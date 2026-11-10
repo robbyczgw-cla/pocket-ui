@@ -11,7 +11,7 @@ The same settings for one game are on its card without starting it: [This game](
 | **Picture** | Size, look, frame and orientation, with a live preview. |
 | **Emulator** | Settings of the emulator itself, such as colours and palettes. Shown only when the emulator offers settings. |
 | **Controls** | Which button does what, and the left stick. |
-| **Cheats** | Cheats from the libretro cheat database. The Brick includes it; the page explains when a game has no matching codes. Other hosts show it only for matching games. |
+| **Cheats** | Cheats from the libretro cheat database. On TrimUI, opening it downloads the database once over Wi-Fi, with progress; afterwards it works offline. Other hosts show it only for matching games. See [Cheats](options-cheats.md) |
 | **Shortcuts** | HOME + button combinations while you play. |
 | **Speed, rumble, fan** | Fast-forward speed, rewind, what is shown over the game, rumble, performance, fan and run-ahead. |
 | **Runs on** | Which emulator plays this game or this console (see [Runs on](#runs-on)). It has its own Save changes. |
@@ -223,17 +223,14 @@ do what these lines say, by where the button sits (the right face button is A). 
 
 HOME, and SELECT + START held to quit, always work on the real buttons, whatever you change here.
 
+On the TrimUI Brick, **F1 and F2 are system shortcuts**. Their global actions are chosen in
+Settings → Sound & feel → **Lights & buttons**; they cannot be assigned to console buttons here
+or in Controller setup. This applies to every hosted core, including mGBA.
+
 ## Cheats
 
-Games on pocket-ui's own host get a **Cheats** page in the Options menu when the libretro cheat database has cheats for
-them. The Brick brings the database with its card and updates; there the page says "No cheats found for this game" when
-it has none. Each cheat is On or Off: A turns it on or off, L1 and R1 skip five lines, "All off" at the end switches them
-all off. What is on is remembered for that game and takes effect at once. The game is found by its file name without the
-bits in brackets. Cheats are not part of Keep for.
-
-Some cheat files (mostly Atari, PC Engine and a few NES games) name a place in memory and a value instead of giving codes;
-pocket-core can't apply those yet; the last line of the page says how many there are, and a game with only such cheats
-still gets the page with that line alone.
+Games on pocket-ui's own host get a **Cheats** page when the libretro cheat database has cheats for them: an On/Off list per
+game, with a one-time Wi-Fi download on TrimUI. See [Options: Cheats](options-cheats.md).
 
 ## Shortcuts
 

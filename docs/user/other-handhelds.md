@@ -127,3 +127,13 @@ doesn't change them.
 - **To go back:** take the card out and put your stock card in, or run `sh /storage/pocket-ui/uninstall.sh`, or
   start *Uninstall pocket-ui* in Ports: EmulationStation is back at the next start. Don't run ROCKNIX's online
   update on a card with pocket-ui until a pocket-ui release says that version was checked.
+
+## TrimUI Brick Pro (experimental)
+
+The Brick Pro uses the same TrimUI card as the Brick and Smart Pro. It has two sticks with L3/R3 clicks and separate F1/F2
+buttons. Clicking a stick never quick-saves or quick-loads; use MENU and the pause menu for saves, or assign the separate F keys.
+Its 3.95-inch screen uses the standard type sizes. The side switch has no assigned function and the lights stay off while their
+behaviour is untested. Lights & buttons offers only the F1/F2 assignments.
+
+Nobody on the project has tested a Brick Pro. Use a spare card and back up saves before trying it. For feedback, open
+Settings → Help & tools → Report a problem. If there is no picture, send the card's `pocket-ui/logs` folder.

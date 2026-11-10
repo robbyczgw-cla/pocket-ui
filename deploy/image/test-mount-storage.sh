@@ -38,12 +38,20 @@ setup() {
 
 # Sources mount-storage.sh as ROCKNIX's init does (inside mount_storage, $disk set), with logging fakes.
 boot() {
-  env -i PATH="$T/applets" PU_STORAGE="$S" PU_FLASH="$FL" PU_SYSROOT="$T/sysroot" T="$T" FL="$FL" "$BB" sh -c '
+  env -i PATH="$T/applets" PU_STORAGE="$S" PU_FLASH="$FL" PU_SYSROOT="$T/sysroot" T="$T" FL="$FL" \
+    SEED_COPY_FAIL="${SEED_COPY_FAIL:-}" SEED_SYNC_FAIL="${SEED_SYNC_FAIL:-}" "$BB" sh -c '
     mount_part() { echo "mount_part $*" >>$T/calls; }
     mount() { echo "mount $*" >>$T/calls; }
     progress() { echo "progress $*" >>$T/calls; }
     # The card is a fixture: record the barrier without flushing unrelated host writes.
-    sync() { echo "sync $*" >>$T/calls; }
+    cp() { "$T/applets/cp" "$@" || return; [ -z "$SEED_COPY_FAIL" ]; }
+    sync() {
+      echo "sync $*" >>$T/calls
+      if [ -d "$PU_STORAGE/.pocket-seed" ] && [ -f "$PU_STORAGE/.config/system.d/essway.service.d/10-pocket-ui.conf" ]; then
+        echo "seed barrier before source removal" >>$T/calls
+        [ -z "$SEED_SYNC_FAIL" ] || return 1
+      fi
+    }
     disk=LABEL=STORAGE
     check_update() { echo "check_update" >>$T/calls; }
     mount_storage() { if [ -f $FL/mount-storage.sh ]; then . $FL/mount-storage.sh; else mount_part "$disk" /storage rw,noatime; fi; }
@@ -94,6 +102,22 @@ echo keep >$S/.config/system.d/other.conf
 boot
 check "other file kept" '[ "$(cat $S/.config/system.d/other.conf)" = keep ]'
 check "drop-in added" '[ -f "$S/$DROPIN" ]'
+
+echo "== seeding survives a failed copy or durability barrier"
+setup
+SEED_COPY_FAIL=1 boot
+check "failed copy keeps the retry source and boot/update guard still runs" \
+  '[ -f "$S/.pocket-seed/$DROPIN" ] && grep -qx check_update "$T/calls"'
+boot
+check "next boot finishes the copied seed" '[ -f "$S/$DROPIN" ] && [ ! -e "$S/.pocket-seed" ]'
+setup
+boot
+check "seed data is synced before its retry source is removed" 'grep -qx "seed barrier before source removal" "$T/calls"'
+setup
+SEED_SYNC_FAIL=1 boot
+check "failed seed barrier keeps the source for the next boot" '[ -f "$S/.pocket-seed/$DROPIN" ]'
+boot
+check "a retry after the failed barrier finishes" '[ -f "$S/$DROPIN" ] && [ ! -e "$S/.pocket-seed" ]'
 
 # The update guard. ROCKNIX's check_update runs after this hook and installs *.tar, *.img, *.img.gz or KERNEL+SYSTEM
 # from $S/.update. TAR is a ROCKNIX-named update as EmulationStation's updater or pocket-ui would put it there.
@@ -319,8 +343,10 @@ newcard() {
   chmod 755 "$G/stock"
 }
 firststart() {
+  set -- "$BB" sh
+  [ "${FIRSTSTART_SH:-}" != dash ] || set -- "$(command -v dash)"
   env -i PATH="$T/gtools" PU_STORAGE="$G/storage" PU_STOCK="$G/stock" PU_MOUNTS="$G/mounts" PU_BLOCK="$G/block" PU_DIRS="$G/dirs" \
-    PU_LOG="$G/log" PU_WORK="$G/work" T="$T" HERE="$HERE" "$BB" sh -c '
+    PU_LOG="$G/log" PU_WORK="$G/work" T="$T" HERE="$HERE" CUT_FINALIZE="${CUT_FINALIZE:-}" "$@" -c '
       echo $$ >"$T/g/top"
       # BusyBox may run its own applet before anything on PATH: these must be the stand-ins.
       mount() { "$T/gtools/mount" "$@"; }
@@ -328,6 +354,18 @@ firststart() {
       blkid() { "$T/gtools/blkid" "$@"; }
       reboot() { "$T/gtools/reboot" "$@"; }
       sync() { echo "sync $*" >>"$T/g/calls"; }
+      # Inject at the previously uncovered rm/sync boundary, after rm completed.
+      rm() {
+        "$T/gtools/rm" "$@" || return
+        if [ -n "$CUT_FINALIZE" ]; then
+          for p do
+            if [ "$p" = "$PU_STORAGE/.pocket-games-state" ]; then
+              echo cut >"$T/g/finalize-cut"
+              kill -9 $$
+            fi
+          done
+        fi
+      }
       . "$HERE/games-first-start.sh"
     ' >/dev/null 2>&1
 }
@@ -368,6 +406,22 @@ while [ $c -le $steps ]; do
   c=$((c + 1))
 done
 check "$steps cut points, each recovers to the same card" '[ $bad = 0 ] && [ "$steps" -gt 10 ]'
+
+echo "== power cut immediately after final state removal, before sync"
+newcard
+CUT_FINALIZE=1 firststart
+check "the finalization cut was reached" '[ -e "$G/finalize-cut" ]'
+# init runs firststart only if the resize marker is still present.
+marker_gone || firststart
+check "completed GAMES never falls back to stock resize after finalization cut" \
+  'split_right && marker_gone && [ "$(cat "$G/fs")" = "exfat GAMES" ] && ! grep -q stock "$G/end" 2>/dev/null'
+if command -v dash >/dev/null; then
+  newcard
+  FIRSTSTART_SH=dash CUT_FINALIZE=1 firststart
+  marker_gone || FIRSTSTART_SH=dash firststart
+  check "dash: finalization cut keeps completed GAMES without stock resize" \
+    '[ -e "$G/finalize-cut" ] && split_right && marker_gone && ! grep -q stock "$G/end" 2>/dev/null'
+fi
 
 echo "== after a cut, games already on a good GAMES are never formatted away"
 newcard

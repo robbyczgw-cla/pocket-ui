@@ -25,6 +25,14 @@ done
 IN=$(cd "$(dirname "$IN")" && pwd)/$(basename "$IN")
 [ -n "$VERSION" ] || VERSION=$(version_of "$IN")
 [ -n "$VERSION" ] || { echo "FAIL cannot tell the version from the name $(basename "$IN"); pass --version" >&2; exit 1; }
+# The supervisor hashes both published files before/after this exact check. A raw
+# image or standalone diagnostic copy can still be checked without release notes.
+case $IN in *.img.xz)
+  if [ "${POCKET_IMAGE_RECEIPT_CHILD:-0}" != 1 ] && [ -f "${IN%.img.xz}.txt" ] && [ -f "$(dirname "$IN")/SHA256SUMS" ]; then
+    exec python3 -I "$ROOT/scripts/image/receipt.py" run-check "$IN" --version "$VERSION" -- \
+      sh "$ROOT/scripts/check-image.sh" "$IN" --version "$VERSION"
+  fi ;;
+esac
 W=${CHECK_WORK:-$ROOT/build/image/check}
 mkdir -p "$W"
 W=$(cd "$W" && pwd)

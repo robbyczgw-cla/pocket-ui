@@ -50,7 +50,8 @@ impl App {
     #[cfg(not(feature = "brick"))]
     fn runner_inputs(&self, sys: &System, path: Option<&Path>, host_bin: bool) -> Inputs {
         let system = sys.name.as_str();
-        let bios = Path::new(hostsys::BIOS_DIR);
+        let bios = hostsys::bios_dir();
+        let bios = bios.as_path();
         // pocket-core opens zip files itself but not 7z: those games stay with RetroArch.
         let file_ok = path.is_none_or(|path| {
             let is_7z = path.extension().is_some_and(|e| e.eq_ignore_ascii_case("7z"));

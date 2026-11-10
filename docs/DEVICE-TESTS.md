@@ -16,6 +16,162 @@ press. Detailed procedures: docs/SLEEP.md, docs/SYSTEM-CONTROLS.md, docs/HOST.md
 - Restart and Power off end the session. With the dual-boot install, Power + Vol Up brings pocket-ui back; after a
   RAM boot (`fastboot boot`) a restart lands in Android and ROCKNIX has to be started from the computer again.
 
+## Where the UI is: `/tmp/pocket-ui.status`
+
+A script or an agent that presses buttons reads where pocket-ui is first, and never presses blind: B and A mean
+something different on every page, and a press on a dark screen only wakes it. pocket-ui keeps one line in
+`/tmp/pocket-ui.status` (RAM, never the card; `<dir>/ui.status` under `--test-driver`), replaced whole and only when a
+field changes (`src/ui_status.rs`, `src/app_where.rs`).
+
+```
+v=1	rev=42	pid=1234	place=settings:List Look	cover=none	sleep=awake	game=none
+```
+
+TAB-separated `key=value`; the first three are always there and always in that order, a reader ignores keys it doesn't
+know. Values are machine codes, never translated text, and never secrets: no network names, passwords, addresses, codes or
+game names.
+
+| Key | Values |
+|---|---|
+| `v` | The schema, 1. A new number only when a field changes its meaning or goes away |
+| `rev` | One more with every write, from 1 in each pocket-ui process |
+| `pid` | pocket-ui's process: a file whose pid is gone is stale |
+| `place` | The page in front, as the navigation explorer's `@where` names it: `shelf:Home`, `shelf:Games(3)`, `settings:Groups`, `settings:List Look`, `settings:Updates`, `settings:Controllers (pause)` (opened from the pause menu), `settings:Manual (setup)`, `setup:wifi`, `setup:wifi (settings)`, `pause:Main`, `pause:Options`, `pause:Big`, `card`, `card:Delete` (and `Status`, `Note`, `Choose`, `Manage`), `box`, `console`, `this game`, `runs on`, `curator:Lens`, `search`, `recent games`, `recent games (game)`, `tour`, `kids:shelf`, `kids:pin`, `game`, `app`, `powering off` |
+| `cover` | What is painted over the page, comma-separated, or `none`: `where was I`, `notice`, `quick`, `time` (`time:regions`, `time:zones`, `time:search`, `time:clock`), `power`, `leave`, `slideshow` |
+| `sleep` | `awake`; `waking` (just woke: presses are still swallowed for 0.6 s); `light` (dark: a press only wakes it); `deep`; `powering-off` |
+| `game` | `none`, `starting`, `playing`, `paused` (the pause menu), `quitting` (saving on its way out), `app` (a tool, PC streaming) |
+| `update` | Job phase: `idle`, `confirming`, `checking`, a worker phase, or the last result (`checked`, `installed`, `os-staged`, `failed`) |
+| `cheats`, `cheats.bytes`, `cheats.total` | While the pause menu owns a Cheats page, or Extras manages its database: `available`, `checking`, `downloading`, `saving`, `offline`, `retry`, `ready`, `empty`, `update`, `confirming-remove` or `removing`, plus received/expected pack bytes. Read from memory; optional data is independent of the app update job |
+| `update.job`, `update.kind`, `update.version` | Process-local job number or `none`; `check`, `app`, `system`, or `none`; public target version or `none` |
+| `update.bytes`, `update.total`, `update.bytes.scope` | Bytes received and expected for the **current file**, with scope `current-file` or `none`. Brick components reset this counter; it is not a whole-package percentage |
+| `update.cancel`, `update.cancel.requested` | `unavailable`, `effective`, or `too-late`; whether the player requested it (`yes` / `no`). A late request does not interrupt the existing commit sequence |
+| `update.notice`, `update.notice.reason`, `update.notice.version` | `stopped`, `waiting`, `checking`, or `shown`; the suppression reason; pending or most recently consumed public version, or `none` |
+| `update.notice.schedule` | The actual hint-schedule phase: `stopped`, `waiting`, or `checking`, including when a previously consumed notice is still `shown` |
+| `update.milestone`, `update.health` | Read-only installation evidence (`unobserved`, `not-pending`, `pending`, `confirmed`, `stable`) and this process's health-watch observation |
+| `update.pending`, `update.pending.version` | Pending marker ownership (`none`, `ours`, `other`, `unreadable`) and its public version, or `none` |
+| `update.recovery`, `update.recovery.layout`, `update.stability.scope` | Read-only layout/marker classification; `rocknix`, `brick`, `host-owned`, or `unobserved`; known-good evidence applies to a `release` or `version`, or is `none` |
+
+Update fields extend this same version-1 line and revision counter. They never write a second status file or add a
+durable marker. The projection reads cached worker observations; it performs no filesystem or network work on the UI
+thread. Unknown or unobserved evidence stays explicit. Recovery classifications describe existing files and links;
+they never choose or perform recovery.
+
+`confirmed` records the existing first-frame/player health check. `stable` records agreement with the launcher's
+existing known-good marker, not elapsed UI time. ROCKNIX records a specific release directory in a symlink; Brick's
+marker contains a version and its timer does not itself wait for a frame. A same-version Brick reinstall therefore has
+only version-level known-good evidence. These formats and the installer's writes, flushes, cancellation checks and
+rename order stay unchanged.
+
+Worker phases are `starting`, `preparing-layout`, `connecting`, `fallback`, `downloading`, `checking-download`,
+`preparing`, `checking-assets`, `unpacking`, `validating`, `moving-assets`, `flushing`, `activating`, `pruning`,
+`staging-system`. Notice reasons are `none`, `off`, `kids`, `stopped-after-kids`, `development`, `host-owned`, `mock`,
+`request`, `already-said`, `game`, `job`, `scheduled`, `backoff`, `shelf-covered`, `wifi-off`, `input`, `ready`.
+`already-said` explains the consumed notice while its daily check is still scheduled. A request already out when
+checks are switched Off remains `checking` with reason `off` until its ignored answer arrives. Before its due tick,
+a Kids Mode schedule is still `waiting` with reason `kids`. `stopped-after-kids` describes
+the retained stopped schedule after Kids Mode ends; this observation does not restart it.
+
+Health codes are `unobserved`, `watching`, `confirming`, `not-pending`, `confirmed`, `timed-out`, `broken`.
+Recovery codes are `unobserved`, `host-owned`, `not-installed`, `legacy-flat`, `clean`, `staging`, `ready`,
+`activation-interrupted`, `asset-recovery`, `confirmation-pending`, `confirmed-marker-retained`, `incomplete`,
+`unreadable`. Inspection runs off the UI thread every five seconds and after job completion; it can lag a marker
+change or sample an install in progress. It is read-only evidence and never drives boot recovery. A terminal job
+retains its last file counters and job number until the next task/confirmation; cancellation is then `unavailable`.
+Mock/snapshot runs leave installation evidence `unobserved`. A fatal health-watch exit can happen before another
+UI turn publishes its final code; check the pid before acting on the file.
+
+pocket-core's own `/tmp/pocket-core.status` uses the same head (`v`, `rev`, `pid`) and syntax.
+
+`scripts/ui-status.sh` reads it on the device; `scripts/dev.sh` runs it over SSH:
+
+```sh
+scripts/dev.sh status                               # shelf:Home  sleep=awake game=none rev=7
+scripts/dev.sh expect 'settings:*' 5                # waits for the page (instead of a fixed sleep), exit 1 on timeout
+scripts/dev.sh send --at 'settings:Groups' down a   # waits for the page first, else presses nothing (exit 3)
+scripts/dev.sh send wake                            # the screen on from light sleep, no button pressed
+scripts/dev.sh send --launch a                      # A where it starts a game: only with --launch
+```
+
+`send` refuses `a` where it starts a game (a shelf, recent games, the game card or box, the child's shelf, with nothing
+over them) unless `--launch` is given, and any key while the screen is dark or still waking (exit 4: `wake` first, never
+`b`). The pattern is a shell glob on the page and its covers as `@where` writes them: a notice up makes `shelf:Home /
+notice`, which `shelf:Home` doesn't match. `scripts/device-check.sh` wakes with `wake` and checks it is on the shelf
+before a game's buttons. A pocket-ui older than the status file has none: `status` says so, `send` presses other keys
+blind with a warning and refuses `a` without `--launch`.
+
+### Firmware and transfer checks (host only)
+
+`ui-status.sh` stays self-contained when piped over SSH. When the firmware has no
+`timeout`, its FIFO writer uses a shell watchdog: two seconds, TERM on expiry,
+124 for the timed command and the existing exit 1 from `send` on a failed write.
+The writer and timer are reaped. An available native `timeout` remains in use.
+
+`scripts/device_transfer.py` is the shared host-side transfer helper used by
+`device-check.sh` and the Brick journey. It checks byte count and SHA-256 before
+publishing a download or replacing an uploaded file. Interrupted transfers resume
+a verified prefix on one retry; a corrupt prefix restarts the transfer. Two
+failed attempts leave the previous destination intact. Remote commands need no
+`stat`, `timeout`, `rsync` or Python. Backups are first materialized as an archive
+so a retry receives the same bytes. Remove session archives before releasing the
+device lock.
+
+Run `python3 scripts/test-device-portability.py` and
+`python3 scripts/test-device-transfer.py` without a device. The firmware fixture
+runs under dash and BusyBox ash with `timeout`, `stat` and `nohup` absent, including
+BusyBox's standalone applet lookup. Both checks also run in the merge gate.
+The broader local backup/restore fixtures are in `bash scripts/test-device-check.sh`.
+
+`device-check.sh` waits on `/tmp/pocket-core.status` (`play=playing`, `menu-paused|held`) and `game=` in `/tmp/pocket-ui.status`
+instead of fixed sleeps, and keeps the old sleeps only where there is no status file. `grim` is tried up to six times; the tries,
+an output that was off and a final failure (with the core and UI status) go into the game's `capture_notes`. `underruns` is the sum of
+the core's summary lines (`audio underruns N over S s`, one per game process; `underruns_source` names them). A game that shows no
+movement at all in the first half of play is looked at again for up to 30 s (`warmup_s`, first-run shader compiles). A caller that
+deployed the build passes `DC_BUILD_COMMIT` and `DC_BUILD_MD5` (8 hex of its `pocket-ui`); the result then carries `build_commit`,
+`build_binary_md5`, `build_verified` (`yes`/`NO`/`NA`) and `check_version` (version + md5 of the script). Host fixtures:
+`scripts/test-device-check-harness.sh`.
+
+## Where the core is
+
+`/tmp/pocket-core.status` is a read-only observation of pocket-core, using the same v1 TAB-separated
+`key=value` line and `v`, `rev`, `pid` head as `/tmp/pocket-ui.status`. The shared `ui_status::Writer`
+replaces the whole file by atomic rename on tmpfs, with no `fsync`, only on change. Revisions start at 1
+in each process and advance only after successful writes. Ignore unknown keys. A missing file means
+unknown (including an older core); a file whose `pid` has exited is stale. It remains after exit.
+Neither UI version requires this file, so updates may run old UI with new core or new UI with old core.
+No game names, paths, translated text, account data or command payloads appear in it. Host runs with
+`POCKET_CORE_TEST` set use `<TMPDIR>/pocket-core.status`, matching their isolated command FIFO;
+normal runs always use the fixed `/tmp` path, regardless of `TMPDIR`.
+
+| Field | Machine codes / meaning |
+| --- | --- |
+| `play` | `playing`, `held`, `menu-paused`, `asleep`, `dark-playing`, `exiting` |
+| `quit` | `none`, `save`, `skip-resume`, `for-switch`; the existing FIFO still says `quit`, `quit nosave`, `quit handoff` |
+| `menu` | `none`, `paused`; waking from sleep preserves an open pause menu |
+| `asleep` | `off`, `on`; independent of the pause menu |
+| `screen` | `on`, `dark`; `dark` means the core's screen-off flag, not a backlight measurement |
+| `hold` | `off`, `on`; startup presentation hold; emulation may run behind the insert animation |
+| `slot` | Current slot, 1–8, as on the FIFO and in the menu |
+| `disc` | Last reported `none` or current/count, 1-based; current `0` means unknown |
+| `save-trouble` | `none`, `full`, `unwritable`, `unreadable`; last observed battery-save health, not proof an exit save completed |
+
+Dominant `play` precedence is exiting, asleep, menu-paused, dark-playing, held, playing. The other flags
+retain combinations such as sleeping behind an open menu. This is a projection of existing flags,
+not a second controller. `rev` is not a command counter or acknowledgement: repeated pause, unknown
+commands and read-only requests do not change an unchanged line. A quit reports intent before the
+save; the existing handoff pipe and save-error notice remain authoritative for its result.
+
+The core publishes before its first frame, after command-driven changes, after frame-driven changes
+such as releasing a startup hold, and before exit. An unchanged frame compares a small value without
+formatting, file I/O or querying the emulator. Failed status writes never affect play or saving and
+retry on the next state event or command. There are no status writes or cleanup after the handoff
+announcement, so a retiring core cannot overwrite or remove the next game's status.
+
+Host verification: the `core_contract_` tests run the actual FIFO dispatch against a stub libretro
+core with no compositor, audio device or player files; they characterize pause/sleep/wake, permissive
+slot parsing, picture defaults, strict quits and batch termination. `core_command_` tests cover the
+wire grammar, including literal-space payloads and test-only commands. `core_status_` covers every
+combination of the four flags, revisions, failed-write retries, and old-publisher teardown.
+
 ## Sleep and power
 - [ ] Power key on the shelf: screen off, device sleeps; Power again: back, sound at the old volume.
 - [ ] The same in a GBA game: it continues where it was, sound right away, no crackle.

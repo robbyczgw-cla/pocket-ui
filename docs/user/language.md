@@ -13,7 +13,8 @@ What stays in English in the German and Spanish interfaces:
 - **This manual** (Settings → Help & tools → **Manual**). Its title line and buttons are in your language, its pages
   are not translated yet.
 - **Names**: games, systems, emulators and cores, people and makers, and pocket-ui's own feature names such as
-  Curator, Lens, Echoes and Pixel Path.
+  Curator, Lens, Echoes and Pixel Path. Game and system names keep their original wording on covers,
+  cards, case spines and details, including wrapped or shortened lines.
 - **What comes from elsewhere**: game descriptions from Wikipedia and Wikidata, the facts and notes on the console
   pages, PortMaster's texts, RetroAchievements' achievement names, the names of networks and devices.
 - **A few rare refusals on the phone upload page** (a name that can't be used, a folder in the way): the page shows the Pocket's English sentence when it has no translation for them. The common ones are in your phone's language.
@@ -22,3 +23,5 @@ What stays in English in the German and Spanish interfaces:
 - **The web companion's pages in the browser** (Settings → Connections → Web companion is translated on the Pocket).
 
 A sentence pocket-ui has no translation for yet appears in English, never as an empty line.
+
+Menu entries printed on cases use the chosen language. Names on those cases, including your own shelves or stickers, keep their wording.

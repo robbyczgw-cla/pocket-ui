@@ -9,7 +9,7 @@ use pocket_ui::lastframe;
 use pocket_ui::pad::Button;
 use pocket_ui::recents;
 use pocket_ui::switcher::{self, Action, Entry, Switcher};
-use pocket_ui::text::Face;
+use pocket_ui::text::{Face, Text};
 
 use super::{stripe, system_label, system_short, App, Item, Page, Screen, CONFIRM};
 
@@ -95,7 +95,8 @@ impl App {
 
     /// Width of a title with its star, before any clipping.
     pub(crate) fn title_width(&mut self, face: Face, px: u32, title: &str, fav: bool) -> i32 {
-        self.text.width(face, px, title) + if fav { star_room(px) } else { 0 }
+        let width = if pocket_ui::i18n::is_name(title) { self.text.literal(|text| text.width(face, px, title)) } else { self.text.width(face, px, title) };
+        width + if fav { star_room(px) } else { 0 }
     }
 
     /// A row's title in `max_w` pixels: the selected row's scrolls when it is too long, the others end in
@@ -115,13 +116,15 @@ impl App {
         fav: bool,
     ) {
         let room = max_w - if fav { star_room(px) } else { 0 };
-        let w = if selected {
-            self.marquee.draw(&mut self.text, c, face, px, x, baseline, room, color, title);
-            self.text.width(face, px, title).min(room)
+        let marquee = &mut self.marquee;
+        let mut paint = |text: &mut Text| if selected {
+            marquee.draw(text, c, face, px, x, baseline, room, color, title);
+            text.width(face, px, title).min(room)
         } else {
-            let fitted = self.text.fit(face, px, title, room);
-            self.text.draw(c, face, px, x, baseline, color, &fitted)
+            let fitted = text.fit(face, px, title, room);
+            text.draw(c, face, px, x, baseline, color, &fitted)
         };
+        let w = if pocket_ui::i18n::is_name(title) { self.text.literal(paint) } else { paint(&mut self.text) };
         if fav {
             App::paint_title_star(c, x + w, baseline, px, color);
         }
@@ -362,7 +365,11 @@ impl App {
         self.home_down = false;
         self.switcher = None;
         if let Some((system, name, path)) = self.switch_to.take() {
-            if !retried {
+            // The existing error file carries text. Keep only save failures on the shelf; other notices retain
+            // their established switch behavior until the status protocol can carry an explicit outcome.
+            let save_failed = self.notice.as_ref().is_some_and(|n| n.text() == pocket_ui::save_trouble::MOMENT_FAILED
+                || [pocket_ui::save_trouble::Trouble::Full, pocket_ui::save_trouble::Trouble::Unwritable, pocket_ui::save_trouble::Trouble::Unreadable].iter().any(|t| n.text() == t.after_quit()));
+            if !retried && !save_failed {
                 pocket_ui::fast_switch::mark("switcher: old game done, starting the next");
                 println!("switcher: starting {}", path.display());
                 self.launch(system, name, path);

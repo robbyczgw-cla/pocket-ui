@@ -306,8 +306,8 @@ appear by themselves when a later core can save states. More in [Systems](system
 
 Quit closes only this launch and its helpers, including helpers in another process group. A port started next keeps its controls.
 
-HOME opens the menu over a running port, and **Continue** gives the port its buttons back. A port saves by itself, so
-there is no Save or Load: the menu says "This game saves by itself. Save in the game before you quit."
+HOME opens the menu over a running port, and **Continue** gives the port its buttons back. Saving depends on the game;
+there is no frontend Save or Load: the menu says "Saving is up to the game. Use its save option if it has one."
 
 - **Options** is the port's own **Performance & fan** ([PortMaster ports](performance.md#portmaster-ports)). What you
   change there applies from the port's next start.
@@ -329,3 +329,5 @@ Performance in Quick settings and Settings → Playing → Performance & fan app
 
 ScummVM, PICO-8 and TIC-80 on pocket-ui's own host have no save states either. Their menu has no Save or Load and
 says where their saving is, for example "No save states for ScummVM: START opens its own Save and Load".
+
+If the game cannot keep Before load, Load leaves you where you are and says so. Free space on the card or keep playing before trying again. If Quit cannot save, you return to the shelf with a message; the previous saved moment stays. A game chosen in the switcher waits until you have read the message and choose again.

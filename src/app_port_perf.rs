@@ -49,6 +49,7 @@ pub(crate) const LOADING: &str = "Loading…";
 
 /// "Battery, fan Quiet" for the card.
 fn speed_line(c: &Choice) -> String {
+    if !pocket_ui::port_perf_page::fan_control_here() { return performance_label(c.performance).to_string(); }
     format!("{}, fan {}", performance_label(c.performance), fan_label(c.fan))
 }
 
@@ -230,7 +231,7 @@ impl App {
         let (pad, row, font) = (NU_PAD, pocket_ui::type_scale::row(66, 36), 36u32);
         // Slimmer rows on a short screen (768 lines), so the explanation and the note under them end above the hints.
         let row = if pocket_ui::kit::short_screen(c.h) { row * 4 / 5 } else { row };
-        self.sheet_header(c, "Performance & fan");
+        self.sheet_header(c, if page.fan_control { "Performance & fan" } else { "Performance" });
         let sub = self.text.fit(Face::Body, 28, &page.title, c.w - 2 * pad - 2 * NU_BTN_PAD - 330);
         self.text.draw(c, Face::Body, 28, pad + NU_BTN_PAD, pad + 104, pal().dust, &sub);
         let (top, right) = (pad + NU_PILL + 46, c.w - pad);
@@ -280,8 +281,8 @@ impl App {
             y += 6;
         }
         y += 14;
-        let note = "These apply to this port from its next start. What every port starts with is \
-in Settings › Playing › Performance & fan.";
+        let note = if page.fan_control { "These apply to this port from its next start. What every port starts with is \
+in Settings › Playing › Performance & fan." } else { "These apply to this port from its next start. What every port starts with is in Settings › Playing › Performance." };
         for line in self.text.wrap_prose(Face::Body, 24, note, width) {
             self.text.draw(c, Face::Body, 24, left, y, pal().quiet, &line);
             y += pocket_ui::type_scale::line(24, 8);

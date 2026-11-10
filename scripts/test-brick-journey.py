@@ -311,6 +311,9 @@ class Safety(unittest.TestCase):
             return result.getvalue()
         class Device:
             body=b'before';running=False
+            def get(self,path,destination,**kw):
+                assert not self.running, 'backup read after owner resumed'
+                destination.write_bytes(archive(self.body))
             def run(self,command,*args,**kw):
                 if command.startswith('cd '+journey.CFG):return archive(self.body)
                 if '/restore.sh ' in command:

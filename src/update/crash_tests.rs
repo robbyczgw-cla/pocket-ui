@@ -38,7 +38,7 @@ fn offered(dir: &Path, crashes: bool, runs: &Path) -> (Release, String) {
     let tar = dir.join("app.tar.gz");
     assert!(Command::new("tar").arg("-czf").arg(&tar).arg("-C").arg(&src).args(["pocket-ui", "pocket-core"]).status().unwrap().success());
     let data = std::fs::read(&tar).unwrap();
-    let rel = Release { version: NEW.into(), url: "app.tar.gz".into(), mirrors: Vec::new(), sha256: store::sha256_hex(&data), size: data.len() as u64, notes: String::new() };
+    let rel = Release { version: NEW.into(), url: "app.tar.gz".into(), preferred_sources: Vec::new(), mirrors: Vec::new(), sha256: store::sha256_hex(&data), size: data.len() as u64, notes: String::new() };
     (rel, format!("file://{}/update.json", dir.display()))
 }
 

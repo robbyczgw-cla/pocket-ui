@@ -1,4 +1,4 @@
-//! The Brick's cheat database as ONE file (`app/cores/cht.pack`), built by `scripts/brick-cheats-data.py`.
+//! The TrimUI cheat database as ONE file (`storage/pocket-ui/cheats/cht.pack`; legacy `app/cores/cht.pack`), built by `scripts/brick-cheats-data.py`.
 //!
 //! The same `.cht` files RetroArch reads, 23,000 of them, were 837 MB on the card's FAT (32 KB clusters) and made an
 //! update take ten minutes. Here they are one file of about 35 MB; a lookup reads one folder's index and the few

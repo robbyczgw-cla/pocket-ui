@@ -38,5 +38,7 @@ The type of every screen, or the Retro style.
   sets, each dark and light:
   - **Cocoa**, the default: warm brown and cream, a tangerine selection.
   - **Pea**: the four greens of an old handheld's screen; the little pictures turn green too.
+- **Retro Pixelify**: the same Retro style with the rounder Pixelify letters it had before 0.3.2 (with LCD-style
+  numbers). Retro itself uses Departure Mono: even, square pixel letters. One step Right from Retro on the Style row.
 
 Long names that don't fit get smaller or shortened as with Barlow; the wider fonts fit a little less on a line.

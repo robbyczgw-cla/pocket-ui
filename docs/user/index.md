@@ -87,7 +87,7 @@ and say clearly where something is still being built or has not been confirmed o
 3. [Coming from ROCKNIX or Android](coming-from.md): what happens to your saves, states, favourites and settings.
 4. [Playing](playing.md): Home, finding a game, the looks, console pages, Recent games; [Easy](easy.md): the look with one big game at a time; [Easy to read, Zoom and Hold to toggle](easy-to-read.md): larger text in one switch, a magnifier for the pause menu, buttons that stay down. [Continue](continue.md): an open case means your moment is waiting, and A goes straight back.
 5. [The pause menu](pause-menu.md): what each emulator offers, quitting, Pixel Path; [Saving in the pause menu](pause-menu-saves.md): save slots, Where I quit and Before load, Earlier, when a save fails.
-6. [Options](options.md): picture, screen frames, controls, shortcuts, extras and run-ahead in a game; [their shorter list](options-big.md) for PlayStation 2, GameCube, Wii and 3DS.
+6. [Options](options.md): picture, screen frames, controls, shortcuts, extras and run-ahead in a game, and [Cheats](options-cheats.md); [their shorter list](options-big.md) for PlayStation 2, GameCube, Wii and 3DS.
 7. [Controls](controls.md): every button, screen by screen; [in Settings, setup and on the touch screen](controls-settings.md), with the power and volume keys; [the controls card](controls-card.md), which button is which on each console.
 8. [Settings](settings.md): the Settings categories and the entries of Look, Playing and Games; [Sound & feel](settings-sound.md); [Connections, System and Help & tools](settings-system.md): Wi-Fi, Bluetooth, Tailscale, Sync, the clock, sleep, backups, the Tour and this guide; [quick settings, sleep and power](quick-settings.md); [storage](storage.md): what takes up space on the SD card, clean-ups, hidden games; [Bluetooth](bluetooth.md): pairing controllers, headphones and speakers.
 9. [Language](language.md): English, German or Spanish menus, and what stays English.
@@ -100,7 +100,7 @@ and say clearly where something is still being built or has not been confirmed o
 16. [Systems](systems.md): which systems run on which emulator.
 17. [Arcade games](arcade.md): which core plays them, matching romsets, parents, BIOS and CHD files, when a game does not start.
 18. [Patches, translations and MSU-1](patches-msu1.md): patching a game on a computer or with RetroArch, and one MSU-1 recipe (not checked on the device).
-19. [Pictures & extras](extras.md): box art, PortMaster games, tools, the Store (not open yet).
+19. [Extras](extras.md): box art, PortMaster games, tools, the Store (not open yet).
 20. [Sync](sync.md): saves and states on all your devices, with Syncthing.
 21. [Tailscale](remote.md): reach the Pocket from anywhere on your private network.
 22. [Web companion](web-companion.md): your library, uploads and play time in a browser, over Tailscale.

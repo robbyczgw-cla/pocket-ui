@@ -157,9 +157,12 @@ elif [ $format = 1 ]; then
 fi
 
 cp "$LOG" "$S/.pocket-games-first-start.log" 2>/dev/null
+# Commit the completed card before retiring the grow request. Keep ownership state
+# until that removal is durable: a cut while MARK remains must still recognise p3.
+sync || restart
+rm -f "$MARK" || restart
+sync || restart
 rm -f "$STATE" "$TRIES"
-sync
-rm -f "$MARK"
 sync
 say "pocket-ui: card ready, restarting"
 umount "$S" 2>/dev/null

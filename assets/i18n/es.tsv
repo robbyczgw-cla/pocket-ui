@@ -1099,6 +1099,7 @@ Dolphin's VBI skip: when the game runs slow, it skips frames to keep the sound s
 
 # --- Theme → Font (font_style.rs)
 Rounded	Redondeada
+Retro Pixelify	Retro Pixelify
 Clean and narrow, the look pocket-ui started with.	Limpia y estrecha, la que tenía pocket-ui al principio.
 Pixel letters for titles and labels; the small text stays plain.	Letras de píxeles para títulos y etiquetas; el texto pequeño queda normal.
 Soft, round letters everywhere.	Letras suaves y redondas en todas partes.
@@ -2219,7 +2220,6 @@ Your game is on the shelf.	Tu juego está en el estante.
 Your {n} games are on the shelf.	Tus {n} juegos están en el estante.
 Go to your games	Ir a tus juegos
 Optional. You can get these any time later.	Opcional. Puedes conseguirlos más adelante.
-Connect to Wi-Fi first to use these.	Conéctate primero a Wi-Fi para usarlos.
 Looking up {n} of {m}{s}	Buscando {n} de {m}{s}
 Looking up {n} of {m} pictures{s}	Buscando {n} de {m} imágenes{s}
 Looking up {n} of {m} covers{s}	Buscando {n} de {m} portadas{s}
@@ -2481,6 +2481,20 @@ Syncthing is not running	Syncthing no se está ejecutando
 Syncthing didn't say its device ID	Syncthing no dio el ID de su dispositivo
 Shared	Compartido
 Not shared	No compartido
+Resuming	Continuando
+Resuming.	Continuando.
+Resuming…	Continuando…
+Resuming both folders…	Continuando ambas carpetas…
+Both folders resumed. Syncing again.	Las dos carpetas sincronizan de nuevo.
+Resumed. Syncing again.	Sincroniza de nuevo.
+Paused by pocket-ui. Syncthing isn't answering.	Pausa de pocket-ui. Syncthing no responde.
+Paused, not by pocket-ui. Syncthing isn't answering.	No por pocket-ui. Syncthing no responde.
+Paused by pocket-ui for a game. X resumes it.	Pausa de pocket-ui. Con X continúa.
+Paused by pocket-ui for a game. X resumes both folders.	Pausa de pocket-ui. X continúa las dos.
+Paused, not by pocket-ui. X resumes it.	No por pocket-ui. Con X continúa.
+Paused, not by pocket-ui. X resumes both folders.	No por pocket-ui. X continúa las dos.
+Not while a game runs.	No mientras juegas.
+Syncthing isn't answering.	Syncthing no responde.
 Saves and states, in step across devices.	Partidas y estados, al día en todos tus dispositivos.
 Look for new saves as soon as a game ends.	Busca partidas nuevas en cuanto termina un juego.
 Sync after playing	Sincronizar tras jugar
@@ -3899,7 +3913,7 @@ Couldn't save. Is the card full or read-only?	No se pudo guardar. ¿Está llena 
 You see it when the game starts. In the pause menu, Options > Picture shows it live.	Lo ves al iniciar el juego. En el menú de pausa, Opciones > Imagen lo muestra en vivo.
 Default	Por defecto
 Shortcut: {t}	Atajo: {t}
-This game saves by itself. Save in the game before you quit.	Este juego guarda por sí mismo. Guarda en el juego antes de salir.
+Saving is up to the game. Use its save option if it has one.	Guardar depende del juego. Usa su opción de guardado, si la tiene.
 Update available	Actualización disponible
 Update available, in Extras	Actualización disponible, en Extras
 {s} is up to date.	{s} está al día.
@@ -4602,7 +4616,9 @@ How your games stand: Shelf, Easy, Minimal, Split, Cards or Cabinet, with a live
 First-start setup, how you like to play, Tour, manual, tools, test buttons, Store, report a problem, about.	Configuración inicial, cómo te gusta jugar, Recorrido, manual, herramientas, probar botones, Store, informar, acerca de.
 First-start setup	Configuración inicial
 Language, Wi-Fi, your games and the look again, step by step. Your games and saves stay.	Idioma, Wi-Fi, tus juegos y el aspecto otra vez, paso a paso. Tus juegos y partidas se quedan.
-Copy them from a computer or a phone on the same Wi-Fi, or put them on the SD card in its roms folder. Add games… shows you how.	Cópialos desde un ordenador o un móvil en la misma Wi-Fi, o ponlos en la tarjeta SD, en su carpeta roms. «Añadir juegos…» te enseña cómo.
+Copy them over Wi-Fi from a computer or phone, or use a second SD card. If Windows offers to format a card, press Cancel.	Cópialos por Wi-Fi desde un ordenador o un móvil, o usa una segunda tarjeta SD. Si Windows ofrece formatear una tarjeta, pulsa Cancelar.
+Copy them over Wi-Fi from a computer or phone. If you put the card in a computer and Windows offers to format it, press Cancel.	Cópialos por Wi-Fi desde un ordenador o un móvil. Si pones la tarjeta en un ordenador y Windows ofrece formatearla, pulsa Cancelar.
+Put the card in your computer and copy games into its Roms folder, one folder per system.	Pon la tarjeta en tu ordenador y copia los juegos en su carpeta Roms, una carpeta por sistema.
 Finds the real box for each game, in the background while you're online. Only a game's name is sent.	Busca la caja real de cada juego, en segundo plano mientras estás conectado. Solo se envía el nombre del juego.
 Next: your games, then a look you like.	A continuación: tus juegos y luego un aspecto que te guste.
 Next: your time zone, your games, then a look you like.	A continuación: tu zona horaria, tus juegos y luego un aspecto que te guste.
@@ -4707,3 +4723,122 @@ GBA console	Consola GBA
 Choose the GBA console: Game Boy Advance or Game Boy Advance SP. Changes its picture everywhere and its cartridge slot at launch.	Elige la consola GBA: Game Boy Advance o Game Boy Advance SP. Cambia su imagen en todas las pantallas y la ranura del cartucho al iniciar.
 Game Boy Advance	Game Boy Advance
 Game Boy Advance SP	Game Boy Advance SP
+Couldn't keep this moment. Your earlier saves are kept.	No se pudo guardar este momento. Tus partidas anteriores se conservan.
+Couldn't load: Before load couldn't be saved. Your game is unchanged.	No se pudo cargar: no se pudo guardar Antes de cargar. Tu partida sigue igual.
+Which button of the Deck does what	Qué hace cada botón de la Deck
+Android APK	APK de Android
+Install a newer Android APK to update. Your games and settings stay.	Instala un APK de Android más reciente para actualizar. Tus juegos y ajustes se conservan.
+Could not save the cheat setting	No se pudo guardar el ajuste del truco
+Could not load or restore the game. Load another moment or return to the library. Your earlier saves are kept.	No se pudo cargar ni restaurar el juego. Carga otro momento o vuelve a la biblioteca. Tus partidas anteriores se conservan.
+Return to library	Volver a la biblioteca
+Cannot preserve the current state	No se puede conservar el momento actual
+
+F1 / F2	F1 / F2
+Cheats need Wi-Fi once to download	Los trucos necesitan Wi-Fi una vez para descargarse
+Get cheats	Descargar trucos
+Retry cheats	Reintentar descarga
+Downloading cheats…	Descargando trucos…
+You can go back. The next try continues the download.	Puedes volver atrás. El próximo intento continúa la descarga.
+Cheat download stopped. Try again.	Descarga de trucos detenida. Inténtalo de nuevo.
+Cheats aren't available in this build. Try updating pocket-ui.	Los trucos no están disponibles en esta versión. Actualiza pocket-ui.
+Cheats couldn't be saved. Check free space on the SD card.	No se pudieron guardar los trucos. Comprueba el espacio libre en la tarjeta SD.
+The cheat download is damaged. Try again.	La descarga de trucos está dañada. Inténtalo de nuevo.
+Couldn't keep the installed cheats. Nothing was changed.	No se pudieron conservar los trucos instalados. No se cambió nada.
+The cheat database has no matching codes. You can keep playing normally.	La base de datos de trucos no tiene códigos para este juego. Puedes seguir jugando normalmente.
+Saving cheats…	Guardando trucos…
+Checking cheats…	Comprobando trucos…
+There isn't enough free memory for cheats. Close the game and try again.	No hay memoria libre suficiente para los trucos. Cierra el juego e inténtalo de nuevo.
+
+{s}: {t}.	{s}: {t}.
+Get PortMaster (~300 MB, one time)	Obtener PortMaster (~300 MB, una vez)
+Update PortMaster	Actualizar PortMaster
+Checking PortMaster…	Comprobando PortMaster…
+Downloading PortMaster…	Descargando PortMaster…
+Preparing PortMaster…	Preparando PortMaster…
+Get PortMaster in Extras first.	Obtén PortMaster primero en Extras.
+Needed once for Ports. It stays on this card; games are downloaded separately.	Se necesita una vez para Ports. Se guarda en esta tarjeta; los juegos se descargan por separado.
+Connect to Wi-Fi to get PortMaster.	Conéctate al wifi para obtener PortMaster.
+No download starts until you press A.	La descarga empieza al pulsar A.
+Not enough card space. Free some space and try again.	No hay espacio en la tarjeta. Libera espacio e inténtalo de nuevo.
+Invalid optional download description.	La descripción de la descarga opcional no es válida.
+Invalid download destination.	El destino de la descarga no es válido.
+There isn't enough free space on the SD card for PortMaster.	No hay suficiente espacio libre en la tarjeta SD para PortMaster.
+Forget this port's own choice: Settings › Playing › Performance applies again.	Olvidar la elección de este port: vuelven a aplicarse Ajustes › Jugando › Rendimiento.
+There: Games: performance {s}.	Allí: rendimiento en juegos {s}.
+Battery: the processor's top speeds are held at about half. Cooler, and the battery lasts longer; a demanding port may stutter.	Batería: limita las velocidades máximas del procesador a la mitad. Menos calor y más batería; un port exigente puede ir a tirones.
+These apply to this port from its next start. What every port starts with is in Settings › Playing › Performance.	Se aplica a este port desde el próximo inicio. Los valores para todos los ports están en Ajustes › Jugando › Rendimiento.
+
+# --- Short optional runtime row statuses
+Downloading…	Descargando…
+Preparing…	Preparando…
+
+# --- Portable PortMaster runtime archive errors and download progress
+The runtime zip is damaged or unsupported.	El ZIP del entorno está dañado o no es compatible.
+The runtime zip directory is too big.	El índice del ZIP del entorno es demasiado grande.
+The runtime zip repeats a path.	El ZIP del entorno contiene una ruta repetida.
+The runtime zip contains a special file.	El ZIP del entorno contiene un archivo especial no compatible.
+Runtime ZIP64 files are unsupported; FAT32 files must be smaller than 4 GiB.	Los archivos ZIP64 del entorno no son compatibles; en FAT32 deben medir menos de 4 GiB.
+A runtime file exceeds the 128 MiB unpacking size limit.	Un archivo del entorno supera el límite de 128 MiB al descomprimirlo.
+The runtime zip exceeds the compression ratio limit.	El ZIP del entorno supera el límite de compresión permitido.
+The runtime zip expands beyond its size limit.	El ZIP del entorno supera su límite de tamaño al descomprimirlo.
+A runtime link target is too long.	El destino de un enlace del entorno es demasiado largo.
+The runtime zip contains an invalid link target.	El ZIP del entorno contiene un destino de enlace no válido.
+The runtime zip contains conflicting case-insensitive names.	El ZIP del entorno contiene nombres que solo se diferencian por mayúsculas y minúsculas.
+The runtime zip namespace exceeds its size limit.	Los nombres de las rutas del ZIP del entorno superan su límite de tamaño.
+The runtime zip uses a file or link as a parent folder.	El ZIP del entorno usa un archivo o enlace como carpeta superior.
+The runtime zip uses one name as both a file and a folder.	El ZIP del entorno usa el mismo nombre para un archivo y una carpeta.
+The runtime zip contains an unsafe path or a name unsupported by FAT32/exFAT.	El ZIP del entorno contiene una ruta insegura o un nombre no compatible con FAT32/exFAT.
+The runtime zip contains an external or invalid link.	El ZIP del entorno contiene un enlace externo o no válido.
+A runtime link escapes the archive.	Un enlace del entorno apunta fuera del archivo comprimido.
+A materialized runtime link path is too long.	La ruta de un enlace copiado del entorno es demasiado larga.
+The runtime zip contains a link cycle.	El ZIP del entorno contiene un ciclo de enlaces.
+A runtime link target uses a file as a folder.	El destino de un enlace del entorno usa un archivo como carpeta.
+A runtime link target is missing from the archive.	Falta el destino de un enlace en el archivo del entorno.
+The runtime zip contains a link cycle or an excessive link depth.	El ZIP del entorno contiene un ciclo o demasiados enlaces encadenados.
+The runtime zip contains a link cycle or an excessive folder depth.	El ZIP del entorno contiene un ciclo de enlaces o demasiadas carpetas anidadas.
+The runtime zip expands beyond its entry count limit.	El ZIP del entorno supera el número de entradas permitido al descomprimirlo.
+The runtime zip materialized names exceed their size limit.	Los nombres de las rutas del entorno descomprimido superan su límite de tamaño.
+The runtime zip failed its checksum check.	La suma de comprobación del ZIP del entorno no coincide.
+The runtime destination is unsafe.	El destino del entorno no es seguro.
+The runtime destination contains a conflicting case-insensitive name.	Un nombre del destino solo se diferencia por mayúsculas y minúsculas.
+The runtime destination contains a symbolic link or existing file.	El destino del entorno contiene un enlace simbólico o un archivo existente.
+{s}: {n} / {m} MB	{s}: {n} / {m} MB
+Codes for many games, used from the pause menu (HOME › Options › Cheats).	Códigos para muchos juegos, en el menú de pausa: HOME › Opciones › Trucos.
+Connect to Wi-Fi first to use these.	Conéctate primero a Wi-Fi para usarlos.
+Get · {n} MB	Conseguir · {n} MB
+Installed · {n} MB	Instalado · {n} MB
+Update · {n} MB	Actualizar · {n} MB
+Needs {n} MB	Necesita {n} MB
+Needs Wi-Fi	Necesita Wi-Fi
+Checking…	Comprobando…
+Saving…	Guardando…
+Removing…	Eliminando…
+Remove?	¿Eliminar?
+Remove cheats? A again removes them.	¿Eliminar los trucos? Pulsa A otra vez para eliminarlos.
+Cheats couldn't be removed. Check the SD card and try again.	No se han podido eliminar los trucos. Comprueba la tarjeta SD y vuelve a intentarlo.
+Codes for many games. A offers to remove the downloaded cheats.	Códigos para muchos juegos. Con A puedes eliminar los trucos descargados.
+Not enough space on the SD card: {n} MB needed, {m} MB free.	No hay espacio suficiente en la tarjeta SD: hacen falta {n} MB, hay {m} MB libres.
+New codes are available. A updates them; X offers to remove them. The installed codes keep working until the update finishes.	Hay nuevos códigos. A los actualiza; X permite eliminarlos. Los códigos instalados siguen funcionando hasta que termine la actualización.
+Close the game before downloading extras.	Cierra el juego antes de descargar extras.
+Settings › Games	Ajustes › Juegos
+Retry	Reintentar
+Box art, game pictures and starter pack.	Carátulas, imágenes de juego y pack inicial.
+Box art, PortMaster games, cheats.	Carátulas, juegos de PortMaster y trucos.
+Games, game check, extras, EmulationStation, screenshots, Curator, PC.	Juegos, revisión de juegos, extras, EmulationStation, capturas, Curator, PC.
+Box art, PortMaster games and starter pack.	Carátulas, juegos de PortMaster y pack inicial.
+A few free games to get you started. Pick one or take them all.	Unos juegos gratuitos para empezar. Elige uno o descárgalos todos.
+More to get any time: Settings › Games › Extras.	Consigue más cuando quieras: Ajustes › Juegos › Extras.
+No ports yet	Aún no hay ports
+X offers to remove the installed cheats.	X permite eliminar los trucos instalados.
+Get PC and indie games from PortMaster in Settings › Games › Extras.	Consigue juegos de PC e independientes de PortMaster en Ajustes › Juegos › Extras.
+Get PortMaster	Conseguir PortMaster
+The download was stopped. Try again.	Descarga detenida. Vuelve a intentarlo.
+There isn't enough free memory. Close the game and try again.	No hay memoria libre suficiente. Cierra el juego e inténtalo de nuevo.
+Your games, game files and PortMaster settings stay on this card.	Tus juegos, archivos de juego y ajustes de PortMaster se quedan en esta tarjeta.
+Remove PortMaster? A again removes it. Your games, game files and settings stay.	¿Eliminar PortMaster? Pulsa A de nuevo para eliminarlo. Tus juegos, archivos y ajustes se conservan.
+PC and indie games from PortMaster. X offers to remove PortMaster; your games and game files stay.	Juegos de PC e independientes de PortMaster. X permite eliminar PortMaster; tus juegos y archivos se conservan.
+An update for PortMaster is available. A opens the offer; X offers to remove it. Your games and game files stay.	Hay una actualización de PortMaster. A abre la oferta; X permite eliminarlo. Tus juegos y archivos se conservan.
+Needs {n} MiB	Necesita {n} MiB
+Not enough space on the SD card: {n} MiB needed, {m} MiB free.	No hay espacio suficiente en la tarjeta SD: se necesitan {n} MiB, hay {m} MiB libres.
+Not enough space on the SD card: {n} MiB free, {m} MiB needed.	No hay espacio suficiente en la tarjeta SD: hay {n} MiB libres, se necesitan {m} MiB.
+Could not check free card space.	No se pudo comprobar el espacio libre de la tarjeta.

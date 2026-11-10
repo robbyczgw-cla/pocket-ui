@@ -195,16 +195,37 @@ pub fn curl(url: &str, dest: &Path, max: Option<u64>, progress: &dyn Fn(u64)) ->
 }
 
 /// Removes the download in progress when it goes out of scope, whatever happened.
-struct Work(PathBuf);
+struct Work(PathBuf, bool);
 
 impl Drop for Work {
     fn drop(&mut self) {
-        let _ = std::fs::remove_file(&self.0);
+        if !self.1 { let _ = std::fs::remove_file(&self.0); }
     }
 }
 
 /// Adds one game. See the module comment for the order; nothing is written into `dest_dir` before every check passed.
 pub fn install(game: &Game, env: &Env, fetch: Fetch, progress: &dyn Fn(u64)) -> Result<Outcome, Failure> {
+    install_inner(game, env, fetch, progress, None)
+}
+
+/// Explicit Extras downloads retain a hash-named checkpoint on cancellation and wait behind other optional data.
+pub fn install_cancellable(game: &Game, env: &Env, cancel: &crate::update::Cancel, progress: &dyn Fn(u64)) -> Result<Outcome, Failure> {
+    if let Some(path) = on_card(env.dest_dir, &game.file.name_on_disk) { return Ok(Outcome::AlreadyThere(path)); }
+    let need = crate::update::cheats::space_needed(game.file.size);
+    if let Some(free) = env.free_work.filter(|free| *free < need) { return Err(Failure::NoSpace { free, need }); }
+    let rel = crate::update::Release { version: game.version.clone(), url: game.file.url.clone(), mirrors: Vec::new(),
+        preferred_sources: Vec::new(), sha256: game.file.sha256.clone(), size: game.file.size, notes: String::new() };
+    let fetch = |_: &str, part: &Path, _: Option<u64>, progress: &dyn Fn(u64)| {
+        crate::update::cheats::download_data(&rel, part, cancel, progress).map_err(|error| DownloadFailure::Broke(
+            if cancel.is_cancelled() { "The download was stopped. Try again.".into() }
+            else if error == "There isn't enough free memory for cheats. Close the game and try again." {
+                "There isn't enough free memory. Close the game and try again.".into()
+            } else { error }))
+    };
+    install_inner(game, env, &fetch, progress, Some(cancel))
+}
+
+fn install_inner(game: &Game, env: &Env, fetch: Fetch, progress: &dyn Fn(u64), cancel: Option<&crate::update::Cancel>) -> Result<Outcome, Failure> {
     let f = &game.file;
     if let Some(p) = on_card(env.dest_dir, &f.name_on_disk) {
         return Ok(Outcome::AlreadyThere(p));
@@ -222,7 +243,7 @@ pub fn install(game: &Game, env: &Env, fetch: Fetch, progress: &dyn Fn(u64)) -> 
         }
     }
     std::fs::create_dir_all(env.work_dir).map_err(|e| Failure::Disk(e.to_string()))?;
-    let work = Work(env.work_dir.join(format!("{}.download", game.id)));
+    let mut work = Work(env.work_dir.join(if cancel.is_some() { format!("{}-{}.download", game.id, f.sha256) } else { format!("{}.download", game.id) }), cancel.is_some());
     fetch(&f.url, &work.0, Some(f.size), progress).map_err(|e| match e {
         DownloadFailure::Unreachable => Failure::Offline,
         DownloadFailure::Broke(m) => Failure::Broke(m),
@@ -245,13 +266,16 @@ pub fn install(game: &Game, env: &Env, fetch: Fetch, progress: &dyn Fn(u64)) -> 
         }
         Some(_) => return Err(Failure::BadArchive),
     };
+    if cancel.is_some_and(|c| c.is_cancelled()) { return Err(Failure::Broke("The download was stopped. Try again.".into())); }
     std::fs::create_dir_all(env.dest_dir).map_err(|e| Failure::Disk(e.to_string()))?;
     // Looked at again: the player may have copied the same file in while it downloaded.
     if let Some(p) = on_card(env.dest_dir, &f.name_on_disk) {
+        work.1 = false;
         return Ok(Outcome::AlreadyThere(p));
     }
     let target = env.dest_dir.join(&f.name_on_disk);
     crate::fsutil::write_atomic(&target, &rom).map_err(|e| Failure::Disk(e.to_string()))?;
+    work.1 = false;
     Ok(Outcome::Added(target))
 }
 
@@ -548,6 +572,26 @@ mod tests {
         g.file.url = "http://starter-pack-test.invalid/g.gb".into();
         assert_eq!(install(&g, &env(&dest, &work), &curl, &|_| {}), Err(Failure::Offline));
         assert!(names(&dest).is_empty() && names(&work).is_empty());
+    }
+
+    #[test]
+    fn cancelled_optional_game_keeps_its_checkpoint_and_next_try_resumes_before_publication() {
+        let (dest, work, src) = (temp("optional-dest"), temp("optional-work"), temp("optional-source"));
+        let bytes = vec![42u8; 5000];
+        let mut g = game_of(&bytes);
+        let source = src.join("game.gb");
+        std::fs::write(&source, &bytes).unwrap();
+        g.file.url = format!("file://{}", source.display());
+        let partial = work.join(format!("{}-{}.download", g.id, g.file.sha256));
+        std::fs::write(&partial, &bytes[..19]).unwrap();
+        let cancel = crate::update::Cancel::new();
+        assert!(install_cancellable(&g, &env(&dest, &work), &cancel, &|n| { if n > 19 { cancel.cancel(); } }).is_err());
+        assert!(names(&dest).is_empty(), "B cannot publish a game after cancellation");
+        assert!(partial.exists(), "the RAM transfer is checkpointed after curl exits");
+        assert!(std::fs::metadata(&partial).unwrap().len() >= 19);
+        assert_eq!(install_cancellable(&g, &env(&dest, &work), &crate::update::Cancel::new(), &|_| {}).unwrap(), Outcome::Added(dest.join("Test.gb")));
+        assert_eq!(std::fs::read(dest.join("Test.gb")).unwrap(), bytes);
+        assert!(!partial.exists(), "successful publication retires this exact checkpoint");
     }
 
     #[test]

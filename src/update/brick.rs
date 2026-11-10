@@ -59,6 +59,7 @@ pub(super) fn install_brick_with(
     free: &dyn Fn(&Path) -> Option<u64>,
     unpack: Unpack,
 ) -> Result<(), String> {
+    cancel.boundary(super::CancelBoundary::Activation);
     if rel.version.is_empty() || rel.version.len() > 120 || rel.version.contains(['/', '\\', '\n', '\r', '\0']) {
         return Err("The update list names no usable version. Nothing was changed.".into());
     }
@@ -92,7 +93,7 @@ pub(super) fn install_brick_with(
     if cancel.is_cancelled() { return Err("Download cancelled.".into()); }
     // Every network child has exited before the first update write on the card, including changed components.
     let _idle = super::brick_io::IdleIo::enter().map_err(|e| e.to_string())?;
-    cancel.set_status("Preparing the update…");
+    cancel.set_phase(super::WorkerPhase::Unpacking);
     let work = card.join(".update");
     std::fs::create_dir_all(&work).map_err(|e| e.to_string())?;
     if let Ok(entries) = std::fs::read_dir(&work) {
@@ -128,6 +129,7 @@ pub(super) fn install_brick_with(
         }
     }
     let _ = std::fs::remove_file(&tarball);
+    cancel.set_phase(super::WorkerPhase::Validating);
     if let Some(missing) = BRICK_REQUIRED.iter().find(|f| !staging.join(f).is_file()) {
         return fail(format!("The update is missing {missing}. Nothing was changed."));
     }
@@ -159,12 +161,15 @@ pub(super) fn install_brick_with(
     if cancel.is_cancelled() {
         return fail("Download cancelled.".into());
     }
+    cancel.set_phase(super::WorkerPhase::MovingAssets);
+    if let Err(e) = crate::cheat_download::preserve_legacy(card) { return fail(e); }
     if let Err(e) = plan.move_reused(card, &staging) { return fail(e); }
+    cancel.set_phase(super::WorkerPhase::Flushing);
     // Make newly created parent directories and all moved assets durable BEFORE .ready can reach disk.
     if let Err(e) = crate::fsutil::sync_tree(&staging) { return fail(e.to_string()); }
     crate::fsutil::sync_dir(card);
     // FAT's directory fsync can be unsupported; order .ready after all asset/directory metadata.
-    unsafe { libc::sync() };
+    crate::fsutil::flush_all();
     let ready = (|| -> std::io::Result<()> {
         let f = std::fs::File::create(staging.join(".ready"))?;
         f.sync_all()?;
@@ -175,11 +180,11 @@ pub(super) fn install_brick_with(
     if let Err(e) = ready {
         return fail(e.to_string());
     }
-    // SAFETY: sync(2) takes no arguments and cannot fail; everything written so far is on the card before the renames.
-    unsafe { libc::sync() };
+    // Everything written so far is on the card before the renames.
+    crate::fsutil::flush_all();
+    cancel.set_phase(super::WorkerPhase::Activating);
     if let Err(e) = switch_app(card, &staging, &|a, b| std::fs::rename(a, b)) { return fail(e); }
-    // SAFETY: as above.
-    unsafe { libc::sync() };
+    crate::fsutil::flush_all();
     let _ = std::fs::remove_dir_all(&ram.dir);
     Ok(())
 }

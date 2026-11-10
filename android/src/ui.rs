@@ -52,6 +52,8 @@ pub struct Preferences {
     #[serde(deserialize_with = "lenient")]
     pub font: pocket_ui::font_style::FontStyle,
     #[serde(deserialize_with = "lenient")]
+    pub retro_colours: pocket_ui::retro::Colours,
+    #[serde(deserialize_with = "lenient")]
     pub gba_model: pocket_ui::system_art::GbaModel,
     #[serde(deserialize_with = "lenient")]
     pub prompts: pocket_ui::button_prompts::PromptStyle,
@@ -108,6 +110,7 @@ impl Preferences {
     pub fn apply_look(&self) {
         pocket_ui::palette::set_colours(self.colours);
         pocket_ui::font_style::set(self.font);
+        pocket_ui::retro::set_colours(self.retro_colours);
         pocket_ui::button_prompts::set(self.prompts);
         pocket_ui::motion::set_level(self.motion);
         pocket_ui::motion::set_cozy(self.cozy.unwrap_or(true));
@@ -141,9 +144,10 @@ enum Setting {
     Folder,
     GameCheck,
     Media,
+    Updates,
     FirstStart,
 }
-const SETTINGS: [Setting; 22] = [
+const SETTINGS: [Setting; 23] = [
     Setting::Look,
     Setting::Appearance,
     Setting::Colours,
@@ -165,6 +169,7 @@ const SETTINGS: [Setting; 22] = [
     Setting::Folder,
     Setting::GameCheck,
     Setting::Media,
+    Setting::Updates,
     Setting::FirstStart,
 ];
 #[derive(Clone, Copy, PartialEq, Eq, Hash)]
@@ -694,7 +699,9 @@ impl Ui {
                         self.cards.clear();
                     }
                     Setting::Colours => {
-                        self.prefs.colours = self.prefs.colours.step(true);
+                        if self.prefs.font == pocket_ui::font_style::FontStyle::Retro {
+                            self.prefs.retro_colours = self.prefs.retro_colours.step(true);
+                        } else { self.prefs.colours = self.prefs.colours.step(true); }
                         self.drop_pictures();
                     }
                     Setting::Font => {
@@ -713,6 +720,7 @@ impl Ui {
                     Setting::GameBoy => self.prefs.gameboy_gambatte = !self.prefs.gameboy_gambatte,
                     Setting::Folder => return Command::Folder,
                     Setting::GameCheck => return self.open_check(),
+                    Setting::Updates => return Command::Notice("Install a newer Android APK to update. Your games and settings stay."),
                     Setting::Media => self.prefs.download_media = Some(!self.prefs.download_media.unwrap_or(false)),
                     Setting::Animations => self.prefs.cozy = Some(!self.prefs.cozy.unwrap_or(true)),
                     Setting::CozyExtras => {
@@ -1486,8 +1494,8 @@ impl Ui {
                 .map(|setting| match setting {
                     Setting::Look => row("Look", self.prefs.theme.name()),
                     Setting::Appearance => row("Appearance", if self.prefs.light { "Light" } else { "Dark" }),
-                    Setting::Colours => row("Colours", self.prefs.colours.label()),
-                    Setting::Font => row("Font", self.prefs.font.label()),
+                    Setting::Colours => row("Colours", if self.prefs.font == pocket_ui::font_style::FontStyle::Retro { self.prefs.retro_colours.label() } else { self.prefs.colours.label() }),
+                    Setting::Font => row("Style", self.prefs.font.label()),
                     Setting::TextSize => row("Text size", self.prefs.text_size.label()),
                     Setting::Language => row("Language", pocket_ui::i18n::current().name()),
                     Setting::Animations => row("Animations", if self.prefs.cozy.unwrap_or(true) { "Cozy" } else { "Quick" }),
@@ -1502,6 +1510,7 @@ impl Ui {
                     Setting::Folder => row("Choose your ROM folder", ""),
                     Setting::GameCheck => row("Game check", &self.check_value()),
                     Setting::Media => row("Covers and pictures", on_off(self.prefs.download_media.unwrap_or(false))),
+                    Setting::Updates => row("Updates", "Android APK"),
                     Setting::FirstStart => row("First start", ""),
                 })
                 .collect(),

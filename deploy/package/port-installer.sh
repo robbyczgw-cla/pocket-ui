@@ -86,15 +86,24 @@ worker() {
   [ -f "$PKG/install.sh" ] && [ -f "$PKG/files/VERSION" ] || failed "the package inside is incomplete." "Nothing was changed. Download it again. Press Close to go back to EmulationStation."
   VERSION=$(cat "$PKG/files/VERSION")
 
-  if [ -f "$APP/installed-by-package" ] && [ -f "$DROPIN" ] && [ "$(sed -n 's/^version=//p' "$APP/installed-by-package")" = "$VERSION" ]; then
+  # The installer owns the content/repair decision. Its version marker alone can
+  # survive an interrupted activation or name a damaged/rebuilt package.
+  sh "$PKG/install.sh" --check-installed >"$WORK/check.out" 2>&1
+  rc=$?
+  # A thin starter can find an older zip beside it. Old installers have no query;
+  # let their normal checks/install decide instead of trusting a version marker.
+  if [ $rc -eq 2 ] && grep -q '^unknown option: --check-installed ' "$WORK/check.out"; then
+    sh "$PKG/install.sh" --check >"$WORK/check.out" 2>&1
+    rc=$?
+    [ $rc -ne 0 ] || rc=3
+  fi
+  if [ $rc -eq 0 ]; then
     say "" "pocket-ui $VERSION is already installed on this card." "Nothing to do. Press Close to go back."
     finish nothing
   fi
 
-  # install.sh's own checks; its sentences are the explanation.
-  sh "$PKG/install.sh" --check >"$WORK/check.out" 2>&1
-  rc=$?
-  if [ $rc -ne 0 ]; then
+  # 3 means valid package/system, but content or start files need installing.
+  if [ $rc -ne 3 ]; then
     reason=$(sed -n 's/^NOT INSTALLED: //p' "$WORK/check.out" | head -n 1)
     [ -n "$reason" ] || reason=$(tail -n 3 "$WORK/check.out")
     failed "pocket-ui was NOT installed: ${reason%.}." "Nothing on the card was changed, EmulationStation stays as it was. Press Close to go back to EmulationStation."

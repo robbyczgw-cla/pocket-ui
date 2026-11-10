@@ -72,6 +72,18 @@ pub enum Action {
     SetShare(Share, bool),
     /// The saves with two versions, to choose one each (`sync_conflict_page`).
     OpenVersions,
+    /// X on a paused share row: resume every paused folder of it (`sync::resume`).
+    Resume(Share),
+}
+
+/// A share row's folders paused in Syncthing, as the poller last read them.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Paused {
+    /// How many of the row's folders are paused (GameCube & Wii has two).
+    pub folders: usize,
+    /// Every one of them written down as paused by pocket-ui for a game (`sync::HELD_PATH`). Otherwise someone paused one in
+    /// Syncthing, or pocket-ui stopped between its pause and writing it down: the page can't tell those apart.
+    pub ours: bool,
 }
 
 /// News for the page from its threads.
@@ -81,12 +93,15 @@ pub enum Event {
     Switched { on: bool, result: Result<Option<String>, String> },
     /// A share was switched on or off in Syncthing.
     ShareApplied(Share, Result<(), String>),
-    /// What the poller read: the config file, whether the service runs, and the status.
+    /// What the poller read: the config file, whether the service runs, and the status; `held`, the folders pocket-ui paused.
     Poll {
         cfg: Option<Config>,
         snap: Snapshot,
         password: Option<String>,
+        held: Vec<String>,
     },
+    /// Resume on a row went through (how many folders) or not.
+    Resumed(Share, Result<usize, String>),
     /// The scan after a game finished.
     AfterGame(Outcome),
     /// The search for saves with two versions found these (`app_sync_conflicts`).
@@ -114,6 +129,11 @@ pub struct SyncPage {
     pub alive: std::sync::Arc<std::sync::atomic::AtomicBool>,
     /// Saves with two versions waiting for a choice (set by the App from its last search).
     pub waiting: usize,
+    /// The folders pocket-ui paused for a game (`sync::held_now`), from the last poll.
+    pub held: Vec<String>,
+    /// The row whose folders are being resumed, and the one resumed last (its line says so until the selection moves).
+    pub resuming: Option<Share>,
+    pub resumed: Option<Share>,
 }
 
 impl SyncPage {
@@ -129,7 +149,26 @@ impl SyncPage {
             error: None,
             alive: std::sync::Arc::new(std::sync::atomic::AtomicBool::new(true)),
             waiting: 0,
+            held: Vec::new(),
+            resuming: None,
+            resumed: None,
         }
+    }
+
+    /// The row's paused folders, while Syncthing is on.
+    pub fn paused(&self, share: Share) -> Option<Paused> {
+        let cfg = self.cfg.as_ref().filter(|_| self.on())?;
+        let ids: Vec<&str> = share.dirs().iter().map(|d| d.id).filter(|id| cfg.folders.iter().any(|f| f.id == *id && f.paused)).collect();
+        (!ids.is_empty()).then(|| Paused {
+            folders: ids.len(),
+            ours: ids.iter().all(|id| self.held.iter().any(|h| h == id)),
+        })
+    }
+
+    /// X resumes the selected row: its folders are paused, Syncthing answers and nothing else is under way.
+    pub fn can_resume(&self) -> bool {
+        let answering = self.snap.is_some_and(|s| s.running);
+        self.busy.is_none() && self.resuming.is_none() && answering && matches!(self.row(), Row::Share(s) if self.paused(s).is_some())
     }
 
     /// Saves waiting for a choice, as far as the page says: none while Syncthing is off.
@@ -163,8 +202,16 @@ impl SyncPage {
         let n = rows().len();
         if b == Button::Up {
             self.sel = (self.sel + n - 1) % n;
+            self.resumed = None;
         } else if b == Button::Down {
             self.sel = (self.sel + 1) % n;
+            self.resumed = None;
+        } else if b == Button::North {
+            if let (true, Row::Share(s)) = (self.can_resume(), self.row()) {
+                self.error = None;
+                self.resuming = Some(s);
+                return Action::Resume(s);
+            }
         } else if b == cancel {
             self.alive.store(false, std::sync::atomic::Ordering::Relaxed);
             return Action::Close;
@@ -207,6 +254,8 @@ impl SyncPage {
                 0 => crate::sync_conflict_page::waiting_text(0),
                 n => format!("{} >", crate::sync_conflict_page::waiting_text(n)),
             },
+            Row::Share(s) if self.resuming == Some(s) => "Resuming".to_string(),
+            Row::Share(s) if self.paused(s).is_some() => "Paused".to_string(),
             Row::Share(s) => if self.prefs.shared(s) { "Shared" } else { "Not shared" }.to_string(),
         }
     }
@@ -218,8 +267,28 @@ impl SyncPage {
             Row::AfterPlay => "Look for new saves as soon as a game ends.",
             Row::Versions if self.waiting() > 0 => "Saves changed on two devices. Choose which to keep.",
             Row::Versions => "Nothing is waiting for a choice.",
-            Row::Share(s) => s.blurb(),
+            Row::Share(s) => self.describe_pause(s).unwrap_or(s.blurb()),
         }
+    }
+
+    /// A share row's line while it is paused, resuming or just resumed.
+    fn describe_pause(&self, s: Share) -> Option<&'static str> {
+        let both = s.dirs().len() > 1;
+        if self.resuming == Some(s) {
+            return Some(if both { "Resuming both folders…" } else { "Resuming…" });
+        }
+        let Some(p) = self.paused(s) else {
+            return (self.resumed == Some(s)).then_some(if both { "Both folders resumed. Syncing again." } else { "Resumed. Syncing again." });
+        };
+        let answering = self.snap.is_some_and(|s| s.running);
+        Some(match (p.ours, answering, p.folders > 1) {
+            (true, false, _) => "Paused by pocket-ui. Syncthing isn't answering.",
+            (false, false, _) => "Paused, not by pocket-ui. Syncthing isn't answering.",
+            (true, true, false) => "Paused by pocket-ui for a game. X resumes it.",
+            (true, true, true) => "Paused by pocket-ui for a game. X resumes both folders.",
+            (false, true, false) => "Paused, not by pocket-ui. X resumes it.",
+            (false, true, true) => "Paused, not by pocket-ui. X resumes both folders.",
+        })
     }
 
     pub fn event(&mut self, e: Event) {
@@ -244,12 +313,29 @@ impl SyncPage {
             }
             Event::ShareApplied(share, Err(msg)) => self.error = Some(format!("{}: {msg}", share.label())),
             Event::ShareApplied(_, Ok(())) => {}
-            Event::Poll { cfg, snap, password } => {
+            Event::Poll { cfg, snap, password, held } => {
                 self.cfg = cfg;
                 if self.busy.is_none() {
                     self.snap = Some(snap);
                 }
                 self.password = password;
+                self.held = held;
+            }
+            Event::Resumed(share, result) => {
+                self.resuming = None;
+                match result {
+                    Ok(_) => {
+                        // Not paused any more, before the next poll reads it.
+                        let ids: Vec<&str> = share.dirs().iter().map(|d| d.id).collect();
+                        for f in self.cfg.iter_mut().flat_map(|c| c.folders.iter_mut()).filter(|f| ids.contains(&f.id.as_str())) {
+                            f.paused = false;
+                        }
+                        self.held.retain(|h| !ids.contains(&h.as_str()));
+                        self.resumed = Some(share);
+                    }
+                    // The row stays selected and says Paused: the status says why, without the row's name (room beside the QR code).
+                    Err(msg) => self.error = Some(msg),
+                }
             }
             Event::AfterGame(_) | Event::Conflicts(_) | Event::Kept { .. } | Event::Library(_) => {}
         }
@@ -382,6 +468,88 @@ mod tests {
         assert!(!p.alive.load(std::sync::atomic::Ordering::Relaxed));
     }
 
+    /// Syncthing on, answering or not, with these folders paused and `held` naming ours.
+    fn paused_page(paused: &[&str], held: &[&str], answering: bool) -> SyncPage {
+        let mut p = SyncPage::new(Prefs { enabled: true, ..Prefs::default() }, None);
+        let mut cfg = Config::parse(include_str!("fixtures/syncthing-pocket.xml")).unwrap();
+        for id in ["pocket-gc-cards", "pocket-wii-saves"] {
+            cfg.folders.push(crate::sync::Folder { id: id.into(), label: String::new(), path: String::new(), paused: false });
+        }
+        for f in &mut cfg.folders {
+            f.paused = paused.contains(&f.id.as_str());
+        }
+        p.event(Event::Poll {
+            cfg: Some(cfg),
+            snap: Snapshot { running: answering, ..Default::default() },
+            password: None,
+            held: held.iter().map(|h| h.to_string()).collect(),
+        });
+        p
+    }
+
+    #[test]
+    fn a_pause_that_is_not_ours_shows_on_its_row_and_x_resumes_only_when_chosen() {
+        // Paused by hand in Syncthing, or in the gap between our pause and its marker: the same to the page, and never resumed
+        // by itself (the poll alone asks for nothing).
+        let mut p = paused_page(&["pocket-gc-cards", "pocket-wii-saves"], &[], true);
+        let dolphin = Row::Share(Share::Dolphin);
+        assert_eq!(p.value(dolphin), "Paused");
+        assert_eq!(p.paused(Share::Dolphin), Some(Paused { folders: 2, ours: false }));
+        assert_eq!(p.value(Row::Share(Share::Saves)), "Shared", "the other rows as they were");
+        go_to(&mut p, dolphin);
+        assert_eq!(p.describe(dolphin), "Paused, not by pocket-ui. X resumes both folders.");
+        assert!(p.can_resume());
+        // A still flips the share as before; X resumes.
+        assert_eq!(p.press(Button::North, CONFIRM, CANCEL), Action::Resume(Share::Dolphin));
+        assert_eq!(p.value(dolphin), "Resuming");
+        assert_eq!(p.describe(dolphin), "Resuming both folders…");
+        assert_eq!(p.press(Button::North, CONFIRM, CANCEL), Action::Nothing, "one at a time");
+        p.event(Event::Resumed(Share::Dolphin, Ok(2)));
+        assert_eq!(p.value(dolphin), "Shared");
+        assert_eq!(p.describe(dolphin), "Both folders resumed. Syncing again.");
+        assert!(!p.can_resume());
+        // On a row with nothing paused X does nothing.
+        go_to(&mut p, Row::Share(Share::Saves));
+        assert_eq!(p.press(Button::North, CONFIRM, CANCEL), Action::Nothing);
+        go_to(&mut p, dolphin);
+        assert_eq!(p.press(CONFIRM, CONFIRM, CANCEL), Action::SetShare(Share::Dolphin, false), "the share switch stays");
+    }
+
+    #[test]
+    fn our_own_pause_says_so_and_one_folder_is_it() {
+        let mut p = paused_page(&["pocket-saves"], &["pocket-saves"], true);
+        go_to(&mut p, Row::Share(Share::Saves));
+        assert_eq!(p.paused(Share::Saves), Some(Paused { folders: 1, ours: true }));
+        assert_eq!(p.describe(Row::Share(Share::Saves)), "Paused by pocket-ui for a game. X resumes it.");
+        assert_eq!(p.press(Button::North, CONFIRM, CANCEL), Action::Resume(Share::Saves));
+        // One folder of ours and one not: not all ours, so "not by pocket-ui".
+        let p = paused_page(&["pocket-gc-cards", "pocket-wii-saves"], &["pocket-gc-cards"], true);
+        assert_eq!(p.paused(Share::Dolphin), Some(Paused { folders: 2, ours: false }));
+    }
+
+    #[test]
+    fn no_resume_while_syncthing_does_not_answer_or_is_off_and_a_failure_says_why() {
+        let mut p = paused_page(&["pocket-wii-saves"], &[], false);
+        let dolphin = Row::Share(Share::Dolphin);
+        go_to(&mut p, dolphin);
+        assert_eq!(p.value(dolphin), "Paused", "what the config file says is still shown");
+        assert_eq!(p.describe(dolphin), "Paused, not by pocket-ui. Syncthing isn't answering.");
+        assert!(!p.can_resume());
+        assert_eq!(p.press(Button::North, CONFIRM, CANCEL), Action::Nothing);
+        // Off: nothing syncs, nothing is paused as far as the page says.
+        p.prefs.enabled = false;
+        assert_eq!(p.value(dolphin), "Shared");
+        // Answering, then the resume fails (a game started, Syncthing refused): still paused, and the status says why.
+        let mut p = paused_page(&["pocket-wii-saves"], &[], true);
+        go_to(&mut p, dolphin);
+        assert_eq!(p.describe(dolphin), "Paused, not by pocket-ui. X resumes it.");
+        assert_eq!(p.press(Button::North, CONFIRM, CANCEL), Action::Resume(Share::Dolphin));
+        p.event(Event::Resumed(Share::Dolphin, Err(crate::sync::PLAYING.into())));
+        assert_eq!(p.error.as_deref(), Some("Not while a game runs."));
+        assert_eq!(p.value(dolphin), "Paused");
+        assert!(p.can_resume(), "it can be tried again");
+    }
+
     #[test]
     fn syncthing_running_on_its_own_counts_as_on_and_an_open_interface_is_reported() {
         let mut p = page();
@@ -393,6 +561,7 @@ mod tests {
                 ..Default::default()
             },
             password: None,
+            held: Vec::new(),
         });
         assert!(p.on(), "started by ROCKNIX's own setting");
         assert_eq!(p.problems(), vec![Problem::RocknixLogin, Problem::ClearText]);
@@ -405,6 +574,7 @@ mod tests {
                 ..Default::default()
             },
             password: None,
+            held: Vec::new(),
         });
         assert_eq!(p.problems(), vec![]);
         // Not running: its config file says nothing about what is reachable.
@@ -413,6 +583,7 @@ mod tests {
             cfg: Some(rocknix),
             snap: Snapshot::default(),
             password: None,
+            held: Vec::new(),
         });
         assert_eq!(p.problems(), vec![]);
     }

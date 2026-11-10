@@ -33,7 +33,7 @@ class BrickCheats(unittest.TestCase):
                 out.addfile(entry, io.BytesIO(content))
         return archive
 
-    def test_card_payload_and_ota_retain_cheats_and_notices(self):
+    def test_cheats_are_optional_and_notices_stay_in_card_and_ota(self):
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
             archive, app = self.fixture(root), root / 'card/pocket-ui/app'
@@ -50,6 +50,14 @@ class BrickCheats(unittest.TestCase):
             for folder in data.SYSTEMS.values():
                 self.assertEqual(packed[folder], {self.game: self.code})
             self.assertEqual(manifest['pack_bytes'], (app / data.PACK).stat().st_size)
+            data.make_optional(app, root / 'optional')
+            self.assertFalse((app / data.PACK).exists(), 'the card and its ZIP contain no cheat pack')
+            optional_manifest = json.loads((app / 'database/MANIFEST.json').read_text())
+            self.assertTrue(optional_manifest['optional'])
+            self.assertEqual(optional_manifest['pack'], 'storage/pocket-ui/cheats/cht.pack')
+            attribution = (app / 'licences/libretro-database/ATTRIBUTION.txt').read_text()
+            self.assertIn('cheats-download.json', attribution)
+            self.assertNotIn('../../cores/cht.pack', attribution)
             (app / 'cores/test.so').write_bytes(b'core')
             pack.prepare(app, root / 'release', root / 'channel', 'https://example.org/release', '1')
             with tarfile.open(root / 'channel/pocket-ui-brick-1.tar.gz') as ota:
@@ -57,8 +65,12 @@ class BrickCheats(unittest.TestCase):
                 # The database is an asset package of its own: downloaded once, not part of the app tarball.
                 self.assertNotIn(data.PACK, names)
                 assets = {a['path']: a for a in json.load(ota.extractfile('asset-packages.json'))['assets']}
-                self.assertEqual(assets[data.PACK]['size'], (app / data.PACK).stat().st_size)
-                self.assertEqual(assets[data.PACK]['sha256'], data.sha(app / data.PACK))
+                self.assertNotIn(data.PACK, assets, 'opening Updates must never download cheats')
+                download = json.load(ota.extractfile('database/cheats-download.json'))
+                optional = root / 'channel/assets' / download['url'].rsplit('/', 1)[1]
+                self.assertEqual(download['size'], optional.stat().st_size)
+                self.assertEqual(download['sha256'], data.sha(optional))
+                self.assertEqual(data.read_pack(optional), packed)
                 self.assertFalse([n for n in names if n.startswith('database/cht')])
                 self.assertEqual(ota.extractfile('licences/libretro-database/LICENSE').read(), b'upstream licence')
                 self.assertIn('CC BY-SA 4.0', ota.extractfile('licences/libretro-database/ATTRIBUTION.txt').read().decode())

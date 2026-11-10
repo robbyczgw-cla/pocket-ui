@@ -130,6 +130,7 @@ START on a PortMaster port's card ([Performance & fan](performance.md#portmaster
 | On-screen keyboard | D-pad: move. A: type. B: delete (back to the list when empty). L1: empty the field. X: Shift. Y: symbols. START: connect. |
 | Extras | Up / Down: choose. A: download (cover art) or browse (PortMaster). On Pictures, A or Left / Right: the next choice (Box art, Box art and screenshots, Off). |
 | PortMaster games | Up / Down: move. L1 / R1: page. Left / Right: Ready to play or Bring your own game files. A: install or remove. X: how to copy a game's files. B: back. |
+| PortMaster on TrimUI, first use | A: accept the optional runtime download. Progress and retry appear here. B: back to Extras while the accepted download continues. MENU in a port: pause menu. |
 | Copy your game files | Up / Down: scroll. X: turn file sharing on or off (from Extras). A or B: back. |
 | Add your games | D-pad: move on the grid (L1 / R1: three rows). A on **All systems**: show every system, A again closes the list. X: turn file sharing on or off. |
 | Remote access (SSH) | A: turn remote access on or off. B: back. |
@@ -243,6 +244,9 @@ button of the handheld's own controls while you set up another controller; with 
 up by itself and nothing changes. Input from another controller cannot change the capture. B leaves the page;
 **Reset controller layout** restores only the selected controller.
 
+On the TrimUI Brick, F1/F2 are reserved shortcuts. Pressing one during capture ends it with an explanation;
+no game button changes. Choose their global shortcut actions in Settings → Sound & feel → **Lights & buttons**.
+
 If the selected controller disconnects while the page waits, capture ends without changing the layout.
 Reconnect it and choose the action again. Held buttons are released when its input reader is replaced too,
 so a silent old connection cannot keep a direction or trigger held in the menus or game.
@@ -258,3 +262,5 @@ uses the same press/release thresholds as the menus. HOME, power and volume rema
 
 On the TrimUI Brick, volume keys while the mute slider is engaged show **Muted** and keep the
 previous level. Release the slider to return to that exact level.
+
+Game and system names keep their original wording in every interface language, including wrapped cover and card labels.

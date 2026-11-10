@@ -118,7 +118,7 @@ The `README.txt` inside is the user's guide. New to ROCKNIX on the Mini V2? Sinc
 the zip, with the whole package as a tar.gz after the script, about 10 MB). The player copies this one file into
 `roms/ports` (ROCKNIX's file sharing: Samba on in its Network Settings, then `\\<name or IP>` on Windows or `smb://<name or IP>` on a Mac, see [ROCKNIX: Add Games](https://rocknix.org/play/add-games/); or the card in a computer), has EmulationStation reload its list (Start → Game
 Settings → Update Gamelists) and starts **Install pocket-ui** in Ports. The script is only a front end: it unpacks the
-package to `/storage/.pocket-ui-port`, runs `install.sh --check` and then `install.sh --no-restart` unchanged, so every
+package to `/storage/.pocket-ui-port`, runs `install.sh --check-installed` and then, when needed, `install.sh --no-restart`, so every
 check and the "nothing written until all passed" rule are install.sh's. What the screen shows is ROCKNIX's own
 `text_viewer` (full-screen text with a Close button the pad operates; ROCKNIX's BIOS and download errors use it), running
 a `tail -f` of the log of a worker started detached, so closing the viewer early never ends an install halfway. Steps:
@@ -128,7 +128,10 @@ the card was changed", and "Press Close to go back to EmulationStation"; the sam
 needed to unpack), a damaged file or a bare starter without a zip. On success the entry removes itself, writes `Uninstall
 pocket-ui.sh` (the same script without the package; under that name it runs `/storage/pocket-ui/uninstall.sh`) next to
 it, and the interface restarts into pocket-ui through `systemd-run` (a port runs inside essway, where install.sh cannot
-restart essway itself). A second start with the same version installed says "already installed" and changes nothing.
+restart essway itself). A second start says "already installed" only when the programs and start files match the package.
+A damaged program, missing boot screen or rebuilt package is repaired even if the version number is unchanged.
+`--check-installed` performs the normal checks and compares the installed content/links: exit 0 means complete, 3 means
+an install or repair is needed, and 1 means a check refused it. Like `--check`, it removes its temporary probe files.
 Without the package inside, the file looks for `pocket-ui-*-rocknix-install.zip` next to itself, in `/storage` or
 `/storage/roms`. Tested by `test-package.sh` against the fake root (launch, checks, install, switch, second run, refusals,
 uninstall) and on the Odin 2 Mini on 2026-10-28, launched through ROCKNIX's `runemu.sh` as EmulationStation does

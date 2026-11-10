@@ -78,8 +78,8 @@ FAT partition "ROCKNIX" (readable on any computer):
                              grown; at every start, sets aside system updates pocket-ui did not check
   pocket-ui-info/            this file; SOURCE-OFFER.txt; pocket-ui-os.txt (name and version, shown
                              in Settings, About); pocket-ui's LICENSE and NOTICE.md;
-                             licences/ (the Rust crates' licence texts and the fonts' OFL; also in
-                             STORAGE as /storage/pocket-ui/licences); rocknix-licenses/ (ROCKNIX's
+                             licences/ (the Rust crates' licence texts and the fonts' OFL; /storage/pocket-ui/licences
+                             links here); rocknix-licenses/ (ROCKNIX's
                              LICENSE.md and licenses folder at tag @ROCKNIX_TAG@); firmware-licences/
                              (the terms of the firmware files inside SYSTEM)
 

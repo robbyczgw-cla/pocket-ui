@@ -136,23 +136,8 @@ impl App {
         if self.tour.checked || !self.drew_first || !self.onboarded || self.kids_live() {
             return;
         }
-        let busy = self.running.is_some()
-            || self.launch_at.is_some()
-            || self.setup.is_some()
-            || self.settings_page.is_some()
-            || self.menu.is_some()
-            || self.switcher.is_some()
-            || self.card.is_some()
-            || self.controls_card_open()
-            || self.console.is_some()
-            || self.curator.page.is_some()
-            || self.find.is_open()
-            || self.port_files.is_some()
-            || self.emu_choice_on_shelf()
-            || self.this_game_open()
-            || self.leave.is_some()
-            || self.notice.as_ref().is_some_and(super::Notice::active)
-            || self.sys.is_open();
+        // The shelf with nothing over it (`app_where`), and no game starting from it.
+        let busy = !self.shelf_alone() || self.launch_at.is_some();
         if busy {
             return;
         }

@@ -478,6 +478,7 @@ pub fn spine_px(w: i32, want: f32) -> u32 {
 /// `spine` with the title at `want` pixels or the nearest size below it that fits the label (`spine_px`): the Shelf
 /// look's spines, whose title follows Settings → Text size.
 pub fn spine_with(text: &mut Text, m: Medium, k: f32, look: Look, title: &str, want: f32) -> Pic {
+    text.literal(|text| {
     let look = spine_print(m).map_or(look, |(paper, band)| Look { color: paper.unwrap_or(look.color), band, ..look });
     let t = m.template();
     let f = shelf_scale() * k;
@@ -511,6 +512,7 @@ pub fn spine_with(text: &mut Text, m: Medium, k: f32, look: Look, title: &str, w
         _ => {}
     }
     p
+    })
 }
 
 /// What a spine shows of a title, for tests/spine_names.rs: `POCKETUI_SPINE_LINES` names the file the spines made go to
@@ -789,6 +791,7 @@ pub fn front(text: &mut Text, m: Medium, k: f32, look: Look, title: &str, cover:
 /// The band of pocket-ui's own case: the system's colour, its console small at the left and its name beside it (as
 /// large as the band takes, 21 px at the least, cut with "…" when long).
 fn system_band(text: &mut Text, p: &mut Pic, (x, y, w, h): (i32, i32, i32, i32), color: u32, console: Option<&Sprite>, system: &str) {
+    text.literal(|text| {
     paper(p, (x, y, w, h), color);
     let pad = (h / 6).max(2);
     let mut tx = x + pad * 2;
@@ -832,6 +835,7 @@ fn system_band(text: &mut Text, p: &mut Pic, (x, y, w, h): (i32, i32, i32, i32),
             }
         }
     }
+    })
 }
 
 /// The smallest a cartridge, card or disc is drawn beside its case (screen pixels).
@@ -1134,11 +1138,10 @@ fn label_title(text: &mut Text, p: &mut Pic, (x, y, w, h): (i32, i32, i32, i32),
 /// The title written into `(x, y, w, h)` of `p` as `label_title` does, over what is painted there, at most a
 /// `per_h`th of the height in size.
 fn write_title(text: &mut Text, p: &mut Pic, (x, y, w, h): (i32, i32, i32, i32), look: Look, title: &str, per_h: i32) {
+    text.literal(|text| {
     let _fixed = crate::type_scale::fixed();
     // A shortened title is still a game's name, even when only its full name was learned by i18n. Keep every
     // measurement and wrap untranslated too: otherwise the fallback can turn "Black: ..." into "Schwarz".
-    let translating = text.translating();
-    text.set_translate(false);
     let face = crate::text::Face::Title;
     let max_w = w - (w / 8).max(4);
     let step = |s: u32| s as i32 * 11 / 10;
@@ -1174,7 +1177,7 @@ fn write_title(text: &mut Text, p: &mut Pic, (x, y, w, h): (i32, i32, i32, i32),
         }
         base += step(px);
     }
-    text.set_translate(translating);
+    })
 }
 
 /// The printed side of a system's disc, or the PSP's UMD: a pixel-art template from a photo of the real one
@@ -1477,13 +1480,12 @@ const RING_PX: u32 = 12;
 /// `title` along the lower arc of the ring from radius `r0` to `r1` round `c`, upright, in the middle of it; as large
 /// as the ring allows, without its subtitle when it is too long for the arc, only then cut with "…".
 fn ring_title(text: &mut Text, p: &mut Pic, (cx, cy): (f32, f32), (r0, r1): (f32, f32), ink: u32, title: &str) {
+    text.literal(|text| {
     let px = ((r1 - r0) * 0.78) as u32;
     if px < RING_PX {
         return;
     }
     let _fixed = crate::type_scale::fixed();
-    let translating = text.translating();
-    text.set_translate(false);
     let face = crate::text::Face::Title;
     let mid = (r0 + r1) / 2.0;
     // Up to 70 degrees either side of the bottom.
@@ -1500,7 +1502,6 @@ fn ring_title(text: &mut Text, p: &mut Pic, (cx, cy): (f32, f32), (r0, r1): (f32
         let mut c = crate::gfx::Canvas::new(&mut buf, tw as u32, bh as u32);
         text.draw(&mut c, face, px, 0, px as i32, 0xffffff, &line);
     }
-    text.set_translate(translating);
     // The text's middle (its capitals' middle) on the ring's middle; its top towards the disc's middle.
     let top = mid - px as f32 * 0.62;
     let alpha = |x: f32, y: f32| {
@@ -1526,6 +1527,7 @@ fn ring_title(text: &mut Text, p: &mut Pic, (cx, cy): (f32, f32), (r0, r1): (f32
             }
         }
     }
+    })
 }
 
 /// Where a system's box art has its printed side strip, as a part of the picture's width or height to look in: the
@@ -2431,4 +2433,12 @@ mod tests {
         assert_eq!(main, accent);
         assert!(cover_colors(&[]).is_none());
     }
+}
+
+
+/// Wording ready to print on a case: game/system/player names are literal; pocket-ui labels
+/// are translated as a whole before the name painter fits or splits them.
+pub fn printed_title(title: &str, name: bool) -> std::borrow::Cow<'_, str> {
+    if name { std::borrow::Cow::Borrowed(title) }
+    else { std::borrow::Cow::Owned(crate::i18n::tr(title)) }
 }

@@ -16,8 +16,12 @@
 use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 
+#[cfg(not(target_os = "android"))]
 use crate::control;
+#[cfg(not(target_os = "android"))]
 use crate::emu_menu::Row;
+#[cfg(target_os = "android")]
+pub struct Row { pub name: String, pub value: String, pub desc: String }
 
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct Cheat {
@@ -40,12 +44,15 @@ pub fn db_roots() -> Vec<PathBuf> {
     roots
 }
 
-// The database lives inside app so a card install and an OTA replace the same data.
+// Downloaded data survives app replacements; legacy cards and ROCKNIX keep their existing sources.
 fn platform_roots(card: Option<&Path>) -> Vec<PathBuf> {
     let mut roots = Vec::new();
     if let Some(card) = card {
         // The card's database is one file (docs/TRIMUI-BRICK-STANDALONE.md); a folder of .cht files still works.
+        roots.push(card.join("storage/pocket-ui/cheats/cht.pack"));
         roots.push(card.join("app/cores/cht.pack"));
+        // The first update was installed by the old updater: its pack is still in app.previous.
+        roots.push(card.join("app.previous/cores/cht.pack"));
         roots.push(card.join("app/database/cht"));
     }
     roots.push(PathBuf::from("/tmp/database/cht"));
@@ -491,22 +498,92 @@ pub struct CheatMenu {
     on: BTreeSet<String>,
     store: PathBuf,
     notify: bool,
+    #[cfg(not(target_os = "android"))]
+    download: Option<crate::cheat_download::Page>,
+    #[cfg(not(target_os = "android"))]
+    request: Option<crate::cheat_download::Request>,
 }
 
 impl CheatMenu {
-    /// On a Brick card, an unmatched game gets an explanatory page; elsewhere it has no Cheats page.
+    /// Existing databases work offline. A card without one offers the optional download.
     pub fn load(data_dir: &Path, system: &str, rom: &Path) -> Option<CheatMenu> {
-        let menu = Self::load_in(data_dir, system, rom, &db_roots(), true);
+        let roots = db_roots();
         #[cfg(feature = "brick")]
-        if menu.is_none() && crate::update::brick_card().is_some() {
-            return Some(Self::empty());
+        if let Some(card) = crate::update::brick_card() {
+            return Some(Self::pending(crate::cheat_download::Request {
+                descriptor: card.join("app/database/cheats-download.json"),
+                destination: card.join("storage/pocket-ui/cheats/cht.pack"), roots,
+                data: data_dir.to_path_buf(), system: system.into(), rom: rom.to_path_buf(),
+            }));
         }
+        Self::load_in(data_dir, system, rom, &roots, true)
+    }
+
+    #[cfg(not(target_os = "android"))]
+    fn pending(request: crate::cheat_download::Request) -> Self {
+        let mut menu = Self::empty();
+        menu.download = Some(crate::cheat_download::Page::new(request.clone()));
+        menu.request = Some(request);
         menu
+    }
+
+    /// Workers and fixtures only: inspecting database files never belongs to menu navigation.
+    #[cfg(not(target_os = "android"))]
+    pub fn optional(request: crate::cheat_download::Request) -> Self {
+        let mut menu = Self::load_in(&request.data, &request.system, &request.rom, &request.roots, true).unwrap_or_else(Self::empty);
+        // The worker checks installed databases before any network access, including unmatched games.
+        if menu.cheats.is_empty() && menu.unsupported == 0 && folder(&request.system).is_some()
+            && !crate::cheat_download::installed(&request.roots) {
+            menu.download = Some(crate::cheat_download::Page::new(request.clone()));
+        }
+        menu.request = Some(request);
+        menu
+    }
+
+    #[cfg(not(target_os = "android"))]
+    pub fn download_snapshot(state: &str) -> Self {
+        let mut menu = Self::empty();
+        menu.download = Some(crate::cheat_download::Page::snapshot(state));
+        menu
+    }
+
+    #[cfg(not(target_os = "android"))]
+    pub fn open(&mut self) {
+        // Extras may have installed, updated or removed data since this pause menu was built.
+        if let Some(request) = self.request.clone() {
+            let mut page = crate::cheat_download::Page::new(request);
+            page.check();
+            self.download = Some(page);
+        }
+    }
+    #[cfg(not(target_os = "android"))]
+    pub fn close(&mut self) { if let Some(download) = &mut self.download { download.stop(); } }
+    #[cfg(not(target_os = "android"))]
+    pub(crate) fn download_size(&mut self, size: u64) {
+        if let Some(download) = &mut self.download { download.set_size(size); }
+    }
+    #[cfg(not(target_os = "android"))]
+    pub fn downloading(&self) -> bool { self.download.as_ref().is_some_and(|d| d.busy()) }
+    #[cfg(not(target_os = "android"))]
+    pub fn download_page(&self) -> bool { self.download.is_some() }
+    /// Called only while the worker is active; no file or network work on the UI thread.
+    #[cfg(not(target_os = "android"))]
+    pub fn poll_download(&mut self) {
+        if let Some(menu) = self.download.as_mut().and_then(|d| d.poll()) { *self = menu; }
+    }
+
+    #[cfg(not(target_os = "android"))]
+    pub fn download_status(&self) -> (&'static str, u64, u64) {
+        self.download.as_ref().map_or((if self.cheats.is_empty() && self.unsupported == 0 { "empty" } else { "ready" }, 0, 0), |d| d.status())
     }
 
     /// Keep the page discoverable on a card even when this game has no database entry.
     pub fn empty() -> Self {
-        Self { cheats: Vec::new(), unsupported: 0, keys: Vec::new(), on: BTreeSet::new(), store: PathBuf::new(), notify: false }
+        Self { cheats: Vec::new(), unsupported: 0, keys: Vec::new(), on: BTreeSet::new(), store: PathBuf::new(), notify: false,
+            #[cfg(not(target_os = "android"))]
+            download: None,
+            #[cfg(not(target_os = "android"))]
+            request: None }
     }
 
     pub fn load_in(data_dir: &Path, system: &str, rom: &Path, roots: &[PathBuf], notify: bool) -> Option<CheatMenu> {
@@ -524,11 +601,50 @@ impl CheatMenu {
             on,
             store: store_path(data_dir, system, rom),
             notify,
+            #[cfg(not(target_os = "android"))]
+            download: None,
+            #[cfg(not(target_os = "android"))]
+            request: None,
         })
+    }
+
+    /// A same-game sidecar supplied by a document provider. The caller supplies a private game/core identity.
+    pub fn from_text(store: PathBuf, text: &str) -> Option<Self> {
+        let parsed = parse_cht_full(text);
+        if parsed.cheats.is_empty() && parsed.unsupported.is_empty() { return None; }
+        let keys = keys(&parsed.cheats);
+        let saved = crate::fsutil::read_json_or_backup::<serde_json::Value>(&store);
+        let on = saved.and_then(|v| serde_json::from_value::<BTreeSet<String>>(v["on"].clone()).ok()).unwrap_or_default().into_iter().filter(|k| keys.contains(k)).collect();
+        Some(Self { cheats: parsed.cheats, unsupported: parsed.unsupported.len(), keys, on, store, notify: false,
+            #[cfg(not(target_os = "android"))]
+            download: None,
+            #[cfg(not(target_os = "android"))]
+            request: None })
+    }
+
+    /// Codes in database order, from the switches whose persistence succeeded.
+    pub fn codes(&self) -> Vec<String> {
+        self.cheats.iter().zip(&self.keys).filter(|(_, k)| self.on.contains(*k)).map(|(c, _)| c.code.clone()).collect()
+    }
+
+    /// A failed write leaves both the visible switch and the running core unchanged.
+    pub fn try_press(&mut self, sel: usize) -> Result<bool, &'static str> {
+        if !self.actionable(sel) { return Ok(false); }
+        let before = self.on.clone();
+        if sel == self.cheats.len() { self.on.clear(); }
+        else if !self.on.remove(&self.keys[sel]) { self.on.insert(self.keys[sel].clone()); }
+        if self.on == before { return Ok(false); }
+        if !save_on(&self.store, &self.on) {
+            self.on = before;
+            return Err("Could not save the cheat setting");
+        }
+        Ok(true)
     }
 
     /// The cheats, then "All off" (when there are cheats), then the line about those that can't be applied.
     pub fn count(&self) -> usize {
+        #[cfg(not(target_os = "android"))]
+        if self.download.is_some() { return 1; }
         (self.cheats.len() + usize::from(!self.cheats.is_empty()) + usize::from(self.unsupported > 0)).max(1)
     }
 
@@ -539,6 +655,8 @@ impl CheatMenu {
 
     /// Whether this row offers a switch rather than an explanation only.
     pub fn actionable(&self, sel: usize) -> bool {
+        #[cfg(not(target_os = "android"))]
+        if let Some(download) = &self.download { return !download.busy(); }
         !self.cheats.is_empty() && sel <= self.cheats.len()
     }
 
@@ -547,11 +665,13 @@ impl CheatMenu {
     }
 
     pub fn rows(&self) -> Vec<Row> {
+        #[cfg(not(target_os = "android"))]
+        if let Some(download) = &self.download { return vec![download.row()]; }
         if self.cheats.is_empty() && self.unsupported == 0 {
             return vec![Row {
                 name: "No cheats found for this game".into(),
                 value: String::new(),
-                desc: "The included cheat database has no matching codes. You can keep playing normally.".into(),
+                desc: "The cheat database has no matching codes. You can keep playing normally.".into(),
             }];
         }
         let mut rows: Vec<Row> = self
@@ -587,6 +707,11 @@ impl CheatMenu {
     /// A on a line (or Left/Right): flips a cheat, or switches all off on the last line. Stores the
     /// change and tells pocket-core. False when nothing changed.
     pub fn press(&mut self, sel: usize) -> bool {
+        #[cfg(not(target_os = "android"))]
+        if let Some(download) = &mut self.download {
+            if sel == 0 { download.start(); }
+            return false;
+        }
         if sel < self.cheats.len() {
             let k = self.keys[sel].clone();
             if !self.on.remove(&k) {
@@ -599,9 +724,8 @@ impl CheatMenu {
             self.on.clear();
         }
         save_on(&self.store, &self.on);
-        if self.notify {
-            control::pocket_core("cheats");
-        }
+        #[cfg(not(target_os = "android"))]
+        if self.notify { control::pocket_core("cheats"); }
         true
     }
 }

@@ -224,7 +224,9 @@ way rather than fight over it). `pocket-ui.log` says which, in lines starting wi
 PAL games running on a 60 Hz screen keep a little more sound buffered so repeated pictures do not interrupt
 the audio. Returning from pause preserves that queued sound and waits for enough audio for the next frame before fading in.
 Starting or continuing a game keeps its opening sound while the audio output connects, including when a Continue
-moment restores a large audio buffer.
+moment restores a large audio buffer. If muting the device stops its audio output, the first connection wait
+is limited to two seconds; the game then keeps running and discards inaudible sound. When the output runs
+again, fresh sound fades back in instead of replaying the muted backlog.
 Try the same scene with another available core or player in the game's **Options → Runs on**. If that plays correctly,
 include both choices, the game and your device in [Report a problem](#report-a-problem). This helps distinguish a
 player timing problem from a game that is too demanding. On H700 handhelds, GBA normally uses gpSP; older Continue
@@ -457,7 +459,7 @@ slots are `<game>.pstate` and `<game>.pstate1` to `<game>.pstate7`, the moment y
 `<game>.pstate.auto`, and each has a `.png` preview next to it.
 
 **How do I run the first-start setup again?**
-Each step is in Settings: Look (Look), Wi-Fi (Connections), Pictures & extras and Add games (both under Games).
+Each step is in Settings: Look (Look), Wi-Fi (Connections), Extras and Add games (both under Games).
 <!-- TODO: if a full reset of the first start is wanted, document it (today: set "onboarded" to
      false in settings.json). -->
 

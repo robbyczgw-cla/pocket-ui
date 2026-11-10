@@ -210,9 +210,13 @@ fn retro_in_large_german_text_no_string_runs_into_another_or_off_its_room() {
     let bin = PathBuf::from(env!("CARGO_BIN_EXE_pocket-ui"));
     let stub = wayland(&tmp);
     let mut found = Vec::new();
-    for picture in [None, Some("640x480")] {
-        let jobs = states().into_iter().enumerate().map(|(i, (safe, state))| (format!("retro-{}-{i}", picture.unwrap_or("native")), "large", "de", safe, state)).collect();
-        found.extend(render_all_in(&tmp, &bin, stub.as_ref(), jobs, picture, "", &[("POCKETUI_RETRO", "cocoa")], false).into_iter().map(|f| format!("{}: {f}", picture.unwrap_or("1240x1080"))));
+    // In both of Retro's letters (0.3.2): Departure Mono, the default, and Pixelify Sans.
+    for letters in RETRO_LETTERS {
+        for picture in [None, Some("640x480")] {
+            let jobs = states().into_iter().enumerate().map(|(i, (safe, state))| (format!("retro-{letters}-{}-{i}", picture.unwrap_or("native")), "large", "de", safe, state)).collect();
+            let env = [("POCKETUI_RETRO", "cocoa"), ("POCKETUI_RETRO_LETTERS", letters)];
+            found.extend(render_all_in(&tmp, &bin, stub.as_ref(), jobs, picture, "", &env, false).into_iter().map(|f| format!("{letters} {}: {f}", picture.unwrap_or("1240x1080"))));
+        }
     }
     drop(stub);
     found.sort();
@@ -262,16 +266,19 @@ fn retro_pause_menu_in_large_german_and_spanish_text_stays_inside_its_windows() 
         "slot-save", "slot-load", "slot-auto", "slot-undo", "slot-earlier", "slot-load:snes:card", "slot-save:psx",
         "options", "game-quick", "game-twin-note", "game-save-warning", "achievements-menu", "players-menu:full",
     ];
-    let game = [("POCKETUI_RETRO", "cocoa"), ("POCKETUI_SNAPSHOT_GAME", "snes|Donkey Kong Country 3: Dixie Kong's Double Trouble!|dkc3.sfc")];
     let mut found = Vec::new();
-    for picture in [None, Some("640x480"), Some("1024x768")] {
-        let mut jobs = Vec::new();
-        for lang in ["de", "es"] {
-            for (i, state) in states.iter().enumerate() {
-                jobs.push((format!("retro-pause-{}-{lang}-{i}", picture.unwrap_or("native")), "large", lang, false, state.to_string()));
+    // In both of Retro's letters (0.3.2).
+    for letters in RETRO_LETTERS {
+        let game = [("POCKETUI_RETRO", "cocoa"), ("POCKETUI_RETRO_LETTERS", letters), ("POCKETUI_SNAPSHOT_GAME", "snes|Donkey Kong Country 3: Dixie Kong's Double Trouble!|dkc3.sfc")];
+        for picture in [None, Some("640x480"), Some("1024x768")] {
+            let mut jobs = Vec::new();
+            for lang in ["de", "es"] {
+                for (i, state) in states.iter().enumerate() {
+                    jobs.push((format!("retro-pause-{letters}-{}-{lang}-{i}", picture.unwrap_or("native")), "large", lang, false, state.to_string()));
+                }
             }
+            found.extend(render_all_in(&tmp, &bin, stub.as_ref(), jobs, picture, "", &game, false).into_iter().map(|f| format!("{letters} {}: {f}", picture.unwrap_or("1240x1080"))));
         }
-        found.extend(render_all_in(&tmp, &bin, stub.as_ref(), jobs, picture, "", &game, false).into_iter().map(|f| format!("{}: {f}", picture.unwrap_or("1240x1080"))));
     }
     // And what was cut short there shows whole now: the longest names and Load's "Where I quit", and the game's name
     // beside the battery line.
@@ -283,7 +290,7 @@ fn retro_pause_menu_in_large_german_and_spanish_text_stays_inside_its_windows() 
         ("1240x1080", "en", "slot-auto", "Donkey Kong Country 3: Dixie Kong's Double Trouble!", "Where I quit"),
         ("1240x1080", "en", "menu:pocket-core:0:battery=all", "Donkey Kong Country 3", "Donkey Kong Country 3"),
     ];
-    for (i, (picture, lang, state, game, want)) in whole.into_iter().enumerate() {
+    for (i, (letters, (picture, lang, state, game, want))) in RETRO_LETTERS.into_iter().flat_map(|l| whole.into_iter().map(move |w| (l, w))).enumerate() {
         let (data, seen) = (tmp.join(format!("data-whole-{i}")), tmp.join(format!("whole-{i}.txt")));
         copy_dir(&tmp.join("data"), &data);
         let mut cmd = Command::new(&bin);
@@ -295,7 +302,7 @@ fn retro_pause_menu_in_large_german_and_spanish_text_stays_inside_its_windows() 
         }
         let out = cmd
             .args(["--snapshot", state, tmp.join(format!("whole-{i}.png")).to_str().unwrap()])
-            .env("POCKETUI_MOCK_NOW", FIXTURE_NOW).envs([("POCKETUI_MOCK", "1"), ("POCKETUI_LANG", lang), ("POCKETUI_TEXT_SIZE", "large"), ("POCKETUI_RETRO", "cocoa")])
+            .env("POCKETUI_MOCK_NOW", FIXTURE_NOW).envs([("POCKETUI_MOCK", "1"), ("POCKETUI_LANG", lang), ("POCKETUI_TEXT_SIZE", "large"), ("POCKETUI_RETRO", "cocoa"), ("POCKETUI_RETRO_LETTERS", letters)])
             .env("POCKETUI_SNAPSHOT_GAME", format!("snes|{game}|game.sfc"))
             .env("POCKETUI_VISIBLE_TEXT", &seen)
             .env("POCKETUI_ES_SYSTEMS", tmp.join("es_systems.cfg"))
@@ -304,7 +311,7 @@ fn retro_pause_menu_in_large_german_and_spanish_text_stays_inside_its_windows() 
             .expect("run pocket-ui");
         let seen = std::fs::read_to_string(&seen).unwrap_or_default();
         if !out.status.success() || !seen.lines().any(|l| l.trim() == want) {
-            found.push(format!("{state} ({picture}, {lang}): \"{want}\" not whole on the picture, which shows:\n{seen}"));
+            found.push(format!("{letters} {state} ({picture}, {lang}): \"{want}\" not whole on the picture, which shows:\n{seen}"));
         }
     }
     drop(stub);
@@ -719,6 +726,9 @@ fn your_games_rows_stay_above_the_hint_bar_on_the_small_screens() {
 const FIRST_START_STATES: &[&str] = &["setup:first", "setup:first:device=rp5", "setup:first:device=mini",
     "setup:first:device=nova", "setup:first:device=rp6", "setup:first:device=odin2mini"];
 
+/// Retro's letters (`POCKETUI_RETRO_LETTERS`, 0.3.2): Departure Mono, the default, and Pixelify Sans. The other Retro
+/// runs paint the default; `POCKETUI_RETRO_LETTERS=pixelify cargo test --test text_size` runs the whole file in Pixelify.
+const RETRO_LETTERS: [&str; 2] = ["departure", "pixelify"];
 const BARLOW_LOOKS: [(&str, &str); 2] = [("off", "barlow"), ("cocoa", "barlow")];
 const ALL_LOOKS: [(&str, &str); 3] = [("off", "barlow"), ("cocoa", "barlow"), ("cocoa", "pixel")];
 
@@ -1037,7 +1047,7 @@ fn textfit_brick_031_info_keeps_rating_and_save_labels_whole() {
 fn textfit_brick_031_credits_keep_the_source_line_whole() {
     check_brick_031_visible(&["console:gb:credits:8"],
         &[("en", &["Facts: Wikidata (CC0), Wikipedia · summaries written for pocket-ui"]),
-          ("de", &["Fakten: Wikidata (CC0), Wikipedia · Zusammenfassungen für pocket-ui geschrieben"]),
+          ("de", &["Fakten: Wikidata (CC0), Wikipedia · Kurztexte für pocket-ui geschrieben"]),
           ("es", &["Datos: Wikidata (CC0), Wikipedia · resúmenes escritos para pocket-ui"])]);
 }
 
@@ -1095,4 +1105,70 @@ fn textfit_brick_031_info_keeps_the_year_beside_a_favourite() {
             favorites.as_array_mut().unwrap().push(serde_json::json!({"system": "nes", "name": "Final Fantasy III", "path": path}));
             std::fs::write(file, serde_json::to_vec(&favorites).unwrap()).unwrap();
         });
+}
+
+/// Every Extras row's explanation is painted whole, never cut with "…" (09.11.: on the Brick's 1024x768 Box art's two
+/// paragraphs ended in "no account i…" beside the hint pill, because the footer allowed four lines). Each row in turn,
+/// online (`extras-portmaster-installed` starts on the PortMaster row) and offline, in Barlow and Retro, normal and Large.
+/// Returns the problems found; `rows` is how many rows the device lists.
+fn extras_explanations_whole(device: &str, standalone: bool, sizes: &[&str], rows: usize) -> Vec<String> {
+    const BOX_ART: &str = "The front of each game's box, from a free collection online. Pictures come from a free collection online: no account is needed, and only a game's name is sent. Off downloads nothing by itself.";
+    let tmp = tempfile::tempdir().unwrap();
+    fake_library(tmp.path());
+    let stub = wayland(tmp.path());
+    let bin = std::env::var_os("POCKETUI_NAV_BINARY").map_or_else(|| PathBuf::from(env!("CARGO_BIN_EXE_pocket-ui")), PathBuf::from);
+    let mut found = Vec::new();
+    for (start, online) in [("extras-portmaster-installed", true), ("extras-portmaster-installed-offline", false)] {
+        for row in 0..rows {
+            // From the PortMaster row (2): up to Box art and Pictures, down to the rest.
+            let keys = if row < 2 { "u".repeat(2 - row) } else { "d".repeat(row - 2) };
+            let state = format!("setup:{start}:{keys}");
+            // Barlow, and Retro in both of its letters: Departure Mono (the default since 0.3.2) and Pixelify Sans.
+            for (retro, letters) in [("off", "departure"), ("cocoa", "departure"), ("cocoa", "pixelify")] {
+                for &picture in sizes {
+                    let (snapshot, text_size) = picture.split_once('/').unwrap();
+                    for lang in ["en", "de", "es"] {
+                        let seen = tmp.path().join("extras-visible.txt");
+                        let mut cmd = Command::new(&bin);
+                        cmd.args(["--snapshot", &state, tmp.path().join("extras.png").to_str().unwrap()])
+                            .env("POCKETUI_MOCK", "1").env("POCKETUI_MOCK_NOW", FIXTURE_NOW).env("POCKETUI_DEVICE", device)
+                            .env("POCKETUI_BRICK_STANDALONE", if standalone { "1" } else { "" })
+                            .env("POCKETUI_SOUND_QUANTUM", "0").env("POCKETUI_LANG", lang)
+                            .env("POCKETUI_TEXT_SIZE", text_size).env("POCKETUI_SNAPSHOT_SIZE", snapshot)
+                            .env("POCKETUI_FONT", if retro == "off" { "barlow" } else { "pixel" }).env("POCKETUI_RETRO", retro)
+                            .env("POCKETUI_RETRO_LETTERS", letters)
+                            .env("POCKETUI_VISIBLE_TEXT", &seen)
+                            .env("POCKETUI_ES_SYSTEMS", tmp.path().join("es_systems.cfg"))
+                            .env("POCKETUI_DATA", tmp.path().join("data"));
+                        if let Some(s) = &stub { cmd.env("WAYLAND_DISPLAY", &s.path); }
+                        let out = cmd.output().unwrap();
+                        let at = format!("{state} {retro}/{letters}/{picture}/{lang}");
+                        if !out.status.success() { found.push(format!("{at}: {}", String::from_utf8_lossy(&out.stderr))); continue; }
+                        let visible = std::fs::read_to_string(&seen).unwrap();
+                        if visible.contains('…') {
+                            found.push(format!("{at}: an explanation ends in \"…\":\n{visible}"));
+                        }
+                        let words = visible.split_whitespace().collect::<Vec<_>>().join(" ");
+                        if lang == "en" && row == 0 && online && !words.contains(BOX_ART) {
+                            found.push(format!("{at}: Box art's explanation is not whole:\n{visible}"));
+                        }
+                    }
+                }
+            }
+        }
+    }
+    found
+}
+
+#[test]
+fn textfit_extras_explanations_stay_whole_on_rocknix_640x480() {
+    let found = extras_explanations_whole("rg35xx-plus", false, &["640x480/normal", "640x480/large"], 4);
+    assert!(found.is_empty(), "{}", found.join("\n"));
+}
+
+#[cfg(feature = "brick")]
+#[test]
+fn textfit_extras_explanations_stay_whole_on_the_trimui_card() {
+    let found = extras_explanations_whole("brick", true, &["1024x768/normal", "1024x768/large", "640x480/normal", "640x480/large"], 5);
+    assert!(found.is_empty(), "{}", found.join("\n"));
 }

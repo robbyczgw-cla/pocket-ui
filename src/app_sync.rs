@@ -86,6 +86,7 @@ impl App {
                     cfg,
                     snap,
                     password: sync::password(),
+                    held: sync::held_now(),
                 }));
                 let until = Instant::now() + POLL_EVERY;
                 while alive.load(Ordering::Relaxed) && Instant::now() < until {
@@ -127,6 +128,17 @@ impl App {
             }
             Action::SetAfterPlay(_) => self.keep_sync_prefs(),
             Action::OpenVersions => self.open_conflicts_all(),
+            // Only this choice resumes a pause (`sync::resume_share`); what it does is checked again on the thread.
+            Action::Resume(share) => {
+                if self.running.is_some() {
+                    page.event(Event::Resumed(share, Err(sync::PLAYING.into())));
+                } else {
+                    let proxy = self.proxy.clone();
+                    std::thread::spawn(move || {
+                        let _ = proxy.send_event(UserEvent::Sync(Event::Resumed(share, sync::resume(share))));
+                    });
+                }
+            }
             Action::SetShare(share, on) => {
                 self.keep_sync_prefs();
                 if self.sync.page.as_ref().is_some_and(|p| p.on()) {
@@ -223,7 +235,7 @@ impl App {
 
     /// Something of sync's moves on screen: the switch is working. The still confirmation has its own expiry timer.
     pub(crate) fn sync_note_active(&self) -> bool {
-        self.sync.loaded().and_then(|s| s.page.as_ref()).is_some_and(|p| p.busy.is_some())
+        self.sync.loaded().and_then(|s| s.page.as_ref()).is_some_and(|p| p.busy.is_some() || p.resuming.is_some())
     }
 
     /// The still confirmation changes only when it expires.
@@ -239,7 +251,9 @@ impl App {
     }
 
     /// `--snapshot sync[:off|:nowifi|:on|:busy|:open|:bios|:library|:conflicts|:conflicts-list|:conflicts-card]` draws the page with made-up
-    /// data, for checking the layout (`conflicts…`: two saves with two versions, `App::sync_conflicts_snapshot`).
+    /// data, for checking the layout (`conflicts…`: two saves with two versions, `App::sync_conflicts_snapshot`). The paused
+    /// rows: `:paused-ours` (the battery saves, paused by pocket-ui), `:paused-unknown` (GameCube & Wii, not by pocket-ui),
+    /// `:resuming`, `:resume-failed`, `:paused-offline` (Syncthing not answering: no Resume).
     pub(crate) fn sync_snapshot(&mut self, state: &str) -> bool {
         let Some(rest) = state.strip_prefix("sync") else { return false };
         let mut parts = rest.trim_start_matches(':').split(':');
@@ -279,9 +293,34 @@ impl App {
         if mode == "open" {
             page.cfg = Config::parse(include_str!("fixtures/syncthing-rocknix.xml")).ok();
         }
+        let paused_share = match mode {
+            "paused-ours" => Some(sync::Share::Saves),
+            "paused-unknown" | "resuming" | "resume-failed" | "paused-offline" => Some(sync::Share::Dolphin),
+            _ => None,
+        };
+        if let Some(share) = paused_share {
+            let cfg = page.cfg.get_or_insert_with(|| Config::parse(include_str!("fixtures/syncthing-pocket.xml")).unwrap());
+            for d in share.dirs() {
+                cfg.folders.retain(|f| f.id != d.id);
+                cfg.folders.push(sync::Folder { id: d.id.into(), label: d.label.into(), path: d.path.into(), paused: true });
+            }
+            if mode == "paused-ours" {
+                page.held = vec!["pocket-saves".into()];
+            }
+            if mode == "paused-offline" {
+                page.snap = Some(Snapshot::default());
+            }
+            if mode == "resuming" {
+                page.resuming = Some(share);
+            }
+            if mode == "resume-failed" {
+                page.error = Some(sync::PLAYING.into());
+            }
+        }
         // "sync:on:<row>" selects a row.
         page.sel = match (mode, row) {
             (_, Some(row)) => row.min(rows().len() - 1),
+            (_, None) if paused_share.is_some() => rows().iter().position(|r| Some(*r) == paused_share.map(pocket_ui::sync_page::Row::Share)).unwrap_or(0),
             ("bios", _) => rows().len() - 1,
             ("library", _) => rows().iter().position(|r| *r == pocket_ui::sync_page::Row::Share(sync::Share::Library)).unwrap_or(0),
             _ => 0,
@@ -341,6 +380,8 @@ impl App {
         let hints: &[(&str, &str)] = match page.row() {
             pocket_ui::sync_page::Row::Versions if page.waiting() == 0 => &[("B", "Back")],
             pocket_ui::sync_page::Row::Versions => &[("B", "Back"), ("A", "Open")],
+            // A paused share row: A still shares or stops sharing, X resumes (docs/SYNC-OWNERSHIP.md).
+            _ if page.can_resume() => &[("B", "Back"), ("A", "Change"), ("X", "Resume")],
             _ => &[("B", "Back"), ("A", "Change")],
         };
         let foot = pocket_ui::kit::footer(c, &mut self.text, &mut self.hits, hints, page.describe(page.row()), 2, pal().text);
@@ -367,12 +408,18 @@ impl App {
         };
         // Status
         label(self, c, y0 + 20, "Status");
-        let (status, color) = match (&page.error, page.busy) {
-            (Some(e), _) => (self.text.fit(Face::Title, 37, e, right - left), pal().alert),
-            (None, Some(b)) => (format!("{b}{}", ".".repeat(1 + (self.started.elapsed().as_millis() / 400 % 3) as usize)), pal().dust),
-            (None, None) => (sync::status_line(page.on(), page.snap.as_ref()), if page.on() { pal().chalk } else { pal().dust }),
+        let busy = page.busy.or(page.resuming.map(|_| "Resuming"));
+        // An error is cut to the room it has: left of the QR code while Syncthing is on, and at the size it is drawn at.
+        let room = right - left - if page.on() { 260 + 16 } else { 0 };
+        let (px, status, color) = match (&page.error, busy) {
+            (Some(e), _) => {
+                let (px, line) = self.text.fit_sizes(Face::Title, &[44, 37, 30], e, room);
+                (px, line, pal().alert)
+            }
+            (None, Some(b)) => (44, format!("{b}{}", ".".repeat(1 + (self.started.elapsed().as_millis() / 400 % 3) as usize)), pal().dust),
+            (None, None) => (44, sync::status_line(page.on(), page.snap.as_ref()), if page.on() { pal().chalk } else { pal().dust }),
         };
-        self.text.draw(c, Face::Title, 44, left, y0 + 64 + d1, color, &status);
+        self.text.draw(c, Face::Title, px, left, y0 + 64 + d1, color, &status);
 
         if !page.on() {
             let lines = [

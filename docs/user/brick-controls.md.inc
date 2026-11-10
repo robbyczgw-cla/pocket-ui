@@ -6,7 +6,14 @@ show the buttons that screen uses.
 
 By default on the Brick, **F1 saves to the current slot** and **F2 loads that slot** while a game runs on
 pocket-ui's own host. MENU opens the pause menu. Settings → Sound & feel → Lights & buttons
-lets you change the F keys; the game's Shortcuts switches and Kids mode still apply.
+lets you choose a global shortcut for each F key: quick save, quick load, screenshot, Recent games,
+the pause menu, or nothing. They cannot be assigned to game buttons in Options → Controls or Controller setup,
+including in mGBA. Choosing Nothing disables the shortcut; it does not turn the F key into a game button.
+The game's Shortcuts switches and Kids mode still apply. A changed save/load/screenshot choice takes effect
+the next time you start a game.
+
+Settings → Sound & feel → Lights & buttons → **Mute slider** chooses Mutes or Does nothing.
+Does nothing ignores the slider and releases its mute; the remembered volume stays the same.
 
 ![The Mini V2's controls: the D-pad and the left stick on the left, A, B, X and Y and the right stick on the right, SELECT and START at the top corners, HOME and BACK at the bottom corners, L1, L2, R1 and R2 on the shoulders.](pocket-ui:controls)
 

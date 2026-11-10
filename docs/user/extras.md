@@ -1,18 +1,33 @@
-# Pictures & extras
+# Extras
 
-Settings → Games → **Pictures & extras** (also a step of the first start). The extras are optional and need Wi-Fi;
-without a connection the page says "Connect to Wi-Fi first to use these." The page has three rows: **Box art**,
-**Pictures** (a choice of three, which works without Wi-Fi) and **PortMaster games**. Under the rows a line says where the
-pictures come from and how much space they take.
+Settings → Games → **Extras**. These optional downloads are always here; the first start only points you to this page.
+Select a row with Up/Down. Its right side says what A does, and the line below explains the selected extra. B returns to Games.
+The list scrolls when the screen or Large text needs more room.
 
-This page is about Pictures & extras in Settings. The pause menu has a group of its own for fast-forward, rewind,
-rumble, fan and more; see [Options](options.md#speed-rumble-fan).
+**Box art**, **Pictures** and **Starter pack** are available on every device. **PortMaster games** appears on ROCKNIX and
+TrimUI; **Cheats** appears only on TrimUI. Offline, downloads say **Needs Wi-Fi**. Pictures and installed cheats still work
+without a connection. The connection explanation stays above the rows while you change Pictures. No account is needed.
+
+The pause menu has a separate group for fast-forward, rewind, rumble, fan and more; see [Options](options.md#speed-rumble-fan).
 
 ## Starter pack
 
-Settings → Games → **Starter pack** is not an extra of this page, but it works the same way: free games that their authors
-share for anyone to play, downloaded to your SD card with A when you ask. See
+Choose **Starter pack** to browse free games their authors share for anyone to play. Pick one or take them all with A.
+B stops a download safely and returns to its row in Extras. The same pack is offered on Home while the SD card has no games. See
 [Getting started](getting-started.md#nothing-on-the-sd-card-yet-the-starter-pack).
+
+## Cheats
+
+On TrimUI, **Cheats** offers **Get · 30 MB**. A downloads codes for many games; use them from HOME → Options → Cheats.
+The pause menu offers the same Get row when the database is missing. Opening either page alone downloads nothing.
+The row shows progress, checking and saving. B stops a download safely; the next try continues from its saved checkpoint.
+The free-space check also reserves room to save that checkpoint.
+
+Once installed, the database works offline. A offers to remove it; a second A confirms. This removes the downloaded codes,
+while each game's saved cheat switches are kept. Reinstalling the codes restores those choices.
+A later app version can offer **Update** when its pinned database changes. A updates; X offers removal instead.
+The installed codes keep working until the replacement is fully checked and saved. Failed downloads leave them in place.
+Games and saves are never changed by installing or removing this database.
 
 ## Box art
 
@@ -23,7 +38,7 @@ share for anyone to play, downloaded to your SD card with A when you ask. See
 Covers come without asking whenever the Pocket is online and some games have none yet, unless **Pictures** is
 [Off](#pictures):
 
-- in the first start, once you have left the Extras step (so the choice comes first; nothing is downloaded before),
+- in the first start, once you have left Your games with Box art on,
 - when pocket-ui starts and Wi-Fi is up (it waits up to three minutes for the connection),
 - when the game list is read again and has new games, for example after Settings → Games → Add games.
 
@@ -73,7 +88,7 @@ Good to know:
 
 All pictures come from the free libretro collection (its thumbnail server), with no account. Only the name of a game
 is sent to look it up; the games themselves, your saves and anything about you stay on the Pocket. **Pictures**
-chooses what is downloaded by itself and what the shelf uses. The row shows the three choices at once; A (or
+chooses what is downloaded by itself and what the shelf uses. The row shows its current choice; A (or
 Left/Right) moves to the next:
 
 - **Box art and screenshots** (the default): the box art and, after it, each game's screenshot and title
@@ -87,8 +102,7 @@ Left/Right) moves to the next:
   "Wrong pictures? Look up again" still works; those are things you ask for. Choosing another value starts the
   download again.
 
-On the first start the choice is part of the Extras step, and the downloads wait until you leave it. The same row is in
-Settings → Games → Pictures & extras.
+On the first start, Your games has a simple Box art switch. The finer Pictures choice stays in Settings → Games → Extras.
 
 Where they show:
 
@@ -126,6 +140,8 @@ Good to know:
 
 ## PortMaster games
 
+An empty Ports shelf offers **Get PortMaster**, leading to this page with PortMaster games selected. B returns to the empty shelf.
+
 PortMaster offers PC and indie games for handhelds. pocket-ui lists the ones that run on this device's
 processor type and are not marked experimental, in two lists:
 
@@ -149,8 +165,23 @@ The shelf shows the game's cover from PortMaster (else its screenshot) as the bo
 it. Pictures and update notes refresh in the background after a port is installed, updated or removed; the shelf stays
 responsive while the card is read. A game without any picture keeps the plain look.
 
-Installed games appear on Home under the **Ports** system and start like any other game. PortMaster
-itself is prepared automatically the first time you install something.
+Installed games appear on Home under the **Ports** system and start like any other game. On ROCKNIX,
+PortMaster itself is prepared automatically the first time you install something.
+
+On the standalone TrimUI card, accept **Get PortMaster (~300 MB, one time)** first. This optional download
+needs Wi-Fi and at least 700 MiB free while installing. Progress and errors appear here; B stops the download
+and returns to Extras. Retry keeps the completed download checkpoint. Downloads stop while a game is played. The runtime stays on this card across
+ordinary pocket-ui updates; a changed runtime version offers **Update PortMaster**. It is not included in each
+app update. The list also checks this board's controls and firmware requirements; not every PC port will run.
+MENU opens the pause menu on TrimUI. Port controls are the game's own; the original Brick has no sticks.
+
+Port saves belong to each engine: some keep them inside `Roms/ports/<game>`, others in
+`pocket-ui/storage/home` on the TrimUI card. Keep both when backing up ports. There are no general port
+savestates; use the game's own save feature.
+
+On TrimUI, **X** on the PortMaster row in Extras offers to remove PortMaster. **A** confirms; **B** cancels.
+Only PortMaster itself is removed. Games, their own files, engine runtimes and PortMaster settings stay on the card;
+the next Get uses them again. Removal also works offline.
 
 HOME opens the [pause menu](pause-menu.md#portmaster-ports) over a running port (Continue, Options,
 Quit). Its performance and fan are in Options there, or on its card: X on the port, then START opens **Performance &

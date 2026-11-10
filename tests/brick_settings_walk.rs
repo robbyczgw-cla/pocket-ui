@@ -93,6 +93,43 @@ impl Card {
 
 const LANGS: [&str; 3] = ["en", "de", "es"];
 
+/// A player pressing F1/F2 during Controller setup got eight seconds of waiting and then "No button pressed".
+/// Feed the real evdev codes into capture and check the page explains the shortcut instead.
+#[test]
+fn fkeys_remapping_explains_where_shortcuts_are_changed() {
+    let card = Card::new();
+    for (lang, explanation, settings) in [
+        ("en", "F1/F2 are shortcuts, not game buttons.", "Lights & buttons"),
+        ("de", "F1/F2 sind Kurzbefehle, keine Spieltasten.", "Lichter & Tasten"),
+        ("es", "F1/F2 son atajos, no botones de juego.", "Luces y botones"),
+    ] {
+        for size in ["normal", "large"] {
+            for state in ["controllers:1:brick-f1", "controllers:1:brick-f2", "controls"] {
+                let (shown, _) = card.shot(state, lang, size);
+                assert!(shown.contains(explanation) && shown.contains(settings), "{lang} {size} {state}: {shown}");
+            }
+        }
+    }
+}
+
+/// Lights & buttons changes the global shortcut action; it must not suggest per-game button binding.
+#[test]
+fn fkeys_lights_help_explains_that_the_assignment_is_global() {
+    let card = Card::new();
+    for (lang, explanation) in [
+        ("en", "Shortcuts for all games; not game buttons."),
+        ("de", "Kurzbefehle für alle Spiele; keine Spieltasten."),
+        ("es", "Atajos para todos los juegos; no botones de juego."),
+    ] {
+        for size in ["normal", "large"] {
+            for state in ["leds:off:1", "leds:off:2"] {
+                let (shown, _) = card.shot(state, lang, size);
+                assert!(shown.contains(explanation), "{lang} {size} {state}: {shown}");
+            }
+        }
+    }
+}
+
 /// The handheld is a Brick: the Tailscale, Sync, remote access and power pages said "the Pocket", in every language.
 #[test]
 fn the_bricks_pages_call_it_the_brick() {
@@ -333,4 +370,23 @@ fn text_fits_on_the_smart_pros_1280x720() {
         }
     }
     assert!(bad.is_empty(), "{} findings the 1280x960 layout doesn't have:\n{}", bad.len(), bad.join("\n"));
+}
+
+/// Brick Pro keeps the Brick framebuffer layout and has the larger panel's type, two sticks and separate F keys.
+#[test]
+fn brickpro_names_the_experiment_and_shows_only_its_proven_controls() {
+    let card = Card { device: ("brickpro", "1024x768"), ..Card::new() };
+    for lang in LANGS {
+        let (about, _) = card.shot("about", lang, "normal");
+        assert!(about.contains("TrimUI Brick Pro") && about.contains("experiment"), "{lang}: {about}");
+    }
+    let (keys, _) = card.shot("leds:colour", "en", "normal");
+    assert!(keys.contains("F1 button") && keys.contains("F2 button"), "{keys}");
+    for absent in ["Mute slider", "Each light", "Brightness", "Left grip", "Colour"] {
+        assert!(!keys.lines().any(|l| l == absent), "unproven control {absent}: {keys}");
+    }
+    let (pad, _) = card.shot("test-buttons", "en", "normal");
+    for key in ["F1", "F2"] { assert!(pad.lines().any(|l| l == key), "missing {key}: {pad}"); }
+    let readout = |l: &str| l.split_once(" · ").is_some_and(|(x,y)| x.trim_start_matches('-').parse::<i32>().is_ok() && y.trim_start_matches('-').parse::<i32>().is_ok());
+    assert!(pad.lines().filter(|l| readout(l)).count() >= 2, "both sticks: {pad}");
 }

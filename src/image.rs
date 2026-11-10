@@ -37,14 +37,117 @@ pub fn png_reader<R: std::io::Read>(r: R) -> Option<png::Reader<R>> {
     Some(reader)
 }
 
-/// Screenshot of the whole output via `grim` (PPM on stdout). None when grim fails or doesn't answer in `timeout`.
+/// Screenshot of the whole output via `grim` (PPM or PNG on stdout). None when grim fails or does not answer in `timeout`.
 pub fn capture_screen(timeout: Duration) -> Option<Image> {
-    capture_via(Command::new("grim").args(["-t", "ppm", "-"]), timeout)
+    let mut grim = Command::new("grim");
+    grim.args(["-t", "ppm", "-"]);
+    #[cfg(all(target_os = "linux", feature = "brick"))]
+    if crate::brick_profile::standalone() {
+        return capture_using(Some(&crate::control::ipc::socket()?), &mut grim, timeout);
+    }
+    capture_via(&mut grim, timeout)
+}
+
+#[cfg(all(target_os = "linux", any(feature = "brick", test)))]
+fn capture_using(bridge: Option<&Path>, grim: &mut Command, timeout: Duration) -> Option<Image> {
+    use std::io::Read;
+    let Some(socket) = bridge else { return capture_via(grim, timeout) };
+    let deadline = std::time::Instant::now().checked_add(timeout)?;
+    if timeout.is_zero() { return None; }
+    let capture = BridgeCapture::new()?;
+    let file = capture.file();
+    let left = deadline.checked_duration_since(std::time::Instant::now())?;
+    let reply = match crate::control::ipc::request_at(socket, crate::control::ipc::RUN_COMMAND, &format!("pocket_grab {}", file.display()), left) {
+        Ok(reply) => reply,
+        Err(error) => {
+            if matches!(error.kind(), std::io::ErrorKind::TimedOut | std::io::ErrorKind::WouldBlock) {
+                // The single-threaded bridge may still be writing. A later tree
+                // reply is a barrier after that request; cleanup never delays UI.
+                let socket = socket.to_path_buf();
+                let _ = std::thread::Builder::new().name("capture-cleanup".into()).spawn(move || {
+                    let _ = crate::control::ipc::request_at(&socket, crate::control::ipc::GET_TREE, "", Duration::from_secs(3));
+                    drop(capture);
+                });
+            }
+            return None;
+        }
+    };
+    if !crate::control::ipc::all_succeeded(&reply) || std::time::Instant::now() >= deadline { return None; }
+    let meta = std::fs::symlink_metadata(&file).ok()?;
+    if !meta.is_file() || meta.len() == 0 || meta.len() > MAX_CAPTURE_BYTES { return None; }
+    let source = std::fs::File::open(&file).ok()?.take(MAX_CAPTURE_BYTES);
+    let image = read_png(CaptureReader { source, deadline })?;
+    (std::time::Instant::now() < deadline).then_some(image)
+}
+
+// Only the standalone bridge uses this encoded screenshot cap. Normal ROM
+// images keep their existing limits, and ROCKNIX keeps using grim.
+#[cfg(all(target_os = "linux", any(feature = "brick", test)))]
+const MAX_CAPTURE_BYTES: u64 = 16 * 1024 * 1024;
+
+// One capture, including any bounded late-write cleanup, owns this slot.
+// Another caller can omit its background instead of accumulating worker threads.
+#[cfg(all(target_os = "linux", any(feature = "brick", test)))]
+static CAPTURE_PENDING: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+#[cfg(all(target_os = "linux", any(feature = "brick", test)))]
+struct CaptureSlot;
+#[cfg(all(target_os = "linux", any(feature = "brick", test)))]
+impl Drop for CaptureSlot {
+    fn drop(&mut self) { CAPTURE_PENDING.store(false, std::sync::atomic::Ordering::Release); }
+}
+#[cfg(all(target_os = "linux", any(feature = "brick", test)))]
+struct BridgeCapture { dir: std::path::PathBuf, _slot: CaptureSlot }
+#[cfg(all(target_os = "linux", any(feature = "brick", test)))]
+impl BridgeCapture {
+    fn new() -> Option<Self> {
+        use std::os::unix::fs::DirBuilderExt;
+        use std::sync::atomic::{AtomicU64, Ordering};
+        static NEXT: AtomicU64 = AtomicU64::new(0);
+        CAPTURE_PENDING.compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire).ok()?;
+        let slot = CaptureSlot;
+        for _ in 0..16 {
+            // /tmp is RAM on the card; do not inherit a port's card TMPDIR.
+            let dir = Path::new("/tmp").join(format!("pocket-ui-capture-{}-{}", std::process::id(), NEXT.fetch_add(1, Ordering::Relaxed)));
+            match std::fs::DirBuilder::new().mode(0o700).create(&dir) {
+                Ok(()) => return Some(Self { dir, _slot: slot }),
+                Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => continue,
+                Err(_) => return None,
+            }
+        }
+        None
+    }
+    fn file(&self) -> std::path::PathBuf { self.dir.join("frame.png") }
+}
+#[cfg(all(target_os = "linux", any(feature = "brick", test)))]
+impl Drop for BridgeCapture {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_file(self.file());
+        // The bridge's atomic writer may have left its own temporary file after
+        // an I/O error; this directory was created by this capture alone.
+        let _ = std::fs::remove_dir_all(&self.dir);
+    }
+}
+
+#[cfg(all(target_os = "linux", any(feature = "brick", test)))]
+struct CaptureReader<R> { source: R, deadline: std::time::Instant }
+#[cfg(all(target_os = "linux", any(feature = "brick", test)))]
+impl<R: std::io::Read> std::io::Read for CaptureReader<R> {
+    fn read(&mut self, bytes: &mut [u8]) -> std::io::Result<usize> {
+        if std::time::Instant::now() >= self.deadline { return Err(std::io::ErrorKind::TimedOut.into()); }
+        self.source.read(bytes)
+    }
 }
 
 fn capture_via(cmd: &mut Command, timeout: Duration) -> Option<Image> {
     let out = crate::proc::run_with_timeout(cmd, timeout).ok()?;
-    out.status.success().then(|| parse_ppm(&out.stdout)).flatten()
+    if !out.status.success() {
+        return None;
+    }
+    if out.stdout.starts_with(b"\x89PNG\r\n\x1a\n") {
+        read_png(std::io::Cursor::new(&out.stdout))
+    } else {
+        parse_ppm(&out.stdout)
+    }
 }
 
 /// Binary PPM (P6, maxval 255) as written by grim.
@@ -93,7 +196,11 @@ pub fn png_size(path: &Path) -> Option<(u32, u32)> {
 }
 
 pub fn load_png(path: &Path) -> Option<Image> {
-    let mut reader = png_reader(std::io::BufReader::new(std::fs::File::open(path).ok()?))?;
+    read_png(std::io::BufReader::new(std::fs::File::open(path).ok()?))
+}
+
+fn read_png<R: std::io::Read>(source: R) -> Option<Image> {
+    let mut reader = png_reader(source)?;
     let mut buf = vec![0; reader.output_buffer_size()];
     let info = reader.next_frame(&mut buf).ok()?;
     let rgb = |r: u8, g: u8, b: u8, a: u8| {
@@ -278,6 +385,137 @@ mod tests {
         let img = capture_via(&mut sh("printf 'P6\\n2 1\\n255\\n\\377\\0\\0\\0\\377\\0'"), Duration::from_secs(5)).expect("a picture");
         assert_eq!((img.w, img.h), (2, 1));
         assert_eq!(img.px, vec![0xff0000, 0x00ff00]);
+    }
+
+    #[test]
+    fn a_grim_returning_png_keeps_the_paused_game_picture() {
+        // The standalone framebuffer's grim helper returns PNG even when PPM was requested.
+        let dir = TestDir::new("grim-png");
+        let path = dir.join("frame.png");
+        let mut enc = png::Encoder::new(std::fs::File::create(&path).unwrap(), 2, 1);
+        enc.set_color(png::ColorType::Rgba);
+        enc.set_depth(png::BitDepth::Eight);
+        enc.write_header().unwrap().write_image_data(&[255, 0, 0, 255, 0, 255, 0, 128]).unwrap();
+        let img = capture_via(Command::new("cat").arg(&path), Duration::from_secs(5)).expect("the PNG screenshot must remain visible behind the pause menu");
+        assert_eq!((img.w, img.h, img.px), (2, 1, vec![0xff0000, 0x008000]));
+    }
+
+    #[test]
+    fn a_png_screenshot_with_absurd_dimensions_or_truncated_data_is_refused() {
+        let dir = TestDir::new("grim-png-bounds");
+        let path = dir.join("frame.png");
+        for bytes in [png_claiming(100, 50_000_000), png_claiming(2, 1)[..24].to_vec()] {
+            std::fs::write(&path, bytes).unwrap();
+            assert!(capture_via(Command::new("cat").arg(&path), Duration::from_secs(5)).is_none());
+        }
+    }
+
+    #[cfg(target_os = "linux")]
+    static BRIDGE_TEST: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+    #[cfg(target_os = "linux")]
+    fn png_frame() -> Vec<u8> {
+        let mut out = Vec::new();
+        let mut enc = png::Encoder::new(&mut out, 2, 1);
+        enc.set_color(png::ColorType::Rgb);
+        enc.set_depth(png::BitDepth::Eight);
+        enc.write_header().unwrap().write_image_data(&[255, 0, 0, 0, 255, 0]).unwrap();
+        out
+    }
+
+    #[cfg(target_os = "linux")]
+    fn screenshot_bridge(dir: &Path, kind: &'static str) -> (std::path::PathBuf, std::thread::JoinHandle<Option<std::path::PathBuf>>) {
+        use std::io::{Read, Write};
+        let socket = dir.join("bridge.sock");
+        let listener = std::os::unix::net::UnixListener::bind(&socket).unwrap();
+        listener.set_nonblocking(true).unwrap();
+        let thread = std::thread::spawn(move || {
+            let end = Instant::now() + Duration::from_secs(2);
+            let mut stream = loop {
+                match listener.accept() {
+                    Ok((stream, _)) => break stream,
+                    Err(e) if e.kind() == std::io::ErrorKind::WouldBlock && Instant::now() < end => std::thread::sleep(Duration::from_millis(1)),
+                    _ => return None,
+                }
+            };
+            stream.set_read_timeout(Some(Duration::from_secs(2))).unwrap();
+            let mut head = [0; 14];
+            stream.read_exact(&mut head).unwrap();
+            assert_eq!(&head[..6], b"i3-ipc");
+            assert_eq!(u32::from_ne_bytes(head[10..14].try_into().unwrap()), 0);
+            let mut body = vec![0; u32::from_ne_bytes(head[6..10].try_into().unwrap()) as usize];
+            stream.read_exact(&mut body).unwrap();
+            let command = String::from_utf8(body).unwrap();
+            let path = std::path::PathBuf::from(command.strip_prefix("pocket_grab ").unwrap());
+            assert!(!path.exists(), "a capture must never reuse a previous screenshot");
+            use std::os::unix::fs::PermissionsExt;
+            assert_eq!(std::fs::metadata(path.parent().unwrap()).unwrap().permissions().mode() & 0o777, 0o700);
+            match kind {
+                "timeout" => { std::thread::sleep(Duration::from_millis(100)); std::fs::write(&path, png_frame()).unwrap(); }
+                "missing" => {}
+                "oversized" => { std::fs::File::create(&path).unwrap().set_len(16 * 1024 * 1024 + 1).unwrap(); }
+                "symlink" => { std::os::unix::fs::symlink("/dev/zero", &path).unwrap(); }
+                "damaged" => { std::fs::write(&path, b"not a PNG").unwrap(); }
+                _ => std::fs::write(&path, png_frame()).unwrap(),
+            }
+            let reply = if kind == "failed" { br#"[{"success":false}]"#.as_slice() } else { br#"[{"success":true}]"#.as_slice() };
+            let mut message = b"i3-ipc".to_vec();
+            message.extend_from_slice(&(reply.len() as u32).to_ne_bytes());
+            message.extend_from_slice(&0u32.to_ne_bytes());
+            message.extend_from_slice(reply);
+            let _ = stream.write_all(&message);
+            Some(path)
+        });
+        (socket, thread)
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn the_standalone_pause_picture_uses_its_bridge_even_when_grim_is_blocked() {
+        let _serial = BRIDGE_TEST.lock().unwrap_or_else(|e| e.into_inner());
+        let dir = TestDir::new("pause-bridge");
+        let mut previous = None;
+        for _ in 0..2 {
+            let bridge = TestDir::new("pause-bridge-server");
+            let (socket, server) = screenshot_bridge(&bridge, "good");
+            let marker = dir.join("grim-started");
+            let mut grim = sh("printf started > \"$1\"; sleep 2");
+            grim.arg("sh").arg(&marker);
+            let frame = capture_using(Some(&socket), &mut grim, Duration::from_millis(100)).expect("a running bridge must supply the paused game's picture without waiting for grim");
+            assert_eq!((frame.w, frame.h, frame.px), (2, 1, vec![0xff0000, 0x00ff00]));
+            assert!(!marker.exists(), "the native pause must not start the slow helper process");
+            let path = server.join().unwrap().unwrap();
+            assert_ne!(previous.as_ref(), Some(&path));
+            assert!(!path.exists() && !path.parent().unwrap().exists(), "the private screenshot must be removed after decoding");
+            previous = Some(path);
+        }
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn a_missing_bridge_never_reuses_a_frame_or_starts_grim() {
+        let _serial = BRIDGE_TEST.lock().unwrap_or_else(|e| e.into_inner());
+        let dir = TestDir::new("pause-bridge-missing");
+        let marker = dir.join("grim-started");
+        let mut grim = sh("printf started > \"$1\"");
+        grim.arg("sh").arg(&marker);
+        assert!(capture_using(Some(&dir.join("missing.sock")), &mut grim, Duration::from_millis(100)).is_none());
+        assert!(!marker.exists());
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn timed_out_failed_or_unsafe_bridge_pictures_are_refused_and_cleaned_up() {
+        let _serial = BRIDGE_TEST.lock().unwrap_or_else(|e| e.into_inner());
+        for kind in ["timeout", "failed", "missing", "oversized", "symlink", "damaged"] {
+            let dir = TestDir::new("pause-bridge-invalid");
+            let (socket, server) = screenshot_bridge(&dir, kind);
+            assert!(capture_using(Some(&socket), &mut sh("exit 1"), Duration::from_millis(40)).is_none(), "{kind}");
+            let path = server.join().unwrap().unwrap();
+            let end = Instant::now() + Duration::from_secs(2);
+            while (path.parent().unwrap().exists() || CAPTURE_PENDING.load(std::sync::atomic::Ordering::Acquire)) && Instant::now() < end { std::thread::sleep(Duration::from_millis(5)); }
+            assert!(!path.exists() && !path.parent().unwrap().exists(), "{kind}: no stale frame or private directory");
+        }
     }
 
     #[test]

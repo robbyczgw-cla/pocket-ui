@@ -103,6 +103,8 @@ pub fn targets(system: &str, names: &[Target]) -> Vec<Target> {
         mapping: &mapping,
         core_names: names,
         shortcuts: None,
+        layout: pocket_ui::button_layout_model::ButtonLayout::Xbox,
+        deck: false,
     });
     if !card.known {
         return Vec::new();
@@ -220,7 +222,8 @@ pub fn paint_lines(c: &mut Canvas, text: &mut Text, title: &str, lines: &[String
     for (n, l) in wrapped.iter().skip(scroll.min(max)).take(visible).enumerate() {
         text.draw(c, Face::Body, 28, margin, 140 + n as i32 * line, pal().text, l);
     }
-    c.round_rect(back.x, back.y, back.w, back.h, back.h / 2, pal().pill);
+    if pocket_ui::retro::on() { pocket_ui::retro::frame(c, back.x, back.y, back.w, back.h, pal().pill); }
+    else { c.round_rect(back.x, back.y, back.w, back.h, back.h / 2, pal().pill); }
     let label = text.translated("Back").to_string();
     text.draw(c, Face::Body, 36, back.x + 30, back.y + back.h / 2 + type_scale::mid(36), pal().text, &label);
     if max > 0 {

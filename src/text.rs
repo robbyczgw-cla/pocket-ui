@@ -14,7 +14,7 @@ use std::sync::{mpsc, Arc};
 use fontdue::{Font, FontSettings, Metrics};
 
 use crate::gfx::Canvas;
-use crate::font_style::{self, FontStyle};
+use crate::font_style::{self, FontStyle, RetroLetters};
 use crate::text_fallback::{Fallback, Fit};
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
@@ -49,6 +49,13 @@ pub struct Text {
     scale: [f32; 2],
     /// A pixel face's pixel in ems for each (`font_style::Alt::grid`), 0 for the others: `raster` paints it crisp.
     grid: [f32; 2],
+    /// Whether each face's digits and look-alike capitals come from Retro's LCD set (`font_style::Alt::lcd`).
+    lcd: [bool; 2],
+    /// Whether each face's letters stand a font pixel closer and its pixels are whole screen pixels
+    /// (`font_style::Alt::tight`).
+    tight: [bool; 2],
+    /// Canvas pixels per screen pixel the glyphs were drawn for (`scaled_layout::step`), followed as the style is.
+    step: u32,
     /// The faces of Barlow, or of the store theme that replaced them (`new`): what a style that leaves a face alone
     /// (Pixel's body) or the Barlow style itself uses, and `themed`: which of the two came from the store, which no
     /// style replaces.
@@ -57,6 +64,8 @@ pub struct Text {
     /// The style `title` and `body` are in now, and the one this Text is held to whatever the setting says
     /// (`pinned`: safe mode, the tests), else `font_style::get()` is followed (`sync`).
     style: FontStyle,
+    /// Retro's letters the faces are in (`font_style::retro_letters`), followed as the style is.
+    letters: RetroLetters,
     pinned: Option<FontStyle>,
     /// `prewarm` has been asked for: asked again when the style changes.
     prewarmed: bool,
@@ -81,6 +90,8 @@ pub struct Text {
     tr: crate::i18n::Cache,
     /// Off while the manual's English pages are painted (`set_translate`).
     raw: bool,
+    /// A literal game/system name also bypasses device-specific wording substitutions.
+    naming: bool,
     /// For the snapshot checks only (`i18n::recording`): the first pieces of words `wrap` broke inside, so that one that
     /// is painted is noted (`i18n::note_broken`); a wrap only measured to try a size is not.
     broken: std::collections::HashSet<String>,
@@ -118,12 +129,13 @@ pub fn fonts_dir() -> std::path::PathBuf {
 /// Spiel", first-run test 2026-10-24, finding #9): a letter or digit (a Japanese title) is painted as "?" so that the
 /// name still shows something, anything else (a tick, a star, an emoji, a zero-width mark) is left out. Decided once
 /// per character and size, when the glyph enters the cache: nothing per frame.
-fn raster(font: &Font, scale: f32, grid: f32, plain: &Font, ch: char, px: u32) -> Glyph {
-    // Retro's digits (`retro::Digits`): Barlow's as they are, or the LCD set on the pixel face's grid; its "B" and "Z"
-    // from that set whatever the digits are (`retro::lcd_letter`).
-    if grid > 0.0 && ch.is_ascii_digit() {
+#[allow(clippy::too_many_arguments)]
+fn raster(font: &Font, scale: f32, grid: f32, lcd: bool, tight: Option<u32>, plain: &Font, ch: char, px: u32) -> Glyph {
+    // Retro's digits in Pixelify's letters (`retro::Digits`): Barlow's as they are, or the LCD set on the pixel face's
+    // grid; its "B" and "Z" from that set whatever the digits are (`retro::lcd_letter`). Departure Mono's are its own.
+    if grid > 0.0 && lcd && ch.is_ascii_digit() {
         match crate::retro::digits() {
-            crate::retro::Digits::Plain => return raster(plain, 1.0, 0.0, plain, ch, px),
+            crate::retro::Digits::Plain => return raster(plain, 1.0, 0.0, false, None, plain, ch, px),
             crate::retro::Digits::Lcd => {
                 let rows = &crate::retro::LCD[(ch as u8 - b'0') as usize];
                 return lcd_glyph(font, on_grid(px as f32 * scale, grid), grid, ch, rows, if ch == '1' { 3 } else { 5 });
@@ -131,12 +143,15 @@ fn raster(font: &Font, scale: f32, grid: f32, plain: &Font, ch: char, px: u32) -
             crate::retro::Digits::Pixelify => {}
         }
     }
-    if let Some(rows) = crate::retro::lcd_letter(ch).filter(|_| grid > 0.0) {
+    if let Some(rows) = crate::retro::lcd_letter(ch).filter(|_| grid > 0.0 && lcd) {
         return lcd_glyph(font, on_grid(px as f32 * scale, grid), grid, ch, rows, 5);
     }
     // `scale` fits an alternative face to Barlow's capitals (1.0 for Barlow: the size as it was).
     let px = if scale == 1.0 { px as f32 } else { px as f32 * scale };
-    let px = on_grid(px, grid);
+    let px = match tight {
+        Some(step) => on_screen_grid(px, grid, step),
+        None => on_grid(px, grid),
+    };
     let ch = if font.lookup_glyph_index(ch) != 0 || ch == '?' {
         ch
     } else if ch.is_alphanumeric() {
@@ -152,6 +167,11 @@ fn raster(font: &Font, scale: f32, grid: f32, plain: &Font, ch: char, px: u32) -
             *v = if *v >= 128 { 255 } else { 0 };
         }
         metrics.advance_width = whole_pixels(metrics.advance_width, px, grid);
+        // One font pixel closer where the ink ends a whole font pixel before the next letter (`Alt::tight`).
+        let n = (px * grid).round().max(1.0);
+        if tight.is_some() && !font_style::departure_wide() && (metrics.xmin + metrics.width as i32) as f32 <= metrics.advance_width - n {
+            metrics.advance_width -= n;
+        }
     }
     (metrics, bitmap)
 }
@@ -192,6 +212,16 @@ fn on_grid(px: f32, grid: f32) -> f32 {
         return px;
     }
     (px * grid).round().max(2.0) / grid
+}
+
+/// `on_grid` for a face whose pixels must be whole pixels of the screen (`font_style::Alt::tight`): with `step` canvas
+/// pixels to one of the screen's (`scaled_layout::step`), the canvas pixels per font pixel are a multiple of `step`, at
+/// least two, and halfway between two the smaller (Departure Mono's three canvas pixels came out as one and a half on a
+/// 640x480 screen: uneven strokes, grey edges).
+fn on_screen_grid(px: f32, grid: f32, step: u32) -> f32 {
+    let step = step.max(1) as f32;
+    let screen = (px * grid / step - 0.5).ceil().max(1.0);
+    (screen * step).max(2.0) / grid
 }
 
 /// `ch` from the fallback font in `path`, fitted to `face`; opens the font the first time (`text_fallback::open`, the
@@ -254,8 +284,12 @@ impl Text {
             body,
             scale: [1.0; 2],
             grid: [0.0; 2],
+            lcd: [false; 2],
+            tight: [false; 2],
+            step: 1,
             themed,
             style: FontStyle::Barlow,
+            letters: RetroLetters::Departure,
             pinned: None,
             prewarmed: false,
             cache: HashMap::new(),
@@ -268,6 +302,7 @@ impl Text {
             drawn: 0,
             tr: Default::default(),
             raw: false,
+            naming: false,
             broken: Default::default(),
         }
     }
@@ -303,18 +338,24 @@ impl Text {
     /// the first time it is used (`FontStyle::fitted`), not here per frame. A store theme's faces stay.
     fn sync(&mut self) {
         let want = self.pinned.unwrap_or_else(font_style::get);
-        if want == self.style {
+        // Retro's letters matter only in Retro: another style keeps its faces when they change.
+        let letters = if want == FontStyle::Retro { font_style::retro_letters() } else { self.letters };
+        // A face sized in screen pixels (Departure Mono) is drawn anew when the canvas is shown at another scale.
+        let step = if self.tight.iter().any(|t| *t) || want == FontStyle::Retro { crate::scaled_layout::step() } else { self.step };
+        if want == self.style && letters == self.letters && step == self.step {
             return;
         }
         self.style = want;
+        self.letters = letters;
+        self.step = step;
         let alt = want.fitted();
         let pick = |i: usize, alt: Option<&font_style::Alt>| match alt {
-            Some(a) if !self.themed[i] => (a.font.clone(), a.scale, a.grid),
-            _ => (self.base[i].clone(), 1.0, 0.0),
+            Some(a) if !self.themed[i] => (a.font.clone(), a.scale, a.grid, a.lcd, a.tight),
+            _ => (self.base[i].clone(), 1.0, 0.0, false, false),
         };
         let (title, body) = (pick(0, alt.and_then(|a| a.title.as_ref())), pick(1, alt.and_then(|a| a.body.as_ref())));
-        (self.title, self.scale[0], self.grid[0]) = title;
-        (self.body, self.scale[1], self.grid[1]) = body;
+        (self.title, self.scale[0], self.grid[0], self.lcd[0], self.tight[0]) = title;
+        (self.body, self.scale[1], self.grid[1], self.lcd[1], self.tight[1]) = body;
         // Glyphs, the fallback's fit to the capitals and what the threads were drawing ahead are of the old faces.
         self.cache.clear();
         self.more.clear();
@@ -369,13 +410,13 @@ impl Text {
             self.take_warm();
         }
         // One lookup for a glyph in the cache, as before the fallback font; the fields apart for the one that isn't.
-        let Text { cache, title, body, scale, grid, base, fallback_path, fallback, more, more_bytes, drawn, .. } = self;
+        let Text { cache, title, body, scale, grid, lcd, tight, step, base, fallback_path, fallback, more, more_bytes, drawn, .. } = self;
         cache.entry(key).or_insert_with(|| {
             *drawn += 1;
-            let (font, k, g) = match face {
-                Face::Title => (&**title, scale[0], grid[0]),
-                Face::Body => (&**body, scale[1], grid[1]),
-                Face::Narrow => (&*base[0], 1.0, 0.0),
+            let (font, k, g, l, n) = match face {
+                Face::Title => (&**title, scale[0], grid[0], lcd[0], tight[0].then_some(*step)),
+                Face::Body => (&**body, scale[1], grid[1], lcd[1], tight[1].then_some(*step)),
+                Face::Narrow => (&*base[0], 1.0, 0.0, false, None),
             };
             // The PlayStation-style shapes of the hints (`button_prompts`): drawn, at the face's cap height.
             if let Some(glyph) = crate::button_prompts::raster(ch, px, font.metrics('H', px as f32 * k).height as f32) {
@@ -389,7 +430,7 @@ impl Text {
                     return glyph;
                 }
             }
-            raster(font, k, g, &base[face.slot()], ch, px)
+            raster(font, k, g, l, n, &base[face.slot()], ch, px)
         })
     }
 
@@ -542,7 +583,7 @@ impl Text {
             self.tr.is_translated(key);
         }
         let (tx, rx) = mpsc::channel();
-        let (title, body, scale, grid, base) = (self.title.clone(), self.body.clone(), self.scale, self.grid, self.base.clone());
+        let (title, body, scale, grid, lcd, tight, step, base) = (self.title.clone(), self.body.clone(), self.scale, self.grid, self.lcd, self.tight, self.step, self.base.clone());
         // At the sizes they are painted at (Settings → Text size, `type_scale`); a change of size draws them anew.
         let sizes: Vec<(Face, u32)> = PREWARM.iter().flat_map(|(face, sizes)| sizes.iter().map(|px| (*face, crate::type_scale::px(*px)))).collect();
         let spawned = std::thread::Builder::new().name("glyph-prewarm".into()).spawn(move || {
@@ -550,7 +591,7 @@ impl Text {
             for (face, px) in sizes {
                 let font = if face == Face::Title { &title } else { &body };
                 for ch in (' '..='~').chain(PREWARM_MORE.chars()) {
-                    out.push(((face, px, ch), raster(font, scale[face as usize], grid[face as usize], &base[face.slot()], ch, px)));
+                    out.push(((face, px, ch), raster(font, scale[face as usize], grid[face as usize], lcd[face as usize], tight[face as usize].then_some(step), &base[face.slot()], ch, px)));
                 }
             }
             let _ = tx.send(out);
@@ -583,6 +624,44 @@ impl Text {
         self.tr.name_line(line);
     }
 
+    /// Measure and paint a game/system name literally, restoring the caller's language mode.
+    /// Keep the scope around both operations: measuring must not consume a one-use name exemption.
+    pub fn literal<R>(&mut self, f: impl FnOnce(&mut Self) -> R) -> R {
+        let translating = self.translating();
+        let naming = self.naming;
+        self.naming = true;
+        self.set_translate(false);
+        let result = f(self);
+        self.set_translate(translating);
+        self.naming = naming;
+        result
+    }
+
+    /// Fit a data name for a compact row (metadata choices, related games, management sheets).
+    pub fn fit_name(&mut self, face: Face, px: u32, name: &str, width: i32) -> String {
+        self.literal(|text| text.fit(face, px, name, width))
+    }
+
+    /// Wrap a data name without interpreting words inside it as UI copy.
+    pub fn wrap_name(&mut self, face: Face, px: u32, name: &str, width: i32) -> Vec<String> {
+        self.literal(|text| text.wrap(face, px, name, width))
+    }
+
+    /// A name already fitted/wrapped by its component; never translate the resulting fragments.
+    #[allow(clippy::too_many_arguments)]
+    pub fn draw_name(&mut self, c: &mut crate::gfx::Canvas, face: Face, px: u32, x: i32, y: i32, colour: u32, name: &str) -> i32 {
+        self.literal(|text| text.draw(c, face, px, x, y, colour, name))
+    }
+
+    /// The printed name on a carousel card, fitted before it is painted.
+    pub fn card_name(&mut self, title: &str, width: i32) -> (u32, Vec<String>) {
+        let lines = crate::title_block::name_layout_in(self, Face::Title, 37, title, width, 80);
+        // Printed cards use one size for every line. A subtitle may have been
+        // fitted smaller than the name; keeping the first size would undo that fit.
+        let px = lines.iter().map(|line| line.px).min().unwrap_or(37);
+        (px, lines.into_iter().map(|line| line.text).collect())
+    }
+
     /// Whether strings are translated now (`set_translate`).
     pub fn translating(&self) -> bool {
         !self.raw
@@ -591,6 +670,7 @@ impl Text {
     /// `s` in the interface's language (`crate::i18n`); a borrowed string or a shared one, never a new allocation
     /// for a string painted in the frame before.
     pub fn translated<'a>(&mut self, s: &'a str) -> crate::i18n::Tr<'a> {
+        if self.naming { return crate::i18n::Tr::Same(s); }
         let translated = if self.raw { crate::i18n::Tr::Same(s) } else { self.tr.get(s) };
         if crate::i18n::is_name(s) { translated } else { crate::i18n::device_text(translated) }
     }
@@ -631,6 +711,16 @@ impl Text {
         if !self.broken.is_empty() && self.broken.contains(s) {
             crate::i18n::note_broken(s);
         }
+        // A face of whole screen pixels (Departure Mono) starts on the screen's grid too: on a 640x480 panel's half-size
+        // canvas a letter at an odd x or baseline came out with every font pixel half grey (`font_style::Alt::tight`).
+        self.sync();
+        let whole = match face {
+            Face::Title => self.tight[0],
+            Face::Body => self.tight[1],
+            Face::Narrow => false,
+        };
+        let step = if whole { self.step.max(1) as i32 } else { 1 };
+        let (x, baseline) = (x - x.rem_euclid(step), baseline - baseline.rem_euclid(step));
         let mut pen = x as f32;
         let mut ink = boxes::Ink::new(boxes::on());
         for ch in s.chars() {
@@ -1643,8 +1733,10 @@ mod tests {
             (0..m.width as i32).contains(&col) && (0..m.height as i32).contains(&row) && g[row as usize * m.width + col as usize] >= 128
         };
         let mut differ = 0;
+        // Across both glyphs' ink wherever it starts: Departure Mono's letters stand a whole font pixel in (`xmin`).
+        let (left, right) = (ma.xmin.min(mb.xmin) - 2, (ma.xmin + ma.width as i32).max(mb.xmin + mb.width as i32) + 2);
         for y in -(ma.height.max(mb.height) as i32) - 2..2 {
-            for x in -2..(ma.width.max(mb.width) as i32 + 4) {
+            for x in left..right {
                 differ += usize::from(at(&ma, &ga, x, y) != at(&mb, &gb, x, y));
             }
         }
@@ -1665,23 +1757,76 @@ mod tests {
     /// out with grey edges and strokes of two and three pixels, its "8" read as "S", "Z" as "2", "C" as "O". At every
     /// size, from the pause menu's notes to the biggest title, every pixel is ink or not, and the look-alikes differ by
     /// whole font pixels.
+    /// Both of Retro's letters (`font_style::RetroLetters`, 0.3.2): Departure Mono, the default, and Pixelify Sans.
     #[test]
     fn retro_letters_are_crisp_and_digits_tell_apart_from_letters() {
-        let mut t = Text::builtin().pinned_to(FontStyle::Retro);
-        for face in [Face::Body, Face::Title] {
-            for px in LOOK_ALIKE_SIZES {
-                for ch in "Slot 3 · heute 11:41 48% Zurück SELECT Chrono Trigger description".chars() {
-                    let (_, bitmap) = t.glyph(face, px, ch).clone();
-                    assert!(bitmap.iter().all(|&v| v == 0 || v == 255), "{face:?} {px} px {ch:?}: grey edges");
-                }
-                for (a, b, pixels) in LOOK_ALIKES {
-                    let (differ, capital) = glyph_difference(&mut t, face, px, a, b);
-                    // Whole font pixels: a capital is seven of them high.
-                    let n = (capital / 7).max(1);
-                    assert!(differ >= pixels * n * n, "{face:?} {px} px: {a:?} and {b:?} differ by {differ} pixels only (font pixel {n})");
+        // Pixelify's capitals are seven font pixels high, Departure Mono's eight.
+        for (letters, rows) in [(RetroLetters::Departure, 8), (RetroLetters::Pixelify, 7)] {
+            font_style::set_retro_letters(letters);
+            let mut t = Text::builtin().pinned_to(FontStyle::Retro);
+            for face in [Face::Body, Face::Title] {
+                for px in LOOK_ALIKE_SIZES {
+                    for ch in "Slot 3 · heute 11:41 48% Zurück SELECT Chrono Trigger description ñ¿¡".chars() {
+                        let (_, bitmap) = t.glyph(face, px, ch).clone();
+                        assert!(bitmap.iter().all(|&v| v == 0 || v == 255), "{letters:?} {face:?} {px} px {ch:?}: grey edges");
+                    }
+                    for (a, b, pixels) in LOOK_ALIKES {
+                        let (differ, capital) = glyph_difference(&mut t, face, px, a, b);
+                        // Whole font pixels: a capital is `rows` of them high.
+                        let n = (capital / rows).max(1);
+                        assert!(differ >= pixels * n * n, "{letters:?} {face:?} {px} px: {a:?} and {b:?} differ by {differ} pixels only (font pixel {n})");
+                    }
                 }
             }
         }
+        font_style::set_retro_letters(RetroLetters::Departure);
+    }
+
+    /// Retro's letters as painted (0.3.2): Departure Mono by default, every letter as far on as the next and every font
+    /// pixel the same whole number of screen pixels; a Text in use follows a change to Pixelify by itself.
+    #[test]
+    fn retro_paints_departure_mono_on_its_grid_and_follows_a_change_to_pixelify() {
+        font_style::set_retro_letters(RetroLetters::Departure);
+        let mut t = Text::builtin().pinned_to(FontStyle::Retro);
+        for face in [Face::Body, Face::Title] {
+            for px in LOOK_ALIKE_SIZES {
+                let (narrow, wide) = (t.width(face, px, "iiiiiiii"), t.width(face, px, "MMMMMMMM"));
+                assert_eq!(narrow, wide, "{face:?} {px} px: Departure Mono's letters are all as wide");
+                let (m, _) = t.glyph(face, px, 'H').clone();
+                assert_eq!(m.height % 8, 0, "{face:?} {px} px: a capital of {} pixels is not 8 whole font pixels", m.height);
+                assert_eq!(m.advance_width as usize % (m.height / 8), 0, "{face:?} {px} px: letters a whole number of font pixels apart");
+            }
+        }
+        // A 640x480 screen shows the 1280x960 canvas at half (`scaled_layout::step`): every font pixel an even number of
+        // canvas pixels, whole pixels of the screen, never one and a half; the Text in use draws its glyphs anew.
+        crate::scaled_layout::set_step((1280, 960), (640, 480));
+        for face in [Face::Body, Face::Title] {
+            for px in LOOK_ALIKE_SIZES {
+                let (m, g) = t.glyph(face, px, 'H').clone();
+                let n = m.height / 8;
+                assert_eq!((m.height % 8, n % 2), (0, 0), "{face:?} {px} px on 640x480: a font pixel of {n} canvas pixels");
+                assert!(g.iter().all(|&v| v == 0 || v == 255), "{face:?} {px} px on 640x480: grey edges");
+            }
+        }
+        // And where they land: drawn at an odd place, every font pixel still fills a whole 2x2 block of the canvas, one
+        // pixel of the screen (the 640x480 picture showed half-grey letters before).
+        for (face, px) in [(Face::Body, 28), (Face::Title, 37), (Face::Body, 46)] {
+            let mut buf = vec![0u32; 320 * 90];
+            t.draw(&mut Canvas::new(&mut buf, 320, 90), face, px, 11, 61, 0xffffff, "Systems 8 Shelf");
+            let at = |x: usize, y: usize| buf[y * 320 + x];
+            for y in (0..90).step_by(2) {
+                for x in (0..320).step_by(2) {
+                    let block = [at(x, y), at(x + 1, y), at(x, y + 1), at(x + 1, y + 1)];
+                    assert!(block.iter().all(|&v| v == block[0]), "{face:?} {px} px: half a screen pixel at ({x}, {y}): {block:x?}");
+                }
+            }
+        }
+        crate::scaled_layout::set_step((1024, 768), (1024, 768));
+        assert_eq!(t.glyph(Face::Title, 37, 'H').0.height, 24, "a native screen: three canvas pixels per font pixel at 37 px");
+        font_style::set_retro_letters(RetroLetters::Pixelify);
+        let (narrow, wide) = (t.width(Face::Body, 28, "iiiiiiii"), t.width(Face::Body, 28, "MMMMMMMM"));
+        assert!(narrow < wide, "Pixelify chosen: its narrow i ({narrow} against {wide})");
+        font_style::set_retro_letters(RetroLetters::Departure);
     }
 
     /// The Pixel look (Settings → Look → Font) paints Pixelify Sans' titles as the font draws them, at any size: its

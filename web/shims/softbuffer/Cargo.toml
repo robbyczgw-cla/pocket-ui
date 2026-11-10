@@ -1,0 +1,10 @@
+[package]
+name = "softbuffer"
+version = "0.4.999"
+edition = "2021"
+license = "GPL-2.0-or-later"
+publish = false
+description = "pocket-ui's browser demo: softbuffer 0.4's Surface over a frame the page copies to its canvas"
+
+[dependencies]
+raw-window-handle = "0.6"

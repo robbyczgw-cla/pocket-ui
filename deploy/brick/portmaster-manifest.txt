@@ -1,0 +1,9 @@
+# kind|sha256|size|pinned HTTPS URL; install order matters (Python first).
+# PortMaster MIT; individual ports and dependencies retain their own licences.
+python|6547ff0fe1d6b9c22dd1fbf4bfb676533a2541e294e43345806f9861552bad77|82132671|https://raw.githubusercontent.com/kloptops/TRIMUI_EX/8768f3a90534a7e342722f5a3385c158e468c7ad/System/updates/update_001/python.zip
+portmaster|85c9cf08b187574e83f11af6826ccb035a5fa989d1621c66dd50095a12cd1244|24608358|https://codeload.github.com/PortsMaster/PortMaster-GUI/tar.gz/9ed29285ecbb0610b7c86a0b77d0d9d1c74efd49
+lib/libssl.so.1.1|0406752ac1999f7e7d1cc5595cc20befd22f13d925a265c4f7eeb1b8d50b5659|577176|https://raw.githubusercontent.com/kloptops/TRIMUI_EX/8768f3a90534a7e342722f5a3385c158e468c7ad/System/lib/libssl.so.1.1
+lib/libcrypto.so.1.1|be04d30dd26bf26eb9e55a2458af3001b9eaded410ec8021f7a5ea745c43869d|2739952|https://raw.githubusercontent.com/kloptops/TRIMUI_EX/8768f3a90534a7e342722f5a3385c158e468c7ad/System/lib/libcrypto.so.1.1
+lib/libSDL2_gfx-1.0.so.0|8f124e2666901f68913fcce997816c167ab28a5723c709803eed4d91ad1f24ad|65344|https://raw.githubusercontent.com/kloptops/TRIMUI_EX/8768f3a90534a7e342722f5a3385c158e468c7ad/System/lib/libSDL2_gfx-1.0.so.0
+lib/libSDL2_net-2.0.so.0|9e99a9debf0f6cdfd69b0203a0443c7527ac2d865082274132c45b6b3758bc10|18632|https://raw.githubusercontent.com/kloptops/TRIMUI_EX/8768f3a90534a7e342722f5a3385c158e468c7ad/System/lib/libSDL2_net-2.0.so.0
+lib/liblzma.so.5|8cd9f1ee1383c5a04614f61cd81db012c0245b87cc6f7b12c19a072ccc792775|154232|https://raw.githubusercontent.com/kloptops/TRIMUI_EX/8768f3a90534a7e342722f5a3385c158e468c7ad/System/lib/liblzma.so.5

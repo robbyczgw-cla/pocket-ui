@@ -19,6 +19,9 @@
 //! Needs python3 for scripts/wayland-stub.py on Linux without a compositor (as tests/user_journeys.rs).
 #![cfg(target_os = "linux")]
 
+#[path = "common/executable.rs"]
+mod fixture_executable;
+
 use std::collections::{BTreeMap, BTreeSet};
 use std::io::Write;
 use std::os::fd::FromRawFd;
@@ -57,6 +60,12 @@ struct Frame {
     list: Option<(usize, usize)>,
     hits: Vec<(Rect, usize)>,
     hash: String,
+    /// Which painter painted the frame, and the one `@where`'s page belongs to (`src/app_where.rs`); empty from a binary
+    /// that doesn't say.
+    painted: String,
+    painter: String,
+    /// What the keys before this frame asked for (`@feedback`: "tick", "sound:Nav"…); None from a binary that doesn't say.
+    feedback: Option<String>,
 }
 
 fn centre(r: &Rect) -> (i32, i32) {
@@ -102,6 +111,9 @@ impl Frame {
                     "list" => f.list = Some((n(0) as usize, n(1) as usize)),
                     "hit" => f.hits.push(((n(0), n(1), n(2), n(3)), n(4) as usize)),
                     "hash" => f.hash = rest.to_string(),
+                    "painted" => f.painted = rest.to_string(),
+                    "painter" => f.painter = rest.to_string(),
+                    "feedback" => f.feedback = Some(rest.to_string()),
                     _ => {}
                 }
                 continue;
@@ -319,11 +331,7 @@ impl Card {
 /// Writes an executable in a child, as tests/user_journeys.rs does: another test's fork must not inherit a descriptor that can
 /// write it (ETXTBSY).
 fn executable(path: &Path, body: &str) {
-    let mut writer = Command::new("sh").args(["-c", r#"cat > "$1" && chmod 755 "$1""#, "sh"]).arg(path).stdin(std::process::Stdio::piped()).spawn().unwrap();
-    let mut input = writer.stdin.take().unwrap();
-    input.write_all(body.as_bytes()).unwrap();
-    drop(input);
-    assert!(writer.wait().unwrap().success());
+    fixture_executable::publish(path, body).unwrap();
 }
 
 /// Also lets a regression test be replayed against the saved pre-fix executable.
@@ -337,6 +345,8 @@ struct Ui {
     run: PathBuf,
     /// Frames asked for, for the report.
     frames: usize,
+    /// Slow capture scheduling, local to a fixture (no process-wide environment).
+    capture_delay: Duration,
 }
 
 /// pocket-ui ended (a row that restarts it, a crash): the explorer starts it again. What it said last, for a failure.
@@ -386,7 +396,7 @@ impl Ui {
             cmd.pre_exec(|| if libc::prctl(libc::PR_SET_PDEATHSIG, libc::SIGKILL) == 0 { Ok(()) } else { Err(std::io::Error::last_os_error()) });
         }
         let child = cmd.spawn().unwrap();
-        let mut ui = Ui { child, run, frames: 0 };
+        let mut ui = Ui { child, run, frames: 0, capture_delay: Duration::ZERO };
         let fifo = ui.run.join("ui.in");
         ui.wait(|| fifo.exists(), "the command FIFO").unwrap();
         ui
@@ -430,12 +440,16 @@ impl Ui {
     fn press(&mut self, keys: &[&str]) -> Result<Frame, Exited> {
         let nav = self.run.join("nav.txt");
         let _ = std::fs::remove_file(&nav);
-        let mut line = keys.join("\n");
-        if !line.is_empty() {
-            line.push('\n');
+        // Capture the final key's immediate result in its UI event, before a
+        // same-result worker can overtake a separately queued nav request.
+        let mut commands: Vec<String> = keys.iter().map(|k| (*k).to_string()).collect();
+        match commands.last_mut() {
+            Some(last) if matches!(last.as_str(), "up" | "down" | "left" | "right" | "a" | "b" | "x" | "y" | "l1" | "r1" | "l2" | "r2" | "home" | "select" | "start" | "power" | "volup" | "voldown") => *last = format!("nav-after {last}"),
+            // Commands such as powermenu and leave are not pad presses.
+            _ => commands.push("nav".into()),
         }
-        line += "nav";
-        self.send(&line)?;
+        self.send(&commands.join("\n"))?;
+        std::thread::sleep(self.capture_delay);
         let mut record = String::new();
         self.wait(
             || {
@@ -463,7 +477,9 @@ impl Ui {
             let g = self.press(&[])?;
             seen.push(g.clone());
             if g.same(&f) && !g.busy {
-                return Ok((g, seen));
+                // The keys' feedback is in the first record after them: the settled frame carries all of it.
+                let feedback = seen.iter().filter_map(|s| s.feedback.clone()).reduce(|a, b| format!("{a} {b}"));
+                return Ok((Frame { feedback, ..g }, seen));
             }
             assert!(Instant::now() < until, "page did not finish its asynchronous read: {}", g.at);
             f = g;
@@ -533,6 +549,17 @@ struct Report {
     notes: BTreeSet<String>,
     /// Replays that had to go one button at a time.
     slow_replays: usize,
+    /// Per page: how often Up or Down moved the selection, and how often that move asked for the haptic tick and for a
+    /// sound (`@feedback`). Every move gives both, on every page (2026-11-08: the switcher, quick settings, the power
+    /// menu, the first start and more gave no tick).
+    feedback: BTreeMap<String, Feedback>,
+}
+
+#[derive(Default, Clone, Copy, Debug)]
+struct Feedback {
+    moves: usize,
+    ticks: usize,
+    sounds: usize,
 }
 
 struct Explorer<'a> {
@@ -645,7 +672,9 @@ impl<'a> Explorer<'a> {
 
     fn press(&mut self, keys: &[&str]) -> Result<Frame, Exited> {
         let ui = self.ui.as_mut().expect("a running UI");
-        ui.settled(keys)
+        let f = ui.settled(keys)?;
+        self.check_where(&f);
+        Ok(f)
     }
 
     /// `keys` did something: a frame on the way, or the one it settled on, is not `before`.
@@ -653,7 +682,18 @@ impl<'a> Explorer<'a> {
         let ui = self.ui.as_mut().expect("a running UI");
         let (f, seen) = ui.watched(keys)?;
         let changed = seen.iter().any(|g| !g.same(before));
+        for g in &seen {
+            self.check_where(g);
+        }
         Ok((f, changed))
+    }
+
+    /// `@where` names the page that was painted: a page the record names wrongly is one the walk would take for another
+    /// (the Date and time page was "settings:List System" and never explored, 2026-11-08).
+    fn check_where(&mut self, f: &Frame) {
+        if !f.painted.is_empty() && !f.painter.is_empty() && f.painted != f.painter {
+            self.fail(format!("{}: the {} painter painted it, but @where names a page of the {} painter", f.at, f.painted, f.painter));
+        }
     }
 
     /// Back where `want` was (its page and focused row, and its words): B while the page differs, the same key again while
@@ -724,6 +764,7 @@ impl<'a> Explorer<'a> {
                 return (frames, Walked::Left);
             }
             self.check_focus(&last, &f, dir);
+            self.note_feedback(&last, &f);
             if f.same(&last) {
                 return (frames, Walked::Stopped);
             }
@@ -996,6 +1037,19 @@ impl<'a> Explorer<'a> {
 
     /// The list moved its selection (`@list`): the picture changed, and the focus mark is on the selected row when it is on
     /// the list at all (a page with tiles above the list keeps the focus there).
+    /// A move of the selection (the focused row or the list's selected row changed): did it ask for a tick and a sound?
+    fn note_feedback(&mut self, before: &Frame, after: &Frame) {
+        let Some(said) = &after.feedback else { return };
+        let moved = after.focused() != before.focused() || after.list.map(|l| l.0) != before.list.map(|l| l.0);
+        if !moved || after.at != before.at {
+            return;
+        }
+        let e = self.report.feedback.entry(after.at.clone()).or_default();
+        e.moves += 1;
+        e.ticks += usize::from(said.split(' ').any(|w| w == "tick"));
+        e.sounds += usize::from(said.split(' ').any(|w| w.starts_with("sound:")));
+    }
+
     fn check_focus(&mut self, before: &Frame, after: &Frame, dir: &str) {
         // Grids need no touch-list metadata. A move must still leave a visible selection on a drawn control.
         if before.focused().is_some() && after.focused().is_none() && after.controls().len() > 1 {
@@ -1161,10 +1215,22 @@ fn run(profile: Profile, part: Part) {
         for (p, n) in r.pages {
             *all.pages.entry(p).or_default() += n;
         }
+        for (p, f) in r.feedback {
+            let e = all.feedback.entry(p).or_default();
+            (e.moves, e.ticks, e.sounds) = (e.moves + f.moves, e.ticks + f.ticks, e.sounds + f.sounds);
+        }
+    }
+    for (p, f) in &all.feedback {
+        if f.ticks < f.moves || f.sounds < f.moves {
+            all.failures.insert(format!("[{}] {p}: of {} moves of the selection, {} asked for the haptic tick and {} for a sound", profile.name, f.moves, f.ticks, f.sounds));
+        }
     }
     let mut out = format!("{} {part:?}: {} pages, {starts} starts, {:.0} s\n", profile.name, all.pages.len(), started.elapsed().as_secs_f64());
     for p in all.pages.keys() {
         out += &format!("  page {p}\n");
+    }
+    for (p, f) in &all.feedback {
+        out += &format!("  feedback {p}: {} moves, {} ticks, {} sounds\n", f.moves, f.ticks, f.sounds);
     }
     for n in &all.notes {
         out += &format!("  note {n}\n");
@@ -1418,6 +1484,56 @@ fn rc03_performance_fan_rows_only_offer_arrows_when_they_can_change() {
     }
 }
 
+/// Retro's letters (0.3.2): whoever had Retro on gets Departure Mono, and Pixelify Sans, Retro's letters before, is one
+/// step on Settings › Look › Style, kept in settings.json and there again after a restart; one step back is Departure.
+#[test]
+fn retro_letters_are_one_step_on_the_style_row_and_kept() {
+    let profile = RG35XX_PLUS;
+    let card = Card::new(&profile);
+    // A player from 0.3.1 with Retro on: no "retro_letters" in the file yet.
+    std::fs::write(card.path().join("template-data/settings.json"), r#"{"onboarded":true,"seen_version":"9.9.9","motion":"off","art":"off","language":"en","font":"retro"}"#).unwrap();
+    let row_text = |f: &Frame| {
+        let rect = f.controls().into_iter().find(|c| c.focused).unwrap_or_else(|| panic!("no focus:\n{}", f.text())).rect;
+        f.strings.iter().filter(|(r, _)| inside(centre(r), &rect)).map(|(_, s)| s.clone()).collect::<Vec<_>>().join(" ")
+    };
+    let open_style = |ui: &mut Ui| {
+        let mut f = ui.settled(&["start"]).unwrap();
+        for _ in 0..MAX_WALK {
+            if f.focused().is_some_and(|n| n.starts_with("Look")) { break; }
+            f = ui.settled(&["down"]).unwrap();
+        }
+        ui.settled(&["a"]).unwrap();
+        select_named(ui, "Style")
+    };
+    // settings.json as written, its spaces left out ("retro_letters": "pixelify").
+    let saved = |run: &str| std::fs::read_to_string(card.path().join(run).join("data/settings.json")).unwrap_or_default().replace([' ', '\n'], "");
+    let mut ui = Ui::start(&card, &profile, true, 1, &[]);
+    let style = open_style(&mut ui);
+    assert!(row_text(&style).contains("Retro") && !row_text(&style).contains("Pixelify"), "Retro on means Departure Mono: {}", row_text(&style));
+    let pixelify = ui.settled(&["right"]).unwrap();
+    assert!(pixelify.same_row(&style), "Right keeps the Style row");
+    assert!(row_text(&pixelify).contains("Retro Pixelify"), "one step on is Pixelify: {}", row_text(&pixelify));
+    let until = Instant::now() + Duration::from_secs(5);
+    while !saved("run-1").contains(r#""retro_letters":"pixelify""#) && Instant::now() < until {
+        std::thread::sleep(Duration::from_millis(20));
+    }
+    assert!(saved("run-1").contains(r#""retro_letters":"pixelify""#) && saved("run-1").contains(r#""font":"retro""#), "kept: {}", saved("run-1"));
+    let departure = ui.settled(&["left"]).unwrap();
+    assert!(row_text(&departure).contains("Retro") && !row_text(&departure).contains("Pixelify"), "one step back is Departure Mono: {}", row_text(&departure));
+    ui.settled(&["right"]).unwrap();
+    let until = Instant::now() + Duration::from_secs(5);
+    while !saved("run-1").contains(r#""retro_letters":"pixelify""#) && Instant::now() < until {
+        std::thread::sleep(Duration::from_millis(20));
+    }
+    drop(ui);
+    // The next start reads the choice back.
+    std::fs::create_dir_all(card.path().join("run-2/data")).unwrap();
+    std::fs::write(card.path().join("run-2/data/settings.json"), saved("run-1")).unwrap();
+    let mut ui = Ui::start(&card, &profile, false, 2, &[]);
+    let again = open_style(&mut ui);
+    assert!(row_text(&again).contains("Retro Pixelify"), "Pixelify after a restart: {}", row_text(&again));
+}
+
 #[test]
 fn rc03_starter_pack_left_right_keep_the_focused_game() {
     let profile = RG35XX_PLUS;
@@ -1425,11 +1541,49 @@ fn rc03_starter_pack_left_right_keep_the_focused_game() {
     let mut ui = Ui::start(&card, &profile, true, 1, &[]);
     ui.settled(&["start"]).unwrap();
     open_named(&mut ui, "Games");
+    open_named(&mut ui, "Extras");
     open_named(&mut ui, "Starter pack");
     let before = ui.settled(&["down"]).unwrap();
     for key in ["left", "right"] {
         let after = ui.settled(&[key]).unwrap();
         assert!(after.same_row(&before), "{key} on a game row without a choice must keep its focus");
+    }
+}
+
+#[test]
+fn extras_rows_are_reachable_and_b_returns_from_starter_and_to_games_in_each_language() {
+    let profiles = vec![Profile { text_size: "large", ..RG35XX_PLUS }];
+    #[cfg(feature = "brick")]
+    let profiles = { let mut p = profiles; p.push(Profile { text_size: "large", ..BRICK }); p };
+    for profile in profiles {
+        for (lang, games, starter) in [("en", "Games", "Starter pack"), ("de", "Spiele", "Startpaket"), ("es", "Juegos", "Pack inicial")] {
+            let card = Card::new(&profile);
+            let mut ui = Ui::start(&card, &profile, true, 1, &[("POCKETUI_LANG", lang)]);
+            ui.settled(&["start"]).unwrap();
+            open_named(&mut ui, games);
+            let parent = select_named(&mut ui, "Extras");
+            let mut page = ui.settled(&["a"]).unwrap();
+            assert!(page.at.contains("extras"), "{} {lang}: {}", profile.name, page.at);
+            let count = page.list.expect("Extras registers its full list").1;
+            let mut visited = BTreeSet::new();
+            for _ in 0..count {
+                let (sel, total) = page.list.expect("Extras list");
+                assert_eq!(count, total);
+                assert!(page.focused().is_some(), "{} {lang}: selected row is visible:\n{}", profile.name, page.text());
+                visited.insert(sel);
+                page = ui.settled(&["down"]).unwrap();
+            }
+            assert_eq!(visited.len(), count, "every row is reached, also below the first scroll window");
+            let row = select_named(&mut ui, starter);
+            let pack = ui.settled(&["a"]).unwrap();
+            assert!(pack.text().contains(starter), "{} {lang}: {}", profile.name, pack.text());
+            let back = ui.settled(&["b"]).unwrap();
+            assert_eq!(back.at, row.at);
+            assert!(back.same_row(&row), "{} {lang}: B returns to the Starter pack row", profile.name);
+            let games = ui.settled(&["b"]).unwrap();
+            assert_eq!(games.at, parent.at);
+            assert!(games.same_row(&parent), "{} {lang}: B returns to Extras in Games", profile.name);
+        }
     }
 }
 
@@ -1615,5 +1769,167 @@ fn textfit_rest_031_first_start_rows_stay_above_the_hints_with_the_untested_hint
             }
             assert!(seen.len() >= 2, "{at}: Down reaches the welcome step's rows: {seen:?}");
         }
+    }
+}
+
+/// A refresh can return the identical list before a separately queued capture.
+/// Keep both assertions: X paints its loading state, then the same real result.
+#[test]
+fn tools_same_result_refresh_paints_loading_before_settling() {
+    let card = Card::new(&RG35XX_PLUS);
+    let mut ui = Ui::start(&card, &RG35XX_PLUS, true, 1, &[]);
+    ui.settled(&["start"]).unwrap();
+    open_named(&mut ui, "Help & tools");
+    let before = open_named(&mut ui, "Tools");
+    assert_eq!(before.at, "settings:Tools");
+    ui.capture_delay = Duration::from_millis(50);
+    for _ in 0..16 {
+        let (after, seen) = ui.watched(&["x"]).unwrap();
+        assert!(seen.iter().any(|f| f.busy && f.text().contains("Looking for tools")),
+                "X must paint the loading state even when the scan returns the same list: {seen:?}");
+        assert!(after.same(&before), "an unchanged tool list settles on the same result");
+    }
+}
+
+/// A Syncthing that answers, with the GameCube & Wii row's two folders paused by someone else (or in the gap before pocket-ui
+/// wrote its pause down: the same to the page). `curl` resumes a folder in the made-up config.xml and writes down what it was
+/// asked; nothing reaches a network.
+fn paused_syncthing(card: &Card) -> PathBuf {
+    let root = card.path().join("sync-root");
+    let cfg = root.join(".config/syncthing/config.xml");
+    std::fs::create_dir_all(cfg.parent().unwrap()).unwrap();
+    let folder = |id: &str, paused: bool| format!("<folder id=\"{id}\" label=\"{id}\" path=\"/storage/{id}\"><paused>{paused}</paused></folder>\n");
+    std::fs::write(&cfg, format!(
+        "<configuration version=\"51\">\n{}{}{}<device id=\"MFZWI3D-BONSGYC-YLTMRWG-C43ENR5-QXGZDMM-FZWI3DP-BONSGYY-LTMRWAD\"></device>\n<gui enabled=\"true\" tls=\"true\"><address>127.0.0.1:8384</address><user>pocket</user><password>x</password><apikey>TestApiKeyNotSecret</apikey></gui>\n</configuration>\n",
+        folder("pocket-saves", false), folder("pocket-gc-cards", true), folder("pocket-wii-saves", true))).unwrap();
+    executable(&card.path().join("bin/curl"), &format!(r#"#!/bin/sh
+for a; do url=$a; done
+case "$url" in
+  */rest/noauth/health) printf '{{"status":"OK"}}\n200' ;;
+  */rest/config/folders/*)
+    id=${{url##*/}}
+    case "$*" in *'"paused":false'*) ;; *) printf '\n400'; exit 0 ;; esac
+    echo "$id" >> "$(dirname "$0")/resumed.log"
+    sed -i "/id=\"$id\"/s/<paused>true</<paused>false</" '{cfg}'
+    printf '\n200' ;;
+  *) printf '\n404' ;;
+esac
+"#, cfg = cfg.display()));
+    root
+}
+
+#[test]
+fn sync_a_pause_not_by_pocket_ui_is_shown_x_resumes_both_folders_and_b_leaves() {
+    // The line under the list wraps: its words, one space apart.
+    let words = |f: &Frame| f.text().split_whitespace().collect::<Vec<_>>().join(" ");
+    for profile in [RG35XX_PLUS, MINI_V2] {
+        let card = Card::new(&profile);
+        let root = paused_syncthing(&card);
+        let mut ui = Ui::start(&card, &profile, true, 1, &[("POCKETUI_SYNC_ROOT", root.to_str().unwrap())]);
+        ui.settled(&["start"]).unwrap();
+        open_named(&mut ui, "Connections");
+        let list = select_named(&mut ui, "Sync");
+        ui.settled(&["a"]).unwrap();
+        // The poller reads Syncthing on a thread: wait for its first report, not a fixed time.
+        let until = Instant::now() + Duration::from_secs(20);
+        let mut f = ui.settled(&[]).unwrap();
+        while !f.text().contains("Paused") && Instant::now() < until {
+            std::thread::sleep(Duration::from_millis(20));
+            f = ui.settled(&[]).unwrap();
+        }
+        assert!(f.text().contains("Paused"), "{}: the paused row says so:\n{}", profile.name, f.text());
+        // A row with nothing paused offers no Resume; the paused one does, and says it covers both folders.
+        let saves = select_named(&mut ui, "Saves");
+        assert!(!saves.names_hint("x"), "{}: nothing paused, no X: {:?}", profile.name, saves.hints);
+        let paused = select_named(&mut ui, "GameCube & Wii saves");
+        assert!(paused.hints.iter().any(|(k, w)| k == "X" && w == "Resume"), "{}: {:?}", profile.name, paused.hints);
+        assert!(words(&paused).contains("Paused, not by pocket-ui. X resumes both folders"), "{}:\n{}", profile.name, paused.text());
+        assert!(paused.names_hint("a"), "{}: the share switch stays", profile.name);
+        // X: both folders resumed, and the page says so.
+        let until = Instant::now() + Duration::from_secs(20);
+        let mut f = ui.settled(&["x"]).unwrap();
+        while !words(&f).contains("Both folders resumed") && Instant::now() < until {
+            std::thread::sleep(Duration::from_millis(20));
+            f = ui.settled(&[]).unwrap();
+        }
+        assert!(words(&f).contains("Both folders resumed. Syncing again"), "{}:\n{}", profile.name, f.text());
+        assert!(!f.names_hint("x"), "{}: nothing left to resume: {:?}", profile.name, f.hints);
+        let asked = std::fs::read_to_string(card.path().join("bin/resumed.log")).unwrap_or_default();
+        assert_eq!(asked, "pocket-gc-cards\npocket-wii-saves\n", "{}", profile.name);
+        // B leaves to Connections, on the Sync row.
+        let back = ui.settled(&["b"]).unwrap();
+        assert_eq!(back.at, list.at, "{}: B leaves Sync", profile.name);
+        assert!(back.same_row(&list), "{}: back on the Sync row", profile.name);
+    }
+}
+
+/// The existing Ports store's optional runtime must remain readable before any game is installed.
+#[test]
+fn portmaster_runtime_offer_states_fit_barlow_retro_dark_light_and_large_de_es() {
+    #[cfg(feature = "brick")]
+    let profile = Profile { name: "portmaster-brick", text_size: "large", ..BRICK };
+    #[cfg(not(feature = "brick"))]
+    let profile = Profile { name: "portmaster-1024", text_size: "large", ..RG_DS_PLUS };
+    let card = Card::new(&profile);
+    let boxes = card.path().join("portmaster.boxes");
+    for appearance in ["dark", "light"] {
+        for font in ["barlow", "retro"] {
+            for lang in ["de", "es"] {
+                for suffix in ["", "-checking", "-update", "-offline", "-download", "-error"] {
+                    let state = format!("setup:ports-get{suffix}");
+                    let name = state.replace(':', "-");
+                    let data = card.path().join(format!("data-{name}"));
+                    std::fs::create_dir_all(&data).unwrap();
+                    std::fs::write(data.join("settings.json"), format!(r#"{{"onboarded":true,"appearance":"{appearance}","motion":"off","art":"off"}}"#)).unwrap();
+                    let at = format!("{state} {appearance} {font} large {lang}");
+                    let (frame, png) = rc03_snapshot(&card, profile, &state, &[
+                        ("POCKETUI_LANG", lang), ("POCKETUI_FONT", font), ("POCKETUI_TEXT_SIZE", "large"),
+                        ("POCKETUI_SNAPSHOT_SIZE", "1024x768"), ("POCKETUI_TEXT_BOXES", boxes.to_str().unwrap()),
+                    ]);
+                    if let Some(output) = std::env::var_os("POCKETUI_PORTMASTER_SHOTS") {
+                        let output = PathBuf::from(output);
+                        std::fs::create_dir_all(&output).unwrap();
+                        std::fs::copy(&png, output.join(format!("{name}-{appearance}-{font}-{lang}.png"))).unwrap();
+                    }
+                    let faults = std::fs::read_to_string(&boxes).unwrap();
+                    assert!(faults.trim().is_empty(), "{at}: unreadable text: {faults}");
+                    let text = frame.text().split_whitespace().collect::<Vec<_>>().join(" ");
+                    assert!(text.contains("PortMaster"), "{at}: the offer must name its download: {text}");
+                    assert!(frame.names_hint("b"), "{at}: every state offers Back: {text}");
+                    match suffix {
+                        "" => assert!(text.contains("300 MB"), "{at}: show the one-time size: {text}"),
+                        "-update" => assert!(text.contains(if lang == "de" { "aktualisieren" } else { "Actualizar" }), "{at}: {text}"),
+                        "-offline" => {
+                            assert!(text.contains(if lang == "de" { "WLAN" } else { "wifi" }), "{at}: explain offline: {text}");
+                            assert!(!frame.names_hint("a"), "{at}: no offline download action");
+                        }
+                        "-download" => assert!(text.contains("70 / 300 MB"), "{at}: real byte progress: {text}"),
+                        "-error" => assert!(text.contains(if lang == "de" { "Platz" } else { "espacio" }), "{at}: keep the failure reason: {text}"),
+                        _ => assert!(!frame.names_hint("a"), "{at}: checking cannot download yet"),
+                    }
+                }
+            }
+        }
+    }
+}
+
+#[test]
+fn portmaster_runtime_offer_states_return_to_extras_and_reopen_ports() {
+    #[cfg(feature = "brick")]
+    let profile = BRICK;
+    #[cfg(not(feature = "brick"))]
+    let profile = RG_DS_PLUS;
+    let card = Card::new(&profile);
+    let env = [("POCKETUI_TEXT_SIZE", "large")];
+    for suffix in ["", "-checking", "-update", "-offline", "-download", "-error"] {
+        let state = format!("setup:ports-get{suffix}");
+        let (before, _) = rc03_snapshot(&card, profile, &state, &env);
+        assert!(before.names_hint("b"), "{state} names its way back");
+        let (back, _) = rc03_snapshot(&card, profile, &format!("{state}:b"), &env);
+        assert!(back.text().contains("Extras"), "{state}: B paints Extras: {}", back.text());
+        assert!(back.strings.iter().any(|(_, text)| text == "PortMaster games"), "{state}: B keeps the complete PortMaster row label readable: {}", back.text());
+        let (again, _) = rc03_snapshot(&card, profile, &format!("{state}:ba"), &env);
+        assert!(again.text().contains("PortMaster games"), "{state}: reopening paints Ports: {}", again.text());
+        assert!(again.names_hint("b"), "{state}: the reopened page still offers a way back");
     }
 }

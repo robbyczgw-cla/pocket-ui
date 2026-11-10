@@ -249,6 +249,10 @@ struct QueueHealth {
     startup_backpressure_us: AtomicU64,
     active_dropped_frames: AtomicU64,
     ever_played: std::sync::atomic::AtomicBool,
+    /// Only a completed successful device write clears a startup timeout, never a queue pop.
+    output_stalled: std::sync::atomic::AtomicBool,
+    recovery_pending: std::sync::atomic::AtomicBool,
+    output_stalls: AtomicU64,
     /// Stored as fill + 1 so the default zero means there has not yet been a playing pop.
     min_playing_fill: AtomicU64,
     state: AtomicU64,
@@ -266,6 +270,12 @@ impl QueueHealth {
         // threw away the resume reserve without replacing it, then starved the next real frame.
         if samples.is_empty() {
             return 0;
+        }
+        if self.output_stalled.load(Ordering::Relaxed) {
+            let dropped = queue.len() / 2 + samples.len() / 2;
+            queue.clear();
+            self.record_drop(dropped, self.ever_played.load(Ordering::Relaxed));
+            return dropped;
         }
         // A deliberately tiny bench target must still be able to reach its restart threshold.
         let limit = (target * 3).max(restart);
@@ -294,6 +304,9 @@ impl QueueHealth {
         while !remaining.is_empty() {
             {
                 let mut q = queue.lock().unwrap();
+                if self.output_stalled.load(Ordering::Relaxed) {
+                    return self.enqueue(&mut q, remaining, target, restart);
+                }
                 let room = (restart * 2).saturating_sub(q.len());
                 let count = remaining.len().min(room) / 2 * 2;
                 if count > 0 {
@@ -306,9 +319,13 @@ impl QueueHealth {
             // A broken/closed output must not trap the emulation loop. Keep the loss visible,
             // as with the active overflow counter, rather than claim an intact PCM stream.
             if self.state.load(Ordering::Relaxed) == 4 || progress.elapsed() >= std::time::Duration::from_secs(2) {
-                let dropped = remaining.len() / 2;
-                self.record_drop(dropped, self.ever_played.load(Ordering::Relaxed));
-                eprintln!("audio: output did not accept startup PCM ({dropped} frames lost)");
+                // Serialize the timeout and write acknowledgement with queue access. Otherwise a
+                // returning writer could clear the stall just before we retained stale muted PCM.
+                let mut q = queue.lock().unwrap();
+                self.output_stalled.store(true, Ordering::Relaxed);
+                self.output_stalls.fetch_add(1, Ordering::Relaxed);
+                let dropped = self.enqueue(&mut q, remaining, target, restart);
+                eprintln!("audio: output stalled; discarding PCM until a write completes ({dropped} frames lost)");
                 return dropped;
             }
             let t = std::time::Instant::now();
@@ -316,6 +333,18 @@ impl QueueHealth {
             self.startup_backpressure_us.fetch_add(t.elapsed().as_micros() as u64, Ordering::Relaxed);
         }
         0
+    }
+
+    /// Called after successful writes, including silence priming and pause writes. While the
+    /// device clock stands, queue activity is not evidence that sound can leave the device.
+    fn writer_progress(&self, queue: &Mutex<VecDeque<i16>>) {
+        if self.output_stalled.load(Ordering::Relaxed) {
+            let mut q = queue.lock().unwrap();
+            self.record_drop(q.len() / 2, self.ever_played.load(Ordering::Relaxed));
+            q.clear();
+            self.recovery_pending.store(true, Ordering::Relaxed);
+            self.output_stalled.store(false, Ordering::Relaxed);
+        }
     }
 
     /// A late core frame must not throw away the audio already available. Like a threaded ALSA FIFO,
@@ -365,6 +394,8 @@ impl QueueHealth {
             "dropped_frames": read(&self.dropped_frames),
             "preplay_dropped_frames": read(&self.preplay_dropped_frames),
             "startup_backpressure_us": read(&self.startup_backpressure_us),
+            "output_stalled": self.output_stalled.load(Ordering::Relaxed),
+            "output_stalls": read(&self.output_stalls),
             "active_dropped_frames": read(&self.active_dropped_frames),
             "min_playing_fill_frames": read(&self.min_playing_fill).checked_sub(1)
         })
@@ -512,7 +543,7 @@ impl Audio {
                         if stopped() { break; }
                         let t = std::time::Instant::now();
                         health.prefill_silence_chunks.fetch_add(1, Ordering::Relaxed);
-                        sink.write(&silence);
+                        if sink.write(&silence) { health.writer_progress(&q); }
                         let elapsed = t.elapsed();
                         crate::mark!("audio-prime", "write_us={}", elapsed.as_micros());
                         if elapsed > std::time::Duration::from_millis(4) {
@@ -588,6 +619,10 @@ impl Audio {
                     {
                         let paused = p.load(std::sync::atomic::Ordering::Relaxed);
                         let mut q = q.lock().unwrap();
+                        if health.recovery_pending.swap(false, Ordering::Relaxed) {
+                            was_paused = true;
+                            started.store(false, Ordering::Relaxed);
+                        }
                         // Paused (pause menu): silence, entered and left with a short fade instead of a
                         // click. What is still queued plays on after the pause, where it belongs.
                         let ramp = |chunk: &mut [i16], out: bool| {
@@ -648,6 +683,8 @@ impl Audio {
                             }
                             None => return,
                         }
+                    } else {
+                        health.writer_progress(&q);
                     }
                     // Neither API is thread-safe, so the writer thread is the one that asks.
                     written += 1;
@@ -812,6 +849,138 @@ impl Audio {
 mod tests {
     use super::*;
     use std::cell::Cell;
+
+    /// A muted DAC may stop inside write forever. Only the first full queue may wait;
+    /// subsequent video frames must run freely, then fresh sound returns with a fade.
+    #[test]
+    #[ignore = "timing tier: scripts/test-timing.sh (serial)"]
+    fn timing_a_stalled_start_drops_audio_without_stalling_later_video_frames_and_fades_back() {
+        use std::sync::{Condvar, atomic::AtomicBool};
+        struct Output {
+            running: Arc<(Mutex<bool>, Condvar)>,
+            entered: Arc<AtomicBool>,
+            chunks: Arc<Mutex<Vec<Vec<i16>>>>,
+        }
+        // Also releases the writer on assertion failure, so the test leaves no hung thread.
+        struct Release(Arc<(Mutex<bool>, Condvar)>);
+        impl Drop for Release {
+            fn drop(&mut self) {
+                *self.0.0.lock().unwrap() = true;
+                self.0.1.notify_all();
+            }
+        }
+        unsafe extern "C" fn write(stream: *mut c_void, data: *const c_void, bytes: usize, _: *mut c_int) -> c_int {
+            let output = unsafe { &mut *stream.cast::<Output>() };
+            output.entered.store(true, Ordering::Release);
+            let mut running = output.running.0.lock().unwrap();
+            while !*running { running = output.running.1.wait(running).unwrap(); }
+            drop(running);
+            std::thread::sleep(std::time::Duration::from_millis(6));
+            let samples = unsafe { std::slice::from_raw_parts(data.cast::<i16>(), bytes / 2) };
+            output.chunks.lock().unwrap_or_else(|e| e.into_inner()).push(samples.to_vec());
+            0
+        }
+        unsafe extern "C" fn free(stream: *mut c_void) {
+            drop(unsafe { Box::from_raw(stream.cast::<Output>()) });
+        }
+        let running = Arc::new((Mutex::new(false), Condvar::new()));
+        let release = Release(running.clone());
+        let entered = Arc::new(AtomicBool::new(false));
+        let chunks = Arc::new(Mutex::new(Vec::new()));
+        let sink = Sink::Pulse { _lib: None,
+            stream: Box::into_raw(Box::new(Output { running, entered: entered.clone(), chunks: chunks.clone() })).cast(),
+            write, latency: fake_latency, free, observation: Default::default() };
+        let small = Arc::new(AtomicBool::new(true));
+        let mut audio = Audio::start_with(sink, 48000.0, false, None,
+            Some(Route { small: small.clone(), decided: Arc::new(AtomicBool::new(true)),
+                #[cfg(feature = "brick")] bluetooth: Arc::new(AtomicBool::new(false)) }), |_| None);
+        audio.push(&vec![12000; 8070 * 2]);
+        assert!(entered.load(Ordering::Acquire), "test never reached the blocked device write");
+        let before = audio.queue_health.startup_backpressure_us.load(Ordering::Relaxed);
+        let start = std::time::Instant::now();
+        // Two seconds of video, supplied without a video sleep: audio cannot pace these frames.
+        for frame in 0..120 {
+            if frame == 30 { audio.pause(true); }
+            if frame == 60 { small.store(false, Ordering::Relaxed); audio.reassert_quantum(); }
+            if frame == 90 { audio.pause(false); }
+            audio.push(&vec![12000; 800 * 2]);
+            assert!(start.elapsed() < std::time::Duration::from_millis(500),
+                "video frame {frame} waited again for a muted output");
+        }
+        assert_eq!(audio.queue_health.startup_backpressure_us.load(Ordering::Relaxed), before,
+            "muted frames repeatedly entered startup backpressure");
+        assert_eq!(audio.buffered_ms(), 0.0, "muted sound accumulated a stale backlog");
+        assert_eq!(audio.diagnostics()["queue"]["output_stalls"], 1);
+        assert_eq!(audio.diagnostics()["queue"]["output_stalled"], true);
+        drop(release);
+        // Refill with a different held tone; the old muted sound must never play.
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(3);
+        loop {
+            audio.push(&vec![-12000; 800 * 2]);
+            if chunks.lock().unwrap().iter().filter(|c| c.iter().any(|&s| s != 0)).count() >= 2 { break; }
+            assert!(std::time::Instant::now() < deadline, "sound did not return after the writer recovered");
+            std::thread::sleep(std::time::Duration::from_millis(16));
+        }
+        audio.pause(true);
+        assert_eq!(audio.diagnostics()["queue"]["output_stalled"], false);
+        let captured = chunks.lock().unwrap();
+        let sounding: Vec<_> = captured.iter().filter(|c| c.iter().any(|&s| s != 0)).collect();
+        assert_eq!(sounding[0][0], 0, "sound returned with a hard edge");
+        assert!(sounding[0].chunks_exact(2).all(|s| s[0] == s[1]), "fade split the stereo pair");
+        assert!(sounding[0].windows(2).all(|s| (s[1] as i32 - s[0] as i32).abs() < 100),
+            "recovered held tone contains a click");
+        assert!(sounding[1].iter().all(|&s| s == -12000), "muted backlog played instead of fresh sound");
+    }
+
+    #[test]
+    #[ignore = "timing tier: scripts/test-timing.sh (serial)"]
+    fn timing_a_blocked_device_write_does_not_hold_up_the_next_game() {
+        use std::sync::atomic::AtomicBool;
+        struct Blocked { entered: Arc<AtomicBool>, release: Arc<AtomicBool> }
+        struct Release(Arc<AtomicBool>);
+        impl Drop for Release {
+            fn drop(&mut self) { self.0.store(true, Ordering::Release); }
+        }
+        unsafe extern "C" fn write(stream: *mut c_void, _: *const c_void, _: usize, _: *mut c_int) -> c_int {
+            let blocked = unsafe { &*stream.cast::<Blocked>() };
+            blocked.entered.store(true, Ordering::Release);
+            while !blocked.release.load(Ordering::Acquire) {
+                std::thread::sleep(std::time::Duration::from_millis(2));
+            }
+            0
+        }
+        unsafe extern "C" fn free(stream: *mut c_void) {
+            drop(unsafe { Box::from_raw(stream.cast::<Blocked>()) });
+        }
+        let entered = Arc::new(AtomicBool::new(false));
+        let release = Arc::new(AtomicBool::new(false));
+        let unblock = Release(release.clone());
+        let sink = Sink::Pulse { _lib: None,
+            stream: Box::into_raw(Box::new(Blocked { entered: entered.clone(), release })).cast(),
+            write, latency: fake_latency, free, observation: Default::default() };
+        let mut old = Audio::start(sink, 48000.0, false, None, |_| None);
+        // Enough PCM to enter priming, without making the producer wait for more room.
+        old.push(&vec![1000; restart_frames(old.target(), 800) * 2 + 72]);
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(3);
+        while !entered.load(Ordering::Acquire) {
+            assert!(std::time::Instant::now() < deadline, "writer never reached the device");
+            std::thread::sleep(std::time::Duration::from_millis(2));
+        }
+        let finished = old.writer_finished.clone();
+        let start = std::time::Instant::now();
+        drop(old);
+        assert!(start.elapsed() < STOP_WAIT + std::time::Duration::from_millis(200),
+            "game switch joined a device write that cannot complete");
+        assert!(!finished.load(Ordering::Acquire));
+        let mut next = Audio::start(paced_sink(), 48000.0, false, None, |_| None);
+        next.push(&vec![2000; 8070 * 2]);
+        assert!(next.queue_health.ever_played.load(Ordering::Relaxed), "next game could not play sound");
+        drop(unblock);
+        while !finished.load(Ordering::Acquire) {
+            assert!(std::time::Instant::now() < deadline, "old writer did not close after release");
+            std::thread::sleep(std::time::Duration::from_millis(2));
+        }
+    }
 
     #[test]
     fn pausing_during_prefill_keeps_the_pcm_after_the_fade_continuous() {
@@ -1485,6 +1654,46 @@ mod tests {
     }
     fn reopen_counted(_: Ring) -> Option<Sink> {
         Some(Sink::Pulse { _lib: None, stream: std::ptr::NonNull::<c_void>::dangling().as_ptr(), write: counted_write, latency: fake_latency, free: fake_free, observation: Default::default() })
+    }
+
+    static SAVE_PCM_ACCEPTED: AtomicUsize = AtomicUsize::new(0);
+    static SAVE_PCM_FAILED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+    unsafe extern "C" fn save_pcm_write(_: *mut c_void, data: *const c_void, bytes: usize, _: *mut c_int) -> c_int {
+        let pcm = unsafe { std::slice::from_raw_parts(data as *const i16, bytes / 2) };
+        std::thread::sleep(std::time::Duration::from_millis(5));
+        if pcm.iter().any(|s| *s != 0) {
+            let frames = pcm.len() / 2;
+            if !SAVE_PCM_FAILED.swap(true, Ordering::SeqCst) {
+                SAVE_PCM_ACCEPTED.fetch_add(frames / 2, Ordering::SeqCst);
+                return -1; // A backend may have accepted a prefix before its write failed.
+            }
+            SAVE_PCM_ACCEPTED.fetch_add(frames, Ordering::SeqCst);
+        }
+        0
+    }
+    fn save_pcm_sink(_: Ring) -> Option<Sink> {
+        Some(Sink::Pulse { _lib: None, stream: std::ptr::NonNull::<c_void>::dangling().as_ptr(),
+            write: save_pcm_write, latency: fake_latency, free: fake_free, observation: Default::default() })
+    }
+
+    #[test]
+    #[ignore = "known failure: reopen loses the failed PCM tail; audio behavior needs separate measured review"]
+    fn save_safety_audio_reopen_keeps_unaccepted_pcm() {
+        SAVE_PCM_ACCEPTED.store(0, Ordering::SeqCst);
+        SAVE_PCM_FAILED.store(false, Ordering::SeqCst);
+        let audio = Audio::start(save_pcm_sink(Ring::Short).unwrap(), 48000.0, false, None, save_pcm_sink);
+        audio.queue.lock().unwrap().extend(std::iter::repeat_n(12000, 4096 * 2));
+        let until = std::time::Instant::now() + crate::testutil::timeout(std::time::Duration::from_secs(3));
+        while (!audio.queue.lock().unwrap().is_empty() || SAVE_PCM_ACCEPTED.load(Ordering::SeqCst) == 0)
+            && std::time::Instant::now() < until {
+            std::thread::sleep(std::time::Duration::from_millis(2));
+        }
+        // Let the final popped block reach the backend before close.
+        while SAVE_PCM_ACCEPTED.load(Ordering::SeqCst) < 3968 && std::time::Instant::now() < until {
+            std::thread::sleep(std::time::Duration::from_millis(2));
+        }
+        drop(audio);
+        assert_eq!(SAVE_PCM_ACCEPTED.load(Ordering::SeqCst), 4096, "reopen must not discard an unaccepted tail");
     }
 
     #[cfg(feature = "brick")]

@@ -15,7 +15,7 @@ Settings → **Sound & feel**. What moves, what you hear and what you feel in yo
 | **Zoom in the pause menu** | Whether the pause menu's first page lists Zoom: **Off** (the default) or **On**. Zoom is always under Options, and listed here too while Easy to read is on. A switches it. See [Zoom in the pause menu](#zoom-in-the-pause-menu) |
 | **Sounds** | Soft clicks in the menus (not the game's volume or the screen brightness: those are on HOME, [Quick settings](quick-settings.md)). A turns them on or off, Left/Right set how loud. See [Playing](playing.md#menu-sounds) |
 | **Case sounds** | Cases click open, cartridges and discs go in with a sound, the old TV hums on. Shelf and Cabinet looks only. Needs Sounds on; the menu sounds are not affected. **On** at the start. A or Left/Right switches it |
-| **Haptics** | A very short tick in the menus as the selection moves. A turns it on or off. Off by default |
+| **Haptics** | A very short tick in the menus as the selection moves, on every page where a move also clicks. A turns it on or off. Off by default |
 | **LEDs** | The lights around the sticks: off, one colour, or the battery colours. Only on a device with sticks. On the TrimUI Brick the row is called **Lights & buttons** and holds the Brick's own lights, the F1 and F2 keys and the mute slider. See [LEDs](#leds) |
 
 Playful cases, Old-TV switch-on and Case sounds sit beside the switches they need (Animations, Motion, Sounds). While
@@ -94,3 +94,5 @@ ROCKNIX lights them at full brightness out of the box, and pocket-ui switches th
 Left/Right change the selected row, A moves on to the next choice. The choice takes effect at once, is kept across restarts,
 and is the one ROCKNIX applies at the next boot. The lights also go dark while the device sleeps, as ROCKNIX does it.
 
+
+On the experimental TrimUI Brick Pro, **Lights & buttons** offers only the separate F1/F2 assignments. L3/R3 are stick clicks; the side switch and light controls stay disabled.

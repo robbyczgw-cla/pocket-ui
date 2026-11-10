@@ -1,0 +1,18 @@
+#!/bin/sh
+# SPDX-License-Identifier: GPL-2.0-or-later
+# Sourced by upstream port scripts; all data stays on this card.
+. "$BRICK_APP/portmaster/device-env.sh" || return 1
+export controlfolder="$BRICK_PORTMASTER_HOME"
+export directory="${BRICK_PORTS_DIR:-/storage/roms/ports}"
+directory=${directory%/ports}; directory=${directory#/}; export directory
+export ESUDO= ESUDOKILL=-1 ESUDOKILL2=-1 CUR_TTY=/dev/null TASKSET=
+export ANALOGSTICKS=$ANALOG_STICKS LOWRES=N HOTKEY=guide
+export SDL_GAMECONTROLLERCONFIG_FILE="$controlfolder/pocket-gamecontrollerdb.txt"
+export GPTOKEYB="$controlfolder/gptokeyb -1"
+export GPTOKEYB2="env LD_PRELOAD=$controlfolder/libinterpose.aarch64.so $controlfolder/gptokeyb2 -1"
+get_controls() {
+  sdl_controllerconfig=$(cat "$SDL_GAMECONTROLLERCONFIG_FILE")
+  export sdl_controllerconfig SDL_GAMECONTROLLERCONFIG="$sdl_controllerconfig"
+}
+# Runtime mounting helpers, message functions and per-engine setup stay upstream.
+. "$controlfolder/funcs.txt"

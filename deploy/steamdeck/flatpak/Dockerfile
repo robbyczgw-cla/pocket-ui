@@ -3,5 +3,5 @@
 FROM ubuntu:26.04
 ENV DEBIAN_FRONTEND=noninteractive
 RUN apt-get update && apt-get install -y --no-install-recommends flatpak flatpak-builder gamescope xvfb xauth x11-utils xdotool imagemagick \
-    python3 ca-certificates curl dbus-x11 mesa-vulkan-drivers libgl1-mesa-dri procps fonts-dejavu-core && rm -rf /var/lib/apt/lists/*
+    python3 libxkbcommon-x11-0 ca-certificates curl dbus-x11 mesa-vulkan-drivers libgl1-mesa-dri procps fonts-dejavu-core && rm -rf /var/lib/apt/lists/*
 RUN flatpak remote-add --system --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo

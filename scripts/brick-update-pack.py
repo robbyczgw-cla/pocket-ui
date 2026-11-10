@@ -20,7 +20,7 @@ def sha(path):
         return h.hexdigest()
 
 
-def archive(root, files, dest, extra=None):
+def archive(root, files, dest, extra=None, cheats=None):
     with dest.open('wb') as raw, gzip.GzipFile(filename='', fileobj=raw, mode='wb', mtime=0, compresslevel=9) as gz:
         # Upstream cheat filenames can exceed ustar's 100-byte basename limit.
         # The Brick's checked extractor accepts GNU long-name headers.
@@ -44,18 +44,59 @@ def archive(root, files, dest, extra=None):
                 info.size = len(data)
                 info.mode = 0o644
                 out.addfile(info, io.BytesIO(data))
+            if cheats is not None:
+                import io
+                data = json.dumps(cheats, sort_keys=True, indent=2).encode()
+                info = tarfile.TarInfo('database/cheats-download.json')
+                info.size = len(data)
+                info.mode = 0o644
+                out.addfile(info, io.BytesIO(data))
     if dest.stat().st_size > LIMIT:
         raise ValueError(f'{dest.name} exceeds the 80 MB hosting budget')
 
 
-def prepare(app, release, channel, github, version):
+def optional_cheats(app, release, channel, optional=None):
+    """Publish immutable raw data separately. The trusted app carries only its size/hash/URL."""
+    descriptor = app / 'database/cheats-download.json'
+    legacy = app / 'cores/cht.pack'
+    if legacy.is_symlink() or descriptor.is_symlink():
+        raise ValueError('unsupported cheat link')
+    if legacy.is_file():
+        digest = sha(legacy)
+        info = {'version': digest, 'size': legacy.stat().st_size, 'sha256': digest,
+                'url': f'https://pocketui.xyz/updates/brick/assets/cheats-{digest}.pack'}
+        source = legacy
+    elif descriptor.is_file():
+        info = json.loads(descriptor.read_text())
+        source = (optional or app.parents[2] / 'optional') / f"cheats-{info['sha256']}.pack"
+    else:
+        return None
+    if not 0 < info['size'] <= LIMIT or len(info['sha256']) != 64 or any(c not in '0123456789abcdef' for c in info['sha256']):
+        raise ValueError('invalid optional cheat description')
+    name = f"cheats-{info['sha256']}.pack"
+    if info['url'] != f'https://pocketui.xyz/updates/brick/assets/{name}':
+        raise ValueError('unexpected optional cheat URL')
+    if source.stat().st_size != info['size'] or sha(source) != info['sha256']:
+        raise ValueError('optional cheats differ from their description')
+    import shutil
+    shutil.copyfile(source, release / name)
+    shutil.copyfile(source, channel / 'assets' / name)
+    return info
+
+
+def prepare(app, release, channel, github, version, optional=None):
     if app.resolve() in release.resolve().parents or app.resolve() in channel.resolve().parents:
         raise ValueError('output must be outside the input app')
     release.mkdir(parents=True, exist_ok=True)
     (channel / 'assets').mkdir(parents=True, exist_ok=True)
+    cheats = optional_cheats(app, release, channel, optional)
     assets, regular = [], []
     for path in sorted(app.rglob('*')):
         relative = path.relative_to(app)
+        if relative.as_posix() in ('cores/cht.pack', 'database/cheats-download.json'):
+            if path.is_symlink():
+                raise ValueError('unsupported cheat link')
+            continue
         if relative.parts[0] in ('cores', 'bios-data') or relative.as_posix() in HELPERS:
             if path.is_symlink():
                 raise ValueError(f'unsupported asset link: {path}')
@@ -72,8 +113,8 @@ def prepare(app, release, channel, github, version):
             import shutil
             shutil.copyfile(target, channel / 'assets' / name)
             assets.append({'path': str(relative), 'size': path.stat().st_size, 'sha256': sha(path),
-                           'package': {'version': version, 'url': f'https://pocketui.xyz/updates/brick/assets/{name}',
-                                       'mirrors': [f'{github}/{name}'], 'size': target.stat().st_size, 'sha256': digest}})
+                           'package': {'version': version, 'url': f'{github}/{name}',
+                                       'mirrors': [f'https://pocketui.xyz/updates/brick/assets/{name}'], 'size': target.stat().st_size, 'sha256': digest}})
         else:
             if relative.as_posix() == 'asset-packages.json':
                 raise ValueError('input already contains asset-packages.json')
@@ -81,7 +122,7 @@ def prepare(app, release, channel, github, version):
     if not assets:
         raise ValueError('card has no cores or data assets')
     name = f'pocket-ui-brick-{version}.tar.gz'
-    archive(app, regular, release / name, {'format': 1, 'assets': assets})
+    archive(app, regular, release / name, {'format': 1, 'assets': assets}, cheats)
     import shutil
     shutil.copyfile(release / name, channel / name)
     print(json.dumps({'app_bytes': (release / name).stat().st_size, 'asset_files': len(assets),
@@ -97,5 +138,6 @@ if __name__ == '__main__':
     p.add_argument('channel', type=Path)
     p.add_argument('github')
     p.add_argument('version')
+    p.add_argument('--optional', type=Path)
     a = p.parse_args()
-    prepare(a.app, a.release, a.channel, a.github.rstrip('/'), a.version)
+    prepare(a.app, a.release, a.channel, a.github.rstrip('/'), a.version, a.optional)

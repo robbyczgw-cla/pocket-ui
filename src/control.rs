@@ -298,7 +298,17 @@ fn focused_in(json: &[u8]) -> Option<i64> {
 /// Sends `sig` to the game's whole process group (pocket-ui starts every game in its own group).
 fn signal_group(pgid: i32, sig: i32) -> bool {
     // SAFETY: kill(2) with a negative pid only signals that process group.
-    pgid > 1 && unsafe { libc::kill(-pgid, sig) } == 0
+    if pgid <= 1 { return false; }
+    let mut sent = unsafe { libc::kill(-pgid, sig) } == 0;
+    #[cfg(target_os = "linux")]
+    for pid in group_members(pgid) {
+        // A port owns a session (setsid), and a mapper may change only its group.
+        // Ordinary launches keep the original group scope; another session is never reached.
+        if unsafe { libc::getpgid(pid) } != pgid {
+            sent |= unsafe { libc::kill(pid, sig) } == 0;
+        }
+    }
+    sent
 }
 
 /// Pauses every process of the running game; works for any emulator.
@@ -343,7 +353,7 @@ pub fn group_alive(pgid: i32) -> bool {
     }
 }
 
-/// The live (not zombie) processes of process group `pgid`.
+/// Live processes of the game group, or its private port session (whose id equals the leader's pid).
 #[cfg(target_os = "linux")]
 fn group_members(pgid: i32) -> Vec<i32> {
     let Ok(dir) = std::fs::read_dir("/proc") else { return Vec::new() };
@@ -355,7 +365,8 @@ fn group_members(pgid: i32) -> Vec<i32> {
             let mut rest = stat.get(stat.rfind(')')? + 2..)?.split(' ');
             let state = rest.next()?;
             let group: i32 = rest.nth(1)?.parse().ok()?;
-            (group == pgid && state != "Z" && state != "X").then_some(pid)
+            let session: i32 = rest.next()?.parse().ok()?;
+            ((group == pgid || session == pgid) && state != "Z" && state != "X").then_some(pid)
         })
         .collect()
 }
@@ -678,5 +689,59 @@ mod linux_tests {
         terminate_game(game.pgid, false);
         let status = game.wait(Duration::from_secs(5)).expect("pocket-core didn't end");
         assert_eq!(status.signal(), Some(libc::SIGTERM));
+    }
+
+    // This record belongs only to the mapper fixture, never to the game launch path.
+    fn mapper_fixture_pid(path: &std::path::Path) -> Option<i32> {
+        let record = std::fs::read_to_string(path).ok()?;
+        record.strip_suffix('\n')?.parse().ok().filter(|pid| *pid > 1)
+    }
+
+    #[test]
+    fn mapper_fixture_waits_until_its_pid_record_is_complete() {
+        let dir = TestDir::new("mapper-record");
+        let path = dir.join("helper");
+        assert_eq!(mapper_fixture_pid(&path), None);
+        for incomplete in ["", "1", "123", "bad\n", "0\n", "1\n", "-1\n", "99999999999999999999\n"] {
+            std::fs::write(&path, incomplete).unwrap();
+            assert_eq!(mapper_fixture_pid(&path), None, "not a complete mapper PID: {incomplete:?}");
+        }
+        let pid = std::process::id() as i32;
+        std::fs::write(&path, format!("{pid}\n")).unwrap();
+        assert_eq!(mapper_fixture_pid(&path), Some(pid));
+    }
+
+    #[test]
+    fn a_ports_mapper_in_another_group_pauses_with_its_game() {
+        use std::os::unix::process::CommandExt;
+        struct Port { child: std::process::Child }
+        impl Drop for Port {
+            fn drop(&mut self) {
+                // The unreaped child holds the session ID, also before the PID record is ready.
+                signal_group(self.child.id() as i32, libc::SIGKILL);
+                let _ = self.child.kill();
+                let _ = self.child.wait();
+            }
+        }
+        let dir = TestDir::new("port-pause-session");
+        let mut cmd = Command::new("python3");
+        cmd.args(["-c", "import os,time,sys\npid=os.fork()\nif pid == 0:\n os.setpgid(0,0)\n temporary=sys.argv[1] + '.new'\n with open(temporary, 'w') as record: record.write(str(os.getpid()) + '\\n')\n os.replace(temporary, sys.argv[1])\nwhile True: time.sleep(0.02)"])
+            .arg(dir.join("helper"));
+        // SAFETY: setsid is async-signal-safe, before exec.
+        unsafe { cmd.pre_exec(|| if libc::setsid() < 0 { Err(std::io::Error::last_os_error()) } else { Ok(()) }); }
+        let port = Port { child: cmd.spawn().unwrap() };
+        let mut helper = None;
+        crate::testutil::clock::wait_for(|| {
+            helper = mapper_fixture_pid(&dir.join("helper"));
+            helper.is_some()
+        }, Duration::from_secs(3), "port mapper started");
+        let helper = helper.unwrap();
+        assert!(pause_game(port.child.id() as i32));
+        let stopped = || std::fs::read_to_string(format!("/proc/{helper}/stat")).is_ok_and(|s| s.get(s.rfind(')').unwrap() + 2..).is_some_and(|r| r.starts_with("T ")));
+        let end = Instant::now() + Duration::from_millis(500);
+        while !stopped() && Instant::now() < end { std::thread::sleep(Duration::from_millis(5)); }
+        assert!(stopped(), "the port's keyboard mapper must stop before the pause menu receives input");
+        assert!(resume_game(port.child.id() as i32));
+        crate::testutil::clock::wait_for(|| !stopped(), Duration::from_secs(2), "port mapper resumed");
     }
 }

@@ -83,12 +83,26 @@ longer than 4 ms: the first may still be stream linking, followed by a fast serv
 paced write keeps that burst in planned silence rather than consuming the opening PCM. The 200-write
 and shutdown bounds remain. Startup backpressure is reported
 as `startup_backpressure_us`. A closed output, or two seconds without accepting another piece, reports the
-unplayed tail as dropped rather than trapping the game or claiming intact sound.
+unplayed tail and queued PCM as dropped and latches `output_stalled`. Later deliveries are discarded
+immediately, including across pause/resume and a route change; they do not each wait another two seconds.
+Only a successful completed sink write (including priming or pause silence) clears the latch. Queue pops
+and failed/zero-progress writes cannot clear it. Recovery starts with a fresh reserve and the normal stereo
+fade-in, so the muted backlog is not replayed. `output_stalls` counts these episodes; `output_stalled`
+reports whether the current episode is still open. The initial two-second linking allowance is unchanged.
 Flow control continues until the route is decided, PCM has played, and the queue fits the current restart reserve.
 This also preserves the prefix queued for 48 ms when route selection chooses 20 ms before the first pop.
-After that handover, the existing active overflow policy remains unchanged. Host regressions check the
-first PCM prefix through a delayed stream, bounded stereo delivery, the startup route shrink, a linking write followed by fast server-buffer filling, the observed 2925-to-960-frame loss,
-and 240 seconds of PAL with 20 pauses, two-block writer bursts and a late delivery. The PAL test checks every
+After that handover, the existing active overflow policy remains unchanged unless a startup stall is
+still latched: discarding remains immediate until a successful write, even if the handover happened meanwhile.
+Pause/resume only updates an atomic flag, and route fitting/reopening stays on the writer thread. The producer
+never joins either path. Game teardown waits at most 300 ms for the writer (a stuck write is allowed to outlive
+that wait); the independent route keeper has its existing seven-second bounded restoration wait. Sink opening
+at game creation remains a synchronous backend call; this change addresses repeated frame waits, not stream-open APIs.
+Host regressions check the first PCM prefix through a delayed stream, bounded stereo delivery, the startup route
+shrink, a linking write followed by fast server-buffer filling, and the observed 2925-to-960-frame loss. The muted
+startup test supplies 120 video frames freely, including pause/resume and a short-to-cycle route change, then
+checks recovery with fresh held PCM and a stereo fade. Another test starts the next game's audio while the
+old game's device write remains blocked. A PAL test covers 240 seconds with 20 pauses, two-block writer bursts
+and a late delivery. It checks every
 sample's order and the full produced/consumed/queued/dropped balance through warmup and later playback.
 The resumed video clock anchors its first deadline when pause ends. An immediately presented first picture
 therefore cannot be followed by a second source frame on the same tick, accumulating an extra audio burst on

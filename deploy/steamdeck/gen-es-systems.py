@@ -1,10 +1,12 @@
 #!/usr/bin/env python3
 """Writes an es_systems.cfg for pocket-ui on a Steam Deck from the ROM folders found (docs/STEAMDECK.md).
 
-Looks for, in this order: $POCKETUI_ROMS, EmuDeck's ~/Emulation/roms, ES-DE's ROMs folder (~/ES-DE/ROMs, then
-the path in ~/ES-DE/settings/es_settings.xml), the SD card's /run/media/*/Emulation/roms. EmuDeck and ES-DE name
-some folders differently from ROCKNIX (genesis, gc, psx, ...): FOLDERS maps them. A system with no games is simply
-not written (pocket-ui hides empty systems anyway).
+Looks for, in this order: $POCKETUI_ROMS, EmuDeck's ~/Emulation/roms, RetroDECK's ~/retrodeck/roms, ES-DE's
+ROMs folder (~/ES-DE/ROMs, then the path in ~/ES-DE/settings/es_settings.xml), the SD card's
+/run/media/*/Emulation/roms and /run/media/*/retrodeck/roms. EmuDeck, RetroDECK and ES-DE name some folders
+differently from ROCKNIX (genesis, gc, psx, ...): SYSTEMS maps them. The complete catalog is written so
+the shared library reader can recognise other-card folders ("Game Boy Advance (GBA)", "GBA", etc.) too.
+The app hides systems with no games.
 
 usage: gen-es-systems.py <out es_systems.cfg> [roms dir]
 """
@@ -40,7 +42,7 @@ SYSTEMS = {
 
 
 def roms_root(arg):
-    cands = [arg, os.environ.get("POCKETUI_ROMS"), os.path.expanduser("~/Emulation/roms"), os.path.expanduser("~/ES-DE/ROMs")]
+    cands = [arg, os.environ.get("POCKETUI_ROMS"), os.path.expanduser("~/Emulation/roms"), os.path.expanduser("~/retrodeck/roms"), os.path.expanduser("~/ES-DE/ROMs")]
     settings = os.path.expanduser("~/ES-DE/settings/es_settings.xml")
     if os.path.exists(settings):
         import re
@@ -48,6 +50,7 @@ def roms_root(arg):
         if m:
             cands.append(m.group(1).replace("%ESPATH%", os.path.expanduser("~/ES-DE")))
     cands += sorted(glob.glob("/run/media/*/Emulation/roms")) + sorted(glob.glob("/run/media/*/*/Emulation/roms"))
+    cands += sorted(glob.glob("/run/media/*/retrodeck/roms")) + sorted(glob.glob("/run/media/*/*/retrodeck/roms"))
     return next((c for c in cands if c and os.path.isdir(c)), None)
 
 
@@ -55,15 +58,15 @@ def main():
     out = sys.argv[1]
     root = roms_root(sys.argv[2] if len(sys.argv) > 2 else None)
     if root is None:
-        print("no ROM folder found (looked for ~/Emulation/roms, ~/ES-DE/ROMs, the SD card)", file=sys.stderr)
+        print("no ROM folder found (looked for ~/Emulation/roms, ~/retrodeck/roms, ~/ES-DE/ROMs, the SD card)", file=sys.stderr)
         sys.exit(3)
     cfg = ['<?xml version="1.0"?>', "<systemList>"]
     found = 0
     for sid, (full, exts, folders, core, flatpak) in SYSTEMS.items():
-        folder = next((os.path.join(root, f) for f in folders if os.path.isdir(os.path.join(root, f))), None)
-        if folder is None:
-            continue
-        found += 1
+        # Keep every system's identity, even when only an alias folder exists. library::foreign_folders in the
+        # app owns that matching table; duplicating it here would drift as other layouts are added.
+        folder = next((os.path.join(root, f) for f in folders if os.path.isdir(os.path.join(root, f))), os.path.join(root, folders[0]))
+        found += int(os.path.isdir(folder))
         ext = " ".join("." + e for e in exts.split()) + " " + " ".join("." + e.upper() for e in exts.split())
         if core:
             emu = f'<emulators><emulator name="pocket-core"><cores><core default="true">{core}</core></cores></emulator></emulators>'
@@ -73,7 +76,7 @@ def main():
                    f"<extension>{ext}</extension>{emu}</system>")
     cfg.append("</systemList>")
     open(out, "w").write("\n".join(cfg) + "\n")
-    print(f"{found} systems from {root} -> {out}")
+    print(f"{found} standard folders, {len(SYSTEMS)} system definitions from {root} -> {out}")
 
 
 main()

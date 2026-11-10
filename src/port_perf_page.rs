@@ -47,6 +47,7 @@ pub struct PortPerfPage {
     /// Settings → Performance & fan's Games: performance and Games: fan: what "the defaults" are.
     pub defaults: (Performance, Fan),
     pub smooth_fan: bool,
+    pub fan_control: bool,
     /// What the busy-wait look found, if it looked.
     pub note: Option<Note>,
     pub sel: usize,
@@ -58,6 +59,13 @@ fn step<T: Copy + PartialEq>(choices: &[T], now: T, delta: i32) -> T {
     choices[(i + delta).rem_euclid(n) as usize]
 }
 
+/// PortMaster uses the same fanless TrimUI profile as the global Performance page.
+pub fn fan_control_here() -> bool {
+    #[cfg(feature = "brick")]
+    if crate::device::brick() { return false; }
+    true
+}
+
 impl PortPerfPage {
     /// The page as it opens: on the offer when there is one, else on Performance.
     pub fn new(title: &str, rom: PathBuf, choice: Choice, defaults: (Performance, Fan), smooth_fan: bool, note: Option<Note>) -> PortPerfPage {
@@ -67,6 +75,7 @@ impl PortPerfPage {
             choice,
             defaults,
             smooth_fan,
+            fan_control: fan_control_here(),
             note,
             sel: 0,
         }
@@ -82,7 +91,8 @@ impl PortPerfPage {
         if self.offers_battery() {
             rows.push(Row::UseBattery);
         }
-        rows.extend([Row::Performance, Row::Fan]);
+        rows.push(Row::Performance);
+        if self.fan_control { rows.push(Row::Fan); }
         if self.choice.own_performance || self.choice.own_fan {
             rows.push(Row::Defaults);
         }
@@ -191,8 +201,10 @@ impl PortPerfPage {
                 "How fast the processor may run while this port plays. A change applies from the port's next start.".to_string(),
                 match self.choice.performance {
                     Performance::Battery if crate::device::current().model.is_some_and(|m| m.is_h700()) => "Battery: saves in menus and idle. Games keep their normal processor speed on this device.".to_string(),
+                    Performance::Battery if !self.fan_control => "Battery: the processor's top speeds are held at about half. Cooler, and the battery lasts longer; a demanding port may stutter.".to_string(),
                     Performance::Battery => "Battery: the processor's top speeds are held at about half. Cooler, quieter, and the battery lasts longer; a demanding port may stutter.".to_string(),
                     Performance::Auto => "Auto: the system decides; it speeds up and slows down as the port needs it.".to_string(),
+                    Performance::Performance if !self.fan_control => "Max: full speed all the time, for demanding games. Uses more battery and gets warmer.".to_string(),
                     Performance::Performance => "Max: the big cores and the graphics run at full speed all the time. Uses more battery and gets warmer.".to_string(),
                 },
             ],
@@ -201,6 +213,10 @@ impl PortPerfPage {
                 "Needs Smooth fan (Settings › Playing › Performance & fan). Without it, ports keep the system's own cooling.".to_string(),
             ],
             Row::Fan => ["How early the fan starts while this port plays.".to_string(), fan_blurb(self.choice.fan, true)],
+            Row::Defaults if !self.fan_control => [
+                "Forget this port's own choice: Settings › Playing › Performance applies again.".to_string(),
+                format!("There: Games: performance {}.", performance_label(self.defaults.0)),
+            ],
             Row::Defaults => [
                 "Forget this port's own choice: Settings › Playing › Performance & fan applies again.".to_string(),
                 format!(
@@ -275,6 +291,21 @@ mod tests {
             at: 1,
             seen: false,
         }
+    }
+
+    #[test]
+    fn a_fanless_port_offers_only_processor_speed_and_its_defaults() {
+        let mut p = page(None, defaults());
+        p.fan_control = false;
+        assert_eq!(p.rows(), [Row::Performance]);
+        p.press(Button::Down, CONFIRM, CANCEL);
+        assert_eq!(p.row(), Row::Performance, "there is no inactive fan row to reach");
+        assert_eq!(p.press(Button::Right, CONFIRM, CANCEL), Action::Set { key: "performance", value: "performance" });
+        p.press(Button::Down, CONFIRM, CANCEL);
+        assert_eq!(p.row(), Row::Defaults);
+        assert!(p.describe(Row::Defaults).iter().all(|s| !s.contains("fan")), "defaults name only settings this device has");
+        assert_eq!(p.press(CONFIRM, CONFIRM, CANCEL), Action::Defaults);
+        assert_eq!(p.rows(), [Row::Performance]);
     }
 
     #[test]

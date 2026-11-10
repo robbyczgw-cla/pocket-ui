@@ -361,15 +361,30 @@ pub fn twins<'a>(path: &Path, shown: impl Iterator<Item = &'a Path>, hidden: imp
     out
 }
 
-/// Whether Frozen games is on this device: not where the host owns the emulators and their states (the Steam Deck).
+/// Whether Frozen games is on this device. On the handhelds always. Where the host owns the emulators (the Steam
+/// Deck) only once the launcher moved the states into pocket-ui's data (`POCKETUI_STATES`, `slots::states_moved`):
+/// pocket-core's moments are pocket-ui's own there and a start can go back to them, while the big emulators keep
+/// their own saves and simply never stand open (their `resume_files` stay empty but for the one with a resume state).
 #[cfg(not(target_os = "android"))]
 pub fn available() -> bool {
-    !crate::device::current().host_owned()
+    available_on(crate::device::current().host_owned(), crate::slots::states_moved())
+}
+
+pub fn available_on(host_owned: bool, states_moved: bool) -> bool {
+    !host_owned || states_moved
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_deck_with_its_states_in_pocket_ui_data_has_open_cases_a_bare_one_has_not() {
+        assert!(available_on(false, false), "a handheld: as before");
+        assert!(available_on(false, true), "a handheld with the variable set: as before");
+        assert!(available_on(true, true), "the Deck through its launcher: pocket-core moments count");
+        assert!(!available_on(true, false), "the Deck without the launcher: states would go to /storage, so no open cases");
+    }
 
     /// The sixth game with a moment: it stands open for Easy, the others' limit of five stays theirs.
     #[test]

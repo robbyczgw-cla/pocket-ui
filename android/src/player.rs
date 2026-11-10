@@ -11,6 +11,7 @@ use pocket_ui::{
     image::Image,
     libretro::Core,
     palette::{self, pal},
+    pause_head::{self, EDGE, GAP, TARGET_MIN},
     text::{Face, Text},
     type_scale,
     touch::Area,
@@ -233,6 +234,8 @@ enum Menu {
     Recovery,
     Zoom,
 }
+#[path = "moments.rs"]
+mod moments;
 // Dereferencing the core makes its isolated context current for every entry point,
 // including save/load, options and destruction; composition explicitly restores the Activity.
 fn core_hw_frame(core: &CoreSession) -> Option<pocket_ui::libretro::Frame> {
@@ -277,6 +280,11 @@ impl std::ops::DerefMut for CoreSession {
         }
         &mut self.core
     }
+}
+impl moments::States for CoreSession {
+    fn snapshot(&mut self) -> Option<Vec<u8>> { self.save_state() }
+    fn restore(&mut self, bytes: &[u8]) -> Result<(), (bool, String)> { self.load_state_reached(bytes) }
+    fn block_saves(&mut self, blocked: bool) { std::ops::DerefMut::deref_mut(self).block_saves(blocked); }
 }
 impl Drop for CoreSession {
     fn drop(&mut self) {
@@ -378,6 +386,8 @@ struct Player {
     last_flush: Instant,
     last_earlier: Instant,
     earlier: usize,
+    cheats: Option<pocket_ui::cheats::CheatMenu>,
+    recovery_required: bool,
 }
 impl Player {
     fn new(core_path: &str, rom: &str, system: String, key: String, title: String, light: bool, frozen: bool) -> Result<Self, String> {
@@ -538,19 +548,23 @@ impl Player {
             last_flush: now,
             last_earlier: now,
             earlier: initial,
+            cheats: None,
+            recovery_required: false,
         })
     }
     fn state(&mut self, path: &Path) -> Result<(), String> {
+        if self.recovery_required { return Err(moments::RECOVERY_MESSAGE.into()); }
         let bytes = self.core.save_state().ok_or("This core could not save its state")?;
         pocket_ui::state_file::write(path, &bytes).map_err(|e| e.to_string())?;
         if let Some(image) = &self.frame {
-            png(&pocket_ui::slots::preview_path(path), image)?;
+            if let Err(error) = png(&pocket_ui::slots::preview_path(path), image) { log::warn!("Saved moment without preview: {error}"); }
         }
         self.refresh_slots();
         log::info!("player state saved: {} bytes={}", path.display(), bytes.len());
         Ok(())
     }
     fn automatic(&mut self) -> Result<(), String> {
+        if self.recovery_required { return Err(moments::RECOVERY_MESSAGE.into()); }
         let path = pocket_ui::slots::auto_path(&self.base);
         // The battery save first, so the state is never older than it (`Core::resume`), as pocket-core's exit does.
         let battery = self.core.write_sram();
@@ -564,13 +578,18 @@ impl Player {
     }
     fn load(&mut self, path: &Path) -> Result<(), String> {
         let bytes = pocket_ui::state_file::read(path).map_err(|e| e.to_string())?;
-        let undo = self.core.save_state().ok_or("Cannot preserve the current state")?;
         let undo_path = pocket_ui::slots::undo_path(&self.base);
-        pocket_ui::fsutil::write_atomic(&undo_path, &undo).map_err(|e| e.to_string())?;
-        if let Err(error) = self.core.load_state(&bytes) {
-            let _ = self.core.load_state(&undo);
-            return Err(error);
+        let result = if self.recovery_required { moments::recover(&mut self.core, &bytes) }
+        else { moments::load(&mut self.core, &bytes, |before| pocket_ui::fsutil::write_atomic(&undo_path, before).map_err(|_| pocket_ui::save_trouble::UNDO_FAILED.to_string())) };
+        if let Err(error) = result {
+            self.recovery_required |= error.recovery;
+            if error.recovery { self.menu = Menu::Recovery; self.note = vec![error.message.clone()]; self.scroll = 0; }
+            return Err(error.message);
         }
+        self.recovery_required = false;
+        self.core.set_analog([0; 4]);
+        self.core.set_pointer(None);
+        if let Some(image) = pocket_ui::image::load_png(&pocket_ui::slots::preview_path(path)) { self.frame = Some(image); }
         self.held = Default::default();
         self.buttons = 0;
         self.fingers.clear();
@@ -597,6 +616,7 @@ impl Player {
         );
     }
     fn pause(&mut self, on: bool) {
+        if !on && self.recovery_required { return; }
         if !on {self.suspended=false;}
         if !on && self.audio.is_none() {
             self.audio = pocket_ui::audio::Audio::open(self.core.av.timing.sample_rate, false);
@@ -789,6 +809,14 @@ impl Player {
         options.push(FileOption {key:"hold_toggle".into(), label:"Hold to toggle".into(), current:self.hold_button.map_or("none".into(),|b|b.to_string()), values, category:Some("Controls".into()), ..Default::default()});
         options.extend(self.options.iter().cloned());
         for (row, option) in options.iter_mut().enumerate() { option.category = Some(Self::section(row).into()); }
+        if let Some(cheats) = &self.cheats {
+            for (i, row) in cheats.rows().into_iter().enumerate() {
+                let actionable = cheats.actionable(i);
+                options.push(FileOption { key:format!("cheat.{i}"), label:row.name, info:row.desc, current:row.value,
+                    values: if actionable { ["Off", "On"].into_iter().map(|s| pocket_ui::core_options::FileValue {value:s.into(),label:s.into()}).collect() } else {vec![]},
+                    category:Some("Cheats".into()), ..Default::default() });
+            }
+        }
         options
     }
     fn section(row: usize) -> &'static str {
@@ -810,7 +838,7 @@ impl Player {
             "Screenshot".into(),
             "Controls".into(),
             "Zoom".into(),
-            "Save & quit".into(),
+            if self.recovery_required { "Return to library" } else { "Save & quit" }.into(),
         ]
     }
     /// The slot picker's places: the slots, then the kept moments.
@@ -841,6 +869,17 @@ impl Player {
             if let Err(e) = pocket_ui::fsutil::write_json(&path, &self.hold_button) {self.hold_button=before;self.message = e.to_string();}
             return;
         }
+        let cheat_start = self.options.len() + picture::ROWS + 1;
+        if self.row >= cheat_start {
+            if let Some(cheats) = self.cheats.as_mut() {
+                match cheats.try_press(self.row - cheat_start) {
+                    Ok(true) => { let codes = cheats.codes(); self.core.set_cheats(&codes); },
+                    Err(e) => self.message = pocket_ui::i18n::tr(e),
+                    _ => (),
+                }
+            }
+            return;
+        }
         let Some(option) = self.options.get_mut(self.row - picture::ROWS - 1) else { return };
         if option.values.is_empty() {
             return;
@@ -856,11 +895,11 @@ impl Player {
     }
     fn activate(&mut self) {
         if self.menu == Menu::Options {
-            if self.row == self.options.len() + picture::ROWS + 2 {
+            if self.row == self.display_options().len() + 1 {
                 // "Advanced (this emulator)": opens or closes its group.
                 self.advanced_open = !self.advanced_open;
                 self.sound(pocket_ui::ui_sound::Sound::Confirm);
-            } else if self.row >= self.options.len() + picture::ROWS + 1 {
+            } else if self.row == self.display_options().len() {
                 self.menu = Menu::Pause;
                 self.row = 0;
             } else {
@@ -918,6 +957,7 @@ impl Player {
                 return;
             }
             _ => {
+                if self.recovery_required { self.quit = true; self.audio.take(); return; }
                 let saved = self.automatic();
                 if saved.is_ok() {
                     self.quit = true;
@@ -1451,10 +1491,7 @@ fn paint_note(c: &mut Canvas, text: &mut Text, w: i32, lines: &[String]) -> Area
     area
 }
 // Touch pause menu. Sizes are logical pixels (about 2.2 per dp): every target is at least 106 (48 dp) high with
-// gaps of 20 (9 dp); the primary button is 128 (58 dp).
-const EDGE: i32 = 40;
-const GAP: i32 = 20;
-const TARGET_MIN: i32 = 106;
+// gaps of 20 (9 dp); the primary button is 128 (58 dp). The sizes and the head are in `pause_head`.
 struct TouchView<'a> {
     size: (i32, i32),
     title: &'a str,
@@ -1500,7 +1537,9 @@ fn chevron(c: &mut Canvas, cx: i32, cy: i32, right: bool, color: u32) {
 fn pill(c: &mut Canvas, text: &mut Text, area: Area, label: &str, primary: bool) {
     // The primary button is the paper selection of the design language; on a light page paper would vanish, so ink.
     let (fill, on_fill) = if pal().is_light() { (pal().ink, pal().select) } else { (pal().select, pal().ink) };
-    c.round_rect(area.x, area.y, area.w, area.h, area.h / 2, if primary { fill } else { pal().pill });
+    let bg = if primary { fill } else { pal().pill };
+    if pocket_ui::retro::on() { pocket_ui::retro::frame(c, area.x, area.y, area.w, area.h, bg); }
+    else { c.round_rect(area.x, area.y, area.w, area.h, area.h / 2, bg); }
     if primary {
         centered(c, text, Face::Title, 52, area, on_fill, label);
     } else {
@@ -1737,15 +1776,16 @@ fn touch_controls(c: &mut Canvas, text: &mut Text, system: &str, (w, h): (i32, i
 }
 
 /// The options page's sections, in page order: the player's own picture settings first, then the core's.
-const SECTIONS: [&str; 5] = ["Picture", "Sound", "Controls", "Speed", "Advanced (this emulator)"];
+const SECTIONS: [&str; 6] = ["Picture", "Sound", "Controls", "Speed", "Cheats", "Advanced (this emulator)"];
 /// The section that starts closed: what is particular to one emulator (its model, BIOS, presets, restarts).
-const ADVANCED: usize = 4;
+const ADVANCED: usize = 5;
 /// Which section of `SECTIONS` option `row` of `display_options` goes in, by its key and name.
 fn option_section(option: &FileOption, row: usize) -> usize {
     if row < picture::ROWS {
         return 0;
     }
     if option.key == "hold_toggle" {return 2;}
+    if option.key.starts_with("cheat.") {return 4;}
     let s = format!("{} {}", option.key, option.label).to_lowercase();
     let has = |words: &[&str]| words.iter().any(|w| s.contains(w));
     // The emulator's own hardware choices and anything that needs a restart: for those who know that core.
@@ -1763,7 +1803,7 @@ fn option_section(option: &FileOption, row: usize) -> usize {
     } else if has(&["palette", "color", "colour", "filter", "blend", "video", "scale", "border", "aspect", "overscan", "crop", "resolution", "render", "screen", "display", "layout", "gamma", "lcd", "ghost", "interlac", "scanline", "texture", "upscal", "brightness", "contrast", "sprite"]) {
         0
     } else {
-        4
+        ADVANCED
     }
 }
 /// The options' rows in page order: by section, each section in the core's own order.
@@ -1817,13 +1857,21 @@ fn touch_pause(c: &mut Canvas, text: &mut Text, v: &TouchView) -> TouchOut {
     let portrait = w < h;
     let mut out = TouchOut::default();
     let inner = w - 2 * EDGE;
-    let title = if v.menu == Menu::Options { "Options" } else { v.title };
-    let title = text.fit(Face::Title, 46, title, if v.menu == Menu::Options && !portrait { inner - 420 } else { inner });
-    text.draw(c, Face::Title, 46, EDGE, 92, pal().chalk, &title);
-    let top = 170;
     // A controller's keys go in a line at the bottom; a finger needs none.
     let hint_h = if v.focus.is_some() { 56 } else { 0 };
     let bottom = h - 36 - hint_h;
+    // Options repaints this same heading after clipping its scrolling rows below.
+    let title = if v.menu == Menu::Options { text.fit(Face::Title, 46, "Options", if portrait { inner } else { inner - 420 }) } else { String::new() };
+    let mut top = 170;
+    if v.menu == Menu::Options {
+        text.draw(c, Face::Title, 46, EDGE, 92, pal().chalk, &title);
+    } else {
+        // The game's whole name (two lines when it needs them, never translated) and the status line under it; the
+        // rows start under both and keep their height.
+        let head = pause_head::layout(text, v.title, v.message, inner, bottom, pause_head::rows_need(portrait, v.card));
+        pause_head::paint(c, text, &head, EDGE, pal().chalk, pal().dust);
+        top = head.bottom;
+    }
     if v.focus.is_some() {
         let hint = if v.menu == Menu::Options { "A Choose · ‹ › Change · B Back" } else { "A Choose · B Continue · L / R Slot" };
         let hint = text.fit(Face::Body, 28, hint, inner);
@@ -1897,7 +1945,8 @@ fn touch_pause(c: &mut Canvas, text: &mut Text, v: &TouchView) -> TouchOut {
                 if v.focus == Some(v.options.len() + 1) {
                     ring(c, area);
                 }
-                c.round_rect(area.x, area.y, area.w, area.h, area.h / 2, pal().spine);
+                if pocket_ui::retro::on() { pocket_ui::retro::frame(c, area.x, area.y, area.w, area.h, pal().spine); }
+                else { c.round_rect(area.x, area.y, area.w, area.h, area.h / 2, pal().spine); }
                 let name = text.translated("Advanced (this emulator)").to_string();
                 let label = format!("{name} · {count}");
                 text.draw(c, Face::Title, 38, area.x + 48, area.y + area.h / 2 + type_scale::mid(38), pal().chalk, &label);
@@ -1925,7 +1974,8 @@ fn touch_pause(c: &mut Canvas, text: &mut Text, v: &TouchView) -> TouchOut {
             if v.focus == Some(i) {
                 ring(c, area);
             }
-            c.round_rect(area.x, area.y, area.w, area.h, row_h / 2, pal().pill);
+            if pocket_ui::retro::on() { pocket_ui::retro::frame(c, area.x, area.y, area.w, area.h, pal().pill); }
+            else { c.round_rect(area.x, area.y, area.w, area.h, row_h / 2, pal().pill); }
             let many = option.values.len() > 1;
             let arrow = if many { pal().text } else { pal().off };
             chevron(c, area.x + zone / 2 + 6, area.y + row_h / 2, false, arrow);
@@ -1977,13 +2027,12 @@ fn touch_pause(c: &mut Canvas, text: &mut Text, v: &TouchView) -> TouchOut {
         }
         return out;
     }
-    let message = text.fit(Face::Body, 28, v.message, inner);
-    text.draw(c, Face::Body, 28, EDGE, 140, pal().dust, &message);
     // With the whole memory card the slot picker is taller, to show the medium.
     let (picker_extra, primary_extra) = (if v.card { 38 + 110 } else { 38 }, 16);
     let labels = ["Continue", "Save", "Load", "Earlier", "Options", "Screenshot", "Controls", "Zoom", "Save & quit"];
     let picker = |c: &mut Canvas, text: &mut Text, out: &mut TouchOut, area: Area| {
-        c.round_rect(area.x, area.y, area.w, area.h, 28, pal().pill);
+        if pocket_ui::retro::on() { pocket_ui::retro::frame(c, area.x, area.y, area.w, area.h, pal().pill); }
+        else { c.round_rect(area.x, area.y, area.w, area.h, 28, pal().pill); }
         let zone = 120.min(area.w / 4);
         let (left, right) = (Area::new(area.x, area.y, zone, area.h), Area::new(area.x + area.w - zone, area.y, zone, area.h));
         chevron(c, left.x + zone / 2 + 6, area.y + area.h / 2, false, pal().text);
@@ -2013,7 +2062,7 @@ fn touch_pause(c: &mut Canvas, text: &mut Text, v: &TouchView) -> TouchOut {
         if v.focus == Some(row) {
             ring(c, area);
         }
-        pill(c, text, area, labels[row], row == 0);
+        pill(c, text, area, if row == 8 { &v.rows[row] } else { labels[row] }, row == 0);
         // The accessibility label follows the interface language, like the painted one.
         out.hits.push((area, row, text.translated(&v.rows[row]).to_string()));
     };
@@ -2155,6 +2204,7 @@ pub extern "system" fn Java_dev_pocket_spike_PlayerActivity_nativeCreate(
     let extras = pref!(pocket_ui::cozy_extras::Extras, "extras");
     pocket_ui::palette::set_colours(pref!(pocket_ui::palette::Colours, "colours"));
     pocket_ui::font_style::set(pref!(pocket_ui::font_style::FontStyle, "font"));
+    pocket_ui::retro::set_colours(pref!(pocket_ui::retro::Colours, "retro_colours"));
     pocket_ui::button_prompts::set(pref!(pocket_ui::button_prompts::PromptStyle, "prompts"));
     pocket_ui::motion::set_level(pref!(pocket_ui::motion::Motion, "motion"));
     pocket_ui::motion::set_cozy(prefs["cozy"].as_bool().unwrap_or(true));
@@ -2169,6 +2219,11 @@ pub extern "system" fn Java_dev_pocket_spike_PlayerActivity_nativeCreate(
         let frozen = prefs["frozen_shown"].as_bool().unwrap_or(false);
         match Player::new(&core, &rom, system, key, title, prefs["light"].as_bool().unwrap_or(false), frozen) {
             Ok(mut player) => {
+                // The sidecar came from this game's SAF document. No database is downloaded or shared by name.
+                if matches!(player.core.name.as_str(), "mGBA" | "Gambatte" | "Nestopia" | "bsnes") {
+                    player.cheats = pocket_ui::cheats::CheatMenu::from_text(player.data.join("android-cheats").join(format!("{}.json",player.key)), prefs["cheat_text"].as_str().unwrap_or(""));
+                    if let Some(cheats) = &player.cheats { player.core.set_cheats(&cheats.codes()); }
+                }
                 player.sounds_muted = prefs["muted"].as_bool().unwrap_or(false);
                 player.haptics = prefs["haptics"].as_bool().unwrap_or(false);
                 player.text_size = serde_json::from_value(prefs["text_size"].clone()).unwrap_or_default();

@@ -131,7 +131,7 @@ them off; the values are then only shown.
 - **The label at the top**: the box art (when cover art was downloaded, see [Extras](extras.md)), the
   name, system, year and number of players, and your status with the time played.
 - **Pictures**: under the facts, the game running and its title screen ("In the game", "Title screen"), when the
-  free collection has them and Settings → Games → Pictures & extras → **Pictures** is Box art and screenshots ([Extras](extras.md#pictures)).
+  free collection has them and Settings → Games → Extras → **Pictures** is Box art and screenshots ([Extras](extras.md#pictures)).
   A game without them has no such heading and no gap.
 - **About the game**: developer, publisher, genre, series and review scores where they are known.
   A score reads, for example, "Metacritic 92 · via Wikidata". When the offline game list spells the game

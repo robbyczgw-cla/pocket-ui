@@ -19,8 +19,8 @@ fn name(s: &OsStr) -> io::Result<CString> {
     CString::new(s.as_bytes()).map_err(|_| invalid())
 }
 fn sync_card() {
-    // SAFETY: sync takes no arguments. Unlike directory fsync it also works on the card's FAT.
-    unsafe { libc::sync() };
+    // Unlike directory fsync it also works on the card's FAT.
+    crate::fsutil::flush_all();
 }
 
 /// Hold every traversed directory open; openat with O_NOFOLLOW also prevents an

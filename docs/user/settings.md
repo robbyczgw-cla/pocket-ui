@@ -20,7 +20,7 @@ Left/Right, right in the list, and the selected one shows **‹ ›** round its 
 | **Look** | Layout, Systems on the shelf, Cozy extras, Appearance, Colours, Style, Text size, Screen colour, Night light. See [Look](#look) |
 | **Sound & feel** | Animations, Playful cases, Old-TV switch-on, Motion, Zoom in the pause menu, Sounds, Case sounds, Haptics, LEDs. See [Sound & feel](settings-sound.md) |
 | **Playing** | On start, Continue where I quit, Remind me where I was, Buttons, Over the game, Screen frames, Performance & fan, Battery, RetroAchievements. See [Playing](#playing) |
-| **Games** | Add games, Game check, Starter pack, Pictures & extras, From EmulationStation, Screenshots, Curator, PC streaming. See [Games](#games) |
+| **Games** | Add games, Game check, Extras, From EmulationStation, Screenshots, Curator, PC streaming. See [Games](#games) |
 | **Connections** | Wi-Fi, Bluetooth, Tailscale, Sync, Remote access (SSH), Web companion. See [Connections](settings-system.md#connections) |
 | **System** | Language, Time, Sleep & power, Second screen (two screens only), Kids mode, Updates, Storage, Backup & reset. See [System](settings-system.md#system) |
 | **Help & tools** | First-start setup, How you like to play, Tour, Manual, Tools, Test buttons, Store (only on a device with a store set up), Report a problem, About. See [Help & tools](settings-system.md#help--tools) |
@@ -51,7 +51,7 @@ Easy to read, Large text and Reduced motion together, is a card of the [Tour](to
 | **Cozy extras** | The little touches you see, each on or off on its own: the TV on the cabinet, stickers, printed discs, the memory card in the pause menu, light by time of day, decorations, game connections, Rediscover. See [Cozy extras](settings-sound.md#cozy-extras) |
 | **Appearance** | **Dark** (the default), **Light** or **Automatic**. A or Left/Right switches it. See [Appearance](#appearance) |
 | **Colours** | The colours of every page: Warm, Indigo Cube, Grey Brick, Green X or Blue Station; with the Retro style, Cocoa or Pea. A or Left/Right switches it. See [Colours and style](theme.md) |
-| **Style** | Barlow, Pixel or Rounded type, or **Retro**: pixel letters, frames and icons everywhere, with its own colours and menu sounds. A or Left/Right switches it. See [Colours and style](theme.md#style) |
+| **Style** | Barlow, Pixel or Rounded type, or **Retro**: pixel letters, frames and icons everywhere, with its own colours and menu sounds; **Retro Pixelify** is Retro with Pixelify's rounder letters. A or Left/Right switches it. See [Colours and style](theme.md#style) |
 | **Text size** | **Normal** (the default), **Medium** or **Large**: larger text on every screen, fewer rows on a page. A or Left/Right switches it. See [Text size](#text-size) |
 | **Screen colour** | The screen's white: **Cooler 10** … **Neutral** … **Warmer 10**. Left/Right changes it, you see it at once; A goes back to Neutral. The same setting as [SELECT + Vol](controls-settings.md#volume-and-brightness-keys), so the two always agree |
 | **Night light** | Warmer, less blue colours in the evening, in the menus and in games: **Off** (the default), **On** or **Scheduled**, with a strength. See [Night light](night-light.md) |
@@ -270,8 +270,7 @@ Settings → **Games**. Getting games and what runs them onto the Pocket, and th
 |---|---|
 | **Add games** | A tile per system with its folder, file types and BIOS needs, file sharing, sending games from your phone (Y), and folders or disc games it can't read. See [Getting started](getting-started.md#the-systems-grid) and [From your phone](phone-upload.md) |
 | **Game check** | "Will my games start?": goes through your card and says, in plain words, what is missing and what to do. Only looks; it can hide a duplicate from the shelf when you press A. See [Getting started](game-check.md) |
-| **Starter pack** | A handful of free games to download when the SD card has none: pick one or take them all. Also offered on Home while the SD card is empty. See [Getting started](getting-started.md#nothing-on-the-sd-card-yet-the-starter-pack) |
-| **Pictures & extras** | Box art, the Pictures choice (Box art, Box art and screenshots or Off) and PortMaster games. See [Pictures and extras](extras.md) |
+| **Extras** | Box art, the Pictures choice and Starter pack; PortMaster games on ROCKNIX and TrimUI, and optional Cheats on TrimUI. See [Extras](extras.md) |
 | **From EmulationStation** | The favourites and ratings in your EmulationStation `gamelist.xml` files: A adds the favourites to Favourites or uses the ratings as My rating, without changing a thing in EmulationStation. Says "No gamelist" when there is none. See [Your EmulationStation gamelists](library.md#your-emulationstation-gamelists) |
 | **Screenshots** | The pictures you took with HOME + A, newest first, in groups by day, with a small picture each. A opens one full screen, X deletes it. The value at the right is how many there are; with none the page says how to take one. See [Looking at your screenshots](playing.md#looking-at-your-screenshots) |
 | **Curator** | The Lens and smart shelves, labels, Echoes, Up next, versions and play history, each on or off. See [Curator](#curator) |

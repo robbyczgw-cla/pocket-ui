@@ -120,6 +120,36 @@ impl Format {
     }
 }
 
+/// The visible page as RGB. The caller keeps every pixel inside the mapped framebuffer.
+unsafe fn native_rgb(map: *const u8, width: usize, height: usize, visible: usize, stride: usize, format: Format) -> Vec<u8> {
+    let mut rgb = Vec::with_capacity(width * height * 3);
+    for y in 0..height {
+        for x in 0..width {
+            let at = visible + y * stride + x * format.bytes();
+            // Uncached framebuffer reads are expensive: one complete pixel per
+            // volatile access, retaining byte reads for unaligned rows or maps.
+            // SAFETY: the caller checked the complete visible page; each wider
+            // read is checked for its own pointer alignment before dereferencing.
+            let pixel = unsafe { map.add(at) };
+            let word = match format {
+                Format::Bits32 { .. } if pixel.cast::<u32>().is_aligned() => u32::from_le(unsafe { pixel.cast::<u32>().read_volatile() }),
+                Format::Rgb565 if pixel.cast::<u16>().is_aligned() => u16::from_le(unsafe { pixel.cast::<u16>().read_volatile() }) as u32,
+                _ => {
+                    let mut bytes = [0u8; 4];
+                    for (i, byte) in bytes.iter_mut().enumerate().take(format.bytes()) { *byte = unsafe { pixel.add(i).read_volatile() }; }
+                    u32::from_le_bytes(bytes)
+                }
+            };
+            let pixel = match format {
+                Format::Bits32 { r, g, b, .. } => [(word >> r) as u8, (word >> g) as u8, (word >> b) as u8],
+                Format::Rgb565 => [(((word >> 11) & 31) * 255 / 31) as u8, (((word >> 5) & 63) * 255 / 63) as u8, ((word & 31) * 255 / 31) as u8],
+            };
+            rgb.extend_from_slice(&pixel);
+        }
+    }
+    rgb
+}
+
 /// One row from XRGB8888 (`src`, native-endian u32 as bytes) to the framebuffer's format. No allocation, on the frame path.
 pub fn convert_row(fmt: Format, src: &[u8], dst: &mut [u8]) {
     match fmt {
@@ -515,6 +545,17 @@ struct Server {
     /// Over the game on the Brick (`pocket_overlay`): pocket-core's overlay (the FPS line, toasts, the volume bar) drawn over a game the
     /// renderer draws; its own GL context, made with the first texts. None: nothing over the game.
     hud: Option<(glow::Context, pocket_ui::overlay::Overlay, pocket_ui::overlay::Hud)>,
+    /// SDL on stock TrimUI draws directly to the display, outside Wayland.
+    native_port: Option<(i32, u64, i64)>,
+}
+
+const NATIVE_PORT: (u64, u32) = (u64::MAX, 0);
+
+fn live_start(pid: i32) -> Option<u64> {
+    let stat = std::fs::read_to_string(format!("/proc/{pid}/stat")).ok()?;
+    let mut fields = stat.get(stat.rfind(')')? + 2..)?.split_whitespace();
+    if matches!(fields.next()?, "Z" | "X") { return None; }
+    fields.nth(18)?.parse().ok()
 }
 
 /// How long the GPU crossfades from one window to another (the pause menu over a game, a game starting or ending).
@@ -643,6 +684,13 @@ impl Server {
 
     /// Puts a window on the screen: its last picture, and the frame callbacks it was kept waiting for.
     fn raise(&mut self, key: u64, surface: u32) {
+        if (key, surface) == NATIVE_PORT {
+            self.focus = Some(NATIVE_PORT);
+            self.anim = None;
+            self.next_page = None;
+            self.cross_next = false;
+            return;
+        }
         // A window without a picture yet (focused over IPC before it drew) takes the screen with its first one.
         if let Some(sf) = self.clients.get_mut(&key).and_then(|c| c.surfaces.get_mut(&surface)) {
             if sf.current.is_none() {
@@ -789,6 +837,10 @@ impl Server {
     }
 
     fn drop_dead(&mut self) {
+        if self.native_port.is_some_and(|(pid, start, _)| live_start(pid) != Some(start)) {
+            self.native_port = None;
+            if self.focus == Some(NATIVE_PORT) { self.focus = None; self.fall_back(); }
+        }
         let dead: Vec<u64> = self.clients.iter().filter(|(_, c)| c.dead).map(|(k, _)| *k).collect();
         for key in dead {
             if let Some(c) = self.clients.remove(&key) {
@@ -809,6 +861,7 @@ impl Server {
 
     fn windows(&self) -> Vec<(u64, u32, i64, String)> {
         let mut all: Vec<_> = self.clients.iter().flat_map(|(k, c)| c.surfaces.iter().filter(|(_, s)| s.toplevel.is_some()).map(|(id, s)| (*k, *id, s.con, s.app_id.clone()))).collect();
+        if let Some((_, _, con)) = self.native_port { all.push((NATIVE_PORT.0, NATIVE_PORT.1, con, "pocket-native-port".into())); }
         all.sort_by_key(|w| w.2);
         all
     }
@@ -816,7 +869,7 @@ impl Server {
     /// sway's GET_TREE, as much of it as `control::focused_in` and `standalone` read.
     fn tree(&self) -> String {
         let nodes: Vec<_> = self.windows().into_iter().map(|(k, s, con, app)| {
-            let pid = self.clients.get(&k).and_then(|c| peer_pid(&c.stream));
+            let pid = if (k, s) == NATIVE_PORT { self.native_port.map(|p| p.0) } else { self.clients.get(&k).and_then(|c| peer_pid(&c.stream)) };
             serde_json::json!({"type": "con", "id": con, "app_id": app, "pid": pid, "focused": self.focus == Some((k, s)), "visible": self.focus == Some((k, s)), "nodes": [], "floating_nodes": []})
         }).collect();
         serde_json::json!({"type": "root", "id": 1, "nodes": [{"type": "output", "name": "FB-0", "nodes": [{"type": "workspace", "name": "1", "nodes": nodes, "floating_nodes": []}], "floating_nodes": []}], "floating_nodes": []}).to_string()
@@ -833,7 +886,14 @@ impl Server {
     /// on a screen of one (fullscreen, `for_window`: a new window takes the screen anyway) succeeds and does nothing.
     /// The focused window's picture as a PNG in `path` (a temporary file, then a rename). False without a picture or when the file can't be written.
     /// The pictures here are wl_shm's ARGB8888 / XRGB8888: little-endian words, so the bytes are blue, green, red, unused.
-    fn grab(&self, path: &str) -> bool {
+    fn grab(&mut self, path: &str) -> bool {
+        if self.focus == Some(NATIVE_PORT) {
+            self.fb.follow_pan();
+            // SAFETY: Fb::open/follow_pan check the complete visible page.
+            let rgb = unsafe { native_rgb(self.fb.map, self.fb.width as usize, self.fb.height as usize, self.fb.visible, self.fb.stride, self.fb.format) };
+            return pocket_ui::screenshot::encode_rgb(self.fb.width, self.fb.height, &rgb)
+                .is_some_and(|png| !path.is_empty() && pocket_ui::fsutil::write_atomic(std::path::Path::new(path), &png).is_ok());
+        }
         let Some((key, surface)) = self.focus else { return false };
         let Some(c) = self.clients.get(&key) else { return false };
         let Some(buffer) = c.surfaces.get(&surface).and_then(|s| s.current) else { return false };
@@ -861,6 +921,7 @@ impl Server {
         match (verb, criteria) {
             // The GPU's own animations (`brick_gpu` in pocket-ui): only with `--gl`, so a "no" keeps pocket-ui on the CPU.
             ("pocket_gpu", None) => self.gl.is_some(),
+            ("pocket_port", None) => self.native_command(action.trim_start_matches("pocket_port").trim()),
             // Shaders and screen frames (`brick_picture`): yes only with a GPU and a renderer that compiled.
             ("pocket_shaders", None) => self.gl.is_some() && self.picture.is_some(),
             ("pocket_picture_shot", None) => self.picture_shot(action.trim_start_matches("pocket_picture_shot").trim()),
@@ -897,6 +958,14 @@ impl Server {
             ("kill", Some(c)) => {
                 let found = self.matching(c);
                 for (k, s, ..) in &found {
+                    if (*k, *s) == NATIVE_PORT {
+                        if let Some((pid, start, _)) = self.native_port.filter(|(pid, start, _)| live_start(*pid) == Some(*start)) {
+                            let _ = start;
+                            // SAFETY: the registered launch's PID and start time still agree.
+                            unsafe { libc::kill(pid, libc::SIGTERM); }
+                        }
+                        continue;
+                    }
                     let Some(client) = self.clients.get_mut(k) else { continue };
                     if let Some(top) = client.surfaces.get(s).and_then(|x| x.toplevel) {
                         client.send(top, 1, &[]);
@@ -1009,6 +1078,27 @@ impl Server {
 
     fn matching(&self, criteria: &str) -> Vec<(u64, u32, i64, String)> {
         self.windows().into_iter().filter(|(_, _, con, app)| criteria_match(criteria, *con, app)).collect()
+    }
+
+    fn native_command(&mut self, command: &str) -> bool {
+        let mut words = command.split_whitespace();
+        let (Some(verb), Some(pid)) = (words.next(), words.next().and_then(|p| p.parse::<i32>().ok()).filter(|p| *p > 1)) else { return false };
+        if words.next().is_some() { return false; }
+        match verb {
+            "begin" if self.native_port.is_none() => {
+                let Some(start) = live_start(pid) else { return false };
+                self.next_con += 1;
+                self.native_port = Some((pid, start, self.next_con));
+                self.raise(NATIVE_PORT.0, NATIVE_PORT.1);
+                true
+            }
+            "end" if self.native_port.is_some_and(|p| p.0 == pid) => {
+                self.native_port = None;
+                if self.focus == Some(NATIVE_PORT) { self.focus = None; self.fall_back(); }
+                true
+            }
+            _ => false,
+        }
     }
 }
 
@@ -1579,7 +1669,7 @@ fn run() -> Result<(), String> {
             None
         }
     });
-    let mut server = Server { fb, clients: HashMap::new(), focus: None, next_con: 100, next_client: 0, frames: 0, copy: Duration::ZERO, worst: Duration::ZERO, gl, gl_to_file, pace: Pace::default(), anim: None, next_page: None, cross_next: false, picture, picture_pid: None, shown_by_picture: false, ipc_pid: None, hud: None };
+    let mut server = Server { fb, clients: HashMap::new(), focus: None, next_con: 100, next_client: 0, frames: 0, copy: Duration::ZERO, worst: Duration::ZERO, gl, gl_to_file, pace: Pace::default(), anim: None, next_page: None, cross_next: false, picture, picture_pid: None, shown_by_picture: false, ipc_pid: None, hud: None, native_port: None };
     let mut ipcs: Vec<(UnixStream, Vec<u8>)> = Vec::new();
     while !STOP.load(Ordering::Relaxed) {
         let mut polls = vec![libc::pollfd { fd: wayland.as_raw_fd(), events: libc::POLLIN, revents: 0 }, libc::pollfd { fd: ipc.as_raw_fd(), events: libc::POLLIN, revents: 0 }];
@@ -1596,6 +1686,7 @@ fn run() -> Result<(), String> {
         // While the GPU animates the loop doesn't wait: the swap in `animate` paces it.
         let n = unsafe { libc::poll(polls.as_mut_ptr(), polls.len() as _, if server.anim.is_some() { 0 } else { 1000 }) };
         if n <= 0 {
+            server.drop_dead();
             server.animate();
             continue;
         }
@@ -1724,5 +1815,66 @@ mod tests {
         assert!(criteria_match("con_id=7", 7, "x"));
         assert!(!criteria_match("con_id=8", 7, "x"));
         assert!(!criteria_match(r#"class=".*""#, 7, "x"));
+    }
+}
+
+#[cfg(test)]
+mod native_capture_tests {
+    use super::*;
+
+    struct Memory { words: Vec<u32>, offset: usize }
+    impl Memory {
+        fn new(offset: usize) -> Self { Self { words: vec![0; 32], offset } }
+        fn pixel(&mut self, at: usize, bytes: &[u8]) {
+            // SAFETY: words are initialized; this fixture writes only within their backing bytes.
+            let data = unsafe { std::slice::from_raw_parts_mut(self.words.as_mut_ptr().cast::<u8>(), self.words.len() * 4) };
+            data[self.offset + at..self.offset + at + bytes.len()].copy_from_slice(bytes);
+        }
+        fn memory(&self) -> *const u8 { unsafe { self.words.as_ptr().cast::<u8>().add(self.offset) } }
+    }
+
+    const BGR: Format = Format::Bits32 { r: 16, g: 8, b: 0, alpha: 0xff000000 };
+    const COLOURS: [u8; 12] = [255, 0, 0, 0, 255, 0, 0, 0, 255, 255, 255, 255];
+
+    #[test]
+    fn a_native_32bit_pause_frame_preserves_colours_pan_and_stride() {
+        let mut source = Memory::new(0);
+        for (at, pixel) in [(32, [0, 0, 255, 0]), (36, [0, 255, 0, 0]), (48, [255, 0, 0, 0]), (52, [255, 255, 255, 0])] { source.pixel(at, &pixel); }
+        // SAFETY: this fixture contains both visible rows, including their stride padding.
+        let rgb = unsafe { native_rgb(source.memory(), 2, 2, 32, 16, BGR) };
+        assert_eq!(rgb, COLOURS, "the displayed pan page and its colours must survive capture");
+    }
+
+    #[test]
+    fn a_native_565_pause_frame_preserves_colours() {
+        let mut source = Memory::new(0);
+        for (at, pixel) in [(16, 0xf800u16), (18, 0x07e0), (24, 0x001f), (26, 0xffff)] { source.pixel(at, &pixel.to_le_bytes()); }
+        // SAFETY: both visible rows are within the initialized backing bytes.
+        let rgb = unsafe { native_rgb(source.memory(), 2, 2, 16, 8, Format::Rgb565) };
+        assert_eq!(rgb, COLOURS);
+    }
+
+    #[test]
+    fn unaligned_native_mapping_offset_or_stride_keeps_the_same_picture_safely() {
+        for (base, visible, stride) in [(1, 0, 8), (0, 1, 8), (0, 0, 9)] {
+            let mut source = Memory::new(base);
+            for (at, pixel) in [(visible, [0, 0, 255, 0]), (visible + 4, [0, 255, 0, 0]), (visible + stride, [255, 0, 0, 0]), (visible + stride + 4, [255, 255, 255, 0])] { source.pixel(at, &pixel); }
+            // SAFETY: the deliberately unaligned fixture still includes all complete pixels.
+            assert_eq!(unsafe { native_rgb(source.memory(), 2, 2, visible, stride, BGR) }, COLOURS);
+        }
+        let mut source = Memory::new(1);
+        source.pixel(0, &0xf800u16.to_le_bytes());
+        source.pixel(2, &0x07e0u16.to_le_bytes());
+        // SAFETY: two complete, deliberately unaligned 16-bit pixels.
+        assert_eq!(unsafe { native_rgb(source.memory(), 2, 1, 0, 4, Format::Rgb565) }, COLOURS[..6]);
+    }
+
+    #[test]
+    fn native_channel_order_remains_the_framebuffers_order() {
+        let mut source = Memory::new(0);
+        source.pixel(0, &[255, 0, 0, 0]);
+        // SAFETY: one initialized pixel; this framebuffer stores red in its low byte.
+        let rgb = unsafe { native_rgb(source.memory(), 1, 1, 0, 4, Format::Bits32 { r: 0, g: 8, b: 16, alpha: 0 }) };
+        assert_eq!(rgb, [255, 0, 0]);
     }
 }

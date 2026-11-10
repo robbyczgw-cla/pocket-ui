@@ -31,8 +31,14 @@ pu_seed() {
   [ -e "$pu_storage/.please_resize_me" ] && return 0
   [ -d "$pu_storage/.pocket-seed" ] || return 0
   progress "pocket-ui: putting the first-start files in place"
-  cp -a "$pu_storage/.pocket-seed/." "$pu_storage/" && rm -rf "$pu_storage/.pocket-seed"
-  sync
+  # The seed is the retry source. Commit its copied files before removing it;
+  # a failed copy or barrier must leave it for the next boot.
+  if cp -a "$pu_storage/.pocket-seed/." "$pu_storage/" && sync; then
+    rm -rf "$pu_storage/.pocket-seed"
+    sync
+  else
+    progress "pocket-ui: first-start files incomplete; will retry at the next start"
+  fi
 }
 
 # First start, images with a GAMES drive (H700, build.sh): games-first-start.sh runs instead of ROCKNIX's fs-resize, and

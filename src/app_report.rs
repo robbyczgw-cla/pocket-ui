@@ -48,6 +48,17 @@ fn back_row(back_to: Option<&str>) -> usize {
 }
 
 impl App {
+    /// The report is being written on its thread: the sheet says "Writing…" and its OK comes when it is done (the
+    /// navigation explorer's `@busy`, so it judges a key on the page as it settles, not on the sheet changing by itself).
+    pub(crate) fn about_report_writing(&self) -> bool {
+        matches!(self.about.sheet, Some(Sheet::Writing))
+    }
+
+    /// The About page's selected row and whether its sheet is up (`App::feedback_view`).
+    pub(crate) fn about_mark(&self) -> (usize, bool) {
+        (self.about.sel, self.about.sheet.is_some())
+    }
+
     /// From the Settings list: the first row, no sheet, no result of an earlier visit.
     pub(crate) fn open_about(&mut self) -> Option<SettingsPage> {
         self.about.sel = 0;

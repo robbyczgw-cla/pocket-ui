@@ -12,9 +12,11 @@ OUT="$PWD/android/build"
 # The APK identity follows the shared release: a new Cargo version restarts the build counter at 1 and rewrites the manifest
 # (a bump can't break the build); the same version keeps its counter. versionCode is derived from both.
 python3 - <<'PYVERSION'
-import re
+import os,re
 from pathlib import Path
 version=re.search(r'^version = "([^" ]+)"',Path('Cargo.toml').read_text(),re.M).group(1)
+version=os.environ.get('ANDROID_QA_VERSION', version)
+assert re.fullmatch(r'\d+\.\d+\.\d+',version),'Invalid Android QA version'
 path=Path('android/AndroidManifest.xml');text=path.read_text()
 name=re.search(r'android:versionName="([^"]*)"',text).group(1)
 build=int(name.rsplit('.',1)[1]) if name.startswith(version+'-android.') else 1

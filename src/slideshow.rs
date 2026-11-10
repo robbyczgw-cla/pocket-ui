@@ -10,7 +10,7 @@
 //! ([`paint`]: a bilinear window, so a slow zoom does not shimmer). Nothing here touches the sleep timers: the show
 //! only reads how long the pad has been quiet and ends when the screen would go off.
 
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "emscripten"))]
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
@@ -88,7 +88,7 @@ pub struct Slide {
     pub source: Source,
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "emscripten"))]
 /// A game of the library, as the show needs it.
 #[derive(Clone, Debug)]
 pub struct GameRef {
@@ -100,7 +100,7 @@ pub struct GameRef {
     pub path: PathBuf,
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "emscripten"))]
 /// The folders pictures are looked for in.
 #[derive(Clone, Debug)]
 pub struct Dirs {
@@ -134,12 +134,12 @@ impl Rng {
     }
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "emscripten"))]
 fn usable(file: &Path) -> bool {
     image::png_size(file).is_some_and(|(w, h)| w >= MIN_SIDE && h >= MIN_SIDE)
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "emscripten"))]
 /// The pictures the show cycles through: of a shuffle of the games, the first picture each has (box art, in-game
 /// screenshot or title screen, in an order that varies), and the player's own screenshots and save-state pictures,
 /// one in three. Files are looked at by their headers only. Empty when there is nothing real to show.
@@ -186,14 +186,14 @@ pub fn collect(games: &[GameRef], dirs: &Dirs, seed: u64) -> Vec<Slide> {
     out
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "emscripten"))]
 /// A screenshot file's game part: "Game Name 2026-10-24 18-05-09.png" gives "Game Name".
 pub fn screenshot_title(file_name: &str) -> Option<String> {
     let stem = file_name.strip_suffix(".png")?;
     stem.char_indices().filter(|(_, c)| *c == ' ').map(|(i, _)| i).rev().find_map(|i| crate::screenshot::valid_at(&stem[i + 1..]).then(|| stem[..i].to_string())).filter(|t| !t.is_empty())
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "emscripten"))]
 /// A save-state picture's game part: "Game.pstate2.png" and "Game.pstate.auto.png" give "Game"; the undo state's picture
 /// ("Before load") is no memory.
 pub fn state_title(file_name: &str) -> Option<String> {
@@ -207,7 +207,7 @@ pub fn state_title(file_name: &str) -> Option<String> {
     (slot_ok && at > 0).then(|| stem[..at].to_string())
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "emscripten"))]
 fn memories(games: &[GameRef], dirs: &Dirs, rng: &mut Rng) -> Vec<Slide> {
     let mut systems: Vec<(&str, &str)> = games.iter().map(|g| (g.system.as_str(), g.system_name.as_str())).collect();
     systems.sort_unstable();

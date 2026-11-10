@@ -346,8 +346,8 @@ impl Config {
 
     /// The configuration Syncthing keeps on this device.
     pub fn read() -> Result<Config, String> {
-        let xml = std::fs::read_to_string(CONFIG_XML).map_err(|e| format!("{CONFIG_XML}: {e}"))?;
-        let cert = std::fs::read_to_string(CERT_PEM).unwrap_or_default();
+        let xml = std::fs::read_to_string(on_card(CONFIG_XML)).map_err(|e| format!("{CONFIG_XML}: {e}"))?;
+        let cert = std::fs::read_to_string(on_card(CERT_PEM)).unwrap_or_default();
         Ok(Config::parse(&xml)?.with_cert(&cert))
     }
 
@@ -698,6 +698,30 @@ pub fn holds_left(path: &Path) -> bool {
     !read_held(path).is_empty()
 }
 
+/// The folders we paused, as the marker says now: what Settings › Sync calls paused by pocket-ui.
+pub fn held_now() -> Vec<String> {
+    read_held(&on_card(HELD_PATH))
+}
+
+/// Under `POCKETUI_MOCK`, `POCKETUI_SYNC_ROOT` stands for `/storage` where Syncthing's config and our marker are read
+/// (the navigation explorer's made-up Syncthing); never on a device.
+fn on_card(path: &'static str) -> PathBuf {
+    match std::env::var_os("POCKETUI_SYNC_ROOT").filter(|_| crate::proc::mock()) {
+        Some(root) => Path::new(&root).join(path.trim_start_matches("/storage/")),
+        None => PathBuf::from(path),
+    }
+}
+
+fn write_held(path: &Path, held: &[String]) -> Result<(), String> {
+    let text: String = held.iter().map(|id| format!("{id}\n")).collect();
+    let written = if held.is_empty() {
+        std::fs::remove_file(path).or(Ok(()))
+    } else {
+        crate::fsutil::write_atomic(path, text.as_bytes())
+    };
+    written.map_err(|e: std::io::Error| format!("{}: {e}", path.display()))
+}
+
 /// Pauses and resumes our folders as `want_held` asked, keeping `cfg` in step and `held_path` up to date.
 pub fn apply_holds(api: &mut dyn Api, cfg: &mut Config, held_path: &Path) -> Result<(), String> {
     let _one = APPLYING.lock();
@@ -725,20 +749,49 @@ pub fn apply_holds(api: &mut dyn Api, cfg: &mut Config, held_path: &Path) -> Res
         }
     }
     if held != before {
-        let text: String = held.iter().map(|id| format!("{id}\n")).collect();
-        let written = if held.is_empty() {
-            std::fs::remove_file(held_path).or(Ok(()))
-        } else {
-            crate::fsutil::write_atomic(held_path, text.as_bytes())
-        };
-        if let Err(e) = written {
-            error.get_or_insert(format!("{}: {e}", held_path.display()));
+        if let Err(e) = write_held(held_path, &held) {
+            error.get_or_insert(e);
         }
     }
     if !plan.pause.is_empty() || !plan.resume.is_empty() {
         println!("sync: paused {:?}, resumed {:?}", plan.pause, plan.resume);
     }
     error.map_or(Ok(()), Err)
+}
+
+/// Why Resume did nothing: a game runs, and its folders stay as its holds want them.
+pub const PLAYING: &str = "Not while a game runs.";
+
+/// The player chose Resume on a row of Settings › Sync: every paused folder of `share` is resumed, whoever paused it. The only
+/// way pocket-ui resumes a pause it can't prove is its own (docs/SYNC-OWNERSHIP.md); nothing calls it but that choice.
+/// `playing` is asked under the same lock as the game's holds: while a game runs nothing is sent. Returns how many folders
+/// were resumed; they leave `held` too, a refused one stays paused (and ours, if it was).
+pub fn resume_share(api: &mut dyn Api, cfg: &mut Config, share: Share, held_path: &Path, playing: impl FnOnce() -> bool) -> Result<usize, String> {
+    let _one = APPLYING.lock();
+    if playing() {
+        return Err(PLAYING.into());
+    }
+    let before = read_held(held_path);
+    let mut held = before.clone();
+    let (mut resumed, mut error) = (0, None);
+    let paused: Vec<&Dir> = share.dirs().iter().filter(|d| cfg.folder(d.id).is_some_and(|f| f.paused)).collect();
+    for dir in paused {
+        match api.set_paused(dir.id, false) {
+            Ok(()) => {
+                cfg.set_paused(dir.id, false);
+                held.retain(|h| h != dir.id);
+                resumed += 1;
+            }
+            Err(e) => error = Some(e),
+        }
+    }
+    if held != before {
+        if let Err(e) = write_held(held_path, &held) {
+            error.get_or_insert(e);
+        }
+    }
+    println!("sync: resumed {resumed} folder(s) of {} by the player's choice", share.label());
+    error.map_or(Ok(resumed), Err)
 }
 
 /// Folders of shares that are on but not in Syncthing yet, because their emulator had not made them when sync
@@ -1362,6 +1415,19 @@ pub fn snapshot(prefs: &Prefs) -> Snapshot {
     CurlApi::new(&cfg).snapshot(&folders)
 }
 
+/// Resume on a row of Settings › Sync, on the page's thread: with the folders' state read now, not the page's last poll.
+pub fn resume(share: Share) -> Result<usize, String> {
+    let mut cfg = Config::read()?;
+    let mut api = CurlApi::new(&cfg);
+    if !api.health() {
+        return Err("Syncthing isn't answering.".into());
+    }
+    // A game's holds wanted (pocket-core, RetroArch), or a standalone emulator still running after a restart. The explorer's
+    // made-up card (`POCKETUI_MOCK`) asks only the first: other tests' emulators may run on the same computer.
+    let playing = || WANT_HELD.lock().is_ok_and(|w| !w.is_empty()) || (!crate::proc::mock() && crate::standalone::emulator_running());
+    resume_share(&mut api, &mut cfg, share, &on_card(HELD_PATH), playing)
+}
+
 /// A game of `system` starts: pauses the folders it writes (its battery saves and states, and a standalone
 /// emulator's own), on a thread (it returns at once).
 pub fn hold_for_game(prefs: &Prefs, system: &str) {
@@ -1385,20 +1451,30 @@ pub fn release_leftover_holds() {
     if !holds_left(Path::new(HELD_PATH)) {
         return;
     }
-    std::thread::spawn(|| loop {
+    std::thread::spawn(|| recover_leftover_holds(|| {
         if !crate::standalone::emulator_running() {
             if let Ok(mut cfg) = Config::read() {
                 let mut api = CurlApi::new(&cfg);
                 if api.health() {
-                    if let Err(e) = apply_holds(&mut api, &mut cfg, Path::new(HELD_PATH)) {
-                        println!("sync: resuming folders left paused: {e}");
-                    }
-                    return;
+                    return Some(apply_holds(&mut api, &mut cfg, Path::new(HELD_PATH)));
                 }
             }
         }
-        std::thread::sleep(Duration::from_secs(5));
-    });
+        None
+    }, || std::thread::sleep(Duration::from_secs(5))));
+}
+
+// Keep the startup worker's retry rule separate from system discovery, so interruption and
+// retry tests can use an isolated service and a controlled wait without reading the device's /storage.
+fn recover_leftover_holds(mut attempt: impl FnMut() -> Option<Result<(), String>>, mut wait: impl FnMut()) {
+    loop {
+        match attempt() {
+            Some(Ok(())) => return,
+            Some(Err(e)) => println!("sync: resuming folders left paused: {e}"),
+            None => {}
+        }
+        wait();
+    }
 }
 
 #[cfg(test)]
@@ -2210,5 +2286,80 @@ mod tests {
         std::fs::write(dir.join(".stignore"), "mine\n").unwrap();
         write_saves_ignore(&dir).unwrap();
         assert_eq!(std::fs::read_to_string(dir.join(".stignore")).unwrap(), "mine\n");
+    }
+
+    /// Syncthing for Resume: writes down what it was asked, and refuses the folders in `refuse`.
+    #[derive(Default)]
+    struct Resumer {
+        asked: Vec<(String, bool)>,
+        refuse: Vec<&'static str>,
+    }
+
+    impl Api for Resumer {
+        fn running(&mut self) -> bool {
+            true
+        }
+        fn scan(&mut self, _: &ScanReq) -> Result<(), String> {
+            Err("no scan here".into())
+        }
+        fn peers(&mut self) -> Result<Peers, String> {
+            Err("no peers here".into())
+        }
+        fn outstanding(&mut self, _: &[String]) -> Result<u64, String> {
+            Err("no transfer here".into())
+        }
+        fn set_paused(&mut self, folder: &str, paused: bool) -> Result<(), String> {
+            self.asked.push((folder.to_string(), paused));
+            if self.refuse.contains(&folder) {
+                return Err(format!("pause {folder}: HTTP 500"));
+            }
+            Ok(())
+        }
+        fn add_folder(&mut self, _: &'static Dir) -> Result<(), String> {
+            Err("no folder is added here".into())
+        }
+    }
+
+    #[test]
+    fn resume_on_a_row_resumes_every_paused_folder_of_it_ours_or_not() {
+        let dir = TestDir::new("sync-resume");
+        let held = dir.join("held");
+        // GameCube cards paused by us (a crash before the game's end), Wii saves paused by someone else or in the gap before
+        // the marker; the battery saves paused by hand stay as they are: they are another row.
+        std::fs::write(&held, "pocket-gc-cards\n").unwrap();
+        let mut c = with_folders(&[("pocket-saves", true), ("pocket-gc-cards", true), ("pocket-wii-saves", true)]);
+        let mut api = Resumer::default();
+        assert_eq!(resume_share(&mut api, &mut c, Share::Dolphin, &held, || false), Ok(2), "the row says both");
+        assert_eq!(api.asked, [("pocket-gc-cards".to_string(), false), ("pocket-wii-saves".to_string(), false)]);
+        assert!(!holds_left(&held), "what is resumed is no longer ours to resume after a restart");
+        assert!(c.folder("pocket-saves").unwrap().paused, "another row's pause is untouched");
+        assert!(!c.folder("pocket-wii-saves").unwrap().paused);
+        // Nothing paused on the row: nothing asked.
+        let mut api = Resumer::default();
+        assert_eq!(resume_share(&mut api, &mut c, Share::Dolphin, &held, || false), Ok(0));
+        assert!(api.asked.is_empty());
+    }
+
+    #[test]
+    fn resume_is_refused_while_a_game_runs_and_a_refusal_keeps_what_failed_paused_and_ours() {
+        let dir = TestDir::new("sync-resume-refused");
+        let held = dir.join("held");
+        std::fs::write(&held, "pocket-gc-cards\npocket-wii-saves\n").unwrap();
+        let mut c = with_folders(&[("pocket-gc-cards", true), ("pocket-wii-saves", true)]);
+        // A game runs (its holds wanted, or a standalone emulator still up): nothing is sent to Syncthing.
+        let mut api = Resumer::default();
+        assert_eq!(resume_share(&mut api, &mut c, Share::Dolphin, &held, || true), Err(PLAYING.to_string()));
+        assert!(api.asked.is_empty());
+        // Syncthing refuses one: the other is resumed, the refused one stays paused and in `held`, and the error says so.
+        let mut api = Resumer { refuse: vec!["pocket-wii-saves"], ..Resumer::default() };
+        let r = resume_share(&mut api, &mut c, Share::Dolphin, &held, || false);
+        assert_eq!(r, Err("pause pocket-wii-saves: HTTP 500".to_string()));
+        assert_eq!(std::fs::read_to_string(&held).unwrap(), "pocket-wii-saves\n");
+        assert!(!c.folder("pocket-gc-cards").unwrap().paused && c.folder("pocket-wii-saves").unwrap().paused);
+    }
+
+    mod ownership {
+        use super::*;
+        include!("sync_ownership_tests.rs");
     }
 }

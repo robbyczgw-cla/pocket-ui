@@ -465,8 +465,11 @@ impl App {
                     y += 44;
                 }
                 y += 30;
+                // On a second line when the words don't fit beside the code (German in Retro's letters at 1024x768).
                 let waiting = format!("Waiting for approval{dots}");
-                self.text.draw(c, Face::Body, 28, tx, y, pal().dust, &waiting);
+                for (i, line) in self.text.wrap_prose_at_most(Face::Body, 28, &waiting, width, 2).iter().enumerate() {
+                    self.text.draw(c, Face::Body, 28, tx, y + i as i32 * 40, pal().dust, line);
+                }
             }
             _ => {
                 let msg = if by_key { "Signing in with the key" } else { "Getting the sign-in address" };

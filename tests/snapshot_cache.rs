@@ -2,6 +2,9 @@
 //! misses, damaged entries and unsuccessful renders. No renderer is mocked by a
 //! cache hit unless its original complete response has actually been produced.
 #![cfg(unix)]
+#[path = "common/executable.rs"]
+mod fixture_executable;
+
 use std::{fs, path::Path, process::Command};
 #[path = "common/snapshot.rs"]
 mod snapshot;
@@ -37,13 +40,12 @@ impl Drop for Env { fn drop(&mut self) {
 
 #[test]
 fn shared_snapshots_keep_the_actual_pixels_and_probes_and_never_reuse_changed_or_failed_inputs() {
-    use std::os::unix::fs::PermissionsExt;
     let tmp = tempfile::tempdir().unwrap();
     let cache = tmp.path().join("cache");
     let _env = Env(std::env::var_os("POCKETUI_SNAPSHOT_CACHE_DIR"));
     std::env::set_var("POCKETUI_SNAPSHOT_CACHE_DIR", &cache);
     let program = tmp.path().join("renderer");
-    fs::write(&program, r#"#!/usr/bin/env python3
+    fixture_executable::publish(&program, r#"#!/usr/bin/env python3
 import hashlib, json, os, pathlib, struct, sys, zlib, xml.etree.ElementTree as E
 with open(os.environ['SNAPSHOT_FIXTURE_CALLS'], 'a') as f: f.write('render\n')
 i = sys.argv.index('--snapshot')
@@ -61,7 +63,6 @@ pathlib.Path(output).write_bytes(png)
 if state=='mutate': (roms/'game.gb').write_text('unexpected mutation')
 if state=='failed': sys.exit(1)
 "#).unwrap();
-    fs::set_permissions(&program, fs::Permissions::from_mode(0o755)).unwrap();
     let (one, two) = (tmp.path().join("one"), tmp.path().join("two"));
     fixture(&one); fixture(&two);
     let count = tmp.path().join("calls");
@@ -193,6 +194,37 @@ fn real_renderer_keeps_its_pixels_and_each_probe(tmp: &Path) {
                 }
             }
             outputs.push(files);
+        }
+    }
+}
+
+/// A static room's lighting must follow the same injected instant as its clock,
+/// even when plain/cache processes straddle a real lighting quantisation step.
+#[cfg(target_os = "linux")]
+#[test]
+fn snapshot_room_light_uses_the_injected_clock_in_each_zone() {
+    const CHILD: &str = "POCKETUI_ROOM_CLOCK_TEST_CHILD";
+    const NAME: &str = "snapshot_room_light_uses_the_injected_clock_in_each_zone";
+    const NOW: i64 = 1_794_139_200;
+    if let Ok(expected) = std::env::var(CHILD) {
+        pocket_ui::status_corner::freeze_clock();
+        assert_eq!(pocket_ui::status_corner::unix_now(), Some(NOW));
+        assert_eq!(pocket_ui::room_light::minute_now(), expected.parse::<f32>().unwrap(),
+                   "a frozen snapshot must not shade its shelf from the host's real time");
+        let shift = std::env::var("POCKETUI_CLOCK_SHIFT").unwrap().parse::<i64>().unwrap();
+        assert_eq!(pocket_ui::appearance::shifted_unix_now(), NOW + shift);
+        return;
+    }
+    for (zone, minute) in [("UTC0", 720), ("EST5", 420)] {
+        for shift in [0, 3600] {
+            let out = Command::new(std::env::current_exe().unwrap())
+                .args(["--exact", NAME, "--nocapture"])
+                .env(CHILD, (minute + shift / 60).to_string())
+                .env("POCKETUI_MOCK", "1").env("POCKETUI_MOCK_NOW", NOW.to_string())
+                .env("POCKETUI_CLOCK_SHIFT", shift.to_string()).env("TZ", zone)
+                .env_remove("POCKETUI_ROOM_TIME").output().unwrap();
+            assert!(out.status.success(), "{zone}, shift={shift}: {}{}",
+                    String::from_utf8_lossy(&out.stdout), String::from_utf8_lossy(&out.stderr));
         }
     }
 }

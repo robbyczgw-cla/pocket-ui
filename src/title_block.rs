@@ -15,6 +15,8 @@ pub struct Line {
     pub text: String,
     pub px: u32,
     pub sub: bool,
+    /// This line belongs to a game/system name, including a shortened fragment.
+    pub literal: bool,
 }
 
 /// The subtitle's type is this share of the main title's, in tenths.
@@ -72,29 +74,38 @@ pub fn is_whole(lines: &[Line], title: &str) -> bool {
 }
 
 /// `title` in at most `max_lines` lines of `width` pixels, starting at main type `px`. Names are laid out as they are
-/// painted: a game's name is not translated word by word, and its pieces are marked as names for the painter.
+/// painted: a game's name is literal, and its lines carry that identity through measurement and painting.
 pub fn layout(text: &mut Text, face: Face, px: u32, title: &str, width: i32, max_lines: usize) -> Vec<Line> {
-    let name = crate::i18n::is_name(title);
-    let translating = text.translating();
-    if name {
-        text.set_translate(false);
-    }
-    let lines = fit(text, face, px, title, width, max_lines.max(1), name);
-    if name {
-        text.set_translate(translating);
-        for l in &lines {
-            text.keep_as_name(&l.text);
-        }
-    }
-    lines
+    layout_kind(text, face, px, title, width, max_lines, crate::i18n::is_name(title))
+}
+
+/// A game/system title, even before library/metadata loading has learned its name.
+pub fn name_layout(text: &mut Text, face: Face, px: u32, title: &str, width: i32, max_lines: usize) -> Vec<Line> {
+    layout_kind(text, face, px, title, width, max_lines, true)
+}
+
+#[allow(clippy::too_many_arguments)]
+fn layout_kind(text: &mut Text, face: Face, px: u32, title: &str, width: i32, max_lines: usize, name: bool) -> Vec<Line> {
+    if name { text.literal(|text| fit(text, face, px, title, width, max_lines.max(1), true)) }
+    else { fit(text, face, px, title, width, max_lines.max(1), false) }
 }
 
 /// The same title rule inside a fixed heading band. Details keeps the cover, system/year and facts
 /// in place: shrink a step when the measured baselines would cross that band, before cutting words.
 pub fn layout_in(text: &mut Text, face: Face, px: u32, title: &str, width: i32, height: i32) -> Vec<Line> {
+    layout_in_kind(text, face, px, title, width, height, false)
+}
+
+/// A literal game/system heading fitted into a fixed band.
+pub fn name_layout_in(text: &mut Text, face: Face, px: u32, title: &str, width: i32, height: i32) -> Vec<Line> {
+    layout_in_kind(text, face, px, title, width, height, true)
+}
+
+#[allow(clippy::too_many_arguments)]
+fn layout_in_kind(text: &mut Text, face: Face, px: u32, title: &str, width: i32, height: i32, name: bool) -> Vec<Line> {
     let mut size = px;
     loop {
-        let lines = layout(text, face, size, title, width, 3);
+        let lines = layout_kind(text, face, size, title, width, 3, name || crate::i18n::is_name(title));
         let first = lines.first().map_or(size, |l| l.px);
         let bottom = positions(text, face, &lines, 0, crate::type_scale::px(first) as i32, false).last().map_or(0, |p| p.1);
         let next = smaller(first);
@@ -112,11 +123,7 @@ pub fn layout_in(text: &mut Text, face: Face, px: u32, title: &str, width: i32, 
 /// "…". The first two sizes are tried for every part before a smaller one. Returns the text to paint and its size; a
 /// game's name is painted as it is, not translated.
 pub fn row(text: &mut Text, face: Face, px: u32, title: &str, room: i32) -> (String, u32) {
-    let name = crate::i18n::is_name(title);
-    let translating = text.translating();
-    if name {
-        text.set_translate(false);
-    }
+    text.literal(|text| {
     let least = (px * LEAST_SHARE / 100).max(LEAST.min(px));
     let mut sizes = vec![px];
     while let Some(&last) = sizes.last() {
@@ -127,7 +134,7 @@ pub fn row(text: &mut Text, face: Face, px: u32, title: &str, room: i32) -> (Str
         sizes.push(next);
     }
     let bare = title.strip_prefix("The ").map(str::trim).filter(|r| !r.is_empty());
-    let parts = if name { crate::media::telling_parts(title) } else { Vec::new() };
+    let parts = crate::media::telling_parts(title);
     let candidates: Vec<&str> = std::iter::once(title).chain(bare).chain(parts.iter().copied()).collect();
     // A step smaller before a part is dropped, but the part at the size asked for beats the whole name at 21 beside rows
     // of 37: the first two sizes for every candidate, then the smaller ones.
@@ -135,20 +142,16 @@ pub fn row(text: &mut Text, face: Face, px: u32, title: &str, room: i32) -> (Str
     let found = [near, far].iter().find_map(|group| candidates.iter().find_map(|&t| group.iter().find(|&&s| text.width(face, s, t) <= room).map(|&s| (t.to_string(), s))));
     let (shown, size) = found.unwrap_or_else(|| {
         let (size, best) = (*sizes.last().unwrap_or(&px), parts.first().copied().unwrap_or(title));
-        text.set_translate(false);
         (text.fit(face, size, best, room), size)
     });
-    text.set_translate(translating);
-    if name {
-        text.keep_as_name(&shown);
-    }
     (shown, size)
+    })
 }
 
 /// `name`: a game's name, whose subtitle is cut off at its dash; any other title ("Today: Xenoblade") is only wrapped, as
 /// its translation may be a pattern that the pieces would break.
 fn fit(text: &mut Text, face: Face, px: u32, title: &str, width: i32, max_lines: usize, name: bool) -> Vec<Line> {
-    let one = |t: &str, px: u32, sub: bool| Line { text: t.to_string(), px, sub };
+    let one = |t: &str, px: u32, sub: bool| Line { text: t.to_string(), px, sub, literal: name };
     if text.width(face, px, title) <= width {
         return vec![one(title, px, false)];
     }
@@ -159,11 +162,11 @@ fn fit(text: &mut Text, face: Face, px: u32, title: &str, width: i32, max_lines:
     loop {
         let lines = match parts {
             Some((main, sub)) if text.words_fit(face, size, main, width) && text.words_fit(face, sub_px(size), sub, width) => {
-                let mut lines: Vec<Line> = text.wrap(face, size, main, width).into_iter().map(|t| Line { text: t, px: size, sub: false }).collect();
-                lines.extend(text.wrap(face, sub_px(size), sub, width).into_iter().map(|t| Line { text: t, px: sub_px(size), sub: true }));
+                let mut lines: Vec<Line> = text.wrap(face, size, main, width).into_iter().map(|t| Line { text: t, px: size, sub: false, literal: name }).collect();
+                lines.extend(text.wrap(face, sub_px(size), sub, width).into_iter().map(|t| Line { text: t, px: sub_px(size), sub: true, literal: name }));
                 Some(lines)
             }
-            None if text.words_fit(face, size, title, width) => Some(text.wrap(face, size, title, width).into_iter().map(|t| Line { text: t, px: size, sub: false }).collect()),
+            None if text.words_fit(face, size, title, width) => Some(text.wrap(face, size, title, width).into_iter().map(|t| Line { text: t, px: size, sub: false, literal: name }).collect()),
             _ => None,
         };
         if let Some(lines) = lines.filter(|l| l.len() <= max_lines) {
@@ -182,14 +185,14 @@ fn fit(text: &mut Text, face: Face, px: u32, title: &str, width: i32, max_lines:
         Some((main, sub)) => {
             let main_lines = text.wrap(face, size, main, width);
             if main_lines.len() >= max_lines {
-                return text.wrap_at_most(face, size, main, width, max_lines).into_iter().map(|t| Line { text: t, px: size, sub: false }).collect();
+                return text.wrap_at_most(face, size, main, width, max_lines).into_iter().map(|t| Line { text: t, px: size, sub: false, literal: name }).collect();
             }
-            let mut lines: Vec<Line> = main_lines.into_iter().map(|t| Line { text: t, px: size, sub: false }).collect();
+            let mut lines: Vec<Line> = main_lines.into_iter().map(|t| Line { text: t, px: size, sub: false, literal: name }).collect();
             let room = max_lines - lines.len();
-            lines.extend(text.wrap_at_most(face, sub_px(size), sub, width, room).into_iter().map(|t| Line { text: t, px: sub_px(size), sub: true }));
+            lines.extend(text.wrap_at_most(face, sub_px(size), sub, width, room).into_iter().map(|t| Line { text: t, px: sub_px(size), sub: true, literal: name }));
             lines
         }
-        None => text.wrap_at_most(face, size, title, width, max_lines).into_iter().map(|t| Line { text: t, px: size, sub: false }).collect(),
+        None => text.wrap_at_most(face, size, title, width, max_lines).into_iter().map(|t| Line { text: t, px: size, sub: false, literal: name }).collect(),
     }
 }
 
@@ -203,7 +206,7 @@ pub fn positions(text: &mut Text, face: Face, lines: &[Line], x: i32, first: i32
             // Between two sizes, halfway: the subtitle stands a little closer than a line of the main title would.
             y += (step(text, lines[k - 1].px) + step(text, l.px)) / 2;
         }
-        let w = text.width(face, l.px, &l.text);
+        let w = if l.literal { text.literal(|text| text.width(face, l.px, &l.text)) } else { text.width(face, l.px, &l.text) };
         out.push((if centre { x - w / 2 } else { x }, y));
     }
     out
@@ -215,11 +218,18 @@ pub fn positions(text: &mut Text, face: Face, lines: &[Line], x: i32, first: i32
 pub fn paint(text: &mut Text, c: &mut crate::gfx::Canvas, face: Face, lines: &[Line], x: i32, first: i32, colour: u32, sub_colour: u32, centre: bool) -> (i32, i32) {
     let mut end = (x, first);
     for (l, (lx, y)) in lines.iter().zip(positions(text, face, lines, x, first, centre)) {
-        let w = text.draw(c, face, l.px, lx, y, if l.sub { sub_colour } else { colour }, &l.text);
+        let w = paint_line(text, c, face, l, lx, y, if l.sub { sub_colour } else { colour });
         note(l, y);
         end = (lx + w, y);
     }
     end
+}
+
+/// Paint a measured line without sending name fragments back through i18n.
+#[allow(clippy::too_many_arguments)]
+pub fn paint_line(text: &mut Text, c: &mut crate::gfx::Canvas, face: Face, line: &Line, x: i32, y: i32, colour: u32) -> i32 {
+    if line.literal { text.draw_name(c, face, line.px, x, y, colour, &line.text) }
+    else { text.draw(c, face, line.px, x, y, colour, &line.text) }
 }
 
 /// A line painted (the tests read the lines of a picture, `text::boxes::note_title`); `paint` does it itself.

@@ -26,6 +26,7 @@ import time
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import latency
+import device_transfer
 from nav import Frame
 
 Q = shlex.quote
@@ -170,7 +171,7 @@ class Remote:
     def run(self, command, data=None, timeout=20, check=True):
         p = subprocess.run(self.ssh+[command], input=data, capture_output=True, timeout=timeout)
         if check and p.returncode:
-            raise RuntimeError(f'remote command failed ({p.returncode}): {p.stderr.decode(errors="replace")[:300]}')
+            raise subprocess.CalledProcessError(p.returncode, command, output=p.stdout, stderr=p.stderr)
         return p.stdout
 
     def text(self, command, **kw):
@@ -178,7 +179,10 @@ class Remote:
 
     def put(self, path, data):
         # Receive into RAM only; do not stream network data onto the SD card.
-        self.run('cat >'+Q(path), data)
+        device_transfer.upload(self.run, path, data)
+
+    def get(self, path, destination, timeout=120):
+        device_transfer.download(self.run, path, destination, timeout)
 
     def background(self, command, log, pidfile, errors=None):
         # Firmware BusyBox has no nohup applet. Ignore HUP before exec instead.
@@ -299,8 +303,7 @@ class Journey:
         (self.out/'protected-before.md5').write_text(self.protected)
         (self.out/'power-before.txt').write_text(self.r.text('cat /sys/class/power_supply/*/uevent; cat /sys/class/thermal/thermal_zone*/temp; cat /proc/meminfo; command -v perf; command -v strace',check=False))
         # Save the full config except downloaded art. Never copy the owner's ROMs.
-        backup = self.r.run('cd '+CFG+' && find . -type f ! -path "./covers/*" ! -path "./game-descriptions/*" | tar -cf - -T -', timeout=60)
-        (self.out/'config-before.tar').write_bytes(backup)
+        backup = self.config_archive(self.out/'config-before.tar')
         (self.out/'config-before.tar').chmod(0o600)
         self.pre_files = file_map(backup)
         self.r.run('set -e; alsactl --file '+self.work+'/mixer-before store; cat /sys/class/speaker/mute >'+self.work+'/speaker-before; dmesg >'+self.work+'/kernel-before; md5sum /sys/fs/pstore/* >'+self.work+'/pstore-before')
@@ -467,6 +470,15 @@ done
         self.ui=int(self.read('ui.pid'))
         (self.out/'clocks-running.txt').write_text(self.r.text(CLOCK_SNAPSHOT))
 
+    def config_archive(self, destination):
+        # Materialize once: retries must resume the same archive, not a fresh tar
+        # stream whose contents/headers may have changed during a disconnect.
+        path = self.work+'/config-transfer.tar'
+        self.r.run('set -e; cd '+CFG+'; find . -type f ! -path "./covers/*" ! -path "./game-descriptions/*" >'+Q(self.work+'/config-files')+'; tar -cf '+Q(path)+' -T '+Q(self.work+'/config-files'), timeout=60)
+        self.r.get(path, destination)
+        self.r.run('rm -f '+Q(path))
+        return destination.read_bytes()
+
     def cleanup(self):
         if not self.armed:
             if self.created:
@@ -481,13 +493,13 @@ done
         # No directory is removed and no unknown "extra" file is ever deleted.
         restored=[]
         try:
-            current=file_map(self.r.run('cd '+CFG+' && find . -type f ! -path "./covers/*" ! -path "./game-descriptions/*" | tar -cf - -T -',timeout=60))
+            current=file_map(self.config_archive(self.out/'config-compare.tar'))
             for name,body in self.pre_files.items():
                 if current.get(name)!=body and name not in ('./dev-ssh','./no-autosuspend'):
                     self.r.put(self.work+'/restore-file',body)
                     self.r.run('cp '+self.work+'/restore-file '+Q(CFG+'/'+name))
                     restored.append(name)
-            after_files=file_map(self.r.run('cd '+CFG+' && find . -type f ! -path "./covers/*" ! -path "./game-descriptions/*" | tar -cf - -T -',timeout=60))
+            after_files=file_map(self.config_archive(self.out/'config-compare.tar'))
             marker_names={'./no-autosuspend','./dev-ssh'}
             changed=[k for k in self.pre_files.keys()|after_files.keys() if self.pre_files.get(k)!=after_files.get(k) and k not in marker_names]
         finally:

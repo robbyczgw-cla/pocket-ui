@@ -46,6 +46,21 @@ pub struct Card {
     pub shortcuts: Vec<(&'static str, &'static str)>,
     /// A line under the picture for the odd one out of a console (the N64's C buttons).
     pub note: Option<&'static str>,
+    /// The letters printed on this device's face buttons, in the paint order (top, left, right, bottom): the
+    /// handhelds print X Y A B there, an Xbox-printed device (the Steam Deck) Y X B A (`face_letters`).
+    pub faces: [&'static str; 4],
+    /// The Steam Deck's back buttons, drawn under the shoulders (L4=L1, L5=HOME, R4=R1, R5=HOME: the shipped
+    /// Steam Input layout, `deploy/steamdeck/controller_neptune.vdf`).
+    pub back: bool,
+}
+
+/// The printed face letters (top, left, right, bottom) of a device with this printed layout. The layout of the
+/// menus a player picked changes no printing, so the builders pass the device's own (`device::menu_layout`).
+pub fn face_letters(layout: crate::button_layout_model::ButtonLayout) -> [&'static str; 4] {
+    match layout {
+        crate::button_layout_model::ButtonLayout::Nintendo => ["X", "Y", "A", "B"],
+        crate::button_layout_model::ButtonLayout::Xbox => ["Y", "X", "B", "A"],
+    }
 }
 
 /// The HOME shortcuts that are switched on for the game (Options > Shortcuts).
@@ -83,6 +98,10 @@ pub struct Input<'a> {
     /// The shortcuts that are on, for a game on pocket-core's own host; None for any other emulator (HOME opens the
     /// menu there, the rest is the emulator's).
     pub shortcuts: Option<Shortcuts>,
+    /// The device's printed button layout (`face_letters`).
+    pub layout: crate::button_layout_model::ButtonLayout,
+    /// A Steam Deck: its back buttons are drawn too.
+    pub deck: bool,
 }
 
 /// One line per console that has had its card at a first start.
@@ -270,7 +289,7 @@ pub fn build(i: &Input) -> Card {
     }
     // Independent C-button Controls changes R2 into the R shoulder: do not claim it still selects C mode.
     let note = table.and_then(|p| p.note).filter(|_| i.core_names.is_empty() || i.core_names.iter().any(|t| t.id == 13 && t.label == "C Buttons Mode"));
-    Card { system_name: i.system_name.to_string(), known, slots, dpad, left_stick, right_stick, shortcuts, note }
+    Card { system_name: i.system_name.to_string(), known, slots, dpad, left_stick, right_stick, shortcuts, note, faces: face_letters(i.layout), back: i.deck }
 }
 
 /// The Brick's two extra keys under the shortcuts, with what they do now (Settings > Lights & buttons); one that does
@@ -357,8 +376,10 @@ fn paint_pad(c: &mut Canvas, text: &mut Text, card: &Card, area: (i32, i32, i32,
     let mid_s = crate::type_scale::mid(small);
     let mid_l = crate::type_scale::mid(size);
     let pill_h = crate::type_scale::px(small) as i32 + 20;
+    // The Deck's back buttons take a second row under the shoulders; the middle block gets what is left.
+    let rows_h = pill_h + if card.back { pill_h + 10 } else { 0 };
     // The picture's scale follows the room: a round button's radius, the face buttons' distance from their middle.
-    let r = ((h - pill_h - 34) * 10 / 78).clamp(12, 58);
+    let r = ((h - rows_h - 34) * 10 / 78).clamp(12, 58);
     let d = r * 19 / 10;
     let slot = |id: usize| &card.slots[id];
 
@@ -378,12 +399,23 @@ fn paint_pad(c: &mut Canvas, text: &mut Text, card: &Card, area: (i32, i32, i32,
     for (id, name, px, pw) in shoulders {
         shoulder_pill(c, text, px, y0, pw, pill_h, name, slot(id), col);
     }
+    // The Deck's back buttons (the shipped Steam Input layout): the upper ones repeat the bumpers, the lower ones
+    // are HOME, so Steam's own button and its quick menu stay Steam's.
+    if card.back {
+        let y = y0 + pill_h + 10;
+        let bw = [shoulder_w(text, "L4", &Slot::named("L1"), pill_w), shoulder_w(text, "L5", &Slot::named("HOME"), pill_w)];
+        let brw = [shoulder_w(text, "R4", &Slot::named("R1"), pill_w), shoulder_w(text, "R5", &Slot::named("HOME"), pill_w)];
+        shoulder_pill(c, text, x0, y, bw[0], pill_h, "L4", &Slot::named("L1"), col);
+        shoulder_pill(c, text, x0 + bw[0] + gap, y, bw[1], pill_h, "L5", &Slot::named("HOME"), col);
+        shoulder_pill(c, text, x0 + w - brw[1] - gap - brw[0], y, brw[0], pill_h, "R4", &Slot::named("R1"), col);
+        shoulder_pill(c, text, x0 + w - brw[1], y, brw[1], pill_h, "R5", &Slot::named("HOME"), col);
+    }
 
     // --- the middle block, centred in what is left: D-pad and left stick at the left, the face buttons and the
     // right stick at the right, SELECT and START between the sticks.
     let used = (r + d) * 2 + 22 + 2 * (r + 2);
-    let room = h - pill_h - 14;
-    let cy = y0 + pill_h + 14 + (room - used).max(0) / 2 + d + r;
+    let room = h - rows_h - 14;
+    let cy = y0 + rows_h + 14 + (room - used).max(0) / 2 + d + r;
     let sy = cy + d + r + 22 + r + 2;
     let lx = x0 + w * 26 / 100;
     let rx = x0 + w * 74 / 100;
@@ -419,9 +451,10 @@ fn paint_pad(c: &mut Canvas, text: &mut Text, card: &Card, area: (i32, i32, i32,
         stick_label(c, text, (lx - r - 16, sy + mid_l, true), &stick_txt, press, stick_colour, col.dim, label_size, side);
     }
 
-    // Face buttons: Pocket X on top, Y at the left, A at the right, B at the bottom. Labels at the right of each
-    // circle, except Y's, which stands at its left.
-    let faces = [(9usize, "X", rx, cy - d), (1, "Y", rx - d, cy), (8, "A", rx + d, cy), (0, "B", rx, cy + d)];
+    // Face buttons: the device's printed letters (`card.faces`: Pocket X on top, Y at the left, A at the right, B
+    // at the bottom; the Deck prints Y X B A there). Labels at the right of each circle, except the left one's,
+    // which stands at its left.
+    let faces = [(9usize, card.faces[0], rx, cy - d), (1, card.faces[1], rx - d, cy), (8, card.faces[2], rx + d, cy), (0, card.faces[3], rx, cy + d)];
     for (id, name, fx, fy) in faces {
         let s = slot(id);
         outline_disc(c, fx, fy, r, col, s.changed);
@@ -577,7 +610,7 @@ mod tests {
             values.insert(format!("ctl.{k}"), v.to_string());
         }
         let mapping = Mapping::from_values(system, &values);
-        build(&Input { system, system_name: system, mapping: &mapping, core_names: core, shortcuts })
+        build(&Input { system, system_name: system, mapping: &mapping, core_names: core, shortcuts, layout: crate::button_layout_model::ButtonLayout::Nintendo, deck: false })
     }
 
     fn label(c: &Card, key: &str) -> Option<String> {
@@ -595,6 +628,21 @@ mod tests {
         assert_eq!([label(&c, "l2"), label(&c, "r2"), label(&c, "l3")], [None, None, None]);
         assert_eq!(c.left_stick.label.as_deref(), Some("D-pad"), "no analog stick on a SNES");
         assert_eq!(c.right_stick.label, None);
+    }
+
+    #[test]
+    fn the_decks_card_prints_the_decks_letters_and_has_its_back_buttons() {
+        use crate::button_layout_model::ButtonLayout;
+        assert_eq!(face_letters(ButtonLayout::Nintendo), ["X", "Y", "A", "B"], "top, left, right, bottom as printed");
+        assert_eq!(face_letters(ButtonLayout::Xbox), ["Y", "X", "B", "A"], "the Deck prints A at the bottom");
+        let mapping = Mapping::from_values("snes", &BTreeMap::new());
+        let deck = build(&Input { system: "snes", system_name: "snes", mapping: &mapping, core_names: &[], shortcuts: None, layout: ButtonLayout::Xbox, deck: true });
+        assert!(deck.back, "the back buttons are drawn");
+        assert_eq!(deck.faces, ["Y", "X", "B", "A"]);
+        // The console's own names do not move with the printing: the bottom button still presses the SNES B.
+        assert_eq!(label(&deck, "b"), Some("B".into()));
+        let handheld = card_for("snes", &[], &[], None);
+        assert!(!handheld.back && handheld.faces == ["X", "Y", "A", "B"], "the handhelds' card is as it was");
     }
 
     #[test]

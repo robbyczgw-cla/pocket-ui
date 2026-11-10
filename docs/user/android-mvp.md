@@ -35,7 +35,7 @@ audio quality. Extra in-app cores and hardware rendering are still being develop
 On phones, Select and Start sit above the D-pad and face buttons in portrait, so their touch areas do not overlap.
 The system Back gesture opens the pause menu; from core Options it returns to the pause menu first.
 
-The pause menu follows the app's light/dark appearance and language.
+The pause menu follows the app's light/dark appearance and language. Its heading shows the game's whole name, in two or three lines when it is long, and never translated; a long status line under it ("Saved to slot 2", an error) wraps instead of being cut.
 
 The box's empty-picture hint points to the Android pause menu. Screenshots are still stored privately; importing
 them into the box's picture carousel and exporting them to the phone gallery remain preview work.
@@ -178,3 +178,26 @@ play and brings back the touch pad. Battery saver pauses optional media download
 slideshow and the startup animation; it leaves the game speed and saved preferences alone.
 A refused old PSP moment opens Recovery with a clear explanation and keeps the original
 under Load. The in-game save remains safe.
+
+
+Settings → **Style → Retro** gives menus pixel type and frames. **Colours** then chooses Cocoa or Pea; Appearance
+still chooses dark/light. Long selected names have a three-line title/subtitle band beside or below their cover.
+Folders from another card, such as `Game Boy Advance (GBA)` or `Sega Genesis`, work without renaming. Box art already
+inside a chosen folder is preferred to downloaded pictures, and nothing is written to the card.
+
+For mGBA, Gambatte, bsnes and Nestopia, a `.cht` file with the game's exact filename stem next to the ROM adds
+**Cheats** to pause → Options. Codes start Off and are remembered for that game and core. Unsupported memory-write
+cheats are explained. External apps manage their own cheats. This preview includes no cheat database.
+
+A failed Save & quit keeps the player open and says why. A Load that cannot keep Before load leaves the game
+unchanged. If both a Load and its recovery fail, play and saving stop: load another moment, or choose **Return to
+library** to close that session safely. Earlier saves are kept. **Where was I?** now waits for a press; that press
+only dismisses the reminder.
+
+Settings → **Updates** explains Android updates: install a newer, matching signed APK over the installed app.
+Games and settings stay. Do not uninstall to update: uninstalling removes private saves. The preview does not use
+the SD-card updater and does not announce Linux releases as Android updates.
+
+Game and system names keep their original spelling in every language, including phone rows, title bands, box headers and the pause header. Buttons and instructions follow the selected language.
+
+Box headers leave room between the game name and its system at large Android font sizes.

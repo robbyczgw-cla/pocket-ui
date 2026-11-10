@@ -55,9 +55,37 @@ pub struct ScaledFrame {
     row_sums: Vec<u64>,
 }
 
+/// How many canvas pixels make one pixel of the screen: 2 where a 640x480 panel shows a 1280x960 canvas, 1 on a native
+/// one and where the ratio isn't whole (1280 to 720). A pixel font sized in whole screen pixels per font pixel
+/// (`text::raster`, Departure Mono) asks it: an odd number of canvas pixels per font pixel came out as half pixels.
+#[cfg(not(test))]
+static STEP: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(1);
+#[cfg(test)]
+thread_local! {
+    static STEP: std::sync::atomic::AtomicU32 = const { std::sync::atomic::AtomicU32::new(1) };
+}
+
+/// The canvas `logical` is shown on `panel` from now on (`step`): the live frame and `--snapshot` say so before painting.
+pub fn set_step(logical: (u32, u32), panel: (u32, u32)) {
+    let step = if panel.0 > 0 && logical.0 % panel.0 == 0 && logical.0 / panel.0 == logical.1 / panel.1.max(1) { logical.0 / panel.0 } else { 1 };
+    #[cfg(not(test))]
+    STEP.store(step.max(1), std::sync::atomic::Ordering::Relaxed);
+    #[cfg(test)]
+    STEP.with(|s| s.store(step.max(1), std::sync::atomic::Ordering::Relaxed));
+}
+
+pub fn step() -> u32 {
+    #[cfg(not(test))]
+    let v = STEP.load(std::sync::atomic::Ordering::Relaxed);
+    #[cfg(test)]
+    let v = STEP.with(|s| s.load(std::sync::atomic::Ordering::Relaxed));
+    v
+}
+
 impl ScaledFrame {
     pub fn render(&mut self, output: &mut [u32], panel: (u32, u32), paint: &mut dyn FnMut(&mut [u32], u32, u32)) {
         let logical = logical_size(panel);
+        set_step(logical, panel);
         if logical == panel {
             paint(output, panel.0, panel.1);
             return;

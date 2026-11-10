@@ -806,15 +806,9 @@ impl App {
     /// Whether the Cabinet's cases are on screen and nothing in front takes touches: the tap and swipe of
     /// `app_touch` go to the shelf only then.
     pub(crate) fn cabinet_in_front(&self) -> bool {
-        self.theme == pocket_ui::settings::Theme::Cabinet
-            && !self.cabinet.drawn.is_empty()
-            && self.settings_page.is_none()
-            && self.setup.is_none()
-            && !self.tour.is_open()
-            && self.card.is_none()
-            && self.console.is_none()
-            && self.switcher.is_none()
-            && self.running.is_none()
+        // The cabinet with nothing over it (`app_where`): a tap on a dialog, the search or a page in front of the cases is
+        // that page's, never a case's behind it.
+        self.theme == pocket_ui::settings::Theme::Cabinet && !self.cabinet.drawn.is_empty() && self.shelf_alone()
     }
 
     pub(crate) fn cabinet_tap(&mut self, x: f32, y: f32) -> Option<bool> {
@@ -1128,7 +1122,7 @@ impl App {
         let t0 = Instant::now();
         // As large as the label takes (37 px at most): readable at arm's length on the Mini V2 (Alex's photo,
         // 2026-10-28: "Legend of…" at 21 px was not).
-        let pic = media::spine_with(&mut self.text, m, 1.0, look, &info.title, 37.0);
+        let pic = media::spine_with(&mut self.text, m, 1.0, look, &media::printed_title(&info.title, item.title_is_name()), 37.0);
         let pic = self.stuck_spine(pic, m, 1.0, &info.rom, key.case);
         let pic = Rc::new(if key.ajar { ajar_spine(&mut self.text, pic, &info.system, &info.rom, media::shelf_scale(), look) } else { pic });
         self.cabinet.made("spine", t0);
@@ -1193,12 +1187,12 @@ impl App {
         }
         let sprite = pocket_ui::system_art::get(&info.system).or_else(|| emblem(item));
         let t0 = Instant::now();
-        let spine = media::spine(&mut self.text, m, k, look, &info.title);
+        let spine = media::spine(&mut self.text, m, k, look, &media::printed_title(&info.title, item.title_is_name()));
         let spine = Rc::new(self.stuck_spine(spine, m, k, &info.rom, key.case));
         self.cabinet.made("big spine", t0);
         let t0 = Instant::now();
         let name = super::system_short(&self.systems, &info.system);
-        let front = media::front(&mut self.text, m, k, look, &info.title, label.as_deref(), sprite, &name);
+        let front = media::front(&mut self.text, m, k, look, &media::printed_title(&info.title, item.title_is_name()), label.as_deref(), sprite, &name);
         let front = self.stuck_front(front, m, k, &info.rom, key.case);
         self.cabinet.made(if label.is_some() { "front" } else { "plain front" }, t0);
         self.cabinet.shown.insert(key, (spine.clone(), front.clone(), label.is_some(), frame));
@@ -1794,27 +1788,34 @@ impl App {
             // wider faces).
             let mut size = 50;
             let (lines, y) = loop {
-                let mut lines = title_block::layout(&mut self.text, Face::Title, size, &title, c.w - 2 * MARGIN - star, 2);
+                let mut lines = title_block::name_layout(&mut self.text, Face::Title, size, &title, c.w - 2 * MARGIN - star, 2);
                 if lines.len() < 2 {
                     break (lines, 150 - lift(c.h));
                 }
-                lines = title_block::layout(&mut self.text, Face::Title, size, &title, right - MARGIN - star - 140, 2);
+                lines = title_block::name_layout(&mut self.text, Face::Title, size, &title, right - MARGIN - star - 140, 2);
                 let up = (title_block::step(&self.text, lines[0].px) + title_block::step(&self.text, lines.last().map_or(0, |l| l.px))) / 2;
                 let y = (150 - lift(c.h)).min(meta_y - up);
                 let least = super::app_status_corner::TOP_LINE + 12 + (pocket_ui::type_scale::px(lines[0].px) as f32 * 0.8) as i32;
-                if lines.len() < 2 || y >= least || size <= 30 {
+                // The meta line keeps its size and place beside the second line: the name goes a step smaller first
+                // (Retro's even-width letters left "Not played yet" too little room at 1024x768 in Large text, and the
+                // meta line a step smaller stood lower than the other games').
+                let meta_fits = lines.get(1).is_none_or(|second| {
+                    let x = MARGIN + self.text.width_plain(Face::Title, second.px, &second.text) + 40 + if fav { super::app_switcher::star_room(second.px) } else { 0 };
+                    self.text.width(Face::Body, 28, &meta) <= right - x
+                });
+                if lines.len() < 2 || (y >= least && meta_fits) || size <= 30 {
                     break (lines, y);
                 }
                 size = size * 5 / 6;
             };
             let first = &lines[0];
-            let w = self.text.draw(c, Face::Title, first.px, MARGIN, y, pal().chalk, &first.text);
+            let w = title_block::paint_line(&mut self.text, c, Face::Title, first, MARGIN, y, pal().chalk);
             title_block::note(first, y);
             if fav && lines.len() == 1 {
                 App::paint_title_star(c, MARGIN + w, y, 50, pal().chalk);
             }
             if let Some(second) = lines.get(1) {
-                let w = self.text.draw(c, Face::Title, second.px, MARGIN, meta_y, pal().chalk, &second.text);
+                let w = title_block::paint_line(&mut self.text, c, Face::Title, second, MARGIN, meta_y, pal().chalk);
                 title_block::note(second, meta_y);
                 if fav {
                     App::paint_title_star(c, MARGIN + w, meta_y, second.px, pal().chalk);
@@ -2323,7 +2324,7 @@ impl App {
             _ => info.title.clone(),
         };
         let t0 = Instant::now();
-        let pic = media::spine_with(&mut self.text, m, f / media::shelf_scale(), key.0.look, &title, want);
+        let pic = media::spine_with(&mut self.text, m, f / media::shelf_scale(), key.0.look, &media::printed_title(&title, item.title_is_name()), want);
         let pic = self.stuck_spine(pic, m, f / media::shelf_scale(), &info.rom, key.0.case);
         let pic = Rc::new(if key.0.ajar { ajar_spine(&mut self.text, pic, &info.system, &info.rom, f, key.0.look) } else { pic });
         self.cabinet.made("standing spine", t0);
@@ -2364,7 +2365,7 @@ impl App {
             return (spine, None);
         }
         let sprite = pocket_ui::system_art::get(&info.system).or_else(|| emblem(item));
-        let title = if reading { "" } else { info.title.as_str() };
+        let title = media::printed_title(if reading { "" } else { info.title.as_str() }, item.title_is_name());
         let t0 = Instant::now();
         let spine = media::spine(&mut self.text, m, k, key.0.look, "");
         let spine = Rc::new(self.stuck_spine(spine, m, k, &info.rom, key.0.case));
@@ -2373,7 +2374,7 @@ impl App {
             m,
             k,
             key.0.look,
-            title,
+            &title,
             label.as_deref(),
             if reading { None } else { sprite },
             &super::system_short(&self.systems, &info.system),
@@ -2684,12 +2685,12 @@ impl App {
             let room = bottom - y - meta_room;
             let mut n = ((room / step.max(1)).clamp(2, 3)) as usize;
             let star = if fav { super::app_switcher::star_room(67) } else { 0 };
-            let mut lines = title_block::layout(&mut self.text, Face::Title, 67, &title, w - 40 - star, n);
+            let mut lines = title_block::name_layout(&mut self.text, Face::Title, 67, &title, w - 40 - star, n);
             let mut step = step;
             if n < 3 && !title_block::is_whole(&lines, &title) {
                 // Room for two lines only, and the name needs three: the type goes smaller until three fit.
                 let px = title_block::px_for(&self.text, 67, 3, room);
-                lines = title_block::layout(&mut self.text, Face::Title, px, &title, w - 40 - star, 3);
+                lines = title_block::name_layout(&mut self.text, Face::Title, px, &title, w - 40 - star, 3);
                 (n, step) = (3, title_block::step(&self.text, px));
             }
             let first = y + line(67, 0) - 6;

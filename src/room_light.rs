@@ -106,7 +106,7 @@ pub fn at(minute: f32, light_page: bool) -> Light {
 
 /// The minute of the day now on this device's clock (its time zone, `POCKETUI_CLOCK_SHIFT` as Automatic appearance
 /// takes it); `POCKETUI_ROOM_TIME=HH:MM` sets it outright (snapshots, trying it without waiting).
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "emscripten"))]
 pub fn minute_now() -> f32 {
     if let Some(m) = std::env::var("POCKETUI_ROOM_TIME").ok().as_deref().and_then(parse_hhmm) {
         return m;

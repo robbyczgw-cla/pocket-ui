@@ -654,7 +654,7 @@ impl App {
         let room = bx - 20 - title_x - if fav { star_room(37) } else { 0 };
         let (shown, px) = pocket_ui::title_block::row(&mut self.text, Face::Title, 37, &name, room);
         let baseline = y + h / 2 + pocket_ui::type_scale::base(13, px);
-        let w = self.text.draw(c, Face::Title, px, title_x, baseline, fg, &shown);
+        let w = self.text.draw_name(c, Face::Title, px, title_x, baseline, fg, &shown);
         if fav {
             App::paint_title_star(c, title_x + w, baseline, px, fg);
         }

@@ -176,6 +176,8 @@ Hades II
 Steam Big Picture
 RetroFan
 pocket-mini
+pocket-brick
+SM83
 login.tailscale.com
 MFZWI3D-BONSGYC-YLTMRWG-C43ENR5
 QXGZDMM-FZWI3DP-BONSGYY-LTMRWAD
@@ -619,3 +621,9 @@ Updates. Fixes long game names on the shelf.
 # 0.3.1 release check: the Smart Pro's names (a product name and the word that stands for "the Pocket")
 TrimUI Smart Pro
 Smart Pro
+
+# Product names shown by the TrimUI board profile.
+TrimUI Brick Pro
+Brick Pro
+# Controller setup title: the pad's product name and the last 8 characters of its id (the snapshots' demo pad ends "-pad-one", src/app_controllers.rs).
+re:^8BitDo SN30 Pro · -pad-

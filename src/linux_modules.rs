@@ -65,6 +65,8 @@ pub mod palette;
 pub mod kit;
 /// What a frame offers the D-pad, for tests/nav_explorer.rs (off unless POCKETUI_NAV_PROBE is set).
 pub mod nav_probe;
+/// Where the UI is, one line in /tmp/pocket-ui.status for agents and test helpers (docs/DEVICE-TESTS.md).
+pub mod ui_status;
 pub mod appearance;
 pub mod setup;
 // The feature registry, its cards and their previews (first start, Settings → Tour, "New in this version").
@@ -87,7 +89,7 @@ pub mod resample;
 pub mod clock_check;
 pub mod manual_time;
 pub mod libretro;
-pub mod hw_render;
+#[cfg_attr(target_os = "emscripten", path = "platform/android_hw_render.rs")] pub mod hw_render;
 pub mod options;
 pub mod look;
 pub mod starter;
@@ -120,6 +122,7 @@ pub mod frame_cache;
 pub mod preview;
 pub mod core_options;
 pub mod controls;
+pub mod button_layout_model;
 pub mod controls_card;
 pub mod emu_menu;
 pub mod slots;
@@ -153,6 +156,10 @@ pub mod emu_choice;
 pub mod emu_choice_page;
 pub mod cheats;
 pub mod cheat_pack;
+pub mod cheat_download;
+pub mod cheat_data;
+pub mod extras_page;
+pub mod optional_data;
 pub mod rumble;
 pub mod ui_sound;
 pub mod favorites;
@@ -222,6 +229,7 @@ pub mod case_stickers;
 pub mod cabinet_tv;
 pub mod media;
 pub mod title_block;
+pub mod pause_head;
 pub mod quit;
 pub mod exit_guard;
 pub mod fast_switch;
@@ -389,3 +397,10 @@ pub mod brick_gles;
 pub mod brick_picture;
 #[cfg(feature = "brick")]
 pub mod brick_hw;
+
+/// Backward-compatible pocket-core FIFO decoding.
+pub mod core_command;
+
+/// Read-only pocket-core play state, using the shared v1 status writer.
+pub mod core_status;
+pub mod document_art;

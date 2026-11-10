@@ -1,5 +1,5 @@
 #!/bin/bash
-# Builds the standalone TrimUI card (Brick and Smart Pro, one card): one folder (and a zip of it) to copy onto an empty FAT card
+# Builds the standalone TrimUI card (Brick, Brick Pro and Smart Pro, one card): one folder (and a zip of it) to copy onto an empty FAT card
 # (docs/TRIMUI-BRICK-STANDALONE.md).
 #   scripts/brick-make-card.sh OUT_DIR BINS_DIR LIBS_DIR CORES_DIR [VERSION]
 # VERSION    what the programs were built as (POCKETUI_VERSION; `pocket-ui --version` prints it): app/RELEASE, compared by the updater.
@@ -7,6 +7,7 @@
 # PARTS      (environment BRICK_PARTS) the output of scripts/brick-remote-parts.sh: Tailscale, curl, dropbear with their licences
 # BRICK_CHEATS_ARCHIVE (optional) offline copy of the pinned libretro-database tar.gz; otherwise fetched and cached in downloads/.
 # BRICK_UPDATE_URL  (optional) the update channel's update.json, written to app/update-url (docs/TRIMUI-BRICK-REMOTE.md); never public
+# BRICK_PORTMASTER_PARTS scripts/brick-portmaster-parts.sh output (default PARTS/portmaster): Bash and the private port chroot helper.
 # BINS_DIR   pocket-ui, pocket-core, pocket-fb (cargo zigbuild --release --features brick --target aarch64-unknown-linux-gnu.2.33)
 #            (CARGO_TARGET_DIR set before `. scripts/release-rustflags.sh`) and brick-hw
 #            (zig cc -target aarch64-linux-gnu.2.33 -O2 -s -ffile-prefix-map=$PWD=/pocket-ui deploy/brick/brick-hw.c)
@@ -17,6 +18,7 @@
 # looks for is in it. No part of TrimUI's firmware goes in; it stays on the handheld.
 set -eu
 OUT=${1:?out dir}; BINS=${2:?bins}; LIBS=${3:?libs}; CORES=${4:?cores dir}; PARTS=${BRICK_PARTS:?BRICK_PARTS: the folder scripts/brick-remote-parts.sh made}
+PORTMASTER_PARTS=${BRICK_PORTMASTER_PARTS:-$PARTS/portmaster}
 HERE=$(cd "$(dirname "$0")" && pwd); ROOT=$(dirname "$HERE")
 COMMIT=$(git -C "$ROOT" rev-parse --short HEAD 2>/dev/null || echo unknown)
 VERSION=${5:-brick-$COMMIT}
@@ -25,6 +27,9 @@ for f in pocket-ui pocket-core pocket-fb brick-hw brick-egl; do [ -f "$BINS/$f" 
 for f in libwayland-client.so.0 libwayland-cursor.so.0 libwayland-egl.so.1 libxkbcommon.so.0 libffi.so.8; do [ -e "$LIBS/$f" ] || die "$LIBS/$f is missing"; done
 for c in gambatte mgba nestopia snes9x pcsx_rearmed gpsp fceumm picodrive beetle_ngp beetle_wswan beetle_pce_fast handy stella prosystem fbneo mupen64plus_next ppsspp flycast gearsystem beetle_supergrafx pokemini beetle_vb fake08 tic80 melondsds dosbox_pure scummvm yabause; do [ -f "$CORES/cores/${c}_libretro.so" ] || die "core $c is missing in $CORES/cores"; done
 for f in tailscale tailscaled curl dropbearmulti syncthing; do [ -f "$PARTS/bin/$f" ] || die "$PARTS/bin/$f is missing (scripts/brick-remote-parts.sh)"; done
+for f in bin/bash bin/portmaster-exec licences/bash/LICENSE sources/bash-5.2.37.tar.gz PORTMASTER-PARTS.txt; do
+  [ -s "$PORTMASTER_PARTS/$f" ] || die "$PORTMASTER_PARTS/$f is missing (scripts/brick-portmaster-parts.sh)"
+done
 [ -s "$CORES/assets/bios/scummvm/extra/sky.cpt" ] && [ -s "$CORES/assets/bios/scummvm/theme/scummmodern.zip" ] || die "ScummVM engine data/theme bundle is missing"
 mkdir -p "$OUT"; OUT=$(cd "$OUT" && pwd)
 CARD=$OUT/card
@@ -32,14 +37,27 @@ rm -rf "$CARD"; mkdir -p "$CARD/.tmp_update" "$CARD/trimui/app" "$CARD/pocket-ui
 # pocket-ui/start.sh is the fixed part (it picks the program folder and takes a failed update back); app/ is the program, which an
 # update replaces as a whole; storage/, logs/ and authorized_keys next to it are the player's (start.sh makes them on the card).
 P=$CARD/pocket-ui/app
-# Cheat data lives in app/: the card zip and every OTA carry the same pinned subset and notices.
+# The card carries notices and a pinned download description; the optional pack stays OUTSIDE card/.
 if [ -n "${BRICK_CHEATS_ARCHIVE:-}" ]; then
-  python3 -I "$ROOT/scripts/brick-cheats-data.py" "$P" --archive "$BRICK_CHEATS_ARCHIVE"
+  python3 -I "$ROOT/scripts/brick-cheats-data.py" "$P" --optional "$OUT/optional" --archive "$BRICK_CHEATS_ARCHIVE"
 else
-  python3 -I "$ROOT/scripts/brick-cheats-data.py" "$P"
+  python3 -I "$ROOT/scripts/brick-cheats-data.py" "$P" --optional "$OUT/optional"
 fi
 cp "$ROOT/deploy/brick/boot.sh" "$CARD/pocket-ui/start.sh"
 cp "$ROOT/deploy/brick/start.sh" "$P/start.sh"
+mkdir -p "$P/portmaster"
+for f in portmaster-runtime.sh portmaster-download.sh portmaster-extract.py portmaster-archive.py portmaster-bridge.py portmaster-manifest.txt; do
+  cp "$ROOT/deploy/brick/$f" "$P/portmaster/$f"
+done
+cp "$ROOT/deploy/brick/portmaster-runtime.sh" "$P/bin/portmaster"
+# Control/detection and launch belong to the application; the optional engines/Python remain beside app/ across OTA.
+[ ! -d "$ROOT/deploy/brick/portmaster" ] || cp -R "$ROOT/deploy/brick/portmaster/." "$P/portmaster/"
+[ ! -f "$ROOT/deploy/brick/portmaster-run.sh" ] || cp "$ROOT/deploy/brick/portmaster-run.sh" "$P/bin/portmaster-run"
+cp "$PORTMASTER_PARTS/bin/bash" "$PORTMASTER_PARTS/bin/portmaster-exec" "$P/bin/"
+mkdir -p "$P/licences/portmaster" "$CARD/pocket-ui/sources/portmaster"
+cp -R "$PORTMASTER_PARTS/licences/." "$P/licences/portmaster/"
+cp "$PORTMASTER_PARTS/PORTMASTER-PARTS.txt" "$P/licences/portmaster/"
+cp -R "$PORTMASTER_PARTS/sources/." "$CARD/pocket-ui/sources/portmaster/"
 cp "$ROOT/deploy/brick/entries/updater" "$CARD/.tmp_update/updater"                          # entry: the firmware's start script
 cp "$ROOT/deploy/brick/entries/MainUI" "$ROOT/deploy/brick/entries/premainui.sh" "$ROOT/deploy/brick/entries/preload.sh" "$CARD/trimui/app/"   # entry: TrimUI's own
 for f in pocket-ui pocket-core pocket-fb brick-hw brick-egl; do cp "$BINS/$f" "$P/bin/$f"; done
@@ -107,18 +125,20 @@ mkdir -p "$CARD/pocket-ui/sources/cores"; cp "$CORES"/sources/*.tar.gz "$CARD/po
 for d in tailscale curl dropbear syncthing; do mkdir -p "$P/licences/$d"; cp -R "$PARTS/licences/$d/." "$P/licences/$d/"; done
 mkdir -p "$P/sources/network"; cp -R "$PARTS/sources/." "$P/sources/network/"; cp "$PARTS/PARTS.txt" "$P/licences/NETWORK-PARTS.txt"
 cat >"$P/licences/README.txt" <<TXT
-pocket-ui on a TrimUI Brick or Smart Pro (standalone card), $VERSION.
+pocket-ui on a TrimUI Brick, Brick Pro or Smart Pro (standalone card), $VERSION.
 pocket-ui and its helpers: LICENSE, NOTICE.md and the third-party lists in pocket-ui/ (GPL-2.0-or-later and the crates' own licences).
 Cores: CORES-LICENCES.txt, and each core's own licence files in cores/. Where the source of each core (the exact commit it was built
 from) is: SOURCES.txt. snes9x, picodrive and fbneo are licensed for non-commercial use only (free to pass on under their licence terms, not to sell); see CORES-LICENCES.txt.
 Bundled libraries (libwayland-*: MIT, libxkbcommon: MIT-style, libffi: MIT-style): libwayland-COPYING.txt, libxkbcommon-LICENSE.txt, libffi-copyright.txt.
-Cheat database (cores/cht.pack, one file): libretro-database, CC BY-SA 4.0; full licence, upstream credits and subset attribution in libretro-database/.
+Optional cheat database (downloaded once from the pause menu): libretro-database, CC BY-SA 4.0; full licence, upstream credits and subset attribution in libretro-database/.
 The pinned commit, source archive, checksum, system list and size are in ../database/MANIFEST.json. Each cheat file in the pack is unchanged.
 Time zone data (pocket-ui/zoneinfo): the IANA Time Zone Database, public domain.
 Network parts (NETWORK-PARTS.txt has their versions and checksums): Tailscale (BSD-3-Clause, tailscale/), Syncthing (MPL-2.0, syncthing/, unchanged), curl and its libraries
 (curl/), dropbear (MIT, dropbear/; changed by pocket-ui, the change is in ../sources/network/). Where each one's source is:
 ../sources/network/SOURCES.txt.
 No part of TrimUI's firmware is on this card. The handheld's own firmware libraries are used from the handheld, not copied.
+PortMaster launch helpers: Bash (GPL-3.0-or-later, portmaster/bash/LICENSE; complete source in the separate source zip, see SOURCES.txt).
+PortMaster and Python are optional downloads kept outside app/; their licences travel with their upstream archives.
 TXT
 echo "pocket-ui brick standalone $VERSION (pocket-ui commit $COMMIT, $(date -u +%Y-%m-%d))" >"$P/VERSION"
 echo "$VERSION" >"$P/RELEASE"
@@ -139,7 +159,7 @@ readme() { # system, what goes there
   esac
   printf '%s\n' "$2" "" "$layout Delete this file if you like; pocket-ui ignores it." >"$CARD/Roms/$1/README.txt"
 }
-for s in gb gbc gba nes snes psx megadrive mastersystem gamegear ngp ngpc wonderswan wonderswancolor pcengine atarilynx atari2600 atari7800 fbn neogeo cps1 cps2 cps3 n64 psp dreamcast fds sg-1000 segacd sega32x pcenginecd supergrafx pokemini virtualboy pico-8 tic-80 nds pc scummvm saturn bios; do mkdir -p "$CARD/Roms/$s"; done
+for s in ports gb gbc gba nes snes psx megadrive mastersystem gamegear ngp ngpc wonderswan wonderswancolor pcengine atarilynx atari2600 atari7800 fbn neogeo cps1 cps2 cps3 n64 psp dreamcast fds sg-1000 segacd sega32x pcenginecd supergrafx pokemini virtualboy pico-8 tic-80 nds pc scummvm saturn bios; do mkdir -p "$CARD/Roms/$s"; done
 readme gb "Game Boy games (.gb, or .zip)."
 readme gbc "Game Boy Color games (.gbc, .gb, or .zip)."
 readme gba "Game Boy Advance games (.gba, or .zip)."
@@ -193,7 +213,7 @@ storage/          your settings, the Tailscale login, the Remote access password
 logs/             what pocket-ui writes down (boot.log first).
 authorized_keys   SSH keys that may log in as root when Remote access is on, one per line, as in ~/.ssh/authorized_keys (empty at first).
 
-This card is for the TrimUI Brick and the TrimUI Smart Pro (experimental). On a Smart Pro, update TrimUI's firmware to 1.1.1 first
+This card is for the TrimUI Brick, TrimUI Brick Pro (experimental) and TrimUI Smart Pro (experimental). On a Smart Pro, update TrimUI's firmware to 1.1.1 first
 (1.0.4 at least); with older firmware pocket-ui cannot start and logs/FIRMWARE-TOO-OLD.txt says so.
 TXT
 # Keep this folder name free of other launchers' names: a leftover .system folder would mean the wrong folder was copied over.
@@ -204,8 +224,11 @@ TXT
 ZIP=$OUT/pocket-ui-trimui-card-$VERSION.zip
 SRCZIP=$OUT/pocket-ui-trimui-sources-$VERSION.zip
 rm -f "$ZIP" "$SRCZIP"
+SRC=$OUT/sources-apart; rm -rf "$SRC"; mkdir -p "$SRC/sources"
+# Bash is a small launch dependency; its much larger source archive always travels
+# separately, including private/beta cards which keep core source on the card.
+mv "$CARD/pocket-ui/sources/portmaster" "$SRC/sources/portmaster"
 if [ "${BRICK_SOURCES_APART:-0}" = 1 ]; then
-  SRC=$OUT/sources-apart; rm -rf "$SRC"; mkdir -p "$SRC/sources"
   mv "$CARD/pocket-ui/sources/cores" "$SRC/sources/cores"; rmdir "$CARD/pocket-ui/sources"
   cp -R "$P/sources/network" "$SRC/sources/network"
   [ -z "${BRICK_POCKETUI_SOURCE:-}" ] || { [ -s "$BRICK_POCKETUI_SOURCE" ] || die "no pocket-ui source at $BRICK_POCKETUI_SOURCE"; cp "$BRICK_POCKETUI_SOURCE" "$SRC/sources/"; }
@@ -213,11 +236,13 @@ if [ "${BRICK_SOURCES_APART:-0}" = 1 ]; then
 The source of the cores on this card, and of pocket-ui itself, is in pocket-ui-trimui-sources-$VERSION.zip, published next to
 pocket-ui-trimui-card-$VERSION.zip on the same release page (https://github.com/robbyczgw-cla/pocket-ui/releases, tag of this version).
 Each core's exact commit: CORES-LICENCES.txt. The network parts' source is on this card too: pocket-ui/app/sources/network/.
+Bash's complete source is in the same source zip, sources/portmaster/.
 TXT
 else
   cat >"$P/licences/SOURCES.txt" <<TXT
 The source of the cores on this card: pocket-ui/sources/cores/ on a card made from the zip (one archive per core and commit), and
 sources/ in the update channel. Each core's exact commit: CORES-LICENCES.txt. The network parts' source: pocket-ui/app/sources/network/.
+Bash's complete source is in pocket-ui-trimui-sources-$VERSION.zip next to the card zip, sources/portmaster/.
 TXT
 fi
 python3 -I - "$CARD" "$ZIP" <<'PY'
@@ -241,7 +266,7 @@ with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED, compresslevel=9) as z:
         zi.compress_type = zipfile.ZIP_DEFLATED
         z.writestr(zi, open(full, "rb").read())
 PY
-if [ "${BRICK_SOURCES_APART:-0}" = 1 ]; then
+if [ -d "$OUT/sources-apart" ]; then
   (cd "$OUT/sources-apart" && python3 -I -c '
 import os, sys, zipfile
 with zipfile.ZipFile(sys.argv[1], "w", zipfile.ZIP_STORED) as z:

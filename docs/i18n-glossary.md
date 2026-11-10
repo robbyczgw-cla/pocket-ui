@@ -110,7 +110,7 @@ They are names, not descriptions, and the manual (still English) uses them:
 | Quiet, Cool (fan) | Leise, Kühl | |
 | Fast-forward, Rewind | Vorspulen, Zurückspulen | |
 | Cover art, box art | Cover | |
-| Pictures (Settings → Games → Pictures & extras); screenshot, title screen | Spielbilder; Screenshot, Titelbild | the collection's in-game picture and title screen beside the box art; "Box art" → "Cover", "Box art and screenshots" → "Cover und Screenshots" |
+| Pictures (Settings → Games → Extras); screenshot, title screen | Spielbilder; Screenshot, Titelbild | the collection's in-game picture and title screen beside the box art; "Box art" → "Cover", "Box art and screenshots" → "Cover und Screenshots" |
 | Safe mode | Abgesicherter Modus | |
 | Backup & reset | Sichern & zurücksetzen | |
 | Manual, user guide | Handbuch, Anleitung | |

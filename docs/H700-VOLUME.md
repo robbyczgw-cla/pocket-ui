@@ -31,12 +31,23 @@ Values are clamped to 0..ceiling; zero percent mutes the switches. It rounds dow
 level for every 5-percent key step, including with the quieter ceiling. References:
 [PulseAudio's cubic conversion](https://github.com/pulseaudio/pulseaudio/blob/master/src/pulse/volume.c) and
 [ALSA's finite-range mapping](https://github.com/alsa-project/alsa-utils/blob/master/alsamixer/volume_mapping.c).
-PipeWire retains control of Line Out's attenuation; it is never forced
-to full gain for the speaker. The only Line Out write is its playback switch for mute and explicit unmute.
+PipeWire retains control of Line Out: its attenuation (never forced to full gain for the speaker) and its playback
+switch. Both UCM devices name "Line Out" as PlaybackMixerElem, so that switch *is* the mute PipeWire shows for the
+Speaker and the Headphones sink, and WirePlumber stores it per route, across restarts. pocket-ui never writes it.
 
-At 0 percent or sink mute, Speaker Switch, DAC Playback Switch (both channels), DAC volume and Line Out Playback
-Switch (both channels) are set to zero. All independent mute mechanisms are attempted even if one control fails;
-successful writes are read back before being owned. Read/write failures cannot prove physical silence.
+At 0 percent or sink mute, Speaker Switch, DAC Playback Switch (both channels) and DAC volume are set to zero. All
+independent mute mechanisms are attempted even if one control fails; successful writes are read back before being
+owned. Read/write failures cannot prove physical silence.
+
+A muted codec sink is never the player's choice on H700: pocket-ui offers no mute there (0 % is the silent level) and
+ROCKNIX's `volume` helper never unmutes. Up to 0.3.1 the 0 % mute also switched Line Out off, which PipeWire showed as a
+sink mute and WirePlumber stored; from then on the worker read "muted" and kept every switch off, so the speaker stayed
+silent with "muted" in Quick settings, also after unplugging headphones and after a restart (issue #3). Now the worker
+lifts such a mute (`pactl set-sink-mute <sink> 0`) when it attaches, on a jack or sink change and on any new wish.
+At attach a lifted mute also switches the DAC and speaker back on (DAC ramped up from where it is): the zeros are what
+the older version left. A wake repair does not lift a mute, since sleep mutes the sink itself for a game's last moment
+before a power off. Silent lab runs therefore cannot rely on a sink mute on H700 (they never could: see the
+validation below).
 
 Only the known `5096000.codec` Speaker/Headphones sinks are treated as internal. `Headphone Jack` is read from
 ALSA's CARD interface. Either a plugged jack or the Headphones sink keeps Speaker off. Headphones use DAC 63 and
@@ -100,7 +111,9 @@ and audio counters. This diagnostic override is not a player setting.
 ## Validation and release
 
 `cargo test --profile gate --lib h700_volume` uses a fake ALSA layer in which Line Out does not affect the speaker.
-It covers volume keys/quick-settings wishes, real hardware mute, independent mute failures, captured amixer parsing,
+Its fake mirrors Line Out's switch into the sink mute, as PipeWire does. It covers the issue #3 sequences (0 % and back on
+headphones, then unplug; a stored mute at start, with and without the jack; a mute appearing on a route change),
+volume keys/quick-settings wishes, real hardware mute, independent mute failures, captured amixer parsing,
 jack changes in both orders, UCM DAC resets, returning from Bluetooth, external edits, wake repair, failed/clamped
 writes, ramp rate/coalescing/mute preemption and conditional exit restoration. Power and Quick settings regressions
 cover the no-cap game policy and hidden-display path. The merge gate also checks existing controls, sleep and platform builds.

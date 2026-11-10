@@ -14,11 +14,13 @@ finish-args:
   - --share=network       # cover art, fetch-cores.sh
   - --device=all            # /dev/input (Steam Input's virtual pad via evdev), /dev/dri for pocket-core's GL
   - --socket=pulseaudio
-  # ROMs, BIOS and saves: EmuDeck's folder, ES-DE's, the SD card.
+  # ROMs, BIOS and saves: EmuDeck's folder, RetroDECK's, ES-DE's, the SD card.
   - --filesystem=~/Emulation
+  - --filesystem=~/retrodeck
   - --filesystem=~/ES-DE
   - --filesystem=/run/media
   # RetroArch's Flatpak cores, read only.
+  - --filesystem=~/.config/retroarch:ro
   - --filesystem=~/.var/app/org.libretro.RetroArch:ro
   - --filesystem=/var/lib/flatpak/app/org.libretro.RetroArch:ro
   - --filesystem=~/.local/share/flatpak/app/org.libretro.RetroArch:ro
@@ -30,7 +32,7 @@ modules:
     buildsystem: simple
     build-commands:
       - install -d /app/share/pocket-ui /app/bin
-      - cp -a pocket-ui pocket-core runemu.sh gen-es-systems.py pocket-ui-deck.sh fetch-cores.sh add-to-steam.py /app/share/pocket-ui/
+      - cp -a pocket-ui pocket-core runemu.sh gen-es-systems.py pocket-ui-deck.sh fetch-cores.sh add-to-steam.py controller_neptune.vdf /app/share/pocket-ui/
       - if [ -d cores ]; then cp -a cores /app/share/pocket-ui/; fi
     sources:
       # The bundle directory from build-bundle.sh (binaries built on our own machine, no network in the Flatpak build).

@@ -1,9 +1,9 @@
-//! The App's side of the starter pack (`pocket_ui::starter`, docs/STARTER-PACK.md): Settings → Games → Starter pack,
+//! The App's side of the starter pack (`pocket_ui::starter`, docs/STARTER-PACK.md): Settings → Games → Extras → Starter pack,
 //! and the calm hint on Home while the card has no games at all ("Get the starter pack", A).
 //!
 //! The page lists the pack's games, each with its size or "On your card"; A downloads one, or "Get all". A download
 //! runs on a thread of its own (the Store's curl, the SHA-256 checked before anything is placed) and reports back as
-//! `UserEvent::Starter`; B leaves the page while it runs. When a game has been added the library is read again
+//! `UserEvent::Starter`; B cancels and checkpoints the download. When a game has been added the library is read again
 //! (`library_rescan`, `app_library.rs`), so the games appear on the shelf by themselves. Everything that touches the
 //! card (finding the folders, what is there already, free space) happens on that thread, never on the UI's.
 
@@ -50,6 +50,10 @@ struct Busy {
     since: Instant,
 }
 
+impl Drop for StarterUi {
+    fn drop(&mut self) { self.cancel.cancel(); }
+}
+
 #[derive(Default)]
 pub(crate) struct StarterUi {
     /// The folder of each system the pack has games for and the shelf knows (`es_systems.cfg`).
@@ -59,10 +63,12 @@ pub(crate) struct StarterUi {
     scanned: bool,
     sel: usize,
     busy: Option<Busy>,
+    cancel: pocket_ui::update::Cancel,
     /// What the last job said: text, and whether it is a problem.
     message: Option<(String, bool)>,
     /// Opened from Home's hint: B goes back to Home, not to Settings.
     from_home: bool,
+    pub(crate) from_extras: bool,
     /// Games added by the job that runs or ran last.
     added: usize,
     /// `--snapshot starter-home:wifi-off`: Home as it is on a handheld that is not online (the mock always is).
@@ -161,9 +167,10 @@ impl App {
         self.starter.demo_offline.unwrap_or_else(|| pocket_ui::device::current().has_wifi() && pocket_ui::wifi::ip().is_none())
     }
 
-    /// Settings → Games → Starter pack (`from_home`: opened by A on Home's hint).
+    /// Settings → Games → Extras → Starter pack (`from_home`: opened by A on Home's hint).
     pub(crate) fn open_starter(&mut self, from_home: bool) -> Option<SettingsPage> {
         self.starter.from_home = from_home;
+        self.starter.from_extras = false;
         self.starter.sel = 0;
         if self.starter.busy.is_none() {
             self.starter.message = None;
@@ -201,19 +208,28 @@ impl App {
         let count = games.len();
         self.starter.added = 0;
         self.starter.message = None;
+        self.starter.cancel = Default::default();
+        let cancel = self.starter.cancel.clone();
         self.starter.busy = Some(Busy { id: games[0].id.clone(), title: games[0].title.clone(), position: 1, count, total: games[0].file.size, done: 0, since: Instant::now() });
         let (proxy, folders, work) = (self.proxy.clone(), self.starter.folders.clone(), self.data_dir.join("starter"));
         let _ = std::thread::Builder::new().name("starter".into()).spawn(move || {
             let send = |e| {
                 let _ = proxy.send_event(UserEvent::Starter(e));
             };
+            let Some(_optional) = pocket_ui::optional_data::lock(&cancel) else { send(Event::Finished); return };
+            if pocket_ui::covers::game_on() { send(Event::Finished); return; }
             // A cheap "is there a network at all" first (a process, up to a second: here, not on the UI's thread).
             let online = pocket_ui::wifi::ip_now().is_some();
             for g in games {
+                if cancel.is_cancelled() || pocket_ui::covers::game_on() { break; }
                 send(Event::Started(g.id.clone()));
                 let Some(dest) = folders.get(&g.system) else { continue };
                 let env = starter::Env { dest_dir: dest, work_dir: &work, free_dest: starter::free_bytes(dest), free_work: starter::free_bytes(&work), online };
-                let result = starter::install(g, &env, &starter::curl, &|n| send(Event::Progress(n)));
+                let result = starter::install_cancellable(g, &env, &cancel, &|n| {
+                    if pocket_ui::covers::game_on() { cancel.cancel(); }
+                    send(Event::Progress(n));
+                });
+                if cancel.is_cancelled() { break; }
                 // Without a network, or without room, the next game would meet the same wall.
                 let stop = matches!(result, Err(Failure::Offline | Failure::NoSpace { .. }));
                 send(Event::Done { id: g.id.clone(), result });
@@ -312,7 +328,12 @@ impl App {
             Button::L1 => self.starter.sel = self.starter.sel.saturating_sub(5),
             Button::R1 if n > 0 => self.starter.sel = (self.starter.sel + 5).min(n - 1),
             b if b == CANCEL => {
-                return if self.starter.from_home { None } else { Some(SettingsPage::List(crate::settings_row(SETTINGS_NAME))) };
+                self.starter.cancel.cancel();
+                if self.starter.from_extras {
+                    self.setup = Some(self.new_extras_setup().only(pocket_ui::setup::Only::Extras).at_starter());
+                    return Some(SettingsPage::List(crate::settings_row("Extras")));
+                }
+                return if self.starter.from_home { None } else { Some(SettingsPage::List(crate::settings_row("Extras"))) };
             }
             b if b == CONFIRM && self.starter.busy.is_none() && self.starter.scanned => match rows.get(self.starter.sel).copied() {
                 Some(Row::All) => {
@@ -490,7 +511,7 @@ impl App {
 
     pub(crate) fn paint_starter(&mut self, c: &mut Canvas) {
         c.clear(pal().void);
-        self.sheet_header(c, "Starter pack");
+        self.sheet_header(c, SETTINGS_NAME);
         let top = NU_PAD + NU_PILL + 12;
         let rows = self.starter.rows();
         let sel = self.starter.sel.min(rows.len().saturating_sub(1));

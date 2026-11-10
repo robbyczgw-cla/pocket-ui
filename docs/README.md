@@ -29,6 +29,7 @@ Start at [user/index.md](user/index.md).
 | [user/pause-menu.md](user/pause-menu.md) | The pause menu of each emulator, Quit and Settings → Playing → Continue where I quit, Pixel Path |
 | [user/pause-menu-saves.md](user/pause-menu-saves.md) | Save slots, Where I quit and Before load, Earlier, where the state files are, when a save fails |
 | [user/options.md](user/options.md) | Options in a game: picture, screen frames, emulator, controls, cheats, shortcuts, extras, run-ahead, saving them |
+| [user/options-cheats.md](user/options-cheats.md) | Options → Cheats: the cheat list, the one-time download on TrimUI, offline use, cheat files pocket-core cannot apply |
 | [user/options-big.md](user/options-big.md) | The Options of PS2, GameCube, Wii and 3DS games |
 | [user/controls.md](user/controls.md) | Every button, screen by screen |
 | [user/controls-card.md](user/controls-card.md) | The console button drawing, remaps and HOME shortcuts; first start, game card and pause menu |
@@ -85,6 +86,7 @@ Start at [DEVELOPING.md](DEVELOPING.md).
 | Document | Type | Contents |
 |---|---|---|
 | [DEVELOPING.md](DEVELOPING.md) | Reference | Building, the dev loop, the virtual device, tests and the documentation checks, environment variables, repository layout |
+| [BINARY-SIZE.md](BINARY-SIZE.md) | Internal | Release binary size by crate/function and embedded data, full-LTO savings, storage reserve and before/after runtime measurements |
 | [ARCHITECTURE.md](ARCHITECTURE.md) | Reference | How pocket-ui fits into ROCKNIX, the processes, the launch flow, switching games, the pause menu, and where each feature lives |
 | [i18n-glossary.md](i18n-glossary.md) | Reference | The German and Spanish interfaces: tone, the terms every page uses, what stays English and why |
 | [HOST.md](HOST.md) | Reference | pocket-core, our libretro host: how it works, systems, measurements |
@@ -100,7 +102,9 @@ Start at [DEVELOPING.md](DEVELOPING.md).
 | [TRIMUI-BRICK.md](TRIMUI-BRICK.md) | Design and reference | The TrimUI Brick (Beta) behind the `brick` feature: the first version under NextUI, the framebuffer bridge, the test kit |
 | [TRIMUI-BRICK-CORES.md](TRIMUI-BRICK-CORES.md) | Design and reference | Additional standalone software cores: pinned builds, licences, routing, real-library checks and limits |
 | [TRIMUI-BRICK-STANDALONE.md](TRIMUI-BRICK-STANDALONE.md) | Design and reference | The same Brick without NextUI: a card folder with its own start script, cores built for glibc 2.33, stand-ins for the firmware helpers, host tests |
+| [TRIMUI-PORTMASTER.md](TRIMUI-PORTMASTER.md) | Design and reference | Optional TrimUI PortMaster setup, portable runtime archives, persistent games and files, cancellation and native launch |
 | [TRIMUI-SMART-PRO.md](TRIMUI-SMART-PRO.md) | Design and reference | The TrimUI Smart Pro on the same card (experimental): how the card tells it from the Brick, what differs, the firmware floor, what a report carries |
+| [TRIMUI-BRICK-PRO.md](TRIMUI-BRICK-PRO.md) | Design and reference | Experimental Brick Pro on the same TrimUI card: detection, separate stick clicks and F keys, suspend handshake, evidence and hardware limits |
 | [TRIMUI-BRICK-REMOTE.md](TRIMUI-BRICK-REMOTE.md) | Design and reference | The Brick's own card on the network: Tailscale, Remote access with dropbear, updates of the card's program folder from a private channel, the way back |
 | [TRIMUI-BRICK-MORE.md](TRIMUI-BRICK-MORE.md) | Design and reference | The Brick's own card with Kids mode, screenshots (and the `grim` stand-in), the web companion over userspace Tailscale, Over the game and a Tour that fits |
 | [TRIMUI-BRICK-HW.md](TRIMUI-BRICK-HW.md) | Design and reference | The Brick's own hardware: rumble motor, the 23 LEDs, the F1/F2 keys and the mute slider, and the Settings page "Lights & buttons" |
@@ -111,6 +115,7 @@ Start at [DEVELOPING.md](DEVELOPING.md).
 | [BRICK-CFG.md](BRICK-CFG.md) | Design and verification | Compile-time ownership of Brick code and assets, the standard-build reference and comparison evidence |
 | [BRICK-SHADERS.md](BRICK-SHADERS.md) | Design and reference | Picture options on the Brick through the GPU: the choices, their cost and the read-back proof |
 | [STEAMDECK.md](STEAMDECK.md) | Design and reference | pocket-ui on a Steam Deck (first preparation, run on a PC only): the Deck profile, EmuDeck library, emulators, bundle and Flatpak plan, Add to Steam, what needs real hardware |
+| [WEB-DEMO.md](WEB-DEMO.md) | Design and reference | pocket-ui in the browser (prototype): the emscripten build beside the device builds, the winit and softbuffer stand-ins, the stand-in game, building, measured size and speed |
 | [PLATFORMS.md](PLATFORMS.md) | Reference | Which user-visible feature exists on ROCKNIX handhelds, Android and the Steam Deck, and what was seen on a device |
 | [H700-SCALED-LAYOUT.md](H700-SCALED-LAYOUT.md) | Small-panel logical layouts, complete snapshot comparisons, JPEG readability and CPU measurement method |
 | [DISPLAY-OUT.md](DISPLAY-OUT.md) | Design and reference | Playing on a TV through USB-C: what ROCKNIX does, TV mode, what is built, the device test plan |
@@ -138,6 +143,7 @@ Start at [DEVELOPING.md](DEVELOPING.md).
 | [CURATOR.md](CURATOR.md) | Design notes and reference | Curator (Lens, smart shelves, stickers, Echoes, Versions) and Pixel Path: the design, then what was built ("Developer notes", "Pixel Path as built") |
 | [HISTORY.md](HISTORY.md) | Reference | Play history: the session log and its file, what counts, Curator → History and the Year in review, the read API for the web companion |
 | [SYNC-CURATION.md](SYNC-CURATION.md) | Reference | Settings → Sync → Library data: one folder per device, values with times, the field-by-field merge with tombstones, the play history union, what is left out |
+| [SYNC-OWNERSHIP.md](SYNC-OWNERSHIP.md) | Reference and design notes | Save-sync pause ownership, failed-resume retry tests, the remaining interruption ambiguity and the manual-recovery follow-up |
 | [CURATOR-DATA.md](CURATOR-DATA.md) | Reference | Curator's data: Wikidata facts and versions by work, the feel-tag vocabulary and labelling, ROM file-name facts, the reader APIs |
 | [STATUS.md](STATUS.md) | Reference | The feature status ledger: one row per feature with how it was verified (device-measured, device smoke-checked, virtual device only, host tests only, not built), the evidence and what is still open |
 | [LEDS.md](LEDS.md) | Reference | The lights around the sticks: ROCKNIX's scripts, what Settings → Sound & feel → LEDs writes, a device checklist |

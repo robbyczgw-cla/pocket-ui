@@ -2,6 +2,9 @@
 //! over real sockets (docs/TRIMUI-BRICK.md). `cargo test --features brick --test brick_fb`.
 #![cfg(all(feature = "brick", target_os = "linux"))]
 
+#[path = "common/executable.rs"]
+mod fixture_executable;
+
 use std::collections::BTreeMap;
 use std::io::{Read, Write};
 use std::os::fd::{AsRawFd, FromRawFd, OwnedFd};
@@ -264,6 +267,30 @@ const GAMES: &str = r#"[app_id="^(?!pocket-ui$).*"]"#;
 const UI: &str = r#"[app_id="pocket-ui"]"#;
 
 #[test]
+fn a_native_port_keeps_the_screen_until_the_pause_menu_and_returns_after_quit() {
+    let bridge = Bridge::start(32);
+    let mut ui = Client::connect(&bridge.path("w"), "pocket-ui");
+    ui.show(0, GREEN);
+    wait_for("the shelf", || bridge.pixel() == GREEN_ON_FB);
+    let pid = std::process::id();
+    assert!(bridge.command_ok(&format!("pocket_port begin {pid}")));
+    let tree: serde_json::Value = serde_json::from_str(&bridge.sway(ipc::GET_TREE, "")).unwrap();
+    assert!(tree.to_string().contains("pocket-native-port"), "native ports must be visible to focus and Quit");
+    std::fs::write(bridge.path("fb"), vec![0x42; (W * H * 4) as usize]).unwrap();
+    ui.show(1, BLUE);
+    assert!(bridge.command_ok(&format!("{GAMES} focus")));
+    assert_eq!(bridge.pixel(), [0x42; 4], "background UI updates must not overwrite the port");
+    assert!(bridge.command_ok(&format!("{UI} focus")));
+    wait_for("the pause menu over the native port", || bridge.pixel() == BLUE_ON_FB);
+    assert!(bridge.command_ok(&format!("{GAMES} focus")));
+    std::fs::write(bridge.path("fb"), vec![0x43; (W * H * 4) as usize]).unwrap();
+    // A stale launch cannot unregister the current port.
+    assert!(!bridge.command_ok(&format!("pocket_port end {}", pid + 1)));
+    assert!(bridge.command_ok(&format!("pocket_port end {pid}")));
+    wait_for("the shelf after Quit", || bridge.pixel() == BLUE_ON_FB);
+}
+
+#[test]
 fn the_pause_menu_goes_over_the_game_and_back() {
     let bridge = Bridge::start(32);
     let mut game = Client::connect(&bridge.path("w"), "pocket-core");
@@ -379,10 +406,8 @@ fn the_real_pocket_ui_reaches_the_framebuffer() {
     wait_for("the sockets", || dir.path().join("w").exists() && dir.path().join("i").exists());
     // A stand-in pocket-core keeps loading after the launch fade, as a stalled card read does. It is one
     // process, bounded to 11 seconds, and pocket-ui's parent-death signal ends it if the UI exits early.
-    use std::os::unix::fs::PermissionsExt;
     let host = dir.path().join("host");
-    std::fs::write(&host, format!("#!/usr/bin/env python3\nimport time,pathlib\ntime.sleep(3)\npathlib.Path({:?}).write_text('loading')\ntime.sleep(8)\n", pocket_ui::startup::loading_path())).unwrap();
-    std::fs::set_permissions(&host, std::fs::Permissions::from_mode(0o755)).unwrap();
+    fixture_executable::publish(&host, format!("#!/usr/bin/env python3\nimport time,pathlib\ntime.sleep(3)\npathlib.Path({:?}).write_text('loading')\ntime.sleep(8)\n", pocket_ui::startup::loading_path())).unwrap();
     std::fs::create_dir_all(dir.path().join("data")).unwrap();
     std::fs::write(dir.path().join("data/settings.json"), r#"{"onboarded":true,"seen_version":"9.9.9","theme":"shelf","motion":"off","art":"off"}"#).unwrap();
     std::fs::create_dir_all(dir.path().join(".pocket-ui-test")).unwrap();

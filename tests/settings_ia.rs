@@ -16,7 +16,7 @@ const TREE: [(&str, &[&str]); 7] = [
     ("Look", &["Layout", "Systems on the shelf", "Cozy extras", "Appearance", "Colours", "Style", "Text size", "Night light"]),
     ("Sound & feel", &["Animations", "Playful cases", "Old-TV switch-on", "Motion", "Zoom in the pause menu", "Sounds", "Case sounds", "Haptics", "LEDs"]),
     ("Playing", &["On start", "Continue where I quit", "Remind me where I was", "Buttons", "Over the game", "Screen frames", "Performance & fan", "Battery", "RetroAchievements"]),
-    ("Games", &["Add games", "Game check", "Starter pack", "Pictures & extras", "From EmulationStation", "Screenshots", "Curator", "PC streaming"]),
+    ("Games", &["Add games", "Game check", "Extras", "From EmulationStation", "Screenshots", "Curator", "PC streaming"]),
     ("Connections", &["Wi-Fi", "Bluetooth", "Tailscale", "Sync", "Remote access (SSH)", "Web companion"]),
     ("System", &["Language", "Time", "Sleep & power", "Kids mode", "Updates", "Storage", "Backup & reset"]),
     ("Help & tools", &["First-start setup", "How you like to play", "Tour", "Manual", "Tools", "Test buttons", "Report a problem", "About"]),
@@ -62,7 +62,7 @@ const LINES: [&str; 7] = [
     "Layout, systems, extras, appearance, colours, style, text size, screen colour, night light.",
     "Animations, playful cases, old-TV switch-on, motion, zoom, sounds, case sounds, haptics, LEDs.",
     "On start, continue, where I was, buttons, over the game, frames, performance, battery, achievements.",
-    "Games, game check, starter pack, pictures, EmulationStation, screenshots, Curator, PC.",
+    "Games, game check, extras, EmulationStation, screenshots, Curator, PC.",
     "Wi-Fi, Bluetooth, USB file transfer, Tailscale, Sync, remote access, web companion.",
     "Language, time, sleep & power, second screen, kids mode, updates, storage, backup & reset.",
     // With the Store, as the German table has it; a test run has no catalog, so its part is left out (below).
@@ -76,10 +76,16 @@ struct Shot {
 }
 
 fn shot(tmp: &Path, stub: &Option<Stub>, state: &str, lang: &str, size: &str, text: &str, games: bool) -> Shot {
-    let name = format!("{}-{lang}-{size}-{text}", state.replace(':', "_"));
+    shot_with(tmp, stub, state, lang, size, text, games, r#"{"onboarded": true}"#, "")
+}
+
+/// `shot` with `settings` as settings.json, its pictures named with `tag` besides.
+#[allow(clippy::too_many_arguments)]
+fn shot_with(tmp: &Path, stub: &Option<Stub>, state: &str, lang: &str, size: &str, text: &str, games: bool, settings: &str, tag: &str) -> Shot {
+    let name = format!("{}-{lang}-{size}-{text}{tag}", state.replace(':', "_"));
     let data = tmp.join(&name);
     std::fs::create_dir_all(&data).unwrap();
-    std::fs::write(data.join("settings.json"), r#"{"onboarded": true}"#).unwrap();
+    std::fs::write(data.join("settings.json"), settings).unwrap();
     let (visible, boxes) = (tmp.join(format!("{name}.txt")), tmp.join(format!("{name}.tsv")));
     let mut cmd = Command::new(env!("CARGO_BIN_EXE_pocket-ui"));
     cmd.args(["--snapshot", state, tmp.join(format!("{name}.png")).to_str().unwrap()])
@@ -194,6 +200,39 @@ fn every_choice_is_a_row_and_shows_whole() {
         let first_word = empty.split_whitespace().next().unwrap().to_string();
         if !s.visible.iter().any(|v| v.starts_with(&first_word)) {
             failed.push(format!("{lang} {size} {text} setup:look-systems without games: no line saying so: {:?}", s.visible));
+        }
+    }
+    let _ = std::fs::remove_dir_all(&tmp);
+    assert!(failed.is_empty(), "{} problem(s):\n{}", failed.len(), failed.join("\n"));
+}
+
+/// Settings › Look › Style in Retro (0.3.2): its value, "Retro" in Departure Mono or "Retro Pixelify", shows whole when
+/// selected and the Style row with it, in Large German on the small screen and the Brick's, in both of Retro's letters.
+#[test]
+fn the_style_rows_retro_values_show_whole_in_both_letters() {
+    let tmp = std::env::temp_dir().join(format!("pocketui-settings-ia-retro-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&tmp);
+    std::fs::create_dir_all(&tmp).unwrap();
+    std::fs::write(tmp.join("none.cfg"), "<systemList></systemList>").unwrap();
+    let stub = wayland(&tmp);
+    let style = TREE[0].1.iter().position(|r| *r == "Style").unwrap();
+    let mut failed = Vec::new();
+    for (letters, value) in [("departure", "Retro"), ("pixelify", "Retro Pixelify")] {
+        let settings = format!(r#"{{"onboarded": true, "font": "retro", "retro_letters": "{letters}"}}"#);
+        for (lang, size, text) in [("de", "640x480", "large"), ("de", "1024x768", "large"), ("es", "640x480", "large"), ("en", "1280x960", "normal")] {
+            let s = shot_with(&tmp, &stub, &format!("settings:0:{style}"), lang, size, text, false, &settings, &format!("-{letters}"));
+            let row = if lang == "en" { "Style".to_string() } else if lang == "de" { german("Style") } else { "Estilo".to_string() };
+            // The value whole, its arrows beside it (Retro paints them apart, as pixel arrows).
+            if !s.visible.iter().any(|v| *v == value || *v == format!("‹ {value} ›")) || !s.visible.iter().any(|v| v.contains('‹')) {
+                failed.push(format!("{letters} {lang} {size} {text}: \"{value}\" not whole beside its arrows: {:?}", s.visible));
+            }
+            if !s.visible.iter().any(|v| *v == row) {
+                failed.push(format!("{letters} {lang} {size} {text}: row {row:?} not whole: {:?}", s.visible));
+            }
+            if s.visible.iter().any(|v| v.ends_with('…') && !v.starts_with('…')) {
+                failed.push(format!("{letters} {lang} {size} {text}: a line is cut: {:?}", s.visible));
+            }
+            failed.extend(s.faults.iter().map(|f| format!("{letters} {lang} {size} {text}: {f}")));
         }
     }
     let _ = std::fs::remove_dir_all(&tmp);

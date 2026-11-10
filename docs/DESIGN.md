@@ -174,7 +174,8 @@ two faces; everything above (the scale, Body 28 as the smallest read text) holds
 | Barlow | Barlow Condensed SemiBold | Barlow Medium |
 | Pixel | Pixelify Sans SemiBold | Barlow Medium, so that small text stays readable |
 | Rounded | Nunito ExtraBold | Nunito SemiBold |
-| Retro | Pixelify Sans SemiBold | Pixelify Sans Regular at nine tenths of Barlow's capitals (it runs 21 % wider), and with it the whole Retro style ([RETRO-STYLE.md](RETRO-STYLE.md)) |
+| Retro | Departure Mono (one weight, monospaced, an 11-pixel grid; letters one font pixel apart) at 0.9 of Barlow Condensed's capitals | Departure Mono at 0.85 of Barlow's, each font pixel whole screen pixels; with it the whole Retro style ([RETRO-STYLE.md](RETRO-STYLE.md)) |
+| Retro Pixelify (`font_style::RetroLetters::Pixelify`) | Pixelify Sans SemiBold | Pixelify Sans Regular at nine tenths of Barlow's capitals (it runs 21 % wider) |
 
 All OFL 1.1, static Latin instances compiled in (about 100 KB for the two new families; `assets/fonts/OFL.txt`). Each
 alternative face is **fitted to Barlow's capitals**: it is rasterised at a size scaled so that its "H" (bounds, top to
@@ -475,7 +476,7 @@ and rare: they never add a frame, a row or a badge to a list.
   PNG header), so nothing moves when it arrives.
 - **Never an empty frame.** A game without a screenshot cycles nothing and shows its box art; without box art but
   with a screenshot it shows the screenshot; with nothing, the console and the count as before. "Box art"
-  or "Off" (Settings → Games → Pictures & extras → Pictures) hides them all.
+  or "Off" (Settings → Games → Extras → Pictures) hides them all.
 - **Cost.** PNGs are decoded and scaled on one loader thread into the box art's image cache (16 pictures at most),
   never on the UI thread; the files are stat'ed by their 24-byte header once.
 

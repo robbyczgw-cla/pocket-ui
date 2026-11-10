@@ -72,11 +72,18 @@ pub struct Hotkeys {
     #[cfg(feature = "brick")]
     f_action: [Option<Action>; 2],
     pending: Vec<Action>,
+    suppressed: bool,
 }
 
 impl Hotkeys {
     pub fn new(enabled: Enabled) -> Self {
         Hotkeys { enabled, ..Default::default() }
+    }
+
+    /// Commands gathered while the game is paused, asleep or dark are discarded.
+    pub fn suppress(&mut self, on: bool) {
+        self.suppressed = on;
+        if on { self.pending.clear(); }
     }
 
     /// Feeds one input event; completed shortcuts are queued for `take`.
@@ -98,7 +105,7 @@ impl Hotkeys {
     #[cfg(feature = "brick")]
     fn f_key(&mut self, i: usize, pressed: bool) {
         let was = std::mem::replace(&mut self.f_down[i], pressed);
-        if !pressed || was {
+        if !pressed || was || self.suppressed {
             return;
         }
         let e = self.enabled;
@@ -132,7 +139,7 @@ impl Hotkeys {
         };
         let was = std::mem::replace(slot, pressed);
         // A shortcut fires when its button goes down while HOME is already held.
-        if !pressed || was || !self.home {
+        if !pressed || was || !self.home || self.suppressed {
             return;
         }
         let e = self.enabled;
@@ -156,7 +163,7 @@ impl Hotkeys {
 
     /// HOME + L2 is held and the shortcut is on.
     pub fn rewind_held(&self) -> bool {
-        self.home && self.l2 && self.enabled.rewind
+        !self.suppressed && self.home && self.l2 && self.enabled.rewind
     }
 
     /// The shortcuts completed since the last call.
@@ -201,6 +208,22 @@ mod tests {
     fn tap(h: &mut Hotkeys, b: Button) {
         press(h, b, true);
         press(h, b, false);
+    }
+
+    #[test]
+    fn save_safety_shortcuts_during_menu_sleep_and_dark_never_replay() {
+        for blocked in ["menu", "sleep", "dark"] {
+            let mut h = Hotkeys::new(Enabled::default());
+            press(&mut h, Button::Mode, true);
+            tap(&mut h, Button::R1); // queued just before the pause was taken
+            h.suppress(true);
+            tap(&mut h, Button::L1);
+            tap(&mut h, Button::R2);
+            h.suppress(false);
+            assert!(h.take().is_empty(), "{blocked}: no deferred save, load or speed action");
+            tap(&mut h, Button::R1);
+            assert_eq!(h.take(), vec![Action::Save], "a fresh gameplay press still works");
+        }
     }
 
     #[test]
@@ -349,6 +372,29 @@ mod tests {
         assert_eq!(menus_opened(&[(Mode, true), (East, true), (East, false), (Mode, false), (Mode, true), (Mode, false)]), 1);
         // A alone never opens it.
         assert_eq!(menus_opened(&[(East, true), (East, false)]), 0);
+    }
+
+    #[test]
+    #[cfg(feature = "brick")]
+    fn brick_fkeys_after_pause_sleep_and_dark_require_a_fresh_press() {
+        for blocked in ["pause", "sleep", "dark"] {
+            let mut h = Hotkeys::new(Enabled::default());
+            h.set_f_keys([Some(Action::Save), Some(Action::Load)]);
+            tap(&mut h, Button::F1);
+            h.suppress(true);
+            press(&mut h, Button::F1, true);
+            press(&mut h, Button::F2, true);
+            h.suppress(false);
+            assert!(h.take().is_empty(), "{blocked}: no queued or suspended save/load replays");
+            press(&mut h, Button::F1, true);
+            press(&mut h, Button::F2, true);
+            assert!(h.take().is_empty(), "{blocked}: held keys do not act on resume");
+            press(&mut h, Button::F1, false);
+            press(&mut h, Button::F2, false);
+            tap(&mut h, Button::F1);
+            tap(&mut h, Button::F2);
+            assert_eq!(h.take(), [Action::Save, Action::Load], "{blocked}: new gameplay presses still work");
+        }
     }
 
     #[test]

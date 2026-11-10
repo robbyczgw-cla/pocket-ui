@@ -4,7 +4,7 @@ pub mod frame_pace;
 pub mod state_policy;
 pub mod audio_diagnostics;
 pub mod audio_pw_stats;
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "emscripten"))] // and the browser demo over its stand-ins (docs/WEB-DEMO.md)
 include!("linux_modules.rs");
 #[cfg(target_os = "android")]
 include!("android_modules.rs");

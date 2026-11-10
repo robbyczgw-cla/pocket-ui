@@ -2,6 +2,8 @@
 """Player-facing packaging regressions, with a tiny fake card; no build machines or signing key."""
 import importlib.util
 import json
+import subprocess
+import sys
 from pathlib import Path
 import tarfile
 import tempfile
@@ -30,11 +32,34 @@ class Packaging(unittest.TestCase):
                     inventory = json.load(archive.extractfile('asset-packages.json'))
                 snapshots.append({p.name: p.read_bytes() for p in (channel / 'assets').iterdir()})
                 for asset in inventory['assets']:
+                    package = asset['package']
+                    self.assertTrue(package['url'].startswith('https://github.com/owner/repo/releases/download/v' + version + '/'))
+                    self.assertEqual(package['mirrors'], ['https://pocketui.xyz/updates/brick/assets/' + package['url'].rsplit('/', 1)[1]])
                     file = release / asset['package']['url'].rsplit('/', 1)[1]
                     self.assertEqual(pack.sha(file), asset['package']['sha256'])
                     with tarfile.open(file) as archive:
                         self.assertEqual(archive.getnames(), [asset['path']])
             self.assertEqual(snapshots[0], snapshots[1], 'app release numbers never cause unchanged cores to be downloaded again')
+
+    def test_legacy_card_pack_is_published_only_as_an_optional_download(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            app = root / 'app'
+            (app / 'cores').mkdir(parents=True)
+            (app / 'cores/core.so').write_bytes(b'core')
+            (app / 'cores/cht.pack').write_bytes(b'legacy cheats')
+            pack.prepare(app, root / 'release', root / 'channel', 'https://example.org/release', '1')
+            with tarfile.open(root / 'channel/pocket-ui-brick-1.tar.gz') as archive:
+                self.assertNotIn('cores/cht.pack', archive.getnames())
+                inventory = json.load(archive.extractfile('asset-packages.json'))
+                self.assertEqual([asset['path'] for asset in inventory['assets']], ['cores/core.so'])
+                info = json.load(archive.extractfile('database/cheats-download.json'))
+            self.assertEqual((root / 'channel/assets' / info['url'].rsplit('/', 1)[1]).read_bytes(), b'legacy cheats')
+            self.assertEqual((app / 'cores/cht.pack').read_bytes(), b'legacy cheats', 'preparing OTA never changes the build input')
+            listed = subprocess.check_output([sys.executable, str(Path(__file__).with_name('list-update-assets.py')),
+                str(root / 'channel/pocket-ui-brick-1.tar.gz')], text=True)
+            self.assertIn('optional-cheats\t', listed, 'release preflight checks that the optional download is actually hosted')
+            self.assertIn(info['url'], listed)
 
     def test_oversized_file_and_symlinks_refuse_the_package(self):
         with tempfile.TemporaryDirectory() as temp:

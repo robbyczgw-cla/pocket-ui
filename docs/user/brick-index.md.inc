@@ -29,7 +29,7 @@ Spanish ([Settings → System → Language](language.md)).
 2. [How to](how-to.md): update over Wi-Fi, a game that won't start, pair a controller, back up saves, sync with a second device.
 3. [Playing](playing.md): Home, finding a game, the looks, console pages, Recent games; [Easy](easy.md): the look with one big game at a time; [Easy to read, Zoom and Hold to toggle](easy-to-read.md): larger text in one switch, a magnifier for the pause menu, buttons that stay down. [Continue](continue.md): an open case means your moment is waiting, and A goes straight back.
 4. [The pause menu](pause-menu.md): what each emulator offers, quitting, Pixel Path; [Saving in the pause menu](pause-menu-saves.md): save slots, Where I quit and Before load, Earlier, when a save fails.
-5. [Options](options.md): picture, screen frames, controls, shortcuts, extras and run-ahead in a game; [their shorter list](options-big.md) for the big consoles of other handhelds.
+5. [Options](options.md): picture, screen frames, controls, shortcuts, extras and run-ahead in a game, and [Cheats](options-cheats.md); [their shorter list](options-big.md) for the big consoles of other handhelds.
 6. [Controls](controls.md): every button, screen by screen; [in Settings, setup and on the touch screen](controls-settings.md), with the power and volume keys; [the controls card](controls-card.md), which button is which on each console.
 7. [Settings](settings.md): the Settings categories and the entries of Look, Playing and Games; [Sound & feel](settings-sound.md); [Connections, System and Help & tools](settings-system.md): Wi-Fi, Bluetooth, Tailscale, Sync, the clock, sleep, backups, the Tour and this guide; [quick settings, sleep and power](quick-settings.md); [storage](storage.md): what takes up space on the SD card, clean-ups, hidden games; [Bluetooth](bluetooth.md): pairing controllers, headphones and speakers.
 8. [Language](language.md): English, German or Spanish menus, and what stays English.
@@ -41,7 +41,7 @@ Spanish ([Settings → System → Language](language.md)).
 14. [Achievements](achievements.md): RetroAchievements, signing in, unlocks, offline play.
 15. [Arcade games](arcade.md): which core plays them, matching romsets, parents, BIOS and CHD files, when a game does not start.
 16. [Patches, translations and MSU-1](patches-msu1.md): patching a game on a computer or with RetroArch, and one MSU-1 recipe (not checked on the device).
-17. [Pictures & extras](extras.md): box art, PortMaster games, tools, the Store (not open yet).
+17. [Extras](extras.md): box art, PortMaster games, tools, the Store (not open yet).
 18. [Sync](sync.md): saves and states on all your devices, with Syncthing.
 19. [Tailscale](remote.md): reach the Brick from anywhere on your private network.
 20. [Web companion](web-companion.md): your library, uploads and play time in a browser, over Tailscale.

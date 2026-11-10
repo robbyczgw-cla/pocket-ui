@@ -206,6 +206,15 @@ impl Device {
         self.model.is_some_and(|m| m.is_h700() || m == Model::RgDsPlus)
     }
 
+    /// The card's games folder shows up on Windows and macOS as it is: the TrimUI Brick's own FAT card. On the ROCKNIX
+    /// handhelds the card's STORAGE part is ext4, which a computer can't read (and Windows offers to format it).
+    pub fn card_reads_in_computer(&self) -> bool {
+        #[cfg(feature = "brick")]
+        { matches!(self.model, Some(Model::Brick(_))) }
+        #[cfg(not(feature = "brick"))]
+        { false }
+    }
+
     /// Analog sticks, and so the lights around them. Per model on the H700 handhelds.
     #[cfg(not(feature = "brick"))]
     pub fn has_sticks(&self) -> bool {

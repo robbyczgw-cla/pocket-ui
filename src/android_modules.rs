@@ -32,6 +32,7 @@ pub mod cabinet_art;
 pub mod phone_shelves;
 pub mod media;
 pub mod title_block;
+pub mod pause_head;
 pub mod slideshow;
 pub mod motion;
 pub mod keyboard;
@@ -53,6 +54,7 @@ pub mod game_box;
 pub mod kit;
 /// What a frame offers the D-pad, for tests/nav_explorer.rs (off unless POCKETUI_NAV_PROBE is set).
 pub mod nav_probe;
+pub mod ui_status;
 pub mod ui_art;
 pub mod scaled_layout;
 #[path = "touch_ui.rs"]
@@ -75,6 +77,7 @@ pub mod wiki_text;
 
 pub mod libretro;
 pub mod controls;
+pub mod button_layout_model;
 pub mod controls_card;
 pub mod core_options;
 pub mod vfs;
@@ -112,3 +115,10 @@ pub mod playful;
 
 pub mod where_was_i;
 pub mod zoom;
+
+pub mod layouts;
+pub mod gamelist;
+pub mod cheat_pack;
+pub mod cheats;
+
+pub mod document_art;

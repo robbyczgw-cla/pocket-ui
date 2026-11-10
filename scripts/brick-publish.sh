@@ -3,14 +3,15 @@
 # inside the owner's tailnet; never copy it, its address or the Brick to the public site or the public repository.
 #   scripts/brick-publish.sh CARD [--channel NAME] [--notes TEXT] [--web DIR] [--full-check]
 # Public channel (docs/UPDATE-CHANNEL.md, "The Brick card"): prepares, publishes nothing.
-#   scripts/brick-publish.sh CARD --public OWNER/NAME --out DIR [--tag vX.Y.Z] [--zip CARD.zip] [--notes TEXT]
+#   scripts/brick-publish.sh CARD --public OWNER/NAME --out DIR [--tag vX.Y.Z] [--zip CARD.zip] [--sources SOURCE.zip] [--notes TEXT]
 #   writes DIR/release/ (the tarball, and the card zip when given: files for the GitHub release <tag> of OWNER/NAME) and
 #   DIR/updates/brick/update.json + .sig (for pocketui.xyz/updates/brick/, the address a public card asks, update::BRICK_DEFAULT_URL),
-#   app and immutable per-file core/data packages on pocketui.xyz first, GitHub fallback. A beta card is refused.
+#   app and immutable per-file core/data packages on GitHub first, pocketui.xyz fallback. A beta card is refused.
 #   After the upload: scripts/release-channel.sh --check DIR/updates/brick/update.json, then deploy the list with the website.
 # CARD        what scripts/brick-make-card.sh made (OUT/card), or its pocket-ui/app folder
 # --channel   the channel's folder name (default beta): <web>/brick-updates/<channel>/
 # --web       the folder `tailscale serve` shares at / on this machine (default ~/work/drop/export/web)
+# --sources   matching pocket-ui-trimui-sources-<version>.zip (auto-discovered beside the card zip or maker output)
 # --notes     shown on the Brick's Updates page
 # --full-check  also downloads the tarball back over the tailnet and compares its sha256 (default: only the list and signature)
 # What it does: checks the program folder (the files the card's start scripts need, aarch64 programs that carry the version in
@@ -29,13 +30,14 @@ set -euo pipefail
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
 die() { echo "brick-publish: $*" >&2; exit 1; }
 CARD=${1:?card folder}; shift
-CHANNEL=beta; NOTES=""; WEB=$HOME/work/drop/export/web; FULL=0; PUBLIC=""; OUTDIR=""; TAG=""; ZIP=""
+CHANNEL=beta; NOTES=""; WEB=$HOME/work/drop/export/web; FULL=0; PUBLIC=""; OUTDIR=""; TAG=""; ZIP=""; SOURCES=""
 while [ $# -gt 0 ]; do
   case $1 in
     --public) PUBLIC=${2:?}; shift 2 ;;
     --out) OUTDIR=${2:?}; shift 2 ;;
     --tag) TAG=${2:?}; shift 2 ;;
     --zip) ZIP=${2:?}; shift 2 ;;
+    --sources) SOURCES=${2:?}; shift 2 ;;
     --channel) CHANNEL=${2:?}; shift 2 ;;
     --notes) NOTES=${2-}; shift 2 ;;
     --web) WEB=${2:?}; shift 2 ;;
@@ -86,6 +88,30 @@ elif [ -s "$APP/update-url" ] && ! grep -q "/brick-updates/$CHANNEL/update.json"
   echo "brick-publish: note: this build looks for updates at $(cat "$APP/update-url"), not in channel $CHANNEL" >&2
 fi
 
+# The launch helpers' complete source is a separate maker artifact, including beta cards.
+# Resolve it before changing an existing prepared release or exposing a new signed update.
+SOURCE_NAME=pocket-ui-trimui-sources-$VERSION.zip
+if [ -z "$SOURCES" ]; then
+  source_candidates=()
+  [ -z "$ZIP" ] || source_candidates+=("$(dirname "$ZIP")/$SOURCE_NAME")
+  source_candidates+=("$(dirname "$APP")/$SOURCE_NAME")
+  case $APP in */pocket-ui/app) source_candidates+=("$APP/../../../$SOURCE_NAME") ;; esac
+  for candidate in "${source_candidates[@]}"; do
+    [ ! -e "$candidate" ] || { SOURCES=$candidate; break; }
+  done
+fi
+if [ -n "$SOURCES" ]; then
+  [ -s "$SOURCES" ] || die "no source archive at $SOURCES (expected $SOURCE_NAME)"
+  [ "$(basename "$SOURCES")" = "$SOURCE_NAME" ] || die "source archive must be $SOURCE_NAME for this card version"
+  SOURCES=$(cd "$(dirname "$SOURCES")" && pwd)/$SOURCE_NAME
+elif [ -s "$APP/bin/bash" ]; then
+  die "the Bash launch helper needs matching $SOURCE_NAME beside the card zip or --sources ZIP"
+fi
+if [ -s "$APP/bin/bash" ]; then
+  grep -qF "$SOURCE_NAME" "$APP/licences/SOURCES.txt" 2>/dev/null \
+    || die "licences/SOURCES.txt must name $SOURCE_NAME, published beside this release"
+fi
+
 # --- store-tool ----------------------------------------------------------------------------------------------------------
 ST=${STORE_TOOL:-}
 if [ -z "$ST" ]; then
@@ -109,18 +135,20 @@ if [ -n "$PUBLIC" ]; then
   python3 "$ROOT/scripts/brick-update-pack.py" "$APP" "$OUTDIR/release" "$OUTDIR/updates/brick" "$BASE" "$VERSION" \
     || die "the small app / asset packages could not be prepared"
   # GitHub Releases take files under 2 GiB.
-  for f in "$OUTDIR/release/$NAME" ${ZIP:+"$ZIP"}; do [ "$(wc -c <"$f" | tr -d ' ')" -lt 2147483648 ] || die "$(basename "$f") is 2 GiB or more: GitHub refuses it"; done
-  "$ST" update "$KEY" "$OUTDIR/updates/brick/update.json" app "$VERSION" "$OUTDIR/release/$NAME" "https://pocketui.xyz/updates/brick/$NAME" "$NOTES" >/dev/null
-  "$ST" mirror "$KEY" "$OUTDIR/updates/brick/update.json" app "$BASE/$NAME" >/dev/null
+  for f in "$OUTDIR/release/$NAME" ${ZIP:+"$ZIP"} ${SOURCES:+"$SOURCES"}; do [ "$(wc -c <"$f" | tr -d ' ')" -lt 2147483648 ] || die "$(basename "$f") is 2 GiB or more: GitHub refuses it"; done
+  "$ST" update "$KEY" "$OUTDIR/updates/brick/update.json" app "$VERSION" "$OUTDIR/release/$NAME" "$BASE/$NAME" "$NOTES" >/dev/null
+  "$ST" mirror "$KEY" "$OUTDIR/updates/brick/update.json" app "https://pocketui.xyz/updates/brick/$NAME" >/dev/null
   if [ -n "$ZIP" ]; then
     cp "$ZIP" "$OUTDIR/release/"
     "$ST" update "$KEY" "$OUTDIR/updates/brick/update.json" install_zip "$VERSION" "$ZIP" "$BASE/$(basename "$ZIP")" "$NOTES" >/dev/null
   fi
+  [ -z "$SOURCES" ] || cp "$SOURCES" "$OUTDIR/release/$SOURCE_NAME"
   "$ST" verify "$OUTDIR/updates/brick/update.json" ${BRICK_PUBLISH_VERIFY_KEY:+"$BRICK_PUBLISH_VERIFY_KEY"} >/dev/null \
     || die "the list does not verify with the key pocket-ui trusts (store::PUBLIC_KEY): wrong signing key?"
   echo "brick-publish: public $VERSION prepared in $OUTDIR (nothing uploaded). Next, by hand:"
   echo "  gh release upload $TAG $OUTDIR/release/* --repo $PUBLIC"
   echo "  scripts/release-channel.sh --check $OUTDIR/updates/brick/update.json"
+  [ -z "$SOURCES" ] || echo "  source archive: $BASE/$SOURCE_NAME (keep it beside the card download)"
   echo "  then check every asset package and copy $OUTDIR/updates/brick/ to the website's updates/brick/ and deploy it"
   exit 0
 fi
@@ -178,6 +206,10 @@ fi
 "$ST" update "$KEY" "$TMP/update.json" app "$VERSION" "$TMP/$NAME" "$TARBALL_URL" "$NOTES" >/dev/null
 # Against the key built into pocket-ui (store::PUBLIC_KEY); BRICK_PUBLISH_VERIFY_KEY (a key file) is for the tests' throwaway key only.
 "$ST" verify "$TMP/update.json" ${BRICK_PUBLISH_VERIFY_KEY:+"$BRICK_PUBLISH_VERIFY_KEY"} >/dev/null || die "the list does not verify with the key pocket-ui trusts (store::PUBLIC_KEY): wrong signing key? Nothing was published."
+# Sources are accessible before the new app's signed list becomes visible.
+if [ -n "$SOURCES" ]; then
+  cp "$SOURCES" "$DIR/.$SOURCE_NAME.part" && mv -f "$DIR/.$SOURCE_NAME.part" "$DIR/$SOURCE_NAME"
+fi
 cp "$TMP/$NAME" "$DIR/.$NAME.part" && mv -f "$DIR/.$NAME.part" "$DIR/$NAME"
 cp "$TMP/update.json" "$DIR/.update.json.new"; cp "$TMP/update.json.sig" "$DIR/.update.json.sig.new"
 # The signature first, then the list: a Brick reads the list, then its signature; the window between the two renames is a moment.
@@ -206,6 +238,12 @@ if [ "$FULL" = 1 ]; then
   case $TARBALL_URL in *://*) BACK=$TARBALL_URL ;; *) BACK=$BASE/brick-updates/$CHANNEL/$NAME ;; esac
   curl -fsS --max-time 600 "$BACK" -o "$TMP/back.tar.gz"
   cmp -s "$TMP/back.tar.gz" "$DIR/$NAME" || die "the tarball over the tailnet ($BACK) is not the one published"
+  if [ -n "$SOURCES" ]; then
+    curl -fsS --max-time 600 "$BASE/brick-updates/$CHANNEL/$SOURCE_NAME" -o "$TMP/back-sources.zip"
+    cmp -s "$TMP/back-sources.zip" "$DIR/$SOURCE_NAME" || die "the source archive over the channel is not the one published"
+  fi
 fi
 case $TARBALL_URL in *://*) FROM=" (tarball from the mirror $MIRROR)" ;; *) FROM= ;; esac
 echo "brick-publish: $VERSION in channel $CHANNEL ($(du -h "$DIR/$NAME" | cut -f1))$FROM: $URL"
+
+[ -z "$SOURCES" ] || echo "brick-publish: source archive: $BASE/brick-updates/$CHANNEL/$SOURCE_NAME"

@@ -6,7 +6,12 @@
 //! | Barlow (default) | Barlow Condensed SemiBold | Barlow Medium |
 //! | Pixel | Pixelify Sans SemiBold | Barlow Medium (stays readable) |
 //! | Rounded | Nunito ExtraBold | Nunito SemiBold |
-//! | Retro | Pixelify Sans SemiBold | Pixelify Sans Regular |
+//! | Retro | Departure Mono | Departure Mono |
+//! | Retro Pixelify (`RetroLetters::Pixelify`) | Pixelify Sans SemiBold | Pixelify Sans Regular |
+//!
+//! Retro's letters are a choice of their own (settings.json `"retro_letters"`, `RetroLetters`): Departure Mono since
+//! 0.3.2, or Pixelify Sans as before. The Style row shows it as a fifth value, "Retro Pixelify", right after "Retro"
+//! (`ROW`), so that Look keeps its nine rows.
 //!
 //! The fonts are SIL OFL 1.1, compiled in as static, Latin-only instances (`assets/fonts/`, 104 KB for the two new
 //! families); `assets/fonts/OFL.txt` carries the licences. A style's faces are parsed the first time it is used, once per
@@ -35,8 +40,73 @@ pub enum FontStyle {
     Pixel,
     /// Nunito for both faces.
     Rounded,
-    /// Retro (`retro`): Pixelify Sans for both faces, and with it the Retro style's colours, pixel frames and icons.
+    /// Retro (`retro`): pixel letters for both faces (`RetroLetters`), and with it the Retro style's colours, pixel frames
+    /// and icons.
     Retro,
+}
+
+/// The Retro style's letters (settings.json `"retro_letters"`): Departure Mono when unset, so whoever has Retro on gets
+/// it with 0.3.2; Pixelify Sans, Retro's letters before, stays a choice.
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, Default, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum RetroLetters {
+    /// Departure Mono: even, square letters on an 11-pixel grid, every letter as wide as the next.
+    #[default]
+    Departure,
+    /// Pixelify Sans, rounder and narrower.
+    Pixelify,
+}
+
+impl RetroLetters {
+    pub const ALL: [RetroLetters; 2] = [RetroLetters::Departure, RetroLetters::Pixelify];
+
+    /// `POCKETUI_RETRO_LETTERS=departure|pixelify` for the snapshots and the text-size runs; `None` when unset or wrong.
+    pub fn from_env() -> Option<RetroLetters> {
+        match std::env::var("POCKETUI_RETRO_LETTERS").ok()?.trim().to_ascii_lowercase().as_str() {
+            "departure" => Some(RetroLetters::Departure),
+            "pixelify" => Some(RetroLetters::Pixelify),
+            _ => None,
+        }
+    }
+
+    fn from_u8(v: u8) -> RetroLetters {
+        Self::ALL.get(v as usize).copied().unwrap_or_default()
+    }
+}
+
+/// The values of Settings → Look → Style in their order: the four styles, Retro once with each of its letters.
+pub const ROW: [(FontStyle, RetroLetters); 5] = [
+    (FontStyle::Barlow, RetroLetters::Departure),
+    (FontStyle::Pixel, RetroLetters::Departure),
+    (FontStyle::Rounded, RetroLetters::Departure),
+    (FontStyle::Retro, RetroLetters::Departure),
+    (FontStyle::Retro, RetroLetters::Pixelify),
+];
+
+/// Where on `ROW` the style in use stands (the letters count only for Retro).
+fn row_index() -> usize {
+    let (style, letters) = (get(), retro_letters());
+    ROW.iter().position(|&(s, l)| s == style && (s != FontStyle::Retro || l == letters)).unwrap_or(0)
+}
+
+/// The Style row's value: the style's name, "Retro Pixelify" for Retro in Pixelify's letters.
+pub fn row_label() -> &'static str {
+    match ROW[row_index()] {
+        (FontStyle::Retro, RetroLetters::Pixelify) => "Retro Pixelify",
+        (s, _) => s.label(),
+    }
+}
+
+/// The next (`forward`) or previous value of the Style row, used from the next glyph on: the style, and Retro's
+/// letters when it lands on Retro (the other styles keep them for the next time).
+pub fn step_row(forward: bool) {
+    let n = ROW.len();
+    let i = row_index();
+    let (style, letters) = ROW[if forward { (i + 1) % n } else { (i + n - 1) % n }];
+    if style == FontStyle::Retro {
+        set_retro_letters(letters);
+    }
+    set(style);
 }
 
 impl FontStyle {
@@ -92,12 +162,33 @@ impl FontStyle {
         static PIXEL: OnceLock<Fitted> = OnceLock::new();
         static ROUNDED: OnceLock<Fitted> = OnceLock::new();
         static RETRO: OnceLock<Fitted> = OnceLock::new();
+        static RETRO_DEPARTURE: OnceLock<Fitted> = OnceLock::new();
         match self {
+            FontStyle::Retro if retro_letters() == RetroLetters::Departure => Some(RETRO_DEPARTURE.get_or_init(|| {
+                // One face for titles and body text, on its 11-pixel grid like Pixelify's (`Alt::grid`), with its own
+                // digits and capitals: they tell apart without the LCD set (`Alt::lcd`). Its letters stand one font
+                // pixel apart instead of two (`Alt::tight`) and a little lower than Barlow's capitals: every letter
+                // as wide as an "M" ran 35 % wider than Pixelify, and pages laid out for Barlow and Pixelify cut lines
+                // at 1024x768 in Large text (the text-size test's Retro runs, 09.11.2026).
+                let mut f = Fitted::new(Some(DEPARTURE), Some(DEPARTURE));
+                for alt in [f.title.as_mut(), f.body.as_mut()].into_iter().flatten() {
+                    alt.grid = DEPARTURE_PIXEL;
+                    alt.tight = true;
+                }
+                if let Some(title) = f.title.as_mut() {
+                    title.scale *= DEPARTURE_TITLE;
+                }
+                if let Some(body) = f.body.as_mut() {
+                    body.scale *= DEPARTURE_BODY;
+                }
+                f
+            })),
             FontStyle::Retro => Some(RETRO.get_or_init(|| {
                 let mut f = Fitted::new(Some(include_bytes!("../assets/fonts/PixelifySans-SemiBold.ttf")), Some(include_bytes!("../assets/fonts/PixelifySans-Regular.ttf")));
                 // Retro paints Pixelify on its own pixel grid: whole screen pixels per font pixel, no grey edges (`Alt::grid`).
                 for alt in [f.title.as_mut(), f.body.as_mut()].into_iter().flatten() {
                     alt.grid = PIXELIFY_PIXEL;
+                    alt.lcd = true;
                 }
                 // Pixelify's letters run 21 % wider than Barlow Medium's at equal capitals: the body text stands a tenth
                 // lower, so pages laid out for Barlow keep their lines (docs/RETRO-STYLE.md, the text-size test's Retro run).
@@ -117,8 +208,24 @@ impl FontStyle {
     }
 }
 
-/// How high Retro's body text stands against Barlow's capitals (`fitted`).
+/// How high Retro's body text stands against Barlow's capitals in Pixelify's letters (`fitted`).
 pub(crate) const RETRO_BODY: f32 = 0.9;
+/// The same in Departure Mono's, and its titles against Barlow Condensed's capitals: its letters, one font pixel apart,
+/// then run about as wide as Pixelify's at the sizes pocket-ui paints (`fitted`).
+pub(crate) const DEPARTURE_BODY: f32 = 0.85;
+pub(crate) const DEPARTURE_TITLE: f32 = 0.9;
+
+/// `POCKETUI_RETRO_TRACKING=wide`: Departure Mono's letters as far apart as the font sets them (`Alt::tight` off for
+/// the spacing only), for comparing pictures; read once.
+pub(crate) fn departure_wide() -> bool {
+    static WIDE: OnceLock<bool> = OnceLock::new();
+    *WIDE.get_or_init(|| std::env::var("POCKETUI_RETRO_TRACKING").is_ok_and(|v| v.trim().eq_ignore_ascii_case("wide")))
+}
+
+/// Departure Mono 1.500, the Retro style's letters (`RetroLetters::Departure`).
+pub(crate) const DEPARTURE: &[u8] = include_bytes!("../assets/fonts/DepartureMono-Regular.otf");
+/// One font pixel of Departure Mono in ems: 50 of its 550 units, the 11-pixel grid it is drawn on (capitals eight high).
+pub(crate) const DEPARTURE_PIXEL: f32 = 50.0 / 550.0;
 
 pub(crate) const BARLOW_TITLE: &[u8] = include_bytes!("../assets/fonts/BarlowCondensed-SemiBold.ttf");
 pub(crate) const BARLOW_BODY: &[u8] = include_bytes!("../assets/fonts/Barlow-Medium.ttf");
@@ -136,6 +243,14 @@ pub(crate) struct Alt {
     /// came out with strokes of two and three pixels and blurred edges: "Z" read as "2", digits were hard to tell
     /// apart, worst at 640x480 (Retro clip, 06.11.2026).
     pub grid: f32,
+    /// Retro paints this pixel face's digits and its look-alike capitals from the LCD set (`retro::LCD`,
+    /// `retro::lcd_letter`): Pixelify's, whose own read as other letters; Departure Mono's are its own.
+    pub lcd: bool,
+    /// Departure Mono's way (`text::raster`): its letters one font pixel closer than the font sets them where their ink
+    /// leaves the room (two pixels between letters become one; "%", "&", "→", which fill their cell, keep theirs), and
+    /// every font pixel a whole number of the *screen's* pixels, a step smaller when in between (`scaled_layout::step`:
+    /// a 640x480 panel shows half the canvas).
+    pub tight: bool,
 }
 
 /// A style's faces: `None` keeps Barlow's own for that face (Pixel's body).
@@ -148,7 +263,7 @@ impl Fitted {
     fn new(title: Option<&'static [u8]>, body: Option<&'static [u8]>) -> Fitted {
         let face = |bytes: &'static [u8], barlow: &[u8]| {
             let font = Font::from_bytes(bytes, FontSettings::default()).expect("embedded font");
-            Alt { font: Arc::new(font), scale: fit_scale(bytes, barlow), grid: 0.0 }
+            Alt { font: Arc::new(font), scale: fit_scale(bytes, barlow), grid: 0.0, lcd: false, tight: false }
         };
         Fitted { title: title.map(|b| face(b, BARLOW_TITLE)), body: body.map(|b| face(b, BARLOW_BODY)) }
     }
@@ -178,6 +293,30 @@ static STYLE: AtomicU8 = AtomicU8::new(0);
 #[cfg(test)]
 thread_local! {
     static STYLE: AtomicU8 = const { AtomicU8::new(0) };
+}
+
+/// Retro's letters (`RetroLetters`), process wide as the style is; kept while another style is in use.
+#[cfg(not(test))]
+static LETTERS: AtomicU8 = AtomicU8::new(0);
+#[cfg(test)]
+thread_local! {
+    static LETTERS: AtomicU8 = const { AtomicU8::new(0) };
+}
+
+/// Retro's letters from the next glyph on (settings.json, the Style row); every `Text` in Retro follows by itself.
+pub fn set_retro_letters(l: RetroLetters) {
+    #[cfg(not(test))]
+    LETTERS.store(l as u8, Ordering::Relaxed);
+    #[cfg(test)]
+    LETTERS.with(|v| v.store(l as u8, Ordering::Relaxed));
+}
+
+pub fn retro_letters() -> RetroLetters {
+    #[cfg(not(test))]
+    let v = LETTERS.load(Ordering::Relaxed);
+    #[cfg(test)]
+    let v = LETTERS.with(|v| v.load(Ordering::Relaxed));
+    RetroLetters::from_u8(v)
 }
 
 /// The style in use from the next glyph on (Settings, the start); every `Text` follows by itself.
@@ -216,15 +355,47 @@ mod tests {
         assert_eq!(FontStyle::Barlow.next().next().next().next(), FontStyle::Barlow);
     }
 
+    /// Retro's letters (0.3.2): Departure Mono unless Pixelify is chosen, and on the Style row Pixelify is one step on
+    /// from Retro, one step back is Departure Mono again; another style leaves the letters for the next time.
+    #[test]
+    fn retro_is_departure_mono_and_pixelify_is_one_step_on_the_style_row() {
+        assert_eq!(RetroLetters::default(), RetroLetters::Departure);
+        set(FontStyle::Retro);
+        set_retro_letters(RetroLetters::default());
+        assert_eq!(row_label(), "Retro");
+        assert!(std::ptr::eq(FontStyle::Retro.fitted().unwrap(), FontStyle::Retro.fitted().unwrap()), "parsed once");
+        let departure = FontStyle::Retro.fitted().unwrap().body.as_ref().unwrap().font.clone();
+        assert_eq!(departure.metrics('i', 22.0).advance_width, departure.metrics('M', 22.0).advance_width, "Departure Mono: every letter as wide");
+        step_row(true);
+        assert_eq!((get(), retro_letters(), row_label()), (FontStyle::Retro, RetroLetters::Pixelify, "Retro Pixelify"));
+        let pixelify = FontStyle::Retro.fitted().unwrap().body.as_ref().unwrap();
+        assert!(pixelify.lcd && pixelify.font.metrics('i', 22.0).advance_width < pixelify.font.metrics('M', 22.0).advance_width, "Pixelify's own letters");
+        step_row(false);
+        assert_eq!((get(), retro_letters(), row_label()), (FontStyle::Retro, RetroLetters::Departure, "Retro"));
+        // All the way round: each value once, Barlow after Retro Pixelify.
+        set_retro_letters(RetroLetters::Pixelify);
+        step_row(true);
+        assert_eq!(get(), FontStyle::Barlow);
+        let mut seen = vec![row_label()];
+        for _ in 1..ROW.len() {
+            step_row(true);
+            seen.push(row_label());
+        }
+        assert_eq!(seen, ["Barlow", "Pixel", "Rounded", "Retro", "Retro Pixelify"]);
+        set(FontStyle::Barlow);
+        set_retro_letters(RetroLetters::Departure);
+    }
+
     #[test]
     fn every_font_has_the_german_letters_and_marks_barlow_has() {
         let need = "ÄÖÜäöüß„“”–…·‹›×°";
         let barlow = [BARLOW_TITLE, BARLOW_BODY];
-        for s in [FontStyle::Pixel, FontStyle::Rounded, FontStyle::Retro] {
+        for (s, letters) in [(FontStyle::Pixel, RetroLetters::Departure), (FontStyle::Rounded, RetroLetters::Departure), (FontStyle::Retro, RetroLetters::Departure), (FontStyle::Retro, RetroLetters::Pixelify)] {
+            set_retro_letters(letters);
             let fitted = s.fitted().unwrap();
             for face in [&fitted.title, &fitted.body].into_iter().flatten() {
                 for ch in need.chars().chain('!'..='~') {
-                    assert_ne!(face.font.lookup_glyph_index(ch), 0, "{s:?} lacks {ch:?}");
+                    assert_ne!(face.font.lookup_glyph_index(ch), 0, "{s:?} {letters:?} lacks {ch:?}");
                 }
                 // Whatever Barlow can paint, the alternative can (the arrow is in neither: both leave it out).
                 for b in barlow {
@@ -247,9 +418,10 @@ mod tests {
         need.dedup();
         let barlow = [BARLOW_TITLE, BARLOW_BODY].map(|b| Font::from_bytes(b, FontSettings::default()).unwrap());
         let mut faces: Vec<(String, &Font)> = barlow.iter().map(|f| ("Barlow".to_string(), f)).collect();
-        for s in [FontStyle::Pixel, FontStyle::Rounded, FontStyle::Retro] {
+        for (s, letters) in [(FontStyle::Pixel, RetroLetters::Departure), (FontStyle::Rounded, RetroLetters::Departure), (FontStyle::Retro, RetroLetters::Departure), (FontStyle::Retro, RetroLetters::Pixelify)] {
+            set_retro_letters(letters);
             let fitted = s.fitted().unwrap();
-            faces.extend([&fitted.title, &fitted.body].into_iter().flatten().map(|f| (format!("{s:?}"), &*f.font)));
+            faces.extend([&fitted.title, &fitted.body].into_iter().flatten().map(|f| (format!("{s:?} {letters:?}"), &*f.font)));
         }
         let missing: Vec<String> = faces.iter().flat_map(|(name, font)| need.iter().filter(|c| font.lookup_glyph_index(**c) == 0).map(move |c| format!("{name} lacks {c:?}"))).collect();
         assert!(missing.is_empty(), "{}", missing.join("\n"));

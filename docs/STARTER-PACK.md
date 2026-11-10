@@ -2,7 +2,7 @@
 
 A card with no games shows an empty shelf, which is a poor first minute. The starter pack offers a handful of **free
 homebrew games** to download at once, so a new player can play straight away (Recalbox does the same). It is the page
-Settings → Games → **Starter pack**, and on Home while no system has a game: **No games yet** with **Get the starter pack** (A), **Add games** (X: the Add games page, online or offline) and **Look around** (B: the empty shelf in the chosen look with a line saying so, `StarterUi::looking_around`, only until the next start or until games appear; A there brings the hint back; no Curator rows or recents stand on it, in the Cabinet look too)
+Settings → Games → Extras → **Starter pack**, and on Home while no system has a game: **No games yet** with **Get the starter pack** (A), **Add games** (X: the Add games page, online or offline) and **Look around** (B: the empty shelf in the chosen look with a line saying so, `StarterUi::looking_around`, only until the next start or until games appear; A there brings the hint back; no Curator rows or recents stand on it, in the Cabinet look too)
 (A; offline with a Wi-Fi chip the button reads "Connect to Wi-Fi" and opens the Wi-Fi page, the pack is there on return). Kids Mode's
 "No games to pick yet" page has X for the same page (`FlowOut::Starter`, the flow waits in `Kids::adding`). The user's view is in [Getting started](user/getting-started.md#nothing-on-the-sd-card-yet-the-starter-pack).
 
@@ -105,17 +105,15 @@ before it is placed; for a zip, the ROM inside is checked too). Source code: the
 1. The folder comes from `es_systems.cfg` (`/storage/roms/<system>`); a system the shelf does not have is not offered.
 2. A file of that name (any case) is there already: nothing happens ("already on your card").
 3. No network address: "The Pocket isn't online" (the address is looked at on the thread, `wifi::ip_now`).
-4. Room: the download and the ROM both need space (`statvfs`, plus 2 MB so the card is never filled up): "Not enough room on
-   the card: 3 MB free, 5 MB needed".
-5. The Store's curl (`store::download_with_cause`: 15 s to connect, given up below 10 kB/s for 30 s, never larger than the list's
-   size) into `<data>/starter/<id>.download`. No route to the host is "offline" too, whatever the address said.
+4. Room: the ROM needs its size plus 2 MB. Interactive downloads also reserve the download size plus 32 MiB for a safe checkpoint; the page reports free and needed space.
+5. Interactive requests use the updater's checked resumable transport and a hash-named `<data>/starter/<id>-<sha256>.download` checkpoint. On TrimUI, network output stays in RAM; curl exits before the paced card checkpoint. B cancels, retaining those bytes for the next try. The noninteractive installer keeps its existing Store transport and `<id>.download` cleanup contract.
 6. The size and the **SHA-256** must equal the list's. A zip must hold the ROM with the list's own hash. Else
    "The download is damaged or was changed. Nothing was added."
 7. Written into the system's folder with `fsutil::write_atomic` (temporary file, `fsync`, rename), after looking once more for
-   a file of that name. The download is removed whatever happened.
+   a file of that name and checking cancellation again. A successful install removes its exact checkpoint; a cancelled interactive request keeps it.
 
 Then the library is read again on a thread (`library_rescan`), and the games are on the shelf when the player leaves the page.
-"Get all" does the games one after another and stops at the first "offline" or "no room".
+"Get all" does the games one after another and stops at the first "offline", "no room", cancellation or game launch. Optional jobs share one worker lock with PortMaster and cheats. B returns to Extras when opened there, Home when opened from its hint, or the Kids Mode picker that requested the pack.
 
 Tests: `starter.rs` (the list: free licences only, no NonCommercial, fixed addresses, hashes well-formed, varied systems;
 a good download is placed and leaves no work file; a wrong hash and a short file leave nothing; a file that is there is

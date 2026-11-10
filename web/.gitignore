@@ -1,0 +1,4 @@
+# Made by make-demo-library.py and build.sh: real covers (not ours to publish in the source tree) and the build.
+/demo/storage/
+/demo/dist/
+/target/

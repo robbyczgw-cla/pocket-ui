@@ -155,7 +155,7 @@ mod tests {
     use crate::update::Release;
 
     fn list(app: Option<&str>) -> Manifest {
-        let release = |v: &str| Release { version: v.into(), url: format!("pocket-ui-{v}-aarch64.tar.gz"), mirrors: Vec::new(), sha256: String::new(), size: 1, notes: String::new() };
+        let release = |v: &str| Release { version: v.into(), url: format!("pocket-ui-{v}-aarch64.tar.gz"), preferred_sources: Vec::new(), mirrors: Vec::new(), sha256: String::new(), size: 1, notes: String::new() };
         Manifest { format: 1, app: app.map(release), os: Some(release("20261201")), ..Default::default() }
     }
 

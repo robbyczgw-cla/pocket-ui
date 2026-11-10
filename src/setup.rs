@@ -73,6 +73,12 @@ pub enum SetupEvent {
     /// The run that just ended gave up: the picture server didn't answer (it is tried again at the next start).
     CoversUnreachable,
     Catalog(Result<Vec<Port>, String>),
+    PortMasterStatus(Result<ports::RuntimeStatus, String>),
+    PortMasterSpace(Result<ports::RuntimeSpace, String>),
+    PortMasterProgress(ports::DownloadProgress),
+    PortMasterDone(Result<(), String>),
+    PortMasterRemoved(Result<(), String>),
+    PortProgress(ports::DownloadProgress),
     /// `name`: the catalog name of the port, to open its "Copy your game files" page after an install.
     PortDone { name: String, title: String, result: Result<(), String>, installing: bool, updated: bool },
     /// The phone page's server saw something: a phone, a file's bytes, a file in place, it closed by itself.
@@ -170,11 +176,16 @@ fn default_net(_hw: &SharedHw) -> Arc<NetState> {
     NetState::inline(crate::net_state::fake::FakeNet::new(Radio::On))
 }
 
-/// Rows of the Extras page: Cover art, Game pictures, PortMaster games. A Steam Deck has no PortMaster: two.
+fn extras_cheats() -> bool {
+    #[cfg(feature = "brick")]
+    { ports::trimui_standalone() }
+    #[cfg(not(feature = "brick"))]
+    { false }
+}
+
+/// Box art, Pictures, supported optional data, then Starter pack.
 fn extras_rows() -> usize {
-    // No PortMaster on the Steam Deck nor on the TrimUI Brick's card (Pictures & extras offered "PortMaster games" there).
-    let brick = { #[cfg(feature = "brick")] { crate::device::brick() } #[cfg(not(feature = "brick"))] { false } };
-    if crate::device::current().host_owned() || brick { 2 } else { 3 }
+    3 + usize::from(ports::offered()) + usize::from(extras_cheats())
 }
 
 /// Setup steps that Settings can open on their own.
@@ -556,6 +567,11 @@ pub struct Setup {
     /// (`take_art`).
     art: Art,
     art_changed: bool,
+    cheat_data: Option<crate::cheat_data::Page>,
+    extras_demo_online: Option<bool>,
+    extras_touch: std::cell::RefCell<crate::touch::HitMap>,
+    open_starter: bool,
+    covers_cancel: crate::update::Cancel,
     /// The time zone step was left without a pick and with nothing to go on: the clock is on UTC (the Done page says so).
     zone_utc: bool,
     /// When the games step's counts were last asked for (a press while the step is open counts again, at most every few seconds).
@@ -570,6 +586,17 @@ pub struct Setup {
     /// Title of the port being installed or removed.
     port_busy: Option<String>,
     port_note: Option<(String, bool)>,
+    port_progress: Option<ports::DownloadProgress>,
+    portmaster: Option<PortMasterState>,
+    portmaster_status: ports::RuntimeStatus,
+    portmaster_note: Option<String>,
+    portmaster_demo_online: Option<bool>,
+    portmaster_fetch: fn(&ports::DownloadReporter, &ports::DownloadCancel) -> Result<(), String>,
+    portmaster_remove: fn(&ports::DownloadReporter, &ports::DownloadCancel) -> Result<(), String>,
+    portmaster_confirm_remove: bool,
+    portmaster_removing: bool,
+    portmaster_space: Option<ports::RuntimeSpace>,
+    port_download_cancel: Option<ports::DownloadCancel>,
     previews: HashMap<String, Option<Image>>,
     /// Opened from Settings for one step: leaving that step ends setup instead of moving on.
     only: Option<Only>,
@@ -611,6 +638,14 @@ pub struct Setup {
     tour_changed: bool,
 }
 
+#[derive(Clone, Debug)]
+enum PortMasterState {
+    Checking,
+    Offer(ports::RuntimeStatus),
+    Downloading(ports::DownloadProgress),
+    Ready,
+}
+
 /// The PortMaster browser's two lists: ports that run as they are, and ports that need files from the
 /// player's own copy of the game.
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Hash)]
@@ -639,8 +674,7 @@ impl PortTab {
     }
 }
 
-/// Where BIOS files go (see docs/user/getting-started.md).
-const BIOS_DIR: &str = "/storage/roms/bios";
+/// Where BIOS files go (see docs/user/getting-started.md): `crate::hostsys::bios_dir()` (`POCKETUI_BIOS` on the Deck).
 
 /// A system with games, for Settings > Look > Systems on the shelf.
 #[derive(Clone, Debug)]
@@ -648,6 +682,13 @@ pub struct ShelfSystem {
     pub id: String,
     pub name: String,
     pub games: usize,
+}
+
+impl Drop for Setup {
+    fn drop(&mut self) {
+        self.covers_cancel.cancel();
+        if let Some(cancel) = &self.port_download_cancel { cancel.cancel(); }
+    }
 }
 
 impl Setup {
@@ -1070,7 +1111,7 @@ impl Setup {
                 };
                 let line = text.fit(Face::Body, 24, &format!("{}, {count}", sys.folder), w);
                 text.draw(c, Face::Body, 24, x, top + 86, pal().dust, &line);
-                let (exts, bios) = systems_grid::details(sys, std::path::Path::new(BIOS_DIR));
+                let (exts, bios) = systems_grid::details(sys, &crate::hostsys::bios_dir());
                 text.draw(c, Face::Body, 24, x, top + 124, pal().dust, "Files");
                 let exts = if exts.is_empty() { "any".to_string() } else { exts };
                 let exts = text.fit(Face::Body, 24, &exts, w - label_w);
@@ -1132,7 +1173,7 @@ impl Setup {
             ("File sharing is on".to_string(), pal().chalk)
         } else if self.ip.is_none() {
             let d = crate::device::current();
-            (if crate::games_card::in_use() { "Games card in" } else { offline_way(crate::card_health::games_drive(), d.has_second_card_slot(), d.has_wifi()).0 }.to_string(), pal().dust)
+            (if crate::games_card::in_use() { "Games card in" } else { offline_way_here(&d).0 }.to_string(), pal().dust)
         } else {
             ("File sharing is off".to_string(), pal().chalk)
         };
@@ -1147,7 +1188,7 @@ impl Setup {
                 None if crate::card_health::image_card() => crate::card_health::IMAGE_CARD_NOTE,
                 None if crate::games_card::in_use() => GAMES_CARD_WAY,
                 None if self.only.is_none() && crate::card_health::games_drive() => GAMES_DRIVE_FIRST_WAY,
-                None => offline_way(crate::card_health::games_drive(), d.has_second_card_slot(), d.has_wifi()).1,
+                None => offline_way_here(&d).1,
             };
             // Above the hint bar ("estas carpetas." ran into it at Large text on 768 lines, the Brick).
             let room = (((crate::kit::hint_bar_top(c.h) - 8 - (top + 92)) / 32 + 1).max(1) as usize).min(4);
@@ -1182,6 +1223,8 @@ const GAMES_DRIVE_WAY: &str = "Put the card in your computer and copy games to t
 /// The same in the first start's games step: the drive isn't there until this first start is over (a computer shows no GAMES
 /// right after flashing), so it says when to go and get it.
 const GAMES_DRIVE_FIRST_WAY: &str = "After this first start, switch off, put the card in a computer and copy games into the drive called GAMES.";
+/// Add games on the Brick's own card.
+const BRICK_CARD_WAY: &str = "Put the card in your computer and copy games into its Roms folder, one folder per system.";
 /// Add games without a network and without that drive, on a handheld with a second slot.
 const SECOND_CARD_WAY: &str = "Copy games to a second SD card (over 8 GB) in your computer, into a folder called roms, then put it in the second slot.";
 const OR_SECOND_CARD_WAY: &str = "Or copy games to a second SD card (over 8 GB) in your computer, into a folder called roms, then put it in the second slot.";
@@ -1197,6 +1240,19 @@ fn offline_way(games_drive: bool, second_slot: bool, wifi: bool) -> (&'static st
         (false, true, false) => ("Use a second card", SECOND_CARD_WAY),
         (false, true, true) => ("Connect to Wi-Fi first", OR_SECOND_CARD_WAY),
         (false, false, _) => ("Connect to Wi-Fi first", SHARE_OFFLINE),
+    }
+}
+
+/// [`offline_way`] for this device: the Brick's own card is the one card a computer reads as it is (the Roms folder).
+fn offline_way_here(d: &crate::device::Device) -> (&'static str, &'static str) {
+    offline_way_for(d.card_reads_in_computer(), crate::card_health::games_drive(), d.has_second_card_slot(), d.has_wifi())
+}
+
+fn offline_way_for(card_in_computer: bool, games_drive: bool, second_slot: bool, wifi: bool) -> (&'static str, &'static str) {
+    if card_in_computer && !games_drive {
+        ("Copy from a computer", BRICK_CARD_WAY)
+    } else {
+        offline_way(games_drive, second_slot, wifi)
     }
 }
 
@@ -1252,8 +1308,32 @@ fn ways_for(host_owned: bool, wifi: bool, usb: bool) -> Vec<Way> {
     ways
 }
 
-/// The first start's "Your games" without games, on a handheld with Wi-Fi.
-const FOUND_WIFI_WAY: &str = "Copy them from a computer or a phone on the same Wi-Fi, or put them on the SD card in its roms folder. Add games… shows you how.";
+/// The first start's "Your games" without games, on a handheld with Wi-Fi and a second card slot. A computer can't read
+/// this card's STORAGE part, and Windows offers to format it: that is the warning, not "put them in the roms folder".
+const FOUND_WIFI_SLOT_WAY: &str = "Copy them over Wi-Fi from a computer or phone, or use a second SD card. If Windows offers to format a card, press Cancel.";
+/// The same on a handheld with Wi-Fi and one slot.
+const FOUND_WIFI_WAY: &str = "Copy them over Wi-Fi from a computer or phone. If you put the card in a computer and Windows offers to format it, press Cancel.";
+
+/// What the first start's "Your games" says when there are no games, for the first way that applies. A pure function of the
+/// device, so a test can walk every kind of device (K1 of the UX review: "the same folders" was said to cards a computer
+/// can't read).
+fn no_games_way(host_owned: bool, image_card: bool, games_card: bool, games_drive: bool, card_in_computer: bool, wifi: bool, second_slot: bool) -> &'static str {
+    if host_owned {
+        DECK_GAMES_NOTE
+    } else if image_card {
+        crate::card_health::IMAGE_CARD_NOTE
+    } else if games_card {
+        GAMES_CARD_WAY
+    } else if games_drive {
+        GAMES_DRIVE_FIRST_WAY
+    } else if card_in_computer {
+        BRICK_CARD_WAY
+    } else if wifi {
+        if second_slot { FOUND_WIFI_SLOT_WAY } else { FOUND_WIFI_WAY }
+    } else {
+        offline_way(false, second_slot, false).1
+    }
+}
 
 /// The Box art row's line on "Your games".
 const BOX_ART_NOTE: &str = "Finds the real box for each game, in the background while you're online. Only a game's name is sent.";
@@ -1608,6 +1688,11 @@ impl Setup {
             covers_unreachable: false,
             art: Art::default(),
             art_changed: false,
+            cheat_data: None,
+            extras_demo_online: None,
+            extras_touch: Default::default(),
+            open_starter: false,
+            covers_cancel: Default::default(),
             zone_utc: false,
             counted_at: Instant::now(),
             ports: Vec::new(),
@@ -1617,6 +1702,17 @@ impl Setup {
             catalog_loading: false,
             port_busy: None,
             port_note: None,
+            port_progress: None,
+            portmaster: None,
+            portmaster_status: ports::RuntimeStatus::Missing,
+            portmaster_note: None,
+            portmaster_demo_online: None,
+            portmaster_fetch: ports::install_runtime,
+            portmaster_remove: ports::remove_runtime,
+            portmaster_confirm_remove: false,
+            portmaster_removing: false,
+            portmaster_space: None,
+            port_download_cancel: None,
             previews: HashMap::new(),
             only: None,
             open_wifi: None,
@@ -1752,7 +1848,19 @@ impl Setup {
                 self.step = Step::Wifi;
                 self.scan();
             }
-            Only::Extras => self.step = Step::Extras { sel: 0 },
+            Only::Extras => {
+                self.step = Step::Extras { sel: 0 };
+                if ports::trimui_standalone() { self.check_portmaster(); }
+                self.ip = wifi::ip();
+                #[cfg(feature = "brick")]
+                if extras_cheats() {
+                    if let Some(card) = crate::update::brick_card() {
+                        let mut page = crate::cheat_data::Page::new(crate::cheat_data::Source::for_card(&card));
+                        page.inspect();
+                        self.cheat_data = Some(page);
+                    }
+                }
+            }
             Only::Games => self.go_to_games(),
             Only::Play => {
                 let now = Profile::of(&self.switches);
@@ -1950,6 +2058,7 @@ impl Setup {
     /// True while something on screen moves (scan or connect in progress).
     pub fn animating(&self) -> bool {
         self.scanning
+            || self.cheat_data.as_ref().is_some_and(|p| p.busy())
             || self.switching.is_some()
             || self.sharing_busy
             || self.usb_busy
@@ -1960,6 +2069,7 @@ impl Setup {
             || self.catalog_loading
             || matches!(&self.step, Step::Zone(z) if z.loading)
             || self.port_busy.is_some()
+            || matches!(self.portmaster, Some(PortMasterState::Checking | PortMasterState::Downloading(_)))
             || matches!(self.step, Step::Connecting { .. })
             || (matches!(self.step, Step::Wifi) && self.connecting_since.is_some())
             || matches!(&self.step, Step::Portal(p) if p.busy())
@@ -2687,7 +2797,50 @@ impl Setup {
                 self.covers_running = done < total;
             }
             SetupEvent::CoversUnreachable => self.covers_unreachable = true,
+            SetupEvent::PortMasterStatus(result) => match result {
+                Ok(status) => {
+                    self.portmaster_status = status;
+                    self.portmaster = Some(if status == ports::RuntimeStatus::Ready { PortMasterState::Ready } else { PortMasterState::Offer(status) });
+                    if status == ports::RuntimeStatus::Ready && matches!(self.step, Step::Ports) { self.load_catalog(); }
+                }
+                Err(error) => {
+                    self.portmaster = Some(PortMasterState::Offer(ports::RuntimeStatus::Missing));
+                    self.portmaster_note = Some(error);
+                }
+            },
+            SetupEvent::PortMasterProgress(progress) => self.portmaster = Some(PortMasterState::Downloading(progress)),
+            SetupEvent::PortMasterSpace(space) => self.portmaster_space = space.ok(),
+            SetupEvent::PortMasterRemoved(result) => {
+                self.port_download_cancel = None;
+                self.portmaster_removing = false;
+                self.portmaster_confirm_remove = result.is_err();
+                if result.is_ok() {
+                    self.portmaster_status = ports::RuntimeStatus::Missing;
+                    self.portmaster = Some(PortMasterState::Offer(ports::RuntimeStatus::Missing));
+                    self.portmaster_note = None;
+                } else {
+                    self.portmaster = Some(PortMasterState::Ready);
+                    self.portmaster_note = result.err();
+                }
+            }
+            SetupEvent::PortMasterDone(result) => {
+                self.port_download_cancel = None;
+                match result {
+                    Ok(()) => {
+                        self.portmaster_status = ports::RuntimeStatus::Ready;
+                        self.portmaster = Some(PortMasterState::Ready);
+                        self.portmaster_note = None;
+                        if matches!(self.step, Step::Ports) { self.load_catalog(); }
+                    }
+                    Err(error) => {
+                        self.portmaster = Some(PortMasterState::Offer(self.portmaster_status));
+                        self.portmaster_note = Some(error);
+                    }
+                }
+            }
+            SetupEvent::PortProgress(progress) => self.port_progress = Some(progress),
             SetupEvent::Catalog(result) => {
+                self.port_download_cancel = None;
                 self.catalog_loading = false;
                 match result {
                     Ok(ports) => {
@@ -2699,7 +2852,9 @@ impl Setup {
                 }
             }
             SetupEvent::PortDone { name, title, result, installing, updated } => {
+                self.port_download_cancel = None;
                 self.port_busy = None;
+                self.port_progress = None;
                 let needs_files = self.ports.iter().find(|p| p.name == name).filter(|p| p.needs_files).cloned();
                 self.port_note = Some(match &result {
                     Ok(()) if updated => (format!("{title} is up to date."), false),
@@ -2723,6 +2878,8 @@ impl Setup {
         self.covers_running = true;
         self.covers_unreachable = false;
         self.covers = Some((0, 0, 0));
+        self.covers_cancel = Default::default();
+        let cancel = self.covers_cancel.clone();
         // The automatic download is already on it: the app passes its progress on to this page.
         let Some(claim) = covers::claim() else { return };
         let (notify, data_dir, games, pictures) = (self.notify.clone(), self.data_dir.clone(), self.games.clone(), self.art == Art::Pictures);
@@ -2733,7 +2890,8 @@ impl Setup {
             // Box art, then (unless Box art only) the games' screenshots and title screens.
             let wanted = pictures.then(|| game_pictures::missing(&data_dir, &games, &Default::default()));
             // A game started from the shelf while this first start's run goes on stops it (`covers::game_on`).
-            let run = game_pictures::run_until(&game_pictures::Libretro, &data_dir, &games, wanted.as_deref(), report, covers::game_on);
+            let run = game_pictures::run_until(&game_pictures::Libretro, &data_dir, &games, wanted.as_deref(), report,
+                || cancel.is_cancelled() || covers::game_on());
             // Nothing to do still has to end the run.
             if games.is_empty() || run.found == 0 || run.unreachable {
                 report(1, 1, run.found);
@@ -2744,13 +2902,161 @@ impl Setup {
         });
     }
 
+    fn check_portmaster(&mut self) {
+        self.portmaster = Some(PortMasterState::Checking);
+        let notify = self.notify.clone();
+        std::thread::spawn(move || {
+            notify(SetupEvent::PortMasterStatus(ports::runtime_status()));
+            notify(SetupEvent::PortMasterSpace(ports::runtime_space()));
+        });
+    }
+
+    fn portmaster_can_remove(&self) -> bool {
+        ports::trimui_standalone() && self.port_download_cancel.is_none()
+            && matches!(self.portmaster, Some(PortMasterState::Ready | PortMasterState::Offer(ports::RuntimeStatus::Outdated)))
+    }
+
+    fn remove_portmaster(&mut self) {
+        if !self.portmaster_confirm_remove || self.port_download_cancel.is_some() { return; }
+        self.portmaster_removing = true;
+        self.portmaster_note = None;
+        let (notify, remove) = (self.notify.clone(), self.portmaster_remove);
+        let cancel = ports::DownloadCancel::new();
+        self.port_download_cancel = Some(cancel.clone());
+        self.portmaster = Some(PortMasterState::Downloading(ports::DownloadProgress { stage: "removing".into(), ..Default::default() }));
+        std::thread::spawn(move || {
+            let report = { let notify = notify.clone(); move |progress| notify(SetupEvent::PortMasterProgress(progress)) };
+            let result = remove(&report, &cancel);
+            let removed = result.is_ok();
+            notify(SetupEvent::PortMasterRemoved(result));
+            if removed { notify(SetupEvent::PortMasterSpace(ports::runtime_space())); }
+        });
+    }
+
+    fn portmaster_low_space(&self) -> Option<ports::RuntimeSpace> {
+        self.portmaster_space.filter(|s| s.available_kib < s.needed_kib)
+    }
+
+    fn portmaster_row(&self, online: bool) -> crate::emu_menu::Row {
+        let about = "PC and indie games from PortMaster: ready to play, or with your own game files.";
+        let (value, desc) = if self.portmaster_removing {
+            ("Removing…".into(), "Your games, game files and PortMaster settings stay on this card.".into())
+        } else if self.portmaster_confirm_remove {
+            ("Remove?".into(), self.portmaster_note.clone().unwrap_or_else(|| "Remove PortMaster? A again removes it. Your games, game files and settings stay.".into()))
+        } else {
+            match &self.portmaster {
+                Some(PortMasterState::Checking) => ("Checking…".into(), about.into()),
+                Some(PortMasterState::Downloading(progress)) => {
+                    let value = match progress.stage.as_str() {
+                        "checking" | "verify" => "Checking…".into(),
+                        "saving" | "preparing" | "installing" | "ready" => "Preparing…".into(),
+                        _ if progress.total > 0 => format!("{}%", progress.done.saturating_mul(100).checked_div(progress.total).unwrap_or(0).min(100)),
+                        _ => "Downloading…".into(),
+                    };
+                    (value, crate::cheat_data::CONTINUE.into())
+                }
+                _ if !online && !matches!(self.portmaster, Some(PortMasterState::Ready)) => ("Needs Wi-Fi".into(), crate::cheat_data::CONNECT.into()),
+                _ if self.portmaster_note.is_some() => ("Retry".into(), self.portmaster_note.clone().unwrap()),
+                Some(PortMasterState::Offer(_)) if self.portmaster_low_space().is_some() => {
+                    let space = self.portmaster_low_space().unwrap();
+                    (format!("Needs {} MiB", space.needed_kib.div_ceil(1024)),
+                        format!("Not enough space on the SD card: {} MiB needed, {} MiB free.", space.needed_kib.div_ceil(1024), space.available_kib / 1024))
+                }
+                Some(PortMasterState::Offer(ports::RuntimeStatus::Outdated)) => ("Browse".into(), "An update for PortMaster is available. A opens the offer; X offers to remove it. Your games and game files stay.".into()),
+                _ if self.portmaster_can_remove() => ("Browse".into(), "PC and indie games from PortMaster. X offers to remove PortMaster; your games and game files stay.".into()),
+                _ => ("Browse".into(), about.into()),
+            }
+        };
+        crate::emu_menu::Row { name: "PortMaster games".into(), value, desc }
+    }
+
+    fn enter_ports(&mut self) {
+        self.step = Step::Ports;
+        if ports::trimui_standalone() && self.portmaster.is_none() { self.check_portmaster(); }
+        if self.portmaster_ready() { self.load_catalog(); }
+    }
+
+    fn portmaster_ready(&self) -> bool {
+        matches!(self.portmaster, None | Some(PortMasterState::Ready))
+    }
+
+    fn portmaster_online(&self) -> bool {
+        self.portmaster_demo_online.unwrap_or_else(|| self.ip.is_some() || self.net.snapshot().saving.ip.is_some())
+    }
+
+    fn portmaster_action(&self) -> &'static str {
+        match self.portmaster {
+            Some(PortMasterState::Offer(ports::RuntimeStatus::Outdated)) => "Update PortMaster",
+            Some(PortMasterState::Checking) => "Checking PortMaster…",
+            Some(PortMasterState::Downloading(ref progress)) if matches!(progress.stage.as_str(), "checking" | "verify") => "Checking PortMaster…",
+            Some(PortMasterState::Downloading(ref progress)) if matches!(progress.stage.as_str(), "saving" | "preparing" | "installing" | "ready") => "Preparing PortMaster…",
+            Some(PortMasterState::Downloading(_)) => "Downloading PortMaster…",
+            _ => "Get PortMaster (~300 MB, one time)",
+        }
+    }
+
+    fn portmaster_progress_line(&self) -> String {
+        let Some(PortMasterState::Downloading(progress)) = &self.portmaster else { return String::new(); };
+        if progress.total > 0 { format!("{} / {} MB", progress.done / (1 << 20), progress.total / (1 << 20)) } else if progress.done > 0 { ports::size_label(progress.done) } else { "Preparing PortMaster…".to_string() }
+    }
+
+    fn start_portmaster(&mut self) {
+        if !matches!(self.portmaster, Some(PortMasterState::Offer(_))) { return; }
+        // Offline the offer already explains Wi-Fi and advertises only B. A must leave that view unchanged.
+        if !self.portmaster_online() { return; }
+        if let Some(space) = self.portmaster_low_space() {
+            self.portmaster_note = Some(format!("Not enough space on the SD card: {} MiB needed, {} MiB free.", space.needed_kib.div_ceil(1024), space.available_kib / 1024));
+            return;
+        }
+        self.portmaster = Some(PortMasterState::Downloading(Default::default()));
+        self.portmaster_note = None;
+        let (notify, fetch) = (self.notify.clone(), self.portmaster_fetch);
+        let cancel = ports::DownloadCancel::new();
+        self.port_download_cancel = Some(cancel.clone());
+        std::thread::spawn(move || {
+            let report = { let notify = notify.clone(); move |progress| notify(SetupEvent::PortMasterProgress(progress)) };
+            notify(SetupEvent::PortMasterDone(fetch(&report, &cancel)));
+        });
+    }
+
+    pub fn with_portmaster_demo(mut self, state: &str) -> Self {
+        self.portmaster = Some(match state {
+            "checking" => PortMasterState::Checking,
+            "download" => PortMasterState::Downloading(ports::DownloadProgress { stage: "download".into(), done: 70 << 20, total: 300 << 20 }),
+            "update" => PortMasterState::Offer(ports::RuntimeStatus::Outdated),
+            _ => PortMasterState::Offer(ports::RuntimeStatus::Missing),
+        });
+        self.portmaster_demo_online = Some(state != "offline");
+        self.portmaster_note = (state == "error").then(|| "Not enough card space. Free some space and try again.".into());
+        self
+    }
+
+    pub fn with_extras_portmaster_demo(self, state: &str) -> Self {
+        let mut page = self.with_portmaster_demo(state);
+        page.step = Step::Extras { sel: 2 };
+        page.extras_demo_online = Some(!state.ends_with("offline"));
+        page.portmaster_status = match state {
+            "installed" | "installed-offline" | "remove" | "removing" => ports::RuntimeStatus::Ready,
+            "update" => ports::RuntimeStatus::Outdated,
+            _ => ports::RuntimeStatus::Missing,
+        };
+        if matches!(state, "installed" | "installed-offline" | "remove") { page.portmaster = Some(PortMasterState::Ready); }
+        if state == "saving" { page.portmaster = Some(PortMasterState::Downloading(ports::DownloadProgress { stage: "saving".into(), ..Default::default() })); }
+        page.portmaster_confirm_remove = state == "remove";
+        page.portmaster_removing = state == "removing";
+        if state == "no-space" { page.portmaster_space = Some(ports::RuntimeSpace { needed_kib: 716800, available_kib: 421888 }); }
+        page
+    }
+
     fn load_catalog(&mut self) {
         if self.catalog_loading || !self.ports.is_empty() {
             return;
         }
         self.catalog_loading = true;
         let (notify, data_dir) = (self.notify.clone(), self.data_dir.clone());
-        std::thread::spawn(move || notify(SetupEvent::Catalog(ports::catalog(&data_dir))));
+        let cancel = ports::DownloadCancel::new();
+        self.port_download_cancel = Some(cancel.clone());
+        std::thread::spawn(move || notify(SetupEvent::Catalog(ports::catalog_with_cancel(&data_dir, &cancel))));
     }
 
     /// The ports of the list on show, as indices into `ports`.
@@ -2780,9 +3086,13 @@ impl Setup {
         let installing = updating || !ports::installed(&port);
         self.port_busy = Some(port.title.clone());
         self.port_note = None;
+        self.port_progress = None;
         let notify = self.notify.clone();
+        let cancel = ports::DownloadCancel::new();
+        self.port_download_cancel = Some(cancel.clone());
         std::thread::spawn(move || {
-            let result = if installing { ports::install(&port) } else { ports::uninstall(&port) };
+            let report = { let notify = notify.clone(); move |progress| notify(SetupEvent::PortProgress(progress)) };
+            let result = if installing { ports::install_with_cancel(&port, &report, &cancel) } else { ports::uninstall_with_cancel(&port, &cancel) };
             notify(SetupEvent::PortDone { name: port.name, title: port.title, result, installing, updated: updating });
         });
     }
@@ -2933,6 +3243,10 @@ impl Setup {
 
     /// A tap on a tile of the row of ways moves the selection there by `n` (0: the one that is, now with the focus).
     pub fn ways_steps(&mut self, n: i32) {
+        if let Step::Extras { sel } = &mut self.step {
+            *sel = (*sel as i32 + n).clamp(0, extras_rows() as i32 - 1) as usize;
+            return;
+        }
         let len = self.ways().len();
         if len > 0 {
             self.ways_sel = (self.ways_sel as i32 + n).clamp(0, len as i32 - 1) as usize;
@@ -2942,16 +3256,27 @@ impl Setup {
 
     /// Whether the focus is on the row of ways (a tap on the selected tile then does it).
     pub fn ways_focused(&self) -> bool {
-        self.ways_focus
+        self.ways_focus || matches!(self.step, Step::Extras { .. })
     }
 
     /// Add games takes touch: its tiles of ways and its hints.
     pub fn takes_touch(&self) -> bool {
-        matches!(self.step, Step::Games)
+        matches!(self.step, Step::Games | Step::Extras { .. })
     }
 
     /// The last frame's touch targets, into the app's map: the ways as rows of a list, the hints as buttons.
     pub fn register_touch(&self, hits: &mut crate::touch::HitMap) {
+        if let Step::Extras { sel } = self.step {
+            for &(area, target) in self.extras_touch.borrow().targets() {
+                match target {
+                    crate::touch::Target::Row(i) => hits.row(area, i),
+                    crate::touch::Target::Button(b) => hits.button(area, b),
+                    crate::touch::Target::Presses(b, n) => hits.presses(area, b, n),
+                }
+            }
+            hits.list(sel, extras_rows(), 0.0, 0.0);
+            return;
+        }
         // Only the step that takes touch: the other steps' frames would keep Add games' tiles in the map.
         if !self.takes_touch() {
             return;
@@ -3054,6 +3379,7 @@ impl Setup {
     }
 
     pub fn show_ports(mut self, ports: Vec<Port>) -> Self {
+        self.portmaster = None;
         self.ports = ports;
         self.step = Step::Ports;
         self
@@ -3065,7 +3391,7 @@ impl Setup {
         use std::hash::{Hash, Hasher};
         let mut h = std::collections::hash_map::DefaultHasher::new();
         match &self.step {
-            Step::Welcome => (0u8, crate::i18n::current()).hash(&mut h),
+            Step::Welcome => (0u8, crate::i18n::current(), self.welcome_row, self.kids_wanted, crate::type_scale::get()).hash(&mut h),
             Step::Look => (1u8, self.appearance, self.motion, self.look_row, self.animations_shown(), self.theme).hash(&mut h),
             Step::Play { sel } => (15u8, sel).hash(&mut h),
             Step::Cards(c) => (16u8, c.mark()).hash(&mut h),
@@ -3094,6 +3420,8 @@ impl Setup {
         (self.sel, self.theme, self.port_sel, self.port_tab, self.sharing, self.remote_busy, self.sharing_busy).hash(&mut h);
         (self.share_read_only, &self.ip, &self.share_password).hash(&mut h);
         (self.ways_sel, self.ways_focus, self.usb_busy, self.usb_failed, self.usb_status().label()).hash(&mut h);
+        self.cheat_data.as_ref().map(|p| p.status()).hash(&mut h);
+        (self.portmaster_confirm_remove, self.portmaster_removing).hash(&mut h);
         h.finish()
     }
 
@@ -3141,7 +3469,7 @@ impl Setup {
     /// Whether a thread this setup started for the time zone step or the games step has not answered yet.
     #[cfg(test)]
     fn waiting(&self) -> bool {
-        self.counting || self.zone_guessing || matches!(&self.step, Step::Zone(z) if z.loading || z.asked.iter().any(|a| !z.offsets.contains_key(a)))
+        matches!(self.portmaster, Some(PortMasterState::Downloading(_))) || self.counting || self.zone_guessing || matches!(&self.step, Step::Zone(z) if z.loading || z.asked.iter().any(|a| !z.offsets.contains_key(a)))
     }
 
     /// Takes the answers of those threads, waiting for them (the tests run steps one after the other).
@@ -3599,8 +3927,31 @@ impl Setup {
     }
 
     pub fn press(&mut self, b: Button) -> bool {
+        let runtime_row = matches!(self.step, Step::Extras { sel: 2 })
+            || matches!(self.step, Step::Ports) && !self.portmaster_ready();
+        if runtime_row && self.portmaster_confirm_remove {
+            match b {
+                Button::East => { self.remove_portmaster(); return false; }
+                Button::South if !self.portmaster_removing => { self.portmaster_confirm_remove = false; return false; }
+                Button::Up | Button::Down | Button::Left | Button::Right => self.portmaster_confirm_remove = false,
+                _ => {}
+            }
+        }
+        if runtime_row && b == Button::North && self.portmaster_can_remove() {
+            self.portmaster_confirm_remove = true;
+            self.portmaster_note = None;
+            self.step = Step::Extras { sel: 2 };
+            return false;
+        }
+        if matches!(self.step, Step::Extras { .. }) && matches!(b, Button::South | Button::Start) {
+            if let Some(page) = &mut self.cheat_data { page.cancel(); }
+            self.covers_cancel.cancel();
+        }
         // A press takes the player's hand back: the step no longer goes on by itself.
         self.advance_pending = None;
+        if matches!(b, Button::South | Button::Start) && matches!(self.step, Step::Ports | Step::Extras { .. }) {
+            if let Some(cancel) = &self.port_download_cancel { cancel.cancel(); }
+        }
         let done = self.press_first_start(b).unwrap_or_else(|| self.press_step(b));
         // Games being copied while the page is open: a press reads the folders again (not a read already under way).
         if matches!(self.step, Step::Games | Step::Found { .. }) && !self.counting && self.counted_at.elapsed() >= RECOUNT_AFTER {
@@ -3766,6 +4117,7 @@ impl Setup {
                 return false;
             }
         }
+        let portmaster_ready = self.portmaster_ready();
         match &mut self.step {
             Step::Welcome => {
                 // A gets started, from any row; B has nothing to go back to on the first page, except Settings when the
@@ -3940,17 +4292,34 @@ impl Setup {
                     self.art = self.art.prev();
                     self.art_changed = true;
                 }
+                Button::East if *sel == extras_rows() - 1 => {
+                    if let Some(page) = &mut self.cheat_data { page.cancel(); }
+                    self.covers_cancel.cancel();
+                    self.open_starter = true;
+                }
+                Button::East if extras_cheats() && *sel == 3 => {
+                    let online = self.extras_demo_online.unwrap_or_else(|| self.ip.is_some() || wifi::ip().is_some());
+                    if let Some(page) = &mut self.cheat_data { page.activate(online); }
+                }
+                Button::North if extras_cheats() && *sel == 3 => {
+                    if let Some(page) = &mut self.cheat_data { page.confirm_remove(); }
+                }
+                Button::East if *sel == 2 && (ports::trimui_standalone() || self.portmaster.is_some()) => self.enter_ports(),
                 Button::East if self.ip.is_some() || wifi::ip().is_some() => {
                     if *sel == 0 {
                         self.start_covers();
                     } else {
-                        self.step = Step::Ports;
-                        self.load_catalog();
+                        self.enter_ports();
                     }
                 }
                 Button::Start => self.go_to_games(),
                 Button::South if crate::device::current().host_owned() => self.step = Step::Play { sel: 0 },
                 Button::South => self.enter_zone(),
+                _ => {}
+            },
+            Step::Ports if !portmaster_ready => match b {
+                Button::East => self.start_portmaster(),
+                Button::South | Button::Start => self.step = Step::Extras { sel: 2 },
                 _ => {}
             },
             Step::Ports => {
@@ -4412,19 +4781,8 @@ impl Setup {
     /// "Your games" without games: the way that works here, in a sentence (Add games… has the details).
     fn found_way(&self) -> &'static str {
         let d = crate::device::current();
-        if d.host_owned() {
-            DECK_GAMES_NOTE
-        } else if crate::card_health::image_card() {
-            crate::card_health::IMAGE_CARD_NOTE
-        } else if crate::games_card::in_use() {
-            GAMES_CARD_WAY
-        } else if crate::card_health::games_drive() {
-            GAMES_DRIVE_FIRST_WAY
-        } else if d.has_wifi() {
-            FOUND_WIFI_WAY
-        } else {
-            offline_way(false, d.has_second_card_slot(), false).1
-        }
+        no_games_way(d.host_owned(), crate::card_health::image_card(), crate::games_card::in_use(), crate::card_health::games_drive(),
+            d.card_reads_in_computer(), d.has_wifi(), d.has_second_card_slot())
     }
 
     /// The first start's "Your games": what was found (or the way to add some), then its rows.
@@ -4558,84 +4916,71 @@ impl Setup {
         hints(c, text, &[("A", action), ("B", "Back"), ("START", "Skip the rest")]);
     }
 
+    /// The existing page, in the same row and footer style as other Settings pages.
     fn paint_extras(&mut self, c: &mut Canvas, text: &mut Text, sel: usize, dots: &str) {
-        // On a short screen (768 lines) the heading, the rows and the note under them stand closer, so that the
-        // note's three lines end above the hint bar.
-        let short = crate::kit::short_screen(c.h);
-        let (head, sub, first, mut gap) = if short { (100, 148, 172, 8) } else { (140, 192, 240, 18) };
-        text.draw(c, Face::Title, 67, MARGIN, head, pal().chalk, "Pictures & extras");
-        // Once, for "6 games" on a card the shelf hasn't read yet.
-        if self.games_counted.is_none() && !self.counting {
-            self.count_games();
-        }
-        let online = wifi::ip().is_some();
-        let d = crate::device::current();
-        let (px, subtitle) = text.fit_sizes(Face::Body, &[28, 24], extras_sub(online, d.host_owned(), d.has_wifi()), c.w - 2 * MARGIN);
-        text.draw(c, Face::Body, px, MARGIN, sub, pal().dust, &subtitle);
-        let pictures = self.art == Art::Pictures;
-        let covers = if self.covers_unreachable && !self.covers_running {
-            "Couldn't reach the picture server. Try again later.".to_string()
-        } else {
-            extras_status(self.covers, self.covers_running, pictures, self.games_known(), dots)
-        };
-        let ports = if self.ports.is_empty() { "Browse".to_string() } else { format!("{} ready to play", self.tab_count(PortTab::Ready)) };
-        let rows = [
-            ("Box art", "The front of each game's box, from a free collection online.", covers),
-            // The choices are drawn as pills in place of the line (`pill_track`), the current one on paper.
-            ("Pictures", "", String::new()),
-            ("PortMaster games", "PC and indie games from PortMaster: ready to play, or with your own game files.", ports),
+        if let Some(page) = &mut self.cheat_data { page.poll(); }
+        let online = self.extras_demo_online.unwrap_or_else(|| self.ip.is_some() || wifi::ip().is_some());
+        let device = crate::device::current();
+        let offline = extras_sub(false, device.host_owned(), device.has_wifi());
+        let about = format!("{}\n{}", "The front of each game's box, from a free collection online.", PICTURES_NOTE);
+        let covers_error = self.covers_unreachable && !self.covers_running;
+        let covers = if !online { "Needs Wi-Fi".into() }
+            else if covers_error { "Retry".into() }
+            else if self.covers_running || self.covers.is_some() { extras_status(self.covers, self.covers_running, self.art == Art::Pictures, self.games_known(), dots) }
+            else { "Download".into() };
+        let mut rows = vec![
+            crate::emu_menu::Row { name: "Box art".into(), value: covers, desc: if online && covers_error { "Couldn't reach the picture server. Try again later.".into() } else { about } },
+            crate::emu_menu::Row { name: "Pictures".into(), value: if sel == 1 { format!("‹ {} ›", self.art.label()) } else { self.art.label().into() },
+                desc: PICTURES_NOTE.into() },
         ];
-        let width = c.w - 2 * MARGIN;
-        // A title and a line under it: taller by their growth with Settings → Text size.
-        let (g1, g2) = (crate::type_scale::grow(50), crate::type_scale::grow(24));
-        let h = if short { 124 } else { 132 } + g1 + g2;
-        // The note reserves its measured height: with larger text the rows grow, so what is over (down to a
-        // small floor) comes out of the gaps between the rows, instead of running into the hint bar.
-        let note = text.wrap_prose(Face::Body, 24, PICTURES_NOTE, width);
-        let note_off = if short { 24 } else { 26 };
-        let n = extras_rows() as i32;
-        let note_h = (note.len() as i32 - 1) * crate::type_scale::line(24, 10) + 10;
-        let hints_top = c.h - 52 - 9 - crate::type_scale::row(36, 21) / 2 - crate::type_scale::grow(21) / 3 - 4;
-        let over = first + n * (h + gap) + note_off + note_h - hints_top;
-        if over > 0 {
-            gap -= ((over + n - 1) / n).min(gap - 2);
+        if ports::offered() {
+            rows.push(self.portmaster_row(online));
         }
-        for (i, (title, about, status)) in rows.iter().take(extras_rows()).enumerate() {
-            let y = first + i as i32 * (h + gap);
-            let selected = i == sel;
-            crate::kit::shelf_row(c, MARGIN, y, width, h, selected);
-            // The switch works without Wi-Fi; the downloads and the browser need it.
-            let usable = online || i == 1;
-            let (fg, dim) = if selected { (pal().ink, pal().label_dust) } else if usable { (pal().chalk, pal().dust) } else { (pal().off, pal().off) };
-            let status_w = text.width(Face::Body, 24, status);
-            let title = text.fit(Face::Title, 50, title, width - 56 - status_w - 40);
-            text.draw(c, Face::Title, 50, MARGIN + 28, y + 62 + g1, fg, &title);
-            if i == 1 {
-                let names: Vec<&str> = Art::ALL.iter().map(|a| a.label()).collect();
-                let on = Art::ALL.iter().position(|a| *a == self.art).unwrap_or(0);
-                pill_track(c, text, MARGIN + 28, y + 80 + g1, &names, on);
-                continue;
-            }
-            let about = text.fit(Face::Body, 24, about, width - 56);
-            text.draw(c, Face::Body, 24, MARGIN + 28, y + 104 + g1 + g2, dim, &about);
-            text.draw_right(c, Face::Body, 24, MARGIN + width - 28, y + 58 + g1, dim, status);
+        if extras_cheats() {
+            rows.push(self.cheat_data.as_ref().map_or_else(|| crate::cheat_data::get_row(31_367_177, online, Some(crate::update::cheats::UNAVAILABLE)), |page| page.row(online)));
         }
-        // What the downloads are and where from, whatever is chosen: this step is where it is decided.
-        let mut y = first + n * (h + gap) + note_off;
-        for l in note {
-            text.draw(c, Face::Body, 24, MARGIN, y, pal().dust, &l);
-            y += crate::type_scale::line(24, 10);
-        }
-        let action = match sel {
-            0 => "Download",
-            1 => "Change",
-            _ => "Browse",
-        };
-        hints(c, text, &extras_hints(action, online || sel == 1));
+        rows.push(crate::emu_menu::Row { name: "Starter pack".into(), value: if online { "Browse" } else { "Needs Wi-Fi" }.into(),
+            desc: "A few free games to get you started. Pick one or take them all.".into() });
+        let cheat = extras_cheats() && sel == 3;
+        let runtime = ports::trimui_standalone() && sel == 2;
+        let action = if cheat { self.cheat_data.as_ref().filter(|p| p.can_activate(online)).map(|p| p.action(online)) }
+            else if runtime && (self.portmaster_removing || matches!(self.portmaster, Some(PortMasterState::Downloading(_) | PortMasterState::Checking))) { None }
+            else if runtime && self.portmaster_confirm_remove { Some("Remove") }
+            else if runtime && !matches!(self.portmaster, Some(PortMasterState::Downloading(_) | PortMasterState::Checking)) { Some("Browse") }
+            else if sel == 1 { Some("Change") } else if sel == rows.len() - 1 { Some("Browse") }
+            else if !online { None } else if sel == 0 { Some(if covers_error { "Retry" } else { "Download" }) } else { Some("Browse") };
+        let alert = cheat && self.cheat_data.as_ref().is_some_and(|p| p.alert(online))
+            || runtime && (self.portmaster_note.is_some() || online && matches!(self.portmaster, Some(PortMasterState::Offer(_))) && self.portmaster_low_space().is_some())
+            || sel == 0 && online && covers_error;
+        let remove = runtime && !self.portmaster_confirm_remove && self.portmaster_can_remove();
+        crate::extras_page::paint(c, text, &mut self.extras_touch.borrow_mut(), &rows, sel, (!online).then_some(offline),
+            crate::extras_page::Footer { action, alert, remove });
+    }
+
+    pub fn take_open_starter(&mut self) -> bool { std::mem::take(&mut self.open_starter) }
+    pub fn at_starter(mut self) -> Self { self.step = Step::Extras { sel: extras_rows() - 1 }; self }
+    pub fn at_portmaster(mut self) -> Self { self.step = Step::Extras { sel: 2 }; self }
+    pub fn cheat_status(&self) -> Option<(&'static str, u64, u64)> { self.cheat_data.as_ref().map(|p| p.status()) }
+
+    /// Uses the production row mapper, with no worker or filesystem access.
+    pub fn with_cheats_demo(mut self, state: &str) -> Self {
+        self.cheat_data = Some(crate::cheat_data::Page::snapshot(state));
+        self.extras_demo_online = Some(!state.ends_with("offline"));
+        self.step = Step::Extras { sel: 3 };
+        self
+    }
+
+    pub fn with_cover_error_demo(mut self) -> Self {
+        self.covers_unreachable = true;
+        self.covers_running = false;
+        self.extras_demo_online = Some(true);
+        self.step = Step::Extras { sel: 0 };
+        self
     }
 
     fn paint_ports(&mut self, c: &mut Canvas, text: &mut Text, dots: &str) {
         text.draw(c, Face::Title, 67, MARGIN, 124, pal().chalk, "PortMaster games");
+        if !self.portmaster_ready() { self.paint_portmaster_offer(c, text); return; }
         // The two lists as tabs: the one on show is paper, like a selected row.
         let mut x = MARGIN;
         for tab in [PortTab::Ready, PortTab::OwnFiles] {
@@ -4651,7 +4996,11 @@ impl Setup {
             PortTab::OwnFiles => "They need files from your own copy of the game. pocket-ui shows where they go.",
         };
         let (line, color) = match (&self.port_busy, &self.port_note, self.catalog_loading) {
-            (Some(title), _, _) => (format!("Working on {title}{dots}"), pal().dust),
+            (Some(title), _, _) => (match &self.port_progress {
+                Some(p) if p.total > 0 => format!("{title}: {} / {} MB", p.done / (1 << 20), p.total / (1 << 20)),
+                Some(p) if p.done > 0 => format!("{title}: {}", ports::size_label(p.done)),
+                _ => format!("Working on {title}{dots}"),
+            }, pal().dust),
             (_, Some((msg, err)), _) => (msg.clone(), if *err { pal().alert } else { pal().dust }),
             (_, _, true) => (format!("Loading the catalogue{dots}"), pal().dust),
             _ => (about.to_string(), pal().dust),
@@ -4759,6 +5108,45 @@ impl Setup {
         }
         items.extend([("L1/R1", "Page"), ("B", "Back")]);
         hints(c, text, &items);
+    }
+
+    fn paint_portmaster_offer(&mut self, c: &mut Canvas, text: &mut Text) {
+        let width = c.w - 2 * MARGIN;
+        let mut y = 235;
+        for line in text.wrap_prose(Face::Body, 28, "Needed once for Ports. It stays on this card; games are downloaded separately.", width) {
+            text.draw(c, Face::Body, 28, MARGIN, y, pal().dust, &line);
+            y += crate::type_scale::line(28, 10);
+        }
+        y += 32;
+        let action = self.portmaster_action();
+        let lines = text.wrap_prose(Face::Title, 40, action, width - 64);
+        let line_h = crate::type_scale::line(40, 12);
+        let row_h = (lines.len() as i32 * line_h + 64).max(132);
+        crate::kit::shelf_row(c, MARGIN, y, width, row_h, true);
+        for (i, line) in lines.iter().enumerate() {
+            text.draw(c, Face::Title, 40, MARGIN + 32, y + 48 + i as i32 * line_h, pal().ink, line);
+        }
+        y += row_h + 44;
+        let note = self.portmaster_note.clone().unwrap_or_else(|| {
+            if !self.portmaster_online() && !matches!(self.portmaster, Some(PortMasterState::Downloading(_))) { "Connect to Wi-Fi to get PortMaster.".into() }
+            else if matches!(self.portmaster, Some(PortMasterState::Downloading(_))) { self.portmaster_progress_line() }
+            else { "No download starts until you press A.".into() }
+        });
+        for line in text.wrap_prose(Face::Body, 26, &note, width) {
+            if y >= c.h - 120 { break; }
+            text.draw(c, Face::Body, 26, MARGIN, y, if self.portmaster_note.is_some() { pal().alert } else { pal().dust }, &line);
+            y += crate::type_scale::line(26, 10);
+        }
+        if let Some(PortMasterState::Downloading(progress)) = &self.portmaster {
+            if progress.total > 0 && y + 20 < c.h - 100 {
+                c.rect(MARGIN, y + 8, width, 10, pal().spine);
+                c.rect(MARGIN, y + 8, (width as u64 * progress.done.min(progress.total) / progress.total) as i32, 10, pal().label);
+            }
+        }
+        let mut bar = Vec::new();
+        if matches!(self.portmaster, Some(PortMasterState::Offer(_))) && self.portmaster_online() { bar.push(("A", "Download")); }
+        bar.push(("B", if matches!(self.portmaster, Some(PortMasterState::Downloading(_))) { "Cancel" } else { "Back" }));
+        hints(c, text, &bar);
     }
 
     fn paint_port_files(&mut self, c: &mut Canvas, text: &mut Text, dots: &str) {
@@ -5010,7 +5398,7 @@ impl Setup {
         self.paint_step_count(c, text);
         // The first start has a line under its rows (what HOME does in a game): the pictures give up its height.
         let (pw, ph) = look_preview((c.w, c.h));
-        let (pw, ph) = if first { let short = ph - crate::type_scale::line(24, 8); (pw * short / ph, short) } else { (pw, ph) };
+        let (pw, ph) = if first { let short = (ph - 3 * crate::type_scale::line(24, 8)).max(44); (pw * short / ph, short) } else { (pw, ph) };
         let (x, y) = ((c.w - pw) / 2, 226);
         let n = self.themes.len();
         if previews.len() == n {
@@ -5109,7 +5497,8 @@ impl Setup {
     fn paint_look_end(&self, c: &mut Canvas, text: &mut Text, top: i32) {
         let width = c.w - 2 * MARGIN;
         let step = crate::type_scale::line(24, 8);
-        let last = crate::kit::hint_bar_top(c.h) - 16;
+        let more = text.wrap_prose_at_most(Face::Body, 24, "More to get any time: Settings › Games › Extras.", width, 2);
+        let last = crate::kit::hint_bar_top(c.h) - 16 - more.len() as i32 * step;
         let mut lines: Vec<&str> = Vec::new();
         if self.kids_skipped {
             lines.push("Kids Mode is there whenever you want it: Settings › System › Kids mode.");
@@ -5136,6 +5525,10 @@ impl Setup {
                 text.draw(c, Face::Body, 24, MARGIN, y, pal().dust, &w);
                 y += step;
             }
+        }
+        for line in more {
+            text.draw(c, Face::Body, 24, MARGIN, y, pal().dust, &line);
+            y += step;
         }
         hints(c, text, &look_hints(false, self.look_row > 0));
     }
@@ -5588,26 +5981,7 @@ fn pill_row(c: &mut Canvas, text: &mut Text, top: i32, label: &str, names: &[&st
     text.draw(c, Face::Body, npx, x + 28, base, pal().dust, &note);
 }
 
-/// The choices on a keycap track with the one in use on a paper pill, from (`x`, `top`): `pill_row` without a label and a
-/// blurb. Returns where the track ends.
-fn pill_track(c: &mut Canvas, text: &mut Text, x: i32, top: i32, names: &[&str], on: usize) -> i32 {
-    let (h, px) = (pill_h(), 24u32);
-    let base = top + h / 2 + crate::type_scale::mid(px);
-    let widths: Vec<i32> = names.iter().map(|n| text.width(Face::Body, px, n) + 40).collect();
-    let end = x + widths.iter().sum::<i32>() + 8;
-    crate::retro::pill(c, x, top, end - x, h, h / 2, pal().keycap);
-    let mut x = x + 4;
-    for (i, (n, w)) in names.iter().zip(&widths).enumerate() {
-        if i == on {
-            crate::retro::pill(c, x, top + 4, *w, h - 8, (h - 8) / 2, pal().label);
-        }
-        text.draw(c, Face::Body, px, x + 20, base, if i == on { pal().ink } else { pal().chalk }, n);
-        x += w;
-    }
-    end
-}
-
-/// The Pictures & extras page's line about the picture downloads: where from, what is sent, and what Off does (the sizes
+/// The Extras page's line about the picture downloads: where from, what is sent, and what Off does (the sizes
 /// are in docs/user/extras.md).
 const PICTURES_NOTE: &str = "Pictures come from a free collection online: no account is needed, and only a game's name is sent. Off downloads nothing by itself.";
 
@@ -5649,21 +6023,6 @@ fn zone_list_hints(country: bool, stage: bool, empty: bool) -> Vec<(&'static str
         _ if empty => vec![("START", "Next"), ("B", "Back")],
         _ => vec![("A", "Set"), ("L1/R1", "Page"), ("START", "Next"), ("B", "Back")],
     }
-}
-
-/// The hint bar of the Extras step: A only where it does something. The downloads and the browser need Wi-Fi, the
-/// pictures switch does not (`usable`).
-fn extras_hints(action: &'static str, usable: bool) -> Vec<(&'static str, &'static str)> {
-    let mut h = Vec::new();
-    // The Pictures row is a choice: Left/Right, as on every row of choices (A steps it on too).
-    if action == "Change" {
-        h.push(("Left/Right", "Change"));
-    } else if usable {
-        h.push(("A", action));
-    }
-    h.push(("B", "Back"));
-    h.push(("START", "Next"));
-    h
 }
 
 /// The hint bar of Add your games. `more`: the "All systems" tile is selected, and whether its list is open. X (file
@@ -5798,7 +6157,7 @@ mod tests {
         let tx = std::sync::Mutex::new(tx);
         // Only the answers `Setup::settle` waits for; the rest (file sharing, remote access) is dropped as before.
         let notify: Notify = Arc::new(move |e| {
-            if matches!(e, SetupEvent::Zone(_) | SetupEvent::ZoneGuess(_) | SetupEvent::ZoneOffsets(_) | SetupEvent::GameCounts(_) | SetupEvent::Net) {
+            if matches!(e, SetupEvent::Zone(_) | SetupEvent::ZoneGuess(_) | SetupEvent::ZoneOffsets(_) | SetupEvent::GameCounts(_) | SetupEvent::Net | SetupEvent::PortMasterStatus(_) | SetupEvent::PortMasterSpace(_) | SetupEvent::PortMasterProgress(_) | SetupEvent::PortMasterDone(_) | SetupEvent::PortMasterRemoved(_)) {
                 let _ = tx.lock().unwrap().send(e);
             }
         });
@@ -7915,6 +8274,154 @@ mod tests {
     }
 
     #[test]
+    fn leaving_ports_or_dropping_setup_cancels_the_worker_even_before_it_starts() {
+        let mut s = ports_setup("pm-cancel-back");
+        let cancel = ports::DownloadCancel::new();
+        s.port_download_cancel = Some(cancel.clone());
+        s.portmaster = Some(PortMasterState::Downloading(Default::default()));
+        s.press(Button::South);
+        assert_eq!(s.at(), "extras");
+        assert!(cancel.is_cancelled(), "B requests a checkpoint before returning to Extras");
+        let cancel = ports::DownloadCancel::new();
+        s.port_download_cancel = Some(cancel.clone());
+        drop(s);
+        assert!(cancel.is_cancelled(), "closing Extras also stops its owned worker");
+    }
+
+    #[test]
+    fn b_cancels_the_owned_portmaster_worker_and_reopening_can_retry() {
+        use std::sync::atomic::{AtomicUsize, Ordering};
+        static CALLS: AtomicUsize = AtomicUsize::new(0);
+        fn fetch(_report: &ports::DownloadReporter, cancel: &ports::DownloadCancel) -> Result<(), String> {
+            if CALLS.fetch_add(1, Ordering::SeqCst) > 0 { return Ok(()); }
+            let limit = std::time::Instant::now() + Duration::from_secs(2);
+            while !cancel.is_cancelled() && std::time::Instant::now() < limit { std::thread::sleep(Duration::from_millis(5)); }
+            assert!(cancel.is_cancelled(), "B must reach even a worker scheduled after the page was left");
+            Err("Download cancelled.".into())
+        }
+        let mut s = ports_setup("pm-worker-back");
+        s.portmaster = Some(PortMasterState::Offer(ports::RuntimeStatus::Missing));
+        s.portmaster_fetch = fetch;
+        s.ip = Some("192.0.2.1".into());
+        s.press(Button::East);
+        s.press(Button::South);
+        s.settle();
+        assert_eq!(s.at(), "extras");
+        assert!(matches!(s.portmaster, Some(PortMasterState::Offer(_))));
+        assert_eq!(s.portmaster_note.as_deref(), Some("Download cancelled."));
+        s.press(Button::East);
+        s.press(Button::East);
+        s.settle();
+        assert!(matches!(s.portmaster, Some(PortMasterState::Ready)));
+        assert_eq!(CALLS.load(Ordering::SeqCst), 2, "retry begins only after the first worker finished");
+    }
+
+    #[test]
+    fn portmaster_is_an_explicit_one_time_download_and_reopening_does_not_download_again() {
+        use std::sync::atomic::{AtomicUsize, Ordering};
+        static INSTALLS: AtomicUsize = AtomicUsize::new(0);
+        fn fetch(report: &(dyn Fn(ports::DownloadProgress) + Send + Sync), _cancel: &ports::DownloadCancel) -> Result<(), String> {
+            INSTALLS.fetch_add(1, Ordering::SeqCst);
+            report(ports::DownloadProgress { stage: "download".into(), done: 20 << 20, total: 300 << 20 });
+            Ok(())
+        }
+        let mut s = ports_setup("pm-on-demand");
+        s.portmaster = Some(PortMasterState::Offer(ports::RuntimeStatus::Missing));
+        s.portmaster_fetch = fetch;
+        s.ip = Some("192.0.2.1".into());
+        assert_eq!(s.portmaster_action(), "Get PortMaster (~300 MB, one time)");
+        assert_eq!(INSTALLS.load(Ordering::SeqCst), 0, "opening Ports never starts a large download");
+        s.press(Button::East);
+        assert!(matches!(s.portmaster, Some(PortMasterState::Downloading(_))));
+        s.settle();
+        assert!(matches!(s.portmaster, Some(PortMasterState::Ready)));
+        assert_eq!(INSTALLS.load(Ordering::SeqCst), 1);
+        s.press(Button::South);
+        s.press(Button::East);
+        assert!(matches!(s.step, Step::Ports));
+        assert_eq!(INSTALLS.load(Ordering::SeqCst), 1, "installed runtime stays on the card");
+    }
+
+    #[test]
+    fn portmaster_offer_stays_reachable_offline_and_keeps_download_errors_with_retry() {
+        let mut s = ports_setup("pm-offline");
+        s.portmaster = Some(PortMasterState::Offer(ports::RuntimeStatus::Missing));
+        s.ip = None;
+        s.portmaster_demo_online = Some(false);
+        let paint = |s: &mut Setup| {
+            let mut pixels = vec![0; 1024 * 768];
+            s.paint_portmaster_offer(&mut Canvas::new(&mut pixels, 1024, 768), &mut Text::builtin());
+            pixels
+        };
+        let before = paint(&mut s);
+        s.press(Button::East);
+        assert!(matches!(s.portmaster, Some(PortMasterState::Offer(_))), "offline A cannot start a download");
+        assert!(paint(&mut s) == before, "offline A has no advertised action and leaves the picture unchanged");
+        assert!(s.portmaster_note.is_none());
+        s.on_event(SetupEvent::PortMasterDone(Err("Not enough card space.".into())));
+        assert!(s.portmaster_note.as_deref().is_some_and(|n| n.contains("card space")));
+        assert_eq!(s.portmaster_action(), "Get PortMaster (~300 MB, one time)");
+        s.press(Button::South);
+        assert_eq!(s.at(), "extras", "B always leaves the offer");
+    }
+
+    #[test]
+    fn portmaster_remove_needs_confirm_works_offline_and_returns_to_the_get_offer() {
+        use std::sync::atomic::{AtomicUsize, Ordering};
+        static REMOVALS: AtomicUsize = AtomicUsize::new(0);
+        fn remove(_: &ports::DownloadReporter, _: &ports::DownloadCancel) -> Result<(), String> {
+            REMOVALS.fetch_add(1, Ordering::SeqCst);
+            Ok(())
+        }
+        let mut s = ports_setup("pm-remove");
+        s.step = Step::Extras { sel: 2 };
+        s.portmaster = Some(PortMasterState::Ready);
+        s.portmaster_status = ports::RuntimeStatus::Ready;
+        s.portmaster_remove = remove;
+        s.ip = None;
+        s.remove_portmaster();
+        assert_eq!(REMOVALS.load(Ordering::SeqCst), 0, "browsing never removes the runtime");
+        s.portmaster_confirm_remove = true;
+        assert_eq!(s.portmaster_row(false).value, "Remove?");
+        s.press(Button::South);
+        assert!(!s.portmaster_confirm_remove, "B puts the offer away without removal");
+        s.portmaster_confirm_remove = true;
+        s.press(Button::East);
+        assert!(s.portmaster_removing);
+        s.settle();
+        assert_eq!(REMOVALS.load(Ordering::SeqCst), 1);
+        assert!(matches!(s.portmaster, Some(PortMasterState::Offer(ports::RuntimeStatus::Missing))));
+        assert!(!s.portmaster_confirm_remove && !s.portmaster_removing);
+        assert_eq!(s.portmaster_row(false).value, "Needs Wi-Fi", "Get can wait until the player is online again");
+    }
+
+    #[test]
+    fn portmaster_free_space_refuses_a_download_with_the_actual_card_numbers() {
+        let mut s = ports_setup("pm-space").with_extras_portmaster_demo("no-space");
+        assert_eq!(s.portmaster_row(true).value, "Needs 700 MiB");
+        assert!(s.portmaster_row(true).desc.contains("412 MiB free"));
+        s.start_portmaster();
+        assert!(matches!(s.portmaster, Some(PortMasterState::Offer(_))));
+        assert!(s.port_download_cancel.is_none(), "low space never starts the download");
+    }
+
+    #[test]
+    fn portmaster_progress_and_pin_refresh_are_visible_and_busy_presses_do_not_start_ports() {
+        let mut s = ports_setup("pm-progress");
+        s.portmaster = Some(PortMasterState::Offer(ports::RuntimeStatus::Outdated));
+        assert_eq!(s.portmaster_action(), "Update PortMaster");
+        s.on_event(SetupEvent::PortMasterProgress(ports::DownloadProgress { stage: "verify".into(), done: 300 << 20, total: 300 << 20 }));
+        assert!(s.portmaster_progress_line().contains("300 MB"));
+        assert_eq!(s.portmaster_action(), "Checking PortMaster…", "a completed transfer says it is being checked");
+        s.on_event(SetupEvent::PortMasterProgress(ports::DownloadProgress { stage: "downloading".into(), done: 16 << 20, total: 0 }));
+        assert_eq!(s.portmaster_progress_line(), "16 MB", "unknown totals keep real received bytes without a made-up percentage");
+        s.press(Button::East);
+        assert!(s.port_busy.is_none(), "the runtime's A never installs a game behind it");
+        s.press(Button::South);
+        assert_eq!(s.at(), "extras", "B leaves after requesting a resumable checkpoint");
+    }
+
+    #[test]
     fn the_browser_keeps_ports_that_need_your_files_in_a_list_of_their_own() {
         let mut s = ports_setup("ports-tabs");
         assert_eq!(s.at(), "ports");
@@ -8062,10 +8569,51 @@ mod hint_bars {
         }
     }
 
+    /// K1 of the UX review: "put them on the SD card in its roms folder" was said on every handheld with Wi-Fi, but a computer
+    /// reads only the GAMES drive and the Brick's own card; the ROCKNIX cards' STORAGE part it can't read, and Windows offers to
+    /// format it. Each kind of device gets the sentence that is true for it, in three languages, and it fits.
+    #[test]
+    fn the_first_start_does_not_send_a_rocknix_card_into_the_computer() {
+        // (host_owned, image_card, games_card, games_drive, card_in_computer, wifi, second_slot)
+        let plus = no_games_way(false, false, false, false, false, true, true); // RG35XX Plus, SP
+        let mini = no_games_way(false, false, false, false, false, true, false); // Mini V2, Odin
+        let rg28 = no_games_way(false, false, false, false, false, false, true); // no Wi-Fi, second slot
+        let drive = no_games_way(false, false, false, true, false, true, true); // a card with the GAMES drive
+        let brick = no_games_way(false, false, false, false, true, false, false);
+        assert_eq!(plus, FOUND_WIFI_SLOT_WAY);
+        assert_eq!(mini, FOUND_WIFI_WAY);
+        assert_eq!(rg28, SECOND_CARD_WAY, "no Wi-Fi: the second card");
+        assert_eq!(drive, GAMES_DRIVE_FIRST_WAY);
+        assert_eq!(brick, BRICK_CARD_WAY);
+        assert_eq!(no_games_way(true, false, false, false, false, false, false), DECK_GAMES_NOTE);
+        assert_eq!(no_games_way(false, false, true, true, false, true, true), GAMES_CARD_WAY, "a games card wins over the rest");
+        for (name, line) in [("plus", plus), ("mini", mini)] {
+            assert!(!line.contains("roms") && !line.contains("Roms"), "{name}: a ROCKNIX card has no folder a computer can use: {line}");
+            assert!(line.contains("Cancel"), "{name}: the format warning: {line}");
+        }
+        assert!(brick.contains("Roms") && !brick.contains("Cancel"), "{brick}");
+        assert!(offline_way_for(true, false, false, false).1.contains("Roms"), "Add games on the Brick names its Roms folder");
+        let mut text = Text::new();
+        let width = 1024 - 2 * MARGIN; // the narrowest canvas (the 4:3 handhelds paint at 1024 wide)
+        for line in [FOUND_WIFI_SLOT_WAY, FOUND_WIFI_WAY, BRICK_CARD_WAY] {
+            for (lang, table) in [("en", None), ("de", Some(crate::i18n::Lang::De)), ("es", Some(crate::i18n::Lang::Es))] {
+                let shown = match table {
+                    None => line.to_string(),
+                    Some(l) => l.table().and_then(|t| t.translate(line)).unwrap_or_else(|| panic!("{lang}: no line for {line}")).into_owned(),
+                };
+                for px in [28, 34] {
+                    let lines = text.wrap_prose(Face::Body, px, &shown, width);
+                    assert!(lines.len() <= 4, "{lang} at {px}: {} lines: {lines:?}", lines.len());
+                }
+            }
+        }
+    }
+
     #[test]
     fn extras_offers_a_only_where_it_works() {
-        assert_eq!(keys(&extras_hints("Download", false)), ["B", "START"], "offline: nothing to download");
-        assert_eq!(keys(&extras_hints("Download", true)), ["A", "B", "START"]);
+        assert_eq!(keys(&crate::extras_page::hints(None)), ["B"], "offline: nothing to download");
+        assert_eq!(keys(&crate::extras_page::hints(Some("Download"))), ["A", "B"]);
+        assert_eq!(keys(&crate::extras_page::hints(Some("Change"))), ["Left/Right", "A", "B"], "Pictures still changes offline");
     }
 
     /// Add games' row of ways per kind of device: Wi-Fi, USB cable, nothing on a Steam Deck (host-owned).

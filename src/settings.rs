@@ -167,6 +167,10 @@ pub struct Settings {
     /// The Retro style's palette (`retro::Colours`), the Colours row's choice while Style is Retro; Cocoa when unset.
     #[serde(default, deserialize_with = "lenient")]
     pub retro_colours: crate::retro::Colours,
+    /// The Retro style's letters (`font_style::RetroLetters`), the Style row's "Retro" or "Retro Pixelify"; Departure Mono
+    /// when unset, also for whoever had Retro on before the choice (0.3.2).
+    #[serde(default, deserialize_with = "lenient")]
+    pub retro_letters: crate::font_style::RetroLetters,
     /// Settings → Look → Cozy extras → GBA console. Only the hardware picture changes.
     #[serde(default, deserialize_with = "lenient")]
     pub gba_model: crate::system_art::GbaModel,
@@ -386,18 +390,20 @@ pub fn language(data_dir: &Path) -> crate::i18n::Lang {
         .unwrap_or_else(crate::i18n::Lang::system_default)
 }
 
-/// Settings → Look → Style and Retro's palette alone (pocket-core's overlays paint with them, `retro`): read once at a
-/// game's start; Barlow and Cocoa when the file or a field is missing.
-pub fn style(data_dir: &Path) -> (crate::font_style::FontStyle, crate::retro::Colours) {
+/// Settings → Look → Style, Retro's palette and its letters alone (pocket-core's overlays paint with them, `retro`): read
+/// once at a game's start; Barlow, Cocoa and Departure Mono when the file or a field is missing.
+pub fn style(data_dir: &Path) -> (crate::font_style::FontStyle, crate::retro::Colours, crate::font_style::RetroLetters) {
     #[derive(serde::Deserialize, Default)]
     struct Only {
         #[serde(default, deserialize_with = "lenient")]
         font: crate::font_style::FontStyle,
         #[serde(default, deserialize_with = "lenient")]
         retro_colours: crate::retro::Colours,
+        #[serde(default, deserialize_with = "lenient")]
+        retro_letters: crate::font_style::RetroLetters,
     }
     let only = std::fs::read(data_dir.join(FILE)).ok().and_then(|b| serde_json::from_slice::<Only>(&b).ok()).unwrap_or_default();
-    (only.font, only.retro_colours)
+    (only.font, only.retro_colours, only.retro_letters)
 }
 
 #[cfg(test)]
@@ -429,6 +435,7 @@ mod tests {
             colours: crate::palette::Colours::GreyBrick,
             font: crate::font_style::FontStyle::Rounded,
             retro_colours: crate::retro::Colours::Pea,
+            retro_letters: crate::font_style::RetroLetters::Pixelify,
             gba_model: crate::system_art::GbaModel::Sp,
             motion: Motion::Reduced,
             frames: Frames::Every,
@@ -604,6 +611,25 @@ mod tests {
         }
         std::fs::write(d.join(FILE), br#"{"font": "pixel"}"#).unwrap();
         assert_eq!(Settings::load(&d).font, FontStyle::Pixel);
+    }
+
+    /// Retro's letters (0.3.2): a player who had Retro on before the choice gets Departure Mono, Pixelify is kept once
+    /// chosen, a wrong value is Departure Mono and costs nothing else; pocket-core reads the same (`style`).
+    #[test]
+    fn retro_letters_are_departure_mono_until_pixelify_is_chosen_and_kept() {
+        use crate::font_style::{FontStyle, RetroLetters};
+        let d = dir("retro-letters");
+        std::fs::write(d.join(FILE), br#"{"font": "retro", "retro_colours": "pea", "onboarded": true}"#).unwrap();
+        let s = Settings::load(&d);
+        assert_eq!((s.font, s.retro_letters), (FontStyle::Retro, RetroLetters::Departure), "Retro from 0.3.1: Departure Mono");
+        assert_eq!(style(&d), (FontStyle::Retro, crate::retro::Colours::Pea, RetroLetters::Departure));
+        assert_eq!(style(&d.join("nothing")).2, RetroLetters::Departure, "a new device");
+        Settings { font: FontStyle::Retro, retro_letters: RetroLetters::Pixelify, ..chosen() }.save(&d);
+        assert_eq!(Settings::load(&d).retro_letters, RetroLetters::Pixelify);
+        assert_eq!(style(&d).2, RetroLetters::Pixelify, "pocket-core's overlays in Pixelify too");
+        std::fs::write(d.join(FILE), br#"{"font": "retro", "retro_letters": "comic", "theme": "split"}"#).unwrap();
+        let s = Settings::load(&d);
+        assert_eq!((s.retro_letters, s.font, s.theme), (RetroLetters::Departure, FontStyle::Retro, Theme::Split), "a wrong value: the rest is kept");
     }
 
     #[test]

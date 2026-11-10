@@ -202,7 +202,7 @@ pub(crate) fn row_line(i: usize) -> &'static str {
     if pocket_ui::device::current().host_owned() {
         match SETTINGS[i].1 {
             Opens::Setup(Only::Games) => return "Where each system's games go.",
-            Opens::Setup(Only::Extras) => return "Box art and game pictures.",
+            Opens::Setup(Only::Extras) => return "Box art, game pictures and starter pack.",
             Opens::SleepPower => return "A slideshow of your games when the Deck sits idle.",
             _ => {}
         }
@@ -215,8 +215,8 @@ pub(crate) fn row_line(i: usize) -> &'static str {
             // Nothing on the card updates TrimUI's system: "and the system" promised what the page can't do.
             Opens::Updates => return "New versions of pocket-ui.",
             Opens::PerfFan => return "How fast the processor may run, in games and in menus.",
-            // No PortMaster on the Brick's card.
-            Opens::Setup(Only::Extras) => return "Box art and game pictures.",
+            Opens::Setup(Only::Extras) if !pocket_ui::ports::offered() => return "Box art and game pictures.",
+            Opens::Setup(Only::Extras) => return "Box art, PortMaster games, cheats.",
             _ => {}
         }
     }
@@ -306,7 +306,7 @@ pub(crate) fn groups_input_with(page: SettingsPage, b: Button, store: bool) -> O
 }
 
 /// Where Settings' switches without a page of their own stand (Look → Appearance, Colours, Font; Sound & feel →
-/// Motion; Playing → Buttons' two): part of `App::sound_view`, so that switching one clicks as any other change does.
+/// Motion; Playing → Buttons' two): part of `App::feedback_view`, so that switching one clicks as any other change does.
 /// Each process-wide choice is read where it lives; the App's own two are handed in.
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
 pub(crate) struct Switches {
@@ -315,6 +315,7 @@ pub(crate) struct Switches {
     motion: pocket_ui::motion::Motion,
     colours: pocket_ui::palette::Colours,
     font: pocket_ui::font_style::FontStyle,
+    letters: pocket_ui::font_style::RetroLetters,
     prompts: pocket_ui::button_prompts::PromptStyle,
 }
 
@@ -326,6 +327,7 @@ impl Switches {
             motion: pocket_ui::motion::level(),
             colours: pocket_ui::palette::colours(),
             font: pocket_ui::font_style::get(),
+            letters: pocket_ui::font_style::retro_letters(),
             prompts: pocket_ui::button_prompts::get(),
         }
     }
@@ -436,8 +438,8 @@ impl App {
             Opens::Setup(Only::Play) => pocket_ui::features::Profile::of(&self.switches()).name().to_string(),
             Opens::Colours if i == sel => format!("‹ {} ›", colours_label()),
             Opens::Colours => colours_label().to_string(),
-            Opens::Font if i == sel => format!("‹ {} ›", pocket_ui::font_style::get().label()),
-            Opens::Font => pocket_ui::font_style::get().label().to_string(),
+            Opens::Font if i == sel => format!("‹ {} ›", pocket_ui::font_style::row_label()),
+            Opens::Font => pocket_ui::font_style::row_label().to_string(),
             Opens::Appearance if i == sel => format!("‹ {} ›", self.appearance.name()),
             Opens::Appearance => self.appearance.name().to_string(),
             Opens::Motion if i == sel => format!("‹ {} ›", pocket_ui::motion::level().name()),
@@ -711,7 +713,7 @@ mod tests {
                 lines.push(tr(note));
             }
             lines.push(tr(REMEMBER_OFF_LINE));
-            let deck_lines = ["Where each system's games go.", "Box art and game pictures.", "A slideshow of your games when the Deck sits idle."];
+            let deck_lines = ["Where each system's games go.", "Box art, game pictures and starter pack.", "A slideshow of your games when the Deck sits idle."];
             lines.extend(deck_lines.iter().map(|l| tr(l)));
         }
         for size in [TextSize::Normal, TextSize::Medium, TextSize::Large] {
@@ -1043,7 +1045,7 @@ fn brick_hides_with(opens: Opens, standalone: bool) -> bool {
     if matches!(opens, Opens::Frames) && pocket_ui::brick_profile::picture_rows_out() {
         return true;
     }
-    !(standalone && matches!(opens, Opens::Setup(Only::Extras | Only::Games) | Opens::SleepPower | Opens::NightLight | Opens::Starter | Opens::Achievements | Opens::OverGame | Opens::Screenshots | Opens::Web))
+    !(standalone && matches!(opens, Opens::Setup(Only::Extras | Only::Games) | Opens::SleepPower | Opens::NightLight | Opens::Achievements | Opens::OverGame | Opens::Screenshots | Opens::Web))
         && matches!(
             opens,
             Opens::NightLight
@@ -1054,7 +1056,6 @@ fn brick_hides_with(opens: Opens, standalone: bool) -> bool {
                 | Opens::SleepPower
                 | Opens::PcStreaming
                 | Opens::Achievements
-                | Opens::Starter
                 | Opens::Setup(Only::Extras | Only::Games)
         )
 }
@@ -1100,7 +1101,7 @@ mod brick_standalone_tests {
         let games = Opens::Setup(Only::Games);
         assert!(brick_hides_with(games, false), "NextUI's card has its own way to add games");
         assert!(!brick_hides_with(games, true), "the standalone card shows Add games (phone page, file sharing)");
-        for (n, kept) in [Opens::SleepPower, Opens::NightLight, Opens::Starter, Opens::Achievements].into_iter().enumerate() {
+        for (n, kept) in [Opens::SleepPower, Opens::NightLight, Opens::Achievements].into_iter().enumerate() {
             assert!(brick_hides_with(kept, false), "with NextUI's card page {n} stays out");
             assert!(!brick_hides_with(kept, true), "the standalone card keeps page {n}");
         }

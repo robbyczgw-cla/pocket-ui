@@ -69,6 +69,9 @@ card (switch on Samba in ROCKNIX's Network Settings, then open `\\<device name o
 nothing and **Close** takes you back to EmulationStation. To remove pocket-ui again, open EmulationStation (in pocket-ui: Settings → Help & tools → About → Open
 EmulationStation…, or hold SELECT and START), then start **Ports → Uninstall pocket-ui** (the installer leaves it there).
 
+Running the installer again repairs missing or damaged program files, even with the same version number. A complete
+matching install is left in place. Your games and saves stay as they are.
+
 If pocket-ui is not installed, ROCKNIX's own menu (EmulationStation) appears instead. If pocket-ui keeps stopping, it
 goes back to the last version that worked, then to a [safe mode](safe-mode.md) page; EmulationStation only opens by
 itself if pocket-ui cannot start at all.
@@ -106,7 +109,7 @@ switches **Easy to read** on every stage (larger text and calmer menus, at once,
    the systems, their folders and file sharing ([Add games](#5-add-games)), and B comes back from there. Something in
    the roms folder that isn't read (a folder of no system, a disc game missing a file) is named in a line of its own.
    **Box art** is one switch, **On** as it ships: the boxes come in the background while you're online, only a game's
-   name is sent ([Pictures & extras](extras.md#box-art) has the finer choice). Nothing is downloaded before you leave
+   name is sent ([Extras](extras.md#box-art) has the finer choice). Nothing is downloaded before you leave
    this page. No switch on a handheld without Wi-Fi.
 4. **How your games stand.** A small picture of the shelf in each look, the one shown in the middle and its
    neighbours at the sides: your own games when the card has some, else games called "Sample game". Left/Right
@@ -117,7 +120,7 @@ switches **Easy to read** on every stage (larger text and calmer menus, at once,
    straight to your shelf, with the look shown, from any row; B goes back to your games, so pressing B a few times
    never ends the setup by surprise. Under the rows: in a game, HOME opens the menu (save, load, quit), and the look
    changes any time in Settings → Look (as far as the screen has room). See [Playing](playing.md#looks) for the six
-   looks.
+   looks. The last line points to optional downloads any time: Settings → Games → Extras.
 
 For a child (the third row of the first page): after your games, Kids Mode's own steps (a PIN, the games a child may play, its
 colour, time and volume) take the look's place, and the setup ends with them ([Kids mode](kids-mode.md)). B on their
@@ -226,7 +229,7 @@ system starts. If the connection drops while pocket-ui runs, it reconnects by it
 
 A card with no games shows **No games yet** on Home, with **Get the starter pack** (A) and **Add games** (X) for your own. The pack is
 a handful of small games that their authors share for anyone to play, from Game Boy to Super Nintendo, Mega Drive and GBA. You can
-also open it from Settings → Games → **Starter pack**.
+also open it from Settings → Games → Extras → **Starter pack**.
 
 1. Offline, Home's button says **Connect to Wi-Fi** (A opens the Wi-Fi page; B comes back here).
 2. Press A on **Get the starter pack**. **Get all** takes every game, A on a game takes just that one. Each is checked and put into

@@ -1,5 +1,9 @@
 #!/bin/sh
-# Merge gate: the tests at release level (exit code, not grep), the Steam Deck and Android compile checks (scripts/check-platforms.sh), then the launcher tests, the verify-device test, the
+# Merge gate, two tiers (docs/DEVELOPING.md "Merge gate"). Default: the fast tier (target <= 8 min on the train host) - every
+# program compiles, unit tests, doctests, the integration suites except the slow layout matrices, plus what the change
+# touches (scripts/gate-parts.py). GATE_FULL=1 (nightly on main, scripts/release-check.sh): the tests at release level
+# (exit code, not grep), the serial timing tier, the Brick corpus and UI walk, the Steam Deck and Android compile checks
+# (scripts/check-platforms.sh), the German/Spanish matrix, then the launcher tests, the verify-device test, the
 # core-licence check's test, the install package's test and the quiet start script's test.
 # Usage: scripts/gate.sh [--quick] [worktree]      (default: the repository this script is in)
 #   GATE: ok (N passed)  exit 0     everything passed
@@ -16,7 +20,7 @@
 #    debug assertions, no overflow checks), but no LTO, 16 codegen units and incremental compilation. Nothing that
 #    ships is built with it: the app and the release builds keep [profile.release].
 #  - the shell tests (launcher test in one lane, the small ones in another) run beside cargo on hosts with 8+ cores
-#    after compilation and the serial Rust timing tier. They never retry a red verdict.
+#    after compilation, on separate SMT groups of an exclusive train host. Timing starts after all lanes join. They never retry a red verdict.
 #  - paths changed against the merge base with main (GATE_BASE=<ref>; a remote gate: the list comes from tools/remote-gate.sh)
 #    select a short gate only for strictly allowlisted, unembedded documents (scripts/gate-select.py).
 #    Source, scripts, runtime assets/translations/manual, Cargo, unknown and mixed changes run every tier.
@@ -30,6 +34,13 @@ if [ "${1:-}" = --quick ]; then quick=1; shift; fi
 case ${1:-} in --*) echo "usage: scripts/gate.sh [--quick] [worktree]" >&2; exit 2 ;; esac
 dir=${1:-$(cd "$(dirname "$0")/.." && pwd)}
 cd "$dir" || exit 2
+# The runner guarantees one train per host only when EXCLUSIVE is set. CPU caps
+# apply to every tier, including quick/docs; parallel lanes use whole SMT groups.
+allocation=$(python3 scripts/gate-cpus.py) || exit 1
+eval "$allocation"
+if [ "${GATE_CPUSET+x}" = x ]; then
+    taskset -pc "$gate_allowed" $$ >/dev/null || { echo "GATE: cannot enforce CPU cap"; exit 1; }
+fi
 # Refresh source and embedded inputs after rsync, while the remote caller holds the shared target slot lock.
 for input in src tests assets; do [ ! -d "$input" ] || find "$input" -type f -exec touch {} + || exit 1; done
 name=$(basename "$(pwd)")
@@ -91,6 +102,13 @@ if [ -f scripts/test-gate-paths.sh ]; then
         echo "GATE: path-selection tests FAILED ($paths_log)"; tail -10 "$paths_log"; exit 1;
     }
 fi
+if [ -f scripts/test-gate-schedule.py ]; then
+    schedule_log=/tmp/gate-schedule-$name.log
+    python3 scripts/test-gate-schedule.py >"$schedule_log" 2>&1 || {
+        echo "GATE: scheduling fixtures FAILED ($schedule_log)"; tail -20 "$schedule_log"; exit 1;
+    }
+    tail -1 "$schedule_log"
+fi
 unset POCKETUI_TEST_QUICK
 start=$(date +%s)
 
@@ -107,6 +125,19 @@ docs_only=0 shell_tests=1 why_shell=full
 if [ -n "$changed" ] && [ -z "${GATE_FULL:-}" ] && [ -f scripts/gate-select.py ]; then
     mode=$(printf '%s\n' "$changed" | python3 scripts/gate-select.py "$(pwd)") || exit 1
     [ "$mode" != docs ] || docs_only=1
+fi
+# The merge gate's fast tier (2026-11-10, target <= 8 min on the train host): every program compiles, the unit tests, every
+# integration suite except the slow layout matrices, the ones the change touches (scripts/gate-parts.py), a Brick and
+# Deck compile check, and the shell suites when a script or a path they read changed. The timing tier, the full Brick
+# tier, Android, the German/Spanish matrix and the other slow suites run when the change touches them, every night on
+# main (tools/nightly-gate.sh) and before a release (scripts/release-check.sh): GATE_FULL=1 runs all of it.
+tier=full heavy= brick_full=1 i18n_matrix=1 android=1
+if [ "$docs_only" -eq 0 ] && [ -n "$changed" ] && [ -z "${GATE_FULL:-}" ] && [ -f scripts/gate-parts.py ]; then
+    selection=$(printf '%s\n' "$changed" | python3 scripts/gate-parts.py "$(pwd)") || exit 1
+    eval "$selection"
+fi
+if [ "$tier" = fast ]; then
+    echo "gate: fast tier (GATE_FULL=1 runs everything); slow suites run: ${heavy:-none}; Brick ${brick_full:+$([ "$brick_full" -eq 1 ] && echo tests || echo check)}; shells $([ "$shell_tests" -eq 1 ] && echo "yes ($why_shell)" || echo no)"
 fi
 if [ "$docs_only" -eq 1 ]; then
     # These are the same active document, link/index and translation contracts
@@ -137,24 +168,21 @@ fi
 RCD=$(mktemp -d "${TMPDIR:-/tmp}/gate-rc.XXXXXX") || { echo "GATE: cannot create shell test result directory"; exit 1; }
 # A fresh scope per gate; no render is reused across runs or different binaries.
 export POCKETUI_SNAPSHOT_CACHE_DIR="$RCD/snapshots"
-shell_launcher() { sh deploy/test-run-pocket-ui.sh >"$L" 2>&1; echo $? >"$RCD/l"; }
-shell_small() {
-    # The device check's shell test (fake ssh and /proc, about 3 s): scripts/verify-device.sh, docs/DEVELOPING.md "Deploy".
-    sh scripts/test-verify-device.sh >"$V" 2>&1; echo $? >"$RCD/v"
-    # The core-licence check's shell test (fixture trees, about 1 s): scripts/check-core-licences.sh must keep reading src/hostsys.rs.
-    bash scripts/test-check-core-licences.sh >"$C" 2>&1; echo $? >"$RCD/c"
-    # The install package's scripts against a fake root (about 8 s): deploy/package/install.sh and uninstall.sh.
-    sh deploy/package/test-package.sh >"$P" 2>&1; echo $? >"$RCD/p"
-    # The quiet start's script against a fake /flash (about 1 s): deploy/grub-quiet.sh.
-    sh deploy/test-grub-quiet.sh >"$Q" 2>&1; echo $? >"$RCD/q"
-    # The SD image check's reading of grub.cfg (about 1 s): scripts/image/grub-checks.sh against deploy/sd-efi/grub.cfg.
-    # Plus the family parameter of scripts/image/rocknix-source.sh (--dry-run, nothing fetched).
-    { sh scripts/image/test-grub-checks.sh && sh scripts/image/test-rocknix-source.sh && sh scripts/image/test-h700-pins.sh; } >"$G" 2>&1; echo $? >"$RCD/g"
-    # The FAT-card install hook against a fake /flash and /storage (about 2 s): deploy/fat/mount-storage.sh.in; then the
-    # SD image's boot hook with its update guard (about 1 s): deploy/image/mount-storage.sh.
-    { sh deploy/fat/test-hook.sh && sh deploy/image/test-mount-storage.sh; } >"$F" 2>&1; echo $? >"$RCD/f"
+trap 'rm -rf "$RCD"' EXIT
+trap 'exit 143' HUP INT TERM
+shell_tests_run() {
+    sh scripts/gate-shell.sh launcher "$name" "$RCD"
+    sh scripts/gate-shell.sh small "$name" "$RCD"
 }
-shell_tests_run() { shell_launcher; shell_small; }
+shell_run_rc=0 launcher_pid= small_pid=
+shell_wait() {
+    [ -z "$launcher_pid" ] || wait "$launcher_pid" || shell_run_rc=$?
+    [ -z "$small_pid" ] || wait "$small_pid" || shell_run_rc=$?
+}
+run_rust() {
+    if [ "$gate_parallel" -eq 1 ]; then taskset -c "$gate_normal" nice -n "$nice_increment" "$@"
+    else nice -n "$nice_increment" "$@"; fi
+}
 shell_rc() {
     # A skipped suite has no result by design; a selected suite without a complete result never passed.
     if [ "$shell_tests" -eq 0 ]; then echo 0; return; fi
@@ -164,7 +192,35 @@ shell_rc() {
 
 # Deadline and watchdog scenarios run after cargo, in a separate serial tier.
 # A retry would conceal a scheduling assumption; a red verdict stays red.
-cores=$(nproc 2>/dev/null || echo 1)
+case ${GATE_RUNNER:-auto} in auto|cargo|nextest) ;; *) echo "GATE: unknown GATE_RUNNER (use auto, cargo or nextest)"; exit 2 ;; esac
+cores=$gate_cores
+# The fast tier runs only some integration suites, but every test program still compiles.
+rust_targets=
+if [ "$tier" = fast ]; then
+    rust_targets="--lib --bins"
+    for suite in tests/*.rs; do
+        [ -f "$suite" ] || continue
+        suite=$(basename "$suite" .rs)
+        case " $skip " in *" $suite "*) ;; *) rust_targets="$rust_targets --test $suite" ;; esac
+    done
+fi
+if [ "$gate_parallel" -eq 1 ] || [ "$tier" = fast ]; then
+    # Finish compilation before watchdogs, and finish default tests before any
+    # Brick build can overwrite the unversioned CARGO_BIN_EXE_pocket-ui.
+    nice -n "$nice_increment" cargo test $pflag --no-run >"$T" 2>&1 || {
+        echo "GATE: compilation FAILED ($T)"; tail -20 "$T"; exit 1;
+    }
+fi
+compiled=$(date +%s)
+if [ "$gate_parallel" -eq 1 ] && [ "$shell_tests" -eq 1 ]; then
+    echo "gate: parallel on ${GATE_HOST:-host}; Rust CPUs $gate_normal; launcher $gate_launcher; small shells $gate_small"
+    taskset -c "$gate_launcher" nice -n "$nice_increment" sh scripts/gate-shell.sh launcher "$name" "$RCD" & launcher_pid=$!
+    taskset -c "$gate_small" nice -n "$nice_increment" sh scripts/gate-shell.sh small "$name" "$RCD" & small_pid=$!
+elif [ "$gate_parallel" -eq 1 ]; then
+    echo "gate: parallel on ${GATE_HOST:-host}; Rust CPUs $gate_normal; no shell suites selected"
+else
+    echo "gate: serial schedule (no exclusive host, disabled, or insufficient separate cores)"
+fi
 
 # shellcheck disable=SC2086  # pflag is one or two words
 runner=${GATE_RUNNER:-auto}
@@ -176,9 +232,11 @@ case $runner in
     cargo)
         if [ "$docs_only" -eq 1 ]; then
             # Unit tests only: they hold the doc-drift checks (src/doc_checks.rs); no source changed, so cargo has nothing to build.
-            nice -n "$nice_increment" cargo test $pflag --lib --bins -q >"$T" 2>&1
+            run_rust cargo test $pflag --lib --bins -q >"$T" 2>&1
+        elif [ "$tier" = fast ]; then
+            run_rust cargo test $pflag $rust_targets -q >>"$T" 2>&1 && run_rust cargo test $pflag --doc -q >>"$T" 2>&1
         else
-            nice -n "$nice_increment" cargo test $pflag -q >"$T" 2>&1
+            run_rust cargo test $pflag -q >"$T" 2>&1
         fi
         trc=$?
         ;;
@@ -187,22 +245,44 @@ case $runner in
         # green. A test that fails twice makes the gate red. The test threads come from GATE_TEST_THREADS (default: the cores, at most 8).
         nthreads=$cores; [ "$nthreads" -le 8 ] || nthreads=8   # a shared computer: remote-gate.sh passes GATE_TEST_THREADS
         export NEXTEST_TEST_THREADS=${GATE_TEST_THREADS:-${NEXTEST_TEST_THREADS:-$nthreads}}
-        if [ "$docs_only" -eq 1 ]; then ntargets="--lib --bins"; else ntargets=; fi
-        nice -n "$nice_increment" cargo nextest run --cargo-profile "$profile" $ntargets --no-fail-fast \
+        if [ "$docs_only" -eq 1 ]; then ntargets="--lib --bins"; else ntargets=$rust_targets; fi
+        run_rust cargo nextest run --cargo-profile "$profile" $ntargets --no-fail-fast \
             --status-level retry --final-status-level flaky >"$T" 2>&1
         trc=$?
         # nextest doesn't execute Rust documentation examples. Keep the complete gate's doctest protection.
-        if [ "$docs_only" -eq 0 ]; then nice -n "$nice_increment" cargo test $pflag --doc -q >>"$T" 2>&1 || trc=1; fi
+        if [ "$docs_only" -eq 0 ]; then run_rust cargo test $pflag --doc -q >>"$T" 2>&1 || trc=1; fi
         ;;
     *) echo "GATE: unknown GATE_RUNNER (use auto, cargo or nextest)"; exit 2 ;;
 esac
 runner_done=$(date +%s)
+# Join watchdogs before the next feature build too: disjoint CPUs do not
+# isolate compilation I/O and memory pressure. Timing remains alone afterward.
+if [ "$gate_parallel" -eq 1 ]; then shell_wait; fi
+[ "$shell_run_rc" -eq 0 ] || trc=1
+brick_started=$(date +%s)
+# The German and Spanish snapshot matrix (~45 s) is a release check, but any full-gate change (a new screen, a Brick state, a
+# manual page) can turn it red: run it in every full gate, so a release candidate does not find it first.
+if [ "$trc" -eq 0 ] && [ "$docs_only" -eq 0 ] && [ "$i18n_matrix" -eq 1 ] && [ -f tests/i18n_snapshots.rs ]; then
+    nice -n "$nice_increment" cargo test $pflag --test i18n_snapshots -q -- --include-ignored \
+        every_string_in_the_german_snapshots_is_translated_or_a_name \
+        every_string_in_the_spanish_snapshots_is_translated_or_a_name >>"$T" 2>&1 || trc=1
+fi
 # The ordinary library tier covers every captured public controller. The private
 # Brick feature must run the SAME corpus too: otherwise a default gate can miss an
 # ID collision that only changes the built-in Brick's F keys. Fixture gate trees and
 # public exports without this feature keep their ordinary integration tier.
-if [ "$trc" -eq 0 ] && [ "$docs_only" -eq 0 ] && [ -f src/input_corpus_tests.rs ] && grep -Eq '^[[:space:]]*brick[[:space:]]*=' Cargo.toml; then
+has_brick=0
+if [ -f src/input_corpus_tests.rs ] && grep -Eq '^[[:space:]]*brick[[:space:]]*=' Cargo.toml; then has_brick=1; fi
+if [ "$trc" -eq 0 ] && [ "$docs_only" -eq 0 ] && [ "$has_brick" -eq 1 ] && [ "$brick_full" -eq 0 ]; then
+    # Fast tier: the Brick build must still compile (a check, no codegen); its corpus and UI walk run nightly.
+    nice -n "$nice_increment" cargo check $pflag --features brick --lib --bins -q >>"$T" 2>&1 || trc=1
+fi
+if [ "$trc" -eq 0 ] && [ "$docs_only" -eq 0 ] && [ "$has_brick" -eq 1 ] && [ "$brick_full" -eq 1 ]; then
     nice -n "$nice_increment" cargo test $pflag --features brick --lib input_corpus_tests -q >>"$T" 2>&1 || trc=1
+    # The Brick's manual has its own pages: none may outgrow the screen's limit (the default run checks the others).
+    nice -n "$nice_increment" cargo test $pflag --features brick --lib manual_pages_are_not_too_long_for_the_screen -q >>"$T" 2>&1 || trc=1
+    # The Settings writer and the card's hardware watcher must agree on the slider file, including legacy cards.
+    nice -n "$nice_increment" cargo test $pflag --features brick --lib the_saved_slider_choice_reaches_the_card_watcher -q >>"$T" 2>&1 || trc=1
     # The ordinary integration tier excludes the Brick settings walk and the
     # Brick-only text regressions. Run those cases, keeping the public text matrix in its usual tier. The Smart Pro's
     # D-pad explorer (same card, 1280x720; its text fit is in brick_settings_walk) runs here too.
@@ -214,31 +294,54 @@ if [ "$trc" -eq 0 ] && [ "$docs_only" -eq 0 ] && [ -f src/input_corpus_tests.rs 
     done
 fi
 brick_done=$(date +%s)
+# No timing assertion runs while a lane or its compiler may still be active.
+timing_started=$(date +%s)
 # Timing cases must measure a real renderer, not a stored static layout probe.
 unset POCKETUI_SNAPSHOT_CACHE_DIR
 # The ignored timing tier is mandatory for both cargo and nextest. It gets one
 # attempt, one test thread, and runs after compilation; failure stays red.
-if [ "$trc" -eq 0 ]; then
+if [ "$tier" = fast ]; then
+    :   # the timing tier runs nightly and before a release (GATE_FULL=1)
+elif [ "$trc" -eq 0 ] && [ "$shell_run_rc" -eq 0 ]; then
     if [ "$docs_only" -eq 1 ]; then timing_targets="--lib --bins"; else timing_targets=; fi
     nice -n "$nice_increment" sh scripts/test-timing.sh "$profile" $timing_targets >>"$T" 2>&1 || trc=1
+elif [ "$shell_run_rc" -ne 0 ]; then
+    echo "gate: timing not started: shell coordinator did not finish cleanly"
+    trc=1
 fi
 timing_done=$(date +%s)
 # The Steam Deck's and Android's own code (scripts/check-platforms.sh): checks, not builds; after the tests. Android is
 # skipped where no NDK is installed; GATE_ANDROID_TARGET_DIR (set by the remote gate) keeps its files out of the host target dir.
 prc_platforms=0 platforms_log=/tmp/gate-platforms-$name.log
 if [ "$docs_only" -eq 0 ] && [ -f scripts/check-platforms.sh ]; then
-    nice -n "$nice_increment" sh scripts/check-platforms.sh >"$platforms_log" 2>&1 || prc_platforms=1
+    platform_parts="deck android"; [ "$android" -eq 1 ] || platform_parts=deck
+    nice -n "$nice_increment" sh scripts/check-platforms.sh $platform_parts >"$platforms_log" 2>&1 || prc_platforms=1
 fi
 tdone=$(date +%s)
 sdone=$tdone
-shell_run_rc=0
-if [ "$shell_tests" -eq 1 ]; then
+if [ "$shell_tests" -eq 1 ] && [ "$gate_parallel" -eq 0 ]; then
     # Supervise a child even in the serial tier: an interrupted coordinator must
     # not turn missing exit-code files into success.
     shell_tests_run & shell_pid=$!
     wait "$shell_pid" || shell_run_rc=$?
     sdone=$(date +%s)
 fi
+shell_bounds=$(python3 - "$RCD" <<'BOUNDS'
+from pathlib import Path
+import sys
+root=Path(sys.argv[1])
+try:
+    starts=[int((root/f"{lane}.start").read_text()) for lane in ("launcher","small")]
+    ends=[int((root/f"{lane}.end").read_text()) for lane in ("launcher","small")]
+    if any(end < start for start,end in zip(starts,ends)): raise ValueError("negative interval")
+    print(f"shell_started={min(starts)} shell_finished={max(ends)} shell_bounds_ok=1")
+except (OSError,ValueError):
+    # Missing result files are reported below; no fabricated positive duration.
+    print("shell_started=0 shell_finished=0 shell_bounds_ok=0")
+BOUNDS
+) || exit 1
+eval "$shell_bounds"
+if [ "$shell_bounds_ok" -ne 1 ] && [ "$shell_run_rc" -eq 0 ] && [ "$shell_tests" -eq 1 ]; then shell_run_rc=125; fi
 lrc=$(shell_rc l) vrc=$(shell_rc v) crc=$(shell_rc c) prc=$(shell_rc p) qrc=$(shell_rc q) grc=$(shell_rc g) frc=$(shell_rc f)
 cache_rc=0
 if [ -f "$RCD/snapshots/stats.jsonl" ]; then
@@ -258,11 +361,18 @@ if [ "$shell_tests" -eq 1 ]; then
     cp "$V" /tmp/gate-verify.log
 fi
 if [ "$shell_tests" -eq 1 ]; then
-    echo "gate: profile $profile; tests $((tdone - start)) s, shell tests (launcher etc.) $((sdone - start)) s$([ -n "$why_shell" ] && echo "; run because of $why_shell"), total $((end - start)) s"
+    echo "gate: profile $profile; tests $((tdone - start)) s, shell tests (launcher etc.) $((shell_finished - shell_started)) s$([ -n "$why_shell" ] && echo "; run because of $why_shell"), total $((end - start)) s"
 else
     echo "gate: profile $profile; tests $((tdone - start)) s, total $((end - start)) s"
 fi
-echo "gate: stages runner+doc $((runner_done - start)) s, brick corpus+UI $((brick_done - runner_done)) s, serial timing $((timing_done - brick_done)) s, platforms $((tdone - timing_done)) s, shells $((sdone - tdone)) s"
+echo "gate: tier $tier; compile $((compiled - start)) s"
+echo "gate: stages runner+doc $((runner_done - start)) s, brick corpus+UI $((brick_done - brick_started)) s, serial timing $((timing_done - timing_started)) s, platforms $((tdone - timing_done)) s, shells $((shell_finished - shell_started)) s, join before Brick $((brick_started - runner_done)) s"
+python3 - "$gate_parallel" "$gate_normal" "$gate_launcher" "$gate_small" "$start" "$runner_done" "$brick_started" "$brick_done" "$shell_started" "$shell_finished" "$timing_started" "$timing_done" "$tdone" <<'WINDOWS' || exit 1
+import json, os, sys
+parallel, normal, launcher, small = sys.argv[1:5]
+start, runner, brick_start, brick, shell_start, shell_end, timing_start, timing_end, platforms = map(int, sys.argv[5:])
+print("gate: schedule " + json.dumps({"mode": "parallel" if parallel == "1" else "serial", "host": os.environ.get("GATE_HOST", "host"), "cpus": {"rust": normal, "launcher": launcher, "small": small}, "windows": {"runner": [start, runner], "brick": [brick_start, brick], "shells": [shell_start, shell_end], "timing": [timing_start, timing_end], "platforms": [timing_end, platforms]}}))
+WINDOWS
 if [ "$docs_only" -eq 1 ]; then
     echo "gate: SKIPPED integration tests: only documents changed ($(echo "$changed" | wc -l) files, none read by the Rust build or the manual); unit tests with the doc checks ran"
 fi

@@ -1,0 +1,20 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>pocket-ui in your browser</title>
+<link rel="stylesheet" href="pad.css">
+</head>
+<body>
+<main class="demo" id="demo">
+  <div class="screen"><canvas id="screen" width="640" height="480" aria-label="pocket-ui"></canvas>
+    <p class="status" id="status">Loading pocket-ui…</p></div>
+  <div class="pad" id="pad" aria-label="On-screen controls"></div>
+</main>
+<script>window.pocketDemoCode = WebAssembly.validate(new Uint8Array([0,97,115,109,1,0,0,0,1,5,1,96,0,1,123,3,2,1,0,10,10,1,8,0,65,0,253,15,253,98,11])) ? "simd/" : "base/";</script>
+<script src="pad.js"></script>
+<script src="demo-data.js"></script>
+<script>document.write('<script src="' + window.pocketDemoCode + 'pocket-ui.js"><\/script>');</script>
+</body>
+</html>

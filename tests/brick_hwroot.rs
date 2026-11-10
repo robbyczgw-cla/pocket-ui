@@ -3,14 +3,16 @@
 //! and power, with a fake `amixer` and fake sysfs files. `cargo test --features brick --test brick_hwroot`.
 #![cfg(all(feature = "brick", target_os = "linux"))]
 
-use std::os::unix::fs::{symlink, PermissionsExt};
+#[path = "common/executable.rs"]
+mod fixture_executable;
+
+use std::os::unix::fs::symlink;
 use std::path::Path;
 
 use pocket_ui::system_ctl::{Charge, Hw, PowerAction, RealHw};
 
 fn script(path: &Path, body: &str) {
-    std::fs::write(path, format!("#!/bin/sh\n{body}\n")).unwrap();
-    std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o755)).unwrap();
+    fixture_executable::publish(path, format!("#!/bin/sh\n{body}\n")).unwrap();
 }
 
 /// The tests that set the process environment (PATH, BRICK_*) take turns.

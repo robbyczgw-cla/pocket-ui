@@ -151,7 +151,7 @@ impl App {
 /// painted again when one changes.
 pub(crate) fn style_mark() -> u32 {
     // Retro's own colours too: Cocoa or Pea on the first start's Colours row changes the previews.
-    pocket_ui::button_prompts::get() as u32 | (pocket_ui::palette::colours() as u32) << 4 | (pocket_ui::font_style::get() as u32) << 8 | (pocket_ui::retro::colours() as u32) << 12
+    pocket_ui::button_prompts::get() as u32 | (pocket_ui::palette::colours() as u32) << 4 | (pocket_ui::font_style::get() as u32) << 8 | (pocket_ui::retro::colours() as u32) << 12 | (pocket_ui::font_style::retro_letters() as u32) << 16
 }
 
 /// What the previews were painted with: appearance, language, text size and the corner's clock ("14:02", None while the

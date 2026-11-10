@@ -186,6 +186,12 @@ fn the_last_page_of_the_first_start_says_what_home_does() {
     ] {
         let page = card.screen("setup:first-look:device=rg28xx", lang, "640x480");
         assert!(sees(&page, line), "{lang}: {page}");
+        let extras = match lang {
+            "de" => "Jederzeit mehr laden: Einstellungen › Spiele › Extras.",
+            "es" => "Consigue más cuando quieras: Ajustes › Juegos › Extras.",
+            _ => "More to get any time: Settings › Games › Extras.",
+        };
+        assert!(sees(&page, extras), "{lang}: the final first-start page points to the optional downloads: {page}");
         // Settings' Add games is not the first start.
         assert!(!sees(&card.screen("setup:games", lang, "640x480"), line), "{lang}: Settings");
     }

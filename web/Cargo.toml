@@ -1,0 +1,70 @@
+# The browser demo (docs/WEB-DEMO.md): the same pocket-ui sources (../src) built for wasm32-unknown-emscripten.
+# A manifest of its own so the device builds' Cargo.toml and Cargo.lock stay exactly as they are. winit and softbuffer
+# are small stand-ins (web/shims): one window that is the page's canvas, and an event loop the page feeds.
+[package]
+name = "pocket-ui-web"
+version = "0.2.0"
+edition = "2021"
+authors = ["Robby Czesany"]
+license = "GPL-2.0-or-later"
+publish = false
+build = "build.rs"
+
+[lib]
+name = "pocket_ui"
+path = "../src/lib.rs"
+test = false
+doctest = false
+
+[[bin]]
+name = "pocket-ui"
+path = "../src/main.rs"
+test = false
+
+[dependencies]
+font8x8 = { version = "0.3", default-features = false }
+fontdue = "0.9"
+ttf-parser = { version = "0.25", default-features = false, features = ["std"] }
+memmap2 = "0.9"
+png = "0.17"
+jpeg-decoder = { version = "0.3", default-features = false }
+roxmltree = "0.20"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+libc = "0.2"
+ed25519-dalek = { version = "2", default-features = false, features = ["std"] }
+sha2 = "0.10"
+base64 = "0.22"
+libloading = "0.8"
+miniz_oxide = "0.8"
+crc32fast = "1"
+glow = "0.14"
+raw-window-handle = "0.6"
+qrcode = { version = "0.14.1", default-features = false }
+winit = { path = "shims/winit" }
+softbuffer = { path = "shims/softbuffer" }
+
+[build-dependencies]
+cc = "1"
+
+[features]
+x11 = []
+brick = []
+
+[profile.release]
+opt-level = 3
+lto = "thin"
+codegen-units = 1
+strip = true
+panic = "abort"
+
+[profile.dev]
+opt-level = 1
+panic = "abort"
+
+# For trying things: release's code without LTO, in parallel and incremental (`web/build.sh fast`).
+[profile.fast]
+inherits = "release"
+lto = false
+codegen-units = 16
+incremental = true

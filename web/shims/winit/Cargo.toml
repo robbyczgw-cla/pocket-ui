@@ -1,0 +1,10 @@
+[package]
+name = "winit"
+version = "0.30.999"
+edition = "2021"
+license = "GPL-2.0-or-later"
+publish = false
+description = "pocket-ui's browser demo: the slice of winit 0.30's API the UI uses, over one canvas the page feeds"
+
+[dependencies]
+raw-window-handle = { version = "0.6", features = ["alloc"] }

@@ -56,7 +56,7 @@ pub const FIELDS: [&str; 21] = [
 ];
 
 /// The data file shipped with pocket-ui.
-pub static EMBEDDED: &[u8] = include_bytes!("../assets/gamedb.bin");
+#[cfg(not(target_os = "emscripten"))] pub static EMBEDDED: &[u8] = include_bytes!("../assets/gamedb.bin"); #[cfg(target_os = "emscripten")] pub static EMBEDDED: &[u8] = include_bytes!(env!("POCKETUI_WEB_GAMEDB"));
 
 const MAGIC: &str = "PGDB1";
 /// No system unpacks to more than this; a damaged length can't make us allocate the card full.

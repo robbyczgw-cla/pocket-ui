@@ -167,7 +167,7 @@ pub struct CardSaves {
 impl CardSaves {
     /// The slots of a game pocket-core runs with save states (`hostsys`): a few file checks, no reading, like the
     /// patch's. None for every other game.
-    #[cfg(target_os = "linux")]
+    #[cfg(any(target_os = "linux", target_os = "emscripten"))]
     pub fn of(system: &str, rom: &std::path::Path, stripe: u32) -> Option<CardSaves> {
         // The handhelds and the two Nintendo home consoles are `HANDHELD_CORES`, not in `SYSTEMS`.
         let handheld = crate::hostsys::HANDHELD_CORES.iter().any(|(s, _)| *s == system);

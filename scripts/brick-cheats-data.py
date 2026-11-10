@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Install the pinned libretro cheat subset into a Brick app (card zip and OTA)."""
+"""Build the pinned libretro cheat subset; --optional keeps data outside the card and app archive."""
 import argparse
 import hashlib
 import json
@@ -38,9 +38,8 @@ def sha(path):
 
 
 PACK_MAGIC = b'PUICHT01'
-# The one file of the database. It lives in cores/ because that is where an update may carry an asset package: a Brick that
-# still runs 0.3.0.1 checks the list with its own old code (and boot.sh) and only knows cores/, bios-data/ and bin/. So the
-# OTA ships it as a package of its own (brick-update-pack.py), downloaded once and moved on unchanged by later updates.
+# Staging path and legacy card location. With --optional the builder moves this file OUTSIDE card/ and writes
+# database/cheats-download.json; neither the card ZIP nor the OTA's required assets contains the pack.
 PACK = 'cores/cht.pack'
 
 
@@ -178,9 +177,30 @@ def install(archive, app, expected_sha=ARCHIVE_SHA256):
         raise
 
 
+def make_optional(app, output):
+    pack = app / PACK
+    digest = sha(pack)
+    name = f'cheats-{digest}.pack'
+    output.mkdir(parents=True, exist_ok=True)
+    target = output / name
+    pack.replace(target)
+    descriptor = {'version': digest, 'size': target.stat().st_size, 'sha256': digest,
+                  'url': f'https://pocketui.xyz/updates/brick/assets/{name}'}
+    (app / 'database/cheats-download.json').write_text(json.dumps(descriptor, sort_keys=True, indent=2) + '\n')
+    inventory = app / 'database/MANIFEST.json'
+    manifest = json.loads(inventory.read_text())
+    manifest.update({'optional': True, 'pack': 'storage/pocket-ui/cheats/cht.pack', 'pack_base': 'pocket-ui card folder'})
+    inventory.write_text(json.dumps(manifest, sort_keys=True, indent=2) + '\n')
+    attribution = app / 'licences/libretro-database/ATTRIBUTION.txt'
+    attribution.write_text(attribution.read_text().replace('in the single file cores/cht.pack.', 'in one optional pack.')
+        .replace('cheat files: ../../cores/cht.pack.', 'download: ../../database/cheats-download.json.\n'
+                 'Installed on the card at pocket-ui/storage/pocket-ui/cheats/cht.pack.'))
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('app', type=Path)
+    parser.add_argument('--optional', type=Path, help='keep raw pack here, outside the card; app gets a download description only')
     parser.add_argument('--archive', type=Path, help='offline copy of the pinned upstream tar.gz')
     args = parser.parse_args()
     archive = args.archive
@@ -198,6 +218,8 @@ def main():
             finally:
                 partial.unlink(missing_ok=True)
     manifest = install(archive, args.app)
+    if args.optional is not None:
+        make_optional(args.app, args.optional)
     print(f'Brick cheats: {manifest["files"]} files, {manifest["bytes"]} bytes, {len(SYSTEMS)} systems; {COMMIT}')
 
 

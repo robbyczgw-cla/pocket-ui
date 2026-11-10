@@ -269,6 +269,18 @@ for SH in $SHELLS; do
   check "$SH: upgrade: launcher replaced, update-pending gone" 'cmp -s "$REPO/deploy/run-pocket-ui.sh" "$r/$APP/run-pocket-ui.sh" && [ ! -e "$r/$APP/update-pending" ]'
   check "$SH: --no-restart: essway not restarted" '! grep -q "restart essway" "$r/calls" && grep -q daemon-reload "$r/calls"'
 
+  # An SD image card: /storage/pocket-ui/licences is a link to the FAT partition's copy (pocket-ui-info/licences; STORAGE has no room
+  # for a second one). The update has to put a real folder there on the grown STORAGE and leave the FAT copy (read-only /flash) alone.
+  make_root
+  mkdir -p "$r/$APP" "$r/flash/pocket-ui-info/licences"
+  echo fat >"$r/flash/pocket-ui-info/licences/LICENSE"
+  ln -s "$r/flash/pocket-ui-info/licences" "$r/$APP/licences"
+  inst --no-restart
+  rc=$?
+  check "$SH: image card: update over the licences link (exit 0)" '[ $rc = 0 ]' || sed 's/^/     /' "$T/out"
+  check "$SH: image card: licences is a real folder with all five texts now, the FAT copy untouched" \
+    '[ -d "$r/$APP/licences" ] && [ ! -L "$r/$APP/licences" ] && for f in LICENSE NOTICE.md FONTS-OFL.txt THIRD-PARTY-CRATES.md THIRD-PARTY-LICENSES.txt; do cmp -s "$T/pkg/licences/$f" "$r/$APP/licences/$f" || exit 1; done && [ "$(cat "$r/flash/pocket-ui-info/licences/LICENSE")" = fat ] && [ "$(ls "$r/flash/pocket-ui-info/licences")" = LICENSE ]'
+
   # The same version, another build (a rebuilt package): replaced.
   echo different >"$r/$APP/releases/$V/pocket-core"
   inst --no-restart
@@ -544,6 +556,45 @@ for SH in $SHELLS; do
   port "Install pocket-ui.sh"
   check "$SH: port: second run says it is already installed, changes nothing, no restart" \
     'shown "already installed" && [ "$(tree)" = "$before" ] && ! grep -q "restart essway" "$r/calls"' || sed 's/^/     /' "$T/viewer.out"
+
+  # A marker with the same version cannot prove that the install is complete.
+  echo damaged >"$r/$APP/current/pocket-core"
+  make_port payload
+  : >"$r/calls"
+  port "Install pocket-ui.sh"
+  check "$SH: port: same-version damaged program is repaired and activated" \
+    'cmp -s "$T/pkg/files/pocket-core" "$r/$APP/current/pocket-core" && shown "Step 2 of 3" && grep -q "^systemd-run .* restart essway" "$r/calls"'
+  rm -f "$r/$SPLASH"
+  make_port payload
+  port "Install pocket-ui.sh"
+  check "$SH: port: same-version missing boot screen is repaired" \
+    'cmp -s "$T/pkg/files/pocket-splash.service" "$r/$SPLASH" && shown "Step 2 of 3"'
+  echo "$V" >"$r/$APP/update-pending"
+  make_port payload
+  port "Install pocket-ui.sh"
+  check "$SH: port: same-version incomplete update is activated instead of skipped" \
+    '[ ! -e "$r/$APP/update-pending" ] && shown "Step 2 of 3"'
+  # A publisher may rebuild the same version. The package's content, not its name, wins.
+  echo '# repaired build' >>"$T/pkg/files/pocket-core"
+  (cd "$T/pkg/files" && sha256sum pocket-ui pocket-core pocket-splash portmaster-setup.sh run-pocket-ui.sh 10-pocket-ui.conf pocket-splash.service VERSION >SHA256SUMS)
+  make_port payload
+  port "Install pocket-ui.sh"
+  check "$SH: port: rebuilt package with the same version replaces old bytes" \
+    'cmp -s "$T/pkg/files/pocket-core" "$r/$APP/current/pocket-core" && shown "Step 2 of 3"'
+  make_pkg
+  # A new thin starter must still accept an older package without the query verb.
+  mv "$T/pkg/install.sh" "$T/pkg/legacy-install.sh"
+  cat >"$T/pkg/install.sh" <<'LEGACY'
+#!/bin/sh
+case " $* " in *' --check-installed '*) echo 'unknown option: --check-installed (see sh install.sh --help)' >&2; exit 2 ;; esac
+exec sh "$(dirname "$0")/legacy-install.sh" "$@"
+LEGACY
+  make_root
+  make_port thin zip
+  port "Install pocket-ui.sh"
+  check "$SH: port: thin starter still installs an older package without the query" \
+    'shown "Step 2 of 3" && [ -x "$r/$APP/current/pocket-core" ]'
+  make_pkg
 
   # Failures: a sentence what does not fit and how to get back, nothing written, no switch, the entry stays.
   portfail() {

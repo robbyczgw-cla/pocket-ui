@@ -1,0 +1,23 @@
+#!/bin/sh
+# SPDX-License-Identifier: GPL-2.0-or-later
+# Our verified board identity. No upstream probe of unrelated firmware files or SDL windows.
+case "${POCKETUI_DEVICE:-}" in
+  brick) DEVICE_NAME=trimui-brick; ANALOG_STICKS=0; DISPLAY_WIDTH=1024; DISPLAY_HEIGHT=768; ASPECT_X=4; ASPECT_Y=3 ;;
+  brickpro) DEVICE_NAME=trimui-brick-pro; ANALOG_STICKS=2; DISPLAY_WIDTH=1024; DISPLAY_HEIGHT=768; ASPECT_X=4; ASPECT_Y=3 ;;
+  smartpro) DEVICE_NAME=trimui-smart-pro; ANALOG_STICKS=2; DISPLAY_WIDTH=1280; DISPLAY_HEIGHT=720; ASPECT_X=16; ASPECT_Y=9 ;;
+  *) echo 'PortMaster: unsupported TrimUI board' >&2; return 1 ;;
+esac
+export DEVICE_NAME ANALOG_STICKS DISPLAY_WIDTH DISPLAY_HEIGHT ASPECT_X ASPECT_Y
+export CFW_NAME=pocket-ui CFW_VERSION="${POCKETUI_VERSION:-standalone}" CFW_GLIBC=233
+export DEVICE_CPU=A133P DEVICE_ARCH=aarch64 DEVICE_HAS_AARCH64=Y DEVICE_HAS_ARMHF=N
+export GPU_DRIVER=powervr DEVICE_RAM=1 DEVICE_RAM_MB=1024 DEVICE_TOUCH=N DEVICE_HAS_RUMBLE=N
+export DEVICE_REFRESH_RATE=60 DISPLAY_ORIENTATION=0 ANALOG_TRIGGERS=N
+DEVICE_CAPABILITIES="aarch64 hires 1gb ${DISPLAY_WIDTH}x${DISPLAY_HEIGHT} ${ASPECT_X}:${ASPECT_Y} analog_0"
+if [ "$ANALOG_STICKS" = 2 ]; then
+  ANALOG_TRIGGERS=Y
+  DEVICE_CAPABILITIES="$DEVICE_CAPABILITIES analog_1 analog_2 analog_triggers"
+fi
+[ "$POCKETUI_DEVICE" != smartpro ] || DEVICE_CAPABILITIES="$DEVICE_CAPABILITIES wide"
+export DEVICE_CAPABILITIES ANALOG_TRIGGERS
+# No DEVICE_INFO_VERSION: this is an explicit platform profile, not PortMaster's probe cache.
+unset DEVICE_INFO_VERSION

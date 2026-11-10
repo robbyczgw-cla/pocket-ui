@@ -48,6 +48,7 @@ struct Entry {
     csize: usize,
     usize: usize,
     local: usize,
+    unix_mode: usize,
 }
 
 /// The end-of-central-directory record in `tail` (the last bytes of a zip): how many entries the directory has, where
@@ -88,6 +89,7 @@ fn directory(z: &[u8], count: usize) -> Result<Vec<Entry>, String> {
             csize: le32(z, at + 20).ok_or_else(bad)?,
             usize: le32(z, at + 24).ok_or_else(bad)?,
             local: le32(z, at + 42).ok_or_else(bad)?,
+            unix_mode: le32(z, at + 38).ok_or_else(bad)? >> 16,
         });
         at += 46 + name_len + extra + comment;
     }
@@ -289,6 +291,300 @@ pub fn extract_rom(zip_path: &Path, wanted: &[&str]) -> Result<(String, Vec<u8>)
     Ok((name, data))
 }
 
+/// Extract the pinned Python runtime without relying on stock firmware's optional unzip applet.
+/// The generic extractor keeps all regular files; the CLI uses the headless Python policy below.
+/// Every policy validates all entry paths, headers and size limits before writing.
+pub fn unpack_runtime(zip_path: &Path, destination: &Path) -> Result<(), String> {
+    unpack_runtime_filtered(zip_path, destination, |_| false)
+}
+
+/// The headless store needs the standard library, but not Python's test suite, pip or GUI/development files.
+pub fn unpack_python_runtime(zip_path: &Path, destination: &Path) -> Result<(), String> {
+    unpack_runtime_filtered(zip_path, destination, |name| {
+        ["include/", "share/", "lib/python3.11/site-packages/", "lib/python3.11/test/",
+         "lib/python3.11/idlelib/", "lib/python3.11/turtledemo/", "lib/python3.11/ensurepip/",
+         "lib/python3.11/ctypes/test/", "lib/python3.11/distutils/tests/", "lib/python3.11/unittest/test/",
+         "lib/python3.11/lib2to3/tests/"].iter().any(|prefix| name.starts_with(prefix))
+    })
+}
+
+const RUNTIME_MAX_ENTRY: usize = 128 << 20;
+const RUNTIME_MAX_TOTAL: usize = 700 << 20;
+const RUNTIME_MAX_OUTPUTS: usize = 100_000;
+const RUNTIME_MAX_NAMES: usize = 16 << 20;
+
+enum RuntimeNode { Directory, File(usize), Link(String) }
+
+struct RuntimePlan<'a> {
+    entries: &'a [Entry],
+    outputs: Vec<(String, Option<usize>)>,
+    expanded: usize,
+    name_bytes: usize,
+}
+
+fn unpack_runtime_filtered(zip_path: &Path, destination: &Path, skip: impl Fn(&str) -> bool) -> Result<(), String> {
+    use std::io::Write;
+    let bytes = read_bounded(zip_path, MAX_ZIP)?;
+    let bad = || "The runtime zip is damaged or unsupported.".to_string();
+    let end = find_end(&bytes).ok_or_else(bad)?;
+    let (count, directory_at, directory_size) = end_record(&bytes)?;
+    if le16(&bytes, end + 4) != Some(0) || le16(&bytes, end + 6) != Some(0)
+        || le16(&bytes, end + 8) != Some(count)
+        || directory_at.checked_add(directory_size) != Some(end)
+        || end.checked_add(22).and_then(|n| n.checked_add(le16(&bytes, end + 20)?)) != Some(bytes.len()) {
+        return Err(bad());
+    }
+    if directory_size > MAX_DIRECTORY { return Err("The runtime zip directory is too big.".into()); }
+    let list = entries(&bytes)?;
+    let mut namespace_bytes = 0usize;
+    let mut names = std::collections::HashMap::<String, String>::new();
+    let mut explicit = std::collections::HashSet::new();
+    let mut tree = std::collections::BTreeMap::new();
+    tree.insert(String::new(), RuntimeNode::Directory);
+    let mut total = 0usize;
+    let mut existing = RuntimeDestination::default();
+    existing.check(destination)?;
+    // Validate the complete namespace and every header before creating any destination file.
+    for (index, entry) in list.iter().enumerate() {
+        let relative = runtime_path(&entry.name)?.to_string_lossy().into_owned();
+        if !explicit.insert(relative.clone()) { return Err("The runtime zip repeats a path.".into()); }
+        let kind = entry.unix_mode & 0o170000;
+        if !matches!(kind, 0 | 0o100000 | 0o040000 | 0o120000) { return Err("The runtime zip contains a special file.".into()); }
+        if entry.usize == u32::MAX as usize || entry.csize == u32::MAX as usize {
+            return Err("Runtime ZIP64 files are unsupported; FAT32 files must be smaller than 4 GiB.".into());
+        }
+        if entry.usize > RUNTIME_MAX_ENTRY { return Err("A runtime file exceeds the 128 MiB unpacking size limit.".into()); }
+        if entry.usize as u64 > (entry.csize as u64).saturating_mul(1000).saturating_add(65536) {
+            return Err("The runtime zip exceeds the compression ratio limit.".into());
+        }
+        let directory = entry.name.ends_with('/') || kind == 0o040000;
+        if entry.flags & 0x41 != 0 || !matches!(entry.method, 0 | 8)
+            || directory && (entry.usize != 0 || kind == 0o100000 || kind == 0o120000) {
+            return Err(bad());
+        }
+        total = total.checked_add(entry.usize).filter(|n| *n <= RUNTIME_MAX_TOTAL).ok_or("The runtime zip expands beyond its size limit.")?;
+        runtime_raw(&bytes, entry, directory_at)?;
+        let node = if directory { RuntimeNode::Directory } else if kind == 0o120000 {
+            if entry.usize > 4096 { return Err("A runtime link target is too long.".into()); }
+            let data = runtime_data(&bytes, entry, directory_at)?;
+            let target = std::str::from_utf8(&data).map_err(|_| "The runtime zip contains an invalid link target.")?;
+            RuntimeNode::Link(runtime_link_target(&relative, target)?)
+        } else { RuntimeNode::File(index) };
+        let parts: Vec<_> = relative.split('/').collect();
+        let mut prefix = String::new();
+        for (at, part) in parts.iter().enumerate() {
+            if !prefix.is_empty() { prefix.push('/'); }
+            prefix.push_str(part);
+            let folded = runtime_case_key(&prefix);
+            if let Some(previous) = names.get(&folded) {
+                if previous != &prefix { return Err("The runtime zip contains conflicting case-insensitive names.".into()); }
+            } else {
+                namespace_bytes = namespace_bytes.checked_add(prefix.len()).filter(|n| *n <= RUNTIME_MAX_NAMES).ok_or("The runtime zip namespace exceeds its size limit.")?;
+                names.insert(folded, prefix.clone());
+            }
+            if at + 1 < parts.len() {
+                match tree.get(&prefix) {
+                    Some(RuntimeNode::Directory) => {}
+                    Some(_) => return Err("The runtime zip uses a file or link as a parent folder.".into()),
+                    None => { tree.insert(prefix.clone(), RuntimeNode::Directory); }
+                }
+            }
+        }
+        if tree.get(&relative).is_some_and(|previous| !matches!((previous, &node), (RuntimeNode::Directory, RuntimeNode::Directory))) {
+            return Err("The runtime zip uses one name as both a file and a folder.".into());
+        }
+        tree.insert(relative, node);
+    }
+    let mut children = std::collections::HashMap::<String, Vec<String>>::new();
+    for name in tree.keys().filter(|name| !name.is_empty()) {
+        let parent = name.rsplit_once('/').map_or("", |(parent, _)| parent);
+        children.entry(parent.to_string()).or_default().push(name.clone());
+    }
+    let mut plan = RuntimePlan { entries: &list, outputs: Vec::new(), expanded: 0, name_bytes: 0 };
+    runtime_walk("", "", &tree, &children, &mut std::collections::HashSet::new(), &mut plan)?;
+    for (name, _) in &plan.outputs { existing.check(&destination.join(name))?; }
+    std::fs::create_dir_all(destination).map_err(|e| e.to_string())?;
+    for (name, source) in plan.outputs {
+        if skip(&name) || source.is_none() && skip(&format!("{name}/")) { continue; }
+        let path = destination.join(&name);
+        let Some(index) = source else {
+            std::fs::create_dir_all(path).map_err(|e| e.to_string())?;
+            continue;
+        };
+        let data = runtime_data(&bytes, &list[index], directory_at)?;
+        std::fs::create_dir_all(path.parent().ok_or_else(bad)?).map_err(|e| e.to_string())?;
+        let mut file = std::fs::OpenOptions::new().write(true).create_new(true).open(&path).map_err(|e| e.to_string())?;
+        file.write_all(&data).map_err(|e| e.to_string())?;
+        // FAT/exFAT own modes and creation times. Never restore Unix modes or archive timestamps.
+    }
+    Ok(())
+}
+
+fn runtime_component(part: &str) -> bool {
+    !part.is_empty() && !matches!(part, "." | "..") && !part.ends_with(['.', ' ']) && part.len() <= 255
+        && !part.chars().any(|ch| ch.is_control() || "\\:*?\"<>|".contains(ch))
+}
+
+fn runtime_path(name: &str) -> Result<std::path::PathBuf, String> {
+    let name = name.strip_suffix('/').unwrap_or(name);
+    if name.len() > 4096 || !name.split('/').all(runtime_component) {
+        return Err("The runtime zip contains an unsafe path or a name unsupported by FAT32/exFAT.".into());
+    }
+    Ok(name.into())
+}
+
+fn runtime_case_key(name: &str) -> String {
+    name.chars().flat_map(char::to_lowercase).flat_map(char::to_uppercase).flat_map(char::to_lowercase).collect()
+}
+
+fn runtime_link_target(name: &str, target: &str) -> Result<String, String> {
+    let mut parts: Vec<_> = name.split('/').collect();
+    parts.pop();
+    let target = target.strip_suffix('/').unwrap_or(target);
+    if target.is_empty() || target.len() > 4096 || target.starts_with('/') { return Err("The runtime zip contains an external or invalid link.".into()); }
+    for part in target.split('/') {
+        match part {
+            "." => {}
+            ".." => { if parts.pop().is_none() { return Err("A runtime link escapes the archive.".into()); } }
+            _ if runtime_component(part) => parts.push(part),
+            _ => return Err("The runtime zip contains an external or invalid link.".into()),
+        }
+    }
+    Ok(parts.join("/"))
+}
+
+/// A target may name a file below an archive directory link (copy/file, where copy -> data).
+/// Resolve each linked prefix before looking up the remaining suffix, without touching the filesystem.
+fn runtime_resolve_link(target: &str, tree: &std::collections::BTreeMap<String, RuntimeNode>) -> Result<String, String> {
+    let mut path = target.to_string();
+    let mut links = std::collections::HashSet::new();
+    for _ in 0..128 {
+        if path.len() > 4096 { return Err("A materialized runtime link path is too long.".into()); }
+        if matches!(tree.get(&path), Some(RuntimeNode::File(_) | RuntimeNode::Directory)) { return Ok(path); }
+        let parts: Vec<_> = path.split('/').collect();
+        let mut prefix = String::new();
+        let mut replacement = None;
+        for (at, part) in parts.iter().enumerate() {
+            if !prefix.is_empty() { prefix.push('/'); }
+            prefix.push_str(part);
+            match tree.get(&prefix) {
+                Some(RuntimeNode::Link(next)) => {
+                    if !links.insert(prefix.clone()) { return Err("The runtime zip contains a link cycle.".into()); }
+                    let suffix = parts[at + 1..].join("/");
+                    replacement = Some(if suffix.is_empty() { next.clone() } else if next.is_empty() { suffix } else { format!("{next}/{suffix}") });
+                    break;
+                }
+                Some(RuntimeNode::Directory) => {}
+                Some(RuntimeNode::File(_)) => return Err("A runtime link target uses a file as a folder.".into()),
+                None => return Err("A runtime link target is missing from the archive.".into()),
+            }
+        }
+        path = replacement.ok_or("A runtime link target is missing from the archive.")?;
+    }
+    Err("The runtime zip contains a link cycle or an excessive link depth.".into())
+}
+
+fn runtime_walk(source: &str, destination: &str, tree: &std::collections::BTreeMap<String, RuntimeNode>, children: &std::collections::HashMap<String, Vec<String>>, visiting: &mut std::collections::HashSet<String>, plan: &mut RuntimePlan<'_>) -> Result<(), String> {
+    if visiting.len() >= 128 || !visiting.insert(source.to_string()) { return Err("The runtime zip contains a link cycle or an excessive folder depth.".into()); }
+    match tree.get(source).ok_or("A runtime link target is missing from the archive.")? {
+        RuntimeNode::Link(target) => runtime_walk(&runtime_resolve_link(target, tree)?, destination, tree, children, visiting, plan)?,
+        node => {
+            if !destination.is_empty() {
+                if plan.outputs.len() >= RUNTIME_MAX_OUTPUTS { return Err("The runtime zip expands beyond its entry count limit.".into()); }
+                let entry = if let RuntimeNode::File(index) = node {
+                    plan.expanded = plan.expanded.checked_add(plan.entries[*index].usize).filter(|n| *n <= RUNTIME_MAX_TOTAL).ok_or("The runtime zip expands beyond its size limit.")?;
+                    Some(*index)
+                } else { None };
+                plan.name_bytes = plan.name_bytes.checked_add(destination.len()).filter(|n| *n <= RUNTIME_MAX_NAMES).ok_or("The runtime zip materialized names exceed their size limit.")?;
+                plan.outputs.push((destination.to_string(), entry));
+            }
+            if matches!(node, RuntimeNode::Directory) {
+                for child in children.get(source).into_iter().flatten() {
+                    let name = child.rsplit('/').next().unwrap_or(child);
+                    let output = if destination.is_empty() { name.to_string() } else { format!("{destination}/{name}") };
+                    if output.len() > 4096 { return Err("A materialized runtime link path is too long.".into()); }
+                    runtime_walk(child, &output, tree, children, visiting, plan)?;
+                }
+            }
+        }
+    }
+    visiting.remove(source);
+    Ok(())
+}
+
+fn runtime_data(bytes: &[u8], entry: &Entry, directory_at: usize) -> Result<Vec<u8>, String> {
+    let raw = runtime_raw(bytes, entry, directory_at)?;
+    let data = if entry.method == 0 { raw.to_vec() } else {
+        miniz_oxide::inflate::decompress_to_vec_with_limit(raw, entry.usize).map_err(|_| "The runtime zip is damaged or unsupported.")?
+    };
+    if data.len() != entry.usize || crc32fast::hash(&data) != entry.crc { return Err("The runtime zip failed its checksum check.".into()); }
+    Ok(data)
+}
+
+/// A preflight snapshot of the existing namespace. Prefixes/directories are read once even for
+/// thousands of Python files on a slow FAT card; the complete output plan has no aliases of its own.
+#[derive(Default)]
+struct RuntimeDestination {
+    checked: std::collections::HashSet<std::path::PathBuf>,
+    children: std::collections::HashMap<std::path::PathBuf, std::collections::HashMap<String, Option<std::ffi::OsString>>>,
+}
+
+impl RuntimeDestination {
+    fn check(&mut self, path: &Path) -> Result<(), String> {
+        let mut checked = std::path::PathBuf::new();
+        for component in path.components() {
+            if matches!(component, std::path::Component::ParentDir | std::path::Component::CurDir | std::path::Component::Prefix(_)) {
+                return Err("The runtime destination is unsafe.".into());
+            }
+            checked.push(component.as_os_str());
+            if !self.checked.insert(checked.clone()) { continue; }
+            if let (Some(parent), Some(name)) = (checked.parent(), checked.file_name()) {
+                if let std::collections::hash_map::Entry::Vacant(slot) = self.children.entry(parent.to_path_buf()) {
+                    let mut names = std::collections::HashMap::new();
+                    match std::fs::read_dir(if parent.as_os_str().is_empty() { Path::new(".") } else { parent }) {
+                        Ok(entries) => for entry in entries {
+                            let name = entry.map_err(|e| e.to_string())?.file_name();
+                            let key = runtime_case_key(&name.to_string_lossy());
+                            names.entry(key).and_modify(|existing| *existing = None).or_insert(Some(name));
+                        },
+                        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+                        Err(error) => return Err(error.to_string()),
+                    }
+                    slot.insert(names);
+                }
+                if self.children[parent].get(&runtime_case_key(&name.to_string_lossy())).is_some_and(|existing| existing.as_deref() != Some(name)) {
+                    return Err("The runtime destination contains a conflicting case-insensitive name.".into());
+                }
+            }
+            match std::fs::symlink_metadata(&checked) {
+                Ok(meta) if meta.file_type().is_symlink() || !meta.is_dir() => return Err("The runtime destination contains a symbolic link or existing file.".into()),
+                Ok(_) => {}
+                Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+                Err(error) => return Err(error.to_string()),
+            }
+        }
+        Ok(())
+    }
+}
+
+fn runtime_raw<'a>(bytes: &'a [u8], entry: &Entry, directory_at: usize) -> Result<&'a [u8], String> {
+    let bad = || "The runtime zip is damaged or unsupported.".to_string();
+    let at = entry.local;
+    if !bytes.get(at..).is_some_and(|data| data.starts_with(b"PK\x03\x04"))
+        || le16(bytes, at + 6) != Some(entry.flags) || le16(bytes, at + 8) != Some(entry.method) { return Err(bad()); }
+    let name_len = le16(bytes, at + 26).ok_or_else(bad)?;
+    let name_at = at.checked_add(30).ok_or_else(bad)?;
+    let name_end = name_at.checked_add(name_len).ok_or_else(bad)?;
+    if bytes.get(name_at..name_end) != Some(entry.name.as_bytes()) { return Err(bad()); }
+    let start = name_end.checked_add(le16(bytes, at + 28).ok_or_else(bad)?).ok_or_else(bad)?;
+    let end = start.checked_add(entry.csize).filter(|n| *n <= directory_at).ok_or_else(bad)?;
+    if entry.flags & 8 == 0 && (le32(bytes, at + 14) != Some(entry.crc as usize) || le32(bytes, at + 18) != Some(entry.csize) || le32(bytes, at + 22) != Some(entry.usize)) {
+        return Err(bad());
+    }
+    if entry.method == 0 && entry.csize != entry.usize { return Err(bad()); }
+    bytes.get(start..end).ok_or_else(bad)
+}
+
 #[cfg(test)]
 mod bounded_tests {
     use super::*;
@@ -382,6 +678,242 @@ pub(crate) mod tests {
 
     fn rom() -> Vec<u8> {
         (0..5000u32).map(|i| (i * 7 % 251) as u8).collect()
+    }
+
+    fn runtime_extract(files: &[F]) -> (TestDir, Result<(), String>) {
+        let dir = TestDir::new("runtime-zip");
+        let source = dir.join("runtime.zip");
+        std::fs::write(&source, zip(files)).unwrap();
+        let result = unpack_runtime(&source, &dir.join("out"));
+        (dir, result)
+    }
+
+    #[test]
+    fn runtime_zip_extracts_all_nested_python_files_and_checks_deflated_data() {
+        let data = b"binary python runtime";
+        let files = [stored("bin/", b""), stored("bin/python3", data), F { name: "lib/python3.11/os.py", method: 8, stored: miniz_oxide::deflate::compress_to_vec(b"import sys", 6), ..stored("lib/python3.11/os.py", b"import sys") }, stored("README", b"licence")];
+        let (dir, result) = runtime_extract(&files);
+        result.unwrap();
+        assert_eq!(std::fs::read(dir.join("out/bin/python3")).unwrap(), data);
+        assert_eq!(std::fs::read(dir.join("out/lib/python3.11/os.py")).unwrap(), b"import sys");
+        assert_eq!(std::fs::read(dir.join("out/README")).unwrap(), b"licence");
+    }
+
+    #[test]
+    fn headless_runtime_skips_tests_and_build_tools_but_keeps_standard_library_caches() {
+        let dir = TestDir::new("runtime-headless");
+        let source = dir.join("runtime.zip");
+        let files = [stored("include/python.h", b"header"), stored("share/man/python", b"manual"),
+            stored("lib/python3.11/test/__pycache__/test_os.pyc", b"tests"), stored("lib/python3.11/idlelib/editor.py", b"gui"),
+            stored("lib/python3.11/site-packages/pip/main.py", b"pip"), stored("lib/python3.11/os.py", b"os"),
+            stored("lib/python3.11/__pycache__/os.pyc", b"cached"), stored("bin/python3", b"binary")];
+        std::fs::write(&source, zip(&files)).unwrap();
+        unpack_python_runtime(&source, &dir.join("out")).unwrap();
+        for skipped in ["include", "share", "lib/python3.11/test", "lib/python3.11/idlelib", "lib/python3.11/site-packages"] {
+            assert!(!dir.join("out").join(skipped).exists(), "avoid writing and deleting {skipped} on FAT");
+        }
+        assert_eq!(std::fs::read(dir.join("out/lib/python3.11/__pycache__/os.pyc")).unwrap(), b"cached");
+        assert_eq!(std::fs::read(dir.join("out/lib/python3.11/os.py")).unwrap(), b"os");
+        std::fs::write(&source, zip(&[stored("include/../escape", b"bad")])).unwrap();
+        assert!(unpack_python_runtime(&source, &dir.join("bad")).is_err(), "excluded trees still have their paths checked");
+        let mut malformed = zip(&[stored("include/python.h", b"header")]);
+        malformed[0] = 0;
+        std::fs::write(&source, malformed).unwrap();
+        assert!(unpack_python_runtime(&source, &dir.join("bad")).is_err(), "excluded entries still have their local headers checked");
+    }
+
+    #[test]
+    fn runtime_zip_rejects_unsafe_paths_before_creating_any_files() {
+        for name in ["../outside", "/absolute", "a/../../outside", "a\\outside", "a/./file", "a//file", "C:/file", "bad\0file"] {
+            let (dir, result) = runtime_extract(&[stored("good", b"good"), stored(name, b"bad")]);
+            assert!(result.is_err(), "reject {name:?}");
+            assert!(!dir.join("out/good").exists(), "validate the entire directory before writing");
+        }
+    }
+
+    #[test]
+    fn runtime_zip_refuses_crc_damage_and_expansion_bombs() {
+        let mut corrupt = stored("bin/python3", b"binary");
+        corrupt.crc ^= 1;
+        assert!(runtime_extract(&[corrupt]).1.is_err());
+        let oversized = F { method: 8, size: (128 << 20) + 1, ..stored("large", b"tiny") };
+        assert!(runtime_extract(&[oversized]).1.is_err());
+        let files: Vec<_> = ["a", "b", "c", "d", "e", "f"].into_iter().map(|name| F { method: 8, size: 128 << 20, ..stored(name, b"tiny") }).collect();
+        let (dir, result) = runtime_extract(&files);
+        assert!(result.is_err());
+        assert!(!dir.join("out/a").exists(), "reject the total expansion before unpacking any entry");
+        let corrupt = F { method: 8, stored: vec![1, 2, 3], ..stored("broken", b"binary") };
+        assert!(runtime_extract(&[corrupt]).1.is_err());
+    }
+
+    #[test]
+    fn runtime_zip_refuses_external_links_and_symlinks_in_existing_destinations() {
+        let dir = TestDir::new("runtime-link");
+        let source = dir.join("runtime.zip");
+        let mut bytes = zip(&[stored("bin/python3", b"../../outside")]);
+        let central = bytes.windows(4).position(|p| p == b"PK\x01\x02").unwrap();
+        bytes[central + 38..central + 42].copy_from_slice(&(0o120777u32 << 16).to_le_bytes());
+        std::fs::write(&source, bytes).unwrap();
+        assert!(unpack_runtime(&source, &dir.join("out")).is_err());
+        std::fs::write(&source, zip(&[stored("bin/python3", b"binary")])).unwrap();
+        std::fs::create_dir_all(dir.join("out")).unwrap();
+        std::fs::create_dir_all(dir.join("outside")).unwrap();
+        #[cfg(unix)] {
+            std::os::unix::fs::symlink(dir.join("outside"), dir.join("out/bin")).unwrap();
+            assert!(unpack_runtime(&source, &dir.join("out")).is_err());
+            assert!(!dir.join("outside/python3").exists(), "never follow an existing destination symlink");
+        }
+    }
+
+    fn portable_zip(files: &[F], links: &[usize]) -> Vec<u8> {
+        let mut bytes = zip(files);
+        let (_, mut at, _) = end_record(&bytes).unwrap();
+        for (index, file) in files.iter().enumerate() {
+            if links.contains(&index) { bytes[at + 38..at + 42].copy_from_slice(&(0o120777u32 << 16).to_le_bytes()); }
+            at += 46 + file.name.len();
+        }
+        bytes
+    }
+
+    fn portable_extract(files: &[F], links: &[usize]) -> (TestDir, Result<(), String>) {
+        let dir = TestDir::new("portable-runtime");
+        let source = dir.join("runtime.zip");
+        std::fs::write(&source, portable_zip(files, links)).unwrap();
+        let result = unpack_runtime(&source, &dir.join("out"));
+        (dir, result)
+    }
+
+    #[test]
+    fn portable_runtime_materializes_internal_file_links_and_forward_chains() {
+        let files = [stored("lib/alias.so", b"next.so"), stored("lib/next.so", b"real.so"), stored("lib/real.so", b"library"),
+            stored("bin/python3", b"../lib/real.so")];
+        let (dir, result) = portable_extract(&files, &[0, 1, 3]);
+        result.unwrap();
+        for name in ["lib/alias.so", "lib/next.so", "lib/real.so", "bin/python3"] {
+            assert_eq!(std::fs::read(dir.join("out").join(name)).unwrap(), b"library");
+            assert!(!std::fs::symlink_metadata(dir.join("out").join(name)).unwrap().file_type().is_symlink(), "{name} must work without filesystem links");
+        }
+    }
+
+    #[test]
+    fn portable_runtime_materializes_internal_directory_links() {
+        let files = [stored("alias", b"real"), stored("real/lib/module.so", b"module"), stored("real/lib/config.ini", b"config")];
+        let (dir, result) = portable_extract(&files, &[0]);
+        result.unwrap();
+        assert_eq!(std::fs::read(dir.join("out/alias/lib/module.so")).unwrap(), b"module");
+        assert_eq!(std::fs::read(dir.join("out/alias/lib/config.ini")).unwrap(), b"config");
+        assert!(!std::fs::symlink_metadata(dir.join("out/alias")).unwrap().file_type().is_symlink());
+    }
+
+    #[test]
+    fn portable_runtime_resolves_files_below_directory_link_prefixes() {
+        let files = [stored("game/data/file", b"game data"), stored("game/copy", b"data"), stored("game/chain", b"copy/file"),
+            stored("game/lib/lib.so", b"lib.so.1"), stored("game/lib/lib.so.1", b"library")];
+        let (dir, result) = portable_extract(&files, &[1, 2, 3]);
+        result.unwrap();
+        assert_eq!(std::fs::read(dir.join("out/game/chain")).unwrap(), b"game data");
+        assert_eq!(std::fs::read(dir.join("out/game/copy/file")).unwrap(), b"game data");
+        assert_eq!(std::fs::read(dir.join("out/game/lib/lib.so")).unwrap(), b"library");
+        assert!(!std::fs::symlink_metadata(dir.join("out/game/chain")).unwrap().file_type().is_symlink());
+        let (dir, result) = portable_extract(&[stored("good", b"good"), stored("a", b"b/file"), stored("b", b"a")], &[1, 2]);
+        assert!(result.unwrap_err().contains("cycle"), "directory-prefix alias cycles remain bounded");
+        assert!(!dir.join("out/good").exists());
+    }
+
+    #[test]
+    fn portable_runtime_refuses_external_missing_cyclic_and_damaged_links_before_writing() {
+        for target in ["/outside", "../../outside", "missing", "C:/outside", "..\\outside"] {
+            let (dir, result) = portable_extract(&[stored("good", b"good"), stored("lib/link", target.as_bytes())], &[1]);
+            assert!(result.is_err(), "reject link target {target}");
+            assert!(!dir.join("out/good").exists(), "validate all links before copying files");
+        }
+        let (dir, result) = portable_extract(&[stored("good", b"good"), stored("a", b"b"), stored("b", b"a")], &[1, 2]);
+        assert!(result.unwrap_err().to_lowercase().contains("cycle"));
+        assert!(!dir.join("out/good").exists());
+        let (dir, result) = portable_extract(&[stored("real/file", b"good"), stored("real/loop", b"..")], &[1]);
+        assert!(result.is_err(), "a directory alias must not recurse into its own ancestor");
+        assert!(!dir.join("out/real/file").exists());
+        let mut bad = stored("link", b"real"); bad.crc ^= 1;
+        let (dir, result) = portable_extract(&[stored("good", b"good"), bad, stored("real", b"payload")], &[1]);
+        assert!(result.is_err()); assert!(!dir.join("out/good").exists());
+    }
+
+    #[test]
+    fn portable_runtime_refuses_fat_names_and_case_aliases_before_writing() {
+        for name in ["bad:name", "bad*name", "bad?name", "bad\"name", "bad<name", "bad>name", "bad|name", "bad.", "bad ", "dir./file", "dir /file", "bad\tname"] {
+            let (dir, result) = portable_extract(&[stored("good", b"good"), stored(name, b"bad")], &[]);
+            assert!(result.is_err(), "reject FAT name {name:?}");
+            assert!(!dir.join("out/good").exists());
+        }
+        for files in [[stored("lib/A.so", b"one"), stored("lib/a.so", b"two")], [stored("LIB/one", b"one"), stored("lib/two", b"two")], [stored("lib/ß.so", b"one"), stored("lib/ẞ.so", b"two")]] {
+            let (dir, result) = portable_extract(&files, &[]);
+            assert!(result.unwrap_err().to_lowercase().contains("case"), "explain case-insensitive path conflicts");
+            assert!(!dir.join("out").exists());
+        }
+    }
+
+    #[test]
+    fn portable_runtime_refuses_case_aliases_of_existing_destination_names() {
+        for folder_alias in [true, false] {
+            let dir = TestDir::new("runtime-existing-case");
+            let source = dir.join("runtime.zip");
+            let existing = if folder_alias { "LIB" } else { "lib" };
+            std::fs::create_dir_all(dir.join("out").join(existing)).unwrap();
+            std::fs::write(dir.join("out").join(existing).join("One.so"), b"keep").unwrap();
+            let name = if folder_alias { "lib/new.so" } else { "lib/one.so" };
+            std::fs::write(&source, zip(&[stored("good", b"good"), stored(name, b"replace")])).unwrap();
+            let error = unpack_runtime(&source, &dir.join("out")).unwrap_err();
+            assert!(error.to_lowercase().contains("case"), "explain the existing case alias: {error}");
+            assert_eq!(std::fs::read(dir.join("out").join(existing).join("One.so")).unwrap(), b"keep");
+            assert!(!dir.join("out/good").exists(), "refuse the collision before copying any new files");
+        }
+    }
+
+    #[test]
+    fn portable_runtime_explains_fat_and_compression_limits_before_writing() {
+        let huge = F { method: 8, size: u32::MAX as usize, ..stored("huge", b"tiny") };
+        let (dir, result) = portable_extract(&[stored("good", b"good"), huge], &[]);
+        assert!(result.unwrap_err().contains("4 GiB"));
+        assert!(!dir.join("out/good").exists());
+        let bomb = F { method: 8, size: 1000 + 65536 + 1, stored: vec![0], ..stored("bomb", b"tiny") };
+        let (dir, result) = portable_extract(&[stored("good", b"good"), bomb], &[]);
+        assert!(result.unwrap_err().contains("compression ratio"));
+        assert!(!dir.join("out/good").exists());
+    }
+
+    #[test]
+    fn portable_runtime_limits_directory_metadata_before_building_its_link_graph() {
+        let names: Vec<&'static str> = (0..70).map(|i| &*Box::leak(format!("file{i}").into_boxed_str())).collect();
+        let files: Vec<_> = names.iter().map(|name| stored(name, b"tiny")).collect();
+        let mut bytes = zip(&files);
+        let (_, at, _) = end_record(&bytes).unwrap();
+        let end = find_end(&bytes).unwrap();
+        let mut central = Vec::new();
+        let mut cursor = at;
+        for file in &files {
+            let mut entry = bytes[cursor..cursor + 46 + file.name.len()].to_vec();
+            entry[32..34].copy_from_slice(&65535u16.to_le_bytes());
+            central.extend(entry);
+            central.extend(std::iter::repeat_n(b'x', 65535));
+            cursor += 46 + file.name.len();
+        }
+        let mut tail = bytes[end..].to_vec();
+        tail[12..16].copy_from_slice(&(central.len() as u32).to_le_bytes());
+        bytes.truncate(at); bytes.extend(central); bytes.extend(tail);
+        let dir = TestDir::new("runtime-metadata-limit");
+        std::fs::write(dir.join("runtime.zip"), bytes).unwrap();
+        let error = unpack_runtime(&dir.join("runtime.zip"), &dir.join("out")).unwrap_err();
+        assert!(error.contains("directory"), "bound metadata allocations before expanding the namespace: {error}");
+        assert!(!dir.join("out").exists());
+    }
+
+    #[test]
+    fn portable_runtime_counts_materialized_link_copies_toward_the_expansion_limit() {
+        let large = F { method: 8, size: 128 << 20, stored: vec![0; 135000], ..stored("real", b"tiny") };
+        let files = [large, stored("alias1", b"real"), stored("alias2", b"real"), stored("alias3", b"real"), stored("alias4", b"real"), stored("alias5", b"real")];
+        let (dir, result) = portable_extract(&files, &[1, 2, 3, 4, 5]);
+        assert!(result.unwrap_err().contains("size limit"));
+        assert!(!dir.join("out").exists());
     }
 
     #[test]

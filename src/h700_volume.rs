@@ -104,6 +104,8 @@ impl Wish {
 trait Alsa {
     fn read(&mut self) -> Option<Mixer>;
     fn write(&mut self, control: Control, value: Raw) -> bool;
+    /// `pactl set-sink-mute <sink> 0`: PipeWire turns Line Out's switch back on and WirePlumber stores the unmute.
+    fn unmute(&mut self, sink: &str) -> bool;
 }
 
 /// DAC TLV: -73.08 dB + raw * 1.16 dB. Use ALSA's cubic UI mapping over the available finite dB range.
@@ -138,6 +140,8 @@ struct Session {
     force: bool,
     authorized_sound: bool,
     next_gain: Option<Instant>,
+    /// The sink's mute was lifted this tick: the worker's cached wish says unmuted until its next poll.
+    lifted: bool,
 }
 impl Session {
     fn dac_target(&self, percent: u8) -> u8 {
@@ -165,7 +169,7 @@ impl Session {
         true
     }
 
-    fn update_at(&mut self, io: &mut impl Alsa, wish: Wish, revision: u64, now: Instant) {
+    fn update_at(&mut self, io: &mut impl Alsa, mut wish: Wish, revision: u64, now: Instant) {
         let was_pending = std::mem::replace(&mut self.pending, true);
         let Some(mut mixer) = io.read() else { return };
         if !wish.internal() {
@@ -188,17 +192,28 @@ impl Session {
             self.first_wish = Some((wish.percent, wish.muted));
             self.first_sink = Some(wish.sink.clone());
         }
-        let key = (wish.clone(), mixer.jack, revision);
-        if self.last.as_ref() == Some(&key) && !self.force && !was_pending {
+        if self.last.as_ref() == Some(&(wish.clone(), mixer.jack, revision)) && !self.force && !was_pending {
             self.pending = false;
             return;
         }
         let route_changed = self.last.as_ref().is_some_and(|(w, jack, _)| w.sink != wish.sink || *jack != mixer.jack);
         let mut ramping = false;
-        let deliberate = self
+        let mut deliberate = self
             .last
             .as_ref()
             .is_some_and(|(w, _, r)| *r != revision || (!self.force && w.sink == wish.sink && (w.percent != wish.percent || w.muted != wish.muted)));
+        // A muted codec sink is nobody's choice on H700: pocket-ui has no mute there (0 % is the silent level), and
+        // WirePlumber keeps a mute for good, over restarts, while ROCKNIX's `volume` never lifts one (issue #3). Lifted
+        // at attach (heals a state stored earlier), on a jack/sink change and on any new wish; a wake repair is no
+        // such moment (sleep mutes the sink itself for a game's last moment before a power off).
+        let heal = wish.muted && (initial || route_changed || deliberate) && io.unmute(&wish.sink);
+        if heal {
+            eprintln!("h700 volume: lifted a mute nobody chose on {}", wish.sink);
+            wish.muted = false;
+            deliberate = true;
+            self.lifted = true;
+        }
+        let key = (wish.clone(), mixer.jack, revision);
         // A raw amixer edit is not a request for us to turn anything back on. Route changes alone cannot take it back.
         let external = self.owned.iter().enumerate().any(|(i, v)| v.is_some_and(|v| v != mixer.values[i]));
         self.yielded |= external && !deliberate;
@@ -218,9 +233,10 @@ impl Session {
             return;
         }
         if silent {
-            // Try every independent way to silence even if a switch/helper fails.
+            // Try every independent way to silence even if a switch/helper fails. Never Line Out's switch: it is
+            // PipeWire's mute of both codec sinks (UCM PlaybackMixerElem), which WirePlumber would store for good.
             let mut ok = true;
-            for c in [Control::Speaker, Control::DacOn, Control::Dac, Control::LineOn] {
+            for c in [Control::Speaker, Control::DacOn, Control::Dac] {
                 ok &= self.put(io, &mut mixer, c, [0; 2]);
             }
             if !ok {
@@ -243,10 +259,11 @@ impl Session {
             let restore_dac = ours_off(Control::DacOn);
             let restore_speaker = ours_off(Control::Speaker);
             let target = if headphones { 63 } else { self.dac_target(wish.percent) };
-            // At attach we may only turn down; an existing hardware mute belongs to the user.
-            let target = if initial { target.min(mixer.values[Control::Dac.index()][0]) } else { target };
+            // At attach we may only turn down; an existing hardware mute belongs to the user, unless it came with a
+            // lifted sink mute (then it is what an earlier version left behind for that mute).
+            let target = if initial && !heal { target.min(mixer.values[Control::Dac.index()][0]) } else { target };
             let current = mixer.values[Control::Dac.index()][0];
-            let next = if initial || (route_changed && !headphones && current > target) {
+            let next = if (initial && !heal) || (route_changed && !headphones && current > target) {
                 // Jack removal must lower the former headphone gain before enabling the speaker.
                 target
             } else if target > current {
@@ -274,11 +291,7 @@ impl Session {
             if !headphones && (deliberate || restore_speaker || (!initial && was_on)) && !self.put(io, &mut mixer, Control::Speaker, [1; 2]) {
                 return;
             }
-            // Line Out stays at PipeWire's attenuation. In particular never set it to full gain for a speaker.
-            // Only undo our own mute when the user explicitly asks for sound.
-            if (deliberate || restore_dac) && self.owned[Control::LineOn.index()] == Some([0; 2]) && !self.put(io, &mut mixer, Control::LineOn, [1; 2]) {
-                return;
-            }
+            // Line Out stays PipeWire's: its attenuation (never full gain for a speaker) and its switch (the sink mute).
         }
         self.last = Some(key);
         self.force = false;
@@ -544,6 +557,9 @@ impl Alsa for Real {
     fn write(&mut self, control: Control, value: Raw) -> bool {
         self.native.write(control, value)
     }
+    fn unmute(&mut self, sink: &str) -> bool {
+        output("pactl", &["set-sink-mute", sink, "0"]).is_some()
+    }
 }
 fn wish() -> Option<Wish> {
     let sink = output("pactl", &["get-default-sink"])?;
@@ -644,16 +660,20 @@ impl Keeper {
                 while !stop {
                     let now = Instant::now();
                     let revision = REVISION.load(Ordering::Relaxed);
-                    let repair = REPAIR.load(Ordering::Relaxed);
-                    session.force |= repaired != repair;
-                    repaired = repair;
                     if now >= next_poll {
                         cached = wish();
                         last_poll = now;
                         next_poll = now + if now < active_until { ACTIVE_POLL } else { POLL };
                     }
-                    if let Some(wish) = cached.as_ref() {
+                    // After the poll: sleep's own mute, seen by it, must arrive as a repair, never as a new wish.
+                    let repair = REPAIR.load(Ordering::Relaxed);
+                    session.force |= repaired != repair;
+                    repaired = repair;
+                    if let Some(wish) = cached.as_mut() {
                         session.update_at(&mut io, wish.clone(), revision, now);
+                        if std::mem::take(&mut session.lifted) {
+                            wish.muted = false;
+                        }
                     }
                     let deadline = if session.pending {
                         next_poll.min(Instant::now() + RAMP_STEP)
@@ -714,6 +734,10 @@ mod tests {
         ignored: Option<Control>,
         readable: bool,
         now: Instant,
+        /// PipeWire's mute of the codec sinks: both UCM devices use "Line Out" as PlaybackMixerElem, so ACP follows
+        /// its switch, and WirePlumber stores what it shows (it survives a restart).
+        sink_muted: bool,
+        unmutes: usize,
     }
     impl Fake {
         fn playing() -> Self {
@@ -727,6 +751,8 @@ mod tests {
                 ignored: None,
                 readable: true,
                 now: Instant::now(),
+                sink_muted: false,
+                unmutes: 0,
             }
         }
         fn value(&self, c: Control) -> Raw {
@@ -750,8 +776,17 @@ mod tests {
             }
             if self.ignored != Some(c) {
                 self.mixer.values[c.index()] = value;
+                if c == Control::LineOn {
+                    self.sink_muted = value == [0; 2];
+                }
             }
             // The fake intentionally does NOT connect Line Out to Speaker: this reproduces the actual UCM bug.
+            true
+        }
+        fn unmute(&mut self, _: &str) -> bool {
+            self.unmutes += 1;
+            self.sink_muted = false;
+            self.mixer.values[Control::LineOn.index()] = [1; 2];
             true
         }
     }
@@ -761,6 +796,18 @@ mod tests {
             let now = fake.now;
             session.update_at(fake, wish.clone(), revision, now);
             if !session.pending || fake.fail.is_some() || fake.ignored.is_some() || !fake.readable {
+                break;
+            }
+        }
+    }
+
+    /// Like `apply`, with the wish's mute read from the fake PipeWire each tick, as the worker's poll does.
+    fn apply_pw(session: &mut Session, fake: &mut Fake, sink: &str, percent: u8, revision: u64) {
+        for _ in 0..=64 {
+            fake.now += RAMP_STEP;
+            let (now, muted) = (fake.now, fake.sink_muted);
+            session.update_at(fake, Wish { sink: sink.into(), percent, muted }, revision, now);
+            if !session.pending {
                 break;
             }
         }
@@ -812,18 +859,23 @@ mod tests {
         for muted in [false, true] {
             let (mut s, mut f) = (Session::default(), Fake::playing());
             let mut w = volume(if muted { 60 } else { 0 });
-            w.muted = muted;
+            if muted {
+                // The only sink mute pocket-ui makes on H700: sleep's, for a game's last moment before a power off.
+                apply(&mut s, &mut f, volume(60), 0);
+                w.muted = true;
+                s.force = true;
+            }
             apply(&mut s, &mut f, w, 0);
             assert!(!f.audible());
             assert_eq!(f.value(Control::Dac), [0; 2]);
             assert_eq!(f.value(Control::DacOn), [0; 2]);
-            assert_eq!(f.value(Control::LineOn), [0; 2]);
+            assert_eq!(f.value(Control::LineOn), [1; 2], "Line Out's switch is PipeWire's sink mute: never ours");
             s.restore(&mut f);
             assert!(!f.audible(), "exit must stay silent");
             apply(&mut s, &mut f, volume(15), 1);
             assert!(f.audible(), "deliberate volume/unmute can restore sound");
-            assert_eq!(f.value(Control::LineOn), [1; 2]);
             assert!(f.value(Control::Dac)[0] < SPEAKER_MAX_RAW);
+            assert!(!f.writes.iter().any(|(c, _)| *c == Control::LineOn));
         }
     }
 
@@ -982,7 +1034,7 @@ mod tests {
 
     #[test]
     fn failed_speaker_switch_still_mutes_dac_and_failed_dac_switch_still_mutes_speaker() {
-        for failed in [Control::Speaker, Control::DacOn, Control::Dac, Control::LineOn] {
+        for failed in [Control::Speaker, Control::DacOn, Control::Dac] {
             let (mut s, mut f) = (Session::default(), Fake::playing());
             f.fail = Some(failed);
             apply(&mut s, &mut f, volume(0), 0);
@@ -1164,6 +1216,81 @@ mod tests {
             })
         );
         assert!(parse_wish("missing", json).is_none());
+    }
+
+    #[test]
+    fn volume_down_to_zero_and_up_again_never_leaves_a_stored_sink_mute() {
+        // Issue #3 (RG35XX SP): headphones fine, after unplugging the speaker silent and Quick settings said muted,
+        // even after a restart.
+        let (mut s, mut f) = (Session::default(), Fake::playing());
+        apply_pw(&mut s, &mut f, SPEAKER, 40, 0);
+        f.mixer.jack = true;
+        apply_pw(&mut s, &mut f, HEADPHONES, 40, 0);
+        apply_pw(&mut s, &mut f, HEADPHONES, 0, 0);
+        assert!(!f.audible());
+        apply_pw(&mut s, &mut f, HEADPHONES, 30, 0);
+        assert!(!f.sink_muted, "0 % is a level, not a mute PipeWire and WirePlumber should keep");
+        assert_eq!(f.value(Control::DacOn), [1; 2], "headphones play again at 30 %");
+        // Unplug: UCM's Speaker enable sequence turns the amplifier on at DAC 63.
+        f.mixer.jack = false;
+        f.set(Control::Speaker, 1);
+        f.set(Control::Dac, 63);
+        apply_pw(&mut s, &mut f, SPEAKER, 30, 0);
+        assert!(f.audible());
+        assert!(!f.sink_muted);
+        assert_eq!(f.value(Control::Dac), [speaker_dac(30); 2]);
+        assert_eq!(f.unmutes, 0, "nothing to lift when nothing muted it");
+    }
+
+    #[test]
+    fn a_stored_mute_nobody_chose_is_lifted_on_the_first_start() {
+        // The state an earlier version leaves behind: everything off and the sink muted in WirePlumber's state.
+        for jack in [false, true] {
+            let (mut s, mut f) = (Session::default(), Fake::playing());
+            for c in [Control::Speaker, Control::DacOn, Control::Dac, Control::LineOn] {
+                f.set(c, 0);
+            }
+            f.sink_muted = true;
+            f.mixer.jack = jack;
+            apply_pw(&mut s, &mut f, if jack { HEADPHONES } else { SPEAKER }, 40, 0);
+            assert!(!f.sink_muted, "jack {jack}");
+            assert_eq!(f.unmutes, 1);
+            assert_eq!(f.value(Control::DacOn), [1; 2]);
+            if jack {
+                assert_eq!(f.value(Control::Speaker), [0; 2], "the speaker stays off with headphones in");
+                assert_eq!(f.value(Control::Dac), [63; 2]);
+            } else {
+                assert!(f.audible());
+                assert_eq!(f.value(Control::Dac), [speaker_dac(40); 2]);
+            }
+        }
+    }
+
+    #[test]
+    fn a_mute_appearing_on_a_route_change_or_from_outside_is_lifted_but_not_sleeps_short_mute() {
+        let (mut s, mut f) = (Session::default(), Fake::playing());
+        apply_pw(&mut s, &mut f, SPEAKER, 40, 0);
+        // Whatever mutes the codec sink while headphones come or go (WirePlumber's stored route, the shared switch).
+        f.mixer.jack = true;
+        f.sink_muted = true;
+        apply_pw(&mut s, &mut f, HEADPHONES, 40, 0);
+        assert!(!f.sink_muted);
+        assert_eq!(f.value(Control::DacOn), [1; 2]);
+        f.mixer.jack = false;
+        f.sink_muted = true;
+        apply_pw(&mut s, &mut f, SPEAKER, 40, 0);
+        assert!(f.audible() && !f.sink_muted);
+        // A mute from outside on the same route (no key, no wake).
+        f.sink_muted = true;
+        apply_pw(&mut s, &mut f, SPEAKER, 40, 0);
+        assert!(f.audible() && !f.sink_muted);
+        let lifted = f.unmutes;
+        // Power off from a bag: sleep mutes the sink for the game's last moment and says so (`repair`).
+        f.sink_muted = true;
+        s.force = true;
+        apply_pw(&mut s, &mut f, SPEAKER, 40, 0);
+        assert!(!f.audible());
+        assert_eq!(f.unmutes, lifted, "sleep's own short mute stays");
     }
 
     #[test]

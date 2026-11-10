@@ -1489,8 +1489,11 @@ mod tests {
     }
 
     /// A stand-in for ROCKNIX's 001-functions with its `wait_lock` (same lock protocol, test paths).
+    // `sync` records its barrier instead of running: with uutils coreutils `sync FILE` is a sync(2) of the
+    // whole shared disk and outlasted the writer's 20 s limit under gate load (09.11.).
     const FUNCTIONS_STUB: &str = r#"J_CONF=/nonexistent/system.cfg
 J_CONF_LOCK=/nonexistent/lock
+sync() { printf '%s\n' "$*" >>"${J_CONF}.synced"; }
 wait_lock() {
   while true; do
     if (set -o noclobber; echo "$$" > "${J_CONF_LOCK}") 2>/dev/null; then
@@ -1522,6 +1525,11 @@ wait_lock() {
         write_system_cfg(&edits, Some(&funcs), Some(&file), Some(&lock)).unwrap();
         let text = std::fs::read_to_string(&file).unwrap();
         assert!(!lock.exists(), "the lock is released");
+        assert_eq!(
+            std::fs::read_to_string(dir.join("system.cfg.synced")).unwrap(),
+            format!("{} {}\n", file.display(), dir.display()),
+            "the file and its folder reach the card before the lock is given back"
+        );
         assert_eq!(
             text.matches("].core=").count(),
             1,

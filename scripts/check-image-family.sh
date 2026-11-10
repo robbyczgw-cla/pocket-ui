@@ -37,6 +37,12 @@ done
 [ -n "$MODEL" ] || { echo "FAIL cannot tell the model from the name $(basename "$IN")" >&2; exit 1; }
 family_pins "$FAMILY"
 [ -n "$VERSION" ] || VERSION=$(echo "$base" | sed "s/^pocket-ui-//; s/-$MODEL\$//")
+case $IN in *.img.xz)
+  if [ "${POCKET_IMAGE_RECEIPT_CHILD:-0}" != 1 ] && [ -f "${IN%.img.xz}.txt" ] && [ -f "$(dirname "$IN")/SHA256SUMS" ]; then
+    exec python3 -I "$ROOT/scripts/image/receipt.py" run-check "$IN" --version "$VERSION" -- \
+      sh "$ROOT/scripts/check-image-family.sh" "$IN" --version "$VERSION"
+  fi ;;
+esac
 W=${CHECK_WORK:-$ROOT/build/image-$(echo "$FAMILY" | tr 'A-Z' 'a-z')/check}
 mkdir -p "$W"
 W=$(cd "$W" && pwd)

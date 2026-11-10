@@ -310,7 +310,7 @@ for f in LICENSE NOTICE.md; do
   fi
 done
 
-for f in FONTS-OFL.txt THIRD-PARTY-CRATES.md THIRD-PARTY-LICENSES.txt; do
+for f in LICENSE NOTICE.md FONTS-OFL.txt THIRD-PARTY-CRATES.md THIRD-PARTY-LICENSES.txt; do
   mkdir -p "$W/fat/pocket-ui-info/licences"
   mcopy -n -i "$FAT" "::/pocket-ui-info/licences/$f" "$W/fat/pocket-ui-info/licences/$f" 2>/dev/null
   check "pocket-ui-info/licences/$f is not empty" '[ -s "$W/fat/pocket-ui-info/licences/$f" ]'
@@ -349,12 +349,7 @@ sort >"$W/lists/storage.expected" <<EOF
 777 0:0 l ./pocket-ui/pocket-ui current/pocket-ui
 777 0:0 l ./pocket-ui/pocket-core current/pocket-core
 777 0:0 l ./pocket-ui/portmaster-setup.sh current/portmaster-setup.sh
-755 0:0 d ./pocket-ui/licences
-644 0:0 f ./pocket-ui/licences/FONTS-OFL.txt
-644 0:0 f ./pocket-ui/licences/LICENSE
-644 0:0 f ./pocket-ui/licences/NOTICE.md
-644 0:0 f ./pocket-ui/licences/THIRD-PARTY-CRATES.md
-644 0:0 f ./pocket-ui/licences/THIRD-PARTY-LICENSES.txt
+777 0:0 l ./pocket-ui/licences /flash/pocket-ui-info/licences
 755 0:0 d ./pocket-ui/releases
 755 0:0 d ./pocket-ui/releases/$V
 755 0:0 f ./pocket-ui/releases/$V/pocket-ui
@@ -391,8 +386,8 @@ HOST=$(image_hostname "$MODEL")
 sed "s/^NAME=pocket-ui\$/NAME=$HOST/" /repo/deploy/image/image-defaults.sh >"$W/lists/image-defaults.expected"
 check "first-start settings waiting in .pocket-seed are deploy/image/image-defaults.sh with the hostname $HOST" \
   'same "$S/.pocket-seed/.config/autostart/pocket-ui-image-defaults" "$W/lists/image-defaults.expected" && grep -qx "NAME=$HOST" "$S/.pocket-seed/.config/autostart/pocket-ui-image-defaults" && printf %s "$HOST" | grep -Eq "^[a-z][a-z0-9-]{0,23}\$" && [ "$HOST" != ROCKNIX ]'
-check "licence texts in STORAGE: the repository's LICENSE and NOTICE.md, the fonts' OFL, the crates' texts (not empty)" \
-  'same "$S/pocket-ui/licences/LICENSE" /repo/LICENSE && same "$S/pocket-ui/licences/NOTICE.md" /repo/NOTICE.md && same "$S/pocket-ui/licences/FONTS-OFL.txt" /repo/assets/fonts/OFL.txt && [ -s "$S/pocket-ui/licences/THIRD-PARTY-CRATES.md" ] && grep -q "^adler2 " "$S/pocket-ui/licences/THIRD-PARTY-LICENSES.txt"'
+check "licence texts: STORAGE links to the FAT partition's copy, which has the repository's LICENSE and NOTICE.md, the fonts' OFL, the crates' texts" \
+  '[ "$(readlink "$S/pocket-ui/licences")" = /flash/pocket-ui-info/licences ] && same "$W/fat/pocket-ui-info/licences/LICENSE" /repo/LICENSE && same "$W/fat/pocket-ui-info/licences/NOTICE.md" /repo/NOTICE.md && same "$W/fat/pocket-ui-info/licences/FONTS-OFL.txt" /repo/assets/fonts/OFL.txt && [ -s "$W/fat/pocket-ui-info/licences/THIRD-PARTY-CRATES.md" ] && grep -q "^adler2 " "$W/fat/pocket-ui-info/licences/THIRD-PARTY-LICENSES.txt"'
 check "launcher is deploy/run-pocket-ui.sh" 'same "$S/pocket-ui/run-pocket-ui.sh" /repo/deploy/run-pocket-ui.sh'
 check "portmaster-setup.sh is deploy/portmaster-setup.sh" 'same "$S/pocket-ui/releases/$V/portmaster-setup.sh" /repo/deploy/portmaster-setup.sh'
 for b in pocket-ui pocket-core pocket-splash; do
@@ -408,9 +403,11 @@ check "no recents, saves or games" '[ -z "$(find "$S" -name "recents*" -o -name 
 check "no BIOS files" '[ -z "$(find "$S" -iname "*bios*")" ] && ! grep -qi bios "$W/lists/fat"'
 check "no update left pending (update-pending, previous, dev.env)" \
   '[ ! -e "$S/pocket-ui/update-pending" ] && [ ! -L "$S/pocket-ui/previous" ] && [ ! -e "$S/pocket-ui/dev.env" ]'
-echo "STORAGE before the first boot: $(du -sh "$S" | cut -f1) used of 32 MB"
-# The programs grow with every release; STORAGE stays 32 MB until the first boot grows it (debugfs fails when full).
-warn "STORAGE keeps a quarter free for the programs to grow (under 24 MB used)" '[ "$(du -sk "$S" | cut -f1)" -lt 24576 ]'
+# The programs grow with every release and STORAGE stays 32 MiB until the first boot grows it (debugfs fails when full: 0.3.1).
+# A finished image has to keep P2_MIN_HEADROOM_BLOCKS free, about two releases of growth: a failure, not a warning.
+FREE=$(dumpe2fs -h "$W/p2.ext4" 2>/dev/null | sed -n 's/^Free blocks: *//p')
+echo "STORAGE before the first boot: $(du -sh "$S" | cut -f1) used of 32 MB, ${FREE:-?} of $P2_FREE_BLOCKS blocks (4 KiB) free"
+check "STORAGE keeps at least $P2_MIN_HEADROOM_BLOCKS blocks ($((P2_MIN_HEADROOM_BLOCKS * 4)) KiB) free for the programs to grow" '[ "${FREE:-0}" -ge "$P2_MIN_HEADROOM_BLOCKS" ]'
 # For the --version check outside (scripts/check-image.sh).
 [ -d "$S/pocket-ui/releases" ] && cp -r "$S/pocket-ui/releases" "$W/releases"
 

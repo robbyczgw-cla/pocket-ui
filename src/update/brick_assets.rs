@@ -84,7 +84,7 @@ fn from_json(
     let mut needed = 32u64 << 20;
     for asset in assets.assets {
         if cancel.is_cancelled() { return Err("Download cancelled.".into()); }
-        cancel.set_status("Checking installed cores and data…"); progress(0);
+        cancel.set_phase(super::WorkerPhase::CheckingAssets); progress(0);
         if safe_old(card, &asset) {
             reused.push(asset.path.clone());
             entries.push((asset, None));
@@ -131,7 +131,7 @@ impl Plan {
         crate::fsutil::write_atomic(&app.join(".asset-moves"), format!("{}\n", self.reused.join("\n")).as_bytes()).map_err(|e| e.to_string())?;
         // FAT may refuse directory fsync. The fixed recovery script and manifest must both survive
         // before a single old asset is removed from its original path.
-        unsafe { libc::sync() };
+        crate::fsutil::flush_all();
         for path in &self.reused {
             std::fs::rename(app.join(path), staging.join(path)).map_err(|e| e.to_string())?;
             if path.starts_with("bin/") {
@@ -156,7 +156,7 @@ impl Plan {
             }
         }
         // See move_reused(): do not remove the recovery instructions until the restored paths are durable.
-        unsafe { libc::sync() };
+        crate::fsutil::flush_all();
         let manifest = app.join(".asset-moves");
         if manifest.exists() { std::fs::remove_file(manifest).map_err(|e| e.to_string())?; crate::fsutil::sync_dir(&app); }
         Ok(())
@@ -207,6 +207,7 @@ mod tests {
             version: "9".into(),
             url: format!("file://{}", file.display()),
             mirrors: vec![],
+            preferred_sources: Vec::new(),
             sha256: store::sha256_file(&file).unwrap(),
             size: std::fs::metadata(file).unwrap().len(),
             notes: String::new(),

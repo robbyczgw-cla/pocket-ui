@@ -136,6 +136,20 @@ pub fn to_px(pos: (f32, f32), w: u32, h: u32) -> (f32, f32) {
     )
 }
 
+/// A mouse wheel (a Steam Deck trackpad circling, a real wheel on a desk): whole steps the selection moves, from
+/// what the window reported since the last call. `lines` is the report in lines (negative: the wheel went down,
+/// as winit reports it), `carry` keeps the fraction of a fine trackpad between reports. Down moves the selection
+/// down, the way every list on a computer scrolls.
+pub fn wheel_steps(lines: f32, carry: &mut f32) -> i32 {
+    if !lines.is_finite() {
+        return 0;
+    }
+    *carry = (*carry - lines).clamp(-60.0, 60.0);
+    let steps = carry.trunc() as i32;
+    *carry -= steps as f32;
+    steps
+}
+
 // ---- one finger from the multitouch stream -------------------------------------------------------------
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -469,6 +483,15 @@ impl Shared {
             return s.pos;
         }
         s.latch.take()
+    }
+
+    /// The running game's pointer; dark-screen input belongs to no game.
+    pub fn frame_for_game(&self, dark: bool) -> Option<(f32, f32)> {
+        if dark {
+            self.after_pause();
+            return None;
+        }
+        self.frame()
     }
 
     /// Back from a pause or sleep: a tap made meanwhile was the menu's, and a finger still down stays
@@ -961,6 +984,18 @@ mod tests {
 
     fn near(a: (f32, f32), b: (f32, f32)) {
         assert!((a.0 - b.0).abs() < 0.002 && (a.1 - b.1).abs() < 0.002, "{a:?} != {b:?}");
+    }
+
+    #[test]
+    fn a_wheel_down_moves_the_selection_down_and_fractions_add_up() {
+        let mut carry = 0.0;
+        assert_eq!(wheel_steps(-1.0, &mut carry), 1, "one notch down: one row down");
+        assert_eq!(wheel_steps(1.0, &mut carry), -1, "one notch up: one row up");
+        assert_eq!(wheel_steps(-0.4, &mut carry), 0, "a trackpad's fraction alone moves nothing");
+        assert_eq!(wheel_steps(-0.4, &mut carry), 0);
+        assert_eq!(wheel_steps(-0.4, &mut carry), 1, "three fractions are a step");
+        assert_eq!(wheel_steps(f32::NAN, &mut carry), 0, "a broken report moves nothing");
+        assert_eq!(wheel_steps(-500.0, &mut carry), 60, "a fling is capped, not a jump to the end");
     }
 
     // ---- coordinates -------------------------------------------------------------------------------------
@@ -1756,6 +1791,19 @@ mod tests {
         s.feed(&ev(Phase::Up, 0.21, 0.3));
         assert_eq!(s.frame(), Some((0.2, 0.3)), "the frame sees where it landed");
         assert_eq!(s.frame(), None, "and only one");
+    }
+
+    #[test]
+    fn save_safety_dark_touch_never_reaches_the_game_or_replays_on_wake() {
+        let s = Shared::default();
+        s.feed(&ev(Phase::Down, 0.2, 0.3));
+        assert_eq!(s.frame_for_game(true), None, "a touch in the pocket is not a game action");
+        assert_eq!(s.frame_for_game(false), None, "the held finger is not the wake action either");
+        s.feed(&ev(Phase::Move, 0.3, 0.4));
+        assert_eq!(s.frame_for_game(false), None);
+        s.feed(&ev(Phase::Up, 0.3, 0.4));
+        s.feed(&ev(Phase::Down, 0.6, 0.7));
+        assert_eq!(s.frame_for_game(false), Some((0.6, 0.7)));
     }
 
     #[test]

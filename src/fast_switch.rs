@@ -588,7 +588,8 @@ mod tests {
     }
 
     /// What the line promises: whoever acts on it finds the exit save complete on disk. A stand-in for pocket-core
-    /// writes the state the way `fsutil::write_atomic` does (temp file, sync, rename) and announces afterwards.
+    /// writes the state the way `fsutil::write_atomic` does (temp file, rename) and announces afterwards. Without the
+    /// sync: a reader sees the bytes either way, and with uutils coreutils `sync FILE` flushes the whole disk.
     #[cfg(target_os = "linux")]
     #[test]
     fn the_save_is_complete_when_the_line_arrives() {
@@ -597,7 +598,7 @@ mod tests {
         let state = dir.join("game.pstate.auto");
         std::fs::write(&state, b"old").unwrap();
         let mut cmd = std::process::Command::new("sh");
-        cmd.arg("-c").arg(r#"head -c 800000 /dev/zero > "$1.tmp" && sync "$1.tmp" && mv "$1.tmp" "$1" && echo saved > "/dev/fd/$POCKET_HANDOFF_FD"; read -r release"#).arg("sh").arg(&state).stdin(std::process::Stdio::piped());
+        cmd.arg("-c").arg(r#"head -c 800000 /dev/zero > "$1.tmp" && mv "$1.tmp" "$1" && echo saved > "/dev/fd/$POCKET_HANDOFF_FD"; read -r release"#).arg("sh").arg(&state).stdin(std::process::Stdio::piped());
         let h = Handoff::attach(&mut cmd).expect("pipe");
         let mut child = cmd.spawn().unwrap();
         let (tx, rx) = mpsc::channel();

@@ -27,8 +27,8 @@ impl AxisName {
 }
 struct Path { decoder: Decoder, menu: PadState, roles: Remap, input: Inputs, hotkeys: Hotkeys, layout: ButtonLayout }
 impl Path {
-    fn new(node: &Node, layout: ButtonLayout) -> Self {
-        let decoder=Decoder::with_caps(node.id.bustype,node.id.vendor,node.id.product,node.id.version,&node.name,node.keys.clone(),node.abs.iter().map(|a|(a[0] as u16,a[1],a[2])).collect());
+    fn new(node: &Node, layout: ButtonLayout, legacy_fkeys: bool) -> Self {
+        let decoder=Decoder::with_caps_profile((node.id.bustype,node.id.vendor,node.id.product,node.id.version),&node.name,node.keys.clone(),node.abs.iter().map(|a|(a[0] as u16,a[1],a[2])).collect(),legacy_fkeys);
         let mut menu=PadState::new(vec![]);
         let input=Inputs::new(vec![],None);
         let connected=PadEvent::Connected { source:0,controller:Controller::builtin() };
@@ -85,7 +85,7 @@ fn check(file:&str) {
         assert_eq!(node.keys,node.expected_keys.iter().map(|k|k.code).collect::<Vec<_>>(),"{} keys missing from the evidence",node.name);
         assert_eq!(node.abs.iter().map(|a|a[0] as u16).collect::<Vec<_>>(),node.expected_axes.iter().map(|a|a.code).collect::<Vec<_>>(),"{} axes missing",node.name);
         for layout in [ButtonLayout::Nintendo,ButtonLayout::Xbox] {
-            let mut path=Path::new(&node,layout);
+            let mut path=Path::new(&node,layout,file == "trimui-brick.json");
             for k in &node.expected_keys {
                 for down in [true,false] {
                     path.feed(1,k.code,i32::from(down));

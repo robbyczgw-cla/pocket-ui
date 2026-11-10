@@ -47,12 +47,26 @@ def tap(label,prefix=False):
     n=wait(label,prefix);x1,y1,x2,y2=map(int,re.findall(r'\d+',n.get('bounds')))
     shell('input','tap',str((x1+x2)//2),str((y1+y2)//2));time.sleep(.25)
 def key(code):shell('input','keyevent',str(code));time.sleep(.25)
-def shot(name): (out/(name+'.png')).write_bytes(run('exec-out','screencap -p'))
+def shot_file(name): return out/(name+('.jpg' if os.environ.get('ANDROID_SMOKE_JPEG') == '1' else '.png'))
+def shot(name):
+    data=run('exec-out','screencap -p')
+    if os.environ.get('ANDROID_SMOKE_JPEG') == '1':
+        import io
+        from PIL import Image
+        picture=Image.open(io.BytesIO(data)).convert('RGB');picture.thumbnail((1280,1280))
+        for quality in [80,65,50,35]:
+            buffer=io.BytesIO();picture.save(buffer,format='JPEG',quality=quality,optimize=True)
+            if buffer.tell()<=150_000:break
+        assert buffer.tell()<=150_000
+        shot_file(name).write_bytes(buffer.getvalue())
+    else: shot_file(name).write_bytes(data)
 def prefs(**changes):
     shell('am','force-stop',pkg)
     try: value=json.loads(read(private+'/launcher.json'))
     except (subprocess.CalledProcessError,ValueError): value={}
-    value.update(changes);p=out/'prefs.json';p.write_text(json.dumps(value));run('push',str(p),'/data/local/tmp/android-02-prefs.json')
+    value.update(changes)
+    if os.environ.get('ANDROID_SMOKE_STYLE'):value['font']=os.environ['ANDROID_SMOKE_STYLE']
+    p=out/'prefs.json';p.write_text(json.dumps(value));run('push',str(p),'/data/local/tmp/android-02-prefs.json')
     shell('cp','/data/local/tmp/android-02-prefs.json',private+'/launcher.json')
     shell('am','start','-W','-n',pkg+'/.PocketActivity');time.sleep(.6)
 def settings_row(label):
@@ -110,11 +124,11 @@ if os.environ.get('ANDROID02_EXTRA') == '1':
     tap('Settings');launcher_pid=shell('pidof',pkg).strip();shot('live-font-launcher-100')
     shell('settings','put','system','font_scale','2.0');time.sleep(.8);shot('live-font-launcher-200')
     assert launcher_pid==shell('pidof',pkg).strip(),'Font scale restarted the launcher'
-    assert (out/'live-font-launcher-100.png').read_bytes()!=(out/'live-font-launcher-200.png').read_bytes(),'Idle launcher did not redraw for the font change'
+    assert shot_file('live-font-launcher-100').read_bytes()!=shot_file('live-font-launcher-200').read_bytes(),'Idle launcher did not redraw for the font change'
     key(4);play();pause();player_pid=shell('pidof',pkg+':player').strip();shot('live-font-player-200')
     shell('settings','put','system','font_scale','1.0');time.sleep(.8);shot('live-font-player-100')
     assert player_pid==shell('pidof',pkg+':player').strip(),'Font scale restarted the player'
-    assert (out/'live-font-player-100.png').read_bytes()!=(out/'live-font-player-200.png').read_bytes(),'Paused player did not redraw for the font change'
+    assert shot_file('live-font-player-100').read_bytes()!=shot_file('live-font-player-200').read_bytes(),'Paused player did not redraw for the font change'
     quit()
     for width,height,orientation in [(720,1280,'portrait'),(1280,720,'landscape')]:
         shell('wm','size',f'{width}x{height}');shell('settings','put','system','font_scale','2.0')
@@ -197,7 +211,12 @@ prefs(onboarding_done=True,language='en',theme='big',light=False,cozy=False,hapt
 shell('rm','-rf',private+'/android-controls')
 key(34);subprocess.check_call([sys.executable,str(root/'scripts/android/select-demo-folder.py'),adb,serial,str(out)])
 if find('Not now') is not None:tap('Not now')
-wait('Pocket Audio');play();pause();quit()
+tap('Games')
+wait('Pocket Audio')
+if os.environ.get('ANDROID02_SETUP_ONLY') == '1':
+    (out/'result.txt').write_text('PASS: generated GB fixture selected through the real SAF folder picker.\n')
+    sys.exit(0)
+play();pause();quit()
 # Every new page in portrait/landscape, dark/light, and Android's 200% font setting.
 if os.environ.get('ANDROID02_SKIP_MATRIX') != '1':
     for width,height,orientation in [(720,1280,'portrait'),(1280,720,'landscape')]:
@@ -216,6 +235,9 @@ if os.environ.get('ANDROID02_SKIP_MATRIX') != '1':
                 assert 'PlayerActivity' in shell('dumpsys','activity','activities')
                 quit()
 print('PASS: pages, fonts, orientations and nested Back',flush=True)
+if os.environ.get('ANDROID02_MATRIX_ONLY') == '1':
+    (out/'result.txt').write_text('PASS: portrait/landscape × dark/light × 100%/200% fonts, Controls, Zoom, Options and nested Back.\n')
+    sys.exit(0)
 # Pinch opens the frozen picture and changes its crop; running frames never respond to it.
 shell('wm','size','720x1280');shell('settings','put','system','font_scale','1.0');prefs(light=False);play();pause()
 shell('env','CLASSPATH=/data/local/tmp/classes.dex','app_process','/system/bin','dev.pocket.qa.Gestures','360','350')
@@ -265,7 +287,9 @@ for light in [False,True]:
     value=json.loads(read(private+'/launcher.json'));played={k:int(time.time())-23*86400 for k in value.get('played',{})}
     prefs(played=played,remind_where=True,light=light);tap('Continue');time.sleep(.3);shot('where-was-i'+('-light' if light else '-dark'))
     assert 'Android reminder: Last played 3 weeks ago' in shell('logcat','-d','-s','PocketMvp:I')
-    time.sleep(4);pause();quit()
+    time.sleep(4)
+    assert find('Pause') is None,'The reminder must wait for a press instead of timing out'
+    key(4);wait('Pause');pause();quit()
 # Battery saver suspends optional shelf animation/downloads, without changing the stored consent.
 shell('dumpsys','battery','unplug');shell('cmd','power','set-mode','1');time.sleep(.6)
 assert 'Android battery saver=true' in shell('logcat','-d','-s','PocketMvp:I')

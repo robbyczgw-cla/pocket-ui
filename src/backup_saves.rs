@@ -314,7 +314,7 @@ fn copy_file(from: &Path, to: &Path, modified: Option<u64>) -> Result<(u64, u64)
 fn flush(path: &Path) {
     if let Ok(f) = std::fs::File::open(path) {
         // SAFETY: the descriptor is open for the length of the call.
-        unsafe { libc::syncfs(std::os::fd::AsRawFd::as_raw_fd(&f)) };
+        #[cfg(not(target_os = "emscripten"))] unsafe { libc::syncfs(std::os::fd::AsRawFd::as_raw_fd(&f)) };
     }
 }
 
@@ -581,8 +581,8 @@ pub fn restore(plan: &RestorePlan, storage: &Path, root: &Path, now: u64, app: &
         }
         progress.done.fetch_add(1, Ordering::Relaxed);
     }
-    // SAFETY: sync takes nothing and returns nothing. Saves can lie on two file systems (the Wii's, a second card's).
-    unsafe { libc::sync() };
+    // Saves can lie on two file systems (the Wii's, a second card's).
+    crate::fsutil::flush_all();
     Ok(Restored { put, replaced, kept, failed, stopped, before })
 }
 
@@ -993,8 +993,6 @@ mod tests {
                 std::fs::write(dir.join(format!("Game {save}.srm")), vec![7u8; 1 << 20]).unwrap();
             }
         }
-        // SAFETY: sync takes nothing. What this test wrote is not what it measures.
-        unsafe { libc::sync() };
         let t = std::time::Instant::now();
         let plan = measure(&storage, &root, false);
         println!("{} files, {} MB: counted among 20000 names in {:?}", plan.items.len(), plan.bytes >> 20, t.elapsed());

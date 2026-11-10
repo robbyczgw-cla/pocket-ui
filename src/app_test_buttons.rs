@@ -442,13 +442,21 @@ impl App {
                 badges.push((px(cx + r - 6), py(cy - r + 6)));
             }
         }
-        // SELECT, START and HOME: chips as wide as their words need.
+        // SELECT, START and HOME: chips as wide as their words need. SELECT and START move apart by what their words lack
+        // between them (Retro's even-width letters in Large text ran SELECT into START at 1024x768).
+        let mut words = |b: Button| self.text.width(Face::Body, label_px(22), b.label());
+        let apart = ((words(Button::Select) + words(Button::Start)) / 2 + 12 - u(190)).max(0);
         for (b, cx, y) in [(Button::Select, 405, 190), (Button::Start, 595, 190), (Button::Mode, 500, 262)] {
             let down = pad.is_down(b);
             let font = label_px(22);
             let tw = self.text.width(Face::Body, font, b.label());
             let (w, h) = (u(130).max(tw + 24), u(44).max(font as i32 + 16));
-            let x = px(cx) - w / 2;
+            let nudge = match b {
+                Button::Select => -apart / 2,
+                Button::Start => apart - apart / 2,
+                _ => 0,
+            };
+            let x = px(cx) + nudge - w / 2;
             c.round_rect(x, py(y), w, h, h / 2, if down { lit } else { base });
             self.text.draw(c, Face::Body, font, x + (w - tw) / 2, py(y) + h / 2 + pocket_ui::type_scale::mid(font), if down { on_lit } else { pal().text }, b.label());
             if moved(b) {

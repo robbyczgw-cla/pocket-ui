@@ -218,23 +218,23 @@ impl InfoView {
         // and facts keep their old positions, including headings whose old wrap used two lines.
         let title_step = type_scale::line(50, 6);
         ty += 44 + type_scale::grow(50);
-        let old_lines = text.wrap(Face::Title, 50, &d.title, tw).len().clamp(1, 2);
+        let old_lines = text.literal(|text| text.wrap(Face::Title, 50, &d.title, tw).len().clamp(1, 2));
         let meta_y = ty + title_step * (old_lines as i32 - 1) + type_scale::line(28, 22);
         let title_top = ty - type_scale::px(50) as i32;
         let room = meta_y - type_scale::px(28) as i32 - 12 - title_top;
-        let lines = crate::title_block::layout_in(text, Face::Title, 50, &d.title, tw, room);
+        let lines = crate::title_block::name_layout_in(text, Face::Title, 50, &d.title, tw, room);
         let first = title_top + type_scale::px(lines.first().map_or(50, |l| l.px)) as i32;
         crate::title_block::paint(text, c, Face::Title, &lines, tx, first, pal().chalk, pal().dust, false);
         ty = meta_y;
         let mut meta = vec![d.system.clone()];
         meta.extend(d.year.map(|y| y.to_string()));
         // Retro's 28 and 24 share a pixel grid at Large: let the Favourite mark take the next visible step before losing the year.
-        let fav_px = if d.favorite && text.width(Face::Body, 24, &meta.join(" · ")) + text.width(Face::Body, 28, "Favourite") + 24 > tw { 21 } else { 28 };
+        let fav_px = if d.favorite && text.literal(|text| text.width(Face::Body, 24, &meta.join(" · "))) + text.width(Face::Body, 28, "Favourite") + 24 > tw { 21 } else { 28 };
         let fav_w = if d.favorite { text.width(Face::Body, fav_px, "Favourite") + 24 } else { 0 };
         let sizes: &[u32] = if crate::retro::on() { &[28, 24, 21] } else { &[28, 24] };
         let room = tw - fav_w;
         let least = *sizes.last().unwrap();
-        if text.width(Face::Body, least, &meta.join(" · ")) > room {
+        if text.literal(|text| text.width(Face::Body, least, &meta.join(" · "))) > room {
             // Use the console's existing short name before cutting its label; never lose the game's year.
             #[cfg(not(target_os = "android"))]
             if let Some(console) = crate::consoles::all().iter().find(|c| c.name == d.system || c.aka.contains(&d.system)) {
@@ -243,11 +243,13 @@ impl InfoView {
             if let Some(year) = d.year {
                 let suffix = format!(" · {year}");
                 let name_room = room - text.width(Face::Body, least, &suffix);
-                meta[0] = text.fit(Face::Body, least, &meta[0], name_room);
+                meta[0] = text.literal(|text| text.fit(Face::Body, least, &meta[0], name_room));
             }
         }
-        let (meta_px, meta) = text.fit_sizes(Face::Body, sizes, &meta.join(" · "), room);
-        let mw = text.draw(c, Face::Body, meta_px, tx, ty, pal().dust, &meta);
+        let mw = text.literal(|text| {
+            let (meta_px, meta) = text.fit_sizes(Face::Body, sizes, &meta.join(" · "), room);
+            text.draw(c, Face::Body, meta_px, tx, ty, pal().dust, &meta)
+        });
         if d.favorite {
             text.draw(c, Face::Body, fav_px, tx + mw + 24, ty, pal().amber, "Favourite");
         }
@@ -472,7 +474,9 @@ fn paint_about(c: &mut Canvas, text: &mut Text, d: &CardData, (x, w): (i32, i32)
 
 /// A game without box art: a printed title card, the console over the name (docs/DESIGN.md, "Fronts without a
 /// cover"), on the shelf's spine colour with the system's stripe.
-fn paint_title_card(c: &mut Canvas, text: &mut Text, d: &CardData, console: Option<&Sprite>, (x, y, w, h): (i32, i32, i32, i32)) {
+/// The fallback cover when the game has no box art.
+pub fn paint_title_card(c: &mut Canvas, text: &mut Text, d: &CardData, console: Option<&Sprite>, (x, y, w, h): (i32, i32, i32, i32)) {
+    text.literal(|text| {
     c.rect(x, y, w, h, pal().spine);
     c.rect(x, y, w, 12, d.stripe);
     let pad = 18;
@@ -488,4 +492,5 @@ fn paint_title_card(c: &mut Canvas, text: &mut Text, d: &CardData, console: Opti
         let lw = text.width(Face::Title, 37, l);
         text.draw(c, Face::Title, 37, x + (w - lw) / 2, cy + type_scale::grow(37) + 24 + i as i32 * step, pal().chalk, l);
     }
+    });
 }

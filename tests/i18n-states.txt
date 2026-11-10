@@ -91,6 +91,11 @@ setup:phone=timeup
 setup:phone=nowifi
 setup:extras
 setup:extras:da
+setup:extras:dd
+setup:extras:ddd
+ports-empty
+ports-empty:a
+ports-empty:a:b
 setup:card=lens
 setup:card=pixel_path
 setup:card=frames
@@ -257,6 +262,11 @@ sync:syncing
 sync:open
 sync:bios
 sync:library
+sync:paused-ours
+sync:paused-unknown
+sync:resuming
+sync:resume-failed
+sync:paused-offline
 sync:conflicts
 sync:conflicts-list
 sync:conflicts-card
@@ -546,6 +556,10 @@ emulator
 controls
 controls:1
 controls:18
+controllers:1:brick-f1
+controllers:1:brick-f2
+leds:off:1
+leds:off:2
 cheats
 cheats-more
 cheats-only
@@ -880,3 +894,21 @@ updates:timeout
 # Safe one-launch retry and a set-aside moment waiting for card space.
 notice:fallback
 notice:kept
+
+notice:save-failed
+notice:undo-failed
+load-blocked
+load-blocked:a
+load-blocked:b
+cheats-get
+cheats-downloading
+cheats-offline
+cheats-unavailable
+
+# TrimUI on-demand PortMaster runtime, including its offline and retry states.
+setup:ports-get
+setup:ports-get-checking
+setup:ports-get-update
+setup:ports-get-offline
+setup:ports-get-download
+setup:ports-get-error

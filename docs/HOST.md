@@ -1836,8 +1836,16 @@ log says `audio: Cycle buffer (32 ms)` on headphones.
 - **Source**: libretro-database's `.cht` files, which ROCKNIX ships in `/usr/share/libretro-database/cht` and
   mounts (with the user's additions in `/storage/database`) at `/tmp/database/cht` (`cheat_database_path` of
   RetroArch). Folder per console (`cheats::folder`: "Nintendo - Game Boy Advance", ...). `POCKET_CHEATS_DB`
-  points somewhere else for tests. A Brick card also searches `<POCKETUI_BRICK_CARD>/app/cores/cht.pack`
-  (and a folder `app/database/cht`) before the ROCKNIX paths, so the card ZIP and OTA contain the same pinned subset. The
+  points somewhere else for tests. A TrimUI card first searches
+  `<POCKETUI_BRICK_CARD>/storage/pocket-ui/cheats/cht.pack`, then legacy `app/cores/cht.pack`,
+  `app.previous/cores/cht.pack` and `app/database/cht` before the ROCKNIX paths. Card ZIPs and OTA updates contain only the
+  pinned download description and notices; opening Cheats downloads the optional pack once. `src/cheat_download.rs`
+  owns the worker and its visible progress/retry rows; `src/update/cheats.rs` uses the updater's resumed curl transfer,
+  size and SHA-256 verification before fsync/rename. On TrimUI, curl writes to private RAM; only after it exits does
+  a paced copy checkpoint bytes to the card. Hash-named checkpoints stay beside the final pack across restarts.
+  The app's signed archive authenticates `database/cheats-download.json`. The update worker copies a legacy pack to
+  persistent storage before retiring its app folder (including the first upgrade's `app.previous`); failure aborts the
+  update. Matching games and unmatched games in an installed database never start a download. The
   pack is ONE file of the unchanged `.cht` texts, each deflated on its own (`src/cheat_pack.rs`, built by
   `scripts/brick-cheats-data.py`): 23,000 small files cost 837 MB on the card's FAT and ten minutes of OTA install. A
   root that is a file is read as a pack, a folder as before; matching is the same for both.
@@ -2323,3 +2331,26 @@ even when start evidence is Unknown; that safe stop does not depend on fallback 
 Regression coverage: `clock_regression_*` exercises old gpSP moments via the real host option ABI and a controlled
 clock, and reset/flush/cold-start via an RTC-clearing stub. `fast_switch::tests::a_sigkill_after_a_frame_never_becomes_a_start_failure`
 kills a real child before the pipe reader starts; fallback tests protect every kind of moment and migrate both legacy JSON formats.
+
+### Save and load failures
+
+A failed exit save never sends the fast-switch `saved` line. The UI waits for the game to end and shows the save failure on the shelf; a game chosen in the switcher does not start over that notice. The previous written moment stays available. The FIFO commands and save file names are unchanged.
+
+Load first keeps the running moment as Before load. If that capture fails, Load leaves the game where it is and explains why; it never calls the core with the target state. Earlier only copies an Auto written successfully by the current autosave, never the older Auto left after a failed attempt. A Continue moment must be renamed to its taken/retry name before it reaches the core; a failed rename leaves the moment intact and starts without applying it.
+
+Shortcuts gathered while the core is paused, asleep or dark are dropped. Dark-playing also ignores touch until a new touch after waking. Standalone resume progress belongs to its launch, so an older worker cannot dismiss the current game's progress.
+
+### Core command and state contract
+
+The Linux host decodes its existing line FIFO in `core_command::Command`, with `Quit::{Save,
+SkipResume, ForSwitch}` for the three unchanged quit strings. Unknown commands still do nothing;
+slot defaults, accepted extra words, literal-space option/control payloads and newest-preview
+coalescing are preserved. The FIFO reader uses the same decoder to recognize urgent pause/quit.
+No new response, handshake or required command was added.
+
+`core_status::Snapshot` derives `Play::{Playing, Held, MenuPaused, Asleep, DarkPlaying, Exiting}`
+from the host's existing flags and publishes `/tmp/pocket-core.status` through the shared v1 status
+writer. It is optional diagnostic output; neither the UI nor the core relies on it to control a game
+or confirm a save. See [Where the core is](DEVICE-TESTS.md#where-the-core-is) for the field contract,
+precedence, stale-process rule and compatibility guarantees. The audio and frame scheduling paths
+keep their existing behavior.

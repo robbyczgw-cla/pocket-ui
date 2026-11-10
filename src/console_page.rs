@@ -575,7 +575,8 @@ pub fn paint_facts(c: &mut Canvas, text: &mut Text, rows: &[Row], x: i32, first:
     let shown = consoles::rows_that_fit(rows, room, step);
     for (i, r) in shown.iter().enumerate() {
         let y = first + i as i32 * step;
-        text.draw(c, Face::Body, font, x, y, label, r.label);
+        let (label_px, label_text) = text.fit_sizes(Face::Body, &[font, 24, 21], r.label, key - 16);
+        text.draw(c, Face::Body, label_px, x, y, label, &label_text);
         let (v, px) = consoles::pick_value(&r.values, w - key, font, 24, |s, px| text.width(Face::Body, px, s));
         text.draw(c, Face::Body, px, x + key, y, value, &v);
     }

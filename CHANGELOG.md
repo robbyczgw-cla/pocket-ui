@@ -5,6 +5,43 @@ and versions follow [Semantic Versioning](https://semver.org/) (before 1.0, a mi
 
 ## [Unreleased]
 
+## [0.3.2] - 2026-11-10
+
+### Added
+
+- **Retro has new letters: Departure Mono.** Even, square pixel letters, sharp on every screen. Whoever has Retro on gets them with this version. The rounder Pixelify letters stay one step away: Settings → Look → Style → Retro Pixelify.
+- **PortMaster games on TrimUI.** Settings → Games → Extras → PortMaster games offers PortMaster as an explicit one-time download (about 110 MB of pinned archives, Wi-Fi, at least 700 MiB free while installing; pinned Python and PortMaster archives, checked by size and SHA-256, unpacked safely on the FAT32 card), then the same Browse/Install/Remove lists as on ROCKNIX. Ports start from the Ports shelf through a private chroot with GNU Bash (source in the TrimUI sources zip), hand the display to the pause menu (Continue, Options, Quit; Performance and Quick settings), stop every process of their session on quit, screen off or a UI crash, and never download during a game. The runtime stays beside `app/` across updates; X then A removes it and keeps games, their files and settings.
+- **Extras:** Settings → Games → Extras brings Box art, Pictures, PortMaster games, optional TrimUI Cheats and the Starter pack together; the last first-start page and an empty Ports shelf point there. Optional downloads share one cancellable lane: B stops, checked checkpoints resume, nothing downloads while a game runs.
+- **TrimUI cheats are an optional download.** Extras → Cheats, or Cheats in the pause menu when the database is missing, offers **Get · 30 MB** (the pinned libretro cheat database, 31 367 177 bytes, Wi-Fi); opening a page downloads nothing. The row shows progress, checking and saving, "Cheats need Wi-Fi once to download" when offline; B stops safely and the next try resumes. Downloads are checked (size, SHA-256, usable contents) before use; the TrimUI worker keeps network output in RAM and writes the card in paced checkpoints. A database already on the card stays usable offline and survives app updates; removing it keeps each game's cheat switches. The TrimUI card and the regular update no longer include the pack (28.4 MB less on the first update); games without cheats still say so, without a download.
+- **TrimUI Brick Pro, experimental.** The shared TrimUI card detects a Brick Pro and uses the Brick screen, the Smart Pro's analog input, and F1/F2 as their own keys (the old L3/R3 save/load shortcuts only on a confirmed Brick). Standby pauses the stock input daemon. Slider and light controls stay off there. About says "experimental"; Report a problem adds the input devices and the end of the start log.
+- Menu sounds and haptic ticks come from one place per page: recent games, a card's status picker, console pages, quick settings and the power menu, Date and time, Sleep & power, Updates, Starter and every first-start step now tick and click like the rest (haptics stay off by default).
+- TrimUI Brick: Controls and Lights & buttons explain that F1/F2 choose global shortcuts, not game-button bindings; pressing an F key during Controller setup says where to change it.
+- Updates download from GitHub first and fall back to pocketui.xyz: the Brick always, ROCKNIX handhelds through a signed preference (the list still names the website first for versions up to 0.2.5, which know no other source).
+- Settings → Connections → Sync shows a paused folder on its row ("Paused") and says whether pocket-ui paused it for a game. X resumes it when you choose to (GameCube & Wii saves: both folders); nothing is resumed while a game runs or while Syncthing isn't answering.
+- `web/`: the source of the browser demo at pocketui.xyz/try (pocket-ui built for WebAssembly with its own menu sounds).
+
+### Changed
+
+- The release programs are about 2 MB smaller (full link-time optimisation, same speed in the measured start, frame and audio runs).
+
+### Fixed
+
+- The first start no longer sends you to "put them on the SD card in its roms folder" on a handheld whose card a computer cannot read. It says Wi-Fi or a second SD card, and that Windows' "format the disk" question is answered with Cancel. The GAMES-drive cards and the Brick keep the card-in-the-computer sentence (Brick: its Roms folder), also on Add games.
+- Extras: every row's explanation is painted whole above the hint pill (Box art's ended in "…" on the Brick; Pictures and PortMaster in German and Spanish at 640×480).
+- Anbernic H700: the speaker should no longer stay silent with "muted" in Quick settings after headphones were unplugged or the volume was turned all the way down and up again; a handheld already stuck like this should get its sound back on the first start of this version.
+- A game started while the device's audio output is stopped by a full mute no longer stalls: the first wait for the output is limited to two seconds, inaudible sound is dropped, and when the output runs again fresh sound fades back in instead of replaying the muted backlog.
+- A button let go on another page no longer acts there: START or SELECT let go over the power menu no longer opens Settings or Recent games behind it, and a held direction only repeats while the page it was pressed on is in front.
+- Failed saves and loads are reported honestly: a failed exit save is not acknowledged as done, a load without its "Before load" copy is refused, an Auto save only rotates into "Earlier" once it is really written, and the notices appear in English, German and Spanish. Shortcuts pressed while suspended are dropped, touch is masked while the screen is dark, and standalone resume progress is bound to its launch.
+- German and Spanish: game and console names are never translated. Cases, covers, spines, details headers, search rows, related games, the chooser and fitted captions carry the name as the literal text while the interface words around it are translated ("Search" the game versus "Suchen" the menu; "Game Boy Color" no longer becomes "Spiel Boy…").
+- Cards: neighbouring console names stay whole in large Retro, printed game names fit the title band, subtitles and Spanish system facts stay inside their columns.
+- Achievements: the complete progress counts have their own line; the full point total stays visible in Retro.
+- Manual: focused links keep readable contrast in Retro and both appearances.
+- Date and time: B from a region's cities returns to that region; with network time synced, A explains it and the bar names A.
+- Notices (low space, newer pocket-ui, "New in this version") and touch on the Cabinet's cases wait for a shelf with nothing over it.
+- TrimUI Brick: the mute slider's "Does nothing" choice reaches the hardware watcher and the volume restore; an older choice saved beside the storage folder is kept.
+- ROCKNIX: the Ports installer repairs missing or damaged files even when the version is unchanged; a GAMES card interrupted during first-start cleanup keeps its completed split, and first-start seed files stay until their copy is synced.
+- A save-sync pause held for a game is resumed at the next start, with retries after short failures (never guessing ownership of an unrecorded pause).
+
 ## [0.3.1] - 2026-11-08
 
 ### Added
@@ -193,6 +230,7 @@ and versions follow [Semantic Versioning](https://semver.org/) (before 1.0, a mi
 - **Easy to read**, the last card in the Tour (after its six basics): Large text and Reduced motion in one switch (the same two settings as Text size and Motion, which stay in their rows).
 - **Where was I?** Back to a game after more than two weeks, a quiet card on the picture of your moment says when you played it last ("Last played 3 weeks ago"), how long you have played it, and your note from the game card if you wrote one, while the moment loads. It never asks anything. On pocket-ui's own host the game waits at your moment for about four seconds, silent and still, so you can read it and miss nothing; any button plays at once. Easy shows it plainly, Kids Mode not at all. Settings → Playing → **Remind me where I was** switches it off.
 - **The controls card**: a drawing of the Pocket's buttons with what each one is on the console (SNES Y X B A, GBA A B L R, PlayStation Cross Circle Square Triangle with L1 L2 R1 R2, the Nintendo 64's A, B, Z and C buttons on the right stick), your own changes from Options → Controls marked, and the HOME keys (menu, save, load) under it. It comes once at the first start of a console (any button goes on to the game), as the **Controls** row on a game's card, and as the first line of Options → Controls in the pause menu. The names are the emulators' own (read from their button lists) or, for a console that ran before, from its first game; German and Spanish follow.
+- **Steam Deck: the package is 0.2 now** (bundle and Flatpak from `deploy/steamdeck/`, one-line install in docs/STEAMDECK.md), built for its 1280×800 screen: every 0.2 page above is rendered and checked at that size. The controls card prints the Deck's own letters and draws its back buttons; the shipped Steam Input layout (**pocket-ui** under Controller settings) makes L4/R4 repeat the bumpers and L5/R5 the HOME key, so the Steam button and the "..." menu stay Steam's, and the trackpads work as a mouse and a scroll wheel in the menus (the touch screen the same way). Games pocket-ui plays itself continue where you quit, with open cases and "Where was I?" — their moments and the BIOS files now live in pocket-ui's data on the Deck (the launcher links your EmuDeck/RetroDECK BIOS in), and RetroDECK libraries are found like EmuDeck ones. The Deck's power button suspends as before, but the running game's moment is written first, as sleep does on the handhelds. Not run on a Deck yet: the list of what its first session must confirm is in docs/STEAMDECK.md.
 
 ### Fixed
 

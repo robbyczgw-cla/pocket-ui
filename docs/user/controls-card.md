@@ -35,6 +35,10 @@ played on it (the emulator tells them once it runs); until then it says that the
 shows the HOME keys. Games that run in RetroArch or in another emulator show only HOME as the menu; their buttons are set
 in that emulator.
 
+On a **Steam Deck** the card draws the Deck's own letters (Y at the top, X at the left, B at the right, A at the
+bottom) and its back buttons: **L4** and **R4** repeat L1 and R1, **L5** and **R5** are HOME — that is the
+**pocket-ui** layout under Controller settings in Steam. The Steam button stays Steam's.
+
 On a **Nintendo 64**, the right stick is the C buttons. Hold R2 and the four face buttons are the C buttons instead.
 On a **PlayStation** both sticks go to the game, as on a DualShock; with Options → Controls → **Left stick as D-pad** on, the
 left stick is the D-pad again and the card says so.

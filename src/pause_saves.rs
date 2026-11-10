@@ -17,8 +17,8 @@ use crate::quit::Saver;
 
 /// Other emulators: pocket-ui can't save or continue them; Quit only closes them.
 pub const OWN_SAVES: &str = "This emulator keeps its own saves. Save in the game before you quit.";
-/// A PortMaster port: it keeps its own saves; Quit ends the port without asking it for one.
-pub const PORT_SAVES: &str = "This game saves by itself. Save in the game before you quit.";
+/// A PortMaster port: saving depends on the engine; Quit never requests a save.
+pub const PORT_SAVES: &str = "Saving is up to the game. Use its save option if it has one.";
 /// A PS2 game whose emulator hasn't said yet which game runs: a Save would have no file to go to, a Quit no
 /// resume state to write.
 pub const NOT_READY: &str = "Save and Load aren't ready yet. Save in the game before you quit.";
@@ -82,7 +82,7 @@ mod tests {
         // ARMSX2 before PINE named the game: Save went nowhere and Quit wrote no resume state.
         assert_eq!(Saves::of(Saver::Standalone, false, None), Saves::InGame(NOT_READY));
         assert_eq!(Saves::of(Saver::Other, true, None), Saves::InGame(OWN_SAVES));
-        assert_eq!(Saves::of(Saver::Port, false, None), Saves::InGame(PORT_SAVES), "a port saves by itself, with or without state names");
+        assert_eq!(Saves::of(Saver::Port, false, None), Saves::InGame(PORT_SAVES), "a port never advertises frontend save states, including games without any saving");
         assert!(!Saves::of(Saver::Port, true, None).rows());
         for s in [Saves::Slots, Saves::One] {
             assert!(s.rows() && s.line().is_none());

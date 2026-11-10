@@ -57,7 +57,7 @@ impl Default for Roots {
     fn default() -> Self {
         Roots {
             roms: PathBuf::from("/storage/roms"),
-            bios: PathBuf::from(crate::hostsys::BIOS_DIR),
+            bios: crate::hostsys::bios_dir(),
             ports: PathBuf::from(crate::ports::PORTS_DIR),
             screenshots: crate::screenshot::dir(),
             uploads: PathBuf::from("/storage/roms").join(UPLOADS_DIR),

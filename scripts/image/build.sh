@@ -112,7 +112,7 @@ assemble() {
   # Everything that goes in, staged here so owners (root), modes and times are exact.
   S=/tmp/stage
   rm -rf "$S"
-  mkdir -p "$S/fat/pocket-ui-info" "$S/storage/licences"
+  mkdir -p "$S/fat/pocket-ui-info" "$S/storage"
   if [ "$FAMILY" = SM8550 ]; then
     : # KERNEL carries the trees, ROCKNIX's ABL starts it: no boot files to add.
   elif [ "$FAMILY" = RK3566 ]; then
@@ -162,8 +162,9 @@ assemble() {
   # The notes, the source offer, pocket-ui's LICENSE and NOTICE.md, licences/ (crates, fonts), rocknix-licenses/
   # (ROCKNIX's LICENSE.md and licenses folder at the tag) and firmware-licences/ (the firmware's terms).
   cp -r "$W/info/." "$S/fat/pocket-ui-info/"
-  # The crates' and fonts' texts also in STORAGE (/storage/pocket-ui/licences, where Settings > About points).
-  cp "$W/info/licences/"* "$S/storage/licences/"
+  # The crates' and fonts' texts live once on the card, in pocket-ui-info/licences on the FAT partition (readable on any computer).
+  # /storage/pocket-ui/licences, where Settings > About points, is a link to them: a second 1.4 MB copy no longer fits into the
+  # 32 MiB STORAGE next to the programs (0.3.1 was 27 blocks short, scripts/image/storage-budget.sh). /flash is the FAT partition.
   for f in pocket-ui pocket-core pocket-splash; do install -m 755 "$W/bin/$f" "$S/storage/$f"; done
   install -m 755 /repo/deploy/portmaster-setup.sh "$S/storage/portmaster-setup.sh"
   install -m 755 /repo/deploy/run-pocket-ui.sh "$S/storage/run-pocket-ui.sh"
@@ -218,6 +219,9 @@ assemble() {
   dd if="$IMG" of="$P2" bs=512 skip="$P2_START" count="$P2_SIZE" status=none
   [ "$(e2label "$P2")" = STORAGE ] || die "partition 2 is not STORAGE"
   [ -n "$(debugfs -R 'stat /.please_resize_me' "$P2" 2>/dev/null)" ] || die "STORAGE has no .please_resize_me"
+  # The room ROCKNIX leaves is what storage-budget.sh and pins.sh P2_MIN_HEADROOM_BLOCKS are worked out from.
+  [ "$(dumpe2fs -h "$P2" 2>/dev/null | sed -n 's/^Free blocks: *//p')" = "$P2_FREE_BLOCKS" ] ||
+    die "ROCKNIX's STORAGE has not $P2_FREE_BLOCKS free blocks (pins.sh P2_FREE_BLOCKS): work out the new room, storage-budget.sh"
   R=pocket-ui/releases/$VERSION
   UNITS=.pocket-seed/.config/system.d
   SEED=$UNITS/essway.service.d
@@ -234,10 +238,7 @@ assemble() {
     # The layout scripts/dev.sh and the updater use (docs/UPDATES.md): fixed paths through current.
     echo "symlink /pocket-ui/current releases/$VERSION"
     # Licence texts of the crates and the fonts (scripts/licence-files.sh), read from Settings > About.
-    echo "mkdir /pocket-ui/licences"
-    for f in $(ls "$S/storage/licences"); do
-      echo "write $S/storage/licences/$f /pocket-ui/licences/$f"
-    done
+    echo "symlink /pocket-ui/licences /flash/pocket-ui-info/licences"
     for f in pocket-ui pocket-core portmaster-setup.sh; do
       echo "symlink /pocket-ui/$f current/$f"
     done
@@ -263,7 +264,7 @@ assemble() {
     fi
     for p in / /pocket-ui /pocket-ui/releases "/$R" "/$R/pocket-ui" "/$R/pocket-core" "/$R/pocket-splash" "/$R/portmaster-setup.sh" \
       /pocket-ui/run-pocket-ui.sh /pocket-ui/current /pocket-ui/pocket-ui /pocket-ui/pocket-core \
-      /pocket-ui/portmaster-setup.sh /pocket-ui/licences $(for f in $(ls "$S/storage/licences"); do echo "/pocket-ui/licences/$f"; done) /.pocket-seed /.pocket-seed/.config /.pocket-seed/.config/system.d "/$SEED" \
+      /pocket-ui/portmaster-setup.sh /pocket-ui/licences /.pocket-seed /.pocket-seed/.config /.pocket-seed/.config/system.d "/$SEED" \
       "/$SEED/10-pocket-ui.conf" "/$UNITS/pocket-splash.service" "/$UNITS/sysinit.target.wants" \
       "/$UNITS/sysinit.target.wants/pocket-splash.service" /.pocket-seed/.config/autostart \
       /.pocket-seed/.config/autostart/pocket-ui-image-defaults $GAMES_PATHS; do

@@ -198,7 +198,7 @@ system's shelf.
 ### The TV on the cabinet
 
 In the Cabinet look a small old TV stands on the cabinet's top board, at the right, and shows the selected game: its
-screenshot when pocket-ui has downloaded one (Settings → Games → Pictures & extras → Box art), else the latest picture of your
+screenshot when pocket-ui has downloaded one (Settings → Games → Extras → Box art), else the latest picture of your
 own play (the one Continue starts from), else its cover; a game with none of these shows its console. The picture
 changes with a short crossfade as you move (at once with Motion off). On a small screen the TV is smaller; where it
 would be too small to see it is left out.

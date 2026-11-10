@@ -14,24 +14,27 @@ pub const SCREEN: (u32, u32) = (1024, 768);
 /// The built-in pad as the kernel names it (`/proc/bus/input/devices`; trimui_inputd makes it from the keys).
 pub const PAD: &str = "TRIMUI Player1";
 
-/// Which TrimUI handheld of the A133P family this is: the `brick` build and its card run on both (docs/TRIMUI-SMART-PRO.md).
-/// Everything the two share (the firmware, the card, NextUI's way, 1 GB, no fan, no touch) is `device::brick()`; what differs is here.
+/// Which TrimUI handheld of the A133P family this is: the `brick` build and its card run on all three (docs/TRIMUI-SMART-PRO.md).
+/// Everything the three share (the firmware, the card, NextUI's way, 1 GB, no fan, no touch) is `device::brick()`; what differs is here.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum Board {
     /// The TrimUI Brick: 3.2" 1024x768, no sticks, F1 and F2 beside the screen, the mute slider, the lights `brick_hw` drives.
     Brick,
-    /// The TrimUI Smart Pro: 4.96" 1280x720, two sticks with L3 and R3, no F keys, no slider. Not played on by the project
+    /// The TrimUI Smart Pro: 4.96" 1280x720, two sticks (317/318 reserved for L3/R3), no F keys, no slider. Not played on by the project
     /// (no device); its lights are a ring around each stick that nobody has mapped, so they stay dark (`leds`).
     SmartPro,
+    /// 3.95" 1024x768, two clickable sticks and separate F1/F2. Public-source profile, no project hardware.
+    BrickPro,
 }
 
 impl Board {
-    pub const ALL: [Board; 2] = [Board::Brick, Board::SmartPro];
+    pub const ALL: [Board; 3] = [Board::Brick, Board::SmartPro, Board::BrickPro];
 
     pub fn name(self) -> &'static str {
         match self {
             Board::Brick => NAME,
             Board::SmartPro => "TrimUI Smart Pro",
+            Board::BrickPro => "TrimUI Brick Pro",
         }
     }
 
@@ -40,6 +43,7 @@ impl Board {
         match self {
             Board::Brick => "Brick",
             Board::SmartPro => "Smart Pro",
+            Board::BrickPro => "Brick Pro",
         }
     }
 
@@ -48,6 +52,7 @@ impl Board {
         match self {
             Board::Brick => REPORTED,
             Board::SmartPro => "TrimUI Smart Pro (NextUI)",
+            Board::BrickPro => "TrimUI Brick Pro (experimental)",
         }
     }
 
@@ -56,6 +61,7 @@ impl Board {
         match self {
             Board::Brick => "brick",
             Board::SmartPro => "smartpro",
+            Board::BrickPro => "brickpro",
         }
     }
 
@@ -66,22 +72,22 @@ impl Board {
     /// The screen as fb0 has it. The Smart Pro's from its specification and every project that runs on it (no rotation).
     pub fn screen(self) -> (u32, u32) {
         match self {
-            Board::Brick => SCREEN,
+            Board::Brick | Board::BrickPro => SCREEN,
             Board::SmartPro => SMART_PRO_SCREEN,
         }
     }
 
     /// Two analog sticks (and their presses, L3 and R3).
     pub fn sticks(self) -> bool {
-        self == Board::SmartPro
+        matches!(self, Board::SmartPro | Board::BrickPro)
     }
 
-    /// F1 and F2 beside the screen: on the Brick they arrive as 317 and 318, which are the stick presses on the Smart Pro.
+    /// Separate F keys: Brick uses 317/318, Brick Pro uses KEY_F1/KEY_F2 (59/60). Stick presses are never F keys.
     pub fn fkeys(self) -> bool {
-        self == Board::Brick
+        matches!(self, Board::Brick | Board::BrickPro)
     }
 
-    /// The mute slider (gpio243 on the Brick). The Smart Pro has none: nothing may read that pin as "muted" there.
+    /// Only the proven Brick mute slider. On the Pro boards the pin must never be interpreted as muted.
     pub fn slider(self) -> bool {
         self == Board::Brick
     }
@@ -94,7 +100,7 @@ impl Board {
 
     /// The small type a step larger (`type_scale::brick_base`): the Brick's panel is 400 ppi (15.75 px a mm). The Smart Pro's
     /// 4.96" at 1280x720 is about 296 ppi (11.7 px a mm): the design's Body 28 is 2.4 mm there, larger than the Brick's 31 (2.0 mm),
-    /// so it keeps the design's sizes.
+    /// so it keeps the design's sizes. The Brick Pro is 1280 / 3.95 = 324 ppi; Body 28 is 2.2 mm there, also the design's sizes.
     pub fn larger_small_type(self) -> bool {
         self == Board::Brick
     }
@@ -152,12 +158,43 @@ pub fn board() -> Option<Board> {
 }
 
 /// The board, read below `root` (`/` on the device) when start.sh did not say (`POCKETUI_DEVICE`; NextUI's pak, the kit). By the
-/// screen first (fb0's `virtual_size`: 1024 wide on the Brick, 1280 on the Smart Pro), then the name TrimUI's own MainUI carries
-/// (`Trimui Brick`, `Trimui Smart Pro`). Nothing that says Smart Pro: the Brick, as before this existed, so a firmware that changes
-/// a string can't turn a Brick into something else.
+/// Pro identity and stick bus first, then fb0 and the older MainUI names. Unknown firmware retains the Brick fallback;
+/// the input decoder requires a verified plain-Brick identity before allowing thumb codes to become F-key shortcuts.
 pub fn board_at(root: &Path) -> Board {
+    let (identity, bytes) = identity_at(root);
+    if identity == Some(Board::BrickPro) { return Board::BrickPro; }
     let fb = std::fs::read_to_string(root.join("sys/class/graphics/fb0/virtual_size")).unwrap_or_default();
-    board_from(&fb, || std::fs::read(root.join("usr/trimui/bin/MainUI")).unwrap_or_default())
+    board_from(&fb, || bytes)
+}
+
+// The real Brick also advertises dummy X/Y/RX/RY axes and KEY_F1/F2: capability bitmaps cannot prove sticks.
+// Only a verified plain Brick may turn thumb codes into destructive F-key shortcuts. Pro evidence wins even
+// over an old POCKETUI_DEVICE=brick override; an unknown identity remains safe.
+pub(crate) fn legacy_input_fkeys() -> bool {
+    legacy_input_fkeys_at(board(), Path::new("/"))
+}
+
+fn legacy_input_fkeys_at(board: Option<Board>, root: &Path) -> bool {
+    board == Some(Board::Brick) && identity_at(root).0 == Some(Board::Brick)
+}
+
+fn identity_at(root: &Path) -> (Option<Board>, Vec<u8>) {
+    if root.join("dev/i2c-3").exists() { return (Some(Board::BrickPro), Vec::new()); }
+    for file in ["etc/model", "proc/device-tree/model", "proc/device-tree/compatible",
+        "sys/firmware/devicetree/base/model", "sys/firmware/devicetree/base/compatible"] {
+        let bytes = std::fs::read(root.join(file)).unwrap_or_default();
+        if brickpro_identity(&bytes) { return (Some(Board::BrickPro), Vec::new()); }
+    }
+    let bytes = std::fs::read(root.join("usr/trimui/bin/MainUI")).unwrap_or_default();
+    if brickpro_identity(&bytes) { return (Some(Board::BrickPro), bytes); }
+    let brick = bytes.split(|b| *b == 0 || *b == b'\n').any(|s| s.eq_ignore_ascii_case(b"Trimui Brick"));
+    (brick.then_some(Board::Brick), bytes)
+}
+
+fn brickpro_identity(bytes: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(bytes).to_ascii_lowercase();
+    text.contains("trimui brick pro") || text.contains("trimui,brick-pro") || text.contains("trimui,brickpro")
+        || text.split(|c: char| !c.is_ascii_alphanumeric()).any(|s| s == "tg4040")
 }
 
 /// `board_at` on what was read: fb0's `virtual_size` ("1280,2880") and, only when that says nothing, MainUI's bytes.
@@ -176,7 +213,7 @@ pub fn board_from(fb_virtual_size: &str, main_ui: impl FnOnce() -> Vec<u8>) -> B
 }
 
 /// The Brick and the Brick Pro both: the stock system has `/usr/trimui/bin/MainUI`, NextUI's card has `.system`.
-/// CONFIRM (`read`, the string in `MainUI`): the Brick Pro. NextUI tells them apart by a string inside MainUI; the profile is the same here.
+/// `board_at` distinguishes the profiles; the stock path alone does not identify a model.
 pub fn detected(root: &Path) -> bool {
     root.join("usr/trimui/bin/MainUI").is_file() && root.join("mnt/SDCARD/.system").is_dir()
 }
@@ -457,6 +494,50 @@ mod tests {
         assert_eq!(report_section_for(Some(Board::Brick), &d.join("devices"), Some(&d.join("card"))), "");
         assert_eq!(report_section_for(None, &d.join("devices"), None), "");
         assert!(report_section_for(Some(Board::SmartPro), &d.join("none"), None).contains("[input_devices]\n(missing)"));
+    }
+
+    #[test]
+    fn brickpro_detection_never_confuses_the_shared_1024_screen_with_a_plain_brick() {
+        // Synthetic rootfs fixtures: identity strings from NextUI, not captures from our hardware.
+        for (fb, main, model, compatible, i2c, want) in [
+            ("1024,16384", "Trimui Brick Pro", "", "", false, "brickpro"),
+            ("1024,16384", "Trimui Brick", "", "", true, "brickpro"),
+            ("", "", "Trimui Brick Pro", "", false, "brickpro"),
+            ("1024,768", "", "TG4040", "", false, "brickpro"),
+            ("1024,768", "", "", "trimui,brick-pro\0allwinner,sun50iw10p1\0", false, "brickpro"),
+            ("1024,16384", "Trimui Brick", "TG3040", "allwinner,sun50iw10p1", false, "brick"),
+            ("1280,2880", "Trimui Smart Pro", "TG5040", "", false, "smartpro"),
+            ("", "Trimui Smart Pro", "", "", false, "smartpro"),
+            ("", "", "", "allwinner,sun50iw10p1", false, "brick"),
+            ("1024,16384", "", "TG3040", "", false, "brick"),
+        ] {
+            let d = TestDir::new("brickpro-detection");
+            for (file, value) in [("sys/class/graphics/fb0/virtual_size", fb), ("usr/trimui/bin/MainUI", main),
+                ("etc/model", model), ("proc/device-tree/compatible", compatible)] {
+                let path = d.join(file);
+                std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+                std::fs::write(path, value).unwrap();
+            }
+            if i2c { std::fs::create_dir_all(d.join("dev")).unwrap(); std::fs::write(d.join("dev/i2c-3"), "").unwrap(); }
+            assert_eq!(board_at(&d).key(), want, "fb={fb}, MainUI={main}, model={model}, dt={compatible}, i2c={i2c}");
+            assert_eq!(legacy_input_fkeys_at(Some(Board::Brick), &d), want == "brick" && main == "Trimui Brick",
+                "even a stale Brick override must fail safe without a verified plain-Brick identity");
+        }
+    }
+
+    #[test]
+    fn brickpro_reuses_the_brick_screen_and_smart_pro_sticks_but_only_proven_controls() {
+        let dev = device::from_override("brickpro");
+        assert_eq!(dev.model, Some(Model::Brick(Board::BrickPro)));
+        assert_eq!((dev.screen(), dev.has_sticks(), dev.has_touch(), dev.has_fan()), ((1024,768),true,false,false));
+        let b = Board::BrickPro;
+        assert!(b.fkeys() && b.sticks() && b.experimental());
+        assert!(!b.slider() && !b.leds() && !b.larger_small_type());
+        assert_eq!(dev.about_line().as_deref(), Some("TrimUI Brick Pro (experimental)"));
+        let d = TestDir::new("brickpro-report");
+        std::fs::write(d.join("devices"), "N: Name=TRIMUI Player1").unwrap();
+        let report = report_section_for(Some(b), &d.join("devices"), None);
+        assert!(report.contains("[input_devices]\nN: Name=TRIMUI Player1") && report.contains("[boot_log]"));
     }
 
     #[test]

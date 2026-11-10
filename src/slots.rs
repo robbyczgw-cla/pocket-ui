@@ -29,6 +29,16 @@ fn dir_from(value: Option<&str>) -> PathBuf {
     }
 }
 
+/// Whether the launcher moved the states folder (`POCKETUI_STATES` set to a real path): pocket-core's moments then
+/// live in pocket-ui's own data even where the host owns the emulators, so `frozen::available` can use them there.
+pub fn states_moved() -> bool {
+    moved_from(std::env::var("POCKETUI_STATES").ok().as_deref())
+}
+
+fn moved_from(value: Option<&str>) -> bool {
+    value.map(str::trim).is_some_and(|v| !v.is_empty())
+}
+
 /// `<states>/<system>/<stem>`: the common start of every file of one game.
 pub fn base(system: &str, stem: &str) -> PathBuf {
     states_dir().join(system).join(stem)
@@ -100,6 +110,8 @@ pub fn clear_undo(base: &Path) {
 pub enum Loaded {
     /// The file couldn't be read: nothing changed.
     Unreadable,
+    /// Nothing was loaded: the running moment could not be kept for undo.
+    UndoUnavailable,
     Loaded,
     /// The core refused it, why; the game is as it was (or back at Before load).
     Refused(String),
@@ -120,6 +132,9 @@ pub fn load_keeping_undo(
     let Ok(data) = crate::state_file::read(state) else { return Loaded::Unreadable };
     let undo = undo_path(base);
     let undo_written = keep(&undo);
+    if !undo_written {
+        return Loaded::UndoUnavailable;
+    }
     match load(&data) {
         Ok(()) => Loaded::Loaded,
         Err((reached, why)) => {
@@ -399,6 +414,18 @@ mod tests {
     }
 
     #[test]
+    fn save_safety_failed_undo_capture_blocks_any_mutating_load() {
+        let dir = TestDir::new("load-no-undo");
+        let target = dir.join("old");
+        std::fs::write(&target, b"old progress").unwrap();
+        let state = std::cell::RefCell::new(b"current progress".to_vec());
+        let result = load_keeping_undo(&dir.join("Game"), &target, |_| false,
+            |data| { *state.borrow_mut() = data.to_vec(); Ok(()) }, |_| panic!("nothing was loaded"));
+        assert_eq!(*state.borrow(), b"current progress", "a full card must never permit an irreversible load");
+        assert_ne!(result, Loaded::Loaded);
+    }
+
+    #[test]
     fn every_load_keeps_what_ran_as_before_load_an_earlier_state_too() {
         let dir = TestDir::new("load-undo");
         let b = dir.join("Game");
@@ -428,6 +455,8 @@ mod tests {
         assert_eq!(dir_from(Some("  ")), Path::new("/storage/roms/savestates"), "an empty value moves nothing");
         assert_eq!(dir_from(Some("/data/pocket-ui/savestates")), Path::new("/data/pocket-ui/savestates"));
         assert_eq!(states_dir(), Path::new(STATES_DIR), "no variable in the test process");
+        assert!(!moved_from(None) && !moved_from(Some("  ")), "unset or empty: not moved");
+        assert!(moved_from(Some("/data/pocket-ui/savestates")), "the Deck launcher's value: moved");
     }
 
     #[test]

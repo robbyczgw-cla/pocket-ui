@@ -1474,16 +1474,31 @@ pub mod linux {
 
     /// `button`, for the device called `name`: the H700 pad's X and Y cross over, so printed X is `North` and printed
     /// Y is `West` like on every other pad. This is the only place evdev keys become `Button`, for the UI and the core.
+    #[cfg(any(not(feature = "brick"), test))]
     pub(super) fn button_on(name: &str, code: KeyCode) -> Option<Button> {
-        // The Brick's F1 and F2 arrive as the thumb-stick presses (317, 318) on its pad, which has no sticks (the Smart Pro's: L3, R3).
         #[cfg(feature = "brick")]
-        if crate::brick_profile::is_pad(name) && crate::brick_profile::board().is_none_or(|b| b.fkeys()) {
+        { button_on_with_legacy_fkeys(name, code, crate::brick_profile::legacy_input_fkeys()) }
+        #[cfg(not(feature = "brick"))]
+        { positional_button(name, code) }
+    }
+
+    #[cfg(feature = "brick")]
+    pub(super) fn button_on_with_legacy_fkeys(name: &str, code: KeyCode, legacy_fkeys: bool) -> Option<Button> {
+        if crate::brick_profile::is_pad(name) {
             match code {
-                KeyCode::BTN_THUMBL | KeyCode::KEY_F1 => return Some(Button::F1),
-                KeyCode::BTN_THUMBR | KeyCode::KEY_F2 => return Some(Button::F2),
+                KeyCode::BTN_THUMBL if legacy_fkeys => return Some(Button::F1),
+                KeyCode::BTN_THUMBR if legacy_fkeys => return Some(Button::F2),
+                KeyCode::KEY_F1 => return Some(Button::F1),
+                KeyCode::KEY_F2 => return Some(Button::F2),
+                // Brick Pro's separate HOME key, as reported by the stock pad.
+                KeyCode::KEY_HOMEPAGE => return Some(Button::Mode),
                 _ => {}
             }
         }
+        positional_button(name, code)
+    }
+
+    fn positional_button(name: &str, code: KeyCode) -> Option<Button> {
         match (button(code), is_h700_pad(name)) {
             (Some(Button::North), true) => Some(Button::West),
             (Some(Button::West), true) => Some(Button::North),

@@ -296,6 +296,9 @@ pub fn calm(rgb: (u8, u8, u8)) -> (u8, u8, u8) {
 
 // ---- the F keys ---------------------------------------------------------------------------------------
 
+/// Shown in game Controls and when Controller setup receives a reserved F-key press.
+pub const FKEYS_REMAP_NOTE: &str = "F1/F2 are shortcuts, not game buttons.\nSet them in Settings › Sound & feel › Lights & buttons.";
+
 /// What F1 and F2 do (Settings > Buttons; the choice is `<data>/brick-keys.json`).
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Default, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "lowercase")]
@@ -1087,6 +1090,19 @@ mod tests {
         p.step_level(-1);
         p.step_level(-1);
         assert_eq!(p.level, None);
+    }
+
+    #[test]
+    #[cfg(target_os = "linux")]
+    fn the_saved_slider_choice_reaches_the_card_watcher() {
+        let d = TestDir::new("brick-slider-launcher");
+        Slider::Nothing.save(&d);
+        let out = std::process::Command::new("bash")
+            .arg(crate::testutil::manifest_dir().join("scripts/test-brick-card.sh"))
+            .env("BRICK_SLIDER_TESTS_ONLY", "1")
+            .env("BRICK_SLIDER_TEST_CHOICE", d.join(SLIDER_FILE))
+            .output().expect("host card launcher probe");
+        assert!(out.status.success(), "{}\n{}", String::from_utf8_lossy(&out.stdout), String::from_utf8_lossy(&out.stderr));
     }
 
     #[test]

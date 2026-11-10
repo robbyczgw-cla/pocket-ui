@@ -71,6 +71,8 @@ vdev.sh up [--device D] | down     start / remove the container; D: miniv2 (defa
 vdev.sh lid close|open             the Flip 2's lid (a container started with --device flip2); `send lid close` does the same
 vdev.sh deploy [--no-build]        zigbuild, copy, (re)start pocket-ui; creates the container if needed
 vdev.sh send up down a home        pocket-ui's command FIFO (up down left right a b x y l1 r1 l2 r2 select start home quit)
+vdev.sh send --at 'settings:*' a    the same, after reading where the UI is (/tmp/pocket-ui.status; `a` where it starts a game only with --launch, `wake` for a dark screen: docs/DEVICE-TESTS.md "Where the UI is")
+vdev.sh expect 'shelf:*' 5         wait until the UI is at that page, instead of a fixed sleep (`vdev.sh status`: where it is)
 vdev.sh pad press A 150            virtual pad: press, down/up, seq, stick LX LY [RX RY] (see scripts/vpad.py); also MODE
 vdev.sh shot NAME                  grim of the whole screen -> screenshots/NAME.png
 vdev.sh log [-f] [boot|sway|pipewire|pulse|pad]   pocket-ui's log by default (pocket-core logs into it)

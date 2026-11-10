@@ -98,7 +98,7 @@ impl EmuMenu {
 
     /// The controls card (`controls_card`) of the game that runs: the live mapping and the core's own button names.
     pub fn controls_card(&self, system_name: &str, shortcuts: Option<crate::controls_card::Shortcuts>) -> crate::controls_card::Card {
-        crate::controls_card::build(&crate::controls_card::Input { system: &self.system, system_name, mapping: &self.mapping, core_names: &self.file.controls.targets, shortcuts })
+        crate::controls_card::build(&crate::controls_card::Input { system: &self.system, system_name, mapping: &self.mapping, core_names: &self.file.controls.targets, shortcuts, layout: crate::device::current().menu_layout(), deck: crate::device::current().model == Some(crate::device::Model::SteamDeck) })
     }
 
     /// Whether the core has anything to show on the Emulator page.

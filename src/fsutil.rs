@@ -235,6 +235,18 @@ fn write_via_temp(path: &Path, bytes: &[u8], durable: bool) -> io::Result<()> {
     Ok(())
 }
 
+/// Every file system's dirty data on its disk: sync(2), for the card's FAT (no folder fsync) and saves spread over
+/// two file systems. The one way pocket-ui calls it (`every_whole_system_flush_goes_through_flush_all`). Tests and
+/// mock runs skip it: on a shared build computer it flushes every other job's writes too, and took longer than a
+/// test's 20 s helper limit on a build computer (gate flakes, 09.11.). What a test checks never depends on it.
+pub fn flush_all() {
+    #[cfg(not(test))]
+    if std::env::var_os("POCKETUI_MOCK").is_none() {
+        // SAFETY: sync takes no arguments and cannot fail.
+        unsafe { libc::sync() };
+    }
+}
+
 /// A folder's own entries (a rename into it, a new link) on the card. Some file systems refuse to sync a folder; that is
 /// not an error.
 pub fn sync_dir(dir: &Path) {
@@ -949,5 +961,25 @@ mod tests {
         fs::write(&f, b"").unwrap();
         fs::write(backup_path(&f), b"[").unwrap();
         assert_eq!(read_json_or_backup::<Vec<i32>>(&f), None);
+    }
+
+    /// A direct sync(2) elsewhere would flush the whole build computer from a test again (09.11.).
+    #[test]
+    fn every_whole_system_flush_goes_through_flush_all() {
+        fn walk(dir: &Path, out: &mut Vec<String>) {
+            for e in fs::read_dir(dir).unwrap().flatten() {
+                let p = e.path();
+                if p.is_dir() {
+                    walk(&p, out);
+                } else if p.extension().is_some_and(|x| x == "rs") && !p.ends_with("src/fsutil.rs") {
+                    let text = fs::read_to_string(&p).unwrap();
+                    out.extend(text.lines().enumerate().filter(|(_, l)| l.contains(concat!("libc::", "sync()"))).map(|(n, _)| format!("{}:{}", p.display(), n + 1)));
+                }
+            }
+        }
+        let mut direct = Vec::new();
+        let root = std::path::PathBuf::from(std::env::var_os("CARGO_MANIFEST_DIR").unwrap_or_else(|| env!("CARGO_MANIFEST_DIR").into()));
+        walk(&root.join("src"), &mut direct);
+        assert!(direct.is_empty(), "call fsutil::flush_all() instead of sync(2): {direct:?}");
     }
 }

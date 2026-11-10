@@ -31,6 +31,48 @@ pub(crate) fn snapshot_catalog(data_dir: &Path) -> Vec<ports::Port> {
 }
 
 impl App {
+    /// A shelf that became empty (for example after removing its last port) keeps a useful way to get games.
+    pub(crate) fn empty_ports(&self) -> bool {
+        let supported = !pocket_ui::device::current().host_owned();
+        #[cfg(feature = "brick")]
+        let supported = supported && (!pocket_ui::device::brick() || pocket_ui::brick_profile::standalone());
+        supported && self.items.is_empty() && matches!(self.screen, super::Screen::Games(i) if self.systems.get(i).is_some_and(|s| s.name == "ports"))
+    }
+
+    pub(crate) fn empty_ports_press(&mut self, button: Button) -> bool {
+        if !self.empty_ports() || button != super::CONFIRM { return false; }
+        self.setup = Some(self.new_extras_setup().only(pocket_ui::setup::Only::Extras).at_portmaster());
+        true
+    }
+
+    pub(crate) fn paint_empty_ports(&mut self, c: &mut Canvas, with_hints: bool) {
+        let dy = pocket_ui::ui_art::above_words(c, pocket_ui::ui_art::Art::NoGames, super::MARGIN, false, super::EMPTY_ART_TOP, 300, 50);
+        self.text.draw(c, pocket_ui::text::Face::Title, 50, super::MARGIN, 300 + dy, pocket_ui::palette::pal().chalk, "No ports yet");
+        let line = "Get PC and indie games from PortMaster in Settings › Games › Extras.";
+        for (i, line) in self.text.wrap_prose(pocket_ui::text::Face::Body, 28, line, c.w - 2 * super::MARGIN).iter().enumerate() {
+            self.text.draw(c, pocket_ui::text::Face::Body, 28, super::MARGIN, 350 + dy + i as i32 * 40, pocket_ui::palette::pal().dust, line);
+        }
+        if with_hints { self.paint_hint_row(c, &[("A", "Get PortMaster"), ("B", "Back")]); }
+    }
+
+    pub(crate) fn empty_ports_snapshot(&mut self, state: &str) -> bool {
+        let Some(keys) = state.strip_prefix("ports-empty") else { return false };
+        let Some(mut system) = self.systems.first().cloned() else { return false };
+        system.name = "ports".into(); system.fullname = "Ports".into(); system.games.clear();
+        let index = self.systems.len(); self.systems.push(system);
+        self.screen = super::Screen::Games(index); self.rebuild();
+        for key in keys.split(':').filter(|key| !key.is_empty()) {
+            match key {
+                "a" => { self.empty_ports_press(super::CONFIRM); }
+                "b" => {
+                    if self.setup.as_mut().is_some_and(|s| s.press(Button::South)) { self.setup = None; }
+                }
+                _ => (),
+            }
+        }
+        true
+    }
+
     /// Before a port starts: true when it is not to start, because its files are missing; the page then says
     /// what to copy where. Ready-to-run ports, and ports whose files may well be there, start as before.
     pub(crate) fn port_needs_files(&mut self, launcher: &Path) -> bool {

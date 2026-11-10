@@ -63,3 +63,4 @@ setup:look-systems
 big-shelf
 big-pause:retroarch
 big-pause:more
+sync:paused-unknown

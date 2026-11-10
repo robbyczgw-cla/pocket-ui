@@ -75,7 +75,7 @@ impl App {
             played_secs: self.system_played_secs(s),
             last: self.system_last_played(s).map(|(name, at, _)| (name, at)),
             runs_on: self.system_runs_on(s),
-            bios: consoles::bios_status(&sys.name, Path::new(pocket_ui::hostsys::BIOS_DIR)),
+            bios: consoles::bios_status(&sys.name, &pocket_ui::hostsys::bios_dir()),
             achievements: self.console_achievements(s),
         };
         Some(Page::new(data))

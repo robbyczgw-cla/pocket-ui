@@ -185,9 +185,10 @@ pub fn footer(c: &mut Canvas, text: &mut Text, hits: &mut HitMap, hints: &[(&str
     let pill_x = if hints.is_empty() { c.w - PAD } else { pill_hints(c, text, hits, hints) };
     let pill_top = c.h - PAD - PILL;
     let wrapped = footer_lines(text, desc, c.w, pill_x, lines);
-    let (left, step, last) = (PAD + BTN_PAD, type_scale::line(SMALL, 10), footer_baseline(c.h));
+    let px = footer_px(text, desc, pill_x);
+    let (left, step, last) = (PAD + BTN_PAD, type_scale::line(px, 10), footer_baseline(c.h));
     for (n, line) in wrapped.iter().enumerate() {
-        text.draw(c, Face::Body, SMALL, left, last - (wrapped.len() - 1 - n) as i32 * step, color, line);
+        text.draw(c, Face::Body, px, left, last - (wrapped.len() - 1 - n) as i32 * step, color, line);
     }
     (last - wrapped.len() as i32 * step).min(pill_top)
 }
@@ -197,6 +198,7 @@ pub fn footer(c: &mut Canvas, text: &mut Text, hits: &mut HitMap, hints: &[(&str
 /// paragraph (a line of `desc`) on lines of its own. At most `lines`: a longer one is wrapped to the column alone,
 /// the last line shown ending with "…".
 pub fn footer_lines(text: &mut Text, desc: &str, screen_w: i32, pill_x: i32, lines: usize) -> Vec<String> {
+    let px = footer_px(text, desc, pill_x);
     let left = PAD + BTN_PAD;
     let (column, wide) = (pill_x - 24 - left, screen_w - 2 * left);
     let paragraphs: Vec<&str> = desc.trim().lines().filter(|l| !l.trim().is_empty()).collect();
@@ -204,26 +206,32 @@ pub fn footer_lines(text: &mut Text, desc: &str, screen_w: i32, pill_x: i32, lin
     let mut parts: Vec<Vec<String>> = Vec::new();
     for p in paragraphs.iter().rev() {
         if budget == 0 {
-            parts.push(text.wrap_prose(Face::Body, SMALL, p, wide));
+            parts.push(text.wrap_prose(Face::Body, px, p, wide));
             continue;
         }
-        let narrow = text.wrap_prose(Face::Body, SMALL, p, column);
+        let narrow = text.wrap_prose(Face::Body, px, p, column);
         let k = budget.min(narrow.len());
         budget -= k;
-        if k == narrow.len() {
+        // A word wider than the column is never broken beside the pill: it goes above, across the page ("despertarlo." in
+        // Retro's even-width letters, Large Spanish at 1024x768).
+        let too_wide = |w: &str, text: &mut Text| text.width_plain(Face::Body, px, w) > column;
+        // The words as painted: the paragraph in the interface's language (`wrap_prose` translates it as well).
+        let shown = text.translated(p).to_string();
+        let unbroken = !shown.split_whitespace().any(|w| too_wide(w, text));
+        if k == narrow.len() && unbroken {
             parts.push(narrow);
             continue;
         }
         // The lines beside the pill are filled from the paragraph's end, the rest stands above across the page: a
         // lone word stays off the pill's line ("a TV."). The lines are the interface's language already, so they are
         // measured as they are.
-        let mut words: Vec<&str> = narrow.iter().flat_map(|l| l.split_whitespace()).collect();
+        let mut words: Vec<&str> = if unbroken { narrow.iter().flat_map(|l| l.split_whitespace()).collect() } else { shown.split_whitespace().collect() };
         let mut beside: Vec<String> = Vec::new();
         for _ in 0..k {
             let mut line: Vec<&str> = Vec::new();
             while let Some(w) = words.last() {
                 let candidate = std::iter::once(*w).chain(line.iter().copied()).collect::<Vec<_>>().join(" ");
-                if !line.is_empty() && text.width(Face::Body, SMALL, &candidate) > column {
+                if (!line.is_empty() || too_wide(w, text)) && text.width(Face::Body, px, &candidate) > column {
                     break;
                 }
                 line.insert(0, *w);
@@ -233,12 +241,12 @@ pub fn footer_lines(text: &mut Text, desc: &str, screen_w: i32, pill_x: i32, lin
         }
         // A short line above gets words back from the first line beside the pill until the two are about as long
         // ("LCD grid imitates a handheld screen," over "scanlines and CRT a TV.", not "LCD grid" alone on top).
-        let mut part = if words.is_empty() { Vec::new() } else { text.wrap_prose(Face::Body, SMALL, &words.join(" "), wide) };
+        let mut part = if words.is_empty() { Vec::new() } else { text.wrap_prose(Face::Body, px, &words.join(" "), wide) };
         if let ([above], Some(first)) = (part.as_mut_slice(), beside.first_mut()) {
-            while text.width(Face::Body, SMALL, above) < text.width(Face::Body, SMALL, first) {
+            while text.width(Face::Body, px, above) < text.width(Face::Body, px, first) {
                 let Some((word, rest)) = first.split_once(' ') else { break };
                 let longer = format!("{above} {word}");
-                if text.width(Face::Body, SMALL, &longer) > wide {
+                if text.width(Face::Body, px, &longer) > wide {
                     break;
                 }
                 *above = longer;
@@ -258,9 +266,22 @@ pub fn footer_lines(text: &mut Text, desc: &str, screen_w: i32, pill_x: i32, lin
         if room == 0 {
             break;
         }
-        out.extend(text.wrap_prose_at_most(Face::Body, SMALL, p, column, room));
+        out.extend(text.wrap_prose_at_most(Face::Body, px, p, column, room));
     }
     out
+}
+
+/// The size `footer` paints `desc` at beside a hint pill starting at `pill_x`: `SMALL`, a step smaller when a word of
+/// it (in the interface's language) is wider than the column beside the pill, which would break it in two
+/// ("despertarl" over "o." in Retro's even-width letters, Large Spanish at 1024x768).
+pub fn footer_px(text: &mut Text, desc: &str, pill_x: i32) -> u32 {
+    let column = pill_x - 24 - (PAD + BTN_PAD);
+    let shown = text.translated(desc).to_string();
+    if shown.split_whitespace().any(|w| text.width_plain(Face::Body, SMALL, w) > column) {
+        crate::title_block::smaller(SMALL)
+    } else {
+        SMALL
+    }
 }
 
 /// Where `footer` puts its last line when the explanation stands beside the pill: the baseline on the pill's line.
@@ -572,6 +593,27 @@ mod tests {
             let out = footer_lines(&mut text, desc, column + 300, column + 24 + PAD + BTN_PAD, 5);
             if out.len() >= 2 {
                 assert!(out.last().unwrap().contains(' '), "column {column}: {out:?}");
+            }
+        }
+    }
+
+    /// Sleep & power in Retro's letters, Large Spanish at 1024x768 (the merge gate, 09.11.2026): "despertarlo." was wider
+    /// than the column beside the hints and came out broken in two. A word too wide for the column stays whole, above.
+    #[test]
+    fn a_footer_word_wider_than_the_column_beside_the_pill_stays_whole() {
+        let mut text = Text::new();
+        text.set_translate(false);
+        let desc = "Guarda el juego y suspende el Pocket. Pulsa de nuevo el botón de encendido para despertarlo.";
+        let wide = text.width(Face::Body, SMALL, "despertarlo.");
+        for column in [wide - 40, wide - 1] {
+            let out = footer_lines(&mut text, desc, 1024, column + 24 + PAD + BTN_PAD, 4);
+            let words: Vec<&str> = out.iter().flat_map(|l| l.split_whitespace()).collect();
+            assert_eq!(words, desc.split_whitespace().collect::<Vec<_>>(), "column {column}: every word whole, in order: {out:?}");
+            // Painted a step smaller (`footer_px`), the lines beside the pill fit its column.
+            let px = footer_px(&mut text, desc, column + 24 + PAD + BTN_PAD);
+            assert!(px < SMALL, "column {column}: the explanation a step smaller");
+            for (i, line) in out.iter().enumerate().rev().take(2) {
+                assert!(text.width(Face::Body, px, line) <= column, "column {column}: line {i} beside the pill is too wide: {out:?}");
             }
         }
     }

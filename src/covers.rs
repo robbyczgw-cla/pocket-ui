@@ -286,6 +286,11 @@ pub fn fetch_index(playlist: &str) -> Vec<String> {
 
 /// The names listed in one of the playlist's directories (`Named_Boxarts`, `Named_Snaps`, `Named_Titles`).
 pub fn fetch_index_in(playlist: &str, remote_dir: &str) -> Vec<String> {
+    #[cfg(not(target_os = "android"))]
+    let cancel = crate::update::Cancel::new();
+    #[cfg(not(target_os = "android"))]
+    let _optional = crate::optional_data::lock(&cancel);
+    if game_on() { return Vec::new(); }
     let url = format!("{BASE}/{}/{remote_dir}/", percent_encode(playlist));
     curl_listing(&url).map(|b| parse_index(&String::from_utf8_lossy(&b))).unwrap_or_default()
 }
@@ -294,6 +299,11 @@ pub fn fetch_index_in(playlist: &str, remote_dir: &str) -> Vec<String> {
 /// Downloads one picture of the collection to `dest` (written as `.part` first, moved into place only when
 /// `accept` likes it). `extra` are more curl options (a size limit). True when the file is on disk.
 pub fn download_from(playlist: &str, remote_dir: &str, name: &str, dest: &Path, extra: &[&str], accept: &dyn Fn(&Path) -> bool) -> bool {
+    #[cfg(not(target_os = "android"))]
+    let cancel = crate::update::Cancel::new();
+    #[cfg(not(target_os = "android"))]
+    let _optional = crate::optional_data::lock(&cancel);
+    if game_on() { return false; }
     if let Some(dir) = dest.parent() {
         let _ = std::fs::create_dir_all(dir);
     }

@@ -5,7 +5,7 @@
 //! pattern made) and no allocation; English costs one atomic load. Only the first sight of a string that is not an
 //! exact line runs the patterns, once per painter (`i18n::Cache`).
 
-use pocket_ui::i18n::{self, Cache, Lang, Table};
+use pocket_ui::i18n::{self, Cache, Lang};
 use pocket_ui::text::{Face, Text};
 use std::alloc::{GlobalAlloc, Layout, System};
 use std::hint::black_box;
@@ -51,12 +51,14 @@ fn per_string(cache: &mut Cache, strings: &[&str], rounds: usize) -> (f64, usize
 }
 
 fn main() {
-    let src = include_str!("../assets/i18n/de.tsv");
-    let t0 = Instant::now();
-    let (table, errors) = Table::parse(src);
-    let parse = t0.elapsed();
-    let (exact, patterns) = table.len();
-    println!("table: {exact} lines, {patterns} patterns, read in {:.2} ms ({} errors)", parse.as_secs_f64() * 1000.0, errors.len());
+    // Measure the shipped loader, including any unpacking, before `set` can start it on a worker.
+    for lang in [Lang::De, Lang::Es] {
+        let t0 = Instant::now();
+        let table = lang.table().unwrap();
+        let elapsed = t0.elapsed();
+        let (exact, patterns) = table.len();
+        println!("table {lang:?}: {exact} lines, {patterns} patterns, ready in {:.2} ms", elapsed.as_secs_f64() * 1000.0);
+    }
 
     i18n::set(Lang::En);
     let mut cache = Cache::default();

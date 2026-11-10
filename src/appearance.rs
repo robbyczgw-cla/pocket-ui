@@ -65,7 +65,9 @@ pub fn utc_offset_now(unix: i64) -> i32 {
 /// negative) to try Automatic appearance and the night light on the virtual device without waiting for the evening.
 pub fn shifted_unix_now() -> i64 {
     let shift = std::env::var("POCKETUI_CLOCK_SHIFT").ok().and_then(|s| s.trim().parse::<i64>().ok()).unwrap_or(0);
-    std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_secs() as i64) + shift
+    // Static probes must shade the room from the same injected instant as
+    // history and the visible clock, even across a real lighting threshold.
+    crate::play_time::now_secs() as i64 + shift
 }
 
 /// Whether `choice` means light now on this device (`shifted_unix_now`).

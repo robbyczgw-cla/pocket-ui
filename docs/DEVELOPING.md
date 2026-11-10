@@ -28,6 +28,10 @@ cargo zigbuild --release --target aarch64-unknown-linux-gnu.2.38 --bin pocket-ui
 
 The output is in `target/aarch64-unknown-linux-gnu/release/`.
 
+Release uses full LTO with one codegen unit, opt-level 3, stripped symbols and aborting panics. The gate overrides
+LTO and codegen units for build speed. Size attribution, the alternatives considered, and the measured runtime
+comparison are in [BINARY-SIZE.md](BINARY-SIZE.md); do not optimise the shared core/audio code for size alone.
+
 The scripts that build release binaries (`dev.sh deploy`, `vdev.sh deploy`, `release-app.sh`, `make-image.sh`,
 `make-install-zip.sh`, `syscheck.sh`, the build check of `export-public.sh`) first source `scripts/release-rustflags.sh`.
 It adds `--remap-path-prefix` for the repository (`/pocket-ui`), the cargo home (`/cargo`) and the Rust toolchain
@@ -106,7 +110,9 @@ scripts/dev.sh log           # pocket-ui's log
 scripts/dev.sh stop          # stop pocket-ui; EmulationStation comes back
 ```
 
-`send` accepts: `up down left right a b x y l1 r1 l2 r2 select start home quit leave`. The letters are the menus' roles
+`send` accepts: `up down left right a b x y l1 r1 l2 r2 select start home quit leave wake`, and reads where the UI is
+before each key (`--at <page>`, `--launch`, `dev.sh expect <page>`: [DEVICE-TESTS.md](DEVICE-TESTS.md#where-the-ui-is-tmppocket-uistatus)).
+`wake` turns a dark screen on and is no button. The letters are the menus' roles
 (a confirms, b goes back, x is the top button's action, y the left one's), the same in both Settings → Playing → Button
 layouts: the FIFO is not a physical pad (`button_layout`). A real pad's buttons, and `vdev.sh pad press A`, which is
 one, follow the layout. `quit` ends pocket-ui with
@@ -299,7 +305,7 @@ With `POCKET_CORE_TEST=1` the host's command FIFO is in `TMPDIR`, isolating thes
 `<data>/started-boot`), without a crash notice, and when `<data>/last-game.json` says the game ended normally. In the
 virtual device the boot id never changes: remove `started-boot` to try a "first start".
 
-**Settings → Playing → Buttons → Button layout** (`src/button_layout.rs`): the menus' code and hints speak in four roles on
+**Settings → Playing → Buttons → Button layout** (`src/button_layout.rs`; pure shared `ButtonLayout` in `src/button_layout_model.rs`, also used by Android controls cards): the menus' code and hints speak in four roles on
 `Button::East` (A, confirm), `South` (B, back), `North` (X) and `West` (Y). The setting (Nintendo: as printed; Xbox:
 A and B swapped, X and Y swapped) decides which physical button plays which role. The one place it is applied is the
 closure `main` hands to `pad::linux::supervise` (`Remap::event`, on the pad threads, before the event reaches the UI
@@ -331,11 +337,20 @@ keyed by it). The constants (`VOID`, `CHALK` …) and `DARK` stay Warm's: overla
 
 ## Tests
 
+`python3 -I scripts/image/test-receipts.py` checks image/release receipts with tiny fixture files and a stand-in
+GitHub client. It covers legacy check logs, real check-script entrypoints, the shared STORAGE floor, interrupted
+checks and refusal of changed/unchecked uploads before any network action (see [SD images](SD-IMAGE.md)).
+
+The package fixtures cover Ports repairs with an unchanged version (damaged binaries, missing splash and rebuilt
+package bytes), using the installer's `--check-installed` result. The boot-hook fixtures inject a failed seed copy,
+a failed seed sync, and a power cut immediately after GAMES ownership-state removal, before the following sync.
+They keep the retry source until copied seed data is synced and keep split ownership until the grow marker's removal is durable.
+
 | Command | What it runs |
 |---|---|
 | `cargo test` | The unit tests on your computer. Tests that need `/proc`, `prctl` or real process groups (`src/control.rs`) only exist on Linux and are left out on macOS |
 | `scripts/test-linux.sh [filter]` | The library's unit tests on Linux (aarch64, in Docker), including the Linux-only ones. The first run builds a small Debian image with gcc and curl |
-| `scripts/gate.sh [worktree]` | The merge gate: the tests at release level, then the launcher tests, the verify-device test, the core-licence check's test, the install package's test, the quiet start's test (`deploy/test-grub-quiet.sh`) and the image check's grub.cfg test (`scripts/image/test-grub-checks.sh`); prints `GATE: ok (N passed)` and exits 0, or `GATE: ... FAILED` and exits 1 ([Merge gate](#merge-gate)) |
+| `scripts/gate.sh [worktree]` | The merge gate: the tests at release level and, on an exclusive host, independent shell lanes on separate cores; the launcher tests, the verify-device test, the core-licence check's test, the install package's test, the quiet start's test (`deploy/test-grub-quiet.sh`) and the image check's grub.cfg test (`scripts/image/test-grub-checks.sh`); prints `GATE: ok (N passed)` and exits 0, or `GATE: ... FAILED` and exits 1 ([Merge gate](#merge-gate)) |
 | `sh deploy/image/test-mount-storage.sh` | Tests of the SD image's boot hook `deploy/image/mount-storage.sh`: the first-start seed and the guard against system updates pocket-ui did not stage; and of the GAMES drive's `games-first-start.sh` and `games-mount.sh` with stand-ins for what changes the card: a power cut at every tool call, a small card, a foreign partition, each failure ([SD-IMAGE.md](SD-IMAGE.md)) (part of the gate) |
 | `sh deploy/image/test-hooks.sh` | Tests of the SD image's `post-flash.sh` in the virtual device's base image (Docker) |
 | `sh deploy/fat/test-hook.sh` | Tests of the FAT-card install hook (`deploy/fat/mount-storage.sh.in`, built by `scripts/make-fat-install.sh`, [INSTALL-DUAL-BOOT.md](INSTALL-DUAL-BOOT.md#install-with-two-files-on-the-official-rocknix-card)) against a fake /flash and /storage with only the initramfs's applets: not grown yet is a no-op, install, third start, second run, another pocket-ui present, damaged or missing tar, STORAGE too small, wrong content, the Xbox core of `make-fat-install.sh --hakux` (with the real files in `POCKETUI_FAT_DIR`), and the H700 device check (five models accepted, the CubeXX and unknown H700 handhelds refused). About 2 s, part of the gate |
@@ -345,10 +360,10 @@ keyed by it). The constants (`VOID`, `CHALK` …) and `DARK` stay Warm's: overla
 | `scripts/check-image.sh <img.xz>` | Offline check of a built SD image: partitions, labels, GRUB, kernel and device tree, every file on STORAGE, no developer data ([SD-IMAGE.md](SD-IMAGE.md)) |
 | `sh deploy/test-run-pocket-ui.sh` | Tests of the launcher `deploy/run-pocket-ui.sh` and the drop-in with a fake pocket-ui, a fake game and fake `systemctl`: every stage of the [rescue path](ARCHITECTURE.md#rescue-path) (crash restarts, rollback after a failed update, the last known good version, safe mode, EmulationStation only on request or when pocket-ui can't run), the exit codes, the black screen guard, the helpers' time limits, essway mode, the logger for `logs/` (src/logs.rs), Smooth fan's hand-back (clean-up, watchdog, TERM; [FAN-CURVE.md](FAN-CURVE.md#safety)), and ROCKNIX's UI-start steps (20261001's and ROCKNIX main's, [UPDATES.md](UPDATES.md#rocknixs-ui-start)). Needs Linux; elsewhere it re-runs itself in the virtual device's base image (about 45 s). Where `/bin/sh` is dash (Debian, Ubuntu) it runs in bash, the device's `/bin/sh`: dash's `kill` takes no `--`. It clears `LANG` and the other locale variables, as systemd starts the launcher without them |
 | `cargo test --release --test picture_shaders` | pocket-core's picture shaders on a headless GLES 3 context (EGL's device platform, Mesa's llvmpipe on a Linux computer; also part of `cargo test`): every variant compiles and links, Sharp and Crisp at whole scales show the pixels as they are, scanlines stay even and keep a flat picture's light at Aspect, the GPU's scanlines match the CPU reference in `src/picture_fx.rs`, the LCD grid and its GBA colours, the CRT mask, Soft glow's halo, Smooth pixels' stair-steps (and flat areas left alone), a 3D core's lines, a picture turned by Screen orientation (both ways, on top of a core's own turn, its scanlines). Without a GL context the tests print SKIPPED and pass; `POCKET_REQUIRE_GL=1` makes that a failure ([HOST.md](HOST.md#picture-effects-2026-10-24)) |
-| `cargo test --release --test i18n_snapshots` | The translated interfaces (also part of `cargo test`; the three coverage tests are release checks, `scripts/release-check.sh`): every string of `src/` that reads like words has a line in `assets/i18n/de.tsv` or is listed as a name or as never shown, every state of `tests/i18n-states.txt` rendered in German and Spanish shows no English sentence, and the system language (`LANG`, as the launcher passes on EmulationStation's) decides until Settings → System → Language is chosen. Each snapshot gets its own copy of the made-up data folder. Needs python3; on Linux without a compositor it starts `scripts/wayland-stub.py` itself. See [Translations](#translations) |
+| `cargo test --release --test i18n_snapshots` | The translated interfaces (also part of `cargo test`; the German and Spanish snapshot matrix is a release check; the source audit is in the gate, `scripts/release-check.sh`): every string of `src/` that reads like words has a line in `assets/i18n/de.tsv` or is listed as a name or as never shown, every state of `tests/i18n-states.txt` rendered in German and Spanish shows no English sentence, and the system language (`LANG`, as the launcher passes on EmulationStation's) decides until Settings → System → Language is chosen. Each snapshot gets its own copy of the made-up data folder. Needs python3; on Linux without a compositor it starts `scripts/wayland-stub.py` itself. See [Translations](#translations) |
 | `cargo test --release --test nav_explorer` | The D-pad explorer (also part of `cargo test`, [The navigation explorer](#the-navigation-explorer)): the real binary driven with buttons through every page of Settings, the quick settings, the power menu, SELECT + START's dialog, a game's pause menu, the newer-version card and the first start, at 1240x1080, 640x480 and 1024x768; fails when a drawn row can't be reached, a page can't be left with B, the hint bar names a key that does nothing or leaves out A or B that work, or the selection moves without a visible focus. Each part is its own test, so they run side by side: the gate runs Settings at 1024x768, the overlays at 640x480 and the first start at 1240x1080; `scripts/release-check.sh` the other sizes, Settings in Large text and on an Odin 2 Mini (SM8550) |
 | `cargo test --release --test game_check` | Settings → Games → Game check as a player meets it (also part of `cargo test`): cards with the usual mistakes made in a temp folder, `game-check:real` rendered in English at 1280x720 and German at 640x480 Large; what must be on the screen, and no cut text |
-| `cargo test --release --test text_size` | Settings → Look → Text size (also part of `cargo test`): every state of `tests/i18n-states.txt` rendered in Medium and in Large, in English and German, with the text painter recording where each string went (`POCKETUI_TEXT_BOXES`); fails on text that runs into other text or a hint bar, touches the string beside it, or is cut by the edge of what it is painted into (or, at the top or bottom, by the picture's own edge) ([DESIGN.md](DESIGN.md#text-size)). A second test reads the size from settings.json and finds it on its Settings row. About 2,200 snapshots; needs python3 as the German test. The `textfit_031_` cases also check the missing-lights note, setup/search headings, controller notes, series headings and complete system names across Barlow and Retro, Normal/Large, EN/DE/ES and 640x480, 1024x768, 1240x1080, 1280x720. The Info regression walks down past long facts and checks that a full description line is actually readable; the navigation regression reaches every Sleep & power row above the hints. The `textfit_brick_031_` cases (`--features brick`) cover the larger Brick minima at 1024x768, Normal/Medium/Large, EN/DE/ES and Barlow/Retro: complete system facts, Recent games, rating/save labels, complete system/year metadata beside Favourite (also NES with and without Favourite, allowing its existing short name when needed), credits, password and Extras explanations, Pixel Path grades clear of their explanation, and measured Performance labels clear of their readings. The Brick settings walk also checks every Sleep & power explanation in Barlow/Retro and Normal/Medium/Large, with complete rows above the existing footer. The `textfit_rest_031_` cases check Tailscale (every state), the first start with the untested-device paragraph and safe mode's rows in Barlow, Retro and Retro's pixel font; the navigation explorer's first-start case walks the welcome rows on the RG DS Plus above the hints, and the safe-mode case selects each row of safe mode (the painters' focus mark, `POCKETUI_NAV_PROBE`) and finds its whole band above the hints. A third test renders every state at 1024x768 in Large and fails on `V`, text the picture's top or bottom edge cuts. A fourth renders every state in the Retro style (`POCKETUI_RETRO=cocoa`), Large German, at 1240x1080 and 640x480, with the same record; a fifth the Retro pause menu, Save/Load, Options, quick settings and pocket-core's notes in Large German and Spanish at 1240x1080, 640x480 and 1024x768 behind a long game name, with the windows' frame lines recorded as areas no text may touch, and checks that the longest names show whole ([RETRO-STYLE.md](RETRO-STYLE.md)) |
+| `cargo test --release --test text_size` | Settings → Look → Text size (also part of `cargo test`): every state of `tests/i18n-states.txt` rendered in Medium and in Large, in English and German, with the text painter recording where each string went (`POCKETUI_TEXT_BOXES`); fails on text that runs into other text or a hint bar, touches the string beside it, or is cut by the edge of what it is painted into (or, at the top or bottom, by the picture's own edge) ([DESIGN.md](DESIGN.md#text-size)). A second test reads the size from settings.json and finds it on its Settings row. About 2,200 snapshots; needs python3 as the German test. The `textfit_031_` cases also check the missing-lights note, setup/search headings, controller notes, series headings and complete system names across Barlow and Retro, Normal/Large, EN/DE/ES and 640x480, 1024x768, 1240x1080, 1280x720. The Info regression walks down past long facts and checks that a full description line is actually readable; the navigation regression reaches every Sleep & power row above the hints. The `textfit_brick_031_` cases (`--features brick`) cover the larger Brick minima at 1024x768, Normal/Medium/Large, EN/DE/ES and Barlow/Retro: complete system facts, Recent games, rating/save labels, complete system/year metadata beside Favourite (also NES with and without Favourite, allowing its existing short name when needed), credits, password and Extras explanations, Pixel Path grades clear of their explanation, and measured Performance labels clear of their readings. The Brick settings walk also checks every Sleep & power explanation in Barlow/Retro and Normal/Medium/Large, with complete rows above the existing footer. The `textfit_rest_031_` cases check Tailscale (every state), the first start with the untested-device paragraph and safe mode's rows in Barlow, Retro and Retro's pixel font; the navigation explorer's first-start case walks the welcome rows on the RG DS Plus above the hints, and the safe-mode case selects each row of safe mode (the painters' focus mark, `POCKETUI_NAV_PROBE`) and finds its whole band above the hints. A third test renders every state at 1024x768 in Large and fails on `V`, text the picture's top or bottom edge cuts. A fourth renders every state in the Retro style (`POCKETUI_RETRO=cocoa`), Large German, at 1240x1080 and 640x480, in both of Retro's letters (`POCKETUI_RETRO_LETTERS=departure|pixelify`; every other Retro run paints Departure Mono, the default, and the variable set for the whole run paints them all in Pixelify), with the same record; a fifth, likewise in both letters, the Retro pause menu, Save/Load, Options, quick settings and pocket-core's notes in Large German and Spanish at 1240x1080, 640x480 and 1024x768 behind a long game name, with the windows' frame lines recorded as areas no text may touch, and checks that the longest names show whole ([RETRO-STYLE.md](RETRO-STYLE.md)) |
 | `cargo test --release --test font_styles` | Settings → Look → Style (also part of `cargo test`): the layout-risk states (`tests/layout-risk-states.txt`) rendered at 640x480, Large text, German and Spanish with the Pixel and the Rounded font (`POCKETUI_FONT`), plus four states where a wide font once broke a word, with the same clipping record as `text_size` (no `O`, `T` or `E`) and no name painted with a word broken in pieces (`W`, `i18n::note_broken`: a painter that only counted lines must make the name smaller, `Text::title_px`/`words_fit`); settings.json's `"font"` reaches a start (Barlow when unset or wrong) and a theme's own `title.ttf` wins over the style; a `Text` follows a change of the style by itself, keeps Barlow's capital height and a pinned one (and safe mode's `Text::builtin`) does not move. Needs python3 for the made-up library and `scripts/wayland-stub.py` |
 | `cargo test --release --test small_screen` | Small screens (also part of `cargo test`): every state of `tests/i18n-states.txt` rendered at 640x480, the size of the H700 handhelds' screens, where the pages laid out for 1240x1080 must be cut off at the edge instead of slicing past the picture; fails when one does not render. The regression test for the 62 states that aborted there before (`gfx::Canvas::rect`, the game card's body). About 620 snapshots, eight at a time; needs python3 as the German test |
 | `cargo test --release --test cjk_snapshots` | Japanese game names (also part of `cargo test`): a made-up library of Super Famicom and Famicom games with Japanese names on a system's list in Split and in Cards (with the jump's big letter), on a game's card and in search, dark and light, Normal and Large text, with ROCKNIX's Noto Sans CJK (`POCKETUI_CJK_FONT`) and without it; fails when the font changes nothing or its names run into other text, touch it or are cut by an edge more than the names as "?" do ([DESIGN.md](DESIGN.md#japanese-chinese-and-korean-names)). Needs the font (`POCKETUI_TEST_CJK_FONT`, else the unpacked ROCKNIX image in `/tmp/rocknix-root-20261001`; without it: `SKIPPED`) and python3 for `scripts/wayland-stub.py` on Linux without a compositor |
@@ -384,8 +399,12 @@ keyed by it). The constants (`VOID`, `CHALK` …) and `DARK` stay Warm's: overla
 | `scripts/idle-cpu.sh [seconds [max %]]` | In the virtual device (after `vdev.sh deploy`): starts a game and measures pocket-ui's CPU and wake-ups per thread while it runs behind it; fails above 1 %. It should sleep while a game runs |
 
 A unit test that writes a fake program for the code to run (a stand-in `curl`, `bluetoothctl`, ROCKNIX script ...)
-writes it with `testutil::write_executable`, not `std::fs::write` + `set_permissions`: a file this multi-threaded test
-process ever held open for writing can fail to start with "Text file busy" when another test forks at that moment.
+writes it with `testutil::write_executable`; integration tests use `tests/common/executable.rs::publish`. Both use the
+same helper: unchanged bytes keep the existing executable, and a child writes changed bytes to a temporary file,
+closes it, then atomically renames it into place. Never truncate a program a previous worker may still be running.
+Writing in the child also prevents another test's fork from inheriting a writable descriptor ("Text file busy").
+`cargo test --profile gate --test fake_executables` covers a live old executable, unchanged fixtures, and parallel
+publish/exec traffic without retries that would hide the race.
 
 A test that asserts *how long* something took measures the calling thread's CPU time
 (`run_ahead::thread_cpu_ms()`), never the wall clock: the build machine runs other builds next to the gate, and a thread
@@ -432,14 +451,16 @@ An empty measurement window is missing evidence. A core-routing host test cannot
 after every press it reads what the frame offered instead of looking at pixels. A frame's offer is recorded by
 `src/nav_probe.rs` when `POCKETUI_NAV_PROBE` names a file: every string with its place, `‹nav:row›` where a row or control
 a player can operate is drawn, `‹nav:focus›` where the focus mark is, `‹nav:hint›` for each hint the bar shows; the
-binary adds where the App is (`@where`, `src/app_nav_probe.rs`: "settings:List Look", "setup:look (settings)",
-"pause:Options", what covers it after " / "), the list it registered for touch (`@list`, `@hit`), a fingerprint of the
-picture, `@busy` while a Wi-Fi list scan or cartridge lookup is pending, and `@end`. The explorer waits for both a
-visually stable frame and a completed Wi-Fi list scan. Other loading screens remain observable, including the
+binary adds where the App is (`@where`, `src/app_where.rs`: "settings:List Look", "setup:look (settings)",
+"pause:Options", what covers it after " / "), which painter painted the frame and which one `@where`'s page belongs to
+(`@painted`, `@painter`: the explorer fails when they differ, and `tests/where_states.rs` checks the same over the snapshot
+states), the list it registered for touch (`@list`, `@hit`), a fingerprint of the
+picture, `@busy` while a Wi-Fi list scan, Tools scan/run or cartridge lookup is pending, and `@end`. The explorer waits for both a
+visually stable frame and completed asynchronous work. Other loading screens remain observable, including the
 remote-access regression that deliberately holds its reply until after inspecting the initial frame. Lookup journeys wait until the UI has applied the worker
 result and the refreshed library has reached the shelf before continuing. Game-check journeys also wait for
 the independently refreshed library before opening the corrected game list. The phone-upload page harness drains
-its pending XHR and FileReader callbacks; a quiet upload counter does not mean those jobs completed. The FIFO command `nav` writes the record without a PNG.
+its pending XHR and FileReader callbacks; a quiet upload counter does not mean those jobs completed. The FIFO command `nav` writes the record without a PNG. `nav-after <key>` (test driver only) sends the same pad press and release through the normal input handler and captures their immediate painted result in that UI event. Fast same-result worker replies cannot overtake that capture. The explorer retains its visible-change assertions, then waits for the settled result. Its Tools regression delays reading the capture by 50 ms and checks both the loading frame and the unchanged final list. The manual cartridge-name fixture saves the real `art_off` setting so automatic downloads cannot take the claim from its manual lookup; a second journey uses slow local picture helpers.
 
 The shared painters declare themselves (`kit::selection`, `kit::row_label`, `kit::shelf_row`, `retro::select`,
 `features::row_back`, the first start's pill rows, both hint bars), and the rows a list registers for touch count as rows.
@@ -460,6 +481,12 @@ the card and replays the buttons. A test fails on:
   leaves whose bar doesn't name B;
 - a hint whose key does nothing (anything on screen changing for a moment counts, "Looking…"), A that works without an A
   hint.
+- a move of the selection (Up or Down changed the focused row or the list's) that asks for no haptic tick or no menu
+  sound. The record's `@feedback` says what the keys since the last record asked for ("tick", "sound:Nav"), whether or
+  not haptics and sounds are switched on; the report lists each page's moves, ticks and sounds. Both come from one mark
+  of where the UI is (`App::feedback_view`, `src/app_where.rs`: the page's name, the state of the page in front by its
+  `Place`, its covers'), so a new page says what moves on it or the match doesn't compile. The shelf's side (Recent
+  games, a card's pickers, a console page) is `tests/user_journeys.rs`, `every_move_on_the_shelf_side_asks_for_a_tick_and_a_sound`.
 
 Keys other than A and B that work without a hint are listed in the report, not failed (the bar shows four hints at most).
 Not pressed: rows that restart or quit pocket-ui, start a game or erase something (`NOT_PRESSED`). Test buttons takes
@@ -488,10 +515,14 @@ The user guide is also the manual on the device, and the features keep changing 
 documents against the code (`src/doc_checks.rs`, a test module of the `pocket-ui` binary; no network, milliseconds).
 Each check compares names and structure, not wording:
 
-Since 2026-11-04 only the checks that guard a player's way stay in the merge gate. The bookkeeping ones (every source
-string has a German line, the German and Spanish snapshot matrix, every environment variable and source module
-documented, the Settings paths in prose, each category's line naming its rows in order, the manual's page length) are
-`#[ignore = "release check: ..."]` tests that `sh scripts/release-check.sh` runs before a release. When one is red,
+Since 2026-11-04 only the checks that guard a player's way stay in the merge gate. The bookkeeping ones (the German and
+Spanish snapshot matrix, every environment variable and source module documented, the Settings paths in prose, each
+category's line naming its rows in order) are `#[ignore = "release check: ..."]` tests that `sh scripts/release-check.sh`
+runs before a release. Two of them moved back into the gate on 2026-11-09 because a release candidate found them red and
+they take seconds: every source string has a German line (`scripts/i18n-extract.py --check`), and no manual page is
+taller than 30 000 px (default pages and the Brick's). When one is red,
+`scripts/release-check.sh` also fails when the AArch64 programs no longer fit the SD image's 32 MiB STORAGE with room to grow
+(`scripts/image/storage-budget.sh`, [SD-IMAGE.md](SD-IMAGE.md#storage-room); give it `POCKET_STORAGE_BIN_DIR`).
 `scripts/doc-missing.py` lists the undocumented environment variables and source modules, and
 `scripts/i18n-extract.py --stub` the missing German lines; descriptions and translations are written by hand.
 
@@ -555,7 +586,7 @@ the `app_*.rs` files, whose comments give the details:
 | `slot-save`, `slot-load`, `slot-auto`, `slot-undo`, `slot-empty`, `slot-one`, `slot-earlier[:start\|:none\|:damaged]` | Save and Load with the slots on the game's save medium, Auto, Before load, an empty slot, the 3DS's one slot; Earlier selected (`app_earlier.rs`, `[picture.png]` as its picture): on the state from 12 min ago, on a session start, with none yet, on a damaged one |
 | `save-card:<ps1\|ps2\|gamecube\|vmu\|xbox\|stick\|<cartridge system>>` | One memory card (or a cartridge) alone on grey, large and at the pause menu's size, to compare with a photo of the real one (`app_save_media.rs`) |
 | `slot-<save\|load\|auto\|undo\|empty>:<system>[:nocover][:card]`, `info:…:saves[=none]`, `box:<system>:<name>:saves[=none][:end]` | The same slot page for a made-up game of that system, its slim row in the save medium's plastic (`:card`: the medium itself beside its blocks, as with Memory card in the pause menu on; `psx`, `ps2`, `gamecube`, `dreamcast`: memory card; `snes`, `gba`, `megadrive`, `nds`: cartridge; `ports`: a plain row), with a made-up cover written to the data folder (`:nocover`: the console's picture); a card's info page or box back with save slots 1, 3 and 6 two days old (`=none`: all empty; `:end`: the back scrolled to "Your game"; `app_save_media.rs`) |
-| `options`, `picture[:<row>][:left\|:right]`, `picture-gba[:<row>][:left\|:right]`, `picture-snes[:<row>]`, `picture-psx[:<row>]`, `picture-custom[:<row>]` (a GBA game: the LCD grid's colours row; a SNES game, whose grid shows as Custom; a PlayStation game as it starts, Look Clean; one with the Look turned to Custom, its Sharpness and Effect open; `:left`, `:right`: Screen orientation turned, its row is the last; a raw game frame as the fourth argument stands in for pocket-core's preview, turned likewise), `shortcuts[:<row>]`, `extras[:<row>][:<off\|fps\|sensors\|pixel>]`, `emulator[:<row>]`, `category:<cat>:<row>`, `controls[:<row>]`, `cheats[:<row>]`, `cheats-more[:<row>]` (made-up cht files: cheats with codes and two entries pocket-core can't apply), `cheats-only` (only such entries) | The Options pages of a pocket-core game; `extras:3:sensors` has Over the game on FPS + sensors (any level's value works), `extras:2` is Earlier states |
+| `options`, `picture[:<row>][:left\|:right]`, `picture-gba[:<row>][:left\|:right]`, `picture-snes[:<row>]`, `picture-psx[:<row>]`, `picture-custom[:<row>]` (a GBA game: the LCD grid's colours row; a SNES game, whose grid shows as Custom; a PlayStation game as it starts, Look Clean; one with the Look turned to Custom, its Sharpness and Effect open; `:left`, `:right`: Screen orientation turned, its row is the last; a raw game frame as the fourth argument stands in for pocket-core's preview, turned likewise), `shortcuts[:<row>]`, `extras[:<row>][:<off\|fps\|sensors\|pixel>]`, `emulator[:<row>]`, `category:<cat>:<row>`, `controls[:<row>]`, `cheats[:<row>]`, `cheats-more[:<row>]` (made-up cht files: cheats with codes and two entries pocket-core can't apply), `cheats-only` (only such entries), `cheats-get`, `cheats-downloading`, `cheats-offline`, `cheats-unavailable` (optional cheat data: download offer, percentage, Wi-Fi retry, missing description) | The Options pages of a pocket-core game; `extras:3:sensors` has Over the game on FPS + sensors (any level's value works), `extras:2` is Earlier states |
 | `ps2-options`, `gc-options`, `wii-options`, `3ds-options`, `gc-more`, `wii-more` | The Options of PS2, GameCube, Wii and 3DS |
 | `notice:<several\|password\|packing\|checksum\|incomplete\|empty\|none\|bios\|bios-segacd>`, `notice:patch-<version\|damaged\|big\|kind>` | Home with the card a game that didn't start leaves: what pocket-core says about a zip it refuses (`archive::message`), about a patch next to the game it refuses (`softpatch::message`), or the safety net's BIOS line (`bios-segacd`: naming the BIOS files a Sega CD game lacks) |
 | `achievements-menu`, `achievements-list:<row>`, `achievements[:in\|:user\|:password\|:signing\|:error\|:confirm]` | The pause menu with Achievements, its list, Settings → Playing → RetroAchievements |
@@ -564,7 +595,9 @@ the `app_*.rs` files, whose comments give the details:
 | `settings[:<category>]`, `settings:<category>:<row>`, `about`, `battery[:<range>][:samples]`, `sleep[:<row>][:screen][:never][:old]`, `manual[:<page>[:<pixels>]]` | Settings' categories with that one selected (0 = Look … 6 = Help & tools), a category's list at that row (from 0: `settings:2:6` is Playing → Battery); the rows counted are the shown ones, so Games has no Store row unless POCKETUI_DATA's settings.json has a `store_url`, About, Battery (`:samples` writes six made-up hours of history into POCKETUI_DATA first, with `POCKETUI_BATTERY` a battery), Settings → System → Sleep & power (`App::sleep_power_snapshot`: that row selected; `screen` with Short press on Screen off and Hold on Sleep, `never` with both times on Never, `old` with the 3 min of a file from before the page), a page of the manual (0 = the first) scrolled down |
 | `updates:note`, `updates:refused` | Settings → System → Updates after "Get system": staged with a note of what the new system lacks, refused because pocket-ui would break ([UPDATES.md](UPDATES.md#os-what-pocket-ui-needs-from-the-new-system)) |
 | `buttons[:<row>][:<presses>]`, `setup:look-systems` | Settings → Playing → Buttons (Button layout, Button symbols, the picture of the four buttons), and Systems on the shelf opened from its own row (B goes back to the Settings list) |
-| `setup:extras[:<keys>]` | Settings → Games → Pictures & extras (Cover art, Pictures, PortMaster games; keys `d`, `u`, `a` as for the other `setup:` steps) |
+| `setup:extras[:<keys>]` | Settings → Games → Extras (Box art, Pictures, supported PortMaster/Cheats rows, Starter pack; keys `d`, `u`, `a` as for the other `setup:` steps) |
+| `setup:extras-cheats-<state>` | TrimUI optional database row: missing, downloading, checking, saving, installed, installed-offline, update, offline, no-space, error, remove; use a Brick build/device for these rows |
+| `ports-empty[:a[:b]]` | Empty Ports shelf, its Get PortMaster pointer and the return with B |
 | `gallery[:<what>][:<row>]` | Settings → Games → Screenshots with made-up screenshots (ten PNGs over five weeks, written to `<POCKETUI_DATA>/gallery-made-up`, today is 24 October 2026; `App::gallery_snapshot`): the list (`:<row>` selects another), `full` the picture alone, `delete` and `full-delete` the question X asks, `broken` and `broken-full` with two damaged files on top, `empty`, `loading` (the folder not read yet), `game` and `game-full` one game's own list (opened from its card), `card` the game's card on its "Screenshots (N)" row, `shelf` and `full-shelf` the list and the picture with what Y says |
 | `gamelist[:<row>][:none\|:all\|:done]` | Settings → Games → From EmulationStation for the gamelists in the made-up library's `roms/gba/gamelist.xml` (`scripts/curator-fake-library.py`; or any `POCKETUI_ES_SYSTEMS` whose ROM folders hold one): `none` as if there were none, `all` after favorites and ratings were taken over, `done` after A on the row. `curator:card:gba:advance` is the card of a game the gamelist describes (`App::gamelist_snapshot`) |
 | `controls-card[:<system>][:remap][:first][:off][:zoom]`, `controls-card-row:<system>:<game>`, `controls-card-pause` | The controls card ([controls-card.md](user/controls-card.md)): over the shelf for the first game of that console (`remap`: the Pocket's X presses A and Y nothing, as saved; `first`: the first start's hint; `off`: HOME + R1 switched off; `zoom`: HOME + X switched on), the game's card on its Controls row, and Options > Controls > Controls card of the pause menu (`App::controls_card_snapshot`) |
@@ -680,9 +713,27 @@ Interactive navigation, user journeys and serial timing always execute the actua
 cache before timing checks. `POCKETUI_SNAPSHOT_CACHE_DISABLE=1` runs each request again through the same staged
 fixture for controlled comparisons. The gate reports requests, reuse and renderer starts before deleting its cache; raw counts remain in `/tmp/gate-snapshots-<worktree>.jsonl`.
 
-The gate also prints separate wall times for the Rust runner plus doctests, the Brick input corpus and UI checks, serial timing
-checks, platform checks and shell suites (`gate: stages …`). The runner includes compilation; nextest's own Summary
-and Cargo's Finished lines distinguish test execution from compilation.
+On a train host with `GATE_EXCLUSIVE=1`, `scripts/gate-cpus.py` splits the allowed CPU affinity into disjoint
+SMT sibling groups: at least six logical CPUs for Rust and one separate physical core group for each shell lane.
+The optional `GATE_CPUSET` is intersected with the current affinity and enforced for every tier, including docs
+and quick checks; an invalid or empty intersection fails. Without exclusivity, `taskset`, enough separate cores,
+or with `GATE_PARALLEL=0`, the gate keeps its serial schedule.
+
+Default compilation finishes first. Ordinary Rust tests/doctests, the launcher lane and the small shell lane then
+overlap on their own groups. Both shell coordinators join before the Brick feature build: separate CPUs do not
+isolate compiler I/O or memory pressure from watchdogs. Brick runs after default integration tests, since its build
+can replace the unversioned UI executable those tests launch. Timing runs alone after every lane and build; it
+keeps one test thread, no render cache and no scheduler retry. `scripts/gate-shell.sh` preserves every selected
+shell suite and its exit-code file, unsets the layout cache, and inherits the train's process group for aborts.
+No persistent CPU reservation or cgroup is created.
+
+The gate prints separate wall times for the Rust runner plus doctests (including compilation), the Brick corpus/UI,
+serial timing, platform checks and the actual shell interval (`gate: stages …`). Overlapping durations do not add
+to the total. A `gate: schedule` JSON line records CPU groups and stage windows; nextest's Summary and Cargo's
+Finished lines distinguish execution from compilation. `python3 scripts/test-gate-schedule.py` checks lane overlap,
+join ordering, serial fallback, failures, missing coordinator results and group aborts with bounded stand-in
+processes. It also checks disjoint SMT groups for all nonempty caps of a small topology. Both scheduler fixtures
+and path-selection fixtures run before suite selection, including on the short path.
 
 Private builds run `--features brick --test brick_settings_walk` and the `text_size` group's
 `textfit_brick_031_` cases alongside the Brick input corpus. The ordinary
@@ -691,20 +742,45 @@ sleep explanations and complete hints with the actual Brick build. It uses host-
 fails the gate without a retry; docs-only changes and public builds without the private feature keep their existing
 tiers. Real in-game device-family smokes remain a separate release requirement.
 
-The full gate (`scripts/gate.sh`) runs all Rust, Brick, serial timing, platform and shell tiers whenever a train
-contains a source, test, script, Cargo, asset or unknown path. `GATE_FULL=1` forces that path. Only a strictly
-allowlisted train takes the short path: unembedded root `*.md`, `docs/**/*.md` outside `docs/user/`, and
+**Two tiers (since 2026-11-10).** The merge gate is the *fast tier*, aimed at 8 minutes on the train host. The *full gate*
+(`GATE_FULL=1 scripts/gate.sh`) runs every night on `origin/main` (maintainer tooling, result in a status file) and
+inside `scripts/release-check.sh`; red there means a fix on main before the release, not a blocked merge queue.
+
+The fast tier compiles every program (`cargo test --no-run`: all integration test programs, so a broken suite still
+fails), runs all unit tests (with the documentation checks), the doctests and every integration suite except the slow
+layout matrices listed in `scripts/gate-parts.py` (`text_size`, `long_titles`, `nav_explorer`, `small_screen`, …)
+and the absolute CPU budgets `settings_open` and `shelf_moves` (they run alone and go red on an overloaded host).
+It runs `cargo check --features brick` and the Deck check. `scripts/gate-parts.py` adds what the change touches:
+
+| Change | Also runs |
+|---|---|
+| a slow suite's own `tests/<suite>.rs`, `tests/snapshots/`, `tests/fixtures/` | that suite (all of them for the shared folders) |
+| fonts, `src/text*`, `src/textfit*`, `src/type_scale*`, `src/font*`, `src/letters*`, `src/name_lines*` | the text-fit suites |
+| `assets/i18n/` (not `skip.txt`), `docs/user/`, `tests/i18n*`, `src/i18n.rs`, the state lists | the German/Spanish matrix, `text_size`, `names_never_translated` |
+| a path with `brick` in it, `src/input_corpus*`, `src/fn_keys*`, `src/manual*` | the Brick corpus, manual pages, slider and UI walk |
+| `android/`, a Rust file with `target_os = "android"` | the Android check |
+| a script/deploy/asset/unknown path, or a Rust file a shell script names | the shell suites |
+| `Cargo.*`, `build.rs`, `.cargo/`, `.config/`, `tests/common/`, the gate's own scripts | the full gate |
+
+The timing tier and the remaining slow suites never run in the fast tier. The gate prints the tier and what it chose
+(`gate: fast tier …`, `gate: tier fast; compile N s`).
+
+In the full gate the German and Spanish snapshot matrix (~45 s), every manual page under 30 000 px (default pages, and
+the Brick's with the private feature) and the source translation audit run as well; a docs-only gate skips them.
+
+The short path is unchanged. Only a strictly
+allowlisted train takes it: unembedded root `*.md`, `docs/**/*.md` outside `docs/user/`, and
 `assets/i18n/skip.txt` (extraction notes). It runs the same active `doc_checks::` link/index/document checks and
-`i18n::` checks as the full gate, plus the private-data scan. The on-device manual, `LICENSE`, `NOTICE.md`,
+`i18n::` checks as the other tiers, plus the private-data scan. The on-device manual, `LICENSE`, `NOTICE.md`,
 runtime translation TSVs and documents embedded with `include_str!`/`include_bytes!` or read by other Rust
-contracts retain the full gate.
-Unknown dynamic embed expressions, symlinks, a missing change list and mixed changes also select the full gate.
+contracts leave the short path.
+Unknown dynamic embed expressions, symlinks and mixed changes also leave the short path; a missing change list selects the full gate.
 A failed document, link/index, translation or private-data check cannot merge through the short path.
 
 `sh scripts/test-gate-paths.sh` verifies this selection with temporary fixtures and a fake cargo command, without building;
-the full gate always runs it before selecting suites. Missing or incomplete results of selected shell suites fail the
+every gate except the quick tier runs it before selecting suites. Missing or incomplete results of selected shell suites fail the
 gate. An interrupted parallel coordinator fails without retrying beside a lane it may have left running.
-After the tests (unless only documents changed) the gate runs `scripts/check-platforms.sh`: `cargo check --features x11`,
+After the tests the full gate runs `scripts/check-platforms.sh` (the fast tier: the Deck part, Android when touched): `cargo check --features x11`,
 the Steam Deck build's own code ([STEAMDECK.md](STEAMDECK.md)), and `cargo check --target aarch64-linux-android` of the
 two Android crates (`android/`, `android/player/`, and with them the shared `src/` under `cfg(target_os = "android")`;
 [ANDROID-MVP.md](ANDROID-MVP.md)). A few seconds each once warm. A compile error there fails the gate (`GATE: platform
@@ -735,9 +811,8 @@ leaves the UI waiting for the system to turn off; use a failing command to exerc
 This is a host journey harness,
 not proof of game rendering, audio, Wayland surfaces or physical hardware.
 
-Agent rule: use the quick tier while editing; run the complete `gate.sh <worktree>` (the wrapper around `scripts/gate.sh`) in the
-merge queue before merging. A quick pass is never merge approval. The full gate retains all shell, documentation,
-translation and layout checks. The full gate uses `profile.gate`; quick uses `profile.quick` (our crate at opt-level 1,
+Agent rule: use the quick tier while editing; let the merge queue run `scripts/gate.sh` (the fast tier) before merging. A quick pass is never merge approval.
+The full gate (nightly, release check) retains all shell, documentation, translation, layout and timing checks. The full gate uses `profile.gate`; quick uses `profile.quick` (our crate at opt-level 1,
 256 codegen units, dependencies at opt-level 3/16 units). Both retain release's checks and unwinding, disable LTO and
 compile incrementally. `GATE_PROFILE` overrides either tier. Shipping builds still use `profile.release`. Builds default
 to four jobs and low priority.
@@ -786,6 +861,8 @@ The runtime reductions preserve behaviours:
   helper forked by another test. The guard explicitly unlocks before close, so that helper cannot temporarily retain
   the logger lock. This replaces a scheduling-dependent failure with a deterministic regression check; no retry.
 - Fake shutdown/suspend paths skip a real flush of the build host's filesystems. Production power paths keep it.
+  Every sync(2) goes through `fsutil::flush_all()`, which tests and mock runs skip (a source rule refuses direct
+  calls). Shell fixtures must stub `sync` too: with uutils coreutils (a build computer's `/usr/bin/sync`) `sync FILE` flushes the whole disk.
 - After the RTC fix, the early-shutdown test blocks its worker on a channel before disarm rather than running
   `sleep 1`. Restart and failed-power-off tests consume the worker’s completion message instead of polling time.
   Unit tests skip the three-second failure-notice delay; the production notice duration is unchanged. All new
@@ -885,7 +962,8 @@ What makes it fast, and why none of it tests less:
 - **Wait for the event:** fixture startup, save handoff, held config locks and controller startup use readiness,
   EOF or explicit acknowledgements. The Wayland socket appears only once listening. A save test keeps its child
   alive until the reader releases it. No minimum number of heartbeats per second is required. The system.cfg writer
-  flushes the file and parent directory, rather than all unrelated writes on the host, and reports flush failures.
+  flushes the file and parent directory and reports flush failures; its test stub records that barrier instead of
+  running `sync`, which is a whole-disk flush with uutils coreutils.
   Upload test clients also await a test-only request-completion event after TCP EOF; a response can precede the
   release of the server connection slot. Scope/reset tests observe their thread reaching the actual pending-write
   barrier before releasing the older card write.
@@ -971,6 +1049,24 @@ one press tries it and B leaves everything as it was.
 
 ## PortMaster ports that need the player's files
 
+TrimUI's optional runtime and native launcher: [TRIMUI-PORTMASTER.md](TRIMUI-PORTMASTER.md).
+`update::payload` exposes the updater transport to `--download-asset` before UI/audio startup; the card's
+`portmaster` helper stages it outside `app/`. Snapshot states `setup:ports-get`, `-checking`, `-update`,
+`-offline`, `-download` and `-error` use the existing Ports step; `portmaster_runtime_offer` in `nav_explorer`
+checks both fonts/appearances, Large DE/ES text and B/back/reopen.
+`setup:extras-cheats-<state>` and `setup:extras-portmaster-<state>` paint the real Extras row mapper with
+deterministic local facts. `tests/cheats_snapshots.rs` checks missing, downloading, checking, saving, installed,
+update, offline, low-space, error and removal states at 640×480 Large in EN/DE/ES, dark and light. The navigation
+explorer reaches every row, enters Starter pack and returns to the same Extras row with B.
+The TrimUI PortMaster row reads `ports::runtime_space` on a worker and uses `ports::remove_runtime` only after
+X offers removal and A confirms. Removal keeps games, HOME, engine runtimes and config; its completion refreshes
+free space on a worker before another Get. The browser's X still opens the selected game's own-file instructions.
+`optional_data::lock(&update::Cancel)` serializes optional pack workers, including cheats, until checkpointing
+finishes; it returns `None` when a queued request is cancelled. Never acquire it on the UI thread.
+`ports::runtime_space()` returns `RuntimeSpace { needed_kib, available_kib }` from a worker for translated
+capacity notices. `ports::remove_runtime(report, cancel)` uses the same lane and preserves engines/config,
+port folders and HOME saves; its caller must obtain explicit removal consent first.
+
 About half of PortMaster's arm64 ports are not ready to run (`attr.rtr: false`): they are engines for games the
 player owns. `ports.rs` keeps them (`Port::needs_files`, `Port::instructions` = `attr.inst`); only experimental
 ones are left out. The browser (`setup.rs`, `Step::Ports`) shows them as a second list, and `Step::PortFiles`
@@ -1021,14 +1117,16 @@ These are meant for development and tests; normal use needs none of them. On a d
 | Variable | Effect |
 |---|---|
 | `POCKETUI_MOCK=1` | Use in-memory mocks for brightness, Wi-Fi, battery and so on; skip the hardware GPU stock-clock helper |
-| `POCKETUI_MOCK_NOW=<Unix seconds>` | With `POCKETUI_MOCK`: freeze the wall clock used by Curator and relative play history; the synthetic library generator accepts the same value for timestamps and anniversaries. Snapshot fixtures pin both children to `tests/common/root.rs`’s `FIXTURE_NOW`; monotonic deadlines and cartridge RTC tests keep their own clocks. |
+| `POCKETUI_MOCK_NOW=<Unix seconds>` | With `POCKETUI_MOCK`: freeze the wall clock used by Curator, relative play history, Automatic appearance and the room/night lighting; the synthetic library generator accepts the same value for timestamps and anniversaries. Room lighting retains `POCKETUI_CLOCK_SHIFT` and the explicit `POCKETUI_ROOM_TIME` override; static cache comparisons keep byte-for-byte PNG and probe equality across real clock transitions. Snapshot fixtures pin both children to `tests/common/root.rs`’s `FIXTURE_NOW`; monotonic deadlines and cartridge RTC tests keep their own clocks. |
 | `POCKETUI_MOCK_ZONE=<zone>` | With the mocks: the time zone the system starts with (`UTC` for a fresh ROCKNIX) ([VIRTUAL-DEVICE.md](VIRTUAL-DEVICE.md)) |
 | `POCKETUI_DATA` | Use another data folder instead of `/storage/.config/pocket-ui` |
 | `POCKETUI_ES_SYSTEMS` | Read another `es_systems.cfg` |
 | `POCKETUI_REPORTS=<dir>` | Write Settings → Help & tools → About → Report a problem's zip into this folder instead of `/storage/roms/reports` |
 | `POCKETUI_SCREENSHOTS=<dir>` | Save screenshots (HOME + A) and let the web companion list them from this folder instead of `/storage/roms/screenshots` |
 | `POCKETUI_PORTS_JSON=<file>` | Tests only: `cargo test` also parses this downloaded PortMaster catalog (`ports::tests`) |
+| `POCKETUI_TEST_PM_LIFETIME_HELPER=<file>` | Tests only: the owned fake PortMaster helper for the child-UI lifetime regression (`ports::tests`); never set by a launcher |
 | `POCKETUI_MOONLIGHT=<program>` | Start this program for PC streaming and Settings → Games → PC streaming (pair, list, unpair) instead of ROCKNIX's `moonlight` (virtual device, tests) |
+| `POCKETUI_WEB_GAMEDB` | Build time, the browser demo only: `web/build.rs` names the game-facts file cut to the demo's systems, compiled in instead of `assets/gamedb.bin` ([WEB-DEMO.md](WEB-DEMO.md)) |
 | `POCKETUI_WIFI_IFACE=<name>` | The network interface counted as Wi-Fi (`eth0` in the virtual device; `wlan0` by default) |
 | `POCKETUI_BATTERY=<dir>` | Read the battery from another sysfs directory than `/sys/class/power_supply/battery` |
 | `POCKETUI_SNAPSHOT_NATIVE=1` | Snapshots only: bypass the logical canvas for raw small-panel layout comparisons |
@@ -1050,6 +1148,7 @@ These are meant for development and tests; normal use needs none of them. On a d
 | `POCKETUI_TEST_QUIT_CHILD=<dir>` and `POCKETUI_TEST_BLOCK_SERIALIZE=<file>` | Set by `src/bin/pocket_core/quit_regression.rs` for its own child process: the child loads a fake core whose `serialize` never returns and must still leave within the deadline, keeping the earlier Continue moment. Not for use by hand |
 | `POCKETUI_TEST_COVERS=<dir>` | `cargo test` (`media::tests::real_covers_lose_their_side_strip`): a folder with `gba/`, `gb/` and `snes/` box art PNGs (e.g. a library's thumbnails; not in the repository) to check that a system's printed side strip is cut off the cartridge labels; without it the test says SKIPPED |
 | `POCKETUI_TEST_CRASH_AT=<step>` and `POCKETUI_TEST_CRASH_SPEC=<json>` | Set by `update::crash_tests` for its own child process: the child runs `install_app` and ends with SIGKILL at the named step (`downloaded` … `linked`, also `layout-copied-*`, `layout-synced`, `layout-current`, `layout-linked-*` during flat-install conversion). Covers existing same-version release folders as well. Not for use by hand |
+| `POCKETUI_SYNC_OWNERSHIP_FIXTURE=<dir>` and `POCKETUI_SYNC_OWNERSHIP_MODE=<mode>` | Tests only (`src/sync_ownership_tests.rs`): a child process runs a fake sync service with isolated wish/lock state, a temporary ownership marker, and an API success/crash, refused marker write or refused resume. No device paths are used. Not for use by hand |
 | `POCKETUI_TEST_KILL_AT=<n>` and `POCKETUI_TEST_KILL_LOG=<file>` | Tests only (`fsutil::crash_point`): the process ends with SIGKILL at the n-th write step; the log lists every step reached. Set by `libretro`'s quit test for its own child. Not for use by hand |
 | `POCKETUI_TEST_QUIT_DIR=<dir>` | Set by `libretro::tests::a_quit_cut_off_at_any_write_step_keeps_a_whole_moment_and_the_newest_battery_save` for its own child process (the session that quits). Not for use by hand |
 | `POCKETUI_TEXT_FIT_OUTPUT=<dir>` | `cargo test` (`overlay` startup notes): also write each fitted note as a PNG into this folder, to look at them |
@@ -1059,7 +1158,9 @@ These are meant for development and tests; normal use needs none of them. On a d
 | `POCKETUI_DEVICE=<name>` | Which handheld this is, instead of the device tree: `miniv2`, `mini`, `rp5`, `rp5-visionox`, `flip2`, `flip2-visionox`, `steamdeck` (a `--features brick` build also `brick` and `smartpro`, [TRIMUI-SMART-PRO.md](TRIMUI-SMART-PRO.md)) or a device tree `model` string (`src/device.rs`, [DEVICES.md](DEVICES.md)); a snapshot state may end in `:device=<name>` for the same |
 | `POCKETUI_STATES` | Save-state directory instead of `/storage/roms/savestates`; the Deck launcher uses its data folder (handheld default unchanged) |
 | `POCKETUI_GBA_CORE` | Development path to the bundled ARM64 gpSP library; enables H700 GBA core selection on a stand-in device too, retaining existing Continue ownership and saved choices ([HOST.md](HOST.md#h700-gba)) |
+| `POCKETUI_TEST_PM_LIFETIME_HELPER=<program>` | Tests only (`ports::tests::killing_the_ui_process_stops_its_portmaster_helper_with_a_checkpoint`): passes a fake PortMaster helper to its child UI process so killing that UI verifies helper shutdown and a resumable checkpoint. Not for use by hand |
 | `POCKETUI_TEST_TIME_FACTOR` | Tests only: an extra scheduling allowance from 1 to 64 for hang guards on a constrained runner; product deadlines and simulated clocks are unchanged (see the timing-test notes above) |
+| `POCKETUI_BIOS` | BIOS directory (pocket-core's system folder) instead of `/storage/roms/bios`; the Deck launcher uses its data folder and links the EmuDeck/RetroDECK BIOS into it (handheld default unchanged) |
 | `POCKETUI_HOST_BIN` | Path of `pocket-core` instead of `/storage/pocket-ui/pocket-core` (the Steam Deck app, [STEAMDECK.md](STEAMDECK.md)) |
 | `POCKETUI_HW_ROOT=<dir>` | The hardware seam (`system_ctl::RealHw`) looks below this folder instead of `/` (sysfs files, stand-in programs in `usr/bin`); only in a `--features brick` build ([TRIMUI-BRICK.md](TRIMUI-BRICK.md)) |
 | `POCKET_CORE_SAVE_DIR=<dir>` | pocket-core keeps a game's battery saves and memory cards in `<dir>/<system>` instead of next to the game; only in a `--features brick` build |
@@ -1107,14 +1208,19 @@ These are meant for development and tests; normal use needs none of them. On a d
 | `POCKETUI_TEXT_SIZE=large\|medium\|normal` | The text size whatever Settings → Look → Text size says, for snapshots and tests (`type_scale.rs`, [DESIGN.md](DESIGN.md#text-size)) |
 | `POCKETUI_PROMPTS=nintendo\|xbox\|playstation` | The Button symbols whatever Settings → Look → Colours or Style says, for snapshots and tests (`button_prompts.rs`) |
 | `POCKETUI_COLOURS=warm\|indigo-cube\|grey-brick\|green-x\|blue-station` | The Colours whatever Settings → Look → Colours or Style says, for snapshots and tests (`palette.rs`) |
+| `POCKET_CHEATS_PARITY=<tree>:<pack>` | Release check on real data (`src/cheats.rs`, an ignored test): the unpacked `database/cht` folder and the `cht.pack` made from it must give the same cheats for every game. |
 | `POCKETUI_FONT=barlow\|pixel\|rounded\|retro` | The font style whatever settings.json's `"font"` says, for snapshots and tests (`font_style.rs`, [DESIGN.md](DESIGN.md#font-styles-srcfont_stylers)); `retro` is the whole Retro style |
 | `POCKETUI_RETRO=cocoa\|pea\|off` | Settings → Look → Style → Retro in that palette (or off) whatever settings.json says, for snapshots and tests (`retro.rs`, [RETRO-STYLE.md](RETRO-STYLE.md)) |
+| `POCKETUI_RETRO_TRACKING=wide` | Departure Mono's letters as far apart as the font sets them (two font pixels, not one), for comparing pictures (`font_style::departure_wide`) |
+| `POCKETUI_RETRO_LETTERS=departure\|pixelify` | Retro's letters (`font_style::RetroLetters`) whatever settings.json's `"retro_letters"` says: Departure Mono (the default) or Pixelify Sans, for snapshots and tests ([RETRO-STYLE.md](RETRO-STYLE.md)) |
 | `POCKETUI_H700_VOLUME_OSD=1` | Set before start on an H700 handheld to keep the old display path for the volume pop-up instead of the lighter `mako_osd.rs` one; for A/B measurements only ([H700-VOLUME.md](H700-VOLUME.md)) |
 | `POCKETUI_RETRO_DIGITS=lcd\|pixelify\|plain` | Retro's digits: the LCD set (default), Pixelify's own or Barlow's, for comparing snapshots (`retro::Digits`, [RETRO-STYLE.md](RETRO-STYLE.md)) |
 | `POCKETUI_BLIP_DIR=<dir>` | The ignored test `retro_blip_table` writes the Retro menu blips as WAVs there and prints their level table (`ui_sound.rs`) |
 | `POCKETUI_VISIBLE_TEXT=<file>` | A rendered snapshot writes the strings painted into its final canvas, after clipping and dialog coverage; excludes width measurements and off-screen strings; a running pocket-ui writes it for every frame it draws. Used by `tests/user_journeys.rs` and the Wi-Fi bench ([WIFI-BENCH.md](WIFI-BENCH.md)) to assert what the player can read. This is a text transcript, not OCR; images and text painted into a separately composited layer are outside it. |
 | `POCKETUI_LAYOUT_AUDIT=<file>` | A rendered snapshot writes what the text-box record cannot see because nothing overlaps (`text::boxes::layout_audit`): `N` and a column of three or more one- or two-character strings, `S` and a string painted under 14 px. Read by `scripts/size-sweep.sh`. |
+| `POCKETUI_SYNC_ROOT=<dir>` | Only with `POCKETUI_MOCK`: Syncthing's `config.xml` and pocket-ui's `held` marker are read under `<dir>` instead of `/storage` (`sync::on_card`), for the navigation explorer's made-up Syncthing with paused folders ([SYNC-OWNERSHIP.md](SYNC-OWNERSHIP.md)). Unset: `/storage` |
 | `POCKETUI_NAV_PROBE=<file>` | Every frame's offer to the D-pad, for `tests/nav_explorer.rs`: each string and mark (`‹nav:row›`, `‹nav:focus›`, `‹nav:hint›`) with its place, then, under `--test-driver`, where the App is, its touch list and `@end` (`src/nav_probe.rs`, `src/app_nav_probe.rs`, [The navigation explorer](#the-navigation-explorer)). Unset: nothing recorded |
+| `POCKETUI_WHERE_RECORD=<file>` | `--snapshot` writes which painter painted the state and where the App says it is, for `tests/where_states.rs` (`src/app_where.rs`). Unset: nothing written |
 | `POCKETUI_SNAPSHOT_CACHE_DIR=<dir>` | Test-only fresh run directory for shared static layout renders (`tests/common/snapshot.rs`); never set by the player. Interactive and timing tests bypass it |
 | `POCKETUI_SNAPSHOT_CACHE_DISABLE=1` | Execute every static request through the same staged fixture without reusing outputs, for controlled A/B measurements |
 | `POCKETUI_NAV_REPORT=<dir>` | `tests/nav_explorer.rs` writes each part's pages, notes and failures to `<dir>/<profile>-<part>.txt` |
@@ -1150,6 +1256,8 @@ These are meant for development and tests; normal use needs none of them. On a d
 
 | Variable | Effect |
 |---|---|
+| `POCKET_SAVE_REFUSE=1` | Only the host tests’ stub core: refuse serialization so save-safety regressions can check that earlier saves survive; not a shipped-core option. |
+| `POCKET_SAVE_SAFETY_CHILD=<dir>` | Internal save-safety/core-contract test child root: uses the scratch stub core and redirects runtime notices into that folder; set by the host test harness, not a player option. |
 | `POCKET_TEST_SAVE_DELAY_MS=<ms>` | For a device test of a slow card: pocket-core's exit save takes this much longer (`quit::still_saving`: nothing stops a game while it writes). |
 | `POCKET_TEST_CORE_STATE_LIMIT_S=<seconds>` | For a device test of a PSP game that hangs while saving: pocket-core waits this long for the exit save before it gives up and ends the game itself, instead of its built-in limit (`CORE_STATE_LIMIT`, `src/bin/pocket_core.rs`) |
 | `POCKET_CORE_NO_SHORTCUTS=1` | Set by pocket-ui for a Kids Mode game: pocket-core's HOME shortcuts are all off, also after applying the game's settings ([KIDS-MODE.md](KIDS-MODE.md)) |
@@ -1202,13 +1310,14 @@ first line of each file says what it is for.
 | Path | Contents |
 |---|---|
 | `src/game_card_model.rs`, `rating.rs`, `play_time.rs` | Shared card/box data, status/rating painters, playing-time labels and the shared history/display clock, independent of the full game-card page |
-| `src/untar/`, `src/update/` | Feature-only Brick streaming extraction and atomic card installer; standard implementations stay in `untar.rs` and `update.rs` |
+| `src/untar/`, `src/update/` | Brick streaming extraction and atomic card installer, plus shared typed update runtime observations and read-only marker inspection; standard installers stay in `untar.rs` and `update.rs` |
 | `src/platform/` | OS adapters at existing I/O boundaries; unchanged Linux curl transport and target-selected implementations |
 | `src/linux_modules.rs`, `android_modules.rs`, `library_names.rs`, `look_settings.rs` | Target module composition and shared library-name/disc-sheet rules and look values; [ANDROID-MVP.md](ANDROID-MVP.md) |
 | `src/android_02_tests.rs` | Test-only: compiles the Android app's `ui.rs` and `play_cards.rs` into the Linux library tests so the Android controller and painter code runs on a host ([Android 0.2 controller regressions](#android-02-controller-regressions)) |
 | `src/main.rs` | The `pocket-ui` app: the event loop, Home and the game lists, Settings (`SETTINGS_GROUPS`: the categories and their rows; `SETTINGS`: the rows one after another), the pause menu (`MainItem`, `main_items`), snapshots (`fn snapshot`) |
 | `src/app_achievements.rs`, `app_appearance.rs`, `app_bluetooth.rs`, `app_cabinet.rs`, `app_cabinet_tv.rs`, `app_room_extras.rs`, `app_case_stickers.rs`, `app_card.rs`, `app_controls_card.rs`, `app_cozy_extras.rs`, `app_console.rs`, `app_curator.rs`, `app_connections.rs`, `app_emu_choice.rs`, `app_this_game.rs`, `app_history.rs`, `app_fast_switch.rs`, `app_where_was_i.rs`, `app_kids.rs`, `app_leds.rs`, `app_menu_open.rs`, `app_look.rs`, `app_messages.rs`, `app_motion.rs`, `app_pictures.rs`, `app_slideshow.rs`, `app_night_light.rs`, `app_perf_fan.rs`, `app_quick_profiles.rs`, `app_pixel_path.rs`, `app_players.rs`, `app_zoom.rs`, `app_disc.rs`, `app_earlier.rs`, `app_save_media.rs`, `app_display_out.rs`, `app_second_screen.rs`, `app_column.rs`, `app_save_trouble.rs`, `app_sync_conflicts.rs`, `app_library_sync.rs`, `app_ports.rs`, `app_port_perf.rs`, `app_rescue.rs`, `app_report.rs`, `app_settings_groups.rs`, `app_tools.rs`, `app_moonlight.rs`, `app_backup.rs`, `app_storage.rs`, `app_gamelist.rs`, `app_gallery.rs`, `app_home_panel.rs`, `app_search.rs`, `app_starter.rs`, `app_status_corner.rs`, `app_switcher.rs`, `app_sync.rs`, `app_tailscale.rs`, `app_touch.rs`, `app_tour.rs`, `app_trace.rs`, `app_web.rs`, `store_page.rs` | The App's side of one feature each (part of the `pocket-ui` binary): its threads, its painting, its input, its snapshots. The logic they drive is in the library modules below |
 | `src/lib.rs` | The library both programs use: one `pub mod` per module below |
+| `web/` | The browser demo ([WEB-DEMO.md](WEB-DEMO.md)): its own manifest over `src/`, the winit and softbuffer stand-ins, `app_web_demo.rs` (the `pocket-ui` binary's web side), the demo library script, the page and its test driver. Not part of any device build |
 | `src/app_controllers.rs` | The Controller setup page: device/player identity, button capture before the merged menu pad, swap feedback and background saves; opened from Buttons and the game's Controls page |
 | `src/button_test.rs`, `src/app_test_buttons.rs` | Settings → Help & tools → Test buttons: the pure state (one view per controller, lights, trigger travel with the 0.55/0.40 marks, sticks with the dead zone, the last press explained through the player's layout and the Button layout, the HOME / B + START hold to leave) and the page that draws it; fed per controller from `merge_pad`, before the merge |
 | `src/input_corpus_tests.rs` | Captured built-in and Bluetooth descriptors through the real decoder, Mux/Inputs, both menu layouts and hotkeys; [fixtures and provenance](../tests/fixtures/input/README.md). Test-only Linux module, also mandatory with the Brick feature in the full gate |
@@ -1219,7 +1328,8 @@ first line of each file says what it is for.
 Cabinet's CRT TV with its own picture thread, `assets/media/tv`), the look step's previews, the game switcher and the last frame of each game, the picture a game starts from, favourites, recent games, scrolling titles, the "Add games" grid, the console pictures, the interface's pixel art (empty pages, handhelds, Settings icons, review stickers, the emblems on the fronts of boxes that are not a game; `assets/ui-art`) |
 | `src/document_check.rs`, `android/src/check_page.rs` | Android's Settings → Game check: `game_check`'s shared checks behind its `Files` seam, on a document provider's listing, and what is Android's own (folder grants, the APK's cores and emulator apps, the in-app player's limits). Compiled on Linux as well, so `cargo test` runs it; see [ANDROID-MVP.md](ANDROID-MVP.md#game-check-parity-with-linuxs-settings--games--game-check) |
 | `src/nav_probe.rs`, `app_nav_probe.rs` | The navigation explorer's record of a frame: rows, focus and hints from the shared painters, where the App is, under `POCKETUI_NAV_PROBE` only ([The navigation explorer](#the-navigation-explorer)) |
-| `src/document_library.rs`, `touch_ui.rs`, `device_model.rs` | Provider document identity/disc-set rules, portable hit targets and device names for shared art; Android uses these without Linux input/detection services |
+| `src/app_where.rs`, `ui_status.rs` | Where the App is: the page in front and what covers it, derived in `App::paint`'s order (no state of its own), for `@where` and the status file `/tmp/pocket-ui.status` that helpers read before pressing ([DEVICE-TESTS.md](DEVICE-TESTS.md#where-the-ui-is-tmppocket-uistatus)) |
+| `src/document_library.rs`, `document_art.rs`, `touch_ui.rs`, `device_model.rs` | Provider document identity/disc-set rules, portable hit targets and device names for shared art; Android uses these without Linux input/detection services |
 | `src/settings_values.rs` | The values at the right of the Settings rows: their words, the thread that reads the ones needing a process or a file (Wi-Fi's network, Remote access, time zone, paired PCs), cutting a long one with "…" (`app_settings_groups.rs`; [ARCHITECTURE.md](ARCHITECTURE.md#where-the-other-features-live)) |
 | `src/wifi_activation.rs` | Numeric NetworkManager device-state guard shared by user and watchdog connects: join the target activation, disconnect another SSID before switching, boot/resume settling; fake clocks and scripted nmcli tests need no sleeps |
 | `src/net_state.rs` | The shared picture of the Wi-Fi (`Snapshot`: the stored wish, the radio, the address, the saved networks, the last scan with its typed error), the one serialised worker for switching, scanning and connecting, the generation that drops stale results, the retries ([SYSTEM-CONTROLS.md](SYSTEM-CONTROLS.md#quick-settings-home-on-the-shelf)); read by the quick settings' Wi-Fi row and Settings → Wi-Fi |
@@ -1229,7 +1339,7 @@ Cabinet's CRT TV with its own picture thread, `assets/media/tv`), the look step'
 | `src/kept.rs` | A value the UI shows but never reads itself (a process, a file, a syscall that can stall on the card): read on a thread, kept in memory, a frame when it changed (`Kept`); the About page's free space and address, Settings' Bluetooth row, `wifi::ip` |
 | `src/status_corner.rs` | The status corner at the top right of Home and the pages over it (time, Wi-Fi symbol while connected, battery): its layout and Wi-Fi symbol, the pill Settings, the pause menu's pages and the quick settings show it in (`Pill`), the thread that reads Wi-Fi and the battery only while the corner is on screen (and works out the Wi-Fi symbol's pixels before the first frame needs them), the minute wake-up (`app_status_corner.rs`; [ARCHITECTURE.md](ARCHITECTURE.md#where-the-other-features-live)) |
 | `src/retro.rs` | Settings → Look → Style → Retro ([RETRO-STYLE.md](RETRO-STYLE.md)): whether it is on, its palettes Cocoa and Pea, the pixel frames, the selection bar and cursor, key caps, pills and round buttons the painters ask for, and its PixelLab icons (`assets/ui-art/retro/`) |
-| `src/palette.rs`, `kit.rs`, `appearance.rs`, `motion.rs`, `frame_pace.rs`, `text.rs`, `title_block.rs`, `text_fallback.rs`, `type_scale.rs`, `font_style.rs`, `i18n.rs`, `gfx.rs`, `image.rs`, `scaled_layout.rs` | Drawing (including small-panel logical canvases and cached area reduction): colours (dark and light, five sets: Theme → Colours), the interface's shared parts (`kit.rs`: the hint bar in its two places, a Settings-style row and its selection, the explanation beside the hint pill, panels, sheets, the scroll bar, an empty page's picture and words; [DESIGN.md](DESIGN.md#design-language)), Settings → Look → Look → Appearance and Motion, type (`title_block.rs`: the big name of the selected game as a main title and a smaller subtitle, up to three lines, [DESIGN.md](DESIGN.md#a-games-big-name-srctitle_blockrs); the glyph cache, drawn ahead of time by a thread once the first frame is on screen: `Text::prewarm`; a character the font lacks is painted as "?" or left out, never as a box; the snapshot checks' record of where text went, `text::boxes`; `text_fallback.rs`: the system's Noto Sans CJK for the letters Barlow lacks, memory-mapped and outlined one glyph at a time, [DESIGN.md](DESIGN.md#japanese-chinese-and-korean-names)), Settings → Look → Text size (`type_scale.rs`: the one scale every size, row and line step goes through, [DESIGN.md](DESIGN.md#text-size)), Settings → Look → Style (`font_style.rs`: Barlow, Pixel or Rounded type, a process-wide setting every `Text` follows by itself, the alternative faces fitted to Barlow's capitals, [DESIGN.md](DESIGN.md#font-styles-srcfont_stylers)), Settings → System → Language (the table the text painter translates every string through, [Translations](#translations)), the software canvas, PNG/JPEG decoding |
+| `src/palette.rs`, `kit.rs`, `appearance.rs`, `motion.rs`, `frame_pace.rs`, `text.rs`, `title_block.rs`, `pause_head.rs`, `text_fallback.rs`, `type_scale.rs`, `font_style.rs`, `i18n.rs`, `gfx.rs`, `image.rs`, `scaled_layout.rs` | Drawing (including small-panel logical canvases and cached area reduction): colours (dark and light, five sets: Theme → Colours), the interface's shared parts (`kit.rs`: the hint bar in its two places, a Settings-style row and its selection, the explanation beside the hint pill, panels, sheets, the scroll bar, an empty page's picture and words; [DESIGN.md](DESIGN.md#design-language)), Settings → Look → Look → Appearance and Motion, type (`title_block.rs`: the big name of the selected game as a main title and a smaller subtitle, up to three lines, [DESIGN.md](DESIGN.md#a-games-big-name-srctitle_blockrs); `pause_head.rs`: the head of Android's touch pause sheet, the whole game name (never translated) and the status line under it, the rows keep their height; the glyph cache, drawn ahead of time by a thread once the first frame is on screen: `Text::prewarm`; a character the font lacks is painted as "?" or left out, never as a box; the snapshot checks' record of where text went, `text::boxes`; `text_fallback.rs`: the system's Noto Sans CJK for the letters Barlow lacks, memory-mapped and outlined one glyph at a time, [DESIGN.md](DESIGN.md#japanese-chinese-and-korean-names)), Settings → Look → Text size (`type_scale.rs`: the one scale every size, row and line step goes through, [DESIGN.md](DESIGN.md#text-size)), Settings → Look → Style (`font_style.rs`: Barlow, Pixel or Rounded type, a process-wide setting every `Text` follows by itself, the alternative faces fitted to Barlow's capitals, [DESIGN.md](DESIGN.md#font-styles-srcfont_stylers)), Settings → System → Language (the table the text painter translates every string through, [Translations](#translations)), the software canvas, PNG/JPEG decoding |
 | `src/library.rs`, `library_cache.rs`, `app_library.rs`, `library_meta.rs`, `layouts.rs` (the folder names and picture folders of other systems' cards, read in place: [OTHER-LAYOUTS.md](OTHER-LAYOUTS.md)), `gamelist.rs` and `gamelist_page.rs` (the player's EmulationStation `gamelist.xml` files, read-only: a tolerant scanner, a cache of its own in `<data>/gamelist-cache.json`, the name rule, the card's facts, the pictures and the page that offers the favorites and ratings; `app_gamelist.rs` is the App's side: [ARCHITECTURE.md](ARCHITECTURE.md#where-the-other-features-live)), `archive.rs` (zip handling: the one game of a zip, refusals with advice for several games, passwords, other packings and a CRC-32 mismatch: [HOST.md](HOST.md#how-it-works); `rom_crc`, the game's CRC-32 from the zip's directory), `dsv.rs` (DraStic's `.dsv` saves taken over into the DS's `.sav` at game start: [HOST.md](HOST.md), "NDS saves"), `softpatch.rs` (IPS/BPS/UPS patches next to a game, applied by pocket-core as RetroArch does, refusals with advice: [HOST.md](HOST.md#how-it-works)), `gallery.rs` (the screenshots on the card, `screenshot.rs`'s files: the names read from the end, the in-memory index with a count per game, the page's state and keys, the delete question, the small picture cache with its cap, the copy to the shelf's picture; `app_gallery.rs` is the App's side: [ARCHITECTURE.md](ARCHITECTURE.md#where-the-other-features-live)), `rom_id.rs` and `app_identify.rs` (games recognised by their checksum against libretro-database's No-Intro lists, cached in `<data>/identify/`; the card's "Wrong pictures? Look up again": [CURATOR-DATA.md](CURATOR-DATA.md#identification-by-checksum)), `disc_serial.rs` (PlayStation 1/2 discs recognised by the serial in their `SYSTEM.CNF`, named by libretro-database's Redump lists: [CURATOR-DATA.md](CURATOR-DATA.md#playstation-discs-the-serial), [user/library.md](user/library.md#playstation-1-and-2-discs)), `covers.rs`, `auto_covers.rs`, `game_pictures.rs`, `picture_cycle.rs`, `picture_loader.rs`, `slideshow.rs` (the idle slideshow's pure part: when it starts, the picture list, a picture prepared for the screen, the timing and the camera, the bilinear paint: [SLEEP.md](SLEEP.md#idle-slideshow-2026-10-30-srcslideshowrs-srcapp_slideshowrs)), `auto_texts.rs`, `wiki_text.rs`, `game_card.rs`, `game_info.rs` (the one-screen info page, X on a game in Minimal, Cards and Split: [DESIGN.md](DESIGN.md#info-page-srcgame_infors)), `game_box.rs` (the card as the game's box, front and back, X on a game in Shelf and Cabinet: [DESIGN.md](DESIGN.md#cabinet-look-srccabinetrs-srccabinet_artrs-srcmediars-srcapp_cabinetrs); its frames in `assets/media/back`, made with `tools/` there) | Reading the game library (one directory pass with `DirEntry` types and explicit symlink fallback; names: `display_name`, `tell_apart` for two games of the same name; disc sheets and their files; for Add games, folders of no system and discs missing a file); the cache of the last scan the first frame comes from, and the scan after it (the App's side in `app_library.rs`, [Start time](#start-time)); play status, notes, sessions and stickers (`library.json`); zip handling; cover art, the games' screenshots and title screens (parallel `snaps/` and `titles/` folders, a made-up `Remote` in the tests; `app_pictures.rs` is Split's cycle, the card's pictures and the shared 16-entry fitted-cover cache; `picture_loader.rs` decodes and scales these on its worker, newest queued request first; arrivals redraw only when the last frame requested that key) and the game card's descriptions, by hand and loaded ahead; the game card |
 | `src/gamedb.rs`, `curatordb.rs`, `romfacts.rs`, `assets/gamedb.bin`, `assets/curatordb.bin`, `assets/data/curator-tags.json` | Offline game facts (Wikidata), Curator's feel tags and ROM file-name facts; see [CURATOR-DATA.md](CURATOR-DATA.md) |
 | `src/civil_date.rs` | Calendar arithmetic on day numbers (local day, civil date, day of a date), shared by the play history and by Rediscover (Android has no play log) |
@@ -1241,11 +1351,11 @@ Cabinet's CRT TV with its own picture thread, `assets/media/tv`), the look step'
 | `src/console_credits.rs`, `credits_page.rs`, `assets/data/console-credits.json` | Credits & links (X on a console page): people, makers, chips, family, best-selling game, and the links into the library ([Console credits](#console-credits)) |
 | `src/search.rs`, `search_page.rs`, `letters.rs` | Finding games: the search index, matching and ranking, the recent searches; the search screen; the L2/R2 letter jump |
 | `src/home_panel.rs` | The picture side of Home's Curator, Favorites and pinned rows: what it shows and where each cover goes; `tests/home_panel_labels.rs` renders every console's artless narrow tile with a one-game library, independent of the daily pick ([DESIGN.md](DESIGN.md#home-panels-srchome_panelrs-srcapp_home_panelrs)) |
-| `src/setup.rs`, `settings.rs`, `on_start.rs`, `button_layout.rs`, `button_prompts.rs`, `app_buttons.rs`, `wifi.rs`, `keyboard.rs`, `remote.rs`, `secret.rs`, `sockets.rs`, `timezone.rs` | First-start setup, `settings.json`, Settings → Playing → On start and Buttons (Button layout: which face button plays A, B, X, Y in the menus, and Button symbols: see below), Wi-Fi (and its watchdog), the gamepad keyboard, file sharing and SSH switches, time zones |
+| `src/setup.rs`, `settings.rs`, `on_start.rs`, `button_layout.rs`, `button_layout_model.rs`, `button_prompts.rs`, `app_buttons.rs`, `wifi.rs`, `keyboard.rs`, `remote.rs`, `secret.rs`, `sockets.rs`, `timezone.rs` | First-start setup, `settings.json`, Settings → Playing → On start and Buttons (Button layout: which face button plays A, B, X, Y in the menus, and Button symbols: see below), Wi-Fi (and its watchdog), the gamepad keyboard, file sharing and SSH switches, time zones |
 | `src/features.rs`, `feature_previews.rs` | The feature registry: every optional feature with its switch, the profiles, the version it came in, its card; the cards and the profiles' page; the cards' pictures ([Adding a feature to the tour](#adding-a-feature-to-the-tour)) |
 | `src/library_sync.rs`, `library_sync/` | Settings → Sync → Library data (its two-device tests in `library_sync/tests.rs`): the per-device files of the Syncthing folder, finding this device's edits, the field-by-field merge with tombstones, the play history union, applying the changes to `LibraryMeta`, `Favorites` and Curator's shelves ([SYNC-CURATION.md](SYNC-CURATION.md)) |
 | `src/sync_conflicts.rs`, `sync_conflict_page.rs` | Saves with two versions from Syncthing: finding the `.sync-conflict-` copies, whose game they are, keeping one version and moving the others into `/storage/roms/sync-backups/<date>`; the page that offers the choice ([user/sync.md](user/sync.md#two-versions-of-a-save)) |
-| `src/sync.rs`, `sync_page.rs`, `tailscale.rs`, `tailscale_page.rs`, `bluetooth.rs`, `bluetooth_page.rs`, `moonlight.rs`, `moonlight_page.rs` | Settings → Connections → Sync (Syncthing), Tailscale and Bluetooth, each as the logic and the page's state; PC streaming and Settings → Games → PC streaming (pairing, the PCs, their games) |
+| `src/sync.rs`, `sync_ownership_tests.rs`, `sync_page.rs`, `tailscale.rs`, `tailscale_page.rs`, `bluetooth.rs`, `bluetooth_page.rs`, `moonlight.rs`, `moonlight_page.rs` | Settings → Connections → Sync (Syncthing), Tailscale and Bluetooth, each as the logic and the page's state; isolated ownership/retry fixtures and the remaining crash ambiguity are in [SYNC-OWNERSHIP.md](SYNC-OWNERSHIP.md); PC streaming and Settings → Games → PC streaming (pairing, the PCs, their games) |
 | `src/web/`, `web_page.rs`, `examples/web_dev.rs`, `scripts/web-shots.mjs` | The web companion: its HTTP server on threads of its own (`server.rs`, `http.rs`), where it listens and tailscaled's `whois` (`net.rs`), pairing, sessions and CSRF (`auth.rs`), the JSON API (`api.rs`), uploads (`files.rs`), the page (`page/`, compiled in by `assets.rs`), its tests (`tests.rs`); Settings → Web companion's state; the development server and the page's screenshots ([WEB-COMPANION.md](WEB-COMPANION.md)) |
 | `src/phone_upload.rs`, `phone_upload_page.rs`, `assets/phone-upload/` | "Send from your phone" (Add games, Y): the upload server that exists only while its page is open (Wi-Fi address only, a code per opening, the page and two upload routes, files through `web::files`), the Pocket's page with the QR code and the status, the phone's page ([PHONE-UPLOAD.md](PHONE-UPLOAD.md)) |
 | `src/game_check.rs`, `game_check_page.rs` (`app_game_check.rs` is the App's side; `examples/game_check_bench.rs` measures it on a device) | Settings → Games → Game check: "will my games start?". Re-uses `hostsys`/`systems_grid` (what a system needs), `library` (discs, stray folders), `archive::refusal_of` (zips); adds `KNOWN_BIOS` (known-good BIOS files per system, size and CRC-32) and the look at files the shelf doesn't list. Low priority, stoppable, reads only; findings capped per group |
@@ -1253,14 +1363,14 @@ Cabinet's CRT TV with its own picture thread, `assets/media/tv`), the look step'
 | `src/games_card.rs`, `usb_transfer.rs`, `app_usb_transfer.rs` | Copying games without Wi-Fi: a games card coming or going (a thread asleep in `poll`), USB file transfer (ROCKNIX's MTP gadget; retired, not offered: `usb_transfer::RETIRED`) ([DEVICES.md](DEVICES.md)) |
 | `src/storage.rs`, `storage_page.rs`, `card_health.rs`, `game_files.rs` | Settings → System → Storage (`card_health`: the read-only SD card check row): the walk of the card by kind, the clean-ups and what they may delete, the low-space rule (`storage`), the page's state (`storage_page`); the files of one game, its saves and states, and their delete for the card's Hide or delete (`game_files`) ([ARCHITECTURE.md](ARCHITECTURE.md#where-the-other-features-live)) |
 | `src/ports.rs`, `port_files.rs`, `port_perf.rs`, `port_perf_page.rs` | PortMaster (the catalogue with each port's version, the installed ports' port.json index that finds a port's cover and the update note, `ports::update_available`), its ports that need the player's files, and a port's own performance and fan (applied while it runs, the busy-core look, the page START opens on its card and Options in its pause menu). A running port is a guest (`standalone::guest`, `Guest::Port`): Quit closes its window, then SIGTERM and SIGKILL to the whole process group and the helpers that left it (`quit_port`) |
-| `src/bin/pocket_core.rs`, `libretro.rs`, `video.rs`, `picture_fx.rs`, `audio.rs` (bounded opening PCM delivery and cadence-aligned resume reserve), `resample.rs` (prepared polyphase windowed-sinc conversion, ARM64 NEON; [audio path](AUDIO-PATH.md)), `audio_diagnostics.rs` (backend errors, negotiated PCM and writer pacing), `audio_pw_stats.rs` (verified per-client PipeWire observations), `audio_route.rs`, `h700_volume.rs` (scoped H616 hardware gain/mute workaround; [H700-VOLUME.md](H700-VOLUME.md)), `hw_render.rs`, `vfs.rs`, `hostsys.rs`, `state_policy.rs` (shared raw-state size exceptions), `state_file.rs` (shared Linux/Android compressed Auto codec, raw compatibility and namespace-safe copies; [HOST.md](HOST.md#pause-menu-features)), `core_options.rs`, `exit_guard.rs` (whole-session stall and independent Pause/Quit/SIGTERM recovery clocks, plus the PSP serialization guard), `log_shim.c`, `shaders/` | pocket-core: the libretro host, picture (and its turn: Screen orientation and the core's SET_ROTATION, `video::turned_shape`), the screen effects' numbers and their CPU reference (`picture_fx`), sound and the PipeWire quantum for the speaker or a Bluetooth sink (`audio_route`, which also names where the sound goes for Quick settings' Volume row), OpenGL cores, the virtual file system, the systems it hosts, the cores' options, the cores' log callback (C, built by `build.rs`), GLSL |
+| `src/bin/pocket_core.rs`, `core_command.rs` (typed FIFO decoding), `core_status.rs` (derived play state and status publication), `libretro.rs`, `video.rs`, `picture_fx.rs`, `audio.rs` (bounded opening PCM delivery and cadence-aligned resume reserve), `resample.rs` (prepared polyphase windowed-sinc conversion, ARM64 NEON; [audio path](AUDIO-PATH.md)), `audio_diagnostics.rs` (backend errors, negotiated PCM and writer pacing), `audio_pw_stats.rs` (verified per-client PipeWire observations), `audio_route.rs`, `h700_volume.rs` (scoped H616 hardware gain/mute workaround; [H700-VOLUME.md](H700-VOLUME.md)), `hw_render.rs`, `vfs.rs`, `hostsys.rs`, `state_policy.rs` (shared raw-state size exceptions), `state_file.rs` (shared Linux/Android compressed Auto codec, raw compatibility and namespace-safe copies; [HOST.md](HOST.md#pause-menu-features)), `core_options.rs`, `exit_guard.rs` (whole-session stall and independent Pause/Quit/SIGTERM recovery clocks, plus the PSP serialization guard), `log_shim.c`, `shaders/` | pocket-core: the libretro host, picture (and its turn: Screen orientation and the core's SET_ROTATION, `video::turned_shape`), the screen effects' numbers and their CPU reference (`picture_fx`), sound and the PipeWire quantum for the speaker or a Bluetooth sink (`audio_route`, which also names where the sound goes for Quick settings' Volume row), OpenGL cores, the virtual file system, the systems it hosts, the cores' options, the cores' log callback (C, built by `build.rs`), GLSL |
 | `src/headless_gl.rs` | A GLES 3 context without a window (EGL device platform, surfaceless) for `tests/picture_shaders.rs` and `examples/picture_shots.rs`; pocket-core doesn't use it |
 | `src/achievements/`, `achievements_page.rs`, `rc_shim.c` | RetroAchievements: the session in pocket-core, the account, offline unlocks, the pages; the glue to rcheevos (`vendor/rcheevos`) ([HOST.md](HOST.md#retroachievements-srcachievements)) |
-| `src/options.rs`, `look.rs`, `emu_menu.rs`, `controls.rs`, `controls_card.rs` (the controls card: model of which Pocket button is which console button, from the player's `Mapping`, the core's snapshot names or a table read from the cores' input descriptors, and its painter; docs/user/controls-card.md), `preview.rs`, `slots.rs`, `states.rs`, `timeline.rs`, `rewind.rs`, `hotkeys.rs`, `screenshot.rs`, `app_screenshot.rs`, `extras.rs`, `over_game.rs`, `run_ahead.rs`, `power.rs`, `cheats.rs`, `cheat_pack.rs` (the Brick card's cheat database as one file), `rumble.rs`, `overlay.rs`, `osd_sensors.rs`, `emu_settings.rs` | The pause menu and its Options pages: settings per console and game, the Emulator and Controls pages (and the Pocket's D-pad and sticks turned with Screen orientation, `controls::turn_buttons`), the live preview, save slots and states of every emulator, Earlier (pocket-core's rolling states: play time, the cost guard that never stalls a frame, the writer thread and its caps; [HOST.md](HOST.md#earlier-rolling-states-srctimeliners-2026-10-25)), rewind, shortcuts, screenshots (HOME + A: the file names, the atomic write, the thread that encodes; `app_screenshot.rs` is the standalone emulators' side), fast-forward, run-ahead, CPU and fan, cheats, rumble, messages over the game, the device's state in the FPS line (Show FPS → Sensors: a reader thread, twice a second); the Options of PS2, GameCube, Wii and 3DS |
+| `src/options.rs`, `look.rs`, `emu_menu.rs`, `controls.rs`, `controls_card.rs` (the controls card: model of which Pocket button is which console button, from the player's `Mapping`, the core's snapshot names or a table read from the cores' input descriptors, and its painter; docs/user/controls-card.md), `preview.rs`, `slots.rs`, `states.rs`, `timeline.rs`, `rewind.rs`, `hotkeys.rs`, `screenshot.rs`, `app_screenshot.rs`, `extras.rs`, `over_game.rs`, `run_ahead.rs`, `power.rs`, `cheats.rs`, `cheat_pack.rs` (the TrimUI cheat database as one file), `cheat_download.rs` (optional download worker, explicit Get/progress/retry rows and legacy preservation), `cheat_data.rs` (Extras database inspection/update/removal), `optional_data.rs` (shared cancellable lane for optional packs and cover transfers), `update/cheats.rs` (resumable verified raw pack download), `rumble.rs`, `overlay.rs`, `osd_sensors.rs`, `emu_settings.rs` | The pause menu and its Options pages: settings per console and game, the Emulator and Controls pages (and the Pocket's D-pad and sticks turned with Screen orientation, `controls::turn_buttons`), the live preview, save slots and states of every emulator, Earlier (pocket-core's rolling states: play time, the cost guard that never stalls a frame, the writer thread and its caps; [HOST.md](HOST.md#earlier-rolling-states-srctimeliners-2026-10-25)), rewind, shortcuts, screenshots (HOME + A: the file names, the atomic write, the thread that encodes; `app_screenshot.rs` is the standalone emulators' side), fast-forward, run-ahead, CPU and fan, cheats, rumble, messages over the game, the device's state in the FPS line (Show FPS → Sensors: a reader thread, twice a second); the Options of PS2, GameCube, Wii and 3DS |
 | `src/brick_hw.rs` | The Brick's own hardware (`--features brick`, [TRIMUI-BRICK-HW.md](TRIMUI-BRICK-HW.md)): the rumble motor, the LED driver, F1/F2 choices, the mute slider choice, each light's choices |
 | `src/app_brick_hw.rs` | The App's side of `brick_hw`: haptics strength, what F1/F2 do, the battery lights' upkeep |
 | `src/app_brick_lights.rs` | Settings > Lights & buttons on the Brick: the lights, F1, F2, the mute slider, and Each light one level down |
-| `src/brick_profile.rs` | The TrimUI Brick under NextUI (`--features brick`, [TRIMUI-BRICK.md](TRIMUI-BRICK.md)): name, screen, detection, pad and standalone-only additional core routes ([core builds](TRIMUI-BRICK-CORES.md)); `Board` tells the Brick from the Smart Pro on the same card ([TRIMUI-SMART-PRO.md](TRIMUI-SMART-PRO.md)) |
+| `src/brick_profile.rs` | The TrimUI Brick under NextUI (`--features brick`, [TRIMUI-BRICK.md](TRIMUI-BRICK.md)): name, screen, detection, pad and standalone-only additional core routes ([core builds](TRIMUI-BRICK-CORES.md)); `Board` tells the Brick from the Smart Pro and Brick Pro ([TRIMUI-BRICK-PRO.md](TRIMUI-BRICK-PRO.md)) on the same card ([TRIMUI-SMART-PRO.md](TRIMUI-SMART-PRO.md)) |
 | `src/brick_gl.rs` | The Brick's prototype (`--features brick`, [TRIMUI-BRICK.md](TRIMUI-BRICK.md)): the GPU through the system's EGL, a picture through a texture onto the screen (`pocket-fb --gl`) |
 | `src/brick_gpu.rs` | The Brick's prototype (`--features brick`, [TRIMUI-BRICK.md](TRIMUI-BRICK.md)): page transitions handed to `pocket-fb --gl` over the sway IPC |
 | `src/brick_gles.rs` | The Brick's prototype (`--features brick`, [TRIMUI-BRICK.md](TRIMUI-BRICK.md)): a GLES context for 3D cores on the vendor's EGL, frames read back to the CPU picture |
@@ -1278,16 +1388,17 @@ Cabinet's CRT TV with its own picture thread, `assets/media/tv`), the look step'
 | `src/html_form.rs` | A small tolerant HTML reader for sign-in pages: title, heading, text, forms and fields, refresh and trivial script redirects; one pass with hard limits, never a panic; what a form sends and its encodings |
 | `src/portal_form.rs` | "Sign in…": the sign-in page's form in pocket-ui's style (fields, ticks, choices, buttons, the keyboard, the ends) and the made-up pages of its snapshots |
 | `src/portal_page.rs` | The Wi-Fi page's sheet for a network that wants a sign-in: what it wants, its sign-in page's host, the other ways online with the Pocket's Wi-Fi address ([PORTAL-SIGNIN.md](PORTAL-SIGNIN.md)) |
+| `src/update/runtime.rs`, `update/observation.rs`, `app_update_status.rs` | Typed in-memory update worker phases and cancellation boundaries, worker-only inspection of existing recovery/known-good markers, and update fields in the single tmpfs UI status projection ([UPDATES.md](UPDATES.md#observing-a-job-without-changing-it)); no new disk protocol |
 | `src/update_hint.rs`, `app_update_hint.rs` | The shelf's once-per-version hint that a newer pocket-ui is ready: the rules and `update-hint.json`, the look 60 s after the start with Wi-Fi up (then daily, idle-only, backoff; `update_hint::step`), the On/Off switch and the dot, the notice whose A opens Settings → System → Updates, the Install-now/Later question and its low-battery line ([UPDATES.md](UPDATES.md#the-hint-on-the-shelf)) |
 | `src/clock_check.rs`, `app_clock.rs` | Is the clock clearly wrong (before 2026 or before the build day, `build.rs` sets `POCKETUI_BUILD_UNIX`): the rule, the Time page's line, and the one shelf notice 45 s after the start |
 | `src/manual_time.rs` | Settings → System → Time → Date and time: the picker's fields (local time, month ends, leap years, the start at the build day for a wrong clock) and setting the system clock and the RTC (`clock_settime`, `RTC_SET_TIME`; only `system_ctl::RealHw` calls them, [SYSTEM-CONTROLS.md](SYSTEM-CONTROLS.md#date-and-time-by-hand)) |
 | `src/system_ctl.rs`, `quick.rs`, `quick_paint.rs`, `quick_profiles.rs`, `osd.rs`, `display.rs`, `gamma.rs`, `night_light.rs`, `display_out.rs`, `second_screen.rs`, `device.rs`, `desk.rs`, `fn_keys.rs`, `mako_osd.rs`, `ui_sound.rs`, `pad.rs`, `players.rs`, `players_page.rs`, `zoom.rs`, `touch.rs` | Which handheld this is (the Mini V2 or an experimental SM8250 sibling, from the device tree; [DEVICES.md](DEVICES.md)), the second screen (the RG DS Plus's lower panel, its table of outputs and backlights; [DUAL-SCREEN.md](DUAL-SCREEN.md)), window handling without sway on the Steam Deck (`desk.rs`, x11rb, [STEAMDECK.md](STEAMDECK.md)), system controls, quick settings (and their Performance and Fan rows), the on-screen display, colour temperature and the night light (the schedule, the fade, its thread; [SYSTEM-CONTROLS.md](SYSTEM-CONTROLS.md#night-light)), playing on a TV through USB-C (sway's outputs, [DISPLAY-OUT.md](DISPLAY-OUT.md)), the volume keys (and hiding ROCKNIX's own volume box, `mako_osd.rs`), menu sounds, the gamepads (each device read on its own and merged, `pad::Mux`; opened at the very start, their events kept in `pad::Early` until the event loop is there), the players of pocket-core games and the pause menu's Players page, the touch screen (opened first thing, then supervised: `touch::supervise_with` with its `Bus` fake in the tests, `touch::linux::supervise` on evdev; `touch::IgnoreLog` is the one log line per spell of dropped touches in `app_touch`; and the Flip 2's lid switch, read with the pads) |
 | `src/auto_off.rs`, `app_auto_off.rs` | Switch off after sleeping (L3): the plan on CLOCK_BOOTTIME, the RTC alarm (and its verified disarm before every power off and restart, [SLEEP.md](SLEEP.md#power-off-restart-and-the-rtc-alarm-2026-10-26-fixpower-off-rtc)), the decision at the alarm's wake, the note the next start says once over the game or on the shelf ([SLEEP.md](SLEEP.md#l3-switch-off-after-sleeping-2026-10-25)) |
 | `src/sleep_settings.rs`, `app_sleep_power.rs` | Settings → System → Sleep & power: Screen off after, Sleep after, Switch off after sleeping, the power button's short press and hold; `sleep.json` and its older form ([SLEEP.md](SLEEP.md#sleep--power-settings-2026-10-26)) |
-| `src/sleep.rs`, `powerkey.rs`, `power_menu.rs`, `low_battery.rs`, `heat.rs`, `battery.rs`, `battery_history.rs`, `battery_estimate.rs`, `battery_games.rs`, `leds.rs`, `perf_fan.rs`, `perf_fan_page.rs`, `fan_curve.rs` | Sleep and the power key (Screen off with the game running), the power menu (its battery line, marks and lines, Restart pocket-ui), the low-battery guard, the heat guard (the TrimUI Brick's card), the battery page and history, the battery per game (the pause menu's time left, the card's rate; minute samples buffered for ten-minute writes, with final flushes at sleep/shutdown/exit), the stick LEDs, Settings → Playing → Performance & fan, Smooth fan (the curve, its engine and thread, the hand-back note, the thermal simulation; [FAN-CURVE.md](FAN-CURVE.md)) |
+| `src/sleep.rs`, `sleep_child.rs`, `powerkey.rs`, `power_menu.rs`, `low_battery.rs`, `heat.rs`, `battery.rs`, `battery_history.rs`, `battery_estimate.rs`, `battery_games.rs`, `leds.rs`, `perf_fan.rs`, `perf_fan_page.rs`, `fan_curve.rs` | Sleep and owned logind helper children (parent-death signals, close-on-exec), the power key (Screen off with the game running), the power menu (its battery line, marks and lines, Restart pocket-ui), the low-battery guard, the heat guard (the TrimUI Brick's card), the battery page and history, the battery per game (the pause menu's time left, the card's rate; minute samples buffered for ten-minute writes, with final flushes at sleep/shutdown/exit), the stick LEDs, Settings → Playing → Performance & fan, Smooth fan (the curve, its engine and thread, the hand-back note, the thermal simulation; [FAN-CURVE.md](FAN-CURVE.md)) |
 | `src/manual.rs` | Settings > System > Manual: `docs/user/*.md` bundled with `include_str!`, a Markdown subset parser, layout and the reader |
 | `src/update.rs`, `update/` (the download tests, and an install cut off at every step with the real launcher after it), `os_compat.rs`, `store.rs`, `untar.rs`, `bin/store_tool.rs` | Signed updates (and `pocket-ui --check-os-update`), whether a new ROCKNIX system still has what pocket-ui needs ([UPDATES.md](UPDATES.md#os-what-pocket-ui-needs-from-the-new-system)), and the Store |
-| `src/starter.rs`, `assets/starter-pack.json` | The starter pack: free games for an empty card. The list (author, licence in the author's words, file, SHA-256), the install (room, offline, hash, zip, never overwrite, one atomic write) and the card's lookup ([STARTER-PACK.md](STARTER-PACK.md)); the page and Home's hint are `app_starter.rs` |
+| `src/starter.rs`, `assets/starter-pack.json`, `extras_page.rs`, `optional_data.rs` | Extras' Settings-style list and the shared cancellable optional worker lock. The starter pack: free games for an empty card, with interactive cancellation and checked resumable checkpoints. The list (author, licence in the author's words, file, SHA-256), the install (room, offline, hash, zip, never overwrite, one atomic write) and the card's lookup ([STARTER-PACK.md](STARTER-PACK.md)); the page and Home's hint are `app_starter.rs` |
 | `src/crt_on.rs`, `examples/crt_on_shots.rs` | Cozy's old-TV power-on after the launch hold: `plan` gives the black bars, the line and the glow as rectangles for a moment in time (host-tested), `Overlay::draw_solid` draws them; `crt_on_shots` renders frames of it through the real renderer on a headless GL context |
 | `src/cozy_extras.rs` | The cozy extras: one switch per little touch (`Extra`), each with one home (`Extra::home`: the page Settings → Look → Cozy extras, a row of Sound & feel, or Sleep & power), kept in settings.json's `"extras"` (only values that differ from the start are written), read anywhere with `cozy_extras::on` (one atomic load). Rows of features still being built stay off the page until `Extra::built` says so; the keys are listed in the module's `Extra::key` |
 | `src/system_art.rs` | Embedded console pictures and the saved `GbaModel` choice under Look → Cozy extras. `picture_id` selects SP art everywhere while `canonical` preserves the GBA ROM system. Linux and Android both save and apply the choice; `app_cabinet::console_look_changed` clears fitted art, case and TV caches on a change |
@@ -1424,6 +1535,12 @@ same setting, so its notes over the game are German too. The one line put togeth
 over the game: its numbers change twice a second, so `osd_sensors` looks up each part with words ("Fan {n}%") itself,
 on its reading thread. The manual (`docs/user/`) stays English: the painter is
 switched off while its pages are drawn (`Text::set_translate`).
+
+On the Brick, the snapshot translation check applies the renderer's device wording to recorded translations before
+matching wrapped lines (Pocket → Brick, HOME → MENU), retaining raw wording for states that select another device.
+It recognizes rejoined pieces of known translations and wrapped tails of fact sentences already kept in English.
+Untranslated pattern parts are still checked separately;
+status-file page identifiers belong in `skip.txt`, and the literal hostname `pocket-brick` belongs in `keep.txt`.
 
 | File | What it holds |
 |---|---|
@@ -1627,6 +1744,8 @@ The [input corpus](../tests/fixtures/input/README.md) records real device identi
 controller merging, game input, both menu-role layouts and shortcuts. The full gate additionally runs
 `--features brick --lib input_corpus_tests`, including the built-in Brick whose USB ID collides with Xbox 360.
 Never replace captured data with a generic controller descriptor or weaken expected roles to fit a new decoder.
+The Brick F-key snapshot and corpus fixtures supply their verified plain-Brick identity explicitly through
+`Decoder::with_caps_profile`; the host has no stock MainUI. Live readers keep `with_caps` and its firmware-identity check.
 Refresh with `scripts/input-corpus-capture.py` (read-only, including already-open InputPlumber nodes) or
 `scripts/input-corpus-capture.c` on devices without Python; neither reads gameplay events or grabs a device.
 
@@ -1637,6 +1756,14 @@ with 0.55/0.40 hysteresis. `src/pad_bindings.rs` saves device permutations to `c
 on the supervisor, never during painting. `src/app_controllers.rs` captures input before the merged menu pad,
 undoing menu roles and the current device permutation. Held releases retain their original role. Game-specific
 `ctl.*` remains a separate stage; interactive assignments in `emu_menu` swap conflicts while old files stay readable.
+
+On the Brick, F1/F2 bypass both 16-button mappings: `brick-keys.json` chooses global system shortcuts, loaded by
+pocket-core on launch. Controller capture receives these keys but ends with the Lights & buttons explanation instead of
+waiting for timeout. The game Controls entry uses the same note (`brick_hw::FKEYS_REMAP_NOTE`). See
+[the hardware notes](TRIMUI-BRICK-HW.md#f1f2-assignment-scope) and `tests/brick_settings_walk.rs` (`fkeys` regressions).
+The slider choice uses the same state directory for its Rust writer and the launcher's single `BRICK_SLIDER_CFG`
+export, inherited by volume restore and the watcher. A legacy top-level file is migrated only when the state file is
+absent; the host card probe covers this boundary with a file saved through `Slider::save`.
 
 Each `pad::Supervisor` entry owns a reader stop signal. Retiring an entry (node removal/replacement, including
 udev metadata changes) signals its old reader before opening the replacement; dropping the supervisor retires
@@ -1689,3 +1816,55 @@ The test driver's command FIFO has three verbs for it (`--test-driver` only): `t
 Cartridge-clock and start-failure regressions live in `libretro.rs` (`clock_regression_*`, `full_card_regression_*`), `fallback.rs`
 (moment protection and legacy migration) and `fast_switch.rs` (first-frame evidence survives SIGKILL).
 See [HOST.md](HOST.md#failed-starts-and-continue-safety-2026-11-07) for the pipe protocol and temporary retry.
+
+### Core save-safety regressions
+
+The `save_safety_` tests cover failed undo capture, failed exit handoff, stale Auto copies into Earlier, shortcuts collected while paused/asleep/dark, dark touch, stale standalone resume workers and a failed Continue rename. The pocket-core tests use a compiled stub core in child processes, with no display, sound server or player saves. Run the focused library and pocket-core tests before the merge gate. The explicitly ignored copy-only transit and failed-audio-write tests document known recovery failures that require separately reviewed persistence/audio changes; they are not claims of successful recovery.
+
+The Linux player's `core_command.rs` decodes the backward-compatible FIFO into typed commands and
+quit intent; `core_status.rs` projects the existing control flags into a read-only play state and
+publishes it with `ui_status::Writer`. The [core status contract](DEVICE-TESTS.md#where-the-core-is)
+documents fields, revisions and stale files. Run the `core_command_`, `core_status_` library tests
+and `core_contract_` pocket-core tests when changing either side of the contract.
+
+### Literal game and system names
+
+Use `Text::literal` around measurement and painting of a name, `Text::card_name` plus
+`draw_name` for card labels, and `title_block::name_layout` / `name_layout_in` for selected
+names and Details. `Line::literal` carries this identity through positions and painting;
+manual title painters use `title_block::paint_line`. A name fragment must never depend on
+one-use `Cache::name_line` exemptions: measuring may run more often than drawing.
+`tests/names_never_translated.rs` compares the five production painters with literal
+references in DE/ES for every bundled game label/alias, console name/alias, and the snapshot
+and performance fixture corpus (`tests/name-corpus.py`). UI words must still translate afterward.
+
+Case art also prints UI entries such as Search and Favourites. Its callers use
+`media::printed_title(source, item.title_is_name())` before the literal case painter:
+UI wording is translated once as a whole; game/system names and player-authored shelf/sticker
+names bypass translation. This explicit origin also handles a game called Search without
+preventing the Search menu entry from being translated. The render regression checks both.
+
+Compact data rows use `Text::fit_name` / `wrap_name` and `draw_name` too: the metadata
+chooser, related-game names/system lines, management heading and proper-name fact values
+(including Listed as). The database corpus also compares both fitting helpers with literal
+references, before painting each name through the main components and the case front.
+
+Case fronts, system bands, cartridge labels and disc-ring names use the same literal scope;
+`cabinet_art::plain_label` receives final printed wording (own UI entries are translated by
+`printed_title` first). This includes metadata titles that have never entered the learned-name
+cache. Mixed UI headings such as Note for / Delete keep their existing raw `{s}` placeholders.
+For a mixed system/year/player caption, translate the player-count wording before the
+literal fit. Chooser `Choice::Entry` rows contain names; `Choice::NoEntry` contains our
+translated title and explanation. The rendered UI counterchecks cover both cases in DE/ES.
+
+Android 0.3 regressions extend `src/android_02_tests.rs` with actual Retro palette navigation, complete painted
+selected names in all six phone looks/orientations at 100%/200%, provider artwork/sidecar isolation and persisted
+cheat failures. `android/src/moments.rs` fault tests distinguish refused loads, failed Before load writes and failed
+rollback (blocked saves). The existing bounded-core cheat regression covers Nestopia as well as Snes9x.
+
+The Android name regression paints actual DE/ES phone rows, title bands, box headers and pause titles against a literal reference, checks raw accessibility names, and verifies that surrounding interface text still translates.
+
+Host sleep helper lifecycle: `sleep_child.rs` owns the logind monitor/delay-inhibitor children and sets parent-death
+signals plus close-on-exec for inherited descriptors. The power-key inhibitor is transferred from its startup
+thread to the UI: its stdin pipe, rather than that short thread, owns its lifetime; inherited descriptors still close at exec. `tests/sleep_children.rs` runs the product spawn path with a
+fixture monitor and verifies teardown, abrupt exits, and release of an intentionally inherited heavy-style lock FD.
