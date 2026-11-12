@@ -10,20 +10,17 @@
 
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
+#[cfg(not(target_os = "android"))]
 use std::process::{Command, Stdio};
 use std::time::Duration;
 
+#[cfg(test)]
 use base64::Engine;
-use ed25519_dalek::{Signature, Verifier, VerifyingKey};
-use serde::{Deserialize, Serialize};
-use sha2::{Digest, Sha256};
 
-/// Public half of the catalog signing key (`store-tool keygen`); the private half never leaves
-/// the build machine.
-pub const PUBLIC_KEY: [u8; 32] = [
-    0xf1, 0x86, 0x0a, 0xf1, 0xb2, 0xf1, 0xb3, 0xc6, 0x0b, 0x24, 0x22, 0xcd, 0xfc, 0xa9, 0xf3, 0xc0,
-    0xb8, 0x49, 0x52, 0x07, 0xf5, 0x11, 0x96, 0xe1, 0x75, 0x84, 0x65, 0x32, 0x4f, 0x83, 0xe0, 0x1f,
-];
+use serde::{Deserialize, Serialize};
+use crate::update_channel::newer as version_newer;
+
+pub use crate::signed_data::{PUBLIC_KEY, verify_signed, sha256_hex, sha256_file};
 
 /// The built-in catalog address. Empty: there is no public catalog yet, so without a `store_url` in settings.json
 /// the Store is not offered at all (`catalog_url`). Its place is decided (`https://pocketui.xyz/updates/store/catalog.json`,
@@ -57,13 +54,13 @@ pub fn tools_dir(data_dir: &Path) -> PathBuf {
 /// The core file pocket-core should load: one installed into `/storage/cores` wins over the
 /// image's, the same order the `/tmp/cores` overlay gives RetroArch.
 pub fn core_path(core: &str) -> PathBuf {
+    #[cfg(not(target_os = "android"))]
     if core == "gpsp" {
         let bundled = crate::h700_gba::bundled_path();
         if bundled.is_file() { return bundled }
     }
     let file = format!("{core}_libretro.so");
     let installed = Path::new(CORES_DIR).join(&file);
-    // The Steam Deck app: POCKETUI_CORES is a ':'-separated list of folders (bundled cores, RetroArch's flatpak) searched next.
     let extra = || std::env::var("POCKETUI_CORES").ok().and_then(|d| d.split(':').map(|p| Path::new(p).join(&file)).find(|p| p.is_file()));
     if installed.is_file() {
         installed
@@ -151,40 +148,11 @@ pub struct Installed {
     pub run: Option<String>,
 }
 
-/// Checks that `data` was signed by `key` (base64 Ed25519 signature, as `store-tool sign` writes it).
-pub fn verify_signed(data: &[u8], sig_b64: &str, key: &[u8; 32]) -> Result<(), String> {
-    let key = VerifyingKey::from_bytes(key).map_err(|e| format!("bad public key: {e}"))?;
-    let sig = base64::engine::general_purpose::STANDARD.decode(sig_b64.trim()).map_err(|_| "signature is not base64".to_string())?;
-    let sig = Signature::from_slice(&sig).map_err(|_| "signature has the wrong length".to_string())?;
-    key.verify(data, &sig).map_err(|_| "signature doesn't match".to_string())
-}
-
 /// Checks the signature and parses the catalog; anything not signed by `key` is rejected.
 pub fn verify_catalog(json: &[u8], sig_b64: &str, key: &[u8; 32]) -> Result<Catalog, String> {
     verify_signed(json, sig_b64, key).map_err(|e| format!("catalog {e}"))?;
     serde_json::from_slice(json).map_err(|e| format!("catalog: {e}"))
 }
-
-pub fn sha256_hex(data: &[u8]) -> String {
-    Sha256::digest(data).iter().map(|b| format!("{b:02x}")).collect()
-}
-
-/// SHA-256 of a file read in chunks, for downloads too big to hold in memory (OS images).
-pub fn sha256_file(path: &Path) -> std::io::Result<String> {
-    use std::io::Read;
-    let mut file = std::fs::File::open(path)?;
-    let mut hasher = Sha256::new();
-    let mut buf = vec![0u8; 1 << 20];
-    loop {
-        let n = file.read(&mut buf)?;
-        if n == 0 {
-            break;
-        }
-        hasher.update(&buf[..n]);
-    }
-    Ok(hasher.finalize().iter().map(|b| format!("{b:02x}")).collect())
-}
-
 
 type Inventory = BTreeMap<String, Installed>;
 
@@ -242,19 +210,21 @@ impl Store {
     pub fn status(&self, p: &Package) -> Status {
         match self.installed.get(&p.id) {
             // Only a later version is an update: an older catalog must not offer a downgrade (B5).
-            Some(i) if crate::update::newer(&p.version, &i.version) => Status::UpdateAvailable,
+            Some(i) if version_newer(&p.version, &i.version) => Status::UpdateAvailable,
             Some(_) => Status::Installed,
             None => Status::NotInstalled,
         }
     }
 
     /// Downloads with curl, checks the hash, then installs.
+    #[cfg(not(target_os = "android"))]
     pub fn install(&mut self, p: &Package) -> Result<(), String> {
         self.install_from(p, "", &|_| {})
     }
 
     /// Like `install`, with `p.url` relative to `catalog_url`; `progress` gets the bytes downloaded
     /// so far while the download runs.
+    #[cfg(not(target_os = "android"))]
     pub fn install_from(&mut self, p: &Package, catalog_url: &str, progress: &dyn Fn(u64)) -> Result<(), String> {
         self.usable()?;
         std::fs::create_dir_all(&self.dir).map_err(|e| e.to_string())?;
@@ -276,7 +246,7 @@ impl Store {
         if p.id.is_empty() || p.id.starts_with('.') || !p.id.chars().all(|c| c.is_ascii_alphanumeric() || "._-".contains(c)) {
             return Err("The package has an unsafe ID. Nothing was installed.".into());
         }
-        if self.installed.get(&p.id).is_some_and(|i| crate::update::newer(&i.version, &p.version)) {
+        if self.installed.get(&p.id).is_some_and(|i| version_newer(&i.version, &p.version)) {
             return Err(format!("{} is older than the installed version. Nothing was installed.", p.version));
         }
         let dest = p.install_dir(&self.data);
@@ -468,9 +438,18 @@ pub fn migrate_tools_in(data_dir: &Path) {
 /// Unpacks `p` into `staging` (new, 0700): a tar through untar.rs (only plain files and folders,
 /// no setuid bits, B4), a single file as it is. Returns what is there.
 fn stage(p: &Package, data: &[u8], staging: &Path) -> Result<Vec<crate::untar::Entry>, String> {
-    use std::os::unix::fs::{DirBuilderExt, PermissionsExt};
+    use std::os::unix::fs::DirBuilderExt;
+    #[cfg(not(feature = "brick"))]
+    use std::os::unix::fs::PermissionsExt;
     match p.kind {
-        Kind::Tar => crate::untar::unpack(data, staging),
+        Kind::Tar => {
+            #[cfg(feature = "brick")]
+            {
+                crate::untar::unpack_bytes_throttled(data, staging).map_err(|e| e.to_string())
+            }
+            #[cfg(not(feature = "brick"))]
+            crate::untar::unpack(data, staging)
+        }
         Kind::File => {
             let name = p.name_on_disk.clone().unwrap_or_else(|| p.id.clone());
             if name.is_empty() || name.contains('/') || name == "." || name == ".." {
@@ -478,7 +457,8 @@ fn stage(p: &Package, data: &[u8], staging: &Path) -> Result<Vec<crate::untar::E
             }
             std::fs::DirBuilder::new().mode(0o700).create(staging).map_err(|e| e.to_string())?;
             let file = staging.join(&name);
-            std::fs::write(&file, data).map_err(|e| e.to_string())?;
+            crate::fsutil::write_atomic_bulk(&file, data).map_err(|e| e.to_string())?;
+            #[cfg(not(feature = "brick"))]
             std::fs::set_permissions(&file, std::fs::Permissions::from_mode(0o644)).map_err(|e| e.to_string())?;
             Ok(vec![crate::untar::Entry { path: name, dir: false }])
         }
@@ -521,6 +501,7 @@ pub fn resolve(catalog_url: &str, url: &str) -> String {
     }
 }
 
+#[cfg(not(target_os = "android"))]
 fn download(url: &str) -> Result<Vec<u8>, String> {
     let out = Command::new("curl").args(["-fsSL", "--max-time", "60", url]).output().map_err(|e| e.to_string())?;
     if out.status.success() {
@@ -565,6 +546,7 @@ fn unreachable_code(code: Option<i32>) -> bool {
 
 /// Downloads `url` into `dest` with curl, reporting the bytes so far every quarter of a second. `max`: the size the
 /// catalog gives for it.
+#[cfg(not(target_os = "android"))]
 fn download_to(url: &str, dest: &Path, max: Option<u64>, progress: &dyn Fn(u64)) -> Result<(), String> {
     download_with_cause(url, dest, max, progress).map_err(|f| match f {
         DownloadFailure::Unreachable => crate::net_check::refine("The download didn't finish. Check Wi-Fi and try again."),
@@ -575,7 +557,24 @@ fn download_to(url: &str, dest: &Path, max: Option<u64>, progress: &dyn Fn(u64))
 
 /// `download_to` with the cause of a failure told apart (`DownloadFailure`); the starter pack uses it, so a missing
 /// network is not reported as a broken download. Same curl, same limits.
+#[cfg(not(target_os = "android"))]
 pub fn download_with_cause(url: &str, dest: &Path, max: Option<u64>, progress: &dyn Fn(u64)) -> Result<(), DownloadFailure> {
+    #[cfg(feature = "brick")]
+    {
+        let broke = DownloadFailure::Broke;
+        let mut ram = crate::update::brick_io::Ram::new(dest).map_err(broke)?;
+        let limit = max.filter(|n| *n > 0).unwrap_or(320 << 20);
+        ram.reserve(limit).map_err(broke)?;
+        let temporary = ram.dir.join("store-download");
+        download_network(url, &temporary, Some(limit), progress)?;
+        crate::cheat_download::copy_to_card(&temporary, dest).map_err(broke)
+    }
+    #[cfg(not(feature = "brick"))]
+    download_network(url, dest, max, progress)
+}
+
+#[cfg(not(target_os = "android"))]
+fn download_network(url: &str, dest: &Path, max: Option<u64>, progress: &dyn Fn(u64)) -> Result<(), DownloadFailure> {
     let broke = |e: std::io::Error| DownloadFailure::Broke(e.to_string());
     let _ = std::fs::remove_file(dest);
     let mut child = Command::new("curl")
@@ -630,6 +629,7 @@ impl Drop for Changing {
 
 /// Fetches and verifies the catalog from `url` (with `url.sig` next to it), and checks that it is
 /// neither expired nor older than one already seen (`check_fresh`).
+#[cfg(not(target_os = "android"))]
 pub fn fetch_catalog(url: &str, data_dir: &Path) -> Result<Catalog, String> {
     if url.trim().is_empty() {
         return Err("There is no store yet.".into());

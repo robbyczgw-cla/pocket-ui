@@ -1138,7 +1138,8 @@ pub fn folder_json(dir: &Dir, own: &str, others: &[String]) -> String {
         .chain(others.iter().map(String::as_str))
         .map(|id| serde_json::json!({ "deviceID": id }))
         .collect();
-    serde_json::json!({
+    #[allow(unused_mut)]
+    let mut json = serde_json::json!({
         "id": dir.id,
         "label": dir.label,
         "path": dir.path,
@@ -1149,8 +1150,14 @@ pub fn folder_json(dir: &Dir, own: &str, others: &[String]) -> String {
         "fsWatcherDelayS": 10,
         // The card's file system has no permissions worth syncing.
         "ignorePerms": true,
-    })
-    .to_string()
+    });
+    #[cfg(feature = "brick")]
+    {
+        json["maxConcurrentWrites"] = 1.into();
+        json["pullerMaxPendingKiB"] = 256.into();
+        json["disableFsync"] = false.into();
+    }
+    json.to_string()
 }
 
 /// A folder's `.stignore`, None when everything in it is shared.
@@ -1158,7 +1165,7 @@ pub fn ignore_file(dir: &Dir) -> Option<String> {
     if dir.ignore.is_empty() {
         return None;
     }
-    let mut s = String::from("// Written by pocket-ui (Settings › Connections › Sync). The first line that matches counts: ! shares, the rest keeps out.\n");
+    let mut s = String::from("// Written by pocket-ui (Settings › Help & tools › For tinkerers › Sync). The first line that matches counts: ! shares, the rest keeps out.\n");
     for line in dir.ignore {
         s.push_str(line);
         s.push('\n');
@@ -1931,6 +1938,12 @@ mod tests {
         assert_eq!(json["path"], "/storage/roms/savestates");
         assert_eq!(json["type"], "sendreceive");
         assert_eq!(json["devices"].as_array().unwrap().len(), 2);
+        #[cfg(feature = "brick")]
+        {
+            assert_eq!(json["maxConcurrentWrites"], 1);
+            assert_eq!(json["pullerMaxPendingKiB"], 256);
+            assert_eq!(json["disableFsync"], false);
+        }
         let ignore = saves_ignore();
         assert!(ignore.starts_with("// Written by pocket-ui"));
         assert!(ignore.contains("!**/*.srm\n") && ignore.contains("!**/*.sav\n"));

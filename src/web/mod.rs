@@ -92,12 +92,6 @@ pub enum Edit {
     Note { path: PathBuf, note: String },
     /// The player's rating, 1 to 5; 0 takes it away.
     Rating { path: PathBuf, rating: u8 },
-    /// Puts sticker `id` on the game, or takes it off.
-    Sticker { path: PathBuf, id: u32, on: bool },
-    /// Makes a sticker (and puts it on `path`, if given).
-    NewSticker { name: String, path: Option<PathBuf> },
-    RenameSticker { id: u32, name: String },
-    DeleteSticker { id: u32 },
     /// Smart shelves are addressed by their place and their name, so a shelf that moved meanwhile is not the one changed.
     RenameShelf { index: usize, was: String, name: String },
     DeleteShelf { index: usize, was: String },

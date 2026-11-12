@@ -24,12 +24,11 @@ own dark colours).
 
 ## Style
 
+A saved Rounded or Pixel style from an older version is read as Barlow. Your other settings stay as chosen.
+
 The type of every screen, or the Retro style.
 
 - **Barlow**, the default: clean and narrow.
-- **Pixel**: pixel letters for titles, game names on spines and labels, for the full retro look. The small text
-  (explanations, hints, lists) stays plain Barlow so it is easy to read.
-- **Rounded**: soft, round letters everywhere (Nunito).
 - **Retro**: every menu like an old handheld's. Pixel letters everywhere (sharp on every screen, with clear
   LCD-style numbers), chunky pixel frames round the menus, the hint
   keys and the messages, a flat selection bar with a small cursor, little colour pictures beside the Settings categories

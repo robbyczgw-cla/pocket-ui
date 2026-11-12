@@ -1,8 +1,5 @@
-//! Part of the pocket-ui binary: Settings → System → Sleep & power (`pocket_ui::sleep_settings`). Screen off after,
-//! the slideshow before it, Sleep after, Switch off after sleeping, and the power button's short press and hold, on
-//! one page; a change is kept in `sleep.json` and the sleep module counts with it at once (`Sleep::set_config`), the
-//! slideshow is a cozy extra kept in settings.json (`App::switch_extra`). A Steam Deck has the slideshow alone. Up/Down choose a row,
-//! Left/Right change it (stopping at the ends), A goes on to the next choice; the selected row is explained below.
+//! Settings → System → Sleep & power: screen-off, sleep and switch-off times, plus the power button.
+//! Left/Right change the selected choice, A cycles it, and a change is saved and applied at once.
 
 use pocket_ui::gfx::Canvas;
 use pocket_ui::pad::Button;
@@ -32,20 +29,16 @@ impl App {
             Action::Nothing => {}
             Action::Close => return Some(SettingsPage::List(super::settings_row(SETTINGS_NAME))),
             Action::Save(config) => self.sleep.set_config(config),
-            Action::Slideshow => self.switch_extra(pocket_ui::cozy_extras::Extra::IdleSlideshow),
         }
         Some(SettingsPage::SleepPower)
     }
 
-    /// The Settings row's value: the screen-off time ("2 min", "Never"); the slideshow's On or Off where it is the
-    /// page's only row (a Steam Deck).
     pub(crate) fn sleep_power_value(&self) -> String {
         self.sleep.config.value(rows()[0])
     }
 
     /// `--snapshot sleep[:<row>][:screen][:never][:keys=<presses>]`: the page with that row selected; `screen` with the
-    /// short press on Screen off and the hold on Sleep, `never` with both times on Never, `old` with a file of before the
-    /// page (3 min); then the presses `u`, `d`, `l`, `r`, `a` handled as on the device (the slideshow's switch is saved).
+    /// short press on Screen off and the hold on Sleep, `never` with both times on Never, or `old` with a legacy file.
     pub(crate) fn sleep_power_snapshot(&mut self, state: &str) -> bool {
         let Some(rest) = state.strip_prefix("sleep") else { return false };
         if !(rest.is_empty() || rest.starts_with(':')) {
@@ -53,6 +46,10 @@ impl App {
         }
         let parts: Vec<&str> = rest.split(':').filter(|p| !p.is_empty()).collect();
         let mut config = pocket_ui::sleep_settings::Config::default();
+        #[cfg(feature = "brick")]
+        if pocket_ui::sleep_settings::brick_choice() {
+            config.short_press = pocket_ui::sleep_settings::BRICK_POWER_DEFAULT;
+        }
         if parts.contains(&"screen") {
             config.short_press = ShortPress::ScreenOff;
             config.hold = Hold::Sleep;
@@ -97,10 +94,15 @@ impl App {
         let (top, right) = (pad + NU_PILL + 12, c.w - pad);
         let heading_h = pocket_ui::type_scale::line(NU_SMALL, 30);
         // The same footer and scrolling window as Controllers and Cozy extras: help gives way before rows do.
-        let fixed = pocket_ui::device::current().screen_off_only() && page.row() == Row::ShortPress;
+        let fixed = !pocket_ui::sleep_settings::Config::adjustable(page.row()) && page.row() == Row::ShortPress;
         let hints: &[(&str, &str)] = if fixed { &[("B", "Back")] } else { &[("B", "Back"), ("A", "Next"), ("< >", "Change")] };
         let mut desc = config.explain(page.row()).to_string();
-        if pocket_ui::device::current().screen_off_only() {
+        // The Brick's own card says what its power button does in that row's own explanation instead.
+        #[cfg(feature = "brick")]
+        let note_here = !pocket_ui::sleep_settings::brick_choice();
+        #[cfg(not(feature = "brick"))]
+        let note_here = true;
+        if pocket_ui::device::current().screen_off_only() && note_here {
             #[cfg(feature = "brick")]
             let note = pocket_ui::sleep_settings::no_sleep();
             #[cfg(not(feature = "brick"))]
@@ -128,7 +130,7 @@ impl App {
             self.hits.row(Area::new(pad, y, right - pad, row), i);
             let selected = i == page.sel;
             let value = config.value(*r);
-            let adjustable = !(pocket_ui::device::current().screen_off_only() && *r == Row::ShortPress);
+            let adjustable = *r != Row::ShortPress || pocket_ui::sleep_settings::Config::adjustable(*r);
             let shown = if selected && adjustable { format!("‹ {value} ›") } else { value };
             let vx = right - NU_BTN_PAD;
             // The name leaves room for the value: at Large text "Presentación antes de apagar la pantalla" ran into "Desactivado" (Brick).

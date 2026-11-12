@@ -58,6 +58,6 @@ share's games folder works too, if file sharing is already on (a locked-out grow
 - **The day's time and the clock:** a handheld that loses its clock doesn't start a new day by that: the time goes on counting from the last
   date it knew. If that isn't what you want, use **Start today's time again**.
 - **Saves are shared:** your child plays with the same saves as you.
-- **File sharing** stays as you left them. Your child can't reach their pages, but anyone on your Wi-Fi with the password can still copy files.
+- **File sharing** stays as you left it. Your child can't reach its page, but anyone on your Wi-Fi with the password can still copy files.
 - **The PIN stops accidents, not a determined kid.** Pulling the card gets past it.
-- **Not on the Steam Deck** (Steam's own button can't be closed) and not in the Android app.
+- Kids mode is not available in the Android app.

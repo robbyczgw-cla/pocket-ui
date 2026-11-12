@@ -4,7 +4,6 @@
 //! close). The look is a request for the signed list on a thread of its own, started `FIRST_LOOK` after the start and
 //! only with Wi-Fi up; with Wi-Fi off there is no timer at all, the turn of the loop that a change of Wi-Fi brings
 //! asks again. During a game nothing happens either, and the notice waits until the shelf is free, so it is never over
-//! a game, a page, the first start or another notice. Kids Mode, the Steam Deck and development builds never look.
 
 use std::time::Instant;
 
@@ -25,7 +24,7 @@ enum HintPhase {
 }
 
 #[derive(Clone, Copy)]
-enum StopReason { Off, Kids, Development, HostOwned, Mock }
+enum StopReason { Off, Kids, Development, Mock }
 
 impl HintPhase {
     /// Keep the worker/schedule phase visible even when policy suppresses its eventual notice.
@@ -37,7 +36,7 @@ impl HintPhase {
                 Self::Waiting { .. } => None,
                 Self::Stopped { reason, .. } => Some(match reason {
                     StopReason::Off => "off", StopReason::Kids => "stopped-after-kids", StopReason::Development => "development",
-                    StopReason::HostOwned => "host-owned", StopReason::Mock => "mock",
+                    StopReason::Mock => "mock",
                 }),
             }
         };
@@ -62,7 +61,6 @@ pub(crate) struct UpdateHintUi {
 
 fn ineligible(state: &State) -> StopReason {
     if state.off { StopReason::Off }
-    else if pocket_ui::device::current().host_owned() { StopReason::HostOwned }
     else if std::env::var_os("POCKETUI_MOCK").is_some() { StopReason::Mock }
     else { StopReason::Development }
 }
@@ -71,7 +69,7 @@ impl UpdateHintUi {
     pub(crate) fn schedule_code(&self) -> &'static str { self.phase.status(false, false).0 }
 
     pub(crate) fn new(state: State, now: Instant) -> UpdateHintUi {
-        let looks = update_hint::looks(update::release_build(), &state, pocket_ui::device::current().host_owned());
+        let looks = update_hint::looks(update::release_build(), &state);
         let silent = !looks || std::env::var_os("POCKETUI_MOCK").is_some();
         let found = std::env::var_os("POCKETUI_MOCK").and_then(|_| std::env::var("POCKETUI_UPDATE_HINT").ok()).filter(|v| !v.is_empty());
         if let Some(version) = found.filter(|_| !state.off) {
@@ -264,14 +262,14 @@ impl App {
         self.update_hint.phase.reschedule(due, reason);
     }
 
-    /// Whether this build and device ever look (not a development build, not a Deck, not a mock run).
+    /// Whether this build and device ever look (not a development build or a mock run).
     fn update_hint_may_look(&self) -> bool {
-        update_hint::looks(update::release_build(), &update_hint::State::default(), pocket_ui::device::current().host_owned()) && std::env::var_os("POCKETUI_MOCK").is_none()
+        update_hint::looks(update::release_build(), &update_hint::State::default()) && std::env::var_os("POCKETUI_MOCK").is_none()
     }
 
     /// A newer pocket-ui is known (from the quiet look or the page): the dot on Settings → System and its Updates row.
     pub(crate) fn update_dot(&self) -> bool {
-        self.updates.manifest.as_ref().and_then(|m| m.app.as_ref()).is_some_and(|a| update::newer(&a.version, update::app_version()))
+        self.updates.app_available().is_some()
     }
 
     /// The dot, `after` the end of a name that ends at `x`, centred on `mid`.

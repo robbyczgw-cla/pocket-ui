@@ -10,6 +10,8 @@
 //!
 //! The game played last is left out while anybody else can be picked in tiers 1 to 3; it comes back (an open game is
 //! better than a repeat of nothing) before Completed and Dropped games are looked at. Hidden games are not asked about at all (`allowed`).
+//! The card of Just Play (X on its row) names the pick's reason ([`Index::surprise_reason`]); its "Another" passes the games
+//! shown so far as `skip`, which are left out like the game played last: they come back only when nobody else is left.
 //! In tiers 3 and 4 a game of a system this handheld runs slowly (`system_notes`) counts a fifth, so a press does not
 //! throw a 20-second boot at somebody who has not chosen it; an unfinished or starred game was chosen already.
 //! A pick that does not start (`startable`: the file, and the emulator and core its route names) is dropped and the draw
@@ -54,9 +56,10 @@ pub struct Offer<'a> {
 
 impl Index {
     /// The game Just Play starts: see the module's comment. `startable` is asked of the drawn game only.
-    pub fn just_play(&self, rng: &mut Rng, offer: &Offer, startable: &mut dyn FnMut(usize) -> bool) -> Result<(usize, Why), Miss> {
+    pub fn just_play(&self, rng: &mut Rng, offer: &Offer, skip: &[usize], startable: &mut dyn FnMut(usize) -> bool) -> Result<(usize, Why), Miss> {
         let works = &self.catalog.works;
         let last_work = self.user.games.iter().enumerate().filter_map(|(g, u)| u.last_played.map(|t| (t, g))).max().map(|(_, g)| self.catalog.work_of[g]);
+        let skip_works: Vec<u32> = skip.iter().filter_map(|&g| self.catalog.work_of.get(g).copied()).collect();
         // Per tier: (game, chance, work). Each work once, its preferred version, else the first it may offer.
         let mut tiers: [Vec<(usize, f64, u32)>; 4] = Default::default();
         for (w, members) in works.iter().enumerate() {
@@ -88,7 +91,7 @@ impl Index {
         // leaves nobody with it: a repeat of an open game beats a game the player put away.
         for (open, keep_last) in [(0..3, false), (0..3, true), (3..4, false), (3..4, true)] {
             for t in open {
-                let mut pool: Vec<(usize, f64, u32)> = tiers[t].iter().filter(|(g, _, w)| (keep_last || Some(*w) != last_work) && !bad.contains(g)).copied().collect();
+                let mut pool: Vec<(usize, f64, u32)> = tiers[t].iter().filter(|(g, _, w)| (keep_last || (Some(*w) != last_work && !skip_works.contains(w))) && !bad.contains(g)).copied().collect();
                 while !pool.is_empty() && tries < TRIES {
                     let total: f64 = pool.iter().map(|(_, c, _)| c).sum();
                     let mut at = rng.unit() * total;

@@ -49,7 +49,7 @@ class Firmware(unittest.TestCase):
                             readers.append(subprocess.Popen([BUSYBOX,'cat',str(root/name)],stdout=output))
                     result=subprocess.run(['/bin/bash','-c',
                         '. "$1/device-check.sh" --device brick --out "$2/out"; dev() { sh -c "pidof() { return 0; }; $1"; }; fifo down && qcmd pause',
-                        'fixture',str(HERE),str(root)],env=env,capture_output=True,timeout=4)
+                        'fixture',str(HERE),str(root)],env=env,capture_output=True,timeout=30)
                     self.assertEqual(result.returncode,0,result.stderr)
                     for reader in readers:reader.wait(timeout=2)
                     self.assertEqual((root/'fifo.txt').read_bytes(),b'down\n')

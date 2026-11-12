@@ -23,7 +23,7 @@ fn programs(dir: &Path, version: &str, crashes: bool, runs: &Path) {
     write_executable(
         &dir.join("pocket-ui"),
         format!(
-            "#!/bin/sh\n[ \"$1\" = --version ] && echo 'pocket-ui {version}' && exit 0\n[ \"$1\" = --restore-second-screen ] && exit 0\n\
+            "#!/bin/sh\n[ \"$1\" = --version ] && echo 'pocket-ui {version}' && exit 0\n\
              echo \"{version} $*\" >>'{runs}'\n{crash}: >\"$POCKETUI_FRAME_FILE\"\nexit 77\n",
             runs = runs.display()
         ),
@@ -95,7 +95,6 @@ fn boot(t: &Path, root: &Path) {
         .env("POCKETUI_ROOT", root)
         .env("POCKETUI_LOG", f("log"))
         .env("POCKETUI_BACKLIGHT", f("backlight"))
-        .env("POCKETUI_SECOND_RESTORE_FILE", f("second.restore"))
         .env("POCKETUI_DARK_FILE", f("dark"))
         .env("POCKETUI_GAME_FILE", f("game"))
         .env("POCKETUI_QUANTUM", bin.join("quantum"))

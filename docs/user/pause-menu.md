@@ -66,7 +66,7 @@ and Quit, where saving is: for example "This emulator keeps its own saves. Save 
   back, A opens a page or chooses, Left and Right change a value.
 - **Achievements** (own host, signed in to RetroAchievements) lists the game's achievements, locked and
   unlocked, with your progress. See [Achievements](achievements.md#the-pause-menu).
-- **Zoom** (own host, under **Options**) shows the frozen picture larger: [Zoom](easy-to-read.md#zoom).
+- **Zoom** (own host, under **Options**) shows the frozen picture larger: [Zoom](big-text.md#zoom).
 - **Players** (pocket-ui's own host, a second controller connected) shows which controller is which player and changes
   it. See [Players](#players).
 - **Pixel Path** (switched on in Settings → Games → Curator) shows how the game's picture and sound reach you, stage by stage. See
@@ -232,9 +232,11 @@ One setting decides what is drawn over a game while you play, besides the short 
 | **Off** | Nothing. The default |
 | **FPS** | Frames per second and CPU load in the top left corner: [the FPS line](#the-fps-line-and-sensors) |
 | **FPS + sensors** | The same line with the temperature, the fan and the battery draw added |
-| **Pixel Path** | One quiet line beside the picture, graded in colour, which turns orange when something slips: [Pixel Path over the game](#pixel-path-over-the-game) |
+| **Pixel Path** | One quiet line beside the picture, graded in colour, which turns orange when something slips: [Pixel Path over the game](#pixel-path-over-the-game). Only with [Pixel Path](#pixel-path) in the pause menu |
 
-Only one of them shows at a time: Pixel Path's line has the frame rate too.
+Only one of them shows at a time: Pixel Path's line has the frame rate too. The Pixel Path level is for the
+enthusiasts: it is offered with Settings → Games → Curator → **Pixel Path in the pause menu** on, which the Enthusiast profile
+turns on. Without it, a Pixel Path chosen before 0.4 shows the FPS line.
 
 **Where to set it.**
 
@@ -243,7 +245,8 @@ Only one of them shows at a time: Pixel Path's line has the frame rate too.
 - Options → Speed, rumble, fan → **Over the game**: for the running game, until you quit.
   [Keep for](options.md#keep-for) says whether it stays for this game or this console, like every option, and then it
   wins over Settings.
-- **HOME + Y** while you play switches to the next level at once (Off, FPS, FPS + sensors, Pixel Path, then Off again)
+- **HOME + Y** while you play switches to the next level at once (Off, FPS, FPS + sensors, then Off again; Pixel Path
+  after FPS + sensors with Pixel Path in the pause menu)
   and says which, for example "Over the game: FPS". It lasts until you quit or change Over the game in Options. The
   shortcut can be switched off under [Shortcuts](options.md#shortcuts).
 
@@ -273,8 +276,8 @@ no fan or no battery gauge, is simply left out of the line.
 ### Pixel Path over the game
 
 On **Pixel Path**, Over the game shows one quiet line next to the picture, after a coloured dot, for example
-"mGBA · 5× sharp · 60.00 fps · ≈34 ms · 48 kHz". It doesn't need Pixel Path in the pause menu: that switch is for the
-page above alone.
+"mGBA · 5× sharp · 60.00 fps · ≈34 ms · 48 kHz". It comes with Pixel Path in the pause menu (Settings → Games → Curator):
+without it the level isn't offered.
 
 The dot is the overall grade, in its colour. Then the emulator, how the picture is scaled (a 3D system drawing above
 the console's resolution says so: "2× res, crisp"), the pictures per second (a 50 Hz game: the game's own rate), the

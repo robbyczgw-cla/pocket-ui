@@ -88,7 +88,6 @@ Not seen on a device: Xbox and Wii in the mode (same paths as above, not run). A
 - **The dialog before EmulationStation:** closed, also to a keyboard's Escape; on the crash-loop door a keyboard's keys go to the door, as a pad's do.
 - **File sharing and USB** stay as they were, on or off; their pages are in Settings, which a child can't reach. Add games opens only from a grown-up's flow.
 - **Quick settings:** not there. Only the volume keys, up to the ceiling. Brightness stays where a grown-up left it.
-- **Deck:** off. Steam's button belongs to SteamOS and opens its overlay over anything we show (`device::hides("kids", …)`: no row, no profile).
 - **Android:** not in scope (docs/PLATFORMS.md).
 
 What is still open past that: a launcher that fails even in safe mode ends in EmulationStation (`run-pocket-ui.sh` stage 5), with no door there.

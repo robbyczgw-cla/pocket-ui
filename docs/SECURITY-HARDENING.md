@@ -4,10 +4,10 @@ What a Pocket offers on the Wi-Fi, and how pocket-ui narrows it. Measured on ROC
 local network, written `<device-ip>` below, and the extracted image of the virtual device,
 `docker/extract-rocknix.sh`).
 
-> **Status:** the file sharing changes and the SSH switch (Settings → Connections → Remote access) are implemented and were checked
+> **Status:** the file sharing changes and the SSH switch (Settings → Help & tools → For tinkerers → Remote access) are implemented and were checked
 > on the device. `scripts/harden-ssh.sh` is prepared and only meant for development devices. The "rollout" steps
 > for release devices and the optional rpcbind and LLMNR changes are **planned**. The Syncthing switch
-> (Settings → Connections → Sync) is implemented and was checked on the device, see [Syncthing](#syncthing-settings--sync-implemented-checked-on-the-device-22102026). The Tailscale page (Settings → Connections → Tailscale) is implemented and was tried in the virtual device with stand-ins only, see [Tailscale](#tailscale-settings--tailscale); the test device itself is on a real tailnet, and the web companion's check over it is in [WEB-COMPANION.md](WEB-COMPANION.md#device-checks-partly-done). The ledger is [STATUS.md](STATUS.md).
+> (Settings → Help & tools → For tinkerers → Sync) is implemented and was checked on the device, see [Syncthing](#syncthing-settings--sync-implemented-checked-on-the-device-22102026). The Tailscale page (Settings → Help & tools → For tinkerers → Tailscale) is implemented and was tried in the virtual device with stand-ins only, see [Tailscale](#tailscale-settings--tailscale); the test device itself is on a real tailnet, and the web companion's check over it is in [WEB-COMPANION.md](WEB-COMPANION.md#device-checks-partly-done). The ledger is [STATUS.md](STATUS.md).
 
 ## What ROCKNIX does by default
 
@@ -109,7 +109,7 @@ whose `ports` run as root anyway. Simple beats over-secure here: whoever has the
 Decision (22.10.2026): SSH is off by default; a switch turns it on with a per-device password,
 the same way as file sharing.
 
-Implemented (`src/remote.rs`, Settings → Connections → Remote access (SSH), `Only::Remote` in `src/setup.rs`):
+Implemented (`src/remote.rs`, Settings → Help & tools → For tinkerers → Remote access (SSH), `Only::Remote` in `src/setup.rs`):
 
 - **On:** creates the password once (`/storage/.config/pocket-ui/remote/password`, 0600, same generator as
   file sharing), sets it as root's password with ROCKNIX's `setrootpass` (writes `/storage/.cache/shadow`
@@ -289,7 +289,7 @@ Everything ES does, with a sign-in that works on a handheld, and nothing else:
 | Check | Expected |
 |---|---|
 | `ls -l /usr/sbin/tailscale /usr/sbin/tailscaled; /usr/sbin/tailscale version` | present; 1.98.x |
-| Settings → Connections → Tailscale shows *Off*; `systemctl is-active tailscaled`; `get_setting tailscale.up` | inactive; empty or 0 |
+| Settings → Help & tools → For tinkerers → Tailscale shows *Off*; `systemctl is-active tailscaled`; `get_setting tailscale.up` | inactive; empty or 0 |
 | Switch on | status **Logged out** within a few seconds; `get_setting tailscale.up` is 1; `/storage/.config/tailscaled.defaults` exists; `systemctl is-active tailscaled` active |
 | Sign in: scan the QR code with a phone, approve | the page leaves the QR code by itself, shows **Connected as …**, an address `100.x`, a name and the device count; the Pocket is in the admin console |
 | `tailscale status --json \| head`, `tailscale debug prefs` (or `tailscale status`) | Running; `RunSSH` false; the hostname as chosen |

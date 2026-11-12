@@ -345,7 +345,7 @@ impl Medium {
 pub fn is_digital(system: &str) -> bool {
     matches!(
         system,
-        "ports" | "pico-8" | "pico8" | "tic-80" | "tic80" | "scummvm" | "openbor" | "easyrpg" | "solarus" | "lutro" | "love" | "pygame" | "wiiware" | "pspockets" | "steam" | "moonlight" | "streaming"
+        "ports" | "android" | "pico-8" | "pico8" | "tic-80" | "tic80" | "scummvm" | "openbor" | "easyrpg" | "solarus" | "lutro" | "love" | "pygame" | "wiiware" | "pspockets" | "steam" | "moonlight" | "streaming"
     )
 }
 
@@ -635,7 +635,7 @@ type Cand<'a> = (&'a str, Option<(&'a str, &'a str)>);
 /// Nintendo 64 shelf, 2026-11-07: "Conker's B…", "Super Sma…", "The Legend…" twice, "Mario Kar…" three times):
 /// 1. the whole title: a little smaller (seven tenths of `want`); on two lines, a subtitle on a line of its own without
 ///    its dash; smaller still, down to 21 px (it still reads);
-/// 2. in a font wider than Barlow Condensed (Theme → Font: Pixel, Rounded), the same in Barlow Condensed (`Face::Narrow`);
+/// 2. in a font wider than Barlow Condensed (Theme → Font: Pixel), the same in Barlow Condensed (`Face::Narrow`);
 /// 3. the whole title one size step down and another (`STEP_DOWN_PX`, 18 and 16);
 /// 4. the title without its leading "The";
 /// 5. the part of a "Series - Subtitle" or "Series: Subtitle" name that tells the games apart (the subtitle, "Ocarina
@@ -1108,14 +1108,15 @@ pub fn game_pic(text: &mut Text, g: Game, h: i32, look: Look, title: &str, cover
 /// opposite face. Decoded once, on the first launch frame, just like the front templates.
 /// Photo sources, retouching and licences: assets/media/game/REAR-SOURCES.md.
 pub fn game_back(g: Game) -> Option<&'static Pic> {
-    const PNGS: [&[u8]; 4] = [
+    const PNGS: [&[u8]; 5] = [
         include_bytes!("../assets/media/game/gb-back.png"),
         include_bytes!("../assets/media/game/gbc-back.png"),
         include_bytes!("../assets/media/game/gba-back.png"),
         include_bytes!("../assets/media/game/ds-back.png"),
+        include_bytes!("../assets/media/game/gg-back.png"),
     ];
-    static PICS: [std::sync::OnceLock<Pic>; 4] = [const { std::sync::OnceLock::new() }; 4];
-    let i = match g { Game::Gb => 0, Game::Gbc => 1, Game::Gba => 2, Game::Card => 3, _ => return None };
+    static PICS: [std::sync::OnceLock<Pic>; 5] = [const { std::sync::OnceLock::new() }; 5];
+    let i = match g { Game::Gb => 0, Game::Gbc => 1, Game::Gba => 2, Game::Card | Game::Card3ds => 3, Game::GameGear => 4, _ => return None };
     Some(PICS[i].get_or_init(|| {
         let s = crate::system_art::decode(PNGS[i]).expect("rear cartridge image");
         Pic { w: s.w as i32, h: s.h as i32, px: s.px }
@@ -1914,7 +1915,7 @@ mod tests {
         for system in ["gb", "gbc", "gba", "nes", "snes", "n64", "megadrive", "genesis", "psx", "ps2", "psp", "nds", "gamecube", "wii", "dreamcast", "xbox"] {
             assert!(!Medium::of(system).is_generic(), "{system}");
         }
-        for system in ["atari2600", "atarilynx", "ngpc", "wonderswan", "pcengine", "neogeo", "3do", "pcenginecd", "wiiu", "ps3", "ports", "pico-8", "tic-80", "scummvm", "switch"] {
+        for system in ["atari2600", "atarilynx", "ngpc", "wonderswan", "pcengine", "neogeo", "3do", "pcenginecd", "wiiu", "ps3", "ports", "pico-8", "tic-80", "scummvm"] {
             assert!(Medium::of(system).is_generic(), "{system}");
         }
         let size = |s: &str| Medium::of(s).template_size();
@@ -2352,7 +2353,7 @@ mod tests {
             "Banjo-Kazooie", "Conker's Bad Fur Day", "Diddy Kong Racing", "GoldenEye 007", "Mario Kart 64", "Star Fox 64", "Super Mario 64",
             "Super Smash Bros.", "The Legend of Zelda - Majora's Mask", "The Legend of Zelda - Ocarina of Time",
         ];
-        for style in [FontStyle::Barlow, FontStyle::Pixel, FontStyle::Rounded] {
+        for style in [FontStyle::Barlow] {
             let mut text = Text::new().pinned_to(style);
             let mut seen: Vec<(String, String)> = Vec::new();
             for title in shelf {
@@ -2378,14 +2379,14 @@ mod tests {
         assert_eq!(spine_fit(&mut text, "The Legend of Zelda", 30, 132, 15.0).0, ["The Legend of Zelda"]);
     }
 
-    /// The Pixel and Rounded fonts are wider than Barlow Condensed: a title that fits a thin spine in Barlow still fits
+    /// The Pixel font is wider than Barlow Condensed: a title that fits a thin spine in Barlow still fits
     /// in them, a little smaller, not cut ("Chrono Trigg…" on a DS case in Pixel, 2026-10-30).
     #[test]
     fn a_wider_font_makes_the_spine_title_smaller_before_it_is_cut() {
         use crate::font_style::FontStyle;
         use crate::text::Face;
         let thick = 24;
-        for style in [FontStyle::Barlow, FontStyle::Pixel, FontStyle::Rounded] {
+        for style in [FontStyle::Barlow] {
             let mut text = Text::new().pinned_to(style);
             // A spine a little shorter than the title at 21 px in this font.
             let len = text.width(Face::Title, 21, "Chrono Trigger") * 9 / 10;
@@ -2400,7 +2401,6 @@ mod tests {
             assert_eq!(face == Face::Narrow, style != FontStyle::Barlow, "{style:?}: only a face that needs it goes narrow");
         }
     }
-
 
 
     #[test]

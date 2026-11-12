@@ -2,7 +2,11 @@ Source code for the pocket-ui @VERSION@ SD card image (@MODEL_NAME@)
 ===========================================================================
 
 Much of the software on this card is free software under the GNU General Public License (GPL) or the
+#if EFI
+GNU Lesser General Public License (LGPL): the Linux kernel, GRUB, BusyBox, the GNU C library, RetroArch,
+#else
 GNU Lesser General Public License (LGPL): the Linux kernel, BusyBox, the GNU C library, RetroArch,
+#endif
 many emulators, pocket-ui itself and more. You may have their complete source code.
 
 
@@ -20,6 +24,9 @@ The rest of the source is public, at the exact versions on this card:
               tag @ROCKNIX_TAG@, commit @ROCKNIX_COMMIT@. Every package's recipe (where its source
               comes from), the kernel configuration, all patches, and the scripts that put SYSTEM
               and KERNEL together ("make docker-SM8550" builds them).
+#if EFI
+  GRUB:       @GRUB_SOURCE_URL@
+#endif
   pocket-ui:  @POCKET_UI_SOURCE@
 
 There is no source for DraStic (closed source, passed on unchanged as ROCKNIX does; see the README's Licences section).

@@ -1,0 +1,220 @@
+diff --git a/yabause/src/libretro/Makefile b/yabause/src/libretro/Makefile
+index 5533635..ee81ab4 100644
+--- a/yabause/src/libretro/Makefile
++++ b/yabause/src/libretro/Makefile
+@@ -55,8 +55,20 @@ CORE_DIR := .
+ TARGET_NAME = yabasanshiro
+ CC_AS ?= $(CC)
+ 
++# Android NDK: pthread is part of libc, and the cross compiler is Clang.
++ifneq (,$(findstring android,$(platform)))
++	TARGET := $(TARGET_NAME)_libretro.so
++	fpic := -fPIC
++	SHARED := -shared -Wl,--no-undefined -Wl,--version-script=link.T
++	ARCH_IS_LINUX = 1
++	FLAGS += -DANDROID -DAARCH64 -Wno-error=implicit-function-declaration -Wno-error=incompatible-function-pointer-types
++	HAVE_SSE = 0
++	FORCE_GLES = 1
++	USE_AARCH64_DRC = 1
++	DYNAREC_DEVMIYAX = 1
++
+ # Unix
+-ifneq (,$(findstring unix,$(platform)))
++else ifneq (,$(findstring unix,$(platform)))
+ 	TARGET := $(TARGET_NAME)_libretro.so
+ 	fpic := -fPIC
+ 	SHARED := -shared -Wl,--no-undefined -Wl,--version-script=link.T
+@@ -385,8 +397,10 @@ ifeq ($(DEBUG), 1)
+ 	FLAGS += -O0 -g
+ else
+ 	FLAGS += -O3 -DNDEBUG
++ifeq (,$(findstring android,$(platform)))
+         FLAGS += -fno-tree-tail-merge #workaround segfault on N2 and possibly other ARM boards
+ endif
++endif
+ 
+ OBJECTS += $(OBJECTS_C) $(OBJECTS_CXX) $(OBJECTS_S)
+ 
+diff --git a/yabause/src/libretro/libretro.c b/yabause/src/libretro/libretro.c
+index c75e71b..a5561e4 100644
+--- a/yabause/src/libretro/libretro.c
++++ b/yabause/src/libretro/libretro.c
+@@ -38,6 +38,29 @@ static char slash = path_default_slash_c();
+ 
+ static char g_save_dir[PATH_MAX];
+ static char g_system_dir[PATH_MAX];
++
++#ifdef ANDROID
++#include <unistd.h>
++/* tmpfile() defaults to /data/local/tmp, which an Android app cannot write.
++ * Unlink a uniquely created private file immediately; close also removes it
++ * after an aborted state operation, with no persistent files or shared names. */
++FILE * YabAndroidStateFile(void)
++{
++   char path[PATH_MAX];
++   int fd, n;
++   FILE * fp;
++   if (!g_save_dir[0]) return NULL;
++   n = snprintf(path, sizeof(path), "%s/.yaba-state-XXXXXX", g_save_dir);
++   if (n < 0 || (size_t)n >= sizeof(path)) return NULL;
++   fd = mkstemp(path);
++   if (fd < 0) return NULL;
++   if (unlink(path) != 0) { close(fd); return NULL; }
++   fp = fdopen(fd, "w+b");
++   if (fp == NULL) close(fd);
++   return fp;
++}
++#endif
++
+ static char full_path[PATH_MAX];
+ static char bios_path[PATH_MAX];
+ static char bup_path[PATH_MAX];
+@@ -862,35 +885,39 @@ size_t retro_serialize_size(void)
+    size_t size;
+ 
+    ScspMuteAudio(SCSP_MUTE_SYSTEM);
+-   YabSaveStateBuffer (&buffer, &size);
++   int error = YabSaveStateBuffer (&buffer, &size);
+    ScspUnMuteAudio(SCSP_MUTE_SYSTEM);
+ 
+    free(buffer);
+ 
+-   return size;
++   return error ? 0 : size;
+ }
+ 
+ bool retro_serialize(void *data, size_t size)
+ {
+    // Disabling savestates until they are safe
+-   if (!rendering_started)
+-      return true;
++   if (!rendering_started || data == NULL)
++      return false;
+    void *buffer;
+    size_t out_size;
+ 
+    int error = YabSaveStateBuffer (&buffer, &out_size);
+ 
+-   memcpy(data, buffer, size);
+-
++   if (error || buffer == NULL || out_size != size)
++   {
++      free(buffer);
++      return false;
++   }
++   memcpy(data, buffer, out_size);
+    free(buffer);
+-   return !error;
++   return true;
+ }
+ 
+ bool retro_unserialize(const void *data, size_t size)
+ {
+    // Disabling savestates until they are safe
+-   if (!rendering_started)
+-      return true;
++   if (!rendering_started || data == NULL || size == 0)
++      return false;
+    int error = YabLoadStateBuffer(data, size);
+    retro_set_resolution();
+ 
+diff --git a/yabause/src/memory.c b/yabause/src/memory.c
+index ee7be64..abf3618 100644
+--- a/yabause/src/memory.c
++++ b/yabause/src/memory.c
+@@ -1445,39 +1445,47 @@ void FormatBackupRam(void *mem, u32 size)
+ 
+ //////////////////////////////////////////////////////////////////////////////
+ 
++#ifdef ANDROID
++/* Defined by the libretro frontend, using its private save directory. */
++extern FILE * YabAndroidStateFile(void);
++#endif
++
+ int YabSaveStateBuffer(void ** buffer, size_t * size)
+ {
+    FILE * fp;
++   void * data = NULL;
++   long length;
+    int status;
+-   size_t num_read = 0;
+-
+    if (buffer != NULL) *buffer = NULL;
++   if (size == NULL) return -1;
+    *size = 0;
+-
++#ifdef ANDROID
++   fp = YabAndroidStateFile();
++#else
+    fp = tmpfile();
+-
++#endif
++   if (fp == NULL) return -1;
+    ScspLockThread();
+    status = YabSaveStateStream(fp);
+    ScspUnLockThread();
+-
+-   if (status != 0)
+-   {
+-      fclose(fp);
+-      return status;
+-   }
+-
+-   fseek(fp, 0, SEEK_END);
+-   *size = ftell(fp);
+-   fseek(fp, 0, SEEK_SET);
+-
++   if (status != 0 || ferror(fp) || fseek(fp, 0, SEEK_END) != 0)
++      goto fail;
++   length = ftell(fp);
++   if (length <= 0 || fseek(fp, 0, SEEK_SET) != 0) goto fail;
+    if (buffer != NULL)
+    {
+-      *buffer = malloc(*size);
+-      num_read = fread(*buffer, 1, *size, fp);
++      data = malloc((size_t)length);
++      if (data == NULL || fread(data, 1, (size_t)length, fp) != (size_t)length)
++         goto fail;
+    }
+-
+-   fclose(fp);
++   if (fclose(fp) != 0) { free(data); return -1; }
++   *size = (size_t)length;
++   if (buffer != NULL) *buffer = data;
+    return 0;
++fail:
++   free(data);
++   fclose(fp);
++   return status != 0 ? status : -1;
+ }
+ 
+ //////////////////////////////////////////////////////////////////////////////
+@@ -1637,18 +1645,20 @@ int YabLoadStateBuffer(const void * buffer, size_t size)
+ {
+    FILE * fp;
+    int status;
+-
++   if (buffer == NULL || size == 0) return -1;
++#ifdef ANDROID
++   fp = YabAndroidStateFile();
++#else
+    fp = tmpfile();
+-   fwrite(buffer, 1, size, fp);
+-
+-   fseek(fp, 0, SEEK_SET);
+-
++#endif
++   if (fp == NULL) return -1;
++   if (fwrite(buffer, 1, size, fp) != size || fseek(fp, 0, SEEK_SET) != 0)
++   { fclose(fp); return -1; }
+    ScspLockThread();
+    status = YabLoadStateStream(fp);
+    ScspUnLockThread();
+-
+-   fclose(fp);
+-
++   if (ferror(fp)) status = -1;
++   if (fclose(fp) != 0) status = -1;
+    return status;
+ }
+ 

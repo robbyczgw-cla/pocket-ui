@@ -5,25 +5,24 @@
 pub enum Theme {
     #[default]
     Shelf,
-    Minimal,
+    /// Also what a settings file from before 0.4 says for the two looks that went then, Minimal and Cards: both were
+    /// lists or flat fronts with quick animations, and Split is the one left like them (`settings::retired_look`).
+    #[serde(alias = "minimal", alias = "cards")]
     Split,
-    Cards,
     Cabinet,
     /// "Easy": one big game at a time (`big_shelf`).
     Big,
 }
 
 impl Theme {
-    pub const ALL: [Theme; 6] = [Theme::Shelf, Theme::Big, Theme::Minimal, Theme::Split, Theme::Cards, Theme::Cabinet];
+    pub const ALL: [Theme; 4] = [Theme::Shelf, Theme::Big, Theme::Split, Theme::Cabinet];
     /// Phone looks, including the single-game Easy view.
-    pub const PHONE: [Theme; 6] = Self::ALL;
+    pub const PHONE: [Theme; 4] = Self::ALL;
 
     pub fn name(self) -> &'static str {
         match self {
             Theme::Shelf => "Shelf",
-            Theme::Minimal => "Minimal",
             Theme::Split => "Split",
-            Theme::Cards => "Cards",
             Theme::Cabinet => "Cabinet",
             Theme::Big => "Easy",
         }
@@ -33,9 +32,7 @@ impl Theme {
     pub fn blurb(self) -> &'static str {
         match self {
             Theme::Shelf => "Your games standing on a shelf. The one you pick shows its cover.",
-            Theme::Minimal => "Just the names, nothing else.",
             Theme::Split => "List on the left, details on the right.",
-            Theme::Cards => "Big cards you flip through sideways.",
             Theme::Cabinet => "Your games in their cases on a wooden shelf. Pull one out to see its cover.",
             Theme::Big => "One big game at a time, simple menus.",
         }

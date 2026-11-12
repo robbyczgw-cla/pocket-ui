@@ -1,4 +1,4 @@
-//! libretro's virtual file system interface (version 3) on top of plain POSIX calls. Some cores (Stella
+//! libretro's virtual file system interface (version 3) on top of buffered POSIX streams. Some cores (Stella
 //! among them) read their files only through it; without it they cannot even open the ROM.
 
 use std::ffi::{c_char, c_int, c_uint, c_void, CStr, CString};
@@ -20,7 +20,7 @@ const STAT_DIR: c_int = 2;
 const STAT_CHAR_SPECIAL: c_int = 4;
 
 pub struct File {
-    fd: c_int,
+    stream: *mut libc::FILE,
     path: CString,
 }
 
@@ -99,20 +99,30 @@ unsafe extern "C" fn open(path: *const c_char, mode: c_uint, _hints: c_uint) -> 
     if fd < 0 {
         return std::ptr::null_mut();
     }
+    // Cores use this as stdio (including byte-at-a-time fputc/fgets). In particular,
+    // PCSX formats a missing 128 KiB memory card with 131072 writes. Unbuffered
+    // writes on the Brick's sync-mounted FAT card stall startup for minutes.
+    // Keep open's creation/truncation flags; fdopen only adds stdio buffering.
+    let stream_mode = if mode & WRITE == 0 { c"rb" } else if mode & READ != 0 { c"r+b" } else { c"wb" };
+    let stream = libc::fdopen(fd, stream_mode.as_ptr());
+    if stream.is_null() {
+        libc::close(fd);
+        return std::ptr::null_mut();
+    }
     Box::into_raw(Box::new(File {
-        fd,
+        stream,
         path: CStr::from_ptr(path).to_owned(),
     }))
 }
 
 unsafe extern "C" fn close(f: *mut File) -> c_int {
     let f = Box::from_raw(f);
-    libc::close(f.fd)
+    libc::fclose(f.stream)
 }
 
 unsafe extern "C" fn size(f: *mut File) -> i64 {
     let mut st: libc::stat = std::mem::zeroed();
-    if libc::fstat((*f).fd, &mut st) == 0 {
+    if libc::fflush((*f).stream) == 0 && libc::fstat(libc::fileno((*f).stream), &mut st) == 0 {
         st.st_size as i64
     } else {
         -1
@@ -120,7 +130,7 @@ unsafe extern "C" fn size(f: *mut File) -> i64 {
 }
 
 unsafe extern "C" fn truncate(f: *mut File, len: i64) -> i64 {
-    if libc::ftruncate((*f).fd, len as libc::off_t) == 0 {
+    if libc::fflush((*f).stream) == 0 && libc::ftruncate(libc::fileno((*f).stream), len as libc::off_t) == 0 {
         0
     } else {
         -1
@@ -128,7 +138,7 @@ unsafe extern "C" fn truncate(f: *mut File, len: i64) -> i64 {
 }
 
 unsafe extern "C" fn tell(f: *mut File) -> i64 {
-    libc::lseek((*f).fd, 0, libc::SEEK_CUR) as i64
+    libc::ftello((*f).stream) as i64
 }
 
 unsafe extern "C" fn seek(f: *mut File, offset: i64, whence: c_int) -> i64 {
@@ -139,23 +149,26 @@ unsafe extern "C" fn seek(f: *mut File, offset: i64, whence: c_int) -> i64 {
     };
     // Like RetroArch's own implementation: 0 on success, -1 on failure (not the new position; cores
     // such as pcsx_rearmed treat any non-zero result as an error).
-    let r = if libc::lseek((*f).fd, offset as libc::off_t, w) < 0 { -1 } else { 0 };
-    trace(|| format!("seek fd {} {offset} whence {whence} -> {r}", (*f).fd));
+    let r = libc::fseeko((*f).stream, offset as libc::off_t, w) as i64;
+    trace(|| format!("seek fd {} {offset} whence {whence} -> {r}", libc::fileno((*f).stream)));
     r
 }
 
 unsafe extern "C" fn read(f: *mut File, buf: *mut c_void, len: u64) -> i64 {
-    let r = libc::read((*f).fd, buf, len as usize) as i64;
-    trace(|| format!("read fd {} {len} -> {r}", (*f).fd));
+    let n = libc::fread(buf, 1, len as usize, (*f).stream);
+    let r = if n == 0 && libc::ferror((*f).stream) != 0 { -1 } else { n as i64 };
+    trace(|| format!("read fd {} {len} -> {r}", libc::fileno((*f).stream)));
     r
 }
 
 unsafe extern "C" fn write(f: *mut File, buf: *const c_void, len: u64) -> i64 {
-    libc::write((*f).fd, buf, len as usize) as i64
+    let n = libc::fwrite(buf, 1, len as usize, (*f).stream);
+    if n == 0 && libc::ferror((*f).stream) != 0 { -1 } else { n as i64 }
 }
 
 unsafe extern "C" fn flush(f: *mut File) -> c_int {
-    libc::fsync((*f).fd)
+    if libc::fflush((*f).stream) != 0 { return -1; }
+    libc::fsync(libc::fileno((*f).stream))
 }
 
 unsafe extern "C" fn remove(path: *const c_char) -> c_int {
@@ -288,6 +301,69 @@ pub struct InterfaceInfo {
 mod tests {
     use super::*;
     use crate::testutil::TestDir;
+
+    // PCSX formats a missing second memory card one byte at a time. On the Brick's
+    // sync-mounted FAT card every unbuffered write waits for the card; the game
+    // never reaches its first frame before the stall guard kills it.
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn a_new_ps1_memory_card_does_not_stall_the_game_with_a_disk_write_per_byte() {
+        fn writes() -> u64 {
+            std::fs::read_to_string("/proc/thread-self/io").unwrap().lines()
+                .find_map(|line| line.strip_prefix("syscw: ")).unwrap().parse().unwrap()
+        }
+        let dir = TestDir::new("vfs-new-memcard");
+        let path = dir.join("pcsx-card2.mcd");
+        let name = CString::new(path.as_os_str().as_encoded_bytes()).unwrap();
+        let expected: Vec<u8> = (0..128 * 1024).map(|i| (i % 251) as u8).collect();
+        let before = writes();
+        unsafe {
+            let f = open(name.as_ptr(), WRITE, 0);
+            assert!(!f.is_null());
+            for byte in &expected {
+                assert_eq!(write(f, byte as *const u8 as *const c_void, 1), 1);
+            }
+            assert_eq!(close(f), 0, "the entire new card reaches disk before the core reopens it");
+        }
+        let calls = writes() - before;
+        assert!(calls < 128, "formatting one memory card made {calls} disk writes; on synchronous FAT the player waits for each one");
+        assert_eq!(std::fs::read(path).unwrap(), expected, "the game sees every byte after reopening its card");
+    }
+
+    #[test]
+    fn a_game_can_flush_reopen_patch_and_shorten_its_saved_card() {
+        let dir = TestDir::new("vfs-saved-card");
+        let path = dir.join("saved card (玩家's).mcd");
+        let name = CString::new(path.as_os_str().as_encoded_bytes()).unwrap();
+        unsafe {
+            let f = open(name.as_ptr(), READ | WRITE, 0);
+            assert!(!f.is_null());
+            assert_eq!(write(f, b"before".as_ptr().cast(), 6), 6);
+            assert_eq!(tell(f), 6, "the cursor includes buffered bytes");
+            assert_eq!(size(f), 6, "size includes the game's latest changes");
+            assert_eq!(seek(f, -3, 1), 0);
+            assert_eq!(write(f, b"!!!".as_ptr().cast(), 3), 3);
+            assert_eq!(flush(f), 0);
+            assert_eq!(std::fs::read(&path).unwrap(), b"bef!!!", "explicit flush makes a complete save visible to another reader");
+            assert_eq!(seek(f, 0, 0), 0);
+            let mut data = [0u8; 6];
+            assert_eq!(read(f, data.as_mut_ptr().cast(), 6), 6);
+            assert_eq!(&data, b"bef!!!");
+            assert_eq!(seek(f, 0, 2), 0);
+            assert_eq!(write(f, b"tail".as_ptr().cast(), 4), 4);
+            assert_eq!(truncate(f, 4), 0, "a pending tail must not reappear on close after truncation");
+            assert_eq!(close(f), 0);
+            let f = open(name.as_ptr(), READ | WRITE | UPDATE_EXISTING, 0);
+            assert!(!f.is_null());
+            assert_eq!(size(f), 4, "updating an existing save never truncates it on open");
+            assert_eq!(read(f, data.as_mut_ptr().cast(), 6), 4);
+            assert_eq!(&data[..4], b"bef!");
+            assert_eq!(read(f, data.as_mut_ptr().cast(), 6), 0, "EOF remains distinguishable from an I/O error");
+            assert_eq!(seek(f, 0, 0), 0, "rewinding after EOF works");
+            assert_eq!(read(f, data.as_mut_ptr().cast(), 4), 4);
+            assert_eq!(close(f), 0);
+        }
+    }
 
     #[test]
     fn flycast_card_names() {

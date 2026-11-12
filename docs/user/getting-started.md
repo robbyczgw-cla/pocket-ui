@@ -84,7 +84,7 @@ your games stand on the shelf. Dots at the top right show how far you are. Every
 the one you are on, **A** takes it, and the way on is always a row or "A" itself (Continue, Looks right, Finish).
 **B goes back** to the stage before (L1 does too), and **START skips the rest** of the setup; inside a keyboard or a
 list B, L1 and START are the keyboard's and the list's. The hint bar names the keys of the row you are on. **L2**
-switches **Easy to read** on every stage (larger text and calmer menus, at once, also in the keyboards): the small
+switches **Big text** on every stage (larger text and calmer menus, at once, also in the keyboards): the small
 **L2 Aa** at the top right says so. Settings → Help & tools → **First-start setup** runs it all again later.
 
 ![The first start: choose the language, then a few short steps](pictures/first-start.webp)
@@ -92,10 +92,9 @@ switches **Easy to read** on every stage (larger text and calmer menus, at once,
 1. **Your language.** The Spanish welcome reads **Bienvenido a tu Pocket**. Under the cartridge and your handheld,
    Left/Right choose **English**, **Deutsch** or **Español**:
    the screen changes at once, and the choice is kept ([Language](language.md)). It starts on the system language
-   ROCKNIX was set to. The row under it is **Easy to read**: Down reaches it and Left/Right switch it there (L2 does it
+   ROCKNIX was set to. The row under it is **Big text**: Down reaches it and Left/Right switch it there (L2 does it
    from anywhere), Up goes back to the language. Setting the Pocket up for a child? The third row, **For a child**
-   (On with Left/Right; Y switches it too), notes it, and Kids Mode's own steps come after your games (below); not on
-   the Steam Deck. A ("Get started") goes on from any row. SELECT opens the manual, this guide, on the device (in
+   (On with Left/Right; Y switches it too), notes it, and Kids Mode's own steps come after your games (below). A ("Get started") goes on from any row. SELECT opens the manual, this guide, on the device (in
    English); B comes back.
 2. **Wi-Fi.** Choose a network. Already connected: A on it is Continue. A network that connects says "Connected to
    Home" and the setup goes on by itself. Under the networks: **Other network…**, **Wi-Fi country**, **Time zone**,
@@ -114,7 +113,7 @@ switches **Easy to read** on every stage (larger text and calmer menus, at once,
 4. **How your games stand.** A small picture of the shelf in each look, the one shown in the middle and its
    neighbours at the sides: your own games when the card has some, else games called "Sample game". Left/Right
    switch looks; Easy says what it does ("One big game at a time, simple menus."). Under them three rows, as in
-   every list: Down reaches **Style** (Barlow, Pixel, Rounded or [Retro](theme.md#style)), **Colours** (Retro's
+   every list: Down reaches **Style** (Barlow or [Retro](theme.md#style)), **Colours** (Retro's
    Cocoa and Pea while it is on) and **Appearance** (Dark, Light or Automatic), a bar beside the row you are on;
    Left/Right change it and the pictures above show it at once, Up goes back to the looks. **A** ("Finish") goes
    straight to your shelf, with the look shown, from any row; B goes back to your games, so pressing B a few times

@@ -47,6 +47,8 @@ pub fn monotonic_ms() -> f64 {
     unsafe { libc::clock_gettime(libc::CLOCK_MONOTONIC, &mut t) };
     t.tv_sec as f64 * 1000.0 + t.tv_nsec as f64 / 1e6
 }
+/// The game stream's numbers for the player's audio log line (`android_audio::game_line`).
+pub fn audio_line() -> String { super::audio_backend::game_line() }
 pub fn string(name: &str) -> String { strings(name, &[]).unwrap_or_default() }
 pub fn data_dir() -> PathBuf { PathBuf::from(string("dataPath")) }
 pub fn is_speaker() -> bool { string("speakerState") == "true" }

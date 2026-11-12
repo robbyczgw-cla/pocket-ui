@@ -97,6 +97,9 @@ On the experimental Pocket 6 and Nova, Power short press turns the screen off; a
 Any button turns it back on. ROCKNIX sleep is unavailable there. The Sleep & power page offers an optional
 Switch off after timer (Off by default), counted while the screen is off on battery.
 
+If a restart finds the screen dark and its previous brightness was lost, it brings back a dim picture;
+choose your brightness again in Quick settings.
+
 ### Sleep & power settings
 
 Settings → System → **Sleep & power**. Up/Down choose a row, Left/Right change it, A goes on to its next choice; the
@@ -106,7 +109,6 @@ heading **Power button**. On a short screen or with larger text, the list scroll
 | Row | Choices (default in bold) |
 |---|---|
 | **Screen off after** | Never, 30 s, 1 min, **2 min**, 5 min without a button press before the screen goes dark (light sleep). In a game the game pauses. Never: the screen stays on until you press the power button |
-| **Slideshow before screen off** | On, **Off**: your games' pictures play on the shelf before the screen goes dark (the idle slideshow below). Left/Right or A switches it |
 | **Sleep after** | Never, 1 min, **2 min**, 5 min, 15 min with the screen off by itself before the Pocket goes to sleep (deep sleep, the game saved first); a system sleep block keeps it in light sleep. Never: it stays awake with the screen dark until you press a button, which uses the battery; at 2% it still saves and switches off |
 | **Switch off after sleeping** | **Off**, 1 h, 3 h, 8 h asleep on battery before the Pocket saves the game and switches off (above) |
 | **Short press** | **Sleep**, Screen off: what a short press of the power button does |
@@ -126,28 +128,3 @@ heading **Power button**. On a short screen or with larger text, the list scroll
   opening it wakes the screen.
 - Settings from before this page (the times used to be in Settings → Playing → Battery) are kept: 3 minutes there is
   3 min under Screen off after until you change it.
-
-**Idle slideshow.** Leave the shelf alone for a minute and your games' pictures start to play: box art, screenshots, and
-the screenshots and save pictures you took yourself, slowly zooming, with the game's name at the bottom and the clock
-and battery in the corner. Press any button (or touch the screen) and you are back exactly where you were; that press
-does nothing else. It never keeps the Pocket awake: the screen still goes off after **Screen off after**, and the show
-is over with it (with Screen off after 30 s it starts at 15 s). With no pictures yet the shelf just stays. It is Off in every look until you switch it on
-under Settings → System → Sleep & power → **Slideshow before screen off**. Motion Reduced or Off keeps only the cross-fades.
-On a Steam Deck, where SteamOS owns sleep and the power button, Sleep & power has this one row.
-
-On Anbernic H700 handhelds with the affected system audio configuration, speaker volume also adjusts the
-physical DAC, with a reduced maximum. Zero and mute turn off the speaker and DAC output; changes may take a
-short moment. Plugging in headphones keeps the speaker off and uses the headphone volume path. An existing
-hardware mute is kept on startup; changing volume deliberately can bring sound back.
-
-On Anbernic H700 handhelds, **Battery** keeps the game's normal processor speed. Power saving stays with menus
-and idle; it does not impose a half-speed game cap. Volume feedback is shown on the shelf and in Quick settings;
-its small overlay is suppressed over running H700 games to keep rendering work out of their frame budget.
-
-On the TrimUI Brick, the lower half of the volume range has gentler steps and is easier to hear.
-Levels from 50% upward and the maximum stay the same. The mute slider keeps the current level: while muted, volume keys show **Muted** and
-leave that level alone. Moving the slider back restores it with a short fade. Zero volume is silent.
-
-After updating a Brick from the older volume curve, its displayed percentage can be lower while
-the sound level stays the same. Very quiet old settings below the new range start muted; use a
-volume key to choose the new lowest step.

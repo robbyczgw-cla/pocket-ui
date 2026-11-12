@@ -163,7 +163,7 @@ impl App {
     /// menu grabbed that picture with grim when it opened (time limits included), so nothing is captured
     /// here; scaling and writing happen on a thread. A session that ended any other way (crash, hotkey) has
     /// no frame, and the one of an earlier session goes, so the picture is never older than the last quit.
-    pub(crate) fn keep_last_frame(&mut self, run: &super::Running) {
+    pub(crate) fn keep_last_frame(&mut self, run: &super::Running, frame: Option<std::sync::Arc<pocket_ui::image::Image>>) {
         let started = SystemTime::now() - run.started.elapsed() - Duration::from_secs(2);
         let quit_from_menu = self.menu.as_ref().is_some_and(|m| m.quitting);
         // A Quit without saving (Settings > Continue where I quit off): the next start goes back to the last saving quit, and so does the picture of it
@@ -171,8 +171,9 @@ impl App {
         if self.menu.as_ref().is_some_and(|m| m.discarding) {
             return;
         }
+        // `frame`: the menu's picture, given by `game_exited` (Cozy's way back shows it too, `begin_eject`).
         let screen = if quit_from_menu && lastframe::needs_frame(pocket_ui::switcher::resume_preview_written(&run.system, &run.path), started) {
-            self.menu.as_mut().and_then(|m| m.frame.take())
+            frame
         } else {
             None
         };

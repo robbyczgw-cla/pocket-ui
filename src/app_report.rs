@@ -16,11 +16,10 @@ use super::{app_rescue, App, SettingsPage, UserEvent, CANCEL, CONFIRM, NU_BTN_PA
 
 /// About's rows, in order.
 const ROW_LIST: [&str; 2] = [report::ROW, "Open EmulationStation\u{2026}"];
-/// The rows About has: no EmulationStation on the Steam Deck (docs/STEAMDECK.md) nor on the TrimUI Brick (ROCKNIX's menu is not
-/// there; the row only restarted pocket-ui after a warning about Android's bootloader).
+/// EmulationStation is absent on the TrimUI Brick; its About page keeps the report row.
 fn rows() -> &'static [&'static str] {
     let brick = { #[cfg(feature = "brick")] { pocket_ui::device::brick() } #[cfg(not(feature = "brick"))] { false } };
-    if pocket_ui::device::current().host_owned() || brick { &ROW_LIST[..1] } else { &ROW_LIST }
+    if brick { &ROW_LIST[..1] } else { &ROW_LIST }
 }
 /// Under "Open EmulationStation…" while it is selected.
 const ES_HELP: &str = "ROCKNIX's own menu, after a warning. Restart the Pocket to come back.";

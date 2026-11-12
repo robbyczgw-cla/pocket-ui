@@ -3,9 +3,9 @@
 The Brick's own card ([TRIMUI-BRICK-STANDALONE.md](TRIMUI-BRICK-STANDALONE.md)) with three things: Tailscale for the network (an
 optional page, as on ROCKNIX), SSH for logs and tests, and updates of the card's program folder over Wi-Fi. A card from the public
 zip updates from the public channel: a signed list on pocketui.xyz, the tarball on the GitHub release, no Tailscale and no account
-([UPDATE-CHANNEL.md](UPDATE-CHANNEL.md#the-brick-card)). The maintainer's beta cards ask a private channel inside a tailnet instead
+([UPDATE-CHANNEL.md](UPDATE-CHANNEL.md#the-brick-card)). The maintainer's development cards ask a private channel inside a tailnet instead
 (below, "Updates over Wi-Fi (private channel)"); this file names no tailnet. Updates over Wi-Fi, the way back, Tailscale and SSH have
-run on a real Brick since the first beta cards (2026-11-03); what is still open is at the end.
+run on a real Brick since the first development cards (2026-11-03); what is still open is at the end.
 
 ## The card's pocket-ui folder
 
@@ -35,7 +35,7 @@ Tailscale is the page the ROCKNIX devices have (`tailscale.rs`, `app_tailscale.r
 | `tailscale up --reset --ssh=false` | the same, plus `--accept-dns=false --netfilter-mode=off` (`tailscale::up_args_for`): the firmware's resolv.conf and firewall are in its flash, which the card never changes |
 | key file of an auth-key login in `/run` | `/tmp/pocket-ui` (`XDG_RUNTIME_DIR`; the firmware has no `/run` we rely on) |
 
-**Signing in on the device**, the same as on ROCKNIX: Settings › Connections › Tailscale, switch on, *Sign in*; the page shows the
+**Signing in on the device**, the same as on ROCKNIX: Settings › Help & tools › For tinkerers › Tailscale, switch on, *Sign in*; the page shows the
 sign-in address as a QR code and as text, the phone opens it, the owner approves, the page says *Connected*. The device's suggested
 name is `pocket-brick`. An auth key (`tskey-auth-…`) can be typed instead.
 
@@ -57,7 +57,7 @@ name is `pocket-brick`. An auth key (`tskey-auth-…`) can be typed instead.
 ## Remote access (SSH)
 
 **Decision (owner, 2026-11-03):** no Tailscale SSH (`--ssh=false` stays, as on ROCKNIX); plain SSH with dropbear, listening only while
-Settings › Connections › Remote access is on, with a password the device makes and shows, and keys from the card. Root logs in over
+Settings › Help & tools › For tinkerers › Remote access is on, with a password the device makes and shows, and keys from the card. Root logs in over
 Tailscale and the local network alike. The firmware has no dropbear of its own that we know of (NextUI's SSH pak brings one; we use
 nothing of NextUI), so the card ships it:
 
@@ -104,7 +104,8 @@ must be newer than the running one.
 3. Unpack as it is read (`untar::unpack_file_throttled`, bounded decompression and the usual refusals for links, devices,
    `..` and data behind the end) into `pocket-ui/app.new`. Card writes run on the update worker with Linux I/O class idle,
    at most 2 MiB/s and a `fsync` after every chunk of at most 256 KiB. There is no saved credit that permits a later burst.
-   Phone/web transfers and local save backup/restore copies share this write budget on Brick. Other device families retain
+   Phone/web transfers, local save backup/restore, starter ROM output, settings backups/restore and
+   conflict copies share this write budget on Brick. Other device families retain
    their previous behavior. A full card removes the incomplete folder and retains the app download in RAM for another try.
 4. Check the required startup files, `RELEASE`, `sh -n start.sh`, and exact version output of both programs. Extract and
    verify changed components from their completed RAM archives. Matching immutable cores, engine data and helper binaries
@@ -168,13 +169,10 @@ checks the signed list aside, puts the tarball in place first and the list last 
 in the middle of a download finishes it), and reads the list back over the tailnet (`--full-check`: the tarball too). The key is
 never printed. The first card with this updater goes onto the Brick by hand (the zip); every later one can come over Wi-Fi.
 
-**Version numbers (from update 6 on):** `<release>-brick.<beta>`, the last *published* release and the beta's number:
-`0.1.14-brick.6` is beta 6 on 0.1.14, shown as "0.1.14 for TrimUI Brick (beta 6)" on About and "0.1.14 beta 6" on the Updates page
-(`update::brick_long`, `brick_short`). The updater compares number groups (`update::newer`), so 0.1.14-brick.6 counts as newer than
-the date builds before it (0.1.11-brick.202611032041: 14 > 11 decides first). The beta number stays below 10000; a new release base
-can start again at 1. The base is never a release that is still to come: `0.3.0-brick.N` counts as newer than `0.3.0`, so a beta
-named after the coming release would never be offered that release. Before 0.3.0 is out, betas are `0.2.x-brick.N`; after it,
-`0.3.0-brick.N` (newer than 0.3.0, older than 0.3.1).
+**Earlier numbered builds:** `<release>-brick.<n>`, for example `0.1.14-brick.6`, remains a readable and comparable
+version. About shows the exact identifier with the device name; Updates shows the exact identifier. `update::newer`
+compares number groups, so older date builds and numbered builds still update in the same order. The old private channel
+folder and `--channel beta` remain compatibility identifiers for existing cards. Current public cards use the public channel.
 
 ## curl
 
@@ -206,7 +204,7 @@ Nothing of NextUI or MinUI is used or copied.
 
 ## Still open on the device
 
-Seen on the real Brick (beta cards 1 to 7, 2026-11-03 to 11-05): Tailscale up and the sign-in, SSH over the tailnet and the local
+Seen on the real Brick (development cards 1 to 7, 2026-11-03 to 11-05): Tailscale up and the sign-in, SSH over the tailnet and the local
 network, updates fetched over the tailnet, unpacked on the card's FAT, the restart into the new version. Not yet seen: an update from
 the public channel (GitHub's redirect to its download host, through the Brick's own curl and clock) on a card from the public zip,
 a Wi-Fi loss in the middle of that download, and the way back after a real failed start (host tests only).
@@ -214,5 +212,36 @@ a Wi-Fi loss in the middle of that download, and the way back after a real faile
 Public small updates: `brick-publish.sh --public` prepares a complete app tar plus immutable
 per-file core/data/helper archives. The device reuses only copies with the signed inventory's
 exact size and SHA-256, downloading changed components from the website with a GitHub fallback.
-Beta publishing stays full for old clients. Rebuild the initial public card with this updater;
+Development-channel publishing stays full for old clients. Rebuild the initial public card with this updater;
 the publisher checks for its support marker. See [UPDATE-CHANNEL.md](UPDATE-CHANNEL.md#small-standalone-card-updates-public-brick-channel).
+
+
+## Bulk-write audit: optional assets and local copies
+
+The stock 4.9 sunxi-mmc kernel has crashed during heavy card writes with Wi-Fi reception. Pacing reduces
+that exposure; host checks cannot establish kernel stability. No device access was used for this audit.
+
+| Path on the standalone Brick | Write policy |
+|---|---|
+| App/component update and boot asset seed (`update::brick`, `brick_seed`) | Existing RAM downloads, paced extraction/copies, idle I/O; unchanged assets use same-card renames |
+| PortMaster Python ZIP (`archive::unpack_python_runtime`) | Shared Rust Pacer, 2 MiB/s, 256 KiB maximum block, sync_all per block, idle I/O |
+| TrimUI PortMaster ZIP/tar, aliases, fonts, pinned libraries and retained config/engine libraries (`portmaster-archive.py`, `portmaster-runtime.sh`) | Equivalent Python pre-write sleep, flush + os.fsync per 256 KiB or smaller block; idle I/O restored on exit |
+| Cheat database (`update::cheats`, `cheat_download`) | Existing RAM/checkpoint + shared Pacer; packed cheats are looked up in memory, not expanded as one large card tree |
+| Box art batches (`covers::download_from`, `game_pictures`) | Each response finishes in RAM before the shared paced atomic write; batch workers retain the optional-data lock |
+| Identification DAT tables (`rom_id`, `disc_serial`) | Download/parse in memory; large cached lookup tables use paced atomic output on their worker |
+| Starter pack and generic store downloads (`starter`, `store`) | RAM network phase and paced checkpoint; extracted ROM, raw package and tar output also paced with idle I/O |
+| Save backup/restore and phone/web save import (`backup_saves`, `web::files`) | Existing shared Pacer; import/export archive assembly is in RAM |
+| Settings/library backup and restore (`backup`) | Explicit worker-only paced atomic bulk writes; ordinary UI settings writes retain their latency |
+| Save-conflict preservation and cross-filesystem conflict moves (`sync_conflicts`) | Shared Pacer and idle I/O; same-filesystem moves remain renames |
+| Syncthing save sync (`brick-syncthing`, `sync::folder_json`) | 512 KiB/s receive cap including LAN, one syncing folder, one concurrent folder writer and 256 KiB pending requests; inherited idle I/O, native fsync enabled |
+
+The Syncthing cap limits network input, not every physical card write: its native file-copy and index database
+writes do not use the Rust mutex or a per-256-KiB fsync schedule. Its internal block handling and filesystem
+writeback can still burst, so this path needs separate device validation. Other external writers (games,
+SSH/SCP and file sharing) likewise cannot acquire an in-process Rust budget. Patched/ZIP ROM working copies live in `/tmp` (RAM), not on the card. Small metadata, progress,
+configuration and marker files are not bulk payloads. Same-card renames do not duplicate payload bytes.
+
+PortMaster preparation now takes at least roughly 2½ minutes for about 277 MiB at 2 MiB/s, plus download,
+fsync and extra font/engine copies. Both unpackers publish durable-byte progress to the temporary progress
+file; the worker polls it every 100 ms and the page shows **Preparing PortMaster…**, changing MB counts
+and B cancellation. See [TRIMUI-PORTMASTER.md](TRIMUI-PORTMASTER.md).

@@ -9,6 +9,29 @@ ROCKNIX's. pocket-ui is not made or endorsed by the ROCKNIX team; please report 
 pocket-ui (@ISSUES_URL@), not to ROCKNIX.
 
 
+#if EFI
+Before you start: which card, and how it starts
+-----------------------------------------------
+
+Which card: a Pocket 6 with the left stick above the D-pad takes the -rp6 card, a Pocket 6 with the D-pad on top the
+-rp6-top-dpad card, a Nova the -nova card. With the wrong Pocket 6 card the sticks work the wrong way round.
+
+Nothing needs flashing. Newer Retroid firmware has its own way to start a card: hold Volume Down while you switch on, and
+Retroid's menu offers "UEFI" next to Android. This card is made for that (step 2 of Install). It is new: it has been
+reported working with another system on a Pocket 6, and nobody has started this card that way yet. If your menu has no
+"UEFI", update Android first (Settings, System update). If it shows a Secure Boot setting, it has to be off.
+
+Already set up for ROCKNIX? The card starts the ways you know too. With ROCKNIX's boot helper (its "ABL", flashed once from
+Android with root rights) it starts as ROCKNIX does: pick your handheld under "Set device model" in its menu. With OpenABL it
+starts this card's own entry. This card does not flash a boot helper, does not carry one, and never changes the bootloader.
+
+Started through "UEFI" or OpenABL, the card hides the handheld's internal storage from the system, so Android and anything
+on it stay untouched. That also goes for ROCKNIX installed onto the internal storage: this card starts instead. Through
+ROCKNIX's boot helper the internal ROCKNIX wins (it finds its partitions by name, and the internal ones have the same names);
+add pocket-ui to it with its install package there.
+
+
+#else
 Before you start: your handheld needs one thing first
 -----------------------------------------------------
 
@@ -31,13 +54,20 @@ sees this card as a games card. Nothing is lost, but you won't get pocket-ui thi
 with its install package instead.
 
 
+#endif
 Install
 -------
 
 1. Write @IMAGE_NAME@.img.xz to a microSD card with balenaEtcher or Raspberry Pi
    Imager. Both read the .xz file directly. Everything on the card is erased. 8 GB or more.
    Use a spare card, not the one the handheld came with.
+#if EFI
+2. Put the card into the card slot of the switched-off handheld. Hold Volume Down and press Power until Retroid's menu
+   shows. Pick "UEFI" with the volume keys (on some firmware it is the "Boot mode" line), confirm with Power, then Start.
+   With ROCKNIX's boot helper or OpenABL, start Linux from their menu as usual.
+#else
 2. Put the card into the card slot of the switched-off handheld and switch it on.
+#endif
 3. The first start takes a few minutes and restarts once by itself while the card's storage is set up.
    Then pocket-ui's first-start setup opens: look, Wi-Fi, extras.
 
@@ -53,7 +83,11 @@ never say yes, press Cancel. Formatting would erase pocket-ui from the card.
 
 
 If the screen stays black, switch off (hold Power for 10 seconds) and report it with the model.
+#if EFI
+To go back to Android, switch off, hold Volume Down and press Power, and pick Android (or take the card out).
+#else
 To go back to what the handheld ran before, switch off and swap the card back.
+#endif
 
 This card contains no games and no console maker's BIOS files (the BIOS files in it are open replacements: DraStic's pair and ReGBA's). Add only games and BIOS files you own.
 Remote access (SSH), file sharing and Syncthing are off. When you turn on Remote access or file
@@ -69,8 +103,21 @@ by hand) to /storage/.update-refused and starts as usual. Nothing there is delet
 What is on the card
 -------------------
 
+#if EFI
+FAT partition "ROCKNIX" (an EFI system partition: Linux shows it, Windows and macOS hide it):
+  KERNEL, KERNEL.md5         ROCKNIX @ROCKNIX_TAG@, unchanged (ROCKNIX-SM8550.aarch64-@ROCKNIX_TAG@.img.gz); ROCKNIX's
+                             boot helper starts it
+  EFI/BOOT/BOOTAA64.EFI      GRUB (@GRUB_VERSION@), which Retroid's "UEFI" starts
+  boot/grub/grub.cfg         GRUB's settings: the kernel below with this model's device tree
+  boot/pocket/Image          the kernel inside KERNEL, unpacked (GRUB can't read KERNEL's format)
+  boot/pocket/@EFI_DTB_FILE@
+                             the @MODEL_NAME@'s device tree from KERNEL, with the internal storage (UFS) switched off
+  boot/pocket/KERNEL.source.md5   which KERNEL the two came from
+  loader/entries/pocket-ui.conf   the same start for OpenABL
+#else
 FAT partition "ROCKNIX" (readable on any computer):
   KERNEL, KERNEL.md5         ROCKNIX @ROCKNIX_TAG@, unchanged (ROCKNIX-SM8550.aarch64-@ROCKNIX_TAG@.img.gz)
+#endif
   SYSTEM, SYSTEM.md5         ROCKNIX @ROCKNIX_TAG@'s system, repacked without the files listed under
                              "Changes" below; everything else in it is unchanged
   post-flash.sh              boot hook: starts without the ROCKNIX logo
@@ -89,7 +136,12 @@ Partition "STORAGE" (grows to fill the card at the first start):
                              .config/system.d at the second start), and a script ROCKNIX runs once
                              at the first start: device name "pocket-ui", ROCKNIX's update check off
 
+#if EFI
+Changes from the ROCKNIX image: ROCKNIX's rocknix_abl folder is left off, the first partition is marked as an EFI system
+partition, and the files above were added (GRUB and its files, the hooks, pocket-ui-info/, pocket-ui/).
+#else
 Changes from the ROCKNIX image: ROCKNIX's rocknix_abl folder is left off, and the files above were added (the hooks, pocket-ui-info/, pocket-ui/).
+#endif
 Removed from SYSTEM:
   - ROCKNIX's ABL (usr/share/bootloader/rocknix_abl): no stated licence and no source, and this card never flashes it.
   - firmware for handhelds this image isn't for: the AYANEO Pocket family and the AYN Thor (qcom/sm8550/ayaneo,
@@ -130,7 +182,13 @@ Firmware inside SYSTEM (usr/lib/kernel-overlays/base/lib/firmware): Qualcomm Wi-
   can't work without, and a few more files. It is passed on unchanged, as ROCKNIX does, and we remove it on request of
   whoever holds the rights. README.txt in that folder lists every file and where it comes from.
 
+#if EFI
+Linux kernel (KERNEL, boot/pocket/Image): GNU GPL version 2. The device trees are ROCKNIX's, inside KERNEL; the copy in
+  boot/pocket/ differs only in the internal storage switched off.
+GRUB (EFI/BOOT/BOOTAA64.EFI): GNU GPL version 3 or later, Debian's build (@GRUB_VERSION@), unchanged.
+#else
 Linux kernel (KERNEL): GNU GPL version 2. The device trees are ROCKNIX's, unchanged, inside KERNEL.
+#endif
 
 DraStic (usr/config/drastic in SYSTEM): the Nintendo DS emulator DraStic by Exophase (https://www.drastic-ds.com/) is
   closed-source software. It is passed on unchanged, as ROCKNIX does, on the basis of the author's 2017 forum

@@ -1,7 +1,7 @@
 //! The feature registry: every optional part of pocket-ui, with the switch that turns it on (the same one its
 //! Settings page sets), what the first start's profiles do with it, the version it came in and its card (title, one
 //! line, a preview). The first start's "How do you like to play?", Settings → Tour and "New in this version" read
-//! only this list, so a new feature adds one entry to `FEATURES` (docs/DEVELOPING.md, "Adding a feature to the tour").
+//! only this list, so a new feature adds one entry to `FEATURES` (docs/dev/tour.md, "Adding a feature to the tour").
 //!
 //! Nothing here touches a file: `Switches` is a copy of the App's own settings, the cards change the copy, and the App
 //! takes it back and saves it the way each Settings page does (`app_tour.rs`). So a profile never keeps a state of its
@@ -67,7 +67,7 @@ impl Default for Switches {
     }
 }
 
-/// Whether Easy to read is on: Large text and a Motion that isn't Full. The Tour card's switch, and what puts Zoom
+/// Whether Big text is on: Large text and a Motion that isn't Full. The Tour card's switch, and what puts Zoom
 /// into the pause menu's main page (`app_zoom::zoom_row_on`).
 pub fn reading_on(text_size: TextSize, motion: Motion) -> bool {
     text_size == TextSize::Large && motion != Motion::Full
@@ -106,7 +106,6 @@ pub enum Profile {
 impl Profile {
     pub const ALL: [Profile; 5] = [Profile::Simple, Profile::JustPlay, Profile::Enthusiast, Profile::Choose, Profile::Child];
 
-    /// What this device offers: no "For a child" where the host owns buttons a child can reach (the Steam Deck's Steam button).
     pub fn offered() -> Vec<Profile> {
         Profile::ALL.into_iter().filter(|p| *p != Profile::Child || !crate::device::hides_here("kids")).collect()
     }
@@ -280,11 +279,11 @@ pub static FEATURES: &[Feature] = &[
     },
     Feature {
         id: "easy_to_read",
-        title: "Easy to read",
+        title: "Big text",
         plain: "larger text and calmer menus",
         line: "Larger text, menus that only fade, and Zoom in the pause menu. Switches Text size and Motion together.",
         place: "Settings › Look › Text size, Settings › Sound & feel › Motion",
-        guide: "easy-to-read.md#easy-to-read",
+        guide: "big-text.md#big-text",
         since: "0.2.0",
         // On is Large text and Reduced motion (an Off motion stays Off); off is the design's Normal text and Full motion.
         switch: Some(Switch {
@@ -421,7 +420,7 @@ pub static FEATURES: &[Feature] = &[
             get: |s| s.curator.echoes,
             set: |s, on| curator(s).echoes = on,
         }),
-        simple: Pick::On,
+        simple: Pick::Off,
         enthusiast: Pick::On,
         preview: pv::echoes,
         todo: None,
@@ -439,49 +438,14 @@ pub static FEATURES: &[Feature] = &[
             get: |s| s.curator.merge_versions,
             set: |s, on| curator(s).merge_versions = on,
         }),
-        simple: Pick::On,
+        simple: Pick::Off,
         enthusiast: Pick::On,
         preview: pv::versions,
         todo: None,
         try_it: None,
     },
-    Feature {
-        id: "stickers",
-        title: "Labels",
-        plain: "your own labels for games",
-        line: "Your own labels for games, such as Couch co-op. Pin one to see it on Home.",
-        place: "Settings › Games › Curator",
-        guide: "curator.md#labels",
-        since: "0.1.0",
-        switch: Some(Switch {
-            get: |s| s.curator.stickers,
-            set: |s, on| curator(s).stickers = on,
-        }),
-        simple: Pick::On,
-        enthusiast: Pick::On,
-        preview: pv::stickers,
-        todo: None,
-        try_it: None,
-    },
-    Feature {
-        id: "up_next",
-        title: "Up next after a game",
-        plain: "a next game to try after you quit",
-        line: "When you quit a game, one line on the shelf suggests a game of yours like it. X plays it; nothing starts by itself.",
-        place: "Settings › Games › Curator",
-        guide: "curator.md#up-next",
-        since: "0.1.0",
-        switch: Some(Switch {
-            get: |s| s.curator.up_next,
-            set: |s, on| curator(s).up_next = on,
-        }),
-        // Off by default and in Simple: for a few seconds Up next makes A play the suggestion.
-        simple: Pick::Off,
-        enthusiast: Pick::On,
-        preview: pv::up_next,
-        todo: None,
-        try_it: None,
-    },
+
+
     Feature {
         id: "play_history",
         title: "Play history",
@@ -548,11 +512,13 @@ pub static FEATURES: &[Feature] = &[
         // Over the game's Pixel Path level (below a console's or a game's own choice); Off takes only that level
         // away, so the FPS line stays where it was chosen. It doesn't need the pause menu's Pixel Path (2026-10-25).
         switch: Some(Switch {
-            get: |s| s.over_game == crate::over_game::Level::PixelPath,
+            get: |s| s.over_game == crate::over_game::Level::PixelPath && s.curator.pixel_path,
             set: |s, on| {
                 use crate::over_game::Level;
                 if on {
+                    // The level comes with the pause menu's Pixel Path, as in the Enthusiast profile (`Level::offered`).
                     s.over_game = Level::PixelPath;
+                    curator(s).pixel_path = true;
                 } else if s.over_game == Level::PixelPath {
                     s.over_game = Level::Off;
                 }
@@ -577,8 +543,8 @@ pub static FEATURES: &[Feature] = &[
             get: |s| s.curator.lens,
             set: |s, on| curator(s).lens = on,
         }),
-        // Simple is the defaults (2026-10-25), and Lens is one of them; pressing START on the profiles gives the same.
-        simple: Pick::On,
+        // Curator's depth is Enthusiast's (Streichliste 0.4); the shelf has Just Play for "pick me something".
+        simple: Pick::Off,
         enthusiast: Pick::On,
         preview: pv::lens,
         todo: None,
@@ -679,7 +645,7 @@ pub static FEATURES: &[Feature] = &[
         title: "Sync",
         plain: "Sync",
         line: "Keeps saves and save states in step with your other devices, with Syncthing.",
-        place: "Settings › Connections › Sync",
+        place: "Settings › Help & tools › For tinkerers › Sync",
         guide: "sync.md#turn-it-on",
         since: "0.1.0",
         switch: None,
@@ -694,7 +660,7 @@ pub static FEATURES: &[Feature] = &[
         title: "Tailscale",
         plain: "Tailscale",
         line: "Reach the Pocket from your phone or computer, even away from home.",
-        place: "Settings › Connections › Tailscale",
+        place: "Settings › Help & tools › For tinkerers › Tailscale",
         guide: "remote.md#turn-it-on-and-sign-in",
         since: "0.1.0",
         switch: None,
@@ -723,7 +689,7 @@ pub static FEATURES: &[Feature] = &[
         id: "cozy_extras",
         title: "Cozy extras",
         plain: "Cozy extras",
-        line: "The little touches, each on its own: real cases, the memory card, stickers, printed discs and more.",
+        line: "The little touches, each on its own: real cases, stickers, printed discs and more.",
         place: crate::cozy_extras::PAGE,
         guide: "settings-sound.md#cozy-extras",
         since: "0.1.0",
@@ -751,12 +717,11 @@ pub static FEATURES: &[Feature] = &[
     },
 ];
 
-/// The entries that are wired (not `todo`) and that this device has (the same list as Settings' rows,
-/// `device::hides`: no Stick lights without sticks, no Haptics, Sync, Tailscale, Tools or Performance & fan on a
-/// Steam Deck), with their index in `FEATURES`.
+/// The wired entries this device offers, as in Settings: no Stick lights without sticks, and services owned by
+/// NextUI stay hidden (`device::hides`).
 #[cfg(not(feature = "brick"))]
 pub fn available() -> impl Iterator<Item = (usize, &'static Feature)> {
-    available_on(crate::device::current().has_sticks(), crate::device::current().host_owned())
+    available_on(crate::device::current().has_sticks(), false)
 }
 
 #[cfg(feature = "brick")]
@@ -764,8 +729,8 @@ pub fn available() -> impl Iterator<Item = (usize, &'static Feature)> {
     FEATURES.iter().enumerate().filter(|(_, f)| f.todo.is_none() && !crate::device::hides_here(f.id))
 }
 
-pub fn available_on(sticks: bool, host_owned: bool) -> impl Iterator<Item = (usize, &'static Feature)> {
-    FEATURES.iter().enumerate().filter(move |(_, f)| f.todo.is_none() && !crate::device::hides(f.id, sticks, host_owned))
+pub fn available_on(sticks: bool, nextui_owned: bool) -> impl Iterator<Item = (usize, &'static Feature)> {
+    FEATURES.iter().enumerate().filter(move |(_, f)| f.todo.is_none() && !crate::device::hides(f.id, sticks, nextui_owned))
 }
 
 pub fn by_id(id: &str) -> Option<usize> {
@@ -831,7 +796,7 @@ pub static BASICS: &[Basic] = &[
     },
 ];
 
-/// The six basics followed by Easy to read. Tour indices after BASICS refer to FEATURES.
+/// The six basics followed by Big text. Tour indices after BASICS refer to FEATURES.
 pub fn tour_list() -> Vec<usize> {
     (0..BASICS.len()).chain(std::iter::once(BASICS.len() + by_id("easy_to_read").expect("reading card"))).collect()
 }
@@ -1001,7 +966,7 @@ impl Cards {
         if self.mode == Mode::Tour { i.checked_sub(BASICS.len()) } else { Some(i) }
     }
 
-    /// The feature card shown (the Tour ends with Easy to read after its basics).
+    /// The feature card shown (the Tour ends with Big text after its basics).
     pub fn feature(&self) -> Option<&'static Feature> {
         FEATURES.get(self.feature_index()?)
     }
@@ -1438,7 +1403,7 @@ mod tests {
         assert!(!(card.get)(&s) && !reading_on(s.text_size, s.motion), "a new device: no Zoom on the main page");
         (card.set)(&mut s, true);
         assert!(reading_on(s.text_size, s.motion) && (card.get)(&s));
-        // Large text alone, or calmer motion alone, is not Easy to read.
+        // Large text alone, or calmer motion alone, is not Big text.
         assert!(!reading_on(TextSize::Large, Motion::Full) && !reading_on(TextSize::Normal, Motion::Reduced));
         (card.set)(&mut s, false);
         assert!(!reading_on(s.text_size, s.motion));
@@ -1464,8 +1429,8 @@ mod tests {
             }
             assert!(!f.line.ends_with(' ') && f.line.ends_with('.'), "{}: one sentence", f.id);
         }
-        // Up next and Pixel Path over every game came from other branches and are wired now.
-        for id in ["up_next", "pixel_path_live"] {
+        // Pixel Path over every game has a switch.
+        for id in ["pixel_path_live"] {
             assert!(by_id(id).is_some_and(|i| FEATURES[i].switch.is_some()), "{id}");
         }
     }
@@ -1490,7 +1455,7 @@ mod tests {
         assert_eq!(chosen, start, "Choose yourself starts from what is there");
         let c = &enthusiast.curator;
         assert!(
-            c.lens && c.echoes && c.merge_versions && c.stickers && c.not_on_device && c.pixel_path,
+            c.lens && c.echoes && c.merge_versions && c.not_on_device && c.pixel_path,
             "Curator in full"
         );
         assert_eq!(
@@ -1498,8 +1463,7 @@ mod tests {
             (Frames::Every, OnStart::Continue, Motion::Full)
         );
         let c = &simple.curator;
-        assert!(c.lens && c.stickers && c.echoes && c.merge_versions && !c.not_on_device && !c.pixel_path && !c.up_next);
-        assert!(enthusiast.curator.up_next, "Enthusiast keeps Up next");
+        assert!(!c.lens && !c.echoes && !c.merge_versions && !c.not_on_device && !c.pixel_path, "Curator's depth is Enthusiast's");
         assert_eq!((simple.over_game, enthusiast.over_game), (crate::over_game::Level::Off, crate::over_game::Level::Off), "no line over the game from a profile");
         assert_eq!(
             (simple.frames, simple.on_start, simple.motion),
@@ -1548,7 +1512,7 @@ mod tests {
         let mut s = Switches::default();
         (w.set)(&mut s, true);
         assert_eq!(s.over_game, Level::PixelPath);
-        assert!(!s.curator.pixel_path, "the pause menu's Pixel Path is a switch of its own");
+        assert!(s.curator.pixel_path, "the level comes with the pause menu's Pixel Path (0.4: not offered without it)");
         (w.set)(&mut s, false);
         assert_eq!(s.over_game, Level::Off);
         s.over_game = Level::Sensors;
@@ -1559,7 +1523,7 @@ mod tests {
 
     #[test]
     fn new_cards_are_the_entries_newer_than_the_version_seen_at_most_three_newest_first() {
-        // Easy to read came in 0.2.0, Retro in 0.3.0: an update shows what is newer than the version seen, once, newest first.
+        // Big text came in 0.2.0, Retro in 0.3.0: an update shows what is newer than the version seen, once, newest first.
         let (easy, retro) = (by_id("easy_to_read").unwrap(), by_id("retro_look").unwrap());
         assert_eq!(due(None, "0.3.0"), vec![retro, easy]);
         assert_eq!(due(Some("0.1.14"), "0.2.0"), vec![easy]);
@@ -1590,14 +1554,6 @@ mod tests {
         assert_eq!(c.press(Button::South), Out::Done);
         assert!(c.take_switches().is_none(), "B changes nothing");
 
-        // Pixel chosen before: B keeps it, and so does Off (Off only takes Retro away).
-        let pixel = Switches { font: FontStyle::Pixel, ..Switches::default() };
-        let mut c = Cards::new(new(), vec![by_id("retro_look").unwrap()], pixel.clone(), Vec::new());
-        c.press(Button::Down);
-        assert_eq!(c.offer().map(|_| c.choice()), Some(1), "Off chosen: A says Done again");
-        c.press(Button::East);
-        assert!(c.take_switches().is_none(), "Off leaves Pixel alone");
-
         // Retro on already: nothing to try, A changes nothing.
         let on = Switches { font: FontStyle::Retro, ..Switches::default() };
         let mut c = Cards::new(new(), vec![by_id("retro_look").unwrap()], on, Vec::new());
@@ -1627,15 +1583,15 @@ mod tests {
 
     #[test]
     fn a_card_starts_on_what_is_set_and_a_changes_only_what_differs() {
-        let mut c = cards(Mode::First, &["pixel_path", "echoes", "search"]);
+        let mut c = cards(Mode::First, &["pixel_path", "play_history", "search"]);
         assert_eq!(c.choice(), 1, "Pixel Path is off: Off is selected");
         assert_eq!(c.press(Button::East), Out::Stay, "Off again changes nothing");
         assert!(c.take_switches().is_none());
-        assert_eq!(c.choice(), 0, "Echoes is on");
+        assert_eq!(c.choice(), 0, "Play history is on");
         c.press(Button::Down);
         assert_eq!(c.press(Button::East), Out::Changed);
         let s = c.take_switches().unwrap();
-        assert!(!s.curator.echoes && !s.curator.pixel_path);
+        assert!(!s.curator.history && !s.curator.pixel_path);
         assert!(c.take_switches().is_none(), "once");
         // A card without a switch: Up/Down do nothing, A ends the last card.
         assert_eq!(c.feature().unwrap().id, "search");
@@ -1646,19 +1602,22 @@ mod tests {
 
     #[test]
     fn later_is_remembered_until_the_card_is_decided() {
-        let mut c = cards(Mode::First, &["stickers", "lens"]);
+        let mut switches = Switches::default();
+        switches.curator.echoes = true;
+        let list = ["echoes", "lens"].iter().map(|id| by_id(id).unwrap()).collect();
+        let mut c = Cards::new(Mode::First, list, switches, Vec::new());
         c.press(Button::Down);
         c.press(Button::Down);
         assert_eq!(c.choice(), LATER);
         assert_eq!(c.press(Button::East), Out::Stay);
-        assert_eq!(c.later, ["stickers"]);
+        assert_eq!(c.later, ["echoes"]);
         assert!(c.take_switches().is_none(), "Later changes no switch");
         c.press(Button::L1);
-        assert_eq!(c.feature().unwrap().id, "stickers");
+        assert_eq!(c.feature().unwrap().id, "echoes");
         c.press(Button::Down);
         c.press(Button::East);
         assert!(c.later.is_empty(), "decided now");
-        assert!(!c.take_switches().unwrap().curator.stickers);
+        assert!(!c.take_switches().unwrap().curator.echoes);
     }
 
     #[test]

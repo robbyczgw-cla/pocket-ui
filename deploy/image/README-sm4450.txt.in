@@ -1,0 +1,161 @@
+Needs ROCKNIX's bootloader (ABL) already installed on your Classic; this card does not install it.
+Classic Rev Q only; the six-button variant is not supported. Untested on real hardware.
+
+@OS_NAME@ @VERSION@ for the @MODEL_NAME@: SD card image
+================================================================
+
+pocket-ui is a game launcher with its own libretro frontend. This card (pocket-ui @VERSION@) starts it when the
+handheld boots from it. This card does not flash anything to the handheld, and takes nothing off its internal storage.
+
+@OS_NAME@ is built on ROCKNIX @ROCKNIX_TAG@ (https://rocknix.org): its kernel, system and emulators are
+ROCKNIX's. pocket-ui is not made or endorsed by the ROCKNIX team; please report problems with this card to
+pocket-ui (@ISSUES_URL@), not to ROCKNIX.
+
+
+Basis: ROCKNIX 20261101, selected for Classic touch-resume and digital-trigger fixes.
+Requires an existing OpenABL compatible with its EFI/BLS boot format (v1.2). No flashing for this beta.
+
+Before you start
+---------------
+
+Needs ROCKNIX's bootloader (ABL) already installed on your Classic; this card does not install it.
+Classic Rev Q with FOUR face buttons only. The six-button variant and other revisions are NOT supported.
+This is an experimental beta, never booted or played on a real Classic by this project.
+
+Use this card only if this exact Classic Rev Q already boots ROCKNIX from microSD.
+The upstream bootloader information is https://github.com/ROCKNIX/abl/releases/tag/v1.2 .
+The official ROCKNIX SM4450 image's openabl/README describes a separate Android/root flashing
+procedure. It modifies internal ABL and is outside this test. Do NOT flash or update ABL for this beta.
+This image carries neither ABL nor a flash payload. RP5/Flip 2 stock Loader instructions do not apply.
+With the existing ABL configured for your exact model and SD boot with the 20261101 EFI/BLS format, insert the card while powered off.
+To return to Android, choose Android in your existing ABL menu.
+
+The official Classic tree disables internal eMMC (/soc@0/mmc@7c4000); the removable SD
+controller remains enabled. Offline checks verify this, firmware and boot files; they cannot
+prove real hardware boot or safety. No Android data migration or internal install is performed.
+
+
+Install
+-------
+
+1. Write @IMAGE_NAME@.img.xz to a microSD card with balenaEtcher or Raspberry Pi
+   Imager. Both read the .xz file directly. Everything on the card is erased. 8 GB or more.
+   Use a spare card, not the one the handheld came with.
+2. Put the card into the card slot of the switched-off handheld and switch it on.
+3. The first start takes a few minutes and restarts once by itself while the card's storage is set up.
+   Then pocket-ui's first-start setup opens: look, Wi-Fi, extras.
+
+
+Add your games
+--------------
+
+Settings, Games, Add games shows the folder of each system. Turn on file sharing on that page and copy your games from your
+computer over Wi-Fi.
+
+Your computer can't write to the card's large STORAGE part without extra software, and Windows may ask to format it:
+never say yes, press Cancel. Formatting would erase pocket-ui from the card.
+
+
+If the screen stays black, switch off (hold Power for 10 seconds) and report it with the model.
+To go back to what the handheld ran before, switch off and swap the card back.
+
+This card contains no games and no console maker's BIOS files (the BIOS file in it is ReGBA's open replacement). Add only games and BIOS files you own.
+Remote access (SSH), file sharing and Syncthing are off. When you turn on Remote access or file
+sharing in pocket-ui's Settings, it makes a password for this device and shows it on the screen.
+(EmulationStation, ROCKNIX's menu, can also turn SSH on; it then uses ROCKNIX's standard root password
+"rocknix" until you change it there.)
+Updates come from pocket-ui (Settings, Updates). ROCKNIX's own updates would replace the system on this card
+behind pocket-ui's back and flash the handheld's boot helper, so this card does not install them: the boot hook moves
+any update pocket-ui did not check (from EmulationStation's menu, the network share "update" or copied
+by hand) to /storage/.update-refused and starts as usual. Nothing there is deleted.
+
+
+What is on the card
+-------------------
+
+FAT partition "ROCKNIX" (readable on any computer):
+  KERNEL, KERNEL.md5         ROCKNIX @ROCKNIX_TAG@, unchanged EFI-stub kernel (ROCKNIX-SM4450.aarch64-@ROCKNIX_TAG@.img.gz)
+  SYSTEM, SYSTEM.md5         ROCKNIX @ROCKNIX_TAG@'s system, repacked without the files listed under
+                             "Changes" below; everything else in it is unchanged
+  dtbs/, loader/entries/     unchanged device trees and BLS configuration for existing OpenABL
+  post-flash.sh              boot hook: starts without the ROCKNIX logo
+  mount-storage.sh           boot hook: puts pocket-ui's start entry in place once the storage has
+                             grown; at every start, sets aside system updates pocket-ui did not check
+  pocket-ui-info/            this file; SOURCE-OFFER.txt; pocket-ui-os.txt (name and version, shown
+                             in Settings, About); pocket-ui's LICENSE and NOTICE.md;
+                             licences/ (the Rust crates' licence texts and the fonts' OFL; /storage/pocket-ui/licences
+                             links here); rocknix-licenses/ (ROCKNIX's
+                             LICENSE.md and licenses folder at tag @ROCKNIX_TAG@); firmware-licences/
+                             (the terms of the firmware files inside SYSTEM)
+
+Partition "STORAGE" (grows to fill the card at the first start):
+  pocket-ui/                 pocket-ui, pocket-core and pocket-splash (the boot screen) @VERSION@, the launcher
+  .pocket-seed/              the start entry for pocket-ui and the boot screen's unit (moved to
+                             .config/system.d at the second start), and a script ROCKNIX runs once
+                             at the first start: device name "pocket-ui", ROCKNIX's update check off
+
+Changes from the ROCKNIX image: ROCKNIX's openabl folder is left off, and the files above were added (the hooks, pocket-ui-info/, pocket-ui/).
+Removed from SYSTEM:
+  - ROCKNIX's ABL (usr/share/bootloader/openabl): no stated licence and no source, and this card never flashes it.
+  - unused Anbernic RG55G1 firmware (qcom/sm4450/RG55G1), from extra-firmware without stated licence.
+  - the Kickstart relocation tables (kick*.RTB) of Amiberry's WHDLoad booter, loose and inside its
+    boot-data.zip (the rest of that archive is unchanged). They come from SKick
+    (aminet.net, util/boot/skick346.lha), whose licence allows passing them on only inside that unchanged
+    archive. Amiga games run with the standard emulator as before; for WHDLoad games in Amiberry,
+    copy the .RTB files from that archive to /storage/.config/amiberry/whdboot/save-data/Kickstarts.
+  - the DOOM shareware game data (usr/share/idtech/doom.tar.gz), so the card holds no games; its
+    shareware terms also ask for the complete, unchanged shareware package.
+The partition table and KERNEL are unchanged. ROCKNIX's own interface, EmulationStation, stays on
+the card and takes over if pocket-ui cannot start.
+
+
+Licences
+--------
+
+This image may be shared free of charge, for non-commercial use only. Do not sell it, and do not
+bundle it with hardware you sell. Reasons: ROCKNIX includes components licensed for non-commercial use
+only (for example the libretro cores snes9x, genesis_plus_gx, picodrive and fbneo), and its artwork is
+licensed CC BY-NC-SA 4.0.
+
+ROCKNIX (KERNEL, SYSTEM)
+  Copyright ROCKNIX (https://github.com/ROCKNIX). ROCKNIX is a fork of JELOS
+  (https://github.com/JustEnoughLinuxOS/distribution); credit to the JELOS team.
+  The ROCKNIX team's own software and scripts: GNU GPL version 2. Every bundled component keeps its own
+  licence: see pocket-ui-info/rocknix-licenses/ (ROCKNIX's LICENSE.md and licenses folder) and each
+  package's PKG_LICENSE in ROCKNIX's source.
+  ROCKNIX branding and images (logos, splash artwork, EmulationStation themes inside SYSTEM):
+  CC BY-NC-SA 4.0, https://creativecommons.org/licenses/by-nc-sa/4.0/ . They are included unchanged
+  inside SYSTEM; this image does not use them as its own branding.
+
+Firmware inside SYSTEM (usr/lib/kernel-overlays/base/lib/firmware): Qualcomm Wi-Fi, Bluetooth and graphics firmware from
+  linux-firmware 20260309 and the wireless regulatory database from wireless-regdb 2026.05.30, all unchanged, under the
+  terms in pocket-ui-info/firmware-licences/. The rest comes from ROCKNIX's extra-firmware repository, which states no
+  licence (its package says "proprietary"): the sound and battery firmware of these handhelds (qcom/sm4450/RPClassic), which they
+  can't work without, and a few more files. It is passed on unchanged, as ROCKNIX does, and we remove it on request of
+  whoever holds the rights. README.txt in that folder describes its sources and unresolved terms.
+
+Linux kernel (KERNEL): GNU GPL version 2. The Classic device tree is ROCKNIX's, unchanged, in dtbs/; other models' DTBs are omitted from FAT.
+
+pocket-ui and pocket-core
+  GNU GPL version 2 or later (pocket-ui-info/LICENSE).
+  Source: @POCKET_UI_SOURCE@.
+  Third-party credits (fonts, Rust crates and other parts, each under its own licence) are in
+  NOTICE.md: pocket-ui-info/NOTICE.md on this card, and in the repository. The licence texts of the Rust crates
+  and of the fonts (SIL Open Font License) are in pocket-ui-info/licences/.
+
+
+Source code
+-----------
+
+pocket-ui's source and the scripts that build this image are next to the image on @RELEASE_URL@
+(pocket-ui-@VERSION@-source.tar.gz); the rest of the source is public at the links below. For at least three
+years from the release of this image, anyone can ask for the complete corresponding source code of the GNU GPL
+and LGPL software on this card, for no charge beyond the cost of providing it: open an issue at the project's
+GitHub page. See pocket-ui-info/SOURCE-OFFER.txt.
+
+ROCKNIX @ROCKNIX_TAG@, including the kernel and its patches:
+  https://github.com/ROCKNIX/distribution/tree/@ROCKNIX_TAG@
+  tag @ROCKNIX_TAG@, commit @ROCKNIX_COMMIT@
+pocket-ui, pocket-core and the scripts that make this image: @POCKET_UI_SOURCE@
+  (scripts/make-image-family.sh --family SM4450 rebuilds this image from the ROCKNIX release above;
+  scripts/check-image-family.sh checks it).

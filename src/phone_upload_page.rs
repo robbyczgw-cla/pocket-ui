@@ -58,10 +58,9 @@ pub fn layout(text: &mut Text, help: &str, w: i32, h: i32) -> (Vec<String>, i32,
 /// The QR code's top.
 const QR_TOP: i32 = 228;
 
-/// Whether the page is offered: the handhelds, not the Steam Deck (games go into its own folders there).
 pub fn offered() -> bool {
     let d = crate::device::current();
-    !d.host_owned() && d.has_wifi()
+    d.has_wifi()
 }
 
 impl PhonePage {

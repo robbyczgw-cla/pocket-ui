@@ -53,6 +53,15 @@ configure() {
     -e '/<gui /s|tls="[a-z]*"|tls="true"|' \
     -e '/<options>/,/<\/options>/{s|<urAccepted>[^<]*</urAccepted>|<urAccepted>-1</urAccepted>|;s|<crashReportingEnabled>[^<]*</crashReportingEnabled>|<crashReportingEnabled>false</crashReportingEnabled>|;s|<startBrowser>[^<]*</startBrowser>|<startBrowser>false</startBrowser>|;s|<autoUpgradeIntervalH>[^<]*</autoUpgradeIntervalH>|<autoUpgradeIntervalH>0</autoUpgradeIntervalH>|}' \
     "$c" || return 1
+  # Syncthing owns its streaming writes and fsyncs. Limit incoming data even on
+  # the LAN; this is deliberately below the Rust/Python card-write budget.
+  sed -i '/<options>/,/<\/options>/{ /<maxRecvKbps>/d; /<limitBandwidthInLan>/d; /<setLowPriority>/d; /<maxFolderConcurrency>/d; }' "$c" || return 1
+  sed -i '/<options>/a\
+        <maxRecvKbps>512</maxRecvKbps>\
+        <limitBandwidthInLan>true</limitBandwidthInLan>\
+        <setLowPriority>false</setLowPriority>\
+        <maxFolderConcurrency>1</maxFolderConcurrency>' "$c" || return 1
+  sed -i '/<folder /,/<\/folder>/{s|<maxConcurrentWrites>[^<]*</maxConcurrentWrites>|<maxConcurrentWrites>1</maxConcurrentWrites>|;s|<pullerMaxPendingKiB>[^<]*</pullerMaxPendingKiB>|<pullerMaxPendingKiB>256</pullerMaxPendingKiB>|;s|<disableFsync>[^<]*</disableFsync>|<disableFsync>false</disableFsync>|;}' "$c" || return 1
   grep -q "<address>0.0.0.0:$PORT</address>" "$c" && grep -q '<gui [^>]*tls="true"' "$c"
 }
 
@@ -71,7 +80,9 @@ case "${1:-}" in
     printf '%s' "$PASS" | "$SYNCTHING" generate --home "$LIVE" --gui-user "$USERNAME" --gui-password - >>"$LOG" 2>&1 || { echo "brick-syncthing: generate failed: $(tail -n 1 "$LOG")" >&2; exit 1; }
     configure || { echo "brick-syncthing: config.xml is not the shape we expect" >&2; exit 1; }
     sync_once
-    "$SYNCTHING" serve --home "$LIVE" --data "$CARD_DB" --no-browser --no-restart >>"$LOG" 2>&1 &
+    # Boot starts this service before start.sh exports the UI's library path.
+    LD_LIBRARY_PATH="$APP/lib:${BRICK_FIRMWARE:-/usr/trimui}/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}" \
+      nice -n 19 "$APP/bin/pocket-ui" --brick-idle "$SYNCTHING" serve --home "$LIVE" --data "$CARD_DB" --no-browser --no-restart >>"$LOG" 2>&1 &
     echo $! >"$PIDF"
     ( while sleep "$SYNC_EVERY"; do sync_once; done ) >/dev/null 2>&1 &
     echo $! >"$WATCHF"

@@ -1,16 +1,14 @@
-//! Settings → Look → Style (settings.json `"font"`): the type pocket-ui paints with, one of four styles. The fourth,
-//! Retro, is more than type: it switches the whole Retro style on (`retro`).
+//! Settings → Look → Style (settings.json `"font"`): the type pocket-ui paints with, Barlow or Retro. Retro is more
+//! than type: it switches the whole Retro style on (`retro`). Rounded and Pixel went with 0.4; a saved one is Barlow.
 //!
 //! | Style | Titles, spines, labels (`Face::Title`) | Meta text, hints (`Face::Body`) |
 //! |---|---|---|
 //! | Barlow (default) | Barlow Condensed SemiBold | Barlow Medium |
-//! | Pixel | Pixelify Sans SemiBold | Barlow Medium (stays readable) |
-//! | Rounded | Nunito ExtraBold | Nunito SemiBold |
 //! | Retro | Departure Mono | Departure Mono |
 //! | Retro Pixelify (`RetroLetters::Pixelify`) | Pixelify Sans SemiBold | Pixelify Sans Regular |
 //!
 //! Retro's letters are a choice of their own (settings.json `"retro_letters"`, `RetroLetters`): Departure Mono since
-//! 0.3.2, or Pixelify Sans as before. The Style row shows it as a fifth value, "Retro Pixelify", right after "Retro"
+//! 0.3.2, or Pixelify Sans as before. The Style row shows it as a third value, "Retro Pixelify", right after "Retro"
 //! (`ROW`), so that Look keeps its nine rows.
 //!
 //! The fonts are SIL OFL 1.1, compiled in as static, Latin-only instances (`assets/fonts/`, 104 KB for the two new
@@ -34,12 +32,11 @@ use fontdue::{Font, FontSettings};
 #[serde(rename_all = "lowercase")]
 pub enum FontStyle {
     /// Barlow Condensed SemiBold and Barlow Medium, as before the choice existed.
+    /// Also what a settings file says for the styles that went with 0.4, Rounded and Pixel: their letters were type
+    /// on the Barlow page, not the Retro style's colours and frames.
     #[default]
+    #[serde(alias = "rounded", alias = "pixel")]
     Barlow,
-    /// A pixel font for titles, spines and labels; the body text stays Barlow Medium.
-    Pixel,
-    /// Nunito for both faces.
-    Rounded,
     /// Retro (`retro`): pixel letters for both faces (`RetroLetters`), and with it the Retro style's colours, pixel frames
     /// and icons.
     Retro,
@@ -74,11 +71,9 @@ impl RetroLetters {
     }
 }
 
-/// The values of Settings → Look → Style in their order: the four styles, Retro once with each of its letters.
-pub const ROW: [(FontStyle, RetroLetters); 5] = [
+/// Settings → Look → Style in order, with one row for each of Retro's letter sets.
+pub const ROW: [(FontStyle, RetroLetters); 3] = [
     (FontStyle::Barlow, RetroLetters::Departure),
-    (FontStyle::Pixel, RetroLetters::Departure),
-    (FontStyle::Rounded, RetroLetters::Departure),
     (FontStyle::Retro, RetroLetters::Departure),
     (FontStyle::Retro, RetroLetters::Pixelify),
 ];
@@ -110,14 +105,12 @@ pub fn step_row(forward: bool) {
 }
 
 impl FontStyle {
-    pub const ALL: [FontStyle; 4] = [FontStyle::Barlow, FontStyle::Pixel, FontStyle::Rounded, FontStyle::Retro];
+    pub const ALL: [FontStyle; 2] = [FontStyle::Barlow, FontStyle::Retro];
 
     /// The value on the Settings row.
     pub fn label(self) -> &'static str {
         match self {
             FontStyle::Barlow => "Barlow",
-            FontStyle::Pixel => "Pixel",
-            FontStyle::Rounded => "Rounded",
             FontStyle::Retro => "Retro",
         }
     }
@@ -126,8 +119,6 @@ impl FontStyle {
     pub fn blurb(self) -> &'static str {
         match self {
             FontStyle::Barlow => "Clean and narrow, the look pocket-ui started with.",
-            FontStyle::Pixel => "Pixel letters for titles and labels; the small text stays plain.",
-            FontStyle::Rounded => "Soft, round letters everywhere.",
             FontStyle::Retro => "Pixel letters, frames and icons.",
         }
     }
@@ -144,7 +135,7 @@ impl FontStyle {
         Self::ALL[(i + Self::ALL.len() - 1) % Self::ALL.len()]
     }
 
-    /// The style named `name` (`POCKETUI_FONT=barlow|pixel|rounded`, case ignored).
+    /// The style named `name` (`POCKETUI_FONT=barlow|pixel|retro`, case ignored).
     pub fn parse(name: &str) -> Option<FontStyle> {
         Self::ALL.into_iter().find(|s| s.label().eq_ignore_ascii_case(name.trim()))
     }
@@ -159,8 +150,6 @@ impl FontStyle {
 
     /// The faces of this style besides Barlow's own, parsed the first time (`None` for Barlow).
     pub(crate) fn fitted(self) -> Option<&'static Fitted> {
-        static PIXEL: OnceLock<Fitted> = OnceLock::new();
-        static ROUNDED: OnceLock<Fitted> = OnceLock::new();
         static RETRO: OnceLock<Fitted> = OnceLock::new();
         static RETRO_DEPARTURE: OnceLock<Fitted> = OnceLock::new();
         match self {
@@ -198,12 +187,6 @@ impl FontStyle {
                 f
             })),
             FontStyle::Barlow => None,
-            FontStyle::Pixel => Some(PIXEL.get_or_init(|| {
-                Fitted::new(Some(include_bytes!("../assets/fonts/PixelifySans-SemiBold.ttf")), None)
-            })),
-            FontStyle::Rounded => Some(ROUNDED.get_or_init(|| {
-                Fitted::new(Some(include_bytes!("../assets/fonts/Nunito-ExtraBold.ttf")), Some(include_bytes!("../assets/fonts/Nunito-SemiBold.ttf")))
-            })),
         }
     }
 }
@@ -253,7 +236,7 @@ pub(crate) struct Alt {
     pub tight: bool,
 }
 
-/// A style's faces: `None` keeps Barlow's own for that face (Pixel's body).
+/// A style's faces: `None` keeps Barlow's own for that face.
 pub(crate) struct Fitted {
     pub title: Option<Alt>,
     pub body: Option<Alt>,
@@ -343,7 +326,7 @@ mod tests {
     fn barlow_is_the_default_and_the_names_are_plain() {
         assert_eq!(FontStyle::default(), FontStyle::Barlow);
         let labels: Vec<_> = FontStyle::ALL.iter().map(|s| s.label()).collect();
-        assert_eq!(labels, ["Barlow", "Pixel", "Rounded", "Retro"]);
+        assert_eq!(labels, ["Barlow", "Retro"]);
         for s in FontStyle::ALL {
             assert!(!s.blurb().is_empty() && s.blurb().len() < 80, "{s:?}");
             assert_eq!(FontStyle::from_u8(s.to_u8()), s);
@@ -352,7 +335,7 @@ mod tests {
         }
         assert_eq!(FontStyle::parse("comic"), None);
         assert_eq!(FontStyle::from_u8(200), FontStyle::Barlow, "a wrong number is Barlow");
-        assert_eq!(FontStyle::Barlow.next().next().next().next(), FontStyle::Barlow);
+        assert_eq!(FontStyle::Barlow.next().next(), FontStyle::Barlow);
     }
 
     /// Retro's letters (0.3.2): Departure Mono unless Pixelify is chosen, and on the Style row Pixelify is one step on
@@ -381,7 +364,7 @@ mod tests {
             step_row(true);
             seen.push(row_label());
         }
-        assert_eq!(seen, ["Barlow", "Pixel", "Rounded", "Retro", "Retro Pixelify"]);
+        assert_eq!(seen, ["Barlow", "Retro", "Retro Pixelify"]);
         set(FontStyle::Barlow);
         set_retro_letters(RetroLetters::Departure);
     }
@@ -390,7 +373,7 @@ mod tests {
     fn every_font_has_the_german_letters_and_marks_barlow_has() {
         let need = "ÄÖÜäöüß„“”–…·‹›×°";
         let barlow = [BARLOW_TITLE, BARLOW_BODY];
-        for (s, letters) in [(FontStyle::Pixel, RetroLetters::Departure), (FontStyle::Rounded, RetroLetters::Departure), (FontStyle::Retro, RetroLetters::Departure), (FontStyle::Retro, RetroLetters::Pixelify)] {
+        for (s, letters) in [(FontStyle::Retro, RetroLetters::Departure), (FontStyle::Retro, RetroLetters::Pixelify)] {
             set_retro_letters(letters);
             let fitted = s.fitted().unwrap();
             for face in [&fitted.title, &fitted.body].into_iter().flatten() {
@@ -418,30 +401,12 @@ mod tests {
         need.dedup();
         let barlow = [BARLOW_TITLE, BARLOW_BODY].map(|b| Font::from_bytes(b, FontSettings::default()).unwrap());
         let mut faces: Vec<(String, &Font)> = barlow.iter().map(|f| ("Barlow".to_string(), f)).collect();
-        for (s, letters) in [(FontStyle::Pixel, RetroLetters::Departure), (FontStyle::Rounded, RetroLetters::Departure), (FontStyle::Retro, RetroLetters::Departure), (FontStyle::Retro, RetroLetters::Pixelify)] {
+        for (s, letters) in [(FontStyle::Retro, RetroLetters::Departure), (FontStyle::Retro, RetroLetters::Pixelify)] {
             set_retro_letters(letters);
             let fitted = s.fitted().unwrap();
             faces.extend([&fitted.title, &fitted.body].into_iter().flatten().map(|f| (format!("{s:?} {letters:?}"), &*f.font)));
         }
         let missing: Vec<String> = faces.iter().flat_map(|(name, font)| need.iter().filter(|c| font.lookup_glyph_index(**c) == 0).map(move |c| format!("{name} lacks {c:?}"))).collect();
         assert!(missing.is_empty(), "{}", missing.join("\n"));
-    }
-
-    #[test]
-    fn the_capitals_are_as_high_as_barlows_within_a_pixel() {
-        for (s, face, barlow) in [
-            (FontStyle::Pixel, FontStyle::Pixel.fitted().unwrap().title.as_ref().unwrap(), BARLOW_TITLE),
-            (FontStyle::Rounded, FontStyle::Rounded.fitted().unwrap().title.as_ref().unwrap(), BARLOW_TITLE),
-            (FontStyle::Rounded, FontStyle::Rounded.fitted().unwrap().body.as_ref().unwrap(), BARLOW_BODY),
-        ] {
-            let reference = Font::from_bytes(barlow, FontSettings::default()).unwrap();
-            for px in [21.0f32, 28.0, 30.0, 36.0, 37.0, 50.0, 67.0] {
-                let want = reference.metrics('H', px);
-                let got = face.font.metrics('H', px * face.scale);
-                let (top_w, top_g) = (want.height as f32 + want.ymin as f32, got.height as f32 + got.ymin as f32);
-                assert!((top_w - top_g).abs() <= 1.0, "{s:?} at {px}: the capitals end {top_g} high, Barlow's {top_w}");
-                assert!((want.height as f32 - got.height as f32).abs() <= 1.0, "{s:?} at {px}: {} high, Barlow's {}", got.height, want.height);
-            }
-        }
     }
 }

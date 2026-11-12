@@ -16,7 +16,7 @@ handheld can take games: **File sharing** and **From your phone**. Press Down fr
 Left and Right, and press A to switch the one you chose on or off. Each tile says **On** or **Off**; the right side shows
 the address and password of file sharing. Without a connection, A on **File sharing** takes you to the Wi-Fi
 page. X still switches file sharing from anywhere on the page, and B goes back. A handheld without Wi-Fi has no file sharing
-or phone tile, and a Steam Deck has neither (its games go in through Desktop Mode). A second card
+or phone tile, A second card
 and the GAMES drive are not switches: the page says how they work on your handheld.
 
 ## With a second SD card

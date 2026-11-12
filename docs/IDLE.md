@@ -16,14 +16,6 @@ input, surface recovery, or an animation in progress may request a frame.
 - `app_sync.rs`: a still sync confirmation has one expiry deadline.
 - Menu sound stays warm during browsing, with a two-second activity lease. After quiet it closes, so there is no
   silent audio stream keeping PipeWire running. The next sound reopens on the sound thread; input handling never waits.
-- `app_second_screen.rs`: animation frames are paced from that window's last successful presentation. Each window
-  tracks its own decoded-image dependencies, so an off-screen image does not repaint the shelf. Selection debounce,
-  the box-to-info turn, bounded initial image retries and surface-recovery deadlines end when their work is done.
-
-Clock minutes and status changes already have independent timers / worker notifications. Battery safety, controller
-hotplug, fan safety and network/file watchers still sleep on their own timers or kernel events. The optional idle
-slideshow deliberately changes pictures: its existing fade / Ken Burns pacing remains, with no shelf-rate loop
-underneath it. Keyboards have no blinking cursor timer. Cozy motion speeds, easing and launch timing are unchanged.
 
 ## Repeating a measurement
 

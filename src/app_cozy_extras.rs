@@ -1,8 +1,7 @@
 //! Part of the pocket-ui binary: Settings → Look → Cozy extras (`pocket_ui::cozy_extras` has the switches). A list of
 //! switches in the Settings style, one per extra you see (`Extra::PAGE_ROWS`), each On or Off, followed by the GBA
 //! console-model choice; the selected one's line
-//! under the list, with the looks it is seen in. The extras you hear or that move are rows of Sound & feel, the
-//! slideshow is in Sleep & power (`Extra::home`); all of them switch through [`App::switch_extra`].
+//! under the list, with the looks it is seen in. The extras you hear or that move are rows of Sound & feel.
 //!
 //! A switch takes effect at once (an atomic, read where the extra is drawn or heard) and is saved at once with the
 //! other settings. Nothing here reads a file or starts work.
@@ -149,7 +148,7 @@ impl App {
         let presses = parts.next().unwrap_or_default();
         // Optional fourth field: paint a hardware view before changing the model and return
         // to it afterwards. This exercises the player's warm case/icon caches in one App.
-        let warm = parts.next().filter(|look| ["shelf", "cabinet", "cards", "minimal", "split"].contains(look));
+        let warm = parts.next().filter(|look| ["shelf", "cabinet", "split"].contains(look));
         if let Some(look) = warm {
             self.shelf_snapshot(&format!("gba:{look}"));
             let (w,h) = super::snapshot_dims();

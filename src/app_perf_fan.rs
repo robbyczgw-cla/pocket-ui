@@ -46,6 +46,7 @@ pub(crate) struct PerfFanUi {
     curve: Option<fan_curve::Handle>,
     /// Games started, so the curve tells a new game from the last (`Plan::game_id`).
     games: u64,
+    launching: bool,
 }
 
 impl PerfFanUi {
@@ -63,6 +64,7 @@ impl PerfFanUi {
             awake: Arc::new(AtomicBool::new(true)),
             curve: None,
             games: 0,
+            launching: false,
         }
     }
 
@@ -164,6 +166,7 @@ impl App {
     /// Puts the fan where it should be now. Called from `about_to_wait`, so it follows games, sleep and the page; does
     /// nothing (a comparison) while nothing changed.
     pub(crate) fn perf_fan_sync(&mut self) {
+        if self.perf.launching { return; }
         // A change in Quick settings' Performance or Fan row (`app_quick_profiles`) first.
         self.quick_profiles_sync();
         let moment = self.perf_fan_moment();
@@ -217,6 +220,32 @@ impl App {
             self.perf.curve_release();
             self.perf.keeper.sync(Fan::Auto);
         }
+    }
+
+    /// The launch worker owns the trip-profile transaction; the UI never waits for release/fsync.
+    pub(crate) fn perf_fan_prepare_launch(&mut self) -> impl FnOnce(bool) -> FanKeeper + Send + 'static {
+        self.perf.games += 1;
+        self.perf.launching = true;
+        let smooth = self.perf.prefs.smooth_fan;
+        let curve = if smooth { None } else { self.perf.curve.take() };
+        let mut keeper = std::mem::replace(&mut self.perf.keeper, FanKeeper::system());
+        move |apply| {
+            if apply && pocket_ui::device::current().has_fan() {
+                if smooth {
+                    // An old game's request is only a transient hint on tmpfs, never a saved preference.
+                    std::fs::remove_file(fan_curve::GAME_REQUEST_FILE).ok();
+                } else {
+                    if let Some(c) = curve { c.release_and_wait(Duration::from_secs(1)); }
+                    keeper.sync(Fan::Auto);
+                }
+            }
+            keeper
+        }
+    }
+
+    pub(crate) fn perf_fan_launch_ready(&mut self, keeper: Option<FanKeeper>) {
+        if let Some(k) = keeper { self.perf.keeper = k; }
+        self.perf.launching = false;
     }
 
     /// Settings → Performance & fan as saved, from memory (a port's defaults, `app_port_perf`).

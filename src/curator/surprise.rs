@@ -1,4 +1,4 @@
-//! "Surprise me" (docs/CURATOR.md "Surprise me"): one game of the library picked for the player, with one line why.
+//! "Surprise me" (docs/CURATOR.md "Surprise me"), the weights and reasons Just Play's card and the day's pick use: one game of the library picked for the player, with one line why.
 //!
 //! Every work is a candidate once (its preferred version). Its chance is the product of:
 //! - **status:** not started and started-but-unfinished (Playing, Paused) count in full, Completed a sixth, Dropped a
@@ -44,7 +44,7 @@ impl Rng {
     }
 }
 
-/// The game "Surprise me" picked and why.
+/// The game a draw picked and why.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Pick {
     /// The catalog's number of the game.

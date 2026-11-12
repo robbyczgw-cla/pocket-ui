@@ -1,4 +1,4 @@
-//! Check H700's virtual panel/profile contract without starting Docker or touching /sys.
+//! Check virtual device profiles and userland selection without Docker or touching /sys.
 use std::process::Command;
 
 #[test]
@@ -33,4 +33,18 @@ fn h700_entrypoint_matches_the_device_profiles() {
         assert_eq!(profile.has_lid(), lid == "1");
         assert_eq!(pocket_ui::scaled_layout::logical_size(profile.screen()), (1280, 960));
     }
+}
+
+#[test]
+fn selected_rocknix_userland_reaches_the_virtual_device() {
+    let out = Command::new("python3")
+        .args(["-I", concat!(env!("CARGO_MANIFEST_DIR"), "/scripts/test-vdev-images.py")])
+        .output()
+        .expect("run the isolated vdev image regression tests");
+    assert!(
+        out.status.success(),
+        "{}{}",
+        String::from_utf8_lossy(&out.stdout),
+        String::from_utf8_lossy(&out.stderr)
+    );
 }

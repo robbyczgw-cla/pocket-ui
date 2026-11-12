@@ -2,7 +2,7 @@
 
 ## Which handhelds pocket-ui runs on
 
-pocket-ui runs on ROCKNIX, on the three ROCKNIX images it ships for: **SM8250**, **SM8550** and **H700**. Each device
+pocket-ui runs on ROCKNIX, on the three ROCKNIX images it ships for: **SM8250**, **SM8550** and **H700**, plus the private experimental **SM4450** Classic Rev Q beta. Each device
 below has a ROCKNIX device tree on that image (its path is given under the table) and a pocket-ui profile that knows its
 screen, sticks, fan, Wi-Fi and lid. The installers accept exactly these devices. 🎮 means the project has played on it;
 ✅ means the same chip, the same ROCKNIX image and a pocket-ui profile. ⏸ means parked: a profile from a
@@ -15,7 +15,7 @@ runs in [STATUS.md](STATUS.md) and [BIG-EMULATORS.md](BIG-EMULATORS.md), in orde
 
 Add games shows one sentence under a system's Files and BIOS lines where the chip runs it, but not every game smoothly
 (`src/system_notes.rs`, the sources are named there): Snapdragon 865: PS2, GameCube, Wii, 3DS, Xbox. Snapdragon 8 Gen 2:
-PS2, GameCube, Xbox, PS3, Wii U, PS Vita. H700: Nintendo 64, PSP, Dreamcast, Nintendo DS, Saturn. RK3568 (RG DS Plus): Nintendo 64, PSP, Dreamcast, Saturn. Unknown handhelds and the Steam Deck
+PS2, GameCube, Xbox, PS3, Wii U, PS Vita. H700: Nintendo 64, PSP, Dreamcast, Nintendo DS, Saturn. RK3568 (RG DS Plus): Nintendo 64, PSP, Dreamcast, Saturn. Unknown handhelds
 show none. It changes nothing about which emulator plays a system.
 
 ### Snapdragon 865: ROCKNIX SM8250 image
@@ -92,7 +92,6 @@ two-screen code stay in the source for later.
 
 ROCKNIX: `projects/ROCKNIX/devices/RK3566/linux/dts/rockchip/rk3568-anbernic-rg-ds-plus.dts` (the "Specific" RK3566 build).
 The other handhelds of that image, the first RG DS among them, have no pocket-ui profile, and the installers refuse them.
-The two screens: [DUAL-SCREEN.md](DUAL-SCREEN.md).
 
 ## The four devices
 
@@ -351,7 +350,6 @@ landscape, the Goodix's `touchscreen-size`), lid, one stick, touch, two card slo
 plain letters. `Model::small_chip` puts it with the H700 handhelds where the chip matters: N64, PSP, Dreamcast and DS stay
 on ROCKNIX (`hostsys::H700_STAYS_ON_ROCKNIX`), the game check's stray folders, `ram_mb`. The installer takes
 `HW_DEVICE=RK3566` with this model only (`MODELS_RK3566`); the first RG DS and every other RK3566 handheld are refused.
-The two panels, their backlights and the touch screen are one table, `second_screen::Panels` ([DUAL-SCREEN.md](DUAL-SCREEN.md)).
 Not checked yet: ROCKNIX's contract on the RK3566 image (`scripts/rocknix-contract.sh --host` on the device), the
 buttons (F is `BTN_MODE`, the HOME key), sleep on the RK3568, the charge current (ROCKNIX PR #3539).
 
@@ -410,13 +408,7 @@ What pocket-ui does about what is missing (`Device::has_fan`, `has_touch`, `has_
   no rule for *remove*: the dead mount stays until a new card or a restart. `games_card::watch` (poll on the mount table and on
   `/dev`, no wake-ups) makes the shelf read again, or say the card is out. pocket-core's saves then fail at `write_atomic`'s
   fsync and `save_trouble` says so; ROCKNIX's standalone emulators can't, the notice afterwards is all there is.
-- **USB file transfer** (`usb_transfer.rs`, all three images): **retired, not offered to players** (no tile on Add games, no row in Settings → Connections; `usb_transfer::RETIRED`): nobody completed a real transfer, and a Mac depends on OpenMTP, never shown to see the device. The code stays, unused; a start switches off a transfer left on by an earlier version (`usb_transfer::retire`). What was checked: `umtprd` is in each SYSTEM, the gadget is prepared at every start by
-  autostart `081-usbgadget`, off by default, `usbgadget file_transfer` / `disabled`, storage `/storage/roms`, FunctionFS. H700:
-  `usb@5100000` `dr_mode = "otg"`, musb, `CONFIG_USB_CONFIGFS_F_FS`, and ROCKNIX rebinds after sleep
-  (`sleep.d/post/005-usbgadget`). SM8250: `dr_mode = "otg"`, `usb-role-switch`; SM8550: role switch; TCPM owns the role on both,
-  `usbgadget` doesn't touch it. Seen on the Odin 2 Mini and the Mini V2 with a charger on the port (no computer): on in 1.1 s, off in
-  0.06 s, 1.6 MB, no CPU while idle, charging unaffected. On a port in host mode there's no controller, it fails, and the row says so.
-  `systemd-run --scope` keeps `umtprd` when pocket-ui restarts. The row needs `usbgadget`, `umtprd` and the gadget directory.
+
 - **Wi-Fi (RG28XX, RG35XX 2024 without a chip):** the Wi-Fi page (first start and Settings) says "This device has no
   Wi-Fi. Everything else works without it." and offers nothing to choose; the Settings row reads "None on this device";
   Quick settings show no Wi-Fi row; the radio is "absent" instead of the mock's pretend networks. Pages that need the
@@ -473,7 +465,7 @@ The kernel applies touch swaps/inversions, then pocket-ui follows fbcon rotation
 3 → Deg90 on Portal. Unit tests cover the resulting corners; actual touch alignment awaits hardware.
 The printed layouts are visible in AYN's [Mini product image](https://www.ayntec.com/cdn/shop/files/1_6dd30630-56ff-42e9-9f9a-f007bba23264.jpg?v=1715943106)
 and [Portal product image](https://www.ayntec.com/cdn/shop/files/odin2-portal_1.jpg?v=1737092883).
-Unspecified menu layout follows those labels, including safe mode; explicit settings are preserved.
+Unspecified menu layout follows those including safe mode; explicit settings are preserved.
 Games retain the existing positional controls: HOME + right face button takes a screenshot (printed B on Mini/Portal).
 
 **Wii U and PS3 (2026-10-28, experimental).** ROCKNIX's SM8550 image ships Cemu (`start_cemu.sh`) and RPCS3
@@ -561,3 +553,28 @@ was never called. The container was removed. No physical device was accessed.
 This is **host evidence only**: the vdev uses SM8250 userland with a synthetic DT/pad/touch and software GL.
 The InputPlumber keyboard was a uinput stand-in, not the SM8550 daemon. Kernel touch transformations, real
 suspend, Mini LED backlight, real GPU/Zink, LEDs, vibration, fan, battery and device installation remain untested.
+
+## Experimental SM4450: Retroid Pocket Classic Rev Q
+
+`POCKETUI_DEVICE=rp-classic` selects the Classic for previews. ROCKNIX 20261101's
+`sm4450-retroid-pocket-classic-revq.dts` identifies it as `Retroid Pocket Classic Rev Q`,
+compatible `retroid,pocket-classic`, `qcom,sm4450`. The model-only fallback also recognizes
+`Retroid Pocket Classic`; the image and installer accept Rev Q only. Other revisions and the
+six-button variant are unsupported by this image.
+
+The OLED is 1080 × 1240, DT rotation 90°, presented as **1240 × 1080**. FocalTech FT5452
+reports 1080 × 1240 touch coordinates; the existing compositor/touch rotation handles them.
+RSInput exposes the D-pad, four face buttons, shoulders, triggers, Start/Select and Home;
+volume and power use GPIO/PMIC input. There are no sticks, so stick-light settings are hidden.
+No controllable decorative LEDs are declared by this tree. The PWM fan stays under ROCKNIX's
+control (two cooling levels, 0 and 102); pocket-ui does not apply Mini V2 PWM tuning.
+
+Sound is the `RetroidPocketClassic` ALSA/UCM card: two AW88166 speaker amplifiers,
+WCD9370 headphones, and ADSP firmware. The SM4450 platform has no suspend-off quirk,
+so pocket-ui keeps its normal suspend path; wake, touch after wake, audio and cooling need
+real hardware verification. This is experimental, with no hardware or game performance claim.
+
+The base is **20261101**: its Classic-specific touch-resume and digital-trigger fixes justify
+using a newer base than the SM8250/SM8550 images. The four-button Rev Q alone is supported;
+the six-button variant stays outside this beta. Sleep/wake is still unproven on real hardware.
+See [SD images](SD-IMAGE.md#sm4450-classic-beta).

@@ -33,7 +33,7 @@ pub(crate) fn snapshot_catalog(data_dir: &Path) -> Vec<ports::Port> {
 impl App {
     /// A shelf that became empty (for example after removing its last port) keeps a useful way to get games.
     pub(crate) fn empty_ports(&self) -> bool {
-        let supported = !pocket_ui::device::current().host_owned();
+        let supported = true;
         #[cfg(feature = "brick")]
         let supported = supported && (!pocket_ui::device::brick() || pocket_ui::brick_profile::standalone());
         supported && self.items.is_empty() && matches!(self.screen, super::Screen::Games(i) if self.systems.get(i).is_some_and(|s| s.name == "ports"))

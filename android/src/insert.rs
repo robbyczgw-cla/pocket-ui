@@ -23,9 +23,15 @@ use std::{
 /// A frame handed to the screen reaches the glass about this much later (the compositor's vsync and the panel's), while a
 /// sound's moment is AAudio's presentation time. scripts/android/insert-sync.py measures both up to that point: without
 /// this the sound is 22-30 ms before the frame is handed over, and that frame is seen a vsync or two after.
-const PICTURE_LATE: Duration = Duration::from_millis(30);
+pub const PICTURE_LATE: Duration = Duration::from_millis(30);
 /// After the fade, this long on black before the screen says why (a large game still being copied, a slow folder).
 const SAY_STARTING_AFTER: Duration = Duration::from_millis(1200);
+/// The player is told to come this long before the fade has run: from then its window, its core and its first picture take
+/// 214-580 ms on the Odin 2 Mini (GBA 214, SNES 345, N64 ~440, PSP 580; 12.11.), while on Linux pocket-core has been making
+/// the game ready since A. Told at the fade's end, as before, the screen stayed black that long after it. Told 250 ms
+/// earlier (1350 ms after A, the medium is in at 1200), even the quickest start shows its first picture after a lid or tray
+/// has shut (1480 ms).
+pub const PLAYER_START: Duration = Duration::from_millis(250);
 /// The player never came: the shelf comes back rather than a black screen for good.
 const GIVE_UP_AFTER: Duration = Duration::from_secs(20);
 
@@ -42,15 +48,16 @@ pub struct Launch {
     hand_over: HandOver,
     /// When the player was told to come.
     released_at: Option<Instant>,
-    /// Black is on screen after the end: nothing more to paint until it says "Starting".
-    pub settled: bool,
+    /// What the last frame at the black end showed: whether it said "Starting" (None: not painted at the end yet). The end
+    /// needs a frame only when that changes (`needs_frame`).
+    end_shown: Option<bool>,
     pub trace: bool,
     /// Test only: no game comes, the page comes back at the end (`insertRehearsal`).
     pub rehearsal: bool,
 }
 
 /// The console a game goes into: Android keeps Wii and GameCube on one shelf (`document_library`), their consoles differ.
-fn rig_system(game: &Game) -> &str {
+pub fn rig_system(game: &Game) -> &str {
     let relative = game.relative.to_ascii_lowercase();
     if game.system_id == "gamecube" && (relative.ends_with(".wbfs") || relative.ends_with(".wad") || relative.split('/').any(|d| d == "wii")) {
         "wii"
@@ -90,14 +97,15 @@ impl Launch {
         let rig = rig_files.as_ref().and_then(|f| Some((f.rig, png_size(&f.base)?)));
         // A rig's own measures, or the plain console's room.
         let base = rig.map_or((300, 200), |(_, b)| b);
-        let blocks = insert_scene::phone_blocks(rig.as_ref().map(|(r, _)| r), base, (w, h));
-        let k = blocks as f32 / ir::SCALE;
+        let (blocks, stage) = insert_scene::phone_stage(rig.as_ref().map(|(r, _)| r), base, (w, h));
+        let k = stage.k;
         let sprite = system_art::get(system).or_else(|| system_art::get(insert_scene::STAND_IN)).map(|s| s.fitted((560.0 * k) as i32, (330.0 * k) as i32));
         let floor = if rig.is_some() {
-            insert_scene::phone_floor(rig.as_ref().map(|(r, _)| r), base, blocks, h, k)
+            stage.floor
         } else {
+            // On the floor as the handhelds' plain animation (`app_cabinet`), the console whole on the screen.
             let sh = sprite.as_ref().map_or((120.0 * k) as i32, |s| s.h as i32);
-            (h + sh) / 2 + (10.0 * k) as i32
+            (h - (insert_scene::HANDHELD_FLOOR_GAP as f32 * k) as i32).max(sh + (26.0 * k) as i32).min(h)
         };
         let mut scene = Scene {
             system: system.to_string(),
@@ -114,6 +122,7 @@ impl Launch {
             at_drive: None,
             rig: None,
             rig_asked: false,
+            home: None,
         };
         scene.load_rig(blocks);
         let seated = scene.rig.as_ref().map_or(0, |r| r.rig.seated_h(r.scale));
@@ -145,15 +154,16 @@ impl Launch {
             window,
             hand_over: HandOver::new(cozy),
             released_at: None,
-            settled: false,
+            end_shown: None,
             trace: false,
             rehearsal: false,
         }
     }
 
-    /// Time to tell the player to come (once): Cozy's hold has run, or at once the quick way.
+    /// Time to tell the player to come (once): a player's start (`PLAYER_START`) before Cozy's hold has run, or at once the
+    /// quick way.
     pub fn take_release(&mut self, now: Instant) -> bool {
-        let due = self.hand_over.take_release(now.saturating_duration_since(self.at));
+        let due = self.hand_over.take_release(now.saturating_duration_since(self.at) + PLAYER_START);
         if due {
             self.released_at = Some(now);
         }
@@ -169,7 +179,7 @@ impl Launch {
         if !self.hand_over.skip() {
             return false;
         }
-        self.settled = false;
+        self.end_shown = None;
         ui_sound::forget_waiting();
         true
     }
@@ -188,6 +198,12 @@ impl Launch {
         self.hand_over.skipped() || self.scene.fade_at(now.saturating_duration_since(self.at)) >= 1.0
     }
 
+    /// Something new to paint `now`: the picture still moves, or its black end isn't on screen yet as it should be (with or
+    /// without "Starting"). Black on screen stays as it is: painting it again only takes time from the player starting.
+    pub fn needs_frame(&self, now: Instant) -> bool {
+        !self.at_end(now) || self.end_shown != Some(self.says_starting(now))
+    }
+
     pub fn says_starting(&self, now: Instant) -> bool {
         self.released_at.is_some_and(|at| now.saturating_duration_since(at) > SAY_STARTING_AFTER) && self.at_end(now)
     }
@@ -204,8 +220,9 @@ impl Launch {
         let elapsed = now.saturating_duration_since(self.at);
         if self.at_end(now) {
             c.clear(0);
+            self.end_shown = Some(self.says_starting(now));
             if self.says_starting(now) {
-                let word = crate::ui::tr("Starting");
+                let word = super::ui::tr("Starting");
                 let size = (self.stage.k * 28.0) as u32;
                 let tw = text.width(Face::Body, size, &word);
                 text.draw(&mut c, Face::Body, size, (w as i32 - tw) / 2, h as i32 / 2, pal().dust, &word);
@@ -223,8 +240,29 @@ impl Launch {
         if self.at_end(now) {
             return 0;
         }
+        self.margin_at(elapsed, self.scene.fade_at(elapsed))
+    }
+
+    /// The same `elapsed` after A under black of `black` (1 black).
+    pub fn margin_at(&self, elapsed: Duration, black: f32) -> u32 {
         let st = pocket_ui::cabinet::insert_at(elapsed, self.scene.cozy);
-        let dark = 1.0 - (1.0 - st.dim) * (1.0 - self.scene.fade_at(elapsed));
+        let dark = 1.0 - (1.0 - st.dim) * (1.0 - black);
         mix(0, pal().void, ((1.0 - dark) * 256.0) as u32)
+    }
+
+    /// The way back from a game (`eject`): the page with the scene `elapsed` after A over it, without the launch's fade.
+    pub fn paint_scene(&mut self, buf: &mut [u32], elapsed: Duration) {
+        let (w, h) = self.size;
+        let mut c = Canvas::new(buf, w, h);
+        if self.backdrop.len() == c.buf.len() {
+            c.buf.copy_from_slice(&self.backdrop);
+        } else {
+            c.clear(0);
+        }
+        self.scene.paint(&mut c, elapsed, self.sprite.as_ref(), self.stage);
+    }
+
+    pub fn medium(&self) -> Medium {
+        self.scene.medium
     }
 }

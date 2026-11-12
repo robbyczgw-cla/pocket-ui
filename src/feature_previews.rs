@@ -765,32 +765,6 @@ pub fn perf_fan(c: &mut Canvas, text: &mut Text) {
     hints(c, text, &[("B", "Back"), ("Left/Right", "Change")]);
 }
 
-/// The shelf after a game, with Up next over its foot: the paper label, the box, the name and the reason.
-pub fn up_next(c: &mut Canvas, text: &mut Text) {
-    c.clear(pal().void);
-    text.draw(c, Face::Body, 28, MARGIN, 72, pal().dust, "Home");
-    label(c, text, 110, "Sample game", "Game Boy Advance · played 1 min ago", "gba");
-    spine(c, text, 346, "Game Boy Advance", "12", "gba");
-    spine(c, text, 430, "Super Nintendo", "9", "snes");
-    spine(c, text, 514, "Mega Drive", "7", "megadrive");
-    spine(c, text, 598, "PlayStation", "2", "psx");
-    let (x, w, h) = (MARGIN, c.w - 2 * MARGIN, 132);
-    let y = c.h - 112 - h;
-    for k in 0..40 {
-        c.shade_rect(0, y - 40 + k, c.w, 1, pal().void, (k * 255 / 40) as u8);
-    }
-    c.rect(0, y, c.w, c.h - y, pal().void);
-    c.rect(x, y, w, h, pal().label);
-    game_card::lift_shadow(c, x, y + h, w, pal().t.max(120));
-    c.rect(x, y, STRIPE, h, stripe("psp"));
-    let tx = x + STRIPE + 24;
-    c.round_rect(tx + 12, y + 16, 72, h - 32, 6, mix(stripe("psp"), pal().label, 170));
-    let tx = tx + 120;
-    text.draw(c, Face::Body, 21, tx, y + 36, pal().label_dust, "Up next");
-    text.draw(c, Face::Title, 37, tx, y + 80, pal().ink, "Sample game 2");
-    text.draw(c, Face::Body, 28, tx, y + 116, pal().label_dust, "PSP · Same series");
-    hints(c, text, &[("X", "Play it"), ("B", "Not now")]);
-}
 
 /// A game at Integer scaling with Pixel Path's line in the band above the picture, placed and painted by
 /// `pixel_live` itself from its demo report.

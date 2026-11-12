@@ -1007,6 +1007,25 @@
    ],
    "source": "Wikimedia Commons File:ZX_Spectrum_Plus2_(retouched).jpg (https://commons.wikimedia.org/wiki/File:ZX_Spectrum_Plus2_(retouched).jpg), 1280 px thumbnail, public domain; lettering painted over on the photo first",
    "result": "assets/systems/zxspectrum.png"
+  },
+  "pd_arcade": {
+   "system": "arcade",
+   "endpoint": "image-to-pixelart",
+   "api": "v2, 2026-11-11",
+   "seed": 19,
+   "text_guidance_scale": 8.0,
+   "init_image_strength": 300,
+   "input_size": [
+    830,
+    1280
+   ],
+   "output_size": [
+    166,
+    256
+   ],
+   "source": "Wikimedia Commons File:Sega_astro_city_candy_cab.jpg (https://commons.wikimedia.org/wiki/File:Sega_astro_city_candy_cab.jpg), The real dog god, public domain (PD-self); cut from its room, lettering, brand plate, panel print, screen reflection and a cable painted over on the photo first",
+   "result": "assets/systems/arcade.png (162x252 after the cut-out)",
+   "credits": 8
   }
  }
 }

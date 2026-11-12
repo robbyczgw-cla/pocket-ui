@@ -54,7 +54,8 @@ impl App {
         let core_names = CoreOptionsFile::read(&core_options::file_path(&self.data_dir, system), path).map(|f| f.controls.targets).unwrap_or_default();
         let hosted = self.resolve_runner(sys, Some(path), Path::new(super::host_bin()).exists()).runner.emulator == pocket_ui::emu_choice::POCKET_CORE;
         let shortcuts = hosted.then(|| Shortcuts::from_values(&settings.effective()));
-        let card = controls_card::build(&Input { system, system_name: &sys.fullname, mapping: &mapping, core_names: &core_names, shortcuts, layout: pocket_ui::device::current().menu_layout(), deck: pocket_ui::device::current().model == Some(pocket_ui::device::Model::SteamDeck) });
+        let game = path.file_stem().map(|s| s.to_string_lossy().into_owned()).unwrap_or_default();
+        let card = controls_card::build(&Input { system, system_name: &sys.fullname, game: &game, mapping: &mapping, core_names: &core_names, shortcuts, layout: Some(pocket_ui::device::current().menu_layout()), menu_key: "HOME", touch: false });
         #[cfg(feature = "brick")]
         let card = self.brick_card_keys(card);
         Some(card)
@@ -65,11 +66,7 @@ impl App {
         (pocket_ui::hostsys::find(system).is_some() || controls_card::has_names(system)).then(|| CuratorRow {
             kind: RowKind::Controls,
             title: "Controls".into(),
-            line: if pocket_ui::device::current().model == Some(pocket_ui::device::Model::SteamDeck) {
-                "Which button of the Deck does what".into()
-            } else {
-                "Which button of the Pocket does what".into()
-            },
+            line: "Which button of the Pocket does what".into(),
         })
     }
 
@@ -94,31 +91,13 @@ impl App {
     /// A start the player asked for (A on a game, on the card's Play): the first time a console starts on pocket-core,
     /// its controls card comes first and the game starts when it goes. Everything else starts at once.
     pub(crate) fn launch_asking(&mut self, system: String, name: String, path: PathBuf) {
-        if self.first_card_wanted(&system, &path) {
-            println!("controls card: first start of {system}");
-            self.open_controls_card(&system, &name, &path, Some((system.clone(), name.clone(), path.clone())));
-            if self.controls_card.is_some() {
-                return;
-            }
-        }
-        self.launch(system, name, path);
+        self.queue_launch(system, name, path, true);
     }
 
-    fn first_card_wanted(&self, system: &str, path: &Path) -> bool {
-        if self.kids_live() {
-            return false;
-        }
-        let Some(sys) = self.systems.iter().find(|s| s.name == system) else { return false };
-        // Only what pocket-core plays, and only when due (unknown consoles still explain HOME): the
-        // mark is written here, so a start that fails still counts as told.
-        let hosted = self.resolve_runner(sys, Some(path), Path::new(super::host_bin()).exists()).runner.emulator == pocket_ui::emu_choice::POCKET_CORE;
-        if !hosted {
-            return false;
-        }
-        let stem = path.file_stem().and_then(|s| s.to_str()).unwrap_or("game");
-        let states = pocket_ui::states::StateSet::pocket_core(&pocket_ui::slots::base(system, stem));
-        let resuming = states.path(pocket_ui::states::Target::Auto).is_some();
-        controls_card::first_start_due(&self.data_dir, system, false, resuming)
+    pub(crate) fn open_launch_controls(&mut self, system: String, name: String, path: PathBuf) {
+        println!("controls card: first start of {system}");
+        self.open_controls_card(&system, &name, &path, Some((system.clone(), name.clone(), path.clone())));
+        if self.controls_card.is_none() { self.launch(system, name, path); }
     }
 
     pub(crate) fn controls_card_open(&self) -> bool {
@@ -202,7 +181,7 @@ impl App {
         let values = menu.settings.as_ref().map(|s| s.effective());
         let shortcuts = menu.hosted.then(|| values.as_ref().map_or(Shortcuts { save: true, load: true, zoom: false }, Shortcuts::from_values));
         let system_name = self.systems.iter().find(|s| s.name == system).map_or_else(|| system.clone(), |s| s.fullname.clone());
-        let card = emu.controls_card(&system_name, shortcuts);
+        let card = emu.controls_card(&system_name, &name, shortcuts);
         #[cfg(feature = "brick")]
         let card = self.brick_card_keys(card);
         c.clear(VOID);
@@ -266,7 +245,7 @@ impl App {
         let mapping = Mapping::from_values(&system, &settings.values);
         let core_names = CoreOptionsFile::read(&core_options::file_path(&self.data_dir, &system), &path).map(|f| f.controls.targets).unwrap_or_default();
         let shortcuts = Some(Shortcuts::from_values(&settings.effective()));
-        let card = controls_card::build(&Input { system: &system, system_name: &sys.fullname, mapping: &mapping, core_names: &core_names, shortcuts, layout: pocket_ui::device::current().menu_layout(), deck: pocket_ui::device::current().model == Some(pocket_ui::device::Model::SteamDeck) });
+        let card = controls_card::build(&Input { system: &system, system_name: &sys.fullname, game: &name, mapping: &mapping, core_names: &core_names, shortcuts, layout: Some(pocket_ui::device::current().menu_layout()), menu_key: "HOME", touch: false });
         #[cfg(feature = "brick")]
         let card = self.brick_card_keys(card);
         let launch = flags.contains(&"first").then(|| (system.clone(), name.clone(), path.clone()));

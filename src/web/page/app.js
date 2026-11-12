@@ -351,26 +351,6 @@ async function gameView(id) {
     catch (e) { toast(e.message, true); }
   });
 
-  // Stickers
-  const chips = h("div", { class: "chips" });
-  const paintChips = () => chips.replaceChildren(
-    ...lib.stickers.map((s) => {
-      const on = g.stickers.includes(s.id);
-      return h("button", { class: "chip" + (on ? " on" : ""), "aria-pressed": on ? "true" : "false", onclick: async () => {
-        try { await post("/api/game/sticker", { id, sticker: s.id, on: !on }); g.stickers = on ? g.stickers.filter((x) => x !== s.id) : g.stickers.concat(s.id); paintChips(); }
-        catch (e) { toast(e.message, true); }
-      } }, s.name);
-    }));
-  paintChips();
-  const newSticker = h("input", { type: "text", maxlength: String(lib.stickerMax), placeholder: "New label", "aria-label": "New label" });
-  const addSticker = h("button", {}, "Add");
-  addSticker.addEventListener("click", async () => {
-    const name = newSticker.value.trim();
-    if (!name) return;
-    try { await post("/api/stickers/new", { name, id }); S.lib = await api("/api/library"); route(); }
-    catch (e) { toast(e.message, true); }
-  });
-
   // Facts
   const f = g.facts;
   const facts = f ? h("dl", { class: "facts" },
@@ -418,7 +398,6 @@ async function gameView(id) {
     h("h3", {}, "Status"), seg,
     h("h3", {}, "My rating"), stars,
     h("h3", {}, "Note"), h("div", { class: "note" }, note, saveNote),
-    h("h3", {}, "Labels"), lib.stickers.length ? chips : h("p", { class: "quiet small" }, "No labels yet."), h("div", { class: "note" }, newSticker, addSticker),
     pictures,
     shots,
     versions);
@@ -443,10 +422,6 @@ function shelvesView() {
   view(
     h("h2", {}, "Favourites"),
     h("ul", { class: "shelf" }, h("li", {}, h("a", { class: "spine", href: "#/favorites", stripe: "var(--amber)" }, h("span", { class: "name" }, "Favourites"), h("span", { class: "side" }, String(lib.favorites))))),
-    h("h2", {}, "Labels"),
-    lib.stickers.length ? h("ul", { class: "shelf" }, lib.stickers.map((s) => manage("#/sticker/" + s.id, s.name, s.games + (s.pinned ? " · on Home" : ""),
-      () => rename(s.name, s.name, lib.stickerMax, (name) => post("/api/stickers/rename", { sticker: s.id, name })),
-      () => del(s.name, () => post("/api/stickers/delete", { sticker: s.id }))))) : h("p", { class: "quiet" }, "Put labels on games from a game's page, or on the Pocket."),
     h("h2", {}, "Smart shelves"),
     lib.shelves.length ? h("ul", { class: "shelf" }, lib.shelves.map((s) => manage("#/shelf/" + s.index, s.name, s.pinned ? "on Home" : "",
       () => rename(s.name, s.name, lib.shelfMax, (name) => post("/api/shelves/rename", { index: s.index, was: s.name, name })),

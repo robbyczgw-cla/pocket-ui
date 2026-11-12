@@ -310,7 +310,14 @@ pub fn download_from(playlist: &str, remote_dir: &str, name: &str, dest: &Path, 
     let url = format!("{BASE}/{}/{remote_dir}/{}.png", percent_encode(playlist), percent_encode(name));
     let tmp = dest.with_extension("part");
     // A game that started meanwhile gets the CPU and the card: the picture isn't checked or kept (asked again later).
-    let ok = curl_with(&url, Some(&tmp), extra).is_some() && !game_on() && accept(&tmp) && std::fs::rename(&tmp, dest).is_ok();
+    #[cfg(feature = "brick")]
+    let fetched = curl_with(&url, None, extra).is_some_and(|bytes| {
+        // curl has exited: a whole batch must not dirty the card during Wi-Fi input.
+        !game_on() && crate::fsutil::write_atomic_bulk(&tmp, &bytes).is_ok()
+    });
+    #[cfg(not(feature = "brick"))]
+    let fetched = curl_with(&url, Some(&tmp), extra).is_some();
+    let ok = fetched && !game_on() && accept(&tmp) && std::fs::rename(&tmp, dest).is_ok();
     let _ = std::fs::remove_file(&tmp);
     ok
 }

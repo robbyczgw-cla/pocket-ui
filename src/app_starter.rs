@@ -18,7 +18,8 @@ use pocket_ui::starter::{self, Failure, Game, Outcome};
 use pocket_ui::text::Face;
 use pocket_ui::touch::Area;
 
-use crate::store_page::{row_h, Marker};
+enum Marker { None, Text(String) }
+fn row_h() -> i32 { pocket_ui::type_scale::row(66, 36) }
 use crate::{App, Screen, SettingsPage, UserEvent, CANCEL, CONFIRM, EMPTY_ART_TOP, NU_BTN_PAD, NU_PAD, NU_PILL, NU_SMALL};
 
 /// The name of the Settings row.
@@ -151,6 +152,23 @@ fn short_system(id: &str) -> &'static str {
 }
 
 impl App {
+    fn starter_row(&mut self, c: &mut Canvas, y: i32, label: &str, selected: bool, marker: Marker) {
+        let (pad, right, row, font) = (NU_PAD, c.w - NU_PAD, row_h(), 36);
+        let base = y + row / 2 + pocket_ui::type_scale::mid(font);
+        let label = self.text.fit(Face::Body, font, label, right - pad - 2 * NU_BTN_PAD - 300);
+        if selected {
+            pocket_ui::kit::selection(c, pad, y, right - pad, row);
+            self.text.draw(c, Face::Body, font, pad + NU_BTN_PAD, base, pal().ink, &label);
+        } else {
+            self.text.draw(c, Face::Body, font, pad + NU_BTN_PAD, base, pal().text, &label);
+        }
+        let quiet = if selected { pal().label_dust } else { pal().dust };
+        match marker {
+            Marker::None => {}
+            Marker::Text(t) => self.text.draw_right(c, Face::Body, NU_SMALL, right - NU_BTN_PAD, base - 2, quiet, &t),
+        }
+    }
+
     /// Whether Home shows the starter pack's hint: the card has no games at all (and the list could be read).
     pub(crate) fn starter_home(&self) -> bool {
         self.screen == Screen::Home && self.load_error.is_none() && self.systems.is_empty() && !starter::games().is_empty() && !self.starter.looking_around
@@ -494,7 +512,7 @@ impl App {
     pub(crate) fn paint_empty_home_around(&mut self, c: &mut Canvas, with_hints: bool) {
         match self.theme {
             crate::Theme::Shelf => self.paint_empty_shelf(c),
-            crate::Theme::Minimal | crate::Theme::Split | crate::Theme::Cards | crate::Theme::Cabinet | crate::Theme::Big => {}
+            crate::Theme::Split | crate::Theme::Cabinet | crate::Theme::Big => {}
         }
         let dy = pocket_ui::ui_art::above_words(c, pocket_ui::ui_art::Art::NoGames, MARGIN, false, EMPTY_ART_TOP, 300, 50);
         self.text.draw(c, Face::Title, 50, MARGIN, 300 + dy, pal().chalk, "No games yet");
@@ -541,7 +559,7 @@ impl App {
                     (g.title.clone(), marker)
                 }
             };
-            self.store_row(c, y, &label, i == sel, marker);
+            self.starter_row(c, y, &label, i == sel, marker);
             self.hits.row(Area::new(NU_PAD, y, c.w - 2 * NU_PAD, row_h()), i);
         }
         self.hits.list(sel, rows.len(), 0.0, row_h() as f32);

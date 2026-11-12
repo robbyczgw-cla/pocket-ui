@@ -145,3 +145,13 @@ all-ARM recordings stay valuable failure evidence: inspect `bench_rec` errors as
 recorder with its own xruns cannot establish waveform acceptance, even if playback counters are clean.
 The matrix writes `.capture.json` and returns nonzero when the final raw recorder ERR is positive or its active
 row is unavailable. A zero remains a partial snapshot, never a complete capture-coverage guarantee.
+
+## Brick codec control curve
+
+`capture-brick-volume.py --host HOST --out OUT --owner-watch-binary ARM_HELPER` holds the device lock, refuses an active game,
+requires the original UI to be dark, and uses private remembered levels. Build `scripts/brick/owner-watch.c` for the Brick as
+in [the development guide](../../docs/DEVELOPING.md). Both output paths and the speaker amp remain muted; it records real
+codec readbacks at 5% intervals and restores the full ALSA state and amp mute exactly. It never starts a PCM stream.
+The device-side watcher restores on physical input even without a network; every helper ends with the bounded session.
+Run `brick-volume.py OUT/readbacks.json --csv OUT/levels.csv` to report relative gain from the inverted vendor control,
+not acoustic SPL. [Measured levels and limits](../../docs/TRIMUI-BRICK-04.md#volume-real-codec-readbacks-silent).

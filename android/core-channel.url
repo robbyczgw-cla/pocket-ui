@@ -1,0 +1,5 @@
+# The public download channel for the extra systems (PSP, DS, N64, Dreamcast).
+# Empty (no line below): the app lists them as "Coming soon" and offers no download, so nothing ends in an error.
+# To open the channel: put the address of the signed catalog.json on one line below (https, next to its catalog.json.sig),
+# then build the APK again (scripts/android/build-apk.sh). ANDROID_CORE_CHANNEL_URL=<address> does the same for one build.
+# The packages and their signed catalog come from `scripts/android/package-cores.py` (android/build/core-downloads/).

@@ -18,6 +18,8 @@
 #   vdev.sh ls                       all virtual devices
 #   vdev.sh image [--rebuild-base]   build the images (up does it when missing)
 # Several at once: VDEV_NAME=<name> vdev.sh ...   (default name: dev)
+# Base: VDEV_BASE_IMAGE=pocket-vdev-base-<your-name>:<tag> selects/imports a private ROCKNIX base
+#       (existing explicit tags are never overwritten; ROCKNIX_IMG supplies a missing base).
 # Other knobs: VDEV_ROMS=<host dir>, VDEV_CPUS=<n>, VDEV_ONBOARDING=1, VDEV_LIVE=1, ROCKNIX_IMG=<.img>, VDEV_DOCKER_ARGS="<docker run args>"
 set -eu
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
@@ -33,6 +35,12 @@ KILL='pkill -f "[r]un-pocket-ui.sh"; kill $(pidof pocket-ui pocket-core pocket-l
 
 die() { echo "vdev: $*" >&2; exit 1; }
 say() { echo "vdev: $*" >&2; }
+
+# A private, explicit local tag avoids selecting or replacing another session's userland.
+if [ -n "${VDEV_BASE_IMAGE:-}" ]; then
+  printf '%s\n' "$VDEV_BASE_IMAGE" | grep -Eq '^pocket-vdev-base-[a-z0-9]+([._-][a-z0-9]+)*:[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}$' ||
+    die "VDEV_BASE_IMAGE must be a local pocket-vdev-base-<your-name>:<tag> reference"
+fi
 
 # --- engine -------------------------------------------------------------------------------------------
 engine() {
@@ -63,36 +71,57 @@ find_img() {
   return 1
 }
 
-overlay_hash() { cat "$ROOT/docker/Dockerfile" "$ROOT/docker/mesa-closure.sh" $(find "$ROOT/docker/vdev" -type f | sort) | shasum | cut -c1-10; }
+overlay_hash() {
+  # Include the immutable identity too: reimporting a tag must replace its cached overlay.
+  { printf '%s\n' "$BASE" "$BASE_ID"; cat "$ROOT/docker/Dockerfile" "$ROOT/docker/mesa-closure.sh" $(find "$ROOT/docker/vdev" -type f | sort); } | shasum | cut -c1-10
+}
 
 base_image() {
-  # the base is named after the ROCKNIX version it was made from; the newest one wins
-  docker images --format '{{.Repository}}:{{.Tag}}' pocket-vdev-base 2>/dev/null | sort | tail -1
+  if [ -n "${VDEV_BASE_IMAGE:-}" ]; then
+    if docker image inspect "$VDEV_BASE_IMAGE" >/dev/null 2>&1; then echo "$VDEV_BASE_IMAGE"; fi
+  else
+    # Preserve automatic selection for existing callers; explicit selections never use this list.
+    docker images --format '{{.Repository}}:{{.Tag}}' pocket-vdev-base 2>/dev/null | sort | tail -1
+  fi
 }
 
 build_base() {
+  if [ -n "${VDEV_BASE_IMAGE:-}" ] && docker image inspect "$VDEV_BASE_IMAGE" >/dev/null 2>&1; then
+    die "base image $VDEV_BASE_IMAGE already exists; choose a fresh private tag to rebuild"
+  fi
   img=$(find_img) || die "no ROCKNIX image found: set ROCKNIX_IMG=<path to ROCKNIX-SM8250...img> (see docs/VIRTUAL-DEVICE.md)"
   ver=$(basename "$img" | sed -n 's/.*aarch64-\([0-9]*\)\.img/\1/p')
   [ -n "$ver" ] || ver=unknown
+  base_target=${VDEV_BASE_IMAGE:-pocket-vdev-base:$ver}
+  extractor=pocket-vdev-extract
+  if [ -n "${VDEV_BASE_IMAGE:-}" ]; then
+    extractor=${VDEV_BASE_IMAGE%:*}-extract:$(shasum "$ROOT/docker/Dockerfile.extract" | cut -c1-10)
+  fi
   say "unpacking $img (once, about 2 minutes; nothing is copied out of the container)"
-  docker build -q -f "$ROOT/docker/Dockerfile.extract" -t pocket-vdev-extract "$ROOT/docker" >/dev/null
+  docker build -q -f "$ROOT/docker/Dockerfile.extract" -t "$extractor" "$ROOT/docker" >/dev/null
   docker run --rm --platform linux/arm64 -v "$img:/in/rocknix.img:ro" \
-    -v "$ROOT/docker/extract-rocknix.sh:/extract.sh:ro" pocket-vdev-extract sh /extract.sh \
-    | docker import --platform linux/arm64 - "pocket-vdev-base:$ver" >/dev/null
-  say "base image pocket-vdev-base:$ver ready"
+    -v "$ROOT/docker/extract-rocknix.sh:/extract.sh:ro" "$extractor" sh /extract.sh \
+    | docker import --platform linux/arm64 - "$base_target" >/dev/null
+  say "base image $base_target ready"
+}
+
+select_image() {
+  BASE=$(base_image)
+  if [ -z "$BASE" ]; then build_base; BASE=$(base_image); fi
+  [ -n "$BASE" ] || die "no base image"
+  BASE_ID=$(docker image inspect --format '{{.Id}}' "$BASE")
+  IMAGE=pocket-vdev:$(overlay_hash)
 }
 
 build_overlay() {
-  base=$(base_image)
-  [ -n "$base" ] || die "no base image"
-  docker build -q --platform linux/arm64 --build-arg "BASE=$base" -t "pocket-vdev:$(overlay_hash)" \
+  docker build -q --platform linux/arm64 --build-arg "BASE=$BASE" -t "$IMAGE" \
     -f "$ROOT/docker/Dockerfile" "$ROOT/docker" >/dev/null
 }
 
 ensure_image() {
   engine
-  [ -n "$(base_image)" ] || build_base
-  docker image inspect "pocket-vdev:$(overlay_hash)" >/dev/null 2>&1 || { say "building the device image"; build_overlay; }
+  select_image
+  docker image inspect "$IMAGE" >/dev/null 2>&1 || { say "building the device image"; build_overlay; }
 }
 
 # --- instance ----------------------------------------------------------------------------------------
@@ -125,7 +154,7 @@ cmd_up() {
   # shellcheck disable=SC2086
   [ -n "${VDEV_DOCKER_ARGS:-}" ] && set -- "$@" $VDEV_DOCKER_ARGS
   start=$(date +%s)
-  docker run -d "$@" "pocket-vdev:$(overlay_hash)" >/dev/null
+  docker run -d "$@" "$IMAGE" >/dev/null
   i=0
   until dx sh -c 'test -e /run/vdev/ready' 2>/dev/null; do
     i=$((i + 1))
@@ -257,16 +286,16 @@ cmd_run_core() {
 cmd_image() {
   engine
   [ "${1:-}" = --rebuild-base ] && build_base
-  [ -n "$(base_image)" ] || build_base
+  select_image
   build_overlay
   if [ "${1:-}" = --prune ]; then
     # old overlay images (one per change of docker/); those still used by a container stay
     for img in $(docker images --format '{{.Repository}}:{{.Tag}}' pocket-vdev); do
-      [ "$img" = "pocket-vdev:$(overlay_hash)" ] || docker rmi "$img" >/dev/null 2>&1 || true
+      [ "$img" = "$IMAGE" ] || docker rmi "$img" >/dev/null 2>&1 || true
     done
     docker images --format '{{.Repository}}:{{.Tag}}  {{.Size}}' | grep '^pocket-vdev' >&2 || true
   fi
-  say "image pocket-vdev:$(overlay_hash) ready"
+  say "image $IMAGE ready"
 }
 
 case "${1:-}" in

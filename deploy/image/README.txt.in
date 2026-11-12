@@ -58,6 +58,7 @@ FAT partition "ROCKNIX" (readable on any computer):
   boot/pocket/Image          the Linux kernel, unpacked unchanged from KERNEL
   boot/pocket/miniv2-noufs.dtb   the Mini V2 device tree from KERNEL, with the internal storage
                              switched off, so the system never sees Android
+  loader/entries/pocket-ui.conf  the same start as grub.cfg, for OpenABL ("Boot mode: Linux")
   post-flash.sh              boot hook: starts without the ROCKNIX logo
   mount-storage.sh           boot hook: puts pocket-ui's start entry in place once the storage has
                              grown; at every start, sets aside system updates pocket-ui did not check

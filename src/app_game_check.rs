@@ -83,7 +83,6 @@ impl App {
                 return;
             };
             let roms = pocket_ui::library::roms_root(&catalog).unwrap_or_else(|| std::path::Path::new("/storage/roms").to_path_buf());
-            // The Deck's BIOS folder is its own (`POCKETUI_BIOS`), not a `bios` beside the games' folders.
             let bios_dir = if pocket_ui::hostsys::bios_moved() { pocket_ui::hostsys::bios_dir() } else { roms.join("bios") };
             let input = Input { catalog, shelf, bios_dir, roms, h700 };
             let mut sent = Instant::now();

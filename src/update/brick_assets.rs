@@ -1,5 +1,6 @@
 //! Two-phase component updates: resolve and download everything in RAM before writing the card.
 use super::*;
+use serde::Deserialize;
 use std::collections::HashSet;
 use std::io::Read;
 

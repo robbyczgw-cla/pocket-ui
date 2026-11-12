@@ -110,6 +110,11 @@ impl Config {
         let mut config = saved.unwrap_or_default();
         if saved.is_none() && crate::device::current().screen_off_only() {
             config.off_after = None;
+            // A fresh Brick card: its own default for the power button, as an older file gets (`Stored::short_press_for`).
+            #[cfg(feature = "brick")]
+            if crate::sleep_settings::brick_choice() {
+                config.short_press = crate::sleep_settings::BRICK_POWER_DEFAULT;
+            }
         }
         config.for_device(crate::device::current().screen_off_only())
     }
@@ -236,6 +241,9 @@ impl Game {
     fn pause(&self) {
         match self.kind {
             GameKind::PocketCore { .. } => {
+                #[cfg(feature = "brick")]
+                pause_core_for_screen_off(self.pgid, || control::pocket_core("sleep"));
+                #[cfg(not(feature = "brick"))]
                 control::pocket_core("sleep");
             }
             _ => {
@@ -311,6 +319,27 @@ impl Game {
             std::thread::sleep(Duration::from_millis(200));
         }
     }
+}
+
+#[cfg(feature = "brick")]
+const SCREEN_OFF_PAUSE_WAIT: Duration = Duration::from_millis(150);
+
+#[cfg(feature = "brick")]
+fn pause_core_for_screen_off(pgid: Option<i32>, send: impl FnOnce() -> bool) {
+    let before = pgid.map(|g| (g, crate::fast_switch::pauses(g)));
+    if send() {
+        if let Some((g, n)) = before {
+            if !crate::fast_switch::wait_paused(g, n, SCREEN_OFF_PAUSE_WAIT) {
+                eprintln!("sleep: PCM close acknowledgement timed out; screen still turns off");
+            }
+        }
+    }
+}
+
+#[cfg(feature = "brick")]
+fn pause_and_blank(pause: impl FnOnce(), blank: impl FnOnce() -> Option<u32>) -> Option<u32> {
+    pause();
+    blank()
 }
 
 /// Written before deep sleep and power off: the game the next start of pocket-ui opens again, in case
@@ -450,6 +479,7 @@ fn sync_filesystems() {
 #[derive(Clone, Debug)]
 struct System {
     backlight: Option<PathBuf>,
+    dark_file: PathBuf,
     suspend_cmd: String,
     poweroff_cmd: String,
     reboot_cmd: String,
@@ -468,6 +498,7 @@ impl System {
     fn new(backlight: Option<PathBuf>, suspend_cmd: String, dpms: bool) -> System {
         System {
             backlight,
+            dark_file: PathBuf::from(DARK_FILE),
             suspend_cmd,
             poweroff_cmd: default_command(PowerAction::PowerOff),
             reboot_cmd: default_command(PowerAction::Reboot),
@@ -480,10 +511,7 @@ impl System {
     }
 
     fn from_env() -> System {
-        // Two panels (RG DS Plus): the upper one's; the lower one follows it (`second_screen::follow_light`).
-        let upper = crate::second_screen::Panels::current().and_then(|p| crate::second_screen::light_dir(Path::new("/"), &p.top_light));
-        if upper.is_some() { crate::second_screen::note_restore(); }
-        let backlight = std::env::var("POCKETUI_BACKLIGHT").ok().map(PathBuf::from).or(upper).or_else(|| {
+        let backlight = std::env::var("POCKETUI_BACKLIGHT").ok().map(PathBuf::from).or_else(|| {
             std::fs::read_dir("/sys/class/backlight")
                 .ok()?
                 .flatten()
@@ -495,6 +523,9 @@ impl System {
             std::env::var("POCKETUI_SUSPEND_CMD").unwrap_or_else(|_| default_command(PowerAction::Sleep)),
             crate::device::current().screen_off_only() || std::env::var_os("POCKETUI_SLEEP_DPMS").is_some(),
         );
+        if let Some(file) = std::env::var_os("POCKETUI_DARK_FILE") {
+            sys.dark_file = PathBuf::from(file);
+        }
         if let Ok(c) = std::env::var("POCKETUI_POWEROFF_CMD") {
             sys.poweroff_cmd = c;
         }
@@ -527,10 +558,9 @@ impl System {
             let file = d.join("brightness");
             let saved = std::fs::read_to_string(&file).ok()?.trim().parse::<u32>().ok()?;
             if saved > 0 {
-                let _ = std::fs::write(DARK_FILE, saved.to_string());
+                let _ = std::fs::write(&self.dark_file, saved.to_string());
             }
             let _ = std::fs::write(&file, "0");
-            crate::second_screen::follow_light(Path::new("/"), 0, 1);
             Some(saved)
         });
         if self.dpms {
@@ -570,22 +600,28 @@ impl System {
     /// The screen on, on the caller's thread.
     fn screen_on_now(&self, saved: Option<u32>) {
         if self.dpms {
-            if let Some(p) = crate::second_screen::Panels::current() {
-                // The second-screen worker restores the lower panel according to the game/setting.
-                crate::control::sway_command(&format!("output {} power on", p.top));
-            } else {
-                crate::control::sway_command("output * power on");
-            }
+            crate::control::sway_command("output * power on");
         }
+        let max = self.backlight.as_ref().and_then(|dir| {
+            std::fs::read_to_string(dir.join("max_brightness")).ok()?.trim().parse::<u32>().ok().filter(|v| *v > 0)
+        });
         let saved = saved
             .filter(|l| *l > 0)
-            .or_else(|| std::fs::read_to_string(DARK_FILE).ok()?.trim().parse().ok());
+            .or_else(|| std::fs::read_to_string(&self.dark_file).ok()?.trim().parse::<u32>().ok().filter(|v| *v > 0))
+            .or_else(|| {
+                let dir = self.backlight.as_ref()?;
+                std::fs::read_to_string(dir.join("brightness")).ok()?.trim().parse::<u32>().ok().filter(|v| *v > 0)
+            })
+            // A dark panel can outlive its process and its note (for example a
+            // probe used to consume the owner's note). Wake must show a picture.
+            .or_else(|| self.backlight.as_ref().map(|_| (max.unwrap_or(10) / 10).max(1)));
         if let (Some(dir), Some(level)) = (self.backlight.as_ref(), saved) {
-            let _ = std::fs::write(dir.join("brightness"), level.to_string());
-            let max = std::fs::read_to_string(dir.join("max_brightness")).ok().and_then(|m| m.trim().parse().ok()).unwrap_or(255);
-            crate::second_screen::follow_light(Path::new("/"), level, max);
+            let level = level.min(max.unwrap_or(u32::MAX));
+            match std::fs::write(dir.join("brightness"), level.to_string()) {
+                Ok(()) => { let _ = std::fs::remove_file(&self.dark_file); }
+                Err(error) => eprintln!("sleep: could not restore the backlight: {error}"),
+            }
         }
-        let _ = std::fs::remove_file(DARK_FILE);
     }
 
     /// Whether the backlight is at 0 (the screen is dark), as far as it can be read.
@@ -598,7 +634,7 @@ impl System {
 
     /// At start: a screen left dark by a pocket-ui that ended asleep comes back on.
     fn recover(&self) {
-        if self.screen_dark() && Path::new(DARK_FILE).exists() {
+        if self.screen_dark() {
             println!("sleep: the screen was left dark, turning it on");
             self.screen_on_now(None);
         }
@@ -848,11 +884,9 @@ enum InhibitorSlot {
 }
 
 impl InhibitorSlot {
-    /// Nothing is taken where the host owns the power key (a Steam Deck): logind's handling stays.
-    fn take_soon_unless(host_owned: bool) -> InhibitorSlot {
-        if host_owned {
-            return InhibitorSlot::Have(None);
-        }
+    #[cfg(feature = "brick")]
+    fn take_soon_unless(nextui_owned: bool) -> InhibitorSlot {
+        if nextui_owned { return InhibitorSlot::Have(None); }
         InhibitorSlot::take_soon()
     }
 
@@ -1136,6 +1170,9 @@ fn plan_for_deep(minutes: Option<u32>, before: Option<crate::auto_off::Plan>, no
 /// The real steps, on the deep sleep's worker thread.
 struct DeepWorker {
     seq: u64,
+    /// The Brick's own card: no PipeWire sink to read or kick (its mixer comes back with the codec).
+    #[cfg(feature = "brick")]
+    brick_card: bool,
     game: Option<Game>,
     /// The game was stopped by us or by the open pause menu: stopped again after saving.
     stopped: bool,
@@ -1165,6 +1202,10 @@ impl DeepSteps for DeepWorker {
     }
 
     fn volume(&mut self) -> Option<(u32, bool)> {
+        #[cfg(feature = "brick")]
+        if self.brick_card {
+            return None;
+        }
         sink_volume()
     }
 
@@ -1297,15 +1338,12 @@ impl DeepSteps for DeepWorker {
 pub struct Sleep {
     pub config: Config,
     screen_only: bool,
-    /// SteamOS owns sleep: no idle timers, no suspend, no power-key inhibitor (`build_on`).
-    host_owned: bool,
+    nextui_owned: bool,
     data_dir: PathBuf,
     sys: System,
     state: State,
     timers: Timers,
     game: Option<Game>,
-    /// The host watcher reads a copy without borrowing the UI or doing work on its thread.
-    host_game: Option<Arc<std::sync::Mutex<Option<Game>>>>,
     /// We stopped the game's processes (not the pause menu).
     stopped_game: bool,
     /// The pause menu was open when sleep began.
@@ -1323,6 +1361,9 @@ pub struct Sleep {
     /// Brick in a bag woke itself on every button and ran its menu until the battery was empty, hot, 03.11.).
     #[cfg(feature = "brick")]
     brick_card: bool,
+    /// Back from the Brick's real sleep with the game paused: the app opens the pause menu (`take_menu_after_wake`).
+    #[cfg(feature = "brick")]
+    menu_after_wake: bool,
     inhibitor: InhibitorSlot,
     force_power_key: bool,
     /// The power button: short press sleeps, long press asks for the power menu (`take_menu_request`).
@@ -1369,8 +1410,7 @@ impl Sleep {
     /// `notify` wakes the app's event loop when a worker has news (then call `tick`).
     #[cfg(not(feature = "brick"))]
     pub fn new(data_dir: PathBuf, notify: Arc<dyn Fn() + Send + Sync>) -> Sleep {
-        let host_owned = crate::device::current().host_owned();
-        let mut sleep = Sleep::build(data_dir, System::from_env(), notify, InhibitorSlot::take_soon_unless(host_owned));
+        let mut sleep = Sleep::build(data_dir, System::from_env(), notify, InhibitorSlot::take_soon());
         sleep.sys.recover();
         // Switched off after sleeping: the backlight was 0 then. One small file, and only that start finds one.
         sleep.switched_off = crate::auto_off::take_note(&sleep.data_dir);
@@ -1380,24 +1420,15 @@ impl Sleep {
         }
         #[cfg(target_os = "linux")]
         sleep.spawn_watcher();
-        // A Steam Deck: SteamOS suspends on its power button without asking pocket-ui. Watch logind's signal and get
-        // the running game's moment on the card first, as deep sleep does on the handhelds (`spawn_host_sleep`).
-        #[cfg(target_os = "linux")]
-        if host_owned {
-            spawn_host_sleep(sleep.host_game.as_ref().unwrap().clone());
-        }
-        // A Steam Deck: SteamOS owns the battery, sleep and the power key (docs/STEAMDECK.md), so no critical-battery power-off.
-        if !host_owned {
-            sleep.spawn_battery_guard();
-        }
+        sleep.spawn_battery_guard();
         sleep.spawn_rtc_check();
         sleep
     }
 
     #[cfg(feature = "brick")]
     pub fn new(data_dir: PathBuf, notify: Arc<dyn Fn() + Send + Sync>) -> Sleep {
-        let host_owned = crate::device::current().host_owned() || { #[cfg(feature = "brick")] { crate::device::brick() } #[cfg(not(feature = "brick"))] { false } };
-        let mut sleep = Sleep::build(data_dir, System::from_env(), notify, InhibitorSlot::take_soon_unless(host_owned));
+        let nextui_owned = { #[cfg(feature = "brick")] { crate::device::brick() } #[cfg(not(feature = "brick"))] { false } };
+        let mut sleep = Sleep::build(data_dir, System::from_env(), notify, InhibitorSlot::take_soon_unless(nextui_owned));
         sleep.sys.recover();
         // Switched off after sleeping: the backlight was 0 then. One small file, and only that start finds one.
         sleep.switched_off = crate::auto_off::take_note(&sleep.data_dir);
@@ -1407,8 +1438,7 @@ impl Sleep {
         }
         #[cfg(target_os = "linux")]
         sleep.spawn_watcher();
-        // A Steam Deck: SteamOS owns the battery, sleep and the power key (docs/STEAMDECK.md), so no critical-battery power-off.
-        if !host_owned {
+        if !nextui_owned {
             sleep.spawn_battery_guard();
             #[cfg(feature = "brick")]
             if sleep.brick_card {
@@ -1428,9 +1458,9 @@ impl Sleep {
         });
     }
 
-    /// Screen off / Sleep after as timers; none on a host-owned device.
-    fn times(host_owned: bool, config: &Config) -> (Option<Duration>, Option<Duration>) {
-        if host_owned {
+    /// Screen off / Sleep after as timers.
+    fn times(nextui_owned: bool, config: &Config) -> (Option<Duration>, Option<Duration>) {
+        if nextui_owned {
             return (None, None);
         }
         (config.screen_off.map(scaled_secs), config.sleep_after.map(|m| minute() * m))
@@ -1439,24 +1469,26 @@ impl Sleep {
     /// The state alone: no threads, no inhibitor, nothing read but the settings (`new` adds those; the tests don't).
     #[cfg(not(feature = "brick"))]
     fn build(data_dir: PathBuf, sys: System, notify: Arc<dyn Fn() + Send + Sync>, inhibitor: InhibitorSlot) -> Sleep {
-        Sleep::build_on(crate::device::current().host_owned(), data_dir, sys, notify, inhibitor)
+        Sleep::build_on(false, data_dir, sys, notify, inhibitor)
     }
 
     #[cfg(feature = "brick")]
     fn build(data_dir: PathBuf, sys: System, notify: Arc<dyn Fn() + Send + Sync>, inhibitor: InhibitorSlot) -> Sleep {
         // The Brick with NextUI's card: NextUI owns sleep. Its own card is ours: the idle timers run (they did not, and a Brick woken in a
         // bag stayed on until the battery was empty, 03.11.).
-        Sleep::build_on(crate::device::current().host_owned() || { #[cfg(feature = "brick")] { crate::device::brick() && !crate::brick_profile::standalone() } #[cfg(not(feature = "brick"))] { false } }, data_dir, sys, notify, inhibitor)
+        Sleep::build_on({ #[cfg(feature = "brick")] { crate::device::brick() && !crate::brick_profile::standalone() } #[cfg(not(feature = "brick"))] { false } }, data_dir, sys, notify, inhibitor)
     }
 
-    /// `host_owned`: SteamOS (a Steam Deck) owns sleep, so none of the idle timers run, whatever sleep.json says.
-    fn build_on(host_owned: bool, data_dir: PathBuf, sys: System, notify: Arc<dyn Fn() + Send + Sync>, inhibitor: InhibitorSlot) -> Sleep {
+    /// NextUI owns the idle timers on its card; standalone cards use ours.
+    fn build_on(nextui_owned: bool, data_dir: PathBuf, sys: System, notify: Arc<dyn Fn() + Send + Sync>, inhibitor: InhibitorSlot) -> Sleep {
         let config = Config::load(&data_dir);
+        #[cfg(feature = "brick")]
+        crate::sleep_settings::note_power_button(&config);
         let (tx, rx) = channel();
-        let (light_after, deep_after) = Sleep::times(host_owned, &config);
+        let (light_after, deep_after) = Sleep::times(nextui_owned, &config);
         Sleep {
             screen_only: crate::device::current().screen_off_only(),
-            host_owned,
+            nextui_owned,
             timers: Timers {
                 light_after,
                 deep_after,
@@ -1469,7 +1501,6 @@ impl Sleep {
             sys,
             state: State::Awake,
             game: None,
-            host_game: host_owned.then(|| Arc::new(std::sync::Mutex::new(None))),
             stopped_game: false,
             menu_open: false,
             brightness: None,
@@ -1480,6 +1511,8 @@ impl Sleep {
             too_hot: None,
             #[cfg(feature = "brick")]
             brick_card: crate::device::brick() && crate::brick_profile::standalone(),
+            #[cfg(feature = "brick")]
+            menu_after_wake: false,
             inhibitor,
             force_power_key: std::env::var_os("POCKETUI_POWER_KEY").is_some(),
             power_key: PowerKey::default(),
@@ -1584,8 +1617,12 @@ impl Sleep {
 
     /// Wakes the screen from light sleep without a button (the command FIFO's `wake`, for test helpers that must never
     /// press a key a page could take). True when it was dark; false, and nothing done, when awake, in deep sleep or
-    /// powering off.
+    /// powering off. An already-awake process also repairs an unexpectedly dark panel.
     pub fn wake_from_light(&mut self, by: &str) -> bool {
+        if self.state == State::Awake && self.sys.screen_dark() {
+            self.screen_job = self.sys.screen_on_soon(self.brightness);
+            return true;
+        }
         if self.state != State::Light {
             return false;
         }
@@ -1602,23 +1639,19 @@ impl Sleep {
     pub fn set_config(&mut self, config: Config) {
         let config = config.for_device(self.screen_only);
         self.config = config;
+        #[cfg(feature = "brick")]
+        crate::sleep_settings::note_power_button(&config);
         self.config.save(&self.data_dir);
-        (self.timers.light_after, self.timers.deep_after) = Sleep::times(self.host_owned, &config);
+        (self.timers.light_after, self.timers.deep_after) = Sleep::times(self.nextui_owned, &config);
         self.timers.last_input = Instant::now();
     }
 
     pub fn game_started(&mut self, game: Game) {
-        if let Some(shared) = &self.host_game {
-            *shared.lock().unwrap_or_else(|e| e.into_inner()) = Some(game.clone());
-        }
         self.game = Some(game);
         self.timers.last_input = Instant::now();
     }
 
     pub fn game_ended(&mut self) {
-        if let Some(shared) = &self.host_game {
-            *shared.lock().unwrap_or_else(|e| e.into_inner()) = None;
-        }
         self.game = None;
         self.stopped_game = false;
         // A game that ended by itself behind the dark screen: from now on it is light sleep, Sleep after counting.
@@ -1631,7 +1664,7 @@ impl Sleep {
     /// longer waits, `Timers::deep_wait`); the low-battery guard covers a device that stays dark anyway.
     fn auto_suspend(&self) -> bool {
         !self.screen_only
-            && !self.host_owned
+            && !self.nextui_owned
             && std::env::var_os("POCKETUI_NO_AUTOSUSPEND").is_none()
             && !no_autosuspend(&self.data_dir, Path::new("/storage/.config/pocket-ui"))
     }
@@ -1788,7 +1821,6 @@ impl Sleep {
     }
 
     /// How long no button was pressed and no finger touched the screen, while awake; zero when the screen is off or the
-    /// Pocket sleeps. Read by the idle slideshow (`slideshow`), which starts on it: it changes no timer here, so the
     /// screen goes off exactly when it would have without the show.
     pub fn quiet_for(&self) -> Duration {
         if self.state == State::Awake {
@@ -2084,15 +2116,18 @@ impl Sleep {
         crate::phone_upload::sleeping();
         self.power_key.cancel();
         crate::trace::step("sleep: light");
-        // 0 when a screen-on is still under way (asleep again at once): the level from before stays.
-        self.brightness = self.sys.screen_off().filter(|l| *l > 0).or(self.brightness);
-        self.menu_open = ctx.menu_open;
-        if let Some(game) = &self.game {
-            if !ctx.menu_open || matches!(game.kind, GameKind::PocketCore { .. }) {
-                game.pause();
-                self.stopped_game = !ctx.menu_open && !matches!(game.kind, GameKind::PocketCore { .. });
+        let sys = &self.sys;
+        let game = &self.game;
+        let stopped_game = &mut self.stopped_game;
+        self.brightness = pause_and_blank(|| {
+            if let Some(game) = game {
+                if !ctx.menu_open || matches!(game.kind, GameKind::PocketCore { .. }) {
+                    game.pause();
+                    *stopped_game = !ctx.menu_open && !matches!(game.kind, GameKind::PocketCore { .. });
+                }
             }
-        }
+        }, || sys.screen_off()).filter(|l| *l > 0).or(self.brightness);
+        self.menu_open = ctx.menu_open;
         self.state = State::Light;
         self.timers.light_since = Some(Instant::now());
         self.timers.failures = 0;
@@ -2134,13 +2169,30 @@ impl Sleep {
         self.auto_off = None;
     }
 
+    /// The Brick's own card with Power button: Sleep (Settings › System › Sleep & power): the short press and the quick
+    /// settings' Sleep suspend for real (`brick-suspend`); idle still only turns the screen off. Everywhere else: never
+    /// on a screen-only device.
+    fn power_sleeps(&self) -> bool {
+        #[cfg(feature = "brick")]
+        if self.brick_card {
+            return self.config.short_press == ShortPress::Sleep;
+        }
+        false
+    }
+
+    /// Back from the Brick's real sleep with the game still paused: true once, then the app opens the pause menu.
+    #[cfg(feature = "brick")]
+    pub fn take_menu_after_wake(&mut self) -> bool {
+        std::mem::take(&mut self.menu_after_wake)
+    }
+
     /// Deep sleep right away (power key, the quick settings' Sleep).
     pub fn sleep_now(&mut self, ctx: Ctx) {
         self.sleep_for(ctx, SuspendOrigin::Other);
     }
 
     fn sleep_for(&mut self, ctx: Ctx, origin: SuspendOrigin) {
-        if self.screen_only {
+        if self.screen_only && !self.power_sleeps() {
             self.screen_off_now(ctx);
             return;
         }
@@ -2321,8 +2373,8 @@ impl Sleep {
     fn deep(&mut self, _ctx: Ctx, origin: SuspendOrigin) {
         // Closed in `light` already; again here in case a path ever reaches the suspend without it.
         crate::phone_upload::sleeping();
-        // Final barrier: no worker, suspend command or RTC alarm on this platform.
-        if self.screen_only {
+        // Final barrier: no worker, suspend command or RTC alarm on this platform, unless it is the Brick's card set to sleep.
+        if self.screen_only && !self.power_sleeps() {
             return;
         }
         self.pause_dark_game();
@@ -2334,6 +2386,7 @@ impl Sleep {
         let plan = self.auto_off;
         let worker = DeepWorker {
             seq: self.deep_seq,
+            brick_card: self.brick_card,
             game: self.game.clone(),
             // Stopped by us or by the open pause menu: stopped again after saving.
             stopped: self.stopped_game || self.menu_open,
@@ -2381,6 +2434,17 @@ impl Sleep {
         // On its own thread (three reads 100 ms apart and a file write): the screen comes on without waiting for it.
         // Asked before `wake_light`, so it is taken in the sleep's generation and counts for no game.
         crate::battery::sample_soon(&self.data_dir);
+        // The Brick: the game stays paused and its pause menu comes up, so nobody is dropped into the middle of play by a
+        // press in a bag. pocket-core hears "pause" before "wake": it never runs a frame in between ("awake (still paused)").
+        #[cfg(feature = "brick")]
+        if self.brick_card && !self.menu_open {
+            if let Some(game) = &self.game {
+                if matches!(game.kind, GameKind::PocketCore { .. }) {
+                    control::pocket_core("pause");
+                }
+                self.menu_after_wake = true;
+            }
+        }
         self.wake_light("back from deep sleep");
     }
 
@@ -2508,12 +2572,7 @@ impl Sleep {
             if let Some(game) = &game {
                 if dark_output {
                     let _turn = sys.screen_lock.lock().unwrap_or_else(|e| e.into_inner());
-                    if let Some(p) = crate::second_screen::Panels::current() {
-                // The second-screen worker restores the lower panel according to the game/setting.
-                crate::control::sway_command(&format!("output {} power on", p.top));
-            } else {
-                crate::control::sway_command("output * power on");
-            }
+                    crate::control::sway_command("output * power on");
                 }
                 say(if why == Why::BatteryEmpty { "Battery empty. Saving…" } else { "Saving…" });
                 // Nobody asked for this power off: it happens only with the game's spot confirmed saved right now
@@ -2640,12 +2699,7 @@ impl Sleep {
             if let Some(game) = &game {
                 if dark_output {
                     let _turn = sys.screen_lock.lock().unwrap_or_else(|e| e.into_inner());
-                    if let Some(p) = crate::second_screen::Panels::current() {
-                        // The second-screen worker restores the lower panel according to the game/setting.
-                        crate::control::sway_command(&format!("output {} power on", p.top));
-                    } else {
-                        crate::control::sway_command("output * power on");
-                    }
+                    crate::control::sway_command("output * power on");
                 }
                 #[cfg(not(feature = "brick"))]
                 say(if why == Why::BatteryEmpty { "Battery empty. Saving…" } else { "Saving…" });
@@ -2753,110 +2807,11 @@ impl Sleep {
     }
 }
 
-/// One line of `dbus-monitor --system` on logind's `PrepareForSleep`: `Some(true)` as the suspend starts,
-/// `Some(false)` when the system is back. The signal's line carries no value; the next line is `boolean true`.
-fn host_sleep_line(line: &str, pending: &mut bool) -> Option<bool> {
-    if line.contains("member=PrepareForSleep") {
-        *pending = true;
-        return None;
-    }
-    if !*pending {
-        return None;
-    }
-    match line.trim() {
-        "boolean true" => {
-            *pending = false;
-            Some(true)
-        }
-        "boolean false" => {
-            *pending = false;
-            Some(false)
-        }
-        _ => None,
-    }
-}
 
 #[path = "sleep_child.rs"]
 mod sleep_child;
 
-/// Holds the host's delay lock until pocket-core has completed this request, within logind's usual 5 s budget.
-fn save_host_core_moment(path: &Path, request: impl FnOnce() -> bool) -> bool {
-    let before = crate::fsutil::stamp(path);
-    request() && crate::fsutil::wait_new_version(path, before, Duration::from_secs(4), Duration::from_millis(100), None)
-}
 
-/// The moment of the game that runs, before the host suspends: pocket-core writes its auto-resume state (the deep
-/// sleep's `autosave`), the one standalone with a resume state saves his; every other emulator keeps its own saves.
-/// True only when a new moment was confirmed. The host still owns whether it suspends after its deadline.
-fn save_for_host_sleep(game: Option<&Game>) -> bool {
-    crate::battery_history::flush();
-    let Some(game) = game else { return false };
-    let saved = match &game.kind {
-        GameKind::PocketCore { auto_state } => save_host_core_moment(auto_state, || control::pocket_core("autosave")),
-        GameKind::Standalone => crate::standalone::save_resume_state(),
-        GameKind::RetroArch | GameKind::Other => false,
-    };
-    if saved {
-        println!("sleep: the host is suspending; the game's new moment is confirmed");
-    } else {
-        eprintln!("sleep: the host is suspending without a confirmed new moment; the game stays in memory");
-    }
-    saved
-}
-
-/// Watches the host's suspend (the Steam Deck's power button, SteamOS) on its own thread, for the whole run. A
-/// delay inhibitor holds the suspend (logind waits up to its 5 s by itself) while the moment is written, then is let
-/// go; after the wake it is taken again. Without `dbus-monitor` on the host the thread logs once and ends: the games
-/// then sleep in memory as they do without us, and an empty battery still ends them without a moment.
-#[cfg(target_os = "linux")]
-fn spawn_host_sleep(game: Arc<std::sync::Mutex<Option<Game>>>) {
-    use std::io::{BufRead, BufReader};
-    std::thread::spawn(move || {
-        let in_flatpak = std::env::var_os("FLATPAK_ID").is_some();
-        let (monitor, inhibit) = sleep_child::commands(in_flatpak);
-        let take_inhibitor = |inhibit: &[&str]| {
-            sleep_child::spawn(Command::new(inhibit[0]).args(&inhibit[1..]).stdin(Stdio::piped()).stdout(Stdio::null()).stderr(Stdio::null())).ok()
-        };
-        loop {
-            let mut child = match sleep_child::monitor(in_flatpak) {
-                Ok(c) => c,
-                Err(e) => {
-                    println!("sleep: no host suspend watch ({}: {e})", monitor.join(" "));
-                    return;
-                }
-            };
-            let mut inhibitor = take_inhibitor(&inhibit);
-            let mut pending = false;
-            if let Some(out) = child.stdout.take() {
-                for line in BufReader::new(out).lines().map_while(Result::ok) {
-                    match host_sleep_line(&line, &mut pending) {
-                        Some(true) => {
-                            let current = game.lock().unwrap_or_else(|e| e.into_inner()).clone();
-                            save_for_host_sleep(current.as_ref());
-                            if let Some(mut held) = inhibitor.take() {
-                                // Closing the pipe ends its `cat`, and with it the delay lock (as `Inhibitor`).
-                                drop(held.stdin.take());
-                                let _ = held.wait();
-                            }
-                        }
-                        Some(false) => {
-                            println!("sleep: the host is back from its suspend");
-                            inhibitor = take_inhibitor(&inhibit);
-                        }
-                        None => {}
-                    }
-                }
-            }
-            let _ = child.kill();
-            let _ = child.wait();
-            if let Some(mut held) = inhibitor.take() {
-                drop(held.stdin.take());
-                let _ = held.wait();
-            }
-            std::thread::sleep(Duration::from_secs(5));
-        }
-    });
-}
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -2907,7 +2862,6 @@ mod tests {
         assert_eq!(t.due(State::Awake, t0 + Duration::from_secs(99_999), true), (None, None));
         assert_eq!(t.due(State::Deep, t0, true), (None, None));
     }
-
 
 
     #[test]
@@ -3642,6 +3596,38 @@ mod tests {
         }
     }
 
+    #[cfg(feature = "brick")]
+    #[test]
+    fn blanking_does_not_interrupt_a_still_running_native_pcm() {
+        use std::cell::Cell;
+        let pcm_running = Cell::new(true);
+        let xruns = Cell::new(0);
+        let brightness = Cell::new(3);
+        let saved = pause_and_blank(|| pcm_running.set(false), || {
+            // The real LCD transition exhausted the native PCM before its
+            // sleep command arrived. Model that externally visible glitch.
+            if pcm_running.get() { xruns.set(xruns.get() + 1); }
+            brightness.set(0);
+            Some(3)
+        });
+        assert_eq!(xruns.get(), 0, "turning the display off interrupted game sound");
+        assert_eq!((brightness.get(), saved), (0, Some(3)));
+    }
+
+    #[cfg(feature = "brick")]
+    #[test]
+    fn a_hung_core_cannot_keep_the_screen_lit() {
+        use std::cell::Cell;
+        let brightness = Cell::new(3);
+        let start = Instant::now();
+        let saved = pause_and_blank(|| pause_core_for_screen_off(Some(9_731_905), || true), || {
+            brightness.set(0);
+            Some(3)
+        });
+        assert_eq!((brightness.get(), saved), (0, Some(3)), "screen must go dark even without a core acknowledgement");
+        assert!(start.elapsed() < crate::testutil::timeout(Duration::from_secs(2)), "missing acknowledgement hung screen-off");
+    }
+
     /// The scratch folder comes first: a `let (dir, sleep, ..)` drops the `Sleep` before the folder goes.
     fn test_sleep(name: &str) -> (SleepDir, Sleep, PathBuf) {
         let dir = TestDir::new(&format!("sleep-{name}"));
@@ -3649,6 +3635,7 @@ mod tests {
         let level = dir.join("backlight/brightness");
         std::fs::write(&level, "120").unwrap();
         let mut sys = System::new(Some(dir.join("backlight")), "false".into(), false);
+        sys.dark_file = dir.join("dark-note");
         // Never the real thing from a test: a power off is a line in a file.
         sys.poweroff_cmd = format!("echo off >> {}", dir.join("powered-off").display());
         let mut sleep = Sleep::build(dir.to_path_buf(), sys, Arc::new(|| {}), InhibitorSlot::Have(None));
@@ -4155,6 +4142,78 @@ mod tests {
         s.config.hold = hold;
     }
 
+    /// Ticks as the app does until the deep sleep's worker has come back (at most 10 s).
+    #[cfg(feature = "brick")]
+    fn wake_up(s: &mut Sleep, ctx: Ctx) {
+        let end = Instant::now() + crate::testutil::timeout(Duration::from_secs(10));
+        while s.state() != State::Awake {
+            assert!(Instant::now() < end, "no wake: {:?}", s.state());
+            s.tick(ctx);
+            std::thread::sleep(Duration::from_millis(20));
+        }
+    }
+
+    /// The Brick's own card, Power button: Sleep (08.11.): a short press saves and suspends for real; the wake leaves the
+    /// game paused behind its pause menu (asked for once), and pocket-core hears "pause" before "wake".
+    #[cfg(feature = "brick")]
+    #[test]
+    fn on_the_brick_set_to_sleep_the_power_button_suspends_and_wakes_into_the_pause_menu() {
+        let (dir, mut s, file) = test_sleep("brick-sleeps");
+        s.brick_card = true;
+        s.screen_only = true;
+        with_buttons(&mut s, ShortPress::Sleep, Hold::Menu);
+        let suspended = dir.join("suspended");
+        // A command that blocks past BLOCKING_SUSPEND stands for a suspend.
+        s.sys.suspend_cmd = format!("touch {}; sleep 3.5", suspended.display());
+        s.game_started(some_game());
+        assert!(s.power_step(Step::Short, true, Ctx::default()));
+        assert_eq!(s.state(), State::Deep, "saved and suspending, not only dark");
+        assert_eq!(level(&file), "0");
+        wake_up(&mut s, Ctx::default());
+        assert!(suspended.exists(), "brick-suspend ran");
+        s.screen_job.take().unwrap().join().unwrap();
+        assert_eq!((s.state(), level(&file).as_str()), (State::Awake, "120"), "the screen is back");
+        assert!(s.take_menu_after_wake(), "the pause menu opens");
+        assert!(!s.take_menu_after_wake(), "once");
+        // The long press is unchanged: the power menu.
+        assert!(s.power_step(Step::Long, false, Ctx::default()));
+        assert!(s.take_menu_request());
+    }
+
+    #[cfg(feature = "brick")]
+    #[test]
+    fn on_the_brick_set_to_screen_off_nothing_suspends() {
+        let (dir, mut s, file) = test_sleep("brick-screen");
+        s.brick_card = true;
+        s.screen_only = true;
+        with_buttons(&mut s, ShortPress::ScreenOff, Hold::Menu);
+        let suspended = dir.join("suspended");
+        s.sys.suspend_cmd = format!("touch {}", suspended.display());
+        s.game_started(some_game());
+        assert!(s.power_step(Step::Short, true, Ctx::default()));
+        assert_eq!((s.state(), level(&file).as_str()), (State::Light, "0"), "dark, the game paused");
+        s.deep(Ctx::default(), SuspendOrigin::Other); // the barrier holds for any caller
+        assert_eq!(s.state(), State::Light);
+        assert!(!suspended.exists());
+        assert!(!s.take_menu_after_wake());
+    }
+
+    /// The pause menu that was open before the sleep stays open: no second one is asked for.
+    #[cfg(feature = "brick")]
+    #[test]
+    fn on_the_brick_an_open_pause_menu_is_not_opened_again_after_the_wake() {
+        let (_dir, mut s, _) = test_sleep("brick-menu-open");
+        s.brick_card = true;
+        s.screen_only = true;
+        with_buttons(&mut s, ShortPress::Sleep, Hold::Menu);
+        s.sys.suspend_cmd = "sleep 3.5".into();
+        s.game_started(some_game());
+        s.sleep_now(Ctx { menu_open: true, ..Ctx::default() });
+        assert_eq!(s.state(), State::Deep);
+        wake_up(&mut s, Ctx { menu_open: true, ..Ctx::default() });
+        assert!(!s.take_menu_after_wake());
+    }
+
     #[test]
     fn a_short_press_sleeps_by_default_and_turns_only_the_screen_off_when_set_so() {
         let (_dir, mut s, _) = test_sleep("short-sleep");
@@ -4332,69 +4391,6 @@ mod tests {
         assert_eq!(t.due(State::Light, t0, true).1, Some(t0 + RETRY_FIRST * 2));
     }
 
-    fn sleep_on(host_owned: bool, name: &str) -> (SleepDir, Sleep) {
-        let dir = TestDir::new(&format!("sleep-{name}"));
-        let sys = System::new(None, "false".into(), false);
-        let sleep = Sleep::build_on(host_owned, dir.to_path_buf(), sys, Arc::new(|| {}), InhibitorSlot::Have(None));
-        (SleepDir(dir, sleep.own_suspend.clone()), sleep)
-    }
-
-    #[test]
-    fn host_suspend_keeps_waiting_for_a_slow_moment_and_never_accepts_the_old_one() {
-        let dir = crate::testutil::TestDir::new("host-suspend-moment");
-        let path = dir.join("game.pstate.auto.z");
-        std::fs::write(&path, b"previous moment").unwrap();
-        let dest = path.clone();
-        let writer = std::thread::spawn(move || {
-            std::thread::sleep(Duration::from_millis(1000));
-            std::fs::write(dest, b"current moment").unwrap();
-        });
-        assert!(save_host_core_moment(&path, || true));
-        let kept = std::fs::read(&path).unwrap();
-        writer.join().unwrap();
-        assert_eq!(kept, b"current moment", "the inhibitor must stay until this save, even after 800 ms");
-        assert!(!save_host_core_moment(&path, || true), "an unchanged previous save is no success");
-        assert!(!save_host_core_moment(&path, || false), "a refused request is no success");
-    }
-
-    #[test]
-    fn the_hosts_suspend_signal_is_the_boolean_after_prepare_for_sleep() {
-        let mut pending = false;
-        let signal = "signal time=1.0 sender=:1.2 -> destination=(null) serial=3 path=/org/freedesktop/login1; interface=org.freedesktop.login1.Manager; member=PrepareForSleep";
-        assert_eq!(host_sleep_line("   boolean true", &mut pending), None, "a value without its signal counts for nothing");
-        assert_eq!(host_sleep_line(signal, &mut pending), None);
-        assert_eq!(host_sleep_line("   boolean true", &mut pending), Some(true), "the suspend starts");
-        assert_eq!(host_sleep_line("   boolean true", &mut pending), None, "once only");
-        assert_eq!(host_sleep_line(signal, &mut pending), None);
-        assert_eq!(host_sleep_line("   boolean false", &mut pending), Some(false), "the system is back");
-        let (monitor, inhibit) = sleep_child::commands(false);
-        assert_eq!(monitor[0], "dbus-monitor");
-        assert!(monitor[2].contains("PrepareForSleep"), "{monitor:?}");
-        assert_eq!(inhibit[0], "systemd-inhibit");
-        assert!(inhibit.contains(&"--mode=delay"), "a delay lock, so the moment is written first: {inhibit:?}");
-        let (monitor, inhibit) = sleep_child::commands(true);
-        assert_eq!(&monitor[..3], ["flatpak-spawn", "--host", "--watch-bus"], "out of the Flatpak both run on the host");
-        assert_eq!(&inhibit[..3], ["flatpak-spawn", "--host", "--watch-bus"]);
-    }
-
-    #[test]
-    fn a_steam_deck_runs_no_sleep_timers_and_takes_no_power_key() {
-        // The page is hidden there, so the defaults (screen off after 2 min, sleep after 2 more) would be unreachable.
-        let (_d, mut deck) = sleep_on(true, "deck-timers");
-        assert_eq!((deck.timers.light_after, deck.timers.deep_after), (None, None));
-        assert!(!deck.auto_suspend());
-        let t0 = deck.timers.last_input;
-        assert_eq!(deck.timers.due(State::Awake, t0 + Duration::from_secs(99_999), true), (None, None));
-        let mut c = deck.config;
-        c.screen_off = Some(30);
-        c.sleep_after = Some(1);
-        deck.set_config(c);
-        assert_eq!((deck.timers.light_after, deck.timers.deep_after), (None, None), "not even from a saved choice");
-        assert!(matches!(InhibitorSlot::take_soon_unless(true), InhibitorSlot::Have(None)), "no logind inhibitor taken");
-        // Handhelds: exactly the timers of the settings.
-        let (_d, hand) = sleep_on(false, "hand-timers");
-        assert_eq!((hand.timers.light_after, hand.timers.deep_after), (Some(scaled_secs(120)), Some(minute() * 2)));
-    }
 
     #[test]
     fn new_times_count_from_the_change() {
@@ -4548,7 +4544,8 @@ mod tests {
         let dir = TestDir::new("sleep-gen");
         let file = dir.join("brightness");
         std::fs::write(&file, "0").unwrap();
-        let sys = System::new(Some(dir.to_path_buf()), "false".into(), false);
+        let mut sys = System::new(Some(dir.to_path_buf()), "false".into(), false);
+        sys.dark_file = dir.join("dark-note");
         // The screen-on thread waits for the lock; meanwhile the device goes dark again (what `screen_off` does first).
         let turn = sys.screen_lock.lock().unwrap();
         let job = sys.screen_on_soon(Some(90)).unwrap();
@@ -4559,6 +4556,77 @@ mod tests {
         // Without one, it comes on.
         sys.screen_on_soon(Some(90)).unwrap().join().unwrap();
         assert_eq!(level(&file), "90");
+    }
+
+    #[test]
+    fn backlight_recovery_without_a_note_lights_each_panel_range() {
+        // Brick, H700 and pocket use different raw ranges; all must show a
+        // usable picture after restart even when the previous process lost its note.
+        for (name, max) in [("brick", 255u32), ("h700", 100), ("pocket", 4095)] {
+            let (_dir, s, file) = test_sleep(name);
+            std::fs::write(file.parent().unwrap().join("max_brightness"), max.to_string()).unwrap();
+            for note in [None, Some("0"), Some("broken")] {
+                let _ = std::fs::remove_file(&s.sys.dark_file);
+                if let Some(note) = note { std::fs::write(&s.sys.dark_file, note).unwrap(); }
+                std::fs::write(&file, "0").unwrap();
+                s.sys.recover();
+                let raw: u32 = level(&file).parse().unwrap();
+                assert!(raw > 0 && raw <= max, "{name}: restart left the picture dark ({note:?})");
+            }
+        }
+    }
+
+    #[test]
+    fn backlight_wake_without_a_saved_level_shows_the_menu() {
+        let (_dir, mut s, file) = test_sleep("lost-level");
+        std::fs::write(file.parent().unwrap().join("max_brightness"), "255").unwrap();
+        // A restored dark panel, with neither this new process nor its note
+        // remembering the level. A normal button wake still needs a picture.
+        std::fs::write(&file, "0").unwrap();
+        s.light(Ctx::default());
+        assert!(s.wake_from_light("test button"));
+        s.screen_job.take().unwrap().join().unwrap();
+        assert_eq!(s.state(), State::Awake);
+        assert!(level(&file).parse::<u32>().unwrap() > 0, "awake must have a visible menu");
+    }
+
+    #[test]
+    fn backlight_awake_wake_repairs_a_panel_left_dark() {
+        let (_dir, mut s, file) = test_sleep("awake-dark");
+        std::fs::write(&file, "0").unwrap();
+        assert!(s.wake_from_light("remote wake"));
+        s.screen_job.take().unwrap().join().unwrap();
+        assert!(level(&file).parse::<u32>().unwrap() > 0);
+        assert!(!s.wake_from_light("already visible"));
+    }
+
+    #[test]
+    fn backlight_write_failure_keeps_the_level_for_the_next_wake() {
+        let (_dir, s, file) = test_sleep("write-failed");
+        std::fs::write(&s.sys.dark_file, "120").unwrap();
+        std::fs::remove_file(&file).unwrap();
+        std::fs::create_dir(&file).unwrap();
+        s.sys.screen_on_now(None);
+        assert_eq!(level(&s.sys.dark_file), "120", "a failed write must keep the player's level");
+        std::fs::remove_dir(&file).unwrap();
+        std::fs::write(&file, "0").unwrap();
+        s.sys.recover();
+        assert_eq!(level(&file), "120");
+        assert!(!s.sys.dark_file.exists());
+    }
+
+    #[test]
+    fn backlight_probe_wake_preserves_the_owners_dark_note() {
+        let (dir, mut owner, file) = test_sleep("owner-note");
+        owner.light(Ctx::default());
+        let mut probe = System::new(Some(file.parent().unwrap().into()), "false".into(), false);
+        probe.dark_file = dir.join("probe-note");
+        std::fs::write(&probe.dark_file, "3").unwrap();
+        probe.screen_on_now(None);
+        assert_eq!(level(&owner.sys.dark_file), "120", "private wake must keep the owner's restart level");
+        std::fs::write(&file, "0").unwrap();
+        owner.sys.recover();
+        assert_eq!(level(&file), "120", "the owner returns at the player's brightness");
     }
 
     #[test]

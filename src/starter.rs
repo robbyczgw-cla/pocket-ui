@@ -274,7 +274,7 @@ fn install_inner(game: &Game, env: &Env, fetch: Fetch, progress: &dyn Fn(u64), c
         return Ok(Outcome::AlreadyThere(p));
     }
     let target = env.dest_dir.join(&f.name_on_disk);
-    crate::fsutil::write_atomic(&target, &rom).map_err(|e| Failure::Disk(e.to_string()))?;
+    crate::fsutil::write_atomic_bulk(&target, &rom).map_err(|e| Failure::Disk(e.to_string()))?;
     work.1 = false;
     Ok(Outcome::Added(target))
 }

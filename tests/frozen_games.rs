@@ -80,7 +80,7 @@ fn frozen_games_show_in_every_look_and_not_when_switched_off_or_when_there_are_n
     let c = Ctx { stub: wayland(&tmp), tmp: tmp.clone(), n: Default::default() };
     // The row of the first recent game, after Curator, Search and Just Play on top of Home in every look but the Cabinet,
     // where Just Play is the first case of the Continue shelf.
-    for look in ["shelf", "minimal", "split", "cards", "cabinet"] {
+    for look in ["shelf", "split", "cabinet"] {
         let state = if look == "cabinet" { "home:1" } else { "home:3" };
         for (lang, resume, word) in [("en", "Continue", "Continue"), ("de", "Fortsetzen", "Fortsetzen")] {
             let (v, faults) = c.shot(look, state, 5, lang, "{}");
@@ -100,7 +100,7 @@ fn frozen_games_show_in_every_look_and_not_when_switched_off_or_when_there_are_n
             assert!(faults.is_empty(), "{look} {lang}: {faults:?}");
             let (none, _) = c.shot(look, state, 0, lang, "{}");
             // (The Shelf and the Cabinet say "Continue" over the first recent game anyway.)
-            if matches!(look, "minimal" | "split" | "cards") {
+            if look == "split" {
                 assert!(!has(&none, word), "{look} {lang}: nothing frozen, no word: {none:?}");
             }
             assert!(has(&none, if lang == "en" { "Play" } else { "Spielen" }), "{look} {lang}: a normal case plays: {none:?}");

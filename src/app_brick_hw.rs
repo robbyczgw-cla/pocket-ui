@@ -30,6 +30,15 @@ pub(crate) struct State {
 }
 
 impl State {
+    /// A temporary output choice; the saved light preferences stay intact across screen off and wake.
+    fn screen_choice(&mut self, saved: leds::Config, dark: bool) -> Option<leds::Config> {
+        if saved.mode == Mode::Battery || Some(dark) == self.led_dark { return None; }
+        self.led_dark = Some(dark);
+        Some(if dark && !(saved.mode == Mode::Colour && self.lights.shows_battery()) {
+            leds::Config { mode: Mode::Off, ..saved }
+        } else { saved })
+    }
+
     pub(crate) fn load(data_dir: &std::path::Path) -> State {
         let lights = brick_hw::Lights::load(data_dir);
         brick_hw::set_lights(lights);
@@ -101,20 +110,17 @@ impl App {
         let lights = self.brick.lights;
         // A dark screen (Light, Deep, powering off) puts the lights out, but for what shows the battery (the whole page on Battery &
         // charging, or the lights set to it under Each light); awake again, the choice comes back.
-        if self.leds.mode != Mode::Battery && Some(dark) != self.brick.led_dark {
-            self.brick.led_dark = Some(dark);
+        if let Some(choice) = self.brick.screen_choice(self.leds, dark) {
             if dark && colour && lights.shows_battery() {
                 println!("lights: the screen is dark, only the battery lights stay on");
                 brick_hw::set_lights(lights.battery_only());
-                leds::apply_in_background(Job::Choice(self.leds));
-            } else if dark {
-                println!("lights: the screen is dark, all out (effects, scale and the raw picture)");
-                leds::apply_in_background(Job::Choice(leds::Config { mode: Mode::Off, ..self.leds }));
-            } else {
+            } else if !dark {
                 println!("lights: the screen is on, the choice is back");
                 brick_hw::set_lights(lights);
-                leds::apply_in_background(Job::Choice(self.leds));
+            } else {
+                println!("lights: the screen is dark, all out (effects, scale and the raw picture)");
             }
+            leds::apply_in_background(Job::Choice(choice));
         }
         // The colour cycle turns while a light is on it and the screen is on.
         brick_hw::set_rainbow(colour && !dark && lights.cycling(), std::path::Path::new("/"));
@@ -138,5 +144,34 @@ impl App {
         let next = now + BATTERY_EVERY;
         st.led_next = Some(next);
         Some(next)
+    }
+}
+
+#[cfg(test)]
+mod standby_tests {
+    use super::*;
+
+    #[test]
+    fn standby_keeps_default_lights_dark_and_restores_the_players_choice() {
+        for mode in Mode::ALL {
+            for battery_zone in [false, true] {
+                let dir = tempfile::tempdir().unwrap();
+                let mut state = State::load(dir.path());
+                if battery_zone { state.lights.zones[0].glow = brick_hw::Glow::Battery; }
+                let saved = leds::Config { mode, ..leds::Config::default() };
+                let before = state.lights;
+                let dark = state.screen_choice(saved, true);
+                if mode == Mode::Battery {
+                    assert_eq!(dark, None, "the chosen battery indication stays active");
+                } else {
+                    let dark = dark.expect("screen-off updates the light output");
+                    let expected = if mode == Mode::Colour && battery_zone { mode } else { Mode::Off };
+                    assert_eq!(dark.mode, expected, "default and colour lights go dark; chosen battery zones stay active");
+                    assert!(state.screen_choice(saved, true).is_none(), "no repeated output while dark");
+                    assert_eq!(state.screen_choice(saved, false), Some(saved), "wake restores the full saved choice");
+                }
+                assert_eq!(state.lights, before, "no per-light choice is lost");
+            }
+        }
     }
 }

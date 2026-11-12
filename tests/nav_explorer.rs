@@ -1,4 +1,4 @@
-//! The D-pad explorer (docs/DEVELOPING.md "The navigation explorer"): the real pocket-ui binary, driven over `--test-driver`
+//! The D-pad explorer (docs/dev/tests.md "The navigation explorer"): the real pocket-ui binary, driven over `--test-driver`
 //! with the buttons a player has, through every page it can reach from Settings, the quick settings, the power menu and the
 //! first start. After every press it reads what the frame offered (`pocket_ui::nav_probe`: the strings with their places,
 //! where an operable row is drawn, where the focus mark is, which hints the bar shows, and where the App is), never pixels at
@@ -361,6 +361,8 @@ impl Ui {
         if onboarded {
             std::fs::copy(card.path().join("template-data/settings.json"), data.join("settings.json")).unwrap();
         }
+        let saved_keys = card.path().join("template-data/brick-keys.json");
+        if saved_keys.exists() { std::fs::copy(saved_keys, data.join("brick-keys.json")).unwrap(); }
         std::fs::copy(card.path().join("template-run-game"), run.join("run-game")).unwrap();
         std::fs::write(run.join("wakealarm"), "+3600").unwrap();
         let log = std::fs::File::create(run.join("ui.log")).unwrap();
@@ -1045,6 +1047,9 @@ impl<'a> Explorer<'a> {
             return;
         }
         let e = self.report.feedback.entry(after.at.clone()).or_default();
+        if !said.contains("tick") || !said.contains("sound:") {
+            eprintln!("feedback diagnostic {}: before focus={:?} list={:?}; after focus={:?} list={:?}; feedback={said:?}", after.at, before.focused(), before.list, after.focused(), after.list);
+        }
         e.moves += 1;
         e.ticks += usize::from(said.split(' ').any(|w| w == "tick"));
         e.sounds += usize::from(said.split(' ').any(|w| w.starts_with("sound:")));
@@ -1682,7 +1687,7 @@ exit 0
     let mut ex = Explorer::new(&card, profile, true, Vec::new());
     let mut path = vec!["start".to_string()];
     let mut f = ex.replay(&path).unwrap();
-    for name in ["Connections", "Remote access (SSH)"] {
+    for name in ["Help & tools", "For tinkerers", "Remote access (SSH)"] {
         for _ in 0..MAX_WALK {
             if f.focused().as_deref() == Some(name) { break; }
             path.push("down".to_string());
@@ -1827,7 +1832,8 @@ fn sync_a_pause_not_by_pocket_ui_is_shown_x_resumes_both_folders_and_b_leaves() 
         let root = paused_syncthing(&card);
         let mut ui = Ui::start(&card, &profile, true, 1, &[("POCKETUI_SYNC_ROOT", root.to_str().unwrap())]);
         ui.settled(&["start"]).unwrap();
-        open_named(&mut ui, "Connections");
+        open_named(&mut ui, "Help & tools");
+        open_named(&mut ui, "For tinkerers");
         let list = select_named(&mut ui, "Sync");
         ui.settled(&["a"]).unwrap();
         // The poller reads Syncthing on a thread: wait for its first report, not a fixed time.
@@ -1856,7 +1862,7 @@ fn sync_a_pause_not_by_pocket_ui_is_shown_x_resumes_both_folders_and_b_leaves() 
         assert!(!f.names_hint("x"), "{}: nothing left to resume: {:?}", profile.name, f.hints);
         let asked = std::fs::read_to_string(card.path().join("bin/resumed.log")).unwrap_or_default();
         assert_eq!(asked, "pocket-gc-cards\npocket-wii-saves\n", "{}", profile.name);
-        // B leaves to Connections, on the Sync row.
+        // B leaves to For tinkerers, on the Sync row.
         let back = ui.settled(&["b"]).unwrap();
         assert_eq!(back.at, list.at, "{}: B leaves Sync", profile.name);
         assert!(back.same_row(&list), "{}: back on the Sync row", profile.name);
@@ -1931,5 +1937,93 @@ fn portmaster_runtime_offer_states_return_to_extras_and_reopen_ports() {
         let (again, _) = rc03_snapshot(&card, profile, &format!("{state}:ba"), &env);
         assert!(again.text().contains("PortMaster games"), "{state}: reopening paints Ports: {}", again.text());
         assert!(again.names_hint("b"), "{state}: the reopened page still offers a way back");
+    }
+}
+
+/// The Brick's power button (08.11.): Settings › System › Sleep & power › Short press is reached with the D-pad on a fresh card,
+/// reads Sleep (the Brick's default from 0.4, also where no sleep.json is), Right makes it Screen off (a Change hint), and
+/// that choice is kept on its own key; B goes back. In English at Normal and in Spanish at Large in Retro.
+#[cfg(feature = "brick")]
+#[test]
+fn bricks_short_press_sleeps_by_default_and_screen_off_is_kept() {
+    for (lang, size, retro, system, sleep_row, row, screen_off, sleep) in [
+        ("en", "normal", None, "System", "Sleep", "Short press", "Screen off", "Sleep"),
+        ("es", "large", Some("cocoa"), "Sistema", "Suspensión", "Pulsación corta", "Pantalla apagada", "Suspender"),
+    ] {
+        let profile = Profile { text_size: size, ..BRICK };
+        let card = Card::new(&profile);
+        let mut env = vec![("POCKETUI_LANG", lang)];
+        if let Some(r) = retro { env.push(("POCKETUI_RETRO", r)); }
+        let mut ui = Ui::start(&card, &profile, true, 1, &env);
+        ui.settled(&["start"]).unwrap();
+        open_named(&mut ui, system);
+        let mut f = ui.settled(&[]).unwrap();
+        for _ in 0..MAX_WALK {
+            if f.focused().is_some_and(|name| name.starts_with(sleep_row)) { break; }
+            f = ui.settled(&["down"]).unwrap();
+        }
+        assert!(f.focused().is_some_and(|name| name.starts_with(sleep_row)), "{lang}: Sleep & power offered:\n{}", f.text());
+        let mut f = ui.settled(&["a"]).unwrap();
+        for _ in 0..MAX_WALK {
+            if f.focused().is_some_and(|name| name.starts_with(row)) { break; }
+            f = ui.settled(&["down"]).unwrap();
+        }
+        assert!(f.focused().is_some_and(|name| name.starts_with(row)), "{lang}: {row} reachable:\n{}", f.text());
+        // The value is its own line (the arrows are buttons of their own); "Screen off after" is another row.
+        let value = |f: &Frame, v: &str| f.text().lines().any(|l| l == v);
+        assert!(value(&f, sleep) && !value(&f, screen_off), "{lang}: the default:\n{}", f.text());
+        assert!(f.hints.len() >= 3, "{lang}: the row can be changed: {:?}", f.hints);
+        let f = ui.settled(&["right"]).unwrap();
+        assert!(value(&f, screen_off) && !value(&f, sleep), "{lang}: Right chose Screen off:\n{}", f.text());
+        let f = ui.settled(&["b"]).unwrap();
+        assert!(!f.text().contains(row), "{lang}: B went back:\n{}", f.text());
+        let kept = std::fs::read_to_string(card.path().join("run-1/data/sleep.json")).unwrap();
+        assert!(kept.split_whitespace().collect::<String>().contains(r#""power_button":"screen_off""#), "{lang}: {kept}");
+    }
+}
+
+/// Both shortcut rows must be reachable from Settings and keep a changed action after restart.
+#[cfg(feature = "brick")]
+#[test]
+fn bricks_fkeys_are_reachable_changeable_and_kept_after_restart() {
+    let card = Card::new(&BRICK);
+    let mut ui = Ui::start(&card, &BRICK, true, 1, &[]);
+    ui.settled(&["start"]).unwrap();
+    open_named(&mut ui, "Sound & feel");
+    let mut frame = open_named(&mut ui, "Lights & buttons");
+    for (row, wanted) in [("F1 button", "Quick load"), ("F2 button", "Screenshot")] {
+        for _ in 0..MAX_WALK {
+            if frame.focused().is_some_and(|s| s.starts_with(row)) { break; }
+            frame = ui.settled(&["down"]).unwrap();
+        }
+        assert!(frame.focused().is_some_and(|s| s.starts_with(row)), "{row}: {}", frame.text());
+        frame = ui.settled(&["right"]).unwrap();
+        assert!(frame.text().lines().any(|s| s == wanted), "{row} must show its new action: {}", frame.text());
+    }
+    let saved = card.path().join("run-1/data/brick-keys.json");
+    let keys: serde_json::Value = serde_json::from_slice(&std::fs::read(&saved).unwrap()).unwrap();
+    assert_eq!(keys["f1"], "load");
+    assert_eq!(keys["f2"], "screenshot");
+    drop(ui);
+    std::fs::copy(saved, card.path().join("template-data/brick-keys.json")).unwrap();
+    let mut ui = Ui::start(&card, &BRICK, true, 2, &[]);
+    ui.settled(&["start"]).unwrap();
+    open_named(&mut ui, "Sound & feel");
+    let frame = open_named(&mut ui, "Lights & buttons");
+    assert!(frame.text().lines().any(|s| s == "Quick load"), "F1 action after restart: {}", frame.text());
+    assert!(frame.text().lines().any(|s| s == "Screenshot"), "F2 action after restart: {}", frame.text());
+}
+/// Launching asks for a response paint even without a window. That paint must
+/// not replace the explicitly captured input's feedback while its reader waits.
+#[test]
+fn launch_response_preserves_the_requested_frames_sound() {
+    let card = Card::new(&RG35XX_PLUS);
+    for run in 1..=5 {
+        let mut ui = Ui::start(&card, &RG35XX_PLUS, true, run, &[("POCKETUI_TEST_PREPARE_MS", "100")]);
+        ui.settled(&["a"]).unwrap();
+        ui.capture_delay = Duration::from_millis(50);
+        let frame = ui.press(&["a"]).unwrap();
+        assert!(frame.feedback.as_ref().is_some_and(|s| s.contains("sound:")),
+            "the requested launch frame retains its button sound despite an automatic response paint: {frame:?}");
     }
 }

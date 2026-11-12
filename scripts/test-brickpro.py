@@ -35,48 +35,31 @@ class BrickPro(unittest.TestCase):
                     out = subprocess.check_output(shell + ['-c', functions + '\nboard'], env=env, text=True)
                     self.assertEqual(out.strip(), want)
 
+    def suspend_fixture(self, shell, outcome='success'):
+        # Share the new dispatcher's harmless kernel capability/counter fixtures.
+        import runpy
+        fixture = runpy.run_path(str(ROOT/'scripts/test-brick-suspend.py'))['Suspend'].fixture
+        root, env, run = fixture(self, shell, outcome)
+        env['BRICK_INPUTD_SUSPEND'] = str(root/'system_suspend')
+        return root, env, run
+
     def test_inputd_is_paused_at_kernel_entry_and_resumed_before_services(self):
         for shell in (['dash'], ['busybox', 'ash']):
             for failed in (False, True):
-                with self.subTest(shell=shell, failed=failed), tempfile.TemporaryDirectory() as d:
-                    root = Path(d)
-                    marker = root/'system_suspend'
-                    state = root/'power'
-                    if failed:
-                        # Opening a directory for output refuses suspend, without touching host /sys.
-                        state.mkdir()
-                    else:
-                        os.mkfifo(state)
-                    wpa = root/'wpa'
-                    wpa.write_text('#!/bin/sh\nif [ "$1" = start ]; then test ! -e "$BRICK_INPUTD_SUSPEND" || exit 8; echo resumed >"$BRICK_STATE/resumed"; fi\n')
-                    wpa.chmod(0o755)
-                    env = dict(os.environ, BRICK_INPUTD_SUSPEND=str(marker), BRICK_POWER_STATE=str(state),
-                               BRICK_STATE=d, BRICK_HW='/bin/true', BRICK_WPA_INIT=str(wpa),
-                               BRICK_PIDOF='/bin/false', BRICK_UDHCPC='/bin/true', BRICK_RFKILL=str(root/'none'),
-                               BRICK_SUSPEND_RETRY='0', BRICK_INPUTD_DRAIN='0',
-                               BRICK_SYNC='/bin/true')  # a real sync waits for every disk write on the host (seconds on a busy server)
-                    proc = subprocess.Popen(shell + [str(ROOT/'deploy/brick/hwroot/usr/bin/systemctl'), 'suspend'], env=env,
-                                            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-                    try:
-                        if not failed:
-                            # FIFO open unblocks the kernel-write stand-in. The flag must already exist.
-                            deadline = time.monotonic() + 5
-                            while not marker.exists() and proc.poll() is None and time.monotonic() < deadline:
-                                time.sleep(0.01)
-                            self.assertTrue(marker.exists(), 'inputd was still polling at kernel entry')
-                            fd = os.open(state, os.O_RDONLY | os.O_NONBLOCK)
-                            import select
-                            self.assertTrue(select.select([fd], [], [], 5)[0], 'suspend never reached kernel entry')
-                            self.assertEqual(os.read(fd, 64), b'mem\n')
-                            os.close(fd)
-                        result = proc.wait(timeout=5)
-                        self.assertEqual(result, 1 if failed else 0)
-                        self.assertFalse(marker.exists(), 'input left paused after suspend returned/refused')
-                        self.assertTrue((root/'resumed').exists(), 'input must resume before network services')
-                    finally:
-                        if proc.poll() is None:
-                            proc.terminate()
-                            proc.wait(timeout=5)
+                with self.subTest(shell=shell, failed=failed):
+                    root, env, run = self.suspend_fixture(shell)
+                    marker=Path(env['BRICK_INPUTD_SUSPEND'])
+                    stats=root/'sys/kernel/debug/suspend_stats'
+                    Path(env['BRICK_SUSPEND_ENTER']).write_text(
+                        '#!/bin/sh\n' + f'test -e "{marker}" || exit 8\necho entered >"{root}/entered"\n' +
+                        ('exit 1\n' if failed else f'echo "success: 1" >"{stats}"\n'))
+                    Path(env['BRICK_WPA_INIT']).write_text(
+                        '#!/bin/sh\nif [ "$1" = start ]; then test ! -e "$BRICK_INPUTD_SUSPEND" || exit 8; echo resumed >"'+str(root)+'/resumed"; fi\n')
+                    result=run()
+                    self.assertEqual(result.returncode, 1 if failed else 0, result.stderr)
+                    self.assertTrue((root/'entered').exists(), 'inputd must already be paused at kernel entry')
+                    self.assertFalse(marker.exists(), 'input left paused after suspend returned/refused')
+                    self.assertTrue((root/'resumed').exists(), 'input must resume before network services')
 
     def test_pro_poweroff_uses_its_own_zones_and_leaves_the_brick_raw_frame_alone(self):
         for shell in (['dash'], ['busybox', 'ash']):
@@ -92,27 +75,21 @@ class BrickPro(unittest.TestCase):
 
     def test_marker_failure_refuses_kernel_entry(self):
         for shell in (['dash'], ['busybox', 'ash']):
-            with self.subTest(shell=shell), tempfile.TemporaryDirectory() as d:
-                root = Path(d)
-                state = root/'power'
-                env = dict(os.environ, BRICK_INPUTD_SUSPEND=str(root/'missing/system_suspend'), BRICK_POWER_STATE=str(state))
-                out = subprocess.run(shell + [str(ROOT/'deploy/brick/hwroot/usr/bin/systemctl'), 'suspend'], env=env,
-                                     capture_output=True, timeout=5)
+            with self.subTest(shell=shell):
+                root, env, run = self.suspend_fixture(shell)
+                env['BRICK_INPUTD_SUSPEND'] = str(root/'missing/system_suspend')
+                out=run()
                 self.assertNotEqual(out.returncode, 0)
-                self.assertFalse(state.exists(), 'must refuse sleep when inputd cannot be paused')
+                self.assertNotIn('enter', (root/'calls').read_text() if (root/'calls').exists() else '',
+                                 'must refuse sleep when inputd cannot be paused')
 
     def test_interrupted_suspend_releases_inputd(self):
         import signal
         for shell in (['dash'], ['busybox', 'ash']):
-            with self.subTest(shell=shell), tempfile.TemporaryDirectory() as d:
-                root = Path(d)
-                marker = root/'system_suspend'
-                wpa = root/'wpa'
-                wpa.write_text('#!/bin/sh\ntouch "$BRICK_STATE/reached"\nexec sleep 20\n')
-                wpa.chmod(0o755)
-                env = dict(os.environ, BRICK_INPUTD_SUSPEND=str(marker), BRICK_INPUTD_DRAIN='0',
-                           BRICK_HW='/bin/true', BRICK_RFKILL=str(root/'none'), BRICK_WPA_INIT=str(wpa), BRICK_STATE=d,
-                           BRICK_SYNC='/bin/true')
+            with self.subTest(shell=shell):
+                root, env, _ = self.suspend_fixture(shell)
+                marker=Path(env['BRICK_INPUTD_SUSPEND'])
+                Path(env['BRICK_UBUS']).write_text('#!/bin/sh\ntouch "'+str(root)+'/reached"\nexec sleep 20\n')
                 proc = subprocess.Popen(shell + [str(ROOT/'deploy/brick/hwroot/usr/bin/systemctl'), 'suspend'], env=env,
                                         start_new_session=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
                 try:
@@ -121,9 +98,12 @@ class BrickPro(unittest.TestCase):
                         time.sleep(0.01)
                     self.assertTrue((root/'reached').exists(), 'interruption must exercise the paused network helper')
                     self.assertTrue(marker.exists())
-                    os.killpg(proc.pid, signal.SIGTERM)  # this test created the entire process group
+                    os.killpg(proc.pid, signal.SIGTERM)
                     self.assertNotEqual(proc.wait(timeout=5), 0)
                     self.assertFalse(marker.exists(), 'input must not remain paused after termination')
+                    deadline=time.monotonic()+5
+                    while (root/'tmp/brick-suspend.lock').exists() and time.monotonic()<deadline:
+                        time.sleep(.01)
                 finally:
                     if proc.poll() is None:
                         os.killpg(proc.pid, signal.SIGKILL)

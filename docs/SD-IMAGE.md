@@ -97,7 +97,7 @@ in the SM8250 SYSTEM (only two sleep scripts of the Anbernic RG DS name it).
 
 | Partition | Added | Removed |
 |---|---|---|
-| FAT, label `ROCKNIX` (`/flash`) | `EFI/BOOT/BOOTAA64.EFI`, `boot/grub/grub.cfg`, `boot/grub/grub-efi-arm64-bin.version`, `boot/pocket/{Image,miniv2-noufs.dtb,KERNEL.source.md5}`, `post-flash.sh`, `mount-storage.sh`, `pocket-ui-info/` (`README.txt`, `SOURCE-OFFER.txt`, `LICENSE`, `NOTICE.md`, `licences/`, `rocknix-licenses/`, `firmware-licences/`) | `rocknix_abl/`: ROCKNIX's replacement for Retroid's bootloader and the scripts that flash it. This boot path never uses it, and flashing it is what this setup avoids. `SYSTEM` and `SYSTEM.md5` are replaced by the repacked SYSTEM (above) |
+| FAT, label `ROCKNIX` (`/flash`) | `EFI/BOOT/BOOTAA64.EFI`, `boot/grub/grub.cfg`, `boot/grub/grub-efi-arm64-bin.version`, `boot/pocket/{Image,miniv2-noufs.dtb,KERNEL.source.md5}`, `loader/entries/pocket-ui.conf`, `post-flash.sh`, `mount-storage.sh`, `pocket-ui-info/` (`README.txt`, `SOURCE-OFFER.txt`, `LICENSE`, `NOTICE.md`, `licences/`, `rocknix-licenses/`, `firmware-licences/`) | `rocknix_abl/`: ROCKNIX's replacement for Retroid's bootloader and the scripts that flash it. This boot path never uses it, and flashing it is what this setup avoids. `SYSTEM` and `SYSTEM.md5` are replaced by the repacked SYSTEM (above) |
 | STORAGE, ext4 | `pocket-ui/` (launcher, `releases/<version>/` with pocket-ui, pocket-core and pocket-splash, `current` and the three links, as `dev.sh` and the updater lay it out), `.pocket-seed/.config/system.d/`: `essway.service.d/10-pocket-ui.conf`, and the boot screen `pocket-splash.service` with its link `sysinit.target.wants/pocket-splash.service` ([BOOT-SPLASH.md](BOOT-SPLASH.md)) | nothing (`.please_resize_me` and `lost+found` stay) |
 
 Partition table, partition sizes and KERNEL are unchanged; SYSTEM only lost the paths above. Image: 2,198,863,872 bytes raw, 1,518,697,476
@@ -345,12 +345,40 @@ U-Boot; the guard in `mount-storage.sh` keeps foreign updates out, and our own O
 
 ## SM8550: AYN Odin 2 family, Retroid Pocket 6 and Nova (test images, never booted)
 
-Status 2026-10-31: built and checked offline; no card has been started on a handheld. Same builder and check as the H700
+Status 2026-10-31: built and checked offline; no card has been started on a handheld. Since 2026-11-12 the Retroid
+cards also carry GRUB and a BLS entry (below). Same builder and check as the H700
 (`scripts/make-image-family.sh --family SM8550`, `scripts/check-image-family.sh`); a family is a block of pins plus its notes.
 
 **Boot path.** The official image holds only `KERNEL` (an Android boot image with every model's device tree and the
 command line `boot=LABEL=ROCKNIX disk=LABEL=STORAGE`), `SYSTEM` and `rocknix_abl/` on a GPT card with the same offsets as the
-Mini V2's. So there is no GRUB and no `dtb.img`, and the five images differ only in their name and notes.
+Mini V2's. So the Odin cards have no GRUB and no `dtb.img` and differ only in their name and notes.
+
+**Retroid cards also start without ROCKNIX's ABL (2026-11-12, never booted).** `rp6`, `rp6-top-dpad` and `nova`
+(`SM8550_EFI_MODELS` in `pins.sh`) get the SM8250 cards' second way in, next to the unchanged `KERNEL`: p1 typed as EFI
+system partition, `EFI/BOOT/BOOTAA64.EFI` (the same Debian GRUB, `scripts/make-sd-efi.sh`), `boot/pocket/Image` (the gzip
+member of `KERNEL`, md5 `SM8550_IMAGE_MD5`), `boot/pocket/<model>-noufs.dtb` (the model's tree from `KERNEL` with
+`ufshc@1d84000` and `phy@1d80000` disabled, nothing else changed) and `loader/entries/pocket-ui.conf`; the templates are
+`deploy/sd-efi-sm8550/`. GRUB passes `KERNEL`'s own command line plus the quiet words and `video=efifb:off gpt`.
+
+| Bootloader in the Retroid | What it starts from the card |
+|---|---|
+| Retroid's "UEFI" in the Volume Down menu (newer firmware; reported for a Pocket 6 on r/retroid, 2026-08) and any other UEFI | GRUB, with the model's tree. Without the tree the kernel starts and the screen stays black |
+| OpenABL ("Boot mode: Linux") | the BLS entry, before `KERNEL` |
+| ROCKNIX's ABL (the 20261001 `abl_signed-SM8550.elf`) | `KERNEL` with the menu's device model, as before: its strings name only `\KERNEL`, `\kernel.img` and `\boot\reglinux.update` |
+
+**Why one card per Retroid and nothing on the Odin cards.** OpenABL reads `loader/entries` and `EFI/BOOT` before `KERNEL`, so
+GRUB or a BLS entry on a shared card would start an Odin with a Retroid tree. GRUB cannot tell the models apart before the
+kernel runs, and the Pocket 6's two factory layouts (left stick on top: `Retroid Pocket 6`; D-pad on top:
+`Retroid Pocket 6 TOP-DPAD`) differ only in the stick axes of the tree (`invert-x`, `invert-y`). The Odin cards are byte for
+byte what they were (`notes_blocks` drops the `#if EFI` blocks; `scripts/image/test-h700-pins.sh` proves it). Through UEFI or
+OpenABL the internal UFS is off, so an internal ROCKNIX install no longer wins over the card there.
+
+**Open on hardware: sound under UEFI.** ASoC names a card from DMI when the firmware gives SMBIOS tables
+(`snd_soc_set_dmi_name`, vendor-product-version-board), and UCM looks for `conf.d/sm8550/<that long name>.conf` before
+`sm8550.conf`. Under ROCKNIX's ABL there is no DMI and the card is `AYN-Odin2` (its UCM file). ROCKNIX added such long-name
+links for the Odin 2 and the AYANEO Pockets ("Add EFI boot compatibility"), none for the Retroids. If Retroid's UEFI has
+SMBIOS, the Pocket 6 and Nova may start without sound until a link for their long name exists; ask the tester for
+`/proc/asound/cards`.
 
 **What a player needs first.** ROCKNIX's ABL must be in the handheld: flashed once from Android with root
 (`rocknix_abl/README` of the official image: `backup_abl.sh`, `flash_abl.sh`, then Volume Down at start). Its menu then wants
@@ -401,6 +429,9 @@ the three `--version` ones, which warned because the virtual device's base image
   `deploy/grub-quiet.sh` (what `scripts/boot-quiet.sh` runs on a card) finds it already quiet and would change nothing
   (`scripts/image/grub-checks.sh`, test `scripts/image/test-grub-checks.sh`, part of the gate), and every file it names
   exists; `BOOTAA64.EFI` is an arm64 EFI application (and the device's, else only a warning).
+- BLS entry: `loader/entries/pocket-ui.conf` is `deploy/sd-efi/loader/entries/pocket-ui.conf` with the model's tree and
+  starts exactly what grub.cfg's "pocket-ui" entry starts (`linux`, `devicetree`, `options`; no `initrd`, no other key;
+  `bls_matches_grub` in `scripts/image/grub-checks.sh`). The exact FAT list keeps `extlinux/` and `boot.scr` off the card.
 - Kernel: `Image` md5 is the device's and it is re-unpacked from this KERNEL for comparison; dtb md5 is the
   device's, its model is "Retroid Pocket Mini V2", `ufshc@1d84000` and `phy@1d87000` are disabled;
   `KERNEL.source.md5` names this KERNEL.
@@ -510,7 +541,7 @@ which card is in it.
      starts.
    - The third start (step 8) shows the boot screen without the line.
 6. Run through the setup: a look, Wi-Fi with the on-screen keyboard, extras.
-7. Then, with SSH switched on in Settings → Connections → Remote access (read only):
+7. Then, with SSH switched on in Settings → Help & tools → For tinkerers → Remote access (read only):
    - `df -h /storage` shows the card's full size.
    - `ls /flash`: `mount-storage.sh` and `post-flash.sh` still there (both run at every start). `cat /flash/fs-resize.log`.
    - `grep -E "^(updates.enabled|system.hostname)=" /storage/.config/system/configs/system.cfg` says `0` and
@@ -548,3 +579,83 @@ Full LTO recovers 1.95 MiB in the measured successor build, leaving a conservati
 without changing the partition layout. The historical finished-image/receipt minimum above stays unchanged,
 so existing immutable 0.3.1 image attestations remain valid. See [BINARY-SIZE.md](BINARY-SIZE.md) for attribution,
 alternatives and runtime measurements.
+
+## Experimental SM8250 tester cards (Pocket 5 and Flip 2)
+
+`scripts/make-image.sh --model rp5|flip2 --version 0.3.2 --bin-dir DIR` uses
+the same pinned ROCKNIX 20261001 SM8250 base and existing release programs.
+Supply the public 0.3.2 programs, not binaries from a development tree.
+These cards have **not booted on hardware**; testers are wanted. They select
+the original-panel `Retroid Pocket 5` or `Retroid Pocket Flip2` tree appended
+to ROCKNIX's KERNEL. Visionox panels need a separate image and are not covered.
+
+The shared builder disables both `/soc@0/ufshc@1d84000` and
+`/soc@0/phy@1d87000`, checks their status and the original and patched tree
+hashes, and gives GRUB exactly one model-specific device tree.
+`check-image.sh` infers the model from the image name and checks the pinned
+tree, disabled UFS, GRUB, partitions and per-model hostname (`pocket-rp5`,
+`pocket-flip2`). Existing device recognition supplies the experimental About
+row and first-start untested notice. No bootloader is flashed.
+
+`--system-file FILE` can reuse a previously repacked SYSTEM; its pinned MD5
+must match before assembly. Image compression uses two xz threads. The
+compressed file and notes receive the existing hash-bound check receipts.
+Every SM8250 card carries two starts of the same kernel, tree and command line, so one card serves each
+bootloader a Retroid may have (2026-11-12, after a Pocket 5 tester found no "Boot mode: Loader"):
+
+| Bootloader in the handheld | What it starts from the card |
+|---|---|
+| Retroid's stock ABL, "Boot mode: Loader" (Retroid u-boot 2024.10 in `loader`) | `EFI/BOOT/BOOTAA64.EFI` (GRUB, `grub.cfg`). U-Boot has no BLS reader; it would prefer `extlinux/` or `boot.scr`, which the card must not have |
+| OpenABL (OpenHandheldCollective, ROCKNIX 20261101), "Boot mode: Linux" | `loader/entries/pocket-ui.conf` first (its `devicetree` wins over the menu's device model), else GRUB |
+| ROCKNIX ABL (`ROCKNIX/abl` up to v1.2), "Boot mode: Linux" | `EFI/BOOT/BOOTAA64.EFI` first (strings of the v1.2 SM8250 binary: no BLS reader), else ROCKNIX's `/KERNEL` with the menu's model |
+| Retroid's newer "Boot mode: UEFI" and any other UEFI firmware (EDK2) | `EFI/BOOT/BOOTAA64.EFI` (GRUB). QEMU's EDK2 also takes it from a basic-data partition; Retroid's UEFI is reported to want an EFI system partition, so the Pocket 5 and Flip 2 mark p1 as one |
+
+Offsets, names and the `LegacyBIOSBootable` attribute stay ROCKNIX's; only p1's type GUID differs on the Pocket 5 and Flip 2
+(`sm8250_p1_type` in `pins.sh`). Retroid's u-boot boots ESP-typed partitions as well (they count as bootable). An EFI system
+partition is hidden by Windows and macOS and not mounted by Android; the notes say so. The Mini V2 keeps the basic-data type
+until a Mini V2 card is checked with it. Secure Boot: GRUB is unsigned. In QEMU with Secure Boot on (AAVMF, Microsoft keys)
+the firmware refuses it ("Access Denied"); Debian's signed shim and GRUB (`shim-signed 1.51~1+deb13u1+16.1`,
+`grub-efi-arm64-signed 1+2.12+9+deb13u2`) start, then refuse `devicetree` ("not allowed when lockdown is enforced") and
+ROCKNIX's unsigned kernel ("bad shim signature"). A firmware that enforces Secure Boot cannot start this card with or
+without a signed shim; one that boots Linux with a loaded device tree has it off, and then shim adds nothing.
+
+The partition table is otherwise ROCKNIX's. In QEMU (AAVMF 2025.02, `-M virt`) GRUB loads the model's tree, installs it as
+the FDT table and the kernel's EFI stub boots with it; systemd-boot does the same from the BLS entry. That proves the
+files and their format, not a start on the handheld. Offline checks do not establish boot, panel, controls, lid, audio or game
+compatibility. Keep the untested label until a real first and second boot
+and game smoke have been reported on each model.
+
+## SM4450 Classic beta
+
+Needs ROCKNIX's bootloader (ABL) already installed on your Classic; this card does not install it.
+**Classic Rev Q only. The six-button variant and other revisions are not supported.**
+The prerequisite is ROCKNIX's SM4450 ABL, described by the upstream
+[ABL release](https://github.com/ROCKNIX/abl/releases/tag/v1.2).
+A stock Retroid Loader/GRUB boot path has not been established for this model. Do not apply
+the RP5/Flip 2 Loader instructions or flash a bootloader for this beta.
+
+`scripts/make-image-family.sh --family SM4450 --models rp-classic --version 0.3.2`
+builds `pocket-ui-0.3.2-rp-classic.img.xz`, notes and SHA256SUMS.
+`--system-file FILE` reuses an already stripped SYSTEM only if its MD5 matches the family pin. Pins are in
+`scripts/image/pins.sh`; `scripts/check-image.sh` routes Classic images to the family checker.
+The Classic uses ROCKNIX **20261101**, for its touch-resume and digital-trigger fixes.
+Unlike the October families, this base has an EFI-stub KERNEL, separate DTBs in `dtbs/`
+and a BLS entry in `loader/entries/`. The existing compatible OpenABL reads that entry and
+boots KERNEL with the selected Classic Rev Q DTB. KERNEL, DTBs and BLS stay unchanged.
+No GRUB or SD U-Boot is added. An older October ABL is not a verified prerequisite.
+
+The Classic tree disables its internal eMMC controller (`/soc@0/mmc@7c4000`);
+its removable card controller (`/soc@0/mmc@8804000`) remains enabled. The offline checker
+verifies both properties, the exact tree, firmware availability and boot command line.
+The FAT `openabl/` folder and SYSTEM `usr/share/bootloader/openabl` payload are removed;
+unchecked system updates are refused by the existing image boot hook. This card does not
+install or update ABL, and it is not an internal Android installation. These are offline
+checks, not proof of boot or electrical safety on a real Classic.
+
+Test only on a spare card in an already ROCKNIX-booting Classic Rev Q. With the existing
+ABL configured for this exact model and SD boot, insert the card while powered off and boot.
+To return to Android use the existing ABL's Android option. Do not change or flash ABL for this
+test. First boot may resize STORAGE and restart once. Report the hardware revision, Android
+firmware, ABL version, SD card, first/second boot, display/touch, all buttons, sound,
+Wi-Fi, sleep/wake and fan behaviour. Test owned GB/GBC, GBA, SNES, MD and PS1 games and report
+core, speed and audio. No real Classic has been tested; no public release is authorized.

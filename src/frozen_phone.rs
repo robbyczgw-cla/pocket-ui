@@ -1,8 +1,8 @@
 //! Frozen games on a phone (docs/ANDROID-MVP.md, "Frozen games"): the rules are `frozen`'s, this is where they meet
 //! Android's files. A game's states are `states/<key>/<stem>` under the app's data, by its document's identity, and the
-//! core plays a copy of the document (`content/<key>/<name>`), made at every start, or kept between starts for a big game
-//! whose document hasn't changed (`GameCopy`). So the launcher can only compare the
-//! document's size with the mark ([`stand_open`]); what the file holds is judged in the player, after the copy and before
+//! core plays a direct descriptor alias or a fallback copy (`content/<key>/<name>`, `GameCopy`). The launcher checks
+//! the fallback copy when present, otherwise opens its own short-lived document alias. Large direct documents retain
+//! the same checksum identity through tiny `.stage` metadata (`platform/android_content`). Content is checked before
 //! the core sees a state ([`at_start`]). A moment that isn't loaded goes to a free slot, or behind the slots when all are
 //! taken: Load finds it either way and no later Quit can overwrite it ([`set_aside`]). In-game saves aren't touched by
 //! anything here.
@@ -31,7 +31,7 @@ pub fn base(data: &Path, key: &str, name: &str) -> PathBuf {
     data.join("states").join(key).join(Path::new(name).file_stem().unwrap_or_default())
 }
 
-/// The player's copy of the document.
+/// The fallback copy of the document; direct sessions have only short-lived descriptor aliases.
 pub fn staged_rom(data: &Path, key: &str, name: &str) -> PathBuf {
     data.join("content").join(key).join(name)
 }
@@ -82,6 +82,13 @@ pub struct Candidate {
     pub base: PathBuf,
     /// The document's size now; negative when its provider doesn't say.
     pub size: i64,
+}
+
+impl Candidate {
+    /// Keep the provider's entry metadata separate from the total space a set needs.
+    pub fn from_game(document: &crate::document_library::Game, game: Game, base: PathBuf) -> Self {
+        Self { key: document.key.clone(), game, base, size: document.document_size }
+    }
 }
 
 /// The keys of the newest [`frozen::MOST`] games that stand open. On a thread: it reads the copies' samples.
@@ -213,7 +220,7 @@ pub struct Start {
     pub note: Vec<String>,
 }
 
-/// `rom`: the copy just made of the document. `shown`: the shelf showed the game as frozen. Holds with the Frozen games
+/// `rom`: the prepared copy or live descriptor alias of the document. `shown`: the shelf showed the game as frozen. Holds with the Frozen games
 /// switch off too: the switch closes the cases, it doesn't make a state load for another file.
 pub fn at_start(base: &Path, rom: &Path, core: &str, shown: bool) -> Start {
     restore_kept(base);
@@ -284,6 +291,65 @@ mod tests {
         assert_eq!(stand_open(&[candidate(&rom, &b, "k")]), ["k"]);
         assert_eq!(at_start(&b, &rom, "mgba", true), Start { resume: true, note: vec![] });
         assert!(auto.exists(), "nothing moved: Core::resume takes it");
+    }
+
+    #[test]
+    fn disc_sets_keep_their_continue_entry_and_existing_marks() {
+        for phone in [false, true] {
+            let run = || {
+                // Identity-test bytes only: these are never passed to a core as emulator fixtures.
+                let cases: &[(&str, &str, &[(&str, &[u8])])] = &[
+                    ("psx", "Game.cue", &[("Game.cue", b"FILE \"Track.bin\" BINARY\n"), ("Track.bin", b"first disc bytes")]),
+                    ("saturn", "Game.cue", &[("Game.cue", b"FILE \"Game.iso\" BINARY\nFILE \"Music.wav\" WAVE\n"), ("Game.iso", b"data disc bytes"), ("Music.wav", b"audio wave bytes")]),
+                    ("psx", "Game.m3u", &[("Game.m3u", b"Disc.cue\nSecond.chd\n"), ("Disc.cue", b"FILE \"Track.bin\" BINARY\n"), ("Track.bin", b"first disc bytes"), ("Second.chd", b"second disc bytes")]),
+                    ("dreamcast", "Game.gdi", &[("Game.gdi", b"2\n1 0 4 2352 Track.bin 0\n2 1000 0 2352 Audio.raw 0\n"), ("Track.bin", b"data track bytes"), ("Audio.raw", b"audio track bytes")]),
+                    ("dreamcast", "Game.cdi", &[("Game.cdi", b"self contained disc bytes")]),
+                    ("psx", "Game.chd", &[("Game.chd", b"self contained compressed disc bytes")]),
+                ];
+                for (system, entry, contents) in cases {
+                    let d = TestDir::new("frozen-disc-entry");
+                    let folder = d.join(system);
+                    std::fs::create_dir_all(&folder).unwrap();
+                    let docs = contents.iter().map(|(name, bytes)| {
+                        std::fs::write(folder.join(name), bytes).unwrap();
+                        crate::document_library::Document {
+                            uri: format!("content://test/document/{name}"), authority: "test".into(), id: name.to_string(),
+                            relative: format!("{system}/{name}"), root_name: String::new(), size: bytes.len() as i64,
+                            sheet: String::from_utf8_lossy(bytes).into_owned(),
+                        }
+                    }).collect();
+                    let games = crate::document_library::scan(docs);
+                    // Android's current scanner does not list CDI; Linux can still hand that single-file format
+                    // to the common moment check. Exercise it there without claiming new scanner/core support.
+                    if !entry.ends_with(".cdi") { assert_eq!(games.len(), 1, "{system}/{entry}"); }
+                    let rom = folder.join(entry);
+                    let base = d.join("state/Game");
+                    std::fs::create_dir_all(base.parent().unwrap()).unwrap();
+                    let auto = slots::auto_path(&base);
+                    crate::state_file::write(&auto, b"existing moment").unwrap();
+                    write_mark(&base, &Mark::new(EMULATOR, "fixture-core", &rom, None).unwrap());
+                    let mark_bytes = std::fs::read(mark_path(&base)).unwrap();
+                    let game = Game { system: system.to_string(), path: rom.clone(), emulator: EMULATOR.into(), core: "fixture-core".into(), mark: read_mark(&base) };
+                    let candidate = match games.first() {
+                        Some(document) => Candidate::from_game(document, game, base.clone()),
+                        None => Candidate { key: format!("test:{entry}"), game, base: base.clone(), size: std::fs::metadata(&rom).unwrap().len() as i64 },
+                    };
+                    // Linux uses this same file/runner check, without Android's provider-size prefilter.
+                    assert!(frozen::open_moment(&candidate.game, &files(&base)).is_some(), "Linux: {entry}");
+                    assert_eq!(stand_open(std::slice::from_ref(&candidate)), [candidate.key.clone()], "Android: {entry}, phone policy={phone}");
+                    assert_eq!(std::fs::read(mark_path(&base)).unwrap(), mark_bytes, "existing marks need no migration");
+                    // A same-size change in a child disc/track still closes the old moment on both platforms.
+                    let (changed, original) = contents.last().unwrap();
+                    let mut patched = original.to_vec();patched[0] ^= 1;
+                    std::fs::write(folder.join(changed), &patched).unwrap();
+                    assert!(!frozen::is_frozen(&candidate.game, &files(&base)), "changed {changed}");
+                    assert!(stand_open(std::slice::from_ref(&candidate)).is_empty());
+                    assert!(auto.exists(), "the moment is retained for manual loading");
+                    assert_eq!(std::fs::read(mark_path(&base)).unwrap(), mark_bytes);
+                }
+            };
+            if phone { frozen::on_phone(run) } else { run() }
+        }
     }
 
     #[test]
@@ -441,6 +507,52 @@ mod tests {
         std::fs::remove_file(slots::state_path(&b, 0)).unwrap();
         restore_kept(&b);
         assert_eq!(std::fs::read(slots::state_path(&b, 0)).unwrap(), b"old progress");
+    }
+
+    #[cfg(any(target_os = "linux", target_os = "android"))]
+    #[test]
+    fn a_direct_start_keeps_the_large_copied_games_moment_and_saves() {
+        crate::frozen::on_phone(|| {
+        let (d, copy, base, auto) = played("direct-migration");
+        let file = std::fs::OpenOptions::new().write(true).open(&copy).unwrap();
+        file.set_len((65 << 20) + 1).unwrap();
+        let crc = crc32fast::hash(&std::fs::read(&copy).unwrap());
+        std::fs::write(copy.with_file_name(".stage"), format!("68157441 1 {crc}\n")).unwrap();
+        let old = Mark::new(EMULATOR, "mgba", &copy, None).unwrap();
+        write_mark(&base, &old);
+        let document = crate::platform::android_content::DirectGame::new(std::fs::File::open(&copy).unwrap(), &d.join("direct-content/abc"), "Game.gba").unwrap();
+        let saved = std::fs::read(&auto).unwrap();
+        let start = at_start(&base, document.path(), "mgba", true);
+        assert!(start.resume, "switching from a copy to the same document must resume: {:?}", start.note);
+        assert!(std::fs::symlink_metadata(document.path()).unwrap().file_type().is_symlink());
+        assert!(std::fs::metadata(d.join("direct-content/abc/source.json")).unwrap().len() < 256, "only checksum metadata is stored");
+        assert_eq!(std::fs::read(&auto).unwrap(), saved, "the saved moment is unchanged");
+        assert_eq!(read_mark(&base), Some(old), "the existing mark is unchanged too");
+        });
+    }
+
+    #[cfg(any(target_os = "linux", target_os = "android"))]
+    #[test]
+    fn a_changed_large_direct_game_with_preserved_mtime_keeps_its_old_moment_out_of_the_core() {
+        crate::frozen::on_phone(|| {
+            use std::io::{Seek, SeekFrom, Write};
+            let (d, source, base, auto) = played("direct-changed");
+            let mut file = std::fs::OpenOptions::new().write(true).open(&source).unwrap();
+            file.set_len((65 << 20) + 1).unwrap();
+            let original_mtime = file.metadata().unwrap().modified().unwrap();
+            let root = d.join("direct-content/abc");
+            let document = crate::platform::android_content::DirectGame::new(std::fs::File::open(&source).unwrap(), &root, "Game.gba").unwrap();
+            write_mark(&base, &Mark::new(EMULATOR, "mgba", document.path(), None).unwrap());
+            drop(document);
+            // A same-size patch between every sampled position, with mtime restored by a patching/copy tool.
+            file.seek(SeekFrom::Start(1 << 20)).unwrap();
+            file.write_all(b"changed game").unwrap();
+            file.set_modified(original_mtime).unwrap();
+            let saved = crate::state_file::read(&auto).unwrap();
+            let document = crate::platform::android_content::DirectGame::new(std::fs::File::open(&source).unwrap(), &root, "Game.gba").unwrap();
+            assert!(!at_start(&base, document.path(), "mgba", true).resume);
+            assert_eq!(crate::state_file::read(&slots::state_path(&base, 0)).unwrap(), saved, "the old progress is kept under Load");
+        });
     }
 
     #[test]

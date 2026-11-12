@@ -1203,6 +1203,14 @@ pub mod boxes {
         }
     }
 
+    /// Words of three or more letters painted smaller than `below` pixels since the last `reset` (needs a record on):
+    /// the phone-format sweeps ask this per screen density, where `SMALLEST_PX` is one number for all.
+    pub fn small_words(below: u32) -> Vec<(u32, String)> {
+        sizes().lock().map_or_else(|_| Vec::new(), |v| {
+            v.iter().filter(|(px, t)| *px < below && t.chars().filter(|c| c.is_alphabetic()).count() >= 3 && !t.starts_with("‹")).cloned().collect()
+        })
+    }
+
     /// A line of the big game name (`title_block`) painted at `px`, its baseline at `y`, for tests/long_titles.rs:
     /// `POCKETUI_TITLE_BLOCKS` names the file the lines of the picture go to (size, main or sub, baseline, text).
     pub fn note_title(px: u32, sub: bool, y: i32, text: &str) {
@@ -1372,7 +1380,7 @@ pub mod boxes {
         }
         let _ = std::fs::write(path, out);
         // A full stop or comma painted on its own after a bold word or a link (the manual's "Manual."): it belongs to the
-        // word before it, close by design (Nunito's letters stand closer to it than Barlow's).
+        // word before it, close by design (alternative letters can stand closer to it than Barlow's).
         fn punctuation(s: &str) -> bool {
             let t = s.trim();
             !t.is_empty() && t.chars().all(|c| matches!(c, '.' | ',' | ';' | ':' | '!' | '?' | ')' | '…'))
@@ -1829,18 +1837,4 @@ mod tests {
         font_style::set_retro_letters(RetroLetters::Departure);
     }
 
-    /// The Pixel look (Settings → Look → Font) paints Pixelify Sans' titles as the font draws them, at any size: its
-    /// C, c, Z and 5 are the letters the Retro style's pixels use (`scripts/pixelify-glyphs.py`), so those pairs
-    /// differ by whole font pixels at every size as well.
-    #[test]
-    fn pixel_font_look_alikes_tell_apart_at_every_size() {
-        let mut t = Text::builtin().pinned_to(FontStyle::Pixel);
-        for px in LOOK_ALIKE_SIZES {
-            for (a, b, pixels) in LOOK_ALIKES.into_iter().filter(|&(a, b, _)| "Cc5".contains(a) || b == 'Z') {
-                let (differ, _) = glyph_difference(&mut t, Face::Title, px, a, b);
-                let font_pixel = px as f32 * crate::font_style::PIXELIFY_PIXEL;
-                assert!(differ as f32 >= pixels as f32 * font_pixel * font_pixel, "Pixel {px} px: {a:?} and {b:?} differ by {differ} pixels only (font pixel {font_pixel})");
-            }
-        }
-    }
 }

@@ -1,4 +1,4 @@
-//! The German interface against the snapshot suite (docs/DEVELOPING.md "Translations"): every state of
+//! The German interface against the snapshot suite (docs/dev/translations.md "Translations"): every state of
 //! `tests/i18n-states.txt` is rendered in German with scripts/curator-fake-library.py's made-up library, and every
 //! string painted without a translation fails the test unless it is
 //! - no words (numbers, sizes, times, symbols),

@@ -15,7 +15,6 @@ pub const SLOTS: usize = 8;
 pub const STATES_DIR: &str = "/storage/roms/savestates";
 
 /// The folder of every game's states: `STATES_DIR` on the handhelds. `POCKETUI_STATES` moves it where there is no
-/// `/storage` (the Steam Deck launcher points it into pocket-ui's data folder; docs/STEAMDECK.md), so pocket-ui and
 /// pocket-core keep writing beside each other instead of into a folder that does not exist there.
 pub fn states_dir() -> PathBuf {
     static DIR: std::sync::OnceLock<PathBuf> = std::sync::OnceLock::new();
@@ -456,7 +455,7 @@ mod tests {
         assert_eq!(dir_from(Some("/data/pocket-ui/savestates")), Path::new("/data/pocket-ui/savestates"));
         assert_eq!(states_dir(), Path::new(STATES_DIR), "no variable in the test process");
         assert!(!moved_from(None) && !moved_from(Some("  ")), "unset or empty: not moved");
-        assert!(moved_from(Some("/data/pocket-ui/savestates")), "the Deck launcher's value: moved");
+        assert!(moved_from(Some("/data/pocket-ui/savestates")), "a custom launcher's value: moved");
     }
 
     #[test]

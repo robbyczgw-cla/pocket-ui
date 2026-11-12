@@ -1649,23 +1649,25 @@ mod tests {
     }
 
     #[test]
-    fn sm8550_leaves_pwm_trips_and_stale_recovery_notes_alone() {
-        let rig = Rig::new("sm8550");
-        rig.temps(90.0, 90.0);
-        put(&rig.f.0, "etc/os-release", "HW_DEVICE=\"SM8550\"\n");
-        let before = rig.active();
-        let mut e = rig.engine();
-        for fan in [Fan::Quiet, Fan::Cool, Fan::Auto] { e.tick(1.0, &on(fan)); }
-        assert!(!e.driving());
-        assert_eq!(rig.pwm(), 0);
-        assert_eq!(rig.active(), before);
-        // A valid SM8250 recovery note must not be applied to an SM8550 card either.
-        let note = Note { pwm: rig.f.0.join("sys/class/hwmon/hwmon3/pwm1"), ..Note::default() };
-        std::fs::create_dir_all(rig.paths.note.parent().unwrap()).unwrap();
-        std::fs::write(&rig.paths.note, note.text()).unwrap();
-        assert!(!hand_back(&rig.paths.note, &rig.f.0));
-        assert!(rig.paths.note.exists());
-        assert_eq!(rig.pwm(), 0);
+    fn rocknix_owned_fans_leave_pwm_trips_and_stale_recovery_notes_alone() {
+        for family in ["SM8550", "SM4450"] {
+            let rig = Rig::new(family);
+            rig.temps(90.0, 90.0);
+            put(&rig.f.0, "etc/os-release", &format!("HW_DEVICE=\"{family}\"\n"));
+            let before = rig.active();
+            let mut e = rig.engine();
+            for fan in [Fan::Quiet, Fan::Cool, Fan::Auto] { e.tick(1.0, &on(fan)); }
+            assert!(!e.driving());
+            assert_eq!(rig.pwm(), 0);
+            assert_eq!(rig.active(), before);
+            // A valid SM8250 recovery note must not be applied to an SM8550 card either.
+            let note = Note { pwm: rig.f.0.join("sys/class/hwmon/hwmon3/pwm1"), ..Note::default() };
+            std::fs::create_dir_all(rig.paths.note.parent().unwrap()).unwrap();
+            std::fs::write(&rig.paths.note, note.text()).unwrap();
+            assert!(!hand_back(&rig.paths.note, &rig.f.0));
+            assert!(rig.paths.note.exists());
+            assert_eq!(rig.pwm(), 0);
+        }
     }
 
     #[test]

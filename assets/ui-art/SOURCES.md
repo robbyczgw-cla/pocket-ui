@@ -34,7 +34,6 @@ used included, with its seed: `pixellab-assets.json`.
 | `sticker-streak.png` | a small flame like a candle flame, warm orange | 231 | 96x96 |
 | `sticker-came-back.png` | a small bird returning to its birdhouse | 242 | 96x96 |
 | `emblem-curator.png` | a tidy little wooden crate holding a row of plain coloured game cartridges, a small brass label holder on its front | 304 | 160x120 |
-| `emblem-surprise.png` | a small wrapped gift box with a ribbon bow | 311 | 160x120 |
 | `emblem-streaming.png` | a small desktop computer monitor with a game controller resting in front of it | 321 | 160x120 |
 | `emblem-sticker.png` | a few round colourful paper stickers on a peeled sticker sheet | 331 | 160x120 |
 | `logo.png` | pocket-ui's mark (2026-10-30): "app icon: one retro video game cartridge seen straight from the front, warm grey plastic shell, rounded beveled top shoulders, vertical grip ridges along both sides, a large recessed cream paper label with rounded corners in the upper middle, the bottom edge is narrower and stepped with a row of shiny gold contact pins peeking out, small embossed arrow pointing down below the label, simple bold shapes, centered" (no common ending; 64x64, then cut to 50x52; the request is logged with the logo pack, not in `pixellab-assets.json`); finished by hand: greys turned warm, the label's four stripes and a lowercase "p" painted in, gold contacts in the three windows | 31 | 50x52 |

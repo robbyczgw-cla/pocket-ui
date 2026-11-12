@@ -556,7 +556,7 @@ fn speed_index_build_lens_keypress_and_echoes_for_5000_games() {
     budget("Echoes for one seed (median of 8)", percentile(&mut took, 50), Duration::from_millis(5));
     println!("Echoes, worst of 8: {:?}", took.last().copied().unwrap_or_default());
 
-    // "Why these?" when the Echoes page opens (on the UI thread), and Up next (on the index thread).
+    // "Why these?" when the Echoes page opens (on the UI thread), and the next Echo (on the index thread).
     let mut why = Vec::new();
     let mut next = Vec::new();
     for seed in [0, 1234, 2500, 4999, 100, 3000, 4000, 777] {
@@ -565,11 +565,11 @@ fn speed_index_build_lens_keypress_and_echoes_for_5000_games() {
         std::hint::black_box(ix.why(seed, &e));
         why.push(thread_cpu() - t);
         let t = thread_cpu();
-        std::hint::black_box(ix.up_next(seed));
+        std::hint::black_box(ix.next_echo(seed));
         next.push(thread_cpu() - t);
     }
     budget("Why these? (median of 8)", percentile(&mut why, 50), Duration::from_millis(1));
-    budget("Up next (median of 8, on the index thread)", percentile(&mut next, 50), Duration::from_millis(5));
+    budget("Next Echo (median of 8, on the index thread)", percentile(&mut next, 50), Duration::from_millis(5));
 
     // Home's Curator row: the day's pick and the games waiting, with every new index (on the index thread).
     let mut took = Vec::new();
@@ -676,27 +676,27 @@ fn index_with(edit: impl FnOnce(&mut Player)) -> Index {
 }
 
 #[test]
-fn up_next_is_the_first_echo_you_might_play_next() {
+fn next_echo_is_the_first_echo_you_might_play_next() {
     let ix = index(&CuratorDbFeel);
     let revenge = find(&ix, "Burnout Revenge", "ps2");
-    let e = ix.up_next(revenge).expect("an Echo to suggest");
+    let e = ix.next_echo(revenge).expect("an Echo to suggest");
     assert_eq!(ix.game(e.game).name, "Burnout Legends");
     assert!(e.reason.starts_with("Same series"), "{e:?}");
     // Never a game you completed (Burnout 3 is an Echo of it, and high), dropped, or the same work.
     for seed in 0..ix.len() {
-        let Some(e) = ix.up_next(seed) else { continue };
+        let Some(e) = ix.next_echo(seed) else { continue };
         let u = &ix.user.games[e.game];
         assert!(!matches!(u.status, Status::Completed | Status::Dropped), "{}: {}", ix.game(seed).name, ix.game(e.game).name);
         assert_ne!(ix.catalog.work_of[e.game], ix.catalog.work_of[seed], "{}", ix.game(seed).name);
-        assert!(e.score >= echoes::UP_NEXT_MIN);
+        assert!(e.score >= echoes::NEXT_ECHO_MIN);
         assert!(ix.echoes(seed, echoes::FULL_LIST).iter().any(|x| x.game == e.game), "an Echo of it");
     }
-    assert!(ix.up_next(find(&ix, "Celeste Classic", "ports")).is_none(), "nothing alike, nothing suggested");
+    assert!(ix.next_echo(find(&ix, "Celeste Classic", "ports")).is_none(), "nothing alike, nothing suggested");
     // Played an hour ago: not suggested again (no back and forth between two games).
     let ix = index_with(|p| {
         p.recents.insert(path("psp", "Burnout Legends (USA).iso"), (p.now - 3600, 1800));
     });
-    let e = ix.up_next(find(&ix, "Burnout Revenge", "ps2")).unwrap();
+    let e = ix.next_echo(find(&ix, "Burnout Revenge", "ps2")).unwrap();
     assert_ne!(ix.game(e.game).name, "Burnout Legends");
     assert_ne!(ix.game(e.game).name, "Burnout 3 - Takedown", "completed");
 }
@@ -1000,7 +1000,7 @@ fn offer_all() -> justplay::Offer<'static> {
 
 /// `n` Just Play presses with seeds 0..n on a player who starts everything.
 fn just_plays(ix: &Index, offer: &justplay::Offer, n: u64) -> Vec<(usize, justplay::Why)> {
-    (0..n).map(|s| ix.just_play(&mut surprise::Rng::new(s), offer, &mut |_| true).unwrap()).collect()
+    (0..n).map(|s| ix.just_play(&mut surprise::Rng::new(s), offer, &[], &mut |_| true).unwrap()).collect()
 }
 
 #[test]
@@ -1104,10 +1104,10 @@ fn just_play_never_offers_hidden_games_and_says_so_when_nothing_is_left() {
         assert!(g != gt4 && ix.catalog.work_of[g] != ix.catalog.work_of[chrono]);
     }
     let nothing = justplay::Offer { allowed: &|_| false, heavy: &|_| false };
-    assert_eq!(ix.just_play(&mut surprise::Rng::new(1), &nothing, &mut |_| true), Err(justplay::Miss::NoGames));
+    assert_eq!(ix.just_play(&mut surprise::Rng::new(1), &nothing, &[], &mut |_| true), Err(justplay::Miss::NoGames));
     // An empty library.
     let empty = Index::build(Arc::new(Catalog::build(Vec::new(), Vec::new())), UserState::default());
-    assert_eq!(empty.just_play(&mut surprise::Rng::new(1), &offer_all(), &mut |_| true), Err(justplay::Miss::NoGames));
+    assert_eq!(empty.just_play(&mut surprise::Rng::new(1), &offer_all(), &[], &mut |_| true), Err(justplay::Miss::NoGames));
 }
 
 #[test]
@@ -1116,13 +1116,13 @@ fn just_play_skips_games_that_do_not_start_and_gives_up_after_a_few_tries() {
     let gt4 = find(&ix, "Gran Turismo 4", "ps2");
     // The file of Gran Turismo 4 is gone: the other unfinished game comes, every time.
     for s in 0..100 {
-        let (g, why) = ix.just_play(&mut surprise::Rng::new(s), &offer_all(), &mut |g| g != gt4).unwrap();
+        let (g, why) = ix.just_play(&mut surprise::Rng::new(s), &offer_all(), &[], &mut |g| g != gt4).unwrap();
         assert_ne!(g, gt4);
         assert_eq!(why, justplay::Why::Unfinished);
     }
     // Nothing starts: asked at most TRIES times, then a clear miss, no loop.
     let mut asked = 0;
-    let r = ix.just_play(&mut surprise::Rng::new(1), &offer_all(), &mut |_| {
+    let r = ix.just_play(&mut surprise::Rng::new(1), &offer_all(), &[], &mut |_| {
         asked += 1;
         false
     });
@@ -1133,7 +1133,7 @@ fn just_play_skips_games_that_do_not_start_and_gives_up_after_a_few_tries() {
 #[test]
 fn just_play_is_deterministic_and_prefers_not_to_throw_a_slow_system_at_a_press() {
     let ix = index(&CuratorDbFeel);
-    let a: Vec<_> = (0..20).map(|_| ()).map(|_| ix.just_play(&mut surprise::Rng::new(7), &offer_all(), &mut |_| true).unwrap()).collect();
+    let a: Vec<_> = (0..20).map(|_| ()).map(|_| ix.just_play(&mut surprise::Rng::new(7), &offer_all(), &[], &mut |_| true).unwrap()).collect();
     assert!(a.windows(2).all(|w| w[0] == w[1]), "same seed, same pick");
     // Nobody has played anything: PS2 and GameCube (slow here) are 15 of 66 games but come up far less than that.
     let cat = catalog(&CuratorDbFeel);
@@ -1148,6 +1148,27 @@ fn just_play_is_deterministic_and_prefers_not_to_throw_a_slow_system_at_a_press(
     assert!(just_plays(&ix, &all_slow, 50).iter().all(|(_, w)| *w == justplay::Why::Unfinished));
 }
 
+/// Just Play's card brings another game with Right: the games shown so far are left out, like the game played last, while
+/// anybody else is left; when nobody is, a game comes back rather than nothing.
+#[test]
+fn just_plays_card_brings_another_game_each_time_and_never_runs_dry() {
+    let cat = catalog(&CuratorDbFeel);
+    let blank = Index::build(cat.clone(), user_state(&cat, &Player::default()));
+    let works = blank.catalog.works.len();
+    assert!(works > 10, "a library to draw from");
+    let mut shown: Vec<usize> = Vec::new();
+    for s in 0..works as u64 {
+        let (g, _) = blank.just_play(&mut surprise::Rng::new(s), &offer_all(), &shown, &mut |_| true).unwrap();
+        let w = blank.catalog.work_of[g];
+        assert!(!shown.iter().any(|&p| blank.catalog.work_of[p] == w), "pick {s}: a game of work {w} was shown already");
+        shown.push(g);
+    }
+    // Every work was shown: the next press is a repeat, not a miss.
+    assert!(blank.just_play(&mut surprise::Rng::new(99), &offer_all(), &shown, &mut |_| true).is_ok());
+    // The reason on the card is the plain-words one.
+    assert!(blank.surprise_reason(shown[0]).starts_with("Never played"), "{}", blank.surprise_reason(shown[0]));
+}
+
 #[test]
 fn just_play_is_instant_for_10000_games() {
     let cat = big_catalog(10_000);
@@ -1157,7 +1178,7 @@ fn just_play_is_instant_for_10000_games() {
     let mut took = Vec::new();
     for s in 0..30 {
         let c = thread_cpu();
-        let r = ix.just_play(&mut surprise::Rng::new(s), &offer, &mut |_| true);
+        let r = ix.just_play(&mut surprise::Rng::new(s), &offer, &[], &mut |_| true);
         took.push(thread_cpu() - c);
         assert!(r.is_ok());
     }
@@ -1193,12 +1214,12 @@ fn just_play_takes_the_second_version_when_the_preferred_one_does_not_start() {
     let pref = ix.preferred(versions[0]);
     let only = justplay::Offer { allowed: &|g| versions.contains(&g), heavy: &|_| false };
     for s in 0..50 {
-        let (g, _) = ix.just_play(&mut surprise::Rng::new(s), &only, &mut |g| g != pref).unwrap();
+        let (g, _) = ix.just_play(&mut surprise::Rng::new(s), &only, &[], &mut |g| g != pref).unwrap();
         assert!(versions.contains(&g) && g != pref);
     }
     // All three broken: asked once each, then the miss.
     let mut asked = Vec::new();
-    let r = ix.just_play(&mut surprise::Rng::new(1), &only, &mut |g| {
+    let r = ix.just_play(&mut surprise::Rng::new(1), &only, &[], &mut |g| {
         asked.push(g);
         false
     });
@@ -1209,7 +1230,13 @@ fn just_play_takes_the_second_version_when_the_preferred_one_does_not_start() {
 /// Walk 2026-11-02: "Stickers" meant two things. The player's own tags are Labels everywhere; Stickers are the ones
 /// on the case (and the card's row that holds both says so).
 #[test]
-fn the_players_own_tags_are_labels_and_never_stickers() {
+fn retired_labels_still_filter_saved_shelves_but_are_not_offered() {
+    let ix = index(&CuratorDbFeel);
+    assert!(!ix.shown_facets().contains(&Facet::Stickers));
+    let mut saved = Lens::default();
+    saved.toggle(Facet::Stickers, "1");
+    let matched = ix.matches(&saved).count();
+    assert!(matched > 0 && (matched as usize) < ix.len(), "saved label filters still restrict their shelves");
     assert_eq!(Facet::Stickers.label(), "Labels");
     // What a saved smart shelf stores is not a word the player reads: it stays.
     assert_eq!(Facet::Stickers.id(), "stickers");

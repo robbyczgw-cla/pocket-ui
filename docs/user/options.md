@@ -216,7 +216,7 @@ Pause menu → Options → **Controls**; its first line, **Controls card**, draw
   and the four D-pad directions. The value is the console button it presses, by the name the
   emulator uses ("A presses A."). Left/Right choose another console button, or **None** ("X does
   nothing in this game."). L3 and R3 mean pressing the left and right stick in.
-- **Hold to toggle** ([how](easy-to-read.md#hold-to-toggle)) and **Reset controls**, which puts everything back.
+- **Hold to toggle** ([how](big-text.md#hold-to-toggle)) and **Reset controls**, which puts everything back.
 
 When you play together ([Players](pause-menu.md#players)), the layout is the same for every player: a controller's buttons
 do what these lines say, by where the button sits (the right face button is A). They name the buttons as printed on the Pocket, even when Settings → Playing → Buttons → [**Button layout**](settings.md#button-layout) is Xbox: that changes pocket-ui's menus, not games.
@@ -245,8 +245,8 @@ while you play:
 | **Fast-forward** | HOME + R2 | Turn fast-forward on or off. The speed is set under [Speed, rumble, fan](#speed-rumble-fan). |
 | **Rewind** | Hold HOME + L2 | Rewind, for as long as you hold it. Rewind itself has to be switched on under [Speed, rumble, fan](#speed-rumble-fan). |
 | **Screenshot** | HOME + A | Save a [screenshot](playing.md#screenshots) of the game. The pause menu does not open. |
-| **Over the game** | HOME + Y | Switch to the next level of [Over the game](pause-menu.md#over-the-game): Off, FPS, FPS + sensors, Pixel Path. It lasts until you quit or change **Over the game** under Speed, rumble, fan. |
-| **Zoom** | HOME + X | The paused picture larger ([Zoom](easy-to-read.md#zoom)); B goes back into the game. Off by default. |
+| **Over the game** | HOME + Y | Switch to the next level of [Over the game](pause-menu.md#over-the-game): Off, FPS, FPS + sensors (and Pixel Path with Pixel Path in the pause menu). It lasts until you quit or change **Over the game** under Speed, rumble, fan. |
+| **Zoom** | HOME + X | The paused picture larger ([Zoom](big-text.md#zoom)); B goes back into the game. Off by default. |
 
 A short message over the picture confirms what happened, for example "Saved to slot 3",
 "Slot 4 is empty" or "Screenshot saved".
@@ -263,7 +263,7 @@ Pause menu → Options → **Speed, rumble, fan** ("Settings you rarely need.").
 | **Fast-forward speed** | 2x, 3x, **4x**, 8x, As fast as possible | How fast the game runs while fast-forward is on (HOME + R2). Sound is muted meanwhile, and "FF 4x" (or the speed you chose) shows over the picture. |
 | **Rewind** | **Off**, On | Remembers the last minute so you can play it backwards: hold HOME + L2. "REWIND" shows over the picture and sound is muted; at the oldest moment the picture stops. Uses some extra power. |
 | **Earlier states** | Off, **On** | Keeps a state every 5 minutes of play, the last half hour, and where each session began; the pause menu's **Earlier** loads them ([Earlier](pause-menu-saves.md#earlier)). The game never waits for it. **Off by default for N64, PSP, DS, Dreamcast and Saturn**: their states are 8 to 40 MB. At most 100 MB a game and 1 GB on the SD card. |
-| **Over the game** | **Off**, FPS, FPS + sensors, Pixel Path | What is drawn over the game while you play. **FPS** shows frames per second and CPU load in the top left corner, for example "60 FPS   CPU 23%", updated twice a second. **FPS + sensors** adds temperature, fan and battery draw: see [the FPS line and sensors](pause-menu.md#the-fps-line-and-sensors). **Pixel Path** shows one line beside the picture instead, which turns orange when something slips: see [Pixel Path over the game](pause-menu.md#pixel-path-over-the-game). The start value is the one under Settings → Playing → [Over the game](settings.md#over-the-game). |
+| **Over the game** | **Off**, FPS, FPS + sensors, Pixel Path (with Pixel Path in the pause menu) | What is drawn over the game while you play. **FPS** shows frames per second and CPU load in the top left corner, for example "60 FPS   CPU 23%", updated twice a second. **FPS + sensors** adds temperature, fan and battery draw: see [the FPS line and sensors](pause-menu.md#the-fps-line-and-sensors). **Pixel Path** shows one line beside the picture instead, which turns orange when something slips: see [Pixel Path over the game](pause-menu.md#pixel-path-over-the-game). The start value is the one under Settings → Playing → [Over the game](settings.md#over-the-game). |
 | **Rumble** | Off, Low, **Medium**, High | How strongly games that rumble shake the console. |
 | **Performance** | Battery, **Auto**, Max | **Auto**: the system decides how fast the CPU runs (until October 2026 this was called Balanced). Battery limits the CPU to half speed: enough for Game Boy and NES. Max keeps the CPU at full speed for demanding games. |
 | **Fan** | Very quiet, **Quiet**, Auto, Cool | Very quiet keeps the fan off until the Pocket gets warm (60 °C); the Pocket feels a bit warmer. Quiet starts the fan later and keeps it slow. Auto keeps the system's cooling profile. Cool starts it earlier. With [Smooth fan](performance.md#smooth-fan) on, each is a smooth curve. Not shown on a handheld without a fan (the Anbernic H700 ones, the TrimUI Brick). |

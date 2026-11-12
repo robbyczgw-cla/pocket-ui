@@ -30,7 +30,7 @@ impl Index {
                 if Path::new(rom_folder).file_name().is_some_and(|s| s.eq_ignore_ascii_case("media")) { rom_folder = parent(rom_folder); }
                 index.beside.entry(key(d, &format!("{rom_folder}/{name}"))).or_default().push((kind, d.uri.clone()));
                 if folder.to_lowercase().contains("/downloaded_media/") {
-                    if let Some((system, ..)) = crate::document_library::folder_system(&d.relative) {
+                    if let Some((system, ..)) = d.folder_system() {
                         index.es.entry((root(d).into(), system.into(), name)).or_default().push((kind, d.uri.clone()));
                     }
                 }
@@ -59,7 +59,7 @@ impl Index {
         let path = format!("{}/{}", parent(&game.relative), stem(&game.relative));
         let mut found = self.lists.get(&key(game, &game.relative)).cloned().unwrap_or_default();
         found.extend(self.beside.get(&key(game, &path)).into_iter().flatten().cloned());
-        if let Some((system, ..)) = crate::document_library::folder_system(&game.relative) {
+        if let Some((system, ..)) = game.folder_system() {
             found.extend(self.es.get(&(root(game).into(), system.into(), stem(&game.relative))).into_iter().flatten().cloned());
         }
         found.retain(|(kind, _)| !snaps || *kind == Kind::Shot);

@@ -59,6 +59,20 @@ pub trait Transport: Send + Sync {
     }
 }
 
+#[cfg(not(target_os = "android"))]
+const PLATFORM: &str = "Linux";
+#[cfg(target_os = "android")]
+const PLATFORM: &str = "Android";
+
+#[cfg(not(target_os = "android"))]
+fn app_version() -> &'static str {
+    crate::update::app_version()
+}
+#[cfg(target_os = "android")]
+fn app_version() -> &'static str {
+    env!("CARGO_PKG_VERSION")
+}
+
 /// The User-Agent: client and version, the platform, the core and rcheevos.
 pub fn user_agent(core: Option<(&str, &str)>) -> String {
     let core = match core {
@@ -73,7 +87,7 @@ pub fn user_agent(core: Option<(&str, &str)>) -> String {
         }
         _ => String::new(),
     };
-    format!("pocket-ui/{} (Linux){core} rcheevos/{}", crate::update::app_version(), ffi::version())
+    format!("pocket-ui/{} ({PLATFORM}){core} rcheevos/{}", app_version(), ffi::version())
 }
 
 /// The system's curl. The POST body goes in through stdin, so a password or token never shows in the process list.
@@ -95,7 +109,7 @@ impl Curl {
     /// Downloads `url` (a badge) to `dest` through a temporary file; true when it is there.
     fn fetch(&self, url: &str, dest: &std::path::Path) -> bool {
         if let Some(dir) = dest.parent() {
-            let _ = std::fs::create_dir_all(dir);
+            std::fs::create_dir_all(dir).ok();
         }
         let tmp = dest.with_extension("part");
         let ok = Command::new("curl")
@@ -111,7 +125,7 @@ impl Curl {
             .status()
             .is_ok_and(|s| s.success())
             && std::fs::rename(&tmp, dest).is_ok();
-        let _ = std::fs::remove_file(&tmp);
+        std::fs::remove_file(&tmp).ok();
         ok
     }
 }
@@ -163,6 +177,51 @@ impl Transport for Curl {
     }
 }
 
+/// What the Android Activity answers a request with: `OK\n<status>\n<body>`, or `ERR\n<why>` when nothing came back
+/// (no network, timeout, a certificate that isn't trusted). Anything else counts as no answer.
+pub fn parse_bridge_reply(reply: &str) -> Response {
+    let Some(rest) = reply.strip_prefix("OK\n") else { return Response::unreachable() };
+    let (status, body) = rest.split_once('\n').unwrap_or((rest, ""));
+    match status.trim().parse::<i32>() {
+        Ok(status) if status > 0 => Response { status, body: body.as_bytes().to_vec() },
+        _ => Response::unreachable(),
+    }
+}
+
+/// Android's HTTPS (the system's certificate store) through the Activity (`RaHttp.java`): the same one-request,
+/// one-answer shape as curl. The POST body travels as an argument of the call, never in a file or a log line.
+#[cfg(target_os = "android")]
+pub struct AndroidHttp {
+    pub user_agent: String,
+}
+
+#[cfg(target_os = "android")]
+impl Transport for AndroidHttp {
+    fn call(&self, req: &Request) -> Response {
+        let content_type = req.content_type.as_deref().unwrap_or("application/x-www-form-urlencoded");
+        let post = req.post_data.as_deref().unwrap_or("");
+        let reply = crate::platform::android::strings(
+            "raRequest",
+            &[&req.url, post, if req.post_data.is_some() { content_type } else { "" }, &self.user_agent],
+        );
+        match reply {
+            Ok(reply) => parse_bridge_reply(&reply),
+            Err(_) => Response::unreachable(),
+        }
+    }
+
+    fn download(&self, url: &str, dest: &std::path::Path) -> bool {
+        if let Some(dir) = dest.parent() {
+            std::fs::create_dir_all(dir).ok();
+        }
+        let tmp = dest.with_extension("part");
+        let Some(tmp_str) = tmp.to_str() else { return false };
+        let ok = crate::platform::android::strings("raDownload", &[url, tmp_str, &self.user_agent]).is_ok_and(|r| r.starts_with("OK")) && std::fs::rename(&tmp, dest).is_ok();
+        std::fs::remove_file(&tmp).ok();
+        ok
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -182,6 +241,16 @@ mod tests {
         assert!(ua.contains(" (Linux) mGBA/0.10.3abc rcheevos/12."), "{ua}");
         assert!(!user_agent(None).contains("  "));
         assert!(user_agent(Some(("Snes9x", ""))).contains(" Snes9x rcheevos/"));
+    }
+
+    #[test]
+    fn the_activitys_answer_becomes_a_response() {
+        assert_eq!(parse_bridge_reply("OK\n200\n{\"Success\":true}"), Response::ok("{\"Success\":true}"));
+        assert_eq!(parse_bridge_reply("OK\n401\n{\"Success\":false}\nsecond line").status, 401);
+        assert_eq!(parse_bridge_reply("OK\n204\n").body, Vec::<u8>::new());
+        for none in ["", "ERR\ntimeout", "OK\nsoon\nbody", "OK\n0\n", "garbage"] {
+            assert!(parse_bridge_reply(none).failed(), "{none:?} is no answer");
+        }
     }
 
     #[test]

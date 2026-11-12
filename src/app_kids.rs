@@ -741,8 +741,8 @@ impl App {
 
         // The way into the console, as on the Shelf look, and the fade into the game.
         if let Some(t) = self.launch_at {
-            let p = (t.elapsed().saturating_sub(self.cabinet.launch_delay()).as_secs_f32() / FADE.as_secs_f32()).min(1.0);
-            self.paint_insert(c, Instant::now());
+            let p = (pocket_ui::frame_clock::now().saturating_duration_since(t).saturating_sub(self.cabinet.launch_delay()).as_secs_f32() / FADE.as_secs_f32()).min(1.0);
+            self.paint_insert(c, pocket_ui::frame_clock::now());
             let p = self.cabinet.launch_fade_at(p);
             c.fade((p * 255.0) as u8);
             if !self.cabinet_inserting() {
@@ -764,7 +764,7 @@ impl App {
         let sel = self.sel.min(n - 1);
         let item = self.items[sel];
         let m = self.medium(item);
-        let now = Instant::now();
+        let now = pocket_ui::frame_clock::now();
 
         // The neighbours, smaller and behind, slide with the move.
         let (room_w, room_h) = (c.w as f32 * room.0, c.h as f32 * room.1);

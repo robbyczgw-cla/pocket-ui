@@ -44,6 +44,8 @@ pub fn picture_id(system: &str) -> &str {
 /// The systems with a picture of their own (assets/systems/<id>.png), by ROCKNIX system name.
 const ART: &[(&str, &[u8])] = &[
     ("3do", include_bytes!("../assets/systems/3do.png")),
+    // Arcade sets (MAME, FinalBurn Neo, CPS, NAOMI…): one upright cabinet with its marquee and control panel blank.
+    ("arcade", include_bytes!("../assets/systems/arcade.png")),
     ("3ds", include_bytes!("../assets/systems/3ds.png")),
     ("amiga", include_bytes!("../assets/systems/amiga.png")),
     ("atari2600", include_bytes!("../assets/systems/atari2600.png")),
@@ -123,8 +125,7 @@ const ALIASES: &[(&str, &str)] = &[
     ("pico8", "pico-8"),
     ("wiiware", "wii"),
     ("n3ds", "3ds"),
-    // Arcade boards and sets share one id; no picture of a cabinet is shipped (none could be shown to be free to publish),
-    // so these cards stay plain until one is.
+    // Arcade boards and sets share one id and its cabinet.
     ("mame", "arcade"),
     ("fbn", "arcade"),
     ("fbneo", "arcade"),
@@ -301,7 +302,29 @@ mod tests {
         "atari800",
         "c64",
         "zxspectrum",
+        "arcade",
     ];
+
+    #[test]
+    fn every_arcade_set_shows_the_upright_cabinet_not_the_plain_card() {
+        // Before 2026-11-11 MAME, FinalBurn Neo, CPS and NAOMI had no picture: a plain card and the crate. Now each shows
+        // the same cabinet: taller than wide, its screen a dark block in the upper half, its body light plastic.
+        for s in ["arcade", "mame", "fbn", "fbneo", "cps1", "cps2", "cps3", "naomi", "atomiswave", "daphne"] {
+            let sprite = get(s).unwrap_or_else(|| panic!("{s}: plain card"));
+            assert!(std::ptr::eq(sprite, get("arcade").unwrap()), "{s}: the arcade cabinet");
+            assert!(sprite.h as f32 > sprite.w as f32 * 1.3, "{s}: an upright cabinet, {}x{}", sprite.w, sprite.h);
+        }
+        let s = get("arcade").unwrap();
+        let share = |y0: u32, y1: u32, f: &dyn Fn(f32) -> bool| {
+            let row = |y: u32| (0..s.w).map(move |x| s.px[(y * s.w + x) as usize]).filter(|p| p >> 24 != 0);
+            let (hit, all) = (y0..y1).flat_map(row).fold((0, 0), |(h, a), p| (h + f(luma(p)) as u32, a + 1));
+            hit as f32 / all.max(1) as f32
+        };
+        let screen = share(s.h * 20 / 100, s.h * 55 / 100, &|l| l < 60.0);
+        let base = share(s.h * 75 / 100, s.h, &|l| l > 120.0);
+        assert!(screen > 0.5, "the screen is the dark middle of the upper half: {screen}");
+        assert!(base > 0.7, "the cabinet's base is light plastic: {base}");
+    }
 
     #[test]
     fn every_shelf_system_has_an_embedded_picture() {
@@ -379,6 +402,10 @@ mod tests {
             ("megacd", "segacd"),
             ("tg16cd", "pcenginecd"),
             ("ngp", "ngpc"),
+            ("mame", "arcade"),
+            ("fbneo", "arcade"),
+            ("cps2", "arcade"),
+            ("naomi", "arcade"),
         ] {
             assert_eq!(png(alias).map(|b| b.as_ptr()), png(id).map(|b| b.as_ptr()), "{alias} -> {id}");
             assert!(png(alias).is_some(), "{alias}");

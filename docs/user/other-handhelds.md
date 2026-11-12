@@ -121,7 +121,7 @@ doesn't change them.
   makes it larger.
 - **Hidden or reduced.** Fan settings say "No fan"; there is no touch setup. The RG28XX and RG35XX 2024 say
   "This device has no Wi-Fi" on the Wi-Fi page and offer nothing to switch on there: everything else works offline,
-  while online features (Store, covers, updates, RetroAchievements, file sharing) wait for a network. On the
+  while online features (covers, updates, RetroAchievements, file sharing) wait for a network. On the
   handhelds without sticks, no stick lights are offered.
 - **Time zone** is set the H700 way (ROCKNIX's system setting); the first-start step is there as on the other devices.
 - **To go back:** take the card out and put your stock card in, or run `sh /storage/pocket-ui/uninstall.sh`, or
@@ -137,3 +137,16 @@ behaviour is untested. Lights & buttons offers only the F1/F2 assignments.
 
 Nobody on the project has tested a Brick Pro. Use a spare card and back up saves before trying it. For feedback, open
 Settings → Help & tools → Report a problem. If there is no picture, send the card's `pocket-ui/logs` folder.
+
+## Retroid Pocket Classic beta
+
+The Classic Rev Q is experimental and has not been tested on real hardware. Its screen is
+1240 × 1080 with touch, four face buttons and no sticks. Stick-light settings are hidden;
+ROCKNIX controls the fan. Sleep, sound, touch and every button need verification on the device.
+The six-button Classic and other revisions are not supported by this beta image.
+
+Needs ROCKNIX's bootloader (ABL) already installed on your Classic; this card does not install it.
+Do not flash a bootloader for this beta or follow the Pocket 5's Loader instructions. Use a spare
+microSD only on a Classic Rev Q already booting ROCKNIX 20261101 through compatible OpenABL (v1.2). The card disables access to internal
+eMMC and carries no ABL payload. Android stays on internal storage; select Android in the
+existing bootloader to return to it. Boot and hardware safety have only been checked offline.

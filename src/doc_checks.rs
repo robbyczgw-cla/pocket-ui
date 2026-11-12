@@ -1,6 +1,6 @@
 //! Doc-drift checks: the user guide (`docs/user/`, which is also the manual on the device) and the developer documents
 //! against the code, so a feature that changes a menu, a row, a default or a module can't leave the documentation
-//! behind without a red test. What each check holds is listed in docs/DEVELOPING.md, "Documentation checks".
+//! behind without a red test. What each check holds is listed in docs/dev/tests.md, "Documentation checks".
 //!
 //! The checks read the Markdown as it is in the repository (no network, a few milliseconds). They compare names and
 //! structure, not prose: a row of a table, a bold name, a link. A failure names the file and what is missing; fix the
@@ -259,15 +259,13 @@ fn the_settings_table_lists_every_settings_row_in_order() {
     let open = first_table(&section(&md, "Open Settings"));
     let doc: Vec<String> = open.iter().map(|r| bold(&r[0])).collect();
     // The Look category carries a zero-width mark (so German can translate it apart from its row "Look").
-    let code: Vec<&str> = super::SETTINGS_GROUPS.iter().map(|c| c.0.trim_end_matches('\u{200b}')).collect();
+    let code: Vec<&str> = super::SETTINGS_GROUPS.iter().take(super::app_settings_groups::SHOWN).map(|c| c.0.trim_end_matches('\u{200b}')).collect();
     assert_eq!(
         doc, code,
         "docs/user/settings.md, \"Open Settings\": one row per category of main.rs SETTINGS_GROUPS, in its order"
     );
-    // USB file transfer is retired (`usb_transfer::RETIRED`): its row is in the code, not in the guide.
-    let guide_has = |o: &super::Opens| !matches!(o, super::Opens::UsbTransfer) || pocket_ui::usb_transfer::offered();
     for (row, (name, _, entries)) in open.iter().zip(super::SETTINGS_GROUPS.iter()) {
-        for (entry, _, _) in entries.iter().filter(|e| guide_has(&e.1)) {
+        for (entry, _, _) in entries.iter() {
             assert!(row[1].contains(entry), "docs/user/settings.md, \"Open Settings\": the row of {name} names {entry}");
         }
     }
@@ -276,11 +274,11 @@ fn the_settings_table_lists_every_settings_row_in_order() {
     for (name, _, entries) in super::SETTINGS_GROUPS.iter() {
         let name = name.trim_end_matches('\u{200b}');
         let doc: Vec<String> = first_table(&section(&md, name)).iter().map(|r| bold(&r[0])).collect();
-        let code: Vec<&str> = entries.iter().filter(|s| guide_has(&s.1)).map(|s| s.0).collect();
+        let code: Vec<&str> = entries.iter().map(|s| s.0).collect();
         assert_eq!(doc, code, "docs/user/settings.md, \"{name}\": one row per entry of the category in main.rs SETTINGS_GROUPS, in its order");
         all.extend(doc);
     }
-    let code: Vec<&str> = super::SETTINGS.iter().filter(|s| guide_has(&s.1)).map(|s| s.0).collect();
+    let code: Vec<&str> = super::SETTINGS.iter().map(|s| s.0).collect();
     assert_eq!(all, code, "docs/user/settings.md: every row of main.rs SETTINGS, in its order");
 }
 
@@ -345,7 +343,6 @@ fn sleep_and_power_rows_their_start_values_and_choices_are_described() {
                 Row::SwitchOff => pocket_ui::auto_off::CHOICES.iter().map(|c| pocket_ui::auto_off::label(*c)).collect(),
                 Row::ShortPress => ShortPress::ALL.iter().map(|p| p.label().to_string()).collect(),
                 Row::Hold => Hold::ALL.iter().map(|h| h.label().to_string()).collect(),
-                Row::Slideshow => vec!["On".into(), "Off".into()],
             };
             for c in choices {
                 assert!(cells[1].contains(&c), "{page}, {}: the choice {c:?}", row.label());
@@ -677,13 +674,13 @@ fn the_documentation_index_lists_every_document() {
     let index = read("docs/README.md");
     let linked: BTreeSet<String> = links(&index).into_iter().map(|(_, t)| t).collect();
     let mut missing = Vec::new();
-    for dir in ["docs", "docs/user"] {
+    for dir in ["docs", "docs/user", "docs/dev"] {
         for e in std::fs::read_dir(root().join(dir)).unwrap().flatten() {
             let name = e.file_name().to_string_lossy().to_string();
             if !name.ends_with(".md") || (dir == "docs" && name == "README.md") {
                 continue;
             }
-            let rel = if dir == "docs" { name } else { format!("user/{name}") };
+            let rel = if dir == "docs" { name } else { format!("{}/{name}", &dir[5..]) };
             if !linked.contains(&rel) {
                 missing.push(rel);
             }
@@ -693,11 +690,11 @@ fn the_documentation_index_lists_every_document() {
     assert!(missing.is_empty(), "docs/README.md links every document; missing: {missing:?}");
 }
 
+// In the fast merge gate since 12.11. (main went red here twice; the check reads files for under a second).
 #[test]
-#[ignore = "release check: sh scripts/release-check.sh"]
 fn developing_md_names_every_source_module() {
-    let layout = section(&read("docs/DEVELOPING.md"), "Repository layout");
-    let binaries = section(&read("docs/DEVELOPING.md"), "Building");
+    let layout = section(&read("docs/dev/layout.md"), "Repository layout");
+    let binaries = section(&read("docs/dev/building.md"), "Building");
     let mut missing = Vec::new();
     for e in std::fs::read_dir(root().join("src")).unwrap().flatten() {
         let name = e.file_name().to_string_lossy().to_string();
@@ -716,14 +713,14 @@ fn developing_md_names_every_source_module() {
     missing.sort();
     assert!(
         missing.is_empty(),
-        "docs/DEVELOPING.md, \"Repository layout\" names every module of src/; missing: {missing:?}"
+        "docs/dev/layout.md, \"Repository layout\" names every module of src/; missing: {missing:?}"
     );
 }
 
+// In the fast merge gate since 12.11. (main went red here twice; the check reads files for under a second).
 #[test]
-#[ignore = "release check: sh scripts/release-check.sh"]
 fn every_environment_variable_is_documented() {
-    let env = section(&read("docs/DEVELOPING.md"), "Environment variables");
+    let env = section(&read("docs/dev/environment.md"), "Environment variables");
     let prefix = ["\"", "POCKET"].concat();
     let mut missing = BTreeSet::new();
     for file in rust_sources() {
@@ -744,7 +741,7 @@ fn every_environment_variable_is_documented() {
     }
     assert!(
         missing.is_empty(),
-        "docs/DEVELOPING.md, \"Environment variables\" has every variable the code reads; missing: {missing:?}"
+        "docs/dev/environment.md, \"Environment variables\" has every variable the code reads; missing: {missing:?}"
     );
 }
 
@@ -883,6 +880,67 @@ fn settings_paths_on_the_screen_use_the_glossarys_arrow() {
         }
     }
     assert!(bad.is_empty(), "write a Settings path with \"›\":\n{}", bad.join("\n"));
+}
+
+// ---- the Android app's own Settings ---------------------------------------------------------------------------------
+
+/// The rows of the Android app's Settings list: the labels `menu_rows` in android/src/ui.rs gives each `Setting`
+/// (`Setting::PlaysWith => row("Plays with", "")`). Android has one flat list, no categories ("Settings › Plays with"), and a row
+/// can lead to a page of its own ("Settings › Cozy extras › Download now": the part after the row is not checked, as on Linux).
+fn android_settings_rows() -> Vec<String> {
+    let ui = read("android/src/ui.rs");
+    let rows: Vec<String> = ui
+        .lines()
+        .filter_map(|l| {
+            let rest = &l[l.find("=> row(\"")? + 8..];
+            Some(rest[..rest.find('"')?].to_string())
+        })
+        .collect();
+    assert!(rows.len() >= 20 && rows.iter().any(|r| r == "Plays with"), "android/src/ui.rs no longer lists the Settings rows as `=> row(\"…\"`: {rows:?}");
+    rows
+}
+
+/// Everything the Android app's sources spell out, with the string escapes undone: a text of `assets/i18n/*.tsv` whose English
+/// key is in it is an Android text and is checked against [`android_settings_rows`] instead of the Linux categories.
+fn android_source_text() -> String {
+    let mut all = String::new();
+    for e in std::fs::read_dir(root().join("android/src")).unwrap().flatten() {
+        if e.path().extension().is_some_and(|x| x == "rs") {
+            all.push_str(&std::fs::read_to_string(e.path()).unwrap());
+        }
+    }
+    all.replace("\\\"", "\"").replace("\\u{203a}", "\u{203a}")
+}
+
+/// The problems in the Settings paths of one Android line: "Settings › R" (or with an arrow) where R must be a row of Android's
+/// Settings. `rows` are the names in the line's language, `word` is "Settings" or its translation.
+fn android_path_problems(line: &str, word: &str, rows: &[String]) -> Vec<String> {
+    let line = line.replace('\u{2192}', "\u{203a}");
+    let start = format!("{word} \u{203a} ");
+    let mut out = Vec::new();
+    let mut at = 0;
+    while let Some(i) = line[at..].find(&start) {
+        let rest = &line[at + i + start.len()..];
+        let ok = rows.iter().any(|r| rest.starts_with(r.as_str()) && !rest[r.len()..].chars().next().is_some_and(char::is_alphanumeric));
+        if !ok {
+            out.push(format!("{word} \u{203a} {}: not a row of the Android app's Settings (android/src/ui.rs)", rest.chars().take(30).collect::<String>()));
+        }
+        at += i + start.len();
+    }
+    out
+}
+
+/// The check of the Android texts catches a path to a row the Android app does not have, accepts a page below a row, and reads the
+/// rows from the app's own list (so a renamed row turns the Help text red).
+#[test]
+fn an_android_settings_path_names_a_row_of_the_android_list() {
+    let rows = android_settings_rows();
+    assert!(android_path_problems("Settings \u{203a} Plays with: for each system", "Settings", &rows).is_empty());
+    assert!(android_path_problems("PSP is optional. Settings \u{2192} Cozy extras \u{203a} Download now loads it.", "Settings", &rows).is_empty());
+    assert!(android_path_problems("Ajustes \u{203a} Copia de partidas.", "Ajustes", &["Copia de partidas".to_string()]).is_empty());
+    let bad = android_path_problems("Settings \u{203a} Playing \u{203a} Battery, and Settings \u{203a} Save backup", "Settings", &rows);
+    assert_eq!(bad.len(), 1, "Playing is a Linux category, not a row of Android's list: {bad:?}");
+    assert!(android_path_problems("Settings \u{203a} Plays withx", "Settings", &rows).len() == 1, "a row name is matched as whole words");
 }
 
 // ---- every path in Settings names a real category and row ------------------------------------------------------
@@ -1052,8 +1110,20 @@ fn every_path_in_settings_names_a_category_and_one_of_its_rows() {
             .map(|(k, v)| (k.to_string(), v.to_string()))
             .collect();
         let names = settings_names(Some(&map));
+        let (android_rows, android_text) = (android_settings_rows(), android_source_text());
+        let android_names: Vec<String> = android_rows.iter().map(|r| map.get(r).cloned().unwrap_or_else(|| r.clone())).collect();
         for (n, line) in tsv.lines().enumerate().filter(|(_, l)| !l.starts_with('#')) {
             let (k, v) = line.split_once('\t').unwrap_or((line, ""));
+            // A text of the Android app (its Help page, its download notes): Android has a Settings list of its own.
+            if android_text.contains(k) {
+                for p in android_path_problems(k, "Settings", &android_rows) {
+                    bad.push(format!("assets/i18n/{file}:{} (English, Android): {p}", n + 1));
+                }
+                for p in android_path_problems(v, word, &android_names) {
+                    bad.push(format!("assets/i18n/{file}:{} (translated, Android): {p}", n + 1));
+                }
+                continue;
+            }
             for p in settings_path_problems(k, "", "Settings", &en) {
                 bad.push(format!("assets/i18n/{file}:{} (English): {p}", n + 1));
             }
@@ -1066,5 +1136,179 @@ fn every_path_in_settings_names_a_category_and_one_of_its_rows() {
         bad.is_empty(),
         "a path \"Settings › A › B\" needs A = a category and B = a row of A (main.rs SETTINGS_GROUPS):\n{}",
         bad.join("\n")
+    );
+}
+
+// ---- code shape -----------------------------------------------------------------------------------------------------
+
+/// The `src/` files that are test code as a whole: declared under `#[cfg(test)]` as `mod name;`, with or without
+/// `#[path = "..."]`.
+fn test_only_files(sources: &[PathBuf]) -> BTreeSet<PathBuf> {
+    let mut out = BTreeSet::new();
+    for f in sources {
+        let text = std::fs::read_to_string(f).unwrap();
+        let name = f.file_name().unwrap().to_string_lossy();
+        // `mod x;` in main.rs, lib.rs or mod.rs sits next to the file; anywhere else in a folder named after it.
+        let dir = if matches!(&*name, "main.rs" | "lib.rs" | "mod.rs") || f.parent().unwrap().ends_with("src/bin") {
+            f.parent().unwrap().to_path_buf()
+        } else {
+            f.with_extension("")
+        };
+        let lines: Vec<&str> = text.lines().map(str::trim).collect();
+        for (i, l) in lines.iter().enumerate() {
+            if *l != "#[cfg(test)]" {
+                continue;
+            }
+            let mut path = None;
+            for next in &lines[i + 1..] {
+                if let Some(p) = next.strip_prefix("#[path = \"").and_then(|p| p.strip_suffix("\"]")) {
+                    path = Some(f.parent().unwrap().join(p));
+                } else if next.starts_with("#[") {
+                } else {
+                    let decl = next.strip_prefix("pub(crate) ").or_else(|| next.strip_prefix("pub ")).unwrap_or(next);
+                    if let Some(m) = decl.strip_prefix("mod ").and_then(|m| m.strip_suffix(';')) {
+                        out.insert(path.take().unwrap_or_else(|| {
+                            let flat = dir.join(format!("{m}.rs"));
+                            if flat.exists() {
+                                flat
+                            } else {
+                                dir.join(m).join("mod.rs")
+                            }
+                        }));
+                    }
+                    break;
+                }
+            }
+        }
+    }
+    out
+}
+
+/// `text` without its `#[cfg(test)]` items and without `//` comment lines. An item ends at the first line at its own
+/// indentation that ends with `}`, `;` or `,` (a field), or before a line indented less (the end of its parent).
+fn without_tests(text: &str) -> String {
+    let indent = |l: &str| l.len() - l.trim_start().len();
+    let mut out = String::with_capacity(text.len());
+    let mut skip: Option<usize> = None;
+    for l in text.lines() {
+        let t = l.trim();
+        if let Some(i) = skip {
+            if t.is_empty() {
+                continue;
+            }
+            if indent(l) < i {
+                skip = None;
+            } else {
+                if indent(l) == i && !t.starts_with("#[") && (t.ends_with('}') || t.ends_with(';') || t.ends_with(',')) {
+                    skip = None;
+                }
+                continue;
+            }
+        }
+        if t == "#[cfg(test)]" {
+            skip = Some(indent(l));
+            continue;
+        }
+        if !t.starts_with("//") {
+            out.push_str(l);
+            out.push('\n');
+        }
+    }
+    out
+}
+
+/// `Result<…, String>`: a `Result` whose error type (after the last top-level comma) is `String`.
+fn string_results(text: &str) -> usize {
+    text.match_indices("Result<")
+        .filter(|(at, _)| !text[..*at].chars().next_back().is_some_and(|c| c.is_alphanumeric() || c == '_'))
+        .filter(|(at, _)| {
+            let inner = &text[at + "Result<".len()..];
+            let (mut depth, mut comma) = (0usize, None);
+            for (i, c) in inner.char_indices() {
+                match c {
+                    '<' | '(' | '[' => depth += 1,
+                    ')' | ']' => depth = depth.saturating_sub(1),
+                    '>' if depth == 0 => return comma.is_some_and(|c: usize| inner[c + 1..i].trim() == "String"),
+                    '>' => depth -= 1,
+                    ',' if depth == 0 => comma = Some(i),
+                    ';' | '{' => return false,
+                    _ => {}
+                }
+            }
+            false
+        })
+        .count()
+}
+
+/// The code-shape counts of the product code in `src/` (tests left out): the capped ones in the order of
+/// `tests/code-shape.txt`, and `pub fn`, which is only shown (a new module may bring up to 5 `pub` items, rule 9).
+fn code_shape_counts() -> (Vec<(&'static str, usize)>, usize) {
+    let sources = rust_sources();
+    let tests = test_only_files(&sources);
+    let code: String = sources
+        .iter()
+        .filter(|f| !tests.contains(*f))
+        .map(|f| without_tests(&std::fs::read_to_string(f).unwrap()))
+        .collect();
+    let count = |s: &str| code.matches(s).count();
+    let capped = vec![
+        ("== \"pocket-core\"", count("== \"pocket-core\"")),
+        ("== \"ports\"", count("== \"ports\"")),
+        ("let _ = fs::", count("let _ = fs::") + count("let _ = std::fs::")),
+        ("Result<_, String>", string_results(&code)),
+    ];
+    (capped, count("pub fn "))
+}
+
+/// Four counts of "Code shape" (DEVELOPING.md) may only go down: each is capped by its line in
+/// `tests/code-shape.txt`. Whoever lowers one lowers its cap in the same commit. `pub fn` is printed, not capped.
+#[test]
+fn the_code_shape_counts_never_go_up() {
+    let caps = read("tests/code-shape.txt");
+    let caps: Vec<(&str, usize)> = caps
+        .lines()
+        .filter(|l| !l.starts_with('#') && !l.trim().is_empty())
+        .map(|l| {
+            let (k, v) = l.rsplit_once('\t').unwrap_or_else(|| panic!("tests/code-shape.txt: no tab in {l:?}"));
+            (k, v.trim().parse().unwrap_or_else(|_| panic!("tests/code-shape.txt: no number in {l:?}")))
+        })
+        .collect();
+    let (counts, pub_fns) = code_shape_counts();
+    eprintln!("code shape: pub fn {pub_fns} in src/ (product code; shown, not capped)");
+    assert_eq!(
+        caps.iter().map(|c| c.0).collect::<Vec<_>>(),
+        counts.iter().map(|c| c.0).collect::<Vec<_>>(),
+        "tests/code-shape.txt has to list these counts, in this order"
+    );
+    let up: Vec<String> = caps
+        .iter()
+        .zip(&counts)
+        .filter(|((_, cap), (_, n))| n > cap)
+        .map(|((k, cap), (_, n))| format!("{k}: {n} in src/ (product code), the cap is {cap}"))
+        .collect();
+    assert!(
+        up.is_empty(),
+        "a code-shape count went up (docs/DEVELOPING.md, \"Code shape\"); use a type, return the error or keep the item \
+         private instead:\n{}",
+        up.join("\n")
+    );
+    let down: Vec<String> =
+        caps.iter().zip(&counts).filter(|((_, cap), (_, n))| n < cap).map(|((k, _), (_, n))| format!("{k}\t{n}")).collect();
+    if !down.is_empty() {
+        eprintln!("code shape: lower these caps in tests/code-shape.txt:\n{}", down.join("\n"));
+    }
+}
+
+#[test]
+fn code_shape_leaves_test_items_and_comments_out() {
+    let text = "fn a() {\n    let _ = fs::remove_file(p);\n}\n// let _ = fs::write(p, b);\n#[cfg(test)]\nmod tests {\n    \
+                fn b() {\n        let _ = fs::write(p, b);\n    }\n}\nstruct S {\n    #[cfg(test)]\n    x: u8,\n    \
+                y: u8,\n}\n#[cfg(test)]\nuse foo;\nfn c() {}\n";
+    let kept = without_tests(text);
+    assert_eq!(kept.matches("let _ = fs::").count(), 1, "{kept}");
+    assert!(kept.contains("y: u8") && kept.contains("fn c()") && !kept.contains("x: u8") && !kept.contains("use foo"));
+    assert_eq!(
+        string_results("fn a() -> Result<(), String> {}\nfn b() -> io::Result<Vec<u8>> {}\nfn c() -> Result<HashMap<String, u8>, String>;\nfn d() -> Result<String, Error>;"),
+        2
     );
 }

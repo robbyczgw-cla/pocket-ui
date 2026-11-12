@@ -13,6 +13,9 @@ pub struct CheckUi {
     page: Option<GameCheckPage>,
     unreadable: Vec<Unreadable>,
     no_folder: bool,
+    /// Where the page was opened from (the Settings row, or the page a folder was chosen on): B, Back, "Not now" and
+    /// Cancel all end there, never somewhere else.
+    from: Option<Screen>,
     /// The Settings row's value: what the last finished check found, this session.
     last: Option<String>,
 }
@@ -23,6 +26,7 @@ impl Ui {
         self.check.page = Some(GameCheckPage::running());
         self.check.unreadable.clear();
         self.check.no_folder = false;
+        self.check.from = Some(Screen::Settings);
         self.navigate(Screen::GameCheck);
         Command::Check
     }
@@ -37,6 +41,9 @@ impl Ui {
     /// A folder was chosen and `added` new games are on the shelf: the page offers to look at them.
     pub fn offer_check(&mut self, added: usize) {
         self.check.page = Some(GameCheckPage::offer(added));
+        if self.screen != Screen::GameCheck {
+            self.check.from = Some(self.screen);
+        }
         self.navigate(Screen::GameCheck);
     }
     /// The page is waiting for a check it started: its dots move, and the host stops the worker when it is left.
@@ -92,6 +99,11 @@ impl Ui {
             _ => None,
         }
     }
+    /// Back to where the page was opened from (the Settings row when nothing else is known).
+    fn leave_check(&mut self) {
+        let to = self.check.from.take().filter(|s| *s != Screen::GameCheck).unwrap_or(Screen::Settings);
+        self.navigate(to);
+    }
     pub(super) fn check_press(&mut self, b: Button) -> Command {
         if matches!(b, Button::Up | Button::Down) {
             self.move_by(if b == Button::Up { -1 } else { 1 });
@@ -110,7 +122,7 @@ impl Ui {
         }
         let menu = self.menu;
         let Some(page) = self.check.page.as_mut() else {
-            self.navigate(Screen::Settings);
+            self.leave_check();
             return Command::None;
         };
         match page.level {
@@ -135,7 +147,7 @@ impl Ui {
         match action {
             PageAction::Close => {
                 self.check.page = None;
-                self.navigate(Screen::Settings);
+                self.leave_check();
                 Command::None
             }
             PageAction::Start => {
@@ -264,7 +276,7 @@ impl Ui {
         }
         if self.nothing_to_list() {
             let room = self.check_buttons(c, text, room, &[back, choose]);
-            self.empty_page(c, text, room, Art::NoGames, &tr("No games found"), &tr("Nothing in your folders is a game yet. Game folders are named after their system, like gba or psx."), None);
+            self.empty_page(c, text, room, Art::NoGames, &tr("No games found"), &tr("Choose the folder that contains your system folders, or a system folder such as psp or gba."), None);
             return;
         }
         let mut room = self.check_buttons(c, text, room, &[back, again]);

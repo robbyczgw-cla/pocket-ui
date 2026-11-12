@@ -436,7 +436,7 @@ mod tests {
         assert_eq!(Settings::from_values(&values(&[("over_game", "junk")])).over_game, Level::Off);
         let mut ex = Extras::new(&values(&[("over_game", "pixel")]), Power::with_root(dir.to_path_buf(), dir.join("r.json")));
         assert_eq!(ex.over_game, Level::PixelPath);
-        ex.over_game = ex.over_game.step(1); // HOME + Y
+        ex.over_game = ex.over_game.step(1, true); // HOME + Y with the pause menu's Pixel Path
         assert_eq!(ex.over_game, Level::Off);
         ex.set("rewind", "on");
         assert_eq!(ex.over_game, Level::Off, "another setting leaves the shortcut's choice alone");

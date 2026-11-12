@@ -10,7 +10,7 @@ from pathlib import Path
 from PIL import Image, ImageDraw
 adb,serial,destination=sys.argv[1:4];phase=sys.argv[4] if len(sys.argv)>4 else 'all'
 root=Path(__file__).resolve().parents[2];out=Path(destination);out.mkdir(parents=True,exist_ok=True)
-pkg='dev.pocket.spike';private='/data/data/'+pkg+'/files';base='/sdcard/Download/PocketMvp'
+pkg='xyz.pocketui.app';private='/data/data/'+pkg+'/files';base='/sdcard/Download/PocketMvp'
 def run(*args,**kw): return subprocess.check_output([adb,'-s',serial,*args],timeout=kw.pop('timeout',30),**kw)
 def sh(*args): return run('shell',shlex.join(args),text=True)
 def read(path): return run('exec-out','cat '+shlex.quote(path))

@@ -91,7 +91,7 @@ all legacy `held` readers and manual-pause behaviour.
 
 ## Manual Resume on the Sync page (built)
 
-Settings › Connections › Sync shows a paused folder on its share row: the value reads **Paused**, and the line under the
+Settings › Help & tools › For tinkerers › Sync shows a paused folder on its share row: the value reads **Paused**, and the line under the
 list says who paused it as far as pocket-ui can tell. "Paused by pocket-ui" means every paused folder of the row is in
 `held`; anything else reads "Paused, not by pocket-ui", which covers a pause made in Syncthing and the crash gap above
 (the two can't be told apart). The poller reads `config.xml` and `held` every three seconds (`sync::held_now`); it never

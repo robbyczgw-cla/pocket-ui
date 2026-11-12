@@ -1,14 +1,64 @@
 #!/usr/bin/env python3
 """Bounded archives with regular-file link materialization for FAT/exFAT cards."""
 import ctypes
+from contextlib import contextmanager
 import os
 from pathlib import Path
 import stat
 import sys
 import tarfile
 import tempfile
+import time
 import unicodedata
 import zipfile
+
+# Keep in step with src/update/brick_io.rs. Sleep before each write: validation,
+# decompression and switching files must never earn credit for a later burst.
+WRITE_RATE = 2 * 1024**2
+WRITE_CHUNK = 256 * 1024
+
+
+@contextmanager
+def idle_io():
+    previous = None
+    if sys.platform.startswith('linux'):
+        # Linux has no glibc ioprio wrapper. TrimUI is aarch64; x86_64 is the host test path.
+        numbers = {'aarch64': (30, 31), 'x86_64': (251, 252), 'armv7l': (314, 315)}
+        set_nr, get_nr = numbers[os.uname().machine]
+        libc = ctypes.CDLL(None, use_errno=True)
+        previous = libc.syscall(get_nr, 1, 0)
+        if previous < 0 or libc.syscall(set_nr, 1, 0, 3 << 13) < 0:
+            number = ctypes.get_errno()
+            raise OSError(number, os.strerror(number))
+    try:
+        yield
+    finally:
+        if previous is not None:
+            libc.syscall(set_nr, 1, 0, previous)
+
+
+class Pacer:
+    def __init__(self, total):
+        self.done, self.total = 0, total
+        self.progress()
+
+    def progress(self):
+        value = os.environ.get('BRICK_PORTMASTER_PROGRESS')
+        if value:
+            path = Path(value)
+            temporary = path.with_suffix('.new')
+            temporary.write_text(f'unpacking|{self.done}|{self.total}\n')
+            temporary.replace(path)
+
+    def write(self, out, block):
+        for offset in range(0, len(block), WRITE_CHUNK):
+            chunk = block[offset:offset + WRITE_CHUNK]
+            time.sleep(len(chunk) / WRITE_RATE)
+            out.write(chunk)
+            out.flush()
+            os.fsync(out.fileno())
+            self.done += len(chunk)
+            self.progress()
 
 
 class Limits:
@@ -224,6 +274,11 @@ def destination_budget(plan, root):
 
 
 def materialize(tree, dest, opener, members=None):
+    with idle_io():
+        _materialize(tree, dest, opener, members)
+
+
+def _materialize(tree, dest, opener, members=None):
     plan = tree.plan(members)
     paths = destination_paths(dest, plan)
     # Even per-member HarbourMaster extraction preflights the complete payload.
@@ -232,6 +287,7 @@ def materialize(tree, dest, opener, members=None):
     device = existing_directory(dest).stat().st_dev
     destination_budget(tree.full_plan if device not in tree.checked_filesystems else plan, dest)
     tree.checked_filesystems.add(device)
+    pacer = Pacer(sum(node.size for node in plan.values() if node.kind == 'file'))
     for name, node in plan.items():
         target = paths[name]
         if node.kind == 'dir':
@@ -244,11 +300,11 @@ def materialize(tree, dest, opener, members=None):
                 temporary = Path(out.name)
                 copied = 0
                 with opener(node.source) as source:
-                    for block in iter(lambda: source.read(256 * 1024), b''):
+                    for block in iter(lambda: source.read(WRITE_CHUNK), b''):
                         copied += len(block)
                         if copied > node.size:
                             raise ValueError('Archive file exceeds its declared size.')
-                        out.write(block)
+                        pacer.write(out, block)
                 if copied != node.size:
                     raise ValueError('Archive file is truncated.')
             try:
@@ -389,6 +445,28 @@ def extract_tar(source, dest, limits=None, portmaster=False):
 
 def extract_portmaster_tar(source, dest, limits=None):
     extract_tar(source, dest, limits, portmaster=True)
+
+
+def copy_path(source, dest):
+    """Preserved engine libraries can be larger than the bootstrap itself."""
+    source, dest = Path(source), Path(dest)
+    if source.is_symlink():
+        raise ValueError('Preserved runtime data is a symbolic link.')
+    paths = sorted(source.rglob('*')) if source.is_dir() else [source]
+    entries = []
+    for path in paths:
+        metadata = path.lstat()
+        if stat.S_ISDIR(metadata.st_mode):
+            kind = 'dir'
+        elif stat.S_ISREG(metadata.st_mode):
+            kind = 'file'
+        else:
+            raise ValueError('Preserved runtime data contains a link or special file.')
+        name = path.relative_to(source).as_posix() if source.is_dir() else dest.name
+        entries.append(Entry(name, kind, path, metadata.st_size if kind == 'file' else 0,
+                             metadata.st_mode))
+    tree = Tree(entries, Limits())
+    materialize(tree, dest if source.is_dir() else dest.parent, lambda path: path.open('rb'))
 
 
 if __name__ == '__main__':

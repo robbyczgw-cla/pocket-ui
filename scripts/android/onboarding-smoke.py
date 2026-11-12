@@ -2,9 +2,9 @@
 """Exercise first-run onboarding on our X300 emulator, using fresh semantic bounds.
 
 Usage: onboarding-smoke.py ADB emulator-5582 OUTPUT [--all-combinations]
-Clears ONLY dev.pocket.spike on the explicitly verified emulator. Existing ROM
+Clears ONLY xyz.pocketui.app on the explicitly verified emulator. Existing ROM
 fixtures in Download/PocketMvp are retained; PocketEmpty is a separate empty root.
-Default: seven English portrait and seven German landscape screenshots. The flag
+Default: eight English portrait and eight German landscape screenshots. The flag
 also checks English landscape/German portrait. No hardware targets are accepted.
 """
 import argparse
@@ -16,10 +16,10 @@ import time
 import xml.etree.ElementTree as ET
 from pathlib import Path
 
-PACKAGE = 'dev.pocket.spike'
+PACKAGE = 'xyz.pocketui.app'
 HEADINGS = [
     'Welcome to pocket-ui', 'Language', 'Where your games are', 'Your look',
-    'Covers and pictures', 'Your controls', 'Ready to play',
+    'Covers and pictures', 'More systems?', 'Your controls', 'Ready to play',
 ]
 
 
@@ -97,7 +97,7 @@ def main():
         raise AssertionError(f'Missing enabled live target: {tr(label)!r}')
 
     def wait_step(number):
-        expected = tr('Step {n} of {m}').replace('{n}', str(number)).replace('{m}', '7')
+        expected = tr('Step {n} of {m}').replace('{n}', str(number)).replace('{m}', '8')
         heading = tr(HEADINGS[number - 1])
         for _ in range(12):
             current = labels(tree())
@@ -170,15 +170,15 @@ def main():
     run('emu', 'sensor', 'set', 'acceleration', '0:9.8:0')
     time.sleep(1)
     start()
-    for number in range(1, 7):
+    for number in range(1, 8):
         wait_step(number)
         tap('Skip')
-    wait_step(7)
-    screenshot('skip-portrait-07-ready')
+    wait_step(8)
+    screenshot('skip-portrait-08-ready')
     tap('Continue')
     time.sleep(.7)
     current = labels(tree())
-    assert not any(tr('Step {n} of {m}').replace('{n}', str(n)).replace('{m}', '7') in current for n in range(1, 8))
+    assert not any(tr('Step {n} of {m}').replace('{n}', str(n)).replace('{m}', '8') in current for n in range(1, 9))
     assert tr('Choose your ROM folder') in current or tr('No games') in current, 'Skipped setup did not open an empty library'
     screenshot('skip-portrait-08-empty-library')
     shell('am', 'force-stop', PACKAGE)
@@ -216,7 +216,7 @@ def main():
         time.sleep(.7)
         # Back may first go to the picker's parent directory, rather than dismiss
         # DocumentsUI. Keep using live trees until the app's same step returns.
-        expected_step = tr('Step {n} of {m}').replace('{n}', '3').replace('{m}', '7')
+        expected_step = tr('Step {n} of {m}').replace('{n}', '3').replace('{m}', '8')
         for _ in range(8):
             shell('input', 'keyevent', '4')
             time.sleep(.35)
@@ -239,7 +239,7 @@ def main():
         tap('Continue')
         wait_step(4)
         current = labels(tree())
-        for choice in ('Shelf', 'Minimal', 'Split', 'Cards', 'Cabinet'):
+        for choice in ('Shelf', 'Split', 'Cabinet'):
             label = ('• ' if choice == 'Shelf' else '') + tr(choice)
             assert label in current, 'Missing look choice: ' + label
         for setting, value in (('Animations', 'Cozy'), ('Appearance', 'Dark')):
@@ -257,18 +257,22 @@ def main():
         screenshot(prefix + '-05-covers')
         tap('Not now')
         # Choosing the option may select it or advance; both are allowed.
-        if tr('Step {n} of {m}').replace('{n}', '5').replace('{m}', '7') in labels(tree()):
+        if tr('Step {n} of {m}').replace('{n}', '5').replace('{m}', '8') in labels(tree()):
             assert '• ' + tr('Not now') in labels(tree()), 'Not now was not selected'
             tap('Continue')
         wait_step(6)
-        assert any(tr(label) in labels(tree()) for label in ('Touch', 'Controller detected'))
-        screenshot(prefix + '-06-controls')
+        assert tr('More systems?') in labels(tree())
+        screenshot(prefix + '-06-systems')
         tap('Continue')
         wait_step(7)
-        screenshot(prefix + '-07-ready')
+        assert any(tr(label) in labels(tree()) for label in ('Touch', 'Controller detected'))
+        screenshot(prefix + '-07-controls')
+        tap('Continue')
+        wait_step(8)
+        screenshot(prefix + '-08-ready')
         tap('Continue')
         time.sleep(1)
-        assert not any(tr('Step {n} of {m}').replace('{n}', str(n)).replace('{m}', '7') in labels(tree()) for n in range(1, 8)), 'Did not finish onboarding'
+        assert not any(tr('Step {n} of {m}').replace('{n}', str(n)).replace('{m}', '8') in labels(tree()) for n in range(1, 9)), 'Did not finish onboarding'
         shell('am', 'force-stop', PACKAGE)
         start()
         assert tr(HEADINGS[0]) not in labels(tree()), 'Finished onboarding reappeared after relaunch'
@@ -278,7 +282,7 @@ def main():
         assert 'FATAL EXCEPTION' not in log and 'Fatal signal' not in log, 'App crashed during onboarding'
         results.append({'language': chosen_lang, 'orientation': orientation, 'steps': 7, 'resumed': [2, 3], 'folders': ['PocketEmpty', 'PocketMvp']})
     (out / 'results.json').write_text(json.dumps({'skip_all': True, 'picker_cancel': True, 'combinations': results}, indent=2) + '\n')
-    print('Onboarding: seven steps, EN/DE, portrait/landscape, resume and real/empty SAF roots passed. Inspect the PNGs.')
+    print('Onboarding: eight steps, EN/DE, portrait/landscape, resume and real/empty SAF roots passed. Inspect the PNGs.')
 
 
 if __name__ == '__main__':

@@ -1,0 +1,123 @@
+#!/bin/sh
+# Real sleep on the Brick (Settings > Sleep & power > Power button: Sleep; `systemctl suspend`). pocket-ui has saved and
+# paused the game and pocket-core has closed its sound stream (`Audio::hold`) before this runs.
+# Wi-Fi and Bluetooth stop before the kernel's "mem" (their services, never an rfkill) and come back in the background
+# after it: the screen and the paused game do not wait for them. No retries here: a failed transition returns awake
+# with the radios as they were.
+set -u
+ROOT=${BRICK_SUSPEND_ROOT:-}
+POWER=${BRICK_POWER_STATE:-$ROOT/sys/power/state}
+RTC=${BRICK_SUSPEND_RTC:-$ROOT/sys/class/rtc/rtc0}
+RUN=${BRICK_SUSPEND_RUN:-$ROOT/tmp}
+INPUTD_FLAG=${BRICK_INPUTD_SUSPEND:-$RUN/system_suspend}
+HW=${BRICK_HW:-/mnt/SDCARD/pocket-ui/app/bin/brick-hw}
+BT=${BRICK_BT:-$(dirname "$(readlink -f "$0")")/brick-bluetooth}
+UBUS=${BRICK_UBUS:-ubus}
+WPA=${BRICK_WPA_INIT:-/etc/init.d/wpa_supplicant}
+PIDOF=${BRICK_PIDOF:-pidof}
+IFCONFIG=${BRICK_IFCONFIG:-ifconfig}
+STATS=${BRICK_SUSPEND_STATS:-$ROOT/sys/kernel/debug/suspend_stats}
+LOG=${BRICK_SUSPEND_LOG:-$RUN/pocket-ui/brick-suspend.log}
+say() { echo "brick-suspend: $*" >&2; }
+number() { case "$1" in ''|*[!0-9]*) return 1 ;; esac; }
+# An armed RTC alarm (switch off after sleeping, or a test's safety alarm) must not be due during the transition:
+# the kernel would wake at once or, past due, never by the alarm.
+alarm_ok() {
+ a=$(cat "$RTC/wakealarm" 2>/dev/null); n=$(cat "$RTC/since_epoch" 2>/dev/null)
+ case "$a" in ''|0) return 0 ;; esac
+ number "$a" && number "$n" && [ "$a" -gt "$((n+$1))" ]
+}
+
+grep -qw mem "$POWER" || { say 'kernel has no mem suspend'; exit 1; }
+alarm_ok 5 || { say 'an RTC alarm is due within seconds; not suspending'; exit 1; }
+# The radios of the last wake may still be coming back: this sleep waits for them (a few seconds), then goes on.
+# A lock whose owner is gone (killed mid-way) is taken over.
+WORK=$RUN/brick-suspend.lock
+n=0
+until mkdir "$WORK" 2>/dev/null; do
+ owner=$(cat "$WORK/pid" 2>/dev/null)
+ if number "$owner" && ! kill -0 "$owner" 2>/dev/null; then
+  rm -f "$WORK/pid" "$WORK/brightness"; rmdir "$WORK" 2>/dev/null; continue
+ fi
+ [ "$n" -lt 20 ] || { say 'another transition is active'; exit 1; }
+ sleep 1; n=$((n+1))
+done
+echo $$ >"$WORK/pid"
+wifi=0; bt=0; input=0; result=1
+# After the wake, in the background (its own log), so the caller returns as soon as the kernel is back.
+radios_back() {
+ # This background shell owns the lock now (its PID: the parent of a child shell).
+ sh -c 'echo $PPID' >"$WORK/pid"
+ if [ "$wifi" = 1 ]; then
+  "$IFCONFIG" wlan0 up || echo 'wlan0 did not come up'
+  "$WPA" start >/dev/null 2>&1 || echo 'wpa_supplicant did not start'
+  for pid in $("$PIDOF" udhcpc 2>/dev/null); do
+   number "$pid" && kill -USR1 "$pid" 2>/dev/null
+  done
+ fi
+ # Bluetooth on in Settings: our service again (it reconnects the headphones it had).
+ [ "$bt" = 0 ] || "$BT" start >/dev/null 2>&1 || echo 'Bluetooth did not start'
+ echo "radios back at $(cut -d' ' -f1 /proc/uptime 2>/dev/null) s uptime"
+ rm -f "$WORK/pid"
+ rmdir "$WORK"
+}
+restore() {
+ trap '' HUP INT TERM
+ trap - EXIT
+ [ "$input" = 0 ] || rm -f "$INPUTD_FLAG"
+ [ ! -s "$WORK/brightness" ] || "$HW" bl-set "$(cat "$WORK/brightness")" >/dev/null 2>&1 || result=1
+ rm -f "$WORK/brightness"
+ mkdir -p "$(dirname "$LOG")" 2>/dev/null
+ # Not the caller's pipes: pocket-ui reads them to the end and would wait for the radios.
+ # (`exec` in the subshell: a redirected function call keeps copies of the old ones in dash.) The signals as they were:
+ # a service started with TERM ignored can never trap it, and its stop (or the next sleep) could not end it (08.11.).
+ ( trap - HUP INT TERM; exec </dev/null >"$LOG" 2>&1; radios_back ) &
+ exit "$result"
+}
+trap restore EXIT
+trap 'result=1; exit 1' HUP INT TERM
+"$HW" bl-get >"$WORK/brightness" || exit 1
+"$HW" bl-set 0 || exit 1
+# Pause polling before service shutdown as well as kernel entry (Brick Pro i2c-3 handshake).
+if [ ! -e "$INPUTD_FLAG" ]; then
+ : >"$INPUTD_FLAG" || { say 'cannot pause trimui_inputd'; exit 1; }
+ input=1
+fi
+# No rfkill here, ever: Bluetooth's cut the XR829 combo chip's Bluetooth firmware under its attach (it answered nothing
+# after the wake, 08.11.), and a Wi-Fi rfkill cycle restarted the kernel (08.11. 03:16). The services stop instead,
+# as NextUI's suspend does.
+# Our Bluetooth service ends cleanly (the headphones hear a disconnect) and keeps Settings' "on" for the wake.
+if "$BT" status >/dev/null 2>&1; then
+ bt=1
+ "$BT" sleep >/dev/null 2>&1 || exit 1
+fi
+# procd owns the existing supplicant. Removing that named service avoids the stock init script's broad killall.
+if "$PIDOF" wpa_supplicant >/dev/null 2>&1; then
+ wifi=1
+ "$UBUS" call service delete '{"name":"wpa_supplicant"}' >/dev/null 2>&1 || exit 1
+ "$IFCONFIG" wlan0 down || exit 1
+fi
+# Stock trimui_inputd notices the marker in its polling loop.
+sleep "${BRICK_SUSPEND_SETTLE:-${BRICK_INPUTD_DRAIN:-1}}"
+${BRICK_SYNC:-sync}
+before=$(sed -n 's/^success: *//p' "$STATS" 2>/dev/null)
+number "$before" || { say 'kernel suspend counter is unavailable'; exit 1; }
+# Recheck after radio shutdown: an alarm due by now must never strand the device.
+alarm_ok 2 || exit 1
+say 'entering mem'
+if [ -n "${BRICK_SUSPEND_ENTER:-}" ]; then
+ # Host fixtures substitute the kernel transition, never its cleanup.
+ "$BRICK_SUSPEND_ENTER"
+else
+ echo mem >"$POWER"
+fi
+rc=$?
+after=$(sed -n 's/^success: *//p' "$STATS" 2>/dev/null)
+if number "$after" && [ "$after" -gt "$before" ]; then
+ # Some BSP versions report an error even after sleeping: the kernel's
+ # successful-suspend counter is stronger evidence than the write's status.
+ result=0
+ say "resumed (kernel write status $rc)"
+else
+ say "suspend failed (kernel write status $rc); restoring services"
+fi

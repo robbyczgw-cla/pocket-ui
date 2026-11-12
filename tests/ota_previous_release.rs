@@ -78,7 +78,7 @@ fn ota_from_public_layouts_keeps_settings_progress_and_games_across_two_starts()
         for n in 0..2 {
             let record = tmp.path().join("painted.tsv");
             let out = Command::new(root.join("pocket-ui"))
-                .args(["--snapshot", "shelf:gb:minimal"]).arg(tmp.path().join(format!("restart-{n}.png")))
+                .args(["--snapshot", "shelf:gb:split"]).arg(tmp.path().join(format!("restart-{n}.png")))
                 .env("WAYLAND_DISPLAY", &socket).env("POCKETUI_MOCK", "1").env("POCKETUI_LANG", "de")
                 .env("POCKETUI_ES_SYSTEMS", &cfg).env("POCKETUI_DATA", &data).env("POCKETUI_STATES", root.join("states"))
                 .env("POCKETUI_I18N_MISSES", &record).output().unwrap();

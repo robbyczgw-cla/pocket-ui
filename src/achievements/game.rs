@@ -31,6 +31,7 @@ pub fn start(data_dir: &Path, system: &str, rom: &Path, core: &Core) -> Option<S
         core_name: core.name.clone(),
         snapshot: SNAPSHOT_FILE.into(),
         verbose: std::env::var_os("POCKET_CORE_TRACE").is_some(),
+        mastery_key: None,
     };
     Session::start(config, core.achievement_memory(), Box::new(Curl::new(agent)))
 }

@@ -11,18 +11,24 @@
 //!   without network still counts; unlocks the server hasn't confirmed are kept in `pending.json` and sent later.
 //! - [`snapshot`]: the files pocket-ui reads: the running game's list for the pause menu, and a tally per game for the
 //!   game card and the console page ([`lookup`] fills it in for a game not played yet).
+//! - [`mastery`]: a game with every achievement unlocked, handed to the Android launcher for the golden sticker.
+//! - [`cards`]: the unlock cards and notes a game shows (the Android player paints them; Linux's HUD has its own line).
 //! - [`chime`]: the unlock sound, mixed into the game's own sound when UI sounds are on.
 //!
 //! Softcore only: hardcore would forbid loading states, and instant resume is a state load (docs/user/achievements.md).
 
 pub mod account;
 pub mod api;
+pub mod cards;
 pub mod chime;
 pub mod consoles;
 pub mod ffi;
+// pocket-core's HUD side; Android's player has its own (android/src/achievements.rs).
+#[cfg(not(target_os = "android"))]
 pub mod game;
 pub mod http;
 pub mod lookup;
+pub mod mastery;
 pub mod offline;
 pub mod session;
 pub mod snapshot;
@@ -73,6 +79,14 @@ pub fn hash_rom(console: u32, rom: &Path) -> Option<String> {
 }
 
 #[cfg(test)]
+mod hash_tests;
+
+/// A CHD disc image: RetroAchievements can only identify it through a CHD reader the host provides, and pocket-ui has none.
+pub fn is_chd(rom: &Path) -> bool {
+    rom.extension().and_then(|e| e.to_str()).is_some_and(|e| e.eq_ignore_ascii_case("chd"))
+}
+
+#[cfg(test)]
 mod tests {
     use super::*;
     use crate::testutil::TestDir;
@@ -82,7 +96,7 @@ mod tests {
     }
 
     /// A zip with one stored file, as `archive` reads them.
-    fn zip_of(name: &str, data: &[u8]) -> Vec<u8> {
+    pub(super) fn zip_of(name: &str, data: &[u8]) -> Vec<u8> {
         let crc = {
             let mut c = 0xffff_ffffu32;
             for b in data {

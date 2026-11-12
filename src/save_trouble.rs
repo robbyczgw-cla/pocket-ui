@@ -125,6 +125,28 @@ pub fn take() -> Option<Trouble> {
     t
 }
 
+/// A save state that pocket-ui moves aside while a standalone emulator saves or loads through its slot (Azahar's quick
+/// slot, Dolphin's `.s00`, `standalone::azahar::park`) and couldn't put back: it is kept beside the slot
+/// (`<slot>.pocket-ui`) and goes back at the next start of the game (`standalone::azahar::recover`).
+pub const STATE_NOT_BACK: &str = "A save state couldn't be put back in its place on the SD card. It is kept and goes back the next time this game starts.";
+
+// Not on Android: no standalone emulators there (`standalone` is in linux_modules.rs).
+#[cfg(not(target_os = "android"))]
+static STATE_NOT_BACK_NOTED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// pocket-ui: that a parked save state didn't go back (the rename failed), for the shelf after the game.
+#[cfg(not(target_os = "android"))]
+pub(crate) fn note_state_not_back(e: &io::Error) {
+    eprintln!("save_trouble: a parked save state did not go back: {e}");
+    STATE_NOT_BACK_NOTED.store(true, std::sync::atomic::Ordering::Relaxed);
+}
+
+/// pocket-ui: [`STATE_NOT_BACK`] once after a standalone game when its parked save state didn't go back.
+#[cfg(not(target_os = "android"))]
+pub(crate) fn take_state_not_back() -> Option<&'static str> {
+    STATE_NOT_BACK_NOTED.swap(false, std::sync::atomic::Ordering::Relaxed).then_some(STATE_NOT_BACK)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -58,7 +58,7 @@ impl App {
             Some(Item::Streaming) => "streaming".into(),
             Some(Item::Search) => "search".into(),
             Some(Item::JustPlay) => "just-play".into(),
-            Some(Item::Curator | Item::Lens | Item::Surprise | Item::SmartShelf(_) | Item::Sticker(_) | Item::History | Item::Review(_) | Item::Rediscover) => "curator".into(),
+            Some(Item::Curator | Item::Lens | Item::SmartShelf(_) | Item::Sticker(_) | Item::History | Item::Review(_) | Item::Rediscover) => "curator".into(),
             None => "-".into(),
         };
         // Spaces in a file name would split the line; the harness reads `sel=` up to the end.

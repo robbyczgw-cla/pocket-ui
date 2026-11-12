@@ -28,6 +28,9 @@ impl App {
         out += &format!("@painted\t{}\n@painter\t{}\n", self.painted.name(), at.place.painter().name());
         // What the inputs since the last record asked for: the haptic tick and the sound (`App::feedback`).
         out += &format!("@feedback\t{}\n", self.feedback.join(" "));
+        if self.pending_launch.is_some() {
+            out += "@busy\tlaunch\n";
+        }
         if self.setup.as_ref().is_some_and(|setup| setup.wifi_scanning()) {
             out += "@busy\twifi\n";
         }

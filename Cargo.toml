@@ -1,6 +1,6 @@
 [package]
 name = "pocket-ui"
-version = "0.3.2"
+version = "0.4.0"
 edition = "2021"
 authors = ["Robby Czesany"]
 license = "GPL-2.0-or-later"
@@ -63,8 +63,6 @@ raw-window-handle = "0.6"
 qrcode = { version = "0.14.1", default-features = false }
 
 [features]
-# Steam Deck / desktop Linux (docs/STEAMDECK.md): XWayland or X11 windows besides Wayland. Off for the handhelds.
-x11 = ["winit/x11", "glutin/x11", "glutin-winit/x11", "softbuffer/x11", "softbuffer/x11-dlopen", "dep:x11rb"]
 # TrimUI Brick under Knulli (docs/TRIMUI-BRICK.md): the framebuffer bridge. Off for the handhelds of the ROCKNIX image.
 brick = []
 
@@ -83,8 +81,6 @@ glutin = { version = "0.32", default-features = false, features = ["egl", "wayla
 glutin-winit = { version = "0.5", default-features = false, features = ["egl", "wayland"] }
 softbuffer = { version = "0.4", default-features = false, features = ["wayland", "wayland-dlopen"] }
 winit = { version = "0.30", default-features = false, features = ["rwh_06", "wayland", "wayland-dlopen"] }
-# Steam Deck only (`--features x11`, src/desk.rs)
-x11rb = { version = "0.13", optional = true, default-features = false }
 evdev = "0.13"
 # wlr-gamma-control for the display look (src/gamma.rs); both are already in the tree through winit
 wayland-client = "0.31"
@@ -103,7 +99,7 @@ strip = true
 # screen. What can fail for a moment (surface, buffer, GL setup) is an error value instead; see `frame`.
 panic = "abort"
 
-# The merge gate's profile (scripts/gate.sh, docs/DEVELOPING.md "Merge gate"): `cargo test --profile gate`. The same
+# The merge gate's profile (scripts/gate.sh, docs/dev/merge-gate.md "Merge gate"): `cargo test --profile gate`. The same
 # code generation level as release (opt-level 3, no debug assertions, no overflow checks), so the tests see what the
 # device runs, but it builds in well under half the time (a tenth after a small change): no LTO, 16 codegen units instead of 1, incremental. It also
 # unwinds: cargo builds tests (and the crates they link) with unwinding anyway, so with `panic = "abort"` in release the

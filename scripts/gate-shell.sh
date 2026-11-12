@@ -11,7 +11,7 @@ case $lane in
     sh deploy/test-run-pocket-ui.sh >"$L" 2>&1; echo $? >"$RCD/l"
     ;;
  small)
-    { sh scripts/test-verify-device.sh && python3 scripts/test-device-portability.py && python3 scripts/test-device-transfer.py; } >"$V" 2>&1; echo $? >"$RCD/v"
+    { sh scripts/test-verify-device.sh && python3 scripts/test-device-portability.py && python3 scripts/test-device-transfer.py && python3 -I scripts/android/test-release-check.py; } >"$V" 2>&1; echo $? >"$RCD/v"
     bash scripts/test-check-core-licences.sh >"$C" 2>&1; echo $? >"$RCD/c"
     sh deploy/package/test-package.sh >"$P" 2>&1; echo $? >"$RCD/p"
     sh deploy/test-grub-quiet.sh >"$Q" 2>&1; echo $? >"$RCD/q"

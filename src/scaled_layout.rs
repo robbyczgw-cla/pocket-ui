@@ -2,15 +2,9 @@
 //! Large outputs keep their native canvas; output size wins over the profile (HDMI).
 
 /// The supported layouts start at 1280×960, with the panel's aspect ratio preserved.
-/// A square 720 panel therefore uses 1280×1280 rather than stretching a 4:3 page. The Steam Deck's 1280×800 (docs/STEAMDECK.md)
-/// is painted at 1536×960: the pages are made for more lines than 800 pixels hold (the first-start pages ran into their hints).
-/// Only there: a handheld's output of 721 to 800 lines (HDMI) keeps its native canvas as before.
+/// Outputs above 720 lines keep their native canvas.
 pub fn logical_size(panel: (u32, u32)) -> (u32, u32) {
-    #[cfg(target_os = "linux")]
-    let max_h = if crate::device::current().host_owned() { 800 } else { 720 };
-    #[cfg(not(target_os = "linux"))]
-    let max_h = 720;
-    logical_size_up_to(panel, max_h)
+    logical_size_up_to(panel, 720)
 }
 
 fn logical_size_up_to((w, h): (u32, u32), max_h: u32) -> (u32, u32) {
@@ -197,7 +191,6 @@ mod tests {
         ] {
             assert_eq!(logical_size(panel), logical);
         }
-        // The Steam Deck's 1280×800 is scaled up; the same output on a handheld (HDMI) keeps its canvas.
         assert_eq!(logical_size_up_to((1280, 800), 800), (1536, 960));
         assert_eq!(logical_size_up_to((1280, 800), 720), (1280, 800));
         assert_eq!(logical_size((1024, 768)), (1024, 768));

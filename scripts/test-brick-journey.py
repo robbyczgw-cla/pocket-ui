@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """Host regression checks for the real-device release journey's safety seams."""
 import io
+import json
+import os
 from pathlib import Path
 import struct
 import subprocess
@@ -17,7 +19,389 @@ import journey
 from nav import Frame
 
 
+class NightDevice:
+    """Recorded interfaces, with a real helper process for both LCD readbacks."""
+    def __init__(self, root):
+        self.root=root
+        self.real=root/'real';self.logical=root/'logical'
+        self.real.write_text('3');self.logical.write_text('3')
+        self.status='v=1\tpid=44\tplace=pause:Main\tcover=none\tsleep=awake\tgame=paused\n'
+        self.kernel='[1.0] boot\n';self.pstore='';self.capacity='80\n'
+        self.boot='same';self.route=True;self.calls=[]
+
+    def text(self, command, **kw):
+        self.calls.append(command)
+        if command=='cat /proc/sys/kernel/random/boot_id':return self.boot
+        if command=='dmesg':return self.kernel
+        if command=='md5sum /sys/fs/pstore/*':return self.pstore
+        if command=='cat /proc/net/route':
+            return 'Iface Destination\nwlan0 00000000\n' if self.route else 'Iface Destination\n'
+        if command.endswith('/ui.status'):return self.status
+        if command=='cat /sys/class/disp/disp/attr/sys':return 'lcd output backlight('+self.real.read_text()+')\n'
+        if command==journey.APP+'/bin/brick-hw bl-get':
+            return subprocess.check_output(['sh','-c','cat "$1"','fixture',str(self.real)]).decode()
+        if command=='cat '+journey.HW+'/sys/class/backlight/panel/brightness':
+            return subprocess.check_output(['sh','-c','cat "$1"','fixture',str(self.logical)]).decode()
+        if '/capacity' in command:return self.capacity
+        if command=='cat /sys/power/pm_wakeup_irq':return '344'
+        if command=='cat /proc/interrupts':return '344: 0 0 0 0 wakeupgen 108 Level rtc\n'
+        if command=='cat /sys/class/rtc/rtc0/since_epoch':return '1000'
+        raise AssertionError('unexpected device read: '+command)
+
+    def run(self, command, **kw):
+        self.calls.append(command)
+        if command in ('dmesg','md5sum /sys/fs/pstore/*','tar -cf - -C /sys/fs/pstore .'):return b'crash evidence'
+        if '/wakealarm' in command:return b''
+        raise AssertionError('unexpected device write: '+command)
+
+
+class NightJourney(journey.Journey):
+    def __init__(self, root):
+        super().__init__(SimpleNamespace(out=root/'proof',label='night',phase='sleep',night_soak=True,
+                         alarm_seconds=20,physical=False,bt=False,cycles=5,owner_watch_binary=Path(__file__)),NightDevice(root))
+        self.ui=44;self.boot_id='same';self.cycles=[];self.last={key:0 for key,_ in self.COUNTERS}
+        self.kernel_mark=0;self.commands=[];self.stage='pause';self.error_count=0
+
+    def read(self, name):
+        return '[1.0] boot\n' if name=='kernel-before' else ''
+
+    def log(self):
+        return ('sleep: suspending\nstate saved for Journey\nawake (still paused)\n'
+                'sleep: awake on the Brick; the pause menu\nplay resumed\n')*len(self.commands)
+
+    def reach(self,*args):return self.log()
+
+    def cmd(self, key):
+        self.commands.append(key)
+        self.stage='power' if key=='powermenu' else 'pause'
+        self.r.status=self.r.status.replace('cover=none','cover=power') if key=='powermenu' else self.r.status.replace('cover=power','cover=none')
+        if key in ('dark','wake'):
+            value='0' if key=='dark' else '3'
+            self.r.real.write_text(value);self.r.logical.write_text(value)
+            self.r.status=self.r.status.replace('sleep=awake','sleep=light') if key=='dark' else self.r.status.replace('sleep=light','sleep=awake')
+
+    def record(self):return SimpleNamespace(text=lambda:'Sleep' if self.stage=='power' else 'Continue')
+    def focus(self,*args):pass
+    def shot(self,name):return name+'.jpg'
+    def until(self,predicate,seconds=8):
+        value=predicate()
+        if not value:raise TimeoutError('fixture state absent')
+        return value
+    def audio_sample(self):
+        self.audio_was_dark=self.r.real.read_text()=='0'
+        return {'backend':{'alsa':{'xrun_errors':self.error_count,'write_errors':0,'recover_calls':0},'write_failures':0},
+                'queue':{'playing_underruns':0,'playing_missing_frames':0,'dropped_frames':0}}
+
+
+class NightSoak(unittest.TestCase):
+    def test_early_input_restore_preserves_owner_core_fifo_inode_and_afterpark_discards_only_probe(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root=Path(temp);device_tmp=root/'tmp';work=root/'session'
+            device_tmp.mkdir();work.mkdir()
+            owner=device_tmp/'pocket-core.cmd';os.mkfifo(owner);inode=owner.stat().st_ino
+            script='W='+journey.Q(str(work))+'\n'+journey.core_restore(str(device_tmp))
+            # Physical input can run restore before the park directory exists.
+            subprocess.run(['sh'],input=script.encode(),check=True,capture_output=True)
+            self.assertTrue(owner.is_fifo());self.assertEqual(owner.stat().st_ino,inode)
+            parked=work/'parked';parked.mkdir();owner.rename(parked/owner.name)
+            # Even a partial park is returned, without discarding unparked files.
+            perf=device_tmp/'pocket-perf.lock';perf.write_text('owner lock')
+            subprocess.run(['sh'],input=script.encode(),check=True,capture_output=True)
+            self.assertEqual(owner.stat().st_ino,inode);self.assertEqual(perf.read_text(),'owner lock')
+            owner.rename(parked/owner.name);perf.rename(parked/perf.name)
+            (work/'parked-ready').touch();os.mkfifo(owner);probe_inode=owner.stat().st_ino
+            subprocess.run(['sh'],input=script.encode(),check=True,capture_output=True)
+            self.assertEqual(owner.stat().st_ino,inode)
+            self.assertEqual((work/'discard/pocket-core.cmd').stat().st_ino,probe_inode)
+            self.assertEqual(perf.read_text(),'owner lock')
+
+    def test_owner_config_change_after_input_restore_is_preserved_and_reported(self):
+        def archive():
+            stream=io.BytesIO()
+            with tarfile.open(fileobj=stream,mode='w') as ar:
+                body=b'owner changed settings';item=tarfile.TarInfo('./settings.json');item.size=len(body)
+                ar.addfile(item,io.BytesIO(body))
+            return stream.getvalue()
+        class Device:
+            def text(self,command,**kw):
+                if command.endswith('/owner-abort && echo abort'):return 'abort'
+                if command.endswith('/restored && echo restored'):return 'restored'
+                if command.startswith('test ! -e /proc/88'):return 'gone'
+                if command.startswith('cat /proc/77/stat;'):return '77 (pocket-ui) S 0\n'
+                if command.startswith('md5sum '):return 'protected\n'
+                if command==journey.CLOCK_SNAPSHOT:return 'owner game clocks\n'
+                if command.startswith('for f in ') and '/lights-before/' in command:return 'effect_lr\n'
+                if command=='cat '+journey.APP+'/RELEASE':return '0.3.2'
+                return ''
+            def run(self,command,*args,**kw):
+                if command.startswith('cp '):raise AssertionError('owner settings were overwritten')
+                return b''
+            def put(self,*args):raise AssertionError('owner settings were overwritten')
+            def get(self,path,destination,**kw):destination.write_bytes(archive())
+        with tempfile.TemporaryDirectory() as temp:
+            j=journey.Journey(SimpleNamespace(out=Path(temp)/'proof',label='owner',phase='sleep',night_soak=True),Device())
+            j.original=77;j.armed=True;j.created=True;j.input_watch_started=True
+            j.owner_audio='/home/user/.asoundrc';j.protected='protected\n';j.pre_files={'./settings.json':b'old settings'}
+            j.read=lambda name:'88' if name=='guard.pid' else ''
+            (j.out/'clocks-before.txt').write_text('clocks\n')
+            with patch.object(journey.time,'sleep'):j.cleanup()
+            restore=json.loads((j.out/'restore.json').read_text())
+            self.assertTrue(restore['owner_interrupted'])
+            self.assertEqual(restore['owner_activity_config_changes'],['./settings.json'])
+            self.assertEqual(restore['restored_files'],[])
+            self.assertFalse(restore['cpu_policy_unchanged'])
+            self.assertEqual(restore['light_control_differences'],['effect_lr'])
+
+    def test_owner_waking_during_backup_blocks_takeover_without_a_control_write(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root=Path(temp);status=root/'owner.status';real=root/'real';logical=root/'logical'
+            helper=root/'app/bin/brick-hw';helper.parent.mkdir(parents=True)
+            helper.write_text('#!/bin/sh\ncat '+journey.Q(str(real))+'\n');helper.chmod(0o700)
+            pidof=root/'pidof';pidof.write_text('#!/bin/sh\n[ "$*" != pocket-ui ] || echo '+str(os.getpid())+'\n');pidof.chmod(0o700)
+            real.write_text('0');logical.write_text('0')
+            quiet=f'v=1\tpid={os.getpid()}\tplace=shelf:Home\tcover=none\tsleep=light\tgame=none\n'
+            status.write_text(quiet)
+            j=object.__new__(journey.Journey);j.work=str(root);j.original=os.getpid()
+            def run_guard():
+                command=j.night_owner_guard().replace('/tmp/pocket-ui.status',str(status)).replace(
+                    journey.HW+'/sys/class/backlight/panel/brightness',str(logical))
+                return subprocess.run(['sh','-c',command+'echo controlled >'+str(root/'control-write')],
+                                      env=dict(os.environ,PATH=str(root)+':'+os.environ['PATH']),capture_output=True)
+            with patch.object(journey,'APP',str(root/'app')):
+                self.assertEqual(run_guard().returncode,0)
+                (root/'control-write').unlink()
+                # The first check passed; a real press wakes the owner during backup.
+                for changed in (quiet.replace('sleep=light','sleep=awake'),quiet.replace('game=none','game=playing'),
+                                quiet.replace('place=shelf:Home','place=settings:Groups'),quiet.replace('pid='+str(os.getpid()),'pid=1')):
+                    status.write_text(changed)
+                    self.assertNotEqual(run_guard().returncode,0)
+                    self.assertFalse((root/'control-write').exists())
+                status.write_text(quiet)
+                for file in (real,logical):
+                    file.write_text('3')
+                    self.assertNotEqual(run_guard().returncode,0)
+                    self.assertFalse((root/'control-write').exists())
+                    file.write_text('0')
+                (root/'owner-abort').touch()
+                self.assertNotEqual(run_guard().returncode,0)
+                self.assertFalse((root/'control-write').exists())
+
+    def test_failed_prearm_stops_its_local_watcher_before_removing_scratch(self):
+        class Local:
+            abort_path=None
+            def run(self,command,**kw):return subprocess.run(['sh','-c',command],capture_output=True,check=True).stdout
+            def text(self,command,**kw):return self.run(command,**kw).decode()
+        with tempfile.TemporaryDirectory() as temp:
+            root=Path(temp)/'brick-journey-fixture';root.mkdir()
+            watcher=root/'owner-watch';watcher.write_text('import time\nfrom pathlib import Path\nPath(__file__).with_name("ready").touch()\ntime.sleep(60)\n')
+            child=subprocess.Popen([sys.executable,str(watcher)])
+            try:
+                for _ in range(100):
+                    if (root/'ready').exists():break
+                    time.sleep(.01)
+                self.assertTrue((root/'ready').exists())
+                (root/'input-watch.pid').write_text(str(child.pid))
+                j=object.__new__(journey.Journey);j.r=Local();j.work=str(root);j.armed=False
+                j.start=time.monotonic()
+                j.created=True;j.input_watch_started=True;j.owner_watch=None
+                j.cleanup()
+                child.wait(timeout=2)
+                self.assertFalse(root.exists())
+            finally:
+                if child.poll() is None:child.terminate();child.wait(timeout=2)
+
+    def test_owner_abort_restore_finishes_before_host_cleanup_can_change_files(self):
+        class Restoring:
+            abort_path=None;polls=0;finished=False
+            def text(self,command,**kw):
+                if command.endswith('/owner-abort && echo abort'):return 'abort'
+                if command.endswith('/restored && echo restored'):
+                    self.polls+=1;self.finished=self.polls==2
+                    return 'restored' if self.finished else ''
+                return 'gone'
+            def run(self,command,**kw):
+                assert self.finished,'host wrote while the input watcher was still restoring'
+        j=object.__new__(journey.Journey);j.a=SimpleNamespace(night_soak=True)
+        j.r=Restoring();j.work='/tmp/brick-journey-test';j.start=time.monotonic()
+        j.armed=False;j.created=True;j.input_watch_started=True;j.owner_watch=None
+        with patch.object(journey.time,'sleep'):j.cleanup()
+        self.assertEqual(j.r.polls,2)
+        self.assertFalse(j.created)
+
+    def test_night_restore_keeps_zone_scales_colours_and_ignores_read_only_driver_info(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root=Path(temp);before=root/'lights-before';lights=root/'leds'
+            before.mkdir();lights.mkdir()
+            saved={'effect_enable':b'0\n','anim_frames_enable':b'0\n','max_scale':b'22\n',
+                   'max_scale_lr':b'17\n','max_scale_f1f2':b'13\n','effect_rgb_hex_l':b'010203 \n',
+                   'effect_rgb_hex_lr':b'040506 \n','frame_hex':b'010203\0 040506\0 \n'}
+            for name,value in saved.items():
+                (before/name).write_bytes(value);(lights/name).write_bytes(b'0\n')
+            (before/'effect_names').write_text('old information')
+            (lights/'effect_names').write_text('current read-only driver information')
+            script='W='+journey.Q(str(root))+'\n'+journey.night_led_restore(str(lights))
+            result=subprocess.run(['sh'],input=script.encode(),check=True,capture_output=True)
+            self.assertEqual(result.stderr,b'')
+            self.assertEqual({name:(lights/name).read_bytes() for name in saved},
+                             {name:value.replace(b'\0',b'') for name,value in saved.items()})
+            self.assertEqual((lights/'effect_names').read_text(),'current read-only driver information')
+
+    def test_black_lcd_fails_before_any_brightness_repair_and_keeps_evidence(self):
+        with tempfile.TemporaryDirectory() as temp:
+            j=NightJourney(Path(temp));j.r.real.write_text('0')
+            with self.assertRaisesRegex(AssertionError,'backlight'):j.night_wake(1)
+            self.assertEqual(j.r.real.read_text(),'0')
+            self.assertFalse(j.commands)
+            self.assertIn('backlight(0)',(j.out/'cycle-1-lcd.txt').read_text())
+            self.assertIn('sleep=awake',(j.out/'cycle-1-status.txt').read_text())
+            j.r.real.write_text('3');j.r.logical.write_text('0')
+            with self.assertRaisesRegex(AssertionError,'backlight'):j.night_wake(2)
+
+    def test_oversized_light_and_wrong_pause_state_are_rejected_without_repair(self):
+        with tempfile.TemporaryDirectory() as temp:
+            j=NightJourney(Path(temp));j.r.real.write_text('26')
+            with self.assertRaisesRegex(AssertionError,'10%'):j.night_wake(1)
+            j.r.real.write_text('3');j.r.status=j.r.status.replace('place=pause:Main','place=game')
+            with self.assertRaisesRegex(AssertionError,'pause|shelf'):j.night_wake(2)
+
+    def test_every_cycle_checks_route_sound_and_darkens_before_the_audio_wait(self):
+        with tempfile.TemporaryDirectory() as temp, patch.object(journey.time,'sleep'):
+            j=NightJourney(Path(temp));j.sleep_cycle(1)
+            self.assertTrue(j.audio_was_dark)
+            self.assertEqual(j.r.real.read_text(),'0')
+            row=j.cycles[0]
+            self.assertEqual(row['backlight'],{'real':3,'logical':3})
+            self.assertTrue(row['route'])
+            self.assertEqual(row['boot_id'],'same')
+            self.assertEqual(row['battery_percent'],80)
+            self.assertIn('dark',j.commands)
+            self.assertTrue((j.out/'cycle-1-kernel-after.txt').exists())
+            j.r.route=False
+            with self.assertRaisesRegex((TimeoutError,AssertionError),'route|state'):j.sleep_cycle(2)
+
+    def test_audio_failure_stops_the_cycle_instead_of_waiting_for_batch_end(self):
+        with tempfile.TemporaryDirectory() as temp, patch.object(journey.time,'sleep'):
+            j=NightJourney(Path(temp));j.error_count=1
+            with self.assertRaisesRegex(AssertionError,'sound'):j.sleep_cycle(1)
+            self.assertTrue(j.audio_was_dark)
+            self.assertEqual(j.cycles,[])
+            self.assertEqual(json.loads((j.out/'cycle-1-measurements.json').read_text())['delta']['xrun'],1)
+
+    def test_missing_sound_counters_do_not_count_as_a_clean_cycle(self):
+        with tempfile.TemporaryDirectory() as temp:
+            j=NightJourney(Path(temp))
+            with self.assertRaisesRegex(AssertionError,'sound counter unavailable'):j.counters({'backend':{}})
+
+    def test_low_battery_pstore_and_real_oops_abort_but_known_wifi_warnings_are_counted(self):
+        with tempfile.TemporaryDirectory() as temp:
+            j=NightJourney(Path(temp))
+            j.r.kernel+='[2.0] WARNING: CPU: 2 PID: 20 at net/core/skbuff.c:4383 skb_try_coalesce+0x1bc/0x2f8\n[2.1] mmc2: error -22 whilst initialising SDIO card\n'
+            health=j.night_health(1,'before')
+            self.assertEqual(health['known_wifi_warn'],1)
+            self.assertEqual(health['known_wifi_sdio'],1)
+            for field,value,reason in [('capacity','19\n','battery'),('pstore','new crash','pstore'),
+                                       ('kernel','[2.0] Oops: bad memory','kernel'),
+                                       ('kernel','[2.0] mmc1: error -22 reading SD card','kernel'),
+                                       ('kernel','[2.0] WARNING: CPU: 1 at another_driver.c:44','kernel warning'),
+                                       ('boot','rebooted','rebooted')]:
+                previous=getattr(j.r,field);setattr(j.r,field,value)
+                with self.assertRaisesRegex((AssertionError,RuntimeError),reason):j.night_health(2,'after')
+                setattr(j.r,field,previous)
+            self.assertTrue((j.out/'reset-pstore.tar').exists())
+
+    def test_night_session_rejects_missing_guard_and_overlong_cycle_budget(self):
+        for options in ({'owner_watch_binary':None},{'physical':True},{'phase':'game'}, {'cycles':100}):
+            args=dict(night_soak=True,phase='sleep',physical=False,owner_watch_binary=Path(__file__),cycles=5,alarm_seconds=20)
+            args.update(options)
+            with self.assertRaises(ValueError):journey.validate_night_args(SimpleNamespace(**args))
+
+    def test_reach_retries_only_transport_disconnect_not_owner_abort_or_command_errors(self):
+        for code in (125,1):
+            r=SimpleNamespace(text=lambda *a,code=code,**kw:(_ for _ in ()).throw(subprocess.CalledProcessError(code,'ssh')))
+            j=SimpleNamespace(r=r)
+            with self.assertRaises(subprocess.CalledProcessError):journey.Journey.reach(j,'read',10)
+        replies=iter([subprocess.CalledProcessError(255,'ssh'),'back'])
+        def reconnect(*args,**kw):
+            value=next(replies)
+            if isinstance(value,Exception):raise value
+            return value
+        with patch.object(journey.time,'sleep'):
+            self.assertEqual(journey.Journey.reach(SimpleNamespace(r=SimpleNamespace(text=reconnect)),'read',10),'back')
+        replies=iter([subprocess.TimeoutExpired('ssh',10),'back after timeout'])
+        with patch.object(journey.time,'sleep'):
+            self.assertEqual(journey.Journey.reach(SimpleNamespace(r=SimpleNamespace(text=reconnect)),'read',10),'back after timeout')
+        with self.assertRaisesRegex(RuntimeError,'real failure'):
+            journey.Journey.reach(SimpleNamespace(r=SimpleNamespace(text=lambda *a,**k:(_ for _ in ()).throw(RuntimeError('real failure')))),'read',0)
+        with self.assertRaises(subprocess.TimeoutExpired):
+            journey.Journey.reach(SimpleNamespace(r=SimpleNamespace(text=lambda *a,**k:(_ for _ in ()).throw(subprocess.TimeoutExpired('ssh',10)))),'read',0)
+
+
 class Safety(unittest.TestCase):
+    def test_legacy_ui_is_refused_before_any_device_mutation(self):
+        class Device:
+            def text(self,command,**kw):
+                if command=='cat '+journey.APP+'/RELEASE':return '0.3.2'
+                if command=='pidof pocket-ui':return '15502'
+                if command=='pidof pocket-core retroarch':return ''
+                if command.startswith('if grep -Fq POCKETUI_STATUS '):return ''
+                raise AssertionError('unexpected read: '+command)
+            def run(self,*args,**kw):raise AssertionError('legacy probe changed the device')
+        with tempfile.TemporaryDirectory() as temp:
+            old=Path(temp)/'old-ui';old.write_bytes(b'ELF old UI with global status only')
+            status_only=Path(temp)/'status-only-ui';status_only.write_bytes(b'ELF POCKETUI_STATUS')
+            for i,binary in enumerate((old,status_only,None)):
+                j=journey.Journey(SimpleNamespace(out=Path(temp)/str(i),expect_version='0.3.2',phase='lights',binary=binary),Device())
+                with self.assertRaisesRegex(journey.DeviceBusy,'private status'):j.prepare()
+                self.assertFalse(j.created)
+                self.assertFalse(j.armed)
+
+    def test_current_local_and_installed_ui_can_use_private_status(self):
+        class Device:
+            def text(self,command):
+                assert command.startswith('if grep -Fq POCKETUI_STATUS ')
+                return 'supported\n'
+        with tempfile.TemporaryDirectory() as temp:
+            current=Path(temp)/'current-ui';current.write_bytes(b'ELF POCKETUI_STATUS POCKETUI_DARK_FILE')
+            for binary in (current,None):
+                j=object.__new__(journey.Journey);j.a=SimpleNamespace(binary=binary);j.r=Device()
+                j.require_private_status()
+
+    def test_probe_launch_cannot_overwrite_an_inherited_owner_status(self):
+        with tempfile.TemporaryDirectory(prefix='brick status ') as temp:
+            root=Path(temp);owner=root/'owner.status';owner.write_text('owner status\n')
+            ui=root/'fake-ui'
+            ui.write_text('#!/usr/bin/env python3\nimport os\nfrom pathlib import Path\nPath(os.environ["POCKETUI_STATUS"]).write_text("probe status\\n")\n')
+            ui.chmod(0o700)
+            j=object.__new__(journey.Journey);j.work=str(root)
+            script=j.launch_script({'POCKETUI_STATUS':str(owner)},str(ui))
+            subprocess.run(['sh'],input=script,check=True)
+            self.assertEqual(owner.read_text(),'owner status\n')
+            self.assertEqual((root/'ui.status').read_text(),'probe status\n')
+
+    def test_probe_launch_cannot_consume_the_owners_brightness_note(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root=Path(temp);owner=root/'owner.brightness';owner.write_text('150')
+            ui=root/'fake-ui'
+            ui.write_text('#!/usr/bin/env python3\nimport os\nfrom pathlib import Path\nPath(os.environ["POCKETUI_DARK_FILE"]).unlink(missing_ok=True)\n')
+            ui.chmod(0o700)
+            j=object.__new__(journey.Journey);j.work=str(root)
+            (root/'ui.brightness').write_text('3')
+            subprocess.run(['sh'],input=j.launch_script({'POCKETUI_DARK_FILE':str(owner)},str(ui)),check=True)
+            self.assertEqual(owner.read_text(),'150')
+            self.assertFalse((root/'ui.brightness').exists())
+
+    def test_probe_key_guard_reads_only_its_own_status(self):
+        calls=[]
+        class Remote:
+            def text(self,command):
+                calls.append(command)
+                return 'v=1\trev=1\tpid=8044\tplace=settings:Groups\n' if command=="cat '/tmp/private status/ui.status'" else 'v=1\trev=1\tpid=15502\t'
+            def run(self,command):calls.append(command)
+        j=object.__new__(journey.Journey);j.work='/tmp/private status';j.ui=8044;j.boot_id='same-boot';j.r=Remote()
+        j.cmd('b')
+        self.assertEqual(calls[0],"cat '/tmp/private status/ui.status'")
+        self.assertEqual(len(calls),2)
+
     def test_explorer_does_not_mix_a_delayed_child_frame_into_the_parent_page(self):
         class Page:
             def __init__(self,name,at):self.name,self.at=name,at
@@ -471,6 +855,24 @@ class Safety(unittest.TestCase):
         self.assertEqual(f.focused(),'Appearance')
         self.assertEqual({c['name'] for c in f.controls()},{'Appearance','Motion'})
         self.assertFalse(next(c for c in f.controls() if c['name']=='Motion')['focused'])
+
+    def test_a_real_button_or_dpad_stops_the_session_before_any_further_guard_write(self):
+        import owner_watch
+        for kind, code, value in [(1, 305, 1), (1, 116, 1), (3, 16, -1), (3, 17, 1)]:
+            watch = owner_watch.OwnerWatch(None, '/tmp/private')
+            stream = io.BytesIO(owner_watch.EVENT.pack(0, 0, kind, code, value))
+            with patch.object(owner_watch.os, 'kill') as stop:
+                watch.read(SimpleNamespace(stdout=stream))
+                stop.assert_called_once_with(owner_watch.os.getpid(), owner_watch.signal.SIGUSR2)
+        watch.ending.set()
+        with patch.object(owner_watch.os, 'kill') as stop:
+            watch.read(SimpleNamespace(stdout=io.BytesIO(owner_watch.EVENT.pack(0, 0, 1, 305, 1))))
+            stop.assert_not_called()
+
+    def test_sync_release_and_neutral_axes_do_not_claim_the_owner_pressed(self):
+        import owner_watch
+        for kind, code, value in [(0, 0, 0), (1, 305, 0), (1, 305, 2), (3, 16, 0)]:
+            self.assertFalse(owner_watch.pressed(owner_watch.EVENT.pack(0, 0, kind, code, value)))
 
 
 if __name__=='__main__':

@@ -497,7 +497,7 @@ impl Index {
 
     /// The facets that have something to offer, in the Lens's order.
     pub fn shown_facets(&self) -> Vec<Facet> {
-        self.facets.iter().filter(|f| !f.values.is_empty()).map(|f| f.facet).collect()
+        self.facets.iter().filter(|f| f.facet != Facet::Stickers && !f.values.is_empty()).map(|f| f.facet).collect()
     }
 
     /// How much the player's taste leans towards a game: cosine of the profile and the game's vector, -1..1.

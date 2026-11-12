@@ -161,6 +161,15 @@ fn shaded(p: u32, shade: u32) -> u32 {
     ((p & 0xff00ff) * shade >> 8 & 0xff00ff) | ((p & 0x00ff00) * shade >> 8 & 0x00ff00)
 }
 
+/// `p` with its colours multiplied by `shade`/256 as [`blit`] paints it, its alpha kept: a case taken off a page
+/// (Android's start and way back) looks as it stood there.
+pub fn lit(p: &Pic, shade: u32) -> Pic {
+    if shade >= 256 {
+        return p.clone();
+    }
+    Pic { w: p.w, h: p.h, px: p.px.iter().map(|&s| (s & 0xff00_0000) | shaded(s, shade)).collect() }
+}
+
 /// Copies `p` onto the canvas at (x, y), its colours multiplied by `shade`/256, only rows from `clip.0` to
 /// `clip.1` (exclusive).
 pub fn blit(c: &mut Canvas, p: &Pic, x: i32, y: i32, shade: u32, clip: (i32, i32)) {
@@ -985,6 +994,26 @@ pub fn draw_turning(c: &mut Canvas, spine: &Pic, front: &Pic, size: Size, turn: 
     (covered.0, covered.1, covered.2 - covered.0, covered.3 - covered.1)
 }
 
+/// A case's cover `tex` swinging open towards you about the hinge at its left edge (a jewel or DVD case): `open` 0 shut
+/// (the picture as it is at `(x, y)`, `w` x `h`) to 1 at `max_deg`. In the same perspective as [`draw_turning`]: the edge
+/// that lifts comes nearer and grows, each column of the picture where it really is, never just squeezed. Lit by `shade`
+/// (0-256), darker as it turns from the light. Returns the screen rectangle it covered.
+#[allow(clippy::too_many_arguments)]
+pub fn draw_hinged(c: &mut Canvas, tex: &Pic, (x, y): (f32, f32), (w, h): (f32, f32), open: f32, max_deg: f32, shade: u32, clip: (i32, i32)) -> (i32, i32, i32, i32) {
+    let th = open.clamp(0.0, 1.0) * max_deg.to_radians();
+    let (sin, cos) = th.sin_cos();
+    // The free edge, w from the hinge, comes towards you by w·sin: nearer is larger.
+    let k = FOCAL / (FOCAL - w * sin).max(FOCAL * 0.25);
+    let a = (x, 1.0);
+    let b = (x + w * cos * k, k);
+    let mut covered = (i32::MAX, i32::MAX, i32::MIN, i32::MIN);
+    face(c, tex, a, b, y + h / 2.0, h, shade_for(cos, shade), clip, &mut covered);
+    if covered.0 == i32::MAX {
+        return (x as i32, y as i32, 0, 0);
+    }
+    (covered.0, covered.1, covered.2 - covered.0, covered.3 - covered.1)
+}
+
 fn shade_for(facing: f32, shade: u32) -> u32 {
     ((0.5 + 0.5 * facing) * shade as f32) as u32
 }
@@ -1253,6 +1282,17 @@ mod tests {
 /// the picture in 16.16 fixed point and only over the columns the picture covers, so it costs little more than a
 /// plain blit of the same pixels (a lid swinging, a disc lying down: `insert_rig`). Nothing is made.
 pub fn blit_affine(c: &mut Canvas, p: &Pic, o: (f32, f32), u: (f32, f32), v: (f32, f32), shade: u32, clip: (i32, i32)) {
+    blit_affine_rows(c, p, o, u, v, shade, clip, (0.0, p.h as f32));
+}
+
+/// [`blit_affine`] of the picture's rows `rows.0` to `rows.1` only (a cartridge half in a front-loader's opening: the part
+/// still outside is drawn again over the console, `insert_scene`).
+#[allow(clippy::too_many_arguments)]
+pub fn blit_affine_rows(c: &mut Canvas, p: &Pic, o: (f32, f32), u: (f32, f32), v: (f32, f32), shade: u32, clip: (i32, i32), rows: (f32, f32)) {
+    let (t_lo, t_hi) = (rows.0.max(0.0), rows.1.min(p.h as f32));
+    if t_hi <= t_lo {
+        return;
+    }
     let det = u.0 * v.1 - u.1 * v.0;
     if det.abs() < 1e-3 || p.w <= 0 || p.h <= 0 {
         return;
@@ -1269,7 +1309,7 @@ pub fn blit_affine(c: &mut Canvas, p: &Pic, o: (f32, f32), u: (f32, f32), v: (f3
     let (y0, y1) = ((lo_y.floor() as i32).max(clip.0).max(0), (hi_y.ceil() as i32).min(clip.1).min(c.h));
     const ONE: f32 = 65536.0;
     let (step_s, step_t) = ((ds_dx * ONE) as i64, (dt_dx * ONE) as i64);
-    let (max_s, max_t) = ((p.w as i64) << 16, (p.h as i64) << 16);
+    let (max_s, min_t, max_t) = ((p.w as i64) << 16, (t_lo * ONE) as i64, ((t_hi * ONE) as i64).min((p.h as i64) << 16));
     for row in y0..y1 {
         let dy = row as f32 + 0.5 - o.1;
         // At the row's first column (x = 0.5).
@@ -1277,7 +1317,7 @@ pub fn blit_affine(c: &mut Canvas, p: &Pic, o: (f32, f32), u: (f32, f32), v: (f3
         let t0 = (0.5 - o.0) * dt_dx + dy * dt_dy;
         // The columns where s stays in 0..w and t in 0..h.
         let (mut a, mut b) = (0.0f32, c.w as f32);
-        for (v0, d, max) in [(s0, ds_dx, pw), (t0, dt_dx, ph)] {
+        for (v0, d, max) in [(s0, ds_dx, pw), (t0 - t_lo, dt_dx, t_hi - t_lo)] {
             if d.abs() < 1e-6 {
                 if v0 < 0.0 || v0 >= max {
                     b = a;
@@ -1296,7 +1336,7 @@ pub fn blit_affine(c: &mut Canvas, p: &Pic, o: (f32, f32), u: (f32, f32), v: (f3
         let mut t = ((t0 + x0 as f32 * dt_dx) * ONE) as i64;
         let dst = &mut c.buf[(row * c.w + x0) as usize..(row * c.w + x1) as usize];
         for d in dst {
-            if s >= 0 && t >= 0 && s < max_s && t < max_t {
+            if s >= 0 && t >= min_t && s < max_s && t < max_t {
                 put(d, p.px[((t >> 16) * p.w as i64 + (s >> 16)) as usize], shade);
             }
             s += step_s;

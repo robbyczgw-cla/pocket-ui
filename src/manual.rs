@@ -47,7 +47,7 @@ pub const PAGES: &[(&str, &str)] = &[
     ("coming-from", include_str!("../docs/user/coming-from.md")),
     ("playing", include_str!("../docs/user/playing.md")),
     ("easy", include_str!("../docs/user/easy.md")),
-    ("easy-to-read", include_str!("../docs/user/easy-to-read.md")),
+    ("big-text", include_str!("../docs/user/big-text.md")),
     ("continue", include_str!("../docs/user/continue.md")),
     ("pause-menu", include_str!("../docs/user/pause-menu.md")),
     ("pause-menu-saves", include_str!("../docs/user/pause-menu-saves.md")),

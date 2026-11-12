@@ -29,11 +29,15 @@ budget "$T/fat"; r=$?; [ $r = 0 ] && ok "fat-LTO programs fit with the new reser
 left=$(sed -n 's/.* \([0-9]*\) left = .*/\1/p' "$T/out")
 [ "${left:-0}" -ge 512 ] && ok "fat-LTO keeps at least 2 MiB free (${left:-0} blocks)" || bad "fat-LTO keeps only ${left:-0} blocks free"
 
-# With these core/splash sizes and the pinned image, a UI of exactly 4647 blocks leaves 512 blocks.
-# One extra byte needs another block; a byte-count-only budget must not let it pass.
-mk "$T/boundary" 19034112 5593224 1949552
-budget "$T/boundary"; r=$?; [ $r = 0 ] && ok "exactly the growth reserve fits" || bad "growth reserve boundary: exit $r"
-truncate -s 19034113 "$T/boundary/pocket-ui"
+# Grow the known-good UI to the exact 512-block reserve. Launcher/helper changes may
+# move this boundary; the reserve itself stays fixed. One extra byte then needs
+# another block, so a byte-count-only budget must not let it pass.
+boundary_ui_bytes=$(( ((18140104 + 4095) / 4096 + left - 512) * 4096 ))
+mk "$T/boundary" "$boundary_ui_bytes" 5593224 1949552
+budget "$T/boundary"; r=$?
+boundary_left=$(sed -n 's/.* \([0-9]*\) left = .*/\1/p' "$T/out")
+[ $r = 0 ] && [ "${boundary_left:-0}" = 512 ] && ok "exactly the growth reserve fits" || bad "growth reserve boundary: exit $r, ${boundary_left:-0} blocks left"
+truncate -s $((boundary_ui_bytes + 1)) "$T/boundary/pocket-ui"
 budget "$T/boundary"; r=$?; [ $r = 1 ] && grep -q 'next release will not' "$T/out" && ok "one block below the reserve fails" || bad "one block below the reserve: exit $r"
 
 # Growth: each of the next releases may add what 0.3.1 did (67 blocks); a program 700 KiB bigger must be called out before the build.

@@ -855,11 +855,20 @@ case $1 in
     cat >"$home/config.xml" <<'C'
 <configuration version="51">
     <device id="AAAAAAA" name="other"><address>dynamic</address></device>
+    <folder id="pocket-saves" path="/storage/roms/saves">
+        <maxConcurrentWrites>16</maxConcurrentWrites>
+        <pullerMaxPendingKiB>0</pullerMaxPendingKiB>
+        <disableFsync>true</disableFsync>
+    </folder>
     <gui enabled="true" tls="false" sendBasicAuthPrompt="false">
         <address>127.0.0.1:8384</address>
         <user>pocket</user>
     </gui>
     <options>
+        <maxRecvKbps>0</maxRecvKbps>
+        <limitBandwidthInLan>false</limitBandwidthInLan>
+        <setLowPriority>true</setLowPriority>
+        <maxFolderConcurrency>0</maxFolderConcurrency>
         <urAccepted>0</urAccepted>
         <crashReportingEnabled>true</crashReportingEnabled>
         <startBrowser>true</startBrowser>
@@ -873,6 +882,8 @@ C
 esac
 X
 chmod +x "$Y/app/bin/syncthing"
+printf '#!/bin/sh\n[ "$1" = --brick-idle ] || exit 2\n[ "${LD_LIBRARY_PATH%%%%:*}" = "$BRICK_APP/lib" ] || exit 3\nshift\nexec "$@"\n' >"$Y/app/bin/pocket-ui"
+chmod +x "$Y/app/bin/pocket-ui"
 export BRICK_APP=$Y/app BRICK_DATA=$Y/data BRICK_RUN=$Y/run BRICK_SYNC_EVERY=1 BRICK_TEST_LOG=$Y/log
 check "no password file: it does not start (never an open interface)" "! $HW/systemctl start syncthing && ! $HW/systemctl is-active --quiet syncthing"
 echo 'otter-cedar-lamp-315' >"$Y/data/storage/.config/pocket-ui/sync/password"
@@ -881,6 +892,8 @@ check "the password goes in on stdin, not on the command line" "! grep -q otter-
 C=$Y/run/syncthing/config.xml
 check "web interface: all addresses, TLS, our login" "grep -q '<address>0.0.0.0:8384</address>' $C && grep -q '<gui [^>]*tls=\"true\"' $C"
 check "no usage report, no crash report, no browser, no self-upgrade" "grep -q '<urAccepted>-1<' $C && grep -q '<crashReportingEnabled>false<' $C && grep -q '<startBrowser>false<' $C && grep -q '<autoUpgradeIntervalH>0<' $C"
+check "save sync limits incoming card data on LAN as well" "grep -q '<maxRecvKbps>512</maxRecvKbps>' $C && grep -q '<limitBandwidthInLan>true</limitBandwidthInLan>' $C"
+check "save sync keeps inherited idle I/O, bounds pending writes and keeps fsync enabled" "grep -q '<setLowPriority>false</setLowPriority>' $C && grep -q '<maxFolderConcurrency>1</maxFolderConcurrency>' $C && grep -q '<maxConcurrentWrites>1</maxConcurrentWrites>' $C && grep -q '<pullerMaxPendingKiB>256</pullerMaxPendingKiB>' $C && grep -q '<disableFsync>false</disableFsync>' $C"
 check "a device's own address is left alone" "grep -q '<device id=\"AAAAAAA\" name=\"other\"><address>dynamic</address>' $C"
 sleep 2
 check "config and keys reach the card (where pocket-ui reads them) within seconds" "[ \"\$(cat $Y/data/storage/.config/syncthing/cert.pem)\" = cert-1 ] && grep -q '0.0.0.0:8384' $Y/data/storage/.config/syncthing/config.xml"
@@ -938,7 +951,7 @@ sh -c "trap 'echo usr1 >>$N/got' USR1; while :; do sleep 1; done" & UD2=$!
 sleep 1
 printf '#!/bin/sh\necho %s\n' "$UD2" >"$N/pidof2"; printf '#!/bin/sh\necho "wpa $1" >>%s/calls\n' "$N" >"$N/wpa"; printf '#!/bin/sh\ncase "$1" in bl-get) echo 100;; esac\n' >"$N/hw"
 chmod +x "$N/pidof2" "$N/wpa" "$N/hw"; : >"$N/state"
-check "after a suspend the supplicant is started again and the running udhcpc renews its lease" "BRICK_PIDOF=$N/pidof2 BRICK_WPA_INIT=$N/wpa BRICK_HW=$N/hw BRICK_POWER_STATE=$N/state BRICK_INPUTD_SUSPEND=$N/system_suspend BRICK_RFKILL=$N/no-rfkill $HW/systemctl suspend; sleep 2; grep -q 'wpa stop' $N/calls && grep -q 'wpa start' $N/calls && grep -q mem $N/state && [ -s $N/got ]"
+check "experimental suspend preserves network, radio and input state on success and failure" "python3 $ROOT/scripts/test-brick-suspend.py"
 : >"$N/got"
 check "wifictl enable renews a running udhcpc as well" "BRICK_PIDOF=$N/pidof2 BRICK_WPA_INIT=$N/wpa BRICK_IFCONFIG=true BRICK_RFKILL=$N/no-rfkill BRICK_STATE=$N $HW/wifictl enable; sleep 2; [ -s $N/got ]"
 kill $UD2 2>/dev/null; wait $UD2 2>/dev/null

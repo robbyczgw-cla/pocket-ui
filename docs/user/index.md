@@ -42,7 +42,7 @@ and say clearly where something is still being built or has not been confirmed o
 - On its own host: picture settings with a live preview, screen frames, the emulator's own
   options, button remapping, fast-forward, rewind, run-ahead, cheats and button shortcuts.
 - Switches between recent games with SELECT, and between two games on its own host about as fast as one starts.
-- Helps you find your way around a larger collection with Curator: filters, smart shelves, your own labels,
+- Helps you find your way around a larger collection with Curator: filters, smart shelves,
   "more like this" and the versions of a game you own on several systems ([Your library](curator.md#curator)).
 - Sets up Wi-Fi, cover art and PortMaster games on the device itself, with an on-screen keyboard
   for the gamepad: saved networks, hidden networks and the Wi-Fi country too.
@@ -85,22 +85,22 @@ and say clearly where something is still being built or has not been confirmed o
 1. [Getting started](getting-started.md): installing, first start, Wi-Fi, adding games; [Other handhelds](other-handhelds.md): other Retroid devices, SM8550 and Anbernic H700; [The GAMES drive](games-drive.md): games from a computer; [Second card](copy-games.md): games without Wi-Fi; [Game check](game-check.md): will your games start?; [games from your phone](phone-upload.md) over the same Wi-Fi; [Kids mode](kids-mode.md): a big simple shelf for a child.
 2. [How to](how-to.md): update over Wi-Fi, a game that won't start, pair a controller, back up saves, sync with a second device.
 3. [Coming from ROCKNIX or Android](coming-from.md): what happens to your saves, states, favourites and settings.
-4. [Playing](playing.md): Home, finding a game, the looks, console pages, Recent games; [Easy](easy.md): the look with one big game at a time; [Easy to read, Zoom and Hold to toggle](easy-to-read.md): larger text in one switch, a magnifier for the pause menu, buttons that stay down. [Continue](continue.md): an open case means your moment is waiting, and A goes straight back.
+4. [Playing](playing.md): Home, finding a game, the looks, console pages, Recent games; [Easy](easy.md): the look with one big game at a time; [Big text, Zoom and Hold to toggle](big-text.md): larger text in one switch, a magnifier for the pause menu, buttons that stay down. [Continue](continue.md): an open case means your moment is waiting, and A goes straight back.
 5. [The pause menu](pause-menu.md): what each emulator offers, quitting, Pixel Path; [Saving in the pause menu](pause-menu-saves.md): save slots, Where I quit and Before load, Earlier, when a save fails.
 6. [Options](options.md): picture, screen frames, controls, shortcuts, extras and run-ahead in a game, and [Cheats](options-cheats.md); [their shorter list](options-big.md) for PlayStation 2, GameCube, Wii and 3DS.
 7. [Controls](controls.md): every button, screen by screen; [in Settings, setup and on the touch screen](controls-settings.md), with the power and volume keys; [the controls card](controls-card.md), which button is which on each console.
-8. [Settings](settings.md): the Settings categories and the entries of Look, Playing and Games; [Sound & feel](settings-sound.md); [Connections, System and Help & tools](settings-system.md): Wi-Fi, Bluetooth, Tailscale, Sync, the clock, sleep, backups, the Tour and this guide; [quick settings, sleep and power](quick-settings.md); [storage](storage.md): what takes up space on the SD card, clean-ups, hidden games; [Bluetooth](bluetooth.md): pairing controllers, headphones and speakers.
+8. [Settings](settings.md): the Settings categories and the entries of Look, Playing and Games; [Sound & feel](settings-sound.md); [Connections, System and Help & tools](settings-system.md): Wi-Fi, Bluetooth, the clock, sleep, backups, the Tour, this guide and For tinkerers (Tailscale, Sync, remote access); [quick settings, sleep and power](quick-settings.md); [storage](storage.md): what takes up space on the SD card, clean-ups, hidden games; [Bluetooth](bluetooth.md): pairing controllers, headphones and speakers.
 9. [Language](language.md): English, German or Spanish menus, and what stays English.
 10. [Night light](night-light.md): warmer, less blue colours in the evening, on a schedule or all the time.
 11. [Colours and style](theme.md): the colour sets, fonts and the Retro style for every screen, switched in place.
 12. [Performance and fan](performance.md): what games start with, the fan in the menus, Smooth fan, the readout.
 13. [Features and the Tour](tour.md): every feature on a card, the first start's profiles, new in this version.
-14. [Your library](library.md): game cards, play status, ratings and notes; [Curator](curator.md): Lens, smart shelves, labels, Echoes, Versions and play history.
+14. [Your library](library.md): game cards, play status, ratings and notes; [Curator](curator.md): Lens, smart shelves, Echoes, Versions and play history.
 15. [Achievements](achievements.md): RetroAchievements, signing in, unlocks, offline play.
 16. [Systems](systems.md): which systems run on which emulator.
 17. [Arcade games](arcade.md): which core plays them, matching romsets, parents, BIOS and CHD files, when a game does not start.
 18. [Patches, translations and MSU-1](patches-msu1.md): patching a game on a computer or with RetroArch, and one MSU-1 recipe (not checked on the device).
-19. [Extras](extras.md): box art, PortMaster games, tools, the Store (not open yet).
+19. [Extras](extras.md): box art, PortMaster games, tools.
 20. [Sync](sync.md): saves and states on all your devices, with Syncthing.
 21. [Tailscale](remote.md): reach the Pocket from anywhere on your private network.
 22. [Web companion](web-companion.md): your library, uploads and play time in a browser, over Tailscale.

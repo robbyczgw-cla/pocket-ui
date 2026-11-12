@@ -314,7 +314,7 @@ impl App {
     /// The real rescan/Back transition for Connections' render regressions. Both libraries are throwaway fixtures;
     /// the second configuration changes system order, available games, or removes the originating system entirely.
     pub(crate) fn connection_rescan_snapshot(&mut self, system: &str, title: &str) {
-        self.theme = pocket_ui::settings::Theme::Minimal;
+        self.theme = pocket_ui::settings::Theme::Split;
         let s = self.systems.iter().position(|s| s.name == system).expect("snapshot's system");
         let g = self.systems[s]
             .games

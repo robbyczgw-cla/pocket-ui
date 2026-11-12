@@ -8,11 +8,11 @@ Settings → **Sound & feel**. What moves, what you hear and what you feel in yo
 
 | Entry | What it holds |
 |---|---|
-| **Animations** | **Cozy**: watch your game slide into the console, and the pages, the box and the menus move a little slower and softer. **Quick**: straight into the game, the animations as short as they get. A or Left/Right switches it. Cozy in the Shelf and Cabinet looks until you choose, Quick in the others. See [Animations](#animations) |
+| **Animations** | **Cozy**: watch your game slide into the console, and after Quit come back out of it into its case, and the pages, the box and the menus move a little slower and softer. **Quick**: straight into the game, the animations as short as they get. A or Left/Right switches it. Cozy in the Shelf and Cabinet looks until you choose, Quick in the others. See [Animations](#animations) |
 | **Playful cases** | Cases spring out and wiggle, each game goes into its console its own way, the open box's disc turns, spines lean as you scroll ([Playing](playing.md#starting-a-game)). Shelf and Cabinet looks only, with Motion on Full. **On with Cozy, Off with Quick** until you switch it. A or Left/Right switches it |
-| **Old-TV switch-on** | The game's picture comes on like an old TV when it starts. Shelf and Cabinet looks only, with Animations on Cozy and Motion on Full. **On** at the start. A or Left/Right switches it |
+| **Old-TV switch-on** | The game's picture comes on like an old TV when it starts (a handheld's display just lights up), and goes off like one (to a line and a dot) after Quit; a handheld's game just goes dark. In looks with the insertion animation, with Animations on Cozy and Motion on Full. **On** at the start. A or Left/Right switches it |
 | **Motion** | **Full** (the default), **Reduced** or **Off**: how much the menus move. A or Left/Right switches it. See [Motion](#motion) |
-| **Zoom in the pause menu** | Whether the pause menu's first page lists Zoom: **Off** (the default) or **On**. Zoom is always under Options, and listed here too while Easy to read is on. A switches it. See [Zoom in the pause menu](#zoom-in-the-pause-menu) |
+| **Zoom in the pause menu** | Whether the pause menu's first page lists Zoom: **Off** (the default) or **On**. Zoom is always under Options, and listed here too while Big text is on. A switches it. See [Zoom in the pause menu](#zoom-in-the-pause-menu) |
 | **Sounds** | Soft clicks in the menus (not the game's volume or the screen brightness: those are on HOME, [Quick settings](quick-settings.md)). A turns them on or off, Left/Right set how loud. See [Playing](playing.md#menu-sounds) |
 | **Case sounds** | Cases click open, cartridges and discs go in with a sound, the old TV hums on. Shelf and Cabinet looks only. Needs Sounds on; the menu sounds are not affected. **On** at the start. A or Left/Right switches it |
 | **Haptics** | A very short tick in the menus as the selection moves, on every page where a move also clicks. A turns it on or off. Off by default |
@@ -29,16 +29,23 @@ Settings → Sound & feel → **Animations**. The first start doesn't ask: the l
   (about a second, with a click). Pages, the game's box and the menus take about a third longer and ease in more softly.
 - **Quick**: straight into the game; the animations as short as they get.
 
-Until you choose, the look decides: Cozy for Shelf and Cabinet, Quick for Minimal, Card and Split. Once you choose, it stays
+Until you choose, the look decides: Cozy for Shelf and Cabinet, Quick for Split. Once you choose, it stays
 yours, whatever look you pick later. With Cozy, a game of pocket-core's is shown once the animation is over, so it starts
 about a second later than with Quick (a game that needs longer to load is not held at all); any button skips the rest.
-The picture then comes on like an old TV, in a third of a second: dark, a bright line in the middle, and the picture opens out of it
+The shelf fades to black before the picture comes on like an old TV, in a third of a second: a bright line grows out of
+the middle, and the picture opens out of it, squeezed at first. A handheld's game (Game Boy, GBA, DS, PSP) has no TV: its
+display lights up instead. Continue follows the same order; the saved picture behind a reminder stays visible
 (with Motion on Full; Quick and Reduced skip it, and a button press cuts it short).
 **Motion** (Reduced, Off) still overrides it: nothing slides where Motion says so.
 
+After Quit, Cozy plays the way back in every look that puts games into consoles, including Easy and Kids Mode.
+The shelf is already usable: any button or touch ends the effect and takes its usual action. A handheld display
+goes dark; with Old-TV switch-on enabled a TV picture closes to a line and a dot. The cartridge or disc returns
+to its case, which stays a little open when Continue waits. Quick and Motion Reduced or Off show the shelf at once.
+
 ### Motion
 
-Settings → Sound & feel → **Motion**; A or Left/Right switches it (the first start keeps the default; its Easy to read,
+Settings → Sound & feel → **Motion**; A or Left/Right switches it (the first start keeps the default; its Big text,
 L2, switches Reduced on with Large text).
 
 - **Full**, the default: the selection glides to the row you move to, lists scroll smoothly, pages slide in,
@@ -56,8 +63,8 @@ and pressing again in the middle of a movement takes it straight to the new plac
 Settings → Sound & feel → **Zoom in the pause menu**: the [pause menu](pause-menu.md) on pocket-ui's own host lists **Zoom** before
 Quit. **Off** is the default, because the magnifier is a help for small text and most players never need it: then Zoom is a
 row of Options, next to Picture and Controls, and can be a [shortcut](options.md#shortcuts) (HOME + X). While
-[Easy to read](easy-to-read.md#easy-to-read) is on, the row is on the first page whatever this switch says. A switches it.
-See [Zoom](easy-to-read.md#zoom).
+[Big text](big-text.md#big-text) is on, the row is on the first page whatever this switch says. A switches it.
+See [Zoom](big-text.md#zoom).
 
 ### Cozy extras
 
@@ -65,15 +72,13 @@ Settings → Look → **Cozy extras** switches the little touches you see, one b
 not others. Up/Down move, A (or Left/Right) switches the selected one **On** or **Off**; it takes effect at once and is
 kept across restarts. The line under the list says what the selected one does and in which looks you see it. Reset
 settings (System → Backup & reset) puts them back as they start. The extras you hear or that move are entries of
-Sound & feel (Playful cases, Old-TV switch-on, Case sounds); the slideshow before the screen goes off
-is in System → [Sleep & power](quick-settings.md#sleep--power-settings).
+Sound & feel (Playful cases, Old-TV switch-on, Case sounds).
 
 | Extra | What it does | Start |
 |---|---|---|
 | **TV on the cabinet** | A small old TV on top of the cabinet shows the selected game. Cabinet look only | On |
-| **Stickers on cases** | Your stickers on the cases. Off hides them on the shelf and the box; they stay on the game and on its card's Stickers & labels row. Shelf and Cabinet looks only | On |
+| **Stickers on cases** | Your stickers on the cases. Off hides them on the shelf and the box; they stay on the game and on its card's Stickers row. Shelf and Cabinet looks only | On |
 | **Printed discs** | Discs printed with their cover's art and title. Off: a plain disc in its console's colour. Shelf and Cabinet looks only | On |
-| **Memory card in the pause menu** | Save and Load in the pause menu show the game's whole memory card or cartridge with its blocks instead of the slim row of blocks. The info page and the box's back always show it | Off |
 | **Light by time of day** | The room's light follows your Pocket's clock: cool and bright in the morning, warm in the evening with the lamp glowing, dim at night. Very gentle: covers and text keep their colours. Shelf and Cabinet looks only | On |
 | **Decorations** | Things on your shelves that grow with your play: the plant grows with your hours, a trophy after your first completed game, a framed "100 %" after your first 100 % sticker, a small figurine for each system you played for 10 hours. Only where a shelf has room. This works with Light by time of day on or off. Off: the shelves as they were. Shelf and Cabinet looks only | On |
 | **Game connections** | The developer, publisher, series and genre on the info page and the box's back lead to your other games with the same one ([Connections](library.md#connections)). Off: they are only shown | On |

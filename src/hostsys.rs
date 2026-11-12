@@ -14,8 +14,6 @@ use std::path::{Path, PathBuf};
 pub const BIOS_DIR: &str = "/storage/roms/bios";
 
 /// The BIOS folder in use: `BIOS_DIR` on the handhelds. `POCKETUI_BIOS` moves it where there is no `/storage`
-/// (the Steam Deck launcher points it into pocket-ui's data and links the player's EmuDeck/RetroDECK BIOS files
-/// into it; docs/STEAMDECK.md), like `POCKETUI_STATES` for the states.
 pub fn bios_dir() -> PathBuf {
     static DIR: std::sync::OnceLock<PathBuf> = std::sync::OnceLock::new();
     DIR.get_or_init(|| bios_dir_from(std::env::var("POCKETUI_BIOS").ok().as_deref())).clone()
@@ -28,7 +26,7 @@ fn bios_dir_from(value: Option<&str>) -> PathBuf {
     }
 }
 
-/// Whether the launcher moved the BIOS folder (`POCKETUI_BIOS`, the Deck): checks that otherwise look beside the
+/// Whether the launcher moved the BIOS folder (`POCKETUI_BIOS`): checks that otherwise look beside the
 /// games (`<roms>/bios` on a card) then look in `bios_dir()` instead.
 pub fn bios_moved() -> bool {
     std::env::var("POCKETUI_BIOS").ok().as_deref().map(str::trim).is_some_and(|v| !v.is_empty())
@@ -324,10 +322,11 @@ pub fn core_states_vary(core_id: &str) -> bool {
 /// states are handed over padded with zeros to the size now (`Core::pad_short_states`), but only from this many bytes:
 /// real Flycast states are tens of MB. The minimum and the check of a RASTATE container's section lengths protect memory;
 /// they do not tell a cut-off state, another game's or a damaged one from a good one (Flycast's own header decides).
-pub const PADDED_STATE_MIN: usize = 1 << 20;
+/// Defined in `state_policy`, which Android builds too.
+pub use crate::state_policy::PADDED_STATE_MIN;
 
 pub fn core_pads_short_states(core_id: &str) -> bool {
-    core_id == "flycast"
+    crate::state_policy::core_pads_short_states(core_id)
 }
 
 /// The systems pocket-core started with (the handhelds and the two Nintendo home consoles) and their cores: pocket-ui's
@@ -705,7 +704,7 @@ mod tests {
     fn the_bios_folder_moves_only_with_pocketui_bios() {
         assert_eq!(bios_dir_from(None), Path::new("/storage/roms/bios"), "the handhelds keep their folder");
         assert_eq!(bios_dir_from(Some("  ")), Path::new("/storage/roms/bios"), "an empty value moves nothing");
-        assert_eq!(bios_dir_from(Some("/data/pocket-ui/bios")), Path::new("/data/pocket-ui/bios"), "the Deck launcher's folder");
+        assert_eq!(bios_dir_from(Some("/data/pocket-ui/bios")), Path::new("/data/pocket-ui/bios"), "an overridden BIOS folder");
         assert_eq!(crate::hostsys::bios_dir(), Path::new(BIOS_DIR), "no variable in the test process");
     }
 
@@ -1078,7 +1077,7 @@ mod tests {
         assert!(core_states_vary("mgba"), "mGBA's states grow with the game's save data (GBA resume)");
         assert!(core_states_vary("nestopia"), "Nestopia's states differ by 9 bytes from moment to moment (NES resume)");
         assert!(!core_states_vary("gambatte") && !core_states_vary("snes9x"));
-        assert!(core_pads_short_states("flycast") && !core_pads_short_states("ppsspp") && !core_pads_short_states("melondsds"));
+        assert!(core_pads_short_states("flycast") && core_pads_short_states("ppsspp") && !core_pads_short_states("melondsds"));
     }
 
     /// ROCKNIX's /usr/config/ppsspp/assets as the libretro core wants it in the system folder.

@@ -409,6 +409,12 @@ fn copy_flushed(from: &Path, to: &Path) -> std::io::Result<()> {
     if let Some(dir) = to.parent() {
         std::fs::create_dir_all(dir)?;
     }
+    #[cfg(feature = "brick")]
+    let n = {
+        let _idle = crate::update::brick_io::IdleIo::enter()?;
+        crate::update::brick_io::Pacer::new().copy(&mut std::fs::File::open(from)?, &mut std::fs::File::create(to)?)?
+    };
+    #[cfg(not(feature = "brick"))]
     let n = std::fs::copy(from, to)?;
     std::fs::File::open(to)?.sync_all()?;
     if n != std::fs::metadata(from)?.len() {

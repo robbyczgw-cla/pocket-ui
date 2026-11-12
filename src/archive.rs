@@ -295,17 +295,31 @@ pub fn extract_rom(zip_path: &Path, wanted: &[&str]) -> Result<(String, Vec<u8>)
 /// The generic extractor keeps all regular files; the CLI uses the headless Python policy below.
 /// Every policy validates all entry paths, headers and size limits before writing.
 pub fn unpack_runtime(zip_path: &Path, destination: &Path) -> Result<(), String> {
-    unpack_runtime_filtered(zip_path, destination, |_| false)
+    unpack_runtime_filtered(zip_path, destination, |_| false, &|_, _| {})
 }
 
 /// The headless store needs the standard library, but not Python's test suite, pip or GUI/development files.
 pub fn unpack_python_runtime(zip_path: &Path, destination: &Path) -> Result<(), String> {
+    unpack_python_runtime_with_progress(zip_path, destination, &|_, _| {}).map_err(|e| e.to_string())
+}
+
+/// A runtime refused during validation or stopped by a card write failure.
+#[derive(Debug)]
+pub struct RuntimeError(String);
+
+impl std::fmt::Display for RuntimeError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result { f.write_str(&self.0) }
+}
+impl std::error::Error for RuntimeError {}
+
+/// Worker/CLI only: report durable extracted bytes, including materialized aliases.
+pub fn unpack_python_runtime_with_progress(zip_path: &Path, destination: &Path, progress: &dyn Fn(u64, u64)) -> Result<(), RuntimeError> {
     unpack_runtime_filtered(zip_path, destination, |name| {
         ["include/", "share/", "lib/python3.11/site-packages/", "lib/python3.11/test/",
          "lib/python3.11/idlelib/", "lib/python3.11/turtledemo/", "lib/python3.11/ensurepip/",
          "lib/python3.11/ctypes/test/", "lib/python3.11/distutils/tests/", "lib/python3.11/unittest/test/",
          "lib/python3.11/lib2to3/tests/"].iter().any(|prefix| name.starts_with(prefix))
-    })
+    }, progress).map_err(RuntimeError)
 }
 
 const RUNTIME_MAX_ENTRY: usize = 128 << 20;
@@ -322,8 +336,13 @@ struct RuntimePlan<'a> {
     name_bytes: usize,
 }
 
-fn unpack_runtime_filtered(zip_path: &Path, destination: &Path, skip: impl Fn(&str) -> bool) -> Result<(), String> {
+fn unpack_runtime_filtered(zip_path: &Path, destination: &Path, skip: impl Fn(&str) -> bool, progress: &dyn Fn(u64, u64)) -> Result<(), String> {
+    #[cfg(not(feature = "brick"))]
     use std::io::Write;
+    #[cfg(feature = "brick")]
+    let _idle = crate::update::brick_io::IdleIo::enter().map_err(|e| e.to_string())?;
+    #[cfg(feature = "brick")]
+    let mut pacer = crate::update::brick_io::Pacer::new();
     let bytes = read_bounded(zip_path, MAX_ZIP)?;
     let bad = || "The runtime zip is damaged or unsupported.".to_string();
     let end = find_end(&bytes).ok_or_else(bad)?;
@@ -403,6 +422,10 @@ fn unpack_runtime_filtered(zip_path: &Path, destination: &Path, skip: impl Fn(&s
     let mut plan = RuntimePlan { entries: &list, outputs: Vec::new(), expanded: 0, name_bytes: 0 };
     runtime_walk("", "", &tree, &children, &mut std::collections::HashSet::new(), &mut plan)?;
     for (name, _) in &plan.outputs { existing.check(&destination.join(name))?; }
+    let total = plan.outputs.iter().filter(|(name, _)| !skip(name))
+        .filter_map(|(_, source)| source.map(|index| list[index].usize as u64)).sum();
+    let mut done = 0;
+    progress(done, total);
     std::fs::create_dir_all(destination).map_err(|e| e.to_string())?;
     for (name, source) in plan.outputs {
         if skip(&name) || source.is_none() && skip(&format!("{name}/")) { continue; }
@@ -414,7 +437,14 @@ fn unpack_runtime_filtered(zip_path: &Path, destination: &Path, skip: impl Fn(&s
         let data = runtime_data(&bytes, &list[index], directory_at)?;
         std::fs::create_dir_all(path.parent().ok_or_else(bad)?).map_err(|e| e.to_string())?;
         let mut file = std::fs::OpenOptions::new().write(true).create_new(true).open(&path).map_err(|e| e.to_string())?;
-        file.write_all(&data).map_err(|e| e.to_string())?;
+        for block in data.chunks(256 << 10) {
+            #[cfg(feature = "brick")]
+            pacer.write(block, &mut file).map_err(|e| e.to_string())?;
+            #[cfg(not(feature = "brick"))]
+            file.write_all(block).map_err(|e| e.to_string())?;
+            done += block.len() as u64;
+            progress(done, total);
+        }
         // FAT/exFAT own modes and creation times. Never restore Unix modes or archive timestamps.
     }
     Ok(())
@@ -686,6 +716,31 @@ pub(crate) mod tests {
         std::fs::write(&source, zip(files)).unwrap();
         let result = unpack_runtime(&source, &dir.join("out"));
         (dir, result)
+    }
+
+    #[test]
+    #[cfg(feature = "brick")]
+    fn runtime_extraction_obeys_the_card_write_budget_across_files() {
+        let data = vec![83; (256 << 10) * 2 + 17];
+        let files = [stored("bin/python3", &data), stored("lib/alias", &data[..4096])];
+        let start = std::time::Instant::now();
+        let (dir, result) = runtime_extract(&files);
+        result.unwrap();
+        assert!(start.elapsed() >= std::time::Duration::from_secs_f64(
+            (data.len() + 4096) as f64 / crate::update::brick_io::WRITE_RATE as f64),
+            "unpacking must not burst onto the Brick card");
+        assert_eq!(std::fs::read(dir.join("out/bin/python3")).unwrap(), data);
+    }
+
+    #[test]
+    fn runtime_progress_reports_output_bytes_while_preparing_the_python_tree() {
+        let dir = TestDir::new("runtime-progress");
+        let source = dir.join("runtime.zip");
+        let data = vec![83; (256 << 10) * 2 + 17];
+        std::fs::write(&source, zip(&[stored("bin/python3", &data), stored("include/skip", b"header")])).unwrap();
+        let seen = std::cell::RefCell::new(Vec::new());
+        unpack_python_runtime_with_progress(&source, &dir.join("out"), &|done, total| seen.borrow_mut().push((done, total))).unwrap();
+        assert_eq!(*seen.borrow(), vec![(0, 524305), (262144, 524305), (524288, 524305), (524305, 524305)]);
     }
 
     #[test]

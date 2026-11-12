@@ -1,0 +1,20 @@
+pocket-ui ist ein Spiele-Frontend mit eigenem Player. Zeig der App die Ordner mit deinen Spielen, und sie stehen auf einem Regal, mit Box, ein paar Angaben zum Spiel und einem großen Weiterspielen-Knopf für das zuletzt gespielte. Du musst nichts einrichten: Die Emulatoren sind in der App.
+
+<b>Das ist eine Vorschau.</b> Es ist die Android-Version von pocket-ui, das auf ROCKNIX-Handhelds läuft. Sie funktioniert, wurde aber vor allem auf einem Handheld getestet (AYN Odin 2 Mini, Android 13), und nicht alles aus der Linux-Version ist schon da.
+
+<b>Das kann sie</b>
+• Regal, Vitrine, Karten und weitere Ansichten für deine Sammlung, mit Suche, Favoriten und einem Kurator mit Filtern
+• Weiterspielen, wo du aufgehört hast: Jedes Spiel merkt sich seinen letzten Moment; das Pausenmenü speichert, lädt, geht in der Zeit zurück, zoomt und zeigt die Steuerung
+• Eingebaute Cores für Game Boy, Game Boy Color, Game Boy Advance, NES, SNES, Master System, Game Gear, Mega Drive (Module), PC Engine, WonderSwan, Neo Geo Pocket, Atari 2600, Atari Lynx, PlayStation und Sega Saturn (experimentell)
+• Weitere Systeme als kostenlose Downloads, beim ersten Start oder später in den Einstellungen, nur im WLAN: Nintendo DS sowie PSP, Nintendo 64 und Dreamcast als experimentell
+• Mit Controller oder per Touch; das Touch-Pad zeigt die Tasten, die das Spiel nutzt
+• Spielstand-Sicherung: alle Spielstände und Momente in einer Zip-Datei, die du behältst
+• Englisch, Deutsch und Spanisch; größere Schrift und eine Tastatur für den Controller
+
+<b>Deine Spiele bleiben deine</b>
+Es sind keine Spiele und keine BIOS-Dateien enthalten. Du wählst die Ordner; Spiele aus einer einzelnen Datei laufen direkt aus deinem Ordner; Spiele aus mehreren Dateien oder von einem Speicheranbieter, der nur Datenströme liefert, werden einmal in den privaten Speicher der App kopiert (die letzten fünf großen bleiben bereit). Cover und Infos kommen nur aus dem Internet, wenn du es in den Einstellungen erlaubst, und nur im WLAN.
+
+<b>Freie Software</b>
+pocket-ui steht unter der GPL-2.0-or-later. Die Emulator-Cores behalten ihre eigenen Lizenzen; zu jeder Version gehört ihr genauer Quellcode. Die Lizenzdateien liegen in der App und auf der Release-Seite.
+
+Braucht Android 8.0 oder neuer auf einem 64-Bit-ARM-Gerät. PS2-, GameCube- und 3DS-Spiele spielt pocket-ui nicht selbst.

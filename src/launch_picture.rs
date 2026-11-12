@@ -2,6 +2,8 @@
 //! a game looks like a console waking from standby instead of a black moment. pocket-ui fades the shelf out and this
 //! picture in where the game is going to draw it; pocket-core's first frame is then the same picture, and it fades its
 //! frame (the screen border) in around it (`overlay::Overlay::draw_veil`).
+//! A start with old-TV switch-on omits this preview so the picture first appears after the dark and the line;
+//! the intentional picture behind a "Where was I?" reminder is kept (`App::launch_prepared`).
 //!
 //! Only a picture of the moment the game continues from is shown: the preview of the auto-resume state (pocket-core's
 //! `<game>.pstate.auto.png`, RetroArch's `<game>.state.auto.png`), else the frame pocket-ui kept when the game was

@@ -1,5 +1,4 @@
 //! pocket-core inside the APK: shared libretro host, save semantics and audio engine on the EGL thread.
-use glow::HasContext;
 use jni::{
     objects::{JObject, JString},
     sys::{jboolean, jfloat, jint, jstring},
@@ -27,205 +26,14 @@ mod picture;
 #[path = "play_cards.rs"]
 mod play_cards;
 thread_local! {static PLAYER:RefCell<Option<Player>>=const{RefCell::new(None)};}
-#[link(name = "EGL")]
-extern "C" {
-    fn eglGetProcAddress(name: *const std::ffi::c_char) -> *const std::ffi::c_void;
-}
-struct Graphics {
-    gl: glow::Context,
-    program: glow::Program,
-    solid_program: glow::Program,
-    texture: glow::Texture,
-    vao: glow::VertexArray,
-    size: (i32, i32),
-    game_texture: glow::Texture,
-    game_size: (i32, i32),
-    // 0xRRGGBB behind the picture and in the system-bar insets: the touch pause sheet's page colour, else black.
-    backdrop: u32,
-    effect: usize,
-}
-impl Graphics {
-    fn new() -> Result<Self, String> {
-        unsafe {
-            let gl = glow::Context::from_loader_function_cstr(|name| eglGetProcAddress(name.as_ptr()));
-            let program = gl.create_program()?;
-            for(kind,source)in[(glow::VERTEX_SHADER,"#version 300 es\nout vec2 uv;void main(){vec2 p=vec2(float((gl_VertexID<<1)&2),float(gl_VertexID&2));uv=vec2(p.x,1.0-p.y);gl_Position=vec4(p*2.0-1.0,0.0,1.0);}"),(glow::FRAGMENT_SHADER,"#version 300 es\nprecision mediump float;in vec2 uv;uniform sampler2D image;uniform bool overlay;uniform int effect;uniform float sourceHeight;out vec4 color;void main(){vec4 t=texture(image,uv);vec3 c=t.bgr;if(!overlay){if(effect==2||effect==3){float line=sin(uv.y*sourceHeight*3.14159265*2.0);c*=0.86+0.14*line;}if(effect==2){vec2 q=uv*2.0-1.0;c*=1.0-0.16*dot(q,q);c=pow(c,vec3(0.94));}}float a=overlay?(t.a>0.0?t.a:float(any(notEqual(c,vec3(0.0))))):1.0;color=vec4(c,a);}")] {
-            let shader=gl.create_shader(kind)?;gl.shader_source(shader,source);gl.compile_shader(shader);
-            if !gl.get_shader_compile_status(shader){return Err(gl.get_shader_info_log(shader));}
-            gl.attach_shader(program,shader);gl.link_program(program);gl.delete_shader(shader);
-        }
-            if !gl.get_program_link_status(program) {
-                return Err(gl.get_program_info_log(program));
-            }
-            let solid_program = gl.create_program()?;
-            for (kind, source) in [
-                (
-                    glow::VERTEX_SHADER,
-                    "#version 300 es\nvoid main(){vec2 p=vec2(float((gl_VertexID<<1)&2),float(gl_VertexID&2));gl_Position=vec4(p*2.0-1.0,0.0,1.0);}",
-                ),
-                (
-                    glow::FRAGMENT_SHADER,
-                    "#version 300 es\nprecision mediump float;uniform vec4 tint;out vec4 color;void main(){color=tint;}",
-                ),
-            ] {
-                let shader = gl.create_shader(kind)?;
-                gl.shader_source(shader, source);
-                gl.compile_shader(shader);
-                if !gl.get_shader_compile_status(shader) {
-                    return Err(gl.get_shader_info_log(shader));
-                }
-                gl.attach_shader(solid_program, shader);
-                gl.link_program(solid_program);
-                gl.delete_shader(shader);
-            }
-            if !gl.get_program_link_status(solid_program) {
-                return Err(gl.get_program_info_log(solid_program));
-            }
-            let texture = gl.create_texture()?;
-            gl.bind_texture(glow::TEXTURE_2D, Some(texture));
-            gl.tex_parameter_i32(glow::TEXTURE_2D, glow::TEXTURE_MIN_FILTER, glow::NEAREST as i32);
-            gl.tex_parameter_i32(glow::TEXTURE_2D, glow::TEXTURE_MAG_FILTER, glow::NEAREST as i32);
-            gl.tex_parameter_i32(glow::TEXTURE_2D, glow::TEXTURE_WRAP_S, glow::CLAMP_TO_EDGE as i32);
-            gl.tex_parameter_i32(glow::TEXTURE_2D, glow::TEXTURE_WRAP_T, glow::CLAMP_TO_EDGE as i32);
-            let game_texture = gl.create_texture()?;
-            gl.bind_texture(glow::TEXTURE_2D, Some(game_texture));
-            gl.tex_parameter_i32(glow::TEXTURE_2D, glow::TEXTURE_MIN_FILTER, glow::NEAREST as i32);
-            gl.tex_parameter_i32(glow::TEXTURE_2D, glow::TEXTURE_MAG_FILTER, glow::NEAREST as i32);
-            gl.tex_parameter_i32(glow::TEXTURE_2D, glow::TEXTURE_WRAP_S, glow::CLAMP_TO_EDGE as i32);
-            gl.tex_parameter_i32(glow::TEXTURE_2D, glow::TEXTURE_WRAP_T, glow::CLAMP_TO_EDGE as i32);
-            let vao = gl.create_vertex_array()?;
-            log::info!(
-                "player EGL: {} / {}",
-                gl.get_parameter_string(glow::RENDERER),
-                gl.get_parameter_string(glow::VERSION)
-            );
-            Ok(Self {
-                gl,
-                program,
-                solid_program,
-                texture,
-                vao,
-                size: (0, 0),
-                game_texture,
-                game_size: (0, 0),
-                backdrop: 0,
-                effect: 0,
-            })
-        }
-    }
-    unsafe fn upload(gl: &glow::Context, pixels: &[u32], size: (i32, i32), previous: &mut (i32, i32)) {
-        // SAFETY: tightly packed u32 pixels cover exactly this texture; GLES consumes the slice synchronously.
-        let bytes = unsafe { std::slice::from_raw_parts(pixels.as_ptr().cast::<u8>(), pixels.len() * 4) };
-        unsafe {
-            if *previous != size {
-                gl.tex_image_2d(
-                    glow::TEXTURE_2D,
-                    0,
-                    glow::RGBA8 as i32,
-                    size.0,
-                    size.1,
-                    0,
-                    glow::RGBA,
-                    glow::UNSIGNED_BYTE,
-                    Some(bytes),
-                );
-                *previous = size;
-            } else {
-                gl.tex_sub_image_2d(
-                    glow::TEXTURE_2D,
-                    0,
-                    0,
-                    0,
-                    size.0,
-                    size.1,
-                    glow::RGBA,
-                    glow::UNSIGNED_BYTE,
-                    glow::PixelUnpackData::Slice(bytes),
-                );
-            }
-        }
-    }
-    #[allow(clippy::too_many_arguments)]
-    fn present(
-        &mut self,
-        pixels: &[u32],
-        size: (i32, i32),
-        view: (i32, i32, i32, i32),
-        game: Option<(&Image, Area)>,
-        dirty: bool,
-        crt: &[pocket_ui::crt_on::Quad],
-    ) {
-        unsafe {
-            let gl = &self.gl;
-            let channel = |shift: u32| ((self.backdrop >> shift) & 0xff) as f32 / 255.0;
-            gl.clear_color(channel(16), channel(8), channel(0), 1.0);
-            gl.clear(glow::COLOR_BUFFER_BIT);
-            gl.enable(glow::BLEND);
-            gl.blend_func(glow::SRC_ALPHA, glow::ONE_MINUS_SRC_ALPHA);
-            gl.use_program(Some(self.program));
-            gl.bind_vertex_array(Some(self.vao));
-            gl.active_texture(glow::TEXTURE0);
-            let overlay = gl.get_uniform_location(self.program, "overlay");
-            if let Some((image, rect)) = game {
-                // Upload the core's native framebuffer, not a CPU enlargement of it. The phone's
-                // physical resolution therefore does not multiply the per-frame copy or CPU blit cost.
-                gl.bind_texture(glow::TEXTURE_2D, Some(self.game_texture));
-                Self::upload(gl, &image.px, (image.w as i32, image.h as i32), &mut self.game_size);
-                let filter = if matches!(self.effect, 1 | 2) { glow::LINEAR } else { glow::NEAREST };
-                gl.tex_parameter_i32(glow::TEXTURE_2D, glow::TEXTURE_MIN_FILTER, filter as i32);
-                gl.tex_parameter_i32(glow::TEXTURE_2D, glow::TEXTURE_MAG_FILTER, filter as i32);
-                gl.uniform_1_i32(gl.get_uniform_location(self.program, "effect").as_ref(), self.effect as i32);
-                gl.uniform_1_f32(gl.get_uniform_location(self.program, "sourceHeight").as_ref(), image.h as f32);
-                gl.uniform_1_i32(overlay.as_ref(), 0);
-                gl.viewport(
-                    view.0 + rect.x * view.2 / size.0,
-                    view.1 + view.3 - (rect.y + rect.h) * view.3 / size.1,
-                    rect.w * view.2 / size.0,
-                    rect.h * view.3 / size.1,
-                );
-                gl.draw_arrays(glow::TRIANGLES, 0, 3);
-            }
-            // Shared CRT geometry over the game only; GPU quads keep the normal native-size upload path.
-            if !crt.is_empty() {
-                gl.use_program(Some(self.solid_program));
-                let tint = gl.get_uniform_location(self.solid_program, "tint");
-                for quad in crt {
-                    let (x, y, w, h) = quad.rect;
-                    let (sx, sy) = (view.2 as f32 / size.0 as f32, view.3 as f32 / size.1 as f32);
-                    let x0 = (x * sx).floor() as i32;
-                    let x1 = ((x + w) * sx).ceil() as i32;
-                    let y0 = (y * sy).floor() as i32;
-                    let y1 = ((y + h) * sy).ceil() as i32;
-                    gl.viewport(view.0 + x0, view.1 + view.3 - y1, x1 - x0, y1 - y0);
-                    let value = if quad.white { 1.0 } else { 0.0 };
-                    gl.uniform_4_f32(tint.as_ref(), value, value, value, quad.alpha);
-                    gl.draw_arrays(glow::TRIANGLES, 0, 3);
-                }
-                gl.use_program(Some(self.program));
-            }
-            // Picture effects never filter the pause sheet or touch controls.
-            gl.uniform_1_i32(gl.get_uniform_location(self.program, "effect").as_ref(), 0);
-            gl.bind_texture(glow::TEXTURE_2D, Some(self.texture));
-            if dirty || self.size != size {
-                Self::upload(gl, pixels, size, &mut self.size);
-            }
-            gl.uniform_1_i32(overlay.as_ref(), i32::from(game.is_some()));
-            gl.viewport(view.0, view.1, view.2, view.3);
-            gl.draw_arrays(glow::TRIANGLES, 0, 3);
-        }
-    }
-}
-impl Drop for Graphics {
-    fn drop(&mut self) {
-        unsafe {
-            self.gl.delete_texture(self.texture);
-            self.gl.delete_texture(self.game_texture);
-            self.gl.delete_program(self.program);
-            self.gl.delete_program(self.solid_program);
-            self.gl.delete_vertex_array(self.vao);
-        }
-    }
-}
+#[path = "player_graphics.rs"]
+mod player_graphics;
+use player_graphics::Graphics;
+#[path = "player_video.rs"]
+mod player_video;
+#[path = "player_touch.rs"]
+mod player_touch;
+use player_touch::touch_controls;
 #[derive(Clone, Copy, PartialEq)]
 enum Menu {
     Pause,
@@ -233,9 +41,16 @@ enum Menu {
     Controls,
     Recovery,
     Zoom,
+    /// The game's RetroAchievements, as a list to read (a row of the pause menu while signed in).
+    Achievements,
 }
 #[path = "moments.rs"]
 mod moments;
+#[path = "player_achievements.rs"]
+mod player_achievements;
+#[cfg(feature = "ra-replay")]
+#[path = "ra_replay.rs"]
+mod ra_replay;
 // Dereferencing the core makes its isolated context current for every entry point,
 // including save/load, options and destruction; composition explicitly restores the Activity.
 fn core_hw_frame(core: &CoreSession) -> Option<pocket_ui::libretro::Frame> {
@@ -298,6 +113,11 @@ impl Drop for CoreSession {
     }
 }
 struct Player {
+    // First, so it is dropped (its session closed) before the core, whose memory it reads, goes.
+    ra: Option<player_achievements::Achievements>,
+    /// The Achievements page's lines, read from the session's list at most once a second.
+    ra_lines: Vec<String>,
+    ra_read: Option<Instant>,
     core: CoreSession,
     audio: Option<pocket_ui::audio::Audio>,
     gfx: Graphics,
@@ -305,9 +125,12 @@ struct Player {
     pixels: Vec<u32>,
     overlay_size: Option<(u32, u32)>,
     touch_visible: bool,
-    frame: Option<Image>,
+    frame: Option<std::sync::Arc<Image>>,
     game_area: Option<Area>,
+    /// The window's size at the last frame, in pixels (the launcher's way back places the last picture by it).
+    window: (u32, u32),
     stylus_finger: Option<i32>,
+    stylus: pocket_ui::platform::android_pointer::Pointer,
     title: String,
     system: String,
     base: PathBuf,
@@ -315,10 +138,15 @@ struct Player {
     key: String,
     /// What this session's states are made with (`frozen_phone`), written beside the auto state.
     mark: Option<pocket_ui::frozen::Mark>,
+    // Declared after core: drop the core before closing its source and removing its path.
+    _document: Option<pocket_ui::platform::android_content::DirectGame>,
     /// Lines over the game's first moments about its start (`frozen_phone`), where they are and until when.
     note: Vec<String>,
     note_until: Option<Instant>,
     note_area: Area,
+    /// Where the achievement card was painted last (the accessibility tree names it).
+    card_area: Area,
+    card_label: String,
     first_frame: bool,
     paused: bool,
     resumed: bool,
@@ -355,6 +183,14 @@ struct Player {
     buttons: u16,
     pulses: u16,
     stick_buttons: u16,
+    /// L2/R2 when the pad reports them as axes (`pad::android::Trigger`); their bits join `stick_buttons`.
+    triggers: [pocket_ui::pad::android::Trigger; 2],
+    /// The gamepads, who plays which player, and the buttons of players 2 to 4 (`android_pads`).
+    pads: pocket_ui::android_pads::Pads,
+    /// Where the pad behind the event being handled has its A/B/X/Y (`Pads::arrangement_of`).
+    arrangement: pocket_ui::pad::android::Arrangement,
+    /// The buttons the core was given last (a change is logged: what the pads did, as the game saw it).
+    last_given: [u16; 4],
     stick_direction: i32,
     menu_drag: Option<(i32, f32, f32)>,
     // Touch pause menu: the finger whose tap only revealed it, the Options page's pixel scroll and its drag, and the
@@ -383,9 +219,13 @@ struct Player {
     next: Instant,
     period: Duration,
     frames: u64,
+    /// Fresh pictures delivered by the core, separate from emulation ticks and display presentations.
+    video_frames: u64,
+    diagnostic_buttons_seen: u16,
     last_flush: Instant,
     last_earlier: Instant,
     earlier: usize,
+    earlier_writer: Option<pocket_ui::platform::android_earlier::Writer>,
     cheats: Option<pocket_ui::cheats::CheatMenu>,
     recovery_required: bool,
 }
@@ -399,10 +239,29 @@ impl Player {
         pocket_ui::ui_sound::start();
         let saves = data.join("saves").join(&key);
         let states = data.join("states").join(&key);
-        let bios = data.join("bios");
+        let downloaded_system = Path::new(core_path).parent().unwrap_or(Path::new("")).join("system");
+        let bios = if system == "psp" && downloaded_system.join("PPSSPP").is_dir() { downloaded_system } else { data.join("bios") };
         for path in [&saves, &states, &bios] {
             std::fs::create_dir_all(path).map_err(|e| e.to_string())?;
         }
+        if system == "psp" && !bios.join("PPSSPP").is_dir() {
+            match pocket_ui::platform::android::strings("preparePspAssets", &[]) {
+                Ok(error) if error.is_empty() => {}
+                error => {
+                    log::warn!("PPSSPP system assets unavailable: {error:?}");
+                    return Err(pocket_ui::i18n::tr("The emulator's files could not be prepared.").into());
+                }
+            }
+        }
+        let descriptor = pocket_ui::platform::android::string("gameDocumentFd");
+        let document = if descriptor.is_empty() { None } else {
+            use std::os::fd::FromRawFd;
+            let fd = descriptor.parse::<i32>().ok().filter(|fd| *fd >= 0).ok_or_else(|| pocket_ui::i18n::tr("The game's document could not be opened"))?;
+            let source = unsafe { std::fs::File::from_raw_fd(fd) };
+            Some(pocket_ui::platform::android_content::DirectGame::new(source, &data.join("direct-content").join(&key), Path::new(rom).file_name().and_then(|n| n.to_str()).unwrap_or_default()).map_err(|e| e.to_string())?)
+        };
+        let rom = document.as_ref().map_or(Path::new(rom), |d| d.path());
+        let rom = rom.to_str().ok_or("Invalid ROM path")?;
         let base = states.join(Path::new(rom).file_stem().unwrap_or_default());
         let alternative = Path::new(core_path).file_name().and_then(|n| n.to_str()) == Some("libgambatte_libretro.so");
         let options_name = if alternative {
@@ -414,29 +273,48 @@ impl Player {
         let saved_options: std::collections::BTreeMap<String, String> = pocket_ui::fsutil::read_json_or_backup(&options_path).unwrap_or_default();
         let selected: Vec<_> = saved_options.iter().map(|(k, v)| (k.as_str(), v.as_str())).collect();
         let mut core = CoreSession::new(Core::load(Path::new(core_path), Path::new(rom), &bios, &saves, &selected)?)?;
-        let (_, _, av, geometry) = core.run(0);
+        core.input_probe(pocket_ui::platform::android::string("diagnosticAudio") == "true");
+        let (initial_frame, _, av, geometry) = core.run(0);
         if let Some(av) = av {
             core.av = av;
         }
         if let Some(geometry) = geometry {
             core.av.geometry = geometry;
         }
+        let initial_frame = core_hw_frame(&core).or(initial_frame);
         // Frozen games: the file just copied decides, before the core sees a state. A moment for another file or core
         // isn't loaded and goes where it can't be lost; the start says so.
         let core_id = pocket_ui::frozen_phone::core_of(Path::new(core_path));
         let start = pocket_ui::frozen_phone::at_start(&base, Path::new(rom), &core_id, frozen);
-        // Only length-bounded parsers may receive shorter raw states. In particular the
-        // pinned PPSSPP adapter ignores the supplied length; keep its minimum-size guard.
-        if pocket_ui::state_policy::core_states_vary(&core_id) {
-            core.states_vary_in_size();
-        }
+        // Only length-bounded parsers may receive shorter raw states as they are. The pinned PPSSPP adapter ignores
+        // the supplied length and reports a 128 MiB placeholder until its renderer is up: its states are padded to the
+        // size asked now instead (`state_policy`).
+        core.apply_state_policy(&core_id);
+        // Players 2 to 4 get a pad in the ports the core lists (couch co-op); a core with one port hears every pad as player 1.
+        let mut pads = pocket_ui::android_pads::Pads::default();
+        let plugged = core.plug_other_players(false); // plain pads, as player 1 has them here (no DualShock plugged on Android)
+        pads.set_multiplayer(!plugged.is_empty());
+        for line in &plugged { log::info!("player {line}"); }
         let resume = if start.resume { core.resume(&pocket_ui::slots::auto_path(&base)) } else { pocket_ui::libretro::Resume::NoState };
         let mut note = start.note;
         note.extend(pocket_ui::frozen_phone::after_resume(&base, resume, core.resumed_from()));
         if let Some(message) = play_cards::recovery_note(&core_id, resume) {note.push(message.into());}
         let mark = pocket_ui::frozen::Mark::new(pocket_ui::frozen_phone::EMULATOR, &core_id, Path::new(rom), None);
+        if document.is_some() {
+            // The existing CRC identity has been checked and the core opened the original document.
+            // The previous content directory contains only disposable GameCopy payload, never saves.
+            let copy = data.join("content").join(&key);
+            if copy.is_dir() {
+                if let Err(error) = std::fs::remove_dir_all(&copy) { log::warn!("old content copy retained: {error}"); }
+            }
+            log::info!("content: direct core={} path={} copied_bytes=0", core_id, rom);
+        }
         let period = Duration::from_secs_f64(1.0 / core.av.timing.fps.clamp(10.0, 240.0));
-        let audio = pocket_ui::audio::Audio::open(core.av.timing.sample_rate, false);
+        let mut audio = pocket_ui::audio::Audio::open(core.av.timing.sample_rate, pocket_ui::audio::needs_jitter_reserve(&system));
+        if let Some(audio) = &mut audio {
+            audio.set_source_timing(core.av.timing.sample_rate, core.av.timing.fps, display_refresh_hz());
+            if matches!(resume, pocket_ui::libretro::Resume::NoState) { audio.reserve_startup(&system); }
+        }
         if audio.is_none() {
             return Err("AAudio output unavailable".into());
         }
@@ -457,7 +335,7 @@ impl Player {
             .unwrap_or(0);
         let resumed_frame = if matches!(resume, pocket_ui::libretro::Resume::Resumed | pocket_ui::libretro::Resume::ResumedAgain) {
             let (frame,_,_,_) = core.run(0);
-            core_hw_frame(&core).or(frame).and_then(|f| Some(f.to_rgb()).map(|rgb| Image {w:f.width,h:f.height,px:rgb.chunks_exact(3).map(|p|((p[0] as u32)<<16)|((p[1] as u32)<<8)|p[2] as u32).collect()}))
+            core_hw_frame(&core).or(frame)
         } else {None};
         let filled_slots = std::array::from_fn(|i| pocket_ui::slots::state_path(&base, i).is_file());
         let kept = pocket_ui::frozen_phone::kept(&base);
@@ -467,7 +345,12 @@ impl Player {
         let control_names: Vec<_> = core.described_inputs().into_iter().map(|t| pocket_ui::controls::Target{id:t.id,label:t.label}).collect();
         if let Err(e)=play_cards::remember_names(&data,&key,&control_names) {log::warn!("Could not remember core button names: {e}");}
         let zoom = play_cards::Zoom::new(&system);
+        // RetroAchievements, when an account is signed in: everything slow runs on the session's own threads.
+        let ra = player_achievements::Achievements::start(&data, &system, Path::new(rom), &key, &core);
         Ok(Self {
+            ra,
+            ra_lines: Vec::new(),
+            ra_read: None,
             core,
             audio,
             gfx,
@@ -475,18 +358,23 @@ impl Player {
             pixels: vec![],
             overlay_size: None,
             touch_visible: pocket_ui::platform::android::string("hasGamepad") != "true",
-            frame: resumed_frame,
+            frame: player_video::startup(initial_frame, resumed_frame),
             game_area: None,
+            window: (0, 0),
             stylus_finger: None,
+            stylus: Default::default(),
             title,
             system,
             base,
             data,
             key,
             mark,
+            _document: document,
             note,
             note_until: None,
             note_area: Area::new(0, 0, 0, 0),
+            card_area: Area::new(0, 0, 0, 0),
+            card_label: String::new(),
             first_frame: false,
             paused: false,
             resumed: matches!(resume, pocket_ui::libretro::Resume::Resumed | pocket_ui::libretro::Resume::ResumedAgain),
@@ -522,6 +410,10 @@ impl Player {
             buttons: 0,
             pulses: 0,
             stick_buttons: 0,
+            triggers: Default::default(),
+            pads,
+            arrangement: Default::default(),
+            last_given: [0; 4],
             stick_direction: 0,
             menu_drag: None,
             swallow: None,
@@ -545,9 +437,15 @@ impl Player {
             next: now,
             period,
             frames: 0,
+            video_frames: 0,
+            diagnostic_buttons_seen: 0,
             last_flush: now,
             last_earlier: now,
             earlier: initial,
+            earlier_writer: match pocket_ui::platform::android_earlier::Writer::start() {
+                Ok(writer) => Some(writer),
+                Err(error) => { log::warn!("Earlier worker unavailable: {error}"); None }
+            },
             cheats: None,
             recovery_required: false,
         })
@@ -587,9 +485,13 @@ impl Player {
             return Err(error.message);
         }
         self.recovery_required = false;
+        // The loaded moment can't unlock anything by itself: achievements wait for the game to move on.
+        if let Some(ra) = &mut self.ra { ra.reset(); }
         self.core.set_analog([0; 4]);
+        self.stylus.clear();
+        self.stylus_finger = None;
         self.core.set_pointer(None);
-        if let Some(image) = pocket_ui::image::load_png(&pocket_ui::slots::preview_path(path)) { self.frame = Some(image); }
+        if let Some(image) = pocket_ui::image::load_png(&pocket_ui::slots::preview_path(path)) { self.frame = Some(std::sync::Arc::new(image)); }
         self.held = Default::default();
         self.buttons = 0;
         self.fingers.clear();
@@ -597,8 +499,41 @@ impl Player {
         log::info!("player state loaded: {}", path.display());
         Ok(())
     }
+    /// Save & quit: the launcher's way back gets the game's last picture (the auto state's preview, just written) and
+    /// where it stood on the screen (`eject::LastPicture`). The time is the quit's, for its measurement in the log.
+    fn leave_last_picture(&self, saved: bool) {
+        log::info!("quit: saved={saved} at {:.1}", pocket_ui::platform::android::monotonic_ms());
+        let preview = pocket_ui::slots::preview_path(&pocket_ui::slots::auto_path(&self.base));
+        let (left, _, vw, vh) = self.view;
+        let (lw, lh) = (self.logical.0.max(1) as f32, self.logical.1.max(1) as f32);
+        // The game's rectangle is in the overlay's logical pixels; the view starts `top` down from the window's top.
+        let rect = self.game_area.map(|a| {
+            let (kx, ky) = (vw as f32 / lw, vh as f32 / lh);
+            (left + (a.x as f32 * kx).round() as i32, self.top + (a.y as f32 * ky).round() as i32, (a.w as f32 * kx).round() as i32, (a.h as f32 * ky).round() as i32)
+        });
+        let note = pocket_ui::eject::LastPicture {
+            key: self.key.clone(),
+            picture: (saved && self.frame.is_some() && preview.is_file()).then_some(preview),
+            rect,
+            window: self.window,
+            saved,
+            at_ms: std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_millis() as u64),
+        };
+        if let Err(error) = note.write(&self.data) {
+            log::warn!("quit: no last picture for the way back: {error}");
+        }
+    }
     fn refresh_slots(&mut self) {
         self.filled_slots = std::array::from_fn(|i| pocket_ui::slots::state_path(&self.base, i).is_file());
+    }
+    /// The Achievements page's lines from the session's list (the file it wrote when the menu opened), at most once a
+    /// second: the list is still loading when the menu opens in a game's first seconds.
+    fn refresh_achievements(&mut self, now: bool) {
+        let Some(ra) = &self.ra else { return };
+        if !now && self.ra_read.is_some_and(|t| t.elapsed() < Duration::from_secs(1)) { return; }
+        self.ra_read = Some(Instant::now());
+        ra.menu_opened();
+        self.ra_lines = pocket_ui::achievements_page::list_lines(&ra.list());
     }
     fn sound(&self, sound: pocket_ui::ui_sound::Sound) {
         // The shared mixer uses Android AAudio and the app sound preference; Android owns master volume.
@@ -619,7 +554,12 @@ impl Player {
         if !on && self.recovery_required { return; }
         if !on {self.suspended=false;}
         if !on && self.audio.is_none() {
-            self.audio = pocket_ui::audio::Audio::open(self.core.av.timing.sample_rate, false);
+            self.audio = pocket_ui::audio::Audio::open(self.core.av.timing.sample_rate, pocket_ui::audio::needs_jitter_reserve(&self.system));
+        }
+        if !on {
+            if let Some(audio) = &mut self.audio {
+                audio.set_source_timing(self.core.av.timing.sample_rate, self.core.av.timing.fps, display_refresh_hz());
+            }
         }
         if on {
             self.crt_done = true;
@@ -640,8 +580,10 @@ impl Player {
         self.buttons = 0;
         self.pulses = 0;
         self.stick_buttons = 0;
+        self.pads.release_all();
         self.stick_direction = 0;
         self.core.set_analog([0; 4]);
+        self.stylus.clear();
         self.core.set_pointer(None);
         self.stylus_finger = None;
         self.menu_drag = None;
@@ -656,7 +598,40 @@ impl Player {
         self.swallow = None;
         log::info!("player paused={on}");
     }
-    fn analog(&mut self, axes: [f32; 4], hat: [f32; 2]) -> bool {
+    /// A key of one device. In the game a pad that plays player 2 to 4 only holds its own buttons; the keys that
+    /// open the pause menu, and every key while a menu is open, are anybody's.
+    fn key_of(&mut self, device: i32, key: i32, down: bool) -> bool {
+        if !self.paused && !matches!(key, 4 | 82 | 110) {
+            match self.pads.player_of(device) {
+                Some(0) => (),
+                Some(_) => {
+                    self.pads.key(device, key, down);
+                    return true;
+                }
+                None => return true,
+            }
+        }
+        self.arrangement = self.pads.arrangement_of(device);
+        self.key(key, down)
+    }
+    /// The sticks, hat and triggers of one device, as `key_of`.
+    fn analog_of(&mut self, device: i32, axes: [f32; 4], hat: [f32; 2], triggers: [f32; 2]) -> bool {
+        if !self.paused {
+            match self.pads.player_of(device) {
+                Some(0) => (),
+                Some(_) => {
+                    self.pads.motion(device, axes, hat, triggers, pocket_ui::controls::stick_dpad_default(&self.system));
+                    return true;
+                }
+                None => return true,
+            }
+        }
+        self.analog(axes, hat, triggers)
+    }
+    fn analog(&mut self, axes: [f32; 4], hat: [f32; 2], triggers: [f32; 2]) -> bool {
+        for (latch, value) in self.triggers.iter_mut().zip(triggers) {
+            latch.update(value);
+        }
         if axes.iter().chain(hat.iter()).any(|v| v.abs() > 0.55) {
             self.crt_done = true;
         }
@@ -677,7 +652,7 @@ impl Player {
             1 << 5
         } else {
             0
-        });
+        }) | (if self.triggers[0].down() { 1 << 12 } else { 0 }) | (if self.triggers[1].down() { 1 << 13 } else { 0 });
         let direction = if x.abs() > y.abs() {
             if x < -0.55 {
                 21
@@ -717,19 +692,22 @@ impl Player {
                     self.controls_intro = false;
                     self.pause(false);
                 } else if self.paused && self.menu != Menu::Pause {
+                    // Back from the achievements list lands on its own row, so the next press doesn't start at the top.
+                    self.row = if self.menu == Menu::Achievements { self.rows().len().saturating_sub(1) } else { 0 };
                     self.menu = Menu::Pause;
-                    self.row = 0;
                     self.scroll = 0;
                     self.zoom_fingers.clear();
                 } else { self.pause(!self.paused); }
             }
             return !self.paused;
         }
-        if self.paused && matches!(self.menu, Menu::Controls | Menu::Recovery) {
+        if self.paused && matches!(self.menu, Menu::Controls | Menu::Recovery | Menu::Achievements) {
             if down {
+                // A long list (a hundred achievements) moves by five lines.
+                let step = if self.menu == Menu::Achievements { 5 } else { 1 };
                 match key {
-                    19 => self.scroll = (self.scroll - 1).max(0),
-                    20 => self.scroll = (self.scroll + 1).min(self.scroll_max),
+                    19 => self.scroll = (self.scroll - step).max(0),
+                    20 => self.scroll = (self.scroll + step).min(self.scroll_max),
                     23 | 66 | 96 => { self.key(4, true); },
                     _ => (),
                 }
@@ -791,7 +769,7 @@ impl Player {
                 23 | 66 | 96 => self.activate(),
                 _ => (),
             }
-        } else if let Some(bit) = key_bit(key) {
+        } else if let Some(bit) = pocket_ui::pad::android::retro_bit_on(key, self.arrangement) {
             if down {
                 self.buttons |= 1 << bit;
                 self.pulses |= 1 << bit;
@@ -817,6 +795,13 @@ impl Player {
                     category:Some("Cheats".into()), ..Default::default() });
             }
         }
+        // A game of several discs (an `.m3u`, a multi-disc `.pbp`): which one is in, as the handhelds' Disc row
+        // (`pocket_ui::disc`). Last, so the rows above keep their places.
+        if let Some((at, count)) = self.core.disc().filter(|(_, count)| *count > 1) {
+            options.push(FileOption { key: DISC_ROW.into(), label: "Disc".into(), current: at.to_string(),
+                values: (0..count).map(|i| pocket_ui::core_options::FileValue { value: i.to_string(), label: format!("Disc {} of {}", i + 1, count) }).collect(),
+                category: Some("Controls".into()), ..Default::default() });
+        }
         options
     }
     fn section(row: usize) -> &'static str {
@@ -829,7 +814,7 @@ impl Player {
             return rows;
         }
         let place = place_name(self.slot, self.filled_slots.len());
-        vec![
+        let mut rows: Vec<String> = vec![
             "Continue".into(),
             format!("Save · {place}"),
             format!("Load · {place}"),
@@ -839,7 +824,10 @@ impl Player {
             "Controls".into(),
             "Zoom".into(),
             if self.recovery_required { "Return to library" } else { "Save & quit" }.into(),
-        ]
+        ];
+        // Only in a game with an account signed in (RetroAchievements); the row comes last so the others keep their numbers.
+        if self.ra.is_some() { rows.push("Achievements".into()); }
+        rows
     }
     /// The slot picker's places: the slots, then the kept moments.
     fn places(&self) -> usize {
@@ -853,6 +841,19 @@ impl Player {
         }
     }
     fn change_option(&mut self, delta: i32) {
+        let cheats = self.cheats.as_ref().map_or(0, |c| c.rows().len());
+        if self.row == self.options.len() + picture::ROWS + 1 + cheats {
+            // The Disc row: the tray opens, the other disc goes in, it closes (`Core::set_disc`).
+            if let Some((at, count)) = self.core.disc().filter(|(_, count)| *count > 1) {
+                let next = (at as i32 + delta).rem_euclid(count as i32) as u32;
+                if self.core.set_disc(next) {
+                    log::info!("player disc {} of {count}", next + 1);
+                } else {
+                    self.message = pocket_ui::i18n::tr("Couldn't change the disc");
+                }
+            }
+            return;
+        }
         if self.row < picture::ROWS {
             if let Err(error) = self.picture.change(self.row, delta) { self.message = error; }
             self.overlay_size = None;
@@ -944,7 +945,7 @@ impl Player {
                     self.key,
                     SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default().as_secs()
                 ));
-                self.frame.as_ref().ok_or_else(|| "No frame yet".into()).and_then(|image| png(&path, image))
+                self.frame.as_deref().ok_or_else(|| "No frame yet".into()).and_then(|image| png(&path, image))
             }
             6 => {
                 self.menu = Menu::Controls;
@@ -956,12 +957,19 @@ impl Player {
                 self.zoom = play_cards::Zoom::new(&self.system);
                 return;
             }
+            9 if self.ra.is_some() => {
+                self.menu = Menu::Achievements;
+                self.scroll = 0;
+                self.refresh_achievements(true);
+                return;
+            }
             _ => {
-                if self.recovery_required { self.quit = true; self.audio.take(); return; }
+                if self.recovery_required { self.quit = true; self.audio.take(); self.leave_last_picture(false); return; }
                 let saved = self.automatic();
                 if saved.is_ok() {
                     self.quit = true;
                     self.audio.take();
+                    self.leave_last_picture(true);
                 }
                 saved
             }
@@ -993,6 +1001,7 @@ impl Player {
             self.stick_buttons = 0;
             self.held = Default::default();
             self.core.set_analog([0;4]);
+            self.stylus.clear();
             self.core.set_pointer(None);
             self.stylus_finger = None;
             self.pulses = 0;
@@ -1025,6 +1034,7 @@ impl Player {
             self.stick_buttons = 0;
             self.held = Default::default();
             self.core.set_analog([0;4]);
+            self.stylus.clear();
             self.core.set_pointer(None);
             self.stylus_finger = None;
             self.pulses = 0;
@@ -1075,7 +1085,7 @@ impl Player {
             if phase == 2 {self.zoom_fingers.remove(&id);self.zoom_distance=None;}
             return false;
         }
-        if self.paused && matches!(self.menu, Menu::Controls | Menu::Recovery) {
+        if self.paused && matches!(self.menu, Menu::Controls | Menu::Recovery | Menu::Achievements) {
             if phase == 0 {self.menu_drag=Some((id,x,y));}
             if phase == 2 {
                 if let Some((_,_,sy))=self.menu_drag.take() {
@@ -1145,7 +1155,7 @@ impl Player {
                         )
                     })
                 };
-                self.core.set_pointer(point);
+                self.stylus.event(point);
                 if phase == 2 {
                     self.stylus_finger = None;
                 }
@@ -1208,6 +1218,7 @@ impl Player {
             log::info!("player viewport: physical={w}x{h} insets={insets:?} density={density}");
         }
         self.view = view;
+        self.window = (w.max(0) as u32, h.max(0) as u32);
         self.logical = pocket_ui::scaled_layout::mobile_size((self.view.2 as u32, self.view.3 as u32), density);
         // Overlay pixels per dp: the touch controls are sized in dp (at least 56 dp a button).
         self.dp = self.logical.0 as f32 / (self.view.2.max(1) as f32 / density.max(0.5));
@@ -1220,53 +1231,52 @@ impl Player {
             let touch = self.fingers.values().fold(self.pulses, |v, b| v | b);
             let mut buttons = self.buttons | touch | self.stick_buttons;
             self.pulses = 0;
-            if self.system == "n64" && self.touch_visible {
-                let axis = |negative: u32, positive: u32| {
-                    if touch & (1u16 << negative) != 0 {
-                        -32767
-                    } else if touch & (1u16 << positive) != 0 {
-                        32767
-                    } else {
-                        0
-                    }
-                };
-                self.core.set_analog([axis(6, 7), axis(4, 5), axis(8, 13), axis(9, 14)]);
-                // Touch C buttons use the core's right stick, independent of its face-button map.
-                buttons &= !((1 << 4) | (1 << 5) | (1 << 6) | (1 << 7) | (1 << 8) | (1 << 9) | (1 << 13) | (1 << 14));
+            if self.touch_visible {
+                if let Some((axes, consumed)) = play_cards::touch_analog(&self.system, touch) {
+                    self.core.set_analog(axes);
+                    buttons &= !consumed;
+                }
             }
             let was_held = self.held.held();
             buttons = self.held.apply(buttons,self.hold_button);
+            self.diagnostic_buttons_seen |= buttons;
             if was_held != self.held.held() {self.overlay_size = None;}
+            self.core.set_pointer(self.stylus.sample());
+            pocket_ui::mark!("android-core-run", "phase=begin frame={}", self.frames);
+            for player in 1..4 {
+                let (bits, sticks) = self.pads.player(player);
+                self.core.set_player(player, bits, sticks);
+            }
+            let given = [buttons, self.pads.player(1).0, self.pads.player(2).0, self.pads.player(3).0];
+            if given != self.last_given {
+                log::info!("player input: p1={:04x} p2={:04x} p3={:04x} p4={:04x}", given[0], given[1], given[2], given[3]);
+                self.last_given = given;
+            }
             let (frame, samples, av, geometry) = self.core.run(buttons);
+            pocket_ui::mark!("android-core-run", "phase=end frame={} samples={}", self.frames, samples.len() / 2);
             if let Some(av) = av {
                 self.core.av = av;
                 self.period = Duration::from_secs_f64(1.0 / av.timing.fps.clamp(10.0, 240.0));
                 if let Some(audio) = &mut self.audio {
-                    audio.set_input_rate(av.timing.sample_rate);
+                    audio.set_source_timing(av.timing.sample_rate, av.timing.fps, display_refresh_hz());
                 }
             }
             if let Some(geometry) = geometry {
                 self.core.av.geometry = geometry;
             }
+            pocket_ui::mark!("android-readback", "phase=begin frame={}", self.frames);
             let frame = core_hw_frame(&self.core).or(frame);
+            pocket_ui::mark!("android-readback", "phase=end frame={}", self.frames);
             if let Some(frame) = frame {
-                let rgb = frame.to_rgb();
-                let px = rgb
-                    .as_chunks::<3>()
-                    .0
-                    .iter()
-                    .map(|p| ((p[0] as u32) << 16) | ((p[1] as u32) << 8) | p[2] as u32)
-                    .collect();
-                self.frame = Some(Image {
-                    w: frame.width,
-                    h: frame.height,
-                    px,
-                });
+                self.video_frames += 1;
+                self.frame = Some(player_video::image(frame));
             }
             if let Some(audio) = &mut self.audio {
                 audio.push(&samples);
             }
             self.frames += 1;
+            // RetroAchievements reads the game's memory after each emulated frame (well under a millisecond).
+            if let Some(ra) = &mut self.ra { ra.frame(); }
             self.next += self.period;
             if self.last_flush.elapsed() > Duration::from_secs(10) {
                 self.core.write_sram_in_background();
@@ -1274,17 +1284,80 @@ impl Player {
                 if let Some(audio) = &self.audio {
                     let underruns = *audio.underruns.lock().unwrap_or_else(|e| e.into_inner());
                     let queue_ms = audio.buffered_ms();
-                    log::info!("player audio: frames={} underruns={} queue_ms={queue_ms:.2}", self.frames, underruns);
+                    let diagnostics = audio.diagnostics();
+                    let dropped = diagnostics["queue"]["active_dropped_frames"].as_u64().unwrap_or(0);
+                    if pocket_ui::platform::android::string("diagnosticAudio") == "true" {
+                        log::info!("player supply diagnostic: missing_frames={} startup_gap_frames={} startup_last_missing_frame={} steady_gap_frames={}",diagnostics["queue"]["playing_missing_frames"],diagnostics["queue"]["startup_missing_burst_max_frames"],diagnostics["queue"]["startup_last_missing_frame"],diagnostics["queue"]["steady_missing_burst_max_frames"]);
+                        log::info!("player startup diagnostic: reserve_frames={} trimmed_frames={} trim_peak={} splice_step={} return_frame={}",diagnostics["startup_reserve_frames"],diagnostics["startup_silent_trimmed_frames"],diagnostics["startup_trim_peak"],diagnostics["startup_splice_step"],diagnostics["startup_return_frame"]);
+                    }
+                    let input_frames = diagnostics["queue"]["input_frames"].as_u64().unwrap_or(0);
+                    let resampled_frames = diagnostics["queue"]["resampled_frames"].as_u64().unwrap_or(0);
+                    log::info!("player audio: frames={} underruns={} queue_ms={queue_ms:.2} dropped_frames={dropped} input_rate={:.1} target_ms={:.1} video_frames={} input_frames={input_frames} resampled_frames={resampled_frames}{} read_buffer_overrides={}", self.frames, underruns, audio.input_rate(), audio.target_ms(), self.video_frames, pocket_ui::platform::android::audio_line(), pocket_ui::hw_render::read_buffer_overrides());
+                }
+                if pocket_ui::platform::android::string("diagnosticAudio") == "true" {
+                    let (reads,bits)=self.core.take_input_probe();
+                    log::info!("player input diagnostic: buttons_seen={} core_reads={reads} core_bits={bits}",std::mem::take(&mut self.diagnostic_buttons_seen));
+                    if let Some(image) = &self.frame {
+                        let nonzero = image.px.iter().filter(|&&p| p & 0xff_ffff != 0).count();
+                        log::info!("player picture diagnostic: width={} height={} nonzero_rgb_pixels={nonzero}",image.w,image.h);
+                    }
                 }
             }
             if self.last_earlier.elapsed() > Duration::from_secs(300) {
-                let path = self.base.with_extension(format!("earlier{}", self.earlier % 6));
-                if self.state(&path).is_ok() {
-                    self.earlier += 1;
+                if let Some(writer) = &self.earlier_writer {
+                    let started = Instant::now();
+                    if let Some((bytes, serialize_time)) = self.core.save_state_with_serialize_time().filter(|(b, _)| !b.is_empty() && b.len() <= pocket_ui::state_file::MAX_STATE) {
+                        let capture_ms = started.elapsed().as_secs_f64() * 1000.0;
+                        let serialize_ms = serialize_time.as_secs_f64() * 1000.0;
+                        let size = bytes.len();
+                        // Move the owned state and share the immutable frame. RGB copying, PNG
+                        // encoding, compression and durable writes all happen on the worker.
+                        let image = self.frame.clone();
+                        let path = self.base.with_extension(format!("earlier{}", self.earlier % 6));
+                        log::info!("player Earlier captured: bytes={size} serialize_ms={serialize_ms:.3} capture_ms={capture_ms:.3}");
+                        writer.submit(move || {
+                            let write_started = Instant::now();
+                            let preview = pocket_ui::slots::preview_path(&path);
+                            // An absent preview is truthful while the new state replaces the old one.
+                            if let Err(error) = std::fs::remove_file(&preview) {
+                                if error.kind() != std::io::ErrorKind::NotFound {
+                                    log::warn!("Earlier preview could not be replaced: {error}");
+                                    return;
+                                }
+                            }
+                            if let Err(error) = pocket_ui::state_file::write(&path, &bytes) {
+                                log::warn!("Earlier state write failed: {error}");
+                                return;
+                            }
+                            if let Some(image) = image {
+                                if let Err(error) = png(&preview, &image) {
+                                    log::warn!("Earlier saved without preview: {error}");
+                                }
+                            }
+                            log::info!("player Earlier written: bytes={size} serialize_ms={serialize_ms:.3} worker_ms={:.3}", write_started.elapsed().as_secs_f64() * 1000.0);
+                        });
+                        self.earlier += 1;
+                    } else { log::warn!("Earlier capture failed or exceeded the state size limit"); }
                 }
                 self.last_earlier = Instant::now();
             }
         }
+        // Achievements: while paused rc_client's timers go on and the Achievements page keeps its list current; in the
+        // game the unlock cards and notes come up (a card is only taken from the line while it can be seen).
+        if let Some(ra) = &mut self.ra {
+            if self.paused {
+                ra.idle();
+            } else {
+                let (notes, changed) = ra.poll(Instant::now());
+                if !notes.is_empty() {
+                    self.note.extend(notes);
+                    self.note_until = None;
+                    self.overlay_size = None;
+                }
+                if changed { self.overlay_size = None; }
+            }
+        }
+        if self.paused && self.menu == Menu::Achievements { self.refresh_achievements(false); }
         if self.frames > 0 && !self.note.is_empty() && !self.paused {
             let until = *self.note_until.get_or_insert_with(|| Instant::now() + NOTE_FOR);
             if Instant::now() >= until {
@@ -1292,7 +1365,9 @@ impl Player {
                 self.overlay_size = None;
             }
         }
+        pocket_ui::mark!("android-present", "phase=begin frame={}", self.frames);
         self.paint();
+        pocket_ui::mark!("android-present", "phase=end frame={}", self.frames);
         if self.frames > 0 && !self.first_frame {
             // The tests' end of "A or tap to the game's first frame" (the launcher logs the start).
             self.first_frame = true;
@@ -1315,8 +1390,11 @@ impl Player {
             if self.menu == Menu::Options {
                 nodes.extend(self.option_arrows.iter().map(|(a, _, _, label)| (*a, label.clone(), false)));
             }
+            if self.menu == Menu::Achievements {
+                nodes.push((Area::new(36, 150, self.logical.0 as i32 - 72, self.logical.1 as i32 - 300), self.ra_lines.iter().filter(|l| !l.is_empty()).cloned().collect::<Vec<_>>().join(". "), false));
+            }
             if matches!(self.menu, Menu::Controls | Menu::Recovery) {
-                nodes.push((Area::new(36,120,self.logical.0 as i32-72,self.logical.1 as i32-280),if self.menu == Menu::Recovery {self.note.iter().map(|l|pocket_ui::i18n::tr(l)).collect::<Vec<_>>().join(". ")} else {play_cards::control_lines(&self.system,&self.control_names).join(". ")},false));
+                nodes.push((Area::new(36,150,self.logical.0 as i32-72,self.logical.1 as i32-300),if self.menu == Menu::Recovery {self.note.iter().map(|l|pocket_ui::i18n::tr(l)).collect::<Vec<_>>().join(". ")} else {play_cards::control_lines(&self.system,&self.title,&self.control_names,self.touch_visible).join(". ")},false));
             }
             if !self.message.is_empty() {nodes.push((Area::new(40,100,self.logical.0 as i32-80,60),self.message.clone(),false));}
             nodes
@@ -1327,6 +1405,9 @@ impl Player {
             }
             if !self.note.is_empty() {
                 nodes.push((self.note_area, self.note.iter().map(|l| note_text(l)).collect::<Vec<_>>().join(". "), false));
+            }
+            if !self.card_label.is_empty() {
+                nodes.push((self.card_area, self.card_label.clone(), false));
             }
             if let Some(bit)=self.held.held() {
                 let label=pocket_ui::i18n::tr("{s} held").replace("{s}",self.control_label(bit as u16));
@@ -1343,11 +1424,17 @@ impl Player {
     fn paint(&mut self) {
         palette::set_blend(if self.light { 255 } else { 0 });
         let (w, h) = (self.logical.0 as i32, self.logical.1 as i32);
-        let game_rect = self.frame.as_ref().map(|image| self.picture.rect(
+        let game_rect = self.frame.as_deref().map(|image| self.picture.rect(
             (w,h), (self.view.2,self.view.3), (image.w,image.h),
             self.core.av.geometry.aspect_ratio as f64, self.touch_visible,
         ));
         self.gfx.effect = self.picture.effect;
+        // A game that had no TV switches its display on instead of the tube (`crt_on::Screen`, as on Linux).
+        let screen = match pocket_ui::eject::Screen::of(pocket_ui::cabinet::FormFactor::of(&self.system)) {
+            pocket_ui::eject::Screen::Lcd => pocket_ui::crt_on::Screen::Lcd,
+            pocket_ui::eject::Screen::Tv => pocket_ui::crt_on::Screen::Tv,
+        };
+        let mut squeezed = None;
         let crt = if let Some(rect) = game_rect.filter(|_| !self.paused && !self.crt_done) {
             let started = if let Some(started) = self.crt_started {
                 started
@@ -1355,13 +1442,19 @@ impl Player {
                 let now = Instant::now();
                 self.crt_started = Some(now);
                 pocket_ui::crt_on::start();
-                self.sound(pocket_ui::ui_sound::Sound::CrtOn);
+                if screen == pocket_ui::crt_on::Screen::Tv {
+                    self.sound(pocket_ui::ui_sound::Sound::CrtOn);
+                }
                 now
             };
-            let quads = pocket_ui::crt_on::plan(started.elapsed(), (rect.x as f32, rect.y as f32, rect.w as f32, rect.h as f32));
+            let area = (rect.x as f32, rect.y as f32, rect.w as f32, rect.h as f32);
+            let quads = pocket_ui::crt_on::plan_for(screen, started.elapsed(), area);
             if quads.is_empty() {
                 self.crt_done = true;
             }
+            // The tube's picture opens out of its line, squeezed into what is lit.
+            let (_, y, _, h) = pocket_ui::crt_on::picture(screen, started.elapsed(), area);
+            squeezed = Some((y.round() as i32, (h.round() as i32).max(1)));
             quads
         } else {
             Vec::new()
@@ -1371,7 +1464,7 @@ impl Player {
             if changed { log::info!("player picture: system={} logical={}x{} rect={},{},{}x{} physical={}x{} scaling={} effect={}", self.system,w,h,rect.x,rect.y,rect.w,rect.h,self.view.2,self.view.3,self.picture.scaling,self.picture.effect); }
         }
         self.game_area = game_rect;
-        let game = if self.paused { None } else { self.frame.as_ref().zip(game_rect) };
+        let game = if self.paused { None } else { self.frame.as_deref().zip(game_rect.map(|r| match squeezed { Some((y, h)) => Area { y, h, ..r }, None => r })) };
         if !self.paused && self.overlay_size == Some(self.logical) {
             self.core.frontend_current();
             self.gfx.present(&self.pixels, (w, h), self.view, game, false, &crt);
@@ -1386,7 +1479,7 @@ impl Player {
         if let Some(rect) = game_rect { self.picture.paint_frame(&mut c, rect, &self.system); }
         // Paused backgrounds are painted only when the menu changes; active frames are scaled by GLES.
         if self.paused {
-            if let Some((image, rect)) = self.frame.as_ref().zip(game_rect) {
+            if let Some((image, rect)) = self.frame.as_deref().zip(game_rect) {
                 c.blit_scaled(image, rect.x, rect.y, rect.w, rect.h);
             }
         }
@@ -1405,6 +1498,17 @@ impl Player {
         }
         if !self.paused && !self.note.is_empty() {
             self.note_area = paint_note(&mut c, &mut self.text, w, &self.note);
+        }
+        // An achievement unlock: its card at the top, under the note when there is one.
+        self.card_label.clear();
+        if !self.paused {
+            if let Some(ra) = &mut self.ra {
+                if let Some(card) = ra.card(Instant::now()) {
+                    let top = if self.note.is_empty() { 14 } else { self.note_area.h + 12 };
+                    self.card_area = player_achievements::Achievements::paint_card(&mut c, &mut self.text, card, w, top);
+                    self.card_label = format!("{}. {}", pocket_ui::i18n::tr(&pocket_ui::unlock_card::head(card.points)), card.title);
+                }
+            }
         }
         if self.paused {
             // A flat sheet for touch and controller alike (a controller gets a focus ring and a hint line): the
@@ -1427,16 +1531,18 @@ impl Player {
                 icon,
                 options: &display_options,
                 scroll: self.scroll,
-                frame: self.frame.as_ref().zip(game_rect).map(|(image, rect)| (image, rect.w as f64 / rect.h.max(1) as f64)),
+                frame: self.frame.as_deref().zip(game_rect).map(|(image, rect)| (image, rect.w as f64 / rect.h.max(1) as f64)),
                 focus: (!self.touch_visible).then_some(self.row),
                 advanced_open: self.advanced_open,
-                card: pocket_ui::cozy_extras::on(pocket_ui::cozy_extras::Extra::PauseMemoryCard),
+                card: false,
             };
-            let out = if matches!(self.menu, Menu::Controls | Menu::Recovery) {
-                let (back,max) = if self.menu == Menu::Recovery {
+            let out = if matches!(self.menu, Menu::Controls | Menu::Recovery | Menu::Achievements) {
+                let (back,max) = if self.menu == Menu::Achievements {
+                    play_cards::paint_lines(&mut c, &mut self.text, &pocket_ui::i18n::tr("Achievements"), &self.ra_lines, self.scroll.max(0) as usize)
+                } else if self.menu == Menu::Recovery {
                     let lines:Vec<_> = self.note.iter().map(|l|pocket_ui::i18n::tr(l)).collect();
                     play_cards::paint_lines(&mut c,&mut self.text,"Recovery",&lines,self.scroll.max(0) as usize)
-                } else {play_cards::paint_controls(&mut c,&mut self.text,&self.system,&self.control_names,self.scroll.max(0) as usize)};
+                } else {play_cards::paint_controls(&mut c,&mut self.text,&self.system,&self.title,&self.control_names,self.touch_visible,self.scroll.max(0) as usize)};
                 TouchOut {hits:vec![(back,0,pocket_ui::i18n::tr("Back"))],scroll:self.scroll.min(max as i32),scroll_max:max as i32,..Default::default()}
             } else if self.menu == Menu::Zoom {
                 let back=Area::new(40,h-120,w-80,TARGET_MIN);
@@ -1522,7 +1628,7 @@ struct TouchOut {
     scroll_max: i32,
 }
 fn centered(c: &mut Canvas, text: &mut Text, face: Face, px: u32, area: Area, color: u32, label: &str) {
-    let label = text.fit(face, px, label, area.w - 24);
+    let (px, label) = pause_head::button_words(text, face, px, label, area.w - 24);
     let width = text.width(face, px, &label);
     text.draw(c, face, px, area.x + (area.w - width) / 2, area.y + area.h / 2 + type_scale::mid(px), color, &label);
 }
@@ -1546,235 +1652,8 @@ fn pill(c: &mut Canvas, text: &mut Text, area: Area, label: &str, primary: bool)
         centered(c, text, Face::Body, 38, area, pal().text, label);
     }
 }
-// ---- Touch controls ------------------------------------------------------------------------------------------------
-// Drawn into the overlay with real transparency: the top byte of an overlay pixel is its alpha (the shader blends it);
-// pixels without one (text, the picture's frame) stay opaque as before.
-
-/// The controls' paper, warm like the shelf's label.
-const PAD_PAPER: u32 = 0xece9e1;
-/// Blends `color` at `alpha` (0-255) over the overlay pixel (x, y), keeping the result's alpha in the top byte.
-fn put(c: &mut Canvas, x: i32, y: i32, color: u32, alpha: u32) {
-    if x < 0 || y < 0 || x >= c.w || y >= c.h || alpha == 0 {
-        return;
-    }
-    let p = &mut c.buf[(y * c.w + x) as usize];
-    let (old, old_a) = (*p & 0xff_ffff, *p >> 24);
-    if old != 0 && old_a == 0 {
-        // An opaque pixel already (text or a frame): mix into it and keep it opaque.
-        *p = pocket_ui::gfx::mix(old, color, alpha) & 0xff_ffff;
-        return;
-    }
-    let a = alpha + old_a * (255 - alpha) / 255;
-    let channel = |shift: u32| {
-        let (s, d) = ((color >> shift) & 255, (old >> shift) & 255);
-        ((s * alpha + d * old_a * (255 - alpha) / 255) / a.max(1)).min(255)
-    };
-    *p = (a.max(1) << 24) | (channel(16) << 16) | (channel(8) << 8) | channel(0);
-}
-/// Paints the pixels whose signed distance `sd(x, y)` (negative inside) is below zero, smoothed over one pixel.
-fn fill(c: &mut Canvas, (x0, y0, x1, y1): (i32, i32, i32, i32), color: u32, alpha: u32, sd: impl Fn(f32, f32) -> f32) {
-    for y in y0.max(0)..y1.min(c.h) {
-        for x in x0.max(0)..x1.min(c.w) {
-            let cover = (0.5 - sd(x as f32 + 0.5, y as f32 + 0.5)).clamp(0.0, 1.0);
-            if cover > 0.0 {
-                put(c, x, y, color, (alpha as f32 * cover) as u32);
-            }
-        }
-    }
-}
-fn round_box(px: f32, py: f32, (cx, cy, hw, hh, r): (f32, f32, f32, f32, f32)) -> f32 {
-    let (qx, qy) = ((px - cx).abs() - hw + r, (py - cy).abs() - hh + r);
-    (qx.max(0.0).powi(2) + qy.max(0.0).powi(2)).sqrt() + qx.max(qy).min(0.0) - r
-}
-fn soft_disc(c: &mut Canvas, (cx, cy, r): (f32, f32, f32), color: u32, alpha: u32) {
-    let b = (cx - r - 2.0, cy - r - 2.0, cx + r + 2.0, cy + r + 2.0);
-    fill(c, (b.0 as i32, b.1 as i32, b.2 as i32 + 1, b.3 as i32 + 1), color, alpha, |x, y| ((x - cx).powi(2) + (y - cy).powi(2)).sqrt() - r);
-}
-fn soft_ring(c: &mut Canvas, (cx, cy, r): (f32, f32, f32), t: f32, color: u32, alpha: u32) {
-    let b = (cx - r - 2.0, cy - r - 2.0, cx + r + 2.0, cy + r + 2.0);
-    fill(c, (b.0 as i32, b.1 as i32, b.2 as i32 + 1, b.3 as i32 + 1), color, alpha, |x, y| (((x - cx).powi(2) + (y - cy).powi(2)).sqrt() - (r - t / 2.0)).abs() - t / 2.0);
-}
-fn soft_pill(c: &mut Canvas, a: Area, color: u32, alpha: u32) {
-    let shape = (a.x as f32 + a.w as f32 / 2.0, a.y as f32 + a.h as f32 / 2.0, a.w as f32 / 2.0, a.h as f32 / 2.0, a.h as f32 / 2.0);
-    fill(c, (a.x - 1, a.y - 1, a.x + a.w + 1, a.y + a.h + 1), color, alpha, |x, y| round_box(x, y, shape));
-}
-/// A small filled triangle pointing from (cx, cy) towards (dx, dy) (a unit direction), `s` across.
-fn arrow(c: &mut Canvas, (cx, cy): (f32, f32), (dx, dy): (f32, f32), s: f32, color: u32, alpha: u32) {
-    let (tip, base) = ((cx + dx * s * 0.55, cy + dy * s * 0.55), (cx - dx * s * 0.35, cy - dy * s * 0.35));
-    let (nx, ny) = (-dy, dx);
-    let pts = [tip, (base.0 + nx * s * 0.5, base.1 + ny * s * 0.5), (base.0 - nx * s * 0.5, base.1 - ny * s * 0.5)];
-    let edge = |p: (f32, f32), a: (f32, f32), b: (f32, f32)| {
-        let (ex, ey) = (b.0 - a.0, b.1 - a.1);
-        let len = (ex * ex + ey * ey).sqrt().max(0.001);
-        ((p.0 - a.0) * ey - (p.1 - a.1) * ex) / len
-    };
-    let (x0, y0) = ((cx - s) as i32, (cy - s) as i32);
-    fill(c, (x0, y0, x0 + 2 * s as i32 + 2, y0 + 2 * s as i32 + 2), color, alpha, |x, y| {
-        let p = (x, y);
-        let d = [edge(p, pts[0], pts[1]), edge(p, pts[1], pts[2]), edge(p, pts[2], pts[0])];
-        // Inside when every edge agrees (either winding).
-        if d.iter().all(|v| *v <= 0.0) { d.iter().cloned().fold(f32::MIN, f32::max) } else if d.iter().all(|v| *v >= 0.0) { -d.iter().cloned().fold(f32::MAX, f32::min) } else { 1.0 }
-    });
-}
-/// One round face button: translucent paper, a brighter rim, the letter (or PlayStation mark) small in the middle.
-fn face_button(c: &mut Canvas, text: &mut Text, (cx, cy, r): (f32, f32, f32), label: &str, psp: Option<u16>, on: bool) {
-    soft_disc(c, (cx, cy, r), PAD_PAPER, if on { 120 } else { 52 });
-    soft_ring(c, (cx, cy, r), (r * 0.06).max(2.0), PAD_PAPER, if on { 220 } else { 130 });
-    let glyph = 0xf4f1ea;
-    let (x, y) = (cx as i32, cy as i32);
-    let g = (r * 0.36) as i32;
-    match psp {
-        Some(8) => soft_ring(c, (cx, cy, g as f32), (r * 0.09).max(3.0), glyph, 230),
-        Some(1) => {
-            let t = (r * 0.09).max(3.0) as i32;
-            for (ax, ay, aw, ah) in [(x - g, y - g, 2 * g, t), (x - g, y + g - t, 2 * g, t), (x - g, y - g, t, 2 * g), (x + g - t, y - g, t, 2 * g)] {
-                fill(c, (ax, ay, ax + aw, ay + ah), glyph, 230, |_, _| -1.0);
-            }
-        }
-        Some(9) => {
-            let t = (r * 0.09).max(3.0);
-            let (top, left, right) = ((cx, cy - g as f32), (cx - g as f32, cy + g as f32 * 0.75), (cx + g as f32, cy + g as f32 * 0.75));
-            for (a, b) in [(top, left), (left, right), (right, top)] {
-                let n = 64;
-                for i in 0..=n {
-                    let f = i as f32 / n as f32;
-                    soft_disc(c, (a.0 + (b.0 - a.0) * f, a.1 + (b.1 - a.1) * f, t / 2.0), glyph, 60);
-                }
-            }
-        }
-        Some(0) => {
-            let t = (r * 0.09).max(3.0);
-            for i in -40..=40 {
-                let f = i as f32 / 40.0 * g as f32;
-                soft_disc(c, (cx + f, cy + f, t / 2.0), glyph, 45);
-                soft_disc(c, (cx + f, cy - f, t / 2.0), glyph, 45);
-            }
-        }
-        _ => {
-            let size = ((r * 0.62) as u32).clamp(18, 44);
-            let w = text.width(Face::Title, size, label);
-            text.draw(c, Face::Title, size, x - w / 2, y + type_scale::mid(size), glyph, label);
-        }
-    }
-}
-/// The on-screen pad for a phone: an 8-way D-pad, the system's face buttons in its own layout, shoulder and
-/// Start/Select pills and Pause, at least 56 dp a button, by the thumbs: either side of the picture in landscape,
-/// under it in portrait. Returns the buttons' touch areas (with their pad bits), the D-pad's circle and Pause.
-/// The pad's touch areas with their bits, the D-pad's circle (centre and radius) and the Pause button.
-type PadLayout = (Vec<(Area, u16)>, Option<(f32, f32, f32)>, Area);
-fn touch_controls(c: &mut Canvas, text: &mut Text, system: &str, (w, h): (i32, i32), dp: f32, game: Option<Area>, pressed: u16) -> PadLayout {
-    let mut controls = Vec::new();
-    let d = |v: f32| (v * dp) as i32;
-    let portrait = w < h;
-    let edge = d(18.0);
-    // The clusters: D-pad diameter and face-button size.
-    let face_r = d(30.0) as f32;
-    // Portrait: the clusters low, where the thumbs rest, shoulders over them, the small pills under them; a tall
-    // picture (two DS screens) leaves less room and the D-pad shrinks, never under 112 dp.
-    let below = game.map_or(h / 2, |g| g.y + g.h) + d(10.0);
-    let dpad_d = if portrait { (h - below - d(12.0 + 44.0 + 24.0 + 16.0 + 52.0)).clamp(d(112.0), d(150.0)) } else { d(150.0) } as f32;
-    let (left_c, right_c, shoulder_y, util_y) = if portrait {
-        let util_y = h - d(12.0) - d(44.0);
-        let cy = util_y - d(24.0) - dpad_d as i32 / 2;
-        let shoulder_y = cy - dpad_d as i32 / 2 - d(16.0) - d(52.0);
-        ((edge as f32 + dpad_d / 2.0, cy as f32), ((w - edge) as f32 - dpad_d / 2.0, cy as f32), shoulder_y, util_y)
-    } else {
-        let cy = h as f32 * 0.58;
-        ((edge as f32 + dpad_d / 2.0 + d(8.0) as f32, cy), ((w - edge) as f32 - dpad_d / 2.0 - d(8.0) as f32, cy), d(14.0), h - d(14.0) - d(44.0))
-    };
-    // D-pad: one cross, translucent, a dimple in the middle and four small arrows.
-    let (cx, cy, r) = (left_c.0, left_c.1, dpad_d / 2.0);
-    let arm = r * 0.72;
-    let dir_on = |bit: u16| pressed & (1 << bit) != 0;
-    let any = (4..8).any(dir_on);
-    fill(c, ((cx - r) as i32 - 2, (cy - r) as i32 - 2, (cx + r) as i32 + 3, (cy + r) as i32 + 3), PAD_PAPER, if any { 96 } else { 52 }, |x, y| {
-        round_box(x, y, (cx, cy, r, arm / 2.0, arm / 3.0)).min(round_box(x, y, (cx, cy, arm / 2.0, r, arm / 3.0)))
-    });
-    soft_disc(c, (cx, cy, arm * 0.28), 0x222222, 40);
-    for (bit, dir) in [(4u16, (0.0, -1.0)), (5, (0.0, 1.0)), (6, (-1.0, 0.0)), (7, (1.0, 0.0))] {
-        arrow(c, (cx + dir.0 * r * 0.66, cy + dir.1 * r * 0.66), dir, arm * 0.32, 0xf4f1ea, if dir_on(bit) { 255 } else { 170 });
-    }
-    let dpad = Some((cx, cy, r));
-    // Face buttons around the right cluster's centre, in the system's own positions.
-    let (fx, fy) = right_c;
-    let s = face_r * 1.25;
-    let buttons: Vec<(&str, u16, f32, f32, f32)> = match system {
-        // Mega Drive six-button pad: X Y Z over A B C, the rows slanting up to the right like the pad's.
-        "megadrive" => vec![("X", 10, -1.75, -0.7, 0.82), ("Y", 9, 0.0, -0.95, 0.82), ("Z", 11, 1.75, -1.2, 0.82), ("A", 1, -1.75, 1.0, 0.9), ("B", 0, 0.0, 0.75, 0.9), ("C", 8, 1.75, 0.5, 0.9)],
-        // N64: A and B large, the four C buttons small above them (turned into the right stick before retro_run).
-        "n64" => vec![("B", 1, -1.2, 0.9, 1.0), ("A", 0, 0.35, 1.45, 1.0), ("◀", 8, 0.0, -0.9, 0.62), ("▲", 9, 1.0, -1.85, 0.62), ("▶", 13, 2.0, -0.9, 0.62), ("▼", 14, 1.0, 0.05, 0.62)],
-        "snes" | "psx" | "nds" | "psp" => vec![("Y", 1, -1.45, 0.0, 1.0), ("X", 9, 0.0, -1.45, 1.0), ("B", 0, 0.0, 1.45, 1.0), ("A", 8, 1.45, 0.0, 1.0)],
-        _ => vec![("B", 0, -0.95, 0.55, 1.0), ("A", 8, 0.95, -0.55, 1.0)],
-    };
-    let psp = system == "psp";
-    // The cluster stays inside the screen: a wide one (six buttons) moves in from the edge.
-    let reach = buttons.iter().map(|(_, _, ox, _, k)| ox * s + face_r * k).fold(0.0f32, f32::max);
-    let fx = fx.min((w - edge) as f32 - reach);
-    for (label, bit, ox, oy, k) in buttons {
-        let (bx, by, br) = (fx + ox * s, fy + oy * s, face_r * k);
-        // The N64's C marks are not in the UI font: small drawn arrows instead.
-        if system == "n64" && k < 0.9 {
-            soft_disc(c, (bx, by, br), 0xe8c66a, if pressed & (1 << bit) != 0 { 140 } else { 70 });
-            let dir = match bit { 8 => (-1.0, 0.0), 9 => (0.0, -1.0), 13 => (1.0, 0.0), _ => (0.0, 1.0) };
-            arrow(c, (bx, by), dir, br * 0.55, 0xf4f1ea, 220);
-        } else {
-            face_button(c, text, (bx, by, br), label, psp.then_some(bit), pressed & (1 << bit) != 0);
-        }
-        let hit = (br * 1.25) as i32;
-        controls.push((Area::new(bx as i32 - hit, by as i32 - hit, 2 * hit, 2 * hit), bit));
-    }
-    // Shoulders: pills at the top corners (landscape) or over the clusters (portrait).
-    let shoulders: &[(&str, u16, bool)] = match system {
-        "gba" | "snes" | "psx" | "nds" | "psp" | "dreamcast" => &[("L", 10, false), ("R", 11, true)],
-        "n64" => &[("L", 10, false), ("Z", 12, false), ("R", 11, true)],
-        _ => &[],
-    };
-    let (sw, sh) = (d(96.0), d(52.0));
-    let mut left_x = edge;
-    for (label, bit, right) in shoulders {
-        let x = if *right { w - edge - sw } else { left_x };
-        if !right {
-            left_x += sw + d(10.0);
-        }
-        let area = Area::new(x, shoulder_y, sw, sh);
-        let on = pressed & (1 << bit) != 0;
-        soft_pill(c, area, PAD_PAPER, if on { 120 } else { 52 });
-        let size = (d(18.0) as u32).clamp(16, 40);
-        let tw = text.width(Face::Title, size, label);
-        text.draw(c, Face::Title, size, area.x + (area.w - tw) / 2, area.y + area.h / 2 + type_scale::mid(size), 0xf4f1ea, label);
-        controls.push((area, *bit));
-    }
-    // Select, Pause and Start: small pills at the bottom, in the middle in portrait, under the clusters in landscape.
-    let (uw, uh) = (d(76.0), d(44.0));
-    let utility: Vec<(&str, Option<u16>, i32)> = if portrait {
-        vec![("SELECT", Some(2), w / 2 - uw * 3 / 2 - d(10.0)), ("Pause", None, w / 2 - uw / 2), ("START", Some(3), w / 2 + uw / 2 + d(10.0))]
-    } else {
-        vec![("SELECT", Some(2), left_c.0 as i32 - uw / 2), ("Pause", None, w / 2 - uw / 2), ("START", Some(3), right_c.0 as i32 - uw / 2)]
-    };
-    let mut menu = Area::new(0, 0, 0, 0);
-    for (label, bit, x) in utility {
-        if system == "n64" && bit == Some(2) {
-            continue;
-        }
-        // Pause in landscape sits under the left shoulder, beside the picture rather than over it.
-        let area = if bit.is_none() && !portrait {
-            Area::new(left_c.0 as i32 - uw / 2, shoulder_y + d(52.0) + d(10.0), uw, uh)
-        } else {
-            Area::new(x, util_y, uw, uh)
-        };
-        let on = bit.is_some_and(|b| pressed & (1 << b) != 0);
-        soft_pill(c, area, PAD_PAPER, if on { 120 } else { if bit.is_none() { 64 } else { 44 } });
-        let size = (d(11.0) as u32).clamp(14, 28);
-        let tw = text.width(Face::Body, size, label);
-        text.draw(c, Face::Body, size, area.x + (area.w - tw) / 2, area.y + area.h / 2 + type_scale::mid(size), 0xf4f1ea, label);
-        match bit {
-            Some(b) => controls.push((area, b)),
-            None => menu = area,
-        }
-    }
-    (controls, dpad, menu)
-}
-
+/// The key of the Options page's Disc row (`Player::display_options`).
+const DISC_ROW: &str = "disc";
 /// The options page's sections, in page order: the player's own picture settings first, then the core's.
 const SECTIONS: [&str; 6] = ["Picture", "Sound", "Controls", "Speed", "Cheats", "Advanced (this emulator)"];
 /// The section that starts closed: what is particular to one emulator (its model, BIOS, presets, restarts).
@@ -1784,7 +1663,7 @@ fn option_section(option: &FileOption, row: usize) -> usize {
     if row < picture::ROWS {
         return 0;
     }
-    if option.key == "hold_toggle" {return 2;}
+    if option.key == "hold_toggle" || option.key == DISC_ROW {return 2;}
     if option.key.starts_with("cheat.") {return 4;}
     let s = format!("{} {}", option.key, option.label).to_lowercase();
     let has = |words: &[&str]| words.iter().any(|w| s.contains(w));
@@ -1854,7 +1733,7 @@ fn ring(c: &mut Canvas, area: Area) {
 }
 fn touch_pause(c: &mut Canvas, text: &mut Text, v: &TouchView) -> TouchOut {
     let (w, h) = v.size;
-    let portrait = w < h;
+    let portrait = pause_head::portrait(w, h, v.card);
     let mut out = TouchOut::default();
     let inner = w - 2 * EDGE;
     // A controller's keys go in a line at the bottom; a finger needs none.
@@ -2029,7 +1908,9 @@ fn touch_pause(c: &mut Canvas, text: &mut Text, v: &TouchView) -> TouchOut {
     }
     // With the whole memory card the slot picker is taller, to show the medium.
     let (picker_extra, primary_extra) = (if v.card { 38 + 110 } else { 38 }, 16);
-    let labels = ["Continue", "Save", "Load", "Earlier", "Options", "Screenshot", "Controls", "Zoom", "Save & quit"];
+    let labels = ["Continue", "Save", "Load", "Earlier", "Options", "Screenshot", "Controls", "Zoom", "Save & quit", "Achievements"];
+    // A game with an account signed in has one more row (Achievements, last); everyone else sees the layout as before.
+    let more = v.rows.len().saturating_sub(9);
     let picker = |c: &mut Canvas, text: &mut Text, out: &mut TouchOut, area: Area| {
         if pocket_ui::retro::on() { pocket_ui::retro::frame(c, area.x, area.y, area.w, area.h, pal().pill); }
         else { c.round_rect(area.x, area.y, area.w, area.h, 28, pal().pill); }
@@ -2068,8 +1949,9 @@ fn touch_pause(c: &mut Canvas, text: &mut Text, v: &TouchView) -> TouchOut {
     };
     if portrait {
         let avail = bottom - top;
-        let bh = ((avail - 6 * GAP - picker_extra - primary_extra) / 7).clamp(TARGET_MIN, 124);
-        let total = 7 * bh + 6 * GAP + picker_extra + primary_extra;
+        let n = 7 + more as i32;
+        let bh = ((avail - (n - 1) * GAP - picker_extra - primary_extra) / n).clamp(TARGET_MIN, 124);
+        let total = n * bh + (n - 1) * GAP + picker_extra + primary_extra;
         let mut y = (bottom - total).max(top);
         if let Some((image, aspect)) = v.frame {
             let (room_top, room_bottom) = (top + 20, y - 2 * GAP);
@@ -2093,21 +1975,22 @@ fn touch_pause(c: &mut Canvas, text: &mut Text, v: &TouchView) -> TouchOut {
             y += bh + GAP;
         }
         // The two longest actions keep a full row, including at 200% font scale in DE/ES.
-        for row in [5,8] {button(c,text,&mut out,Area::new(EDGE,y,inner,bh),row);y+=bh+GAP;}
+        for row in [5,8].into_iter().chain((more > 0).then_some(9)) {button(c,text,&mut out,Area::new(EDGE,y,inner,bh),row);y+=bh+GAP;}
     } else {
         // Two columns that always fit the height: Continue, the slot and Save | Load at the left; Earlier, Options,
         // Screenshot and Quit at the right. The buttons shrink to fit, never below 48 dp, before anything scrolls.
         let avail = bottom - top;
         let col_w = (inner - 2 * EDGE) / 2;
-        let bh = ((avail - 3 * GAP) / 4).clamp(TARGET_MIN, 124);
-        let right_h = 4 * bh + 3 * GAP;
+        let rows = 4 + more as i32;
+        let bh = ((avail - (rows - 1) * GAP) / rows).clamp(TARGET_MIN, 124);
+        let right_h = rows * bh + (rows - 1) * GAP;
         let y0 = top + ((avail - right_h) / 2).max(0);
         let x2 = w - EDGE - col_w;
-        let half = (col_w-GAP)/2;
+        let half = pause_head::landscape_half(w);
         for (n,pair) in [[3,4],[6,7]].into_iter().enumerate() {
             for (col,row) in pair.into_iter().enumerate() {button(c,text,&mut out,Area::new(x2+col as i32*(half+GAP),y0+n as i32*(bh+GAP),half,bh),row);}
         }
-        for (n,row) in [5,8].into_iter().enumerate() {button(c,text,&mut out,Area::new(x2,y0+(n as i32+2)*(bh+GAP),col_w,bh),row);}
+        for (n,row) in [5,8].into_iter().chain((more > 0).then_some(9)).enumerate() {button(c,text,&mut out,Area::new(x2,y0+(n as i32+2)*(bh+GAP),col_w,bh),row);}
         // Left column: the same height as the right one, the spare room shared between its gaps.
         let (cont, pick) = (bh + primary_extra.min((right_h - 3 * bh - 2 * GAP) / 2).max(0), bh + picker_extra.min((right_h - 3 * bh - 2 * GAP) / 2).max(0));
         // The whole memory card: the picker takes two rows' height, Continue and Save | Load keep a plain one.
@@ -2123,25 +2006,9 @@ fn touch_pause(c: &mut Canvas, text: &mut Text, v: &TouchView) -> TouchOut {
     }
     out
 }
-fn key_bit(key: i32) -> Option<u16> {
-    Some(match key {
-        // Android A/B/X/Y are south/east/west/north; libretro uses B/A/Y/X.
-        96 => 0,
-        97 => 8,
-        99 => 1,
-        100 => 9,
-        19 => 4,
-        20 => 5,
-        21 => 6,
-        22 => 7,
-        108 => 3,
-        109 => 2,
-        102 => 10,
-        103 => 11,
-        104 => 12,
-        105 => 13,
-        _ => return None,
-    })
+fn display_refresh_hz() -> f64 {
+    pocket_ui::platform::android::string("displayRefreshRate").parse::<f64>().ok()
+        .filter(|hz| hz.is_finite() && (10.0..=480.0).contains(hz)).unwrap_or(60.0)
 }
 fn png(path: &Path, image: &Image) -> Result<(), String> {
     if let Some(parent) = path.parent() {
@@ -2162,7 +2029,7 @@ fn string(env: &mut JNIEnv, value: JString) -> String {
     env.get_string(&value).map(|s| s.to_string_lossy().into_owned()).unwrap_or_default()
 }
 #[no_mangle]
-pub extern "system" fn Java_dev_pocket_spike_PlayerActivity_nativeCreate(
+pub extern "system" fn Java_xyz_pocketui_app_PlayerActivity_nativeCreate(
     mut env: JNIEnv,
     activity: JObject,
     core: JString,
@@ -2258,7 +2125,7 @@ pub extern "system" fn Java_dev_pocket_spike_PlayerActivity_nativeCreate(
     env.new_string(error).map(|s| s.into_raw()).unwrap_or(std::ptr::null_mut())
 }
 #[no_mangle]
-pub extern "system" fn Java_dev_pocket_spike_PlayerActivity_nativeFrame(
+pub extern "system" fn Java_xyz_pocketui_app_PlayerActivity_nativeFrame(
     mut env: JNIEnv,
     activity: JObject,
     w: jint,
@@ -2285,26 +2152,33 @@ pub extern "system" fn Java_dev_pocket_spike_PlayerActivity_nativeFrame(
         }
 
         if result == 2 {
-            slot.take();
+            // The game is over and its files are whole: the launcher copies them into the player's folder (never while playing).
+            if let Some(player) = slot.take() {
+                let key = player.key.clone();
+                drop(player);
+                if let Err(e) = pocket_ui::save_copy::mark_pending(&pocket_ui::platform::data_dir(), &key) {
+                    log::warn!("save copy: no note for the launcher: {e}");
+                }
+            }
         }
         result
     })
 }
 #[no_mangle]
-pub extern "system" fn Java_dev_pocket_spike_PlayerActivity_nativeKey(_: JNIEnv, _: JObject, key: jint, down: jboolean, controller: jboolean) -> jboolean {
+pub extern "system" fn Java_xyz_pocketui_app_PlayerActivity_nativeKey(_: JNIEnv, _: JObject, key: jint, down: jboolean, controller: jboolean, device: jint) -> jboolean {
     PLAYER.with(|slot| {
         slot.borrow_mut().as_mut().is_some_and(|p| {
             if controller != 0 && down != 0 {
                 p.input_mode(false);
             }
-            let result = p.key(key, down != 0);
+            let result = p.key_of(device, key, down != 0);
             p.core.frontend_current();
             result
         })
     }) as jboolean
 }
 #[no_mangle]
-pub extern "system" fn Java_dev_pocket_spike_PlayerActivity_nativeAnalog(
+pub extern "system" fn Java_xyz_pocketui_app_PlayerActivity_nativeAnalog(
     _: JNIEnv,
     _: JObject,
     x: jfloat,
@@ -2313,20 +2187,23 @@ pub extern "system" fn Java_dev_pocket_spike_PlayerActivity_nativeAnalog(
     ry: jfloat,
     hx: jfloat,
     hy: jfloat,
+    lt: jfloat,
+    rt: jfloat,
+    device: jint,
 ) -> jboolean {
     PLAYER.with(|slot| {
         slot.borrow_mut().as_mut().is_some_and(|p| {
-            if [x, y, rx, ry, hx, hy].iter().any(|v| v.abs() > 0.01) {
+            if [x, y, rx, ry, hx, hy, lt, rt].iter().any(|v| v.abs() > 0.01) {
                 p.input_mode(false);
             }
-            let result = p.analog([x, y, rx, ry], [hx, hy]);
+            let result = p.analog_of(device, [x, y, rx, ry], [hx, hy], [lt, rt]);
             p.core.frontend_current();
             result
         })
     }) as jboolean
 }
 #[no_mangle]
-pub extern "system" fn Java_dev_pocket_spike_PlayerActivity_nativeTouch(_: JNIEnv, _: JObject, id: jint, x: jfloat, y: jfloat, phase: jint) -> jboolean {
+pub extern "system" fn Java_xyz_pocketui_app_PlayerActivity_nativeTouch(_: JNIEnv, _: JObject, id: jint, x: jfloat, y: jfloat, phase: jint) -> jboolean {
     PLAYER.with(|slot| {
         slot.borrow_mut().as_mut().is_some_and(|p| {
             let result = p.touch(id, x, y, phase);
@@ -2336,7 +2213,7 @@ pub extern "system" fn Java_dev_pocket_spike_PlayerActivity_nativeTouch(_: JNIEn
     }) as jboolean
 }
 #[no_mangle]
-pub extern "system" fn Java_dev_pocket_spike_PlayerActivity_nativeSuspend(_: JNIEnv, _: JObject) {
+pub extern "system" fn Java_xyz_pocketui_app_PlayerActivity_nativeSuspend(_: JNIEnv, _: JObject) {
     PLAYER.with(|slot| {
         if let Some(p) = slot.borrow_mut().as_mut() {
             if p.suspended {return;}
@@ -2352,13 +2229,26 @@ pub extern "system" fn Java_dev_pocket_spike_PlayerActivity_nativeSuspend(_: JNI
     });
 }
 
+/// The gamepads now connected (one line each, `android_pads::Device::parse`): who plays which player.
+#[no_mangle]
+pub extern "system" fn Java_xyz_pocketui_app_PlayerActivity_nativeRoster(mut env: JNIEnv, _: JObject, roster: JString) {
+    let text = string(&mut env, roster);
+    let devices: Vec<_> = text.lines().filter_map(pocket_ui::android_pads::Device::parse).collect();
+    PLAYER.with(|slot| {
+        if let Some(p) = slot.borrow_mut().as_mut() {
+            let notes = p.pads.roster(devices);
+            for note in &notes { log::info!("player pads: {note}"); }
+            if let Some(note) = notes.last() { p.message = note.clone(); }
+        }
+    });
+}
 /// Input-device removal must release every source and latch before a replacement controller is used.
 #[no_mangle]
-pub extern "system" fn Java_dev_pocket_spike_PlayerActivity_nativeControllers(_: JNIEnv,_:JObject,connected:jboolean,interrupted:jboolean) {
+pub extern "system" fn Java_xyz_pocketui_app_PlayerActivity_nativeControllers(_: JNIEnv,_:JObject,connected:jboolean,interrupted:jboolean) {
     PLAYER.with(|slot|{if let Some(p)=slot.borrow_mut().as_mut(){
         if interrupted != 0 {
-            p.buttons=0;p.pulses=0;p.stick_buttons=0;p.stick_direction=0;p.fingers.clear();p.held=Default::default();
-            p.core.set_analog([0;4]);p.core.set_pointer(None);
+            p.buttons=0;p.pulses=0;p.stick_buttons=0;p.triggers=Default::default();p.pads.release_all();p.stick_direction=0;p.fingers.clear();p.held=Default::default();
+            p.core.set_analog([0;4]);p.stylus.clear();p.stylus_finger=None;p.core.set_pointer(None);
             if !p.paused {p.pause(true);}
         }
         p.input_mode(connected==0);
@@ -2366,7 +2256,7 @@ pub extern "system" fn Java_dev_pocket_spike_PlayerActivity_nativeControllers(_:
     }});
 }
 #[no_mangle]
-pub extern "system" fn Java_dev_pocket_spike_PlayerActivity_nativeZoom(_: JNIEnv,_:JObject,factor:jfloat) {
+pub extern "system" fn Java_xyz_pocketui_app_PlayerActivity_nativeZoom(_: JNIEnv,_:JObject,factor:jfloat) {
     PLAYER.with(|slot|{if let Some(p)=slot.borrow_mut().as_mut(){
         if p.paused && p.frame.is_some() && matches!(p.menu,Menu::Pause|Menu::Zoom) {
             p.menu=Menu::Zoom;p.zoom.magnify(factor);p.zoom_fingers.clear();p.zoom_distance=None;
@@ -2375,6 +2265,6 @@ pub extern "system" fn Java_dev_pocket_spike_PlayerActivity_nativeZoom(_: JNIEnv
 }
 
 #[no_mangle]
-pub extern "system" fn Java_dev_pocket_spike_PlayerActivity_nativeForeground(_: JNIEnv,_:JObject) {
+pub extern "system" fn Java_xyz_pocketui_app_PlayerActivity_nativeForeground(_: JNIEnv,_:JObject) {
     PLAYER.with(|slot|{if let Some(p)=slot.borrow_mut().as_mut(){p.suspended=false;}});
 }

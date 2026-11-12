@@ -42,6 +42,9 @@ pub struct Config {
     pub snapshot: PathBuf,
     /// rc_client's log at verbose level (POCKET_CORE_TRACE).
     pub verbose: bool,
+    /// Android: the game's identity. When every achievement of the game is unlocked, a mark for the launcher is left
+    /// (`mastery`), which turns it into the golden sticker. None on Linux.
+    pub mastery_key: Option<String>,
 }
 
 /// News for the game thread.
@@ -361,6 +364,9 @@ fn write_files(shared: &Shared) {
         _ => None,
     };
     if let Some(t) = tally {
+        if let (Some(key), true) = (&shared.config.mastery_key, t.total > 0 && t.unlocked >= t.total) {
+            super::mastery::mark(&shared.config.data_dir, key, &t.title);
+        }
         t.save(&shared.config.data_dir, &shared.config.system, &shared.config.rom);
     }
 }
@@ -418,7 +424,12 @@ fn work_loop(shared: Arc<Shared>, client: Ptr, rx: Receiver<Work>) {
         }
         None => {
             eprintln!("achievements: couldn't hash {}", cfg.rom.display());
-            shared.set_state(State::Failed, "Couldn't read the game to identify it");
+            if super::is_chd(&cfg.rom) {
+                // No CHD reader in pocket-ui (rcheevos has none of its own): said as it is, the game plays on.
+                shared.set_state(State::Failed, "A CHD disc can't be identified. A CUE/BIN, ISO or M3U copy of it can");
+            } else {
+                shared.set_state(State::Failed, "Couldn't read the game to identify it");
+            }
         }
     }
     write_files(&shared);
@@ -718,6 +729,14 @@ mod tests {
     }
 
     fn start(dir: &std::path::Path, mock: Arc<Mock>) -> Session {
+        start_keyed(dir, mock, None)
+    }
+
+    fn start_keyed(dir: &std::path::Path, mock: Arc<Mock>, mastery_key: Option<&str>) -> Session {
+        start_with(dir, Box::new(Shared2(mock)), mastery_key)
+    }
+
+    fn start_with(dir: &std::path::Path, transport: Box<dyn Transport>, mastery_key: Option<&str>) -> Session {
         let rom = dir.join("Game.nes");
         std::fs::write(&rom, vec![0x42u8; 0x8000]).unwrap();
         let config = Config {
@@ -733,13 +752,14 @@ mod tests {
             core_name: "Nestopia".into(),
             snapshot: dir.join("snapshot.json"),
             verbose: false,
+            mastery_key: mastery_key.map(str::to_string),
         };
         let memory = AchievementMemory {
             descriptors: Vec::new(),
             data: Some(memory_data),
             size: Some(memory_size),
         };
-        Session::start(config, memory, Box::new(Shared2(mock))).expect("session")
+        Session::start(config, memory, transport).expect("session")
     }
 
     /// Waits up to 10 s for what the worker writes (`menu_opened`): the pause menu's list and the summary the shelf
@@ -836,6 +856,98 @@ mod tests {
         close_cleanly(s);
     }
 
+    #[test]
+    fn unlocking_the_last_achievement_leaves_the_launcher_a_mark_once() {
+        let _one = ONE_AT_A_TIME.lock().unwrap_or_else(|e| e.into_inner());
+        *RAM.lock().unwrap() = [0; 0x800];
+        let dir = scratch("mastery");
+        const KEY: &str = "00112233445566ff";
+        let mock = Arc::new(server(SETS, r#"{"Success":true,"Unlocks":[{"ID":5502,"When":1234567899}],"HardcoreUnlocks":[]}"#));
+        let mut s = start_keyed(&dir, mock, Some(KEY));
+        until_ready(&mut s);
+        s.menu_opened();
+        std::thread::sleep(Duration::from_millis(200));
+        assert!(super::super::mastery::pending(&dir).is_empty(), "1 of 2 is not mastered");
+        for _ in 0..3 {
+            run_frame(&mut s);
+        }
+        poke(1, 3);
+        poke(2, 7);
+        run_frame(&mut s);
+        s.settle();
+        s.menu_opened();
+        let marked = until(|| Some(super::super::mastery::pending(&dir)).filter(|p| !p.is_empty())).expect("a mark for the launcher");
+        assert_eq!(marked, vec![(KEY.to_string(), "Sample Game".to_string())]);
+        // The launcher puts the sticker on and uses the mark; the game being open again changes nothing.
+        super::super::mastery::done(&dir, KEY);
+        s.menu_opened();
+        std::thread::sleep(Duration::from_millis(300));
+        assert!(super::super::mastery::pending(&dir).is_empty(), "a used mark never comes back");
+        close_cleanly(s);
+    }
+
+    /// The QA replay set (android/src/ra_replay.rs) rests on this: conditions with a hit count (the same one
+    /// true for N frames) unlock by themselves after N frames, no game memory needed, and the last unlock masters the game.
+    #[test]
+    fn a_set_of_hit_counts_unlocks_by_itself_after_a_few_frames_and_masters_the_game() {
+        let _one = ONE_AT_A_TIME.lock().unwrap_or_else(|e| e.into_inner());
+        *RAM.lock().unwrap() = [0; 0x800];
+        let dir = scratch("always");
+        const KEY: &str = "00112233445566aa";
+        let sets = SETS.replace("0xH0001=3_0xH0002=7", "1=1.5.").replace("0xH0001=2_0x0002=9", "1=1.12.");
+        let mock = Arc::new(server(&sets, r#"{"Success":true,"Unlocks":[],"HardcoreUnlocks":[]}"#));
+        let mut s = start_keyed(&dir, mock, Some(KEY));
+        let mut unlocked = Vec::new();
+        crate::testutil::clock::wait_for(
+            || {
+                run_frame(&mut s);
+                unlocked.extend(s.take_notices().into_iter().filter_map(|n| if let Notice::Unlocked { id, .. } = n { Some(id) } else { None }));
+                unlocked.len() >= 2
+            },
+            Duration::from_secs(10),
+            "both achievements unlock by themselves",
+        );
+        unlocked.sort();
+        assert_eq!(unlocked, vec![5501, 5502]);
+        s.settle();
+        s.menu_opened();
+        assert!(until(|| Some(super::super::mastery::pending(&dir)).filter(|p| !p.is_empty())).is_some(), "mastered: the mark is there");
+        close_cleanly(s);
+    }
+
+    /// A network that takes its time (hotel Wi-Fi, a dead route) never holds the game thread: starting the session and
+    /// every frame stay far under a frame's time, and the end of the game waits only the short moment it is given.
+    struct Hanging(Duration);
+    impl Transport for Hanging {
+        fn call(&self, _req: &Request) -> Response {
+            std::thread::sleep(self.0);
+            Response::unreachable()
+        }
+    }
+
+    #[test]
+    fn a_network_that_never_answers_never_holds_the_game_thread() {
+        let _one = ONE_AT_A_TIME.lock().unwrap_or_else(|e| e.into_inner());
+        *RAM.lock().unwrap() = [0; 0x800];
+        let dir = scratch("hang");
+        let began = Instant::now();
+        let mut s = start_with(&dir, Box::new(Hanging(Duration::from_millis(1200))), None);
+        let started = began.elapsed();
+        let mut worst = Duration::ZERO;
+        for _ in 0..180 {
+            let t = Instant::now();
+            run_frame(&mut s);
+            worst = worst.max(t.elapsed());
+        }
+        let closing = Instant::now();
+        s.close(Duration::from_millis(300));
+        let closed = closing.elapsed();
+        eprintln!("hanging network: start {started:?}, worst frame {worst:?}, close {closed:?}");
+        assert!(started < crate::testutil::timeout(Duration::from_millis(250)), "starting took {started:?}");
+        assert!(worst < crate::testutil::timeout(Duration::from_millis(60)), "a frame took {worst:?}");
+        assert!(closed < crate::testutil::timeout(Duration::from_millis(1000)), "closing took {closed:?}");
+    }
+
     /// A server that also has badges: it writes a small PNG for every download and counts them.
     struct WithBadges(Arc<Mock>, AtomicUsize);
     impl Transport for WithBadges {
@@ -878,6 +990,7 @@ mod tests {
             core_name: "Nestopia".into(),
             snapshot: dir.join("snapshot.json"),
             verbose: false,
+            mastery_key: None,
         };
         let memory = AchievementMemory {
             descriptors: Vec::new(),

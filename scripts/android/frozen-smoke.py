@@ -19,7 +19,7 @@ from pathlib import Path
 adb, serial, apk, destination, *phases = sys.argv[1:]
 out = Path(destination)
 out.mkdir(parents=True, exist_ok=True)
-PACKAGE = 'dev.pocket.spike'
+PACKAGE = 'xyz.pocketui.app'
 ROOT = '/sdcard/Download/PocketFrozen'
 # (fixture under PocketMvp, the name the shelf gives it)
 GAMES = json.loads((Path(__file__).parent / 'frozen-smoke-games.json').read_text())
@@ -147,19 +147,19 @@ def fresh():
     # The system's own "Viewing full screen" hint, once on a new phone.
     if find('Got it') is not None:
         tap('Got it')
-    wait_text('Step 1 of 7')
+    wait_text('Step 1 of 8')
     tap('Continue')
-    wait_text('Step 2 of 7')
+    wait_text('Step 2 of 8')
     tap('Continue')
-    wait_text('Step 3 of 7')
+    wait_text('Step 3 of 8')
     tap('Choose your ROM folder')
     time.sleep(1)
     pick_folder()
-    wait_text('Step 3 of 7')
-    for step in (3, 4, 5, 6):
-        wait_text(f'Step {step} of 7')
+    wait_text('Step 3 of 8')
+    for step in (3, 4, 5, 6, 7):
+        wait_text(f'Step {step} of 8')
         tap('Skip' if step == 5 else 'Continue')
-    wait_text('Step 7 of 7')
+    wait_text('Step 8 of 8')
     tap('Continue')
     wait_text('Games')
     time.sleep(2)
@@ -328,7 +328,7 @@ def phase_five():
     check('external game closed after its start', status() == '')
     check('still five', open_count() == 5, str(open_count()))
     # Looks and orientations, a game open and selected.
-    for look in ('Shelf', 'Cabinet', 'Cards', 'Minimal', 'Split'):
+    for look in ('Shelf', 'Cabinet', 'Split'):
         for _ in range(6):
             tap('Settings')
             row = next(t for t in texts() if t.startswith('Look ·'))

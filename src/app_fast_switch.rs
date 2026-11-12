@@ -3,7 +3,7 @@
 //! out of main.rs so `launch`, `game_exited`, the pause menu and the switcher only carry hooks.
 
 use std::path::PathBuf;
-use std::time::{Duration, Instant};
+use std::time::Instant;
 
 use pocket_ui::control;
 use pocket_ui::fast_switch::{self, Game};
@@ -158,14 +158,8 @@ impl App {
     /// (`fast_switch::overlap_allowed`: another pocket-core game that shares no save with it), so nothing it still
     /// does can meet the new start (the same game again after a Quit to the shelf, RetroArch, a standalone
     /// emulator). Practically never waits: the teardown takes a fraction of a second, picking a game longer.
-    pub(crate) fn wait_for_drained(&self, system: &str, path: &std::path::Path, emulator: &str, core: &str) {
+    pub(crate) fn launch_drains(&self, system: &str, path: &std::path::Path, emulator: &str, core: &str) -> Vec<i32> {
         let next = Game { emulator, core, system, rom: path };
-        for d in self.fast.draining.iter().filter(|d| !fast_switch::overlap_allowed(Game { emulator: "pocket-core", core: &d.core, system: &d.system, rom: &d.path }, next)) {
-            fast_switch::mark("start waits for the old game's process");
-            if !fast_switch::wait_ended(d.pgid, quit::WINDOW_GRACE) {
-                control::terminate_game(d.pgid, true);
-                fast_switch::wait_ended(d.pgid, Duration::from_secs(1));
-            }
-        }
+        self.fast.draining.iter().filter(|d| !fast_switch::overlap_allowed(Game { emulator: "pocket-core", core: &d.core, system: &d.system, rom: &d.path }, next)).map(|d| d.pgid).collect()
     }
 }

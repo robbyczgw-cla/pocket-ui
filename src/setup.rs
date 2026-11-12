@@ -35,7 +35,6 @@ pub enum SetupEvent {
     /// switch that did not work. The page reads the snapshot.
     Net,
     /// USB file transfer was switched on Add games (`Setup::switch_usb`): what the controller says now.
-    Usb { wanted_on: bool, status: crate::usb_transfer::Status },
     Connected { ssid: String, result: Result<(), String> },
     /// First start: `ADVANCE_AFTER` has passed since a connection made here worked (`Setup::advance`); `gen` says which.
     Advance { gen: u64 },
@@ -230,23 +229,21 @@ enum LookRow {
     Appearance,
     Motion,
     Animations,
-    /// The first start: Barlow, Pixel, Rounded or Retro (Settings › Look › Style).
+    /// The first start: Barlow or Retro (Settings › Look › Style).
     Font,
     /// The first start: the colour set (Retro's own two while it is on; Settings › Look › Colours).
     Colours,
 }
 
 /// Whether the welcome offers to set the Pocket up for a child (Kids Mode): not where the host owns buttons a child can
-/// reach (the Steam Deck's Steam button, `features::Profile::offered`).
 fn kids_offered() -> bool {
     Profile::offered().contains(&Profile::Child)
 }
 
-/// A handheld with no Wi-Fi chip (RG28XX, RG35XX 2024; not the Steam Deck, which skips more): the first start leaves out the
 /// Wi-Fi page ("This device has no Wi-Fi") and the Extras page ("downloads aren't available"), both of which have nothing to choose.
 fn no_wifi_chip() -> bool {
     let d = crate::device::current();
-    !d.has_wifi() && !d.host_owned()
+    !d.has_wifi()
 }
 
 enum Step {
@@ -408,7 +405,7 @@ pub struct Setup {
     zone_guessing: bool,
     /// Left/Right on the look step's Colours row (first start): the next (true) or previous set, once; the app steps them.
     colours_step: Option<bool>,
-    /// The same on its Style row (Barlow, Pixel, Rounded, Retro: `font_style`, `retro`).
+    /// The same on its Style row (Barlow, Retro: `font_style`, `retro`).
     font_step: Option<bool>,
     /// The time zone was opened from the Wi-Fi page's Time zone row: leaving it goes back there, and the zone picked
     /// there is kept (the guess after Wi-Fi is not made again).
@@ -504,8 +501,6 @@ pub struct Setup {
     /// transfer being switched, and its last attempt having failed.
     ways_sel: usize,
     ways_focus: bool,
-    usb_busy: bool,
-    usb_failed: bool,
     /// What the last Add games frame offers to touch (`register_touch`).
     touch: std::cell::RefCell<Vec<(crate::touch::Area, Touch)>>,
     /// A thread is looking at file sharing (`look_sharing`): never `systemctl` on the UI thread.
@@ -544,7 +539,7 @@ pub struct Setup {
     /// `backed_out` says so to the app.
     again: bool,
     backed_out: bool,
-    /// The welcome's row that Left/Right change: 0 the language, 1 Easy to read (Up/Down; first-start walk 2026-11-06:
+    /// The welcome's row that Left/Right change: 0 the language, 1 Big text (Up/Down; first-start walk 2026-11-06:
     /// the second row looked like one to choose, and Down then Right changed the language).
     welcome_row: u8,
     /// The language chosen on the welcome step (Left/Right), until the app has kept it (`take_language`).
@@ -674,7 +669,7 @@ impl PortTab {
     }
 }
 
-/// Where BIOS files go (see docs/user/getting-started.md): `crate::hostsys::bios_dir()` (`POCKETUI_BIOS` on the Deck).
+/// Where BIOS files go (see docs/user/getting-started.md): `crate::hostsys::bios_dir()` (`POCKETUI_BIOS` can override it).
 
 /// A system with games, for Settings > Look > Systems on the shelf.
 #[derive(Clone, Debug)]
@@ -902,9 +897,7 @@ impl Setup {
             [] => {
                 text.draw(c, Face::Title, 67, MARGIN, 140, pal().chalk, "Add your games");
                 let d = crate::device::current();
-                let about = if d.host_owned() {
-                    "One folder per system in Emulation/roms. Copy games there from Desktop Mode."
-                } else if !d.has_wifi() || crate::card_health::games_drive() {
+                let about = if !d.has_wifi() || crate::card_health::games_drive() {
                     // File sharing isn't the way, or not the only one: the right side says which is.
                     "One folder per system in roms."
                 } else {
@@ -948,7 +941,6 @@ impl Setup {
             self.paint_tile_details(c, text, grid, MARGIN, top, col_w);
         }
         match ways.get(self.ways_sel).filter(|_| self.ways_focus) {
-            Some(Way::Usb) => self.paint_usb(c, text, MARGIN + col_w + 40, top, col_w),
             _ => self.paint_share(c, text, MARGIN + col_w + 40, top, col_w, dots),
         }
         // The "All systems" tile selected: whether its list is open.
@@ -956,7 +948,7 @@ impl Setup {
             Some(Tile::More) => Some(self.grid.as_ref().is_some_and(|g| g.expanded)),
             _ => None,
         };
-        let mut bar = games_hints(more, self.sharing, self.ip.is_some() && !crate::device::current().host_owned());
+        let mut bar = games_hints(more, self.sharing, self.ip.is_some());
         // A on the row of ways: what it does to the one selected.
         if let Some(label) = ways.get(self.ways_sel).filter(|_| self.ways_focus).map(|w| self.way_action(*w)) {
             bar.insert(0, ("A", label));
@@ -996,8 +988,6 @@ impl Setup {
             Way::Sharing => ("File sharing", "Off".to_string(), false),
             Way::Phone if self.ip.is_none() => ("From your phone", "Connect to Wi-Fi first".to_string(), false),
             Way::Phone => ("From your phone", "Or a computer's browser, same Wi-Fi".to_string(), false),
-            Way::Usb if self.usb_busy => ("USB file transfer", format!("Switching{dots}"), self.usb_status() != crate::usb_transfer::Status::Off),
-            Way::Usb => ("USB file transfer", self.usb_status().label().to_string(), self.usb_status() != crate::usb_transfer::Status::Off),
         }
     }
 
@@ -1009,22 +999,9 @@ impl Setup {
             Way::Sharing => "Turn on file sharing",
             Way::Phone if self.ip.is_none() => "Connect to Wi-Fi",
             Way::Phone => "From your phone",
-            Way::Usb if self.usb_status() == crate::usb_transfer::Status::Off => "Turn on USB file transfer",
-            Way::Usb => "Turn off USB file transfer",
         }
     }
 
-    /// Under the grid on the right while the USB file transfer tile is selected: its state and the one sentence.
-    fn paint_usb(&self, c: &mut Canvas, text: &mut Text, x: i32, top: i32, w: i32) {
-        let status = self.usb_status();
-        let head = if self.usb_busy { "Switching…" } else { status.label() };
-        let head = text.fit(Face::Title, 37, head, w);
-        text.draw(c, Face::Title, 37, x, top + 50, if status == crate::usb_transfer::Status::Off { pal().dust } else { pal().chalk }, &head);
-        let (about, color) = if self.usb_failed { (USB_FAILED, pal().alert) } else { (USB_WAY, pal().dust) };
-        for (i, l) in text.wrap_prose(Face::Body, 24, about, w).iter().take(4).enumerate() {
-            text.draw(c, Face::Body, 24, x, top + 92 + i as i32 * 32, color, l);
-        }
-    }
 
     fn paint_grid(&self, c: &mut Canvas, text: &mut Text, grid: &Grid, top: i32, width: i32, rows_shown: usize) {
         const GAP: i32 = GRID_GAP;
@@ -1157,14 +1134,6 @@ impl Setup {
 
     /// Under the grid on the right: file sharing, its address and login.
     fn paint_share(&self, c: &mut Canvas, text: &mut Text, x: i32, top: i32, w: i32, dots: &str) {
-        if crate::device::current().host_owned() {
-            let status = text.fit(Face::Title, 37, "Where games go", w);
-            text.draw(c, Face::Title, 37, x, top + 50, pal().chalk, &status);
-            for (i, l) in text.wrap_prose(Face::Body, 24, DECK_GAMES_NOTE, w).iter().take(4).enumerate() {
-                text.draw(c, Face::Body, 24, x, top + 92 + i as i32 * 32, pal().dust, l);
-            }
-            return;
-        }
         let (status, color) = if self.sharing_busy {
             (format!("Switching file sharing{dots}"), pal().dust)
         } else if self.share_looking {
@@ -1212,8 +1181,6 @@ impl Setup {
     }
 }
 
-/// Add games on a Steam Deck, where the file sharing is on the right on the handhelds.
-const DECK_GAMES_NOTE: &str = "Put games in the folders on the left (EmuDeck's Emulation/roms) or on the SD card. New ones show up the next time pocket-ui starts.";
 
 /// Add games without Wi-Fi and no other way, under "Connect to Wi-Fi first": what file sharing will do once there is an address.
 const SHARE_OFFLINE: &str = "Then a computer on the same network can copy games straight into these folders.";
@@ -1260,8 +1227,6 @@ fn offline_way_for(card_in_computer: bool, games_drive: bool, second_slot: bool,
 const WAY_H: i32 = 84;
 
 /// Add games' USB file transfer: its sentence (the same as Settings → Connections) and what it says when it didn't start.
-const USB_WAY: &str = "Copy games with a USB cable. Windows and Linux open it by themselves; a Mac needs the free OpenMTP app.";
-const USB_FAILED: &str = "USB file transfer didn't start. Take out what's in the USB port and try again.";
 
 /// A way to get games onto this device that Add games lets you start from its row of tiles. The ways with only a
 /// sentence (the second card, the GAMES drive) are not here: they have nothing to switch (`offline_way`).
@@ -1270,7 +1235,6 @@ const USB_FAILED: &str = "USB file transfer didn't start. Take out what's in the
 enum Way {
     Sharing,
     Phone,
-    Usb,
 }
 
 /// The rows of the first start's "Your games" (`Setup::found_rows`).
@@ -1290,20 +1254,13 @@ enum Touch {
 }
 
 /// The ways this device offers: file sharing where there is Wi-Fi (connected or not: unconnected, it leads to the Wi-Fi
-/// page), USB file transfer where the device has it; nothing on a Steam Deck, whose games go through Desktop Mode.
-fn ways_for(host_owned: bool, wifi: bool, usb: bool) -> Vec<Way> {
+fn ways_for(wifi: bool) -> Vec<Way> {
     let mut ways = Vec::new();
-    if host_owned {
-        return ways;
-    }
     if wifi {
         ways.push(Way::Sharing);
         if crate::phone_upload_page::offered() {
             ways.push(Way::Phone);
         }
-    }
-    if usb {
-        ways.push(Way::Usb);
     }
     ways
 }
@@ -1317,10 +1274,8 @@ const FOUND_WIFI_WAY: &str = "Copy them over Wi-Fi from a computer or phone. If 
 /// What the first start's "Your games" says when there are no games, for the first way that applies. A pure function of the
 /// device, so a test can walk every kind of device (K1 of the UX review: "the same folders" was said to cards a computer
 /// can't read).
-fn no_games_way(host_owned: bool, image_card: bool, games_card: bool, games_drive: bool, card_in_computer: bool, wifi: bool, second_slot: bool) -> &'static str {
-    if host_owned {
-        DECK_GAMES_NOTE
-    } else if image_card {
+fn no_games_way(image_card: bool, games_card: bool, games_drive: bool, card_in_computer: bool, wifi: bool, second_slot: bool) -> &'static str {
+    if image_card {
         crate::card_health::IMAGE_CARD_NOTE
     } else if games_card {
         GAMES_CARD_WAY
@@ -1406,15 +1361,14 @@ const RECOUNT_AFTER: Duration = Duration::from_secs(3);
 
 /// How many stages the first start has, for its dots: the welcome with the language, Wi-Fi (the time zone in its place
 /// without a Wi-Fi chip; with Wi-Fi the zone is guessed and only asked inside this stage when the guess is unsure), your
-/// games, the look (Kids Mode's own steps in its place for a child). A Steam Deck has no Wi-Fi stage: three.
-fn stage_count(host_owned: bool) -> usize {
-    if host_owned { 3 } else { 4 }
+fn stage_count() -> usize {
+    4
 }
 
 /// Which dot a first-start page lights (from 0); `None` for the pages inside a stage (keyboards, lists, the time zone's
 /// picker, Add more…), which keep the screen for their own title.
-fn stage_of(step: &Step, host_owned: bool) -> Option<usize> {
-    let games = if host_owned { 1 } else { 2 };
+fn stage_of(step: &Step) -> Option<usize> {
+    let games = { 2 };
     match step {
         Step::Welcome => Some(0),
         Step::Wifi => Some(1),
@@ -1472,11 +1426,9 @@ fn look_zone(hw: &dyn crate::system_ctl::Hw) -> ZoneStep {
 
 /// The Extras step's line under the title. A handheld without a Wi-Fi chip (the RG28XX) can't "connect to Wi-Fi first":
 /// it says so instead (first-start test 2026-11-01).
-fn extras_sub(online: bool, host_owned: bool, has_wifi: bool) -> &'static str {
+fn extras_sub(online: bool, has_wifi: bool) -> &'static str {
     if online {
         "Optional. You can get these any time later."
-    } else if host_owned {
-        "Connect to the internet first to use these."
     } else if !has_wifi {
         "This device has no Wi-Fi, so the downloads aren't available."
     } else {
@@ -1652,8 +1604,6 @@ impl Setup {
             sharing_busy: false,
             ways_sel: 0,
             ways_focus: false,
-            usb_busy: false,
-            usb_failed: false,
             touch: Default::default(),
             share_looking: false,
             share_password: None,
@@ -2061,7 +2011,6 @@ impl Setup {
             || self.cheat_data.as_ref().is_some_and(|p| p.busy())
             || self.switching.is_some()
             || self.sharing_busy
-            || self.usb_busy
             || self.remote_busy
             || self.share_looking
             || self.remote_looking
@@ -2446,7 +2395,7 @@ impl Setup {
     /// back by itself after a restart (`wifi::keep_sharing_on`), and X has to do what the page says. It ends with the
     /// page (it holds a `Weak` of the token); the answers come as `SetupEvent::ShareChanged`, only when something changed.
     fn keep_share_watch(&mut self) {
-        if !matches!(self.step, Step::Games | Step::PortFiles(_)) || crate::device::current().host_owned() {
+        if !matches!(self.step, Step::Games | Step::PortFiles(_)) {
             self.share_watch = None;
             return;
         }
@@ -2713,12 +2662,6 @@ impl Setup {
                 self.step = if refused { Step::Password { ssid, kb: Keyboard { text: typed, ..Keyboard::default() }, hidden: self.connect_hidden } } else { Step::Wifi };
                 // The scan that follows is `NetState::exclusive`'s own: asking again would run it twice.
             }
-            SetupEvent::Usb { wanted_on, status } => {
-                // Settings → Connections reads the same facts, so both places show the same state.
-                crate::settings_values::set_usb(status);
-                self.usb_failed = wanted_on && status == crate::usb_transfer::Status::Off;
-                self.usb_busy = false;
-            }
             SetupEvent::Sharing { on, read_only, password, switched } => {
                 if switched {
                     self.sharing_busy = false;
@@ -2949,7 +2892,7 @@ impl Setup {
                 Some(PortMasterState::Downloading(progress)) => {
                     let value = match progress.stage.as_str() {
                         "checking" | "verify" => "Checking…".into(),
-                        "saving" | "preparing" | "installing" | "ready" => "Preparing…".into(),
+                        "saving" | "preparing" | "installing" | "unpacking" | "ready" => "Preparing…".into(),
                         _ if progress.total > 0 => format!("{}%", progress.done.saturating_mul(100).checked_div(progress.total).unwrap_or(0).min(100)),
                         _ => "Downloading…".into(),
                     };
@@ -2989,7 +2932,7 @@ impl Setup {
             Some(PortMasterState::Offer(ports::RuntimeStatus::Outdated)) => "Update PortMaster",
             Some(PortMasterState::Checking) => "Checking PortMaster…",
             Some(PortMasterState::Downloading(ref progress)) if matches!(progress.stage.as_str(), "checking" | "verify") => "Checking PortMaster…",
-            Some(PortMasterState::Downloading(ref progress)) if matches!(progress.stage.as_str(), "saving" | "preparing" | "installing" | "ready") => "Preparing PortMaster…",
+            Some(PortMasterState::Downloading(ref progress)) if matches!(progress.stage.as_str(), "saving" | "preparing" | "installing" | "unpacking" | "ready") => "Preparing PortMaster…",
             Some(PortMasterState::Downloading(_)) => "Downloading PortMaster…",
             _ => "Get PortMaster (~300 MB, one time)",
         }
@@ -3117,13 +3060,13 @@ impl Setup {
     #[cfg(not(feature = "brick"))]
     fn ways(&self) -> Vec<Way> {
         let d = crate::device::current();
-        ways_for(d.host_owned(), d.has_wifi(), crate::usb_transfer::offered())
+        ways_for(d.has_wifi())
     }
 
     #[cfg(feature = "brick")]
     fn ways(&self) -> Vec<Way> {
         let d = crate::device::current();
-        let mut ways = ways_for(d.host_owned(), d.has_wifi(), crate::usb_transfer::offered());
+        let mut ways = ways_for(d.has_wifi());
         #[cfg(feature = "brick")]
         if matches!(d.model, Some(crate::device::Model::Brick(_))) && !crate::brick_profile::file_sharing() {
             ways.retain(|w| *w != Way::Sharing);
@@ -3131,9 +3074,6 @@ impl Setup {
         ways
     }
 
-    fn usb_status(&self) -> crate::usb_transfer::Status {
-        crate::settings_values::get().usb.unwrap_or(crate::usb_transfer::Status::Off)
-    }
 
     /// The grid moves; Down from its last row goes on to the row of ways. True when the button was used.
     fn press_grid(&mut self, b: Button) -> bool {
@@ -3178,7 +3118,6 @@ impl Setup {
             }
             Some(Way::Phone) => self.open_phone(),
             Some(Way::Sharing) => self.switch_sharing(),
-            Some(Way::Usb) => self.switch_usb(),
             None => {}
         }
     }
@@ -3228,18 +3167,6 @@ impl Setup {
         self
     }
 
-    /// USB file transfer on or off, on a thread (about a second): what Settings → Connections does, with the same
-    /// result in `settings_values`.
-    fn switch_usb(&mut self) {
-        if self.usb_busy {
-            return;
-        }
-        self.usb_busy = true;
-        self.usb_failed = false;
-        let on = self.usb_status() == crate::usb_transfer::Status::Off;
-        let notify = self.notify.clone();
-        std::thread::spawn(move || notify(SetupEvent::Usb { wanted_on: on, status: crate::usb_transfer::set(on) }));
-    }
 
     /// A tap on a tile of the row of ways moves the selection there by `n` (0: the one that is, now with the focus).
     pub fn ways_steps(&mut self, n: i32) {
@@ -3292,8 +3219,7 @@ impl Setup {
 
     /// X on the games step and on "Copy your game files": file sharing on or off, on a thread.
     fn switch_sharing(&mut self) {
-        // SteamOS has no file sharing of ours (no smbd service): the Deck's games go into its Emulation folder.
-        if crate::device::current().host_owned() || self.sharing_busy || self.share_looking || !(self.sharing || self.ip.is_some()) {
+        if self.sharing_busy || self.share_looking || !(self.sharing || self.ip.is_some()) {
             return;
         }
         self.sharing_busy = true;
@@ -3419,7 +3345,7 @@ impl Setup {
         }
         (self.sel, self.theme, self.port_sel, self.port_tab, self.sharing, self.remote_busy, self.sharing_busy).hash(&mut h);
         (self.share_read_only, &self.ip, &self.share_password).hash(&mut h);
-        (self.ways_sel, self.ways_focus, self.usb_busy, self.usb_failed, self.usb_status().label()).hash(&mut h);
+        (self.ways_sel, self.ways_focus).hash(&mut h);
         self.cheat_data.as_ref().map(|p| p.status()).hash(&mut h);
         (self.portmaster_confirm_remove, self.portmaster_removing).hash(&mut h);
         h.finish()
@@ -3509,11 +3435,8 @@ impl Setup {
     }
 
     /// On from the welcome: Wi-Fi; the time zone where there is no Wi-Fi chip; your games where the system owns both
-    /// (the Steam Deck, docs/STEAMDECK.md).
     fn after_welcome(&mut self) {
-        if crate::device::current().host_owned() {
-            self.enter_found();
-        } else if self.no_wifi {
+        if self.no_wifi {
             self.enter_zone();
         } else {
             self.step = Step::Wifi;
@@ -3983,7 +3906,7 @@ impl Setup {
                 self.switch_easy_to_read();
                 Some(false)
             }
-            Button::Start if stage_of(&self.step, crate::device::current().host_owned()).is_some() => Some(true),
+            Button::Start if stage_of(&self.step).is_some() => Some(true),
             // B and L1 go back to the stage before; lists inside a stage keep L1 for paging. A question the page asked
             // (Forget this network?) is taken back by B first.
             Button::L1 if self.stage_back() => Some(false),
@@ -4010,7 +3933,6 @@ impl Setup {
     /// The stage before this one, opened as when reached forward.
     fn go_back_a_stage(&mut self) -> bool {
         self.net_menu = None;
-        let host_owned = crate::device::current().host_owned();
         match &self.step {
             // The time zone belongs to the Wi-Fi stage: back to its page (the welcome where it takes Wi-Fi's place).
             // Seen and left with B: asked once, Continue then goes on (the Time zone row still opens it); a country's list
@@ -4024,10 +3946,6 @@ impl Setup {
             }
             Step::Wifi | Step::Zone(_) => {
                 self.wifi_for_phone = false;
-                self.step = Step::Welcome;
-                true
-            }
-            Step::Found { .. } if host_owned => {
                 self.step = Step::Welcome;
                 true
             }
@@ -4085,10 +4003,8 @@ impl Setup {
         let mut words = line.split_whitespace();
         let name = words.next().unwrap_or("");
         self.kids_wanted = words.next() == Some("child") && kids_offered();
-        let host_owned = crate::device::current().host_owned();
         match name {
             "look" | "play" | "wifi" => self.after_welcome(),
-            "zone" if host_owned => self.enter_found(),
             // Opened again as when Wi-Fi was left: a guess that can be trusted is taken, a failed one shows the step.
             "zone" if self.no_wifi => self.enter_zone(),
             "zone" => self.enter_zone_auto(),
@@ -4140,7 +4056,7 @@ impl Setup {
                     Button::Down => self.welcome_row = (self.welcome_row + 1).min(rows - 1),
                     _ => {}
                 }
-                // The language, in use from the next frame on (`i18n`); on the rows below, Easy to read as L2 switches it,
+                // The language, in use from the next frame on (`i18n`); on the rows below, Big text as L2 switches it,
                 // and the wish for Kids Mode.
                 if matches!(b, Button::Left | Button::Right) && self.welcome_row == 2 {
                     self.kids_wanted = !self.kids_wanted;
@@ -4313,7 +4229,6 @@ impl Setup {
                     }
                 }
                 Button::Start => self.go_to_games(),
-                Button::South if crate::device::current().host_owned() => self.step = Step::Play { sel: 0 },
                 Button::South => self.enter_zone(),
                 _ => {}
             },
@@ -4477,10 +4392,7 @@ impl Setup {
                 let model = crate::device::current().model.unwrap_or(crate::device::Model::MiniV2);
                 let row = [crate::ui_art::Art::Logo, crate::ui_art::Art::Device(model)];
                 let lines = [
-                    if crate::device::current().host_owned() {
-                        // No count: "Three short steps" beside four dots (this page is the first) read as one missing.
-                        "Next: your games, then a look you like."
-                    } else if self.no_wifi {
+                    if self.no_wifi {
                         "Next: your time zone, your games, then a look you like."
                     } else {
                         "Next: Wi-Fi, your games, then a look you like."
@@ -4511,7 +4423,7 @@ impl Setup {
                     let rows_end = words_end.max(430) + 40 + rows * (pill_h() + 15) - 15;
                     (rows_end - (crate::kit::hint_bar_top(c.h) - 12)).max(0)
                 };
-                // The title stands clear of the status corner (the clock of Easy to read and the dots) down to here; a
+                // The title stands clear of the status corner (the clock of Big text and the dots) down to here; a
                 // longer page sets the paragraph about the device in a smaller type instead (German, Large).
                 let (mut note_px, mut lift) = (28, lift_for(text, 28));
                 if lift > 160 {
@@ -4535,7 +4447,7 @@ impl Setup {
                 // The languages in their own names; the line after them in the one chosen.
                 let on = crate::i18n::Lang::ALL.iter().position(|l| *l == crate::i18n::current()).unwrap_or(0);
                 let names: Vec<&str> = crate::i18n::Lang::ALL.iter().map(|l| l.name()).collect();
-                let label_w = ["Language", "Easy to read", "For a child"].iter().map(|l| text.width(Face::Body, 24, l)).max().unwrap_or(0);
+                let label_w = ["Language", "Big text", "For a child"].iter().map(|l| text.width(Face::Body, 24, l)).max().unwrap_or(0);
                 let top = below.max(470 - 40 + dy.min(0)) + 40;
                 pill_row(c, text, top, "Language", &names, on, "You can change it later in Settings.", label_w);
                 self.paint_easy_to_read(c, text, top + pill_h() + 15, label_w);
@@ -4548,7 +4460,7 @@ impl Setup {
                 focus_bar(c, top + i32::from(self.welcome_row) * (pill_h() + 15), pill_h());
                 let change = match self.welcome_row {
                     0 => "Language",
-                    1 => "Easy to read",
+                    1 => "Big text",
                     _ => "For a child",
                 };
                 let mut bar = vec![("Left/Right", change), ("A", "Get started")];
@@ -4734,10 +4646,9 @@ impl Setup {
     /// First start only: "Step 3 of 7" at the top right, so a new player knows how long the setup is. The Look step is
     /// painted by the app (`paint_look`, which calls this too); the cards have their own "n of m".
     fn paint_step_count(&self, c: &mut Canvas, text: &mut Text) {
-        let host_owned = crate::device::current().host_owned();
-        let Some(at) = self.only.is_none().then(|| stage_of(&self.step, host_owned)).flatten() else { return };
+        let Some(at) = self.only.is_none().then(|| stage_of(&self.step)).flatten() else { return };
         // One dot per stage, the ones done and this one filled: pages turned, not a queue (no "Step 2 of 4").
-        let n = stage_count(host_owned) as i32;
+        let n = stage_count() as i32;
         let (d, gap) = (14, 12);
         let right = c.w - MARGIN;
         let y = 56;
@@ -4747,7 +4658,7 @@ impl Setup {
             crate::retro::pill(c, x, y, d, d, d / 2, color);
         }
         crate::text::boxes::area(c, (right - n * (d + gap) + gap, y, n * (d + gap) - gap, d), "‹dots›");
-        // Easy to read, on every stage: its key and "Aa", the letters larger when it is on.
+        // Big text, on every stage: its key and "Aa", the letters larger when it is on.
         let on = self.easy_to_read();
         let label = if on { "Aa  On" } else { "Aa" };
         let lw = text.width(Face::Body, 24, label);
@@ -4763,9 +4674,8 @@ impl Setup {
     /// "Step n of m" as a number, for the tests: the dot that is lit (from 1) and how many there are.
     #[cfg(test)]
     fn step_of(&self) -> Option<(usize, usize)> {
-        let host_owned = crate::device::current().host_owned();
-        let n = self.only.is_none().then(|| stage_of(&self.step, host_owned)).flatten()?;
-        Some((n + 1, stage_count(host_owned)))
+        let n = self.only.is_none().then(|| stage_of(&self.step)).flatten()?;
+        Some((n + 1, stage_count()))
     }
 
     /// The rows of "Your games": Continue and Add more… with games, Add games… and I'll add games later without; the Box
@@ -4781,7 +4691,7 @@ impl Setup {
     /// "Your games" without games: the way that works here, in a sentence (Add games… has the details).
     fn found_way(&self) -> &'static str {
         let d = crate::device::current();
-        no_games_way(d.host_owned(), crate::card_health::image_card(), crate::games_card::in_use(), crate::card_health::games_drive(),
+        no_games_way(crate::card_health::image_card(), crate::games_card::in_use(), crate::card_health::games_drive(),
             d.card_reads_in_computer(), d.has_wifi(), d.has_second_card_slot())
     }
 
@@ -4921,7 +4831,7 @@ impl Setup {
         if let Some(page) = &mut self.cheat_data { page.poll(); }
         let online = self.extras_demo_online.unwrap_or_else(|| self.ip.is_some() || wifi::ip().is_some());
         let device = crate::device::current();
-        let offline = extras_sub(false, device.host_owned(), device.has_wifi());
+        let offline = extras_sub(false, device.has_wifi());
         let about = format!("{}\n{}", "The front of each game's box, from a free collection online.", PICTURES_NOTE);
         let covers_error = self.covers_unreachable && !self.covers_running;
         let covers = if !online { "Needs Wi-Fi".into() }
@@ -5472,7 +5382,7 @@ impl Setup {
                 let on = Animations::ALL.iter().position(|a| *a == shown).unwrap_or(0);
                 pill_row(c, text, top, "Animations", &names, on, shown.blurb(), label_w);
             }
-            // Barlow, Pixel, Rounded, Retro: as Settings › Look › Style, and every page in it from the next frame on.
+            // Barlow, Retro: as Settings › Look › Style, and every page in it from the next frame on.
             LookRow::Font => {
                 let now = crate::font_style::get();
                 let names: Vec<&str> = crate::font_style::FontStyle::ALL.iter().map(|f| f.label()).collect();
@@ -5533,12 +5443,12 @@ impl Setup {
         hints(c, text, &look_hints(false, self.look_row > 0));
     }
 
-    /// Easy to read as the look step shows it: Large text and a Motion that isn't Full (`features::reading_on`).
+    /// Big text as the look step shows it: Large text and a Motion that isn't Full (`features::reading_on`).
     fn easy_to_read(&self) -> bool {
         features::reading_on(crate::type_scale::get(), self.motion)
     }
 
-    /// R1 on the first start's look step: Easy to read on or off, through the Tour card's own switch, so both set Text
+    /// R1 on the first start's look step: Big text on or off, through the Tour card's own switch, so both set Text
     /// size and Motion the same way. The app keeps both (`take_text_size`, `motion`).
     fn switch_easy_to_read(&mut self) {
         let Some(switch) = features::by_id("easy_to_read").and_then(|i| features::FEATURES[i].switch) else { return };
@@ -5553,11 +5463,11 @@ impl Setup {
 
 
 
-    /// The welcome's Easy to read row under the language: Off / On (L2 on every stage), Large text and calmer menus.
+    /// The welcome's Big text row under the language: Off / On (L2 on every stage), Large text and calmer menus.
     fn paint_easy_to_read(&self, c: &mut Canvas, text: &mut Text, top: i32, label_w: i32) {
         let on = self.easy_to_read();
         let blurb = if on { "Larger text and calmer menus, on every page." } else { "Larger text and calmer menus. L2 on every page." };
-        pill_row(c, text, top, "Easy to read", &["Off", "On"], usize::from(on), blurb, label_w);
+        pill_row(c, text, top, "Big text", &["Off", "On"], usize::from(on), blurb, label_w);
     }
 
     /// The labels of the pill rows line up.
@@ -6110,10 +6020,9 @@ mod tests {
 
     #[test]
     fn extras_without_a_wifi_chip_does_not_ask_to_connect() {
-        assert_eq!(extras_sub(false, false, true), "Connect to Wi-Fi first to use these.");
-        assert_eq!(extras_sub(false, false, false), "This device has no Wi-Fi, so the downloads aren't available.");
-        assert_eq!(extras_sub(false, true, false), "Connect to the internet first to use these.");
-        assert_eq!(extras_sub(true, false, false), "Optional. You can get these any time later.");
+        assert_eq!(extras_sub(false, true), "Connect to Wi-Fi first to use these.");
+        assert_eq!(extras_sub(false, false), "This device has no Wi-Fi, so the downloads aren't available.");
+        assert_eq!(extras_sub(true, false), "Optional. You can get these any time later.");
     }
 
     #[test]
@@ -6438,7 +6347,7 @@ mod tests {
         assert!(!s.press(Button::South) && !s.backed_out() && s.at() == "welcome");
     }
 
-    /// The welcome's three rows: the language, Easy to read, and For a child, which only Y reached before.
+    /// The welcome's three rows: the language, Big text, and For a child, which only Y reached before.
     #[test]
     fn the_welcome_reaches_for_a_child_with_the_d_pad() {
         fresh("welcome-rows");
@@ -6530,7 +6439,7 @@ mod tests {
         assert_eq!(wifi_hints("Connect", false, false, false, false, false).iter().map(|(k, _)| *k).collect::<Vec<_>>(), ["A", "B"]);
     }
 
-    /// The welcome: Down reaches the Easy to read row and Left/Right switch it there; the language stays (first-start walk
+    /// The welcome: Down reaches the Big text row and Left/Right switch it there; the language stays (first-start walk
     /// 2026-11-06: the row looked like one to choose, Down did nothing and Right changed the language).
     #[test]
     fn down_on_the_welcome_reaches_easy_to_read() {
@@ -6665,7 +6574,7 @@ mod tests {
         let _ = std::fs::remove_dir_all(&dir);
     }
 
-    /// Easy to read on every stage with L2: larger text and calmer menus at once, kept by the app; and back.
+    /// Big text on every stage with L2: larger text and calmer menus at once, kept by the app; and back.
     #[test]
     fn easy_to_read_is_one_key_on_every_stage() {
         use crate::type_scale::TextSize;
@@ -6765,10 +6674,6 @@ mod tests {
     }
 
 
-
-
-
-
     #[test]
     fn pictures_is_one_row_of_three_choices_that_works_without_wifi() {
         let mut s = shelf_setup("art-row").only(Only::Extras);
@@ -6813,7 +6718,7 @@ mod tests {
     #[test]
     fn a_profile_sets_the_switches_once_and_ends_the_page() {
         use crate::features::Switches;
-        for (downs, lens, pixel_path) in [(0, true, false), (1, true, false), (2, true, true)] {
+        for (downs, lens, pixel_path) in [(0, false, false), (1, false, false), (2, true, true)] {
             let (s, _hw) = setup(&format!("profile{downs}"), "UTC", Some(IW_AT));
             let mut s = s.with_switches(Switches::default(), Vec::new()).only(Only::Play);
             for _ in 0..downs {
@@ -6868,7 +6773,7 @@ mod tests {
         let (sw, later) = s.take_tour().expect("a profile was taken");
         assert_eq!(sw, Switches::default(), "Simple sets nothing that differs from the start settings");
         assert!(later.is_empty());
-        assert!(sw.curator.lens && sw.curator.stickers && !sw.curator.up_next, "Lens and Stickers on, Up next off");
+        assert!(!sw.curator.lens && !sw.curator.echoes && !sw.curator.merge_versions, "Lens, Echoes and Versions are Enthusiast's");
     }
 
     /// Settings › Help & tools › How you like to play: the first start's question, answered later in one page.
@@ -6896,7 +6801,7 @@ mod tests {
         assert!(s.take_tour().is_none());
         // One switch of its own: "Choose for yourself" is where it stands, and A there opens the cards, B comes back.
         let mut own = Switches::default();
-        own.curator.lens = false;
+        own.curator.lens = true;
         assert_eq!(Profile::of(&own), Profile::Choose);
         let mut s = open("play-later-3", own);
         assert!(matches!(s.step, Step::Play { sel: 3 }));
@@ -8413,6 +8318,11 @@ mod tests {
         s.on_event(SetupEvent::PortMasterProgress(ports::DownloadProgress { stage: "verify".into(), done: 300 << 20, total: 300 << 20 }));
         assert!(s.portmaster_progress_line().contains("300 MB"));
         assert_eq!(s.portmaster_action(), "Checking PortMaster…", "a completed transfer says it is being checked");
+        for done in [1, 32, 128] {
+            s.on_event(SetupEvent::PortMasterProgress(ports::DownloadProgress { stage: "unpacking".into(), done: done << 20, total: 277 << 20 }));
+            assert_eq!(s.portmaster_action(), "Preparing PortMaster…");
+            assert_eq!(s.portmaster_progress_line(), format!("{done} / 277 MB"));
+        }
         s.on_event(SetupEvent::PortMasterProgress(ports::DownloadProgress { stage: "downloading".into(), done: 16 << 20, total: 0 }));
         assert_eq!(s.portmaster_progress_line(), "16 MB", "unknown totals keep real received bytes without a made-up percentage");
         s.press(Button::East);
@@ -8574,19 +8484,18 @@ mod hint_bars {
     /// format it. Each kind of device gets the sentence that is true for it, in three languages, and it fits.
     #[test]
     fn the_first_start_does_not_send_a_rocknix_card_into_the_computer() {
-        // (host_owned, image_card, games_card, games_drive, card_in_computer, wifi, second_slot)
-        let plus = no_games_way(false, false, false, false, false, true, true); // RG35XX Plus, SP
-        let mini = no_games_way(false, false, false, false, false, true, false); // Mini V2, Odin
-        let rg28 = no_games_way(false, false, false, false, false, false, true); // no Wi-Fi, second slot
-        let drive = no_games_way(false, false, false, true, false, true, true); // a card with the GAMES drive
-        let brick = no_games_way(false, false, false, false, true, false, false);
+        // (false, image_card, games_card, games_drive, card_in_computer, wifi, second_slot)
+        let plus = no_games_way(false, false, false, false, true, true); // RG35XX Plus, SP
+        let mini = no_games_way(false, false, false, false, true, false); // Mini V2, Odin
+        let rg28 = no_games_way(false, false, false, false, false, true); // no Wi-Fi, second slot
+        let drive = no_games_way(false, false, true, false, true, true); // a card with the GAMES drive
+        let brick = no_games_way(false, false, false, true, false, false);
         assert_eq!(plus, FOUND_WIFI_SLOT_WAY);
         assert_eq!(mini, FOUND_WIFI_WAY);
         assert_eq!(rg28, SECOND_CARD_WAY, "no Wi-Fi: the second card");
         assert_eq!(drive, GAMES_DRIVE_FIRST_WAY);
         assert_eq!(brick, BRICK_CARD_WAY);
-        assert_eq!(no_games_way(true, false, false, false, false, false, false), DECK_GAMES_NOTE);
-        assert_eq!(no_games_way(false, false, true, true, false, true, true), GAMES_CARD_WAY, "a games card wins over the rest");
+        assert_eq!(no_games_way(false, true, true, false, true, true), GAMES_CARD_WAY, "a games card wins over the rest");
         for (name, line) in [("plus", plus), ("mini", mini)] {
             assert!(!line.contains("roms") && !line.contains("Roms"), "{name}: a ROCKNIX card has no folder a computer can use: {line}");
             assert!(line.contains("Cancel"), "{name}: the format warning: {line}");
@@ -8616,19 +8525,14 @@ mod hint_bars {
         assert_eq!(keys(&crate::extras_page::hints(Some("Change"))), ["Left/Right", "A", "B"], "Pictures still changes offline");
     }
 
-    /// Add games' row of ways per kind of device: Wi-Fi, USB cable, nothing on a Steam Deck (host-owned).
     #[test]
     fn add_games_offers_the_ways_the_device_has() {
         // Wi-Fi, connected or not (unconnected, file sharing leads to the Wi-Fi page), with and without USB transfer.
-        assert_eq!(ways_for(false, true, true), [Way::Sharing, Way::Phone, Way::Usb]);
-        assert_eq!(ways_for(false, true, false), [Way::Sharing, Way::Phone], "USB file transfer not available: no tile for it");
+        assert_eq!(ways_for(true), [Way::Sharing, Way::Phone], "USB file transfer not available: no tile for it");
         // The RG28XX: no Wi-Fi, a second slot (a sentence, not a way) and maybe the cable.
-        assert_eq!(ways_for(false, false, false), [], "no Wi-Fi, no USB: the sentence about the card or the GAMES drive alone");
-        assert_eq!(ways_for(false, false, true), [Way::Usb]);
-        // The Deck's games go through Desktop Mode.
-        assert_eq!(ways_for(true, true, true), []);
+        assert_eq!(ways_for(false), [], "no Wi-Fi, no USB: the sentence about the card or the GAMES drive alone");
         let de = crate::i18n::german();
-        for line in ["File sharing", "USB file transfer", "Connect to Wi-Fi first", "Connect to Wi-Fi", "From your phone", "Or a computer's browser, same Wi-Fi", "Turn on USB file transfer", "Turn off USB file transfer", "On", "Off", "Switching…", USB_WAY, USB_FAILED] {
+        for line in ["File sharing", "Connect to Wi-Fi first", "Connect to Wi-Fi", "From your phone", "Or a computer's browser, same Wi-Fi", "On", "Off", "Switching…"] {
             assert!(de.translate(line).is_some(), "{line} has a German line");
         }
     }

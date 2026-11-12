@@ -9,6 +9,8 @@ pub enum Refused {
     Unsafe,
     /// Not a tar or not a .tar.gz, cut short, or larger than allowed.
     Damaged(&'static str),
+    /// A bounded in-memory package failed decompression or namespace preflight.
+    Invalid(String),
     /// The target ran out of space (ENOSPC, or the file size limit).
     Full,
     /// Any other failure writing the target.
@@ -21,7 +23,7 @@ impl std::fmt::Display for Refused {
             Refused::Unsafe => f.write_str(UNSAFE),
             Refused::Damaged(why) => f.write_str(why),
             Refused::Full => f.write_str("No space left to unpack the download."),
-            Refused::Io(e) => f.write_str(e),
+            Refused::Io(e) | Refused::Invalid(e) => f.write_str(e),
         }
     }
 }
@@ -281,11 +283,23 @@ pub fn unpack_file_throttled(archive: &Path, into: &Path, limit: u64) -> Result<
     unpack_inner(archive, into, limit, Some(crate::update::brick_io::Pacer::new()))
 }
 
-fn unpack_inner(archive: &Path, into: &Path, limit: u64, mut pacer: Option<crate::update::brick_io::Pacer>) -> Result<Vec<Entry>, Refused> {
-    use std::os::unix::fs::{DirBuilderExt, OpenOptionsExt};
+/// Store packages already held in RAM may be plain tar as well as gzip.
+pub fn unpack_bytes_throttled(archive: &[u8], into: &Path) -> Result<Vec<Entry>, Refused> {
+    let tar = super::decompress(archive).map_err(Refused::Invalid)?;
+    super::entries(&tar).map_err(Refused::Invalid)?;
+    let _idle = crate::update::brick_io::IdleIo::enter()?;
+    unpack_reader(&mut tar.as_ref(), into, Some(crate::update::brick_io::Pacer::new()))
+}
+
+fn unpack_inner(archive: &Path, into: &Path, limit: u64, pacer: Option<crate::update::brick_io::Pacer>) -> Result<Vec<Entry>, Refused> {
     let mut gz = Gz::new(std::fs::File::open(archive)?, limit)?;
+    unpack_reader(&mut gz, into, pacer)
+}
+
+fn unpack_reader(reader: &mut dyn Read, into: &Path, mut pacer: Option<crate::update::brick_io::Pacer>) -> Result<Vec<Entry>, Refused> {
+    use std::os::unix::fs::{DirBuilderExt, OpenOptionsExt};
     std::fs::DirBuilder::new().mode(0o755).create(into)?;
-    let result = walk(&mut gz, |e, mode, data| {
+    let result = walk(reader, |e, mode, data| {
         let path = into.join(&e.path);
         if e.dir {
             std::fs::DirBuilder::new().recursive(true).mode(0o755).create(&path)?;

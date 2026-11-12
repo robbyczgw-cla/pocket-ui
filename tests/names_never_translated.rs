@@ -132,7 +132,7 @@ fn our_labels_on_cases_still_translate_while_names_with_the_same_words_do_not() 
     for item in [Item::Game(0, 0), Item::Recent(0), Item::System(0), Item::SmartShelf(0), Item::Sticker(1)] {
         assert!(item.title_is_name());
     }
-    for item in [Item::Favorites, Item::Search, Item::JustPlay, Item::Streaming, Item::Surprise] {
+    for item in [Item::Favorites, Item::Search, Item::JustPlay, Item::Streaming] {
         assert!(!item.title_is_name());
     }
     let look = Look { color: 0x555555, band: 0x777777, plastic: 0xaaaaaa };

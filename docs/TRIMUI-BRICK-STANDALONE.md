@@ -1,13 +1,13 @@
-# TrimUI Brick: pocket-ui on its own card (Beta)
+# TrimUI Brick: pocket-ui on its own card
 
 An empty FAT card with one folder copied onto it, power on, straight into pocket-ui. No NextUI, no MinUI (their licences are
 not ours; nothing of them is read into the card or the repository). Take the card out, put the normal card back, and the Brick
 is what it was. Based on the first version under NextUI ([TRIMUI-BRICK.md](TRIMUI-BRICK.md)).
 
-**Beta (0.3.0).** The Brick is a public Beta: it runs from a microSD card of your own, the Brick's stock firmware is not touched, and
+**Supported since 0.4.** it runs from a microSD card of your own, the Brick's stock firmware is not touched, and
 new versions arrive over Wi-Fi as a signed update of the card's program folder. It has been tested on one Brick so far, so expect rough edges.
 
-**Boots on a real Brick since 2026-11-03** (card 1, then beta updates 2 to 7 over Wi-Fi), on a Brick that had run NextUI before;
+**Boots on a real Brick since 2026-11-03** (card 1, then development updates 2 to 7 over Wi-Fi), on a Brick that had run NextUI before;
 a Brick that never ran NextUI is still to be seen (the TrimUI entry below). Where a statement below says "read", it comes from a
 file of the running firmware; the rest of the page notes what only the device showed.
 
@@ -141,7 +141,7 @@ NextUI's was copied). Everything that is a sysfs file or an ioctl of the firmwar
 | `keymon.elf`: rumble, DIP switch | motor on gpio227 / `/sys/class/motor/voltage`; DIP switch gpio243 | pocket-core's rumble is not wired (nothing on the host can show it); the updater only switches the motor off |
 | `audiomon.elf` | applies the volume to ALSA (`digital volume` 0..63; `HpSpeaker Switch`, `Headphone Switch` on), keeps `.asoundrc`, jack changes | `volume N`, `restore`, `mute` and `unmute` share a lock and the volume profile (gentler steps below 50%; unchanged above). The exact target is in `brick-volume-curve3`; curve 2 remains a rollback value; `brick-volume` is its OTA-predecessor compatibility value. `pactl get-sink-volume/-mute` reports the saved target when it matches the chip and the slider marker; `RealHw` reads these state files directly. The separate speaker-amp override does not freeze jack/Bluetooth volume. See [the curve and rollback limits](TRIMUI-BRICK-HW.md#volume-curve-and-mute). **The jack is not followed** |
 | `batmon.elf` | reads `power_supply/axp2202-battery/capacity` and `axp2202-usb/online`, low-battery LED, charging stop | pocket-ui reads the battery itself (`POCKETUI_BATTERY`, the fake root links `battery` to `axp2202-battery`); its low-battery guard saves and powers off at 2 %. **The low-battery LED is not done** |
-| `suspend` script | saves the mixer, stops `bluetoothd` and `wpa_supplicant`, `echo mem > /sys/power/state` up to 3 times, starts them again | `systemctl suspend`: screen off, Bluetooth rfkill off, Wi-Fi client stopped, `mem` (retried), then everything back; **UNPROVEN** |
+| `suspend` script | saves the mixer, stops `bluetoothd` and `wpa_supplicant`, `echo mem > /sys/power/state` up to 3 times, starts them again | `systemctl suspend` runs `brick-suspend` when Short press is Sleep: our Bluetooth service and the Wi-Fi client stopped (never an rfkill), one `mem`, everything back in the background ([TRIMUI-BRICK-SLEEP.md](TRIMUI-BRICK-SLEEP.md)) |
 | `poweroff_next`, `reboot_next` | sync, firmware poweroff / reboot | `systemctl poweroff|reboot`: `sync`, then BusyBox `poweroff` / `reboot` |
 | `rfkill.elf`, `syncsettings.elf`, `nextval.elf`, `show2.elf` | Wi-Fi/Bluetooth switches, NextUI's own settings and boot picture | `wifictl enable|disable` (rfkill `soft` of the `wlan` entry and `ifconfig wlan0 up|down`); the rest is NextUI's own and has no use here |
 | `governor.sh` | CPU governor and frequency range per game | **not done** (the kernel's default governor stays; TrimUI's `preload.sh` sets `ondemand`, 408 MHz to 2 GHz, after its UI) |
@@ -159,7 +159,13 @@ files (`sys/class/backlight/panel`, `power_supply/battery`, `rfkill`), `usr/bin/
 Games go in `Roms/psx` (`.cue`/`.bin`, `.chd`, `.pbp`, `.m3u`, `.iso`). **With no BIOS on the card nothing is said and nothing fails:** pocket-ui lists PlayStation
 without a BIOS requirement (`hostsys.rs`) and the core runs on its built-in HLE BIOS (the load test ran exactly that, no BIOS file anywhere). HLE is
 less compatible than a real BIOS (some games do not start or glitch, no memory-card or CD-player menu). A real BIOS (`scph5501.bin` or similar, not on
-the card, not ours to ship) put in `Roms/bios` is used by the core. Not run: a real PlayStation game, speed on the Brick's CPU.
+the card, not ours to ship) put in `Roms/bios` is used by the core.
+
+The core opens CUE/BIN tracks as files and seeks to sectors; it does not mmap or preload the whole BIN. The CHD
+precache option applies only to CHD. A missing shared second memory card (`pcsx-card2.mcd`, 128 KiB) is formatted
+byte by byte. The VFS buffers those writes, like stdio, so the Brick's sync-mounted FAT32 card does not force a
+separate disk write for every byte before the first frame. Existing cards and the core's memory-card defaults stay
+in use; no disc conversion, RAM copy, mount change or longer stall timeout is needed. See [the VFS contract](HOST.md).
 
 ## Power, covers, GBA core, governor
 
@@ -197,14 +203,14 @@ With NextUI's card all of these stay hidden (NextUI owns them); `POCKETUI_BRICK_
 |---|---|---|
 | **Clock and time zone** | The card carries the IANA zone data (`pocket-ui/zoneinfo`, public domain). The choice is the zone's *name* in `storage/.config/pocket-ui/timezone` (a FAT card takes no symlink); `start.sh` rebuilds `etc/localtime` and `usr/share/zoneinfo` in the stand-in root from it and exports `TZ` for every program it starts; a name the card has no file for falls back to the firmware's zone, then UTC. Setting the clock by hand writes the system clock and `/dev/rtc0`. Network time: one try in the background at start (`systemctl restart systemd-timesyncd` stand-in = one shot of the firmware's `ntpd -q`), and the page can ask again; `timedatectl show` stand-in reports it. A wrong clock makes every TLS download fail, so this comes first | whether the firmware has `ntpd`; the RTC write |
 | **Night light** | The Soft backend (no compositor gamma on `pocket-fb`): pocket-ui tints its own frames; in the CPU copy (`POCKET_CORE_SOFTWARE`) `soft_screen` passes each pixel through the look's three 256-entry tables (nothing is paid while the look is neutral); the GL path keeps the multiply layer pocket-core already draws. The fade, the schedule and the zone work as on every device | how the warm tint looks on this panel; CPU cost of the tables at 1024x768 |
-| **Sleep & power** | The Brick counts as *screen off only*, like the Snapdragon 8 Gen 2 handhelds: short Power = screen off, the game pauses behind a dark screen (backlight 0), any button wakes it; hold = the power menu (Power off saves and quits the game first); "Switch off after" saves the game and powers off after N hours dark on battery. **No `mem` suspend is ever requested**, so a firmware that does not wake cannot lose a game. If suspend is proven later (read-only checks on the device), the one switch is `Device::screen_off_only` | the wake from a dark screen on the real panel; battery use while dark |
+| **Sleep & power** | Short Power defaults to **Sleep**: save, close the sound stream and suspend; wake returns to the pause menu. Settings can choose Screen off. Idle only turns off the screen. See [sleep ordering and evidence](TRIMUI-BRICK-SLEEP.md) | Power-button wake was recorded with IRQ 379; the current integration also has RTC wake evidence |
 | **Starter pack** | Free games into `Roms/<system>` (nine games for gb, gbc, gba, nes, snes, megadrive: all folders of the card's shelf, tested). Work files in `storage/.config/pocket-ui/starter` on the card, SHA-256 checked before anything is placed, one atomic write. Needs a network (`ip` stand-in), the clock and `curl` with a CA bundle: the card's `curl` is the one from `feat/trimui-brick-remote` (`pocket-ui/bin/curl`, first on `PATH`). **Without that curl the page says "no network"/"didn't finish", nothing is damaged** | a download over the Brick's Wi-Fi |
 | **RetroAchievements** | pocket-core's own rcheevos (`pocket_rcheevos`), sign-in on the gamepad keyboard, unlock cards, offline cache in the data dir on the card (survives power-off; synced at the next game start with a network). Network through the same `curl` and clock | sign-in and an unlock over the Brick's Wi-Fi; a core that exposes memory on the aarch64 builds |
 
 ## Not done, on purpose or for lack of time
 
 - Settings still hides Store and Tools on this card (NextUI's list). The pages that are back are in "Settings pages the card keeps" above, plus Wi-Fi (checked on the empty shelf: "Needs Wi-Fi. Connect in Settings"), Remote access, Tailscale and Updates ([TRIMUI-BRICK-REMOTE.md](TRIMUI-BRICK-REMOTE.md)); `POCKETUI_BRICK_STANDALONE=1`, set by `start.sh`.
-- Sound: `pocket-ui/asoundrc` (dmix, 21 ms) plays without dropouts in long runs (beta 7: a 22-minute SNES run at 60.01 fps, 0 underruns);
+- Sound: `pocket-ui/asoundrc` (dmix, 21 ms) plays without dropouts in long runs (development build 7: a 22-minute SNES run at 60.01 fps, 0 underruns);
   the latency from a button to the sound is not measured.
 - The headphone jack is not followed (plugging in or out during a game), no low-battery LED, no USB storage mode.
 - The public card's source: `BRICK_SOURCES_APART=1` puts the cores' source and pocket-ui's own (`scripts/source-archive.sh`, from the

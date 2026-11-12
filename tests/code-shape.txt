@@ -1,0 +1,8 @@
+# Code shape (docs/DEVELOPING.md): caps for counts in the product code of src/ (#[cfg(test)] items, test-only files and
+# `//` lines left out). doc_checks::the_code_shape_counts_never_go_up fails when a count goes over its cap.
+# Lower a count, lower its cap here in the same commit. Never raise one. Format: <what><TAB><cap>
+# `pub fn` is not capped: the test only prints it (a new module may bring up to 5 pub items).
+== "pocket-core"	11
+== "ports"	14
+let _ = fs::	235
+Result<_, String>	443

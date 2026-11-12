@@ -4,7 +4,8 @@
 Uses the existing FIFO, latency trace, nav-probe and grim seams. Each invocation
 owns the shared host flock for at most nine minutes, with a device dead-man.
 The installed UI is stopped by its exact PID; an isolated UI uses scratch data,
-ROMs, SRAM and moments. Its original FIFO is parked and put back, inode intact.
+ROMs, SRAM, moments and status. Probe instances never write /tmp/pocket-ui.status.
+Its original FIFO is parked and put back, inode intact.
 No installer, service-row activation, reboot or power-off command is used.
 """
 import argparse
@@ -24,6 +25,9 @@ import tarfile
 import tempfile
 import time
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from owner_watch import OwnerWatch
+
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import latency
 import device_transfer
@@ -35,6 +39,42 @@ CFG = CARD + '/storage/.config/pocket-ui'
 APP = CARD + '/app'
 HW = '/tmp/pocket-ui/hwroot'
 FIFO = '/tmp/pocket-ui.in'
+# Driver controls written by brick-hw led-off / brick_hw::led_writes_with,
+# including aggregate scale aliases changed by max_scale. No read-only names/help.
+# Aggregate zones precede individual zones so restoring lr cannot overwrite l/r.
+NIGHT_LED_FILES=('max_scale','max_scale_lr','max_scale_m','max_scale_f1f2',
+                 'max_scale_l','max_scale_r','max_scale_f1','max_scale_f2') + tuple(
+    f'effect{part}_{zone}' for zone in ('lr','m','f1','f2','l','r')
+    for part in ('_rgb_hex','_duration','_cycles','')) + ('frame_hex','anim_frames_enable','effect_enable')
+
+
+def night_led_restore(directory='/sys/class/led_anim'):
+    return 'L='+Q(directory)+'''\n# Restore only known controls; pair zones/scales before individual overrides.
+echo 0 >"$L/effect_enable"
+[ ! -w "$L/anim_frames_enable" ] || echo 0 >"$L/anim_frames_enable"
+for n in '''+' '.join(NIGHT_LED_FILES)+'''; do
+ [ ! -f "$W/lights-before/$n" ] || tr -d '\\000' <"$W/lights-before/$n" >"$L/$n"
+done
+'''
+
+
+def core_restore(directory='/tmp'):
+    return 'C='+Q(directory)+'''
+mkdir -p "$W/discard"
+# Before parking finishes these files still belong to the owner.
+if [ -e "$W/parked-ready" ]; then
+ for f in "$C"/pocket-core* "$C"/pocket-perf.lock; do
+  [ -f "$f" ] || [ -p "$f" ] || continue
+  mv "$f" "$W/discard/"
+ done
+fi
+for f in "$W/parked/"*; do
+ [ -e "$f" ] || [ -p "$f" ] || continue
+ mv "$f" "$C/"
+done
+'''
+
+
 CLOCK_SNAPSHOT = '''for p in /sys/devices/system/cpu/cpufreq/policy*; do
  for n in scaling_min_freq scaling_max_freq scaling_governor; do
   f=$p/$n; [ -r "$f" ] || continue
@@ -57,6 +97,33 @@ esac
 
 class DeviceBusy(RuntimeError):
     """No mutation is authorized while somebody else's game is running."""
+
+
+def validate_night_args(args):
+    if not getattr(args, 'night_soak', False):
+        return
+    if args.phase != 'sleep' or args.physical or not args.owner_watch_binary:
+        raise ValueError('--night-soak requires --phase sleep, --owner-watch-binary and RTC wake (no --physical)')
+    # Leave setup, evidence collection and restoration inside the existing
+    # 480-second work budget. Never lengthen a lock/dead-man for a larger batch.
+    if args.cycles < 1 or args.alarm_seconds < 10 or args.cycles*(args.alarm_seconds+35)+90 > 480:
+        raise ValueError('night cycle/alarm budget exceeds this bounded session; split into smaller batches')
+
+
+def kernel_delta(before, now):
+    return now[len(before):] if now.startswith(before) else '\n'.join(line for line in now.splitlines() if line not in before.splitlines())
+
+
+def night_kernel_health(delta):
+    # The firmware's WLAN SDIO reinitialization is not the SD card's MMC path.
+    # Allow only the previously observed signature; every other MMC error fails.
+    known_sdio=r'^.*\bmmc2: error -22 whilst initialising SDIO card\s*$'
+    fatal=re.sub(known_sdio, '', delta, flags=re.M)
+    assert not re.search(r'Kernel panic|Oops:|BUG:|mmc.*(?:error|CRC)|sunxi-mmc.*error',fatal,re.I), 'kernel failure: '+fatal[-2000:]
+    warnings=[line for line in delta.splitlines() if 'WARNING:' in line]
+    known=[line for line in warnings if re.search(r'at net/core/skbuff.c:4383 skb_try_coalesce\+',line)]
+    assert len(warnings)==len(known), 'unrecognized kernel warning: '+'\n'.join(line for line in warnings if line not in known)
+    return {'known_wifi_warn':len(known), 'known_wifi_sdio':len(re.findall(known_sdio,delta,re.M))}
 
 
 def events(code, down=True, kind=1):
@@ -161,6 +228,7 @@ def may_open(frame, control):
 
 class Remote:
     def __init__(self, host):
+        self.abort_path = None
         self.temp = tempfile.TemporaryDirectory(prefix='brick-journey-ssh-')
         self.ssh = ['sshpass', '-f', str(Path.home()/'.config/pocket-brick/remote-password'),
                     'ssh', '-o', 'ConnectTimeout=8', '-o', 'ServerAliveInterval=5',
@@ -169,6 +237,8 @@ class Remote:
                     '-o', 'ControlPersist=30', '-o', 'ControlPath='+self.temp.name+'/sock', host]
 
     def run(self, command, data=None, timeout=20, check=True):
+        if self.abort_path:
+            command = 'test ! -e '+Q(self.abort_path)+' || exit 125; '+command
         p = subprocess.run(self.ssh+[command], input=data, capture_output=True, timeout=timeout)
         if check and p.returncode:
             raise subprocess.CalledProcessError(p.returncode, command, output=p.stdout, stderr=p.stderr)
@@ -207,6 +277,8 @@ class Journey:
         self.pre_files = {}
         self.armed = False
         self.created = False
+        self.owner_watch = None
+        self.input_watch_started = False
         self.start = time.monotonic()
         self.trace_path = self.out/'trace.log'
 
@@ -242,9 +314,19 @@ class Journey:
         raise TimeoutError('expected state did not arrive')
 
     def cmd(self, key):
+        if key in ('power', 'powerdown', 'powerup'):
+            raise ValueError('use the visible power menu for sleep tests; never send a Power key')
+        if getattr(self, 'ui', None):
+            status = self.r.text('cat '+Q(self.work+'/ui.status'))
+            assert f'pid={self.ui}\t' in status, 'status belongs to another UI: ' + status
+            if key == 'a':
+                self.before_a = getattr(self, 'before_a', 0) + 1
+                self.shot(f'before-a-{self.before_a:03d}')
         # A reboot replaces both the original PID and FIFO. Never send the next
         # journey key to the freshly started public UI.
         guard='test "$(cat /proc/sys/kernel/random/boot_id)" = '+Q(self.boot_id)+' || exit 125; '
+        if getattr(self, 'work', None):
+            guard += 'test ! -e '+Q(self.work+'/owner-abort')+' || exit 125; '
         self.r.run(guard+'printf "%s\\n" '+Q(key)+' >'+FIFO)
 
     def press(self, key, gap=.18):
@@ -278,16 +360,45 @@ class Journey:
         (self.out/'result.json').write_text(json.dumps({'label': self.a.label, 'phase': self.a.phase,
             'metrics': self.metrics, 'steps': self.results}, indent=2, ensure_ascii=False)+'\n')
 
+    def launch_script(self, env, target):
+        # Never inherit a public status target, including when the owner exports it.
+        env = dict(env, POCKETUI_STATUS=self.work+'/ui.status',
+                   POCKETUI_DARK_FILE=self.work+'/ui.brightness')
+        return ('#!/bin/sh\n'+''.join('export '+k+'='+Q(v)+'\n' for k,v in env.items())+'exec '+Q(target)+'\n').encode()
+
+    def require_private_status(self):
+        # Older installed UIs ignore the override and would still replace the owner's file.
+        # This pocket-ui's ELF contains the env key only once its writer supports it.
+        binary = getattr(self.a, 'binary', None)
+        if binary:
+            data = binary.read_bytes()
+            supported = all(key in data for key in (b'POCKETUI_STATUS', b'POCKETUI_DARK_FILE'))
+        else:
+            supported = self.r.text('if grep -Fq POCKETUI_STATUS '+Q(APP+'/bin/pocket-ui')+
+                                    ' && grep -Fq POCKETUI_DARK_FILE '+Q(APP+'/bin/pocket-ui')+
+                                    '; then echo supported; fi').strip() == 'supported'
+        if not supported:
+            raise DeviceBusy('UI predates private status/brightness output; supply a newer --binary; no device files changed')
+
     def prepare(self):
         # The shared host lock is held by main before the first device contact.
+        validate_night_args(self.a)
         version=self.r.text('cat '+APP+'/RELEASE').strip()
         if self.a.expect_version and version!=self.a.expect_version:
             raise DeviceBusy(f'installed {version}, expected {self.a.expect_version}; no device files changed')
+        if getattr(self.a, 'phase', None) == 'sleep' and not getattr(self.a, 'owner_watch_binary', None):
+            raise DeviceBusy('sleep sessions require --owner-watch-binary (device-side input restore across Wi-Fi loss)')
         self.original = int(self.r.text('pidof pocket-ui').strip())
         if self.r.text('pidof pocket-core retroarch', check=False).strip():
             raise DeviceBusy('owner game running; no device files changed')
+        self.require_private_status()
+        if getattr(self.a, 'night_soak', False):
+            self.night_battery()
+            self.night_owner_idle()
         self.r.run('mkdir '+Q(self.work))
         self.created = True
+        self.owner_watch = OwnerWatch(self.r, self.work)
+        self.owner_watch.start()
         self.r.run('if [ ! -e '+CFG+'/no-autosuspend ]; then touch '+CFG+'/no-autosuspend; touch '+self.work+'/owned-inhibitor; fi')
         self.r.run('if [ ! -e '+CFG+'/dev-ssh ]; then touch '+CFG+'/dev-ssh; touch '+self.work+'/owned-ssh; fi')
         self.env = dict(x.split('=', 1) for x in self.r.run('cat /proc/'+str(self.original)+'/environ').decode().split('\0') if '=' in x)
@@ -307,6 +418,11 @@ class Journey:
         (self.out/'config-before.tar').chmod(0o600)
         self.pre_files = file_map(backup)
         self.r.run('set -e; alsactl --file '+self.work+'/mixer-before store; cat /sys/class/speaker/mute >'+self.work+'/speaker-before; dmesg >'+self.work+'/kernel-before; md5sum /sys/fs/pstore/* >'+self.work+'/pstore-before')
+        lights=' '.join('/sys/class/led_anim/'+name for name in NIGHT_LED_FILES) if getattr(self.a,'night_soak',False) else '/sys/class/led_anim/effect* /sys/class/led_anim/max_scale /sys/class/led_anim/frame_hex /sys/class/led_anim/anim_frames_enable'
+        self.r.run('mkdir '+self.work+'/lights-before; for f in '+lights+'; do [ -r "$f" ] || continue; cat "$f" >'+self.work+'/lights-before/$(basename "$f"); done; '+APP+'/bin/brick-hw bl-get >'+self.work+'/backlight-before; cat '+HW+'/sys/class/backlight/panel/brightness >'+self.work+'/logical-light-before')
+        if getattr(self.a,'night_soak',False):
+            (self.out/'lights-before.tar').write_bytes(self.r.run('tar -cf - -C '+self.work+'/lights-before .'))
+
         for name in ('kernel-before','pstore-before'):
             (self.out/name).write_text(self.read(name))
         (self.out/'mixer-before.txt').write_text(self.r.text('amixer -c 0 contents'))
@@ -318,6 +434,11 @@ class Journey:
         restore = '''#!/bin/sh
 W=$1
 [ ! -e "$W/restored" ] || exit 0
+touch "$W/stop"
+if [ -r "$W/guard.pid" ]; then
+ p=$(cat "$W/guard.pid")
+ if [ -r /proc/$p/cmdline ] && tr '\\000' ' ' </proc/$p/cmdline | grep -Fq "$W/guard.sh"; then kill "$p" 2>/dev/null; fi
+fi
 [ ! -f "$W/ftrace-instance" ] || {
  t=$(cat "$W/ftrace-instance")
  echo 0 >"$t/tracing_on"
@@ -350,28 +471,32 @@ done
 }
 sleep 1
 if [ -p "$W/owner.fifo" ]; then rm -f /tmp/pocket-ui.in; mv "$W/owner.fifo" /tmp/pocket-ui.in; fi
-mkdir -p "$W/discard"
-for f in /tmp/pocket-core* /tmp/pocket-perf.lock; do
- [ -f "$f" ] || [ -p "$f" ] || continue
- mv "$f" "$W/discard/"
-done
-for f in "$W/parked/"*; do
- [ -e "$f" ] || [ -p "$f" ] || continue
- mv "$f" /tmp/
-done
+''' + core_restore() + '''
 alsactl --file "$W/mixer-before" restore
 # CPU profiles can change while a game runs. Restore only the known policy
 # files captured before our UI started, and only when their value changed.
 ''' + CLOCK_RESTORE + '''
-# Session ends silent even if it began with sound enabled.
-amixer -q cset 'name=DAC volume' 0,0
-echo 1 >/sys/class/speaker/mute
-''' + 'kill -CONT '+str(self.original)+''' 2>/dev/null
-''' + APP+'''/bin/brick-hw bl-set 0
-''' + APP+'''/bin/brick-hw led-off
-echo 0 >''' + HW+'''/sys/class/backlight/panel/brightness
-[ ! -e "$W/owned-inhibitor" ] || rm -f '''+CFG+'''/no-autosuspend
-[ ! -e "$W/owned-ssh" ] || rm -f '''+CFG+'''/dev-ssh
+''' + ('''# The mixer as it was (muted already): exactly, no forced level.
+[ ! -r "$W/printk-before" ] || cat "$W/printk-before" >/proc/sys/kernel/printk
+echo 0 >/sys/class/rtc/rtc0/wakealarm
+[ ! -e "$W/bt-started" ] || BRICK_STATE="$W/data" sh "$W/bin/brick-bluetooth" stop
+[ ! -e "$W/bt-store-new" ] || grep -q ' /var/lib/bluetooth ' /proc/mounts || rmdir /var/lib/bluetooth 2>/dev/null
+[ ! -e "$W/bt-run-new" ] || [ -e /tmp/pocket-ui/bluetooth/mounted ] || rm -rf /tmp/pocket-ui/bluetooth
+[ ! -e "$W/hci-before" ] || ! grep -q DOWN "$W/hci-before" || hciconfig hci0 down 2>/dev/null
+n=0; while [ -d /tmp/brick-suspend.lock ] && [ "$n" -lt 30 ]; do sleep 1; n=$((n+1)); done
+''' if self.a.phase=='sleep' else '') + 'kill -CONT '+str(self.original)+''' 2>/dev/null
+''' + APP+'''/bin/brick-hw bl-set "$(cat "$W/backlight-before")"
+cat "$W/logical-light-before" >''' + HW+'''/sys/class/backlight/panel/brightness
+''' + (night_led_restore() if getattr(self.a,'night_soak',False) else '''# Restore the effect enable last, after colours and scale; readbacks can have a trailing newline.
+for f in "$W/lights-before/"*; do
+ [ -f "$f" ] || continue
+ [ "$(basename "$f")" = effect_enable ] && continue
+ cat "$f" >"/sys/class/led_anim/$(basename "$f")"
+done
+cat "$W/lights-before/effect_enable" >/sys/class/led_anim/effect_enable
+''') + '''
+cat "$W/speaker-before" >/sys/class/speaker/mute
+# Persistent development access markers stay on the card.
 touch "$W/restored"
 '''
         self.r.put(self.work+'/restore.sh', restore.encode())
@@ -389,18 +514,54 @@ done
         if self.a.phase=='game':
             # Both paths off stop the codec clock, which blocks a silent dmix writer.
             guard=guard.replace(' sleep 1;', " amixer -q cset 'name=Headphone Switch' on\n amixer -q cset 'name=HpSpeaker Switch' off\n sleep 1;")
+        if self.a.phase=='sleep':
+            # Measured sound counters: the clock path ON (Headphone switched on, nothing switched off), silent by DAC 0 +
+            # the amp's mute, written only when changed (each amp write is a kernel line, part of what is measured).
+            # The backlight is the UI's: sleeping and waking it is what is tested.
+            guard='''#!/bin/sh
+W=$1; n=0
+while [ ! -e "$W/stop" ] && [ "$n" -lt 500 ]; do
+ [ "$(cat /sys/class/speaker/mute)" = 1 ] || echo 1 >/sys/class/speaker/mute
+ amixer cget 'name=DAC volume' | grep -q ': values=0,0' || amixer -q cset 'name=DAC volume' 0,0
+ amixer cget 'name=Headphone Switch' | grep -q ': values=on' || amixer -q cset 'name=Headphone Switch' on
+ '''+APP+'''/bin/brick-hw led-off
+ sleep 1; n=$((n+1))
+done
+[ -e "$W/stop" ] || sh "$W/restore.sh" "$W"
+'''
+        if self.a.phase == 'lights':
+            guard = guard.replace(' '+APP+'/bin/brick-hw led-off\n', '')
         self.r.put(self.work+'/guard.sh', guard.encode())
+        if getattr(self.a, 'owner_watch_binary', None):
+            self.r.put(self.work+'/owner-watch', self.a.owner_watch_binary.read_bytes())
+            self.r.run('chmod 700 '+self.work+'/owner-watch')
+            self.r.background(self.work+'/owner-watch '+self.work+' 500', self.work+'/input-watch.log', self.work+'/input-watch.pid')
+            self.input_watch_started = True
+            self.r.abort_path = self.work+'/owner-abort'
+
+        if getattr(self.a,'night_soak',False):
+            # A spawned PID alone is not proof: an invalid ELF or a failed
+            # input open would otherwise leave only the network watcher.
+            self.until(lambda: self.r.text('p=$(cat '+self.work+'/input-watch.pid); '
+                'kill -0 "$p" 2>/dev/null || exit 1; '
+                'for n in 0 1 3; do found=0; for fd in /proc/$p/fd/*; do '
+                '[ "$(readlink "$fd")" != /dev/input/event$n ] || found=1; done; '
+                '[ "$found" = 1 ] || exit 1; done; echo ready',check=False).strip()=='ready',5)
+            # Firmware without timeout may have no host watcher during backup.
+            self.night_owner_idle()
+        self.armed = True
         self.r.run('echo 1 >/sys/class/speaker/mute; amixer -q cset "name=DAC volume" 0,0')
         self.r.background('sh '+self.work+'/guard.sh '+self.work,self.work+'/guard.log',self.work+'/guard.pid')
         self.armed = True
         self.r.run('kill -0 $(cat '+self.work+'/guard.pid)')
-        self.r.run('set -e; kill -STOP '+str(self.original)+'; mv '+FIFO+' '+self.work+'/owner.fifo')
+        takeover=self.night_owner_guard() if getattr(self.a,'night_soak',False) else ''
+        self.r.run('set -e; '+takeover+'kill -STOP '+str(self.original)+'; mv '+FIFO+' '+self.work+'/owner.fifo')
         # Leave the owner's sleep state alone. The scratch process starts with a
         # dim, awake hardware view; no Power event or original-UI restart needed.
         self.r.run('echo 3 >'+HW+'/sys/class/backlight/panel/brightness; '+APP+'/bin/brick-hw bl-set 3')
         # Preserve pre-existing core FIFOs/files by rename, including their inode.
         # They go back BEFORE any session-created scratch directory is removed.
-        self.r.run('mkdir '+self.work+'/parked; for f in /tmp/pocket-core* /tmp/pocket-perf.lock; do [ -f "$f" ] || [ -p "$f" ] || continue; mv "$f" '+self.work+'/parked/; done')
+        self.r.run('set -e; mkdir '+self.work+'/parked; for f in /tmp/pocket-core* /tmp/pocket-perf.lock; do [ -f "$f" ] || [ -p "$f" ] || continue; mv "$f" '+self.work+'/parked/; done; touch '+self.work+'/parked-ready')
         self.r.run('mkdir -p '+self.work+'/data/console-settings '+self.work+'/states '+self.work+'/sram '+self.work+'/home '+self.work+'/.pocket-ui-test/gb')
         rom = self.a.rom.read_bytes()
         assert 16384 <= len(rom) <= 4*1024*1024, 'supply a small, redistributable GB test cartridge'
@@ -413,7 +574,13 @@ done
         self.r.put(self.work+'/data/leds.json',b'{"mode":"off"}\n')
         # The inhibitor only blocks deep sleep. A six-minute screen-on sample
         # must also disable light sleep in this private data directory.
-        self.r.put(self.work+'/data/sleep.json',b'{"screen_off_secs":0,"sleep_after_min":0,"off_after_min":0}\n')
+        if self.a.phase=='sleep':
+            # Power button: Sleep, nothing idle (only the presses sleep), no switch-off alarm of the UI's own.
+            self.r.put(self.work+'/data/sleep.json',b'{"screen_off_secs":0,"sleep_after_min":0,"off_after_min":0,"power_button":"sleep","hold":"menu"}\n')
+        else:
+            self.r.put(self.work+'/data/sleep.json',b'{"screen_off_secs":0,"sleep_after_min":0,"off_after_min":0}\n')
+        if self.a.phase == 'lights':
+            self.r.put(self.work+'/data/sleep.json',b'{"screen_off_secs":30,"sleep_after_min":0,"off_after_min":0}\n')
         # Release builds check after 60 s; development builds do not. Keep the
         # benchmark on the shelf in either case. The Updates page still performs
         # its real manual check in the network phase.
@@ -445,6 +612,19 @@ done
                    POCKETUI_LOG=self.work+'/ui.log', POCKETUI_UPDATE_URL='https://pocketui.xyz/updates/brick/update.json')
         if self.a.phase not in ('perf','idle','perf-idle'):
             env['POCKETUI_NAV_PROBE']=self.work+'/nav.txt'
+        if self.a.phase=='sleep':
+            # This tree's suspend helpers (the installed card's systemctl refuses to suspend), and its start.sh console level.
+            self.r.run('mkdir '+self.work+'/bin')
+            for name in ('systemctl','brick-suspend','brick-bluetooth'):
+                self.r.put(self.work+'/bin/'+name,(Path(__file__).resolve().parents[2]/'deploy/brick/hwroot/usr/bin'/name).read_bytes())
+            self.r.run('chmod 700 '+self.work+'/bin/*; cat /proc/sys/kernel/printk >'+self.work+'/printk-before; echo 3 >/proc/sys/kernel/printk')
+            env['PATH']=self.work+'/bin:'+env['PATH']
+            env['BRICK_SUSPEND_LOG']=self.work+'/radios.log'
+            if self.a.bt:
+                # Bluetooth on for the session only, in the scratch data (its "on" marker and pairings stay there).
+                # What a start makes that was not there (RAM): removed again by restore.sh, nothing else.
+                self.r.run('W='+self.work+'; [ -e /var/lib/bluetooth ] || touch $W/bt-store-new; [ -e /tmp/pocket-ui/bluetooth ] || touch $W/bt-run-new; hciconfig hci0 | sed -n 3p >$W/hci-before')
+                self.r.run('BRICK_STATE='+self.work+'/data sh '+self.work+'/bin/brick-bluetooth start && touch '+self.work+'/bt-started', timeout=70)
         if self.a.phase=='controls':
             self.r.put(self.work+'/silent-amixer',SILENT_AMIXER.encode())
             self.r.run('chmod 700 '+self.work+'/silent-amixer')
@@ -461,7 +641,7 @@ done
             self.r.put(self.work+'/data/settings.json',(json.dumps(settings)+'\n').encode())
             seed_read_caches(self.r,CFG,self.work+'/data')
             self.metrics['read_caches']='existing identity, cover, screenshot, title and description caches; original timestamps preserved'
-        self.r.put(self.work+'/launch.sh', ('#!/bin/sh\n'+''.join('export '+k+'='+Q(v)+'\n' for k,v in env.items())+'exec '+Q(target)+'\n').encode())
+        self.r.put(self.work+'/launch.sh', self.launch_script(env, target))
         if self.a.cold:
             self.r.run('sync; echo 3 >/proc/sys/vm/drop_caches')
         self.r.background('sh '+self.work+'/launch.sh',self.work+'/ui.log',self.work+'/ui.pid')
@@ -480,31 +660,65 @@ done
         return destination.read_bytes()
 
     def cleanup(self):
+        self.r.abort_path = None
+        owner_interrupted=False
+        if getattr(self, 'owner_watch', None):
+            self.owner_watch.stop()
+            self.owner_watch = None
+        if (getattr(getattr(self,'a',None),'night_soak',False) and getattr(self,'input_watch_started',False)
+                and self.r.text('test -e '+self.work+'/owner-abort && echo abort',check=False).strip()=='abort'):
+            owner_interrupted=True
+            # The C watcher execs restore.sh locally on input. Its completion
+            # flag is written last: never race that restore with host cleanup.
+            deadline=time.monotonic()+45
+            while time.monotonic()<deadline:
+                try:
+                    if self.r.text('test -e '+self.work+'/restored && echo restored',check=False,
+                                   timeout=min(3,max(.1,deadline-time.monotonic()))).strip()=='restored':
+                        break
+                except subprocess.TimeoutExpired:
+                    pass
+                time.sleep(.2)
+            else:
+                raise TimeoutError('owner-input restore did not finish; leaving scratch untouched')
         if not self.armed:
             if self.created:
-                self.r.run('[ ! -e '+self.work+'/owned-inhibitor ] || rm -f '+CFG+'/no-autosuspend; [ ! -e '+self.work+'/owned-ssh ] || rm -f '+CFG+'/dev-ssh; rm -rf '+Q(self.work))
+                if getattr(self,'input_watch_started',False):
+                    # Do not leave a C watcher pointing at deleted scratch.
+                    self.r.run('touch '+self.work+'/stop; p=$(cat '+self.work+'/input-watch.pid); '
+                        'if [ -r /proc/$p/cmdline ] && tr "\\000" " " </proc/$p/cmdline | grep -Fq '+
+                        Q(self.work+'/owner-watch')+'; then kill "$p"; fi')
+                    self.until(lambda: self.r.text('p=$(cat '+self.work+'/input-watch.pid); '
+                        'if [ ! -r /proc/$p/cmdline ] || ! tr "\\000" " " </proc/$p/cmdline | grep -Fq '+
+                        Q(self.work+'/owner-watch')+'; then echo gone; fi',check=False).strip()=='gone',5)
+                self.r.run('rm -rf '+Q(self.work))
                 self.created=False
             return
         self.check_boot()
         # A game is ours only when /proc names this session's private ROM.
         self.r.run('for p in $(pidof pocket-core); do if tr "\\000" "\\n" </proc/$p/cmdline | grep -Fq '+Q(self.work+'/.pocket-ui-test/')+'; then [ ! -p /tmp/pocket-core.cmd ] || echo "quit nosave" >/tmp/pocket-core.cmd; fi; done; true', timeout=10)
         time.sleep(1)
-        # Restore changed original config files while its UI is still stopped.
+        # Normally the owner is stopped; after an input restore it can already
+        # be changing settings. Observe those changes without overwriting them.
         # No directory is removed and no unknown "extra" file is ever deleted.
         restored=[]
         try:
             current=file_map(self.config_archive(self.out/'config-compare.tar'))
-            for name,body in self.pre_files.items():
-                if current.get(name)!=body and name not in ('./dev-ssh','./no-autosuspend'):
-                    self.r.put(self.work+'/restore-file',body)
-                    self.r.run('cp '+self.work+'/restore-file '+Q(CFG+'/'+name))
-                    restored.append(name)
+            if not owner_interrupted:
+                for name,body in self.pre_files.items():
+                    if current.get(name)!=body and name not in ('./dev-ssh','./no-autosuspend'):
+                        self.r.put(self.work+'/restore-file',body)
+                        self.r.run('cp '+self.work+'/restore-file '+Q(CFG+'/'+name))
+                        restored.append(name)
             after_files=file_map(self.config_archive(self.out/'config-compare.tar'))
             marker_names={'./no-autosuspend','./dev-ssh'}
-            changed=[k for k in self.pre_files.keys()|after_files.keys() if self.pre_files.get(k)!=after_files.get(k) and k not in marker_names]
+            changed=sorted(k for k in self.pre_files.keys()|after_files.keys() if self.pre_files.get(k)!=after_files.get(k) and k not in marker_names)
         finally:
-            self.r.run('touch '+self.work+'/stop; p=$(cat '+self.work+'/guard.pid); if [ -r /proc/$p/cmdline ] && tr "\\000" " " </proc/$p/cmdline | grep -Fq '+Q(self.work+'/guard.sh')+'; then kill "$p"; fi; sh '+self.work+'/restore.sh '+self.work, timeout=15)
+            self.r.run('touch '+self.work+'/stop; p=$(cat '+self.work+'/guard.pid); if [ -r /proc/$p/cmdline ] && tr "\\000" " " </proc/$p/cmdline | grep -Fq '+Q(self.work+'/guard.sh')+'; then kill "$p"; fi; sh '+self.work+'/restore.sh '+self.work, timeout=90 if self.a.phase=='sleep' else 15)
         self.r.run('kill -0 '+str(self.original)+'; test -p '+FIFO+'; test -e '+self.work+'/restored')
+        if getattr(self.a, 'owner_watch_binary', None):
+            self.until(lambda: self.r.text('p=$(cat '+self.work+'/input-watch.pid); test ! -e /proc/$p && echo gone', check=False).strip() == 'gone', 5)
+
         for name in ('ui.log','trace.log','nav.txt','guard.log','kernel-before','pstore-before'):
             (self.out/name).write_text(self.read(name))
         self.metrics['startup_steps_ms']=latency.startup_steps(str(self.out/'ui.log'))
@@ -512,7 +726,9 @@ done
         (self.out/'power-after.txt').write_text(self.r.text('cat /sys/class/power_supply/*/uevent; cat /sys/class/thermal/thermal_zone*/temp; cat /proc/meminfo',check=False))
         guard=int(self.read('guard.pid'))
         alive=self.r.text('test ! -e /proc/'+str(guard)+' && echo gone', check=False).strip()=='gone'
-        restore={'comparison':'restored files hashed while original UI stopped; normal logging resumes afterwards','config_differences':changed,'guard_pid':guard,'guard_gone':alive,
+        restore={'comparison':'owner resumed after physical input; later changes left intact' if owner_interrupted else 'restored files hashed while original UI stopped; normal logging resumes afterwards',
+                 'owner_interrupted':owner_interrupted,'owner_activity_config_changes':changed if owner_interrupted else [],
+                 'config_differences':[] if owner_interrupted else changed,'guard_pid':guard,'guard_gone':alive,
                  'restored_files':restored,
                  'original_ui_pid':self.original,'installed_version':self.r.text('cat '+APP+'/RELEASE').strip()}
         protected_after=self.r.text('md5sum '+APP+'/bin/pocket-ui '+APP+'/bin/pocket-core '+Q(self.owner_audio))
@@ -529,14 +745,20 @@ done
             mixer_after=self.r.text('amixer -c 0 contents')
             (self.out/'mixer-after.txt').write_text(mixer_after)
             restore['mixer_control_differences_except_night_DAC']=mixer_differences(mixer_before.read_text(),mixer_after)
+        if getattr(self.a,'night_soak',False):
+            differences=self.r.text('for f in '+self.work+'/lights-before/*; do n=$(basename "$f"); '
+                '[ "$(tr -d "\\000" <"$f")" = "$(tr -d "\\000" </sys/class/led_anim/$n)" ] || echo "$n"; done')
+            restore['light_control_differences']=differences.splitlines()
         (self.out/'restore.json').write_text(json.dumps(restore,indent=2)+'\n')
-        assert not restore.get('mixer_control_differences_except_night_DAC',[]),'ALSA route/gain controls were not restored'
-        assert not changed, f'configuration changed: {changed}; backup kept, scratch retained'
+        if not owner_interrupted:
+            assert not restore.get('mixer_control_differences_except_night_DAC',[]),'ALSA route/gain controls were not restored'
+            assert not restore.get('light_control_differences',[]),'LED controls were not restored: '+str(restore.get('light_control_differences'))
+            assert not changed, f'configuration changed: {changed}; backup kept, scratch retained'
         assert alive, 'guard still alive'
         assert restore['owner_ui_running'],'original UI did not resume'
         assert restore['protected_files_unchanged'],'installed binaries or audio configuration changed'
-        assert restore['cpu_policy_unchanged'],'CPU policy was not restored'
-        assert not self.r.text('ls -A '+self.work+'/parked').strip(),'a pre-existing file is still parked; refusing cleanup'
+        assert owner_interrupted or restore['cpu_policy_unchanged'],'CPU policy was not restored'
+        assert not self.r.text('if [ -d '+self.work+'/parked ]; then ls -A '+self.work+'/parked; fi').strip(),'a pre-existing file is still parked; refusing cleanup'
         trace_left=self.r.text('if [ -f '+self.work+'/ftrace-instance ]; then t=$(cat '+self.work+'/ftrace-instance); [ ! -d "$t" ] || echo trace-present; fi; awk '+Q('$2=="'+self.work+'/debug" {print "debugfs-mounted"}')+' /proc/mounts')
         assert not trace_left.strip(),'private trace/debugfs still present; scratch retained for cleanup'
         # This exact directory was created by this instance. Never delete extras
@@ -644,28 +866,32 @@ done
 
     def game(self):
         self.step('01-shelf',lambda: 'scratch Game Boy cartridge on shelf')
-        def launch():
-            item=self.select_trace(lambda selected:selected.startswith(('system:gb','game:gb/')))
-            if item.get('sel','').startswith('system:'):
-                self.timed_press('a',('games',),'game_system_open_ms')
-                self.select_trace(lambda selected:selected.startswith('game:gb/'))
-            before=max((e['t'] for e in self.trace()),default=0)
-            mark=len(self.log())
-            self.cmd('a')
-            time.sleep(.3)
-            if 'controls card: first start' in self.log()[mark:]:
-                self.metrics['first_controls_card']=True
-                self.shot('02-first-controls-card')
-                self.cmd('a')  # The displayed first-console card: any button continues.
-            fr=self.until(lambda: game_frame(self.trace(),before),25)
-            confirmations=[e for e in self.trace() if e['pid']==self.ui and e['event']=='input' and e.get('down') and e['t']>before]
-            if confirmations:self.metrics['game_confirm_to_frame_ms']=(fr['t']-confirmations[-1]['t'])/1000
-            launches=[e for e in self.trace() if e['t']>before and e['event']=='launch']
-            if launches:
-                self.metrics['game_start_ms']=(fr['t']-launches[0]['t'])/1000
-            return 'actual pocket-core first game frame'
-        if not self.step('02-game',launch):
+        if not self.step('02-game',self.launch_game):
             return
+        self.game_rest()
+
+    def launch_game(self):
+        item=self.select_trace(lambda selected:selected.startswith(('system:gb','game:gb/')))
+        if item.get('sel','').startswith('system:'):
+            self.timed_press('a',('games',),'game_system_open_ms')
+            self.select_trace(lambda selected:selected.startswith('game:gb/'))
+        before=max((e['t'] for e in self.trace()),default=0)
+        mark=len(self.log())
+        self.cmd('a')
+        time.sleep(.3)
+        if 'controls card: first start' in self.log()[mark:]:
+            self.metrics['first_controls_card']=True
+            self.shot('02-first-controls-card')
+            self.cmd('a')  # The displayed first-console card: any button continues.
+        fr=self.until(lambda: game_frame(self.trace(),before),25)
+        confirmations=[e for e in self.trace() if e['pid']==self.ui and e['event']=='input' and e.get('down') and e['t']>before]
+        if confirmations:self.metrics['game_confirm_to_frame_ms']=(fr['t']-confirmations[-1]['t'])/1000
+        launches=[e for e in self.trace() if e['t']>before and e['event']=='launch']
+        if launches:
+            self.metrics['game_start_ms']=(fr['t']-launches[0]['t'])/1000
+        return 'actual pocket-core first game frame'
+
+    def game_rest(self):
         def pause():
             self.timed_press('home',('menu',),'pause_open_ms')
             return self.metrics['pause_open_ms']
@@ -711,6 +937,296 @@ done
             return f'evdev {code}: {pattern}'
         self.step('07-f1-save',lambda:hotkey(317,'saved '))
         self.step('08-f2-load',lambda:hotkey(318,'loaded '))
+
+    # --- Power button: Sleep (docs/TRIMUI-BRICK-SLEEP.md) -------------------------------------------------------------
+    def audio_sample(self):
+        mark=len(self.log())
+        self.r.run('echo "audio stats" >/tmp/pocket-core.cmd')
+        line=self.until(lambda: next((l for l in self.log()[mark:].splitlines() if l.startswith('audio sample ')),None),8)
+        return json.loads(line.split('audio sample ',1)[1])
+
+    def kernel_since(self):
+        """Kernel lines newer than the last call (by their time stamps; the owner's log is never cleared)."""
+        new,last=[],self.kernel_mark
+        for line in self.r.text('dmesg').splitlines():
+            m=re.match(r'\[\s*([0-9.]+)\]',line)
+            if m and float(m.group(1))>self.kernel_mark:
+                new.append(line); last=max(last,float(m.group(1)))
+        self.kernel_mark=last
+        return '\n'.join(new)
+
+    def reach(self, command, seconds):
+        """Wi-Fi (and so SSH) is down around a suspend: retried until the deadline."""
+        end=time.monotonic()+seconds
+        while True:
+            try:
+                return self.r.text(command,timeout=10)
+            except subprocess.CalledProcessError as e:
+                # SSH transport loss is expected around suspend. Never retry an
+                # owner-abort (125), a boot guard, or a real remote command error.
+                if e.returncode != 255 or time.monotonic()>end: raise
+                time.sleep(2)
+            except subprocess.TimeoutExpired:
+                if time.monotonic()>end: raise
+                time.sleep(2)
+
+    def night_owner_guard(self):
+        # Included in the SIGSTOP command: no extra SSH round trip separates
+        # the final owner-state check from taking the screen.
+        guard='''test ! -e '''+Q(self.work+'/owner-abort')+''' || exit 125
+status=$(cat /tmp/pocket-ui.status) || exit 125
+tab=$(printf '\\t')
+for field in pid='''+str(self.original)+''' sleep=light game=none cover=none; do
+ case "$tab$status$tab" in *"$tab$field$tab"*) ;; *) exit 125 ;; esac
+done
+place=$(printf '%s' "$status" | tr '\\t' '\\n' | sed -n 's/^place=//p')
+case "$place" in shelf:*) ;; *) exit 125 ;; esac
+test "$(pidof pocket-ui)" = '''+str(self.original)+''' || exit 125
+test -z "$(pidof pocket-core retroarch)" || exit 125
+test "$('''+APP+'''/bin/brick-hw bl-get)" = 0 || exit 125
+test "$(cat '''+HW+'''/sys/class/backlight/panel/brightness)" = 0 || exit 125
+'''
+        if getattr(self,'boot_id',None):
+            guard+='test "$(cat /proc/sys/kernel/random/boot_id)" = '+Q(self.boot_id)+' || exit 125\n'
+        return guard
+
+    def night_owner_idle(self):
+        try:
+            self.r.run(self.night_owner_guard())
+        except subprocess.CalledProcessError as e:
+            raise DeviceBusy('owner is not on an unchanged dark shelf; refusing night takeover') from e
+
+    def night_battery(self):
+        values=self.r.text('for f in /sys/class/power_supply/*/capacity; do [ ! -r "$f" ] || cat "$f"; done').split()
+        assert values and all(value.isdigit() for value in values), 'battery capacity unavailable; refusing unattended work'
+        percent=min(map(int,values))
+        assert 20<=percent<=100, f'battery at {percent}%; stopping night session'
+        return percent
+
+    def night_health(self, i, stage):
+        self.check_boot()
+        now=self.r.text('dmesg')
+        pstore=self.r.text('md5sum /sys/fs/pstore/*')
+        (self.out/f'cycle-{i}-kernel-{stage}.txt').write_text(now)
+        (self.out/f'cycle-{i}-pstore-{stage}.txt').write_text(pstore)
+        # Write evidence before any assertion so even a failed cycle is reviewable.
+        percent=self.night_battery()
+        assert pstore==self.read('pstore-before'), 'pstore changed during night cycle'
+        health=night_kernel_health(kernel_delta(self.read('kernel-before'),now))
+        assert not fatal_log_lines(self.log()), 'application failure during night cycle'
+        return dict(health,boot_id=self.boot_id,battery_percent=percent)
+
+    def night_wake(self, i):
+        # Do not send wake, clamp or write either backlight here: this check must
+        # expose a black LCD even when the UI claims to be awake and paints fine.
+        real=self.r.text(APP+'/bin/brick-hw bl-get').strip()
+        logical=self.r.text('cat '+HW+'/sys/class/backlight/panel/brightness').strip()
+        lcd=self.r.text('cat /sys/class/disp/disp/attr/sys')
+        status=self.r.text('cat '+Q(self.work+'/ui.status'))
+        (self.out/f'cycle-{i}-lcd.txt').write_text(lcd)
+        (self.out/f'cycle-{i}-status.txt').write_text(status)
+        (self.out/f'cycle-{i}-backlight.json').write_text(json.dumps({'real':real,'logical':logical})+'\n')
+        assert real.isdigit() and logical.isdigit() and int(real)>0 and int(logical)>0, f'wake backlight is dark/unreadable: real={real}, logical={logical}'
+        assert max(int(real),int(logical))<=25, f'wake backlight exceeds night 10% limit: real={real}, logical={logical}'
+        fields=dict(field.split('=',1) for field in status.strip().split('\t') if '=' in field)
+        assert fields.get('pid')==str(self.ui) and fields.get('sleep')=='awake', 'wake status is not our awake UI: '+status
+        assert fields.get('place','').startswith(('pause:','shelf:')) and fields.get('cover')=='none', 'no pause or shelf after wake: '+status
+        return {'real':int(real),'logical':int(logical)}
+
+    def night_dark(self):
+        self.cmd('dark')
+        def dark():
+            status=self.r.text('cat '+Q(self.work+'/ui.status'))
+            return ('sleep=light' in status and self.r.text(APP+'/bin/brick-hw bl-get').strip()=='0'
+                    and self.r.text('cat '+HW+'/sys/class/backlight/panel/brightness').strip()=='0')
+        self.until(dark,5)
+
+    def night_awake(self):
+        self.cmd('wake')
+        self.until(lambda: 'sleep=awake' in self.r.text('cat '+Q(self.work+'/ui.status')),5)
+
+    COUNTERS=(('xrun',('backend','alsa','xrun_errors')),('write_errors',('backend','alsa','write_errors')),
+              ('recoveries',('backend','alsa','recover_calls')),('write_failures',('backend','write_failures')),
+              ('underruns',('queue','playing_underruns')),('missing',('queue','playing_missing_frames')),
+              ('dropped',('queue','dropped_frames')))
+
+    def counters(self, sample):
+        out={}
+        for name,path in self.COUNTERS:
+            v=sample
+            for k in path: v=(v or {}).get(k)
+            if getattr(self.a,'night_soak',False):
+                assert isinstance(v,int) and not isinstance(v,bool) and v>=0, 'sound counter unavailable: '+name
+            out[name]=v or 0
+        return out
+
+    def lights(self):
+        def output():
+            # This BSP pads frame_hex reads with NUL bytes between its printed zero groups.
+            # NUL is not an illuminated channel; retain and reject every nonzero colour digit.
+            return self.r.text('for n in effect_enable max_scale anim_frames_enable frame_hex; do printf "%s=" "$n"; cat /sys/class/led_anim/$n; done').replace('\0', '')
+        default = output()
+        assert 'effect_enable=0' in default and 'max_scale=0' in default, default
+        self.metrics['default_lights'] = default
+        self.step('01-default-lights-off', lambda: default)
+        self.timed_press('start', ('settings',), 'settings_open_ms')
+        for row in ('^Sound & feel$', '^Lights & buttons$'):
+            self.focus(row)
+            self.settings_press('a')
+        self.focus('^Lights$')
+        self.press('right')
+        self.until(lambda: 'max_scale=0' not in output(), 5)
+        colour = output()
+        for row, expected in [('^F1 button', 'load'), ('^F2 button', 'screenshot')]:
+            self.focus(row)
+            self.press('right')
+            saved = json.loads(self.read('data/brick-keys.json'))
+            assert saved['f1' if 'F1' in row else 'f2'] == expected, saved
+        self.step('02-shortcut-choices-saved', lambda: self.read('data/brick-keys.json'))
+        if not self.a.key_probe:
+            raise ValueError('lights/keys evidence requires --key-probe')
+        self.r.put(self.work+'/key-probe', self.a.key_probe.read_bytes())
+        self.r.run('chmod 700 '+self.work+'/key-probe')
+        def probe():
+            env='POCKETUI_DEVICE=brick POCKETUI_BRICK_STANDALONE=1 '
+            migrated=self.r.text(env+self.work+'/key-probe /dev/input/event3 '+self.work+'/no-old-key-file')
+            changed=self.r.text(env+self.work+'/key-probe /dev/input/event3 '+self.work+'/data')
+            assert 'configured f1=Save f2=Load' in migrated, migrated
+            assert 'configured code=317 actions=[Save]' in migrated and 'configured code=318 actions=[Load]' in migrated, migrated
+            assert 'configured f1=Load f2=Screenshot' in changed, changed
+            assert 'configured code=317 actions=[Load]' in changed and 'configured code=318 actions=[Screenshot]' in changed, changed
+            (self.out/'key-probe.txt').write_text(migrated+'\n'+changed)
+            return changed
+        self.step('03-production-decoder-keeps-and-changes-actions',probe)
+        saved=self.read('data/leds.json')
+        self.until(lambda: 'sleep=light' in self.r.text('cat '+Q(self.work+'/ui.status')),45)
+        dark=output()
+        assert 'effect_enable=0' in dark and 'max_scale=0' in dark and 'anim_frames_enable=0' in dark,dark
+        assert not any(c not in '0 \n\r' for c in dark.split('frame_hex=',1)[1]), dark
+        self.metrics['standby_lights']=dark
+        self.step('04-idle-lights-off',lambda:dark)
+        self.cmd('wake')
+        self.until(lambda: 'sleep=awake' in self.r.text('cat '+Q(self.work+'/ui.status')),5)
+        self.until(lambda: output()==colour,5)
+        assert self.read('data/leds.json')==saved, 'screen off changed the saved light preference'
+        self.step('05-colour-restored-after-wake',lambda:output())
+
+    def sleep_cycle(self, i):
+        night=getattr(self.a,'night_soak',False)
+        if night:
+            before_health=self.night_health(i,'before')
+            # The previous sample ended dark. This wake only prepares the next
+            # transition; the RTC wake below is measured before any such input.
+            self.night_awake()
+        alarm=self.a.alarm_seconds if not self.a.physical else 120
+        now=int(self.r.text('cat /sys/class/rtc/rtc0/since_epoch').strip())
+        # Tests only: an RTC alarm, so the Brick can never stay asleep without a press.
+        self.r.run(f'echo {now+alarm} >/sys/class/rtc/rtc0/wakealarm')
+        mark=len(self.log())
+        if self.a.physical:
+            print(f'cycle {i}: PRESS POWER (sleep), wait about 5 s, PRESS POWER again (wake)',flush=True)
+            self.until(lambda: 'sleep: power key' in self.log()[mark:],180)
+        else:
+            self.cmd('powermenu')
+            self.until(lambda: 'Sleep' in self.record().text(), 10)
+            self.focus('^Sleep$')
+            self.shot(f'cycle-{i}-sleep-menu')
+            status = self.r.text('cat '+Q(self.work+'/ui.status'))
+            assert 'cover=power' in status and f'pid={self.ui}\t' in status, status
+            self.cmd('a')
+        self.until(lambda: 'sleep: suspending' in self.log()[mark:],15)
+        t0=time.monotonic()
+        text=lambda: self.reach('cat '+Q(self.work+'/ui.log'),alarm+90)[mark:]
+        log=''
+        while 'sleep: awake on the Brick; the pause menu' not in log:
+            assert time.monotonic()-t0<alarm+90,'no wake into the pause menu'
+            time.sleep(2)
+            log=text()
+        self.check_boot()
+        self.r.run('echo 0 >/sys/class/rtc/rtc0/wakealarm')
+        backlight=self.night_wake(i) if night else None
+        if night:
+            self.night_health(i,'wake')
+        # What woke the kernel: its last wake interrupt and that line of /proc/interrupts (the RTC, or the power chip's NMI
+        # that carries the power key). The wakeup-source counters stay 0 for the power chip on this kernel.
+        irq=self.r.text('cat /sys/power/pm_wakeup_irq',check=False).strip()
+        line=next((l for l in self.r.text('cat /proc/interrupts').splitlines() if l.split(':')[0].strip()==irq),'')
+        woke={'irq':irq,'line':' '.join(line.split()[5:]) if line else ''}
+        assert 'state saved for' in log,'no confirmed save before the suspend'
+        assert 'awake (still paused)' in log,'the game ran on after the wake'
+        frame=self.record()
+        assert 'Continue' in frame.text(),'no pause menu after the wake'
+        self.shot(f'cycle-{i}-paused-after-wake')
+        row={'cycle':i,'woke_by':woke,'helper':re.findall(r'brick-suspend: [^\n]*',log),
+             'screen_on_ms':None,'radios':self.read('radios.log').strip()}
+        if night:
+            row['backlight']=backlight
+            assert 'rtc' in woke['line'], f'not woken by RTC: {woke}'
+        m=re.search(r'wake.*?screen on (\d+) ms',log)
+        if m: row['screen_on_ms']=int(m.group(1))
+        if self.a.physical:
+            assert 'axp' in woke['line'] or 'nmi' in woke['line'],f'not woken by the power key (PMIC): {woke}'
+        mark=len(self.log())
+        self.cmd('a')  # Continue: the menu opens on it
+        self.until(lambda: 'play resumed' in self.log()[mark:],10)
+        if night:
+            # Brick screen-off intentionally pauses the core. The counter delta
+            # covers suspend/resume and Continue; the observation wait is dark.
+            self.night_dark()
+        time.sleep(8)
+        sample=self.audio_sample()
+        row['delta']={k:v-self.last[k] for k,v in self.counters(sample).items()}
+        self.last=self.counters(sample)
+        dm=self.kernel_since()
+        row['kernel']={'sdio_rto':dm.count('RTO'),'wifi_reinit':dm.count('xradio_core_reinit end'),
+                       'suspended_s':re.findall(r'Suspended for ([0-9.]+) seconds',dm)}
+        row['route']=bool(re.search(r'^wlan0\s+00000000',self.r.text('cat /proc/net/route'),re.M))
+        if night:
+            measurements=self.out/f'cycle-{i}-measurements.json'
+            measurements.write_text(json.dumps(row,indent=2)+'\n')
+            try:
+                self.until(lambda: bool(re.search(r'^wlan0\s+00000000',self.r.text('cat /proc/net/route'),re.M)),20)
+            except TimeoutError as e:
+                raise AssertionError('WLAN default route did not return after wake') from e
+            row['route']=True
+            after_health=self.night_health(i,'after')
+            for key in ('known_wifi_warn','known_wifi_sdio'):
+                after_health[key]-=before_health[key]
+            row.update(after_health)
+            # Save the failed measurements as well as successful cycles.
+            measurements.write_text(json.dumps(row,indent=2)+'\n')
+            assert not any(row['delta'].values()), 'sound errors during night cycle: '+json.dumps(row['delta'])
+        if self.a.bt:
+            n=0
+            while 'Powered: yes' not in self.r.text('bluetoothctl show',check=False) and n<20:
+                time.sleep(1); n+=1
+            row['bt_powered_after_s']=n
+            self.r.run('(bluetoothctl --timeout 4 scan on >/dev/null 2>&1 &); sleep 2',check=False)
+            row['bt_discovering']='Discovering: yes' in self.r.text('bluetoothctl show',check=False)
+        self.cycles.append(row)
+        (self.out/'cycles.json').write_text(json.dumps(self.cycles,indent=2)+'\n')
+        return json.dumps(row)
+
+    def sleep(self):
+        self.step('01-shelf',lambda: 'scratch Game Boy cartridge on shelf')
+        if not self.step('02-game',self.launch_game):
+            return
+        if getattr(self.a,'night_soak',False):
+            self.night_dark()
+        self.kernel_mark=0.0
+        self.kernel_since()
+        time.sleep(5)
+        self.cycles=[]
+        self.last=self.counters(self.audio_sample())
+        self.metrics['audio_before_cycles']=dict(self.last)
+        for i in range(1,self.a.cycles+1):
+            if not self.step(f'{10+i}-sleep-wake',lambda i=i: self.sleep_cycle(i)):
+                return
+        def clean():
+            bad=[(c['cycle'],c['delta']) for c in self.cycles if any(c['delta'].values())]
+            assert not bad,f'sound errors at the transition: {bad}'
+            return f'{len(self.cycles)} cycles: 0 xruns, write errors, recoveries, underruns, dropped frames'
+        self.step('30-sound-clean',clean)
 
     def select_trace(self, predicate, limit=60):
         # List looks clamp at their ends. After returning from a console the
@@ -1004,8 +1520,11 @@ cat "$r/soft" >"$W/wifi-on-result"
         self.check_boot()
         now=self.r.text('dmesg')
         before=self.read('kernel-before')
-        delta=now[len(before):] if now.startswith(before) else '\n'.join(line for line in now.splitlines() if line not in before.splitlines())
-        assert not re.search(r'Kernel panic|Oops:|BUG:|mmc.*(?:error|CRC)|sunxi-mmc.*error',delta,re.I),delta[-1000:]
+        delta=kernel_delta(before,now)
+        if getattr(self.a,'night_soak',False):
+            self.metrics['night_kernel']=night_kernel_health(delta)
+        else:
+            assert not re.search(r'Kernel panic|Oops:|BUG:|mmc.*(?:error|CRC)|sunxi-mmc.*error',delta,re.I),delta[-1000:]
         assert not fatal_log_lines(self.log()),'application crash in session log: '+str(fatal_log_lines(self.log()))
         assert self.r.text('md5sum /sys/fs/pstore/*')==self.read('pstore-before'),'pstore changed'
         return 'no new app panic, kernel Oops/MMC error or pstore change'
@@ -1017,17 +1536,28 @@ def main():
     p.add_argument('--host', default=os.environ.get('DC_HOST') or (host_file.read_text().strip() if host_file.exists() else None))
     p.add_argument('--rom',type=Path,default=Path.home()/'.config/pocket-ui/brick-smoke.gb')
     p.add_argument('--binary',type=Path)
+    p.add_argument('--key-probe',type=Path,help='ARM build of examples/brick_keys.rs, for the lights/keys session')
     p.add_argument('--core',type=Path)
+    p.add_argument('--owner-watch-binary', type=Path, help='ARM build of scripts/brick/owner-watch.c; required for sleep sessions')
     p.add_argument('--out',type=Path,required=True)
     p.add_argument('--label',required=True)
     p.add_argument('--expect-version',help='refuse before mutation if the installed release differs')
-    p.add_argument('--phase',choices=['all','first-start','perf','perf-idle','game','settings','network','controls','idle'],default='all')
+    p.add_argument('--phase',choices=['all','first-start','perf','perf-idle','game','settings','network','controls','idle','sleep','lights'],default='all')
+    p.add_argument('--cycles',type=int,default=5,help='sleep: suspend/resume cycles mid-game')
+    p.add_argument('--alarm-seconds',type=int,default=20,help='sleep: the RTC safety alarm (tests only)')
+    p.add_argument('--physical',action='store_true',help='sleep: a person presses the power button to sleep and wake')
+    p.add_argument('--night-soak',action='store_true',help='sleep: bounded silent/dark RTC batch with per-cycle LCD, route, battery, audio and crash checks')
+    p.add_argument('--bt',action='store_true',help='sleep: Bluetooth on (scratch pairings) for the session')
     p.add_argument('--wifi-cycle',action='store_true',help='hazardous opt-in: a real rfkill cycle reset the Brick kernel; default stays BLOCKED')
     p.add_argument('--cold',action='store_true',help='drop file caches before process start; not a firmware cold boot')
     p.add_argument('--hold-seconds',type=float,default=10)
     p.add_argument('--idle-seconds',type=int,default=60)
     a=p.parse_args()
-    for flag,path in (('--rom',a.rom),('--binary',a.binary),('--core',a.core)):
+    try:
+        validate_night_args(a)
+    except ValueError as e:
+        p.error(str(e))
+    for flag,path in (('--rom',a.rom),('--binary',a.binary),('--core',a.core),('--owner-watch-binary',a.owner_watch_binary)):
         if path is not None and not path.is_file():
             p.error(f'{flag}: file does not exist: {path}')
     if not a.host:
@@ -1065,6 +1595,7 @@ def main():
         raise TimeoutError('session interrupted; restoring the device')
     signal.signal(signal.SIGTERM,interrupt)
     signal.signal(signal.SIGALRM,interrupt)
+    signal.signal(signal.SIGUSR2,interrupt)
     with open('/tmp/brick-device.lock','w') as lock:
         r=Remote(a.host)
         journey=Journey(a,r)

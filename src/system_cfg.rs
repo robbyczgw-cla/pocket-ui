@@ -56,7 +56,7 @@ pub enum LockStyle {
 
 impl LockStyle {
     /// The running system's, read once from 001-functions (CreateExclusive when it can't be read).
-    pub fn of_device() -> LockStyle {
+    fn of_device() -> LockStyle {
         static STYLE: std::sync::OnceLock<LockStyle> = std::sync::OnceLock::new();
         *STYLE.get_or_init(|| {
             let text = crate::update::read_small(Path::new(FUNCTIONS), 1 << 20).unwrap_or_default();
@@ -173,6 +173,25 @@ pub fn value<'a>(cfg: &'a str, key: &str) -> Option<&'a str> {
     cfg.lines().find_map(|l| l.strip_prefix(key)?.strip_prefix('='))
 }
 
+/// Whether a switch of system.cfg is on. ROCKNIX writes "1" and "0" and its scripts compare with them
+/// (`autostart/080-network`, `daemons/001-ssh`), so "true", "on" or "yes" from a hand-edited file are off there; they
+/// are off here too, or pocket-ui and ROCKNIX would disagree about one switch.
+fn switch_on(value: &str) -> bool {
+    value.trim() == "1"
+}
+
+/// `wifi.enabled` in `cfg`: whether the player wants Wi-Fi on (None: not in the file). The one reader of the key.
+pub(crate) fn wifi_enabled(cfg: &str) -> Option<bool> {
+    value(cfg, "wifi.enabled").map(switch_on)
+}
+
+/// `ssh.enabled` in `cfg`: whether ROCKNIX starts sshd at boot (None: not in the file). The one reader of the key;
+/// only the device's sshd has it.
+#[cfg(target_os = "linux")]
+pub(crate) fn ssh_enabled(cfg: &str) -> Option<bool> {
+    value(cfg, "ssh.enabled").map(switch_on)
+}
+
 /// ROCKNIX's `[[ "$1" =~ ^[[:alnum:]] ]]`, and no line breaks or `=` in the key.
 fn valid_key(key: &str) -> bool {
     key.chars().next().is_some_and(|c| c.is_ascii_alphanumeric()) && !key.contains(['\n', '='])
@@ -285,6 +304,17 @@ mod tests {
     use super::*;
     use crate::testutil::TestDir;
     use std::process::Command;
+
+    #[test]
+    fn a_switch_is_on_only_as_rocknix_writes_it() {
+        for (v, on) in [("1", true), (" 1 ", true), ("0", false), ("", false), ("true", false), ("on", false), ("yes", false), ("TRUE", false)] {
+            assert_eq!(wifi_enabled(&format!("audio.volume=60\nwifi.enabled={v}\n")), Some(on), "wifi.enabled={v}");
+            assert_eq!(ssh_enabled(&format!("ssh.enabled={v}\nwifi.enabled=1\n")), Some(on), "ssh.enabled={v}");
+        }
+        assert_eq!(wifi_enabled("ssh.enabled=1\n"), None, "not in the file");
+        assert_eq!(ssh_enabled("wifi.enabled=1\n"), None);
+        assert_eq!(wifi_enabled("wifi.enabled=0\nwifi.enabled=1\n"), Some(false), "the first line, as get_setting reads it");
+    }
 
     fn tmp(name: &str) -> crate::testutil::TestDir {
         TestDir::new(&format!("syscfg-{name}"))

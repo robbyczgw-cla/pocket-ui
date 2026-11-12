@@ -8,10 +8,20 @@ corrects small clock differences. It cannot compensate for a game that consisten
 
 The Kaiser sinc uses 72 taps, beta 11, and 512 fractional phases with interpolation. For downsampling, a wider
 kernel is prepared once per core rate on a 1/32 width grid, with ±0.5% controller headroom. Rows have unity DC gain;
-processing blends adjacent fractional phases with a continuous read position. The table is bounded by the maximum
-4:1 step and replaces the old per-output-sample coefficient calculation and normalization. Runtime core-rate changes
+processing blends adjacent fractional phases with a continuous read position. Filter width is bounded at 8:1
+(full downsampling support through 384 kHz input at 48 kHz output); the read position always follows the actual ratio.
+This separates bounded filter cost from playback timing and replaces the old per-output-sample coefficient calculation and normalization. Runtime core-rate changes
 can prepare a new table. Normal rate control does not allocate coefficient tables. ARM64 uses baseline NEON;
 other targets retain the eight-accumulator implementation, including tails for non-multiple-of-eight tap counts.
+
+The same converter serves ROCKNIX, Brick and Android. ClownMDEmu supplies 223721 Hz, about 4.66:1;
+the former fourfold read-step clamp produced about 55895 output frames for one second instead of about 47964
+(after filter delay). This overfilled the queue and prevented the small rate controller from correcting it.
+The high-rate regression checks duration, pitch and both DRC directions without rebuilding the table.
+A separate clock test covers ratios below 1:4, above 8:1 and a step longer than one input chunk; filter bounds never
+change the sample clock. Rejection beyond the bounded filter's range is not guaranteed.
+The standard Mega Drive routes use Genesis Plus GX on ROCKNIX and PicoDrive on Brick, both below this threshold;
+this is a rate-dependent defect, not evidence of crackles in every Mega Drive core.
 
 CPU-only measurements on a Cortex-A53 at a verified 1416 MHz, 1200 stereo pushes with ±0.5% ratio changes:
 
@@ -77,6 +87,11 @@ During startup, the producer feeds the complete PCM packet into the queue in res
 pieces, waiting for the writer to make room. This preserves the opening sound while route selection and
 PipeWire linking run, including an oversized restored SPU packet. Previously the preplay cap discarded the
 prefix repeatedly during a slow start, or let a prefix play before the next push removed its middle.
+The native Brick PCM stays prepared with its clock stopped while the initial game queue fills,
+including when the startup route check replaces its ring. It primes silence once, after that wait;
+an earlier route-change prefill could run dry and report EPIPE during a second prefill before any
+game PCM played. Pulse/BlueALSA and PipeWire retain their early linking writes. Runtime route
+changes and wake still prime the replacement output immediately. No game buffer grows.
 Device silence is primed immediately before real PCM starts; priming it before waiting for the game queue
 lets the server drain that silence and burst-read the first game samples. Priming waits for two writes
 longer than 4 ms: the first may still be stream linking, followed by a fast server-buffer fill. A second
@@ -107,6 +122,26 @@ sample's order and the full produced/consumed/queued/dropped balance through war
 The resumed video clock anchors its first deadline when pause ends. An immediately presented first picture
 therefore cannot be followed by a second source frame on the same tick, accumulating an extra audio burst on
 every resume until the overflow cap discards it. This also protects sources near 60 Hz.
+On the Brick, screen-off closes the PCM stream. Wake marks playback inactive until the replacement output
+has opened and primed; the producer uses bounded backpressure during this interval and preserves the first
+resumed PCM. The slow-reopen regression delays ALSA by 150 ms and requires no discarded game sound.
+
+On the native Brick output, opening the pause menu finishes the existing fade-out, drains that PCM,
+and leaves the stream prepared with its hardware clock stopped. The writer waits on pause/hold/stop
+atomics; it never waits for menu construction. Resume uses the existing fade-in and unchanged PCM
+buffer size, without reopening ALSA. Previously the continuously running silent PCM could xrun when
+menu construction delayed a write by 19.286 ms: the requested 32 ms buffer had negotiated only
+1024 frames at 48 kHz. Pulse and BlueALSA retain their continuous silence policy. Pause-control
+errors remain visible in the ALSA error/recovery counters. A fake native PCM regression checks a
+paused scheduling stall, resumed sound, and a gradual fade from zero; hardware timing and output
+checks remain separate evidence.
+
+Brick light sleep asks pocket-core to close its PCM before changing the LCD backlight. The core
+acknowledges through the existing pause pipe only after the writer has closed; an already sleeping
+core answers a fresh request too. The UI waits at most 150 ms, then blanks the display even if the
+core never answers. Previously the backlight transition preceded the sleep command, leaving an active
+native write exposed to the transition. This ordering adds no game audio buffering.
+
 With `POCKETUI_TRACE` enabled, `audio-push`, `audio-write`, `audio-pause` and `audio-underrun` record burst sizes, queue fill
 and missing frames against the common monotonic clock; normal games do not format or write these events.
 

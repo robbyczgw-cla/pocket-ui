@@ -20,7 +20,7 @@ for look in dark light; do
     lens:dddddrada lens:dddddddddr lens:ddddddddddrda lens:dddddddddddddr echoes:psp:ridge \
     upnext:ps2:revenge upnext:ps2:revenge:cabinet upnext:ps2:revenge:split \
     cabinet:dd cabinet:ddd cabinet:ddrrra cabinet:ddrrrrra cabinetlens:rda \
-    card:ps2:takedown card:ps2:revenge:yddddrr surprise surprise:1:1 surprise:empty lens:S lens:Sdda lens:Sddas options:da \
+    card:ps2:takedown card:ps2:revenge:yddddrr justplay-card justplay-card:1:1 justplay-card:empty lens:S lens:Sdda lens:Sddas options:da \
     home:shelf:favorites home:shelf:shelf home:split:favorites cabinet:ddr; do
     name=$(echo "$state" | tr ':' '-')
     POCKETUI_MOCK=1 POCKETUI_ES_SYSTEMS="$FAKE/es_systems.cfg" POCKETUI_DATA="$FAKE/data" \

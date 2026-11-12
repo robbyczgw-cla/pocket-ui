@@ -13,6 +13,8 @@ mkdir -p "$T/tree/scripts/nested/helpers" "$T/bin" "$T/logs"
 sed -e "s|/tmp/gate-|$T/logs/gate-|g" \
     -e 's|^export PATH=.*|export PATH="$GATE_FIXTURE_BIN:$PATH"|' \
     "$ROOT/scripts/gate.sh" >"$T/tree/scripts/gate.sh"
+cp "$ROOT/scripts/check-compile.sh" "$T/tree/scripts/check-compile.sh"
+printf "[features]\n" >"$T/tree/Cargo.toml"
 cp "$ROOT/scripts/test-timing.sh" "$T/tree/scripts/test-timing.sh"
 cp "$ROOT/scripts/gate-select.py" "$T/tree/scripts/gate-select.py"
 cp "$ROOT/scripts/gate-parts.py" "$T/tree/scripts/gate-parts.py"
@@ -21,6 +23,7 @@ sed "s|/tmp/gate-|$T/logs/gate-|g" "$ROOT/scripts/gate-shell.sh" >"$T/tree/scrip
 cat >"$T/bin/cargo" <<'CARGO'
 #!/bin/sh
 printf '%s\n' "$*" >>"$GATE_FIXTURE_CARGO"
+case " $* " in *"check "*) [ "${GATE_FIXTURE_COMPILE_FAIL:-0}" = 0 ] || exit 1 ;; esac
 case " $* " in *" doc_checks:: "*) [ "${GATE_FIXTURE_DOC_FAIL:-0}" = 0 ] || exit 1 ;; esac
 case " $* " in *" i18n:: "*) [ "${GATE_FIXTURE_I18N_FAIL:-0}" = 0 ] || exit 1 ;; esac
 case " $* " in *" timing_ "*) [ "${GATE_FIXTURE_TIMING_FAIL:-0}" = 0 ] || exit 1 ;; esac
@@ -28,6 +31,7 @@ case " $* " in *" doc_checks:: "*) if [ "${GATE_FIXTURE_DOC_EMPTY:-0}" = 1 ]; th
 case " $* " in *" i18n:: "*) if [ "${GATE_FIXTURE_I18N_EMPTY:-0}" = 1 ]; then echo 'test result: ok. 0 passed'; exit 0; fi ;; esac
 case " $* " in *" --features brick --test brick_settings_walk "*) [ "${GATE_FIXTURE_BRICK_FAIL:-0}" = 0 ] || exit 1 ;; esac
 case " $* " in *" --test text_size textfit_brick_031_ "*) [ "${GATE_FIXTURE_BRICK_TEXT_FAIL:-0}" = 0 ] || exit 1 ;; esac
+case " $* " in *" --test nav_explorer -q -- brick "*) [ "${GATE_FIXTURE_BRICK_NAV_FAIL:-0}" = 0 ] || exit 1 ;; esac
 case " $* " in *" --test long_titles info_titles_031_ "*) [ "${GATE_FIXTURE_INFO_TITLE_FAIL:-0}" = 0 ] || exit 1 ;; esac
 if [ "${GATE_FIXTURE_TIMING_EMPTY:-0}" = 1 ]; then
     case " $* " in *" timing_ "*) echo 'test result: ok. 0 passed'; exit 0 ;; esac
@@ -48,7 +52,8 @@ printf '%s\n' "$0" >>"$GATE_FIXTURE_CALLS"
 case $0 in */test-package.sh) [ "${GATE_FIXTURE_FAIL:-0}" = 0 ] || exit 1 ;; esac
 SUITE
 done
-for suite in scripts/image/test-receipts.py scripts/test-device-portability.py scripts/test-device-transfer.py; do
+for suite in scripts/image/test-receipts.py scripts/test-device-portability.py scripts/test-device-transfer.py scripts/android/test-release-check.py; do
+    mkdir -p "$T/tree/$(dirname "$suite")"
     cat >"$T/tree/$suite" <<'PYTEST'
 import os, sys
 with open(os.environ['GATE_FIXTURE_CALLS'], 'a') as calls:
@@ -91,54 +96,62 @@ check() {
         # Compile everything, then unit + selected integration tests and doctests; the timing tier is nightly.
         if grep -q timing_ "$T/cargo"; then echo "FAIL $label: fast tier ran the timing tier"; exit 1; fi
         grep -q -- '--lib --bins' "$T/cargo" && grep -q -- '--doc' "$T/cargo" || { echo "FAIL $label: fast tier lost unit tests or doctests"; exit 1; }
-        calls=3 ;;
+        calls=4 ;;
     full)
         grep -q 'timing_ -- --ignored --test-threads=1' "$T/cargo" || { echo 'FAIL timing tier missing'; exit 1; }
-        calls=2 ;;
+        calls=3 ;;
     esac
     [ "$(wc -l <"$T/cargo")" -eq "$calls" ] || { echo "FAIL $label: timing tier retried or regular tests skipped"; cat "$T/cargo"; exit 1; }
     pass=$((pass + 1))
     echo "ok $label"
 }
-check 'LICENSE still runs package tests' 14 fast LICENSE
-check 'NOTICE still runs package tests' 14 fast NOTICE.md
-check 'font licence runs package tests' 14 fast assets/fonts/OFL.txt
-check 'deleted or empty licence is rejected by required package suite' 14 fast LICENSE '' 1
+# A broken example must stop before codegen, tests or shell workers.
+: >"$T/cargo"; : >"$T/calls"
+printf '%s\n' src/main.rs >"$T/tree/.gate-changed"
+GATE_FIXTURE_COMPILE_FAIL=1 GATE_RUNNER=cargo sh "$T/tree/scripts/gate.sh" "$T/tree" >"$T/out" 2>&1 && { echo 'FAIL broken compilation passed'; exit 1; }
+grep -q 'GATE: compile-first FAILED' "$T/out" && [ "$(wc -l <"$T/cargo")" -eq 1 ] && [ ! -s "$T/calls" ] || { cat "$T/out"; exit 1; }
+pass=$((pass + 1))
+echo 'ok compile error stops before tests or shell lanes'
+: >"$T/cargo"
+check 'LICENSE still runs package tests' 15 fast LICENSE
+check 'NOTICE still runs package tests' 15 fast NOTICE.md
+check 'font licence runs package tests' 15 fast assets/fonts/OFL.txt
+check 'deleted or empty licence is rejected by required package suite' 15 fast LICENSE '' 1
 check 'ordinary docs use only doc and i18n checks' 0 docs docs/DEVELOPING.md
 check 'root Markdown skips shell and integration tests' 0 docs README.md
 check 'manual changes leave the short path' 0 fast docs/user/settings.md
-check 'Markdown outside docs is unknown' 14 fast assets/new-input.md
-check 'unknown doc configuration runs the shell tests' 14 fast docs/new-input.conf
+check 'Markdown outside docs is unknown' 15 fast assets/new-input.md
+check 'unknown doc configuration runs the shell tests' 15 fast docs/new-input.conf
 check 'one Rust source runs the merge gate without shell tests' 0 fast src/unreferenced_feature.rs
-check 'transitive shell source input runs shell tests' 14 fast src/hostsys.rs
+check 'transitive shell source input runs shell tests' 15 fast src/hostsys.rs
 check 'one Rust test runs the merge gate' 0 fast tests/layout_contract.rs
 check 'Brick text regression changes run the merge gate' 0 fast tests/text_size.rs
-check 'transitive shell test input runs shell tests' 14 fast tests/shell_input.rs
-check 'unknown test data still runs shell tests' 14 fast tests/new-input.txt
-check 'Rust test path with spaces remains unknown' 14 fast 'tests/new input.rs'
-check 'Rust test changes cannot cancel deploy tests' 14 fast 'tests/layout_contract.rs
+check 'transitive shell test input runs shell tests' 15 fast tests/shell_input.rs
+check 'unknown test data still runs shell tests' 15 fast tests/new-input.txt
+check 'Rust test path with spaces remains unknown' 15 fast 'tests/new input.rs'
+check 'Rust test changes cannot cancel deploy tests' 15 fast 'tests/layout_contract.rs
 deploy/run-pocket-ui.sh'
-check 'full override retains shell tests after Rust test changes' 14 full tests/layout_contract.rs 1
-check 'non-Rust source input is unknown' 14 fast src/new-input.c
-check 'unknown assets run shell tests' 14 fast assets/new-input.txt
-check 'unknown root files run shell tests' 14 fast new-input
-check 'deploy changes run shell tests' 14 fast deploy/run-pocket-ui.sh
-check 'gate script changes run the full gate' 14 full scripts/test-gate-paths.sh
-check 'other script changes run shell tests' 14 fast scripts/device-check.sh
-check 'Cargo metadata changes run the full gate' 14 full Cargo.toml
-check 'test harness changes run the full gate' 14 full tests/common/mod.rs
-check 'docs cannot cancel licence tests' 14 fast 'LICENSE
+check 'full override retains shell tests after Rust test changes' 15 full tests/layout_contract.rs 1
+check 'non-Rust source input is unknown' 15 fast src/new-input.c
+check 'unknown assets run shell tests' 15 fast assets/new-input.txt
+check 'unknown root files run shell tests' 15 fast new-input
+check 'deploy changes run shell tests' 15 fast deploy/run-pocket-ui.sh
+check 'gate script changes run the full gate' 15 full scripts/test-gate-paths.sh
+check 'other script changes run shell tests' 15 fast scripts/device-check.sh
+check 'Cargo metadata changes run the full gate' 15 full Cargo.toml
+check 'test harness changes run the full gate' 15 full tests/common/mod.rs
+check 'docs cannot cancel licence tests' 15 fast 'LICENSE
 README.md'
-check 'docs cannot cancel unknown input tests' 14 fast 'assets/new-input
+check 'docs cannot cancel unknown input tests' 15 fast 'assets/new-input
 README.md'
-check 'path with spaces remains one unknown path' 14 fast 'assets/new input.md'
+check 'path with spaces remains one unknown path' 15 fast 'assets/new input.md'
 check 'Markdown path with spaces remains one document' 0 docs 'docs/new document.md'
 check 'unembedded translation audit notes use short path' 0 docs assets/i18n/skip.txt
-check 'runtime translation tables leave the short path' 14 fast assets/i18n/de.tsv
+check 'runtime translation tables leave the short path' 15 fast assets/i18n/de.tsv
 check 'mixed docs and Rust leave the short path' 0 fast 'docs/DEVELOPING.md
 src/main.rs'
-check 'no change list runs everything' 14 full ''
-check 'full override runs everything' 14 full docs/DEVELOPING.md 1
+check 'no change list runs everything' 15 full ''
+check 'full override runs everything' 15 full docs/DEVELOPING.md 1
 # Firmware and transfer failures must fail the real shell tier.
 printf '%s\n' scripts/device-check.sh >"$T/tree/.gate-changed"
 for suite in test-device-portability.py test-device-transfer.py; do
@@ -212,7 +225,7 @@ echo 'ok empty timing tier fails the gate'
 mkdir -p "$T/tree/src" "$T/tree/tests"
 printf '[features]\nbrick = []\n' >"$T/tree/Cargo.toml"
 : >"$T/tree/src/input_corpus_tests.rs"
-for suite in brick_settings_walk text_size long_titles search_titles; do : >"$T/tree/tests/$suite.rs"; done
+for suite in brick_settings_walk text_size long_titles search_titles nav_explorer; do : >"$T/tree/tests/$suite.rs"; done
 printf '%s\n' src/sleep.rs >"$T/tree/.gate-changed"
 for broken in 1 0; do
     : >"$T/cargo"
@@ -226,6 +239,33 @@ for broken in 1 0; do
     pass=$((pass + 1))
     echo "ok private Brick UI walk verdict $broken"
 done
+# Every Brick-named navigation case needs a feature-enabled stage, including future names.
+# Check actual gate invocations against the real suite, rather than trusting a comment or a fixed list of today's cases.
+python3 -I - "$ROOT/tests/nav_explorer.rs" "$T/cargo" <<'NAV_COVERAGE'
+from pathlib import Path
+import re, shlex, sys
+names = re.findall(r"fn\s+(\w*brick\w*)\s*\(", Path(sys.argv[1]).read_text())
+names += ["future_brick_navigation_regression", "brick_future_shortcut"]
+filters = []
+for line in Path(sys.argv[2]).read_text().splitlines():
+    args = shlex.split(line)
+    if "--features" not in args or "brick" not in args[args.index("--features")+1].split(","):
+        continue
+    if "--test" not in args or args[args.index("--test")+1] != "nav_explorer":
+        continue
+    tail = args[args.index("--test")+2:]
+    filters.extend(a for a in tail if not a.startswith("-") and a != "--")
+missing = [name for name in names if not any(f in name for f in filters)]
+assert not missing, "Brick navigation omitted from every feature-enabled stage: " + ", ".join(missing)
+print(f"ok {len(names)} current/future Brick navigation names have a feature-enabled stage")
+NAV_COVERAGE
+pass=$((pass + 1))
+: >"$T/cargo"
+rc=0
+GATE_FULL=1 GATE_FIXTURE_BRICK_NAV_FAIL=1 GATE_RUNNER=cargo sh "$T/tree/scripts/gate.sh" "$T/tree" >"$T/out" 2>&1 || rc=$?
+[ "$rc" = 1 ] || { echo 'FAIL red Brick navigation did not fail the gate'; exit 1; }
+pass=$((pass + 1))
+echo 'ok red Brick navigation fails the gate'
 : >"$T/cargo"
 rc=0
 GATE_FULL=1 GATE_FIXTURE_BRICK_TEXT_FAIL=1 GATE_RUNNER=cargo sh "$T/tree/scripts/gate.sh" "$T/tree" >"$T/out" 2>&1 || rc=$?
@@ -249,7 +289,7 @@ printf '%s\n' src/sleep.rs >"$T/tree/.gate-changed"
 GATE_FIXTURE_BRICK_FAIL=1 GATE_RUNNER=cargo sh "$T/tree/scripts/gate.sh" "$T/tree" >"$T/out" 2>&1 || {
     echo 'FAIL merge gate ran the Brick UI walk for an ordinary source change'; cat "$T/out"; exit 1;
 }
-grep -q -- '^check --profile gate --features brick --lib --bins' "$T/cargo" || { echo 'FAIL merge gate lost the Brick compile check'; exit 1; }
+grep -q -- '^check --profile gate --locked --all-targets --features brick' "$T/cargo" || { echo 'FAIL merge gate lost the Brick compile check'; exit 1; }
 if grep -q -- '--features brick --test' "$T/cargo"; then echo 'FAIL merge gate ran Brick suites'; exit 1; fi
 pass=$((pass + 1))
 echo 'ok merge gate compiles the Brick build for ordinary changes'
@@ -277,6 +317,15 @@ for changed_path in src/sleep.rs tests/text_size.rs assets/fonts/new.ttf; do
     echo "ok slow suite text_size ran=$ran for $changed_path"
 done
 rm "$T/tree/tests/user_journeys.rs"
+# A font or text-fit change also runs the Brick's own text-fit cases (they caught a Retro font regression, 10.11.).
+for changed_path in assets/fonts/new.ttf src/font_style.rs src/kit.rs src/layouts.rs src/text_size.rs assets/i18n/de.tsv src/i18n.rs docs/user/settings.md; do
+    printf '%s\n' "$changed_path" >"$T/tree/.gate-changed"
+    : >"$T/cargo"
+    GATE_RUNNER=cargo sh "$T/tree/scripts/gate.sh" "$T/tree" >"$T/out" 2>&1 || { echo "FAIL $changed_path gate"; cat "$T/out"; exit 1; }
+    grep -q -- '--features brick --test text_size textfit_brick_031_' "$T/cargo" || { echo "FAIL $changed_path skipped the Brick text-fit cases"; cat "$T/cargo"; exit 1; }
+    pass=$((pass + 1))
+    echo "ok $changed_path runs the Brick text-fit cases"
+done
 
 printf '%s\n' docs/DEVELOPING.md >"$T/tree/.gate-changed"
 : >"$T/cargo"

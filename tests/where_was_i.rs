@@ -125,7 +125,7 @@ fn the_card_after_a_long_break_its_note_a_button_and_the_switch() {
     }
 
     // Every look shows it the same way; Easy plainly, without the time played.
-    for look in ["minimal", "split", "cards", "cabinet"] {
+    for look in ["split", "cabinet"] {
         let s = c.shot(look, "dark", "where-was-i", "en", "1240x1080", "");
         assert!(has(&s.visible, "Last played 3 weeks ago") && s.faults.is_empty(), "{look}: {:?} {:?}", s.visible, s.faults);
     }

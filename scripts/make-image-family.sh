@@ -4,11 +4,12 @@
 # A new family is a block of pins in scripts/image/pins.sh, its notes (deploy/image/README-<family>.txt.in,
 # SOURCE-OFFER-<family>.txt.in, firmware-licences-<family>/) and its boot checks in scripts/image/check-h700.sh.
 #
-#   scripts/make-image-family.sh --family H700|SM8550|RK3566 [--version V] [--bin-dir DIR] [--models "m1 m2"] [--source TEXT]
+#   scripts/make-image-family.sh --family H700|SM8550|SM4450|RK3566 [--version V] [--bin-dir DIR] [--models "m1 m2"] [--source TEXT]
 #                              [--release-url URL] [--out DIR] [--keep-work] [--no-check]
 #     --family       the block of pins (pins.sh <FAMILY>_*)
 #     --version      pocket-ui version (default: Cargo.toml); the binaries are built with POCKETUI_VERSION=V
 #     --bin-dir      take pocket-ui, pocket-core and pocket-splash from DIR instead of building them (must answer --version V)
+#     --system-file  reuse a repacked SYSTEM only when it matches the family's pinned MD5
 #     --gba-core     pinned ARM64 gpSP build folder, including licence and corresponding source
 #     --models       image names from pins.sh <FAMILY>_MODELS (default: all of them)
 #     --source, --release-url   as for scripts/make-image.sh
@@ -19,8 +20,10 @@
 # Starts from the family's official ROCKNIX image (20261001; the RK3566's 20261101), downloaded once into
 # downloads/rocknix-<tag>-<family>/ of the main checkout, or ROCKNIX_CACHE; sha256 pinned in scripts/image/pins.sh. It only
 # adds files: two initramfs hooks (deploy/image/), the notes, the source offer and the licence texts (pocket-ui-info/),
-# pocket-ui on STORAGE, on the H700 dtb.img (the model's device tree); on the RK3566 extlinux.conf names the model's tree. SYSTEM is repacked without the few files in pins.sh <FAMILY>_SYSTEM_REMOVE; the
-# partition table, KERNEL and what boots the card (the H700's U-Boot 8 KiB in) stay as shipped.
+# pocket-ui on STORAGE, on the H700 dtb.img (the model's device tree); on the RK3566 extlinux.conf names the model's tree; the
+# SM8550 Retroids (pins.sh SM8550_EFI_MODELS) also get GRUB, the Image, their tree and a BLS entry (scripts/make-sd-efi.sh). SYSTEM is repacked without the few files in pins.sh <FAMILY>_SYSTEM_REMOVE; the
+# partition table (but p1's type on the SM8550 Retroids: EFI system partition), KERNEL and what boots the card (the H700's
+# U-Boot 8 KiB in) stay as shipped.
 #
 # Only writes files below OUT and the download cache. Never touches a disk: no dd to /dev, no flashing.
 # Needs Docker (mtools, debugfs and squashfs-tools run in a container), cargo zigbuild unless --bin-dir.
@@ -34,6 +37,7 @@ TARGET=aarch64-unknown-linux-gnu
 FAMILY=
 VERSION=
 BIN_DIR=
+SYSTEM_FILE=
 GBA_CORE_DIR=
 SOURCE=
 RELEASE_URL=
@@ -46,6 +50,7 @@ while [ $# -gt 0 ]; do
     --family) FAMILY=$2; shift ;;
     --version) VERSION=$2; shift ;;
     --bin-dir) BIN_DIR=$2; shift ;;
+    --system-file) SYSTEM_FILE=$2; shift ;;
     --gba-core) GBA_CORE_DIR=$2; shift ;;
     --models) MODELS=$2; shift ;;
     --source) SOURCE=$2; shift ;;
@@ -58,7 +63,7 @@ while [ $# -gt 0 ]; do
   esac
   shift
 done
-case $FAMILY in H700 | SM8550 | RK3566) ;; *) echo "--family must be H700, SM8550 or RK3566, not '$FAMILY'" >&2; exit 2 ;; esac
+case $FAMILY in H700 | SM8550 | SM4450 | RK3566) ;; *) echo "--family must be H700, SM8550, SM4450 or RK3566, not '$FAMILY'" >&2; exit 2 ;; esac
 family_pins "$FAMILY"
 [ -n "$FAM_IMG" ] || { echo "this tree has no pins for the $FAMILY family" >&2; exit 2; }
 FAM=$(echo "$FAMILY" | tr 'A-Z' 'a-z')
@@ -134,8 +139,16 @@ for m in $MODELS; do
   fi
 done
 
-say "SYSTEM without $(echo $FAM_SYSTEM_REMOVE | wc -w) paths (pins.sh ${FAMILY}_SYSTEM_REMOVE; takes a while: zstd level 19)"
-docker run --rm -e FAMILY="$FAMILY" -e SQUASH_CPUS="${SQUASH_CPUS:-4}" -v "$W:/w" -v "$ROOT:/repo:ro" "$TOOLS" nice -n 19 sh /repo/scripts/image/build.sh strip-system
+if [ -n "$SYSTEM_FILE" ]; then
+  [ -f "$SYSTEM_FILE" ] || die "--system-file is not a file"
+  SYSTEM_FILE=$(cd "$(dirname "$SYSTEM_FILE")" && pwd)/$(basename "$SYSTEM_FILE")
+  [ "$SYSTEM_FILE" = "$W/SYSTEM" ] || cp "$SYSTEM_FILE" "$W/SYSTEM"
+  [ "$(in_tools md5sum /w/SYSTEM | cut -d' ' -f1)" = "$FAM_POCKET_SYSTEM_MD5" ] || die "--system-file does not match the pinned SYSTEM"
+  say "reusing pinned SYSTEM from $SYSTEM_FILE"
+else
+  say "SYSTEM without $(echo $FAM_SYSTEM_REMOVE | wc -w) paths (pins.sh ${FAMILY}_SYSTEM_REMOVE; zstd level 19)"
+  docker run --rm -e FAMILY="$FAMILY" -e SQUASH_CPUS="${SQUASH_CPUS:-4}" -v "$W:/w" -v "$ROOT:/repo:ro" "$TOOLS" nice -n 19 sh /repo/scripts/image/build.sh strip-system
+fi
 
 say "pocket-ui $VERSION"
 rm -rf "$W/bin"
@@ -166,6 +179,24 @@ if [ ! -f "$RL/LICENSE.md" ]; then
   mv "$RL.new" "$RL"
 fi
 
+# GRUB for the SM8550 Retroids, built once (scripts/make-sd-efi.sh: Debian's grub-efi-arm64-bin in Docker); each model's
+# tree and its two boot entries are put in per model below.
+GRUB_VERSION= GRUB_SRC= GRUB_SOURCE_URL=
+for m in $MODELS; do
+  is_efi_card "$FAMILY" "$m" || continue
+  say "GRUB (scripts/make-sd-efi.sh)"
+  MODEL=$m in_tools sh /repo/scripts/image/build.sh extract-efi
+  sm8550_efi_pins "$m"
+  rm -rf "$W/grub"
+  sh "$ROOT/scripts/make-sd-efi.sh" "$W/KERNEL" "$W/$EFI_DTB_FILE" "$W/grub" >/dev/null
+  [ "$(md5sum "$W/grub/boot/pocket/Image" | cut -d' ' -f1)" = "$SM8550_IMAGE_MD5" ] || die "the Image unpacked from KERNEL is not the pinned one"
+  GRUB_VERSION=$(cat "$W/grub/boot/grub/grub-efi-arm64-bin.version")
+  GRUB_SRC=$(sed -n 's/.*(source \([^ ]*\) \([^)]*\)).*/\1 \2/p' "$W/grub/boot/grub/grub-efi-arm64-bin.version")
+  GRUB_SOURCE_URL="https://snapshot.debian.org/package/${GRUB_SRC% *}/${GRUB_SRC#* }/"
+  echo "GRUB: $GRUB_VERSION"
+  break
+done
+
 NAMES=
 for MODEL in $MODELS; do
   NAME=pocket-ui-$VERSION-$MODEL
@@ -174,14 +205,27 @@ for MODEL in $MODELS; do
   RAM=DDR4
   ! is_ddr3 "$FAMILY" "$MODEL" || RAM=DDR3
   say "$NAME ($MODEL_NAME)"
+  EFI=0 EFI_DTB_FILE=
+  rm -rf "$W/sd-efi"
+  if is_efi_card "$FAMILY" "$MODEL"; then
+    EFI=1
+    in_tools sh /repo/scripts/image/build.sh extract-efi
+    sm8550_efi_pins "$MODEL"
+    cp -r "$W/grub" "$W/sd-efi"
+    rm -f "$W/sd-efi/boot/pocket/"*.dtb "$W/sd-efi/SHA256SUMS"
+    cp "$W/$EFI_DTB_FILE" "$W/sd-efi/boot/pocket/$EFI_DTB_FILE"
+    sed "s/rp6-noufs.dtb/$EFI_DTB_FILE/g" "$ROOT/deploy/sd-efi-sm8550/grub.cfg" >"$W/sd-efi/boot/grub/grub.cfg"
+    sed "s/rp6-noufs.dtb/$EFI_DTB_FILE/g" "$ROOT/deploy/sd-efi-sm8550/loader/entries/pocket-ui.conf" >"$W/sd-efi/loader/entries/pocket-ui.conf"
+  fi
   rm -rf "$W/info"
   mkdir -p "$W/info"
   for f in README SOURCE-OFFER; do
     sed -e "s|@VERSION@|$VERSION|g" -e "s|@ROCKNIX_TAG@|$ROCKNIX_TAG|g" -e "s|@ROCKNIX_COMMIT@|$ROCKNIX_COMMIT|g" \
       -e "s|@POCKET_UI_SOURCE@|$SOURCE|g" -e "s|@RELEASE_URL@|$RELEASE_URL|g" -e "s|@ISSUES_URL@|$ISSUES|g" \
       -e "s|@OS_NAME@|$POCKET_OS_NAME|g" -e "s|@MODEL_NAME@|$MODEL_NAME|g" -e "s|@IMAGE_NAME@|$NAME|g" -e "s|@DTB_NAME@|$DTB_NAME|g" \
-      -e "s|@RAM@|$RAM|g" \
-      "$ROOT/deploy/image/$f-$FAM.txt.in" | notes_blocks "$(has_games_drive "$FAMILY" "$MODEL" && echo 1 || echo 0)" >"$W/info/$f.txt"
+      -e "s|@RAM@|$RAM|g" -e "s|@GRUB_VERSION@|$GRUB_VERSION|g" -e "s|@GRUB_SOURCE_URL@|$GRUB_SOURCE_URL|g" \
+      -e "s|@EFI_DTB_FILE@|${EFI_DTB_FILE:-}|g" \
+      "$ROOT/deploy/image/$f-$FAM.txt.in" | notes_blocks "$(has_games_drive "$FAMILY" "$MODEL" && echo 1 || echo 0)" "$EFI" >"$W/info/$f.txt"
     if [ "$RAM" = DDR3 ] && [ "$f" = README ]; then
       { printf '%s\n\n' "Test build for $MODEL_NAME units with DDR3 memory (if the normal image stays black). Not tested on hardware yet."; cat "$W/info/$f.txt"; } >"$W/info/$f.new"
       mv "$W/info/$f.new" "$W/info/$f.txt"
@@ -216,7 +260,7 @@ for MODEL in $MODELS; do
   cp "$W/info/README.txt" "$OUT/$NAME.txt"
   NAMES="$NAMES $NAME"
 done
-rm -f "$W/image.img" "$W/base-ddr3.img"
+rm -rf "$W/image.img" "$W/base-ddr3.img" "$W/grub" "$W/sd-efi"
 (cd "$OUT" && for n in $NAMES; do shasum -a 256 "$n.img.xz" "$n.txt"; done >SHA256SUMS)
 [ $KEEP = 1 ] || rm -rf "$W"
 for n in $NAMES; do ls -l "$OUT/$n.img.xz" "$OUT/$n.txt"; done

@@ -61,8 +61,6 @@ pub fn around(view_w: f32, view_h: f32, hole: Option<(f32, f32, f32, f32)>) -> V
 const UNLOCK_FOR: Duration = Duration::from_millis(4000);
 const BADGE_WAIT: Duration = Duration::from_millis(900);
 /// The unlock card: badge size, padding, the text column's widest line.
-const BADGE: i32 = 72;
-const CARD_PAD: i32 = 18;
 const CARD_TEXT_MAX: i32 = 760;
 const CARD_ALPHA: f32 = 0.94;
 
@@ -746,32 +744,10 @@ fn upload(gl: &glow::Context, piece: &mut Piece, w: i32, h: i32, buf: &[u32]) {
 /// The unlock card: the badge on the left (a drawn ring in amber when there is none), "Achievement unlocked · 5 points"
 /// in grey over the title in white. Dark like every message over a game. Returns width, height and pixels.
 pub fn paint_unlock(text: &mut Text, u: &Unlock) -> (i32, i32, Vec<u32>) {
-    const SMALL: u32 = 24;
-    const TITLE: u32 = 34;
-    let head = match u.points {
-        0 => "Achievement unlocked".to_string(),
-        1 => "Achievement unlocked · 1 point".to_string(),
-        p => format!("Achievement unlocked · {p} points"),
-    };
-    let title = text.fit(Face::Title, TITLE, &u.title, CARD_TEXT_MAX);
-    let text_w = text.width(Face::Body, SMALL, &head).max(text.width(Face::Title, TITLE, &title));
-    let h = BADGE + 2 * CARD_PAD;
-    let w = CARD_PAD + BADGE + 20 + text_w + CARD_PAD + 8;
+    let (w, h) = crate::unlock_card::size(text, &u.title, u.points, CARD_TEXT_MAX);
     let mut buf = vec![KEY; (w * h) as usize];
     let mut c = Canvas::new(&mut buf, w as u32, h as u32);
-    crate::retro::window(&mut c, 0, 0, w, h, 26, PILL);
-    let (bx, by) = (CARD_PAD, CARD_PAD);
-    match &u.badge {
-        Some(img) => c.blit_scaled(img, bx, by, BADGE, BADGE),
-        None => {
-            crate::retro::pill(&mut c, bx, by, BADGE, BADGE, 14, 0x2a2a2e);
-            c.ring(bx + BADGE / 2, by + BADGE / 2, 20, 4, 0xd39a2c);
-            c.disc(bx + BADGE / 2, by + BADGE / 2, 7, 0xd39a2c);
-        }
-    }
-    let tx = bx + BADGE + 20;
-    text.draw(&mut c, Face::Body, SMALL, tx, CARD_PAD + 26, 0xaaa79f, &head);
-    text.draw(&mut c, Face::Title, TITLE, tx, CARD_PAD + 26 + 46, 0xffffff, &title);
+    crate::unlock_card::paint(&mut c, text, (0, 0), &u.title, u.points, u.badge.as_ref(), CARD_TEXT_MAX);
     (w, h, buf)
 }
 
@@ -928,7 +904,7 @@ mod tests {
         hud.achievement(1, "A very long achievement title that goes on and on and on and would never fit on one line of the card", 25, "");
         let u = hud.current_unlock().unwrap();
         let (w, h, buf) = paint_unlock(&mut text, u);
-        assert!(w <= CARD_PAD + BADGE + 20 + CARD_TEXT_MAX + CARD_PAD + 8 && h == BADGE + 2 * CARD_PAD, "{w}x{h}");
+        assert!(w <= crate::unlock_card::PAD + crate::unlock_card::BADGE + 20 + CARD_TEXT_MAX + crate::unlock_card::PAD + 8 && h == crate::unlock_card::BADGE + 2 * crate::unlock_card::PAD, "{w}x{h}");
         assert_eq!(buf[0], KEY, "rounded corner is see-through");
         assert!(buf.contains(&0xd39a2c), "the drawn mark stands in for a missing badge");
     }

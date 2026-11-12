@@ -1,6 +1,6 @@
 # Spanish interface: English source string<TAB>Spanish. Keyed by the exact English text the code paints.
 # Placeholders: {n} {m} {k} {n2}... a number, {s} {s2}... text kept as it is, {t} {t2}... text translated in turn.
-# How to add lines: docs/DEVELOPING.md "Translations". Terms: docs/i18n-glossary.md. Lines of a description that the
+# How to add lines: docs/dev/translations.md "Translations". Terms: docs/i18n-glossary.md. Lines of a description that the
 # code draws line by line are separate entries.
 
 
@@ -210,7 +210,9 @@ Preferred	Preferida
 Off >	Desactivado >
 On >	Activado >
 Lens & smart shelves	Lens y estantes inteligentes
-The Curator row and Just Play on Home: combine filters, and keep a filter as a smart shelf that updates itself.	La fila Curator y «Jugar ya» en Home: combina filtros y guarda un filtro como estante inteligente que se actualiza solo.
+The Curator row on Home: combine filters, and keep a filter as a smart shelf that updates itself.	La fila Curator en Home: combina filtros y guarda un filtro como estante inteligente que se actualiza solo.
+Just Play on Home	Jugar ya en Home
+A row on Home: A starts a game that suits you now, X shows it first, with a line why, and Right on that card brings another.	Una fila en Home: A inicia un juego que te viene bien ahora, X lo muestra antes con el motivo, Derecha en esa ficha trae otro.
 Echoes on the game card	Echoes en la ficha del juego
 More like this: games you own that play alike, each with a short reason.	Parecidos a este: juegos tuyos que se juegan parecido, cada uno con un breve motivo.
 Up next after a game	A continuación tras un juego
@@ -286,10 +288,6 @@ most played first	más jugados primero
 best rated first	mejor puntuados primero
 oldest first	más antiguos primero
 shortest first	más cortos primero
-Surprise me	Sorpréndeme
-From 1 game	De 1 juego
-From {n} games	De {n} juegos
-One game picked for you, and why. Right picks another.	Un juego elegido para ti, y por qué. Derecha elige otro.
 No games to pick from yet	Aún no hay juegos para elegir
 Another	Otro
 Never played	Nunca jugado
@@ -1101,7 +1099,6 @@ Dolphin's VBI skip: when the game runs slow, it skips frames to keep the sound s
 Rounded	Redondeada
 Retro Pixelify	Retro Pixelify
 Clean and narrow, the look pocket-ui started with.	Limpia y estrecha, la que tenía pocket-ui al principio.
-Pixel letters for titles and labels; the small text stays plain.	Letras de píxeles para títulos y etiquetas; el texto pequeño queda normal.
 Soft, round letters everywhere.	Letras suaves y redondas en todas partes.
 
 # --- Options: GameCube, Wii, 3DS
@@ -1712,7 +1709,7 @@ Fan off	Ventilador apagado
 Fan {n}%	Ventilador {n} %
 Fan {n} rpm	Ventilador {n} rpm
 charging	cargando
-FPS, sensors or Pixel Path (how a game's picture and sound reach you) over every game.	FPS, sensores o Pixel Path (cómo llegan a ti la imagen y el sonido del juego) sobre cada juego.
+The frame rate, or the sensors too, over every game.	La tasa de fotogramas, o también los sensores, sobre cada juego.
 How strongly games shake the console, for games that rumble.	Intensidad de la vibración en los juegos que la usan.
 Off keeps it still.	Desactivado la deja quieta.
 Low	Baja
@@ -2086,7 +2083,7 @@ Leave pocket-ui?	¿Salir de pocket-ui?
 Open EmulationStation?	¿Abrir EmulationStation?
 Reset pocket-ui settings?	¿Restablecer ajustes de pocket-ui?
 Restart pocket-ui starts it afresh. {t}	Reiniciar pocket-ui lo inicia de cero. {t}
-Your look, Curator, favourites, play history, covers and what the Store installed move to {t}. Nothing is deleted.	Tu vista, Curator, favoritos, historial de juego, portadas y lo que instaló la Store pasan a {t}. No se borra nada.
+Your look, Curator, favourites, play history, covers and downloaded extras move to {t}. Nothing is deleted.	Tu vista, Curator, favoritos, historial de juego, portadas y extras descargados pasan a {t}. No se borra nada.
 a backup folder beside them	una carpeta de copia junto a ellos
 Games, saves and the passwords for file sharing and remote access stay. pocket-ui then starts like new, with the first-start setup.	Juegos, partidas y las contraseñas de compartir archivos y acceso remoto se quedan. Luego pocket-ui se inicia como nuevo, con la configuración del primer inicio.
 Restart normally	Reiniciar normalmente
@@ -2150,14 +2147,11 @@ Only fades. Nothing slides or grows.	Solo fundidos.
 No animation at all.	Sin ninguna animación.
 Handhelds	Portátiles
 Every console	Todas las consolas
-Minimal	Minimalista
 Split	Dividida
 Cards	Tarjetas
 Cabinet	Vitrina
 Your games standing on a shelf. The one you pick shows its cover.	Tus juegos en un estante. El que eliges muestra su portada.
-Just the names, nothing else.	Solo los nombres, nada más.
 List on the left, details on the right.	Lista a la izquierda, detalles a la derecha.
-Big cards you flip through sideways.	Tarjetas grandes que pasas hacia los lados.
 Your games in their cases on a wooden shelf. Pull one out to see its cover.	Tus juegos en sus cajas sobre un estante de madera. Saca uno para ver su portada.
 Dark	Oscuro
 Light	Claro
@@ -3009,7 +3003,7 @@ Look, language, text, night light, frames, sounds, LEDs, animations, extras.	Vis
 On start, quit, buttons, over the game, performance, battery, achievements, Curator.	Al iniciar, continuar, botones, sobre el juego, rendimiento, batería, logros, Curator.
 Add games, starter pack, extras, screenshots, the Store, tools, PC streaming.	Añadir juegos, pack inicial, extras, capturas, la Store, herramientas, streaming desde PC.
 Add games, starter pack, extras, screenshots, tools, PC streaming.	Añadir juegos, pack inicial, extras, capturas, herramientas, streaming desde PC.
-Wi-Fi, Bluetooth, USB file transfer, Tailscale, Sync, remote access, web companion.	Wi-Fi, Bluetooth, Transferencia por USB, Tailscale, Sync, acceso remoto, compañero web.
+Wi-Fi, Bluetooth, USB file transfer, web companion.	Wi-Fi, Bluetooth, Transferencia por USB, compañero web.
 Time, updates, backup and reset, the Tour, the manual, about.	Hora, actualizaciones, copia y restablecer, el Recorrido, el manual, acerca de.
 Web companion	Compañero web
 Your games, play time and uploads in a browser.	Tus juegos, tiempo de juego y subidas en un navegador.
@@ -3178,7 +3172,7 @@ or http:{s}	o http:{s}
 Not listening	Sin escuchar
 {t} It tries again every 30 seconds.	{t} Lo intenta de nuevo cada 30 segundos.
 Waiting for Tailscale	Esperando a Tailscale
-It listens only on the Tailscale network. Switch Tailscale on and sign in (Settings › Connections › Tailscale).	Solo escucha en la red Tailscale. Activa Tailscale e inicia sesión (Ajustes › Conexiones › Tailscale).
+It listens only on the Tailscale network. Switch Tailscale on and sign in (Settings › Help & tools › For tinkerers › Tailscale).	Solo escucha en la red Tailscale. Activa Tailscale e inicia sesión (Ajustes › Ayuda y herramientas › Para trastear › Tailscale).
 Pair a browser	Vincular un navegador
 No code: the Pocket gave no random numbers.	Sin código: el Pocket no dio números aleatorios.
 1.  Scan this with your phone's camera,	1.  Escanea esto con la cámara del teléfono,
@@ -3581,10 +3575,10 @@ Saves changed on two devices before they could sync. Choose which version to kee
 Saves changed on two devices. Choose which to keep.	Cambiaron en dos dispositivos. Elige cuál conservar.
 Keeping…	Conservando…
 Kept. The other version is in {s}.	Conservada. La otra versión está en {s}.
-A save has two versions: {s} and {n} more – choose in Settings › Connections › Sync	Una partida tiene dos versiones: {s} y {n} más – elige en Ajustes › Conexiones › Sync
-A memory card has two versions: {s} and {n} more – choose in Settings › Connections › Sync	Una tarjeta de memoria tiene dos versiones: {s} y {n} más – elige en Ajustes › Conexiones › Sync
-A save has two versions: {s} – choose in Settings › Connections › Sync	Una partida tiene dos versiones: {s} – elige en Ajustes › Conexiones › Sync
-A memory card has two versions: {s} – choose in Settings › Connections › Sync	Una tarjeta de memoria tiene dos versiones: {s} – elige en Ajustes › Conexiones › Sync
+A save has two versions: {s} and {n} more – choose in Settings › Help & tools › For tinkerers › Sync	Una partida tiene dos versiones: {s} y {n} más – elige en Ajustes › Ayuda y herramientas › Para trastear › Sync
+A memory card has two versions: {s} and {n} more – choose in Settings › Help & tools › For tinkerers › Sync	Una tarjeta de memoria tiene dos versiones: {s} y {n} más – elige en Ajustes › Ayuda y herramientas › Para trastear › Sync
+A save has two versions: {s} – choose in Settings › Help & tools › For tinkerers › Sync	Una partida tiene dos versiones: {s} – elige en Ajustes › Ayuda y herramientas › Para trastear › Sync
+A memory card has two versions: {s} – choose in Settings › Help & tools › For tinkerers › Sync	Una tarjeta de memoria tiene dos versiones: {s} – elige en Ajustes › Ayuda y herramientas › Para trastear › Sync
 A save has two versions: {s} – open the game's card to choose	Una partida tiene dos versiones: {s} – abre la ficha del juego para elegir
 A memory card has two versions: {s} – open the game's card to choose	Una tarjeta de memoria tiene dos versiones: {s} – abre la ficha del juego para elegir
 Nothing waiting	Nada pendiente
@@ -3859,6 +3853,15 @@ Saves a file with the logs and settings that help find a problem. You attach it 
 ROCKNIX's own menu, after a warning. Restart the Pocket to come back.	El menú propio de ROCKNIX, tras una advertencia. Reinicia el Pocket para volver.
 Writing the report…	Escribiendo el informe…
 Report saved	Informe guardado
+One text with your device, cores, sound counters and the end of the logs. You choose where it goes; the app sends nothing.	Un texto con el dispositivo, los núcleos, los contadores de sonido y el final de los registros. Tú eliges adónde va; la app no envía nada.
+The share sheet is open. Choose where the report goes, for example a message to yourself.	El menú de compartir está abierto. Elige adónde va el informe, por ejemplo un mensaje para ti.
+Copied. Paste it into your report on GitHub.	Copiado. Pégalo en tu informe en GitHub.
+Android has no app to share with. Use Copy the report instead.	Android no tiene ninguna app para compartir. Usa «Copiar el informe».
+Android would not copy the report. Use Share the report instead.	Android no copió el informe. Usa «Compartir el informe».
+The report could not be written. Try again after restarting the app.	No se pudo escribir el informe. Inténtalo de nuevo tras reiniciar la app.
+Left out: addresses, passwords, tokens, folder names. Games show as a short code, so name yours if it matters.	Se omiten: direcciones, contraseñas, tokens, nombres de carpetas. Los juegos salen como código; nombra el tuyo si importa.
+Share the report	Compartir el informe
+Copy the report	Copiar el informe
 Report not saved	Informe no guardado
 In the reports folder of the games share (roms/reports on the SD card).	En la carpeta de informes del recurso compartido de juegos (roms/reports en la tarjeta SD).
 Attach this file to your report on GitHub.	Adjunta este archivo a tu informe en GitHub.
@@ -4232,10 +4235,12 @@ Install {s} from its official site or store and they start from here. Until then
 {s} starts in RetroArch, with its {s2} core.	{s} se inicia en RetroArch, con su core {s2}.
 Download that core once inside RetroArch. pocket-ui can't see into another app, so it can't say whether it is there.	Descarga ese core una vez dentro de RetroArch. pocket-ui no ve el interior de otra app, así que no puede decir si está.
 {s} needs a BIOS file from your own console.	{s} necesita un archivo BIOS de tu propia consola.
-{s} needs keys and firmware from your own console.	{s} necesita claves y firmware de tu propia consola.
 {s} asks for it and keeps it in its own folder. pocket-ui can't see into another app, so it can't say whether it is there.	{s} lo pide y lo guarda en su propia carpeta. pocket-ui no ve el interior de otra app, así que no puede decir si está.
-The files in your bios folder aren't read.	Los archivos de tu carpeta bios no se leen.
-pocket-ui's own player needs no BIOS, and each emulator app keeps its own: add the file there.	El emulador propio de pocket-ui no necesita BIOS, y cada app de emulador guarda la suya: añade el archivo allí.
+Only PlayStation BIOS files are read from your bios folder.	De tu carpeta bios solo se leen los archivos BIOS de PlayStation.
+The others are for emulator apps, and each keeps its own: add them there.	Los demás son para apps de emulador, y cada una guarda los suyos: añádelos allí.
+No PlayStation BIOS found. Games start with the player's built-in stand-in, and a few need the real one.	No se encontró ninguna BIOS de PlayStation. Los juegos arrancan con el sustituto integrado del emulador, y algunos necesitan la real.
+Put a BIOS such as scph5501.bin in a folder named bios beside your games.	Pon una BIOS como scph5501.bin en una carpeta llamada bios junto a tus juegos.
+No PlayStation BIOS. If a game hangs, put one in a folder named bios.	Sin BIOS de PlayStation. Si un juego falla, pon una en la carpeta bios.
 Reading your folders. Nothing is changed.	Leyendo tus carpetas. No se cambia nada.
 Can't read your folders	No se pueden leer tus carpetas
 Your games are safe. Try again in a moment.	Tus juegos están a salvo. Inténtalo de nuevo en un momento.
@@ -4511,14 +4516,14 @@ Changes show at once and stay for this game. Left or right: every game on this c
 Changes show at once and stay for every game on this console. Left or right: this game only.	Los cambios se ven al instante y se quedan en todos los juegos de esta consola. Izquierda o derecha: solo este juego.
 Press A again to restore the defaults. B keeps your settings.	Pulsa A otra vez para restaurar los valores. Con B se quedan tus ajustes.
 
-# --- Zoom, Hold to toggle, Easy to read (pause menu, Options → Controls, the Tour)
+# --- Zoom, Hold to toggle, Big text (pause menu, Options → Controls, the Tour)
 Zoom	Lupa
 The picture larger, to read small text. Move with the D-pad.	La imagen más grande, para leer texto pequeño. Muévela con la cruceta.
 Move	Mover
 Hold to toggle	Mantener pulsado con una pulsación
 Pick a button: one press holds it down, the next lets go.	Elige un botón: una pulsación lo mantiene pulsado, la siguiente lo suelta.
 For buttons you would hold, like run.	Para botones que habría que mantener, como correr.
-Easy to read	Fácil de leer
+Big text	Texto grande
 larger text and calmer menus	texto más grande y menús más tranquilos
 Larger text, menus that only fade, and Zoom in the pause menu. Switches Text size and Motion together.	Texto más grande, menús que solo se funden y lupa en pausa. Cambia Tamaño de texto y Movimiento a la vez.
 Settings › Look › Text size, Settings › Sound & feel › Motion	Ajustes › Aspecto › Tamaño de texto, Ajustes › Sonido y tacto › Movimiento
@@ -4612,8 +4617,7 @@ Checking installed cores and data…	Comprobando núcleos y datos instalados…
 The update's asset list is invalid. Nothing was changed.	La lista de componentes no es válida. No se cambió nada.
 The update's core or data file is damaged. Nothing was changed.	Un núcleo o archivo de datos está dañado. No se cambió nada.
 Layout, systems, extras, appearance, colours, style, text size, screen colour, night light.	Disposición, sistemas, extras, apariencia, colores, estilo, tamaño de texto, color de pantalla, luz nocturna.
-How your games stand: Shelf, Easy, Minimal, Split, Cards or Cabinet, with a live preview.	Cómo se colocan tus juegos: Estantería, Fácil, Mínima, Dividida, Tarjetas o Mueble, con vista previa.
-First-start setup, how you like to play, Tour, manual, tools, test buttons, Store, report a problem, about.	Configuración inicial, cómo te gusta jugar, Recorrido, manual, herramientas, probar botones, Store, informar, acerca de.
+How your games stand: Shelf, Easy, Split or Cabinet, with a live preview.	Cómo se colocan tus juegos: Estantería, Fácil, Dividida o Mueble, con vista previa.
 First-start setup	Configuración inicial
 Language, Wi-Fi, your games and the look again, step by step. Your games and saves stay.	Idioma, Wi-Fi, tus juegos y el aspecto otra vez, paso a paso. Tus juegos y partidas se quedan.
 Copy them over Wi-Fi from a computer or phone, or use a second SD card. If Windows offers to format a card, press Cancel.	Cópialos por Wi-Fi desde un ordenador o un móvil, o usa una segunda tarjeta SD. Si Windows ofrece formatear una tarjeta, pulsa Cancelar.
@@ -4653,7 +4657,7 @@ A finishes, B stays here.	A termina, B se queda aquí.
 Stay	Quedarse
 Kids Mode is there whenever you want it: Settings › System › Kids mode.	El modo infantil está cuando quieras en Ajustes › Sistema › Modo infantil.
 Larger text and calmer menus, on every page.	Texto más grande y menús más tranquilos.
-Larger text and calmer menus. L2 on every page.	Texto más grande y menús más tranquilos. L2 en cada página.
+Larger text and calmer menus. L2 on every page.	Letra grande, menús tranquilos. L2 siempre.
 Finish	Terminar
 Colours and style	Colores y estilo
 Style…	Estilo…
@@ -4700,7 +4704,7 @@ Messages about a fresh start or a saved moment stay inside the screen as the gam
 This game didn't start on pocket-core, so it runs with {t} for this launch. Next time pocket-core will try again.	Este juego no arrancó en pocket-core y esta vez funciona con {t}. La próxima vez se volverá a intentar con pocket-core.
 Its moment is kept under Load, after the last slot	El momento se conserva en Cargar, después de la última ranura
 Its moment is kept until it can move into a free slot	El momento se conserva hasta que se pueda mover a una ranura libre
-A simple shelf for a child, set up after your games.	Una estantería sencilla para un niño, se prepara después de tus juegos.
+A simple shelf for a child, set up after your games.	Estantería infantil tras añadir juegos.
 Choose another…	Elegir otra…
 Couldn't tell where you are. Choose your time zone below.	No se pudo saber dónde estás. Elige tu zona horaria abajo.
 Other places…	Otros lugares…
@@ -4724,6 +4728,7 @@ Choose the GBA console: Game Boy Advance or Game Boy Advance SP. Changes its pic
 Game Boy Advance	Game Boy Advance
 Game Boy Advance SP	Game Boy Advance SP
 Couldn't keep this moment. Your earlier saves are kept.	No se pudo guardar este momento. Tus partidas anteriores se conservan.
+A save state couldn't be put back in its place on the SD card. It is kept and goes back the next time this game starts.	Un estado guardado no pudo volver a su sitio en la tarjeta SD. Se conserva y vuelve la próxima vez que se inicie este juego.
 Couldn't load: Before load couldn't be saved. Your game is unchanged.	No se pudo cargar: no se pudo guardar Antes de cargar. Tu partida sigue igual.
 Which button of the Deck does what	Qué hace cada botón de la Deck
 Android APK	APK de Android
@@ -4824,7 +4829,7 @@ Settings › Games	Ajustes › Juegos
 Retry	Reintentar
 Box art, game pictures and starter pack.	Carátulas, imágenes de juego y pack inicial.
 Box art, PortMaster games, cheats.	Carátulas, juegos de PortMaster y trucos.
-Games, game check, extras, EmulationStation, screenshots, Curator, PC.	Juegos, revisión de juegos, extras, EmulationStation, capturas, Curator, PC.
+Games, game check, extras, EmulationStation, screenshots, Curator.	Juegos, revisión de juegos, extras, EmulationStation, capturas, Curator.
 Box art, PortMaster games and starter pack.	Carátulas, juegos de PortMaster y pack inicial.
 A few free games to get you started. Pick one or take them all.	Unos juegos gratuitos para empezar. Elige uno o descárgalos todos.
 More to get any time: Settings › Games › Extras.	Consigue más cuando quieras: Ajustes › Juegos › Extras.
@@ -4842,3 +4847,194 @@ Needs {n} MiB	Necesita {n} MiB
 Not enough space on the SD card: {n} MiB needed, {m} MiB free.	No hay espacio suficiente en la tarjeta SD: se necesitan {n} MiB, hay {m} MiB libres.
 Not enough space on the SD card: {n} MiB free, {m} MiB needed.	No hay espacio suficiente en la tarjeta SD: hay {n} MiB libres, se necesitan {m} MiB.
 Could not check free card space.	No se pudo comprobar el espacio libre de la tarjeta.
+# --- Android: Settings → Saves (save_transfer, android/src/saves_page.rs)
+Save backup	Copia de partidas
+Export saves	Exportar partidas
+Import saves	Importar partidas
+Keep this phone's saves	Conservar las del teléfono
+Use the backup's saves	Usar las de la copia
+Your saves and save states are kept inside this app, and Android deletes them when the app is removed. Export writes them into one file. Import brings them back.	Tus partidas y estados guardados están dentro de esta app, y Android los borra cuando se elimina la app. Exportar los escribe en un archivo. Importar los trae de vuelta.
+Writing the backup. Choose where it goes when Android asks.	Escribiendo la copia. Elige dónde va cuando Android pregunte.
+Reading the backup. Choose the file when Android asks.	Leyendo la copia. Elige el archivo cuando Android pregunte.
+Nothing was changed.	No se cambió nada.
+The backup could not be written. Your saves are as they were. Try another folder.	No se pudo escribir la copia. Tus partidas siguen como estaban. Prueba con otra carpeta.
+The backup could not be read. Your saves are as they were.	No se pudo leer la copia. Tus partidas siguen como estaban.
+Not enough room on this phone for the backup's saves. Nothing was changed.	No hay espacio suficiente en este teléfono para las partidas de la copia. No se cambió nada.
+Games in this backup: {n}	Juegos en esta copia: {n}
+Of these, already with saves on this phone: {n}	De ellos, ya con partidas en este teléfono: {n}
+This file is not a pocket-ui save backup.	Este archivo no es una copia de partidas de pocket-ui.
+This backup was made by a newer pocket-ui. Update the app first.	Esta copia la hizo un pocket-ui más reciente. Actualiza primero la app.
+This backup holds no saves.	Esta copia no contiene partidas.
+No saves yet. They appear here after you have played.	Aún no hay partidas. Aparecen aquí cuando hayas jugado.
+1 game has its saves back.	1 juego ha recuperado sus partidas.
+{n} games have their saves back.	{n} juegos han recuperado sus partidas.
+1 game kept the saves from this phone.	1 juego conservó las partidas de este teléfono.
+{n} games kept the saves from this phone.	{n} juegos conservaron las partidas de este teléfono.
+Backup written: the saves of 1 game.	Copia escrita: las partidas de 1 juego.
+Backup written: the saves of {n} games.	Copia escrita: las partidas de {n} juegos.
+# --- Android: saves copied into the games folder (save_copy, android/src/saves_page.rs)
+Saved copies	Copias
+Copying	Copiando
+Folder missing	Falta la carpeta
+Copies of your saves are kept in pocket-ui saves, inside your games folder. They stay when the app is removed.	Las copias de tus partidas están en «pocket-ui saves», dentro de tu carpeta de juegos. Se conservan cuando se quita la app.
+Copies are off: pocket-ui may not write into your games folder. Choose the folder again and allow changes.	Las copias están desactivadas: pocket-ui no puede escribir en tu carpeta de juegos. Elige la carpeta otra vez y permite los cambios.
+The copies' folder can't be reached. Is the card in, and the folder still there?	No se puede acceder a la carpeta de copias. ¿Está la tarjeta puesta y sigue ahí la carpeta?
+Copying your saves.	Copiando tus partidas.
+pocket-ui may not write into your folder. Choose the folder again and allow changes to copy your saves.	pocket-ui no puede escribir en tu carpeta. Elige la carpeta otra vez y permite los cambios para copiar tus partidas.
+The folder for your saves' copies can't be reached. Is the card in, and the folder still there?	No se puede acceder a la carpeta de las copias de tus partidas. ¿Está la tarjeta puesta y sigue ahí la carpeta?
+Your saves could not be copied to your folder.	No se pudieron copiar tus partidas a tu carpeta.
+1 game has its saves back from your folder.	1 juego ha recuperado sus partidas de tu carpeta.
+{n} games have their saves back from your folder.	{n} juegos han recuperado sus partidas de tu carpeta.
+Copied the saves of 1 game to your folder.	Se copiaron las partidas de 1 juego a tu carpeta.
+Copied the saves of {n} games to your folder.	Se copiaron las partidas de {n} juegos a tu carpeta.
+1 game's saves differ from the copy in your folder. Nothing was overwritten.	Las partidas de 1 juego difieren de la copia de tu carpeta. No se sobrescribió nada.
+{n} games' saves differ from the copies in your folder. Nothing was overwritten.	Las partidas de {n} juegos difieren de las copias de tu carpeta. No se sobrescribió nada.
+Show the pick	Mostrar el juego
+Experimental	Experimental
+Experimental: compatibility, sound and saves are still being tested.	Experimental: la compatibilidad, el sonido y las partidas guardadas siguen en pruebas.
+The emulator's files could not be prepared.	No se pudieron preparar los archivos del emulador.
+This game plays in RetroArch, which isn't installed. Get it from retroarch.com or Google Play, then start the game again.	Este juego se juega en RetroArch, que no está instalado. Consíguelo en retroarch.com o en Google Play y vuelve a iniciar el juego.
+PlayStation 2 games play in ARMSX2, which isn't installed. Get it from github.com/ARMSX2/ARMSX2 (Releases), add your console's BIOS in it once, then start the game again.	Los juegos de PlayStation 2 se juegan en ARMSX2, que no está instalado. Consíguelo en github.com/ARMSX2/ARMSX2 (Releases), añade una vez la BIOS de tu consola y vuelve a iniciar el juego.
+GameCube and Wii games play in Dolphin, which isn't installed. Get it from F-Droid, Google Play or dolphin-emu.org, then start the game again.	Los juegos de GameCube y Wii se juegan en Dolphin, que no está instalado. Consíguelo en F-Droid, Google Play o dolphin-emu.org y vuelve a iniciar el juego.
+PSP games play in PPSSPP, which isn't installed. Get it from ppsspp.org or Google Play, then start the game again.	Los juegos de PSP se juegan en PPSSPP, que no está instalado. Consíguelo en ppsspp.org o en Google Play y vuelve a iniciar el juego.
+PlayStation games play in DuckStation, which isn't installed. Get it from Google Play, then start the game again.	Los juegos de PlayStation se juegan en DuckStation, que no está instalado. Consíguelo en Google Play y vuelve a iniciar el juego.
+3DS games play in Azahar, which isn't installed. Get it from azahar-emu.org or Google Play, then start the game again.	Los juegos de 3DS se juegan en Azahar, que no está instalado. Consíguelo en azahar-emu.org o en Google Play y vuelve a iniciar el juego.
+Xbox games play in hakuX, which isn't installed. Get it from github.com/rfandango/hakuX (Releases), choose your Xbox games folder in it once, then start the game again.	Los juegos de Xbox se juegan en hakuX, que no está instalado. Consíguelo en github.com/rfandango/hakuX (Releases), elige una vez en él tu carpeta de juegos de Xbox y vuelve a iniciar el juego.
+App missing	Falta la app
+# 0.4: the looks Minimal and Cards became Split (src/settings.rs RETIRED_LOOK_NOTE)
+Minimal and Cards are gone in this version, so your games are in the Split look now. Settings › Look › Layout changes it.	Minimalista y Tarjetas ya no existen en esta versión, así que tus juegos están ahora en la vista Dividida. Ajustes › Aspecto › Disposición lo cambia.
+# Android Settings: Curator as a fifth tab, off until switched on (android/src/ui.rs Setting::CuratorTab)
+Curator tab	Pestaña Curator
+Put it on a game from its card: X, then Stickers.	Ponla en un juego desde su ficha: X y luego Pegatinas.
+The little touches, each on its own: real cases, stickers, printed discs and more.	Los pequeños detalles, uno a uno: cajas reales, stickers, discos impresos y más.
+Barlow or Pixel type, or Retro: pixel letters, frames and icons everywhere.	Letra Barlow o Pixel, o Retro: letras de píxeles, marcos e iconos en todas partes.
+First-start setup, how you like to play, Tour, manual, for tinkerers, tools, test buttons, report a problem, about.	Configuración inicial, jugar, recorrido, manual, trastear, herramientas, probar botones, problema, acerca de.
+Language, time, sleep & power, kids mode, updates, storage, backup & reset.	Idioma, hora, suspensión y encendido, modo infantil, actualizaciones, almacenamiento, copia y restablecer.
+Wi-Fi, Bluetooth, web companion.	Wi-Fi, Bluetooth, compañero web.
+Lens, smart shelves, Echoes, versions and play history.	Lens, estantes inteligentes, Echoes, versiones e historial de juego.
+Back to NextUI	Volver a NextUI
+New versions of pocket-ui.	Versiones nuevas de pocket-ui.
+Stickers	Pegatinas
+Development build: install a release package to use app updates.	Versión de desarrollo: instala un paquete de lanzamiento para usar las actualizaciones de la app.
+pocket-ui {s}-dev ({s2})	pocket-ui {s}-dev ({s2})
+For tinkerers	Para trastear
+Tailscale, Sync, remote access, PC streaming.	Tailscale, Sync, acceso remoto, streaming desde PC.
+Tailscale, Sync, remote access and PC streaming.	Tailscale, Sync, acceso remoto y PC streaming.
+More systems?	¿Más sistemas?
+Choose extra systems to download on Wi-Fi. All are optional. You can add them later in Extras.	Elige sistemas adicionales para descargar por wifi. Todos son opcionales. Puedes añadirlos después en Extras.
+Download now	Descargar ahora
+B cancels	B cancela
+This system is not installed yet. Choose Download now to add it on Wi-Fi.	Este sistema aún no está instalado. Elige Descargar ahora para añadirlo por wifi.
+System installed. You can start your game now.	Sistema instalado. Ya puedes iniciar tu juego.
+The system download channel is not available yet.	El canal de descarga de sistemas aún no está disponible.
+Could not read the system list. Try again on Wi-Fi.	No se pudo leer la lista de sistemas. Inténtalo de nuevo por wifi.
+This system is not in the download channel.	Este sistema no está en el canal de descarga.
+The system list has changed. Update the app and try again.	La lista de sistemas ha cambiado. Actualiza la app e inténtalo de nuevo.
+Download cancelled. Choose it again to continue.	Descarga cancelada. Elígela de nuevo para continuar.
+Invalid Android core package	El paquete del sistema no es válido.
+Invalid Android core archive	El archivo del sistema no es válido.
+Core checksum does not match	La suma de comprobación del emulador no coincide.
+Core source reference does not match	La referencia al código fuente del emulador no coincide.
+Missing PSP system files	Faltan archivos del sistema PSP.
+Invalid PSP system file	Un archivo del sistema PSP no es válido.
+PSP system file checksum does not match	La suma de comprobación de un archivo del sistema PSP no coincide.
+The Android update list is invalid. Nothing was installed.	La lista de actualizaciones de Android no es válida. No se ha instalado nada.
+Cancel download	Cancelar descarga
+Optional systems. Wi-Fi only. You can add them later in Extras.	Sistemas opcionales. Solo por wifi. También puedes añadirlos después en Extras.
+
+# Android signed APK updates
+Connect to Wi-Fi to download updates. Nothing was installed.	Conéctate a una red Wi-Fi para descargar actualizaciones. No se instaló nada.
+This APK has a different signing key. Nothing was installed.	Esta APK tiene otra clave de firma. No se instaló nada.
+Cancelled. Nothing was installed.	Cancelado. No se instaló nada.
+Allow pocket-ui to install updates, then return here.	Permite que pocket-ui instale actualizaciones y vuelve aquí.
+Android couldn't open the update installer. Nothing was installed.	Android no pudo abrir el instalador. No se instaló nada.
+There isn't enough space for this update. Nothing was installed.	No hay espacio suficiente para esta actualización. No se instaló nada.
+This APK isn't the offered pocket-ui update. Nothing was installed.	Esta APK no es la actualización de pocket-ui ofrecida. No se instaló nada.
+This update is older than the installed app. Nothing was installed.	Esta actualización es anterior a la app instalada. No se instaló nada.
+Update permission wasn't granted. Nothing was installed.	No se concedió permiso para actualizar. No se instaló nada.
+Confirm the update in Android. Your games and settings stay.	Confirma la actualización en Android. Tus juegos y ajustes se conservan.
+Android couldn't install this update. Nothing was installed.	Android no pudo instalar esta actualización. No se instaló nada.
+Update pocket-ui now? Your games and settings stay.	¿Actualizar pocket-ui ahora? Tus juegos y ajustes se conservan.
+Connecting to the download server…	Conectando con el servidor de descarga…
+Finish or cancel the update before starting a game.	Termina o cancela la actualización antes de iniciar un juego.
+After updating, pocket-ui closes. Open it again; your games and settings stay.	pocket-ui se cierra al actualizar. Ábrelo otra vez; tus juegos y ajustes se conservan.
+Confirm in Android. pocket-ui closes afterwards; open it again.	Confirma en Android. pocket-ui se cierra después; ábrelo otra vez.
+Updated to {s}	Actualizado a {s}
+
+# Direct Android documents
+Game changed while opening	El juego cambió mientras se abría
+Invalid ROM name	Nombre de archivo de juego no válido
+Empty ROM	El archivo del juego está vacío
+The game's document could not be opened	No se pudo abrir el archivo del juego
+
+Choose the folder that contains your system folders, or a system folder such as psp or gba.	Elige la carpeta que contiene las carpetas de tus sistemas, o una carpeta de sistema como psp o gba.
+No new games in that folder.	No hay juegos nuevos en esa carpeta.
+
+
+Saturn needs a BIOS. Put saturn_bios.bin, sega_101.bin or mpr-17933.bin in a selected folder, then run Game check.	Saturn necesita una BIOS. Añade saturn_bios.bin, sega_101.bin o mpr-17933.bin a una carpeta seleccionada y ejecuta Revisar juegos.
+No Dreamcast BIOS. Flycast uses its built-in replacement. For better compatibility, add dc_boot.bin and dc_flash.bin to a selected bios folder.	No hay BIOS de Dreamcast. Flycast usa su reemplazo integrado. Para mayor compatibilidad, añade dc_boot.bin y dc_flash.bin a una carpeta bios seleccionada.
+PlayStation, Saturn and Dreamcast BIOS files are read from your bios folder.	De tu carpeta bios se leen las BIOS de PlayStation, Saturn y Dreamcast.
+Add your own BIOS to a selected folder, then run Game check again.	Añade tu propia BIOS a una carpeta seleccionada y ejecuta Revisar juegos de nuevo.
+This core needs OpenGL ES	Este núcleo necesita OpenGL ES
+No new games there. Choose the folder with your system folders.	Ahí no hay juegos nuevos. Elige la carpeta con tus sistemas.
+Play with the D-pad and the buttons.	Se juega con la cruceta y los botones.
+Pause menu	Menú de pausa
+The buttons on the screen have the same names.	Los botones de la pantalla se llaman igual.
+Less sunlight	Menos sol
+More sunlight	Más sol
+Pause	Pausa
+Coming soon	Próximamente
+These systems are coming to this app later. There is nothing to download yet.	Estos sistemas llegarán más adelante a esta app. Todavía no hay nada que descargar.
+This system is coming soon. It can't be downloaded yet.	Este sistema llegará pronto. Todavía no se puede descargar.
+Patches	Parches
+In the app	En la app
+Optional download	Descarga opcional
+pocket-ui is free software (GPL version 2 or later). The emulators in it are separate programs with their own licences. Choose one to see its licence, where its source is and what was changed in it.	pocket-ui es software libre (GPL versión 2 o posterior). Los emuladores que lleva son programas aparte con sus propias licencias. Elige uno para ver su licencia, dónde está su código fuente y qué se cambió en él.
+The complete source of every emulator, with the patches, is next to the APK on the release page. Ask for it any time: open an issue titled "Source request".	El código fuente completo de cada emulador, con los parches, está junto al APK en la página de la versión. Puedes pedirlo en cualquier momento: abre un issue titulado "Source request".
+The list of licences could not be read. The texts are in the app's package and next to the APK on the release page.	No se pudo leer la lista de licencias. Los textos están en el paquete de la app y junto al APK en la página de la versión.
+# Settings → Plays with (Android)
+Plays with	Se juega con
+Another app starts the game and brings you back here. Continue and the pause menu are then that app's own.	Otra app inicia el juego y te trae de vuelta aquí. Continuar y el menú de pausa son entonces de esa app.
+Nothing to choose yet: none of your systems has another emulator app on this phone (RetroArch, PPSSPP and DuckStation work). Until then pocket-ui's own player starts every game.	Aún no hay nada que elegir: ninguno de tus sistemas tiene otra app de emulador en este móvil (sirven RetroArch, PPSSPP y DuckStation). Hasta entonces, el reproductor propio de pocket-ui inicia todos los juegos.
+Experimental in pocket-ui's player: {s}	Experimental en el reproductor de pocket-ui: {s}
+Apps	Apps
+Android apps	Apps de Android
+Android shelf	Estante Android
+On the shelf	En el estante
+Looks like a game	Parece un juego
+No Android games on the shelf yet. Hold a game to put it there. Tap an app to open it.	Aún no hay juegos de Android en el estante. Mantén pulsado un juego para ponerlo ahí. Toca una app para abrirla.
+No Android games on the shelf yet. Press Y on a game to put it there.	Aún no hay juegos de Android en el estante. Pulsa Y sobre un juego para ponerlo ahí.
+Tap an app to open it. Hold a game to put it on the Android shelf or take it off.	Toca una app para abrirla. Mantén pulsado un juego para ponerlo en el estante Android o quitarlo.
+Y puts a game on the Android shelf or takes it off.	Y pone un juego en el estante Android o lo quita.
+Reading your apps...	Leyendo tus apps...
+No apps found	No se encontraron apps
+Android lists no other apps with a start icon. Apps you install show up here.	Android no muestra otras apps con icono de inicio. Las apps que instales aparecerán aquí.
+1 app	1 app
+{n} apps	{n} apps
+This app can't be started. It may have been removed.	Esta app no se puede iniciar. Puede que se haya eliminado.
+Help	Ayuda
+Short answers to the usual questions. Choose a topic.	Respuestas cortas a las preguntas habituales. Elige un tema.
+Choose your games folder	Elige tu carpeta de juegos
+Settings › Choose your ROM folder: pick the folder with one folder per system (gba, snes, psx). Games stay where they are; nothing is copied.	Ajustes › Elige tu carpeta de ROM: elige la carpeta con una carpeta por sistema (gba, snes, psx). Los juegos se quedan donde están; no se copia nada.
+Load more systems	Descargar más sistemas
+PSP, DS, Nintendo 64 and Dreamcast are optional. Settings › Cozy extras › Download now loads one over Wi-Fi; B cancels. All other systems are already in the app.	PSP, DS, Nintendo 64 y Dreamcast son opcionales. Ajustes › Extras acogedores › Descargar ahora baja uno por Wi-Fi; B cancela. Los demás sistemas ya vienen en la app.
+In a game press Back or your handheld's Menu button. Continue, Save, Load, Options, Controls and Save & quit are in it. With a controller, A chooses and B continues.	En un juego pulsa Atrás o el botón de menú de tu portátil. Dentro: Continuar, Guardar, Cargar, Opciones, Controles y Guardar y salir. Con mando, A elige y B continúa.
+Save and keep playing	Guardar y seguir jugando
+Save & quit keeps your place and the game's own saves. Next time the game is under Continue and starts where you stopped. Save and Load have eight slots.	Guardar y salir conserva tu punto y las partidas del juego. La próxima vez está en Continuar y empieza donde lo dejaste. Guardar y Cargar tienen ocho ranuras.
+Copy of your saves	Copia de tus partidas
+When a game ends, pocket-ui copies its saves into the folder pocket-ui saves in your games folder. It stays if the app is removed. Check: Settings › Save backup.	Al terminar un juego, pocket-ui copia sus partidas en la carpeta pocket-ui saves de tu carpeta de juegos. Se queda si quitas la app. Comprobar: Ajustes › Copia de partidas.
+Settings › Plays with: for each system, A switches between pocket-ui's own player and an emulator app you installed (RetroArch, PPSSPP, DuckStation). Only installed apps appear.	Ajustes › Se juega con: para cada sistema, A alterna entre el reproductor de pocket-ui y una app de emulador instalada (RetroArch, PPSSPP, DuckStation). Solo salen las instaladas.
+Leave another emulator app	Salir de otra app de emulador
+PS2, GameCube, Wii, 3DS and Xbox games open in their own app. Leave through its menu: ARMSX2 Close, Dolphin Exit Emulation, Azahar Close Game and OK, hakuX Exit.	Los juegos de PS2, GameCube, Wii, 3DS y Xbox se abren en su propia app. Sal desde su menú: ARMSX2 Close, Dolphin Exit Emulation, Azahar Close Game y OK, hakuX Exit.
+Removes the sign-in key from this device.	Quita la clave de acceso de este dispositivo.
+Sent once to sign in, never kept.	Se envía una vez para iniciar sesión y nunca se guarda.
+Couldn't keep the sign-in key: {s}	No se pudo guardar la clave de acceso: {s}
+Couldn't start the sign-in.	No se pudo iniciar el inicio de sesión.
+Couldn't sign in.	No se pudo iniciar sesión.
+Couldn't reach RetroAchievements. Is this device online?	No se pudo conectar con RetroAchievements. ¿Tiene conexión este dispositivo?
+A CHD disc can't be identified. A CUE/BIN, ISO or M3U copy of it can	Un disco CHD no se puede identificar. Una copia CUE/BIN, ISO o M3U sí
+Earn achievements in the games pocket-ui plays itself.	Logros en los juegos que pocket-ui ejecuta por sí mismo.
+Your password is sent once and never kept.	Tu contraseña se envía una vez y nunca se guarda.
+Settings › Report a problem: Share sends one text with your device and logs to a chat or mail, Copy puts it on the clipboard for a GitHub issue. Nothing goes out by itself.	Ajustes › Informar de un problema: «Compartir el informe» envía un texto con tu dispositivo y los registros a un chat o correo; «Copiar el informe» lo copia para una incidencia de GitHub.
+The extra systems can't be downloaded yet. Try again later; every system already in the app works as it is.	Los sistemas adicionales aún no se pueden descargar. Inténtalo más tarde; todos los sistemas que ya están en la app funcionan como siempre.
+The download server isn't answering right now. Try again later.	El servidor de descargas no responde ahora mismo. Inténtalo más tarde.

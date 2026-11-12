@@ -3,7 +3,7 @@
 //! player owns by the same developer or in the same series. A plays, B goes back, Y sets the status and the
 //! player's rating (a row of the same picker), X edits the note, up/down (L1/R1 a page) scroll.
 //!
-//! Opened by Curator's "Surprise me", the card says why it picked the game in one line over the facts, and Right picks
+//! Opened by X on Home's Just Play, the card says why it picked the game in one line over the facts, and Right picks
 //! another (`Out::Another`).
 //!
 //! Curator's rows (Echoes, Versions, Stickers; docs/CURATOR.md) sit under "Your game". Down moves onto them once the
@@ -56,7 +56,7 @@ fn tight() -> i32 {
     type_scale::line(28, 8)
 }
 
-/// The room "Surprise me"'s line takes above the columns (a row and a little air).
+/// The room Just Play's line takes above the columns (a row and a little air).
 fn surprise_h() -> i32 {
     row() + 14
 }
@@ -151,7 +151,7 @@ pub enum Out {
     Row(RowKind),
     /// START: the "This game" page (`this_game_page`), with "Runs on" (`emu_choice_page`) in it.
     Emulator,
-    /// Right on a card opened by "Surprise me": pick another game.
+    /// Right on a card opened by Just Play (X on its row): pick another game.
     Another,
     /// "Hide from the shelf" (`app_storage`).
     Hide,
@@ -186,9 +186,6 @@ pub struct Card {
     pub info: Option<crate::game_info::InfoView>,
     /// Opened as the info page: SELECT goes between it and the full page, and the box is never shown.
     pub info_look: bool,
-    /// Painted without its hint bar and the status corner: the second screen's box and info page, which no key acts on
-    /// and whose clock is on the screen above (`second_screen`).
-    pub bare: bool,
 }
 
 /// The baseline of the body's first headings ("About the game", "Your game") below `top`: lower by what Large adds to
@@ -216,7 +213,6 @@ impl Card {
             boxed: None,
             info: None,
             info_look: false,
-            bare: false,
         }
     }
 
@@ -662,7 +658,7 @@ impl Card {
                 let start = if self.data.port.is_some() { "Performance & fan" } else { "This game" };
                 let mut h = vec![("A", a), ("B", "Back"), ("Y", "Status"), ("X", "Note"), ("START", start)];
                 if self.data.surprise.is_some() {
-                    // A card of "Surprise me": another pick is the first thing after Play and Back; the emulator waits.
+                    // A card of Just Play: another pick is the first thing after Play and Back; the emulator waits.
                     h.retain(|(k, _)| *k != "START");
                     h.insert(2, ("RIGHT", "Another"));
                 }
@@ -762,12 +758,9 @@ impl Card {
         // No Curator rows on this page: none to tap.
         self.row_at.borrow_mut().clear();
         if let Some(info) = self.info.as_mut() {
-            info.passive = self.bare;
             info.paint(c, text, &self.data, cover, console);
         }
-        if !self.bare {
-            crate::setup::hints(c, text, &self.hints());
-        }
+        crate::setup::hints(c, text, &self.hints());
         match &self.mode {
             Mode::Status { sel, stars } => self.paint_picker(c, text, *sel, *stars),
             Mode::Choose { sel, rows } => self.paint_chooser(c, text, *sel, rows),
@@ -805,9 +798,7 @@ impl Card {
                 }
             }
         }
-        if !self.bare {
-            crate::setup::hints(c, text, &self.hints());
-        }
+        crate::setup::hints(c, text, &self.hints());
         match &self.mode {
             Mode::Status { sel, stars } => self.paint_picker(c, text, *sel, *stars),
             Mode::Choose { sel, rows } => self.paint_chooser(c, text, *sel, rows),
@@ -878,10 +869,10 @@ impl Card {
         let (lw, rw) = (rx - lx - 50, c.w - MARGIN - rx);
         // Label columns as wide as their labels need at the text size in use.
         let key_w = type_scale::wide(170, 28);
-        // "Surprise me": why this game, one line across both columns above them.
+        // Just Play's card: why this game, one line across both columns above them.
         let mut top = y0;
         if let Some(why) = &d.surprise {
-            let lead = "Surprise me";
+            let lead = "Just Play";
             let lw0 = text.draw(c, Face::Body, 28, MARGIN, y0 + 34, pal().dust, lead);
             // Two lines at most: German and Large text don't fit the reason on one.
             let lines = text.wrap(Face::Body, 28, why, full_w - lw0 - 24);

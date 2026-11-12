@@ -30,8 +30,6 @@ pub enum Item {
     Curator,
     /// The Lens, first in the Curator list.
     Lens,
-    /// "Surprise me", under the Lens in the Curator list: opens the card of a game picked for the player.
-    Surprise,
     /// A smart shelf (index into curator.json's shelves): in the Curator list, and on Home when pinned.
     SmartShelf(usize),
     /// A sticker (its id in library.json): in the Curator list, and on Home when pinned.
@@ -43,8 +41,8 @@ pub enum Item {
     /// Curator → Rediscover (`app_connections`): the games played a year ago today and those not played for a year; in
     /// the Curator list while there are any.
     Rediscover,
-    /// "Just Play" on Home (`with_just_play`): A starts a suitable game at once, nothing to choose (docs/CURATOR.md
-    /// "Just Play", `Index::just_play`). Not a Curator row: it opens nothing and goes with the Curator switch.
+    /// "Just Play" on Home (`with_just_play`): A starts a suitable game at once, nothing to choose; X shows the game first, on its
+    /// card (docs/CURATOR.md "Just Play", `Index::just_play`). Not a Curator row: it goes with its own switch.
     JustPlay,
     /// "Search", the first row of Home in the list looks (`with_search`): opens the game search (`search_page`).
     Search,
@@ -85,7 +83,7 @@ impl Item {
 
     /// One of Curator's rows (they open a list or the Lens, they don't start anything).
     pub fn is_curator(self) -> bool {
-        matches!(self, Item::Curator | Item::Lens | Item::Surprise | Item::SmartShelf(_) | Item::Sticker(_) | Item::History | Item::Review(_) | Item::Rediscover)
+        matches!(self, Item::Curator | Item::Lens | Item::SmartShelf(_) | Item::Sticker(_) | Item::History | Item::Review(_) | Item::Rediscover)
     }
 
     /// Puts "Search" above everything else on Home but a Curator row on top, when there are games to search
@@ -166,7 +164,6 @@ pub fn toggle_hidden(hidden: &mut Vec<String>, id: &str, with_games: &[&str]) ->
 pub fn hints(selected: Option<Item>, home: bool, starred: bool, system_page: bool) -> Vec<(&'static str, &'static str)> {
     let action = match selected {
         Some(Item::System(_) | Item::Favorites | Item::Search | Item::Curator | Item::Lens | Item::SmartShelf(_) | Item::Sticker(_) | Item::History | Item::Review(_) | Item::Rediscover) => "Open",
-        Some(Item::Surprise) => "Pick",
         Some(Item::Streaming) => "Start",
         _ => "Play",
     };
@@ -176,6 +173,10 @@ pub fn hints(selected: Option<Item>, home: bool, starred: bool, system_page: boo
     } else {
         // HOME opens the quick settings on Home and the shelf (`quick::Sys`).
         hints.push(("HOME", "Quick settings"));
+    }
+    if let Some(Item::JustPlay) = selected {
+        // X shows the game A would start, with the reason, before it starts (`App::curator_just_play_card`).
+        hints.push(("X", "Show the pick"));
     }
     if let Some(Item::Recent(_) | Item::Game(..)) = selected {
         // X opens the game's card (src/game_card.rs). The bar shows at most four hints (`kit::page_hints`) and drops

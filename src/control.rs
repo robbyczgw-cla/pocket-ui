@@ -6,10 +6,6 @@ use std::time::Duration;
 
 pub const RETROARCH_APP_ID: &str = "com.libretro.RetroArch";
 pub const OWN_APP_ID: &str = "pocket-ui";
-/// pocket-ui's window on the dual-screen add-on's second screen (`second_screen`). Not a game: the rules below that
-/// catch "every window but pocket-ui" leave it alone.
-pub const SECOND_APP_ID: &str = "pocket-ui-second";
-
 /// Sends one RetroArch network command (e.g. "SAVE_STATE", "LOAD_STATE", "QUIT") to localhost:55355.
 pub fn retroarch(cmd: &str) -> bool {
     UdpSocket::bind("127.0.0.1:0").and_then(|s| s.send_to(cmd.as_bytes(), "127.0.0.1:55355")).is_ok()
@@ -50,10 +46,6 @@ pub fn restore_system(bin: &'static str) {
 /// `restore_system`, then `done` on the same thread once it has finished (or couldn't run): pocket-ui's fan outside
 /// games waits for it, so it notes the system's trips and not what a killed game left (`perf_fan`).
 pub fn restore_system_then(bin: &'static str, done: impl FnOnce() + Send + 'static) {
-    // The Steam Deck's system owns CPU and fan: pocket-core changed none of it (docs/STEAMDECK.md).
-    if crate::device::current().host_owned() {
-        return done();
-    }
     std::thread::spawn(move || {
         let _ = Command::new(bin).arg("--restore-system").status();
         done();
@@ -196,10 +188,7 @@ fn sway_ok(cmd: &mut Command, timeout: Duration) -> bool {
 /// Makes every other window (the games) open fullscreen and focused. Some emulators, Dolphin's
 /// nogui build among them, don't ask for fullscreen and would otherwise be tiled next to pocket-ui.
 pub fn games_open_fullscreen() -> bool {
-    if crate::desk::active() {
-        return true;
-    }
-    swaymsg(&format!(r#"for_window [app_id="{}"] fullscreen enable, focus"#, game_app_pattern(crate::second_screen::offered())))
+    swaymsg(&format!(r#"for_window [app_id="{}"] fullscreen enable, focus"#, game_app_pattern()))
         && swaymsg(r#"for_window [class=".*"] fullscreen enable, focus"#)
 }
 
@@ -230,28 +219,22 @@ pub fn show_ui() -> bool {
 }
 
 pub fn show_ui_within(timeout: Duration) -> bool {
-    if crate::desk::active() {
-        return crate::desk::show_ui();
-    }
     swaymsg_within(&show_ui_cmd(), timeout)
 }
 
 /// Gives the screen and focus back to the game, which resumes by itself.
 pub fn show_game() -> bool {
-    if crate::desk::active() {
-        return crate::desk::show_game();
-    }
     swaymsg(&show_game_cmd())
 }
 
 /// Every window but pocket-ui: the game, whichever emulator it is (Wayland and XWayland). Used when the
 /// game's window id is unknown, e.g. sway answered too slowly under load when the menu opened.
-fn game_app_pattern(dual: bool) -> String {
-    if dual { format!("^(?!{OWN_APP_ID}(-second)?$).*") } else { format!("^(?!{OWN_APP_ID}$).*") }
+fn game_app_pattern() -> String {
+    format!("^(?!{OWN_APP_ID}$).*")
 }
 
 fn games() -> [String; 2] {
-    [format!(r#"[app_id="{}"]"#, game_app_pattern(crate::second_screen::offered())), r#"[class=".*"]"#.to_string()]
+    [format!(r#"[app_id="{}"]"#, game_app_pattern()), r#"[class=".*"]"#.to_string()]
 }
 
 fn show_ui_cmd() -> String {
@@ -267,9 +250,6 @@ fn show_game_cmd() -> String {
 /// Sway container id of the focused window, if it is not pocket-ui (the running game during play).
 /// None as well when sway doesn't answer within `timeout`.
 pub fn focused_window(timeout: Duration) -> Option<i64> {
-    if crate::desk::active() {
-        return crate::desk::game_window();
-    }
     match ipc::request(ipc::GET_TREE, "", timeout) {
         Ok(tree) => focused_in(&tree),
         Err(e) if ipc::unreachable(&e) => focused_window_via(Command::new("swaymsg").args(["-t", "get_tree"]), timeout),
@@ -377,10 +357,6 @@ pub fn show_ui_over(con: i64) -> bool {
 }
 
 pub fn show_ui_over_within(con: i64, timeout: Duration) -> bool {
-    if crate::desk::active() {
-        let _ = con;
-        return crate::desk::show_ui();
-    }
     swaymsg_within(
         &format!(r#"[con_id={con}] fullscreen disable; [app_id="{OWN_APP_ID}"] focus; [app_id="{OWN_APP_ID}"] fullscreen enable"#),
         timeout,
@@ -389,9 +365,6 @@ pub fn show_ui_over_within(con: i64, timeout: Duration) -> bool {
 
 /// Gives the screen and focus back to the game window `con`.
 pub fn show_window(con: i64) -> bool {
-    if crate::desk::active() {
-        return crate::desk::show_window(con);
-    }
     swaymsg(&format!(r#"[app_id="{OWN_APP_ID}"] fullscreen disable; [con_id={con}] focus; [con_id={con}] fullscreen enable"#))
 }
 
@@ -399,9 +372,6 @@ pub fn show_window(con: i64) -> bool {
 /// It gets focus first (not fullscreen, the menu stays visible): paused clients like RetroArch only
 /// act on the request while focused.
 pub fn close_window(con: i64) -> bool {
-    if crate::desk::active() {
-        return crate::desk::close_window(con);
-    }
     swaymsg(&format!("[con_id={con}] focus; [con_id={con}] kill"))
 }
 
@@ -420,15 +390,13 @@ mod tests {
     /// move any game window, not only RetroArch: ARMSX2 stayed tiled next to pocket-ui after Continue.
     #[test]
     fn single_screen_game_rules_keep_their_original_scope() {
-        assert_eq!(game_app_pattern(false), format!("^(?!{OWN_APP_ID}$).*"));
-        assert_eq!(game_app_pattern(true), format!("^(?!{OWN_APP_ID}(-second)?$).*"));
+        assert_eq!(game_app_pattern(), format!("^(?!{OWN_APP_ID}$).*"));
     }
 
     #[test]
     fn without_a_window_id_any_game_window_is_shown_and_hidden() {
         for cmd in [show_ui_cmd(), show_game_cmd()] {
-            assert!(cmd.contains(&format!(r#"[app_id="{}"]"#, game_app_pattern(crate::second_screen::offered()))), "any non-pocket-ui window: {cmd}");
-            assert_eq!(format!("{OWN_APP_ID}-second"), SECOND_APP_ID, "the second screen's window is not a game");
+            assert!(cmd.contains(&format!(r#"[app_id="{}"]"#, game_app_pattern())), "any non-pocket-ui window: {cmd}");
             assert!(cmd.contains(r#"[class=".*"]"#), "XWayland games too: {cmd}");
         }
         assert!(show_game_cmd().contains("fullscreen enable") && show_game_cmd().starts_with(&format!(r#"[app_id="{OWN_APP_ID}"] fullscreen disable"#)));

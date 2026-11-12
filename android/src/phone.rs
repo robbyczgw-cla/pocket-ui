@@ -6,7 +6,7 @@ use pocket_ui::ui_art::{Art, Icon};
 
 /// Material's minimum touch target.
 const TARGET: f32 = 48.0;
-/// The tabs, in order: what they open, their label and their icon.
+/// The tabs, in order: what they open, their label and their icon. Curator only with Settings → Curator tab (`Ui::has_tab`).
 const TABS: [(Screen, &str, Icon); 5] = [
     (Screen::Library, "Games", Icon::Games),
     (Screen::Favorites, "Favourites", Icon::Favourites),
@@ -50,12 +50,30 @@ impl Ui {
     pub fn zoom(&self, landscape: bool) -> f32 {
         if !self.prefs.onboarding_done || self.screen != Screen::Box {
             1.0
-        } else if landscape && matches!(self.prefs.theme, Theme::Minimal | Theme::Cards | Theme::Split) {
+        } else if landscape && self.prefs.theme == Theme::Split {
             // The info page needs 900 px beside its buttons for its two columns (cover left, facts right).
             0.8
         } else {
             0.62
         }
+    }
+    /// The canvas the page is painted on for a safe area of `w` x `h` screen pixels at `density`: the screen's own
+    /// pixels, or a smaller one that is enlarged (the shared game card, the controls card). Sets `dp` to the canvas'
+    /// pixels per dp. The launcher's window and the phone-format tests use this one rule.
+    pub fn canvas_for(&mut self, (w, h): (u32, u32), density: f32) -> (u32, u32) {
+        let zoom = self.zoom(w > h);
+        let (lw, lh) = if self.controls_open {
+            // This shared prose painter uses the same mobile canvas as the player, without the box's extra enlargement.
+            pocket_ui::scaled_layout::mobile_size((w, h), density)
+        } else if zoom < 1.0 {
+            let (mw, mh) = pocket_ui::scaled_layout::mobile_size((w, h), density);
+            let k = (w.min(h) as f32 * zoom / mw.min(mh) as f32).clamp(0.5, 1.0);
+            (((mw as f32 * k) as u32).max(1), ((mh as f32 * k) as u32).max(1))
+        } else {
+            (w, h)
+        };
+        self.dp = lw as f32 / (w as f32 / density.max(0.5));
+        (lw, lh)
     }
     /// A region that does `action` when tapped; its label is the accessibility name (translated).
     pub(super) fn target(&mut self, area: Area, label: &str, action: Action) {
@@ -78,16 +96,19 @@ impl Ui {
     fn play_pill(&mut self, c: &mut Canvas, text: &mut Text, area: Area) {
         let word = self.play_word();
         self.pill(c, text, area, word, true, Action::Press(Button::East));
+        let experimental = self.game().is_some_and(|g| self.experimental(g.system_id));
         if let Some(region) = self.regions.last_mut() {
-            region.label = super::tr("Play");
+            region.label = if experimental {
+                format!("{} · {}", super::tr("Play"), super::tr("Experimental"))
+            } else { super::tr("Play") };
         }
     }
     /// The line under a game's name: its system, after "Continue" when it stands open.
     fn system_line(&self, game: &Game) -> String {
         if self.is_frozen(&game.key) {
-            format!("{} · {}", super::tr("Continue"), game.system)
+            format!("{} · {}", super::tr("Continue"), super::play_cards::system_label(self.experimental(game.system_id), game.system))
         } else {
-            game.system.to_string()
+            super::play_cards::system_label(self.experimental(game.system_id), game.system)
         }
     }
     /// A pill button: paper with ink for the primary action, the sheet's pill colour otherwise. The label is
@@ -116,17 +137,58 @@ impl Ui {
         let h = self.d(56.0);
         let size = self.sp(26.0);
         let base = h / 2 + type_mid(size);
-        let note_w = if note.is_empty() { 0 } else { text.width(Face::Body, self.sp(14.0), note) + self.d(12.0) }.max(keep);
-        let shown = text.fit(Face::Title, size, title, c.w - 2 * margin - note_w);
+        let small = self.sp(14.0);
+        let gap = self.d(12.0);
+        let right = c.w - margin;
+        let note_w = if note.is_empty() { 0 } else { text.width(Face::Body, small, note) };
+        let note_room = if note.is_empty() { 0 } else { note_w + gap };
+        // The status corner, as on the handhelds, at the right end of the top line: it gives way (a step at a time,
+        // down to nothing) before it cuts a letter of the title or runs into the note or the shelf buttons.
+        let room = if keep > 0 {
+            // Landscape shelf: the free end above the side panel, right of the two shelf buttons.
+            right - (c.w - keep + self.d(112.0) + self.d(8.0)) - note_room
+        } else {
+            let line = right - margin;
+            // The title comes first: the corner is shown only where the whole title stands beside it.
+            line - text.width(Face::Title, size, title) - gap - note_room
+        };
+        let corner = self.corner_for(text, room, small);
+        let corner_w = -corner.layout_at(0, small, |s| text.width(Face::Body, small, s)).1;
+        let reserve = (if corner_w > 0 { corner_w + gap } else { 0 } + note_room).max(keep);
+        let shown = text.fit(Face::Title, size, title, c.w - 2 * margin - reserve);
         text.draw(c, Face::Title, size, margin, base, pal().chalk, &shown);
+        #[cfg(test)]
+        {
+            self.header_rects = vec![("margin", margin, h), ("title", margin, margin + text.width(Face::Title, size, &shown))];
+            if corner_w > 0 {
+                self.header_rects.push(("corner", right - corner_w, right));
+            }
+            if !note.is_empty() {
+                let end = if corner_w > 0 { right - corner_w - gap } else { right };
+                self.header_rects.push(("note", end - note_w, end));
+            }
+        }
         // A title that is also a tab's name is already spoken by the tab (and taps by name find the tab).
         if TABS.iter().all(|(_, label, _)| tr(label) != tr(title)) {
-            self.target(Area::new(margin, 0, c.w - 2 * margin - note_w, h), title, Action::Label);
+            self.target(Area::new(margin, 0, c.w - 2 * margin - reserve, h), title, Action::Label);
+        }
+        if corner_w > 0 {
+            corner.paint_at(c, text, right, base, small, pal().dust);
         }
         if !note.is_empty() {
-            text.draw_right(c, Face::Body, self.sp(14.0), c.w - margin, base, pal().dust, note);
+            let end = if corner_w > 0 { right - corner_w - gap } else { right };
+            text.draw_right(c, Face::Body, small, end, base, pal().dust, note);
         }
         h
+    }
+    /// The status corner for a header with `room` pixels for it at type size `px`: empty while Android's own status
+    /// bar shows (no second clock), where nothing is known (a device without a battery still shows the time) and when
+    /// not even the time fits.
+    pub(super) fn corner_for(&self, text: &mut Text, room: i32, px: u32) -> pocket_ui::status_corner::Corner {
+        if self.system_bar {
+            return Default::default();
+        }
+        self.corner.fit(pocket_ui::status_corner::unix_now(), room, px, |s| text.width(Face::Body, px, s))
     }
     pub(super) fn margin(&self, c: &Canvas) -> i32 {
         self.d(if c.w > c.h { 24.0 } else { 16.0 })
@@ -144,16 +206,17 @@ impl Ui {
             Screen::Results | Screen::Facet => Screen::Curator,
             // A fact's list belongs to the card's tab, Rediscover to Curator.
             Screen::Connection if self.list_from_curator() => Screen::Curator,
-            Screen::Connection => Screen::Library,
-            Screen::Quick | Screen::Extras | Screen::GameCheck => Screen::Settings,
+            Screen::Connection | Screen::Apps => Screen::Library,
+            Screen::Quick | Screen::Extras | Screen::GameCheck | Screen::Updates | Screen::Licences | Screen::Saves | Screen::Report | Screen::Help | Screen::Achievements | Screen::PlaysWith => Screen::Settings,
             s => s,
         };
         let margin = if landscape { self.d(24.0) } else { 0 };
-        let tw = (c.w - 2 * margin) / TABS.len() as i32;
+        let tabs: Vec<_> = TABS.into_iter().filter(|(screen, _, _)| self.has_tab(*screen)).collect();
+        let tw = (c.w - 2 * margin) / tabs.len() as i32;
         let k = (self.d(24.0) / 16).max(1);
         let icon = 16 * k;
         let size = self.sp(if landscape { 14.0 } else { 12.5 });
-        for (i, (screen, label, glyph)) in TABS.into_iter().enumerate() {
+        for (i, (screen, label, glyph)) in tabs.into_iter().enumerate() {
             let x = margin + i as i32 * tw;
             let on = current == screen;
             let shown_label = tr(label);
@@ -257,9 +320,14 @@ impl Ui {
         let bar = if keyboard { c.h } else { self.tab_bar(c, text) };
         let hints: Vec<(&str, &str)> = match self.screen {
             _ if keyboard => vec![("A", "Choose"), ("B", "Delete"), ("START", "Done")],
+            Screen::Updates if self.updates.busy() && self.updates.cancellable => vec![("B", "Cancel")],
+            Screen::Updates => vec![("A", "Choose"), ("B", "Back")],
             Screen::GameCheck => vec![("A", "Choose"), ("B", "Back"), ("X", "Check again")],
-            Screen::Stickers => vec![("A", "Choose"), ("B", "Back")],
-            Screen::Settings | Screen::Extras | Screen::Quick | Screen::Curator | Screen::Facet => vec![("A", "Choose"), ("B", "Back"), ("L1/R1", "Tabs")],
+            Screen::Stickers | Screen::Saves | Screen::Report | Screen::Help | Screen::Achievements | Screen::PlaysWith | Screen::Licences => vec![("A", "Choose"), ("B", "Back")],
+            Screen::Quick => vec![("A", "Choose"), ("X", "Show the pick"), ("B", "Back"), ("L1/R1", "Tabs")],
+            Screen::Settings | Screen::Extras | Screen::Curator | Screen::Facet => vec![("A", "Choose"), ("B", "Back"), ("L1/R1", "Tabs")],
+            Screen::Apps => vec![("A", "Open"), ("Y", "Android shelf"), ("B", "Back"), ("L1/R1", "Tabs")],
+            Screen::Library => vec![("A", self.play_word()), ("X", "Info"), ("Y", "Favourite"), ("R2", "Apps"), ("L1/R1", "Tabs"), ("START", "Settings")],
             _ => vec![("A", self.play_word()), ("X", "Info"), ("Y", "Favourite"), ("L1/R1", "Tabs"), ("START", "Settings")],
         };
         let bottom = if keyboard { bar } else { self.hint_row(c, text, bar, &hints) };
@@ -281,6 +349,14 @@ impl Ui {
             Screen::Extras => ("Cozy extras".into(), String::new()),
             Screen::Stickers => ("Stickers".into(), self.sticker_note()),
             Screen::GameCheck => (self.check_title(), String::new()),
+            Screen::Saves => ("Save backup".into(), String::new()),
+            Screen::Report => ("Report a problem".into(), String::new()),
+            Screen::Help => ("Help".into(), String::new()),
+            Screen::Achievements => ("RetroAchievements".into(), String::new()),
+            Screen::PlaysWith => ("Plays with".into(), String::new()),
+            Screen::Updates => ("Updates".into(), String::new()),
+            Screen::Licences => ("Licences".into(), String::new()),
+            Screen::Apps => ("Android apps".into(), self.apps_note()),
             _ => ("Settings".into(), String::new()),
         };
         let keep = if self.screen == Screen::Library && self.shelf_row().is_some() && c.w > c.h {
@@ -288,7 +364,21 @@ impl Ui {
         } else {
             0
         };
-        let top = self.header(c, text, &title, &note, keep);
+        let mut top = self.header(c, text, &title, &note, keep);
+        if self.screen == Screen::Extras && !self.core_note.is_empty() {
+            // Download status is a sentence, not the short right-aligned game count of a header.
+            let message = self.core_note.clone();
+            let margin = self.margin(c);
+            let size = self.sp(14.0);
+            let height = type_scale::px(size) as i32;
+            let start = top;
+            for line in text.wrap(Face::Body, size, &message, c.w - 2 * margin) {
+                text.draw(c, Face::Body, size, margin, top + height, pal().dust, &line);
+                top += height + self.d(6.0);
+            }
+            self.target(Area::new(margin, start, c.w - 2 * margin, top - start), &message, Action::Label);
+            top += self.d(12.0);
+        }
         // Why the stickers don't show is read out too.
         if self.screen == Screen::Stickers && !note.is_empty() {
             self.target(Area::new(c.w / 2, 0, c.w / 2, top), &note, Action::Label);
@@ -305,7 +395,15 @@ impl Ui {
                 self.paint_menu_phone(c, text, room, rows);
             }
             Screen::GameCheck => self.paint_check(c, text, room),
+            Screen::Saves => self.paint_saves(c, text, room),
+            Screen::Report => self.paint_report(c, text, room),
+            Screen::Help => self.paint_help(c, text, room),
+            Screen::Achievements => self.paint_achievements(c, text, room),
+            Screen::PlaysWith => self.paint_plays_with(c, text, room),
+            Screen::Updates => self.paint_updates(c, text, room),
+            Screen::Licences => self.paint_licences(c, text, room),
             Screen::Search => self.paint_search_phone(c, text, room, cover),
+            Screen::Apps => self.paint_apps(c, text, room),
             _ => self.paint_games_phone(c, text, room, cover),
         }
         if keyboard {
@@ -324,7 +422,7 @@ impl Ui {
     fn sticker_note(&self) -> String {
         if !self.prefs.extras.case_stickers {
             tr("Stickers on cases is off")
-        } else if matches!(self.prefs.theme, Theme::Minimal | Theme::Split) {
+        } else if self.prefs.theme == Theme::Split {
             tr("This look shows no cases")
         } else {
             String::new()
@@ -389,10 +487,24 @@ impl Ui {
                 }
                 let arrows = if row.stepper { self.d(TARGET) } else { 0 };
                 let value_w = if row.value.is_empty() { 0 } else { (text.width(Face::Body, size, &row.value) + self.d(16.0) + 2 * arrows).min((w - x - margin) * 2 / 3) };
-                let label = text.fit(Face::Body, size, &row.label, w - x - margin - value_w);
-                text.draw(&mut clip, Face::Body, size, x, base, fg, &label);
+                // A long name ("Buscar actualizaciones automáticamente") goes a step smaller, then on to a second line,
+                // before a word of it is cut: a 360 dp phone has 200 dp for it beside a switch.
+                let room_w = w - x - margin - value_w;
+                let small = [size, self.sp(15.0), self.sp(14.0)].into_iter().find(|s| text.width(Face::Body, *s, &row.label) <= room_w).unwrap_or(self.sp(14.0));
+                let lines = text.wrap_at_most(Face::Body, small, &row.label, room_w, 2);
+                if lines.last().is_some_and(|l| l.ends_with('…')) {
+                    self.cut.push(row.label.clone());
+                }
+                let line_px = type_scale::px(small) as i32 * 6 / 5;
+                let first = y + pitch / 2 + type_mid(small) - (lines.len() as i32 - 1) * line_px / 2;
+                for (k, line) in lines.iter().enumerate() {
+                    text.draw(&mut clip, Face::Body, small, x, first + k as i32 * line_px, fg, line);
+                }
                 if !row.value.is_empty() {
                     let value = text.fit(Face::Body, size, &row.value, value_w - self.d(16.0) - 2 * arrows);
+                    if value != row.value {
+                        self.cut.push(row.value.clone());
+                    }
                     text.draw_right(&mut clip, Face::Body, size, w - margin - arrows, base, quiet, &value);
                     if row.stepper {
                         for (ax, back) in [(w - margin - value_w + self.d(16.0), true), (w - margin - arrows, false)] {
@@ -431,8 +543,32 @@ impl Ui {
         }
         self.scrollbar(c, top, room.bottom - top, rows.len() as i32 * pitch);
     }
+    /// How many lines of the words above a page's rows there is room for: half the page, or all but one row
+    /// (a phone held across has 150 dp for both; the rows scroll, the words do not): the words may take all but one row.
+    pub(super) fn words_limit(&self, room: &Room, step: i32) -> usize {
+        let height = room.bottom - room.top;
+        let row = self.d(56.0).max(type_scale::row(self.d(56.0), self.sp(16.0)));
+        (height / 2 / step).max((height - row - self.d(10.0)) / step).max(2) as usize
+    }
+    /// The words above a page's rows wrapped to `w`: the usual size, or a step smaller when that is the only way they
+    /// all have room (a 720p phone held across at larger text). Returns the lines, their size and step, and how many fit.
+    pub(super) fn words_lines(&mut self, text: &mut Text, room: &Room, words: &str, w: i32) -> (Vec<String>, u32, i32, usize) {
+        let mut out = None;
+        for dp in [15.0, 13.0] {
+            let size = self.sp(dp);
+            let step = size as i32 + self.d(7.0);
+            let most = self.words_limit(room, step);
+            let lines: Vec<String> = words.lines().flat_map(|line| text.wrap(Face::Body, size, line, w)).collect();
+            let fits = lines.len() <= most;
+            out = Some((lines, size, step, most));
+            if fits {
+                break;
+            }
+        }
+        out.unwrap()
+    }
     /// A thin bar at the right edge while a page scrolls.
-    fn scrollbar(&self, c: &mut Canvas, top: i32, view: i32, content: i32) {
+    pub(super) fn scrollbar(&self, c: &mut Canvas, top: i32, view: i32, content: i32) {
         if content <= view || view <= 0 {
             return;
         }
@@ -455,23 +591,33 @@ impl Ui {
     /// fronts that scroll up and down (or a list in the list looks) with the selected game and its Play button in a
     /// strip above the tabs. Landscape: the handheld's shelf, as tall as the page, the selected game beside it.
     fn paint_games_phone(&mut self, c: &mut Canvas, text: &mut Text, room: Room, cover: Option<&Image>) {
+        let mut room = room;
+        // The Games page's top row: Just Play, and the drawer with the phone's other apps (also before any games, and
+        // in Easy, where it is the only button up there).
+        if self.screen == Screen::Library {
+            let h = self.d(TARGET);
+            let just_play = self.prefs.theme != Theme::Big && !self.visible.is_empty();
+            let gap = self.d(8.0);
+            let apps_w = if just_play { (c.w - 2 * room.margin - gap) / 3 } else { c.w - 2 * room.margin };
+            if just_play {
+                self.pill(c, text, Area::new(room.margin, room.top, c.w - 2 * room.margin - apps_w - gap, h), "Just Play", false, Action::JustPlay);
+            }
+            self.pill(c, text, Area::new(c.w - room.margin - apps_w, room.top, apps_w, h), "Apps", false, Action::Apps);
+            if let Some(region) = self.regions.last_mut() {
+                region.label = tr("Android apps");
+            }
+            room.top += h + gap;
+        }
         if self.visible.is_empty() {
             self.paint_empty_phone(c, text, room);
             return;
-        }
-        let mut room = room;
-        if self.screen == Screen::Library && self.prefs.theme != Theme::Big {
-            let h = self.d(TARGET);
-            self.pill(c, text, Area::new(room.margin, room.top, c.w - 2 * room.margin, h),
-                "Just Play", false, Action::JustPlay);
-            room.top += h + self.d(8.0);
         }
         if self.prefs.theme == Theme::Big {
             self.paint_easy_phone(c, text, room, cover);
             return;
         }
         let landscape = c.w > c.h;
-        let list = matches!(self.prefs.theme, Theme::Minimal | Theme::Split);
+        let list = self.prefs.theme == Theme::Split;
         if landscape {
             let side = c.w - self.landscape_shelf_w(c) - room.margin;
             let area = Room { bottom: room.bottom, ..room };
@@ -518,9 +664,7 @@ impl Ui {
             let arrow = h;
             self.pill(c, text, Area::new(room.margin, bottom, arrow, h), "‹", false, Action::Press(Button::Left));
             self.pill(c, text, Area::new(c.w - room.margin - arrow, bottom, arrow, h), "›", false, Action::Press(Button::Right));
-            let label = self.play_word();
-            self.pill(c, text, Area::new(room.margin + arrow + gap, bottom, c.w - 2 * (room.margin + arrow + gap), h),
-                label, true, Action::Press(Button::East));
+            self.play_pill(c, text, Area::new(room.margin + arrow + gap, bottom, c.w - 2 * (room.margin + arrow + gap), h));
         }
     }
     /// How wide the landscape shelf is, beside the panel with the selected game.
@@ -582,13 +726,19 @@ impl Ui {
         self.play_pill(c, text, Area::new(x + info_w + gap, buttons_y, w - info_w - gap, bh));
         let system_base = buttons_y - self.d(14.0);
         let line = self.system_line(&game);
-        let system = text.fit_name(Face::Body, self.sp(14.0), &line, w);
-        text.draw_name(c, Face::Body, self.sp(14.0), x, system_base, pal().dust, &system);
-        self.name_target(Area::new(x, system_base - self.d(14.0), w, self.d(18.0)), &line, Action::Label);
-        let name_bottom = system_base - pocket_ui::type_scale::px(self.sp(14.0)) as i32 - self.d(8.0);
+        let system_px = pocket_ui::type_scale::px(self.sp(14.0)) as i32;
+        // A phone held across with a hint bar leaves this panel under 110 dp: the name before the system line, which the
+        // card says again (without the room the two stood on each other).
+        let show_system = system_base - system_px - self.d(8.0) - (y + self.d(8.0)) >= pocket_ui::type_scale::px(self.sp(22.0)) as i32;
+        let name_bottom = if show_system { system_base - system_px - self.d(8.0) } else { buttons_y - self.d(8.0) };
+        if show_system {
+            let system = text.fit_name(Face::Body, self.sp(14.0), &line, w);
+            text.draw_name(c, Face::Body, self.sp(14.0), x, system_base, pal().dust, &system);
+            self.name_target(Area::new(x, system_base - self.d(14.0), w, self.d(18.0)), &line, Action::Label);
+        }
         let name_top = (name_bottom - self.name_band()).max(y + self.d(8.0));
         self.paint_name(c, text, &game.name, Area::new(x, name_top, w, (name_bottom - name_top).max(1)));
-        self.name_target(Area::new(x, name_top, w, system_base - name_top), &game.name, Action::Press(Button::North));
+        self.name_target(Area::new(x, name_top, w, (if show_system { system_base } else { name_bottom }) - name_top), &game.name, Action::Press(Button::North));
         let pic_h = name_top - y - self.d(16.0);
         if pic_h < self.d(60.0) {
             return;
@@ -647,7 +797,9 @@ impl Ui {
         // A frozen game's front keeps its size: what is inside comes out into the gap beside it.
         let frozen = self.frozen.contains(&game.key);
         let peek = self.d(AJAR_MOST_DP);
-        if let Some(pic) = self.cards.get(&key).filter(|p| {
+        // Just back from it (`eject`): what is inside comes out on its own clock, the picture made each frame meanwhile.
+        let out = if frozen { self.ajar_out(&game.key, std::time::Instant::now()) } else { 1.0 };
+        if let Some(pic) = self.cards.get(&key).filter(|_| out >= 1.0).filter(|p| {
             let front_w = p.w - if frozen { peek } else { 0 };
             front_w <= w && p.h <= h && (front_w + 2 >= w || p.h + 2 >= h)
         }) {
@@ -674,7 +826,7 @@ impl Ui {
             // What is inside comes a little out of the side (`app_cabinet::paint_ajar_game`); always this wide, so the
             // cached picture's front is known.
             if let Some(inside) = super::game_inside(text, game, (m, pic.h), look, label, self.prefs.extras.printed_discs) {
-                pic = ajar_front(pic, &inside, peek);
+                pic = ajar_front(pic, &inside, peek, (peek as f32 * out).round() as i32);
             } else {
                 let mut wider = art::Pic::new(pic.w + peek, pic.h, 0);
                 for y in 0..pic.h {
@@ -683,7 +835,9 @@ impl Ui {
                 pic = wider;
             }
         }
-        self.cards.insert(key, pic.clone());
+        if out >= 1.0 {
+            self.cards.insert(key, pic.clone());
+        }
         Some(pic)
     }
     /// Portrait shelves: rows of fronts standing on boards (the Cabinet's compartments in the Cabinet look). The
@@ -775,15 +929,17 @@ impl Ui {
         // Its start is on its way (`insert`): the case goes from here, its place stays empty.
         let leaving = selected && self.launching;
         if leaving {
-            self.front_at = Some(((x, top + py, pic.w, pic.h), pic.clone()));
-        } else if selected {
+            // In the light it stood in: the case leaves and comes home as the page shows it.
+            self.front_at = Some(((x, top + py, pic.w, pic.h), art::lit(pic, shade)));
+        }
+        if selected && (!leaving || self.returning) {
             // The lifted case's shadow on the board.
             clip.shade_rect(x + self.d(4.0), base - self.d(3.0), pic.w - self.d(8.0), self.d(3.0), 0, 120);
         }
         if !leaving {
             art::blit(clip, pic, x, py, shade, (0, i32::MAX));
         }
-        if selected && !leaving && self.controller_hints() {
+        if selected && (!leaving || self.returning) && self.controller_hints() {
             clip.frame(x - self.d(3.0), py - self.d(3.0), pic.w + self.d(6.0), pic.h + self.d(6.0), self.d(2.0), pal().chalk);
         }
     }
@@ -909,7 +1065,7 @@ impl Ui {
         }
         self.scrollbar(c, room.top, view, content);
     }
-    /// The list looks (Minimal, Split): a row per game with its system's stripe at the left edge, 64 dp high.
+    /// The list look (Split): a row per game with its system's stripe at the left edge, 64 dp high.
     fn paint_list_phone(&mut self, c: &mut Canvas, text: &mut Text, room: Room, right: i32) {
         let pitch = type_scale::row(self.d(64.0), self.sp(18.0));
         let view = room.bottom - room.top;
@@ -946,8 +1102,10 @@ impl Ui {
                 }
                 let (name, name_size) = text.literal(|text| pocket_ui::title_block::row(text, Face::Title, self.sp(18.0), &game.name, w - self.d(32.0) - star_w));
                 text.draw_name(&mut clip, Face::Title, name_size, x + self.d(18.0), y + h / 2 - self.d(2.0), fg, &name);
-                text.draw_name(&mut clip, Face::Body, self.sp(13.0), x + self.d(18.0), y + h / 2 + self.d(18.0), quiet, game.system);
-                targets.push((Area::new(x, room.top + y, w, pitch).clip_y(room.top, room.bottom), game.name.clone(), pos));
+                let system = super::play_cards::system_label(self.experimental(game.system_id), game.system);
+                let shown = text.fit_name(Face::Body, self.sp(13.0), &system, w - self.d(32.0));
+                text.draw_name(&mut clip, Face::Body, self.sp(13.0), x + self.d(18.0), y + h / 2 + self.d(18.0), quiet, &shown);
+                targets.push((Area::new(x, room.top + y, w, pitch).clip_y(room.top, room.bottom), if self.experimental(game.system_id) { format!("{} · {}", game.name, system) } else { game.name.clone() }, pos));
             }
         }
         for (area, name, pos) in targets {
@@ -957,8 +1115,8 @@ impl Ui {
         }
         self.scrollbar(c, room.top, view, self.visible.len() as i32 * pitch);
     }
-    /// Landscape Shelf, Cabinet and Cards: the handheld's shelf filling the page's height. The selected game
-    /// stands out with its front; its neighbours are spines (fronts in Cards). Drag along it with momentum.
+    /// Landscape Shelf and Cabinet: the handheld's shelf filling the page's height. The selected game
+    /// stands out with its front; its neighbours are spines. Drag along it with momentum.
     fn paint_shelf_landscape(&mut self, c: &mut Canvas, text: &mut Text, room: Room, right: i32, cover: Option<&Image>) {
         let cabinet = self.prefs.theme == Theme::Cabinet;
         let (light, earned) = if matches!(self.prefs.theme, Theme::Shelf | Theme::Cabinet) {
@@ -986,11 +1144,7 @@ impl Ui {
             c.rect(margin - self.d(6.0), base, width + self.d(12.0), self.d(5.0), light.tint(pal().spine));
             c.rect(margin - self.d(6.0), base + self.d(5.0), width + self.d(12.0), self.d(5.0), light.tint(pal().dust));
         }
-        let mut case_h = scene_h - self.d(cabinet as u8 as f32 * 14.0) - self.d(10.0);
-        if self.prefs.theme == Theme::Cards {
-            // Cards are all fronts: smaller, so four or five stand on the shelf instead of two.
-            case_h = case_h.min((width - margin) / 4);
-        }
+        let case_h = scene_h - self.d(cabinet as u8 as f32 * 14.0) - self.d(10.0);
         let gap = self.d(4.0);
         // Neighbours first, to find how many fit left of the selected game (a third of the shelf).
         // With several shelves, only the selection's.
@@ -998,9 +1152,13 @@ impl Ui {
         let mut pics: Vec<(usize, art::Pic)> = Vec::new();
         let mut used = 0;
         let mut start = self.selected;
+        // The selected game's open case always fits: neighbours only take what it leaves (on a Mini V2's 1240x1080 a
+        // third of the shelf plus the case was wider than the shelf, and the selected game was left out).
+        let selected_w = if self.selected < lib_len { self.shelf_pic(text, self.selected, true, case_h, cover).w } else { 0 };
+        let left_room = (width / 3).min(width - self.d(8.0) - selected_w - gap);
         while start > lo {
             let pic = self.shelf_pic(text, start - 1, false, case_h, cover);
-            if used + pic.w + gap > width / 3 {
+            if used + pic.w + gap > left_room {
                 break;
             }
             used += pic.w + gap;
@@ -1023,11 +1181,11 @@ impl Ui {
             let up = if selected { self.d(10.0) } else { 0 };
             let leaving = selected && self.launching;
             if leaving {
-                self.front_at = Some(((x, base - pic.h - up, pic.w, pic.h), pic.clone()));
+                self.front_at = Some(((x, base - pic.h - up, pic.w, pic.h), art::lit(&pic, shade)));
             } else {
                 art::blit(c, &pic, x, base - pic.h - up, shade, (room.top, room.bottom));
             }
-            if selected && !leaving && self.controller_hints() {
+            if selected && (!leaving || self.returning) && self.controller_hints() {
                 c.frame(x - self.d(3.0), base - pic.h - up - self.d(3.0), pic.w + self.d(6.0), pic.h + self.d(6.0), self.d(2.0), pal().chalk);
             }
             if !selected {
@@ -1070,11 +1228,10 @@ impl Ui {
             art::blit(c, &pics[i], x, base - pics[i].h, shade, clip);
         }
     }
-    /// A game's spine (or front, selected or in Cards) at the shelf's case height.
+    /// A game's spine (or front, selected) at the shelf's case height.
     fn shelf_pic(&mut self, text: &mut Text, pos: usize, selected: bool, case_h: i32, cover: Option<&Image>) -> art::Pic {
         let index = self.visible[pos];
-        let cards = self.prefs.theme == Theme::Cards;
-        if selected || cards {
+        if selected {
             return self.front_pic(text, index, selected, (case_h, case_h), cover).unwrap_or_else(|| art::Pic::new(1, 1, 0));
         }
         if self.cards.len() > 96 {
@@ -1138,7 +1295,7 @@ impl Ui {
                 _ => (
                     Art::NoGames,
                     "No games found",
-                    tr("Choose another folder."),
+                    tr("Choose the folder that contains your system folders, or a system folder such as psp or gba."),
                     Some(("Choose your ROM folder", Action::Folder)),
                 ),
             }
@@ -1150,7 +1307,8 @@ impl Ui {
         let margin = room.margin;
         let room_h = room.bottom - room.top;
         // Landscape: the vignette at the left, the words and the button beside it, both in the middle of the page.
-        let side = c.w > c.h && pocket_ui::ui_art::get(picture).is_some();
+        // On a phone held across (under 240 dp of room) the words take the whole width: the vignette would leave them four lines too many.
+        let side = c.w > c.h && room_h >= self.d(240.0) && pocket_ui::ui_art::get(picture).is_some();
         let (tx, w) = if side {
             let art_w = (c.w - 2 * margin) * 2 / 5;
             if let Some(sprite) = pocket_ui::ui_art::get(picture) {
@@ -1162,12 +1320,26 @@ impl Ui {
             (margin, c.w - 2 * margin)
         };
         let button_h = self.d(52.0);
-        let lines = text.wrap_at_most(Face::Body, self.sp(16.0), line, w, 3);
-        let hs = self.sp(24.0);
-        let text_h = hs as i32 + self.d(10.0) + lines.len() as i32 * self.d(24.0) + if button.is_some() { button_h + self.d(28.0) } else { 0 };
+        // The words say what to do next: never cut them short (a small landscape screen needs four or five lines). A page
+        // that does not fit in the room (a 720p phone held across, German at larger text) goes a step or two smaller, which
+        // reads better than words over the button.
+        let mut chosen = None;
+        for (body, head, pitch) in [(16.0, 24.0, 24.0), (14.0, 20.0, 20.0), (13.0, 18.0, 18.0)] {
+            let (bs, hs) = (self.sp(body), self.sp(head));
+            let lines = text.wrap_at_most(Face::Body, bs, line, w, 6);
+            // The heading on two lines rather than cut ("No se encontraron juegos" in large type).
+            let heading_lines = text.wrap_at_most(Face::Title, hs, heading, w, 2);
+            let heading_px = pocket_ui::type_scale::px(hs) as i32;
+            let text_h = heading_lines.len() as i32 * (heading_px + self.d(6.0)) + self.d(4.0) + lines.len() as i32 * self.d(pitch) + if button.is_some() { button_h + self.d(28.0) } else { 0 };
+            chosen = Some((bs, hs, self.d(pitch), lines, heading_lines, heading_px, text_h));
+            if text_h + self.d(12.0) <= room_h {
+                break;
+            }
+        }
+        let (bs, hs, pitch, lines, heading_lines, heading_px, text_h) = chosen.unwrap();
         let art_h = if side { 0 } else { (room_h - text_h - self.d(48.0)).min(self.d(200.0)) };
         let block = text_h + if art_h > self.d(64.0) { art_h + self.d(16.0) } else { 0 };
-        let mut y = if side { room.top + (room_h - block) / 2 } else { room.top + self.d(16.0) };
+        let mut y = if side { (room.top + (room_h - block) / 2).max(room.top + self.d(4.0)) } else { room.top + self.d(16.0) };
         if !side && art_h > self.d(64.0) {
             if let Some(sprite) = pocket_ui::ui_art::get(picture) {
                 let fitted = sprite.fitted(w.min(self.d(260.0)), art_h);
@@ -1175,17 +1347,19 @@ impl Ui {
                 y += art_h + self.d(16.0);
             }
         }
-        let heading_shown = text.fit(Face::Title, hs, heading, w);
-        let hw = text.width(Face::Title, hs, &heading_shown);
-        y += hs as i32;
-        text.draw(c, Face::Title, hs, tx + (w - hw) / 2, y, pal().chalk, &heading_shown);
-        self.target(Area::new(tx, y - hs as i32, w, hs as i32 + self.d(8.0)), heading, Action::Label);
+        let heading_top = y;
+        for (k, shown) in heading_lines.iter().enumerate() {
+            let hw = text.width(Face::Title, hs, shown);
+            y += if k == 0 { hs as i32 } else { heading_px + self.d(6.0) };
+            text.draw(c, Face::Title, hs, tx + (w - hw) / 2, y, pal().chalk, shown);
+        }
+        self.target(Area::new(tx, heading_top, w, y - heading_top + self.d(8.0)), heading, Action::Label);
         y += self.d(10.0);
         let line_top = y;
         for l in &lines {
-            y += self.d(24.0);
-            let lw = text.width(Face::Body, self.sp(16.0), l);
-            text.draw(c, Face::Body, self.sp(16.0), tx + (w - lw) / 2, y, pal().dust, l);
+            y += pitch;
+            let lw = text.width(Face::Body, bs, l);
+            text.draw(c, Face::Body, bs, tx + (w - lw) / 2, y, pal().dust, l);
         }
         // The words are read out too, not only the heading.
         if !lines.is_empty() {
@@ -1221,23 +1395,54 @@ impl Ui {
         let below = Room { top: field.y + field.h + self.d(12.0), ..room };
         let bottom = if self.keyboard.is_some() { c.h - self.keyboard_height(c) } else { room.bottom };
         let below = Room { bottom, ..below };
-        if self.query.is_empty() && self.keyboard.is_none() {
-            self.empty_page(c, text, below, Art::Search, "Find a game", &tr("Type a few letters of its name."), None);
+        // The keyboard covers the page: one line above it, never an empty gap while typing.
+        let typing_line = |me: &mut Self, c: &mut Canvas, text: &mut Text, line: String| {
+            // A German sentence at larger text takes a step smaller type and a second line, not a cut word.
+            let width = c.w - 2 * room.margin;
+            let size = [me.sp(16.0), me.sp(14.0)].into_iter().find(|s| text.width(Face::Body, *s, &line) <= width).unwrap_or(me.sp(14.0));
+            let step = size as i32 + me.d(6.0);
+            let lines = text.wrap_at_most(Face::Body, size, &line, width, 2);
+            let mut shown = 0;
+            for (i, l) in lines.iter().enumerate() {
+                let y = below.top + me.d(8.0) + size as i32 + i as i32 * step;
+                if y < below.bottom {
+                    text.draw(c, Face::Body, size, room.margin, y, pal().dust, l);
+                    shown += 1;
+                }
+            }
+            if shown > 0 {
+                me.target(Area::new(room.margin, below.top, width, shown * step + me.d(16.0)), &line, Action::Label);
+            }
+        };
+        if self.query.is_empty() {
+            // Nothing typed yet: what to do, not "No games found".
+            if self.keyboard.is_none() {
+                self.empty_page(c, text, below, Art::Search, "Find a game", &tr("Type a few letters of its name."), None);
+            } else {
+                typing_line(self, c, text, tr("Type a few letters of its name."));
+            }
         } else if self.visible.is_empty() {
             if self.keyboard.is_none() {
                 self.empty_page(c, text, below, Art::Search, "No games found", &tr("Try fewer letters."), None);
+            } else {
+                typing_line(self, c, text, format!("{} · {}", tr("No games found"), tr("Try fewer letters.")));
             }
         } else if below.bottom - below.top >= self.d(64.0) {
             self.paint_list_phone(c, text, below, c.w);
-            if self.keyboard.is_none() && c.w < c.h {
-                // The matches are a list; Play and Info go in the strip like the shelf's.
-            }
+        } else {
+            // No room for the list above the keyboard (a small landscape screen): the matches as one line, so typing
+            // shows that it found something; Done shows the list.
+            let names: Vec<&str> = self.library.as_ref().map_or(vec![], |lib| self.visible.iter().take(3).map(|&i| lib.games[i].name.as_str()).collect());
+            let line = format!("{} · {}", games_note(self.visible.len()), names.join(", "));
+            typing_line(self, c, text, line);
         }
     }
     pub(super) fn keyboard_height(&self, c: &Canvas) -> i32 {
         let rows = self.keyboard.as_ref().map_or(0, |k| k.rows().len()) as i32;
         let key_h = self.d(if c.w > c.h { 40.0 } else { 52.0 });
-        rows * key_h + self.d(16.0)
+        // The keys give way before the search field does: a 720p phone held across has 304 dp, of which the header and the
+        // field keep 118 (the keys then stand 34 dp high, never under 28).
+        (rows * key_h + self.d(16.0)).min(c.h - self.d(118.0)).max(rows * self.d(28.0) + self.d(16.0))
     }
     /// The search's own keyboard, as large as a phone's: 52 dp keys across the width.
     fn paint_keyboard_phone(&mut self, c: &mut Canvas, text: &mut Text) {
@@ -1267,7 +1472,9 @@ impl Ui {
                 let done = matches!(key, Key::Special(pocket_ui::keyboard::Special::Done));
                 let bg = if on || done { pal().label } else { pal().pill };
                 c.round_rect(inner.x, inner.y, inner.w, inner.h, self.d(6.0), bg);
-                let s = if label.chars().count() > 1 { self.sp(14.0) } else { size };
+                let mut s = if label.chars().count() > 1 { self.sp(14.0) } else { size };
+                // A long key name (German "Leerzeichen") gets smaller, down to a floor, before it would be cut.
+                while s > self.sp(9.0) && text.width(Face::Body, s, &label) > inner.w - self.d(8.0) { s -= 1; }
                 let shown = text.fit(Face::Body, s, &label, inner.w - self.d(8.0));
                 let tw = text.width(Face::Body, s, &shown);
                 text.draw(c, Face::Body, s, inner.x + (inner.w - tw) / 2, inner.y + inner.h / 2 + type_mid(s), if on || done { pal().ink } else { pal().chalk }, &shown);
@@ -1286,13 +1493,13 @@ impl Ui {
         let hints = self.controller_hints();
         let hint_h = if hints { self.d(40.0) } else { 0 };
         let favourite = self.game().is_some_and(|g| self.prefs.favorites.contains(&g.key));
-        let boxed = !matches!(self.prefs.theme, Theme::Minimal | Theme::Cards | Theme::Split);
+        let boxed = self.prefs.theme != Theme::Split;
         let mut secondary: Vec<(&str, Action)> = vec![("Back", Action::Press(Button::South)), ("Favourite", Action::Press(Button::West))];
         if boxed {
             secondary.push(("Turn over", Action::Press(Button::North)));
         }
         secondary.push(("Stickers", Action::Press(Button::Select)));
-        if self.game().is_some_and(|g| super::super::bundled_core(g.system_id).is_some()) {
+        if self.game().is_some_and(|g| super::super::bundled_core(g.system_id).is_some() && self.plays_in_app(g).is_none()) {
             secondary.push(("Controls", Action::Controls));
         }
         // A favourite's button is amber, the colour of Favourites on the shelf.
@@ -1324,6 +1531,7 @@ impl Ui {
             self.card_buf = buf;
             self.link_targets((0, 0));
             // The info page has the name at its top already; the box shows only its cover.
+            let mut header_bottom = 0;
             if let Some(game) = self.game().cloned().filter(|_| boxed) {
                 let ts = self.sp(22.0);
                 let mut y = self.d(16.0);
@@ -1333,23 +1541,37 @@ impl Ui {
                     y += self.d(4.0);
                 }
                 y += pocket_ui::type_scale::px(self.sp(14.0)) as i32 + self.d(8.0);
-                let system = text.fit_name(Face::Body, self.sp(14.0), game.system, col_w);
+                let line = self.system_line(&game);
+                let system = text.fit_name(Face::Body, self.sp(14.0), &line, col_w);
                 text.draw_name(c, Face::Body, self.sp(14.0), col_x, y, pal().dust, &system);
                 self.name_target(Area::new(col_x, 0, col_w, y + self.d(8.0)), &game.name, Action::Label);
+                header_bottom = y + self.d(8.0);
             }
-            let play_h = self.d(52.0);
+            // Two to a line, so a long name above them keeps its room; on a phone held across (304 dp high with its
+            // gesture bar) a name of two lines leaves too little for three rows of buttons and Play: they stand a
+            // little closer and lower rather than over the name.
+            let lines = secondary.len().div_ceil(2) as i32;
+            let (mut bh, mut gap, mut play_h) = (bh, gap, self.d(52.0));
+            if header_bottom + lines * (bh + gap) + play_h + self.d(12.0) > c.h - hint_h {
+                (bh, gap, play_h) = (self.d(40.0), self.d(6.0), self.d(44.0));
+            }
             let mut y = c.h - hint_h - self.d(12.0) - play_h;
             self.play_pill(c, text, Area::new(col_x, y, col_w, play_h));
-            // Two to a line, so a long name above them keeps its room.
             let half = (col_w - gap) / 2;
-            let lines = secondary.len().div_ceil(2) as i32;
             y -= lines * (bh + gap);
             for (i, (label, action)) in secondary.into_iter().enumerate() {
                 let x = col_x + (i as i32 % 2) * (half + gap);
                 self.pill_in(c, text, Area::new(x, y + (i as i32 / 2) * (bh + gap), half, bh), label, colors(label), action);
             }
         } else {
-            let bar = 2 * bh + 3 * gap;
+            // Back, Favourite, Turn over, Stickers and Controls in one row are 58 dp each on a 360 dp phone: "Favo…",
+            // "Stick…". When the words do not fit their pills at a readable size they stand in two rows of up to three.
+            let w = c.w - 2 * margin;
+            let one_row = (w - gap * (secondary.len() as i32 - 1)) / secondary.len() as i32;
+            let size = self.sp(14.0);
+            let words_fit = secondary.iter().all(|(label, _)| text.width(Face::Title, size, label) <= one_row - self.d(24.0));
+            let rows = if words_fit { 1 } else { secondary.len().div_ceil(3) as i32 };
+            let bar = (rows + 1) * bh + (rows + 2) * gap;
             let top = c.h - bar - hint_h;
             // The game's name and system above its box, where the phone has the room.
             let head = if boxed {
@@ -1363,7 +1585,9 @@ impl Ui {
                         y += self.d(4.0);
                     }
                     y += pocket_ui::type_scale::px(self.sp(15.0)) as i32 + self.d(8.0);
-                    text.draw_name(c, Face::Body, self.sp(15.0), margin, y, pal().dust, game.system);
+                    let line = self.system_line(&game);
+                    let line = text.fit_name(Face::Body, self.sp(15.0), &line, c.w - 2 * margin);
+                    text.draw_name(c, Face::Body, self.sp(15.0), margin, y, pal().dust, &line);
                     self.name_target(Area::new(margin, 0, c.w - 2 * margin, y + self.d(8.0)), &game.name, Action::Label);
                 }
                 y + self.d(8.0)
@@ -1400,12 +1624,19 @@ impl Ui {
                 self.card_facts(c, text, (margin, y, c.w - 2 * margin, top - self.d(12.0)));
             }
             c.rect(0, top, c.w, c.h - top, pal().void);
-            let w = c.w - 2 * margin;
             self.play_pill(c, text, Area::new(margin, top + gap, w, bh));
-            let n = secondary.len() as i32;
-            let sw = (w - gap * (n - 1)) / n;
-            for (i, (label, action)) in secondary.into_iter().enumerate() {
-                self.pill_in(c, text, Area::new(margin + i as i32 * (sw + gap), top + 2 * gap + bh, sw, bh), label, colors(label), action);
+            // The pills share the rows evenly (5 as 3 and 2), each row across the whole width.
+            let n = secondary.len();
+            let per_row = n.div_ceil(rows as usize);
+            let mut labels = secondary.into_iter();
+            for row in 0..rows as usize {
+                let count = per_row.min(n - row * per_row);
+                let sw = (w - gap * (count as i32 - 1)) / count as i32;
+                let y = top + (row as i32 + 2) * gap + (row as i32 + 1) * bh;
+                for i in 0..count {
+                    let (label, action) = labels.next().unwrap();
+                    self.pill_in(c, text, Area::new(margin + i as i32 * (sw + gap), y, sw, bh), label, colors(label), action);
+                }
             }
         }
         if hints {
@@ -1429,7 +1660,6 @@ impl Ui {
         };
         let size = self.sp(15.0);
         let line = size as i32 + self.d(9.0);
-        let key_w = self.d(96.0);
         // (key, value, the link it leads by): a fact that leads to the player's other games has an arrow and is a button.
         let mut rows: Vec<(String, String, Option<usize>)> = Vec::new();
         if let Some(year) = card.year {
@@ -1441,8 +1671,11 @@ impl Ui {
         for (i, (label, value)) in card.facts.iter().enumerate() {
             rows.push((tr(label), value.clone(), card.links.iter().position(|(f, _)| *f == i)));
         }
+        // The names of the facts are ours, so they stand whole ("Herausgeber", "Desarrollador" at larger text); the room
+        // they take is the widest of them, between 96 dp and 45 % of the card.
+        let key_w = rows.iter().map(|(label, _, _)| text.width(Face::Body, size, label) + self.d(12.0)).max().unwrap_or(0).max(self.d(96.0)).min(w * 45 / 100);
         if rows.is_empty() && !card.matched {
-            for l in text.wrap_at_most(Face::Body, size, &tr("Not in the offline game list, so there are no facts to show."), w, 2) {
+            for l in text.wrap_at_most(Face::Body, size, &tr("Not in the offline game list, so there are no facts to show."), w, 4) {
                 y += line;
                 text.draw(c, Face::Body, size, x, y, pal().dust, &l);
             }
@@ -1498,13 +1731,14 @@ pub(super) fn type_mid(size: u32) -> i32 {
 }
 /// How far a frozen game's front shows what is inside.
 const AJAR_MOST_DP: f32 = 10.0;
-/// The case `front` with `inside` behind it, out of its side by `peek`. The picture only grows sideways.
-fn ajar_front(front: art::Pic, inside: &art::Pic, peek: i32) -> art::Pic {
+/// The case `front` with `inside` behind it, out of its side by `out` of `peek` (0 while it is still going back in, after
+/// a game). The picture only grows sideways, always by `peek`, so the shelf around it stays where it is.
+fn ajar_front(front: art::Pic, inside: &art::Pic, peek: i32, out: i32) -> art::Pic {
     let (gw, gh) = (inside.w, inside.h);
     let mut pic = art::Pic::new(front.w + peek, front.h.max(gh), 0);
     let top = (pic.h - front.h) / 2;
-    let (gx, gy) = (front.w + peek - gw, (pic.h - gh) / 2);
-    for y in 0..gh {
+    let (gx, gy) = (front.w + out.clamp(0, peek) - gw, (pic.h - gh) / 2);
+    for y in (0..gh).filter(|_| out > 0) {
         for x in 0..gw {
             let (px, at) = (inside.px[(y * gw + x) as usize], (y + gy) * pic.w + x + gx);
             if px >> 24 != 0 && gx + x >= 0 {
@@ -1530,7 +1764,7 @@ fn c_band(c: &mut Canvas, x: i32, y: i32, w: i32, h: i32, color: u32) {
 }
 use pocket_ui::type_scale;
 
-trait ClipY {
+pub(super) trait ClipY {
     fn clip_y(self, top: i32, bottom: i32) -> Area;
 }
 impl ClipY for Area {

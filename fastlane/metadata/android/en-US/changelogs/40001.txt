@@ -1,0 +1,7 @@
+First public preview of pocket-ui for Android.
+• Shelf, cabinet and card looks, search, favourites, Curator
+• Built-in player with Continue, save slots, step back, zoom and a controls card
+• Cores for GB/GBC/GBA, NES, SNES, Master System, Game Gear, Mega Drive, PC Engine, WonderSwan, Neo Geo Pocket, Atari 2600/Lynx, PlayStation, Saturn (experimental)
+• Downloads: Nintendo DS; PSP, N64, Dreamcast experimental
+• Save backup as one zip
+No games or BIOS included.

@@ -47,6 +47,12 @@ impl Notice {
         Notice::take().or_else(|| trouble.map(|t| Notice::new(t.after_quit())))
     }
 
+    /// After a standalone emulator's game: a save state pocket-ui parked for a save or load that couldn't go back
+    /// (`save_trouble::STATE_NOT_BACK`). Shows once.
+    pub fn take_after_standalone() -> Option<Notice> {
+        crate::save_trouble::take_state_not_back().map(Notice::new)
+    }
+
     /// A message of pocket-ui's own.
     pub fn new(text: impl Into<String>) -> Notice {
         Notice { text: text.into(), report: false, updates: false }

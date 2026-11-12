@@ -81,7 +81,7 @@ if state=='failed': sys.exit(1)
     other_probes.env_remove("POCKETUI_SPINE_LINES");
     assert!(other_probes.snapshot_output().unwrap().status.success());
     assert_eq!(calls(&count), prior + 1, "another recorder set is a distinct renderer input");
-    for (key, value) in [("POCKETUI_LANG", "de"), ("POCKETUI_FONT", "pixel"), ("POCKETUI_TEXT_SIZE", "large"), ("POCKETUI_DEVICE", "rg35xx-plus"), ("POCKETUI_SNAPSHOT_SIZE", "640x480"), ("POCKETUI_RETRO", "cocoa"), ("POCKETUI_MOCK_NOW", "1794225600"), ("POCKETUI_FUTURE_RENDER_KNOB", "different")] {
+    for (key, value) in [("POCKETUI_LANG", "de"), ("POCKETUI_FONT", "retro"), ("POCKETUI_TEXT_SIZE", "large"), ("POCKETUI_DEVICE", "rg35xx-plus"), ("POCKETUI_SNAPSHOT_SIZE", "640x480"), ("POCKETUI_RETRO", "cocoa"), ("POCKETUI_MOCK_NOW", "1794225600"), ("POCKETUI_FUTURE_RENDER_KNOB", "different")] {
         let prior = calls(&count);
         let mut changed = command(&program, &one, &count, &b, "shelf:gb");
         changed.env(key, value);
@@ -165,7 +165,7 @@ fn real_renderer_keeps_its_pixels_and_each_probe(tmp: &Path) {
                 .env("POCKETUI_MOCK", "1").env("POCKETUI_MOCK_NOW", "1794139200")
                 .env("POCKETUI_DATA", root.join("data")).env("POCKETUI_ES_SYSTEMS", root.join("es_systems.cfg"))
                 .env("POCKETUI_SNAPSHOT_SIZE", "640x480").env("POCKETUI_LANG", "de")
-                .env("POCKETUI_FONT", if n % 2 == 0 { "barlow" } else { "pixel" });
+                .env("POCKETUI_FONT", if n % 2 == 0 { "barlow" } else { "retro" });
             if _stub.is_some() { cmd.env("WAYLAND_DISPLAY", &socket); }
             let records = [("POCKETUI_TEXT_BOXES", "boxes"), ("POCKETUI_I18N_MISSES", "misses"),
                 ("POCKETUI_VISIBLE_TEXT", "visible"), ("POCKETUI_NAV_PROBE", "nav"),

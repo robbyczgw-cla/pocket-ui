@@ -28,6 +28,7 @@ struct CallbackInfo {
 }
 #[derive(Clone, Copy)]
 struct Request {
+    minor: c_uint,
     reset: Option<Callback>,
     destroy: Option<Callback>,
     depth: bool,
@@ -37,6 +38,8 @@ struct Request {
 static REQUEST: Mutex<Option<Request>> = Mutex::new(None);
 static FRAME: Mutex<Option<(u32, u32)>> = Mutex::new(None);
 static FBO: AtomicU32 = AtomicU32::new(0);
+static READ_BUFFER_OVERRIDES: AtomicU32 = AtomicU32::new(0);
+pub fn read_buffer_overrides() -> u32 { READ_BUFFER_OVERRIDES.load(Ordering::Relaxed) }
 #[link(name = "EGL")]
 extern "C" {
     fn eglGetProcAddress(name: *const c_char) -> *const c_void;
@@ -66,6 +69,7 @@ pub fn reset() {
     *REQUEST.lock().unwrap_or_else(|e| e.into_inner()) = None;
     *FRAME.lock().unwrap_or_else(|e| e.into_inner()) = None;
     FBO.store(0, Ordering::Relaxed);
+    READ_BUFFER_OVERRIDES.store(0, Ordering::Relaxed);
 }
 pub fn video_refresh(data: *const c_void, width: c_uint, height: c_uint) -> bool {
     if data as usize != usize::MAX {
@@ -83,12 +87,13 @@ pub unsafe fn environment(cmd: c_uint, data: *mut c_void) -> Option<bool> {
                 return Some(false);
             }
             let cb = &mut *data.cast::<CallbackInfo>();
-            if !matches!(cb.kind, 2 | 4 | 5) || cb.kind == 5 && (cb.major > 3 || cb.major == 3 && cb.minor > 0) {
+            if !matches!(cb.kind, 2 | 4 | 5) || cb.kind == 5 && (cb.major != 3 || cb.minor > 2) {
                 return Some(false);
             }
             cb.framebuffer = Some(framebuffer);
             cb.proc_address = Some(proc_address);
             *REQUEST.lock().unwrap_or_else(|e| e.into_inner()) = Some(Request {
+                minor: if cb.kind == 5 { cb.minor } else { 0 },
                 reset: cb.reset,
                 destroy: cb.destroy,
                 depth: cb.depth,
@@ -157,9 +162,9 @@ impl HwContext {
             {
                 return Err("Cannot find the Activity EGL config".into());
             }
-            let core = eglCreateContext(display, config, frontend, [0x3098, 3, 0x3038].as_ptr());
+            let core = eglCreateContext(display, config, frontend, [0x3098, 3, 0x30fb, request.minor as i32, 0x3038].as_ptr());
             if core.is_null() {
-                return Err("Cannot create the core GLES 3 context".into());
+                return Err(format!("{} 3.{}", crate::i18n::tr("This core needs OpenGL ES"), request.minor));
             }
             if eglMakeCurrent(display, draw, read, core) == 0 {
                 eglDestroyContext(display, core);
@@ -276,6 +281,13 @@ impl HwContext {
         unsafe {
             let old = self.gl.get_parameter_i32(glow::READ_FRAMEBUFFER_BINDING);
             self.gl.bind_framebuffer(glow::READ_FRAMEBUFFER, Some(self.fbo));
+            // Read-buffer selection belongs to the framebuffer and survives a core's scene passes.
+            // Reading with NONE (or another attachment) otherwise leaves our zeroed picture black.
+            let read_buffer = self.gl.get_parameter_i32(glow::READ_BUFFER);
+            if read_buffer != glow::COLOR_ATTACHMENT0 as i32 {
+                READ_BUFFER_OVERRIDES.fetch_add(1, Ordering::Relaxed);
+            }
+            self.gl.read_buffer(glow::COLOR_ATTACHMENT0);
             let old_pack = self.gl.get_parameter_i32(glow::PIXEL_PACK_BUFFER_BINDING);
             let packing =
                 [glow::PACK_ALIGNMENT, glow::PACK_ROW_LENGTH, glow::PACK_SKIP_ROWS, glow::PACK_SKIP_PIXELS].map(|p| (p, self.gl.get_parameter_i32(p)));
@@ -297,6 +309,7 @@ impl HwContext {
             }
             self.gl
                 .bind_buffer(glow::PIXEL_PACK_BUFFER, std::num::NonZeroU32::new(old_pack as u32).map(glow::NativeBuffer));
+            self.gl.read_buffer(read_buffer as u32);
             self.gl
                 .bind_framebuffer(glow::READ_FRAMEBUFFER, std::num::NonZeroU32::new(old as u32).map(glow::NativeFramebuffer));
         }

@@ -293,10 +293,9 @@ pub struct RocknixWifi {
 }
 
 pub fn parse_rocknix_wifi(system_cfg: &str) -> RocknixWifi {
-    let mut w = RocknixWifi::default();
+    let mut w = RocknixWifi { enabled: crate::system_cfg::wifi_enabled(system_cfg).unwrap_or(false), ..RocknixWifi::default() };
     for line in system_cfg.lines() {
         match line.split_once('=') {
-            Some(("wifi.enabled", v)) => w.enabled = v.trim() == "1",
             Some(("wifi.ssid", v)) => w.ssid = v.to_string(),
             Some(("wifi.key", v)) => w.key = v.to_string(),
             _ => {}

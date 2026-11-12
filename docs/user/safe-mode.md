@@ -25,7 +25,7 @@ started again in the same way.
 With [Kids mode](kids-mode.md) on, a child sees a picture and "Please ask a grown-up" first. Hold SELECT and START for 5 seconds and enter the PIN for the page below.
 
 Safe mode starts pocket-ui with only what this page needs. It shows no covers or other pictures and runs no extras
-(Curator, achievements, Sync, the Store, cover downloads), and it uses the standard look in dark or light, as you set
+(Curator, achievements, Sync, cover downloads), and it uses the standard look in dark or light, as you set
 it. Your games and saves are not touched.
 
 At the top, **What happened** says why safe mode started, the last line of the crash report, and the last steps of
@@ -35,7 +35,7 @@ the start. Under it:
 |---|---|
 | **Restart normally** | Starts pocket-ui as usual. If it fails again, this page comes back. |
 | **Use previous version** | Shown only when there is one: goes back to the version that ran before (its number is in brackets), then starts it as usual. Your settings and games stay. |
-| **Reset pocket-ui settings…** | Asks first. Moves pocket-ui's settings aside: your look, Curator, favourites, play history, covers and what the Store installed go to a folder next to them, `/storage/.config/pocket-ui.rescue-<date>`. Nothing is deleted. Games, saves, the logs and the passwords for file sharing and remote access stay; file sharing is switched off. Then choose Restart normally: pocket-ui starts like new, with the first-start setup. |
+| **Reset pocket-ui settings…** | Asks first. Moves pocket-ui's settings aside: your look, Curator, favourites, play history, covers and downloaded extras go to a folder next to them, `/storage/.config/pocket-ui.rescue-<date>`. Nothing is deleted. Games, saves, the logs and the passwords for file sharing and remote access stay; file sharing is switched off. Then choose Restart normally: pocket-ui starts like new, with the first-start setup. |
 | **Open EmulationStation…** | ROCKNIX's own menu, after the warning below. |
 | **Power off** | Switches the Pocket off. |
 

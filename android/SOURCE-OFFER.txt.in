@@ -1,0 +1,40 @@
+Source code and licences for pocket-ui for Android @VERSION@
+==========================================================
+
+pocket-ui for Android is free software (GPL version 2 or later; LICENSE and NOTICE.md in this app's licences list
+what is not ours). Its emulator cores are separate programs with their own free licences (GPL, LGPL, MPL, AGPL and
+permissive ones). You may have the complete source code of all of them, exactly as built into this app.
+
+
+Where it is
+-----------
+
+Next to the APK, on @RELEASE_URL@ :
+
+  @ARCHIVE@
+      For every core below: the complete corresponding source at the commit named, with the patches already applied
+      and its embedded dependencies, as one archive per core (corresponding-source/), plus manifest.json (names and sha256).
+      The patches are also in this archive's patches/ folder.
+  pocket-ui-android-licences.txt
+      This offer, pocket-ui's licence, NOTICE.md and the list of cores.
+
+pocket-ui's own source is the public repository, at the commit of this release.
+
+The licence texts are in the app as well: Settings -> Licences lists every core with its licence, upstream commit and
+patches. The files are in the APK under assets/licences/ (also for the cores that are optional downloads), and each
+downloaded core keeps its own licences/ folder next to its library.
+
+
+The cores
+---------
+
+@CORES@
+
+
+Written offer
+-------------
+
+For at least three years from the release of this app, anyone can get the complete corresponding source code of the
+GPL-, LGPL-, MPL- and AGPL-licensed software in it, for no charge beyond the cost of providing it. To ask, open an issue
+titled "Source request" at @ISSUES_URL@ and name this app: pocket-ui for Android @VERSION@.
+This offer is valid for anyone who has this information.

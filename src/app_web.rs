@@ -319,49 +319,6 @@ impl App {
                 self.curator.touch();
                 Ok(())
             }
-            Edit::Sticker { path, id, on } => {
-                if !self.library.stickers().iter().any(|s| s.id == id) {
-                    return Err("That label is gone.".into());
-                }
-                if self.library.get(&path).stickers.contains(&id) != on {
-                    io(self.library.toggle_sticker(&path, id).map(|_| ()))?;
-                    self.curator.touch();
-                    self.rebuild();
-                }
-                Ok(())
-            }
-            Edit::NewSticker { name, path } => {
-                if name.trim().is_empty() {
-                    return Err("Give the label a name.".into());
-                }
-                let id = self.library.add_sticker(&name).map_err(|e| format!("The Pocket could not save it: {e}"))?;
-                if let Some(path) = path {
-                    if !self.library.get(&path).stickers.contains(&id) {
-                        io(self.library.toggle_sticker(&path, id).map(|_| ()))?;
-                    }
-                }
-                self.curator.touch();
-                self.rebuild();
-                Ok(())
-            }
-            Edit::RenameSticker { id, name } => {
-                if !self.library.stickers().iter().any(|s| s.id == id) {
-                    return Err("That label is gone.".into());
-                }
-                if name.trim().is_empty() {
-                    return Err("Give the label a name.".into());
-                }
-                io(self.library.rename_sticker(id, &name))?;
-                self.curator.touch();
-                self.rebuild();
-                Ok(())
-            }
-            Edit::DeleteSticker { id } => {
-                if !self.library.stickers().iter().any(|s| s.id == id) {
-                    return Err("That label is gone.".into());
-                }
-                io(self.curator_delete_sticker(id))
-            }
             Edit::RenameShelf { index, was, name } => {
                 let name: String = name.split_whitespace().collect::<Vec<_>>().join(" ").chars().take(pocket_ui::curator::prefs::SHELF_NAME_MAX).collect();
                 if name.is_empty() {
@@ -670,7 +627,7 @@ impl App {
             (None, true) => {
                 self.text.draw(c, Face::Title, 44, left, y, pal().dust, "Waiting for Tailscale");
                 y += 44;
-                for l in self.text.wrap_prose(Face::Body, 26, "It listens only on the Tailscale network. Switch Tailscale on and sign in (Settings › Connections › Tailscale).", width) {
+                for l in self.text.wrap_prose(Face::Body, 26, "It listens only on the Tailscale network. Switch Tailscale on and sign in (Settings › Help & tools › For tinkerers › Tailscale).", width) {
                     self.text.draw(c, Face::Body, 26, left, y, pal().dust, &l);
                     y += pocket_ui::type_scale::line(26, 8);
                 }

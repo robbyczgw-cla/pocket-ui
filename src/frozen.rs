@@ -55,16 +55,29 @@ fn is_zero(n: &u64) -> bool {
 
 /// How much of a file is read to tell it from another one of the same size: its start, middle and end.
 const SAMPLE: u64 = 4096;
-/// Up to this size the whole file is read instead. A phone plays a private copy it has made of the document, with no card
-/// to spare, and a game patched in the middle looks the same to the samples: all cartridges are read whole there, and a
-/// bigger copy has its whole file's check beside it (`GameCopy.COPIED_EVERY_START`, change them together).
+/// Up to this size Android reads the whole file instead: a patch in the middle would look the same to samples.
+/// Larger fallback copies and direct document aliases carry the whole-file CRC in small `.stage` metadata
+/// (`GameCopy.COPIED_EVERY_START` and `android_content`, change the limits together).
 const WHOLE_UP_TO: u64 = if cfg!(target_os = "android") { 64 << 20 } else { 0 };
 
 /// A game's size and a hash of what it holds: for a disc sheet (`.cue`, `.m3u`, `.gdi`) the sheet and every file it names,
 /// down to the tracks, so a swapped BIN or CHD counts as another game. The time isn't in it: a card copied on a PC, or a
 /// patched file with the old time, is judged by what is in the file. None when something can't be read.
 pub fn fingerprint(rom: &Path) -> Option<(u64, u64)> {
+    #[cfg(test)]
+    if PHONE_FINGERPRINTS.with(|phone| phone.get()) { return fingerprint_up_to(rom, 64 << 20); }
     fingerprint_up_to(rom, WHOLE_UP_TO)
+}
+
+#[cfg(test)]
+thread_local! { static PHONE_FINGERPRINTS: std::cell::Cell<bool> = const { std::cell::Cell::new(false) }; }
+/// Exercise Android's file identity policy in host regressions without changing other tests' threads.
+#[cfg(test)]
+pub(crate) fn on_phone<T>(test: impl FnOnce() -> T) -> T {
+    struct Restore(bool);
+    impl Drop for Restore { fn drop(&mut self) { PHONE_FINGERPRINTS.with(|phone| phone.set(self.0)); } }
+    let _restore = Restore(PHONE_FINGERPRINTS.with(|phone| phone.replace(true)));
+    test()
 }
 
 fn fingerprint_up_to(rom: &Path, whole_up_to: u64) -> Option<(u64, u64)> {
@@ -120,7 +133,8 @@ fn mix_file(path: &Path, depth: u32, whole_up_to: u64, hash: &mut u64, bytes: &m
     // A phone's big copy (`GameCopy`, whole_up_to is only set there): what the whole file came to when it was copied, so
     // that a patch between the samples is still another game. Without it (a copy nothing could vouch for) the samples say.
     if whole_up_to > 0 {
-        if let Some(line) = std::fs::read_to_string(path.with_file_name(".stage")).ok().as_deref().and_then(|s| s.trim().split(' ').nth(2).map(str::to_owned)) {
+        // Its first line: a set of files (a cue and its tracks) has one line per file after it.
+        if let Some(line) = std::fs::read_to_string(path.with_file_name(".stage")).ok().as_deref().and_then(|s| s.trim().lines().next()?.split(' ').nth(2).map(str::to_owned)) {
             feed(line.as_bytes(), hash);
         }
     }
@@ -361,30 +375,17 @@ pub fn twins<'a>(path: &Path, shown: impl Iterator<Item = &'a Path>, hidden: imp
     out
 }
 
-/// Whether Frozen games is on this device. On the handhelds always. Where the host owns the emulators (the Steam
-/// Deck) only once the launcher moved the states into pocket-ui's data (`POCKETUI_STATES`, `slots::states_moved`):
-/// pocket-core's moments are pocket-ui's own there and a start can go back to them, while the big emulators keep
-/// their own saves and simply never stand open (their `resume_files` stay empty but for the one with a resume state).
+/// Frozen games are available on every supported Linux handheld.
 #[cfg(not(target_os = "android"))]
 pub fn available() -> bool {
-    available_on(crate::device::current().host_owned(), crate::slots::states_moved())
+    true
 }
 
-pub fn available_on(host_owned: bool, states_moved: bool) -> bool {
-    !host_owned || states_moved
-}
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    #[test]
-    fn a_deck_with_its_states_in_pocket_ui_data_has_open_cases_a_bare_one_has_not() {
-        assert!(available_on(false, false), "a handheld: as before");
-        assert!(available_on(false, true), "a handheld with the variable set: as before");
-        assert!(available_on(true, true), "the Deck through its launcher: pocket-core moments count");
-        assert!(!available_on(true, false), "the Deck without the launcher: states would go to /storage, so no open cases");
-    }
 
     /// The sixth game with a moment: it stands open for Easy, the others' limit of five stays theirs.
     #[test]
@@ -512,6 +513,23 @@ mod tests {
         std::fs::write(d.join(".stage"), "200000 222 1234\n").unwrap();
         assert_ne!(of(10), checked);
         assert_eq!(of(0), bare_linux(&rom), "no check beside a handheld's file counts");
+    }
+
+    #[test]
+    fn a_copied_disc_with_its_tracks_is_told_apart_by_the_whole_sets_check() {
+        let d = crate::testutil::TestDir::new("frozen-big-set");
+        let cue = d.join("Game.cue");
+        std::fs::write(&cue, "FILE \"Game (Track 1).bin\" BINARY\n  TRACK 01 MODE2/2352\n").unwrap();
+        std::fs::write(d.join("Game (Track 1).bin"), vec![7u8; 200_000]).unwrap();
+        let of = || fingerprint_up_to(&cue, 10).unwrap();
+        // `GameCopy.prepareSet`'s stage: the whole set's line, then one per file with its own time.
+        std::fs::write(d.join(".stage"), "200050 111 3735928559\n50 111 Game.cue\n200000 111 Game (Track 1).bin\n").unwrap();
+        let checked = of();
+        assert_eq!(checked.0, 200_000 + std::fs::metadata(&cue).unwrap().len(), "the sheet and its track");
+        std::fs::write(d.join(".stage"), "200050 222 3735928559\n50 222 Game.cue\n200000 0 Game (Track 1).bin\n").unwrap();
+        assert_eq!(of(), checked, "copied again, the same bytes: the same game");
+        std::fs::write(d.join(".stage"), "200050 222 1234\n50 222 Game.cue\n200000 222 Game (Track 1).bin\n").unwrap();
+        assert_ne!(of(), checked, "a track patched between the samples is another game");
     }
 
     fn bare_linux(rom: &Path) -> (u64, u64) {

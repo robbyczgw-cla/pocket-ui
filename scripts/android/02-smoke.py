@@ -9,7 +9,7 @@ from pathlib import Path
 adb, serial, destination = sys.argv[1:]
 out = Path(destination); out.mkdir(parents=True, exist_ok=True)
 root = Path(__file__).resolve().parents[2]
-pkg = 'dev.pocket.spike'; private = '/data/data/' + pkg + '/files'
+pkg = 'xyz.pocketui.app'; private = '/data/data/' + pkg + '/files'
 def run(*args, **kwargs):
     kwargs.setdefault('timeout',30)
     return subprocess.check_output([adb, '-s', serial, *args], **kwargs)

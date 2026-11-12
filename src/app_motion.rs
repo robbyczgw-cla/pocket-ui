@@ -60,7 +60,7 @@ impl Page {
 /// Which of the scrolling lists a glide belongs to.
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub(crate) enum List {
-    /// The shelf in the Shelf, Minimal and Split looks (one is shown at a time).
+    /// The shelf in the Shelf and Split looks (and Easy's lists off Home) (one is shown at a time).
     Home,
     /// The Settings list.
     Settings,
@@ -88,8 +88,6 @@ pub(crate) struct MotionUi {
     settings: ListGlides,
     /// Lists of other pages: (which, what it shows, glides).
     pages: Vec<(u8, u64, ListGlides)>,
-    /// The Cards look's carousel, in cards.
-    cards: Glide,
     /// The hint bar: what it shows, what it showed before and since when it changes.
     hints: Vec<(String, String)>,
     old_hints: Vec<(String, String)>,
@@ -114,7 +112,6 @@ impl Default for MotionUi {
             home: ListGlides::new(),
             settings: ListGlides::new(),
             pages: Vec::new(),
-            cards: Glide::rows(),
             hints: Vec::new(),
             old_hints: Vec::new(),
             hints_at: None,
@@ -132,7 +129,6 @@ impl MotionUi {
         self.home = ListGlides::new();
         self.settings = ListGlides::new();
         self.pages.clear();
-        self.cards = Glide::rows();
         self.hints.clear();
         self.hints_at = None;
     }
@@ -190,12 +186,6 @@ impl MotionUi {
         if self.transition.is_some() && h > 0 {
             self.rows.push((x, y, w, h));
         }
-    }
-
-    /// The carousel's position in this frame, gliding to `sel`.
-    pub(crate) fn cards_at(&mut self, sel: usize, now: Instant) -> f32 {
-        self.cards.set(sel as f32, now);
-        self.cards.value(now)
     }
 
     /// The hint bar's crossfade: the hints shown before and how far the new ones are in (0-1), while it lasts.

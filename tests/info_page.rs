@@ -94,7 +94,7 @@ fn minimal_cards_and_split_open_the_info_page_and_nothing_is_cut_off() {
         .expect("python3 for scripts/curator-fake-library.py");
     assert!(status.success());
     let stub = wayland(tmp.path());
-    for look in ["minimal", "cards", "split"] {
+    for look in ["split"] {
         for size in ["1280x720", "640x480"] {
             for (lang, text_size) in [("en", "normal"), ("de", "large")] {
                 // A game with a description from the gamelist, one with none, a Favourite.
@@ -134,7 +134,7 @@ fn a_long_developer_takes_a_second_line_instead_of_ending_in_dots() {
     assert!(status.success());
     let stub = wayland(tmp.path());
     for (lang, text_size) in [("de", "large"), ("en", "normal")] {
-        let (seen, problems) = shot(tmp.path(), stub.as_ref(), "info:minimal:gb:link", "640x480", lang, text_size);
+        let (seen, problems) = shot(tmp.path(), stub.as_ref(), "info:split:gb:link", "640x480", lang, text_size);
         assert!(seen.contains("Nintendo Entertainment") && seen.contains("Analysis & Development"), "{lang}: the whole developer is there\n{seen}");
         assert!(problems.trim().is_empty(), "{lang}: {problems}");
     }
@@ -155,7 +155,7 @@ fn textfit_031_description_is_reachable_below_the_facts() {
         let mut reached = false;
         let nav = tmp.path().join("description.nav");
         for n in 0..=20 {
-            let state = format!("info:cards:ps2:revenge:{}", "d".repeat(n));
+            let state = format!("info:split:ps2:revenge:{}", "d".repeat(n));
             let (seen, problems) = shot_in(tmp.path(), stub.as_ref(), &state, dimensions, "es", "large",
                 &[("POCKETUI_RETRO", "cocoa"), ("POCKETUI_NAV_PROBE", nav.to_str().unwrap())]);
             let words = seen.split_whitespace().collect::<Vec<_>>().join(" ");

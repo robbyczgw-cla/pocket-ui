@@ -8,7 +8,7 @@ A snapshot paints into memory and never opens a window, but winit's event loop (
 connects to the compositor first and binds wl_compositor, wl_shm and xdg_wm_base. This answers exactly that: the
 registry, binds, sync callbacks; every other request is read and ignored. Nothing is ever shown. macOS and a Linux
 desktop with a compositor don't need it. Used by tests/i18n_snapshots.rs and scripts/i18n-shots.sh
-(docs/DEVELOPING.md "Snapshots").
+(docs/dev/tests.md, snapshot states).
 """
 import os
 import socket

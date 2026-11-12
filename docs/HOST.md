@@ -200,8 +200,13 @@ and `bench` / `ra` next to it (see the header of `scripts/syscheck.sh`), then se
   patched game. Patching costs one read of the patch and one pass over the game before the core starts: a few ms for
   a cartridge game; none of it on pocket-ui's UI thread.
 - **libretro VFS** (`src/vfs.rs`, version 3): Stella reads its ROM only through it and failed without it
-  ("Unrecognized ROM file type"); pcsx_rearmed also uses it for disc images. `seek` returns 0 on success like
-  RetroArch's own (pcsx_rearmed treats the new position as an error).
+  ("Unrecognized ROM file type"); pcsx_rearmed also uses it for disc images and memory cards. Streams use
+  stdio buffering for small reads and writes. PCSX creates a missing second 128 KiB memory card one byte at a time;
+  forwarding each byte directly to `write(2)` on the Brick's sync-mounted FAT card stalled the first launch until
+  the core guard stopped it. Buffering batches these writes without preloading the disc or changing core options.
+  `tell` includes buffered bytes; `size` and `truncate` flush pending output first; close flushes the complete stream,
+  and explicit flush also calls `fsync` as before. `seek` returns 0 on success like RetroArch's buffered stdio
+  implementation (pcsx_rearmed treats a nonzero result as an error).
 - **BIOS and failed starts**: `src/hostsys.rs` knows the BIOS files a system needs (Sega CD, PC Engine CD); when
   one is missing, pocket-core writes the reason to `/tmp/pocket-core.error` and exits, and pocket-ui shows it as a
   card at the top of the shelf (`src/notice.rs`) that stays until A, B or a tap closes it. Other failed starts carry the core's own last
@@ -514,7 +519,7 @@ rejects damaged headers, truncated streams and oversized input before passing an
 fsync remain in `fsutil::write_atomic`; compression runs in pocket-core/the Android player, never on the launcher's UI thread.
 
 Only Auto changes format/name. Manual slots, Before load and Earlier remain raw; a timeline copy or Android set-aside
-slot decodes Auto first, so no compressed bytes reach a legacy filename. Linux, Deck and handheld builds share the helper;
+slot decodes Auto first, so no compressed bytes reach a legacy filename. Linux handheld builds share the helper;
 Android's player uses the same codec for save/load and `Core::resume`. Old raw `.pstate.auto` / `.taken` states still load,
 without a migration write. The newest actual quit is selected across both namespaces before crash recovery points.
 
@@ -537,7 +542,7 @@ as pocket-ui; while HOME is down the game gets no buttons.
 | HOME + Left / Right | previous / next slot |
 | HOME + R2 | fast-forward on / off |
 | hold HOME + L2 | rewind |
-| HOME + Y | Over the game: the next level (Off → FPS → FPS + sensors → Pixel Path → Off) for this session, with a toast "Over the game: FPS" |
+| HOME + Y | Over the game: the next level (Off → FPS → FPS + sensors → Off; Pixel Path after FPS + sensors with the pause menu's Pixel Path on) for this session, with a toast "Over the game: FPS" |
 
 A HOME tap on its own still opens the menu: pocket-ui treats any other button pressed while HOME is down as "this was a
 shortcut". The Mini V2's L2/R2 are analog axes (a virtual pad reports them as buttons); both count from half travel.
@@ -563,8 +568,12 @@ game shows (below): the FPS line, or Pixel Path's strip beside the picture (`src
   (`set over_game …`, also the Pixel Path page's Y) sets it again. **Migration:** `over_game::migrate` turns an Options
   file's `show_fps` (`on` → `fps`, the others as they were) and `hk_pixel` into the new keys when it is read, and
   `over_game::adopt_curator` moves `curator.json`'s `pixel_live` (only with `pixel_path` on, as it worked) into
-  settings.json once at pocket-ui's start. The Pixel Path level no longer waits for Settings → Curator → Pixel Path in
-  the pause menu, which is the page's switch alone.
+  settings.json once at pocket-ui's start. **Since 0.4** the Pixel Path level is offered only with Settings → Games →
+  Curator → Pixel Path in the pause menu (`curator.json`'s `pixel_path`, on with the Enthusiast profile;
+  `over_game::pixel_path_offered`): `Level::step` walks past it otherwise (the Settings row, HOME + Y in pocket-core,
+  which reads the file at the press, and `GameSettings::step` for Options), and `Level::offered` makes a saved `pixel`
+  FPS (pocket-ui's start for settings.json, `GameSettings::load` for the Options files and the default). The module
+  itself stays: the player takes the FPS clock, the line count for scanlines and the colour-correction check from it.
   - *FPS*: "60 FPS   CPU 23%" top left, updated twice a second (CPU of the pocket-core process, 100 % = one core).
   - *FPS + sensors* adds the device's state to the same line: "60 FPS   CPU 23%   62 °C   Fan 45%   4.8 W" (hottest
     thermal zone, the fan's PWM duty or rpm or "Fan off", the battery draw in watts or "charging"; `src/osd_sensors.rs`).
@@ -918,7 +927,7 @@ A demanding port (several busy cores) is not busy-waiting; a calm one isn't eith
 Press START" until the page has been opened once (`Note::seen`), and the page then offers "Use Battery for this port"
 first. Nothing is ever applied by itself.
 
-**Screenshots:** `--snapshot port-perf[:<row>][:busy][:own]` (DEVELOPING.md's table).
+**Screenshots:** `--snapshot port-perf[:<row>][:busy][:own]` (dev/tests.md's table).
 
 Reading it back over SSH: `cat /storage/.config/pocket-ui/performance.json`; the fan zone is the one with a `pwm-fan`
 cooling device (`grep -l pwm-fan /sys/class/thermal/thermal_zone*/cdev*/type`), its trips
@@ -1570,9 +1579,16 @@ set it (or a single entry) to false and they go back to their default emulator.
   size, the rest zeros, and the full buffer length as its size, so nothing the core reads lies outside it. Files under the
   minimum stay refused, and so does a RetroArch container (`RASTATE`) whose section lengths do not fit the real file. This protects
   memory only: a cut-off state over 1 MiB, another game's or a damaged one is not recognised by pocket-ui (Flycast's own header and RAM
-  size decide). No other core is on the list: PPSSPP ignores the length it is given, melonDS DS wants its exact size. The state
+  size decide). PPSSPP is on the list too (below); no other core is: melonDS DS wants its exact size. The state
   files themselves are unchanged (raw, as before). A state that grew between `retro_serialize_size` and `retro_serialize`
   is saved with a second try.
+- **PPSSPP's state size is an upper bound** (PSP): until its renderer is up `retro_serialize_size` says 134217728 bytes (and
+  `retro_serialize` refuses), later the measured state rounded up to 8 MiB (41943040 for Bomberman), and the state written at
+  quit is that later size. Android asks right after the start, so Continue was refused as "wrong size (41943040 of 134217728
+  bytes)" and the Save & quit that followed said the core could not save (Odin 2 Mini, 2026-11-11); Linux asks after the
+  renderer is up and was only exposed to a state that crossed a rounding step. `state_policy::core_pads_short_states` lists
+  `ppsspp` next to `flycast`, with the same minimum and container check; PPSSPP's adapter ignores the length it is given, so a
+  bare shorter file is never handed over. Both players apply the list through `Core::apply_state_policy`.
 - **SuperGrafx.** `exts: pce, sgx, zip`: HuCards. CD images (`.cue`, `.ccd`, `.chd`) in the same folder need a System
   Card (`syscard3.pce`) and stay with RetroArch, as `roms/pcenginecd` does. A `.pce` runs in PC Engine mode, an `.sgx`
   in SuperGrafx mode (the state doubles, 78 → 167 KB: the second VDC). 59.82 Hz like the PC Engine.
@@ -2146,6 +2162,16 @@ the Pocket's motor at the same time, and the Players page (A on each controller)
   279 mA, 1.5 % busy).
   `POCKETUI_SOUND_DEBUG=1` logs, per sound, how long the mixer thread took to pick it up, the open time and what is
   already queued ahead of it.
+- **A muted sink opens no stream** (2026-11-11, Android, the Odin 2 Mini). With the system volume at 0 every key press
+  opened the output beside its mute check and closed it again at once when the check said muted: "AAudio opened" every
+  3 s in the log of a QA script that pressed a key every 3 s (13 open/close pairs in 13 presses, 33 ms each; an idle shelf
+  opened nothing: 0 in 2 minutes). Now a sound asked while the last answer was "muted" waits for a fresh answer
+  (`held`, polled every 2 ms) and opens the output only if it is audible; muted, it is dropped and nothing opens. The
+  first sound after a mute is learned still opens once (nothing known yet), and the first sound after unmuting waits for
+  the check (`ui-sound: unmuted: ... waited N ms` in logcat; 2 ms on the Odin, whose first sound after quiet is 30-40 ms
+  from the press to the first chunk either way). After the fix on the Odin: 13 muted presses, 1 stream (the first); 2 minutes of
+  idle shelf, empty or full library: 0. Test: `a_muted_handheld_opens_no_stream_for_key_presses_after_the_first`
+  (ten presses, one stream; red before with ten).
 - **Latency** (2026-10-22, virtual device, PipeWire at ROCKNIX's quantum of 1024; the device measured 27-41 ms to open
   and about 55 ms queued, the same shape): a sound waits for (a) the mixer to pick it up, which only happens when its
   blocked write returns (a quantum, 21 ms, at 1024: 2-21 ms, mean 11), (b) the silence already written ahead of it

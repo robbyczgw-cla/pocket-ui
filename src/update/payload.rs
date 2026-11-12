@@ -65,7 +65,19 @@ fn transfer(tools: &Tools, rel: &Release, destination: &Path, cancel: &Cancel, p
 
 extern "C" fn cancel_signal(_: libc::c_int) { CLI_CANCEL.store(true, Ordering::Relaxed); }
 
-fn write_progress(path: &Path, phase: &str, bytes: u64, total: u64) {
+/// External card writers inherit this thread's idle I/O class across exec.
+#[cfg(all(target_os = "linux", feature = "brick"))]
+pub fn idle_command(args: &[std::ffi::OsString]) -> i32 {
+    use std::os::unix::process::CommandExt;
+    let Some((program, args)) = args.split_first() else { return 2; };
+    let result = super::brick_io::IdleIo::enter().and_then(|_idle| {
+        Err::<(), _>(std::process::Command::new(program).args(args).exec())
+    });
+    if let Err(error) = result { eprintln!("idle command: {error}"); }
+    1
+}
+
+pub fn write_progress(path: &Path, phase: &str, bytes: u64, total: u64) {
     let temporary = path.with_extension("new");
     if std::fs::write(&temporary, format!("{phase}|{bytes}|{total}\n")).is_ok() {
         let _ = std::fs::rename(temporary, path);

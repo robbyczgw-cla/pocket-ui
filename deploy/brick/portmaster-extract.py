@@ -55,7 +55,9 @@ def prepare(dest, revision):
 
 
 if __name__ == "__main__":
-    if len(sys.argv) == 4 and sys.argv[1] == '--prepare':
+    if len(sys.argv) == 4 and sys.argv[1] == '--copy':
+        policy().copy_path(*sys.argv[2:])
+    elif len(sys.argv) == 4 and sys.argv[1] == '--prepare':
         prepare(*sys.argv[2:])
     else:
         extract(*sys.argv[1:])

@@ -583,7 +583,6 @@ fn library_overview(ctx: &Ctx) -> Response {
             "stickers": stickers,
             "shelves": shelves,
             "shelvesReady": have_index,
-            "stickerMax": crate::library_meta::STICKER_MAX,
             "noteMax": crate::library_meta::NOTE_MAX,
             "shelfMax": crate::curator::prefs::SHELF_NAME_MAX,
         }),
@@ -1014,8 +1013,7 @@ fn edit(ctx: &Ctx, path: &str, req: &Request, body: &mut impl Read) -> Result<Re
         let (sys, gm) = (&lib.systems[s], &lib.systems[s].games[g]);
         Ok((sys.name.clone(), gm.name.clone(), gm.path.clone()))
     };
-    // Numbers that don't fit are refused, never cut down to another sticker's or shelf's (review F18).
-    let sticker = || v.get("sticker").and_then(|n| n.as_u64()).and_then(|n| u32::try_from(n).ok()).ok_or_else(|| Response::error(400, "Which sticker?"));
+    // Numbers that don't fit are refused, never cut down to another shelf's (review F18).
     let shelf = || v.get("index").and_then(|n| n.as_u64()).and_then(|n| usize::try_from(n).ok()).ok_or_else(|| Response::error(400, "Which shelf?"));
     let e = match path {
         "/api/game/favorite" => {
@@ -1032,22 +1030,12 @@ fn edit(ctx: &Ctx, path: &str, req: &Request, body: &mut impl Read) -> Result<Re
             let rating = v.get("rating").and_then(|n| n.as_u64()).filter(|n| *n <= crate::library_meta::RATING_MAX as u64).ok_or_else(|| Response::error(400, "A rating is 0 to 5."))?;
             Edit::Rating { path: game()?.2, rating: rating as u8 }
         }
-        "/api/game/sticker" => {
-            let id = sticker()?;
-            Edit::Sticker { path: game()?.2, id, on: v.get("on").and_then(|b| b.as_bool()).unwrap_or(true) }
-        }
         "/api/game/preferred" => {
             let path = game()?.2;
             let ix = ctx.shared.curator.lock().unwrap().clone().ok_or_else(|| Response::error(503, "Curator is still reading the library."))?;
             let work = ix.find(&path).and_then(|g| ix.game(g).work.clone()).ok_or_else(|| Response::error(409, "This game has no other versions."))?;
             Edit::Preferred { work, path }
         }
-        "/api/stickers/new" => {
-            let path = if v.get("id").is_some() { Some(game()?.2) } else { None };
-            Edit::NewSticker { name: text_of(&v, "name"), path }
-        }
-        "/api/stickers/rename" => Edit::RenameSticker { id: sticker()?, name: text_of(&v, "name") },
-        "/api/stickers/delete" => Edit::DeleteSticker { id: sticker()? },
         "/api/shelves/rename" => Edit::RenameShelf { index: shelf()?, was: text_of(&v, "was"), name: text_of(&v, "name") },
         "/api/shelves/delete" => Edit::DeleteShelf { index: shelf()?, was: text_of(&v, "was") },
         _ => return Err(Response::error(404, "Not found.")),

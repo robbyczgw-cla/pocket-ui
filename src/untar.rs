@@ -243,7 +243,7 @@ pub fn entries(tar: &[u8]) -> Result<Vec<Entry>, String> {
 #[cfg(feature = "brick")]
 mod brick;
 #[cfg(feature = "brick")]
-pub use brick::{walk, unpack_file, unpack_file_throttled, Gz, Refused};
+pub use brick::{walk, unpack_file, unpack_file_throttled, unpack_bytes_throttled, Gz, Refused};
 
 /// Sets folders and executables to 0755 and every other file to 0644 below `dir` (and `dir`
 /// itself); anything that is neither a file nor a folder is an error.
@@ -277,9 +277,14 @@ pub fn unpack(archive: &[u8], into: &Path) -> Result<Vec<Entry>, String> {
     std::fs::DirBuilder::new().mode(0o700).create(into).map_err(|e| format!("{}: {e}", into.display()))?;
     // The umask may have left more than 0700 open.
     let result = std::fs::set_permissions(into, std::fs::Permissions::from_mode(0o700)).map_err(|e| e.to_string()).and_then(|_| {
-        let mut child = Command::new("tar")
-            .args(["--no-same-owner", "--no-same-permissions", "-xf", "-", "-C"])
-            .arg(into)
+        let mut command = Command::new("tar");
+        // Android ships Toybox tar: -o ignores ownership; the common preflight and final
+        // normalisation retain exactly the same path/link/mode checks as the desktop installer.
+        #[cfg(target_os = "android")]
+        command.args(["-o", "-xf", "-", "-C"]);
+        #[cfg(not(target_os = "android"))]
+        command.args(["--no-same-owner", "--no-same-permissions", "-xf", "-", "-C"]);
+        let mut child = command.arg(into)
             .stdin(Stdio::piped())
             .stdout(Stdio::null())
             .stderr(Stdio::null())

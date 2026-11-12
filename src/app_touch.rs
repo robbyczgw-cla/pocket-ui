@@ -51,11 +51,6 @@ impl App {
         if self.on_tv() {
             return self.touch_ignored(touch::Ignored::TvOutput);
         }
-        // Two screens: the touch screen lies on the lower one, which only shows the game; a tap there never reaches
-        // the shelf, quick settings or a menu above (`second_screen`).
-        if pocket_ui::second_screen::Panels::current().is_some() || self.second.is_some() {
-            return self.touch_ignored(touch::Ignored::LowerScreen);
-        }
         // Quick settings and the power menu (also over a paused game) have their own map (`Sys::hits`).
         if self.sys.quick_open() || self.sys.power_menu_open() {
             self.ignore_log.accepted();

@@ -11,15 +11,18 @@ use std::process::Command;
 
 include!("common/root.rs");
 
+/// The page behind Help & tools → For tinkerers (the eighth entry of main.rs SETTINGS_GROUPS, no category of the first page).
+const TINKERERS: [&str; 4] = ["Tailscale", "Sync", "Remote access (SSH)", "PC streaming"];
+
 /// The tree as the player sees it without a store catalog: category, then its rows.
 const TREE: [(&str, &[&str]); 7] = [
     ("Look", &["Layout", "Systems on the shelf", "Cozy extras", "Appearance", "Colours", "Style", "Text size", "Night light"]),
     ("Sound & feel", &["Animations", "Playful cases", "Old-TV switch-on", "Motion", "Zoom in the pause menu", "Sounds", "Case sounds", "Haptics", "LEDs"]),
     ("Playing", &["On start", "Continue where I quit", "Remind me where I was", "Buttons", "Over the game", "Screen frames", "Performance & fan", "Battery", "RetroAchievements"]),
-    ("Games", &["Add games", "Game check", "Extras", "From EmulationStation", "Screenshots", "Curator", "PC streaming"]),
-    ("Connections", &["Wi-Fi", "Bluetooth", "Tailscale", "Sync", "Remote access (SSH)", "Web companion"]),
+    ("Games", &["Add games", "Game check", "Extras", "From EmulationStation", "Screenshots", "Curator"]),
+    ("Connections", &["Wi-Fi", "Bluetooth", "Web companion"]),
     ("System", &["Language", "Time", "Sleep & power", "Kids mode", "Updates", "Storage", "Backup & reset"]),
-    ("Help & tools", &["First-start setup", "How you like to play", "Tour", "Manual", "Tools", "Test buttons", "Report a problem", "About"]),
+    ("Help & tools", &["First-start setup", "How you like to play", "Tour", "Manual", "For tinkerers", "Tools", "Test buttons", "Report a problem", "About"]),
 ];
 
 struct Stub(std::process::Child, PathBuf);
@@ -54,19 +57,18 @@ fn german(en: &str) -> String {
 }
 
 /// The rows of Settings → Look → Cozy extras and System → Sleep & power, in their order.
-const COZY: [&str; 9] = ["TV on the cabinet", "Stickers on cases", "Printed discs", "Memory card in the pause menu", "Light by time of day", "Decorations", "Game connections", "Rediscover", "GBA console"];
-const SLEEP: [&str; 6] = ["Screen off after", "Slideshow before screen off", "Sleep after", "Switch off after sleeping", "Short press", "Hold"];
+const COZY: [&str; 8] = ["TV on the cabinet", "Stickers on cases", "Printed discs", "Light by time of day", "Decorations", "Game connections", "Rediscover", "GBA console"];
+const SLEEP: [&str; 5] = ["Screen off after", "Sleep after", "Switch off after sleeping", "Short press", "Hold"];
 
 /// The line naming what is in each category, as at the bottom of the categories (the Look key ends with a zero-width mark).
 const LINES: [&str; 7] = [
     "Layout, systems, extras, appearance, colours, style, text size, screen colour, night light.",
     "Animations, playful cases, old-TV switch-on, motion, zoom, sounds, case sounds, haptics, LEDs.",
     "On start, continue, where I was, buttons, over the game, frames, performance, battery, achievements.",
-    "Games, game check, extras, EmulationStation, screenshots, Curator, PC.",
-    "Wi-Fi, Bluetooth, USB file transfer, Tailscale, Sync, remote access, web companion.",
-    "Language, time, sleep & power, second screen, kids mode, updates, storage, backup & reset.",
-    // With the Store, as the German table has it; a test run has no catalog, so its part is left out (below).
-    "First-start setup, how you like to play, Tour, manual, tools, test buttons, Store, report a problem, about.",
+    "Games, game check, extras, EmulationStation, screenshots, Curator.",
+    "Wi-Fi, Bluetooth, web companion.",
+    "Language, time, sleep & power, kids mode, updates, storage, backup & reset.",
+    "First-start setup, how you like to play, Tour, manual, for tinkerers, tools, test buttons, report a problem, about.",
 ];
 
 /// What one snapshot painted: the visible strings and the text-box faults (`E` cut, `O` overlapping).
@@ -136,10 +138,7 @@ fn every_choice_is_a_row_and_shows_whole() {
                     failed.push(format!("{lang} {size} {text}: the categories don't show {cat:?}: {:?}", page.visible));
                 }
             }
-            // Not in a test run: the Store (no catalog) and USB file transfer (retired, `usb_transfer::RETIRED`).
-            let line = tr(LINES[g]).replace(", Store,", ",").replace(", USB-Dateiübertragung,", ",").replace(", Transferencia por USB,", ",").replace(", USB file transfer,", ",")
-                // Second screen is only there with two screens (the RG DS Plus), not on the test machine.
-                .replace(", second screen,", ",").replace(", zweiter Bildschirm,", ",").replace(", segunda pantalla,", ",");
+            let line = tr(LINES[g]);
             // Wrapped at spaces: the painted lines one after another are the whole line.
             if !page.visible.join(" ").contains(&line) || page.visible.iter().any(|v| v.ends_with('…')) {
                 failed.push(format!("{lang} {size} {text} category {g}: its line {line:?} isn't shown whole: {:?}", page.visible));
@@ -165,11 +164,12 @@ fn every_choice_is_a_row_and_shows_whole() {
             failed.push(format!("{lang} {size} {text}: the full selected SP model name must be readable"));
         }
         failed.extend(sp.faults.iter().map(|f| format!("{lang} {size} {text} GBA SP choice: {f}")));
-        for (g, (cat, rows)) in TREE.iter().enumerate() {
+        let pages = TREE.iter().copied().chain(std::iter::once(("For tinkerers", &TINKERERS[..])));
+        for (g, (cat, rows)) in pages.enumerate() {
             for (r, row) in rows.iter().enumerate() {
                 let state = format!("settings:{g}:{r}");
                 let s = shot(&tmp, &stub, &state, lang, size, text, true);
-                let (cat_name, row_name) = (if *cat == "Look" { german("Look\u{200b}") } else { tr(cat) }, if lang == "de" { german(row) } else { row.to_string() });
+                let (cat_name, row_name) = (if cat == "Look" { german("Look\u{200b}") } else { tr(cat) }, if lang == "de" { german(row) } else { row.to_string() });
                 let cat_name = if lang == "de" { cat_name } else { cat.to_string() };
                 if !s.visible.iter().any(|v| v.trim_end_matches('\u{200b}') == cat_name) {
                     failed.push(format!("{lang} {size} {text} {state}: title {cat_name:?} not shown"));

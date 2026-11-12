@@ -53,7 +53,7 @@ A restore never overwrites a newer save: you keep both. More: [Backup & reset](s
 
 ## Keep saves the same on two devices
 
-1. Connect to Wi-Fi, then Settings → Connections → **Sync** → **Syncthing**, **A**.
+1. Connect to Wi-Fi, then Settings → Help & tools → For tinkerers → **Sync** → **Syncthing**, **A**.
 2. Install Syncthing on your computer, phone or second handheld and add this handheld by its **Device ID** (or scan
    the QR code on the Sync page).
 3. Share the "Pocket saves" and "Pocket save states" folders with it, as [Pair a computer](sync.md#pair-a-computer)

@@ -26,7 +26,7 @@ TESTED_ROCKNIX="20261001"
 MODEL_WANTED="Retroid Pocket Mini V2"
 # The Mini V2's siblings on the same ROCKNIX SM8250 image, as their device trees name them (src/device.rs): pocket-ui
 # knows them. The project has played on the Odin 2 Mini (below); the others have not been tried.
-MODELS_EXPERIMENTAL="Retroid Pocket 5|Retroid Pocket 5 Visionox|Retroid Pocket Flip2|Retroid Pocket Flip2 Visionox|Retroid Pocket Mini|Retroid Pocket 6|Retroid Pocket 6 TOP-DPAD|Retroid Pocket Nova|AYN Odin 2|AYN Odin 2 Mini|AYN Odin 2 Portal"
+MODELS_EXPERIMENTAL="Retroid Pocket Classic Rev Q|Retroid Pocket 5|Retroid Pocket 5 Visionox|Retroid Pocket Flip2|Retroid Pocket Flip2 Visionox|Retroid Pocket Mini|Retroid Pocket 6|Retroid Pocket 6 TOP-DPAD|Retroid Pocket Nova|AYN Odin 2|AYN Odin 2 Mini|AYN Odin 2 Portal"
 # Experimental models the project has played on (docs/DEVICES.md, the 🎮 rows): the note says so.
 MODELS_PLAYED="AYN Odin 2 Mini|Anbernic RG35XX Plus|Anbernic RG35XX SP"
 # The Anbernic models of ROCKNIX's H700 image that pocket-ui has a profile for (src/device.rs H700_BOARDS; a test keeps the
@@ -94,7 +94,7 @@ OSR=$R/etc/os-release
 [ -f "$OSR" ] || die "no /etc/os-release: this is not ROCKNIX"
 [ "$(field OS_NAME "$OSR")" = ROCKNIX ] || die "this system is $(field OS_NAME "$OSR" || echo unknown), not ROCKNIX"
 dev=$(field HW_DEVICE "$OSR") arch=$(field HW_ARCH "$OSR") ver=$(field OS_VERSION "$OSR")
-{ [ "$dev" = SM8250 ] || [ "$dev" = SM8550 ] || [ "$dev" = H700 ] || [ "$dev" = RK3566 ]; } && [ "$arch" = aarch64 ] || die "this is ROCKNIX for $dev/$arch; pocket-ui needs ROCKNIX for SM8250, SM8550, H700 or RK3566 (aarch64)"
+{ [ "$dev" = SM4450 ] || [ "$dev" = SM8250 ] || [ "$dev" = SM8550 ] || [ "$dev" = H700 ] || [ "$dev" = RK3566 ]; } && [ "$arch" = aarch64 ] || die "this is ROCKNIX for $dev/$arch; pocket-ui needs ROCKNIX for SM4450, SM8250, SM8550, H700 or RK3566 (aarch64)"
 # ROCKNIX versions are dates (20261001). The tested one and any newer one go ahead (the compatibility check below is the
 # real contract and still blocks); an older one is asked to update first.
 case $ver in *[!0-9]* | '') vernum=0 ;; *) vernum=$ver ;; esac
@@ -111,6 +111,9 @@ fi
 model=$(tr -d '\000' <"$MODEL_FILE" 2>/dev/null)
 experimental=0
 case "|$MODELS_EXPERIMENTAL|" in *"|$model|"*) [ -n "$model" ] && experimental=1 ;; esac
+if [ "$dev" = SM4450 ]; then
+  [ "$model" = "Retroid Pocket Classic Rev Q" ] || die "this SM4450 model has no supported Classic Rev Q profile"
+fi
 if [ "$dev" = H700 ]; then
   experimental=0
   # An H700 handheld needs its own profile (screen size, buttons, what it has): no profile, no install, whatever the option.

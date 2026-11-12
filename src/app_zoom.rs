@@ -5,7 +5,7 @@
 //! page asks the game for nothing and reads no file. Until that picture has come (a game still starting) the row
 //! refuses, as a Load without a state does.
 //!
-//! Where it is reached: Pause → Options → Zoom always; a row on the pause menu's main page only while Easy to read is on
+//! Where it is reached: Pause → Options → Zoom always; a row on the pause menu's main page only while Big text is on
 //! or Settings → Sound & feel → Zoom in the pause menu is (`zoom_row_on`); and, off by default, HOME + X in the game
 //! (Options → Shortcuts → Zoom, `zoom_key`), which opens the menu straight on this page. B goes back to where it came from.
 
@@ -29,7 +29,7 @@ pub(crate) enum Back {
 }
 
 impl App {
-    /// Whether the pause menu lists Zoom on its main page: Easy to read is on (`features::reading_on`) or the player
+    /// Whether the pause menu lists Zoom on its main page: Big text is on (`features::reading_on`) or the player
     /// switched on Settings → Sound & feel → Zoom in the pause menu.
     pub(crate) fn zoom_row_on(&self) -> bool {
         self.zoom_in_pause || pocket_ui::features::reading_on(pocket_ui::type_scale::get(), pocket_ui::motion::level())

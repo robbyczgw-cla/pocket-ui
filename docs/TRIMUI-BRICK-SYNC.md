@@ -17,6 +17,13 @@ pocket-ui's `/storage` is the card's folder bound there by `start.sh`, so every 
 the REST address) is already right. Folders for systems the Brick does not have (PS2, GameCube, Wii, 3DS) are not offered because their
 folders are missing.
 
+The card starts `syncthing serve` at CPU nice 19 through `pocket-ui --brick-idle`, preserving Linux idle I/O across exec.
+`setLowPriority=false` prevents Syncthing from replacing that policy. Receive traffic is capped at 512 KiB/s
+including LAN (`maxRecvKbps`, `limitBandwidthInLan`), with one active folder. Existing configured folders
+and newly created pocket-ui folders use one concurrent writer, a 256 KiB pending-request budget and native
+fsyncs. These [Syncthing settings](https://docs.syncthing.net/users/config) limit input/concurrency; they do
+not provide the Rust Pacer's per-block disk-rate guarantee for native copies or database writes.
+
 ## Checks
 
 - `scripts/test-brick-card.sh` "Sync": a stand-in `syncthing` proves no start without a password, serve flags (RAM home, card database,

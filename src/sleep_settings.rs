@@ -1,8 +1,7 @@
 //! Settings → System → Sleep & power: when the screen goes off, when the Pocket sleeps and switches off, and what
 //! the power button does (docs/SLEEP.md, "Sleep & power settings"). One page in the manner of NextUI's System
 //! settings (Screen timeout, Suspend timeout): the times of the two sleep steps, the switch-off after sleeping, and
-//! the button's short press and hold; and the cozy extra that comes before the screen goes off, the slideshow of your
-//! games (`cozy_extras::Extra::IdleSlideshow`, kept in settings.json, not sleep.json: the App switches it).
+//! the power button's short press and hold.
 //!
 //! The choices live in `<data>/sleep.json` with `sleep.rs`, which acts on them (`Sleep::set_config`). Files from
 //! before this page (2026-10-26) had only `light_after` (minutes: Off, 1, 3, 5) and `off_after`: `light_after` becomes
@@ -149,6 +148,50 @@ struct Stored {
     short_press: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     hold: Option<String>,
+    /// The Brick's own card: the power button's short press as the player chose it ("sleep", "screen_off"). Apart from
+    /// `short_press`, which 0.3.x wrote as "screen_off" for everyone (it was no choice then); missing = `BRICK_POWER_DEFAULT`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    power_button: Option<String>,
+}
+
+#[cfg(feature = "brick")]
+impl Stored {
+    /// The short press as kept: on the Brick's own card its own key (`power_button`), never 0.3.x's forced `short_press`.
+    fn short_press_for(&self, brick_card: bool) -> ShortPress {
+        let find = |k: &Option<String>| ShortPress::ALL.into_iter().find(|p| k.as_deref() == Some(p.key()));
+        if brick_card {
+            find(&self.power_button).unwrap_or(BRICK_POWER_DEFAULT)
+        } else {
+            find(&self.short_press).unwrap_or_default()
+        }
+    }
+}
+
+/// The Brick's power button before the player chooses (`Stored::power_button`).
+#[cfg(feature = "brick")]
+pub const BRICK_POWER_DEFAULT: ShortPress = ShortPress::Sleep;
+
+/// The Brick's own card: its power button can sleep for real (`brick-suspend`) or only turn the screen off.
+#[cfg(feature = "brick")]
+pub fn brick_choice() -> bool {
+    crate::device::brick() && crate::brick_profile::standalone()
+}
+
+/// What the Brick's short press does now, for the pages that only show it (power menu): set by `Sleep` with its config.
+#[cfg(feature = "brick")]
+static BRICK_SLEEPS: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+#[cfg(feature = "brick")]
+pub fn note_power_button(c: &Config) {
+    BRICK_SLEEPS.store(brick_choice() && c.short_press == ShortPress::Sleep, std::sync::atomic::Ordering::Relaxed);
+}
+
+/// The power button (and the power menu's first entry) sleeps for real, though the device is screen-only otherwise.
+pub fn power_sleeps() -> bool {
+    #[cfg(feature = "brick")]
+    return BRICK_SLEEPS.load(std::sync::atomic::Ordering::Relaxed);
+    #[cfg(not(feature = "brick"))]
+    false
 }
 
 #[cfg(not(feature = "brick"))]
@@ -200,7 +243,7 @@ impl From<Stored> for Config {
             screen_off,
             sleep_after: s.sleep_after_min.map_or(SLEEP_AFTER_DEFAULT, never_is_zero),
             off_after: match s.off_after_min { Some(m) => never_is_zero(m), None => s.off_after.map(|h| h.saturating_mul(60)) },
-            short_press: ShortPress::ALL.into_iter().find(|p| s.short_press.as_deref() == Some(p.key())).unwrap_or_default(),
+            short_press: s.short_press_for(brick_choice()),
             hold: Hold::ALL.into_iter().find(|h| s.hold.as_deref() == Some(h.key())).unwrap_or_default(),
         }
     }
@@ -229,6 +272,7 @@ impl From<Config> for Stored {
             off_after_min: Some(c.off_after.unwrap_or(0)),
             short_press: Some(c.short_press.key().into()),
             hold: Some(c.hold.key().into()),
+            power_button: brick_choice().then(|| c.short_press.key().into()),
         }
     }
 }
@@ -279,8 +323,6 @@ fn step_of<T: Copy + PartialEq>(choices: &[T], now: T, delta: i32, round: bool) 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum Row {
     ScreenOff,
-    /// The idle slideshow before the screen goes off: On or Off (`Action::Slideshow`).
-    Slideshow,
     SleepAfter,
     SwitchOff,
     ShortPress,
@@ -293,7 +335,7 @@ pub const NO_SLEEP: &str = "ROCKNIX sleep is unavailable here; the screen turns 
 /// the screen goes off instead. Said as what happens (under Screen off in the power menu too), in one line on the Sleep & power page:
 /// at two the selected row's explanation was cut to one line with "…" (settings walk 06.11.).
 #[cfg(feature = "brick")]
-const NO_SLEEP_BRICK: &str = "The screen goes off and the game waits; any button wakes it.";
+const NO_SLEEP_BRICK: &str = "The screen goes off and the game waits; the power button wakes it.";
 
 /// `NO_SLEEP` for this device.
 #[cfg(feature = "brick")]
@@ -304,32 +346,23 @@ pub fn no_sleep() -> &'static str {
     }
     NO_SLEEP
 }
-const SCREEN_ONLY_ROWS: [Row; 4] = [Row::ScreenOff, Row::Slideshow, Row::SwitchOff, Row::ShortPress];
-/// A Steam Deck: SteamOS owns sleep and the power button (docs/STEAMDECK.md); the slideshow is pocket-ui's own.
-const HOST_ROWS: [Row; 1] = [Row::Slideshow];
+const SCREEN_ONLY_ROWS: [Row; 3] = [Row::ScreenOff, Row::SwitchOff, Row::ShortPress];
 
 pub fn rows() -> &'static [Row] {
-    if crate::device::current().host_owned() {
-        &HOST_ROWS
-    } else if crate::device::current().screen_off_only() {
+    if crate::device::current().screen_off_only() {
         &SCREEN_ONLY_ROWS
     } else {
         &ROWS
     }
 }
 
-pub const ROWS: [Row; 6] = [Row::ScreenOff, Row::Slideshow, Row::SleepAfter, Row::SwitchOff, Row::ShortPress, Row::Hold];
+pub const ROWS: [Row; 5] = [Row::ScreenOff, Row::SleepAfter, Row::SwitchOff, Row::ShortPress, Row::Hold];
 
-/// Whether the slideshow before the screen goes off is on (`cozy_extras`).
-fn slideshow() -> bool {
-    crate::cozy_extras::on(crate::cozy_extras::Extra::IdleSlideshow)
-}
 
 impl Row {
     pub fn label(self) -> &'static str {
         match self {
             Row::ScreenOff => "Screen off after",
-            Row::Slideshow => crate::cozy_extras::Extra::IdleSlideshow.label(),
             Row::SleepAfter => "Sleep after",
             Row::SwitchOff if crate::device::current().screen_off_only() => "Switch off after",
             Row::SwitchOff => "Switch off after sleeping",
@@ -350,17 +383,36 @@ impl Config {
     pub fn for_device(mut self, screen_only: bool) -> Self {
         if screen_only {
             self.sleep_after = None;
-            self.short_press = ShortPress::ScreenOff;
+            // The Brick's own card keeps the player's choice (`BRICK_POWER_DEFAULT`); idle still only turns the screen off.
+            #[cfg(feature = "brick")]
+            let keep = brick_choice();
+            #[cfg(not(feature = "brick"))]
+            let keep = false;
+            if !keep {
+                self.short_press = ShortPress::ScreenOff;
+            }
             self.hold = Hold::Menu;
         }
         self
+    }
+
+    /// The row can be changed on this device (the power button's rows are fixed where it only turns the screen off).
+    pub fn adjustable(row: Row) -> bool {
+        let fixed = match row {
+            Row::SleepAfter | Row::Hold => true,
+            #[cfg(feature = "brick")]
+            Row::ShortPress => !brick_choice(),
+            #[cfg(not(feature = "brick"))]
+            Row::ShortPress => true,
+            _ => false,
+        };
+        !(fixed && crate::device::current().screen_off_only())
     }
 
     /// The value of `row` as the page shows it.
     pub fn value(&self, row: Row) -> String {
         match row {
             Row::ScreenOff => screen_off_label(self.screen_off),
-            Row::Slideshow => if slideshow() { "On" } else { "Off" }.into(),
             Row::SleepAfter => sleep_after_label(self.sleep_after),
             Row::SwitchOff => crate::auto_off::label(self.off_after),
             Row::ShortPress => self.short_press.label().into(),
@@ -370,7 +422,7 @@ impl Config {
 
     /// `row` one choice on: Left/Right (`delta`) stop at the ends, A (`round`) goes from the last to the first.
     pub fn step(&mut self, row: Row, delta: i32, round: bool) {
-        if crate::device::current().screen_off_only() && matches!(row, Row::SleepAfter | Row::ShortPress | Row::Hold) {
+        if !Self::adjustable(row) {
             return;
         }
         match row {
@@ -379,8 +431,6 @@ impl Config {
             Row::SwitchOff => self.off_after = step_time(&crate::auto_off::CHOICES, self.off_after, delta, round),
             Row::ShortPress => self.short_press = step_of(&ShortPress::ALL, self.short_press, delta, round),
             Row::Hold => self.hold = step_of(&Hold::ALL, self.hold, delta, round),
-            // Not in sleep.json: `Page::press` hands it to the App.
-            Row::Slideshow => {}
         }
     }
 
@@ -394,12 +444,16 @@ impl Config {
                 "The screen stays on. A short press of the power button still turns it off or puts the Pocket to sleep."
             }
             Row::ScreenOff => "How long without a button press before the screen goes dark. A game pauses then; any button brings it back.",
-            Row::Slideshow => crate::cozy_extras::Extra::IdleSlideshow.blurb(),
             Row::SleepAfter if self.sleep_after.is_none() => {
                 "When the screen turns off by itself, the Pocket stays awake until you press a button. That uses the battery."
             }
             Row::SleepAfter => "How long the screen stays dark before the Pocket sleeps. The game is saved first; the power button wakes it.",
             Row::SwitchOff => crate::auto_off::explain(self.off_after),
+            #[cfg(feature = "brick")]
+            Row::ShortPress if brick_choice() => match self.short_press {
+                ShortPress::Sleep => "Saves the game and puts the Brick to sleep. The power button wakes it; the game waits in its pause menu.",
+                ShortPress::ScreenOff => "Only the screen goes dark and the game waits. The power button turns it back on.",
+            },
             Row::ShortPress => match self.short_press {
                 ShortPress::Sleep => "Saves the game and puts the Pocket to sleep. Press the power button again to wake it.",
                 ShortPress::ScreenOff => "Only the screen goes dark: the game and its sound keep running. Any button turns it back on.",
@@ -419,8 +473,6 @@ pub enum Action {
     Close,
     /// Keep and apply these choices.
     Save(Config),
-    /// Switch the slideshow before the screen goes off (a cozy extra, kept with the other settings).
-    Slideshow,
 }
 
 /// The page: the selected row and the choices as shown.
@@ -460,9 +512,6 @@ impl Page {
             b if b == confirm => (1, true),
             _ => return Action::Nothing,
         };
-        if self.row() == Row::Slideshow {
-            return Action::Slideshow;
-        }
         let before = self.config;
         self.config.step(self.row(), delta, round);
         if self.config == before {
@@ -694,10 +743,6 @@ mod tests {
         let Action::Save(c) = p.press(Button::Left, A, B) else { panic!("a change is saved") };
         assert_eq!(c.screen_off, Some(60));
         assert_eq!(p.press(Button::Down, A, B), Action::Nothing);
-        assert_eq!(p.row(), Row::Slideshow, "the slideshow comes right after the screen-off time");
-        assert_eq!(p.press(Button::Right, A, B), Action::Slideshow, "switched by the App, not in sleep.json");
-        assert_eq!(p.press(A, A, B), Action::Slideshow);
-        p.press(Button::Down, A, B);
         p.press(Button::Down, A, B);
         p.press(Button::Down, A, B);
         assert_eq!(p.row(), Row::ShortPress);
@@ -726,4 +771,29 @@ mod tests {
         assert!(screen.explain(Row::ShortPress).contains("keep running"));
         assert!(Config { hold: Hold::Sleep, ..Config::default() }.explain(Row::Hold).contains("quick settings"));
     }
+    /// 0.4: Sleep is the Brick's default (the power key wake was confirmed on a real Brick, 08.11.). A 0.3.x file, whose
+    /// "screen_off" was forced on everyone, gets it too; a player's own choice of Screen off stays.
+    #[cfg(feature = "brick")]
+    #[test]
+    fn a_brick_without_its_own_choice_sleeps_and_a_chosen_screen_off_stays() {
+        let old: Stored = serde_json::from_str(r#"{"screen_off_secs":120,"short_press":"screen_off","hold":"menu"}"#).unwrap();
+        assert_eq!(old.short_press_for(true), ShortPress::Sleep);
+        let chosen: Stored = serde_json::from_str(r#"{"short_press":"screen_off","power_button":"screen_off"}"#).unwrap();
+        assert_eq!(chosen.short_press_for(true), ShortPress::ScreenOff);
+    }
+
+    /// 0.3.x wrote "short_press": "screen_off" for every Brick (it was no choice then): that is no player's choice of
+    /// Screen off, so the Brick's own default applies until the new row is used; the row's choice is kept on its own key.
+    #[cfg(feature = "brick")]
+    #[test]
+    fn the_bricks_power_button_choice_is_its_own_key_and_old_files_get_the_default() {
+        let old: Stored = serde_json::from_str(r#"{"screen_off_secs":120,"short_press":"screen_off","hold":"menu"}"#).unwrap();
+        assert_eq!(old.short_press_for(true), BRICK_POWER_DEFAULT);
+        assert_eq!(old.short_press_for(false), ShortPress::ScreenOff, "other devices read short_press as before");
+        for (choice, key) in [(ShortPress::Sleep, "sleep"), (ShortPress::ScreenOff, "screen_off")] {
+            let kept: Stored = serde_json::from_str(&format!(r#"{{"short_press":"screen_off","power_button":"{key}"}}"#)).unwrap();
+            assert_eq!(kept.short_press_for(true), choice);
+        }
+    }
+
 }

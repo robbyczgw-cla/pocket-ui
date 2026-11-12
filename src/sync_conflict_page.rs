@@ -1,6 +1,6 @@
 //! "Two versions": the page that lets the player choose which version of a save to keep (`sync_conflicts`). Opened
 //! from a game's card (only that game's saves, straight on its versions when there is one) or from Settings →
-//! Connections → Sync (every save waiting, as a list first). The state and what a press asks for; painting is in the
+//! Help & tools → For tinkerers → Sync (every save waiting, as a list first). The state and what a press asks for; painting is in the
 //! binary (`app_sync_conflicts.rs`).
 
 use crate::pad::Button;
@@ -220,18 +220,18 @@ pub fn card_warning(kind: Kind) -> Option<&'static str> {
 }
 
 /// The one-time notice on the shelf for groups that appeared since the last one. It says where to choose: the game's
-/// card when one game's save is meant, Settings → Connections → Sync otherwise (several, a memory card, a save no game
+/// card when one game's save is meant, Settings → Help & tools → For tinkerers → Sync otherwise (several, a memory card, a save no game
 /// of the library owns: those have no card to open).
 pub fn notice(new: &[&Entry]) -> Option<String> {
     let first = new.first()?;
     let (card, title, more) = (first.group.kind == Kind::Card, &first.title, new.len() - 1);
     Some(match (card, more, matches!(first.owner, Owner::Game(_))) {
         (true, 0, true) => format!("A memory card has two versions: {title} – open the game's card to choose"),
-        (true, 0, false) => format!("A memory card has two versions: {title} – choose in Settings › Connections › Sync"),
-        (true, _, _) => format!("A memory card has two versions: {title} and {more} more – choose in Settings › Connections › Sync"),
+        (true, 0, false) => format!("A memory card has two versions: {title} – choose in Settings › Help & tools › For tinkerers › Sync"),
+        (true, _, _) => format!("A memory card has two versions: {title} and {more} more – choose in Settings › Help & tools › For tinkerers › Sync"),
         (false, 0, true) => format!("A save has two versions: {title} – open the game's card to choose"),
-        (false, 0, false) => format!("A save has two versions: {title} – choose in Settings › Connections › Sync"),
-        (false, _, _) => format!("A save has two versions: {title} and {more} more – choose in Settings › Connections › Sync"),
+        (false, 0, false) => format!("A save has two versions: {title} – choose in Settings › Help & tools › For tinkerers › Sync"),
+        (false, _, _) => format!("A save has two versions: {title} and {more} more – choose in Settings › Help & tools › For tinkerers › Sync"),
     })
 }
 
@@ -361,11 +361,11 @@ mod tests {
     fn the_notice_names_the_game_counts_the_rest_and_says_where_to_choose() {
         let (mut a, b, c) = (entry("Pokémon Emerald", Kind::Save, 1), entry("Mcd001.ps2", Kind::Card, 1), entry("Zelda", Kind::Save, 1));
         // One game's save has a card to open; a save nobody owns, a memory card and several have only Settings → Sync.
-        assert_eq!(notice(&[&a]).as_deref(), Some("A save has two versions: Pokémon Emerald – choose in Settings › Connections › Sync"));
+        assert_eq!(notice(&[&a]).as_deref(), Some("A save has two versions: Pokémon Emerald – choose in Settings › Help & tools › For tinkerers › Sync"));
         a.owner = Owner::Game(PathBuf::from("/storage/roms/gba/Pokemon Emerald.gba"));
         assert_eq!(notice(&[&a]).as_deref(), Some("A save has two versions: Pokémon Emerald – open the game's card to choose"));
-        assert_eq!(notice(&[&b]).as_deref(), Some("A memory card has two versions: Mcd001.ps2 – choose in Settings › Connections › Sync"));
-        assert_eq!(notice(&[&a, &c, &b]).as_deref(), Some("A save has two versions: Pokémon Emerald and 2 more – choose in Settings › Connections › Sync"));
+        assert_eq!(notice(&[&b]).as_deref(), Some("A memory card has two versions: Mcd001.ps2 – choose in Settings › Help & tools › For tinkerers › Sync"));
+        assert_eq!(notice(&[&a, &c, &b]).as_deref(), Some("A save has two versions: Pokémon Emerald and 2 more – choose in Settings › Help & tools › For tinkerers › Sync"));
     }
 
     /// Every sentence of the notice has its German line.
@@ -379,7 +379,7 @@ mod tests {
         assert_eq!(t.translate(&one).as_deref(), Some("Ein Spielspeicher hat zwei Versionen: Pokémon Emerald – wähle auf der Spielkarte"));
         for text in [notice(&[&b]).unwrap(), notice(&[&a, &b]).unwrap(), notice(&[&b, &a]).unwrap()] {
             let de = t.translate(&text).unwrap_or_else(|| panic!("no German for {text:?}"));
-            assert!(de.contains("Einstellungen › Verbindungen › Sync"), "{de}");
+            assert!(de.contains("Einstellungen › Hilfe & Werkzeuge › Für Bastler › Sync"), "{de}");
         }
     }
 }

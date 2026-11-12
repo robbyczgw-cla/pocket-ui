@@ -659,7 +659,7 @@ fn long_game_titles_fit_at_rest_in_both_languages_and_large_text() {
 
 /// A real Brick, 2026-11-06: on the first start's "Your games" the hint bar lay on top of the third row ("Box art"), at
 /// 1024x768 with 28 games found. At the sizes of every handheld (1024x768 and 640x480 are painted from 768 and 960 lines) and
-/// in Normal and Large text (Easy to read), in English, German and Spanish, with and without games and with the selection
+/// in Normal and Large text (Big text), in English, German and Spanish, with and without games and with the selection
 /// on Box art (its line over the rows), every row is on the picture, whole, and no text runs into the hint bar.
 #[test]
 fn your_games_rows_stay_above_the_hint_bar_on_the_small_screens() {
@@ -730,7 +730,7 @@ const FIRST_START_STATES: &[&str] = &["setup:first", "setup:first:device=rp5", "
 /// runs paint the default; `POCKETUI_RETRO_LETTERS=pixelify cargo test --test text_size` runs the whole file in Pixelify.
 const RETRO_LETTERS: [&str; 2] = ["departure", "pixelify"];
 const BARLOW_LOOKS: [(&str, &str); 2] = [("off", "barlow"), ("cocoa", "barlow")];
-const ALL_LOOKS: [(&str, &str); 3] = [("off", "barlow"), ("cocoa", "barlow"), ("cocoa", "pixel")];
+const ALL_LOOKS: [(&str, &str); 3] = [("off", "barlow"), ("cocoa", "barlow"), ("cocoa", "retro")];
 
 /// Reuse the text painter's edge/overlap checks for the 0.3.1 sweep's small fixes, at every requested corner.
 fn check_settings_setup_textfit(states: &[&str]) {
@@ -879,7 +879,7 @@ fn check_system_names(states: &[(&str, &str, &str)], themes: &[&str]) {
 
 #[test]
 fn textfit_031_system_rows_keep_known_names_whole() {
-    check_system_names(&[("home", "Nintendo Entertainment System", "NES")], &["split", "minimal"]);
+    check_system_names(&[("home", "Nintendo Entertainment System", "NES")], &["split"]);
 }
 
 #[test]
@@ -1135,7 +1135,7 @@ fn extras_explanations_whole(device: &str, standalone: bool, sizes: &[&str], row
                             .env("POCKETUI_BRICK_STANDALONE", if standalone { "1" } else { "" })
                             .env("POCKETUI_SOUND_QUANTUM", "0").env("POCKETUI_LANG", lang)
                             .env("POCKETUI_TEXT_SIZE", text_size).env("POCKETUI_SNAPSHOT_SIZE", snapshot)
-                            .env("POCKETUI_FONT", if retro == "off" { "barlow" } else { "pixel" }).env("POCKETUI_RETRO", retro)
+                            .env("POCKETUI_FONT", if retro == "off" { "barlow" } else { "retro" }).env("POCKETUI_RETRO", retro)
                             .env("POCKETUI_RETRO_LETTERS", letters)
                             .env("POCKETUI_VISIBLE_TEXT", &seen)
                             .env("POCKETUI_ES_SYSTEMS", tmp.path().join("es_systems.cfg"))

@@ -75,6 +75,7 @@ thumbnail of each was used.
 | atari5200 | https://commons.wikimedia.org/wiki/File:Atari-5200-4-Port-Console-FL.jpg | Evan-Amos | Public domain | 2026-11-02 |
 | amiga | https://commons.wikimedia.org/wiki/File:Amiga_500_Plus_(white_background).jpg | Sernot (it.wikipedia), retouched by Ubcule | Public domain | 2026-11-02 |
 | zxspectrum | https://commons.wikimedia.org/wiki/File:ZX_Spectrum_Plus2_(retouched).jpg | StuartBrady ("Photographed by StuartBrady. Public domain.", his upload comment of 2005-12-30), retouched by Ubcule | Public domain | 2026-11-02 |
+| arcade | https://commons.wikimedia.org/wiki/File:Sega_astro_city_candy_cab.jpg | The real dog god (own work, uploaded 2010-01-13) | Public domain (PD-self) | 2026-11-11 |
 
 The first Dreamcast choice, `Dreamcast-Console-Set.jpg`, is CC BY-SA 3.0 on Commons, so the public-domain
 `Sega-Dreamcast-Console-FL.jpg` (console without controller) was used instead.
@@ -114,7 +115,7 @@ The `ps3` (the slim PS3, console only) and `wiiu` (the Wii U console, standing f
 `saturn` (added 2026-11-02) is the shut console of the Saturn rig (`assets/media/rig/saturn`: base, lid and front parts composed, 255 colours), no conversion of its own.
 
 
-The computers (added 2026-11-02): `c64`, `atari800`, `atari5200`, `amiga` (an Amiga 500 Plus, also standing for the CD32 and the other Amigas) and `zxspectrum` (the +2). The brand lettering on the photos (Commodore, Atari, AMIGA, Sinclair, ZX Spectrum, Datacorder) was painted over on the photo before the conversion, by a fill from the plastic round each shape (limited to the object), and `tools/rim.py` was applied to the dark ones. PixelLab made one conversion each (5 credits). The ZX Spectrum came out navy and was desaturated to grey after the conversion. Checked against the Commons file pages and their histories on 2026-11-02: the three Evan Amos photos carry his own `PD-self`; the Amiga's original is Sernot's own work (`PD-user-it`, moved from it.wikipedia) and the white-background file only removes the background; the ZX Spectrum's original was uploaded by StuartBrady on 2005-12-30 with the comment "Photographed by StuartBrady. Public domain." (Commons marks the author "assumed" only because the file has no formal author field), and Ubcule's retouched version builds on it. There is no picture of an arcade cabinet: the one tried (a CC0 illustration, `Arcade_cabinet.png`, from the aggregator publicdomainq) has no named author, the aggregator's own page tags it "AI" and shows a Sega Astro City cabinet, and its Commons licence review is still open, so it could not be shown to be free to publish and was taken out before 0.1.12. MAME, FinalBurn Neo, CPS, NAOMI and the other arcade systems show the plain card and put their game into the crate, until a clearly public-domain photo is found. Not made, for want of a clearly public-domain photo of the plain machine: MSX, Atari ST, Amstrad CPC (the Commons photos are CC BY or CC BY-SA, or show a shelf of other things).
+The computers (added 2026-11-02): `c64`, `atari800`, `atari5200`, `amiga` (an Amiga 500 Plus, also standing for the CD32 and the other Amigas) and `zxspectrum` (the +2). The brand lettering on the photos (Commodore, Atari, AMIGA, Sinclair, ZX Spectrum, Datacorder) was painted over on the photo before the conversion, by a fill from the plastic round each shape (limited to the object), and `tools/rim.py` was applied to the dark ones. PixelLab made one conversion each (5 credits). The ZX Spectrum came out navy and was desaturated to grey after the conversion. Checked against the Commons file pages and their histories on 2026-11-02: the three Evan Amos photos carry his own `PD-self`; the Amiga's original is Sernot's own work (`PD-user-it`, moved from it.wikipedia) and the white-background file only removes the background; the ZX Spectrum's original was uploaded by StuartBrady on 2005-12-30 with the comment "Photographed by StuartBrady. Public domain." (Commons marks the author "assumed" only because the file has no formal author field), and Ubcule's retouched version builds on it. Not made, for want of a clearly public-domain photo of the plain machine: MSX, Atari ST, Amstrad CPC (the Commons photos are CC BY or CC BY-SA, or show a shelf of other things).
 
 What was changed in every picture above:
 
@@ -205,4 +206,22 @@ unchanged. `system_art.rs` has a test that fails for a picture that is dark all 
 
 Systems that are not listed here keep the plain coloured card. The SuperGrafx and the Pokémon mini first stayed
 without a picture because Commons has no public-domain photo of them; they have one now, generated from text
-(above). The arcade folders (CPS1, CPS2, CPS3) have no single console to picture.
+(above).
+
+## Arcade cabinet (2026-11-11)
+
+`arcade.png` stands for every arcade set (`arcade`, `mame`, `fbn`/`fbneo`, `cps1`-`cps3`, `naomi`, `atomiswave` and the
+others aliased in `src/system_art.rs`): one upright Japanese "candy" cabinet from the front left, its marquee and control
+panel blank. The photo, [Sega astro city candy cab.jpg](https://commons.wikimedia.org/wiki/File:Sega_astro_city_candy_cab.jpg),
+is the uploader's own work (`{{own}}`, `{{PD-self}}`, camera EXIF of a Kodak EasyShare C613, uploaded 2010-01-13 and
+unchanged since); licence and history read from the Commons API on 2026-11-11. The cabinet was cut from its room (blue
+wall, shelves, a guitar, a magazine) by a colour mask inside a hand outline. Painted over on the photo before the
+conversion, each with the plastic or print round it: the marquee's lettering (game name), the brand plate with its
+maker's and the cabinet's name and its stripes, the control panel's name plate and small print, the lamp's reflection on
+the screen (the glass made one smooth neutral dark grey) and a red cable hanging from the coin door. PixelLab
+`image-to-pixelart`, 166x256, strength 300: four seeds on a first input (the screen kept a warm stain, not used) and four
+on the cleaned one; seed 19 kept (8 credits). The steps are in the workshop scripts `arcade_cut.py`,
+`arcade_prep.py` and `arcade_finish.py` (not shipped); the picture was cut out with the photo's own mask at the art's
+size. The game has no medium to show: the cabinet's screen lights up when a game starts (`insert_scene::lights_up_only`).
+An earlier try (2026-10, a CC0 illustration from the aggregator publicdomainq with no named author) was taken out before
+0.1.12 because its licence could not be shown.

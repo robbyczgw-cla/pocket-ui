@@ -535,6 +535,8 @@ pub struct GameSettings {
     /// The Look row was turned to Custom (or the saved values fit no Look) while this page is open: Sharpness and Effect stay
     /// open, even if their values come to match a Look. Not saved and not sent to pocket-core; `close_custom` forgets it.
     custom_open: bool,
+    /// Over the game offers its Pixel Path level (`over_game::pixel_path_offered`, read at `load`).
+    pixel_path: bool,
 }
 
 impl GameSettings {
@@ -576,7 +578,13 @@ impl GameSettings {
         if over != crate::over_game::Level::Off {
             globals.insert(crate::over_game::KEY.into(), over.value().into());
         }
-        GameSettings { dir, system: system.to_string(), game, values, level, globals, custom_open: false }
+        // Its Pixel Path level only with the pause menu's Pixel Path (Enthusiast): otherwise a saved one is FPS, here
+        // and in the game (`over_game::Level::offered`), and the Options row walks past it (`step`).
+        let pixel_path = crate::over_game::pixel_path_offered(data_dir);
+        for v in [values.get_mut(crate::over_game::KEY), globals.get_mut(crate::over_game::KEY)].into_iter().flatten() {
+            *v = crate::over_game::Level::parse(v).offered(pixel_path).value().to_string();
+        }
+        GameSettings { dir, system: system.to_string(), game, values, level, globals, custom_open: false, pixel_path }
     }
 
     /// Index of the current choice for `setting`: saved value (this game's, else this console's), else the default
@@ -633,7 +641,8 @@ impl GameSettings {
         let mut i = self.index(setting) as i32;
         for _ in 0..n {
             i = (i + delta).rem_euclid(n);
-            if offered(setting, setting.choices[i as usize].value, &self.system) {
+            let value = setting.choices[i as usize].value;
+            if offered(setting, value, &self.system) && (setting.key != crate::over_game::KEY || self.pixel_path || value != "pixel") {
                 break;
             }
         }
@@ -881,12 +890,17 @@ mod tests {
         let dir = TestDir::new("over-game-default");
         let over = |rom: &str| GameSettings::load(&dir, "gba", Path::new(rom)).effective()["over_game"].clone();
         assert_eq!(over("a.gba"), "off", "a new device: nothing over the game");
-        crate::settings::Settings { over_game: Level::PixelPath, ..Default::default() }.save(&dir);
-        assert_eq!(over("a.gba"), "pixel");
+        crate::settings::Settings { over_game: Level::Sensors, ..Default::default() }.save(&dir);
+        assert_eq!(over("a.gba"), "sensors");
         let mut s = GameSettings::load(&dir, "gba", Path::new("b.gba"));
         s.values.insert("over_game".into(), "fps".into());
         assert!(s.save_for_game());
-        assert_eq!((over("b.gba").as_str(), over("a.gba").as_str()), ("fps", "pixel"), "a game's own choice wins");
+        assert_eq!((over("b.gba").as_str(), over("a.gba").as_str()), ("fps", "sensors"), "a game's own choice wins");
+        // Pixel Path (an Enthusiast's, with the pause menu's Pixel Path): drawn as saved; for everyone else the FPS line.
+        crate::settings::Settings { over_game: Level::PixelPath, ..Default::default() }.save(&dir);
+        assert_eq!(over("a.gba"), "fps", "Pixel Path without the pause menu's Pixel Path: FPS");
+        std::fs::write(dir.join("curator.json"), br#"{"pixel_path": true}"#).unwrap();
+        assert_eq!(over("a.gba"), "pixel");
     }
 
     #[test]
@@ -902,7 +916,7 @@ mod tests {
         assert_eq!((v["over_game"].as_str(), v["hk_over"].as_str(), v["rewind"].as_str()), ("fps", "off", "on"), "On is FPS; the shortcut stays off");
         assert!(!v.contains_key("show_fps") && !v.contains_key("hk_pixel"));
         assert_eq!(load("snes", "Zelda.sfc").effective()["over_game"], "sensors");
-        assert_eq!(load("nes", "x.nes").effective()["over_game"], "pixel", "Pixel Path without its Curator switch now");
+        assert_eq!(load("nes", "x.nes").effective()["over_game"], "fps", "Pixel Path is the FPS line without the pause menu's Pixel Path (0.4)");
         // Saved again, the file has the new keys only.
         let mut gba = gba;
         assert!(gba.save_for_console());
@@ -1182,23 +1196,34 @@ mod tests {
         assert!(picture.descs().len() > 15, "every explanation counts for the room under the list");
     }
 
-    /// Over the game's Pixel Path level and its shortcut are there for everyone: since 2026-10-25 only the pause menu's
-    /// Pixel Path page waits for the enthusiasts' switch, "Pixel Path in the pause menu" (`curator.json`'s `pixel_path`).
+    /// Over the game's shortcut is there for everyone, its Pixel Path level since 0.4 only with the pause menu's Pixel
+    /// Path (`curator.json`'s `pixel_path`, the Enthusiast profile's): without it the Options row walks Off, FPS and
+    /// FPS + sensors.
     #[test]
-    fn over_the_game_offers_every_level_and_its_shortcut_without_the_pixel_path_switch() {
+    fn over_the_game_offers_pixel_path_only_with_the_pause_menus_pixel_path() {
         let dir = TestDir::new("over-game-levels");
         let over = setting("over_game").unwrap();
         let shortcuts = GROUPS.iter().find(|g| g.name == "Shortcuts").unwrap();
+        let walk = |s: &mut GameSettings| -> Vec<String> {
+            (0..4)
+                .map(|_| {
+                    s.step(over, 1);
+                    s.values["over_game"].clone()
+                })
+                .collect()
+        };
         let mut s = GameSettings::load(&dir, "gba", Path::new("x.gba"));
-        let walk: Vec<String> = (0..4)
-            .map(|_| {
-                s.step(over, 1);
-                s.values["over_game"].clone()
-            })
-            .collect();
-        assert_eq!(walk, ["fps", "sensors", "pixel", "off"]);
+        assert_eq!(walk(&mut s), ["fps", "sensors", "off", "fps"]);
+        s.step(over, -1);
+        assert_eq!(s.values["over_game"], "off", "left goes back");
+        s.step(over, -1);
+        assert_eq!(s.values["over_game"], "sensors", "and past Pixel Path");
+        std::fs::write(dir.join("curator.json"), br#"{"pixel_path": true}"#).unwrap();
+        let mut s = GameSettings::load(&dir, "gba", Path::new("x.gba"));
+        assert_eq!(walk(&mut s), ["fps", "sensors", "pixel", "off"]);
         s.step(over, -1);
         assert_eq!(s.values["over_game"], "pixel", "left goes back");
+        std::fs::remove_file(dir.join("curator.json")).unwrap();
         let loaded = GameSettings::load(&dir, "gba", Path::new("x.gba"));
         assert!(shortcuts.visible(Some(&loaded)).iter().any(|s| s.key == "hk_over"));
         assert_eq!(loaded.effective()["over_game"], "off", "starts off");

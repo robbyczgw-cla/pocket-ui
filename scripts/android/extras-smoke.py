@@ -3,9 +3,8 @@
 
 Usage: extras-smoke.py ADB emulator-5582 OUTPUT GAME [PSP_GAME [LINK_GAME]]
 Needs the fixtures of main-refresh-smoke.py (a homebrew game by name, Download/PocketMvp chosen). Emulator only.
-Checks: the Cozy extras sheet lists the rows below with On/Off, and Settings itself the four extras it keeps as rows of
-their own (as Linux's Sound & feel and Sleep & power); "Memory card in the pause menu" On shows the slot picker
-with the memory card (the player's pause sheet still has Save/Load · Slot N and its arrows move the slot).
+Checks: the Cozy extras sheet lists the rows below with On/Off, and Settings itself the three extras it keeps as rows of
+their own (as Linux's Sound & feel). The player's pause sheet keeps Save/Load · Slot N and its arrows move the slot.
 """
 import re
 import subprocess
@@ -18,8 +17,8 @@ adb, serial, destination, game = sys.argv[1:5]
 PSP_GAME = sys.argv[5] if len(sys.argv) > 5 else 'Psp2048'
 out = Path(destination)
 out.mkdir(parents=True, exist_ok=True)
-ROWS = ['TV on the cabinet', 'Stickers on cases', 'Printed discs', 'Memory card in the pause menu', 'Light by time of day', 'Decorations', 'Game connections', 'Rediscover']
-SETTINGS_ROWS = ['Playful cases', 'Old-TV switch-on', 'Case sounds', 'Slideshow before screen off']
+ROWS = ['TV on the cabinet', 'Stickers on cases', 'Printed discs', 'Light by time of day', 'Decorations', 'Game connections', 'Rediscover']
+SETTINGS_ROWS = ['Playful cases', 'Old-TV switch-on', 'Case sounds']
 
 def run(*args):
     return subprocess.check_output([adb, '-s', serial, *args])
@@ -74,8 +73,8 @@ def set_extra(label, value):
     if sheet:
         key(4)
 
-sh('am', 'force-stop', 'dev.pocket.spike')
-sh('am', 'start', '-W', '-n', 'dev.pocket.spike/.PocketActivity')
+sh('am', 'force-stop', 'xyz.pocketui.app')
+sh('am', 'start', '-W', '-n', 'xyz.pocketui.app/.PocketActivity')
 time.sleep(2)
 tap('Settings')
 shown = texts()
@@ -93,21 +92,19 @@ for label in ROWS:
     assert any(t.startswith(label + ' ·') for t in shown), f'Missing Cozy extras row {label}: {shown}'
 shot('extras')
 key(4)
-for state in ('On', 'Off'):
-    set_extra('Memory card in the pause menu', state)
-    tap('Games')
-    choose(game)
-    tap('Play')
-    time.sleep(4)
-    key(4)
-    time.sleep(1)
-    t = texts()
-    assert any(x.startswith('Save · Slot 1') for x in t), t
-    key(22)
-    assert any(x.startswith('Save · Slot 2') for x in t + texts()), texts()
-    shot('pause-card-' + state.lower())
-    tap('Save & quit')
-    time.sleep(1)
+tap('Games')
+choose(game)
+tap('Play')
+time.sleep(4)
+key(4)
+time.sleep(1)
+t = texts()
+assert any(x.startswith('Save · Slot 1') for x in t), t
+key(22)
+assert any(x.startswith('Save · Slot 2') for x in t + texts()), texts()
+shot('pause-slots')
+tap('Save & quit')
+time.sleep(1)
 # Printed discs: the open box of a PSP game (a UMD) shows the disc either way and the page keeps its buttons.
 for state in ('On', 'Off'):
     set_extra('Printed discs', state)
@@ -172,20 +169,4 @@ for extra in ('Decorations', 'Light by time of day'):
         assert shots['On'] != shots['Off'], 'Decorations changed nothing on the shelf'
     else:
         print('Light by time of day: on/off differ' if shots['On'] != shots['Off'] else 'Light by time of day: same picture (daytime afternoon is neutral)', flush=True)
-# The slideshow (SLOW=1: it needs a quiet minute and covers or pictures in the app's data folder, `covers/<hash>.png`):
-# after a minute without touch the page is replaced by a slide with the game's title; a touch ends it and does nothing else.
-import os
-if os.environ.get('SLOW'):
-    set_extra('Slideshow before screen off', 'On')
-    tap('Games')
-    before = run('exec-out', 'screencap', '-p')
-    time.sleep(70)
-    during = run('exec-out', 'screencap', '-p')
-    (out / 'slideshow.png').write_bytes(during)
-    assert during != before and not [t for t in texts() if t in ('Games', 'Favourites')], 'The slideshow did not start'
-    assert 'KEEP_SCREEN_ON' in sh('dumpsys', 'window', 'windows'), 'The screen is not kept on while the slideshow runs'
-    sh('input', 'tap', '600', '1200')
-    time.sleep(1.2)
-    assert 'Games' in texts() and 'Favourites' in texts(), texts()
-    set_extra('Slideshow before screen off', 'Off')
 print('Cozy extras rows + memory card + printed discs + connections + rediscover + decorations + light PASS', flush=True)

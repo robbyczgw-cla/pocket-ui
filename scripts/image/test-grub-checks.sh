@@ -42,5 +42,19 @@ check "the file given is left as it was" '[ "$(cksum <"$CFG")" = "$before" ]'
 # The check as it was before grub-checks.sh: red on the repository's own file.
 check "the old one-line grep refused deploy/sd-efi/grub.cfg (why this file exists)" 'grep -Eq "^ *echo |fbcon=" "$CFG"'
 
+# The BLS entry for OpenABL (deploy/sd-efi/loader/entries/pocket-ui.conf) and GRUB's entry start the same thing.
+BLS=$ROOT/deploy/sd-efi/loader/entries/pocket-ui.conf
+check "the BLS entry starts GRUB's kernel, device tree and command line" 'bls_matches_grub "$BLS" "$CFG"'
+sed 's| quiet loglevel=3 | |' "$BLS" >"$T/bls-loud.conf"
+check "a BLS entry whose command line differs from GRUB's is refused" '! bls_matches_grub "$T/bls-loud.conf" "$CFG"'
+sed '/^devicetree/d' "$BLS" >"$T/bls-nodtb.conf"
+check "a BLS entry without the device tree is refused (OpenABL would take the menu's model, UFS visible)" '! bls_matches_grub "$T/bls-nodtb.conf" "$CFG"'
+sed 's|miniv2-noufs.dtb|rp5-noufs.dtb|' "$BLS" >"$T/bls-otherdtb.conf"
+check "a BLS entry naming another device tree than GRUB's is refused" '! bls_matches_grub "$T/bls-otherdtb.conf" "$CFG"'
+{ cat "$BLS"; echo "initrd     /boot/pocket/initrd"; } >"$T/bls-initrd.conf"
+check "a BLS entry with an initrd GRUB does not load is refused" '! bls_matches_grub "$T/bls-initrd.conf" "$CFG"'
+sed 's|^linux .*|linux      /KERNEL|' "$BLS" >"$T/bls-kernel.conf"
+check "a BLS entry starting ROCKNIX's /KERNEL instead of GRUB's Image is refused" '! bls_matches_grub "$T/bls-kernel.conf" "$CFG"'
+
 echo
 if [ $fails -eq 0 ]; then echo "all grub-checks tests passed"; else echo "$fails grub-checks tests failed"; exit 1; fi

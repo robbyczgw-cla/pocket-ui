@@ -1,5 +1,5 @@
 //! The status file: one line saying where the UI is, for agents, test helpers and support (docs/DEVICE-TESTS.md "Where the
-//! UI is"). `/tmp/pocket-ui.status` (tmpfs, never the card), or `<dir>/ui.status` under `--test-driver`.
+//! UI is"). `/tmp/pocket-ui.status` (tmpfs, never the card), `POCKETUI_STATUS` for a probe, or `<dir>/ui.status` under `--test-driver`.
 //!
 //! The line is TAB-separated `key=value` fields: first `v` (the schema, `VERSION`), `rev` (one more with every write, from 1
 //! in each process) and `pid`, then the fields the App gives (`place`, `cover`, `sleep`, `game`, later `update`…). Values
@@ -7,6 +7,7 @@
 //! ignores keys it doesn't know. The file is replaced whole (a temporary file renamed over it, no `fsync`) and only when a
 //! field changed: an unchanged screen never writes.
 
+use std::ffi::OsString;
 use std::io;
 use std::path::{Path, PathBuf};
 
@@ -56,6 +57,12 @@ pub fn parse(line: &str) -> Vec<(String, String)> {
         .filter_map(|f| f.split_once('='))
         .map(|(k, v)| (k.to_string(), v.to_string()))
         .collect()
+}
+
+/// The UI status destination; the test driver otherwise keeps it beside its FIFO.
+pub fn output_path(driver: Option<&Path>, requested: Option<OsString>) -> PathBuf {
+    requested.filter(|p| !p.is_empty()).map(PathBuf::from)
+        .unwrap_or_else(|| driver.map_or_else(|| PathBuf::from(FILE), |d| d.join("ui.status")))
 }
 
 /// Writes the file when the line changed.
@@ -125,6 +132,21 @@ mod tests {
         assert!(w.offer(&line("settings:Groups")).unwrap());
         let text = std::fs::read_to_string(w.path()).unwrap();
         assert!(text.contains("\trev=2\t") && text.contains("place=settings:Groups"), "{text}");
+    }
+
+    #[test]
+    fn a_probe_status_override_never_replaces_the_owner_status() {
+        let dir = crate::testutil::TestDir::new("probe-status");
+        let owner = dir.join("ui.status");
+        let private = dir.join("probe.status");
+        std::fs::write(&owner, "owner status\n").unwrap();
+        let mut probe = Writer::new(output_path(Some(&dir.join("")), Some(private.clone().into_os_string())));
+        probe.offer(&line("settings:Groups")).unwrap();
+        assert_eq!(std::fs::read_to_string(&owner).unwrap(), "owner status\n", "probe replaced the owner's status");
+        assert!(std::fs::read_to_string(&private).unwrap().contains("place=settings:Groups"));
+        assert_eq!(output_path(None, Some(private.clone().into_os_string())), private);
+        assert_eq!(output_path(None, None), PathBuf::from(FILE));
+        assert_eq!(output_path(None, Some(OsString::new())), PathBuf::from(FILE));
     }
 
     #[test]

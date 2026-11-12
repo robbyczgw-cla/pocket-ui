@@ -8,8 +8,7 @@ stdin: changed paths, one per line. argv[1]: the tree. Output, one per line:
   shell_tests=0|1 why_shell=<path>
   brick_full=0|1           Brick corpus/UI walk; otherwise only `cargo check --features brick`
   i18n_matrix=0|1          German/Spanish snapshot matrix
-  android=0|1              Android compile check (the Deck check is a few seconds and always runs)
-The nightly run and release check use GATE_FULL=1: every suite, the timing tier, Brick and both platforms.
+The nightly run and release check use GATE_FULL=1: every suite, the timing tier, Brick and Android.
 """
 from pathlib import Path
 import re
@@ -30,7 +29,7 @@ FULL = re.compile(r"^(Cargo\.(toml|lock)|build\.rs|rust-toolchain(\.toml)?|\.car
 
 def parts(root, names):
     heavy, why_shell, shell = set(), "", 0
-    brick = i18n = android = 0
+    brick = i18n = 0
     shell_scripts = list(root.joinpath("scripts").rglob("*.sh")) + list(root.joinpath("deploy").rglob("*.sh"))
     srcrefs = set()
     for script in shell_scripts:
@@ -64,7 +63,7 @@ def parts(root, names):
         if name in ("tests/i18n-states.txt", "tests/layout-risk-states.txt"):
             heavy.add("text_size")
             i18n = 1
-        if name.startswith("assets/fonts/") or re.match(r"src/(text|textfit|type_scale|font|letters|name_lines)", name):
+        if name.startswith("assets/fonts/") or re.match(r"src/(text|textfit|type_scale|font|letters|name_lines|kit|layouts|scaled_layout|wiki_text|auto_texts)", name):
             heavy.update(TEXT)
         if (name.startswith(("assets/i18n/", "docs/user/", "tests/i18n")) and name != "assets/i18n/skip.txt") \
                 or name == "src/i18n.rs":
@@ -74,17 +73,12 @@ def parts(root, names):
             heavy.add("nav_explorer")
         if "brick" in name or name.startswith(("src/input_corpus", "src/fn_keys", "src/manual")):
             brick = 1
-        if name.startswith("android/") or name == "scripts/check-platforms.sh":
-            android = 1
-        elif name.endswith(".rs"):
-            try:
-                if 'target_os = "android"' in root.joinpath(name).read_text(errors="replace"):
-                    android = 1
-            except OSError:
-                pass  # a deleted file
+    # The Brick runs its own text-fit cases of these suites (gate.sh's Brick tier): a text change runs them too.
+    if heavy & {"text_size", "long_titles", "nav_explorer"} or "tests/search_titles.rs" in names:
+        brick = 1
     present = {p.stem for p in root.joinpath("tests").glob("*.rs")}
     return {"tier": "fast", "heavy": " ".join(sorted(heavy)), "skip": " ".join(sorted(present & set(HEAVY + BUDGET) - heavy)), "shell_tests": shell, "why_shell": why_shell,
-            "brick_full": brick, "i18n_matrix": i18n, "android": android}
+            "brick_full": brick, "i18n_matrix": i18n}
 
 
 if __name__ == "__main__":

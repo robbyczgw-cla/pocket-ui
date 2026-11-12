@@ -19,7 +19,7 @@ import xml.etree.ElementTree as ET
 import zipfile
 from pathlib import Path
 
-PACKAGE = 'dev.pocket.spike'
+PACKAGE = 'xyz.pocketui.app'
 BASE = '/sdcard/Download/'
 HERE = Path(__file__).resolve().parent
 FORBIDDEN = ['SD card', 'SD-Karte', '/storage', 'roms/', 'Press ', 'Drück ', 'Web companion', 'handheld', 'Handheld', 'pocket-core']

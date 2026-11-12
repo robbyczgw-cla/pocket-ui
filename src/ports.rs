@@ -122,7 +122,7 @@ pub fn trimui_standalone() -> bool {
 pub fn offered() -> bool {
     #[cfg(feature = "brick")]
     if crate::device::brick() { return crate::brick_profile::standalone(); }
-    !crate::device::current().host_owned()
+    true
 }
 
 fn trimui_capabilities() -> Option<Vec<&'static str>> {

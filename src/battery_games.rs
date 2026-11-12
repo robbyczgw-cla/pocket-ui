@@ -43,6 +43,14 @@ pub struct Key {
 }
 
 impl Key {
+    /// The key a game's stretches on battery go under, or None for a game a test started through the test door (a file below a
+    /// `.pocket-ui-test` folder, `play <system> <file>`): the ledger is written when pocket-ui quits, after scripts/device-check.sh has
+    /// put the owner's files back, and would bring such a game back into Settings → Playing → Battery.
+    pub fn recorded(system: &str, rom: &Path, emulator: &str) -> Option<Key> {
+        let test = rom.components().any(|c| c.as_os_str() == ".pocket-ui-test");
+        (!test).then(|| Key::new(system, rom, emulator))
+    }
+
     pub fn new(system: &str, rom: &Path, emulator: &str) -> Key {
         Key {
             system: system.to_string(),
@@ -276,6 +284,18 @@ mod tests {
     use crate::testutil::TestDir;
 
     const T0: u64 = 1_790_000_000 / 60 * 60;
+
+    /// A game a test starts through the test door (`play <system> <file>` below `.pocket-ui-test`, scripts/device-check.sh) must not
+    /// reach the ledger: the ledger is written when pocket-ui quits, after a check has put the owner's files back (11.11.: "pocketcheck"
+    /// in a Brick's battery list again).
+    #[test]
+    fn a_test_game_has_no_ledger_entry() {
+        let test = Path::new("/mnt/SDCARD/.pocket-ui-test/device-check/rom/pocketcheck.gba");
+        let real = Path::new("/storage/roms/gba/Pokemon Odyssey v4.1.gba");
+        assert_eq!(Key::recorded("gba", test, "pocket-core"), None);
+        assert_eq!(Key::recorded("gba", real, "pocket-core"), Some(Key::new("gba", real, "pocket-core")));
+        assert_eq!(Key::recorded("gba", Path::new("/storage/roms/gba/.pocket-ui-test-fan.gba"), "pocket-core").is_some(), true, "only a folder of that name counts");
+    }
 
     fn key(system: &str, game: &str, emulator: &str) -> Key {
         Key {

@@ -74,9 +74,6 @@ From pale to full colour.	Von blass bis kräftig.
 Steady, breathing, fading, pulsing, a colour cycle, the battery and charger, or off; "Like the rest" follows the colour above.	Ruhig, atmend, verblassend, pulsierend, Farbwechsel, Akku und Laden, oder aus; "Wie die anderen" folgt der Farbe oben.
 How fast it breathes, fades, pulses or cycles.	Wie schnell es atmet, verblasst, pulsiert oder die Farbe wechselt.
 
-# Update 6: the beta version (update::brick_short, brick_long)
-{s} beta {n}	{s} Beta {n}
-{s} for TrimUI Brick (beta {n})	{s} für TrimUI Brick (Beta {n})
 Not saved.	Nicht gespeichert.
 The emulator choice couldn't be saved on the card. Nothing was changed.	Die Emulator-Wahl ließ sich nicht auf der Karte speichern. Nichts wurde geändert.
 Controllers and headphones. Connected headphones take the sound of games and menus; it comes back to the speaker when they go.	Controller und Kopfhörer. Verbundene Kopfhörer bekommen den Ton von Spielen und Menüs; er geht zurück auf den Lautsprecher, wenn sie weg sind.
@@ -87,9 +84,12 @@ Only pocket-ui starts again, in seconds. Your games, saves and settings stay as 
 New versions of pocket-ui.	Neue Versionen von pocket-ui.
 User	Benutzer
 (unchanged)	(unverändert)
-The screen goes off and the game waits; any button wakes it.	Der Bildschirm geht aus und das Spiel wartet; jede Taste weckt ihn.
 How fast the processor may run, in games and in menus.	Wie schnell der Prozessor laufen darf, in Spielen und Menüs.
 A choice saved in the pause menu (Options › Speed, rumble, fan) wins over this one.	Eine im Pausenmenü gespeicherte Wahl (Optionen › Tempo, Vibration, Lüfter) geht dieser vor.
 Battery saves and save states. No games, no BIOS files.	Spielspeicher und Spielstände. Keine Spiele, keine BIOS-Dateien.
 To {s} on the SD card. Copy it to a computer too.	Nach {s} auf der SD-Karte. Kopiere sie auch auf einen Computer.
-{s} for TrimUI Smart Pro (beta {n})	{s} für TrimUI Smart Pro (Beta {n})
+The screen goes off and the game waits; the power button wakes it.	Der Bildschirm geht aus und das Spiel wartet; die Ein/Aus-Taste weckt ihn.
+Saves the game and puts the Brick to sleep. The power button wakes it; the game waits in its pause menu.	Speichert das Spiel und schickt den Brick in den Ruhezustand. Die Ein/Aus-Taste weckt ihn; das Spiel wartet im Pausenmenü.
+Only the screen goes dark and the game waits. The power button turns it back on.	Nur der Bildschirm wird dunkel und das Spiel wartet. Die Ein/Aus-Taste schaltet ihn wieder ein.
+Saves the game. The power button wakes it.	Speichert das Spiel. Die Ein/Aus-Taste weckt ihn.
+The power button wakes it.	Die Ein/Aus-Taste weckt ihn.

@@ -1,5 +1,4 @@
 //! The one caution on "Add your games": a system this handheld runs, though not every game of it runs smoothly.
-//! Only the handhelds in docs/DEVICES.md get one, and only for the systems below; an unknown handheld, the Steam Deck
 //! and a system the handheld cannot play at all get nothing (routing is not touched here: hostsys.rs decides who plays).
 //!
 //! Sources of the table (a general caution, so a solid consensus is enough; no numbers are claimed):
@@ -34,7 +33,8 @@ fn family(model: Model) -> Option<Family> {
         Model::Pocket6 | Model::Nova | Model::Odin2 | Model::Odin2Mini | Model::Odin2Portal => Some(Family::Sd8Gen2),
         Model::H700(_) => Some(Family::H700),
         Model::RgDsPlus => Some(Family::Rk3566),
-        Model::SteamDeck => None, #[cfg(feature = "brick")] Model::Brick(_) => None,
+        Model::PocketClassic => None,
+        #[cfg(feature = "brick")] Model::Brick(_) => None,
     }
 }
 
@@ -96,7 +96,6 @@ mod tests {
 
     #[test]
     fn the_deck_and_unknown_handhelds_get_nothing() {
-        assert!(systems(Some(Model::SteamDeck)).is_empty());
         assert!(systems(None).is_empty());
     }
 

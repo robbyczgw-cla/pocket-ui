@@ -1,0 +1,7 @@
+Erste öffentliche Vorschau von pocket-ui für Android.
+• Regal, Vitrine und Karten, Suche, Favoriten, Kurator
+• Eigener Player mit Weiterspielen, Speicherplätzen, Zeit zurück, Zoom und Steuerungskarte
+• Cores für GB/GBC/GBA, NES, SNES, SMS, Game Gear, Mega Drive, PC Engine, WonderSwan, NGP, Atari 2600/Lynx, PlayStation, Saturn (experimentell)
+• Downloads: Nintendo DS; PSP, N64, Dreamcast experimentell
+• Spielstand-Sicherung als Zip
+Keine Spiele oder BIOS-Dateien enthalten.

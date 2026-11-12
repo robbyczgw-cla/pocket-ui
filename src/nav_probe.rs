@@ -1,4 +1,4 @@
-//! What a frame offers the D-pad, for the navigation explorer (`tests/nav_explorer.rs`, docs/DEVELOPING.md "The navigation
+//! What a frame offers the D-pad, for the navigation explorer (`tests/nav_explorer.rs`, docs/dev/tests.md "The navigation
 //! explorer"): where an operable row is drawn, where the focus mark is, and which hints the bar shows. The shared painters say
 //! so (`kit::selection`, `kit::row_label`, `kit::shelf_row`, `features::row_back`, the first start's pill rows, both hint bars),
 //! so a page that paints with them is covered without code of its own; a page that draws a row or its focus by hand calls

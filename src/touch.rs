@@ -136,7 +136,6 @@ pub fn to_px(pos: (f32, f32), w: u32, h: u32) -> (f32, f32) {
     )
 }
 
-/// A mouse wheel (a Steam Deck trackpad circling, a real wheel on a desk): whole steps the selection moves, from
 /// what the window reported since the last call. `lines` is the report in lines (negative: the wheel went down,
 /// as winit reports it), `carry` keeps the fraction of a fine trackpad between reports. Down moves the selection
 /// down, the way every list on a computer scrolls.
@@ -760,8 +759,6 @@ pub enum Ignored {
     SystemPanel,
     /// The last frame left nothing to touch.
     NothingToTouch,
-    /// Two screens (the RG DS Plus): the touch screen is the lower one's, under the game info, never the shelf's.
-    LowerScreen,
 }
 
 impl Ignored {
@@ -775,7 +772,6 @@ impl Ignored {
             Ignored::Setup => "the first-start setup is open (buttons only)",
             Ignored::SystemPanel => "a system panel is open (buttons only)",
             Ignored::NothingToTouch => "the last frame had nothing to touch",
-            Ignored::LowerScreen => "the touch screen is the lower screen's, which only shows the game (buttons for the shelf)",
         }
     }
 }

@@ -32,19 +32,16 @@ pub struct Prefs {
     /// Lens & smart shelves: the Curator row on Home, pinned shelves.
     #[serde(default = "yes")]
     pub lens: bool,
+    /// Just Play on Home (A starts a suitable game, X shows it first). Its own switch since the Lens one stopped being the
+    /// way to find a game to play; a `curator.json` from before it has no key and follows the Lens it had (`Prefs::load`).
+    #[serde(default = "yes")]
+    pub just_play: bool,
     /// Echoes on the game card.
     #[serde(default = "yes")]
     pub echoes: bool,
-    /// Up next: after a game, one line on the shelf suggests an Echo of it (`app_curator.rs`). Never starts anything
-    /// by itself, but for a few seconds A plays the suggestion, and A is the button still being pressed when a game
-    /// ends: Off by default since 2026-10-25 (a `curator.json` that has the key keeps its value; Enthusiast sets On).
-    #[serde(default)]
-    pub up_next: bool,
     /// Lists that mix systems show a game owned on several systems once.
     #[serde(default = "yes")]
     pub merge_versions: bool,
-    #[serde(default = "yes")]
-    pub stickers: bool,
     /// Echoes also names games that are not on this device.
     #[serde(default)]
     pub not_on_device: bool,
@@ -63,8 +60,10 @@ pub struct Prefs {
 }
 
 impl Default for Prefs {
+    /// A new Pocket: the Lens, Echoes and Merge versions are Enthusiast's (the shelf has Just Play for "pick me something").
+    /// A Pocket that was set up before (`Prefs::load`) keeps them on without a file.
     fn default() -> Prefs {
-        Prefs { lens: true, echoes: true, up_next: false, merge_versions: true, stickers: true, not_on_device: false, pixel_path: false, pixel_live: false, shelves: Vec::new(), history: true }
+        Prefs { lens: false, just_play: true, echoes: false, merge_versions: false, not_on_device: false, pixel_path: false, pixel_live: false, shelves: Vec::new(), history: true }
     }
 }
 
@@ -73,7 +72,31 @@ pub const SHELF_NAME_MAX: usize = 40;
 
 impl Prefs {
     pub fn load(data_dir: &Path) -> Prefs {
-        crate::fsutil::read_json_or_backup(&data_dir.join(FILE)).unwrap_or_default()
+        let mut p: Prefs = crate::fsutil::read_json_or_backup(&data_dir.join(FILE)).unwrap_or_else(|| Prefs::when_nothing_is_saved(data_dir));
+        // Just Play went with the Lens switch until it got its own: a player who had the Lens off had no Just Play, and
+        // keeps none until they switch it on (a file that has the key says what it says).
+        if !p.lens && p.saved_without_just_play(data_dir) {
+            p.just_play = false;
+        }
+        p
+    }
+
+    /// Without a `curator.json`: a Pocket whose first start ran (`settings.json` exists, it is only written after) always had
+    /// the Lens, Echoes and Merge versions on by default, and keeps them; a new one starts as Simple does.
+    fn when_nothing_is_saved(data_dir: &Path) -> Prefs {
+        if data_dir.join("settings.json").exists() {
+            Prefs { lens: true, echoes: true, merge_versions: true, ..Prefs::default() }
+        } else {
+            Prefs::default()
+        }
+    }
+
+    /// Whether there is a `curator.json` that has no `just_play` key (it was saved by a version without the switch).
+    fn saved_without_just_play(&self, data_dir: &Path) -> bool {
+        std::fs::read_to_string(data_dir.join(FILE))
+            .ok()
+            .and_then(|t| serde_json::from_str::<serde_json::Value>(&t).ok())
+            .is_some_and(|v| v.is_object() && v.get("just_play").is_none())
     }
 
     pub fn save(&self, data_dir: &Path) -> bool {
@@ -108,11 +131,22 @@ mod tests {
     use crate::testutil::TestDir;
 
     #[test]
+    fn retired_suggestions_and_labels_keep_saved_smart_shelves() {
+        let p: Prefs = serde_json::from_str(r#"{"up_next":true,"stickers":true,"echoes":false,"shelves":[{"name":"My shelf","lens":{},"pinned":true}]}"#).unwrap();
+        assert!(!p.echoes);
+        assert_eq!(p.shelves.len(), 1);
+        assert_eq!(p.shelves[0].name, "My shelf");
+        let saved = serde_json::to_value(&p).unwrap();
+        assert!(saved.get("up_next").is_none() && saved.get("stickers").is_none());
+        assert_eq!(serde_json::from_value::<Prefs>(saved).unwrap().shelves, p.shelves);
+    }
+
+    #[test]
     fn defaults_survive_a_restart_and_shelves_get_free_names() {
         let d = TestDir::new("curator-prefs");
         let p = Prefs::load(&d);
         assert_eq!(p, Prefs::default());
-        assert!(p.lens && p.echoes && !p.up_next && p.merge_versions && p.stickers && !p.not_on_device && !p.pixel_path && p.history);
+        assert!(!p.lens && !p.echoes && !p.merge_versions && !p.not_on_device && !p.pixel_path && p.history, "a new Pocket: the depth is Enthusiast's");
         let mut p = p;
         let mut lens = Lens::default();
         lens.toggle(Facet::System, "gba");
@@ -139,14 +173,41 @@ mod tests {
         assert!(!p.echoes && p.lens && p.merge_versions && p.history, "Play history is on for a file from before it");
     }
 
+    /// The Lens, Echoes and Merge versions became Enthusiast's (Streichliste 0.4): a Pocket whose first start ran, and that
+    /// saved no `curator.json`, had them on and keeps them; one that saved a file keeps what the file says.
     #[test]
-    fn up_next_is_off_unless_the_file_says_otherwise() {
-        assert!(!Prefs::default().up_next, "A must not play a suggestion right after a game unless it was asked for");
-        let p: Prefs = serde_json::from_str(r#"{"echoes": true}"#).unwrap();
-        assert!(!p.up_next, "a file from before the key existed");
-        let p: Prefs = serde_json::from_str(r#"{"up_next": true}"#).unwrap();
-        assert!(p.up_next, "a file that has the key keeps it");
-        let p: Prefs = serde_json::from_str(r#"{"up_next": false}"#).unwrap();
-        assert!(!p.up_next);
+    fn a_pocket_set_up_before_keeps_the_curator_it_had() {
+        let fresh = TestDir::new("curator-prefs-fresh");
+        let p = Prefs::load(&fresh);
+        assert!(!p.lens && !p.echoes && !p.merge_versions, "no settings.json: a new Pocket starts as Simple does");
+        let old = TestDir::new("curator-prefs-old");
+        std::fs::write(old.join("settings.json"), r#"{"onboarded":true}"#).unwrap();
+        let p = Prefs::load(&old);
+        assert!(p.lens && p.echoes && p.merge_versions && p.just_play, "set up before, nothing saved: the Curator it always had");
+        // A saved file says what it says, switched off or on.
+        std::fs::write(old.join(FILE), r#"{"lens":false,"echoes":true}"#).unwrap();
+        let p = Prefs::load(&old);
+        assert!(!p.lens && p.echoes && p.merge_versions, "{p:?}");
     }
+
+    /// Just Play and the Lens were one switch. A saved file from before keeps what the player saw: no Lens, no Just Play.
+    #[test]
+    fn just_play_keeps_the_lens_choice_of_an_older_file_and_then_has_its_own() {
+        let d = TestDir::new("curator-prefs-just-play");
+        assert!(Prefs::load(&d).just_play, "no file: on");
+        std::fs::write(d.join(FILE), r#"{"lens": true}"#).unwrap();
+        assert!(Prefs::load(&d).just_play, "Lens on: Just Play was there");
+        std::fs::write(d.join(FILE), r#"{"lens": false}"#).unwrap();
+        let mut p = Prefs::load(&d);
+        assert!(!p.lens && !p.just_play, "Lens off: Just Play was not on Home, it stays off");
+        // Switched on again, it is written and kept whatever the Lens says.
+        p.just_play = true;
+        assert!(p.save(&d));
+        let again = Prefs::load(&d);
+        assert!(!again.lens && again.just_play, "its own key wins");
+        // And a file from before the Lens existed has neither key.
+        std::fs::write(d.join(FILE), r#"{"echoes": false}"#).unwrap();
+        assert!(Prefs::load(&d).just_play);
+    }
+
 }

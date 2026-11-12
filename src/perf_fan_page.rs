@@ -96,9 +96,9 @@ pub fn fan_label(f: Fan) -> &'static str {
     }
 }
 
-/// The fan rows cannot be changed here: ROCKNIX owns the fan (SM8550), or there is none (the H700 handhelds).
+/// The fan rows cannot be changed here: ROCKNIX owns the fan (SM8550/SM4450), or there is none (the H700 handhelds).
 fn fan_not_ours(row: Row) -> bool {
-    row != Row::GamesPerformance && (crate::device::current().screen_off_only() || !crate::device::current().has_fan())
+    row != Row::GamesPerformance && (crate::device::current().rocknix_fan() || !crate::device::current().has_fan())
 }
 
 impl PerfFanPage {

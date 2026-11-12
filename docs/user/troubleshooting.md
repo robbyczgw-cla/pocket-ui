@@ -24,8 +24,6 @@ rotated), please report it; developers can rotate the mapping with `POCKETUI_TOU
 **Playing on a TV has not been tried yet.** Nothing has been plugged into a Mini V2 so far; sound follows the TV
 even with headphones in, and sleep leaves the TV on (see [Playing on a TV](playing.md#playing-on-a-tv)).
 
-**System updates are untested on a device**, and our own system build is not published yet, so the System row has nothing
-to offer. pocket-ui updates come over Wi-Fi (see [Updates](updates.md)).
 
 **Options, shortcuts and run-ahead exist only on pocket-ui's own host**, and save slots there and on PlayStation 2,
 GameCube, Wii and 3DS. The systems are listed in [Systems](systems.md#on-pocket-uis-own-host).
@@ -103,7 +101,7 @@ also close with L1 held and SELECT + START.
 
 **A tool I installed from the Store was gone after a restart.**
 Older versions put Store tools into ROCKNIX's tools folder, which ROCKNIX empties at every start. They now go to
-pocket-ui's own folder; a tool that was lost that way shows **Install** again in the Store.
+pocket-ui's own folder.
 
 **I changed a setting and want the old ones back.**
 Settings → System → Backup & reset lists the backups, including the one made before every reset and restore. Restore one (A,
@@ -221,6 +219,8 @@ way rather than fight over it). `pocket-ui.log` says which, in lines starting wi
 
 **A game's sound crackles and the game slows down.**
 
+High-rate cores such as ClownMDEmu now keep their original pitch and duration when converted to the device’s output rate.
+
 PAL games running on a 60 Hz screen keep a little more sound buffered so repeated pictures do not interrupt
 the audio. Returning from pause preserves that queued sound and waits for enough audio for the next frame before fading in.
 Starting or continuing a game keeps its opening sound while the audio output connects, including when a Continue
@@ -249,7 +249,7 @@ says **Connecting…**, not Connected, just like the status corner, which shows 
 Hotel, train, airport and café networks often show a login or "I agree" page before they let anything through. The
 Wi-Fi page shows it as its first row, checks again by itself, and lists the other ways online, with the Pocket's
 Wi-Fi address for the front desk: see [Hotel and train Wi-Fi](hotel-wifi.md). How pocket-ui notices: after you join,
-when the Wi-Fi page opens while connected, and when an update, the store or the PortMaster catalogue fails, pocket-ui
+when the Wi-Fi page opens while connected, and when an update or the PortMaster catalogue fails, pocket-ui
 sends one plain web request to `nmcheck.gnome.org`, the page NetworkManager (the system's network service) itself
 uses for this question; it answers "NetworkManager is online". A redirect or a page of its own instead means a
 sign-in. While the Wi-Fi page shows a sign-in, the same request is sent every 15 seconds until the network lets the
@@ -402,7 +402,7 @@ If "Power off" restarted the Pocket instead, the newest `boot-…` folder is the
 what the CPU and GPU were doing just before; `kernel.log` ends with the last thing the system said.
 
 **How to get the files off the Pocket.** The file sharing over the network only shares the games (`roms`), so the logs
-are not in it. Use remote access: Settings → Connections → [Remote access (SSH)](settings-system.md#remote-access-ssh), then on your computer
+are not in it. Use remote access: Settings → Help & tools → For tinkerers → [Remote access (SSH)](settings-system.md#remote-access-ssh), then on your computer
 
 ```
 scp -r root@<address>:/storage/.config/pocket-ui/logs ./pocket-logs
@@ -416,7 +416,7 @@ The logs contain the names of your games and may contain network details such as
 before you post them in public, or use [Report a problem](#report-a-problem), which leaves those out.
 
 **I lost the file sharing or remote access password.**
-Both are shown on screen: Settings → Games → Add games, and Settings → Connections → Remote access (SSH). Each Pocket has its own
+Both are shown on screen: Settings → Games → Add games, and Settings → Help & tools → For tinkerers → Remote access (SSH). Each Pocket has its own
 password; it does not change.
 
 **How do I get to ROCKNIX's standard menu (EmulationStation)?**
@@ -436,7 +436,7 @@ In `/storage/.config/pocket-ui/` on the SD card:
 | `fallback.json` | Legacy automatic emulator choices, cleared on update; new retries apply once only |
 | `covers/`, `snaps/`, `titles/` | Cover art, and the screenshots and title screens beside it ([Pictures](extras.md#pictures)) |
 | `favorites.json` | Starred games (if you use Favourites) |
-| `library.json` | Play status, notes, sessions and labels ([Your library](library.md#where-it-is-kept)) |
+| `library.json` | Play status, notes, sessions and legacy labels ([Your library](library.md#where-it-is-kept)) |
 | `curator.json` | Curator's switches and your smart shelves |
 | `wikipedia/` | Game descriptions loaded from Wikipedia |
 | `retroachievements.json`, `achievements/` | The RetroAchievements sign-in key and what the Pocket keeps for offline play ([Achievements](achievements.md#good-to-know)) |

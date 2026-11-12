@@ -17,6 +17,10 @@ use std::ffi::{c_int,c_long,c_ulong,c_void};
 use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 
+#[path = "audio_startup.rs"]
+mod startup;
+#[path = "audio_gaps.rs"]
+mod gaps;
 
 pub const OUT_RATE: u32 = 48_000;
 /// Buffered audio the rate control steers towards, in ms (POCKET_CORE_AUDIO_MS overrides it).
@@ -37,6 +41,11 @@ const CYCLE_TARGET_MS: usize = 48;
 /// (shader compiles, scene loads, threaded renderers). Mupen64Plus-Next, Mario Kart 64, 25 s driving:
 /// 20 ms underran once per run and 15 times while a state loaded; 48 ms never, and twice.
 const HEAVY_TARGET_MS: usize = 48;
+/// Android's console identity chooses the reserve on first open and after audio focus returns.
+pub fn needs_jitter_reserve(system: &str) -> bool {
+    matches!(system, "n64" | "psp" | "nds" | "saturn" | "dreamcast")
+}
+
 const MAX_SKEW: f64 = 0.005;
 /// How much of each new fill reading the rate control takes (an average over about a second at 60 pushes a second).
 /// The queue's fill saws up and down by a core frame (17 ms) and by a writer chunk or a whole graph cycle (5 or 21 ms)
@@ -60,6 +69,15 @@ const REOPEN_FOR: std::time::Duration = std::time::Duration::from_secs(5);
 const REOPEN_FOR: std::time::Duration = std::time::Duration::from_secs(12);
 const REOPEN_EVERY: std::time::Duration = std::time::Duration::from_millis(200);
 
+/// The game's own stream, at its start and when it is opened again. On Android it also keeps its numbers for the
+/// player's log line (`platform::android::audio_line`); everywhere else this is `Sink::open`.
+fn open_game(ring: Ring) -> Option<Sink> {
+    #[allow(unused_mut)]
+    let mut sink = Sink::open(ring)?;
+    #[cfg(target_os = "android")]
+    sink.report_as_game();
+    Some(sink)
+}
 /// A new stream after the old one failed, tried for `REOPEN_FOR`; None when none comes or the audio is being closed.
 fn reopen_stream(reopen: fn(Ring) -> Option<Sink>, ring: Ring, stopped: &impl Fn() -> bool) -> Option<Sink> {
     let t0 = std::time::Instant::now();
@@ -200,6 +218,12 @@ pub struct Audio {
     /// Time-paced cores (e.g. PAL 50 Hz on a 60 Hz display) skip some display ticks. Their audio
     /// arrives less often than the writer's short reserve can bridge.
     cadence_target: Arc<AtomicUsize>,
+    startup_target: Arc<AtomicUsize>,
+    startup_remaining: usize,
+    startup_silent_trimmed: usize,
+    startup_trim_peak: u16,
+    startup_splice_step: u16,
+    startup_return_frame: u64,
     delivery: Arc<AtomicUsize>,
     rate: RateControl,
     /// The writer plays (`RateControl::step`): false before it starts and during a pause.
@@ -217,6 +241,11 @@ pub struct Audio {
     /// What the server reports as still queued before the speaker, in µs (updated a few times a second).
     server_latency_us: Arc<AtomicU64>,
     paused: Arc<std::sync::atomic::AtomicBool>,
+    /// The Brick's suspend: the writer closes the stream and waits (`hold`); `closed` is its answer.
+    #[cfg(feature = "brick")]
+    held: Arc<std::sync::atomic::AtomicBool>,
+    #[cfg(feature = "brick")]
+    closed: Arc<std::sync::atomic::AtomicBool>,
     pub backend: &'static str,
     /// Sets PipeWire's quantum for the output (speaker or Bluetooth) on a thread of its own, follows a change while
     /// the game plays and puts ROCKNIX's back when dropped (`audio_route::Keeper`). None in the tests.
@@ -234,6 +263,7 @@ pub struct Audio {
 /// visible even when the old playing-only `underruns` counter is zero.
 #[derive(Default)]
 struct QueueHealth {
+    gaps: gaps::Gaps,
     route_wait_polls: AtomicU64,
     prefill_waits: AtomicU64,
     prefill_missing_max: AtomicU64,
@@ -262,6 +292,7 @@ impl QueueHealth {
     /// Both pause fades emit real PCM too, including a pause entered during startup prefill.
     fn fade_chunk(&self, queue: &mut VecDeque<i16>, chunk: &mut [i16]) {
         self.ever_played.store(true, Ordering::Relaxed);
+        self.gaps.break_gap();
         for sample in chunk { *sample = queue.pop_front().unwrap_or(0); }
     }
 
@@ -357,6 +388,7 @@ impl QueueHealth {
         }
         chunk[available..].fill(0);
         let missing = (chunk.len() - available) / 2;
+        self.gaps.observe(chunk.len()/2,available/2);
         self.observe_fill(queue.len() / 2);
         if missing > 0 {
             self.playing_underruns.fetch_add(1, Ordering::Relaxed);
@@ -390,6 +422,9 @@ impl QueueHealth {
             "playing_underruns": read(&self.playing_underruns),
             "playing_silence_frames": read(&self.playing_missing_frames),
             "playing_missing_frames": read(&self.playing_missing_frames),
+            "startup_missing_burst_max_frames": self.gaps.startup(),
+            "startup_last_missing_frame": self.gaps.startup_last(),
+            "steady_missing_burst_max_frames": self.gaps.steady(),
             "input_frames": read(&self.input_frames), "resampled_frames": read(&self.resampled_frames),
             "dropped_frames": read(&self.dropped_frames),
             "preplay_dropped_frames": read(&self.preplay_dropped_frames),
@@ -443,12 +478,12 @@ impl Audio {
         let ring = if !crate::audio_route::short_quantum(Some(configured)) { Ring::Cycle } else { Ring::Short };
         #[cfg(not(target_os = "linux"))]
         let ring = Ring::Short;
-        let sink = Sink::open(ring)?;
+        let sink = open_game(ring)?;
         // The pulse path can't go below 1024 per client anyway; only the native stream gains. The quantum is set on
         // the keeper's thread (it may ask PipeWire for the default sink first), not here: this only starts it.
         let frames = if sink.uses_graph() { configured } else { 0 };
         let route = Some(crate::audio_route::Keeper::spawn(frames));
-        let mut audio = Audio::start(sink, in_rate, heavy, route, Sink::open);
+        let mut audio = Audio::start(sink, in_rate, heavy, route, open_game);
         audio.opened(std::env::var_os(PW_STATS_ENV).is_some());
         Some(audio)
     }
@@ -499,6 +534,10 @@ impl Audio {
         let underrun_at = Arc::new(Mutex::new(Vec::new()));
         let server_latency_us = Arc::new(AtomicU64::new(0));
         let paused = Arc::new(std::sync::atomic::AtomicBool::new(false));
+        #[cfg(feature = "brick")]
+        let (held, closed) = (Arc::new(std::sync::atomic::AtomicBool::new(false)), Arc::new(std::sync::atomic::AtomicBool::new(false)));
+        #[cfg(feature = "brick")]
+        let (hold, closed_ack) = (held.clone(), closed.clone());
         let stop = Arc::new(std::sync::atomic::AtomicBool::new(false));
         let (ended_tx, ended) = std::sync::mpsc::channel();
         let playing = Arc::new(std::sync::atomic::AtomicBool::new(false));
@@ -510,12 +549,16 @@ impl Audio {
         // The queue's target for each `Ring` (read once: POCKET_CORE_AUDIO_MS).
         let targets = (target_frames(heavy, true), target_frames(heavy, false));
         let cadence_target = Arc::new(AtomicUsize::new(0));
+        let startup_target = Arc::new(AtomicUsize::new(0));
+        let startup_reserve = startup_target.clone();
+        let first_queue = queue_health.clone();
         let delivery = Arc::new(AtomicUsize::new(OUT_RATE as usize / 60));
         let writer_delivery = delivery.clone();
         let cadence = cadence_target.clone();
         let target_for = move |ring: Ring| {
             let base = if ring == Ring::Short { targets.0 } else { targets.1 };
-            base.max(cadence.load(Ordering::Relaxed))
+            startup::writer_target(base.max(cadence.load(Ordering::Relaxed)),
+                startup_reserve.load(Ordering::Relaxed), first_queue.ever_played.load(Ordering::Relaxed))
         };
         std::thread::spawn(move || {
             // Runs until the stream fails or `Audio` is dropped; then the stream is closed and the drop hears of it.
@@ -555,7 +598,7 @@ impl Audio {
                 // A buffer for the cycle the graph runs at (`Ring`), before the first sample and whenever the output
                 // or the quantum changes while the game plays (headphones connected or switched off).
                 #[cfg(not(feature = "brick"))]
-                let fit = |sink: &mut Sink| {
+                let fit = |sink: &mut Sink, _before_queue: bool| {
                     let want = Route::ring(&fl);
                     if sink.ring().is_some_and(|r| r != want) {
                         if let Some(mut new) = reopen(want) {
@@ -572,18 +615,28 @@ impl Audio {
                 let mut on_bt = fl.as_ref().is_some_and(|r| r.bluetooth.load(Ordering::Relaxed));
                 #[cfg(feature = "brick")]
                 let mut next_try = std::time::Instant::now();
+                // Back from a suspend (`hold`): the closed stream is replaced on the route of now, which may have changed meanwhile.
                 #[cfg(feature = "brick")]
-                let mut fit = |sink: &mut Sink| {
+                let reopen_now = std::cell::Cell::new(false);
+                #[cfg(feature = "brick")]
+                let mut fit = |sink: &mut Sink, before_queue: bool| {
                     let want = Route::ring(&fl);
                     let bt = fl.as_ref().is_some_and(|r| r.bluetooth.load(Ordering::Relaxed));
                     let moved = bt != on_bt;
-                    if (sink.ring().is_some_and(|r| r != want) || moved) && std::time::Instant::now() >= next_try {
+                    if (sink.ring().is_some_and(|r| r != want) || moved || reopen_now.get()) && std::time::Instant::now() >= next_try {
+                        reopen_now.set(false);
                         if let Some(mut new) = reopen(want) {
                             new.observe(writer_diagnostics.clone());
                             println!("audio: {want:?} buffer ({} ms){}", want.us() / 1000, if moved { if bt { ", to the headphones" } else { ", to the speaker" } } else { "" });
                             *sink = new;
                             on_bt = bt;
-                            prefill(sink);
+                            // A native PCM starts its hardware clock on these
+                            // writes. Leave it prepared across the startup queue
+                            // wait; the prefill below runs just before game PCM.
+                            // Pulse/BlueALSA still link before that wait.
+                            if !before_queue || !sink.is_native_brick_pcm() {
+                                prefill(sink);
+                            }
                         } else {
                             next_try = std::time::Instant::now() + std::time::Duration::from_millis(500);
                         }
@@ -592,12 +645,15 @@ impl Audio {
                 // Opened again before the queue fills, not after: the silence in it blocks until WirePlumber has linked
                 // the new stream, and the core's frames meanwhile overfilled the queue by up to 100 ms, which the rate
                 // control then drained at +5 cents for ten seconds (scripts/audio-bench).
-                fit(&mut sink);
+                fit(&mut sink, true);
                 // Match the before-push rate-control reference, rather than starting a delivery low.
                 loop {
                     let buffered = q.lock().unwrap().len() / 2;
                     let target = restart_frames(target_for(Route::ring(&fl)), writer_delivery.load(Ordering::Relaxed));
                     if buffered >= target { break; }
+                    // Asleep before the first sample: the queue won't fill, the hold below closes the stream.
+                    #[cfg(feature = "brick")]
+                    if hold.load(Ordering::Acquire) { break; }
                     health.prefill_wait(target - buffered);
                     if stopped() {
                         return;
@@ -616,8 +672,33 @@ impl Audio {
                 // restored SPU packet. A pause before the first sample stays silent too.
                 let mut was_paused = true;
                 while !stopped() {
+                    // The Brick goes to sleep (pocket-core `sleep`): the stream closes and nothing is written until `wake`.
+                    // A PCM that is open across the kernel's suspend fails its first write after it (counted as an xrun).
+                    #[cfg(feature = "brick")]
+                    if hold.load(Ordering::Acquire) {
+                        // The old stream cannot consume PCM while the next one opens.
+                        // Resume feeds through the same bounded backpressure as startup.
+                        started.store(false, Ordering::Relaxed);
+                        sink.close();
+                        closed_ack.store(true, Ordering::Release);
+                        crate::trace::step("audio: closed for sleep");
+                        while hold.load(Ordering::Acquire) && !stopped() {
+                            std::thread::sleep(std::time::Duration::from_millis(5));
+                        }
+                        closed_ack.store(false, Ordering::Release);
+                        if stopped() {
+                            break;
+                        }
+                        reopen_now.set(true);
+                        fit(&mut sink, false);
+                        was_paused = true;
+                        crate::trace::step("audio: open again after sleep");
+                        // Paused still (or refilling): the loop goes on writing silence at once, so the new ring never runs dry.
+                        continue;
+                    }
+                    let paused;
                     {
-                        let paused = p.load(std::sync::atomic::Ordering::Relaxed);
+                        paused = p.load(std::sync::atomic::Ordering::Relaxed);
                         let mut q = q.lock().unwrap();
                         if health.recovery_pending.swap(false, Ordering::Relaxed) {
                             was_paused = true;
@@ -691,7 +772,17 @@ impl Audio {
                     if written.is_multiple_of(32) {
                         lat.store(sink.latency_us(), Ordering::Relaxed);
                     }
-                    fit(&mut sink);
+                    fit(&mut sink, false);
+                    #[cfg(feature = "brick")]
+                    if paused && sink.park_after_pause() {
+                        crate::trace::step("audio: paused PCM prepared");
+                        // No PCM clock runs while the menu does work. The stream
+                        // stays open/prepared; resume uses the same small buffer
+                        // and fade-in, and sleep/stop remain independently visible.
+                        while p.load(Ordering::Relaxed) && !hold.load(Ordering::Acquire) && !stopped() {
+                            std::thread::sleep(std::time::Duration::from_millis(2));
+                        }
+                    }
                 }
             };
             play();
@@ -710,6 +801,12 @@ impl Audio {
             in_rate,
             targets,
             cadence_target,
+            startup_target,
+            startup_remaining: 0,
+            startup_silent_trimmed: 0,
+            startup_trim_peak: 0,
+            startup_splice_step: 0,
+            startup_return_frame: 0,
             delivery,
             rate: RateControl::default(),
             playing,
@@ -721,6 +818,10 @@ impl Audio {
             underrun_at,
             server_latency_us,
             paused,
+            #[cfg(feature = "brick")]
+            held,
+            #[cfg(feature = "brick")]
+            closed,
             backend,
             route,
             stop,
@@ -740,6 +841,11 @@ impl Audio {
             "pipewire": pw, "playing": self.playing.load(Ordering::Relaxed),
             "queued_frames": self.queue.lock().unwrap().len() / 2,
             "writer_finished": writer_finished,
+            "startup_reserve_frames": self.startup_target.load(Ordering::Relaxed),
+            "startup_silent_trimmed_frames": self.startup_silent_trimmed,
+            "startup_trim_peak": self.startup_trim_peak,
+            "startup_splice_step": self.startup_splice_step,
+            "startup_return_frame": self.startup_return_frame,
         })
     }
 
@@ -763,8 +869,27 @@ impl Audio {
         self.paused.store(on, std::sync::atomic::Ordering::Relaxed);
     }
 
+    /// The Brick before its suspend: the writer closes the stream (`on`; true once it has, within `STOP_WAIT`), and
+    /// opens a new one when let go. Use with `pause(true)`: the new stream starts with silence until the pause ends.
+    #[cfg(feature = "brick")]
+    pub fn hold(&self, on: bool) -> bool {
+        crate::mark!("audio-hold", "{on}");
+        self.held.store(on, Ordering::Release);
+        if !on {
+            return true;
+        }
+        let t0 = std::time::Instant::now();
+        while !self.closed.load(Ordering::Acquire) {
+            if t0.elapsed() >= STOP_WAIT || self.writer_finished.load(Ordering::Acquire) {
+                return self.writer_finished.load(Ordering::Acquire);
+            }
+            std::thread::sleep(std::time::Duration::from_millis(1));
+        }
+        true
+    }
+
     /// The queue the rate control steers towards now, in frames (`target_frames`).
-    fn target(&self) -> usize {
+    fn steady_target(&self) -> usize {
         let base = if Route::ring(&self.flags) == Ring::Short {
             self.targets.0
         } else {
@@ -773,20 +898,67 @@ impl Audio {
         base.max(self.cadence_target.load(Ordering::Relaxed))
     }
 
+    fn target(&self) -> usize {
+        self.steady_target().max(self.startup_target.load(Ordering::Relaxed))
+    }
+
+    /// Android cold starts only. Return the reserve through >=50 ms stereo intervals below
+    /// -60 dBFS with a short crossfade; a continuous score otherwise drains at one cent.
+    /// Ordinary pitch correction stays off until the extra queued PCM has returned.
+    pub fn reserve_startup(&mut self, system: &str) {
+        let target = startup::target_frames(system);
+        self.startup_target.store(target, Ordering::Relaxed);
+        self.startup_remaining = if target == 0 { 0 } else { OUT_RATE as usize * 15 };
+    }
+
+    fn release_startup(&mut self) {
+        if self.startup_remaining != 0 { return; }
+        let desired = restart_frames(self.steady_target(), self.delivery.load(Ordering::Relaxed));
+        let mut queue = self.queue.lock().unwrap();
+        let excess = (queue.len() / 2).saturating_sub(desired);
+        let trim = if excess == 0 {
+            startup::Trim { frames: 0, peak: 0, nonzero_samples: 0, splice_step: 0 }
+        } else {
+            let Some(trim) = startup::trim_silence(&mut queue, excess) else { return; };
+            trim
+        };
+        self.startup_silent_trimmed += trim.frames;
+        self.startup_trim_peak=self.startup_trim_peak.max(trim.peak);
+        self.startup_splice_step=self.startup_splice_step.max(trim.splice_step);
+        // A >=50 ms quiet interval may return only part of the reserve. Keep
+        // ordinary pitch correction disabled until all extra queued PCM is gone.
+        let finished = queue.len() / 2 <= desired;
+        if finished {
+            self.startup_return_frame=self.queue_health.gaps.played();
+            self.startup_target.store(0, Ordering::Relaxed);
+            self.rate = RateControl::default();
+        }
+        crate::mark!("audio-startup-trim", "trimmed_frames={} peak={} nonzero_samples={} queued={} target={}",
+            trim.frames, trim.peak, trim.nonzero_samples, queue.len() / 2, self.steady_target());
+    }
+
     /// Adds one video frame's worth of core samples (interleaved stereo).
     pub fn push(&mut self, samples: &[i16]) {
+        crate::mark!("audio-input", "frames={} rate={:.1}", samples.len() / 2, self.in_rate);
         let target = self.target();
+        let startup = self.startup_target.load(Ordering::Relaxed) != 0;
         let fill = self.queue.lock().unwrap().len() / 2;
         let ratio = self.in_rate / OUT_RATE as f64;
         let pushed = samples.len() as f64 / 2.0 / ratio;
-        let step = self.rate.step(ratio, fill, target, pushed, self.playing.load(Ordering::Relaxed));
+        let step = if startup && self.startup_remaining == 0 && fill > self.steady_target() {
+            startup::drain_step(ratio)
+        } else {
+            self.rate.step(ratio, fill, target, pushed, self.playing.load(Ordering::Relaxed) && !startup)
+        };
         // Converted before the queue is locked again: the writer thread must not wait for the filter.
         self.scratch.clear();
         self.resampler.process(samples, step, &mut self.scratch);
+        if startup { self.startup_remaining = self.startup_remaining.saturating_sub(self.scratch.len() / 2); }
+        crate::mark!("audio-resample", "input={} output={} target={target} step={step:.10} nominal={ratio:.10} startup={startup}", samples.len() / 2, self.scratch.len() / 2);
         self.queue_health.input_frames.fetch_add(samples.len() as u64 / 2, Ordering::Relaxed);
         self.queue_health.resampled_frames.fetch_add(self.scratch.len() as u64 / 2, Ordering::Relaxed);
         let restart = restart_frames(target, self.delivery.load(Ordering::Relaxed));
-        let dropped = if self.starting {
+        let dropped = if self.starting || !self.playing.load(Ordering::Relaxed) {
             let dropped = self.queue_health.enqueue_startup(&self.queue, &self.scratch, target, restart);
             // Keep flow control through the first playing pop. The producer may have queued for
             // 48 ms before the keeper chose 20 ms; the next call must drain that valid prefix,
@@ -807,6 +979,7 @@ impl Audio {
             // The average would remember the overfull queue for a second.
             self.rate.fill = Some(target as f64);
         }
+        if startup { self.release_startup(); }
         crate::mark!("audio-push", "input={} output={} queued={} playing={}", samples.len() / 2,
             self.scratch.len() / 2, self.queue.lock().unwrap().len() / 2, self.playing.load(Ordering::Relaxed));
     }
@@ -815,6 +988,12 @@ impl Audio {
     pub fn set_input_rate(&mut self, rate: f64) {
         self.resampler.prepare(rate / OUT_RATE as f64);
         self.in_rate = rate;
+    }
+
+    /// Update the source format when a core changes its sound or picture timing.
+    pub fn set_source_timing(&mut self, sample_rate: f64, core_fps: f64, display_hz: f64) {
+        self.set_frame_timing(core_fps, display_hz);
+        self.set_input_rate(sample_rate);
     }
 
     /// Match the reserve to the producer's cadence, also when a core changes video mode. Near the
@@ -849,6 +1028,84 @@ impl Audio {
 mod tests {
     use super::*;
     use std::cell::Cell;
+
+    #[test]
+    fn continuous_n64_music_has_normal_queue_latency_after_twenty_seconds() {
+        // Drive production push/resample/playing-pop paths with 20 s of a
+        // continuous stereo square tone. No quiet interval can hide the backlog.
+        let mut audio = Audio::start(paced_sink(), 48000.0, true, None, |_| None);
+        audio.stop.store(true, Ordering::Relaxed);
+        audio.ended.recv_timeout(std::time::Duration::from_secs(3)).unwrap();
+        audio.reserve_startup("n64");
+        audio.starting = false;
+        audio.playing.store(true, Ordering::Relaxed);
+        let normal = restart_frames(audio.steady_target(), 800);
+        let boot = restart_frames(audio.target(), 800);
+        *audio.queue.lock().unwrap() = vec![12000; boot * 2].into();
+        audio.queue_health.ever_played.store(true, Ordering::Relaxed);
+        let packet: Vec<_> = (0..800).flat_map(|i| {
+            let value = if i % 48 < 24 { 12000 } else { -12000 };
+            [value, -value]
+        }).collect();
+        let mut heard = vec![0; 800 * 2];
+        for _ in 0..60 * 20 {
+            audio.push(&packet);
+            assert_eq!(audio.queue_health.playing_chunk(&mut audio.queue.lock().unwrap(), &mut heard), 0);
+        }
+        let queued = audio.queue.lock().unwrap().len() / 2;
+        eprintln!("continuous N64 music at 20 s: queue={queued} frames ({:.3} ms), normal={normal} frames ({:.3} ms)",
+            queued as f64 / 48.0, normal as f64 / 48.0);
+        assert_eq!(audio.queue_health.dropped_frames.load(Ordering::Relaxed), 0, "music must not be cut to meet latency");
+        assert!(queued <= normal + 800, "continuous music must reach normal latency within 20 s: {queued} > {}", normal + 800);
+        assert_eq!(audio.target(), audio.steady_target(), "the startup target must be released too");
+    }
+
+    #[test]
+    fn a_short_quiet_gap_does_not_release_the_unreturned_startup_reserve() {
+        let mut audio=Audio::start(paced_sink(),48000.0,false,None,|_|None);
+        audio.stop.store(true,Ordering::Relaxed);
+        audio.ended.recv_timeout(std::time::Duration::from_secs(3)).expect("the test writer must stop before inspecting PCM");
+        let desired=restart_frames(audio.steady_target(),audio.delivery.load(Ordering::Relaxed));
+        audio.startup_target.store(desired+4000,Ordering::Relaxed);
+        audio.startup_remaining=0;
+        *audio.queue.lock().unwrap()=[vec![1000;1000*2],vec![20;2880*2],vec![-1000;(desired+120)*2]].concat().into();
+        audio.release_startup();
+        assert!(audio.startup_silent_trimmed>0,"the short quiet interval must return some latency");
+        assert!(audio.queue.lock().unwrap().len()/2>desired,"the entire reserve did not fit into this interval");
+        assert!(audio.startup_target.load(Ordering::Relaxed)>0,"normal pitch control must stay off while extra latency remains");
+        *audio.queue.lock().unwrap()=vec![0;(desired+4000)*2].into();
+        audio.release_startup();
+        assert_eq!(audio.queue.lock().unwrap().len()/2,desired);
+        assert_eq!(audio.startup_target.load(Ordering::Relaxed),0,"the full safe return restores normal latency");
+    }
+
+    #[test]
+    fn n64_startup_drain_stays_below_two_cents_in_rendered_pcm() {
+        let mut converter = crate::resample::Resampler::new(true);
+        let nominal = 44100.0 / OUT_RATE as f64;
+        converter.prepare(nominal);
+        let tone: Vec<_> = (0..44100 * 2).flat_map(|i| {
+            let value = ((i as f64 * 1000.0 / 44100.0 * std::f64::consts::TAU).sin() * 20_000.0) as i16;
+            [value, value]
+        }).collect();
+        let mut pcm = Vec::new();
+        let mut reference = Vec::new();
+        let mut normal = crate::resample::Resampler::new(true);
+        normal.prepare(nominal);
+        for packet in tone.chunks(735 * 2) {
+            converter.process(packet, startup::drain_step(nominal), &mut pcm);
+            normal.process(packet, nominal, &mut reference);
+        }
+        assert!(reference.len() / 2 - pcm.len() / 2 >= 48, "the reserve must actually drain during a continuous note");
+        let left: Vec<_> = pcm.iter().step_by(2).copied().collect();
+        let crossings: Vec<_> = left.windows(2).enumerate().skip(500).filter_map(|(i, v)| {
+            (v[0] <= 0 && v[1] > 0).then(|| i as f64 - v[0] as f64 / (v[1] as f64 - v[0] as f64))
+        }).collect();
+        let hz = OUT_RATE as f64 * (crossings.len() - 1) as f64 / (crossings.last().unwrap() - crossings[0]);
+        let cents = 1200.0 * (hz / 1000.0).log2();
+        eprintln!("N64 startup drain: measured rendered 1kHz tone {hz:.8} Hz, {cents:.6} cents");
+        assert!((0.0..2.0).contains(&cents), "the rendered drain must stay below two cents: {cents}");
+    }
 
     /// A muted DAC may stop inside write forever. Only the first full queue may wait;
     /// subsequent video frames must run freely, then fresh sound returns with a fade.
@@ -1442,6 +1699,26 @@ mod tests {
         assert_eq!(cadence_target_frames(59.7275, 60.0), 0);
     }
 
+    #[test]
+    fn android_sega_slow_core_audio_spans_a_late_picture() {
+        let mut audio = Audio::start(paced_sink(), 44100.0, true, None, |_| None);
+        let original = audio.target_ms();
+        audio.set_source_timing(44100.0, 30.0, 60.0);
+        let target = (audio.target_ms() * OUT_RATE as f64 / 1000.0) as usize;
+        let health = QueueHealth::default();
+        let mut queue = VecDeque::from(vec![1234i16; target * 2]);
+        let mut chunk = [0; CHUNK_FRAMES * 2];
+        // A normal 33-ms picture plus 20 ms scheduling delay must keep the queued
+        // sound intact. The old 48-ms heavy-core queue runs out here.
+        for _ in 0..10 {
+            assert_eq!(health.playing_chunk(&mut queue, &mut chunk), 0, "30-Hz source ran out before its next picture");
+            assert!(chunk.iter().all(|&s| s == 1234));
+        }
+        assert_eq!(audio.input_rate(), 44100.0, "queue reserve does not change pitch");
+        audio.set_source_timing(44100.0, 60.0, 60.0);
+        assert_eq!(audio.target_ms(), original, "a 60-Hz source keeps its existing reserve");
+    }
+
     /// Review 0.3: every game sampled PipeWire with helper programs every 2 s (about 7 processes a second, `vdev`
     /// measure in REVIEW-OPUS-0.3-MERGES.md). A game's sound starts none of that unless a bench asks.
     #[test]
@@ -1579,6 +1856,259 @@ mod tests {
         assert!(counters["queue"]["refill_silence_chunks"].as_u64().unwrap() > 0);
         assert_eq!(counters["queue"]["state"], "refill");
         assert!(counters["pipewire"].is_null(), "a fake sink cannot prove client xruns");
+    }
+
+    // The Brick's suspend (`Audio::hold`): statics, as the writer thread closes and opens the streams.
+    #[cfg(feature = "brick")]
+    static HOLD_WRITES: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+    #[cfg(feature = "brick")]
+    static HOLD_CLOSED: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+    #[cfg(feature = "brick")]
+    static HOLD_OPENS: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+    #[cfg(feature = "brick")]
+    unsafe extern "C" fn hold_writei(_: *mut c_void, _: *const c_void, frames: c_ulong) -> c_long {
+        std::thread::sleep(std::time::Duration::from_millis(1));
+        HOLD_WRITES.fetch_add(1, Ordering::SeqCst);
+        frames as c_long
+    }
+    #[cfg(feature = "brick")]
+    unsafe extern "C" fn hold_close(_: *mut c_void) -> c_int {
+        HOLD_CLOSED.fetch_add(1, Ordering::SeqCst);
+        0
+    }
+    #[cfg(feature = "brick")]
+    fn hold_sink(_: Ring) -> Option<Sink> {
+        HOLD_OPENS.fetch_add(1, Ordering::SeqCst);
+        Some(Sink::Alsa {
+            _lib: None,
+            pcm: std::ptr::NonNull::<c_void>::dangling().as_ptr(),
+            writei: hold_writei,
+            recover: fake_recover,
+            delay: fake_delay,
+            close: hold_close,
+            ring: Ring::Short,
+            observation: Default::default(),
+        })
+    }
+
+    /// A native PCM primed during the initial route replacement keeps running while
+    /// the first game packets arrive. A late reserve then exhausts that silence and
+    /// the second prefill reports EPIPE before any game sound has played.
+    #[cfg(feature = "brick")]
+    #[test]
+    fn a_native_brick_game_start_does_not_run_the_pcm_before_its_queue_is_ready() {
+        use std::sync::atomic::AtomicBool;
+        #[derive(Default)]
+        struct State {
+            reserve_ready: AtomicBool,
+            early_writes: AtomicUsize,
+            expired: AtomicBool,
+            sounding: Mutex<Vec<Vec<i16>>>,
+        }
+        static CONTEXT: Mutex<Option<Arc<State>>> = Mutex::new(None);
+        unsafe extern "C" fn write(pcm: *mut c_void, samples: *const c_void, frames: c_ulong) -> c_long {
+            let state = unsafe { &*pcm.cast::<Arc<State>>() };
+            if !state.reserve_ready.load(Ordering::Acquire) {
+                state.early_writes.fetch_add(1, Ordering::Relaxed);
+            }
+            if state.expired.swap(false, Ordering::AcqRel) { return -32; }
+            let samples = unsafe { std::slice::from_raw_parts(samples.cast::<i16>(), frames as usize * 2) };
+            if samples.iter().any(|&s| s != 0) { state.sounding.lock().unwrap().push(samples.to_vec()); }
+            std::thread::sleep(std::time::Duration::from_millis(5));
+            frames as c_long
+        }
+        unsafe extern "C" fn close(pcm: *mut c_void) -> c_int {
+            drop(unsafe { Box::from_raw(pcm.cast::<Arc<State>>()) });
+            0
+        }
+        unsafe extern "C" fn control(_: *mut c_void) -> c_int { 0 }
+        unsafe extern "C" fn recover(_: *mut c_void, _: c_int, _: c_int) -> c_int { 0 }
+        fn open(ring: Ring) -> Option<Sink> {
+            let state = CONTEXT.lock().unwrap().as_ref().unwrap().clone();
+            Some(Sink::Alsa {
+                _lib: None, pcm: Box::into_raw(Box::new(state)).cast(),
+                writei: write, recover, delay: fake_delay, close, ring,
+                observation: crate::platform::audio_backend::Observation::with_native_pause(control, control),
+            })
+        }
+        let state = Arc::new(State::default());
+        *CONTEXT.lock().unwrap() = Some(state.clone());
+        // The keeper replaces the initially short stream with its cycle ring.
+        let route = Route { small: Arc::new(AtomicBool::new(false)), decided: Arc::new(AtomicBool::new(true)),
+            bluetooth: Arc::new(AtomicBool::new(false)) };
+        let mut audio = Audio::start_with(open(Ring::Short).unwrap(), 48000.0, false, None, Some(route), open);
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(3);
+        while audio.queue_health.prefill_waits.load(Ordering::Relaxed) == 0 {
+            assert!(std::time::Instant::now() < deadline, "writer never waited for the first game packet");
+            std::thread::sleep(std::time::Duration::from_millis(1));
+        }
+        // Advance the fake native clock across the measured 21–61 ms reserve
+        // wait. Only a PCM already started by silence can exhaust its buffer.
+        state.expired.store(state.early_writes.load(Ordering::Relaxed) != 0, Ordering::Release);
+        state.reserve_ready.store(true, Ordering::Release);
+        audio.push(&vec![400; restart_frames(audio.target(), 800) * 2 + 72]);
+        while state.sounding.lock().unwrap().is_empty() {
+            assert!(std::time::Instant::now() < deadline, "game sound never started");
+            std::thread::sleep(std::time::Duration::from_millis(1));
+        }
+        let snapshot = audio.diagnostics();
+        drop(audio);
+        *CONTEXT.lock().unwrap() = None;
+        let sounding = state.sounding.lock().unwrap();
+        assert_eq!(&sounding[0][..2], &[0, 0], "first game PCM lost its fade-in");
+        assert_eq!(snapshot["backend"]["alsa"]["xrun_errors"], 0,
+            "the native clock ran dry before the first game PCM: {snapshot}");
+        assert_eq!(snapshot["backend"]["alsa"]["recover_calls"], 0);
+        assert_eq!(snapshot["queue"]["dropped_frames"], 0, "the first game sound was discarded");
+    }
+
+    /// A screen-off wake resumes emulation while ALSA opens again. Its first PCM must wait
+    /// for the new output rather than overflow the old active queue and skip game sound.
+    #[cfg(feature = "brick")]
+    #[test]
+    fn a_paused_native_brick_pcm_cannot_xrun_while_the_menu_is_busy() {
+        use std::ffi::{c_int, c_long, c_ulong, c_void};
+        use std::sync::atomic::AtomicBool;
+        struct Pcm {
+            paused: Arc<AtomicBool>,
+            drains: Arc<AtomicUsize>,
+            silent_writes: usize,
+            chunks: Arc<Mutex<Vec<(std::time::Instant, Vec<i16>)>>>,
+        }
+        unsafe extern "C" fn write(p: *mut c_void, samples: *const c_void, n: c_ulong) -> c_long {
+            let pcm = unsafe { &mut *p.cast::<Pcm>() };
+            pcm.chunks.lock().unwrap().push((std::time::Instant::now(), unsafe { std::slice::from_raw_parts(samples.cast::<i16>(), n as usize * 2) }.to_vec()));
+            if pcm.paused.load(Ordering::Relaxed) {
+                pcm.silent_writes += 1;
+                // Three silent chunks then the measured menu scheduling gap:
+                // an unparked native PCM exhausts its reserve and reports EPIPE.
+                if pcm.silent_writes == 3 { return -32; }
+            }
+            std::thread::sleep(std::time::Duration::from_millis(5));
+            n as c_long
+        }
+        unsafe extern "C" fn drain(p: *mut c_void) -> c_int {
+            unsafe { (*p.cast::<Pcm>()).drains.fetch_add(1, Ordering::Relaxed); }
+            0
+        }
+        unsafe extern "C" fn control(_: *mut c_void) -> c_int { 0 }
+        unsafe extern "C" fn recover(_: *mut c_void, _: c_int, _: c_int) -> c_int { 0 }
+        unsafe extern "C" fn delay(_: *mut c_void, out: *mut c_long) -> c_int { unsafe { *out = 0 }; 0 }
+        unsafe extern "C" fn close(p: *mut c_void) -> c_int { drop(unsafe { Box::from_raw(p.cast::<Pcm>()) }); 0 }
+        let paused = Arc::new(AtomicBool::new(false));
+        let drains = Arc::new(AtomicUsize::new(0));
+        let chunks = Arc::new(Mutex::new(Vec::new()));
+        let sink = Sink::Alsa {
+            _lib: None,
+            pcm: Box::into_raw(Box::new(Pcm { paused: paused.clone(), drains: drains.clone(), silent_writes: 0, chunks: chunks.clone() })).cast(),
+            writei: write, recover, delay, close, ring: Ring::Short,
+            observation: crate::platform::audio_backend::Observation::with_native_pause(drain, control),
+        };
+        let mut audio = Audio::start(sink, 48000.0, false, None, |_| None);
+        for _ in 0..8 {
+            audio.push(&vec![200; 800 * 2]);
+            std::thread::sleep(std::time::Duration::from_millis(16));
+        }
+        assert!(audio.playing.load(Ordering::Relaxed));
+        paused.store(true, Ordering::Relaxed);
+        audio.pause(true);
+        std::thread::sleep(std::time::Duration::from_millis(60));
+        let snapshot = audio.diagnostics();
+        let resume_index = chunks.lock().unwrap().len();
+        let resumed_at = std::time::Instant::now();
+        paused.store(false, Ordering::Relaxed);
+        audio.pause(false);
+        for _ in 0..8 {
+            audio.push(&vec![400; 800 * 2]);
+            std::thread::sleep(std::time::Duration::from_millis(16));
+        }
+        assert!(audio.playing.load(Ordering::Relaxed), "game audio did not resume after parking the PCM");
+        let captured = chunks.lock().unwrap();
+        let (accepted_at, first) = captured[resume_index..].iter().find(|(_, c)| c.iter().any(|&s| s != 0)).expect("resume produced no PCM");
+        assert_eq!(&first[..2], &[0, 0], "resume must start at silence");
+        assert!(first.chunks_exact(2).map(|f| f[0]).collect::<Vec<_>>().windows(2).all(|f| (f[1] as i32 - f[0] as i32).abs() <= 2), "resume introduced a sample jump instead of the existing fade-in");
+        println!("resume to first faded PCM: {:.3} ms (fake sink, not physical output)", accepted_at.duration_since(resumed_at).as_secs_f64() * 1000.0);
+        assert_eq!(snapshot["backend"]["alsa"]["xrun_errors"], 0, "a silent paused PCM ran dry: {snapshot}");
+        assert_eq!(drains.load(Ordering::Relaxed), 1, "the pause fade must finish before the native clock stops");
+        assert_eq!(audio.diagnostics()["backend"]["alsa"]["xrun_errors"], 0);
+    }
+
+    #[cfg(feature = "brick")]
+    #[test]
+    fn a_slow_brick_reopen_keeps_the_first_resumed_game_sound() {
+        static SLOW: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+        unsafe extern "C" fn write(_: *mut c_void, _: *const c_void, frames: c_ulong) -> c_long {
+            std::thread::sleep(std::time::Duration::from_millis(5));
+            frames as c_long
+        }
+        unsafe extern "C" fn close(_: *mut c_void) -> c_int { 0 }
+        fn sink(_: Ring) -> Option<Sink> {
+            if SLOW.swap(false, Ordering::SeqCst) {
+                std::thread::sleep(std::time::Duration::from_millis(150));
+            }
+            Some(Sink::Alsa {
+                _lib: None, pcm: std::ptr::NonNull::<c_void>::dangling().as_ptr(),
+                writei: write, recover: fake_recover, delay: fake_delay, close,
+                ring: Ring::Short, observation: Default::default(),
+            })
+        }
+        let mut audio = Audio::start(sink(Ring::Short).unwrap(), 48000.0, false, None, sink);
+        audio.push(&vec![100; 4800 * 2]);
+        for _ in 0..4 {
+            std::thread::sleep(std::time::Duration::from_millis(16));
+            audio.push(&vec![100; 800 * 2]);
+        }
+        assert!(!audio.starting, "the regression must exercise an already playing game");
+        audio.pause(true);
+        assert!(audio.hold(true), "the old stream closed");
+        let before = audio.queue_health.dropped_frames.load(Ordering::Relaxed);
+        SLOW.store(true, Ordering::SeqCst);
+        audio.hold(false);
+        audio.pause(false);
+        for _ in 0..16 {
+            audio.push(&vec![200; 800 * 2]);
+            std::thread::sleep(std::time::Duration::from_millis(16));
+        }
+        assert!(audio.playing.load(Ordering::Relaxed), "game sound resumed on the new stream");
+        audio.pause(true);
+        assert_eq!(audio.queue_health.dropped_frames.load(Ordering::Relaxed), before,
+            "opening the output after a wake discarded the first resumed game sound");
+    }
+
+    /// The xruns after the Brick's suspend (2026-11-08): pocket-core's paused game kept writing silence into a PCM
+    /// the kernel then suspended; its first write after the wake failed twice and counted an xrun. Asleep, the stream is
+    /// closed and nothing is written; awake, a new one opens and silence flows into it at once, the game still paused.
+    #[cfg(feature = "brick")]
+    #[test]
+    fn asleep_on_the_brick_no_stream_is_open_and_waking_opens_a_new_one() {
+        let wait = |what: &str, condition: &dyn Fn() -> bool| {
+            let deadline = std::time::Instant::now() + std::time::Duration::from_secs(3);
+            while !condition() {
+                assert!(std::time::Instant::now() < deadline, "{what}");
+                std::thread::sleep(std::time::Duration::from_millis(2));
+            }
+        };
+        let mut audio = Audio::start(hold_sink(Ring::Short).unwrap(), 48000.0, false, None, hold_sink);
+        audio.push(&vec![100; 4800 * 2]);
+        wait("plays", &|| audio.queue_health.state.load(Ordering::Relaxed) == 1);
+        audio.pause(true);
+        wait("paused", &|| audio.queue_health.state.load(Ordering::Relaxed) == 2);
+        let opens = HOLD_OPENS.load(Ordering::SeqCst);
+        let closed = HOLD_CLOSED.load(Ordering::SeqCst);
+        assert!(audio.hold(true), "the stream is closed when hold returns");
+        assert_eq!(HOLD_CLOSED.load(Ordering::SeqCst), closed + 1, "closed once");
+        let writes = HOLD_WRITES.load(Ordering::SeqCst);
+        std::thread::sleep(std::time::Duration::from_millis(60));
+        assert_eq!(HOLD_WRITES.load(Ordering::SeqCst), writes, "nothing written while asleep");
+        audio.hold(false);
+        wait("a new stream", &|| HOLD_OPENS.load(Ordering::SeqCst) == opens + 1);
+        wait("silence again", &|| HOLD_WRITES.load(Ordering::SeqCst) > writes + 5);
+        assert_eq!(audio.queue_health.state.load(Ordering::Relaxed), 2, "still paused");
+        let alsa = audio.diagnostics()["backend"]["alsa"].clone();
+        assert_eq!((alsa["write_errors"].as_u64(), alsa["recover_calls"].as_u64()), (Some(0), Some(0)));
+        assert_eq!(audio.diagnostics()["backend"]["write_failures"], 0);
+        drop(audio);
+        assert_eq!(HOLD_CLOSED.load(Ordering::SeqCst), closed + 2, "the new one closes with the game");
     }
 
     #[test]
@@ -1837,5 +2367,30 @@ mod tests {
         out = None;
         assert!(out.is_none());
         assert_eq!(closed(), before + 1);
+    }
+}
+
+#[cfg(test)]
+#[test]
+fn android_large_core_keeps_sound_through_a_late_video_frame() {
+    // An Android frame can arrive after a 53 ms scene/render delay. The endpoint still
+    // asks for ten 256-frame blocks; every available stereo sample must remain audible.
+    for system in ["n64", "psp", "nds", "saturn", "dreamcast"] {
+        let target = target_frames(needs_jitter_reserve(system), true).max(OUT_RATE as usize * 32 / 1000);
+        let mut queue = VecDeque::from(vec![1234; restart_frames(target, 800) * 2]);
+        let health = QueueHealth::default();
+        let mut chunk = [0; CHUNK_FRAMES * 2];
+        let mut missing = 0;
+        for _ in 0..10 {
+            missing += health.playing_chunk(&mut queue, &mut chunk);
+        }
+        assert_eq!(missing, 0, "{system}: the opening or scene change inserted silence before its next audio delivery");
+        // The Android frame loop may catch up four ticks after that delay. Preserve
+        // their valid PCM when the next regular delivery arrives, rather than trimming it.
+        let restart = restart_frames(target, 800);
+        let mut queue = VecDeque::from(vec![1234; target * 2]);
+        assert_eq!(health.enqueue(&mut queue, &vec![2345; 3200 * 2], target, restart), 0);
+        assert_eq!(health.enqueue(&mut queue, &vec![3456; 800 * 2], target, restart), 0,
+            "{system}: catch-up discarded sound after a late frame");
     }
 }

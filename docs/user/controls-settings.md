@@ -116,8 +116,8 @@ START on a PortMaster port's card ([Performance & fan](performance.md#portmaster
 
 | Screen | Buttons |
 |---|---|
-| Every first-start stage | Up / Down: every row and choice on the page. Left / Right: change the one you are on. A: take it; the way on is a row (Continue, Looks right) or A itself (Get started, Finish). B or L1: back to the stage before. START: skip the rest of the setup. L2: Easy to read on or off. Inside a keyboard or a list B, L1 and START are its own. A page opened from Settings returns to its category's list instead. SELECT opens the [manual](settings-system.md#manual). |
-| Your language | Up / Down: Language, Easy to read, For a child. Left / Right: change the row you are on (the language is used at once, [Language](language.md)). A: get started. Y: for a child, from any row. |
+| Every first-start stage | Up / Down: every row and choice on the page. Left / Right: change the one you are on. A: take it; the way on is a row (Continue, Looks right) or A itself (Get started, Finish). B or L1: back to the stage before. START: skip the rest of the setup. L2: Big text on or off. Inside a keyboard or a list B, L1 and START are its own. A page opened from Settings returns to its category's list instead. SELECT opens the [manual](settings-system.md#manual). |
+| Your language | Up / Down: Language, Big text, For a child. Left / Right: change the row you are on (the language is used at once, [Language](language.md)). A: get started. Y: for a child, from any row. |
 | Wi-Fi (first start) | Up / Down: the networks, Other network…, Wi-Fi country, Time zone, Scan again, Continue (Continue offline). A: connect or open the row. X: scan again. B: back to your language. |
 | Time zone (first start) | Up / Down: Looks right (Keep UTC), Choose another…. A: take it. X: choose another. B: back to Wi-Fi. |
 | Your games | Up / Down: Continue, Add more… (or Add games…, I'll add games later), Box art. A: take it; on Box art A or Left / Right switch it. B: back to Wi-Fi. |
@@ -125,7 +125,7 @@ START on a PortMaster port's card ([Performance & fan](performance.md#portmaster
 | Choose a look (Settings) | Up / Down: the layouts, then the rows Appearance, Motion and Animations. Left / Right: change the layout or the row you are on. A: keep. B: cancel, back to Settings with the look as it was. |
 | How you like to play (Settings) | Up / Down: The shelf, Easy, Enthusiast, Choose for yourself. A: take it. B: back. |
 | Feature cards (Choose for yourself, New in this version) | Up / Down: On, Off, Later. A: take the choice, next card. L1 / R1 or Left / Right: previous / next card without choosing. B: back a card (How you like to play) or close (new cards). START: skip the rest. |
-| Tour (Settings → Help & tools → Tour) | A: next card, the last one closes. L1 / R1 or Left / Right: previous / next card. B: close. The first six cards explain; on Easy to read, Up/Down choose and A applies Large text and Reduced motion. |
+| Tour (Settings → Help & tools → Tour) | A: next card, the last one closes. L1 / R1 or Left / Right: previous / next card. B: close. The first six cards explain; on Big text, Up/Down choose and A applies Large text and Reduced motion. |
 | Wi-Fi | Up / Down: the networks, then Other network…, Wi-Fi country and Scan again. A: connect; on a saved network its menu (Connect, Forget; the first start's connected one: Continue, Forget). X: scan again. Y: forget a saved network straight away. B: back. |
 | On-screen keyboard | D-pad: move. A: type. B: delete (back to the list when empty). L1: empty the field. X: Shift. Y: symbols. START: connect. |
 | Extras | Up / Down: choose. A: download (cover art) or browse (PortMaster). On Pictures, A or Left / Right: the next choice (Box art, Box art and screenshots, Off). |
@@ -145,11 +145,10 @@ On the shelf, the game lists, Settings, the search and Recent games:
 |---|---|
 | Tap a row (or card) | Select it. Tap the selected one again to open or play it. |
 | Swipe up / down | Scroll the list: the selection follows the finger by whole rows. The list stops at its ends. In the manual the page follows the finger. |
-| Swipe left / right | On the Cards look and in Recent games: previous / next card. In the Cabinet: along the shelf (up / down: to another shelf). |
+| Swipe left / right | In Recent games: previous / next card. In the Cabinet: along the shelf (up / down: to another shelf). |
 | Tap a button hint at the bottom (A, B, X, Y, SELECT, START) | The same as pressing that button. START opens Settings. |
 | Tap a key of the search's keyboard | Type it. |
-| Tap a Curator row on a game's card (Echoes, Versions, Stickers & labels) | Select it. Tap it again to open it. |
-| Tap Up next on the shelf | Play that game, as A does. |
+| Tap a Curator row on a game's card (Echoes, Versions, Stickers) | Select it. Tap it again to open it. |
 
 In a game, pocket-ui ignores the touch screen and the game gets it:
 - **Nintendo DS**: touch the bottom screen with a finger as you would with the stylus. It follows the layout in use
@@ -253,8 +252,7 @@ so a silent old connection cannot keep a direction or trigger held in the menus 
 
 The layout is saved automatically for the controller's identity and follows it through reconnects and player
 changes. It applies before the Nintendo/Xbox menu layout and before each game's Controls settings: the shelf,
-menus, pocket-core games and ROCKNIX's SDL Dolphin and ARMSX2 use it. The Steam Deck's host-owned input,
-RetroArch, Azahar (3DS), PortMaster and other external players keep their own controller setup.
+menus, pocket-core games and ROCKNIX's SDL Dolphin and ARMSX2 use it. RetroArch, Azahar (3DS), PortMaster and other external players keep their own controller setup.
 
 Trigger press is at 55% travel; release is below 40%, preventing repeated presses near the threshold. A digital
 trigger behaves like an ordinary button. Unchanged analogue triggers keep their travel in standalone games. A remapped trigger

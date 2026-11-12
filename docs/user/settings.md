@@ -20,10 +20,10 @@ Left/Right, right in the list, and the selected one shows **‹ ›** round its 
 | **Look** | Layout, Systems on the shelf, Cozy extras, Appearance, Colours, Style, Text size, Screen colour, Night light. See [Look](#look) |
 | **Sound & feel** | Animations, Playful cases, Old-TV switch-on, Motion, Zoom in the pause menu, Sounds, Case sounds, Haptics, LEDs. See [Sound & feel](settings-sound.md) |
 | **Playing** | On start, Continue where I quit, Remind me where I was, Buttons, Over the game, Screen frames, Performance & fan, Battery, RetroAchievements. See [Playing](#playing) |
-| **Games** | Add games, Game check, Extras, From EmulationStation, Screenshots, Curator, PC streaming. See [Games](#games) |
-| **Connections** | Wi-Fi, Bluetooth, Tailscale, Sync, Remote access (SSH), Web companion. See [Connections](settings-system.md#connections) |
-| **System** | Language, Time, Sleep & power, Second screen (two screens only), Kids mode, Updates, Storage, Backup & reset. See [System](settings-system.md#system) |
-| **Help & tools** | First-start setup, How you like to play, Tour, Manual, Tools, Test buttons, Store (only on a device with a store set up), Report a problem, About. See [Help & tools](settings-system.md#help--tools) |
+| **Games** | Add games, Game check, Extras, From EmulationStation, Screenshots, Curator. See [Games](#games) |
+| **Connections** | Wi-Fi, Bluetooth, Web companion. See [Connections](settings-system.md#connections) |
+| **System** | Language, Time, Sleep & power, Kids mode, Updates, Storage, Backup & reset. See [System](settings-system.md#system) |
+| **Help & tools** | First-start setup, How you like to play, Tour, Manual, For tinkerers (Tailscale, Sync, Remote access, PC streaming), Tools, Test buttons, Report a problem, About. See [Help & tools](settings-system.md#help--tools) |
 
 The second half of Settings, [Connections, System and Help & tools](settings-system.md), has its own page.
 
@@ -42,16 +42,16 @@ category's list instead of moving on. The first start's time zone has no page of
 
 Settings → **Look**. How pocket-ui looks, in the first start's order: first how your games stand (the layout, which
 systems, the cozy extras), then the style (appearance, colours, type, the screen). Every choice has a row of its own.
-Easy to read, Large text and Reduced motion together, is a card of the [Tour](tour.md) and a key of the first start.
+Big text, Large text and Reduced motion together, is a card of the [Tour](tour.md) and a key of the first start.
 
 | Entry | What it holds |
 |---|---|
-| **Layout** | How your games stand: Shelf, Easy, Minimal, Split, Cards or Cabinet, each a live preview of your own shelf. See [Choose a look](#choose-a-look) |
+| **Layout** | How your games stand: Shelf, Easy, Split or Cabinet, each a live preview of your own shelf. See [Choose a look](#choose-a-look) |
 | **Systems on the shelf** | Which systems are on Home, a tick each. The row says "1 hidden" (or 2, 3...) while a system with games is off the shelf: this is the way back. See [Systems on the shelf](#systems-on-the-shelf) |
 | **Cozy extras** | The little touches you see, each on or off on its own: the TV on the cabinet, stickers, printed discs, the memory card in the pause menu, light by time of day, decorations, game connections, Rediscover. See [Cozy extras](settings-sound.md#cozy-extras) |
 | **Appearance** | **Dark** (the default), **Light** or **Automatic**. A or Left/Right switches it. See [Appearance](#appearance) |
 | **Colours** | The colours of every page: Warm, Indigo Cube, Grey Brick, Green X or Blue Station; with the Retro style, Cocoa or Pea. A or Left/Right switches it. See [Colours and style](theme.md) |
-| **Style** | Barlow, Pixel or Rounded type, or **Retro**: pixel letters, frames and icons everywhere, with its own colours and menu sounds; **Retro Pixelify** is Retro with Pixelify's rounder letters. A or Left/Right switches it. See [Colours and style](theme.md#style) |
+| **Style** | Barlow type, or **Retro**: pixel letters, frames and icons everywhere, with its own colours and menu sounds; **Retro Pixelify** is Retro with Pixelify's rounder letters. A or Left/Right switches it. See [Colours and style](theme.md#style) |
 | **Text size** | **Normal** (the default), **Medium** or **Large**: larger text on every screen, fewer rows on a page. A or Left/Right switches it. See [Text size](#text-size) |
 | **Screen colour** | The screen's white: **Cooler 10** … **Neutral** … **Warmer 10**. Left/Right changes it, you see it at once; A goes back to Neutral. The same setting as [SELECT + Vol](controls-settings.md#volume-and-brightness-keys), so the two always agree |
 | **Night light** | Warmer, less blue colours in the evening, in the menus and in games: **Off** (the default), **On** or **Scheduled**, with a strength. See [Night light](night-light.md) |
@@ -60,7 +60,7 @@ Easy to read, Large text and Reduced motion together, is a card of the [Tour](to
 
 Settings → Look → **Layout** is the first start's last page ("How your games stand"): a scaled-down picture of your shelf in each look, drawn by
 the shelf itself with a few of your systems and one game (with its box art when it has one; on an SD card without
-games, a built-in set of "Sample game"s). It works like every list: Left/Right switch between the six looks, and the
+games, a built-in set of "Sample game"s). It works like every list: Left/Right switch between the four looks, and the
 shelf behind Settings takes the look at once. See [Playing](playing.md#looks) for what each look does. Under the
 preview are three rows, the [appearance](#appearance), the [motion](settings-sound.md#motion) and the [animations](settings-sound.md#animations):
 Down reaches each one (a bar beside it shows which), Left/Right change it, Up goes back to the looks. A keeps
@@ -113,7 +113,7 @@ belong to a picture of a fixed size: the titles on the cases' spines and the she
 pictures on the Tour's cards and the look previews' shrunken screens, and what is drawn over a running game by
 pocket-core (the in-game messages and Pixel Path's line over the game).
 
-The first start has **Easy to read** on every page (**L2**, and a row on its first page), so larger text is there from
+The first start has **Big text** on every page (**L2**, and a row on its first page), so larger text is there from
 the start.
 Safe mode uses the size chosen here too.
 
@@ -151,7 +151,7 @@ Settings → **Playing**. What happens when you start and quit, the buttons, how
 | **Continue where I quit** | Whether the pause menu's Quit keeps the moment you are at for the next start: **On** (the default) or **Off**, only the game's own saves. A switches it. See [Continue where I quit](#continue-where-i-quit) |
 | **Remind me where I was** | Back to a game after more than two weeks: when you played it last and your note, while its moment loads. **On** (the default) or **Off**. A switches it. See [Remind me where I was](#remind-me-where-i-was) |
 | **Buttons** | Which face button confirms in pocket-ui's menus, and how the buttons look in the hints, with a picture of the four buttons. See [Buttons](#buttons) |
-| **Over the game** | The frame rate, the sensors or Pixel Path's line over every game, or nothing (the default). See [Over the game](#over-the-game) |
+| **Over the game** | The frame rate, the sensors or (with Pixel Path in the pause menu) Pixel Path's line over every game, or nothing (the default). See [Over the game](#over-the-game) |
 | **Screen frames** | Where a game gets a frame when you haven't chosen one: **Off** (the default), **Handhelds** or **Every console**. A or Left/Right switches it. See [Screen frames](#screen-frames) |
 | **Performance & fan** | How fast the processor runs and how early the fan starts in games, the fan in the menus, and the temperatures right now. See [Performance and fan](performance.md) |
 | **Battery** | Battery history, time left, what a game costs. See [Battery](settings-system.md#battery) |
@@ -239,7 +239,8 @@ combined freely. The explanations under a list still name the keys by their lett
 ### Over the game
 
 Settings → Playing → **Over the game**: what is drawn over every game while you play, **Off** (the default),
-**FPS**, **FPS + sensors** or **Pixel Path**; what each shows is in [Over the game](pause-menu.md#over-the-game). Right
+**FPS** or **FPS + sensors**, and **Pixel Path** with Settings → Games → Curator → **Pixel Path in the pause menu** on (the
+Enthusiast profile turns it on); what each shows is in [Over the game](pause-menu.md#over-the-game). Right
 or A goes on, Left goes back. A console or game with its own choice under Options → Speed, rumble, fan keeps it, and **HOME + Y**
 switches to the next level while you play. The [Easy](easy.md) look never draws any of it, whatever this says, and leaves the setting alone.
 
@@ -273,8 +274,7 @@ Settings → **Games**. Getting games and what runs them onto the Pocket, and th
 | **Extras** | Box art, the Pictures choice and Starter pack; PortMaster games on ROCKNIX and TrimUI, and optional Cheats on TrimUI. See [Extras](extras.md) |
 | **From EmulationStation** | The favourites and ratings in your EmulationStation `gamelist.xml` files: A adds the favourites to Favourites or uses the ratings as My rating, without changing a thing in EmulationStation. Says "No gamelist" when there is none. See [Your EmulationStation gamelists](library.md#your-emulationstation-gamelists) |
 | **Screenshots** | The pictures you took with HOME + A, newest first, in groups by day, with a small picture each. A opens one full screen, X deletes it. The value at the right is how many there are; with none the page says how to take one. See [Looking at your screenshots](playing.md#looking-at-your-screenshots) |
-| **Curator** | The Lens and smart shelves, labels, Echoes, Up next, versions and play history, each on or off. See [Curator](#curator) |
-| **PC streaming** | Pair a gaming PC for Moonlight on the Pocket itself, see the paired PCs, stream one of their games. See [PC streaming](pc-streaming.md) |
+| **Curator** | The Lens and smart shelves, Echoes, versions and play history, each on or off. See [Curator](#curator) |
 
 ### Curator
 
@@ -283,14 +283,13 @@ row; the line under the list says what it does. Changes apply at once.
 
 | Row | Default | What it does |
 |---|---|---|
-| **Lens & smart shelves** | On | The Curator row on Home, with the Lens, and your pinned smart shelves; also [Just Play](curator.md#just-play) on Home |
-| **Echoes on the game card** | On | "More like this" on every card |
-| **Up next after a game** | Off | When you quit a game you played for a minute or more, one line on the shelf suggests a game of yours like it. X plays it, any other button puts it away (A is the shelf's own); it goes by itself after a few seconds. See [Up next](curator.md#up-next) |
-| **Merge versions in mixed lists** | On | A game you own on several systems shows once in Favourites, smart shelves and Echoes, and starts its preferred version |
-| **Labels** | On | The card's Stickers & labels row, labels in the Curator list and pinned labels on Home |
+| **Lens & smart shelves** | Off | The Curator row on Home, with the Lens, and your pinned smart shelves. On with Enthusiast, and on a Pocket that was set up before this became a choice |
+| **Just Play on Home** | On | The row on Home: A starts a game that suits you now, X shows it first with the reason ([Just Play](curator.md#just-play)). Off after an update only if the Lens was off before |
+| **Echoes on the game card** | Off | "More like this" on every card |
+| **Merge versions in mixed lists** | Off | A game you own on several systems shows once in Favourites, smart shelves and Echoes, and starts its preferred version |
 | **Games not on this device in Echoes** | Off | Echoes also names a few games you don't have. Names only |
-| **Pixel Path in the pause menu** | Off | Adds Pixel Path to the pause menu: how a game's picture and sound reach you, stage by stage, graded in colour. See [Pixel Path](pause-menu.md#pixel-path). The line beside the picture while you play is [Over the game](#over-the-game) → Pixel Path, which doesn't need this switch |
+| **Pixel Path in the pause menu** | Off | Adds Pixel Path to the pause menu: how a game's picture and sound reach you, stage by stage, graded in colour. See [Pixel Path](pause-menu.md#pixel-path). It also adds the Pixel Path level to [Over the game](#over-the-game), the line beside the picture while you play; switched off, that level draws the FPS line |
 | **Play history** | On | Curator → History and the Year in review: what you played this week, month and year. Kept on this Pocket only. Off: nothing new is recorded, and what was recorded stays. See [Play history](curator.md#play-history) |
 
-Switching a part off hides it; your smart shelves, labels and preferred versions stay and come back when you
+Switching a part off hides it; your smart shelves and preferred versions stay and come back when you
 switch it on again.

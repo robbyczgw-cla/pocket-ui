@@ -2,6 +2,7 @@
 """Portable PortMaster archives must install actual data on FAT and reject unsafe trees."""
 import importlib.util
 import io
+import os
 from pathlib import Path
 import stat
 import sys
@@ -9,6 +10,7 @@ import tarfile
 import tempfile
 import unittest
 import types
+import time
 from unittest.mock import patch
 import zipfile
 
@@ -37,6 +39,75 @@ class ArchiveTests(unittest.TestCase):
                 info.compress_type = zipfile.ZIP_DEFLATED
                 out.writestr(info, value)
         return target
+
+    def test_extraction_paces_and_fsyncs_every_block_including_links_and_small_files(self):
+        data = os.urandom(2 * 256 * 1024 + 17)
+        source = self.make_zip([('data', 'file', data), ('alias', 'link', 'data'),
+                                ('small', 'file', b'last')])
+        elapsed, synced, per_file = [0.0], [], {}
+
+        def sleep(seconds):
+            elapsed[0] += seconds
+
+        def fsync(fd):
+            info = os.fstat(fd)
+            previous = per_file.get(info.st_ino, 0)
+            block = info.st_size - previous
+            self.assertGreater(block, 0)
+            self.assertLessEqual(block, 256 * 1024, 'unbounded dirty-card burst')
+            synced.append(block)
+            per_file[info.st_ino] = info.st_size
+            self.assertGreaterEqual(elapsed[0] + 1e-9, sum(synced) / (2 * 1024**2))
+
+        with patch.object(time, 'sleep', sleep), patch.object(os, 'fsync', fsync):
+            archive.extract_zip(source, self.dest)
+        self.assertEqual(synced, [256 * 1024, 256 * 1024, 17] * 2 + [4])
+        self.assertEqual((self.dest / 'alias').read_bytes(), data)
+        self.assertEqual((self.dest / 'small').read_bytes(), b'last')
+
+    def test_unpack_progress_changes_while_files_are_still_being_written(self):
+        source = self.make_zip([('data', 'file', os.urandom(2 * 256 * 1024 + 17))])
+        progress = self.root / 'runtime.progress'
+        seen = []
+        original = archive.Pacer.progress
+
+        def report(pacer):
+            original(pacer)
+            seen.append(progress.read_text().strip())
+
+        with patch.dict(os.environ, BRICK_PORTMASTER_PROGRESS=str(progress)), \
+                patch.object(time, 'sleep'), patch.object(archive.Pacer, 'progress', report):
+            archive.extract_zip(source, self.dest)
+        self.assertEqual(seen, ['unpacking|0|524305', 'unpacking|262144|524305',
+                                'unpacking|524288|524305', 'unpacking|524305|524305'])
+
+    def test_failed_fsync_does_not_publish_extracted_or_preserved_data(self):
+        source = self.root / 'libs'
+        source.mkdir()
+        (source / 'engine').write_bytes(b'new runtime')
+        self.dest.mkdir()
+        (self.dest / 'engine').write_bytes(b'previous runtime')
+        with patch.object(os, 'fsync', side_effect=OSError('card write failed')), patch.object(time, 'sleep'):
+            with self.assertRaises(OSError):
+                archive.copy_path(source, self.dest)
+        self.assertEqual((self.dest / 'engine').read_bytes(), b'previous runtime')
+        self.assertEqual(sorted(p.name for p in self.dest.iterdir()), ['engine'])
+
+    @unittest.skipUnless(sys.platform.startswith('linux'), 'Linux thread I/O policy')
+    def test_idle_io_is_applied_to_writes_and_restored_after_success_and_error(self):
+        import ctypes
+        numbers = {'aarch64': 31, 'x86_64': 252, 'armv7l': 315}
+        syscall = ctypes.CDLL(None).syscall
+        get = lambda: syscall(numbers[os.uname().machine], 1, 0)
+        before = get()
+        with archive.idle_io():
+            self.assertEqual(get(), 3 << 13)
+        self.assertEqual(get(), before)
+        with self.assertRaises(ValueError):
+            with archive.idle_io():
+                self.assertEqual(get(), 3 << 13)
+                raise ValueError('failed extraction')
+        self.assertEqual(get(), before)
 
     def make_tar(self, entries):
         target = self.root / 'test.tar.gz'

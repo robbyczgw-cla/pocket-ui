@@ -6,7 +6,10 @@
 //! - **Off**: nothing is drawn, no reader thread, no report (`overlay::Overlay::draw` returns at once).
 //! - **FPS**: "60 FPS   CPU 23%" in the top left corner, twice a second (`overlay::Hud::frame`).
 //! - **FPS + sensors**: the same line with the temperature, the fan and the battery draw (`osd_sensors`).
-//! - **Pixel Path**: Pixel Path's line beside the picture (`pixel_live`), which has the frame rate too.
+//! - **Pixel Path**: Pixel Path's line beside the picture (`pixel_live`), which has the frame rate too. Since 0.4 only
+//!   with the pause menu's Pixel Path on (Settings → Curator → Pixel Path in the pause menu), which the Enthusiast
+//!   profile switches on and the others off ([`pixel_path_offered`]). Without it the level is not offered on the
+//!   Settings row, in Options or on HOME + Y, and a saved "pixel" draws as FPS ([`Level::offered`]).
 //!
 //! Where it is set: Settings → Playing → Over the game (`settings::Settings::over_game`, what every game starts with),
 //! Options → Extras → Over the game (this console or this game, saved with Save changes as every option, key
@@ -71,11 +74,23 @@ impl Level {
         }
     }
 
-    /// The next level (`step` 1, A and Right on the Settings row, HOME + Y) or the one before (-1, Left), round.
-    pub fn step(self, step: i32) -> Level {
+    /// The next level (`step` 1, A and Right on the Settings row, HOME + Y) or the one before (-1, Left), round;
+    /// past Pixel Path unless `pixel_path` ([`pixel_path_offered`]).
+    pub fn step(self, step: i32, pixel_path: bool) -> Level {
         let n = Level::ALL.len() as i32;
-        let i = Level::ALL.iter().position(|l| *l == self).unwrap_or(0) as i32;
-        Level::ALL[(i + step).rem_euclid(n) as usize]
+        let mut i = Level::ALL.iter().position(|l| *l == self).unwrap_or(0) as i32;
+        loop {
+            i = (i + step).rem_euclid(n);
+            let l = Level::ALL[i as usize];
+            if pixel_path || l != Level::PixelPath {
+                return l;
+            }
+        }
+    }
+
+    /// The level as it is drawn: Pixel Path is FPS (its frame rate, without the line) where it isn't offered.
+    pub fn offered(self, pixel_path: bool) -> Level {
+        if self == Level::PixelPath && !pixel_path { Level::Fps } else { self }
     }
 
     /// The FPS line in the top left corner.
@@ -92,6 +107,12 @@ impl Level {
     pub fn strip(self) -> bool {
         self == Level::PixelPath
     }
+}
+
+/// Whether Over the game offers its Pixel Path level: the pause menu's Pixel Path is on (`curator.json`'s
+/// `pixel_path`, on with the Enthusiast profile). Read from the file, so pocket-core and pocket-ui agree.
+pub fn pixel_path_offered(data_dir: &std::path::Path) -> bool {
+    crate::curator::prefs::Prefs::load(data_dir).pixel_path
 }
 
 /// An Options file from before 2026-10-25: Show FPS becomes Over the game (Off, On → FPS, Sensors → FPS + sensors,
@@ -145,17 +166,39 @@ mod tests {
         assert_eq!(Level::ALL.map(Level::label), ["Off", "FPS", "FPS + sensors", "Pixel Path"]);
         for l in Level::ALL {
             assert_eq!(Level::parse(l.value()), l);
-            assert_eq!(l.step(1).step(-1), l);
+            assert_eq!(l.step(1, true).step(-1, true), l);
             assert_eq!(serde_json::to_string(&l).unwrap(), format!("\"{}\"", l.value()));
         }
-        assert_eq!(Level::Off.step(-1), Level::PixelPath);
-        assert_eq!(Level::PixelPath.step(1), Level::Off);
-        let mut seen = vec![Level::Off];
-        while seen.len() < 5 {
-            seen.push(seen.last().unwrap().step(1));
-        }
-        assert_eq!(seen, [Level::Off, Level::Fps, Level::Sensors, Level::PixelPath, Level::Off], "HOME + Y goes round");
+        assert_eq!(Level::Off.step(-1, true), Level::PixelPath);
+        assert_eq!(Level::PixelPath.step(1, true), Level::Off);
+        let round = |pixel_path: bool| {
+            let mut seen = vec![Level::Off];
+            while seen.len() < 5 {
+                seen.push(seen.last().unwrap().step(1, pixel_path));
+            }
+            seen
+        };
+        assert_eq!(round(true), [Level::Off, Level::Fps, Level::Sensors, Level::PixelPath, Level::Off], "HOME + Y goes round");
         assert_eq!(Level::parse("junk"), Level::Off);
+    }
+
+    /// Since 0.4 the Pixel Path level is for the Enthusiast profile (its pause-menu Pixel Path): everyone else has Off,
+    /// FPS and FPS + sensors on the Settings row and on HOME + Y, and a Pixel Path saved before draws the FPS line.
+    #[test]
+    fn without_the_pause_menus_pixel_path_the_level_is_not_offered_and_a_saved_one_is_fps() {
+        let mut seen = vec![Level::Off];
+        while seen.len() < 4 {
+            seen.push(seen.last().unwrap().step(1, false));
+        }
+        assert_eq!(seen, [Level::Off, Level::Fps, Level::Sensors, Level::Off], "HOME + Y goes round the three");
+        assert_eq!(Level::Off.step(-1, false), Level::Sensors, "Left too");
+        assert_eq!(Level::PixelPath.offered(false), Level::Fps);
+        assert_eq!(Level::PixelPath.offered(true), Level::PixelPath);
+        assert_eq!(Level::Sensors.offered(false), Level::Sensors);
+        let d = TestDir::new("over-game-offered");
+        assert!(!pixel_path_offered(&d), "a new device: no Pixel Path level");
+        std::fs::write(d.join("curator.json"), br#"{"pixel_path": true}"#).unwrap();
+        assert!(pixel_path_offered(&d), "the pause menu's Pixel Path on: offered");
     }
 
     #[test]
@@ -198,7 +241,7 @@ mod tests {
         use crate::settings::Settings;
         let d = TestDir::new("over-game-adopt");
         std::fs::write(d.join("curator.json"), br#"{"pixel_path": true, "pixel_live": true, "lens": false}"#).unwrap();
-        std::fs::write(d.join("settings.json"), br#"{"onboarded": true, "theme": "cards"}"#).unwrap();
+        std::fs::write(d.join("settings.json"), br#"{"onboarded": true, "theme": "cabinet"}"#).unwrap();
         let (mut s, mut p) = (Settings::load(&d), Prefs::load(&d));
         assert!(p.pixel_live, "read from a file of before");
         assert!(adopt_curator(&d, &mut s, &mut p));

@@ -213,8 +213,7 @@ pub enum DialogKind {
 pub enum Choice {
     Cancel,
     RestartUi,
-    /// The Steam Deck's Leave dialog: pocket-ui ends and Steam is back (exit 0; docs/STEAMDECK.md).
-    QuitToSteam,
+    BackToNextui,
     OpenEs,
     Reset,
     /// "Report a problem": the dialog is where a player looks when something is wrong (`app_report`).
@@ -227,7 +226,7 @@ impl Choice {
         match self {
             Choice::Cancel => "Cancel",
             Choice::RestartUi => "Restart pocket-ui",
-            Choice::QuitToSteam => "Quit to Steam",
+            Choice::BackToNextui => "Back to NextUI",
             Choice::OpenEs => "Open EmulationStation",
             Choice::Reset => "Reset settings",
             Choice::Report => crate::report::ROW,
@@ -239,7 +238,7 @@ impl Choice {
         match self {
             Choice::Cancel => "Cancel",
             Choice::RestartUi => "Restart pocket-ui",
-            Choice::QuitToSteam => { #[cfg(feature = "brick")] { if crate::device::brick() { "Back to NextUI" } else { "Quit to Steam" } } #[cfg(not(feature = "brick"))] { "Quit to Steam" } }
+            Choice::BackToNextui => "Back to NextUI",
             Choice::OpenEs => "Open EmulationStation",
             Choice::Reset => "Reset settings",
             Choice::Report => crate::report::ROW,
@@ -287,7 +286,7 @@ impl Dialog {
 
     pub fn title(&self) -> &'static str {
         match self.kind {
-            DialogKind::Leave if crate::device::current().host_owned() => "Quit pocket-ui?", #[cfg(feature = "brick")] DialogKind::Leave if crate::device::brick() && crate::brick_profile::standalone() => BRICK_CARD_LEAVE, #[cfg(feature = "brick")] DialogKind::Leave if crate::device::brick() => "Back to NextUI?",
+            #[cfg(feature = "brick")] DialogKind::Leave if crate::device::brick() && crate::brick_profile::standalone() => BRICK_CARD_LEAVE, #[cfg(feature = "brick")] DialogKind::Leave if crate::device::brick() => "Back to NextUI?",
             DialogKind::Leave => "Leave pocket-ui?",
             DialogKind::OpenEs => "Open EmulationStation?",
             DialogKind::Reset => "Reset pocket-ui settings?",
@@ -298,11 +297,11 @@ impl Dialog {
     pub fn body(&self) -> Vec<String> {
         match self.kind {
             DialogKind::OpenEs => ES_WARNING.iter().map(|s| s.to_string()).collect(),
-            DialogKind::Leave if crate::device::current().host_owned() => vec!["Back to Steam. Your games, saves and settings stay as they are.".to_string()], #[cfg(feature = "brick")] DialogKind::Leave if crate::device::brick() && crate::brick_profile::standalone() => vec![BRICK_CARD_LEAVE_BODY.to_string()], #[cfg(feature = "brick")] DialogKind::Leave if crate::device::brick() => vec!["Back to NextUI. Your games, saves and settings stay as they are.".to_string()],
+            #[cfg(feature = "brick")] DialogKind::Leave if crate::device::brick() && crate::brick_profile::standalone() => vec![BRICK_CARD_LEAVE_BODY.to_string()], #[cfg(feature = "brick")] DialogKind::Leave if crate::device::brick() => vec!["Back to NextUI. Your games, saves and settings stay as they are.".to_string()],
             DialogKind::Leave => std::iter::once(format!("Restart pocket-ui starts it afresh. {}", ES_WARNING[0])).chain(ES_WARNING[1..].iter().map(|s| s.to_string())).collect(),
             DialogKind::Reset => vec![
                 format!(
-                    "Your look, Curator, favourites, play history, covers and what the Store installed move to {}. Nothing is deleted.",
+                    "Your look, Curator, favourites, play history, covers and downloaded extras move to {}. Nothing is deleted.",
                     self.backup.as_deref().unwrap_or("a backup folder beside them")
                 ),
                 "Games, saves and the passwords for file sharing and remote access stay. pocket-ui then starts like new, with the first-start setup."
@@ -313,7 +312,7 @@ impl Dialog {
 
     pub fn choices(&self) -> &'static [Choice] {
         match self.kind {
-            DialogKind::Leave if crate::device::current().host_owned() => &[Choice::Cancel, Choice::QuitToSteam, Choice::Report], #[cfg(feature = "brick")] DialogKind::Leave if crate::device::brick() && crate::brick_profile::standalone() => &[Choice::Cancel, Choice::RestartUi], #[cfg(feature = "brick")] DialogKind::Leave if crate::device::brick() => &[Choice::Cancel, Choice::QuitToSteam],
+            #[cfg(feature = "brick")] DialogKind::Leave if crate::device::brick() && crate::brick_profile::standalone() => &[Choice::Cancel, Choice::RestartUi], #[cfg(feature = "brick")] DialogKind::Leave if crate::device::brick() => &[Choice::Cancel, Choice::BackToNextui],
             DialogKind::Leave => &[Choice::Cancel, Choice::RestartUi, Choice::Report, Choice::OpenEs],
             DialogKind::OpenEs => &[Choice::Cancel, Choice::OpenEs],
             DialogKind::Reset => &[Choice::Cancel, Choice::Reset],
@@ -351,7 +350,7 @@ pub fn before_es() {
 /// The exit code for a choice that leaves pocket-ui.
 pub fn exit_code(c: Choice) -> Option<i32> {
     match c {
-        Choice::RestartUi | Choice::QuitToSteam => Some(RESTART_CODE),
+        Choice::RestartUi | Choice::BackToNextui => Some(RESTART_CODE),
         Choice::OpenEs => Some(OPEN_ES_CODE),
         Choice::Cancel | Choice::Reset | Choice::Report => None,
     }

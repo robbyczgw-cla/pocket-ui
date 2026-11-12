@@ -1,12 +1,15 @@
 #!/usr/bin/env python3
 """Prints what the release check's bookkeeping tests would complain about, ready to fix.
-    scripts/doc-missing.py            env variables and source modules missing from docs/DEVELOPING.md
+    scripts/doc-missing.py            env variables and source modules missing from docs/dev/
 German keys: scripts/i18n-extract.py --stub (the missing ones as table lines to fill in).
 Writes nothing; descriptions and translations stay a human's job."""
 import os, re, sys
 
 root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-dev = open(os.path.join(root, "docs/DEVELOPING.md"), encoding="utf-8").read()
+dev = "\n".join(
+    open(os.path.join(root, f), encoding="utf-8").read()
+    for f in ["docs/DEVELOPING.md"] + sorted("docs/dev/" + n for n in os.listdir(os.path.join(root, "docs/dev")) if n.endswith(".md"))
+)
 
 
 def section(title):
@@ -25,7 +28,7 @@ for dirpath, _, files in os.walk(src):
         for name in re.findall(r'"(POCKET[A-Z0-9_]*)"', open(path, encoding="utf-8").read()):
             if "_" in name and f"`{name}" not in env_doc:
                 variables.setdefault(name, os.path.relpath(path, root))
-print("Environment variables to add under 'Environment variables' in docs/DEVELOPING.md:")
+print("Environment variables to add under 'Environment variables' in docs/dev/environment.md:")
 for name, where in sorted(variables.items()):
     print(f"  | `{name}` | ... | {where}")
 print("Source modules to name under 'Repository layout' (binaries: under 'Building'):")

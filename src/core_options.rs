@@ -324,8 +324,8 @@ pub fn add_game_defaults(options: &mut Vec<(&str, &str)>, core: &str, rom: &Path
 
 /// Curation by the core's file name without `_libretro.so` (`gambatte`, `mgba`, …).
 /// Checked against the option lists on the device (`pocket-core --dump-options`, 2026-10-21): gambatte,
-/// mgba, nestopia, snes9x, genesis_plus_gx, beetle_pce_fast, pcsx_rearmed, picodrive. Cores that declare
-/// their options only once a game is loaded (fbneo) and the 3D cores are not curated yet.
+/// mgba, nestopia, snes9x, genesis_plus_gx, beetle_pce_fast, pcsx_rearmed, picodrive. The pinned Android
+/// Sega cores have additional defaults in `android_curation`; installed Linux profiles stay as before.
 pub fn curation(core: &str) -> Curation {
     match core {
         // Game Boy and Game Boy Color. A DMG game gets its game-specific colours when the core knows
@@ -516,10 +516,40 @@ pub fn curation(core: &str) -> Curation {
     }
 }
 
-/// The core's id as used in `curation`: `/usr/lib/libretro/mgba_libretro.so` → `mgba`.
+/// Platform-specific defaults retain the common option policy unless Android needs a different clock.
+pub fn android_curation(core: &str) -> Curation {
+    match core {
+        // Android already clocks retro_run and presentation. Yaba's busy-wait limiter
+        // otherwise consumes the paint budget: 60 core pictures became 15 presentations/s.
+        "yabasanshiro" => Curation { defaults: &[("yabasanshiro_frameskip", "disabled")], ..curation(core) },
+        // A locked 30/20-Hz title can emit more than one vblank's sound per retro_run.
+        // Let the core report that cadence instead of running its game and PCM at twice speed.
+        // An explicit disabled setting still wins for games with an unlocked frame rate.
+        "flycast" => Curation {
+            defaults: &[
+                ("reicast_per_content_vmus", "VMU A1"), ("flycast_per_content_vmus", "VMU A1"),
+                ("reicast_detect_vsync_swap_interval", "enabled"), ("flycast_detect_vsync_swap_interval", "enabled"),
+            ],
+            hidden: &[
+                "reicast_per_content_vmus", "reicast_vmu*", "reicast_lightgun*", "reicast_show_*",
+                "reicast_network_output", "reicast_upnp", "reicast_emulate_bba",
+                "flycast_per_content_vmus", "flycast_vmu*", "flycast_lightgun*", "flycast_show_*",
+                "flycast_network_output", "flycast_upnp", "flycast_emulate_bba",
+            ],
+            ..curation(core)
+        },
+        _ => curation(core),
+    }
+}
+
+/// The core's id as used in `curation`: `mgba_libretro.so` and Android's
+/// `libmgba_libretro.so` both name `mgba`. Custom library names stay unchanged.
 pub fn core_id(core_path: &Path) -> String {
     let stem = core_path.file_stem().and_then(|s| s.to_str()).unwrap_or_default();
-    stem.strip_suffix("_libretro").unwrap_or(stem).to_string()
+    match stem.strip_suffix("_libretro") {
+        Some(core) => core.strip_prefix("lib").unwrap_or(core).to_string(),
+        None => stem.to_string(),
+    }
 }
 
 /// All options of the running core and their current values.
@@ -1042,6 +1072,43 @@ mod tests {
                 assert!(k.starts_with(prefix), "{core}: {k}");
             }
         }
+    }
+
+    #[test]
+    fn android_sega_current_flycast_gets_its_vmu_and_adaptive_timing() {
+        // Real names and values from the pinned Flycast libretro option table. It still
+        // uses the historical reicast namespace; a profile with only flycast keys is ignored.
+        let mut options = OptionSet::new(android_curation("flycast"), &[]);
+        options.declare(vec![], vec![
+            def("reicast_per_content_vmus", &["disabled", "VMU A1", "All VMUs"]),
+            def("reicast_detect_vsync_swap_interval", &["disabled", "enabled"]),
+        ]);
+        assert_eq!(options.get("reicast_per_content_vmus"), Some("VMU A1"), "the VMU must belong to this game");
+        assert_eq!(options.get("reicast_detect_vsync_swap_interval"), Some("enabled"), "a 30-Hz game must not run at twice its audio rate");
+        let mut chosen = OptionSet::new(android_curation("flycast"), &[("reicast_detect_vsync_swap_interval".into(), "disabled".into())]);
+        chosen.declare(vec![], vec![def("reicast_detect_vsync_swap_interval", &["disabled", "enabled"])]);
+        assert_eq!(chosen.get("reicast_detect_vsync_swap_interval"), Some("disabled"), "an unlocked game's explicit choice still wins");
+    }
+
+    #[test]
+    fn android_sega_saturn_has_only_the_frontend_clock() {
+        let mut options = OptionSet::new(android_curation("yabasanshiro"), &[]);
+        options.declare(vec![], vec![def("yabasanshiro_frameskip", &["enabled", "disabled"])]);
+        assert_eq!(options.get("yabasanshiro_frameskip"), Some("disabled"), "the core's busy wait must not batch several pictures into one Android presentation");
+        let mut linux = OptionSet::new(curation("yabasanshiro"), &[]);
+        linux.declare(vec![], vec![def("yabasanshiro_frameskip", &["enabled", "disabled"])]);
+        assert_eq!(linux.get("yabasanshiro_frameskip"), Some("enabled"), "this Android correction does not change Linux's existing setup");
+    }
+
+    #[test]
+    fn android_flycast_library_keeps_the_linux_vmu_defaults() {
+        for core in ["flycast", "mgba", "gambatte", "pcsx_rearmed"] {
+            let android = core_id(Path::new(&format!("/app/lib/arm64/lib{core}_libretro.so")));
+            let linux = core_id(Path::new(&format!("/usr/lib/libretro/{core}_libretro.so")));
+            assert_eq!(android, linux, "a library prefix must not discard the player's curated settings");
+            assert_eq!(curation(&android).defaults, curation(&linux).defaults);
+        }
+        assert!(curation(&core_id(Path::new("libflycast_libretro.so"))).defaults.contains(&("flycast_per_content_vmus", "VMU A1")));
     }
 
     #[test]

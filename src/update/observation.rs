@@ -22,9 +22,9 @@ pub fn record_health(health: HealthObservation) { if let Ok(mut current) = HEALT
 fn health() -> HealthObservation { HEALTH.lock().map(|h| *h).unwrap_or_default() }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub enum Layout { #[default] Unobserved, Rocknix, Brick, HostOwned }
+pub enum Layout { #[default] Unobserved, Rocknix, Brick }
 impl Layout {
-    pub fn code(self) -> &'static str { match self { Self::Unobserved => "unobserved", Self::Rocknix => "rocknix", Self::Brick => "brick", Self::HostOwned => "host-owned" } }
+    pub fn code(self) -> &'static str { match self { Self::Unobserved => "unobserved", Self::Rocknix => "rocknix", Self::Brick => "brick" } }
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -35,10 +35,10 @@ impl Pending {
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub enum Recovery { #[default] Unobserved, HostOwned, NotInstalled, LegacyFlat, Clean, Staging, Ready, ActivationInterrupted, AssetRecovery, ConfirmationPending, ConfirmedMarkerRetained, Incomplete, Unreadable }
+pub enum Recovery { #[default] Unobserved, NotInstalled, LegacyFlat, Clean, Staging, Ready, ActivationInterrupted, AssetRecovery, ConfirmationPending, ConfirmedMarkerRetained, Incomplete, Unreadable }
 impl Recovery {
     pub fn code(self) -> &'static str {
-        match self { Self::Unobserved => "unobserved", Self::HostOwned => "host-owned", Self::NotInstalled => "not-installed", Self::LegacyFlat => "legacy-flat", Self::Clean => "clean", Self::Staging => "staging", Self::Ready => "ready", Self::ActivationInterrupted => "activation-interrupted", Self::AssetRecovery => "asset-recovery", Self::ConfirmationPending => "confirmation-pending", Self::ConfirmedMarkerRetained => "confirmed-marker-retained", Self::Incomplete => "incomplete", Self::Unreadable => "unreadable" }
+        match self { Self::Unobserved => "unobserved", Self::NotInstalled => "not-installed", Self::LegacyFlat => "legacy-flat", Self::Clean => "clean", Self::Staging => "staging", Self::Ready => "ready", Self::ActivationInterrupted => "activation-interrupted", Self::AssetRecovery => "asset-recovery", Self::ConfirmationPending => "confirmation-pending", Self::ConfirmedMarkerRetained => "confirmed-marker-retained", Self::Incomplete => "incomplete", Self::Unreadable => "unreadable" }
     }
 }
 
@@ -90,14 +90,11 @@ fn pending(root: &Path, running: &str) -> Pending {
 }
 
 impl Inspection {
-    pub fn host_owned() -> Self {
-        Self { layout: Layout::HostOwned, recovery: Recovery::HostOwned, milestone: Milestone::NotPending, ..Self::default() }
-    }
+
 
     /// Worker-only filesystem inspection. A poll can overlap an install; it is evidence, never a recovery verdict.
     pub fn read(layout: Layout, root: &Path, running: &str, release: &Path, health: HealthObservation) -> Self {
         if layout == Layout::Unobserved { return Self::default(); }
-        if layout == Layout::HostOwned { return Self::host_owned(); }
         let state = if layout == Layout::Brick { root.join("storage/pocket-ui") } else { root.to_path_buf() };
         let pending = pending(&state, running);
         let recorded_stable = match layout {
@@ -143,10 +140,9 @@ impl Inspection {
 
 /// One worker observes metadata at most every five seconds, or after a job result. Only changes wake the UI.
 /// Dropping the sender ends it; no filesystem work happens in the status projection.
-pub fn watch(host_owned: bool, changed: impl Fn(Inspection) + Send + 'static) -> Sender<()> {
+pub fn watch(changed: impl Fn(Inspection) + Send + 'static) -> Sender<()> {
     let (send, receive) = mpsc::channel();
     let _ = std::thread::Builder::new().name("update-status".into()).spawn(move || {
-        if host_owned { changed(Inspection::host_owned()); return; }
         #[cfg(feature = "brick")]
         let card = super::brick_card();
         #[cfg(not(feature = "brick"))]

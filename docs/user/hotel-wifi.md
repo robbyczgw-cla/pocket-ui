@@ -1,7 +1,7 @@
 # Hotel and train Wi-Fi
 
 Hotel, train, airport and café networks often show a page first: accept their terms, type a room number and
-surname, or a voucher code. Until that page is done, nothing online works on that network (cover art, the store,
+surname, or a voucher code. Until that page is done, nothing online works on that network (cover art,
 updates, RetroAchievements), even though the Wi-Fi itself is connected.
 
 ## What the Pocket shows
@@ -21,7 +21,7 @@ The check is one small web request to `nmcheck.gnome.org` (the page the system's
 sends nothing about you or the Pocket ([Troubleshooting](troubleshooting.md)). The Pocket never accepts terms or
 sends anything you typed anywhere by itself.
 
-When an update, the store or the PortMaster catalogue can't go online because of such a page, the message says
+When an update or the PortMaster catalogue can't go online because of such a page, the message says
 "Connected, but this network wants a sign-in first. Open Settings › Connections › Wi-Fi."
 
 ## Sign in on the Pocket

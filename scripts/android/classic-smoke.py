@@ -30,7 +30,7 @@ for system in ['sms','gg','ws','atari2600']:
 if os.environ.get('ANDROID_CLASSIC_CASES'):
     selected=set(os.environ['ANDROID_CLASSIC_CASES'].split(','));cases=[c for c in cases if c[0]in selected];assert cases,'No matching classic cases'
 (out/'rom-provenance.json').write_text(json.dumps(provenance,indent=2)+'\n')
-shell('am','force-stop','dev.pocket.spike');shell('logcat','-c');shell('am','start','-W','-n','dev.pocket.spike/.PocketActivity');time.sleep(2)
+shell('am','force-stop','xyz.pocketui.app');shell('logcat','-c');shell('am','start','-W','-n','xyz.pocketui.app/.PocketActivity');time.sleep(2)
 shell('input','keyevent','34');time.sleep(1)
 subprocess.check_call([sys.executable,str(root/'scripts/android/select-demo-folder.py'),adb,serial,str(out)]);time.sleep(2)
 sequence=0

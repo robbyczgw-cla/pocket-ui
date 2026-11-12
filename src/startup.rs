@@ -1,5 +1,5 @@
 //! Where the time to the first shelf frame goes: `mark` notes a step of pocket-ui's start, `report` gives them as one
-//! log line next to "first frame after" (docs/DEVELOPING.md, Start time). A handful of `Instant`s in a mutex, written
+//! log line next to "first frame after" (docs/dev/start-time.md, Start time). A handful of `Instant`s in a mutex, written
 //! only during the start; costs nothing measurable.
 
 use std::sync::Mutex;

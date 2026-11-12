@@ -44,17 +44,13 @@ impl App {
         Some(CuratorToday { pick, waiting })
     }
 
-    /// The panel of a row, for the rows that have one (Curator, Surprise me, Favorites, pinned smart shelves and
+    /// The panel of a row, for the rows that have one (Curator, Favorites, pinned smart shelves and
     /// stickers); `None` for games, systems and the rest, which show their own picture.
     pub(crate) fn home_panel(&self, item: Item) -> Option<Panel> {
         let ready = self.curator.index.is_some();
         let tiles = |games: Option<&Vec<usize>>| games.map_or_else(Vec::new, |gs| gs.iter().filter_map(|g| self.catalog_tile(*g)).collect());
         match item {
             Item::Curator => Some(home_panel::curator(self.curator_today())),
-            Item::Surprise => {
-                let otherwise = self.describe(item).3;
-                Some(home_panel::surprise(self.curator_today().and_then(|t| t.pick), otherwise))
-            }
             Item::Favorites => {
                 let games = self.favorite_items().into_iter().filter_map(|i| if let Item::Game(s, g) = i { self.game_tile(s, g) } else { None }).collect();
                 Some(home_panel::list(List::Favorites, games, self.describe(item).3, true))

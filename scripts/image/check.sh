@@ -5,6 +5,7 @@
 set -u
 . /repo/scripts/image/pins.sh
 . /repo/scripts/image/grub-checks.sh
+sm8250_pins "${MODEL:-rp-mini-v2}"
 IMG=$1
 VERSION=$2
 W=$3
@@ -40,8 +41,11 @@ sfdisk -d "$IMG" >"$W/lists/sfdisk" 2>/dev/null
 part() { grep "^$IMG$1 " "$W/lists/sfdisk" | sed 's/^[^:]*: *//; s/, uuid=[^,]*//; s/, attrs="[^"]*"//'; }
 check "GPT" 'grep -qx "label: gpt" "$W/lists/sfdisk"'
 check "exactly two partitions" '[ "$(grep -c "^$IMG[0-9]" "$W/lists/sfdisk")" = 2 ]'
-check "p1 system, FAT, as in ROCKNIX $ROCKNIX_TAG" \
-  '[ "$(part 1)" = "start=       $P1_START, size=     $P1_SIZE, type=EBD0A0A2-B9E5-4433-87C0-68B6B72699C7, name=\"system\"" ]'
+P1_TYPE=$(sm8250_p1_type "${MODEL:-}")
+check "p1 system, FAT, ROCKNIX $ROCKNIX_TAG's offsets, type $P1_TYPE" \
+  '[ "$(part 1)" = "start=       $P1_START, size=     $P1_SIZE, type=$P1_TYPE, name=\"system\"" ]'
+# Retroid's u-boot lists only bootable partitions (ESP type or this attribute) for its EFI boot.
+check "p1 keeps ROCKNIX's LegacyBIOSBootable attribute" 'grep "^${IMG}1 " "$W/lists/sfdisk" | grep -q "attrs=\"LegacyBIOSBootable\""'
 check "p2 storage, Linux, as in ROCKNIX $ROCKNIX_TAG" \
   '[ "$(part 2)" = "start=     $P2_START, size=       $P2_SIZE, type=0FC63DAF-8483-4772-8E79-3D69D8477DE4, name=\"storage\"" ]'
 check "image size unchanged (2,198,863,872 bytes)" '[ "$(stat -c %s "$IMG")" = 2198863872 ]'
@@ -65,7 +69,10 @@ boot/grub/grub.cfg
 boot/pocket/
 boot/pocket/Image
 boot/pocket/KERNEL.source.md5
-boot/pocket/miniv2-noufs.dtb
+boot/pocket/$SM8250_DTB_FILE
+loader/
+loader/entries/
+loader/entries/pocket-ui.conf
 mount-storage.sh
 pocket-ui-info/
 pocket-ui-info/README.txt
@@ -88,7 +95,7 @@ check "exactly the expected files (no rocknix_abl, nothing else)" 'same "$W/list
 check "rocknix-licenses/: ROCKNIX's LICENSE.md and its licenses folder ($ROCKNIX_LICENSE_FILES files)" \
   '[ "$(grep -c "^pocket-ui-info/rocknix-licenses/.*[^/]$" "$W/lists/fat")" = "$ROCKNIX_LICENSE_FILES" ] && grep -qx "pocket-ui-info/rocknix-licenses/LICENSE.md" "$W/lists/fat" && grep -qx "pocket-ui-info/rocknix-licenses/licenses/GPL-2.0-only.txt" "$W/lists/fat"'
 for f in KERNEL KERNEL.md5 SYSTEM.md5 EFI/BOOT/BOOTAA64.EFI boot/grub/grub.cfg boot/grub/grub-efi-arm64-bin.version \
-  boot/pocket/Image boot/pocket/KERNEL.source.md5 boot/pocket/miniv2-noufs.dtb mount-storage.sh post-flash.sh \
+  boot/pocket/Image boot/pocket/KERNEL.source.md5 boot/pocket/$SM8250_DTB_FILE loader/entries/pocket-ui.conf mount-storage.sh post-flash.sh \
   pocket-ui-info/README.txt pocket-ui-info/pocket-ui-os.txt; do
   mkdir -p "$W/fat/$(dirname "$f")"
   mcopy -n -i "$FAT" "::/$f" "$W/fat/$f" 2>/dev/null
@@ -136,11 +143,12 @@ check "every firmware file in SYSTEM ($(wc -l <"$W/lists/firmware")) is listed w
 rm -f "$W/SYSTEM"
 
 echo "== boot files"
-check "grub.cfg is deploy/sd-efi/grub.cfg" 'same "$W/fat/boot/grub/grub.cfg" /repo/deploy/sd-efi/grub.cfg'
+sed "s/miniv2-noufs.dtb/$SM8250_DTB_FILE/g" /repo/deploy/sd-efi/grub.cfg >"$W/grub.expected"
+check "grub.cfg is the template with this model's single tree" 'same "$W/fat/boot/grub/grub.cfg" "$W/grub.expected" && [ "$(grep -c "^ *devicetree " "$W/grub.expected")" = 1 ]'
 G=$W/fat/boot/grub/grub.cfg
 check "grub.cfg finds the FAT partition by label ROCKNIX" 'grep -Eq "^ *search .*--label ROCKNIX$" "$G"'
 check "grub.cfg loads /boot/pocket/Image" 'grep -Eq "^ *linux /boot/pocket/Image " "$G"'
-check "grub.cfg loads /boot/pocket/miniv2-noufs.dtb" 'grep -Eq "^ *devicetree /boot/pocket/miniv2-noufs.dtb$" "$G"'
+check "grub.cfg loads /boot/pocket/$SM8250_DTB_FILE" 'grep -Eq "^ *devicetree /boot/pocket/$SM8250_DTB_FILE$" "$G"'
 check "kernel command line: boot=LABEL=ROCKNIX disk=LABEL=STORAGE" 'grep -Eq "^ *linux .* boot=LABEL=ROCKNIX disk=LABEL=STORAGE " "$G"'
 # The quiet start (docs/BOOT-SPLASH.md): no kernel or GRUB text on the screen, and fbcon left as the kernel sets it.
 check "kernel command line: quiet loglevel=3 vt.global_cursor_default=0" 'grep -Eq "^ *linux .* rootwait quiet loglevel=3 vt.global_cursor_default=0 " "$G"'
@@ -150,6 +158,12 @@ check "boot-quiet.sh (deploy/grub-quiet.sh) finds this grub.cfg already quiet an
 for p in $(awk '$1 == "linux" || $1 == "devicetree" || $1 == "initrd" { print $2 }' "$G"); do
   check "file named in grub.cfg exists: $p" '[ -s "$W/fat$p" ]'
 done
+# OpenABL ("Boot mode: Linux") reads the BLS entry before EFI/BOOT/BOOTAA64.EFI: the same kernel, tree and command line.
+# The exact file list above also keeps extlinux/ and boot.scr off the card, which Retroid's u-boot would start before GRUB.
+sed "s/miniv2-noufs.dtb/$SM8250_DTB_FILE/g" /repo/deploy/sd-efi/loader/entries/pocket-ui.conf >"$W/bls.expected"
+B=$W/fat/loader/entries/pocket-ui.conf
+check "loader/entries/pocket-ui.conf is the template with this model's tree" 'same "$B" "$W/bls.expected"'
+check "the BLS entry starts what grub.cfg starts (kernel, $SM8250_DTB_FILE, command line), no initrd" 'bls_matches_grub "$B" "$G"'
 check "GRUB is an arm64 EFI application" 'file -b "$W/fat/EFI/BOOT/BOOTAA64.EFI" | grep -q "EFI application.*Aarch64"'
 warn "GRUB is byte for byte the one on the author's device" '[ "$(md5 "$W/fat/EFI/BOOT/BOOTAA64.EFI")" = "$GRUB_EFI_MD5_DEVICE" ]'
 check "GRUB version recorded: $(cat "$W/fat/boot/grub/grub-efi-arm64-bin.version" 2>/dev/null)" 'grep -q "^grub-efi-arm64-bin " "$W/fat/boot/grub/grub-efi-arm64-bin.version"'
@@ -163,9 +177,9 @@ open(sys.argv[2], 'wb').write(zlib.decompressobj(31).decompress(payload) if payl
 EOF
 check "Image is unpacked from this KERNEL" 'same "$W/kernel-image" "$W/fat/boot/pocket/Image"'
 rm -f "$W/kernel-image"
-D=$W/fat/boot/pocket/miniv2-noufs.dtb
-check "dtb is the one on the author's device (md5 $DTB_MD5)" '[ "$(md5 "$D")" = "$DTB_MD5" ]'
-check "dtb model is Retroid Pocket Mini V2" '[ "$(fdtget -t s "$D" / model)" = "Retroid Pocket Mini V2" ]'
+D=$W/fat/boot/pocket/$SM8250_DTB_FILE
+check "dtb is the pinned UFS-disabled tree (md5 $DTB_MD5)" '[ "$(md5 "$D")" = "$DTB_MD5" ]'
+check "dtb model is $SM8250_MODEL_NAME" '[ "$(fdtget -t s "$D" / model)" = "$SM8250_MODEL_NAME" ]'
 check "dtb: internal UFS disabled (Android stays invisible)" \
   '[ "$(fdtget -t s "$D" /soc@0/ufshc@1d84000 status)" = disabled ] && [ "$(fdtget -t s "$D" /soc@0/phy@1d87000 status)" = disabled ]'
 check "KERNEL.source.md5 names this KERNEL" '[ "$(cat "$W/fat/boot/pocket/KERNEL.source.md5")" = "$KERNEL_MD5" ]'
@@ -270,7 +284,7 @@ check "boot screen unit waiting in .pocket-seed is deploy/pocket-splash.service"
   'same "$S/.pocket-seed/.config/system.d/pocket-splash.service" /repo/deploy/pocket-splash.service'
 # deploy/image/image-defaults.sh with the model's hostname on its NAME line (image_hostname, pins.sh), a valid name that is not
 # ROCKNIX's default.
-HOST=$(image_hostname "")
+HOST=$(image_hostname "$MODEL")
 sed "s/^NAME=pocket-ui\$/NAME=$HOST/" /repo/deploy/image/image-defaults.sh >"$W/lists/image-defaults.expected"
 check "first-start settings waiting in .pocket-seed are deploy/image/image-defaults.sh with the hostname $HOST" \
   'same "$S/.pocket-seed/.config/autostart/pocket-ui-image-defaults" "$W/lists/image-defaults.expected" && grep -qx "NAME=$HOST" "$S/.pocket-seed/.config/autostart/pocket-ui-image-defaults" && printf %s "$HOST" | grep -Eq "^[a-z][a-z0-9-]{0,23}\$" && [ "$HOST" != ROCKNIX ]'

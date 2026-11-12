@@ -1,4 +1,4 @@
-//! Settings → Connections → Sync → **Library data**: the player's curation (favourites, play status, notes, ratings,
+//! Settings → Help & tools → For tinkerers → Sync → **Library data**: the player's curation (favourites, play status, notes, ratings,
 //! stickers, hidden games, smart shelves and play history) the same on every Pocket they own, through one more
 //! Syncthing folder. The layout and the rules are in docs/SYNC-CURATION.md; in short:
 //!

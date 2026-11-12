@@ -10,6 +10,21 @@ use pocket_ui::{
     type_scale,
 };
 
+/// These bundled cores have no release qualification on Android yet. Nintendo DS left the list on 12.11.2026
+/// (three games, 180 s each, zero underruns, Continue with sound: ANDROID-BIG-SYSTEMS.md).
+pub fn experimental(system: &str) -> bool {
+    matches!(system, "n64" | "psp" | "saturn" | "dreamcast")
+}
+/// A system's name on a case: "Experimental" after it while our own player starts it (`Ui::experimental`; the app a
+/// game plays with in Settings → Plays with is not what that word is about).
+pub fn system_label(experimental: bool, name: &str) -> String {
+    if experimental {
+        format!("{} · {}", name, pocket_ui::i18n::tr("Experimental"))
+    } else {
+        name.into()
+    }
+}
+
 pub fn text_size(chosen: pocket_ui::text_size::TextSize, scale: f32) -> pocket_ui::text_size::TextSize {
     use pocket_ui::text_size::TextSize::*;
     if scale >= 1.25 || chosen == Large {
@@ -71,6 +86,14 @@ pub fn touch_label(system: &str, bit: usize) -> &'static str {
         ("psp", 8) => "Circle",
         ("psp", 1) => "Square",
         ("psp", 9) => "Triangle",
+        ("saturn"|"dreamcast",0) => "A",
+        ("saturn"|"dreamcast",8) => "B",
+        ("saturn"|"dreamcast",1) => "X",
+        ("saturn"|"dreamcast",9) => "Y",
+        ("saturn"|"dreamcast",12) => "L",
+        ("saturn"|"dreamcast",13) => "R",
+        ("saturn",10) => "C",
+        ("saturn",11) => "Z",
         ("megadrive", 1) => "A",
         ("megadrive", 0) => "B",
         ("megadrive", 8) => "C",
@@ -82,79 +105,73 @@ pub fn touch_label(system: &str, bit: usize) -> &'static str {
         ][bit],
     }
 }
+/// The actual painted face buttons: label, RetroPad bit, horizontal/vertical spacing, radius multiplier.
+/// The controls card derives its touch list from this same table.
+pub fn touch_faces(system: &str) -> &'static [(&'static str, u16, f32, f32, f32)] {
+    match system {
+        "megadrive" => &[("X",10,-1.75,-0.7,0.82),("Y",9,0.0,-0.95,0.82),("Z",11,1.75,-1.2,0.82),("A",1,-1.75,1.0,0.9),("B",0,0.0,0.75,0.9),("C",8,1.75,0.5,0.9)],
+        "saturn" => &[("X",1,-1.75,-0.7,0.82),("Y",9,0.0,-0.95,0.82),("Z",11,1.75,-1.2,0.82),("A",0,-1.75,1.0,0.9),("B",8,0.0,0.75,0.9),("C",10,1.75,0.5,0.9)],
+        "dreamcast" => &[("X",1,-1.45,0.0,1.0),("Y",9,0.0,-1.45,1.0),("A",0,0.0,1.45,1.0),("B",8,1.45,0.0,1.0)],
+        "n64" => &[("B",1,-1.2,0.9,1.0),("A",0,0.35,1.45,1.0),("◀",8,0.0,-0.9,0.62),("▲",9,1.0,-1.85,0.62),("▶",13,2.0,-0.9,0.62),("▼",14,1.0,0.05,0.62)],
+        "snes"|"psx"|"nds"|"psp" => &[("Y",1,-1.45,0.0,1.0),("X",9,0.0,-1.45,1.0),("B",0,0.0,1.45,1.0),("A",8,1.45,0.0,1.0)],
+        _ => &[("B",0,-0.95,0.55,1.0),("A",8,0.95,-0.55,1.0)],
+    }
+}
+pub fn touch_shoulders(system: &str) -> &'static [(&'static str,u16,bool)] {
+    match system {
+        "saturn"|"dreamcast" => &[("L",12,false),("R",13,true)],
+        "gba"|"snes"|"psx"|"nds"|"psp" => &[("L",10,false),("R",11,true)],
+        "n64" => &[("L",10,false),("Z",12,false),("R",11,true)],
+        _ => &[],
+    }
+}
+/// Touch arrows supply an analog stick for consoles whose games need one. Other buttons keep their core bits.
+pub fn touch_analog(system: &str, touch: u16) -> Option<([i16; 4], u16)> {
+    if !matches!(system,"n64"|"dreamcast") { return None; }
+    let axis = |negative: u32, positive: u32| {
+        if touch & (1u16 << negative) != 0 { -32767 }
+        else if touch & (1u16 << positive) != 0 { 32767 } else { 0 }
+    };
+    if system == "dreamcast" { return Some(([axis(6,7),axis(4,5),0,0],0)); }
+    Some(([axis(6,7),axis(4,5),axis(8,13),axis(9,14)], (1<<4)|(1<<5)|(1<<6)|(1<<7)|(1<<8)|(1<<9)|(1<<13)|(1<<14)))
+}
 /// Only controls actually painted by `touch_controls`; N64 C arrows use the right stick, separately.
 pub fn touch_bits(system: &str) -> Vec<u8> {
-    let mut ids = match system {
-        "megadrive" => vec![10, 9, 11, 1, 0, 8],
-        "n64" => vec![1, 0, 10, 12, 11],
-        "snes" | "psx" | "nds" | "psp" => vec![1, 9, 0, 8, 10, 11],
-        "gba" => vec![0, 8, 10, 11],
-        _ => vec![0, 8],
-    };
-    ids.extend([2, 3]);
+    let mut ids: Vec<_> = touch_faces(system).iter().map(|b| b.1 as u8)
+        .filter(|id| system != "n64" || ![8,9,13,14].contains(id)).collect();
+    ids.extend(touch_shoulders(system).iter().map(|b| b.1 as u8));
+    if !matches!(system,"n64"|"saturn"|"dreamcast") { ids.push(2); }
+    ids.push(3);
     ids
 }
-/// Honest names from the core, else the shared console card's verified table.
+/// What a button can be set to in Options > Controls: the core's names, else the console table's (extras such as
+/// turbo included; the card leaves those out unless they are used).
 pub fn targets(system: &str, names: &[Target]) -> Vec<Target> {
+    controls_card::console_targets(system, names)
+}
+/// The card of `system` as Android shows it: the console's names in the places of the gamepad's buttons (Android
+/// does not know what a maker printed on them), Back as the menu key, and a line for the touch buttons without a pad.
+pub fn card(system: &str, game: &str, names: &[Target], touch: bool) -> controls_card::Card {
     let mapping = Mapping::defaults(system);
-    let card = controls_card::build(&controls_card::Input {
+    let name = pocket_ui::document_library::system(system).map_or(system, |s| s.1);
+    controls_card::build(&controls_card::Input {
         system,
-        system_name: system,
+        system_name: name,
+        game,
         mapping: &mapping,
         core_names: names,
         shortcuts: None,
-        layout: pocket_ui::button_layout_model::ButtonLayout::Xbox,
-        deck: false,
-    });
-    if !card.known {
-        return Vec::new();
-    }
-    card.slots
-        .iter()
-        .enumerate()
-        .filter_map(|(id, slot)| {
-            slot.label.as_ref().map(|label| Target {
-                id: id as u8,
-                label: label.clone(),
-            })
-        })
-        .collect()
+        layout: None,
+        menu_key: if touch { "Pause" } else { "Back" },
+        touch,
+    })
 }
-pub fn control_lines(system: &str, names: &[Target]) -> Vec<String> {
-    let tr = pocket_ui::i18n::tr;
-    let mut lines = vec![tr("Android gamepad / Touch controls: Console")];
-    let targets = targets(system, names);
-    if targets.is_empty() {
-        lines.push(tr("The console’s button names will show here after its first game."));
+/// The card as sentences, for TalkBack.
+pub fn control_lines(system: &str, game: &str, names: &[Target], touch: bool) -> Vec<String> {
+    let mut lines = card(system, game, names, touch).lines();
+    if experimental(system) {
+        lines.insert(1, pocket_ui::i18n::tr("Experimental: compatibility, sound and saves are still being tested."));
     }
-    for t in targets {
-        if (4..8).contains(&t.id) {
-            continue;
-        }
-        let touch = touch_bits(system).contains(&t.id);
-        let input = if touch {
-            format!("{} / {}", tr(pad_label(t.id as usize)), tr(touch_label(system, t.id as usize)))
-        } else {
-            tr(pad_label(t.id as usize))
-        };
-        lines.push(format!("{input}: {}", tr(&t.label)));
-    }
-    lines.push(tr("D-pad: D-pad"));
-    lines.push(tr(if system == "n64" {
-        "Touch D-pad: Analog stick"
-    } else if pocket_ui::controls::stick_dpad_default(system) {
-        "Left stick: D-pad"
-    } else {
-        "Left stick: Analog stick"
-    }));
-    if system == "nds" {
-        lines.push(tr("Touch the lower screen to use the stylus"));
-    }
-    if system == "n64" {
-        lines.push(tr("Touch C arrows: C buttons (right stick)"));
-    }
-    lines.push(tr("Back / Pause: Menu"));
-    lines.push(tr("Swipe or use the D-pad to read more"));
     lines
 }
 
@@ -200,9 +217,38 @@ impl Zoom {
     }
 }
 
-/// Scrollable prose for the controls card, with one Back target kept clear of text in either orientation.
-pub fn paint_controls(c: &mut Canvas, text: &mut Text, system: &str, names: &[Target], scroll: usize) -> (Area, usize) {
-    paint_lines(c, text, "Controls", &control_lines(system, names), scroll)
+/// The controls card: the console's name, Back beside it as a button like the sheets' (48 dp, as wide as its word),
+/// the shared picture (`controls_card::paint`) in all the room under them. It fits one screen in every Retroid
+/// format, so nothing scrolls (the second value stays 0 for the callers' scroll state).
+pub fn paint_controls(c: &mut Canvas, text: &mut Text, system: &str, game: &str, names: &[Target], touch: bool, _scroll: usize) -> (Area, usize) {
+    let margin = 36;
+    let card = card(system, game, names, touch);
+    let bh = 106; // 48 dp at the shared mobile canvas's 2.2 logical pixels per dp.
+    let label = text.translated("Back").to_string();
+    let bw = text.width(Face::Title, 36, &label) + 96;
+    let back = Area::new(c.w - margin - bw, 24, bw, bh);
+    // A long console name ("Nintendo Entertainment System") gets smaller before it is cut.
+    let room = back.x - margin - 24;
+    let mut size = 46;
+    while size > 30 && text.width(Face::Title, size, &card.system_name) > room {
+        size -= 2;
+    }
+    let title = text.fit(Face::Title, size, &card.system_name, room);
+    text.draw(c, Face::Title, size, margin, 82, pal().text, &title);
+    let sub = text.fit(Face::Body, 28, "Controls", back.x - margin - 24);
+    text.draw(c, Face::Body, 28, margin, 82 + type_scale::line(28, 18), pal().dust, &sub);
+    if pocket_ui::retro::on() { pocket_ui::retro::frame(c, back.x, back.y, back.w, back.h, pal().pill); }
+    else { c.round_rect(back.x, back.y, back.w, back.h, back.h / 2, pal().pill); }
+    text.draw(c, Face::Title, 36, back.x + 48, back.y + back.h / 2 + type_scale::mid(36), pal().text, &label);
+    let room = controls_area(c);
+    let colors = controls_card::Colors { bg: pal().void, line: pal().dust, text: pal().text, dim: pal().dust, accent: pal().amber };
+    controls_card::paint(c, text, &card, (room.x, room.y, room.w, room.h), colors);
+    (back, 0)
+}
+/// The card's room under the heading (`paint_controls`), for the screen reader's label and the layout tests.
+pub fn controls_area(c: &Canvas) -> Area {
+    let top = (82 + type_scale::line(28, 18) + 36).max(24 + 106 + 24);
+    Area::new(36, top, c.w - 72, c.h - 28 - top)
 }
 pub fn paint_lines(c: &mut Canvas, text: &mut Text, title: &str, lines: &[String], scroll: usize) -> (Area, usize) {
     let margin = 36;

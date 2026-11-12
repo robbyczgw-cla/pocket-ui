@@ -294,6 +294,29 @@ pub fn menu_rows(snap: &Snapshot) -> Vec<(String, String, String)> {
         .collect()
 }
 
+/// The same list as lines of text, for a page that scrolls plain lines (the Android player's pause menu): the heading
+/// with the totals, then per achievement its name and value and its description, a blank line between. The words the
+/// site provides (names, descriptions) stay as they are; ours go through the translation.
+pub fn list_lines(snap: &Snapshot) -> Vec<String> {
+    let tr = crate::i18n::tr;
+    let mut lines = vec![tr(&snap.headline())];
+    if !snap.user.is_empty() {
+        lines.push(snap.user.clone());
+    }
+    lines.push(String::new());
+    for (name, value, explanation) in menu_rows(snap) {
+        let name = if snap.state == State::Ready && !snap.achievements.is_empty() { name } else { tr(&name) };
+        lines.push(if value.is_empty() { name } else { format!("{name} · {}", tr(&value)) });
+        let ready = snap.state == State::Ready && !snap.achievements.is_empty();
+        for (i, part) in explanation.split('\n').enumerate() {
+            // A set's description is the site's own words; the line under it ("5 points · Locked.") is ours.
+            lines.push(if ready && i == 0 { part.to_string() } else { tr(part) });
+        }
+        lines.push(String::new());
+    }
+    lines
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -418,6 +441,34 @@ mod tests {
         let mut s = String::from("secret");
         wipe(&mut s);
         assert!(s.is_empty());
+    }
+
+    #[test]
+    fn the_list_reads_as_lines_for_a_page_that_scrolls_text() {
+        let snap = Snapshot {
+            state: State::Ready,
+            total: 2,
+            unlocked: 1,
+            points: 15,
+            points_unlocked: 10,
+            user: "Alex".into(),
+            achievements: vec![
+                Entry { id: 1, title: "Collect coins".into(), description: "Collect 100 coins.".into(), points: 5, progress: "37/100".into(), ..Default::default() },
+                Entry { id: 3, title: "First steps".into(), description: "Start.".into(), points: 10, unlocked: true, ..Default::default() },
+            ],
+            ..Default::default()
+        };
+        let lines = list_lines(&snap);
+        assert_eq!(lines[0], "1 of 2 unlocked · 10 of 15 points");
+        assert_eq!(lines[1], "Alex");
+        let at = lines.iter().position(|l| l == "Collect coins · 37/100").expect("locked first, with its progress");
+        assert_eq!(lines[at + 1], "Collect 100 coins.");
+        assert!(lines[at + 2].starts_with("5 points"), "{lines:?}");
+        assert!(lines.iter().any(|l| l == "First steps · Unlocked"));
+        // No set yet: one honest line of what is going on, never an empty page.
+        let waiting = list_lines(&Snapshot::default());
+        assert!(waiting.iter().filter(|l| !l.is_empty()).count() >= 2, "{waiting:?}");
+        assert!(waiting.iter().any(|l| l.contains("Looking up")), "{waiting:?}");
     }
 
     #[test]

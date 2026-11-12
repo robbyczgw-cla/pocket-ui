@@ -43,7 +43,8 @@ const SHORT_LIFT: i32 = 18;
 fn lift(h: i32) -> i32 {
     if h < SHORT_H { SHORT_LIFT } else { 0 }
 }
-const SCENE_BOTTOM_GAP: i32 = 1080 - 992;
+/// The floor of a start's console over the screen's bottom; Android places it the same way (`insert_scene::phone_floor`).
+const SCENE_BOTTOM_GAP: i32 = pocket_ui::insert_scene::HANDHELD_FLOOR_GAP;
 
 fn scene_bottom(h: i32) -> i32 {
     h - SCENE_BOTTOM_GAP
@@ -120,8 +121,8 @@ const AJAR: f32 = 0.5;
 const AJAR_FRONT: f32 = 0.45;
 /// Easy: the medium stands this much of the case's width out, whatever the medium is.
 const AJAR_BIG: f32 = 0.17;
-/// The time it takes to slide out with the case's turn.
-const AJAR_IN: Duration = Duration::from_millis(240);
+/// The time it takes to slide out with the case's turn (shared with Android's way back).
+use pocket_ui::eject::AJAR_IN;
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
 enum Kind {
@@ -246,6 +247,25 @@ pub(crate) struct Inserting {
     scene: Scene,
 }
 
+/// Cozy's way back from a game (`pocket_ui::eject`, `App::begin_eject`): the last picture switches off, then the launch
+/// animation plays backwards over the live shelf. Nothing waits for it; any button ends it.
+pub(crate) struct Ejecting {
+    /// When the game ended: the way back's clock.
+    at: Instant,
+    /// What shows when (a TV's picture or a handheld's display, switching off first or not, a lid to open).
+    way: pocket_ui::eject::Way,
+    /// The game's last picture, as the pause menu grabbed it (shared with the switcher's keep, never copied).
+    frame: Option<Arc<Image>>,
+    /// Where it stood: the pause menu picture's size and the game's rectangle in it (`preview::GameRect`).
+    area: ((u32, u32), Option<(u32, u32, u32, u32)>),
+    /// The played game's case on the shelf.
+    item: Item,
+    /// The case's way back was asked of `begin_insert` (once, on the first frame after the picture is off).
+    scene_asked: bool,
+    /// The lid check and the case's sound, on the first frame (nothing of it in `game_exited`).
+    ready: bool,
+}
+
 #[derive(Default)]
 struct Timing {
     frames: u32,
@@ -316,6 +336,11 @@ pub(crate) struct CabinetUi {
     /// Where each case was painted, for taps: (rectangle, shelf, case); the pulled-out one last.
     drawn: Vec<(i32, i32, i32, i32, usize, usize)>,
     pub(crate) insert: Option<Inserting>,
+    /// The way back from a game, while it plays (`App::begin_eject`); its case uses `insert` going backwards.
+    pub(crate) eject: Option<Ejecting>,
+    /// When the way back ended: an open case's game slides out of it from then (`paint_ajar_game`), on its own clock,
+    /// so that the shelf's move (the case turning in, the rock) does not start again over the case just put back.
+    pub(crate) ajar_at: Option<Instant>,
     /// The game box's cartridge or card, made for the case front it came out of (`box_game`).
     box_game: Option<(Rc<Pic>, Rc<Pic>)>,
     /// Fronts with case stickers and the same without (`app_case_stickers`).
@@ -374,6 +399,8 @@ impl Default for CabinetUi {
             inline: false,
             drawn: Vec::new(),
             insert: None,
+            eject: None,
+            ajar_at: None,
             box_game: None,
             bare_fronts: Default::default(),
             tv: Default::default(),
@@ -592,12 +619,10 @@ impl App {
             },
             // Curator's boxes on its shelf (the Lens, smart shelves, stickers), coloured as Curator's rows are.
             // Their "ROM" only tells their pictures apart (and a renamed one from its old name); they have no box art.
-            Item::Curator | Item::Lens | Item::Surprise | Item::SmartShelf(_) | Item::Sticker(_) | Item::History | Item::Review(_) | Item::Rediscover => {
+            Item::Curator | Item::Lens | Item::SmartShelf(_) | Item::Sticker(_) | Item::History | Item::Review(_) | Item::Rediscover => {
                 let title = self.curator_describe(item).0;
-                // Surprise me's box shows the day's pick on its front (`surprise_front`): a new pick, a new front.
-                let pick = if item == Item::Surprise { self.surprise_front().map(|(_, rom)| rom.to_string_lossy().into_owned()).unwrap_or_default() } else { String::new() };
                 Info {
-                    rom: PathBuf::from(format!("curator/{item:?}/{title}/{pick}")),
+                    rom: PathBuf::from(format!("curator/{item:?}/{title}/")),
                     title,
                     system: if matches!(item, Item::Sticker(_)) { "sticker" } else { "curator" }.into(),
                 }
@@ -620,14 +645,14 @@ impl App {
     /// The case a game (or one of Curator's boxes) stands in on the shelf (`media`).
     pub(crate) fn medium(&self, item: Item) -> Medium {
         match item {
-            Item::Streaming | Item::JustPlay | Item::Curator | Item::Lens | Item::Surprise | Item::SmartShelf(_) | Item::Sticker(_) | Item::History | Item::Review(_) | Item::Rediscover => Medium::Keep,
+            Item::Streaming | Item::JustPlay | Item::Curator | Item::Lens | Item::SmartShelf(_) | Item::Sticker(_) | Item::History | Item::Review(_) | Item::Rediscover => Medium::Keep,
             _ => Medium::of(&self.case_info(item).system),
         }
     }
 
     fn form_factor(&self, item: Item) -> FormFactor {
         match item {
-            Item::Streaming | Item::JustPlay | Item::Curator | Item::Lens | Item::Surprise | Item::SmartShelf(_) | Item::Sticker(_) | Item::History | Item::Review(_) | Item::Rediscover => FormFactor::DvdCase,
+            Item::Streaming | Item::JustPlay | Item::Curator | Item::Lens | Item::SmartShelf(_) | Item::Sticker(_) | Item::History | Item::Review(_) | Item::Rediscover => FormFactor::DvdCase,
             _ => FormFactor::of(&self.case_info(item).system),
         }
     }
@@ -683,7 +708,7 @@ impl App {
                 (_, Item::Curator | Item::History | Item::Review(_) | Item::Rediscover) => ShelfKey::Curator,
                 (_, Item::SmartShelf(i)) => ShelfKey::SmartShelf(i),
                 (_, Item::Sticker(id)) => ShelfKey::Sticker(id),
-                (_, Item::Recent(_) | Item::Streaming | Item::Search | Item::JustPlay | Item::Lens | Item::Surprise) => ShelfKey::Continue,
+                (_, Item::Recent(_) | Item::Streaming | Item::Search | Item::JustPlay | Item::Lens) => ShelfKey::Continue,
                 (Screen::Favorites, _) | (_, Item::Favorites) => ShelfKey::Favorites,
                 (_, Item::Game(s, _) | Item::System(s)) => ShelfKey::System(s),
             };
@@ -736,7 +761,7 @@ impl App {
             if moved {
                 self.prev_sel = self.sel;
                 self.sel = pos;
-                self.moved_at = Instant::now();
+                self.moved_at = pocket_ui::frame_clock::now();
             }
         }
     }
@@ -838,6 +863,7 @@ impl App {
     /// A game that needs longer to load than that is not held at all.
     pub(crate) fn launch_animation(&mut self, path: &std::path::Path, hosted: bool) -> Option<Duration> {
         self.cabinet.insert = None;
+        self.cabinet.eject = None;
         if !matches!(self.theme, super::Theme::Cabinet | super::Theme::Shelf) && !self.big_live() {
             return None;
         }
@@ -897,10 +923,14 @@ impl App {
         }
         let Some(game) = self.box_game(item, front) else { return };
         let (gw, gh, out) = pocket_ui::game_box::game_beside(m, (front.w, front.h), Some(&game));
-        let at = pocket_ui::motion::progress(pocket_ui::motion::Kind::Move, self.moved_at, Instant::now(), AJAR_IN);
+        let from = self.cabinet.ajar_at.map_or(self.moved_at, |t| t.max(self.moved_at));
+        let at = pocket_ui::motion::progress(pocket_ui::motion::Kind::Move, from, pocket_ui::frame_clock::now(), AJAR_IN);
         // Easy's one big case: well out, so an open case shows at a glance, the same for a cartridge, a card and a disc.
         let reach = if self.big_on() { (front.w as f32 * AJAR_BIG).min(gw as f32 * 0.8) } else { (out as f32 * AJAR).min(front.w as f32 * AJAR_FRONT) };
-        let gx = x + front.w - gw + (reach * at) as i32;
+        // From the middle of its case, where the way back leaves it (`insert_scene`: a game rests there before it comes
+        // out), to beside it: no step when the shelf takes over (a clear case shows the game through it).
+        let (inside, out_x) = ((front.w - gw) as f32 / 2.0, (front.w - gw) as f32 + reach);
+        let gx = x + (inside + (out_x - inside) * at).round() as i32;
         art::blit(c, &game, gx, y + (front.h - gh) / 2, 256, clip);
     }
 
@@ -979,7 +1009,7 @@ impl App {
         let kind = media::Game::of(&info.system, &info.rom.to_string_lossy());
         let has_cover = self.cover_file(&info.system, &info.rom).is_some();
         self.cabinet.insert = Some(Inserting {
-            at: Instant::now(),
+            at: pocket_ui::frame_clock::now(),
             item,
             scene: Scene {
                 system: info.system,
@@ -997,6 +1027,7 @@ impl App {
                 at_drive: None,
                 rig: None,
                 rig_asked: false,
+                home: None,
             },
         });
         true
@@ -1150,23 +1181,11 @@ impl App {
         self.cabinet.labels.iter().any(|((f, _, _), slot)| *f == file && matches!(slot, Slot::Ready(_)))
     }
 
-    /// The day's pick (system, file) whose box art is on Surprise me's front (docs/DESIGN.md "Home panels").
-    fn surprise_front(&self) -> Option<(String, PathBuf)> {
-        self.curator.index.as_ref()?;
-        let pick = self.curator.today.pick.as_ref()?;
-        let tile = self.catalog_tile(pick.game)?;
-        Some((tile.system, tile.rom))
-    }
-
     /// The big spine and front of a case coming out; its cover is asked for the first time it is needed.
     fn shown_pics(&mut self, item: Item, m: Medium) -> (Rc<Pic>, Rc<Pic>) {
         let info = self.case_info(item);
         let look = self.case_look(&info, m);
-        // Surprise me's box keeps Curator's colours and shows the day's pick's cover on its front.
-        let file = match (item, self.surprise_front()) {
-            (Item::Surprise, Some((system, rom))) => self.cover_file(&system, &rom),
-            _ => self.cover_file(&info.system, &info.rom),
-        };
+        let file = self.cover_file(&info.system, &info.rom);
         let k = show_scale(m, self.cabinet.show_room);
         let label = file.and_then(|f| self.cover_label(&f, m, (m.size().h as f32 * k).round() as i32));
         let key = CaseKey {
@@ -1274,7 +1293,7 @@ impl App {
     pub(crate) fn paint_cabinet(&mut self, c: &mut Canvas) {
         let started = Instant::now();
         let cpu_started = thread_cpu();
-        let now = started;
+        let now = pocket_ui::frame_clock::now();
         self.cabinet.frame += 1;
         self.cabinet_poll();
         self.cabinet_shelves();
@@ -1645,8 +1664,11 @@ impl App {
     #[allow(clippy::too_many_arguments)]
     fn paint_out(&mut self, c: &mut Canvas, s: usize, i: usize, sy: i32, now: Instant, inner_x: i32, show_bottom: i32) {
         let case = self.cabinet.cab.shelves[s].cases[i];
-        // The case going into the console is drawn by `paint_insert`.
-        if self.cabinet.insert.as_ref().is_some_and(|ins| ins.item == case.item) {
+        // The case going into the console is drawn by `paint_insert`. Its place is still worked out once (on its way back
+        // from a game every frame), for it to go back to, and nothing drawn there.
+        let hidden = self.cabinet.insert.as_ref().is_some_and(|ins| ins.item == case.item);
+        // Once: where it goes back to (`insert_scene::Home`), below.
+        if hidden && self.cabinet.eject.is_none() && self.cabinet.insert.as_ref().is_some_and(|ins| ins.scene.home.is_some()) {
             return;
         }
         let o = self.cabinet.pull.openness(case.item, now);
@@ -1687,6 +1709,18 @@ impl App {
         // Its shadow on what is behind and under it.
         let h_case = size.h as f32 + (size.front_h - size.h) as f32 * turned;
         let (w_now, h_now) = ((size.spine as f32 + (size.front - size.spine) as f32 * turned) * scale, h_case * scale);
+        if hidden {
+            let r = ((cx - front.w as f32 / 2.0).round() as i32, (cy - front.h as f32 / 2.0).round() as i32, front.w, front.h);
+            if (s, i) == self.cabinet_cursor().unwrap_or((usize::MAX, 0)) {
+                self.cabinet.last_out = Some((case.item, r));
+            }
+            // Its place on the shelf, for the case to go back to once its game is out (`insert_scene::Home`): its spine
+            // standing where the shelf shows it at rest.
+            if let Some(ins) = self.cabinet.insert.as_mut().filter(|ins| ins.item == case.item) {
+                ins.scene.home = Some(pocket_ui::insert_scene::Home { spine, at: (slot_cx, floor - size.h as f32 / 2.0), scale: 1.0 });
+            }
+            return;
+        }
         art::soft_shadow(
             c,
             (cx - w_now / 2.0) as i32 + 14,
@@ -1837,8 +1871,8 @@ impl App {
     /// Starting a game: the console comes up, the case opens and the cartridge, card or disc slides out of it, the case
     /// fades and the game goes into the console (every system the same way, 0.1.4).
     pub(crate) fn paint_insert(&mut self, c: &mut Canvas, now: Instant) {
-        // Back from the game (or it never came up): the cabinet as it was.
-        if self.launch_at.is_none() {
+        // Back from the game (or it never came up): the cabinet as it was, unless the case is on its way back (`eject`).
+        if self.launch_at.is_none() && self.cabinet.eject.is_none() {
             self.cabinet.insert = None;
         }
         let Some(ins) = self.cabinet.insert.as_ref() else { return };
@@ -1883,6 +1917,326 @@ impl App {
         let Some(ins) = self.cabinet.insert.as_mut() else { return };
         let elapsed = now.saturating_duration_since(ins.at);
         ins.scene.paint(c, elapsed, sprite.as_deref(), pocket_ui::insert_scene::Stage { floor, k: 1.0 });
+    }
+}
+
+impl App {
+    /// Cozy's way back from a game (`pocket_ui::eject`), from `game_exited` once the shelf is made again: the last
+    /// picture (`frame`, the pause menu's) switches off and the case comes back out of the console, over the live shelf.
+    /// Only with Animations on Cozy and Motion on Full, in the insertion looks (including Easy and Kids), on the
+    /// game just played; nothing waits for it, and any button ends it (`skip_eject`).
+    pub(crate) fn begin_eject(&mut self, rom: &Path, system: &str, frame: Option<(Arc<Image>, Option<pocket_ui::preview::GameRect>)>) {
+        self.cabinet.eject = None;
+        let why = if !matches!(self.theme, super::Theme::Cabinet | super::Theme::Shelf | super::Theme::Big) {
+            "look"
+        } else if !self.cozy() || pocket_ui::motion::level() != pocket_ui::motion::Motion::Full {
+            "not Cozy with Motion Full"
+        } else if !self.shelf_in_front() && self.kids_view() != Some(super::app_kids::KidsView::Shelf) {
+            "the shelf is not in front"
+        } else {
+            ""
+        };
+        let item = self.items.get(self.sel).copied().filter(|i| matches!(i, Item::Recent(_) | Item::Game(..)));
+        let why = match item {
+            _ if !why.is_empty() => why,
+            Some(i) if self.case_info(i).rom == rom => "",
+            _ => "the shelf is not on the game",
+        };
+        let Some(item) = item.filter(|_| why.is_empty()) else {
+            println!("eject: not shown ({why})");
+            return;
+        };
+        let screen = pocket_ui::eject::Screen::of(FormFactor::of(system));
+        let crt = pocket_ui::cozy_extras::on(pocket_ui::cozy_extras::Extra::CrtOn);
+        let off = frame.is_some() && (screen == pocket_ui::eject::Screen::Lcd || crt);
+        // Only the game switches off, not the black round it or a screen frame: its part of the picture, painted from it.
+        let area = frame.as_ref().map_or(((0, 0), None), |(f, r)| ((f.w, f.h), *r));
+        let frame = frame.map(|(f, _)| f);
+        let way = pocket_ui::eject::Way { screen, off, lid: false };
+        self.cabinet.eject = Some(Ejecting { at: pocket_ui::frame_clock::now(), way, frame, area, item, scene_asked: false, ready: false });
+    }
+
+    /// The first frame of the way back: whether its console opens a lid or tray first (`insert_rig`, it starts shut), and
+    /// the case's sound as the medium is back in it. Here, not in `begin_eject`: the shelf after Quit comes first.
+    fn eject_ready(&mut self) {
+        let Some((item, way)) = self.cabinet.eject.as_ref().filter(|e| !e.ready).map(|e| (e.item, e.way)) else { return };
+        let info = self.case_info(item);
+        let kind = media::Game::of(&info.system, &info.rom.to_string_lossy());
+        let lid = pocket_ui::playful::on() && pocket_ui::insert_rig::takes_disc(&info.system, kind);
+        let way = pocket_ui::eject::Way { lid, ..way };
+        if let Some(ej) = self.cabinet.eject.as_mut() {
+            ej.way = way;
+            ej.ready = true;
+        }
+        let medium = self.medium(item);
+        let since = self.cabinet.eject.as_ref().map_or(Duration::ZERO, |e| pocket_ui::frame_clock::now().saturating_duration_since(e.at));
+        self.play_sound_after(pocket_ui::ui_sound::opening(medium), way.case_shut_at().saturating_sub(since), 0.0);
+    }
+
+    /// Before a frame: where the way back is. The case goes backwards through the launch animation (`insert`, its clock
+    /// set to the moment), following where the shelf paints it now; at the end it is the shelf's again.
+    pub(crate) fn eject_tick(&mut self, now: Instant) {
+        self.eject_ready();
+        let Some(ej) = self.cabinet.eject.as_ref() else { return };
+        let (item, asked) = (ej.item, ej.scene_asked);
+        match ej.way.moment(now.saturating_duration_since(ej.at)) {
+            pocket_ui::eject::Moment::Done => {
+                self.end_eject();
+                // Back in its place: an open case's game comes a little out of it (`paint_ajar_game`). Not `moved_at`: that
+                // would turn the case in from its edge again and rock it, a jump right after the way back (11.11.).
+                self.cabinet.ajar_at = Some(now);
+            }
+            pocket_ui::eject::Moment::Off(_) => {}
+            pocket_ui::eject::Moment::Shelf { scene, .. } => {
+                if !asked {
+                    if let Some(ej) = self.cabinet.eject.as_mut() {
+                        ej.scene_asked = true;
+                    }
+                    // From where the shelf painted the case last (the picture switching off was over it).
+                    if self.begin_insert(item) {
+                        if let Some(ins) = self.cabinet.insert.as_mut() {
+                            // Back from a game is always the Cozy way, a frozen game too (it goes back in quickly).
+                            ins.scene.cozy = true;
+                        }
+                    }
+                }
+                let target = if self.theme == super::Theme::Cabinet {
+                    self.cabinet.last_out.filter(|(i, _)| *i == item).map(|(_, r)| r)
+                } else {
+                    self.cabinet.shelf_lit.as_ref().map(|(f, x, y)| (*x, *y, f.w, f.h))
+                };
+                if let Some(ins) = self.cabinet.insert.as_mut().filter(|i| i.item == item) {
+                    ins.at = now.checked_sub(scene).unwrap_or(now);
+                    if let Some(r) = target {
+                        ins.scene.from = r;
+                    }
+                }
+            }
+        }
+    }
+
+    /// Over the shelf, after it is painted: the last picture switching off, then black lifting off the shelf (the Shelf
+    /// look's case is painted here; the Cabinet paints it with the cabinet).
+    pub(crate) fn paint_eject(&mut self, c: &mut Canvas, now: Instant) {
+        let Some(ej) = self.cabinet.eject.as_ref() else { return };
+        match ej.way.moment(now.saturating_duration_since(ej.at)) {
+            pocket_ui::eject::Moment::Off(p) => {
+                let area = pocket_ui::eject::area_on(c.w, c.h, ej.area.0, ej.area.1);
+                let (frame, src) = (ej.frame.as_deref(), ej.area.1);
+                match ej.way.screen {
+                    pocket_ui::eject::Screen::Tv => pocket_ui::eject::paint_tv_off(c, frame, src, area, p),
+                    pocket_ui::eject::Screen::Lcd => pocket_ui::eject::paint_lcd_off(c, frame, src, area, p),
+                }
+            }
+            pocket_ui::eject::Moment::Shelf { black, .. } => {
+                if self.theme != super::Theme::Cabinet {
+                    self.paint_insert(c, now);
+                }
+                pocket_ui::eject::paint_black(c, black);
+            }
+            pocket_ui::eject::Moment::Done => {}
+        }
+    }
+
+    /// The way back is playing (the shelf keeps drawing frames).
+    pub(crate) fn ejecting(&self) -> bool {
+        self.cabinet.eject.is_some()
+    }
+
+    /// Runs before trigger gestures can consume an input (L2/R2 open overlays themselves).
+    pub(crate) fn eject_input(&mut self, event: &super::UserEvent) {
+        use pocket_ui::pad::PadEvent;
+        if matches!(event, super::UserEvent::Pad(PadEvent::Button { pressed: true, .. }) | super::UserEvent::Touch(_))
+            || matches!(event, super::UserEvent::Pad(PadEvent::Axis { value, .. }) if value.abs() > pocket_ui::pad::STICK_DEADZONE) {
+            self.skip_eject();
+        }
+    }
+
+    /// A button or a touch during the way back: it ends at once (true when there was one), the press goes on to the
+    /// shelf as always.
+    pub(crate) fn skip_eject(&mut self) -> bool {
+        if self.cabinet.eject.is_none() {
+            return false;
+        }
+        self.end_eject();
+        pocket_ui::ui_sound::forget_waiting();
+        self.request_redraw();
+        true
+    }
+
+    /// `POCKETUI_SNAPSHOT_EJECT_MS=<ms>` on `shelf:<system>:<look>:…`: the way back from the selected game that long after
+    /// it ended, with `POCKETUI_SNAPSHOT_EJECT_FRAME` (a PNG or JPEG of the game) as its last picture. With
+    /// `POCKETUI_SNAPSHOT_EJECT_SERIES=<folder>` every 60 Hz frame from the end of the game to a moment after the way back
+    /// (`<folder>/0000.png` …, for a video). `POCKETUI_SNAPSHOT_EJECT_BENCH=1`: no picture, the line `bench-eject …` with
+    /// what starting it costs, its frames and what a button does on its way (any moment: it ends, the shelf moves).
+    /// True when it wrote what was asked.
+    pub(crate) fn eject_snapshot(&mut self, buf: &mut [u32], w: u32, h: u32, out: &str) -> bool {
+        let var = |k: &str| std::env::var(k).ok().filter(|v| !v.is_empty());
+        let bench = var("POCKETUI_SNAPSHOT_EJECT_BENCH").is_some();
+        let series = var("POCKETUI_SNAPSHOT_EJECT_SERIES");
+        let Some(ms) = var("POCKETUI_SNAPSHOT_EJECT_MS").and_then(|v| v.parse::<u64>().ok()).or((bench || series.is_some()).then_some(0)) else {
+            return false;
+        };
+        let Some(item) = self.items.get(self.sel).copied() else { return false };
+        let info = self.case_info(item);
+        // The raw game frame as the screen showed it: a TV game at 4:3, a handheld's at its own shape, in the middle.
+        let tv = pocket_ui::eject::Screen::of(FormFactor::of(&info.system)) == pocket_ui::eject::Screen::Tv;
+        let frame = var("POCKETUI_SNAPSHOT_EJECT_FRAME").and_then(|p| image::load_image(Path::new(&p))).map(|raw| {
+            let shape = if tv { 4.0 / 3.0 } else { raw.w as f32 / raw.h.max(1) as f32 };
+            let (gw, gh) = if w as f32 / h as f32 > shape { ((h as f32 * shape) as u32, h) } else { (w, (w as f32 / shape) as u32) };
+            let rect = ((w - gw) / 2, (h - gh) / 2, gw, gh);
+            let mut px = vec![0u32; (w * h) as usize];
+            Canvas::new(&mut px, w, h).blit_scaled(&raw, rect.0 as i32, rect.1 as i32, gw as i32, gh as i32);
+            (Arc::new(Image { w, h, px }), Some(rect))
+        });
+        let start = |app: &mut App, ago: Duration| {
+            app.begin_eject(&info.rom, &info.system, frame.clone());
+            if let Some(ej) = app.cabinet.eject.as_mut() {
+                ej.at = pocket_ui::frame_clock::now().checked_sub(ago).unwrap_or(ej.at);
+            }
+        };
+        if bench {
+            // What it costs, on the real clock.
+            pocket_ui::frame_clock::thaw();
+            self.eject_bench(item, start, buf, w, h);
+            return true;
+        }
+        // Every frame the moment it stands for, however long the one before took (`frame_clock`).
+        let t0 = pocket_ui::frame_clock::hold_settled();
+        if let Some(dir) = series {
+            if let Err(error) = std::fs::create_dir_all(&dir) {
+                eprintln!("{error}");
+                return false;
+            }
+            start(self, Duration::ZERO);
+            let Some(ej) = self.cabinet.eject.as_ref() else { return false };
+            let len = ej.way.len() + Duration::from_millis(700);
+            let frames = (len.as_secs_f64() * 60.0).ceil() as u32;
+            let mut done = None;
+            for k in 0..frames {
+                // The clock steps by exactly one 60 Hz frame; the way back, and after it the game's way out of its case
+                // (`eject_tick` starts it), follow it.
+                pocket_ui::frame_clock::freeze(t0 + pocket_ui::frame_clock::frames(k));
+                if self.cabinet.eject.is_none() {
+                    done.get_or_insert(k);
+                }
+                self.paint(&mut Canvas::new(buf, w, h));
+                super::write_png(buf, w, h, &format!("{dir}/{k:04}.png"));
+            }
+            // Where the way back ended: the test of the hand-over to the still shelf compares the frames round it.
+            println!("eject-series frames={frames} done={}", done.map_or(-1, |d| d as i64));
+            return true;
+        }
+        start(self, Duration::from_millis(ms));
+        // Its first frame makes the case's way back from where the shelf painted it; the second is the moment asked.
+        self.paint(&mut Canvas::new(buf, w, h));
+        if let Some(ej) = self.cabinet.eject.as_mut() {
+            ej.at = t0.checked_sub(Duration::from_millis(ms)).unwrap_or(ej.at);
+        }
+        self.paint(&mut Canvas::new(buf, w, h));
+        super::write_png(buf, w, h, out);
+        println!("eject-snapshot ms={ms} playing={} inserting={}", self.ejecting(), self.cabinet_inserting());
+        true
+    }
+
+    /// The numbers of `eject_snapshot`'s bench: the start, each frame, and a button at moments along the way.
+    fn eject_bench(&mut self, item: Item, start: impl Fn(&mut App, Duration), buf: &mut [u32], w: u32, h: u32) {
+        // Costs as the UI thread's CPU time: what the way back takes, not how busy the computer is (a wall clock made
+        // the gate's check of it depend on the load, 11.11.).
+        let paint = |app: &mut App, buf: &mut [u32]| {
+            let t = thread_cpu();
+            app.paint(&mut Canvas::new(buf, w, h));
+            thread_cpu().saturating_sub(t)
+        };
+        let mut shelf = Vec::new();
+        for _ in 0..20 {
+            shelf.push(paint(self, buf));
+        }
+        let t = thread_cpu();
+        start(self, Duration::ZERO);
+        let begin = thread_cpu().saturating_sub(t);
+        let Some(ej) = self.cabinet.eject.as_ref() else {
+            println!("bench-eject started=false");
+            return;
+        };
+        let len = ej.way.len();
+        let mut frames = Vec::new();
+        let mut k = 0u64;
+        let mut way = None;
+        while self.ejecting() {
+            let at = Duration::from_nanos(k * 16_666_667);
+            if let Some(ej) = self.cabinet.eject.as_mut() {
+                ej.at = Instant::now().checked_sub(at).unwrap_or(ej.at);
+            }
+            frames.push(paint(self, buf));
+            way = way.or(self.cabinet.eject.as_ref().map(|e| e.way));
+            k += 1;
+            if k > 600 {
+                break;
+            }
+        }
+        // A button at moments along the way: the way back ends with it, and the press moves the shelf in the same
+        // frame (the cursor on another case), nothing waits.
+        let mut presses = Vec::new();
+        for ms in [0u64, 100, 300, 700, 1200] {
+            self.sel = self.items.iter().position(|i| *i == item).unwrap_or(self.sel);
+            self.prev_sel = self.sel;
+            self.cabinet_sync();
+            paint(self, buf);
+            start(self, Duration::from_millis(ms));
+            paint(self, buf);
+            let before = (self.sel, self.cabinet_cursor());
+            let was_playing = self.ejecting();
+            let t = thread_cpu();
+            self.press(Button::Right);
+            let handled = thread_cpu().saturating_sub(t);
+            let frame = paint(self, buf);
+            let moved = (self.sel, self.cabinet_cursor()) != before;
+            presses.push(format!("{ms}:{}:{}:{}:{:.0}:{:.0}", was_playing, !self.ejecting() && !self.cabinet_inserting(), moved, handled.as_secs_f64() * 1e6, frame.as_secs_f64() * 1e6));
+        }
+        let mut aborts = Vec::new();
+        use pocket_ui::pad::{Axis, PadEvent};
+        for ms in [0u64, 700, 1200] {
+            for button in Button::ALL {
+                self.sel = self.items.iter().position(|i| *i == item).unwrap_or(self.sel);
+                self.prev_sel = self.sel;
+                start(self, Duration::from_millis(ms));
+                self.eject_input(&super::UserEvent::Pad(PadEvent::Button { source: usize::MAX, button, pressed: true }));
+                aborts.push(!self.ejecting() && !self.cabinet_inserting());
+            }
+            for axis in Axis::ALL {
+                start(self, Duration::from_millis(ms));
+                self.eject_input(&super::UserEvent::Pad(PadEvent::Axis { source: usize::MAX, axis, value: 0.9 }));
+                aborts.push(!self.ejecting() && !self.cabinet_inserting());
+            }
+            start(self, Duration::from_millis(ms));
+            self.eject_input(&super::UserEvent::Touch(pocket_ui::touch::TouchEvent { phase: pocket_ui::touch::Phase::Down, x: 0.5, y: 0.5 }));
+            aborts.push(!self.ejecting() && !self.cabinet_inserting());
+        }
+        assert!(aborts.iter().all(|ended| *ended), "every input ends ejection before another overlay can consume it");
+        println!(
+            "{} screen={} off={} lid={} len_ms={} begin_us={:.0} shelf_p50_us={:.0} presses={}",
+            bench_line("bench-eject", &frames),
+            way.map_or_else(|| "none".to_string(), |w| format!("{:?}", w.screen)),
+            way.is_some_and(|w| w.off),
+            way.is_some_and(|w| w.lid),
+            way.map_or(len, |w| w.len()).as_millis(),
+            begin.as_secs_f64() * 1e6,
+            {
+                let mut s: Vec<f64> = shelf.iter().map(|d| d.as_secs_f64() * 1e6).collect();
+                s.sort_by(|a, b| a.total_cmp(b));
+                s[s.len() / 2]
+            },
+            presses.join(",")
+        );
+    }
+
+    fn end_eject(&mut self) {
+        if let Some(ej) = self.cabinet.eject.take() {
+            if self.cabinet.insert.as_ref().is_some_and(|i| i.item == ej.item) && self.launch_at.is_none() {
+                self.cabinet.insert = None;
+            }
+        }
     }
 }
 
@@ -1937,6 +2291,15 @@ impl App {
             }
             self.held = None;
             let ago = pull_ms.filter(|_| k + 1 == n).map_or(rest, Duration::from_millis);
+            settle(self, ago);
+            // This offline snapshot records the settled outcome (including an empty/missing-game notice).
+            // Its first response was just painted above; live launches continue through the event loop.
+            self.launch_response_painted();
+            let deadline = Instant::now() + Duration::from_secs(5);
+            while self.pending_launch.is_some() && Instant::now() < deadline {
+                self.launch_poll();
+                if self.pending_launch.is_some() { std::thread::sleep(Duration::from_millis(1)); }
+            }
             settle(self, ago);
         }
         if let Some(ms) = insert_ms {
@@ -2038,6 +2401,8 @@ impl App {
                 // The launch: from A to the end, five times.
                 for _ in 0..5 {
                     self.launch_animation_snapshot(Duration::ZERO);
+                    // A bench: what painting costs, on the real clock.
+                    pocket_ui::frame_clock::thaw();
                     let len = self.cabinet.insert.as_ref().map_or(cabinet::INSERT_COZY, |i| cabinet::insert_len(i.scene.cozy));
                     let start = Instant::now();
                     for k in 0..=(len.as_millis() / 16) as u32 {
@@ -2060,11 +2425,49 @@ impl App {
     pub(crate) fn launch_animation_snapshot(&mut self, ago: Duration) {
         let Some(item) = self.items.get(self.sel).copied() else { return };
         if self.begin_insert(item) {
+            // One moment: the clock stands while it is painted (`frame_clock`).
+            let now = pocket_ui::frame_clock::hold_settled();
             if let Some(ins) = self.cabinet.insert.as_mut() {
-                ins.at = Instant::now() - ago;
+                ins.at = now - ago;
             }
-            self.launch_at = Some(Instant::now() - ago);
+            self.launch_at = Some(now - ago);
         }
+    }
+
+    /// `POCKETUI_SNAPSHOT_LAUNCH_SERIES=<folder>` on `shelf:<system>:<look>:…`: every 60 Hz frame of the launch animation
+    /// from A to its end (`<folder>/0000.png` …), and the line `launch-series frames=… ` with the paint times
+    /// (`bench_line`, PNG writing not counted). For the frame-sequence tests (no jump over a threshold) and contact sheets.
+    /// True when it wrote the series.
+    pub(crate) fn launch_series_snapshot(&mut self, buf: &mut [u32], w: u32, h: u32) -> bool {
+        let Some(dir) = std::env::var("POCKETUI_SNAPSHOT_LAUNCH_SERIES").ok().filter(|v| !v.is_empty()) else { return false };
+        if let Err(error) = std::fs::create_dir_all(&dir) {
+            eprintln!("{error}");
+            return false;
+        }
+        let Some(item) = self.items.get(self.sel).copied() else { return false };
+        if !self.begin_insert(item) {
+            println!("launch-series started=false");
+            return true;
+        }
+        let cozy = self.cabinet.insert.as_ref().is_some_and(|i| i.scene.cozy);
+        let len = cabinet::insert_len(cozy) + pocket_ui::insert_scene::FADE;
+        let frames = (len.as_secs_f64() * 60.0).ceil() as u32;
+        // A at `t0`; the clock steps by exactly one 60 Hz frame (`frame_clock`).
+        let t0 = pocket_ui::frame_clock::hold_settled();
+        if let Some(ins) = self.cabinet.insert.as_mut() {
+            ins.at = t0;
+        }
+        self.launch_at = Some(t0);
+        let mut times = Vec::new();
+        for k in 0..frames {
+            pocket_ui::frame_clock::freeze(t0 + pocket_ui::frame_clock::frames(k));
+            let t = Instant::now();
+            self.paint(&mut Canvas::new(buf, w, h));
+            times.push(t.elapsed());
+            super::write_png(buf, w, h, &format!("{dir}/{k:04}.png"));
+        }
+        println!("launch-series {} cozy={cozy}", bench_line("paint", &times));
+        true
     }
 }
 
@@ -2132,14 +2535,13 @@ pub(crate) fn shelf_layout(w: i32, h: i32, tallest: f32) -> ShelfLayout {
 }
 
 /// The picture printed on the front of a box that is not a game (a game shows its console; `ui_art`): Curator's crate
-/// of cartridges, Surprise me's gift (until its pick's cover is read), Just Play's cartridge and dice, the monitor of PC streaming, a sticker's sheet,
+/// of cartridges, Just Play's cartridge and dice, the monitor of PC streaming, a sticker's sheet,
 /// and from the empty pages' vignettes Favourites' star on its cushion, the search's glass, a smart shelf's row of
 /// cartridges and the history's notebook.
 fn emblem(item: Item) -> Option<&'static pocket_ui::system_art::Sprite> {
     use pocket_ui::ui_art::{get, Art, Emblem, Sticker};
     get(match item {
         Item::Curator => Art::Emblem(Emblem::Curator),
-        Item::Surprise => Art::Emblem(Emblem::Surprise),
         Item::JustPlay => Art::Emblem(Emblem::JustPlay),
         Item::Streaming => Art::Emblem(Emblem::Streaming),
         Item::Sticker(_) => Art::Emblem(Emblem::Sticker),
@@ -2237,11 +2639,17 @@ impl App {
         }
     }
 
+    /// The game is still sliding a little out of the case just put back (`ajar_at`): keep painting.
+    pub(crate) fn ajar_sliding(&self, now: Instant) -> bool {
+        pocket_ui::motion::allowed(pocket_ui::motion::Kind::Move) && self.cabinet.ajar_at.is_some_and(|t| now < t + AJAR_IN + pocket_ui::motion::SETTLE)
+    }
+
     /// Covers still being read, the selected case still turning or the shelf still gliding: keep painting.
     pub(crate) fn shelf_media_animating(&self, now: Instant) -> bool {
         self.cabinet.pending > 0
             || self.cabinet.shelf_waiting
             || self.cabinet.shelf_scroll.moving(now)
+            || self.ajar_sliding(now)
             || (pocket_ui::motion::allowed(pocket_ui::motion::Kind::Move) && now < self.moved_at + SHELF_TURN + pocket_ui::motion::SETTLE)
             || (pocket_ui::playful::on()
                 && (self.cabinet.lean.moving(now) || now < self.moved_at + pocket_ui::playful::span(SHELF_TURN + pocket_ui::playful::WIGGLE) + pocket_ui::motion::SETTLE))
@@ -2340,10 +2748,7 @@ impl App {
     /// the list looks' does (tests/shelf_moves.rs).
     pub(crate) fn stand_front(&mut self, item: Item, m: Medium, k: f32, later: bool) -> (Rc<Pic>, Option<Rc<Pic>>) {
         let (info, key) = self.shelf_key(item, m);
-        let file = match (item, self.surprise_front()) {
-            (Item::Surprise, Some((system, rom))) => self.cover_file(&system, &rom),
-            _ => self.cover_file(&info.system, &info.rom),
-        };
+        let file = self.cover_file(&info.system, &info.rom);
         let fh = (m.size().h as f32 * k).round() as i32;
         let label = file.as_ref().and_then(|f| self.cover_label(f, m, fh));
         let reading = label.is_none()
@@ -2483,7 +2888,7 @@ impl App {
         }
         // The spines' scale is the screen's; the room above them follows the row's tallest case.
         let f = shelf_layout(c.w, c.h, TALLEST).f;
-        let now = self.cabinet.shelf_clock.unwrap_or_else(Instant::now);
+        let now = self.cabinet.shelf_clock.unwrap_or_else(pocket_ui::frame_clock::now);
         let new_row = self.shelf_row(f, c.w - 2 * MARGIN);
         let Some(mut row) = self.cabinet.shelf_row.take() else { return };
         let lay = shelf_layout(c.w, c.h, row.tallest);
@@ -2628,6 +3033,11 @@ impl App {
                     let rock = if playful { pocket_ui::playful::wiggle(pocket_ui::playful::secs(self.moved_at, now) - SHELF_TURN.as_secs_f32()) } else { 0.0 };
                     self.paint_ajar_game(c, item, sm, &front, (fx, fy), show_clip);
                     art::blit_sheared(c, &front, fx, fy, rock * front.h as f32, 256, show_clip);
+                }
+                // Going into the console, the case turns its spine to you again where it stands (`insert_scene::Home`), as it
+                // turned its front to you coming out.
+                if let Some(ins) = self.cabinet.insert.as_mut().filter(|ins| ins.item == item) {
+                    ins.scene.home = Some(pocket_ui::insert_scene::Home { spine: spine.clone(), at: ((fx + fw / 2) as f32, (fy + fh / 2) as f32), scale: k });
                 }
                 self.cabinet.shelf_lit = Some((front, fx, fy));
             }
@@ -2942,6 +3352,7 @@ mod shelf_tests {
                         system: "gb".into(), ff: FormFactor::of("gb"),
                         medium: Medium::Gb, look, title: "Active launch".into(), kind: media::Game::of("gb", "1.gb"),
                         has_cover: true, front: front.clone(), from: (0, 0, 140, 200), game: None, game_back: None, cozy: false, at_drive: None,
+                        home: None,
                     },
                 });
             }

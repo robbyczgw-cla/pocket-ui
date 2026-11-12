@@ -1,6 +1,6 @@
 # Reach your Pocket from anywhere with Tailscale
 
-Settings → Connections → **Tailscale** puts the Pocket on your [Tailscale](https://tailscale.com) network (a "tailnet"): a private
+Settings → Help & tools → For tinkerers → **Tailscale** puts the Pocket on your [Tailscale](https://tailscale.com) network (a "tailnet"): a private
 network between your phone, your computer and the Pocket that works over any Wi-Fi, a phone hotspot or mobile data,
 without opening anything on your router. ROCKNIX already contains Tailscale; this page turns it on, signs it in and
 shows its state.
@@ -15,7 +15,7 @@ shows its state.
 
 - It gives the Pocket an address on your tailnet (`100.x.y.z`) and a name (`pocket-mini` by default), reachable from
   every device of yours that has Tailscale, wherever they are.
-- It is **only the network path**. What you can do over it is decided by the other switches: SSH needs Settings → Connections →
+- It is **only the network path**. What you can do over it is decided by the other switches: SSH needs Settings → Help & tools → For tinkerers →
   **Remote access (SSH)** to be on and uses its password; file sharing and Syncthing keep their own passwords.
   Tailscale's own SSH server is **not** used (pocket-ui always starts it with `--ssh=false`), so nothing answers on
   port 22 except the SSH of Remote access.
@@ -23,7 +23,7 @@ shows its state.
 
 ## Turn it on and sign in
 
-1. Settings → Connections → **Tailscale**. Select **Tailscale** and press **A**. The service starts; the status says **Logged out**.
+1. Settings → Help & tools → For tinkerers → **Tailscale**. Select **Tailscale** and press **A**. The service starts; the status says **Logged out**.
 2. Select **Sign in** and press **A**. A QR code appears.
 3. Scan it with your phone's camera (or type the short address under the code into any browser), sign in to Tailscale
    and approve the Pocket. The page returns to the list by itself and shows **Connected as** your tailnet, the Pocket's
@@ -56,7 +56,7 @@ console if you do not want it listed.
 
 ## Reaching the Pocket
 
-From a device on your tailnet, with Settings → Connections → Remote access (SSH) switched on:
+From a device on your tailnet, with Settings → Help & tools → For tinkerers → Remote access (SSH) switched on:
 
 ```
 ssh root@pocket-mini

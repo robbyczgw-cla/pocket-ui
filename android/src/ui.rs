@@ -15,6 +15,10 @@ use pocket_ui::{
     touch::{Area, HitMap},
 };
 use std::{collections::HashSet, sync::Arc};
+#[path = "apps_page.rs"]
+pub mod apps_page;
+#[path = "achievements_ui.rs"]
+pub mod achievements_ui;
 #[path = "check_page.rs"]
 mod check_page;
 #[path = "onboarding.rs"]
@@ -23,6 +27,18 @@ mod onboarding;
 mod phone;
 #[path = "play_cards.rs"]
 mod play_cards;
+#[path = "plays_with_page.rs"]
+pub mod plays_with_page;
+#[path = "saves_page.rs"]
+pub mod saves_page;
+#[path = "report_page.rs"]
+pub mod report_page;
+#[path = "help_page.rs"]
+pub mod help_page;
+#[path = "updates_page.rs"]
+pub mod updates_page;
+#[path = "licences_page.rs"]
+pub mod licences_page;
 
 #[derive(Default, serde::Serialize, serde::Deserialize)]
 #[serde(default)]
@@ -30,6 +46,9 @@ pub struct Preferences {
     pub light: bool,
     pub selected_uri: String,
     pub selected_key: String,
+    /// Shelf, Easy, Split or Cabinet; "minimal" and "cards" from the builds before 0.4 read as Split
+    /// (`Theme::Split`'s aliases), and a look this version doesn't know is the Shelf, the rest of the file kept.
+    #[serde(deserialize_with = "lenient")]
     pub theme: Theme,
     pub favorites: HashSet<String>,
     /// Settings → Language, once chosen (`chosen_language`).
@@ -42,10 +61,20 @@ pub struct Preferences {
     pub haptics: bool,
     pub remind_where: Option<bool>,
     pub gameboy_gambatte: bool,
+    /// Settings → Plays with: the emulator app (its package) a system's games start in, by system id. A system that is
+    /// not in it, or whose app is gone from the phone, plays with our own player.
+    #[serde(deserialize_with = "lenient")]
+    pub plays_with: std::collections::HashMap<String, String>,
     pub onboarding_done: bool,
+    pub core_catalog_url: String,
+    pub selected_cores: HashSet<String>,
+    pub core_download_consent: bool,
     pub onboarding_step: usize,
     pub cozy: Option<bool>,
     pub download_media: Option<bool>,
+    /// Settings → Curator tab: Curator (sorting the library by facts) as a fifth tab. Off until switched on, so the
+    /// bar has four tabs (Games, Favourites, Search, Settings), as the Curator's depth is for enthusiasts on Linux too.
+    pub curator_tab: bool,
     /// The look settings of the shared Linux pages that exist on a phone (`apply_look`); a wrong value is the start value.
     #[serde(deserialize_with = "lenient")]
     pub colours: pocket_ui::palette::Colours,
@@ -73,6 +102,9 @@ pub struct Preferences {
     /// The case stickers per game key, without the star: that is `favorites`.
     #[serde(deserialize_with = "lenient")]
     pub stickers: std::collections::HashMap<String, pocket_ui::case_stickers::CaseStickers>,
+    /// The apps the player put on the Android shelf (package → its name when marked; Android's list renames it).
+    #[serde(deserialize_with = "lenient")]
+    pub android_games: std::collections::BTreeMap<String, String>,
 }
 
 impl Preferences {
@@ -120,8 +152,8 @@ impl Preferences {
 }
 /// The rows of the Cozy extras sheet, in the Linux page's order (`Extra::PAGE_ROWS`): every one has its feature on a
 /// phone. Case sounds, the old-TV switch-on and the playful cases are rows of Settings itself, beside Animations, Motion
-/// and UI sounds, as in Linux's Sound & feel; so is the slideshow, which Linux keeps in Sleep & power (`Extra::home`).
-pub const PHONE_EXTRAS: [pocket_ui::cozy_extras::Extra; 8] = pocket_ui::cozy_extras::Extra::PAGE_ROWS;
+/// and UI sounds, as in Linux's Sound & feel.
+pub const PHONE_EXTRAS: [pocket_ui::cozy_extras::Extra; 7] = pocket_ui::cozy_extras::Extra::PAGE_ROWS;
 /// The rows of Settings in page order; only what exists on a phone (no LEDs, fan, sleep or Tailscale rows).
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum Setting {
@@ -141,13 +173,27 @@ enum Setting {
     RemindWhere,
     ButtonSymbols,
     GameBoy,
+    /// The emulator app each system plays with (`plays_with_page`).
+    PlaysWith,
     Folder,
     GameCheck,
+    /// Saves out of the app into one file, and back.
+    Saves,
     Media,
+    /// Curator as a tab of its own (`Preferences::curator_tab`).
+    CuratorTab,
     Updates,
+    /// pocket-ui's licence and every emulator core's licence, source and patches.
+    Licences,
     FirstStart,
+    /// Settings → Report a problem: the text of a bug report, shared or copied.
+    Report,
+    /// Settings → Help: short answers to the usual questions.
+    Help,
+    /// Settings → RetroAchievements: sign in once, log out.
+    Achievements,
 }
-const SETTINGS: [Setting; 23] = [
+const SETTINGS: [Setting; 29] = [
     Setting::Look,
     Setting::Appearance,
     Setting::Colours,
@@ -163,14 +209,20 @@ const SETTINGS: [Setting; 23] = [
     Setting::Haptics,
     Setting::RemindWhere,
     Setting::Extra(pocket_ui::cozy_extras::Extra::CaseSounds),
-    Setting::Extra(pocket_ui::cozy_extras::Extra::IdleSlideshow),
     Setting::ButtonSymbols,
     Setting::GameBoy,
+    Setting::PlaysWith,
     Setting::Folder,
     Setting::GameCheck,
+    Setting::Achievements,
+    Setting::Saves,
     Setting::Media,
+    Setting::CuratorTab,
     Setting::Updates,
+    Setting::Licences,
     Setting::FirstStart,
+    Setting::Help,
+    Setting::Report,
 ];
 #[derive(Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Screen {
@@ -187,10 +239,26 @@ pub enum Screen {
     Extras,
     /// Settings → Game check.
     GameCheck,
+    /// Settings → Saves: export and import.
+    Saves,
+    /// Settings → Plays with: own player or an installed emulator app, per system.
+    PlaysWith,
+    /// Settings → Updates.
+    Updates,
+    /// Settings → Help.
+    Help,
+    /// Settings → Report a problem.
+    Report,
+    /// Settings → RetroAchievements.
+    Achievements,
+    /// Settings → Licences.
+    Licences,
     Quick,
     Box,
     /// The open card's stickers.
     Stickers,
+    /// The drawer under the shelf: the phone's other apps (`apps_page`).
+    Apps,
 }
 #[derive(Clone)]
 pub enum Action {
@@ -214,6 +282,10 @@ pub enum Action {
     Tab(Screen),
     Row(usize),
     Key(usize, usize),
+    /// A card of the drawer: a tap opens the app, a held finger puts it on the Android shelf.
+    App(usize),
+    /// Opens the drawer.
+    Apps,
 }
 pub struct Region {
     pub area: Area,
@@ -222,6 +294,8 @@ pub struct Region {
 }
 pub enum Command {
     Notice(&'static str),
+    CoreDownload(String),
+    CoreCancel,
     PersistSetup,
     None,
     Launch,
@@ -231,6 +305,27 @@ pub enum Command {
     Check,
     /// Stop reading this chosen folder (it can't be read any more).
     Forget(String),
+    /// Settings → Saves: write the backup (Android asks where), read one (Android asks which), the answer to
+    /// "these games have saves here" (true: use the backup's), and never mind.
+    SavesExport,
+    SavesImport,
+    SavesAnswer(bool),
+    SavesCancel,
+    /// "Saved copies" while they work: copy what is new and look for copies to bring back, now.
+    SavesCopyNow,
+    UpdateCheck,
+    UpdateInstall,
+    UpdateCancel,
+    UpdateAuto,
+    /// Settings → Report a problem: write the report and hand it to Android's share sheet, or to the clipboard.
+    ReportShare,
+    ReportCopy,
+    /// Settings → RetroAchievements: sign in with this user name and password (once; only the token is kept), and
+    /// log out (delete the token).
+    RaLogin(String, String),
+    RaLogout,
+    /// Start this app (a package name) the way a home screen does.
+    OpenApp(String),
 }
 pub struct Library {
     pub games: Vec<Game>,
@@ -238,6 +333,8 @@ pub struct Library {
     pub index: pocket_ui::curator::Index,
     pub search: pocket_ui::search::Index,
     pub connections: pocket_ui::connections::Index,
+    /// Supported BIOS files among the chosen folders (`document_library::player_bios`), imported for the selected system.
+    pub bios: Vec<pocket_ui::document_library::Part>,
 }
 /// The games a Connections or Rediscover list holds (indexes into the library).
 #[derive(Clone)]
@@ -274,6 +371,13 @@ pub struct Ui {
     pub hits: HitMap,
     pub message: String,
     pub system_font_scale: f32,
+    /// The status corner's facts (`phone_corner`), as the Activity last said them; unknown until the first look.
+    pub corner: pocket_ui::phone_corner::Reading,
+    /// Android's own status bar is showing: its clock and battery are enough, the header shows none.
+    pub system_bar: bool,
+    /// Tests: where the last header put its title, note and corner, as (name, left, right) in canvas pixels.
+    #[cfg(test)]
+    pub header_rects: Vec<(&'static str, i32, i32)>,
     pub controls_open: bool,
     controls_scroll: usize,
     control_names: Vec<pocket_ui::controls::Target>,
@@ -285,6 +389,13 @@ pub struct Ui {
     pub scan_running: bool,
     pub controller_connected: bool,
     pub wifi_ready: bool,
+    pub core_offers: Vec<pocket_ui::android_cores::CorePackage>,
+    /// Whether the system download channel is public (`core-channel.url` in the APK's assets, or an intent's override). While
+    /// it is not, the extra systems are shown as "Coming soon": nothing is offered, nothing ends in an error. Off until set.
+    pub core_channel_open: bool,
+    pub installed_cores: HashSet<String>,
+    pub core_busy: Option<String>,
+    pub core_note: String,
     pub snapshot: Option<Image>,
     /// The games that stand open (`frozen_phone::stand_open`), by `Game::key`.
     frozen: HashSet<String>,
@@ -295,6 +406,17 @@ pub struct Ui {
     list_back: Vec<ListBack>,
     room: RoomUi,
     check: check_page::CheckUi,
+    pub saves: saves_page::SavesUi,
+    pub report: report_page::ReportUi,
+    pub help: help_page::HelpUi,
+    pub ra: achievements_ui::RaUi,
+    /// Settings → Plays with: the apps on the phone and the systems that have a choice.
+    plays: plays_with_page::PlaysUi,
+    pub updates: updates_page::UpdatesUi,
+    pub licences: licences_page::LicencesUi,
+    /// Words of a sheet page that the last paint had to shorten with "…" or leave out (a row's name or value, a line
+    /// above the rows). Empty on a page that shows all it says; the tests of a page's texts read it.
+    pub cut: Vec<String>,
     facet: pocket_ui::curator::Facet,
     positions: std::collections::HashMap<Screen, usize>,
     box_view: pocket_ui::game_box::BoxView,
@@ -326,10 +448,16 @@ pub struct Ui {
     pub launching: bool,
     /// Where the selected case stood in that paint (canvas pixels) and its front; None when the page shows no case.
     pub front_at: Option<((i32, i32, i32, i32), art::Pic)>,
+    /// That paint is the page under the way back from a game (`eject`): the case's place keeps its shadow and the
+    /// selection's frame, so nothing appears there when the case is back.
+    pub returning: bool,
+    /// The case of the game just back (`eject`, its key): what is in it stays inside (None) while the way back plays,
+    /// then comes out of its side from that moment on (`pocket_ui::eject::AJAR_IN`), as on the handhelds.
+    pub ajar: Option<(String, Option<std::time::Instant>)>,
     /// Where the card's canvas starts on the page.
     card_origin: (i32, i32),
-    /// The Games page's shelves (Shelf, Cabinet and Cards looks with more than one), positions in `visible`.
-    rows: Option<pocket_ui::phone_shelves::Shelves>,
+    /// The Games page's shelves (Shelf and Cabinet looks with more than one), positions in `visible`.
+    pub rows: Option<pocket_ui::phone_shelves::Shelves>,
     /// How far each portrait shelf is scrolled along, and where each landscape shelf's selection was left.
     row_scroll: std::collections::HashMap<pocket_ui::cabinet::ShelfKey, f32>,
     row_left_at: std::collections::HashMap<pocket_ui::cabinet::ShelfKey, usize>,
@@ -345,6 +473,10 @@ pub struct Ui {
     drag_across: Option<f32>,
     /// The Game of the year sticker's year on the open sheet.
     sticker_year: u16,
+    /// The games Just Play's card showed since X was pressed on its row, so Right brings another.
+    just_play_seen: Vec<usize>,
+    /// The drawer's apps and its selection.
+    pub apps: apps_page::AppsUi,
 }
 impl Ui {
     pub fn new(prefs: Preferences) -> Self {
@@ -358,6 +490,10 @@ impl Ui {
             hits: HitMap::default(),
             message: String::new(),
             system_font_scale: 1.0,
+            corner: Default::default(),
+            system_bar: false,
+            #[cfg(test)]
+            header_rects: Vec::new(),
             controls_open: false,
             controls_scroll: 0,
             control_names: Vec::new(),
@@ -369,6 +505,11 @@ impl Ui {
             scan_running: false,
             controller_connected: false,
             wifi_ready: false,
+            core_offers: vec![],
+            core_channel_open: false,
+            installed_cores: HashSet::new(),
+            core_busy: None,
+            core_note: String::new(),
             snapshot: None,
             frozen: HashSet::new(),
             frozen_stale: true,
@@ -377,6 +518,14 @@ impl Ui {
             list_back: Vec::new(),
             room: RoomUi::default(),
             check: Default::default(),
+            saves: Default::default(),
+            report: Default::default(),
+            help: Default::default(),
+            ra: Default::default(),
+            plays: Default::default(),
+            updates: Default::default(),
+            licences: Default::default(),
+            cut: Vec::new(),
             facet: pocket_ui::curator::Facet::System,
             positions: Default::default(),
             box_view: Default::default(),
@@ -398,6 +547,8 @@ impl Ui {
             grid_cols: 0,
             launching: false,
             front_at: None,
+            returning: false,
+            ajar: None,
             card_origin: (0, 0),
             rows: None,
             row_scroll: Default::default(),
@@ -409,29 +560,36 @@ impl Ui {
             drag_row: None,
             drag_across: Some(0.0),
             sticker_year: 0,
+            just_play_seen: Vec::new(),
+            apps: Default::default(),
         }
     }
     pub fn is_frozen(&self, key: &str) -> bool {
         self.frozen.contains(key)
     }
     /// The answer of the read: the cases are made again when it changed.
-    pub fn frozen_got(&mut self, open: Vec<String>) {
+    /// True when it changed.
+    pub fn frozen_got(&mut self, open: Vec<String>) -> bool {
         let open: HashSet<String> = open.into_iter().collect();
-        if open != self.frozen {
-            self.frozen = open;
-            self.cards.clear();
-            self.reshelve();
+        if open == self.frozen {
+            return false;
         }
+        self.frozen = open;
+        self.cards.clear();
+        self.reshelve();
+        true
     }
     pub fn game(&self) -> Option<&Game> {
         self.library.as_ref()?.games.get(*self.visible.get(self.selected)?)
     }
-    pub fn install(&mut self, library: Library) {
+    pub fn install(&mut self, mut library: Library) {
+        self.with_android_shelf(&mut library);
         let restored = library
             .games
             .iter()
             .position(|g| g.key == self.prefs.selected_key || g.uri == self.prefs.selected_uri);
         self.library = Some(library);
+        self.rebuild_plays();
         self.frozen_stale = true;
         self.message.clear();
         self.filter();
@@ -446,7 +604,7 @@ impl Ui {
             self.rows = None;
             return;
         };
-        if !matches!(self.screen, Screen::Settings | Screen::Extras | Screen::GameCheck | Screen::Quick | Screen::Curator | Screen::Facet | Screen::Box | Screen::Stickers) {
+        if !matches!(self.screen, Screen::Settings | Screen::Extras | Screen::GameCheck | Screen::Updates | Screen::Licences | Screen::Saves | Screen::Report | Screen::Help | Screen::Achievements | Screen::PlaysWith | Screen::Quick | Screen::Curator | Screen::Facet | Screen::Box | Screen::Stickers | Screen::Apps) {
             self.rows = None;
         }
         self.visible = match self.screen {
@@ -460,20 +618,35 @@ impl Ui {
             Screen::Search => lib.search.search(&self.query, &|_| true).iter().map(|h| h.game).collect(),
             Screen::Results => lib.index.list(&lib.index.matches(&self.lens), false),
             Screen::Connection => self.connection.as_ref().map(|l| l.games.clone()).unwrap_or_default(),
-            Screen::Settings | Screen::Extras | Screen::GameCheck | Screen::Quick | Screen::Curator | Screen::Facet | Screen::Box | Screen::Stickers => return,
+            Screen::Settings | Screen::Extras | Screen::GameCheck | Screen::Updates | Screen::Licences | Screen::Saves | Screen::Report | Screen::Help | Screen::Achievements | Screen::PlaysWith | Screen::Quick | Screen::Curator | Screen::Facet | Screen::Box | Screen::Stickers | Screen::Apps => return,
             _ => {
-                let shelves = (!matches!(self.prefs.theme, Theme::Minimal | Theme::Split | Theme::Big)).then(|| shelves_of(lib, &self.prefs, &self.frozen)).filter(|s| s.rows.len() > 1);
+                let shelves = (!matches!(self.prefs.theme, Theme::Split | Theme::Big)).then(|| shelves_of(lib, &self.prefs, &self.frozen)).filter(|s| s.rows.len() > 1);
                 self.rows = shelves;
                 self.rows.as_ref().map_or_else(|| (0..lib.games.len()).collect(), |s| s.games.clone())
             }
         };
         self.selected = self.selected.min(self.visible.len().saturating_sub(1));
     }
+    /// A folder chosen from Settings that brought no new games (empty, or the wrong one): say so and which folder to
+    /// choose, instead of silence. `None` when it added games (the Game check offers to look at them). An Android toast
+    /// shows two lines from Android 12 on, so the words stay short.
+    pub fn folder_without_new_games(added: usize) -> Option<String> {
+        (added == 0).then(|| tr("No new games there. Choose the folder with your system folders."))
+    }
+    /// The page shows the selected game's case, where a start and the way back go from (not the list look, not Easy's
+    /// one big front, not a card or a menu).
+    pub fn shows_case(&self) -> bool {
+        Self::list_screen(self.screen) && !matches!(self.prefs.theme, Theme::Split | Theme::Big)
+    }
     pub fn list_screen(screen: Screen) -> bool {
         matches!(screen, Screen::Library | Screen::Favorites | Screen::Search | Screen::Results | Screen::Connection)
     }
     fn facets(&self) -> Vec<pocket_ui::curator::Facet> {
         self.library.as_ref().map(|l| l.index.shown_facets()).unwrap_or_default()
+    }
+    /// Whether the tab bar (and L1/R1) has this page: every tab but Curator, which waits for Settings → Curator tab.
+    pub fn has_tab(&self, screen: Screen) -> bool {
+        screen != Screen::Curator || self.prefs.curator_tab
     }
     pub fn navigate(&mut self, screen: Screen) {
         if Self::list_screen(self.screen) {
@@ -484,6 +657,20 @@ impl Ui {
             SETTINGS.iter().position(|s| matches!(s, Setting::CozyExtras))
         } else if self.screen == Screen::GameCheck && screen == Screen::Settings {
             SETTINGS.iter().position(|s| matches!(s, Setting::GameCheck))
+        } else if self.screen == Screen::Updates && screen == Screen::Settings {
+            SETTINGS.iter().position(|s| matches!(s, Setting::Updates))
+        } else if self.screen == Screen::Licences && screen == Screen::Settings {
+            SETTINGS.iter().position(|s| matches!(s, Setting::Licences))
+        } else if self.screen == Screen::Saves && screen == Screen::Settings {
+            SETTINGS.iter().position(|s| matches!(s, Setting::Saves))
+        } else if self.screen == Screen::Help && screen == Screen::Settings {
+            SETTINGS.iter().position(|s| matches!(s, Setting::Help))
+        } else if self.screen == Screen::Report && screen == Screen::Settings {
+            SETTINGS.iter().position(|s| matches!(s, Setting::Report))
+        } else if self.screen == Screen::Achievements && screen == Screen::Settings {
+            SETTINGS.iter().position(|s| matches!(s, Setting::Achievements))
+        } else if self.screen == Screen::PlaysWith && screen == Screen::Settings {
+            SETTINGS.iter().position(|s| matches!(s, Setting::PlaysWith))
         } else {
             None
         };
@@ -518,18 +705,25 @@ impl Ui {
     fn count(&self) -> usize {
         match self.screen {
             Screen::Settings => SETTINGS.len(),
-            Screen::Extras => PHONE_EXTRAS.len() + 2,
+            Screen::Extras => PHONE_EXTRAS.len() + 2 + self.core_offers.len(),
             Screen::GameCheck => self.check_rows().len(),
+            Screen::Saves => self.saves_rows().len(),
+            Screen::Report => self.report_rows().len(),
+            Screen::Help => self.help_rows().len(),
+            Screen::Achievements => self.achievements_rows().len(),
+            Screen::PlaysWith => self.plays_rows().len(),
+            Screen::Updates => self.updates_rows().len(),
+            Screen::Licences => self.licences_rows().len(),
             Screen::Quick => 3,
             Screen::Stickers => STICKER_ROWS,
-            Screen::Curator => 2 + self.facets().len() + self.rediscover_row() as usize,
+            Screen::Curator => 1 + self.facets().len() + self.rediscover_row() as usize,
             Screen::Facet => self.library.as_ref().map_or(2, |l| 2 + l.index.facet(self.facet).values.len()),
             _ => self.visible.len(),
         }
     }
     pub fn move_by(&mut self, delta: i32) {
         if self.screen == Screen::Box {
-            if matches!(self.prefs.theme, Theme::Minimal | Theme::Cards | Theme::Split) {
+            if self.prefs.theme == Theme::Split {
                 self.info_view.scroll_by(delta * 64);
             } else {
                 self.box_view.scroll_by(delta * 64);
@@ -547,9 +741,9 @@ impl Ui {
     }
     /// The page is a sheet of rows, not a shelf of games.
     fn sheet(&self) -> bool {
-        matches!(self.screen, Screen::Settings | Screen::Extras | Screen::GameCheck | Screen::Quick | Screen::Curator | Screen::Facet | Screen::Stickers)
+        matches!(self.screen, Screen::Settings | Screen::Extras | Screen::GameCheck | Screen::Updates | Screen::Licences | Screen::Saves | Screen::Report | Screen::Help | Screen::Achievements | Screen::PlaysWith | Screen::Quick | Screen::Curator | Screen::Facet | Screen::Stickers)
     }
-    fn open_controls(&mut self) {
+    pub fn open_controls(&mut self) {
         // Read once at the explicit open, like the game card's save details; never in the painter.
         self.control_names = self.game().map(|g| play_cards::remembered_names(&super::data_dir(), &game_key(g,self.prefs.gameboy_gambatte))).unwrap_or_default();
         self.controls_open = true;
@@ -565,13 +759,14 @@ impl Ui {
             }
             return Command::None;
         }
-        if self.screen == Screen::Box && b == Button::R2 && self.game().is_some_and(|g| super::bundled_core(g.system_id).is_some()) {
+        if self.screen == Screen::Box && b == Button::R2 && self.game().is_some_and(|g| super::bundled_core(g.system_id).is_some() && self.plays_in_app(g).is_none()) {
             self.open_controls();
             return Command::None;
         }
         if !self.prefs.onboarding_done {
             return self.setup_press(b);
         }
+        if self.screen != Screen::Achievements {
         if let Some(keyboard) = &mut self.keyboard {
             let result = keyboard.press(b);
             self.query = keyboard.text.clone();
@@ -581,8 +776,39 @@ impl Ui {
             }
             return Command::None;
         }
+        }
+        if self.screen == Screen::Apps {
+            if let Some(command) = self.apps_press(b) {
+                return command;
+            }
+        }
+        // R2 on the Games page pulls the drawer out.
+        if b == Button::R2 && self.screen == Screen::Library {
+            return self.open_apps();
+        }
         if self.screen == Screen::GameCheck {
             return self.check_press(b);
+        }
+        if self.screen == Screen::Updates {
+            return self.updates_press(b);
+        }
+        if self.screen == Screen::Licences {
+            return self.licences_press(b);
+        }
+        if self.screen == Screen::Saves {
+            return self.saves_press(b);
+        }
+        if self.screen == Screen::Report {
+            return self.report_press(b);
+        }
+        if self.screen == Screen::Help {
+            return self.help_press(b);
+        }
+        if self.screen == Screen::Achievements {
+            return self.achievements_press(b);
+        }
+        if self.screen == Screen::PlaysWith {
+            return self.plays_press(b);
         }
         if self.screen == Screen::Box && self.card_link_press(b) {
             return Command::None;
@@ -592,6 +818,7 @@ impl Ui {
                 return command;
             }
         }
+        if b == Button::South && self.core_busy.is_some() { return Command::CoreCancel; }
         if b == Button::South {
             if self.screen == Screen::Box {
                 self.screen = self.prior;
@@ -623,9 +850,9 @@ impl Ui {
             return Command::None;
         }
         if b == Button::L1 || b == Button::R1 {
-            let tabs = [Screen::Library, Screen::Favorites, Screen::Search, Screen::Curator];
+            let tabs: Vec<Screen> = [Screen::Library, Screen::Favorites, Screen::Search, Screen::Curator].into_iter().filter(|s| self.has_tab(*s)).collect();
             let i = tabs.iter().position(|s| *s == self.screen).unwrap_or(0);
-            self.navigate(tabs[(i + if b == Button::R1 { 1 } else { 3 }) % 4]);
+            self.navigate(tabs[(i + if b == Button::R1 { 1 } else { tabs.len() - 1 }) % tabs.len()]);
             return Command::None;
         }
         if b == Button::West {
@@ -642,6 +869,15 @@ impl Ui {
                     self.filter();
                 }
                 return Command::Persist;
+            }
+        }
+        if b == Button::North && self.screen == Screen::Quick && self.menu == 1 {
+            return self.just_play_card(true);
+        }
+        if b == Button::Right && self.screen == Screen::Box {
+            let shown = self.visible.get(self.selected).copied();
+            if shown.is_some_and(|g| self.library.as_ref().is_some_and(|l| l.cards[g].surprise.is_some())) {
+                return self.just_play_card(false);
             }
         }
         if b == Button::North {
@@ -718,10 +954,14 @@ impl Ui {
                     Setting::Motion => self.prefs.motion = self.prefs.motion.next(),
                     Setting::ButtonSymbols => self.prefs.prompts = self.prefs.prompts.step(true),
                     Setting::GameBoy => self.prefs.gameboy_gambatte = !self.prefs.gameboy_gambatte,
+                    Setting::PlaysWith => return self.open_plays_with(),
                     Setting::Folder => return Command::Folder,
                     Setting::GameCheck => return self.open_check(),
-                    Setting::Updates => return Command::Notice("Install a newer Android APK to update. Your games and settings stay."),
+                    Setting::Saves => return self.open_saves(),
+                    Setting::Updates => return self.open_updates(),
+                    Setting::Licences => return self.open_licences(),
                     Setting::Media => self.prefs.download_media = Some(!self.prefs.download_media.unwrap_or(false)),
+                    Setting::CuratorTab => self.prefs.curator_tab = !self.prefs.curator_tab,
                     Setting::Animations => self.prefs.cozy = Some(!self.prefs.cozy.unwrap_or(true)),
                     Setting::CozyExtras => {
                         self.navigate(Screen::Extras);
@@ -732,6 +972,9 @@ impl Ui {
                         self.prefs.extras.set(e, on);
                         self.cards.clear();
                     }
+                    Setting::Help => return self.open_help(),
+                    Setting::Report => return self.open_report(),
+                    Setting::Achievements => return self.open_achievements(),
                     Setting::FirstStart => {
                         self.prefs.onboarding_done = false;
                         self.prefs.onboarding_step = 0;
@@ -756,6 +999,11 @@ impl Ui {
                     self.prefs.apply_look();
                     self.drop_pictures();
                     Command::Persist
+                } else if let Some(p) = self.core_offers.get(self.menu.saturating_sub(PHONE_EXTRAS.len() + 1)) {
+                    if !self.core_channel_open { self.core_note = tr(COMING_SOON_NOTE); Command::None }
+                    else if self.core_busy.is_some() || self.prefs.selected_cores.contains(&p.core) && self.prefs.core_download_consent { Command::CoreCancel }
+                    else if self.installed_cores.contains(&p.core) { Command::None }
+                    else { Command::CoreDownload(p.core.clone()) }
                 } else {
                     self.navigate(Screen::Settings);
                     Command::None
@@ -773,29 +1021,11 @@ impl Ui {
                 }
             }
             Screen::Curator => {
-                if self.menu == 0 {
-                    let seed = std::time::SystemTime::now()
-                        .duration_since(std::time::UNIX_EPOCH)
-                        .unwrap_or_default()
-                        .as_nanos() as u64;
-                    let pick = self
-                        .library
-                        .as_ref()
-                        .and_then(|l| l.index.surprise(&mut pocket_ui::curator::surprise::Rng::new(seed), &[]));
-                    if let Some(pick) = pick {
-                        self.navigate(Screen::Library);
-                        self.selected = self.visible.iter().position(|i| *i == pick.game).unwrap_or(0);
-                        if let Some(lib) = &mut self.library {
-                            lib.cards[pick.game].surprise = Some(pick.reason);
-                        }
-                        self.prior = Screen::Library;
-                        self.screen = Screen::Box;
-                    }
-                } else if self.menu == self.count() - 1 {
+                if self.menu == self.count() - 1 {
                     self.navigate(Screen::Results);
                 } else if self.rediscover_row() && self.menu == self.count() - 2 {
                     self.open_rediscover();
-                } else if let Some(facet) = self.facets().get(self.menu - 1).copied() {
+                } else if let Some(facet) = self.facets().get(self.menu).copied() {
                     self.facet = facet;
                     self.navigate(Screen::Facet);
                 }
@@ -813,7 +1043,7 @@ impl Ui {
             }
             _ => {
                 if self.game().is_some() {
-                    Command::Launch
+                    self.launch_game()
                 } else if self.library.is_none() || self.screen == Screen::Library {
                     Command::Folder
                 } else {
@@ -854,7 +1084,11 @@ impl Ui {
                             if secs.is_none() && case.is_none() {
                                 return None;
                             }
-                            let meta = pocket_ui::library_meta::GameMeta { secs: secs.unwrap_or(0), case: case.unwrap_or_default(), ..Default::default() };
+                            let case = case.unwrap_or_default();
+                            // The golden "100 %" sticker (it comes by itself with every RetroAchievements achievement of a game)
+                            // counts for the trophy as a completed game does: no trophy room of its own.
+                            let status = if case.hundred { pocket_ui::library_meta::Status::Completed } else { Default::default() };
+                            let meta = pocket_ui::library_meta::GameMeta { secs: secs.unwrap_or(0), case, status, ..Default::default() };
                             Some((format!("{}/{}", g.system_id, g.name), meta))
                         })
                         .collect();
@@ -1006,6 +1240,16 @@ impl Ui {
             self.prefs.stickers.remove(&key);
         }
     }
+    /// The player mastered the game with this identity (`achievements::mastery`): the golden "100 %" sticker goes on its
+    /// case. False when no game of the shelf has that identity.
+    pub fn master_game(&mut self, key: &str) -> bool {
+        let gambatte = self.prefs.gameboy_gambatte;
+        let found = self.library.iter().flat_map(|l| l.games.iter()).find(|g| game_key(g, gambatte) == key || game_key(g, !gambatte) == key).map(|g| g.key.clone());
+        let Some(found) = found else { return false };
+        self.edit_stickers(found, |s| s.set(pocket_ui::case_stickers::Kind::Hundred, true, 0));
+        self.sticker_changed();
+        true
+    }
     /// The pictures with stickers on them, and what they earn on the shelf, are made again.
     fn sticker_changed(&mut self) {
         self.cards.clear();
@@ -1118,7 +1362,7 @@ impl Ui {
             return false;
         }
         let down = b == Button::Down;
-        let picked = if matches!(self.prefs.theme, Theme::Minimal | Theme::Cards | Theme::Split) {
+        let picked = if self.prefs.theme == Theme::Split {
             if b != Button::East && self.info_view.link_step(down, links) {
                 return true;
             }
@@ -1146,7 +1390,7 @@ impl Ui {
     pub(super) fn link_targets(&mut self, (ox, oy): (i32, i32)) {
         let Some(&game) = self.visible.get(self.selected) else { return };
         let Some(card) = self.library.as_ref().map(|l| &l.cards[game]) else { return };
-        let info = matches!(self.prefs.theme, Theme::Minimal | Theme::Cards | Theme::Split);
+        let info = self.prefs.theme == Theme::Split;
         let found: Vec<_> = card
             .links
             .iter()
@@ -1189,7 +1433,7 @@ impl Ui {
     }
     /// The shared choice policy; limit automatic picks to our bundled player. External
     /// apps remain available through an explicit Play, without probing them on the UI thread.
-    fn just_play(&mut self) -> Command {
+    fn just_play_pick(&mut self, skip: &[usize]) -> Option<usize> {
         let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or_default();
         let seed = now.as_nanos() as u64;
         let prefs = &self.prefs;
@@ -1208,18 +1452,45 @@ impl Ui {
             }
             let allowed = |g: usize| lib.games.get(g).is_some_and(|game| super::bundled_core(game.system_id).is_some());
             let heavy = |_| false;
-            let mut startable = |g: usize| lib.games.get(g).is_some_and(|game| game.size != 0 && (game.system_id == "psp" || game.size <= 512 << 20) && game.missing.is_empty());
+            let mut startable = |g: usize| lib.games.get(g).is_some_and(|game| game.size != 0 && (pocket_ui::document_library::plays_from_its_file(game.system_id) || game.size <= 512 << 20) && game.missing.is_empty());
             lib.index.just_play(&mut pocket_ui::curator::surprise::Rng::new(seed),
-                &pocket_ui::curator::justplay::Offer { allowed: &allowed, heavy: &heavy }, &mut startable).ok()
+                &pocket_ui::curator::justplay::Offer { allowed: &allowed, heavy: &heavy }, skip, &mut startable).ok()
         });
-        if let Some((game, _)) = pick {
+        pick.map(|(game, _)| game)
+    }
+    /// A on Just Play: the pick starts.
+    fn just_play(&mut self) -> Command {
+        if let Some(game) = self.just_play_pick(&[]) {
             self.navigate(Screen::Library);
             self.selected = self.visible.iter().position(|i| *i == game).unwrap_or(0);
             self.follow_selection();
-            Command::Launch
+            self.launch_game()
         } else {
             Command::Notice("No games to pick from yet")
         }
+    }
+    /// X on Just Play (its Quick row) and Right on the card: the game A would start, on its card with the reason. Right brings
+    /// another, none shown since X.
+    fn just_play_card(&mut self, first: bool) -> Command {
+        if first {
+            self.just_play_seen.clear();
+        }
+        let seen = self.just_play_seen.clone();
+        let Some(game) = self.just_play_pick(&seen) else { return Command::Notice("No games to pick from yet") };
+        self.just_play_seen.push(game);
+        if let Some(lib) = &mut self.library {
+            for card in &mut lib.cards {
+                card.surprise = None;
+            }
+        }
+        self.navigate(Screen::Library);
+        self.selected = self.visible.iter().position(|i| *i == game).unwrap_or(0);
+        if let Some(lib) = &mut self.library {
+            lib.cards[game].surprise = Some(lib.index.surprise_reason(game));
+        }
+        self.prior = Screen::Library;
+        self.screen = Screen::Box;
+        Command::None
     }
     pub fn tap(&mut self, x: f32, y: f32) -> Command {
         self.touch_mode = true;
@@ -1233,6 +1504,8 @@ impl Ui {
                 Command::None
             }
             Some(Action::JustPlay) => self.just_play(),
+            Some(Action::Apps) => self.open_apps(),
+            Some(Action::App(i)) => self.app_tap(i, false),
             Some(Action::Tab(screen)) => {
                 if self.screen == screen && Self::list_screen(screen) {
                     // The tab again goes back to the top, as on every phone.
@@ -1250,6 +1523,9 @@ impl Ui {
                 if let Some(k) = &mut self.keyboard {
                     k.row = row;
                     k.col = col;
+                }
+                if self.screen == Screen::Achievements {
+                    self.achievements_key_at(row, col);
                 }
                 self.press(Button::East)
             }
@@ -1290,6 +1566,13 @@ impl Ui {
     /// A finger held still on a game opens its card.
     pub fn long_press(&mut self, x: f32, y: f32) -> Command {
         self.touch_mode = true;
+        if self.prefs.onboarding_done && self.screen == Screen::Apps {
+            let app = self.regions.iter().rev().find(|r| r.area.contains(x, y)).and_then(|r| match r.action {
+                Action::App(i) => Some(i),
+                _ => None,
+            });
+            return app.map_or(Command::None, |i| self.app_tap(i, true));
+        }
         if !self.prefs.onboarding_done || !Self::list_screen(self.screen) {
             return Command::None;
         }
@@ -1328,7 +1611,7 @@ impl Ui {
         }
         if self.screen == Screen::Box {
             let d = -dy.round() as i32;
-            if matches!(self.prefs.theme, Theme::Minimal | Theme::Cards | Theme::Split) {
+            if self.prefs.theme == Theme::Split {
                 self.info_view.scroll_by(d);
             } else {
                 self.box_view.scroll_by(d);
@@ -1444,6 +1727,7 @@ impl Ui {
                 }
             }
             Action::Tab(screen) => screen == self.screen,
+            Action::App(i) => i == self.apps.selected,
             Action::Key(r, c) => self.keyboard.as_ref().is_some_and(|k| k.row == r && k.col == c),
             _ => false,
         }
@@ -1464,6 +1748,7 @@ impl Ui {
         c.clear(pal().void);
         self.hits.clear();
         self.regions.clear();
+        self.cut.clear();
         self.front_at = None;
         if !self.prefs.onboarding_done {
             self.paint_setup(c, text);
@@ -1471,10 +1756,12 @@ impl Ui {
         }
         if self.controls_open {
             let system = self.game().map_or("", |g| g.system_id).to_string();
-            let (back, max) = play_cards::paint_controls(c, text, &system, &self.control_names, self.controls_scroll);
+            let game = self.game().map_or(String::new(), |g| g.name.clone());
+            let touch = !self.controller_connected;
+            let (back, max) = play_cards::paint_controls(c, text, &system, &game, &self.control_names, touch, self.controls_scroll);
             self.controls_scroll = self.controls_scroll.min(max);
             self.target(back, "Back", Action::Press(Button::South));
-            self.target(Area::new(36, 120, c.w - 72, back.y - 140), &play_cards::control_lines(&system, &self.control_names).join(". "), Action::Label);
+            self.target(play_cards::controls_area(c), &play_cards::control_lines(&system, &game, &self.control_names, touch).join(". "), Action::Label);
             return;
         }
         self.paint_phone(c, text, cover);
@@ -1507,16 +1794,31 @@ impl Ui {
                     Setting::RemindWhere => row("Remind me where I was", on_off(self.prefs.remind_where.unwrap_or(true))),
                     Setting::ButtonSymbols => row("Button symbols", self.prefs.prompts.label()),
                     Setting::GameBoy => row("Game Boy core", if self.prefs.gameboy_gambatte { "Gambatte" } else { "mGBA" }),
+                    Setting::PlaysWith => row("Plays with", ""),
                     Setting::Folder => row("Choose your ROM folder", ""),
                     Setting::GameCheck => row("Game check", &self.check_value()),
+                    Setting::Saves => row("Save backup", ""),
                     Setting::Media => row("Covers and pictures", on_off(self.prefs.download_media.unwrap_or(false))),
-                    Setting::Updates => row("Updates", "Android APK"),
+                    Setting::CuratorTab => row("Curator tab", on_off(self.prefs.curator_tab)),
+                    Setting::Updates => row("Updates", self.updates.available().map_or("", |a| a.version.as_str())),
+                    Setting::Licences => row("Licences", ""),
                     Setting::FirstStart => row("First start", ""),
+                    Setting::Help => row("Help", ""),
+                    Setting::Report => row("Report a problem", ""),
+                    Setting::Achievements => row("RetroAchievements", &self.achievements_value()),
                 })
                 .collect(),
             Screen::Extras => {
                 let mut rows: Vec<_> = PHONE_EXTRAS.iter().map(|e| row(e.label(), on_off(self.prefs.extras.get(*e)))).collect();
                 rows.push(row("GBA console", self.prefs.gba_model.label()));
+                for p in &self.core_offers {
+                    let value = if self.installed_cores.contains(&p.core) { tr("Installed") }
+                        else if !self.core_channel_open { tr("Coming soon") }
+                        else if self.core_busy.as_deref() == Some(&p.core) { format!("{} · {}", self.core_note, tr("Cancel")) }
+                        else if self.prefs.selected_cores.contains(&p.core) && self.prefs.core_download_consent { format!("{} · {}", tr("Downloads wait for unmetered Wi-Fi."), tr("Cancel")) }
+                        else { format!("{} · {}", core_size(p.package.size), tr("Download now")) };
+                    rows.push(phone::MenuRow { label:p.package.name.clone(), value, check:None, stepper:false });
+                }
                 rows.push(row("Back", ""));
                 rows
             }
@@ -1546,7 +1848,7 @@ impl Ui {
                 rows
             }
             _ => {
-                let mut rows = vec![row("Surprise me", "")];
+                let mut rows = Vec::new();
                 for facet in self.facets() {
                     let picked = self
                         .library
@@ -1580,7 +1882,7 @@ impl Ui {
             band: game.color,
             plastic: art::plastic(game.system_id),
         };
-        if matches!(self.prefs.theme, Theme::Minimal | Theme::Cards | Theme::Split) {
+        if self.prefs.theme == Theme::Split {
             let (cw, ch) = pocket_ui::game_info::cover_room(c.w, c.h, &lib.cards[index]);
             let key = (index, cw, ch);
             if self.info_cover.as_ref().is_none_or(|(old, _)| *old != key) {
@@ -1589,10 +1891,13 @@ impl Ui {
                     (key, std::rc::Rc::new(image.resized(iw, ih)))
                 });
             }
+            // Translate the status at paint time, including after a language change.
+            let mut card = lib.cards[index].clone();
+            card.system = play_cards::system_label(self.experimental(game.system_id), game.system);
             self.info_view.paint(
                 c,
                 text,
-                &lib.cards[index],
+                &card,
                 self.info_cover.as_ref().map(|(_, image)| image),
                 pocket_ui::system_art::get(game.system_id),
             );
@@ -1631,7 +1936,33 @@ impl Ui {
         self.info_cover = None;
     }
     pub fn animating(&self) -> bool {
-        self.screen == Screen::Box && self.box_view.animating(std::time::Instant::now())
+        let now = std::time::Instant::now();
+        self.screen == Screen::Box && self.box_view.animating(now) || self.ajar_moving(now)
+    }
+    /// How far the game of `key` is out of its open case at `now`, 0 (inside) to 1 (where it stands open).
+    pub fn ajar_out(&self, key: &str, now: std::time::Instant) -> f32 {
+        match &self.ajar {
+            Some((k, None)) if k == key => 0.0,
+            Some((k, Some(from))) if k == key => pocket_ui::motion::progress(pocket_ui::motion::Kind::Move, *from, now, pocket_ui::eject::AJAR_IN),
+            _ => 1.0,
+        }
+    }
+    /// The game just back is still coming out of its case: the page keeps drawing frames.
+    pub fn ajar_moving(&self, now: std::time::Instant) -> bool {
+        matches!(&self.ajar, Some((_, Some(from))) if pocket_ui::motion::allowed(pocket_ui::motion::Kind::Move) && now < *from + pocket_ui::eject::AJAR_IN + pocket_ui::motion::SETTLE)
+    }
+    /// Back from the game of `key` with its way back (`eject`): saved by Save & quit, it stands open already (the read of
+    /// the files, `frozen_got`, says so a moment later), and what is inside stays in until the case is home.
+    pub fn back_from(&mut self, key: &str, saved: bool) {
+        if saved && self.frozen.insert(key.to_string()) {
+            self.cards.clear();
+            self.reshelve();
+        }
+        self.ajar = Some((key.to_string(), None));
+    }
+    /// Its case is home at `at` (the way back's end, or a button): what is inside comes out from then on.
+    pub fn case_home(&mut self, key: &str, at: std::time::Instant) {
+        self.ajar = Some((key.to_string(), Some(at)));
     }
 }
 
@@ -1760,5 +2091,23 @@ pub fn library(games: Vec<Game>) -> Library {
     let index = Index::build(Arc::new(Catalog::build(features, systems.into_values().collect())), UserState::default());
     let search = pocket_ui::search::Index::build(games.iter().enumerate().map(|(i, g)| (0, i, g.name.as_str())));
     let connections = pocket_ui::connections::Index::build(entries);
-    Library { games, cards, index, search, connections }
+    Library { games, cards, index, search, connections, bios: Vec::new() }
+}
+
+/// What a press on an extra system says while its download channel is not public (no error, nothing is tried).
+/// The first start's step "More systems?" while the channel is not public.
+pub const COMING_SOON_STEP: &str = "These systems are coming to this app later. There is nothing to download yet.";
+pub const COMING_SOON_NOTE: &str = "This system is coming soon. It can't be downloaded yet.";
+
+pub fn core_size(bytes: u64) -> String { format!("{:.1} MB", bytes as f64 / 1_000_000.0) }
+
+impl Ui {
+    pub fn missing_core(&mut self, core: &str) {
+        self.navigate(Screen::Extras);
+        self.core_note = tr(if self.core_channel_open { "This system is not installed yet. Choose Download now to add it on Wi-Fi." } else { COMING_SOON_NOTE });
+        if let Some(index) = self.core_offers.iter().position(|p| p.core == core) {
+            self.menu = PHONE_EXTRAS.len() + 1 + index;
+            self.follow = true;
+        }
+    }
 }

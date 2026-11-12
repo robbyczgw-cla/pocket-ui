@@ -203,6 +203,9 @@ struct Shared {
     audio: Vec<i16>,
     /// RETRO_DEVICE_ID_JOYPAD_* bits of player 1.
     buttons: u16,
+    input_probe: bool,
+    input_probe_reads: u64,
+    input_probe_bits: u16,
     /// Players 2 to 4 (ports 1..3): their joypad bits and sticks (`Core::set_player`; couch co-op, `players`).
     others: [(u16, [i16; 4]); OTHER_PORTS],
     system_dir: CString,
@@ -789,7 +792,14 @@ unsafe extern "C" fn input_state(port: c_uint, device: c_uint, index: c_uint, id
     if device != DEVICE_JOYPAD {
         return 0;
     }
-    SHARED.with_borrow(|s| joypad_read(s.buttons, id))
+    SHARED.with_borrow_mut(|s| {
+        let value=joypad_read(s.buttons,id);
+        if s.input_probe {
+            s.input_probe_reads+=1;
+            s.input_probe_bits|=if id==JOYPAD_MASK {value as u16} else if value!=0 && id<16 {1u16<<id} else {0};
+        }
+        value
+    })
 }
 
 /// The controller type to plug in from a port's list: the DualShock or another analog pad when `analog` (some cores
@@ -912,7 +922,9 @@ impl Core {
         SHARED.with_borrow_mut(|s| {
             *s = Shared::default();
             let saved: Vec<(String, String)> = options.iter().map(|(k, v)| (k.to_string(), v.to_string())).collect();
-            s.opts = OptionSet::new(core_options::curation(&core_options::core_id(core_path)), &saved);
+            let id = core_options::core_id(core_path);
+            let profile = if cfg!(target_os = "android") { core_options::android_curation(&id) } else { core_options::curation(&id) };
+            s.opts = OptionSet::new(profile, &saved);
             s.trace = std::env::var_os("POCKET_CORE_TRACE").is_some();
             crate::vfs::TRACE.store(s.trace, std::sync::atomic::Ordering::Relaxed);
             s.system_dir = CString::new(system_dir.as_os_str().as_encoded_bytes()).unwrap_or_default();
@@ -1024,6 +1036,13 @@ impl Core {
                 size_queries: Default::default(),
                 pad_min: None,
             };
+            // Flycast starts every Maple port disconnected. Its first-run setup waits for
+            // all four device selections, including the controller carrying the VMU.
+            // Configure them here so Android and other callers are ready before retro_run.
+            if crate::core_options::core_id(core_path) == "flycast" {
+                core.use_analog_pad();
+                core.plug_other_players(true);
+            }
             core.read_sram();
             core.read_rtc();
             Ok(core)
@@ -1165,22 +1184,36 @@ impl Core {
     /// `retro_serialize_size` was asked (Flycast measures and writes in two stops) is asked again once with the new size,
     /// instead of losing the save.
     pub fn save_state(&self) -> Option<Vec<u8>> {
+        self.save_state_with_serialize_time().map(|(bytes, _)| bytes)
+    }
+
+    /// The elapsed time spent inside `retro_serialize`, excluding size queries, buffer allocation
+    /// and file work. Retrying a grown state counts both serialize calls.
+    pub fn save_state_with_serialize_time(&self) -> Option<(Vec<u8>, std::time::Duration)> {
         if self.no_states {
             return None;
         }
         unsafe {
             let size: Symbol<unsafe extern "C" fn() -> usize> = self.lib.get(b"retro_serialize_size").ok()?;
             let save: Symbol<unsafe extern "C" fn(*mut c_void, usize) -> bool> = self.lib.get(b"retro_serialize").ok()?;
+            let mut elapsed = std::time::Duration::ZERO;
+            let mut serialize = |buf: &mut [u8]| {
+                if buf.is_empty() { return false; }
+                let started = std::time::Instant::now();
+                let ok = save(buf.as_mut_ptr() as *mut c_void, buf.len());
+                elapsed += started.elapsed();
+                ok
+            };
             let mut buf = vec![0u8; size()];
-            if !buf.is_empty() && save(buf.as_mut_ptr() as *mut c_void, buf.len()) {
-                return Some(buf);
+            if serialize(&mut buf) {
+                return Some((buf, elapsed));
             }
             let again = size();
             if again == buf.len() {
                 return None;
             }
             buf = vec![0u8; again];
-            (!buf.is_empty() && save(buf.as_mut_ptr() as *mut c_void, buf.len())).then_some(buf)
+            serialize(&mut buf).then_some((buf, elapsed))
         }
     }
 
@@ -1198,6 +1231,17 @@ impl Core {
     /// A RetroArch container ("RASTATE\1") must have every section length inside the real file bytes (`rastate_sections_fit`).
     pub fn pad_short_states(&mut self, min: usize) {
         self.pad_min = Some(min);
+    }
+
+    /// What the shared policy (`state_policy`) says about this core's state sizes: states that vary, or that are padded
+    /// to the size asked now. Linux and Android both call it, so a core is treated alike on either.
+    pub fn apply_state_policy(&mut self, core_id: &str) {
+        if crate::state_policy::core_states_vary(core_id) {
+            self.states_vary_in_size();
+        }
+        if crate::state_policy::core_pads_short_states(core_id) {
+            self.pad_short_states(crate::state_policy::PADDED_STATE_MIN);
+        }
     }
 
     /// No saving, loading or rewinding from here on, whatever the core offers (`hostsys::HostSystem::no_states`).
@@ -1540,6 +1584,15 @@ impl Core {
     /// The core's names for player 1's buttons.
     pub fn described_inputs(&self) -> Vec<Described> {
         SHARED.with_borrow(|s| s.described.clone())
+    }
+
+    /// Enable bounded diagnostic observations of player 1's actual joypad callback reads.
+    pub fn input_probe(&self, enabled:bool) {
+        SHARED.with_borrow_mut(|s| {s.input_probe=enabled;s.input_probe_reads=0;s.input_probe_bits=0;});
+    }
+    /// Reads and clears the diagnostic interval, without changing any button state.
+    pub fn take_input_probe(&self)->(u64,u16) {
+        SHARED.with_borrow_mut(|s|(std::mem::take(&mut s.input_probe_reads),std::mem::take(&mut s.input_probe_bits)))
     }
 
     /// Analog sticks for cores that read them: left x/y, right x/y.
@@ -2341,9 +2394,7 @@ bool retro_unserialize(const void *d, size_t n) {
         let g = Game::built("moving-size", "srm", &["-DMOVING_SIZE"]);
         let start = || {
             let mut core = Core::load(&g.core, &g.rom, &g.dir, &g.dir, &[]).unwrap();
-            if crate::hostsys::core_pads_short_states("flycast") {
-                core.pad_short_states(crate::hostsys::PADDED_STATE_MIN);
-            }
+            core.apply_state_policy("flycast");
             core.use_save_extension(g.save_ext);
             let resume = core.resume(&g.state);
             (core, resume)
@@ -3195,9 +3246,27 @@ void retro_reset(void) { memset(state, 0, sizeof state); }
 static int av_run = -1, av_state = -1;
 static int ask_av(void) { int f = -1; return env(47 | 0x10000, &f) ? f : -1; }
 static unsigned char pixels[160 * 144 * 2];
+/* PPSSPP (stub_upper_bound): until its renderer is up, three frames here, the size is a fixed placeholder and
+   retro_serialize refuses; an unserialize then is kept and applied when the renderer is up. After that the size is the
+   measured state rounded up, `bound_size`. The state is a header ("PSPS", length) and the machine, zero-padded to the
+   size; the core refuses what has no header. */
+static int upper_bound, frames_run, deferred;
+static size_t bound_size = 41943040;
+static unsigned char kept[8 + sizeof state];
+static int ready(void) { return frames_run >= 3; }
+static int apply_bound(const void *d, size_t n) {
+    if (n < sizeof kept || memcmp(d, "PSPS", 4)) return 0;
+    memcpy(state, (const char *)d + 8, sizeof state);
+    return 1;
+}
+void stub_upper_bound(void) { upper_bound = 1; }
+void stub_bound_size(size_t n) { bound_size = n; }
+int stub_deferred(void) { return deferred; }
 void retro_run(void) {
     static const short tone[4] = { 1, 2, 3, 4 };
     av_run = ask_av();
+    frames_run++;
+    if (upper_bound && deferred && ready()) { deferred = 0; apply_bound(kept, sizeof kept); }
     /* The game moves on one step a frame (in its state), and shows how far it is in its first pixel. */
     state[0]++;
     pixels[0] = state[0];
@@ -3213,13 +3282,26 @@ static bool variable_size;
 static size_t extra, asked_extra;
 void stub_size_grows(void) { extra = 40; }
 void stub_grows_after_asked(void) { asked_extra = 40; }
-size_t retro_serialize_size(void) { size_t n = sizeof state + extra; if (asked_extra) { extra = asked_extra; asked_extra = 0; } return n; }
-bool retro_serialize(void *d, size_t n) { av_state = ask_av(); if (n < sizeof state + extra) return false; memset(d, 0, n); memcpy(d, state, sizeof state); return true; }
+size_t retro_serialize_size(void) { if (upper_bound) return ready() ? bound_size : 134217728; size_t n = sizeof state + extra; if (asked_extra) { extra = asked_extra; asked_extra = 0; } return n; }
+bool retro_serialize(void *d, size_t n) {
+    av_state = ask_av();
+    if (upper_bound) {
+        if (!ready() || n < bound_size) return false;
+        memset(d, 0, n); memcpy(d, "PSPS", 4); ((unsigned *)d)[1] = sizeof state; memcpy((char *)d + 8, state, sizeof state);
+        return true;
+    }
+    if (n < sizeof state + extra) return false; memset(d, 0, n); memcpy(d, state, sizeof state); return true; }
 /* Trusts the size, as many cores do; only a core with states of varying size reads fewer bytes. */
 static size_t last_n, calls_n;
 size_t stub_last_unserialize_len(void) { return last_n; }
 size_t stub_unserialize_calls(void) { return calls_n; }
-bool retro_unserialize(const void *d, size_t n) { last_n = n; calls_n++; av_state = ask_av(); memcpy(state, d, variable_size && n < sizeof state ? n : sizeof state); return true; }
+bool retro_unserialize(const void *d, size_t n) {
+    last_n = n; calls_n++; av_state = ask_av();
+    if (upper_bound) {
+        if (!ready()) { if (n >= sizeof kept) memcpy(kept, d, sizeof kept); deferred = 1; return true; }
+        return apply_bound(d, n);
+    }
+    memcpy(state, d, variable_size && n < sizeof state ? n : sizeof state); return true; }
 /* gpSP's clock selection: deterministic base is in the moment, time source is a frontend option.
    The injected wall clock avoids sleeping and crossing a real second in the regression. */
 static unsigned wall_time = 1000;
@@ -3365,6 +3447,23 @@ void stub_frame(unsigned w, unsigned h, size_t pitch, unsigned bpp) {
     }
 
     #[test]
+    fn input_diagnostics_observe_what_the_loaded_core_actually_reads() {
+        let _l=globals();let stub=Stub::new("input-probe");let core=stub.load();
+        core.input_probe(true);core.run(1<<3);
+        unsafe {
+            let read:unsafe extern "C" fn(u32,u32,u32,u32)->i16=hook(&core,"stub_read");
+            assert_eq!(read(0,DEVICE_JOYPAD,0,3),1);
+            assert_eq!(read(0,DEVICE_JOYPAD,0,JOYPAD_MASK),8);
+            read(1,DEVICE_JOYPAD,0,3);
+        }
+        assert_eq!(core.take_input_probe(),(2,8),"Start reached the actual C core's callback");
+        assert_eq!(core.take_input_probe(),(0,0),"reading a diagnostic interval resets only its observations");
+        core.input_probe(false);
+        unsafe {let read:unsafe extern "C" fn(u32,u32,u32,u32)->i16=hook(&core,"stub_read");assert_eq!(read(0,DEVICE_JOYPAD,0,3),1);}
+        assert_eq!(core.take_input_probe(),(0,0),"normal playback does not collect callback diagnostics");
+    }
+
+    #[test]
     fn long_snes_cheat_groups_apply_every_code_without_overflowing_the_core() {
         let _l = globals();
         let stub = Stub::new("long-cheats");
@@ -3440,6 +3539,30 @@ void stub_frame(unsigned w, unsigned h, size_t pitch, unsigned bpp) {
         assert!(core.save_state().is_none());
         assert!(!core.save_state_into(&mut Vec::new()));
         assert!(core.load_state(&state).is_err());
+    }
+
+    /// Flycast receives input only after its Maple ports have all been configured.
+    #[test]
+    fn android_flycast_has_a_controller_and_vmu_ports_before_start() {
+        let _l = globals();
+        let stub = Stub::new("android-flycast-ports");
+        let source = STUB
+            .replace("static const struct cinfo info[4] = { { pads, 2 }, { pads, 2 }, { plain, 1 }, { NULL, 0 } };",
+                     "static const struct cinfo info[5] = { { plain, 1 }, { plain, 1 }, { plain, 1 }, { plain, 1 }, { NULL, 0 } };")
+            .replace("bool retro_load_game(const void *g) { return env(16, vars); }",
+                     "bool retro_load_game(const void *g) { stub_controller_info(); return env(16, vars); }")
+            + "\nshort stub_connected_start(void) { for (int p=0;p<4;p++) if (plugged[p] != 1) return 0; return input(0,1,0,3); }\n";
+        std::fs::write(stub.dir.join("flycast.c"), source).unwrap();
+        let library = stub.dir.join("libflycast_libretro.so");
+        assert!(std::process::Command::new("cc").args(["-shared", "-fPIC", "-o"]).arg(&library).arg(stub.dir.join("flycast.c")).status().unwrap().success());
+        let core = Core::load(&library, &stub.dir.join("Game.cdi"), &stub.dir, &stub.dir, &[]).unwrap();
+        core.run(1 << joypad::START);
+        unsafe {
+            let start: unsafe extern "C" fn() -> i16 = hook(&core, "stub_connected_start");
+            assert_eq!(start(), 1, "Flycast must see Start: otherwise its game waits forever for a disconnected controller");
+            let plugged: unsafe extern "C" fn(c_uint) -> c_uint = hook(&core, "stub_plugged");
+            for port in 0..4 { assert_eq!(plugged(port), DEVICE_JOYPAD, "all Maple ports must finish initial setup"); }
+        }
     }
 
     /// Couch co-op: players 2 to 4 read their own pad and sticks from ports 1 to 3; the ports the core lists get a pad
@@ -3734,6 +3857,82 @@ void stub_frame(unsigned w, unsigned h, size_t pitch, unsigned bpp) {
         assert_eq!(calls(&core), 2, "the core never saw those");
         assert_eq!(core.load_state(&[state.as_slice(), &[0; 80]].concat()), Ok(()), "longer: for the core to judge");
         assert_eq!(last(&core), 160);
+    }
+
+    /// PPSSPP's `retro_serialize_size` is an upper bound, not the length of the state: 128 MiB until its renderer is up
+    /// (and `retro_serialize` refuses then), later the measured state rounded up to 8 MiB (Bomberman: 41943040). The
+    /// state written at quit is shorter than what the next start asks, so Continue was refused as "wrong size (41943040
+    /// of 134217728 bytes)" on Android (Odin 2 Mini, 2026-11-11), and with a state that grew past a rounding step also
+    /// on Linux. The policy both players apply (`apply_state_policy`) hands it over padded; a damaged state, a cut-off
+    /// one and one without the core's header are still refused.
+    #[test]
+    fn a_core_with_an_upper_bound_size_continues_from_its_shorter_state() {
+        let _l = globals();
+        let hooks = |c: &Core| unsafe {
+            (
+                hook::<unsafe extern "C" fn()>(c, "stub_upper_bound"),
+                hook::<unsafe extern "C" fn(usize)>(c, "stub_bound_size"),
+                hook::<unsafe extern "C" fn() -> usize>(c, "stub_unserialize_calls"),
+                hook::<unsafe extern "C" fn() -> usize>(c, "stub_last_unserialize_len"),
+            )
+        };
+        const PLACEHOLDER: usize = 134_217_728;
+        const MEASURED: usize = 41_943_040;
+        // The session that quits: renderer up, 40 MiB of state, the game at frame 5.
+        let writer = Stub::new("bound-writer");
+        let w = writer.load();
+        unsafe { hooks(&w).0() };
+        assert_eq!(w.state_size(), Some(PLACEHOLDER));
+        assert!(w.save_state().is_none(), "before the renderer is up the core can't save: Save & quit says so");
+        for _ in 0..5 {
+            w.run(0);
+        }
+        assert_eq!(w.state_size(), Some(MEASURED));
+        let saved = w.save_state().expect("saves once the renderer is up");
+        assert_eq!(saved.len(), MEASURED);
+        assert_eq!(saved[8], 5);
+
+        // The next start (Android: the core was run once for its picture info, no renderer yet) asks 128 MiB.
+        let reader = Stub::new("bound-reader");
+        let mut core = reader.load();
+        let (upper, bound, calls, last) = hooks(&core);
+        unsafe { upper() };
+        assert_eq!(core.state_size(), Some(PLACEHOLDER));
+        assert_eq!(core.load_state(&saved), Err(format!("wrong size ({MEASURED} of {PLACEHOLDER} bytes)")), "as it was");
+        assert_eq!(unsafe { calls() }, 0);
+        core.apply_state_policy("ppsspp");
+        // Continue itself, from a file on the card, as the player starts it.
+        let auto = crate::slots::auto_path(&reader.dir.join("Game"));
+        crate::state_file::write(&auto, &saved).unwrap();
+        assert_eq!(core.resume(&auto), Resume::Resumed, "Continue works from the shorter state");
+        assert_eq!((unsafe { calls() }, unsafe { last() }), (1, PLACEHOLDER), "the core was given the whole size it asked");
+        for _ in 0..3 {
+            core.run(0);
+        }
+        assert_eq!(core.save_state().unwrap()[8], 6, "the game went on from frame 5 (applied once the renderer was up)");
+
+        // What is wrong stays refused. Renderer up: the core judges what the player hands it.
+        let calls_before = unsafe { calls() };
+        for n in [0, 1, 8, 1000, (1 << 20) - 1] {
+            assert!(core.load_state(&saved[..n]).is_err(), "{n} bytes are under the minimum");
+        }
+        assert_eq!(unsafe { calls() }, calls_before, "the core never saw those");
+        let foreign = vec![0xABu8; 2 << 20];
+        assert_eq!(core.load_state(&foreign), Err("the core refused it".to_string()), "no header of the core's");
+        let mut damaged = saved.clone();
+        damaged[0] ^= 0xFF;
+        assert!(core.load_state(&damaged).is_err(), "a damaged header");
+        // The state grew past a rounding step since it was written (Linux: asked after the renderer is up).
+        unsafe { bound(MEASURED + (8 << 20)) };
+        assert_eq!(core.load_state(&saved), Ok(()), "a 40 MiB state at a 48 MiB size loads padded");
+        assert_eq!(unsafe { last() }, MEASURED + (8 << 20));
+        // A core that is not on the list still takes only the exact size.
+        let plain = Stub::new("bound-plain");
+        let mut other = plain.load();
+        let (u, _, _, _) = hooks(&other);
+        unsafe { u() };
+        other.apply_state_policy("snes9x");
+        assert_eq!(other.load_state(&saved), Err(format!("wrong size ({MEASURED} of {PLACEHOLDER} bytes)")));
     }
 
     /// A RetroArch container ("RASTATE") whose MEM section claims more than the file holds would make Flycast read past its

@@ -110,12 +110,6 @@ pub fn is_panel(name: &str) -> bool {
     name.starts_with("DSI-") || name.starts_with("eDP-") || name.starts_with("LVDS-")
 }
 
-/// Retroid's dual-screen add-on is a DisplayPort screen too (a Lontium bridge); ROCKNIX sets it up as a second
-/// screen, and it is not a TV.
-pub fn is_add_on_screen(o: &Output) -> bool {
-    let l = |s: &str| s.to_ascii_lowercase().contains("lontium");
-    l(&o.make) || l(&o.model)
-}
 
 /// The panel and the TV, as sway has them now.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -130,7 +124,7 @@ impl Screens {
         for o in outputs {
             if is_panel(&o.name) && s.panel.is_none() {
                 s.panel = Some(o);
-            } else if is_external(&o.name) && !is_add_on_screen(&o) && s.tv.is_none() {
+            } else if is_external(&o.name) && s.tv.is_none() {
                 s.tv = Some(o);
             }
         }
@@ -637,15 +631,6 @@ mod tests {
         assert_eq!(s.shown_tv(), None);
     }
 
-    #[test]
-    fn the_dual_screen_add_on_is_not_a_tv() {
-        let json = r#"[{"name":"DSI-1","active":true,"power":true,"modes":[]},
-            {"name":"DP-1","make":"Lontium Semiconductor","model":"LT6911","active":true,"power":true,
-             "modes":[{"width":1080,"height":1920,"refresh":60000}],"current_mode":{"width":1080,"height":1920,"refresh":60000}}]"#;
-        let s = screens(json);
-        assert!(s.tv.is_none());
-        assert!(plan(&s, &s, Some("DSI-1"), Some(90)).is_empty());
-    }
 
     #[test]
     fn connectors() {

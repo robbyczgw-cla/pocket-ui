@@ -1,8 +1,8 @@
 #!/bin/sh
 # Stand-in for the `systemctl` calls pocket-ui makes for power. There is no systemd on the Brick.
 #   poweroff / reboot   sync, then the firmware's own poweroff / reboot (BusyBox)
-#   suspend             screen off, Wi-Fi client and Bluetooth stopped, then the kernel's "mem" state (UNPROVEN on a real Brick);
-#                       the call returns when it has woken up, everything is put back first
+#   suspend             brick-suspend: radios stopped, the kernel's "mem", back awake with the radios as they were (Wi-Fi and
+#                       Bluetooth come back in the background); pocket-ui calls it only with Power button: Sleep
 #   start|stop|is-active tailscaled   the card's Tailscale (brick-tailscale), started at boot when Settings > Tailscale is on
 #   start|stop|is-active sshd         Remote access (brick-ssh): dropbear with the device's password
 #   start|stop|restart|is-active syncthing   save sync (brick-syncthing), started at boot when Settings > Sync is on
@@ -42,46 +42,7 @@ case "${verb:-}" in
     ${BRICK_SYNC:-sync}; ${BRICK_POWEROFF:-poweroff} ;;
   reboot) ${BRICK_SYNC:-sync}; ${BRICK_REBOOT:-reboot} ;;
   suspend)
-    # Stock trimui_inputd parks its i2c-3 polling while this marker exists (see TRIMUI-BRICK-PRO.md).
-    # Never enter the kernel unless input has been paused. Always release it, including failed writes/signals.
-    INPUTD_FLAG=${BRICK_INPUTD_SUSPEND:-/tmp/system_suspend}
-    if ! : >"$INPUTD_FLAG"; then echo "suspend: cannot pause trimui_inputd" >&2; exit 1; fi
-    trap 'rm -f "$INPUTD_FLAG"' EXIT
-    trap 'exit 1' HUP INT TERM
-    sleep "${BRICK_INPUTD_DRAIN:-0.2}"
-    # What the firmware's own key handler does (screen off, Bluetooth radio off, then "mem"), plus what the usual suspend scripts
-    # found necessary: the Wi-Fi client is stopped before and started after, and a refused or too-short sleep is tried again.
-    ${BRICK_SYNC:-sync}
-    was=$("$HW" bl-get 2>/dev/null)
-    "$HW" bl-set 0 2>/dev/null
-    for r in "${BRICK_RFKILL:-/sys/class/rfkill}"/rfkill*; do
-      [ "$(cat "$r/type" 2>/dev/null)" = bluetooth ] && echo 0 >"$r/state" 2>/dev/null
-    done
-    wpa=${BRICK_WPA_INIT:-/etc/init.d/wpa_supplicant}
-    [ -x "$wpa" ] && "$wpa" stop >/dev/null 2>&1
-    tries=0
-    slept=0
-    while [ $tries -lt 3 ]; do
-      tries=$((tries + 1))
-      t0=$(cut -d. -f1 "${BRICK_UPTIME:-/proc/uptime}" 2>/dev/null)
-      if echo mem >"$POWER_STATE" 2>/dev/null; then slept=1; break; fi
-      t1=$(cut -d. -f1 "${BRICK_UPTIME:-/proc/uptime}" 2>/dev/null)
-      [ $(( ${t1:-0} - ${t0:-0} )) -ge 5 ] && { slept=1; break; }        # it did sleep (the write reports an error on some wake-ups)
-      sleep "${BRICK_SUSPEND_RETRY:-3}"
-    done
-    # Input must return before potentially slow network restarts, on success AND refusal.
-    rm -f "$INPUTD_FLAG"
-    trap - EXIT HUP INT TERM
-    [ -x "$wpa" ] && "$wpa" start >/dev/null 2>&1
-    # The udhcpc that ran through it must renew: the supplicant's restart takes the default route with it, and a udhcpc that just keeps
-    # running never puts it back (seen on the real Brick, 03.11.: LAN fine, nothing outside it, Tailscale offline).
-    if pids=$("${BRICK_PIDOF:-pidof}" udhcpc 2>/dev/null); then kill -USR1 $pids 2>/dev/null; else "${BRICK_UDHCPC:-udhcpc}" -i wlan0 -b >/dev/null 2>&1; fi
-    for r in "${BRICK_RFKILL:-/sys/class/rfkill}"/rfkill*; do
-      [ "$(cat "$r/type" 2>/dev/null)" = bluetooth ] && echo 1 >"$r/state" 2>/dev/null
-    done
-    [ -n "$was" ] && "$HW" bl-set "$was" 2>/dev/null
-    [ "$slept" = 1 ] || exit 1
-    exit 0
+    exec "$BIN/brick-suspend"
     ;;
   restart)
     # The only service pocket-ui restarts is network time (`sync_time`). There is no timesyncd here: one shot of

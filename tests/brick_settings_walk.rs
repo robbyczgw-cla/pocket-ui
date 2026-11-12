@@ -135,10 +135,10 @@ fn fkeys_lights_help_explains_that_the_assignment_is_global() {
 fn the_bricks_pages_call_it_the_brick() {
     let card = Card::new();
     for lang in LANGS {
-        for state in ["tailscale", "sync:off", "sys:power-noboot", "settings:4:4"] {
+        for state in ["tailscale", "sync:off", "sys:power-noboot", "settings:7:2"] {
             let (shown, _) = card.shot(state, lang, "normal");
             // The German and Spanish line under Remote access names no device at all.
-            assert!(shown.contains("Brick") || (state == "settings:4:4" && lang != "en"), "{lang} {state}: {shown}");
+            assert!(shown.contains("Brick") || (state == "settings:7:2" && lang != "en"), "{lang} {state}: {shown}");
             assert!(!shown.contains("Pocket"), "{lang} {state}: {shown}");
         }
     }
@@ -190,7 +190,8 @@ fn sleep_and_power_explains_each_row_in_full_on_the_brick() {
     for lang in LANGS {
         for font in ["barlow", "retro"] {
             for size in ["normal", "medium", "large"] {
-                for state in ["sleep", "sleep:1", "sleep:2", "sleep:3"] {
+                // sleep:3 is Short press (Sleep, the default), and with Right on it Screen off: both explanations whole (08.11.).
+                for state in ["sleep", "sleep:1", "sleep:2", "sleep:3", "sleep:3:keys=r"] {
                     let (shown, boxes) = card.shot_style(state, lang, size, font);
                     assert!(!shown.lines().any(|l| l.ends_with('…') || l.ends_with("...")), "{lang} {font} {size} {state}: {shown}");
                     assert!(boxes.lines().all(|l| !['O', 'E', 'T', 'V'].iter().any(|kind| l.starts_with(*kind))), "{lang} {font} {size} {state}: {boxes}");

@@ -22,10 +22,9 @@ const ROW_GAP: i32 = 12;
 static SNAPSHOT_CARD: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 
 /// "Memory card in the pause menu" (off by default): the full medium beside its blocks instead of the slim row.
-/// Settings → Look → Cozy extras switches it (`cozy_extras::Extra::PauseMemoryCard`); the snapshots
-/// "slot-…:<system>:card" show it too.
+/// Only "slot-…:<system>:card" snapshots request the full medium here; players use the slim row.
 pub(crate) fn pause_memory_card() -> bool {
-    pocket_ui::cozy_extras::on(pocket_ui::cozy_extras::Extra::PauseMemoryCard) || SNAPSHOT_CARD.load(std::sync::atomic::Ordering::Relaxed)
+    SNAPSHOT_CARD.load(std::sync::atomic::Ordering::Relaxed)
 }
 
 impl App {

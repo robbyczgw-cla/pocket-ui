@@ -149,7 +149,7 @@ fn the_tour_explains_six_basics_then_offers_easier_reading() {
     }
     assert!(card.screen("tour:settings", "").lines().any(|l| l == "Next"));
     let reading = card.screen("tour:easy_to_read", "");
-    for word in ["Easy to read", "On", "Off", "Later", "Done"] {
+    for word in ["Big text", "On", "Off", "Later", "Done"] {
         assert!(reading.lines().any(|l| l == word), "{reading}");
     }
     card.screen("tour:easy_to_read:ua", "");
@@ -279,7 +279,7 @@ fn sparse_card(files: &[&str]) -> Card {
 fn an_empty_card_explains_how_to_add_games_in_every_look_and_both_styles() {
     let card = sparse_card(&[]);
     for font in ["barlow", "retro"] {
-        for look in ["shelf", "cabinet", "cards", "split", "minimal", "easy"] {
+        for look in ["shelf", "cabinet", "split", "easy"] {
             let state = if look == "easy" { "big-shelf".into() } else { format!("shelf::{look}") };
             let (words, _) = card.screen_styled(&state, "640x480", "en", "normal", font);
             assert!(words.contains("No games yet") && words.contains("Add games"), "{look}/{font}: a cause and a way forward: {words}");
@@ -291,7 +291,7 @@ fn an_empty_card_explains_how_to_add_games_in_every_look_and_both_styles() {
 fn unknown_games_keep_their_title_and_explain_missing_facts_and_description_in_both_styles() {
     let card = sparse_card(&["Pocket Homebrew Demo (En,Fr) [!].gba"]);
     for font in ["barlow", "retro"] {
-        for look in ["shelf", "cabinet", "cards", "split", "minimal"] {
+        for look in ["shelf", "cabinet", "split"] {
             let turn = if matches!(look, "shelf" | "cabinet") { ":r" } else { "" };
             let (words, _) = card.screen_styled(&format!("info:{look}:gba:pocket homebrew{turn}"), "640x480", "en", "normal", font);
             let words = words.split_whitespace().collect::<Vec<_>>().join(" ");
@@ -338,7 +338,7 @@ fn easy_details_explain_when_a_game_has_no_description() {
 fn one_system_keeps_roms_with_language_tags_typos_and_archive_extensions_visible() {
     let card = sparse_card(&["Pocket Homebrew Demo (En,Fr) [!].gba", "Poket Dmeo [!].zip", "Odd Demo (En,Fr).7z"]);
     for font in ["barlow", "retro"] {
-        let (words, _) = card.screen_styled("shelf:gba:minimal:games", "640x480", "en", "normal", font);
+        let (words, _) = card.screen_styled("shelf:gba:split:games", "640x480", "en", "normal", font);
         for title in ["Pocket Homebrew Demo", "Poket Dmeo", "Odd Demo"] {
             assert!(words.contains(title), "{font}: the file remains a recognisable game: {words}");
         }
@@ -352,7 +352,7 @@ fn a_system_without_known_art_or_facts_still_names_itself_and_counts_its_games()
     let xml = std::fs::read_to_string(&cfg).unwrap().replace("<name>gba</name>", "<name>mystery</name>").replace("Game Boy Advance", "Mystery console");
     std::fs::write(cfg, xml).unwrap();
     for font in ["barlow", "retro"] {
-        for look in ["shelf", "cabinet", "cards", "split"] {
+        for look in ["shelf", "cabinet", "split"] {
             let (words, _) = card.screen_styled(&format!("shelf:mystery:{look}"), "640x480", "en", "normal", font);
             let content = if look == "cabinet" { "Pocket Demo" } else { "1 game" };
             assert!(words.contains("Mystery console") && words.contains(content), "{look}/{font}: unknown systems still have a name and games: {words}");
@@ -364,7 +364,7 @@ fn a_system_without_known_art_or_facts_still_names_itself_and_counts_its_games()
 fn a_series_with_one_owned_game_is_a_fact_and_never_an_empty_link() {
     let card = sparse_card(&["Metroid Fusion (USA).gba"]);
     for font in ["barlow", "retro"] {
-        let (words, _) = card.screen_styled("info:minimal:gba:metroid fusion:d", "640x480", "en", "normal", font);
+        let (words, _) = card.screen_styled("info:split:gba:metroid fusion:d", "640x480", "en", "normal", font);
         assert!(words.contains("Series") && words.contains("Metroid"), "{font}: the series fact stays: {words}");
         assert!(words.lines().any(|w| w == "Play") && !words.lines().any(|w| w == "Open"), "{font}: a single game cannot open an empty connection: {words}");
     }
@@ -446,4 +446,24 @@ fn a_newer_pocket_ui_puts_a_dot_on_system_and_on_updates_and_nowhere_else() {
         assert!(some > none + 20, "{with_dot}: the dot is painted ({some} amber pixels, {none} without)");
     }
     assert_eq!(amber("settings:0:0:dot"), amber("settings:0:0"), "a list without the Updates row shows no dot");
+}
+
+/// A main artifact has newer code than the published release but an older Cargo version: do not offer a downgrade.
+#[test]
+fn development_build_explains_why_it_does_not_offer_a_release_as_newer() {
+    let card = Card::new();
+    for lang in ["en", "de", "es"] {
+        for size in ["640x480", "1024x768"] {
+            let (words, boxes) = card.screen_in("updates:development", size, lang, "normal");
+            let words = words.split_whitespace().collect::<Vec<_>>().join(" ");
+            assert!(boxes.trim().is_empty(), "{lang}/{size}: {boxes}");
+            let explanation = match lang { "de" => "Entwicklungsversion", "es" => "Versión de desarrollo", _ => "Development build" };
+            assert!(words.contains(explanation), "{lang}/{size}: {words}");
+            assert!(!words.contains("0.3.2") && !words.contains("Everything is up to date"), "no false newer-version offer or claim: {words}");
+        }
+    }
+    if !pocket_ui::update::release_build() {
+        let words = card.screen("about", "1024x768");
+        assert!(words.contains("-dev (") && words.contains(option_env!("POCKETUI_COMMIT").unwrap_or("unknown")), "About identifies the dev build and commit: {words}");
+    }
 }

@@ -83,7 +83,7 @@ fn all_five_default_card_looks_show_the_problem_and_keep_their_connection_facts_
     let (_stub, display) = fixture(tmp.path());
     std::fs::write(rom(tmp.path(), "snes", "link to the past"), b"").unwrap();
     std::fs::write(rom(tmp.path(), "ps2", "revenge"), b"").unwrap();
-    for look in ["minimal", "cards", "split", "shelf", "cabinet"] {
+    for look in ["split", "shelf", "cabinet"] {
         let boxed = matches!(look, "shelf" | "cabinet");
         for (lang, size, cause, remedy) in [
             ("en", "normal", "file is empty (0 bytes)", "Copy the game to the card again."),

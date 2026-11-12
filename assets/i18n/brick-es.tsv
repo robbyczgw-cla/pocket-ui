@@ -74,9 +74,6 @@ From pale to full colour.	De pálido a color pleno.
 Steady, breathing, fading, pulsing, a colour cycle, the battery and charger, or off; "Like the rest" follows the colour above.	Fija, respirando, desvaneciéndose, pulsando, ciclo de color, batería y carga, o apagada; "Como las demás" sigue el color de arriba.
 How fast it breathes, fades, pulses or cycles.	Con qué rapidez respira, se desvanece, pulsa o cambia de color.
 
-# Update 6: the beta version (update::brick_short, brick_long)
-{s} beta {n}	{s} beta {n}
-{s} for TrimUI Brick (beta {n})	{s} para TrimUI Brick (beta {n})
 Not saved.	No se ha guardado.
 The emulator choice couldn't be saved on the card. Nothing was changed.	No se pudo guardar la elección de emulador en la tarjeta. No se ha cambiado nada.
 Controllers and headphones. Connected headphones take the sound of games and menus; it comes back to the speaker when they go.	Mandos y auriculares. Los auriculares conectados reciben el sonido de juegos y menús; vuelve al altavoz cuando se desconectan.
@@ -87,9 +84,12 @@ Only pocket-ui starts again, in seconds. Your games, saves and settings stay as 
 New versions of pocket-ui.	Versiones nuevas de pocket-ui.
 User	Usuario
 (unchanged)	(sin cambios)
-The screen goes off and the game waits; any button wakes it.	La pantalla se apaga y el juego espera; cualquier botón la despierta.
 How fast the processor may run, in games and in menus.	Lo rápido que puede ir el procesador, en juegos y en menús.
 A choice saved in the pause menu (Options › Speed, rumble, fan) wins over this one.	Lo que guardes en el menú de pausa (Opciones › Velocidad, vibración, ventilador) manda sobre esto.
 Battery saves and save states. No games, no BIOS files.	Partidas y estados guardados. Sin juegos ni archivos BIOS.
 To {s} on the SD card. Copy it to a computer too.	A {s} en la tarjeta SD. Cópiala también a un ordenador.
-{s} for TrimUI Smart Pro (beta {n})	{s} para TrimUI Smart Pro (beta {n})
+The screen goes off and the game waits; the power button wakes it.	La pantalla se apaga y el juego espera; el botón de encendido la despierta.
+Saves the game and puts the Brick to sleep. The power button wakes it; the game waits in its pause menu.	Guarda el juego y suspende el Brick. El botón de encendido lo despierta; el juego espera en su menú de pausa.
+Only the screen goes dark and the game waits. The power button turns it back on.	Solo se oscurece la pantalla y el juego espera. El botón de encendido la enciende de nuevo.
+Saves the game. The power button wakes it.	Guarda el juego. El botón de encendido lo despierta.
+The power button wakes it.	El botón de encendido lo despierta.

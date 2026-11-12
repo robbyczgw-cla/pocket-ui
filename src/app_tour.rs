@@ -89,8 +89,10 @@ impl App {
             self.frames = s.frames;
             settings = true;
         }
-        if s.over_game != self.over_game {
-            self.over_game = s.over_game;
+        // The Pixel Path level only where the switches keep the pause menu's Pixel Path (`over_game::Level::offered`).
+        let over_game = s.over_game.offered(s.curator.pixel_path);
+        if over_game != self.over_game {
+            self.over_game = over_game;
             settings = true;
         }
         if s.curator != self.curator.prefs {
@@ -120,7 +122,7 @@ impl App {
         }
     }
 
-    /// Settings → Tour: six basics and Easy to read, from the first.
+    /// Settings → Tour: six basics and Big text, from the first.
     pub(crate) fn open_tour(&mut self) {
         self.tour.cards = Some(Cards::new(Mode::Tour, features::tour_list(), self.switches(), self.tour.later.clone()));
     }

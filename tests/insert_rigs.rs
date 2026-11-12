@@ -96,14 +96,14 @@ fn lit(px: &[u8]) -> usize {
 #[test]
 fn cozy_shows_the_mechanism_at_every_step_and_the_plain_animation_elsewhere() {
     let w = World::new("cozy");
-    for system in ["psx", "gamecube", "ps2", "snes", "gba", "n64"] {
+    for system in ["psx", "gamecube", "ps2", "snes", "gba", "n64", "nes", "gbc", "psp", "mastersystem", "gamegear", "pcengine", "3ds"] {
         let (open, down, shut) = (w.frame(system, COZY, 750), w.frame(system, COZY, 1240), w.frame(system, COZY, 1400));
         assert!(lit(&open) > 3000, "{system}: a console stands there");
         assert!(differs(&open, &down) > 2000, "{system}: the game moved");
         assert!(differs(&down, &shut) > 200, "{system}: something still moves after it is in");
     }
     // No rig: the plain animation is there all the same, never a gap.
-    let plain = w.frame("3ds", COZY, 750);
+    let plain = w.frame("wiiu", COZY, 750);
     assert!(lit(&plain) > 3000, "a system without a rig shows its console");
 }
 

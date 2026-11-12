@@ -5,8 +5,15 @@
   </picture>
 </h1>
 
-<p align="center"><b>A free frontend with its own game player for retro handhelds.</b><br>
+<p align="center"><b>A cozy, free OS with its own game player for retro handhelds.</b><br>
 Your games on one shelf, press A and you're playing, right where you left off.</p>
+
+pocket-ui comes in two editions:
+
+- **pocket-ui for Linux**: its own bootable OS image (built on [ROCKNIX](https://rocknix.org)) or an install on a system
+  you already have (ROCKNIX, or a card of its own on the TrimUI Brick). For Anbernic, TrimUI, Retroid and AYN handhelds.
+  This is what you can download today.
+- **pocket-ui for Android**: the same shelf as a frontend app for Android. It is in the works, with no download yet.
 
 <p align="center">
   <a href="https://pocketui.xyz"><img src="docs/media/hero.webp" width="620" alt="The shelf: Advance Wars ready to continue, the last games as cases and every console as a spine"></a>
@@ -27,7 +34,7 @@ Your games on one shelf, press A and you're playing, right where you left off.</
   a few minutes), screen frames, CRT and LCD looks, cheats (on the Brick too) and the controls of that console, from Game Boy to
   PlayStation 2.
 - **Every game in its case.** Box art on real cases, cartridges and discs, stickers for the games you finished, and
-  six looks to choose from, including Easy: one big game at a time, for anyone you hand the handheld to.
+  four looks to choose from, including Easy: one big game at a time, for anyone you hand the handheld to.
 - **Retro, in one switch.** Settings → Look → Style → Retro turns every menu into an old handheld's: pixel letters,
   chunky pixel frames, little icons and soft blips, in Cocoa or Pea. Your shelf and box art stay as they are.
 - **Set up on the handheld.** A calm first start in four steps (language, Wi-Fi, your games, the look) and you're on
@@ -43,7 +50,7 @@ Your games on one shelf, press A and you're playing, right where you left off.</
 
 - **Ready SD card image**: write it to a card with balenaEtcher or Raspberry Pi Imager and start. There is one for the
   Retroid Pocket Mini V2, the Pocket 6 and Nova, the AYN Odin 2 family and each Anbernic H700 model.
-- **TrimUI Brick (Beta)**: unzip the card download onto an empty microSD card and switch on. The Brick's own system isn't
+- **TrimUI Brick**: unzip the card download onto an empty microSD card and switch on. The Brick's own system isn't
   touched, and updates come over Wi-Fi. Tested on one Brick so far.
 - **Already on ROCKNIX?** Unzip the Ports installer into `roms/ports` and pick **Install pocket-ui** under Ports.
   About five minutes, and **Uninstall pocket-ui** brings ROCKNIX's own menu back. Your games, saves and settings stay.
@@ -53,7 +60,7 @@ You bring your own games and, for a few systems, BIOS files; pocket-ui includes 
 
 **Runs on** handhelds with [ROCKNIX](https://rocknix.org): Retroid Pocket Mini V2, Mini, 5, Flip 2, 6 and Nova ·
 AYN Odin 2, Odin 2 Mini and Odin 2 Portal · Anbernic RG35XX Plus, H, Pro, 2024 and SP, RG28XX, RG40XX H and V,
-RG34XX, RG34XX-SP and RG-SP · TrimUI Brick (Beta, from a card of its own) and TrimUI Smart Pro (experimental, same card). Played on most: the Mini V2, the Odin 2 Mini and the RG35XX Plus. Which consoles run on
+RG34XX, RG34XX-SP and RG-SP · TrimUI Brick (from a card of its own) and TrimUI Smart Pro (experimental, same card). Played on most: the Mini V2, the Odin 2 Mini and the RG35XX Plus. Which consoles run on
 which chip: [docs/DEVICES.md](docs/DEVICES.md).
 
 ## Learn more

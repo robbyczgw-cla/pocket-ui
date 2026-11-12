@@ -141,7 +141,7 @@ fn shoot(tmp: &Path, lib: &Path, stub: &Option<PathBuf>, id: usize, j: &Job) -> 
         .env("POCKETUI_LANG", j.lang)
         .env("POCKETUI_TEXT_SIZE", j.text)
         .env("POCKETUI_SNAPSHOT_SIZE", j.size)
-        .env("POCKETUI_FONT", if j.retro { "pixel" } else { "barlow" })
+        .env("POCKETUI_FONT", if j.retro { "retro" } else { "barlow" })
         .env("POCKETUI_TEXT_BOXES", &boxes)
         .env("POCKETUI_TITLE_BLOCKS", &blocks)
         .env("POCKETUI_NAV_PROBE", &probe)
@@ -186,7 +186,7 @@ fn long_game_names_are_whole_beside_their_cover_in_every_look() {
     let lib = library(&tmp);
     let quick = std::env::var_os("POCKETUI_TEST_QUICK").is_some();
     let mut jobs = Vec::new();
-    for look in ["shelf", "cabinet", "cards", "split", "easy"] {
+    for look in ["shelf", "cabinet", "split", "easy"] {
         for size in if quick { vec!["1024x768"] } else { vec!["640x480", "1024x768", "1240x1080"] } {
             for retro in [false, true] {
                 for text in if quick { vec!["normal"] } else { vec!["normal", "large"] } {
@@ -243,7 +243,7 @@ fn long_game_names_are_whole_beside_their_cover_in_every_look() {
     }
     // The meta line stands still: one place for every game of a system (its cover is the same size, so the name's lines
     // never move what is under them), for a look, a size, a font, a text size and a language.
-    for look in ["shelf", "cabinet", "cards", "split"] {
+    for look in ["shelf", "cabinet", "split"] {
         for size in if quick { vec!["1024x768"] } else { vec!["640x480", "1024x768", "1240x1080"] } {
             for retro in [false, true] {
                 for text in if quick { vec!["normal"] } else { vec!["normal", "large"] } {
@@ -293,7 +293,7 @@ fn info_titles_031_are_whole_above_the_fixed_facts() {
             }
         }
     }
-    for look in ["minimal", "cards", "easy", "cabinet"] {
+    for look in ["easy", "cabinet"] {
         for game in 0..GAMES.len() {
             jobs.push(Job { look, size: "1024x768", retro: true, text: "large", lang: "es", game, info: true, home: None, frozen: false });
         }
@@ -354,7 +354,7 @@ fn continue_row_031_meta_line_and_open_word_stay_clear_of_the_name() {
     let lib = library(&tmp);
     let quick = std::env::var_os("POCKETUI_TEST_QUICK").is_some();
     let mut jobs = Vec::new();
-    for look in ["cabinet", "shelf", "cards", "split", "minimal", "easy"] {
+    for look in ["cabinet", "shelf", "split", "easy"] {
         for size in if quick { vec!["1024x768"] } else { vec!["640x480", "1024x768", "1240x1080", "1280x720", "1920x1080"] } {
             for retro in [false, true] {
                 for text in if quick { vec!["normal"] } else if cfg!(feature = "brick") { vec!["normal", "medium", "large"] } else { vec!["normal", "large"] } {
@@ -402,7 +402,7 @@ fn continue_row_031_meta_line_and_open_word_stay_clear_of_the_name() {
     let seen = seen.lock().unwrap();
     let mut wrong = wrong.lock().unwrap();
     // Every look shows the long recent game on one of the rows (else the test would look at the wrong page).
-    for look in ["cabinet", "split", "minimal"] {
+    for look in ["cabinet", "split"] {
         if !seen.iter().any(|s| s.0 == look) {
             wrong.push(format!("{look}: the recent game's name was on neither row"));
         }
@@ -424,7 +424,7 @@ fn just_play_031_texts_stay_clear_in_every_look() {
     let lib = library(&tmp);
     let quick = std::env::var_os("POCKETUI_TEST_QUICK").is_some();
     let mut jobs = Vec::new();
-    for look in ["cards", "cabinet", "shelf", "split", "minimal"] {
+    for look in ["cabinet", "shelf", "split"] {
         for size in if quick { vec!["1024x768"] } else { vec!["640x480", "1024x768", "1240x1080", "1280x720", "1920x1080"] } {
             for retro in [false, true] {
                 for text in if quick { vec!["large"] } else if cfg!(feature = "brick") { vec!["normal", "medium", "large"] } else { vec!["normal", "large"] } {
@@ -484,7 +484,7 @@ fn just_play_031_texts_stay_clear_in_every_look() {
     let seen = seen.lock().unwrap();
     let mut wrong = wrong.lock().unwrap();
     // Every look shows Just Play on one of the four rows (else the test would look at the wrong page).
-    for look in ["cards", "cabinet", "shelf", "split", "minimal"] {
+    for look in ["cabinet", "shelf", "split"] {
         if !seen.iter().any(|s| s.0 == look) {
             wrong.push(format!("{look}: Just Play was on none of the rows"));
         }

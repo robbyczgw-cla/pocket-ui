@@ -15,7 +15,7 @@ use super::App;
 impl App {
     /// At the launch of `path`, after the moment's check (`fresh`: it is left out, the game starts anew): the card this
     /// start shows once its picture is there, or none.
-    pub(crate) fn where_was_i_at_launch(&mut self, system: &str, path: &Path, emulator: &str, core: &str, fresh: bool) {
+    pub(crate) fn where_was_i_at_launch(&mut self, path: &Path, fresh: bool, resumable: bool) {
         self.where_was_i = None;
         if fresh || !self.remind_where {
             return;
@@ -26,15 +26,8 @@ impl App {
         let note = self.library.get(path).note;
         let facts = Facts { on: self.remind_where, kids: self.kids_live(), easy: self.big_on(), last_played: Some(last), play_secs: secs, note: &note };
         self.where_was_i = where_was_i::card(&facts, pocket_ui::recents::now_secs());
-        if self.where_was_i.is_some() {
-            // A preview survives Quit without saving, a deleted state, or a change of emulator. It alone is no
-            // evidence that this start continues a moment. Check only for a start that would show the reminder.
-            let mark = self.recents.list.iter().find(|r| r.path == path).and_then(|r| r.frozen.clone());
-            let game = pocket_ui::frozen::Game { system: system.into(), path: path.into(), emulator: emulator.into(), core: core.into(), mark };
-            if !pocket_ui::frozen::is_frozen(&game, &pocket_ui::frozen::resume_files(&game)) {
-                self.where_was_i = None;
-            }
-        }
+        // The worker validated the moment before preparing this exact launch; a stale preview adds no reminder.
+        if !resumable { self.where_was_i = None; }
         if let Some(card) = &self.where_was_i {
             println!("where was i: {} (note: {})", card.ago, if card.note.is_some() { "yes" } else { "no" });
         }
@@ -42,13 +35,13 @@ impl App {
 
     /// Requests a still hold for a readable reminder. The animation has a deadline; the reminder waits for a
     /// button (`startup::HOLD_STILL`). None without a card, a preview, or pocket-core hosting the game.
-    pub(crate) fn where_was_i_hold(&self, system: &str, path: &Path, hosted: bool) -> Option<Duration> {
+    pub(crate) fn where_was_i_hold(&self, hosted: bool, preview: bool) -> Option<Duration> {
         if !hosted || self.where_was_i.is_none() {
             return None;
         }
         // The moment's picture is what the card stands on: without one there is nothing to hold for (a stat or two,
         // only at a start after a long break).
-        pocket_ui::launch_picture::source(&self.data_dir, system, path)?;
+        if !preview { return None; }
         Some(self.cabinet.launch_delay() + super::FADE)
     }
 
@@ -70,8 +63,9 @@ impl App {
     /// A button while a game is starting: the launch animation is skipped and the card goes at once, and nothing holds
     /// the game's window back (`startup::skip_hold`). Nothing happens when neither is on the screen.
     pub(crate) fn launch_button(&mut self) -> bool {
+        let preparing = self.pending_launch.as_mut().is_some_and(|p| { p.skipped = true; true });
         let reminder = self.where_was_i_skip();
-        if reminder | self.cabinet.skip_insert(Instant::now()) {
+        if preparing | reminder | self.cabinet.skip_insert(Instant::now()) {
             pocket_ui::startup::skip_hold();
             self.launch_at = self.launch_at.map(|t| t.min(Instant::now() - super::FADE));
             self.request_redraw();

@@ -68,7 +68,7 @@ hours. So, on a device:
 - `latency.sh` stops `essway` (or the `pocketui` unit) for the whole run. After `latency.py`, whatever its outcome,
   the device side kills every `pocket-ui` and `pocket-core` still alive (they can only be the harness's), then
   restarts `essway` the way `dev.sh deploy` does (`DEVICE_RESTORE` in `latency.sh`; also in the detached `--wake` run).
-- Last, `latency.sh` runs `scripts/verify-device.sh --no-local` ([DEVELOPING.md](DEVELOPING.md#after-a-deploy-or-a-measurement-scriptsverify-devicesh)):
+- Last, `latency.sh` runs `scripts/verify-device.sh --no-local` ([dev/device-loop.md](dev/device-loop.md#after-a-deploy-or-a-measurement-scriptsverify-devicesh)):
   the unit active, exactly one pocket-ui and it in `essway.service`, no trace variables, the deployed binary running.
   If that fails, `latency.sh` exits 3 and says so (the JSON is fetched first, but no table is printed): fix the
   device before the next run or deploy. The virtual device is not checked (a container, no `essway`).

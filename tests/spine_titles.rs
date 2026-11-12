@@ -1,7 +1,7 @@
 //! Long titles on the spines (`media::spine_fit`, docs/DESIGN.md "Media"): a trailer's frames of 2026-10-29 showed
 //! "Advance…", "Tekken…", "Donkey Kon…" and "Prince of Persia - The Sa…" on spines that had the room. The Shelf and the
 //! Cabinet look with long official titles of SNES, GBA and PS2 games, rendered at 640x480 (the H700 handhelds) and
-//! 1280x720, in Normal and Large text, in each font of Theme → Font (Barlow, and the wider Pixel and Rounded): no title,
+//! 1280x720, in Normal and Large text, in each font of Theme → Font (Barlow, and the wider Pixel): no title,
 //! nor its main part, is cut short with "…" (`Text::fit` notes every cut in `POCKETUI_I18N_MISSES`).
 //!
 //! Needs python3 (and, on Linux without a compositor, scripts/wayland-stub.py), as tests/text_size.rs.
@@ -109,7 +109,7 @@ fn long_titles_fit_their_spines_on_small_and_wide_screens() {
     let lib = library(&tmp);
     let mut wrong = Vec::new();
     // Every font of Theme → Font: the wider ones make a title smaller where Barlow Condensed fits it.
-    for font in ["barlow", "pixel", "rounded"] {
+    for font in ["barlow"] {
         for size in ["640x480", "1280x720"] {
             for text in ["normal", "large"] {
                 for state in ["shelf:snes:shelf:games:0", "shelf:gba:shelf:games:0", "shelf:ps2:shelf:games:0", "shelf:nds:shelf:games:0", "shelf:snes:cabinet:games:0", "shelf:gba:cabinet:games:0"] {

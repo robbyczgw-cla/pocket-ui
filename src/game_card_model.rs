@@ -124,7 +124,7 @@ pub struct CardData {
     pub port: Option<(String, bool)>,
     /// PortMaster has a newer version of this port: a quiet note under the Speed line (A updates it in Extras).
     pub port_update: bool,
-    /// Opened by "Surprise me": why this game ("Not played for 3 months · you like platformers"); Right picks again.
+    /// Opened by X on Just Play: why this game ("Not played for 3 months · you like platformers"); Right picks again.
     pub surprise: Option<String>,
     /// The game's pictures come from the libretro collection: the status picker offers "Wrong pictures? Look up
     /// again" (`Out::LookUpAgain`).

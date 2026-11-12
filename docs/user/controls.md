@@ -17,7 +17,7 @@ puts A at the bottom and B on the right in every menu of pocket-ui; games keep t
 | Button | What it does |
 |---|---|
 | D-pad Up / Down | Move through the list. Hold to keep moving. The list stops at its ends. |
-| D-pad Left / Right | The same as Up / Down (handy in the Cards look). |
+| D-pad Left / Right | The same as Up / Down. |
 | L1 / R1 | Jump five entries up / down. |
 | L2 / R2 | Jump to the previous / next first letter (on Home: to the first system, then letter by letter through the systems). The letter shows large for a moment. Hold to keep jumping. Like Up and Down, this stops at the ends of the list: R2 in the last letter goes to the last entry. |
 | Up on Continue | **Search**, the row above it: A opens the [search](playing.md#finding-a-game). |
@@ -34,9 +34,6 @@ In the **Cabinet** look, Left / Right move along a shelf and Up / Down go to the
 top shelf opens the [search](playing.md#finding-a-game). B does nothing there: all the shelves are on one screen.
 The one exception is a Curator list opened from the Curator shelf or the Lens: B goes back there.
 
-**Up next.** After you quit a game, the shelf may show [Up next](curator.md#up-next), a game of yours like the one
-you played. While it shows, **A** plays that game and **B** puts it away; any other button puts it away and does
-what it always does. It goes by itself after a few seconds, and then A is the shelf's again. A tap on it plays it.
 
 ## In the search
 
@@ -72,11 +69,11 @@ In the list:
 | SELECT | The order of the games: Name, Last played first, Most played first, Best rated first, Oldest first, Shortest first ([Lens](curator.md#lens)). |
 | B | Back. The Lens keeps its picks and order until pocket-ui restarts. |
 
-On a game's card, Down moves onto the Curator rows (Echoes, Versions, Stickers & labels) and A opens them; on the touch
+On a game's card, Down moves onto the Curator rows (Echoes, Versions, Stickers) and A opens them; on the touch
 screen, tap a row to select it and tap it again to open it. On the Echoes page
 A plays and X opens the card; on the Versions page A plays and Y makes a version the preferred one. The card's
 other buttons are in [Your library](library.md#opening-a-card); Y there also sets your [rating](library.md#my-rating) (Left /
-Right on the My rating row). On a card opened by [Surprise me](curator.md#surprise-me), D-pad Right picks another game.
+Right on the My rating row). On a card opened by X on [Just Play](curator.md#just-play), D-pad Right picks another game.
 
 ## In History
 
@@ -174,7 +171,7 @@ Shortcuts on pocket-ui's own host (each can be switched off in Options → Short
 | HOME + R2 | Fast-forward on / off. |
 | Hold HOME + L2 | Rewind while held (only when Rewind is on under Speed, rumble, fan). |
 | HOME + Y | [Over the game](pause-menu.md#over-the-game): the next of Off, FPS, FPS + sensors and Pixel Path, until you quit. |
-| HOME + X | [Zoom](easy-to-read.md#zoom): the paused picture larger; B goes back into the game. Off until Options → Shortcuts → Zoom is switched on. |
+| HOME + X | [Zoom](big-text.md#zoom): the paused picture larger; B goes back into the game. Off until Options → Shortcuts → Zoom is switched on. |
 | HOME + A | [Screenshot](playing.md#screenshots): a picture of the game, saved to the SD card. "Screenshot saved" shows for a moment. Always the button printed A, whatever [Button layout](settings.md#button-layout) says. |
 
 HOME + A also works in the games of the standalone emulators (PlayStation 2, GameCube, Wii, 3DS) and in PortMaster

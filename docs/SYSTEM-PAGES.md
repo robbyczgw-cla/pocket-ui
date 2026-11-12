@@ -54,7 +54,7 @@ without pause menu, switcher or recents. pocket-ui shows "Starting <name>" until
 Settings page steps aside while the tool runs (`settings_aside_for_app`): Settings input comes before a running
 game's in the event loop, so the buttons pressed in the tool would otherwise have moved and started things on the
 page underneath. It comes back when the tool ends (`settings_after_app`; the same for a PC game started from
-Settings → Games → PC streaming). A tool (or a PC game) that ends with an error within 3 s is explained in red on the page
+Settings → Help & tools → For tinkerers → PC streaming). A tool (or a PC game) that ends with an error within 3 s is explained in red on the page
 it came from (`settings_after_app`; a notice would only show over the shelf).
 
 **Leaving a tool.** Its own Quit; ROCKNIX's kill combination L1 + SELECT + START for scripts that name their
@@ -65,11 +65,11 @@ its script ends normally; after every tool pocket-ui runs `systemctl start input
 (`tools::after_tool`, a no-op when it runs), so a stopped GPcal can't leave the Pocket without its controls.
 
 **Store tools** run as before: `sh <script>` in `/tmp` on a thread, the last line of output shown on the page
-(`tools::run_quiet`, shared with the Store's Run).
+(`tools::run_quiet`).
 
 **Store tools are no longer in ROCKNIX's folder.** `001-sync-modules` runs `rsync -a --delete` into
 `/storage/.config/modules` at every boot, so tools the Store put there were gone after the next start (confirmed on
-the Mini V2). They now go to `<data>/tools`, and older installs are moved over or forgotten: [STORE.md](STORE.md#tools).
+the Mini V2). They now go to `<data>/tools`, and older installs are moved over or forgotten: [STORE.md](STORE.md).
 
 ## Wi-Fi
 
@@ -117,7 +117,7 @@ locked system.cfg writer is merged, that is the one place to switch over. The wa
 
 ## PC streaming
 
-Settings → Games → **PC streaming** (`src/moonlight.rs`, `moonlight_page.rs`, `app_moonlight.rs`), user side in
+Settings → Help & tools → For tinkerers → **PC streaming** (`src/moonlight.rs`, `moonlight_page.rs`, `app_moonlight.rs`), user side in
 [user/pc-streaming.md](user/pc-streaming.md).
 
 **Pairing.** Moonlight Embedded 2.7.0 (ROCKNIX 20261001) has no option to be given a PIN: `moonlight pair [host]`
@@ -199,7 +199,7 @@ Settings → System → **Backup & reset** (`src/backup.rs`, `backup_page.rs`, `
 | `setup:wifi[:<keys>]` | Settings → Connections → Wi-Fi with a made-up neighbourhood and three saved networks (keys as for the other `setup:` states: `d` down, `a`, `y` forget, `x` scan) |
 | `setup:wifi-off`, `-switch-failed`, `-save-failed`, `-scan-failed`, `-empty`, `-switching` | The same page with the radio off (the boot hooks blocked it), with a switch that did not work, with a scan that failed, with one that found nobody, and with the radio on its way on (`net_state::demo`); the picture stays as it is |
 | `sys:quick-wifi-off`, `sys:quick-wifi-failed`, `sys:quick-wifi-save-failed` | Quick settings with the Wi-Fi row on Off, and with the line of a switch that did not work |
-| `pc-streaming[:<row>][:pin\|:searching\|:address\|:unpair\|:done\|:none\|:missing]` | Settings → Games → PC streaming with two PCs and three games |
+| `pc-streaming[:<row>][:pin\|:searching\|:address\|:unpair\|:done\|:none\|:missing]` | Settings → Help & tools → For tinkerers → PC streaming with two PCs and three games |
 | `backup[:<row>][:reset\|:restore\|:done\|:empty\|:saves-counted\|:saves-card\|:saves-copying\|:saves-full\|:saves-restore\|:saves-done]` | Settings → System → Backup & reset with made-up backups: saves counted (and on a second card), being copied, not fitting, compared for a restore, done |
 
 ## Trying it in the virtual device

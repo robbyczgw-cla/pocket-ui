@@ -9,7 +9,7 @@
 A heuristic, not a parser: it reads string literals outside tests, logs, panics and attributes, keeps the ones
 that read like words for a person (a capital letter or a space, not a path, key or identifier) and turns format
 strings into patterns ("{} games" -> "{n} games"). The authoritative check is tests/i18n_snapshots.rs, which
-renders the snapshot states in German and fails on what is shown untranslated. See docs/DEVELOPING.md
+renders the snapshot states in German and fails on what is shown untranslated. See docs/dev/translations.md
 "Translations".
 """
 import os
@@ -24,6 +24,8 @@ SKIP = os.path.join(ROOT, "assets", "i18n", "skip.txt")
 
 # Files that show nothing on the screen (tools, tests, the docs check).
 SKIP_FILES = {"doc_checks.rs", "bin/hello_pad.rs", "bin/store_tool.rs", "manual.rs", "curator/tests.rs", "web/tests.rs", "testutil.rs",
+              # Android's way back on a host (`#[cfg(test)]` only): fixture games, never painted by the app.
+              "android_eject_tests.rs",
               # Where the UI is: machine codes for `@where`, /tmp/pocket-ui.status and logs, never painted (DEVICE-TESTS.md).
               "app_where.rs", "ui_status.rs",
               # pocket-core's FIFO contract tests (`#[cfg(test)]`): command words, never painted.
@@ -414,7 +416,7 @@ def main(argv):
         print(
             f"\n{len(missing)} strings have no German line: translate them in assets/i18n/de.tsv (scripts/i18n-extract.py "
             "--stub prints them as lines to fill in), or add a name to assets/i18n/keep.txt, or something never shown "
-            "(a log line, a key) to assets/i18n/skip.txt. docs/DEVELOPING.md \"Translations\".",
+            "(a log line, a key) to assets/i18n/skip.txt. docs/dev/translations.md \"Translations\".",
             file=sys.stderr,
         )
         return 1

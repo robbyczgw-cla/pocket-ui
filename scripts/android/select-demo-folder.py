@@ -33,7 +33,7 @@ for step in range(16):
         if target is None: target = next((n for n in nodes if n.get('text') == 'Download' and n.get('resource-id', '').endswith('breadcrumb_text')), None)
         if target is None: target = find(model, 'android:id/title')
         if target is None: target = find('Show roots')
-    if target is None and any(n.get('package') == 'dev.pocket.spike' for n in nodes):
+    if target is None and any(n.get('package') == 'xyz.pocketui.app' for n in nodes):
         subprocess.check_call([adb, '-s', serial, 'shell', 'input', 'keyevent', '34'])
     if target is not None:
         x1, y1, x2, y2 = map(int, re.findall(r'\d+', target.get('bounds')))

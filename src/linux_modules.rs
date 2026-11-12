@@ -23,6 +23,7 @@ pub mod library_cache;
 pub mod pad;
 /// Couch co-op: which controller is player 1 to 4 in pocket-core games, and each player's input.
 pub mod players;
+pub mod android_pads;
 pub mod players_page;
 pub mod zoom;
 pub mod touch;
@@ -32,6 +33,8 @@ pub mod big_shelf;
 // Android's files for Frozen games. On Linux pocket-core uses its set-aside (a moment that isn't loaded goes into a free
 // slot, never under a name the next quit removes), and the gate tests its rules.
 pub mod frozen_phone;
+pub mod save_transfer;
+pub mod save_copy;
 // A phone's Games page: on Linux only so the gate tests its rules.
 #[cfg(test)]
 pub(crate) mod phone_shelves;
@@ -43,6 +46,7 @@ pub mod splash;
 /// The first frame after the Pocket starts fades in from black (docs/BOOT-SPLASH.md).
 pub mod boot_fade;
 pub mod crt_on;
+pub mod eject;
 pub mod cozy_extras;
 pub mod insert_rig;
 pub mod insert_scene;
@@ -60,6 +64,8 @@ pub mod net_state;
 pub mod secret;
 pub mod sockets;
 pub mod remote;
+pub mod report_redact;
+pub mod report_phone;
 pub mod report;
 pub mod palette;
 pub mod kit;
@@ -76,7 +82,6 @@ pub mod covers;
 pub mod auto_covers;
 pub mod game_pictures;
 pub mod picture_cycle;
-pub mod slideshow;
 pub mod picture_loader;
 pub mod ports;
 pub mod port_files;
@@ -147,6 +152,8 @@ pub mod pixel_live;
 /// Over the game: Off, FPS, FPS + sensors or Pixel Path, one setting for what pocket-core draws over a game.
 pub mod over_game;
 pub mod overlay;
+/// The achievement unlock card, painted alike by pocket-core's HUD and the Android player.
+pub mod unlock_card;
 pub mod standalone;
 pub mod emu_settings;
 pub mod fallback;
@@ -199,12 +206,8 @@ pub mod system_cfg;
 pub mod rescue;
 pub mod display;
 pub mod display_out;
-/// Two screens: the shelf on top, the selected game's box below (the RG DS Plus, Retroid's add-on; docs/DUAL-SCREEN.md).
-pub mod second_screen;
 /// Which handheld this is: the Mini V2 (tested) or one of its experimental SM8250 siblings (docs/DEVICES.md).
 pub mod device;
-/// Window handling without sway (the Steam Deck, X11; the code itself only with `--features x11`).
-pub mod desk;
 #[cfg(target_os = "linux")]
 pub mod gamma;
 pub mod night_light;
@@ -324,8 +327,6 @@ pub mod storage;
 pub mod card_health;
 // A games card in the second slot: it came or went (the shelf reads again, or says so). Sleeps in poll, no wake-ups.
 pub mod games_card;
-// Settings → Connections → USB file transfer: ROCKNIX's MTP gadget on or off.
-pub mod usb_transfer;
 // A Wi-Fi network that wants a sign-in in a browser (a hotel, a train): found by one plain request, said instead of "Check Wi-Fi".
 pub mod net_check;
 // A network with a sign-in page: the Wi-Fi page's sheet (other ways online, the sign-in helper).
@@ -404,3 +405,6 @@ pub mod core_command;
 /// Read-only pocket-core play state, using the shared v1 status writer.
 pub mod core_status;
 pub mod document_art;
+
+pub mod android_cores;
+pub mod phone_corner;

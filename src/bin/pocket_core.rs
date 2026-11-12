@@ -324,6 +324,8 @@ struct App {
     /// cut short by a button; `crt_started` once its hook was written.
     crt_on: bool,
     crt_started: bool,
+    /// An old TV or a handheld's display (`crt_on::screen`).
+    crt_screen: pocket_ui::crt_on::Screen,
     /// Woken from sleep and running: the next frame swapped is the first after the wake (`core-frame wake` in the
     /// trace, for `latency.py measure --wake`).
     woke_frame: bool,
@@ -441,6 +443,15 @@ impl App {
         let aspect = Self::display_aspect(&self.core, &self.video_src.0);
         gfx.video.set_rotation(self.rotate_override.unwrap_or_else(|| self.core.rotation()));
         let t0 = Instant::now();
+        // The old-TV power-on opens the picture out of its line, squeezed into what is lit (`crt_on::picture`).
+        let squeeze = match (self.crt_on && self.bench.is_none(), self.shown_at) {
+            (true, Some(t)) => gfx.video.placement(w, h, aspect, &self.video).map(|(r, _)| {
+                let (_, y, _, ph) = pocket_ui::crt_on::picture(self.crt_screen, t.elapsed(), (r.x as f32, r.y as f32, r.w as f32, r.h as f32));
+                (y, ph)
+            }),
+            _ => None,
+        };
+        gfx.video.set_squeeze(squeeze);
         gfx.video.draw(w, h, aspect, &self.video);
         if let Some(overlay) = gfx.overlay.as_mut() {
             // The first quarter second: the frame around the picture fades in from the black pocket-ui showed around
@@ -457,14 +468,15 @@ impl App {
                         self.crt_started = true;
                         pocket_ui::crt_on::start();
                         // Its sound, a thunk and a faint whine, into the game's own: the chime, at the UI sounds' volume.
+                        // A handheld's display switching on has no tube to thunk.
                         let rate = self.core.av.timing.sample_rate;
-                        if self.chime_gain > 0.0 && rate > 0.0 && !pocket_ui::crt_on::silent() {
+                        if self.chime_gain > 0.0 && rate > 0.0 && !pocket_ui::crt_on::silent() && self.crt_screen == pocket_ui::crt_on::Screen::Tv {
                             self.chime.start_samples(pocket_ui::ui_sound::synth_at(pocket_ui::ui_sound::Sound::CrtOn, rate as u32), self.chime_gain);
                         }
                     }
                     // Over the game's picture only, the frame around it keeps its own fade-in (the veil).
                     let area = gfx.video.placement(w, h, aspect, &self.video).map_or((0.0, 0.0, w as f32, h as f32), |(r, _)| (r.x as f32, r.y as f32, r.w as f32, r.h as f32));
-                    let quads = pocket_ui::crt_on::plan(t.elapsed(), area);
+                    let quads = pocket_ui::crt_on::plan_for(self.crt_screen, t.elapsed(), area);
                     if quads.is_empty() {
                         self.crt_on = false;
                     } else {
@@ -488,6 +500,10 @@ impl App {
         // which is no stall of the core (`exit_guard::Progress::display`).
         if gfx.video.has_frame() {
             pocket_ui::fast_switch::presenting_frame();
+        }
+        // A frame dump (POCKETUI_FRAME_DUMP from pocket-ui): this picture as the screen gets it, one tick.
+        if pocket_ui::frame_dump::on() {
+            pocket_ui::frame_dump::capture_screen(gfx.video.read_screen(w, h), w, h);
         }
         let swapped = PROGRESS.display(|| gfx.surface.swap_buffers(&gfx.context).ok());
         // A successful swap of a real game picture is evidence it started. Empty/failed swaps are not.
@@ -808,6 +824,8 @@ impl App {
         if self.chime.playing() && !back && ff.is_none() {
             self.chime.mix(&mut samples);
         }
+        // A frame dump's game sound, as this frame brought it (POCKETUI_FRAME_DUMP).
+        pocket_ui::frame_dump::audio(&samples, self.core.av.timing.sample_rate);
         // Sound is muted while fast-forwarding or rewinding, but the queue still gets its silence
         // so playback continues smoothly when the shortcut is released.
         if let Some(audio) = self.audio.as_mut() {
@@ -1495,9 +1513,10 @@ impl App {
                 println!("fast-forward {} ({speed})", if self.ex.ff_on { "on" } else { "off" });
             }
             Action::Screenshot => self.screenshot(),
-            // Off → FPS → FPS + sensors → Pixel Path → Off, for this game until it quits or the option changes.
+            // Off → FPS → FPS + sensors (→ Pixel Path with the pause menu's Pixel Path on) → Off, for this game until it
+            // quits or the option changes.
             Action::NextOverGame => {
-                self.ex.over_game = self.ex.over_game.step(1);
+                self.ex.over_game = self.ex.over_game.step(1, pocket_ui::over_game::pixel_path_offered(&data_dir()));
                 self.update_strip();
                 self.hud.toast(format!("Over the game: {}", self.ex.over_game.label()));
             }
@@ -1635,12 +1654,31 @@ impl App {
                     self.crt_on = false;
                     self.sleeping = true;
                     self.timeline.stop();
+                    #[cfg(feature = "brick")]
+                    let mut pcm_quiet = true;
                     if let Some(a) = &self.audio {
                         a.pause(true);
+                        // The Brick: no stream open while it may suspend (`Audio::hold`); answered before the next command.
+                        #[cfg(feature = "brick")]
+                        if !a.hold(true) {
+                            pcm_quiet = false;
+                            eprintln!("audio: the stream didn't close for sleep");
+                        }
                     }
+                    #[cfg(feature = "brick")]
+                    if pcm_quiet { pocket_ui::fast_switch::announce_paused(); }
                     // The Brick: the CPU at its lowest speed while the game waits in the dark.
                     #[cfg(feature = "brick")]
                     self.ex.dark(true);
+                    println!("asleep");
+                }
+                #[cfg(feature = "brick")]
+                CoreCommand::Sleep => {
+                    // An already sleeping game still answers a fresh bounded
+                    // screen-off request; a stale earlier pause is insufficient.
+                    if self.audio.as_ref().is_none_or(|a| a.hold(true)) {
+                        pocket_ui::fast_switch::announce_paused();
+                    }
                     println!("asleep");
                 }
                 CoreCommand::ScreenOff if !self.dark => {
@@ -1672,6 +1710,10 @@ impl App {
                     if std::mem::take(&mut self.sleeping) {
                         #[cfg(feature = "brick")]
                         self.ex.dark(false);
+                        #[cfg(feature = "brick")]
+                        if let Some(a) = &self.audio {
+                            a.hold(false);
+                        }
                         self.after_pause();
                         self.woke_frame = !self.paused;
                         pocket_ui::trace::step("core: awake");
@@ -2374,13 +2416,8 @@ fn main() {
             core.states_vary_in_size();
         }
     }
-    // GBA and the other HOST_CORES systems have no `HostSystem`: the core decides (`hostsys::core_states_vary`).
-    if host.is_none_or(|h| !h.states_vary) && hostsys::core_states_vary(&core_options::core_id(core_so)) {
-        core.states_vary_in_size();
-    }
-    if hostsys::core_pads_short_states(&core_options::core_id(core_so)) {
-        core.pad_short_states(hostsys::PADDED_STATE_MIN);
-    }
+    // GBA and the other HOST_CORES systems have no `HostSystem`: the core decides (`state_policy`, shared with Android).
+    core.apply_state_policy(&core_options::core_id(core_so));
     if host.is_some_and(|h| h.analog) {
         println!("player 1: {}", core.use_analog_pad());
     }
@@ -2461,6 +2498,10 @@ fn main() {
         let (rate, heavy) = (core.av.timing.sample_rate, hw_render::is_3d_core(core_so));
         std::thread::spawn(move || Audio::open(rate, heavy))
     };
+    // A pocket-ui recording its frames (POCKETUI_FRAME_DUMP): this game's pictures and sound go into the same dump.
+    if pocket_ui::frame_dump::for_game() {
+        println!("frame-dump: the game's frames to {}", pocket_ui::frame_dump::dir().map_or_else(String::new, |d| d.display().to_string()));
+    }
     let event_loop = EventLoop::new().expect("event loop");
     event_loop.set_control_flow(ControlFlow::Poll);
     let mut app = App {
@@ -2498,6 +2539,7 @@ fn main() {
         hold_down: None,
         crt_on: pocket_ui::startup::held() && pocket_ui::crt_on::wanted(),
         crt_started: false,
+        crt_screen: pocket_ui::crt_on::screen(),
         woke_frame: false,
         held_mask: [0; players::MAX],
         toggled: Default::default(),
@@ -2563,6 +2605,7 @@ fn main() {
     pocket_ui::startup::mark("resume");
     STARTED.set(started).ok();
     event_loop.run_app(&mut app).expect("run");
+    pocket_ui::frame_dump::finish(pocket_ui::frame_dump::tick(), 0);
     PROGRESS.exiting();
     pocket_ui::fast_switch::mark("event loop left");
     // The Disc row's file ends with the game (a game started meanwhile keeps its own).

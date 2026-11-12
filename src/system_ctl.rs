@@ -368,8 +368,7 @@ impl RealHw {
         RealHw { root: root.into(), settle: std::time::Duration::from_secs(4), nm_radio: Mutex::new(None) }
     }
 
-    /// The first backlight by name; on a handheld with two panels the upper one's (`second_screen::Panels`), whose
-    /// level the lower one follows.
+    /// The first backlight by name.
     fn backlight(&self) -> Option<(PathBuf, u32)> {
         let mut dirs: Vec<PathBuf> = std::fs::read_dir(self.root.join("sys/class/backlight"))
             .ok()?
@@ -377,9 +376,6 @@ impl RealHw {
             .map(|e| e.path())
             .collect();
         dirs.sort();
-        if let Some(upper) = crate::second_screen::Panels::current().and_then(|p| crate::second_screen::light_dir(&self.root, &p.top_light)) {
-            dirs.insert(0, upper);
-        }
         dirs.into_iter().find_map(|d| {
             let max: u32 = read(&d.join("max_brightness"))?.parse().ok()?;
             (max > 0 && d.join("brightness").exists()).then_some((d, max))
@@ -520,7 +516,6 @@ impl Hw for RealHw {
         if let Some((dir, max)) = self.backlight() {
             let raw = pct.clamp(MIN_BRIGHTNESS, 100) as u32 * max / 100;
             let _ = std::fs::write(dir.join("brightness"), raw.to_string());
-            crate::second_screen::follow_light(&self.root, raw, max);
         }
     }
 
@@ -618,7 +613,7 @@ impl Hw for RealHw {
     }
 
     fn wifi_wanted(&self) -> Option<bool> {
-        self.system_cfg().get("wifi.enabled").map(|v| v.trim() == "1")
+        crate::system_cfg::wifi_enabled(&self.system_cfg().read())
     }
 
     fn persist_wifi(&self, on: bool) -> bool {
@@ -789,7 +784,7 @@ impl Hw for RealHw {
 
     #[cfg(not(feature = "brick"))]
     fn power(&self, action: PowerAction) -> Result<(), String> {
-        if action == PowerAction::Sleep && crate::device::rocknix_cooling(&self.root) {
+        if action == PowerAction::Sleep && crate::device::rocknix_screen_off_only(&self.root) {
             return Err(crate::sleep_settings::NO_SLEEP.into());
         }
         if action.argv().is_empty() {
@@ -800,7 +795,7 @@ impl Hw for RealHw {
 
     #[cfg(feature = "brick")]
     fn power(&self, action: PowerAction) -> Result<(), String> {
-        if action == PowerAction::Sleep && (crate::device::rocknix_cooling(&self.root) || crate::device::current().screen_off_only()) {
+        if action == PowerAction::Sleep && crate::device::rocknix_screen_off_only(&self.root) {
             return Err(crate::sleep_settings::no_sleep().into());
         }
         if action.argv().is_empty() {

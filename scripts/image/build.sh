@@ -2,13 +2,15 @@
 # The container half of scripts/make-image.sh. Runs in pocket-image-tools with the repository at /repo (read-only)
 # and the work directory at /w. Writes only to files in /w; never to a block device (there are none in here).
 #   build.sh extract              /w/base.img -> /w/KERNEL, /w/miniv2-noufs.dtb
+#   build.sh extract-efi          FAMILY=SM8550 MODEL=<a Retroid>: /w/base.img -> /w/KERNEL, /w/<model>-noufs.dtb
 #   build.sh strip-system         /w/base.img's SYSTEM -> /w/SYSTEM, repacked without pins.sh SYSTEM_REMOVE
 #   build.sh assemble VERSION EPOCH
 #       /w/image.img (a copy of base.img) gets the boot files from /w/sd-efi, the initramfs hooks, the notes from
 #       /w/info, and pocket-ui from /w/bin on STORAGE. EPOCH (seconds) is the time stamp of every added file.
 # FAMILY=H700, SM8550 or RK3566 (scripts/make-image-family.sh): that family's pins instead; strip-system works on its SYSTEM,
 # and assemble takes MODEL (and no boot files from /w/sd-efi): no GRUB; on the H700 the FAT root gets dtb.img, a copy of
-# that model's tree from device_trees/, and on the RK3566 extlinux.conf names that model's tree instead of the X55's.
+# that model's tree from device_trees/, and on the RK3566 extlinux.conf names that model's tree instead of the X55's. The
+# SM8550 Retroids (pins.sh SM8550_EFI_MODELS) are the exception: they take /w/sd-efi as the SM8250 cards do, next to KERNEL.
 set -eu
 . /repo/scripts/image/pins.sh
 FAMILY=${FAMILY:-SM8250}
@@ -19,24 +21,49 @@ if [ "$FAMILY" != SM8250 ]; then
   SYSTEM_ZIP_REMOVE=$FAM_SYSTEM_ZIP_REMOVE
   POCKET_SYSTEM_MD5=$FAM_POCKET_SYSTEM_MD5
 fi
+if [ "$FAMILY" = SM8250 ]; then sm8250_pins "${MODEL:-rp-mini-v2}"; fi
 W=/w
 die() { echo "build.sh: $*" >&2; exit 1; }
 md5() { md5sum "$1" | cut -d' ' -f1; }
 
 extract() {
   FAT="$W/base.img@@$((P1_START * 512))"
-  rm -f "$W/KERNEL" "$W/miniv2-noufs.dtb"
+  rm -f "$W/KERNEL" "$W/$SM8250_DTB_FILE"
   mcopy -n -i "$FAT" ::/KERNEL "$W/KERNEL"
   [ "$(md5 "$W/KERNEL")" = "$KERNEL_MD5" ] || die "KERNEL md5 $(md5 "$W/KERNEL") is not ROCKNIX $ROCKNIX_TAG's $KERNEL_MD5"
   # The Mini V2 tree among the device trees appended to KERNEL, then the internal UFS switched off in place.
   # fdtput changes only the two properties, so the result is byte for byte the tree that booted on the device.
-  python3 -I /repo/scripts/make-test-bootimg.py "$W/KERNEL" /tmp/kernel-test.img "Retroid Pocket Mini V2" >/dev/null
+  python3 -I /repo/scripts/make-test-bootimg.py "$W/KERNEL" /tmp/kernel-test.img "$SM8250_MODEL_NAME" >/dev/null
+  [ "$(md5 /tmp/kernel-test.img.orig.dtb)" = "$SM8250_ORIG_MD5" ] || die "original device tree hash mismatch"
   cp /tmp/kernel-test.img.orig.dtb /tmp/noufs.dtb
   fdtput -t s /tmp/noufs.dtb /soc@0/ufshc@1d84000 status disabled
   fdtput -t s /tmp/noufs.dtb /soc@0/phy@1d87000 status disabled
   [ "$(md5 /tmp/noufs.dtb)" = "$DTB_MD5" ] || die "device tree md5 $(md5 /tmp/noufs.dtb), expected $DTB_MD5"
-  cp /tmp/noufs.dtb "$W/miniv2-noufs.dtb"
-  echo "KERNEL and miniv2-noufs.dtb extracted, both as expected"
+  [ "$(fdtget -t s /tmp/noufs.dtb /soc@0/ufshc@1d84000 status)" = disabled ] &&
+    [ "$(fdtget -t s /tmp/noufs.dtb /soc@0/phy@1d87000 status)" = disabled ] || die "internal UFS is not disabled"
+  cp /tmp/noufs.dtb "$W/$SM8250_DTB_FILE"
+  echo "KERNEL and $SM8250_DTB_FILE extracted, both as expected"
+}
+
+# An SM8550 Retroid card (pins.sh SM8550_EFI_MODELS): KERNEL, and the model's tree from it with the internal UFS switched
+# off in place, as extract does for the SM8250 cards (only the status properties change).
+extract_efi() {
+  FAT="$W/base.img@@$((P1_START * 512))"
+  sm8550_efi_pins "${MODEL:-}" || die "$MODEL is not in SM8550_EFI_MODELS"
+  rm -f "$W/KERNEL" "$W/$EFI_DTB_FILE"
+  mcopy -n -i "$FAT" ::/KERNEL "$W/KERNEL"
+  [ "$(md5 "$W/KERNEL")" = "$FAM_KERNEL_MD5" ] || die "KERNEL md5 $(md5 "$W/KERNEL") is not ROCKNIX $ROCKNIX_TAG's $FAM_KERNEL_MD5"
+  python3 -I /repo/scripts/make-test-bootimg.py "$W/KERNEL" /tmp/kernel-test.img "$EFI_MODEL_NAME" >/dev/null
+  [ "$(md5 /tmp/kernel-test.img.orig.dtb)" = "$EFI_ORIG_MD5" ] || die "original device tree of the $EFI_MODEL_NAME: hash mismatch"
+  cp /tmp/kernel-test.img.orig.dtb /tmp/noufs.dtb
+  for node in $SM8550_UFS_NODES; do fdtput -t s /tmp/noufs.dtb "$node" status disabled; done
+  [ "$(md5 /tmp/noufs.dtb)" = "$EFI_DTB_MD5" ] || die "device tree md5 $(md5 /tmp/noufs.dtb), expected $EFI_DTB_MD5"
+  for node in $SM8550_UFS_NODES; do
+    [ "$(fdtget -t s /tmp/noufs.dtb "$node" status)" = disabled ] || die "internal UFS ($node) is not disabled"
+  done
+  cp /tmp/noufs.dtb "$W/$EFI_DTB_FILE"
+  rm -f /tmp/kernel-test.img*
+  echo "KERNEL and $EFI_DTB_FILE extracted, both as expected"
 }
 
 # ROCKNIX's SYSTEM without the files in SYSTEM_REMOVE. Unpacked as root (owners, modes, device nodes and times
@@ -44,38 +71,41 @@ extract() {
 # settings ROCKNIX used (unsquashfs -s: zstd level 19, 1 MiB blocks, no xattrs) and its creation time. The listing of the new SYSTEM must be
 # the old one minus exactly the removed paths.
 strip_system() {
+  # Linux ownership, modes and symlinks need the container filesystem, not a
+  # macOS bind mount (e.g. usr/cache/shadow cannot be unpacked there).
+  SYSROOT=/tmp/pocket-image-sysroot
   FAT="$W/base.img@@$((P1_START * 512))"
-  rm -rf "$W/SYSTEM.orig" "$W/SYSTEM" "$W/sysroot"
+  rm -rf "$W/SYSTEM.orig" "$W/SYSTEM" "$SYSROOT"
   mcopy -n -i "$FAT" ::/SYSTEM "$W/SYSTEM.orig"
   [ "$(md5 "$W/SYSTEM.orig")" = "$SYSTEM_MD5" ] || die "SYSTEM md5 is not ROCKNIX $ROCKNIX_TAG's $SYSTEM_MD5"
   # The new SYSTEM keeps ROCKNIX's creation time (superblock bytes 8-11), so its md5 does not depend on our commit.
   MKFS_TIME=$(od -An -t u4 -j 8 -N 4 "$W/SYSTEM.orig" | tr -d ' ')
-  unsquashfs -q -n -d "$W/sysroot" "$W/SYSTEM.orig" >/dev/null || die "unsquashfs failed"
+  unsquashfs -q -n -d "$SYSROOT" "$W/SYSTEM.orig" >/dev/null || die "unsquashfs failed"
   for p in $SYSTEM_REMOVE; do
-    [ -e "$W/sysroot/$p" ] || die "$p is not in ROCKNIX's SYSTEM"
-    parent=$(dirname "$W/sysroot/$p")
+    [ -e "$SYSROOT/$p" ] || die "$p is not in ROCKNIX's SYSTEM"
+    parent=$(dirname "$SYSROOT/$p")
     stamp=$(stat -c %Y "$parent")
-    rm -rf "${W:?}/sysroot/$p"
+    rm -rf "${SYSROOT:?}/$p"
     touch -d "@$stamp" "$parent"
   done
   echo "$SYSTEM_ZIP_REMOVE" | while read -r z glob; do
     [ -n "$z" ] || continue
-    [ -f "$W/sysroot/$z" ] || die "$z is not in ROCKNIX's SYSTEM"
-    n=$(unzip -Z1 "$W/sysroot/$z" | grep -c "^$(echo "$glob" | sed 's/\./\\./g; s/\*/[^\/]*/g')\$")
+    [ -f "$SYSROOT/$z" ] || die "$z is not in ROCKNIX's SYSTEM"
+    n=$(unzip -Z1 "$SYSROOT/$z" | grep -c "^$(echo "$glob" | sed 's/\./\\./g; s/\*/[^\/]*/g')\$")
     [ "$n" -gt 0 ] || die "$z holds nothing like $glob"
     # zip -d writes a new file and renames it: the archive's and its folder's times are put back afterwards.
-    stamp=$(stat -c %Y "$W/sysroot/$z")
-    dstamp=$(stat -c %Y "$(dirname "$W/sysroot/$z")")
-    zip -q -d "$W/sysroot/$z" "$glob" || die "zip -d $z $glob failed"
-    touch -d "@$stamp" "$W/sysroot/$z"
-    touch -d "@$dstamp" "$(dirname "$W/sysroot/$z")"
-    ! unzip -Z1 "$W/sysroot/$z" | grep -q "^$(echo "$glob" | sed 's/\./\\./g; s/\*/[^\/]*/g')\$" || die "$glob still in $z"
-    unzip -tq "$W/sysroot/$z" >/dev/null || die "$z is damaged after zip -d"
+    stamp=$(stat -c %Y "$SYSROOT/$z")
+    dstamp=$(stat -c %Y "$(dirname "$SYSROOT/$z")")
+    zip -q -d "$SYSROOT/$z" "$glob" || die "zip -d $z $glob failed"
+    touch -d "@$stamp" "$SYSROOT/$z"
+    touch -d "@$dstamp" "$(dirname "$SYSROOT/$z")"
+    ! unzip -Z1 "$SYSROOT/$z" | grep -q "^$(echo "$glob" | sed 's/\./\\./g; s/\*/[^\/]*/g')\$" || die "$glob still in $z"
+    unzip -tq "$SYSROOT/$z" >/dev/null || die "$z is damaged after zip -d"
     echo "$z: $n entries $glob removed"
   done
-  mksquashfs "$W/sysroot" "$W/SYSTEM" -comp zstd -Xcompression-level 19 -b 1048576 -no-xattrs -noappend \
+  mksquashfs "$SYSROOT" "$W/SYSTEM" -comp zstd -Xcompression-level 19 -b 1048576 -no-xattrs -noappend \
     -mkfs-time "$MKFS_TIME" -processors "${SQUASH_CPUS:-4}" -quiet -no-progress >/dev/null || die "mksquashfs failed"
-  rm -rf "$W/sysroot"
+  rm -rf "$SYSROOT"
   unsquashfs -lln "$W/SYSTEM.orig" | sed -n 's#^\([^ ]*\) \([^ ]*\) .* squashfs-root#\1 \2 #p' | sort >/tmp/list.orig
   unsquashfs -lln "$W/SYSTEM" | sed -n 's#^\([^ ]*\) \([^ ]*\) .* squashfs-root#\1 \2 #p' | sort >/tmp/list.new
   # Everything that went: the removed paths and whatever was below them.
@@ -113,7 +143,17 @@ assemble() {
   S=/tmp/stage
   rm -rf "$S"
   mkdir -p "$S/fat/pocket-ui-info" "$S/storage"
-  if [ "$FAMILY" = SM8550 ]; then
+  if is_efi_card "$FAMILY" "${MODEL:-}"; then
+    # KERNEL stays for ROCKNIX's ABL; GRUB, the Image, the model's tree and the BLS entry for UEFI and OpenABL (as SM8250).
+    sm8550_efi_pins "$MODEL"
+    [ "$(md5 "$E/boot/pocket/Image")" = "$SM8550_IMAGE_MD5" ] || die "boot/pocket/Image is not the kernel unpacked from KERNEL"
+    [ "$(md5 "$E/boot/pocket/$EFI_DTB_FILE")" = "$EFI_DTB_MD5" ] || die "boot/pocket/$EFI_DTB_FILE is not the pinned tree"
+    mkdir -p "$S/fat/EFI/BOOT" "$S/fat/boot/grub" "$S/fat/boot/pocket" "$S/fat/loader/entries"
+    cp "$E/EFI/BOOT/BOOTAA64.EFI" "$S/fat/EFI/BOOT/"
+    cp "$E/boot/grub/grub.cfg" "$E/boot/grub/grub-efi-arm64-bin.version" "$S/fat/boot/grub/"
+    cp "$E/boot/pocket/Image" "$E/boot/pocket/$EFI_DTB_FILE" "$E/boot/pocket/KERNEL.source.md5" "$S/fat/boot/pocket/"
+    cp "$E/loader/entries/pocket-ui.conf" "$S/fat/loader/entries/"
+  elif [ "$FAMILY" = SM8550 ] || [ "$FAMILY" = SM4450 ]; then
     : # KERNEL carries the trees, ROCKNIX's ABL starts it: no boot files to add.
   elif [ "$FAMILY" = RK3566 ]; then
     # ROCKNIX's extlinux.conf with its one FDT line (the Powkiddy X55's tree) naming this model's tree; the rest unchanged.
@@ -146,10 +186,12 @@ assemble() {
       [ "$(head -c $((P1_START * 512)) "$IMG" | md5sum | cut -d' ' -f1)" = "$H700_DDR3_LOADER_MD5" ] || die "the DDR3 loader did not land on the image"
     fi
   else
-    mkdir -p "$S/fat/EFI/BOOT" "$S/fat/boot/grub" "$S/fat/boot/pocket"
+    mkdir -p "$S/fat/EFI/BOOT" "$S/fat/boot/grub" "$S/fat/boot/pocket" "$S/fat/loader/entries"
     cp "$E/EFI/BOOT/BOOTAA64.EFI" "$S/fat/EFI/BOOT/"
     cp "$E/boot/grub/grub.cfg" "$E/boot/grub/grub-efi-arm64-bin.version" "$S/fat/boot/grub/"
-    cp "$E/boot/pocket/Image" "$E/boot/pocket/miniv2-noufs.dtb" "$E/boot/pocket/KERNEL.source.md5" "$S/fat/boot/pocket/"
+    cp "$E/boot/pocket/Image" "$E/boot/pocket/$SM8250_DTB_FILE" "$E/boot/pocket/KERNEL.source.md5" "$S/fat/boot/pocket/"
+    # OpenABL's Boot Loader Specification entry (no extlinux.conf or boot.scr: Retroid's u-boot would take those before GRUB).
+    cp "$E/loader/entries/pocket-ui.conf" "$S/fat/loader/entries/"
   fi
   cp /repo/deploy/image/post-flash.sh /repo/deploy/image/mount-storage.sh "$S/fat/"
   # The GAMES drive (docs/SD-IMAGE.md, "The GAMES drive"), only on the models pins.sh names: the first start's script, and at
@@ -181,7 +223,13 @@ assemble() {
   echo "== FAT partition"
   # rocknix_abl/ holds ROCKNIX's replacement for Retroid's bootloader (abl) and scripts that flash it. This boot
   # path never uses it, and flashing it is what this setup avoids, so it is not on the card.
-  case $FAMILY in H700 | RK3566) ;; *) mdeltree -i "$FAT" ::/rocknix_abl ;; esac
+  case $FAMILY in H700 | RK3566) ;; SM4450)
+    mdeltree -i "$FAT" ::/openabl
+    # This private beta is for the four-button Classic Rev Q only.
+    for tree in $(mdir -b -i "$FAT" ::/dtbs/ | sed 's#^.*/##'); do
+      [ "$tree" = "$DTB_NAME.dtb" ] || mdel -i "$FAT" "::/dtbs/$tree"
+    done
+    ;; *) mdeltree -i "$FAT" ::/rocknix_abl ;; esac
   # SYSTEM without the files in pins.sh SYSTEM_REMOVE (strip-system), and its .md5 in ROCKNIX's format.
   # A new SYSTEM_REMOVE (or a new mksquashfs) gives a new md5: then pins.sh is "unset" for one build, which prints it.
   sysmd5=$(md5 "$W/SYSTEM")
@@ -207,6 +255,19 @@ assemble() {
     mcopy -m -i "$FAT" "$S/fat/$f" "::/$f"
   done
   mdir -/ -b -i "$FAT" ::/ | sed 's#^::/#  #'
+  if is_efi_card "$FAMILY" "${MODEL:-}"; then
+    # As on the Pocket 5: Retroid's "UEFI" is reported to start only from an EFI system partition. Offsets, names and
+    # LegacyBIOSBootable stay.
+    sfdisk -q --part-type "$IMG" 1 "$SM8250_ESP_TYPE" || die "could not mark p1 as EFI system partition"
+    [ "$(sfdisk --part-type "$IMG" 1)" = "$SM8250_ESP_TYPE" ] || die "p1 is not an EFI system partition"
+    echo "p1 marked as EFI system partition"
+  fi
+  if [ "$FAMILY" = SM8250 ] && [ "$(sm8250_p1_type "${MODEL:-}")" != "$SM8250_DATA_TYPE" ]; then
+    # Only p1's type GUID changes (sfdisk rewrites both GPT copies); offsets, names and LegacyBIOSBootable stay.
+    sfdisk -q --part-type "$IMG" 1 "$(sm8250_p1_type "$MODEL")" || die "could not mark p1 as EFI system partition"
+    [ "$(sfdisk --part-type "$IMG" 1)" = "$SM8250_ESP_TYPE" ] || die "p1 is not an EFI system partition"
+    echo "p1 marked as EFI system partition"
+  fi
   # The clusters of ROCKNIX's original SYSTEM are free now but still hold its bytes, with the files SYSTEM_REMOVE
   # leaves out: zero every free cluster (scripts/image/fat-free-zero.py), then let fsck.vfat look at the result.
   python3 -I /repo/scripts/image/fat-free-zero.py "$IMG" "$((P1_START * 512))" || die "zeroing the free FAT clusters failed"
@@ -291,7 +352,8 @@ assemble() {
 
 case ${1:-} in
   extract) extract ;;
+  extract-efi) extract_efi ;;
   strip-system) shift; strip_system "$@" ;;
   assemble) shift; assemble "$@" ;;
-  *) die "usage: build.sh extract | strip-system | assemble VERSION EPOCH" ;;
+  *) die "usage: build.sh extract | extract-efi | strip-system | assemble VERSION EPOCH" ;;
 esac

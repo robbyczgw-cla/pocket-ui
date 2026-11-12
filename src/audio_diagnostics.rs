@@ -59,6 +59,8 @@ pub struct AlsaSnapshot {
     pub xrun_errors: u64,
     pub query_xrun_errors: u64,
     pub write_errors: u64,
+    /// The first write errors as (error code, µs since the session began): -32 xrun, -86 suspended.
+    pub first_write_errors: Vec<(i64, u64)>,
     pub short_writes: u64,
     pub zero_writes: u64,
     /// Last opened ALSA stream's negotiated parameters, not the requested values.
@@ -113,6 +115,7 @@ pub struct Diagnostics {
     xrun_errors: AtomicU64,
     query_xrun_errors: AtomicU64,
     write_errors: AtomicU64,
+    first_write_errors: std::sync::Mutex<Vec<(i64, u64)>>,
     short_writes: AtomicU64,
     zero_writes: AtomicU64,
     pcm_rate: AtomicU32,
@@ -123,6 +126,9 @@ pub struct Diagnostics {
     delay_frames: Range,
     avail_frames: Range,
 }
+/// How many write errors keep their code and time (`first_write_errors`).
+const FIRST_ERRORS: usize = 16;
+
 impl Default for Diagnostics {
     fn default() -> Self {
         Self {
@@ -143,6 +149,7 @@ impl Default for Diagnostics {
             xrun_errors: AtomicU64::new(0),
             query_xrun_errors: AtomicU64::new(0),
             write_errors: AtomicU64::new(0),
+            first_write_errors: Default::default(),
             short_writes: AtomicU64::new(0),
             zero_writes: AtomicU64::new(0),
             pcm_rate: AtomicU32::new(0),
@@ -188,6 +195,7 @@ impl Diagnostics {
                 xrun_errors: self.xrun_errors.load(Relaxed),
                 query_xrun_errors: self.query_xrun_errors.load(Relaxed),
                 write_errors: self.write_errors.load(Relaxed),
+                first_write_errors: self.first_write_errors.lock().map(|e| e.clone()).unwrap_or_default(),
                 short_writes: self.short_writes.load(Relaxed),
                 zero_writes: self.zero_writes.load(Relaxed),
                 pcm_rate: (rate != 0).then_some(rate),
@@ -219,6 +227,11 @@ impl Diagnostics {
     }
     pub(crate) fn alsa_write_error(&self, error: i64) {
         self.write_errors.fetch_add(1, Relaxed);
+        if let Ok(mut first) = self.first_write_errors.lock() {
+            if first.len() < FIRST_ERRORS {
+                first.push((error, micros(self.started.elapsed())));
+            }
+        }
         if error == -32 {
             self.xrun_errors.fetch_add(1, Relaxed);
         }

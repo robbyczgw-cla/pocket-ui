@@ -217,8 +217,9 @@ const PACKED: &[&str] = &["rar", "tar", "gz", "tgz", "bz2", "xz", "ace", "arj", 
 /// What a copy or a download leaves when it stopped.
 const UNFINISHED: &[&str] = &["part", "crdownload", "tmp", "download", "partial", "opdownload"];
 /// Never a game, on top of what zips call clutter (`archive::is_clutter`), saves and states: what emulators and scrapers
-/// keep beside games.
-const NOT_GAMES: &[&str] = &["cfg", "conf", "json", "opt", "cht", "mp4", "mkv", "webp", "svg", "db", "sub", "ccd", "sbi", "wav", "mp3", "ogg", "flac", "ape", "ips", "bps", "ups", "xdelta", "pal", "mdf", "dat", "sh", "state", "auto", "nvm", "nv", "hi"];
+/// keep beside games. Also `nsp` and `xci`: no system of ours takes Switch files, so the check says nothing about them,
+/// not even a typo (`wrong_file` would offer `.ngp` and `.cci`).
+const NOT_GAMES: &[&str] = &["nsp", "xci", "cfg", "conf", "json", "opt", "cht", "mp4", "mkv", "webp", "svg", "db", "sub", "ccd", "sbi", "wav", "mp3", "ogg", "flac", "ape", "ips", "bps", "ups", "xdelta", "pal", "mdf", "dat", "sh", "state", "auto", "nvm", "nv", "hi"];
 /// Subfolders of a system's folder that belong to its emulator or to a scraper, not to its games.
 pub(crate) const DATA_FOLDERS: &[&str] = &["data", "azahar", "citra", "psp", "save", "saves", "savestates", "states", "system", "media", "images", "manuals", "videos", "covers", "snap", "snaps", "boxart", "downloaded_media", "cheats", "shaders"];
 
@@ -238,7 +239,7 @@ pub trait Files {
 /// Disc images and their kin: they may begin with a zero megabyte and still run (Sonic Adventure 2's `.cdi`), so the zeros
 /// look says nothing about them.
 const DISC_EXTENSIONS: &[&str] = &[
-    "cdi", "iso", "bin", "img", "cue", "gdi", "chd", "cso", "ciso", "rvz", "wbfs", "gcm", "gcz", "mdf", "nrg", "pbp", "wux", "wud", "xiso", "ecm", "mds", "toc", "m3u", "dax", "jso", "zso", "3ds", "cia", "nsp", "xci",
+    "cdi", "iso", "bin", "img", "cue", "gdi", "chd", "cso", "ciso", "rvz", "wbfs", "gcm", "gcz", "mdf", "nrg", "pbp", "wux", "wud", "xiso", "ecm", "mds", "toc", "m3u", "dax", "jso", "zso", "3ds", "cia",
 ];
 const EDGE: u64 = 64 << 10;
 const SPOT: u64 = 4 << 10;

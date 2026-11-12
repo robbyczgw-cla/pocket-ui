@@ -111,7 +111,14 @@ PYARTIFACT
       if [ -f '"$DROPIN"' ]; then rm -f '"$ES_ONLY"'; systemctl stop essway; fi;
       cd /storage/pocket-ui 2>/dev/null || mkdir -p /storage/pocket-ui; mkdir -p /storage/pocket-ui/releases/dev;
       cd /storage/pocket-ui && if [ "$(readlink known-good 2>/dev/null)" = releases/dev ]; then
-        rm -rf releases/dev-good; cp -a releases/dev releases/dev-good && ln -sfn releases/dev-good known-good; fi; true'
+        rm -rf releases/dev-good; cp -a releases/dev releases/dev-good && ln -sfn releases/dev-good known-good; fi;
+      # Bundled player cores belong with the programs (H700 GBA defaults to gpSP only while its bundle exists).
+      # Keep the installed bundle on binary-only deploys; previous also repairs a dev folder from an older deploy.
+      cd /storage/pocket-ui || exit 1;
+      core_source=current; [ -d "$core_source/cores" ] || core_source=previous;
+      if [ -d "$core_source/cores" ] && [ ! "$core_source/cores" -ef releases/dev/cores ]; then
+        mkdir -p releases/dev/cores && cp -a "$core_source/cores/." releases/dev/cores/ || exit 1;
+      fi; true'
     scp -q "$BUILD/pocket-ui" "$BUILD/pocket-core" "$BUILD/pocket-splash" "$SOURCE_ROOT/deploy/portmaster-setup.sh" "$HOST:/storage/pocket-ui/releases/dev/"
     scp -q "$SOURCE_ROOT/deploy/run-pocket-ui.sh" "$HOST:/storage/pocket-ui/"
     # The boot screen goes with the boot UI's drop-in, as install.sh and autostart.sh do it; never started here.

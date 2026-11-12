@@ -1,4 +1,4 @@
-//! The interface in another language (German, Spanish): Settings → Language, docs/DEVELOPING.md "Translations".
+//! The interface in another language (German, Spanish): Settings → Language, docs/dev/translations.md "Translations".
 //!
 //! Nothing in the rest of the code is wrapped for translation. The text painter (`Text::draw`, `width`, `fit`, `wrap`,
 //! `draw_right`, `draw_clipped`) looks every string it is given up here, by its exact English wording, and paints the

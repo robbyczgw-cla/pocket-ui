@@ -1,0 +1,20 @@
+pocket-ui is a game frontend with its own player. Point it at the folders with your games and they stand on a shelf, with their box, a few facts about each game and a big Continue button for the one you played last. Nothing to set up first: the emulators are inside the app.
+
+<b>This is a preview.</b> It is the Android version of the pocket-ui that runs on ROCKNIX handhelds. It works, but it has been tested mostly on one handheld (AYN Odin 2 Mini, Android 13) and not everything of the Linux version is here yet.
+
+<b>What it does</b>
+• Shelves, a cabinet, cards and other looks for your library, with search, favourites and a Curator with filters
+• Continue where you stopped: every game remembers its last moment, with a pause menu to save, load, step back in time, zoom and look up the controls
+• Built-in cores for Game Boy, Game Boy Color, Game Boy Advance, NES, SNES, Master System, Game Gear, Mega Drive (cartridges), PC Engine, WonderSwan, Neo Geo Pocket, Atari 2600, Atari Lynx, PlayStation and Sega Saturn (experimental)
+• More systems as free downloads, on first start or later in Settings, over Wi-Fi only: Nintendo DS, plus PSP, Nintendo 64 and Dreamcast as experimental
+• Works with a controller or with touch; the touch pad shows the buttons the game uses
+• Save backup: all saves and moments in one zip file you keep
+• English, German and Spanish; larger text and a gamepad keyboard
+
+<b>Your games stay yours</b>
+No games and no BIOS files are included. You pick the folders; Single-file games play straight from your folder; games made of several files, or kept by a storage provider that only offers streams, are copied once into the app's private storage (the last five big ones stay ready). Covers and facts are fetched from the internet only if you allow it in Settings, and only on Wi-Fi.
+
+<b>Free software</b>
+pocket-ui is licensed GPL-2.0-or-later. The emulator cores keep their own licences; every release comes with their exact source code. See the licence files in the app and on the release page.
+
+Needs Android 8.0 or newer on a 64-bit ARM device. PS2, GameCube and 3DS games are not played by pocket-ui itself.

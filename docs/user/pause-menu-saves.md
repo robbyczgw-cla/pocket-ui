@@ -74,8 +74,7 @@ On the right you see:
 - under it, a slim row of eight small blocks in the plastic of what the game saved to back then (the PlayStation's
   grey card, the PS2's black one, the Dreamcast's white VMU, the GameCube's, a cartridge's own colour): a block with a
   save shows the game's cover, the ring marks the slot Save or Load is on (no ring while Load is on Where I quit or Before
-  load). With Settings → Look → Cozy extras → **Memory card in the pause menu** on (it is off at first), the
-  memory card or cartridge itself stands there beside its numbered blocks, as on the game's info page
+  load). The whole memory card or cartridge remains on the game's info page and the box's back
 - above the keys: "Slot 3 · replaces the save from today 14:02" (on Save), "Slot 3 · saved
   yesterday 21:10" (on Load), "Slot 3 · empty" (on Save; on Load: "No save in slot 3 yet"), "Where I quit · today 14:02" or
   "Before load · today 14:05" (real times)
@@ -108,7 +107,9 @@ becomes slot 1. A state without such a picture is yours and stays where it is; n
 ### The 3DS has one slot
 
 Azahar has a quick slot and no shortcut for any other, so Save and Load use that one slot ("The
-only slot") and the dots are left out. Where I quit and Before load work as above.
+only slot") and the dots are left out. Where I quit and Before load work as above. They pass through that slot
+for a moment while your own state waits beside it; if the SD card refuses to put it back, the shelf tells you after
+the game, and the next start of the game tries again.
 
 ## Earlier
 

@@ -30,7 +30,6 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-use serde::{Deserialize, Serialize};
 
 use crate::os_compat::{self, Needs, System};
 use crate::store;
@@ -59,108 +58,49 @@ pub const BUSY_BLOCKS_SLEEP_FOR: Duration = Duration::from_secs(30 * 60);
 /// Releases. settings.json `update_url` overrides it (`file://` for tests and the device test).
 pub const DEFAULT_URL: &str = "https://pocketui.xyz/updates/stable/update.json";
 
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
-pub struct Release {
-    pub version: String,
-    /// Absolute, or relative to update.json.
-    pub url: String,
-    /// Additional signed sources, tried in order after `url`, with exactly the same size and SHA-256.
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub mirrors: Vec<String>,
-    /// Signed sources preferred by new clients. Older clients keep using `url`.
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub preferred_sources: Vec<String>,
-    pub sha256: String,
-    pub size: u64,
-    #[serde(default)]
-    pub notes: String,
-}
-
-impl Release {
-    /// The distinct signed sources in attempt order. Resolve before deduplicating so
-    /// an absolute mirror of the relative primary does not consume another attempt.
-    pub fn download_urls(&self, manifest_url: &str) -> Vec<String> {
-        let mut urls = Vec::new();
-        for source in self.preferred_sources.iter().chain(std::iter::once(&self.url)).chain(&self.mirrors) {
-            let url = resolve(manifest_url, source);
-            if !urls.contains(&url) {
-                urls.push(url);
-            }
-        }
-        urls
-    }
-}
-
-#[derive(Clone, Debug, Default, Serialize, Deserialize)]
-pub struct Manifest {
-    pub format: u32,
-    #[serde(default)]
-    pub app: Option<Release>,
-    #[serde(default)]
-    pub os: Option<Release>,
-    /// The SD card image and the install package for a ROCKNIX card, for people (the website's download page, a
-    /// checksum to compare); a device ignores both. docs/UPDATE-CHANNEL.md.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub sd_image: Option<Release>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub install_zip: Option<Release>,
-}
-
-/// True when `candidate` is a later version than `current`: number groups compared in order
-/// ("0.10.0" > "0.9.3", "20261101" > "20261001"); anything else in the string is ignored.
-pub fn newer(candidate: &str, current: &str) -> bool {
-    let nums = |s: &str| -> Vec<u64> { s.split(|c: char| !c.is_ascii_digit()).filter(|p| !p.is_empty()).filter_map(|p| p.parse().ok()).collect() };
-    nums(candidate) > nums(current)
-}
+pub use crate::update_channel::{Release, Manifest, newer, resolve, parse_manifest};
 
 /// Cargo.toml's version, or POCKETUI_VERSION at build time (scripts/release-app.sh sets it).
 pub fn app_version() -> &'static str {
     option_env!("POCKETUI_VERSION").unwrap_or(env!("CARGO_PKG_VERSION"))
 }
 
-/// The Brick's beta builds are `<release>-brick.<n>` from update 6 on (0.1.14-brick.6): the release they are built on, then the
-/// beta's number. Older ones (0.1.11-brick.202611032041, a date) and anything else: None, shown as they are. `newer` still
+/// The Brick's earlier numbered builds are `<release>-brick.<n>` from update 6 on (0.1.14-brick.6): the release they are built on, then the
+/// build's number. Older ones (0.1.11-brick.202611032041, a date) and anything else: None, shown as they are. `newer` still
 /// compares the raw strings: 0.1.14-brick.6 is newer than 0.1.11-brick.202611032041 (14 > 11 comes first).
 #[cfg(feature = "brick")]
-fn brick_beta(v: &str) -> Option<(&str, u32)> {
+fn brick_numbered_build(v: &str) -> Option<(&str, u32)> {
     let (base, n) = v.split_once("-brick.")?;
     let n = n.parse().ok().filter(|n| *n < 10_000)?;
     Some((base, n))
 }
 
-/// A version in a short row (Settings' lists, the Updates page): "0.1.14 beta 6".
+/// A version in a short row; keep the installed version identifier, including older numbered builds.
 #[cfg(feature = "brick")]
 pub fn brick_short(v: &str) -> String {
-    brick_beta(v).map_or_else(|| v.to_string(), |(base, n)| format!("{base} beta {n}"))
+    v.to_string()
 }
 
-/// The version on About: "0.1.14 for TrimUI Brick (beta 6)", a public release "0.2.1 for TrimUI Brick".
+/// The installed version on About, with the device name. Earlier numbered builds keep their exact identifier.
 #[cfg(feature = "brick")]
 pub fn brick_long(v: &str) -> String {
     // The same card on a Smart Pro says so (`brick_profile::Board`); everything else, also a computer, the Brick as before.
     let name = crate::brick_profile::board().unwrap_or(crate::brick_profile::Board::Brick).name();
-    match brick_beta(v) {
-        Some((base, n)) => format!("{base} for {name} (beta {n})"),
+    match brick_numbered_build(v) {
+        Some(_) => format!("{v} for {name}"),
         None if !v.contains('-') => format!("{v} for {name}"),
         None => v.to_string(),
     }
 }
+
+/// Why app OTA ordering is unavailable for a build without a release stamp.
+pub const DEVELOPMENT_BUILD: &str = "Development build: install a release package to use app updates.";
 
 /// A release build: the release scripts (`release-app.sh`, `make-image*.sh`, `make-*-install.sh`) set
 /// POCKETUI_VERSION. A build from main or a branch (`dev.sh`, the artifact worker, tests) does not; its Cargo.toml
 /// version lags the released ones.
 pub fn release_build() -> bool {
     option_env!("POCKETUI_VERSION").is_some()
-}
-
-/// `url` as given when absolute, otherwise next to `manifest_url`.
-pub fn resolve(manifest_url: &str, url: &str) -> String {
-    if url.contains("://") {
-        url.to_string()
-    } else {
-        let base = manifest_url.rsplit_once('/').map_or(manifest_url, |(b, _)| b);
-        format!("{base}/{url}")
-    }
 }
 
 /// The programs this module runs; tests substitute scripts for them.
@@ -332,11 +272,6 @@ fn fetch_manifest_with(tools: &Tools, url: &str, key: &[u8; 32]) -> Result<Manif
     let json = fetch(tools, url)?;
     let sig = fetch(tools, &format!("{url}.sig"))?;
     parse_manifest(&json, &String::from_utf8_lossy(&sig), key)
-}
-
-pub fn parse_manifest(json: &[u8], sig_b64: &str, key: &[u8; 32]) -> Result<Manifest, String> {
-    store::verify_signed(json, sig_b64, key).map_err(|_| "The update list isn't signed by us. Nothing was changed.".to_string())?;
-    serde_json::from_slice(json).map_err(|e| format!("update list: {e}"))
 }
 
 /// One bounded attempt. Retries belong to the signed source list, so a blocked host cannot
@@ -690,7 +625,7 @@ fn reports_version(stdout: &str, bin: &str, version: &str) -> bool {
 pub const BRICK_DEFAULT_URL: &str = "https://pocketui.xyz/updates/brick/update.json";
 
 /// The channel this build was given: in a `--features brick` build POCKETUI_UPDATE_URL (the Brick card's start script reads it from
-/// `app/update-url`; only a private beta card has one), else the Brick's public channel on its own card and the ROCKNIX one
+/// `app/update-url`; only a private development card has one), else the Brick's public channel on its own card and the ROCKNIX one
 /// everywhere else. settings.json `update_url` still wins over all of them.
 #[cfg(feature = "brick")]
 pub fn default_url() -> String {
@@ -896,7 +831,6 @@ pub const OS_BRAND_FILE: &str = "/flash/pocket-ui-info/pocket-ui-os.txt";
 /// Settings > About's System row. On our SD image "pocket-ui OS 0.1.7 · built on ROCKNIX 20261001 (SM8250)": the
 /// image's name and version, and the ROCKNIX underneath as /etc/os-release says (so it stays true after an OS update).
 /// On a ROCKNIX card with pocket-ui added "ROCKNIX 20261001 (SM8250)". None (no row) where os-release has no OS_NAME
-/// and there is no brand file: a desktop, the Steam Deck, the build computer's snapshots.
 pub fn os_brand_line(os_release: &str, brand: Option<&str>) -> Option<String> {
     let field = |k: &str| os_release_field(os_release, k).filter(|v| !v.is_empty());
     let base = field("OS_NAME").map(|name| {
@@ -1174,18 +1108,18 @@ mod tests {
 
     #[cfg(feature = "brick")]
     #[test]
-    fn brick_betas_count_up_from_the_date_builds_and_read_as_betas() {
-        assert!(newer("0.1.14-brick.6", "0.1.11-brick.202611032041"), "the first numbered beta over the last date build");
+    fn brick_numbered_builds_keep_their_identifiers_without_a_support_label() {
+        assert!(newer("0.1.14-brick.6", "0.1.11-brick.202611032041"), "the first numbered build over the last date build");
         assert!(newer("0.1.14-brick.7", "0.1.14-brick.6") && !newer("0.1.14-brick.6", "0.1.14-brick.6"));
         assert!(newer("0.1.15-brick.1", "0.1.14-brick.9"), "a new release base starts at 1 again");
         assert!(newer("0.2.0-brick.7", "0.1.14-brick.6"), "update 7 on 0.2 over update 6 on 0.1.14");
-        assert_eq!(brick_short("0.2.0-brick.7"), "0.2.0 beta 7");
-        assert_eq!(brick_short("0.1.14-brick.6"), "0.1.14 beta 6");
-        assert_eq!(brick_long("0.1.14-brick.6"), "0.1.14 for TrimUI Brick (beta 6)");
+        assert_eq!(brick_short("0.2.0-brick.7"), "0.2.0-brick.7");
+        assert_eq!(brick_short("0.1.14-brick.6"), "0.1.14-brick.6");
+        assert_eq!(brick_long("0.1.14-brick.6"), "0.1.14-brick.6 for TrimUI Brick");
         assert_eq!(brick_long("0.1.11-brick.202611032041"), "0.1.11-brick.202611032041", "a date build stays as it is");
         assert_eq!(brick_short("0.1.14"), "0.1.14");
         assert_eq!(brick_long("0.2.1"), "0.2.1 for TrimUI Brick", "a public release");
-        assert!(newer("0.2.1", "0.2.0-brick.7") && newer("0.2.1-brick.8", "0.2.1"), "public over the beta before it, the next beta over both");
+        assert!(newer("0.2.1", "0.2.0-brick.7") && newer("0.2.1-brick.8", "0.2.1"), "public over the numbered build before it, the next build over both");
     }
 
     #[cfg(feature = "brick")]
@@ -1199,10 +1133,10 @@ mod tests {
     }
 
     /// A card from the public zip has no `app/update-url`: it must ask the Brick channel, never the ROCKNIX one (whose tarball is a
-    /// ROCKNIX program folder). A private beta card keeps its channel; outside the card (the NextUI pak) the ROCKNIX default stays.
+    /// ROCKNIX program folder). A private development card keeps its channel; outside the card (the NextUI pak) the ROCKNIX default stays.
     #[cfg(feature = "brick")]
     #[test]
-    fn a_public_card_asks_the_brick_channel_and_a_beta_card_its_own() {
+    fn a_public_card_asks_the_brick_channel_and_a_development_card_its_own() {
         assert_eq!(default_url_from(None, true), BRICK_DEFAULT_URL);
         assert_eq!(default_url_from(Some("  ".into()), true), BRICK_DEFAULT_URL, "an empty update-url is no channel");
         assert_eq!(default_url_from(Some("https://beta.example/brick-updates/beta/update.json\n".into()), true), "https://beta.example/brick-updates/beta/update.json");

@@ -9,7 +9,7 @@ assert shell('getprop','ro.kernel.qemu').strip()=='1'and shell('id','-u').strip(
 os.environ['ANDROID_CLASSIC_CASES']='ucity';os.environ['ANDROID_GAMEBOY_CORE']='Gambatte'
 sys.argv=[str(Path(__file__).with_name('classic-smoke.py')),adb,serial,str(out/'fixture')]
 qa=runpy.run_path(sys.argv[0]);tap,key,tree,shot=map(qa.get,['tap','key','tree','shot'])
-base='/data/user/0/dev.pocket.spike/files/core-options/'
+base='/data/user/0/xyz.pocketui.app/files/core-options/'
 def read(name):
     try:return json.loads(shell('cat',base+name+'.json',stderr=subprocess.DEVNULL))
     except subprocess.CalledProcessError:return None

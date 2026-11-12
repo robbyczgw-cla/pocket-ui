@@ -471,6 +471,9 @@ const MUTE_FRESH: Duration = Duration::from_millis(1500);
 const RETRY_OPEN: Duration = Duration::from_secs(5);
 /// A closed warm stream polls a pending mute answer without waiting for another UI event.
 const MUTE_PENDING: Duration = Duration::from_millis(100);
+/// Sounds wait for a mute answer (`held`): looked for this often, so the first sound after unmuting is late by what the check
+/// takes, not by a poll interval (the first Odin run: 100 ms with `MUTE_PENDING`).
+const HELD_POLL: Duration = Duration::from_millis(2);
 
 enum Msg {
     /// Which sound, how loud, whether a game runs, when the UI thread asked (for the numbers `POCKETUI_SOUND_DEBUG`
@@ -486,6 +489,8 @@ enum Msg {
     GameEnded,
     /// pocket-ui is in front with the screen on and sounds on (`keep_warm`): the output opens now and stays open.
     Warm(bool),
+    /// Nothing came in while a mute answer was due for sounds that wait for it (`held`): look at the answer.
+    Recheck,
 }
 
 /// The quantum to lower PipeWire to while the output is open, if at all: on the shelf only (in a game
@@ -799,6 +804,8 @@ pub fn play_after(sound: Sound, ctx: &Ctx, after: Duration, db: f32) -> bool {
         LAST_TICK_MS.store(now, Ordering::Relaxed);
     }
     start();
+    // A frame dump's sound track (POCKETUI_FRAME_DUMP): the sound by frame, as it would play at any speaker volume.
+    crate::frame_dump::event(|| format!("sound {sound:?} {} {db}", after.min(MAX_AFTER).as_millis()));
     let gain = ctx.config.gain() * 10f32.powf(db.min(0.0) / 20.0);
     TX.get().is_some_and(|tx| tx.try_send(Msg::Play(sound, gain, ctx.in_game, Instant::now(), after.min(MAX_AFTER))).is_ok())
 }
@@ -907,8 +914,9 @@ fn forget_unstarted(voices: &mut Vec<Voice>) {
 }
 
 /// The sounds still waiting start when they will be heard on time, whatever the output holds ahead by then and however
-/// it started: an Android stream opened a moment ago (by a tap's tick, say) can hold a few hundred ms and doesn't tell
-/// until it runs, and counting frames from the sound's request would put all of it on the sound.
+/// it started. Android's backend validates its timestamp against the actual queue on local Fast
+/// outputs before returning this lead: a firmware reporting half a second for a small queue must
+/// not make an insertion sound play before the cartridge reaches the console.
 #[cfg(target_os = "android")]
 fn keep_their_moment<O: MixerOutput>(voices: &mut [Voice], o: &mut O) {
     if voices.iter().all(|v| v.pos >= v.wait) {
@@ -993,6 +1001,14 @@ fn mixer(rx: Receiver<Msg>) {
     mixer_with(rx, crate::audio::Sink::open, check_audible, quantum, configured_quantum, MUTE_FRESH);
 }
 
+/// One line in logcat on Android (nothing elsewhere): why the mixer opened or closed the output.
+fn note(what: &str) {
+    #[cfg(target_os = "android")]
+    crate::platform::audio_backend::log_line(4, &format!("ui-sound: {what}"));
+    #[cfg(not(target_os = "android"))]
+    let _ = what;
+}
+
 fn mixer_with<O: MixerOutput>(
     rx: Receiver<Msg>,
     open: impl Fn(crate::audio::Ring) -> Option<O>,
@@ -1031,6 +1047,12 @@ fn mixer_with<O: MixerOutput>(
     let mut mute: Option<(Instant, bool)> = None;
     let mut checking: Option<Receiver<bool>> = None;
     let mut open_failed: Option<Instant> = None;
+    // Sounds asked while the sink was last known muted: they wait for a fresh answer instead of opening an output
+    // that would be closed again at once (a muted handheld opened and closed a stream for every key press).
+    let mut held: Vec<Msg> = Vec::new();
+    let mut held_since: Option<Instant> = None;
+    // The first sound that found the output closed: when it was asked, and what the opening took (logged once its first chunk is written).
+    let mut cold: Option<(Instant, Sound, u128)> = None;
     // A game is starting: close once the voices have ended, giving the quantum back or not (`close_when_done`).
     let mut closing: Option<bool> = None;
     // Closes the output; the shelf's quantum stays (`Q::Shelf`).
@@ -1043,20 +1065,37 @@ fn mixer_with<O: MixerOutput>(
         if warm && checking.is_none() && !matches!(mute, Some((at, _)) if at.elapsed() < mute_fresh) {
             checking = Some(check_audible());
         }
+        // The answer the held sounds wait for: audible, they play now (as if asked just now, their wait counted from the
+        // ask); muted, they are dropped, as a sound at a muted sink is.
+        let mut replay: Vec<Msg> = Vec::new();
+        if !held.is_empty() && { take_answer(&mut checking, &mut mute); checking.is_none() } {
+            let since = held_since.take();
+            if mute.is_some_and(|(_, m)| m) {
+                held.clear();
+            } else {
+                // The one cost of not opening for a muted sink: the first sound after it is unmuted waits for this answer.
+                if let Some(since) = since {
+                    note(&format!("unmuted: {} sound(s) waited {} ms for the mute answer", held.len(), since.elapsed().as_millis()));
+                }
+                replay = std::mem::take(&mut held);
+            }
+        }
         // Closed: sleep until there is something to play. Open: take what came in since the last chunk.
-        let first = if out.is_none() {
-            match closed_message(&rx, warm, checking.is_some(), mute_fresh) {
+        let first = if out.is_none() && replay.is_empty() {
+            match closed_message(&rx, warm, checking.is_some(), !held.is_empty(), mute_fresh) {
                 Ok(m) => Some(m),
                 Err(_) => return,
             }
         } else {
             None
         };
-        for msg in first.into_iter().chain(std::iter::from_fn(|| rx.try_recv().ok())) {
+        for msg in first.into_iter().chain(replay).chain(std::iter::from_fn(|| rx.try_recv().ok())) {
             let (sound, gain, in_game, asked, after) = match msg {
+                Msg::Recheck => continue,
                 Msg::Stop(restore) => {
                     voices.clear();
                     waiting.clear();
+                    held.clear();
                     // Kept warm and open: closed (and the quantum left) once the launch's own sounds, queued right
                     // after this, have played, as `close_when_done` does; closing now and opening again for them cost
                     // 100 to 300 ms on an H700 while the game starts.
@@ -1073,6 +1112,7 @@ fn mixer_with<O: MixerOutput>(
                 }
                 Msg::ForgetWaiting => {
                     waiting.clear();
+                    held.clear();
                     forget_unstarted(&mut voices);
                     continue;
                 }
@@ -1084,6 +1124,7 @@ fn mixer_with<O: MixerOutput>(
                 }
                 Msg::CloseWhenDone(restore) => {
                     warm = false;
+                    held.clear();
                     closing = Some(restore);
                     continue;
                 }
@@ -1098,6 +1139,7 @@ fn mixer_with<O: MixerOutput>(
                             checking = Some(check_audible());
                         }
                         let t = Instant::now();
+                        note("open: kept warm");
                         out = open(ring_now());
                         match &out {
                             Some(s) if debug => println!("ui-sound: kept warm, opened {} in {} ms", s.name(), t.elapsed().as_millis()),
@@ -1128,10 +1170,21 @@ fn mixer_with<O: MixerOutput>(
                 if muted_before || open_failed.is_some_and(|t| t.elapsed() < RETRY_OPEN) {
                     continue;
                 }
+                // Last known muted, the answer old: ask again and open only if it is audible now. Opening beside the
+                // check (below) is for a sink last heard audible, where the stream is wanted nearly every time.
+                if matches!(mute, Some((_, true))) {
+                    if checking.is_none() {
+                        checking = Some(check_audible());
+                    }
+                    held.push(Msg::Play(sound, gain, in_game, asked, after));
+                    held_since.get_or_insert_with(Instant::now);
+                    continue;
+                }
                 if !matches!(mute, Some((at, _)) if at.elapsed() < mute_fresh) && checking.is_none() {
                     checking = Some(check_audible());
                 }
                 let t = Instant::now();
+                note(&format!("open: for {sound:?}"));
                 out = open(ring_now());
                 open_ms = t.elapsed().as_millis();
                 match &out {
@@ -1143,6 +1196,9 @@ fn mixer_with<O: MixerOutput>(
                         continue;
                     }
                 }
+            }
+            if !was_open && after.is_zero() {
+                cold = Some((asked, sound, open_ms));
             }
             // On the shelf (also with the output still open from a game's pause menu): its own quantum, once; the
             // quantum thread keeps it from then on.
@@ -1187,6 +1243,7 @@ fn mixer_with<O: MixerOutput>(
         // The mute check came back: muted, so the output closes again.
         take_answer(&mut checking, &mut mute);
         if mute.is_some_and(|(_, m)| m) && out.is_some() {
+            note("close: muted");
             voices.clear();
             waiting.clear();
             close(&mut out);
@@ -1210,6 +1267,7 @@ fn mixer_with<O: MixerOutput>(
             .and_then(|o| o.ring())
             .is_some_and(|r| r != want && (want == crate::audio::Ring::Cycle || voices.is_empty()))
         {
+            note("open: ring changed");
             if let Some(new) = open(want) {
                 out = Some(new);
             }
@@ -1227,9 +1285,13 @@ fn mixer_with<O: MixerOutput>(
         mix(&mut chunk, &mut voices, &bank);
         // Blocks until the output has room: this thread runs at the sound card's pace while open.
         if !o.write(&chunk) {
+            note("close: write failed");
             voices.clear();
             close(&mut out);
             continue;
+        }
+        if let Some((asked, sound, open_ms)) = cold.take() {
+            note(&format!("{sound:?} asked, first chunk written after {} ms (opening {open_ms} ms)", asked.elapsed().as_millis()));
         }
         if let Some(restore) = closing.filter(|_| voices.is_empty() && waiting.is_empty()) {
             closing = None;
@@ -1239,6 +1301,7 @@ fn mixer_with<O: MixerOutput>(
             continue;
         }
         if voices.is_empty() && last_sound.elapsed() > KEEP_OPEN && !warm {
+            note("close: quiet");
             close(&mut out);
             mute = None;
         }
@@ -1247,13 +1310,13 @@ fn mixer_with<O: MixerOutput>(
 
 /// Closed outputs sleep indefinitely outside the shelf. A warm one wakes to finish a mute query, notice an unmute
 /// or retry after a stream failure; `keep_warm` sends only transitions, so waiting for another UI event loses warmth.
-fn closed_message(rx: &Receiver<Msg>, warm: bool, checking: bool, retry: Duration) -> Result<Msg, std::sync::mpsc::RecvError> {
-    if !warm {
+fn closed_message(rx: &Receiver<Msg>, warm: bool, checking: bool, held: bool, retry: Duration) -> Result<Msg, std::sync::mpsc::RecvError> {
+    if !warm && !(held && checking) {
         return rx.recv();
     }
-    match rx.recv_timeout(if checking { MUTE_PENDING.min(retry) } else { retry }) {
+    match rx.recv_timeout(if held && checking { HELD_POLL } else if checking { MUTE_PENDING.min(retry) } else { retry }) {
         Ok(msg) => Ok(msg),
-        Err(std::sync::mpsc::RecvTimeoutError::Timeout) => Ok(Msg::Warm(true)),
+        Err(std::sync::mpsc::RecvTimeoutError::Timeout) => Ok(if warm { Msg::Warm(true) } else { Msg::Recheck }),
         Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => Err(std::sync::mpsc::RecvError),
     }
 }
@@ -1542,13 +1605,13 @@ mod tests {
         let (tx, rx) = sync_channel(16);
         // Initial mute, a failed open or a failed write: the UI still considers the shelf warm and sends no new
         // Warm(true). The mixer must wake itself to consume the pending answer and open after an unmute/recovery.
-        assert!(matches!(closed_message(&rx, true, true, MUTE_FRESH), Ok(Msg::Warm(true))));
+        assert!(matches!(closed_message(&rx, true, true, false, MUTE_FRESH), Ok(Msg::Warm(true))));
         tx.send(Msg::Stop(false)).unwrap();
-        assert!(matches!(closed_message(&rx, true, true, MUTE_FRESH), Ok(Msg::Stop(false))), "a stop wins over the retry timer");
+        assert!(matches!(closed_message(&rx, true, true, false, MUTE_FRESH), Ok(Msg::Stop(false))), "a stop wins over the retry timer");
         tx.send(Msg::Warm(false)).unwrap();
-        assert!(matches!(closed_message(&rx, false, false, MUTE_FRESH), Ok(Msg::Warm(false))));
+        assert!(matches!(closed_message(&rx, false, false, false, MUTE_FRESH), Ok(Msg::Warm(false))));
         drop(tx);
-        assert!(closed_message(&rx, true, false, MUTE_FRESH).is_err(), "no retry after the sender has gone");
+        assert!(closed_message(&rx, true, false, false, MUTE_FRESH).is_err(), "no retry after the sender has gone");
     }
 
     #[test]
@@ -1619,6 +1682,122 @@ mod tests {
         wait_for(&|| state.active.load(Ordering::SeqCst) == 0);
         drop(tx);
         mixer.join().unwrap();
+    }
+
+    /// A mixer on a silent in-memory output: how often it was opened, what is open, what was written (and when it first was).
+    struct Rig {
+        audible: Arc<AtomicBool>,
+        opens: Arc<std::sync::atomic::AtomicUsize>,
+        active: Arc<std::sync::atomic::AtomicUsize>,
+        loud_writes: Arc<std::sync::atomic::AtomicUsize>,
+        tx: SyncSender<Msg>,
+        mixer: Option<std::thread::JoinHandle<()>>,
+    }
+    use std::sync::Arc;
+    impl Rig {
+        fn start(audible: bool) -> Rig {
+            use std::sync::atomic::AtomicUsize;
+            struct Silent(Arc<AtomicUsize>, Arc<AtomicUsize>);
+            impl MixerOutput for Silent {
+                fn ring(&self) -> Option<crate::audio::Ring> { None }
+                fn name(&self) -> &'static str { "silent test stream" }
+                fn latency_us(&mut self) -> u64 { 0 }
+                fn write(&mut self, samples: &[i16]) -> bool {
+                    std::thread::sleep(Duration::from_millis(1));
+                    if samples.iter().any(|s| *s != 0) { self.1.fetch_add(1, Ordering::SeqCst); }
+                    true
+                }
+            }
+            impl Drop for Silent {
+                fn drop(&mut self) { self.0.fetch_sub(1, Ordering::SeqCst); }
+            }
+            let audible = Arc::new(AtomicBool::new(audible));
+            let (opens, active, loud) = (Arc::new(AtomicUsize::new(0)), Arc::new(AtomicUsize::new(0)), Arc::new(AtomicUsize::new(0)));
+            let (tx, rx) = sync_channel(16);
+            let (quantum, _quantum_rx) = sync_channel(32);
+            let (a, o, l, ask) = (active.clone(), opens.clone(), loud.clone(), audible.clone());
+            let mixer = std::thread::spawn(move || {
+                mixer_with(rx, move |_| {
+                    a.fetch_add(1, Ordering::SeqCst);
+                    o.fetch_add(1, Ordering::SeqCst);
+                    Some(Silent(a.clone(), l.clone()))
+                }, move || {
+                    let (tx, rx) = sync_channel(1);
+                    tx.send(ask.load(Ordering::SeqCst)).unwrap();
+                    rx
+                }, quantum, Some(0), Duration::from_millis(20));
+            });
+            Rig { audible, opens, active, loud_writes: loud, tx, mixer: Some(mixer) }
+        }
+        fn press(&self) {
+            self.tx.send(Msg::Play(Sound::Nav, 1.0, false, Instant::now(), Duration::ZERO)).unwrap();
+        }
+        fn opens(&self) -> usize { self.opens.load(Ordering::SeqCst) }
+        fn finish(mut self) {
+            let (tx, _) = sync_channel(1);
+            drop(std::mem::replace(&mut self.tx, tx));
+            self.mixer.take().unwrap().join().unwrap();
+        }
+    }
+
+    /// The Odin's log showed "AAudio opened" every 3 s. Nothing was playing: a script pressed keys on a muted handheld,
+    /// and every press found the mute answer older than `MUTE_FRESH`, opened the output beside a new check and closed it
+    /// again at once when the check said muted. An idle shelf (no sound asked) never opened anything.
+    #[test]
+    fn an_idle_shelf_opens_no_output_while_nothing_is_played() {
+        for audible in [true, false] {
+            let rig = Rig::start(audible);
+            std::thread::sleep(Duration::from_millis(500));
+            assert_eq!(rig.opens(), 0, "audible {audible}: no sound asked, no stream opened");
+            rig.finish();
+        }
+    }
+
+    #[test]
+    fn a_muted_handheld_opens_no_stream_for_key_presses_after_the_first() {
+        let rig = Rig::start(false);
+        // Ten presses, each after the 20 ms the mute answer stays fresh (1.5 s in the app: a press every 2 to 5 s).
+        for _ in 0..10 {
+            rig.press();
+            std::thread::sleep(Duration::from_millis(60));
+        }
+        assert!(rig.opens() <= 1, "a muted sink learned at the first press: {} streams opened for ten presses", rig.opens());
+        assert_eq!(rig.active.load(Ordering::SeqCst), 0, "nothing is left open");
+        assert_eq!(rig.loud_writes.load(Ordering::SeqCst), 0, "and nothing was played");
+        rig.finish();
+    }
+
+    #[test]
+    fn the_first_press_after_unmuting_still_makes_its_sound() {
+        let rig = Rig::start(false);
+        rig.press();
+        std::thread::sleep(Duration::from_millis(100));
+        rig.press();
+        std::thread::sleep(Duration::from_millis(100));
+        let opened = rig.opens();
+        rig.audible.store(true, Ordering::SeqCst);
+        let t = Instant::now();
+        rig.press();
+        while rig.loud_writes.load(Ordering::SeqCst) == 0 && t.elapsed() < crate::testutil::timeout(Duration::from_secs(2)) {
+            std::thread::sleep(Duration::from_millis(1));
+        }
+        assert!(rig.loud_writes.load(Ordering::SeqCst) > 0, "the press after unmuting is heard, not swallowed");
+        assert_eq!(rig.opens(), opened + 1, "one stream for it");
+        assert!(t.elapsed() < Duration::from_millis(50), "and without a poll interval's wait: {:?}", t.elapsed());
+        rig.finish();
+    }
+
+    #[test]
+    fn a_game_starting_drops_the_sounds_that_wait_for_a_mute_answer() {
+        let rig = Rig::start(false);
+        rig.press();
+        std::thread::sleep(Duration::from_millis(100));
+        rig.audible.store(true, Ordering::SeqCst);
+        rig.press();
+        rig.tx.send(Msg::Stop(true)).unwrap();
+        std::thread::sleep(Duration::from_millis(200));
+        assert_eq!(rig.loud_writes.load(Ordering::SeqCst), 0, "a sound held for the check did not play after the stop");
+        rig.finish();
     }
 
     #[test]

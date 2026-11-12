@@ -758,19 +758,13 @@ fn every_write_needs_the_csrf_token_and_this_origin() {
     assert_eq!(post("/api/game/status", format!(r#"{{"id":"{id}","status":"completed"}}"#)).status, 200);
     assert_eq!(post("/api/game/status", format!(r#"{{"id":"{id}","status":"won"}}"#)).status, 400);
     assert_eq!(post("/api/game/note", format!(r#"{{"id":"{id}","note":"Chapter 4"}}"#)).status, 200);
-    assert_eq!(post("/api/game/sticker", format!(r#"{{"id":"{id}","sticker":3,"on":false}}"#)).status, 200);
-    assert_eq!(post("/api/stickers/new", r#"{"name":"Couch"}"#.into()).status, 200);
-    assert_eq!(post("/api/stickers/rename", r#"{"sticker":3,"name":"Sofa"}"#.into()).status, 200);
     assert_eq!(post("/api/shelves/delete", r#"{"index":0,"was":"Racing"}"#.into()).status, 200);
     assert_eq!(post("/api/game/note", r#"{"id":"0000000000000000","note":"x"}"#.into()).status, 404, "ids, never paths");
     assert_eq!(post("/api/game/note", "not json".into()).status, 400);
     let edits = r.edits.lock().unwrap().clone();
     assert_eq!(edits[1], Edit::Status { path: path.clone(), status: crate::library_meta::Status::Completed });
     assert_eq!(edits[2], Edit::Note { path: path.clone(), note: "Chapter 4".into() });
-    assert_eq!(edits[3], Edit::Sticker { path: path.clone(), id: 3, on: false });
-    assert_eq!(edits[4], Edit::NewSticker { name: "Couch".into(), path: None });
-    assert_eq!(edits[5], Edit::RenameSticker { id: 3, name: "Sofa".into() });
-    assert_eq!(edits[6], Edit::DeleteShelf { index: 0, was: "Racing".into() });
+    assert_eq!(edits[3], Edit::DeleteShelf { index: 0, was: "Racing".into() });
     let big = format!(r#"{{"id":"{id}","note":"{}"}}"#, "x".repeat(70_000));
     assert_eq!(post("/api/game/note", big).status, 413);
     // The rating: 0 to 5 (0 takes it away); anything else is refused, never cut down to another rating.
@@ -795,8 +789,8 @@ fn the_owners_tailnet_devices_get_in_without_a_code() {
     assert_eq!(s["name"], "owner@example.com");
     let csrf = s["csrf"].as_str().unwrap().to_string();
     assert_eq!(r.req("GET", "/api/library", &[], b"").status, 200);
-    assert_eq!(r.req("POST", "/api/stickers/new", &[], br#"{"name":"x"}"#).status, 403, "writes still need the token");
-    assert_eq!(r.req("POST", "/api/stickers/new", &[("X-CSRF-Token", &csrf)], br#"{"name":"x"}"#).status, 200);
+    assert_eq!(r.req("POST", "/api/shelves/delete", &[], br#"{"index":0,"was":"Racing"}"#).status, 403, "writes still need the token");
+    assert_eq!(r.req("POST", "/api/shelves/delete", &[("X-CSRF-Token", &csrf)], br#"{"index":0,"was":"Racing"}"#).status, 200);
     // The Pocket's own name works as the Host too.
     let named = r.raw(b"GET /api/library HTTP/1.1\r\nHost: pocket\r\n\r\n");
     assert_eq!(named.status, 200);
@@ -1437,14 +1431,16 @@ fn every_session_cookie_is_tried() {
     assert_eq!(r.req("GET", "/api/library", &[("Cookie", &both)], b"").status, 200);
 }
 
-/// F18: an id that doesn't fit is refused, not cut down to another sticker's.
+/// Retired label edits cannot change legacy labels or the saved shelves that still use them.
 #[test]
-fn ids_that_dont_fit_are_refused() {
+fn retired_labels_cannot_mutate_the_library() {
     let r = rig("api-ids", false);
     let (cookie, csrf) = r.pair();
-    let a = r.req("POST", "/api/stickers/delete", &[("Cookie", &cookie), ("X-CSRF-Token", &csrf)], br#"{"sticker":4294967297}"#);
-    assert_eq!(a.status, 400);
-    assert!(r.edits.lock().unwrap().is_empty(), "sticker 1 was not deleted");
+    for route in ["/api/game/sticker", "/api/stickers/new", "/api/stickers/rename", "/api/stickers/delete"] {
+        let a = r.req("POST", route, &[("Cookie", &cookie), ("X-CSRF-Token", &csrf)], br#"{"sticker":4294967297,"name":"x"}"#);
+        assert_eq!(a.status, 404);
+    }
+    assert!(r.edits.lock().unwrap().is_empty(), "legacy labels were not changed");
 }
 
 /// F19: a picture whose pixels don't match its size is refused, not indexed (a panic would end pocket-ui).

@@ -79,13 +79,18 @@ fn parent_dir(path: &Path) -> Option<&Path> {
 /// Replaces `path` with `bytes` in one step: the file is the old content or the new one, never a mix or
 /// empty. Creates the directory if needed.
 pub fn write_atomic(path: &Path, bytes: &[u8]) -> io::Result<()> {
-    write_via_temp(path, bytes, true)
+    write_via_temp(path, bytes, true, false)
+}
+
+/// Worker-only bulk output. Brick shares the updater's pacing and idle I/O policy.
+pub fn write_atomic_bulk(path: &Path, bytes: &[u8]) -> io::Result<()> {
+    write_via_temp(path, bytes, true, true)
 }
 
 /// [`write_atomic`] without the `fsync`s, for files that may be lost in a power cut but must never be half written
 /// or written through a link (a state's preview picture): nothing waits for the card.
 pub fn replace_file(path: &Path, bytes: &[u8]) -> io::Result<()> {
-    write_via_temp(path, bytes, false)
+    write_via_temp(path, bytes, false, false)
 }
 
 /// Copies `from` to `to` unless something is at `to` already: the bytes go to a temporary file beside it, then
@@ -192,7 +197,15 @@ pub(crate) fn crash_point(step: &str) {
 #[inline(always)]
 pub(crate) fn crash_point(_: &str) {}
 
-fn write_via_temp(path: &Path, bytes: &[u8], durable: bool) -> io::Result<()> {
+fn write_via_temp(path: &Path, bytes: &[u8], durable: bool, bulk: bool) -> io::Result<()> {
+    #[cfg(feature = "brick")]
+    let _idle = if bulk { Some(crate::update::brick_io::IdleIo::enter()?) } else { None };
+    let write = |f: &mut File, data: &[u8]| -> io::Result<()> {
+        #[cfg(feature = "brick")]
+        if bulk { return crate::update::brick_io::Pacer::new().write(data, f); }
+        let _ = bulk;
+        f.write_all(data)
+    };
     let dir = parent_dir(path);
     if let Some(dir) = dir {
         fs::create_dir_all(dir)?;
@@ -206,12 +219,12 @@ fn write_via_temp(path: &Path, bytes: &[u8], durable: bool) -> io::Result<()> {
         }
         #[cfg(test)]
         {
-            f.write_all(&bytes[..bytes.len() / 2])?;
+            write(&mut f, &bytes[..bytes.len() / 2])?;
             crash_point("half written");
-            f.write_all(&bytes[bytes.len() / 2..])?;
+            write(&mut f, &bytes[bytes.len() / 2..])?;
         }
         #[cfg(not(test))]
-        f.write_all(bytes)?;
+        write(&mut f, bytes)?;
         crash_point("written");
         if durable {
             f.sync_all()?;

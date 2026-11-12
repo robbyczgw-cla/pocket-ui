@@ -105,7 +105,7 @@ fn japanese_names_are_painted_from_the_system_font_and_run_into_nothing() {
     let stub = wayland(&tmp);
     let mut problems = Vec::new();
     // Split's list, Cards with the jump's big letter, the card of a Japanese name, the search finding two.
-    for state in ["letters:snes:0", "letters:snes:3:cards", "curator:card:snes:ファイナル", "search:results:マリオ"] {
+    for state in ["letters:snes:0", "letters:snes:3:split", "curator:card:snes:ファイナル", "search:results:マリオ"] {
         for light in [false, true] {
             for size in ["normal", "large"] {
                 let (with, with_rec) = render(&tmp, stub.as_ref(), state, light, size, Some(&font));

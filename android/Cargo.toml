@@ -19,12 +19,16 @@ android_logger = "0.15"
 pocket-ui = { path = ".." }
 serde_json = "1"
 serde = { version = "1", features = ["derive"] }
+[features]
+# QA only: a RetroAchievements server answered from the device (src/ra_replay.rs). Off in every release APK.
+ra-replay = []
+
 [profile.release]
 lto = "thin"
 strip = true
 panic = "abort"
 
-# A gamepad's D-pad (hat axes) and left stick reach the launcher as arrow keys: winit 0.30.13 with one patch in
+# A gamepad's D-pad (hat axes) and left stick reach the launcher as arrow keys, analog L2/R2 as L2/R2 keys: winit 0.30.13 with one patch in
 # its Android input path (vendor/winit-0.30.13-android, "pocket-ui patch"). Remove when winit forwards joystick motion.
 [patch.crates-io]
 winit = { path = "../vendor/winit-0.30.13-android" }

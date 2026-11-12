@@ -9,7 +9,7 @@
 //! - [`echoes`]: "more like this" with reason lines.
 //! - [`versions`]: one game on several systems, the preferred version, lists with each game once.
 //! - [`sort`]: the orders of the Lens's games and of a smart shelf (name, last played, play time, rating, year, length).
-//! - [`surprise`]: "Surprise me", one game picked for you with the reason.
+//! - [`surprise`]: the weighted draw and its reason (the day's pick, Just Play's card).
 //! - [`justplay`]: "Just Play", the one game Home's button starts: unfinished first, no choice.
 //! - [`today`]: what Home's Curator row offers: the day's pick and the games waiting for you.
 //! - [`prefs`]: Settings → Curator and the smart shelves.

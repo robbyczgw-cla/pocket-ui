@@ -29,8 +29,6 @@ pub enum Art {
     Screenshots,
     /// A magnifying glass beside an empty box: nothing matches.
     Search,
-    /// A market stall with empty shelves: nothing in the store.
-    Store,
     /// A handheld asleep under a blanket: nothing played yet.
     NothingPlayed,
     /// pocket-ui's mark: a cartridge whose paper label has the four system stripes and a "p" (the boot screen, first
@@ -48,8 +46,6 @@ pub enum Art {
 pub enum Emblem {
     /// A wooden crate of cartridges with a brass label holder: Curator.
     Curator,
-    /// A wrapped gift box: Surprise me, before its pick's cover is read.
-    Surprise,
     /// A monitor with a game pad in front of it: PC streaming.
     Streaming,
     /// Round stickers on a peeled sheet: a sticker's shelf.
@@ -99,7 +95,6 @@ const FILES: &[(Art, &[u8])] = &[
     (Art::Hotel, include_bytes!("../assets/ui-art/empty-hotel.png")),
     (Art::Screenshots, include_bytes!("../assets/ui-art/empty-screenshots.png")),
     (Art::Search, include_bytes!("../assets/ui-art/empty-search.png")),
-    (Art::Store, include_bytes!("../assets/ui-art/empty-store.png")),
     (Art::NothingPlayed, include_bytes!("../assets/ui-art/empty-nothing-played.png")),
     (Art::Logo, include_bytes!("../assets/ui-art/logo.png")),
     (Art::Device(Model::MiniV2), include_bytes!("../assets/ui-art/device-miniv2.png")),
@@ -124,7 +119,6 @@ const FILES: &[(Art, &[u8])] = &[
     (Art::Sticker(Sticker::Streak), include_bytes!("../assets/ui-art/sticker-streak.png")),
     (Art::Sticker(Sticker::CameBack), include_bytes!("../assets/ui-art/sticker-came-back.png")),
     (Art::Emblem(Emblem::Curator), include_bytes!("../assets/ui-art/emblem-curator.png")),
-    (Art::Emblem(Emblem::Surprise), include_bytes!("../assets/ui-art/emblem-surprise.png")),
     (Art::Emblem(Emblem::Streaming), include_bytes!("../assets/ui-art/emblem-streaming.png")),
     (Art::Emblem(Emblem::Sticker), include_bytes!("../assets/ui-art/emblem-sticker.png")),
     (Art::Emblem(Emblem::JustPlay), include_bytes!("../assets/ui-art/emblem-justplay.png")),
@@ -289,7 +283,7 @@ mod tests {
         // Play's case as a plain grey card again.
         let (w, h) = size(Art::Emblem(Emblem::JustPlay), 1);
         assert!(w >= 80 && h >= 70, "{w}x{h}");
-        for e in [Emblem::Curator, Emblem::Surprise, Emblem::Streaming, Emblem::Sticker] {
+        for e in [Emblem::Curator, Emblem::Streaming, Emblem::Sticker] {
             let (ow, oh) = size(Art::Emblem(e), 1);
             assert!(w * h * 10 >= ow * oh * 7, "{e:?} {ow}x{oh} against {w}x{h}");
         }

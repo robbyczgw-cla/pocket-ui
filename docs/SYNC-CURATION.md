@@ -1,6 +1,6 @@
 # Library data: syncing the curation, not just the saves
 
-Settings → Connections → Sync → **Library data** (off at the start) makes the player's curation the same on every
+Settings → Help & tools → For tinkerers → Sync → **Library data** (off at the start) makes the player's curation the same on every
 Pocket they own: favourites, play status, notes, ratings, stickers, hidden games, smart shelves and play history.
 The user's side is in [user/sync.md](user/sync.md#library-data). This page is the design: why the files look the way
 they do, how two devices that both changed something end up with both changes, and what is deliberately left out.

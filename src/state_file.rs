@@ -1,6 +1,6 @@
 //! Durable automatic states, compressed outside the legacy namespace. Manual/undo/Earlier files stay raw so older
 //! players can still use them. Old players never open `.pstate.auto.z`; their quit cannot replace the saved moment.
-//! Linux (including Deck and shared handheld players) and Android use these same readers and writers.
+//! Linux handheld players and Android use these same readers and writers.
 
 use std::io::{self, Read};
 use std::path::{Path, PathBuf};

@@ -150,12 +150,28 @@ impl Files for Listings<'_> {
 fn app_name(profile: &str) -> Option<&'static str> {
     Some(match profile.split(':').next().unwrap_or("") {
         "retroarch" => "RetroArch",
-        "ps2" => "NetherSX2",
+        "ps2" => "ARMSX2",
         "dolphin" => "Dolphin",
         "psp" => "PPSSPP",
         "psx" => "DuckStation",
         "3ds" => "Azahar",
-        "switch" => "Eden",
+        "xbox" => "hakuX",
+        _ => return None,
+    })
+}
+
+/// What a start says when the game's emulator app isn't on the phone (`Host::installed` false): which app, where to get
+/// it, and the one step in it that the start needs. Said instead of starting; nothing counts as played. None: a profile
+/// nothing can start from here (`app_name`).
+pub fn app_missing(profile: &str) -> Option<&'static str> {
+    Some(match profile.split(':').next().unwrap_or("") {
+        "retroarch" => "This game plays in RetroArch, which isn't installed. Get it from retroarch.com or Google Play, then start the game again.",
+        "ps2" => "PlayStation 2 games play in ARMSX2, which isn't installed. Get it from github.com/ARMSX2/ARMSX2 (Releases), add your console's BIOS in it once, then start the game again.",
+        "dolphin" => "GameCube and Wii games play in Dolphin, which isn't installed. Get it from F-Droid, Google Play or dolphin-emu.org, then start the game again.",
+        "psp" => "PSP games play in PPSSPP, which isn't installed. Get it from ppsspp.org or Google Play, then start the game again.",
+        "psx" => "PlayStation games play in DuckStation, which isn't installed. Get it from Google Play, then start the game again.",
+        "3ds" => "3DS games play in Azahar, which isn't installed. Get it from azahar-emu.org or Google Play, then start the game again.",
+        "xbox" => "Xbox games play in hakuX, which isn't installed. Get it from github.com/rfandango/hakuX (Releases), choose your Xbox games folder in it once, then start the game again.",
         _ => return None,
     })
 }
@@ -163,7 +179,7 @@ fn app_name(profile: &str) -> Option<&'static str> {
 /// A system that doesn't start without a console's file of its own: its emulator app asks for it and keeps it, out of
 /// this app's sight.
 fn needs_own_files(system: &str) -> bool {
-    matches!(system, "psx" | "ps2" | "segacd" | "switch")
+    matches!(system, "psx" | "ps2" | "segacd")
 }
 
 /// The catalog `game_check` looks up file types in.
@@ -208,7 +224,7 @@ pub fn check(listing: &Listing, host: &dyn Host, stop: &AtomicBool, progress: &m
         found.add(Finding { group: Group::Access, name: root.name.clone(), system: String::new(), what, todo: todo.into(), place: None, fix: None });
     }
     let listed: Vec<&Listed> = listing.roots.iter().flat_map(|r| &r.files).collect();
-    let documents: Vec<Document> = listed.iter().map(|f| Document { uri: f.uri.clone(), id: f.id.clone(), authority: f.authority.clone(), relative: f.relative.clone(), sheet: f.sheet.clone(), size: f.size }).collect();
+    let documents: Vec<Document> = listing.roots.iter().flat_map(|root| root.files.iter().map(move |f| Document { uri: f.uri.clone(), id: f.id.clone(), authority: f.authority.clone(), relative: f.relative.clone(), root_name: root.name.clone(), sheet: f.sheet.clone(), size: f.size })).collect();
     let games = document_library::scan(documents.clone());
     let total = games.len();
     let catalog = catalog();
@@ -315,9 +331,7 @@ pub fn check(listing: &Listing, host: &dyn Host, stop: &AtomicBool, progress: &m
         let name = if inner.is_empty() { root_name } else { last_part(inner) };
         let what = if *n == 1 { format!("pocket-ui can't tell which system the game in {name} is for, so it isn't on your shelf.") } else { format!("pocket-ui can't tell which system the {n} games in {name} are for, so they aren't on your shelf.") };
         let alias = Some(plain(name)).filter(|p| document_library::system(p).is_some() && p != name);
-        let todo = if inner.is_empty() && document_library::system(&plain(name)).is_some() {
-            format!("You chose {name} itself. Choose the folder above it, so that its name counts.")
-        } else if let Some(alias) = alias {
+        let todo = if let Some(alias) = alias {
             format!("Rename the folder to {alias}.")
         } else {
             "Name the folder after the system, for example psx, ps2 or segacd.".to_string()
@@ -353,8 +367,9 @@ pub fn check(listing: &Listing, host: &dyn Host, stop: &AtomicBool, progress: &m
                 if *id == "pcengine" && matches!(ext.as_str(), "cue" | "chd") {
                     found.add(not_here("PC Engine CD games don't start in this app yet: its player has no way to get their BIOS and tracks.".into(), "The game stays on your shelf and nothing is changed."));
                     blocked.insert(path.clone());
-                } else if let Some(len) = files.size(path) {
-                    if *id != "psp" && len > MAX_IN_MEMORY {
+                } else if let Some(len) = if game.parts.is_empty() { files.size(path) } else { u64::try_from(game.size).ok() } {
+                    // A disc with its tracks: all of them are copied, so all of them count.
+                    if !document_library::plays_from_its_file(id) && len > MAX_IN_MEMORY {
                         found.add(not_here(format!("This game is {} MB. This app's player takes games up to {} MB on this system.", len >> 20, MAX_IN_MEMORY >> 20), "The game stays on your shelf and nothing is changed."));
                         blocked.insert(path.clone());
                     } else if len > BIG {
@@ -398,17 +413,38 @@ pub fn check(listing: &Listing, host: &dyn Host, stop: &AtomicBool, progress: &m
         }
         if needs_own_files(id) {
             let Some(shown) = app_name(document_library::system(id).map_or("", |s| s.2)) else { continue };
-            let what = if *id == "switch" { format!("{name} needs keys and firmware from your own console.") } else { format!("{name} needs a BIOS file from your own console.") };
+            let what = format!("{name} needs a BIOS file from your own console.");
             found.add(tip(what, format!("{shown} asks for it and keeps it in its own folder. pocket-ui can't see into another app, so it can't say whether it is there.")));
         }
     }
-    if bios_folder {
+    // PlayStation in this app's player: PCSX ReARMed starts without a BIOS, with its own stand-in, and a few games need the
+    // real one. Said only when none is among the folders (`document_library::ps1_bios`, what a start copies).
+    let ps1_bios = document_library::ps1_bios(&documents);
+    if right_type.contains_key("psx") && host.bundled("psx") && ps1_bios.is_empty() {
+        found.add(Finding {
+            group: Group::Tips,
+            name: "PlayStation".into(),
+            system: String::new(),
+            what: "No PlayStation BIOS found. Games start with the player's built-in stand-in, and a few need the real one.".into(),
+            todo: "Put a BIOS such as scph5501.bin in a folder named bios beside your games.".into(),
+            place: None,
+            fix: None,
+        });
+    }
+    let bios = document_library::player_bios(&documents);
+    for (id, name, missing) in [("saturn", "Sega Saturn", document_library::SATURN_BIOS_MISSING), ("dreamcast", "Dreamcast", document_library::DREAMCAST_BIOS_MISSING)] {
+        if right_type.contains_key(id) && host.bundled(id) && !bios.iter().any(|p| document_library::bios_file(&p.name).is_some_and(|b| b.0 == id && (id != "dreamcast" || b.1 == "dc/dc_boot.bin"))) {
+            found.add(Finding {group: Group::Tips, name: name.into(), system: String::new(), what: missing.into(), todo: "Add your own BIOS to a selected folder, then run Game check again.".into(), place: None, fix: None});
+        }
+    }
+    let other_bios = listed.iter().any(|f| document_library::in_bios_folder(&f.relative) && document_library::bios_file(last_part(&f.relative)).is_none());
+    if bios_folder && other_bios {
         found.add(Finding {
             group: Group::Tips,
             name: "bios".into(),
             system: String::new(),
-            what: "The files in your bios folder aren't read.".into(),
-            todo: "pocket-ui's own player needs no BIOS, and each emulator app keeps its own: add the file there.".into(),
+            what: "PlayStation, Saturn and Dreamcast BIOS files are read from your bios folder.".into(),
+            todo: "The others are for emulator apps, and each keeps its own: add them there.".into(),
             place: None,
             fix: None,
         });
@@ -482,6 +518,17 @@ mod tests {
         assert!(o.report.all_good());
         assert_eq!((o.report.total, o.report.ready), (4, 4));
     }
+    #[test]
+    fn a_psp_chd_is_ready_in_the_same_system_as_the_player() {
+        let o = run(&Phone::default(), vec![root(vec![file("psp/Game.chd", 800 << 20, "")])]);
+        assert_eq!((o.report.total, o.report.ready), (1, 1), "the pinned PSP loader advertises CHD");
+        assert!(o.report.findings.is_empty(), "{:?}", o.report.findings);
+        let mut selected = root(vec![file("Game.chd", 800 << 20, "")]);
+        selected.name = "playstationportable".into();
+        let direct = run(&Phone::default(), vec![selected]);
+        assert_eq!((direct.report.total, direct.report.ready), (1, 1), "Game check must use the selected folder too");
+        assert!(direct.report.findings.is_empty(), "{:?}", direct.report.findings);
+    }
 
     #[test]
     fn the_faults_of_a_normal_copied_folder_each_have_their_place() {
@@ -525,8 +572,8 @@ mod tests {
         assert!(by("Odd Name").what.contains("2 games in Odd Name"), "{:?}", by("Odd Name"));
         assert!(r.ready < r.total);
         // On the shelf: the two Libbets, Stopped, the two zips, Chrono, the two discs. Stopped, Only Text, Chrono, Lost Track
-        // can't start, and PlayStation needs DuckStation.
-        assert_eq!((r.total, r.ready), (8, 3), "{:#?}", r.findings);
+        // can't start; the PlayStation disc starts in this app's player.
+        assert_eq!((r.total, r.ready), (8, 4), "{:#?}", r.findings);
     }
 
     #[test]
@@ -585,7 +632,6 @@ mod tests {
             file("psx/Empty.bin", 0, ""),
             file("psx/Fine.chd", 3000, ""),
             file("segacd/Disc.chd", 3000, ""),
-            file("switch/Game.nsp", 3000, ""),
             file("pcengine/Cd.chd", 3000, ""),
             file("psvita/Game.vpk", 3000, ""),
             file("psp/Big.iso", 1 << 30, ""),
@@ -600,8 +646,8 @@ mod tests {
         let mut roots = vec![root(faults)];
         roots.extend(states);
         let mut all = run(&phone, roots).report.findings;
-        let with_apps = Phone { apps: vec!["retroarch", "psx", "ps2", "switch"], ..Phone::default() };
-        all.extend(run(&with_apps, vec![root(vec![file("segacd/Disc.chd", 3000, ""), file("psx/Fine.chd", 3000, ""), file("switch/Game.nsp", 3000, "")])]).report.findings);
+        let with_apps = Phone { apps: vec!["retroarch", "psx", "ps2"], ..Phone::default() };
+        all.extend(run(&with_apps, vec![root(vec![file("segacd/Disc.chd", 3000, ""), file("psx/Fine.chd", 3000, "")])]).report.findings);
         let german = crate::i18n::german();
         for g in Group::ALL {
             assert!(german.translate(g.name()).is_some(), "{}", g.name());
@@ -615,25 +661,120 @@ mod tests {
     }
 
     #[test]
+    fn a_start_without_its_emulator_app_names_the_app_and_where_to_get_it_in_every_language() {
+        // Every system the phone hands to another app: a press on Play without it says which app and where it comes from.
+        for id in document_library::SYSTEM_IDS {
+            let (_, name, profile, _) = document_library::system(id).unwrap();
+            let Some(app) = app_name(profile) else { continue };
+            if Phone::default().bundled(id) {
+                continue;
+            }
+            let said = app_missing(profile).unwrap_or_else(|| panic!("{name}: a start without {app} says nothing"));
+            assert!(said.contains(app) && said.contains("Get it from"), "{name}: {said}");
+            for lang in [crate::i18n::Lang::De, crate::i18n::Lang::Es] {
+                let shown = crate::i18n::tr_in(lang, said);
+                assert_ne!(shown, said, "{name} in {lang:?}: {said}");
+                assert!(shown.contains(app), "{name} in {lang:?} drops the app's name: {shown}");
+            }
+        }
+        // Xbox games are on the shelf and need hakuX; the Game check names it like the others.
+        let o = run(&Phone::default(), vec![root(vec![file("xbox/Game.xiso.iso", 3000, "")])]);
+        let apps = of(&o, Group::Emulator);
+        assert_eq!(apps.iter().map(|f| f.what.as_str()).collect::<Vec<_>>(), ["1 game needs the hakuX app, which isn't installed."]);
+        let o = run(&Phone { apps: vec!["xbox"], ..Phone::default() }, vec![root(vec![file("xbox/Game.xiso.iso", 3000, "")])]);
+        assert_eq!((o.report.total, o.report.ready), (1, 1));
+    }
+
+    #[test]
+    fn switch_files_are_no_system_and_the_game_check_says_nothing_about_them() {
+        // pocket-ui never supports the Switch: its files and folders are left alone as if they were not there. No shelf, no card,
+        // no count, no starter, no line in the Game check (not "can't be started", not "wrong folder", not "unknown type").
+        let recipes = include_str!("../android/java/xyz/pocketui/app/EmulatorIntents.java").to_lowercase();
+        let manifest = include_str!("../android/AndroidManifest.xml").to_lowercase();
+        for word in ["eden", "citron", "yuzu", "sudachi", "ryujinx", "\"switch\""] {
+            assert!(!recipes.contains(word) && !manifest.contains(word), "{word} is still started or queried");
+        }
+        assert!(document_library::system("switch").is_none() && document_library::folder_system("switch/Game.nsp").is_none());
+        assert!(!document_library::SYSTEM_IDS.contains(&"switch") && document_library::takes("switch").is_empty());
+        assert!(!document_library::shelf_type("nsp") && !document_library::shelf_type("xci"));
+        assert!(app_name("switch").is_none() && app_missing("switch").is_none());
+        // Beside a game that does start, so the count is seen to stay at one.
+        let files = || vec![file("gba/Real.gba", 3000, ""), file("switch/Game.nsp", 3000, ""), file("switch/Game2.xci", 3000, ""), file("Nintendo Switch/Third.nsp", 3000, ""), file("gba/Wrong.nsp", 3000, ""), file("Game.xci", 3000, "")];
+        for phone in [Phone::default(), Phone { apps: vec!["retroarch", "psx", "ps2"], ..Phone::default() }] {
+            let o = run(&phone, vec![root(files())]);
+            let said: Vec<_> = o.report.findings.iter().flat_map(|f| [f.name.as_str(), f.system.as_str(), f.what.as_str(), f.todo.as_str(), f.place.as_deref().unwrap_or("")]).collect();
+            assert!(said.iter().all(|t| { let t = t.to_lowercase(); !t.contains("switch") && !t.contains("nsp") && !t.contains("xci") }), "{said:?}");
+            assert_eq!(o.report.total, 1, "only the Game Boy Advance game is on the shelf");
+        }
+    }
+
+    #[test]
+    fn every_emulator_app_a_start_hands_to_is_one_android_lets_pocket_ui_see() {
+        // Android 11+ hides another app unless the manifest asks for it: an installed ARMSX2 counted as missing.
+        let recipes = include_str!("../android/java/xyz/pocketui/app/EmulatorIntents.java");
+        let manifest = include_str!("../android/AndroidManifest.xml");
+        let body = &recipes[recipes.find("String[][] apps(").unwrap()..recipes.find("static boolean available").unwrap()];
+        let packages: Vec<&str> = body.split("{\"").skip(1).filter_map(|p| p.split('"').next()).collect();
+        assert!(packages.len() >= 12, "{packages:?}");
+        for package in packages {
+            assert!(manifest.contains(&format!("<package android:name=\"{package}\"/>")), "{package} is started but not in <queries>");
+        }
+        // Every system that goes to another app has a recipe for its profile.
+        for id in document_library::SYSTEM_IDS {
+            let profile = document_library::system(id).unwrap().2;
+            if app_name(profile).is_some() && !profile.starts_with("retroarch:") {
+                assert!(body.contains(&format!("case \"{profile}\":")), "{id}: no recipe for {profile}");
+            }
+        }
+    }
+
+    /// Odin 2 Mini, 11.11.2026: with Azahar opened once before (its setup, its game list), Close Game → OK ended on Azahar's
+    /// own list and a second Back stayed there; pocket-ui never came back and the play time was not counted. A game of
+    /// Azahar starts in a clean task, so closing it returns to pocket-ui.
+    #[test]
+    fn a_3ds_game_starts_azahar_in_a_clean_task_so_closing_it_returns_to_pocket_ui() {
+        let recipes = include_str!("../android/java/xyz/pocketui/app/EmulatorIntents.java");
+        let at = recipes.find("profile.equals(\"3ds\")").expect("a 3DS rule in create()");
+        assert!(recipes[at..].lines().next().unwrap().contains("FLAG_ACTIVITY_CLEAR_TASK"), "the 3DS start must clear Azahar's old task");
+        // Only Azahar: the others come back with their own Close/Exit (ARMSX2, Dolphin, hakuX) and were not changed.
+        assert_eq!(recipes.matches("FLAG_ACTIVITY_CLEAR_TASK").count(), 1);
+    }
+
+    #[test]
     fn an_emulator_that_is_there_is_no_fault_and_one_that_is_not_says_which() {
-        let folder = || vec![root(vec![file("psx/A.chd", 3000, ""), file("psx/B.chd", 3000, ""), file("dreamcast/C.chd", 3000, ""), file("gamecube/D.rvz", 3000, "")])];
+        let folder = || vec![root(vec![file("ps2/A.chd", 3000, ""), file("ps2/B.iso", 3000, ""), file("segacd/C.chd", 3000, ""), file("gamecube/D.rvz", 3000, "")])];
         let o = run(&Phone::default(), folder());
         let apps = of(&o, Group::Emulator);
         assert_eq!(apps.len(), 3, "{apps:?}");
-        let ps = apps.iter().find(|f| f.name == "PlayStation").unwrap();
-        assert_eq!(ps.what, "2 games need the DuckStation app, which isn't installed.");
+        let ps = apps.iter().find(|f| f.name == "PlayStation 2").unwrap();
+        assert_eq!(ps.what, "2 games need the ARMSX2 app, which isn't installed.");
         assert!(apps.iter().any(|f| f.what.starts_with("1 game needs the RetroArch app")));
         assert_eq!((o.report.total, o.report.ready), (4, 0));
         assert!(!o.report.all_good());
 
-        let phone = Phone { apps: vec!["psx", "retroarch", "dolphin"], ..Phone::default() };
+        let phone = Phone { apps: vec!["ps2", "retroarch", "dolphin"], ..Phone::default() };
         let o = run(&phone, folder());
         assert!(of(&o, Group::Emulator).is_empty());
         assert_eq!((o.report.total, o.report.ready), (4, 4));
         assert!(o.report.all_good(), "tips only: {:?}", o.report.findings);
         let tips = of(&o, Group::Tips);
-        assert!(tips.iter().any(|t| t.what == "PlayStation needs a BIOS file from your own console." && t.todo.contains("DuckStation")), "{tips:?}");
-        assert!(tips.iter().any(|t| t.what.contains("RetroArch, with its flycast core")), "{tips:?}");
+        assert!(tips.iter().any(|t| t.what == "PlayStation 2 needs a BIOS file from your own console." && t.todo.contains("ARMSX2")), "{tips:?}");
+        assert!(tips.iter().any(|t| t.what.contains("RetroArch, with its clownmdemu core")), "{tips:?}");
+    }
+
+    #[test]
+    fn sega_discs_use_our_player_and_missing_firmware_is_explained() {
+        let games = || vec![file("saturn/Play.iso", 700 << 20, ""), file("dreamcast/Play.cdi", 900 << 20, "")];
+        let o = run(&Phone::default(), vec![root(games())]);
+        assert_eq!((o.report.total,o.report.ready),(2,2));
+        assert!(of(&o,Group::Emulator).is_empty(), "No other app is needed for either bundled core");
+        assert!(of(&o,Group::NotHere).is_empty(), "Discs are read as files, not whole in-memory cartridges");
+        let tips=of(&o,Group::Tips);
+        assert!(tips.iter().any(|t| t.what==document_library::SATURN_BIOS_MISSING));
+        assert!(tips.iter().any(|t| t.what==document_library::DREAMCAST_BIOS_MISSING));
+        let mut files=games();files.extend([file("bios/SATURN_BIOS.BIN",512<<10,""),file("bios/DC_BOOT.BIN",2<<20,"")]);
+        let o=run(&Phone::default(),vec![root(files)]);
+        assert!(of(&o,Group::Tips).is_empty(),"The selected BIOS files unlock both systems without stale missing-BIOS advice: {:?}",o.report.findings);
     }
 
     #[test]
@@ -649,10 +790,43 @@ mod tests {
         // No bundled system of the phone asks for one.
         let o = run(&Phone::default(), vec![root(vec![file("gba/A.gba", 3000, ""), file("nes/B.nes", 3000, ""), file("psp/C.iso", 3000, ""), file("nds/D.nds", 3000, ""), file("n64/E.z64", 3000, "")])]);
         assert_eq!(o.report.findings, Vec::new());
-        // A file in the bios folder is no game, and it is said that nothing reads it.
+        // A file in the bios folder is no game, and it is said which BIOS files the own player reads.
         let o = run(&Phone::default(), vec![root(vec![file("gba/A.gba", 3000, ""), file("bios/syscard3.pce", 262144, ""), file("bios/gba_bios.bin", 16384, "")])]);
         assert_eq!(o.report.total, 1);
         assert!(of(&o, Group::Tips)[0].what.contains("bios folder"));
+        // A PlayStation BIOS there is what the player takes: nothing to say.
+        let o = run(&Phone::default(), vec![root(vec![file("gba/A.gba", 3000, ""), file("bios/scph5501.bin", 524288, "")])]);
+        assert_eq!(o.report.findings, Vec::new());
+    }
+
+    #[test]
+    fn a_playstation_game_without_a_bios_starts_and_the_check_says_how_to_add_one() {
+        let games = || vec![file("psx/Game.cue", 60, "FILE \"Game.bin\" BINARY"), file("psx/Game.bin", 300 << 20, ""), file("psx/Other.chd", 200 << 20, "")];
+        let o = run(&Phone::default(), vec![root(games())]);
+        assert_eq!((o.report.total, o.report.ready), (2, 2), "both start in this app's player: {:#?}", o.report.findings);
+        assert!(o.report.all_good(), "a tip, no fault: {:?}", o.report.findings);
+        let tips = of(&o, Group::Tips);
+        assert_eq!(tips.len(), 1, "{tips:?}");
+        assert!(tips[0].what.starts_with("No PlayStation BIOS found.") && tips[0].todo.contains("bios"), "{tips:?}");
+        assert!(!tips[0].todo.contains("DuckStation"), "no emulator app is needed any more");
+        // One beside the games, in any folder or letters: found, nothing said.
+        let mut with = games();
+        with.push(file("psx/SCPH1001.BIN", 524288, ""));
+        let o = run(&Phone::default(), vec![root(with)]);
+        assert!(of(&o, Group::Tips).is_empty(), "{:?}", o.report.findings);
+        assert_eq!(o.report.total, 2, "the BIOS is no game on the shelf");
+    }
+
+    #[test]
+    fn a_big_disc_counts_with_its_tracks_for_the_room_its_copy_needs() {
+        // The cue is 60 bytes, its tracks 700 MB: the room asked is the set's.
+        let phone = Phone { room: Some(500 << 20), ..Phone::default() };
+        let o = run(&phone, vec![root(vec![file("psx/Big.cue", 60, "FILE \"Big (Track 1).bin\" BINARY\nFILE \"Big (Track 2).bin\" BINARY"), file("psx/Big (Track 1).bin", 600 << 20, ""), file("psx/Big (Track 2).bin", 100 << 20, "")])]);
+        let no = of(&o, Group::NotHere);
+        assert!(no.iter().any(|f| f.name == "Big" && f.what.starts_with("This game needs 956 MB free")), "{no:?}");
+        // Over the 512 MB a cartridge core takes in memory, and still no fault: PCSX ReARMed reads the file.
+        let o = run(&Phone::default(), vec![root(vec![file("psx/Big.cue", 60, "FILE \"Big.bin\" BINARY"), file("psx/Big.bin", 700 << 20, "")])]);
+        assert!(of(&o, Group::NotHere).is_empty(), "{:?}", o.report.findings);
     }
 
     #[test]
@@ -719,8 +893,9 @@ mod tests {
         let d = of(&o, Group::Discs);
         assert!(d.iter().any(|f| f.what == "Disc: Disc 1.cue is there, its Track.bin is missing."), "{d:?}");
         assert!(d.iter().any(|f| f.what == "Disc: Empty.cue is there, its Empty.bin is empty."), "{d:?}");
-        assert_eq!(d.iter().find(|f| f.what.contains("Caps.cue")).unwrap().todo, "Rename CAPS.BIN to Caps.bin.");
-        assert_eq!(o.report.ready, 0, "{} on the shelf, none can start: {:#?}", o.report.total, o.report.findings);
+        // A track in other letters than its sheet writes is found, and copied under the sheet's name: no fault on a phone.
+        assert!(!d.iter().any(|f| f.what.contains("Caps.cue")), "{d:?}");
+        assert_eq!(o.report.ready, 1, "{} on the shelf, only Caps can start: {:#?}", o.report.total, o.report.findings);
     }
 
     #[test]
@@ -743,8 +918,11 @@ mod tests {
         // The folder that was chosen is psx itself: its name isn't part of the paths.
         let chosen = Root { name: "psx".into(), ..root(vec![file("Game.chd", 3000, ""), file("Other.cue", 30, "FILE \"Other.bin\" BINARY"), file("Other.bin", 3000, "")]) };
         let o = run(&Phone::default(), vec![chosen]);
-        assert_eq!(of(&o, Group::Place)[0].todo, "You chose psx itself. Choose the folder above it, so that its name counts.");
-        assert_eq!(o.report.total, 0);
+        assert!(of(&o, Group::Place).is_empty(), "a selected system folder needs no repair");
+        assert_eq!((o.report.total, o.report.ready), (2, 2));
+        let misspelled = Root { name: "P S X".into(), ..root(vec![file("Game.chd", 3000, "")]) };
+        let o = run(&Phone::default(), vec![misspelled]);
+        assert_eq!(of(&o, Group::Place)[0].todo, "Rename the folder to psx.");
     }
 
     #[test]

@@ -55,17 +55,13 @@ Then pocket-ui asks nothing and says nothing; **Check again** still works when y
 The first time you open the page, pocket-ui checks for updates by itself (unless you switched the automatic check off). The page shows:
 
 - **pocket-ui**: the installed version, and a newer one if available ("0.2.0, 0.2.1 available").
-- **System**: the installed system version, and a newer one if available, or "update waiting for
-  restart" when a system update has been downloaded. Not on the TrimUI Brick: its system is TrimUI's, and pocket-ui only updates
-  itself there ("New versions of pocket-ui.").
+
 
 Below that are the actions that apply right now:
 
 | Action | What it does |
 |---|---|
 | **Install pocket-ui …** | Asks first: **Install now** downloads and installs the new pocket-ui and restarts it by itself ("Installed. Restarting…"), **Later** (or B) goes back. If the battery is under 20 % and not charging, the page says to plug in the charger first. |
-| **Get system …** | Downloads and checks a new system version. It is installed the next time the system starts. |
-| **Remove the waiting system update** | Cancels a system update that was downloaded but not installed yet. |
 | **Check again** | Checks for updates again. |
 
 While something downloads, a progress bar shows how far it is, and **A** cancels the download
@@ -73,6 +69,12 @@ While something downloads, a progress bar shows how far it is, and **A** cancels
 next download server; slow Wi-Fi is fine as long as data keeps coming. When no server works, the page says why
 ("The download server stopped responding…" or "Download failed. Check Wi-Fi."). The release notes of the selected
 update appear at the bottom. If everything is current, the page says "Everything is up to date."
+
+Development builds show "Development build: install a release package to use app updates." Their internal version
+number does not establish their order relative to published releases, so they offer no app OTA updates, including
+future releases. Install the normal release package to return to release updates; your games and settings stay.
+About identifies a development build with `-dev` and its commit; the TrimUI model stays visible in its own
+Device row. Problem reports include the build type and commit.
 
 Once a completed download is being committed to the card, cancellation can be too late: the update finishes and
 restarts normally. Keep the device charged while installation finishes. A missing shelf notice can also mean that
@@ -104,54 +106,11 @@ On ROCKNIX, the installer also writes the new programs to the card before switch
 installation, a complete interface remains available at the next start. Installing a rebuilt copy of the same version
 keeps the old programs in a separate folder, too. Run the installer again to finish an interrupted installation.
 
-## System updates and the bootloader
+## Android
 
-The bootloader is the small program in the device's internal storage that starts Android. A
-damaged bootloader can stop the device from starting at all.
-
-ROCKNIX's own updates can rewrite this bootloader. pocket-ui does not allow that. Before a system
-update is allowed to install, pocket-ui opens it and refuses it if:
-
-- it contains ROCKNIX's tool for rewriting the bootloader,
-- its install scripts would write to the bootloader or to any partition,
-- it is made for a different device, or
-- its version does not match the signed list.
-
-In each case the update is not installed, and the page says why, for example "This system update
-would touch the bootloader or a partition". **Standard ROCKNIX updates are therefore always
-refused**; system updates come only from our own system build, which leaves the bootloader out.
-
-## System updates that would break pocket-ui
-
-pocket-ui is made separately from the system, so a new system could lack something it needs. Before a system update is
-allowed to install, pocket-ui also looks inside it for what pocket-ui and its games use:
-
-- **Refused** if pocket-ui could not start or play with it: an older system library than pocket-ui was made for,
-  a library its window or the games' picture needs, sway (which draws the screen), the program that starts the
-  other emulators, or EmulationStation (the way back when pocket-ui can't start). The page says what is missing,
-  for example "This system update would break pocket-ui (libxkbcommon.so.0 is missing: pocket-ui can't open its
-  window). It was not installed."
-- **Installed, with a note** if only a part would stop working: Wi-Fi, sound, Bluetooth or time zone tools, or the
-  emulator (core) of a system pocket-ui plays itself, for example "Ready. It installs the next time the system
-  starts. Note: no gambatte core in the new system, so gb, gbc games would not start." A core you installed from
-  the Store is kept and still counts.
-
-The system update itself is installed by the system during the next start, from the SD card.
-
-### The kernel on the SD card
-
-With the dual-boot setup ([install guide](../INSTALL-DUAL-BOOT.md)) the system's core part (the kernel) is
-copied to `boot/pocket/Image` on the SD card by `scripts/make-sd-efi.sh`. A system update replaces `KERNEL` and
-`SYSTEM` but not that copy, so the boot files have to be made again from the new version. Making them
-automatically after an update is planned. If you start the system from a computer with `fastboot boot`, the
-Updates page reminds you: "This device starts from a computer: make a new boot image from the update first."
-
-System updates have not been tested on a device yet, because our own system build does not exist
-yet.
-
-On a standalone TrimUI Brick card, an update keeps cores and supporting files that already
-match the new version. It checks them before switching versions and keeps a recovery record so the previous version can use them again. Only changed
-or missing components need a download, and they receive the same integrity checks as the app.
-Downloads finish in memory before the card is written. If memory is too full, restart the Brick and try again.
-Your games, saves and settings stay in place. Leave enough free card space for both app
-versions; the previous version remains available for automatic recovery.
+On Android, open the existing Updates row in Settings. The page uses a separate signed APK
+channel and the same version, check, install confirmation and automatic-check actions. Downloads
+use Wi-Fi only, with progress and **B** to cancel. Android asks once to allow pocket-ui to install
+unknown apps, then asks to confirm each installation. A successful update closes the app; open it
+again to see the installed version. It keeps its data and saves. Automatic channel checks do not
+interrupt Play; an update you have started must finish or be cancelled before starting a game. See [Android updates](android-mvp.md#updates-over-wi-fi).

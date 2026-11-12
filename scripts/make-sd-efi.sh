@@ -1,15 +1,18 @@
 #!/bin/sh
 # Builds the SD boot files for the dual boot: Boot mode: Loader -> Retroid u-boot (loader) -> GRUB -> pocket-ui.
+# Any other UEFI firmware that starts EFI/BOOT/BOOTAA64.EFI from the card takes the same GRUB path; OpenABL
+# ("Boot mode: Linux") reads loader/entries/pocket-ui.conf first and starts the same kernel, tree and command line.
 #   scripts/make-sd-efi.sh KERNEL miniv2-noufs.dtb OUTDIR
 # KERNEL is ROCKNIX's Android boot image from the SD (/flash/KERNEL); the arm64 Image inside it is unpacked.
 # GRUB comes from Debian's grub-efi-arm64-bin (Docker, arm64). Nothing is written to the device.
 # OUTDIR gets the SD layout: EFI/BOOT/BOOTAA64.EFI, boot/grub/{grub.cfg,grub-efi-arm64-bin.version},
-# boot/pocket/{Image,miniv2-noufs.dtb,KERNEL.source.md5}. scripts/make-image.sh uses it for the whole SD image.
+# boot/pocket/{Image,miniv2-noufs.dtb,KERNEL.source.md5}, loader/entries/pocket-ui.conf. scripts/make-image.sh uses it for
+# the whole SD image.
 set -eu
 [ $# -eq 3 ] || { echo "usage: $0 KERNEL DTB OUTDIR" >&2; exit 2; }
 KERNEL=$1 DTB=$2 OUT=$3
 HERE=$(cd "$(dirname "$0")" && pwd)
-mkdir -p "$OUT/EFI/BOOT" "$OUT/boot/grub" "$OUT/boot/pocket"
+mkdir -p "$OUT/EFI/BOOT" "$OUT/boot/grub" "$OUT/boot/pocket" "$OUT/loader/entries"
 OUT=$(cd "$OUT" && pwd)
 
 python3 - "$KERNEL" "$OUT/boot/pocket/Image" <<'EOF'
@@ -28,6 +31,7 @@ EOF
 cp "$DTB" "$OUT/boot/pocket/miniv2-noufs.dtb"
 md5 -q "$KERNEL" 2>/dev/null >"$OUT/boot/pocket/KERNEL.source.md5" || md5sum "$KERNEL" | cut -d' ' -f1 >"$OUT/boot/pocket/KERNEL.source.md5"
 cp "$HERE/../deploy/sd-efi/grub.cfg" "$OUT/boot/grub/grub.cfg"
+cp "$HERE/../deploy/sd-efi/loader/entries/pocket-ui.conf" "$OUT/loader/entries/pocket-ui.conf"
 
 # The container runs on the build machine's own architecture: an arm64 one does not start on an x86_64 machine without
 # qemu ("exec format error"). grub-mkimage (grub-common) builds arm64-efi images on any architecture, from the arm64

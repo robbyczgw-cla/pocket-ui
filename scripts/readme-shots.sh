@@ -4,7 +4,7 @@
 #   scripts/readme-shots.sh [OUT]        (default: docs/media)
 # BIN=path/to/pocket-ui uses a binary you already built; otherwise `cargo build --release --bin pocket-ui` runs first.
 # Needs python3 and ImageMagick's `convert`. On Linux without a compositor, start scripts/wayland-stub.py first
-# (docs/DEVELOPING.md, "Tests").
+# (docs/dev/tests.md, "Tests").
 set -eu
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
 OUT=${1:-$ROOT/docs/media}

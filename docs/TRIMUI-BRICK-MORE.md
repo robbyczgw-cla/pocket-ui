@@ -1,4 +1,4 @@
-# TrimUI Brick, own card: Kids mode, Screenshots, Web companion, Over the game, Tour (Beta)
+# TrimUI Brick, own card: Kids mode, Screenshots, Web companion, Over the game, Tour
 
 On top of the Brick's own card ([TRIMUI-BRICK-STANDALONE.md](TRIMUI-BRICK-STANDALONE.md), [TRIMUI-BRICK-REMOTE.md](TRIMUI-BRICK-REMOTE.md)).
 All of it is pocket-ui's own code that ROCKNIX already has; the Brick only hid the rows. What changed is behind the `brick` feature and

@@ -69,8 +69,8 @@ def rotate(portrait):
 def shot(name):
     (out / (name + '.png')).write_bytes(run('exec-out', 'screencap', '-p'))
 
-sh('am', 'force-stop', 'dev.pocket.spike')
-sh('am', 'start', '-W', '-n', 'dev.pocket.spike/.PocketActivity')
+sh('am', 'force-stop', 'xyz.pocketui.app')
+sh('am', 'start', '-W', '-n', 'xyz.pocketui.app/.PocketActivity')
 time.sleep(2)
 rotate(False)
 look('Cabinet')

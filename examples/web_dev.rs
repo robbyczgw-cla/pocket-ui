@@ -179,16 +179,6 @@ fn apply(data: &Path, e: Edit) -> Result<(), String> {
         Edit::Status { path, status } => meta.set_status(&path, status),
         Edit::Note { path, note } => meta.set_note(&path, &note),
         Edit::Rating { path, rating } => meta.set_rating(&path, rating),
-        Edit::Sticker { path, id, on } => {
-            if meta.get(&path).stickers.contains(&id) != on {
-                meta.toggle_sticker(&path, id).map(|_| ())
-            } else {
-                Ok(())
-            }
-        }
-        Edit::NewSticker { name, path } => meta.add_sticker(&name).and_then(|id| path.map_or(Ok(()), |p| meta.toggle_sticker(&p, id).map(|_| ()))),
-        Edit::RenameSticker { id, name } => meta.rename_sticker(id, &name),
-        Edit::DeleteSticker { id } => meta.delete_sticker(id),
         Edit::Preferred { work, path } => meta.set_preferred(&work, &path),
         Edit::RenameShelf { .. } | Edit::DeleteShelf { .. } | Edit::LibraryChanged(_) => Ok(()),
     };

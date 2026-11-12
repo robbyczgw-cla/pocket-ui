@@ -7,9 +7,11 @@ question and no waiting. Nothing keeps running and nothing extra goes on your ca
 
 Your last five games with a saved moment stand a little open on the shelf: on Home's recent row and in their system's row,
 the game peeks out over the case's top, and when you pick one its cartridge, card or disc comes a little out of the side.
-In the Minimal, Split, Cards and Cabinet looks the word **Continue** beside the game says the same. The first time an open case is on screen, one line says what it means: "Open means your moment is waiting"
+In the Split and Cabinet looks the word **Continue** beside the game says the same. The first time an open case is on screen, one line says what it means: "Open means your moment is waiting"
 (once, never in Kids Mode).
 Other games with a moment continue the same way when you start them; they just don't stand open.
+
+In Shelf and Cabinet, the case starts moving as soon as you press **A**, while pocket-ui prepares the game.
 
 ## How fast
 
@@ -83,15 +85,6 @@ restored frame for as long as you need. Any press or touch starts play immediate
 out the total play time. In the Android app, the **Remind me where I was** row in its own Settings switches it off.
 A failed resume shows no reminder. In particular, a short old PSP moment opens **Recovery**
 with an explanation; the moment remains under Load and the in-game save is kept safe.
-
-## On a Steam Deck
-
-Games pocket-ui plays itself (the libretro systems) continue the same way: their moments live in pocket-ui's data
-folder on the Deck, the last five stand open, and [Where was I?](#where-was-i) greets you after a long break.
-The big emulators (PCSX2, Dolphin and the other apps) keep their own saves, as everywhere; their games stand
-closed. SteamOS's power button puts the Deck to sleep: pocket-ui writes the moment of the game that is running
-first and waits briefly for it to finish. If it cannot save before SteamOS sleeps, the game remains in memory;
-an empty battery can then lose that progress. Waking the Deck returns to the game in memory.
 
 ## In-game saves
 

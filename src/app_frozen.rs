@@ -135,26 +135,12 @@ impl App {
     /// `launch`: what the start does about the game's moment. Goes on the start's environment for pocket-core, on the
     /// shelf for an emulator that takes longer to come up.
     /// True when the moment is left out: the game starts fresh ("Where was I?" shows nothing then, `where_was_i`).
-    pub(crate) fn frozen_at_launch(&mut self, system: &str, path: &Path, emulator: &str, core: &str, env: &mut Vec<(&'static str, String)>) -> bool {
+    pub(crate) fn frozen_at_launch(&mut self, path: &Path, hosted: bool, at: AtLaunch, wait: bool, env: &mut Vec<(&'static str, String)>) -> bool {
         self.frozen_wait = None;
-        // With the shelf's Frozen games off too: a start doesn't load a state made for another file or another patch.
-        if !frozen::available() {
-            return false;
-        }
-        let mark = self.recents.list.iter().find(|r| r.path == path).and_then(|r| r.frozen.clone());
-        let game = frozen::Game { system: system.into(), path: path.into(), emulator: emulator.into(), core: core.into(), mark };
-        let shown = wanted() && self.is_frozen_path(path);
-        let hosted = emulator == "pocket-core";
-        let at = match self.shared_moment_not_own(system, path, emulator) {
-            // RetroArch loads what it finds: all there is to do is to say so.
-            true if hosted && frozen::resume_files(&game).iter().any(|f| f.exists()) => AtLaunch::Fresh(frozen::SHARED),
-            true => AtLaunch::Note(frozen::SHARED),
-            false => frozen::at_launch(&game, shown),
-        };
         let (note, fresh) = match at {
             AtLaunch::Normal => {
                 // pocket-core is there in a moment; a big emulator takes as long as it takes, and says that it is on it.
-                if shown && !hosted && standalone::auto_states(system, emulator, core, path).is_some() {
+                if wait {
                     self.frozen_wait = Some(Instant::now());
                 }
                 return false;
@@ -163,8 +149,6 @@ impl App {
             AtLaunch::Fresh(note) => {
                 if hosted {
                     env.push((frozen::SKIP_RESUME_ENV, "1".into()));
-                } else {
-                    standalone::skip_next_resume();
                 }
                 (note, true)
             }

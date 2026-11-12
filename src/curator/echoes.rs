@@ -35,10 +35,10 @@ pub const FULL_LIST: usize = 12;
 pub const MIN_SCORE: f32 = 0.1;
 /// "Like X" only for a game of the profile at least this alike.
 const LIKE_AT_LEAST: f32 = 0.5;
-/// Up next suggests nothing less alike than this (an Echo's score, taste and status included).
-pub const UP_NEXT_MIN: f32 = 0.3;
-/// Up next skips a game played this recently (seconds).
-pub const UP_NEXT_RECENT: u64 = 24 * 3600;
+/// A next Echo suggests nothing less alike than this (an Echo's score, taste and status included).
+pub const NEXT_ECHO_MIN: f32 = 0.3;
+/// A next Echo skips a game played this recently (seconds).
+pub const NEXT_ECHO_RECENT: u64 = 24 * 3600;
 
 /// One game in the Echoes of a seed.
 #[derive(Clone, Debug, PartialEq)]
@@ -252,15 +252,15 @@ impl Index {
         }
     }
 
-    /// "Up next" after `played` ended (Roon Radio's continuation): the first of its Echoes you might play next. Echoes
+    /// A review suggestion after `played`: the first of its Echoes you might play next. Echoes
     /// already leave out its versions, remakes and dropped games; this also skips games you completed and games
-    /// played in the last [`UP_NEXT_RECENT`] seconds (no back and forth between two games), and suggests nothing
-    /// below [`UP_NEXT_MIN`]. Runs on the index thread (one Echoes list, well under a millisecond).
-    pub fn up_next(&self, played: usize) -> Option<Echo> {
+    /// played in the last [`NEXT_ECHO_RECENT`] seconds (no back and forth between two games), and suggests nothing
+    /// below [`NEXT_ECHO_MIN`]. Runs on the index thread (one Echoes list, well under a millisecond).
+    pub fn next_echo(&self, played: usize) -> Option<Echo> {
         self.echoes(played, FULL_LIST).into_iter().find(|e| {
             let u = &self.user.games[e.game];
-            let recent = u.last_played.is_some_and(|t| self.user.now.saturating_sub(t) < UP_NEXT_RECENT);
-            e.score >= UP_NEXT_MIN && !matches!(u.status, Status::Completed | Status::Dropped) && !recent && e.game != played
+            let recent = u.last_played.is_some_and(|t| self.user.now.saturating_sub(t) < NEXT_ECHO_RECENT);
+            e.score >= NEXT_ECHO_MIN && !matches!(u.status, Status::Completed | Status::Dropped) && !recent && e.game != played
         })
     }
 

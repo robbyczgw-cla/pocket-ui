@@ -51,7 +51,7 @@ with tempfile.TemporaryDirectory(prefix="gate-schedule-") as tmp:
     for d in (tree/"scripts",bins,logs,events):d.mkdir(parents=True,exist_ok=True)
     def put(path,text):
         path.parent.mkdir(parents=True,exist_ok=True);path.write_text(text);path.chmod(0o755)
-    for name in ("gate.sh","gate-shell.sh"):
+    for name in ("gate.sh","gate-shell.sh","check-compile.sh"):
         text=(ROOT/"scripts"/name).read_text().replace("/tmp/gate-",str(logs/"gate-"))
         if name=="gate.sh": text=text.replace("export PATH=$HOME/.cargo/bin:$HOME/opt/zig:$PATH",'export PATH="$FIXTURE_BIN:$PATH"')
         put(tree/"scripts"/name,text)
@@ -89,6 +89,12 @@ if kind==os.environ.get('FIXTURE_FAIL'):sys.exit(1)
     put(bins/"stage",stage)
     put(bins/"cargo",'''#!/bin/sh
 case " $* " in
+ *"check "*)
+  stage=linux
+  case " $* " in *" --features brick "*) stage=brick ;; esac
+  touch "$FIXTURE_EVENTS/check-$stage"
+  [ "$FIXTURE_FAIL" != "$stage" ] || exit 1
+  echo "compile check"; exit 0 ;;
  *" --no-run "*) touch "$FIXTURE_EVENTS/build"; exit 0 ;;
  *" --features brick "*)
   if [ "$GATE_EXCLUSIVE" = 1 ]; then
@@ -100,6 +106,12 @@ case " $* " in
 esac
 echo 'test result: ok. 1 passed'
 ''')
+    put(tree/"scripts/check-platforms.sh",'''#!/bin/sh
+for part in "$@"; do
+ touch "$FIXTURE_EVENTS/check-$part"
+ [ "$FIXTURE_FAIL" != "$part" ] || exit 1
+done
+''')
     put(tree/"scripts/test-timing.sh",'''#!/bin/sh
 for lane in rust launcher small; do
  if [ "$GATE_EXCLUSIVE" = 1 ]; then [ -f "$FIXTURE_EVENTS/$lane.end" ] || exit 1; fi
@@ -110,10 +122,12 @@ echo 'test result: ok. 1 passed'
     for suite in ['deploy/test-run-pocket-ui.sh','scripts/test-verify-device.sh','scripts/test-check-core-licences.sh','deploy/package/test-package.sh','deploy/test-grub-quiet.sh','scripts/image/test-grub-checks.sh','scripts/image/test-rocknix-source.sh','scripts/image/test-h700-pins.sh','scripts/image/test-storage-budget.sh','deploy/fat/test-hook.sh','deploy/image/test-mount-storage.sh']:
         kind='launcher' if 'test-run-pocket-ui' in suite else 'small' if 'verify-device' in suite else ''
         put(tree/suite, '#!/bin/sh\n'+(f'exec stage {kind}\n' if kind else 'exit 0\n'))
-    for script in ['scripts/test-device-portability.py','scripts/test-device-transfer.py','scripts/image/test-receipts.py']: put(tree/script,'pass\n')
+    for script in ['scripts/test-device-portability.py','scripts/test-device-transfer.py','scripts/image/test-receipts.py','scripts/android/test-release-check.py']: put(tree/script,'pass\n')
     (tree/"src").mkdir(); (tree/"tests").mkdir()
     (tree/"src/input_corpus_tests.rs").touch()
     (tree/"Cargo.toml").write_text("[features]\nbrick = []\n")
+    (tree/"android").mkdir()
+    (tree/"android/Cargo.toml").touch()
     for suite in ["brick_settings_walk","text_size","long_titles","search_titles","nav_explorer"]:(tree/f"tests/{suite}.rs").touch()
     (tree/".gate-changed").write_text("src/player.rs\n")
     env={k:v for k,v in os.environ.items() if not k.startswith(('GATE_','POCKETUI_SNAPSHOT_CACHE'))}
@@ -124,6 +138,12 @@ echo 'test result: ok. 1 passed'
         out=subprocess.run(['sh',str(tree/'scripts/gate.sh'),str(tree)],env=current,text=True,stdout=subprocess.PIPE,stderr=subprocess.STDOUT,timeout=20)
         (logs/f'{label}.log').write_text(out.stdout)
         return out
+    for part in ('linux','brick','android'):
+        out=run('compile-red-'+part,fail=part)
+        check(out.returncode==1 and 'compile-first FAILED' in out.stdout,out.stdout)
+        check((events/('check-'+part)).exists(),'selected compiler ran')
+        check(not(events/'build').exists(),'compile error stops before test codegen')
+        check(not any((events/(lane+'.start')).exists() for lane in ('rust','launcher','small')),'compile error starts no lane')
     out=run('parallel')
     check(out.returncode==0,out.stdout)
     check((events/'build').exists(),"precompile before lanes")

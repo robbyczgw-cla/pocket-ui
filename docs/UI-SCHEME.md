@@ -21,7 +21,7 @@ checks the rules on every page it can reach.
 - **Shortcut keys** (X, Y, L1/R1, L2, START, SELECT) are extras for what a row already does: X scans again beside the
   Scan again row, Y forgets beside the network's menu, Y switches For a child beside its row. Never the only way to
   anything. The hint bar names them when there is room (four hints at most, the focused row's keys first). Kept for
-  the whole first start: START skips the rest of it, L2 switches Easy to read (its key is on the top row). L1/R1 page
+  the whole first start: START skips the rest of it, L2 switches Big text (its key is on the top row). L1/R1 page
   through a list longer than the screen.
 
 ## What a page shows

@@ -90,13 +90,13 @@ impl Describe for Tags {
     }
 }
 
-/// A period's review with "You might like next": Up next's pick for the top game (Echoes on).
+/// A period's review with "You might like next": an Echoes pick for the top game (Echoes on).
 fn make_review(log: &Log, period: Period, today: i64, tags: &Tags, echoes: bool) -> ph::Review {
     let mut r = ph::review(log, period, today, tags);
     let ix = tags.index.as_deref().filter(|_| echoes);
     let next = r.summary.games.first().zip(ix).and_then(|(top, ix)| {
         let g = ix.find(Path::new(&top.path))?;
-        let e = ix.up_next(g)?;
+        let e = ix.next_echo(g)?;
         let f = ix.game(e.game);
         Some(Card::Next { name: f.name.clone(), system: f.system.clone(), path: f.path.to_string_lossy().into_owned(), reason: e.reason })
     });

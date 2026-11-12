@@ -21,3 +21,12 @@ pub(crate) mod audio_backend;
 #[cfg(target_os="android")]
 #[path="android_audio.rs"]
 pub(crate) mod audio_backend;
+
+#[cfg(any(target_os = "android", test))]
+pub mod android_pointer;
+
+#[cfg(any(target_os = "android", test))]
+pub mod android_earlier;
+
+#[cfg(any(target_os = "android", all(test, target_os = "linux")))]
+pub mod android_content;

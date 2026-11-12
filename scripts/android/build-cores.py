@@ -11,26 +11,46 @@ host='darwin-x86_64'if platform.system()=='Darwin'else'linux-x86_64'
 tools=ndk/'toolchains/llvm/prebuilt'/host/'bin'
 assert tools.is_dir(),f'Missing NDK toolchain: {tools}'
 assert re.search(r'^Pkg.Revision\s*=\s*'+re.escape(lock['ndk'])+r'\s*$',(ndk/'source.properties').read_text(),re.M),'The core lock requires the recorded NDK revision'
-out=ROOT/'android/build/cores'
+# Resolve a shared cache symlink before passing source paths to CMake: its source directory must stay stable across exports.
+out=(ROOT/'android/build/cores').resolve()
 for name in ['source','build','lib','licences','corresponding-source']:(out/name).mkdir(parents=True,exist_ok=True)
+# Android 15+ devices may use 16 KB memory pages: every LOAD segment of every packaged library must be aligned to 16 KB
+# (NDK 27 still links with 4 KB unless told otherwise). Checked below for each finished core; scripts/android/release-check.sh
+# checks the whole APK.
+PAGE='-Wl,-z,max-page-size=16384 -Wl,-z,common-page-size=16384'
 def run(args,cwd=None):subprocess.run([str(a)for a in args],cwd=cwd,check=True)
 def git(p,*args):return subprocess.check_output(['git','-C',str(p),*args])
 def sha(p):return hashlib.sha256(p.read_bytes()).hexdigest()
+def load_alignments(binary):
+    return [int(m,16)for m in re.findall(r'^\s*LOAD\s.*\s(0x[0-9a-fA-F]+)\s*$',subprocess.check_output([str(tools/'llvm-readelf'),'-lW',str(binary)],text=True),re.M)]
 def archive(src,dest,prefix,dependencies=()):
     # Git's tracked list excludes build outputs; recurse into pinned submodules if a future core needs them.
     files=[]
     for base,namespace in [(src,''),*[(p,'third-party/'+p.name+'/')for p in dependencies]]:
         files.extend((base,namespace,raw)for raw in git(base,'ls-files','--recurse-submodules','-z').split(b'\0')if raw)
-    with dest.open('wb')as raw,gzip.GzipFile(fileobj=raw,mode='wb',mtime=0,filename='')as gz,tarfile.open(fileobj=gz,mode='w|')as tar:
-        for base,namespace,name in sorted(files,key=lambda row:(row[1],row[2])):
-            relative=os.fsdecode(name);p=base/relative
-            if not p.exists():
-                data=git(base,'show','HEAD:'+relative);info=tarfile.TarInfo(prefix+'/'+namespace+relative);info.size=len(data);tar.addfile(info,io.BytesIO(data));continue
-            info=tar.gettarinfo(str(p),arcname=prefix+'/'+namespace+relative)
-            info.uid=info.gid=info.mtime=0;info.uname=info.gname=''
-            if info.isfile():
-                with p.open('rb')as f:tar.addfile(info,f)
-            else:tar.addfile(info)
+    # Never leave a truncated tarball looking complete after a failed write; a retry must rebuild it.
+    part=dest.with_name(dest.name+'.part')
+    try:
+        with part.open('wb')as raw,gzip.GzipFile(fileobj=raw,mode='wb',mtime=0,filename='')as gz,tarfile.open(fileobj=gz,mode='w|')as tar:
+            for base,namespace,name in sorted(files,key=lambda row:(row[1],row[2])):
+                relative=os.fsdecode(name);p=base/relative
+                if not p.exists():
+                    # zlib's configure moves tracked zconf.h. A recursive ls-files names it from the outer core,
+                    # but its blob belongs to the owning submodule, not to the outer repository's HEAD tree.
+                    parent=p.parent
+                    while not parent.exists():parent=parent.parent
+                    owner=Path(git(parent,'rev-parse','--show-toplevel').decode().strip())
+                    data=git(owner,'show','HEAD:'+p.relative_to(owner).as_posix())
+                    info=tarfile.TarInfo(prefix+'/'+namespace+relative);info.size=len(data);tar.addfile(info,io.BytesIO(data));continue
+                info=tar.gettarinfo(str(p),arcname=prefix+'/'+namespace+relative)
+                info.uid=info.gid=info.mtime=0;info.uname=info.gname=''
+                if info.isfile():
+                    with p.open('rb')as f:tar.addfile(info,f)
+                else:tar.addfile(info)
+        part.replace(dest)
+    except BaseException:
+        if part.exists():part.unlink()
+        raise
 # NDK runtimes carry their own notices, including the static C++ runtime in C++ cores.
 for name in ['NOTICE','NOTICE.toolchain']:
     shutil.copyfile(ndk/name,out/'licences'/('NDK-'+name+'.txt'))
@@ -43,7 +63,9 @@ for core in lock['cores']:
     if subprocess.run(['git','-C',str(src),'cat-file','-e',rev+'^{commit}'],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL).returncode:
         run(['git','-C',src,'fetch','--depth','1',core['source']+'.git',rev])
     run(['git','-C',src,'checkout','--detach','-q',rev])
-    if(src/'.gitmodules').exists():run(['git','-C',src,'submodule','update','--init','--recursive','--depth','1'])
+    # Optional path list skips unrelated standalone UI/renderer dependencies. Gitlinks pin every selected revision.
+    if(src/'.gitmodules').exists() and core.get('submodules',None)!=[]:
+        run(['git','-C',src,'submodule','update','--init','--recursive','--depth','1',*core.get('submodules',[])])
     cached_files={}
     for raw in git(src,'diff','--name-only','-z').split(b'\0'):
         if raw:
@@ -68,13 +90,19 @@ for core in lock['cores']:
     jobs=os.environ.get('ANDROID_CORE_JOBS','4')
     if core['builder']=='cmake':
         build=out/'build'/cid
-        run(['cmake','-S',src,'-B',build,'-G','Ninja',f'-DCMAKE_TOOLCHAIN_FILE={ndk}/build/cmake/android.toolchain.cmake','-DANDROID_ABI=arm64-v8a',f'-DANDROID_PLATFORM=android-{lock["api"]}','-DCMAKE_BUILD_TYPE=Release','-DANDROID_STL=c++_static',f'-DCMAKE_C_FLAGS={prefix}',f'-DCMAKE_CXX_FLAGS={prefix}',*['-D'+v for v in core['options']]])
+        run(['cmake','-S',src,'-B',build,'-G','Ninja',f'-DCMAKE_TOOLCHAIN_FILE={ndk}/build/cmake/android.toolchain.cmake','-DANDROID_ABI=arm64-v8a',f'-DANDROID_PLATFORM=android-{lock["api"]}','-DCMAKE_BUILD_TYPE=Release','-DANDROID_STL=c++_static',f'-DCMAKE_C_FLAGS={prefix}',f'-DCMAKE_CXX_FLAGS={prefix}','-DANDROID_SUPPORT_FLEXIBLE_PAGE_SIZES=ON',f'-DCMAKE_SHARED_LINKER_FLAGS={PAGE}',f'-DCMAKE_MODULE_LINKER_FLAGS={PAGE}',*['-D'+v for v in core['options']]])
         run(['cmake','--build',build,'--target',core['target'],'--parallel',jobs]);binary=build/core['binary']
     else:
         build=src/core.get('directory','.')
+        binary=build/core['binary']
+        # Make does not track command-line linker flags. Discard just an old final library so the 16 KB flags take effect,
+        # retaining expensive object files; CMake/Ninja tracks the changed link command itself.
+        if binary.exists():
+            aligns=load_alignments(binary)
+            if not aligns or min(aligns)<16384:binary.unlink()
         cc=tools/f'aarch64-linux-android{lock["api"]}-clang'
         cxx=tools/f'aarch64-linux-android{lock["api"]}-clang++'
-        run(['make','-C',build,'-j'+jobs,'platform=unix','CC='+str(cc),'CXX='+str(cxx)+' -static-libstdc++','LD='+str(cxx)+' -static-libstdc++','AR='+str(tools/'llvm-ar'),'STRIP='+str(tools/'llvm-strip'),'GIT_VERSION='+rev[:7],*core['options']]);binary=build/core['binary']
+        run(['make','-C',build,'-j'+jobs,'platform=unix','CC='+str(cc)+' '+PAGE,'CXX='+str(cxx)+' -static-libstdc++ '+PAGE,'LD='+str(cxx)+' -static-libstdc++ '+PAGE,'AR='+str(tools/'llvm-ar'),'STRIP='+str(tools/'llvm-strip'),'GIT_VERSION='+rev[:7],*core['options']]);binary=build/core['binary']
     dependencies=[]
     if core.get('fetch_dependencies'):
         for name,dep in core['fetch_dependencies'].items():
@@ -111,6 +139,17 @@ for core in lock['cores']:
     # Fail if the build silently produced a host binary or depends on an unbundled C++ runtime.
     elf=subprocess.check_output([str(tools/'llvm-readelf'),'-h','-d',str(dest)],text=True)
     assert 'AArch64'in elf and 'libc++_shared.so'not in elf,f'Invalid ARM64 self-contained core: {cid}'
-    manifest.append({**core,'sha256':sha(dest),'bytes':dest.stat().st_size,'notices':notices,'evidence':evidence,**source_evidence})
+    aligns=load_alignments(dest)
+    assert aligns and min(aligns)>=16384,f'Core {cid} is not aligned for 16 KB pages (LOAD alignments {[hex(a)for a in aligns]})'
+    system_assets={}
+    if cid=='ppsspp':
+        assets=[]
+        for raw in sorted(git(src,'ls-files','-z','assets').split(b'\0')):
+            if not raw:continue
+            p=src/os.fsdecode(raw)
+            if p.is_file():assets.append({'path':p.relative_to(src/'assets').as_posix(),'sha256':sha(p),'bytes':p.stat().st_size})
+        assert assets,'Missing PPSSPP system assets'
+        system_assets={'system_assets':assets}
+    manifest.append({**core,'sha256':sha(dest),'bytes':dest.stat().st_size,'notices':notices,'evidence':evidence,**source_evidence,**system_assets})
 (out/'manifest.json').write_text(json.dumps({**{k:lock[k]for k in ['format','abi','api','ndk']},'cores':manifest},indent=2)+'\n')
 print('Built '+', '.join(c['id']for c in manifest))

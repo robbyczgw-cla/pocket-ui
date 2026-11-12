@@ -65,6 +65,33 @@ DTB_MD5=1ff6d2a9f7221a3aa3c7c683e1bd5080
 # GRUB on the device. Rebuilt from Debian's current grub-efi-arm64-bin it may differ; the check only warns then.
 GRUB_EFI_MD5_DEVICE=3e6c69bc4fc03408913aa9f6375b0796
 
+# SM8250 EFI cards. Trees are selected by their exact model in the pinned KERNEL,
+# rather than a filename on FAT (this base carries its trees appended to KERNEL).
+# Columns: image key | exact model | original MD5 | UFS-disabled MD5.
+SM8250_MODELS="
+rp-mini-v2|Retroid Pocket Mini V2|4c49e68a9625eda8ea6a37283ca52740|1ff6d2a9f7221a3aa3c7c683e1bd5080
+rp5|Retroid Pocket 5|f7502e1a1453aecee136bd3bf504860e|7655f05d1502a7aa705f783e12a13d78
+flip2|Retroid Pocket Flip2|97154a65cf345121ed65f92cff39152b|13321ee941e568d0cd5cc1c68d044bf5
+"
+# Partition type of p1 on SM8250 cards. The Pocket 5 and Flip 2 mark it an EFI system partition: Retroid's newer
+# "Boot mode: UEFI" is reported to start only from one (r/retroid, Pocket 6, 2026-08). Retroid's u-boot, OpenABL and
+# ROCKNIX's ABL start from either type. The Mini V2 keeps ROCKNIX's basic-data type until a Mini V2 card is checked.
+SM8250_ESP_TYPE=C12A7328-F81F-11D2-BA4B-00A0C93EC93B
+SM8250_DATA_TYPE=EBD0A0A2-B9E5-4433-87C0-68B6B72699C7
+sm8250_p1_type() {
+  case ${1:-} in rp5 | flip2) echo "$SM8250_ESP_TYPE" ;; *) echo "$SM8250_DATA_TYPE" ;; esac
+}
+
+sm8250_pins() {
+  SM8250_MODEL=${1:-rp-mini-v2}
+  SM8250_MODEL_NAME=$(echo "$SM8250_MODELS" | awk -F '|' -v m="$SM8250_MODEL" '$1 == m {print $2}')
+  [ -n "$SM8250_MODEL_NAME" ] || { echo "unsupported SM8250 model: $SM8250_MODEL" >&2; return 1; }
+  SM8250_ORIG_MD5=$(echo "$SM8250_MODELS" | awk -F '|' -v m="$SM8250_MODEL" '$1 == m {print $3}')
+  DTB_MD5=$(echo "$SM8250_MODELS" | awk -F '|' -v m="$SM8250_MODEL" '$1 == m {print $4}')
+  SM8250_DTB_FILE=$SM8250_MODEL-noufs.dtb
+  [ "$SM8250_MODEL" != rp-mini-v2 ] || SM8250_DTB_FILE=miniv2-noufs.dtb
+}
+
 # Partition table of the ROCKNIX image, kept as it is (sectors of 512 bytes).
 P1_START=32768
 P1_SIZE=4194304
@@ -153,9 +180,9 @@ H700_POCKET_SYSTEM_MD5=81d174ea53cca597f909ca109547b149
 
 # ---------------------------------------------------------------------------------------------------------------
 # SM8550 family (Snapdragon 8 Gen 2; AYN Odin 2 family, Retroid Pocket 6 and Nova): scripts/make-image-family.sh. Same
-# ROCKNIX tag and commit. Nothing on the card boots it: ROCKNIX's ABL, flashed into the handheld once from Android,
-# starts KERNEL (an Android boot image holding every model's device tree). We never flash it, and it is not on our card.
-# So there is no GRUB and no dtb.img, and the images of one family differ only in their name and notes.
+# ROCKNIX tag and commit. ROCKNIX's ABL, flashed into the handheld once from Android, starts KERNEL (an Android boot image
+# holding every model's device tree). We never flash it, and it is not on our card. The Odin cards have nothing else, so
+# they differ only in their name and notes; the Retroid cards also start without that ABL (SM8550_EFI_MODELS below).
 # ---------------------------------------------------------------------------------------------------------------
 SM8550_IMG=ROCKNIX-SM8550.aarch64-20261001.img
 SM8550_URL=https://github.com/ROCKNIX/distribution/releases/download/20261001/ROCKNIX-SM8550.aarch64-20261001.img.gz
@@ -170,8 +197,40 @@ odin2-mini - - AYN_Odin_2_Mini
 odin2 - - AYN_Odin_2
 odin2-portal - - AYN_Odin_2_Portal
 rp6 - - Retroid_Pocket_6
+rp6-top-dpad - - Retroid_Pocket_6_TOP-DPAD
 nova - - Retroid_Pocket_Nova
 "
+# The Retroid cards also start without ROCKNIX's ABL, the way the SM8250 cards do: Retroid's own "UEFI" in the Volume Down
+# menu (reported for a Pocket 6 on r/retroid, 2026-08: GRUB loads the tree, p1 is an EFI system partition, no flashing) or
+# any other UEFI firmware starts GRUB from the card; OpenABL takes loader/entries/pocket-ui.conf. Both start the arm64 Image
+# unpacked from KERNEL with the model's tree, internal UFS off (deploy/sd-efi-sm8550/). KERNEL stays as it is, and ROCKNIX's
+# ABL still starts it: its SM8550 build looks only for \KERNEL, \kernel.img and \boot\reglinux.update (read from
+# abl_signed-SM8550.elf, 2026-11-12). One card per model, and none of this on the Odin cards: OpenABL reads loader/entries
+# and EFI/BOOT before KERNEL, so a shared card would start an Odin with a Retroid tree, and nothing before the kernel can
+# tell a Pocket 6 from its TOP-DPAD layout (the only difference in the tree: the stick axes, inverted).
+# Columns: image key | exact model in KERNEL | original MD5 | UFS-disabled MD5 (SM8550_UFS_NODES set to disabled).
+SM8550_EFI_MODELS="
+rp6|Retroid Pocket 6|29bf6151db49a1043aeee937c9a4685c|afba667a53ef4c3115bc5effa689dd24
+rp6-top-dpad|Retroid Pocket 6 TOP-DPAD|db9a865e5a0c7ae1c7b9d1cd732493a0|d84d7f3b8abbd985acd78804380a3668
+nova|Retroid Pocket Nova|95bdad48aa6bb6fd7b9e57d086ecd936|21b8fd78dbfcd6ed3065fd080ec77adf
+"
+SM8550_UFS_NODES="/soc@0/ufshc@1d84000 /soc@0/phy@1d80000"
+# md5 of the arm64 Image unpacked from SM8550 KERNEL (the gzip member before the appended trees).
+SM8550_IMAGE_MD5=02d4725f0142622e8f1b40079a815c59
+# sm8550_efi_pins MODEL: the model's EFI pins (EFI_MODEL_NAME, EFI_ORIG_MD5, EFI_DTB_MD5, EFI_DTB_FILE); fails for an Odin.
+sm8550_efi_pins() {
+  pu_line=$(echo "$SM8550_EFI_MODELS" | awk -F '|' -v m="${1:-}" 'NF && $1 == m')
+  [ -n "$pu_line" ] || return 1
+  EFI_MODEL_NAME=$(echo "$pu_line" | cut -d'|' -f2)
+  EFI_ORIG_MD5=$(echo "$pu_line" | cut -d'|' -f3)
+  EFI_DTB_MD5=$(echo "$pu_line" | cut -d'|' -f4)
+  EFI_DTB_FILE=$1-noufs.dtb
+  unset pu_line
+}
+# is_efi_card FAMILY MODEL: the card carries GRUB, the BLS entry and an EFI system partition.
+is_efi_card() {
+  [ "${1:-}" = SM8550 ] && echo "$SM8550_EFI_MODELS" | awk -F '|' -v m="${2:-}" 'NF && $1 == m { f = 1 } END { exit !f }'
+}
 # SYSTEM on an SM8550 card, as for the SM8250 list above. The firmware of devices we don't list goes (AYANEO Pocket
 # family, AYN Thor; ROCKNIX's extra-firmware, which states no licence). The rest of extra-firmware STAYS because the listed
 # devices need it (sound and battery run on the ADSP): an open licence question, deploy/image/firmware-licences-sm8550/README.txt.
@@ -193,6 +252,31 @@ usr/config/amiberry/whdboot/boot-data.zip Devs/Kickstarts/*.RTB
 "
 # md5 of the repacked SM8550 SYSTEM; two strip runs side by side (2026-10-31) gave this md5.
 SM8550_POCKET_SYSTEM_MD5=ca26139c1ec4416b42bb3ea80a014e99
+
+# SM4450 Classic Rev Q beta. Official 20261101 tree already disables internal eMMC;
+# requires the existing ROCKNIX ABL. Other Classic revisions/six-button models unsupported.
+SM4450_TAG=20261101
+SM4450_COMMIT=cefc14339a4ae18c02bb69888f27835e50664b60
+SM4450_LICENSE_FILES=75
+SM4450_IMG=ROCKNIX-SM4450.aarch64-20261101.img
+SM4450_URL=https://github.com/ROCKNIX/distribution/releases/download/20261101/ROCKNIX-SM4450.aarch64-20261101.img.gz
+SM4450_GZ_SHA256=cb8924c5fc82679a32949f632c9cda3264863f61c450cf5ae985bec379add93d
+SM4450_IMG_SHA256=5bfb01b43a84c539d9f77db3c037083a792e4a17a7f37ef1418c78316ba52dbe
+SM4450_KERNEL_MD5=f0db233941e22d36e3c63d0bea1bb469
+SM4450_SYSTEM_MD5=e062fd2c8b1d889dac71fc86fe4b1bbe
+SM4450_BLS_MD5=21bb31a6c66fb28a665614247bd26a2f
+SM4450_MODELS="
+rp-classic sm4450-retroid-pocket-classic-revq 62352309b1e1261984e91e551a6ab6f9 Retroid_Pocket_Classic_Rev_Q
+"
+SM4450_SYSTEM_REMOVE="$H700_SYSTEM_REMOVE
+usr/share/bootloader/openabl
+usr/lib/kernel-overlays/base/lib/firmware/qcom/sm4450/RG55G1
+"
+SM4450_SYSTEM_ZIP_REMOVE="$SYSTEM_ZIP_REMOVE"
+# First strip prints its MD5; must be pinned before handing out the image.
+SM4450_POCKET_SYSTEM_MD5=7ad75d773235362171161a45bac4640a
+SM4450_FW_SHARED="LICENCE.rtlwifi_firmware.txt LICENSE.QualcommAtheros_ath10k LICENSE.qcom qca-NOTICE.txt qcom-NOTICE.txt wireless-regdb-LICENSE"
+SM4450_GAMES_DRIVE_MODELS=""
 
 # The RK3566 family (Anbernic RG DS Plus) has its pins in scripts/image/pins-rk3566.sh, a file the public export leaves
 # out (scripts/public-exclude.txt): the RG DS Plus image is a private test image. Looked for under $ROOT, /repo (the
@@ -230,7 +314,7 @@ has_games_drive() {
 # has no MODEL. Lowercase ASCII, letters, digits and dashes, at most 24 characters (scripts/image/test-h700-pins.sh).
 # image_hostname MODEL
 image_hostname() {
-  echo "pocket-${1:-mini-v2}"
+  case ${1:-} in rp-mini-v2 | "") echo pocket-mini-v2 ;; *) echo "pocket-$1" ;; esac
 }
 
 family_pins() {

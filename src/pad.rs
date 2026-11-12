@@ -759,8 +759,126 @@ impl Supervisor {
     }
 }
 
+/// Android's gamepad keys (`KeyEvent.KEYCODE_*`), one table for the launcher and the player: a button a hint names is a
+/// button that arrives (the launcher's game card offered "R2 Controls" while R2 never reached it, 10.11.2026 on an Odin 2 Mini).
+pub mod android {
+    use super::Button;
+    /// Launcher: Android's A (the bottom face button) confirms like pocket-ui's A, its B goes back.
+    pub fn button(key: i32) -> Option<Button> {
+        Some(match key {
+            19 => Button::Up,
+            20 => Button::Down,
+            21 => Button::Left,
+            22 => Button::Right,
+            23 | 96 => Button::East,
+            4 | 97 => Button::South,
+            99 => Button::North,
+            100 => Button::West,
+            102 => Button::L1,
+            103 => Button::R1,
+            104 => Button::L2,
+            105 => Button::R2,
+            106 => Button::L3,
+            107 => Button::R3,
+            108 => Button::Start,
+            109 => Button::Select,
+            _ => return None,
+        })
+    }
+    /// Where Android's A/B/X/Y sit on a pad. Android has no one answer: `BUTTON_A` is the letter printed on the
+    /// button, and an Xbox pad prints A at the bottom while a Nintendo pad prints it on the right (AYN's Odin has
+    /// both as its "Controller style"; a Switch Pro Controller's key layout is the Nintendo one).
+    #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+    pub enum Arrangement {
+        /// A bottom, B right, X left, Y top (Android's own convention, and the default for a pad we don't know).
+        #[default]
+        Xbox,
+        /// A right, B bottom, X top, Y left.
+        Nintendo,
+    }
+    /// AYN's built-in pad. The Odin's "Controller style" (Settings → Controller style, `Settings.System
+    /// flip_button_layout`) swaps the whole virtual device its input service shows: 2020:0112 "Xbox Wireless Controller"
+    /// is the Xbox style (1), 2020:0111 "Odin Controller" the Odin style (0). The two have the same key layout; the
+    /// service sends the evdev codes of the other buttons, which no input from below can tell, so the style is read from
+    /// the device (read from OdinSettings.apk and `dumpsys input`; never checked with a real press).
+    pub fn is_odin_pad(vendor: u16, product: u16) -> bool {
+        vendor == 0x2020 && matches!(product, 0x0111 | 0x0112)
+    }
+    /// Which arrangement a controller's letters follow when its identity says so: the Odin by its style (Xbox style:
+    /// Xbox places; Odin style: the pad's own Nintendo lettering), Nintendo's own pads (Switch Pro, Joy-Con, NES/SNES
+    /// Online, 8BitDo pads in Switch mode: vendor 057e) as Nintendo, every other as Xbox. A press's scan code does not tell
+    /// instead: on the Odin 2 Mini a simulated 057e pad's right-hand button arrived as BUTTON_A with scan code 304 (the
+    /// bottom one's), so Android or the driver rewrites it before an app sees it (11.11.2026).
+    pub fn arrangement(vendor: u16, product: u16) -> Arrangement {
+        if vendor == 0x2020 && product == 0x0111 || vendor == 0x057e {
+            Arrangement::Nintendo
+        } else {
+            Arrangement::Xbox
+        }
+    }
+    /// Player: the libretro joypad bit of an Android key, by where the button sits (`Arrangement::Xbox`).
+    pub fn retro_bit(key: i32) -> Option<u16> {
+        retro_bit_on(key, Arrangement::Xbox)
+    }
+    /// Player: the libretro joypad bit of an Android key on a pad of this arrangement. A button keeps its place on the
+    /// pad: libretro's B is the bottom button, A the right, Y the left, X the top (the original console's places), so
+    /// Android's A/B/X/Y land on B/A/Y/X on an Xbox-lettered pad and on A/B/X/Y on a Nintendo-lettered one.
+    pub fn retro_bit_on(key: i32, arrangement: Arrangement) -> Option<u16> {
+        let nintendo = arrangement == Arrangement::Nintendo;
+        Some(match key {
+            96 => if nintendo { 8 } else { 0 },
+            97 => if nintendo { 0 } else { 8 },
+            99 => if nintendo { 9 } else { 1 },
+            100 => if nintendo { 1 } else { 9 },
+            19 => 4,
+            20 => 5,
+            21 => 6,
+            22 => 7,
+            108 => 3,
+            109 => 2,
+            102 => 10,
+            103 => 11,
+            104 => 12,
+            105 => 13,
+            106 => 14,
+            107 => 15,
+            _ => return None,
+        })
+    }
+    /// An analog trigger (L2/R2 as an axis) as a button: down past 3/4, up again under 1/2. A trigger resting part
+    /// way in (an Odin 2 Mini once reported 0.43) neither presses nor sticks.
+    #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+    pub struct Trigger(bool);
+    impl Trigger {
+        pub const PRESS: f32 = 0.75;
+        pub const RELEASE: f32 = 0.5;
+        /// The new state when it changed.
+        pub fn update(&mut self, value: f32) -> Option<bool> {
+            let down = if self.0 { value >= Self::RELEASE } else { value > Self::PRESS };
+            (down != self.0).then(|| {
+                self.0 = down;
+                down
+            })
+        }
+        pub fn down(self) -> bool {
+            self.0
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
+    /// Analog L2/R2: a trigger resting part way in (0.43 on an Odin 2 Mini) neither presses nor sticks pressed.
+    #[test]
+    fn an_analog_trigger_presses_past_three_quarters_and_lets_go_under_half() {
+        let mut t = super::android::Trigger::default();
+        assert_eq!(t.update(0.43), None, "resting part way in is no press");
+        assert_eq!(t.update(0.8), Some(true));
+        assert_eq!(t.update(0.6), None, "easing off a little keeps it held");
+        assert_eq!(t.update(0.43), Some(false), "back at its resting point it is let go");
+        assert!(!t.down());
+    }
+
     use super::*;
     use crate::testutil::TestDir;
     use std::collections::HashMap;

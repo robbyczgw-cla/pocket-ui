@@ -271,7 +271,7 @@ fn store_table(data_dir: &Path, dat: &str, table: &HashMap<u32, String>) -> io::
     let mut lines: Vec<String> = table.iter().map(|(c, n)| format!("{c:08X}\t{n}\n")).collect();
     lines.sort();
     std::fs::create_dir_all(dir(data_dir))?;
-    crate::fsutil::write_atomic(&table_path(data_dir, dat), lines.concat().as_bytes())
+    crate::fsutil::write_atomic_bulk(&table_path(data_dir, dat), lines.concat().as_bytes())
 }
 
 /// Whether the table of `dat` should be fetched (none yet, or older than [`DAT_MAX_AGE`]).

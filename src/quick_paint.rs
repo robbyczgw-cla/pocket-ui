@@ -407,10 +407,9 @@ impl Sys {
         let row_h = top_h + hint_h;
         let panel_w = 960.min(c.w - 2 * PAD);
         let inner_w = panel_w - 2 * BTN_PAD;
-        // No Android on a Steam Deck (docs/STEAMDECK.md) or a TrimUI Brick: nothing to say about a boot menu there. Nor to a child (no
         // Restart pocket-ui: Kids Mode).
         let brick = { #[cfg(feature = "brick")] { crate::device::brick() } #[cfg(not(feature = "brick"))] { false } };
-        let note: Vec<String> = if choices.contains(&Choice::BootMenu) || !choices.contains(&Choice::RestartUi) || crate::device::current().host_owned() || brick {
+        let note: Vec<String> = if choices.contains(&Choice::BootMenu) || !choices.contains(&Choice::RestartUi) || brick {
             Vec::new()
         } else {
             text.wrap_prose(Face::Body, HINT_SIZE, power_menu::NO_BOOT_MENU_HINT, inner_w)
@@ -840,4 +839,3 @@ mod tests {
         assert_eq!(switch_label(false, None), "Not available");
     }
 }
-

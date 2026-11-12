@@ -97,8 +97,59 @@ if pathlib.Path(sys.argv[0]).name == 'scp':
         upload = next(call for call in calls if call[0] == 'scp')
         self.assertEqual([Path(arg).name for arg in upload[2:-1]],
                          ['pocket-ui', 'pocket-core', 'pocket-splash', 'portmaster-setup.sh'])
-        self.assertIn('releases/dev-good', calls[0][-1])
-        self.assertIn('systemctl stop', calls[0][-1])
+        preparation = next(call[-1] for call in calls if call[0] == 'ssh' and 'systemctl stop' in call[-1])
+        self.assertIn('releases/dev-good', preparation)
+
+    def prepare_device(self, current, bundled, dev_core=None):
+        device = self.root / 'device' / 'pocket-ui'
+        release = device / 'releases' / current
+        release.mkdir(parents=True)
+        if bundled:
+            (release / 'cores').mkdir()
+            (release / 'cores/gpsp_libretro.so').write_bytes(b'installed ARM64 gpSP')
+        if dev_core is not None:
+            (device / 'releases/dev/cores').mkdir(parents=True, exist_ok=True)
+            (device / 'releases/dev/cores/gpsp_libretro.so').write_bytes(dev_core)
+        (device / 'current').symlink_to('releases/' + current)
+        self.assertEqual(self.deploy('--artifact', 'latest-main').returncode, 0)
+        command = next(c[-1] for c in self.calls() if c[0] == 'ssh' and 'systemctl stop' in c[-1])
+        # Run the real preparation against a private filesystem, with service operations inert.
+        command = command.replace('/storage/pocket-ui', str(device))
+        result = subprocess.run(['sh', '-c', 'systemctl() { :; }; ' + command],
+                                text=True, capture_output=True)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        return device
+
+    def test_new_gba_games_keep_bundled_gpsp_after_deploy_from_release(self):
+        device = self.prepare_device('0.3.2', bundled=True)
+        core = device / 'releases/dev/cores/gpsp_libretro.so'
+        self.assertTrue(core.is_file(), 'deploy must retain the H700 default player core')
+        self.assertEqual(core.read_bytes(), b'installed ARM64 gpSP')
+
+    def test_switching_from_a_release_refreshes_the_old_dev_core(self):
+        device = self.prepare_device('0.3.2', bundled=True, dev_core=b'older gpSP')
+        self.assertEqual((device / 'releases/dev/cores/gpsp_libretro.so').read_bytes(),
+                         b'installed ARM64 gpSP')
+
+    def test_redeploy_keeps_the_existing_bundled_core(self):
+        device = self.prepare_device('dev', bundled=True)
+        self.assertEqual((device / 'releases/dev/cores/gpsp_libretro.so').read_bytes(),
+                         b'installed ARM64 gpSP')
+
+    def test_missing_dev_core_is_recovered_from_the_previous_release(self):
+        # A binary-only deploy made by the older script has already lost current/cores.
+        device = self.root / 'device' / 'pocket-ui'
+        previous = device / 'releases/0.3.2/cores'
+        previous.mkdir(parents=True)
+        (previous / 'gpsp_libretro.so').write_bytes(b'previous release gpSP')
+        (device / 'previous').symlink_to('releases/0.3.2')
+        device = self.prepare_device('dev', bundled=False)
+        self.assertEqual((device / 'releases/dev/cores/gpsp_libretro.so').read_bytes(),
+                         b'previous release gpSP')
+
+    def test_device_without_bundled_cores_still_deploys(self):
+        device = self.prepare_device('0.3.2', bundled=False)
+        self.assertTrue((device / 'releases/dev').is_dir())
 
     def test_short_and_full_sha_are_supported(self):
         for key in (self.sha[:12], self.sha):

@@ -1,9 +1,9 @@
 #!/bin/sh
-# Merge gate, two tiers (docs/DEVELOPING.md "Merge gate"). Default: the fast tier (target <= 8 min on the train host) - every
+# Merge gate, two tiers (docs/dev/merge-gate.md "Merge gate"). Default: the fast tier (target <= 8 min on the train host) - every
 # program compiles, unit tests, doctests, the integration suites except the slow layout matrices, plus what the change
 # touches (scripts/gate-parts.py). GATE_FULL=1 (nightly on main, scripts/release-check.sh): the tests at release level
-# (exit code, not grep), the serial timing tier, the Brick corpus and UI walk, the Steam Deck and Android compile checks
-# (scripts/check-platforms.sh), the German/Spanish matrix, then the launcher tests, the verify-device test, the
+# (exit code, not grep), the serial timing tier, the Brick corpus and UI walk and the German/Spanish matrix,
+# then the launcher tests, the verify-device test, the
 # core-licence check's test, the install package's test and the quiet start script's test.
 # Usage: scripts/gate.sh [--quick] [worktree]      (default: the repository this script is in)
 #   GATE: ok (N passed)  exit 0     everything passed
@@ -11,11 +11,12 @@
 #   exit 2                          the worktree does not exist
 # First step, both tiers (about 5 s): scripts/check-leaks.sh, the private-data scan of the export, on the tracked tree. A new
 # leak (owner name, home path, host name, MAC or private address) fails here with the file:line list, before the long build.
+# The shared compile-first stage then checks Linux all-targets, Brick and Android before any tests.
 # Logs: /tmp/gate-test-<worktree>.log, /tmp/gate-launcher-<worktree>.log and /tmp/gate-verify-<worktree>.log (one set per worktree, so gates that run at
 # the same time don't overwrite each other's), copied to /tmp/gate-test.log, /tmp/gate-launcher.log and
 # /tmp/gate-verify.log at the end.
 #
-# What is different from a plain `cargo test --release` (docs/DEVELOPING.md, "Merge gate"):
+# What is different from a plain `cargo test --release` (docs/dev/merge-gate.md, "Merge gate"):
 #  - the tests are built with [profile.gate] in Cargo.toml: release's optimisation level and checks (opt-level 3, no
 #    debug assertions, no overflow checks), but no LTO, 16 codegen units and incremental compilation. Nothing that
 #    ships is built with it: the app and the release builds keep [profile.release].
@@ -42,7 +43,7 @@ if [ "${GATE_CPUSET+x}" = x ]; then
     taskset -pc "$gate_allowed" $$ >/dev/null || { echo "GATE: cannot enforce CPU cap"; exit 1; }
 fi
 # Refresh source and embedded inputs after rsync, while the remote caller holds the shared target slot lock.
-for input in src tests assets; do [ ! -d "$input" ] || find "$input" -type f -exec touch {} + || exit 1; done
+for input in src tests examples assets; do [ ! -d "$input" ] || find "$input" -type f -exec touch {} + || exit 1; done
 name=$(basename "$(pwd)")
 T=/tmp/gate-test-$name.log L=/tmp/gate-launcher-$name.log V=/tmp/gate-verify-$name.log C=/tmp/gate-licences-$name.log
 P=/tmp/gate-package-$name.log Q=/tmp/gate-grub-$name.log G=/tmp/gate-image-grub-$name.log F=/tmp/gate-fat-hook-$name.log
@@ -50,7 +51,7 @@ P=/tmp/gate-package-$name.log Q=/tmp/gate-grub-$name.log G=/tmp/gate-image-grub-
 if [ -f scripts/check-leaks.sh ] && [ -z "${GATE_LEAKS_DONE:-}" ]; then
     leaks_start=$(date +%s)
     leaks=$(sh scripts/check-leaks.sh "$(pwd)" 2>&1) || {
-        echo "GATE: leak scan FAILED (scripts/check-leaks.sh; docs/DEVELOPING.md \"Private-data scan\")"
+        echo "GATE: leak scan FAILED (scripts/check-leaks.sh; docs/dev/merge-gate.md \"Private-data scan\")"
         echo "$leaks"
         exit 1
     }
@@ -94,21 +95,6 @@ if [ "$quick" -eq 1 ]; then
     exit 0
 fi
 
-# Run selection regressions even when this branch would skip the shell suites. Fixture trees omit this script,
-# preventing recursion; its cargo and shell commands are stand-ins and never build or access a device.
-if [ -f scripts/test-gate-paths.sh ]; then
-    paths_log=/tmp/gate-paths-$name.log
-    sh scripts/test-gate-paths.sh >"$paths_log" 2>&1 || {
-        echo "GATE: path-selection tests FAILED ($paths_log)"; tail -10 "$paths_log"; exit 1;
-    }
-fi
-if [ -f scripts/test-gate-schedule.py ]; then
-    schedule_log=/tmp/gate-schedule-$name.log
-    python3 scripts/test-gate-schedule.py >"$schedule_log" 2>&1 || {
-        echo "GATE: scheduling fixtures FAILED ($schedule_log)"; tail -20 "$schedule_log"; exit 1;
-    }
-    tail -1 "$schedule_log"
-fi
 unset POCKETUI_TEST_QUICK
 start=$(date +%s)
 
@@ -128,16 +114,48 @@ if [ -n "$changed" ] && [ -z "${GATE_FULL:-}" ] && [ -f scripts/gate-select.py ]
 fi
 # The merge gate's fast tier (2026-11-10, target <= 8 min on the train host): every program compiles, the unit tests, every
 # integration suite except the slow layout matrices, the ones the change touches (scripts/gate-parts.py), a Brick and
-# Deck compile check, and the shell suites when a script or a path they read changed. The timing tier, the full Brick
-# tier, Android, the German/Spanish matrix and the other slow suites run when the change touches them, every night on
+# Android compile checks, and the shell suites when a script or a path they read changed. The timing tier, the full Brick
+# tier, the German/Spanish matrix and the other slow suites run when the change touches them, every night on
 # main (tools/nightly-gate.sh) and before a release (scripts/release-check.sh): GATE_FULL=1 runs all of it.
-tier=full heavy= brick_full=1 i18n_matrix=1 android=1
+tier=full heavy= brick_full=1 i18n_matrix=1
 if [ "$docs_only" -eq 0 ] && [ -n "$changed" ] && [ -z "${GATE_FULL:-}" ] && [ -f scripts/gate-parts.py ]; then
     selection=$(printf '%s\n' "$changed" | python3 scripts/gate-parts.py "$(pwd)") || exit 1
     eval "$selection"
 fi
 if [ "$tier" = fast ]; then
     echo "gate: fast tier (GATE_FULL=1 runs everything); slow suites run: ${heavy:-none}; Brick ${brick_full:+$([ "$brick_full" -eq 1 ] && echo tests || echo check)}; shells $([ "$shell_tests" -eq 1 ] && echo "yes ($why_shell)" || echo no)"
+fi
+# Check every Rust configuration before any test or lane can start. In particular,
+# examples and Android cfg errors must not wait for codegen or the player suites.
+compile_check_started=$(date +%s)
+platforms_log=/tmp/gate-platforms-$name.log
+: >"$platforms_log"
+if [ "$docs_only" -eq 0 ]; then
+    # The remote queue already collects this log, including an early compiler failure.
+    compile_log=$T
+    nice -n "$nice_increment" sh scripts/check-compile.sh >"$compile_log" 2>&1 || {
+        echo "GATE: compile-first FAILED ($(( $(date +%s) - start )) s; $compile_log)"
+        tail -40 "$compile_log"
+        exit 1
+    }
+    grep -E '^(compile-first:|check-platforms:)' "$compile_log"
+fi
+compile_check_done=$(date +%s)
+
+# Run selection regressions even when this branch would skip the shell suites. Fixture trees omit this script,
+# preventing recursion; its cargo and shell commands are stand-ins and never build or access a device.
+if [ -f scripts/test-gate-paths.sh ]; then
+    paths_log=/tmp/gate-paths-$name.log
+    sh scripts/test-gate-paths.sh >"$paths_log" 2>&1 || {
+        echo "GATE: path-selection tests FAILED ($paths_log)"; tail -10 "$paths_log"; exit 1;
+    }
+fi
+if [ -f scripts/test-gate-schedule.py ]; then
+    schedule_log=/tmp/gate-schedule-$name.log
+    python3 scripts/test-gate-schedule.py >"$schedule_log" 2>&1 || {
+        echo "GATE: scheduling fixtures FAILED ($schedule_log)"; tail -20 "$schedule_log"; exit 1;
+    }
+    tail -1 "$schedule_log"
 fi
 if [ "$docs_only" -eq 1 ]; then
     # These are the same active document, link/index and translation contracts
@@ -273,10 +291,6 @@ fi
 # public exports without this feature keep their ordinary integration tier.
 has_brick=0
 if [ -f src/input_corpus_tests.rs ] && grep -Eq '^[[:space:]]*brick[[:space:]]*=' Cargo.toml; then has_brick=1; fi
-if [ "$trc" -eq 0 ] && [ "$docs_only" -eq 0 ] && [ "$has_brick" -eq 1 ] && [ "$brick_full" -eq 0 ]; then
-    # Fast tier: the Brick build must still compile (a check, no codegen); its corpus and UI walk run nightly.
-    nice -n "$nice_increment" cargo check $pflag --features brick --lib --bins -q >>"$T" 2>&1 || trc=1
-fi
 if [ "$trc" -eq 0 ] && [ "$docs_only" -eq 0 ] && [ "$has_brick" -eq 1 ] && [ "$brick_full" -eq 1 ]; then
     nice -n "$nice_increment" cargo test $pflag --features brick --lib input_corpus_tests -q >>"$T" 2>&1 || trc=1
     # The Brick's manual has its own pages: none may outgrow the screen's limit (the default run checks the others).
@@ -289,7 +303,15 @@ if [ "$trc" -eq 0 ] && [ "$docs_only" -eq 0 ] && [ "$has_brick" -eq 1 ] && [ "$b
     for suite in brick_settings_walk text_size long_titles search_titles nav_explorer; do
         [ "$trc" -eq 0 ] || break
         [ -f "tests/$suite.rs" ] || continue
-        case $suite in text_size) filter=textfit_brick_031_ ;; long_titles) filter=info_titles_031_ ;; nav_explorer) filter=on_the_smart_pro ;; *) filter= ;; esac
+        case $suite in
+            nav_explorer)
+                # libtest's filters are ORed: every present/future Brick case, plus the Smart Pro's walks.
+                nice -n "$nice_increment" cargo test $pflag --features brick --test "$suite" -q -- brick on_the_smart_pro >>"$T" 2>&1 || trc=1
+                continue ;;
+            text_size) filter=textfit_brick_031_ ;;
+            long_titles) filter=info_titles_031_ ;;
+            *) filter= ;;
+        esac
         nice -n "$nice_increment" cargo test $pflag --features brick --test "$suite" $filter -q >>"$T" 2>&1 || trc=1
     done
 fi
@@ -310,13 +332,8 @@ elif [ "$shell_run_rc" -ne 0 ]; then
     trc=1
 fi
 timing_done=$(date +%s)
-# The Steam Deck's and Android's own code (scripts/check-platforms.sh): checks, not builds; after the tests. Android is
-# skipped where no NDK is installed; GATE_ANDROID_TARGET_DIR (set by the remote gate) keeps its files out of the host target dir.
-prc_platforms=0 platforms_log=/tmp/gate-platforms-$name.log
-if [ "$docs_only" -eq 0 ] && [ -f scripts/check-platforms.sh ]; then
-    platform_parts="deck android"; [ "$android" -eq 1 ] || platform_parts=deck
-    nice -n "$nice_increment" sh scripts/check-platforms.sh $platform_parts >"$platforms_log" 2>&1 || prc_platforms=1
-fi
+# Platform checks already passed in the compile-first stage.
+prc_platforms=0
 tdone=$(date +%s)
 sdone=$tdone
 if [ "$shell_tests" -eq 1 ] && [ "$gate_parallel" -eq 0 ]; then
@@ -365,7 +382,7 @@ if [ "$shell_tests" -eq 1 ]; then
 else
     echo "gate: profile $profile; tests $((tdone - start)) s, total $((end - start)) s"
 fi
-echo "gate: tier $tier; compile $((compiled - start)) s"
+echo "gate: tier $tier; compile $((compiled - start)) s; compile-first $((compile_check_done - compile_check_started)) s"
 echo "gate: stages runner+doc $((runner_done - start)) s, brick corpus+UI $((brick_done - brick_started)) s, serial timing $((timing_done - timing_started)) s, platforms $((tdone - timing_done)) s, shells $((shell_finished - shell_started)) s, join before Brick $((brick_started - runner_done)) s"
 python3 - "$gate_parallel" "$gate_normal" "$gate_launcher" "$gate_small" "$start" "$runner_done" "$brick_started" "$brick_done" "$shell_started" "$shell_finished" "$timing_started" "$timing_done" "$tdone" <<'WINDOWS' || exit 1
 import json, os, sys

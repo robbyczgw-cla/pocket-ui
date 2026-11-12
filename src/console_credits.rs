@@ -4,7 +4,7 @@
 //! The file is built by `scripts/build-console-credits.py`, which checks every fact against its source (Wikidata, or
 //! the console's English Wikipedia infobox and lead) and drops what it can't find there. This module shows the
 //! values as they are and only works out the links: which related consoles and which consoles with the same chip
-//! are in the player's library. See docs/DEVELOPING.md, "Console credits".
+//! are in the player's library. See docs/dev/consoles.md, "Console credits".
 
 use std::sync::OnceLock;
 

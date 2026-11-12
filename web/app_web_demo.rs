@@ -176,8 +176,9 @@ fn paint_card(system: &str, path: &std::path::Path) {
 
 /// The web build's `spawn_game` (main.rs has the device's): nothing starts; the stand-in answers pocket-core's commands
 /// until Quit.
-pub(crate) fn spawn_game(proxy: winit::event_loop::EventLoopProxy<UserEvent>, system: &str, emulator: &str, _core: &str, path: &std::path::Path, _env: &[(&str, String)]) -> Option<i32> {
-    println!("web demo: {system} {} would start now on {emulator}", path.display());
+pub(crate) fn spawn_game(proxy: winit::event_loop::EventLoopProxy<UserEvent>, run: &super::Run, _env: &[(&str, String)]) -> Option<i32> {
+    let (system, path) = (run.system.as_str(), run.path.as_path());
+    println!("web demo: {system} {} would start now on {} (core {})", path.display(), run.player.name(), run.core);
     // What waited in the stream from before (an OSD line between games) is not this game's.
     let _ = std::fs::read_to_string(CMD);
     paint_card(system, path);

@@ -4,6 +4,8 @@ pub mod gfx;
 pub mod i18n;
 pub mod image;
 pub mod pad;
+pub mod players;
+pub mod android_pads;
 pub mod palette;
 pub mod proc;
 pub mod shelf;
@@ -33,7 +35,6 @@ pub mod phone_shelves;
 pub mod media;
 pub mod title_block;
 pub mod pause_head;
-pub mod slideshow;
 pub mod motion;
 pub mod keyboard;
 mod library_names;
@@ -94,9 +95,12 @@ pub mod rumble;
 
 pub mod frozen;
 pub mod frozen_phone;
+pub mod save_transfer;
+pub mod save_copy;
 pub mod save_media;
 pub mod case_stickers;
 pub mod crt_on;
+pub mod eject;
 pub mod game_info;
 pub mod game_card { pub use crate::game_card_model::*; }
 pub mod recents { pub use crate::play_time::*; }
@@ -121,4 +125,21 @@ pub mod gamelist;
 pub mod cheat_pack;
 pub mod cheats;
 
+// RetroAchievements in the APK's own player (docs/user/android-mvp.md): the same session, offline copy and pages as Linux.
+pub mod achievements;
+pub mod achievements_page;
+/// The achievement unlock card, painted alike by pocket-core's HUD and the Android player.
+pub mod unlock_card;
+
 pub mod document_art;
+
+// The same signed packages and safe installer as Linux; transport belongs to the Activity.
+pub mod store;
+pub mod untar;
+pub mod android_cores;
+pub mod status_corner;
+pub mod phone_corner;
+
+pub mod update_hint;
+pub mod report_redact;
+pub mod report_phone;

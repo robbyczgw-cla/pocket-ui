@@ -7,20 +7,20 @@
 Home is one shelf, from left to right (in the Shelf look; the other looks show the same entries as a list, top to
 bottom):
 
-1. **Curator**, your library by feel: the Lens, your smart shelves, your labels and Surprise me
+1. **Curator**, your library by feel: the Lens, your smart shelves
    ([Curator](curator.md#curator)). Its row says which game it picked for you today ("Today: Super Metroid"). It is
    on top so you see it whenever Home opens; in the Cabinet look it is a shelf under Favourites (see below).
 2. **Search**, to find any game by its name ([Finding a game](#finding-a-game)). Home opens on the row
    under it, so Continue is still one press away, Search is one press up and Curator two. The Cabinet look has no
    Search row: Up on its top shelf opens the search.
    **Just Play** stands right above Continue (one press up from it, one case to the left of the last game in the Cabinet
-   look): A starts a game picked for you, nothing to choose ([Just Play](curator.md#just-play)). It goes with the
-   Curator switch below and is not in Kids Mode.
+   look): A starts a game picked for you, nothing to choose; X shows the pick first, with the reason ([Just Play](curator.md#just-play)). It has its own
+   switch in Settings → Games → Curator and is not in Kids Mode.
 3. **Your recent games**, up to six. The first one is the game you played last; in the Shelf look
    it is labelled **Continue**, and Home opens on it.
 4. **Favourites**, the games you starred with Y, by name. The row appears once you star a game and
    goes away when you unstar the last one.
-5. The **smart shelves and labels you pinned to Home**, each as a row of its own. Each part of Curator can be
+5. The **smart shelves you pinned to Home**, each as a row of its own. Each part of Curator can be
    switched off in [Settings → Games → Curator](settings.md#curator); without the Lens there is no Curator row on
    top. In the Cabinet look they are shelves (see below).
 6. **PC streaming**, only when Moonlight is installed (it is on ROCKNIX) and you ticked it in Settings → Look →
@@ -35,11 +35,11 @@ Shelf look, the panel in Split), the other rows show games too:
 - **Curator**: the cover of today's pick with "Today" under it, and a few of the games waiting for you: the ones
   you started and haven't played for a month ("4 to rediscover"), or, when there are none, the ones you never
   played ("12 never played", today's pick included: the number the Lens shows under Played → Never). The line
-  under the name says why it picked that game ("Today: Super Metroid · Never played · you gave it 5 stars"). Surprise me in the Curator list shows the same game first. The pick stays
+  under the name says why it picked that game ("Today: Super Metroid · Never played · you gave it 5 stars"). The pick stays
   the same all day and changes the next day, or when what you played makes another game more likely.
-- **Favourites** and the **smart shelves and labels on Home**: the covers of their first games, side by side. A
+- **Favourites** and the **smart shelves on Home**: the covers of their first games, side by side. A
   game without box art is a tile in its system's colour with its name. A list with nothing in it says how to fill
-  it ("No games here yet"; for a label, how to put it on a game). A game without box art is a printed title card: the system's stripe, its name small, the title centred; where a tile is too narrow for the title in whole words, the system name alone.
+  it ("No games here yet"). A game without box art is a printed title card: the system's stripe, its name small, the title centred; where a tile is too narrow for the title in whole words, the system name alone.
 - Right after the start, until Curator has read your library (a moment, once), these rows show their title only: no words and no empty boxes.
 
 A game you hid on its card (**Hide or delete** at the end of the card, [Hide or delete a game](library.md#hide-or-delete-a-game))
@@ -100,7 +100,7 @@ searched. On the touch screen, tap the keys to type, tap a game to select it and
 
 ## Looks
 
-The shelf has six looks. Choose one in Settings → Look → **Layout**, with a live preview. The look you
+The shelf has four looks. Choose one in Settings → Look → **Layout**, with a live preview. The look you
 choose is remembered. Each look comes dark or light: Appearance in Settings ([Appearance](settings.md#appearance)),
 and how much the menus move is [Motion](settings-sound.md#motion).
 
@@ -108,19 +108,18 @@ and how much the menus move is [Motion](settings-sound.md#motion).
 |---|---|
 | **Shelf** | Your games standing on a shelf. The one you pick shows its cover. |
 | **Easy** | One big game at a time, simple menus. See [Easy](easy.md). |
-| **Minimal** | Just the names, nothing else. |
 | **Split** | List on the left, details on the right. |
-| **Cards** | Big cards you flip through sideways. |
 | **Cabinet** | Your games in their cases on a wooden shelf. Pull one out to see its cover. |
 
-Cover art, when you have it, appears on the front of the case shown above the shelf (Shelf), in the detail panel (Split),
-on the cards (Cards) and on the front of the case you pull out (Cabinet), whose spine also takes the
-cover's colour. Minimal shows names only. See [Extras](extras.md#box-art). In Split the picture also changes
+Minimal and Cards were looks until 0.4. If you had one of them, pocket-ui starts in Split, the look closest to them
+(and as quick to start a game), and says so once.
+
+Cover art, when you have it, appears on the front of the case shown above the shelf (Shelf), in the detail panel (Split)
+and on the front of the case you pull out (Cabinet), whose spine also takes the
+cover's colour. See [Extras](extras.md#box-art). In Split the picture also changes
 by itself: after you stay on a game for a moment it fades from the box art to the game running and to the title
-screen, when you have them ([Pictures](extras.md#pictures)); with Motion Off it stays on the box art. Entries without a picture
-(Curator's Lens, shelves and labels, Favourites, Search) show their count on the card itself in Cards
-("70 games · 22 filters"); in Split, Curator, Favourites and the pinned rows show their covers in the panel, as on the
-Shelf look (below).
+screen, when you have them ([Pictures](extras.md#pictures)); with Motion Off it stays on the box art. In Split, Curator,
+Favourites and the pinned rows show their covers in the panel, as on the Shelf look (below).
 
 In the Cabinet, **Up/Down** moves between shelves and **Left/Right** between games. Only the shelves that fit
 below the preview are shown. The position beside the game details (for example **2 / 6**) counts all shelves,
@@ -148,15 +147,12 @@ come Curator's shelves, then one shelf per system. A starts the game: its cartri
 
 ### Starting a game
 
-In the Cabinet and the Shelf looks, A on a game starts it at once, and while the emulator loads the console's pixel
-picture comes up: the case opens, the cartridge or disc slides out of it and goes into the console, a short, quiet
-click (with menu sounds on) and a glow as it is in. The game does not wait for any of it: when it is ready first, it simply
-comes up over the rest. Any button skips it. With **Animations: Cozy** (Settings → Sound & feel → Animations, on until you
-choose in the Shelf and Cabinet looks) the animation is slower, about a second, and a game of pocket-core's waits to show itself until it
-is over, then switches on like an old TV (a bright line, the picture opening out of it, a third of a second). With menu
-sounds on you hear all of it: the case opening, the cartridge sliding in and clicking into place (a disc drops in and
-spins up, a game card clicks into its slot), then the TV's soft thunk as it comes on. **Quick** keeps the short one. The
-other looks never have it.
+In Shelf and Cabinet, A starts the emulator while the case opens and its cartridge or disc goes into the console,
+with a quiet click and glow. **Quick** shows the game as soon as it is ready. Any button skips the animation.
+**Animations: Cozy** (Settings → Sound & feel → Animations; the default in these looks) takes about a second.
+pocket-core waits for it: the shelf fades to black, then the game opens from a bright TV line over a third of a
+second, including handhelds and Continue. A “Remind me where I was” card keeps its saved picture while you read.
+With menu sounds on, you hear the case, insertion and TV's soft thunk. Other looks skip this animation.
 
 With **Cozy** and **Playful cases** the big consoles really take their game: the PlayStation's, GameCube's, Dreamcast's
 and Saturn's lid opens, the disc's case opens too, the disc is lifted out and lowered flat, label up, onto the spindle and the lid shuts; the PS2's and Xbox's tray slides out and
@@ -191,8 +187,7 @@ each smart shelf and label (Y pins one to Home, X opens its options, as in the C
 its games as a shelf of their own, right under the Curator shelf, with the list's name on the plate; B goes back to
 the Curator shelf. A smart shelf or label pinned to Home is a shelf of its own all the time, under the Curator
 shelf; a label's shelf has the label itself on the board's edge. START in the Lens shows its games the same
-way. A list with no games stays closed and says so. The **Surprise me** box has today's pick on its front, and the
-line over the cabinet says why. Your Favourites are real cases on their own shelf, with their covers, as in every
+way. A list with no games stays closed and says so. Your Favourites are real cases on their own shelf, with their covers, as in every
 system's shelf.
 
 ### The TV on the cabinet
@@ -220,8 +215,6 @@ What the shelf already shows of it while the system is selected depends on the l
 |---|---|
 | **Split** | Under the console's name: maker, year and generation, then **Released**, **Ended**, **Sold**, **Inside**, **Your games** (how many, and the one you played last) and **Runs on** (the emulator that plays it here). A fact that isn't known is left out; a console without facts here (PC Engine CD, for one) still shows Your games and Runs on. If the rows don't all fit, the ones that matter least go first. |
 | **Shelf** | Maker, year and generation after the game count on the pulled-out label. |
-| **Cards** | Maker, year and generation under the game count. |
-| **Minimal** | Only the X Details hint. |
 | **Cabinet** | Systems are shelves there, not entries you select, so X on a game opens its card. |
 
 The page itself shows, from top to bottom:
@@ -305,6 +298,16 @@ pocket-ui counts the time from starting a game to quitting it and adds it to tha
 If a game on pocket-ui's own host cannot start, a card at the top of the shelf says why for a few
 seconds, and in most cases the game starts again right away with RetroArch. See
 [Systems](systems.md#when-a-game-does-not-start-on-the-own-host).
+
+### After Quit
+
+With **Animations: Cozy** and **Motion: Full**, the way back mirrors putting the game in: the picture switches off,
+the cartridge or disc comes out, and its case closes and returns to the shelf. A home console's picture collapses to
+a line and a dot when **Old-TV switch-on** is enabled; a handheld's display simply goes dark. The case stays a little
+open when Continue is available. This also works in Easy and Kids Mode when Cozy is selected.
+
+The shelf accepts input immediately. Any button or touch ends the effect and acts on the shelf in the same press.
+Quick, Reduced and Off return directly to the shelf. Case sounds use the existing Sounds and Case sounds switches.
 
 ## Recent games
 

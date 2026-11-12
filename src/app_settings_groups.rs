@@ -17,7 +17,6 @@
 //! shows its angle alone.
 
 use std::ops::Range;
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Instant;
 
 use pocket_ui::gfx::{mix, Canvas};
@@ -31,7 +30,7 @@ use pocket_ui::setup::Only;
 use pocket_ui::update;
 
 use super::app_motion;
-use super::{window_start, App, Opens, SettingsPage, SettingsRow, UserEvent, CANCEL, CONFIRM, NU_BTN_PAD, NU_PAD, NU_PILL, NU_SMALL, SETTINGS, SETTINGS_GROUPS};
+use super::{settings_row, window_start, App, Opens, SettingsPage, SettingsRow, UserEvent, CANCEL, CONFIRM, NU_BTN_PAD, NU_PAD, NU_PILL, NU_SMALL, SETTINGS, SETTINGS_GROUPS};
 
 /// The most lines the selected row's line takes over the hints when it doesn't fit beside them; every row's and
 /// category's line fits in two at Large text in English and German (`every_line_fits_at_the_bottom`).
@@ -49,8 +48,13 @@ fn desc_lines(text: &mut pocket_ui::text::Text, s: &str, w: i32) -> Vec<String> 
 
 /// Whether a row's value needs `settings_values`' thread.
 fn needs_facts(opens: Opens) -> bool {
-    matches!(opens, Opens::Setup(Only::Wifi | Only::Remote) | Opens::Time | Opens::PcStreaming | Opens::UsbTransfer)
+    matches!(opens, Opens::Setup(Only::Wifi | Only::Remote) | Opens::Time | Opens::PcStreaming)
 }
+
+/// The last entry of `SETTINGS_GROUPS` is not a category: it is the page behind Help & tools → For tinkerers.
+pub(crate) const TINKERERS: usize = SETTINGS_GROUPS.len() - 1;
+/// The categories the first page lists.
+pub(crate) const SHOWN: usize = TINKERERS;
 
 /// How many rows the categories hold together: the length of `SETTINGS`.
 pub(crate) const fn count() -> usize {
@@ -85,43 +89,35 @@ pub(crate) fn span(g: usize) -> Range<usize> {
     start..start + SETTINGS_GROUPS[g].2.len()
 }
 
-/// Whether the Store row is there: only when a store catalog is set up (`store::catalog_url`). There is no public
-/// catalog yet, so on most devices the row, and the page behind it, would only say "Couldn't reach the store". Set
-/// once at the start from settings.json (`set_store_offered`); the row comes back by itself when a catalog is set.
-static STORE_OFFERED: AtomicBool = AtomicBool::new(false);
-
-/// Called at the start, with the answer of `store::catalog_url(..).is_some()`.
-pub(crate) fn set_store_offered(on: bool) {
-    STORE_OFFERED.store(on, Ordering::Relaxed);
-}
-
-/// Whether Settings has a row for `opens`, with the Store `store`-offered or not. The LEDs row (the lights around the
+/// Whether Settings has a row for `opens`. The LEDs row (the lights around the
 /// sticks) is left out on a device without sticks (the H700 handhelds).
 #[cfg(not(feature = "brick"))]
-fn shown(opens: Opens, store: bool) -> bool {
-    shown_on(opens, store, pocket_ui::device::current().has_sticks(), pocket_ui::device::current().host_owned())
+fn shown(opens: Opens) -> bool {
+    shown_on(opens, pocket_ui::device::current().has_sticks(), false)
 }
 
 #[cfg(feature = "brick")]
-fn shown(opens: Opens, store: bool) -> bool {
-    shown_on(opens, store, pocket_ui::device::current().has_sticks(), pocket_ui::device::current().host_owned() || { #[cfg(feature = "brick")] { pocket_ui::device::brick() } #[cfg(not(feature = "brick"))] { false } })
+fn shown(opens: Opens) -> bool {
+    shown_on(opens, pocket_ui::device::current().has_sticks(), { #[cfg(feature = "brick")] { pocket_ui::device::brick() } #[cfg(not(feature = "brick"))] { false } })
 }
 
-/// USB file transfer is retired (`usb_transfer::RETIRED`): its row and its part of the Connections line stay out. Second
-/// screen is only there with two screens (`second_screen::offered`).
 #[cfg(not(feature = "brick"))]
-fn shown_on(opens: Opens, store: bool, sticks: bool, host_owned: bool) -> bool {
-    (!matches!(opens, Opens::UsbTransfer) || pocket_ui::usb_transfer::offered())
-        && (!matches!(opens, Opens::SecondScreen) || pocket_ui::second_screen::offered()) && (store || !matches!(opens, Opens::Store)) && !device_key(opens).is_some_and(|k| pocket_ui::device::hides(k, sticks, host_owned))
+fn shown_on(opens: Opens, sticks: bool, nextui_owned: bool) -> bool {
+    // For tinkerers is a row only where the page has a row to show (a NextUI card has none of its four).
+    if matches!(opens, Opens::Tinkerers) {
+        return span(TINKERERS).any(|i| shown_on(SETTINGS[i].1, sticks, nextui_owned));
+    }
+    !device_key(opens).is_some_and(|k| pocket_ui::device::hides(k, sticks, nextui_owned))
 }
 
 #[cfg(feature = "brick")]
-fn shown_on(opens: Opens, store: bool, sticks: bool, host_owned: bool) -> bool {
+fn shown_on(opens: Opens, sticks: bool, nextui_owned: bool) -> bool {
+    // For tinkerers is a row only where the page has a row to show (a NextUI card has none of its four).
+    if matches!(opens, Opens::Tinkerers) {
+        return span(TINKERERS).any(|i| shown_on(SETTINGS[i].1, sticks, nextui_owned));
+    }
     let kept = { #[cfg(feature = "brick")] { brick_keeps(opens) } #[cfg(not(feature = "brick"))] { false } };
-    (!matches!(opens, Opens::UsbTransfer) || pocket_ui::usb_transfer::offered())
-        && (!matches!(opens, Opens::SecondScreen) || pocket_ui::second_screen::offered())
-        && (store || !matches!(opens, Opens::Store))
-        && (kept || brick_has(opens) || !device_key(opens).is_some_and(|k| pocket_ui::device::hides(k, sticks, host_owned)))
+    (kept || brick_has(opens) || !device_key(opens).is_some_and(|k| pocket_ui::device::hides(k, sticks, nextui_owned)))
         && { #[cfg(feature = "brick")] { !brick_hides(opens) } #[cfg(not(feature = "brick"))] { true } }
 }
 
@@ -141,14 +137,11 @@ fn brick_has(opens: Opens) -> bool {
 }
 
 /// The pages a device may lack (`pocket_ui::device::hides`, also behind the Tour cards): the lights around the sticks;
-/// on a Steam Deck the radios, fan, clock, updates, ROCKNIX's tools, Sync (ROCKNIX's Syncthing service) and Haptics (the
-/// handhelds' motor). Sleep & power stays with its slideshow alone (`sleep_settings::rows`): SteamOS owns sleep and the
 /// power button.
 fn device_key(opens: Opens) -> Option<&'static str> {
     Some(match opens {
         Opens::Leds => "leds",
         Opens::Haptics => "haptics",
-        Opens::UsbTransfer => "usb_transfer",
         Opens::Sync => "sync",
         Opens::Tailscale => "tailscale",
         Opens::Tools => "tools",
@@ -157,21 +150,19 @@ fn device_key(opens: Opens) -> Option<&'static str> {
         Opens::Time => "time",
         Opens::Kids => "kids",
         Opens::Updates => "updates",
-        Opens::Store => "store",
         _ => return None,
     })
 }
 
 /// The rows of category `g` that are shown, as indexes into `SETTINGS`, in their order. Painting, moving, touch and
 /// the hint bar all count in this list, so a row that is not there leaves no gap and no dead tap.
-pub(crate) fn rows_with(g: usize, store: bool) -> Vec<usize> {
-    span(g).filter(|i| shown(SETTINGS[*i].1, store)).collect()
+pub(crate) fn rows(g: usize) -> Vec<usize> {
+    span(g).filter(|i| shown(SETTINGS[*i].1)).collect()
 }
 
-/// `rows_with` for a made-up device (the Deck's lines are checked against the Deck's rows on any machine).
 #[cfg(test)]
-fn rows_on(g: usize, store: bool, sticks: bool, host_owned: bool) -> Vec<usize> {
-    span(g).filter(|i| shown_on(SETTINGS[*i].1, store, sticks, host_owned)).collect()
+fn rows_on(g: usize, sticks: bool, nextui_owned: bool) -> Vec<usize> {
+    span(g).filter(|i| shown_on(SETTINGS[*i].1, sticks, nextui_owned)).collect()
 }
 
 /// The name of row `i` of `SETTINGS` as this device paints it: its own, except the Brick's lights row, which carries its page's title
@@ -196,17 +187,8 @@ pub(crate) fn leds_row() -> usize {
     SETTINGS.iter().position(|s| matches!(s.1, Opens::Leds)).unwrap_or(0)
 }
 
-/// The line under row `i` of `SETTINGS`: its own, except where the Steam Deck has less than the handhelds (no file sharing,
 /// no PortMaster).
 pub(crate) fn row_line(i: usize) -> &'static str {
-    if pocket_ui::device::current().host_owned() {
-        match SETTINGS[i].1 {
-            Opens::Setup(Only::Games) => return "Where each system's games go.",
-            Opens::Setup(Only::Extras) => return "Box art, game pictures and starter pack.",
-            Opens::SleepPower => return "A slideshow of your games when the Deck sits idle.",
-            _ => {}
-        }
-    }
     #[cfg(feature = "brick")]
     if pocket_ui::device::brick() {
         match SETTINGS[i].1 {
@@ -223,24 +205,18 @@ pub(crate) fn row_line(i: usize) -> &'static str {
     SETTINGS[i].2
 }
 
-/// `rows_with` as this device has it.
-pub(crate) fn rows(g: usize) -> Vec<usize> {
-    rows_with(g, STORE_OFFERED.load(Ordering::Relaxed))
-}
-
 /// The line naming what is in category `g` on this device, in the interface's language through `tr`: the parts of
-/// rows that are not there (the Store without a catalog, LEDs without sticks, what SteamOS owns on a Steam Deck) left
 /// out, as the list leaves them out.
 #[cfg(not(feature = "brick"))]
 pub(crate) fn blurb(g: usize, tr: impl FnMut(&str) -> String) -> String {
     let device = pocket_ui::device::current();
-    blurb_with(g, STORE_OFFERED.load(Ordering::Relaxed), device.has_sticks(), device.host_owned(), tr)
+    blurb_with(g, device.has_sticks(), false, tr)
 }
 
 #[cfg(feature = "brick")]
 pub(crate) fn blurb(g: usize, tr: impl FnMut(&str) -> String) -> String {
     let device = pocket_ui::device::current();
-    blurb_with(g, STORE_OFFERED.load(Ordering::Relaxed), device.has_sticks(), device.host_owned() || { #[cfg(feature = "brick")] { pocket_ui::device::brick() } #[cfg(not(feature = "brick"))] { false } }, tr)
+    blurb_with(g, device.has_sticks(), { #[cfg(feature = "brick")] { pocket_ui::device::brick() } #[cfg(not(feature = "brick"))] { false } }, tr)
 }
 
 /// Category `g`'s line in English: `SETTINGS_GROUPS`', except Sound & feel on the Brick, whose last part is the row's name there
@@ -257,12 +233,12 @@ fn group_line(g: usize) -> &'static str {
 #[cfg(feature = "brick")]
 const BRICK_SOUND_LINE: &str = "Animations, playful cases, old-TV switch-on, motion, zoom, sounds, case sounds, haptics, lights & buttons.";
 
-/// `blurb` with the Store offered (`store`) or not, a device with sticks or without, owned by its host (the Deck) or not. A line has one part per row,
+/// `blurb` for a device with or without sticks and with or without NextUI. A line has one part per row,
 /// in the rows' order, also in German (`every_category_line_names_its_rows_in_order`), so the parts can be left out
 /// by the row they stand for.
-pub(crate) fn blurb_with(g: usize, store: bool, sticks: bool, host_owned: bool, mut tr: impl FnMut(&str) -> String) -> String {
+pub(crate) fn blurb_with(g: usize, sticks: bool, nextui_owned: bool, mut tr: impl FnMut(&str) -> String) -> String {
     let line = tr(group_line(g));
-    let shown: Vec<bool> = span(g).map(|i| shown_on(SETTINGS[i].1, store, sticks, host_owned)).collect();
+    let shown: Vec<bool> = span(g).map(|i| shown_on(SETTINGS[i].1, sticks, nextui_owned)).collect();
     let parts: Vec<&str> = line.trim_end_matches('.').split(", ").collect();
     if shown.iter().all(|s| *s) || parts.len() != shown.len() {
         return line;
@@ -282,24 +258,21 @@ pub(crate) fn group_of(row: usize) -> usize {
 /// Up, Down, A and B on the categories, and Up, Down and B in a category's list (A there is the row's own business,
 /// `App::settings_input`). `None` closes Settings.
 pub(crate) fn groups_input(page: SettingsPage, b: Button) -> Option<SettingsPage> {
-    groups_input_with(page, b, STORE_OFFERED.load(Ordering::Relaxed))
-}
-
-/// `groups_input` with the Store row there (`store`) or not.
-pub(crate) fn groups_input_with(page: SettingsPage, b: Button, store: bool) -> Option<SettingsPage> {
-    let n = SETTINGS_GROUPS.len();
+    let n = SHOWN;
     match (page, b) {
         (SettingsPage::Groups(g), Button::Up) => Some(SettingsPage::Groups((g + n - 1) % n)),
         (SettingsPage::Groups(g), Button::Down) => Some(SettingsPage::Groups((g + 1) % n)),
-        (SettingsPage::Groups(g), b) if b == CONFIRM => Some(SettingsPage::List(rows_with(g, store)[0])),
+        (SettingsPage::Groups(g), b) if b == CONFIRM => Some(SettingsPage::List(rows(g)[0])),
         (SettingsPage::Groups(_), b) if b == CANCEL => None,
         // Moving stays in the category and goes round at its ends, as the long list did.
         (SettingsPage::List(row), Button::Up | Button::Down) => {
-            let r = rows_with(group_of(row), store);
+            let r = rows(group_of(row));
             let (at, len) = (r.iter().position(|i| *i == row).unwrap_or(0), r.len());
             let at = if b == Button::Up { (at + len - 1) % len } else { (at + 1) % len };
             Some(SettingsPage::List(r[at]))
         }
+        // For tinkerers is a page of Help & tools: B goes back to its row there.
+        (SettingsPage::List(row), b) if b == CANCEL && group_of(row) == TINKERERS => Some(SettingsPage::List(settings_row("For tinkerers"))),
         (SettingsPage::List(row), b) if b == CANCEL => Some(SettingsPage::Groups(group_of(row))),
         (page, _) => Some(page),
     }
@@ -346,12 +319,12 @@ fn colours_label() -> &'static str {
 /// The same in the Retro style (`retro`): colour pictures.
 const RETRO_ICONS: [pocket_ui::retro::Icon; SETTINGS_GROUPS.len()] = {
     use pocket_ui::retro::Icon;
-    [Icon::Look, Icon::Sound, Icon::Playing, Icon::Games, Icon::Connections, Icon::System, Icon::Help]
+    [Icon::Look, Icon::Sound, Icon::Playing, Icon::Games, Icon::Connections, Icon::System, Icon::Help, Icon::Help]
 };
 
 const ICONS: [pocket_ui::ui_art::Icon; SETTINGS_GROUPS.len()] = {
     use pocket_ui::ui_art::Icon;
-    [Icon::Look, Icon::Sound, Icon::Playing, Icon::Games, Icon::Connections, Icon::System, Icon::Help]
+    [Icon::Look, Icon::Sound, Icon::Playing, Icon::Games, Icon::Connections, Icon::System, Icon::Help, Icon::Help]
 };
 
 /// Whether the value of row `i` is a network's own name, painted as typed: a Wi-Fi named "Off" or "Unknown" must not be
@@ -362,15 +335,6 @@ pub(crate) fn value_is_typed(i: usize) -> bool {
 
 fn typed_value(opens: Opens, wifi: &Option<values::Wifi>) -> bool {
     matches!(opens, Opens::Setup(Only::Wifi)) && matches!(wifi, Some(values::Wifi::Connected(Some(_))))
-}
-
-/// Settings → System → Second screen's value.
-fn second_screen_value(on: bool) -> &'static str {
-    if on {
-        "Game info"
-    } else {
-        "Off"
-    }
 }
 
 /// The line under Remind me where I was while it is Off.
@@ -385,8 +349,6 @@ impl App {
     pub(crate) fn settings_row_value(&mut self, i: usize, sel: usize, room: i32) -> String {
         let facts = values::get();
         let value = match SETTINGS[i].1 {
-            Opens::UsbTransfer if i == sel && !self.usb_busy => format!("‹ {} ›", self.usb_transfer_value()),
-            Opens::UsbTransfer => self.usb_transfer_value(),
             #[cfg(feature = "brick")]
             Opens::Haptics if pocket_ui::device::brick() => self.brick_haptics_value(i == sel),
             Opens::Haptics => values::on_off(pocket_ui::rumble::menu_haptics()).to_string(),
@@ -395,8 +357,6 @@ impl App {
             Opens::OnStart if i == sel => format!("‹ {} ›", self.on_start.label()),
             Opens::OnStart => self.on_start.label().to_string(),
             Opens::RememberQuit => values::on_off(self.remember_quit).to_string(),
-            Opens::SecondScreen if i == sel => format!("‹ {} ›", second_screen_value(self.second_screen_on)),
-            Opens::SecondScreen => second_screen_value(self.second_screen_on).to_string(),
             Opens::RemindWhere => values::on_off(self.remind_where).to_string(),
             Opens::ZoomInPause => values::on_off(self.zoom_in_pause).to_string(),
             Opens::Animations if i == sel => format!("‹ {} ›", self.animations_in_use().name()),
@@ -455,7 +415,7 @@ impl App {
             // The figure alone: "charging" is in the pill above.
             Opens::Battery => page(&pocket_ui::status_corner::status().battery.map(|b| format!("{}%", b.percent)).unwrap_or_default()),
             Opens::Updates => {
-                let newer = self.updates.manifest.as_ref().and_then(|m| m.app.as_ref()).map(|a| a.version.as_str()).filter(|v| update::newer(v, update::app_version()));
+                let newer = self.updates.app_available().map(|a| a.version.as_str());
                 #[cfg(not(feature = "brick"))]
                 let shown = values::updates(update::app_version(), newer);
                 #[cfg(feature = "brick")]
@@ -535,7 +495,7 @@ impl App {
         let row = if retro { pocket_ui::type_scale::row(66, 36).max(80) } else { pocket_ui::type_scale::row(66, 36) };
         let (pad, font) = (NU_PAD, 36u32);
         let (top, right) = (pad + NU_PILL + 12, c.w - pad);
-        let n = SETTINGS_GROUPS.len();
+        let n = SHOWN;
         self.sheet_header(c, "Settings");
         let hints_at = self.nu_hints(c, &[("B", "Back"), ("A", "Open")]);
         // In the interface's language already (`blurb`): measured and painted as they are, not looked up again.
@@ -694,7 +654,7 @@ mod tests {
         use pocket_ui::type_scale::{self, TextSize};
         let mut text = pocket_ui::text::Text::new();
         text.set_translate(false);
-        // Every line as a device can show it (Store or not, sticks or not, the Deck), in every language.
+        // Every line as a device with or without sticks can show it, in every language.
         let mut lines: Vec<String> = Vec::new();
         for lang in pocket_ui::i18n::Lang::ALL {
             let tr = |s: &str| match lang.table() {
@@ -702,8 +662,8 @@ mod tests {
                 None => s.to_string(),
             };
             for g in 0..SETTINGS_GROUPS.len() {
-                for (store, sticks, deck) in [(true, true, false), (false, true, false), (true, false, false), (false, false, false), (false, false, true)] {
-                    lines.push(blurb_with(g, store, sticks, deck, tr));
+                for (sticks, nextui_owned) in [(true, false), (false, false)] {
+                    lines.push(blurb_with(g, sticks, nextui_owned, tr));
                 }
             }
             for row in SETTINGS.iter() {
@@ -713,8 +673,6 @@ mod tests {
                 lines.push(tr(note));
             }
             lines.push(tr(REMEMBER_OFF_LINE));
-            let deck_lines = ["Where each system's games go.", "Box art, game pictures and starter pack.", "A slideshow of your games when the Deck sits idle."];
-            lines.extend(deck_lines.iter().map(|l| tr(l)));
         }
         for size in [TextSize::Normal, TextSize::Medium, TextSize::Large] {
             type_scale::set(size);
@@ -728,7 +686,7 @@ mod tests {
             // The page at 960 lines: pill and title above, the hints below, two lines' room for the selected line.
             let reserved = DESC_LINES as i32 * type_scale::line(NU_SMALL, 10) + 14;
             let visible = (960 - NU_PAD - NU_PILL - 16 - reserved - (NU_PAD + NU_PILL + 12)) / type_scale::row(66, 36);
-            assert!(visible >= SETTINGS_GROUPS.len() as i32, "{size:?}: {visible} of {} categories on a page", SETTINGS_GROUPS.len());
+            assert!(visible >= SHOWN as i32, "{size:?}: {visible} of {} categories on a page", SHOWN);
         }
         type_scale::set(TextSize::Normal);
     }
@@ -736,33 +694,25 @@ mod tests {
     #[test]
     fn a_device_without_sticks_has_no_stick_lights_row() {
         let leds = SETTINGS.iter().position(|s| matches!(s.1, Opens::Leds)).unwrap();
-        assert!(shown_on(Opens::Leds, true, true, false) && !shown_on(Opens::Leds, true, false, false));
-        assert!(shown_on(Opens::Tools, true, false, false), "everything else stays");
-        // The Steam Deck (docs/STEAMDECK.md): SteamOS owns these pages; the rest of Settings stays.
-        for gone in [Opens::Setup(Only::Wifi), Opens::Bluetooth, Opens::PerfFan, Opens::Time, Opens::Updates, Opens::Tools, Opens::Sync, Opens::Haptics] {
-            assert!(shown_on(gone, true, true, false) && !shown_on(gone, true, true, true), "hidden on a host-owned device only");
-        }
-        for kept in [Opens::Web, Opens::Storage, Opens::About, Opens::Language, Opens::Battery, Opens::SleepPower] {
-            assert!(shown_on(kept, true, true, true), "still there on the Deck");
-        }
-        assert!(rows_with(group_of(leds), true).contains(&leds), "the test machine has sticks (it is no H700)");
+        assert!(shown_on(Opens::Leds, true, false) && !shown_on(Opens::Leds, false, false));
+        assert!(shown_on(Opens::Tools, false, false), "everything else stays");
+        assert!(rows(group_of(leds)).contains(&leds), "the test machine has sticks (it is no H700)");
     }
 
     #[test]
     fn the_tour_and_first_start_cards_follow_the_settings_rows() {
         use pocket_ui::features::{available_on, by_id, FEATURES};
         // A card exists on a device exactly when its Settings row does (no Stick lights on an H700 without sticks, no
-        // Haptics, Sync, Tailscale, Tools or Performance & fan on the Deck).
-        for (sticks, host_owned) in [(true, false), (false, false), (false, true)] {
+        // Haptics, Sync, Tailscale, Tools or Performance & fan under NextUI).
+        for (sticks, nextui_owned) in [(true, false), (false, false)] {
             for (id, opens) in [("leds", Opens::Leds), ("haptics", Opens::Haptics), ("sync", Opens::Sync), ("tailscale", Opens::Tailscale), ("tools", Opens::Tools), ("perf_fan", Opens::PerfFan)] {
-                let card = available_on(sticks, host_owned).any(|(_, f)| f.id == id);
-                assert_eq!(card, shown_on(opens, true, sticks, host_owned), "{id} (sticks {sticks}, host-owned {host_owned})");
+                let card = available_on(sticks, nextui_owned).any(|(_, f)| f.id == id);
+                assert_eq!(card, shown_on(opens, sticks, nextui_owned), "{id} (sticks {sticks}, NextUI {nextui_owned})");
             }
         }
         let all = available_on(true, false).count();
         assert_eq!(all, FEATURES.iter().filter(|f| f.todo.is_none()).count(), "a handheld with sticks keeps every card");
         assert_eq!(available_on(false, false).count(), all - 1, "an H700 without sticks loses Stick lights only");
-        assert_eq!(available_on(false, true).count(), all - 6, "the Deck loses the six");
         assert!(by_id("leds").is_some() || !pocket_ui::device::current().has_sticks());
     }
 
@@ -787,58 +737,35 @@ mod tests {
         }
         // Short lists: the point of the categories. Seven categories, nine rows at most
         // (2026-10-30, nine since Screen colour): a list is never longer than one page, also with Large text.
-        assert!(SETTINGS_GROUPS.len() <= 7, "at most seven categories");
-        assert!(SETTINGS_GROUPS.iter().all(|c| (4..=9).contains(&c.2.len())), "every category holds 4 to 9 rows");
+        assert!(SHOWN <= 7, "at most seven categories (the last entry is the page For tinkerers)");
+        assert!(SETTINGS_GROUPS.iter().all(|c| (3..=9).contains(&c.2.len())), "every category holds 3 to 9 rows");
         let large_row = pocket_ui::type_scale::grown_in(pocket_ui::type_scale::TextSize::Large, 36) as i32 - 36;
         assert!(9 * (66 + large_row * 6 / 5) <= 1080 - 268, "nine Large rows fit on the page");
         let mut seen = std::collections::BTreeSet::new();
         assert!(SETTINGS.iter().all(|r| seen.insert(r.0)), "no row twice: settings_row finds rows by name");
     }
 
-    /// Every name a page comes back to with `settings_row` (B on the page, and so B after a deep link to it) is a
-    /// row: `settings_row` falls back to the first row, which would land in the wrong category.
+    /// For tinkerers is a page of Help & tools: its rows come back to their own row (a page's B), B on that list goes to the row
+    /// in Help & tools, and B there to the categories. Every other category's B goes to the categories.
     #[test]
-    fn every_page_comes_back_to_its_own_row_and_then_to_its_category() {
-        let back = [
-            ("LEDs", "Sound & feel"),
-            (app_cozy_extras::SETTINGS_NAME, "Look"),
-            (super::super::app_sleep_power::SETTINGS_NAME, "System"),
-            (app_night_light::SETTINGS_NAME, "Look"),
-            (super::super::app_buttons::SETTINGS_NAME, "Playing"),
-            (app_perf_fan::SETTINGS_NAME, "Playing"),
-            ("Battery", "Playing"),
-            (app_achievements::SETTINGS_NAME, "Playing"),
-            (app_curator::SETTINGS_NAME, "Games"),
-            (app_tools::SETTINGS_NAME, "Help & tools"),
-            (app_moonlight::SETTINGS_NAME, "Games"),
-            (app_gamelist::SETTINGS_NAME, "Games"),
-            ("Bluetooth", "Connections"),
-            ("Tailscale", "Connections"),
-            ("Sync", "Connections"),
-            ("Updates", "System"),
-            (app_storage::SETTINGS_NAME, "System"),
-            (app_backup::SETTINGS_NAME, "System"),
-            ("Tour", "Help & tools"),
-            ("Manual", "Help & tools"),
-            ("About", "Help & tools"),
-        ];
-        for (name, cat) in back {
-            let row = settings_row(name);
-            assert_eq!(SETTINGS[row].0, name, "{name} is a row of Settings");
-            let list = SettingsPage::List(row);
-            assert_eq!(group_of(row), category(cat), "{name} is under {cat}");
-            // B from the page lands on its row; B from there on the categories, the cursor on its category.
-            assert_eq!(groups_input(list, CANCEL), Some(SettingsPage::Groups(category(cat))), "{name}: B back to {cat}");
-            assert_eq!(
-                groups_input(SettingsPage::Groups(category(cat)), CANCEL),
-                None,
-                "B on the categories closes Settings"
-            );
+    fn for_tinkerers_is_a_page_of_help_and_tools_and_b_goes_back_through_it() {
+        let help = category("Help & tools");
+        let row = settings_row("For tinkerers");
+        assert_eq!(group_of(row), help, "the row is in Help & tools");
+        for name in ["Tailscale", "Sync", "Remote access (SSH)", app_moonlight::SETTINGS_NAME] {
+            let at = settings_row(name);
+            assert_eq!(SETTINGS[at].0, name, "{name} is a row of Settings");
+            assert_eq!(group_of(at), TINKERERS, "{name} is on the page For tinkerers");
+            assert_eq!(groups_input(SettingsPage::List(at), CANCEL), Some(SettingsPage::List(row)), "{name}: B goes back to For tinkerers' row");
         }
-        // The Store comes back by what it opens, not by name.
-        let store = SETTINGS.iter().position(|s| matches!(s.1, Opens::Store)).unwrap();
-        assert_eq!(group_of(store), category("Help & tools"));
+        assert_eq!(groups_input(SettingsPage::List(row), CANCEL), Some(SettingsPage::Groups(help)), "B in Help & tools: the categories");
+        // A on the row opens the page at its first row; nothing of the four is a category of the first page.
+        assert!(rows(TINKERERS).len() <= SETTINGS_GROUPS[TINKERERS].2.len());
+        assert!(!(0..SHOWN).any(|g| g == TINKERERS));
+        // Connections keeps Wi-Fi, Bluetooth and the Web companion.
+        assert_eq!(SETTINGS_GROUPS[category("Connections")].2.len(), 3);
     }
+
 
     /// Settings in seven categories (2026-10-30): every choice has a row, none only on a button (Y, R1, L1, X, R2 on the look
     /// page were the only way to some), and each is in one place.
@@ -863,15 +790,15 @@ mod tests {
     #[ignore = "release check: sh scripts/release-check.sh"]
     fn every_category_line_names_its_rows_in_order() {
         let parts = |line: &str| -> Vec<String> { line.trim_end_matches('.').split(", ").map(|p| p.trim().to_lowercase()).collect() };
-        for (store, sticks, deck) in [(true, true, false), (false, true, false), (true, false, false), (false, false, false), (false, false, true)] {
+        for (sticks, nextui_owned) in [(true, false), (false, false)] {
             for (g, (name, _, _)) in SETTINGS_GROUPS.iter().enumerate() {
-                let rows: Vec<&str> = rows_on(g, store, sticks, deck).iter().map(|i| SETTINGS[*i].0).collect();
+                let rows: Vec<&str> = rows_on(g, sticks, nextui_owned).iter().map(|i| SETTINGS[*i].0).collect();
                 for lang in pocket_ui::i18n::Lang::ALL {
                     let tr = |s: &str| pocket_ui::i18n::tr_in(lang, s);
-                    let line = blurb_with(g, store, sticks, deck, tr);
+                    let line = blurb_with(g, sticks, nextui_owned, tr);
                     let rows: Vec<String> = rows.iter().map(|r| tr(r).to_lowercase()).collect();
                     let got = parts(&line);
-                    assert_eq!(got.len(), rows.len(), "{lang:?} {name} (store {store}, sticks {sticks}, Deck {deck}): {line:?} has a part per row: {rows:?}");
+                    assert_eq!(got.len(), rows.len(), "{lang:?} {name} (sticks {sticks}, NextUI {nextui_owned}): {line:?} has a part per row: {rows:?}");
                     for (part, row) in got.iter().zip(&rows) {
                         assert!(row.contains(part.as_str()) || part.contains(row.as_str()), "{lang:?} {name}: {part:?} is not the row {row:?} ({line:?})");
                     }
@@ -887,8 +814,8 @@ mod tests {
         let g = category("Sound & feel");
         for lang in pocket_ui::i18n::Lang::ALL {
             let tr = |s: &str| pocket_ui::i18n::tr_in(lang, s);
-            assert!(blurb_with(g, false, true, false, tr).contains("LEDs"), "with sticks");
-            let line = blurb_with(g, false, false, false, tr);
+            assert!(blurb_with(g, true, false, tr).contains("LEDs"), "with sticks");
+            let line = blurb_with(g, false, false, tr);
             assert!(!line.contains("LED"), "{line:?}");
             assert!(line.ends_with('.') && line.chars().next().is_some_and(char::is_uppercase), "{line:?}");
         }
@@ -923,86 +850,36 @@ mod tests {
 
     #[test]
     fn a_opens_a_category_at_its_first_row_and_b_returns_to_it() {
-        for store in [false, true] {
-            for g in 0..SETTINGS_GROUPS.len() {
-                let rows = rows_with(g, store);
-                let opened = groups_input_with(SettingsPage::Groups(g), CONFIRM, store);
+        {
+            for g in 0..SHOWN {
+                let rows = rows(g);
+                let opened = groups_input(SettingsPage::Groups(g), CONFIRM);
                 assert_eq!(opened, Some(SettingsPage::List(rows[0])));
                 // Down to the last row, then B: the cursor is on the category it came from.
                 let mut page = opened.unwrap();
                 for _ in 1..rows.len() {
-                    page = groups_input_with(page, Button::Down, store).unwrap();
+                    page = groups_input(page, Button::Down).unwrap();
                 }
                 assert_eq!(page, SettingsPage::List(*rows.last().unwrap()));
-                assert_eq!(groups_input_with(page, CANCEL, store), Some(SettingsPage::Groups(g)));
+                assert_eq!(groups_input(page, CANCEL), Some(SettingsPage::Groups(g)));
             }
         }
     }
 
     #[test]
     fn moving_stays_in_the_category_and_goes_round_at_its_ends() {
-        let r = rows_with(category("Connections"), false);
+        let r = rows(category("Connections"));
         let first = SettingsPage::List(r[0]);
         let last = SettingsPage::List(*r.last().unwrap());
         assert_eq!(groups_input(first, Button::Up), Some(last), "Up on the first row: the category's last");
         assert_eq!(groups_input(last, Button::Down), Some(first), "Down on the last row: the category's first");
         // The categories go round too, and Left/Right do nothing there.
-        let n = SETTINGS_GROUPS.len();
+        let n = SHOWN;
         assert_eq!(groups_input(SettingsPage::Groups(0), Button::Up), Some(SettingsPage::Groups(n - 1)));
         assert_eq!(groups_input(SettingsPage::Groups(n - 1), Button::Down), Some(SettingsPage::Groups(0)));
         assert_eq!(groups_input(SettingsPage::Groups(2), Button::Right), Some(SettingsPage::Groups(2)));
     }
 
-    /// No public catalog: the Store row is not there, nothing in the Help & tools list points at it, and the rows around it
-    /// close up (moving, going round, touch all count in `rows_with`). With a catalog it is back where it was.
-    #[test]
-    fn the_store_row_is_there_only_with_a_catalog() {
-        let help = category("Help & tools");
-        let store = SETTINGS.iter().position(|s| matches!(s.1, Opens::Store)).unwrap();
-        let (without, with) = (rows_with(help, false), rows_with(help, true));
-        assert!(!without.contains(&store), "no catalog: no Store row");
-        assert!(with.contains(&store), "a catalog: the Store row");
-        assert_eq!(with.len(), without.len() + 1);
-        assert!(without.iter().all(|i| !matches!(SETTINGS[*i].1, Opens::Store)));
-        // Other categories are untouched.
-        for g in (0..SETTINGS_GROUPS.len()).filter(|g| *g != help) {
-            assert_eq!(rows_with(g, false), rows_with(g, true));
-        }
-        // The neighbours of the hidden row are neighbours now, in both directions.
-        let before = SettingsPage::List(store - 1);
-        let after = groups_input_with(before, Button::Down, false);
-        // The row after the Store, or the category's first when the Store is its last (it goes round).
-        let next = if store + 1 < span(help).end { store + 1 } else { without[0] };
-        assert_eq!(after, Some(SettingsPage::List(next)), "Down skips the hidden row");
-        assert_eq!(groups_input_with(after.unwrap(), Button::Up, false), Some(before), "Up skips it too");
-        assert_eq!(groups_input_with(before, Button::Down, true), Some(SettingsPage::List(store)), "with a catalog Down lands on it");
-        // Every shown row of Games still names what it opens (hints and touch read the same list).
-        assert!(without.iter().all(|i| !SETTINGS[*i].0.is_empty() && !SETTINGS[*i].2.is_empty()));
-    }
-
-    /// The Deck's lines name exactly the rows the Deck shows, made from the handhelds' lines (which would name Wi-Fi,
-    /// Sync, LEDs ...); `every_category_line_names_its_rows_in_order` checks them part by part, also in German.
-    #[test]
-    fn the_decks_category_lines_name_the_decks_rows() {
-        let deck = |name: &str| blurb_with(category(name), false, false, true, str::to_string);
-        assert_eq!(deck("Sound & feel"), "Animations, playful cases, old-TV switch-on, motion, zoom, sounds, case sounds.");
-        assert_eq!(deck("Connections"), "Web companion.");
-        assert_eq!(deck("System"), "Language, sleep & power, storage, backup & reset.");
-        assert_eq!(deck("Help & tools"), "First-start setup, how you like to play, Tour, manual, test buttons, report a problem, about.");
-        assert_eq!(deck("Playing"), "On start, continue, where I was, buttons, over the game, frames, battery, achievements.");
-    }
-
-    /// The Help & tools line names the Store only while the row is there. (The device default in a test run is "no
-    /// catalog": nothing here sets `STORE_OFFERED`.)
-    #[test]
-    fn the_help_line_leaves_out_the_store_while_it_is_hidden() {
-        let help = category("Help & tools");
-        let id = |s: &str| s.to_string();
-        assert!(blurb_with(help, true, true, false, id).contains("Store"));
-        assert!(!blurb_with(help, false, true, false, id).contains("Store"));
-        assert!(!blurb(help, id).contains("Store"), "no catalog in a test run");
-        assert_eq!(blurb(category("Playing"), id), SETTINGS_GROUPS[category("Playing")].1);
-    }
 
     /// A stranger looks for volume, brightness and BIOS in Settings (daily-use walk): "Sounds 70%" looked like the game
     /// volume, and nothing named BIOS. The lines say where those really are.
@@ -1012,11 +889,12 @@ mod tests {
         let sounds = line("Sounds");
         assert!(sounds.contains("Game volume") && sounds.contains("brightness") && sounds.contains("HOME"), "{sounds}");
         assert!(line("Add games").contains("BIOS"), "{}", line("Add games"));
-        assert!(line("Over the game").contains("picture and sound"), "Pixel Path says what it is where it first appears");
+        // Pixel Path is the enthusiasts' (0.4): the row everyone reads names what everyone gets.
+        assert!(line("Over the game").contains("frame rate") && !line("Over the game").contains("Pixel Path"), "{}", line("Over the game"));
     }
 }
 
-/// The rows the TrimUI Brick leaves out beside what a host-owned device leaves out (docs/TRIMUI-BRICK.md): everything that needs a
+/// The rows the TrimUI Brick leaves out beside what NextUI owns (docs/TRIMUI-BRICK.md): everything that needs a
 /// compositor effect (night light, the picture over the game, screenshots; screen frames only while the bridge has no GPU path, `brick_picture`), ROCKNIX (From EmulationStation, Sleep & power
 /// through systemd, PC streaming), or a network state this system does not give pocket-ui (Wi-Fi is NextUI's): the starter pack,
 /// pictures & extras, the web companion, RetroAchievements. A row that does nothing is worse than none. The Smart Pro has sticks, so `hides` keeps its lights row: it has nothing of ours to light or assign there (`brick_profile::lights_page`).
@@ -1075,18 +953,6 @@ mod brick_standalone_tests {
         assert_eq!(*other.last().unwrap(), "LEDs");
     }
 
-    /// Alex, 2026-11-03: Tailscale is essential on the Brick. Its own card keeps Wi-Fi, Remote access, Tailscale, Updates and Sync;
-    /// NextUI's card does not. Bluetooth is available only on our own card.
-    #[test]
-    fn the_standalone_card_keeps_the_network_rows() {
-        for (name, kept) in [("Bluetooth", Opens::Bluetooth), ("Wi-Fi", Opens::Setup(Only::Wifi)), ("Remote", Opens::Setup(Only::Remote)), ("Tailscale", Opens::Tailscale), ("Updates", Opens::Updates), ("Sync", Opens::Sync)] {
-            assert!(brick_keeps_with(kept, true), "{name}");
-            assert!(!brick_keeps_with(kept, false), "{name} with NextUI's card");
-        }
-        for (name, out) in [("Time", Opens::Time), ("Store", Opens::Store), ("Tools", Opens::Tools)] {
-            assert!(!brick_keeps_with(out, true), "{name}");
-        }
-    }
 
     /// Alex's standalone boot (2026-11-03): no covers appeared. The pictures row (Settings > Games > Extras) is the one place the
     /// automatic fetch is switched off, so on the card without NextUI it stays reachable and the fetch is on until chosen off.

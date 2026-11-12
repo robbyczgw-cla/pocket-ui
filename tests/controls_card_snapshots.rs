@@ -98,16 +98,19 @@ fn render_on(bin: &Path, tmp: &Path, state: &str, size: &str, text_size: &str, s
     }
     let shown = std::fs::read_to_string(&transcript).unwrap();
     if state == "controls-card:n64" {
-        assert!(shown.lines().any(|s| s == "Control stick"), "{size} {text_size}: show the control's full name: {shown}");
+        assert!(shown.lines().any(|s| s == "C buttons"), "{size} {text_size}: the right stick says it is the C buttons: {shown}");
     }
-    if state == "controls-card:psx" {
-        assert!(shown.lines().any(|s| s == "R3"), "{size} {text_size}: the right stick click must remain visible: {shown}");
+    // The emulator's extras and words are no console buttons: never on the card (turbo, the Boktai sensor).
+    if state.starts_with("controls-card:") {
+        for raw in ["Turbo", "Solar", "Sensor"] {
+            assert!(!shown.contains(raw), "{state} {size} {text_size}: \"{raw}\" on the card: {shown}");
+        }
     }
     read_png(&png)
 }
 
 #[test]
-fn every_console_shows_a_card_and_a_console_without_names_says_so() {
+fn every_console_shows_a_card_and_a_console_without_names_gets_the_short_one() {
     let guard = tempfile::tempdir().unwrap();
     let tmp = guard.path().to_path_buf();
     let status = Command::new("python3").env("POCKETUI_MOCK_NOW", FIXTURE_NOW)
@@ -123,7 +126,7 @@ fn every_console_shows_a_card_and_a_console_without_names_says_so() {
         // The drawing's middle third: the face buttons and their names, the D-pad and the sticks.
         let body = (w / 20, h * 3 / 10, w * 9 / 10, h * 4 / 10);
         let mut shots = Vec::new();
-        for system in ["snes", "gba", "psx", "n64"] {
+        for system in ["snes", "gba", "psx", "n64", "megadrive", "psp"] {
             let shot = render(&bin, &tmp, &format!("controls-card:{system}"), size, text_size, stub.as_ref());
             assert!(ink(&shot, body) > (w * h) / 400, "{system} at {size}: the buttons are drawn");
             // The HOME keys under it.
@@ -135,9 +138,10 @@ fn every_console_shows_a_card_and_a_console_without_names_says_so() {
         let plain = &shots[0];
         let remapped = render(&bin, &tmp, "controls-card:snes:remap", size, text_size, stub.as_ref());
         assert_ne!(plain.2, remapped.2, "{size}: a remapped button is drawn differently");
-        // A console that has told no names yet: a sentence where the buttons would be, not an empty page.
-        let unknown = render(&bin, &tmp, "controls-card:megadrive", size, text_size, stub.as_ref());
-        assert!(ink(&unknown, (w / 20, h / 6, w * 9 / 10, h / 8)) > 300, "{size}: the page says why there are no buttons");
+        // A console without known names: the short card (a faint pad and a sentence), not an empty page.
+        let unknown = render(&bin, &tmp, "controls-card:gamecube", size, text_size, stub.as_ref());
+        assert!(ink(&unknown, body) > 300, "{size}: the short card draws its pad and sentence");
+        assert!(std::fs::read_to_string(tmp.join("visible.txt")).unwrap().contains("Play with the D-pad and the buttons."), "{size}: the short card's sentence");
         // The first start's card says what A does, as the hint bar.
         let first = render(&bin, &tmp, "controls-card:gba:first", size, text_size, stub.as_ref());
         assert!(ink(&first, (w * 6 / 10, h * 8 / 10, w * 4 / 10, h / 5)) > 300, "{size}: the hint bar of the first start's card");

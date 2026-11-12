@@ -23,6 +23,15 @@ something different on every page, and a press on a dark screen only wakes it. p
 `/tmp/pocket-ui.status` (RAM, never the card; `<dir>/ui.status` under `--test-driver`), replaced whole and only when a
 field changes (`src/ui_status.rs`, `src/app_where.rs`).
 
+**Probe instances never write `/tmp/pocket-ui.status`.** Before starting any second UI (a device journey, decoder fixture
+or navigation probe), set `POCKETUI_STATUS` to a file in that session's private RAM directory, and read that same file for
+every status/PID guard. The UI and `scripts/ui-status.sh` both honor it. `--test-driver` otherwise writes `<dir>/ui.status`;
+the installed owner's UI keeps the default. Never repair a stale public status by overwriting it from a probe: leave the
+owner's process to publish its next state. The Brick journey sets the private path in its launch script even if its
+parent environment names the public file. Before changing any device file, it also rejects local or installed legacy UIs
+whose binary lacks this writer override; those need a newer `--binary`. Host regressions cover legacy refusal, writer
+isolation and guarded input reads.
+
 ```
 v=1	rev=42	pid=1234	place=settings:List Look	cover=none	sleep=awake	game=none
 ```
@@ -121,6 +130,25 @@ runs under dash and BusyBox ash with `timeout`, `stat` and `nohup` absent, inclu
 BusyBox's standalone applet lookup. Both checks also run in the merge gate.
 The broader local backup/restore fixtures are in `bash scripts/test-device-check.sh`.
 
+A test game leaves nothing in the owner's data (2026-11-11, "pocketcheck" on a Brick's shelf). `device-check.sh` backs up and restores
+what pocket-ui writes about a played game: Recent / Continue (`recents.json` and its backup), the play log, the shelf's play time
+(`library.json`), the battery per game (`battery-games.json`) and the console's core options. A running pocket-ui writes its memory
+over put-back files at its next change, so it is held (SIGSTOP, exact pid, released by itself after 90 s) while the files go back and
+restarted afterwards to read them again. The check never sends the power key (`fifo power`): on a Brick whose power button is Sleep it
+suspends the device and takes the network with it; `fifo dark` and `fifo wake` are the words for the screen. Traces from older runs come
+out with `scripts/device_scrub.py DATA_DIR` (run it with the UI stopped, then start the UI; `--dry-run` first; tested by
+`scripts/test-device-scrub.py`).
+
+A disc game (PS1 on the Brick, 12.11.2026) is a `.cue` sheet plus the track files it names. `device-check.sh` copies all of them below
+`.pocket-ui-test/device-check/rom/` as `pocketcheck.cue` + `pocketcheck.bin` (`pocketcheck-01.bin`, `-02.wav` ... for several tracks), writes
+the sheet again with the copies' names (`scripts/device_game_files.py`; a sheet that points outside its folder is refused), compares each
+copy's size, then flushes the card (`sync`, wait until Dirty/Writeback are below 2 MB) and drops the page cache (`DC_DROP_CACHES=0` keeps it: a player starts a game from a cold cache, not one the copy has just left in memory) before the game starts: the first Brick try started
+right behind a 260 MB write and the loader hung in uninterruptible sleep. The copies go with the rest of the test folder at the end of the
+game. Use a games line like `psx|Crash Bandicoot 2.cue|`; tested in `scripts/test-device-check.sh`.
+A game that takes long to show its first picture is waited for up to `DC_FIRST_FRAME_S` seconds (default 45, also for Continue). While it
+loads, the check writes down every 5 s what the core process does (run state, kernel wait point, resident memory, bytes read from the
+card) as `load_trace` in the result, so a "no first frame" says why. After a failed start on a Brick the copy made for the run is removed.
+
 `device-check.sh` waits on `/tmp/pocket-core.status` (`play=playing`, `menu-paused|held`) and `game=` in `/tmp/pocket-ui.status`
 instead of fixed sleeps, and keeps the old sleeps only where there is no status file. `grim` is tried up to six times; the tries,
 an output that was off and a final failure (with the core and UI status) go into the game's `capture_notes`. `underruns` is the sum of
@@ -129,6 +157,73 @@ movement at all in the first half of play is looked at again for up to 30 s (`wa
 deployed the build passes `DC_BUILD_COMMIT` and `DC_BUILD_MD5` (8 hex of its `pocket-ui`); the result then carries `build_commit`,
 `build_binary_md5`, `build_verified` (`yes`/`NO`/`NA`) and `check_version` (version + md5 of the script). Host fixtures:
 `scripts/test-device-check-harness.sh`.
+
+### Brick RTC batches at night
+
+The Brick journey's opt-in `--night-soak` is only for `--phase sleep` with RTC wake and
+`--owner-watch-binary` (the ARM build of `scripts/brick/owner-watch.c`); it refuses
+`--physical`. Ordinary journey phases retain their existing behavior. For example:
+
+```sh
+python3 scripts/brick/journey.py --host root@<device-ip> --phase sleep --night-soak \
+  --cycles 5 --alarm-seconds 20 --binary /path/to/main/pocket-ui \
+  --core /path/to/main/pocket-core --owner-watch-binary /path/to/owner-watch \
+  --expect-version 0.3.2 --label main-<commit> --out /path/to/proof/batch-01
+```
+
+Use the exact main artifact commit in the label and keep a fresh output directory per
+batch. The controller that spreads batches across the night owns no device lock while
+waiting. It must stop by the agreed deadline, stop after any failed batch or owner input,
+and verify restoration before starting another. This option keeps the existing 480-second
+work budget, 530-second host alarm, 500-second device guard and shared flock; oversized
+cycle/alarm batches are refused. It never turns a 100-cycle run into one long session.
+
+Before mutation it requires readable battery capacity of at least 20% and an owner UI
+on the shelf with matching PID, `sleep=light`, no game/overlay, and both backlights zero.
+After the backup it verifies that the device-side guard actually has all three physical
+input nodes open before any mixer/LED guard writes, then checks the idle owner again.
+The same owner guard runs in the SIGSTOP command immediately before taking the screen.
+Thus a press during backup cannot silently turn into taking over a newly awakened owner.
+Failed preflight also stops an already-started input watcher before removing scratch.
+The existing silent mixer/LED guard, rumble-off private configuration,
+3/255 starting brightness and exact session restore remain in use. Save the owner's
+original mixer and light state once before a night campaign, establish a muted/dark
+baseline for the intervals between batches, then restore the original state when the
+campaign ends; the journey itself restores what it found at each batch's start. Development
+access markers remain in place. Stop on unexpected owner activity between sessions.
+
+Every RTC wake checks the real LCD (`brick-hw bl-get`) and hwroot backlight are nonzero
+and at most 25/255 (below 10%) **before sending wake or writing any brightness value**.
+It saves `cycle-N-backlight.json`, `cycle-N-lcd.txt` and `cycle-N-status.txt`, checks its
+own awake pause/shelf status, and captures the paused game. Boot ID, battery, pstore,
+kernel errors and application crashes are checked before, immediately after wake and
+after the audio observation. A WLAN default route must return within 20 seconds.
+
+FIFO `dark` turns the screen off through the UI's normal screen-off path; FIFO `wake`
+brings it back without a button press. On the Brick, `dark` also pauses the game. Night
+samples confirm Continue first, then darken immediately and observe transition audio
+counters in the paused state; they do not claim an eight-second playing-audio sample.
+Missing counters or any nonzero per-cycle error delta fail that cycle. The following
+cycle wakes before opening its sleep menu. The screen stays dark during the audio wait
+and subsequent checks, and the guard never repairs brightness during a wake measurement.
+
+Each cycle saves full kernel/pstore evidence plus `cycle-N-measurements.json`; successful
+cycles also enter `cycles.json`. The known `skb_try_coalesce` warning at
+`net/core/skbuff.c:4383` and `mmc2: error -22 whilst initialising SDIO card` are counted
+as WLAN firmware issues, separately from failures. Other kernel warnings, MMC errors,
+Oops, BUG, panic, changed pstore or reboot fail the batch. Reboot detection saves the
+post-reset kernel/pstore evidence and performs no further device writes. SSH exit 255
+and transport timeouts are retried around suspend within the reconnect deadline;
+owner-abort 125 and other command failures propagate immediately. When the local input
+watcher has started restoration, host cleanup waits at most 45 seconds for its completion
+flag before proceeding, so it cannot start a concurrent restore. An unfinished restore
+leaves scratch intact for recovery. Restore only discards probe core FIFOs after the
+originals have all been parked (`parked-ready`); an earlier input abort preserves their
+inodes and returns any partially parked files. After an owner-input restore, cleanup
+records `owner_interrupted` and configuration differences as owner activity instead of
+overwriting the owner's new settings or failing because they changed settings, sound,
+lights or clocks. It still checks the original UI/FIFO, guards and protected binaries.
+Run `python3 scripts/test-brick-journey.py` for the host fixtures.
 
 ## Where the core is
 
@@ -226,7 +321,7 @@ Touch was seen on the real panel once, with a DS game, and was wrong (taps mirro
 `/storage/pocket-ui/dev.env` (restart pocket-ui) turns the mapping.
 - [ ] Shelf: tap a row: it is selected; tap it again: it opens. A tap high on the screen must select what is high, left must be left:
   this is the check of the rotation. If a tap lands mirrored or turned, that is the setting above.
-- [ ] Shelf: swipe up and down: the selection follows by rows and stops at the ends. Cards look: swipe left / right.
+- [ ] Shelf: swipe up and down: the selection follows by rows and stops at the ends.
 - [ ] Settings: tap a row, tap it again; swipe; tap the B / A hints at the bottom right.
 - [ ] SELECT hint on the shelf (tap): the switcher opens; swipe left / right moves between cards, tap a card, tap A.
 - [ ] While a game runs (also at the pause menu) touching the screen must do nothing to pocket-ui. After the game, the shelf answers again.

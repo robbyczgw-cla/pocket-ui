@@ -149,7 +149,7 @@ pub fn hint_button(key: &str) -> Option<Button> {
         "R2" => Button::R2,
         // The cabinet's "UP Search" on its top shelf.
         "UP" => Button::Up,
-        // "RIGHT Another" on a card of Surprise me.
+        // "RIGHT Another" on a card of Just Play.
         "RIGHT" => Button::Right,
         _ => return None,
     })

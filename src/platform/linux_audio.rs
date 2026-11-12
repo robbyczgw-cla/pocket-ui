@@ -46,6 +46,8 @@ type SndWritei = unsafe extern "C" fn(*mut c_void, *const c_void, c_ulong) -> c_
 type SndRecover = unsafe extern "C" fn(*mut c_void, c_int, c_int) -> c_int;
 type SndDelay = unsafe extern "C" fn(*mut c_void, *mut c_long) -> c_int;
 type SndClose = unsafe extern "C" fn(*mut c_void) -> c_int;
+#[cfg(feature = "brick")]
+type SndControl = unsafe extern "C" fn(*mut c_void) -> c_int;
 type SndAvail = unsafe extern "C" fn(*mut c_void) -> c_long;
 type SndGetParams = unsafe extern "C" fn(*mut c_void, *mut c_ulong, *mut c_ulong) -> c_int;
 type SndHwMalloc = unsafe extern "C" fn(*mut *mut c_void) -> c_int;
@@ -63,8 +65,14 @@ pub(crate) struct Observation {
     period: Option<u64>,
     config_failures: u64,
     last_sample: Option<Instant>,
+    #[cfg(feature = "brick")]
+    native_pause: Option<(SndControl, SndControl)>,
 }
 impl Observation {
+    #[cfg(all(test, feature = "brick"))]
+    pub(crate) fn with_native_pause(drain: SndControl, prepare: SndControl) -> Self {
+        Self { native_pause: Some((drain, prepare)), ..Self::default() }
+    }
     fn alsa(lib: &Library, pcm: *mut c_void) -> Self {
         let mut out = Self::default();
         // SAFETY: symbols are used only while the Sink retains this Library, on its owning writer.
@@ -238,6 +246,8 @@ impl Drop for Sink {
         // SAFETY: the handle came from the open call of the same library, which is still loaded (fields
         // drop after this), and it is closed exactly once, here.
         match self {
+            // Null: closed already (`close`, the Brick's suspend).
+            Sink::Pulse { stream, .. } | Sink::Alsa { pcm: stream, .. } if stream.is_null() => {}
             Sink::Pulse { stream, free, .. } => unsafe { free(*stream) },
             Sink::Alsa { pcm, close, .. } => unsafe {
                 close(*pcm);
@@ -258,6 +268,28 @@ impl Sink {
             }
         }
     }
+    /// Closes the stream now and leaves this sink empty: writes fail until it is replaced (`Audio::hold`). The Brick's
+    /// kernel suspends a PCM that is open across `mem` and the first write after the wake fails (-ESTRPIPE, then -EPIPE),
+    /// so nothing of ours stays open while it sleeps (docs/TRIMUI-BRICK-SLEEP.md).
+    #[cfg(feature = "brick")]
+    pub(crate) fn close(&mut self) {
+        match self {
+            Sink::Pulse { stream, free, .. } if !stream.is_null() => unsafe { free(std::mem::replace(stream, std::ptr::null_mut())) },
+            Sink::Alsa { pcm, close, .. } if !pcm.is_null() => unsafe {
+                close(std::mem::replace(pcm, std::ptr::null_mut()));
+            },
+            _ => {}
+        }
+    }
+
+    #[cfg(feature = "brick")]
+    fn closed(&self) -> bool {
+        match self {
+            Sink::Pulse { stream, .. } => stream.is_null(),
+            Sink::Alsa { pcm, .. } => pcm.is_null(),
+        }
+    }
+
     pub(crate) fn uses_graph(&self) -> bool {
         matches!(self, Sink::Alsa { .. })
     }
@@ -352,7 +384,18 @@ impl Sink {
             unsafe { close(pcm) };
             return None;
         }
-        let observation = Observation::alsa(&lib, pcm);
+        #[allow(unused_mut)]
+        let mut observation = Observation::alsa(&lib, pcm);
+        // Brick's "pipewire" name is its native chip, not a PipeWire graph.
+        // BlueALSA keeps its existing streaming/pause behaviour.
+        #[cfg(feature = "brick")]
+        if !device.to_bytes().starts_with(b"pocket_bt:") {
+            unsafe {
+                if let (Ok(drain), Ok(prepare)) = (lib.get::<SndControl>(b"snd_pcm_drain"), lib.get::<SndControl>(b"snd_pcm_prepare")) {
+                    observation.native_pause = Some((*drain, *prepare));
+                }
+            }
+        }
         Some(Sink::Alsa {
             _lib: Some(lib),
             pcm,
@@ -381,8 +424,40 @@ impl Sink {
         }
     }
 
+    /// The native chip needs no graph-linking writes before the game queue is
+    /// ready. Its prepared PCM stays stopped until the first startup prefill.
+    #[cfg(feature = "brick")]
+    pub(crate) fn is_native_brick_pcm(&self) -> bool {
+        matches!(self, Sink::Alsa { observation, .. } if observation.native_pause.is_some())
+    }
+
+    /// Finish the pause fade, then leave the native Brick PCM prepared with its
+    /// clock stopped. A menu needs no continuously running stream of silence.
+    /// Pulse/BlueALSA retain their streaming policy. Game buffer sizes stay fixed.
+    #[cfg(feature = "brick")]
+    pub(crate) fn park_after_pause(&mut self) -> bool {
+        let Sink::Alsa { pcm, recover, observation, .. } = self else { return false };
+        let Some((drain, prepare)) = observation.native_pause else { return false };
+        if pcm.is_null() { return false; }
+        for operation in [drain, prepare] {
+            let result = unsafe { operation(*pcm) };
+            if result < 0 {
+                // Preserve real PCM failures even on the pause-control path.
+                if let Some(d) = &observation.writer.diagnostics { d.alsa_write_error(result as i64); }
+                let failed = unsafe { recover(*pcm, result, 1) } < 0;
+                if let Some(d) = &observation.writer.diagnostics { d.alsa_recover(failed); }
+                return false;
+            }
+        }
+        true
+    }
+
     /// Blocks until the output has room; false when the stream is gone.
     pub(crate) fn write(&mut self, samples: &[i16]) -> bool {
+        #[cfg(feature = "brick")]
+        if self.closed() {
+            return false;
+        }
         match self {
             Sink::Pulse {
                 stream, write, observation, ..
@@ -517,6 +592,7 @@ pub(crate) fn minimum_queue_ms() -> u32 {
 mod tests {
     use super::*;
     use std::collections::VecDeque;
+
 
     #[test]
     fn h700_pcm_holds_a_graph_cycle_and_two_writer_chunks() {

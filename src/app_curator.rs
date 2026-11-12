@@ -4,8 +4,8 @@
 //!   runs; until it is there the Curator entries show no words (a toast or the page says "Getting ready…" when you press one);
 //! - Home's Curator row, pinned smart shelves and stickers, the Curator list and the lists they open;
 //! - the Lens, the Echoes and Versions pages, the stickers of a game, naming a shelf or sticker;
-//! - the order of the Lens's games and of each smart shelf (SELECT on the Lens, a shelf's options), and "Surprise me"
-//!   in the Curator list, which opens the picked game's card with the reason;
+//! - the order of the Lens's games and of each smart shelf (SELECT on the Lens, a shelf's options), and Just Play's
+//!   card (X on its row), which opens the picked game's card with the reason;
 //! - the game card's rows, Settings → Curator, and `--snapshot curator:…`.
 //!
 //! main.rs only carries small hooks: the new items and screens call into here.
@@ -43,34 +43,9 @@ const STICKER_STRIPE: &str = "sticker";
 const INLINE: usize = 3;
 /// Games not on this device named under Echoes, when switched on.
 const ELSEWHERE: usize = 6;
-/// Up next: a game played at least this long before it ended gets a suggestion (a start and a quick quit doesn't).
-const UP_NEXT_AFTER: std::time::Duration = std::time::Duration::from_secs(60);
-/// How long Up next stays on the shelf when nothing is pressed; then it goes, and A is the shelf's again.
-pub(crate) const UP_NEXT_SHOWN: std::time::Duration = std::time::Duration::from_secs(8);
-
-/// What a button does while Up next shows: (plays the suggestion, the press is used up). X plays it, B puts it away; any
-/// other button puts it away and does what it always does, A included: it continues the game the shelf is on.
-fn up_next_press(b: Button) -> (bool, bool) {
-    (b == Button::North, b == Button::North || b == CANCEL)
-}
-
-#[cfg(test)]
-mod up_next_tests {
-    use super::*;
-
-    #[test]
-    fn only_x_plays_the_suggestion_and_a_stays_the_shelfs() {
-        assert_eq!(up_next_press(Button::North), (true, true), "X plays it");
-        assert_eq!(up_next_press(CANCEL), (false, true), "B puts it away");
-        assert_eq!(up_next_press(CONFIRM), (false, false), "A: the suggestion goes, the shelf's own A follows");
-        assert_eq!(up_next_press(Button::Down), (false, false), "anything else: away, and it moves");
-    }
-}
-
 /// News from the index thread.
 pub(crate) enum Event {
-    /// A new index; `gen` is the library generation its catalog was made from. `up_next`: the suggestion after the
-    /// game that just ended (its catalog number and reason), worked out on the thread with the index. `today`: what
+    /// A new index; `gen` is the library generation its catalog was made from. `today`: what
     /// Home's Curator row offers (the day's pick, the games waiting), also from the thread.
     /// `connections`: Connections' index, made with a new catalog (`app_connections`); `rediscover`: Rediscover's games.
     Built {
@@ -78,7 +53,6 @@ pub(crate) enum Event {
         index: Arc<Index>,
         catalog_ms: u128,
         index_ms: u128,
-        up_next: Option<(usize, String)>,
         today: Today,
         connections: Option<Arc<pocket_ui::connections::Index>>,
         rediscover: Vec<super::app_connections::Rediscovered>,
@@ -165,8 +139,8 @@ pub(crate) struct CuratorUi {
     /// The Lens as last left, for this session, and the order its games were shown in.
     lens: Lens,
     order: Order,
-    /// "Surprise me": the generator (seeded from the clock at the first pick) and the games shown since the Curator
-    /// list's entry was last pressed, so "Another" brings a new one.
+    /// "Just Play": the generator (seeded from the clock at the first pick) and the games its card showed since X was last
+    /// pressed on the row, so "Another" brings a new one.
     rng: Option<Rng>,
     surprise_seen: Vec<usize>,
     /// Where B goes from a list opened in the Curator list.
@@ -180,30 +154,12 @@ pub(crate) struct CuratorUi {
     pub sticker_tops: HashMap<u32, Vec<usize>>,
     /// What Home's Curator row offers, from the index thread with `index` (`curator::today`).
     pub today: Today,
-    /// Surprise me showed the day's pick already this session; it is the first pick until then.
-    today_shown: bool,
     /// Settings → Curator's selected row.
     pub settings_sel: usize,
-    /// The game running at the last tick (not an app) and when it started: its end is Up next's cue.
-    seen_game: Option<(PathBuf, Instant)>,
-    /// A game ended: the next index build works out Up next for it.
-    up_next_seed: Option<PathBuf>,
-    /// Up next on the shelf, while it is shown.
-    pub up_next: Option<UpNext>,
     /// Play history's pages and rows (`app_history`).
     pub history: super::app_history::HistoryUi,
     /// Connections' index and open list, and Rediscover's games (`app_connections`).
     pub connections: super::app_connections::ConnectionsUi,
-}
-
-/// "Up next: <game> — <reason>" on the shelf after a game (Roon Radio's continuation).
-#[derive(Clone, Debug)]
-pub(crate) struct UpNext {
-    pub item: Item,
-    pub name: String,
-    pub system: String,
-    pub reason: String,
-    pub at: Instant,
 }
 
 impl CuratorUi {
@@ -228,12 +184,11 @@ fn feel_source() -> Box<dyn curator::FeelSource + Send> {
 }
 
 /// Settings → Curator's rows: the switch, its name, what it does.
-pub(crate) const SETTINGS_ROWS: [(&str, &str); 8] = [
-    ("Lens & smart shelves", "The Curator row and Just Play on Home: combine filters, and keep a filter as a smart shelf that updates itself."),
+pub(crate) const SETTINGS_ROWS: [(&str, &str); 7] = [
+    ("Lens & smart shelves", "The Curator row on Home: combine filters, and keep a filter as a smart shelf that updates itself."),
+    ("Just Play on Home", "A row on Home: A starts a game that suits you now, X shows it first, with a line why, and Right on that card brings another."),
     ("Echoes on the game card", "More like this: games you own that play alike, each with a short reason."),
-    ("Up next after a game", "When you quit a game you played for a while, one line on the shelf suggests a game of yours like it. X plays it; any other button puts it away. Nothing starts by itself."),
     ("Merge versions in mixed lists", "A game you own on several systems shows once in Favourites, smart shelves and Echoes, and starts the version you prefer."),
-    ("Labels", "Your own labels for games, such as Couch co-op. Put them on from the game card; pin one to see it on Home."),
     ("Games not on this device in Echoes", "Echoes also names a few games you don't have, from the offline game list. Names only."),
     // Its line over the game is Settings > Playing > Over the game since 2026-10-25 (`over_game`).
     ("Pixel Path in the pause menu", "How a game's picture and sound reach you, stage by stage, graded in colour, in the pause menu of every game. The line beside the picture is under Settings › Playing › Over the game."),
@@ -243,12 +198,11 @@ pub(crate) const SETTINGS_ROWS: [(&str, &str); 8] = [
 pub(crate) fn switch(p: &mut Prefs, row: usize) -> &mut bool {
     match row {
         0 => &mut p.lens,
-        1 => &mut p.echoes,
-        2 => &mut p.up_next,
+        1 => &mut p.just_play,
+        2 => &mut p.echoes,
         3 => &mut p.merge_versions,
-        4 => &mut p.stickers,
-        5 => &mut p.not_on_device,
-        6 => &mut p.pixel_path,
+        4 => &mut p.not_on_device,
+        5 => &mut p.pixel_path,
         _ => &mut p.history,
     }
 }
@@ -259,7 +213,6 @@ impl App {
     /// Called as the loop goes idle: starts a build when the library or the player's state changed. Never before
     /// the first frame, never while a game runs or the first-start setup is open.
     pub(crate) fn curator_tick(&mut self) {
-        self.curator_watch_game();
         // Play history's writer and migration (`app_history`), which also run while a game does.
         self.history_tick();
         let c = &self.curator;
@@ -299,8 +252,6 @@ impl App {
         let gen = self.curator.library_gen;
         self.curator.building = true;
         self.curator.dirty = false;
-        // Up next for the game that just ended: one Echoes list on the thread, with the index that knows the session.
-        let seed = self.curator.up_next_seed.take();
         let data_dir = self.data_dir.clone();
         // Connections and Rediscover take what the EmulationStation gamelists and the play history add (`app_connections`).
         let (gamelist, log) = (self.gamelist.index.clone(), pocket_ui::play_log::view());
@@ -332,10 +283,9 @@ impl App {
             let user = curator::user_state(&catalog, &player);
             let index = Arc::new(Index::build(catalog, user));
             let index_ms = t.elapsed().as_millis();
-            let up_next = seed.and_then(|p| index.find(&p)).and_then(|g| index.up_next(g)).map(|e| (e.game, e.reason));
             // Home's Curator row: one draw and one pass over the works, well under a millisecond (`curator::today`).
             let today = index.today();
-            Event::Built { gen, index, catalog_ms, index_ms, up_next, today, connections, rediscover }
+            Event::Built { gen, index, catalog_ms, index_ms, today, connections, rediscover }
         };
         if now {
             let e = job();
@@ -357,7 +307,7 @@ impl App {
 
     pub(crate) fn curator_event(&mut self, e: Event) {
         match e {
-            Event::Built { gen, index, catalog_ms, index_ms, up_next, today, connections, rediscover } => {
+            Event::Built { gen, index, catalog_ms, index_ms, today, connections, rediscover } => {
                 self.curator.building = false;
                 println!("curator: {} games, catalog {catalog_ms} ms, index {index_ms} ms (library {gen})", index.len());
                 let new_catalog = self.curator.index.as_ref().is_none_or(|old| !Arc::ptr_eq(&old.catalog, &index.catalog));
@@ -370,7 +320,7 @@ impl App {
                     self.curator.page = None;
                 }
                 if new_catalog {
-                    // So are the games "Surprise me" showed.
+                    // So are the games Just Play's card showed.
                     self.curator.surprise_seen.clear();
                 }
                 self.curator.built_gen = Some(gen);
@@ -380,10 +330,6 @@ impl App {
                     self.refresh_card_connections();
                 }
                 self.curator.connections.rediscover = rediscover;
-                // A new day's pick (or another library's) is shown first again.
-                if today.pick.as_ref().map(|p| p.game) != self.curator.today.pick.as_ref().map(|p| p.game) {
-                    self.curator.today_shown = false;
-                }
                 self.curator.today = today;
                 self.curator_counts();
                 if let Some(Page::Lens(p)) = self.curator.page.as_mut() {
@@ -406,9 +352,6 @@ impl App {
                 }
                 // The cabinet's Curator shelves follow the counts and pins.
                 self.cabinet.dirty = true;
-                if let Some((game, reason)) = up_next {
-                    self.offer_up_next(game, reason);
-                }
             }
             Event::History(c) => self.history_counted(c),
             Event::StickerSaveFailed(e) => self.curator_saved::<()>(Err(e), ""),
@@ -471,9 +414,6 @@ impl App {
         if p.lens {
             pinned.extend(p.shelves.iter().enumerate().filter(|(_, s)| s.pinned).map(|(i, _)| ShelfKey::SmartShelf(i)));
         }
-        if p.stickers {
-            pinned.extend(self.library.stickers().iter().filter(|s| s.pinned).map(|s| ShelfKey::Sticker(s.id)));
-        }
         if let Some(open) = screen_shelf(self.screen).filter(|k| *k != ShelfKey::Curator && !pinned.contains(k)) {
             keys.push(open);
         }
@@ -527,156 +467,7 @@ impl App {
         true
     }
 
-    // ---- Up next ------------------------------------------------------------------------------------------------
 
-    /// Watches the running game (each tick): when a game that ran for a while is gone and the shelf is back, the
-    /// next index build works out Up next for it. A game started again (options, a fallback) or handed over to the
-    /// next one (`app_fast_switch`) never leaves `running` empty, so it gets none; an app (PC streaming, a tool)
-    /// neither. Nothing at all when Settings → Curator says no.
-    fn curator_watch_game(&mut self) {
-        match self.running.as_ref() {
-            Some(r) if !r.is_app() => {
-                if self.curator.seen_game.as_ref().is_none_or(|(p, _)| *p != r.path) {
-                    self.curator.seen_game = Some((r.path.clone(), r.started));
-                }
-            }
-            Some(_) => self.curator.seen_game = None,
-            None => {
-                if let Some((path, started)) = self.curator.seen_game.take() {
-                    // A game that ended with a word on the shelf (it failed) gets none.
-                    if self.curator.prefs.up_next && started.elapsed() >= UP_NEXT_AFTER && self.notice.is_none() {
-                        self.curator.up_next_seed = Some(path);
-                        self.curator.touch();
-                    }
-                }
-            }
-        }
-    }
-
-    /// Whether the shelf is what is on screen, with nothing over it: the only place Up next shows.
-    fn up_next_room(&self) -> bool {
-        self.running.is_none()
-            && self.launch_at.is_none()
-            && self.card.is_none()
-            && self.curator.page.is_none()
-            && self.settings_page.is_none()
-            && self.setup.is_none()
-            && self.menu.is_none()
-            && self.switcher.is_none()
-            && self.console.is_none()
-            && self.port_files.is_none()
-            && !self.find.is_open()
-            && self.notice.is_none()
-            && !self.sys.is_open()
-    }
-
-    /// The index thread found a game to suggest: shown when the shelf is free (and the game still where it was).
-    fn offer_up_next(&mut self, game: usize, reason: String) {
-        let Some(item @ Item::Game(s, g)) = self.curator_item(game) else { return };
-        if !self.curator.prefs.up_next || !self.up_next_room() {
-            return;
-        }
-        let (name, system) = (self.systems[s].games[g].name.clone(), self.systems[s].name.clone());
-        println!("curator: up next {name} ({system}): {reason}");
-        self.curator.up_next = Some(UpNext { item, name, system, reason, at: Instant::now() });
-        self.request_redraw();
-    }
-
-    /// Up next while it is on screen (shown, not timed out, the shelf free).
-    pub(crate) fn up_next_shown(&self) -> Option<&UpNext> {
-        self.curator.up_next.as_ref().filter(|u| u.at.elapsed() < UP_NEXT_SHOWN && self.up_next_room())
-    }
-
-    /// A button on the shelf while Up next shows: X plays it, B puts it away; anything else puts it away and goes on
-    /// as usual (true: the press is used up). A is the shelf's own the whole time (it continues the game the shelf is on, as
-    /// the player expects straight after a game); it was the suggestion's, and A is the button most likely still being
-    /// pressed as a game ends (walk 2026-11-02).
-    pub(crate) fn curator_up_next_press(&mut self, b: Button) -> bool {
-        let Some(up) = self.up_next_shown().cloned() else {
-            self.curator.up_next = None;
-            return false;
-        };
-        self.curator.up_next = None;
-        let (play, used) = up_next_press(b);
-        if play {
-            if let Item::Game(s, g) = up.item {
-                if let Some(game) = self.systems.get(s).and_then(|sys| sys.games.get(g)) {
-                    let (system, name, path) = (self.systems[s].name.clone(), game.name.clone(), game.path.clone());
-                    self.launch_asking(system, name, path);
-                }
-            }
-        }
-        used
-    }
-
-    /// The loop's next wake-up for Up next: a frame per refresh while it slides in, then when it goes by itself
-    /// (it is put away here once its time is up). Nothing while there is none.
-    pub(crate) fn curator_up_next_wake(&mut self, now: Instant) -> Option<Instant> {
-        let up = self.curator.up_next.as_ref()?;
-        let end = up.at + UP_NEXT_SHOWN;
-        if now >= end || !self.up_next_room() {
-            self.curator.up_next = None;
-            self.request_redraw();
-            return None;
-        }
-        if pocket_ui::motion::appearing(up.at, now) {
-            // One frame per refresh, as `animating()` paces the others.
-            let due = self.frame_at + super::FRAME;
-            if now < due {
-                return Some(due);
-            }
-            self.request_redraw();
-            return Some(now + super::FRAME);
-        }
-        Some(end)
-    }
-
-    /// Up next over the bottom of the shelf, in every look: a paper label like the Shelf look's selected game, with
-    /// its box, the game and the reason; the hint row says what A and B do now. False when it isn't showing (the
-    /// shelf's own hints then).
-    pub(crate) fn paint_up_next(&mut self, c: &mut Canvas) -> bool {
-        let Some(up) = self.up_next_shown().cloned() else { return false };
-        // Three lines: taller by their growth with Settings → Text size.
-        let (g1, g2, g3) = (pocket_ui::type_scale::grow(21), pocket_ui::type_scale::grow(37), pocket_ui::type_scale::grow(28));
-        let (x, w, h) = (MARGIN, c.w - 2 * MARGIN, 132 + (g1 + g2 + g3) * 6 / 5);
-        let y = c.h - 112 - h;
-        let cover = self.cover(up.item, 96, h - 24);
-        let colour = stripe(&up.system);
-        let short = system_short(&self.systems, &up.system);
-        // The shelf fades out under it, so no row is cut off at its edge.
-        const FADE: i32 = 40;
-        for k in 0..FADE {
-            c.shade_rect(0, y - FADE + k, c.w, 1, pal().void, (k * 255 / FADE) as u8);
-        }
-        c.rect(0, y, c.w, c.h - y, pal().void);
-        pocket_ui::text::boxes::painted_over(c, (0, y, c.w, c.h - y));
-        let text = &mut self.text;
-        pocket_ui::motion::paint_toast(c, up.at, Instant::now(), None, (x, y - 24, w, h + 48), 20.0, |c, dy| {
-            let y = y + dy;
-            c.rect(x, y, w, h, pal().label);
-            game_card::lift_shadow(c, x, y + h, w, pal().t.max(120));
-            c.rect(x, y, STRIPE, h, colour);
-            let mut tx = x + STRIPE + 24;
-            match &cover {
-                Some(img) => {
-                    let (cw, ch) = (img.w as i32, img.h as i32);
-                    c.blit_scaled(img, tx + (96 - cw) / 2, y + (h - ch) / 2, cw, ch);
-                }
-                None => pocket_ui::retro::pill(c, tx + 12, y + 16, 72, h - 32, 6, mix(colour, pal().label, 170)),
-            }
-            tx += 96 + 24;
-            let tw = x + w - 28 - tx;
-            text.draw(c, Face::Body, 21, tx, y + 36 + g1, pal().label_dust, "Up next");
-            let name = text.fit(Face::Title, 37, &up.name, tw);
-            text.draw(c, Face::Title, 37, tx, y + 80 + g1 + g2, pal().ink, &name);
-            let line = text.fit(Face::Body, 28, &format!("{short} · {}", up.reason), tw);
-            text.draw(c, Face::Body, 28, tx, y + 116 + g1 + g2 + g3, pal().label_dust, &line);
-        });
-        // A tap on it plays it, as X does.
-        self.hits.button(Area::new(x, y, w, h), Button::North);
-        self.paint_hint_row(c, &[("X", "Play it"), ("B", "Not now")]);
-        true
-    }
 
     // ---- Home, the Curator list and its lists ----------------------------------------------------------------
 
@@ -691,9 +482,6 @@ impl App {
             // Without the Lens there is no Curator row: History stands on Home itself, once something was played.
             rows.push(Item::History);
         }
-        if p.stickers {
-            rows.extend(self.library.stickers().iter().filter(|s| s.pinned).map(|s| Item::Sticker(s.id)));
-        }
         rows
     }
 
@@ -701,9 +489,7 @@ impl App {
     fn curator_hub_items(&self) -> Vec<Item> {
         let mut items = Vec::new();
         if self.curator.prefs.lens {
-            // "Surprise me" right under the Lens: Curator's list is where finding something to play lives, so it adds
-            // no row to Home and is two presses from it (docs/CURATOR.md "Surprise me").
-            items.extend([Item::Lens, Item::Surprise]);
+            items.push(Item::Lens);
             items.extend((0..self.curator.prefs.shelves.len()).map(Item::SmartShelf));
         }
         // Rediscover while there is something in it: a year ago today, or not played for a year; not with its Cozy
@@ -713,9 +499,6 @@ impl App {
         }
         if self.history_shown() {
             items.extend([Item::History, Item::Review(self.review_year())]);
-        }
-        if self.curator.prefs.stickers {
-            items.extend(self.library.stickers().iter().map(|s| Item::Sticker(s.id)));
         }
         items
     }
@@ -772,7 +555,7 @@ impl App {
         }
         Some(match self.curator.index {
             None => ("Getting ready…", "Curator is reading your library. This takes a moment once."),
-            Some(_) if matches!(self.screen, Screen::Sticker(_)) => ("No games with this label", "Put it on a game from its card: X, then Stickers & labels."),
+            Some(_) if matches!(self.screen, Screen::Sticker(_)) => ("No games with this label", "Put it on a game from its card: X, then Stickers."),
             Some(_) => ("No games here", "Nothing in your library matches these filters right now."),
         })
     }
@@ -783,7 +566,7 @@ impl App {
         let games = |n: usize| if n == 1 { "1 game".to_string() } else { format!("{n} games") };
         match item {
             Item::Curator => {
-                let (shelves, stickers) = (self.curator.prefs.shelves.len(), if self.curator.prefs.stickers { self.library.stickers().len() } else { 0 });
+                let (shelves, stickers) = (self.curator.prefs.shelves.len(), { 0 });
                 let today = self.curator_today();
                 let side = if !ready {
                     String::new()
@@ -820,18 +603,6 @@ impl App {
                     }
                 });
                 ("Lens".into(), CURATOR_STRIPE.into(), side, "Combine filters; the count follows as you pick".into())
-            }
-            Item::Surprise => {
-                // Never a blank where Split shows the figure: what it picks from.
-                let side = self.curator.index.as_ref().map_or(String::new(), |ix| match ix.catalog.works.len() {
-                    0 => "No games yet".to_string(),
-                    1 => "From 1 game".to_string(),
-                    n => format!("From {n} games"),
-                });
-                // The day's pick, which A shows first (`curator_surprise`).
-                let pick = self.curator_today().and_then(|t| t.pick);
-                let meta = pocket_ui::home_panel::surprise(pick, "One game picked for you, and why. Right picks another.".into()).line;
-                ("Surprise me".into(), CURATOR_STRIPE.into(), side, meta)
             }
             Item::SmartShelf(i) => {
                 let Some(s) = self.curator.prefs.shelves.get(i) else { return Default::default() };
@@ -870,10 +641,6 @@ impl App {
         let screen = match item {
             Item::Curator => Screen::Curator,
             Item::Lens => return self.open_lens(self.curator.lens.clone(), None),
-            Item::Surprise => {
-                self.curator.surprise_seen.clear();
-                return self.curator_surprise();
-            }
             Item::History | Item::Review(_) => return self.history_activate(item),
             Item::SmartShelf(i) => Screen::Shelf(i),
             Item::Sticker(id) => Screen::Sticker(id),
@@ -949,8 +716,13 @@ impl App {
         }
     }
 
-    /// X on a shelf or sticker: its options. False when the selection is something else.
+    /// X on Just Play: its card; on a shelf or sticker: its options. False when the selection is something else.
     pub(crate) fn curator_x(&mut self) -> bool {
+        // X on Just Play: the card of the game A would start (docs/CURATOR.md "Just Play").
+        if self.items.get(self.sel) == Some(&Item::JustPlay) {
+            self.curator_just_play_card(true);
+            return true;
+        }
         let Some(item) = self.items.get(self.sel).copied().filter(|i| matches!(i, Item::SmartShelf(_) | Item::Sticker(_))) else { return false };
         let pinned = self.curator_pinned(item);
         let mut acts = Vec::new();
@@ -1329,35 +1101,34 @@ impl App {
         self.launch_asking(sys.name.clone(), game.name.clone(), game.path.clone());
     }
 
-    /// Whether Home offers "Just Play": with the Curator's switch (Settings → Curator → Lens & smart shelves), once the
-    /// shelf has a game, and never in Kids Mode (its own start) or on Easy (A already plays there).
+    /// Whether Home offers "Just Play": with its own switch (Settings → Games → Curator, on unless the player had the Lens off
+    /// before the switch existed, `Prefs::load`), once the shelf has a game, and never in Kids Mode (its own start) or on Easy
+    /// (A already plays there).
     pub(crate) fn just_play_on(&self) -> bool {
-        self.curator.prefs.lens && !self.kids_live() && !self.big_on() && self.systems.iter().any(|s| !s.games.is_empty())
+        self.curator.prefs.just_play && !self.kids_live() && !self.big_on() && self.systems.iter().any(|s| !s.games.is_empty())
     }
 
-    /// "Just Play" (A on its row of Home): `Index::just_play` picks, the one launch path starts it, nothing in between.
+    /// The game Just Play picks (A starts it, X shows its card first): `Index::just_play`, without the games in `skip`.
     /// Hidden games and hidden systems are not offered; a game whose file is gone or empty is passed over (a few tries,
-    /// never a loop); a start that then fails ends as any start does (`game_exited`: a notice, Home as before).
-    pub(crate) fn curator_just_play(&mut self) {
-        if self.kids_live() {
-            return;
-        }
+    /// never a loop). None, with the notice or toast already said, when there is nothing to start.
+    fn just_play_pick(&mut self, skip: &[usize]) -> Option<usize> {
         let Some(ix) = self.curator.index.clone() else {
             self.toast = Some(("Getting ready…".into(), Instant::now()));
-            return;
+            return None;
         };
+        let mut rng = self.curator.rng.take().unwrap_or_else(|| Rng::new(clock_seed()));
         let at = |g: usize| ix.catalog.games.get(g).and_then(|f| Some((f, self.curator_item(g)?)));
         let allowed = |g: usize| at(g).is_some_and(|(f, _)| !self.library.is_hidden(&f.path) && pocket_ui::shelf::recent_shown(&f.system, &self.hidden));
         let heavy = |g: usize| ix.catalog.games.get(g).is_some_and(|f| pocket_ui::system_notes::note(&f.system).is_some());
         // The file, and the route the start would take (the player's own emulator choice is not changed): its emulator and
-        // core must be on this device. A system with no emulator list (nothing to check) and the Deck (Flatpaks) pass.
+        // core must be on this device. A system with no emulator list has nothing to check.
         let host = std::path::Path::new(super::host_bin()).exists();
         let mut startable = |g: usize| {
             at(g).is_some_and(|(f, _)| {
                 let file_ok = pocket_ui::library_cache::missing_game(&f.name, &f.path).is_none() && pocket_ui::library_cache::empty_game(&f.name, &f.path).is_none();
                 file_ok
                     && self.systems.iter().find(|s| s.name == f.system).is_some_and(|sys| {
-                        if sys.emulators.is_empty() || pocket_ui::desk::active() {
+                        if sys.emulators.is_empty() {
                             return true;
                         }
                         let (emulator, core) = self.route(sys, Some(&f.path), host);
@@ -1366,50 +1137,58 @@ impl App {
             })
         };
         let offer = curator::justplay::Offer { allowed: &allowed, heavy: &heavy };
-        let mut rng = Rng::new(clock_seed());
-        let picked = ix.just_play(&mut rng, &offer, &mut startable);
-        let (game, why) = match picked {
-            Ok(p) => p,
+        let picked = ix.just_play(&mut rng, &offer, skip, &mut startable);
+        self.curator.rng = Some(rng);
+        match picked {
+            Ok((game, why)) => {
+                println!("curator: just play {game}: {why:?}");
+                Some(game)
+            }
             Err(curator::justplay::Miss::NoGames) => {
                 self.warn("No games here yet. Add a game first");
-                return;
+                None
             }
             Err(curator::justplay::Miss::NothingStarts) => {
                 println!("curator: just play found no game that starts");
                 self.notice = Some(super::Notice::new("None of the games tried would start. Their files may be gone from the card."));
-                return;
+                None
             }
-        };
+        }
+    }
+
+    /// "Just Play" (A on its row of Home): the pick starts through the one launch path, nothing in between. A start that
+    /// then fails ends as any start does (`game_exited`: a notice, Home as before).
+    pub(crate) fn curator_just_play(&mut self) {
+        if self.kids_live() {
+            return;
+        }
+        let Some(game) = self.just_play_pick(&[]) else { return };
         let Some(Item::Game(s, g)) = self.curator_item(game) else { return };
         let (system, name, path) = (self.systems[s].name.clone(), self.systems[s].games[g].name.clone(), self.systems[s].games[g].path.clone());
-        println!("curator: just play {name} ({system}): {why:?}");
         // The title for a moment, without holding the start back (it is only painted when the shelf is).
         self.toast = Some((format!("Starting {name}"), Instant::now()));
         self.launch_asking(system, name, path);
     }
 
-    /// "Surprise me" (A on its entry, Right on the card it opened): a game picked by `Index::surprise`, none shown since the
-    /// entry was pressed, on its card with the reason. Before the index or with no games it says so in a toast.
-    pub(crate) fn curator_surprise(&mut self) {
-        let Some(ix) = self.curator.index.clone() else {
-            self.toast = Some(("Getting ready…".into(), Instant::now()));
+    /// "Just Play", X on its row and Right on the card it opened: the game it would start, on its card with the reason, so
+    /// the player sees it before it starts. Right brings another, none shown since X was pressed on the row.
+    pub(crate) fn curator_just_play_card(&mut self, first: bool) {
+        if self.kids_live() {
             return;
-        };
-        // The day's pick first, once a session: it is the game the Curator row and this entry name.
-        let today = self.curator.today.pick.clone().filter(|_| !self.curator.today_shown && self.curator.surprise_seen.is_empty());
-        self.curator.today_shown = true;
-        let rng = self.curator.rng.get_or_insert_with(|| Rng::new(clock_seed()));
-        let pick = today.or_else(|| ix.surprise(rng, &self.curator.surprise_seen));
-        let Some((pick, item @ Item::Game(s, g))) = pick.and_then(|p| Some((p.clone(), self.curator_item(p.game)?))) else {
-            self.warn("No games here yet");
-            return;
-        };
-        self.curator.surprise_seen.push(pick.game);
+        }
+        if first {
+            self.curator.surprise_seen.clear();
+        }
+        let seen = self.curator.surprise_seen.clone();
+        let Some(game) = self.just_play_pick(&seen) else { return };
+        let Some(item @ Item::Game(s, g)) = self.curator_item(game) else { return };
+        let Some(ix) = self.curator.index.clone() else { return };
+        self.curator.surprise_seen.push(game);
+        let reason = ix.surprise_reason(game);
         let (system, name, path) = (self.systems[s].name.clone(), self.systems[s].games[g].name.clone(), self.systems[s].games[g].path.clone());
-        println!("curator: surprise {name} ({system}): {}", pick.reason);
         self.show_card(item, system, name, path);
         if let Some(open) = self.card.as_mut() {
-            open.card.data.surprise = Some(pick.reason);
+            open.card.data.surprise = Some(reason);
         }
     }
 
@@ -1495,13 +1274,10 @@ impl App {
         }
         // Always there: the case stickers (Completed, 100 %, …) are on this row too, Curator's own ones with them.
         let meta = self.library.get(path);
-        let mut on = meta.case.names();
-        if p.stickers {
-            on.extend(meta.stickers.iter().filter_map(|id| self.library.stickers().iter().find(|s| s.id == *id)).map(|s| s.name.clone()));
-        }
+        let on = meta.case.names();
         // A line of parts, so each sticker's name is translated on its own.
         let line = if on.is_empty() { "None yet. Press A to add one".to_string() } else { on.join(" · ") };
-        rows.push(CuratorRow { kind: RowKind::Stickers, title: "Stickers & labels".into(), line });
+        rows.push(CuratorRow { kind: RowKind::Stickers, title: "Stickers".into(), line });
         rows
     }
 
@@ -1664,15 +1440,10 @@ impl App {
         let release = self.card.as_ref().and_then(|o| o.card.data.year);
         let year = case.goty.unwrap_or_else(|| case_stickers::default_year(release, this_year));
         let shown = CaseStickers { goty: Some(year), ..case };
-        let mut rows: Vec<(String, Option<bool>)> = CaseKind::ALL.iter().map(|k| (shown.name(*k), Some(case.has(*k)))).collect();
-        let mut ids = Vec::new();
-        if self.curator.prefs.stickers {
-            rows.extend(self.library.stickers().iter().map(|s| (s.name.clone(), Some(meta.stickers.contains(&s.id)))));
-            ids = self.library.stickers().iter().map(|s| s.id).collect();
-            rows.push(("New label…".into(), None));
-        }
+        let rows: Vec<(String, Option<bool>)> = CaseKind::ALL.iter().map(|k| (shown.name(*k), Some(case.has(*k)))).collect();
+        let ids = Vec::new();
         let goty = CaseKind::ALL.iter().position(|k| *k == CaseKind::Goty);
-        let sheet = Sheet { title: "Stickers & labels".into(), rows, sel: 0, single: false, adjust: goty };
+        let sheet = Sheet { title: "Stickers".into(), rows, sel: 0, single: false, adjust: goty };
         self.curator.page = Some(Page::Stickers { sheet, path: path.to_path_buf(), ids, case, year });
     }
 
@@ -2063,7 +1834,7 @@ impl App {
     /// "On >" in the Settings list.
     pub(crate) fn curator_list_value(&self) -> String {
         let p = &self.curator.prefs;
-        let on = [p.lens, p.echoes, p.up_next, p.merge_versions, p.stickers, p.history].iter().filter(|x| **x).count();
+        let on = [p.lens, p.echoes, p.merge_versions, p.history].iter().filter(|x| **x).count();
         if on == 0 {
             "Off >".to_string()
         } else {
@@ -2087,6 +1858,11 @@ impl App {
                 }
                 // The pause menu reads the flag, not the file (`app_pixel_path.rs`).
                 self.pixel_path = self.curator.prefs.pixel_path;
+                // Over the game keeps its Pixel Path level only with it (`over_game::Level::offered`).
+                if self.over_game.offered(self.pixel_path) != self.over_game {
+                    self.over_game = self.over_game.offered(self.pixel_path);
+                    self.save_settings();
+                }
                 self.curator_counts();
                 self.rebuild();
             }
@@ -2167,7 +1943,7 @@ impl App {
     /// `home[:<look>]` (Home on the Curator row), `hub[:<look>:<row>]` (on a smart shelf, or in that look on that row; 0 is the Lens), `shelf:<i>`, `options[:<keys>]`, `lens[:<keys>]` (keys r l u d a b x y s, as for
     /// `setup:`, and L R for L1 R1), `save[:<keys>]` (naming the shelf those picks make), `card:<system>:<name>[:<downs>]`, `echoes:<system>:<name>`,
     /// `versions:<system>:<name>`, `stickers:<system>:<name>`, `settings[:<row>]`, `options`, `ready[:lens]` (before the
-    /// index is there), `surprise[:<seed>[:<n>]]` ("Surprise me"'s card); play history's `history…` and `review…`
+    /// index is there), `justplay-card[:<seed>[:<n>]]` (Just Play's card); play history's `history…` and `review…`
     /// (`App::history_snapshot`). In the keys, `S` is SELECT (the Lens's order) and `s` START.
     pub(crate) fn curator_snapshot(&mut self, rest: &str) {
         std::env::set_var("POCKETUI_SNAPSHOT_POCKET_CORE", "1");
@@ -2313,53 +2089,15 @@ impl App {
                 self.curator_input(Button::Start);
                 self.cabinet_snapshot("");
             }
-            // Up next on the shelf after `<system>:<name>` ended, in a look (`:<look>`, as for `home`).
-            "upnext" => {
-                let Some((s, g)) = game(self) else {
-                    eprintln!("curator:{rest}: no such game");
-                    return;
-                };
-                if let Some(look) = parts.get(3) {
-                    self.theme = match *look {
-                        "minimal" => pocket_ui::settings::Theme::Minimal,
-                        "split" => pocket_ui::settings::Theme::Split,
-                        "cards" => pocket_ui::settings::Theme::Cards,
-                        "cabinet" => pocket_ui::settings::Theme::Cabinet,
-                        _ => pocket_ui::settings::Theme::Shelf,
-                    };
-                }
-                let path = self.systems[s].games[g].path.clone();
-                let ix = self.curator.index.clone();
-                match ix.as_ref().and_then(|ix| ix.find(&path)).and_then(|g| ix.as_ref()?.up_next(g)) {
-                    Some(e) => {
-                        self.offer_up_next(e.game, e.reason);
-                        // Settled, as a second after it came in.
-                        if let Some(u) = self.curator.up_next.as_mut() {
-                            u.at = Instant::now() - std::time::Duration::from_secs(1);
-                        }
-                    }
-                    None => eprintln!("curator:{rest}: nothing to suggest"),
-                }
-                if self.theme == pocket_ui::settings::Theme::Cabinet {
-                    self.cabinet_snapshot("");
-                }
-            }
-            // "Surprise me" from the Curator list with a fixed seed (`surprise[:<seed>[:<n>]]`, `n` more picks with Right), so
-            // the snapshot shows the same game every time; `surprise:empty` before the index is there.
-            "surprise" => {
-                self.curator_activate(Item::Curator);
+            // Just Play's card (X on its row) with a fixed seed (`justplay-card[:<seed>[:<n>]]`, `n` more picks with Right), so
+            // the snapshot shows the same game every time; `justplay-card:empty` before the index is there.
+            "justplay-card" => {
                 if parts.get(1) == Some(&"empty") {
                     self.curator.index = None;
                 } else {
                     self.curator.rng = Some(Rng::new(parts.get(1).and_then(|n| n.parse().ok()).unwrap_or(1)));
-                    // The seed's games, not the day's pick (which changes with the date).
-                    self.curator.today_shown = true;
                 }
-                if let Some(i) = self.items.iter().position(|i| *i == Item::Surprise) {
-                    self.sel = i;
-                    self.prev_sel = i;
-                }
-                self.curator_activate(Item::Surprise);
+                self.curator_just_play_card(true);
                 for _ in 0..parts.get(2).and_then(|n| n.parse().ok()).unwrap_or(0) {
                     self.card_input(Button::Right);
                 }
@@ -2388,7 +2126,7 @@ impl App {
 
     /// After the first paint of a snapshot (which measures the card): `<downs>` presses of Down on the card, or keys
     /// (`y` Y, `d` Down, `u` Up, `r` Right, `l` Left, `a` A, `b` B: `card:ps2:revenge:yddddrr` is the status picker on the
-    /// rating, two stars, `info:minimal:ps2:revenge:da` the list of the developer's games;
+    /// rating, two stars, `info:split:ps2:revenge:da` the list of the developer's games;
     /// `f` makes the open card's rows again as a new Curator index does, `c` as the sync conflicts' scan does).
     pub(crate) fn curator_snapshot_after(&mut self, rest: &str) {
         let parts: Vec<&str> = rest.split(':').collect();
@@ -2461,7 +2199,7 @@ pub(crate) fn shelf_screen(key: ShelfKey) -> Option<Screen> {
     })
 }
 
-/// A seed for "Surprise me" from the clock: another sequence each time pocket-ui starts.
+/// A seed for "Just Play" from the clock: another sequence each time pocket-ui starts.
 fn clock_seed() -> u64 {
     std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(1, |d| d.as_nanos() as u64)
 }
@@ -2502,9 +2240,7 @@ fn scroll_bar(c: &mut Canvas, x: i32, top: i32, h: i32, first: usize, visible: u
 pub(crate) fn look_named(name: &str) -> pocket_ui::settings::Theme {
     use pocket_ui::settings::Theme;
     match name {
-        "minimal" => Theme::Minimal,
         "split" => Theme::Split,
-        "cards" => Theme::Cards,
         "cabinet" => Theme::Cabinet,
         _ => Theme::Shelf,
     }

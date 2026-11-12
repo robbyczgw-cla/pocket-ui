@@ -207,6 +207,10 @@ if [ -x "$FW/bin/trimui_inputd" ] && ! pidof trimui_inputd >/dev/null 2>&1; then
 else
   say "trimui_inputd: $(pidof trimui_inputd 2>/dev/null || echo 'not found')"
 fi
+# The kernel prints every message to a serial console nobody reads (console=ttyS0,115200 loglevel=8), with interrupts off while it
+# does, and every interrupt is on CPU 0: a burst (Wi-Fi joining, the Wi-Fi chip starting again after a sleep) held off the sound
+# card's past its 21 ms buffer, an xrun each time (08.11.). Only critical messages go there now; dmesg and pstore keep them all.
+[ ! -w "${BRICK_PRINTK:-/proc/sys/kernel/printk}" ] || echo 3 >"${BRICK_PRINTK:-/proc/sys/kernel/printk}"
 echo 0 >/sys/class/led_anim/effect_enable 2>/dev/null
 # The Smart Pro's rings: nobody has mapped them for us, so they stay dark (one brightness for all of them there).
 [ "$BOARD" = brick ] || echo 0 >/sys/class/led_anim/max_scale 2>/dev/null

@@ -245,7 +245,7 @@
       "options": [
         "LIBRETRO=ON",
         "USING_GLES2=ON",
-        "USE_FFMPEG=OFF",
+        "USE_FFMPEG=ON",
         "USE_DISCORD=OFF",
         "UNITTEST=OFF",
         "HEADLESS=OFF",
@@ -360,6 +360,106 @@
         "HAVE_NEON=0",
         "CPUFLAGS=-DANDROID -DEGL_EGLEXT_PROTOTYPES",
         "LDFLAGS=-shared -fPIC -Wl,--no-undefined -Wl,--version-script=libretro/link.T -pthread -lGLESv3 -lEGL -llog -lm"
+      ]
+    },
+    {
+      "id": "pcsx_rearmed",
+      "systems": [
+        "psx"
+      ],
+      "source": "https://github.com/libretro/pcsx_rearmed",
+      "revision": "7b0e8f8fadfbce3d170d195b9d9eecaabfa08c8e",
+      "licence": "GPL-2.0-or-later",
+      "evidence": [
+        "COPYING",
+        "frontend/libretro.c",
+        "libpcsxcore/psxbios.c"
+      ],
+      "builder": "make",
+      "binary": "pcsx_rearmed_libretro.so",
+      "options": [
+        "-f",
+        "Makefile.libretro",
+        "DYNAREC=ari64",
+        "BUILTIN_GPU=neon",
+        "HAVE_PHYSICAL_CDROM=0",
+        "HAVE_CHD=1",
+        "LIBPTHREAD="
+      ]
+    },
+    {
+      "id": "flycast",
+      "systems": [
+        "dreamcast"
+      ],
+      "source": "https://github.com/flyinghead/flycast",
+      "revision": "c3763d8fc4208dd6f8f0bc456383543b8406a8a0",
+      "licence": "GPL-2.0-or-later AND GPL-3.0-only",
+      "evidence": [
+        "LICENSE",
+        "core/emulator.cpp",
+        "core/deps/xbrz/xbrz.cpp"
+      ],
+      "builder": "cmake",
+      "target": "flycast_libretro",
+      "binary": "flycast_libretro.so",
+      "submodules": [
+        "core/deps/asio",
+        "core/deps/libchdr",
+        "core/deps/rcheevos",
+        "core/deps/tinygettext",
+        "core/deps/xbyak"
+      ],
+      "options": [
+        "LIBRETRO=ON",
+        "USE_GLES=ON",
+        "USE_OPENGL=ON",
+        "USE_VULKAN=OFF",
+        "USE_DX9=OFF",
+        "USE_DX11=OFF",
+        "USE_HOST_LIBZIP=OFF",
+        "USE_BREAKPAD=OFF",
+        "USE_LUA=OFF",
+        "USE_OPENMP=OFF",
+        "USE_DISCORD=OFF",
+        "USE_LIBCDIO=OFF",
+        "USE_ALSA=OFF",
+        "USE_LIBAO=OFF",
+        "USE_PULSEAUDIO=OFF"
+      ]
+    },
+    {
+      "id": "yabasanshiro",
+      "systems": [
+        "saturn"
+      ],
+      "source": "https://github.com/libretro/yabause",
+      "revision": "39535a6abcad5abf9f71c8b2a7975f005ee12ed6",
+      "licence": "GPL-2.0-or-later",
+      "evidence": [
+        "LICENSE",
+        "yabause/src/yabause.c"
+      ],
+      "builder": "make",
+      "directory": "yabause/src/libretro",
+      "binary": "yabasanshiro_libretro.so",
+      "submodules": [],
+      "options": [
+        "platform=android",
+        "HAVE_NEON=0",
+        "CC_AS=$(CC)",
+        "LDFLAGS=-shared -fPIC -Wl,--no-undefined -Wl,--version-script=link.T -lGLESv3 -lEGL -llog -lm",
+        "GIT_VERSION=39535a6-sound2"
+      ],
+      "patches": [
+        {
+          "path": "android/patches/yabasanshiro-android-ndk.patch",
+          "sha256": "0c92dc806f567048f674e0396f660ac4c966925463d9003a76df22891a8bd363"
+        },
+        {
+          "path": "android/patches/yabasanshiro-sound-state.patch",
+          "sha256": "a19a0487c2ae8f95e09e66d9ea4da0e864328b10a049acbce92797e9a8e2b094"
+        }
       ]
     }
   ]

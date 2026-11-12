@@ -119,6 +119,64 @@ Public Brick releases may also use `X.Y.Z.W` for a Brick-only hotfix. If it beco
 its notes must direct other handhelds to their unchanged ROCKNIX release; the stable channel stays unchanged.
 `scripts/test-brick-hotfix-version.py` checks the real publishers' channel and version validation without signing.
 
+## Android APK channel
+
+Android reads its own signed list at `https://pocketui.xyz/updates/android/update.json`, plus
+`update.json.sig`. This is a prepared channel; the implementation does not publish it. The key,
+exact-byte Ed25519 verification, `Release`/`Manifest` format and numeric version ordering are shared
+with Linux (`signed_data.rs`, `update/channel.rs`). `app` names the APK with its full Android
+versionName, such as `0.4.0-android.2`, mandatory size and SHA-256. It never follows GitHub Latest.
+No OS update or Linux tarball is installed by the Android client.
+
+After building a release, from the private tree with a rebuilt `store-tool`:
+
+```sh
+export STORE_TOOL=/path/to/store-tool
+scripts/android/release-check.sh release/pocket-ui-android.apk --sources SOURCES --previous-code 40001 \
+  --channel-out prepared --channel-url https://example.org/releases/v0.4.0-android.2/pocket-ui-android.apk
+```
+
+All existing APK/certificate, corresponding-source and privacy checks must pass before signing.
+`--channel-key FILE` overrides the usual store signing key. This is distinct from the Android
+keystore: the store key authenticates the offer, while Android requires the installed app's
+current APK signing certificate. Neither private key enters the output.
+
+The prepared tree contains `updates/android/update.json`, its signature, and an immutable local
+copy `updates/android/<versionName>/pocket-ui-android.apk`. A different APK cannot overwrite an
+already prepared version; increment its build number. The manifest's URL is the explicitly supplied
+immutable HTTPS release URL. Existing version copies stay available for clients holding an older offer.
+Check again offline with:
+
+```sh
+scripts/android/release-check.sh release/pocket-ui-android.apk --sources SOURCES --previous-code 40001 \
+  --channel prepared/updates/android/update.json
+```
+
+`scripts/android/release-channel.py --help` also supports standalone preparation and offline
+`--check` against an APK. `file://` URLs are accepted by that tool for offline fixtures; the release
+Android app accepts HTTPS only. Local device tests use an isolated debuggable `xyz.pocketui.qa.*`
+package with an explicit `updateUrl` launch extra. Its `updateOffline` boolean extra simulates
+no Wi-Fi for APK downloads; it never disables the device network or wireless debugging. Both
+fixtures require that debuggable QA identity and are ignored by production. Only that identity permits HTTP, with no TLS bypass
+in production. Tests sign these local manifests too. `--allow-foreign-key` is a tooling-only fixture
+option; it changes no key in an app or production verifier.
+
+The Android worker opens every connection through a Wi-Fi `Network`; it never falls back to
+mobile data. Each source has bounded redirects, connect/read/deadline limits and a fresh partial file.
+It checks exact size and SHA-256 before opening the APK, then package name, versionName, increasing
+versionCode and the exact current signing certificate set. Only then does it create a
+`PackageInstaller` session. The user grants unknown-app permission once per installed app and confirms
+Android's installation dialog for each update. B cancels before the session is committed; Android's
+confirmation has its own Cancel button afterwards. Failure deletes only update cache files and
+abandons the session. Successful replacement closes the app without clearing app data. The
+confirmation explains that the user opens it again. A cache marker containing the offered version
+is consumed only when the running package has that version; the first opening says “Updated to …”.
+No background activity launch, overlay or alarm permission is used.
+
+The website deployment remains a separate, approved action. Its existing `/updates/(.*)` no-cache
+rule applies to this channel as well; deploy the list/signature together. Nothing in either Android
+script uploads an APK, creates a GitHub release or deploys the website.
+
 ## Caching
 
 The list must never be served stale for long, and the list and its signature must always match.
@@ -146,7 +204,7 @@ The list must never be served stale for long, and the list and its signature mus
 ## The signing key
 
 One Ed25519 key signs the update list and the store catalog. Its public half is compiled into pocket-ui
-(`store::PUBLIC_KEY`, `src/store.rs`); a list signed with any other key is refused ("The update list isn't signed by
+(`store::PUBLIC_KEY`, shared from `src/signed_data.rs`); a list signed with any other key is refused ("The update list isn't signed by
 us. Nothing was changed.").
 
 - **Where the private key lives:** `~/.config/pocket-ui/store-signing.key` on the build machine, mode 0600, outside
@@ -156,7 +214,7 @@ us. Nothing was changed.").
 - **A backup:** one offline copy (a password manager or an encrypted stick). Without the key no update can reach a
   device again: a new key means a new public key in the code, and devices only learn it from an update.
 - **The release key (2026-10-26):** made on the build machine with `store-tool keygen` into the default path; its
-  public half is `PUBLIC_KEY` in `src/store.rs`, and the test catalog is signed with it again. The earlier test key
+  public half is `PUBLIC_KEY` in `src/signed_data.rs`, and the test catalog is signed with it again. The earlier test key
   is retired: lists and catalogs signed with it are refused from this version on. The offline backup is the owner's.
 - `release-channel.sh` signs a small probe first and refuses a key whose signature does not verify against the
   `PUBLIC_KEY` built into the same tree, before it hashes anything.
@@ -311,19 +369,13 @@ Backup & reset.
 
 ## The store catalog
 
-There is no public catalog yet, so `store::DEFAULT_URL` stays empty and the Store row stays hidden
-([STORE.md](STORE.md#when-the-store-is-offered)). When the first catalog is published:
+The Store page and Settings row were removed in 0.4. `store::DEFAULT_URL` stays empty;
+setting it no longer adds a page. The package backend remains for updates, the starter pack and tools
+([STORE.md](STORE.md)). Existing package records and installed files stay in place.
 
-- It goes to `https://pocketui.xyz/updates/store/catalog.json` with its `.sig`, signed with the same key, numbered
-  with `serial` and given an `expires` (`scripts/make-test-catalog.sh` shows both).
-- Put the catalog folder (signed `catalog.json`, `.sig`, `packages/`) into `release-out/store/`; `release-channel.sh`
-  checks its signature and copies it to `site-updates/updates/store/`. Small packages can sit next to the catalog
-  (relative URLs); anything big goes into a GitHub release with an absolute URL, since the whole website must stay
-  under Vercel's 100 MB (the script warns above 20 MB in `updates/`).
-- Put the address into `store::DEFAULT_URL` (and the user guide) in the release that ships with the first catalog;
-  the row then appears by itself.
-- The store's own downloads still allow `http://`, for the local test server of [STORE.md](STORE.md#local-test-catalog);
-  its catalog and packages are signed and hashed like the update list.
+A development catalog can still be signed with `scripts/make-test-catalog.sh`. The release channel can
+copy a signed catalog and its packages from `release-out/store/` to `site-updates/updates/store/`;
+this serves package consumers without restoring the removed Store interface.
 
 ## Tests
 

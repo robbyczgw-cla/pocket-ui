@@ -158,7 +158,7 @@ fn the_pause_menu_has_one_way_to_the_quick_settings_and_its_options_pages_have_t
 }
 
 /// Taste pass 2026-11-04: Zoom is a niche help and sat right above Save & quit in every pocket-core game. The pause menu's main
-/// page lists it only for a player who asked (Easy to read, or Settings → Sound & feel → Zoom in the pause menu); everyone can
+/// page lists it only for a player who asked (Big text, or Settings → Sound & feel → Zoom in the pause menu); everyone can
 /// reach it under Options.
 #[test]
 fn zoom_is_under_options_and_on_the_main_page_only_for_whoever_asked() {
@@ -170,7 +170,7 @@ fn zoom_is_under_options_and_on_the_main_page_only_for_whoever_asked() {
     for (json, size, listed) in [
         (r#"{"onboarded":true}"#, "normal", false),
         (r#"{"onboarded":true,"zoom_in_pause":true}"#, "normal", true),
-        // Easy to read is Large text and a Motion that isn't Full: either half alone is not it.
+        // Big text is Large text and a Motion that isn't Full: either half alone is not it.
         (r#"{"onboarded":true,"motion":"reduced"}"#, "normal", false),
         (r#"{"onboarded":true}"#, "large", false),
         (r#"{"onboarded":true,"motion":"reduced"}"#, "large", true),
@@ -469,12 +469,171 @@ while [ "$i" -lt 2400 ]; do sleep 0.05; i=$((i+1)); done
         }
     }
 
+    /// A saved game must not appear over the shelf before the old-TV switch-on. Exercise the actual
+    /// launch worker and rendered frame for TV and handheld systems, including Home's Continue entry. A handheld's game
+    /// asks for its display switching on instead of the tube (`crt_on::LCD`).
+    #[test]
+    fn the_launch_picture_never_flashes_before_the_tv_switches_on() {
+        for (system, continue_row, crt, reminder, preview) in [
+            ("snes", false, true, false, true), ("gb", false, true, false, true),
+            ("gba", false, true, false, true), ("psx", false, true, false, true),
+            ("n64", false, true, false, true), ("snes", true, true, false, true),
+            ("snes", false, false, false, true), ("snes", true, true, true, true),
+            ("snes", true, true, true, false),
+        ] {
+            let mut ui = Driver::start("tv-launch-picture", true, |tmp, cmd| {
+                let rom = tmp.join("Game.rom");
+                std::fs::write(&rom, b"game").unwrap();
+                std::fs::write(tmp.join("es_systems.cfg"), format!("<systemList><system><name>{system}</name><fullname>Fixture console</fullname><path>{}</path><extension>.rom</extension><command>true</command></system></systemList>", tmp.display())).unwrap();
+                std::fs::write(tmp.join("host"), b"").unwrap();
+                std::fs::write(tmp.join("data/controls-card-seen"), format!("{system}\n")).unwrap();
+                std::fs::write(tmp.join("data/settings.json"), format!(r#"{{"onboarded":true,"seen_version":"9.9.9","theme":"shelf","motion":"full","animations":"cozy","frames":"every","art":"off","extras":{{"tv_switch_on":{crt}}}}}"#)).unwrap();
+                let states = tmp.join("states").join(system);
+                std::fs::create_dir_all(&states).unwrap();
+                if !continue_row { std::fs::write(states.join("Game.pstate.auto"), b"moment").unwrap(); }
+                // A colour absent from the shelf: a whole game picture of it is visible even during the fade.
+                if preview {
+                    let mut enc = png::Encoder::new(std::fs::File::create(states.join("Game.pstate.auto.png")).unwrap(), 8, 8);
+                    enc.set_color(png::ColorType::Rgb);
+                    enc.write_header().unwrap().write_image_data(&[0xff, 0x00, 0xff].repeat(64)).unwrap();
+                }
+                if continue_row {
+                    let ago = if reminder { 23 * 86400 } else { 60 };
+                    let recent = serde_json::json!([{"system":system,"name":"Game","path":rom,
+                        "last_played":pocket_ui::recents::now_secs() - ago,"play_secs":7200}]);
+                    std::fs::write(tmp.join("data/recents.json"), recent.to_string()).unwrap();
+                }
+                cmd.env("POCKETUI_HOST_BIN", tmp.join("host")).env("POCKETUI_STATES", tmp.join("states")).env("TMPDIR", tmp);
+                executable(&tmp.join("run-game"), r#"#!/bin/sh
+printf '%s' "${POCKET_LAUNCH_CRT-}" > "$0.crt"
+printf 'started\n' > "$0.started"
+sleep 30
+"#);
+            });
+            if !continue_row {
+                ui.sees("Fixture console");
+                ui.send("a");
+            }
+            ui.sees("Game");
+            // The selected case must finish turning before A can lift it into the console.
+            std::thread::sleep(Duration::from_millis(500));
+            ui.frame();
+            if continue_row {
+                // A moment arriving after the shelf read still takes Cozy/TV-on. A moment already known
+                // to that read is a frozen game's direct start, with no TV-on to precede it.
+                std::fs::write(ui.card.tmp.join("states").join(system).join("Game.pstate.auto"), b"moment").unwrap();
+            }
+            ui.send("a");
+            ui.wait(|d| d.card.tmp.join("run-game.started").exists());
+            // Let insertion and fade finish. The stand-in leaves pocket-ui visible, as a slow core would.
+            std::thread::sleep(Duration::from_millis(1900));
+            let text = ui.frame();
+            let image = pocket_ui::image::load_png(&ui.card.tmp.join("frame.png")).unwrap();
+            let magenta = image.px.iter().filter(|&&p| p & 0xffffff == 0xff00ff).count();
+            let tv = std::fs::read_to_string(ui.card.tmp.join("run-game.crt")).unwrap();
+            // A handheld's game switches its display on (no tube), a console's the old TV.
+            let want = match (crt, matches!(system, "gb" | "gba")) { (false, _) => "", (true, true) => pocket_ui::crt_on::LCD, (true, false) => "1" };
+            assert_eq!(tv, want, "{system}, Continue={continue_row}: wrong switch-on request: {tv:?}\n{}", ui.log());
+            if !preview || (crt && !reminder) {
+                assert_eq!(magenta, 0, "{system}, Continue={continue_row}: the game appeared on the shelf before TV-on");
+            } else {
+                assert!(magenta > image.px.len() / 4, "a preview still bridges starts without TV-on and backs the reminder: {magenta}");
+            }
+            assert_eq!(text.contains("Last played 3 weeks ago"), reminder && preview, "{text}");
+            if reminder && !preview {
+                ui.send("home");
+                ui.frame();
+                let status = std::fs::read_to_string(ui.card.tmp.join("ui.status")).unwrap();
+                assert!(status.contains("game=paused"), "HOME must open the menu, not dismiss an invisible reminder: {status}");
+            }
+        }
+    }
+
+    /// A picture asked for through the FIFO and the status file agree at once: whoever reads the status right after the
+    /// frame (a helper deciding what its next press means, `docs/DEVICE-TESTS.md`) never sees the page before the press.
+    /// Was a flake of the launch-picture journey: HOME, frame, then `game=playing` for a menu already painted.
+    #[test]
+    fn the_status_file_already_says_what_the_frame_just_painted() {
+        let mut ui = Driver::new("status-with-frame", true);
+        ui.sees("Game Boy");
+        ui.send("a\na");
+        ui.wait(|d| d.card.tmp.join("run-game.started").exists());
+        ui.wait(|d| std::fs::read_to_string(d.card.tmp.join("ui.status")).is_ok_and(|s| s.split('\t').any(|f| f == "game=playing")));
+        for round in 0..40 {
+            for (press, game) in [("home", "game=paused"), ("home", "game=playing")] {
+                ui.send(press);
+                ui.frame();
+                let status = std::fs::read_to_string(ui.card.tmp.join("ui.status")).unwrap();
+                assert!(status.split('\t').any(|f| f == game), "round {round}, after {press}: the frame shows it, the status says {status}");
+            }
+        }
+    }
+
     /// A newer pocket-ui is said once on the free shelf (`POCKETUI_UPDATE_HINT` stands in for the signed list): A goes
     /// to Settings → System → Updates, B only closes it, and neither brings it back.
     fn update_ready(name: &str) -> Driver {
         Driver::start(name, true, |_, cmd| {
             cmd.env("POCKETUI_UPDATE_HINT", "99.0.0");
         })
+    }
+
+    #[test]
+    fn the_frame_dump_holds_a_short_walk_frame_by_frame_on_a_fixed_60_fps_clock() {
+        // POCKETUI_FRAME_DUMP (docs/dev/environment.md): videos of the real device, where a screen recorder keeps only
+        // 13-56 of the 60 pictures a second. One picture per sixtieth on the UI's own fixed clock, however slowly this
+        // machine paints, and the press written down with the frame it happened in.
+        let mut d = Driver::start("frame-dump", true, |tmp, cmd| {
+            // With its animations, as a player has them (the driver turns them off for still pictures).
+            std::fs::write(tmp.join("data/settings.json"), r#"{"onboarded":true,"seen_version":"9.9.9","motion":"full","art":"off"}"#).unwrap();
+            std::fs::write(tmp.join("take.txt"), "# one step right, then the glide settles\n90 right\nend 150\n").unwrap();
+            cmd.env("POCKETUI_FRAME_DUMP", tmp.join("dump")).env("POCKETUI_FRAME_DUMP_SCRIPT", tmp.join("take.txt"));
+        });
+        let dir = d.card.tmp.join("dump");
+        let log = || std::fs::read_to_string(dir.join("events.log")).unwrap_or_default();
+        d.wait(|_| log().lines().any(|l| l.starts_with("end ")));
+        let events = log();
+        assert!(events.lines().any(|l| l.starts_with("end 150 ")), "150 ticks: {events}");
+        assert!(events.lines().any(|l| l == "90 script right") && events.lines().any(|l| l == "90 input Right down"), "the press at its frame: {events}");
+        let frames = pocket_ui::frame_dump::read(&dir.join("frames.pfd")).unwrap();
+        let ticks: Vec<u64> = frames.iter().map(|f| f.tick).collect();
+        assert_eq!(ticks, (0..150).collect::<Vec<_>>(), "one frame per tick, none lost");
+        for f in &frames {
+            assert_eq!(f.t_ns, pocket_ui::frame_dump::tick_ns(f.tick), "the UI clock at frame {} is exactly that tick's", f.tick);
+        }
+        let (w, h) = (frames[0].w, frames[0].h);
+        assert!(w > 0 && h > 0 && frames.iter().all(|f| (f.w, f.h) == (w, h) && f.pixels.len() == (w * h) as usize));
+        let changed: Vec<usize> = (1..150).filter(|&k| frames[k].pixels != frames[k - 1].pixels).collect();
+        eprintln!("frames that differ from the one before: {changed:?}");
+        assert!(changed.iter().all(|&k| k < 60 || k >= 90), "nothing moves in the frames before the press: {changed:?}");
+        // The cursor glides: several different pictures on the frames after the press, then it stands.
+        let moving = changed.iter().filter(|&&k| k >= 90).count();
+        assert!(moving >= 3, "the move is seen on {moving} frames: {changed:?}");
+        assert!(frames[149].pixels == frames[148].pixels, "settled by the end: {changed:?}");
+        assert!(frames[149].pixels != frames[89].pixels, "the selection moved");
+        // The host script makes the video track of it: 150 pictures at 60 fps (raw here; ffmpeg isn't everywhere).
+        let out = Command::new("python3").arg("-I").arg(concat!(env!("CARGO_MANIFEST_DIR"), "/scripts/frame-dump-decode.py")).arg(&dir).arg("--raw").output().unwrap();
+        assert!(out.status.success(), "decode: {}", String::from_utf8_lossy(&out.stderr));
+        assert_eq!(out.stdout.len(), 150 * (w * h * 3) as usize, "{}", String::from_utf8_lossy(&out.stderr));
+        let at = |k: usize| &out.stdout[k * (w * h * 3) as usize..(k + 1) * (w * h * 3) as usize];
+        assert!(at(60) == at(89) && at(100) != at(90), "the same pictures as the dump");
+        let p = frames[100].pixels[0];
+        assert_eq!(&at(100)[..3], &[(p >> 16) as u8, (p >> 8) as u8, p as u8], "as rgb24");
+    }
+
+    #[test]
+    fn without_the_frame_dump_no_dump_is_written() {
+        let mut d = Driver::start("no-frame-dump", true, |_, _| {});
+        d.send("right");
+        d.frame();
+        let mut found = Vec::new();
+        let mut dirs = vec![d.card.tmp.clone()];
+        while let Some(dir) = dirs.pop() {
+            for e in std::fs::read_dir(&dir).into_iter().flatten().flatten() {
+                let p = e.path();
+                if p.is_dir() { dirs.push(p) } else if p.file_name().is_some_and(|n| n == "frames.pfd" || n == "events.log") { found.push(p) }
+            }
+        }
+        assert!(found.is_empty(), "no dump without POCKETUI_FRAME_DUMP: {found:?}");
     }
 
     #[test]
@@ -615,12 +774,12 @@ while [ "$i" -lt 2400 ]; do sleep 0.05; i=$((i+1)); done
             pixels[..info.buffer_size()].iter().map(|p| u64::from(*p)).sum::<u64>() / info.buffer_size() as u64
         };
         let mut dark = Driver::start("appearance-dark", true, |tmp, _| {
-            std::fs::write(tmp.join("data/settings.json"), r#"{"onboarded":true,"seen_version":"9.9.9","theme":"minimal","motion":"off","appearance":"dark"}"#).unwrap();
+            std::fs::write(tmp.join("data/settings.json"), r#"{"onboarded":true,"seen_version":"9.9.9","theme":"split","motion":"off","appearance":"dark"}"#).unwrap();
         });
         let dark_words = clockless(dark.frame());
         let dark_brightness = brightness(&mut dark);
         let mut light = Driver::start("appearance-light", true, |tmp, _| {
-            std::fs::write(tmp.join("data/settings.json"), r#"{"onboarded":true,"seen_version":"9.9.9","theme":"minimal","motion":"off","appearance":"light"}"#).unwrap();
+            std::fs::write(tmp.join("data/settings.json"), r#"{"onboarded":true,"seen_version":"9.9.9","theme":"split","motion":"off","appearance":"light"}"#).unwrap();
         });
         assert_eq!(dark_words, clockless(light.frame()), "the same game and controls remain visible in either appearance");
         assert!(brightness(&mut light) > dark_brightness + 100, "the player's Light setting must paint a light page");
@@ -628,6 +787,51 @@ while [ "$i" -lt 2400 ]; do sleep 0.05; i=$((i+1)); done
         dark.send("start\na\ndown\ndown\ndown\na\nb\nb");
         assert_eq!(dark_words, clockless(dark.frame()), "changing Appearance comes back to the same game");
         assert!(brightness(&mut dark) > dark_brightness + 100, "a Light choice in Settings takes effect in the next capture too");
+    }
+
+    /// 0.4 took out the Minimal and Cards looks. A player who had one starts in Split (not the Shelf, whose slow launch
+    /// is the opposite of their choice), is told once, and the file says "split" from then on.
+    #[test]
+    fn a_retired_look_starts_in_split_and_says_so_once() {
+        for old in ["minimal", "cards"] {
+            let mut d = Driver::start(&format!("retired-look-{old}"), true, |tmp, _| {
+                std::fs::write(tmp.join("data/settings.json"), format!(r#"{{"onboarded":true,"seen_version":"9.9.9","theme":"{old}","motion":"off","art":"off"}}"#)).unwrap();
+            });
+            let first = d.frame();
+            assert!(first.contains("Minimal and Cards are gone"), "{old}: the start says what became of the look\n{first}\n{}", std::fs::read_to_string(d.card.tmp.join("ui.log")).unwrap_or_default());
+            let saved = std::fs::read_to_string(d.card.tmp.join("data/settings.json")).unwrap();
+            assert!(saved.contains(r#""theme": "split""#) && saved.contains(r#""onboarded": true"#), "{old}: saved at once, the rest kept\n{saved}");
+        }
+    }
+
+    /// Settings → Playing → Over the game with the D-pad and A: Off, FPS, FPS + sensors and round again for everyone;
+    /// Pixel Path comes after FPS + sensors only with the pause menu's Pixel Path on (the Enthusiast profile's).
+    #[test]
+    fn over_the_game_offers_pixel_path_only_with_the_pause_menus_pixel_path() {
+        for pixel_path in [false, true] {
+            let mut d = Driver::start(&format!("over-game-{pixel_path}"), true, |tmp, _| {
+                if pixel_path {
+                    std::fs::write(tmp.join("data/curator.json"), r#"{"pixel_path":true}"#).unwrap();
+                }
+            });
+            // Playing is the third category, Over the game its fifth row.
+            d.send("start\ndown\ndown\na\ndown\ndown\ndown\ndown");
+            let row = d.frame();
+            assert!(row.contains("Over the game"), "{row}");
+            let saved = |d: &Driver| {
+                let s: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(d.card.tmp.join("data/settings.json")).unwrap()).unwrap();
+                s["over_game"].as_str().unwrap_or("off").to_string()
+            };
+            let mut seen = Vec::new();
+            for _ in 0..3 {
+                d.send("a");
+                let words = d.frame();
+                seen.push(saved(&d));
+                assert!(words.contains("Pixel Path") == (seen.last().unwrap() == "pixel"), "{pixel_path}: the row says what is set\n{words}");
+            }
+            let want = if pixel_path { ["fps", "sensors", "pixel"] } else { ["fps", "sensors", "off"] };
+            assert_eq!(seen, want, "pixel path in the pause menu: {pixel_path}");
+        }
     }
 
     fn new_version_over_shelf(look: &str, cover: bool) -> Driver {
@@ -676,7 +880,7 @@ while [ "$i" -lt 2400 ]; do sleep 0.05; i=$((i+1)); done
 
     #[test]
     fn reading_new_version_cards_stops_the_hidden_games_title_timer() {
-        read_new_cards_without_refreshing_the_hidden_shelf(new_version_over_shelf("minimal", false), "A very long game title");
+        read_new_cards_without_refreshing_the_hidden_shelf(new_version_over_shelf("split", false), "A very long game title");
     }
 
     #[test]
@@ -807,6 +1011,7 @@ while [ "$i" -lt 2400 ]; do sleep 0.05; i=$((i+1)); done
     #[test]
     fn controls_card_also_precedes_a_consoles_first_game_from_just_play() {
         let mut d = Driver::start("controls-just-play", true, |tmp, cmd| {
+            cmd.env("POCKETUI_TEST_PREPARE_MS", "500");
             let cfg = std::fs::read_to_string(tmp.join("es_systems.cfg")).unwrap();
             let only_gb = cfg.lines().filter(|line| !line.contains("<name>segacd</name>")).collect::<Vec<_>>().join("\n");
             std::fs::write(tmp.join("es_systems.cfg"), only_gb).unwrap();
@@ -818,11 +1023,12 @@ while [ "$i" -lt 2400 ]; do sleep 0.05; i=$((i+1)); done
         d.wait(|d| d.log().contains("curator: 1 games"));
         d.send("up");
         d.sees("Just Play");
-        // The row's one-time explanation consumes the first A; the following A plays.
+        // One A starts preparation. Wait for the controls card itself; a second
+        // A during the asynchronous hand-over can dismiss the card we must read.
         d.send("a");
-        if d.frame().contains("Just Play") && !d.log().contains("controls card: first start") {
-            d.send("a");
-        }
+        d.wait(|d| d.log().contains("controls card: first start"));
+        let text = d.frame();
+        assert!(text.contains("Controls · Game Boy"), "one A must leave the controls readable before starting: {text}");
         d.sees("Controls · Game Boy");
         assert!(!d.card.tmp.join("run-game.started").exists());
         d.send("a");
@@ -831,21 +1037,23 @@ while [ "$i" -lt 2400 ]; do sleep 0.05; i=$((i+1)); done
 
     #[test]
     #[ignore = "timing tier: scripts/test-timing.sh (serial)"]
+    // Atari 2600: a console whose button names are still unknown before its first game (the Mega Drive got its own since the
+    // names with the controls card of 11.11.; this journey still used it and ran red in the timing tier, which no merge gate runs.)
     fn timing_controls_card_for_a_console_without_names_explains_home_and_accepts_a_tap() {
         let mut d = Driver::start("controls-unknown-tap", true, |tmp, cmd| {
-            let games = tmp.join("megadrive");
+            let games = tmp.join("atari2600");
             std::fs::create_dir_all(&games).unwrap();
-            std::fs::write(games.join("Card Demo.md"), "game").unwrap();
-            std::fs::write(tmp.join("es_systems.cfg"), format!("<systemList><system><name>megadrive</name><fullname>Mega Drive</fullname><path>{}</path><extension>.md</extension><command>true</command></system></systemList>", games.display())).unwrap();
+            std::fs::write(games.join("Card Demo.a26"), "game").unwrap();
+            std::fs::write(tmp.join("es_systems.cfg"), format!("<systemList><system><name>atari2600</name><fullname>Atari 2600</fullname><path>{}</path><extension>.a26</extension><command>true</command></system></systemList>", games.display())).unwrap();
             let host = tmp.join("pocket-core-stand-in");
             std::fs::write(&host, "").unwrap();
             cmd.env("POCKETUI_HOST_BIN", host).env("POCKETUI_STATES", tmp.join("states"));
         });
-        d.sees("Mega Drive");
+        d.sees("Atari 2600");
         d.send("a");
         d.sees("Card Demo");
         d.send("a");
-        d.sees("This console's button names");
+        d.sees("Play with the D-pad and the buttons.");
         assert!(!d.card.tmp.join("run-game.started").exists());
         let tapped = Instant::now();
         d.send("tap 0.5 0.5");
@@ -1503,13 +1711,13 @@ raise SystemExit(1)
 
     #[test]
     fn a_stale_preview_never_holds_a_fresh_start_for_a_reminder() {
-        for (emulator, state) in [("pocket-core", false), ("pocket-core", true), ("retroarch", false), ("retroarch", true)] {
+        for (emulator, state, early) in [("pocket-core", false, false), ("pocket-core", true, false), ("retroarch", false, false), ("retroarch", true, false), ("pocket-core", true, true)] {
             let mut ui = Driver::start("reminder-moment", true, |tmp, cmd| {
                 let cfg = tmp.join("es_systems.cfg");
                 let text = std::fs::read_to_string(&cfg).unwrap().replace("</command>", "</command><emulators><emulator name=\"retroarch\"><cores><core default=\"true\">gambatte</core></cores></emulator></emulators>");
                 std::fs::write(cfg, text).unwrap();
                 let game = tmp.join("gb/Tobu Tobu Girl (World).gb");
-                std::fs::write(tmp.join("data/settings.json"), r#"{"onboarded":true,"seen_version":"9.9.9","theme":"minimal","motion":"off","art":"off"}"#).unwrap();
+                std::fs::write(tmp.join("data/settings.json"), r#"{"onboarded":true,"seen_version":"9.9.9","theme":"split","motion":"off","art":"off"}"#).unwrap();
                 let recent = serde_json::json!([{"system":"gb", "name":"Tobu Tobu Girl", "path":game,
                     "last_played": pocket_ui::recents::now_secs() - 23 * 86400, "play_secs":7200}]);
                 std::fs::write(tmp.join("data/recents.json"), recent.to_string()).unwrap();
@@ -1524,6 +1732,9 @@ raise SystemExit(1)
                 let mut encoder = png::Encoder::new(std::fs::File::create(preview).unwrap(), 1, 1);
                 encoder.set_color(png::ColorType::Rgb);
                 encoder.write_header().unwrap().write_image_data(&[0x12, 0x34, 0x56]).unwrap();
+                if early {
+                    cmd.env("POCKETUI_TEST_PREPARE_MS", "300").env("POCKETUI_TRACE", tmp.join("trace"));
+                }
                 cmd.env("POCKETUI_STATES", tmp.join("states"));
                 cmd.env("TMPDIR", tmp);
                 if emulator == "pocket-core" {
@@ -1541,10 +1752,17 @@ sleep 30
             });
             ui.sees("Tobu Tobu Girl");
             ui.send("a");
+            if early {
+                ui.wait(|d| std::fs::read_to_string(d.card.tmp.join("trace")).unwrap_or_default().contains("launch preparation begin"));
+                ui.send("volup");
+            }
             ui.wait(|d| d.card.tmp.join("run-game.started").exists());
             let hold = std::fs::read_to_string(ui.card.tmp.join("run-game.hold")).unwrap();
-            assert_eq!(!hold.trim().is_empty(), state && emulator == "pocket-core", "{emulator}, state {state}: {hold:?}");
-            if state {
+            assert_eq!(!hold.trim().is_empty(), state && !early && emulator == "pocket-core", "{emulator}, state {state}: {hold:?}");
+            if early {
+                assert!(!ui.frame().contains("Last played"), "an early button must not reopen the reminder after preparation");
+                assert!(ui.card.tmp.join("pocket-launch-skip").exists());
+            } else if state {
                 ui.sees("Last played 3 weeks ago");
                 ui.send("volup");
                 ui.wait(|d| !d.frame().contains("Last played"));
@@ -1798,10 +2016,10 @@ sleep 30
         let mut ui = Driver::new("test-buttons", true);
         ui.send("start");
         ui.sees("Sound & feel");
-        // Help & tools, the last category; its sixth row is Test buttons.
+        // Help & tools, the last category; its seventh row is Test buttons (after For tinkerers and Tools).
         ui.send("down\ndown\ndown\ndown\ndown\ndown\na");
         ui.sees("Test buttons");
-        ui.send("down\ndown\ndown\ndown\ndown\na");
+        ui.send("down\ndown\ndown\ndown\ndown\ndown\na");
         // The keys sent so far came from no controller (the command FIFO): the Pocket's own buttons stand for them.
         ui.sees("Player 1 · Built-in");
         ui.send("tconnect 11 builtin Pocket\ntconnect 12 bt:e4:17:d8:00:00:02 8BitDo Pro 2");
@@ -1875,7 +2093,6 @@ sleep 30
 
     /// The cozy extras where they live since 2026-10-30 answer a finger as every Settings row does: a tap selects a
     /// row, the next one on it switches it. Sound & feel → Playful cases, Look → Cozy extras → Stickers on cases and
-    /// System → Sleep & power → Slideshow before screen off, each landing in settings.json's "extras".
     #[test]
     fn a_tap_switches_the_cozy_extras_where_they_live_now() {
         let mut ui = Driver::new("extras-tap", true);
@@ -1911,19 +2128,6 @@ sleep 30
         tap(&mut ui, 1);
         tap(&mut ui, 1);
         ui.wait(|_| extra("case_stickers") == serde_json::json!(false));
-        // System → Sleep & power: the slideshow is the page's second row, off until switched.
-        ui.send("b\nb");
-        ui.sees("Help & tools");
-        tap(&mut ui, 5);
-        tap(&mut ui, 5);
-        ui.sees("Sleep & power");
-        tap(&mut ui, 2);
-        tap(&mut ui, 2);
-        ui.sees("Slideshow before screen off");
-        assert!(extra("idle_slideshow").is_null(), "off until switched");
-        tap(&mut ui, 1);
-        tap(&mut ui, 1);
-        ui.wait(|_| extra("idle_slideshow") == serde_json::json!(true));
     }
 
     #[test]
@@ -2268,9 +2472,10 @@ true
         assert!(ui.log().contains("just play"), "{}", ui.log());
     }
 
-    /// With Curator's Lens switch off Home has no Just Play row (Settings → Curator is where Curator's parts go off).
+    /// Just Play has its own switch. A `curator.json` from before it (no key) keeps what the player saw: Lens off, no Just
+    /// Play row. With the key it is the switch that counts, whatever the Lens says.
     #[test]
-    fn just_play_goes_with_the_curator_switch() {
+    fn just_play_has_its_own_switch_and_an_older_lens_off_keeps_it_off() {
         let mut ui = Driver::start("just-play-off", true, |tmp, _| {
             std::fs::write(tmp.join("data/curator.json"), r#"{"lens":false}"#).unwrap();
         });
@@ -2279,6 +2484,35 @@ true
         // Search is the row above the systems, nothing between.
         let home = ui.sees("Find any game by its name");
         assert!(!home.contains("Just Play"), "{home}");
+        let mut ui = Driver::start("just-play-own-switch", true, |tmp, _| {
+            std::fs::write(tmp.join("data/curator.json"), r#"{"lens":false,"just_play":true}"#).unwrap();
+        });
+        ui.sees("Game Boy");
+        ui.send("up");
+        let home = ui.sees("Just Play");
+        assert!(home.contains("Less browsing. More playing."), "Just Play without the Lens: {home}");
+    }
+
+    /// X on Just Play shows the game A would start, with the reason, and starts nothing; Right brings another; A plays it.
+    #[test]
+    fn x_on_just_play_shows_the_pick_with_its_reason_and_right_brings_another() {
+        let mut ui = Driver::new("just-play-card", true);
+        ui.sees("Game Boy");
+        ui.send("up");
+        ui.sees("Just Play");
+        // The index is made on a thread: X once it is there (a second X on the card would be the note's).
+        ui.wait(|d| d.log().contains("games, catalog"));
+        ui.send("x");
+        // The pick's card: "RIGHT Another" is in its hints only when Just Play opened it (the reason line is over the facts).
+        let _card = ui.wait_frame(|t| t.contains("Another"));
+        assert_eq!(launches(&ui), 0, "X only shows the pick: {}", ui.log());
+        let picks = |ui: &Driver| ui.log().lines().filter(|l| l.starts_with("curator: just play")).count();
+        let before = picks(&ui);
+        ui.send("right");
+        ui.wait(|d| picks(d) > before);
+        assert_eq!(launches(&ui), 0, "{}", ui.log());
+        ui.send("a");
+        ui.wait(|d| d.card.tmp.join("run-game.started").exists());
     }
 
     /// Kids Mode has its own start: no Just Play row there.
@@ -2531,7 +2765,7 @@ true
     /// end, A brings the hint back, START still opens Settings and B leaves it again.
     #[test]
     fn looking_around_an_empty_home_works_in_every_look() {
-        for look in ["shelf", "minimal", "split", "cards", "cabinet"] {
+        for look in ["shelf", "split", "cabinet"] {
             let mut ui = empty_card(&format!("empty-around-{look}"), look);
             ui.sees("Look around");
             ui.send("b");
@@ -2559,7 +2793,7 @@ true
     /// Games arrive while the hint is away (or while it shows): the shelf is back, with them, and the hint is gone.
     #[test]
     fn games_appearing_end_the_empty_home() {
-        let mut ui = empty_card("empty-games", "minimal");
+        let mut ui = empty_card("empty-games", "split");
         ui.sees("Look around");
         ui.send("b");
         ui.sees("Press A for the starter pack");
@@ -2620,7 +2854,7 @@ true
         std::fs::write(tmp.join("es_systems.cfg"), format!(
             "<systemList><system><name>gb</name><fullname>Game Boy</fullname><path>{}</path><extension>.gb</extension><command>true</command></system></systemList>", games.display()
         )).unwrap();
-        std::fs::write(tmp.join("data/settings.json"), r#"{"onboarded":true,"seen_version":"9.9.9","theme":"minimal","motion":"off","art":"off"}"#).unwrap();
+        std::fs::write(tmp.join("data/settings.json"), r#"{"onboarded":true,"seen_version":"9.9.9","theme":"split","motion":"off","art":"off"}"#).unwrap();
         std::fs::write(tmp.join("data/curator.json"), r#"{"lens":false,"stickers":false,"history":false}"#).unwrap();
         let crc = pocket_ui::rom_id::checksums("gb", &known).unwrap().unwrap().crc;
         let dat = format!("game (\n name \"Super Mario Land 2 (USA)\"\n rom ( name \"a.gb\" size 12 crc {crc:08X} )\n)\n");
@@ -2778,7 +3012,7 @@ true
             std::fs::write(tmp.join("es_systems.cfg"), format!(
                 "<systemList><system><name>gb</name><fullname>Game Boy</fullname><path>{}</path><extension>.gb</extension><command>true</command></system></systemList>", games.display()
             )).unwrap();
-            std::fs::write(tmp.join("data/settings.json"), r#"{"onboarded":true,"seen_version":"9.9.9","theme":"minimal","motion":"off","art":"off"}"#).unwrap();
+            std::fs::write(tmp.join("data/settings.json"), r#"{"onboarded":true,"seen_version":"9.9.9","theme":"split","motion":"off","art":"off"}"#).unwrap();
             std::fs::write(tmp.join("data/curator.json"), r#"{"lens":false,"stickers":false,"history":false}"#).unwrap();
             // The real catalog worker reads its checksum cache. A FIFO holds that read until the card is open;
             // releasing EOF lets the normal worker send its real Built event, with no synchronous snapshot build.
@@ -2812,7 +3046,7 @@ true
     #[test]
     fn x_in_minimal_opens_the_info_page_and_b_returns() {
         let mut ui = Driver::start("info-page", true, |tmp, _| {
-            std::fs::write(tmp.join("data/settings.json"), r#"{"onboarded":true,"seen_version":"9.9.9","motion":"off","art":"off","theme":"minimal"}"#).unwrap();
+            std::fs::write(tmp.join("data/settings.json"), r#"{"onboarded":true,"seen_version":"9.9.9","motion":"off","art":"off","theme":"split"}"#).unwrap();
         });
         ui.sees("Game Boy");
         ui.send("a");
@@ -2910,7 +3144,6 @@ true
         assert!(disarm < command, "verified before issuing poweroff: {log}");
     }
 
-    // ---- The idle slideshow (`app_slideshow`): the shelf left alone, then any button ----
 
     /// A small PNG (a picture of 200 x 280 pixels, no game's art).
     fn picture(path: &Path) {
@@ -2922,44 +3155,6 @@ true
         enc.write_header().unwrap().write_image_data(&px).unwrap();
     }
 
-    /// The driver on the throwaway card: a cover for the Game Boy game unless `covers` is false, the show after
-    /// `after_ms`, and `settings` as the settings.json (Motion Off: plain fades, so frames are steady).
-    fn quiet_shelf(name: &str, covers: bool, after_ms: u32, settings: &'static str) -> Driver {
-        Driver::start(name, true, move |tmp, cmd| {
-            std::fs::write(tmp.join("data/settings.json"), settings).unwrap();
-            if covers {
-                picture(&tmp.join("data/covers/gb/Tobu Tobu Girl (World).png"));
-            }
-            cmd.env("POCKETUI_SLIDESHOW_AFTER_MS", after_ms.to_string()).env("POCKETUI_SCREENSHOTS", tmp.join("screenshots"));
-        })
-    }
-
-    #[test]
-    fn the_idle_slideshow_plays_the_games_pictures_and_a_button_only_takes_you_back() {
-        let mut ui = quiet_shelf("slideshow-back", true, 4000, r#"{"onboarded":true,"seen_version":"9.9.9","motion":"off","extras":{"idle_slideshow":true}}"#);
-        let clockless = |t: String| t.lines().filter(|l| !(l.len() == 5 && l.as_bytes()[2] == b':')).collect::<Vec<_>>().join("\n");
-        let shelf = clockless(ui.sees("Settings"));
-        // After the quiet time: the game's name and its system, none of the shelf's hints.
-        let mut show = String::new();
-        ui.wait(|d| {
-            show = d.frame();
-            !show.contains("Settings") && show.contains("Tobu Tobu Girl")
-        });
-        assert!(show.contains("Game Boy"), "the system under the title: {show}");
-        assert!(!show.contains("START") && !show.contains("Open"), "no hint bar over the show: {show}");
-        // START would open Settings, A the game's card: either only ends the show.
-        for button in ["start", "a", "x", "r2axis"] {
-            ui.send(button);
-            let back = clockless(ui.frame());
-            assert_eq!(back, shelf, "after {button}: the shelf as it was, nothing opened");
-            // The next quiet spell plays it again.
-            ui.wait(|d| {
-                show = d.frame();
-                !show.contains("Settings")
-            });
-        }
-        assert!(!ui.card.tmp.join("run-game.started").exists(), "no game was started by a press on the show: {}", ui.log());
-    }
 
     /// The status file's fields (`<dir>/ui.status` under the test driver).
     fn status_of(d: &Driver) -> String {
@@ -2978,7 +3173,7 @@ true
             // The controls card of a console's first start would take the first key of a game start.
             std::fs::write(tmp.join("data/controls-card-seen"), "gb\nsegacd\n").unwrap();
             // A list of rows with the focus mark (`kit::shelf_row`), which the navigation record reads.
-            std::fs::write(tmp.join("data/settings.json"), r#"{"onboarded":true,"seen_version":"9.9.9","motion":"off","art":"off","theme":"minimal"}"#).unwrap();
+            std::fs::write(tmp.join("data/settings.json"), r#"{"onboarded":true,"seen_version":"9.9.9","motion":"off","art":"off","theme":"split"}"#).unwrap();
             cmd.env("POCKETUI_NAV_PROBE", tmp.join("nav.txt"));
         });
         d.sees("Game Boy");
@@ -3174,7 +3369,7 @@ true
     #[test]
     fn every_move_on_the_shelf_side_asks_for_a_tick_and_a_sound() {
         let mut d = Driver::start("feedback-shelf", true, |tmp, cmd| {
-            std::fs::write(tmp.join("data/settings.json"), r#"{"onboarded":true,"seen_version":"9.9.9","motion":"off","art":"off","theme":"minimal"}"#).unwrap();
+            std::fs::write(tmp.join("data/settings.json"), r#"{"onboarded":true,"seen_version":"9.9.9","motion":"off","art":"off","theme":"split"}"#).unwrap();
             let recents = serde_json::json!([
                 {"system": "gb", "name": "Tobu Tobu Girl", "path": tmp.join("gb/Tobu Tobu Girl (World).gb"), "last_played": 1794100000u64, "play_secs": 60},
                 {"system": "segacd", "name": "Pocket CD Demo", "path": tmp.join("segacd/Pocket CD Demo (USA).cue"), "last_played": 1794000000u64, "play_secs": 60},
@@ -3232,6 +3427,23 @@ true
             .output()
             .unwrap();
         (out.status.code().unwrap_or(-1), String::from_utf8_lossy(&out.stdout).into_owned(), String::from_utf8_lossy(&out.stderr).into_owned())
+    }
+
+    /// A second UI on the Brick once replaced the owner's public status. A private probe must keep the
+    /// old destination intact while publishing its own changing page and PID to the requested path.
+    #[test]
+    fn a_probe_publishes_its_own_status_without_replacing_the_owner_status() {
+        let mut d = Driver::start("private-status", true, |tmp, cmd| {
+            std::fs::write(tmp.join("ui.status"), "owner status\n").unwrap();
+            cmd.env("POCKETUI_STATUS", tmp.join("probe.status"));
+        });
+        d.sees("Settings");
+        d.wait(|d| std::fs::read_to_string(d.card.tmp.join("probe.status")).is_ok_and(|s| s.contains("place=shelf:Home")));
+        d.send("start");
+        d.wait(|d| std::fs::read_to_string(d.card.tmp.join("probe.status")).is_ok_and(|s| s.contains("place=settings:Groups")));
+        let status = std::fs::read_to_string(d.card.tmp.join("probe.status")).unwrap();
+        assert!(status.contains(&format!("\tpid={}\t", d.child.id())), "{status}");
+        assert_eq!(std::fs::read_to_string(d.card.tmp.join("ui.status")).unwrap(), "owner status\n");
     }
 
     /// Device-test incident 2026-11-08: a key helper pressed B to leave a page, then A for the page it expected, and the
@@ -3294,33 +3506,7 @@ true
         assert!(!ui.card.tmp.join("run-game.started").exists());
     }
 
-    #[test]
-    fn the_idle_slideshow_leaves_a_shelf_without_a_single_picture_alone() {
-        let mut ui = quiet_shelf("slideshow-none", false, 800, r#"{"onboarded":true,"seen_version":"9.9.9","motion":"off","extras":{"idle_slideshow":true}}"#);
-        ui.wait(|d| d.log().contains("slideshow: no pictures"));
-        let text = ui.frame();
-        assert!(text.contains("Settings") && text.contains("Game Boy"), "the shelf is still there: {text}");
-    }
 
-    #[test]
-    #[ignore = "timing tier: scripts/test-timing.sh (serial)"]
-    fn timing_the_idle_slideshow_is_off_in_every_look_until_the_page_switches_it_on() {
-        // As it starts (the Shelf, then a plain look with pictures all the same): the shelf stays a shelf, however long it
-        // is left alone.
-        for (name, settings) in [
-            ("slideshow-default-shelf", r#"{"onboarded":true,"seen_version":"9.9.9","motion":"off"}"#),
-            ("slideshow-default-split", r#"{"onboarded":true,"seen_version":"9.9.9","motion":"off","theme":"split"}"#),
-        ] {
-            let mut ui = quiet_shelf(name, true, 600, settings);
-            std::thread::sleep(Duration::from_millis(2500));
-            let text = ui.frame();
-            assert!(text.contains("Settings"), "{name}: still the shelf: {text}");
-            assert!(!ui.log().contains("slideshow:"), "{name}: {}", ui.log());
-        }
-        // Switched on in the page (kept as extras.idle_slideshow): a plain look plays it too.
-        let mut ui = quiet_shelf("slideshow-split-on", true, 600, r#"{"onboarded":true,"seen_version":"9.9.9","motion":"off","theme":"split","extras":{"idle_slideshow":true}}"#);
-        ui.wait(|d| d.log().contains("slideshow: 1 pictures"));
-    }
 }
 
 #[test]

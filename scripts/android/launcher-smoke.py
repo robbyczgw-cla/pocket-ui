@@ -6,7 +6,7 @@ adb,serial,destination=sys.argv[1:];out=Path(destination);out.mkdir(parents=True
 def run(*args,**kwargs):return subprocess.check_output([adb,'-s',serial,*args],**kwargs)
 def shell(*args):return run('shell',*args,text=True)
 assert serial.startswith('emulator-')and shell('getprop','ro.kernel.qemu').strip()=='1'
-shell('am','force-stop','dev.pocket.spike');shell('logcat','-c');shell('am','start','-W','-n','dev.pocket.spike/.PocketActivity');time.sleep(2)
+shell('am','force-stop','xyz.pocketui.app');shell('logcat','-c');shell('am','start','-W','-n','xyz.pocketui.app/.PocketActivity');time.sleep(2)
 sequence=0
 def tree():
     global sequence

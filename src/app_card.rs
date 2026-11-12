@@ -70,10 +70,10 @@ impl App {
 
     /// Builds the card of a game and starts loading its description if it isn't on the card yet.
     pub(crate) fn show_card(&mut self, item: Item, system: String, name: String, path: PathBuf) {
-        let mut open = self.build_card(item, system, name, path, true);
-        // The Minimal, Cards, Split and Big looks show the info page (`game_info`); Shelf and Cabinet the box (`game_box`)
+        let mut open = self.build_card(item, system, name, path);
+        // The Split and Big looks show the info page (`game_info`); Shelf and Cabinet the box (`game_box`)
         // unless SELECT chose the page last time.
-        if matches!(self.theme, Theme::Minimal | Theme::Cards | Theme::Split | Theme::Big) {
+        if matches!(self.theme, Theme::Split | Theme::Big) {
             open.card.show_info();
         } else if self.game_box {
             open.card.boxed = Some(pocket_ui::game_box::BoxView::new());
@@ -84,11 +84,13 @@ impl App {
         self.card = Some(open);
     }
 
-    /// A game's card, not shown yet: `show_card`, and the second screen's box (`app_second_screen`).
-    pub(crate) fn build_card(&mut self, item: Item, system: String, name: String, path: PathBuf, interactive: bool) -> OpenCard {
+    /// A game's card, not shown yet: `show_card`.
+    pub(crate) fn build_card(&mut self, item: Item, system: String, name: String, path: PathBuf) -> OpenCard {
+        pocket_ui::trace::step("card begin");
         let started = Instant::now();
         let info = self.game_info(&system, &path);
-        let mut data = self.card_data(&system, &name, &path, info.as_ref(), interactive);
+        let mut data = self.card_data(&system, &name, &path, info.as_ref());
+        pocket_ui::trace::step("card data ready");
         let source_facts = data.facts.clone();
         let article = info.as_ref().and_then(|i| i.enwiki.clone());
         // Wikipedia's text, when it is on the card's disk already, comes before anything else.
@@ -98,13 +100,14 @@ impl App {
             pocket_ui::gamelist::fill_card(&mut data, e, cached.is_some());
         }
         // Connections: which facts lead to the player's other games (a few lookups in the index, `app_connections`).
-        if interactive { self.card_connections(&mut data, &path); }
+        self.card_connections(&mut data, &path);
         println!(
             "card {}: {} in {:?}",
             path.display(),
             info.as_ref().map_or("no entry", |i| i.qid.as_str()),
             started.elapsed()
         );
+        pocket_ui::trace::step("card connections ready");
         let mut open = OpenCard {
             card: Card::new(data),
             source_facts,
@@ -119,8 +122,6 @@ impl App {
                 Some(text) => Summary::Wikipedia { text, title },
                 // The gamelist's description is on the card: no wait for Wikipedia, no request for it.
                 None if matches!(open.card.data.summary, Summary::Gamelist(_)) => open.card.data.summary.clone(),
-                // A passive second screen must not start network requests as the player browses the shelf.
-                None if !interactive => Summary::Unavailable("not cached".into()),
                 None => {
                     let (proxy, dir) = (self.proxy.clone(), self.data_dir.clone());
                     std::thread::spawn(move || {
@@ -136,8 +137,6 @@ impl App {
 
     /// The Wikipedia lead arrived (or could not be loaded).
     pub(crate) fn card_text(&mut self, title: String, text: Result<String, String>) {
-        // The second screen's box may be waiting for the same article (`app_second_screen`).
-        self.second_card_text(&title, &text);
         let Some(open) = self.card.as_mut().filter(|o| o.article.as_deref() == Some(title.as_str())) else {
             return;
         };
@@ -161,7 +160,7 @@ impl App {
             .collect()
     }
 
-    fn card_data(&mut self, system: &str, name: &str, path: &Path, info: Option<&GameInfo>, interactive: bool) -> CardData {
+    fn card_data(&mut self, system: &str, name: &str, path: &Path, info: Option<&GameInfo>) -> CardData {
         let meta = self.library.get(path);
         let played = self.recents.list.iter().find(|r| r.path == path).map(|r| (r.last_played, r.play_secs));
         let mut data = CardData {
@@ -192,7 +191,7 @@ impl App {
             // A port: its performance and fan, and the busy-core hint (`app_port_perf`).
             port: self.port_card_line(system, path),
             port_update: system == pocket_ui::port_perf::SYSTEM && path.file_name().and_then(|n| n.to_str()).is_some_and(pocket_ui::ports::update_waiting),
-            // "Surprise me" sets the reason after the card is made (`app_curator`).
+            // Just Play's card sets the reason after the card is made (`app_curator`).
             surprise: None,
             // "Wrong pictures? Look up again" for games whose pictures come from the collection (`app_identify`).
             look_up: pocket_ui::covers::playlist(system).is_some(),
@@ -213,9 +212,7 @@ impl App {
             plain: false,
         };
         // RetroAchievements: what is known, and a lookup in the background when that is old (`app_achievements`).
-        data.achievements = if interactive { self.card_achievements(system, path) } else {
-            pocket_ui::achievements::snapshot::Summary::load(&self.data_dir, system, path).and_then(|s| s.text())
-        };
+        data.achievements = { self.card_achievements(system, path) };
         // A game of the starter pack (docs/STARTER-PACK.md): whose it is and under what licence it may be shared.
         if let Some(g) = path.file_name().and_then(|n| n.to_str()).and_then(|n| pocket_ui::starter::find(system, n)) {
             data.facts.push(("By", g.author.clone()));
@@ -245,7 +242,7 @@ impl App {
         data.sentence = game_card::sentence(info);
         // Only an interactive card needs related-game lists: this clones/resolves the whole library.
         // Passive browsing on a 1 GB A55 must stay proportional to the selected game.
-        if interactive {
+        {
             let related = self.related_games(info, path);
             data.more_by = related.0;
             data.series = related.1;
@@ -325,8 +322,8 @@ impl App {
                 // The Lens's My rating, the shelves' order and the taste profile follow.
                 self.curator.touch();
             }
-            // "Surprise me": another pick, on its own card (`app_curator`).
-            Out::Another => self.curator_surprise(),
+            // Just Play's card: another pick, on its own card (`app_curator`).
+            Out::Another => self.curator_just_play_card(false),
             Out::Row(kind) => self.curator_card_row(kind),
             // A port has one emulator: START is its Performance & fan instead (`app_port_perf`).
             Out::Emulator if open.system == pocket_ui::port_perf::SYSTEM => self.open_port_perf_for_card(),
@@ -531,8 +528,7 @@ impl App {
         }
         let pictures = self.card_pictures(item, c.w);
         let corner = self.status_corner();
-        // The second screen's box has no clock or battery of its own: they are on the screen above (`Card::bare`).
-        let corner = (!self.card.as_ref().is_some_and(|o| o.card.bare)).then_some(&corner);
+        let corner = Some(&corner);
         if self.card.as_ref().is_some_and(|o| o.card.boxed.is_some()) {
             // The box: the case's front from the shelf's own machinery, at the box's height (`game_box`). Its cover is
             // read on the cabinet's thread: taken here, since the shelf that usually takes it is not painted under a card.

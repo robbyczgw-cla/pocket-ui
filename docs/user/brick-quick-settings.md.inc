@@ -26,13 +26,30 @@ the maximum stay the same; zero is silent. After an update the displayed percent
 keep the previous level. A very quiet old level below the new range starts muted; press Volume up
 to choose the new lowest step. The mute slider remembers the level and ignores volume keys while muted.
 
+## Lights and F1/F2
+
+Settings → Sound & feel → **Lights & buttons**. Choose **F1 button** or **F2 button** with Up/Down;
+Left/Right changes its action and saves it immediately. Choices are Quick save, Quick load, Screenshot,
+Recent games, Pause menu and Nothing. They are shortcuts for all games; the game-button setup is separate.
+Without a choice, F1 stays Quick save and F2 stays Quick load. A new game uses the saved choice.
+
+Lights are Off by default. Colour lights go out while the screen is dark and return with the same colour and brightness
+when it wakes. A deliberately chosen Battery & charging indication, including one under Each light, can stay on.
+
 ## Sleep and power
 
-The Brick doesn't sleep: the screen goes off and the game waits behind it, and any button wakes it.
+A short press of the power key either turns the screen off or puts the Brick to sleep, as **Short press** under Sleep & power
+says (below). **Sleep** is the default: the game is saved first and the Brick really sleeps, Wi-Fi and Bluetooth go off, the
+power key wakes it, and the game waits in its pause menu (Continue plays on). Wi-Fi and Bluetooth come back by themselves a few
+seconds later; headphones that were connected are asked to connect again. **Screen off** only darkens the screen, the game waits
+behind it and the power key turns it back on; it still uses battery. For a longer break, use **Switch off after** below or
+**Power off**; powering off saves the game so it can continue on the next start.
+If a restart finds the screen dark and its previous brightness was lost, it brings back a dim picture;
+choose your brightness again in Quick settings.
 
-- **Power key, short press:** the screen goes off. In a game on pocket-ui's own host nothing is drawn and the buttons don't
-  reach the game while it is dark; the button that turns the screen on doesn't either.
-- **Held a moment:** the power menu: Screen off, Restart, Power off, Restart pocket-ui. Power off saves and closes the running game
+- **Power key, short press:** Screen off or Sleep (above). In a game on pocket-ui's own host nothing is drawn and the buttons don't
+  reach the game while it is dark; the press that turns the screen on doesn't either.
+- **Held a moment:** the power menu: Screen off (or Sleep, as Short press says), Restart, Power off, Restart pocket-ui. Power off saves and closes the running game
   first; the next start opens it again.
 - **Held 6 seconds:** the Brick switches off, after the running game has written its save.
 - **Low battery.** At 5% a note says so; at 2% the Brick saves the running game and switches itself off, so the game is not lost
@@ -41,20 +58,14 @@ The Brick doesn't sleep: the screen goes off and the game waits behind it, and a
 ### Sleep & power settings
 
 Settings → System → **Sleep & power**. Up/Down choose a row, Left/Right change it, A goes on to its next choice; the line under the
-rows says what the selected choice does. On the Brick the page has Screen off after, Slideshow before screen off, Switch off after
-sleeping (counted while the screen is off on battery) and Short press (always Screen off); the other rows are for handhelds that
-sleep.
+rows says what the selected choice does. On the Brick the page has Screen off after, Switch off after
+sleeping (counted while the screen is off on battery) and Short press (Screen off or Sleep); the other rows are for handhelds that
+sleep by themselves.
 
 | Row | Choices (default in bold) |
 |---|---|
 | **Screen off after** | Never, 30 s, 1 min, **2 min**, 5 min without a button press before the screen goes dark. In a game the game pauses. Never: the screen stays on until you press the power key |
-| **Slideshow before screen off** | On, **Off**: your games' pictures play on the shelf before the screen goes dark (the idle slideshow below). Left/Right or A switches it |
-| **Sleep after** | Never, 1 min, **2 min**, 5 min, 15 min: not on the Brick, which doesn't sleep |
+| **Sleep after** | Never, 1 min, **2 min**, 5 min, 15 min: not on the Brick: it sleeps only when you press the power key with Short press on Sleep |
 | **Switch off after sleeping** | **Off**, 15 min, 30 min, 1 h, 3 h, 8 h with the screen off on battery before the Brick saves the game and switches off |
-| **Short press** | **Sleep**, Screen off: on the Brick always Screen off |
+| **Short press** | On the Brick: **Sleep** (the game is saved, the Brick sleeps; the power key wakes it into the pause menu), Screen off (the screen goes dark, the game waits) |
 | **Hold** | **Power menu**, Sleep: not on the Brick, where holding the power key always opens the power menu |
-
-**Idle slideshow.** Leave the shelf alone for a minute and your games' pictures start to play, slowly zooming, with the game's name
-at the bottom. Press any button and you are back exactly where you were; that press does nothing else. It never keeps the Brick
-awake: the screen still goes off after **Screen off after**. It is Off until you switch it on under Settings → System → Sleep &
-power → **Slideshow before screen off**.

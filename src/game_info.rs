@@ -22,8 +22,6 @@ use std::rc::Rc;
 /// The scroll of facts and description; the cover and heading stand still.
 #[derive(Default, Debug)]
 pub struct InfoView {
-    /// No controls act on a passive second-screen page.
-    pub passive: bool,
     pub scroll: i32,
     max_scroll: i32,
     view_h: i32,
@@ -197,13 +195,7 @@ impl InfoView {
             }
         };
         lift_shadow(c, side, top + fh, fw, pal().t);
-        let mut your = your_rows(d);
-        if self.passive {
-            for (_, value) in &mut your {
-                if matches!(value, Val::Quiet(t) if *t == crate::game_card_model::no_rating()) { *value = Val::Quiet("None"); }
-            }
-            your.retain(|(_, value)| !matches!(value, Val::Quiet("Busy core? Press START")));
-        }
+        let your = your_rows(d);
         // The player's lines: under the cover on a wide screen, under the facts on a narrow one.
         let (tx, mut ty, tw) = if narrow(c.w) {
             (side, top + fh + 24, c.w - 2 * side)

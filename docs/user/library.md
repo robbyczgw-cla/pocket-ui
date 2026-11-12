@@ -5,7 +5,7 @@ page with its box, what is known about it, how much you have played it, where yo
 what else you own by the same people.
 
 Long selected names scroll to the end and back once, then rest. Reselect the row to read it again. While a menu is
-still, pocket-ui sleeps between real changes such as the clock or battery indicator, including on a second screen.
+still, pocket-ui sleeps between real changes such as the clock or battery indicator.
 
 Home's small title cards keep the console readable by using a smaller size or its usual short name when there is no box art.
 
@@ -20,18 +20,18 @@ text or a long game title.
 
 | Button | On the card |
 |---|---|
-| A | Play the game. On one of the rows under "Your game" (a save with two versions, Echoes, Versions, Stickers & labels, Screenshots, Controls) or on Hide or delete: open it. |
+| A | Play the game. On one of the rows under "Your game" (a save with two versions, Echoes, Versions, Stickers & Screenshots, Controls) or on Hide or delete: open it. |
 | B | Back to the list, at the same game. |
 | Y | Set the play status, or your [rating](#my-rating) (the row under the statuses). Under them: [Wrong game? Choose another](#wrong-game-choose-another) and [Wrong pictures? Look up again](#wrong-pictures-look-up-again). |
 | X | Write or change your note. |
 | START | Open [This game](options.md#this-game): the game's picture, frame, performance, controls and emulator, without starting it. On a PortMaster port: its [Performance & fan](performance.md#portmaster-ports). |
 | D-pad Up / Down | Scroll the page. Down moves onto the rows (the save line, Curator's rows) once they are in view, Up from the first one goes back to scrolling. At the end of the card Down lands on **Hide or delete**. |
 | L1 / R1 | Scroll a whole page. |
-| D-pad Right | Only on a card opened by [Surprise me](curator.md#surprise-me): pick another game. |
+| D-pad Right | Only on a card opened by X on [Just Play](curator.md#just-play): pick another game. |
 
-## The info page (Minimal, Cards and Split)
+## The info page (Split)
 
-In the Minimal, Cards and Split [looks](settings.md) X opens the game's **info page**: everything on one screen, nothing
+In the Split [look](settings.md) X opens the game's **info page**: everything on one screen, nothing
 to turn over. The box art at the left (a title card with the console when there is none), under it your game: status,
 time played, when you last played, your rating, achievements, **Save slots** ("3 of 8", or "All empty") with the
 slots on the game's memory card or cartridge and when the newest was saved, as in the
@@ -67,7 +67,7 @@ keeps its original language, including with the German interface.
 
 | Button | On the box |
 |---|---|
-| D-pad Left / Right | Turn the box over. (On a card of [Surprise me](curator.md#surprise-me), Right picks another game and Left turns it.) |
+| D-pad Left / Right | Turn the box over. (On a card of [Just Play](curator.md#just-play), Right picks another game and Left turns it.) |
 | D-pad Up / Down, L1 / R1 | On the back: scroll it. Down also picks the developer, publisher, genre or series once it is in view. |
 | A | Play the game; on a picked fact of the back, show your games with it ([Connections](#connections)). |
 | B, Y, X | As on the card below: back, status and rating, note. |
@@ -88,8 +88,7 @@ list. Under "No description yet" a line says why: "No Wikipedia article for this
 Collectors mark their cases, and you can too: five stickers that go on the game's case, slightly crooked as if you put
 them on yourself. **Completed** (a green tick), **100 %** (a gold seal), **Favourite** (a star), **Playing now** and
 **Game of the year** with a year you choose. On the card (or the box, or the info page, then SELECT for the page),
-move down to the **Stickers & labels** row and press A: they are the first five entries of the list, before your own
-[labels](curator.md#labels). The list scrolls to fit your screen and text size. A puts one on or takes it off. On Game of the year, Left and Right change its
+move down to the **Stickers** row and press A: the list contains those five stickers. The list scrolls to fit your screen and text size. A puts one on or takes it off. On Game of the year, Left and Right change its
 year first (it starts at the game's release year, or this year when that isn't known); with the sticker on, the new
 year is kept at once. B closes the list.
 
@@ -154,7 +153,7 @@ them off; the values are then only shown.
   before they could sync. The row says "Two versions of this game's save. Choose one…" (or "… of a save state", or
   "… of the memory card" for a PS2 or GameCube card, which every game of that console shares). A on it opens the
   [choice](sync.md#two-versions-of-a-save). Without Syncthing, or with nothing to choose, there is no such row.
-- **Echoes**, **Versions** and **Stickers & labels**, three rows from [Curator](curator.md#curator) (each can be switched off in
+- **Echoes**, **Versions** and **Stickers**, three rows from [Curator](curator.md#curator) (each can be switched off in
   Settings → Games → Curator).
 - **Screenshots (3)**: only on a game you took screenshots of (HOME + A while you play). The row says how many, and when
   the newest was taken ("Newest: Today"). A opens a [gallery](playing.md#looking-at-your-screenshots) of this game's
@@ -204,7 +203,7 @@ them, B leaves them as they were. All the way left is "Not rated" again. The car
 "Rated 4 stars" shows for a moment when you set them.
 
 Ratings are a [Lens](curator.md#lens) filter (**My rating**), an order for the Lens's games and your smart shelves (**Best
-rated first**), and part of what [Surprise me](curator.md#surprise-me) and [Echoes](curator.md#echoes) know about your taste: five stars
+rated first**), and part of what [Just Play](curator.md#just-play) and [Echoes](curator.md#echoes) know about your taste: five stars
 count like a star for Favourites, four half that, three nothing, and one or two stars against games like it. A game
 you have not rated counts as before.
 
@@ -256,7 +255,7 @@ text and press START.
 At the very end of a game's card, under everything else, is the row **Hide or delete**. A on it offers two things:
 
 - **Hide from the shelf**: the game stays on the SD card but leaves every list: Home's recent games, its system's list,
-  Favourites, the search, Curator (Lens, smart shelves, labels, Echoes, Versions, Up next), Recent games, On start
+  Favourites, the search, Curator (Lens, smart shelves, Echoes, Versions), Recent games, On start
   and the [web companion](web-companion.md). Good for BIOS test files, demos, the second disc of a game you start from
   its playlist, a version you don't want. The card closes and says where to bring it back: Settings → System → Storage →
   **Hidden games**, where A on a game shows it again. Hiding is kept in `library.json` (below), by the game's path.
@@ -376,7 +375,7 @@ Two games of one system that would show the same name keep what tells them apart
 notes go by the file, as before. Your recent games (Continue and the list on SELECT), the games
 in Play history and the web companion show the same names as the system list.
 
-Curator (Lens, Surprise me, smart shelves, labels, Echoes, Up next, Versions, play history and the Year in review) has its own page:
+Curator (Lens, smart shelves, Echoes, Versions, play history and the Year in review) has its own page:
 [Curator](curator.md).
 
 ## A card from another handheld

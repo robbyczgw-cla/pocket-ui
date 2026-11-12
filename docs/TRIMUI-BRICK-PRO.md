@@ -3,7 +3,7 @@
 The Brick Pro uses the same TrimUI card and update channel as the Brick and Smart Pro. `Board::BrickPro` combines the
 Brick's 1024 × 768 framebuffer path with the existing Smart Pro stick/analog handling. No project member owns this device;
 all support is based on public sources and host tests. **The Smart Pro stick assumptions are also unproven on hardware.**
-About shows **TrimUI Brick Pro (experimental)**. No new diagnostic mode or separate beta card is needed.
+About shows **TrimUI Brick Pro (experimental)**. No new diagnostic mode or separate development card is needed.
 
 ## Evidence and limits
 

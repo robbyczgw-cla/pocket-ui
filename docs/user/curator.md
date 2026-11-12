@@ -1,4 +1,4 @@
-# Curator: Lens, smart shelves, labels and play history
+# Curator: Lens, smart shelves and play history
 
 The second half of [Your library](library.md): what Curator does with a larger collection. Game cards, play status, ratings, notes and
 where the facts come from are on [the first page](library.md).
@@ -17,9 +17,13 @@ or what's new to you"), and the same for Just Play ("Just Play: one press, the g
 
 ### Lens
 
-**Curator** is the first row on Home, before the recent games (in the Cabinet look, a shelf: see
+Labels from older versions remain in your library and saved smart-shelf filters, but cannot be added or edited.
+
+**Curator** is for the Enthusiast profile: a new Pocket starts without it (the Lens, Echoes and Versions are off; **Just Play** is
+the way to "pick me something"), and Settings → Games → Curator turns each part on. A Pocket that was set up before keeps what it had.
+With the Lens on, Curator is the first row on Home, before the recent games (in the Cabinet look, a shelf: see
 [Playing](playing.md#looks)). A opens it: the **Lens** first, then your smart shelves, **History** and **Year in
-review** (once you have played something) and your labels. The Lens combines
+review** (once you have played something). The Lens combines
 filters, for example "Game Boy Advance · Racing · Never played", or "PlayStation · Story-driven · Not known for
 grinding · German":
 
@@ -27,7 +31,7 @@ grinding · German":
   racing, metroidvania …), Mechanics (drifting, time travel …), Players (solo, co-op on one screen, versus on one
   screen …), Length, Session (short or long sessions), Pace, Difficulty, Story, Grinding, Status, My rating, Played
   (never, this month, long ago), Reading, Language (from the file names, a fan translation counts), Controls (plays well on
-  a D-pad, two screens …), Era, Setting (fantasy, sci-fi …), Mood (cosy, tense …), Labels and Favourites. A facet
+  a D-pad, two screens …), Era, Setting (fantasy, sci-fi …), Mood (cosy, tense …), Favourites. A facet
   with nothing to offer is left out.
 - **Length**: **Under 5 hours**, **5–15 hours**, **15–40 hours**, **40+ hours** or **Endless** (score attack,
   sports seasons, versus). It is a rough guide, plus or minus one step, and there is nothing finer: for "under
@@ -73,6 +77,11 @@ pocket-ui restarts.
 
 One row on Home, right above Continue (in the Cabinet look the first case on the Continue shelf, left of the game you
 played last): **A starts a game at once**. No card, no question, nothing to pick. "Less browsing. More playing."
+**X shows the game first**: its card, with one line over the facts that says why it picked it ("Never played · you like
+arcade racing games", "Started, not played for 3 months", "Not played for 2 years · you gave it 5 stars"). A on the card
+plays it, **D-pad Right** brings another (the hint bar says "RIGHT Another"), B goes back to Home. Status, rating and note
+can be set on that card as on any other. It is the one way to "pick something for me": A when you trust it, X when you
+want to see it first.
 Pocket-ui starts it the way A on a recent game does, so a game you left open comes back where you left it, in the
 emulator you chose for it, with the case animation of your look. The game's name shows for a moment on the shelf.
 
@@ -91,31 +100,13 @@ throw a long boot at you; a game you started or starred is not held back. A game
 none of the few it tries would start, a notice says so and Home stays as it was. A game that does not start ends as any
 start does: a notice says what is missing, once, and Home is usable.
 
-It is not Surprise me. Just Play decides and starts, it leans on what you left unfinished and never shows you a reason
-or a card; [Surprise me](#surprise-me) is for browsing: one game with its card and why, Right for another, A to play.
-It is on while Settings → Games → Curator → **Lens & smart shelves** is on, and not in Kids Mode.
+It is on while Settings → Games → Curator → **Just Play on Home** is on (it is, unless the Lens was off in a version from
+before the switch, then it stays off until you switch it on), and not in Kids Mode or in the Easy look, where A already
+plays the one big game.
 
-### Surprise me
-
-Under the Lens in the Curator list: one game picked for you when you can't decide. A opens the picked game's
-**card**, with one line over the facts that says why: "Never played · you like arcade racing games", "Started, not
-played for 3 months", "Not played for 2 years · you gave it 5 stars". A plays it, **D-pad Right** picks another (the
-hint bar says "RIGHT Another"), B goes back to the Curator list. Status, rating and note can be set on that card as on
-any other.
-
-How it picks: every game of your library can come up, each game owned on several systems once (its preferred
-version). Games you haven't started and games you are playing or paused come up most; completed games about one time
-in six as often, dropped ones rarely. A game you played today hardly ever, this week or this month less often, and an
-unfinished game you left for more than a month a little more often. Games rated 4 or 5 stars come up a little more, 1
-or 2 stars much less. Once Curator knows your taste (time played, finished and starred games, ratings), games like
-the ones you play come up more, and the line says what you like about them. Without any of that, it is a fair draw
-among your unplayed games and says "Never played". Right never shows a game again until every game has been shown since
-you last opened Surprise me.
-
-Its first pick is **today's pick**, the game the Curator row on top of Home names ([Home](playing.md#home)). The
-entry sits in the Curator list: from Home, Up twice (Curator), A, Down, A. It is there while Settings → Games → Curator → **Lens & smart shelves** is on. In its row,
-"From 332 games" says what it picks from; nothing until Curator has read your library (A then says "Getting ready…"),
-and with no games, "No games yet".
+The card's pick is the game A would start, with the same order as above; the line says what is true of it, not how it was
+chosen. Right never shows a game again until every game has been shown since you last pressed X on the row. Until
+Curator has read your library, X says "Getting ready…"; with no games, "No games here yet".
 
 ### Smart shelves
 
@@ -128,18 +119,6 @@ In the Curator list, **Y** pins a shelf to Home or takes it off, and **X** opens
 SELECT in the Lens, kept for that shelf), rename, show on Home, delete. A shelf in an order other than Name shows it
 after its name and on its row ("Smart shelf, on Home. It updates itself · most played first"). Shelves are kept in
 `/storage/.config/pocket-ui/curator.json`.
-
-### Labels
-
-Labels are your own tags for games, such as "Couch co-op" or "Before bed". On a game's card, move down to the
-**Stickers & labels** row and press A: a short list of your labels, each with a tick box (after the five
-[stickers on the case](library.md#stickers-on-the-case), which the Shelf and Cabinet looks show on the game's case; a label
-is not shown on the case). A puts a label on the game or takes it off; the last entry, **New label…**, makes one (a name is
-suggested). B closes the list.
-
-Labels show in the Curator list and as a facet of the Lens. Pin one with **Y** in the Curator list to have it as a
-row on Home. X there renames or deletes it; deleting a label takes it off every game and out of your smart
-shelves. Labels are kept in `library.json`, next to status and notes.
 
 ### Echoes
 
@@ -165,20 +144,6 @@ When your taste changed the order of the list, the line under the title says so 
 On the Echoes page, A plays the selected game, X opens its card, B goes back. With Settings → Games → Curator → **Games not
 on this device in Echoes** on, the page also names a few games of the same series or developer that you don't have,
 from the offline game list. Names only, no shop.
-
-### Up next
-
-When you quit a game you played for a minute or more, the shelf may show **Up next**: one game of yours like it,
-with the reason, for example "Up next: Burnout Legends, PSP · Same series". It is the first of the game's Echoes
-that you haven't finished or dropped, isn't another version of the same game, and wasn't played in the last day
-(so two games don't take turns suggesting each other). When nothing is alike enough, nothing shows.
-
-- **X** plays it; a tap on it too.
-- **B** puts it away. Any other button puts it away and does what it always does: **A** continues the game the shelf is on, as it always does, even while Up next shows.
-- It goes by itself after a few seconds.
-
-Up next never starts a game by itself and costs nothing while you play: Curator works it out
-after the game, once the shelf is back. It is off until you switch it on: Settings → Games → Curator → **Up next after a game** (the first start's Enthusiast turns it on). A device that already had the setting keeps it.
 
 ### Versions
 
@@ -210,7 +175,7 @@ it has a game in it, and Settings → Look → Cozy extras → **Rediscover** sw
 pocket-ui keeps a small diary of what you play: when a game started and ended, on which system and emulator, for how
 long. PortMaster ports and the big emulators (PS2, GameCube, Wii, 3DS) count like any other game; PC streaming and
 the tools don't. It stays on this Pocket, in `/storage/.config/pocket-ui/play-log.bin`, and nothing sends it anywhere
-unless you switch on [Library data](sync.md#library-data) in Settings → Connections → Sync, which shares it with your own other
+unless you switch on [Library data](sync.md#library-data) in Settings → Help & tools → For tinkerers → Sync, which shares it with your own other
 devices; it is not part of a backup either.
 
 Once you have played something, the Curator list has a **History** row (with the Lens off, History is its own row

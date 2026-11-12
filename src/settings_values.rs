@@ -57,8 +57,6 @@ pub struct Facts {
     pub zone: Option<String>,
     /// How many PCs are paired for streaming.
     pub pcs: Option<usize>,
-    /// USB file transfer (`usb_transfer`), read from the USB controller.
-    pub usb: Option<crate::usb_transfer::Status>,
 }
 
 /// A row that opens a page: its value, then ">".
@@ -72,7 +70,7 @@ pub fn page(value: &str) -> String {
 
 /// A row's value as painted: whole on the selected row; on the others without a switch's ‹ ›, which only the selected
 /// row has (Left/Right change it there). A page's ">" stays on every row, painted dimmed (`kit::row_value`): whether
-/// a row opens a page or changes in place is seen before the cursor gets there, as on the Switch and the Deck.
+/// a row opens a page or changes in place is seen before the cursor gets there, as on the Switch.
 pub fn quiet(value: &str, selected: bool) -> String {
     if selected {
         return value.to_string();
@@ -182,16 +180,11 @@ pub fn read(hw: &dyn Hw, net: &Arc<NetState>, data_dir: &Path, connected: bool) 
     if let Some(h) = crate::moonlight::host().filter(|h| !paired.contains(h)) {
         paired.push(h);
     }
-    Facts { wifi: Some(wifi), ssh: Some(ssh), zone: hw.timezone(), pcs: Some(paired.len()), usb: Some(crate::usb_transfer::status()) }
+    Facts { wifi: Some(wifi), ssh: Some(ssh), zone: hw.timezone(), pcs: Some(paired.len()) }
 }
 
 static FACTS: Mutex<Option<Facts>> = Mutex::new(None);
-/// USB file transfer was just switched: the row needn't wait for the next read.
-pub fn set_usb(status: crate::usb_transfer::Status) {
-    if let Ok(mut f) = FACTS.lock() {
-        f.get_or_insert_with(Facts::default).usb = Some(status);
-    }
-}
+
 
 /// When a read was last started.
 static ASKED: Mutex<Option<Instant>> = Mutex::new(None);

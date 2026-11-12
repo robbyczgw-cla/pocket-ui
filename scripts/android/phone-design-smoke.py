@@ -17,8 +17,8 @@ import time
 import xml.etree.ElementTree as ET
 from pathlib import Path
 
-PACKAGE = 'dev.pocket.spike'
-LOOKS = ['Shelf', 'Minimal', 'Split', 'Cards', 'Cabinet']
+PACKAGE = 'xyz.pocketui.app'
+LOOKS = ['Shelf', 'Split', 'Cabinet']
 SYSTEMS = ['Recent games', 'Favourites', 'Game Boy', 'Game Boy Advance', 'Game Boy Color', 'Nintendo Entertainment System', 'Super Nintendo',
            'Atari 2600', 'Atari Lynx', 'Master System', 'Mega Drive', 'Neo Geo Pocket', 'PlayStation Portable', 'Game Gear', 'PC Engine']
 
@@ -110,7 +110,7 @@ def main():
 
     def set_look(look):
         tap('Settings')
-        for _ in range(len(LOOKS)):
+        for _ in range(5):  # the four phone looks (Easy too) and one more look at the row
             row = find(tr('Look'), prefix=True)
             value = (row.get('text') or row.get('content-desc') or '')[len(tr('Look')):].strip(' ·')
             if value == tr(look):
@@ -317,13 +317,13 @@ def main():
         assert strip_name() != selected, 'Down goes to the next shelf'
         shot('controller')
         tap('Games')
-        # The other looks: Cabinet and Cards have the shelves, Minimal's list keeps its flat page and the sheet says why
+        # The other looks: Cabinet has the shelves, Split's list keeps its flat page and the sheet says why
         # stickers don't show.
-        for look in ('Cabinet', 'Cards'):
+        for look in ('Cabinet',):
             set_look(look)
             assert 'Recent games' in labels() or landscape, labels()
             shot('look-' + look.lower())
-        set_look('Minimal')
+        set_look('Split')
         assert 'Shelf below' not in labels() and 'Recent games' not in labels(), labels()
         tap('Attack on Voxelburg')
         tap('Info')
@@ -404,7 +404,7 @@ def main():
     shot('favourites')
     # Favourites empty: remove it again through the card.
     tap('Games')
-    set_look('Minimal')
+    set_look('Split')
     tap('Info')
     shot('info-page')
     tap('Favourite')

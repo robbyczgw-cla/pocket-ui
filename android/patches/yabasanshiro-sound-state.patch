@@ -1,0 +1,84 @@
+diff --git a/yabause/src/m68kmusashi.c b/yabause/src/m68kmusashi.c
+--- a/yabause/src/m68kmusashi.c
++++ b/yabause/src/m68kmusashi.c
+@@ -21,6 +21,8 @@
+ \brief Musashi 68000 interface.
+ */
+ 
++#include <stddef.h>
++#include "memory.h"
+ #include "m68kmusashi.h"
+ #include "musashi/m68k.h"
+ #include "m68kcore.h"
+@@ -166,9 +168,22 @@
+ }
+ 
+ static void M68KMusashiSaveState(FILE *fp) {
++   m68ki_cpu_core context;
++   IOCheck_struct check = {0, 0};
++   /* All fields before the cycle-table pointers are 32-bit CPU values.
++    * Never save host pointers: a Continue may run at different ASLR addresses. */
++   _Static_assert(offsetof(m68ki_cpu_core, cyc_instruction) == MUSASHI_STATE_BYTES,
++                  "Musashi state layout changed");
++   m68k_get_context(&context);
++   ywrite(&check, &context, MUSASHI_STATE_BYTES, 1, fp);
+ }
+ 
+ static void M68KMusashiLoadState(FILE *fp) {
++   m68ki_cpu_core context;
++   IOCheck_struct check = {0, 0};
++   m68k_get_context(&context);
++   yread(&check, &context, MUSASHI_STATE_BYTES, 1, fp);
++   m68k_set_context(&context);
+ }
+ 
+ M68K_struct M68KMusashi = {
+diff --git a/yabause/src/m68kcore.h b/yabause/src/m68kcore.h
+--- a/yabause/src/m68kcore.h
++++ b/yabause/src/m68kcore.h
+@@ -27,6 +27,8 @@
+ #define M68KCORE_C68K     1
+ #define M68KCORE_Q68      2
+ #define M68KCORE_MUSASHI  3
++/* Pointer-free prefix of the pinned Musashi context, shared with the state length guard. */
++#define MUSASHI_STATE_BYTES 240
+ 
+ typedef u32 FASTCALL M68K_READ(const u32 adr);
+ typedef void FASTCALL M68K_WRITE(const u32 adr, u32 data);
+diff --git a/yabause/src/scsp.c b/yabause/src/scsp.c
+--- a/yabause/src/scsp.c
++++ b/yabause/src/scsp.c
+@@ -6043,7 +6043,7 @@
+   u8 nextphase;
+   IOCheck_struct check = { 0, 0 };
+ 
+-  offset = StateWriteHeader (fp, "SCSP", 3);
++  offset = StateWriteHeader (fp, "SCSP", M68K->id == M68KCORE_MUSASHI ? 4 : 3);
+ 
+   // Save 68k registers first
+   ywrite (&check, (void *)&IsM68KRunning, 1, 1, fp);
+@@ -6341,7 +6341,10 @@
+   yread(&check, (void *)&savedcycles, sizeof(u32), 1, fp);
+ 
+ #ifdef IMPROVED_SAVESTATES
+-  M68K->LoadState(fp);
++  /* Version 3 Musashi states contain no sound-CPU context. Keep their layout
++   * readable; that missing state cannot be reconstructed retrospectively. */
++  if (version >= 4 || M68K->id != M68KCORE_MUSASHI)
++    M68K->LoadState(fp);
+ #else
+   for (i = 0; i < 8; i++)
+     {
+diff --git a/yabause/src/libretro/libretro.c b/yabause/src/libretro/libretro.c
+--- a/yabause/src/libretro/libretro.c
++++ b/yabause/src/libretro/libretro.c
+@@ -159,6 +159,9 @@
+    };
+ 
+    environ_cb = cb;
++   /* The reader accepts the old, exactly 240-byte-shorter Musashi layout too. */
++   uint64_t quirks = RETRO_SERIALIZATION_QUIRK_CORE_VARIABLE_SIZE;
++   cb(RETRO_ENVIRONMENT_SET_SERIALIZATION_QUIRKS, &quirks);
+ 
+    cb(RETRO_ENVIRONMENT_SET_VARIABLES, (void*)vars);
+    environ_cb(RETRO_ENVIRONMENT_SET_CONTROLLER_INFO, (void*)ports);

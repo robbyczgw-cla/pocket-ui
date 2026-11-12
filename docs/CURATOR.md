@@ -13,9 +13,7 @@ Settings → Games → Curator.
 |---|---|---|
 | **Lens** | Combine filters ("GBA · Action · D-pad · under 8 h · never started"). The result count updates live. | Focus |
 | **Smart shelves** | A Lens saved under a name. It sits on Home like Favorites and updates itself as the library and play status change. | Saved focus / bookmarks |
-| **Stickers** | Your own labels for games, such as "Couch co-op" or "Before bed". | Tags |
 | **Echoes** | "More like this": ranked games you own, each with a one-line reason. | Radio |
-| **Up next** | After a game, one quiet suggestion on the shelf: its closest Echo you might play next. | Radio's continuation |
 | **Versions** | One page per game across systems (SNES, PS1, DS), with the differences, your saves and a preferred version. | Album versions |
 | **Pixel Path** | The live chain a frame and its sound go through, from core to screen and speaker, graded in colour. | Signal Path |
 
@@ -37,7 +35,7 @@ Settings → Games → Curator.
   - Typing only happens when you name a sticker or shelf, and a sensible name is always suggested.
 - **Simple by default.**
   - A Curator feature takes no space until it has something to show.
-  - Smart shelves and stickers appear on Home only once you make one.
+  - Smart shelves appear on Home once you make one. Custom labels were retired in 0.4; existing label data stays in library.json.
   - Echoes and Versions are rows on the game card.
   - Pixel Path is off by default.
 
@@ -170,7 +168,7 @@ The profile is recomputed in the background after each session.
 ## Screens
 
 - **Home.**
-  - A **Curator** row after Favorites. It opens Lens, the smart shelves and the stickers. (As built since
+  - A **Curator** row after Favorites. It opens Lens, the smart shelves. (As built since
     2026-10-26 it is the top row of Home in the list looks, with the day's pick on it: "Curator on Home" below.)
   - Every smart shelf and every sticker the user pins shows as its own row.
 - **Lens.** (As built it has 22 facets, `curator::Facet::ALL`: Mechanics, Pace, Difficulty and Setting joined the
@@ -205,7 +203,7 @@ The profile is recomputed in the background after each session.
   - An **Echoes** row with the top 3 inline. A opens the full list of 12, each with a cover and
     its reason.
   - A **Versions** row, shown only when two or more versions are owned.
-  - A **Stickers** row: A toggles stickers, and the last entry is "New sticker…".
+  - A **Stickers** row toggles the built-in case stickers.
 - **Versions page.** One row per version with:
   - the system
   - region and language
@@ -352,7 +350,7 @@ Files: `src/pixel_live.rs` (the strip: its items, alerts, placement, painting; p
   START + Vol its Wi-Fi switch) moves `Extras::over_game` on to the next level for the session, with a toast; a change
   of the option sets it again. Options > Shortcuts > Over the game switches it off.
 - **Snapshots.** `over_game_shots pixel` paints a demo strip where the HUD puts it over a `vdev.sh shot`
-  (DEVELOPING.md, under the snapshot states); the virtual device shows the real
+  (dev/tests.md, under the snapshot states); the virtual device shows the real
   one (it runs below 60 fps on llvmpipe, so its strips are orange: the degraded case).
 - **Device checks.** That the line is readable and calm on the panel at 0.82 and 0.6 opacity; that the strip turns
   orange on a real stutter (fast-forward Max on a heavy game, or a PSP game) and calms down 5 s later; that HOME + Y
@@ -413,7 +411,7 @@ item, the page), `UserEvent::PixelSetup` in `src/main.rs`.
   small text over bright frames "kaum störend"; this is a small step, not a black page. `MenuShot` keeps both
   darkened copies, so going in and out of the page costs one blit the first time and copies after.
 - **Snapshots.** `pixel-path:<armsx2|dolphin|azahar>[:<stage>[:about]]` and `menu:ps2[:<row>]:pixel=<armsx2|missing>`
-  (DEVELOPING.md, under the snapshot states). The pause menu is dark in both appearances, so dark and light snapshots
+  (dev/tests.md, under the snapshot states). The pause menu is dark in both appearances, so dark and light snapshots
   are the same.
 - **Device checks.**
   1. Settings → Games → Curator → Pixel Path in the pause menu on. Burnout 3 (ARMSX2): HOME, the menu lists Pixel
@@ -439,11 +437,10 @@ item, the page), `UserEvent::PixelSetup` in `src/main.rs`.
 
 | Setting | Default | Why |
 |---|---|---|
-| Lens & smart shelves | On | Costs nothing until used |
-| Echoes on the game card | On | One row on the card |
-| Up next after a game | Off | One line on the shelf after a game, only when something is alike enough; never starts anything; goes by itself (see "Curator 2 as built"). Off since 2026-10-25: for a few seconds A plays the suggestion, and A is the button still being pressed as a game ends. Enthusiast sets On |
-| Merge versions in mixed lists | On | Only acts when two or more versions are owned |
-| Stickers | On | Invisible until the first sticker |
+| Lens & smart shelves | Off (0.4) | Curator's depth is Enthusiast's; a Pocket set up before keeps it on (`Prefs::load`). Was On: costs nothing until used |
+| Just Play on Home | On | A separate choice for one-press suggestions; an older file with the Lens off keeps it off until chosen |
+| Echoes on the game card | Off (0.4) | One row on the card; same as the Lens |
+| Merge versions in mixed lists | Off (0.4) | Only acts when two or more versions are owned |
 | Games not on this device in Echoes | Off | Library first |
 | Pixel Path in the pause menu | Off | For enthusiasts: the pause menu's page. The line over the game is Settings → Playing → Over the game → Pixel Path (2026-10-25), which the first start's Enthusiast and the Tour's "Pixel Path over every game" card set ([features.rs](../src/features.rs)) |
 | Play history | On | Curator → History and the Year in review; no row until something was played, the review never opens by itself ([HISTORY.md](HISTORY.md)) |
@@ -479,10 +476,10 @@ user guide is `docs/user/curator.md#curator`, `settings.md#curator`, `controls.m
 | `src/curator/versions.rs` | Works (gamedb's `work()`), the preferred version, `remakes` ("Related: remake"), `merge_versions` for mixed lists |
 | `src/curator/prefs.rs` | `curator.json`: the switches and the smart shelves (with their order) |
 | `src/curator/sort.rs` | `Order` (Name, Last played, Play time, Rating, Year, Length) and `Index::sorted` / `sort_games`: a list in an order, games without the figure last by name |
-| `src/curator/surprise.rs` | "Surprise me": `Index::surprise` (weighted, seeded draw over works), `surprise_weight`, `surprise_reason`, the generator `Rng` |
-| `src/curator/justplay.rs` | "Just Play": `Index::just_play` (four tiers, last game left out, slow systems ×0.2 in tiers 3–4, at most `TRIES` startability checks), `Offer`, `Why`, `Miss` |
+| `src/curator/surprise.rs` | The weighted draw behind the day's pick and Just Play's chances: `Index::surprise`, `surprise_weight`, `surprise_reason` (the card's line), the generator `Rng` |
+| `src/curator/justplay.rs` | "Just Play": `Index::just_play` (four tiers, last game and the `skip` list left out, slow systems ×0.2 in tiers 3–4, at most `TRIES` startability checks), `Offer`, `Why`, `Miss` |
 | `src/curator/today.rs` | What Home's Curator row offers: `Index::today` (the day's pick, a Surprise me draw seeded by the day; the games waiting, `Waiting::Rediscover` or `NotStarted`), on the index thread |
-| `src/home_panel.rs` | The picture side of Home's Curator, Favorites and pinned rows: what it shows (`curator`, `surprise`, `list`), where the covers go (`layout`), a line shortened by its parts (`fit_parts`), a title tile's lines (`title_lines`); pure, unit-tested |
+| `src/home_panel.rs` | The picture side of Home's Curator, Favorites and pinned rows: what it shows (`curator`, `list`), where the covers go (`layout`), a line shortened by its parts (`fit_parts`), a title tile's lines (`title_lines`); pure, unit-tested |
 | `src/app_home_panel.rs` | The App's side: the tiles from the index and the favourites, painting from cached covers only, the waiting games giving way to the line |
 | `src/curator/fixture.rs` | Tests only: eight games of hand-made tags in vocabulary ids, for tests that should not move when curatordb is rebuilt |
 | `src/curator/tests.rs` | A 76-game real-name library with the real gamedb and curatordb: Echoes quality, Lens, Versions, editions, remakes, the speed budgets |
@@ -496,7 +493,7 @@ user guide is `docs/user/curator.md#curator`, `settings.md#curator`, `controls.m
 
 main.rs only has hooks: the new `Item`/`Screen`/`SettingsPage` variants, one `UserEvent::Curator`, input and paint
 dispatch for `curator.page`, `curator_tick()` in `about_to_wait`, `curator.touch()` after a session, and the
-`curator:` snapshot; Curator 2 added three small hooks for Up next and one for the Cabinet's hints (below). The Cabinet look shows Curator as shelves
+`curator:` snapshot; The Cabinet keeps its own hints (below). The Cabinet look shows Curator as shelves
 since Curator 2.
 
 ### How the data comes in
@@ -565,7 +562,7 @@ Max with the host under load, so take the larger numbers; on the Mini V2 the mai
   the DS shows the DS version, Favorites the file that was starred.
 - **Not on this device** (off by default): games of the seed's series or developer on the library's systems, from
   gamedb, best known first, six names; worked out on a thread when the Echoes page opens.
-- **Curator list.** Home's Curator row opens a list in the current look: Lens, smart shelves, stickers. Y pins, X
+- **Curator list.** Home's Curator row opens a list in the current look: Lens, smart shelves. Y pins, X
   opens a small options sheet (change the filters, rename, Home, delete). A new smart shelf is pinned.
 - **Data files.** Stickers and preferred versions in `library.json` (version 2; version 1 reads, and the old reader
   still reads version 2, tested). Smart shelves and the switches in `curator.json`. Shelves saved before the wiring
@@ -605,8 +602,8 @@ States: `home[:<look>[:<row>]]` (Home on the Curator row, or `favorites`, the fi
 Favorites row with no games; covers are decoded on the spot), `hub[:<look>:<row>]` (in that look on that row, 0 the Lens), `options[:<keys>]` (`options:da`: the
 shelf's order), `shelf:<i>`, `lens[:<keys>]` (`S` SELECT, the order sheet; `s` START), `save[:<keys>]`, `ready[:lens]` (before the
 index), `card:<system>:<name>[:<downs>|:<keys>]` (keys `y d r l`: `card:ps2:revenge:yddddrr` is the picker on My rating; `f` and `c` make the open card's rows again as a new index and the sync conflicts' scan do),
-`surprise[:<seed>[:<n>]]` and `surprise:empty` (Surprise me's card with a fixed seed, `n` more picks; before the index), `echoes:…`, `versions:…`, `stickers:…`, `settings[:<row>]`, and since
-Curator 2 `upnext:<system>:<name>[:<look>]` (the shelf after that game ended), `cabinet:<keys>` (the Cabinet look
+`justplay-card[:<seed>[:<n>]]` and `justplay-card:empty` (Just Play's card with a fixed seed, `n` more picks; before the index), `echoes:…`, `versions:…`, `stickers:…`, `settings[:<row>]`, and since
+Curator 2 `cabinet:<keys>` (the Cabinet look
 after r l u d a b) and `cabinetlens:<lens keys>` (the Lens's games as a cabinet shelf). On the
 virtual device: `python3 -I scripts/curator-fake-library.py ~/.cache/pocket-vdev/cur-fake dark /storage/roms`, start
 with `VDEV_ROMS=~/.cache/pocket-vdev/cur-fake/roms` and copy `data/*.json` into `/storage/.config/pocket-ui/`.
@@ -614,7 +611,7 @@ with `VDEV_ROMS=~/.cache/pocket-vdev/cur-fake/roms` and copy `data/*.json` into 
 ## Curator 2 as built (`feat/curator-2`, 2026-10-23)
 
 Four additions, each behind Settings → Games → Curator like the rest. The user guide is `docs/user/curator.md` ("Lens",
-"Echoes", "Up next"), `playing.md` (the Cabinet), `controls.md` and `settings.md#curator`.
+"Echoes"), `playing.md` (the Cabinet), `controls.md` and `settings.md#curator`.
 
 ### Lens: Story, Grinding, Reading and Length ranges
 
@@ -644,39 +641,6 @@ The three axes that were in curatordb but had no facet are facets now (`Facet::{
 - The doc check `every_lens_filter_is_described` also wants every value of `Facet::fixed_labels` (Length, Story,
   Grinding, Reading) named in the user guide's "Lens" section.
 - Cost: the Lens keypress with 21 facets is 24 µs (90th percentile, 5,000 games; budget 1 ms).
-
-### Up next
-
-Roon Radio goes on after the album; Up next does the same for a game, but only suggests.
-
-- **The cue** (`App::curator_watch_game`, called from `curator_tick`): the running game is remembered at every tick.
-  When `running` is empty again, the game ran for at least 60 s (`UP_NEXT_AFTER`) and no notice is on the shelf
-  (a failed start), its path becomes the seed. Nothing in `game_exited` or the quit path was touched: a game started
-  again (options, a fallback to another emulator) or handed over by the switcher never leaves `running` empty, so
-  it gets no suggestion; PC streaming and tools are apps and get none. Switched off, nothing is remembered.
-- **The work** happens on the index thread: the session already makes a new index (`curator.touch()`); that build
-  takes the seed and runs `Index::up_next` after the index (one Echoes list: 0.33 ms median on 5,000 games), and
-  `Event::Built` brings it along. The shelf is back before any of it; the suggestion appears a moment later.
-- **The rules** (`echoes::Index::up_next`, tested in `up_next_is_the_first_echo_you_might_play_next`): the first of
-  the game's Echoes (so never its own versions, its remakes or a dropped game) that isn't completed or dropped,
-  wasn't played in the last 24 h (`UP_NEXT_RECENT`, so two games don't take turns) and scores at least 0.3
-  (`UP_NEXT_MIN`). Otherwise nothing.
-- **Showing it** (`App::paint_up_next`): only while the shelf is on screen with nothing over it (`up_next_room`:
-  no card, page, menu, switcher, search, settings, notice). A paper label over the bottom of the shelf in every look
-  ("Up next", the box, the name, "PSP · Same series · …"), the shelf fading out under it, and the hint row says
-  "X Play it · B Not now" instead of the shelf's. It slides in like a toast (`motion::paint_toast`) and goes after
-  8 s (`UP_NEXT_SHOWN`); the loop wakes for that (`curator_up_next_wake`), no frames are drawn in between.
-- **Input** (`App::curator_up_next_press`, the first line of `App::press`): X starts the game, B puts it away, any
-  other button (A too) puts it away and goes on as usual. A tap on the label is X. It never starts anything by itself.
-- **Default: off** (since 2026-10-25; it was on). It takes no room until a game ends and says nothing when nothing is
-  alike enough, but for those few seconds X means "play the suggestion" (it was A until 0.1.12, the button most likely still being
-  pressed as a game ends: the same hazard the 600 ms wake guard in `sleep.rs` exists for). So it is an opt-in: the
-  first start's Enthusiast and the Tour's card turn it on. `Prefs::up_next` has `#[serde(default)]` = false, so a
-  `curator.json` that has the key keeps its value and only a file from before the key existed gets Off. Settings →
-  Games → Curator → Up next after a game (`SETTINGS_ROWS`, row 3).
-- **main.rs hooks** (a few lines each, commented): `App::press` (input), `paint_home` (instead of the shelf's
-  hints), `about_to_wait` (`curator_up_next_wake`: one frame per refresh while it slides in, then the wake-up when
-  it goes). The Cabinet's "B Back" on a Curator list is one more condition in `paint_hints`.
 
 ### Curator in the Cabinet look
 
@@ -770,11 +734,11 @@ Gaps #5 and #6 of the 25 October round ("no sort orders and no personal rating",
 
 ### Surprise me
 
-- **Where, and why there.** An entry **Surprise me** right under the Lens in the Curator list (`Item::Surprise`), and so
-  a box on the Cabinet's Curator shelf. Home stays as it is (no new row for everyone, "simple by default"); finding
-  something to play is what the Curator list is for, and it is two presses from Home. It follows the Lens & smart
-  shelves switch like the rest of that list. Its row says what it picks from ("From 70 games"; "Getting ready…"
-  before the index, "No games yet" with none), never a blank in Split's panel.
+- **Merged into Just Play (0.4, Streichliste step 5).** Surprise me was an entry under the Lens in the Curator list
+  (`Item::Surprise`, a box on the Cabinet's Curator shelf, Android's first Curator row). It is gone: two ways to "pick
+  something for me" were one too many. What stays is the machinery: the draw, the reason and the card, which are now
+  **X on Just Play's row** (Android: X on the Quick settings' Just Play row). The pick is `Index::just_play`, not the
+  weighted draw over every work; `Index::surprise` still makes the day's pick and its reason.
 - **The draw** (`Index::surprise`): every work once (its preferred version), weighted by `surprise_weight` = status ×
   recency × rating × taste: Not started, Playing, Paused 1, Completed 1/6, Dropped 1/20; played in the last day 0.1,
   week 1/3, month 2/3, longer or never 1, an unfinished game left for over a month 1.3; 4–5 stars 1.3, 2 stars 0.4,
@@ -787,13 +751,13 @@ Gaps #5 and #6 of the 25 October round ("no sort orders and no personal rating",
   "Finished, …" for Completed), then a rating of 4 or 5 ("you gave it 5 stars") or, when the taste profile leans to
   the game (affinity ≥ 0.2), its family or sub-genre the profile likes most ("you like arcade racing games", "you like
   Japanese RPGs"). Without a profile (nothing played, rated or starred) the second part is left out.
-- **Showing it**: the picked game's ordinary card (`App::show_card`) with `CardData::surprise` set: one line over the
-  two columns, "Surprise me" in Dust and the reason in amber (the card's colour for suggestions, as "Playing? Press
-  Y"). Right on that card asks for another (`Out::Another` → `App::curator_surprise`); the hint bar puts "RIGHT
-  Another" after Play and Back and leaves out START (Emulator) to keep the row short; START still works. B goes back
-  to the Curator list. Before the index or with no games, A on the entry says so in a toast and stays.
-- **Not done**: Surprise me inside an open Lens (picking among its games) was considered and left out: one entry is
-  calmer, and the Lens's START with "Last played first" or a rating already answers most "what next" questions.
+- **Showing it** (`App::curator_just_play_card`): the picked game's ordinary card (`App::show_card`) with `CardData::surprise`
+  set: one line over the two columns, "Just Play" in Dust and the reason in amber (the card's colour for suggestions, as
+  "Playing? Press Y"). Right on that card asks for another (`Out::Another` → `curator_just_play_card(false)`, the games
+  shown so far are `skip`, left out of `Index::just_play` like the game played last, so Right brings something new until
+  every game was shown); the hint bar puts "RIGHT Another" after Play and Back and leaves out START (Emulator) to keep
+  the row short; START still works. B goes back to Home. Before the index X says "Getting ready…" in a toast.
+  Snapshot: `curator:justplay-card[:<seed>[:<n>]]` and `:empty`.
 
 ## Just Play (`feat/one-button-play`, 2026-11-02)
 
@@ -802,11 +766,12 @@ branch of its own; the label is `shelf::JUST_PLAY` (one string: the name, `asset
 
 - **Where.** `Item::JustPlay`, one more row of Home's list (`Item::with_just_play`, right above Continue: after Curator and
   Search in the list looks; first on the Cabinet's Continue shelf, where Home still opens on the last game, `first_row`).
-  The same `Item` list serves all five looks, so each paints it as it paints Search: a row (Minimal, Split), a card
-  (Cards, "One press" large, the name under it), a spine with its case above the shelf (Shelf, Cabinet: a case with
-  its name and its own emblem, a cartridge with a play triangle and two dice, `ui_art::Emblem::JustPlay`; not a gift, which
-  read as Surprise me). No setting of its own: `App::just_play_on` is Settings →
-  Games → Curator → Lens & smart shelves, and not Kids Mode (`kids_live`), and once the shelf has a game.
+  The same `Item` list serves every look, so each paints it as it paints Search: a row (Split), a spine with its case above the shelf (Shelf, Cabinet: a case with
+  its name and its own emblem, a cartridge with a play triangle and two dice, `ui_art::Emblem::JustPlay`; not a gift). Its own switch
+  since 0.4 (`Prefs::just_play`, Settings → Games → Curator → Just Play on Home; a `curator.json` from before it has no key and
+  takes the Lens' value, so a player who had the Lens off keeps no Just Play, `Prefs::load`): `App::just_play_on` is that
+  switch, not Kids Mode (`kids_live`), not the Easy look, and once the shelf has a game. X on the row shows the pick's card
+  first (above, "Showing it").
 - **Selection** (`Index::just_play`, pure, `curator/justplay.rs`): each work once, its preferred version (else the first
   version not hidden). Tiers: 1 Playing or Paused, or NotStarted with play time (`secs > 0` or a last play); 2 NotStarted,
   starred, no play time; 3 NotStarted, no play time; 4 Completed and Dropped, only when 1–3 have nobody (completion is
@@ -815,7 +780,7 @@ branch of its own; the label is `shelf::JUST_PLAY` (one string: the name, `asset
   with the latest last play is left out while any other candidate is left in tiers 1–3; it comes back before tier 4. Hidden games
   and games of hidden systems are not offered (`Offer::allowed`). The drawn game is checked with `missing_game` and
   `empty_game` (the launch path's own checks) and by its route (`App::route`, the player's choice kept: the emulator and
-  core must be on the device, `emu_choice::installed`; not checked for a system with no emulator list or on the Deck); a
+  core must be on the device, `emu_choice::installed`; not checked for a system with no emulator list); a
   failed one is dropped (another version of the same work is tried before the work is given up) and the draw repeated,
   at most `TRIES` = 8 checks, then `Miss::NothingStarts` and a notice. `Miss::NoGames`: a toast. The seed is the clock at each press.
 - **Cost**: O(works) per press and a few `stat`s. 10,000 games on a desktop host: median 0.3 ms, worst 0.6 ms (test
@@ -837,7 +802,7 @@ The owner, playing on the device: Curator "could stand out a bit more, it's a bi
 field" where a game shows its box art, and Favorites should show the games' pictures. User guide: [user/playing.md](user/playing.md#home),
 [user/curator.md](user/curator.md#curator).
 
-- **Where the row is.** The Curator row is the **top row of Home** in the list looks (Shelf, Minimal, Split, Cards):
+- **Where the row is.** The Curator row is the **top row of Home** in the list looks (Shelf, Split):
   Curator, Search, Continue, the other recent games, Favorites, the pinned smart shelves and stickers, the systems
   (`shelf::Item::with_curator(…, top)`, `with_search` puts Search under it, `first_row` skips both). Home still opens
   on Continue, Search is still one press up, and nothing the player uses every day moved: the recent games, Favorites
@@ -871,12 +836,6 @@ field" where a game shows its box art, and Favorites should show the games' pict
     A list with no games says how to fill it ("Press Y on a game to star it, and it shows here"; "No games here right
     now"; "Put it on a game from its card: X, then Stickers"). The Favorites row itself is still only on Home while a
     starred game is there, so its empty line shows only where that can happen (a snapshot state, `nofavs`).
-  - **Minimal and Cards** have no picture side for these rows and are as before (Cards shows the spine's line, now
-    "Today: …", large on the card).
-- **Surprise me** shows the day's pick first, once a session (`CuratorUi::today_shown`, reset when a new index brings
-  another pick), so the game the row names is the game A finds; its row in the Curator list shows the pick's cover
-  and line, and in the Cabinet the Surprise me box has the pick's box art on its front (`App::surprise_front`; its
-  spine stays Curator's, its picture key has the pick in it so a new pick makes a new front).
 - **The day's pick** (`Index::today`): `Index::surprise` with a generator seeded by the day (`now / 86 400`, UTC), so
   the same game all day and after a restart; it changes at midnight or when the player's state moves the weights
   (after a session the index is built again: playing the pick usually makes it another). The waiting games are counted
@@ -890,13 +849,13 @@ field" where a game shows its box art, and Favorites should show the games' pict
   label, which decodes its box art on the UI thread the first time, a panel never decodes on it. Navigation over
   these rows costs what any label does plus at most five cache look-ups; `docs/latency/device.json`'s move and open
   figures are not affected by construction (not measured on the device by this branch).
-- **Snapshots**: `curator:home[:<look>[:<row>]]` (above); `curator:cabinet:ddr` is the Surprise me box. In
+- **Snapshots**: `curator:home[:<look>[:<row>]]` (above); `curator:cabinet:ddr` is the Curator shelf. In
   `tests/i18n-states.txt` (German and Large).
 
 ## Connections and Rediscover (`feat/connections`, 2026-10-30)
 
 What a game's credits say leads to the player's own games with the same name: the developer, publisher, series and
-genre on the info page (`game_info`, Minimal, Cards, Split) and on the box's back (`game_box`, Shelf, Cabinet) become
+genre on the info page (`game_info`, Split) and on the box's back (`game_box`, Shelf, Cabinet) become
 selectable, and A opens "More from Criterion Games", "More published by Electronic Arts", "Burnout series, in release
 order" or "More racing games" as a shelf of the player's games (`Screen::Connection`, every look; in the Cabinet a
 shelf of its own with the title on its plate). The user's side is [library.md](user/library.md#connections) and
@@ -958,4 +917,3 @@ and with one game on two systems once, the series in release order, B back to th
 to pick, Rediscover only with data and a year ago today first). Snapshots: `info:<look>:ps2:revenge:dddd` (the series
 picked), `…:dddda` (its list), `info:shelf:ps2:revenge:rd` (the box's back), `curator:rediscover[:<look>]` with
 `POCKETUI_REDISCOVER=1 scripts/curator-fake-library.py`.
-

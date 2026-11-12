@@ -653,6 +653,10 @@ impl App {
         // Without a number: where the look opens.
         if let Ok(at) = arg.parse::<usize>() {
             self.sel = at.min(self.items.len().saturating_sub(1));
+        } else if !arg.is_empty() && what == "shelf" {
+            if let Some(at) = self.items.clone().iter().position(|item| self.item_rom(*item).is_some_and(|(_, path)| path.file_name().is_some_and(|name| name == arg))) {
+                self.sel = at;
+            }
         }
         self.prev_sel = self.sel;
         self.moved_at = Instant::now() - Duration::from_secs(5);

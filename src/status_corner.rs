@@ -2,10 +2,14 @@
 //! battery. Settings, its pages, the pause menu's pages and the quick settings show the same parts in a pill (`Pill`).
 //! What it shows comes from memory: Wi-Fi and battery from a thread that reads three sysfs files every few seconds,
 //! only while the corner or the pill is on screen (`set_shown`); the time from `localtime_r`, at most once a second.
+//! On Android only the types, the layout and the painting are compiled: its facts come from the Activity (`phone_corner`).
 
 use std::path::{Path, PathBuf};
+#[cfg(not(target_os = "android"))]
 use std::sync::atomic::{AtomicBool, AtomicU8, Ordering};
-use std::sync::{Mutex, OnceLock};
+use std::sync::Mutex;
+#[cfg(not(target_os = "android"))]
+use std::sync::OnceLock;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use crate::gfx::Canvas;
@@ -62,6 +66,7 @@ pub enum Part<'a> {
 }
 
 impl Corner {
+#[cfg(not(target_os = "android"))]
     /// The corner now: the time, and Wi-Fi and battery as the thread last read them.
     pub fn now() -> Corner {
         let s = status();
@@ -115,13 +120,18 @@ impl Corner {
 
     /// Paints the corner ending at `right` on `baseline` in `colour`; returns its left edge.
     pub fn paint(&self, c: &mut Canvas, text: &mut Text, right: i32, baseline: i32, colour: u32) -> i32 {
-        let (placed, left) = self.layout(right, |s| text.width(Face::Body, PX, s));
+        self.paint_at(c, text, right, baseline, PX, colour)
+    }
+
+    /// `paint` at type size `px` (the phone's header on Android sets its own, in sp).
+    pub fn paint_at(&self, c: &mut Canvas, text: &mut Text, right: i32, baseline: i32, px: u32, colour: u32) -> i32 {
+        let (placed, left) = self.layout_at(right, px, |s| text.width(Face::Body, px, s));
         for (part, x) in placed {
             match part {
                 Part::Text(s) => {
-                    text.draw(c, Face::Body, PX, x, baseline, colour, s);
+                    text.draw(c, Face::Body, px, x, baseline, colour, s);
                 }
-                Part::Wifi => paint_wifi(c, x, baseline, PX, colour),
+                Part::Wifi => paint_wifi(c, x, baseline, px, colour),
             }
         }
         left
@@ -314,6 +324,7 @@ pub fn unix_now() -> Option<i64> {
 
 /// Local time as "13:28" (24 hours, as everywhere in pocket-ui), None while the clock was never set. Worked out at
 /// most once a second: a zone chosen in Settings shows within that second.
+#[cfg(not(target_os = "android"))]
 pub fn clock() -> Option<String> {
     static KEPT: Mutex<Option<(i64, Option<String>)>> = Mutex::new(None);
     let now = unix_now()?;
@@ -326,6 +337,7 @@ pub fn clock() -> Option<String> {
     s
 }
 
+#[cfg(not(target_os = "android"))]
 fn local_clock(now: i64) -> Option<String> {
     let t = now as libc::time_t;
     let mut tm: libc::tm = unsafe { std::mem::zeroed() };
@@ -352,15 +364,21 @@ pub fn next_minute_in() -> Duration {
 
 // The thread. `STATUS` is None until its first read; `SHOWN` says whether the corner is on screen (set by the UI on
 // every pass of its loop: two atomics), `PARKED` that the thread sleeps until it is again.
+#[cfg(not(target_os = "android"))]
 static STATUS: Mutex<Option<Status>> = Mutex::new(None);
+#[cfg(not(target_os = "android"))]
 static SHOWN: AtomicBool = AtomicBool::new(false);
+#[cfg(not(target_os = "android"))]
 static PARKED: AtomicBool = AtomicBool::new(false);
+#[cfg(not(target_os = "android"))]
 static THREAD: OnceLock<std::thread::Thread> = OnceLock::new();
 /// Snapshots: 0 = as read, 1 = Wi-Fi off, 2 = connected (`force_wifi`).
+#[cfg(not(target_os = "android"))]
 static FORCED_WIFI: AtomicU8 = AtomicU8::new(0);
 
 /// Starts the thread that reads Wi-Fi and the battery every `EVERY` while the corner is on screen and sleeps
 /// (parked, no wake-ups) while it is not. `notify` is called from it when what it read changed.
+#[cfg(not(target_os = "android"))]
 pub fn start(notify: impl Fn() + Send + 'static) {
     // The virtual device has no Wi-Fi chip: POCKETUI_WIFI_IFACE=eth0 there stands in for it (docs/VIRTUAL-DEVICE.md).
     let iface = std::env::var("POCKETUI_WIFI_IFACE").unwrap_or_else(|_| "wlan0".into());
@@ -396,6 +414,7 @@ pub fn start(notify: impl Fn() + Send + 'static) {
 }
 
 /// Whether the corner is on screen right now (the UI, after each frame); unparks the thread when it comes back.
+#[cfg(not(target_os = "android"))]
 pub fn set_shown(shown: bool) {
     SHOWN.store(shown, Ordering::SeqCst);
     if shown && PARKED.swap(false, Ordering::SeqCst) {
@@ -406,6 +425,7 @@ pub fn set_shown(shown: bool) {
 }
 
 /// What the thread read last. Without the thread (snapshots, tests) read now, from the same files.
+#[cfg(not(target_os = "android"))]
 pub fn status() -> Status {
     let kept = *STATUS.lock().unwrap_or_else(|e| e.into_inner());
     let mut s = kept.unwrap_or_else(|| {
@@ -425,6 +445,7 @@ pub fn status() -> Status {
 
 /// Whether Wi-Fi is connected now, read afresh (`operstate`, one small file) instead of the thread's last look, which
 /// sleeps on pages without the corner (the Wi-Fi page): Settings → Connections right after a connect. Not on the UI thread.
+#[cfg(not(target_os = "android"))]
 pub fn wifi_now() -> bool {
     match FORCED_WIFI.load(Ordering::Relaxed) {
         1 => false,
@@ -437,11 +458,13 @@ pub fn wifi_now() -> bool {
 }
 
 /// Snapshots (`POCKETUI_SNAPSHOT_WIFI`): the corner as if Wi-Fi were connected or not, whatever this computer has.
+#[cfg(not(target_os = "android"))]
 pub fn force_wifi(connected: bool) {
     FORCED_WIFI.store(if connected { 2 } else { 1 }, Ordering::Relaxed);
 }
 
 /// Snapshots: the battery as made up, without the thread (the Updates page's "plug in first").
+#[cfg(not(target_os = "android"))]
 pub fn force_battery(battery: Battery) {
     let mut kept = STATUS.lock().unwrap_or_else(|e| e.into_inner());
     kept.get_or_insert_with(Status::default).battery = Some(battery);

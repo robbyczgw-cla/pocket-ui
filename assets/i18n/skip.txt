@@ -4,11 +4,13 @@
 # used to look things up (cheat and cover databases), test and snapshot data, and pieces of longer strings that the
 # table translates as a whole ("  ·  {s} left at that rate" is part of "{s} uses about {n}% an hour  ·  {t} left at
 # that rate"). One per line as the script prints it ({s} for a format hole, \n for a line break); `re:` lines are
-# patterns as in keep.txt. Grouped by file; when a string moves, the script lists it again. docs/DEVELOPING.md
+# patterns as in keep.txt. Grouped by file; when a string moves, the script lists it again. docs/dev/translations.md
 # "Translations".
 
 # src/achievements/http.rs
-pocket-ui/{s} (Linux){s} rcheevos/{s}
+pocket-ui/{s} ({s}){s} rcheevos/{s}
+raRequest
+raDownload
 
 # src/achievements/offline.rs
 When
@@ -1082,6 +1084,7 @@ bridge initialization raced
 Activity not ready
 dataPath
 speakerState
+localAudioOutput
 volumeState
 
 # src/platform/android_audio.rs: stream backend name, printed only in sound debugging.
@@ -1092,6 +1095,7 @@ httpGet
 
 # JNI key for optional emulator-only PCM capture; never painted.
 diagnosticAudio
+diagnosticAudioSeconds
 
 # Android native audio diagnostics; logcat only, never drawn in the interface.
 AAudio write failed: {s}
@@ -1199,19 +1203,11 @@ pocket_picture {s} {s} {s} {s}
 pocket_picture_shot {s} {s} {s}
 pocket_picture_preview {s} {s} {s} {s} {s}
 
-# src/second_screen.rs: the second window's title (sway's, never painted), sway commands, the panel table's log line
-pocket-ui game info
-for_window [app_id="{s}"] move container to output {s}; for_window [app_id="{s}"] fullscreen enable; no_focus [app_id="{s}"]
-[app_id="{s}"] move container to output {s}; focus output {s}
-output {s} power {s}
-{s} move scratchpad
-{s} scratchpad show, floating disable, move container to output {s}, fullscreen enable
-focus output {s}
-no mode
-CHECK: {s} (set {s})
-DSI-2
-DSI-1
-Goodix Capacitive TouchScreen
+# src/android_02_tests.rs: the Help test's assertion messages and the names of other apps' menu items it looks for
+Close Game
+Exit Emulation
+said in English: {s}
+the Settings row is cut
 
 # src/android_02_tests.rs: names in the test's made-up targets and game
 Jump
@@ -1226,21 +1222,11 @@ name line wide: {s}
 line above the sheet: {s}
 head takes the rows' room ({s} + {s} > {s}): {s}
 
-# src/app_card.rs: the marker of a second-screen description that isn't cached (GameCardData::note shows nothing for it)
-not cached
-
 # src/control.rs: sway's app_id pattern for the game window
-^(?!{s}(-second)?$).*
 ^(?!{s}$).*
-
-# src/main.rs: sway command of --restore-second-screen
-output {s} power on
 
 # src/os_compat.rs: the HW_DEVICE value in ROCKNIX's os-release
 RK3566
-
-# src/second_screen.rs: the log line for a panel table with the same output or backlight twice
-top and bottom must be different outputs and backlights
 
 # src/update/download_tests.rs: HTTP responses of the test servers; src/main.rs: the Updates page's download line
 # (its phase and percent are translated through "Downloading the update…" and "{t} {n}%")
@@ -1427,7 +1413,6 @@ usage: pocket-fb --wayland <socket> --ipc <socket> [--fb /dev/fb0] [--mode 1024x
 
 # src/app_where.rs, app_curator.rs, app_kids.rs, game_card.rs: stable page/painter
 # identifiers for @where, /tmp/pocket-ui.status and navigation tests; never painted.
-Stickers
 time warning
 ask a grown-up
 time up
@@ -1490,3 +1475,139 @@ usage: --unpack-runtime ZIP DEST
 
 # src/image.rs: existing framebuffer IPC command, never painted
 pocket_grab {s}
+# src/platform/android_audio.rs: the game stream's numbers in the player's log line; a bridge method's name.
+out_ms={s} aaudio_xruns={s} burst={s} buffer={s} callback_underruns={s} handoff_ms={s} reported_out_ms={s} timestamp_fallback={s}
+diagnosticsPath
+
+# Syncthing configuration field names (never painted).
+maxConcurrentWrites
+pullerMaxPendingKiB
+disableFsync
+
+# Launch/return/card preparation trace labels, written to POCKETUI_TRACE only; never painted.
+card begin
+card connections ready
+card data ready
+continue begin
+exit begin
+exit focus ready
+exit frozen ready
+exit notices ready
+exit rebuild ready
+exit shelf state ready
+exit sound ready
+launch animation ready
+launch bookkeeping ready
+launch controls check ready
+launch defaults ready
+launch drain ready
+launch environment ready
+launch files checked
+launch first response painted
+launch frozen checked
+launch picture scheduled
+launch post spawn
+launch preparation begin
+launch preparation queued
+launch reminder ready
+launch spawn begin
+launch spawn ready
+launch standalone prepared
+launch window rules ready
+launch fan ready
+not a frame dump
+script {s}
+script: {s}
+
+# src/game_card_model.rs: internal description-cache status; note() suppresses it.
+not cached
+not Cozy with Motion Full
+the shelf is not in front
+the shelf is not on the game
+
+# src/report_phone.rs (the text of the Android bug report, English on purpose: the maintainers read it, never painted)
+No games were found yet: no folder is chosen, or it holds no games.
+No optional cores chosen for download.
+Optional core {s}: {s}
+chosen, not installed
+The player's last audio line (frames, underruns, queue, dropped frames, resampler, AAudio xruns), {s} such lines in the log:
+No sound counters: the log is empty.
+No sound counters yet: no game has played sound since Android last cleared the log.
+earlier runs of either
+No player lines: no game was started since Android last cleared the log.
+No lines.
+(the last {s} of {s} lines)
+pocket-ui problem report (Android)
+Made: {s}
+Paste this into a new issue on pocket-ui's GitHub page (Issues, New issue, Bug report), say what happened and name the game if it matters.
+pocket-ui {s} (build {s})
+Package: {s}\nUpdate channel: {s}
+Model: {s} ({s})
+Android {s} (API {s}), {s}
+Screen: {s}, density {s} dpi, refresh {s} Hz, text size x{s}
+Game controllers: {s}
+none connected
+Battery saver: {s}\nFree space for the app: {s}
+(the line above came {s} times in a row, the last one at {s})
+
+# src/controls_card.rs: the cores' own spellings of their buttons, matched and replaced by the card's (`PLAIN`), and the
+# name parts of the games that need Boktai's sun sensor (looked up, never painted).
+A Button
+B Button
+L Shoulder
+R Shoulder
+Z Trigger
+C-Up
+C-Down
+C-Left
+C-Right
+bokura no taiyou
+# src/save_copy.rs
+{s} [{s}]
+pocket-ui saves
+not a game's key
+save copy: the list of {s} can't be read; it is written again
+save copy: the copy of {s} ({s}) is newer than this phone's files; nothing overwritten
+save copy: conflict for {s} ({s}): phone and copy both differ from the last agreed state; nothing overwritten
+save copy: conflict for {s} ({s}): {s} on the phone is not newer than the copy's; nothing overwritten
+save copy: {s} changed while it was copied; it follows next time
+changed while it was copied
+save copy: {s}: {s}
+save copy: the state could not be kept: {s}
+{s} of the copy is not whole
+the phone has files for this game now
+save copy: {s}: list not read: {s}
+save copy: the list of {s} is not readable or is from a newer pocket-ui
+save copy: {s} names {s}, which is no save file; skipped
+save copy: {s} has its saves back from {s}
+save copy: {s} not restored from {s}: {s}
+save copy: conflict for {s} ({s}): the phone has saves that differ from the copy; nothing overwritten
+# src/android_02_tests.rs
+ppsspp · psp
+GPL-2.0-or-later
+ppsspp-no-xbrz.patch, ppsspp-pause-drain.patch
+unmuted: {s} sound(s) waited {s} ms for the mute answer
+open: kept warm
+close: muted
+open: ring changed
+close: quiet
+cut: {s}
+
+# src/achievements/hash_tests.rs (test discs and file names)
+re:^BOOT = cdrom:.*
+Super Game (USA) [!].nes
+
+# src/android_02_tests.rs (RetroAchievements page tests: names, steps and the English words searched for)
+Tk
+Ravi
+signed out
+signing in
+signed in
+asks to log out
+user name
+Earn achievements
+Your password is sent once
+Press A again
+Password for
+Sent once
+said in English ({s}): {s}

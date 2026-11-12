@@ -40,6 +40,7 @@ pub(super) fn app(root: &Path) -> App {
         hold_down: None,
         crt_on: false,
         crt_started: false,
+        crt_screen: pocket_ui::crt_on::Screen::Tv,
         woke_frame: false,
         held_mask: [0; players::MAX],
         toggled: Default::default(),

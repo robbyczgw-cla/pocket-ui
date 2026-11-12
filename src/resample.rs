@@ -23,10 +23,11 @@ pub const HALF: usize = 36;
 const PHASES: usize = 512;
 /// Kaiser window shape: about 100 dB of stopband for 72 taps.
 const BETA: f64 = 11.0;
-/// Widest ratio (core rate over output rate) with a proper low-pass; above it the sound is not filtered further.
-const MAX_STEP: f64 = 4.0;
+/// Bound filter cost independently of the sample clock. ClownMDEmu supplies 223721 Hz
+/// (4.66:1 at 48 kHz); limiting its read step changed pitch and overfilled the queue.
+const MAX_FILTER_WIDTH: f64 = 8.0;
 /// Samples kept in front of the read position: the widest kernel half.
-const KEEP: usize = HALF * MAX_STEP as usize;
+const KEEP: usize = HALF * MAX_FILTER_WIDTH as usize;
 
 /// One low-pass table per core rate. Rate control moves the read position, never the cutoff or coefficients.
 struct WideTable {
@@ -228,19 +229,19 @@ impl Sinc {
         if step <= 1.02 {
             return;
         }
-        let width = ((step.clamp(1.0, MAX_STEP) * 1.005 * 32.0).ceil() / 32.0).min(MAX_STEP);
+        let width = ((step.clamp(1.0, MAX_FILTER_WIDTH) * 1.005 * 32.0).ceil() / 32.0).min(MAX_FILTER_WIDTH);
         if self.wide.as_ref().is_none_or(|t| t.width != width) {
             self.wide = Some(WideTable::new(width));
         }
     }
 
     fn process(&mut self, input: &[i16], step: f64, out: &mut Vec<i16>) {
+        if !step.is_finite() || step <= 0.0 { return; }
         self.l.extend(input.chunks_exact(2).map(|f| f[0] as f32));
         self.r.extend(input.chunks_exact(2).map(|f| f[1] as f32));
-        let step = step.clamp(1.0 / MAX_STEP, MAX_STEP);
         // Up to 2 % over the output's rate (a 48 kHz core, nudged) keeps the fast path: its cutoff is the output's
         // Nyquist, and the 1 % of band between that and the wider one holds nothing.
-        let wide = if step <= 1.02 { 1.0 } else { step };
+        let wide = if step <= 1.02 { 1.0 } else { step.min(MAX_FILTER_WIDTH) };
         // Standalone callers can omit prepare. A genuine rate change can rebuild, but the normal ±0.5 %
         // controller stays inside the prepared table's bandwidth. Never calculate taps per output sample.
         if wide > 1.0 && self.wide.as_ref().is_none_or(|t| wide > t.width || t.width > wide * 1.04) {
@@ -275,7 +276,7 @@ impl Sinc {
             }
             self.pos += step;
         }
-        let drop = (self.pos as usize).saturating_sub(KEEP);
+        let drop = (self.pos as usize).saturating_sub(KEEP).min(self.l.len().saturating_sub(KEEP));
         if drop > 0 {
             self.l.drain(..drop);
             self.r.drain(..drop);
@@ -416,8 +417,46 @@ mod tests {
     }
 
     #[test]
+    fn mega_drive_native_rate_keeps_pitch_and_one_second_of_sound() {
+        // ClownMDEmu's PSG rate exceeds 4:1. Clamping its read step to four produced
+        // 16.5 % excess PCM, forcing queue cuts and defeating the ±0.5 % rate control.
+        let rate = 223721.0;
+        let step = rate / 48000.0;
+        let mut r = Resampler::new(true);
+        r.prepare(step);
+        let table = r.sinc.as_ref().unwrap().wide.as_ref().unwrap().rows.as_ptr();
+        let out = run(&mut r, &tone(1000.0, rate, 1.0, 16000.0), step);
+        let expected = 48000.0 - r.sinc.as_ref().unwrap().wide.as_ref().unwrap().half as f64 / step;
+        assert!((out.len() as f64 / 2.0 - expected).abs() < 3.0,
+            "one second of Mega Drive audio became {} output frames; expected {expected}", out.len() / 2);
+        assert!((level(&out[4800..], 1000.0, 48000.0) / 16000.0 - 1.0).abs() < 0.001,
+            "the native PSG rate must keep the tone at 1 kHz");
+        for skew in [0.995, 1.005, 1.0] {
+            let mut tail = Vec::new();
+            r.process(&tone(1000.0, rate, 0.02, 16000.0), step * skew, &mut tail);
+            assert_eq!(table, r.sinc.as_ref().unwrap().wide.as_ref().unwrap().rows.as_ptr(), "DRC rebuilt the table");
+            assert!((tail.len() as f64 / 2.0 - 960.0 / skew).abs() < 3.0, "rate control must still change delivery");
+        }
+    }
+
+    #[test]
+    fn filter_cost_never_changes_the_sample_clock() {
+        // Clock correctness also holds outside the prepared filter's full-rejection band.
+        for step in [1.0 / 6.0, 4.02, 4.660854166666667, 8.04, 16.0, 1000.0] {
+            let mut r = Resampler::new(true);
+            r.prepare(step);
+            let input = vec![0; 2 * 10960];
+            let out = run(&mut r, &input, step);
+            let need = r.sinc.as_ref().unwrap().wide.as_ref().map_or(HALF, |t| t.half);
+            let expected = (10960.0 - need as f64) / step;
+            assert!((out.len() as f64 / 2.0 - expected).abs() < 3.0,
+                "ratio {step}: {} frames, expected {expected}", out.len() / 2);
+        }
+    }
+
+    #[test]
     fn every_common_core_rate_survives_small_chunks_and_rate_changes() {
-        for rate in [22050.0, 32040.0, 32768.0, 44100.0, 48000.0, 65536.0, 96000.0, 192000.0] {
+        for rate in [22050.0, 32040.0, 32768.0, 44100.0, 48000.0, 65536.0, 96000.0, 192000.0, 223721.0] {
             let step = rate / 48000.0;
             let input = tone(1000.0, rate, 0.05, 16000.0);
             let mut r = Resampler::new(true);

@@ -63,7 +63,7 @@ pub struct Context {
 impl Choice {
     pub fn label(self) -> &'static str {
         match self {
-            Choice::Sleep if crate::device::current().screen_off_only() => "Screen off",
+            Choice::Sleep if crate::device::current().screen_off_only() && !crate::sleep_settings::power_sleeps() => "Screen off",
             Choice::Sleep => "Sleep",
             Choice::Restart => "Restart",
             Choice::PowerOff => "Power off",
@@ -93,7 +93,10 @@ impl Choice {
     #[cfg(feature = "brick")]
     pub fn hint(self, ctx: Context) -> &'static str {
         match self {
-            Choice::Sleep if crate::device::current().screen_off_only() => crate::sleep_settings::no_sleep(),
+            Choice::Sleep if crate::device::current().screen_off_only() && !crate::sleep_settings::power_sleeps() => crate::sleep_settings::no_sleep(),
+            // The Brick's real sleep: its drain is not measured yet, so no battery figure.
+            Choice::Sleep if crate::sleep_settings::power_sleeps() && ctx.game => "Saves the game. The power button wakes it.",
+            Choice::Sleep if crate::sleep_settings::power_sleeps() => "The power button wakes it.",
             Choice::Sleep if ctx.game => "Saves the game. The power button wakes it. Uses a few percent of the battery an hour.",
             Choice::Sleep => "The power button wakes it. Uses a few percent of the battery an hour.",
             Choice::Restart if ctx.ram_booted => "Started from a computer: this goes back to Android.",

@@ -827,9 +827,7 @@ impl App {
 
 fn snapshot_theme(name: Option<&str>) -> Theme {
     match name.unwrap_or("shelf") {
-        "minimal" => Theme::Minimal,
         "split" => Theme::Split,
-        "cards" => Theme::Cards,
         "cabinet" => Theme::Cabinet,
         _ => Theme::Shelf,
     }

@@ -66,9 +66,16 @@ loop), a thread fetches the same signed list (`update::fetch_manifest`, `UpdateE
 Updates page. `update_hint::due` says a version when `app` is newer than the running one and not `said` yet; the
 notice (`Notice::update_ready`, A to the page, B closes) waits for `shelf_notice_free()` and writes `said` when it is
 shown. Next look `EVERY` (24 h) after a look that found nothing or said its hint; after a failed one `retry_after` (1 h, 2, 4, 8, at most 16 h). `update_hint::step(Facts)` is the one decision (Stop / Pause / Retry / Say / Look); a look also needs the buttons left alone for `IDLE_FOR` (10 s).
-Never during a game, never in Kids Mode, never on a host-owned device (Steam Deck) or with `POCKETUI_MOCK`, and only
+Never during a game, never in Kids Mode, never with `POCKETUI_MOCK`, and only
 in a release build (`update::release_build`: the release scripts set `POCKETUI_VERSION`; a main or branch build carries
-Cargo.toml's older version and would announce the release over itself, `update_hint::looks`);
+Cargo.toml's older version and would announce the release over itself, `update_hint::looks`).
+The manual Updates page uses the same release requirement for app offers, through `Updates::app_available`: no
+install action, available-version line or settings dot is derived from an unstamped development version. This also
+suppresses genuinely newer releases on development builds: their order cannot be established from Cargo.toml. The
+page explains that a release package must be installed to use app updates. About marks unstamped builds as
+`<version>-dev (<commit>)`, with a separate Device row keeping the TrimUI model name visible (the version and
+commit would otherwise crowd it out); problem reports retain the commit and add
+`build = development` (or `release`).
 The switch Settings → System → Updates → "Check for updates automatically" (On by default) is `{"off": true}` in the file: Off makes no request, says nothing and forgets what was found; the page's first-open check is skipped too ("Check again" still works by hand). A known newer version puts an amber dot (`App::update_dot`) on System and on its Updates row. On the page "Install pocket-ui X" asks first ("Install now" / "Later", B = Later; `UpdatePhase::Confirming`); under 20 % and off the charger the line under it says to plug in (`update_hint::battery_warning`). Nothing installs without that second press. Only `app`: the system image and the Store are not announced from here.
 
 ## Observing a job without changing it
@@ -278,7 +285,7 @@ the device or our image moves to a newer ROCKNIX:
    `CONTRACT: ok` or `CONTRACT: <n> changed` ([ROCKNIX-CONTRACT.md](ROCKNIX-CONTRACT.md)). Each CHANGED row names the
    code that relies on it; after fixing that code, update the row in `scripts/rocknix-contract.txt` (cargo test keeps
    both in step).
-2. `scripts/rocknix-diff.sh <old> <new>` (refs or images, [DEVELOPING.md](DEVELOPING.md#a-new-rocknix-version)). It
+2. `scripts/rocknix-diff.sh <old> <new>` (refs or images, [dev/building.md](dev/building.md#a-new-rocknix-version)). It
    prints what changed in what pocket-ui depends on and a checklist. 20261001 → main 8b70f69 (23.10.2026): the new
    `start_es.sh` steps (handled, above), the flock lock (handled), get_setting rewritten (same order of keys), the
    SM8250 quirk `075-scanout-offload`, `wifi.country` in system.cfg, PipeWire 1.2 → 1.6, systemd 255 → 261,

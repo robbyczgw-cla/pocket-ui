@@ -104,6 +104,21 @@ Switch off. Hold **Vol Down** and press **Power**. Pick **Switch boot mode** unt
 mode: Android**, then **Start**. Android starts as before; the card can stay in. To return to pocket-ui, switch the
 boot mode back to Loader the same way. [V] on the author's device.
 
+## Pocket 5 and Flip 2: "UEFI" instead of "Loader"
+
+The experimental Pocket 5 and Flip 2 cards (`pocket-ui-<version>-rp5-uefi.img.xz`, `…-flip2-uefi.img.xz`, in the beta
+release; not yet started on a real device) are written and started like the Mini V2 card above, and nothing is flashed.
+Only the menu differs: newer Retroid firmware shows **UEFI** where older firmware shows **Boot mode: Loader**.
+
+1. Write the card, put it into the switched-off device, hold **Vol Down** and press **Power**.
+2. Pick **UEFI** or **Boot mode: Loader**, whichever the menu offers, then **Start**. With OpenABL, ROCKNIX's boot
+   helper, pick **Linux** instead; the card has an entry for it.
+3. Android stays as it is: pick **Android** in the same menu to go back.
+
+The card's first partition is marked as an EFI system partition, which Retroid's UEFI wants. A Windows or Mac computer
+therefore no longer shows it, and Android does not mount it; Linux still does. The boot files per bootloader are in
+[SD-IMAGE.md](SD-IMAGE.md#experimental-sm8250-tester-cards-pocket-5-and-flip-2).
+
 ## Install on a ROCKNIX card you already use
 
 For a card that already runs ROCKNIX on the Mini V2 (however it boots), or on one of the experimental Pocket 5, Flip 2

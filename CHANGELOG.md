@@ -5,6 +5,44 @@ and versions follow [Semantic Versioning](https://semver.org/) (before 1.0, a mi
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-11-12
+
+### Added
+
+- **Eject: Quit has a way back.** In the Cozy looks a game now leaves the way it came: a TV picture closes to a line and a dot, a handheld's display goes dark, and the cartridge or disc returns to its case, which closes. Cabinet, Shelf, Easy and Kids Mode accept input at once; any button or a touch skips the effect. Quick and Motion Reduced/Off go straight to the shelf. No new setting.
+- **New insertion scenes.** The NES's door lifts and its cartridge slides in and is pressed down; the Game Boy Color, the Master System, the Game Gear and the PC Engine take their cartridges; the PSP turns round for its UMD; the 3DS gets its scene. A case that goes home no longer fades: it turns over in perspective with its edge, a disc case opens its cover in perspective, and a cartridge that turns round shows its edge.
+- **Smoother TV switch-on.** The picture opens out of a growing line instead of a step; a Game Boy, GBA or DS game lights its display up (no tube, no tube sound). Same 300 ms.
+- **Smoother animations all round.** A console comes up from wholly under the screen, a top-loader's lid is a slab whose edge shows while it opens and shuts, and the way back after Save & quit hands the game's picture over in place instead of jumping.
+- **Arcade games have a picture.** MAME, FinalBurn Neo, CPS, NAOMI and the other arcade folders show an upright arcade cabinet on their card, in their case and when the game starts, where its screen lights up. Before, their card was plain and the game went into the crate.
+- **A controls card you can read in three seconds.** One picture on every handheld: the buttons in their places with the console's own names (the PlayStation's shapes drawn), faint outlines for buttons the console lacks, and the pause menu key large under it. The Mega Drive, Master System and Game Gear have their names before the first game; a console nobody knows yet gets a short card: "Play with the D-pad and the buttons."
+- **Updates:** the UI status file also reports update phases, progress and recovery state; update jobs and notice scheduling use typed states (installed marker formats and power-cut order unchanged).
+- **TrimUI Brick: the power button sleeps.** A short press saves the game and really sleeps; the power button wakes it into the pause menu with the game paused where it was. Wi-Fi and Bluetooth come back a few seconds later. Settings → System → Sleep & power switches back to screen off.
+
+### Changed
+
+- **Just Play and Surprise me are one button.** On Home, A on Just Play still starts a game at once; X shows the pick first, on its card with a line saying why ("Never played · you like platformers"), and Right brings another. Just Play has its own switch: Settings → Games → Curator → Just Play on Home.
+- **A page "For tinkerers" under Settings → Help & tools.** Tailscale, Sync, Remote access (SSH) and PC streaming moved there; Connections and Games keep Wi-Fi, Bluetooth and the Web companion.
+- **The Curator's depth is for the Enthusiast profile.** A new Pocket starts without the Lens, smart shelves, Echoes and Merge versions; Settings → Games → Curator or the Enthusiast profile turns them on. A Pocket set up before keeps what it had.
+- **"Easy to read" is now "Big text"** (German "Große Schrift", Spanish "Texto grande"). The Easy look keeps its name.
+- **TrimUI Brick is no longer a Beta.** The card and the release notes say "TrimUI Brick".
+- A downgrade is never offered to an unstamped development build.
+
+### Removed
+
+- **Four looks instead of six: Minimal and Cards are gone.** Shelf, Easy, Split and Cabinet stay. If you had Minimal or Cards, pocket-ui starts in Split and says so once.
+- **The Pixel style is gone.** Style is Barlow or Retro; if you had Pixel, pocket-ui starts in Barlow. Retro Pixelify keeps the Pixelify letters.
+- **Over the game, Pixel Path is for enthusiasts.** Its level comes with Settings → Games → Curator → Pixel Path; everyone else has Off, FPS and FPS + sensors.
+- Experimental Steam Deck and dual-screen support, the MTP controls, the unused Store page, system-update actions, Up next, custom labels, the pause-menu memory-card switch and the idle slideshow.
+
+### Fixed
+
+- A PSP state that grew past a size step is handed over padded to the size asked, so Continue no longer refuses it ("wrong size"). A damaged, cut-off or foreign state is still refused.
+- TrimUI Brick: the sound no longer drops out for a moment in the seconds after a wake while Wi-Fi comes back, and a game's sound survives the output reopening; the native PCM stays stopped until the first sound is queued and while the pause menu is open; a game's audio is closed before the display goes dark.
+- TrimUI Brick: a dark panel whose brightness note was lost is recovered.
+- TrimUI Brick: PlayStation games start right away again. The very first start of a PS1 game could hang while the player set up its memory card on the card's FAT file system (also in 0.3.2); the player's file reads and writes are buffered now.
+- Developer deployments keep the bundled player cores, so GBA on the H700 keeps its gpSP default after switching from a release to a main build.
+- Notice snapshots, Spanish "Help & tools" line at Large text and the Settings paths in German and Spanish follow the row and category names.
+
 ## [0.3.2] - 2026-11-10
 
 ### Added
@@ -90,13 +128,12 @@ and versions follow [Semantic Versioning](https://semver.org/) (before 1.0, a mi
   box art and Continue stay as they are. Numbers use clear LCD-style digits and the pause menu, Save and Load, Options and
   game notes fit at every size. The Font row is now called Style. After the update a "New in pocket-ui 0.3.0"
   card offers it: A ("Try Retro") switches it on, B leaves the style as it was.
-- **TrimUI Brick (Beta)**: pocket-ui runs on the TrimUI Brick from a microSD card of its own. Unzip the card download onto an
+- **TrimUI Brick**: pocket-ui runs on the TrimUI Brick from a microSD card of its own. Unzip the card download onto an
   empty card, put it in, switch on; the Brick's stock firmware is not touched, and with your usual card back the Brick is what
   it was. The shelf, pause menu and settings fit its 1024x768 screen; Wi-Fi, Bluetooth pads and headphones, Kids Mode, games
   from your phone, Tailscale and Sync are there, F1 and F2 are quick save and load, and the mute slider and lights work.
   Updates come over Wi-Fi and replace only pocket-ui's own folder: your games, saves and settings stay, a new version that
-  doesn't start goes back to the one before, and a power cut during an update is recovered at the next start. It is a Beta:
-  tested on one Brick so far, so tell us what you find.
+  doesn't start goes back to the one before, and a power cut during an update is recovered at the next start. Tested on one Brick so far; tell us what you find.
 - **A shorter first start**: your language, Wi-Fi, your games, how they stand. The time zone is guessed while the Wi-Fi
   page is up and only asked when there is no clear guess; Box art is one switch on "Your games", which says what it found;
   the look comes last, shown with your own games: the layouts to choose from, with Style (Barlow, Pixel, Rounded, Retro),

@@ -523,11 +523,9 @@ Anbernic RG CubeXX
 PlayStation Vita
 PS Vita
 Tearaway
-Steam Deck
 
 # Android provider system names (console brands).
 GameCube / Wii
-Nintendo Switch
 Sega Saturn
 Mega CD
 Neo Geo / Arcade
@@ -555,7 +553,6 @@ roms/gb/Pokémon Blau.gb
 roms/gba/Metroid Fusion (1).gba
 roms/snes/Chrono Trigger.gba
 roms/Sega Genesis
-Eden
 # The same word in Spanish, so its pattern changes nothing: a device's name with its note (About).
 re:\(experimental\)$
 TrimUI Brick
@@ -579,6 +576,19 @@ Turbo B
 Turbo L
 Turbo R
 Z
+Mode
+Option
+Option 1
+Option 2
+Fire
+Button 1
+Button 2
+Button I
+Button II
+C up
+C down
+C left
+C right
 HOME
 re:^HOME \+ 
 
@@ -627,3 +637,7 @@ TrimUI Brick Pro
 Brick Pro
 # Controller setup title: the pad's product name and the last 8 characters of its id (the snapshots' demo pad ends "-pad-one", src/app_controllers.rs).
 re:^8BitDo SN30 Pro · -pad-
+
+Retroid Pocket Classic
+Retroid Pocket Classic Rev Q
+Stardew Valley

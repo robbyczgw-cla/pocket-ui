@@ -10,8 +10,8 @@ assert serial.startswith('emulator-')and shell('getprop','ro.kernel.qemu').strip
 assert 'package:'in shell('pm','path','com.retroarch'),'Prepare the separate official RetroArch fixture first'
 rom=out/'sms-test.sms';rom.write_bytes(runpy.run_path(str(root/'scripts/testroms.py'))['sega_rom']('sms'))
 shell('mkdir','-p','/sdcard/Download/PocketMvp/sms');run('push',str(rom),'/sdcard/Download/PocketMvp/sms/')
-shell('am','force-stop','com.retroarch');shell('am','force-stop','dev.pocket.spike');shell('logcat','-c')
-shell('am','start','-W','-n','dev.pocket.spike/.PocketActivity','--ez','externalPlayer','true');time.sleep(2)
+shell('am','force-stop','com.retroarch');shell('am','force-stop','xyz.pocketui.app');shell('logcat','-c')
+shell('am','start','-W','-n','xyz.pocketui.app/.PocketActivity','--ez','externalPlayer','true');time.sleep(2)
 shell('input','keyevent','34');time.sleep(1)
 subprocess.check_call([sys.executable,str(root/'scripts/android/select-demo-folder.py'),adb,serial,str(out)]);time.sleep(2)
 sequence=0
@@ -39,7 +39,7 @@ assert 'Auto-start game "saf://'in log and 'sms-test.sms'in log,'RetroArch did n
 assert any('RetroActivityFuture'in line for line in activities.splitlines()if 'topResumedActivity='in line or 'mResumedActivity'in line),'RetroArch is not active'
 assert 'FATAL EXCEPTION'not in log and 'Fatal signal'not in log
 # Returning via our ordinary launcher intent must retain the shelf selection and clear the test-only override.
-shell('am','start','-W','-n','dev.pocket.spike/.PocketActivity');time.sleep(2)
+shell('am','start','-W','-n','xyz.pocketui.app/.PocketActivity');time.sleep(2)
 (out/'shelf-returned.png').write_bytes(run('exec-out','screencap','-p'))
 assert any(n.get('text','').casefold()=='sms-test'and n.get('selected')=='true'for n in tree()),'Selection lost after external launch'
 (out/'device.txt').write_text(shell('getprop')+shell('wm','size')+shell('wm','density'))

@@ -3,6 +3,8 @@
 #   build/image/pocket-ui-<version>-rp-mini-v2.img.xz, its notes (.txt) and SHA256SUMS.
 #
 #   scripts/make-image.sh [--version V] [--bin-dir DIR] [--source TEXT] [--release-url URL] [--out DIR] [--keep-work] [--no-check]
+#     --model        rp-mini-v2 (default), rp5 or flip2; original panel only
+#     --system-file  reuse a repacked SYSTEM only when it matches the pinned MD5
 #     --version      pocket-ui version (default: Cargo.toml); the binaries are built with POCKETUI_VERSION=V
 #     --bin-dir      take pocket-ui, pocket-core and pocket-splash from DIR instead of building them (must answer --version V)
 #     --gba-core     pinned ARM64 gpSP build folder, including licence and corresponding source
@@ -24,12 +26,16 @@
 # Only writes files below OUT and the download cache. Never touches a disk: no dd to /dev, no flashing.
 # Needs Docker (mtools, debugfs, fdtput and GRUB run in containers), cargo zigbuild unless --bin-dir.
 set -eu
+# File modes on the card must not depend on the build machine (a build host with umask 002 gave 664 files the check refuses).
+umask 022
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
 . "$ROOT/scripts/image/pins.sh"
 . "$ROOT/scripts/image/tools.sh"
 UA=pocket-ui-image-build/0.1
 TARGET=aarch64-unknown-linux-gnu
 
+MODEL=rp-mini-v2
+SYSTEM_FILE=
 VERSION=
 BIN_DIR=
 GBA_CORE_DIR=
@@ -40,6 +46,8 @@ KEEP=0
 CHECK=1
 while [ $# -gt 0 ]; do
   case $1 in
+    --model) MODEL=$2; shift ;;
+    --system-file) SYSTEM_FILE=$2; shift ;;
     --version) VERSION=$2; shift ;;
     --bin-dir) BIN_DIR=$2; shift ;;
     --gba-core) GBA_CORE_DIR=$2; shift ;;
@@ -53,18 +61,20 @@ while [ $# -gt 0 ]; do
   esac
   shift
 done
+sm8250_pins "$MODEL"
+export MODEL
 [ -n "$VERSION" ] || VERSION=$(sed -n 's/^version = "\(.*\)"$/\1/p' "$ROOT/Cargo.toml" | head -1)
 case $VERSION in '' | *[!A-Za-z0-9.+-]*) echo "bad version: '$VERSION'" >&2; exit 2 ;; esac
 case $OUT in /dev/* | /dev) echo "refusing to write to $OUT" >&2; exit 2 ;; esac
 mkdir -p "$OUT/work"
 OUT=$(cd "$OUT" && pwd)
 W=$OUT/work
-NAME=pocket-ui-$VERSION-rp-mini-v2
+NAME=pocket-ui-$VERSION-$MODEL
 say() { printf '\n== %s\n' "$*"; }
 die() { echo "make-image: $*" >&2; exit 1; }
 sha() { shasum -a 256 "$1" | cut -d' ' -f1; }
 TOOLS=$(tools_image)
-in_tools() { docker run --rm -v "$W:/w" -v "$ROOT:/repo:ro" "$TOOLS" "$@"; }
+in_tools() { docker run --rm -e MODEL="$MODEL" -v "$W:/w" -v "$ROOT:/repo:ro" "$TOOLS" "$@"; }
 
 # The repository's own commit, for the notes; "-dirty" when the files differ from it.
 REPO_COMMIT=$(git -C "$ROOT" rev-parse HEAD 2>/dev/null || echo unknown)
@@ -106,11 +116,21 @@ fi
 in_tools sh /repo/scripts/image/build.sh extract
 
 say "SYSTEM without $(echo $SYSTEM_REMOVE | wc -w) paths (pins.sh SYSTEM_REMOVE; takes a while: zstd level 19)"
-docker run --rm -e SQUASH_CPUS="${SQUASH_CPUS:-4}" -v "$W:/w" -v "$ROOT:/repo:ro" "$TOOLS" nice -n 19 sh /repo/scripts/image/build.sh strip-system
+if [ -n "$SYSTEM_FILE" ]; then
+  [ "$(md5 -q "$SYSTEM_FILE" 2>/dev/null || md5sum "$SYSTEM_FILE" | cut -d' ' -f1)" = "$POCKET_SYSTEM_MD5" ] || die "--system-file is not the pinned repack"
+  cp "$SYSTEM_FILE" "$W/SYSTEM"
+else
+  docker run --rm -e SQUASH_CPUS="${SQUASH_CPUS:-2}" -v "$W:/w" -v "$ROOT:/repo:ro" "$TOOLS" nice -n 19 sh /repo/scripts/image/build.sh strip-system
+fi
 
 say "boot files (scripts/make-sd-efi.sh)"
 rm -rf "$W/sd-efi"
-sh "$ROOT/scripts/make-sd-efi.sh" "$W/KERNEL" "$W/miniv2-noufs.dtb" "$W/sd-efi" >/dev/null
+sh "$ROOT/scripts/make-sd-efi.sh" "$W/KERNEL" "$W/$SM8250_DTB_FILE" "$W/sd-efi" >/dev/null
+if [ "$MODEL" != rp-mini-v2 ]; then
+  mv "$W/sd-efi/boot/pocket/miniv2-noufs.dtb" "$W/sd-efi/boot/pocket/$SM8250_DTB_FILE"
+  sed "s/miniv2-noufs.dtb/$SM8250_DTB_FILE/g" "$ROOT/deploy/sd-efi/grub.cfg" >"$W/sd-efi/boot/grub/grub.cfg"
+  sed "s/miniv2-noufs.dtb/$SM8250_DTB_FILE/g" "$ROOT/deploy/sd-efi/loader/entries/pocket-ui.conf" >"$W/sd-efi/loader/entries/pocket-ui.conf"
+fi
 [ "$(md5 -q "$W/sd-efi/boot/pocket/Image" 2>/dev/null || md5sum "$W/sd-efi/boot/pocket/Image" | cut -d' ' -f1)" = "$IMAGE_MD5" ] ||
   die "boot/pocket/Image differs from the kernel that booted on the device"
 GRUB_VERSION=$(cat "$W/sd-efi/boot/grub/grub-efi-arm64-bin.version")
@@ -141,6 +161,23 @@ for f in README SOURCE-OFFER; do
     "$ROOT/deploy/image/$f.txt.in" >"$W/info/$f.txt"
   ! grep -n '@[A-Z_]*@' "$W/info/$f.txt" || die "placeholder left in $f.txt"
 done
+if [ "$MODEL" != rp-mini-v2 ]; then
+  python3 - "$W/info/README.txt" "$SM8250_MODEL_NAME" "$SM8250_DTB_FILE" "$MODEL" <<'PYNOTES'
+from pathlib import Path
+import sys
+p=Path(sys.argv[1]); s=p.read_text()
+s=s.replace('Retroid Pocket Mini V2', sys.argv[2]).replace('the Mini V2', 'the device').replace('a Mini V2', 'a device')
+s=s.replace('miniv2-noufs.dtb', sys.argv[3])
+s=s.replace('FAT partition "ROCKNIX" (readable on any computer):', 'FAT partition "ROCKNIX" (an EFI system partition: Linux shows it, Windows and macOS hide it):').replace('-rp-mini-v2.img.xz', '-'+sys.argv[4]+'.img.xz')
+a=s.index('These steps are for'); b=s.index('1. Write',a)
+s=s[:a]+('EXPERIMENTAL — tested: no; testers wanted. No hardware boot has been verified.\n'
+'Made for Retroid\'s stock bootloader with a working Retroid u-boot in loader ("Boot mode: Loader").\n'
+'The card also carries the files OpenABL (ROCKNIX\'s bootloader, "Boot mode: Linux") and other UEFI\n'
+'loaders start from a card; those ways are untested too.\n'
+'No bootloader flashing is included or required by this image. Panel: original, not Visionox.\n\n')+s[b:]
+p.write_text(s)
+PYNOTES
+fi
 # The system's name and version for Settings > About (src/update.rs os_brand_line).
 printf 'NAME=%s\nVERSION=%s\n' "$POCKET_OS_NAME" "$VERSION" >"$W/info/pocket-ui-os.txt"
 # ROCKNIX's LICENSE.md and licenses folder at the pinned tag (they are not inside SYSTEM), checked against the commit.
@@ -179,7 +216,9 @@ in_tools sh /repo/scripts/image/build.sh assemble "$VERSION" "$EPOCH"
 
 say "compressing"
 rm -f "$OUT/$NAME.img.xz"
-in_tools sh -c 'xz -T0 -6 -c /w/image.img >/w/out.img.xz'
+in_tools nice -n 19 sh -c 'xz -T2 -6 -c /w/image.img >/w/out.img.xz'
+# Release raw working copies immediately, including with --keep-work.
+in_tools rm -f /w/image.img /w/base.img
 # What the containers wrote (KERNEL, the device tree, the image) back to the user running this: on Linux it is root's.
 in_tools chown -R "$(id -u):$(id -g)" /w 2>/dev/null || true
 mv "$W/out.img.xz" "$OUT/$NAME.img.xz"

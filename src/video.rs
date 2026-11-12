@@ -472,6 +472,9 @@ pub struct Renderer {
     copy_fbos: Option<(glow::Framebuffer, glow::Framebuffer)>,
     /// GPU time of the picture pass, when asked for (`POCKET_CORE_GPU_TIMER=1`, `set_gpu_timer`).
     timer: Option<GpuTimer>,
+    /// The old-TV power-on squeezes the picture into its lit part (`crt_on::picture`): (top, height) in view pixels for
+    /// the next `draw`; the frame around it stays where it is.
+    squeeze: Option<(f32, f32)>,
 }
 
 /// GL timer queries around the picture pass (`GL_EXT_disjoint_timer_query` on GLES, `GL_ARB_timer_query` on desktop
@@ -571,6 +574,7 @@ impl Renderer {
             offscreen: None,
             copy_fbos: None,
             timer: None,
+            squeeze: None,
         })
         .map(|mut r: Renderer| {
             if std::env::var_os("POCKET_CORE_GPU_TIMER").is_some() {
@@ -767,6 +771,19 @@ impl Renderer {
     }
 
     /// The GL context, for things drawn on top of the picture (see `overlay`).
+    /// What has been drawn for the screen so far (the window's own buffer, before it is swapped): RGBA, rows bottom to
+    /// top as GL reads them. For a frame dump (`frame_dump`).
+    pub fn read_screen(&self, w: u32, h: u32) -> Vec<u8> {
+        let mut out = vec![0u8; (w * h * 4) as usize];
+        // SAFETY: reads into a buffer of exactly w * h RGBA pixels with rows packed 4-aligned.
+        unsafe {
+            self.gl.bind_framebuffer(glow::FRAMEBUFFER, None);
+            self.gl.pixel_store_i32(glow::PACK_ALIGNMENT, 4);
+            self.gl.read_pixels(0, 0, w as i32, h as i32, glow::RGBA, glow::UNSIGNED_BYTE, glow::PixelPackData::Slice(&mut out));
+        }
+        out
+    }
+
     pub fn gl(&self) -> &glow::Context {
         &self.gl
     }
@@ -892,6 +909,11 @@ impl Renderer {
         Some(crate::touch::Picture { x: r.x as f32, y: r.y as f32, w: r.w as f32, h: r.h as f32, frame_w: fw, frame_h: fh, turns: self.turns(settings) })
     }
 
+    /// The picture of the following `draw`s squeezed to (top, height) in view pixels (`crt_on::picture`), or as placed.
+    pub fn set_squeeze(&mut self, squeeze: Option<(f32, f32)>) {
+        self.squeeze = squeeze;
+    }
+
     /// Clears the viewport to black and draws the last uploaded frame. `aspect` is the core's
     /// display aspect ratio (0: the frame's own).
     pub fn draw(&mut self, view_w: u32, view_h: u32, aspect: f32, settings: &VideoSettings) {
@@ -951,6 +973,11 @@ impl Renderer {
             _ => self.programs[&PLAIN].as_ref().expect("the plain variant"),
         };
 
+        // The old-TV power-on: the picture squeezed into what is lit, the frame around it as placed.
+        let r = match self.squeeze {
+            Some((top, height)) => Rect { y: top.round().max(0.0) as u32, h: (height.round() as u32).max(1), ..r },
+            None => r,
+        };
         let gl = &self.gl;
         // The GPU timer (debug) brackets the picture pass alone, not the frame around it or the HUD.
         let timed = self.timer.as_mut().and_then(|t| t.free.pop());

@@ -11,14 +11,11 @@ home:-2
 curator:hub:shelf:6
 shelf:gba
 shelf:gba:shelf
-shelf:snes:minimal
-shelf:gba:cards
 shelf:psx:split
 # Systems whose games have no covers and whose fact sheets are the newest (Xbox, Wii U, PS3).
 shelf:xbox
 shelf:wiiu
 shelf:ps3
-shelf:ps3:cards
 shelf:psvita
 cabinet:dd
 cabinet:ddrra
@@ -160,6 +157,10 @@ settings:5:4
 settings:5:5
 settings:6:0
 settings:6:1
+settings:7:0
+settings:7:1
+settings:7:2
+settings:7:3
 settings:6:2
 settings:6:3
 settings:6:4
@@ -313,7 +314,7 @@ cozy:5
 cozy:6
 cozy:7
 cozy:8
-cozy:0:case_sounds,cabinet_tv,pause_memory_card
+cozy:0:case_sounds,cabinet_tv
 perf
 perf:3
 perf:0:waiting
@@ -341,9 +342,6 @@ achievements:password
 achievements:signing
 achievements:error
 achievements:confirm
-store
-store:list
-store:detail
 game-check
 game-check:1
 game-check:running
@@ -531,7 +529,7 @@ slot-load:xbox
 slot-save:psp
 slot-save:gamecube
 info:split:snes:chrono:saves
-info:minimal:gba:golden:saves=none
+info:split:gba:golden:saves=none
 box:gba:advance:saves:end
 options
 picture
@@ -689,10 +687,8 @@ curator:home:shelf:shelf
 curator:home:shelf:sticker
 curator:home:split
 curator:home:split:favorites
-curator:home:cards
 curator:home:shelf:justplay
 curator:home:split:justplay
-curator:home:cards:justplay
 curator:home:cabinet:justplay
 curator:cabinet:ddr
 curator:hub
@@ -712,10 +708,10 @@ curator:card:ps2:revenge:battery=system
 curator:card:ps2:revenge:battery=all
 curator:card:ps2:revenge:battery=measuring
 curator:card:ps2:revenge:battery=charging
-info:minimal:gba:golden
-info:cards:ps2:revenge
+info:split:gba:golden
+info:split:ps2:revenge
 info:split:snes:chrono
-info:minimal:snes:chrono:y
+info:split:snes:chrono:y
 curator:card:ps2:takedown
 curator:card:ps2:revenge:yddddrr
 curator:card:ps2:pursuit:ydddd
@@ -730,8 +726,8 @@ curator:card:gba:aria:lookup=unreachable
 curator:lens:S
 curator:lens:Sddas
 curator:options:da
-curator:surprise:1:1
-curator:surprise:empty
+curator:justplay-card:1:1
+curator:justplay-card:empty
 curator:history
 curator:history:month
 curator:history:year
@@ -767,7 +763,6 @@ curator:versions:snes:chrono
 curator:stickers:snes:mario
 curator:settings
 curator:settings:5
-curator:upnext:ps2:revenge
 curator:cabinet:ddrrra
 curator:cabinetlens:rda
 
@@ -831,11 +826,11 @@ box:ports:celeste
 box:wiiu:mario:r
 shelf:snes:shelf
 shelf:wiiu:shelf
-info:minimal:ps2:revenge:dddd
-info:minimal:ps2:revenge:da
-info:cards:ps2:revenge:dda
+info:split:ps2:revenge:dddd
+info:split:ps2:revenge:da
+info:split:ps2:revenge:dda
 info:split:ps2:revenge:ddda
-info:minimal:ps2:revenge:dddda
+info:split:ps2:revenge:dddda
 info:shelf:ps2:revenge:rd
 
 # Kids Mode (docs/KIDS-MODE.md): the child's screens, the grown-up's flow, the door in front of safe mode. The games are in

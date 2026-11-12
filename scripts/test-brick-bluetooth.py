@@ -5,8 +5,10 @@ import os
 from pathlib import Path
 import socket
 import subprocess
+import sys
 import tarfile
 import tempfile
+import time
 import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -22,7 +24,7 @@ class BluetoothService(unittest.TestCase):
                         BRICK_RUN=str(self.d / 'run'), BRICK_STATE=str(self.d / 'state'),
                         BRICK_BT_STORE=str(self.d / 'store'), BRICK_BT_HCI=str(self.d / 'hci'),
                         BRICK_RFKILL=str(self.d / 'rfkill'), BRICK_BT_BUS=str(self.d / 'bus'),
-                        BRICK_BT_PIDOF='/bin/false')
+                        BRICK_BT_PIDOF='/bin/false', BRICK_HCICONFIG='/bin/true')
         for p in ['hci', 'state', 'rfkill/rfkill0', 'rfkill/rfkill1']:
             (self.d / p).mkdir(parents=True)
         (self.d / 'rfkill/rfkill0/type').write_text('bluetooth\n')
@@ -58,6 +60,9 @@ elif args[:1] == ['info']:
     on = (Path(os.environ['BRICK_DATA'] + '.connected').exists() and headset)
     print('Device %s\\n\\tConnected: %s' % (args[1], 'yes' if on else 'no'))
     print('\\tUUID: Audio Sink                (0000110b-0000-1000-8000-00805f9b34fb)' if headset else '\\tUUID: Human Interface Device    (00001124-0000-1000-8000-00805f9b34fb)')
+elif args[:1] == ['connect']:
+    open(os.environ['BRICK_DATA'] + '.connects', 'a').write(args[1] + '\\n')
+    print('Connection successful')
 elif args[:1] == ['remove']:
     (Path(os.environ['BRICK_RUN']) / 'bluetooth/keys/test/info').unlink()
     print('Device has been removed')
@@ -99,6 +104,58 @@ else:
         self.assertFalse((self.d / 'state/bluetooth-on').exists())
         self.call('start')
         self.assertFalse((self.d / 'run/bluetooth/keys/test/info').exists())
+
+    def test_a_chip_that_answers_nothing_is_attached_once_more(self):
+        # 08.11.: after the first sleep helper's rfkill cycles hci0 stayed but answered nothing (HCI timeouts): the attach that
+        # holds it (exactly hciattach -n ttyS1 xradio) ends, the Bluetooth chip's power is reset, a new attach comes up.
+        (self.d / 'rfkill/rfkill0/name').write_text('sunxi-bt\n')
+        (self.d / 'rfkill/rfkill1/name').write_text('phy0\n')
+        self.env['BRICK_HCICONFIG'] = '/bin/false'
+        hci = self.d / 'hci'
+        stale = subprocess.Popen([sys.executable, '-c', 'import os,signal,sys,time\n'
+                                  'signal.signal(signal.SIGTERM, lambda *_: (os.rmdir(sys.argv[1]), sys.exit(0)))\n'
+                                  'time.sleep(60)', str(hci)])
+        self.addCleanup(lambda: stale.poll() is None and stale.kill())
+        attach = self.stub('BRICK_BT_ATTACH', 'hciattach', """import os, sys, time
+from pathlib import Path
+Path(os.environ['BRICK_BT_HCI']).mkdir(exist_ok=True)
+open(os.environ['BRICK_DATA'] + '.attached', 'a').write(' '.join(sys.argv[1:]) + '\\n')
+time.sleep(60)
+""")
+        proc = self.d / 'attach-proc' / str(stale.pid)
+        proc.mkdir(parents=True)
+        (proc / 'cmdline').write_bytes(f'{attach}\0-n\0ttyS1\0xradio\0'.encode())
+        self.env['BRICK_BT_ATTACH_PROC'] = str(self.d / 'attach-proc')
+        self.stub('BRICK_BT_ATTACH_PIDOF', 'attach-pidof', f'print({stale.pid})\n')
+        wifi = (self.d / 'rfkill/rfkill1/state').stat().st_mtime_ns
+        self.call('start')
+        self.assertIsNotNone(stale.wait(timeout=5), 'the old attach ended')
+        self.assertEqual(Path(self.env['BRICK_DATA'] + '.attached').read_text(), '-n ttyS1 xradio\n', 'one new attach')
+        self.assertEqual((self.d / 'rfkill/rfkill0/state').read_text(), '1\n')
+        self.assertEqual((self.d / 'rfkill/rfkill1/state').stat().st_mtime_ns, wifi, 'never the Wi-Fi rfkill')
+        self.call('status')
+
+    def test_sleep_keeps_bluetooth_on_and_asks_the_headphones_back(self):
+        # The system's sleep (brick-suspend): Settings' "on" stays, and the headphones connected before are asked to
+        # connect again when the service is back; a plain stop forgets them.
+        self.call('start')
+        (self.d / 'run/bt-audio').write_text('AA:BB:CC:DD:EE:FF\n')
+        self.call('sleep')
+        self.assertTrue((self.d / 'state/bluetooth-on').exists(), 'still on in Settings')
+        self.assertNotEqual(self.call('status', check=False).returncode, 0, 'the service ended for the suspend')
+        self.call('start')
+        connects = Path(self.env['BRICK_DATA'] + '.connects')
+        deadline = time.monotonic() + 10
+        while not connects.exists() and time.monotonic() < deadline:
+            time.sleep(0.1)
+        self.assertEqual(connects.read_text(), 'AA:BB:CC:DD:EE:FF\n')
+        self.call('stop')
+        self.assertFalse((self.d / 'run/bluetooth/reconnect').exists())
+
+    def test_a_chip_that_answers_is_left_attached(self):
+        self.stub('BRICK_BT_ATTACH_PIDOF', 'attach-pidof', 'raise SystemExit("asked for the attach")\n')
+        self.call('start')
+        self.assertFalse(Path(self.env['BRICK_DATA'] + '.attached').exists())
 
     def test_foreign_daemon_is_refused_without_mount(self):
         self.env['BRICK_BT_PIDOF'] = '/bin/true'

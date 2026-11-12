@@ -17,7 +17,7 @@ for r in cases:
 assert sh('getprop','ro.kernel.qemu').strip()=='1'
 for r in cases:
  folder='/sdcard/Download/PocketMvp/'+r['system'];sh('mkdir','-p',folder);run('push',str(out/r['name']),folder+'/')
-sh('am','force-stop','dev.pocket.spike');sh('am','start','-W','-n','dev.pocket.spike/.PocketActivity');time.sleep(2);sh('input','keyevent','34');time.sleep(1)
+sh('am','force-stop','xyz.pocketui.app');sh('am','start','-W','-n','xyz.pocketui.app/.PocketActivity');time.sleep(2);sh('input','keyevent','34');time.sleep(1)
 subprocess.check_call([sys.executable,str(root/'scripts/android/select-demo-folder.py'),adb,serial,str(out)]);time.sleep(2)
 def nodes():
  raw=run('exec-out','uiautomator','dump','/dev/tty').decode();return list(ET.fromstring(raw[raw.index('<?xml'):raw.index('</hierarchy>')+12]).iter('node'))

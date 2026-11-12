@@ -141,7 +141,7 @@ storage. So you copy files over, from a backup on your computer.
 | Way | Good for | Not for |
 |---|---|---|
 | **File sharing** (Settings → Games → Add games, X) | Everything under `roms`: games, `.srm`, `.sav`, `.rtc` next to a game, PS2 memory cards in `roms/ps2`, `bios`, `savestates`, `ports`, `PortMaster` | needs the handheld on Wi-Fi |
-| **Remote access (SSH)** (Settings → Connections) | Everything, also outside `roms` | needs a computer that can log in over the network |
+| **Remote access (SSH)** (Settings → Help & tools → For tinkerers) | Everything, also outside `roms` | needs a computer that can log in over the network |
 | **SD card in a computer** | Everything, but STORAGE uses Linux's ext4, which Windows and macOS cannot write | Windows and macOS without extra software |
 | **Sync** (Syncthing) | Keeping saves in step with a computer or another handheld, after the first copy ([Sync](sync.md)) | a first copy out of Android's storage: copy to your computer first |
 | **Web companion** | Games and BIOS files | saves: it only takes game, BIOS and PortMaster files |

@@ -81,7 +81,7 @@ Good to know:
   pictures? Look up again** ([the game card](library.md#wrong-pictures-look-up-again)).
 - Covers are kept on the SD card, in `/storage/.config/pocket-ui/covers/<system>/<game file name>.png`.
   You can put your own PNG image there under the same name.
-- Covers appear in the Shelf, Split, Cards and Cabinet looks, not in Minimal. In the Shelf and Cabinet looks they are
+- Covers appear in every look. In the Shelf and Cabinet looks they are
   also printed on the game's cartridge label and on its disc.
 
 ### Pictures
@@ -171,7 +171,9 @@ PortMaster itself is prepared automatically the first time you install something
 On the standalone TrimUI card, accept **Get PortMaster (~300 MB, one time)** first. This optional download
 needs Wi-Fi and at least 700 MiB free while installing. Progress and errors appear here; B stops the download
 and returns to Extras. Retry keeps the completed download checkpoint. Downloads stop while a game is played. The runtime stays on this card across
-ordinary pocket-ui updates; a changed runtime version offers **Update PortMaster**. It is not included in each
+ordinary pocket-ui updates; a changed runtime version offers **Update PortMaster**.
+On the original Brick, preparation writes slowly to protect the SD card. Allow about 2½ minutes for
+277 MB, plus download and card delays. **Preparing PortMaster…** shows changing MB counts; B still cancels. It is not included in each
 app update. The list also checks this board's controls and firmware requirements; not every PC port will run.
 MENU opens the pause menu on TrimUI. Port controls are the game's own; the original Brick has no sticks.
 
@@ -224,33 +226,10 @@ instructions with X in the list.
 Many of these games prepare your files the first time they start. That can take several minutes, and some
 empty the folder you copied into afterwards; that is normal.
 
-## Store
-
-The Store is a page for optional extras, so the system itself can stay small. **It is not open yet:** there is no
-public store, so Settings → Help & tools has no Store row and nothing else leads to the page. The row appears by itself
-on a device that has a store set up (a `store_url` in settings.json, see [STORE.md](../STORE.md)). What the page
-will hold:
-
-- other emulator cores and newer versions of cores
-- screen frames (bezels) for games on pocket-ui's own host
-- fonts (the only kind of theme so far)
-- small tools
-
-The page has three levels: categories, the packages in a category, and one package with its description, size
-and version. It installs, updates, runs (tools) and removes packages. Installed tools are also listed under
-Settings → Help & tools → [Tools](#tools), next to ROCKNIX's own. It has the same protections as
-[Updates](updates.md): the list of packages is signed, every download is checked before anything is unpacked,
-and removing a package deletes exactly the files it added. The Store does **not** offer BIOS files.
-
-The page is built and tested against a local test catalogue only. Tools you installed from a store earlier stay
-under Settings → Help & tools → [Tools](#tools), whether the Store row is there or not.
-
-For the format of packages and how a catalogue is signed, see [STORE.md](../STORE.md).
-
 ## Tools
 
 Settings → Help & tools → **Tools** starts ROCKNIX's own tools, which used to need ROCKNIX's old menu (EmulationStation), and the
-tools you installed from the [Store](extras.md#store). The right end of each row says what it is:
+tools you installed from the package installer. The right end of each row says what it is:
 
 - **Emulator**: an emulator's own menus, for settings pocket-ui has no page for: **RetroArch** (cores, shaders, input),
   **Dolphin**, **PPSSPP**, **Azahar**, **ARMSX2**, DuckStation, melonDS, Flycast, ScummVM and more.

@@ -172,7 +172,7 @@ pub fn create(data_dir: &Path, root: &Path, reason: Reason, now: u64, app: &str)
             if let Some(parent) = to.parent() {
                 std::fs::create_dir_all(parent).map_err(|e| format!("{}: {e}", parent.display()))?;
             }
-            crate::fsutil::write_atomic(&to, &data).map_err(|e| format!("{rel}: {e}"))?;
+            crate::fsutil::write_atomic_bulk(&to, &data).map_err(|e| format!("{rel}: {e}"))?;
         }
         let manifest = Manifest { version: 1, created: now, reason, app: app.to_string(), files: files.clone() };
         // Plain, without write_json's .bak twin: the folder holds what its list names and the list.
@@ -230,7 +230,7 @@ pub fn restore(data_dir: &Path, backup: &Path, root: &Path, now: u64, app: &str)
         if let Some(parent) = to.parent() {
             std::fs::create_dir_all(parent).map_err(|e| format!("{}: {e}", parent.display()))?;
         }
-        crate::fsutil::write_atomic(&to, &bytes).map_err(|e| format!("{rel}: {e}"))?;
+        crate::fsutil::write_atomic_bulk(&to, &bytes).map_err(|e| format!("{rel}: {e}"))?;
     }
     Ok(before)
 }

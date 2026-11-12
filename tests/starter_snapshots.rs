@@ -150,22 +150,3 @@ fn the_offline_note_on_an_empty_home_wraps_inside_the_screen() {
     assert!(seen.contains("nicht online") && seen.contains("noch einmal"), "the whole note is painted: {seen}");
     drop(stub);
 }
-
-/// House rule "never a blank where a figure goes": a store device whose catalog never loaded still paints words and
-/// art on the list and detail pages (they once painted only the two pills).
-#[test]
-fn the_store_pages_are_never_blank_without_a_catalog() {
-    let _tmp_guard = tempfile::tempdir().unwrap();
-    let tmp = _tmp_guard.path().to_path_buf();
-    let status = Command::new("python3").env("POCKETUI_MOCK_NOW", FIXTURE_NOW)
-        .args(["-I", &format!("{ROOT}/scripts/curator-fake-library.py"), tmp.to_str().unwrap(), "dark"])
-        .stdout(std::process::Stdio::null())
-        .status()
-        .expect("python3 for scripts/curator-fake-library.py");
-    assert!(status.success());
-    let stub = wayland(&tmp);
-    for state in ["store", "store:list", "store:detail", "store:list:tools"] {
-        let lines = painted(&tmp, &stub, state);
-        assert!(!lines.is_empty(), "{state} painted no words: {lines:?}");
-    }
-}

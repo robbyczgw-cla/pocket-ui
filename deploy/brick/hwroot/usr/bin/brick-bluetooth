@@ -101,7 +101,7 @@ ctl() {
   # Firmware has no timeout utility. Own watchdog bounds every one-shot bluetoothctl invocation.
   "$CTL" "$@" >"$BT/reply" 2>&1 &
   q=$!
-  ( sleep "${BRICK_BT_TIMEOUT:-4}";
+  ( sleep "${CTL_WAIT:-${BRICK_BT_TIMEOUT:-4}}";
     tr '\000' '\n' <"${BRICK_PROC:-/proc}/$q/cmdline" 2>/dev/null | grep -Fxq "$CTL" && kill -KILL "$q" 2>/dev/null
   ) &
   timer=$!
@@ -195,11 +195,32 @@ case "${1:-}" in
     for r in "$RFK"/rfkill*; do
       [ "$(cat "$r/type" 2>/dev/null)" != bluetooth ] || echo 1 >"$r/state" || exit 1
     done
+    # A chip that is attached but answers nothing (its Bluetooth firmware gone: an rfkill cycled under the attach, as the first
+    # sleep helper did, 08.11.) is attached once more, as the firmware's own bt_init does: that attach (exactly this command)
+    # ends, the chip's power is reset, a new attach. Never the Wi-Fi rfkill: the XR829 is one chip for both.
+    ATTACH=${BRICK_BT_ATTACH:-/usr/bin/hciattach}
+    reset=0
+    if [ -d "$HCI" ] && ! "${BRICK_HCICONFIG:-hciconfig}" hci0 up >/dev/null 2>&1; then
+      echo 'brick-bluetooth: the chip does not answer; attaching it again'
+      for p in $("${BRICK_BT_ATTACH_PIDOF:-pidof}" "$(basename "$ATTACH")" 2>/dev/null); do
+        case "$p" in ''|*[!0-9]*) continue ;; esac
+        [ "$(tr '\000' ' ' <"${BRICK_BT_ATTACH_PROC:-/proc}/$p/cmdline" 2>/dev/null)" = "$ATTACH -n ttyS1 xradio " ] && kill "$p" 2>/dev/null
+      done
+      n=0; while [ -d "$HCI" ] && [ "$n" -lt 10 ]; do sleep 1; n=$((n + 1)); done
+      [ ! -d "$HCI" ] || { echo 'brick-bluetooth: the chip does not answer and its attach stays'; exit 1; }
+      reset=1
+    fi
     if [ ! -d "$HCI" ]; then
       "${BRICK_BT_PIDOF:-pidof}" hciattach >/dev/null 2>&1 && { echo 'firmware HCI attach is still starting; retry later'; exit 1; }
+      if [ "$reset" = 1 ]; then
+        for r in "$RFK"/rfkill*; do
+          [ "$(cat "$r/type" 2>/dev/null)" = bluetooth ] && [ "$(cat "$r/name" 2>/dev/null)" = sunxi-bt ] || continue
+          echo 0 >"$r/state"; sleep 1; echo 1 >"$r/state"; sleep 1
+        done
+      fi
       # This Brick's firmware uses XR829 on UART1. No vendor reset script, no other process killed.
       [ ! -w "${BRICK_BT_WRITE:-/proc/bluetooth/sleep/btwrite}" ] || echo 1 >"${BRICK_BT_WRITE:-/proc/bluetooth/sleep/btwrite}"
-      "${BRICK_BT_ATTACH:-/usr/bin/hciattach}" -n ttyS1 xradio >>"$BT/attach.log" 2>&1 &
+      "$ATTACH" -n ttyS1 xradio >>"$BT/attach.log" 2>&1 &
       echo $! >"$BT/attach.pid"
       n=0; while [ ! -d "$HCI" ] && [ "$n" -lt 7 ]; do sleep 1; n=$((n + 1)); done
       [ -d "$HCI" ] || exit 1
@@ -235,6 +256,13 @@ case "${1:-}" in
       echo $! >"$BT/bluealsa.pid"
     fi
     : >"$BT/ready"
+    # Back from the system's sleep (`sleep` below): the headphones that were connected then are asked to come back.
+    if [ -s "$BT/reconnect" ]; then
+      mac=$(cat "$BT/reconnect"); rm -f "$BT/reconnect"
+      CTL_WAIT=${BRICK_BT_CONNECT_WAIT:-12}
+      ctl connect "$mac" | grep -q 'Connection successful' && echo "brick-bluetooth: $mac connected again after sleep"
+      CTL_WAIT=
+    fi
     n=0
     while owned daemon "$DAEMON" && owned agent "$CTL"; do
       sleep 1; n=$((n + 1))
@@ -246,8 +274,14 @@ case "${1:-}" in
       fi
     done
     exit 1 ;;
-  stop)
-    rm -f "$STATE/bluetooth-on"
+  stop|sleep)
+    # sleep: the system's suspend (brick-suspend): Settings' "on" stays and the headphones connected now come back after it.
+    if [ "$1" = sleep ]; then
+      a=$(cat "$ROUTE" 2>/dev/null)
+      if [ -n "$a" ]; then echo "$a" >"$BT/reconnect"; else rm -f "$BT/reconnect"; fi
+    else
+      rm -f "$STATE/bluetooth-on" "$BT/reconnect"
+    fi
     if owned service "$SELF"; then
       p=$(cat "$BT/service.pid"); kill "$p" 2>/dev/null
       n=0; while owned service "$SELF" && [ "$n" -lt 25 ]; do sleep 1; n=$((n + 1)); done
@@ -257,5 +291,5 @@ case "${1:-}" in
   status) [ -f "$BT/ready" ] && owned service "$SELF" && owned daemon "$DAEMON" && owned agent "$CTL" ;;
   audio) cat "$ROUTE" 2>/dev/null ;;
   save) save ;;
-  *) echo 'usage: brick-bluetooth start|stop|status|save|audio' >&2; exit 2 ;;
+  *) echo 'usage: brick-bluetooth start|stop|sleep|status|save|audio' >&2; exit 2 ;;
 esac

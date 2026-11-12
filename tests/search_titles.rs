@@ -127,7 +127,7 @@ fn shoot(tmp: &Path, lib: &Path, stub: &Option<PathBuf>, id: usize, j: &Job) -> 
         .env("POCKETUI_LANG", j.lang)
         .env("POCKETUI_TEXT_SIZE", j.text)
         .env("POCKETUI_SNAPSHOT_SIZE", j.size)
-        .env("POCKETUI_FONT", if j.retro { "pixel" } else { "barlow" })
+        .env("POCKETUI_FONT", if j.retro { "retro" } else { "barlow" })
         .env("POCKETUI_TEXT_BOXES", &boxes)
         .env("POCKETUI_NAV_PROBE", &probe)
         .env("POCKETUI_ES_SYSTEMS", lib.join("es_systems.cfg"))

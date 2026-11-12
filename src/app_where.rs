@@ -73,7 +73,6 @@ pub(crate) enum Cover {
     Time(&'static str),
     Power,
     Leave,
-    Slideshow,
 }
 
 impl Cover {
@@ -85,7 +84,6 @@ impl Cover {
             Cover::Time(view) => view,
             Cover::Power => "power",
             Cover::Leave => "leave",
-            Cover::Slideshow => "slideshow",
         }
     }
 }
@@ -102,7 +100,6 @@ fn settings_name(page: SettingsPage) -> String {
     match page {
         Groups(_) => "Groups",
         List(row) => return format!("List {}", SETTINGS_GROUPS[app_settings_groups::group_of(row)].0.trim_end_matches('\u{200b}')),
-        Store => "Store",
         Starter => "Starter",
         GameCheck => "GameCheck",
         Updates => "Updates",
@@ -441,10 +438,6 @@ impl App {
     pub(crate) fn where_now(&self) -> Where {
         let place = self.place();
         let mut covers = Vec::new();
-        if self.slideshow_visible() {
-            covers.push(Cover::Slideshow);
-            return Where { place, covers };
-        }
         if self.where_was_i.is_some() {
             covers.push(Cover::WhereWasI);
         }
@@ -468,6 +461,7 @@ impl App {
     /// The game as far as the UI knows: none, starting (its start picture or "Where was I?" up), playing, paused (the
     /// pause menu), quitting (saving on its way out), or an app (a tool, PC streaming).
     fn game_code(&self) -> &'static str {
+        if self.pending_launch.is_some() { return "starting"; }
         let Some(run) = &self.running else { return "none" };
         if run.is_app() {
             return "app";
@@ -549,7 +543,7 @@ impl App {
             match c {
                 Cover::Quick | Cover::Time(_) | Cover::Power => self.sys.ui_mark().hash(&mut h),
                 Cover::Leave => self.leave.as_ref().map(|d| d.sel).hash(&mut h),
-                Cover::WhereWasI | Cover::Notice | Cover::Slideshow => {}
+                Cover::WhereWasI | Cover::Notice => {}
             }
         }
         // Values the rows show (Settings, the quick settings, a card's facts), and the toast an input may say.
@@ -582,7 +576,7 @@ impl App {
                     self.manual.mark().hash(h);
                 }
                 // Each Settings page's own rows (one tuple hashes at most twelve fields).
-                (self.updates.sel, self.sleep_page.sel, self.about_mark(), self.sync_row(), self.tailscale_row(), self.bluetooth_row(), self.perf_fan_row(), self.achievements_row(), self.store.ui_mark(), self.starter.mark()).hash(h);
+                (self.updates.sel, self.sleep_page.sel, self.about_mark(), self.sync_row(), self.tailscale_row(), self.bluetooth_row(), self.perf_fan_row(), self.achievements_row(), self.starter.mark()).hash(h);
                 (self.tools_row(), self.pc_streaming_row(), self.backup_row(), self.web_row(), self.night_light_row(), self.storage_row(), self.gamelist_row(), self.gallery_row(), self.game_check_mark(), self.conflicts_mark(), self.curator_mark()).hash(h);
             }
             Place::Tour => self.tour_mark().hash(h),
@@ -685,11 +679,11 @@ impl App {
     }
 }
 
-/// Where the status file goes: beside the command FIFO (the test driver's folder, else /tmp); None where there is no FIFO.
+/// A probe may redirect status; otherwise beside the test FIFO or /tmp. None where there is no FIFO.
 pub(crate) fn status_writer() -> Option<pocket_ui::ui_status::Writer> {
     #[cfg(any(target_os = "linux", target_os = "emscripten"))]
     {
-        let path = super::test_driver_dir().map_or_else(|| std::path::PathBuf::from(pocket_ui::ui_status::FILE), |d| d.join("ui.status"));
+        let path = pocket_ui::ui_status::output_path(super::test_driver_dir().map(|d| d.as_path()), std::env::var_os("POCKETUI_STATUS"));
         Some(pocket_ui::ui_status::Writer::new(path))
     }
     #[cfg(not(any(target_os = "linux", target_os = "emscripten")))]

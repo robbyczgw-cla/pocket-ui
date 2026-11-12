@@ -48,3 +48,34 @@ its evidence. Never run these destructive QA fixtures against a player's data.
   process restart, upgrade an authentic old raw Auto made from the player's manual slot,
   and keep that manual slot raw. Fixture copies preserve app ownership and permissions;
   a root-owned copy of a private `0600` slot would test an unreadable file instead.
+
+The system-asset installer also has a host-only Java test (no SDK or device): compile
+`android/java/xyz/pocketui/app/SystemAssets.java` and `scripts/android/test/SystemAssetsTest.java`
+with `javac --release 8 -d <temporary classes folder>`, then run
+`java -cp <temporary classes folder> xyz.pocketui.app.SystemAssetsTest`.
+It checks interrupted copies, first-start fonts, completing a partial folder and preserving existing files.
+`python3 -I scripts/android/test-release-check.py` additionally rejects missing/damaged PSP assets in APKs.
+
+## Direct document loading
+
+Compile `GameDirect.java` and `GameDirectTest.java` with Java 8 compatibility and the SDK's `android.jar` on the
+classpath, then run `xyz.pocketui.app.GameDirectTest` with the classes folder and `android.jar` on the runtime
+classpath. It checks direct attempts for all 15 pinned cores (bundled or optional) and explicit fallback reasons for disc sets, parent-dependent CHD
+and unchecked loaders. CHD header tests cover standalone and parent-dependent v3/v4/v5, truncated/unknown headers,
+parent flags and both checksum types. `cargo test --profile gate --lib android_content` exercises original-name alias ownership,
+repeated reopen/seek and provider refusal without payload files. `cargo test --profile gate --lib frozen_phone`
+also exercises old large-game moments and changed documents using Android's actual CRC/fingerprint policy.
+
+`core-info.c`, built with NDK clang and `-ldl`, takes bundled or installed core library paths as arguments and prints their
+names, extensions, `need_fullpath` and `block_extract`. It never calls core initialisation, load, run, audio or input.
+Run it only in an owned device/emulator session. Device evidence must still show real SAF first/repeated starts,
+copy bytes/app storage and unchanged state/SRAM/RTC hashes for PSP, PS1 CUE/BIN and GBA; host routing alone cannot
+establish that a provider permits `/proc/self/fd` reopening or that every native loader accepts the alias.
+
+`vpad.c` is a simulated gamepad for a real device (not an emulator): a uinput device with the buttons, sticks, hat and
+analog triggers of a Bluetooth/USB pad, any name/vendor/product, driven line by line from stdin (`key 305 1`, `abs 9 32767`,
+`quit`). The adb shell may open `/dev/uinput` on the Odin 2 Mini, so no pairing is needed. Build static without the NDK:
+`zig cc -target aarch64-linux-musl -O2 -static vpad.c -o vpad`, push to `/data/local/tmp`, remove afterwards.
+`StickKeysTest.java` (with `StickKeys.java`) runs on the JVM: `javac -d out android/java/xyz/pocketui/app/StickKeys.java
+scripts/android/test/StickKeysTest.java && java -cp out xyz.pocketui.app.StickKeysTest`.
+

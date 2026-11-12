@@ -24,7 +24,7 @@ import time
 import xml.etree.ElementTree as ET
 from pathlib import Path
 
-PACKAGE = 'dev.pocket.spike'
+PACKAGE = 'xyz.pocketui.app'
 NEIGHBOURS = ('Sample Card', 'Sample CD', 'Sample DVD')
 adb, serial, destination = sys.argv[1:4]
 steps = sys.argv[4:]
@@ -100,9 +100,9 @@ def fresh(apk, roms):
         run('push', str(path), folder + '/', timeout=120)
     start()
     # The first start, as a new player goes through it: only the folder is chosen, every other step keeps its default.
-    for step in range(1, 7):
+    for step in range(1, 8):
         for _ in range(16):
-            if find('Step %d of 7' % step) is not None:
+            if find('Step %d of 8' % step) is not None:
                 break
             got_it = find('Got it')
             if got_it is not None:
@@ -330,7 +330,7 @@ def do_setting(label, value):
 def do_sync(name, warm=False):
     """Cold: the output has closed since the last sound. Warm: Play right after the tap that chose the game, as a player does."""
     start('--ez', 'diagnosticAudio', 'true', '--ez', 'insertRehearsal', 'true')
-    sh('rm', '-rf', '/data/data/%s/files/audio-diagnostics' % PACKAGE)
+    sh('rm', '-rf', '/sdcard/Android/data/%s/files/audio-diagnostics' % PACKAGE)
     choose(name)
     if not warm:
         time.sleep(6)
@@ -359,7 +359,7 @@ def do_sync(name, warm=False):
     log = sh('logcat', '-d', '-v', 'monotonic', '-s', 'PocketMvp:I', timeout=30)
     tag = re.sub(r'\W+', '_', name)
     (out / (tag + '-sync.log')).write_text(log)
-    remote = '/data/data/%s/files/audio-diagnostics' % PACKAGE
+    remote = '/sdcard/Android/data/%s/files/audio-diagnostics' % PACKAGE
     target = out / (tag + '-diag')
     shutil.rmtree(target, ignore_errors=True)
     target.mkdir()

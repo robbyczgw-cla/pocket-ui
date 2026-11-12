@@ -13,7 +13,7 @@
 #     the AArch64 release programs: POCKET_STORAGE_BIN_DIR=<folder with pocket-ui, pocket-core, pocket-splash>, or a build in
 #     target/aarch64-unknown-linux-gnu*/release. Without them it fails: a release must not outgrow the image silently (0.3.1 did).
 # Placeholder integrity, language choice, clipping, saves, launch, quit, update and input stay in the gate.
-# First, the complete gate (GATE_FULL=1: every suite, the timing tier, the Brick corpus and UI walk, Deck and Android, the
+# First, the complete gate (GATE_FULL=1: every suite, the timing tier, the Brick corpus and UI walk, Android, the
 # German/Spanish matrix, the shell suites). The merge gate runs a fast subset since 2026-11-10; the nightly run on main
 # and this check run all of it. RELEASE_CHECK_FULL_GATE=0 skips it only when that exact tree already passed a full gate.
 cd "$(dirname "$0")/.." || exit 2

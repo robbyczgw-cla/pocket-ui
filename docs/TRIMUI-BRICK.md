@@ -1,6 +1,6 @@
 # TrimUI Brick under NextUI (design and reference; the Brick's first version)
 
-The public TrimUI Brick support (Beta since 0.3.0) is pocket-ui on a card of its own, see [TRIMUI-BRICK-STANDALONE.md](TRIMUI-BRICK-STANDALONE.md):
+TrimUI Brick support is pocket-ui on a card of its own, see [TRIMUI-BRICK-STANDALONE.md](TRIMUI-BRICK-STANDALONE.md):
 your own microSD card, the Brick's stock firmware untouched, updates over Wi-Fi. This page is the design it grew from, the pak that runs on
 top of NextUI, and the reference for the framebuffer bridge and the test kit.
 
@@ -190,7 +190,7 @@ the game details now make the shelves outside the view apparent. This applies to
 on main), not just Brick. `tests/cabinet_navigation.rs` renders a five-system fixture at 1024×768 and checks
 NES, PlayStation, the final shelf, and return navigation. The scanner is unchanged.
 
-### Launch feedback and printed buttons (beta 8)
+### Launch feedback and printed buttons (development build 8)
 
 A pocket-core load still busy after three seconds shows “Loading the game…” and a spinner. The due timer requests a redraw
 before moving its next wake; otherwise the launch fade has already stopped painting and pocket-fb keeps the old black picture.

@@ -98,7 +98,7 @@ whose words are placed already puts the vignette in the free room under them, al
 The search puts it right of the words (the keyboard may take the room below). "Loading…" pages have none.
 
 **Fronts without a cover** are a printed title card: the console (or the box's emblem: Curator's crate of cartridges,
-Surprise me's gift, Just Play's cartridge with dice, PC streaming's monitor, a sticker's sheet, Favourites' star on a cushion, the search's and the
+Just Play's cartridge with dice, PC streaming's monitor, a sticker's sheet, Favourites' star on a cushion, the search's and the
 Lens's glass, a smart shelf's row of cartridges, the history's notebook) over the name, both
 centred, the pair a little above the label's middle; the name on two lines of about the same width, never a lone
 word or number on the second (`home`, `curator:hub`, `sys:osd-warmth`).
@@ -148,7 +148,7 @@ read rather than glanced at (a fact, an explanation, a note under a list); 21 is
 notes beside larger text. Section headings on a page are Title 37 (the console page, credits, the game card).
 
 ### A game's big name (`src/title_block.rs`)
-The name of the selected game beside or under its cover (Shelf, Cabinet, Cards, Split, Easy) is shown whole. A name with
+The name of the selected game beside or under its cover (Shelf, Cabinet, Split, Easy) is shown whole. A name with
 a subtitle ("The Legend of Zelda - Ocarina of Time", at the first " - " or ": ") is a big main title and a smaller
 line under it without the dash ("Ocarina of Time", seven tenths of the size); a name that fits one line stays as it is.
 At most three lines in all (the Cabinet two: its title and the meta row are all the room above the showcase has, so
@@ -166,26 +166,24 @@ Awakening DX", "Kong Country 3"), the first two sizes for each before a smaller 
 `tests/search_titles.rs` holds that.
 
 ### Font styles (`src/font_style.rs`)
-Settings → Look → Style (settings.json `"font"`: `barlow`, `pixel`, `rounded`, `retro`; Barlow when unset or wrong) swaps the
+Settings → Look → Style (settings.json `"font"`: `barlow`, `pixel`, `retro`; Barlow when unset or wrong) swaps the
 two faces; everything above (the scale, Body 28 as the smallest read text) holds for each:
 
 | Style | Title (names, spines, labels) | Body (meta, hints) |
 |---|---|---|
 | Barlow | Barlow Condensed SemiBold | Barlow Medium |
-| Pixel | Pixelify Sans SemiBold | Barlow Medium, so that small text stays readable |
-| Rounded | Nunito ExtraBold | Nunito SemiBold |
 | Retro | Departure Mono (one weight, monospaced, an 11-pixel grid; letters one font pixel apart) at 0.9 of Barlow Condensed's capitals | Departure Mono at 0.85 of Barlow's, each font pixel whole screen pixels; with it the whole Retro style ([RETRO-STYLE.md](RETRO-STYLE.md)) |
 | Retro Pixelify (`font_style::RetroLetters::Pixelify`) | Pixelify Sans SemiBold | Pixelify Sans Regular at nine tenths of Barlow's capitals (it runs 21 % wider) |
 
 All OFL 1.1, static Latin instances compiled in (about 100 KB for the two new families; `assets/fonts/OFL.txt`). Each
 alternative face is **fitted to Barlow's capitals**: it is rasterised at a size scaled so that its "H" (bounds, top to
 bottom) is as high as the Barlow face's at the same size (the idea of `text_fallback::Fit` for Japanese letters), so baselines,
-row heights and `type_scale` keep working; only the widths differ, and Rounded's are wider than Barlow Condensed's.
+row heights and `type_scale` keep working; only the widths differ, the alternative faces can be wider than Barlow Condensed.
 Painters therefore measure (`Text::width`, `fit`, `wrap`) and never assume Barlow's widths. A pixel font is crisp
 near whole multiples of its pixel grid and a little soft in between; that is accepted. Letters a style's font lacks
 come from the CJK fallback as before. A store theme's `fonts/title.ttf` and `body.ttf` replace the face they name
-whatever the style says; safe mode is always Barlow. `tests/font_styles.rs` runs the layout-risk states at 640×480, Large,
-German for Pixel and Rounded with the same clipping checks as `tests/text_size.rs`.
+whatever the style says; safe mode is always Barlow. Rounded and Pixel went with 0.4 (a saved one is Barlow); Retro's
+text fit is checked by `tests/text_size.rs` (`POCKETUI_RETRO`).
 
 ### Japanese, Chinese and Korean names
 Barlow has no kana or kanji. A letter it lacks comes from the system's **Noto Sans CJK** (ROCKNIX installs
@@ -278,8 +276,8 @@ for the new size (its layouts are kept per width and size).
 writes one line for text that runs into another string or into a hint bar (`O`), for two strings on one line closer than
 a space (`T`) and for text cut by the left or right edge of what it is painted into (`E`) or by the picture's own top or bottom edge (`V`: a heading half off the screen). `tests/text_size.rs` renders
 every state of `tests/i18n-states.txt` in Medium and in Large, English and German, and fails on any line. Pages mark what is covered
-(a dialog, a sheet), painted over (Up next's card), covered by an overlay of their own (the letter an L2/R2 jump shows
-over the list) or cut on purpose (the Cards look's neighbours).
+(a dialog, a sheet), covered by an overlay of their own (the letter an L2/R2 jump shows
+over the list).
 
 ## Phones (Android)
 
@@ -349,8 +347,7 @@ logical dimensions and reduction; their text-box findings describe the logical c
   along, so a system with three games is not an empty board.
 - **On a wide screen** (1920x1080) the shelf stands in the 1440 px column in the middle, as Settings does
   (`app_column`): more spines in view than on the Mini V2, the same sizes.
-- **Status corner** (`src/status_corner.rs`): the top line's right end on Home (every look; Chalk over the Cards
-  wash), the game card, console pages, the search and Curator's pages. The time (24 h), a Wi-Fi symbol only while
+- **Status corner** (`src/status_corner.rs`): the top line's right end on Home (every look), the game card, console pages, the search and Curator's pages. The time (24 h), a Wi-Fi symbol only while
   connected (a fan of a wedge and two arcs, 45° to either side, drawn with the canvas, as big as the figures), the
   battery ("76 %", "76 %, charging"), 24 px apart, Body 28. A part that is not known is left out, not shown as a
   placeholder. The place at the left is cut short 32 px before the corner, and so is a note left of it ("Saves
@@ -421,8 +418,7 @@ full beginning once, then stays there until reselected. Its still pauses use tim
 | Where | What | Time |
 |---|---|---|
 | Shelf look | the selected spine rises out of the row (the one before goes back), the case above the shelf turns from its spine to its front (`SHELF_TURN`); the shelf glides along under its faded ends, a spine at a time and five on L1/R1 | lift 120 ms, turn 220 ms, glide 220 ms |
-| Minimal, Split, Settings list | the pill / the system-coloured bar / the paper glides to the new row, the pill's width follows the name (Minimal, Split); a name and its value turn to the highlight's text colour as they come under it; the list scrolls under its edges | ~150 ms |
-| Cards look | the carousel slides; size, shade and place of every card follow its distance from the middle; the card in the middle is lifted (3 % larger, a soft shadow on paper); the wash behind turns from one card's colour to the next | ~150 ms |
+| Split, Easy's plain list, Settings list | the pill / the system-coloured bar / the paper glides to the new row, the pill's width follows the name; a name and its value turn to the highlight's text colour as they come under it; the list scrolls under its edges | ~150 ms |
 | Pages | a deeper page (a system's shelf, Settings and its pages, the console page) comes in from 28 px to the right and fades up from the page colour, its list rows one after another (16 ms apart, at most four steps); going back comes in from the left, all at once; the game card rises out of the selected case (the Shelf look) or label; the switcher fades in | 150 ms (+ up to 64 ms) |
 | Curator, Search | Curator's list, the Lens, Echoes, Versions and the search are pages like the others (pushed in, popped back; sheets over the card or the list are not pages); their lists scroll smoothly under their edges (the Lens's values start at rest when another facet is picked), the selected row turns to paper at once | 150 ms |
 | Letter jump (L2/R2) | the big letter shows, then fades out as one layer (box and letter together) over 220 ms; one frame is drawn after it has gone, so nothing faint stays behind | 700 ms in all |
@@ -442,8 +438,7 @@ page colour (taken from the frame's right edge), row by row for a list (the pain
 fade is branch-free and works on two channels at once, so the compiler vectorises it; a stretch of a line that is
 nothing but the page colour is only read, never written (it would come out the same), which is most of a page; a full
 frame is a fraction of the paint time. Toasts and the hint bar use `motion::layer` (keep the area, paint, mix), whose cost is their
-area. The Cards look fits pictures in its two resting sizes only and scales them on the way (pixel art in five
-fixed steps), so a slide never fills the picture caches.
+area.
 
 **Measuring.** `POCKETUI_FRAME_LOG=1` logs "press to frame" for every button press (the time from the event
 to the frame that shows it) and, when an animation ends, the paint time of its frames by kind (page
@@ -480,17 +475,6 @@ and rare: they never add a frame, a row or a badge to a list.
 - **Cost.** PNGs are decoded and scaled on one loader thread into the box art's image cache (16 pictures at most),
   never on the UI thread; the files are stat'ed by their 24-byte header once.
 
-## Idle slideshow (`src/slideshow.rs`, `src/app_slideshow.rs`)
-A shelf left alone for a minute (half the screen-off time when that is shorter) becomes a calm slideshow of the games'
-pictures: box art, scraped screenshots and title screens, and the player's own screenshots and save pictures. Each fades in
-over 1.6 s and then moves slowly (zoom 1.0 to 1.12, a drift in one of eight directions) for its 10 s; the first fades in over
-the shelf itself. The game's title (Title face, 44 px) and its system (Body, 26 px, "Your screenshot" or "From your save" in
-gold after it for the player's own pictures) sit small and centred at the bottom on a dark band, with a shadow; the clock and
-battery stand in the top right corner as on Home. A picture the shape of the screen fills it, any other (a portrait box) is
-shown whole on a dark backdrop of its own colour. Motion Reduced and Off: no zoom or drift, only the cross-fades. 15 frames a
-second while something moves, none between slides when still. Any button or touch ends it and does nothing else; no
-pictures, no show. It is Off in every look until the player switches it on in Sleep & power (Slideshow before screen off) ([SLEEP.md](SLEEP.md#idle-slideshow-2026-10-30-srcslideshowrs-srcapp_slideshowrs)).
-
 ## Home panels (`src/home_panel.rs`, `src/app_home_panel.rs`)
 Where a game's label has its box art, the rows that are not one game show games too, so no pulled-out label is an
 empty field. The same 176 px box at the label's right end (at most 600 px wide), and Split's panel (260 px high,
@@ -509,9 +493,7 @@ centred).
   (1024x768), the system's name alone, never a word cut to "Ne…". The console name tries one smaller size and the existing narrow face before a common short name; the tile keeps its fixed size. A cover being decoded is a faint tile (the page mixed 40 % towards label Dust); before Curator's index
   three of them stand where the covers will be, with no words. An empty list says in words how to fill it.
 - **Calm**: nothing moves but the label's own pull; covers come from the image cache and the picture loader's thread
-  only, so a panel never decodes on the UI thread. Minimal and Cards show no panel (Cards keeps the spine's line
-  large on the card). The Cabinet has its own: Favourites are cases on their shelf, and the Surprise me box has the
-  day's pick on its front.
+  only, so a panel never decodes on the UI thread. The Cabinet has its own: Favourites are cases on their shelf.
 
 ## Game card (`src/game_card.rs`)
 X on a game. The game stays a pulled-out paper label (300 px, its system's stripe, title starting at 67 or 50, box art at the right end, the player's status and time at its foot); everything under it is Chalk
@@ -523,14 +505,14 @@ The status picker is a short shelf of five spines on a black sheet over the dark
 one is paper. Under them, a little apart, the **My rating** spine: a star where the statuses have their marks and five
 stars at its right end (Left / Right change them). On the card the rating is a row of "Your game": five small stars,
 the given ones in the text colour, the others a dim mix of Dust and the page; never gold, which is the Favourites star.
-A card opened by Surprise me has one line over its columns, "Surprise me" in Dust and the reason in amber (the colour of
+A card opened by X on Just Play has one line over its columns, "Just Play" in Dust and the reason in amber (the colour of
 the card's suggestions). Status marks are drawn, not glyphs: a dot (Playing), two bars (Paused), a tick (Completed),
 a dash (Dropped), a thin ring for Not started in the picker only; on the shelf they sit at the spine's
 right end in Dust. The one colour outside the stripes is the amber of Favourites, for the "Playing? Press Y"
 suggestion. Credits are Dust 21 under what they credit ("Text: Wikipedia, …", "Facts: Wikidata, CC0").
 
 ### Info page (`src/game_info.rs`)
-X on a game in the Minimal, Cards and Split looks (Shelf and Cabinet keep the box: the collector's looks). One
+X on a game in the Split look (Shelf and Cabinet keep the box: the collector's looks). One
 screen, Chalk and Dust on the page: the cover at the left in the room `game_info::cover_room` gives it (a printed
 title card with the console when there is none, the label's lift shadow in Light), the player's lines under it (the
 status with its mark across the column, then Played, Last, Rating, Unlocked, a port's Speed and notes, a note), the
@@ -585,7 +567,7 @@ typed; nothing found is said in words ("No game matches “xyz”", Title 37, an
 
 **The letter of a jump** (L2/R2) is a 260 px square with 44 px corners in the middle of the screen, the inverse
 of the page (text colour, `pal().text`, at 94 %; the letter in the page colour, Title 200), like the selected
-row of the Minimal look: it reads over spines, labels and cases alike. It stays 700 ms after the last jump and
+row of the plain list: it reads over spines, labels and cases alike. It stays 700 ms after the last jump and
 fades over the last 220 ms; nothing else moves.
 
 ## Appearance: dark and light (`src/palette.rs`, `src/appearance.rs`)
@@ -612,8 +594,7 @@ alone would be only 1.1:1 against the page), and pickers get a paper sheet with 
 | split_bg / split_dim | `#12161B` / `#AAB3BD` | `#ECE7DD` / `#58544D` | Split look |
 
 System stripes, cover art and console pictures are the same in both (the pictures' dark outlines read well on
-paper; checked for every console on page, spine and label). Washes that went towards black (the Cards
-background, Split's panel, the switcher's glow, dimmed neighbours, the game card's scroll fade and the scrim
+paper; checked for every console on page, spine and label). Washes that went towards black (Split's panel, the switcher's glow, dimmed neighbours, the game card's scroll fade and the scrim
 under pickers) go towards the page colour instead. `palette::tests` require WCAG AA (4.5:1) for every text/background
 pair the palette is used for, in both appearances and without exceptions (a new token for text, or for something text
 sits on, goes into that list). Dark had four pairs below it until 2026-10-24: Dust on a spine and on Split's page (3.5 and
@@ -754,7 +735,7 @@ Shelf look (`Medium::of`):
   while there is another way (`media::spine_fit`, trailer frames of 2026-10-29: "Advance…", "Donkey Kon…"): a little
   smaller (seven tenths of its size); on two lines across a thick spine, a subtitle on a line of its own without its
   dash ("Prince of Persia" over "The Sands of Time"); smaller still, down to 21 px; in a font wider than Barlow Condensed
-  (Theme → Font: Pixel, Rounded) the same in Barlow Condensed; one size step down and another, 18 and 16 px; without a
+  (Theme → Font: Pixel) the same in Barlow Condensed; one size step down and another, 18 and 16 px; without a
   leading "The"; then the part of "Series - Subtitle" or "Series: Subtitle" that tells the games apart (the subtitle,
   "Ocarina of Time" for "The Legend of Zelda - Ocarina of Time", "Majora's Mask"; the main part when it ends in a number,
   "Donkey Kong Country 3", and without its first words if that is too long, "Kong Country 3"; a main part alone
@@ -826,17 +807,28 @@ Two rows of Settings → Look → Cozy extras, both on from the start, Shelf loo
   the case opening at A, `ui_sound::going_in` seated at 1200 ms, `Sound::CrtOn` from pocket-core with the old-TV power-on), slows every timed animation by `motion::COZY_SLOWER` (1.4) and holds a pocket-core game's window
   until the fade has run (`startup::HOLD_UNTIL`; pocket-core draws nothing and is silent meanwhile, a button ends it):
   the game is started at A, and while it loads the console's pixel-art picture comes up, the case opens and the game
-  slides out of it (the cartridge, card or disc, at its real size beside the case), the case fades and the game goes
-  into the console, the same way for every system (0.1.4; the cartridge is made in the first frame of the animation,
+  slides out of it (the cartridge, card or disc, at its real size beside the case), the case fades (Cozy, Cabinet and
+  Shelf looks: it shuts, turns its spine to you and goes back to its place, `insert_scene::Home`; a disc case's cover
+  swings open in perspective, `cabinet_art::draw_hinged`) and the game goes into the console, the same way for every system (0.1.4; the cartridge is made in the first frame of the animation,
   after the game's process has started, from the cover on the case's front); in at 180 ms (`cabinet::IN_AT`) with a click (`Sound::Insert`, a
   short latch click, 6 dB under the other sounds, queued at A so that it lands at 170 ms, `ui_sound::play_after`) and a glow in the label's colour, done at
   300 ms (`cabinet::INSERT`). The launch fade waits for the click. Nothing waits for the animation: a game whose
   window comes up first covers it, and any button skips it. Until 2026-10-28 the game was started only when the
   cartridge reached the slot (260 ms after A), which added that to every start in these looks. Cartridges stay
   half out of the console, as they do.
+- **After Quit** (Cozy, Motion Full, `src/eject.rs`): the live shelf is available as soon as the game hands back.
+  The last game picture closes to a TV line and dot, or a handheld display darkens; the insertion scene then runs
+  backwards. A disc's lid opens before the disc lifts, the case closes with the existing case sample once the medium
+  is inside, then returns to its place. Cabinet, Shelf, Easy and the child's shelf share the same path. Any button,
+  touch or active stick cancels before other gestures handle it. Reduced/Off and Quick skip the effect.
+  Android plays the same way back over its own shelf after Save & quit (`android/src/eject.rs`; Shelf and Cabinet looks,
+  not the list or a page without the case, as its start), and its case's game then slides a little out of it
+  (`eject::AJAR_IN`, its own clock: the shelf's animations don't start again). The console comes up from wholly below
+  the screen and goes back there, also on a phone held upright (its floor is high on the screen).
+
 - **A console's real mechanism** (Cozy + Playful cases, `src/insert_rig.rs`, `insert_scene::Scene::paint`): PS1, GameCube,
   Dreamcast, Saturn (lid); PS2, Xbox (tray, the disc comes from the front lying flat); SNES (US and PAL/JP rigs by the cartridge's
-  region), N64, Mega Drive, Game Boy, GBA (cartridge); DS (the card goes in behind the upper screen, where its slot is); Wii (the disc goes into its slot on the front, along the console's depth). The console alone is shown larger than its system picture (2 screen pixels an art pixel). One timeline,
+  region), N64, Mega Drive, Game Boy, Game Boy Color, GBA (cartridge); Master System (cartridge, three fifths out of the top slot); Game Gear (its cartridge turns its back to the player and goes in behind the top edge, as on the Game Boy); PC Engine (the HuCard slides in lying on the slot's ramp, contacts first, and stays half out); 3DS (the card goes in behind, at the rear of the lower half, as on the DS; the DS card stands in for the 3DS card); PSP (it comes up showing its front and turns round to its back in 280 ms, `insert_rig::TURN_MS` and `front.png`, as the game box turns on the card; the UMD cover springs open, the UMD slides down into it label to the player and the cover shuts over it, `Lid::medium_behind`; the way back turns it to its front again); DS (the card goes in behind the upper screen, where its slot is); Wii (the disc goes into its slot on the front, along the console's depth); NES (front-loader, `Mech::Door`: the door lifts about its hinge at the back, the cartridge turns round on its way from the case and slides in lying flat, label up and connector first, what of it is inside is in the console's shadow and shows only through the opening, `rig.json`'s `mouth`; it is pressed down with the cartridge's click at `IN_AT_COZY` and the door drops shut with the lid's clunk `Sound::DiscShut`; the way back opens the door first; the Famicom keeps the plain animation). The console alone is shown larger than its system picture (2 screen pixels an art pixel). One timeline,
   `insert_rig::pose`, a pure function of the time since A: in at `IN_AT_COZY` with the sound's hit (`Sound::DiscDrop`), a disc rests on its
   spindle for 110 ms, the lid or tray shut 280 ms after it is down with the clunk (`Sound::DiscShut`; the two are `disc-in.wav`
   cut in two at its quiet point, `scripts/ui-sounds/split_disc_in.py`, the other systems keep the whole sound); a cartridge clicks at
@@ -848,9 +840,10 @@ Two rows of Settings → Look → Cozy extras, both on from the start, Shelf loo
   under it), the disc lies on the tray and is lifted off, carried flat with its label up (`Rig::medium_at`: over its place it
   already lies as it will in its seat, it is never held upright) and lowered onto the spindle or tray. A PlayStation's and a
   Saturn's disc is printed to the rim (`media::DiscKind::has_ring`) and every disc is as wide beside its console as the real
-  one (`insert_rig` tests), a lid's underside is the console's own plastic (the Saturn's is black). The PSP has no rig yet
-  (its UMD goes into a door at the back, label out): its start shows no medium, the case fades and the console lights up
-  (`insert_scene::lights_up_only`), never a disc dropped on its screen. A lid is hinged under its console's rear lip
+  one (`insert_rig` tests), a lid's underside is the console's own plastic (the Saturn's is black). The PSP turns round to its
+  back for its UMD (its rig, above); without
+  the rig (Quick) its start shows no medium, the case fades and the console lights up (`insert_scene::lights_up_only`), never a
+  disc dropped on its screen. A lid is hinged under its console's rear lip
   (`Lid::tuck` in `rig.json`: the hinge sits a few art pixels behind the wall): open past a third it is drawn behind the
   console, so its foot is hidden by the wall and it stands up out of the console as a real PlayStation's, Saturn's or
   Dreamcast's lid does (open-lid photos on Commons: "Playstation opened.jpg", "Lettore CD PS.jpg"), not as a grey disc above it. Art from public-domain photos
@@ -863,7 +856,7 @@ Two rows of Settings → Look → Cozy extras, both on from the start, Shelf loo
   already-painted system-case fronts. The photo-derived SP clamshell opens before insertion and remains open;
   its cartridge rotates contacts-first into the bottom/front slot, label to the underside. Quick and reduced
   motion keep this slot geometry with the screen already open and without adding a hold.
-  `POCKETUI_RIG_ASSETS=<dir>` reads rigs from disk for working on them. 3DS, Vita and all others: the
+  `POCKETUI_RIG_ASSETS=<dir>` reads rigs from disk for working on them. Vita and all others: the
   plain animation below (the PSP: no medium, see above); Quick, a frozen game, and Motion Reduced or Off:
   no rig except the SP's bottom-slot geometry, and no hold (`cabinet::starts_cozy`).
 - **The game box** (X on a game; SELECT switches to the page and back, `game_box.rs`): the card as the game's box in its case's style, front and
@@ -899,10 +892,7 @@ Two rows of Settings → Look → Cozy extras, both on from the start, Shelf loo
   shelf has the sticker itself there instead (round, in the stickers' colour).
 - **Curator** (between Favourites and the systems): a shelf of DVD-size boxes in Curator's colour for the Lens, the
   smart shelves and the stickers, the list opened from it as a shelf of its own under it, and the pinned smart
-  shelves and stickers as shelves (CURATOR.md, "Curator 2 as built"). The Surprise me box has the day's pick's box art
-  on its front, its spine stays Curator's (CURATOR.md, "Curator on Home").
-- **Up next** after a game is the same paper label over the bottom of the screen in every look, the cabinet
-  included.
+  shelves and stickers as shelves (CURATOR.md, "Curator 2 as built").
 - Everything around stays as in the other looks: black around the cabinet, the shelf's name and the battery
   in Dust, the game's title in Title 50 Chalk with its meta line under it, the hint pills at the bottom.
 

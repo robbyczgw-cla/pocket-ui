@@ -41,7 +41,7 @@ The quickest way for a few games: send them straight from your phone. Phone and 
   words a file that is empty, the wrong type or misses its BIOS.
 - Without Wi-Fi the page says **Connect to Wi-Fi first**; **A** opens the Wi-Fi settings. In the first start, once a
   network connects there you are back on this page with its code; B on Wi-Fi without connecting comes back to Add games.
-- Not on the Steam Deck: there games go into its own folders.
+- : there games go into its own folders.
 
 ## What plain HTTP on a Wi-Fi means
 

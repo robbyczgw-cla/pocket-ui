@@ -8,6 +8,8 @@ pub enum Model {
     MiniV1,
     /// Retroid Pocket 5: 1920x1080.
     Pocket5,
+    /// SM4450 Classic Rev Q: 1240x1080, touch, no sticks; ROCKNIX owns cooling.
+    PocketClassic,
     /// Retroid Pocket Flip 2 (the SD865 one): the Pocket 5's board and screen in a clamshell, with a lid switch.
     Flip2,
     /// SM8550: portrait panel, screen-off only, ROCKNIX controls the fan.
@@ -24,12 +26,9 @@ pub enum Model {
     /// model are one row of `H700_BOARDS`.
     H700(&'static H700Board),
     /// Anbernic RG DS Plus (ROCKNIX's RK3566 image; an RK3568, 1 GB): two 1024x768 panels, one above the other, touch only
-    /// on the lower one, a lid, one stick, no fan. pocket-ui is on the upper panel; the lower one shows the selected game
-    /// (`second_screen`, docs/DUAL-SCREEN.md).
+    /// on the lower one, a lid, one stick, no fan. pocket-ui uses the main output.
     RgDsPlus,
-    /// Valve Steam Deck (SteamOS, Gamescope): 1280x800, a desktop Linux that owns Wi-Fi, Bluetooth, sleep and fan itself
-    /// (docs/STEAMDECK.md). Found by `POCKETUI_DEVICE=steamdeck` or DMI (`Valve`: `Jupiter`, `Galileo`).
-    SteamDeck, #[cfg(feature = "brick")] Brick(crate::brick_profile::Board),
+    #[cfg(feature = "brick")] Brick(crate::brick_profile::Board),
 }
 
 /// What differs between the Anbernic H700 models (`H700_BOARDS`, docs/DEVICES.md has the same table). The

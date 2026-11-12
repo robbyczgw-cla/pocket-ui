@@ -86,7 +86,8 @@ standalone YabaSanshiro yet: a game saved there doesn't see that save here, and 
 
 **PlayStation**: the own host takes games as `.cue`, `.chd`, `.m3u` and `.pbp`. The left stick and the right
 stick go to the game as analogue sticks (see [Controls](options.md#controls)). A game on several discs changes discs
-in the pause menu ([below](#games-on-several-discs)).
+in the pause menu ([below](#games-on-several-discs)). On the TrimUI Brick, keep a `.cue` together with all of
+its track files in `Roms/psx`. The first launch creates any missing memory card automatically.
 
 **Nintendo 64, PSP and Dreamcast**: both sticks go to the game as analogue sticks. Game saves are shared
 with the emulators ROCKNIX used for these systems before: RetroArch's N64 saves, the PSP save data in

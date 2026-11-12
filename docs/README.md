@@ -33,7 +33,7 @@ Start at [user/index.md](user/index.md).
 | [user/options-big.md](user/options-big.md) | The Options of PS2, GameCube, Wii and 3DS games |
 | [user/controls.md](user/controls.md) | Every button, screen by screen |
 | [user/controls-card.md](user/controls-card.md) | The console button drawing, remaps and HOME shortcuts; first start, game card and pause menu |
-| [user/easy-to-read.md](user/easy-to-read.md) | Easy to read (larger text and calmer menus in one switch), the pause menu's Zoom and Controls → Hold to toggle |
+| [user/big-text.md](user/big-text.md) | Big text (larger text and calmer menus in one switch), the pause menu's Zoom and Controls → Hold to toggle |
 | [user/controls-settings.md](user/controls-settings.md) | The buttons in Settings, during setup, on the touch screen, and the power and volume keys |
 | [user/settings.md](user/settings.md) | How Settings opens, and the entries of Look, Sound & feel, Playing and Games |
 | [user/settings-sound.md](user/settings-sound.md) | The entries of Sound & feel: animations, Cozy touches, motion, sounds, haptics and LEDs |
@@ -85,7 +85,22 @@ Start at [DEVELOPING.md](DEVELOPING.md).
 
 | Document | Type | Contents |
 |---|---|---|
-| [DEVELOPING.md](DEVELOPING.md) | Reference | Building, the dev loop, the virtual device, tests and the documentation checks, environment variables, repository layout |
+| [DEVELOPING.md](DEVELOPING.md) | Reference | The short core for developers and agents: conventions, code shape, what you need, and the index of the topic files in `dev/` |
+| [dev/android.md](dev/android.md) | Reference | Android and platform adapters: read when you work on the Android app or the platform adapters |
+| [dev/brick-bluetooth.md](dev/brick-bluetooth.md) | Reference | Standalone Brick Bluetooth: read when you work on Bluetooth, controller layouts or save-safety / literal-name regressions |
+| [dev/building.md](dev/building.md) | Reference | Building and tools: read when you build, cross-build or package pocket-ui / pocket-core, or need the binaries table |
+| [dev/consoles.md](dev/consoles.md) | Reference | Consoles and game data: read when you edit console fact sheets, credits, gamedb or Curator data |
+| [dev/conventions-details.md](dev/conventions-details.md) | Reference | Conventions, details and regressions: read when you touch Wi-Fi activation, text fit / long titles or small-panel layout measuring |
+| [dev/device-loop.md](dev/device-loop.md) | Reference | Real device and virtual device: read when you deploy to or test on a handheld, or use the virtual device (vdev) |
+| [dev/environment.md](dev/environment.md) | Reference | Environment variables: read when you add or read a POCKET* variable (doc_checks holds this list) |
+| [dev/layout.md](dev/layout.md) | Reference | Repository layout: read when you add or move a module or file in src/ (doc_checks holds this list), or look for where code lives |
+| [dev/merge-gate.md](dev/merge-gate.md) | Reference | Merge gate: read when you queue a change, read a gate log or change gate.sh / the train |
+| [dev/portmaster.md](dev/portmaster.md) | Reference | PortMaster ports: read when you work on PortMaster ports |
+| [dev/release.md](dev/release.md) | Reference | Releasing: read when you cut a release or build release assets |
+| [dev/start-time.md](dev/start-time.md) | Reference | Start time: read when you touch start-up, instant start or anything that could slow the first frame |
+| [dev/tests.md](dev/tests.md) | Reference | Tests and documentation checks: read when you write or run tests, or change docs/user (the "Documentation checks" table is here) |
+| [dev/tour.md](dev/tour.md) | Reference | Feature tour: read when you add a feature that needs a tour card |
+| [dev/translations.md](dev/translations.md) | Reference | Translations: read when you add or change UI text, German/Spanish lines or the i18n snapshots |
 | [BINARY-SIZE.md](BINARY-SIZE.md) | Internal | Release binary size by crate/function and embedded data, full-LTO savings, storage reserve and before/after runtime measurements |
 | [ARCHITECTURE.md](ARCHITECTURE.md) | Reference | How pocket-ui fits into ROCKNIX, the processes, the launch flow, switching games, the pause menu, and where each feature lives |
 | [i18n-glossary.md](i18n-glossary.md) | Reference | The German and Spanish interfaces: tone, the terms every page uses, what stays English and why |
@@ -99,8 +114,10 @@ Start at [DEVELOPING.md](DEVELOPING.md).
 | [ROCKNIX-H700-AUDIO-ISSUE-DRAFT.md](ROCKNIX-H700-AUDIO-ISSUE-DRAFT.md) | Draft, not submitted | Frozen-rootfs UCM finding, observed controls and untested upstream investigation proposal |
 | [SLEEP.md](SLEEP.md) | Reference and design notes | Sleep and power: research, what is built, a device test plan |
 | [DEVICES.md](DEVICES.md) | Design and reference | The Mini V2 and its experimental SM8250 siblings (Pocket 5, Flip 2, Mini V1): how pocket-ui tells them apart, what each gets, layouts at 1920x1080 and 1280x960, safety on untested hardware, installing |
-| [TRIMUI-BRICK.md](TRIMUI-BRICK.md) | Design and reference | The TrimUI Brick (Beta) behind the `brick` feature: the first version under NextUI, the framebuffer bridge, the test kit |
+| [TRIMUI-BRICK.md](TRIMUI-BRICK.md) | Design and reference | The TrimUI Brick behind the `brick` feature: the first version under NextUI, the framebuffer bridge, the test kit |
 | [TRIMUI-BRICK-CORES.md](TRIMUI-BRICK-CORES.md) | Design and reference | Additional standalone software cores: pinned builds, licences, routing, real-library checks and limits |
+| [TRIMUI-BRICK-04.md](TRIMUI-BRICK-04.md) | Testing | Power-button sleep integration, saved F-key actions, standby lights and measured volume steps |
+| [TRIMUI-BRICK-SLEEP.md](TRIMUI-BRICK-SLEEP.md) | Testing and design | Power-button sleep, save and audio ordering, suspend recovery and wake evidence |
 | [TRIMUI-BRICK-STANDALONE.md](TRIMUI-BRICK-STANDALONE.md) | Design and reference | The same Brick without NextUI: a card folder with its own start script, cores built for glibc 2.33, stand-ins for the firmware helpers, host tests |
 | [TRIMUI-PORTMASTER.md](TRIMUI-PORTMASTER.md) | Design and reference | Optional TrimUI PortMaster setup, portable runtime archives, persistent games and files, cancellation and native launch |
 | [TRIMUI-SMART-PRO.md](TRIMUI-SMART-PRO.md) | Design and reference | The TrimUI Smart Pro on the same card (experimental): how the card tells it from the Brick, what differs, the firmware floor, what a report carries |
@@ -114,12 +131,10 @@ Start at [DEVELOPING.md](DEVELOPING.md).
 | [BRICK-CHEAT-PROBE.md](BRICK-CHEAT-PROBE.md) | Testing | Cheat RAM effects, Continue, save states and disabling: core constraints, container checks and real Brick evidence |
 | [BRICK-CFG.md](BRICK-CFG.md) | Design and verification | Compile-time ownership of Brick code and assets, the standard-build reference and comparison evidence |
 | [BRICK-SHADERS.md](BRICK-SHADERS.md) | Design and reference | Picture options on the Brick through the GPU: the choices, their cost and the read-back proof |
-| [STEAMDECK.md](STEAMDECK.md) | Design and reference | pocket-ui on a Steam Deck (first preparation, run on a PC only): the Deck profile, EmuDeck library, emulators, bundle and Flatpak plan, Add to Steam, what needs real hardware |
 | [WEB-DEMO.md](WEB-DEMO.md) | Design and reference | pocket-ui in the browser (prototype): the emscripten build beside the device builds, the winit and softbuffer stand-ins, the stand-in game, building, measured size and speed |
-| [PLATFORMS.md](PLATFORMS.md) | Reference | Which user-visible feature exists on ROCKNIX handhelds, Android and the Steam Deck, and what was seen on a device |
+| [PLATFORMS.md](PLATFORMS.md) | Reference | Which user-visible feature exists on ROCKNIX handhelds, Android, and what was seen on a device |
 | [H700-SCALED-LAYOUT.md](H700-SCALED-LAYOUT.md) | Small-panel logical layouts, complete snapshot comparisons, JPEG readability and CPU measurement method |
 | [DISPLAY-OUT.md](DISPLAY-OUT.md) | Design and reference | Playing on a TV through USB-C: what ROCKNIX does, TV mode, what is built, the device test plan |
-| [DUAL-SCREEN.md](DUAL-SCREEN.md) | Design and reference | Two screens (the RG DS Plus; Retroid's add-on, prototype): the shelf on top, the game's box below, the panel table to confirm on the device |
 | [FAN-CURVE.md](FAN-CURVE.md) | Design and reference | Smooth fan: why the mechanism, the curves, the safety net, the simulation, the device test |
 | [UPDATES.md](UPDATES.md) | Reference | The signed update channel for the app and the system |
 | [UPDATE-CHANNEL.md](UPDATE-CHANNEL.md) | Reference | Where the channel lives (pocketui.xyz, GitHub Releases), the signing key, the release procedure, rollback |

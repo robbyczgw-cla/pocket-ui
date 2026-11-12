@@ -48,7 +48,6 @@ softbuffer = { path = "shims/softbuffer" }
 cc = "1"
 
 [features]
-x11 = []
 brick = []
 
 [profile.release]

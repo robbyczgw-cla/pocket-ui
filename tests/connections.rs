@@ -80,7 +80,7 @@ fn a_cards_developer_and_series_open_the_players_own_games_and_b_comes_back() {
     fake_library(tmp.path(), false);
     let stub = wayland(tmp.path());
     // Burnout Revenge: Developer, Publisher, Genre, Series lead somewhere. Down picks the developer, A opens its list.
-    let (seen, problems) = shot(tmp.path(), stub.as_ref(), "info:minimal:ps2:revenge:da", "1280x720", "en", "normal");
+    let (seen, problems) = shot(tmp.path(), stub.as_ref(), "info:split:ps2:revenge:da", "1280x720", "en", "normal");
     assert!(seen.contains("More from Criterion Games"), "the developer's list\n{seen}");
     assert!(at(&seen, "Burnout 2 - Point of Impact") < at(&seen, "Burnout 3 - Takedown"), "in release order\n{seen}");
     assert!(!seen.contains("Burnout Revenge"), "the game itself isn't more of its developer's\n{seen}");
@@ -88,11 +88,11 @@ fn a_cards_developer_and_series_open_the_players_own_games_and_b_comes_back() {
     assert_eq!(seen.matches("Burnout 2 - Point of Impact").count(), 1, "one game on two systems shows once\n{seen}");
     assert!(problems.trim().is_empty(), "{problems}");
     // The series: every game in it, this one too, oldest first.
-    let (seen, _) = shot(tmp.path(), stub.as_ref(), "info:minimal:ps2:revenge:dddda", "1280x720", "en", "normal");
+    let (seen, _) = shot(tmp.path(), stub.as_ref(), "info:split:ps2:revenge:dddda", "1280x720", "en", "normal");
     assert!(seen.contains("Burnout series, in release order"), "{seen}");
     assert!(at(&seen, "Burnout 3 - Takedown") < at(&seen, "Burnout Revenge") && at(&seen, "Burnout Revenge") < at(&seen, "Burnout Dominator"), "{seen}");
     // B on the list: the card again, as it was left.
-    let (seen, _) = shot(tmp.path(), stub.as_ref(), "info:minimal:ps2:revenge:dab", "1280x720", "en", "normal");
+    let (seen, _) = shot(tmp.path(), stub.as_ref(), "info:split:ps2:revenge:dab", "1280x720", "en", "normal");
     assert!(seen.contains("Burnout Revenge") && seen.contains("Status") && !seen.contains("More from"), "back on the card\n{seen}");
     // The box's back in the Shelf look: turned over, Down picks the developer.
     let (seen, _) = shot(tmp.path(), stub.as_ref(), "info:shelf:ps2:revenge:rda", "1280x720", "en", "normal");
@@ -106,7 +106,7 @@ fn every_look_and_size_shows_the_picked_fact_and_its_list_without_anything_cut_o
     let stub = wayland(tmp.path());
     for size in ["1280x720", "640x480"] {
         for (lang, text_size, title) in [("en", "normal", "Burnout series, in release order"), ("de", "large", "Reihe „Burnout“, nach Erscheinen")] {
-            for (look, open) in [("minimal", "dddd"), ("cards", "dddd"), ("split", "dddd"), ("shelf", "rdddd"), ("cabinet", "rdddd")] {
+            for (look, open) in [("split", "dddd"), ("shelf", "rdddd"), ("cabinet", "rdddd")] {
                 for keys in [open.to_string(), format!("{open}a")] {
                     let state = format!("info:{look}:ps2:revenge:{keys}");
                     let (seen, problems) = shot(tmp.path(), stub.as_ref(), &state, size, lang, text_size);
@@ -131,7 +131,7 @@ fn a_game_without_facts_has_nothing_to_pick_and_never_an_empty_list() {
     // A homebrew game nobody has data for.
     std::fs::write(tmp.path().join("roms/gba/Pocket Homebrew Demo.gba"), "x").unwrap();
     let stub = wayland(tmp.path());
-    for look in ["minimal", "shelf"] {
+    for look in ["split", "shelf"] {
         let keys = if look == "shelf" { "rd" } else { "d" };
         let (seen, problems) = shot(tmp.path(), stub.as_ref(), &format!("info:{look}:gba:pocket homebrew:{keys}"), "640x480", "en", "normal");
         assert!(seen.contains("Not in the offline game list"), "{look}: the facts' place says why it's empty\n{seen}");
@@ -146,19 +146,19 @@ fn rediscover_shows_a_year_ago_today_first_and_only_when_there_is_something() {
     fake_library(tmp.path(), false);
     let stub = wayland(tmp.path());
     // Nothing played a year ago: no row in Curator's list.
-    let (seen, _) = shot(tmp.path(), stub.as_ref(), "curator:hub:minimal:0", "1280x720", "en", "normal");
+    let (seen, _) = shot(tmp.path(), stub.as_ref(), "curator:hub:split:0", "1280x720", "en", "normal");
     assert!(seen.contains("Lens") && !seen.contains("Rediscover"), "{seen}");
     // EmulationStation's "last played": Metroid Fusion a year ago today, Golden Sun two years ago, Advance Wars 400 days.
     let tmp = tempfile::tempdir().unwrap();
     fake_library(tmp.path(), true);
-    let (seen, _) = shot(tmp.path(), stub.as_ref(), "curator:hub:minimal:0", "1280x720", "en", "normal");
+    let (seen, _) = shot(tmp.path(), stub.as_ref(), "curator:hub:split:0", "1280x720", "en", "normal");
     assert!(seen.contains("Rediscover"), "{seen}");
-    for (look, size, lang, text_size) in [("minimal", "1280x720", "en", "normal"), ("shelf", "640x480", "de", "large"), ("cabinet", "640x480", "de", "large"), ("split", "640x480", "en", "large")] {
+    for (look, size, lang, text_size) in [("split", "1280x720", "en", "normal"), ("shelf", "640x480", "de", "large"), ("cabinet", "640x480", "de", "large")] {
         let (seen, problems) = shot(tmp.path(), stub.as_ref(), &format!("curator:rediscover:{look}"), size, lang, text_size);
         let name = format!("{look} {size} {lang} {text_size}");
         assert!(seen.contains("Metroid Fusion"), "{name}\n{seen}");
         assert!(problems.trim().is_empty(), "{name}: {problems}");
-        if look == "minimal" {
+        if look == "split" {
             assert!(at(&seen, "Metroid Fusion") < at(&seen, "Advance Wars") && seen.contains("Golden Sun"), "{name}: a year ago today first\n{seen}");
         }
         if look == "shelf" {

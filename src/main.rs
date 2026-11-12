@@ -37,7 +37,6 @@ use pocket_ui::touch::{self, Area};
 use pocket_ui::update::{self, Manifest};
 use winit::application::ApplicationHandler;
 
-mod store_page;
 use winit::event::{ElementState, KeyEvent, WindowEvent};
 use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoop, EventLoopProxy};
 use winit::keyboard::{KeyCode, PhysicalKey};
@@ -51,7 +50,6 @@ mod app_fast_switch;
 mod app_touch;
 /// Playing on a TV through USB-C: the thread that listens to sway's outputs, and what the UI does with it.
 mod app_display_out;
-mod app_second_screen;
 // Pages of rows and text in a column on a wide screen (the Pocket 5's and Flip 2's 1920x1080).
 mod app_column;
 /// The look step's previews of each theme.
@@ -59,7 +57,6 @@ mod app_look;
 /// The start after a switch-off after sleeping says why, once (`pocket_ui::auto_off`).
 mod app_auto_off;
 mod app_pictures;
-mod app_slideshow;
 /// The picture side of Home's Curator, Favorites and pinned rows (`pocket_ui::home_panel`).
 mod app_home_panel;
 /// The game card (X on a game), play status and notes, offline game facts.
@@ -79,6 +76,7 @@ mod app_appearance;
 mod app_cabinet;
 mod app_frozen;
 mod app_loading;
+mod app_launch;
 mod app_where_was_i;
 // The case stickers on the Cabinet's, the Shelf look's and the game box's fronts and spines.
 mod app_case_stickers;
@@ -129,7 +127,7 @@ mod app_achievements;
 mod app_search;
 mod app_starter;
 /// Settings → Connections → USB file transfer, and a games card coming or going.
-mod app_usb_transfer;
+mod app_games_card;
 /// Pixel Path: the pause menu's graded chain of a game's picture and sound (docs/CURATOR.md).
 mod app_pixel_path;
 /// The pause menu at once: pocket-core paused before it is covered, its picture after the menu is up.
@@ -190,7 +188,9 @@ mod app_status_corner;
 mod app_library;
 /// HOME + A in a game pocket-core does not host (the standalone emulators, ports): `grim` on a thread of its own.
 mod app_screenshot;
-/// Doc-drift tests: the user guide and the developer docs against the code (docs/DEVELOPING.md, "Documentation checks").
+/// POCKETUI_FRAME_DUMP: the event loop tick by tick on a fixed 60 fps clock (`pocket_ui::frame_dump`).
+mod app_frame_dump;
+/// Doc-drift tests: the user guide and the developer docs against the code (docs/dev/tests.md, "Documentation checks").
 #[cfg(test)]
 mod doc_checks;
 
@@ -292,7 +292,6 @@ enum UserEvent {
     LoadBlocked(u64),
     Setup(SetupEvent),
     Update(UpdateEvent),
-    Store(store_page::Event),
     /// The starter pack's downloads and scans (`app_starter`).
     Starter(app_starter::Event),
     /// The automatic cover download (`pocket_ui::auto_covers`).
@@ -313,6 +312,8 @@ enum UserEvent {
     /// A mock-only command FIFO capture (`--test-driver <temporary directory>`); `false`: the navigation explorer's record
     /// only, no picture (`app_nav_probe`).
     TestFrame(bool),
+    /// Mock-only presentation for launch progress; never publishes a capture or consumes its feedback.
+    TestPresent,
     /// Mock-only: press and release a key, then paint its immediate result in the
     /// same event, before a fast worker's reply can overtake a separate capture.
     TestPressFrame(Button),
@@ -323,6 +324,9 @@ enum UserEvent {
     /// docs/DEVICE-TESTS.md).
     #[cfg_attr(not(target_os = "linux"), allow(dead_code))]
     Wake,
+    /// The command FIFO's `dark`: Screen off without a power-key press or kernel suspend.
+    #[cfg_attr(not(target_os = "linux"), allow(dead_code))]
+    ScreenOff,
     /// FIFO `play <system> <file>`: starts a game the way the shelf does (the Brick smoke test, `scripts/brick-smoke.sh`). Only files below a
     /// `.pocket-ui-test` folder; anything else is ignored.
     #[cfg(feature = "brick")]
@@ -368,9 +372,6 @@ enum UserEvent {
     Backup(pocket_ui::backup_page::Event),
     /// EmulationStation's gamelists were read and differ from what the App has (`app_gamelist.rs`).
     Gamelist(std::sync::Arc<pocket_ui::gamelist::Index>),
-    /// The idle slideshow's pictures were found (generation, slides), and one was read and scaled (`app_slideshow.rs`).
-    Slides(u64, Vec<pocket_ui::slideshow::Slide>),
-    SlideScene(u64, usize, Option<Box<pocket_ui::slideshow::Scene>>),
     /// The screenshots folder was read, or a screenshot was copied to the shelf (`app_gallery.rs`).
     Gallery(app_gallery::Event),
     /// The card was measured or cleaned, the free space looked at, a game's delete worked out or done (`app_storage.rs`).
@@ -390,10 +391,9 @@ enum UserEvent {
     Merged(PadEvent),
     /// The status corner's thread read a change: Wi-Fi connected or gone, the battery (`app_status_corner`).
     StatusCorner,
+    LaunchPrepared,
     /// The values of Settings rows that need a process or a file came in (`app_settings_groups`, `settings_values`).
     SettingsValues,
-    /// USB file transfer was switched (`app_usb_transfer`).
-    UsbTransfer { wanted_on: bool, status: pocket_ui::usb_transfer::Status },
     /// A games card came or went (`pocket_ui::games_card`).
     #[cfg_attr(not(target_os = "linux"), allow(dead_code))]
     GamesCard(pocket_ui::games_card::Change),
@@ -406,9 +406,6 @@ enum UserEvent {
     /// The picture went to a TV through USB-C, or back to the panel (`app_display_out`).
     #[cfg_attr(not(target_os = "linux"), allow(dead_code))]
     Display(Option<pocket_ui::display_out::Tv>),
-    /// A second screen is there: the shelf's output and the second screen's (`app_second_screen`).
-    #[cfg_attr(not(target_os = "linux"), allow(dead_code))]
-    SecondScreen(Option<(String, String)>),
 }
 
 #[derive(Debug)]
@@ -423,14 +420,13 @@ enum CoversEvent {
 #[derive(Clone, Copy)]
 enum Opens {
     Setup(Only),
-    /// A switch: the lower screen shows the selected game, or is off (`app_second_screen`; two screens only).
-    SecondScreen,
     /// Warmer or cooler screen colour, as SELECT + Vol (`Sys::set_warmth`).
     ScreenColour,
-    Store,
     // Starter pack is opened from Extras, Home or Kids Mode, without a separate Games settings row.
     /// "Will my games start?" (`app_game_check`).
     GameCheck,
+    /// Help & tools → For tinkerers: a list of Tailscale, Sync, remote access and PC streaming (`SETTINGS_GROUPS`' last entry).
+    Tinkerers,
     /// Time zone and network time (src/quick.rs).
     Time,
     Updates,
@@ -442,8 +438,6 @@ enum Opens {
     About,
     /// A switch, not a page: menu haptics on or off.
     Haptics,
-    /// A switch, not a page: ROCKNIX's MTP gadget on or off (`pocket_ui::usb_transfer`). Only where it can work.
-    UsbTransfer,
     /// A switch, not a page: Home or the last game when the Pocket starts (`on_start`).
     OnStart,
     /// A switch, not a page: whether the pause menu's Quit keeps a resume point (`App::remember_quit`).
@@ -512,7 +506,7 @@ enum Opens {
     SleepPower,
     /// A switch, not a page: the colours of every page (`palette::Colours`); the whole screen shows it at once.
     Colours,
-    /// A switch, not a page: Barlow, Pixel or Rounded (`font_style`).
+    /// A switch, not a page: Barlow or Pixel (`font_style`).
     Font,
     /// A switch, not a page: Dark, Light or Automatic (`settings::Appearance`); Y on the Look page too.
     Appearance,
@@ -536,19 +530,19 @@ type SettingsRow = (&'static str, Opens, &'static str);
 /// at most 9 rows a list, every choice a row of its own, no choice only on a button): a category's name,
 /// the line naming what is in it, its rows in their order. START opens the categories, A a category's list
 /// (`app_settings_groups.rs`). A new row is one line in its category; `SETTINGS` follows by itself.
-const SETTINGS_GROUPS: [(&str, &str, &[SettingsRow]); 7] = [
+const SETTINGS_GROUPS: [(&str, &str, &[SettingsRow]); 8] = [
     // "Look" with a zero-width mark: the same word as its first row in English, a different one in German (Aussehen,
     // the row Ansicht); the German table looks strings up whole (`i18n`), and the mark is painted as nothing.
     // The first start's last stage, in its order: how your games stand (the layout, which systems, the cozy extras), then
     // the style (the Style panel's appearance and colours, the type, the screen). One category of nine rows at most
     // (`the_flat_list_is_the_categories_one_after_another`), layout rows first.
     (LOOK_CATEGORY, "Layout, systems, extras, appearance, colours, style, text size, screen colour, night light.", &[
-        ("Layout", Opens::Setup(Only::Look), "How your games stand: Shelf, Easy, Minimal, Split, Cards or Cabinet, with a live preview."),
+        ("Layout", Opens::Setup(Only::Look), "How your games stand: Shelf, Easy, Split or Cabinet, with a live preview."),
         ("Systems on the shelf", Opens::ShelfSystems, "Which systems are on Home. Their games stay either way."),
         (app_cozy_extras::SETTINGS_NAME, Opens::CozyExtras, "The cabinet's TV, stickers, printed discs and more: each on or off."),
         ("Appearance", Opens::Appearance, "Dark, Light, or Automatic by the time of day."),
         ("Colours", Opens::Colours, "The colours of every page. Left/right: the next set."),
-        ("Style", Opens::Font, "Barlow, Pixel or Rounded type, or Retro: pixel letters, frames and icons everywhere."),
+        ("Style", Opens::Font, "Barlow or Pixel type, or Retro: pixel letters, frames and icons everywhere."),
         ("Text size", Opens::TextSize, "Larger text on every screen, fewer rows on a page."),
         ("Screen colour", Opens::ScreenColour, "Cooler or warmer white, the same as SELECT + Vol. Left/right: change. A: Neutral."),
         (app_night_light::SETTINGS_NAME, Opens::NightLight, "Warmer, less blue colours in the evening."),
@@ -570,52 +564,52 @@ const SETTINGS_GROUPS: [(&str, &str, &[SettingsRow]); 7] = [
         ("Continue where I quit", Opens::RememberQuit, "Quit keeps the moment for the next start."),
         ("Remind me where I was", Opens::RemindWhere, "Back after two weeks or more: when you played last, and your note, while the game loads."),
         (app_buttons::SETTINGS_NAME, Opens::Buttons, "Which button confirms, and how the buttons look in the hints."),
-        ("Over the game", Opens::OverGame, "FPS, sensors or Pixel Path (how a game's picture and sound reach you) over every game."),
+        ("Over the game", Opens::OverGame, "The frame rate, or the sensors too, over every game."),
         ("Screen frames", Opens::Frames, "Auto frames on the handhelds, or on every console."),
         (app_perf_fan::SETTINGS_NAME, Opens::PerfFan, "Processor speed and fan, in games and in menus."),
         ("Battery", Opens::Battery, "Battery history, time left, what each game uses."),
         (app_achievements::SETTINGS_NAME, Opens::Achievements, "Earn achievements in your games."),
     ]),
-    ("Games", "Games, game check, extras, EmulationStation, screenshots, Curator, PC.", &[
+    ("Games", "Games, game check, extras, EmulationStation, screenshots, Curator.", &[
         ("Add games", Opens::Setup(Only::Games), "Where each system's games and BIOS files go, and file sharing."),
         (app_game_check::SETTINGS_NAME, Opens::GameCheck, "Will your games start? What's missing, in plain words."),
         ("Extras", Opens::Setup(Only::Extras), "Box art, PortMaster games and starter pack."),
         (app_gamelist::SETTINGS_NAME, Opens::Gamelist, "Favourites and ratings from your EmulationStation gamelists."),
         (app_gallery::SETTINGS_NAME, Opens::Screenshots, "The pictures you took with HOME + A, newest first."),
-        (app_curator::SETTINGS_NAME, Opens::Curator, "Lens, smart shelves, labels, Echoes, versions and play history."),
-        (app_moonlight::SETTINGS_NAME, Opens::PcStreaming, "Pair a gaming PC for Moonlight, and stream its games."),
+        (app_curator::SETTINGS_NAME, Opens::Curator, "Lens, smart shelves, Echoes, versions and play history."),
     ]),
-    ("Connections", "Wi-Fi, Bluetooth, USB file transfer, Tailscale, Sync, remote access, web companion.", &[
+    ("Connections", "Wi-Fi, Bluetooth, web companion.", &[
         ("Wi-Fi", Opens::Setup(Only::Wifi), "Connect to a network."),
         ("Bluetooth", Opens::Bluetooth, "Pair a controller or headphones, see what is connected."),
-        ("USB file transfer", Opens::UsbTransfer, "Copy games with a USB cable. Windows and Linux open it by themselves; a Mac needs the free OpenMTP app."),
-        ("Tailscale", Opens::Tailscale, "Reach the Pocket from your other devices."),
-        ("Sync", Opens::Sync, "Keep saves and states in step with your other devices."),
-        ("Remote access (SSH)", Opens::Setup(Only::Remote), "Log in from a computer. Turns itself off when the Pocket restarts."),
         (app_web::SETTINGS_NAME, Opens::Web, "Your games, play time and uploads in a browser."),
     ]),
-    ("System", "Language, time, sleep & power, second screen, kids mode, updates, storage, backup & reset.", &[
+    ("System", "Language, time, sleep & power, kids mode, updates, storage, backup & reset.", &[
         ("Language", Opens::Language, "Menus and messages in English, German or Spanish."),
         ("Time", Opens::Time, "Time zone, date and network time."),
         (app_sleep_power::SETTINGS_NAME, Opens::SleepPower, "When the screen goes off and the device sleeps, and the power button."),
-        // Only on a handheld with two screens (`second_screen::offered`, the RG DS Plus).
-        ("Second screen", Opens::SecondScreen, "The lower screen: the selected game's box and info, or off. Off in games; DS games use it."),
         ("Kids mode", Opens::Kids, "A big, simple shelf for a child, with a PIN."),
-        ("Updates", Opens::Updates, "New versions of pocket-ui and the system."),
+        ("Updates", Opens::Updates, "New versions of pocket-ui."),
         (app_storage::SETTINGS_NAME, Opens::Storage, "What takes up space on the SD card, and what can go."),
         (app_backup::SETTINGS_NAME, Opens::Backup, "Save your saves, states and pocket-ui's settings to the SD card, restore them, or start afresh."),
     ]),
-    ("Help & tools", "First-start setup, how you like to play, Tour, manual, tools, test buttons, Store, report a problem, about.", &[
+    ("Help & tools", "First-start setup, how you like to play, Tour, manual, for tinkerers, tools, test buttons, report a problem, about.", &[
         ("First-start setup", Opens::FirstStart, "Language, Wi-Fi, your games and the look again, step by step. Your games and saves stay."),
         ("How you like to play", Opens::Setup(Only::Play), "The shelf, Easy, Enthusiast or your own choice of the extras."),
         ("Tour", Opens::Tour, "The basics in 7 cards: playing, saving, quick settings, adding games, easier reading."),
         ("Manual", Opens::Manual, "The user guide, on the device."),
+        ("For tinkerers", Opens::Tinkerers, "Tailscale, Sync, remote access and PC streaming."),
         (app_tools::SETTINGS_NAME, Opens::Tools, "Emulator menus, RetroArch, gamepad test and calibration, terminal."),
         (app_test_buttons::SETTINGS_NAME, Opens::TestButtons, "Press buttons, triggers and sticks of each controller and watch them light up."),
-        // Hidden until a catalog is set up (`store::catalog_url`). Next to Tools so that Games stays within its eight rows.
-        ("Store", Opens::Store, "Emulators, frames, themes, tools."),
         (pocket_ui::report::ROW, Opens::Report, "Saves a file for a bug report, to attach on GitHub."),
         ("About", Opens::About, "Version, storage and network."),
+    ]),
+    // Not in the categories list: the page "For tinkerers" of Help & tools (`Opens::Tinkerers`), laid out like a category so that
+    // its rows move, scroll, hide per device and come back with B as every row does (`app_settings_groups::TINKERERS`).
+    ("For tinkerers", "Tailscale, Sync, remote access, PC streaming.", &[
+        ("Tailscale", Opens::Tailscale, "Reach the Pocket from your other devices."),
+        ("Sync", Opens::Sync, "Keep saves and states in step with your other devices."),
+        ("Remote access (SSH)", Opens::Setup(Only::Remote), "Log in from a computer. Turns itself off when the Pocket restarts."),
+        (app_moonlight::SETTINGS_NAME, Opens::PcStreaming, "Pair a gaming PC for Moonlight, and stream its games."),
     ]),
 ];
 
@@ -639,18 +633,7 @@ enum UpdateEvent {
     Looked(Result<Manifest, String>),
 }
 
-#[derive(Clone, Copy, PartialEq)]
-enum UpdateAction {
-    Check,
-    /// "Install pocket-ui X": asks first (`InstallNow` / `Later`).
-    InstallApp,
-    InstallNow,
-    Later,
-    /// A switch: whether pocket-ui looks for a newer version by itself (`app_update_hint`).
-    Auto,
-    StageOs,
-    CancelOs,
-}
+use pocket_ui::update_page::Action as UpdateAction;
 
 #[derive(Default)]
 enum UpdatePhase {
@@ -716,6 +699,8 @@ struct UpdateReport {
 /// The page's typed process-local job. The installer and launcher still own the disk protocol.
 #[derive(Default)]
 struct Updates {
+    /// Snapshot/journey fixtures can stand in for a release; real runs use the compiled release stamp.
+    release_build: Option<bool>,
     sel: usize,
     manifest: Option<Manifest>,
     phase: UpdatePhase,
@@ -727,6 +712,13 @@ struct Updates {
 }
 
 impl Updates {
+    fn release_build(&self) -> bool { self.release_build.unwrap_or_else(update::release_build) }
+
+    /// One decision shared by the offer, version line, settings value and dot.
+    fn app_available(&self) -> Option<&update::Release> {
+        pocket_ui::update_page::available(self.manifest.as_ref(), update::app_version(), self.release_build())
+    }
+
     fn start(&mut self, task: UpdateTask) {
         self.next_job = self.next_job.wrapping_add(1).max(1);
         let worker = task.cancel().map_or_else(update::WorkerSnapshot::default, |c| c.snapshot());
@@ -827,7 +819,6 @@ enum SettingsPage {
     Groups(usize),
     /// A category's list, at this row of `SETTINGS`: the category is the one the row is in.
     List(usize),
-    Store,
     /// The starter pack's games (`app_starter`).
     Starter,
     /// Will the games start (`app_game_check`).
@@ -905,10 +896,47 @@ struct Reapply {
 const HOST_CORES: &[(&str, &str)] = pocket_ui::hostsys::HANDHELD_CORES;
 const HOST_BIN_DEFAULT: &str = "/storage/pocket-ui/pocket-core";
 
-/// pocket-core's path; `POCKETUI_HOST_BIN` moves it for the Steam Deck app (docs/STEAMDECK.md), where there is no /storage.
 fn host_bin() -> &'static str {
     static P: std::sync::OnceLock<String> = std::sync::OnceLock::new();
     P.get_or_init(|| std::env::var("POCKETUI_HOST_BIN").ok().filter(|v| !v.is_empty()).unwrap_or_else(|| HOST_BIN_DEFAULT.to_string()))
+}
+
+/// Who plays a game, read once from the emulator's name as system.cfg and the routes give it ("Code shape" in
+/// docs/DEVELOPING.md): what comes after matches on this, not on the name.
+#[derive(Clone, Debug, PartialEq)]
+enum Player {
+    /// pocket-ui's own host, pocket-core.
+    Hosted,
+    /// ARMSX2, Dolphin, Azahar or hakuX, which pocket-ui drives itself (`standalone::Emu`); with the emulator's name.
+    Standalone(standalone::Emu, String),
+    /// RetroArch, a port's script, an app or another program, by its name.
+    Other(String),
+}
+
+impl Player {
+    fn of(system: &str, emulator: &str, core: &str) -> Player {
+        match (emulator, standalone::Emu::detect(system, emulator, core)) {
+            ("pocket-core", _) => Player::Hosted,
+            (_, Some(emu)) => Player::Standalone(emu, emulator.to_string()),
+            (_, None) => Player::Other(emulator.to_string()),
+        }
+    }
+
+    /// The emulator's name, as runemu.sh and the controller bridge take it.
+    fn name(&self) -> &str {
+        match self {
+            Player::Hosted => "pocket-core",
+            Player::Standalone(_, name) | Player::Other(name) => name,
+        }
+    }
+}
+
+/// A game to start, as one value: built once in `App::launch` from the route, then handed on (`spawn_game`).
+struct Run {
+    system: String,
+    player: Player,
+    core: String,
+    path: PathBuf,
 }
 
 impl Running {
@@ -999,7 +1027,7 @@ struct QuickMenu {
     players: Option<pocket_ui::players_page::PlayersPage>,
     /// The Zoom page while it is open (`app_zoom`).
     zoom: Option<pocket_ui::zoom::Zoom>,
-    /// Zoom has a row on the main page: Easy to read is on or Settings → Sound & feel → Zoom in the pause menu is (`app_zoom`).
+    /// Zoom has a row on the main page: Big text is on or Settings → Sound & feel → Zoom in the pause menu is (`app_zoom`).
     zoom_row: bool,
     /// Where B on the Zoom page goes (`app_zoom`).
     zoom_back: app_zoom::Back,
@@ -1056,7 +1084,7 @@ enum OptEntry {
     Group(usize),
     Emulator,
     Controls,
-    /// The frozen picture larger (`app_zoom`); the main page lists it only for Easy to read or with its own switch.
+    /// The frozen picture larger (`app_zoom`); the main page lists it only for Big text or with its own switch.
     Zoom,
     Cheats,
     /// Which emulator plays the game (`app_emu_choice`): a page with its own Save changes.
@@ -1169,7 +1197,7 @@ impl QuickMenu {
         if self.earlier.is_none() {
             items.retain(|i| *i != MainItem::Earlier);
         }
-        // Zoom, for pocket-core, only where the player asked for it: Easy to read or its own switch (`app_zoom`). Otherwise
+        // Zoom, for pocket-core, only where the player asked for it: Big text or its own switch (`app_zoom`). Otherwise
         // it is a row of Options. Before Quit, after what belongs to the game.
         if self.hosted && self.zoom_row {
             let at = items.iter().position(|i| *i == MainItem::Quit).unwrap_or(items.len());
@@ -1352,6 +1380,7 @@ struct App {
     exit_since: Option<Instant>,
     running: Option<Running>,
     launch_at: Option<Instant>,
+    pending_launch: Option<app_launch::Pending>,
     drew_first: bool,
     /// The first frames after the Pocket started fade in from black (`boot_fade`, docs/BOOT-SPLASH.md).
     boot_fade: pocket_ui::boot_fade::BootFade,
@@ -1370,11 +1399,6 @@ struct App {
     after_game_note: Option<String>,
     /// The TV the picture is on through USB-C, while it is (`app_display_out`).
     tv: Option<pocket_ui::display_out::Tv>,
-    /// The second screen and pocket-ui's window on it (`app_second_screen`); None without one.
-    second: Option<app_second_screen::Second>,
-    second_control: Option<pocket_ui::second_screen::Controller>,
-    /// Settings → Look → Second screen: Game info (true) or Off (settings.json's `second_screen_off`, the other way round).
-    second_screen_on: bool,
     /// Why the last game could not start, from pocket-core; and every other message of what went wrong, which stays
     /// until A, B or a tap closes it (`app_messages`).
     notice: Option<Notice>,
@@ -1415,8 +1439,8 @@ struct App {
     settings_page: Option<SettingsPage>,
     updates: Updates,
     update_url: Option<String>,
-    /// Settings → Store; read after the first frame (`startup::Later`), like the other pages' state below.
-    store: pocket_ui::startup::Later<store_page::StorePage>,
+    /// Retained catalog choice for package downloads; existing settings keep their value.
+    store_url: Option<String>,
     /// Settings → Games → Extras → Starter pack and Home's hint on an empty card (`app_starter`).
     starter: app_starter::StarterUi,
     /// Exit code for main once the event loop ends (`update::RESTART_CODE` after an update).
@@ -1440,9 +1464,6 @@ struct App {
     manual_from_setup: bool,
     /// Box art downloaded in the background while online (`pocket_ui::auto_covers`).
     cover_run: pocket_ui::auto_covers::AutoCovers,
-    /// USB file transfer is being switched (`app_usb_transfer`).
-    usb_busy: bool,
-    /// A games card came out and the player hasn't been told yet (`app_usb_transfer`).
     card_out_note: bool,
     /// The game card's descriptions loaded ahead while online, under the same rules (`pocket_ui::auto_texts`).
     text_run: pocket_ui::auto_texts::AutoTexts,
@@ -1467,7 +1488,6 @@ struct App {
     /// The dialog before leaving for EmulationStation (SELECT + START held, Escape, Settings → About), over everything.
     leave: Option<pocket_ui::rescue::Dialog>,
     touch_rec: touch::Recognizer,
-    /// The window's pointer (a Steam Deck trackpad as a mouse, its touch screen through Gamescope, a desk mouse):
     /// where it is in window pixels, whether its left button is down, and the wheel's fraction (`app_touch`).
     cursor: Option<(f64, f64)>,
     mouse_down: bool,
@@ -1551,8 +1571,6 @@ struct App {
     /// Screenshots and title screens beside the box art: the switch, what is known about the files, the cycle of
     /// the Split preview and the thread that decodes them (`app_pictures.rs`).
     pictures: app_pictures::PicturesUi,
-    /// Idle slideshow (`app_slideshow`).
-    slideshow: app_slideshow::SlideshowUi,
     /// Settings > Games > Extras > Pictures is Off: no box art, screenshots or title screens are fetched by themselves
     /// (`auto_covers`, `identify`); the Cover art row still looks up what is asked for.
     art_off: bool,
@@ -1593,7 +1611,7 @@ struct App {
     /// Settings → Playing → Remind me where I was (settings.json's `no_where_was_i`, the other way round).
     remind_where: bool,
     /// Settings → Sound & feel → Zoom in the pause menu (settings.json's `zoom_in_pause`): Zoom on the pause menu's main page
-    /// (Easy to read shows it too; Zoom is under Options either way, `app_zoom::zoom_row_on`).
+    /// (Big text shows it too; Zoom is under Options either way, `app_zoom::zoom_row_on`).
     zoom_in_pause: bool,
     /// "Where was I?": the card of the game being started, shown over its launch picture (`app_where_was_i`).
     where_was_i: Option<pocket_ui::where_was_i::Card>,
@@ -1737,13 +1755,11 @@ impl App {
     }
 
     fn press(&mut self, b: Button) {
+        // A button during the way back from a game ends it and goes on to the shelf (`app_cabinet::skip_eject`).
+        self.skip_eject();
         if self.empty_ports_press(b) { return; }
         if self.big_live() {
             return self.big_press(b);
-        }
-        // Up next after a game (`app_curator`): X plays it, B puts it away, any other button (A too) puts it away and goes on.
-        if self.curator_up_next_press(b) {
-            return;
         }
         // A on Home while the card has no games: the starter pack (`app_starter`).
         if self.starter_home_press(b) {
@@ -1822,7 +1838,7 @@ impl App {
                 self.rebuild();
             }
             Some(Item::Streaming) => self.start_streaming(),
-            Some(item @ (Item::Curator | Item::Lens | Item::Surprise | Item::SmartShelf(_) | Item::Sticker(_) | Item::History | Item::Review(_) | Item::Rediscover)) => self.curator_activate(item),
+            Some(item @ (Item::Curator | Item::Lens | Item::SmartShelf(_) | Item::Sticker(_) | Item::History | Item::Review(_) | Item::Rediscover)) => self.curator_activate(item),
             Some(Item::Search) => self.open_search(),
             Some(Item::JustPlay) => self.curator_just_play(),
             None => {}
@@ -1890,79 +1906,26 @@ impl App {
     }
 
     fn launch(&mut self, system: String, name: String, path: PathBuf) {
-        // The moment the game was asked for; pocket-core logs its first frame against it (`startup`).
-        let asked = pocket_ui::startup::clock_ms();
-        // A PortMaster port whose game files are surely missing: what to copy where, instead of a start into nothing.
-        if system == "ports" && self.port_needs_files(&path) {
-            return;
-        }
-        // A game whose file is gone since the list was read (deleted over the share, a list from the cache that the
-        // scan after the start hasn't corrected yet): a clear word instead of an emulator failing on nothing, and the
-        // folders are read again (`app_library`).
-        if let Some(msg) = pocket_ui::library_cache::missing_game(&name, &path) {
-            println!("launch: {} is missing", path.display());
-            self.notice = Some(Notice::new(msg));
-            self.library_rescan("a game's file was missing");
-            // Its Continue tile goes at once (`recent_visible` looks for the file): a game started from outside the list (the
-            // Brick's test copies) changes nothing the read finds, so Home kept offering it until the next start.
-            #[cfg(feature = "brick")]
-            self.rebuild();
-            return;
-        }
-        // A file with nothing in it: say so, instead of an emulator failing and a guess about a BIOS.
-        if let Some(msg) = pocket_ui::library_cache::empty_game(&name, &path) {
-            println!("launch: {} is empty", path.display());
-            self.notice = Some(Notice::new(msg));
-            self.big_note_failure(&path, &system, &name);
-            return;
-        }
-        // Started from the search: it closes, and the shelf goes to the game (`app_search`).
+        self.queue_launch(system, name, path, false);
+    }
+
+    pub(crate) fn launch_prepared(&mut self, pending: app_launch::Pending, at: pocket_ui::frozen::AtLaunch,
+        wait: bool, resumable: bool, preview: bool, mut env: Vec<(&'static str, String)>) {
+        let app_launch::Pending { run, name, asked, animation, skipped, .. } = pending;
+        let (system, path, emulator, core) = (run.system.clone(), run.path.clone(), run.player.name().to_string(), run.core.clone());
+        let hosted = run.player == Player::Hosted;
         self.search_launching(&path);
-        let Some(sys) = self.systems.iter().find(|s| s.name == system) else { return };
-        let (emulator, core) = self.route(sys, Some(&path), std::path::Path::new(host_bin()).exists());
-        // Kids Mode: every start, also a retry, stays on routes that keep a child inside the game (`kids_route_closed`).
-        if self.kids_route_closed(&system, &emulator, &core, &path) {
-            println!("kids mode: stopped, {} would start on {emulator}", path.display());
-            return self.kids_stuck();
-        }
-        // A game still ending after a hand-over (`app_fast_switch`) ends first, unless this one may start next to it.
-        self.wait_for_drained(&system, &path, &emulator, &core);
-        // The game's window opens fullscreen only once sway has the rules (set on a thread at start).
-        #[cfg(target_os = "linux")]
-        control::rules_in_place();
         println!("launch {system} {} (emulator {emulator}, core {core})", path.display());
-        // The game gets the audio device to itself, and the CPU and network: a cover download stops. A pocket-core game
-        // keeps the shelf's quantum (it sets the same one), anything else gets ROCKNIX's.
-        pocket_ui::ui_sound::stop_for(emulator != "pocket-core");
-        // A port's own performance and fan (`app_port_perf`, from memory), before the fan's plan for the game is made.
         self.port_perf_before_launch(&system, &path);
-        // And the system's fan profile, before anything of the game runs (`app_perf_fan.rs`).
-        self.perf_fan_before_game();
         self.cover_run.game_started();
         self.text_run.game_started();
         self.identify.game_started();
         pocket_ui::covers::set_game_on(true);
-        // GameCube and Dolphin defaults in system.cfg are in place (put off at start until the first frame).
-        #[cfg(target_os = "linux")]
-        emu_settings::apply_start_defaults_once();
-        // A moment that can't be used is left out and said so (`frozen::at_launch`); else the normal start, which loads it.
         let mut frozen_env = Vec::new();
-        let fresh = self.frozen_at_launch(&system, &path, &emulator, &core, &mut frozen_env);
-        standalone::set_kids(self.kids_live());
-        standalone::launch(&system, &emulator, &core, &path, &self.data_dir);
-        emu_settings::launch(standalone::session().map(|s| s.emu), &system, &path);
-        // Pixel Path's first reading of the emulator's settings, on a thread once the start script is done.
-        if self.pixel_path {
-            pocket_ui::pixel_standalone::prefetch();
-        }
-        // The game's saves stay out of Syncthing while it runs (`app_sync.rs`).
+        let fresh = self.frozen_at_launch(&path, hosted, at, wait, &mut frozen_env);
         self.sync_game_started(&system);
-        let mut env = emu_settings::launch_env(&system, &path);
         env.push((pocket_ui::startup::LAUNCHED_AT, format!("{asked:.1}")));
         env.extend(frozen_env);
-        // The case goes into its console while the game loads (Cabinet and Shelf looks, `app_cabinet`). In Cozy a
-        // pocket-core game keeps its window back until the animation has been seen.
-        pocket_ui::motion::set_cozy(self.cozy());
         // Kids Mode: pocket-core's HOME shortcuts are off (`extras::NO_SHORTCUTS`).
         // Easy: no FPS or CPU numbers over the game, whatever Over the game says (`extras::NO_OVER_GAME`).
         if self.big_on() {
@@ -1976,53 +1939,66 @@ impl App {
         }
         // "Where was I?" after a long break: decided from what is in memory (`app_where_was_i`). On pocket-core the game
         // then stands at its moment while the card is read, until a button (`startup::HOLD_STILL`).
-        self.where_was_i_at_launch(&system, &path, &emulator, &core, fresh);
-        let animation = if system == "ports" { None } else { self.launch_animation(&path, emulator == "pocket-core") };
-        let reminder = self.where_was_i_hold(&system, &path, emulator == "pocket-core");
+        self.where_was_i_at_launch(&path, fresh, resumable);
+        pocket_ui::trace::step("launch reminder ready");
+        pocket_ui::trace::step("launch animation ready");
+        if skipped { self.where_was_i = None; }
+        let reminder = self.where_was_i_hold(hosted, preview);
         if let Some(hold) = animation.max(reminder) {
             env.push((pocket_ui::startup::HOLD_UNTIL, format!("{:.1}", asked + hold.as_secs_f64() * 1000.0)));
-            pocket_ui::startup::prepare_skip();
             env.push((pocket_ui::startup::HOLD_SKIP, pocket_ui::startup::skip_path().to_string_lossy().into_owned()));
             if reminder.is_some() {
                 env.push((pocket_ui::startup::HOLD_STILL, "1".into()));
                 env.push((pocket_ui::startup::HOLD_READY, pocket_ui::startup::ready_path().to_string_lossy().into_owned()));
             }
         }
-        if animation.is_some() {
-            // Cozy's ending: the old-TV power-on over the game's first moments, only with Motion on Full (`crt_on`) and
-            // its Cozy extra on; its sound goes with Case sounds (`cozy_extras`).
-            if pocket_ui::motion::level() == pocket_ui::motion::Motion::Full && extra(Extra::CrtOn) {
-                env.push((pocket_ui::crt_on::ENV, "1".into()));
-                if !extra(Extra::CaseSounds) {
-                    env.push((pocket_ui::crt_on::SILENT_ENV, "1".into()));
-                }
+        // Keep the UI handover and pocket-core's switch-on on the same launch decision.
+        let crt_on = animation.is_some() && pocket_ui::motion::level() == pocket_ui::motion::Motion::Full && extra(Extra::CrtOn);
+        if crt_on {
+            // Cozy's ending: the old-TV power-on over the game's first moments, a handheld's display switching on for a
+            // game that had no TV (`eject::Screen::of`, as the way back); its sound goes with Case sounds.
+            let screen = match pocket_ui::eject::Screen::of(pocket_ui::cabinet::FormFactor::of(&system)) {
+                pocket_ui::eject::Screen::Lcd => pocket_ui::crt_on::Screen::Lcd,
+                pocket_ui::eject::Screen::Tv => pocket_ui::crt_on::Screen::Tv,
+            };
+            env.push((pocket_ui::crt_on::ENV, screen.env_value().into()));
+            if !extra(Extra::CaseSounds) {
+                env.push((pocket_ui::crt_on::SILENT_ENV, "1".into()));
             }
         }
         // Smooth fan: a pocket-core game tells pocket-ui its fan choice instead of changing the trips (`app_perf_fan`).
-        env.extend(self.perf_fan_game_env().filter(|_| emulator == "pocket-core"));
+        env.extend(self.perf_fan_game_env().filter(|_| hosted));
         pocket_ui::mark!("launch", "{system} {}", path.display());
         // pocket-core games get our display (the overlay); RetroArch, the standalone emulators and apps get ROCKNIX's box.
-        pocket_ui::mako_osd::set_hidden(emulator == "pocket-core" || pocket_ui::mako_osd::quiet_h700_games());
-        let pgid = spawn_game(self.proxy.clone(), &system, &emulator, &core, &path, &env);
+        pocket_ui::mako_osd::set_hidden(hosted || pocket_ui::mako_osd::quiet_h700_games());
+        pocket_ui::trace::step("launch spawn begin");
+        let pgid = spawn_game(self.proxy.clone(), &run, &env);
+        pocket_ui::trace::step("launch spawn ready");
         // A port: its performance once its own process runs, and the busy-core look (`app_port_perf`, on a thread).
         self.port_perf_started(pgid, &path);
         println!("launch: game process started {:.1} ms after it was asked for", pocket_ui::startup::clock_ms() - asked);
+        pocket_ui::trace::step("launch post spawn");
         // How it ends decides whether Settings > On start may continue it (`on_start`).
-        pocket_ui::on_start::note_started(&self.data_dir, &path);
         // Play history: the session's start, written off this thread (`play_log`).
         pocket_ui::play_log::started(&system, &name, &path, &emulator, &core);
-        // Where the game was left, faded in while it starts; read on a thread once the game's process is on its way.
+        // TV-on must open onto the game for the first time: a preview here would flash over the shelf before
+        // pocket-core starts dark. The deliberate picture behind a readable reminder still needs to be there.
         self.launch_picture = None;
         {
             let (proxy, data_dir, system, path) = (self.proxy.clone(), self.data_dir.clone(), system.clone(), path.clone());
-            let hosted = emulator == "pocket-core";
             let (w, h) = self.screen_size();
             std::thread::spawn(move || {
-                let picture = hosted.then(|| pocket_ui::video::VideoSettings::load(&data_dir, &system, &path)).map(|v| (v.scaling, v.orientation.turns()));
-                let prepared = pocket_ui::launch_picture::prepare(&data_dir, &system, &path, picture, w, h);
+                let prepared = if crt_on && reminder.is_none() {
+                    None
+                } else {
+                    let picture = hosted.then(|| pocket_ui::video::VideoSettings::load(&data_dir, &system, &path)).map(|v| (v.scaling, v.orientation.turns()));
+                    pocket_ui::launch_picture::prepare(&data_dir, &system, &path, picture, w, h)
+                };
+                // Even an omitted picture must clear a reminder that has no image, just as a failed read does.
                 let _ = proxy.send_event(UserEvent::LaunchPicture(path, prepared));
             });
         }
+        pocket_ui::trace::step("launch picture scheduled");
         control::note_game(pgid);
         #[cfg(feature = "brick")]
         self.leds_game_started(&system, &path);
@@ -2031,9 +2007,9 @@ impl App {
         self.sleep.game_started(pocket_ui::sleep::Game::new(&system, &name, &path, &emulator, pgid));
         pocket_ui::battery_history::set_activity(Some(&system));
         // The battery per game: this game's stretches on battery go to its ledger (`battery_games`).
-        pocket_ui::battery_history::set_game(Some(pocket_ui::battery_games::Key::new(&system, &path, &emulator)));
+        pocket_ui::battery_history::set_game(pocket_ui::battery_games::Key::recorded(&system, &path, &emulator));
+        pocket_ui::trace::step("launch bookkeeping ready");
         self.running = Some(Running { system, name, path, emulator, core, started: Instant::now(), pgid, options: Default::default() });
-        self.launch_at = Some(Instant::now());
         self.loading_start();
         self.held = None;
     }
@@ -2049,6 +2025,7 @@ impl App {
     }
 
     fn game_exited(&mut self, secs: u64, ok: bool, start: pocket_ui::fallback::StartOutcome, moments: bool) {
+        pocket_ui::trace::step("exit begin");
         pocket_ui::h700_gba::preload();
         // Asked to stop (Quit in the menu, or the grace period ran out) is no failure.
         let quit_requested = self.menu.as_ref().is_some_and(|m| m.quitting) || self.quit.is_some();
@@ -2080,11 +2057,13 @@ impl App {
             pocket_ui::ui_sound::game_ended();
         }
         println!("game exited after {secs} s (measured {:?})", run.started.elapsed());
+        pocket_ui::trace::step("exit sound ready");
         self.frozen_note_session(&run);
         // An error nobody asked for: Settings > On start doesn't start this game by itself next time.
         pocket_ui::on_start::note_ended(&self.data_dir, &run.path, !ok && !quit_requested);
-        // pocket-core's reason for not starting, else a save that didn't reach the card at the end (`save_trouble`).
-        self.notice = if run.hosted() { Notice::take_after_game() } else { None };
+        // pocket-core's reason for not starting, else a save that didn't reach the card at the end (`save_trouble`);
+        // after a standalone emulator, a parked save state that couldn't go back.
+        self.notice = if run.hosted() { Notice::take_after_game() } else { Notice::take_after_standalone() };
         // The start resumed this game after a switch-off after sleeping: why it was off, now on the shelf.
         self.switched_off_after_game();
         // A run that failed at once never put the game on the screen (`fallback::never_started`): it is no play
@@ -2098,10 +2077,6 @@ impl App {
             // A system whose BIOS pocket-ui knows: the files missing are named, not guessed at (`hostsys::missing_bios`).
             let bios = pocket_ui::hostsys::find(&run.system).and_then(|s| s.missing_bios(&pocket_ui::hostsys::bios_dir()));
             self.notice = Some(Notice::new(pocket_ui::fallback::not_started_notice_on(&run.system, &run.name, bios.as_deref())));
-            // The Steam Deck's big emulators are Flatpaks: say so when the one for this game isn't installed.
-            if pocket_ui::desk::active() && run.emulator.split('.').count() >= 3 && !pocket_ui::desk::flatpak_installed(&run.emulator) {
-                self.notice = Some(Notice::new(pocket_ui::fallback::flatpak_missing_notice(&run.name, &run.emulator)));
-            }
         }
         // A confirmed failed start without pocket-core moments may try the system emulator once.
         // Its core file missing is no fault of the game: no retry with another emulator (there may be none: "emulator , core ", then a
@@ -2128,19 +2103,21 @@ impl App {
         } else if failed {
             self.fallback.remove(&run.path);
             println!("pocket-core couldn't start {} (exit ok {ok}, {secs} s): no other emulator for {}", run.path.display(), run.system);
-            // The Steam Deck names the core pocket-core couldn't load (pocket-core's own line is a dlopen error).
-            let named = if pocket_ui::desk::active() { self.notice.as_ref().and_then(|n| pocket_ui::fallback::missing_core_in(n.text())) } else { None };
-            if let Some(core) = named {
-                self.notice = Some(Notice::new(pocket_ui::fallback::core_missing_named(&run.name, &core)));
-            } else if self.notice.is_none() {
+            if self.notice.is_none() {
                 self.notice = Some(Notice::new(pocket_ui::fallback::core_missing_notice(&run.name)));
             }
         }
         if let Some(core) = core_gone {
             println!("pocket-core couldn't start {}: the {core} core is missing", run.path.display());
-            self.notice = Some(Notice::new(if pocket_ui::desk::active() { pocket_ui::fallback::core_missing_named(&run.name, &core) } else { pocket_ui::fallback::core_missing_here(&run.name, &core) }));
+            self.notice = Some(Notice::new({ pocket_ui::fallback::core_missing_here(&run.name, &core) }));
         }
-        self.keep_last_frame(&run);
+        pocket_ui::trace::step("exit notices ready");
+        // Cozy's way back (`eject`): Quit in the pause menu, and the picture it showed, before the switcher keeps it.
+        // Taken over, not copied: the switcher's keep gets the same picture (`Arc`).
+        let cozy = self.cozy();
+        let quit_frame = self.menu.as_mut().filter(|m| m.quitting).map(|m| (m.frame.take().map(std::sync::Arc::new), m.game_rect));
+        self.keep_last_frame(&run, quit_frame.as_ref().and_then(|q| q.0.clone()));
+        let eject = quit_frame.filter(|_| cozy).map(|(f, rect)| f.map(|f| (f, rect)));
         // Written to the card at the end, after a game chosen in the switcher has been started (each syncs).
         // Not for a game that never started: it would be "Continue" on the shelf and the first card of the switcher.
         if !never_started {
@@ -2153,6 +2130,7 @@ impl App {
             // "without time" in Curator → History).
             pocket_ui::play_log::never_started(&run.system, &run.name, &run.path);
         }
+        pocket_ui::trace::step("exit frozen ready");
         let session = !never_started && self.library.note_session(&run.path, secs);
         self.curator.touch();
         // Back on the shelf at once; Syncthing gets asked on a thread of its own (`app_sync.rs`). Not when the game
@@ -2165,6 +2143,7 @@ impl App {
         }
         // Back on the shelf (or the next game's start says otherwise right after): our display again.
         pocket_ui::mako_osd::set_hidden(true);
+        pocket_ui::trace::step("exit shelf state ready");
         standalone::exited();
         self.launch_at = None;
         self.end_insert();
@@ -2184,9 +2163,11 @@ impl App {
             control::show_ui();
             self.raised();
         }
+        pocket_ui::trace::step("exit focus ready");
         // Stick movements were thinned out while the game ran (`idle::StickThrottle`); the controllers stay known.
         self.pad.let_go();
         self.rebuild();
+        pocket_ui::trace::step("exit rebuild ready");
         // A start that failed stays on the screen until it is read, in Easy.
         if never_started && !retry {
             self.big_note_failure(&run.path, &run.system, &run.name);
@@ -2195,6 +2176,10 @@ impl App {
         if self.screen == Screen::Home && !self.kids_live() && !self.big_live() {
             self.sel = Item::first_row(&self.items);
             self.prev_sel = self.sel;
+        }
+        // The shelf is live now; the way back only paints over it.
+        if let Some(frame) = eject.filter(|_| !never_started && !retry && reapply.is_none()) {
+            self.begin_eject(&run.path, &run.system, frame);
         }
         if retry {
             let path = run.path.clone();
@@ -2903,6 +2888,7 @@ impl App {
     }
 
     fn resume_game(&mut self, action: Option<SaveAction>) {
+        pocket_ui::trace::step("continue begin");
         // PS2, GameCube, Wii and 3DS options changed in the menu: kept for this game now, and applied live or, when the
         // emulator can't take them while running, by a restart that comes back to this moment. After Save or
         // Load a restart waits for the next start, so the two never write states at the same time.
@@ -3666,7 +3652,7 @@ impl App {
         match item {
             Item::Recent(i) => self.recents.list.get(i).map(|r| (r.system.clone(), r.path.clone())),
             Item::Game(s, g) => Some((self.systems[s].name.clone(), self.systems[s].games[g].path.clone())),
-            Item::System(_) | Item::Favorites | Item::Streaming | Item::Search | Item::JustPlay | Item::Curator | Item::Lens | Item::Surprise | Item::SmartShelf(_) | Item::Sticker(_) | Item::History | Item::Review(_) | Item::Rediscover => None,
+            Item::System(_) | Item::Favorites | Item::Streaming | Item::Search | Item::JustPlay | Item::Curator | Item::Lens | Item::SmartShelf(_) | Item::Sticker(_) | Item::History | Item::Review(_) | Item::Rediscover => None,
         }
     }
 
@@ -3756,7 +3742,6 @@ impl App {
         // HOME on a Settings page goes to Home, from wherever in Settings you got lost (Quick settings stay on Home and the shelf).
         if b == Button::Mode {
             if self.settings_page_lets_home_go() {
-                self.usb_transfer_left_settings();
                 self.settings_page = None;
                 self.sys.cancel_home_tap();
             }
@@ -3764,7 +3749,6 @@ impl App {
         }
         // B on the categories closes Settings.
         if matches!(self.settings_page, Some(SettingsPage::Groups(_))) && b == CANCEL {
-            self.usb_transfer_left_settings();
         }
         self.settings_page = match (self.settings_page, b) {
             // The categories, and moving and B in a category's list (`app_settings_groups`).
@@ -3809,7 +3793,6 @@ impl App {
                     }
                     Some(SettingsPage::Updates)
                 }
-                Opens::Store => self.open_store(),
                 Opens::GameCheck => self.open_game_check(),
                 Opens::Sync => self.open_sync(),
                 Opens::Leds => self.open_leds(),
@@ -3825,6 +3808,8 @@ impl App {
                 Opens::Tools => self.open_tools(),
                 Opens::TestButtons => self.open_test_buttons(),
                 Opens::PcStreaming => self.open_pc_streaming(),
+                // The page's first row that this device has (Tailscale, Sync, remote access, PC streaming).
+                Opens::Tinkerers => app_settings_groups::rows(app_settings_groups::TINKERERS).first().map(|r| SettingsPage::List(*r)),
                 Opens::Backup => self.open_backup(),
                 Opens::Storage => self.open_storage(),
                 Opens::Gamelist => self.open_gamelist(),
@@ -3840,10 +3825,6 @@ impl App {
                 Opens::About => self.open_about(),
                 // One press: the file is written and the sheet says where it went (Settings → System → About has the row too).
                 Opens::Report => self.open_report(),
-                Opens::UsbTransfer => {
-                    self.usb_transfer_switch();
-                    Some(SettingsPage::List(sel))
-                }
                 Opens::Haptics => {
                     #[cfg(feature = "brick")]
                     let on_brick = pocket_ui::device::brick();
@@ -3876,11 +3857,6 @@ impl App {
                     self.save_settings();
                     Some(SettingsPage::List(sel))
                 }
-                Opens::SecondScreen => {
-                    self.second_screen_on = !self.second_screen_on;
-                    self.save_settings();
-                    Some(SettingsPage::List(sel))
-                }
                 Opens::RemindWhere => {
                     self.remind_where = !self.remind_where;
                     self.save_settings();
@@ -3903,7 +3879,7 @@ impl App {
                     Some(SettingsPage::List(sel))
                 }
                 Opens::OverGame => {
-                    self.over_game = self.over_game.step(1);
+                    self.over_game = self.over_game.step(1, self.pixel_path);
                     self.save_settings();
                     Some(SettingsPage::List(sel))
                 }
@@ -3979,18 +3955,13 @@ impl App {
                 self.switch_animations();
                 Some(SettingsPage::List(sel))
             }
-            (Some(SettingsPage::List(sel)), Button::Left | Button::Right) if matches!(SETTINGS[sel].1, Opens::SecondScreen) => {
-                self.second_screen_on = !self.second_screen_on;
-                self.save_settings();
-                Some(SettingsPage::List(sel))
-            }
             (Some(SettingsPage::List(sel)), Button::Left | Button::Right) if matches!(SETTINGS[sel].1, Opens::Frames) => {
                 self.frames = self.frames.toggled();
                 self.save_settings();
                 Some(SettingsPage::List(sel))
             }
             (Some(SettingsPage::List(sel)), Button::Left | Button::Right) if matches!(SETTINGS[sel].1, Opens::OverGame) => {
-                self.over_game = self.over_game.step(if b == Button::Left { -1 } else { 1 });
+                self.over_game = self.over_game.step(if b == Button::Left { -1 } else { 1 }, self.pixel_path);
                 self.save_settings();
                 Some(SettingsPage::List(sel))
             }
@@ -4008,9 +3979,6 @@ impl App {
                 let now = self.sys.look().warmth;
                 self.set_screen_colour(now + if b == Button::Left { -1 } else { 1 });
                 Some(SettingsPage::List(sel))
-            }
-            (Some(SettingsPage::Store), b) => {
-                self.store_input(b).or_else(|| Some(SettingsPage::List(SETTINGS.iter().position(|s| matches!(s.1, Opens::Store)).unwrap_or(0))))
             }
             (Some(SettingsPage::Starter), b) => self.starter_input(b),
             (Some(SettingsPage::Sync), b) => self.sync_input(b),
@@ -4081,9 +4049,6 @@ impl App {
 
     /// Settings list and About page, in the same row style as the pause menu's options.
     fn paint_settings(&mut self, c: &mut Canvas) {
-        if self.settings_page == Some(SettingsPage::Store) {
-            return self.paint_store(c);
-        }
         if self.settings_page == Some(SettingsPage::Starter) {
             return self.paint_starter(c);
         }
@@ -4186,7 +4151,7 @@ impl App {
                 } else if screen_colour {
                     self.nu_hints(c, &[("B", "Back"), ("< >", "Change"), ("A", "Neutral")])
                 } else {
-                    self.nu_hints(c, &[("B", "Back"), ("A", if matches!(SETTINGS[sel].1, Opens::Haptics | Opens::Extra(_) | Opens::Sounds | Opens::OnStart | Opens::RememberQuit | Opens::RemindWhere | Opens::ZoomInPause | Opens::Animations | Opens::Appearance | Opens::Colours | Opens::Font | Opens::Motion | Opens::Frames | Opens::OverGame | Opens::Language | Opens::TextSize | Opens::SecondScreen) { "Change" } else { "Open" })])
+                    self.nu_hints(c, &[("B", "Back"), ("A", if matches!(SETTINGS[sel].1, Opens::Haptics | Opens::Extra(_) | Opens::Sounds | Opens::OnStart | Opens::RememberQuit | Opens::RemindWhere | Opens::ZoomInPause | Opens::Animations | Opens::Appearance | Opens::Colours | Opens::Font | Opens::Motion | Opens::Frames | Opens::OverGame | Opens::Language | Opens::TextSize) { "Change" } else { "Open" })])
                 };
                 // The selected row's line at the bottom; the category keeps room over the hints when one of its rows needs
                 // it (`app_settings_groups::desc_room`).
@@ -4253,6 +4218,9 @@ impl App {
                 let version = format!("pocket-ui {}", pocket_ui::update::app_version());
                 #[cfg(feature = "brick")]
                 let version = format!("pocket-ui {}", pocket_ui::update::brick_long(pocket_ui::update::app_version()));
+                let version = if update::release_build() { version } else {
+                    format!("pocket-ui {}-dev ({})", update::app_version(), option_env!("POCKETUI_COMMIT").unwrap_or("unknown"))
+                };
                 let mut lines = vec![
                     ("Version", version),
                     ("Games", format!("{games} on {} systems", self.systems.len())),
@@ -4270,7 +4238,14 @@ impl App {
                 }
                 // On one of the Mini V2's untested siblings: which one, and that it is experimental (docs/DEVICES.md).
                 // The Mini V2 and an unknown device show no such row.
-                if let Some(device) = pocket_ui::device::current().about_line() {
+                let device = pocket_ui::device::current().about_line();
+                // A dev version and commit leave no room for the Brick's model in the Version row.
+                // Keep its identity visible in a separate row, as on the experimental devices.
+                #[cfg(feature = "brick")]
+                let device = device.or_else(|| (!update::release_build()).then(|| {
+                    pocket_ui::brick_profile::board().unwrap_or(pocket_ui::brick_profile::Board::Brick).name().to_string()
+                }));
+                if let Some(device) = device {
                     lines.insert(1, ("Device", device));
                 }
                 // With the Device row on a short screen (the Mini V1's 960 lines, larger text) the facts move closer
@@ -4310,7 +4285,7 @@ impl App {
                 // Report a problem, and ROCKNIX's own menu behind the warning (`app_report`, `app_rescue`).
                 self.paint_about_rows(c, top + (lines.len() as i32 + 1) * row, row_h, font);
             }
-            Some(SettingsPage::Groups(_) | SettingsPage::Store | SettingsPage::Starter | SettingsPage::Sync | SettingsPage::Leds(_) | SettingsPage::NightLight(_) | SettingsPage::CozyExtras(_) | SettingsPage::Buttons(_) | SettingsPage::Controllers(_) | SettingsPage::Tailscale | SettingsPage::Web | SettingsPage::Bluetooth | SettingsPage::PerfFan | SettingsPage::Curator | SettingsPage::Achievements | SettingsPage::Tools | SettingsPage::TestButtons | SettingsPage::GameCheck | SettingsPage::PcStreaming | SettingsPage::Backup | SettingsPage::Storage | SettingsPage::Gamelist | SettingsPage::Screenshots | SettingsPage::SleepPower) | None => {}
+            Some(SettingsPage::Groups(_) | SettingsPage::Starter | SettingsPage::Sync | SettingsPage::Leds(_) | SettingsPage::NightLight(_) | SettingsPage::CozyExtras(_) | SettingsPage::Buttons(_) | SettingsPage::Controllers(_) | SettingsPage::Tailscale | SettingsPage::Web | SettingsPage::Bluetooth | SettingsPage::PerfFan | SettingsPage::Curator | SettingsPage::Achievements | SettingsPage::Tools | SettingsPage::TestButtons | SettingsPage::GameCheck | SettingsPage::PcStreaming | SettingsPage::Backup | SettingsPage::Storage | SettingsPage::Gamelist | SettingsPage::Screenshots | SettingsPage::SleepPower) | None => {}
         }
     }
 
@@ -4341,8 +4316,7 @@ impl App {
         draws.sort_by_key(|d| (std::cmp::Reverse(d.tag.is_some() && d.tag == running), std::cmp::Reverse(d.tag.is_some()), std::cmp::Reverse(d.last)));
         draws.truncate(2);
         // When the screen goes off and the Pocket sleeps is set elsewhere now: one line says where.
-        // (Not on the Steam Deck: SteamOS sets that, and the row is not there.)
-        let pointer = if pocket_ui::device::current().host_owned() { Vec::new() } else { self.text.wrap_prose(Face::Body, NU_SMALL, SLEEP_SETTINGS_POINTER, c.w - 4 * pad) };
+        let pointer = { self.text.wrap_prose(Face::Body, NU_SMALL, SLEEP_SETTINGS_POINTER, c.w - 4 * pad) };
         let (draw_step, desc_step) = (pocket_ui::type_scale::line(NU_SMALL, 14), pocket_ui::type_scale::line(NU_SMALL, 10));
         // Everything under the graph, from its bottom edge to the pointer's last line, and the hint bar's top: the
         // graph gives up height when Large text needs it (it stays at least `min_graph`).
@@ -4468,7 +4442,7 @@ impl App {
             theme: self.kids_saved_settings().0,
             onboarded: self.onboarded,
             update_url: self.update_url.clone(),
-            store_url: self.store.url.clone(),
+            store_url: self.store_url.clone(),
             hidden_systems: self.hidden.clone(),
             streaming_on_home: self.streaming_on,
             appearance: self.appearance,
@@ -4476,7 +4450,6 @@ impl App {
             forget_where_quit: !self.kids_saved_settings().1,
             no_where_was_i: !self.remind_where,
             zoom_in_pause: self.zoom_in_pause,
-            second_screen_off: !self.second_screen_on,
             big_shelf: false,
             button_layout: self.button_layout,
             prompts: pocket_ui::button_prompts::get(),
@@ -4500,6 +4473,7 @@ impl App {
             details_page: !self.game_box,
             open_case_told: self.big.open_case_told,
             extras: pocket_ui::cozy_extras::get(),
+            retired_look: false,
         }
         .save(&self.data_dir);
     }
@@ -4549,22 +4523,7 @@ impl App {
 
     /// What the Updates page offers right now, in display order.
     fn update_actions(&self) -> Vec<UpdateAction> {
-        let m = self.updates.manifest.as_ref();
-        if self.updates.confirming() {
-            return vec![UpdateAction::InstallNow, UpdateAction::Later];
-        }
-        let mut actions = Vec::new();
-        if m.and_then(|m| m.app.as_ref()).is_some_and(|a| update::newer(&a.version, update::app_version())) {
-            actions.push(UpdateAction::InstallApp);
-        }
-        if update::staged_os().is_some() {
-            actions.push(UpdateAction::CancelOs);
-        } else if m.and_then(|m| m.os.as_ref()).is_some_and(|o| update::newer(&o.version, &update::os_version().unwrap_or_default())) {
-            actions.push(UpdateAction::StageOs);
-        }
-        actions.push(UpdateAction::Check);
-        actions.push(UpdateAction::Auto);
-        actions
+        pocket_ui::update_page::actions(self.updates.app_available().is_some(), self.updates.confirming())
     }
 
     /// Starts `action` on a worker thread; results come back as `UserEvent::Update`.
@@ -4582,7 +4541,6 @@ impl App {
         let send = move |e| {
             let _ = proxy.send_event(UserEvent::Update(e));
         };
-        let manifest = self.updates.manifest.clone().unwrap_or_default();
         self.updates.message = None;
         self.updates.done = 0;
         match action {
@@ -4591,6 +4549,7 @@ impl App {
                 std::thread::spawn(move || send(UpdateEvent::Checked(update::fetch_manifest(&url))));
             }
             UpdateAction::InstallApp => {
+                if self.updates.app_available().is_none() { return; }
                 self.updates.set_confirmation(true);
                 self.updates.sel = 0;
             }
@@ -4601,7 +4560,7 @@ impl App {
             UpdateAction::Auto => {}
             UpdateAction::InstallNow => {
                 self.updates.set_confirmation(false);
-                let Some(rel) = manifest.app else { return };
+                let Some(rel) = self.updates.app_available().cloned() else { return };
                 let cancel = update::Cancel::new();
                 self.updates.start(UpdateTask::App { version: rel.version.clone(), total: rel.size, cancel: cancel.clone() });
                 self.observe_update_worker(&cancel);
@@ -4612,22 +4571,6 @@ impl App {
                     let result = update::install_app(&rel, &url, std::path::Path::new(update::APP_ROOT), &cancel, &|n| send(UpdateEvent::Progress(n)));
                     send(UpdateEvent::Done(result.map(|_| true)));
                 });
-            }
-            UpdateAction::StageOs => {
-                let Some(rel) = manifest.os else { return };
-                let cancel = update::Cancel::new();
-                self.updates.start(UpdateTask::System { version: rel.version.clone(), total: rel.size, cancel: cancel.clone() });
-                self.observe_update_worker(&cancel);
-                std::thread::spawn(move || {
-                    send(match update::stage_os(&rel, &url, &cancel, &|n| send(UpdateEvent::Progress(n))) {
-                        Ok(note) => UpdateEvent::OsStaged(note),
-                        Err(e) => UpdateEvent::Done(Err(e)),
-                    });
-                });
-            }
-            UpdateAction::CancelOs => {
-                update::cancel_os();
-                self.updates.message = Some("The system update was removed.".into());
             }
         }
     }
@@ -4657,8 +4600,8 @@ impl App {
             }
             UpdateEvent::Checked(Ok(m)) => {
                 self.updates.manifest = Some(m);
-                let none = !self.update_actions().iter().any(|a| matches!(a, UpdateAction::InstallApp | UpdateAction::StageOs | UpdateAction::CancelOs));
-                self.updates.message = none.then(|| "Everything is up to date.".to_string());
+                let none = !self.update_actions().iter().any(|a| matches!(a, UpdateAction::InstallApp));
+                self.updates.message = none.then(|| if self.updates.release_build() { "Everything is up to date." } else { update::DEVELOPMENT_BUILD }.to_string());
                 UpdateOutcome::Checked
             }
             UpdateEvent::Checked(Err(e)) | UpdateEvent::Done(Err(e)) => { self.updates.message = Some(e); UpdateOutcome::Failed },
@@ -4680,25 +4623,17 @@ impl App {
         let (pad, right) = (NU_PAD, c.w - NU_PAD);
         let m = self.updates.manifest.clone();
         #[cfg(not(feature = "brick"))]
-        let app_line = match m.as_ref().and_then(|m| m.app.as_ref()) {
-            Some(a) if update::newer(&a.version, update::app_version()) => format!("{}, {} available", update::app_version(), a.version),
+        let app_line = match self.updates.app_available() {
+            Some(a) => format!("{}, {} available", update::app_version(), a.version),
             _ => update::app_version().to_string(),
         };
         #[cfg(feature = "brick")]
-        let app_line = match m.as_ref().and_then(|m| m.app.as_ref()) {
-            Some(a) if update::newer(&a.version, update::app_version()) => format!("{}, {} available", update::brick_short(update::app_version()), update::brick_short(&a.version)),
+        let app_line = match self.updates.app_available() {
+            Some(a) => format!("{}, {} available", update::brick_short(update::app_version()), update::brick_short(&a.version)),
             _ => update::brick_short(update::app_version()),
         };
-        let os = update::os_version().unwrap_or_else(|| "unknown".into());
-        let os_line = match (update::staged_os(), m.as_ref().and_then(|m| m.os.as_ref())) {
-            (Some(_), _) => format!("{os}, update waiting for restart"),
-            (None, Some(o)) if update::newer(&o.version, &os) => format!("{os}, {} available", o.version),
-            _ => os,
-        };
-        // The Brick's system is TrimUI's firmware: nothing here updates it, and its os-release has no version ("System: unknown").
-        let brick = { #[cfg(feature = "brick")] { pocket_ui::device::brick() } #[cfg(not(feature = "brick"))] { false } };
-        let lines = [("pocket-ui", app_line), ("System", os_line)];
-        for (i, (name, value)) in lines.iter().take(if brick { 1 } else { 2 }).enumerate() {
+        let lines = [("pocket-ui", app_line)];
+        for (i, (name, value)) in lines.iter().enumerate() {
             let base = top + i as i32 * row + row / 2 + pocket_ui::type_scale::mid(font);
             self.text.draw(c, Face::Body, font, pad + NU_BTN_PAD, base, pal().dust, name);
             self.text.draw_right(c, Face::Body, font, right - NU_BTN_PAD, base, pal().text, value);
@@ -4706,16 +4641,8 @@ impl App {
         let actions = self.update_actions();
         let busy = self.updates.is_busy();
         for (i, action) in actions.iter().enumerate() {
-            let label = match action {
-                UpdateAction::Check => "Check again".to_string(),
-                UpdateAction::InstallApp => format!("Install pocket-ui {}", m.as_ref().and_then(|m| m.app.as_ref()).map_or("", |a| &a.version)),
-                UpdateAction::StageOs => format!("Get system {}", m.as_ref().and_then(|m| m.os.as_ref()).map_or("", |o| &o.version)),
-                UpdateAction::CancelOs => "Remove the waiting system update".to_string(),
-                UpdateAction::InstallNow => "Install now".to_string(),
-                UpdateAction::Later => "Later".to_string(),
-                UpdateAction::Auto => "Check for updates automatically".to_string(),
-            };
-            let y = top + (i as i32 + if brick { 1 } else { 2 }) * row + row / 3;
+            let label = action.label(m.as_ref().and_then(|m| m.app.as_ref()).map(|a| a.version.as_str()));
+            let y = top + (i as i32 + 1) * row + row / 3;
             let base = y + row / 2 + pocket_ui::type_scale::mid(font);
             let selected = i == self.updates.sel && !busy;
             if selected {
@@ -4763,7 +4690,7 @@ impl App {
             }
             None => self.updates.message.clone().unwrap_or_else(|| match actions.get(self.updates.sel) {
                 Some(UpdateAction::InstallApp) => m.as_ref().and_then(|m| m.app.as_ref()).map(|a| a.notes.clone()).unwrap_or_default(),
-                Some(UpdateAction::StageOs) => m.as_ref().and_then(|m| m.os.as_ref()).map(|o| o.notes.clone()).unwrap_or_default(),
+                _ if !self.updates.release_build() => update::DEVELOPMENT_BUILD.to_string(),
                 _ => String::new(),
             }),
         };
@@ -4783,7 +4710,7 @@ impl App {
         }
         // Never up into the actions: long release notes ran over "Check again" at Large text on 768 lines (the Brick); what is
         // over ends with "…".
-        let actions_end = top + (actions.len() as i32 + if brick { 1 } else { 2 }) * row + row / 3 + row + 8;
+        let actions_end = top + (actions.len() as i32 + 1) * row + row / 3 + row + 8;
         let fit = (((c.h - pad - NU_PILL - 30) - actions_end - 30) / 40 + 1).max(1) as usize;
         if lines.len() > fit {
             lines.truncate(fit);
@@ -4951,10 +4878,6 @@ impl App {
     }
 
     fn animating(&self) -> bool {
-        // The idle slideshow sets its own pace (`app_slideshow`).
-        if self.slideshow_visible() {
-            return false;
-        }
         // The Brick's bridge takes frames on a dark screen as well (no compositor stops them): nothing moves while it is dark.
         #[cfg(feature = "brick")]
         if pocket_ui::device::brick() && self.sleep.state() != pocket_ui::sleep::State::Awake {
@@ -4963,7 +4886,7 @@ impl App {
         // Only a shelf that is drawn moves (`app_where`): not behind a page, Kids Mode or a game.
         let shelf_visible = self.shelf_in_front();
         self.setup.as_ref().is_some_and(|s| s.animating()) || self.switcher.as_ref().is_some_and(|s| s.animating()) ||
-        self.quit.is_some() || self.kids_animating() || self.pull_moving(Instant::now()) || self.motion_animating(Instant::now()) || self.sync_note_active() || self.tailscale_animating() || self.bluetooth_animating() || self.tools_animating() || self.test_buttons_animating() || self.game_check_animating() || self.pc_streaming_animating() || self.backup_animating() || (self.updates.restart_at.is_some() && self.running.is_none()) || self.launch_at.is_some_and(|t| t.elapsed() < FADE + self.cabinet.launch_delay() + LAST_FADE_FRAME) || (self.theme == Theme::Cabinet && shelf_visible && self.cabinet.animating(Instant::now())) || (self.theme == Theme::Shelf && shelf_visible && self.shelf_media_animating(Instant::now())) || self.stream_message_due() || self.exit_since.is_some() || (if self.sys.quiet_game_controls(&self.sys_ctx()) { self.sys.animating_on_screen(Instant::now()) } else { self.sys.animating(Instant::now()) }) || (self.manual.moving() && self.settings_page == Some(SettingsPage::Manual)) || self.appearance_animating() || self.card.as_ref().is_some_and(|o| o.card.boxed.as_ref().is_some_and(|b| b.animating(Instant::now()))) || self.find_animating() || self.boot_fade.active()
+        self.pending_launch.is_some() || self.quit.is_some() || self.kids_animating() || self.pull_moving(Instant::now()) || self.motion_animating(Instant::now()) || self.sync_note_active() || self.tailscale_animating() || self.bluetooth_animating() || self.tools_animating() || self.test_buttons_animating() || self.game_check_animating() || self.pc_streaming_animating() || self.backup_animating() || (self.updates.restart_at.is_some() && self.running.is_none()) || self.launch_at.is_some_and(|t| t.elapsed() < FADE + self.cabinet.launch_delay() + LAST_FADE_FRAME) || (self.theme == Theme::Cabinet && shelf_visible && self.cabinet.animating(Instant::now())) || (self.theme == Theme::Shelf && shelf_visible && self.shelf_media_animating(Instant::now())) || self.stream_message_due() || self.exit_since.is_some() || (if self.sys.quiet_game_controls(&self.sys_ctx()) { self.sys.animating_on_screen(Instant::now()) } else { self.sys.animating(Instant::now()) }) || (self.manual.moving() && self.settings_page == Some(SettingsPage::Manual)) || self.appearance_animating() || self.card.as_ref().is_some_and(|o| o.card.boxed.as_ref().is_some_and(|b| b.animating(Instant::now()))) || self.find_animating() || self.boot_fade.active() || self.ejecting() || (self.theme == Theme::Cabinet && shelf_visible && self.ajar_sliding(Instant::now()))
     }
 
     fn openness(&self, i: usize) -> f32 {
@@ -5083,18 +5006,6 @@ impl App {
             // Between dark and light (`app_appearance`) the frame is painted in both and the two pictures are
             // mixed, so text never passes through the grey where it would match its background.
             self.paint_in_appearance(pixels, logical_w, logical_h, &mut |app, c| {
-                // The idle slideshow covers the shelf; the shelf is painted under it only while the first picture fades in.
-                if app.slideshow_visible() {
-                    let now = Instant::now();
-                    if app.slideshow_needs_shelf(now) {
-                        app.paint(c);
-                    } else {
-                        app.slideshow_begin_frame();
-                    }
-                    if app.paint_slideshow(c, now) {
-                        return;
-                    }
-                }
                 app.paint(c);
                 app.paint_notice_over_page(c);
                 app.motion_after_paint(c);
@@ -5114,6 +5025,8 @@ impl App {
             if pocket_ui::text::boxes::on() {
                 pocket_ui::text::boxes::finish(pixels, logical_w as i32, logical_h as i32);
             }
+            // Videos of the real device: every drawn frame with its time (POCKETUI_FRAME_DUMP, `frame_dump`). A no-op unset.
+            pocket_ui::frame_dump::capture(pixels, logical_w, logical_h);
         });
         self.surface = surface;
         if !drawn {
@@ -5125,6 +5038,8 @@ impl App {
         if pocket_ui::trace::on() {
             self.trace_frame(self.frame_at - started, w.get(), h.get());
         }
+        self.launch_response_painted();
+        self.launch_poll();
         self.motion_frame_end(self.frame_at - started);
         if let Some((seq, read, shown)) = self.menu.as_mut().and_then(|m| m.live.shown()) {
             println!("preview {seq}: read after {read:.0} ms, on screen {shown:.0} ms after the change");
@@ -5153,6 +5068,8 @@ impl App {
         self.notice_painted = false;
         // The cases' tap areas too: they are the Cabinet's only while this frame paints it, never under Settings.
         self.cabinet_frame_begin();
+        // Cozy's way back from a game: where it is (`app_cabinet::eject_tick`).
+        self.eject_tick(pocket_ui::frame_clock::now());
         // For the snapshot checks of Settings → Text size (`text::boxes`; nothing unless they run).
         pocket_ui::text::boxes::reset();
         // Set again when this frame paints the status corner (`app_status_corner`).
@@ -5168,6 +5085,7 @@ impl App {
         }
         // Kids Mode paints its own few screens (`app_kids`).
         if self.kids_paint(c) {
+            self.paint_eject(c, pocket_ui::frame_clock::now());
             self.painted = Painter::Kids;
             return;
         }
@@ -5410,21 +5328,16 @@ impl App {
         match self.theme {
             _ if big => self.big_paint(c),
             Theme::Shelf => self.paint_shelf(c),
-            Theme::Minimal => self.paint_minimal(c),
             Theme::Split => self.paint_split(c),
-            Theme::Cards => self.paint_cards(c),
             Theme::Cabinet => self.paint_cabinet(c),
-            // Off Home (a Curator list opened from Settings): a plain list.
+            // Off Home (a Curator list opened from Settings): a plain list, the one the Minimal look had until 0.4.
             Theme::Big => self.paint_minimal(c),
         }
 
         if big {
             // Its hints are its own, and they don't wait for anything else (`big_paint`).
         } else if with_hints {
-            // Up next after a game brings its own hints (`app_curator`).
-            if !self.paint_up_next(c) {
-                self.paint_hints(c);
-            }
+            self.paint_hints(c);
             // The letter of an L2/R2 jump (`app_search`).
             self.paint_letter_flash(c);
         }
@@ -5436,12 +5349,14 @@ impl App {
             self.text.draw_right(c, Face::Body, 24, right, 72, pal().dust, &note);
         }
 
+        // The way back from a game over the live shelf (`app_cabinet::paint_eject`).
+        self.paint_eject(c, pocket_ui::frame_clock::now());
         if let Some(t) = self.launch_at {
             // With the launch animation the fade waits for the cartridge or disc to go in (`app_cabinet`).
-            let p = (t.elapsed().saturating_sub(self.cabinet.launch_delay()).as_secs_f32() / FADE.as_secs_f32()).min(1.0);
+            let p = (pocket_ui::frame_clock::now().saturating_duration_since(t).saturating_sub(self.cabinet.launch_delay()).as_secs_f32() / FADE.as_secs_f32()).min(1.0);
             // The Shelf look's case goes into its console over the shelf (the Cabinet paints its own with the cabinet).
             if self.theme == Theme::Shelf || big {
-                self.paint_insert(c, Instant::now());
+                self.paint_insert(c, pocket_ui::frame_clock::now());
             }
             let p = self.cabinet.launch_fade_at(p);
             c.fade((p * 255.0) as u8);
@@ -5485,7 +5400,8 @@ impl App {
         }
     }
 
-    /// Minimal: plain white names on black, the selected one inverted in a pill (NextUI style).
+    /// The plain list: white names on black, the selected one inverted in a pill. The Minimal look until 0.4; now the
+    /// list Easy shows off Home (a Curator list opened from Settings).
     fn paint_minimal(&mut self, c: &mut Canvas) {
         let (top, row) = (124, 74);
         let visible = ((c.h - 120 - top) / row).max(1) as usize;
@@ -5637,172 +5553,6 @@ impl App {
         }
     }
 
-    /// Cards: a horizontal carousel of rounded cards over a wash of the selected system's colour.
-    fn paint_cards(&mut self, c: &mut Canvas) {
-        let Some(item) = self.items.get(self.sel).copied() else { return };
-        let (title, _, _, meta) = self.describe(item);
-        // The carousel glides (`app_motion`); the wash behind it turns from one card's colour to the next's.
-        let pos = self.motion.cards_at(self.sel, Instant::now());
-        let (lo, t) = (pos.floor().max(0.0) as usize, pos - pos.floor());
-        let wash_of = |app: &App, i: usize| app.items.get(i).map_or(pal().void, |it| mix(stripe(&app.describe(*it).1), pal().void, 215));
-        c.clear(if t > 0.0 { mix(wash_of(self, lo), wash_of(self, lo + 1), (t * 255.0) as u32) } else { wash_of(self, lo) });
-        let place = self.screen_title();
-        self.paint_top_line(c, place.as_deref(), pal().chalk);
-        let center = c.w / 2;
-        // 1080 lines are laid out from y=150: the cards (460 high), then the name 110 below them, the meta line 160 and the
-        // headline 206. A shorter screen (1024x768) starts higher and makes the cards lower so that the lines stay above
-        // the hints (`kh`, down to 0.6).
-        let top = if c.h < 1000 { 100 } else { 150 };
-        // A game's name takes a second line (its subtitle) under the first: room for it (`title_block`).
-        let kh = ((c.h - 100 - top - 222 - pocket_ui::title_block::step(&self.text, 67)) as f32 / 460.0).clamp(0.6, 1.0);
-        let slot = (460.0 * kh).round() as i32;
-        // Cards within reach of the glide, farthest first so the selected one lies on top. Each takes its size,
-        // shade and place from how far it is from the middle; the one in the middle is lifted a little (3 % larger,
-        // a soft shadow on paper).
-        let mut cards: Vec<(usize, f32)> =
-            ((pos.floor() as i32 - 2).max(0)..=(pos.ceil() as i32 + 2).min(self.items.len() as i32 - 1)).map(|i| (i as usize, i as f32 - pos)).collect();
-        cards.sort_by(|a, b| b.1.abs().total_cmp(&a.1.abs()));
-        let peek = pocket_ui::text::boxes::mark();
-        for (i, d) in cards {
-            let near = d.abs().min(1.0);
-            let card = self.items[i];
-            let (t, sys, side, _) = self.describe(card);
-            let lerp = |a: f32, b: f32| (a + (b - a) * near).round() as i32;
-            let (w, h) = (lerp(340.0 * 1.03, 270.0), (lerp(460.0 * 1.03, 370.0) as f32 * kh).round() as i32);
-            let x = center + (d * 330.0).round() as i32 - w / 2;
-            let y = top + (slot - h) / 2;
-            let color = stripe(&sys);
-            self.hits.row(Area::new(x, y, w, h), i);
-            pocket_ui::game_card::lift_shadow(c, x + 8, y + h, w - 16, ((1.0 - near) * pal().t as f32) as u8);
-            pocket_ui::retro::pill(c, x, y, w, h, 28, mix(color, pal().void, (near * pal().pick(120, 80) as f32) as u32));
-            // Pictures are made in the two resting sizes only (they are cached per size) and scaled on the way.
-            let (rw, rh) = if near < 0.5 { ((340.0f32 * 1.03).round() as i32, (460.0f32 * 1.03).round() as i32) } else { (270, 370) };
-            let scale = |iw: i32, ih: i32, room_w: i32, room_h: i32, rest_w: i32, rest_h: i32| {
-                let k = (room_w as f32 / rest_w.max(1) as f32).min(room_h as f32 / rest_h.max(1) as f32);
-                ((iw as f32 * k).round() as i32, (ih as f32 * k).round() as i32)
-            };
-            // Games with box art show the art on the card; the title is printed below the carousel.
-            if let Some(cover) = self.cover(card, rw - 24, rh - 24) {
-                let (cw, ch) = scale(cover.w as i32, cover.h as i32, w - 24, h - 24, rw - 24, rh - 24);
-                let (cx, cy) = (x + (w - cw) / 2, y + (h - ch) / 2);
-                c.blit_scaled(&cover, cx, cy, cw, ch);
-                if near > 0.0 {
-                    c.shade_rect(cx, cy, cw, ch, pal().void, (near * 120.0) as u8);
-                }
-                continue;
-            }
-            // A system card shows its console between the game count and the name. Pixel art is fitted, not scaled,
-            // in five sizes between the two resting ones (each is made once and kept).
-            let q = (near * 4.0).round() / 4.0;
-            let qlerp = |a: f32, b: f32| (a + (b - a) * q).round() as i32;
-            // The console name has an 80 px title band above the 32 px bottom margin. Reserve both so a
-            // two-line neighbour (Game Boy Color in Large Retro) never paints over its console picture.
-            let name_room = if matches!(card, Item::System(_) | Item::Game(..) | Item::Recent(_)) { 80 + 32 } else { 80 };
-            let (aw_max, ah_max) = (qlerp(340.0 * 1.03, 270.0) - 40, (qlerp(460.0 * 1.03, 370.0) as f32 * kh) as i32 - 64 - name_room);
-            let art = self.system_art(card, aw_max, ah_max);
-            if let Some(art) = &art {
-                let (aw, ah) = (art.w as i32, art.h as i32);
-                c.blit_sprite_to(art, x + (w - aw) / 2, y + 64 + (h - 64 - name_room - ah) / 2, (near * 120.0) as u8, pal().void);
-            }
-            let own_line = matches!(card, Item::System(_) | Item::Favorites | Item::Streaming | Item::Search | Item::JustPlay) || card.is_curator();
-            // A name too wide for the card takes a second line rather than ending in "…" ("Game Boy Advance").
-            // A word wider than the card on its own (a wide font, Large text) makes the name smaller, not cut.
-            let name = matches!(card, Item::System(_) | Item::Game(..) | Item::Recent(_));
-            let (tp, lines) = if name { self.text.card_name(&t, w - 48) } else {
-                let px = self.text.title_px(Face::Title, 37, &t, w - 48, 21);
-                (px, self.text.title_lines(Face::Title, px, &t, w - 48))
-            };
-            let title_step = if name { pocket_ui::title_block::step(&self.text, tp) } else { 44 };
-            let last = lines.len() as i32 - 1;
-            let mut body_drawn = false;
-            if own_line && art.is_none() && !side.is_empty() {
-                // No picture (Curator's entries, Favorites, Search, PC streaming, Just Play): their line ("70 games · 21 filters",
-                // "3 shelves", "One press") is the card's content, large in its middle as on Split's panel, not a blank body.
-                // Too wide for one line: a line per part ("70 games" / "21 filters"), each wrapped and not cut. The room is
-                // what the name (one or two lines at the bottom) leaves: a smaller size, never a line over the name's.
-                let room = (y + h - 32 - last * 44 - pocket_ui::type_scale::px(tp) as i32 * 10 / 11 - 8) - (y + 64);
-                let room_w = w - 48;
-                for px in [44u32, 36, 30, 26] {
-                    let parts: Vec<&str> = if self.text.width(Face::Title, px, &side) <= room_w { vec![side.as_str()] } else { side.split(" · ").take(3).collect() };
-                    let mut lines: Vec<String> = Vec::new();
-                    for part in parts {
-                        let wrapped = self.text.title_lines(Face::Title, px, part, room_w);
-                        if wrapped.iter().any(|l| l.ends_with('…')) {
-                            lines.clear();
-                            break;
-                        }
-                        lines.extend(wrapped);
-                    }
-                    let step = pocket_ui::type_scale::px(px) as i32 * 52 / 44;
-                    if lines.is_empty() || lines.len() as i32 * step > room.max(0) {
-                        continue;
-                    }
-                    let n = lines.len() as i32;
-                    let first = y + 64 + (room - n * step) / 2 + pocket_ui::type_scale::px(px) as i32 * 10 / 11;
-                    for (k, line) in lines.iter().enumerate() {
-                        self.text.draw(c, Face::Title, px, x + 24, first + k as i32 * step, 0xffffff, line);
-                    }
-                    body_drawn = true;
-                    break;
-                }
-            }
-            if !body_drawn {
-                // Nothing to show in the middle (a system card's picture stands there) or no room for it beside the name:
-                // the line goes small in the card's corner, wrapped in two lines at most before it is cut.
-                if own_line && !side.is_empty() {
-                    for (k, line) in self.text.wrap_at_most(Face::Body, 21, &side, w - 48, 2).iter().enumerate() {
-                        self.text.draw(c, Face::Body, 21, x + 24, y + 44 + k as i32 * pocket_ui::type_scale::line(21, 4), 0xffffff, line);
-                    }
-                } else {
-                    let short = if own_line { side } else { system_short(&self.systems, &sys) };
-                    let short = self.text.fit(Face::Body, 21, &short, w - 48);
-                    self.text.draw(c, Face::Body, 21, x + 24, y + 44, 0xffffff, &short);
-                }
-            }
-            for (k, line) in lines.iter().enumerate() {
-                if name { self.text.draw_name(c, Face::Title, tp, x + 24, y + h - 32 - (last - k as i32) * title_step, 0xffffff, line); }
-                else { self.text.draw(c, Face::Title, tp, x + 24, y + h - 32 - (last - k as i32) * title_step, 0xffffff, line); }
-            }
-        }
-        // For the snapshot checks of Settings → Text size: the neighbours are cut by the screen's edges on purpose.
-        pocket_ui::text::boxes::cut_on_purpose(peek);
-        // Cards flip sideways; a swipe up or down does the same.
-        self.hits.list(self.sel, self.items.len(), 330.0, 150.0);
-        let fav = self.is_favorite(item);
-        let mut under = 0;
-        if !matches!(item, Item::System(_)) {
-            // A name whole, in up to three lines with a game's subtitle smaller, as far as the room above the hints
-            // goes; the meta line stands where the last of them would end, so it does not move from game to game
-            // (`title_block`).
-            let (step, first) = (pocket_ui::title_block::step(&self.text, 67), top + slot + 110);
-            let n = 1 + ((c.h - 110 - 34 - first - 50) / step.max(1)).clamp(0, 2);
-            let star = if fav { app_switcher::star_room(67) } else { 0 };
-            let layout = if matches!(item, Item::Game(..) | Item::Recent(_)) { pocket_ui::title_block::name_layout } else { pocket_ui::title_block::layout };
-            let lines = layout(&mut self.text, Face::Title, 67, &title, c.w - 2 * MARGIN - star, n as usize);
-            let (end, base) = pocket_ui::title_block::paint(&mut self.text, c, Face::Title, &lines, center, first, pal().text, pal().chalk, true);
-            if fav {
-                App::paint_title_star(c, end, base, 67, pal().text);
-            }
-            under = (n - 1) * step;
-        } else {
-            let tw = self.title_width(Face::Title, 67, &title, fav).min(c.w - 2 * MARGIN);
-            self.draw_title(c, Face::Title, 67, center - tw / 2, top + slot + 110, c.w - 2 * MARGIN, pal().text, &title, true, fav);
-        }
-        let meta = self.text.fit(Face::Body, 28, &meta, c.w - 2 * MARGIN);
-        let mw = self.text.width(Face::Body, 28, &meta);
-        self.text.draw(c, Face::Body, 28, center - mw / 2, top + slot + 160 + under, pal().chalk, &meta);
-        if self.is_frozen_item(item) {
-            // The word in the top corner of the card in the middle.
-            self.paint_frozen_word(c, center + 165, top + 34, 0xffffff);
-        }
-        // A system with a fact sheet: one more line, its headline ("Sega · 1998 · sixth generation").
-        if let Some(headline) = self.console_headline(item) {
-            let headline = self.text.fit(Face::Body, 28, &headline, c.w - 2 * MARGIN);
-            let hw = self.text.width(Face::Body, 28, &headline);
-            self.text.draw(c, Face::Body, 28, center - hw / 2, top + slot + 206, pal().chalk, &headline);
-        }
-    }
-
     /// Only system rows use a known short system name when their full name still cannot fit one size smaller.
     /// Game names keep their own title painter and marquee.
     fn system_name_for_row(&mut self, item: Item, face: Face, px: u32, smaller: u32, title: String, room: i32) -> (u32, String) {
@@ -5816,7 +5566,7 @@ impl App {
     fn describe(&self, item: Item) -> (String, String, String, String) {
         match item {
             Item::Streaming => ("PC streaming".into(), "streaming".into(), "Moonlight".into(), "Play your PC's games over Wi-Fi with Moonlight".into()),
-            Item::Curator | Item::Lens | Item::Surprise | Item::SmartShelf(_) | Item::Sticker(_) | Item::History | Item::Review(_) | Item::Rediscover => self.curator_describe(item),
+            Item::Curator | Item::Lens | Item::SmartShelf(_) | Item::Sticker(_) | Item::History | Item::Review(_) | Item::Rediscover => self.curator_describe(item),
             Item::Search => ("Search".into(), "search".into(), "All games".into(), "Find any game by its name, typos and all".into()),
             Item::JustPlay => (shelf::JUST_PLAY.into(), "curator".into(), shelf::JUST_PLAY_SIDE.into(), shelf::JUST_PLAY_LINE.into()),
             Item::Favorites => {
@@ -6006,6 +5756,7 @@ fn snapshot(app: &mut App, args: &[String]) {
                 app.moved_at = Instant::now() - Duration::from_secs(5);
             }
             app.paint(&mut c);
+            if app.eject_snapshot(&mut buf, w, h, out) { return; }
             write_png(&buf, w, h, out);
         }
         return;
@@ -6023,6 +5774,7 @@ fn snapshot(app: &mut App, args: &[String]) {
                 app.paint(&mut c);
             }
             app.sys.paint(&mut c, &mut app.text, app.menu.is_none());
+            if app.eject_snapshot(&mut buf, w, h, out) { return; }
             write_png(&buf, w, h, out);
         }
         return;
@@ -6033,6 +5785,49 @@ fn snapshot(app: &mut App, args: &[String]) {
         app.where_was_i_snapshot(state, picture, w, h);
         let mut buf = vec![0u32; (w * h) as usize];
         app.paint(&mut Canvas::new(&mut buf, w, h));
+        write_png(&buf, w, h, out);
+        return;
+    }
+    // A press through the real start path, then its first painted animation frame. A mock-only slow preparation
+    // stands in for a card that stalls; rendering must keep going while it is pending (tests/launch_response.rs).
+    if state.starts_with("bench-launch-response") {
+        app.shelf_snapshot("gba:shelf:games:0");
+        let mut buf = vec![0u32; (w * h) as usize];
+        app.paint(&mut Canvas::new(&mut buf, w, h));
+        let before = buf.clone();
+        let Some(expected) = app.card_game(app.items[app.sel]) else { return };
+        if state.ends_with(":missing") { assert!(std::fs::remove_file(&expected.2).is_ok()); }
+        if state.ends_with(":empty") { assert!(std::fs::write(&expected.2, []).is_ok()); }
+        let asked = Instant::now();
+        let cpu = app_cabinet::thread_cpu();
+        app.activate();
+        // The next display refresh, as on the device; an immediate CPU paint can round subpixel motion to zero.
+        std::thread::sleep(FRAME);
+        app.paint(&mut Canvas::new(&mut buf, w, h));
+        app.launch_response_painted();
+        // What the UI thread itself spent on A and its first frame (CPU time: a busy computer doesn't add to it), and
+        // whether the preparation was already past its hold when that frame was painted (`TEST_PREPARE_HOLD`): it may
+        // only go on after five frames.
+        let first_cpu = app_cabinet::thread_cpu().saturating_sub(cpu);
+        let prepared = app_launch::TEST_PREPARED.load(std::sync::atomic::Ordering::SeqCst);
+        println!("bench-launch-response first_ms={:.3} first_cpu_ms={:.3} prepared_before_frame={prepared} inserting={} changed={}", asked.elapsed().as_secs_f64() * 1000.0, first_cpu.as_secs_f64() * 1000.0, app.cabinet_inserting(), before != buf);
+        let mut frames = 0;
+        let mut worst = Duration::ZERO;
+        while app.pending_launch.is_some() && asked.elapsed() < Duration::from_secs(5) {
+            let began = Instant::now();
+            app.paint(&mut Canvas::new(&mut buf, w, h));
+            worst = worst.max(began.elapsed());
+            frames += 1;
+            // The preparation goes on once the animation has shown it keeps going (five frames), on any computer.
+            if frames == 5 {
+                app_launch::TEST_PREPARE_RELEASED.store(true, std::sync::atomic::Ordering::SeqCst);
+            }
+            std::thread::sleep(Duration::from_millis(16));
+            app.launch_poll();
+        }
+        assert!(app.pending_launch.is_none(), "the launch never finished preparing");
+        let correct = app.running.as_ref().is_some_and(|r| r.path == expected.2 && r.system == expected.0 && r.name == expected.1);
+        println!("bench-launch-result frames={frames} worst_ms={:.3} correct={correct} notice={} elapsed_ms={:.3}", worst.as_secs_f64() * 1000.0, app.notice.is_some(), asked.elapsed().as_secs_f64() * 1000.0);
         write_png(&buf, w, h, out);
         return;
     }
@@ -6119,6 +5914,8 @@ fn snapshot(app: &mut App, args: &[String]) {
         let mut buf = vec![0u32; (w * h) as usize];
         let mut c = Canvas::new(&mut buf, w, h);
         app.paint(&mut c);
+        // As the real draw: a page that paints no notice of its own (a shelf with nothing on it) gets it over the page.
+        app.paint_notice_over_page(&mut c);
         write_png(&buf, w, h, out);
         return;
     }
@@ -6314,10 +6111,19 @@ fn snapshot(app: &mut App, args: &[String]) {
         // Playful animations in the Shelf look (`app_cabinet::shelf_playful_snapshot`): POCKETUI_SNAPSHOT_HELD=<steps>:<ms>
         // Right held for that many steps, that long after the last; POCKETUI_SNAPSHOT_MOVED_MS that long after a move.
         app.shelf_playful_snapshot(&mut Canvas::new(&mut buf, w, h));
+        // POCKETUI_SNAPSHOT_LAUNCH_SERIES: every 60 Hz frame of it (`app_cabinet::launch_series_snapshot`).
+        if app.launch_series_snapshot(&mut buf, w, h) {
+            return;
+        }
         // POCKETUI_SNAPSHOT_LAUNCH_MS: the launch animation that long after A (Shelf look, `app_cabinet`).
         if let Some(ms) = std::env::var("POCKETUI_SNAPSHOT_LAUNCH_MS").ok().and_then(|v| v.parse().ok()) {
             app.launch_animation_snapshot(Duration::from_millis(ms));
             app.paint(&mut Canvas::new(&mut buf, w, h));
+        }
+        // POCKETUI_SNAPSHOT_EJECT_MS: Cozy's way back from the selected game that long after it ended
+        // (`app_cabinet::eject_snapshot`); POCKETUI_SNAPSHOT_EJECT_BENCH=1 prints its numbers instead.
+        if app.eject_snapshot(&mut buf, w, h, out) {
+            return;
         }
         write_png(&buf, w, h, out);
         return;
@@ -6330,15 +6136,6 @@ fn snapshot(app: &mut App, args: &[String]) {
         write_png(&buf, w, h, out);
         return;
     }
-    // "second:<box|info>:<system>:<name>", "second:system:<system>", "second:none": what the second screen shows below
-    // the shelf (`app_second_screen`; the RG DS Plus's lower panel).
-    if let Some(rest) = state.strip_prefix("second:") {
-        app.cabinet.inline = true;
-        let mut buf = vec![0u32; (w * h) as usize];
-        app.second_snapshot(rest, &mut buf, w, h);
-        write_png(&buf, w, h, out);
-        return;
-    }
     // "box:<system>:<name>[:<keys>]": the game's card as its box (`game_box`): `r` turns it over, `d` scrolls the
     // back; POCKETUI_SNAPSHOT_FLIP_MS paints the last turn that long after it began.
     let boxed = state.strip_prefix("box:").map(|r| format!("card:{r}"));
@@ -6348,11 +6145,9 @@ fn snapshot(app: &mut App, args: &[String]) {
         app.cabinet.inline = true;
     }
     // "info:<look>:<system>:<name>[:<keys>]": X on the game in that look (`show_card`): the info page (`game_info`) in
-    // Minimal, Cards and Split, the box in Shelf and Cabinet.
+    // Split, the box in Shelf and Cabinet.
     let info = state.strip_prefix("info:").and_then(|r| r.split_once(':')).map(|(look, r)| {
         app.theme = match look {
-            "minimal" => Theme::Minimal,
-            "cards" => Theme::Cards,
             "split" => Theme::Split,
             "cabinet" => Theme::Cabinet,
             _ => Theme::Shelf,
@@ -6375,6 +6170,8 @@ fn snapshot(app: &mut App, args: &[String]) {
         let mut buf = vec![0u32; (w * h) as usize];
         app.paint(&mut Canvas::new(&mut buf, w, h));
         app.curator_snapshot_after(rest);
+        // One moment for the turn, the slide and the disc: the clock stands while the frame is set up and painted.
+        pocket_ui::frame_clock::hold_settled();
         if let Some(bx) = app.card.as_mut().and_then(|o| o.card.boxed.as_mut()) {
             bx.snapshot_settle();
         }
@@ -6410,20 +6207,6 @@ fn snapshot(app: &mut App, args: &[String]) {
         write_png(&buf, w, h, out);
         return;
     }
-    // "slideshow[:<ms>]": the idle slideshow, that long into its first slide (`app_slideshow`).
-    if app.slideshow_snapshot(state) {
-        let mut buf = vec![0u32; (w * h) as usize];
-        let mut c = Canvas::new(&mut buf, w, h);
-        let now = Instant::now();
-        if app.slideshow_needs_shelf(now) || !app.slideshow_visible() {
-            app.paint(&mut c);
-        } else {
-            app.slideshow_begin_frame();
-        }
-        app.paint_slideshow(&mut c, now);
-        write_png(&buf, w, h, out);
-        return;
-    }
     // "gallery[:…]": the screenshot gallery with made-up screenshots, or the game card's row for them (`app_gallery`).
     if app.gallery_snapshot(state) {
         let mut buf = vec![0u32; (w * h) as usize];
@@ -6443,10 +6226,15 @@ fn snapshot(app: &mut App, args: &[String]) {
     }
     if let Some(rest) = state.strip_prefix("cabinet:") {
         app.cabinet_snapshot(rest);
+        app.frozen_snapshot();
         let mut buf = vec![0u32; (w * h) as usize];
         let mut c = Canvas::new(&mut buf, w, h);
         app.paint(&mut c);
         app.cabinet_snapshot_outcome(h as i32);
+        // POCKETUI_SNAPSHOT_EJECT_MS and the rest: the way back from the game the cabinet stands on (`eject_snapshot`).
+        if app.eject_snapshot(&mut buf, w, h, out) {
+            return;
+        }
         write_png(&buf, w, h, out);
         return;
     }
@@ -6534,7 +6322,7 @@ fn snapshot(app: &mut App, args: &[String]) {
         app.paint_manual(&mut Canvas::new(&mut buf, w, h));
         app.manual.scroll_by(at.get(1).copied().unwrap_or(0));
     }
-    if manual_at.is_some() || app.store_snapshot(state) || app.starter_snapshot(state) || app.sync_snapshot(state) || app.leds_snapshot(state) || app.night_light_snapshot(state) || app.buttons_snapshot(state) || app.controllers_snapshot(state) || app.tailscale_snapshot(state) || app.web_snapshot(state) || app.bluetooth_snapshot(state) || app.perf_fan_snapshot(state) || app.sleep_power_snapshot(state) || app.report_snapshot(state) || app.port_perf_snapshot(state) || app.achievements_snapshot(state) || app.tools_snapshot(state) || app.test_buttons_snapshot(state) || app.game_check_snapshot(state) || app.pc_streaming_snapshot(state) || app.backup_snapshot(state) || app.storage_snapshot(state) || app.gamelist_snapshot(state) {
+    if manual_at.is_some() || app.starter_snapshot(state) || app.sync_snapshot(state) || app.leds_snapshot(state) || app.night_light_snapshot(state) || app.buttons_snapshot(state) || app.controllers_snapshot(state) || app.tailscale_snapshot(state) || app.web_snapshot(state) || app.bluetooth_snapshot(state) || app.perf_fan_snapshot(state) || app.sleep_power_snapshot(state) || app.report_snapshot(state) || app.port_perf_snapshot(state) || app.achievements_snapshot(state) || app.tools_snapshot(state) || app.test_buttons_snapshot(state) || app.game_check_snapshot(state) || app.pc_streaming_snapshot(state) || app.backup_snapshot(state) || app.storage_snapshot(state) || app.gamelist_snapshot(state) {
     } else if let Some(kind) = state.strip_prefix("updates") {
         // The Updates page after "Get system" with a made-up list: "updates:note" staged with a note of what the new
         // system lacks, "updates:refused" refused because pocket-ui would break (`os_compat`).
@@ -6553,6 +6341,7 @@ fn snapshot(app: &mut App, args: &[String]) {
             }
             // The page with a newer pocket-ui on offer: its notes, then the question, with a flat battery or a full one.
             ":ready" | ":confirm" | ":confirm-low" | ":confirm-charging" | ":off" => {
+                app.updates.release_build = Some(true);
                 let app_release = update::Release { version: "99.0.0".into(), url: "x.tar".into(), preferred_sources: Vec::new(), mirrors: Vec::new(), sha256: String::new(), size: 1, notes: "Update notice: pocket-ui tells you once when a new version is out. Switch it off in Updates. Fixes long game names on the shelf.".into() };
                 app.updates.manifest = Some(Manifest { format: 1, app: Some(app_release), ..Default::default() });
                 app.updates.message = None;
@@ -6563,6 +6352,11 @@ fn snapshot(app: &mut App, args: &[String]) {
                 if kind == ":confirm-low" || kind == ":confirm-charging" {
                     pocket_ui::status_corner::force_battery(pocket_ui::status_corner::Battery { percent: 14, charging: kind == ":confirm-charging" });
                 }
+            }
+            ":development" => {
+                app.updates.release_build = Some(false);
+                let app_release = update::Release { version: "0.3.2".into(), url: "unused.tar".into(), preferred_sources: Vec::new(), mirrors: Vec::new(), sha256: String::new(), size: 1, notes: String::new() };
+                app.update_event(UpdateEvent::Checked(Ok(Manifest { format: 1, app: Some(app_release), ..Default::default() })));
             }
             ":timeout" => app.updates.message = Some("The download server stopped responding. Nothing was installed. Try again.".into()),
             ":unreachable" => {
@@ -6582,11 +6376,12 @@ fn snapshot(app: &mut App, args: &[String]) {
             ("about", _, _) => SettingsPage::About,
             (_, Some(range), _) => SettingsPage::Battery(range),
             (_, _, Some(r)) => SettingsPage::List(rows[(*r).min(rows.len() - 1)]),
-            _ => SettingsPage::Groups(g),
+            _ => SettingsPage::Groups(g.min(app_settings_groups::SHOWN - 1)),
         });
         // The values the list reads on a thread, read here at once (`settings_values`).
         // ":dot": a newer pocket-ui is known (the dot on System and on its Updates row).
         if state.ends_with(":dot") {
+            app.updates.release_build = Some(true);
             let release = update::Release { version: "99.0.0".into(), url: "x.tar".into(), preferred_sources: Vec::new(), mirrors: Vec::new(), sha256: String::new(), size: 1, notes: String::new() };
             app.updates.manifest = Some(Manifest { format: 1, app: Some(release), ..Default::default() });
         }
@@ -7065,8 +6860,9 @@ fn stripe(system: &str) -> u32 {
 }
 
 #[cfg(target_os = "linux")]
-fn spawn_game(proxy: EventLoopProxy<UserEvent>, system: &str, emulator: &str, core: &str, path: &std::path::Path, env: &[(&str, String)]) -> Option<i32> {
+fn spawn_game(proxy: EventLoopProxy<UserEvent>, run: &Run, env: &[(&str, String)]) -> Option<i32> {
     use std::os::unix::process::CommandExt;
+    let (system, path, core) = (run.system.as_str(), run.path.as_path(), run.core.as_str());
     let started = Instant::now();
     if system == "ports" && !pocket_ui::ports::trimui_standalone() {
         // A PortMaster unpacked by an older pocket-ui lacks execute bits (gptokeyb): repair it before the port starts.
@@ -7084,7 +6880,7 @@ fn spawn_game(proxy: EventLoopProxy<UserEvent>, system: &str, emulator: &str, co
     } else if let Some(c) = (system == "ports").then(|| pocket_ui::ports::trimui_launch_command(path)).flatten() {
         // Native TrimUI ports prepare their runtime in the child and never pass through pocket-core or runemu.sh.
         c
-    } else if emulator == "pocket-core" {
+    } else if run.player == Player::Hosted {
         let mut c = std::process::Command::new(host_bin());
         c.arg(pocket_ui::store::core_path(core)).arg(path).arg("--system").arg(system);
         // pocket-ui puts ROCKNIX's quantum back when the game ends (`ui_sound::game_ended`), in order with the shelf's own.
@@ -7092,7 +6888,7 @@ fn spawn_game(proxy: EventLoopProxy<UserEvent>, system: &str, emulator: &str, co
         // A pocket-ui that crashes takes pocket-core with it (SIGTERM: it saves and quits).
         control::die_with_parent(&mut c);
         c
-    } else if emulator == "hakux" {
+    } else if matches!(run.player, Player::Standalone(standalone::Emu::Hakux, _)) {
         // Xbox: ROCKNIX's RetroArch on the hakuX core in pocket-ui's folder, with our own appendconfig (`hakux`,
         // `standalone::launch` has prepared it). Not runemu.sh: that loads cores from /tmp/cores and writes the config itself.
         let mut c = pocket_ui::hakux::command(path);
@@ -7100,7 +6896,7 @@ fn spawn_game(proxy: EventLoopProxy<UserEvent>, system: &str, emulator: &str, co
         c
     } else {
         let mut c = std::process::Command::new(std::env::var("POCKETUI_RUNEMU").unwrap_or_else(|_| "/usr/bin/runemu.sh".into()));
-        c.arg(path).arg(format!("-P{system}")).arg(format!("--core={core}")).arg(format!("--emulator={emulator}")).arg("--controllers=");
+        c.arg(path).arg(format!("-P{system}")).arg(format!("--core={core}")).arg(format!("--emulator={}", run.player.name())).arg("--controllers=");
         // A writable working directory: start_armsx2.sh tests `[ "$IRES" > "0" ]`, a redirect to a file "0",
         // which fails in the read-only / and drops the PS2 internal resolution back to 1x.
         c.current_dir("/tmp");
@@ -7109,14 +6905,14 @@ fn spawn_game(proxy: EventLoopProxy<UserEvent>, system: &str, emulator: &str, co
     cmd.envs(env.iter().map(|(k, v)| (*k, v)));
     // Standalone SDL guests receive identity-bound, normalised virtual seats. The helper creates
     // them off the UI thread; its lifetime and process group are exactly the game's.
-    if pocket_ui::pad::bridge::bridged(emulator) && test_driver_dir().is_none() && !pocket_ui::device::current().host_owned() {
+    if pocket_ui::pad::bridge::bridged(run.player.name()) && test_driver_dir().is_none() {
         match pocket_ui::pad::bridge::wrap(&cmd) {
             Ok(bridged) => cmd = bridged,
             Err(e) => { eprintln!("controller bridge: {e}"); return None; }
         }
     }
     // pocket-core announces its exit save on a pipe, so a switch needn't wait for the process to end (`fast_switch`).
-    let handoff = (emulator == "pocket-core").then(|| pocket_ui::fast_switch::Handoff::attach(&mut cmd)).flatten();
+    let handoff = (run.player == Player::Hosted).then(|| pocket_ui::fast_switch::Handoff::attach(&mut cmd)).flatten();
     // Own process group, so pause and quit reach every process the game starts.
     let child = if system == "ports" { standalone::spawn_port(&mut cmd) } else { cmd.process_group(0).spawn() };
     let pgid = child.as_ref().ok().map(|c| c.id() as i32);
@@ -7129,7 +6925,7 @@ fn spawn_game(proxy: EventLoopProxy<UserEvent>, system: &str, emulator: &str, co
             let _ = proxy.send_event(UserEvent::GameSaved { pgid: g });
         }))
     } else { None };
-    let hosted = emulator == "pocket-core";
+    let hosted = run.player == Player::Hosted;
     let moment_base = pocket_ui::slots::base(system, path.file_stem().and_then(|s| s.to_str()).unwrap_or_default());
     std::thread::spawn(move || {
         let ok = child.ok().and_then(|mut c| c.wait().ok()).is_some_and(|s| s.success());
@@ -7178,7 +6974,7 @@ fn spawn_app(proxy: EventLoopProxy<UserEvent>, _cmd: std::process::Command) -> O
 }
 
 #[cfg(not(any(target_os = "linux", target_os = "emscripten")))]
-fn spawn_game(proxy: EventLoopProxy<UserEvent>, _system: &str, _emulator: &str, _core: &str, _path: &std::path::Path, _env: &[(&str, String)]) -> Option<i32> {
+fn spawn_game(proxy: EventLoopProxy<UserEvent>, _run: &Run, _env: &[(&str, String)]) -> Option<i32> {
     // Desktop preview: pretend the game ran for two seconds.
     std::thread::spawn(move || {
         std::thread::sleep(Duration::from_secs(2));
@@ -7314,7 +7110,6 @@ fn spawn_command_fifo(proxy: EventLoopProxy<UserEvent>) {
                 "r1" => Button::R1,
                 "l2" => Button::L2,
                 "r2" => Button::R2,
-                // A real analog trigger pull, including extra travel while held, for the slideshow/sleep journeys.
                 "r2axis" if test_driver_dir().is_some() => {
                     for value in [0.9, 0.95, 0.0] {
                         let _ = proxy.send_event(UserEvent::Pad(PadEvent::Axis { source: usize::MAX, axis: Axis::R2, value }));
@@ -7344,6 +7139,10 @@ fn spawn_command_fifo(proxy: EventLoopProxy<UserEvent>) {
                 // the status file, never to a page a waking B would have left (docs/DEVICE-TESTS.md).
                 "wake" => {
                     let _ = proxy.send_event(UserEvent::Wake);
+                    continue;
+                }
+                "dark" => {
+                    let _ = proxy.send_event(UserEvent::ScreenOff);
                     continue;
                 }
                 // SELECT and START held and let go: Kids Mode's way out, for its journey.
@@ -7425,11 +7224,13 @@ impl App {
         pocket_ui::mark!("event", "{:?}", std::mem::discriminant(&ev));
         // A start's skip comes before quick settings, notices and volume keys consume their input. HOME and volume
         // never become a game button in pocket-core, so the UI must deliver their skip itself.
-        if self.running.is_some() && matches!(ev, UserEvent::Pad(PadEvent::Button { pressed: true, .. })) && self.launch_button() {
+        if (self.running.is_some() || self.pending_launch.is_some()) && matches!(ev, UserEvent::Pad(PadEvent::Button { pressed: true, .. })) && self.launch_button() {
             self.home_tap = false;
             self.start_tap.disarm();
             return;
         }
+        if self.pending_launch.is_some() && matches!(ev, UserEvent::Pad(_) | UserEvent::Touch(_))
+            && !matches!(ev, UserEvent::Pad(PadEvent::Button { button: Button::VolUp | Button::VolDown, .. })) { return; }
         // Test buttons takes every button but the volume and power keys, B, START and HOME included (`app_test_buttons`).
         if let UserEvent::Pad(pe) = &ev {
             if self.test_buttons_swallows(pe) {
@@ -7497,6 +7298,7 @@ impl App {
         match ev {
             UserEvent::Quit => el.exit(),
             UserEvent::KidsTick => self.kids_tick(),
+            UserEvent::LaunchPrepared => self.launch_poll(),
             #[cfg(feature = "brick")]
             UserEvent::UiScreenshot(failed) => self.ui_screenshot_done(failed),
             #[cfg(feature = "brick")]
@@ -7509,32 +7311,31 @@ impl App {
                     self.user_event_inner(el, UserEvent::TestFrame(false));
                 }
             }
+            UserEvent::TestPresent => {
+                if test_driver_dir().is_some() {
+                    let now = Instant::now();
+                    let (_, w, h) = self.paint_headless(now);
+                    if pocket_ui::trace::on() {
+                        self.trace_frame(now.elapsed(), w, h);
+                    }
+                    self.launch_response_painted();
+                    self.launch_poll();
+                }
+            }
             UserEvent::TestFrame(picture) => {
                 if let Some(dir) = test_driver_dir() {
-                    let (w, h) = snapshot_dims();
-                    let mut buf = vec![0; (w * h) as usize];
-                    // The idle slideshow, when it is on (the journey tests), else the shelf.
                     let now = Instant::now();
-                    // Match live frames: a saved Light appearance and changes made in Settings must reach the
-                    // capture too. Calling paint directly left all headless journeys in the default dark palette.
-                    self.paint_in_appearance(&mut buf, w, h, &mut |app, c| {
-                        let show = app.slideshow_visible();
-                        if show && app.slideshow_needs_shelf(now) {
-                            app.paint(c);
-                        } else if show {
-                            app.slideshow_begin_frame();
-                        }
-                        if !(show && app.paint_slideshow(c, now)) {
-                            app.paint(c);
-                            app.sys.paint(c, &mut app.text, app.menu.is_none());
-                            app.paint_leave(c);
-                        }
-                    });
+                    let (buf, w, h) = self.paint_headless(now);
                     // The headless driver has no window presentation. Keep its real paint time in the same trace
                     // as window frames, before text diagnostics, scaling and PNG encoding add capture overhead.
                     if pocket_ui::trace::on() {
                         self.trace_frame(now.elapsed(), w, h);
                     }
+                    self.launch_response_painted();
+                    // The status file says what this frame shows before the frame is announced: it is otherwise written
+                    // by the loop's next idle step, so a helper reading it right after the picture got the page before
+                    // the press (tests/user_journeys.rs, `the_status_file_already_says_what_the_frame_just_painted`).
+                    let _ = self.status_tick(Instant::now());
                     if picture {
                         write_png(&buf, w, h, dir.join("frame.png").to_str().unwrap());
                     } else {
@@ -7542,6 +7343,7 @@ impl App {
                     }
                     self.nav_probe_done(&buf);
                     self.feedback.clear();
+                    self.launch_poll();
                 }
             }
             UserEvent::Leave => self.open_leave(pocket_ui::rescue::DialogKind::Leave),
@@ -7549,6 +7351,10 @@ impl App {
                 if !self.sleep.wake_from_light("the command FIFO's wake") {
                     return;
                 }
+            }
+            UserEvent::ScreenOff => {
+                let ctx = self.sleep_ctx();
+                self.sleep.screen_off_now(ctx);
             }
             #[cfg(feature = "brick")]
             UserEvent::Play(system, path) => {
@@ -7615,7 +7421,6 @@ impl App {
             // `merge_pad` turned it into `Pad` already.
             UserEvent::Merged(_) => {}
             UserEvent::Update(e) => self.update_event(e),
-            UserEvent::Store(e) => self.store_event(e),
             UserEvent::Starter(e) => self.starter_event(e),
             UserEvent::GameCheck(gen, e) => self.game_check_event(gen, e),
             UserEvent::Covers(e) => self.covers_event(e),
@@ -7632,22 +7437,14 @@ impl App {
             UserEvent::Texts(e) => self.texts_event(e),
             UserEvent::Identify(e) => self.identify_event(e),
             UserEvent::Picture(key, img) => {
-                self.second_picture_changed(&key);
                 self.picture_arrived(key, img);
                 return;
             },
-            UserEvent::Slides(generation, slides) => self.slideshow_slides(generation, slides),
-            UserEvent::SlideScene(generation, index, scene) => self.slideshow_scene(generation, index, scene),
             UserEvent::Online => self.auto_covers("online after boot"),
             UserEvent::LibraryRescanned(systems, key) => self.library_rescanned(systems, key),
             UserEvent::LibraryUnread { count, rose } => self.library_unread(count, rose),
-            UserEvent::UsbTransfer { wanted_on, status } => self.usb_transfer_switched(wanted_on, status),
             UserEvent::GamesCard(change) => self.games_card_changed(change),
             UserEvent::Display(tv) => self.display_changed(tv),
-            UserEvent::SecondScreen(outputs) => match outputs {
-                Some((main, output)) => self.second_screen_found(el, main, output),
-                None => { self.second = None; },
-            },
             // A frame only while the corner is on screen (every event below ends in one).
             UserEvent::StatusCorner => {
                 if !self.status_corner_shown() {
@@ -7714,7 +7511,7 @@ impl App {
                 if let Some(forward) = self.setup.as_mut().and_then(|s| s.take_colours_step()) {
                     self.step_colours(forward);
                 }
-                // Its Style row: Barlow, Pixel, Rounded or Retro, as Settings › Look › Style.
+                // Its Style row: Barlow or Retro, as Settings › Look › Style.
                 if let Some(forward) = self.setup.as_mut().and_then(|s| s.take_font_step()) {
                     self.step_font(forward);
                 }
@@ -7918,12 +7715,6 @@ impl ApplicationHandler<UserEvent> for App {
             use winit::platform::wayland::WindowAttributesExtWayland;
             attrs.with_name(control::OWN_APP_ID, control::OWN_APP_ID)
         };
-        // The same on X11 (the Steam Deck's XWayland): WM_CLASS, which `desk` finds the window by.
-        #[cfg(all(target_os = "linux", feature = "x11"))]
-        let attrs = {
-            use winit::platform::x11::WindowAttributesExtX11;
-            attrs.with_name(control::OWN_APP_ID, control::OWN_APP_ID)
-        };
         let window = match el.create_window(attrs) {
             Ok(w) => Rc::new(w),
             Err(e) => {
@@ -7952,22 +7743,27 @@ impl ApplicationHandler<UserEvent> for App {
             || matches!(&ev, UserEvent::Pad(PadEvent::Axis { value, .. }) if value.abs() > pocket_ui::pad::STICK_DEADZONE) {
             self.last_input = Instant::now();
         }
-        // The idle slideshow: a touch ends it and is nothing else (`app_slideshow`); the pad's press is dealt with below,
+        // Cancel before L2/R2 gestures can consume the press and open another overlay.
+        self.eject_input(&ev);
         // after sleep has seen it.
-        if matches!(ev, UserEvent::Touch(_)) && self.slideshow_input(&ev) {
-            return;
-        }
-        // The Mini V2's L2/R2 arrive as travel. Normalize them before sleep and the slideshow so the waking or
         // dismissing pull is swallowed as one press, including subsequent travel until its release.
         let Some(ev) = self.trigger_event(ev) else { return };
         // Speed guard: numbered so a frame can say which input it shows (docs/LATENCY.md).
         if let UserEvent::Pad(PadEvent::Button { button, pressed, .. }) = &ev {
             pocket_ui::mark!("input", "{} {:?} {}", pocket_ui::trace::input(), button, if *pressed { "down" } else { "up" });
+            pocket_ui::frame_dump::event(|| format!("input {button:?} {}", if *pressed { "down" } else { "up" }));
         }
         if matches!(ev, UserEvent::Pad(PadEvent::Button { pressed: true, .. })) {
             self.motion_input();
+            // Any button ends the way back from a game, and does what it does on the shelf.
+            self.skip_eject();
         }
         if let UserEvent::Touch(t) = ev {
+            self.skip_eject();
+            if self.pending_launch.is_some() {
+                self.launch_button();
+                return;
+            }
             if self.close_notice_touch(&t) {
                 return;
             }
@@ -7998,11 +7794,6 @@ impl ApplicationHandler<UserEvent> for App {
             && self.running.is_none() && self.settings_page != Some(SettingsPage::Manual) {
             return;
         }
-        // A press while the idle slideshow is on only ends it: the shelf is as it was, nothing is done (`app_slideshow`).
-        if self.slideshow_input(&ev) {
-            self.request_redraw();
-            return;
-        }
         // One rule for releases: a release counts on the page that saw its press (`app_where::press_page`).
         if let UserEvent::Pad(PadEvent::Button { button, pressed, .. }) = &ev {
             self.note_press_page(*button, *pressed);
@@ -8030,19 +7821,6 @@ impl ApplicationHandler<UserEvent> for App {
     }
 
     fn window_event(&mut self, el: &ActiveEventLoop, id: WindowId, event: WindowEvent) {
-        // The second screen's window only paints (`app_second_screen`); keys and closing are the shelf's.
-        if self.is_second_window(id) {
-            match event {
-                WindowEvent::Resized(_) | WindowEvent::RedrawRequested => self.draw_second(),
-                WindowEvent::CloseRequested | WindowEvent::Destroyed => {
-                    self.second = None;
-                    self.second_control = None;
-                    self.second_screen_start();
-                }
-                _ => {}
-            }
-            return;
-        }
         if self.window.as_ref().is_none_or(|w| w.id() != id) { return; }
         match event {
             WindowEvent::CloseRequested => el.exit(),
@@ -8074,7 +7852,6 @@ impl ApplicationHandler<UserEvent> for App {
                 let pressed = state == ElementState::Pressed;
                 self.user_event(el, UserEvent::Pad(PadEvent::Button { source: 0, button, pressed }));
             }
-            // A pointer (the Deck's trackpads and touch screen reach Gamescope as a mouse): in the menus it taps
             // and scrolls like a finger (`app_touch`); a game keeps its own.
             WindowEvent::CursorMoved { position, .. } => {
                 let size = self.window.as_ref().map_or((0, 0), |w| (w.inner_size().width, w.inner_size().height));
@@ -8096,6 +7873,7 @@ impl ApplicationHandler<UserEvent> for App {
     }
 
     fn about_to_wait(&mut self, el: &ActiveEventLoop) {
+        self.launch_poll();
         self.kids_about_to_wait();
         // SELECT + START held: the dialog (Restart pocket-ui, Open EmulationStation), never EmulationStation at once.
         if self.exit_since.is_some_and(|t| t.elapsed() >= EXIT_HOLD) {
@@ -8209,8 +7987,13 @@ impl ApplicationHandler<UserEvent> for App {
         // Awake again: a frame, so the corner's clock and battery are those of now (the minute's wake-up runs on the
         // monotonic clock, which stood still in the suspend). The screen is on already; this is after it.
         if self.sleep.take_woke() {
-            if let Some(second) = self.second.as_ref() { second.request_redraw(); }
             self.request_redraw();
+        }
+        // The Brick back from its real sleep: the game waits behind its pause menu (`Sleep::take_menu_after_wake`).
+        #[cfg(feature = "brick")]
+        if self.sleep.take_menu_after_wake() && self.menu.is_none() {
+            println!("sleep: awake on the Brick; the pause menu");
+            self.open_menu();
         }
         // Keep sound responsive while browsing, then release the silent stream so PipeWire can suspend.
         let sound_until = self.last_input + Duration::from_secs(2);
@@ -8283,23 +8066,11 @@ impl ApplicationHandler<UserEvent> for App {
         if let Some(t) = self.box_warm_tick(now) {
             wake = Some(wake.map_or(t, |w| w.min(t)));
         }
-        // The second screen: the box below follows the shelf (`app_second_screen`). Nothing without one.
-        if let Some(t) = self.second_screen_tick(now) {
-            wake = Some(wake.map_or(t, |w| w.min(t)));
-        }
         if let Some(t) = self.sys.next_wake() {
-            wake = Some(wake.map_or(t, |w| w.min(t)));
-        }
-        // The idle slideshow: starts after a quiet minute on the shelf, ends with the screen (`app_slideshow`).
-        if let Some(t) = self.slideshow_tick(now) {
             wake = Some(wake.map_or(t, |w| w.min(t)));
         }
         // Split's preview changes picture now and then (`app_pictures`).
         if let Some(t) = self.pictures_tick(now) {
-            wake = Some(wake.map_or(t, |w| w.min(t)));
-        }
-        // Up next: frames while it slides in, then a wake-up when it goes by itself (`app_curator`).
-        if let Some(t) = self.curator_up_next_wake(now) {
             wake = Some(wake.map_or(t, |w| w.min(t)));
         }
         if let Some(t) = self.loading_wake(now) {
@@ -8335,7 +8106,7 @@ impl ApplicationHandler<UserEvent> for App {
             self.toast = None;
         }
         let marquee_wake = (self.sleep.state() == pocket_ui::sleep::State::Awake
-            && (self.running.is_none() || self.switcher.is_some()) && !self.slideshow_visible())
+            && (self.running.is_none() || self.switcher.is_some()))
             .then(|| self.marquee.next_wake()).flatten();
         for at in [toast_wake, marquee_wake, self.sync_note_wake(now)].into_iter().flatten() {
             if now >= at { self.request_redraw(); }
@@ -8382,10 +8153,9 @@ impl App {
     fn sleep_ctx(&self) -> pocket_ui::sleep::Ctx {
         pocket_ui::sleep::Ctx {
             menu_open: self.menu.is_some(),
-            busy: self.quit.as_ref().is_some_and(|q| q.busy(Instant::now()))
+            busy: self.pending_launch.is_some() || self.quit.as_ref().is_some_and(|q| q.busy(Instant::now()))
                 || (self.updates.is_busy() && update::busy_blocks_sleep(self.updates.busy_since(), Instant::now()))
                 // A store install or tool (review N5), with the same cap.
-                || update::busy_blocks_sleep(self.store.loaded().and_then(|s| s.busy_since()), Instant::now())
                 // A starter pack download keeps the Pocket awake the same way (`app_starter`).
                 || update::busy_blocks_sleep(self.starter.busy_since(), Instant::now())
                 // A backup or restore of saves copies for as long as the card needs: it ends itself, and says so (`app_backup`).
@@ -8452,6 +8222,19 @@ impl App {
         quick::Ctx { shelf, game }
     }
 
+    fn paint_headless(&mut self, _now: Instant) -> (Vec<u32>, u32, u32) {
+        let (w, h) = snapshot_dims();
+        let mut buf = vec![0; (w * h) as usize];
+        // Match live frames: a saved Light appearance and changes made in Settings must reach the
+        // capture too. Calling paint directly left all headless journeys in the default dark palette.
+        self.paint_in_appearance(&mut buf, w, h, &mut |app, c| {
+            app.paint(c);
+            app.sys.paint(c, &mut app.text, app.menu.is_none());
+            app.paint_leave(c);
+        });
+        (buf, w, h)
+    }
+
     fn request_redraw(&self) {
         if let Some(w) = &self.window {
             w.request_redraw();
@@ -8468,7 +8251,6 @@ impl App {
         // The game list read again (it came from the cache), or the cache written (`app_library`).
         self.library_after_first_frame();
         // The pages' state the first frame doesn't show, each on a thread (`startup::Later`).
-        self.store.start();
         self.sync.start();
         // The look for saves with two versions, on a thread that waits a while first (`app_sync_conflicts`).
         self.sync_conflicts_start();
@@ -8489,8 +8271,6 @@ impl App {
         self.library_prewarm_names();
         // Playing on a TV: a thread asleep on sway's output events (`app_display_out`).
         self.display_out_start();
-        // The second screen (RG DS Plus, the add-on): one look at sway's outputs on a thread (`app_second_screen`).
-        self.second_screen_start();
         // The threads and programs the start put off (`startup::after_first_frame`).
         pocket_ui::startup::first_frame_done();
     }
@@ -8524,17 +8304,24 @@ fn text_size_override() -> Option<pocket_ui::type_scale::TextSize> {
     }
 }
 
-/// `POCKETUI_FONT=barlow`, `pixel` or `rounded`: the font style whatever settings.json says, for the snapshots and tests
+/// `POCKETUI_FONT=barlow`, `pixel` or `retro`: the font style whatever settings.json says, for the snapshots and tests
 /// (as `POCKETUI_TEXT_SIZE` the text size).
 fn font_override() -> Option<pocket_ui::font_style::FontStyle> {
     std::env::var("POCKETUI_FONT").ok().and_then(|v| pocket_ui::font_style::FontStyle::parse(&v))
 }
 
 fn main() {
+    #[cfg(all(target_os = "linux", feature = "brick"))]
+    if std::env::args_os().nth(1).as_deref() == Some(std::ffi::OsStr::new("--brick-idle")) {
+        std::process::exit(pocket_ui::update::payload::idle_command(&std::env::args_os().skip(2).collect::<Vec<_>>()));
+    }
     // Stock firmware has no unzip applet. This bounded helper runs before UI/input/audio starts.
     if std::env::args_os().nth(1).as_deref() == Some(std::ffi::OsStr::new("--unpack-runtime")) {
         let args: Vec<_> = std::env::args_os().skip(2).collect();
-        let result = if args.len() == 2 { pocket_ui::archive::unpack_python_runtime(std::path::Path::new(&args[0]), std::path::Path::new(&args[1])) }
+        let status = std::env::var_os("BRICK_PORTMASTER_PROGRESS").filter(|s| !s.is_empty()).map(std::path::PathBuf::from);
+        let result = if args.len() == 2 { pocket_ui::archive::unpack_python_runtime_with_progress(std::path::Path::new(&args[0]), std::path::Path::new(&args[1]), &|done, total| {
+            if let Some(path) = &status { pocket_ui::update::payload::write_progress(path, "unpacking", done, total); }
+        }).map_err(|e| e.to_string()) }
             else { Err("usage: --unpack-runtime ZIP DEST".to_string()) };
         std::process::exit(match result { Ok(()) => 0, Err(error) => { eprintln!("runtime unpack: {error}"); 1 } });
     }
@@ -8573,16 +8360,6 @@ fn main() {
         if let Err(e) = result {
             eprintln!("brick data: {e}");
             std::process::exit(1);
-        }
-        return;
-    }
-    if let Some(i) = std::env::args().position(|a| a == "--restore-second-screen") {
-        if let Some(p) = pocket_ui::second_screen::Panels::current() {
-            let saved = std::env::args().nth(i + 1).and_then(|v| v.parse().ok());
-            pocket_ui::second_screen::recover_panels(std::path::Path::new("/"), p, saved);
-            for output in [&p.top, &p.bottom] {
-                control::sway_command(&format!("output {output} power on"));
-            }
         }
         return;
     }
@@ -8661,7 +8438,7 @@ fn main() {
     let crash_notice = pocket_ui::crash::take_marker(&data_dir).map(Notice::new);
     pocket_ui::crash::install("pocket-ui", data_dir.clone(), None);
     pocket_ui::startup::mark("crash");
-    // Instant start (docs/DEVELOPING.md, Start time): the type and the game list are read on threads of their own
+    // Instant start (docs/dev/start-time.md, Start time): the type and the game list are read on threads of their own
     // while this one connects to sway and reads the settings; the first frame waits only for the slowest of them.
     let fonts = std::thread::spawn(Text::new);
     // From the cache of the last scan when it is good (`library_cache`; the folders are read again after the first
@@ -8713,8 +8490,7 @@ fn main() {
     pocket_ui::startup::mark("input");
 
     let mut settings = Settings::load(&data_dir);
-    // The Store row is there only when a catalog is set up (`store::catalog_url`; none is public yet).
-    app_settings_groups::set_store_offered(pocket_ui::store::catalog_url(settings.store_url.as_deref()).is_some());
+    let retired_look = settings.retired_look;
     pocket_ui::motion::set_level(settings.motion);
     pocket_ui::cozy_extras::set(settings.extras);
     pocket_ui::system_art::set_gba_model(settings.gba_model);
@@ -8782,9 +8558,7 @@ fn main() {
         pocket_ui::startup::after_first_frame("seed-volume", move || hw.seed_volume());
     }
     pocket_ui::startup::mark("settings+hw");
-    // USB file transfer is retired (`usb_transfer::RETIRED`): one switched on before this version is switched off.
     #[cfg(target_os = "linux")]
-    std::thread::spawn(pocket_ui::usb_transfer::retire);
     // ROCKNIX leaves the GPU overclocked to 925 MHz when nobody chose a speed; heavy PS2 games froze the device.
     #[cfg(target_os = "linux")]
     std::thread::spawn(pocket_ui::system_ctl::cap_gpu_if_unset);
@@ -8814,10 +8588,6 @@ fn main() {
     let sys = Sys::new(hw, data_dir.clone(), power_is_mock);
     pocket_ui::startup::mark("sys");
     let fallback = pocket_ui::fallback::Fallback::load(&data_dir);
-    let store = {
-        let (data_dir, url) = (data_dir.clone(), settings.store_url.clone());
-        Later::new("store", move || store_page::StorePage::new(&data_dir, url))
-    };
     let favorites = pocket_ui::favorites::Favorites::load(&data_dir);
     let library = pocket_ui::library_meta::LibraryMeta::load(&data_dir);
     let sync_ui = {
@@ -8848,6 +8618,8 @@ fn main() {
     let mut curator_ui = app_curator::CuratorUi::load(&data_dir);
     // Curator's "Pixel Path over every game" became Settings → Playing → Over the game (2026-10-25): moved once.
     pocket_ui::over_game::adopt_curator(&data_dir, &mut settings, &mut curator_ui.prefs);
+    // Over the game's Pixel Path level only with the pause menu's Pixel Path (Enthusiast); a saved one is FPS otherwise.
+    settings.over_game = settings.over_game.offered(curator_ui.prefs.pixel_path);
     // Where the play log lives and whether to record; nothing is read or started before the first frame.
     pocket_ui::play_log::configure(&data_dir, curator_ui.prefs.history);
     pocket_ui::startup::mark("configs");
@@ -8892,10 +8664,12 @@ fn main() {
     // Inspection stays on its own worker. Mock/snapshot fixtures have no installed layout to inspect.
     let update_inspector = if std::env::var_os("POCKETUI_MOCK").is_some() || std::env::args().any(|a| a == "--snapshot") { None } else {
         let notify = proxy.clone();
-        Some(update::observation::watch(pocket_ui::device::current().host_owned(), move |inspection| {
+        Some(update::observation::watch(move |inspection| {
             let _ = notify.send_event(UserEvent::Update(UpdateEvent::Inspected(inspection)));
         }))
     };
+    let mock_update_manifest = app_update_hint::mock_manifest();
+    let mock_release_build = mock_update_manifest.is_some().then_some(true);
     let mut app = App {
         proxy,
         started,
@@ -8917,6 +8691,7 @@ fn main() {
         exit_since: None,
         running: None,
         launch_at: None,
+        pending_launch: None,
         drew_first: false,
         boot_fade: pocket_ui::boot_fade::BootFade::new(boot_fade),
         after_first_done: false,
@@ -8941,9 +8716,6 @@ fn main() {
         about: Default::default(),
         after_game_note: None,
         tv: None,
-        second: None,
-        second_control: None,
-        second_screen_on: !settings.second_screen_off,
         notice: crash_notice,
         notice_painted: false,
         notice_later: Vec::new(),
@@ -8969,9 +8741,9 @@ fn main() {
         manual_hold: None,
         manual_from_setup: false,
         // A mock run's stand-in list (`POCKETUI_UPDATE_HINT`) also has its pocket-ui on the Updates page, with notes.
-        updates: Updates { manifest: app_update_hint::mock_manifest(), ..Updates::default() },
+        updates: Updates { release_build: mock_release_build, manifest: mock_update_manifest, ..Updates::default() },
         update_url: settings.update_url.clone(),
-        store,
+        store_url: settings.store_url.clone(),
         starter: Default::default(),
         exit_code: 0,
         onboarded: settings.onboarded,
@@ -8982,7 +8754,6 @@ fn main() {
         kids: Default::default(),
         big: app_big_shelf::Big::new(settings.open_case_told),
         cover_run: Default::default(),
-        usb_busy: false,
         card_out_note: false,
         text_run: Default::default(),
         identify: app_identify::Identify::new(),
@@ -9039,7 +8810,6 @@ fn main() {
         streaming: pocket_ui::moonlight::installed(),
         streaming_on: settings.streaming_on_home,
         pictures: app_pictures::PicturesUi::new(!settings.box_art_only && !settings.art_off),
-        slideshow: app_slideshow::SlideshowUi::new(),
         art_off: settings.art_off,
         cabinet: Default::default(),
         // Read before `curator_ui` moves in: the pause menu's Pixel Path switch (`Prefs::pixel_path`).
@@ -9105,7 +8875,15 @@ fn main() {
         // downloads and rescue markers) belong to an actual device, not a mock-only headless test.
         app.drew_first = true;
         app.after_first_done = true;
-        event_loop.run_app(&mut app).expect("run test driver");
+        // As at a real start (below): a look that went with 0.4 is said once.
+        if retired_look {
+            app.say_retired_look();
+        }
+        if pocket_ui::frame_dump::on() {
+            app_frame_dump::run(event_loop, &mut app);
+        } else {
+            event_loop.run_app(&mut app).expect("run test driver");
+        }
         pocket_ui::fsutil::settle();
         return;
     }
@@ -9135,6 +8913,10 @@ fn main() {
         app.start_game_at_start(pocket_ui::sleep::take_resume(&app.data_dir));
         // Switched off after sleeping: said once, over that game or on the shelf (`app_auto_off`).
         app.say_switched_off();
+        // A look that went with 0.4 is Split now (`settings::RETIRED_LOOKS`): said once, and saved at once.
+        if retired_look {
+            app.say_retired_look();
+        }
         let root = std::path::Path::new(update::APP_ROOT);
         // The launcher handed over to EmulationStation by itself last time (run-pocket-ui.sh, `rescue`).
         if let Some(note) = pocket_ui::rescue::take_es_note(root) {
@@ -9182,7 +8964,7 @@ fn main() {
         pocket_ui::startup::after_first_frame("keep-sharing", pocket_ui::wifi::keep_sharing_on);
         // A games card coming or going while we run: the shelf reads the folders again, or says the card is out.
         #[cfg(target_os = "linux")]
-        if !pocket_ui::device::current().host_owned() {
+        {
             let proxy = app.proxy.clone();
             pocket_ui::startup::after_first_frame("games-card", move || {
                 pocket_ui::games_card::watch(move |change| {
@@ -9207,7 +8989,12 @@ fn main() {
         });
     }
     pocket_ui::startup::mark("threads");
-    event_loop.run_app(&mut app).expect("run app");
+    // A frame dump runs the same loop tick by tick on its fixed clock (`app_frame_dump`); without it, as always.
+    if pocket_ui::frame_dump::on() {
+        app_frame_dump::run(event_loop, &mut app);
+    } else {
+        event_loop.run_app(&mut app).expect("run app");
+    }
     // Stop sampling and flush all buffered history/ledger data before an orderly exit.
     pocket_ui::battery_history::stop();
     // The lists a game's end handed to the card writer are on the card before we go (`fsutil::write_json_soon`).
@@ -9216,9 +9003,6 @@ fn main() {
     pocket_ui::play_log::settle();
     app.perf_fan_exit();
     app.web_exit();
-    // process::exit skips destructors: finish the second-screen worker and return its panel lit explicitly.
-    app.second_control.take();
-    app.second.take();
     if app.exit_code == pocket_ui::rescue::OPEN_ES_CODE {
         pocket_ui::rescue::before_es();
     }
@@ -9229,7 +9013,20 @@ fn main() {
 
 #[cfg(test)]
 mod start_order_tests {
-    /// Battery's pointer to Sleep & power is read on every device (Odin, Anbernic, Deck): no "the Pocket" in it, and
+    /// The player is read once from the route's names, and runemu.sh and the controller bridge still get the same name.
+    #[test]
+    fn a_game_starts_on_the_player_its_route_names() {
+        use super::{standalone::Emu, Player};
+        assert_eq!(Player::of("gba", "pocket-core", "mgba"), Player::Hosted);
+        assert_eq!(Player::of("xbox", "hakux", "hakux"), Player::Standalone(Emu::Hakux, "hakux".into()));
+        assert_eq!(Player::of("ps2", "armsx2", "armsx2"), Player::Standalone(Emu::Armsx2, "armsx2".into()));
+        assert_eq!(Player::of("gba", "retroarch", "mgba"), Player::Other("retroarch".into()));
+        for (system, emulator, core) in [("gba", "pocket-core", "mgba"), ("3ds", "azahar", "azahar"), ("ports", "ports", ""), ("snes", "retroarch", "snes9x")] {
+            assert_eq!(Player::of(system, emulator, core).name(), emulator);
+        }
+    }
+
+    /// Battery's pointer to Sleep & power is read on every device (Odin, Anbernic): no "the Pocket" in it, and
     /// the German line is the neutral one too.
     #[test]
     fn the_battery_pointer_is_device_neutral_in_both_languages() {
@@ -9244,6 +9041,20 @@ mod start_order_tests {
         assert_eq!(crate::toast_len("Added to Favourites"), std::time::Duration::from_millis(2000));
         assert!(crate::toast_len("Hidden: Game. Settings › System › Storage brings it back.") > std::time::Duration::from_millis(3000));
         assert_eq!(crate::toast_len(&"x".repeat(400)), std::time::Duration::from_millis(6000), "never longer than six seconds");
+    }
+
+    #[test]
+    fn a_frame_dump_ticks_as_the_ui_paces_its_frames_so_every_tick_gets_one() {
+        // POCKETUI_FRAME_DUMP on the Mini V2 (10.11.2026): ticks of exactly 1/60 s (16.6667 ms) came 0.3 µs before
+        // `frame_due` (`FRAME`, 16.667 ms), so the window painted only every other tick, 30 fps. The headless driver
+        // paints every tick itself, which hid it; this holds the window's rule against the dump's clock.
+        let t0 = std::time::Instant::now();
+        let mut due = t0;
+        for k in 0..600u64 {
+            let now = t0 + std::time::Duration::from_nanos(pocket_ui::frame_dump::tick_ns(k));
+            assert!(now >= due, "tick {k}: the frame is due {:?} later", due - now);
+            due = pocket_ui::frame_pace::after_paint(now, now, crate::FRAME);
+        }
     }
 
     /// The first press after a cold start was lost while the pads were opened only after the event loop had been
@@ -9278,7 +9089,7 @@ fn split_big_is_side(item: Item) -> bool {
             | Item::Favorites
             | Item::Curator
             | Item::Lens
-            | Item::Surprise
+           
             | Item::SmartShelf(_)
             | Item::Sticker(_)
             | Item::History
@@ -9392,9 +9203,9 @@ mod home_tests {
         for page in [Groups(0), List(3), About, Battery(1), Leds(0), NightLight(0), CozyExtras(2), SleepPower, Curator] {
             assert!(page_lets_home_go(Some(page)), "{page:?}");
         }
-        // A download or a check (Updates, Store, the starter pack), a sign-in or pairing, a clean-up or a restore, a button
+        // A download or a check (Updates, the starter pack), a sign-in or pairing, a clean-up or a restore, a button
         // being remapped: HOME keeps out, B goes back as it asks.
-        for page in [Updates, Store, Starter, GameCheck, Sync, Tailscale, Bluetooth, Web, PerfFan, Achievements, Tools, PcStreaming, Backup, Storage, Gamelist, Screenshots, Buttons(0), Manual] {
+        for page in [Updates, Starter, GameCheck, Sync, Tailscale, Bluetooth, Web, PerfFan, Achievements, Tools, PcStreaming, Backup, Storage, Gamelist, Screenshots, Buttons(0), Manual] {
             assert!(!page_lets_home_go(Some(page)), "{page:?}");
         }
         assert!(!page_lets_home_go(None), "not in Settings: HOME is the shelf's (Quick settings)");
@@ -9492,3 +9303,38 @@ mod test_clock;
 mod app_web_demo;
 #[cfg(target_os = "emscripten")]
 use app_web_demo::{spawn_app, spawn_game};
+
+#[cfg(test)]
+mod development_update_tests {
+    use super::*;
+
+    fn checked(release_build: bool, version: &str) -> Updates {
+        let app = update::Release { version: version.into(), url: "unused.tar.gz".into(),
+            preferred_sources: Vec::new(), mirrors: Vec::new(), sha256: String::new(), size: 1, notes: String::new() };
+        Updates { release_build: Some(release_build), manifest: Some(Manifest { format: 1, app: Some(app), ..Default::default() }), ..Default::default() }
+    }
+
+    #[test]
+    fn development_build_does_not_offer_a_release_over_its_cargo_version() {
+        // Main dd5b2e0d contains 47 commits after the 0.3.2 source freeze, but Cargo still says 0.2.0.
+        assert!(update::newer("0.3.2", "0.2.0"), "the numeric comparison alone causes the false offer");
+        assert!(checked(false, "0.3.2").app_available().is_none(),
+            "a dev build has no release ordering: 0.3.2 must not be offered as newer");
+        assert!(checked(false, "99.0.0").app_available().is_none(),
+            "without a release stamp, even a larger version is not proof of newer code");
+    }
+
+    #[test]
+    fn normal_runs_take_the_build_type_from_the_compiled_release_stamp() {
+        let mut page = checked(false, "99.0.0");
+        page.release_build = None;
+        assert_eq!(page.app_available().is_some(), update::release_build());
+    }
+
+    #[test]
+    fn release_build_keeps_the_existing_numeric_update_order() {
+        assert!(checked(true, "99.0.0").app_available().is_some());
+        assert!(checked(true, update::app_version()).app_available().is_none());
+        assert!(checked(true, "0.0.0").app_available().is_none());
+    }
+}

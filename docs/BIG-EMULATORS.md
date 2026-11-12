@@ -643,7 +643,9 @@ scripts/big-emu-bench.sh [--minutes 3] [--rumble] /storage/roms/wii/<game>.rvz /
     put back (watched with inotify; the slot listing before the load only peeks at the 256-byte header).
     Azahar keeps reading through its open descriptor.
   - If pocket-ui dies in between, `….pocket-ui` is left behind; the next launch of that game puts it back
-    (`azahar::recover`).
+    (`azahar::recover`). When that rename back fails (here or after a save or load, `azahar::unpark`; Dolphin's
+    `.s00` goes the same way), the shelf says so after the game (`save_trouble::STATE_NOT_BACK`, "A save state
+    couldn't be put back in its place on the SD card…") and the next launch tries again.
 - State names: `<program id, 16 hex digits>.NN.cst` (Azahar's `GetSaveStatePath`). pocket-ui reads the id
   from `.3ds`/`.cci` (NCSD partition 0) and `.cxi`/`.app` (NCCH 0x118). `.3dsx`, `.z3dsx`, `.elf` and
   `.axf` have none and Azahar uses 0, so all 3DSX homebrew share one quick slot (the resume state is per

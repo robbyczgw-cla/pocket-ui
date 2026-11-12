@@ -112,7 +112,6 @@ pub fn core_missing_notice(name: &str) -> String {
     format!("{name} didn't start. The system's core may not be installed: add it in RetroArch (Flatpak) > Online Updater > Core Downloader.")
 }
 
-/// The Steam Deck, the core's file is not there: pocket-core's own words ("load /usr/lib/libretro/x_libretro.so: cannot open
 /// shared object file") name it. Returns the core's name from such a line.
 pub fn missing_core_in(reason: &str) -> Option<String> {
     let rest = reason.strip_prefix("load ")?;
@@ -120,21 +119,12 @@ pub fn missing_core_in(reason: &str) -> Option<String> {
     reason.contains("cannot open shared object file").then(|| file.strip_suffix("_libretro.so").unwrap_or(file).to_string())
 }
 
-/// `missing_core_in`'s core, said to the player of a Steam Deck.
-pub fn core_missing_named(name: &str, core: &str) -> String {
-    format!("{name} didn't start. The {core} core isn't installed: get it in RetroArch (Flatpak) > Online Updater > Core Downloader, or run fetch-cores.sh.")
-}
 
-/// pocket-core's core file is not there on this device (not the Steam Deck, which has its own words above): the game is fine.
 /// Said instead of "the file may be damaged" (2026-11-02: a GBA game was called broken when only the emulator was missing).
 pub fn core_missing_here(name: &str, core: &str) -> String {
     format!("{name} didn't start. Its emulator, the {core} core, isn't on this device. The game itself is fine.")
 }
 
-/// A Flatpak emulator of the Steam Deck is not installed.
-pub fn flatpak_missing_notice(name: &str, app_id: &str) -> String {
-    format!("{name} didn't start. {app_id} isn't installed: install it from Discover (Flatpak).")
-}
 
 /// What pocket-ui tells the player when a game goes to the system's default emulator (`emulator`, as in
 /// es_systems.cfg) for this launch.
@@ -186,20 +176,6 @@ mod tests {
         }
     }
 
-    #[test]
-    fn the_deck_names_the_missing_core_and_the_missing_flatpak() {
-        let raw = "load /usr/lib/libretro/gearsystem_libretro.so: /usr/lib/libretro/gearsystem_libretro.so: cannot open shared object file: No such file or directory";
-        assert_eq!(missing_core_in(raw).as_deref(), Some("gearsystem"));
-        assert_eq!(missing_core_in("The core couldn't load this game."), None);
-        assert_eq!(
-            core_missing_named("Test Cartridge", "gearsystem"),
-            "Test Cartridge didn't start. The gearsystem core isn't installed: get it in RetroArch (Flatpak) > Online Updater > Core Downloader, or run fetch-cores.sh."
-        );
-        assert_eq!(
-            flatpak_missing_notice("Space Courier", "org.DolphinEmu.dolphin-emu"),
-            "Space Courier didn't start. org.DolphinEmu.dolphin-emu isn't installed: install it from Discover (Flatpak)."
-        );
-    }
 
     #[test]
     fn a_missing_core_is_the_emulator_not_the_game() {

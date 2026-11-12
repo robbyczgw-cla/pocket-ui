@@ -65,7 +65,6 @@ pub(crate) fn settings_page_holds_games(page: &SettingsPage) -> bool {
         SettingsPage::Curator => true,
         SettingsPage::Groups(_)
         | SettingsPage::List(_)
-        | SettingsPage::Store
         | SettingsPage::Starter
         | SettingsPage::Updates
         | SettingsPage::Battery(_)
@@ -254,6 +253,7 @@ impl App {
     /// From EmulationStation's offers at once, not when Settings is left.
     fn library_swap_allowed(&self) -> bool {
         self.running.is_none()
+            && self.pending_launch.is_none()
             && self.card.is_none()
             && self.console.is_none()
             && self.curator.page.is_none()

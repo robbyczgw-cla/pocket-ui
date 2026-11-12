@@ -160,6 +160,27 @@ is on top (film: the moment is already in the first frame of the slide, about 0.
 
 Measured before the insert animation came to Android's start: frozen and off are the same start in this table, and the time a frozen start saves by skipping that animation isn't in it.
 
+## PlayStation on Android (AYN Odin 2 Mini)
+
+2026-11-10, a real AYN Odin 2 Mini (Android 13) over wireless adb, its own test app beside the installed one, media volume 0,
+the device's own buttons by key injection. PCSX ReARMed 7b0e8f8f, no BIOS (its HLE stand-in). The game is the free 240p Test
+Suite for PS1 (GPL-2.0, `filipalac/240pTestSuite-PS1`), in four shapes: a cue with its bin; a cue whose data track's name is
+in other capitals, with a 100 MiB audio track of our own tone; an `.m3u` of two discs in their own folders; one `.chd`. Frame
+times from SurfaceFlinger, sound from the player's 10-second log line and the system mixer. Playing 90 s (first two) or 60 s.
+
+| Game | Frames per second | Late frames | Sound underruns (app / mixer) | Play to first frame | Copy |
+|---|---|---|---|---|---|
+| cue + bin, 0.8 MiB | 60.00 of 60 Hz | 0 of 4997 | 0 / 0 | 8.6 s (first start: Controls card) | 32 ms |
+| cue + 2 bins, 101 MiB, first start | 60.00 | 0 of 4700 | 0 / 0 | 5.0 s | 319 ms with the window |
+| the same, second start | 60.00 | 0 of 3177 | 0 / 0 | 4.9 s | 29 ms (check, no copy) |
+| `.m3u`, 2 discs | 60.00 | 0 of 3190 | 0 / 0 | 5.1 s | 63 ms |
+| `.chd` | 60.00 | 0 of 3247 | 0 / 0 | 4.9 s | 22 ms |
+
+Each: pause opens, Save and Load to a slot, Save & quit back to the shelf, all by the player's log. Options → Disc put in disc
+2 of the `.m3u` (`player disc 2 of 2`). The insert (case, lid, disc, lid shut) and the copy window played as on other
+systems. The play-to-frame time includes Cozy's insert. Sound queue median 42 to 94 ms. Not tried: `.pbp` (no free PS1
+`.pbp` to hand), a real BIOS (none free to use), audio heard at the speaker.
+
 ## Big PSP games on Android (emulator)
 
 2026-11-01, Android 15 ARM64 emulator on the MacBook Air, X300 size, 4 cores, 2 GB. `scripts/android/frozen-smoke.py ... big`, default settings from a fresh install.

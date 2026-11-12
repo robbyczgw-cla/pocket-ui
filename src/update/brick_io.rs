@@ -75,13 +75,13 @@ pub(super) fn download_path(card: &Path, version: &str) -> PathBuf {
     Path::new("/tmp").join(format!("pocket-ui-update-{}", &key[..16])).join(format!("download-{version}.tar.gz"))
 }
 
-pub(super) struct Ram {
-    pub(super) dir: PathBuf,
+pub(crate) struct Ram {
+    pub(crate) dir: PathBuf,
     reserved: u64,
     pub(super) resume: Option<PathBuf>,
 }
 impl Ram {
-    pub(super) fn new(card: &Path) -> Result<Self, String> {
+    pub(crate) fn new(card: &Path) -> Result<Self, String> {
         use std::os::unix::fs::DirBuilderExt;
         let dir = download_path(card, "").parent().unwrap().to_path_buf();
         match std::fs::DirBuilder::new().mode(0o700).create(&dir) {
@@ -96,7 +96,7 @@ impl Ram {
         // A legacy card's .update is never used for network output. /tmp is tmpfs on the Brick.
         Ok(Self { dir, reserved: 0, resume: None })
     }
-    pub(super) fn reserve(&mut self, bytes: u64) -> Result<(), String> {
+    pub(crate) fn reserve(&mut self, bytes: u64) -> Result<(), String> {
         self.reserved = self.reserved.saturating_add(bytes);
         let available = std::fs::read_to_string("/proc/meminfo").ok().and_then(|s| {
             s.lines().find_map(|l| l.strip_prefix("MemAvailable:").and_then(|v| v.split_whitespace().next()?.parse::<u64>().ok())).map(|n| n * 1024)

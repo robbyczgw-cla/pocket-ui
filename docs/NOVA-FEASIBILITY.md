@@ -4,7 +4,7 @@
 > hardware facts come from ROCKNIX's source tree (`next` at `651150f`, 2026-10-24, the `~/.cache/rocknix-distribution`
 > clone `rocknix-diff.sh` uses) and from the pages under [Sources](#sources); pocket-ui facts from the code at
 > `9ee8e0c`. The only code that came with this note is `POCKETUI_SNAPSHOT_SIZE` (snapshots at another screen size,
-> [DEVELOPING.md](DEVELOPING.md#environment-variables)), so the layouts could be looked at in the Nova's 1280x960.
+> [dev/environment.md](dev/environment.md#environment-variables)), so the layouts could be looked at in the Nova's 1280x960.
 
 The question: could pocket-ui have a version for the Retroid Pocket Nova, a 4:3 handheld with a lot of attention,
 without the device in hand? Short answer: technically yes, and less work than expected, because the Nova runs the same

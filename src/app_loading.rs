@@ -30,7 +30,8 @@ impl App {
     /// spinner and "Loading the game…" over the launch, never a still screen. Looks twice a second for the first seconds of a
     /// start and while it loads, then not again until the next start.
     pub(crate) fn loading_wake(&mut self, now: Instant) -> Option<Instant> {
-        let hosted = self.running.as_ref().is_some_and(|r| r.hosted());
+        let preparing = self.pending_launch.is_some();
+        let hosted = preparing || self.running.as_ref().is_some_and(|r| r.hosted());
         let Some(at) = self.launch_at.filter(|_| hosted && !self.loading.done) else {
             self.loading.since = None;
             return None;
@@ -39,7 +40,7 @@ impl App {
             return Some(next);
         }
         let age = now.saturating_duration_since(at);
-        let on = pocket_ui::startup::loading_path().exists() && age < LOAD_MAX;
+        let on = (preparing && age >= Duration::from_secs(3) || pocket_ui::startup::loading_path().exists()) && age < LOAD_MAX;
         match (on, self.loading.since) {
             (true, None) => {
                 println!("launch: still loading after {age:?}, saying so");

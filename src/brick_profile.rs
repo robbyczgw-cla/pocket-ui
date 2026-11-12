@@ -378,7 +378,6 @@ mod tests {
         assert_eq!(dev.model, Some(Model::Brick(Board::Brick)));
         assert_eq!((dev.screen(), dev.has_fan(), dev.has_touch(), dev.has_sticks(), dev.has_wifi()), ((1024, 768), false, false, false, false));
         assert_eq!(dev.ram_mb(), Some(1024));
-        assert!(!dev.host_owned(), "the Brick is not the Deck: its windowing goes through pocket-fb");
     }
 
     #[test]

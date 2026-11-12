@@ -8,6 +8,11 @@ Settings → Games → Pictures & extras → PortMaster games first offers **Get
 Only A accepts the optional download. B cancels and returns to Extras; retry keeps the completed download checkpoint. Downloads pause when a game starts. Offline,
 progress, retry and runtime update use the existing store step. Ordinary app updates retain the runtime;
 only a changed pinned manifest offers an update. Allow at least 700 MiB free for staging and rollback.
+At 2 MiB/s, writing about 277 MiB alone takes at least 139 seconds (roughly 2½ minutes);
+card fsyncs, fonts, retained engines and the download add time. The installer runs in a tracked child,
+reports `unpacking|done|total` after each durable block and the UI polls from its worker every 100 ms.
+The page says **Preparing PortMaster…** with changing **done / total MB**; input and B cancellation stay
+on the UI thread. Each component has its own real byte total, so a new component starts a new count.
 
 | Data | Card location |
 |---|---|
@@ -25,7 +30,12 @@ PortMaster itself is MIT. Game-file requirements stay visible in the existing tw
 
 The pinned manifest gives URL, size and SHA-256. `update::payload` reuses the updater's checked/resumable
 transport, RAM network phase and paced SD checkpoint. The helper stages and validates a complete generation,
-then renames it into place and keeps the previous generation. Failed downloads keep their cache for retry.
+then renames it into place and keeps the previous generation. Both runtime unpackers now pace card output
+at 2 MiB/s, with at most 256 KiB per write followed by fsync and Linux idle I/O. The Rust ZIP extractor
+uses `update::brick_io::Pacer`; the TrimUI Python policy uses the same constants and sleeps before each
+block, flushes and calls `os.fsync`. Link materialization, Unicode font preparation, pinned shared-library
+copies and preserved engine-library copies use that policy too. Validation and decompression never earn
+credit for a later burst. Failed downloads keep their cache for retry.
 Python, PortMaster and engine runtimes stay outside `app/`; the card and OTA include only small launch
 helpers, Bash and licence notices. Bash source is always in the separate source ZIP, including beta builds.
 
@@ -81,3 +91,9 @@ launcher waits for the mounted card without selecting a filesystem. A cold boot 
 from exFAT has not been tested; extraction support does not establish that boot path. TrimUI's Smart Pro
 [v1.0.3 release notes](https://github.com/trimui/firmware_smartpro/releases/tag/v1.0.3) distinguish Linux
 exFAT access from FAT32-only firmware updates in U-Boot.
+
+Host regression checks in `scripts/test-brick-portmaster-archive.py` measure pre-write sleep and per-block
+fsyncs (including aliases and tiny files), progress updates, idle-I/O restoration and failure before rename.
+The Brick-feature Rust archive test measures elapsed extraction time across files; the setup test checks
+that unpacking events update the visible byte counter. These are host checks; no Brick device test was run
+for the paced-extraction change.

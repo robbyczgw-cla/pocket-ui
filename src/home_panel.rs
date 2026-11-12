@@ -1,5 +1,5 @@
 //! The picture side of a pulled-out Home row that is not one game (docs/DESIGN.md "Home panels"): Curator,
-//! Favorites, a smart shelf or sticker pinned to Home, and Surprise me in the Curator list. Pure: what it shows and
+//! Favorites, a smart shelf or sticker pinned to Home. Pure: what it shows and
 //! where each cover goes is decided here from data the app already holds in memory (the index thread's `Today`, the
 //! favourites, a shelf's first games); `app_home_panel.rs` paints it from covers already decoded.
 //!
@@ -80,20 +80,6 @@ pub fn curator(today: Option<CuratorToday>) -> Panel {
         groups.push(Group { caption: Some(caption), tiles, fan: true });
     }
     Panel { kicker: Some(CURATOR_KICKER), line, groups, getting_ready: false }
-}
-
-/// Surprise me in the Curator list: the day's pick, the same game A shows first. `None` while the index is made or
-/// with no games: the entry's own line stays.
-pub fn surprise(pick: Option<(Tile, String)>, otherwise: String) -> Panel {
-    match pick {
-        Some((tile, reason)) => Panel {
-            kicker: None,
-            line: format!("Today: {} · {}", tile.title, reason),
-            groups: vec![Group { caption: Some("Today".into()), tiles: vec![tile], fan: false }],
-            getting_ready: false,
-        },
-        None => Panel { kicker: None, line: otherwise, groups: Vec::new(), getting_ready: false },
-    }
 }
 
 /// Which list a panel shows, for what it says when it is empty.
@@ -345,15 +331,6 @@ mod tests {
         assert_eq!(title_lines("Burnout 2 - Point of Impact", 100, 2, &mut chars, &mut fit), vec!["Burnout 2", "- Point o…"]);
         assert_eq!(title_lines("Tetris", 100, 3, &mut chars, &mut fit), vec!["Tetris"]);
         assert!(title_lines("", 100, 3, &mut chars, &mut fit).is_empty());
-    }
-
-    #[test]
-    fn surprise_shows_today_s_pick_or_keeps_its_own_line() {
-        let p = surprise(Some((tile("EarthBound"), "Never played".into())), "One game picked for you".into());
-        assert_eq!(p.line, "Today: EarthBound · Never played");
-        assert_eq!(p.groups[0].tiles[0].title, "EarthBound");
-        let p = surprise(None, "One game picked for you".into());
-        assert_eq!((p.line.as_str(), p.groups.len()), ("One game picked for you", 0));
     }
 
     #[test]

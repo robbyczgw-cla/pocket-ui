@@ -123,6 +123,15 @@ install_runtime() {
   rm -rf "$DATA/.stage"
   mkdir -p "$DATA/.stage/runtime" "$DATA/cache"
   stage=$DATA/.stage
+  runtime_python() {
+    if install_child env PYTHONHOME="$stage/runtime" LD_LIBRARY_PATH="$stage/runtime/lib:${BRICK_FIRMWARE:-/usr/trimui}/lib" "$stage/runtime/bin/python3" "$@"; then
+      return 0
+    else
+      python_status=$?
+      [ "$python_status" != 126 ] || die 'The SD card does not allow executable files; check its mount options (noexec).'
+      return "$python_status"
+    fi
+  }
   while IFS='|' read -r kind checksum size url; do
     case "$kind" in ''|'#'*) continue;; esac
     case "$checksum" in *[!0-9a-f]*|'') die 'invalid pinned checksum';; esac
@@ -147,22 +156,13 @@ install_runtime() {
         rm -rf "$stage/runtime/include" "$stage/runtime/share" "$stage/runtime/lib/python3.11/site-packages"
         ;;
       portmaster) pm_archive=$file; pm_revision=${url##*/};;
-      lib/*) name=${kind#lib/}; case "$name" in */*|*..*) die 'invalid library name';; esac; cp "$file" "$stage/runtime/lib/$name";;
+      lib/*) name=${kind#lib/}; case "$name" in */*|*..*) die 'invalid library name';; esac; runtime_python "$ASSETS/portmaster-extract.py" --copy "$file" "$stage/runtime/lib/$name";;
       *) die 'unknown runtime component';;
     esac
     # Finish unzip/copy writeback before starting the next Wi-Fi transfer.
     install_child sync
   done <"$MANIFEST"
   [ -n "${pm_archive:-}" ] || die 'PortMaster archive missing'
-  runtime_python() {
-    if install_child env PYTHONHOME="$stage/runtime" LD_LIBRARY_PATH="$stage/runtime/lib:${BRICK_FIRMWARE:-/usr/trimui}/lib" "$stage/runtime/bin/python3" "$@"; then
-      return 0
-    else
-      python_status=$?
-      [ "$python_status" != 126 ] || die 'The SD card does not allow executable files; check its mount options (noexec).'
-      return "$python_status"
-    fi
-  }
   runtime_python "$ASSETS/portmaster-extract.py" "$pm_archive" "$stage"
   # Generated release metadata is absent from a source archive. Prepare the
   # honest Git version and Unicode fonts without firmware tar/XZ dependencies.
@@ -172,8 +172,8 @@ install_runtime() {
   [ -s "$stage/PortMaster/harbourmaster" ] && [ -s "$stage/PortMaster/gptokeyb" ] || die 'incomplete PortMaster archive'
   # Player configuration and engine runtimes survive both app OTA and PM updates.
   for folder in config libs; do
-    if [ -d "$DATA/preserved/$folder" ]; then mkdir -p "$stage/PortMaster/$folder"; install_child cp -R "$DATA/preserved/$folder/." "$stage/PortMaster/$folder/"; fi
-    if [ -d "$DATA/current/PortMaster/$folder" ]; then mkdir -p "$stage/PortMaster/$folder"; install_child cp -R "$DATA/current/PortMaster/$folder/." "$stage/PortMaster/$folder/"; fi
+    if [ -d "$DATA/preserved/$folder" ]; then mkdir -p "$stage/PortMaster/$folder"; runtime_python "$ASSETS/portmaster-extract.py" --copy "$DATA/preserved/$folder" "$stage/PortMaster/$folder"; fi
+    if [ -d "$DATA/current/PortMaster/$folder" ]; then mkdir -p "$stage/PortMaster/$folder"; runtime_python "$ASSETS/portmaster-extract.py" --copy "$DATA/current/PortMaster/$folder" "$stage/PortMaster/$folder"; fi
   done
   [ ! -f "$ASSETS/control.txt" ] || cp "$ASSETS/control.txt" "$stage/PortMaster/control.txt"
   chmod +x "$stage/PortMaster/gptokeyb" "$stage/PortMaster/gptokeyb2" 2>/dev/null || :

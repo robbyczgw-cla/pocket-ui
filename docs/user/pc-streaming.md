@@ -19,10 +19,10 @@ on**: Settings → Look → **Systems on the shelf** → **PC streaming**, the l
 
 ## Pair once
 
-Pairing has to be done once per computer, on the Pocket: Settings → Games → **PC streaming**.
+Pairing has to be done once per computer, on the Pocket: Settings → Help & tools → For tinkerers → **PC streaming**.
 
 1. Start the gaming PC with Sunshine (or GeForce Experience) running.
-2. On the Pocket: Settings → Games → **PC streaming** → **Pair a PC** → A. The keyboard asks for the PC's address. Press
+2. On the Pocket: Settings → Help & tools → For tinkerers → **PC streaming** → **Pair a PC** → A. The keyboard asks for the PC's address. Press
    **START** with nothing typed to let Moonlight look for the PC on the network, or type its name or address (for
    example `192.168.1.20`) and press START.
 3. A four-digit **PIN** appears in big digits. Enter it on the gaming PC: in Sunshine's web page
@@ -51,9 +51,9 @@ screen takes over. If the PC is off, not paired, or not on the same network, you
 seconds with a note saying so.
 
 - **What is streamed:** Moonlight's default application (it asks for one called *Steam*). To stream another one
-  once, pick it in Settings → Games → PC streaming; to change the default, set `app = Desktop` (or any application name from
+  once, pick it in Settings → Help & tools → For tinkerers → PC streaming; to change the default, set `app = Desktop` (or any application name from
   the PC's list) in `/storage/.config/moonlight/moonlight.conf`.
-- **Which PC:** the one chosen in Settings → Games → PC streaming (the last one paired). Without one, the one Moonlight finds
+- **Which PC:** the one chosen in Settings → Help & tools → For tinkerers → PC streaming (the last one paired). Without one, the one Moonlight finds
   by itself on the network, or `address = <PC address>` in the same file.
 - **Picture and sound:** the file also has the resolution (1240 x 1080 on the Mini V2, set at every start of the
   system), the frame rate (60), the bitrate (15 Mbit/s) and the codec (h264). Raise the bitrate for a sharper
@@ -74,7 +74,7 @@ leave the stream first.
 ## Away from home
 
 Moonlight works over the internet with a VPN. The easiest is Tailscale, which pocket-ui switches on and signs in
-under Settings → Connections → [Tailscale](remote.md); ROCKNIX's wiki also describes WireGuard:
+under Settings → Help & tools → For tinkerers → [Tailscale](remote.md); ROCKNIX's wiki also describes WireGuard:
 [ROCKNIX: Moonlight](https://rocknix.org/systems/moonlight/). Once the VPN is up, set `address` in
 `moonlight.conf` to the PC's VPN address.
 
@@ -84,6 +84,6 @@ under Settings → Connections → [Tailscale](remote.md); ROCKNIX's wiki also d
 |---|---|
 | *Couldn't start the stream*, after 12 seconds | The PC did not answer: is it on, is Sunshine (or GeForce Experience) running, is it on the same network? Set `address` in `moonlight.conf` |
 | *Couldn't start the stream*, at once | Moonlight is not installed or cannot run: look in `/var/log/pocket-ui.log` for the line `pocket-ui: no PC answered the lookup` |
-| The PC asks for a PIN again | The pairing was lost: pair again in Settings → Games → PC streaming |
+| The PC asks for a PIN again | The pairing was lost: pair again in Settings → Help & tools → For tinkerers → PC streaming |
 | *No PC answered* while pairing | The PC is off, Sunshine isn't running, or the search doesn't reach it: type the PC's address instead |
 | The stream stutters | A weaker Wi-Fi band or too high a bitrate: lower `bitrate` in `moonlight.conf` |

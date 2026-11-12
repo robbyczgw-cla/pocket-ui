@@ -296,7 +296,7 @@ for SH in $SHELLS; do
   refused "another SoC" "ROCKNIX for RK3588"
   make_root
   sed -i 's/aarch64/x86_64/' "$r/etc/os-release"
-  refused "another architecture" "needs ROCKNIX for SM8250"
+  refused "another architecture" "needs ROCKNIX for SM4450, SM8250"
   make_root
   sed -i 's/ROCKNIX/Batocera/' "$r/etc/os-release"
   refused "not ROCKNIX" "not ROCKNIX"
@@ -335,9 +335,9 @@ for SH in $SHELLS; do
   inst --check
   rc=$?
   check "$SH: the tested ROCKNIX passes without the newer-note" '[ $rc = 0 ] && ! said "is newer"'
-  for experimental in 'Retroid Pocket 5' 'Retroid Pocket 5 Visionox' 'Retroid Pocket Flip2' 'Retroid Pocket Flip2 Visionox' 'Retroid Pocket Mini' 'Retroid Pocket 6' 'Retroid Pocket 6 TOP-DPAD' 'Retroid Pocket Nova' 'AYN Odin 2' 'AYN Odin 2 Mini' 'AYN Odin 2 Portal'; do
+  for experimental in 'Retroid Pocket Classic Rev Q' 'Retroid Pocket 5' 'Retroid Pocket 5 Visionox' 'Retroid Pocket Flip2' 'Retroid Pocket Flip2 Visionox' 'Retroid Pocket Mini' 'Retroid Pocket 6' 'Retroid Pocket 6 TOP-DPAD' 'Retroid Pocket Nova' 'AYN Odin 2' 'AYN Odin 2 Mini' 'AYN Odin 2 Portal'; do
     make_root
-    case "$experimental" in 'Retroid Pocket 6'*|'Retroid Pocket Nova'|'AYN Odin 2'*) sed -i 's/SM8250/SM8550/' "$r/etc/os-release" ;; esac
+    case "$experimental" in 'Retroid Pocket Classic Rev Q') sed -i 's/SM8250/SM4450/' "$r/etc/os-release" ;; 'Retroid Pocket 6'*|'Retroid Pocket Nova'|'AYN Odin 2'*) sed -i 's/SM8250/SM8550/' "$r/etc/os-release" ;; esac
     printf '%s\000' "$experimental" >"$r/sys/firmware/devicetree/base/model"
     inst --check
     rc=$?
@@ -346,6 +346,13 @@ for SH in $SHELLS; do
       'AYN Odin 2 Mini') check "$SH: the Odin 2 Mini's note says the project played on it, not 'untested'" 'said "has played on this model" && ! said "hasn'"'"'t been tested"' ;;
       *) check "$SH: the $experimental's note says it is untested" 'said "hasn'"'"'t been tested on one yet"' ;;
     esac
+  done
+  # No fallback to Mini V2 geometry on another SM4450 board, even with an override.
+  for other in 'Anbernic RG55G1' 'Retroid Pocket Classic 6 Rev Q'; do
+    make_root
+    sed -i 's/SM8250/SM4450/' "$r/etc/os-release"
+    printf '%s\000' "$other" >"$r/sys/firmware/devicetree/base/model"
+    refused "unsupported SM4450 '$other'" "no supported Classic Rev Q profile" --allow-other-device
   done
   # ROCKNIX's H700 image: exactly the Anbernic models pocket-ui has a profile for.
   for h700 in 'Anbernic RG28XX' 'Anbernic RG35XX 2024' 'Anbernic RG35XX Plus' 'Anbernic RG35XX H' 'Anbernic RG35XX Pro' 'Anbernic RG35XX SP' 'Anbernic RG40XX H' 'Anbernic RG40XX V' 'Anbernic RG34XX' 'Anbernic RG34XX-SP' 'Anbernic RG-SP'; do
@@ -401,7 +408,7 @@ for SH in $SHELLS; do
   done
   make_root
   sed -i 's/SM8250/RK3588/' "$r/etc/os-release"
-  refused "another ROCKNIX platform" "needs ROCKNIX for SM8250, SM8550, H700 or RK3566"
+  refused "another ROCKNIX platform" "needs ROCKNIX for SM4450, SM8250, SM8550, H700 or RK3566"
   make_root
   printf 'AYN Thor Lite\000' >"$r/sys/firmware/devicetree/base/model"
   refused "another device" "this device is 'AYN Thor Lite'"

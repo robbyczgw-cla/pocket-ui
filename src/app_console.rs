@@ -44,12 +44,6 @@ impl App {
         matches!(item, Some(Item::System(s)) if self.systems.get(s).is_some_and(|sys| consoles::for_system(&sys.name).is_some()))
     }
 
-    /// The fact sheet's headline for a system item ("Sega · 1998 · sixth generation").
-    pub(crate) fn console_headline(&self, item: Item) -> Option<String> {
-        let Item::System(s) = item else { return None };
-        consoles::for_system(&self.systems.get(s)?.name)?.lines.headline.clone()
-    }
-
     /// X: the console page on a system, the game's card on a game.
     pub(crate) fn open_details(&mut self) {
         match self.items.get(self.sel).copied() {
@@ -378,7 +372,7 @@ impl App {
         }
     }
 
-    /// `--snapshot shelf:<system>[:<look>]`: Home in that look (shelf, minimal, split, cards, cabinet; Split by
+    /// `--snapshot shelf:<system>[:<look>]`: Home in that look (shelf, split, cabinet; Split by
     /// default) with the system selected and pulled out.
     pub(crate) fn shelf_snapshot(&mut self, rest: &str) {
         ASSUME_POCKET_CORE.store(true, Ordering::Relaxed);
@@ -386,8 +380,6 @@ impl App {
         let id = parts.next().unwrap_or_default();
         self.theme = match parts.next().unwrap_or("split") {
             "shelf" => Theme::Shelf,
-            "minimal" => Theme::Minimal,
-            "cards" => Theme::Cards,
             "cabinet" => Theme::Cabinet,
             _ => Theme::Split,
         };

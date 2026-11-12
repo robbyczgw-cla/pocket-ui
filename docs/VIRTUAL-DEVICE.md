@@ -14,8 +14,8 @@ Same shape as `scripts/dev.sh`, no SSH, no lock.
 
 ## What is inside
 
-The container is the **real ROCKNIX 20261001 userland**, not an imitation: the SYSTEM squashfs of the
-SM8250 image is unpacked into a Docker image on your machine. So these are the device's own files:
+The container uses the **real ROCKNIX userland**, not an imitation: the SYSTEM squashfs of the
+SM8250 image is unpacked into a Docker image on your machine. The original 20261001 setup contains:
 glibc 2.41, sway 1.11, grim, PipeWire 1.2 + WirePlumber + pipewire-pulse (started with the arguments of the
 systemd units), libpulse, wayland libs, python, curl, `/usr/lib/libretro/*.so` and `es_systems.cfg`.
 The binaries from `cargo zigbuild --target aarch64-unknown-linux-gnu.2.38` run unchanged.
@@ -59,10 +59,37 @@ builds what is missing. Once per machine, one to two minutes (67 s on the second
    the repo or anywhere outside Docker; the image file is not modified and the base image is never
    pushed or exported.
 2. `docker/Dockerfile` adds Mesa llvmpipe and the boot scripts in `docker/vdev/` (15 s, rebuilt
-   automatically when those files change; the tag is a hash of them).
+   automatically when those files or the selected base change; the tag hashes their contents, the base
+   reference and its immutable Docker image ID).
 
 `scripts/vdev.sh image --rebuild-base` redoes step 1 for a newer ROCKNIX image, `image --prune` removes old
-`pocket-vdev:<hash>` images.
+`pocket-vdev:<hash>` images. Without an explicit selection, the newest local `pocket-vdev-base:<version>`
+is used, as before.
+
+### Selecting another ROCKNIX version
+
+Set `VDEV_BASE_IMAGE=pocket-vdev-base-<your-name>:<tag>` on every command to select one exact local base.
+Use a private name for parallel work; registry paths and the shared `pocket-vdev-base:<version>` namespace
+are rejected for this option. If the base is missing, `up` or `image` imports `ROCKNIX_IMG` into that tag;
+its extraction helper also uses the private namespace. For example, to test November alongside October:
+
+```bash
+export VDEV_BASE_IMAGE=pocket-vdev-base-compat-check:20261101
+export ROCKNIX_IMG=/path/to/ROCKNIX-SM8250.aarch64-20261101.img
+export VDEV_NAME=compat-check
+scripts/vdev.sh image
+scripts/vdev.sh up --device rp5
+```
+
+An existing explicit base is reused and never overwritten. `image --rebuild-base` refuses an existing
+explicit tag; choose a fresh private tag to import again. The overlay cache includes the selected base's
+reference and Docker image ID, so changing ROCKNIX versions or reimporting an automatic base cannot
+silently reuse the previous userland. An already running container keeps its original base: `down` it
+before `up` to switch versions. Other knobs (`VDEV_DEVICE`, `VDEV_ROMS`, `VDEV_LIVE`, etc.) work as before.
+
+The targeted regression (`python3 -I scripts/test-vdev-images.py`, also run by the `vdev_profiles`
+integration suite) exercises cache changes, exact selection and private imports with a Docker stand-in;
+it never starts containers or builds images.
 
 ## Commands
 
@@ -209,14 +236,14 @@ Do not take performance numbers from here.
 - **Services.** No systemd: `systemctl` calls in `run-pocket-ui.sh` (`essway`) and the `smbd` check fail and are
   ignored; the Samba switch in Add games cannot work. There is no EmulationStation to hand the screen back to.
 - **Syncthing and Moonlight.** `extract-rocknix.sh` drops `usr/bin/syncthing`; `moonlight` is in the image but
-  finds no PC. To try Settings → Connections → Sync (as done for `docs/user/sync.md`): copy the device's `/usr/bin/syncthing` into
+  finds no PC. To try Settings → Help & tools → For tinkerers → Sync (as done for `docs/user/sync.md`): copy the device's `/usr/bin/syncthing` into
   the container (`docker cp`), put a small `systemctl` stand-in in front of the real one (`start`, `restart`, `stop`,
   `is-active`, `daemon-reload` for `syncthing`, running the `ExecStart` of the drop-in), create
   `/storage/.config/system/configs/system.cfg`, and give the container a `wlan0` address (`ip link add wlan0 type
   dummy; ip addr add 192.0.2.23/24 dev wlan0`) so the page has an address to show. A second `syncthing` started
   with `--home /tmp/peer-home` and paired over `127.0.0.1` stands in for a computer. Nothing of this is part of the
   image.
-- **Tailscale.** `extract-rocknix.sh` drops `usr/sbin/tailscale{,d}` and there is no systemd, so Settings → Connections → Tailscale says "Not installed".
+- **Tailscale.** `extract-rocknix.sh` drops `usr/sbin/tailscale{,d}` and there is no systemd, so Settings → Help & tools → For tinkerers → Tailscale says "Not installed".
   `VDEV_NAME=<name> scripts/vdev-fake-tailscale.sh install` puts stand-ins for `tailscale` and `systemctl` into that container
   (nothing leaves it, no tailnet is contacted): `up` prints a sign-in address and waits for `... approve` ("approved on the phone"),
   `... hang` makes every call hang to see that the menu stays responsive, `... state` shows what was called and what
@@ -239,7 +266,7 @@ Do not take performance numbers from here.
   bus error): `vdev.sh sh 'mount -o remount,size=512M /dev/shm'`.
 - **Boot.** The container's boot id is the VM's and stays the same across `vdev.sh deploy`, so Settings → Playing → On start
   ("Last game") sees every start as a restart and stays on Home. `vdev.sh sh rm /storage/.config/pocket-ui/started-boot`
-  before a start makes it the first start of a boot (docs/DEVELOPING.md, Start time).
+  before a start makes it the first start of a boot (docs/dev/start-time.md, Start time).
 - **Display.** One headless output at the device's size (1240x1080 unless `--device`), no rotation, no DPMS, no panel colour.
 - **Disk.** Images take 2.4 GB (shared by all instances) plus 180 MB of Mesa. `vdev.sh down` removes
   the instance and its saves.

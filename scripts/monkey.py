@@ -3,7 +3,7 @@
 
     python3 -I scripts/monkey.py --bin target/release/pocket-ui --out DIR [--seed N] [--minutes M]
         [--look shelf|minimal|split|cards|cabinet] [--lang en|de] [--text normal|medium|large] [--library demo|empty]
-        [--profile miniv2|rg35xx-plus|odin|steamdeck] [--data ok|damaged|readonly|nonet]
+        [--profile miniv2|rg35xx-plus|odin] [--data ok|damaged|readonly|nonet]
         [--library demo|empty|big|weird|emptyfiles] [--touch 15] [--steps N] [--hang-s 10]
         [--replay DIR/<tag>.cmds] [--minimise] [--self-test]
 
@@ -22,7 +22,7 @@ button sequence; every press is also written to DIR/<tag>.cmds. Findings (DIR/<t
   IDLE             more than 1 % of a CPU while nothing is pressed
 
 Profiles set POCKETUI_DEVICE + POCKETUI_SNAPSHOT_SIZE (the frame size): miniv2 1240x1080,
-rg35xx-plus 640x480, odin 1920x1080 (1080p), steamdeck 1280x800. --touch N mixes `tap x y`
+rg35xx-plus 640x480, odin 1920x1080 (1080p). --touch N mixes `tap x y`
 FIFO commands in at N percent (screen fractions, seeded). Data variants: damaged (garbage in
 settings.json/library.json/play-log.bin and a save file), readonly (data dir read-only),
 nonet (mock only: no real network service is ever contacted). Libraries: big (5000 games),
@@ -68,7 +68,6 @@ PROFILES = {
     "miniv2": ("miniv2", "1240x1080"),
     "rg35xx-plus": ("rg35xx-plus", "640x480"),
     "odin": ("odin2", "1920x1080"),
-    "steamdeck": ("steamdeck", "1280x800"),
 }
 WEIRD = [
     "🎮 Emoji Game 🎮 (World).gba", "引用 \"Quote\" 'Game' (Japan).gba", "Trailing dots... .gba",
@@ -155,7 +154,7 @@ def build_card(tmp, lib, look, text, data_variant="ok"):
 
 def self_test():
     """The runner without the UI: profiles, seeded actions, card variants, replay round-trip."""
-    assert PROFILES["rg35xx-plus"][1] == "640x480" and PROFILES["steamdeck"][1] == "1280x800"
+    assert PROFILES["rg35xx-plus"][1] == "640x480"
     assert PROFILES["odin"][1] == "1920x1080" and PROFILES["miniv2"][1] == "1240x1080"
     rng_a, rng_b = random.Random(7), random.Random(7)
     a = [next_action(rng_a, *zip(*KEYS), 15) for _ in range(50)]

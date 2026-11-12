@@ -106,7 +106,7 @@ mod imp {
         }
         let _ = std::fs::remove_file(OWNED_MARKER);
         // ROCKNIX's boot setting first, under its lock (`system_cfg`), only if it is on; then the service.
-        if crate::system_cfg::get("ssh.enabled").is_some_and(|v| v.trim() == "1") {
+        if crate::system_cfg::ssh_enabled(&crate::system_cfg::SystemCfg::rocknix().read()) == Some(true) {
             crate::system_cfg::set("ssh.enabled", "0");
         }
         sh("rm -f \"$1\"; systemctl stop sshd", &[SERVICE_FLAG])
@@ -123,7 +123,7 @@ mod imp {
             return sh("systemctl stop sshd", &[]);
         }
         // ROCKNIX's boot setting first, under its lock (`system_cfg`), only if it is on; then the service.
-        if crate::system_cfg::get("ssh.enabled").is_some_and(|v| v.trim() == "1") {
+        if crate::system_cfg::ssh_enabled(&crate::system_cfg::SystemCfg::rocknix().read()) == Some(true) {
             crate::system_cfg::set("ssh.enabled", "0");
         }
         sh("rm -f \"$1\"; systemctl stop sshd", &[SERVICE_FLAG])

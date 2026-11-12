@@ -28,7 +28,7 @@ IN=$(cd "$(dirname "$IN")" && pwd)/$(basename "$IN")
 base=$(basename "$IN" | sed 's/\.xz$//; s/\.img$//')
 MODEL=
 FAMILY=
-for fam in H700 SM8550 RK3566; do
+for fam in H700 SM8550 SM4450 RK3566; do
   family_pins "$fam"
   for m in $(echo "$FAM_MODELS" | awk 'NF { print $1 }'); do
     case $base in pocket-ui-*-"$m") MODEL=$m FAMILY=$fam ;; esac

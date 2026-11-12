@@ -177,7 +177,7 @@ photograph's own plastic, brightness/colour adjusted, converted to pixel art and
 Each derived PNG is marked with the stated licence, separately from the program's GPL;
 its author, source and licence are also recorded in its PNG text metadata. For the GBA
 CC BY-SA image keep the attribution and licence, identify further changes, and share
-adaptations under CC BY-SA 4.0. The other three derived images are released under CC0 1.0.
+adaptations under CC BY-SA 4.0. The other four derived images are released under CC0 1.0.
 The photographers do not endorse this application.
 
 | Derived asset (in `assets/media/game/`) | Author | Photograph / source | Licence of source and derived asset | Modification |
@@ -186,6 +186,7 @@ The photographers do not endorse this application.
 | `gb-back.png` | Christopher Wells | [Baseball cartridge (JP), 02_cartridge_back.jpg](https://archive.org/details/baseball-cartridge-jp) | [CC0 1.0](https://creativecommons.org/publicdomain/zero/1.0/) | modified via PixelLab |
 | `gbc-back.png` | Christopher Wells | [Harvest Moon 3 GBC cartridge (JP), 02_cartridge_back.jpg](https://archive.org/details/harvest-moon-3-gbc-cartridge-jp) | [CC0 1.0](https://creativecommons.org/publicdomain/zero/1.0/) | modified via PixelLab |
 | `ds-back.png` | Christopher Wells | [Lux-Pain cartridge (NA), 02_cartridge_back.jpg](https://archive.org/details/lux-pain-cartridge-na) | [CC0 1.0](https://creativecommons.org/publicdomain/zero/1.0/) | modified via PixelLab |
+| `gg-back.png` | AOMAF2024 (Wikimedia Commons user) | [Game gear cartridge.jpg](https://commons.wikimedia.org/wiki/File:Game_gear_cartridge.jpg) (the front; no free photo of the back was found) | [CC0 1.0](https://creativecommons.org/publicdomain/zero/1.0/) | the front picture `gg.png` (modified via PixelLab) with its label and SEGA oval filled with its own shell plastic, mirrored as seen from behind |
 
 Full preparation and attribution: [assets/media/game/REAR-SOURCES.md](assets/media/game/REAR-SOURCES.md).
 
@@ -210,7 +211,7 @@ the console picture's CC0 dedication does not change that cartridge licence.
 The pixel-art console pictures in `assets/systems/` (compiled into pocket-ui by `src/system_art.rs`) are
 described in full, file by file, in [assets/systems/SOURCES.md](assets/systems/SOURCES.md). In short:
 
-- **Photos:** 36 photographs by Evan Amos (and, from 2026-11-02, public-domain photos of an Amiga 500 Plus and a ZX Spectrum +2, see SOURCES.md) on Wikimedia Commons, each marked **public domain** on its Commons file
+- **Photos:** 36 photographs by Evan Amos (and, from 2026-11-02, public-domain photos of an Amiga 500 Plus and a ZX Spectrum +2, from 2026-11-11 one of an arcade cabinet, see SOURCES.md) on Wikimedia Commons, each marked **public domain** on its Commons file
   page (licence read from the Commons API and the file pages on 2026-10-22, for the last 15 on 2026-10-27).
 - **Conversion:** each photo was converted to pixel art with [PixelLab](https://www.pixellab.ai)
   (`image-to-pixelart`), then cut out and cleaned with our own scripts in `assets/systems/tools/`. Every logo,
@@ -258,7 +259,7 @@ described file by file in [assets/ui-art/SOURCES.md](assets/ui-art/SOURCES.md). 
 | Font | Where | Licence | Notes |
 |---|---|---|---|
 | Barlow Medium, Barlow Condensed SemiBold (version 1.408) | `assets/fonts/`; compiled into the binaries (`src/text.rs`, `src/font_style.rs`) | SIL Open Font License 1.1 | Copyright 2017 The Barlow Project Authors ([source](https://github.com/jpt/barlow)), designer Jeremy Tribby. Licence text: `assets/fonts/OFL.txt` |
-| Pixelify Sans SemiBold and Regular, Nunito ExtraBold and SemiBold | `assets/fonts/`; compiled into the binaries (`src/font_style.rs`), used by Settings → Theme → Font (Pixel, Rounded) | SIL Open Font License 1.1 | Copyright 2021 The Pixelify Sans Project Authors ([source](https://github.com/eifetx/Pixelify-Sans)); Copyright 2014 The Nunito Project Authors ([source](https://github.com/googlefonts/nunito)). Static Latin instances of the official variable fonts; the Pixelify Sans files are modified: the letters C and c (the original's read as O and o), Z and 5 are redrawn (`scripts/pixelify-glyphs.py`), advance widths and spacing unchanged, no Reserved Font Name is declared. Licence texts: `assets/fonts/OFL.txt` |
+| Pixelify Sans SemiBold and Regular | `assets/fonts/`; compiled into the binaries (`src/font_style.rs`), used by Settings → Theme → Font (Pixel) | SIL Open Font License 1.1 | Copyright 2021 The Pixelify Sans Project Authors ([source](https://github.com/eifetx/Pixelify-Sans)). Static Latin instances of the official variable fonts; the Pixelify Sans files are modified: the letters C and c (the original's read as O and o), Z and 5 are redrawn (`scripts/pixelify-glyphs.py`), advance widths and spacing unchanged, no Reserved Font Name is declared. Licence texts: `assets/fonts/OFL.txt` |
 | Departure Mono Regular (version 1.500) | `assets/fonts/DepartureMono-Regular.otf`; compiled into the binaries (`src/font_style.rs`), the Retro style's letters (Settings → Look → Style → Retro) | SIL Open Font License 1.1 | Copyright 2022–2024 Helena Zhang ([source](https://github.com/rektdeckard/departure-mono), release `DepartureMono-1.500.zip`). The release's OTF file unchanged; no Reserved Font Name is declared. Licence text: `assets/fonts/OFL.txt` |
 | Titillium Web Regular, Bold | `store/test-catalog/src/fonts/`; packed into the test store's `type-titillium` package only, not compiled in | SIL Open Font License 1.1 | Copyright (c) 2009-2011 Accademia di Belle Arti di Urbino and students of MA course of Visual design. Licence text: `store/test-catalog/src/fonts/OFL.txt` (also inside the package as `Titillium-OFL.txt`) |
 | Noto Sans CJK SC Regular | Not shipped: pocket-ui uses the system's copy if present (ROCKNIX installs it at `/usr/share/fonts/truetype/noto-cjk/`), for Japanese, Chinese and Korean letters (`src/text_fallback.rs`) | SIL Open Font License 1.1 (ROCKNIX's package) | Nothing of it is in this repository or our binaries |

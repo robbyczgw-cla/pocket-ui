@@ -23,3 +23,19 @@ grub_cfg_quiet_for_boot_quiet() {
   rm -rf "$gq_tmp"
   [ $gq_ok = 1 ]
 }
+
+# Whether the Boot Loader Specification entry $1 (deploy/sd-efi/loader/entries/pocket-ui.conf, read by OpenABL's
+# "Boot mode: Linux") starts the same kernel, device tree and command line as the "pocket-ui" entry of the GRUB
+# config $2 (started by Retroid's u-boot or any UEFI firmware), and has nothing else that boots: exactly the keys
+# title, linux, devicetree, options, once each, and no initrd (GRUB loads none).
+bls_matches_grub() {
+  bm_g=$(awk '/^menuentry "pocket-ui"/ { e = 1 } e && /^}/ { exit } e' "$2")
+  bm_glinux=$(printf '%s\n' "$bm_g" | awk '$1 == "linux" { print $2 }')
+  bm_gopts=$(printf '%s\n' "$bm_g" | sed -n 's/^[[:space:]]*linux [^ ]* //p')
+  bm_gdtb=$(printf '%s\n' "$bm_g" | awk '$1 == "devicetree" { print $2 }')
+  [ -n "$bm_glinux" ] && [ -n "$bm_gdtb" ] && [ -n "$bm_gopts" ] || return 1
+  [ "$(awk 'NF { print $1 }' "$1" | sort | tr '\n' ' ')" = "devicetree linux options title " ] || return 1
+  [ "$(awk '$1 == "linux" { print $2 }' "$1")" = "$bm_glinux" ] &&
+    [ "$(awk '$1 == "devicetree" { print $2 }' "$1")" = "$bm_gdtb" ] &&
+    [ "$(sed -n 's/^options[[:space:]]*//p' "$1")" = "$bm_gopts" ]
+}

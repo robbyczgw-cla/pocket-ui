@@ -7,15 +7,21 @@
 # with the image's version (run in the virtual device's base image if it exists).
 # The work files go to build/image/check/ (CHECK_WORK). Docker is needed.
 set -eu
+case ${1:-} in *-rp-classic.img | *-rp-classic.img.xz)
+  exec sh "$(dirname "$0")/check-image-family.sh" "$@" ;;
+esac
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
 . "$ROOT/scripts/image/tools.sh"
+. "$ROOT/scripts/image/pins.sh"
 
 [ $# -ge 1 ] || { sed -n '2,3p' "$0" >&2; exit 2; }
 IN=$1
 shift
 VERSION=
+MODEL=
 while [ $# -gt 0 ]; do
   case $1 in
+    --model) MODEL=$2; shift ;;
     --version) VERSION=$2; shift ;;
     *) echo "unknown argument: $1" >&2; exit 2 ;;
   esac
@@ -25,6 +31,11 @@ done
 IN=$(cd "$(dirname "$IN")" && pwd)/$(basename "$IN")
 [ -n "$VERSION" ] || VERSION=$(version_of "$IN")
 [ -n "$VERSION" ] || { echo "FAIL cannot tell the version from the name $(basename "$IN"); pass --version" >&2; exit 1; }
+[ -n "$MODEL" ] || case $(basename "$IN") in
+  *-rp5.img*) MODEL=rp5 ;; *-flip2.img*) MODEL=flip2 ;; *) MODEL=rp-mini-v2 ;;
+esac
+sm8250_pins "$MODEL"
+export MODEL
 # The supervisor hashes both published files before/after this exact check. A raw
 # image or standalone diagnostic copy can still be checked without release notes.
 case $IN in *.img.xz)
@@ -56,7 +67,7 @@ case $IN in
   *.xz)
     echo "unpacking to $W/check.img"
     docker run --rm -v "$(dirname "$IN"):/in:ro" -v "$W:/w" "$TOOLS" \
-      sh -c 'xz -dc -T0 "/in/$1" >/w/check.img' sh "$(basename "$IN")"
+      sh -c 'xz -dc -T2 "/in/$1" >/w/check.img' sh "$(basename "$IN")"
     RAW=/w/check.img
     MOUNT_IN=
     ;;
@@ -67,7 +78,7 @@ case $IN in
 esac
 
 # shellcheck disable=SC2086
-docker run --rm $MOUNT_IN -v "$W:/w" -v "$ROOT:/repo:ro" -e CHECK_OWNER="$(id -u):$(id -g)" "$TOOLS" sh /repo/scripts/image/check.sh "$RAW" "$VERSION" /w ||
+docker run --rm -e MODEL="$MODEL" $MOUNT_IN -v "$W:/w" -v "$ROOT:/repo:ro" -e CHECK_OWNER="$(id -u):$(id -g)" "$TOOLS" sh /repo/scripts/image/check.sh "$RAW" "$VERSION" /w ||
   fails=$((fails + 1))
 
 echo "== the programs"

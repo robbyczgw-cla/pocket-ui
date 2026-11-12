@@ -132,13 +132,6 @@ fn a_child_has_no_way_out_of_the_mode_on_the_power_menu_or_the_rescue_page() {
     assert!(card.screen("rescue", true).contains("Safe mode"), "and the page itself for everyone else, and behind the PIN");
 }
 
-#[test]
-fn the_steam_deck_has_no_kids_mode_and_the_handhelds_do() {
-    let card = Card::new();
-    // The first start's quiet way in: Y on its first page.
-    assert!(card.screen("setup:first", false).contains("For a child"));
-    assert!(!card.screen("setup:first:device=steamdeck", false).contains("For a child"));
-}
 
 /// The picker beside the list shows the cover of the game under the cursor with covers read on the cabinet's thread, as
 /// a device reads them (the other snapshots read at once): it was an empty box, nothing took the finished cover.

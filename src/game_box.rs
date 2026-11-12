@@ -255,6 +255,51 @@ pub fn game_beside(m: Medium, (case_w, case_h): (i32, i32), game: Option<&Pic>) 
 }
 
 /// The front's and the back's width.
+/// One face of the turning box from screen edge `a` to `b`, each (x, size factor), its picture the rectangle `src` of the
+/// off-screen canvas `buf` (`w` wide): each column where it really is (perspective-correct), as tall as its distance
+/// makes it, darkened by `dark` (of 255).
+#[allow(clippy::too_many_arguments)]
+fn face_columns(c: &mut Canvas, buf: &[u32], w: i32, (rx, ry, rw, rh): (i32, i32, i32, i32), a: (f32, f32), b: (f32, f32), cy: f32, h: f32, dark: u32) {
+    let (l, r) = if a.0 <= b.0 { (a, b) } else { (b, a) };
+    let flip = a.0 > b.0;
+    if r.0 - l.0 < 0.5 || rw <= 0 || rh <= 0 {
+        return;
+    }
+    for col in (l.0.floor() as i32).max(0)..(r.0.ceil() as i32).min(c.w) {
+        let t = ((col as f32 + 0.5 - l.0) / (r.0 - l.0)).clamp(0.0, 1.0);
+        let u = t * r.1 / ((1.0 - t) * l.1 + t * r.1);
+        let u = if flip { 1.0 - u } else { u };
+        let k = l.1 + (r.1 - l.1) * t;
+        let ch = h * k;
+        let top = cy - ch / 2.0;
+        let sx = (rx + (u * rw as f32) as i32).clamp(rx, rx + rw - 1);
+        if sx < 0 || sx >= w {
+            continue;
+        }
+        let step = rh as f32 / ch.max(1.0);
+        for row in (top.floor() as i32).max(0)..((top + ch).ceil() as i32).min(c.h) {
+            let sy = (ry + ((row as f32 + 0.5 - top) * step) as i32).clamp(ry, ry + rh - 1);
+            if sy < 0 || sy * w + sx >= buf.len() as i32 {
+                continue;
+            }
+            let p = buf[(sy * w + sx) as usize];
+            c.buf[(row * c.w + col) as usize] = mix(p, 0x000000, dark);
+        }
+    }
+}
+
+/// The box's edge (its spine side) from screen edge `a` to `b`, each (x, size factor), in `color`.
+fn edge_columns(c: &mut Canvas, a: (f32, f32), b: (f32, f32), cy: f32, h: f32, color: u32) {
+    for col in (a.0.floor() as i32).max(0)..(b.0.ceil() as i32).min(c.w) {
+        let t = ((col as f32 + 0.5 - a.0) / (b.0 - a.0).max(0.01)).clamp(0.0, 1.0);
+        let ch = h * (a.1 + (b.1 - a.1) * t);
+        let top = cy - ch / 2.0;
+        for row in (top.round() as i32).max(0)..((top + ch).round() as i32).min(c.h) {
+            c.buf[(row * c.w + col) as usize] = color;
+        }
+    }
+}
+
 fn widths(w: i32, h: i32, front_w: i32) -> (i32, i32) {
     let (_, _, side) = room(w, h);
     let avail = w - 2 * side;
@@ -277,8 +322,8 @@ impl BoxView {
     pub fn new() -> BoxView {
         let dur = crate::motion::span(crate::motion::Kind::Move, OPEN);
         BoxView {
-            opened_at: (!dur.is_zero()).then(Instant::now),
-            spin_at: Some(Instant::now()),
+            opened_at: (!dur.is_zero()).then(crate::frame_clock::now),
+            spin_at: Some(crate::frame_clock::now()),
             ..BoxView::default()
         }
     }
@@ -294,7 +339,7 @@ impl BoxView {
 
     /// LEFT or RIGHT: turns the box over (from wherever a turn has got to).
     pub fn flip(&mut self) {
-        let now = Instant::now();
+        let now = crate::frame_clock::now();
         let dur = crate::motion::span(crate::motion::Kind::Move, FLIP);
         let start = match self.flip_at {
             // Turned back halfway: as far back as it had come.
@@ -313,19 +358,19 @@ impl BoxView {
     /// `POCKETUI_SNAPSHOT_OPEN_MS` into its slide.
     pub fn snapshot_settle(&mut self) {
         let spin: Option<u64> = std::env::var("POCKETUI_SNAPSHOT_SPIN_MS").ok().and_then(|v| v.parse().ok());
-        self.spin_at = Instant::now().checked_sub(Duration::from_millis(spin.unwrap_or(0)));
+        self.spin_at = crate::frame_clock::now().checked_sub(Duration::from_millis(spin.unwrap_or(0)));
         let open: Option<u64> = std::env::var("POCKETUI_SNAPSHOT_OPEN_MS").ok().and_then(|v| v.parse().ok());
-        self.opened_at = open.and_then(|ms| Instant::now().checked_sub(Duration::from_millis(ms)));
+        self.opened_at = open.and_then(|ms| crate::frame_clock::now().checked_sub(Duration::from_millis(ms)));
         let ms: Option<u64> = std::env::var("POCKETUI_SNAPSHOT_FLIP_MS").ok().and_then(|v| v.parse().ok());
         self.flip_at = match (self.flip_at, ms) {
-            (Some(_), Some(ms)) => Instant::now().checked_sub(Duration::from_millis(ms)),
+            (Some(_), Some(ms)) => crate::frame_clock::now().checked_sub(Duration::from_millis(ms)),
             _ => None,
         };
     }
 
     /// The disc's turn as if the box had come up `by` ago (benches).
     pub fn age_spin(&mut self, by: Duration) {
-        self.spin_at = Instant::now().checked_sub(by);
+        self.spin_at = crate::frame_clock::now().checked_sub(by);
     }
 
     /// The next frame for the turning disc (Playful animations), while it turns: not through `animating`, so a slow
@@ -400,7 +445,7 @@ impl BoxView {
     }
 
     fn paint_box(&mut self, c: &mut Canvas, text: &mut Text, d: &CardData, pictures: &[CardPicture], inp: &Inputs) {
-        let now = Instant::now();
+        let now = crate::frame_clock::now();
         let dur = crate::motion::span(crate::motion::Kind::Move, FLIP);
         let t = match self.flip_at {
             Some(at) if !dur.is_zero() && now.duration_since(at) < dur => now.duration_since(at).as_secs_f32() / dur.as_secs_f32(),
@@ -426,27 +471,44 @@ impl BoxView {
         let (fw0, bw0) = widths(w, h, self.front_w(inp, h));
         let (from_w, to_w) = if self.back { (fw0, bw0) } else { (bw0, fw0) };
         let along = from_w as f32 + (to_w - from_w) as f32 * t;
-        let squeeze = (std::f32::consts::PI * t).cos().abs();
-        let dw = ((along * squeeze) as i32).max(2);
+        // The box turns about its upright axis in perspective (as a case on the shelf turns, `draw_turning`): the face
+        // going away recedes, its near edge taller than its far one, and the box's edge comes round between the two faces
+        // in its spine colour, as thick as the case is, so it never thins to a line. 11.11.: it was squeezed flat.
+        let size = inp.medium.size();
+        // As thick as the case itself (its front, not the game beside it), at the case's own proportions.
+        let case_w = inp.front.map_or(along * 0.7, |f| f.w as f32).min(along);
+        let depth = case_w * (size.spine as f32 / size.front.max(1) as f32).clamp(0.05, 0.1);
+        let focal = 2.5 * h as f32;
+        let th = std::f32::consts::PI * t;
+        let (sin, cos) = th.sin_cos();
+        let (half_w, half_d) = (along / 2.0, depth / 2.0);
+        // Top view, the box's middle at the origin, z away from you; a corner (x, z) after the turn.
+        let rot = |x: f32, z: f32| (x * cos + z * sin, -x * sin + z * cos);
+        let cx = (w / 2) as f32;
+        let project = |(x, z): (f32, f32)| {
+            let k = focal / (focal + z);
+            (cx + x * k, k)
+        };
         let (rx, ry, rw, rh) = rect;
-        let dh = (rh as f32 * (1.0 - 0.05 * (std::f32::consts::PI * t).sin())) as i32;
-        let (dx, dy) = (w / 2 - dw / 2, ry + (rh - dh) / 2);
-        for y in 0..dh {
-            let sy = ry + y * rh / dh.max(1);
-            let yy = dy + y;
-            if yy < 0 || yy >= h || sy < 0 || sy >= h {
-                continue;
-            }
-            for x in 0..dw {
-                let sx = rx + x * rw / dw;
-                let xx = dx + x;
-                if xx < 0 || xx >= w || sx < 0 || sx >= w {
-                    continue;
-                }
-                // The face darkens as it turns away from the light.
-                let p = scratch[(sy * w + sx) as usize];
-                c.buf[(yy * w + xx) as usize] = mix(p, 0x000000, ((1.0 - squeeze) * 120.0) as u32);
-            }
+        let cy = (ry + rh / 2) as f32;
+        // A touch smaller while it turns, so its nearer edge stays inside the room it stands in.
+        let tall = rh as f32 * (1.0 - 0.08 * sin);
+        // The face toward you: the near face (z = -half_d) before half way, the far one (z = +half_d) seen from behind after.
+        let (a, b) = if cos >= 0.0 {
+            (project(rot(-half_w, -half_d)), project(rot(half_w, -half_d)))
+        } else {
+            (project(rot(half_w, half_d)), project(rot(-half_w, half_d)))
+        };
+        let dark = ((1.0 - cos.abs()) * 120.0) as u32;
+        face_columns(c, &scratch, w, (rx, ry, rw, rh), a, b, cy, tall, dark);
+        // The edge between them: the box's right side faces you all through a half turn (its normal's z is -sin).
+        let (e0, e1) = (project(rot(half_w, -half_d)), project(rot(half_w, half_d)));
+        // As tall as the case (the back stands the room's height), from the face it leaves to the face it comes to.
+        let case_h = inp.front.map_or(rh, |f| f.h.min(rh)) as f32;
+        let (h_from, h_to) = if self.back { (case_h, rh as f32) } else { (rh as f32, case_h) };
+        let edge_h = (h_from + (h_to - h_from) * t) * tall / rh.max(1) as f32;
+        if e1.0 - e0.0 >= 0.5 {
+            edge_columns(c, e0, e1, cy, edge_h, mix(inp.look.band, 0x000000, ((1.0 - sin) * 110.0) as u32 + 30));
         }
         self.scratch = scratch;
     }
@@ -483,7 +545,7 @@ impl BoxView {
         let (gw, gh, out) = game_beside(inp.medium, (cw, ch), inp.game);
         let x = (c.w - (cw + out)) / 2;
         let y = top + (hh - ch) / 2;
-        let open = if off.is_some() { 1.0 } else { self.openness(Instant::now()) };
+        let open = if off.is_some() { 1.0 } else { self.openness(crate::frame_clock::now()) };
         self.front_rect = Some((x, y, cw, ch));
         if self.hide_case {
             return (x, top, cw + out, hh);
@@ -497,7 +559,7 @@ impl BoxView {
             art::soft_shadow(c, gx + gw / 2 + 8, gy + 10, gw / 2, gh, 20, 0.4, (0, c.h));
             match inp.game {
                 Some(pic) if self.spins && open >= 1.0 => {
-                    let turn = self.spin_at.map_or(0.0, |at| crate::playful::spin(crate::playful::secs(at, Instant::now())));
+                    let turn = self.spin_at.map_or(0.0, |at| crate::playful::spin(crate::playful::secs(at, crate::frame_clock::now())));
                     art::blit_spun(c, pic, gx as f32 + pic.w as f32 / 2.0, gy as f32 + pic.h as f32 / 2.0, turn, (0, c.h));
                 }
                 Some(pic) => art::blit(c, pic, gx, gy, 256, (0, c.h)),

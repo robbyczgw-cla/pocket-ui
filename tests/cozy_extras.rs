@@ -1,7 +1,7 @@
 //! Settings → Look → Cozy extras as the player meets them (docs/user/settings.md "Cozy extras"), on the made-up library
 //! (scripts/curator-fake-library.py): a journey on the page (A on TV on the cabinet; Down to Stickers on cases, A)
 //! lands in settings.json, the Cabinet then stands without its TV, and A again brings it back; a settings.json from
-//! before the page keeps every extra as it starts. The slideshow is switched in System → Sleep & power. Needs python3 (and, on Linux without
+//! before the page keeps every extra as it starts. Needs python3 (and, on Linux without
 //! a compositor, scripts/wayland-stub.py), as tests/stickers_tv.rs.
 
 use std::path::{Path, PathBuf};
@@ -99,7 +99,7 @@ fn the_dpad_reaches_the_gba_choice_and_every_console_view_uses_the_saved_sp() {
     let stub = wayland(tmp.path());
     let lib = library(tmp.path());
     let data = lib.join("data");
-    let views = ["shelf:gba:shelf", "shelf:gba:cabinet:games:0:insert", "shelf:gba:cards", "shelf:gba:split", "shelf:gba:minimal", "console:gba"];
+    let views = ["shelf:gba:shelf", "shelf:gba:cabinet:games:0:insert", "shelf:gba:split", "console:gba"];
     // Compare the pictures that contain hardware, below the live status corner.
     let pixels = |v: (i32, i32, Vec<u8>)| v.2[(v.0 * 110 * 3) as usize..].to_vec();
     let before: Vec<_> = views.iter().map(|s| pixels(shot_in(tmp.path(), &lib, &data, &stub, s, "en", "shelf"))).collect();
@@ -136,7 +136,7 @@ fn the_dpad_reaches_the_gba_choice_and_every_console_view_uses_the_saved_sp() {
     let mut saved: serde_json::Value = serde_json::from_slice(&std::fs::read(&settings).unwrap()).unwrap();
     saved["motion"] = serde_json::json!("off");
     std::fs::write(settings, saved.to_string()).unwrap();
-    for look in ["shelf", "cabinet", "cards", "minimal", "split"] {
+    for look in ["shelf", "cabinet", "split"] {
         // Paint classic first, then choose SP through the actual handler and paint again in
         // the same process. A stale cached case front must not survive that choice.
         let warm = pixels(shot_in(tmp.path(), &lib, &data, &stub, &format!("cozy:0::ua:{look}"), "en", "shelf"));
@@ -182,27 +182,4 @@ fn switching_an_extra_on_the_page_is_saved_and_takes_the_tv_off_the_cabinet() {
     shot(&tmp, &lib, &data, &stub, "cozy:1::urb", "en");
     assert_eq!(extras(&data), serde_json::json!({"case_stickers": false}));
     assert!(red_on_tv(&shot(&tmp, &lib, &data, &stub, "shelf:snes:cabinet:games:0", "en")) > 1500, "the TV is back");
-}
-
-/// The idle slideshow is off in every look until Sleep & power's row switches it on; the switch is kept, and switching it
-/// off again writes nothing. The row comes right after Screen off after.
-#[test]
-fn the_idle_slideshow_is_off_in_every_look_until_the_page_switches_it_on() {
-    let _guard = tempfile::tempdir().unwrap();
-    let tmp = _guard.path().to_path_buf();
-    let stub = wayland(&tmp);
-    let lib = library(&tmp);
-    let row = pocket_ui::sleep_settings::ROWS.iter().position(|r| *r == pocket_ui::sleep_settings::Row::Slideshow).unwrap();
-    assert_eq!(row, 1);
-    assert!(!pocket_ui::cozy_extras::Extra::shown().contains(&pocket_ui::cozy_extras::Extra::IdleSlideshow), "not on the Cozy extras page");
-    for theme in ["shelf", "cabinet", "minimal", "cards", "split"] {
-        let data = tmp.join(format!("data-{theme}"));
-        std::fs::create_dir_all(&data).unwrap();
-        shot_in(&tmp, &lib, &data, &stub, &format!("sleep:{row}"), "en", theme);
-        assert_eq!(extras(&data), serde_json::Value::Null, "{theme}: nothing is written before a choice");
-        shot_in(&tmp, &lib, &data, &stub, &format!("sleep:{row}:keys=a"), "en", theme);
-        assert_eq!(extras(&data), serde_json::json!({ "idle_slideshow": true }), "{theme}: one press switches it on");
-        shot_in(&tmp, &lib, &data, &stub, &format!("sleep:{row}:keys=r"), "en", theme);
-        assert_eq!(extras(&data), serde_json::Value::Null, "{theme}: and the next one back off, written no more");
-    }
 }

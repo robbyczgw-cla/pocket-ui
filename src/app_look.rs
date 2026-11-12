@@ -16,6 +16,22 @@ use super::{stripe, system_short, App, Item, Screen, PULL};
 
 
 impl App {
+    /// At start, when settings.json still named Minimal or Cards (`settings::RETIRED_LOOKS`): one friendly line on the
+    /// Split look they became, after the game of the start if one runs, and the file saved so it says "split" and the
+    /// line never comes again.
+    pub(crate) fn say_retired_look(&mut self) {
+        let text = pocket_ui::settings::RETIRED_LOOK_NOTE.to_string();
+        println!("start: {text}");
+        match &self.running {
+            Some(_) if self.after_game_note.is_none() => self.after_game_note = Some(text),
+            Some(_) => {}
+            // A card that stays until it is closed: the line is longer than a toast holds.
+            None if self.notice.is_none() => self.notice = Some(super::Notice::new(text)),
+            None => self.toast = Some((text, Instant::now())),
+        }
+        self.save_settings();
+    }
+
     /// The first start's step (not the look step), in the column on a wide screen.
     pub(crate) fn paint_setup_in_column(&mut self, c: &mut Canvas) {
         self.in_column(c, |app, c| {
@@ -87,8 +103,7 @@ impl App {
             self.theme = t;
             // Each look at rest: nothing glides over from the one painted before.
             self.motion = Default::default();
-            // Minimal shows a console only next to a selected system, so its preview selects the first one.
-            self.sel = if t == Theme::Minimal { 1 } else { 0 };
+            self.sel = 0;
             self.prev_sel = self.sel;
             let mut c = Canvas::new(&mut buf, frame_w, frame_h);
             // As `App::paint` has it: the Shelf look in the column on a wide screen (`app_column`).

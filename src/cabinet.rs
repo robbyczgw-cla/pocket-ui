@@ -63,7 +63,7 @@ impl FormFactor {
             | "pcengine" | "tg16" | "supergrafx" => ConsoleCart,
             "ps2" | "gamecube" | "wii" | "wiiware" | "wiiu" | "xbox" | "ps3" => DvdCase,
             "psp" | "pspockets" => UmdCase,
-            "nds" | "3ds" | "n3ds" | "psvita" | "switch" => CardBox,
+            "nds" | "3ds" | "n3ds" | "psvita" => CardBox,
             _ => JewelCase,
         }
     }

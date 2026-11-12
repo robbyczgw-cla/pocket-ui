@@ -138,7 +138,7 @@ fn a_move_on_home_draws_no_letters_runs_no_patterns_and_is_quick_in_every_look()
     assert!(status.success(), "curator-fake-library.py failed");
     let wayland = wayland_for_snapshots(&tmp);
     // German is where a line can be run through the patterns; English once, for Split, the look of a new Pocket.
-    let runs = [("split", "en"), ("split", "de"), ("shelf", "de"), ("minimal", "de"), ("cards", "de"), ("cabinet", "de")];
+    let runs = [("split", "en"), ("split", "de"), ("shelf", "de"), ("cabinet", "de")];
     for (look, lang) in runs {
         // The numbers are already the frame's thread CPU time (`App::bench_shelf`), and a busy build computer still
         // inflates them (shared caches and hyper-threads, the clock; cabinet de at load 13-17 measured p50 4.6-6.2 ms,

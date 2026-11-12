@@ -1,8 +1,8 @@
 # Settings: Connections, System and Help & tools
 
 The second half of [Settings](settings.md): the **Connections**, **System** and **Help & tools** categories (Wi-Fi, Bluetooth,
-Tailscale, Sync, remote access, the Web companion; the language, the clock, sleep and power, updates, storage, backups; the Tour,
-this guide, tools and the About page). Look, Sound & feel, Playing and Games, and how Settings opens, are on
+the Web companion; the language, the clock, sleep and power, updates, storage, backups; the Tour,
+this guide, tools and the About page), and the page behind Help & tools, **For tinkerers** (Tailscale, Sync, remote access). Look, Sound & feel, Playing and Games, and how Settings opens, are on
 [the first page](settings.md#open-settings).
 
 ## Connections
@@ -15,35 +15,7 @@ Settings → **Connections**. Networks, controllers, and reaching the Pocket fro
 |---|---|
 | **Wi-Fi** | Connect to a network, switch between saved ones, forget one, join a hidden network, set the Wi-Fi country. See [Getting started](getting-started.md#4-connect-to-wi-fi) |
 | **Bluetooth** | Pair a controller, headphones or a speaker and see what is connected. See [Bluetooth](bluetooth.md) |
-| **Tailscale** | Reach the Pocket from your other devices over a private network, even away from home. See [Tailscale](remote.md) |
-| **Sync** | Keep saves and save states in step with your other devices with Syncthing, and, if you like, your favourites, notes and play history too. See [Sync](sync.md) |
-| **Remote access (SSH)** | Log in from a computer. See [Remote access](#remote-access-ssh) |
 | **Web companion** | Your library, play time and uploads in a browser on your phone or computer, over Tailscale only. Off by default. See [Web companion](web-companion.md) |
-
-### Tailscale
-
-Settings → Connections → **Tailscale** links the Pocket with your phone, computer and other devices over Tailscale, a private
-network that works on any Wi-Fi, a phone hotspot or mobile data. See [Tailscale](remote.md) for the whole page.
-
-1. Select **Tailscale** and press A to switch it on. It stays on after a restart until you switch it off.
-2. Select **Sign in** and press A: a QR code appears. Scan it with your phone and approve the Pocket. The page shows
-   **Connected as** your tailnet, the Pocket's Tailscale address and its name.
-3. **Sign in with a key** is for a key made in the Tailscale admin console. **Name** changes what the Pocket is called on your
-   tailnet. **Log out** asks twice.
-
-Tailscale only sets up the network. To log in with SSH over it, switch on Remote access (SSH) as well.
-
-### Remote access (SSH)
-
-Settings → Connections → **Remote access (SSH)**. Remote access is **off** by default, and it is off again after every restart.
-
-1. Press A ("Turn on remote access"). The screen shows `ssh root@<address>`, the user and a password made for this
-   Pocket.
-2. Log in from your computer with those. The password stays the same for this Pocket.
-3. It stays on until you press A again to turn it off. After a restart it is off again.
-
-Remote access is meant for people who want to copy files or look at logs. You do not need it to play. See
-[SECURITY-HARDENING.md](../SECURITY-HARDENING.md) for what it changes.
 
 ## System
 
@@ -54,9 +26,8 @@ card and backups.
 |---|---|
 | **Language** | **English**, **Deutsch** or **Español**: menus, hints and messages. See [Language](language.md) |
 | **Time** | Time zone, date and network time. See [Time](#time) |
-| **Sleep & power** | When the screen goes off and the device sleeps, the slideshow before it, when it switches off after sleeping, and what the power button does. The row shows the screen-off time ("2 min"). See [Sleep & power](#sleep--power) |
-| **Second screen** | Only on a handheld with two screens. **Game info** (the start): the lower screen shows the game Home rests on, its box and then its info page with your play time and save slots. **Off**: the lower screen stays dark. In a game it is off either way, except in DS games, which use both screens. Quitting a DS game brings Game info back, including after a temporary display error. |
-| **Kids mode** | A big, simple shelf for a child, with a PIN: see [Kids mode](kids-mode.md). Not on the Steam Deck |
+| **Sleep & power** | When the screen goes off and the device sleeps, when it switches off after sleeping, and what the power button does. The row shows the screen-off time ("2 min"). See [Sleep & power](#sleep--power) |
+| **Kids mode** | A big, simple shelf for a child, with a PIN: see [Kids mode](kids-mode.md).  |
 | **Updates** | New versions of pocket-ui and the system. See [Updates](updates.md) |
 | **Storage** | What takes up space on the SD card, what can go, and the games you hid. The row shows the free space ("41.2 GB free"). See [Storage](storage.md) |
 | **Backup & reset** | Back up your saves and states, or pocket-ui's settings and library notes, to the SD card, restore a backup, or reset the settings. See [Backup & reset](#backup--reset) |
@@ -93,7 +64,7 @@ Settings → System → **Time**.
 
 ### Sleep & power
 
-Settings → System → **Sleep & power**: Screen off after, Slideshow before screen off, Sleep after, Switch off after
+Settings → System → **Sleep & power**: Screen off after, Sleep after, Switch off after
 sleeping, and the power button's short press and hold. The rows and their choices are under
 [Sleep & power settings](quick-settings.md#sleep--power-settings), with what sleep does.
 
@@ -127,7 +98,7 @@ Settings → System → **Backup & reset**.
   they were then. What you had is backed up first, so a restore can be undone.
 - **Reset settings**, then **A** again: the look, appearance, motion, sounds, haptics, LEDs, sleep, Performance & fan,
   Curator and every console's and game's Options go back to their defaults. A backup is made first. Kept: your
-  library notes, Sync and Tailscale, your accounts, what the Store installed, and the first start (you land on Home).
+  library notes, Sync and Tailscale, your accounts, downloaded extras, and the first start (you land on Home).
 - After a restore of settings or a reset pocket-ui starts again by itself, which takes a few seconds.
 
 ROCKNIX's own settings are not part of it, nor are the options PlayStation 2, GameCube, Wii and 3DS keep in ROCKNIX's
@@ -185,13 +156,13 @@ Settings → **Help & tools**. The Tour, this guide, ROCKNIX's tools, the bug re
 |---|---|
 | **First-start setup** | The first start again from its first page: language, Wi-Fi, your games, how they stand. Your games, saves and settings stay; it ends on Home. See [Getting started](getting-started.md#3-first-start) |
 | **How you like to play** | The shelf, Easy, Enthusiast or Choose for yourself (the cards): pocket-ui's extras in one go. The row shows where the switches stand now. See [How you like to play](#how-you-like-to-play) |
-| **Tour** | The basics in 7 cards: playing and the HOME menu, continuing, saving, quick settings, adding games, Settings, then Easy to read (Large text and Reduced motion). See [Features and the Tour](tour.md) |
+| **Tour** | The basics in 7 cards: playing and the HOME menu, continuing, saving, quick settings, adding games, Settings, then Big text (Large text and Reduced motion). See [Features and the Tour](tour.md) |
 | **Manual** | This guide, on the device. See [Manual](#manual) |
+| **For tinkerers** | Tailscale, Sync, Remote access (SSH) and PC streaming, for whoever wants to reach the Pocket from other devices. See [For tinkerers](#for-tinkerers) |
 | **Tools** | ROCKNIX's tools without its old menu: the emulators' own settings, RetroArch's menu, gamepad test and calibration, file manager, terminal, and tools installed from a store. See [Tools](#tools) |
 | **Test buttons** | Every controller's buttons, triggers and sticks light up while you press them, and the page says what each press does in menus and in games. See [Test buttons](#test-buttons) |
-| **Store** | Emulators, frames, themes and tools. Shown only on a device that has a store set up; there is no public store yet, so you will not see this row. See [Store](extras.md#store) |
 | **Report a problem** | Opens About with this row selected; A there saves a file for a bug report in the `reports` folder of the games share ([Report a problem](troubleshooting.md#report-a-problem)) and shows where it is. The same row is in About, and in the dialog of SELECT + START held, where you look when something has just gone wrong |
-| **About** | Version, the system underneath (on the SD card image "pocket-ui OS 0.3.2 · built on ROCKNIX 20261001 (SM8250)", on a ROCKNIX card with pocket-ui added just the ROCKNIX version), number of games, free space, network address, battery, where the logs are kept, and where the licence texts are (a Licences row when the page has the room: `/storage/pocket-ui/licences`: pocket-ui's licence, the credits, the licences of the programs it is built from and of its fonts; they come with the install package and the SD card image); on a Retroid Pocket 5, Flip 2 or first Mini also which one it is, marked experimental ([Getting started](other-handhelds.md#other-retroid-devices)). Two rows: **Report a problem** saves a file for a bug report in the `reports` folder of the games share ([Report a problem](troubleshooting.md#report-a-problem)); **Open EmulationStation…** opens ROCKNIX's own menu, after a warning ([Safe mode and EmulationStation](safe-mode.md#opening-emulationstation)); not on the TrimUI Brick, which has no EmulationStation |
+| **About** | Version, the system underneath (on the SD card image "pocket-ui OS 0.4.0 · built on ROCKNIX 20261001 (SM8250)", on a ROCKNIX card with pocket-ui added just the ROCKNIX version), number of games, free space, network address, battery, where the logs are kept, and where the licence texts are (a Licences row when the page has the room: `/storage/pocket-ui/licences`: pocket-ui's licence, the credits, the licences of the programs it is built from and of its fonts; they come with the install package and the SD card image); on a Retroid Pocket 5, Flip 2 or first Mini also which one it is, marked experimental ([Getting started](other-handhelds.md#other-retroid-devices)). Two rows: **Report a problem** saves a file for a bug report in the `reports` folder of the games share ([Report a problem](troubleshooting.md#report-a-problem)); **Open EmulationStation…** opens ROCKNIX's own menu, after a warning ([Safe mode and EmulationStation](safe-mode.md#opening-emulationstation)); not on the TrimUI Brick, which has no EmulationStation |
 
 ### How you like to play
 
@@ -200,9 +171,9 @@ into your game, and more. This page sets them in one go (the first start doesn't
 Up/Down choose, A takes it and closes the page; under the rows the page says what the selected one switches on and
 off, in everyday words. The feature cards are described in [Features and the Tour](tour.md).
 
-- **The shelf**: "Your games on a shelf, as it comes." The start setting of a new Pocket: Lens & smart shelves,
-  Labels, Echoes, Versions and Motion are on; Up next, Pixel Path, Echoes beyond this device, frames on every console
-  and going straight back into your game are off. It puts every extra back as pocket-ui ships it, On start and
+- **The shelf**: "Your games on a shelf, as it comes." The start setting of a new Pocket: Motion
+  is on; Lens & smart shelves, Echoes, Versions, Pixel Path, Echoes beyond this device, frames on every console
+  and going straight back into your game are off (Just Play on Home is the way to "pick me something"). A Pocket set up before keeps its Lens, Echoes and Versions on. It puts every extra back as pocket-ui ships it, On start and
   Screen frames too.
 - **Easy**: the same start settings with the [Easy](easy.md) look.
 - **Enthusiast**: "Suggestions, play statistics, picture details and frames, all on." All of Curator, Pixel Path in
@@ -263,4 +234,42 @@ keeps its own lights, and the page names the one that pressed last.
 ### Tools
 
 Settings → Help & tools → **Tools** starts ROCKNIX's own tools (the emulators' menus, RetroArch's menu, gamepad test and
-calibration, file manager, terminal) and tools installed from a [store](extras.md#store). See [Tools](extras.md#tools).
+calibration, file manager, terminal) and tools installed from a package installer. See [Tools](extras.md#tools).
+
+## For tinkerers
+
+Settings → Help & tools → **For tinkerers**. The ways to reach the Pocket from your other devices, which a player who only wants
+to play never needs. B goes back to Help & tools. On a device that has none of them (a Steam Deck, a card without its own network)
+the row is not there.
+
+| Entry | What it holds |
+|---|---|
+| **Tailscale** | Reach the Pocket from your other devices over a private network, even away from home. See [Tailscale](remote.md) |
+| **Sync** | Keep saves and save states in step with your other devices with Syncthing, and, if you like, your favourites, notes and play history too. See [Sync](sync.md) |
+| **Remote access (SSH)** | Log in from a computer. See [Remote access](#remote-access-ssh) |
+| **PC streaming** | Pair a gaming PC for Moonlight on the Pocket itself, see the paired PCs, stream one of their games. See [PC streaming](pc-streaming.md) |
+
+### Tailscale
+
+Settings → Help & tools → For tinkerers → **Tailscale** links the Pocket with your phone, computer and other devices over Tailscale, a private
+network that works on any Wi-Fi, a phone hotspot or mobile data. See [Tailscale](remote.md) for the whole page.
+
+1. Select **Tailscale** and press A to switch it on. It stays on after a restart until you switch it off.
+2. Select **Sign in** and press A: a QR code appears. Scan it with your phone and approve the Pocket. The page shows
+   **Connected as** your tailnet, the Pocket's Tailscale address and its name.
+3. **Sign in with a key** is for a key made in the Tailscale admin console. **Name** changes what the Pocket is called on your
+   tailnet. **Log out** asks twice.
+
+Tailscale only sets up the network. To log in with SSH over it, switch on Remote access (SSH) as well.
+
+### Remote access (SSH)
+
+Settings → Help & tools → For tinkerers → **Remote access (SSH)**. Remote access is **off** by default, and it is off again after every restart.
+
+1. Press A ("Turn on remote access"). The screen shows `ssh root@<address>`, the user and a password made for this
+   Pocket.
+2. Log in from your computer with those. The password stays the same for this Pocket.
+3. It stays on until you press A again to turn it off. After a restart it is off again.
+
+Remote access is meant for people who want to copy files or look at logs. You do not need it to play. See
+[SECURITY-HARDENING.md](../SECURITY-HARDENING.md) for what it changes.

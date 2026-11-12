@@ -12,7 +12,6 @@
 //!   untouched for a moment ([`IDLE_FOR`]), and a failed one is asked again later and later ([`retry_after`]).
 //! - **Only release builds** ([`looks`]): a build from main or a branch carries Cargo.toml's version, older than the
 //!   released one, and would announce that release over the build being tested (06.11., RG35XX Plus).
-//! - **Not where nobody should see it**: not over a game, not on a device whose OS owns updates (the Steam Deck), not
 //!   in Kids Mode, not over a page or another notice (the shelf asks `shelf_notice_free`).
 
 use std::path::Path;
@@ -20,7 +19,7 @@ use std::time::Duration;
 
 use serde::{Deserialize, Serialize};
 
-use crate::update::{newer, Manifest};
+use crate::update_channel::{newer, Manifest};
 
 /// The memory, in the data folder.
 pub const FILE: &str = "update-hint.json";
@@ -43,12 +42,14 @@ pub fn retry_after(failures: u32) -> Duration {
 }
 
 /// Whether installing should first suggest the charger: under [`LOW_BATTERY`] and not charging. An unknown battery
-/// (a Deck, the desktop) never warns.
+/// (for example, on the desktop) never warns.
+#[cfg(not(target_os = "android"))]
 pub fn low_battery(battery: Option<crate::status_corner::Battery>) -> bool {
     battery.is_some_and(|b| !b.charging && b.percent < LOW_BATTERY)
 }
 
 /// The line under "Install now / Later" when the battery is low and not charging: the charger first. Nothing otherwise.
+#[cfg(not(target_os = "android"))]
 pub fn battery_warning(battery: Option<crate::status_corner::Battery>) -> Option<String> {
     battery.filter(|b| low_battery(Some(*b))).map(|b| format!("The battery is at {}%. Plug in the charger first, so it cannot run out during the update.", b.percent))
 }
@@ -130,8 +131,8 @@ impl State {
 
 /// Whether the shelf looks for a newer version at all: only a release build, not switched off, not on a device whose
 /// OS owns updates.
-pub fn looks(release_build: bool, state: &State, host_owned: bool) -> bool {
-    release_build && !state.off && !host_owned
+pub fn looks(release_build: bool, state: &State) -> bool {
+    release_build && !state.off
 }
 
 /// The version to say: the list's `app` when it is later than the running one and not said yet.
@@ -163,10 +164,9 @@ mod tests {
     #[test]
     fn only_a_release_build_looks() {
         let fresh = State::default();
-        assert!(!looks(false, &fresh, false), "a development build never says a release is ready");
-        assert!(looks(true, &fresh, false));
-        assert!(!looks(true, &State { off: true, ..State::default() }, false));
-        assert!(!looks(true, &fresh, true), "the Steam Deck's OS owns updates");
+        assert!(!looks(false, &fresh), "a development build never says a release is ready");
+        assert!(looks(true, &fresh));
+        assert!(!looks(true, &State { off: true, ..State::default() }));
     }
 
     #[test]
@@ -275,23 +275,23 @@ mod tests {
         assert!(low_battery(battery(19, false)) && battery_warning(battery(19, false)).is_some_and(|w| w.contains("19%") && w.contains("charger")));
         assert!(!low_battery(battery(20, false)), "20 % is enough");
         assert!(!low_battery(battery(5, true)) && battery_warning(battery(5, true)).is_none(), "on the charger it goes ahead");
-        assert!(!low_battery(None) && battery_warning(None).is_none(), "no battery (a Deck, the desktop): no warning");
+        assert!(!low_battery(None) && battery_warning(None).is_none(), "no battery (for example, on the desktop): no warning");
     }
 
     #[test]
     fn the_switch_is_remembered_and_turns_the_look_off() {
         let dir = TestDir::new("update-hint-switch");
         let mut state = State { said: Some("0.3.0".into()), off: false };
-        assert!(looks(true, &state, false));
+        assert!(looks(true, &state));
         state.set_auto(false);
         state.save(&dir);
         crate::fsutil::settle();
         let back = State::load(&dir);
         assert!(back.off && back.said.as_deref() == Some("0.3.0"), "Off survives a restart and keeps what was said: {back:?}");
-        assert!(!looks(true, &back, false));
+        assert!(!looks(true, &back));
         let mut on = back;
         on.set_auto(true);
-        assert!(looks(true, &on, false) && !on.off);
+        assert!(looks(true, &on) && !on.off);
     }
 
     #[test]

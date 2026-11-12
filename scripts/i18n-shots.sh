@@ -1,6 +1,6 @@
 #!/bin/sh
 # Every state of tests/i18n-states.txt in German (or SHOT_LANG=es), dark and light, with Curator's made-up library, as contact sheets,
-# plus what the painter noticed (docs/DEVELOPING.md "Translations"):
+# plus what the painter noticed (docs/dev/translations.md "Translations"):
 #   missing.txt        strings painted without a German line, before keep.txt (the test sorts them)
 #   cut-$SHOT_LANG-only.txt    strings `Text::fit` cut short with "…" in German but not in English, with their states
 #   overflow-$SHOT_LANG-only.txt  strings drawn past the right edge in German but not in English

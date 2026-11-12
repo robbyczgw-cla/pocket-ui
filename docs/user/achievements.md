@@ -7,6 +7,7 @@ counts what you unlock on your account there.
 Achievements work in the games that run on pocket-ui's own emulator host (pocket-core): the systems listed under
 [On pocket-ui's own host](systems.md#on-pocket-uis-own-host). Games on RetroArch or a standalone emulator don't get
 them from pocket-ui.
+On Android the same works in the app's own player: [RetroAchievements on Android](android-mvp.md#retroachievements).
 
 ## Sign in
 
