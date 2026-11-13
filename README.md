@@ -8,7 +8,7 @@
 <p align="center"><b>A cozy, free OS with its own game player for retro handhelds.</b><br>
 Your games on one shelf, press A and you're playing, right where you left off.</p>
 
-**pocket-ui for Linux** is its own bootable OS image (built on [ROCKNIX](https://rocknix.org)) or an install on a
+**pocket-ui OS** comes as its own bootable image (built on [ROCKNIX](https://rocknix.org)) or as an install on a
 system you already have (ROCKNIX, or a card of its own on the TrimUI Brick), for Anbernic, TrimUI, Retroid and AYN
 handhelds.
 
