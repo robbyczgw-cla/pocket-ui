@@ -39,6 +39,13 @@ tests only, with no hardware verification. Use ROCKNIX's own **SM8550 aarch64 im
 (20261001), set up following ROCKNIX's guide for your device, boot it once, then add pocket-ui
 with the install package. The Mini V2 SD image must not be used on these devices.
 
+**Beta cards for the Pocket 6 and Nova** are in the
+[beta release](https://github.com/robbyczgw-cla/pocket-ui/releases/tag/beta-images-0.3.2) and start from Retroid's own
+"UEFI" entry (Volume Down + Power). Retroid's own UEFI start has worked for one tester with another Linux card; if your
+device falls back to the boot menu, set up OpenABL once with ROCKNIX's guide
+([Pocket 6](https://rocknix.org/devices/retroid/retroid-pocket-6/), [Nova](https://rocknix.org/devices/retroid/retroid-pocket-nova/)),
+Android stays. Then start the card from OpenABL's menu, and tell us how it went.
+
 Pocket 6 and the Odin 2 family use 1920×1080; Nova uses 1280×960. First start says once that the device is untested;
 About marks it experimental. **Stock ROCKNIX still disables sleep on these devices (checked 2026-10-27):** the power button
 turns the screen off, and idle turns it off with the game paused. Any button brings it back.

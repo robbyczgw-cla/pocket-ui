@@ -50,7 +50,8 @@ handhelds.
 - **Ready SD card image** (listed on the install page): write it to a card with balenaEtcher or Raspberry Pi Imager
   and start. There is one for the Retroid Pocket Mini V2, the AYN Odin 2 family and each Anbernic H700 model; the
   Pocket 5, Flip 2, Pocket 6 and Nova have beta test images, and testers are welcome. On a Pocket 5 or Flip 2
-  whose boot menu shows "UEFI", set up OpenABL once first ([how](docs/INSTALL-DUAL-BOOT.md#pocket-5-and-flip-2-loader-or-uefi)).
+  whose boot menu shows "UEFI", set up OpenABL once first ([how](docs/INSTALL-DUAL-BOOT.md#pocket-5-and-flip-2-loader-or-uefi)); a Pocket 6 or Nova that
+  falls back to the boot menu takes the same step ([how](docs/user/other-handhelds.md#experimental-sm8550-handhelds)).
 - **TrimUI Brick**: unzip the card download onto an empty microSD card and switch on. The Brick's own system isn't
   touched, and updates come over Wi-Fi.
 - **Already on ROCKNIX?** Unzip the Ports installer into `roms/ports` and pick **Install pocket-ui** under Ports.

@@ -362,7 +362,7 @@ member of `KERNEL`, md5 `SM8550_IMAGE_MD5`), `boot/pocket/<model>-noufs.dtb` (th
 
 | Bootloader in the Retroid | What it starts from the card |
 |---|---|
-| Retroid's "UEFI" in the Volume Down menu (newer firmware; reported for a Pocket 6 on r/retroid, 2026-08) and any other UEFI | GRUB, with the model's tree. Without the tree the kernel starts and the screen stays black |
+| Retroid's "UEFI" in the Volume Down menu (newer firmware; reported for a Pocket 6 on r/retroid, 2026-08) and any other UEFI | GRUB, with the model's tree. Without the tree the kernel starts and the screen stays black. Worked for one tester with another Linux card, never with ours; a handheld that falls back to the boot menu gets OpenABL once (ROCKNIX's Pocket 6 / Nova guide, `backup_abl.sh`, `flash_abl.sh`) |
 | OpenABL ("Boot mode: Linux") | the BLS entry, before `KERNEL` |
 | ROCKNIX's ABL (the 20261001 `abl_signed-SM8550.elf`) | `KERNEL` with the menu's device model, as before: its strings name only `\KERNEL`, `\kernel.img` and `\boot\reglinux.update` |
 
