@@ -13,6 +13,13 @@ work, but nobody has tried pocket-ui on one yet.
   says, start it once, then add pocket-ui with the install package for an existing ROCKNIX card (the
   [install guide](../INSTALL-DUAL-BOOT.md#install-on-a-rocknix-card-you-already-use) has the steps). It recognises
   these devices and says they are experimental.
+- **Beta cards for the Pocket 5 and Flip 2.** There are also ready cards to test, in the
+  [beta release](https://github.com/robbyczgw-cla/pocket-ui/releases/tag/beta-images-0.3.2). Hold Volume Down and press
+  Power: if Retroid's menu says **Loader**, start the card from there. If it says **UEFI**, set up OpenABL once with
+  [ROCKNIX's guide](https://rocknix.org/devices/retroid/retroid-pocket-5/) (no computer needed, Run Script as Root;
+  make the backup first, Android stays), then pick Boot mode: Linux and Boot source: SD card. The 12 GB models with the
+  Visionox screen are not supported yet; a card of their own will follow. Steps:
+  [install guide](../INSTALL-DUAL-BOOT.md#pocket-5-and-flip-2-loader-or-uefi).
 - **What you see.** The first start says once that pocket-ui hasn't been tested on your device, unless the project has
   played on it ([DEVICES](../DEVICES.md)); Settings → Help & tools →
   About shows the device with "(experimental)". Everything else is the same as on the Mini V2. On the Pocket 5's and

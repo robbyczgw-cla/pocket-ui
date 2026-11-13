@@ -608,10 +608,10 @@ bootloader a Retroid may have (2026-11-12, after a Pocket 5 tester found no "Boo
 | Retroid's stock ABL, "Boot mode: Loader" (Retroid u-boot 2024.10 in `loader`) | `EFI/BOOT/BOOTAA64.EFI` (GRUB, `grub.cfg`). U-Boot has no BLS reader; it would prefer `extlinux/` or `boot.scr`, which the card must not have |
 | OpenABL (OpenHandheldCollective, ROCKNIX 20261101), "Boot mode: Linux" | `loader/entries/pocket-ui.conf` first (its `devicetree` wins over the menu's device model), else GRUB |
 | ROCKNIX ABL (`ROCKNIX/abl` up to v1.2), "Boot mode: Linux" | `EFI/BOOT/BOOTAA64.EFI` first (strings of the v1.2 SM8250 binary: no BLS reader), else ROCKNIX's `/KERNEL` with the menu's model |
-| Retroid's newer "Boot mode: UEFI" and any other UEFI firmware (EDK2) | `EFI/BOOT/BOOTAA64.EFI` (GRUB). QEMU's EDK2 also takes it from a basic-data partition; Retroid's UEFI is reported to want an EFI system partition, so the Pocket 5 and Flip 2 mark p1 as one |
+| Retroid's newer "UEFI" next to Android in the Volume Down menu | Nothing: it does not start SD cards (no report of any card starting that way; two Pocket 5s fall back to the fastboot menu, 2026-11-13). Those devices get OpenABL once (row above, ROCKNIX's guide: Run Script as Root, `backup_abl.sh`, `flash_abl.sh`), then Boot mode: Linux, Boot source: SD card. Other UEFI firmware (EDK2, QEMU) starts `EFI/BOOT/BOOTAA64.EFI` (GRUB), also from a basic-data partition |
 
 Offsets, names and the `LegacyBIOSBootable` attribute stay ROCKNIX's; only p1's type GUID differs on the Pocket 5 and Flip 2
-(`sm8250_p1_type` in `pins.sh`). Retroid's u-boot boots ESP-typed partitions as well (they count as bootable). An EFI system
+(`sm8250_p1_type` in `pins.sh`; set for Retroid's UEFI, which turned out not to start cards, so it has no known use). Retroid's u-boot boots ESP-typed partitions as well (they count as bootable). An EFI system
 partition is hidden by Windows and macOS and not mounted by Android; the notes say so. The Mini V2 keeps the basic-data type
 until a Mini V2 card is checked with it. Secure Boot: GRUB is unsigned. In QEMU with Secure Boot on (AAVMF, Microsoft keys)
 the firmware refuses it ("Access Denied"); Debian's signed shim and GRUB (`shim-signed 1.51~1+deb13u1+16.1`,

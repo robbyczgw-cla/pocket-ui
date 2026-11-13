@@ -234,6 +234,10 @@ on a Pocket 5 is for a device to show.
   the single file `Install pocket-ui.sh` in `roms/ports` (same checks, shown on the screen). Its
   `install.sh` accepts the four devices by their device tree `model`; on the three experimental ones it says so.
   Any other device still needs `--allow-other-device`.
+- **Pocket 5 and Flip 2 beta cards** (`-rp5-uefi`, `-flip2-uefi`, never started on a real device): Retroid's menu
+  "Boot mode: Loader" starts them directly; a menu with "UEFI" next to Android needs OpenABL set up once as ROCKNIX's
+  guide says, then Boot mode: Linux, Boot source: SD card ([INSTALL-DUAL-BOOT.md](INSTALL-DUAL-BOOT.md#pocket-5-and-flip-2-loader-or-uefi)).
+  12 GB devices with the Visionox screen stay black with them and are not supported yet; a card of their own will follow.
 
 ## A first day in the virtual device (2026-10-26)
 

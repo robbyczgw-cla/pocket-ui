@@ -104,19 +104,27 @@ Switch off. Hold **Vol Down** and press **Power**. Pick **Switch boot mode** unt
 mode: Android**, then **Start**. Android starts as before; the card can stay in. To return to pocket-ui, switch the
 boot mode back to Loader the same way. [V] on the author's device.
 
-## Pocket 5 and Flip 2: "UEFI" instead of "Loader"
+## Pocket 5 and Flip 2: "Loader" or "UEFI"
 
 The experimental Pocket 5 and Flip 2 cards (`pocket-ui-<version>-rp5-uefi.img.xz`, `…-flip2-uefi.img.xz`, in the beta
-release; not yet started on a real device) are written and started like the Mini V2 card above, and nothing is flashed.
-Only the menu differs: newer Retroid firmware shows **UEFI** where older firmware shows **Boot mode: Loader**.
+release) are written like the Mini V2 card above. Retroid's boot menu (hold **Vol Down**, press **Power**) shows which
+way in your device has:
 
-1. Write the card, put it into the switched-off device, hold **Vol Down** and press **Power**.
-2. Pick **UEFI** or **Boot mode: Loader**, whichever the menu offers, then **Start**. With OpenABL, ROCKNIX's boot
-   helper, pick **Linux** instead; the card has an entry for it.
-3. Android stays as it is: pick **Android** in the same menu to go back.
+- **Boot mode: Loader** (older firmware): start the card straight away, as for the Mini V2. Nothing is flashed.
+- **UEFI** next to Android (newer firmware): Retroid's own UEFI does not start SD cards. Set up **OpenABL** once, as
+  [ROCKNIX's guide](https://rocknix.org/devices/retroid/retroid-pocket-5/) says
+  ([Flip 2](https://rocknix.org/devices/retroid/retroid-pocket-flip2/)). No computer needed: in Android, Settings →
+  Handheld Settings → Advanced → **Run Script as Root** runs `backup_abl.sh` first, then `flash_abl.sh`. Keep the
+  backup files; Android and your data stay. Then power on holding **Vol Down**, set **Boot mode: Linux** and
+  **Boot source: SD card**, and **Start**. The card has its own entry for OpenABL.
+- **12 GB devices with the Visionox screen** are not supported yet: the screen stays black with these cards. A card of
+  their own will follow.
 
-The card's first partition is marked as an EFI system partition, which Retroid's UEFI wants. A Windows or Mac computer
-therefore no longer shows it, and Android does not mount it; Linux still does. The boot files per bootloader are in
+Back to Android: pick **Android** (or Boot mode: Android) in the same menu. Neither card has started on a real
+Pocket 5 or Flip 2 yet.
+
+The card's first partition is marked as an EFI system partition. A Windows or Mac computer therefore no longer shows it,
+and Android does not mount it; Linux still does. The boot files per bootloader are in
 [SD-IMAGE.md](SD-IMAGE.md#experimental-sm8250-tester-cards-pocket-5-and-flip-2).
 
 ## Install on a ROCKNIX card you already use
