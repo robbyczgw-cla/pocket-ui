@@ -8,12 +8,9 @@
 <p align="center"><b>A cozy, free OS with its own game player for retro handhelds.</b><br>
 Your games on one shelf, press A and you're playing, right where you left off.</p>
 
-pocket-ui comes in two editions:
-
-- **pocket-ui for Linux**: its own bootable OS image (built on [ROCKNIX](https://rocknix.org)) or an install on a system
-  you already have (ROCKNIX, or a card of its own on the TrimUI Brick). For Anbernic, TrimUI, Retroid and AYN handhelds.
-  This is what you can download today.
-- **pocket-ui for Android**: the same shelf as a frontend app for Android. It is in the works, with no download yet.
+**pocket-ui for Linux** is its own bootable OS image (built on [ROCKNIX](https://rocknix.org)) or an install on a
+system you already have (ROCKNIX, or a card of its own on the TrimUI Brick), for Anbernic, TrimUI, Retroid and AYN
+handhelds.
 
 <p align="center">
   <a href="https://pocketui.xyz"><img src="docs/media/hero.webp" width="620" alt="The shelf: Advance Wars ready to continue, the last games as cases and every console as a spine"></a>
@@ -23,7 +20,9 @@ pocket-ui comes in two editions:
 ## Why you'll like it
 
 - **Press play, the old way.** The cartridge slides into its console, a disc drops into its case, the old TV flickers
-  on, and you're playing. Handhelds play in their own frame, a GBA or GBA SP.
+  on, and you're playing. Quit, and the TV switches off, the cartridge or disc comes out and the case goes back on the
+  shelf. Many consoles have a scene of their own, from the NES and Game Boy Color to the PSP, Master System, Game Gear,
+  PC Engine and 3DS, and handhelds play in their own frame, a GBA or GBA SP.
 - **Every game has a story.** Turn the box over for pictures from the game and what it's about, and see the other games
   of the series you own.
 - **Bring your card as it is.** Folders like "GBA" or "Game Boy Advance (GBA)" are found as they are, and box art
@@ -48,10 +47,11 @@ pocket-ui comes in two editions:
 
 **[Download the latest version](../../releases/latest)** and follow the [install page](https://pocketui.xyz/install.html):
 
-- **Ready SD card image**: write it to a card with balenaEtcher or Raspberry Pi Imager and start. There is one for the
-  Retroid Pocket Mini V2, the Pocket 6 and Nova, the AYN Odin 2 family and each Anbernic H700 model.
+- **Ready SD card image** (listed on the install page): write it to a card with balenaEtcher or Raspberry Pi Imager
+  and start. There is one for the Retroid Pocket Mini V2, the AYN Odin 2 family and each Anbernic H700 model; the
+  Pocket 5, Flip 2, Pocket 6 and Nova have beta test images, and testers are welcome.
 - **TrimUI Brick**: unzip the card download onto an empty microSD card and switch on. The Brick's own system isn't
-  touched, and updates come over Wi-Fi. Tested on one Brick so far.
+  touched, and updates come over Wi-Fi.
 - **Already on ROCKNIX?** Unzip the Ports installer into `roms/ports` and pick **Install pocket-ui** under Ports.
   About five minutes, and **Uninstall pocket-ui** brings ROCKNIX's own menu back. Your games, saves and settings stay.
 
@@ -100,7 +100,7 @@ and [SECURITY.md](SECURITY.md).
 
 pocket-ui is built by Robby Czesany together with AI coding agents (Claude and Codex). The agents write most of the
 code; he decides what gets built and how it should look and feel, and tests it on his own handhelds. Every change also
-passes about 3,500 automated tests. Some art starts from public-domain photos run through an AI pixel tool. Questions
+passes more than 4,000 automated tests. Some art starts from public-domain photos run through an AI pixel tool. Questions
 about this are welcome in [Discussions](https://github.com/robbyczgw-cla/pocket-ui/discussions).
 
 ## Licence
