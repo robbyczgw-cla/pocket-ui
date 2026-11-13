@@ -293,7 +293,7 @@ controller is the input. Portrait turns the shelf into stacked boards of fronts;
 
 On panels up to 720 px tall, compose the same supported layout on a logical canvas, then reduce the completed
 0RGB frame (`scaled_layout`, `frame::Presenter::draw_scaled`). 640×480 uses 1280×960, 720×480 uses 1440×960,
-and 720×720 uses 1280×1280. This keeps margins, shelves, panels, text and hit areas in one coordinate space;
+and 720×720 uses 1440×1440 (every H700 panel is exactly halved). This keeps margins, shelves, panels, text and hit areas in one coordinate space;
 page painters must not mix physical panel coordinates into their layout. `App::screen_size` returns logical dimensions.
 The actual output wins over the profile, so a large HDMI output keeps its native layout. `pocket-core`'s game
 rendering and touch mapping do not use this UI scaler.

@@ -793,8 +793,6 @@ mod tests {
             assert_eq!(from_override(key).model, Some(m), "{key}");
         }
         assert_eq!(rows.iter().map(|r| r.2).collect::<std::collections::BTreeSet<_>>().len(), H700_BOARDS.len(), "every row of the table is tested");
-        // Only the 720x720 CubeXX is held back; the installers read the same flag.
-        assert_eq!(H700_BOARDS.iter().filter(|b| b.not_yet).map(|b| b.key).collect::<Vec<_>>(), ["rgcubexx"]);
         // Another Anbernic (not an H700 model in the table) stays unknown.
         assert_eq!(identify("Anbernic RG99XX\0", b"anbernic,rg99xx\0allwinner,sun50i-h700\0").model, None);
         // Every other device keeps its fan, touch, sticks and Wi-Fi; an unknown one too.
@@ -831,11 +829,10 @@ mod tests {
             let value = line.split_once('=').unwrap().1.trim().trim_matches('"');
             value.split('|').filter(|n| !n.is_empty()).map(str::to_string).collect()
         }
-        let want: Vec<String> = H700_BOARDS.iter().filter(|b| !b.not_yet).map(|b| b.name.to_string()).collect();
-        let not_yet: Vec<String> = H700_BOARDS.iter().filter(|b| b.not_yet).map(|b| b.name.to_string()).collect();
+        let want: Vec<String> = H700_BOARDS.iter().map(|b| b.name.to_string()).collect();
+        assert!(want.iter().any(|n| n == "Anbernic RG CubeXX"), "the square CubeXX is installed like the others");
         let install = include_str!("../deploy/package/install.sh");
         assert_eq!(list(install, "MODELS_H700="), want, "deploy/package/install.sh MODELS_H700");
-        assert_eq!(list(install, "MODELS_H700_NOT_YET="), not_yet, "deploy/package/install.sh MODELS_H700_NOT_YET");
         let hook = include_str!("../deploy/fat/mount-storage.sh.in");
         assert_eq!(list(hook, "pu_h700_models="), want, "deploy/fat/mount-storage.sh.in pu_h700_models");
     }

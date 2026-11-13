@@ -15,7 +15,7 @@ companion, which stays Tailscale-only.
 
 ## Turn it on
 
-1. Set up Tailscale first: Settings → Help & tools → For tinkerers → **Tailscale**, switch it on and sign in ([Tailscale](remote.md)). Your phone or
+1. Set up Tailscale first: Settings → Connections → **Tailscale**, switch it on and sign in ([Tailscale](remote.md)). Your phone or
    computer needs Tailscale too, signed in to the same tailnet.
 2. Settings → Connections → **Web companion**. Select **Web companion** and press **A**. It says **On**.
 3. Below the list the page shows the address to open, for example `http://pocket-mini`, and the Pocket's Tailscale

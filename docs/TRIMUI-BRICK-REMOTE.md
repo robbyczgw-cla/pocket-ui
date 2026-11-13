@@ -35,7 +35,7 @@ Tailscale is the page the ROCKNIX devices have (`tailscale.rs`, `app_tailscale.r
 | `tailscale up --reset --ssh=false` | the same, plus `--accept-dns=false --netfilter-mode=off` (`tailscale::up_args_for`): the firmware's resolv.conf and firewall are in its flash, which the card never changes |
 | key file of an auth-key login in `/run` | `/tmp/pocket-ui` (`XDG_RUNTIME_DIR`; the firmware has no `/run` we rely on) |
 
-**Signing in on the device**, the same as on ROCKNIX: Settings › Help & tools › For tinkerers › Tailscale, switch on, *Sign in*; the page shows the
+**Signing in on the device**, the same as on ROCKNIX: Settings › Connections › Tailscale, switch on, *Sign in*; the page shows the
 sign-in address as a QR code and as text, the phone opens it, the owner approves, the page says *Connected*. The device's suggested
 name is `pocket-brick`. An auth key (`tskey-auth-…`) can be typed instead.
 
@@ -57,7 +57,7 @@ name is `pocket-brick`. An auth key (`tskey-auth-…`) can be typed instead.
 ## Remote access (SSH)
 
 **Decision (owner, 2026-11-03):** no Tailscale SSH (`--ssh=false` stays, as on ROCKNIX); plain SSH with dropbear, listening only while
-Settings › Help & tools › For tinkerers › Remote access is on, with a password the device makes and shows, and keys from the card. Root logs in over
+Settings › Connections › Remote access is on, with a password the device makes and shows, and keys from the card. Root logs in over
 Tailscale and the local network alike. The firmware has no dropbear of its own that we know of (NextUI's SSH pak brings one; we use
 nothing of NextUI), so the card ships it:
 

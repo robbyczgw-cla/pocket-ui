@@ -9,6 +9,10 @@ and the power and volume keys. The Mini V2's picture, the shelf, games, the paus
 Settings opens on seven categories (Look, Sound & feel, Playing, Games, Connections, System, Help & tools); each holds a short list
 ([Open Settings](settings.md#open-settings)).
 
+Connections holds Wi-Fi, Bluetooth, Tailscale, Remote access (SSH) and Web companion, where the device supports them.
+Use Up/Down to select either network tool, A to open it, and B to return to its row in Connections.
+Sync and PC streaming are under Help & tools → For tinkerers.
+
 | Button | What it does |
 |---|---|
 | D-pad Up / Down | Move. The list wraps around at the ends. |

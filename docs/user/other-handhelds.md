@@ -60,8 +60,8 @@ and Zink on the real GPU still need a tester. Mini and Portal menus start with X
 pocket-ui runs on the Anbernic handhelds that ROCKNIX's **H700 image** supports. All of them are **experimental**:
 pocket-ui knows each model (screen, buttons, what it has). The **RG35XX Plus** has been played on a real handheld; the other
 models have only been tested on a computer so far. If something doesn't work, Settings → Help & tools → About → Report a problem saves a file to attach to a
-report. The **RG CubeXX** (square 720×720 screen) is **not supported yet**: pocket-ui draws that screen too slowly on
-this processor for now, and the installers say so and change nothing.
+report. The **RG CubeXX** (square 720×720 screen) gets the same pages, laid out for a square screen; nobody has played on
+one yet, its speed was measured on an RG35XX Plus, which has the same processor.
 
 | Model | Screen | Wi-Fi | Sticks | Lid | Lights |
 |---|---|---|---|---|---|
@@ -76,7 +76,7 @@ this processor for now, and the installers say so and change nothing.
 | RG34XX | 720×480 | yes | no (ROCKNIX lists none) | no | |
 | RG34XX-SP | 720×480 | yes | yes | yes | |
 | RG-SP | 720×480 | yes | no | yes | |
-| RG CubeXX | 720×720 | yes | yes | no | RGB (**not yet**) |
+| RG CubeXX | 720×720 | yes | yes | no | RGB |
 
 All of them have 1 GB of memory, no touch screen and no fan. The RGB lights of the RG40XX are ROCKNIX's; pocket-ui
 doesn't change them.

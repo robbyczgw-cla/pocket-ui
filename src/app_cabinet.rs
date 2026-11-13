@@ -3311,8 +3311,9 @@ mod shelf_tests {
     /// at least what the TV and the case need (`SHOW_MIN_SHARE`).
     #[test]
     fn the_showcase_never_cuts_the_spines_on_the_supported_sizes() {
-        // The layout's heights: 640x480 and 720x720 are laid out at 960 and 1280 lines, the others natively.
-        for h in [960, 1280, 768, 1080, 800] {
+        // The layout's heights: 640x480 and 720x720 are laid out at 960 and 1440 lines, the others natively; 1280 stays as a
+        // tall in-between size.
+        for h in [960, 1280, 1440, 768, 1080, 800] {
             let f = media::shelf_scale_for(h);
             for m in Medium::ALL {
                 let pitch = (m.template_size().h as f32 * f).round() as i32 + cabinet::HEADROOM + cabinet::BOARD;

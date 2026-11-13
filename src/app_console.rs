@@ -407,7 +407,8 @@ impl App {
     /// look (Split by default) with Curator's index there, as a moment after the start; then Down to the end of the
     /// list and Up to its top, and for each move the first frame `draw` makes after it, in thread CPU time (a frame
     /// preempted by a compile is not a slow one), with the letters it drew on the spot and the strings it ran through
-    /// the German patterns. The speed guard's `nav` is this frame on the device (tests/shelf_moves.rs).
+    /// the German patterns. The speed guard's `nav` is this frame on the device (tests/shelf_moves.rs). On a small panel
+    /// the measured frame includes the reduction to the panel (`scaled_layout::ScaledFrame::render`).
     /// An optional `:<system>` after the look uses that system's games, capped at 120 moves each way;
     /// Cabinet then moves between books with Right/Left rather than between shelves with Down/Up.
     pub(crate) fn bench_shelf(&mut self, look: &str, w: u32, h: u32) -> ShelfBench {
@@ -454,10 +455,18 @@ impl App {
         let mut us = Vec::new();
         let (glyphs, patterns) = (self.text.drawn_on_the_spot(), self.text.pattern_runs());
         let mut worst = (0.0, String::new());
+        // A small panel's frame is the logical canvas plus the live reduction (`scaled_layout`), as on the device.
+        let panel = crate::snapshot_panel_dims();
+        let mut scaler = pocket_ui::scaled_layout::ScaledFrame::default();
+        let mut screen = vec![0u32; panel.0 as usize * panel.1 as usize];
         for b in &moves {
             self.step(*b);
             let t = cpu();
-            frame(self, &mut buf);
+            if panel == (w, h) {
+                frame(self, &mut buf);
+            } else {
+                scaler.render(&mut screen, panel, &mut |p, _, _| frame(self, p));
+            }
             let took = cpu() - t;
             if took > worst.0 {
                 worst = (took, format!("{:?}", self.items.get(self.sel)));

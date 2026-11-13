@@ -21,9 +21,9 @@ Left/Right, right in the list, and the selected one shows **‹ ›** round its 
 | **Sound & feel** | Animations, Playful cases, Old-TV switch-on, Motion, Zoom in the pause menu, Sounds, Case sounds, Haptics, LEDs. See [Sound & feel](settings-sound.md) |
 | **Playing** | On start, Continue where I quit, Remind me where I was, Buttons, Over the game, Screen frames, Performance & fan, Battery, RetroAchievements. See [Playing](#playing) |
 | **Games** | Add games, Game check, Extras, From EmulationStation, Screenshots, Curator. See [Games](#games) |
-| **Connections** | Wi-Fi, Bluetooth, Web companion. See [Connections](settings-system.md#connections) |
+| **Connections** | Wi-Fi, Bluetooth, Tailscale, Remote access (SSH), Web companion. See [Connections](settings-system.md#connections) |
 | **System** | Language, Time, Sleep & power, Kids mode, Updates, Storage, Backup & reset. See [System](settings-system.md#system) |
-| **Help & tools** | First-start setup, How you like to play, Tour, Manual, For tinkerers (Tailscale, Sync, Remote access, PC streaming), Tools, Test buttons, Report a problem, About. See [Help & tools](settings-system.md#help--tools) |
+| **Help & tools** | First-start setup, How you like to play, Tour, Manual, For tinkerers (Sync, PC streaming), Tools, Test buttons, Report a problem, About. See [Help & tools](settings-system.md#help--tools) |
 
 The second half of Settings, [Connections, System and Help & tools](settings-system.md), has its own page.
 

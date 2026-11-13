@@ -2,7 +2,10 @@
 //! Large outputs keep their native canvas; output size wins over the profile (HDMI).
 
 /// The supported layouts start at 1280×960, with the panel's aspect ratio preserved.
-/// Outputs above 720 lines keep their native canvas.
+/// Outputs above 720 lines keep their native canvas. A panel whose double already holds 1280×960 and stays within
+/// 1440×1440 gets exactly that double (every H700 panel: 640×480, 720×480 and the CubeXX's 720×720): the cheap 2:1
+/// box reduction, and a pixel font lands on whole screen pixels (`step` 2). The CubeXX's 1280×1280 with a 16:9 area
+/// filter cost about three times the frame of a 640×480 panel (docs/H700-SCALED-LAYOUT.md "CubeXX").
 pub fn logical_size(panel: (u32, u32)) -> (u32, u32) {
     logical_size_up_to(panel, 720)
 }
@@ -10,6 +13,9 @@ pub fn logical_size(panel: (u32, u32)) -> (u32, u32) {
 fn logical_size_up_to((w, h): (u32, u32), max_h: u32) -> (u32, u32) {
     if w < 64 || !(64..=max_h).contains(&h) || u64::from(w) > u64::from(h) * 4 || u64::from(h) > u64::from(w) * 2 {
         return (w, h);
+    }
+    if (1280..=1440).contains(&(w * 2)) && (960..=1440).contains(&(h * 2)) {
+        return (w * 2, h * 2);
     }
     if u64::from(w) * 960 >= u64::from(h) * 1280 {
         (((u64::from(w) * 960).div_ceil(u64::from(h))) as u32, 960)
@@ -184,7 +190,7 @@ mod tests {
         for (panel, logical) in [
             ((640, 480), (1280, 960)),
             ((720, 480), (1440, 960)),
-            ((720, 720), (1280, 1280)),
+            ((720, 720), (1440, 1440)),
             ((1240, 1080), (1240, 1080)),
             ((1920, 1080), (1920, 1080)),
             ((0, 0), (0, 0)),

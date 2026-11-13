@@ -103,7 +103,7 @@ fn shown(opens: Opens) -> bool {
 
 #[cfg(not(feature = "brick"))]
 fn shown_on(opens: Opens, sticks: bool, nextui_owned: bool) -> bool {
-    // For tinkerers is a row only where the page has a row to show (a NextUI card has none of its four).
+    // For tinkerers is a row only where the page has a row to show (a NextUI card has neither Sync nor PC streaming).
     if matches!(opens, Opens::Tinkerers) {
         return span(TINKERERS).any(|i| shown_on(SETTINGS[i].1, sticks, nextui_owned));
     }
@@ -112,7 +112,7 @@ fn shown_on(opens: Opens, sticks: bool, nextui_owned: bool) -> bool {
 
 #[cfg(feature = "brick")]
 fn shown_on(opens: Opens, sticks: bool, nextui_owned: bool) -> bool {
-    // For tinkerers is a row only where the page has a row to show (a NextUI card has none of its four).
+    // For tinkerers is a row only where the page has a row to show (a NextUI card has neither Sync nor PC streaming).
     if matches!(opens, Opens::Tinkerers) {
         return span(TINKERERS).any(|i| shown_on(SETTINGS[i].1, sticks, nextui_owned));
     }
@@ -633,7 +633,7 @@ impl App {
 
 #[cfg(test)]
 mod tests {
-    use super::super::{app_achievements, app_backup, app_cozy_extras, app_curator, app_gamelist, app_moonlight, app_night_light, app_perf_fan, app_storage, app_tools, settings_row, Opens, SETTINGS};
+    use super::super::{app_achievements, app_backup, app_cozy_extras, app_curator, app_gamelist, app_moonlight, app_night_light, app_perf_fan, app_storage, app_tools, app_web, settings_row, Opens, SETTINGS};
     use super::*;
     use pocket_ui::cozy_extras::Needs;
 
@@ -738,7 +738,8 @@ mod tests {
         // Short lists: the point of the categories. Seven categories, nine rows at most
         // (2026-10-30, nine since Screen colour): a list is never longer than one page, also with Large text.
         assert!(SHOWN <= 7, "at most seven categories (the last entry is the page For tinkerers)");
-        assert!(SETTINGS_GROUPS.iter().all(|c| (3..=9).contains(&c.2.len())), "every category holds 3 to 9 rows");
+        assert!(SETTINGS_GROUPS[..SHOWN].iter().all(|c| (3..=9).contains(&c.2.len())), "every category holds 3 to 9 rows");
+        assert_eq!(SETTINGS_GROUPS[TINKERERS].2.len(), 2, "For tinkerers holds Sync and PC streaming");
         let large_row = pocket_ui::type_scale::grown_in(pocket_ui::type_scale::TextSize::Large, 36) as i32 - 36;
         assert!(9 * (66 + large_row * 6 / 5) <= 1080 - 268, "nine Large rows fit on the page");
         let mut seen = std::collections::BTreeSet::new();
@@ -752,18 +753,26 @@ mod tests {
         let help = category("Help & tools");
         let row = settings_row("For tinkerers");
         assert_eq!(group_of(row), help, "the row is in Help & tools");
-        for name in ["Tailscale", "Sync", "Remote access (SSH)", app_moonlight::SETTINGS_NAME] {
+        for name in ["Sync", app_moonlight::SETTINGS_NAME] {
             let at = settings_row(name);
             assert_eq!(SETTINGS[at].0, name, "{name} is a row of Settings");
             assert_eq!(group_of(at), TINKERERS, "{name} is on the page For tinkerers");
             assert_eq!(groups_input(SettingsPage::List(at), CANCEL), Some(SettingsPage::List(row)), "{name}: B goes back to For tinkerers' row");
         }
         assert_eq!(groups_input(SettingsPage::List(row), CANCEL), Some(SettingsPage::Groups(help)), "B in Help & tools: the categories");
-        // A on the row opens the page at its first row; nothing of the four is a category of the first page.
+        // A on the row opens the page at its first row; neither is a category of the first page.
         assert!(rows(TINKERERS).len() <= SETTINGS_GROUPS[TINKERERS].2.len());
         assert!(!(0..SHOWN).any(|g| g == TINKERERS));
-        // Connections keeps Wi-Fi, Bluetooth and the Web companion.
-        assert_eq!(SETTINGS_GROUPS[category("Connections")].2.len(), 3);
+        // Network tools return to Connections and then to its category, on every device that offers them.
+        let connections = category("Connections");
+        assert_eq!(SETTINGS_GROUPS[connections].2.iter().map(|r| r.0).collect::<Vec<_>>(),
+            ["Wi-Fi", "Bluetooth", "Tailscale", "Remote access (SSH)", app_web::SETTINGS_NAME]);
+        for name in ["Tailscale", "Remote access (SSH)"] {
+            let at = settings_row(name);
+            assert_eq!(group_of(at), connections);
+            assert_eq!(groups_input(SettingsPage::List(at), CANCEL), Some(SettingsPage::Groups(connections)));
+            assert!(!shown_on(SETTINGS[at].1, false, true), "host-owned networking hides {name}");
+        }
     }
 
 

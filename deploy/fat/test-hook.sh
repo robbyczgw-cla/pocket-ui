@@ -192,14 +192,14 @@ dt() { # $1 = model, $2 = first compatible, $3 = SoC
 build_tar $V
 MD5=$(md5sum "$T/seed.tar.gz" | cut -d' ' -f1)
 make_hook $V "$MD5" 200000
-for m in "Anbernic RG28XX|anbernic,rg28xx" "Anbernic RG35XX SP|anbernic,rg35xx-sp" "Anbernic RG40XX V|anbernic,rg40xx-V" "Anbernic RG-SP|anbernic,rg-sp" "Anbernic RG34XX-SP|anbernic,rg34xx-sp"; do
+for m in "Anbernic RG28XX|anbernic,rg28xx" "Anbernic RG35XX SP|anbernic,rg35xx-sp" "Anbernic RG40XX V|anbernic,rg40xx-V" "Anbernic RG-SP|anbernic,rg-sp" "Anbernic RG34XX-SP|anbernic,rg34xx-sp" "Anbernic RG CubeXX|anbernic,rgcubexx"; do
   echo "== H700 card: ${m%%|*}"
   dt "${m%%|*}" "${m##*|}" allwinner,sun50i-h700
   setup resized
   boot
   check "${m%%|*}: installed, the log names the device" '[ -x "$T/storage/pocket-ui/current/pocket-ui" ] && [ ! -e "$T/flash/mount-storage.sh" ] && grep -q "device: ${m%%|*} (Anbernic H700, experimental)" "$T/flash/pocket-ui-install.log"'
 done
-for m in "Anbernic RG CubeXX|anbernic,rgcubexx" "Anbernic RG99XX|anbernic,rg99xx" "Trimui Smart Pro|trimui,smart-pro"; do
+for m in "Anbernic RG99XX|anbernic,rg99xx" "Trimui Smart Pro|trimui,smart-pro"; do
   echo "== H700 card, no profile: ${m%%|*}"
   dt "${m%%|*}" "${m##*|}" allwinner,sun50i-h700
   setup resized

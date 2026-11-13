@@ -1,7 +1,25 @@
 # H700 scaled layouts (2026-10-28)
 
+## CubeXX: 1440×1440 and the box filter (2026-11-13)
+
+The 720×720 panel used to paint 1280×1280 and reduce it by 16:9 with the exact-area filter. Measured on an RG35XX Plus
+(the CubeXX's H700), `POCKETUI_FRAME_BENCH=1 --snapshot home` and `--snapshot bench-shelf:<look>` (thread CPU time, release
+build, offscreen with a Wayland stub, the fake library of `scripts/perf-library.py`, moves over Home's rows; `bench-shelf` includes the
+live reduction since this change):
+
+| Panel, canvas | Home frame median / p95 | of which paint | Move, Split / Shelf / Cabinet (p50) |
+|---|---|---|---|
+| 720×720, 1280×1280 + 16:9 area (before) | 82.5 / 87.6 ms | 7.3 ms | reduction not measured there; about +75 ms each |
+| 720×720, 1440×1440 + 2:1 box (now) | 16.7 / 19.7 ms | 8.1 ms | 15.1 / 16.6 / 48.0 ms |
+| 640×480, 1280×960 + 2:1 box (for comparison) | 11.6 / 14.3 ms | 6.1 ms | 9.8 / 10.7 / 33.3 ms |
+
+Every H700 panel is now exactly doubled (`scaled_layout::logical_size`), so a pixel font lands on whole screen pixels
+(`step` 2). On the A53 the scalar 2:1 box reduction itself costs about 5.6 ms (640×480) and 8.5 ms (720×720), half the
+frame; a NEON version is the next step. These are measurements on a Plus, not on a CubeXX (no CubeXX has run pocket-ui).
+
 The live softbuffer presenter, snapshots and safe mode paint the same logical layouts and area filter.
-640×480 and 720×480 use a rounded 2:1 box filter; 720×720 uses exact fractional area coverage. A native
+640×480, 720×480 and (since 2026-11-13, see "CubeXX" below) 720×720 use a rounded 2:1 box filter; other fractional
+ratios use exact area coverage. The figures further down for 720×720 describe the earlier 1280×1280 canvas. A native
 large output bypasses the canvas and filter. The logical canvas adds 4.69 MiB at 640×480, 5.27 MiB at
 720×480 and 6.25 MiB at 720×720, plus cached coverage tables. The fractional square reduction also
 keeps a 7.03 MiB packed horizontal intermediate; the 2:1 path does not allocate it. There is no worker or redraw timer.

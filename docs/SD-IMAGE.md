@@ -541,7 +541,7 @@ which card is in it.
      starts.
    - The third start (step 8) shows the boot screen without the line.
 6. Run through the setup: a look, Wi-Fi with the on-screen keyboard, extras.
-7. Then, with SSH switched on in Settings → Help & tools → For tinkerers → Remote access (read only):
+7. Then, with SSH switched on in Settings → Connections → Remote access (read only):
    - `df -h /storage` shows the card's full size.
    - `ls /flash`: `mount-storage.sh` and `post-flash.sh` still there (both run at every start). `cat /flash/fs-resize.log`.
    - `grep -E "^(updates.enabled|system.hostname)=" /storage/.config/system/configs/system.cfg` says `0` and

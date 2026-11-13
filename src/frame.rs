@@ -191,7 +191,7 @@ mod tests {
     fn scaled_presenter_keeps_surface_physical_and_rebuilds_after_resize() {
         let script = Rc::new(RefCell::new(Script::default()));
         let mut p = presenter(&script);
-        for (panel, logical) in [((640, 480), (1280, 960)), ((720, 720), (1280, 1280)), ((1240, 1080), (1240, 1080))] {
+        for (panel, logical) in [((640, 480), (1280, 960)), ((720, 720), (1440, 1440)), ((1240, 1080), (1240, 1080))] {
             assert!(p.draw_scaled(nz(panel.0), nz(panel.1), &mut |buf, w, h| {
                 assert_eq!((w, h), logical);
                 assert_eq!(buf.len(), w as usize * h as usize);

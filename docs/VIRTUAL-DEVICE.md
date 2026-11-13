@@ -243,7 +243,7 @@ Do not take performance numbers from here.
   dummy; ip addr add 192.0.2.23/24 dev wlan0`) so the page has an address to show. A second `syncthing` started
   with `--home /tmp/peer-home` and paired over `127.0.0.1` stands in for a computer. Nothing of this is part of the
   image.
-- **Tailscale.** `extract-rocknix.sh` drops `usr/sbin/tailscale{,d}` and there is no systemd, so Settings → Help & tools → For tinkerers → Tailscale says "Not installed".
+- **Tailscale.** `extract-rocknix.sh` drops `usr/sbin/tailscale{,d}` and there is no systemd, so Settings → Connections → Tailscale says "Not installed".
   `VDEV_NAME=<name> scripts/vdev-fake-tailscale.sh install` puts stand-ins for `tailscale` and `systemctl` into that container
   (nothing leaves it, no tailnet is contacted): `up` prints a sign-in address and waits for `... approve` ("approved on the phone"),
   `... hang` makes every call hang to see that the menu stays responsive, `... state` shows what was called and what

@@ -12,7 +12,7 @@ use std::process::Command;
 include!("common/root.rs");
 
 /// The page behind Help & tools → For tinkerers (the eighth entry of main.rs SETTINGS_GROUPS, no category of the first page).
-const TINKERERS: [&str; 4] = ["Tailscale", "Sync", "Remote access (SSH)", "PC streaming"];
+const TINKERERS: [&str; 2] = ["Sync", "PC streaming"];
 
 /// The tree as the player sees it without a store catalog: category, then its rows.
 const TREE: [(&str, &[&str]); 7] = [
@@ -20,7 +20,7 @@ const TREE: [(&str, &[&str]); 7] = [
     ("Sound & feel", &["Animations", "Playful cases", "Old-TV switch-on", "Motion", "Zoom in the pause menu", "Sounds", "Case sounds", "Haptics", "LEDs"]),
     ("Playing", &["On start", "Continue where I quit", "Remind me where I was", "Buttons", "Over the game", "Screen frames", "Performance & fan", "Battery", "RetroAchievements"]),
     ("Games", &["Add games", "Game check", "Extras", "From EmulationStation", "Screenshots", "Curator"]),
-    ("Connections", &["Wi-Fi", "Bluetooth", "Web companion"]),
+    ("Connections", &["Wi-Fi", "Bluetooth", "Tailscale", "Remote access (SSH)", "Web companion"]),
     ("System", &["Language", "Time", "Sleep & power", "Kids mode", "Updates", "Storage", "Backup & reset"]),
     ("Help & tools", &["First-start setup", "How you like to play", "Tour", "Manual", "For tinkerers", "Tools", "Test buttons", "Report a problem", "About"]),
 ];
@@ -66,7 +66,7 @@ const LINES: [&str; 7] = [
     "Animations, playful cases, old-TV switch-on, motion, zoom, sounds, case sounds, haptics, LEDs.",
     "On start, continue, where I was, buttons, over the game, frames, performance, battery, achievements.",
     "Games, game check, extras, EmulationStation, screenshots, Curator.",
-    "Wi-Fi, Bluetooth, web companion.",
+    "Wi-Fi, Bluetooth, Tailscale, remote access, web companion.",
     "Language, time, sleep & power, kids mode, updates, storage, backup & reset.",
     "First-start setup, how you like to play, Tour, manual, for tinkerers, tools, test buttons, report a problem, about.",
 ];

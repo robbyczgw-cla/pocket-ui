@@ -1385,6 +1385,38 @@ fn open_named(ui: &mut Ui, name: &str) -> Frame {
     ui.settled(&["a"]).unwrap()
 }
 
+/// Connections must expose both network tools directly, reachable with the built-in pad.
+fn connections_network_tools(profile: Profile) {
+    let card = Card::new(&profile);
+    let mut ui = Ui::start(&card, &profile, true, 1, &[]);
+    ui.settled(&["start"]).unwrap();
+    let connections = open_named(&mut ui, "Connections");
+    let names: Vec<_> = connections.controls().into_iter().map(|c| c.name).collect();
+    assert_eq!(names, ["Wi-Fi", "Bluetooth", "Tailscale", "Remote access (SSH)", "Web companion"],
+        "{}: Connections must show both network tools", profile.name);
+    for name in ["Tailscale", "Remote access (SSH)"] {
+        let selected = select_named(&mut ui, name);
+        let page = ui.settled(&["a"]).unwrap();
+        assert_ne!(page.at, selected.at, "A opens {name}");
+        let back = ui.settled(&["b"]).unwrap();
+        assert_eq!(back.at, connections.at, "B returns to Connections");
+        assert_eq!(back.focused().as_deref(), Some(name), "B keeps the row");
+    }
+    let categories = ui.settled(&["b"]).unwrap();
+    assert_eq!(categories.focused().as_deref(), Some("Connections"));
+}
+
+#[test]
+fn connections_network_tools_on_rocknix() {
+    connections_network_tools(RG35XX_PLUS);
+}
+
+#[cfg(feature = "brick")]
+#[test]
+fn connections_network_tools_on_brick() {
+    connections_network_tools(BRICK);
+}
+
 /// One working network and one saved network outside its range. The helpers only read these stand-ins.
 fn saved_wifi(card: &Card) {
     executable(&card.path().join("bin/nmcli"), r#"#!/bin/sh
@@ -1687,7 +1719,7 @@ exit 0
     let mut ex = Explorer::new(&card, profile, true, Vec::new());
     let mut path = vec!["start".to_string()];
     let mut f = ex.replay(&path).unwrap();
-    for name in ["Help & tools", "For tinkerers", "Remote access (SSH)"] {
+    for name in ["Connections", "Remote access (SSH)"] {
         for _ in 0..MAX_WALK {
             if f.focused().as_deref() == Some(name) { break; }
             path.push("down".to_string());

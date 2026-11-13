@@ -49,12 +49,10 @@ pub struct H700Board {
     pub wifi: bool,
     /// A lid switch (`gpio-keys-lid`, the clamshells).
     pub lid: bool,
-    /// pocket-ui's frame cost is too high on this panel for now (the 720x720 CubeXX): the installers refuse it.
-    pub not_yet: bool,
 }
 
 const fn board(key: &'static str, name: &'static str, compatible: &'static [&'static str], screen: (u32, u32), sticks: bool, wifi: bool, lid: bool) -> H700Board {
-    H700Board { key, name, compatible, screen, sticks, wifi, lid, not_yet: false }
+    H700Board { key, name, compatible, screen, sticks, wifi, lid }
 }
 
 /// Every H700 model in ROCKNIX's image (`projects/ROCKNIX/config.xml`, H700). The two panel revisions of a model
@@ -73,7 +71,8 @@ pub const H700_BOARDS: &[H700Board] = &[
     board("rg34xx", "Anbernic RG34XX", &["anbernic,rg34xx"], (720, 480), false, true, false),
     board("rg34xx-sp", "Anbernic RG34XX-SP", &["anbernic,rg34xx-sp"], (720, 480), true, true, true),
     board("rg-sp", "Anbernic RG-SP", &["anbernic,rg-sp"], (720, 480), false, true, true),
-    H700Board { not_yet: true, ..board("rgcubexx", "Anbernic RG CubeXX", &["anbernic,rgcubexx"], (720, 720), true, true, false) },
+    // Square: laid out on 1440x1440 and halved like the others (`scaled_layout::logical_size`).
+    board("rgcubexx", "Anbernic RG CubeXX", &["anbernic,rgcubexx"], (720, 720), true, true, false),
 ];
 
 /// The H700 model with this `compatible` entry or device tree `model`, if the profile table has it.

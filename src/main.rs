@@ -425,7 +425,7 @@ enum Opens {
     // Starter pack is opened from Extras, Home or Kids Mode, without a separate Games settings row.
     /// "Will my games start?" (`app_game_check`).
     GameCheck,
-    /// Help & tools → For tinkerers: a list of Tailscale, Sync, remote access and PC streaming (`SETTINGS_GROUPS`' last entry).
+    /// Help & tools → For tinkerers: a list of Sync and PC streaming (`SETTINGS_GROUPS`' last entry).
     Tinkerers,
     /// Time zone and network time (src/quick.rs).
     Time,
@@ -578,9 +578,11 @@ const SETTINGS_GROUPS: [(&str, &str, &[SettingsRow]); 8] = [
         (app_gallery::SETTINGS_NAME, Opens::Screenshots, "The pictures you took with HOME + A, newest first."),
         (app_curator::SETTINGS_NAME, Opens::Curator, "Lens, smart shelves, Echoes, versions and play history."),
     ]),
-    ("Connections", "Wi-Fi, Bluetooth, web companion.", &[
+    ("Connections", "Wi-Fi, Bluetooth, Tailscale, remote access, web companion.", &[
         ("Wi-Fi", Opens::Setup(Only::Wifi), "Connect to a network."),
         ("Bluetooth", Opens::Bluetooth, "Pair a controller or headphones, see what is connected."),
+        ("Tailscale", Opens::Tailscale, "Reach the Pocket from your other devices."),
+        ("Remote access (SSH)", Opens::Setup(Only::Remote), "Log in from a computer. Turns itself off when the Pocket restarts."),
         (app_web::SETTINGS_NAME, Opens::Web, "Your games, play time and uploads in a browser."),
     ]),
     ("System", "Language, time, sleep & power, kids mode, updates, storage, backup & reset.", &[
@@ -597,7 +599,7 @@ const SETTINGS_GROUPS: [(&str, &str, &[SettingsRow]); 8] = [
         ("How you like to play", Opens::Setup(Only::Play), "The shelf, Easy, Enthusiast or your own choice of the extras."),
         ("Tour", Opens::Tour, "The basics in 7 cards: playing, saving, quick settings, adding games, easier reading."),
         ("Manual", Opens::Manual, "The user guide, on the device."),
-        ("For tinkerers", Opens::Tinkerers, "Tailscale, Sync, remote access and PC streaming."),
+        ("For tinkerers", Opens::Tinkerers, "Sync and PC streaming."),
         (app_tools::SETTINGS_NAME, Opens::Tools, "Emulator menus, RetroArch, gamepad test and calibration, terminal."),
         (app_test_buttons::SETTINGS_NAME, Opens::TestButtons, "Press buttons, triggers and sticks of each controller and watch them light up."),
         (pocket_ui::report::ROW, Opens::Report, "Saves a file for a bug report, to attach on GitHub."),
@@ -605,10 +607,8 @@ const SETTINGS_GROUPS: [(&str, &str, &[SettingsRow]); 8] = [
     ]),
     // Not in the categories list: the page "For tinkerers" of Help & tools (`Opens::Tinkerers`), laid out like a category so that
     // its rows move, scroll, hide per device and come back with B as every row does (`app_settings_groups::TINKERERS`).
-    ("For tinkerers", "Tailscale, Sync, remote access, PC streaming.", &[
-        ("Tailscale", Opens::Tailscale, "Reach the Pocket from your other devices."),
+    ("For tinkerers", "Sync, PC streaming.", &[
         ("Sync", Opens::Sync, "Keep saves and states in step with your other devices."),
-        ("Remote access (SSH)", Opens::Setup(Only::Remote), "Log in from a computer. Turns itself off when the Pocket restarts."),
         (app_moonlight::SETTINGS_NAME, Opens::PcStreaming, "Pair a gaming PC for Moonlight, and stream its games."),
     ]),
 ];
@@ -3808,7 +3808,7 @@ impl App {
                 Opens::Tools => self.open_tools(),
                 Opens::TestButtons => self.open_test_buttons(),
                 Opens::PcStreaming => self.open_pc_streaming(),
-                // The page's first row that this device has (Tailscale, Sync, remote access, PC streaming).
+                // The page's first row that this device has (Sync or PC streaming).
                 Opens::Tinkerers => app_settings_groups::rows(app_settings_groups::TINKERERS).first().map(|r| SettingsPage::List(*r)),
                 Opens::Backup => self.open_backup(),
                 Opens::Storage => self.open_storage(),
@@ -5840,7 +5840,7 @@ fn snapshot(app: &mut App, args: &[String]) {
     if let Some(look) = state.strip_prefix("bench-shelf").map(|r| r.trim_start_matches(':')) {
         let b = app.bench_shelf(if look.is_empty() { "split" } else { look }, w, h);
         println!(
-            "bench-shelf items={} moves={} p50_us={:.0} p95_us={:.0} max_us={:.0} glyphs={} patterns={} worst={}",
+            "bench-shelf items={} moves={} p50_us={:.0} p95_us={:.0} max_us={:.0} glyphs={} patterns={} panel={}x{} logical={w}x{h} worst={}",
             app.items.len(),
             b.moves,
             b.p50_us,
@@ -5848,6 +5848,8 @@ fn snapshot(app: &mut App, args: &[String]) {
             b.max_us,
             b.glyphs,
             b.patterns,
+            snapshot_panel_dims().0,
+            snapshot_panel_dims().1,
             b.worst
         );
         return;

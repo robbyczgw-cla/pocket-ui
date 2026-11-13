@@ -7,7 +7,7 @@ them yet. Most things should work; if something doesn't, Settings -> System -> A
 problem saves a file you can attach to a report.
 
 Also, as EXPERIMENTAL, the Anbernic handhelds of ROCKNIX's H700 image: RG28XX, RG34XX, RG34XX-SP,
-RG35XX 2024, Plus, H, Pro and SP, RG40XX H and V, RG-SP (not the RG CubeXX yet). Their ROCKNIX is the
+RG35XX 2024, Plus, H, Pro and SP, RG40XX H and V, RG-SP and RG CubeXX. Their ROCKNIX is the
 H700 build, flashed from the image on rocknix.org (the RG28XX has no Wi-Fi: use the Ports installer or
 the two-file card install, not SSH). Heavy systems (N64, PSP, Dreamcast, DS) stay on ROCKNIX's own
 emulators there. Details: the getting-started guide, "Anbernic H700 handhelds".
@@ -98,7 +98,7 @@ install.sh changes nothing unless all of these pass:
 - the system is ROCKNIX for SM8250, SM8550, H700 or RK3566 (aarch64), version @TESTED_ROCKNIX@ or newer,
 - the device is a Retroid Pocket Mini V2, or one of the experimental Pocket 5, Flip 2 and first Mini
   (its device tree says so; the experimental ones are noted, not refused); on the H700 image exactly the
-  Anbernic models above, whatever the options say (the RG CubeXX is refused with its own sentence); on
+  Anbernic models above, whatever the options say; on
   the RK3566 image the RG DS Plus alone,
 - ROCKNIX's interface unit (essway) and EmulationStation's start script are there, ROCKNIX's first
   start has run, and there is enough free space on /storage,

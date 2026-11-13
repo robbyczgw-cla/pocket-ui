@@ -29,7 +29,7 @@ pu_need_kb=@NEED_KB@
 pu_dt=${PU_DT:-/sys/firmware/devicetree/base}
 # The Anbernic models of ROCKNIX's H700 image pocket-ui has a profile for (as deploy/package/install.sh MODELS_H700; a test
 # keeps them in step). Any other H700 handheld is refused: without a profile pocket-ui's screen and buttons would be wrong.
-pu_h700_models="|Anbernic RG28XX|Anbernic RG35XX 2024|Anbernic RG35XX Plus|Anbernic RG35XX H|Anbernic RG35XX Pro|Anbernic RG35XX SP|Anbernic RG40XX H|Anbernic RG40XX V|Anbernic RG34XX|Anbernic RG34XX-SP|Anbernic RG-SP|"
+pu_h700_models="|Anbernic RG28XX|Anbernic RG35XX 2024|Anbernic RG35XX Plus|Anbernic RG35XX H|Anbernic RG35XX Pro|Anbernic RG35XX SP|Anbernic RG40XX H|Anbernic RG40XX V|Anbernic RG34XX|Anbernic RG34XX-SP|Anbernic RG-SP|Anbernic RG CubeXX|"
 pu_log=
 
 pu_say() { pu_log="$pu_log$*
@@ -74,7 +74,7 @@ pu_install() {
     model=$(tr -d '\000' <"$pu_dt/model" 2>/dev/null)
     case "$pu_h700_models" in
       *"|$model|"*) pu_say "device: $model (Anbernic H700, experimental)." ;;
-      *) pu_fail "this H700 handheld is '${model:-unknown}'; pocket-ui has no profile for it (it knows the Anbernic RG28XX, RG34XX, RG34XX-SP, RG35XX 2024/Plus/H/Pro/SP, RG40XX H/V and RG-SP; the RG CubeXX not yet). Nothing was installed; remove mount-storage.sh and pocket-ui-seed.tar.gz from this partition."; return 1 ;;
+      *) pu_fail "this H700 handheld is '${model:-unknown}'; pocket-ui has no profile for it (it knows the Anbernic RG28XX, RG34XX, RG34XX-SP, RG35XX 2024/Plus/H/Pro/SP, RG40XX H/V, RG-SP and RG CubeXX). Nothing was installed; remove mount-storage.sh and pocket-ui-seed.tar.gz from this partition."; return 1 ;;
     esac
   fi
 

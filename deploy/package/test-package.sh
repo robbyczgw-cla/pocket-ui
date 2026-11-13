@@ -355,7 +355,7 @@ for SH in $SHELLS; do
     refused "unsupported SM4450 '$other'" "no supported Classic Rev Q profile" --allow-other-device
   done
   # ROCKNIX's H700 image: exactly the Anbernic models pocket-ui has a profile for.
-  for h700 in 'Anbernic RG28XX' 'Anbernic RG35XX 2024' 'Anbernic RG35XX Plus' 'Anbernic RG35XX H' 'Anbernic RG35XX Pro' 'Anbernic RG35XX SP' 'Anbernic RG40XX H' 'Anbernic RG40XX V' 'Anbernic RG34XX' 'Anbernic RG34XX-SP' 'Anbernic RG-SP'; do
+  for h700 in 'Anbernic RG28XX' 'Anbernic RG35XX 2024' 'Anbernic RG35XX Plus' 'Anbernic RG35XX H' 'Anbernic RG35XX Pro' 'Anbernic RG35XX SP' 'Anbernic RG40XX H' 'Anbernic RG40XX V' 'Anbernic RG34XX' 'Anbernic RG34XX-SP' 'Anbernic RG-SP' 'Anbernic RG CubeXX'; do
     make_root
     sed -i 's/SM8250/H700/' "$r/etc/os-release"
     printf '%s\000' "$h700" >"$r/sys/firmware/devicetree/base/model"
@@ -376,8 +376,9 @@ for SH in $SHELLS; do
   make_root
   sed -i 's/SM8250/H700/' "$r/etc/os-release"
   printf 'Anbernic RG CubeXX\000' >"$r/sys/firmware/devicetree/base/model"
-  refused "the RG CubeXX (720x720, not yet)" "RG CubeXX's square 720x720 screen is not supported yet"
-  refused "the RG CubeXX even with --allow-other-device" "not supported yet" --allow-other-device
+  inst
+  rc=$?
+  check "$SH: an RG CubeXX (square 720x720) installs for real: current, start entry, restart" '[ $rc = 0 ] && [ "$(readlink "$r/$APP/current")" = "releases/$V" ] && [ -f "$r/$DROPIN" ] && grep -q "restart essway" "$r/calls"'
   for other in 'Anbernic RG99XX' 'Trimui Smart Pro' 'Retroid Pocket Mini V2'; do
     make_root
     sed -i 's/SM8250/H700/' "$r/etc/os-release"
@@ -638,7 +639,9 @@ LEGACY
   sed -i 's/SM8250/H700/' "$r/etc/os-release"
   printf 'Anbernic RG CubeXX\000' >"$r/sys/firmware/devicetree/base/model"
   make_port payload
-  portfail "an RG CubeXX (not yet)" "not supported yet"
+  port "Install pocket-ui.sh"
+  rc=$?
+  check "$SH: port: an RG CubeXX installs, and the screen names it" '[ $rc = 0 ] && shown "device: Anbernic RG CubeXX, experimental" && shown "pocket-ui $V is installed" && [ "$(readlink "$r/$APP/current")" = "releases/$V" ]' || sed 's/^/     /' "$T/viewer.out" "$T/out"
   make_root
   sed -i 's/SM8250/H700/' "$r/etc/os-release"
   printf 'Anbernic RG99XX\000' >"$r/sys/firmware/devicetree/base/model"

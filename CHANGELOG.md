@@ -5,6 +5,21 @@ and versions follow [Semantic Versioning](https://semver.org/) (before 1.0, a mi
 
 ## [Unreleased]
 
+## [0.4.1] - 2026-11-13
+
+### Fixed
+
+- **Anbernic RG CubeXX:** pocket-ui installs on it now (it was refused). Its square 720×720 screen is laid out on a
+  1440×1440 canvas and halved like every other H700 model, so pages fit and the Retro letters stay sharp; the old
+  1280×1280 path was too slow for this processor. Experimental: measured on an RG35XX Plus (same chip), not yet played on a CubeXX.
+- H700 on ROCKNIX: middle speaker volume levels are audible again. The system volume was applied twice,
+  once by PipeWire and once by the speaker DAC. The DAC now only limits the maximum; 100% and silence at 0%
+  keep their previous levels. A speaker level inherited from the old curve is corrected automatically on the first start.
+
+### Changed
+
+- Tailscale and Remote access (SSH) are back in Settings → Connections. Sync and PC streaming stay in Settings → Help & tools → For tinkerers.
+
 ## [0.4.0] - 2026-11-12
 
 ### Added

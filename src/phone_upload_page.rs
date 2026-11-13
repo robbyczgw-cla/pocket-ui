@@ -332,7 +332,7 @@ mod tests {
         let german = crate::i18n::german().translate(HELP).expect("HELP has a German line").to_string();
         assert!(german.contains("verschlüsselt"));
         crate::type_scale::set(crate::type_scale::TextSize::Large);
-        for (w, h) in [(1240, 1080), (1280, 960), (1707, 960), (1920, 1080), (1280, 1280)] {
+        for (w, h) in [(1240, 1080), (1280, 960), (1707, 960), (1920, 1080), (1280, 1280), (1440, 1440)] {
             for help in [HELP, german.as_str()] {
                 let (lines, help_top, q) = layout(&mut text, help, w, h);
                 assert!(lines.len() <= 4, "{w}x{h}: {} lines", lines.len());

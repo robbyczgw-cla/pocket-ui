@@ -1,6 +1,6 @@
 # What each platform has
 
-One table of what a player can use, taken from the code and the docs (0.4.0). "Not seen" means the code has it but nobody has
+One table of what a player can use, taken from the code and the docs (0.4.1). "Not seen" means the code has it but nobody has
 watched it on that platform's real device. ROCKNIX handhelds are the reference: every feature below was seen there, unless its row says otherwise.
 Android is supported by its own launcher and player.
 

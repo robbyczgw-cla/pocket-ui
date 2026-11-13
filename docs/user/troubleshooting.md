@@ -402,7 +402,7 @@ If "Power off" restarted the Pocket instead, the newest `boot-…` folder is the
 what the CPU and GPU were doing just before; `kernel.log` ends with the last thing the system said.
 
 **How to get the files off the Pocket.** The file sharing over the network only shares the games (`roms`), so the logs
-are not in it. Use remote access: Settings → Help & tools → For tinkerers → [Remote access (SSH)](settings-system.md#remote-access-ssh), then on your computer
+are not in it. Use remote access: Settings → Connections → [Remote access (SSH)](settings-system.md#remote-access-ssh), then on your computer
 
 ```
 scp -r root@<address>:/storage/.config/pocket-ui/logs ./pocket-logs
@@ -416,7 +416,7 @@ The logs contain the names of your games and may contain network details such as
 before you post them in public, or use [Report a problem](#report-a-problem), which leaves those out.
 
 **I lost the file sharing or remote access password.**
-Both are shown on screen: Settings → Games → Add games, and Settings → Help & tools → For tinkerers → Remote access (SSH). Each Pocket has its own
+Both are shown on screen: Settings → Games → Add games, and Settings → Connections → Remote access (SSH). Each Pocket has its own
 password; it does not change.
 
 **How do I get to ROCKNIX's standard menu (EmulationStation)?**

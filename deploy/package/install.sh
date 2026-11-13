@@ -30,9 +30,8 @@ MODELS_EXPERIMENTAL="Retroid Pocket Classic Rev Q|Retroid Pocket 5|Retroid Pocke
 # Experimental models the project has played on (docs/DEVICES.md, the 🎮 rows): the note says so.
 MODELS_PLAYED="AYN Odin 2 Mini|Anbernic RG35XX Plus|Anbernic RG35XX SP"
 # The Anbernic models of ROCKNIX's H700 image that pocket-ui has a profile for (src/device.rs H700_BOARDS; a test keeps the
-# two in step), and the one that has a profile but is held back (720x720 draws too slowly on the H700's Cortex-A53 yet).
-MODELS_H700="Anbernic RG28XX|Anbernic RG35XX 2024|Anbernic RG35XX Plus|Anbernic RG35XX H|Anbernic RG35XX Pro|Anbernic RG35XX SP|Anbernic RG40XX H|Anbernic RG40XX V|Anbernic RG34XX|Anbernic RG34XX-SP|Anbernic RG-SP"
-MODELS_H700_NOT_YET="Anbernic RG CubeXX"
+# two in step).
+MODELS_H700="Anbernic RG28XX|Anbernic RG35XX 2024|Anbernic RG35XX Plus|Anbernic RG35XX H|Anbernic RG35XX Pro|Anbernic RG35XX SP|Anbernic RG40XX H|Anbernic RG40XX V|Anbernic RG34XX|Anbernic RG34XX-SP|Anbernic RG-SP|Anbernic RG CubeXX"
 # The one model of ROCKNIX's RK3566 image pocket-ui has a profile for (src/device.rs Model::RgDsPlus): its two screens need it.
 MODELS_RK3566="Anbernic RG DS Plus"
 MODEL_FILE=${POCKETUI_MODEL_FILE:-$R/sys/firmware/devicetree/base/model}
@@ -119,10 +118,7 @@ if [ "$dev" = H700 ]; then
   # An H700 handheld needs its own profile (screen size, buttons, what it has): no profile, no install, whatever the option.
   case "|$MODELS_H700|" in *"|$model|"*) [ -n "$model" ] && experimental=1 ;; esac
   if [ $experimental = 0 ]; then
-    case "|$MODELS_H700_NOT_YET|" in
-      *"|$model|"*) [ -n "$model" ] && die "the $model's square 720x720 screen is not supported yet: pocket-ui draws it too slowly on this processor for now. ROCKNIX keeps working as it is" ;;
-    esac
-    die "this H700 handheld is '${model:-unknown}'; pocket-ui knows the Anbernic RG28XX, RG34XX, RG34XX-SP, RG35XX (2024, Plus, H, Pro, SP), RG40XX (H, V) and RG-SP. Another model has no profile yet, so nothing is installed"
+    die "this H700 handheld is '${model:-unknown}'; pocket-ui knows the Anbernic RG28XX, RG34XX, RG34XX-SP, RG35XX (2024, Plus, H, Pro, SP), RG40XX (H, V), RG-SP and RG CubeXX. Another model has no profile yet, so nothing is installed"
   fi
 fi
 if [ "$dev" = RK3566 ]; then

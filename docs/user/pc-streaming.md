@@ -74,7 +74,7 @@ leave the stream first.
 ## Away from home
 
 Moonlight works over the internet with a VPN. The easiest is Tailscale, which pocket-ui switches on and signs in
-under Settings → Help & tools → For tinkerers → [Tailscale](remote.md); ROCKNIX's wiki also describes WireGuard:
+under Settings → Connections → [Tailscale](remote.md); ROCKNIX's wiki also describes WireGuard:
 [ROCKNIX: Moonlight](https://rocknix.org/systems/moonlight/). Once the VPN is up, set `address` in
 `moonlight.conf` to the PC's VPN address.
 

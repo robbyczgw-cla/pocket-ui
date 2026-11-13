@@ -660,7 +660,7 @@ pub static FEATURES: &[Feature] = &[
         title: "Tailscale",
         plain: "Tailscale",
         line: "Reach the Pocket from your phone or computer, even away from home.",
-        place: "Settings › Help & tools › For tinkerers › Tailscale",
+        place: "Settings › Connections › Tailscale",
         guide: "remote.md#turn-it-on-and-sign-in",
         since: "0.1.0",
         switch: None,

@@ -3172,7 +3172,7 @@ or http:{s}	o http:{s}
 Not listening	Sin escuchar
 {t} It tries again every 30 seconds.	{t} Lo intenta de nuevo cada 30 segundos.
 Waiting for Tailscale	Esperando a Tailscale
-It listens only on the Tailscale network. Switch Tailscale on and sign in (Settings › Help & tools › For tinkerers › Tailscale).	Solo escucha en la red Tailscale. Activa Tailscale e inicia sesión (Ajustes › Ayuda y herramientas › Para trastear › Tailscale).
+It listens only on the Tailscale network. Switch Tailscale on and sign in (Settings › Connections › Tailscale).	Solo escucha en la red Tailscale. Activa Tailscale e inicia sesión (Ajustes › Conexiones › Tailscale).
 Pair a browser	Vincular un navegador
 No code: the Pocket gave no random numbers.	Sin código: el Pocket no dio números aleatorios.
 1.  Scan this with your phone's camera,	1.  Escanea esto con la cámara del teléfono,
@@ -4910,7 +4910,7 @@ The little touches, each on its own: real cases, stickers, printed discs and mor
 Barlow or Pixel type, or Retro: pixel letters, frames and icons everywhere.	Letra Barlow o Pixel, o Retro: letras de píxeles, marcos e iconos en todas partes.
 First-start setup, how you like to play, Tour, manual, for tinkerers, tools, test buttons, report a problem, about.	Configuración inicial, jugar, recorrido, manual, trastear, herramientas, probar botones, problema, acerca de.
 Language, time, sleep & power, kids mode, updates, storage, backup & reset.	Idioma, hora, suspensión y encendido, modo infantil, actualizaciones, almacenamiento, copia y restablecer.
-Wi-Fi, Bluetooth, web companion.	Wi-Fi, Bluetooth, compañero web.
+Wi-Fi, Bluetooth, Tailscale, remote access, web companion.	Wi-Fi, Bluetooth, Tailscale, acceso remoto, compañero web.
 Lens, smart shelves, Echoes, versions and play history.	Lens, estantes inteligentes, Echoes, versiones e historial de juego.
 Back to NextUI	Volver a NextUI
 New versions of pocket-ui.	Versiones nuevas de pocket-ui.
@@ -4918,8 +4918,8 @@ Stickers	Pegatinas
 Development build: install a release package to use app updates.	Versión de desarrollo: instala un paquete de lanzamiento para usar las actualizaciones de la app.
 pocket-ui {s}-dev ({s2})	pocket-ui {s}-dev ({s2})
 For tinkerers	Para trastear
-Tailscale, Sync, remote access, PC streaming.	Tailscale, Sync, acceso remoto, streaming desde PC.
-Tailscale, Sync, remote access and PC streaming.	Tailscale, Sync, acceso remoto y PC streaming.
+Sync, PC streaming.	Sync, streaming desde PC.
+Sync and PC streaming.	Sync y streaming desde PC.
 More systems?	¿Más sistemas?
 Choose extra systems to download on Wi-Fi. All are optional. You can add them later in Extras.	Elige sistemas adicionales para descargar por wifi. Todos son opcionales. Puedes añadirlos después en Extras.
 Download now	Descargar ahora

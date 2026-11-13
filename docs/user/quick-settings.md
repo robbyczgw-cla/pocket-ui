@@ -21,6 +21,10 @@ a row selects it, the selected one is A, and the arrows round a value are Left a
 
 ### Where the sound goes
 
+On Anbernic H700 handhelds with ROCKNIX, volume steps below the maximum are louder than in 0.4.0, which made
+middle levels too quiet. The maximum stays the same; 0% stays silent. A speaker level left by the old curve is corrected
+automatically on the first start after updating; other hardware edits are preserved.
+
 The small text beside the Volume bar is where the system plays sound **right now**, asked when the panel opens and
 again every couple of seconds while it is open. It is read in the background, so the panel never waits for it: a
 "…" stands there for a moment, and "Output unknown" if the system does not say.

@@ -1,4 +1,4 @@
-# H700 speaker volume workaround
+# H700 speaker ceiling and mute
 
 `h700_volume::Keeper` follows the system volume while pocket-ui is running, including pocket-core and standalone
 games. It is enabled only on an H700, without `POCKETUI_MOCK`, with the affected H616 UCM Speaker section
@@ -25,14 +25,23 @@ quiet listening reference reported by the device operator; no higher production 
 The measured −2.4 dBFS digital peak in Alien Hominid/mGBA does not establish the speaker's electrical/mechanical
 clipping threshold. The device session was stopped at the operator’s request; no higher ceiling was tested.
 
-The curve uses ALSA's finite-range cubic UI mapping: `floor = 10^(-ceiling*1.16/60)`,
-`normalized = percent/100*(1-floor)+floor`, `raw = floor(ceiling + 60*log10(normalized)/1.16)`.
-Values are clamped to 0..ceiling; zero percent mutes the switches. It rounds down and retains a distinct DAC
-level for every 5-percent key step, including with the quieter ceiling. References:
-[PulseAudio's cubic conversion](https://github.com/pulseaudio/pulseaudio/blob/master/src/pulse/volume.c) and
-[ALSA's finite-range mapping](https://github.com/alsa-project/alsa-utils/blob/master/alsamixer/volume_mapping.c).
-PipeWire retains control of Line Out: its attenuation (never forced to full gain for the speaker) and its playback
-switch. Both UCM devices name "Line Out" as PlaybackMixerElem, so that switch *is* the mute PipeWire shows for the
+Nonzero speaker wishes target that fixed DAC ceiling (or the downward-only diagnostic ceiling). PipeWire alone
+applies the system volume through Line Out plus a software residual: `60*log10(percent/100)` dB relative to the
+maximum, following [PulseAudio's cubic conversion](https://github.com/pulseaudio/pulseaudio/blob/master/src/pulse/volume.c).
+Zero percent still mutes the hardware switches. The DAC is not another percentage control.
+
+The RG35XX Plus's actual DAPM graph connects `Speaker <- LINEOUT <- Line Out Ramp Controller`. The
+[H616 codec driver](https://code.googlesource.com/linux/torvalds/linux/+/de03b17ec046d81c4713bc54306579b9024fc513/sound/soc/sunxi/sun4i-codec.c)
+routes that output through the Line Out controls. Earlier documentation and the fake ALSA layer incorrectly
+assumed a bypass. In 0.4.0 the same percentage reduced both DAC and Line Out: at 50%, DAC 31 (-37.12 dB)
+plus Line Out 19 (-18 dB) and software gain 1.0 gave -55.12 dB. With DAC 44 it gives -40.04 dB; 100% stays
+-22.04 dB. These are read-back control gains in the serial signal path, not measured speaker SPL or output voltage.
+PipeWire's ideal 50% target gives -40.10 dB; the 0.06 dB difference is hardware/software quantization.
+A 10..100% control sweep confirmed the fixed-ceiling path on one RG35XX Plus. Two quiet half-second 1 kHz
+signals at 50%, source peak -39.99 dBFS, exited successfully with the PCM hardware pointer advancing.
+No high-level listening or analog recording was performed.
+
+PipeWire retains control of Line Out: its attenuation and its playback switch. Both UCM devices name "Line Out" as PlaybackMixerElem, so that switch *is* the mute PipeWire shows for the
 Speaker and the Headphones sink, and WirePlumber stores it per route, across restarts. pocket-ui never writes it.
 
 At 0 percent or sink mute, Speaker Switch, DAC Playback Switch (both channels) and DAC volume are set to zero. All
@@ -62,9 +71,9 @@ One worker starts after the first frame. It validates control ranges/TLV with on
 persistent `libasound.so.2` control handle (`hw:Codec`). The six named controls are read/written directly; the DAC
 ramp forks no subprocess and never opens/reopens a PCM stream. ABI signatures follow ALSA `control.h`.
 
-Normal nonzero gain changes move **one raw DAC step at most every 20 ms**. Faster key notifications are coalesced;
-only the newest target is followed. Ordinary steps touch DAC Playback Volume alone: switches are not toggled and
-routes are not selected. Zero/mute bypasses the gain ramp and immediately writes the physical mute controls once
+DAC changes when restoring sound or changing routes move **one raw DAC step at most every 20 ms**.
+Faster key notifications are coalesced; only the newest target is followed. Ordinary nonzero volume steps keep
+the same DAC ceiling and leave the gain change to PipeWire; no mixer switch or route is toggled. Zero/mute bypasses the gain ramp and immediately writes the physical mute controls once
 the wish is observed. An external ALSA edit cancels an in-progress ramp. Smooth steps reduce discontinuities but
 are not proof of click-free analog output; that still needs the operator's listening A/B.
 
@@ -77,8 +86,13 @@ threads, and no helper is launched for individual ramp steps.
 
 Unchanged volume/mute/route wishes cause no writes, even when someone uses `amixer`. An external edit of an owned
 control yields ownership until a new deliberate volume/mute request. Routing may always turn the speaker off and
-reduce an unsafe speaker gain, but never undo a user's hardware mute. Attaching never raises an existing DAC level
-or unmutes existing switches. After an explicit volume action, normal sound can resume. Our own switches can be
+reduce an unsafe speaker gain, but never undo a user's hardware mute. Attaching normally never raises an existing DAC level
+or unmutes existing switches. One exception is the first 0.4.1 start: with the internal speaker selected, no jack,
+nonzero unmuted volume and all playback switches on, a DAC within one raw step of the old 0.4.0 curve is
+recognized as inherited and ramped to the fixed ceiling. Other values and hardware mutes are left alone.
+The check is stored in `<data>/h700-volume-041` only after it finishes; a later start cannot repeat it on a
+manual edit. Diagnostic ceilings disable the migration. Exit never restores an inherited low value.
+Headphones keep their existing attach behavior. After an explicit volume action, normal sound can resume. Our own switches can be
 restored when returning from headphones or another sink, without undoing an external switch change.
 
 Normal exit stops and joins the worker explicitly (`process::exit` does not run destructors). It rereads the final
@@ -110,10 +124,12 @@ and audio counters. This diagnostic override is not a player setting.
 
 ## Validation and release
 
-`cargo test --profile gate --lib h700_volume` uses a fake ALSA layer in which Line Out does not affect the speaker.
-Its fake mirrors Line Out's switch into the sink mute, as PipeWire does. It covers the issue #3 sequences (0 % and back on
+`cargo test --profile gate --lib h700_volume` uses a fake ALSA layer with the device's serial LINEOUT speaker
+path. Its fake mirrors Line Out's switch into the sink mute, as PipeWire does. A regression combines the
+DAC gain, measured Line Out steps and PipeWire's software residual: 10..100% must apply the system curve
+exactly once, with the same maximum and real mute at zero. It failed against the 0.4.0 DAC curve before the fix. It covers the issue #3 sequences (0 % and back on
 headphones, then unplug; a stored mute at start, with and without the jack; a mute appearing on a route change),
-volume keys/quick-settings wishes, real hardware mute, independent mute failures, captured amixer parsing,
+volume keys/quick-settings wishes, correcting an old quiet DAC after a deliberate volume action, real hardware mute, independent mute failures, captured amixer parsing,
 jack changes in both orders, UCM DAC resets, returning from Bluetooth, external edits, wake repair, failed/clamped
 writes, ramp rate/coalescing/mute preemption and conditional exit restoration. Power and Quick settings regressions
 cover the no-cap game policy and hidden-display path. The merge gate also checks existing controls, sleep and platform builds.

@@ -627,7 +627,7 @@ impl App {
             (None, true) => {
                 self.text.draw(c, Face::Title, 44, left, y, pal().dust, "Waiting for Tailscale");
                 y += 44;
-                for l in self.text.wrap_prose(Face::Body, 26, "It listens only on the Tailscale network. Switch Tailscale on and sign in (Settings › Help & tools › For tinkerers › Tailscale).", width) {
+                for l in self.text.wrap_prose(Face::Body, 26, "It listens only on the Tailscale network. Switch Tailscale on and sign in (Settings › Connections › Tailscale).", width) {
                     self.text.draw(c, Face::Body, 26, left, y, pal().dust, &l);
                     y += pocket_ui::type_scale::line(26, 8);
                 }

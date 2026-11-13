@@ -108,8 +108,9 @@ trait Alsa {
     fn unmute(&mut self, sink: &str) -> bool;
 }
 
-/// DAC TLV: -73.08 dB + raw * 1.16 dB. Use ALSA's cubic UI mapping over the available finite dB range.
-/// Raw zero is not mute: zero percent uses the switches, while nonzero values retain useful key steps.
+/// DAC TLV: -73.08 dB + raw * 1.16 dB. This is only the speaker ceiling.
+/// PipeWire already applies the volume curve through Line Out and its software residual.
+/// Speaker is fed by LINEOUT: applying the percentage here as well attenuates twice.
 #[cfg(test)]
 fn speaker_dac(percent: u8) -> u8 {
     speaker_dac_at(percent, SPEAKER_MAX_RAW)
@@ -119,14 +120,30 @@ fn speaker_dac_at(percent: u8, max_raw: u8) -> u8 {
     if percent == 0 {
         return 0;
     }
-    let ceiling = max_raw.clamp(1, SPEAKER_MAX_RAW) as f64;
+    max_raw.clamp(1, SPEAKER_MAX_RAW)
+}
+
+/// Recognition only: never used as the new volume target.
+fn legacy_040_dac(percent: u8) -> u8 {
+    let ceiling = SPEAKER_MAX_RAW as f64;
     let floor = 10.0_f64.powf(-ceiling * 1.16 / 60.0);
     let normalized = percent.min(100) as f64 / 100.0 * (1.0 - floor) + floor;
     (ceiling + 60.0 * normalized.log10() / 1.16).floor().clamp(1.0, ceiling) as u8
 }
 
+#[derive(Clone, Copy, Default, PartialEq, Eq)]
+enum Migration {
+    #[default]
+    Check,
+    Correcting,
+    Done,
+    Off,
+}
+
 #[derive(Default)]
 struct Session {
+    migration: Migration,
+    migration_raised: bool,
     /// Downward-only diagnostic ceiling; never persisted as a player preference.
     max_raw: Option<u8>,
     original: Option<Mixer>,
@@ -144,6 +161,16 @@ struct Session {
     lifted: bool,
 }
 impl Session {
+    fn start(max_raw: Option<u8>, marker: &std::path::Path) -> Self {
+        Self { max_raw, migration: if max_raw.is_some() || marker.exists() { Migration::Off } else { Migration::Check }, ..Self::default() }
+    }
+    fn save_migration(&mut self, marker: &std::path::Path) -> std::io::Result<()> {
+        if self.migration == Migration::Done {
+            crate::fsutil::write_atomic(marker, b"done\n")?;
+            self.migration = Migration::Off;
+        }
+        Ok(())
+    }
     fn dac_target(&self, percent: u8) -> u8 {
         speaker_dac_at(percent, self.max_raw.unwrap_or(SPEAKER_MAX_RAW))
     }
@@ -187,10 +214,18 @@ impl Session {
             return;
         }
         let initial = self.original.is_none();
+        let inherited = initial && self.migration == Migration::Check && self.max_raw.is_none()
+            && !wish.silent() && !wish.headphones() && !mixer.jack
+            && [Control::Speaker, Control::DacOn, Control::LineOn].iter().all(|c| mixer.values[c.index()] == [1; 2])
+            && mixer.values[Control::Dac.index()][0].abs_diff(legacy_040_dac(wish.percent)) <= 1;
         if initial {
             self.original = Some(mixer.clone());
             self.first_wish = Some((wish.percent, wish.muted));
             self.first_sink = Some(wish.sink.clone());
+            if self.migration == Migration::Check {
+                self.migration = if inherited { Migration::Correcting } else { Migration::Done };
+                self.migration_raised = inherited;
+            }
         }
         if self.last.as_ref() == Some(&(wish.clone(), mixer.jack, revision)) && !self.force && !was_pending {
             self.pending = false;
@@ -261,9 +296,9 @@ impl Session {
             let target = if headphones { 63 } else { self.dac_target(wish.percent) };
             // At attach we may only turn down; an existing hardware mute belongs to the user, unless it came with a
             // lifted sink mute (then it is what an earlier version left behind for that mute).
-            let target = if initial && !heal { target.min(mixer.values[Control::Dac.index()][0]) } else { target };
+            let target = if initial && !heal && !inherited { target.min(mixer.values[Control::Dac.index()][0]) } else { target };
             let current = mixer.values[Control::Dac.index()][0];
-            let next = if (initial && !heal) || (route_changed && !headphones && current > target) {
+            let next = if (initial && !heal && !inherited) || (route_changed && !headphones && current > target) {
                 // Jack removal must lower the former headphone gain before enabling the speaker.
                 target
             } else if target > current {
@@ -296,6 +331,9 @@ impl Session {
         self.last = Some(key);
         self.force = false;
         self.pending = ramping;
+        if self.migration == Migration::Correcting && !ramping {
+            self.migration = Migration::Done;
+        }
     }
 
     fn restore(&mut self, io: &mut impl Alsa) {
@@ -303,7 +341,7 @@ impl Session {
             return;
         };
         // No stale speaker route after jack/sink changes, no unmute after the player asked for silence.
-        if self.pending || self.first_sink.as_ref() != Some(&wish.sink) || !wish.internal() || wish.silent() || now.jack != *jack || now.jack != original.jack {
+        if self.migration_raised || self.pending || self.first_sink.as_ref() != Some(&wish.sink) || !wish.internal() || wish.silent() || now.jack != *jack || now.jack != original.jack {
             return;
         }
         // Restore the snapshot only if the whole owned group is still ours, and volume hasn't changed.
@@ -650,7 +688,10 @@ impl Keeper {
                     }
                 };
                 let max_raw = diagnostic_ceiling(std::env::var("POCKETUI_H700_SPEAKER_MAX_RAW").ok().as_deref());
-                let mut session = Session { max_raw, ..Session::default() };
+                let marker = std::path::PathBuf::from(std::env::var_os("POCKETUI_DATA")
+                    .unwrap_or_else(|| "/storage/.config/pocket-ui".into())).join("h700-volume-041");
+                let mut session = Session::start(max_raw, &marker);
+                let mut migration_warned = false;
                 let mut repaired = REPAIR.load(Ordering::Relaxed);
                 let mut cached = None;
                 let mut next_poll = Instant::now();
@@ -671,6 +712,12 @@ impl Keeper {
                     repaired = repair;
                     if let Some(wish) = cached.as_mut() {
                         session.update_at(&mut io, wish.clone(), revision, now);
+                        if let Err(error) = session.save_migration(&marker) {
+                            if !migration_warned {
+                                eprintln!("h700 volume: could not remember 0.4.1 correction: {error}");
+                                migration_warned = true;
+                            }
+                        }
                         if std::mem::take(&mut session.lifted) {
                             wish.muted = false;
                         }
@@ -763,6 +810,7 @@ mod tests {
         }
         fn audible(&self) -> bool {
             self.value(Control::Speaker) == [1; 2] && self.value(Control::DacOn).contains(&1)
+                && self.value(Control::LineOn).contains(&1) && self.value(Control::Line)[0] >= 2
         }
     }
     impl Alsa for Fake {
@@ -780,7 +828,7 @@ mod tests {
                     self.sink_muted = value == [0; 2];
                 }
             }
-            // The fake intentionally does NOT connect Line Out to Speaker: this reproduces the actual UCM bug.
+            // Device DAPM connects Speaker to LINEOUT: both hardware gains are in the signal path.
             true
         }
         fn unmute(&mut self, _: &str) -> bool {
@@ -822,6 +870,34 @@ mod tests {
     }
 
     #[test]
+    fn speaker_applies_system_attenuation_once_without_raising_the_maximum() {
+        let (mut s, mut f) = (Session::default(), Fake::playing());
+        // Device DAPM: Speaker <- LINEOUT. PipeWire already applies the cubic volume
+        // through Line Out plus its software residual, upstream of the speaker.
+        f.set(Control::Line, 31);
+        apply(&mut s, &mut f, volume(100), 0);
+        let maximum_db = -73.08 + f64::from(f.value(Control::Dac)[0]) * 1.16;
+        assert!((maximum_db - (-22.04)).abs() < 0.001);
+        for (percent, line_raw) in [(10, 2), (20, 4), (30, 11), (40, 16), (50, 19), (60, 23), (70, 25), (80, 28), (90, 30), (100, 31)] {
+            // These Line Out readbacks are from the RG35XX Plus. The residual
+            // completes PipeWire's requested gain between/below hardware steps.
+            f.set(Control::Line, line_raw);
+            apply(&mut s, &mut f, volume(percent), 0);
+            let system_db = 60.0 * (f64::from(percent) / 100.0).log10();
+            let line_db = -46.5 + f64::from(line_raw) * 1.5;
+            let soft_db = system_db - line_db;
+            let total_db = -73.08 + f64::from(f.value(Control::Dac)[0]) * 1.16 + line_db + soft_db;
+            assert!((total_db - (maximum_db + system_db)).abs() < 0.001,
+                "{percent}% must apply the system attenuation once: {total_db} dB");
+            assert!(f.audible());
+        }
+        assert!(!f.writes.iter().any(|(c, _)| matches!(c, Control::Line | Control::LineOn)),
+            "PipeWire keeps both Line Out controls");
+        apply(&mut s, &mut f, volume(0), 1);
+        assert!(!f.audible(), "zero still uses hardware mute");
+    }
+
+    #[test]
     fn silent_lab_ceiling_cannot_be_raised_by_volume_keys_or_exceed_the_production_limit() {
         assert_eq!(diagnostic_ceiling(Some("1")), Some(1));
         assert_eq!(diagnostic_ceiling(Some(&(SPEAKER_MAX_RAW + 1).to_string())), None);
@@ -837,17 +913,18 @@ mod tests {
     }
 
     #[test]
-    fn volume_keys_and_quick_settings_reduce_the_actual_speaker_gain() {
+    fn volume_keys_and_quick_settings_leave_system_gain_to_pipewire() {
         let (mut s, mut f) = (Session::default(), Fake::playing());
         apply(&mut s, &mut f, volume(100), 0);
         assert_eq!(f.value(Control::Dac), [SPEAKER_MAX_RAW; 2]); // Calibrated ceiling applies even at 100%.
         assert_eq!(f.value(Control::Line), [20; 2]); // PipeWire's attenuation is retained.
-        let loud = f.value(Control::Dac)[0];
+        let line = f.value(Control::Line);
+        f.writes.clear();
         apply(&mut s, &mut f, volume(50), 0); // ROCKNIX volume key: observed sink changed.
-        assert!(f.value(Control::Dac)[0] < loud);
-        let medium = f.value(Control::Dac)[0];
+        assert_eq!(f.value(Control::Dac), [SPEAKER_MAX_RAW; 2]);
         apply(&mut s, &mut f, volume(10), 1); // Quick settings: explicit request.
-        assert!(f.value(Control::Dac)[0] < medium);
+        assert!(f.writes.is_empty(), "system volume changes need no second hardware curve");
+        assert_eq!(f.value(Control::Line), line);
         assert!(f.audible());
         let original = f.value(Control::Dac);
         s.restore(&mut f);
@@ -855,7 +932,7 @@ mod tests {
     }
 
     #[test]
-    fn zero_and_mute_really_silence_a_speaker_that_bypasses_line_out() {
+    fn zero_and_mute_silence_the_speaker_without_persisting_a_sink_mute() {
         for muted in [false, true] {
             let (mut s, mut f) = (Session::default(), Fake::playing());
             let mut w = volume(if muted { 60 } else { 0 });
@@ -874,7 +951,7 @@ mod tests {
             assert!(!f.audible(), "exit must stay silent");
             apply(&mut s, &mut f, volume(15), 1);
             assert!(f.audible(), "deliberate volume/unmute can restore sound");
-            assert!(f.value(Control::Dac)[0] < SPEAKER_MAX_RAW);
+            assert_eq!(f.value(Control::Dac)[0], SPEAKER_MAX_RAW);
             assert!(!f.writes.iter().any(|(c, _)| *c == Control::LineOn));
         }
     }
@@ -1069,16 +1146,64 @@ mod tests {
     }
 
     #[test]
-    fn volume_curve_is_monotonic_and_each_key_step_changes_speaker_gain() {
-        let mut before = speaker_dac(0);
-        for percent in 1..=100 {
-            let raw = speaker_dac(percent);
-            assert!(raw >= before && raw <= SPEAKER_MAX_RAW);
-            if percent % 5 == 0 && percent > 5 {
-                assert!(raw > speaker_dac(percent - 5));
-            }
-            before = raw;
+    fn an_old_quiet_dac_is_corrected_on_the_next_deliberate_volume_request() {
+        let (mut s, mut f) = (Session { migration: Migration::Off, ..Session::default() }, Fake::playing());
+        f.set(Control::Dac, 31); // 0.4.0 at 50%.
+        apply(&mut s, &mut f, volume(50), 0);
+        assert_eq!(f.value(Control::Dac), [31; 2], "attach never raises an existing hardware level");
+        apply(&mut s, &mut f, volume(55), 1);
+        assert_eq!(f.value(Control::Dac), [SPEAKER_MAX_RAW; 2]);
+    }
+
+    #[test]
+    fn first_start_automatically_corrects_only_an_enabled_040_speaker_level() {
+        for (raw, expected) in [(29, 29), (30, 44), (31, 44), (32, 44), (33, 33)] {
+            let (mut s, mut f) = (Session::default(), Fake::playing());
+            f.set(Control::Dac, raw); // The old 50% target was 31, with one step of tolerance.
+            apply(&mut s, &mut f, volume(50), 0);
+            assert_eq!(f.value(Control::Dac), [expected; 2], "first start at raw {raw}");
+            s.restore(&mut f);
+            assert_eq!(f.value(Control::Dac), [expected; 2], "exit must not reintroduce the old curve");
         }
+        for off in [Control::Speaker, Control::DacOn] {
+            let (mut s, mut f) = (Session::default(), Fake::playing());
+            f.set(Control::Dac, 31);
+            f.set(off, 0);
+            apply(&mut s, &mut f, volume(50), 0);
+            assert_eq!(f.value(Control::Dac), [31; 2]);
+            assert!(!f.audible(), "migration must preserve a hardware mute");
+        }
+        let (mut s, mut f) = (Session::default(), Fake::playing());
+        f.set(Control::Dac, 31);
+        f.mixer.jack = true;
+        let mut hp = volume(50);
+        hp.sink = HEADPHONES.into();
+        apply(&mut s, &mut f, hp, 0);
+        assert_eq!(f.value(Control::Dac), [31; 2], "headphone attach gain stays unchanged");
+    }
+
+    #[test]
+    fn inherited_correction_is_remembered_and_not_repeated_on_a_later_start() {
+        let dir = std::env::temp_dir().join(format!("h700-volume-041-{}-{}", std::process::id(),
+            std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos()));
+        std::fs::create_dir(&dir).unwrap();
+        let marker = dir.join("h700-volume-041");
+        let mut s = Session::start(None, &marker);
+        let mut f = Fake::playing();
+        f.set(Control::Dac, 31);
+        apply(&mut s, &mut f, volume(50), 0);
+        assert_eq!(f.value(Control::Dac), [44; 2]);
+        s.save_migration(&marker).unwrap();
+        assert!(marker.exists());
+        // A later manual edit happens to match the old curve: the completed migration must not touch it.
+        let mut next = Session::start(None, &marker);
+        f.set(Control::Dac, 31);
+        f.writes.clear();
+        apply(&mut next, &mut f, volume(50), 0);
+        assert_eq!(f.value(Control::Dac), [31; 2]);
+        assert!(f.writes.is_empty());
+        std::fs::remove_file(marker).unwrap();
+        std::fs::remove_dir(dir).unwrap();
     }
 
     #[test]
@@ -1137,16 +1262,17 @@ mod tests {
     }
 
     #[test]
-    fn nonzero_changes_ramp_one_dac_step_without_mute_or_route_flicker() {
+    fn restoring_sound_ramps_one_dac_step_without_route_flicker() {
         let (mut s, mut f) = (Session::default(), Fake::playing());
         apply(&mut s, &mut f, volume(100), 0);
+        apply(&mut s, &mut f, volume(0), 1);
         f.writes.clear();
         let target = speaker_dac(20);
         let mut previous = f.value(Control::Dac)[0];
         for _ in 0..64 {
             f.now += RAMP_STEP;
             let now = f.now;
-            s.update_at(&mut f, volume(20), 1, now);
+            s.update_at(&mut f, volume(20), 2, now);
             let raw = f.value(Control::Dac)[0];
             assert!(previous.abs_diff(raw) <= 1);
             assert!(f.audible());
@@ -1157,8 +1283,8 @@ mod tests {
         }
         assert_eq!(previous, target);
         assert!(
-            f.writes.iter().all(|(control, _)| *control == Control::Dac),
-            "ordinary steps touch one control only"
+            f.writes.iter().filter(|(control, _)| *control != Control::Dac).count() == 2,
+            "restore enables DAC/speaker once; the remaining writes only ramp DAC"
         );
     }
 
@@ -1166,15 +1292,16 @@ mod tests {
     fn repeated_notifications_are_rate_limited_and_new_targets_replace_old_targets() {
         let (mut s, mut f) = (Session::default(), Fake::playing());
         apply(&mut s, &mut f, volume(100), 0);
+        apply(&mut s, &mut f, volume(0), 1);
         f.now += RAMP_STEP;
         let now = f.now;
-        s.update_at(&mut f, volume(20), 1, now);
+        s.update_at(&mut f, volume(20), 2, now);
         f.writes.clear();
         for millisecond in 1..20 {
-            s.update_at(&mut f, volume(10), 2, now + Duration::from_millis(millisecond));
+            s.update_at(&mut f, volume(10), 3, now + Duration::from_millis(millisecond));
         }
         assert!(f.writes.is_empty(), "a repeat burst cannot bypass the DAC rate limit");
-        apply(&mut s, &mut f, volume(80), 3);
+        apply(&mut s, &mut f, volume(80), 4);
         assert_eq!(
             f.value(Control::Dac),
             [speaker_dac(80); 2],
@@ -1186,20 +1313,22 @@ mod tests {
     fn mute_preempts_a_ramp_and_external_mixer_edits_cancel_it() {
         let (mut s, mut f) = (Session::default(), Fake::playing());
         apply(&mut s, &mut f, volume(100), 0);
+        apply(&mut s, &mut f, volume(0), 1);
         f.now += RAMP_STEP;
         let now = f.now;
-        s.update_at(&mut f, volume(10), 1, now);
+        s.update_at(&mut f, volume(10), 2, now);
         assert!(s.pending);
-        s.update_at(&mut f, volume(0), 2, now); // No waiting for the ramp timer.
+        s.update_at(&mut f, volume(0), 3, now); // No waiting for the ramp timer.
         assert!(!f.audible());
         assert_eq!(f.value(Control::DacOn), [0; 2]);
-        apply(&mut s, &mut f, volume(80), 3);
+        // Resume only one step, then let an outside edit cancel that pending ramp.
         f.now += RAMP_STEP;
         let now = f.now;
-        s.update_at(&mut f, volume(10), 4, now);
+        s.update_at(&mut f, volume(80), 4, now);
+        assert!(s.pending);
         f.set(Control::Dac, 2);
         f.writes.clear();
-        s.update_at(&mut f, volume(10), 4, now + RAMP_STEP);
+        s.update_at(&mut f, volume(80), 4, now + RAMP_STEP);
         assert!(f.writes.is_empty(), "a user ALSA edit cancels our pending ramp");
         assert!(!s.pending);
     }

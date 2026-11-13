@@ -135,10 +135,10 @@ fn fkeys_lights_help_explains_that_the_assignment_is_global() {
 fn the_bricks_pages_call_it_the_brick() {
     let card = Card::new();
     for lang in LANGS {
-        for state in ["tailscale", "sync:off", "sys:power-noboot", "settings:7:2"] {
+        for state in ["tailscale", "sync:off", "sys:power-noboot", "settings:4:3"] {
             let (shown, _) = card.shot(state, lang, "normal");
             // The German and Spanish line under Remote access names no device at all.
-            assert!(shown.contains("Brick") || (state == "settings:7:2" && lang != "en"), "{lang} {state}: {shown}");
+            assert!(shown.contains("Brick") || (state == "settings:4:3" && lang != "en"), "{lang} {state}: {shown}");
             assert!(!shown.contains("Pocket"), "{lang} {state}: {shown}");
         }
     }

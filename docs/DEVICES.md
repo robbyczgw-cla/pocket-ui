@@ -62,8 +62,8 @@ ROCKNIX: `projects/ROCKNIX/devices/SM8550/linux/dts/qcom/qcs8550-{ayn-odin2mini,
 | ✅ | Anbernic RG34XX-SP (clamshell) | 720 × 480 | 2 | yes |
 | ✅ | Anbernic RG-SP (clamshell) | 720 × 480 | no | yes |
 
-ROCKNIX: `projects/ROCKNIX/devices/H700/linux/dts/allwinner/sun50i-h700-anbernic-*.dts`. The RG CubeXX is on the same image;
-its square 720 × 720 screen is too heavy for pocket-ui for now, so the installers say no. Devices on these images that are
+ROCKNIX: `projects/ROCKNIX/devices/H700/linux/dts/allwinner/sun50i-h700-anbernic-*.dts`. The RG CubeXX is on the same image
+(square 720 × 720, laid out on 1440 × 1440 and halved like the others). Devices on these images that are
 not listed here have no pocket-ui profile, and the installers refuse them.
 
 ### TrimUI Brick: on top of NextUI, not ROCKNIX
@@ -180,9 +180,10 @@ before a window exists, the device profile supplies it. Thus an H700 on a 1080p 
 |---|---|---|
 | 640×480 | 1280×960 | 2:1 box average |
 | 720×480 | 1440×960 | 2:1 box average |
-| 720×720 | 1280×1280 | exact area coverage (16:9 reduction on each axis) |
+| 720×720 | 1440×1440 | 2:1 box average |
 
-Other small outputs preserve their aspect ratio with at least 1280×960 logical pixels. Transient windows smaller
+A panel whose double holds 1280×960 and stays within 1440×1440 is exactly doubled; other small outputs preserve their
+aspect ratio with at least 1280×960 logical pixels (exact area coverage for a fractional reduction). Transient windows smaller
 than 64 px on either axis or with extreme aspect ratios (outside 1:2–4:1) keep native painting to bound allocation.
 Shelf, Cabinet, game cards, Settings, pause menus, quick settings, first start and safe mode share this path.
 Normalised touch positions map directly into the logical canvas, including quick settings; game touch is unchanged.
@@ -382,10 +383,9 @@ X and Y: the built-in "H700 Gamepad" sends the printed X as `BTN_WEST` and Y as 
 | `rgcubexx` | `Anbernic RG CubeXX` / `anbernic,rgcubexx` | 720×720 | yes | yes | no | `led-rgb` |
 
 The panel-revision device trees (`...-rev6-panel`, `...-v2-panel`) keep their model's `model` and `compatible`, so
-they are the same row. **The RG CubeXX has `not_yet`: the profile exists, but both installers refuse it** with
-"the RG CubeXX's square 720×720 screen is not supported yet". Reason: the exact-area 720×720 reduction measured
-8.2–9.3 ms extra per frame on the build host, 44–104 ms estimated on the A53 (H700-SCALED-LAYOUT.md), too slow to
-call experimental-usable; remove `not_yet` (and the installers' `MODELS_H700_NOT_YET`) when that path is cheaper.
+they are the same row. The RG CubeXX was held back until 2026-11-13: its 1280×1280 canvas with a 16:9 area filter was
+too slow. Since then it paints 1440×1440 and halves it with the same box average as the other models; the frame cost was
+measured on an RG35XX Plus, same processor (H700-SCALED-LAYOUT.md "CubeXX"). No CubeXX has run pocket-ui yet.
 Sticks and Wi-Fi are what ROCKNIX's trees and the makers' specs say, not hardware checks; `has_wifi` only decides
 what is said when no chip shows up.
 
@@ -430,14 +430,14 @@ What pocket-ui does about what is missing (`Device::has_fan`, `has_touch`, `has_
 `deploy/fat/mount-storage.sh.in` accept ROCKNIX `HW_DEVICE=H700` and exactly the models of the table above:
 `install.sh` and the hook keep the same name lists (`MODELS_H700`, `pu_h700_models`), and a unit test
 (`the_installers_accept_exactly_the_h700_models_of_the_table`) keeps them equal to `H700_BOARDS`. An H700 handheld
-that is not in the table, the CubeXX, and an empty or Retroid model on the H700 image are refused with a sentence and
+that is not in the table and an empty or Retroid model on the H700 image are refused with a sentence and
 nothing is written, also with `--allow-other-device` (that option is for another SM8250 device). The hook reads the
 device tree's `compatible` (`sun50i-h700`) and `model` in the initramfs; where it can't read them it behaves as before.
 `pocket-ui --check-os-update /` still blocks what pocket-ui would break on; on the H700 image (`HW_DEVICE="H700"` in
 `/etc/os-release`) a missing `steamos-set-timezone` and `quantum` are only logged (`os_compat::H700_WITHOUT`), a missing
 `unsquashfs` still warns (OS updates can't be checked). Tests: `deploy/package/test-package.sh` (H700 fake roots:
-every model accepted, CubeXX / unknown H700 / Retroid on H700 refused, the Ports installer on an SP, a CubeXX and an
-unknown one) and `deploy/fat/test-hook.sh` (hook accepts five models, refuses CubeXX, an unknown Anbernic and a
+every model accepted, the CubeXX installed for real, unknown H700 / Retroid on H700 refused, the Ports installer on an SP,
+a CubeXX and an unknown one) and `deploy/fat/test-hook.sh` (hook accepts six models including the CubeXX, refuses an unknown Anbernic and a
 Trimui, stays silent on the first start).
 
 Hardware plan (needs the owner's devices): flash ROCKNIX's H700 image (DDR4 first, DDR3 if it doesn't start) onto a
