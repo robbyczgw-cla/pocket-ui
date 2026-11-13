@@ -5,149 +5,90 @@
   </picture>
 </h1>
 
-<p align="center"><b>A cozy, free OS with its own game player for retro handhelds.</b><br>
-Your games on one shelf, press A and you're playing, right where you left off.</p>
-
-**pocket-ui OS** comes as its own bootable image (built on [ROCKNIX](https://rocknix.org)) or as an install on a
-system you already have (ROCKNIX, or a card of its own on the TrimUI Brick), for Anbernic, TrimUI, Retroid and AYN
-handhelds.
+<p align="center"><b>pocket-ui OS puts every game in its real box on your retro handheld:</b><br>
+take it off the shelf, click it in, and continue right where you stopped.</p>
 
 <p align="center">
   <a href="https://pocketui.xyz"><img src="docs/media/hero.webp" width="620" alt="The shelf: Advance Wars ready to continue, the last games as cases and every console as a spine"></a>
-  <br><sub><a href="https://pocketui.xyz">Watch the trailer on pocketui.xyz</a></sub>
+</p>
+
+<p align="center">
+  <a href="https://pocketui.xyz/install"><b>Get it</b></a> ·
+  <a href="https://pocketui.xyz/try">Try it in your browser</a> ·
+  <a href="https://pocketui.xyz/#trailer">Watch the trailer</a>
 </p>
 
 ## Why you'll like it
 
-- **Press play, the old way.** The cartridge slides into its console, a disc drops into its case, the old TV flickers
-  on, and you're playing. Quit, and the TV switches off, the cartridge or disc comes out and the case goes back on the
-  shelf. Many consoles have a scene of their own, from the NES and Game Boy Color to the PSP, Master System, Game Gear,
-  PC Engine and 3DS, and handhelds play in their own frame, a GBA or GBA SP.
-- **Every game has a story.** Turn the box over for pictures from the game and what it's about, and see the other games
-  of the series you own.
-- **Bring your card as it is.** Folders like "GBA" or "Game Boy Advance (GBA)" are found as they are, and box art
-  already on the card is used.
-- **Straight back in.** A game starts from the picture of where you left it, and the shelf is up in a blink.
-  Coming back after weeks? It tells you when you last played and shows the note you left yourself.
-- **One pause menu for every console.** HOME gives you Continue, 8 save slots with pictures, Earlier (a step back of
-  a few minutes), screen frames, CRT and LCD looks, cheats (on the Brick too) and the controls of that console, from Game Boy to
-  PlayStation 2.
-- **Every game in its case.** Box art on real cases, cartridges and discs, stickers for the games you finished, and
-  four looks to choose from, including Easy: one big game at a time, for anyone you hand the handheld to.
-- **Retro, in one switch.** Settings → Look → Style → Retro turns every menu into an old handheld's: pixel letters,
-  chunky pixel frames, little icons and soft blips, in Cocoa or Pea. Your shelf and box art stay as they are.
-- **Set up on the handheld.** A calm first start in four steps (language, Wi-Fi, your games, the look) and you're on
-  your shelf. Box art, games sent from your phone, a Game check that tells you why a game won't start, and updates
-  over Wi-Fi that keep your saves.
-- **Bring your controller.** Bluetooth pads pair in one press and keep their own button layout through reconnects;
-  Test buttons shows every button, trigger and stick light up.
-- **Yours.** No account, no tracking, free and open source. Menus in English, German and Spanish.
+- **Real cases.** Cartridges, jewel cases and big cardboard boxes, made from photos of the real things. Press X and
+  the case opens; turn it over and read what the game is about.
+- **In it goes.** The cartridge clicks into its console, the old TV flickers on, and you're playing. Quit, and it
+  pops back out and goes home to the shelf.
+- **Continue.** Your last games wait half open on the shelf. One press and you're back in the very moment you left.
+- **One pause menu for every console.** Save slots with pictures, Earlier to jump back a few minutes, screen frames
+  and CRT looks, from Game Boy to GameCube.
+
+Plus a Retro look in one switch, games sent from your phone, Game check, Kids Mode and updates over Wi-Fi.
+[See everything it does](https://pocketui.xyz/features).
+
+No account, no tracking, free and open source. Menus in English, German and Spanish.
 
 ## Get it
 
-**[Download the latest version](../../releases/latest)** and follow the [install page](https://pocketui.xyz/install.html):
+| Your handheld | How |
+|---|---|
+| Anbernic RG35XX family, RG28XX, RG34XX, RG40XX, RG CubeXX · Retroid Pocket Mini V2 · AYN Odin 2 family | [Flash one card, pop it in, play](https://pocketui.xyz/install) |
+| TrimUI Brick and Smart Pro | [Unzip the card download onto an empty card](https://pocketui.xyz/install#brick) |
+| Already on ROCKNIX | [Add pocket-ui in five minutes, undo it any time](https://pocketui.xyz/install#way-1) |
 
-- **Ready SD card image** (listed on the install page): write it to a card with balenaEtcher or Raspberry Pi Imager
-  and start. There is one for the Retroid Pocket Mini V2, the AYN Odin 2 family and each Anbernic H700 model; the
-  Pocket 5, Flip 2, Pocket 6 and Nova have beta test images, and testers are welcome. On a Pocket 5 or Flip 2
-  whose boot menu shows "UEFI", set up OpenABL once first ([how](docs/INSTALL-DUAL-BOOT.md#pocket-5-and-flip-2-loader-or-uefi)); a Pocket 6 or Nova that
-  falls back to the boot menu takes the same step ([how](docs/user/other-handhelds.md#experimental-sm8550-handhelds)).
-- **TrimUI Brick**: unzip the card download onto an empty microSD card and switch on. The Brick's own system isn't
-  touched, and updates come over Wi-Fi.
-- **Already on ROCKNIX?** Unzip the Ports installer into `roms/ports` and pick **Install pocket-ui** under Ports.
-  About five minutes, and **Uninstall pocket-ui** brings ROCKNIX's own menu back. Your games, saves and settings stay.
+Three steps, one card, and your handheld's own system stays as it is. Retroid Pocket 5, Flip 2, 6 and Nova have beta
+cards, and testers are very welcome.
 
-You bring your own games and, for a few systems, BIOS files; pocket-ui includes neither. On an empty card it offers a
+You bring your own games and, for a few systems, BIOS files; pocket-ui includes neither. An empty shelf offers a
 [starter pack](docs/STARTER-PACK.md) of free homebrew games.
 
-**Runs on** handhelds with [ROCKNIX](https://rocknix.org): Retroid Pocket Mini V2, Mini, 5, Flip 2, 6 and Nova ·
-AYN Odin 2, Odin 2 Mini and Odin 2 Portal · Anbernic RG35XX Plus, H, Pro, 2024 and SP, RG28XX, RG40XX H and V,
-RG34XX, RG34XX-SP and RG-SP · TrimUI Brick (from a card of its own) and TrimUI Smart Pro (experimental, same card). Played on most: the Mini V2, the Odin 2 Mini and the RG35XX Plus. Which consoles run on
-which chip: [docs/DEVICES.md](docs/DEVICES.md).
+[What plays on which handheld](https://pocketui.xyz/systems) · [All downloads](../../releases/latest)
 
 ## Learn more
 
-| | |
-|---|---|
-| [Guide](https://pocketui.xyz/guide.html) | From the download to your first game, with pictures |
-| [Manual](docs/user/index.md) | Everything pocket-ui does, page by page; also on the handheld under Settings → Help & tools → Manual |
-| [FAQ](https://pocketui.xyz/faq.html) | Short answers to the usual questions |
-| [What's new](CHANGELOG.md) | Every version and what it changed |
-| [Status](docs/STATUS.md) | Every feature and how far it has been tried on a real handheld |
+- [Guide](https://pocketui.xyz/guide): your first evening, with pictures
+- [Manual](docs/user/index.md): everything, page by page; also on the handheld under Settings → Help & tools
+- [FAQ](https://pocketui.xyz/faq): short answers
+- [What's new](CHANGELOG.md): every version
+- [Status](docs/STATUS.md): every feature and where it has been played
 
 Something off? **Settings → Help & tools → About → Report a problem** makes a file for a report, or
-[open an issue](../../issues). pocket-ui is young and made on the Mini V2; reports from other handhelds help most.
-
-## For developers
-
-pocket-ui is written in Rust. `pocket-ui` is the frontend, `pocket-core` our own libretro player
-([docs/HOST.md](docs/HOST.md)); PlayStation 2, GameCube, Wii and 3DS run on their own emulators behind the same pause
-menu ([docs/BIG-EMULATORS.md](docs/BIG-EMULATORS.md)). Build for the handheld with
-[cargo-zigbuild](https://github.com/rust-cross/cargo-zigbuild):
-
-```sh
-rustup target add aarch64-unknown-linux-gnu
-cargo install cargo-zigbuild
-cargo zigbuild --release --target aarch64-unknown-linux-gnu.2.38 --bin pocket-ui --bin pocket-core
-```
-
-`cargo test --release` runs the tests on a Linux or macOS computer, and `scripts/vdev.sh` starts a virtual Mini V2 in
-Docker. The dev loop, the tests and the layout of the code are in [docs/DEVELOPING.md](docs/DEVELOPING.md) and
-[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md); other ways to install (next to Android, over SSH) in
-[docs/INSTALL-DUAL-BOOT.md](docs/INSTALL-DUAL-BOOT.md) and [docs/SD-IMAGE.md](docs/SD-IMAGE.md); every document in
-[docs/README.md](docs/README.md). See [CONTRIBUTING.md](CONTRIBUTING.md), the [code of conduct](CODE_OF_CONDUCT.md)
-and [SECURITY.md](SECURITY.md).
+[open an issue](../../issues). Reports from your handheld help a lot.
 
 ## How it's made
 
 pocket-ui is built by Robby Czesany together with AI coding agents (Claude and Codex). The agents write most of the
-code; he decides what gets built and how it should look and feel, and tests it on his own handhelds. Every change also
-passes more than 4,000 automated tests. Some art starts from public-domain photos run through an AI pixel tool. Questions
-about this are welcome in [Discussions](https://github.com/robbyczgw-cla/pocket-ui/discussions).
+code; he decides what gets built and how it should look and feel, and plays it on his own handhelds. Questions are
+welcome in [Discussions](https://github.com/robbyczgw-cla/pocket-ui/discussions).
+
+## For developers
+
+pocket-ui is written in Rust: `pocket-ui` is the shelf and menus, `pocket-core` our own libretro player.
+
+```sh
+cargo zigbuild --release --target aarch64-unknown-linux-gnu.2.38 --bin pocket-ui --bin pocket-core
+cargo test --release
+```
+
+Set-up, the dev loop and the code layout: [docs/DEVELOPING.md](docs/DEVELOPING.md) ·
+[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) · [every document](docs/README.md) ·
+[CONTRIBUTING.md](CONTRIBUTING.md) · [code of conduct](CODE_OF_CONDUCT.md) · [SECURITY.md](SECURITY.md)
 
 ## Licence
 
-pocket-ui (the `pocket-ui` and `pocket-core` programs and everything else written for this repository) is free
-software under the **GNU General Public License, version 2 or (at your option) any later version**
-(`GPL-2.0-or-later`). The full text is in [LICENSE](LICENSE). It comes without any warranty.
+pocket-ui is free software under the **GNU General Public License, version 2 or (at your option) any later version**
+(`GPL-2.0-or-later`), without any warranty. The full text is in [LICENSE](LICENSE). Copyright (C) 2026 Robby Czesany.
 
-Copyright (C) 2026 Robby Czesany.
-
-pocket-ui is based on [ROCKNIX](https://rocknix.org) and is not endorsed by the ROCKNIX team. Everything that is
-not ours keeps its own licence. [NOTICE.md](NOTICE.md) lists it, with sources: ROCKNIX, the emulators and
-libretro cores, the system pictures (public-domain photos by Evan Amos, converted with PixelLab), the fonts
-(Barlow and Titillium Web, SIL Open Font License) and the Rust crates
-([docs/THIRD-PARTY-CRATES.md](docs/THIRD-PARTY-CRATES.md)).
-
-- Several libretro cores that ROCKNIX ships (snes9x, genesis_plus_gx, picodrive, fbneo) are licensed for
-  non-commercial use only, and so are ROCKNIX's branding and artwork (CC BY-NC-SA 4.0). pocket-ui contains none of
-  them, but an image that bundles them must not be sold. Check [NOTICE.md](NOTICE.md) before you redistribute one.
-- pocket-ui does not include games, ROMs, BIOS files or ROCKNIX itself, and nothing here offers any. Game footage and
-  box art on pocketui.xyz, in `docs/media/hero.webp` and in the manual's screenshots (`docs/user/pictures/`) belong
-  to their owners. `scripts/check-release-tree.py` checks a tree, a tar or an image for them.
-- `assets/gamedb.bin` holds data from Wikidata, released under CC0. No Wikipedia text is included.
-- `assets/curatordb.bin` and `assets/data/curator-tags.json` (Curator's feel tags) are our own data, derived at
-  build time from those CC0 facts, under pocket-ui's licence. No Wikipedia or other copyrighted text is included.
+pocket-ui is based on [ROCKNIX](https://rocknix.org) and is not endorsed by the ROCKNIX team. It includes no games,
+ROMs or BIOS files. Everything that is not ours keeps its own licence, and some cores that ROCKNIX ships are for
+non-commercial use only: read [NOTICE.md](NOTICE.md) before you redistribute an image.
 
 ## Credits
 
-- [ROCKNIX](https://rocknix.org) and its contributors: the operating system pocket-ui runs on.
-- [libretro](https://www.libretro.com) and the authors of the cores pocket-core and RetroArch load.
-- The [libretro thumbnail collection](https://thumbnails.libretro.com) for the box art.
-- [Wikidata](https://www.wikidata.org) for the game facts on the game card (year, developer, publisher, genre,
-  series, players, review scores). They are CC0 (public domain); `assets/gamedb.bin` is a compact copy built by
-  `scripts/build-gamedb.py`.
-- [Wikipedia](https://en.wikipedia.org) for the game descriptions, under
-  [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/). They are not part of pocket-ui: the device
-  loads an article's lead when a card is opened and names the article and the licence under the text.
-- [PortMaster](https://portmaster.games) for the ports catalogue.
-- ARMSX2, Dolphin and Azahar, the standalone emulators for PlayStation 2, GameCube and Wii, and 3DS.
-- [hakuX](https://github.com/rfandango/hakuX) by rfandango, with the Linux/libretro port by portare-ch, for Xbox
-  (experimental); pocket-ui ships a core built from [hakuX-Linux](https://github.com/robbyczgw-cla/hakuX-Linux)
-  (GPL-3.0-or-later, see [NOTICE.md](NOTICE.md)).
-- [RetroAchievements](https://retroachievements.org) and its rcheevos library (MIT), in `vendor/rcheevos`.
-- Retroid's [u-boot for the Pocket devices](https://github.com/RetroidPocket/u-boot), used by the dual-boot setup.
-- [NextUI](https://github.com/LoveRetro/NextUI) and MinUI for the ideas behind the interface.
-- Barlow, by Jeremy Tribby, for the interface font, and Titillium Web for the test store's font package.
-- [Evan Amos](https://commons.wikimedia.org/wiki/User:Evan-Amos), whose public-domain console photographs on Wikimedia
-  Commons are the base of the system pictures ([assets/systems/SOURCES.md](assets/systems/SOURCES.md)).
+Thank you to ROCKNIX, libretro and the authors of the cores, PortMaster, RetroAchievements, Wikidata, Evan Amos and
+everyone else in [CREDITS.md](CREDITS.md).

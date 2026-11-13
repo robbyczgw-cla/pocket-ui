@@ -322,6 +322,8 @@ that means shipping `assets/fonts/OFL.txt` with it.
   `assets/gamedb.bin`, built by `scripts/build-gamedb.py` from the [Wikidata](https://www.wikidata.org) query
   service. Wikidata's data is released under [CC0 1.0](https://creativecommons.org/publicdomain/zero/1.0/); the
   game card still names it ("Facts: Wikidata, CC0", scores "via Wikidata").
+- `assets/curatordb.bin` and `assets/data/curator-tags.json` (Curator's feel tags) are our own data, derived at
+  build time from those CC0 facts, under pocket-ui's licence. No Wikipedia or other copyrighted text is included.
 - **Wikipedia** (the game card's description): **not shipped**. The device fetches the article's lead text when a
   card is opened and caches it under the data folder (`src/wiki_text.rs`). The card shows the article and licence
   ("Text: Wikipedia, CC BY-SA 4.0"). Opening a card lets Wikipedia see which article was asked for.
@@ -350,6 +352,10 @@ bindings they generate are compiled in.
 The pocket-ui source repository contains no game, ROM, BIOS or firmware file, key or third-party emulator binary. The
 source names BIOS files (`src/hostsys.rs`) only so it can tell the user which one is missing; the user supplies
 them. `scripts/check-release-tree.py` enforces this before a release.
+
+pocket-ui does not include games, ROMs, BIOS files or ROCKNIX itself, and nothing here offers any. Game footage and
+box art on pocketui.xyz, in `docs/media/hero.webp` and in the manual's screenshots (`docs/user/pictures/`) belong
+to their owners. `scripts/check-release-tree.py` checks a tree, a tar or an image for them.
 
 ## Optional bundled gpSP for H700
 

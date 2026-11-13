@@ -71,6 +71,17 @@ capped: a new module may bring its few `pub` items (rule 9).
 - For the virtual device: a ROCKNIX SM8250 image on your disk. It is not part of this repository.
 - For a real device: a Mini V2 running ROCKNIX with SSH switched on, reachable from your computer.
 
+Build for the handheld with [cargo-zigbuild](https://github.com/rust-cross/cargo-zigbuild):
+
+```sh
+rustup target add aarch64-unknown-linux-gnu
+cargo install cargo-zigbuild
+cargo zigbuild --release --target aarch64-unknown-linux-gnu.2.38 --bin pocket-ui --bin pocket-core
+```
+
+`cargo test --release` runs the tests on a Linux or macOS computer, and `scripts/vdev.sh` starts a virtual Mini V2 in
+Docker.
+
 The scripts were written on macOS. `scripts/devlock.sh` uses BSD `stat`, and `scripts/flash-sd.sh` uses
 `diskutil`, so these two need changes to run on Linux.
 
