@@ -27,7 +27,7 @@ colours, real box art), cropped to the 640×480 screen. They are not made by `re
 
 | Picture | Screen |
 |---|---|
-| ![Insert](readme-insert.webp) | The NES opens its flap and the Super Mario Bros. 3 cartridge goes in |
+| ![Insert](readme-insert-gba.webp) | The Super Mario Advance 2 cartridge goes into the Game Boy Advance, its box beside it |
 | ![Box back](readme-case-back.webp) | The back of the box: a picture from the game, the title screen and a few lines about it |
 | ![Save slots](readme-save-slots.webp) | The pause menu with Save in slot 2 and its picture |
 | ![Retro shelf](readme-shelf.webp) | A Game Boy Advance shelf in the Retro look |

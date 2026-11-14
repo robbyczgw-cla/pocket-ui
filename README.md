@@ -20,7 +20,7 @@ take it off the shelf, click it in, and continue right where you stopped.</p>
 
 <table align="center">
   <tr>
-    <td align="center"><img src="docs/media/readme-insert.webp" width="380" alt="The Super Mario Bros. 3 cartridge rises out of its box over an NES with its flap open"><br><sub>In it goes: the NES opens its flap</sub></td>
+    <td align="center"><img src="docs/media/readme-insert-gba.webp" width="380" alt="Super Mario Advance 2: its box, and the cartridge right at the slot of a purple Game Boy Advance"><br><sub>In it goes: the cartridge clicks into the Game Boy Advance</sub></td>
     <td align="center"><img src="docs/media/readme-case-back.webp" width="380" alt="The back of the Super Mario Bros. 3 box: a picture from the game, the title screen and a few lines about it"><br><sub>Turn the box over and read what it's about</sub></td>
   </tr>
   <tr>
