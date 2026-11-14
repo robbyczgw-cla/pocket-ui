@@ -42,7 +42,7 @@ take it off the shelf, click it in, and continue right where you stopped.</p>
 Plus a Retro look in one switch, games sent from your phone, Game check, Kids Mode and updates over Wi-Fi.
 [See everything it does](https://pocketui.xyz/features).
 
-No account, no tracking, free and open source. Menus in English, German and Spanish.
+No account, no tracking, free and open source. Menus in English, German, Spanish and Brazilian Portuguese.
 
 **What it plays:** Game Boy, Game Boy Color and Advance, NES, Super Nintendo, Mega Drive, Master System, Game Gear,
 PC Engine, PlayStation, Nintendo 64, PSP, Dreamcast, Nintendo DS, Saturn, arcade and PortMaster ports. On the stronger
