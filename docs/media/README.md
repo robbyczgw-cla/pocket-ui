@@ -21,3 +21,13 @@ these files. Run it again after a change to the screens.
 | ![Settings](settings.png) | Settings, in seven categories |
 | ![Cozy extras](cozy-extras.png) | Settings, Look, Cozy extras: each little touch on or off |
 | ![Look](theme.png) | Settings → Look: colours, font and more, as rows |
+
+The four pictures under the README's hero are stills from the 0.4 video (recorded on a handheld, Retro look with Cocoa
+colours, real box art), cropped to the 640×480 screen. They are not made by `readme-shots.sh`.
+
+| Picture | Screen |
+|---|---|
+| ![Insert](readme-insert.webp) | The NES opens its flap and the Super Mario Bros. 3 cartridge goes in |
+| ![Box back](readme-case-back.webp) | The back of the box: a picture from the game, the title screen and a few lines about it |
+| ![Save slots](readme-save-slots.webp) | The pause menu with Save in slot 2 and its picture |
+| ![Retro shelf](readme-shelf.webp) | A Game Boy Advance shelf in the Retro look |
