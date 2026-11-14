@@ -21,10 +21,10 @@ take it off the shelf, click it in, and continue right where you stopped.</p>
 <table align="center">
   <tr>
     <td align="center"><img src="docs/media/readme-insert-gba.webp" width="380" alt="Super Mario Advance 2: its box, and the cartridge right at the slot of a purple Game Boy Advance"><br><sub>In it goes: the cartridge clicks into the Game Boy Advance</sub></td>
-    <td align="center"><img src="docs/media/readme-case-back.webp" width="380" alt="The back of the Super Mario Bros. 3 box: a picture from the game, the title screen and a few lines about it"><br><sub>Turn the box over and read what it's about</sub></td>
+    <td align="center"><img src="docs/media/readme-case-back-snes.webp" width="380" alt="The back of the Super Metroid box: a picture from the game, the title screen and a few lines about it"><br><sub>Turn the box over and read what it's about</sub></td>
   </tr>
   <tr>
-    <td align="center"><img src="docs/media/readme-save-slots.webp" width="380" alt="The pause menu over Super Mario Bros. 3: Continue, Save in slot 2 with a picture, Load, Earlier, Options, Save &amp; quit"><br><sub>One pause menu: save slots with pictures</sub></td>
+    <td align="center"><img src="docs/media/readme-save-slots-snes.webp" width="380" alt="The pause menu over The Legend of Zelda: A Link to the Past: Continue, Save in slot 2 with its picture, Load, Earlier, Options, Save &amp; quit"><br><sub>One pause menu: save slots with pictures</sub></td>
     <td align="center"><img src="docs/media/readme-shelf.webp" width="380" alt="A Game Boy Advance shelf in the Retro look: Golden Sun's box above a row of spines"><br><sub>The Retro look, one switch away</sub></td>
   </tr>
 </table>
