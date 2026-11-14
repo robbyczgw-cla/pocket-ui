@@ -979,6 +979,7 @@ Put on	Vergeben
 Neutral	Neutral
 Warmer {n}	Wärmer {n}
 Cooler {n}	Kühler {n}
+Extra dim {n}	Extra dunkel {n}
 Normal	Normal
 
 # --- Runs on: emulators and RetroArch settings
@@ -1346,7 +1347,7 @@ played a year ago today	heute vor einem Jahr gespielt
 Not played for a year	Seit einem Jahr nicht gespielt
 {n} played a year ago today	{n} heute vor einem Jahr gespielt
 These games aren't on this Pocket any more.	Diese Spiele sind nicht mehr auf diesem Pocket.
-{s}, in your library	{s}, in deiner Bibliothek
+{t}, in your library	{t}, in deiner Bibliothek
 Facts: Wikidata, CC0	Fakten: Wikidata, CC0
 Wrong game? Choose another	Falsches Spiel? Wähl ein anderes
 Wrong pictures? Look up again	Falsche Bilder? Neu suchen
@@ -1510,7 +1511,7 @@ Previous	Vorige
 # --- Settings list
 Settings	Einstellungen
 Choose how the shelf looks, dark or light.	Wähl, wie das Regal aussieht, dunkel oder hell.
-Menus and messages in English, German or Spanish.	Menüs und Meldungen auf Englisch, Deutsch oder Spanisch.
+Menus and messages in English, German, Spanish or Portuguese.	Menüs und Meldungen auf Englisch, Deutsch, Spanisch oder Portugiesisch.
 Text size	Schriftgröße
 Larger text on every screen, fewer rows on a page.	Größere Schrift auf allen Seiten, dafür weniger Zeilen pro Seite.
 Larger text on every screen.	Größere Schrift auf allen Seiten.
@@ -2196,6 +2197,10 @@ It stays on until you turn it off or the Pocket restarts.	Er bleibt an, bis du i
 Switching remote access{s}	Fernzugriff wird umgeschaltet{s}
 Remote access is on.	Fernzugriff ist an.
 Always on: this is a developer device (dev-ssh).	Immer an: Das ist ein Entwicklergerät (dev-ssh).
+Developer device: SSH is not running.	Entwicklergerät: SSH läuft nicht.
+Developer device: starting SSH{s}	Entwicklergerät: SSH wird gestartet{s}
+Start SSH	SSH starten
+SSH did not start: {s}	SSH ist nicht gestartet: {s}
 On, switched on outside pocket-ui. No time limit.	An, außerhalb von pocket-ui eingeschaltet. Kein Zeitlimit.
 Connect to Wi-Fi first.	Verbinde dich zuerst mit dem WLAN.
 Remote access is off.	Fernzugriff ist aus.
@@ -3004,7 +3009,7 @@ Lens, smart shelves, labels, Echoes, versions and play history.	Lens, smarte Reg
 !{t} › {t2}	{t} › {t2}
 Motion (R1)	Bewegung (R1)
 No games	Keine Spiele
-No PC paired	Kein PC gekoppelt
+No PC paired	Kein PC
 1 PC	1 PC
 {n} PCs	{n} PCs
 Power…	Ein/Aus …
@@ -3425,7 +3430,7 @@ Lens, smart shelves, labels and your play history	Lens, smarte Regale, Etiketten
 Your {n}: the games, the hours, the streaks	Dein {n}: die Spiele, die Stunden, die Serien
 !Your {t}: the games, the hours, the streaks	Dein {t}: die Spiele, die Stunden, die Serien
 !{t}, fan {t2}	{t}, Lüfter {t2}
-Nothing listens while it is off. Switch it on, and the address to open shows here.	Solange er aus ist, lauscht nichts. Schalte ihn ein, dann steht hier die Adresse zum Öffnen.
+Needs Tailscale. Set it up first (Settings › Connections › Tailscale), then switch this on. The address to open shows here.	Braucht Tailscale. Richte es zuerst ein (Einstellungen › Verbindungen › Tailscale), dann schalte dies ein. Hier steht dann die Adresse zum Öffnen.
 Only over Tailscale, and every browser needs a code, yours too. Pauses while a game runs.	Nur über Tailscale, und jeder Browser braucht einen Code, auch deiner. Pausiert, während ein Spiel läuft.
 Code: every browser needs a code, yours too.	Code: Jeder Browser braucht einen Code, auch deiner.
 {t} · 1 filter	{t} · 1 Filter
@@ -4175,6 +4180,9 @@ Copy games into their system's folder (Settings › Games › Add games) or get 
 1 game ready	1 Spiel startklar
 {n} games ready	{n} Spiele startklar
 All good	Alles gut
+Some systems couldn't be read. Settings › Games › Game check says why.	Einige Systeme sind nicht lesbar. Einstellungen › Spiele › Spiele-Check sagt dir, warum.
+One system was left out because its entry can't be read.	Ein System wurde ausgelassen, weil sein Eintrag nicht lesbar ist.
+Check this entry in es_systems.cfg, then scan your games again.	Prüfe diesen Eintrag in es_systems.cfg und lies danach deine Spiele neu ein.
 First 50,000 files checked	Die ersten 50.000 Dateien geprüft
 {n} of {n2} games ready	{n} von {n2} Spielen startklar
 And {n} more. Fix these first, then check again.	Und {n} weitere. Behebe erst diese und prüfe dann erneut.
@@ -5041,3 +5049,15 @@ Your password is sent once and never kept.	Dein Passwort wird einmal gesendet un
 Settings › Report a problem: Share sends one text with your device and logs to a chat or mail, Copy puts it on the clipboard for a GitHub issue. Nothing goes out by itself.	Einstellungen → Problem melden: „Bericht teilen“ schickt einen Text mit Gerätedaten und Logs an Chat oder Mail, „Bericht kopieren“ legt ihn für ein GitHub-Issue in die Zwischenablage. Von selbst geht nichts raus.
 The extra systems can't be downloaded yet. Try again later; every system already in the app works as it is.	Die zusätzlichen Systeme können noch nicht geladen werden. Versuch es später noch einmal; alle Systeme, die schon in der App sind, laufen wie bisher.
 The download server isn't answering right now. Try again later.	Der Download-Server antwortet gerade nicht. Versuch es später noch einmal.
+Loading Java, once (about 200 MB)	Java wird einmalig geladen (etwa 200 MB)
+{n} of {m} MB	{n} von {m} MB
+Unpacking…	Wird entpackt…
+Phone games need Java, loaded once (about 200 MB). Connect to Wi-Fi in Settings, then start the game again.	Handyspiele brauchen Java, einmalig geladen (etwa 200 MB). Verbinde dich in den Einstellungen mit dem WLAN und starte das Spiel dann noch einmal.
+Not enough space on the SD card for Java: {n} MB free, {m} MB needed.	Nicht genug Platz auf der SD-Karte für Java: {n} MB frei, {m} MB nötig.
+The Java download was damaged. Nothing was kept. Start the game again to try once more.	Der Java-Download war beschädigt. Nichts wurde behalten. Starte das Spiel noch einmal, um es erneut zu versuchen.
+Couldn't unpack Java: {s}	Java konnte nicht entpackt werden: {s}
+Java wasn't loaded. It loads the next time you start a phone game.	Java wurde nicht geladen. Es wird beim nächsten Start eines Handyspiels geladen.
+The Java download didn't finish. Check Wi-Fi, then start the game again.	Der Java-Download wurde nicht fertig. Prüfe das WLAN und starte das Spiel dann noch einmal.
+The Java download took too long. Check Wi-Fi, then start the game again.	Der Java-Download hat zu lange gedauert. Prüfe das WLAN und starte das Spiel dann noch einmal.
+java is missing in the download	java fehlt im Download
+tar ended with {s}	tar endete mit {s}

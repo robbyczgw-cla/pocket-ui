@@ -2112,8 +2112,8 @@ pub extern "system" fn Java_xyz_pocketui_app_PlayerActivity_nativeCreate(
                     player.menu=Menu::Controls;
                     player.controls_intro=true;
                 }
-                // A frozen game goes straight back: its moment is the first thing on screen (`cabinet::starts_cozy`).
-                let cozy = pocket_ui::cabinet::starts_cozy(prefs["cozy"].as_bool().unwrap_or(true), pocket_ui::motion::Motion::Full, frozen);
+                // Cozy's switch-on also over a continued moment (`cabinet::starts_cozy`).
+                let cozy = pocket_ui::cabinet::starts_cozy(prefs["cozy"].as_bool().unwrap_or(true), pocket_ui::motion::Motion::Full);
                 player.crt_done = player.paused || !cozy || !extras.tv_switch_on || pocket_ui::platform::android::string("batterySaver") == "true";
                 player.core.frontend_current();
                 *slot.borrow_mut() = Some(player);

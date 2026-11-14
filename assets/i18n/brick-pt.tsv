@@ -1,0 +1,95 @@
+Back to NextUI	Voltar ao NextUI
+Back to NextUI?	Voltar ao NextUI?
+Back to NextUI. Your games, saves and settings stay as they are.	Voltar ao NextUI. Seus jogos, saves e ajustes ficam como estão.
+Couldn't reach the update server over Tailscale. Is Tailscale on and connected?	Não foi possível acessar o servidor de atualizações pelo Tailscale. O Tailscale está ligado e conectado?
+The SD card is too full for this update: it needs {n} MB more. Nothing was changed.	O cartão SD está cheio demais para esta atualização: precisa de mais {n} MB. Nada foi alterado.
+The update list names no usable version. Nothing was changed.	A lista de atualizações não indica nenhuma versão utilizável. Nada foi alterado.
+The update is missing {s}. Nothing was changed.	Falta {s} na atualização. Nada foi alterado.
+The update is not version {s} inside. Nothing was changed.	A atualização não é a versão {s} por dentro. Nada foi alterado.
+The update's start script is broken. Nothing was changed.	O script de início da atualização está quebrado. Nada foi alterado.
+Couldn't switch to the new version: {s}. Nothing was changed.	Não foi possível mudar para a nova versão: {s}. Nada foi alterado.
+No space left to unpack the download.	Sem espaço para descompactar o download.
+Battery & charging	Bateria e carga
+Like the rest	Igual às outras
+Customised	Personalizado
+How bright the lights glow.	O brilho das luzes.
+Colour, effect and brightness of the grips, the middle and the two F keys one by one. A: open.	Cor, efeito e brilho dos apoios, do centro e das duas teclas F, um por um. A: abrir.
+Quick save, quick load, screenshot, Recent games, the pause menu, or nothing.	Salvar state, carregar state, captura de tela, Recentes, o menu de pausa ou nada.
+The slider on the side mutes the sound, or does nothing.	A chave lateral silencia o som ou não faz nada.
+Which light to set.	Qual luz ajustar.
+Its own colour, or the one above.	Cor própria ou a de cima.
+Steady, breathing, fading, pulsing or off; "Like the rest" follows the colour above.	Fixa, respirando, esmaecendo, pulsando ou apagada; “Igual às outras” segue a cor de cima.
+Its own brightness, or the one above.	Brilho próprio ou o de cima.
+Lights & buttons	Luzes e botões
+F1/F2 are shortcuts, not game buttons.	F1/F2 são atalhos, não botões de jogo.
+Set them in Settings › Sound & feel › Lights & buttons.	Configure em Configurações › Som e sensação › Luzes e botões.
+Shortcuts for all games; not game buttons. Choose their action here.	Atalhos para todos os jogos; não são botões de jogo. Escolha a ação aqui.
+Each light	Cada luz
+F1 button	Botão F1
+F2 button	Botão F2
+Mute slider	Chave de silêncio
+The Brick's lights, the F1 and F2 keys and the mute slider.	As luzes do Brick, as teclas F1 e F2 e a chave de silêncio.
+Lights off	Luzes apagadas
+Animations, playful cases, old-TV switch-on, motion, zoom, sounds, case sounds, haptics, lights & buttons.	Animações, caixas divertidas, ligar de TV antiga, movimento, zoom, sons, sons de caixa, vibração, luzes e botões.
+A soft tick as you move, and how strong it is. Games rumble on their own (pause menu, Options).	Um toque suave ao se mover, e a intensidade. Os jogos vibram por conta própria (menu de pausa, Opções).
+Left grip	Apoio esquerdo
+Right grip	Apoio direito
+Middle	Centro
+F1 key	Tecla F1
+F2 key	Tecla F2
+Nothing	Nada
+Quick save	Salvar state
+Quick load	Carregar state
+Pause menu	Menu de pausa
+Mutes	Silencia
+Does nothing	Não faz nada
+Steady	Fixa
+Breathing	Respirando
+Fading	Esmaecendo
+Pulsing	Pulsando
+{s} (heavy)	{s} (forte)
+Warm light in the menus. While a game runs, the main colour of its cover.	Luz quente nos menus. Durante um jogo, a cor principal da capa dele.
+The colour of the Brick's lights.	A cor das luzes do Brick.
+The Brick's lights stay dark.	As luzes do Brick ficam apagadas.
+The grips, the middle and the F keys glow in the colour you pick.	Os apoios, o centro e as teclas F brilham na cor que você escolher.
+Dark while all is well. Orange breathing while it charges, green when it is full, red breathing when it runs low.	Apagadas enquanto está tudo bem. Laranja respirando enquanto carrega, verde quando está cheia, vermelho respirando quando a bateria está baixa.
+That cover is not a PNG picture.	Essa capa não é uma imagem PNG.
+No game called {s} is on the card. Send the game first, then its cover with the same name.	Não há nenhum jogo chamado {s} no cartão SD. Envie o jogo primeiro, depois a capa com o mesmo nome.
+Several systems take this cover: more than one has a game with that name.	Vários sistemas aceitam esta capa: mais de um tem um jogo com esse nome.
+The time zone could not be kept on the card: {s}	Não foi possível guardar o fuso horário no cartão SD: {s}
+The system didn't take the new time zone: {s}	O sistema não aceitou o novo fuso horário: {s}
+PC Engine CD needs a BIOS file in Roms/bios: syscard3.pce	O PC Engine CD precisa de um arquivo BIOS em Roms/bios: syscard3.pce
+Switched off after {n} min asleep to save the battery.	Desligado após {n} min suspenso para economizar bateria.
+Switched off after {n} min with the screen off to save the battery.	Desligado após {n} min com a tela apagada para economizar bateria.
+
+# Update 5: own colour, speed, colour cycle
+Hue	Matiz
+Saturation	Saturação
+Own colour	Cor própria
+Colour cycle	Ciclo de cores
+Slow	Lento
+Its own colour, or the one above. Own colour: pick the hue and the saturation below.	Cor própria ou a de cima. Cor própria: escolha o matiz e a saturação abaixo.
+Round the colour wheel: red, yellow, green, blue, violet and back.	Pela roda de cores: vermelho, amarelo, verde, azul, violeta e de volta.
+From pale to full colour.	De pálido a cor cheia.
+Steady, breathing, fading, pulsing, a colour cycle, the battery and charger, or off; "Like the rest" follows the colour above.	Fixa, respirando, esmaecendo, pulsando, ciclo de cores, bateria e carregador, ou apagada; “Igual às outras” segue a cor de cima.
+How fast it breathes, fades, pulses or cycles.	Com que velocidade respira, esmaece, pulsa ou muda de cor.
+
+Not saved.	Não salvo.
+The emulator choice couldn't be saved on the card. Nothing was changed.	Não foi possível salvar a escolha de emulador no cartão SD. Nada foi alterado.
+Controllers and headphones. Connected headphones take the sound of games and menus; it comes back to the speaker when they go.	Controles e fones. Os fones conectados recebem o som dos jogos e menus; ele volta ao alto-falante quando são desconectados.
+
+# Settings walk 06.11.: the leave dialog on the Brick's own card
+Restart pocket-ui?	Reiniciar o pocket-ui?
+Only pocket-ui starts again, in seconds. Your games, saves and settings stay as they are.	Só o pocket-ui inicia de novo, em segundos. Seus jogos, saves e ajustes ficam como estão.
+New versions of pocket-ui.	Versões novas do pocket-ui.
+User	Usuário
+(unchanged)	(sem alteração)
+How fast the processor may run, in games and in menus.	Quão rápido o processador pode rodar, em jogos e em menus.
+A choice saved in the pause menu (Options › Speed, rumble, fan) wins over this one.	Uma escolha salva no menu de pausa (Opções › Velocidade, vibração, ventoinha) vale mais que esta.
+Battery saves and save states. No games, no BIOS files.	Saves de bateria e save states. Sem jogos, sem arquivos BIOS.
+To {s} on the SD card. Copy it to a computer too.	Para {s} no cartão SD. Copie também para um computador.
+The screen goes off and the game waits; the power button wakes it.	A tela apaga e o jogo espera; o botão de energia acorda.
+Saves the game and puts the Brick to sleep. The power button wakes it; the game waits in its pause menu.	Salva o jogo e suspende o Brick. O botão de energia o acorda; o jogo espera no menu de pausa.
+Only the screen goes dark and the game waits. The power button turns it back on.	Só a tela escurece e o jogo espera. O botão de energia liga de novo.
+Saves the game. The power button wakes it.	Salva o jogo. O botão de energia o acorda.
+The power button wakes it.	O botão de energia acorda.

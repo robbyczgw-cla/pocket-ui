@@ -232,6 +232,10 @@ unsafe extern "C" fn on_event(userdata: *mut c_void, kind: u32, result: c_int, a
             }
             shared.send(Work::Dirty);
         }
+        // The server's note to the player (`ffi::WARNING_ID`): no card, no sound, no badge.
+        ffi::EVENT_ACHIEVEMENT_TRIGGERED if !a.is_null() && (*a).id >= ffi::WARNING_ID => {
+            println!("achievements: the server says: {}", ffi::text((*a).title));
+        }
         ffi::EVENT_ACHIEVEMENT_TRIGGERED if !a.is_null() => {
             let a = &*a;
             let e = copy(a);
@@ -307,7 +311,10 @@ fn net_loop(shared: Arc<Shared>, jobs: Receiver<Job>) {
 }
 
 unsafe extern "C" fn collect(ud: *mut c_void, a: *const RawAchievement) {
-    (*(ud as *mut Vec<Entry>)).push(copy(&*a));
+    // The server's warning entry is no achievement (`ffi::WARNING_ID`): not in the pause menu's list.
+    if (*a).id < ffi::WARNING_ID {
+        (*(ud as *mut Vec<Entry>)).push(copy(&*a));
+    }
 }
 
 /// The running game as rc_client sees it now.
@@ -853,6 +860,31 @@ mod tests {
         let menu = until(|| read().filter(|s| (s.unlocked, s.total) == (2, 2))).expect("the menu's list");
         assert_eq!((menu.unlocked, menu.total, menu.points_unlocked, menu.points), (2, 2, 7, 7));
         assert_eq!(until(|| Summary::load(&dir, "nes", &dir.join("Game.nes"))).expect("the summary").text().as_deref(), Some("2 of 2"));
+        close_cleanly(s);
+    }
+
+    /// The server adds a warning "achievement" to every set for an emulator it hasn't approved (ID 101000001, "Warning:
+    /// Unknown Emulator", true after 300 frames). It is a note to the player, not an achievement: it never shows as an
+    /// unlock card, in the pause menu's list or in the totals (it popped up as an unlock in every recognised game).
+    #[test]
+    fn the_servers_unknown_emulator_warning_is_no_achievement() {
+        let _one = ONE_AT_A_TIME.lock().unwrap_or_else(|e| e.into_inner());
+        *RAM.lock().unwrap() = [0; 0x800];
+        let dir = scratch("warning");
+        let warning = r#"{"ID":101000001,"Title":"Warning: Unknown Emulator","Description":"Hardcore unlocks cannot be earned using this emulator.","Flags":3,"Points":0,"MemAddr":"1=1.300.","Author":"","BadgeName":"00000","Created":1,"Modified":1},"#;
+        let sets = SETS.replacen(r#""Achievements":["#, &format!(r#""Achievements":[{warning}"#), 1);
+        assert!(sets.contains("101000001"));
+        let mut s = start(&dir, Arc::new(server(&sets, r#"{"Success":true,"Unlocks":[],"HardcoreUnlocks":[]}"#)));
+        let mut notices = until_ready(&mut s);
+        for _ in 0..330 {
+            run_frame(&mut s);
+            notices.extend(s.take_notices());
+        }
+        assert!(!notices.iter().any(|n| matches!(n, Notice::Unlocked { .. })), "no unlock card: {notices:?}");
+        assert!(notices.iter().any(|n| matches!(n, Notice::Ready { unlocked: 0, total: 2 })), "{notices:?}");
+        let snap = s.snapshot();
+        assert_eq!(snap.achievements.iter().map(|a| a.id).collect::<Vec<_>>(), vec![5501, 5502], "not in the list");
+        assert_eq!((snap.unlocked, snap.total), (0, 2));
         close_cleanly(s);
     }
 

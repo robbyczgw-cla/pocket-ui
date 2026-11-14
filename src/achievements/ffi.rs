@@ -75,6 +75,11 @@ pub const RC_EXPIRED_TOKEN: c_int = -35;
 /// rc_api_server_response_t's status for "the request never reached the server, try again" (rc_api_request.h).
 pub const RETRYABLE_CLIENT_ERROR: c_int = -2;
 
+/// RC_CLIENT_ACHIEVEMENT_WARNING_ID (rc_client.c): from this ID up, an entry of a set is the server's note to the player
+/// ("Warning: Unknown Emulator" for an emulator it hasn't approved), not an achievement. rc_client leaves it out of
+/// the totals and never sends it, but lists it and raises its trigger like an unlock.
+pub const WARNING_ID: u32 = 101000001;
+
 /// RC_CLIENT_ACHIEVEMENT_BUCKET_*
 pub const BUCKET_LOCKED: u8 = 1;
 pub const BUCKET_UNLOCKED: u8 = 2;

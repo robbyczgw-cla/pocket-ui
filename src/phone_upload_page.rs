@@ -355,7 +355,7 @@ mod tests {
             let help = crate::i18n::tr_in(lang, HELP);
             let (lines, ..) = layout(&mut text, &help, 1240, 1080);
             assert!(lines.len() <= 2, "{lang:?}: {lines:?}");
-            assert!(["encrypted", "verschlüsselt", "cifrar"].iter().any(|w| help.contains(w)), "{help}");
+            assert!(["encrypted", "verschlüsselt", "cifrar", "criptograf"].iter().any(|w| help.contains(w)), "{help}");
         }
     }
 

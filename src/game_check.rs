@@ -124,6 +124,30 @@ impl Report {
         self.findings.iter().all(|f| f.group == Group::Tips)
     }
 
+    /// Include the systems the shelf had to leave out, with the entry's place in the original file.
+    #[cfg(not(all(target_os = "android", not(feature = "handheld"))))]
+    pub fn note_system_list(&mut self, path: &Path) {
+        let Ok(issues) = crate::library::system_list_issues(path) else { return };
+        if issues.is_empty() { return; }
+        let old = std::mem::take(self);
+        let mut found = Findings::default();
+        for f in old.findings { found.add(f); }
+        for issue in issues {
+            found.add(Finding {
+                group: Group::Access, name: issue.name, system: String::new(),
+                what: "One system was left out because its entry can't be read.".into(),
+                todo: "Check this entry in es_systems.cfg, then scan your games again.".into(),
+                place: Some(format!("{}:{}", path.display(), issue.line)), fix: None,
+            });
+        }
+        *self = found.report(old.total, old.ready);
+        self.capped |= old.capped;
+        for (group, n) in old.more {
+            if let Some((_, count)) = self.more.iter_mut().find(|(g, _)| *g == group) { *count += n; }
+            else { self.more.push((group, n)); }
+        }
+    }
+
     /// The Settings row's value.
     pub fn summary(&self) -> String {
         let n: usize = self.groups().iter().filter(|(g, _)| *g != Group::Tips).map(|(_, n)| n).sum();

@@ -193,12 +193,12 @@ These work on the shelf, in quick settings and in games. A bar at the top of the
 | Keys | What it does |
 |---|---|
 | Vol+ / Vol- | Volume |
-| START + Vol+ / Vol- | Brightness, in steps of 5%, never below 5% |
-| HOME + Vol+ / Vol- | Brightness (ROCKNIX does the change, pocket-ui shows the bar) |
+| START + Vol+ / Vol- | Brightness, in steps of 5%. Below 5% come three [Extra dim](quick-settings.md#extra-dim) steps that darken the picture itself |
+| HOME + Vol+ / Vol- | Brightness (ROCKNIX does the change, pocket-ui shows the bar); below ROCKNIX's lowest level, the [Extra dim](quick-settings.md#extra-dim) steps |
 | SELECT + Vol+ / Vol- | Colour: Vol+ goes warmer (more yellow-red), Vol- goes cooler (more blue). The bar shows **Cooler 1…10**, **Neutral** or **Warmer 1…10**; if the screen looks yellowish, press SELECT + Vol- a few times. The same setting as Settings → Look → **Screen colour** (Left/Right there, A for Neutral) |
 
-RetroArch games and the standalone emulators get no bar; the changes still apply. The colour temperature reaches
-RetroArch, PlayStation 2, GameCube and PortMaster games only when the screen supports it system-wide.
+RetroArch games and the standalone emulators get no bar; the changes still apply. The colour temperature and Extra dim
+reach RetroArch, PlayStation 2, GameCube and PortMaster games only when the screen supports it system-wide.
 
 ### The power menu
 

@@ -373,6 +373,13 @@ Die
 Der
 Das
 
+# src/library_systems.rs: XML tokens and internal diagnostics (never painted)
+<![CDATA[
+systemList
+<systemList>
+missing system name or ROM folder
+no readable system list
+
 # src/libretro.rs
 {s} (device {s})
 player {s}: {s} (device {s})
@@ -488,7 +495,7 @@ demo files are included
 helper program timed out
 
 # src/quick.rs
-look {s} {s} {s}
+look {s} {s} {s} {s}
 
 # src/romfacts.rs
 hong kong
@@ -1117,6 +1124,8 @@ $RECYCLE.BIN
 RECYCLER
 # The header a web page is asked in Spanish with (src/i18n.rs TRAITS).
 Accept-Language: es,en;q=0.8
+# …and in Brazilian Portuguese.
+Accept-Language: pt-BR,pt;q=0.9,en;q=0.7
 after USB file transfer
 leaving Settings with USB file transfer on
 a games card came
@@ -1611,3 +1620,63 @@ Press A again
 Password for
 Sent once
 said in English ({s}): {s}
+{s}-linux_aarch64
+# Brazilian Portuguese: the Brick wording tests and the time zone cities (src/i18n.rs, src/timezone.rs).
+As configurações deste Pocket.
+As configurações deste Brick.
+Desempenho e ventoinha
+Desempenho
+Cartum
+Túnis
+Assunção
+Belem
+Belém
+Cuiaba
+Cuiabá
+Maceio
+Maceió
+Santarem
+Santarém
+Araguaina
+Araguaína
+Eirunepe
+Eirunepé
+Noronha
+Fernando de Noronha
+Havana
+Cidade do México
+Nova York
+Bagdá
+Ho Chi Minh
+Jacarta
+Jerusalém
+Katmandu
+Calcutá
+Riade
+Seul
+Xangai
+Singapura
+Taipé
+Teerã
+Tóquio
+Açores
+Canárias
+Amsterdã
+Berlim
+Bruxelas
+Bucareste
+Istambul
+Mônaco
+Moscou
+Sófia
+Varsóvia
+Zurique
+Adis Abeba
+Cairo
+
+# src/j2me_keys.rs
+FreeJ2ME-Plus.rmp
+
+# src/j2me_size.rs
+{s} = "{s}"
+FreeJ2ME-Plus.opt

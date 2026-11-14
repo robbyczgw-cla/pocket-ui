@@ -272,6 +272,46 @@ mod fifo {
     use std::os::fd::FromRawFd;
     use std::time::{Duration, Instant};
 
+    #[test]
+    fn a_bad_system_is_reported_on_home_even_with_continue_and_a_cached_library() {
+        for cached in [false, true] {
+            let mut ui = Driver::start(&format!("system-list-{cached}"), true, |tmp, _| {
+                let cfg = tmp.join("es_systems.cfg");
+                let xml = std::fs::read_to_string(&cfg).unwrap().replace("Game Boy</fullname>", "Game & Watch</fullname>")
+                    .replace("</systemList>", "<system><name>broken</name><fullname>Broken</wrong></system></systemList>");
+                std::fs::write(&cfg, xml).unwrap();
+                std::fs::write(tmp.join("data/recents.json"), serde_json::to_vec(&serde_json::json!([
+                    {"system":"gb", "name":"Tobu Tobu Girl", "path":tmp.join("gb/Tobu Tobu Girl (World).gb"), "last_played":pocket_ui::recents::now_secs(), "play_secs":50}
+                ])).unwrap()).unwrap();
+                let systems = pocket_ui::library::load(&cfg).unwrap();
+                assert_eq!(systems.len(), 2, "both good systems stay");
+                if cached {
+                    pocket_ui::library_cache::write(&tmp.join("data"), &pocket_ui::library_cache::Key::now(&cfg).unwrap(), &systems).unwrap();
+                }
+            });
+            let shown = ui.sees("Some systems couldn't be read.");
+            assert!(shown.contains("Continue"), "the warning also reaches Home with Continue: {shown}");
+            assert!(shown.lines().collect::<Vec<_>>().join(" ").contains("Game check says why."), "{shown}");
+            ui.send("b\nstart");
+            ui.wait(|d| {
+                d.frame();
+                std::fs::read_to_string(d.card.tmp.join("ui.status")).unwrap_or_default().contains("place=settings:")
+            });
+            // Both the 0.4.x categories and the newer tabbed Settings reach the same Game check.
+            let groups = std::fs::read_to_string(ui.card.tmp.join("ui.status")).unwrap().contains("place=settings:Groups");
+            // 0.4.x: Look, Sound & feel, Playing, then Games; its second row is the Game check.
+            ui.send(if groups { "down\ndown\ndown\na" } else { "r1\nr1\nr1\nr1" });
+            ui.sees("Add games");
+            ui.send(if groups { "down\na" } else { "down\ndown\na" });
+            ui.sees("Folders that can't be read");
+            ui.send("a");
+            ui.sees("broken");
+            ui.send("a");
+            let detail = ui.sees("One system was left out");
+            assert!(detail.contains("es_systems.cfg"), "the detail names the file to repair: {detail}");
+        }
+    }
+
     struct Driver {
         card: Card,
         child: std::process::Child,
@@ -1769,6 +1809,55 @@ sleep 30
                 assert!(ui.card.tmp.join("pocket-launch-skip").exists(), "even a volume key dismisses the reminder and releases the game");
             } else {
                 assert!(!ui.frame().contains("Last played"), "{emulator}: no reminder on a fresh start");
+            }
+        }
+    }
+
+    /// An open case (a kept moment, `app_frozen`) started on Cozy plays Cozy's whole scene: the game's window is held for it
+    /// and the moment stands still behind it (`startup::HOLD_PAUSE`), so nothing of it runs unseen. Quick keeps the
+    /// instant way back. Until 14.11. an open case always started the quick way, whatever Animations said: the cartridge
+    /// flashed in for 0.3 s and the game covered it, while the way back out played Cozy's (a player's report, RG34XXSP).
+    #[test]
+    fn an_open_case_on_cozy_plays_the_whole_insert_and_its_moment_waits_behind_it() {
+        for animations in ["cozy", "quick"] {
+            let mut ui = Driver::start("open-case-cozy", true, |tmp, cmd| {
+                let cfg = tmp.join("es_systems.cfg");
+                let text = std::fs::read_to_string(&cfg).unwrap().replace("</command>", "</command><emulators><emulator name=\"retroarch\"><cores><core default=\"true\">gambatte</core></cores></emulator></emulators>");
+                std::fs::write(cfg, text).unwrap();
+                let game = tmp.join("gb/Tobu Tobu Girl (World).gb");
+                let settings = format!(r#"{{"onboarded":true,"seen_version":"9.9.9","theme":"shelf","motion":"full","animations":"{animations}","art":"off"}}"#);
+                std::fs::write(tmp.join("data/settings.json"), settings).unwrap();
+                // Played an hour ago: an open case, too soon for "Where was I?"'s reminder.
+                let recent = serde_json::json!([{"system":"gb", "name":"Tobu Tobu Girl", "path":game,
+                    "last_played": pocket_ui::recents::now_secs() - 3600, "play_secs":7200}]);
+                std::fs::write(tmp.join("data/recents.json"), recent.to_string()).unwrap();
+                let states = tmp.join("states/gb");
+                std::fs::create_dir_all(&states).unwrap();
+                std::fs::write(states.join("Tobu Tobu Girl (World).pstate.auto"), b"moment").unwrap();
+                cmd.env("POCKETUI_STATES", tmp.join("states"));
+                cmd.env("TMPDIR", tmp);
+                std::fs::write(tmp.join("host"), "").unwrap();
+                cmd.env("POCKETUI_HOST_BIN", tmp.join("host"));
+                executable(&tmp.join("run-game"), r#"#!/bin/sh
+printf '%s\n' "${POCKET_LAUNCH_HOLD_UNTIL-}" "${POCKET_LAUNCH_HOLD_PAUSE-}" > "$0.hold"
+printf 'started\n' > "$0.started"
+sleep 30
+"#);
+            });
+            // The case stands open: A continues the game.
+            ui.sees("Continue");
+            ui.send("a");
+            ui.wait(|d| d.card.tmp.join("run-game.started").exists());
+            let hold = std::fs::read_to_string(ui.card.tmp.join("run-game.hold")).unwrap();
+            let mut lines = hold.lines();
+            let (until, pause) = (lines.next().unwrap_or_default(), lines.next().unwrap_or_default());
+            if animations == "cozy" {
+                let log = std::fs::read_to_string(ui.card.tmp.join("ui.log")).unwrap_or_default();
+                let log: Vec<&str> = log.lines().filter(|l| l.contains("launch") || l.contains("frozen") || l.contains("settings")).collect();
+                assert!(!until.is_empty(), "Cozy: the window waits for the scene ({hold:?}); {log:?}");
+                assert_eq!(pause, "1", "and the moment stands still meanwhile ({hold:?})");
+            } else {
+                assert_eq!((until, pause), ("", ""), "Quick: straight back, nothing held ({hold:?})");
             }
         }
     }

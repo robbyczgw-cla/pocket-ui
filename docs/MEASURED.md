@@ -144,6 +144,10 @@ after that wasn't timed); GameCube Super Mario Sunshine, A until the resume thre
 wait for Dolphin's window and a timed wait for its message. 3DS: not measured, the device has only a homebrew game and the bench
 couldn't open its pause menu. The fan came on (pwm 41, 43) by the second start of each of the two.
 
+Since 2026-11-14 (after a player's report, RG34XXSP: the cartridge flashed in and the way back out was slow)
+an open case on Cozy plays Cozy's whole scene like any start, so the "Frozen" column above is Quick's number; on Cozy the
+moment comes once the scene has run (the "Off, Cozy" column), standing still behind it (`startup::HOLD_PAUSE`).
+
 ## Frozen games on Android (emulator)
 
 **Emulator, not a phone:** X300-sized AVD (1216x2640, 480 dpi) on a MacBook Air M4, software GPU, no sound, 2026-10-31. These numbers

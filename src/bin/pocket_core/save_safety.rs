@@ -37,6 +37,7 @@ pub(super) fn app(root: &Path) -> App {
         dark: false,
         hold: false,
         hold_still: false,
+        hold_pause: false,
         hold_down: None,
         crt_on: false,
         crt_started: false,

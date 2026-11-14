@@ -158,6 +158,7 @@ mod tests {
         for line in ["Achievements: 12 of 40", "Every achievement of this game unlocked", "RetroAchievements: sign in again in Settings"] {
             assert!(crate::i18n::german().translate(line).is_some(), "German: {line}");
             assert!(crate::i18n::Lang::Es.table().and_then(|t| t.translate(line)).is_some(), "Spanish: {line}");
+            assert!(crate::i18n::Lang::Pt.table().and_then(|t| t.translate(line)).is_some(), "Portuguese: {line}");
         }
     }
 }

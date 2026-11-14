@@ -291,6 +291,30 @@ pub fn extract_rom(zip_path: &Path, wanted: &[&str]) -> Result<(String, Vec<u8>)
     Ok((name, data))
 }
 
+/// The first `head` unpacked bytes of each entry of the zip in `z` whose name `wanted` accepts (stored or deflated;
+/// others are skipped): enough for a phone game's manifest or a picture's size (`j2me_size`) without unpacking the
+/// rest. Nothing for a file that is no zip this reader understands.
+pub fn heads(z: &[u8], wanted: impl Fn(&str) -> bool, head: usize) -> Vec<(String, Vec<u8>)> {
+    let Ok(list) = entries(z) else { return Vec::new() };
+    list.iter()
+        .filter(|e| wanted(&e.name) && e.flags & 1 == 0)
+        .filter_map(|e| {
+            let start = e.local + 30 + le16(z, e.local + 26)? + le16(z, e.local + 28)?;
+            let raw = z.get(start..start.checked_add(e.csize)?)?;
+            let data = match e.method {
+                0 => raw[..raw.len().min(head)].to_vec(),
+                // Over the limit the inflate stops with what it has: the first `head` bytes and a few more.
+                8 => match miniz_oxide::inflate::decompress_to_vec_with_limit(raw, head) {
+                    Ok(d) => d,
+                    Err(e) => e.output,
+                },
+                _ => return None,
+            };
+            Some((e.name.clone(), data))
+        })
+        .collect()
+}
+
 /// Extract the pinned Python runtime without relying on stock firmware's optional unzip applet.
 /// The generic extractor keeps all regular files; the CLI uses the headless Python policy below.
 /// Every policy validates all entry paths, headers and size limits before writing.

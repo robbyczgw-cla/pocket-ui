@@ -167,7 +167,7 @@ fn printed_menu_key_is_used_on_brick_cards_and_hints_in_both_appearances() {
             let mut saved: serde_json::Value = serde_json::from_slice(&std::fs::read(&settings).unwrap()).unwrap();
             saved["appearance"] = appearance.into();
             std::fs::write(&settings, serde_json::to_vec(&saved).unwrap()).unwrap();
-            for (lang, state) in ["en", "de", "es"].into_iter().flat_map(|lang| ["controls-card:snes", "home"].map(|state| (lang, state))) {
+            for (lang, state) in ["en", "de", "es", "pt"].into_iter().flat_map(|lang| ["controls-card:snes", "home"].map(|state| (lang, state))) {
                 render_on(bin, tmp.path(), state, "1024x768", "normal", stub.as_ref(), Some((device, lang)));
                 let visible = std::fs::read_to_string(tmp.path().join("visible.txt")).unwrap();
                 let (wanted, absent) = if device == "brick" { ("MENU", "HOME") } else { ("HOME", "MENU") };

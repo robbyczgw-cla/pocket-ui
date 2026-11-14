@@ -585,7 +585,7 @@ impl Sys {
             }
         }
         if game == Game::PocketCore && self.look.soft {
-            control::pocket_core(&format!("look {} {} {}", self.look.warmth, self.look.contrast, self.look.night));
+            control::pocket_core(&format!("look {} {} {} {}", self.look.warmth, self.look.contrast, self.look.night, self.look.dim));
         }
     }
 
@@ -644,7 +644,13 @@ impl Sys {
 
     /// One step of the backlight; the new level, or None when it wasn't known yet: then the worker reads it, steps
     /// and reports (`pending_osd`), and the UI thread never waits for the read.
-    fn step_brightness(&mut self, dir: i32, now: Instant) -> Option<u8> {
+    ///
+    /// Below the lowest backlight the slider goes on with extra dim (`display::DIM_STEPS`): the picture itself gets darker,
+    /// the backlight staying at `MIN_BRIGHTNESS`. Going up takes those steps away first.
+    fn step_brightness(&mut self, dir: i32, now: Instant, game: Game) -> Option<u8> {
+        if self.step_dim(dir, self.brightness_now(now), game) {
+            return Some(self.brightness_now(now).unwrap_or(MIN_BRIGHTNESS));
+        }
         let step = move |v: u8| (v as i32 + dir * STEP as i32).clamp(MIN_BRIGHTNESS as i32, 100) as u8;
         self.persist_at = Some(now + PERSIST_AFTER);
         let Some(v) = self.brightness_now(now) else {
@@ -662,6 +668,42 @@ impl Sys {
         self.hw.set_brightness(next);
         self.levels.brightness = Some((next, now));
         Some(next)
+    }
+
+    /// The extra dim part of a brightness step: down from the lowest backlight (or from a dim step) one step darker, up from
+    /// a dim step one lighter. Whether it took the step (then the backlight stays as it is). Applied at once like the screen
+    /// colour, saved on the worker (`display.json`, which pocket-core and the next start read).
+    ///
+    /// Not on Android: its player draws the game without pocket-core's multiply layer, so the shelf alone would get darker.
+    fn step_dim(&mut self, dir: i32, backlight: Option<u8>, game: Game) -> bool {
+        if cfg!(target_os = "android") {
+            return false;
+        }
+        let at_floor = backlight == Some(MIN_BRIGHTNESS);
+        if !(self.look.dim > 0 || (dir < 0 && at_floor)) {
+            return false;
+        }
+        let next = (self.look.dim as i32 - dir).clamp(0, crate::display::DIM_STEPS as i32) as u8;
+        if next != self.look.dim {
+            self.look.dim = next;
+            self.apply_look(game);
+            let (look, dir) = (self.look, self.data_dir.clone());
+            self.spawn("look-save", move || look.save(&dir));
+        }
+        true
+    }
+
+    /// Extra dim on (`Look::dim`), for the panel and the snapshots.
+    pub fn dim(&self) -> u8 {
+        self.look.dim
+    }
+
+    /// The brightness as the slider shows it: a percentage of the backlight, or the extra dim step below it.
+    pub(crate) fn brightness_data(&self, pct: u8) -> Data {
+        match self.look.dim_label() {
+            Some(label) => Data::new("Brightness", label, 0.0, false),
+            None => Data::percent("Brightness", pct),
+        }
     }
 
     /// One step of the volume (on the worker: `volume` is a process); None as for `step_brightness`.
@@ -794,7 +836,7 @@ impl Sys {
     fn data_for(&self, what: What, now: Instant) -> Data {
         match what {
             What::Volume => Data::percent("Volume", self.volume_now(now).unwrap_or(50)),
-            What::Brightness => Data::percent("Brightness", self.brightness_now(now).unwrap_or(50)),
+            What::Brightness => self.brightness_data(self.brightness_now(now).unwrap_or(50)),
             What::Warmth => self.warmth_data(),
         }
     }
@@ -854,8 +896,8 @@ impl Sys {
                 Some(v) => self.show(Data::percent("Volume", v), ctx, now),
                 None => self.pending_osd = Some((What::Volume, now + PENDING_FOR)),
             },
-            Mode::Act(What::Brightness) => match self.step_brightness(dir, now) {
-                Some(v) => self.show(Data::percent("Brightness", v), ctx, now),
+            Mode::Act(What::Brightness) => match self.step_brightness(dir, now, ctx.game) {
+                Some(v) => self.show(self.brightness_data(v), ctx, now),
                 None => self.pending_osd = Some((What::Brightness, now + PENDING_FOR)),
             },
             Mode::Act(What::Warmth) => {
@@ -867,6 +909,7 @@ impl Sys {
                 // No OSD polling/redraw behind a H700 game. The volume worker coalesces and reads the latest wish.
                 crate::h700_volume::key_activity();
             }
+            Mode::Observe(What::Brightness) if self.observe_dim(dir, now, ctx) => {}
             Mode::Observe(what) => {
                 if first {
                     self.observe = Some(Observe {
@@ -880,6 +923,32 @@ impl Sys {
                 }
             }
         }
+    }
+
+    /// HOME + Vol where ROCKNIX moves the backlight: it stops at its lowest level, and extra dim goes on from there as with our
+    /// own keys. Up from a dim step takes the step away and puts back the lowest backlight ROCKNIX has just raised, so
+    /// the first steps up only lighten the picture, as everywhere. Whether it was a dim step.
+    fn observe_dim(&mut self, dir: i32, now: Instant, ctx: &Ctx) -> bool {
+        let was = self.look.dim;
+        if !self.step_dim(dir, self.brightness_now(now), ctx.game) {
+            return false;
+        }
+        if dir > 0 && was > 0 {
+            let (hw, polled) = (self.hw.clone(), self.polled.clone());
+            self.spawn("brightness-floor", move || {
+                // ROCKNIX acts on the same key press; its write lands first.
+                std::thread::sleep(Duration::from_millis(150));
+                hw.set_brightness(MIN_BRIGHTNESS);
+                let mut p = polled.lock().unwrap();
+                p.brightness = Some(MIN_BRIGHTNESS);
+                p.seq += 1;
+            });
+            self.levels.brightness = Some((MIN_BRIGHTNESS, now));
+            self.persist_at = Some(now + PERSIST_AFTER);
+        }
+        let d = self.brightness_data(MIN_BRIGHTNESS);
+        self.show(d, ctx, now);
+        true
     }
 
     /// Reads what ROCKNIX did and shows it if it changed.
@@ -1085,7 +1154,7 @@ impl Sys {
     /// `power-noboot[:row]`, `time[:row]`, `time-wrong` (the clock at 3 March 2000, offline), `time-wrong-wifi` (the same with Wi-Fi on),
     /// `time-unsynced` (Wi-Fi off, no server yet), `time-set[:field]` (Date and time's picker, offline, on that field),
     /// `time-set-wrong` (the picker opened from the clock of 2000), `time-hand[:row]` (after a set by hand, offline),
-    /// `regions`, `zones`, `search`, `osd-volume`, `osd-brightness`, `osd-warmth`.
+    /// `regions`, `zones`, `search`, `osd-volume`, `osd-brightness`, `osd-warmth`, `quick-dim:<step>`, `osd-dim:<step>`.
     pub fn demo(&mut self, what: &str, now: Instant) {
         let (name, arg) = what.split_once(':').map_or((what, 0usize), |(n, a)| (n, a.parse().unwrap_or(0)));
         // A snapshot: the look runs here, so the picture has the values (never so in the running app).
@@ -1099,6 +1168,14 @@ impl Sys {
             "quick-game" => {
                 self.screen = Screen::Quick { sel: arg };
                 self.over_game = true;
+            }
+            // Extra dim: `quick-dim:<step>` the panel at the lowest backlight and that step below it (the whole picture darker).
+            "quick-dim" => {
+                self.profiles.game = None;
+                self.view.brightness = Some(MIN_BRIGHTNESS);
+                self.look.dim = (arg as u8).clamp(1, crate::display::DIM_STEPS);
+                self.look.soft = true;
+                self.screen = Screen::Quick { sel: 0 };
             }
             // The output muted at 5 % (the device's sink can be muted with a level left on it).
             "quick-muted" => {
@@ -1234,6 +1311,12 @@ impl Sys {
             }
             "osd-volume" => self.osd = Some(Shown::new(Data::percent("Volume", 65))),
             "osd-brightness" => self.osd = Some(Shown::new(Data::percent("Brightness", 40))),
+            // The bar on an extra dim step over the shelf (`osd-dim:<step>`), the shelf darker with it.
+            "osd-dim" => {
+                self.look.dim = (arg as u8).clamp(1, crate::display::DIM_STEPS);
+                self.look.soft = true;
+                self.osd = Some(Shown::new(self.brightness_data(MIN_BRIGHTNESS)));
+            }
             "osd-warmth" => {
                 self.look.warmth = 4;
                 self.osd = Some(Shown::new(self.warmth_data()));
@@ -1392,7 +1475,7 @@ impl Sys {
                 Some((What::Brightness, _)) if self.view.brightness.is_some() => {
                     let v = self.view.brightness.unwrap_or(0);
                     self.levels.brightness = Some((v, now));
-                    self.show(Data::percent("Brightness", v), ctx, now);
+                    self.show(self.brightness_data(v), ctx, now);
                 }
                 other => self.pending_osd = other,
             }
@@ -1618,11 +1701,11 @@ impl Sys {
         }
     }
 
-    fn adjust(&mut self, row: Row, dir: i32, _ctx: &Ctx, now: Instant) {
+    fn adjust(&mut self, row: Row, dir: i32, ctx: &Ctx, now: Instant) {
         // The panel covers the shelf, so no OSD: the row itself moves.
         match row {
             Row::Brightness => {
-                self.step_brightness(dir, now);
+                self.step_brightness(dir, now, ctx.game);
             }
             Row::Volume => {
                 self.step_volume(dir, now);
@@ -2055,11 +2138,19 @@ mod tests {
         tap(&mut s, Button::VolUp, &SHELF, now);
         assert_eq!(hw.brightness(), Some(65));
         assert_eq!(hw.volume(), Some(45), "the volume stays");
-        for _ in 0..20 {
+        for _ in 0..12 {
             tap(&mut s, Button::VolDown, &SHELF, now);
         }
         assert_eq!(hw.brightness(), Some(MIN_BRIGHTNESS));
         assert_eq!(s.osd.as_ref().unwrap().data, Data::percent("Brightness", 5));
+        assert_eq!(s.dim(), 0, "the lowest backlight first, then extra dim");
+        // Further down: the extra dim steps, the backlight staying at its floor, and never past the last step.
+        for _ in 0..20 {
+            tap(&mut s, Button::VolDown, &SHELF, now);
+        }
+        assert_eq!(hw.brightness(), Some(MIN_BRIGHTNESS), "the backlight never goes below its floor");
+        assert_eq!(s.dim(), crate::display::DIM_STEPS);
+        assert_eq!(s.osd.as_ref().unwrap().data.value, "Extra dim 3");
         key(&mut s, Button::Start, false, &SHELF, now);
         // Stored once it has settled, not on every step.
         assert_eq!(hw.state().persisted_brightness, None);
@@ -2209,6 +2300,91 @@ mod tests {
         key(&mut s, Button::Start, true, &SHELF, now);
         key(&mut s, Button::VolUp, true, &SHELF, now + Duration::from_secs(3));
         assert_eq!(hw.brightness(), Some(75));
+    }
+
+    #[test]
+    fn extra_dim_goes_first_on_the_way_up_and_is_kept_for_the_next_start() {
+        let (mut s, hw) = sys();
+        let now = Instant::now();
+        hw.set_brightness(MIN_BRIGHTNESS);
+        hw.persist_brightness(MIN_BRIGHTNESS);
+        s.levels.brightness = Some((MIN_BRIGHTNESS, now));
+        key(&mut s, Button::Start, true, &SHELF, now);
+        tap(&mut s, Button::VolDown, &SHELF, now);
+        tap(&mut s, Button::VolDown, &SHELF, now);
+        assert_eq!(s.dim(), 2);
+        assert_eq!(s.look().dim_gain(), crate::display::DIM_GAIN[2], "the picture is darker (shelf, ramps, pocket-core)");
+        assert_eq!(shown(&s).map(|d| (d.value, d.frac)), Some(("Extra dim 2".to_string(), 0.0)));
+        // Saved for pocket-core and the next start; the stored backlight is the one it was.
+        assert_eq!(Look::load(&s.data_dir).dim, 2);
+        s.tick(&SHELF, now + Duration::from_secs(1));
+        assert_eq!(hw.state().persisted_brightness, Some(MIN_BRIGHTNESS), "extra dim never stores another backlight");
+        let again = Sys::for_test(hw.clone(), s.data_dir.clone());
+        assert_eq!(again.dim(), 2, "a restart comes up as dark as it was left");
+        // Up: the dim steps go first, the backlight stays; then the backlight goes up as before.
+        let later = now + Duration::from_millis(1200);
+        tap(&mut s, Button::VolUp, &SHELF, later);
+        assert_eq!((s.dim(), hw.brightness()), (1, Some(MIN_BRIGHTNESS)));
+        tap(&mut s, Button::VolUp, &SHELF, later);
+        assert_eq!((s.dim(), hw.brightness()), (0, Some(MIN_BRIGHTNESS)));
+        assert_eq!(shown(&s), Some(Data::percent("Brightness", 5)));
+        assert!(s.look().is_neutral(), "nothing left of it");
+        tap(&mut s, Button::VolUp, &SHELF, later);
+        assert_eq!((s.dim(), hw.brightness()), (0, Some(10)));
+        assert_eq!(Look::load(&s.data_dir).dim, 0);
+    }
+
+    #[test]
+    fn a_saved_brightness_above_the_floor_is_untouched_by_extra_dim() {
+        // A level the player chose (40 %) comes back as it was: no dim step, no other backlight.
+        let (mut s, hw) = sys();
+        let now = Instant::now();
+        hw.set_brightness(40);
+        poll_all(&*s.hw, &s.net, &s.polled, false);
+        s.take_polled();
+        assert_eq!(s.dim(), 0);
+        s.open_quick(now);
+        s.adjust(Row::Brightness, -1, &SHELF, now);
+        assert_eq!((hw.brightness(), s.dim()), (Some(35), 0), "a step down from 40 is the backlight's");
+        s.adjust(Row::Brightness, 1, &SHELF, now);
+        assert_eq!((hw.brightness(), s.dim()), (Some(40), 0));
+    }
+
+    #[test]
+    fn the_quick_settings_row_goes_on_below_five_percent() {
+        let (mut s, hw) = sys();
+        let now = Instant::now();
+        hw.set_brightness(10);
+        s.levels.brightness = Some((10, now));
+        s.open_quick(now);
+        for _ in 0..3 {
+            s.adjust(Row::Brightness, -1, &SHELF, now);
+        }
+        assert_eq!((hw.brightness(), s.dim()), (Some(MIN_BRIGHTNESS), 2));
+        for _ in 0..5 {
+            s.adjust(Row::Brightness, -1, &SHELF, now);
+        }
+        assert_eq!(s.dim(), crate::display::DIM_STEPS, "stops at the last step");
+    }
+
+    #[test]
+    fn home_plus_volume_with_input_sense_goes_on_below_rocknix_floor() {
+        let (mut s, hw) = sys();
+        s.set_rocknix_keys(true);
+        let now = Instant::now();
+        // ROCKNIX has the backlight at its floor; HOME + Vol- once more: extra dim, ours.
+        hw.set_brightness(MIN_BRIGHTNESS);
+        poll_all(&*s.hw, &s.net, &s.polled, false);
+        s.take_polled();
+        key(&mut s, Button::Mode, true, &SHELF, now);
+        tap(&mut s, Button::VolDown, &SHELF, now);
+        assert_eq!(s.dim(), 1);
+        assert_eq!(shown(&s).map(|d| d.value), Some("Extra dim 1".to_string()));
+        // HOME + Vol+: ROCKNIX raises the backlight on the press; the dim step goes and the floor comes back.
+        hw.set_brightness(10);
+        tap(&mut s, Button::VolUp, &SHELF, now + Duration::from_secs(1));
+        assert_eq!((s.dim(), hw.brightness()), (0, Some(MIN_BRIGHTNESS)), "the first step up only lightens the picture");
+        key(&mut s, Button::Mode, false, &SHELF, now);
     }
 
     fn shown(s: &Sys) -> Option<Data> {

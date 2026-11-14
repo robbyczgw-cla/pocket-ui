@@ -634,7 +634,7 @@ mod tests {
         // Every language says it, and whole: Android shows a toast in two lines and cuts the rest, which was what to do
         // (seen on the Odin 2 Mini). About 35 letters a line there.
         assert!(PS1_BIOS_MISSING.chars().count() <= 72, "{}", PS1_BIOS_MISSING.chars().count());
-        for table in [include_str!("../assets/i18n/de.tsv"), include_str!("../assets/i18n/es.tsv")] {
+        for table in [include_str!("../assets/i18n/de.tsv"), include_str!("../assets/i18n/es.tsv"), include_str!("../assets/i18n/pt.tsv")] {
             let line = table.lines().find_map(|l| l.split_once('\t').filter(|(en, _)| *en == PS1_BIOS_MISSING)).map(|(_, t)| t);
             assert!(line.is_some_and(|t| t.chars().count() <= 72), "{line:?}");
         }

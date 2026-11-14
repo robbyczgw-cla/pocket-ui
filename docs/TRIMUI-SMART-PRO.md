@@ -18,6 +18,7 @@ TrimUI's firmware notes); About says "experimental", and the project asks owners
 | `POCKETUI_DEVICE` (start.sh) | `brick` | `smartpro` |
 | Screen | 1024 × 768, 3.2", 400 ppi | 1280 × 720, 4.96", about 296 ppi |
 | Type (`type_scale::brick_base`) | small sizes a step larger | the design's sizes (Body 28 is 2.4 mm there) |
+| Canvas (`scaled_layout::logical_size`) | 1024 × 768, native | 1280 × 720, native (since 2026-11-13; before, 1707 × 960 reduced by 3:4: 108 ms a Home frame on an A53, now 4.8 ms) |
 | Sticks | none | left ABS_X/Y, right ABS_RX/RY, about ±32767, centre 0, up negative; not clickable |
 | 317 / 318 | F1 / F2 | not keys of its own (the pad's Xbox look announces them); pocket-ui makes them L3 / R3 |
 | Mute slider (gpio243) | followed by `brick-hw slider-watch` | none: no follower, `BRICK_NO_SLIDER=1` for `volume restore` (gpio243 is something else there; a function switch arrives as EV_SW on the pad) |
@@ -50,9 +51,10 @@ last 60 lines of the card's `boot.log`: the board start.sh found, the GPU's answ
   unchanged.
 - `scripts/test-brick-card.sh` 5s, 5u, 5v: the card on a Smart Pro (device, no slider, stick rails), by MainUI's name, a Smart Pro
   S (the note, no hardware), firmware too old.
-- `tests/brick_settings_walk.rs` at 1280 × 720 as `smartpro`: its name, its sticks and none of the Brick's keys, and text that
-  fits: no cut line or overlap the same page at 1280 × 960 doesn't have too (what the two share, a long Spanish explanation at
-  Large or "Game Boy Adv…" in a tile, is the 1280-wide layout's own, on main's Mini V1 the same).
+- `tests/brick_settings_walk.rs` at 1280 × 720 as `smartpro`, painted natively: its name, its sticks and none of the Brick's
+  keys, and text that fits: no cut line or overlap that neither the same page at 1280 × 960 nor the Brick's 1024 × 768 has too
+  (what they share, a long Spanish explanation at Large, "Game Boy Adv…" in a tile or About's help at Large on a short screen,
+  is the layout's own).
 - `tests/nav_explorer.rs` `*_on_the_smart_pro` (in the merge gate, `scripts/gate.sh`): every row reachable with the D-pad, B goes
   back, honest hints, in Settings, the overlays and the first start.
 - The Brick's renders are byte-identical to main's (every state of `tests/i18n-states.txt` in two variants, SMART-PRO.md).

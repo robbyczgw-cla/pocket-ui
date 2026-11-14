@@ -169,10 +169,13 @@ impl Frame {
         }
         let mut out = Vec::new();
         for r in rects {
-            // The name: the leftmost string whose middle is in the row, the top one of a row of two lines.
-            let mut inner: Vec<&(Rect, String)> = self.strings.iter().filter(|(s, _)| inside(centre(s), &r)).collect();
-            inner.sort_by_key(|(s, _)| (s.0 / 8, s.1));
-            let Some((name_at, name)) = inner.first() else { continue };
+            // The name: the leftmost string whose middle is in the row, the top one of a row of two lines. Two lines that
+            // start at the same x differ by their first letters' ink by a few pixels ("Power off" over "Saves the game…"):
+            // the left column is what starts within 8 px of the leftmost, not a fixed 8 px grid a line can fall across
+            // (the Mini V2's power menu named its rows by their explanation lines, 14.11.).
+            let inner: Vec<&(Rect, String)> = self.strings.iter().filter(|(s, _)| inside(centre(s), &r)).collect();
+            let Some(left) = inner.iter().map(|(s, _)| s.0).min() else { continue };
+            let Some((name_at, name)) = inner.iter().filter(|(s, _)| s.0 - left < 8).min_by_key(|(s, _)| (s.1, s.0)).copied() else { continue };
             // The mark across the row, or a pill round its name (the older lists: Sync, Home's Minimal).
             let focused = self.focus.iter().any(|f| inside(centre(&r), f) || overlap(f, &r) * 2 > area(&r) || (overlap(f, &r) > 0 && inside(centre(name_at), f)));
             out.push(Control { rect: r, name: name.clone(), focused });
@@ -307,7 +310,10 @@ impl Card {
         let data = tmp.join("template-data");
         std::fs::create_dir_all(&data).unwrap();
         // The language as a player picked it (`POCKETUI_LANG` would pin it, and Settings › System › Language could not change it).
-        std::fs::write(data.join("settings.json"), r#"{"onboarded":true,"seen_version":"9.9.9","motion":"off","art":"off","language":"en"}"#).unwrap();
+        // A Portuguese profile starts in Portuguese the way a player's card does: the choice in settings.json (and the system's
+        // `LANG` for the first start, where there is none yet).
+        let language = if profile.extra_env.iter().any(|(k, v)| *k == "LANG" && v.starts_with("pt")) { "pt" } else { "en" };
+        std::fs::write(data.join("settings.json"), format!(r#"{{"onboarded":true,"seen_version":"9.9.9","motion":"off","art":"off","language":"{language}"}}"#)).unwrap();
         let stub = if std::env::var_os("WAYLAND_DISPLAY").is_some_and(|w| !w.is_empty()) {
             None
         } else {
@@ -517,7 +523,9 @@ impl Drop for Ui {
 
 /// Rows of A that are not pressed: they end what is being explored for reasons that are no page's (the program restarts or
 /// quits, a game starts, the card is written over). Their pages are still opened when they are pages.
-const NOT_PRESSED: &[&str] = &["Restart pocket-ui", "Power off", "Switch off", "Restart", "Quit", "Save & quit", "Leave", "Start EmulationStation", "Reset", "Erase", "Delete", "Format"];
+const NOT_PRESSED: &[&str] = &["Restart pocket-ui", "Power off", "Switch off", "Restart", "Quit", "Save & quit", "Leave", "Start EmulationStation", "Reset", "Erase", "Delete", "Format",
+    // The same rows in Brazilian Portuguese (the explorer's pt profiles).
+    "Reiniciar pocket-ui", "Desligar", "Reiniciar", "Sair", "Salvar e sair", "Redefinir", "Excluir", "Apagar", "Formatar", "Iniciar o EmulationStation"];
 
 /// Unhinted keys tried once per page: a key that works there is either named or doing something no player finds.
 const OTHER_KEYS: &[&str] = &["x", "y", "l1", "r1"];
@@ -1210,7 +1218,12 @@ fn run(profile: Profile, part: Part) {
             // The card, and the Updates page it opens (Install and its question, Check again, the switch).
             explore(true, vec![("POCKETUI_UPDATE_HINT", "99.0.0")], &[&[][..], &["a"][..]]);
         }
-        Part::FirstStart => explore(false, Vec::new(), &[&[][..]]),
+        // A time zone the system already has, as the ROCKNIX mock has New York: a Brick build's mock took the zone of
+        // the computer running the test (UTC in a container), which counts as unknown, so a fresh start showed the
+        // time zone stage while the walk had skipped it after choosing a zone on the Wi-Fi page, and its replays
+        // landed on other pages (Brick and Smart Pro red, 14.11.). The stage itself: the ROCKNIX first start and the
+        // journeys' fresh UTC start.
+        Part::FirstStart => explore(false, vec![("POCKETUI_MOCK_ZONE", "America/New_York")], &[&[][..]]),
     }
     let mut all = Report::default();
     for r in reports {
@@ -1264,7 +1277,63 @@ const BRICK: Profile = Profile { name: "brick-1024x768", device: "brick", text_s
 /// The same card on a TrimUI Smart Pro (1280x720, sticks; docs/TRIMUI-SMART-PRO.md).
 #[cfg(feature = "brick")]
 const SMART_PRO: Profile = Profile { name: "smartpro-1280x720", device: "smartpro", text_size: "normal", extra_env: &[("POCKETUI_BRICK_STANDALONE", "1")] };
+/// The Anbernic RG CubeXX's square 720x720 panel (an H700 board; the logical canvas is scaled down to it, docs/H700-SCALED-LAYOUT.md).
+const RG_CUBEXX: Profile = Profile { name: "rgcubexx-720x720", device: "rgcubexx", text_size: "normal", extra_env: &[] };
 const ODIN_2_MINI: Profile = Profile { name: "odin2mini", device: "odin2mini", text_size: "normal", extra_env: &[] };
+
+/// Brazilian Portuguese on the three screens that matter (docs/i18n-glossary.md): the RG35XX Plus's 640x480, the Brick's 1024x768 and
+/// the CubeXX's square 720x720, each in Normal and Large text. `LANG` is the system language of a first start, and the card's settings.json says "pt" (`POCKETUI_LANG` would pin it).
+const PT_640: Profile = Profile { name: "rg35xx-plus-640x480-pt", device: "rg35xx-plus", text_size: "normal", extra_env: &[("LANG", "pt_BR.UTF-8")] };
+const PT_640_LARGE: Profile = Profile { name: "rg35xx-plus-640x480-pt-large", device: "rg35xx-plus", text_size: "large", extra_env: &[("LANG", "pt_BR.UTF-8")] };
+const PT_1024: Profile = Profile { name: "rgdsplus-1024x768-pt", device: "rgdsplus", text_size: "normal", extra_env: &[("LANG", "pt_BR.UTF-8")] };
+const PT_1024_LARGE: Profile = Profile { name: "rgdsplus-1024x768-pt-large", device: "rgdsplus", text_size: "large", extra_env: &[("LANG", "pt_BR.UTF-8")] };
+const PT_CUBEXX: Profile = Profile { name: "rgcubexx-720x720-pt", device: "rgcubexx", text_size: "normal", extra_env: &[("LANG", "pt_BR.UTF-8")] };
+const PT_CUBEXX_LARGE: Profile = Profile { name: "rgcubexx-720x720-pt-large", device: "rgcubexx", text_size: "large", extra_env: &[("LANG", "pt_BR.UTF-8")] };
+
+#[test]
+#[ignore = "release check: the explorer in Brazilian Portuguese at 640x480"]
+fn portuguese_every_page_overlay_and_first_start_step_at_640x480() {
+    for profile in [PT_640, PT_640_LARGE] {
+        for part in [Part::Settings, Part::Overlays, Part::FirstStart] {
+            run(profile, part);
+        }
+    }
+}
+
+#[test]
+#[ignore = "release check: the explorer in Brazilian Portuguese at 1024x768"]
+fn portuguese_every_page_overlay_and_first_start_step_at_1024x768() {
+    for profile in [PT_1024, PT_1024_LARGE] {
+        for part in [Part::Settings, Part::Overlays, Part::FirstStart] {
+            run(profile, part);
+        }
+    }
+}
+
+#[test]
+#[ignore = "release check: the explorer in Brazilian Portuguese on the square 720x720 CubeXX"]
+fn portuguese_every_page_overlay_and_first_start_step_on_the_cubexx() {
+    for profile in [PT_CUBEXX, PT_CUBEXX_LARGE] {
+        for part in [Part::Settings, Part::Overlays, Part::FirstStart] {
+            run(profile, part);
+        }
+    }
+}
+
+/// A row of two lines that start at the same x is named by its top line, whichever first letter's ink starts a pixel
+/// further left: the Mini V2's power menu ("Power off" at 129, its line at 127) was named "Saves the game, then switches
+/// off.", the explorer pressed A on it as on any row, and reported that B does not leave "powering off" (14.11.).
+#[test]
+fn a_row_of_two_lines_is_named_by_its_top_line() {
+    let record = format!(
+        "@where\tpause:Main / power\n140\t300\t1100\t420\t{ROW}\n140\t300\t1100\t420\t{FOCUS}\n129\t320\t300\t360\tPower off\n127\t372\t700\t400\tSaves the game, then switches off.\n"
+    );
+    let f = Frame::parse(&record);
+    assert_eq!(f.focused().as_deref(), Some("Power off"));
+    // A string truly further left still names the row (a value at the left of a wide row is no second line).
+    let record = format!("@where\tx\n100\t300\t1100\t420\t{ROW}\n110\t340\t300\t380\tLeft\n400\t310\t600\t340\tTop right\n");
+    assert_eq!(Frame::parse(&record).controls()[0].name, "Left");
+}
 
 // The merge gate: each part once, at a different size (1024x768 is the tightest page, where hints give way first).
 
@@ -1322,6 +1391,24 @@ fn quick_settings_power_menu_pause_menu_and_update_card_on_the_mini_v2() {
 #[ignore = "release check: the explorer at the other sizes"]
 fn the_first_start_step_by_step_at_640x480() {
     run(RG35XX_PLUS, Part::FirstStart);
+}
+
+#[test]
+#[ignore = "release check: the explorer on the square 720x720 CubeXX"]
+fn every_settings_page_on_the_cubexx() {
+    run(RG_CUBEXX, Part::Settings);
+}
+
+#[test]
+#[ignore = "release check: the explorer on the square 720x720 CubeXX"]
+fn quick_settings_power_menu_pause_menu_and_update_card_on_the_cubexx() {
+    run(RG_CUBEXX, Part::Overlays);
+}
+
+#[test]
+#[ignore = "release check: the explorer on the square 720x720 CubeXX"]
+fn the_first_start_step_by_step_on_the_cubexx() {
+    run(RG_CUBEXX, Part::FirstStart);
 }
 
 // A Brick build's gate: the three parts on the Brick, where Settings › Look › Layout's unreachable rows were found.

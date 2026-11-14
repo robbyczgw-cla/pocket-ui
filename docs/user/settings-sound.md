@@ -34,7 +34,8 @@ yours, whatever look you pick later. With Cozy, a game of pocket-core's is shown
 about a second later than with Quick (a game that needs longer to load is not held at all); any button skips the rest.
 The shelf fades to black before the picture comes on like an old TV, in a third of a second: a bright line grows out of
 the middle, and the picture opens out of it, squeezed at first. A handheld's game (Game Boy, GBA, DS, PSP) has no TV: its
-display lights up instead. Continue follows the same order; the saved picture behind a reminder stays visible
+display lights up instead. Continue follows the same order: an open case plays the whole scene too, its moment waiting, still, until the game is in;
+the saved picture behind a reminder stays visible
 (with Motion on Full; Quick and Reduced skip it, and a button press cuts it short).
 **Motion** (Reduced, Off) still overrides it: nothing slides where Motion says so.
 

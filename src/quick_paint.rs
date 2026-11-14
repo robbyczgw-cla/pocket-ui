@@ -336,8 +336,10 @@ impl Sys {
                 // From memory only (`Sys::view`, the background's look): "…" until the first look is in.
                 Row::Brightness => {
                     let b = self.brightness_now(now);
-                    let mut v = RowView::new(Row::Brightness.label(), b.map_or(NOT_YET.to_string(), |b| format!("{b}%")));
-                    v.bar = Some((b.unwrap_or(0) as f32 / 100.0, false));
+                    // Below the lowest backlight: the extra dim step, with an empty bar.
+                    let label = self.look.dim_label().or_else(|| b.map(|b| format!("{b}%")));
+                    let mut v = RowView::new(Row::Brightness.label(), label.unwrap_or_else(|| NOT_YET.to_string()));
+                    v.bar = Some((if self.look.dim > 0 { 0.0 } else { b.unwrap_or(0) as f32 / 100.0 }, false));
                     v
                 }
                 Row::Volume => {
@@ -405,7 +407,9 @@ impl Sys {
         const MARK_W: i32 = 64;
         let (top_h, hint_h) = (crate::type_scale::row(60, FONT), crate::type_scale::line(HINT_SIZE, 14));
         let row_h = top_h + hint_h;
-        let panel_w = 960.min(c.w - 2 * PAD);
+        // 960 wide, or as wide as the longest choice's line needs (Large text's Sleep line) where the screen has the room.
+        let longest = choices.iter().map(|ch| text.width(Face::Body, HINT_SIZE, ch.hint(ctx))).max().unwrap_or(0);
+        let panel_w = (longest + 28 + MARK_W + 10 + BTN_PAD / 2).max(960).min(c.w - 2 * PAD);
         let inner_w = panel_w - 2 * BTN_PAD;
         // Restart pocket-ui: Kids Mode).
         let brick = { #[cfg(feature = "brick")] { crate::device::brick() } #[cfg(not(feature = "brick"))] { false } };

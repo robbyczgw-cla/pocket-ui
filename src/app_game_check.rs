@@ -94,7 +94,8 @@ impl App {
             };
             let report = game_check::check(&input, &stop, &mut progress);
             println!("game check: {} in {:?}", report.as_ref().map_or("stopped".to_string(), |r| format!("{} of {} ready, {} findings", r.ready, r.total, r.findings.len())), t0.elapsed());
-            if let Some(report) = report {
+            if let Some(mut report) = report {
+                report.note_system_list(&es_systems);
                 let _ = proxy.send_event(UserEvent::GameCheck(gen, Event::Done(report)));
             }
         });
@@ -393,7 +394,9 @@ impl App {
                 let shelf = self.systems.iter().map(|s| (s.name.clone(), s.games.iter().map(|g| g.path.clone()).collect())).collect();
                 let input = Input { catalog, shelf, bios_dir: roms.join("bios"), roms, h700: pocket_ui::device::current().model.is_some_and(|m| m.small_chip()) };
                 let report = game_check::check(&input, &AtomicBool::new(false), &mut |_, _, _| {});
-                page.event(Event::Done(report.unwrap_or_default()));
+                let mut report = report.unwrap_or_default();
+                report.note_system_list(&self.es_systems);
+                page.event(Event::Done(report));
                 page.group_sel = row.min(page.groups().len().saturating_sub(1));
             }
             _ => page.event(Event::Done(game_check::demo(false))),

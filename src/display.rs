@@ -20,6 +20,11 @@
 //! `Look::gains` multiplies it with the chosen temperature. Everything that shows the look (the ramps, the Soft
 //! tables, pocket-core's multiply layer) goes through `gains`, so this file is the one place that works out the
 //! final colours.
+//!
+//! Extra dim (`Look::dim`) is the brightness slider going on below the lowest backlight: each step multiplies the whole
+//! picture by `DIM_GAIN`, on top of the colours. It goes the same ways as the colours (ramps on Gamma, the Soft tables and
+//! pocket-core's multiply layer), so the menus and the games are darker alike. A multiply keeps the picture's own contrast,
+//! so text stays as readable as at the lowest backlight, only darker; the last step is still easy to read in a dark room.
 
 use std::path::Path;
 
@@ -33,6 +38,11 @@ pub const KELVIN_PER_STEP: i32 = 300;
 /// for the eye than the same kelvin the other way, and the Mini V2's AMOLED leans yellow (Alex, 2026-11-03).
 pub const KELVIN_PER_COOL_STEP: i32 = 500;
 pub const NEUTRAL_KELVIN: i32 = 6500;
+/// Extra dim steps below the lowest backlight (`MIN_BRIGHTNESS`).
+pub const DIM_STEPS: u8 = 3;
+/// What each extra dim step leaves of the light (step 0 = off). The last one still reads: white text at 35 % of the lowest
+/// backlight (`display::tests::extra_dim_keeps_text_readable`).
+pub const DIM_GAIN: [f32; DIM_STEPS as usize + 1] = [1.0, 0.7, 0.5, 0.35];
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Default, Serialize, Deserialize)]
 pub struct Look {
@@ -49,6 +59,10 @@ pub struct Look {
     /// `display.json`: it follows the clock, so each program works it out itself at its start.
     #[serde(skip)]
     pub night: u16,
+    /// Extra dim: 0 (off) ..= `DIM_STEPS`, the brightness slider's steps below the lowest backlight. Saved, so pocket-core
+    /// and the next start come up as dark as the player left it.
+    #[serde(default)]
+    pub dim: u8,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -80,6 +94,7 @@ impl Look {
     pub fn clamped(mut self) -> Look {
         self.warmth = self.warmth.clamp(-RANGE, RANGE);
         self.contrast = self.contrast.clamp(-RANGE, RANGE);
+        self.dim = self.dim.min(DIM_STEPS);
         self
     }
 
@@ -89,17 +104,24 @@ impl Look {
 
     /// Nothing to apply.
     pub fn is_neutral(&self) -> bool {
-        self.warmth == 0 && self.contrast == 0 && self.night == 0
+        self.warmth == 0 && self.contrast == 0 && self.night == 0 && self.dim == 0
+    }
+
+    /// What the extra dim step leaves of the light (1.0 when off).
+    pub fn dim_gain(&self) -> f32 {
+        DIM_GAIN[self.dim.min(DIM_STEPS) as usize]
     }
 
     /// Per-channel multipliers (0..=1) for the white point of `kelvin()` and of the night light, relative to 6500 K,
     /// never above 1: the two multiply (the night light is warmer on top of the chosen temperature), and the
     /// strongest channel stays at full, as it does for each alone, so the picture does not get darker than it must.
+    /// Extra dim then takes all three down alike.
     pub fn gains(&self) -> [f32; 3] {
         let (a, b) = (white_gains(self.kelvin()), white_gains(if self.night == 0 { NEUTRAL_KELVIN } else { self.night as i32 }));
         let g = [a[0] * b[0], a[1] * b[1], a[2] * b[2]];
         let max = g.iter().cloned().fold(0.0f32, f32::max).max(1e-3);
-        [g[0] / max, g[1] / max, g[2] / max]
+        let dim = self.dim_gain();
+        [g[0] / max * dim, g[1] / max * dim, g[2] / max * dim]
     }
 
     /// Contrast as a slope around mid-grey: 1.0 unchanged, 0.5..1.5 at the ends.
@@ -136,7 +158,7 @@ impl Look {
 
     /// Applies the Soft look to a 0RGB frame.
     pub fn apply_soft(&self, buf: &mut [u32]) {
-        if self.warmth == 0 && self.night == 0 {
+        if self.warmth == 0 && self.night == 0 && self.dim == 0 {
             return;
         }
         let t = self.tables();
@@ -153,6 +175,11 @@ impl Look {
             w if w > 0 => format!("Warmer {w}"),
             w => format!("Cooler {}", -w),
         }
+    }
+
+    /// The brightness slider's value on an extra dim step: "Extra dim 2" (None when off).
+    pub fn dim_label(&self) -> Option<String> {
+        (self.dim > 0).then(|| format!("Extra dim {}", self.dim.min(DIM_STEPS)))
     }
 
     pub fn contrast_label(&self) -> String {
@@ -207,7 +234,7 @@ mod tests {
     use crate::testutil::TestDir;
 
     fn look(warmth: i8, contrast: i8) -> Look {
-        Look { warmth, contrast, soft: false, night: 0 }
+        Look { warmth, contrast, soft: false, night: 0, dim: 0 }
     }
 
     #[test]
@@ -325,6 +352,47 @@ mod tests {
     }
 
     #[test]
+    fn extra_dim_darkens_every_channel_alike_and_each_step_more() {
+        let mut last = 1.0f32;
+        for d in 1..=DIM_STEPS {
+            let l = Look { dim: d, ..look(0, 0) };
+            assert!(!l.is_neutral(), "step {d} is something to apply");
+            let g = l.gains();
+            assert!(g[0] == g[1] && g[1] == g[2], "no colour cast: {g:?}");
+            assert!(g[0] < last, "step {d} is darker than the one before: {g:?}");
+            last = g[0];
+        }
+        // On top of the colours: the night light's warm white, then all of it darker.
+        let warm = Look { night: 4400, ..look(0, 0) }.gains();
+        let both = Look { night: 4400, dim: 2, ..look(0, 0) }.gains();
+        for c in 0..3 {
+            assert!((both[c] - warm[c] * DIM_GAIN[2]).abs() < 1e-5, "{both:?} {warm:?}");
+        }
+        // The same in the ramps (Gamma) and in the Soft tables, and black stays black.
+        let ramps = Look { dim: DIM_STEPS, ..look(0, 0) }.ramps(256);
+        assert_eq!(ramps[0], 0);
+        assert!((ramps[255] as f32 / 65535.0 - DIM_GAIN[DIM_STEPS as usize]).abs() < 0.01, "{}", ramps[255]);
+        let mut px = [0xffffffu32, 0];
+        Look { dim: 1, soft: true, ..look(0, 0) }.apply_soft(&mut px);
+        assert_eq!(px, [0xb3b3b3, 0], "white at 70 %, black kept");
+    }
+
+    #[test]
+    fn extra_dim_keeps_text_readable() {
+        // The last step must still read: white menu text on the darkest panel stays far apart from it (the multiply keeps the
+        // picture's contrast ratio), and is no darker than the dark grey of a menu's dimmed hint at full light.
+        let l = Look { dim: DIM_STEPS, soft: true, ..look(0, 0) };
+        let mut px = [0xffffffu32, 0x18181c, 0x808080];
+        l.apply_soft(&mut px);
+        let (text, bg, hint) = (px[0] & 0xff, px[1] & 0xff, px[2] & 0xff);
+        assert!(text >= 0x55, "white text keeps a third of its light: {text:#x}");
+        assert!(text >= bg * 8, "text against the background: {text} vs {bg}");
+        assert!(hint >= 0x28, "mid-grey hints still show: {hint:#x}");
+        assert_eq!(l.dim_label().as_deref(), Some("Extra dim 3"));
+        assert_eq!(look(0, 0).dim_label(), None);
+    }
+
+    #[test]
     fn file_roundtrip_and_clamping() {
         let dir = TestDir::new("display");
         assert_eq!(Look::load(&dir), Look::default());
@@ -333,6 +401,7 @@ mod tests {
             contrast: -2,
             soft: true,
             night: 0,
+            dim: 2,
         }
         .save(&dir);
         assert_eq!(
@@ -341,21 +410,24 @@ mod tests {
                 warmth: 4,
                 contrast: -2,
                 soft: true,
-                night: 0
-            }
+                night: 0,
+                dim: 2,
+            },
+            "extra dim is kept for the next start and for pocket-core"
         );
-        std::fs::write(dir.join(Look::FILE), r#"{"warmth": 90, "contrast": -90}"#).unwrap();
+        std::fs::write(dir.join(Look::FILE), r#"{"warmth": 90, "contrast": -90, "dim": 9}"#).unwrap();
         assert_eq!(
             Look::load(&dir),
             Look {
                 warmth: 10,
                 contrast: -10,
                 soft: false,
-                night: 0
+                night: 0,
+                dim: DIM_STEPS,
             }
         );
         std::fs::write(dir.join(Look::FILE), "garbage").unwrap();
-        assert_eq!(Look::load(&dir), Look { warmth: 4, contrast: -2, soft: true, night: 0 }, "garbage: the last saved look comes back");
+        assert_eq!(Look::load(&dir), Look { warmth: 4, contrast: -2, soft: true, night: 0, dim: 2 }, "garbage: the last saved look comes back");
         std::fs::remove_file(crate::fsutil::backup_path(&dir.join(Look::FILE))).unwrap();
         assert_eq!(Look::load(&dir), Look::default(), "garbage and no backup: the default");
     }

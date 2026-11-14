@@ -271,10 +271,9 @@ pocket-ui brings a dropped connection back by itself: after 30 seconds offline i
 network in range (your main network first, otherwise the strongest other saved one, such as a phone
 hotspot when you are out), then tries again after 1, 2 and every 5 minutes, as long as Wi-Fi is switched
 on. It never joins a network you haven't connected to before, and it waits while a connection is already
-being made. A saved network whose
-password had gone missing from the system's network settings is repaired at the next start, so you aren't
-asked for it again. It works the other way round too: when EmulationStation emptied the system's copy of the
-password, pocket-ui puts it back from the saved network at its next start.
+being made. A saved network whose password is missing from the system's network settings, or that
+EmulationStation emptied there, is repaired at the next start from the saved network. If it lost the password on both
+sides, Connect asks for it once: nothing has to be forgotten first.
 
 **Box art found nothing for some games, or the wrong picture.**
 Cartridge games are recognised by their checksum, other games by file name ([Extras](extras.md#box-art)). For one

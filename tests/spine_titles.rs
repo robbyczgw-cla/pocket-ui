@@ -113,6 +113,12 @@ fn long_titles_fit_their_spines_on_small_and_wide_screens() {
         for size in ["640x480", "1280x720"] {
             for text in ["normal", "large"] {
                 for state in ["shelf:snes:shelf:games:0", "shelf:gba:shelf:games:0", "shelf:ps2:shelf:games:0", "shelf:nds:shelf:games:0", "shelf:snes:cabinet:games:0", "shelf:gba:cabinet:games:0"] {
+                    // The Smart Pro's 1280x720 is painted natively since 13.11.2026, a short screen like the Brick's 1024x768:
+                    // its Game Boy Advance and DS labels are as short as the Brick's, and a cut title there must tell itself
+                    // apart instead (tests/spine_names.rs `thin`).
+                    if size == "1280x720" && (state.contains(":gba:") || state.contains(":nds:")) {
+                        continue;
+                    }
                     for cut in cuts(&tmp, &lib, &stub, "shelf", size, text, state, font) {
                         // A title, or its part before the subtitle, cut short on a spine.
                         if GAMES.iter().any(|(_, _, title)| *title == cut || title.split(" - ").next() == Some(cut.as_str())) {
@@ -177,11 +183,12 @@ fn every_box_of_one_system_stands_as_wide_as_the_others() {
             cuts(&tmp, &lib, &stub, "shelf", size, "normal", state, "barlow");
             let png = tmp.join(format!("shelf-{size}-normal-barlow-{}.png", state.replace(':', "_")));
             let runs = widths(&png);
-            // The spines come first, all one width; after them only the bookend and the props (at most three runs): a
-            // spine a pixel off would end the run of equal widths among the spines, with more of them after it.
+            // The spines come first, all one width; after them only the bookend and the props (at most four runs: the
+            // bookend, the cat, the trophy and the plant stand apart on 1280x720's native shelf): a spine a pixel off would
+            // end the run of equal widths among the spines, with more of them after it.
             let first = runs.first().copied().unwrap_or(0);
             let n = runs.iter().take_while(|w| **w == first).count();
-            if n < 4 || runs.len() - n > 3 {
+            if n < 4 || runs.len() - n > 4 {
                 wrong.push(format!("{state} at {size}: {runs:?}"));
             }
         }

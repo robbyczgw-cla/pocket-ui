@@ -3,6 +3,10 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 
+#[path = "library_systems.rs"]
+mod system_list;
+pub use system_list::{issues as system_list_issues, Issue as SystemListIssue};
+
 #[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct Game {
     pub name: String,
@@ -64,7 +68,7 @@ pub struct Gamelists<'a> {
 /// `gamelists` says where to look. The names are in the list before it is sorted and told apart, and so in the cache,
 /// the search, Recent and Favorites, which all follow the list.
 pub fn load_with(es_systems: &Path, gamelists: Option<&Gamelists>) -> Result<Vec<System>, String> {
-    let xml = fs::read_to_string(es_systems).map_err(|e| format!("{}: {e}", es_systems.display()))?;
+    let (xml, _) = system_list::read(es_systems)?;
     let doc = roxmltree::Document::parse(&xml).map_err(|e| format!("{}: {e}", es_systems.display()))?;
     let child_text = |node: roxmltree::Node, tag: &str| {
         node.children().find(|n| n.has_tag_name(tag)).and_then(|n| n.text()).map(|t| t.trim().to_string())
@@ -207,7 +211,7 @@ pub fn load_shown(es_systems: &Path, data_dir: &Path) -> Result<Vec<System>, Str
 
 /// Every game system in `es_systems` (not Tools or Music), sorted by full name.
 pub fn all_systems(es_systems: &Path) -> Result<Vec<SysInfo>, String> {
-    let xml = fs::read_to_string(es_systems).map_err(|e| format!("{}: {e}", es_systems.display()))?;
+    let (xml, _) = system_list::read(es_systems)?;
     let doc = roxmltree::Document::parse(&xml).map_err(|e| format!("{}: {e}", es_systems.display()))?;
     let child_text = |node: roxmltree::Node, tag: &str| {
         node.children().find(|n| n.has_tag_name(tag)).and_then(|n| n.text()).map(|t| t.trim().to_string())

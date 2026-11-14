@@ -2275,6 +2275,11 @@ once when the pause menu opens: `pause` command). **"achievements-net"** runs th
 answers back to rc_client on that thread (rc_client locks itself). `rc_client_set_allow_background_memory_reads(0)`:
 memory is read on the game thread only.
 
+**The server's warning entry.** For an emulator RetroAchievements hasn't approved, the server adds an entry with ID
+101000001 ("Warning: Unknown Emulator", true after 300 frames) to every set. rc_client leaves it out of the totals and
+never sends it, but lists it and raises its trigger: `session.rs` drops it from the list (`collect`) and from the unlock
+notices (`ffi::WARNING_ID`), so no card, sound or row shows it (`the_servers_unknown_emulator_warning_is_no_achievement`).
+
 **Memory.** `libretro.rs` copies `RETRO_ENVIRONMENT_SET_MEMORY_MAPS` (the core lends the array for the call only) and
 answers `SET_SUPPORT_ACHIEVEMENTS`. `Core::achievement_memory()` hands the map and `retro_get_memory_data/size` to
 rcheevos' `rc_libretro_memory_init`, which lays them out the way RetroAchievements addresses each console. A core

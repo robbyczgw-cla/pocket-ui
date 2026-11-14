@@ -29,6 +29,7 @@ fn main() {
                     warmth,
                     night,
                     contrast: 0,
+                    dim: 0,
                 },
             );
             let rgb: Vec<u8> = dst.iter().flat_map(|p| [(p >> 16) as u8, (p >> 8) as u8, *p as u8]).collect();

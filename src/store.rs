@@ -516,7 +516,7 @@ const DOWNLOAD_AT_MOST: Duration = Duration::from_secs(30 * 60);
 
 /// curl's arguments for a package download: given up when it moves less than 10 kB/s for 30 s (a server that keeps the
 /// connection open without sending, review N5) or grows past `max` bytes, the size the signed catalog announced.
-fn download_args(url: &str, dest: &Path, max: Option<u64>) -> Vec<std::ffi::OsString> {
+pub(crate) fn download_args(url: &str, dest: &Path, max: Option<u64>) -> Vec<std::ffi::OsString> {
     let mut args: Vec<std::ffi::OsString> = ["-fsSL", "--retry", "2", "--connect-timeout", "15", "--speed-limit", "10240", "--speed-time", "30"]
         .iter()
         .map(Into::into)
@@ -540,7 +540,7 @@ pub enum DownloadFailure {
 }
 
 /// curl's exit codes for "could not resolve the host" and "could not connect".
-fn unreachable_code(code: Option<i32>) -> bool {
+pub(crate) fn unreachable_code(code: Option<i32>) -> bool {
     matches!(code, Some(6 | 7))
 }
 

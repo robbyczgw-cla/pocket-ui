@@ -15,9 +15,9 @@ virtual device shows a working panel although it has no backlight, radios, batte
 | Keys | Where | Does | Done by |
 |---|---|---|---|
 | Vol+ / Vol- | everywhere | volume, 5 % steps, repeating | ROCKNIX (`input_sense` calls `volume up\|down`); pocket-ui only draws the OSD |
-| Start + Vol+/- | shelf, quick settings, pocket-core games | brightness, 5 % steps, never below 5 % | pocket-ui |
+| Start + Vol+/- | shelf, quick settings, pocket-core games | brightness, 5 % steps; below 5 % three extra dim steps ([Extra dim](#extra-dim)) | pocket-ui |
 | Select + Vol+/- | same | colour temperature, 10 steps each way | pocket-ui |
-| HOME + Vol+/- | everywhere | brightness | ROCKNIX (modifier A of `input_sense`); pocket-ui draws the OSD |
+| HOME + Vol+/- | everywhere | brightness; at ROCKNIX's floor pocket-ui takes the extra dim steps | ROCKNIX (modifier A of `input_sense`); pocket-ui draws the OSD |
 | HOME tap | shelf (not in games: there it is the pause menu) | quick settings | pocket-ui |
 | pause menu → Quick settings | any game with a pause menu | quick settings over the paused game; B/HOME back to the menu | pocket-ui |
 
@@ -95,7 +95,7 @@ and A on a radio asks the worker too. `quick::tests::the_panel_never_looks_at_th
 
 | Row | ROCKNIX mechanism |
 |---|---|
-| Brightness | `/sys/class/backlight/*/brightness` for the live value (read by the worker, also while HOME + Vol is watched); `brightness set N` (stores `display.brightness`) once the level has rested 700 ms |
+| Brightness | `/sys/class/backlight/*/brightness` for the live value (read by the worker, also while HOME + Vol is watched); `brightness set N` (stores `display.brightness`) once the level has rested 700 ms. Below `MIN_BRIGHTNESS` the row goes on with Extra dim 1..3 ([Extra dim](#extra-dim)) |
 | Volume | `volume N` (pactl + `audio.volume`), newest value wins; the mute state is read with the volume on the poll thread (`pactl get-sink-mute`), and a muted output shows "5 %, muted" ("Muted" at 0) |
 | Volume's note | Where the sound goes, beside the bar: `Hw::sound` (`audio_route::sound_now`: the default sink from `pw-metadata`, else `pactl get-default-sink`; a `bluez_output.<addr>.1` sink's device name from `bluetoothctl info`) read by the poll thread with the volume, so the panel shows "…" first and never waits. The sink name decides: `HiFi__Headphones__sink` Headphones, `bluez_output.*` Bluetooth, usb/hdmi names, any other Speaker; no answer: "Output unknown". It reports the default sink and does not switch it: ROCKNIX's SM8250 builds may not move the default when the jack is used (release 20241120's notes: "no headphone switching") |
 | Wi-Fi | `net_state::NetState` (below): `Hw::set_wifi` runs `wifictl enable\|disable` (`rfkill unblock\|block wifi`), then `nmcli radio wifi on` when NetworkManager's own switch is off, and reads the radio back (`Hw::wifi_radio`: rfkill soft and hard block from `/sys/class/rfkill`, `nmcli radio wifi`, kept 8 s); `wifi.enabled` in `system.cfg` (`Hw::persist_wifi`, ROCKNIX's `set_setting` under its lock) is written only after the radio was read back in the state asked for |
@@ -446,7 +446,20 @@ The virtual pad has `VOLUP` and `VOLDOWN`, so `vdev.sh pad press VOLUP`, `pad do
 To see the "ROCKNIX does the volume" path, a process named `input_sense` has to run
 (`rocknix_handles_volume` looks in `/proc/*/comm`); then `volume 45` run by hand shows up in the OSD.
 
-Desktop check of the layouts without any device: `pocket-ui --snapshot sys:<quick[:row]|quick-muted|power-off|restart|time|regions|zones|search|osd-volume|osd-brightness|osd-warmth> out.png`
+## Extra dim
+
+The backlight never goes below `MIN_BRIGHTNESS` (5 %, ROCKNIX's floor: a black screen cannot be undone without a display).
+Below it the brightness slider (the quick settings row, Start + Vol, HOME + Vol at ROCKNIX's floor) goes on with
+`display::DIM_STEPS` = 3 software steps, `Look::dim`, which multiply the whole picture by `DIM_GAIN` (70, 50, 35 %).
+Up takes those steps away before the backlight moves (`Sys::step_dim`; with HOME + Vol, where ROCKNIX has already raised
+the backlight on the same press, the worker puts it back to the floor 150 ms later). It rides on the colour look, so it
+reaches every place the colour temperature does: the compositor's gamma ramps (system-wide, RetroArch included), the Soft
+tint of pocket-ui's frames, pocket-core's multiply layer (`look <warmth> <contrast> <night> <dim>`) and the Brick's
+software copy. `dim` is saved in `display.json` (on the worker), so pocket-core and the next start come up as dark.
+The multiply keeps the contrast ratio, so text reads as at the floor, only darker (`display::tests::extra_dim_keeps_text_readable`).
+Snapshots: `sys:quick-dim:<1-3>`, `sys:osd-dim:<1-3>`.
+
+Desktop check of the layouts without any device: `pocket-ui --snapshot sys:<quick[:row]|quick-muted|power-off|restart|time|regions|zones|search|osd-volume|osd-brightness|osd-warmth|quick-dim:<1-3>|osd-dim:<1-3>> out.png`
 (`POCKETUI_MOCK=1`, `POCKETUI_DATA=<scratch dir>`).
 
 ## Files

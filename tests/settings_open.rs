@@ -88,7 +88,7 @@ fn settings_first_frame_draws_no_glyph_runs_no_pattern_and_is_not_much_slower_th
     let _tmp_guard = tempfile::tempdir().unwrap();
     let tmp = _tmp_guard.path().to_path_buf();
     let wayland = wayland_for_snapshots(&tmp);
-    for lang in ["en", "de", "es"] {
+    for lang in ["en", "de", "es", "pt"] {
         let runs: Vec<Bench> = (0..5).map(|_| run(&tmp, &wayland, lang)).collect();
         for r in &runs {
             assert_eq!(r.first_glyphs, 0, "{lang}: the categories page found every letter in the cache ({r:?})");

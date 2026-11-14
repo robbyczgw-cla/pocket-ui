@@ -48,6 +48,7 @@ fn colours_and_placement_match_the_old_picture_in_every_core_pixel_format() {
                     warmth,
                     night,
                     contrast: 7,
+                    dim: 0,
                 }; // Contrast is gamma-only, even when nonzero.
                 let mut old = vec![0xdeadbeef; dw * dh];
                 reference::render(&frame, &mut old, dw, dh, look);
@@ -81,6 +82,27 @@ fn every_16_bit_colour_keeps_its_exact_rounding() {
 }
 
 #[test]
+fn extra_dim_darkens_the_brick_picture_alike_in_every_format() {
+    // The Brick has no compositor gamma: its software copy is where extra dim reaches the game.
+    for format in [PIXEL_XRGB8888, PIXEL_RGB565, PIXEL_0RGB1555] {
+        let frame = reference::frame(format, 16, 13);
+        let plain = render(&frame, 67, 53, Look { soft: true, ..Look::default() });
+        for dim in 1..=pocket_ui::display::DIM_STEPS {
+            let look = Look { soft: true, dim, ..Look::default() };
+            assert!(soft_screen::tinted(&look), "dim {dim} is drawn");
+            let dimmed = render(&frame, 67, 53, look);
+            let mut old = vec![0xdeadbeef; 67 * 53];
+            reference::render(&frame, &mut old, 67, 53, look);
+            assert_eq!(dimmed, old, "format {format}, dim {dim}");
+            let sum = |v: &[u32]| v.iter().map(|p| (p >> 16 & 0xff) + (p >> 8 & 0xff) + (p & 0xff)).sum::<u32>() as f32;
+            let ratio = sum(&dimmed) / sum(&plain).max(1.0);
+            let want = pocket_ui::display::DIM_GAIN[dim as usize];
+            assert!((ratio - want).abs() < 0.03, "format {format}, dim {dim}: {ratio} of the light, want {want}");
+        }
+    }
+}
+
+#[test]
 fn screen_colour_snapshots_stay_pixel_exact() {
     let frame = reference::frame(PIXEL_XRGB8888, 16, 13);
     for (name, warmth, night) in [("neutral", 0, 0), ("warm2", 2, 0), ("warm4", 4, 0), ("cool4", -4, 0), ("night", 4, 3800)] {
@@ -101,6 +123,7 @@ fn screen_colour_snapshots_stay_pixel_exact() {
                 warmth,
                 night,
                 contrast: 0,
+                dim: 0,
             },
         );
         let actual: Vec<u8> = pixels.iter().flat_map(|p| [(p >> 16) as u8, (p >> 8) as u8, *p as u8]).collect();

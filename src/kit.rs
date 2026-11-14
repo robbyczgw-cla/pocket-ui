@@ -27,10 +27,11 @@ pub const FONT: u32 = 46;
 /// Headings in a pill's row, explanations, the hint pill's labels.
 pub const SMALL: u32 = 30;
 
-/// A screen of 721 to 899 lines (1024x768, painted natively): the pages are made for 960 and more, so what stands
-/// between a list and the footer is tighter there. 640x480 and the other small panels are painted at 1280x960 and are not "short".
+/// A screen of 720 to 899 lines (the Brick's 1024x768 and the Smart Pro's 1280x720, painted natively): the pages are made for
+/// 960 and more, so what stands between a list and the footer is tighter there. 640x480 and the other small panels are painted
+/// at 1280x960 and are not "short".
 pub fn short_screen(h: i32) -> bool {
-    (721..900).contains(&h)
+    (720..900).contains(&h)
 }
 /// A list row: 66 px around Body 36 (taller with larger text: `row`).
 pub const ROW: i32 = 66;
@@ -530,13 +531,13 @@ mod tests {
     }
 
     #[test]
-    fn only_the_native_768_line_screens_are_short() {
-        // 1024x768 and its neighbours are painted natively; the small panels (640x480 is painted at 1280x960) and
+    fn only_the_native_720_to_899_line_screens_are_short() {
+        // 1024x768 and 1280x720 are painted natively; the small panels (640x480 is painted at 1280x960) and
         // everything from 900 lines up keep the design's spacing.
-        for h in [768, 800, 720 + 1, 899] {
+        for h in [720, 768, 800, 899] {
             assert!(short_screen(h), "{h}");
         }
-        for h in [480, 720, 900, 960, 1080, 1200] {
+        for h in [480, 719, 900, 960, 1080, 1200] {
             assert!(!short_screen(h), "{h}");
         }
     }

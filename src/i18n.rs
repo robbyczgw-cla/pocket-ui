@@ -1,9 +1,9 @@
-//! The interface in another language (German, Spanish): Settings → Language, docs/dev/translations.md "Translations".
+//! The interface in another language (German, Spanish, Brazilian Portuguese): Settings → Language, docs/dev/translations.md "Translations".
 //!
 //! Nothing in the rest of the code is wrapped for translation. The text painter (`Text::draw`, `width`, `fit`, `wrap`,
 //! `draw_right`, `draw_clipped`) looks every string it is given up here, by its exact English wording, and paints the
 //! translation instead. So the hint bar, toasts, notices, dialogs, page titles and rows are translated wherever they
-//! are drawn, and a new page needs no code for it: only lines in `assets/i18n/de.tsv` and `es.tsv`. One exception: pocket-core's
+//! are drawn, and a new page needs no code for it: only lines in `assets/i18n/de.tsv`, `es.tsv` and `pt.tsv`. One exception: pocket-core's
 //! FPS + sensors line is put together from parts whose numbers change twice a second, so it looks its words up itself
 //! (`osd_sensors::Sensors::text_in`).
 //!
@@ -41,6 +41,7 @@ pub enum Lang {
     En,
     De,
     Es,
+    Pt,
 }
 
 /// What differs by language besides the words. A new language is a line here, one in `Lang`, and its table.
@@ -56,14 +57,15 @@ struct Traits {
 }
 
 /// In the order of `Lang`.
-const TRAITS: [Traits; 3] = [
+const TRAITS: [Traits; 4] = [
     Traits { code: "en", name: "English", accept_language: "Accept-Language: en,de;q=0.5", qwertz: false },
     Traits { code: "de", name: "Deutsch", accept_language: "Accept-Language: de,en;q=0.8", qwertz: true },
     Traits { code: "es", name: "Español", accept_language: "Accept-Language: es,en;q=0.8", qwertz: false },
+    Traits { code: "pt", name: "Português (Brasil)", accept_language: "Accept-Language: pt-BR,pt;q=0.9,en;q=0.7", qwertz: false },
 ];
 
 impl Lang {
-    pub const ALL: [Lang; 3] = [Lang::En, Lang::De, Lang::Es];
+    pub const ALL: [Lang; 4] = [Lang::En, Lang::De, Lang::Es, Lang::Pt];
 
     fn traits(self) -> &'static Traits {
         &TRAITS[self as usize]
@@ -100,6 +102,7 @@ impl Lang {
             Lang::En => return None,
             Lang::De => (&GERMAN, DE, "de.tsv"),
             Lang::Es => (&SPANISH, ES, "es.tsv"),
+            Lang::Pt => (&PORTUGUESE, PT, "pt.tsv"),
         };
         Some(slot.get_or_init(|| {
             let (table, errors) = Table::parse(src);
@@ -142,7 +145,7 @@ impl Lang {
 static LANG: AtomicU8 = AtomicU8::new(0);
 
 /// Switches the whole interface at once: the next frame is painted in it (no restart, nothing to reload).
-/// `POCKETUI_LANG` (`de`, `es` or `en`) overrides it, for snapshots and tests.
+/// `POCKETUI_LANG` (`de`, `es`, `pt` or `en`) overrides it, for snapshots and tests.
 pub fn set(lang: Lang) {
     let lang = std::env::var("POCKETUI_LANG").ok().map_or(lang, |l| Lang::from_locale(&l));
     LANG.store(lang as u8, Ordering::Relaxed);
@@ -166,6 +169,10 @@ const DE: &str = concat!(include_str!("../assets/i18n/de.tsv"), include_str!("..
 const ES: &str = include_str!("../assets/i18n/es.tsv");
 #[cfg(feature = "brick")]
 const ES: &str = concat!(include_str!("../assets/i18n/es.tsv"), include_str!("../assets/i18n/brick-es.tsv"));
+#[cfg(not(feature = "brick"))]
+const PT: &str = include_str!("../assets/i18n/pt.tsv");
+#[cfg(feature = "brick")]
+const PT: &str = concat!(include_str!("../assets/i18n/pt.tsv"), include_str!("../assets/i18n/brick-pt.tsv"));
 
 /// FNV-1a: the keys are short, and SipHash's protection against crafted keys buys nothing here.
 #[derive(Default, Clone, Copy)]
@@ -389,12 +396,15 @@ impl Table {
             return Some(Made { text: Cow::Owned(format!("{}{}{}", &s[..at], inner.text, &s[at + trimmed.len()..])), left: inner.left });
         }
         // A busy line's moving dots ("Turning Tailscale on.", "..", "..."; the page adds them by the clock): the
-        // words are translated, the dots stay. Without this a slow start (a loaded machine) painted the English.
+        // words are translated, the dots stay. Without this a slow start (a loaded machine) painted the English. A stem
+        // the table has only with its dots ("Looking at your games{s}") is left to the patterns below: returning here
+        // painted "Looking at your games.." in English two times in three (game check, 14.11.).
         let stem = s.trim_end_matches('.');
         let dots = &s[stem.len()..];
         if (2..=3).contains(&dots.len()) && !stem.is_empty() && !stem.ends_with(char::is_whitespace) {
-            let inner = self.translate_at(stem, depth, memo)?;
-            return Some(Made { text: Cow::Owned(format!("{}{dots}", inner.text)), left: inner.left });
+            if let Some(inner) = self.translate_at(stem, depth, memo) {
+                return Some(Made { text: Cow::Owned(format!("{}{dots}", inner.text)), left: inner.left });
+            }
         }
         // "Arcade racing" first in a line, "arcade racing" in the table (Curator's vocabulary): the same word, capitalised.
         let mut chars = s.chars();
@@ -593,6 +603,7 @@ fn match_segs<'s>(segs: &[Seg], s: &'s str, caps: &mut Vec<(&'static str, &'s st
 
 static GERMAN: OnceLock<Table> = OnceLock::new();
 static SPANISH: OnceLock<Table> = OnceLock::new();
+static PORTUGUESE: OnceLock<Table> = OnceLock::new();
 
 type NameSet = HashSet<Box<str>, BuildHasherDefault<Fnv>>;
 
@@ -675,14 +686,18 @@ pub fn brick_text(s: &str) -> String {
     s
 }
 
-/// Page names the Brick shortens (it has no fan: Settings › Playing › Performance, `perf_fan_page::title`), in the three
-/// languages as the tables have them: the pause menu's notes and the Tour pointed at "Performance & fan".
+/// Page names the Brick shortens (it has no fan: Settings › Playing › Performance, `perf_fan_page::title`), in every
+/// language as the tables have them: the pause menu's notes and the Tour pointed at "Performance & fan".
 #[cfg(feature = "brick")]
-const BRICK_PAGE_NAMES: [(&str, &str); 3] =
-    [("Performance & fan", "Performance"), ("Leistung & Lüfter", "Leistung"), ("Rendimiento y ventilador", "Rendimiento")];
+const BRICK_PAGE_NAMES: [(&str, &str); 4] = [
+    ("Performance & fan", "Performance"),
+    ("Leistung & Lüfter", "Leistung"),
+    ("Rendimiento y ventilador", "Rendimiento"),
+    ("Desempenho e ventoinha", "Desempenho"),
+];
 
-/// The Brick's own name where a line calls the handheld "the Pocket" (the Mini V2's word, in all three languages: "this Pocket",
-/// "dem Pocket", "el Pocket"): Settings, Tailscale, Sync, the power menu and Test buttons said "Pocket" on a Brick. Other things
+/// The Brick's own name where a line calls the handheld "the Pocket" (the Mini V2's word, in every language: "this Pocket",
+/// "dem Pocket", "el Pocket", "o Pocket"): Settings, Tailscale, Sync, the power menu and Test buttons said "Pocket" on a Brick. Other things
 /// called Pocket keep it: "Retroid Pocket 5", "Neo Geo Pocket", "Game Boy Pocket", "GB Pocket", PocketCore, Pocket5.
 #[cfg(feature = "brick")]
 pub fn brick_words(s: &str) -> String {
@@ -940,7 +955,7 @@ mod tests {
     }
 
     /// Every language's table, by its file's name.
-    const SHIPPED: [(&str, &str); 2] = [("de.tsv", DE), ("es.tsv", ES)];
+    const SHIPPED: [(&str, &str); 3] = [("de.tsv", DE), ("es.tsv", ES), ("pt.tsv", PT)];
 
     /// A table's lines: the English side as it is written, the rest of the line.
     fn lines_of(src: &'static str) -> Vec<(&'static str, &'static str)> {
@@ -1005,6 +1020,7 @@ mod tests {
                 .filter(|l| !["English", "‹ English ›", "puzzle"].contains(l))
                 // In keep.txt because they read the same in German, not because they are names.
                 .filter(|l| !(file == "es.tsv" && (*l == "‹ Warm ›" || *l == "‹ Scanlines ›" || l.starts_with("Code "))))
+                .filter(|l| !(file == "pt.tsv" && (*l == "‹ Warm ›" || *l == "‹ Scanlines ›" || l.starts_with("Code "))))
                 .filter_map(|name| t.translate(name).filter(|g| g != name).map(|g| format!("{name:?} -> {g:?}")))
                 .collect();
             assert!(changed.is_empty(), "{file}: {} names the table changes:\n{}", changed.len(), changed.join("\n"));
@@ -1014,6 +1030,7 @@ mod tests {
         }
         assert_eq!(german().translate("56.1 GB of 63.1 GB").as_deref(), Some("56.1 GB von 63.1 GB"), "the card's sizes still are");
         assert_eq!(Lang::Es.table().unwrap().translate("56.1 GB of 63.1 GB").as_deref(), Some("56.1 GB de 63.1 GB"));
+        assert_eq!(Lang::Pt.table().unwrap().translate("56.1 GB of 63.1 GB").as_deref(), Some("56.1 GB de 63.1 GB"));
     }
 
     #[test]
@@ -1139,6 +1156,30 @@ mod tests {
         assert_eq!(t.translate("Wait..."), None);
     }
 
+    /// Every busy line the tables keep as "Words{s}" (the page adds one to three dots by the clock) is translated with
+    /// each of them: "Looking at your games.." stayed English in the German and Spanish snapshots whenever the clock
+    /// had painted two or three dots (14.11.).
+    #[test]
+    fn every_busy_line_is_translated_with_one_two_and_three_dots() {
+        for lang in [Lang::De, Lang::Es] {
+            let table = lang.table().unwrap();
+            let src = std::fs::read_to_string(format!("{}/assets/i18n/{}.tsv", env!("CARGO_MANIFEST_DIR"), if lang == Lang::De { "de" } else { "es" })).unwrap();
+            let busy: Vec<&str> = src.lines().filter_map(|l| l.split('\t').next()?.strip_suffix("{s}")).filter(|k| k.ends_with(char::is_alphabetic) && !k.contains('{')).collect();
+            assert!(busy.contains(&"Looking at your games"), "{lang:?}");
+            let mut wrong = Vec::new();
+            for stem in busy {
+                for dots in [".", "..", "..."] {
+                    let english = format!("{stem}{dots}");
+                    match table.translate(&english) {
+                        Some(t) if t.ends_with(dots) && t != english => {}
+                        other => wrong.push(format!("{english:?} -> {other:?}")),
+                    }
+                }
+            }
+            assert!(wrong.is_empty(), "{lang:?}:\n{}", wrong.join("\n"));
+        }
+    }
+
     #[test]
     fn dots_glued_to_a_word_are_only_dots() {
         let t = table("Looking for tools{s}\tSuche Tools{s}\n");
@@ -1163,17 +1204,22 @@ mod tests {
         for spanish in ["es", "ES", "es_ES", "es_MX.UTF-8", "es-419", "es-AR", "es.UTF-8"] {
             assert_eq!(Lang::from_locale(spanish), Lang::Es, "{spanish}");
         }
-        for other in ["est", "et_EE", "eo", "pt_BR", "fr_FR", "C.UTF-8"] {
+        for portuguese in ["pt", "PT", "pt_BR", "pt-BR", "pt_BR.UTF-8", "pt_PT", "pt-PT"] {
+            assert_eq!(Lang::from_locale(portuguese), Lang::Pt, "{portuguese}");
+        }
+        for other in ["est", "et_EE", "eo", "ptx", "fr_FR", "it_IT", "C.UTF-8"] {
             assert_eq!(Lang::from_locale(other), Lang::En, "{other}");
         }
     }
 
     #[test]
     fn the_row_walks_through_every_language_both_ways() {
-        assert_eq!([Lang::En.next(), Lang::De.next(), Lang::Es.next()], [Lang::De, Lang::Es, Lang::En]);
-        assert_eq!([Lang::En.previous(), Lang::De.previous(), Lang::Es.previous()], [Lang::Es, Lang::En, Lang::De]);
-        assert_eq!(Lang::ALL.map(Lang::name), ["English", "Deutsch", "Español"]);
+        assert_eq!([Lang::En.next(), Lang::De.next(), Lang::Es.next(), Lang::Pt.next()], [Lang::De, Lang::Es, Lang::Pt, Lang::En]);
+        assert_eq!([Lang::En.previous(), Lang::De.previous(), Lang::Es.previous(), Lang::Pt.previous()], [Lang::Pt, Lang::En, Lang::De, Lang::Es]);
+        assert_eq!(Lang::ALL.map(Lang::name), ["English", "Deutsch", "Español", "Português (Brasil)"]);
         assert_eq!(serde_json::to_string(&Lang::Es).unwrap(), "\"es\"");
+        assert_eq!(serde_json::to_string(&Lang::Pt).unwrap(), "\"pt\"");
+        assert_eq!(serde_json::from_str::<Lang>("\"pt\"").unwrap(), Lang::Pt);
     }
 
     #[test]
@@ -1181,7 +1227,8 @@ mod tests {
         assert_eq!(Lang::De.accept_language(), "Accept-Language: de,en;q=0.8");
         assert_eq!(Lang::En.accept_language(), "Accept-Language: en,de;q=0.5");
         assert!(Lang::Es.accept_language().contains("es,"));
-        assert!(Lang::De.qwertz() && !Lang::En.qwertz() && !Lang::Es.qwertz());
+        assert!(Lang::Pt.accept_language().contains("pt-BR,"));
+        assert!(Lang::De.qwertz() && !Lang::En.qwertz() && !Lang::Es.qwertz() && !Lang::Pt.qwertz());
     }
 
     #[test]
@@ -1193,6 +1240,8 @@ mod tests {
         assert_eq!(Lang::from_system(None, || Some("it_IT".into())), Lang::En);
         assert_eq!(Lang::from_system(None, || Some("es_ES".into())), Lang::Es);
         assert_eq!(Lang::from_system(Some("es_MX.UTF-8"), || None), Lang::Es);
+        assert_eq!(Lang::from_system(None, || Some("pt_BR".into())), Lang::Pt);
+        assert_eq!(Lang::from_system(Some("pt_BR.UTF-8"), || None), Lang::Pt);
         assert_eq!(Lang::from_system(Some(""), || Some("de_DE".into())), Lang::De);
         assert_eq!(Lang::from_system(Some("de_AT.UTF-8"), || None), Lang::De);
         assert_eq!(Lang::default(), Lang::En);
@@ -1204,7 +1253,7 @@ mod brick_tests {
     use super::*;
 
     /// Settings walk 06.11.: on the Brick the Tailscale, Sync and remote-access lines, the power menu and Test buttons called the
-    /// handheld "the Pocket", in English, German and Spanish. Things that are really called Pocket keep the word.
+    /// handheld "the Pocket", in English, German, Spanish and Portuguese. Things that are really called Pocket keep the word.
     #[test]
     fn the_brick_is_called_the_brick_and_other_pockets_keep_their_name() {
         for (line, shown) in [
@@ -1213,6 +1262,7 @@ mod brick_tests {
             ("Pocket", "Brick"),
             ("Erreiche den Pocket von deinen anderen Geräten.", "Erreiche den Brick von deinen anderen Geräten."),
             ("Los ajustes de este Pocket.", "Los ajustes de este Brick."),
+            ("As configurações deste Pocket.", "As configurações deste Brick."),
             ("die Einstellungen dieses Pockets", "die Einstellungen dieses Bricks"),
             ("Retroid Pocket 5, Neo Geo Pocket Color, Game Boy Pocket, GB Pocket", "Retroid Pocket 5, Neo Geo Pocket Color, Game Boy Pocket, GB Pocket"),
             ("PocketCore, Pocket5, PocketSlim, pocket-ui", "PocketCore, Pocket5, PocketSlim, pocket-ui"),
@@ -1226,12 +1276,12 @@ mod brick_tests {
     #[cfg(feature = "brick")]
     #[test]
     fn the_brick_names_its_performance_page_without_the_fan_in_every_language() {
-        for (lang, page) in [(Lang::En, "Performance"), (Lang::De, "Leistung"), (Lang::Es, "Rendimiento")] {
+        for (lang, page) in [(Lang::En, "Performance"), (Lang::De, "Leistung"), (Lang::Es, "Rendimiento"), (Lang::Pt, "Desempenho")] {
             let line = "What games use unless you save one here: Quick settings, or Settings › Playing › Performance & fan.";
             let translated = lang.table().and_then(|t| t.translate(line)).map_or_else(|| line.to_string(), Cow::into_owned);
             let note = brick_text(&translated);
             assert!(note.ends_with(&format!("{page}.")), "{lang:?}: {note}");
-            assert!(!note.contains("fan") && !note.contains("Lüfter") && !note.contains("ventilador"), "{lang:?}: {note}");
+            assert!(!note.contains("fan") && !note.contains("Lüfter") && !note.contains("ventilador") && !note.contains("ventoinha"), "{lang:?}: {note}");
         }
     }
 }

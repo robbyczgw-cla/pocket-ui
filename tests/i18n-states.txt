@@ -417,6 +417,8 @@ sys:zones
 sys:search
 sys:osd-volume
 sys:osd-brightness
+sys:osd-dim:2
+sys:quick-dim:3
 sys:osd-warmth
 
 # Consoles and "Runs on"

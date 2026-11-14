@@ -27,7 +27,7 @@ pub enum Load<'a> { Slot(Option<usize>), Named(&'a str), Earlier(&'a str, Option
 pub enum Command<'a> {
     Unknown, AudioStats, Pause, Resume, Sleep, ScreenOff, Wake, Autosave,
     PixelPath(u32), Shot(u32), Preview(u32, u32, u32), Save(Option<usize>), Load(Load<'a>),
-    Restart, Slot(usize), Reload, Players, Cheats, Look(i8, i8, u16), Note(&'a str), Osd(&'a str),
+    Restart, Slot(usize), Reload, Players, Cheats, Look(i8, i8, u16, u8), Note(&'a str), Osd(&'a str),
     Disc(&'a str), Press(u16, u64), AchievementDemo, Peek(usize), Axis(crate::pad::Axis, f32),
     Option(&'a str, &'a str), Control(&'a str, &'a str), Set(&'a str, &'a str), Quit(Quit),
 }
@@ -58,7 +58,7 @@ impl<'a> Command<'a> {
             ["load", ..] => Self::Load(Load::Slot(slot())),
             ["slot", ..] => slot().map(Self::Slot).unwrap_or(Self::Unknown),
             ["reload"] => Self::Reload, [crate::players::COMMAND] => Self::Players, ["cheats"] => Self::Cheats,
-            ["look", w, c, rest @ ..] => Self::Look(w.parse().unwrap_or(0), c.parse().unwrap_or(0), rest.first().and_then(|n| n.parse().ok()).unwrap_or(0)),
+            ["look", w, c, rest @ ..] => Self::Look(w.parse().unwrap_or(0), c.parse().unwrap_or(0), rest.first().and_then(|n| n.parse().ok()).unwrap_or(0), rest.get(1).and_then(|n| n.parse().ok()).unwrap_or(0)),
             ["note", ..] => cmd.strip_prefix("note ").map(|s| Self::Note(s.trim())).unwrap_or(Self::Unknown),
             ["osd", ..] => cmd.strip_prefix("osd ").map(|s| Self::Osd(s.trim())).unwrap_or(Self::Unknown),
             ["disc", which] => Self::Disc(which),
@@ -96,7 +96,7 @@ mod tests {
             ("load auto extra", Command::Load(Load::Slot(None))), ("slot 2 extra", Command::Slot(1)),
             ("preview bad 640 480 ignored 7 99", Command::Preview(640,480,7)),
             ("shot invalid", Command::Shot(0)), ("shot 4294967296", Command::Shot(0)), ("shot 1 extra", Command::Unknown),
-            ("look 999 -2 bad extra", Command::Look(0,-2,0)), ("set frame x extra", Command::Unknown)] {
+            ("look 999 -2 bad extra", Command::Look(0,-2,0,0)), ("look 3 0 0 2", Command::Look(3,0,0,2)), ("look 0 0 4400", Command::Look(0,0,4400,0)), ("set frame x extra", Command::Unknown)] {
             assert_eq!(Command::parse(line, false), want, "{line}");
         }
     }

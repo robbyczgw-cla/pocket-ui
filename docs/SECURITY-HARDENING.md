@@ -121,7 +121,13 @@ Implemented (`src/remote.rs`, Settings → Connections → Remote access (SSH), 
 - **No idle timeout** (removed 2026-11-01): SSH stays on until switched off, and is off after a restart.
 - **Keys:** `/storage/.ssh/authorized_keys` works whenever sshd runs, also during the password window.
 - **Developer devices:** `/storage/.config/pocket-ui/dev-ssh` exists → mode `Dev`: the switch is
-  disabled, `turn_on`/`turn_off` refuse. **Created on the development device.**
+  disabled, `turn_on`/`turn_off` refuse. **Created on the development device.** pocket-ui keeps sshd running
+  there itself (`remote::keep_dev_ssh`): after the first frame and whenever the page is opened, a developer
+  device whose sshd is not running (mode `DevDown`; e.g. ROCKNIX's `099-networkservices` removed `sshd.conf`
+  because `ssh.enabled` is no longer 1 after a hard power-off) gets `sshd.conf` again and `systemctl start sshd`.
+  The page shows the real state: "Developer device: starting SSH…", then on, or "Developer device: SSH is not
+  running." / the error with A = Start SSH; never "Always on" while sshd is off. The Settings row says on only
+  while sshd runs.
 - **sshd running for another reason** (ROCKNIX `ssh.enabled=1`, kernel `ssh` argument) → mode `External`:
   the timeout leaves it alone; only an explicit switch press stops it.
 

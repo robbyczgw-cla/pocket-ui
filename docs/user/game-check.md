@@ -7,6 +7,7 @@ leaves the shelf alone, and shows either **All good** with how many games are re
 
 | Row | Example | What to do |
 |---|---|---|
+| **Folders that can't be read** | A system entry in `es_systems.cfg` is damaged or has no name or ROM folder | Check the entry at the file and line shown, then scan your games again. Other systems stay on the shelf |
 | **BIOS files** | "Sega CD: BIOS missing." with the exact file names; "The BIOS file is in the wrong folder"; "Wrong BIOS: its checksum differs"; "This BIOS file is empty" | Put your own console's file into `roms/bios`, or move or rename it as the line says |
 | **Discs missing a file** | "Disc: Game.cue is there, its Game.bin is missing." Also an `.m3u` playlist none of whose discs can start | Put the file next to it, with exactly this name |
 | **Empty files** | "This file is empty." | Copy the game again |
@@ -28,3 +29,5 @@ start: the first shelf greets you without it.
 When files were copied that the shelf can't read (a disc without its file, a folder no system reads) and no new game
 turned up with them, the same note says "Some game files can't be read. Settings › Games › Game check says why." On an
 empty Home, "No games yet" says it too.
+
+A literal `&` in a system name (such as Game & Watch) is accepted. A damaged system entry is left out individually; the other games remain. A short note points to Game check. The system list and your games are never changed.

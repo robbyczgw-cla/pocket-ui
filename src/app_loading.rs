@@ -40,7 +40,9 @@ impl App {
             return Some(next);
         }
         let age = now.saturating_duration_since(at);
-        let on = (preparing && age >= Duration::from_secs(3) || pocket_ui::startup::loading_path().exists()) && age < LOAD_MAX;
+        // Java for a phone game's first start is said at once and for as long as it loads (`j2me_java`).
+        let java = preparing && self.java_fetch.is_some();
+        let on = java || (preparing && age >= Duration::from_secs(3) || pocket_ui::startup::loading_path().exists()) && age < LOAD_MAX;
         match (on, self.loading.since) {
             (true, None) => {
                 println!("launch: still loading after {age:?}, saying so");
@@ -75,6 +77,9 @@ impl App {
 
     pub(crate) fn paint_loading(&mut self, c: &mut Canvas) {
         let Some(since) = self.loading.since else { return };
+        if let Some(fetch) = self.java_fetch.clone() {
+            return self.paint_java(c, &fetch);
+        }
         let turn = if pocket_ui::motion::level() == pocket_ui::motion::Motion::Off { 0 } else { (since.elapsed().as_millis() / SPIN_STEP.as_millis()) as i32 };
         let word = "Loading the game…";
         let w = self.text.width(Face::Body, 28, word);
@@ -89,6 +94,42 @@ impl App {
         });
     }
 
+
+    /// B while a phone game's first start loads Java: the load stops at its next look (`j2me_java::Fetch::stop`) and
+    /// the start ends as a failed one, with what happened in the notice. Any other button is the launch's as before.
+    pub(crate) fn java_press(&mut self, b: pocket_ui::pad::Button) -> bool {
+        let Some(fetch) = self.java_fetch.as_ref().filter(|_| b == super::CANCEL) else { return false };
+        println!("j2me: Java load stopped with B");
+        fetch.stop();
+        self.request_redraw();
+        true
+    }
+
+    /// A phone game's first start: "Loading Java, once (about 200 MB)", a bar and how far it is, B to stop in the hint bar, in the same
+    /// dark plate as "Loading the game…" (over any launch scene or picture).
+    pub(crate) fn paint_java(&mut self, c: &mut Canvas, fetch: &pocket_ui::j2me_java::Fetch) {
+        use pocket_ui::j2me_java::TITLE;
+        let line = fetch.line();
+        let tw = self.text.width(Face::Body, 28, TITLE);
+        let lw = self.text.width(Face::Body, 24, &line);
+        let w = tw.max(lw).max(360).min(c.w - 2 * pocket_ui::kit::PAD);
+        let (px, small) = (pocket_ui::type_scale::px(28) as i32, pocket_ui::type_scale::px(24) as i32);
+        let h = px + 22 + 12 + 20 + small + 20;
+        let x = (c.w - w) / 2;
+        let y = pocket_ui::kit::hint_bar_top(c.h) - 24 - h;
+        pocket_ui::palette::scoped(0, || {
+            c.round_rect(x - 24, y, w + 48, h + 16, 12, 0x161616);
+            let mut at = y + 12 + px * 4 / 5;
+            self.text.draw(c, Face::Body, 28, x, at, pal().chalk, TITLE);
+            at += 22;
+            c.round_rect(x, at, w, 12, 6, 0x3a3a3a);
+            let filled = (w as f32 * fetch.fraction()) as i32;
+            if filled > 0 { c.round_rect(x, at, filled.max(12), 12, 6, pal().chalk); }
+            at += 12 + 20 + small * 4 / 5;
+            self.text.draw(c, Face::Body, 24, x, at, pal().dust, &line);
+        });
+        self.paint_hint_row(c, &[("B", "Stop")]);
+    }
 }
 
 impl Loading {

@@ -42,7 +42,7 @@ Start at [user/index.md](user/index.md).
 | [user/bluetooth.md](user/bluetooth.md) | Settings → Connections → Bluetooth: pairing controllers, headphones and speakers, reconnecting, forgetting |
 | [user/continue.md](user/continue.md) | Continue: an open case means your moment is waiting and A goes straight back; how long each system takes, what can't continue |
 | [user/quick-settings.md](user/quick-settings.md) | Quick settings (HOME), the power menu, sleep, power off and low battery |
-| [user/language.md](user/language.md) | Settings → System → Language: English, German or Spanish, what stays English |
+| [user/language.md](user/language.md) | Settings → System → Language: English, German, Spanish or Brazilian Portuguese, what stays English |
 | [user/night-light.md](user/night-light.md) | Settings → Look → Night light: warmer, less blue colours in the evening, the schedule, the strength, how it fades and where it reaches |
 | [user/theme.md](user/theme.md) | Settings → Look → Colours and Font: the five colour sets and the three fonts |
 | [user/performance.md](user/performance.md) | Settings → Playing → Performance & fan: game defaults, the fan in the menus, Smooth fan, the readout |
@@ -100,10 +100,10 @@ Start at [DEVELOPING.md](DEVELOPING.md).
 | [dev/start-time.md](dev/start-time.md) | Reference | Start time: read when you touch start-up, instant start or anything that could slow the first frame |
 | [dev/tests.md](dev/tests.md) | Reference | Tests and documentation checks: read when you write or run tests, or change docs/user (the "Documentation checks" table is here) |
 | [dev/tour.md](dev/tour.md) | Reference | Feature tour: read when you add a feature that needs a tour card |
-| [dev/translations.md](dev/translations.md) | Reference | Translations: read when you add or change UI text, German/Spanish lines or the i18n snapshots |
+| [dev/translations.md](dev/translations.md) | Reference | Translations: read when you add or change UI text, German/Spanish/Portuguese lines or the i18n snapshots |
 | [BINARY-SIZE.md](BINARY-SIZE.md) | Internal | Release binary size by crate/function and embedded data, full-LTO savings, storage reserve and before/after runtime measurements |
 | [ARCHITECTURE.md](ARCHITECTURE.md) | Reference | How pocket-ui fits into ROCKNIX, the processes, the launch flow, switching games, the pause menu, and where each feature lives |
-| [i18n-glossary.md](i18n-glossary.md) | Reference | The German and Spanish interfaces: tone, the terms every page uses, what stays English and why |
+| [i18n-glossary.md](i18n-glossary.md) | Reference | The German, Spanish and Brazilian Portuguese interfaces: tone, the terms every page uses, what stays English and why |
 | [HOST.md](HOST.md) | Reference | pocket-core, our libretro host: how it works, systems, measurements |
 | [AUDIO-PATH.md](AUDIO-PATH.md) | Reference | Prepared sinc and NEON, H700 buffering, RetroArch comparisons and measurement limits |
 | [XBOX.md](XBOX.md) | Reference | Xbox through the hakuX core in RetroArch: start, appendconfig, pause menu, licence, device test (experimental) |

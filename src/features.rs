@@ -1263,9 +1263,15 @@ pub fn paint_profiles(c: &mut Canvas, text: &mut Text, sel: usize, profiles: &[P
     c.clear(pal().void);
     let mut hits = Hits { sel, ..Default::default() };
     // A short screen (768 lines) takes the heading and the five rows closer, so the last row clears the hints (it ran 14 px
-    // under them at pitch 108).
+    // under them at pitch 108); the Smart Pro's 720 lines closer again.
     let short = crate::kit::short_screen(c.h);
-    let (head, sub, first, pitch, row_h) = if short { (100, 148, 172, 100, 92) } else { (140, 192, 230, 124, 112) };
+    let (head, sub, first, pitch, row_h) = if short && c.h < 768 {
+        (88, 130, 150, 86, 80)
+    } else if short {
+        (100, 148, 172, 100, 92)
+    } else {
+        (140, 192, 230, 124, 112)
+    };
     let full = c.w - 2 * MARGIN;
     // A little smaller where they would not fit: Retro's wider letters ran both off a 1024-wide screen (the Brick).
     let (px, title) = text.fit_sizes(Face::Title, &[67, 60, 54], "How do you like to play?", full);

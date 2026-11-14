@@ -63,9 +63,11 @@ Pocket
 English
 Deutsch
 Español
+Português (Brasil)
 ‹ English ›
 ‹ Deutsch ›
 ‹ Español ›
+‹ Português (Brasil) ›
 ‹ Normal ›
 Ports
 Vulkan
@@ -555,6 +557,9 @@ roms/snes/Chrono Trigger.gba
 roms/Sega Genesis
 # The same word in Spanish, so its pattern changes nothing: a device's name with its note (About).
 re:\(experimental\)$
+# Portuguese says Backup and Saves as the English does: the Backup page and the Sync size lines.
+re:^Backup · .*$
+re:^Saves · .*$
 TrimUI Brick
 Some Game (USA).chd
 Pocket UI

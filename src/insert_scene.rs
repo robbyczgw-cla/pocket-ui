@@ -1134,18 +1134,18 @@ mod tests {
     }
 
     #[test]
-    fn motion_off_or_a_frozen_game_is_the_quick_way_with_no_hold_and_one_quiet_click() {
+    fn motion_off_or_reduced_is_the_quick_way_with_no_hold_and_one_quiet_click() {
         use crate::motion::Motion::{Full, Off, Reduced};
-        for (motion, frozen) in [(Off, false), (Reduced, false), (Full, true)] {
-            let cozy = cabinet::starts_cozy(true, motion, frozen);
-            assert!(!cozy, "{motion:?} {frozen}");
+        for motion in [Off, Reduced] {
+            let cozy = cabinet::starts_cozy(true, motion);
+            assert!(!cozy, "{motion:?}");
             assert_eq!(hold(cozy), None);
             let mut s = scene("psx", cozy);
             s.load_rig(2);
             assert!(s.rig.is_none());
             assert_eq!(cues(cozy, Medium::of("psx"), false).iter().map(|c| c.sound).collect::<Vec<_>>(), [Sound::Insert]);
         }
-        assert!(cabinet::starts_cozy(true, Full, false));
+        assert!(cabinet::starts_cozy(true, Full));
     }
 
     #[test]

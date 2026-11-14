@@ -267,6 +267,12 @@ fn every_string_in_the_spanish_snapshots_is_translated_or_a_name() {
     every_string_is_translated_or_a_name("es");
 }
 
+#[test]
+#[ignore = "release check: sh scripts/release-check.sh"]
+fn every_string_in_the_portuguese_snapshots_is_translated_or_a_name() {
+    every_string_is_translated_or_a_name("pt");
+}
+
 fn every_string_is_translated_or_a_name(lang: &'static str) {
     let _tmp_guard = tempfile::tempdir().unwrap();
     let tmp = _tmp_guard.path().to_path_buf();
@@ -314,7 +320,7 @@ fn every_string_is_translated_or_a_name(lang: &'static str) {
 
     let (keep_exact, keep_patterns) = keep();
     let mut data = english_data();
-    data.extend(names_from_data(&tmp, if lang == "es" { pocket_ui::i18n::Lang::Es } else { pocket_ui::i18n::Lang::De }));
+    data.extend(names_from_data(&tmp, pocket_ui::i18n::Lang::from_locale(lang)));
     // Names (of games, systems, places, and what keep.txt keeps), longest first, for `bare` below.
     let mut names: Vec<String> = data.iter().chain(keep_exact.iter()).filter(|n| n.chars().count() >= 2 && n.chars().any(|c| c.is_uppercase() || c.is_ascii_digit() || c == '-')).cloned().collect();
     names.sort_by_key(|n| std::cmp::Reverse(n.len()));
@@ -441,11 +447,14 @@ fn the_system_language_decides_until_one_is_chosen() {
     };
     let german_welcome = welcome("de");
     let spanish_welcome = welcome("es");
-    assert_ne!(german_welcome, spanish_welcome, "the welcome must distinguish the two test languages");
+    let portuguese_welcome = welcome("pt");
+    assert!(german_welcome != spanish_welcome && spanish_welcome != portuguese_welcome && german_welcome != portuguese_welcome, "the welcome must distinguish the test languages");
     let german = shot("de_DE.UTF-8", None, "de");
     assert!(german.lines().any(|line| line == german_welcome), "ROCKNIX set to German, nothing chosen:\n{german}");
     let spanish = shot("es_MX.UTF-8", None, "es");
     assert!(spanish.lines().any(|line| line == spanish_welcome), "ROCKNIX set to Spanish, nothing chosen:\n{spanish}");
+    let portuguese = shot("pt_BR.UTF-8", None, "pt");
+    assert!(portuguese.lines().any(|line| line == portuguese_welcome), "ROCKNIX set to Brazilian Portuguese, nothing chosen:\n{portuguese}");
     let english = shot("en_US.UTF-8", None, "en");
     assert!(!english.contains("O\t"), "ROCKNIX set to English:\n{english}");
     let chosen = shot("de_DE.UTF-8", Some(r#"{"language": "en"}"#), "chosen");

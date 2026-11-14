@@ -232,7 +232,7 @@ impl App {
         // Left: the controllers. Right: the drawing of the selected one. Under both: the last button pressed.
         let column = (c.w * 30 / 100).clamp(300, 400);
         let seats = Seats::arrange(&self.test_buttons.order, &test.pads().iter().map(|p| p.controller.clone()).collect::<Vec<_>>(), Mode::Exact);
-        let panel_h = self.last_panel_height(right - left);
+        let panel_h = self.last_panel_height(right - left, c.h < 768);
         let room = bottom - top - 12 - panel_h - 16;
         self.paint_pad_list(c, test, &seats, (left, top, column, room));
         let x = left + column + 24;
@@ -246,8 +246,9 @@ impl App {
     /// Height of the panel `w` wide under the list and the drawing: three lines, the button's name and who pressed it on the
     /// left, what it does in menus, in games and the note on the right; more when the hints before the first press need
     /// them (the same height before and after, so the drawing doesn't jump).
-    fn last_panel_height(&mut self, w: i32) -> i32 {
-        let step = pocket_ui::type_scale::line(NU_SMALL - 2, 8);
+    /// `tight`: under 768 lines (the Smart Pro's 720) its lines are closer, so the drawing above keeps room for its labels.
+    fn last_panel_height(&mut self, w: i32, tight: bool) -> i32 {
+        let step = pocket_ui::type_scale::line(NU_SMALL - 2, if tight { 4 } else { 8 });
         let (_, right_w) = last_panel_columns(w);
         28 + self.idle_hints(right_w).len().max(3) as i32 * step
     }
@@ -307,7 +308,7 @@ impl App {
             pocket_ui::retro::frame_lines_are_no_text(c, x, y, w, h);
         }
         let (px, inner) = (x + pocket_ui::kit::PANEL_PAD, w - 2 * pocket_ui::kit::PANEL_PAD);
-        let (small, step) = (NU_SMALL - 2, pocket_ui::type_scale::line(NU_SMALL - 2, 8));
+        let (small, step) = (NU_SMALL - 2, pocket_ui::type_scale::line(NU_SMALL - 2, if c.h < 768 { 4 } else { 8 }));
         let base = |row: i32| y + 12 + step * (row + 1) - 6;
         if let Some(progress) = test.hold(now) {
             self.text.draw(c, Face::Title, 40, px, base(0) + 2, pal().chalk, "Keep holding to leave");

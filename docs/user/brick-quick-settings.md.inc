@@ -7,13 +7,20 @@ to bottom:
 
 | Row | Left/Right and A |
 |---|---|
-| **Brightness** | Left/Right change it |
+| **Brightness** | Left/Right change it. Below 5% it goes on to **Extra dim 1**, **2** and **3** for playing in the dark ([Extra dim](#extra-dim)) |
 | **Volume** | Left/Right change it. Muted sound says so: "5%, muted". The small text beside it says where the sound goes: Speaker, or Bluetooth and the headphones' name ([Where the sound goes](#where-the-sound-goes)) |
 | **Wi-Fi** | A switches it on or off. The row says **Off** when the radio is off, and the same on Settings → Connections → Wi-Fi |
 | **Performance** | Left/Right: Battery, Auto, Max; A goes on to the next. What games run with ([Performance](performance.md)) |
 
 The time, the Wi-Fi symbol and the battery level are at the top right, as on Home. B or MENU closes the panel; opened from the pause
 menu, it goes back to the pause menu. In a game, a MENU tap opens the pause menu, not this panel.
+
+### Extra dim
+
+The lowest backlight can still be too bright in a dark room. Turn Brightness down past 5% and the picture itself gets
+darker in three more steps: **Extra dim 1**, **2** and **3**. It works on the shelf, in the menus and in games, and
+text stays readable on the darkest step. Turning Brightness up takes the extra dim steps away first, then the backlight
+goes up again. Your choice is kept after a restart.
 
 ### Where the sound goes
 

@@ -234,8 +234,9 @@ fn run(jobs: Vec<Job>) -> Vec<String> {
                 continue;
             }
             // The Game Boy Advance's and the DS's labels at 1024x768 are 90 pixels long: a long name has no room whole
-            // there, and a cut one is allowed to be the only way, if it tells itself apart (below).
-            let thin = (j.system == "gba" || j.system == "nds") && j.size == "1024x768";
+            // there, and a cut one is allowed to be the only way, if it tells itself apart (below). The same on the Smart
+            // Pro's 1280x720, the other short screen painted natively since 13.11.2026 (before, it was laid out at 1707x960).
+            let thin = (j.system == "gba" || j.system == "nds") && (j.size == "1024x768" || j.size == "1280x720");
             if lines.split('|').any(|l| l.ends_with('…')) && !thin {
                 wrong.push(format!("{at}: \"{title}\" cut short: \"{lines}\" at {px} px"));
             }

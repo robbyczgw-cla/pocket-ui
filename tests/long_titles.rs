@@ -190,7 +190,7 @@ fn long_game_names_are_whole_beside_their_cover_in_every_look() {
         for size in if quick { vec!["1024x768"] } else { vec!["640x480", "1024x768", "1240x1080"] } {
             for retro in [false, true] {
                 for text in if quick { vec!["normal"] } else { vec!["normal", "large"] } {
-                    for lang in if quick { vec!["en"] } else { vec!["en", "de", "es"] } {
+                    for lang in if quick { vec!["en"] } else { vec!["en", "de", "es", "pt"] } {
                         for game in 0..GAMES.len() {
                             jobs.push(Job { look, size, retro, text, lang, game, info: false, home: None, frozen: false });
                         }
@@ -284,7 +284,7 @@ fn info_titles_031_are_whole_above_the_fixed_facts() {
         for size in ["640x480", "1024x768", "1240x1080", "1280x720"] {
             for retro in [false, true] {
                 for text in if cfg!(feature = "brick") { vec!["normal", "medium", "large"] } else { vec!["normal", "large"] } {
-                    for lang in ["en", "de", "es"] {
+                    for lang in ["en", "de", "es", "pt"] {
                         for game in 0..GAMES.len() {
                             jobs.push(Job { look, size, retro, text, lang, game, info: true, home: None, frozen: false });
                         }
@@ -358,7 +358,7 @@ fn continue_row_031_meta_line_and_open_word_stay_clear_of_the_name() {
         for size in if quick { vec!["1024x768"] } else { vec!["640x480", "1024x768", "1240x1080", "1280x720", "1920x1080"] } {
             for retro in [false, true] {
                 for text in if quick { vec!["normal"] } else if cfg!(feature = "brick") { vec!["normal", "medium", "large"] } else { vec!["normal", "large"] } {
-                    for lang in if quick { vec!["en"] } else { vec!["en", "de", "es"] } {
+                    for lang in if quick { vec!["en"] } else { vec!["en", "de", "es", "pt"] } {
                         for home in [0, 1] {
                             for frozen in [true, false] {
                                 jobs.push(Job { look, size, retro, text, lang, game: 0, info: false, home: Some(home), frozen });
@@ -428,7 +428,7 @@ fn just_play_031_texts_stay_clear_in_every_look() {
         for size in if quick { vec!["1024x768"] } else { vec!["640x480", "1024x768", "1240x1080", "1280x720", "1920x1080"] } {
             for retro in [false, true] {
                 for text in if quick { vec!["large"] } else if cfg!(feature = "brick") { vec!["normal", "medium", "large"] } else { vec!["normal", "large"] } {
-                    for lang in if quick { vec!["en"] } else { vec!["en", "de", "es"] } {
+                    for lang in if quick { vec!["en"] } else { vec!["en", "de", "es", "pt"] } {
                         for home in 0..4 {
                             jobs.push(Job { look, size, retro, text, lang, game: 0, info: false, home: Some(home), frozen: false });
                         }

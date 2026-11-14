@@ -257,7 +257,15 @@ as before. Before dropping a short system fact on the Brick, the facts try Body 
 that same band, only when it preserves an additional complete row. The info page tries the next smaller metadata/value size and a compact
 "None · Y" rating hint before cutting it; its label/value column widths stay fixed and Retro tries the next distinct pixel-grid step; if Retro keeps two sizes on the same pixel grid, the Favourite mark takes one visible step down before losing the year; long metadata also tries the next distinct Retro size and an existing console alias (such as NES), reserving the complete year before trimming only an unknown system name; Credits and keyboard notes also try one smaller size. The Brick recent-games hint is "Recent" (German "Zuletzt"). Pixel Path keeps its short-screen grades under their stage names, one step smaller and closer, reserving the selected explanation and live line above the hints. The Performance readings measure the single-column labels as they do in two columns. The Extras subtitle fits at 28 or 24; Spanish keeps the no-Wi-Fi explanation short. Sleep & power allows its existing footer up to eight lines on a short Brick screen, so both the screen-off note and selected explanation remain complete; the existing list scrolls above that reserved area.
 
-Three pages that are taller than a short screen (721 to 899 lines, 1024x768) in Large text give way in a fixed order,
+A short screen is 720 to 899 lines (`kit::short_screen`: the Brick's 1024x768 and the Smart Pro's 1280x720, both painted
+natively). Pages tuned to 768 lines take the Smart Pro's 48 fewer only under 768 (`c.h < 768`), so the Brick's pictures
+stay as they are: Settings' first page (rows down to 50 px, so all seven categories stand there at Normal text), the
+Curator history's chart and rows, Search's empty page, the first start's ways and games, Battery, Sync, Runs on, About,
+the Updates note and Test buttons are a little tighter there; Easy's open-case line waits for a screen with room. The
+shelf keeps the Brick's scale (`media::SHORT_SHELF_SCALE`): long Game Boy Advance and DS names are cut on their spines
+there as on the Brick, and tell themselves apart (tests/spine_names.rs).
+
+Three pages that are taller than a short screen (720 to 899 lines, 1024x768) in Large text give way in a fixed order,
 never by running under the hints: **Tailscale** paints the selected row's line and the hints first, lets its rows shrink to
 what a row of that type needs, makes the facts of a connection stand as far apart as their type is tall, and shows the
 help paragraphs that fit whole above the footer, at 26, 24 or 22 px, the last paragraphs (and the tip about SSH) left out
@@ -291,7 +299,8 @@ controller is the input. Portrait turns the shelf into stacked boards of fronts;
 
 ## Small-panel presentation
 
-On panels up to 720 px tall, compose the same supported layout on a logical canvas, then reduce the completed
+On panels up to 720 px tall (except 1024×720 and wider, the Smart Pro's 1280×720, which is painted natively as a short
+screen), compose the same supported layout on a logical canvas, then reduce the completed
 0RGB frame (`scaled_layout`, `frame::Presenter::draw_scaled`). 640×480 uses 1280×960, 720×480 uses 1440×960,
 and 720×720 uses 1440×1440 (every H700 panel is exactly halved). This keeps margins, shelves, panels, text and hit areas in one coordinate space;
 page painters must not mix physical panel coordinates into their layout. `App::screen_size` returns logical dimensions.

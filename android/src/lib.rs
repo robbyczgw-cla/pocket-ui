@@ -522,7 +522,7 @@ impl App {
                     self.persist();
                     // Cozy's start, or the quick way: the same rules as the handhelds (`cabinet::starts_cozy`).
                     let frozen = self.ui.is_frozen(&game.key);
-                    let cozy = pocket_ui::cabinet::starts_cozy(self.ui.prefs.cozy.unwrap_or(true), pocket_ui::motion::level(), frozen);
+                    let cozy = pocket_ui::cabinet::starts_cozy(self.ui.prefs.cozy.unwrap_or(true), pocket_ui::motion::level());
                     self.begin_insert(&game, cozy);
                     // Test only (`insertRehearsal` launch extra, as `externalPlayer`): the start's picture and sounds of
                     // any system, without a core or an emulator to start.

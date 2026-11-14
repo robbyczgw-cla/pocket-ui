@@ -858,7 +858,7 @@ fn the_status_ledger_rows_have_a_known_status_and_no_private_data() {
 #[ignore = "release check: sh scripts/release-check.sh"]
 fn settings_paths_on_the_screen_use_the_glossarys_arrow() {
     // Put together, so this test's own lines don't count.
-    let (en, de, es) = (["Settings", " > "].concat(), ["Einstellungen", " > "].concat(), ["Ajustes", " > "].concat());
+    let (en, de, es, pt) = (["Settings", " > "].concat(), ["Einstellungen", " > "].concat(), ["Ajustes", " > "].concat(), ["Configurações", " > "].concat());
     let mut bad = Vec::new();
     for f in rust_sources() {
         let src = std::fs::read_to_string(&f).unwrap();
@@ -872,9 +872,9 @@ fn settings_paths_on_the_screen_use_the_glossarys_arrow() {
             }
         }
     }
-    for file in ["de.tsv", "es.tsv"] {
+    for file in ["de.tsv", "es.tsv", "pt.tsv"] {
         for (n, line) in read(&format!("assets/i18n/{file}")).lines().enumerate() {
-            if !line.starts_with('#') && (line.contains(&en) || line.contains(&de) || line.contains(&es)) {
+            if !line.starts_with('#') && (line.contains(&en) || line.contains(&de) || line.contains(&es) || line.contains(&pt)) {
                 bad.push(format!("assets/i18n/{file}:{}: {line}", n + 1));
             }
         }
@@ -1101,7 +1101,7 @@ fn every_path_in_settings_names_a_category_and_one_of_its_rows() {
         }
     }
     // Both sides of each table: the English key as the code paints it, the translation with the translated names.
-    for (file, word) in [("de.tsv", "Einstellungen"), ("es.tsv", "Ajustes")] {
+    for (file, word) in [("de.tsv", "Einstellungen"), ("es.tsv", "Ajustes"), ("pt.tsv", "Configurações")] {
         let tsv = read(&format!("assets/i18n/{file}"));
         let map: std::collections::HashMap<String, String> = tsv
             .lines()

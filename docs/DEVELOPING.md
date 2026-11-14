@@ -19,7 +19,7 @@ reference is split by topic in [`docs/dev/`](dev/) and is read only when you wor
 | [Repository layout](dev/layout.md) | you add or move a module or file in src/ (doc_checks holds this list), or look for where code lives |
 | [Releasing](dev/release.md) | you cut a release or build release assets |
 | [Consoles and game data](dev/consoles.md) | you edit console fact sheets, credits, gamedb or Curator data |
-| [Translations](dev/translations.md) | you add or change UI text, German/Spanish lines or the i18n snapshots |
+| [Translations](dev/translations.md) | you add or change UI text, German/Spanish/Portuguese lines or the i18n snapshots |
 | [Conventions, details and regressions](dev/conventions-details.md) | you touch Wi-Fi activation, text fit / long titles or small-panel layout measuring |
 | [Android and platform adapters](dev/android.md) | you work on the Android app or the platform adapters |
 | [Standalone Brick Bluetooth](dev/brick-bluetooth.md) | you work on Bluetooth, controller layouts or save-safety / literal-name regressions |

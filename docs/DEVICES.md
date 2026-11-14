@@ -173,7 +173,8 @@ the hints, text cut by an edge, strings cut short), and every page was looked at
 
 ### Small panels (H700)
 
-`src/scaled_layout.rs` chooses a logical canvas for outputs at most 720 px tall. The physical window size wins;
+`src/scaled_layout.rs` chooses a logical canvas for outputs at most 720 px tall and narrower than 1024 (1280×720, the
+TrimUI Smart Pro or a 720p TV, is painted natively like the Brick's 1024×768). The physical window size wins;
 before a window exists, the device profile supplies it. Thus an H700 on a 1080p TV uses the native large layout.
 
 | Panel | Logical canvas | Final reduction |

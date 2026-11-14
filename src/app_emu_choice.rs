@@ -434,7 +434,9 @@ impl App {
             Mode::Save { sel } => sel,
         };
         let font = if lines.len() > 6 { 34u32 } else { 36u32 };
-        let row = pocket_ui::type_scale::row(if lines.len() > 6 { 54 } else { 66 }, font);
+        // Nine rows of 54 ended under the hints on 720 lines (the Smart Pro): 48 there.
+        let long = if c.h < 768 { 48 } else { 54 };
+        let row = pocket_ui::type_scale::row(if lines.len() > 6 { long } else { 66 }, font);
         for (i, (name, value)) in lines.iter().enumerate() {
             let y = top + i as i32 * row;
             self.hits.row(Area::new(pad, y, right - pad, row), i);

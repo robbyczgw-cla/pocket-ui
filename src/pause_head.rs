@@ -118,7 +118,7 @@ mod tests {
         }
         let mut text = Text::builtin();
         let mut cut = Vec::new();
-        for lang in [Lang::En, Lang::De, Lang::Es] {
+        for lang in [Lang::En, Lang::De, Lang::Es, Lang::Pt] {
             i18n::set(lang);
             for (w, h, density) in [(1240, 1080, 2.0), (1240, 1080, 2.5), (1920, 1080, 2.5), (1920, 1080, 3.0), (1280, 960, 2.0)] {
                 // Android's buttons at the side in landscape on a small screen (Mini V2: about 64 dp), or at the bottom.

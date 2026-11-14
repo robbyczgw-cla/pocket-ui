@@ -393,10 +393,10 @@ mod tests {
 
     /// A letter a font lacks comes out as a hole in a word, in the fonts of Settings → Look → Style as much as in Barlow.
     #[test]
-    fn every_font_has_every_letter_of_the_spanish_table() {
-        let table = include_str!("../assets/i18n/es.tsv");
+    fn every_font_has_every_letter_of_the_spanish_and_portuguese_tables() {
+        let table = concat!(include_str!("../assets/i18n/es.tsv"), include_str!("../assets/i18n/pt.tsv"));
         let translated = table.lines().filter(|l| !l.starts_with('#')).filter_map(|l| l.split_once('\t')).flat_map(|(_, t)| t.chars());
-        let mut need: Vec<char> = "ñÑ¿¡áéíóúüÁÉÍÓÚÜ“”…".chars().chain(translated.filter(|c| !c.is_ascii())).collect();
+        let mut need: Vec<char> = "ñÑ¿¡áéíóúüÁÉÍÓÚÜãõâêôçÃÕÂÊÔÇà“”…".chars().chain(translated.filter(|c| !c.is_ascii())).collect();
         need.sort_unstable();
         need.dedup();
         let barlow = [BARLOW_TITLE, BARLOW_BODY].map(|b| Font::from_bytes(b, FontSettings::default()).unwrap());

@@ -403,6 +403,8 @@ enum UserEvent {
     /// How many things in the ROM folders the shelf leaves unread, counted after a rescan; `rose` when that is news
     /// and no game arrived (`app_library`).
     LibraryUnread { count: usize, rose: bool },
+    /// A damaged system entry was skipped; the other games remain on the shelf.
+    SystemListUnread,
     /// The picture went to a TV through USB-C, or back to the panel (`app_display_out`).
     #[cfg_attr(not(target_os = "linux"), allow(dead_code))]
     Display(Option<pocket_ui::display_out::Tv>),
@@ -586,7 +588,7 @@ const SETTINGS_GROUPS: [(&str, &str, &[SettingsRow]); 8] = [
         (app_web::SETTINGS_NAME, Opens::Web, "Your games, play time and uploads in a browser."),
     ]),
     ("System", "Language, time, sleep & power, kids mode, updates, storage, backup & reset.", &[
-        ("Language", Opens::Language, "Menus and messages in English, German or Spanish."),
+        ("Language", Opens::Language, "Menus and messages in English, German, Spanish or Portuguese."),
         ("Time", Opens::Time, "Time zone, date and network time."),
         (app_sleep_power::SETTINGS_NAME, Opens::SleepPower, "When the screen goes off and the device sleeps, and the power button."),
         ("Kids mode", Opens::Kids, "A big, simple shelf for a child, with a PIN."),
@@ -1381,6 +1383,8 @@ struct App {
     running: Option<Running>,
     launch_at: Option<Instant>,
     pending_launch: Option<app_launch::Pending>,
+    /// A phone game's first start loading Java (`j2me_java`): its progress over the start, B stops it.
+    java_fetch: Option<std::sync::Arc<pocket_ui::j2me_java::Fetch>>,
     drew_first: bool,
     /// The first frames after the Pocket started fade in from black (`boot_fade`, docs/BOOT-SPLASH.md).
     boot_fade: pocket_ui::boot_fade::BootFade,
@@ -1950,6 +1954,9 @@ impl App {
             if reminder.is_some() {
                 env.push((pocket_ui::startup::HOLD_STILL, "1".into()));
                 env.push((pocket_ui::startup::HOLD_READY, pocket_ui::startup::ready_path().to_string_lossy().into_owned()));
+            } else if hosted && resumable && !fresh {
+                // An open case on Cozy: its moment stands still behind the scene, nothing of it runs unseen.
+                env.push((pocket_ui::startup::HOLD_PAUSE, "1".into()));
             }
         }
         // Keep the UI handover and pocket-core's switch-on on the same launch decision.
@@ -4251,7 +4258,9 @@ impl App {
                 // With the Device row on a short screen (the Mini V1's 960 lines, larger text) the facts move closer
                 // together, so the two rows under them and two lines of their help stay above the hints; where
                 // everything fits (the Mini V2, any text size) they keep the row's height.
-                let below = 2 * row + 20 + pocket_ui::type_scale::px(NU_SMALL) as i32 / 2 + pocket_ui::type_scale::line(NU_SMALL, 12);
+                // Under 768 lines (the Smart Pro's 720) room for two lines of help: one cut "Report a problem"'s explanation short.
+                let help_lines = if c.h < 768 { 2 } else { 1 };
+                let below = 2 * row + 20 + pocket_ui::type_scale::px(NU_SMALL) as i32 / 2 + help_lines * pocket_ui::type_scale::line(NU_SMALL, 12);
                 let fit_for = |n: usize| (c.h - NU_PAD - NU_PILL - 8 - top - below) / (n as i32 + 1);
                 // Where the licence texts are (put there by the install zip and the image: pocket-ui's licence, the
                 // credits, the crates' and the fonts' texts). Its row comes only where the facts keep three quarters
@@ -4263,7 +4272,8 @@ impl App {
                 let fit = fit_for(lines.len());
                 // At least three quarters of the row's height, five eighths on 768 lines with the Device row, where the
                 // two rows and a line of help under the facts would otherwise lie on the hints.
-                let row = row.min(fit).max(row * 5 / 8);
+                // (Nine sixteenths under 768 lines, the Smart Pro's 720, for the second line of help.)
+                let row = row.min(fit).max(if c.h < 768 { row * 9 / 16 } else { row * 5 / 8 });
                 for (i, (name, value)) in lines.iter().enumerate() {
                     let base = top + i as i32 * row + row / 2 + pocket_ui::type_scale::mid(font);
                     let name_w = self.text.draw(c, Face::Body, font, pad + NU_BTN_PAD, base, pal().dust, name);
@@ -4283,7 +4293,9 @@ impl App {
                     }
                 }
                 // Report a problem, and ROCKNIX's own menu behind the warning (`app_report`, `app_rescue`).
-                self.paint_about_rows(c, top + (lines.len() as i32 + 1) * row, row_h, font);
+                // Under 768 lines (the Smart Pro's 720) a third of a row between the facts and the rows instead of a whole one.
+                let gap = if c.h < 768 { row / 3 } else { row };
+                self.paint_about_rows(c, top + lines.len() as i32 * row + gap, row_h, font);
             }
             Some(SettingsPage::Groups(_) | SettingsPage::Starter | SettingsPage::Sync | SettingsPage::Leds(_) | SettingsPage::NightLight(_) | SettingsPage::CozyExtras(_) | SettingsPage::Buttons(_) | SettingsPage::Controllers(_) | SettingsPage::Tailscale | SettingsPage::Web | SettingsPage::Bluetooth | SettingsPage::PerfFan | SettingsPage::Curator | SettingsPage::Achievements | SettingsPage::Tools | SettingsPage::TestButtons | SettingsPage::GameCheck | SettingsPage::PcStreaming | SettingsPage::Backup | SettingsPage::Storage | SettingsPage::Gamelist | SettingsPage::Screenshots | SettingsPage::SleepPower) | None => {}
         }
@@ -4710,19 +4722,23 @@ impl App {
         }
         // Never up into the actions: long release notes ran over "Check again" at Large text on 768 lines (the Brick); what is
         // over ends with "…".
-        let actions_end = top + (actions.len() as i32 + 1) * row + row / 3 + row + 8;
-        let fit = (((c.h - pad - NU_PILL - 30) - actions_end - 30) / 40 + 1).max(1) as usize;
+        // Under 768 lines (the Smart Pro's 720) the lines a little closer and without the spare row's margin over them, so the
+        // note of a system update keeps its third line.
+        let tight = c.h < 768;
+        let actions_end = top + (actions.len() as i32 + 1) * row + row / 3 + if tight { 0 } else { row } + 8;
+        let step = if tight { 36 } else { 40 };
+        let fit = (((c.h - pad - NU_PILL - 30) - actions_end - 30) / step + 1).max(1) as usize;
         if lines.len() > fit {
             lines.truncate(fit);
             if let Some(last) = lines.last_mut() {
                 *last = self.text.fit(Face::Body, NU_SMALL, &format!("{last} …"), max_w);
             }
         }
-        let mut y = c.h - pad - NU_PILL - 30 - 40 * (lines.len() as i32 - 1).max(0);
+        let mut y = c.h - pad - NU_PILL - 30 - step * (lines.len() as i32 - 1).max(0);
         for line in &lines {
             let w = self.text.width(Face::Body, NU_SMALL, line);
             self.text.draw(c, Face::Body, NU_SMALL, (c.w - w) / 2, y, pal().text, line);
-            y += 40;
+            y += step;
         }
         let hints: &[(&str, &str)] = if self.updates.can_cancel() {
             &[("B", "Back"), ("A", "Cancel")]
@@ -5790,6 +5806,33 @@ fn snapshot(app: &mut App, args: &[String]) {
     }
     // A press through the real start path, then its first painted animation frame. A mock-only slow preparation
     // stands in for a card that stalls; rendering must keep going while it is pending (tests/launch_response.rs).
+    // `bench-launch-j2me[:stop]`: A on the first phone game with no Java yet (`j2me_java`, POCKETUI_J2ME_* stand-ins):
+    // the start's picture half-way through the load goes to `out`; `:stop` presses B there. Prints what the player saw.
+    if let Some(rest) = state.strip_prefix("bench-launch-j2me") {
+        app.shelf_snapshot("j2me:split:games:0");
+        app.activate();
+        let mut buf = vec![0u32; (w * h) as usize];
+        let (asked, mut shown, mut saved) = (Instant::now(), false, false);
+        while app.pending_launch.is_some() && asked.elapsed() < Duration::from_secs(20) {
+            app.loading_wake(Instant::now());
+            app.paint(&mut Canvas::new(&mut buf, w, h));
+            app.launch_response_painted();
+            let half = app.java_fetch.as_ref().is_some_and(|f| f.phase() == pocket_ui::j2me_java::Phase::Downloading && f.fraction() >= 0.5);
+            shown |= app.java_fetch.is_some() && app.loading.since.is_some();
+            if half && !saved {
+                write_png(&buf, w, h, out);
+                saved = true;
+                if rest == ":stop" {
+                    app.java_press(CANCEL);
+                }
+            }
+            std::thread::sleep(Duration::from_millis(16));
+            app.launch_poll();
+        }
+        let notice = app.notice.as_ref().map(|n| n.text().to_string()).unwrap_or_default();
+        println!("bench-j2me shown={shown} saved={saved} started={} notice={notice}", app.running.is_some());
+        return;
+    }
     if state.starts_with("bench-launch-response") {
         app.shelf_snapshot("gba:shelf:games:0");
         let mut buf = vec![0u32; (w * h) as usize];
@@ -7224,6 +7267,10 @@ impl App {
 
     fn user_event_inner(&mut self, el: &ActiveEventLoop, ev: UserEvent) {
         pocket_ui::mark!("event", "{:?}", std::mem::discriminant(&ev));
+        // B while a phone game's first start loads Java: the load stops, the cartridge comes back out (`app_loading`).
+        if let UserEvent::Pad(PadEvent::Button { button, pressed: true, .. }) = &ev {
+            if self.java_press(*button) { return; }
+        }
         // A start's skip comes before quick settings, notices and volume keys consume their input. HOME and volume
         // never become a game button in pocket-core, so the UI must deliver their skip itself.
         if (self.running.is_some() || self.pending_launch.is_some()) && matches!(ev, UserEvent::Pad(PadEvent::Button { pressed: true, .. })) && self.launch_button() {
@@ -7445,6 +7492,7 @@ impl App {
             UserEvent::Online => self.auto_covers("online after boot"),
             UserEvent::LibraryRescanned(systems, key) => self.library_rescanned(systems, key),
             UserEvent::LibraryUnread { count, rose } => self.library_unread(count, rose),
+            UserEvent::SystemListUnread => self.warn("Some systems couldn't be read. Settings › Games › Game check says why."),
             UserEvent::GamesCard(change) => self.games_card_changed(change),
             UserEvent::Display(tv) => self.display_changed(tv),
             // A frame only while the corner is on screen (every event below ends in one).
@@ -8273,6 +8321,12 @@ impl App {
         self.library_prewarm_names();
         // Playing on a TV: a thread asleep on sway's output events (`app_display_out`).
         self.display_out_start();
+        // A developer device (`dev-ssh`) whose sshd is off, e.g. after a hard power-off: started (`remote::keep_dev_ssh`).
+        pocket_ui::startup::after_first_frame("dev-ssh", || {
+            if let Some(result) = pocket_ui::remote::keep_dev_ssh() {
+                println!("dev-ssh: sshd was not running; started: {result:?}");
+            }
+        });
         // The threads and programs the start put off (`startup::after_first_frame`).
         pocket_ui::startup::first_frame_done();
     }
@@ -8694,6 +8748,7 @@ fn main() {
         running: None,
         launch_at: None,
         pending_launch: None,
+        java_fetch: None,
         drew_first: false,
         boot_fade: pocket_ui::boot_fade::BootFade::new(boot_fade),
         after_first_done: false,
@@ -8877,6 +8932,7 @@ fn main() {
         // downloads and rescue markers) belong to an actual device, not a mock-only headless test.
         app.drew_first = true;
         app.after_first_done = true;
+        app.library_system_list_check();
         // As at a real start (below): a look that went with 0.4 is said once.
         if retired_look {
             app.say_retired_look();

@@ -206,19 +206,23 @@ fn decorations_grow_with_play_and_never_stand_over_a_case() {
         let a = shot(&tmp, &lib, &new, &stub, "shelf", appearance, size, "15:00", on());
         let b = shot(&tmp, &lib, &long, &stub, "shelf", appearance, size, "15:00", on());
         let (w, h) = (a.w, a.h);
-        // The shelf's right part, past the middle of its row (the SNES cases are grey, none has a sticker here).
-        let shelf = (w * 6 / 10, h / 2, w, h - h / 8);
+        // The shelf's right part, past the middle of its row (the SNES cases are grey, none has a sticker here). On a short
+        // screen painted natively (the Smart Pro's 1280x720, since 13.11.2026) the cases are smaller and the decorations
+        // stand from 46 % of the width; the cases end before 45 %.
+        let short = h < 900 && w >= 1024;
+        let (cases_end, shelf_from) = if short { (w * 44 / 100, w * 45 / 100) } else { (w * 6 / 10, w * 6 / 10) };
+        let shelf = (shelf_from, h / 2, w, h - h / 8);
         let (gold_a, gold_b) = (a.count(shelf, gold), b.count(shelf, gold));
         assert!(gold_a < 20 && gold_b > 60, "{size} {appearance}: the trophy only with a completed game ({gold_a} / {gold_b})");
-        // A sprout for the new player, the big plant for the long history (at 640x480 the row leaves room for a
-        // cactus only, as before).
+        // A sprout for the new player, the big plant for the long history (at 640x480 and on a short screen the row leaves
+        // room for a cactus only, as on the Brick).
         let (green_a, green_b) = (a.count(shelf, green), b.count(shelf, green));
-        if w >= 1280 {
+        if w >= 1280 && !short {
             assert!(green_a > 10, "{size} {appearance}: the sprout ({green_a})");
             assert!(green_b > green_a * 4 + 100, "{size} {appearance}: a sprout grows into a big plant ({green_a} / {green_b})");
         }
         // The cases themselves are the same in both.
-        assert!(a.same(&b, (0, h / 2, w * 6 / 10, h - h / 6)), "{size} {appearance}: something earned stands over the cases");
+        assert!(a.same(&b, (0, h / 2, cases_end, h - h / 6)), "{size} {appearance}: something earned stands over the cases");
         // Decorations off: the shelf as it always was, whatever was played.
         let off = serde_json::json!({ "decorations": false });
         let c = shot(&tmp, &lib, &new, &stub, "shelf", appearance, size, "15:00", off.clone());

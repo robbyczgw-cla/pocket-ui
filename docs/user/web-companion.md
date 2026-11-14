@@ -5,6 +5,9 @@ games, set a game's status, rating, note and manage smart shelves, upload games,
 PortMaster files, see your play time and the battery, and look at the Pocket's screen. It works only over
 [Tailscale](remote.md), and it is **off** until you switch it on.
 
+> **No Tailscale, no companion.** Set up [Tailscale](remote.md) first (Settings → Connections → Tailscale); until then the
+> page only says so. For a quick copy of games over Wi-Fi without it, use file sharing or [From your phone](phone-upload.md).
+
 > **Status:** switching it on and off, where it listens (only on Tailscale), signing in over a real tailnet and the
 > screenshot placeholder were checked on a Mini V2. Pairing a browser with a code, uploading files and using it while
 > a game runs were only tried on a computer with a stand-in library. Please tell us what happens.

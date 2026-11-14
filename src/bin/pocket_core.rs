@@ -318,6 +318,9 @@ struct App {
     /// The hold is "Where was I?"'s (`startup::HOLD_STILL`): the game doesn't run until it is over, once its moment is
     /// loaded (a 3D core's moment waits for its first frames, `resume_in`, which run as in any hold).
     hold_still: bool,
+    /// The hold keeps the game still until its deadline, no button awaited (`startup::HOLD_PAUSE`): an open case on Cozy,
+    /// its moment waits behind the insert scene.
+    hold_pause: bool,
     /// The buttons down when the hold was last looked at (`startup::new_press`).
     hold_down: Option<[u16; players::MAX]>,
     /// The old-TV power-on over the game's first 300 ms (`crt_on`): wanted by pocket-ui (Cozy, Motion Full) and not yet
@@ -702,7 +705,7 @@ impl App {
                     }
                 }
             }
-        } else if pocket_ui::startup::stands_still(self.hold, self.hold_still, self.resume_in.is_some()) {
+        } else if pocket_ui::startup::stands_still(self.hold, self.hold_still || self.hold_pause, self.resume_in.is_some()) {
             // "Where was I?": the game stands at its moment while its card is read; nothing runs, nothing is missed.
         } else {
             let runs = match ff {
@@ -1749,10 +1752,10 @@ impl App {
                         n => format!("{n} cheats on"),
                     });
                 }
-                // "look <warmth> <contrast> [<night light kelvin>]": the colour temperature changed (Select + Vol), or a
-                // step of the night light's fade (0 or no number: it is off).
-                CoreCommand::Look(warmth, contrast, night) => {
-                    let look = pocket_ui::display::Look { warmth, contrast, soft: true, night }.clamped();
+                // "look <warmth> <contrast> [<night light kelvin> [<extra dim>]]": the colour temperature changed (Select + Vol),
+                // a step of the night light's fade (0 or no number: it is off), or the brightness went below the backlight.
+                CoreCommand::Look(warmth, contrast, night, dim) => {
+                    let look = pocket_ui::display::Look { warmth, contrast, soft: true, night, dim }.clamped();
                     self.hud.set_look(&look);
                 }
                 CoreCommand::Note(text) => self.hud.note(text),
@@ -2536,6 +2539,7 @@ fn main() {
         dark: false,
         hold: pocket_ui::startup::held(),
         hold_still: pocket_ui::startup::hold_still(),
+        hold_pause: pocket_ui::startup::hold_pause(),
         hold_down: None,
         crt_on: pocket_ui::startup::held() && pocket_ui::crt_on::wanted(),
         crt_started: false,

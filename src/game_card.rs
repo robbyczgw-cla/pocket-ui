@@ -1474,6 +1474,21 @@ fn battery_split(line: &str) -> Option<(&str, &str)> {
 mod tests {
     use super::*;
 
+    /// The card's "Other games in Burnout, in your library" was half English in German and Spanish: the outer line's
+    /// placeholder kept what it held as it was ({s}), so the inner "Other games in …" was never looked up.
+    #[test]
+    fn library_headings_are_translated_whole() {
+        use crate::i18n::Lang;
+        for (lang, series, maker) in [
+            (Lang::De, "Andere Spiele aus Burnout, in deiner Bibliothek", "Mehr von Square Enix, in deiner Bibliothek"),
+            (Lang::Es, "Otros juegos en Burnout, en tu biblioteca", "Más de Square Enix, en tu biblioteca"),
+        ] {
+            let table = lang.table().expect("a table");
+            assert_eq!(table.translate("Other games in Burnout, in your library").as_deref(), Some(series));
+            assert_eq!(table.translate("More by Square Enix, in your library").as_deref(), Some(maker));
+        }
+    }
+
     fn data() -> CardData {
         CardData {
             title: "Tetris".into(),

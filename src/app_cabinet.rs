@@ -39,9 +39,12 @@ const SCENE_TOP: i32 = 214;
 const SHORT_H: i32 = media::SHORT_SCREEN_H;
 const SHORT_LIFT: i32 = 18;
 
-/// How far up the title block and the scene start on a screen `h` lines high.
+/// How far up the title block and the scene start on a screen `h` lines high. Under 768 lines (the Smart Pro's 720, painted
+/// natively) 15 more (the title still clears the system's name over it), with `show_min_share` 0.17 there: the
+/// showcase keeps 122 lines and its TV, and the SNES and Mega Drive shelves stand whole under the top board (the SNES
+/// one sank 29 lines behind it).
 fn lift(h: i32) -> i32 {
-    if h < SHORT_H { SHORT_LIFT } else { 0 }
+    if h < 768 { SHORT_LIFT + 15 } else if h < SHORT_H { SHORT_LIFT } else { 0 }
 }
 /// The floor of a start's console over the screen's bottom; Android places it the same way (`insert_scene::phone_floor`).
 const SCENE_BOTTOM_GAP: i32 = pocket_ui::insert_scene::HANDHELD_FLOOR_GAP;
@@ -94,6 +97,10 @@ fn show_scale(m: Medium, room: i32) -> f32 {
 /// it to be there): on a short screen with a tall shelf (1024x768, 1280x800: no scaled layout, `scaled_layout`) the shelf
 /// gives way, not the case (the polish review 2026-11-04: a 40-line chip and no TV on the Brick's 768 lines).
 const SHOW_MIN_SHARE: f32 = 0.2;
+/// `SHOW_MIN_SHARE`, and 0.17 under 768 lines (`lift`).
+fn show_min_share(h: i32) -> f32 {
+    if h < 768 { 0.17 } else { SHOW_MIN_SHARE }
+}
 /// How much of the selected shelf may sink behind the top board to make room for it: of its height, so the spines
 /// keep their titles in view.
 const SINK_MAX_SHARE: f32 = 0.45;
@@ -106,7 +113,7 @@ const SINK_MAX_SHARE: f32 = 0.45;
 /// the rest (at most `SINK_MAX_SHARE` of it): its spines are cut at the top, the case keeps its room.
 fn showcase(h: i32, m: Medium, pitch: i32, extra: i32) -> (i32, i32, i32) {
     let base = scene_bottom(h) - pitch - TOP_H - (SCENE_TOP - lift(h)) - 24 + extra;
-    let want = (h as f32 * SHOW_MIN_SHARE).round() as i32;
+    let want = (h as f32 * show_min_share(h)).round() as i32;
     let sink = (want - base).clamp(0, (pitch as f32 * SINK_MAX_SHARE) as i32);
     let room = base + sink;
     let k = show_scale(m, room);
@@ -887,9 +894,9 @@ impl App {
         // case opens, and the game goes into the console with its own sound, seated as it is in (`IN_AT_COZY`). The
         // CRT's sound is pocket-core's, with its picture (`crt_on`).
         use pocket_ui::ui_sound;
-        // A frozen game goes straight back, and Motion Reduced or Off starts straight away: the quick way, whatever
-        // Animations says (`app_frozen`, `cabinet::starts_cozy`).
-        let cozy = cabinet::starts_cozy(self.cozy(), pocket_ui::motion::level(), self.is_frozen_path(path));
+        // Motion Reduced or Off starts straight away: the quick way, whatever Animations says (`cabinet::starts_cozy`).
+        // An open case plays Cozy's scene as well; its moment stands still behind it (`startup::HOLD_PAUSE`).
+        let cozy = cabinet::starts_cozy(self.cozy(), pocket_ui::motion::level());
         if let Some(i) = self.cabinet.insert.as_mut() {
             i.scene.cozy = cozy;
         }
@@ -1022,8 +1029,8 @@ impl App {
                 front,
                 from,
                 game: None, game_back: None,
-                // A frozen game or Motion below Full: no hold and no rig (`launch_animation`).
-                cozy: cabinet::starts_cozy(self.cozy(), pocket_ui::motion::level(), self.is_frozen_item(item)),
+                // Motion below Full: no hold and no rig (`launch_animation`).
+                cozy: cabinet::starts_cozy(self.cozy(), pocket_ui::motion::level()),
                 at_drive: None,
                 rig: None,
                 rig_asked: false,
@@ -2802,7 +2809,7 @@ impl App {
             return false;
         }
         // Every spine starts on a multiple of four pixels: a small screen's picture is laid out larger and scaled down
-        // (`scaled_layout`: 2:1 on 640x480, 4:3 on 1280x720), and a spine starting between two of its pixels came out a
+        // (`scaled_layout`: 2:1 on 640x480 and the other H700 panels), and a spine starting between two of its pixels came out a
         // pixel wider than the one beside it (the owner, 2026-10-29: "same platform, different sizes?").
         let up4 = |v: i32| (v + 3) / 4 * 4;
         let gap = (2.0 * f).round() as i32;
@@ -3042,14 +3049,20 @@ impl App {
                 self.cabinet.shelf_lit = Some((front, fx, fy));
             }
             Some(front) => {
-                let turn = Turn {
-                    cx: (fx + fw / 2) as f32,
-                    cy: (fy + fh / 2) as f32,
-                    scale: k,
-                    turned,
-                    shade: 256,
-                };
-                art::draw_turning(c, &spine, &front, sm.size(), turn, show_clip);
+                // On its way into the console (`paint_insert`): not here as well.
+                if !self.cabinet.insert.as_ref().is_some_and(|i| i.item == item) {
+                    let turn = Turn {
+                        cx: (fx + fw / 2) as f32,
+                        cy: (fy + fh / 2) as f32,
+                        scale: k,
+                        turned,
+                        shade: 256,
+                    };
+                    art::draw_turning(c, &spine, &front, sm.size(), turn, show_clip);
+                }
+                // A pressed while it still turns: the scene starts from its front all the same (until 14.11. there was
+                // no scene and no hold then, and a quick player saw the game come straight up).
+                self.cabinet.shelf_lit = Some((front, fx, fy));
             }
             // Its spine to you, as at the start of the turn: the front comes with the next frame.
             None => art::blit(c, &spine, fx + (fw - spine.w) / 2, fy + (fh - spine.h) / 2, 256, show_clip),
@@ -3311,15 +3324,16 @@ mod shelf_tests {
     /// at least what the TV and the case need (`SHOW_MIN_SHARE`).
     #[test]
     fn the_showcase_never_cuts_the_spines_on_the_supported_sizes() {
-        // The layout's heights: 640x480 and 720x720 are laid out at 960 and 1440 lines, the others natively; 1280 stays as a
-        // tall in-between size.
-        for h in [960, 1280, 1440, 768, 1080, 800] {
+        // The layout's heights: 640x480 and 720x720 are laid out at 960 and 1440 lines, the others natively (720: the Smart
+        // Pro); 1280 stays as a tall in-between size.
+        for h in [960, 1280, 1440, 768, 720, 1080, 800] {
             let f = media::shelf_scale_for(h);
             for m in Medium::ALL {
                 let pitch = (m.template_size().h as f32 * f).round() as i32 + cabinet::HEADROOM + cabinet::BOARD;
                 let (room, _, sink) = showcase(h, m, pitch, 0);
                 assert_eq!(sink, 0, "{m:?} at {h} lines: the shelf would sink {sink} lines behind the board");
-                assert!(room as f32 >= h as f32 * SHOW_MIN_SHARE, "{m:?} at {h} lines: the showcase has {room}");
+                // Rounded as `showcase` rounds what it wants (0.15 of 720 is 108.00001 in f32).
+                assert!(room >= (h as f32 * show_min_share(h)).round() as i32, "{m:?} at {h} lines: the showcase has {room}");
             }
         }
     }

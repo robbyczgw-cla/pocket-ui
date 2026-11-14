@@ -1,14 +1,14 @@
 # Language
 
 Settings → System → **Language**: menus, hints, messages and the notes over a game are in **English**,
-**Deutsch** (German) or **Español** (Spanish). A or Left/Right on the row walks through them; the screen changes at
+**Deutsch** (German), **Español** (Spanish) or **Português (Brasil)** (Brazilian Portuguese). A or Left/Right on the row walks through them; the screen changes at
 once, nothing restarts. The first start's Welcome page has the same choice (Left/Right).
 
 Until you choose, pocket-ui uses the system language set in ROCKNIX's own menu (EmulationStation, in its system
-settings): German when that is German, Spanish when that is Spanish in any country's form, English for every other language. Once you choose here or on the
+settings): German when that is German, Spanish when that is Spanish in any country's form, Portuguese when that is Portuguese (it speaks Brazilian Portuguese), English for every other language. Once you choose here or on the
 Welcome page, pocket-ui keeps its own choice, even when the system language changes later.
 
-What stays in English in the German and Spanish interfaces:
+What stays in English in the German, Spanish and Portuguese interfaces:
 
 - **This manual** (Settings → Help & tools → **Manual**). Its title line and buttons are in your language, its pages
   are not translated yet.

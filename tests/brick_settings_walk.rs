@@ -91,7 +91,7 @@ impl Card {
     }
 }
 
-const LANGS: [&str; 3] = ["en", "de", "es"];
+const LANGS: [&str; 4] = ["en", "de", "es", "pt"];
 
 /// A player pressing F1/F2 during Controller setup got eight seconds of waiting and then "No button pressed".
 /// Feed the real evdev codes into capture and check the page explains the shortcut instead.
@@ -332,15 +332,18 @@ fn the_smart_pro_shows_its_sticks_and_none_of_the_bricks_keys() {
     }
 }
 
-/// 1280x720 is the width of the 1280x960 handhelds' layout with 240 lines less: on the pages a player reads first, in three
-/// languages, at Normal and Large text, in both styles, the Smart Pro shows no line cut short and no text running into text, the
-/// hints or the edge that the same page at 1280x960 (the Mini V1's layout, the one every 1280-wide page is made for) doesn't show
-/// too. What the two share is the layout's own (a long Spanish explanation at Large, a long system name in a tile): not the
-/// Smart Pro's, and not fixed here.
+/// The Smart Pro paints its 1280x720 natively (`scaled_layout::logical_size`; until 13.11.2026 it was laid out at 1707x960 and
+/// scaled down, so this test never saw 720 lines): the 1280x960 handhelds' width with 240 lines less, a short screen like the
+/// Brick's 768 (`kit::short_screen`). On the pages a player reads first, in three languages, at Normal and Large text, in both
+/// styles, it shows no line cut short and no text running into text, the hints or the edge that neither the same page at
+/// 1280x960 (the Mini V1's layout, the one every 1280-wide page is made for) nor the Brick's 1024x768 (the other short screen)
+/// shows too. What they share is the layout's own (a long Spanish explanation at Large, a long system name in a tile, About's
+/// help at Large on a short screen): not the Smart Pro's, and not fixed here.
 #[test]
 fn text_fits_on_the_smart_pros_1280x720() {
     let card = Card::smart_pro();
     let wide = Card { device: ("mini", "1280x960"), ..Card::new() };
+    let brick = Card::new();
     let states = ["home", "setup:first", "setup:first-games", "setup:first-look", "settings", "settings:0", "settings:1", "settings:2",
         "settings:3", "settings:4", "settings:5", "settings:6", "about", "sleep", "sleep:1", "perf", "sync:off", "test-buttons", "updates:note", "leave"];
     let findings = |shown: &str, boxes: &str| -> Vec<String> {
@@ -356,7 +359,9 @@ fn text_fits_on_the_smart_pros_1280x720() {
                 for state in states {
                     let (shown, boxes) = card.shot_style(state, lang, size, font);
                     let (wide_shown, wide_boxes) = wide.shot_style(state, lang, size, font);
-                    let there = findings(&wide_shown, &wide_boxes);
+                    let (brick_shown, brick_boxes) = brick.shot_style(state, lang, size, font);
+                    let mut there = findings(&wide_shown, &wide_boxes);
+                    there.extend(findings(&brick_shown, &brick_boxes));
                     for f in findings(&shown, &boxes) {
                         // The made-up card's own folder (About's data line) is a test path, cut at any width; a card's is short.
                         // A line cut at both sizes is cut at a different letter: the same line when it starts the same.
@@ -370,7 +375,7 @@ fn text_fits_on_the_smart_pros_1280x720() {
             }
         }
     }
-    assert!(bad.is_empty(), "{} findings the 1280x960 layout doesn't have:\n{}", bad.len(), bad.join("\n"));
+    assert!(bad.is_empty(), "{} findings neither the 1280x960 layout nor the Brick's 1024x768 has:\n{}", bad.len(), bad.join("\n"));
 }
 
 /// Brick Pro keeps the Brick framebuffer layout and has the larger panel's type, two sticks and separate F keys.

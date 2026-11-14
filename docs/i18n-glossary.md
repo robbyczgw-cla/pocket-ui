@@ -251,3 +251,102 @@ Extras, Sticker(s), Home, FPS, CPU, "Pocket" ("el Pocket", masculine); Little, B
 
 The same as in German, above: the manual's pages (the painter is switched off while they are drawn), data from
 elsewhere, messages of other programs, names.
+
+# Brazilian Portuguese glossary
+
+The words the Brazilian Portuguese interface uses (`assets/i18n/pt.tsv`, language name "Português (Brasil)", code `pt`),
+translated from the English source, not from German or Spanish. A line goes into `de.tsv`, `es.tsv` and `pt.tsv` together
+(`i18n`'s test `every_language_has_every_line_with_its_placeholders`). Any `pt` locale (`pt_BR`, `pt-PT`, `pt`) starts it.
+
+## Tone
+
+- Brazilian Portuguese, **você** (never tu, never o senhor): the way a Brazilian retro-handheld player talks to a friend.
+  Short, friendly, plain. No stiff passives, no "por favor" unless the English says please, no exclamation marks the English
+  doesn't have. Gamer words people really use (`save`, `save state`, `slot`, `cheats`, `patch`, `online`, `overlay`) stay.
+- Imperatives in você form: "Aperte A", "Escolha sua rede", "Tente de novo". Press = **apertar** (not pressionar).
+- Short. Portuguese runs longer than English and the pages were laid out for English: take the shorter of two good words,
+  drop articles in labels and hints. Hint bar and pills: one or two words.
+- Typography: “aspas”, an ellipsis with no space ("Carregando…"), "45%" with no space like the English, "45 °C", "12 h" and
+  "4,8 W" only where the code doesn't format the number; numbers as the code formats them. Dates: "14 de março de 2025", short
+  "14 mar 2025"; months and weekdays lower case inside a date and a capital when alone. Time stays 24-hour.
+- Brazilian spelling (since the 2009 agreement): "ação", "projeto", "tela", "arquivo", "celular", "controle", "baixar", "time"
+  (not "ecrã", "ficheiro", "telemóvel", "comando", "descarregar", "equipa").
+
+## What stays as it is
+
+pocket-ui, pocket-core, Curator, Lens, Echoes, Pixel Path, ROCKNIX, RetroArch, RetroAchievements, EmulationStation,
+PortMaster, Moonlight, Sunshine, Syncthing, Tailscale, Bluetooth, Store, Wi-Fi; game, emulator and core names; button names as
+printed (A, B, X, Y, L1, R1, L2, R2, SELECT, START, HOME, Vol+, Vol-); Run-ahead, Grinding, Shader, Core, Extras, Sticker(s),
+Home, FPS, CPU, "Pocket" ("o Pocket", masculine); Little, Big, Prime; "Português (Brasil)" as the language's own name.
+Console names as Brazilians say them: Mega Drive (not Genesis), Master System, Super Nintendo / SNES, Nintendo 64, PlayStation,
+Game Boy Advance, Neo Geo Pocket Color. Game names are never translated.
+
+## Terms
+
+| English | Brazilian Portuguese | Note |
+|---|---|---|
+| Settings | Configurações | a path: "Configurações › Sistema › Bateria" |
+| Settings' categories: Connections, Look, Controls & sound, Playing, Games, System, Help & tools | Conexões, Aparência, Controles e som, Jogando, Jogos, Sistema, Ajuda e ferramentas | |
+| Look (Settings → Look → Layout), look | Visual | "Choose a look" → "Escolha um visual" |
+| Shelf, Split, Cabinet (the looks) | Estante, Dividido, Vitrine | |
+| Appearance: Dark, Light, Automatic | Aparência: Escuro, Claro, Automático | |
+| Motion: Full, Reduced, Off | Movimento: Completo, Reduzido, Desligado | |
+| Language | Idioma | |
+| Button layout | Layout dos botões | |
+| Continue, Resume | Continuar | one word for both |
+| Game card (a game's page) | ficha do jogo, ficha | never "cartão" |
+| SD card | cartão SD | never just "cartão" |
+| Memory card | Memory Card | |
+| save, in-game save (what the game writes) | save, save do jogo | |
+| Save state | save state | a moment saved by pocket-core or the emulator |
+| saves and states | saves e save states | |
+| Save / Load (pause menu) | Salvar / Carregar | |
+| Slot | Slot | |
+| Before load, Earlier (pause menu pills) | Antes, Anterior | "Earlier states": "Estados anteriores" |
+| Quit | Sair | |
+| Pause menu, Quick settings | Menu de pausa, Configurações rápidas | |
+| Options (a game's); Picture, Shortcuts | Opções; Imagem, Atalhos | |
+| Over the game | Sobreposição | what pocket-core draws over a game |
+| Screen frame(s); frames | Moldura(s) de tela; molduras | |
+| Moment; Continue | Momento; Continuar | an open case means a moment is waiting |
+| Runs on | Roda em | |
+| Achievements | Conquistas | the service stays RetroAchievements |
+| Smart shelf | Estante inteligente | |
+| Up next | A seguir | |
+| Versions, preferred | Versões, preferida | |
+| Star / Unstar, starred | Favoritar / Desfavoritar, favoritos | a star is a favourite |
+| Favourites | Favoritos | |
+| Pin / Unpin | Fixar / Desafixar | |
+| Recent games, Recently played | Recentes, Jogados recentemente | |
+| Home (the screen) | Home | a name, as in the manual; also on the hint bar |
+| Game check | Verificação de jogos | |
+| Controller | controle | |
+| Press (a button) | apertar | |
+| D-pad; directions | direcional; Esquerda/Direita, Cima/Baixo; hint bar "Esq./Dir." | |
+| Pair, pairing; Forget | parear, pareamento; esquecer | |
+| Remote access; File sharing; PC streaming | Acesso remoto; Compartilhar arquivos; Streaming do PC | |
+| Web companion | Companheiro web | |
+| Sleep; Power off; Restart; Power | Suspender; Desligar; Reiniciar; Energia | |
+| Battery; Haptics; Sounds | Bateria; Vibração; Sons | |
+| Performance & fan, Smooth fan | Desempenho e ventoinha, Ventoinha suave | |
+| Balanced, Quiet, Cool | Equilibrado, Silencioso, Frio | |
+| Fast-forward, Rewind | Avanço rápido, Rebobinar | |
+| Cover art, box art | Capa | |
+| Pictures; screenshot; title screen | Imagens; captura de tela; tela de título | |
+| Cheats; Patch; Tour; Updates; Sync; Logs | Cheats; Patch; Tour; Atualizações; Sincronizar; Registros | |
+| History, Play history, Year in review, Month in review | Histórico, Histórico de jogo, Resumo do ano, Resumo do mês | |
+| Session, streak | Sessão, sequência | |
+| Safe mode; Backup & reset | Modo seguro; Backup e redefinição | |
+| Manual; About; Tools | Manual; Sobre; Ferramentas | |
+| Back, Open, Switch, Change, Close, Choose, Select | Voltar, Abrir, Alternar, Alterar, Fechar, Escolher, Selecionar | |
+| On, Off | Ligado, Desligado | |
+| Delete; Keep; Folder; Password; Download | Excluir; Manter; Pasta; Senha; Baixar | |
+| Hold; online; slot; rating; clock | segurar; online; slot; nota; frequência | |
+| Clamshell | Clamshell | |
+| Developer, Publisher (a game card's rows) | Estúdio, Editora | short: the longer words wrapped the values beside them at Large text |
+| Look (the Settings category) vs Appearance (Dark, Light) | Visual vs Aparência | two words, as the English has two |
+
+## Left in English
+
+The same as in German, above: the manual's pages (the painter is switched off while they are drawn), data from
+elsewhere, messages of other programs, names.

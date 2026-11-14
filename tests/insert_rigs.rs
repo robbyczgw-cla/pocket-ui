@@ -125,25 +125,18 @@ fn quick_and_motion_off_never_show_a_rig() {
 }
 
 #[test]
-fn a_frozen_game_goes_straight_back_and_the_others_keep_their_rig() {
+fn an_open_case_on_cozy_plays_its_rig_as_every_game_does_and_quick_stays_quick() {
     let w = World::new("frozen");
     let quick = r#"{"onboarded": true, "theme": "shelf", "animations": "quick"}"#;
-    // The newest recent games stand open (two PS2 games on the made-up library). Each row of the PS2's list:
-    let mut frozen_rows = 0;
+    // The newest recent games stand open (two PS2 games on the made-up library). Each row of the PS2's list, all open and
+    // none open: an open case plays Cozy's rig like the others (since 14.11.; until then it went the quick way).
     for row in 0..5 {
         let (cozy, open, q) = (w.frame_with("ps2", COZY, 750, row, 0), w.frame_with("ps2", COZY, 750, row, 99), w.frame_with("ps2", quick, 750, row, 0));
-        let (to_cozy, to_quick) = (differs(&open, &cozy), differs(&open, &q));
-        if to_quick < to_cozy {
-            // A frozen game: no rig, the quick way, whatever Animations says.
-            frozen_rows += 1;
-            assert!(differs(&cozy, &q) > 2000, "row {row}: the rig is there when it isn't frozen");
-        } else {
-            // A game beside the half-open cases: its rig as ever, moving.
-            assert!(lit(&open) > 3000, "row {row}");
-            assert!(differs(&open, &w.frame_with("ps2", COZY, 1240, row, 99)) > 2000, "row {row}: the rig moves");
-        }
+        assert!(differs(&cozy, &q) > 2000, "row {row}: Cozy's rig is not Quick's picture");
+        assert!(differs(&open, &cozy) < differs(&open, &q), "row {row}: an open case on Cozy is Cozy's scene, not Quick's");
+        assert!(lit(&open) > 3000, "row {row}");
+        assert!(differs(&open, &w.frame_with("ps2", COZY, 1240, row, 99)) > 2000, "row {row}: the rig moves");
     }
-    assert!(frozen_rows >= 1, "the made-up library has frozen games in the PS2's list");
 }
 
 #[test]

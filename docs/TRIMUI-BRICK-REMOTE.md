@@ -71,7 +71,7 @@ nothing of NextUI), so the card ships it:
 - `remote.rs` on this card: *switch on* makes the password once (`secret::load_or_create`, `storage/.config/pocket-ui/remote/password`,
   the same kind as on ROCKNIX: three words and three digits), shows it, and runs `systemctl start sshd` (the stand-in → `brick-ssh`);
   *switch off* stops the listener and ends open sessions. Off after a restart, as on ROCKNIX; a card with
-  `storage/.config/pocket-ui/dev-ssh` starts it at every boot. No `setrootpass`: root's password in the firmware stays as it is.
+  `storage/.config/pocket-ui/dev-ssh` starts it at every boot, and pocket-ui starts it again when it finds it off (`remote::keep_dev_ssh`). No `setrootpass`: root's password in the firmware stays as it is.
 - `brick-ssh` copies `pocket-ui/authorized_keys` (comments dropped) into `/tmp/pocket-ui/ssh/` at every start, keeps the host key
   on the card (`remote/dropbear_ed25519_host_key`; the same key across restarts and updates) and logs to `/tmp/pocket-ui/dropbear.log`.
 - An SSH shell's `PATH` starts with `/tmp/pocket-ui/bin`: `tailscale` (the card's), `curl`, `scp`, `dropbearkey`.

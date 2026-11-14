@@ -558,12 +558,18 @@ impl App {
     fn paint_recent(&mut self, c: &mut Canvas, page: &SearchPage, bottom: i32) {
         let width = c.w - 2 * MARGIN;
         if page.recent.list.is_empty() {
+            // Over the keys of the Smart Pro's 720 lines (under 768) the two lines move up as the results' do; the second
+            // only where it ends above the keys.
+            let up = c.h < 768 && LIST_TOP + 106 + pocket_ui::type_scale::grow(28) + 10 > bottom;
             let (px, hint) = self.text.fit_sizes(Face::Title, &[37, 28], "Type part of a game's name.", width);
-            self.text.draw(c, Face::Title, px, MARGIN, LIST_TOP + 60, pal().chalk, &hint);
+            self.text.draw(c, Face::Title, px, MARGIN, LIST_TOP + if up { 44 } else { 60 }, pal().chalk, &hint);
             let games: usize = self.systems.iter().filter(|s| !self.hidden.contains(&s.name)).map(|s| s.games.len()).sum();
             let line = format!("Every game on the shelf is searched, {games} in all. Small typos are fine.");
             let line = self.text.fit(Face::Body, 28, &line, width);
-            self.text.draw(c, Face::Body, 28, MARGIN, LIST_TOP + 106 + pocket_ui::type_scale::grow(28), pal().dust, &line);
+            let y = LIST_TOP + if up { 82 } else { 106 } + pocket_ui::type_scale::grow(28);
+            if c.h >= 768 || y + 10 <= bottom {
+                self.text.draw(c, Face::Body, 28, MARGIN, y, pal().dust, &line);
+            }
             return;
         }
         self.text.draw(c, Face::Body, 28, MARGIN, LIST_TOP + 30, pal().dust, "Recent searches");

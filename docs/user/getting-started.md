@@ -90,7 +90,7 @@ switches **Big text** on every stage (larger text and calmer menus, at once, als
 ![The first start: choose the language, then a few short steps](pictures/first-start.webp)
 
 1. **Your language.** The Spanish welcome reads **Bienvenido a tu Pocket**. Under the cartridge and your handheld,
-   Left/Right choose **English**, **Deutsch** or **Español**:
+   Left/Right choose **English**, **Deutsch**, **Español** or **Português (Brasil)**:
    the screen changes at once, and the choice is kept ([Language](language.md)). It starts on the system language
    ROCKNIX was set to. The row under it is **Big text**: Down reaches it and Left/Right switch it there (L2 does it
    from anywhere), Up goes back to the language. Setting the Pocket up for a child? The third row, **For a child**

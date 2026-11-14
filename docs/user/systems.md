@@ -217,6 +217,29 @@ Arcade games need a game ZIP made for the core that plays them, and often a pare
 [Arcade games](arcade.md). Translations and hacks that come as `.ips`, `.bps` or `.ups` patch files, and MSU-1 games, are
 in [Patches, translations and MSU-1](patches-msu1.md). pocket-core applies a patch that sits next to the game with its name.
 
+### Phone games (J2ME)
+
+Java phone games (`.jar` files in `roms/j2me`) play on RetroArch's FreeJ2ME-Plus. They need Java, which is not on
+the SD card at first: the first time you start a phone game, pocket-ui loads it once (about 200 MB, so connect to
+Wi-Fi first) and shows "Loading Java, once" with how far it is. The game starts as soon as Java is there, and every
+later start goes straight in. B stops the loading; nothing half-loaded is kept, and it starts again with the next
+phone game. Without Wi-Fi a note says so and nothing waits. Java takes about 170 MB on the card, in `/storage/jdk`.
+
+Every phone game runs at the screen size it was made for: 176 × 208 for many Nokia games, 240 × 320 for most later
+ones, 360 × 640 for touch phones. pocket-ui reads it from the game (its name, its own description or its full-screen
+pictures) and uses 240 × 320 when the game doesn't say. The picture then fills the screen in its own shape: by whole
+numbers where twice the size fits (176 × 208 becomes 352 × 416 on a 640 × 480 screen, every pixel the same size), else
+as large as it fits.
+
+The phone's middle key (OK), which jumps, shoots or confirms in most games, is on **A**; Y is 9, B is 7, X is 0, L1
+and R1 are 1 and 3, SELECT and START the left and right soft keys, and the left stick is 2, 4, 6 and 8 (5 is a press of
+it). FreeJ2ME-Plus itself puts OK on Y; pocket-ui swaps the two with a RetroArch remap for the phone games' core, unless
+you made one of your own.
+
+Not every phone game plays well. Games in 3D (made for the phones' 3D extras, such as 3D Bomberman) often show broken
+or noisy 3D pictures: the phone emulator on the card draws 3D only in part. 2D games play as they should. Games made
+only for touch screens don't react to the buttons.
+
 <!-- TODO: confirm each system's default emulator against es_systems.cfg on the device; the
      examples above come from the developer notes (docs/PER-CONSOLE.md, docs/HOST.md). -->
 

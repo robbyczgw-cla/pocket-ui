@@ -891,11 +891,13 @@ impl Setup {
     /// "Add your games": the systems grid, the selected system's file types and BIOS, and file sharing.
     fn paint_games(&self, c: &mut Canvas, text: &mut Text, dots: &str) {
         let width = c.w - 2 * MARGIN;
+        // Under 768 lines (the Smart Pro's 720): heading, grid and details as much higher, so the details end above the hints.
+        let up = (768 - c.h).clamp(0, 48);
         // Something in roms isn't read: say so where the subtitle is (two lines move the title up a little).
         let unread = unread_lines(&self.strays, &self.broken);
         match unread.as_slice() {
             [] => {
-                text.draw(c, Face::Title, 67, MARGIN, 140, pal().chalk, "Add your games");
+                text.draw(c, Face::Title, 67, MARGIN, 140 - up, pal().chalk, "Add your games");
                 let d = crate::device::current();
                 let about = if !d.has_wifi() || crate::card_health::games_drive() {
                     // File sharing isn't the way, or not the only one: the right side says which is.
@@ -905,18 +907,18 @@ impl Setup {
                 };
                 // Smaller type before "…": the Spanish line at large text (first-start walk 2026-11-06).
                 let (px, line) = text.fit_sizes(Face::Body, &[28, 25, 22], about, width);
-                text.draw(c, Face::Body, px, MARGIN, 192, pal().dust, &line);
+                text.draw(c, Face::Body, px, MARGIN, 192 - up, pal().dust, &line);
             }
             [one] => {
-                text.draw(c, Face::Title, 67, MARGIN, 140, pal().chalk, "Add your games");
+                text.draw(c, Face::Title, 67, MARGIN, 140 - up, pal().chalk, "Add your games");
                 let line = text.fit(Face::Body, 28, one, width);
-                text.draw(c, Face::Body, 28, MARGIN, 192, pal().chalk, &line);
+                text.draw(c, Face::Body, 28, MARGIN, 192 - up, pal().chalk, &line);
             }
             lines => {
-                text.draw(c, Face::Title, 67, MARGIN, 120, pal().chalk, "Add your games");
+                text.draw(c, Face::Title, 67, MARGIN, 120 - up, pal().chalk, "Add your games");
                 for (i, l) in lines.iter().take(2).enumerate() {
                     let line = text.fit(Face::Body, 24, l, width);
-                    text.draw(c, Face::Body, 24, MARGIN, 166 + i as i32 * 34, pal().chalk, &line);
+                    text.draw(c, Face::Body, 24, MARGIN, 166 - up + i as i32 * 34, pal().chalk, &line);
                 }
             }
         }
@@ -925,12 +927,12 @@ impl Setup {
         // The row of ways takes the room of a grid row on the Mini V2 (3 → 2) and the V1 (2 → 1).
         let ways = self.ways();
         let ways_h = if ways.is_empty() { 0 } else { WAY_H + 10 };
-        let grid_rows = ((c.h - 228 - 336 - ways_h) / (GRID_TILE_H + GRID_GAP)).clamp(1, 3) as usize;
+        let grid_rows = ((c.h + up - 228 - 336 - ways_h) / (GRID_TILE_H + GRID_GAP)).clamp(1, 3) as usize;
         self.touch.borrow_mut().clear();
         if let Some(grid) = &self.grid {
-            self.paint_grid(c, text, grid, 228, width, grid_rows);
+            self.paint_grid(c, text, grid, 228 - up, width, grid_rows);
         }
-        let mut top = 228 + grid_rows as i32 * (GRID_TILE_H + GRID_GAP) + 6;
+        let mut top = 228 - up + grid_rows as i32 * (GRID_TILE_H + GRID_GAP) + 6;
         if !ways.is_empty() {
             self.paint_ways(c, text, &ways, top - 6, width, dots);
             top += ways_h;
@@ -2580,7 +2582,7 @@ impl Setup {
                         }
                     }
                     // The saved password is no longer right (or the profile lost it): ask for it.
-                    Err(e) if wifi::wrong_password(&e) => {
+                    Err(e) if wifi::needs_password(&e) => {
                         self.advance_armed = false;
                         eprintln!("wifi: connection failed: {e}");
                         self.note = Some(("The saved password didn't work. Type it again.".into(), true));
@@ -2680,8 +2682,10 @@ impl Setup {
             }
             SetupEvent::Remote { mode, password, result } => {
                 match result {
+                    // A switch press, or a look that had to start a developer device's sshd (`remote::keep_dev_ssh`).
                     Some(result) => {
                         self.remote_busy = false;
+                        self.remote_looking = false;
                         self.remote_error = result.err();
                     }
                     None => self.remote_looking = false,
@@ -3282,11 +3286,31 @@ impl Setup {
         }
     }
 
-    /// Remote access and its password, the same way (`remote::current` runs `systemctl`).
+    /// The Remote access page's status line and its colour: what sshd really does, never only what a marker says.
+    fn remote_status(&self, dots: &str) -> (String, u32) {
+        match (&self.remote_error, self.remote) {
+            _ if self.remote_busy && self.remote == remote::Mode::DevDown => (format!("Developer device: starting SSH{dots}"), pal().dust),
+            _ if self.remote_busy => (format!("Switching remote access{dots}"), pal().dust),
+            _ if self.remote_looking => (format!("Looking at remote access{dots}"), pal().dust),
+            (Some(e), _) => (e.clone(), pal().alert),
+            (None, remote::Mode::On) => ("Remote access is on.".into(), pal().chalk),
+            (None, remote::Mode::Dev) => ("Always on: this is a developer device (dev-ssh).".into(), pal().chalk),
+            (None, remote::Mode::DevDown) => ("Developer device: SSH is not running.".into(), pal().alert),
+            (None, remote::Mode::External) => ("On, switched on outside pocket-ui. No time limit.".into(), pal().chalk),
+            (None, remote::Mode::Off) if self.ip.is_none() => ("Connect to Wi-Fi first.".into(), pal().dust),
+            (None, remote::Mode::Off) => ("Remote access is off.".into(), pal().dust),
+        }
+    }
+
+    /// Remote access and its password, the same way (`remote::current` runs `systemctl`). On a developer device whose sshd
+    /// is off it is started first, and a failure is what the page says.
     fn look_remote(&mut self) {
         self.remote_looking = true;
         let notify = self.notify.clone();
-        std::thread::spawn(move || notify(SetupEvent::Remote { mode: remote::current(), password: remote::password(), result: None }));
+        std::thread::spawn(move || {
+            let result = remote::keep_dev_ssh().map(|r| r.map_err(|e| e.to_string()));
+            notify(SetupEvent::Remote { mode: remote::current(), password: remote::password(), result })
+        });
     }
 
     /// The PortMaster browser with this catalog, without loading it (`--snapshot`).
@@ -4304,6 +4328,15 @@ impl Setup {
                 _ => {}
             },
             Step::Remote => match b {
+                // A developer device whose sshd is off: A tries to start it again.
+                Button::East if !self.remote_busy && !self.remote_looking && self.remote == remote::Mode::DevDown => {
+                    self.remote_busy = true;
+                    let notify = self.notify.clone();
+                    std::thread::spawn(move || {
+                        let result = remote::keep_dev_ssh().unwrap_or(Ok(())).map_err(|e| e.to_string());
+                        notify(SetupEvent::Remote { mode: remote::current(), password: remote::password(), result: Some(result) })
+                    });
+                }
                 Button::East if !self.remote_busy && !self.remote_looking && matches!(self.remote, remote::Mode::Off | remote::Mode::On | remote::Mode::External) => {
                     if self.remote == remote::Mode::Off && self.ip.is_none() {
                         return false;
@@ -4597,26 +4630,18 @@ impl Setup {
                 // The login and the status move down with a longer text above: four lines of it (German, Retro, 1024 wide: the
                 // Brick) put the ssh line over the login.
                 let (login_y, mut status_y) = ((ssh_y + 68).max(434), 544);
-                let on = matches!(self.remote, remote::Mode::On | remote::Mode::Dev | remote::Mode::External);
+                let on = self.remote.running();
                 if on {
                     // Dev or external SSH: pocket-ui never set a password, root's own one applies.
                     let pw = self.remote_password.as_deref().or((self.remote != remote::Mode::On).then_some("(unchanged)"));
                     paint_login(c, text, login_y, "root", pw);
                     status_y = status_y.max(login_y + 110);
                 }
-                let (status, color) = match (&self.remote_error, self.remote) {
-                    _ if self.remote_busy => (format!("Switching remote access{dots}"), pal().dust),
-                    _ if self.remote_looking => (format!("Looking at remote access{dots}"), pal().dust),
-                    (Some(e), _) => (e.clone(), pal().alert),
-                    (None, remote::Mode::On) => ("Remote access is on.".into(), pal().chalk),
-                    (None, remote::Mode::Dev) => ("Always on: this is a developer device (dev-ssh).".into(), pal().chalk),
-                    (None, remote::Mode::External) => ("On, switched on outside pocket-ui. No time limit.".into(), pal().chalk),
-                    (None, remote::Mode::Off) if self.ip.is_none() => ("Connect to Wi-Fi first.".into(), pal().dust),
-                    (None, remote::Mode::Off) => ("Remote access is off.".into(), pal().dust),
-                };
+                let (status, color) = self.remote_status(&dots);
                 text.draw(c, Face::Body, 28, MARGIN, status_y, color, &status);
                 let h: &[(&str, &str)] = match self.remote {
                     remote::Mode::Dev => &[("B", "Back")],
+                    remote::Mode::DevDown => &[("A", "Start SSH"), ("B", "Back")],
                     // Without an address A does nothing (the status line says "Connect to Wi-Fi first").
                     remote::Mode::Off if self.ip.is_none() => &[("B", "Back")],
                     remote::Mode::Off => &[("A", "Turn on remote access"), ("B", "Back")],
@@ -5436,9 +5461,13 @@ impl Setup {
                 y += step;
             }
         }
-        for line in more {
-            text.draw(c, Face::Body, 24, MARGIN, y, pal().dust, &line);
-            y += step;
+        // The pointer to more too only where it stands above the hint bar (the rows took the room at Large text on the
+        // Smart Pro's 720 lines).
+        if y <= last + step {
+            for line in more {
+                text.draw(c, Face::Body, 24, MARGIN, y, pal().dust, &line);
+                y += step;
+            }
         }
         hints(c, text, &look_hints(false, self.look_row > 0));
     }
@@ -5805,7 +5834,9 @@ fn paint_keyboard_room(c: &mut Canvas, text: &mut Text, kb: &Keyboard, done: &st
     c.rect(MARGIN + 32 + w, 166, 4, 52, pal().ink);
 
     // 82 px keys on 1080 lines; the five rows share what is left above the hints on a screen of fewer (1024x768: 67).
-    let (gap, top) = (10, 290);
+    // Under 768 lines (the Smart Pro's 720) they start 28 px higher, closer under the text field (it ends at 234): at Large
+    // text the note under them ran into the bottom row.
+    let (gap, top) = (10, if c.h < 768 { 262 } else { 290 });
     let key_h = ((c.h - 100 - reserve - top - 4 * gap) / 5).clamp(48, 82);
     for (r, row) in kb.rows().iter().enumerate() {
         let y = top + r as i32 * (key_h + gap);
@@ -5859,14 +5890,23 @@ fn pill_row(c: &mut Canvas, text: &mut Text, top: i32, label: &str, names: &[&st
     let (h, px) = (if label_w > 0 { pill_h() } else { crate::type_scale::row(44, 24) }, 24u32);
     let base = top + h / 2 + crate::type_scale::mid(px);
     let mut x = MARGIN + text.draw(c, Face::Body, px, MARGIN, base, pal().dust, label).max(label_w) + 20;
-    let widths: Vec<i32> = names.iter().map(|n| text.width(Face::Body, px, n) + 40).collect();
+    // Four languages ("Português (Brasil)" is the longest name) leave the welcome step's note little room beside its pills: the
+    // pills give up some of their padding (40, 32, 24 px) before the note loses its end.
+    let inner: Vec<i32> = names.iter().map(|n| text.width(Face::Body, px, n)).collect();
+    let note_w = text.width(Face::Body, 20, blurb);
+    let pad = if label_w > 0 {
+        [40, 32, 24].into_iter().find(|p| c.w - MARGIN - (x + inner.iter().sum::<i32>() + p * inner.len() as i32 + 8) - 28 >= note_w).unwrap_or(24)
+    } else {
+        40
+    };
+    let widths: Vec<i32> = inner.iter().map(|w| w + pad).collect();
     crate::retro::pill(c, x, top, widths.iter().sum::<i32>() + 8, h, h / 2, pal().keycap);
     x += 4;
     for (i, (n, w)) in names.iter().zip(&widths).enumerate() {
         if i == on {
             crate::retro::pill(c, x, top + 4, *w, h - 8, (h - 8) / 2, pal().label);
         }
-        text.draw(c, Face::Body, px, x + 20, base, if i == on { pal().ink } else { pal().chalk }, n);
+        text.draw(c, Face::Body, px, x + pad / 2, base, if i == on { pal().ink } else { pal().chalk }, n);
         x += w;
     }
     // A row of choices a player expects to reach and change (the explorer, `nav_probe`): its label and its pills.
@@ -5887,6 +5927,18 @@ fn pill_row(c: &mut Canvas, text: &mut Text, top: i32, label: &str, names: &[&st
         }
     }
     // Smaller type before "…": "Black pages. Uses the least batte…" at 1024 px.
+    // A row of the welcome step whose note has no room even at the smallest type: two lines beside the pills (the row
+    // is 62 px of its own), the whole note, as the Portuguese language name's pill left too little for one.
+    if label_w > 0 && text.width(Face::Body, 20, blurb) > room {
+        let lines = text.wrap(Face::Body, 20, blurb, room);
+        if lines.len() == 2 {
+            let step = crate::type_scale::line(20, 4);
+            for (i, line) in lines.iter().enumerate() {
+                text.draw(c, Face::Body, 20, x + 28, base - step / 2 + 4 + i as i32 * step, pal().dust, line);
+            }
+            return;
+        }
+    }
     let (npx, note) = text.fit_sizes(Face::Body, &[px, 22, 20], blurb, room);
     text.draw(c, Face::Body, npx, x + 28, base, pal().dust, &note);
 }
@@ -6955,6 +7007,32 @@ mod tests {
         assert_eq!(hw.state().zone, "Europe/Vienna");
     }
 
+    /// Alex's RG35XX Plus, 14.11.: sshd was off after an empty battery, the page said "Always on" and A did nothing. A
+    /// developer device whose sshd is off says so, offers A = Start SSH, says it is starting, and a failure is shown.
+    #[test]
+    fn a_developer_device_with_sshd_off_says_so_and_a_starts_it() {
+        let mut s = wifi_setup("remote-dev-down");
+        s.step = Step::Remote;
+        s.remote_looking = false;
+        s.remote = remote::Mode::Dev;
+        assert_eq!(s.remote_status("").0, "Always on: this is a developer device (dev-ssh).", "sshd runs: always on");
+        s.on_event(SetupEvent::Remote { mode: remote::Mode::DevDown, password: None, result: None });
+        assert_eq!(s.remote_status("").0, "Developer device: SSH is not running.");
+        assert!(!s.remote.running(), "no login is shown for an sshd that is off");
+        paint_it(&mut s);
+        press(&mut s, &[Button::East]);
+        assert!(s.remote_busy, "A starts sshd on a developer device");
+        assert_eq!(s.remote_status("…").0, "Developer device: starting SSH…");
+        s.on_event(SetupEvent::Remote { mode: remote::Mode::DevDown, password: None, result: Some(Err("SSH did not start: no sshd.service".into())) });
+        assert!(!s.remote_busy && !s.remote_looking);
+        assert_eq!(s.remote_status("").0, "SSH did not start: no sshd.service", "the failure, not a claim that it is on");
+        // A look that had to start it reports like a press: done looking, the error shown.
+        s.remote_looking = true;
+        s.on_event(SetupEvent::Remote { mode: remote::Mode::Dev, password: None, result: Some(Ok(())) });
+        assert!(!s.remote_looking);
+        assert_eq!(s.remote_status("").0, "Always on: this is a developer device (dev-ssh).");
+    }
+
     fn wifi_setup(name: &str) -> Setup {
         setup(name, "UTC", Some(IW_AT)).0.only(Only::Wifi).with_wifi_demo()
     }
@@ -7361,6 +7439,26 @@ mod tests {
         assert_eq!(s.at(), "password");
         assert!(matches!(&s.step, Step::Password { ssid, .. } if ssid == "Home"));
         assert!(s.note.as_ref().unwrap().0.contains("saved password didn't work"));
+    }
+
+    /// A network connected in EmulationStation can end up with a profile without its security section and no key in
+    /// ROCKNIX's settings either (ES-REPLACEMENT-GAPS 4.2: `wifictl connect` without a key). Connecting to it says
+    /// "802-11-wireless-security.key-mgmt: property is missing", not "Secrets were required". A report from a Reddit user
+    /// (RG34XXSP, ROCKNIX first, pocket-ui added) had to forget the network and add it again before anything worked:
+    /// this error got a plain "couldn't connect" and no keyboard. Missed because the tests only used the "Secrets" wording.
+    #[test]
+    fn a_saved_profile_that_lost_its_security_section_asks_for_the_password_like_a_refused_one() {
+        let nmcli = "Error: Connection activation failed: 802-11-wireless-security.key-mgmt: property is missing";
+        assert_eq!(wifi::connection_error(nmcli), "Wrong password. Try again.", "never the vague 'couldn't connect'");
+        let mut s = wifi_setup("wifi-keyless-profile");
+        s.on_event(SetupEvent::ConnectedSaved { ssid: "Home".into(), result: Err(nmcli.into()) });
+        assert_eq!(s.at(), "password", "the keyboard, so nothing has to be forgotten first");
+        assert!(matches!(&s.step, Step::Password { ssid, .. } if ssid == "Home"));
+        assert!(s.note.as_ref().unwrap().0.contains("saved password didn't work"));
+        // Any other failure still goes back to the list.
+        let mut s = wifi_setup("wifi-other-failure");
+        s.on_event(SetupEvent::ConnectedSaved { ssid: "Home".into(), result: Err("Error: Connection activation failed: IP configuration could not be reserved".into()) });
+        assert_eq!(s.at(), "wifi");
     }
 
     #[test]
@@ -8466,7 +8564,7 @@ mod hint_bars {
         assert!(GAMES_DRIVE_FIRST_WAY.contains("GAMES") && GAMES_DRIVE_FIRST_WAY.contains("first start"));
         let mut text = Text::new();
         let col_w = (1280 - 2 * MARGIN - 40) / 2;
-        for (lang, table) in [("en", None), ("de", Some(crate::i18n::Lang::De)), ("es", Some(crate::i18n::Lang::Es))] {
+        for (lang, table) in [("en", None), ("de", Some(crate::i18n::Lang::De)), ("es", Some(crate::i18n::Lang::Es)), ("pt", Some(crate::i18n::Lang::Pt))] {
             let line = match table {
                 None => GAMES_DRIVE_FIRST_WAY.to_string(),
                 Some(l) => l.table().and_then(|t| t.translate(GAMES_DRIVE_FIRST_WAY)).unwrap_or_else(|| panic!("{lang}: no line")).into_owned(),
@@ -8505,7 +8603,7 @@ mod hint_bars {
         let mut text = Text::new();
         let width = 1024 - 2 * MARGIN; // the narrowest canvas (the 4:3 handhelds paint at 1024 wide)
         for line in [FOUND_WIFI_SLOT_WAY, FOUND_WIFI_WAY, BRICK_CARD_WAY] {
-            for (lang, table) in [("en", None), ("de", Some(crate::i18n::Lang::De)), ("es", Some(crate::i18n::Lang::Es))] {
+            for (lang, table) in [("en", None), ("de", Some(crate::i18n::Lang::De)), ("es", Some(crate::i18n::Lang::Es)), ("pt", Some(crate::i18n::Lang::Pt))] {
                 let shown = match table {
                     None => line.to_string(),
                     Some(l) => l.table().and_then(|t| t.translate(line)).unwrap_or_else(|| panic!("{lang}: no line for {line}")).into_owned(),

@@ -1,7 +1,8 @@
 //! Remote access over SSH, switched in Settings (docs/SECURITY-HARDENING.md, B2 in
 //! the internal review). Off unless the user turns it on; then root can log in with this
 //! device's password (shown on screen, same kind as the file sharing password) or a key from
-//! /storage/.ssh/authorized_keys. It stays on until switched off, and is off after a restart. A developer device keeps SSH on for good with the `dev-ssh` marker file.
+//! /storage/.ssh/authorized_keys. It stays on until switched off, and is off after a restart. A developer device keeps SSH on for good with the `dev-ssh` marker file: pocket-ui starts sshd there
+//! whenever it finds it off (at start and on the page), and shows the real state.
 
 pub const SSH_PORT: u16 = 22;
 /// Present on development devices: SSH stays on, the switch leaves it alone.
@@ -17,15 +18,31 @@ pub enum Mode {
     Off,
     /// Turned on with our switch.
     On,
-    /// `dev-ssh` marker: always on, never touched by pocket-ui.
+    /// `dev-ssh` marker and sshd runs: always on, the switch leaves it alone.
     Dev,
+    /// `dev-ssh` marker but sshd is not running (ROCKNIX's `sshd.conf` gone, e.g. `ssh.enabled` reset after a hard
+    /// power-off): pocket-ui starts it ([`keep_dev_ssh`]); never shown as on.
+    DevDown,
     /// sshd runs, but not because of our switch (ROCKNIX's `ssh.enabled`, the kernel command line).
     External,
 }
 
+impl Mode {
+    /// Whether sshd runs: what the page and the Settings row may call on.
+    pub fn running(self) -> bool {
+        matches!(self, Mode::On | Mode::Dev | Mode::External)
+    }
+}
+
+/// A developer device whose sshd is not running: pocket-ui starts it (at start and when the page looks).
+pub fn needs_start(mode: Mode) -> bool {
+    mode == Mode::DevDown
+}
+
 pub fn mode(running: bool, owned: bool, dev: bool) -> Mode {
     match (dev, running, owned) {
-        (true, _, _) => Mode::Dev,
+        (true, true, _) => Mode::Dev,
+        (true, false, _) => Mode::DevDown,
         (false, true, true) => Mode::On,
         (false, true, false) => Mode::External,
         (false, false, _) => Mode::Off,
@@ -73,6 +90,21 @@ mod imp {
     pub fn current() -> Mode {
         let running = Command::new("systemctl").args(["is-active", "--quiet", "sshd"]).status().is_ok_and(|s| s.success());
         mode(running, owned_marker().exists(), Path::new(DEV_MARKER).exists())
+    }
+
+    /// A developer device (`dev-ssh`) whose sshd is not running: starts it. ROCKNIX's sshd.service only starts with
+    /// `SERVICE_FLAG`, which its boot script removes when `ssh.enabled` is not 1, so the flag is made again first; the
+    /// Brick's card has its own stand-in for `systemctl`. `None`: nothing to do (no marker, or sshd runs).
+    pub fn keep_dev_ssh() -> Option<std::io::Result<()>> {
+        if !needs_start(current()) {
+            return None;
+        }
+        #[cfg(feature = "brick")]
+        if brick_card() {
+            return Some(sh("systemctl start sshd", &[]).map_err(|e| std::io::Error::other(format!("SSH did not start: {e}"))));
+        }
+        let started = sh("mkdir -p /storage/.cache/services && touch \"$1\" && systemctl start sshd", &[SERVICE_FLAG]);
+        Some(started.map_err(|e| std::io::Error::other(format!("SSH did not start: {e}"))))
     }
 
     /// Sets this device's password (created once) as root's, then starts sshd for this session.
@@ -156,12 +188,16 @@ mod imp {
         Ok(())
     }
 
+    pub fn keep_dev_ssh() -> Option<std::io::Result<()>> {
+        None
+    }
+
     pub fn password() -> Option<String> {
         ON.load(Ordering::Relaxed).then(|| "otter-cedar-lamp-315".into())
     }
 }
 
-pub use imp::{current, password, turn_off, turn_on};
+pub use imp::{current, keep_dev_ssh, password, turn_off, turn_on};
 
 #[cfg(test)]
 mod tests {
@@ -174,6 +210,23 @@ mod tests {
         assert_eq!(mode(true, false, false), Mode::External);
         assert_eq!(mode(false, true, false), Mode::Off, "stale marker, sshd gone");
         assert_eq!(mode(true, false, true), Mode::Dev);
-        assert_eq!(mode(false, false, true), Mode::Dev, "the marker wins even while sshd restarts");
+    }
+
+    /// Alex's RG35XX Plus, 14.11.: after an empty battery and a restart sshd was off (port 22 refused), but the page said
+    /// "Always on: this is a developer device" and the switch refused. The marker alone is not SSH: a developer device whose
+    /// sshd is not running is `DevDown`, which pocket-ui starts and never shows as on.
+    #[test]
+    fn a_developer_device_without_sshd_is_not_shown_as_on_and_gets_started() {
+        assert_eq!(mode(false, false, true), Mode::DevDown, "the dev marker without a running sshd");
+        assert_eq!(mode(false, true, true), Mode::DevDown, "a stale switch marker changes nothing");
+        assert!(!Mode::DevDown.running(), "the Settings row and the login must not say on");
+        assert!(needs_start(Mode::DevDown));
+        for m in [Mode::Off, Mode::On, Mode::Dev, Mode::External] {
+            assert!(!needs_start(m), "{m:?}: pocket-ui starts sshd by itself only on a developer device");
+        }
+        // Widened to the whole class: every mode that says SSH is on needs sshd running.
+        for (running, owned, dev) in [(false, false, false), (false, true, false), (false, false, true), (false, true, true)] {
+            assert!(!mode(running, owned, dev).running(), "{:?} from markers alone", mode(running, owned, dev));
+        }
     }
 }

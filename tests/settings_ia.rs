@@ -274,7 +274,7 @@ fn the_selected_kids_mode_row_shows_that_it_opens_a_page() {
     std::fs::create_dir_all(&tmp).unwrap();
     std::fs::write(tmp.join("none.cfg"), "<systemList></systemList>").unwrap();
     let stub = wayland(&tmp);
-    for lang in ["en", "de", "es"] {
+    for lang in ["en", "de", "es", "pt"] {
         let s = shot(&tmp, &stub, "settings:5:3", lang, "1280x720", "normal", false);
         assert!(s.visible.iter().any(|v| v.trim() == ">"), "{lang}: no \">\" on the selected Kids mode row: {:?}", s.visible);
     }

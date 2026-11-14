@@ -1,7 +1,9 @@
 # Continue
 
 A game you have played comes back where you left it. **A** on it goes straight back to the moment you left, with no
-question and no waiting. Nothing keeps running and nothing extra goes on your card: it is the moment Quit or sleep wrote.
+question. Nothing keeps running and nothing extra goes on your card: it is the moment Quit or sleep wrote. With
+[Animations](settings-sound.md#animations) on Cozy (and Motion on Full) you watch the game go into its console first, as at
+every start; the moment loads meanwhile and waits, still, until the scene is over. Quick skips the scene.
 
 ## An open case means a moment is waiting
 
@@ -15,7 +17,8 @@ In Shelf and Cabinet, the case starts moving as soon as you press **A**, while p
 
 ## How fast
 
-It depends on the emulator. From A until the moment is back on the screen, measured on real games:
+It depends on the emulator. From A until the moment is back on the screen with Animations on Quick, measured on real
+games (on Cozy the moment comes once the game is in its console, about 1.6 s after A, or later when the emulator takes longer):
 
 | System | Mini V2 | RG35XX Plus |
 |---|---|---|

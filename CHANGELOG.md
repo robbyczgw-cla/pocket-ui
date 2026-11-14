@@ -5,6 +5,39 @@ and versions follow [Semantic Versioning](https://semver.org/) (before 1.0, a mi
 
 ## [Unreleased]
 
+## [0.4.2] - 2026-11-14
+
+### Added
+
+- **Português (Brasil).** pocket-ui speaks Brazilian Portuguese: Settings → System → Language, or right at the first start.
+  A device set to Portuguese starts in it by itself.
+- **Extra dim.** Too bright in a dark room even at the lowest setting? Turn Brightness down past 5 % and the picture gets
+  darker in three more steps (Extra dim 1, 2 and 3), on the shelf, in the menus and in games.
+
+### Fixed
+
+- **Java phone games (J2ME):** the first start of a phone game no longer sits on a black screen and then says "make sure you
+  have Java". pocket-ui downloads Java once (about 200 MB) and shows how far it is; B stops it, and without Wi-Fi it tells
+  you so instead of failing.
+- **Java phone games fill the screen.** Each game starts at its own screen size (176×208, 240×320, 360×640 …) and is shown as
+  large as fits, sharp where it doubles; A is the main key (OK, fire) instead of 9.
+- **RetroAchievements:** no more fake "Warning: Unknown Emulator" unlock card (with sound) a few seconds into every game.
+- **A "&" in a system name no longer empties your library.** A broken entry in the system list is skipped and named in the
+  Game check; every other system stays on the shelf.
+- **TrimUI Smart Pro:** the menus run smoothly. Its 1280×720 screen is painted directly, as the Brick's: a frame on Home
+  takes about 5 ms instead of over 100, the Retro letters are sharp, and pages that ran into the button hints fit.
+- **Anbernic RG CubeXX:** the last screenshot in the list is no longer covered by the message line, the power menu shows
+  "Sleep" whole at Large text, and "Other games in …" is fully translated in German and Spanish.
+- **Continue on Cozy:** an open case plays the whole insert scene too, and its moment waits, still, until the game is in; A
+  while the case is still turning starts the scene as well (on H700 handhelds the scene was cut short or skipped).
+- **Wi-Fi:** a saved network that lost its password (after setting Wi-Fi up in EmulationStation) asks for the password
+  instead of saying "couldn't connect"; you no longer have to forget the network first. The web companion's page says that it needs Tailscale.
+- **Remote access (SSH) on a developer device** really starts SSH again after a restart, and the page shows whether it runs.
+- German and Spanish: Settings → Connections → PC streaming no longer says "No PC paire…" in English at Large text; it
+  reads "Kein PC" / "Ningún PC".
+- German and Spanish: "Looking at your games…", "Sending…" and the other loading lines no longer flip to English while
+  their dots move.
+
 ## [0.4.1] - 2026-11-13
 
 ### Fixed

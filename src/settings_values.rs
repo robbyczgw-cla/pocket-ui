@@ -175,7 +175,7 @@ pub fn read(hw: &dyn Hw, net: &Arc<NetState>, data_dir: &Path, connected: bool) 
     } else {
         Wifi::NotConnected
     };
-    let ssh = if mock { false } else { crate::remote::current() != crate::remote::Mode::Off };
+    let ssh = if mock { false } else { crate::remote::current().running() };
     let mut paired = crate::moonlight::load_pcs(data_dir);
     if let Some(h) = crate::moonlight::host().filter(|h| !paired.contains(h)) {
         paired.push(h);
@@ -297,6 +297,17 @@ pub fn fit(value: &str, max_w: i32, mut width: impl FnMut(&str) -> i32) -> Strin
     format!("…{tail}")
 }
 
+/// [`fit`] for a value the painter translates when it paints it. The cut must be made in the words the player reads:
+/// cutting the English and painting the piece left "No PC paire…" in German, a string the table can't know. So the
+/// value is measured as painted (`width` translates); if it fits it stays as it is (the painter translates it), else
+/// `translate` gives its words and those are cut.
+pub fn fit_translated(value: &str, max_w: i32, translate: impl FnOnce(&str) -> String, mut width: impl FnMut(&str) -> i32) -> String {
+    if width(value) <= max_w {
+        return value.to_string();
+    }
+    fit(&translate(value), max_w, width)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -347,6 +358,17 @@ mod tests {
         let cut = fit("Indianapolis, Indiana", 100, w);
         assert!(w(&cut) <= 100 && cut.ends_with('…'), "{cut:?}");
         assert_eq!(fit("Whatever >", 30, w), "… >", "no room at all: the arrow stays");
+    }
+
+    #[test]
+    fn a_value_too_long_in_the_players_language_is_cut_in_that_language() {
+        // 10 px a character; the painter measures the German of "No PC paired >" and paints a cut piece as it is.
+        let de = |s: &str| if s == "No PC paired >" { "Kein PC gekoppelt >".to_string() } else { s.to_string() };
+        let w = |s: &str| de(s).chars().count() as i32 * 10;
+        assert_eq!(fit_translated("No PC paired >", 300, de, w), "No PC paired >", "fits as painted: left to the painter");
+        let cut = fit_translated("No PC paired >", 150, de, w);
+        assert_eq!(cut, "Kein PC geko… >", "cut from the German, not from the English");
+        assert!(!cut.contains("PC paire"), "{cut:?}");
     }
 
     #[test]

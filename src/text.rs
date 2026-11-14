@@ -107,7 +107,7 @@ impl Default for Text {
 /// pause menu 21) and of the titles (50), for ASCII and `PREWARM_MORE`.
 const PREWARM: [(Face, &[u32]); 2] = [(Face::Body, &[21, 28, 30, 36, 46]), (Face::Title, &[50])];
 /// The letters of German and the marks of Settings' values besides ASCII.
-const PREWARM_MORE: &str = "ÄÖÜäöüßáéíóúñÁÉÍÓÚÑ¿¡“”…‹›·–×°→\u{200b}";
+const PREWARM_MORE: &str = "ÄÖÜäöüßáéíóúñÁÉÍÓÚÑãõâêôçÃÕÂÊÔÇà¿¡“”…‹›·–×°→\u{200b}";
 /// The sizes games' names are painted at (the rows of a list and of search 37, the card's title 50 and 67, a cover's
 /// caption 44, the hints and meta lines 28 and 30), at which `prewarm_names` draws their CJK letters ahead.
 const PREWARM_NAMES: [(Face, &[u32]); 2] = [(Face::Title, &[37, 44, 50, 67]), (Face::Body, &[28, 30])];

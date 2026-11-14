@@ -116,6 +116,15 @@ pub fn stands_still(hold: bool, still: bool, resume_pending: bool) -> bool {
 /// behind the launch animation, as before.
 pub const HOLD_STILL: &str = "POCKET_LAUNCH_HOLD_STILL";
 
+/// Environment variable: "1" when the game stands still through a hold with a deadline, no button awaited: an open case
+/// started on Cozy, its moment waits behind the scene (0.4.2: from main's showcase hand-over, its hold part only).
+pub const HOLD_PAUSE: &str = "POCKET_LAUNCH_HOLD_PAUSE";
+
+/// pocket-core: this start's hold keeps the game still (`HOLD_PAUSE`).
+pub fn hold_pause() -> bool {
+    std::env::var_os(HOLD_PAUSE).is_some_and(|v| v == "1")
+}
+
 /// Optional file set by pocket-ui once the reminder has a decoded launch picture. Missing: no extra hold.
 pub const HOLD_READY: &str = "POCKET_LAUNCH_HOLD_READY";
 

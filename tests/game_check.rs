@@ -141,3 +141,19 @@ fn the_usual_mistakes_are_named_with_what_to_do() {
     assert_eq!(faults, Vec::<String>::new());
     let _ = std::fs::remove_dir_all(&t);
 }
+
+#[test]
+fn a_broken_system_is_visible_while_the_other_games_stay() {
+    let t = tmp("broken-system");
+    let stub = wayland(&t);
+    let cfg = card(&t);
+    put(&t, "roms/snes/Chrono Trigger.sfc", b"game");
+    let xml = std::fs::read_to_string(&cfg).unwrap().replace("</systemList>", "<system><name>broken</name><fullname>Game & Watch</wrong></system></systemList>");
+    std::fs::write(&cfg, xml).unwrap();
+    let systems = pocket_ui::library::load(&cfg).unwrap();
+    assert_eq!(systems.iter().map(|s| s.games.len()).sum::<usize>(), 1, "the good games remain on Home");
+    let (shown, _) = screen(&t, &stub, &cfg, "game-check:real", "en", "1280x720", "normal");
+    assert!(shown.contains("Folders that can't be read"), "the skipped system is visible in Game check: {shown}");
+    assert!(!shown.contains("All good"), "{shown}");
+    let _ = std::fs::remove_dir_all(&t);
+}

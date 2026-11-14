@@ -145,9 +145,21 @@ impl App {
         self.text.prewarm_names(self.systems.iter().flat_map(|s| s.games.iter().map(|g| g.name.as_str())));
     }
 
+    /// Read-only diagnosis, also used by the headless driver which leaves device startup jobs off.
+    pub(crate) fn library_system_list_check(&self) {
+        // Also for cached lists and for Home with Continue: the empty-page error would be hidden there.
+        let (proxy, es_systems) = (self.proxy.clone(), self.es_systems.clone());
+        let _ = std::thread::Builder::new().name("system-list-check".into()).spawn(move || {
+            if library::system_list_issues(&es_systems).is_ok_and(|issues| !issues.is_empty()) {
+                let _ = proxy.send_event(UserEvent::SystemListUnread);
+            }
+        });
+    }
+
     /// The first frame is on screen (or the start took too long for it): the scan or the cache write the start put
     /// off. Once.
     pub(crate) fn library_after_first_frame(&mut self) {
+        self.library_system_list_check();
         // The player's EmulationStation gamelists, on a thread of their own (`app_gamelist`).
         self.gamelist_refresh("after the start");
         // And the screenshots folder, for the card's row and Settings (`app_gallery`).

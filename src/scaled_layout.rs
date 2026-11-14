@@ -2,11 +2,17 @@
 //! Large outputs keep their native canvas; output size wins over the profile (HDMI).
 
 /// The supported layouts start at 1280×960, with the panel's aspect ratio preserved.
-/// Outputs above 720 lines keep their native canvas. A panel whose double already holds 1280×960 and stays within
-/// 1440×1440 gets exactly that double (every H700 panel: 640×480, 720×480 and the CubeXX's 720×720): the cheap 2:1
+/// Outputs above 720 lines and panels of 1024×720 or more (the Smart Pro's 1280×720) keep their native canvas. A panel
+/// whose double already holds 1280×960 and stays within 1440×1440 gets exactly that double (every H700 panel: 640×480, 720×480 and the CubeXX's 720×720): the cheap 2:1
 /// box reduction, and a pixel font lands on whole screen pixels (`step` 2). The CubeXX's 1280×1280 with a 16:9 area
 /// filter cost about three times the frame of a 640×480 panel (docs/H700-SCALED-LAYOUT.md "CubeXX").
 pub fn logical_size(panel: (u32, u32)) -> (u32, u32) {
+    // A panel of 1024x720 and more is painted natively, as the Brick's 1024x768: the TrimUI Smart Pro's 1280x720 is the
+    // full 1280 width with 48 lines less (`kit::short_screen`). Laid out at 1707x960 and reduced by 3:4 it took 108-132 ms
+    // a frame on an A53, and a pixel font fell between screen pixels.
+    if panel.0 >= 1024 && panel.1 >= 720 {
+        return panel;
+    }
     logical_size_up_to(panel, 720)
 }
 
@@ -193,6 +199,9 @@ mod tests {
             ((720, 720), (1440, 1440)),
             ((1240, 1080), (1240, 1080)),
             ((1920, 1080), (1920, 1080)),
+            ((1280, 720), (1280, 720)),
+            ((1024, 720), (1024, 720)),
+            ((960, 544), (1695, 960)),
             ((0, 0), (0, 0)),
         ] {
             assert_eq!(logical_size(panel), logical);

@@ -63,6 +63,10 @@ impl App {
         let shown = self.is_frozen_path(&path);
         let drains = self.launch_drains(&system, &path, &emulator, &core);
         let (data, kids, pixel, proxy) = (self.data_dir.clone(), self.kids_live(), self.pixel_path, self.proxy.clone());
+        // A phone game's first start on ROCKNIX: Java is loaded first, its progress over the start (`j2me_java`).
+        let java = (!hosted && pocket_ui::j2me_java::needed(&pocket_ui::j2me_java::Places::here(), &core))
+            .then(|| std::sync::Arc::new(pocket_ui::j2me_java::Fetch::default()));
+        self.java_fetch = java.clone();
         let run = Run { player, system: system.clone(), core, path: path.clone() };
         pocket_ui::motion::set_cozy(self.cozy());
         pocket_ui::ui_sound::stop_for(!hosted);
@@ -79,7 +83,7 @@ impl App {
         pocket_ui::trace::step("launch preparation queued");
         let fan = self.perf_fan_prepare_launch();
         std::thread::spawn(move || {
-            let prepared = prepare(&name, &game, &data, kids, pixel, controls, shared(), shown, drains, fan);
+            let prepared = prepare(&name, &game, &data, kids, pixel, controls, shared(), shown, drains, java.as_deref(), fan);
             let _ = tx.send(prepared);
             let _ = proxy.send_event(UserEvent::LaunchPrepared);
         });
@@ -105,6 +109,7 @@ impl App {
             Err(mpsc::TryRecvError::Disconnected) => (Outcome::Empty(pocket_ui::fallback::not_started_notice_on(&p.run.system, &p.name, None)), None),
         };
         self.perf_fan_launch_ready(fan);
+        self.java_fetch = None;
         let Some(p) = self.pending_launch.take() else { return };
         match outcome {
             Outcome::Ready { at, wait, resumable, preview, env } => self.launch_prepared(p, at, wait, resumable, preview, env),
@@ -140,7 +145,7 @@ pub(crate) static TEST_PREPARE_RELEASED: std::sync::atomic::AtomicBool = std::sy
 pub(crate) static TEST_PREPARED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 
 fn prepare(name: &str, game: &frozen::Game, data: &std::path::Path, kids: bool, pixel: bool, controls: bool,
-    shared: bool, shown: bool, drains: Vec<i32>, fan: impl FnOnce(bool) -> pocket_ui::perf_fan::FanKeeper) -> (Outcome, pocket_ui::perf_fan::FanKeeper) {
+    shared: bool, shown: bool, drains: Vec<i32>, java: Option<&pocket_ui::j2me_java::Fetch>, fan: impl FnOnce(bool) -> pocket_ui::perf_fan::FanKeeper) -> (Outcome, pocket_ui::perf_fan::FanKeeper) {
     pocket_ui::trace::step("launch preparation begin");
     if pocket_ui::proc::mock() {
         if let Some(ms) = std::env::var("POCKETUI_TEST_PREPARE_MS").ok().and_then(|s| s.parse::<u64>().ok()) {
@@ -160,6 +165,13 @@ fn prepare(name: &str, game: &frozen::Game, data: &std::path::Path, kids: bool, 
     if let Some(msg) = pocket_ui::library_cache::missing_game(name, path) { return (Outcome::Missing(msg), fan(false)); }
     if let Some(msg) = pocket_ui::library_cache::empty_game(name, path) { return (Outcome::Empty(msg), fan(false)); }
     pocket_ui::trace::step("launch files checked");
+    if let Some(fetch) = java {
+        println!("j2me: loading Java before {}", path.display());
+        if let Err(e) = pocket_ui::j2me_java::load(&pocket_ui::j2me_java::Places::here(), fetch) {
+            println!("j2me: Java not loaded: {e:?}");
+            return (Outcome::Empty(e.message()), fan(false));
+        }
+    }
     if controls && !kids && hosted {
         let stem = path.file_stem().and_then(|s| s.to_str()).unwrap_or("game");
         let states = pocket_ui::states::StateSet::pocket_core(&pocket_ui::slots::base(system, stem));
@@ -192,6 +204,10 @@ fn prepare(name: &str, game: &frozen::Game, data: &std::path::Path, kids: bool, 
     let preview = hosted && pocket_ui::launch_picture::source(data, system, path).is_some();
     pocket_ui::trace::step("launch frozen checked");
     if matches!(at, frozen::AtLaunch::Fresh(_)) && !hosted { standalone::skip_next_resume(); }
+    // Phone games: A is the phone's OK key (`j2me_keys`).
+    pocket_ui::j2me_keys::before_start(core);
+    // Phone games at their own screen size, filling the screen (`j2me_size`).
+    pocket_ui::j2me_size::before_start(system, core, path);
     standalone::set_kids(kids);
     standalone::launch(system, emulator, core, path, data);
     pocket_ui::trace::step("launch standalone prepared");

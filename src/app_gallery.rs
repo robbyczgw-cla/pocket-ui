@@ -439,7 +439,12 @@ impl App {
         };
         let title = self.text.fit(Face::Title, 50, &title, pill_left - 24 - left);
         self.text.draw(c, Face::Title, 50, left, pad + 58, pal().chalk, &title);
-        let (top, bottom) = (pad + NU_PILL + 12, c.h - pad - NU_PILL - 16);
+        let (top, mut bottom) = (pad + NU_PILL + 12, c.h - pad - NU_PILL - 16);
+        // What a delete or Y came to may need its own line above the hints (`paint_gallery`): the list ends above it,
+        // so the message never covers a row's name (the square CubeXX page ended a row right under it).
+        if page.message.is_some() {
+            bottom -= type_scale::line(NU_SMALL, 8) + 8;
+        }
 
         if page.shots().is_empty() {
             let (head, line) = match (page.loaded, &page.scope) {

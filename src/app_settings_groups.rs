@@ -429,7 +429,9 @@ impl App {
             _ => ">".to_string(),
         };
         let max_w = room.min(values::MAX_W);
-        values::fit(&values::quiet(&value, i == sel), max_w, |s| self.text.width(Face::Body, 36, s))
+        let shown = values::quiet(&value, i == sel);
+        let lang = pocket_ui::i18n::current();
+        values::fit_translated(&shown, max_w, |v| pocket_ui::i18n::tr_in(lang, v), |s| self.text.width(Face::Body, 36, s))
     }
 
     /// The line under row `i` of `SETTINGS` as it is now: a cozy extra's note while another switch keeps it from
@@ -504,13 +506,17 @@ impl App {
         self.text.set_translate(false);
         let reserved = self.desc_room(&lines.iter().map(String::as_str).collect::<Vec<_>>(), hints_at);
         self.text.set_translate(was);
-        // Seven fit at every text size; a window that follows the selection only if a screen ever has less room.
-        let visible = (((c.h - pad - NU_PILL - 16 - reserved - top) / row) as usize).max(1);
+        // Seven fit at every text size; a window that follows the selection only if a screen ever has less room. Under 768
+        // lines (the Smart Pro's 720) the rows share the room down to 50 px, so all of them still stand on the page.
+        let room = c.h - pad - NU_PILL - 16 - reserved - top;
+        let row = if c.h < 768 { row.min((room / n.max(1) as i32).max(50)) } else { row };
+        let visible = ((room / row) as usize).max(1);
         let first = window_start(sel, visible, n);
         let now = Instant::now();
         let (first_f, hl) = self.motion.list_at(app_motion::List::Settings, first, sel, now);
         // Each category's icon (`ui_art`, one colour, painted in the name's) before its name, which moves right for it.
-        let icon_k = 2;
+        // Half-size icons where a row is lower than they are (Retro's 64 px under 768 lines).
+        let icon_k = if row < if retro { pocket_ui::retro::ICON * 2 + 8 } else { 40 } { 1 } else { 2 };
         let indent = if retro { pocket_ui::retro::ICON * icon_k + 18 } else { 16 * icon_k + 18 };
         let mut band = c.rows(top, top + visible as i32 * row);
         let hy = ((hl - first_f) * row as f32).round() as i32;
@@ -645,7 +651,7 @@ mod tests {
     }
 
     /// The categories are bare rows (2026-10-30, NextUI's idea): all seven on one page at every text size on the
-    /// handhelds' 960 logical lines (640x480 and 1280x720 are both painted at that height, `scaled_layout`), with room
+    /// handhelds' 960 logical lines (640x480 is painted at that height, `scaled_layout`), with room
     /// over the hints kept for the selected one's line; and every line, of a category or of a row, English or German,
     /// fits whole in the two lines it may take at the bottom at Large text (never cut with "…"). The first-day run
     /// (2026-10-26) found Playing and System cut short; with the lines under the names 640x480 Large showed 3 of 7.

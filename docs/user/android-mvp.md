@@ -116,7 +116,7 @@ covers and pictures, more systems, controls, and ready. Continue advances, Back 
 for later. If you close the app or return from the folder picker, setup resumes where you left it.
 Settings → First start opens the eight-step guide again. You can finish without games or a network connection.
 
-Choose English, German or Spanish, one of the four looks (Shelf, Easy, Split, Cabinet; Minimal or Cards from an
+Choose English, German, Spanish or Brazilian Portuguese, one of the four looks (Shelf, Easy, Split, Cabinet; Minimal or Cards from an
 earlier build open as Split), Cozy or Quick animations, and dark or light pages.
 Choose your ROM folder through Android's own picker and allow read access. Choosing another folder
 adds it to your library; existing folder permissions stay in place. An empty folder is harmless:

@@ -7,7 +7,7 @@ visible behind the panel). Rows, top to bottom:
 
 | Row | Left/Right and A |
 |---|---|
-| **Brightness** | Left/Right change it |
+| **Brightness** | Left/Right change it. Below 5% it goes on to **Extra dim 1**, **2** and **3** for playing in the dark ([Extra dim](#extra-dim)) |
 | **Volume** | Left/Right change it. Muted sound says so: "5%, muted". The small text beside it says where the sound goes: Speaker, Headphones, Bluetooth: and the device's name, USB audio or HDMI ([Where the sound goes](#where-the-sound-goes)) |
 | **Wi-Fi** | A switches it on or off, by what the radio is doing right now (not by what the row showed a moment ago). The row says **Off** when the radio is off, however that came about, and the same on Settings → Connections → Wi-Fi. If Wi-Fi is on in your settings but the system blocked the radio while starting, pocket-ui switches it on once by itself; a Wi-Fi you switched off stays off. If the switch does not work, a short line says "Couldn't turn Wi-Fi on. Try again." and the row keeps showing what the radio really does. Switching Wi-Fi off ends a remote login |
 | **Bluetooth** | A switches it on or off. It takes a few seconds. To pair a controller, see [Bluetooth](bluetooth.md) |
@@ -18,6 +18,14 @@ visible behind the panel). Rows, top to bottom:
 The time, the Wi-Fi symbol and the battery level are at the top right, as on Home. B or HOME closes the panel; opened from the pause menu, it
 goes back to the pause menu. In a game, a HOME tap opens the pause menu, not this panel. The rows can also be touched:
 a row selects it, the selected one is A, and the arrows round a value are Left and Right.
+
+### Extra dim
+
+The lowest backlight can still be too bright in a dark room. Turn Brightness down past 5% and the picture itself gets
+darker in three more steps: **Extra dim 1**, **2** and **3**. It works on the shelf, in the menus and in games, and
+text stays readable on the darkest step. Turning Brightness up takes the extra dim steps away first, then the backlight
+goes up again. Your choice is kept after a restart. On Android, use Android's own Extra dim (in Android's settings, under Accessibility)
+instead.
 
 ### Where the sound goes
 

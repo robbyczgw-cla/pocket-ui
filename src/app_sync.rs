@@ -347,7 +347,9 @@ impl App {
         // The details under the list keep their room above the hints: with larger text (Settings → Text size) the
         // list shows fewer rows and scrolls, with a bar at the edge.
         let need = DETAILS_H + 6 * pocket_ui::type_scale::grow(28);
-        let visible = (((c.h - pad - NU_PILL - 10 - need - 14 - top) / row).max(3) as usize).min(rows().len());
+        // Three rows at the least; two on short screens (1024x768, the Smart Pro's 720) with the largest text, where the details under them must stay over the hint bar.
+        let least = if pocket_ui::kit::short_screen(c.h) { 2 } else { 3 };
+        let visible = (((c.h - pad - NU_PILL - 10 - need - 14 - top) / row).max(least) as usize).min(rows().len());
         let first = super::window_start(page.sel, visible, rows().len());
         if rows().len() > visible {
             let track = visible as i32 * row;
@@ -406,8 +408,11 @@ impl App {
         let label = |app: &mut App, c: &mut Canvas, y: i32, s: &str| {
             app.text.draw(c, Face::Body, 24, left, y, pal().dust, s);
         };
-        // Status
-        label(self, c, y0 + 20, "Status");
+        // Status. Off, under 768 lines (the Smart Pro's 720), without its label and 24 higher: the third paragraph kept its end.
+        let lift = if !page.on() && c.h < 768 { 24 } else { 0 };
+        if lift == 0 {
+            label(self, c, y0 + 20, "Status");
+        }
         let busy = page.busy.or(page.resuming.map(|_| "Resuming"));
         // An error is cut to the room it has: left of the QR code while Syncthing is on, and at the size it is drawn at.
         let room = right - left - if page.on() { 260 + 16 } else { 0 };
@@ -419,7 +424,7 @@ impl App {
             (None, Some(b)) => (44, format!("{b}{}", ".".repeat(1 + (self.started.elapsed().as_millis() / 400 % 3) as usize)), pal().dust),
             (None, None) => (44, sync::status_line(page.on(), page.snap.as_ref()), if page.on() { pal().chalk } else { pal().dust }),
         };
-        self.text.draw(c, Face::Title, px, left, y0 + 64 + d1, color, &status);
+        self.text.draw(c, Face::Title, px, left, y0 + 64 + d1 - lift, color, &status);
 
         if !page.on() {
             let lines = [
@@ -427,10 +432,13 @@ impl App {
                 "Turn it on, then add this Pocket in Syncthing on your other device: scan the QR code or type the device ID.",
                 "Nothing leaves the Pocket until you pair a device. BIOS stays home unless you share it.",
             ];
-            let mut y = y0 + 110 + d1 + g(26);
+            let mut y = y0 + 110 + d1 + g(26) - lift;
             // Above the hints' line (and the Wi-Fi line under them when there is one); with larger text the last
             // paragraph that reaches it is shortened with "…".
-            let step = pocket_ui::type_scale::line(26, 8);
+            // Under 768 lines (the Smart Pro's 720) the lines and paragraphs closer, so the last one keeps its end.
+            let tight = c.h < 768;
+            let step = pocket_ui::type_scale::line(26, if tight { 4 } else { 8 });
+            let gap = if tight { 0 } else { 10 };
             let bottom = (c.h - NU_PAD - NU_PILL).min(foot) - 10 - if page.ip.is_none() { step + 10 + step / 2 } else { 0 };
             for l in lines {
                 let room = if y > bottom { 0 } else { ((bottom - y) / step + 1) as usize };
@@ -438,7 +446,7 @@ impl App {
                     self.text.draw(c, Face::Body, 26, left, y, pal().dust, &line);
                     y += step;
                 }
-                y += 10;
+                y += gap;
             }
             if page.ip.is_none() {
                 // Smaller, or without the way there, where it would run off the screen (German at 1024 wide, the Brick).
@@ -485,7 +493,8 @@ impl App {
         // With larger text (Settings → Text size) the last line can run into the hints: a problem then takes the
         // login's line, and the note about the certificate is left out.
         let (login_y, note_y) = (y0 + 314 + d6, y0 + 352 + d6 + g(24));
-        let last = if note_y > c.h - NU_PAD - NU_PILL - 10 { login_y } else { note_y };
+        // The foot's explanation counts too: two lines of it stand higher than the hints.
+        let last = if note_y > (c.h - NU_PAD - NU_PILL).min(foot) - 10 { login_y } else { note_y };
         if last == note_y || problems.is_empty() {
             // Cut with "…" where it is wider than the page (larger text, a long password).
             let login = self.text.fit(Face::Body, 28, &login, right - left);

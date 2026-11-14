@@ -141,7 +141,7 @@ switches the cache off.
 
 1. `src/library.rs` reads ROCKNIX's `es_systems.cfg` for the systems, their ROM folders, file types and the
    emulators and cores each system can run with, and lists the games on the card (at start from the cache of the
-   last scan, [Start](#start)). A game whose file is gone doesn't start: pocket-ui says so and reads the list again.
+   last scan, [Start](#start)). `library_systems.rs` reads each damaged entry independently: literal ampersands are accepted, and an unreadable or incomplete system is skipped while the others remain. Game check names the skipped entry and its line; a quiet note after the first frame points there. The source file is never rewritten. A game whose file is gone doesn't start: pocket-ui says so and reads the list again.
    Names come from the file (`display_name`: tags and a trailing version such as "v1.02" left out, ", The" moved to
    the front); games of one system that end up with the same name get back what tells them apart (`tell_apart`:
    their own tags, else the file type, else the folder). A file name with no capital letter is cased for the shelf
@@ -547,9 +547,9 @@ pre-rasterised font) into a Wayland surface through `winit` and `softbuffer`; po
 well under 300 ms; since the start work moved off the UI thread, pocket-ui's own first frame comes about 10 ms after
 `main` in the virtual device and about 40 ms on the Mini V2 ([dev/start-time.md](dev/start-time.md#start-time)).
 
-The interface's words are English in the code and German or Spanish on request (Settings → System → Language, `src/i18n.rs`): the text
+The interface's words are English in the code and German, Spanish or Brazilian Portuguese on request (Settings → System → Language, `src/i18n.rs`): the text
 painter (`src/text.rs`) looks each string up by its English wording in a table compiled into both programs
-(`assets/i18n/de.tsv`, `es.tsv`) and paints the translation, so the pages themselves know nothing of it. The choice is one field
+(`assets/i18n/de.tsv`, `es.tsv`, `pt.tsv`) and paints the translation, so the pages themselves know nothing of it. The choice is one field
 of `settings.json`; until it is made, the system language EmulationStation set (`system.language`, which the launcher
 passes on as `LANG`) decides. What `Text::fit` and `Text::wrap` give back is translated already and is painted as it is (`i18n::Cache::is_translated`): a second look-up of it would run every pattern of the table over it. See [dev/translations.md](dev/translations.md#translations).
 
@@ -577,7 +577,7 @@ Odin 2 Mini/Portal use Xbox menu defaults (saved choices win); safe mode follows
 ### Small-panel UI frames
 
 `frame::Presenter::draw_scaled` paints into `scaled_layout::ScaledFrame`'s reusable logical buffer on outputs up to
-720 px tall, then area-reduces into the physical softbuffer surface. Native large frames paint directly into the
+720 px tall and narrower than 1024 (1280×720 is native), then area-reduces into the physical softbuffer surface. Native large frames paint directly into the
 surface. Only existing redraw requests invoke this work. Layout measurements, animation buffers and touch HitMaps
 use logical dimensions (`App::screen_size`); normalised touch events are mapped into that same space. Snapshots and
 safe mode share the scaler. Core video and core pointer coordinates remain physical. Details: [DESIGN.md](DESIGN.md#small-panel-presentation).
@@ -701,6 +701,8 @@ card rather than in firmware. Default ROCKNIX behavior is unchanged. Details and
 audio limitation: [TRIMUI-BRICK-BLUETOOTH.md](TRIMUI-BRICK-BLUETOOTH.md).
 
 Slow pocket-core loads signal the UI after three seconds (`startup::LoadWatch`); `app_loading` paints “Loading the game…” until the load finishes. The due timer requests a frame before advancing its next wake.
+
+A phone game's (J2ME) first start on ROCKNIX loads Java before RetroArch starts (`j2me_java`): `queue_launch` decides it from two file looks (the ROCKNIX script is there, `/storage/jdk/bin/java` is not), the launch worker downloads (curl, the Store's limits), checks Azul's SHA-256, unpacks with `tar` and renames the finished folder into place; `app_loading` paints its progress at once and B stops it (`java_press`). A failure or stop ends the start as a failed one with the reason in the notice. ROCKNIX's `freej2me.sh` then finds the folder filled and skips its own download.
 
 
 ## Audio observations

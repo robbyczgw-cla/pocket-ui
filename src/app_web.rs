@@ -23,6 +23,10 @@ use super::{App, SettingsPage, UserEvent, CANCEL, CONFIRM, NU_BTN_PAD, NU_PAD, N
 /// The name in the Settings list, to come back to.
 pub(crate) const SETTINGS_NAME: &str = "Web companion";
 
+/// What the page says while the companion is off: that it needs Tailscale and where to set that up. Without it a player
+/// without Tailscale saw a switch that looked as if it would just work (it only listens on the tailnet).
+const OFF_NOTE: &str = "Needs Tailscale. Set it up first (Settings › Connections › Tailscale), then switch this on. The address to open shows here.";
+
 /// The server starts this long after pocket-ui did, when it is on: never in the way of the first frame.
 const START_AFTER: Duration = Duration::from_secs(3);
 
@@ -635,7 +639,7 @@ impl App {
             (None, false) => {
                 self.text.draw(c, Face::Title, 44, left, y, pal().dust, "Off");
                 y += 44;
-                for l in self.text.wrap_prose(Face::Body, 26, "Nothing listens while it is off. Switch it on, and the address to open shows here.", width) {
+                for l in self.text.wrap_prose(Face::Body, 26, OFF_NOTE, width) {
                     self.text.draw(c, Face::Body, 26, left, y, pal().dust, &l);
                     y += pocket_ui::type_scale::line(26, 8);
                 }
@@ -753,6 +757,16 @@ fn address(a: std::net::SocketAddr) -> String {
 mod tests {
     use super::*;
     use std::io::{Read, Write};
+
+    #[test]
+    fn the_off_page_says_plainly_that_tailscale_is_needed_in_every_language() {
+        assert!(OFF_NOTE.contains("Tailscale") && OFF_NOTE.contains("Settings › Connections › Tailscale"));
+        for (lang, word) in [("de", "Braucht Tailscale"), ("es", "Necesita Tailscale"), ("pt", "Precisa do Tailscale")] {
+            let tsv = std::fs::read_to_string(format!("{}/assets/i18n/{lang}.tsv", env!("CARGO_MANIFEST_DIR"))).unwrap();
+            let row = tsv.lines().find(|l| l.starts_with(&format!("{OFF_NOTE}\t"))).unwrap_or_else(|| panic!("{lang}: no translation"));
+            assert!(row.contains(word) && row.contains("Tailscale)"), "{lang}: {row}");
+        }
+    }
 
     /// A WebUi as `main` makes it, over a temporary data folder, listening on 127.0.0.1 instead of the tailnet.
     fn web_ui(name: &str, enabled: bool) -> (WebUi, tempfile::TempDir) {

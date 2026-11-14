@@ -336,10 +336,12 @@ pub fn fade_delay(cozy: bool) -> Duration {
     }
 }
 
-/// Whether a start is Cozy's: the look's or player's Animations, Motion on Full (Reduced and Off start straight away, the
-/// game's window isn't held for what they don't show), and not a frozen game, which goes straight back.
-pub fn starts_cozy(cozy: bool, motion: crate::motion::Motion, frozen: bool) -> bool {
-    cozy && motion == crate::motion::Motion::Full && !frozen
+/// Whether a start is Cozy's: the look's or player's Animations and Motion on Full (Reduced and Off start straight away,
+/// the game's window isn't held for what they don't show). An open case (a moment to continue) too: Cozy plays its
+/// whole scene while the moment loads, Quick goes straight back (14.11.: the case flashed in and the game
+/// covered it, while the way back out played Cozy's).
+pub fn starts_cozy(cozy: bool, motion: crate::motion::Motion) -> bool {
+    cozy && motion == crate::motion::Motion::Full
 }
 
 /// When the medium is in, for its sound and its seat.
@@ -964,11 +966,11 @@ mod tests {
     }
 
     #[test]
-    fn only_cozy_with_motion_on_full_and_not_frozen_holds_a_start() {
+    fn only_cozy_with_motion_on_full_holds_a_start() {
         use crate::motion::Motion::{Full, Off, Reduced};
-        assert!(starts_cozy(true, Full, false));
-        for (cozy, motion, frozen) in [(false, Full, false), (true, Reduced, false), (true, Off, false), (true, Full, true)] {
-            assert!(!starts_cozy(cozy, motion, frozen), "{cozy} {motion:?} {frozen}");
+        assert!(starts_cozy(true, Full));
+        for (cozy, motion) in [(false, Full), (true, Reduced), (true, Off)] {
+            assert!(!starts_cozy(cozy, motion), "{cozy} {motion:?}");
         }
     }
 

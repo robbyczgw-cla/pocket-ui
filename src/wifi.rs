@@ -412,6 +412,13 @@ pub fn wrong_password(e: &str) -> bool {
     lower.contains("secrets") || lower.contains("password") || lower.contains("802-1x")
 }
 
+/// A saved network that has to be asked for its password again: the stored one was refused (`wrong_password`), or the
+/// profile has none at all (`stale_profile`: EmulationStation's wifictl rebuilt it without a key). Never for a password
+/// just typed: that one retries a profile without security (`connect_network`).
+pub fn needs_password(e: &str) -> bool {
+    wrong_password(e) || stale_profile(e)
+}
+
 /// nmcli deleting a profile that is already gone ("cannot delete unknown connection(s)"): forgotten all the same.
 pub fn already_forgotten(e: &str) -> bool {
     e.to_lowercase().contains("unknown connection")
@@ -420,7 +427,7 @@ pub fn already_forgotten(e: &str) -> bool {
 /// Calm, translatable screen text. The diagnostic stays in the log, never in a painted sentence.
 pub fn connection_error(e: &str) -> &'static str {
     let lower = e.to_lowercase();
-    if wrong_password(e) {
+    if needs_password(e) {
         "Wrong password. Try again."
     } else if lower.contains("no network with ssid") || lower.contains("could not be found") || lower.contains("ssid-not-found") {
         "That network is out of range. Scan again."

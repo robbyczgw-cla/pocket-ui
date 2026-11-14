@@ -236,7 +236,7 @@ fn retro_play_question_keeps_its_heading_off_the_line_under_it() {
     for picture in ["1024x768", "640x480"] {
         let mut jobs = Vec::new();
         for (i, size) in ["normal", "large"].into_iter().enumerate() {
-            for lang in ["en", "de", "es"] {
+            for lang in ["en", "de", "es", "pt"] {
                 jobs.push((format!("retro-play-{picture}-{lang}-{i}"), size, lang, false, "setup:play".to_string()));
             }
         }
@@ -272,7 +272,7 @@ fn retro_pause_menu_in_large_german_and_spanish_text_stays_inside_its_windows() 
         let game = [("POCKETUI_RETRO", "cocoa"), ("POCKETUI_RETRO_LETTERS", letters), ("POCKETUI_SNAPSHOT_GAME", "snes|Donkey Kong Country 3: Dixie Kong's Double Trouble!|dkc3.sfc")];
         for picture in [None, Some("640x480"), Some("1024x768")] {
             let mut jobs = Vec::new();
-            for lang in ["de", "es"] {
+            for lang in ["de", "es", "pt"] {
                 for (i, state) in states.iter().enumerate() {
                     jobs.push((format!("retro-pause-{letters}-{}-{lang}-{i}", picture.unwrap_or("native")), "large", lang, false, state.to_string()));
                 }
@@ -336,7 +336,7 @@ fn retro_test_buttons_page_keeps_its_hints_inside_the_panel() {
     let mut found = Vec::new();
     for picture in [None, Some("640x480"), Some("1024x768")] {
         let mut jobs = Vec::new();
-        for lang in ["en", "de", "es"] {
+        for lang in ["en", "de", "es", "pt"] {
             for (i, state) in states.iter().enumerate() {
                 jobs.push((format!("retro-tb-{}-{lang}-{i}", picture.unwrap_or("native")), "large", lang, false, state.to_string()));
             }
@@ -408,6 +408,73 @@ fn at_1024x768_in_normal_text_nothing_overlaps_or_runs_off_the_picture() {
     assert!(found.is_empty(), "{} problems at 1024x768 in Normal text (O: runs into another string or a hint bar, V: cut by the top or bottom edge, E: cut by the side edge, X: past the right edge):\n{}", found.len(), found.join("\n"));
 }
 
+/// The Anbernic RG CubeXX's square 720x720 panel shows a 1440x1440 page scaled 2:1 (docs/H700-SCALED-LAYOUT.md); the
+/// snapshot paints that page itself (`POCKETUI_SNAPSHOT_NATIVE`). Every state of tests/i18n-states.txt (English, Normal)
+/// must show no string that runs into another or into a hint bar (`O`), is cut by the top or bottom (`V`) or the side
+/// edge (`E`), or is drawn past the right edge (`X`). The square found: the screenshots page's "This is now the game's
+/// picture on the shelf" over the list's last row.
+#[test]
+fn on_the_cubexx_square_nothing_overlaps_or_runs_off_the_picture() {
+    let tmp = tempfile::tempdir().unwrap();
+    fake_library(tmp.path());
+    let bin = PathBuf::from(env!("CARGO_BIN_EXE_pocket-ui"));
+    let stub = wayland(tmp.path());
+    let jobs: Vec<_> = states().into_iter().enumerate().map(|(i, (safe, state))| (format!("cubexx-{i}"), "normal", "en", safe, state)).collect();
+    let env = [("POCKETUI_DEVICE", "rgcubexx"), ("POCKETUI_SNAPSHOT_NATIVE", "1")];
+    let mut found = render_all_in(tmp.path(), &bin, stub.as_ref(), jobs, Some("1440x1440"), "OVEX", &env, false);
+    drop(stub);
+    found.sort();
+    assert!(found.is_empty(), "{} problems on the CubeXX's 1440x1440 page (O: runs into another string or a hint bar, V: cut by the top or bottom edge, E: cut by the side edge, X: past the right edge):\n{}", found.len(), found.join("\n"));
+}
+
+/// The power menu's Sleep line ("… Uses a few percent of the battery an hour.") ended in "…" in Large text: the panel
+/// was 960 wide whatever the screen. Where the screen has the room (the 1280-wide pages, the CubeXX's 1440 square) the
+/// panel grows to the longest line, so each choice's line shows whole, in Barlow and Retro.
+#[test]
+fn power_menu_lines_show_whole_in_large_text_where_the_screen_has_room() {
+    let tmp = tempfile::tempdir().unwrap();
+    let tmp = tmp.path();
+    fake_library(tmp);
+    let bin = PathBuf::from(env!("CARGO_BIN_EXE_pocket-ui"));
+    let stub = wayland(tmp);
+    let mut found = Vec::new();
+    let cases = [
+        ("sys:power", "The power button wakes it. Uses a few percent of the battery an hour."),
+        ("sys:power-game", "Saves the game. The power button wakes it. Uses a few percent of the battery an hour."),
+    ];
+    for (i, ((picture, device), (retro, font), (state, want))) in [("1280x960", ""), ("1440x1440", "rgcubexx")].into_iter()
+        .flat_map(|p| [("off", "barlow"), ("cocoa", "retro")].into_iter().map(move |l| (p, l)))
+        .flat_map(|(p, l)| cases.into_iter().map(move |c| (p, l, c)))
+        .enumerate()
+    {
+        let (data, seen) = (tmp.join(format!("data-power-{i}")), tmp.join(format!("power-{i}.txt")));
+        copy_dir(&tmp.join("data"), &data);
+        let mut cmd = Command::new(&bin);
+        if let Some(stub) = &stub {
+            cmd.env("WAYLAND_DISPLAY", &stub.path);
+        }
+        if !device.is_empty() {
+            cmd.envs([("POCKETUI_DEVICE", device), ("POCKETUI_SNAPSHOT_NATIVE", "1")]);
+        }
+        let out = cmd
+            .args(["--snapshot", state, tmp.join(format!("power-{i}.png")).to_str().unwrap()])
+            .env("POCKETUI_MOCK_NOW", FIXTURE_NOW)
+            .envs([("POCKETUI_MOCK", "1"), ("POCKETUI_LANG", "en"), ("POCKETUI_TEXT_SIZE", "large"), ("POCKETUI_RETRO", retro), ("POCKETUI_FONT", font)])
+            .env("POCKETUI_SNAPSHOT_SIZE", picture)
+            .env("POCKETUI_VISIBLE_TEXT", &seen)
+            .env("POCKETUI_ES_SYSTEMS", tmp.join("es_systems.cfg"))
+            .env("POCKETUI_DATA", &data)
+            .output()
+            .expect("run pocket-ui");
+        let seen = std::fs::read_to_string(&seen).unwrap_or_default();
+        if !out.status.success() || !seen.lines().any(|l| l.trim() == want) {
+            found.push(format!("{state} {picture} {font}: \"{want}\" not whole; the picture shows:\n{seen}"));
+        }
+    }
+    drop(stub);
+    assert!(found.is_empty(), "{}", found.join("\n"));
+}
+
 /// Native 1024x768 outputs do not use the H700's larger logical canvas. A two-line save note must still clear the keys.
 #[test]
 fn save_preview_notes_stay_above_the_hints_on_native_and_small_outputs() {
@@ -453,7 +520,7 @@ fn pages_found_overlapping_at_1024x768_keep_their_lines_apart() {
         "achievements:offline", "sys:time-wrong-wifi", "search:none:qqqq", "curator:history", "curator:history:year",
         "battery:3:samples", "port-perf:own", "port-perf:busy", "pc-streaming:pin", "slot-undo",
     ];
-    for lang in ["en", "de", "es"] {
+    for lang in ["en", "de", "es", "pt"] {
         for state in states {
             let boxes = tmp.path().join("pages.box");
             let png = tmp.path().join("pages.png");
@@ -756,7 +823,7 @@ fn check_textfit_jobs(states: &[&str], faults: &str, looks: &[(&str, &str)], saf
         for picture in ["640x480", "1024x768", "1240x1080", "1280x720"] {
             let mut jobs = Vec::new();
             for size in ["normal", "large"] {
-                for lang in ["en", "de", "es"] {
+                for lang in ["en", "de", "es", "pt"] {
                     for (i, state) in states.iter().enumerate() {
                         jobs.push((format!("textfit-031-{style}-{font}-{picture}-{size}-{lang}-{i}"), size, lang, safe, state.to_string()));
                     }
@@ -847,7 +914,7 @@ fn check_system_names(states: &[(&str, &str, &str)], themes: &[&str]) {
         for dimensions in ["1280x720", "1024x768", "640x480", "1240x1080"] {
             for style in ["off", "cocoa"] {
                 for size in ["normal", "large"] {
-                    for lang in ["en", "de", "es"] {
+                    for lang in ["en", "de", "es", "pt"] {
                         for (state, full, short) in states {
                             let visible = tmp.path().join("name.txt");
                             let misses = tmp.path().join("name.tsv");
@@ -929,7 +996,7 @@ fn textfit_rest_031_every_safe_mode_row_can_be_selected_in_full_view() {
     for (style, font) in ALL_LOOKS {
         for picture in ["640x480", "1024x768", "1280x720"] {
             for size in ["normal", "large"] {
-                for lang in ["en", "de", "es"] {
+                for lang in ["en", "de", "es", "pt"] {
                     for row in 0..5 {
                         let state = format!("rescue:{row}");
                         let probe = tmp.path().join("rescue.probe");
@@ -1127,7 +1194,7 @@ fn extras_explanations_whole(device: &str, standalone: bool, sizes: &[&str], row
             for (retro, letters) in [("off", "departure"), ("cocoa", "departure"), ("cocoa", "pixelify")] {
                 for &picture in sizes {
                     let (snapshot, text_size) = picture.split_once('/').unwrap();
-                    for lang in ["en", "de", "es"] {
+                    for lang in ["en", "de", "es", "pt"] {
                         let seen = tmp.path().join("extras-visible.txt");
                         let mut cmd = Command::new(&bin);
                         cmd.args(["--snapshot", &state, tmp.path().join("extras.png").to_str().unwrap()])
@@ -1171,4 +1238,47 @@ fn textfit_extras_explanations_stay_whole_on_rocknix_640x480() {
 fn textfit_extras_explanations_stay_whole_on_the_trimui_card() {
     let found = extras_explanations_whole("brick", true, &["1024x768/normal", "1024x768/large", "640x480/normal", "640x480/large"], 5);
     assert!(found.is_empty(), "{}", found.join("\n"));
+}
+
+/// Brazilian Portuguese (pt-BR) runs longer than English: every state of tests/i18n-states.txt in Normal and Large text at
+/// the 640x480 handhelds, the Brick's 1024x768 and the CubeXX's square 720x720 (its 1440x1440 page), in Barlow, and in Large
+/// Retro (Departure Mono, the widest) at the first two. Nothing may run into another string or a hint bar (`O`), be cut by
+/// the top or bottom (`V`) or the side edge (`E`), or be drawn past the right edge (`X`) that English, rendered the same
+/// way, does not run into as well: Large text at 1024x768 has pages the English already fills to the hint bar (the
+/// size sweep's, scripts/size-sweep.sh), and Portuguese may not add one. A release check, like the 720x720 explorer: about
+/// 14,000 snapshots (`cargo test --release --test text_size portuguese -- --ignored`).
+#[test]
+#[ignore = "release check: the Portuguese text-fit matrix, 640x480, 1024x768 and 720x720, Normal and Large"]
+fn portuguese_in_normal_and_large_text_nothing_overlaps_or_runs_off_the_picture() {
+    let tmp = tempfile::tempdir().unwrap();
+    fake_library(tmp.path());
+    let bin = PathBuf::from(env!("CARGO_BIN_EXE_pocket-ui"));
+    let stub = wayland(tmp.path());
+    let cubexx = [("POCKETUI_DEVICE", "rgcubexx"), ("POCKETUI_SNAPSHOT_NATIVE", "1")];
+    let retro = [("POCKETUI_RETRO", "cocoa")];
+    // (label, picture, text size, environment, which findings count)
+    let runs: [(&str, &str, &str, &[(&str, &str)], &str); 8] = [
+        ("640x480", "640x480", "normal", &[], "OVEX"),
+        ("640x480", "640x480", "large", &[], "OVEX"),
+        ("1024x768", "1024x768", "normal", &[], "OVEX"),
+        ("1024x768", "1024x768", "large", &[], "OVEX"),
+        ("720x720", "1440x1440", "normal", &cubexx, "OVEX"),
+        ("720x720", "1440x1440", "large", &cubexx, "OVEX"),
+        ("Retro 640x480", "640x480", "large", &retro, ""),
+        ("Retro 1024x768", "1024x768", "large", &retro, ""),
+    ];
+    let mut found = Vec::new();
+    for (label, picture, size, env, only) in runs {
+        let render = |lang: &'static str| {
+            let jobs: Vec<_> = states().into_iter().enumerate().map(|(i, (safe, state))| (format!("{lang}-{label}-{size}-{i}"), size, lang, safe, state)).collect();
+            render_all_in(tmp.path(), &bin, stub.as_ref(), jobs, Some(picture), only, env, false)
+        };
+        // A finding is the state; where English has a fault of its own on the same page, Portuguese's is not new.
+        let fault = |line: &str| line.split_once(" (").map(|(state, _)| state.to_string());
+        let english: std::collections::HashSet<String> = render("en").iter().filter_map(|l| fault(l)).collect();
+        found.extend(render("pt").into_iter().filter(|l| !fault(l).is_some_and(|f| english.contains(&f))).map(|f| format!("{label}: {f}")));
+    }
+    drop(stub);
+    found.sort();
+    assert!(found.is_empty(), "{} problems in Portuguese that English hasn't (O overlap, T touch, E side edge, V top/bottom edge, X past the right edge, W a word broken):\n{}", found.len(), found.join("\n"));
 }

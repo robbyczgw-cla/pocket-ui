@@ -57,6 +57,11 @@ These are meant for development and tests; normal use needs none of them. On a d
 | `POCKETUI_GBA_CORE` | Development path to the bundled ARM64 gpSP library; enables H700 GBA core selection on a stand-in device too, retaining existing Continue ownership and saved choices ([HOST.md](../HOST.md#h700-gba)) |
 | `POCKETUI_TEST_PM_LIFETIME_HELPER=<program>` | Tests only (`ports::tests::killing_the_ui_process_stops_its_portmaster_helper_with_a_checkpoint`): passes a fake PortMaster helper to its child UI process so killing that UI verifies helper shutdown and a resumable checkpoint. Not for use by hand |
 | `POCKETUI_TEST_PREPARE_MS=<ms>` | With `POCKETUI_MOCK` only: delay the launch worker, capped at 2 s |
+| `POCKETUI_J2ME_ROOT=<dir>` | With `POCKETUI_MOCK` only: stands in for the handheld's `/storage` (`<dir>/storage`) and ROCKNIX's `freej2me.sh` (`<dir>/freej2me.sh`) for a phone game's Java load (`src/j2me_java.rs`, tests/j2me_java.rs); without it no start loads Java under the mock |
+| `POCKETUI_J2ME_ARCHIVE=<file>` | With `POCKETUI_MOCK` only: the Java archive "downloaded" instead of Azul's (its own SHA-256 checked); `POCKETUI_J2ME_TOP=<folder>` is the folder inside it |
+| `POCKETUI_J2ME_TOP=<folder>` | With `POCKETUI_J2ME_ARCHIVE`: the archive's top folder, as `zulu11.48.21-ca-jdk11.0.11-linux_aarch64` is Azul's |
+| `POCKETUI_J2ME_STEP_MS=<ms>` | With `POCKETUI_J2ME_ARCHIVE`: the stand-in download comes in ten steps this long, so its progress can be painted and B pressed half-way |
+| `POCKETUI_J2ME_OFFLINE=1` | With `POCKETUI_J2ME_ARCHIVE`: the handheld has no network, as when Wi-Fi is off |
 | `POCKETUI_TEST_PREPARE_HOLD=1` | With `POCKETUI_MOCK` only: the launch worker waits (at most 2 s) until `bench-launch-response` has painted five frames; `tests/launch_response.rs` checks that the first frame with the insertion came before the preparation got past that hold, and that A and that frame cost the UI thread at most 50 ms of CPU time (no wall clock) |
 | `POCKETUI_TEST_TIME_FACTOR` | Tests only: an extra scheduling allowance from 1 to 64 for hang guards on a constrained runner; product deadlines and simulated clocks are unchanged (see the timing-test notes above) |
 | `POCKETUI_BIOS` | BIOS directory (pocket-core's system folder) instead of `/storage/roms/bios` |
@@ -183,6 +188,7 @@ These are meant for development and tests; normal use needs none of them. On a d
 | `POCKET_LAUNCHED_AT` | The moment the game was asked for (`CLOCK_MONOTONIC`, ms), so pocket-core logs its start against it ([Start time](start-time.md#start-time)) |
 | `POCKET_LAUNCH_HOLD_UNTIL` | Cozy animations and "Where was I?": the `CLOCK_MONOTONIC` ms until which pocket-core keeps its window back (draws nothing, silent) while the launch animation plays or the card is read; a button ends it, an animation deadline more than 2 s away is ignored; `HOLD_STILL=1` waits for a button (`startup::held`) |
 | `POCKET_LAUNCH_HOLD_STILL=1` | Set by pocket-ui with "Where was I?"'s hold: the game runs no frame during the hold once its moment is loaded (`startup::stands_still`) |
+| `POCKET_LAUNCH_HOLD_PAUSE=1` | Set by pocket-ui for an open case started on Cozy: the game stands still through the hold (its deadline, no button awaited), so nothing of its moment runs behind the insert scene (`startup::hold_pause`) |
 | `POCKET_LAUNCH_HOLD_READY` | Optional reminder-ready file: pocket-ui creates it when the decoded launch picture arrives; if it is still missing when pocket-core starts, the game plays immediately rather than waiting for an invisible card |
 | `POCKET_SKIP_RESUME` | Set by pocket-ui (`frozen::at_launch`): pocket-core starts fresh and moves the auto state aside for Load: it was made for another version of the file |
 | `POCKET_START_NOTE` | Set by pocket-ui: a line pocket-core shows over the game's first moments (`frozen::at_launch`) |

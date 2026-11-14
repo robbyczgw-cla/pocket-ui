@@ -61,7 +61,7 @@ pub fn blit(frame: &Frame, dst: &mut [u32], dw: usize, dh: usize) {
 
 pub fn render(frame: &Frame, dst: &mut [u32], w: usize, h: usize, look: Look) {
     blit(frame, dst, w, h);
-    if look.soft && (look.warmth != 0 || look.night != 0) {
+    if look.soft && (look.warmth != 0 || look.night != 0 || look.dim != 0) {
         let t = look.tables();
         for p in dst {
             *p = (t[0][(*p >> 16 & 255) as usize] as u32) << 16 | (t[1][(*p >> 8 & 255) as usize] as u32) << 8 | t[2][(*p & 255) as usize] as u32;

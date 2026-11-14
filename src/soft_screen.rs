@@ -78,7 +78,7 @@ impl SoftScreen {
 
 /// Whether this look tints in software: the look says so (`soft`: no compositor does it) and it changes a colour.
 pub fn tinted(look: &Look) -> bool {
-    look.soft && (look.warmth != 0 || look.night != 0)
+    look.soft && (look.warmth != 0 || look.night != 0 || look.dim != 0)
 }
 
 /// `blit` through the look's tables (`Look::tables`); the black around the picture stays black (a multiply keeps 0).
@@ -242,6 +242,7 @@ mod tests {
         assert!(!tinted(&Look { night: 3800, ..Look::default() }), "a compositor look is not ours to apply");
         let night = Look { soft: true, night: 3800, ..Look::default() };
         assert!(tinted(&night) && tinted(&Look { soft: true, warmth: 4, ..Look::default() }));
+        assert!(tinted(&Look { soft: true, dim: 1, ..Look::default() }), "extra dim is drawn here too");
         let f = Frame { width: 1, height: 1, pitch: 4, format: PIXEL_XRGB8888, data: vec![255, 255, 255, 0] };
         let (mut plain, mut warm) = (vec![0u32; 3], vec![0u32; 3]);
         blit(&f, &mut plain, 3, 1);

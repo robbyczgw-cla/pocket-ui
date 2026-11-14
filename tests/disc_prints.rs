@@ -159,8 +159,15 @@ fn the_disc_out_of_its_case_is_printed_with_the_cover_or_the_title() {
         let c = plain.colours(right);
         assert!(c > 60, "{size} {appearance}: the plain disc shows its print and title ({c} colours)");
     }
-    // Cozy launch, mid-flight: the printed disc over the console.
-    let s = shot(&tmp, &lib, &covered, &stub, "shelf:psx:shelf:games:0", "dark", "1280x720", Some(450));
-    let n = s.count((s.w / 4, s.h / 3, s.w * 3 / 4, s.h * 5 / 6), red);
+    // Cozy launch, mid-flight: the printed disc over the console. Where it is at a moment follows the layout (1280x720 is
+    // painted natively since 13.11.2026, its case smaller and further left): at one of three moments of the flight.
+    let n = [450, 600, 800]
+        .map(|ms| {
+            let s = shot(&tmp, &lib, &covered, &stub, "shelf:psx:shelf:games:0", "dark", "1280x720", Some(ms));
+            s.count((s.w / 4, s.h / 3, s.w * 3 / 4, s.h * 5 / 6), red)
+        })
+        .into_iter()
+        .max()
+        .unwrap_or(0);
     assert!(n > 2000, "the launch carries the printed disc ({n} red pixels)");
 }
