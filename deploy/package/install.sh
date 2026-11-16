@@ -1,7 +1,7 @@
 #!/bin/sh
 # Installs pocket-ui on a ROCKNIX card that is already in use (Retroid Pocket Mini V2, ROCKNIX SM8250; the Pocket 5,
 # Flip 2 and first Mini on the same image, the SM8550 handhelds, the Anbernic H700 models of ROCKNIX's H700 image and
-# the Anbernic RG DS Plus of ROCKNIX's RK3566 image are experimental, docs/DEVICES.md). Run it on the
+# the handhelds of ROCKNIX's RK3566 image with a profile are experimental, docs/DEVICES.md). Run it on the
 # device as root, from the unpacked package (README.txt):
 #
 #   sh install.sh             checks, installs, then restarts the interface: pocket-ui comes up
@@ -32,8 +32,11 @@ MODELS_PLAYED="AYN Odin 2 Mini|Anbernic RG35XX Plus|Anbernic RG35XX SP"
 # The Anbernic models of ROCKNIX's H700 image that pocket-ui has a profile for (src/device.rs H700_BOARDS; a test keeps the
 # two in step).
 MODELS_H700="Anbernic RG28XX|Anbernic RG35XX 2024|Anbernic RG35XX Plus|Anbernic RG35XX H|Anbernic RG35XX Pro|Anbernic RG35XX SP|Anbernic RG40XX H|Anbernic RG40XX V|Anbernic RG34XX|Anbernic RG34XX-SP|Anbernic RG-SP|Anbernic RG CubeXX"
-# The one model of ROCKNIX's RK3566 image pocket-ui has a profile for (src/device.rs Model::RgDsPlus): its two screens need it.
-MODELS_RK3566="Anbernic RG DS Plus"
+# The models of ROCKNIX's RK3566 image pocket-ui has a profile for: the RG DS Plus (src/device.rs Model::RgDsPlus, its two
+# screens) and the one-screen handhelds of src/device_model.rs RK3566_BOARDS, in that order (a test keeps them in step).
+MODELS_RK3566="Anbernic RG DS Plus|Anbernic RG353M|Anbernic RG353P|Anbernic RG353PS|Anbernic RG353V|Anbernic RG353VS|Anbernic RG503|Powkiddy RGB30|Powkiddy RGB20SX|Powkiddy RK2023"
+# The models of ROCKNIX's RK3326 image pocket-ui has a profile for (src/device_model.rs RK3326_BOARDS; the same test).
+MODELS_RK3326="Game Console R36S"
 MODEL_FILE=${POCKETUI_MODEL_FILE:-$R/sys/firmware/devicetree/base/model}
 APP=$R/storage/pocket-ui
 DROPIN_DIR=$R/storage/.config/system.d/essway.service.d
@@ -88,12 +91,12 @@ for f in LICENSE NOTICE.md FONTS-OFL.txt THIRD-PARTY-CRATES.md THIRD-PARTY-LICEN
   [ -s "$LIC/$f" ] || die "licences/$f is missing from the package: unpack the whole package and run install.sh from its folder"
 done
 
-# The system: ROCKNIX SM8250/SM8550/H700/RK3566 on aarch64; only the Mini V2 has hardware verification.
+# The system: ROCKNIX SM8250/SM8550/H700/RK3566/RK3326 on aarch64; only the Mini V2 has hardware verification.
 OSR=$R/etc/os-release
 [ -f "$OSR" ] || die "no /etc/os-release: this is not ROCKNIX"
 [ "$(field OS_NAME "$OSR")" = ROCKNIX ] || die "this system is $(field OS_NAME "$OSR" || echo unknown), not ROCKNIX"
 dev=$(field HW_DEVICE "$OSR") arch=$(field HW_ARCH "$OSR") ver=$(field OS_VERSION "$OSR")
-{ [ "$dev" = SM4450 ] || [ "$dev" = SM8250 ] || [ "$dev" = SM8550 ] || [ "$dev" = H700 ] || [ "$dev" = RK3566 ]; } && [ "$arch" = aarch64 ] || die "this is ROCKNIX for $dev/$arch; pocket-ui needs ROCKNIX for SM4450, SM8250, SM8550, H700 or RK3566 (aarch64)"
+{ [ "$dev" = SM4450 ] || [ "$dev" = SM8250 ] || [ "$dev" = SM8550 ] || [ "$dev" = H700 ] || [ "$dev" = RK3566 ] || [ "$dev" = RK3326 ]; } && [ "$arch" = aarch64 ] || die "this is ROCKNIX for $dev/$arch; pocket-ui needs ROCKNIX for SM4450, SM8250, SM8550, H700, RK3566 or RK3326 (aarch64)"
 # ROCKNIX versions are dates (20261001). The tested one and any newer one go ahead (the compatibility check below is the
 # real contract and still blocks); an older one is asked to update first.
 case $ver in *[!0-9]* | '') vernum=0 ;; *) vernum=$ver ;; esac
@@ -123,9 +126,15 @@ if [ "$dev" = H700 ]; then
 fi
 if [ "$dev" = RK3566 ]; then
   experimental=0
-  # Many handhelds share ROCKNIX's RK3566 image; pocket-ui has a profile for the RG DS Plus alone (two screens, 1024x768).
+  # Many handhelds share ROCKNIX's RK3566 image; pocket-ui has a profile for these (screen size, buttons, what each has).
   case "|$MODELS_RK3566|" in *"|$model|"*) [ -n "$model" ] && experimental=1 ;; esac
-  [ $experimental = 1 ] || die "this RK3566 handheld is '${model:-unknown}'; pocket-ui knows only the Anbernic RG DS Plus on this image (not the first RG DS). Another model has no profile yet, so nothing is installed"
+  [ $experimental = 1 ] || die "this RK3566 handheld is '${model:-unknown}'; pocket-ui knows the Anbernic RG353 (M, P, PS, V, VS), RG503 and RG DS Plus and the Powkiddy RGB30, RGB20SX and RK2023 on this image (not the first RG DS). Another model has no profile yet, so nothing is installed"
+fi
+if [ "$dev" = RK3326 ]; then
+  experimental=0
+  # ROCKNIX's RK3326 image starts many handhelds; pocket-ui has a profile for the R36S on its own tree (the card sets it).
+  case "|$MODELS_RK3326|" in *"|$model|"*) [ -n "$model" ] && experimental=1 ;; esac
+  [ $experimental = 1 ] || die "this RK3326 handheld is '${model:-unknown}'; pocket-ui knows only the R36S on this image (ROCKNIX's 'Game Console R36S' device tree). Another model has no profile yet, so nothing is installed"
 fi
 if [ "$model" = "$MODEL_WANTED" ]; then
   ok "device: $model"

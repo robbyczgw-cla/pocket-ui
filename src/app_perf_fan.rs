@@ -333,6 +333,14 @@ impl App {
         self.sheet_header(c, pocket_ui::perf_fan_page::title());
         let (top, right) = (pad + NU_PILL + 12, c.w - pad);
         let rows = rows();
+        // The readout's panel keeps its place above the hint bar even where the rows would leave no room for it (1280x720
+        // in Large text: its last lines ran under the bar): the rows give up height, down to what their type needs; the
+        // descriptions give way first (below).
+        let (line_h, head) = (pocket_ui::type_scale::line(32, 16), 46 + pocket_ui::type_scale::grow(24));
+        let lines = page.readout_lines();
+        let hints_top = c.h - pad - NU_PILL;
+        let panel_min = head + (lines.len() as i32 + 1) / 2 * line_h + 14;
+        let row = row.min((hints_top - 22 - panel_min - 12 - 20 - top) / rows.len() as i32).max(pocket_ui::type_scale::px(font) as i32 + 16);
         for (i, r) in rows.iter().enumerate() {
             let y = top + i as i32 * row;
             self.hits.row(Area::new(pad, y, right - pad, row), i);
@@ -371,9 +379,6 @@ impl App {
         let y_full = y + wrapped.iter().map(|(l, _)| l.len() as i32 * desc_step + 6).sum::<i32>() + 14;
         // The readout, in a panel above the hints; the note takes the room left above it (with larger text it may
         // be shortened, ending with "…").
-        let hints_top = c.h - pad - NU_PILL;
-        let (line_h, head) = (pocket_ui::type_scale::line(32, 16), 46 + pocket_ui::type_scale::grow(24));
-        let lines = page.readout_lines();
         // Two lines side by side when the four under each other would reach into the hints (the Mini V1's 960 lines,
         // docs/DEVICES.md); on 1080 lines they never do, at every text size.
         let tall = head + lines.len() as i32 * line_h + 14;
@@ -383,6 +388,11 @@ impl App {
         // (the second, about the choice, last: it says what the selected value does). Found by the size sweep 2026-10-29:
         // the panel's last line ran under the hints.
         let desc_room = ((hints_top - 22 - panel_h - 12 - y) / desc_step).max(0) as usize;
+        // No room for any of it: its gaps go too, or they alone push the panel under the hints.
+        let gaps = i32::from(desc_room > 0);
+        if desc_room == 0 {
+            y = top + rows.len() as i32 * row + 20;
+        }
         let choice_lines = wrapped[1].0.len().min(desc_room);
         let rooms = [desc_room - choice_lines, choice_lines];
         for ((lines, color), room) in wrapped.iter().zip(rooms) {
@@ -400,9 +410,9 @@ impl App {
                     y += desc_step;
                 }
             }
-            y += 6;
+            y += 6 * gaps;
         }
-        y += 14;
+        y += 14 * gaps;
         let step = pocket_ui::type_scale::line(24, 8);
         // As many lines as leave the panel (12 px under them) clear of the hints.
         let room = ((hints_top - 8 - panel_h - 12 - y) / step).max(0) as usize;

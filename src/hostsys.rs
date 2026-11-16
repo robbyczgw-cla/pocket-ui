@@ -488,6 +488,19 @@ pub fn prepare_scummvm(bios_dir: &Path) {
 /// ROCKNIX's standalone PPSSPP ships its assets here; its libretro core package installs only the `.so`.
 pub const PPSSPP_ASSETS_SRC: &str = "/usr/config/ppsspp/assets";
 
+/// Where `prepare_ppsspp` copies from: `POCKETUI_PPSSPP_ASSETS` when the launcher names another system's copy
+/// (dArkOS: its standalone PPSSPP's `/opt/ppsspp/assets`, docs/DARKOS.md), else ROCKNIX's `PPSSPP_ASSETS_SRC`.
+pub fn ppsspp_assets_src() -> PathBuf {
+    ppsspp_assets_from(std::env::var("POCKETUI_PPSSPP_ASSETS").ok().as_deref())
+}
+
+fn ppsspp_assets_from(value: Option<&str>) -> PathBuf {
+    match value.map(str::trim) {
+        Some(v) if !v.is_empty() => PathBuf::from(v),
+        _ => PathBuf::from(PPSSPP_ASSETS_SRC),
+    }
+}
+
 /// The libretro PPSSPP core reads `ppge_atlas.zim`, `vfpu/` and `flash0/` from `<system dir>/PPSSPP` (not
 /// `PPSSPP/assets`). Without them its system dialogs (saving!) stay incomplete and the VFPU falls back to approximations.
 /// This copies what is missing from `src` (ROCKNIX's `/usr/config/ppsspp/assets`) into `<bios_dir>/PPSSPP`, file by
@@ -1078,6 +1091,13 @@ mod tests {
         assert!(core_states_vary("nestopia"), "Nestopia's states differ by 9 bytes from moment to moment (NES resume)");
         assert!(!core_states_vary("gambatte") && !core_states_vary("snes9x"));
         assert!(core_pads_short_states("flycast") && core_pads_short_states("ppsspp") && !core_pads_short_states("melondsds"));
+    }
+
+    #[test]
+    fn ppsspp_assets_come_from_rocknix_unless_the_launcher_names_another_copy() {
+        assert_eq!(ppsspp_assets_from(None), Path::new(PPSSPP_ASSETS_SRC));
+        assert_eq!(ppsspp_assets_from(Some(" ")), Path::new(PPSSPP_ASSETS_SRC));
+        assert_eq!(ppsspp_assets_from(Some("/opt/ppsspp/assets")), Path::new("/opt/ppsspp/assets"));
     }
 
     /// ROCKNIX's /usr/config/ppsspp/assets as the libretro core wants it in the system folder.

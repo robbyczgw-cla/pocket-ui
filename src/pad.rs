@@ -74,6 +74,25 @@ impl Button {
 }
 
 pub const STICK_DEADZONE: f32 = 0.15;
+/// A stick counts as somebody using the device only past this. The menus' `STICK_DEADZONE` is smaller, but the
+/// Mini V2's left stick already rests at about +0.12 and drifts a few hundredths with warmth: past 0.15 it would keep
+/// a lying device "in use".
+pub const ACTIVITY_STICK: f32 = 0.35;
+/// An analog trigger counts as somebody using the device past half its travel.
+pub const ACTIVITY_TRIGGER: f32 = 0.5;
+
+/// The one rule for "somebody is using the device" (waking a dark screen, the sleep timers, the UI's own quiet
+/// spells): a button pressed, a stick pushed well out, a trigger pulled half way. Releases, stick drift and resting
+/// offsets, a controller connecting and the lid are not. Motion sensors and controller touchpads never get here:
+/// `linux::is_wanted` does not read them.
+pub fn counts_as_input(e: &PadEvent) -> bool {
+    match e {
+        PadEvent::Button { pressed, .. } => *pressed,
+        PadEvent::Axis { axis: Axis::L2 | Axis::R2, value, .. } => *value > ACTIVITY_TRIGGER,
+        PadEvent::Axis { value, .. } => value.abs() > ACTIVITY_STICK,
+        PadEvent::Raw { .. } | PadEvent::Connected { .. } | PadEvent::Disconnected { .. } | PadEvent::Lid { .. } => false,
+    }
+}
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum Axis { LeftX, LeftY, RightX, RightY, L2, R2 }
@@ -800,12 +819,13 @@ pub mod android {
     /// flip_button_layout`) swaps the whole virtual device its input service shows: 2020:0112 "Xbox Wireless Controller"
     /// is the Xbox style (1), 2020:0111 "Odin Controller" the Odin style (0). The two have the same key layout; the
     /// service sends the evdev codes of the other buttons, which no input from below can tell, so the style is read from
-    /// the device (read from OdinSettings.apk and `dumpsys input`; never checked with a real press).
+    /// the device (read from OdinSettings.apk and `dumpsys input`). The Odin prints A at the bottom; Odin style sends
+    /// `BUTTON_A` from the right button, Xbox style from the bottom one (pressed by hand, 15.11.2026, `recorded::ODIN`).
     pub fn is_odin_pad(vendor: u16, product: u16) -> bool {
         vendor == 0x2020 && matches!(product, 0x0111 | 0x0112)
     }
     /// Which arrangement a controller's letters follow when its identity says so: the Odin by its style (Xbox style:
-    /// Xbox places; Odin style: the pad's own Nintendo lettering), Nintendo's own pads (Switch Pro, Joy-Con, NES/SNES
+    /// Xbox places; Odin style: A on the right, as on a Nintendo pad), Nintendo's own pads (Switch Pro, Joy-Con, NES/SNES
     /// Online, 8BitDo pads in Switch mode: vendor 057e) as Nintendo, every other as Xbox. A press's scan code does not tell
     /// instead: on the Odin 2 Mini a simulated 057e pad's right-hand button arrived as BUTTON_A with scan code 304 (the
     /// bottom one's), so Android or the driver rewrites it before an app sees it (11.11.2026).
@@ -864,10 +884,188 @@ pub mod android {
             self.0
         }
     }
+    /// The D-pad key (Android's 19 up, 20 down, 21 left, 22 right) a hat or stick position stands for, 0 for none.
+    /// The longer axis wins, and a direction counts past 0.55 (a stick resting a little off centre presses nothing).
+    pub fn direction_of(x: f32, y: f32) -> i32 {
+        if x.abs() > y.abs() {
+            if x < -0.55 {
+                21
+            } else if x > 0.55 {
+                22
+            } else {
+                0
+            }
+        } else if y < -0.55 {
+            19
+        } else if y > 0.55 {
+            20
+        } else {
+            0
+        }
+    }
+    /// A direction held on a hat or stick in a menu. Android repeats a held D-pad *key* by itself, but a hat is an axis:
+    /// it reports the press and the let-go and nothing in between, so a held hat made one step and then sat still.
+    /// Down it steps once; held it repeats like a key (after `DELAY` ms, then every `EVERY` ms); let go it stops.
+    #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+    pub struct DirectionRepeat {
+        key: i32,
+        at: u64,
+    }
+    impl DirectionRepeat {
+        pub const DELAY: u64 = 400;
+        pub const EVERY: u64 = 90;
+        /// The direction changed (`key` 0 = let go) at `now` ms: the step to make now.
+        pub fn set(&mut self, key: i32, now: u64) -> Option<i32> {
+            self.key = key;
+            self.at = now + Self::DELAY;
+            (key != 0).then_some(key)
+        }
+        /// `now` ms: the step to repeat, when a held direction's time has come. A long gap between two looks is one
+        /// step, not a burst.
+        pub fn due(&mut self, now: u64) -> Option<i32> {
+            if self.key == 0 || now < self.at {
+                return None;
+            }
+            self.at = now + Self::EVERY;
+            Some(self.key)
+        }
+        pub fn held(&self) -> bool {
+            self.key != 0
+        }
+    }
+
+    /// Presses as Android hands them to an app, for the tests of the menus (`button_layout::effective_on`) and the
+    /// player (`retro_bit_on`): the face button's place, the device, Android's key and the evdev code under it, and the
+    /// letter the pad's setting gives that place (what the hint bar must call it).
+    #[cfg(test)]
+    pub(crate) mod recorded {
+        #[derive(Clone, Copy, Debug)]
+        pub(crate) struct Press {
+            pub pad: &'static str,
+            pub device: &'static str,
+            pub vendor: u16,
+            pub product: u16,
+            /// "bottom" or "right".
+            pub place: &'static str,
+            pub key: i32,
+            pub scan: u16,
+            /// The letter this place has with the pad's setting: the one that confirms is "A".
+            pub letter: &'static str,
+        }
+        const fn p(pad: &'static str, device: &'static str, vendor: u16, product: u16, place: &'static str, key: i32, scan: u16, letter: &'static str) -> Press {
+            Press { pad, device, vendor, product, place, key, scan, letter }
+        }
+        /// The Odin 2 Mini's own pad in its two Controller styles. A hand test (15.11.2026, 0.5.0-android.2): Odin
+        /// style should confirm with the right button and Xbox style with the bottom one (the switch's purpose); the
+        /// Handheld view confirmed with the bottom one in Odin style and the right one in Xbox style. The view confirmed
+        /// with `BUTTON_B` then (the Odin's default Xbox layout swapped `pad::android::button`'s roles), so the right button
+        /// sends `BUTTON_A` in Odin style and the bottom one in Xbox style: AYN's input service swaps the evdev codes
+        /// below Android (the same key layout in both, `is_odin_pad`), and these keys are what reaches the app.
+        pub(crate) const ODIN: [Press; 4] = [
+            p("Odin, Odin style", "Odin Controller", 0x2020, 0x0111, "right", 96, 304, "A"),
+            p("Odin, Odin style", "Odin Controller", 0x2020, 0x0111, "bottom", 97, 305, "B"),
+            p("Odin, Xbox style", "Xbox Wireless Controller", 0x2020, 0x0112, "bottom", 96, 304, "A"),
+            p("Odin, Xbox style", "Xbox Wireless Controller", 0x2020, 0x0112, "right", 97, 305, "B"),
+        ];
+        /// Other pads by make, with the letters they print. Xbox, PlayStation (cross = A) and 8BitDo in X-input mode send
+        /// `BUTTON_A` from the bottom button (Android's convention); a simulated Nintendo pad (057e) on the Odin sent it from
+        /// the right one (11.11.2026), as Switch Pro, Joy-Con and 8BitDo in Switch mode print it. Retroid's own pad is read
+        /// as Android's convention until one is checked.
+        pub(crate) const OTHERS: [Press; 10] = [
+            p("Xbox Wireless", "Xbox Wireless Controller", 0x045e, 0x0b13, "bottom", 96, 304, "A"),
+            p("Xbox Wireless", "Xbox Wireless Controller", 0x045e, 0x0b13, "right", 97, 305, "B"),
+            p("DualShock 4", "Wireless Controller", 0x054c, 0x09cc, "bottom", 96, 304, "A"),
+            p("DualShock 4", "Wireless Controller", 0x054c, 0x09cc, "right", 97, 305, "B"),
+            p("Switch Pro", "Pro Controller", 0x057e, 0x2009, "right", 96, 304, "A"),
+            p("Switch Pro", "Pro Controller", 0x057e, 0x2009, "bottom", 97, 305, "B"),
+            p("8BitDo X-input", "8BitDo Pro 2", 0x045e, 0x028e, "bottom", 96, 304, "A"),
+            p("8BitDo X-input", "8BitDo Pro 2", 0x045e, 0x028e, "right", 97, 305, "B"),
+            p("Retroid (assumed)", "Retroid Pocket Controller", 0x0000, 0x0000, "bottom", 96, 304, "A"),
+            p("Retroid (assumed)", "Retroid Pocket Controller", 0x0000, 0x0000, "right", 97, 305, "B"),
+        ];
+    }
 }
 
 #[cfg(test)]
 mod tests {
+    /// What a player does to the pause sheet with a D-pad hat: every press steps once, however fast or slow, and a held
+    /// hat repeats like a held key. The sheet's walk is `pause_head::pad_step`; the hat's events are what Android hands
+    /// the player (a press, a let-go, nothing in between).
+    fn walk(events: &[(u64, f32)], end: u64) -> Vec<i32> {
+        // events: (time ms, hat y); polled like a frame every 16 ms; returns the keys the sheet got.
+        let mut repeat = super::android::DirectionRepeat::default();
+        let mut keys = Vec::new();
+        let mut current = 0;
+        let mut next = 0;
+        for now in (0..=end).step_by(16) {
+            while next < events.len() && events[next].0 <= now {
+                let direction = super::android::direction_of(0.0, events[next].1);
+                next += 1;
+                if direction != current {
+                    current = direction;
+                    keys.extend(repeat.set(direction, now));
+                }
+            }
+            keys.extend(repeat.due(now));
+        }
+        keys
+    }
+    #[test]
+    fn a_single_hat_press_is_one_step_whether_quick_or_slow_or_after_a_pause() {
+        for hold in [32, 80, 150, 390] {
+            assert_eq!(walk(&[(100, 1.0), (100 + hold, 0.0)], 3000), vec![20], "a press held {hold} ms");
+        }
+    }
+    #[test]
+    fn eight_quick_hat_presses_are_eight_steps_and_the_first_press_after_a_pause_counts_too() {
+        let mut events = Vec::new();
+        for n in 0..8u64 {
+            events.push((n * 140, -1.0));
+            events.push((n * 140 + 70, 0.0));
+        }
+        assert_eq!(walk(&events, 2000), vec![19; 8]);
+        // 1.5 s apart, as in the field report
+        let slow: Vec<_> = (0..6u64).flat_map(|n| [(n * 1500, 1.0), (n * 1500 + 150, 0.0)]).collect();
+        assert_eq!(walk(&slow, 9500), vec![20; 6]);
+    }
+    #[test]
+    fn a_held_hat_repeats_like_a_held_key_and_stops_when_let_go() {
+        let keys = walk(&[(0, 1.0), (1600, 0.0)], 3000);
+        assert_eq!(keys[0], 20);
+        // one step, a pause of 400 ms, then a step about every 90 ms: 1 + (1600 - 400) / 90 + 1
+        assert!((13..=17).contains(&keys.len()), "{} steps in 1.6 s", keys.len());
+        assert!(keys.iter().all(|k| *k == 20));
+        let quiet = keys.len();
+        assert_eq!(walk(&[(0, 1.0), (1600, 0.0)], 5000).len(), quiet, "nothing after the let-go");
+        // a hold shorter than the delay is still only the one step
+        assert_eq!(walk(&[(0, 1.0), (380, 0.0)], 2000), vec![20]);
+    }
+    #[test]
+    fn a_stalled_frame_gives_one_repeat_not_a_burst() {
+        let mut repeat = super::android::DirectionRepeat::default();
+        assert_eq!(repeat.set(20, 0), Some(20));
+        assert_eq!(repeat.due(10_000), Some(20));
+        assert_eq!(repeat.due(10_016), None);
+        assert_eq!(repeat.due(10_100), Some(20));
+    }
+    #[test]
+    fn going_straight_from_one_direction_to_another_steps_and_starts_the_delay_again() {
+        let mut repeat = super::android::DirectionRepeat::default();
+        assert_eq!(repeat.set(20, 0), Some(20));
+        assert_eq!(repeat.set(19, 300), Some(19));
+        assert_eq!(repeat.due(500), None, "the delay counts from the new direction");
+        assert_eq!(repeat.due(700), Some(19));
+        assert_eq!(repeat.set(0, 750), None);
+        assert!(!repeat.held());
+    }
+    #[test]
+    fn a_resting_stick_off_centre_and_the_longer_axis() {
+        use super::android::direction_of;
+        assert_eq!(direction_of(0.3, 0.2), 0);
+        assert_eq!(direction_of(0.0, 1.0), 20);
+        assert_eq!(direction_of(-1.0, 0.4), 21);
+        assert_eq!(direction_of(0.6, -0.9), 19);
+    }
     /// Analog L2/R2: a trigger resting part way in (0.43 on an Odin 2 Mini) neither presses nor sticks pressed.
     #[test]
     fn an_analog_trigger_presses_past_three_quarters_and_lets_go_under_half() {
@@ -1425,17 +1623,34 @@ mod tests {
 #[cfg(target_os = "linux")]
 pub mod linux {
     //! Reads every evdev device that looks like a gamepad or carries power/volume keys.
-    //! Devices are read without grabbing, so sway and logind still see them.
+    //! Devices are shared, except the dArkOS UI exclusively owns the separate PMIC power key while it runs.
 
     use super::{Button, Controller, DeviceBus, Held, Node, PadEvent, Probe, PumpEnd, Supervisor};
-    use evdev::{Device, EventSummary, InputEvent, KeyCode, SwitchCode};
+    use evdev::{Device, EventSummary, InputEvent, KeyCode, PropType, SwitchCode};
 
     /// The one place that decides which input devices we read: gamepads, the power and volume keys, and a lid switch
     /// (the Flip 2's hall sensor), plus InputPlumber's keyboard aliases. Touch has its own reader.
     pub fn is_wanted(d: &Device) -> bool {
         if d.name() == Some(super::bridge::NAME) { return false; }
-        d.supported_keys().is_some_and(|k| wants_keys(|c| k.contains(c), d.name().is_some_and(|n| n.contains("InputPlumber"))))
-            || d.supported_switches().is_some_and(|s| s.contains(SwitchCode::SW_LID))
+        let keys = d.supported_keys();
+        let has = |c: KeyCode| keys.is_some_and(|k| k.contains(c));
+        let props = d.properties();
+        wanted(
+            |c| has(c),
+            |p| props.contains(p),
+            d.name().is_some_and(|n| n.contains("InputPlumber")),
+            d.supported_switches().is_some_and(|s| s.contains(SwitchCode::SW_LID)),
+        )
+    }
+
+    /// `is_wanted` for a device with these keys and properties. Never a controller's motion sensors (a DualSense's or
+    /// DualShock's "Motion Sensors", a Switch pad's "IMU": they report all the time while the pad lies on a table, or
+    /// in a bag) and never a touch surface (a controller's touchpad; the touch screen has its own reader, `touch`),
+    /// whatever keys they carry. Their events would otherwise count as somebody using the device.
+    pub(super) fn wanted(has: impl Fn(KeyCode) -> bool, prop: impl Fn(PropType) -> bool, inputplumber: bool, lid: bool) -> bool {
+        let motion = prop(PropType::ACCELEROMETER);
+        let touch_surface = has(KeyCode::BTN_TOUCH) || prop(PropType::BUTTONPAD) || prop(PropType::SEMI_MT);
+        !motion && !touch_surface && (wants_keys(&has, inputplumber) || lid)
     }
 
     /// The key part of `is_wanted`, for a device with these keys. Vol- counts on its own: on the Mini V2 the two volume
@@ -1481,7 +1696,15 @@ pub mod linux {
     }
 
     /// /dev/input as the supervisor sees it.
-    struct EvdevBus;
+    struct EvdevBus { #[cfg_attr(not(feature = "brick"), allow(dead_code))] claim_power: bool }
+
+    // Only the separate power key: never steal a pad, volume keys or headphones from ogage.
+    #[cfg(feature = "brick")]
+    fn power_only(d: &Device) -> bool {
+        d.supported_keys().is_some_and(|keys| {
+            keys.contains(KeyCode::KEY_POWER) && keys.iter().all(|k| k == KeyCode::KEY_POWER)
+        }) && d.supported_switches().is_none_or(|s| s.iter().next().is_none())
+    }
 
     impl DeviceBus for EvdevBus {
         type Dev = Device;
@@ -1492,7 +1715,17 @@ pub mod linux {
 
         fn open(&mut self, node: &str) -> Probe<Device> {
             match Device::open(node) {
-                Ok(d) if is_wanted(&d) => Probe::Wanted(display_name(&d, std::path::Path::new(node)), d),
+                Ok(mut d) if is_wanted(&d) => {
+                    #[cfg(feature = "brick")]
+                    if self.claim_power && crate::darkos::host() && power_only(&d) {
+                        if let Err(e) = d.grab() {
+                            eprintln!("power key: cannot claim {node}: {e}; leaving it to the host");
+                            return Probe::Failed;
+                        }
+                        println!("power key: claimed {} exclusively (released on exit)", display_name(&d, std::path::Path::new(node)));
+                    }
+                    Probe::Wanted(display_name(&d, std::path::Path::new(node)), d)
+                },
                 // Not on this thread: each close takes the kernel 7-45 ms, and the pad may be the next node.
                 Ok(d) => {
                     super::close_later(Box::new(d));
@@ -1508,10 +1741,21 @@ pub mod linux {
     /// dead ones are dropped and let go of their buttons. Returns the names found now; `send` gets every event and
     /// returns false when nobody listens any more.
     pub fn supervise(send: impl Fn(PadEvent) -> bool + Send + Sync + 'static) -> Vec<String> {
+        supervise_with_power(false, send)
+    }
+
+    /// UI only: on dArkOS, EVIOCGRAB keeps ogage/logind from acting on the same power press. The fd belongs to
+    /// this UI process; exit (including SIGKILL) closes it and restores delivery to all existing host readers.
+    /// pocket-core uses `supervise` and never competes for that grab, including when a game starts or resumes.
+    pub fn supervise_ui(send: impl Fn(PadEvent) -> bool + Send + Sync + 'static) -> Vec<String> {
+        supervise_with_power(true, send)
+    }
+
+    fn supervise_with_power(claim_power: bool, send: impl Fn(PadEvent) -> bool + Send + Sync + 'static) -> Vec<String> {
         let send = std::sync::Arc::new(send);
         let (done_tx, done_rx) = std::sync::mpsc::channel::<(usize, PumpEnd)>();
         let mut sup = Supervisor::default();
-        let mut bus = EvdevBus;
+        let mut bus = EvdevBus { claim_power };
         let step = move |sup: &mut Supervisor, bus: &mut EvdevBus| -> Option<Vec<String>> {
             let mut closed = false;
             while let Ok((source, end)) = done_rx.try_recv() {
@@ -1601,7 +1845,7 @@ pub mod linux {
     }
 
     #[cfg(feature = "brick")]
-    pub(super) fn button_on_with_legacy_fkeys(name: &str, code: KeyCode, legacy_fkeys: bool) -> Option<Button> {
+    pub(super) fn button_on_with_legacy_fkeys(name: &str, code: KeyCode, legacy_fkeys: bool) -> Option<Button> { if let Some(b) = crate::darkos::pad_button(name, code.code()) { return Some(b); }
         if crate::brick_profile::is_pad(name) {
             match code {
                 KeyCode::BTN_THUMBL if legacy_fkeys => return Some(Button::F1),
@@ -1617,10 +1861,28 @@ pub mod linux {
     }
 
     fn positional_button(name: &str, code: KeyCode) -> Option<Button> {
+        let home = match crate::device::current().model {
+            Some(crate::device::Model::Rk3566(b)) => Some(crate::device::rk3566_home(b)),
+            _ => None,
+        };
+        if let Some(b) = rk3566_home_key(home, code) {
+            return Some(b);
+        }
         match (button(code), is_h700_pad(name)) {
             (Some(Button::North), true) => Some(Button::West),
             (Some(Button::West), true) => Some(Button::North),
             (b, _) => b,
+        }
+    }
+
+    /// HOME on an RK3566 board (`device::rk3566_home`): the F key (InputPlumber's keyboard sends it as F1, the bare
+    /// `adc-keys-home` as BTN_BACK) or, on the boards without one, the right stick's click. None: the usual `button`.
+    pub(super) fn rk3566_home_key(home: Option<crate::device::Rk3566Home>, code: KeyCode) -> Option<Button> {
+        use crate::device::Rk3566Home;
+        match (home?, code) {
+            (Rk3566Home::FKey, KeyCode::KEY_F1 | KeyCode::BTN_BACK) => Some(Button::Mode),
+            (Rk3566Home::RightStickClick, KeyCode::BTN_THUMBR) => Some(Button::Mode),
+            _ => None,
         }
     }
 
@@ -1690,6 +1952,8 @@ pub mod linux {
         use std::os::fd::AsRawFd;
         // poll readiness is not a promise that the following read can block safely (disconnect/revoke can race).
         if dev.set_nonblocking(true).is_err() { return PumpEnd::DeviceGone; }
+        #[cfg(feature = "brick")]
+        let host_power = crate::darkos::host() && !dev.is_grabbed();
         let mut decoder = super::decode::Decoder::new(dev);
         let wake = stop.wake.as_ref().map_or(-1, AsRawFd::as_raw_fd);
         loop {
@@ -1714,8 +1978,13 @@ pub mod linux {
                 Err(e) if matches!(e.kind(), std::io::ErrorKind::WouldBlock | std::io::ErrorKind::Interrupted) => continue,
                 Err(_) => return PumpEnd::DeviceGone,
             };
-            let batch: Vec<_> = events.collect();
+            let mut batch: Vec<_> = events.collect();
+            super::decode::select_before_guide(&mut batch);
+            let now = std::time::SystemTime::now();
             for ev in batch {
+                // Unclaimed keys stay the host's. This also prevents the core from forwarding power a second time.
+                #[cfg(feature = "brick")]
+                if host_power && matches!(ev.destructure(), EventSummary::Key(_, KeyCode::KEY_POWER, _)) { continue; }
                 if !stop.active() { return PumpEnd::DeviceGone; }
                 // The power key's own time stamp, the kernel's (evdev's clock is CLOCK_REALTIME unless asked otherwise):
                 // after a wake by the key, how long the resume took before anything of ours ran (`sleep`'s log line).
@@ -1726,11 +1995,24 @@ pub mod linux {
                         }
                     }
                 }
-                for out in decoder.event(source, ev) {
+                for out in decoder.event_read_at(source, ev, now) {
+                    if !send(out) { return PumpEnd::Closed; }
+                }
+            }
+            // Late stick values go on once the queue is read empty (`Decoder::event_read_at`): only the newest.
+            if decoder.has_backlog() && !readable_now(dev.as_raw_fd()) {
+                for out in decoder.flush(source) {
                     if !send(out) { return PumpEnd::Closed; }
                 }
             }
         }
+    }
+
+    /// Whether more events wait on `fd` right now.
+    fn readable_now(fd: std::os::fd::RawFd) -> bool {
+        let mut fds = [libc::pollfd { fd, events: libc::POLLIN, revents: 0 }];
+        // SAFETY: one live descriptor, the array lives through poll; a zero timeout never blocks.
+        unsafe { libc::poll(fds.as_mut_ptr(), 1, 0) > 0 && fds[0].revents & libc::POLLIN != 0 }
     }
 
     #[cfg(test)]
@@ -1832,6 +2114,22 @@ mod ayn_input_tests {
         assert_eq!(linux::button(KeyCode::BTN_C), None);
     }
 
+    /// HOME on the RK3566 boards under ROCKNIX's InputPlumber (20261101 maps): the F key (InputPlumber's keyboard F1, or
+    /// BTN_BACK from the bare `adc-keys-home`) on the Anbernics, the right stick's click on the Powkiddys without a menu
+    /// key; nothing changes on any other device.
+    #[test]
+    fn rk3566_boards_find_home_on_the_f_key_or_the_right_stick() {
+        use crate::device::Rk3566Home::{FKey, RightStickClick};
+        assert_eq!(linux::rk3566_home_key(Some(FKey), KeyCode::KEY_F1), Some(Button::Mode));
+        assert_eq!(linux::rk3566_home_key(Some(FKey), KeyCode::BTN_BACK), Some(Button::Mode));
+        assert_eq!(linux::rk3566_home_key(Some(FKey), KeyCode::BTN_THUMBR), None, "R3 stays R3 where there is an F key");
+        assert_eq!(linux::rk3566_home_key(Some(RightStickClick), KeyCode::BTN_THUMBR), Some(Button::Mode));
+        assert_eq!(linux::rk3566_home_key(Some(RightStickClick), KeyCode::KEY_F1), None);
+        for code in [KeyCode::KEY_F1, KeyCode::BTN_BACK, KeyCode::BTN_THUMBR, KeyCode::BTN_SELECT, KeyCode::BTN_MODE] {
+            assert_eq!(linux::rk3566_home_key(None, code), None, "{code:?} on another device");
+        }
+    }
+
     /// An RG28XX (2026-10-31): the built-in "H700 Gamepad" sends the printed X as BTN_WEST and the printed Y as
     /// BTN_NORTH. After the swap printed X is `North` and printed Y `West`; other pads and other keys stay as they are.
     #[test]
@@ -1862,5 +2160,59 @@ mod volume_key_device_tests {
         assert!(!wants_keys(keys(&[KeyCode::KEY_A, KeyCode::KEY_MUTE]), false), "a keyboard");
         assert!(!wants_keys(keys(&[KeyCode::KEY_F1]), false), "F1 alone is not ours");
         assert!(wants_keys(keys(&[KeyCode::KEY_F1]), true), "InputPlumber's keyboard");
+    }
+}
+
+#[cfg(test)]
+#[cfg(target_os = "linux")]
+mod noise_device_tests {
+    use super::linux::wanted;
+    use evdev::{KeyCode, PropType};
+
+    const PAD: &[KeyCode] = &[KeyCode::BTN_SOUTH, KeyCode::BTN_EAST, KeyCode::BTN_NORTH, KeyCode::BTN_WEST, KeyCode::BTN_TL, KeyCode::BTN_TR, KeyCode::BTN_SELECT, KeyCode::BTN_START, KeyCode::BTN_MODE];
+    const TOUCHPAD: &[KeyCode] = &[KeyCode::BTN_LEFT, KeyCode::BTN_TOOL_FINGER, KeyCode::BTN_TOUCH, KeyCode::BTN_TOOL_DOUBLETAP];
+
+    fn reads(keys: &[KeyCode], props: &[PropType], inputplumber: bool, lid: bool) -> bool {
+        wanted(|c| keys.contains(&c), |p| props.contains(&p), inputplumber, lid)
+    }
+
+    /// Alex's Mini V2 (`/proc/bus/input/devices`, 2026-11-14): InputPlumber shows the built-in pad as a virtual
+    /// DualSense (uhid) with four nodes. Only the pad is read; its motion sensors (PROP 0x40), its touchpad (PROP 0x5,
+    /// BTN_TOUCH) and its headset jack never are, so none of them can wake the dark screen or keep it awake.
+    #[test]
+    fn of_a_dualsense_only_the_pad_is_read_never_its_motion_sensors_touchpad_or_jack() {
+        assert!(reads(PAD, &[], false, false), "Sony Interactive Entertainment DualSense Wireless Controller");
+        assert!(!reads(&[], &[PropType::ACCELEROMETER], false, false), "… Motion Sensors");
+        assert!(!reads(TOUCHPAD, &[PropType::POINTER, PropType::BUTTONPAD], false, false), "… Touchpad");
+        assert!(!reads(&[], &[], false, false), "… Headset Jack (a switch, not the lid)");
+    }
+
+    /// The same for every pad with a gyro or a touchpad: a DualShock 4 ("Wireless Controller Motion Sensors",
+    /// "… Touchpad"), a Switch Pro, Joy-Con or 8BitDo in Switch mode (hid-nintendo's "… IMU"). Even a motion or touch
+    /// node that also lists pad keys is not read: what it sends while the pad lies still is not somebody playing.
+    #[test]
+    fn motion_sensors_and_touch_surfaces_of_any_pad_are_never_read_even_with_pad_keys() {
+        for (name, keys, props) in [
+            ("DualShock 4 Motion Sensors", &[][..], &[PropType::ACCELEROMETER][..]),
+            ("DualShock 4 Touchpad", TOUCHPAD, &[PropType::POINTER, PropType::BUTTONPAD][..]),
+            ("Nintendo Switch Pro Controller IMU", &[][..], &[PropType::ACCELEROMETER][..]),
+            ("Nintendo Switch Left Joy-Con IMU", &[][..], &[PropType::ACCELEROMETER][..]),
+            ("a motion node that also lists pad keys", PAD, &[PropType::ACCELEROMETER][..]),
+            ("a touch surface that also lists pad keys", &[KeyCode::BTN_SOUTH, KeyCode::BTN_TOUCH][..], &[][..]),
+            ("an old two-finger touchpad with pad keys", PAD, &[PropType::SEMI_MT][..]),
+        ] {
+            assert!(!reads(keys, props, false, false), "{name} must not be read");
+        }
+    }
+
+    /// What is read stays read: the pads (Xbox, the H700's, the Brick's, a Switch Pro's own pad node), the power and
+    /// volume keys, InputPlumber's keyboard and the Flip 2's lid.
+    #[test]
+    fn pads_keys_inputplumbers_keyboard_and_the_lid_are_still_read() {
+        assert!(reads(PAD, &[], false, false), "a pad");
+        assert!(reads(&[KeyCode::KEY_POWER], &[], false, false), "pm8941_pwrkey");
+        assert!(reads(&[KeyCode::KEY_VOLUMEDOWN], &[], false, false), "pm8941_resin");
+        assert!(reads(&[KeyCode::KEY_F1, KeyCode::KEY_A], &[], true, false), "InputPlumber Keyboard");
+        assert!(reads(&[], &[], false, true), "the lid");
     }
 }

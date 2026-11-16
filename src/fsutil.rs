@@ -273,16 +273,31 @@ pub fn sync_dir(dir: &Path) {
 /// when the kernel writes them back, up to half a minute later. A power cut in between would leave the link pointing at
 /// empty programs.
 pub fn sync_tree(dir: &Path) -> io::Result<()> {
+    sync_tree_with(dir, &mut || {})
+}
+
+/// `sync_tree` that calls `each` after every file it made durable (the Updates page counts them; `count_files` is the total).
+pub fn sync_tree_with(dir: &Path, each: &mut dyn FnMut()) -> io::Result<()> {
     for e in fs::read_dir(dir)? {
         let e = e?;
         let kind = e.file_type()?;
         if kind.is_dir() {
-            sync_tree(&e.path())?;
+            sync_tree_with(&e.path(), each)?;
         } else if kind.is_file() {
             File::open(e.path())?.sync_all()?;
+            each();
         }
     }
     File::open(dir)?.sync_all()
+}
+
+/// The plain files `sync_tree` would sync below `path` (1 for a file itself, 0 for anything unreadable).
+pub fn count_files(path: &Path) -> u64 {
+    match fs::symlink_metadata(path) {
+        Ok(m) if m.is_file() => 1,
+        Ok(m) if m.is_dir() => fs::read_dir(path).map_or(0, |entries| entries.flatten().map(|e| count_files(&e.path())).sum()),
+        _ => 0,
+    }
 }
 
 /// [`write_atomic`] for a value as pretty JSON, and the same bytes again as `<name>.bak` (after the file

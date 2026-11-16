@@ -48,7 +48,7 @@ impl App {
     pub(crate) fn paint_empty_ports(&mut self, c: &mut Canvas, with_hints: bool) {
         let dy = pocket_ui::ui_art::above_words(c, pocket_ui::ui_art::Art::NoGames, super::MARGIN, false, super::EMPTY_ART_TOP, 300, 50);
         self.text.draw(c, pocket_ui::text::Face::Title, 50, super::MARGIN, 300 + dy, pocket_ui::palette::pal().chalk, "No ports yet");
-        let line = "Get PC and indie games from PortMaster in Settings › Games › Extras.";
+        let line = "Get PC and indie games from PortMaster in Settings › Games › Box art & downloads.";
         for (i, line) in self.text.wrap_prose(pocket_ui::text::Face::Body, 28, line, c.w - 2 * super::MARGIN).iter().enumerate() {
             self.text.draw(c, pocket_ui::text::Face::Body, 28, super::MARGIN, 350 + dy + i as i32 * 40, pocket_ui::palette::pal().dust, line);
         }

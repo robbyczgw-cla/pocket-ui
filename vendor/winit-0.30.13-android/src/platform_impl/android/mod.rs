@@ -25,6 +25,7 @@ use crate::window::{
     WindowButtons, WindowLevel,
 };
 
+mod axes;
 mod keycodes;
 
 pub(crate) use crate::cursor::{
@@ -143,10 +144,8 @@ pub struct EventLoop<T: 'static> {
     cause: StartCause,
     ignore_volume_keys: bool,
     combining_accent: Option<char>,
-    /// pocket-ui patch: the joystick's direction (hat or left stick) as -1/0/1 per axis, for key edges.
-    joystick: (i8, i8),
-    /// pocket-ui patch: analog L2/R2 as pressed or not (down past 0.75, up under 0.5: `pocket_ui::pad::android::Trigger`).
-    triggers: (bool, bool),
+    /// pocket-ui patch: each pad's hat, stick and analog triggers, for key edges (`axes`).
+    axes: axes::Axes,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -196,8 +195,7 @@ impl<T: 'static> EventLoop<T> {
             cause: StartCause::Init,
             ignore_volume_keys: attributes.ignore_volume_keys,
             combining_accent: None,
-            joystick: (0, 0),
-            triggers: (false, false),
+            axes: axes::Axes::default(),
         })
     }
 
@@ -387,24 +385,20 @@ impl<T: 'static> EventLoop<T> {
             {
                 use android_activity::input::Axis;
                 let p = motion_event.pointer_at_index(0);
-                let pick = |hat: f32, stick: f32| -> i8 {
-                    let v = if hat.abs() > 0.5 { hat } else { stick };
-                    if v > 0.5 {
-                        1
-                    } else if v < -0.5 {
-                        -1
-                    } else {
-                        0
-                    }
-                };
-                let now = (pick(p.axis_value(Axis::HatX), p.axis_value(Axis::X)), pick(p.axis_value(Axis::HatY), p.axis_value(Axis::Y)));
-                let before = std::mem::replace(&mut self.joystick, now);
                 let device_id = event::DeviceId(DeviceId(motion_event.device_id()));
+                let step = self.axes.step(
+                    motion_event.device_id(),
+                    (p.axis_value(Axis::HatX), p.axis_value(Axis::HatY)),
+                    (p.axis_value(Axis::X), p.axis_value(Axis::Y)),
+                    (
+                        p.axis_value(Axis::Ltrigger).max(p.axis_value(Axis::Brake)),
+                        p.axis_value(Axis::Rtrigger).max(p.axis_value(Axis::Gas)),
+                    ),
+                );
+                let (before, now) = step.joystick;
                 // Analog L2/R2 become Android's BUTTON_L2/R2 (104/105), as a pad that sends them as keys.
-                let latch = |down: bool, v: f32| if down { v >= 0.5 } else { v > 0.75 };
-                let left = latch(self.triggers.0, p.axis_value(Axis::Ltrigger).max(p.axis_value(Axis::Brake)));
-                let right = latch(self.triggers.1, p.axis_value(Axis::Rtrigger).max(p.axis_value(Axis::Gas)));
-                for (old, new, code) in [(self.triggers.0, left, 104u32), (self.triggers.1, right, 105u32)] {
+                let ((was_left, was_right), (left, right)) = step.triggers;
+                for (old, new, code) in [(was_left, left, 104u32), (was_right, right, 105u32)] {
                     if old == new {
                         continue;
                     }
@@ -426,7 +420,6 @@ impl<T: 'static> EventLoop<T> {
                     };
                     callback(event, self.window_target());
                 }
-                self.triggers = (left, right);
                 for (old, new, minus, plus) in [
                     (before.0, now.0, crate::keyboard::KeyCode::ArrowLeft, crate::keyboard::KeyCode::ArrowRight),
                     (before.1, now.1, crate::keyboard::KeyCode::ArrowUp, crate::keyboard::KeyCode::ArrowDown),

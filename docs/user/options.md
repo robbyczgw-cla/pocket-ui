@@ -208,23 +208,28 @@ better.
 
 ## Controls
 
-Pause menu → Options → **Controls**; its first line, **Controls card**, draws the buttons ([the card](controls-card.md)).
+Pause menu → Options → **Controls**: what each button presses in the game you are playing, and your own changes.
 
 - **Left stick as D-pad** (On / Off): on by default, except for PlayStation, where both sticks go to the game
   as analogue sticks. Turn it off for games that use an analogue stick.
+- **D-pad as left stick** (On / Off, only for systems whose games use a stick: PlayStation, N64, PSP, Dreamcast and
+  others): the D-pad moves the left stick, so Mario 64 walks on a handheld without sticks. On by default for N64, PSP
+  and Dreamcast on handhelds without sticks (TrimUI Brick, RG35XX Plus, RG35XX SP, RG28XX, RG34XX). A stick you move wins.
 - Then one line for each button of the Mini V2: A, B, X, Y, L1, R1, L2, R2, L3, R3, Select, Start
   and the four D-pad directions. The value is the console button it presses, by the name the
   emulator uses ("A presses A."). Left/Right choose another console button, or **None** ("X does
   nothing in this game."). L3 and R3 mean pressing the left and right stick in.
 - **Hold to toggle** ([how](big-text.md#hold-to-toggle)) and **Reset controls**, which puts everything back.
+- **Controller setup**, the last line: a separate layout for each controller, in menus and games
+  ([Controller setup](controls-settings.md#controller-setup)).
 
 When you play together ([Players](pause-menu.md#players)), the layout is the same for every player: a controller's buttons
-do what these lines say, by where the button sits (the right face button is A). They name the buttons as printed on the Pocket, even when Settings → Playing → Buttons → [**Button layout**](settings.md#button-layout) is Xbox: that changes pocket-ui's menus, not games.
+do what these lines say, by where the button sits (the right face button is A). They name the buttons as printed on the Pocket, even when Settings → Controls → Buttons → [**Button layout**](settings-sound.md#button-layout) is Xbox: that changes pocket-ui's menus, not games.
 
 HOME, and SELECT + START held to quit, always work on the real buttons, whatever you change here.
 
 On the TrimUI Brick, **F1 and F2 are system shortcuts**. Their global actions are chosen in
-Settings → Sound & feel → **Lights & buttons**; they cannot be assigned to console buttons here
+Settings → Controls → **Lights & buttons**; they cannot be assigned to console buttons here
 or in Controller setup. This applies to every hosted core, including mGBA.
 
 ## Cheats
@@ -346,7 +351,12 @@ the well-known CRT, LCD and sharp-scaling presets ROCKNIX has, such as crt-geom 
 HOME + L2), **Run-ahead** (RetroArch's own, 1 or 2 frames) and **Auto save and load** (with Off, pocket-ui can't
 continue the game where you left off). Rewind and run-ahead are not shown where ROCKNIX switches them off (Nintendo 64,
 PSP, Dreamcast, Saturn, 32X and a few more). The values shown are the ones in use, ROCKNIX's own until you change
-them (3:2 for the Game Boy Advance). HOME + R2 turns RetroArch's fast-forward on and off.
+them (3:2 for the Game Boy Advance). HOME + R2 turns RetroArch's fast-forward on and off. Phone games have two more rows,
+**D-pad** ([their keys](systems.md#phone-games-j2me)) and **Screen size** ([Phone games](systems.md#phone-games-j2me)).
+Nintendo 64 and Dreamcast on RetroArch have a **D-pad** row too: **Automatic** (the D-pad moves the left stick on a
+handheld without sticks, such as the RG35XX Plus or RG28XX), **Left stick** or **D-pad**. pocket-ui writes it as
+RetroArch's remap for the game, never over a remap of your own. PSP on ROCKNIX's PPSSPP gets the D-pad on the analog
+nub by itself on a handheld without sticks, unless you changed those controls in PPSSPP.
 
 **Save changes** on this page is the one place that still asks: **For this console**, **For this game** (only what differs from the console's
 is kept for the game) or **Restore defaults** (pocket-ui's default emulator and ROCKNIX's settings). Nothing is kept

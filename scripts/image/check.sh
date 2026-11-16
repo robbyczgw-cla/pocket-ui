@@ -38,17 +38,18 @@ mkdir -p "$W/fat" "$W/lists"
 
 echo "== partition table"
 sfdisk -d "$IMG" >"$W/lists/sfdisk" 2>/dev/null
-part() { grep "^$IMG$1 " "$W/lists/sfdisk" | sed 's/^[^:]*: *//; s/, uuid=[^,]*//; s/, attrs="[^"]*"//'; }
+part() { grep "^$IMG$1 " "$W/lists/sfdisk" | sed 's/^[^:]*: *//; s/, uuid=[^,]*//; s/, attrs="[^"]*"//' | tr -s ' '; }
 check "GPT" 'grep -qx "label: gpt" "$W/lists/sfdisk"'
 check "exactly two partitions" '[ "$(grep -c "^$IMG[0-9]" "$W/lists/sfdisk")" = 2 ]'
 P1_TYPE=$(sm8250_p1_type "${MODEL:-}")
 check "p1 system, FAT, ROCKNIX $ROCKNIX_TAG's offsets, type $P1_TYPE" \
-  '[ "$(part 1)" = "start=       $P1_START, size=     $P1_SIZE, type=$P1_TYPE, name=\"system\"" ]'
+  '[ "$(part 1)" = "start= $P1_START, size= $P1_SIZE, type=$P1_TYPE, name=\"system\"" ]'
 # Retroid's u-boot lists only bootable partitions (ESP type or this attribute) for its EFI boot.
 check "p1 keeps ROCKNIX's LegacyBIOSBootable attribute" 'grep "^${IMG}1 " "$W/lists/sfdisk" | grep -q "attrs=\"LegacyBIOSBootable\""'
-check "p2 storage, Linux, as in ROCKNIX $ROCKNIX_TAG" \
-  '[ "$(part 2)" = "start=     $P2_START, size=       $P2_SIZE, type=0FC63DAF-8483-4772-8E79-3D69D8477DE4, name=\"storage\"" ]'
-check "image size unchanged (2,198,863,872 bytes)" '[ "$(stat -c %s "$IMG")" = 2198863872 ]'
+check "p2 storage, Linux, start as in ROCKNIX $ROCKNIX_TAG, size $P2_SIZE sectors (pins.sh: 128 MiB)" \
+  '[ "$(part 2)" = "start= $P2_START, size= $P2_SIZE, type=0FC63DAF-8483-4772-8E79-3D69D8477DE4, name=\"storage\"" ]'
+check "image size: ROCKNIX's, plus the 96 MiB STORAGE grew by ($IMG_BYTES bytes, pins.sh)" '[ "$(stat -c %s "$IMG")" = "$IMG_BYTES" ]'
+check "partition table verifies, second GPT/last partition end inside the image (sfdisk -V)" 'sfdisk -V "$IMG" >/dev/null 2>&1'
 
 echo "== FAT partition (/flash)"
 check "label ROCKNIX (boot=LABEL=ROCKNIX, GRUB search --label)" 'mlabel -i "$FAT" -s :: 2>/dev/null | grep -q "Volume label is ROCKNIX"'
@@ -252,9 +253,12 @@ sort >"$W/lists/storage.expected" <<EOF
 755 0:0 d ./.pocket-seed/.config/system.d/essway.service.d
 644 0:0 f ./.pocket-seed/.config/system.d/essway.service.d/10-pocket-ui.conf
 644 0:0 f ./.pocket-seed/.config/system.d/pocket-splash.service
+755 0:0 d ./.pocket-seed/.config/system.d/rocknix-automount.service.d
+644 0:0 f ./.pocket-seed/.config/system.d/rocknix-automount.service.d/20-pocket-games-card.conf
 755 0:0 d ./.pocket-seed/.config/system.d/sysinit.target.wants
 777 0:0 l ./.pocket-seed/.config/system.d/sysinit.target.wants/pocket-splash.service ../pocket-splash.service
 755 0:0 d ./pocket-ui
+755 0:0 f ./pocket-ui/games-card.sh
 755 0:0 f ./pocket-ui/run-pocket-ui.sh
 777 0:0 l ./pocket-ui/current releases/$V
 777 0:0 l ./pocket-ui/pocket-ui current/pocket-ui
@@ -282,6 +286,8 @@ check "drop-in waiting in .pocket-seed is deploy/essway-pocket-ui.conf" \
   'same "$S/.pocket-seed/.config/system.d/essway.service.d/10-pocket-ui.conf" /repo/deploy/essway-pocket-ui.conf'
 check "boot screen unit waiting in .pocket-seed is deploy/pocket-splash.service" \
   'same "$S/.pocket-seed/.config/system.d/pocket-splash.service" /repo/deploy/pocket-splash.service'
+check "an ArkOS card in the second slot: deploy/image/games-card.sh, started by the seed's automount drop-in" \
+  'same "$S/pocket-ui/games-card.sh" /repo/deploy/image/games-card.sh && same "$S/.pocket-seed/.config/system.d/rocknix-automount.service.d/20-pocket-games-card.conf" /repo/deploy/image/rocknix-automount-games-card.conf'
 # deploy/image/image-defaults.sh with the model's hostname on its NAME line (image_hostname, pins.sh), a valid name that is not
 # ROCKNIX's default.
 HOST=$(image_hostname "$MODEL")
@@ -304,10 +310,10 @@ check "no recents, saves or games" '[ -z "$(find "$S" -name "recents*" -o -name 
 check "no BIOS files" '[ -z "$(find "$S" -iname "*bios*")" ] && ! grep -qi bios "$W/lists/fat"'
 check "no update left pending (update-pending, previous, dev.env)" \
   '[ ! -e "$S/pocket-ui/update-pending" ] && [ ! -L "$S/pocket-ui/previous" ] && [ ! -e "$S/pocket-ui/dev.env" ]'
-# The programs grow with every release and STORAGE stays 32 MiB until the first boot grows it (debugfs fails when full: 0.3.1).
+# The programs grow with every release and STORAGE stays $((P2_SIZE / 2048)) MiB until the first boot grows it (debugfs fails when full: 0.3.1).
 # A finished image has to keep P2_MIN_HEADROOM_BLOCKS free, about two releases of growth: a failure, not a warning.
 FREE=$(dumpe2fs -h "$W/p2.ext4" 2>/dev/null | sed -n 's/^Free blocks: *//p')
-echo "STORAGE before the first boot: $(du -sh "$S" | cut -f1) used of 32 MB, ${FREE:-?} of $P2_FREE_BLOCKS blocks (4 KiB) free"
+echo "STORAGE before the first boot: $(du -sh "$S" | cut -f1) used of $((P2_SIZE / 2048)) MB, ${FREE:-?} of $P2_FREE_BLOCKS blocks (4 KiB) free"
 check "STORAGE keeps at least $P2_MIN_HEADROOM_BLOCKS blocks ($((P2_MIN_HEADROOM_BLOCKS * 4)) KiB) free for the programs to grow" '[ "${FREE:-0}" -ge "$P2_MIN_HEADROOM_BLOCKS" ]'
 # For the --version check outside (scripts/check-image.sh).
 [ -d "$S/pocket-ui/releases" ] && cp -r "$S/pocket-ui/releases" "$W/releases"

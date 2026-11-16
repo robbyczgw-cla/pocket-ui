@@ -19,14 +19,21 @@ reference is split by topic in [`docs/dev/`](dev/) and is read only when you wor
 | [Repository layout](dev/layout.md) | you add or move a module or file in src/ (doc_checks holds this list), or look for where code lives |
 | [Releasing](dev/release.md) | you cut a release or build release assets |
 | [Consoles and game data](dev/consoles.md) | you edit console fact sheets, credits, gamedb or Curator data |
-| [Translations](dev/translations.md) | you add or change UI text, German/Spanish/Portuguese lines or the i18n snapshots |
+| [Translations](dev/translations.md) | you add or change UI text, German/Spanish/Portuguese/French/Italian lines or the i18n snapshots |
+| [Painting small panels natively](dev/native-paint.md) | you touch `gfx.rs`, `scaled_layout.rs`, text drawing or code that reads or writes a canvas's pixels |
 | [Conventions, details and regressions](dev/conventions-details.md) | you touch Wi-Fi activation, text fit / long titles or small-panel layout measuring |
 | [Android and platform adapters](dev/android.md) | you work on the Android app or the platform adapters |
 | [Standalone Brick Bluetooth](dev/brick-bluetooth.md) | you work on Bluetooth, controller layouts or save-safety / literal-name regressions |
 
 ## Conventions
 
-- Animation deadlines include painting in the refresh budget (`src/frame_pace.rs`, `main.rs`); still pages continue to wait for input or real deadlines. Guard: `cargo test --profile gate --lib frame_pace::` (14 ms paints keep 60 animation frames/s, 25 ms paints keep 40, fast paints remain capped).
+- Animation deadlines include painting in the refresh budget (`src/frame_pace.rs`, `main.rs`); still pages continue to wait for input or real deadlines. Guard: `cargo test --profile gate --lib frame_pace::` (14 ms paints keep 60 animation frames/s, 25 ms paints keep 40, fast paints remain capped). After the last frame painted while something moved, the loop asks for exactly one more (`frame_pace::Settle`), so a slow screen never stays on an in-between frame; `game_box::tests::on_a_slow_screen_the_turn_always_ends_on_a_face_at_rest` drives the box turn through it.
+- The Android handheld view paints through its own window surface (`src/native_surface.rs`, colours as bytes by `src/rgbx.rs`), not
+  softbuffer's Android backend: that one made a new zeroed 8 MB buffer for every 1920×1080 frame and swapped the colours byte by
+  byte (about half of the measured 12 ms per frame on the Odin). `frame::Presenter::stages()` says where a frame's time went
+  (the closure, waiting for the window's buffer, the thread's CPU time and context switches); the handheld library writes them
+  to logcat as `paint:` every 5 s and as `slow frame:` for a frame over 12 ms of CPU or held up in the wall clock
+  (`android/handheld/app_android.rs`). Guards: `cargo test --profile gate --lib rgbx::` and `frame::`.
 - Panics end the process (`panic = "abort"`). Anything that can fail for a moment (a surface, a buffer, GL
   setup) returns an error value; see `src/frame.rs`. The panic hook writes `crash.log` and leaves a notice for the
   next screen (`src/crash.rs`).
@@ -42,7 +49,8 @@ reference is split by topic in [`docs/dev/`](dev/) and is read only when you wor
 
 ## Code shape
 
-Counted in `doc_checks` (`the_code_shape_counts_never_go_up`); the counts may only go down. The caps are in
+Counted in `doc_checks` (`the_code_shape_counts_never_go_up`, bookkeeping: a warning of `scripts/bookkeeping.sh` in the
+nightly run, not a merge blocker); the counts should only go down. The caps are in
 `tests/code-shape.txt`: whoever lowers a count lowers its cap in the same commit. `pub fn` is only printed, not
 capped: a new module may bring its few `pub` items (rule 9).
 

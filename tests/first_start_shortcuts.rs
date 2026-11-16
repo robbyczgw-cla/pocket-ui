@@ -107,8 +107,8 @@ fn the_play_style_page_from_settings_has_four_answers_and_no_child_mode() {
         }
         assert!(!sees(&page, "For a child") && !sees(&page, "Für ein Kind") && !sees(&page, "Para un niño"), "{lang}: {page}");
     }
-    // The row itself: in Help & tools under First-start setup, with where the switches stand.
-    let row = card.screen("settings:6:1", "en", "640x480");
+    // The row itself: in Help & tools above First-start setup, with where the switches stand.
+    let row = card.screen("settings:7:2", "en", "640x480");
     assert!(sees(&row, "How you like to play") && sees(&row, "The shelf") && sees(&row, "First-start setup"), "{row}");
 }
 
@@ -187,9 +187,9 @@ fn the_last_page_of_the_first_start_says_what_home_does() {
         let page = card.screen("setup:first-look:device=rg28xx", lang, "640x480");
         assert!(sees(&page, line), "{lang}: {page}");
         let extras = match lang {
-            "de" => "Jederzeit mehr laden: Einstellungen › Spiele › Extras.",
-            "es" => "Consigue más cuando quieras: Ajustes › Juegos › Extras.",
-            _ => "More to get any time: Settings › Games › Extras.",
+            "de" => "Jederzeit mehr laden: Einstellungen › Spiele › Cover & Downloads.",
+            "es" => "Consigue más cuando quieras: Ajustes › Juegos › Carátulas y descargas.",
+            _ => "More to get any time: Settings › Games › Box art & downloads.",
         };
         assert!(sees(&page, extras), "{lang}: the final first-start page points to the optional downloads: {page}");
         // Settings' Add games is not the first start.

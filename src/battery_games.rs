@@ -45,7 +45,7 @@ pub struct Key {
 impl Key {
     /// The key a game's stretches on battery go under, or None for a game a test started through the test door (a file below a
     /// `.pocket-ui-test` folder, `play <system> <file>`): the ledger is written when pocket-ui quits, after scripts/device-check.sh has
-    /// put the owner's files back, and would bring such a game back into Settings → Playing → Battery.
+    /// put the owner's files back, and would bring such a game back into Settings → System → Battery.
     pub fn recorded(system: &str, rom: &Path, emulator: &str) -> Option<Key> {
         let test = rom.components().any(|c| c.as_os_str() == ".pocket-ui-test");
         (!test).then(|| Key::new(system, rom, emulator))
@@ -180,8 +180,9 @@ pub enum Left {
     Charging,
     /// On the charger with a full battery: "Charging" would not be true any more (first-start walk 2026-11-04).
     Full,
-    /// Not enough play on battery anywhere yet.
-    Measuring,
+    /// Not enough play on battery anywhere yet; the charge now, whole percent: until an estimate exists the line is that
+    /// number alone ("83%"), not a sentence about missing data (polish review 12.11.).
+    Measuring(u8),
     /// Seconds until empty at the rate of `basis`.
     Time { secs: u64, basis: Basis },
 }
@@ -201,7 +202,7 @@ pub fn left(rate: Option<Rate>, now: Option<&Sample>, t: u64) -> Option<Left> {
             secs: (s.capacity as f64 / r.per_hour * 3600.0) as u64,
             basis: r.basis,
         },
-        _ => Left::Measuring,
+        _ => Left::Measuring(s.capacity),
     })
 }
 
@@ -234,12 +235,12 @@ fn per_hour(rate: &Rate) -> String {
 
 impl Left {
     /// "About 3 h 20 min left in this game", "About 4 h left (PS2 games)", "About 5 h left (all games)", "Charging",
-    /// "Battery: measuring this game…". `system` is what the player calls the system ("PS2").
+    /// "83%" (nothing measured enough yet). `system` is what the player calls the system ("PS2").
     pub fn line(&self, system: &str) -> String {
         match self {
             Left::Charging => "Charging".to_string(),
             Left::Full => "Full".to_string(),
-            Left::Measuring => "Battery: not enough play to tell yet".to_string(),
+            Left::Measuring(percent) => format!("{percent}%"),
             Left::Time { secs, basis: Basis::Game } => format!("{} in this game", time_left(*secs)),
             // Not this game's own measurement: whose it is, in brackets.
             Left::Time { secs, basis } => format!("{}{}", time_left(*secs), whose(*basis, system)),
@@ -262,7 +263,7 @@ pub fn card_line(rate: Option<Rate>, now: Option<&Sample>, t: u64, system: &str)
     Some(match (left(rate, now, t), rate) {
         (Some(Left::Time { secs, basis: Basis::Game }), Some(r)) => format!("{}, {}", time_left(secs), per_hour(&r)),
         (Some(Left::Time { secs, basis }), _) => format!("{}{}", time_left(secs), whose(basis, system)),
-        (Some(Left::Measuring), _) | (Some(Left::Charging | Left::Full), None) => measuring(),
+        (Some(Left::Measuring(_)), _) | (Some(Left::Charging | Left::Full), None) => measuring(),
         (Some(Left::Charging | Left::Full) | None, Some(r)) => {
             let rate = if r.per_hour < 1.0 { per_hour(&r) } else { format!("about {}", per_hour(&r)) };
             format!("{}{}", capitalise(&rate), whose(r.basis, system))
@@ -379,7 +380,7 @@ mod tests {
         play(&mut l, &new, T0, 10, steady(30.0, 80.0), |_| false);
         assert_eq!(l.rate(&new), None, "nothing is enough anywhere: measuring");
         let now = s(T0 + 600, 75, false);
-        assert_eq!(left(l.rate(&new), Some(&now), now.t), Some(Left::Measuring));
+        assert_eq!(left(l.rate(&new), Some(&now), now.t), Some(Left::Measuring(75)));
         // Another N64 game was played for an hour: its rate stands in, said as such.
         play(&mut l, &key("n64", "Zelda.z64", "pocket-core"), T0 + 3600, 60, steady(24.0, 95.0), |_| false);
         let r = l.rate(&new).unwrap();
@@ -515,7 +516,7 @@ mod tests {
         assert_eq!(t(4 * 3600, Basis::System).line("PS2"), "About 4 h left (PS2 games)");
         assert_eq!(t(30 * 3600, Basis::AllGames).line("GBA"), "More than a day left (all games)");
         assert_eq!(t(25 * 60, Basis::Game).line("GBA"), "About 25 min left in this game");
-        assert_eq!(Left::Measuring.line("GBA"), "Battery: not enough play to tell yet");
+        assert_eq!(Left::Measuring(83).line("GBA"), "83%");
         let r = Rate {
             per_hour: 12.2,
             basis: Basis::Game,

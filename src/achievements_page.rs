@@ -35,6 +35,8 @@ pub enum Action {
     },
     /// Delete the token.
     Logout,
+    /// Hardcore switched (the account says so already; the App keeps it): `achievements::hardcore`.
+    Hardcore(bool),
 }
 
 /// News from the App's threads.
@@ -57,17 +59,79 @@ pub struct AchievementsPage {
     /// The Pocket has an address (`wifi::ip`, set by the app before each press). Without one, Sign in says so at once
     /// rather than after the user name and password were typed on the pad (the first-day run, 2026-10-26).
     pub online: bool,
+    /// The selected row: 0 Sign in / Log out, 1 Hardcore (signed in only; [`AchievementsPage::step`] moves it).
+    pub sel: usize,
+    /// The page has the Hardcore row (`achievements::hardcore::OFFERED`; tests and snapshots switch it on).
+    pub hardcore_offered: bool,
 }
+
+/// The Hardcore row's line beside the hints, off and on.
+pub const HARDCORE_OFF: &str = "Off: save states, rewind and cheats work. Unlocks count as softcore.";
+pub const HARDCORE_ON: &str = "On: no save states, rewind or cheats. Continue starts from the in-game save.";
 
 /// Sign in pressed without Wi-Fi.
 pub const OFFLINE: &str = "Connect to Wi-Fi first to sign in (Settings › Connections › Wi-Fi).";
+/// The same on a handheld without Wi-Fi (`device::no_wifi_chip`): RetroAchievements needs the internet, said plainly
+/// (also as the status before anything is pressed, while there is no network).
+pub const OFFLINE_NO_WIFI: &str = "RetroAchievements needs the internet, and this handheld has no Wi-Fi.";
 
 /// What the page says about RetroAchievements, under the status.
-pub const ABOUT: [&str; 3] = [
+pub const ABOUT: [&str; 3] = if crate::achievements::hardcore::OFFERED {
+    [
+    "Earn achievements in the games pocket-core plays: unlocks are checked as you play and count on retroachievements.org.",
+    "With Hardcore off, save states, rewind and cheats stay usable. With it on they are off, a game starts from its in-game save, and the site counts your unlocks as hardcore. Without Wi-Fi, unlocks are kept and sent the next time a game starts online.",
+    "You need a free account from retroachievements.org. Your password is sent once to sign in and is not kept; the Pocket keeps only the sign-in key the site gives back.",
+    ]
+} else {
+    [
     "Earn achievements in the games pocket-core plays: unlocks are checked as you play and count on retroachievements.org.",
     "Save states, rewind and cheats stay usable. Without Wi-Fi, unlocks are kept and sent the next time a game starts online.",
     "You need a free account from retroachievements.org. Your password is sent once to sign in and is not kept; the Pocket keeps only the sign-in key the site gives back.",
-];
+    ]
+};
+
+/// [`ABOUT`] in Android's handheld view: the games of pocket-ui's own player (there is no pocket-core), its pause menu's save
+/// states (no rewind or cheats there), and no "Pocket" (the Odin 2 Mini's page named all three, 13.11.).
+pub const ANDROID_ABOUT: [&str; 3] = if crate::achievements::hardcore::OFFERED {
+    [
+    "Earn achievements in the games pocket-ui's own player plays: unlocks are checked as you play and count on retroachievements.org.",
+    "With Hardcore off, save states stay usable. With it on they are off, a game starts from its in-game save, and the site counts your unlocks as hardcore. Without a connection, unlocks are kept and sent the next time a game starts online.",
+    "You need a free account from retroachievements.org. Your password is sent once to sign in and is not kept; pocket-ui keeps only the sign-in key the site gives back.",
+    ]
+} else {
+    [
+    "Earn achievements in the games pocket-ui's own player plays: unlocks are checked as you play and count on retroachievements.org.",
+    "Save states stay usable. Without a connection, unlocks are kept and sent the next time a game starts online.",
+    "You need a free account from retroachievements.org. Your password is sent once to sign in and is not kept; pocket-ui keeps only the sign-in key the site gives back.",
+    ]
+};
+
+/// What the page says on this device ([`ABOUT`], or [`ANDROID_ABOUT`] in Android's profile).
+pub fn about_in(android: bool) -> [&'static str; 3] {
+    about_on(android, crate::device::no_wifi_chip())
+}
+
+/// [`about_in`] on a handheld with (`no_chip` false) or without Wi-Fi.
+pub fn about_on(android: bool, no_chip: bool) -> [&'static str; 3] {
+    match (android, no_chip) {
+        (true, _) => ANDROID_ABOUT,
+        // No promise of unlocks sent later over Wi-Fi: the status line says it needs the internet.
+        (false, true) => [ABOUT[0], NO_WIFI_ABOUT, ABOUT[2]],
+        (false, false) => ABOUT,
+    }
+}
+
+/// [`ABOUT`]'s middle paragraph on a handheld without Wi-Fi ([`about_on`]).
+const NO_WIFI_ABOUT: &str = if crate::achievements::hardcore::OFFERED {
+    "With Hardcore off, save states, rewind and cheats stay usable. With it on they are off, a game starts from its in-game save, and the site counts your unlocks as hardcore."
+} else {
+    "Save states, rewind and cheats stay usable."
+};
+
+/// The line under the password on the pad keyboard.
+pub fn password_note_in(android: bool) -> &'static str {
+    if android { "Sent once to sign in, never kept. pocket-ui keeps only the sign-in key." } else { "Sent once to sign in, never kept. The Pocket keeps only the sign-in key." }
+}
 
 /// A typed password as it shows: dots, with the last character readable (it was just typed on a pad).
 pub fn masked(text: &str) -> String {
@@ -92,7 +156,26 @@ impl AchievementsPage {
             error: None,
             confirm_logout: false,
             online: true,
+            sel: 0,
+            hardcore_offered: crate::achievements::hardcore::OFFERED,
         }
+    }
+
+    /// How many rows the page has: Sign in, or Log out (and Hardcore where it is offered).
+    pub fn rows(&self) -> usize {
+        if self.signed_in() && self.hardcore_offered { 2 } else { 1 }
+    }
+
+    /// Up or Down on the list (`by` rows, wrapping): a question asked on the row left behind is taken back.
+    pub fn step(&mut self, by: i32) {
+        let n = self.rows() as i32;
+        self.sel = (self.sel as i32 + by).rem_euclid(n) as usize;
+        self.confirm_logout = false;
+    }
+
+    /// Whether Hardcore is on for the account signed in.
+    pub fn hardcore(&self) -> bool {
+        self.account.as_ref().is_some_and(|a| a.hardcore)
     }
 
     pub fn signed_in(&self) -> bool {
@@ -139,10 +222,18 @@ impl AchievementsPage {
         if b == cancel {
             return Action::Close;
         }
-        if b != confirm {
+        let hardcore_row = self.rows() > 1 && self.sel == 1;
+        if b != confirm && !(hardcore_row && matches!(b, Button::Left | Button::Right)) {
             return Action::Nothing;
         }
         self.error = None;
+        if hardcore_row {
+            let on = !self.hardcore();
+            if let Some(a) = self.account.as_mut() {
+                a.hardcore = on;
+            }
+            return Action::Hardcore(on);
+        }
         if self.signed_in() {
             if !self.confirm_logout {
                 self.confirm_logout = true;
@@ -150,10 +241,11 @@ impl AchievementsPage {
             }
             self.confirm_logout = false;
             self.account = None;
+            self.sel = 0;
             return Action::Logout;
         }
         if !self.online {
-            self.error = Some(OFFLINE.into());
+            self.error = Some(crate::device::wifi_or(OFFLINE, OFFLINE_NO_WIFI).into());
             return Action::Nothing;
         }
         self.view = View::Keyboard(
@@ -220,8 +312,16 @@ impl AchievementsPage {
         self.account.as_ref().map(|a| a.shown_name().to_string()).unwrap_or_default()
     }
 
+    /// The Hardcore row's value.
+    pub fn hardcore_value(&self) -> &'static str {
+        if self.hardcore() { "On" } else { "Off" }
+    }
+
     /// The line next to the hints.
     pub fn describe(&self) -> &'static str {
+        if self.rows() > 1 && self.sel == 1 {
+            return if self.hardcore() { HARDCORE_ON } else { HARDCORE_OFF };
+        }
         match (self.signed_in(), self.confirm_logout) {
             (true, true) => "Press A again to log out. B keeps you signed in.",
             (true, false) => "Removes the sign-in key from the Pocket.",
@@ -237,6 +337,7 @@ impl AchievementsPage {
         match (&self.view, &self.account) {
             (View::SigningIn, _) => ("Signing in".into(), Tone::Busy),
             (_, Some(a)) => (format!("Signed in as {}", a.shown_name()), Tone::Good),
+            (_, None) if !self.online && crate::device::no_wifi_chip() => (OFFLINE_NO_WIFI.into(), Tone::Quiet),
             (_, None) => ("Not signed in".into(), Tone::Quiet),
         }
     }
@@ -320,6 +421,18 @@ pub fn list_lines(snap: &Snapshot) -> Vec<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A handheld without Wi-Fi (15.11.): the page said "Without Wi-Fi, unlocks are kept and sent the next time a game
+    /// starts online" under "RetroAchievements needs the internet, and this handheld has no Wi-Fi." It says what it
+    /// needs, once.
+    #[test]
+    fn without_a_wifi_chip_the_page_does_not_promise_unlocks_sent_later_over_wifi() {
+        for p in about_on(false, true) {
+            assert!(!p.contains("Wi-Fi"), "{p}");
+        }
+        assert!(about_on(false, false)[1].contains("Without Wi-Fi"), "with a chip the usual words");
+        assert!(about_on(false, true)[1].contains("Save states"), "the rest of the paragraph stays");
+    }
     use crate::achievements::snapshot::Entry;
 
     const CONFIRM: Button = Button::East;
@@ -378,6 +491,7 @@ mod tests {
             username: "Alex".into(),
             token: "Tk".into(),
             display_name: String::new(),
+            hardcore: false,
         })));
         assert!(matches!(p.view, View::List));
         assert_eq!((p.label(), p.value()), ("Log out", "Alex".to_string()));
@@ -415,12 +529,43 @@ mod tests {
         assert_eq!(press(&mut p, CANCEL), Action::Close);
     }
 
+    /// Hardcore is one row under Log out: A (or Left/Right) switches it, the account keeps it, and the line says what
+    /// it changes. Signed out there is no such row.
+    #[test]
+    fn the_hardcore_row_switches_and_says_what_it_does() {
+        let mut p = AchievementsPage::new(None);
+        assert_eq!(p.rows(), 1);
+        p.step(1);
+        assert_eq!(p.sel, 0, "signed out: one row");
+        let mut p = AchievementsPage::new(Some(Account { username: "Alex".into(), token: "Tk".into(), display_name: String::new(), hardcore: false }));
+        assert_eq!(p.rows(), if crate::achievements::hardcore::OFFERED { 2 } else { 1 }, "the row only where pocket-ui offers Hardcore");
+        p.hardcore_offered = true;
+        assert_eq!(p.rows(), 2);
+        p.step(1);
+        assert_eq!((p.sel, p.hardcore_value(), p.describe()), (1, "Off", HARDCORE_OFF));
+        assert_eq!(press(&mut p, CONFIRM), Action::Hardcore(true));
+        assert_eq!((p.hardcore_value(), p.describe()), ("On", HARDCORE_ON));
+        assert!(p.account.as_ref().unwrap().hardcore);
+        assert_eq!(press(&mut p, Button::Right), Action::Hardcore(false));
+        assert_eq!(press(&mut p, Button::Up), Action::Nothing, "Up is the App's to move the row");
+        // Back on Log out, A asks as before (never logs out from the Hardcore row).
+        p.step(-1);
+        assert_eq!(press(&mut p, CONFIRM), Action::Nothing);
+        assert!(p.confirm_logout);
+        p.step(1);
+        assert!(!p.confirm_logout, "the question goes with the row");
+        for line in [HARDCORE_OFF, HARDCORE_ON] {
+            assert!(crate::i18n::german().translate(line).is_some(), "{line} has a German line");
+        }
+    }
+
     #[test]
     fn logging_out_asks_first() {
         let mut p = AchievementsPage::new(Some(Account {
             username: "Alex".into(),
             token: "Tk".into(),
             display_name: "Rob".into(),
+            hardcore: false,
         }));
         assert_eq!(p.value(), "Rob");
         assert_eq!(press(&mut p, CONFIRM), Action::Nothing);

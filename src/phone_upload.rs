@@ -345,7 +345,7 @@ impl Server {
             .into_iter()
             .find(|i| i.addr == ip && !i.name.starts_with("tailscale") && !i.addr.is_loopback())
             .ok_or_else(|| "The Wi-Fi address is gone.".to_string())?;
-        let listen = crate::web::net::Listen { addr: SocketAddr::new(ip, 0), iface: iface.name, index: iface.index };
+        let listen = crate::web::net::Listen { addr: SocketAddr::new(ip, 0), iface: iface.name, index: iface.index, lan: true };
         let listener = crate::web::net::bind(&listen).map_err(|e| format!("Can't open the page: {e}"))?;
         let server = Server::start(listener, cfg).map_err(|e| format!("Can't open the page: {e}"))?;
         server.register();

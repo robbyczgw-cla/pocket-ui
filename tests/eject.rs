@@ -209,6 +209,25 @@ fn every_look_that_inserts_also_returns_the_case_and_accepts_the_same_press() {
     }
 }
 
+/// A start that failed: the case's click waits for the medium to be back inside, whether the launch had got a little way or
+/// all the way to the fade, and the sentence's error sound is due at the end, never before the case is shut.
+#[test]
+fn a_failed_starts_sounds_come_in_order() {
+    use pocket_ui::eject::{Moment, Screen, Way};
+    use pocket_ui::{cabinet, insert_rig};
+    for lid in [false, true] {
+        let way = Way { screen: Screen::Tv, off: false, lid };
+        for ran in [way.start() / 2, way.start(), way.start() + pocket_ui::eject::FADE + std::time::Duration::from_millis(500)] {
+            let failed = way.failed(ran);
+            let Moment::Shelf { scene, .. } = failed.moment(failed.case_shut_at()) else { panic!("the case still returns ({ran:?})") };
+            assert!(cabinet::insert_at(scene, true).carry < 0.01, "{ran:?}: the cartridge is inside its case when it clicks shut: {scene:?}");
+            assert!(insert_rig::pose(insert_rig::Kind::Lid, scene).out < 0.01, "{ran:?}: the lid has closed when it clicks: {scene:?}");
+            assert!(failed.case_shut_at() < failed.len(), "{ran:?}: the case shuts, then the sentence and its error sound");
+            assert_eq!(failed.moment(failed.len()), Moment::Done);
+        }
+    }
+}
+
 #[test]
 fn the_case_sound_waits_until_the_medium_is_back_inside() {
     use pocket_ui::eject::{Moment, Screen, Way};
@@ -313,4 +332,78 @@ fn the_way_back_hands_over_to_the_still_shelf_without_a_jump() {
         }
     }
     assert!(failures.is_empty(), "the case jumps when the way back ends:\n{}", failures.join("\n"));
+}
+
+/// What the pause menu grabbed of a game on a 640x480 screen: the screen frame round the game, the black round that, the
+/// game in its rectangle (x, y, w, h). The kinds are the ones a player meets: a TV frame, a console's body, no frame.
+fn screen_grab(path: &Path, kind: &str) -> (u32, u32) {
+    let (w, h) = (640u32, 480u32);
+    // The game's rectangle is not the 4:3 of the test picture on purpose (NES at Aspect, 8:7 at Integer): a way back that
+    // guessed the game's place from the screen's shape would show it.
+    let (body, rect): (u32, (u32, u32, u32, u32)) = match kind {
+        "tv" => (0x4a3a2a, (64, 56, 512, 340)),
+        "console" => (0xb8b4a8, (150, 70, 340, 255)),
+        _ => (0x000000, (88, 0, 464, 480)),
+    };
+    let px: Vec<u8> = (0..w * h).flat_map(|i| {
+        let (x, y) = (i % w, i / w);
+        let inside = x >= rect.0 && x < rect.0 + rect.2 && y >= rect.1 && y < rect.1 + rect.3;
+        let c = if inside {
+            // Stripes and a bright block: any shift or scale of the game shows in the difference.
+            let (gx, gy) = (x - rect.0, y - rect.1);
+            if (gx / 16 + gy / 16) % 2 == 0 { 0x3060c0 } else { 0xe0d040 }
+        } else if kind == "none" {
+            0
+        } else if x < 24 || y < 24 || x >= w - 24 || y >= h - 24 { 0x181818 } else { body };
+        [(c >> 16) as u8, (c >> 8) as u8, c as u8]
+    }).collect();
+    let mut e = png::Encoder::new(std::fs::File::create(path).unwrap(), w, h);
+    e.set_color(png::ColorType::Rgb);
+    e.set_depth(png::BitDepth::Eight);
+    e.write_header().unwrap().write_image_data(&px).unwrap();
+    (w, h)
+}
+
+/// The first picture of the way back is the last picture of the game, frame and all (before: the screen frame was gone at
+/// once and the game stood in another place and size for a tick, 13.11., NES clearly, PlayStation slightly), and what
+/// follows only pulls together: the frame is still there while the picture is squeezed, nothing jumps on the way to the
+/// line. Every kind of screen (a TV, a handheld's display), every screen frame.
+#[test]
+fn the_way_back_starts_from_the_last_picture_frame_and_all() {
+    let tmp = tempfile::tempdir().unwrap();
+    let stub = wayland(tmp.path());
+    let mut failures = Vec::new();
+    for (system, rom) in [
+        ("snes", "Chrono Trigger (USA).sfc"), ("psx", "Final Fantasy VII (USA).chd"), ("gba", "Golden Sun (USA, Europe).gba"),
+    ] {
+        let (lib, frame) = library(tmp.path(), system, rom, serde_json::json!({}));
+        for kind in ["tv", "console", "none"] {
+            let grab = tmp.path().join(format!("grab-{kind}.png"));
+            screen_grab(&grab, kind);
+            let want = read_png(&grab);
+            let dir = tmp.path().join(format!("series-{system}-{kind}"));
+            let (out, _) = run(tmp.path(), &stub, &lib, &frame, &[
+                ("EJECT_TEST_SCENE", &format!("shelf:{system}:shelf:games:0")), ("POCKETUI_SNAPSHOT_SIZE", "640x480"),
+                ("POCKETUI_SNAPSHOT_EJECT_SCREEN", grab.to_str().unwrap()), ("POCKETUI_SNAPSHOT_EJECT_SERIES", dir.to_str().unwrap()),
+            ]);
+            let line = out.lines().find(|l| l.starts_with("eject-series")).unwrap_or_else(|| panic!("{system} {kind}: {out}"));
+            assert!(value(line, "frames").parse::<usize>().unwrap() > 30, "{system} {kind}: {line}");
+            let pics: Vec<Vec<u8>> = (0..4).map(|k| read_png(&dir.join(format!("{k:04}.png")))).collect();
+            let first = picture_diff(&pics[0], &want);
+            if first > 0.5 {
+                failures.push(format!("{system} {kind}: the first picture differs from the game's last by {first:.2}"));
+            }
+            // Three frames in, the frame's body is still beside the game (a TV's brightening or a display going dark changes
+            // its colour, not its place): it falls together with the picture instead of being gone from the first frame.
+            if kind != "none" {
+                let body = if kind == "tv" { [0x4a, 0x3a, 0x2a] } else { [0xb8, 0xb4, 0xa8] };
+                let at = (240 * 640 + 40) * 3;
+                let got = &pics[3][at..at + 3];
+                if got.iter().zip(body).any(|(g, b)| (*g as i32) < b * 45 / 100 || (*g as i32) > b + 60) {
+                    failures.push(format!("{system} {kind}: the frame is gone by the fourth picture ({got:?})"));
+                }
+            }
+        }
+    }
+    assert!(failures.is_empty(), "the way back does not start from the picture the game ended on:\n{}", failures.join("\n"));
 }

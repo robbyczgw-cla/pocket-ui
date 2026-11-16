@@ -7,12 +7,14 @@ use pocket_ui::text::Text;
 
 #[test]
 fn a_cartridge_labels_shortened_title_keeps_its_original_language() {
+    // This thread's language only: the other tests in this program keep theirs.
+    let _language = i18n::for_this_thread(Lang::En);
     i18n::set(Lang::De);
     i18n::german();
     let title = format!("Black: {}", "A very long subtitle that cannot fit on a cartridge label ".repeat(12));
     i18n::learn_names([&title]);
     assert!(!i18n::is_name("Black"), "only the complete library name is learned");
-    let look = Look { color: 0x3a2a6a, band: 0x7a6cb0, plastic: 0x9c99a2 };
+    let look = Look { color: 0x3a2a6a, band: 0x7a6cb0, plastic: 0x9c99a2, tape: false };
     let mut translated = Text::new();
     let actual = media::game_pic(&mut translated, Game::Gb, 200, look, &title, None, None).unwrap();
     assert!(translated.translating(), "the painter keeps its caller's translation setting");

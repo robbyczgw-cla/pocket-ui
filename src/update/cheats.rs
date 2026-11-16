@@ -57,6 +57,45 @@ fn install_checked(tools: &Tools, descriptor: &Path, destination: &Path, cancel:
 
 const MEMORY: &str = "There isn't enough free memory for cheats. Close the game and try again.";
 
+/// Where the cheats file is offered for the card (the same pack as the description's `url`).
+pub const SITE: &str = "pocketui.xyz/cheats";
+pub const CARD_NOTHING: &str = "No cheats file on the card. Put the cheats file from pocketui.xyz/cheats on the card, then look again.";
+pub const CARD_DAMAGED: &str = "The cheats file on the card is incomplete or damaged. Copy it onto the card again. Nothing was installed.";
+
+/// The cheats from the card, without a network: a `cheats-….pack` in one of `places` (`card::places`) whose size and
+/// SHA-256 are the signed description's, copied in, checked again, published like a download, then removed from the card.
+pub fn install_from_card(descriptor: &Path, destination: &Path, places: &[PathBuf], cancel: &Cancel, progress: &dyn Fn(u64)) -> Result<(), String> {
+    let rel = description(descriptor)?;
+    let want = rel.sha256.to_lowercase();
+    let mut files: Vec<PathBuf> = places.iter().filter_map(|d| std::fs::read_dir(d).ok()).flatten().flatten()
+        .filter(|e| { let n = e.file_name().to_string_lossy().to_lowercase(); n.starts_with("cheats") && n.ends_with(".pack") })
+        .map(|e| e.path()).filter(|p| p.is_file()).collect();
+    files.sort();
+    if files.is_empty() { return Err(CARD_NOTHING.into()); }
+    let the_pack = |f: &Path| std::fs::metadata(f).is_ok_and(|m| m.len() == rel.size) && store::sha256_file(f).is_ok_and(|h| h == want);
+    let Some(file) = files.into_iter().find(|f| !cancel.is_cancelled() && the_pack(f)) else {
+        return Err(if cancel.is_cancelled() { "Cheats weren't installed.".into() } else { CARD_DAMAGED.into() });
+    };
+    let parent = destination.parent().ok_or(WRITE)?;
+    std::fs::create_dir_all(parent).map_err(|_| WRITE)?;
+    if crate::starter::free_bytes(parent).is_some_and(|free| free < space_needed(rel.size)) { return Err(WRITE.into()); }
+    let part = destination.with_file_name(format!(".cheats-{want}.part"));
+    std::fs::copy(&file, &part).map_err(|_| WRITE)?;
+    progress(rel.size);
+    // The copy checked again before it is published, as a download's card copy is.
+    if !the_pack(&part) || !crate::cheat_download::installed(std::slice::from_ref(&part)) {
+        let _ = std::fs::remove_file(&part);
+        return Err(CARD_DAMAGED.into());
+    }
+    std::fs::File::open(&part).and_then(|f| f.sync_all()).map_err(|_| WRITE)?;
+    std::fs::rename(&part, destination).map_err(|_| WRITE)?;
+    crate::fsutil::sync_dir(parent);
+    if !super::card::remove_after_use(&file) {
+        eprintln!("cheats: installed, but {} couldn't be removed from the card", file.display());
+    }
+    Ok(())
+}
+
 /// The same RAM/network/checkpoint order for small pinned optional game archives.
 pub(crate) fn download_data(rel: &Release, part: &Path, cancel: &Cancel, progress: &dyn Fn(u64)) -> Result<(), String> {
     transfer(&TOOLS, rel, Path::new("/"), part, cancel, progress)
@@ -127,6 +166,37 @@ mod tests {
         std::fs::remove_file(&descriptor).unwrap();
         install(&descriptor, &dest, &Cancel::new(), &|_| panic!("already installed: no download")).unwrap();
         assert!(crate::cheat_download::available(&[dest], "gb"));
+    }
+
+    /// No network (Wi-Fi off, or none): the pack from pocketui.xyz on the card, under the name the site gives it, is
+    /// checked against the signed description, installed and removed from the card.
+    #[test]
+    fn the_cheats_file_on_the_card_is_checked_installed_and_removed() {
+        let dir = TestDir::new("cheats-card");
+        let (descriptor, dest, bytes, rel) = fixture(&dir);
+        let card = dir.join("card");
+        std::fs::create_dir_all(&card).unwrap();
+        let file = card.join(format!("cheats-{}.pack", rel.sha256));
+        std::fs::write(&file, &bytes).unwrap();
+        std::fs::remove_file(dir.join("source.pack")).unwrap();
+        install_from_card(&descriptor, &dest, &[dir.join("absent"), card.clone()], &Cancel::new(), &|_| {}).unwrap();
+        assert_eq!(std::fs::read(&dest).unwrap(), bytes);
+        assert!(!file.exists(), "the file on the card is removed after a good install");
+        assert!(crate::cheat_download::available(&[dest], "gb"));
+    }
+
+    #[test]
+    fn a_damaged_or_missing_cheats_file_on_the_card_installs_nothing_and_says_why() {
+        let dir = TestDir::new("cheats-card-bad");
+        let (descriptor, dest, bytes, _) = fixture(&dir);
+        let card = dir.join("card");
+        std::fs::create_dir_all(&card).unwrap();
+        assert_eq!(install_from_card(&descriptor, &dest, std::slice::from_ref(&card), &Cancel::new(), &|_| {}), Err(CARD_NOTHING.into()));
+        let file = card.join("cheats-0123.pack");
+        std::fs::write(&file, &bytes[..bytes.len() - 3]).unwrap();
+        assert_eq!(install_from_card(&descriptor, &dest, std::slice::from_ref(&card), &Cancel::new(), &|_| {}), Err(CARD_DAMAGED.into()));
+        assert!(!dest.exists());
+        assert!(file.exists(), "a file that isn't ours stays where the player put it");
     }
 
     #[test]

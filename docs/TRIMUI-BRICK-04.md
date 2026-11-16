@@ -34,7 +34,7 @@ boot ID and pstore remained intact and restoration passed. No further device cyc
 
 ## Configurable F1/F2 and lights
 
-Settings → Sound & feel → Lights & buttons exposes F1 button and F2 button. Left/Right saves a global shortcut.
+Settings → Controls → Lights & buttons exposes F1 button and F2 button. Left/Right saves a global shortcut.
 The original defaults remain Quick save / Quick load. Tests cover absence of a choice, existing choices and reload.
 The navigation explorer reaches each row, changes it and restarts the UI with the saved choices.
 

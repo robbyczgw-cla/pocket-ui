@@ -5,7 +5,8 @@
 //!
 //! A letter Barlow lacks (a Japanese name, "ファイナルファンタジーVI") comes from the system's Noto Sans CJK
 //! (`text_fallback`), fitted to Barlow's capitals and weight, and is kept apart in a cache of its own of at most
-//! `FALLBACK_BYTES`. Without that font it is painted as "?" (a letter) or left out (a mark), as before.
+//! `FALLBACK_BYTES`. Without that font a name is written in Latin letters where that can be done (kana, hangul) and
+//! the letters nothing can say are left out (`latinise`): never "?" and never an empty box.
 
 use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
@@ -70,6 +71,9 @@ pub struct Text {
     /// `prewarm` has been asked for: asked again when the style changes.
     prewarmed: bool,
     cache: HashMap<Key, Glyph>,
+    /// The glyphs of `cache` at half size for a canvas painted natively at 2:1 (`gfx::Canvas::screen`), one per place
+    /// within a screen pixel (x and y even or odd, `gfx::half_mask`): (width, height, coverage). Go with `cache`.
+    half: HashMap<(Key, u8), (usize, usize, Vec<u8>)>,
     /// Which glyphs of `cache` came from the fallback font (`text_fallback`): a library of Japanese names can ask for
     /// thousands, so they are dropped once they pass `FALLBACK_BYTES` (and drawn again as they are needed).
     more: Vec<Key>,
@@ -90,6 +94,10 @@ pub struct Text {
     tr: crate::i18n::Cache,
     /// Off while the manual's English pages are painted (`set_translate`).
     raw: bool,
+    /// What `latinise::fold` made of the strings with letters no face of this style has (`None`: nothing to do), and
+    /// which letters are drawable (`covers`); both of the faces in use, so they go with the cache.
+    folded: HashMap<Box<str>, Option<Arc<str>>>,
+    covered: HashMap<char, bool>,
     /// A literal game/system name also bypasses device-specific wording substitutions.
     naming: bool,
     /// For the snapshot checks only (`i18n::recording`): the first pieces of words `wrap` broke inside, so that one that
@@ -107,7 +115,7 @@ impl Default for Text {
 /// pause menu 21) and of the titles (50), for ASCII and `PREWARM_MORE`.
 const PREWARM: [(Face, &[u32]); 2] = [(Face::Body, &[21, 28, 30, 36, 46]), (Face::Title, &[50])];
 /// The letters of German and the marks of Settings' values besides ASCII.
-const PREWARM_MORE: &str = "ÄÖÜäöüßáéíóúñÁÉÍÓÚÑãõâêôçÃÕÂÊÔÇà¿¡“”…‹›·–×°→\u{200b}";
+const PREWARM_MORE: &str = "ÄÖÜäöüßáéíóúñÁÉÍÓÚÑãõâêôçÃÕÂÊÔÇà¿¡“”…‹›·–×°→èûïîùœëÈÀÉÙÎÏŒòì«»\u{a0}\u{200b}";
 /// The sizes games' names are painted at (the rows of a list and of search 37, the card's title 50 and 67, a cover's
 /// caption 44, the hints and meta lines 28 and 30), at which `prewarm_names` draws their CJK letters ahead.
 const PREWARM_NAMES: [(Face, &[u32]); 2] = [(Face::Title, &[37, 44, 50, 67]), (Face::Body, &[28, 30])];
@@ -126,8 +134,8 @@ pub fn fonts_dir() -> std::path::PathBuf {
 }
 
 /// A glyph as `Text` paints it. A character the font has no picture for would come out as an empty box ("Ünïcödé ▯
-/// Spiel", first-run test 2026-10-24, finding #9): a letter or digit (a Japanese title) is painted as "?" so that the
-/// name still shows something, anything else (a tick, a star, an emoji, a zero-width mark) is left out. Decided once
+/// Spiel", first-run test 2026-10-24, finding #9): it is left out (a tick, a star, an emoji, a zero-width mark; and a
+/// letter that `translated` did not write in Latin letters, `latinise`, which used to be painted as "?"). Decided once
 /// per character and size, when the glyph enters the cache: nothing per frame.
 #[allow(clippy::too_many_arguments)]
 fn raster(font: &Font, scale: f32, grid: f32, lcd: bool, tight: Option<u32>, plain: &Font, ch: char, px: u32) -> Glyph {
@@ -152,13 +160,11 @@ fn raster(font: &Font, scale: f32, grid: f32, lcd: bool, tight: Option<u32>, pla
         Some(step) => on_screen_grid(px, grid, step),
         None => on_grid(px, grid),
     };
-    let ch = if font.lookup_glyph_index(ch) != 0 || ch == '?' {
-        ch
-    } else if ch.is_alphanumeric() {
-        '?'
-    } else {
+    // A letter no face has is left out, never painted as "?" or an empty box: `Text::translated` has written such
+    // names in Latin letters long before (`latinise::fold`); this is only for what slipped past it.
+    if font.lookup_glyph_index(ch) == 0 && ch != '?' {
         return (Metrics::default(), Vec::new());
-    };
+    }
     let (mut metrics, mut bitmap) = font.rasterize(ch, px);
     // A pixel face: every screen pixel in or out, as the font's own pixels are (`on_grid`), and each letter a whole
     // number of font pixels on from the last, so the gaps between letters are even ("ha t" in "hat" otherwise).
@@ -225,17 +231,18 @@ fn on_screen_grid(px: f32, grid: f32, step: u32) -> f32 {
 }
 
 /// `ch` from the fallback font in `path`, fitted to `face`; opens the font the first time (`text_fallback::open`, the
-/// state in `fallback`). `None` when there is none or it lacks `ch` too: then the face's "?" or nothing (`raster`).
+/// state in `fallback`). `None` when there is none or it lacks `ch` too: then nothing (`raster`).
 #[allow(clippy::too_many_arguments)]
 fn fallback_glyph(fallback: &mut Option<Option<(Arc<Fallback>, [Fit; 2])>>, path: Option<&std::path::Path>, title: &Font, body: &Font, scale: [f32; 2], face: Face, px: u32, ch: char) -> Option<Glyph> {
-    let (font, fits) = fallback
-        .get_or_insert_with(|| {
-            let font = path.and_then(crate::text_fallback::open)?;
-            let fits = fits(&font, title, body, scale);
-            Some((font, fits))
-        })
-        .as_ref()?;
+    let (font, fits) = fallback.get_or_insert_with(|| open_fallback(path, title, body, scale)).as_ref()?;
     font.raster(ch, px, fits[face.slot()])
+}
+
+/// The fallback font in `path` and its fit to the two faces, `None` without one (`text_fallback::open`).
+fn open_fallback(path: Option<&std::path::Path>, title: &Font, body: &Font, scale: [f32; 2]) -> Option<(Arc<Fallback>, [Fit; 2])> {
+    let font = path.and_then(crate::text_fallback::open)?;
+    let fits = fits(&font, title, body, scale);
+    Some((font, fits))
 }
 
 /// The memory a fallback glyph takes in the cache (`Text::more_bytes`).
@@ -275,6 +282,12 @@ fn letters_for_fallback<'a>(title: &Font, body: &Font, names: impl Iterator<Item
     letters.into_iter().take(max).map(|(ch, _)| ch).collect()
 }
 
+/// The words of a line, as `wrap` breaks it: between spaces, but never at a no-break space (U+00A0, U+202F): French keeps
+/// its `?` `!` `:` `;` `%` and « » with the word before ("Prêt ?"), and a line must not end before them.
+fn words(s: &str) -> impl Iterator<Item = &str> {
+    s.split(|c: char| c.is_whitespace() && c != '\u{a0}' && c != '\u{202f}').filter(|w| !w.is_empty())
+}
+
 impl Text {
     fn with_faces(title: Font, body: Font, themed: [bool; 2], fallback_path: Option<PathBuf>) -> Self {
         let (title, body) = (Arc::new(title), Arc::new(body));
@@ -293,6 +306,7 @@ impl Text {
             pinned: None,
             prewarmed: false,
             cache: HashMap::new(),
+            half: HashMap::new(),
             more: Vec::new(),
             more_bytes: 0,
             fallback_path,
@@ -302,6 +316,8 @@ impl Text {
             drawn: 0,
             tr: Default::default(),
             raw: false,
+            folded: HashMap::new(),
+            covered: HashMap::new(),
             naming: false,
             broken: Default::default(),
         }
@@ -358,6 +374,9 @@ impl Text {
         (self.body, self.scale[1], self.grid[1], self.lcd[1], self.tight[1]) = body;
         // Glyphs, the fallback's fit to the capitals and what the threads were drawing ahead are of the old faces.
         self.cache.clear();
+        self.half.clear();
+        self.folded.clear();
+        self.covered.clear();
         self.more.clear();
         self.more_bytes = 0;
         self.fallback = None;
@@ -393,6 +412,9 @@ impl Text {
         self.fallback_path = path;
         self.fallback = None;
         self.cache.clear();
+        self.half.clear();
+        self.folded.clear();
+        self.covered.clear();
         self.more.clear();
         self.more_bytes = 0;
         self
@@ -447,6 +469,7 @@ impl Text {
         for key in self.more.drain(..) {
             self.cache.remove(&key);
         }
+        self.half.clear();
         self.more_bytes = 0;
     }
 
@@ -670,9 +693,59 @@ impl Text {
     /// `s` in the interface's language (`crate::i18n`); a borrowed string or a shared one, never a new allocation
     /// for a string painted in the frame before.
     pub fn translated<'a>(&mut self, s: &'a str) -> crate::i18n::Tr<'a> {
-        if self.naming { return crate::i18n::Tr::Same(s); }
-        let translated = if self.raw { crate::i18n::Tr::Same(s) } else { self.tr.get(s) };
-        if crate::i18n::is_name(s) { translated } else { crate::i18n::device_text(translated) }
+        let t = if self.naming {
+            crate::i18n::Tr::Same(s)
+        } else {
+            let translated = if self.raw { crate::i18n::Tr::Same(s) } else { self.tr.get(s) };
+            if crate::i18n::is_name(s) { translated } else { crate::i18n::device_text(translated) }
+        };
+        self.drawable(t)
+    }
+
+    /// Whether the faces in use (or the fallback font) have a picture for `ch`: what `drawable` asks, once per letter.
+    pub fn covers(&mut self, ch: char) -> bool {
+        if ch.is_ascii() {
+            return true;
+        }
+        if let Some(known) = self.covered.get(&ch) {
+            return *known;
+        }
+        let own = self.title.lookup_glyph_index(ch) != 0 && self.body.lookup_glyph_index(ch) != 0;
+        let has = own || {
+            let Text { fallback, fallback_path, title, body, scale, .. } = self;
+            fallback.get_or_insert_with(|| open_fallback(fallback_path.as_deref(), title, body, *scale)).as_ref().is_some_and(|(f, _)| f.has(ch))
+        };
+        self.covered.insert(ch, has);
+        has
+    }
+
+    /// `t` as the faces can draw it: a Japanese or Korean name without the fallback font in Latin letters, the letters
+    /// nothing can say left out, never "?" or an empty box (`latinise::fold`). Strings with only letters of Latin
+    /// type (every string of the interface, nearly every name) cost one scan; the others one lookup per frame.
+    fn drawable<'a>(&mut self, t: crate::i18n::Tr<'a>) -> crate::i18n::Tr<'a> {
+        use crate::i18n::Tr;
+        if t.is_ascii() || t.chars().all(|c| !c.is_alphanumeric() && !crate::latinise::is_cjk_mark(c) || (c as u32) < 0x180) {
+            return t;
+        }
+        if let Some(known) = self.folded.get(&*t) {
+            return match known {
+                Some(done) => Tr::Shared(done.clone()),
+                None => t,
+            };
+        }
+        let done = match crate::latinise::fold(&t, &mut |c| self.covers(c)) {
+            std::borrow::Cow::Borrowed(_) => None,
+            std::borrow::Cow::Owned(own) => Some(Arc::<str>::from(own)),
+        };
+        // A library of Japanese names fills this up: it starts over rather than grows.
+        if self.folded.len() >= 8192 {
+            self.folded.clear();
+        }
+        self.folded.insert(Box::from(&*t), done.clone());
+        match done {
+            Some(done) => Tr::Shared(done),
+            None => t,
+        }
     }
 
     pub fn width(&mut self, face: Face, px: u32, s: &str) -> i32 {
@@ -728,13 +801,30 @@ impl Text {
             let gx = pen.round() as i32 + m.xmin;
             let gy = baseline - m.height as i32 - m.ymin;
             ink.add(gx, gy, m.width as i32, m.height as i32);
+            if c.n() != 1 {
+                // Painted natively at 2:1: the glyph at half size for where it falls in a screen pixel, from the cache.
+                let (width, height, advance) = (m.width, m.height, m.advance_width);
+                if width > 0 && height > 0 {
+                    let (sx, sy, fx, fy) = c.cell(gx, gy);
+                    let key = ((face, px, ch), fx | fy << 1);
+                    if !self.half.contains_key(&key) {
+                        let (_, bitmap) = &self.cache[&key.0];
+                        let half = crate::gfx::half_mask(bitmap, width, height, fx, fy);
+                        self.half.insert(key, half);
+                    }
+                    let (w2, h2, half) = &self.half[&key];
+                    c.mask_screen(sx, sy, *w2, *h2, half, color);
+                }
+                pen += advance;
+                continue;
+            }
             if m.width > 0 && gx >= 0 && gy >= 0 && gx + m.width as i32 <= c.w && gy + m.height as i32 <= c.h {
                 // Inside the picture, the usual case: rows of the picture, no bounds test per pixel, and a fully
                 // covered pixel is the colour itself (`mix` at 255 gives exactly that).
                 let (w, plain) = (c.w as usize, color & 0xff_ffff);
                 for (row, cover) in bitmap.chunks_exact(m.width).enumerate() {
                     let at = (gy as usize + row) * w + gx as usize;
-                    for (px, &a) in c.buf[at..at + m.width].iter_mut().zip(cover) {
+                    for (px, &a) in c.pixels_mut()[at..at + m.width].iter_mut().zip(cover) {
                         match a {
                             0 => {}
                             255 => *px = plain,
@@ -774,6 +864,8 @@ impl Text {
                 continue;
             }
             let gy = baseline - m.height as i32 - m.ymin;
+            // Painted natively (`gfx::Canvas::screen`): the cut and faded glyph as one mask, averaged per screen pixel.
+            let mut faded = (c.n() != 1).then(|| vec![0u8; m.width * m.height]);
             for col in 0..m.width {
                 let cx = gx + col as i32;
                 if cx < clip.0 || cx >= clip.1 {
@@ -783,10 +875,15 @@ impl Text {
                 let k = edge(cx - clip.0, fade.0).min(edge(clip.1 - 1 - cx, fade.1)) as u32;
                 for row in 0..m.height {
                     let a = bitmap[row * m.width + col] as u32 * k / 255;
-                    if a > 0 {
+                    if let Some(f) = faded.as_mut() {
+                        f[row * m.width + col] = a as u8;
+                    } else if a > 0 {
                         c.blend(cx, gy + row as i32, color, a as u8);
                     }
                 }
+            }
+            if let Some(f) = faded {
+                c.mask(gx, gy, m.width, m.height, &f, color);
             }
         }
     }
@@ -820,7 +917,7 @@ impl Text {
         let translated = !self.raw && !matches!(s, crate::i18n::Tr::Same(_));
         let mut lines: Vec<String> = Vec::new();
         let mut line = String::new();
-        for word in s.split_whitespace() {
+        for word in words(&s) {
             let candidate = if line.is_empty() { word.to_string() } else { format!("{line} {word}") };
             if self.width_raw(face, px, &candidate) <= max {
                 line = candidate;
@@ -917,10 +1014,21 @@ impl Text {
                 // Measured as it is painted: the lines are in the interface's language already.
                 let raw = self.raw;
                 self.raw = true;
-                *last = self.fit(face, px, &format!("{last} …"), max);
-                if !last.ends_with('…') {
-                    last.push('…');
+                // Whole words: the last ones go until "… " fits ("Choose which to keep." never ends "Choose whic…").
+                let words: Vec<String> = last.split(' ').map(str::to_string).collect();
+                let mut shown = None;
+                for n in (1..=words.len()).rev() {
+                    let candidate = format!("{} …", words[..n].join(" "));
+                    if self.fit(face, px, &candidate, max) == candidate {
+                        shown = Some(candidate);
+                        break;
+                    }
                 }
+                *last = shown.unwrap_or_else(|| {
+                    // One word wider than the room: cut inside it, as before.
+                    let cut = self.fit(face, px, &format!("{last} …"), max);
+                    if cut.ends_with('…') { cut } else { format!("{cut}…") }
+                });
                 self.raw = raw;
             }
         }
@@ -976,7 +1084,8 @@ impl Text {
     pub fn words_fit(&mut self, face: Face, px: u32, s: &str, max: i32) -> bool {
         let scaled = crate::type_scale::px(px);
         let s = self.translated(s).to_string();
-        s.split_whitespace().all(|w| self.width_raw(face, scaled, w) <= max)
+        let fits = words(&s).all(|w| self.width_raw(face, scaled, w) <= max);
+        fits
     }
 
     /// A title in at most two lines of `max` pixels (a long one's second line ends with "…"), for a card whose name
@@ -1010,10 +1119,28 @@ impl Text {
         // For the German snapshot checks: cut short here (`i18n::note_cut`; nothing is written unless they run).
         crate::i18n::note_cut(english);
         let mut chars: Vec<char> = s.chars().collect();
+        // A sentence ("Choose which to keep.") is cut between words; a name ("Kirby - Nightmare in Dream Land") where it ends.
+        let sentence = boxes::is_sentence(&s);
         while !chars.is_empty() {
             chars.pop();
-            let candidate: String = chars.iter().collect::<String>().trim_end().to_string() + "…";
+            let mut candidate: String = chars.iter().collect::<String>().trim_end().to_string() + "…";
             if self.width_raw(face, px, &candidate) <= max {
+                let in_word = chars.last().is_some_and(|c| !c.is_whitespace()) && s.chars().nth(chars.len()).is_some_and(|c| !c.is_whitespace());
+                if in_word && sentence {
+                    // Back to the end of the last whole word, when there is one.
+                    if let Some(space) = chars.iter().rposition(|c| *c == ' ') {
+                        let whole: String = chars[..space].iter().collect::<String>().trim_end().to_string();
+                        if !whole.is_empty() {
+                            candidate = whole + "…";
+                            if translated {
+                                self.tr.is_translated(&candidate);
+                            }
+                            return candidate;
+                        }
+                    }
+                    // One word wider than the room: cut inside it, and the snapshot checks list it (`W`).
+                    boxes::broken_word(&candidate, &[candidate.clone()]);
+                }
                 if translated {
                     self.tr.is_translated(&candidate);
                 }
@@ -1079,11 +1206,11 @@ pub mod boxes {
             let cut = x0 < -2 || x1 > c.w + 2;
             if cut_vertically(y0, y1, c.h) {
                 if let Ok(mut v) = v_cuts().lock() {
-                    v.push((c.buf.as_ptr() as usize, c.w, c.h, s.to_string()));
+                    v.push((c.id(), c.w, c.h, s.to_string()));
                 }
             }
             if let Ok(mut rec) = rec.lock() {
-                rec.push((c.buf.as_ptr() as usize, c.w, (cx0, cy0, cx1, cy1), cut, s.to_string()));
+                rec.push((c.id(), c.w, (cx0, cy0, cx1, cy1), cut, s.to_string()));
             }
         }
     }
@@ -1096,7 +1223,7 @@ pub mod boxes {
     /// An area no other text may run into (a hint bar), recorded as if it were a string called `name`.
     pub fn area(c: &Canvas, (x, y, w, h): (i32, i32, i32, i32), name: &str) {
         let Some(Ok(mut rec)) = record().map(|r| r.lock()) else { return };
-        rec.push((c.buf.as_ptr() as usize, c.w, (x.max(0), y.max(0), (x + w).min(c.w), (y + h).min(c.h)), false, name.to_string()));
+        rec.push((c.id(), c.w, (x.max(0), y.max(0), (x + w).min(c.w), (y + h).min(c.h)), false, name.to_string()));
     }
 
     /// Where the record is now, for `clip_since`.
@@ -1115,7 +1242,7 @@ pub mod boxes {
     /// its lines drew over its edges, the manual's).
     pub fn clip_since(mark: usize, c: &Canvas, y0: i32, y1: i32) {
         let Some(Ok(mut rec)) = record().map(|r| r.lock()) else { return };
-        let at = (c.buf.as_ptr() as usize / 4) as i64;
+        let at = (c.id() / 4) as i64;
         let mut i = mark;
         while i < rec.len() {
             let (p, cw, r, _, _) = &mut rec[i];
@@ -1155,7 +1282,7 @@ pub mod boxes {
     /// Drops what lies inside `rect` (`inside_only`) or anywhere under it, if it was painted before `mark`.
     fn painted_over_or_covered(mark: usize, c: &Canvas, (x, y, w, h): (i32, i32, i32, i32), inside_only: bool) {
         let Some(Ok(mut rec)) = record().map(|r| r.lock()) else { return };
-        let at = (c.buf.as_ptr() as usize / 4) as i64;
+        let at = (c.id() / 4) as i64;
         let before = mark.min(rec.len());
         let mut i = 0;
         rec.retain(|(p, cw, (x0, y0, x1, y1), _, _)| {
@@ -1176,15 +1303,16 @@ pub mod boxes {
 
     /// What was painted into `from` (`from_w` wide, whole rows) now lies in `to` (`to_w` wide) at the same rows and
     /// `dx` pixels further right: a column copied into the middle of the screen (the binary's `app_column`).
-    pub fn moved(from: &[u32], from_w: i32, to: &[u32], to_w: i32, dx: i32) {
+    pub fn moved(from: &[u32], from_w: i32, to: &Canvas, dx: i32) {
         let Some(Ok(mut rec)) = record().map(|r| r.lock()) else { return };
         let (start, end) = (from.as_ptr() as usize, from.as_ptr() as usize + from.len() * 4);
+        let to_w = to.w;
         for (at, cw, (x0, _, x1, _), _, _) in rec.iter_mut() {
             if *at < start || *at >= end || *cw != from_w {
                 continue;
             }
             let row = (*at - start) / 4 / from_w.max(1) as usize;
-            *at = to.as_ptr() as usize + row * to_w as usize * 4;
+            *at = to.id() + row * to_w as usize * 4;
             *cw = to_w;
             *x0 += dx;
             *x1 += dx;
@@ -1283,6 +1411,12 @@ pub mod boxes {
         B.get_or_init(|| Mutex::new(Vec::new()))
     }
 
+    /// A line of explanation rather than a name: three or more words, ending in a full stop (a name like "WarioWare: Mega Microgame$!" is none).
+    pub fn is_sentence(s: &str) -> bool {
+        let t = s.trim_end();
+        t.split_whitespace().count() >= 3 && t.ends_with('.')
+    }
+
     /// `word`, short as it is, was torn across lines because its column was too narrow: the picture's record says so
     /// (`W` and the word), which the size sweep treats like text running into other text (a Game Boy Advance
     /// page, 2026-11-03: "US$99.99" one character a line down a strip beside the prices).
@@ -1305,10 +1439,19 @@ pub mod boxes {
     /// top or bottom edge cuts. Strings painted into another buffer (a layer
     /// mixed in later) are left out.
     pub fn finish(buf: &[u32], w: i32, h: i32) {
+        finish_at(buf.as_ptr() as usize, buf.len(), w, h);
+    }
+
+    /// `finish` for the canvas the frame was painted into (`Canvas::id`; painted natively, its buffer is the screen's,
+    /// a quarter of the design pixels the record is in).
+    pub fn finish_canvas(c: &Canvas) {
+        finish_at(c.id(), (c.w.max(0) as usize) * (c.h.max(0) as usize), c.w, c.h);
+    }
+
+    fn finish_at(start: usize, len: usize, w: i32, h: i32) {
         let Some(rec) = record() else { return };
         let Ok(rec) = rec.lock() else { return };
-        let start = buf.as_ptr() as usize;
-        let end = start + buf.len() * 4;
+        let end = start + len * 4;
         let mut placed: Vec<(Rect, bool, &str)> = Vec::new();
         for (at, cw, (x0, y0, x1, y1), cut, s) in rec.iter() {
             if *cw != w || *at < start || *at >= end {
@@ -1508,17 +1651,23 @@ mod tests {
         }
     }
 
-    /// First-run test 2026-10-24, finding #9: "Ünïcödé ✓ Spiel" showed an empty box for the tick.
+    /// First-run test 2026-10-24, finding #9: "Ünïcödé ✓ Spiel" showed an empty box for the tick. Since 2026-11-13 a letter
+    /// no face has is no longer a question mark either (snapshot: "Also known as Nintendo GameCube, ????????????").
     #[test]
-    fn a_character_the_font_lacks_is_left_out_or_shown_as_a_question_mark() {
-        let mut t = Text::builtin();
+    fn a_character_the_font_lacks_is_left_out_or_written_in_latin_never_a_box_or_a_question_mark() {
+        let mut t = Text::builtin().with_fallback(None);
         for face in [Face::Body, Face::Title] {
             assert!(!t.has_glyph(face, '✓') && !t.has_glyph(face, 'ド'), "the test needs characters Barlow lacks");
             assert_eq!(t.width(face, 30, "A✓B\u{200b}"), t.width(face, 30, "AB"), "a mark: nothing, no box");
-            assert_eq!(t.width(face, 30, "ドラ"), t.width(face, 30, "??"), "a letter: a question mark, so a name never comes out empty");
+            // A kana is read as Latin letters, a kanji or a Thai letter between two letters is not there at all.
+            assert_eq!(t.width(face, 30, "ドラ"), t.width(face, 30, "Dora"));
+            assert_eq!(t.width(face, 30, "A国B"), t.width(face, 30, "AB"));
+            // Even a string that skips the translation step (`width_plain`, a word measured by itself) has no "?" in it.
+            assert_eq!(t.width_plain(face, 30, "国"), 0);
+            assert_eq!(t.width_plain(face, 30, "ドラ"), 0);
             let (mut a, mut b) = (vec![0u32; 300 * 60], vec![0u32; 300 * 60]);
             t.draw(&mut Canvas::new(&mut a, 300, 60), face, 30, 10, 40, 0xffffff, "Spiel ✓ ド");
-            t.draw(&mut Canvas::new(&mut b, 300, 60), face, 30, 10, 40, 0xffffff, "Spiel  ?");
+            t.draw(&mut Canvas::new(&mut b, 300, 60), face, 30, 10, 40, 0xffffff, "Spiel  Do");
             assert!(a == b);
         }
     }
@@ -1603,20 +1752,56 @@ mod tests {
         assert!(ink_sum(&mut t, Face::Title) > ink_sum(&mut t, Face::Body));
     }
 
+    /// The pixels of `s` painted by `t`.
+    fn pixels(t: &mut Text, face: Face, px: u32, s: &str) -> Vec<u32> {
+        let mut buf = vec![0u32; 1400 * 120];
+        t.draw(&mut Canvas::new(&mut buf, 1400, 120), face, px, 10, 80, 0xffffff, s);
+        buf
+    }
+
     #[test]
-    fn without_the_fallback_font_a_japanese_name_is_painted_as_before() {
-        let mut plain = Text::builtin();
+    fn without_the_fallback_font_a_japanese_name_is_written_in_latin_letters_never_as_question_marks() {
         for path in [Some(PathBuf::from("/nonexistent/NotoSansCJKsc-Regular.otf")), None] {
             let mut t = Text::builtin().with_fallback(path.clone());
             for face in [Face::Body, Face::Title] {
-                let s = "ファイナルファンタジーVI ✓";
-                assert_eq!(t.width(face, 30, s), plain.width(face, 30, s), "{path:?}");
-                assert_eq!(t.width(face, 30, "ドラ"), t.width(face, 30, "??"));
+                // Kana and hangul as Latin letters: the same pixels as the Latin text itself, and not "?" for each.
+                for (name, latin) in [
+                    ("ニンテンドーゲームキューブ", "Nintendoogeemukyuubu"),
+                    ("ファイナルファンタジーVI ✓", "FainarufantajiiVI ✓"),
+                    ("마리오 카트", "Mario Kateu"),
+                    ("ＦＩＮＡＬ　ＦＡＮＴＡＳＹ", "FINAL FANTASY"),
+                ] {
+                    assert!(pixels(&mut t, face, 30, name) == pixels(&mut t, face, 30, latin), "{path:?}: {name}");
+                    assert_eq!(t.width(face, 30, name), t.width(face, 30, latin), "{name}");
+                    let marks = "?".repeat(name.chars().count());
+                    assert!(pixels(&mut t, face, 30, name) != pixels(&mut t, face, 30, &marks), "{name} is not painted as {marks}");
+                }
+                // Kanji are left out; a name of nothing else is painted as "…", never as a gap or as "?".
+                assert_eq!(t.width(face, 30, "聖剣伝説2"), t.width(face, 30, "2"));
+                assert!(pixels(&mut t, face, 30, "任天堂") == pixels(&mut t, face, 30, "…"));
+                assert!(pixels(&mut t, face, 30, "任天堂") != vec![0u32; 1400 * 120]);
+                // Names, wrapped and cut: the lines are what is painted.
+                assert_eq!(t.fit_name(face, 30, "ファイナルファンタジーVI", 5000), "FainarufantajiiVI");
             }
             assert_eq!(t.fallback_cache(), (0, 0));
             t.prewarm_names(["スーパーマリオワールド"]);
             t.finish_prewarm();
             assert_eq!(t.fallback_cache(), (0, 0), "nothing drawn ahead either");
+        }
+    }
+
+    #[test]
+    fn a_string_every_face_can_draw_is_painted_as_it_is_with_no_copy() {
+        let mut t = Text::builtin().with_fallback(None);
+        for s in ["Super Mario World", "Pokémon Rubis ñandú ÄÖÜ", "1–4 players · ‹ Original ›"] {
+            assert!(matches!(t.translated(s), crate::i18n::Tr::Same(_)), "{s}");
+        }
+        assert!(matches!(t.translated("ゲーム"), crate::i18n::Tr::Shared(_)));
+        // Asked again, the same shared string: nothing is made per frame.
+        let (a, b) = (t.translated("ゲーム"), t.translated("ゲーム"));
+        match (a, b) {
+            (crate::i18n::Tr::Shared(a), crate::i18n::Tr::Shared(b)) => assert!(Arc::ptr_eq(&a, &b)),
+            _ => panic!("shared"),
         }
     }
 
@@ -1730,6 +1915,36 @@ mod tests {
         assert!(t.wrap_at_most(Face::Body, 28, s, 300, 0).is_empty());
     }
 
+    #[test]
+    fn a_sentence_cut_by_fit_ends_at_a_whole_word_and_a_name_where_it_ends() {
+        let mut t = Text::builtin();
+        let s = "The web interface uses ROCKNIX's login (root). Turn Syncthing off and on again to secure it.";
+        for width in (200..700).step_by(11) {
+            let cut = t.fit(Face::Body, 24, s, width);
+            let shown = cut.trim_end_matches('…');
+            assert!(s.starts_with(shown), "{width}: {cut}");
+            assert!(cut == s || s[shown.len()..].starts_with(' '), "cut inside a word at {width}: {cut}");
+        }
+        // A name is cut where the room ends.
+        let name = "Castlevania - Symphony of the Night";
+        assert!(t.fit(Face::Body, 24, name, 200).ends_with('…'));
+    }
+
+    /// Sync at 1280x720 in Large text showed "Saves changed on two devices. Choose whic…": the last line is cut at a
+    /// word, never inside one.
+    #[test]
+    fn a_paragraph_cut_to_fewer_lines_ends_at_a_whole_word() {
+        let mut t = Text::builtin();
+        let s = "Saves changed on two devices. Choose which to keep.";
+        for width in (180..400).step_by(7) {
+            let one = t.wrap_prose_at_most(Face::Body, 30, s, width, 1);
+            let shown = one[0].trim_end_matches('…').trim_end();
+            assert!(s.starts_with(shown), "{width}: {one:?}");
+            let rest = &s[shown.len()..];
+            assert!(rest.is_empty() || rest.starts_with(' '), "cut inside a word at {width}: {one:?}");
+        }
+    }
+
     /// How many pixels of `a` and `b` (painted at `px`) differ, with the pen on the same baseline, an ink pixel being
     /// one at half coverage or more; and the height of a capital in screen pixels.
     fn glyph_difference(t: &mut Text, face: Face, px: u32, a: char, b: char) -> (usize, usize) {
@@ -1835,6 +2050,68 @@ mod tests {
         let (narrow, wide) = (t.width(Face::Body, 28, "iiiiiiii"), t.width(Face::Body, 28, "MMMMMMMM"));
         assert!(narrow < wide, "Pixelify chosen: its narrow i ({narrow} against {wide})");
         font_style::set_retro_letters(RetroLetters::Departure);
+    }
+
+
+    /// `paint` the old way (a design canvas twice the size, reduced 2:1) and painted natively (n = 2), over `back`.
+    fn old_and_new(w: u32, h: u32, back: u32, mut paint: impl FnMut(&mut Canvas)) -> (Vec<u32>, Vec<u32>) {
+        crate::scaled_layout::set_step((w * 2, h * 2), (w, h));
+        let mut design = vec![back; (w * h * 4) as usize];
+        paint(&mut Canvas::new(&mut design, w * 2, h * 2));
+        let mut old = vec![0u32; (w * h) as usize];
+        crate::scaled_layout::ScaledFrame::default().downscale(&design, (w * 2, h * 2), &mut old, (w, h));
+        let mut new = vec![back; (w * h) as usize];
+        paint(&mut Canvas::screen(&mut new, (w, h), 2));
+        (old, new)
+    }
+
+    /// The largest difference of one channel between the two pictures.
+    fn worst((old, new): &(Vec<u32>, Vec<u32>)) -> u32 {
+        old.iter().zip(new).map(|(a, b)| [0, 8, 16].iter().map(|s| ((a >> s) & 0xff).abs_diff((b >> s) & 0xff)).max().unwrap_or(0)).max().unwrap_or(0)
+    }
+
+    #[test]
+    fn painted_natively_departure_mono_is_the_old_picture_bit_for_bit() {
+        font_style::set_retro_letters(RetroLetters::Departure);
+        let mut t = Text::builtin().pinned_to(FontStyle::Retro);
+        // Even and odd places (a pixel face starts on the screen's grid either way), body and title sizes.
+        for (x, baseline) in [(10, 60), (11, 61), (-7, 45)] {
+            let pair = old_and_new(220, 70, 0x1b1712, |c| {
+                t.draw(c, Face::Body, 28, x, baseline, 0xece9e1, "Systems 8 Shelf · Größe");
+                t.draw(c, Face::Title, 37, x + 3, baseline + 50, 0xffcc00, "Link's Awakening DX 12");
+                t.draw_right(c, Face::Body, 21, 430, 20, 0x88ff88, "B Back");
+            });
+            assert_eq!(worst(&pair), 0, "Departure Mono at {x},{baseline} differs from the old picture");
+            assert!(pair.1.iter().any(|p| *p == 0xece9e1) && pair.1.iter().any(|p| *p == 0xffcc00), "the letters are there");
+        }
+        crate::scaled_layout::set_step((1240, 1080), (1240, 1080));
+    }
+
+    #[test]
+    fn painted_natively_barlow_and_big_text_keep_their_soft_edges() {
+        // The coverage is averaged per screen pixel once (the glyph cache's half glyphs), not each design pixel mixed
+        // and then averaged: the same edges, at most a few steps of rounding apart.
+        let mut t = Text::builtin();
+        for (px, x) in [(28, 10), (30, 11), (36, 13), (50, 12), (67, 9)] {
+            let pair = old_and_new(260, 60, 0x12161b, |c| {
+                t.draw(c, Face::Body, px, x, 40, 0xece9e1, "Shelf Größe Wy");
+                t.draw(c, Face::Title, px, x + 1, 95, 0x12161b, "Zelda");
+            });
+            let w = worst(&pair);
+            assert!(w <= 2, "{px} px at {x}: {w} steps apart");
+        }
+        // The same glyph again from the cache, and at the other places within a screen pixel.
+        let first = t.half.len();
+        let _ = old_and_new(260, 60, 0x12161b, |c| {
+            t.draw(c, Face::Body, 28, 10, 40, 0xece9e1, "Shelf Größe Wy");
+        });
+        assert_eq!(t.half.len(), first, "drawn again from the cache");
+        // A title cut and faded at its edges (`draw_clipped`, a marquee).
+        let pair = old_and_new(160, 40, 0x000000, |c| {
+            t.draw_clipped(c, Face::Title, 44, -13.0, 60, 0xffffff, "A long scrolling title", (20, 280), (24, 24));
+        });
+        assert!(worst(&pair) <= 2, "the marquee: {} steps apart", worst(&pair));
+        crate::scaled_layout::set_step((1240, 1080), (1240, 1080));
     }
 
 }

@@ -22,7 +22,31 @@ mod startup;
 #[path = "audio_gaps.rs"]
 mod gaps;
 
+/// The output rate everywhere but dArkOS (`out_rate`).
 pub const OUT_RATE: u32 = 48_000;
+/// dArkOS's: its ALSA `default` ends in a dmix fixed at 44.1 kHz (`~ark/.asoundrc`), and its alsa-lib has only the linear
+/// rate converter. So the sinc resampler here and the UI's sounds go to 44.1 kHz there, and ALSA converts nothing.
+pub const DARKOS_OUT_RATE: u32 = 44_100;
+
+/// The rate the sound goes out at: `DARKOS_OUT_RATE` when started from dArkOS's Ports (docs/DARKOS.md), else `OUT_RATE`.
+pub fn out_rate() -> u32 {
+    static RATE: std::sync::OnceLock<u32> = std::sync::OnceLock::new();
+    *RATE.get_or_init(|| out_rate_on(darkos_host()))
+}
+
+fn out_rate_on(darkos: bool) -> u32 {
+    if darkos { DARKOS_OUT_RATE } else { OUT_RATE }
+}
+
+#[cfg(feature = "brick")]
+fn darkos_host() -> bool {
+    crate::darkos::host()
+}
+
+#[cfg(not(feature = "brick"))]
+fn darkos_host() -> bool {
+    false
+}
 /// Buffered audio the rate control steers towards, in ms (POCKET_CORE_AUDIO_MS overrides it).
 /// It only has to bridge the core's frame-sized bursts; the output keeps its own small buffer.
 /// Measured on the Mini V2: through pulse (30 s each, mGBA and snes9x) 24 ms had no underruns,
@@ -98,7 +122,7 @@ fn reopen_stream(reopen: fn(Ring) -> Option<Sink>, ring: Ring, stopped: &impl Fn
 fn target_frames(heavy: bool, small: bool) -> usize {
     let base = if heavy { HEAVY_TARGET_MS } else { TARGET_MS };
     let ms = std::env::var("POCKET_CORE_AUDIO_MS").ok().and_then(|v| v.parse().ok()).unwrap_or(if small { base } else { base.max(CYCLE_TARGET_MS) });
-    OUT_RATE as usize * ms.max(crate::platform::audio_backend::minimum_queue_ms() as usize).clamp(8, 200) / 1000
+    out_rate() as usize * ms.max(crate::platform::audio_backend::minimum_queue_ms() as usize).clamp(8, 200) / 1000
 }
 
 fn cadence_target_frames(core_fps: f64, display_hz: f64) -> usize {
@@ -106,7 +130,7 @@ fn cadence_target_frames(core_fps: f64, display_hz: f64) -> usize {
         return 0;
     }
     let ms = (2000.0 / core_fps.max(1.0)).ceil().clamp(CYCLE_TARGET_MS as f64, 200.0);
-    OUT_RATE as usize * ms as usize / 1000
+    out_rate() as usize * ms as usize / 1000
 }
 
 /// The regular delivery, never the sometimes very large first SPU buffer after loading a state.
@@ -117,7 +141,7 @@ fn delivery_frames(core_fps: f64, display_hz: f64) -> usize {
     } else {
         core_fps.min(display_hz)
     };
-    (OUT_RATE as f64 / fps.max(1.0)).ceil() as usize
+    (out_rate() as f64 / fps.max(1.0)).ceil() as usize
 }
 
 /// The writer tests the fill after a push, while rate control observes it before a push. Start
@@ -171,7 +195,7 @@ impl RateControl {
             Some(r) => r + (target as f64 - r).clamp(-pushed * REFERENCE_SLEW, pushed * REFERENCE_SLEW),
             None => {
                 self.warm += pushed;
-                if self.warm < OUT_RATE as f64 * WARM_S {
+                if self.warm < out_rate() as f64 * WARM_S {
                     self.target = target;
                     return ratio;
                 }
@@ -529,7 +553,7 @@ impl Audio {
         let queue_health = Arc::new(QueueHealth::default());
         let health = queue_health.clone();
         let writer_diagnostics = diagnostics.clone();
-        let queue = Arc::new(Mutex::new(VecDeque::with_capacity(OUT_RATE as usize)));
+        let queue = Arc::new(Mutex::new(VecDeque::with_capacity(out_rate() as usize)));
         let underruns = Arc::new(Mutex::new(0));
         let underrun_at = Arc::new(Mutex::new(Vec::new()));
         let server_latency_us = Arc::new(AtomicU64::new(0));
@@ -552,7 +576,7 @@ impl Audio {
         let startup_target = Arc::new(AtomicUsize::new(0));
         let startup_reserve = startup_target.clone();
         let first_queue = queue_health.clone();
-        let delivery = Arc::new(AtomicUsize::new(OUT_RATE as usize / 60));
+        let delivery = Arc::new(AtomicUsize::new(out_rate() as usize / 60));
         let writer_delivery = delivery.clone();
         let cadence = cadence_target.clone();
         let target_for = move |ring: Ring| {
@@ -795,7 +819,7 @@ impl Audio {
             let _ = ended_tx.send(());
         });
         let mut resampler = crate::resample::Resampler::from_env();
-        resampler.prepare(in_rate / OUT_RATE as f64);
+        resampler.prepare(in_rate / out_rate() as f64);
         Audio {
             queue,
             in_rate,
@@ -908,7 +932,7 @@ impl Audio {
     pub fn reserve_startup(&mut self, system: &str) {
         let target = startup::target_frames(system);
         self.startup_target.store(target, Ordering::Relaxed);
-        self.startup_remaining = if target == 0 { 0 } else { OUT_RATE as usize * 15 };
+        self.startup_remaining = if target == 0 { 0 } else { out_rate() as usize * 15 };
     }
 
     fn release_startup(&mut self) {
@@ -943,7 +967,7 @@ impl Audio {
         let target = self.target();
         let startup = self.startup_target.load(Ordering::Relaxed) != 0;
         let fill = self.queue.lock().unwrap().len() / 2;
-        let ratio = self.in_rate / OUT_RATE as f64;
+        let ratio = self.in_rate / out_rate() as f64;
         let pushed = samples.len() as f64 / 2.0 / ratio;
         let step = if startup && self.startup_remaining == 0 && fill > self.steady_target() {
             startup::drain_step(ratio)
@@ -986,7 +1010,7 @@ impl Audio {
 
     /// Effective rate of the samples pushed per second of real time.
     pub fn set_input_rate(&mut self, rate: f64) {
-        self.resampler.prepare(rate / OUT_RATE as f64);
+        self.resampler.prepare(rate / out_rate() as f64);
         self.in_rate = rate;
     }
 
@@ -1011,11 +1035,11 @@ impl Audio {
 
     /// The queue the rate control steers towards, in ms.
     pub fn target_ms(&self) -> f64 {
-        self.target() as f64 / OUT_RATE as f64 * 1000.0
+        self.target() as f64 / out_rate() as f64 * 1000.0
     }
 
     pub fn buffered_ms(&self) -> f64 {
-        self.queue.lock().unwrap().len() as f64 / 2.0 / OUT_RATE as f64 * 1000.0
+        self.queue.lock().unwrap().len() as f64 / 2.0 / out_rate() as f64 * 1000.0
     }
 
     /// Audio still in the server (PipeWire and the sound card) at the last measurement.
@@ -1105,6 +1129,15 @@ mod tests {
         let cents = 1200.0 * (hz / 1000.0).log2();
         eprintln!("N64 startup drain: measured rendered 1kHz tone {hz:.8} Hz, {cents:.6} cents");
         assert!((0.0..2.0).contains(&cents), "the rendered drain must stay below two cents: {cents}");
+    }
+
+    #[test]
+    fn on_darkos_the_sound_leaves_at_its_dmix_rate_so_alsa_converts_nothing() {
+        assert_eq!((out_rate_on(true), out_rate_on(false)), (44_100, 48_000));
+        assert_eq!(out_rate(), OUT_RATE, "not started from dArkOS's Ports");
+        // A 32768 Hz GBA core then steps 32768/44100 through its input, and the queue's sizes are in 44.1 kHz frames.
+        let gba = 32768.0 / out_rate_on(true) as f64;
+        assert!((gba - 0.743).abs() < 0.001, "{gba}");
     }
 
     /// A muted DAC may stop inside write forever. Only the first full queue may wait;

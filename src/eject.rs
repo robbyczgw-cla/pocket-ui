@@ -9,7 +9,9 @@
 //! at once and does what it does on the shelf. Quit itself is not touched: pocket-core ends as before.
 //!
 //! [`moment`] says what shows `since` the game ended; [`paint_tv_off`] and [`paint_lcd_off`] draw the first part over
-//! the whole screen from the picture the pause menu grabbed (`QuickMenu::frame`, taken over, not copied).
+//! the whole screen from the picture the pause menu grabbed (`QuickMenu::frame`, taken over, not copied): the whole screen as it
+//! showed the game, screen frame and black borders with it, so the first picture is the last one of the game and the frame
+//! pulls together with it.
 
 use std::path::{Path, PathBuf};
 use std::time::Duration;
@@ -124,6 +126,16 @@ impl Way {
         }
     }
 
+    /// A start that failed, `ran` after A: the medium goes back out of the console the way it went in, from where the
+    /// launch had got to. Inside the scene (before the medium is in and the fade begins, [`Way::start`]) nothing was
+    /// black yet and it simply comes back, no fade; later the game's window had the screen, and black lifts first, from
+    /// as black as the launch had made it.
+    pub fn failed(self, ran: Duration) -> Failed {
+        let start = self.start();
+        let black = ran.saturating_sub(start).as_secs_f32() / FADE.as_secs_f32();
+        Failed { way: self, from: ran.min(start), black: black.min(1.0) }
+    }
+
     /// The medium is fully back before the case closes: both timelines start opening at 120 ms.
     /// The earlier carry threshold (0.3) still leaves the cartridge sticking out of its case.
     pub fn case_shut_at(self) -> Duration {
@@ -131,6 +143,46 @@ impl Way {
         self.off_len() + FADE + self.start().saturating_sub(shut).div_f32(BACK_SPEED)
     }
 
+}
+
+/// The way back of a start that failed (`Way::failed`): the launch animation backwards from where it had got to.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Failed {
+    way: Way,
+    /// The scene's moment the launch had reached (at most where its fade began).
+    from: Duration,
+    /// How black the screen had got by then, 0 to 1 (0 inside the scene).
+    black: f32,
+}
+
+impl Failed {
+    fn lift(self) -> Duration {
+        FADE.mul_f32(self.black)
+    }
+
+    /// How long it takes: black lifting, then the scene backwards.
+    pub fn len(self) -> Duration {
+        self.lift() + self.from.div_f32(BACK_SPEED)
+    }
+
+    /// What shows `since` the start ended. Never black over a scene that was still running.
+    pub fn moment(self, since: Duration) -> Moment {
+        let lift = self.lift();
+        if since < lift {
+            return Moment::Shelf { black: self.black * (1.0 - since.as_secs_f32() / lift.as_secs_f32()), scene: self.from };
+        }
+        let back = (since - lift).mul_f32(BACK_SPEED);
+        match self.from.checked_sub(back) {
+            Some(scene) if !scene.is_zero() => Moment::Shelf { black: 0.0, scene },
+            _ => Moment::Done,
+        }
+    }
+
+    /// When the case's shutting sounds: the medium is back in before the case closes, as on [`Way::case_shut_at`].
+    pub fn case_shut_at(self) -> Duration {
+        let shut = cabinet::INSERT_COZY.mul_f32(0.06);
+        self.lift() + self.from.saturating_sub(shut).div_f32(BACK_SPEED)
+    }
 }
 
 /// Android's player and launcher are two processes: at Save & quit the player leaves the game's last picture and where
@@ -274,15 +326,27 @@ pub fn paint_tv_off(c: &mut Canvas, frame: Option<&Image>, src: Option<(u32, u32
     }
 }
 
-/// The beam's last sweep over `rect`: what is lit goes towards white by `k`, black much less (the black round a game's
-/// picture stays dark instead of turning into grey bars).
+/// The beam's last sweep over `rect`: what is lit goes towards white by `k`, dark colours much less, pure black not at all
+/// (the black round a game's picture stays dark instead of turning into grey bars).
 fn brighten(c: &mut Canvas, (x, y, w, h): (i32, i32, i32, i32), k: f32) {
-    for row in y.max(0)..(y + h).min(c.h) {
-        for col in x.max(0)..(x + w).min(c.w) {
-            let i = (row * c.w + col) as usize;
-            let p = c.buf[i];
-            let luma = ((p >> 16 & 0xff) * 3 + (p >> 8 & 0xff) * 6 + (p & 0xff)) as f32 / 2550.0;
-            c.buf[i] = crate::gfx::mix(p, 0xffffff, (k * (0.25 + 0.75 * luma) * 255.0) as u32);
+    let lit = |p: u32| {
+        // The black round the game (letterbox bars, the screen's own border) stays black: the whole screen switches off now.
+        if p & 0xff_ffff == 0 {
+            return p;
+        }
+        let luma = ((p >> 16 & 0xff) * 3 + (p >> 8 & 0xff) * 6 + (p & 0xff)) as f32 / 2550.0;
+        crate::gfx::mix(p, 0xffffff, (k * (0.25 + 0.75 * luma) * 255.0) as u32)
+    };
+    let (x0, x1, y0, y1) = (x.max(0), (x + w).min(c.w), y.max(0), (y + h).min(c.h));
+    if c.n() != 1 {
+        // Painted natively (docs/dev/native-paint.md): the four design pixels of each screen pixel as below, averaged.
+        return crate::cabinet_art::cells_over(c, x0, x1, y0, y1, |_, _, bg| lit(bg));
+    }
+    let c_w = c.w;
+    for row in y0..y1 {
+        for col in x0..x1 {
+            let i = (row * c_w + col) as usize;
+            c.pixels_mut()[i] = lit(c.pixels()[i]);
         }
     }
 }
@@ -291,19 +355,27 @@ fn brighten(c: &mut Canvas, (x, y, w, h): (i32, i32, i32, i32), k: f32) {
 fn glow_disc(c: &mut Canvas, (cx, cy): (f32, f32), r: f32, halo: f32, a: f32) {
     let (x0, x1) = (((cx - halo).floor() as i32).max(0), ((cx + halo).ceil() as i32).min(c.w));
     let (y0, y1) = (((cy - halo).floor() as i32).max(0), ((cy + halo).ceil() as i32).min(c.h));
+    let lit = |x: i32, y: i32, bg: u32| {
+        let d = ((x as f32 + 0.5 - cx).powi(2) + (y as f32 + 0.5 - cy).powi(2)).sqrt();
+        let (toward, k) = if d <= r {
+            (0xffffff, a)
+        } else if d < halo {
+            let t = 1.0 - (d - r) / (halo - r);
+            (0xd8e6ff, a * 0.55 * t * t)
+        } else {
+            return bg;
+        };
+        crate::gfx::mix(bg, toward, (k * 255.0) as u32)
+    };
+    if c.n() != 1 {
+        // Painted natively (docs/dev/native-paint.md): the four design pixels of each screen pixel as below, averaged.
+        return crate::cabinet_art::cells_over(c, x0, x1, y0, y1, lit);
+    }
+    let c_w = c.w;
     for y in y0..y1 {
         for x in x0..x1 {
-            let d = ((x as f32 + 0.5 - cx).powi(2) + (y as f32 + 0.5 - cy).powi(2)).sqrt();
-            let (toward, k) = if d <= r {
-                (0xffffff, a)
-            } else if d < halo {
-                let t = 1.0 - (d - r) / (halo - r);
-                (0xd8e6ff, a * 0.55 * t * t)
-            } else {
-                continue;
-            };
-            let i = (y * c.w + x) as usize;
-            c.buf[i] = crate::gfx::mix(c.buf[i], toward, (k * 255.0) as u32);
+            let i = (y * c_w + x) as usize;
+            c.pixels_mut()[i] = lit(x, y, c.pixels()[i]);
         }
     }
 }
@@ -382,6 +454,47 @@ mod tests {
         paint_lcd_off(&mut Canvas::new(&mut buf, 8, 6), Some(&img), Some((1, 1, 2, 2)), (2, 2, 4, 2), 0.0);
         assert_eq!(&buf[2 * 8..3 * 8], &[0, 0, 5, 5, 6, 6, 0, 0]);
         assert!(buf[..2 * 8].iter().all(|p| *p == 0), "black round it");
+    }
+
+    /// A start that fails inside the scene (a missing core fails in a few hundred ms) is the medium coming back out from where
+    /// it was: no black, backwards, to A, and then it is over. One that fails after the fade lifts black first.
+    #[test]
+    fn a_failed_start_comes_back_from_where_the_launch_had_got_to() {
+        for lid in [false, true] {
+            let way = Way { screen: Screen::Tv, off: false, lid };
+            // Inside the scene: from there, never black.
+            let ran = way.start() / 2;
+            let f = way.failed(ran);
+            assert_eq!(f.moment(Duration::ZERO), Moment::Shelf { black: 0.0, scene: ran });
+            let mut last = ran;
+            let mut t = Duration::ZERO;
+            while t < f.len() {
+                match f.moment(t) {
+                    Moment::Shelf { black, scene } => {
+                        assert!(black == 0.0 && scene <= last, "{lid} {t:?}: backwards, never black over a scene that was running");
+                        last = scene;
+                    }
+                    m => panic!("{t:?}: {m:?}"),
+                }
+                t += ms(8);
+            }
+            assert!(f.len() < ran, "faster than it went in (BACK_SPEED)");
+            assert_eq!(f.moment(f.len()), Moment::Done);
+            assert!(f.case_shut_at() < f.len(), "the case shuts before it is over");
+            // After the fade: black lifts first, then the whole scene backwards, as the way back from a game.
+            let late = way.failed(way.start() + FADE + ms(900));
+            assert_eq!(late.moment(Duration::ZERO), Moment::Shelf { black: 1.0, scene: way.start() });
+            assert!(matches!(late.moment(FADE / 2), Moment::Shelf { black, scene } if black > 0.4 && black < 0.6 && scene == way.start()));
+            assert!(matches!(late.moment(FADE + ms(100)), Moment::Shelf { black, scene } if black == 0.0 && scene < way.start()));
+            assert_eq!(late.len(), FADE + way.start().div_f32(BACK_SPEED));
+            // Half way into the fade: the lift starts from the black it had made.
+            let half = way.failed(way.start() + FADE / 2);
+            assert!(matches!(half.moment(Duration::ZERO), Moment::Shelf { black, .. } if (black - 0.5).abs() < 0.01));
+            assert_eq!(half.lift(), FADE / 2);
+        }
+        // Gone before the scene had moved: over at once, the sentence comes without a wait.
+        let way = Way { screen: Screen::Tv, off: false, lid: false };
+        assert_eq!(way.failed(Duration::ZERO).moment(Duration::ZERO), Moment::Done);
     }
 
     #[test]

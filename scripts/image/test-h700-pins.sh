@@ -1,5 +1,5 @@
 #!/bin/sh
-# Test of the H700, SM8550 and RK3566 image inputs that need no Docker and no download (scripts/make-image-family.sh, pins.sh).
+# Test of the H700, SM8550, RK3566 and RK3326 image inputs that need no Docker and no download (scripts/make-image-family.sh, pins.sh).
 # Part of the gate (scripts/gate.sh).
 set -u
 cd "$(dirname "$0")/../.." || exit 1
@@ -28,8 +28,8 @@ dupd=$(echo "$H700_MODELS" | awk 'NF && $5 != "ddr3" { print $2 }' | sort | uniq
 echo "$H700_MODELS" | awk 'NF && $5 == "ddr3" { n = $1; sub(/-ddr3$/, "", n); print n, $2, $3, $4 }' | while read -r twin dtb md5 model; do
   echo "$H700_MODELS" | awk -v t="$twin" -v d="$dtb" -v m="$md5" -v s="$model" '$1 == t && $2 == d && $3 == m && $4 == s && $5 != "ddr3" { f = 1 } END { exit !f }' || { echo "FAIL: $twin-ddr3 has no DDR4 twin with the same tree" >&2; exit 1; }
 done && ok "every DDR3 model has a DDR4 twin with the same tree" || bad "a DDR3 model without its twin"
-is_ddr3 H700 rg40xx-h-ddr3 && ! is_ddr3 H700 rg40xx-h && ! is_ddr3 H700 "" && ! is_ddr3 SM8550 odin2 && ok "is_ddr3 tells the DDR3 models" || bad "is_ddr3"
-[ "$(echo "$H700_MODELS" | awk 'NF { print $1 }' | tr '\n' ' ')" = "rg35xx-plus rg35xx-sp rg28xx rg35xx-h rg35xx-pro rg35xx-2024 rg40xx-h rg40xx-v rg34xx rg34xx-sp rg-sp rgcubexx rg35xx-plus-r6 rg35xx-sp-v2 rg40xx-h-ddr3 " ] && ok "the three models with a unit to test first, then the untested ones" || bad "model list changed"
+is_ddr3 H700 rg40xx-h-ddr3 && is_ddr3 H700 rg34xx-sp-v2-ddr3 && is_ddr3 H700 rg-sp-ddr3 && ! is_ddr3 H700 rg40xx-h && ! is_ddr3 H700 rg34xx-sp-v2 && ! is_ddr3 H700 "" && ! is_ddr3 SM8550 odin2 && ok "is_ddr3 tells the DDR3 models" || bad "is_ddr3"
+[ "$(echo "$H700_MODELS" | awk 'NF { print $1 }' | tr '\n' ' ')" = "rg35xx-plus rg35xx-sp rg28xx rg35xx-h rg35xx-pro rg35xx-2024 rg40xx-h rg40xx-v rg34xx rg34xx-sp rg-sp rgcubexx rg35xx-plus-r6 rg35xx-sp-v2 rg40xx-h-ddr3 rg34xx-sp-v2 rg34xx-sp-v2-ddr3 rg-sp-ddr3 " ] && ok "the three models with a unit to test first, then the untested ones" || bad "model list changed"
 # The GAMES drive goes by model, and only where there's no Wi-Fi chip: the notes of all others don't name it.
 has_games_drive H700 rg28xx && has_games_drive H700 rg35xx-2024 && ! has_games_drive H700 rg35xx-h && ! has_games_drive H700 rg35xx-plus && ! has_games_drive H700 rg35xx-sp && ! has_games_drive H700 "" && ! has_games_drive SM8250 rg28xx \
   && [ -z "$SM8550_GAMES_DRIVE_MODELS" ] && ok "GAMES drive on the RG28XX and RG35XX 2024 only" || bad "GAMES drive models: $H700_GAMES_DRIVE_MODELS / $SM8550_GAMES_DRIVE_MODELS"
@@ -117,8 +117,20 @@ if [ -f scripts/image/pins-rk3566.sh ]; then
 hex "$RK3566_GZ_SHA256" 64 && hex "$RK3566_IMG_SHA256" 64 && hex "$RK3566_KERNEL_MD5" 32 && hex "$RK3566_SYSTEM_MD5" 32 \
   && hex "$RK3566_LOADER_MD5" 32 && hex "$RK3566_EXTLINUX_MD5" 32 && hex "$RK3566_COMMIT" 40 && ok "RK3566 pins are hashes" || bad "an RK3566 pin is not a hash"
 case $RK3566_POCKET_SYSTEM_MD5 in unset) ok "RK3566_POCKET_SYSTEM_MD5 is unset (first build)" ;; *) hex "$RK3566_POCKET_SYSTEM_MD5" 32 && ok "RK3566_POCKET_SYSTEM_MD5 is a hash" || bad "RK3566_POCKET_SYSTEM_MD5" ;; esac
-[ "$(echo "$RK3566_MODELS" | awk 'NF { print $1, $2, $4 }')" = "rg-ds-plus rk3568-anbernic-rg-ds-plus Anbernic_RG_DS_Plus" ] \
-  && ok "RK3566: the RG DS Plus with its own tree (not the plain RG DS's)" || bad "RK3566_MODELS changed"
+[ "$(echo "$RK3566_MODELS" | awk 'NF { printf "%s %s %s %s;", $1, $2, $4, $5 }')" = "rg-ds-plus rk3568-anbernic-rg-ds-plus Anbernic_RG_DS_Plus ;rk3566 - RK3566_handhelds generic;" ] \
+  && ok "RK3566: the RG DS Plus with its own tree (not the plain RG DS's), and the Generic card" || bad "RK3566_MODELS changed"
+# The Generic card (pins.sh is_generic): its own image's loader and extlinux.conf, its trees and the profile's names.
+hex "$RK3566_GENERIC_GZ_SHA256" 64 && hex "$RK3566_GENERIC_IMG_SHA256" 64 && hex "$RK3566_GENERIC_LOADER_MD5" 32 && hex "$RK3566_GENERIC_EXTLINUX_MD5" 32 \
+  && [ "$RK3566_GENERIC_IMG" = "ROCKNIX-RK3566.aarch64-$RK3566_TAG-Generic.img" ] && [ "${RK3566_GENERIC_URL##*/}" = "$RK3566_GENERIC_IMG.gz" ] \
+  && ok "the Generic pins are hashes, of the same release" || bad "a Generic pin"
+is_generic RK3566 rk3566 && ! is_generic RK3566 rg-ds-plus && ! is_generic H700 rg35xx-plus && ! is_ddr3 RK3566 rk3566 \
+  && ok "is_generic: the rk3566 card only" || bad "is_generic"
+trees=$(echo "$RK3566_GENERIC_TREES" | awk 'NF { print $3 }' | tr _ ' ' | sort | tr '\n' '|')
+want=$(sed -n 's/^    board("[^"]*", "\([^"]*\)", &\["[a-z]*,[a-z0-9-]*"\].*/\1/p' src/device_model.rs | grep -E '^(Anbernic RG353|Anbernic RG503|Powkiddy)' | sort | tr '\n' '|')
+[ -n "$want" ] && [ "$trees" = "$want" ] && ok "RK3566_GENERIC_TREES names every RK3566_BOARDS model with a tree of its own" || bad "RK3566_GENERIC_TREES ($trees) vs RK3566_BOARDS ($want)"
+for blk in GENERIC; do
+  [ "$(grep -c "^#if $blk\$" deploy/image/README-rk3566.txt.in)" = "$(grep -c '^#endif$' deploy/image/README-rk3566.txt.in)" ] && ok "README-rk3566: every #if has its #endif" || bad "README-rk3566 #if/#endif"
+done
 family_pins RK3566
 [ "$ROCKNIX_TAG" = 20261101 ] && [ "$ROCKNIX_COMMIT" = "$RK3566_COMMIT" ] && [ "$ROCKNIX_LICENSE_FILES" = 75 ] && [ "$FAM_IMG" = "$RK3566_IMG" ] \
   && ok "family_pins RK3566 gives ROCKNIX 20261101's tag, commit and licence count" || bad "family_pins RK3566: $ROCKNIX_TAG $ROCKNIX_COMMIT"
@@ -135,16 +147,73 @@ c=$(grep -Ec '^  [0-9a-f]{32} ' deploy/image/firmware-licences-rk3566/README.txt
 [ "$c" = 293 ] && ok "firmware-licences-rk3566/README.txt lists the 293 firmware files with md5" || bad "RK3566 firmware list has $c md5 lines"
 for f in $RK3566_FW_SHARED; do [ -s "deploy/image/firmware-licences/$f" ] || bad "shared licence text missing: $f"; done
 fi
+# The RK3326 pins, notes and R36S files are private too (scripts/public-exclude.txt).
+if [ -f scripts/image/pins-rk3326.sh ]; then
+hex "$RK3326_GZ_SHA256" 64 && hex "$RK3326_IMG_SHA256" 64 && hex "$RK3326_KERNEL_MD5" 32 && hex "$RK3326_SYSTEM_MD5" 32 && hex "$RK3326_LOADER_MD5" 32 \
+  && hex "$RK3326_BOOTSCR_MD5" 32 && hex "$RK3326_EXTLINUX_MD5" 32 && hex "$RK3326_COMMIT" 40 && hex "$RK3326_IMPORTPANEL_SHA256" 64 && hex "$RK3326_ROCKNIX_DTBO_SHA256" 64 \
+  && hex "$RK3326_PYFDT_SHA256" 64 && ok "RK3326 pins are hashes" || bad "an RK3326 pin is not a hash"
+case $RK3326_POCKET_SYSTEM_MD5 in unset) ok "RK3326_POCKET_SYSTEM_MD5 is unset (first build)" ;; *) hex "$RK3326_POCKET_SYSTEM_MD5" 32 && ok "RK3326_POCKET_SYSTEM_MD5 is a hash" || bad "RK3326_POCKET_SYSTEM_MD5" ;; esac
+[ "$RK3326_IMG" = "ROCKNIX-RK3326.aarch64-$RK3326_TAG-a.img" ] && [ "${RK3326_URL##*/}" = "$RK3326_IMG.gz" ] && ok "RK3326: ROCKNIX's \"a\" image (the genuine R36S's), not \"b\" (EE clones)" || bad "RK3326 image name"
+[ "$(echo "$RK3326_MODELS" | awk 'NF { printf "%s %s %s %s;", $1, $2, $4, $5 }')" = "r36s rk3326-gameconsole-r36s Game_Console_R36S ;r36s-devtest rk3326-gameconsole-r36s Game_Console_R36S devtest;" ] \
+  && ok "RK3326: the R36S card and its device-test twin, both on the R36S tree" || bad "RK3326_MODELS changed"
+is_devtest RK3326 r36s-devtest && ! is_devtest RK3326 r36s && ! is_devtest H700 rg35xx-plus && ! is_generic RK3326 r36s && ! is_ddr3 RK3326 r36s-devtest \
+  && ok "is_devtest: the r36s-devtest card only" || bad "is_devtest"
+[ "$(image_hostname r36s)" = pocket-r36s ] && ok "the R36S card's name on the network: pocket-r36s" || bad "R36S hostname"
+[ "$RK3326_FDT_COMMENT" = "  # FDT /your-custom-devicetree.dtb" ] && ok "RK3326: the commented FDT line build.sh turns into the R36S's" || bad "RK3326_FDT_COMMENT"
+[ "$(echo "$RK3326_PANELS" | awk 'NF { print $1 }' | tr '\n' ' ')" = "r36s-panel1 r36s-panel2 r36s-panel3 r36s-panel4 r36s_clone rg351mp-v2 rg351v-v2 " ] \
+  && [ -z "$(echo "$RK3326_PANELS" | awk 'NF && $2 !~ /^[0-9a-f]{64}$/')" ] && ok "seven pinned R36S screen overlays (not the RK3566 ones, cb408 and x35s)" || bad "RK3326_PANELS"
+for w in r36s-panel4 r36s_clone rg351mp-v2 rg351v-v2 r36s-panel1 r36s-panel2 r36s-panel3; do
+  grep -q "$w" deploy/image/r36s-panels-README.txt || bad "r36s-panels-README.txt does not name $w"
+done
+grep -q "delete overlays/mipi-panel.dtbo" deploy/image/r36s-panels-README.txt && ok "the panels README says how to go back" || bad "panels README"
+family_pins RK3326
+[ "$ROCKNIX_TAG" = 20261101 ] && [ "$ROCKNIX_COMMIT" = "$RK3326_COMMIT" ] && [ "$ROCKNIX_LICENSE_FILES" = 75 ] && [ "$FAM_IMG" = "$RK3326_IMG" ] \
+  && ok "family_pins RK3326 gives ROCKNIX 20261101's tag, commit and licence count" || bad "family_pins RK3326: $ROCKNIX_TAG"
+family_pins H700
+[ "$ROCKNIX_TAG" = 20261001 ] && ok "the other families stay on 20261001 after an RK3326 lookup" || bad "family_pins H700 after RK3326: $ROCKNIX_TAG"
+[ -z "$RK3326_GAMES_DRIVE_MODELS" ] && ! grep -q GAMES deploy/image/README-rk3326.txt.in && ok "RK3326: no GAMES drive, the notes don't name it" || bad "RK3326 GAMES drive"
+[ "$(grep -c '^#if DEVTEST$' deploy/image/README-rk3326.txt.in)" = "$(grep -c '^#endif$' deploy/image/README-rk3326.txt.in)" ] && ok "README-rk3326: every #if has its #endif" || bad "README-rk3326 #if/#endif"
+! notes_blocks 0 0 0 0 <deploy/image/README-rk3326.txt.in | grep -q "169.254.170.2" && notes_blocks 0 0 0 1 <deploy/image/README-rk3326.txt.in | grep -q "ssh root@169.254.170.2" \
+  && ok "only the device-test card's notes name the USB network and SSH" || bad "DEVTEST block of README-rk3326"
+for t in README SOURCE-OFFER; do
+  for ph in $(grep -o '@[A-Z_]*@' "deploy/image/$t-rk3326.txt.in" | sort -u); do
+    echo "$known" | grep -qx "$ph" || bad "$t-rk3326.txt.in: $ph is not filled in by make-image-family.sh"
+  done
+done
+c=$(grep -Ec '^  [0-9a-f]{32} ' deploy/image/firmware-licences-rk3326/README.txt)
+[ "$c" = 295 ] && ok "firmware-licences-rk3326/README.txt lists the 295 firmware files with md5" || bad "RK3326 firmware list has $c md5 lines"
+for f in $RK3326_FW_SHARED; do [ -s "deploy/image/firmware-licences/$f" ] || bad "shared licence text missing: $f"; done
+grep -q 'usbgadget\.conf' deploy/image/r36s-devtest.sh && grep -q 'set_setting ssh.enabled 1' deploy/image/r36s-devtest.sh && ok "the device-test script turns SSH on" || bad "r36s-devtest.sh"
+printf 'ssh-ed25519 AAAA test\n' >"${TMPDIR:-/tmp}/pu-keys.$$"
+sh scripts/make-image-family.sh --family RK3326 --models r36s --authorized-keys "${TMPDIR:-/tmp}/pu-keys.$$" --out "${TMPDIR:-/tmp}/pu-out.$$" >/dev/null 2>&1 && bad "keys accepted for the normal R36S card" || ok "the normal R36S card refuses --authorized-keys"
+sh scripts/make-image-family.sh --family RK3326 --models r36s-devtest --out "${TMPDIR:-/tmp}/pu-out.$$" >/dev/null 2>&1 && bad "the device-test card was built without keys" || ok "the device-test card needs --authorized-keys"
+printf -- '-----BEGIN OPENSSH %s KEY-----\n' PRIVATE >"${TMPDIR:-/tmp}/pu-keys.$$"
+sh scripts/make-image-family.sh --family RK3326 --models r36s-devtest --authorized-keys "${TMPDIR:-/tmp}/pu-keys.$$" --out "${TMPDIR:-/tmp}/pu-out.$$" >/dev/null 2>&1 && bad "a private key was accepted" || ok "a private key is refused for the device-test card"
+rm -rf "${TMPDIR:-/tmp}/pu-keys.$$" "${TMPDIR:-/tmp}/pu-out.$$"
+sh deploy/image/test-r36s-stock-panel.sh >/dev/null && ok "deploy/image/test-r36s-stock-panel.sh" || bad "deploy/image/test-r36s-stock-panel.sh"
+fi
 sh scripts/make-image-family.sh --family AMD64 >/dev/null 2>&1 && bad "an unknown family was accepted" || ok "an unknown family is refused"
 # Every card gives its handheld its own name on the network (system.hostname): lowercase ASCII, at most 24 characters, never
 # ROCKNIX's default, different on each model, and image-defaults.sh has the one NAME line the build and the checks replace.
-hosts=$(for m in "" $(echo "$H700_MODELS $SM8550_MODELS $SM4450_MODELS $RK3566_MODELS" | awk 'NF { print $1 }'); do image_hostname "$m"; done)
+hosts=$(for m in "" $(echo "$H700_MODELS $SM8550_MODELS $SM4450_MODELS $RK3566_MODELS ${RK3326_MODELS:-}" | awk 'NF { print $1 }'); do image_hostname "$m"; done)
 bad_host=$(echo "$hosts" | grep -Ev '^[a-z][a-z0-9-]{0,23}$|^$')
-[ -z "$bad_host" ] && ! echo "$hosts" | grep -qix 'rocknix\|sm8250\|sm8550\|h700\|rk3566' && ok "every image has a valid hostname of its own kind" || bad "hostname not valid: $bad_host"
+[ -z "$bad_host" ] && ! echo "$hosts" | grep -qix 'rocknix\|sm8250\|sm8550\|h700\|rk3566\|rk3326' && ok "every image has a valid hostname of its own kind" || bad "hostname not valid: $bad_host"
 [ -z "$(echo "$hosts" | sort | uniq -d)" ] && [ "$(image_hostname "")" = pocket-mini-v2 ] && [ "$(image_hostname rg35xx-plus)" = pocket-rg35xx-plus ] && [ "$(image_hostname rg-ds-plus)" = pocket-rg-ds-plus ] \
   && ok "hostnames are unique: pocket-mini-v2, pocket-rg35xx-plus, ..." || bad "hostnames clash or changed: $(echo $hosts)"
 [ "$(grep -c '^NAME=pocket-ui$' deploy/image/image-defaults.sh)" = 1 ] && grep -q 'set_setting system.hostname "\$NAME"' deploy/image/image-defaults.sh \
   && ok "image-defaults.sh has one NAME line and sets system.hostname from it" || bad "image-defaults.sh: NAME line"
 sed "s/^NAME=pocket-ui\$/NAME=$(image_hostname rg28xx)/" deploy/image/image-defaults.sh | grep -qx 'NAME=pocket-rg28xx' && ok "the build's sed puts the model's name on the NAME line" || bad "sed does not set NAME"
 python3 -I scripts/image/test-tree-firmware.py && ok "Classic speaker labels do not hide valid firmware" || bad "firmware path parser"
+
+# RK3566 release images carry Experimental; legacy beta notes remain accepted.
+# The warning must label the card, not just mention experimental options.
+for warning in 'Experimental' 'Experimental: expect rough edges.' 'This is a test image (beta), not a stable release.' 'It is a test image (beta).' 'A test image for new hardware.'; do
+  printf '%s\n' "$warning" | image_test_warning && ok "clear card warning: $warning" || bad "card warning refused: $warning"
+done
+for text in 'A normal release image.' 'Experimental feature settings are optional.' 'This is not a test image.' 'Firmware terms for this test image remain open.' 'Experimentalist: a project name.' ''; do
+  if printf '%s\n' "$text" | image_test_warning; then bad "missing card warning accepted: $text"; else ok "no card warning: $text"; fi
+done
+for generic in 0 1; do
+  notes_blocks 0 0 "$generic" <deploy/image/README-rk3566.txt.in | image_test_warning && ok "RK3566 notes have a clear warning (generic=$generic)" || bad "RK3566 warning missing (generic=$generic)"
+done
 exit $fail

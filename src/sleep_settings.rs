@@ -218,7 +218,7 @@ impl From<Stored> for Config {
     fn from(s: Stored) -> Config {
         let screen_off = match (s.screen_off_secs, s.light_after) {
             (Some(secs), _) => never_is_zero(secs),
-            // Before this page: the minutes of Settings → Playing → Battery's "Sleep after".
+            // Before this page: the minutes of Settings → System → Battery's "Sleep after".
             (None, Some(minutes)) => minutes.filter(|m| *m > 0).map(|m| m.saturating_mul(60)),
             (None, None) => SCREEN_OFF_DEFAULT,
         };
@@ -235,7 +235,7 @@ impl From<Stored> for Config {
     fn from(s: Stored) -> Config {
         let screen_off = match (s.screen_off_secs, s.light_after) {
             (Some(secs), _) => never_is_zero(secs),
-            // Before this page: the minutes of Settings → Playing → Battery's "Sleep after".
+            // Before this page: the minutes of Settings → System → Battery's "Sleep after".
             (None, Some(minutes)) => minutes.filter(|m| *m > 0).map(|m| m.saturating_mul(60)),
             (None, None) => SCREEN_OFF_DEFAULT,
         };
@@ -566,7 +566,7 @@ mod tests {
     #[cfg(not(feature = "brick"))]
     #[test]
     fn a_file_from_before_the_page_keeps_its_time() {
-        // Settings → Playing → Battery's "Sleep after": Off, 1, 3 (the old default), 5 min.
+        // Settings → System → Battery's "Sleep after": Off, 1, 3 (the old default), 5 min.
         assert_eq!(parse(r#"{"light_after":3,"off_after":3}"#).screen_off, Some(180), "3 min stays 3 min");
         assert_eq!(parse(r#"{"light_after":1}"#).screen_off, Some(60));
         assert_eq!(parse(r#"{"light_after":5,"off_after":8}"#).screen_off, Some(300));
@@ -579,7 +579,7 @@ mod tests {
     #[cfg(feature = "brick")]
     #[test]
     fn a_file_from_before_the_page_keeps_its_time() {
-        // Settings → Playing → Battery's "Sleep after": Off, 1, 3 (the old default), 5 min.
+        // Settings → System → Battery's "Sleep after": Off, 1, 3 (the old default), 5 min.
         assert_eq!(parse(r#"{"light_after":3,"off_after":3}"#).screen_off, Some(180), "3 min stays 3 min");
         assert_eq!(parse(r#"{"light_after":1}"#).screen_off, Some(60));
         assert_eq!(parse(r#"{"light_after":5,"off_after":8}"#).screen_off, Some(300));

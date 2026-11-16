@@ -126,6 +126,7 @@ mod tests {
             username: "Alex".into(),
             token: "Tk".into(),
             display_name: String::new(),
+            hardcore: false,
         };
         let mock = Mock::new(vec![
             ("gameid", Response::ok(r#"{"Success":true,"GameID":1234}"#)),

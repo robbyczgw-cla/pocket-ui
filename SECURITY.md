@@ -7,7 +7,7 @@ tell us privately before anyone else.
 ## How to report
 
 Use GitHub's private reporting: the **Security** tab of this repository → **Report a vulnerability**. Only the
-maintainers see the report. Please include:
+maintainers see the report. No GitHub account? Write to robby@robbyczesany.com instead. Please include:
 
 - what an attacker needs (same Wi-Fi, same tailnet, physical access, a crafted file on the card, ...),
 - the steps to reproduce, and the pocket-ui and ROCKNIX versions,

@@ -12,12 +12,17 @@ use pocket_ui::report::{self, Failure, GameName, Saved};
 use pocket_ui::text::Face;
 use pocket_ui::touch::Area;
 
-use super::{app_rescue, App, SettingsPage, UserEvent, CANCEL, CONFIRM, NU_BTN_PAD, NU_PAD, NU_PILL, NU_SMALL};
+use super::{app_rescue, App, SettingsPage, UserEvent, CANCEL, CONFIRM, NU_PAD, NU_PILL, NU_SMALL};
 
 /// About's rows, in order.
 const ROW_LIST: [&str; 2] = [report::ROW, "Open EmulationStation\u{2026}"];
 /// EmulationStation is absent on the TrimUI Brick; its About page keeps the report row.
 fn rows() -> &'static [&'static str] {
+    // Android's handheld view: neither is there (the report goes to a Linux card's folder, EmulationStation is ROCKNIX's);
+    // the Mobile view has Report a problem (review of 12.11.2026, #12).
+    if pocket_ui::device::android_profile() {
+        return &[];
+    }
     let brick = { #[cfg(feature = "brick")] { pocket_ui::device::brick() } #[cfg(not(feature = "brick"))] { false } };
     if brick { &ROW_LIST[..1] } else { &ROW_LIST }
 }
@@ -89,6 +94,8 @@ impl App {
             return Some(SettingsPage::About);
         }
         match b {
+            // No rows (Android): only B, back.
+            b if rows().is_empty() && b != CANCEL => {}
             Button::Up => self.about.sel = (self.about.sel + rows().len() - 1) % rows().len(),
             Button::Down => self.about.sel = (self.about.sel + 1) % rows().len(),
             b if b == CONFIRM && self.about.sel == 0 => self.write_report(),
@@ -142,30 +149,26 @@ impl App {
             self.hits.row(Area::new(pad, ry, right - pad, row), i);
         }
         self.hits.list(self.about.sel, rows().len(), 0.0, row as f32);
-        // What the selected row does, in the room above the hints (cut with "…" when larger text needs more).
-        let (left, width) = (pad + NU_BTN_PAD, c.w - 2 * (pad + NU_BTN_PAD));
-        let step = pocket_ui::type_scale::line(NU_SMALL, 12);
-        let mut ly = y + rows().len() as i32 * row + 20 + pocket_ui::type_scale::px(NU_SMALL) as i32 / 2;
-        let hints_top = c.h - pad - NU_PILL - 8;
-        // The last line's baseline may sit up to a line above the hints' top, as on Sleep & power.
-        let room = ((hints_top - ly) / step + 1).max(1) as usize;
-        let help = if self.about.sel == 0 { report::ROW_HELP } else { ES_HELP };
-        for line in self.text.wrap_prose_at_most(Face::Body, NU_SMALL, help, width, room) {
-            self.text.draw(c, Face::Body, NU_SMALL, left, ly, pal().quiet, &line);
-            ly += step;
-        }
-        // The handheld in the room left above the hints (`ui_art`; the Mini V2 where the device isn't known): twice
+        // What the selected row does: the Settings family's footer, beside the hint pill and above it where it needs more
+        // lines (`kit::footer`); the handheld stands in the room left above that.
+        let hints: &[(&str, &str)] = if rows().is_empty() { &[("B", "Back")] } else { &[("A", "Choose"), ("B", "Back")] };
+        let help = if rows().is_empty() { "" } else if self.about.sel == 0 { report::ROW_HELP }
+            else if { #[cfg(feature = "brick")] { pocket_ui::darkos::host() } #[cfg(not(feature = "brick"))] { false } } { pocket_ui::rescue::BACK_ROW_HELP } else { ES_HELP };
+        // As many lines as the room under the two rows leaves (the last cut with "…"), at most three.
+        let rows_end = y + rows().len() as i32 * row;
+        let step = pocket_ui::type_scale::line(NU_SMALL, 10);
+        let lines = (((pocket_ui::kit::footer_baseline(c.h) - rows_end - 8) / step) + 1).clamp(1, 3) as usize;
+        let foot = pocket_ui::kit::footer(c, &mut self.text, &mut self.hits, hints, help, lines, pal().quiet);
+        // The handheld in the room left above the footer (`ui_art`; the Mini V2 where the device isn't known): twice
         // its pixels where that fits, once where only that does, none on a page with no room left.
         let model = pocket_ui::device::current().model.unwrap_or(pocket_ui::device::Model::MiniV2);
         let art = pocket_ui::ui_art::Art::Device(model);
-        // `ly` is the baseline a next line would have: the last one's letters end a step above it.
-        let below = ly - step + pocket_ui::type_scale::px(NU_SMALL) as i32 / 3 + 8;
-        let free = hints_top - 8 - below;
+        let below = y + rows().len() as i32 * row + 12;
+        let free = foot - 8 - below;
         if let Some(k) = [2, 1].into_iter().find(|k| pocket_ui::ui_art::size(art, *k).1 <= free) {
             let (aw, ah) = pocket_ui::ui_art::size(art, k);
             pocket_ui::ui_art::paint(c, art, (c.w - aw) / 2, below + (free - ah) / 2, k);
         }
-        self.nu_hints(c, &[("A", "Choose"), ("B", "Back")]);
         if let Some(sheet) = self.about.sheet.clone() {
             self.paint_report_sheet(c, &sheet);
         }

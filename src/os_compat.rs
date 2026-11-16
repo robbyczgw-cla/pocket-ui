@@ -502,11 +502,11 @@ fn dotted(v: &[u32]) -> String {
     v.iter().map(u32::to_string).collect::<Vec<_>>().join(".")
 }
 
-/// Files of ROCKNIX's Steam package, which its H700 and RK3566 images don't have and pocket-ui does without there
+/// Files of ROCKNIX's Steam package, which its H700, RK3566 and RK3326 images don't have and pocket-ui does without there
 /// (docs/DEVICES.md).
 const H700_WITHOUT: &[&str] = &["usr/bin/steamos-polkit-helpers/steamos-set-timezone", "usr/sbin/quantum"];
 
-/// Whether the system is ROCKNIX's H700 or RK3566 image (`HW_DEVICE` in its os-release): no Steam package.
+/// Whether the system is ROCKNIX's H700, RK3566 or RK3326 image (`HW_DEVICE` in its os-release): no Steam package.
 fn is_h700_system(sys: &dyn System) -> bool {
     let text = resolve(sys, "etc/os-release").and_then(|p| sys.read(&p)).map(|b| String::from_utf8_lossy(&b).into_owned());
     let platform = text.and_then(|t| t.lines().find_map(|l| l.trim().strip_prefix("HW_DEVICE=").map(|v| v.trim_matches('"').to_string())));
@@ -515,7 +515,13 @@ fn is_h700_system(sys: &dyn System) -> bool {
         Some("RK3566") => {
             let model = resolve(sys, "sys/firmware/devicetree/base/model").and_then(|p| sys.read(&p)).unwrap_or_default();
             let compatible = resolve(sys, "sys/firmware/devicetree/base/compatible").and_then(|p| sys.read(&p)).unwrap_or_default();
-            crate::device::identify(&String::from_utf8_lossy(&model), &compatible).model == Some(crate::device::Model::RgDsPlus)
+            matches!(crate::device::identify(&String::from_utf8_lossy(&model), &compatible).model, Some(crate::device::Model::RgDsPlus | crate::device::Model::Rk3566(_)))
+        },
+        // The R36S on the RK3326 card (ROCKNIX builds its Steam package only for the Snapdragon images).
+        Some("RK3326") => {
+            let model = resolve(sys, "sys/firmware/devicetree/base/model").and_then(|p| sys.read(&p)).unwrap_or_default();
+            let compatible = resolve(sys, "sys/firmware/devicetree/base/compatible").and_then(|p| sys.read(&p)).unwrap_or_default();
+            crate::device::identify(&String::from_utf8_lossy(&model), &compatible).model.is_some_and(|m| m.is_rk3326())
         },
         _ => false,
     }
@@ -1138,6 +1144,26 @@ pub(crate) mod tests {
         r.file("sys/firmware/devicetree/base/model", b"Anbernic RG DS Plus\0");
         let rep = check(&sd, &needs("GLIBC_2.38", &[]));
         assert!(rep.warnings().is_empty() && rep.blocking().is_empty(), "{}", rep.text());
+        // The one-screen RK3566 handhelds of the Generic card (an RG353M carries the RG353P's tree, only `model` differs).
+        r.file("sys/firmware/devicetree/base/model", b"Anbernic RG353M\0");
+        r.file("sys/firmware/devicetree/base/compatible", b"anbernic,rg353p\0rockchip,rk3566\0");
+        let rep = check(&sd, &needs("GLIBC_2.38", &[]));
+        assert!(rep.warnings().is_empty() && rep.blocking().is_empty(), "{}", rep.text());
+        r.file("sys/firmware/devicetree/base/model", b"Powkiddy x35s\0");
+        r.file("sys/firmware/devicetree/base/compatible", b"powkiddy,x35s\0rockchip,rk3566\0");
+        let rep = check(&sd, &needs("GLIBC_2.38", &[]));
+        assert_eq!(rep.warnings().len(), 2, "an RK3566 handheld without a profile still warns");
+        // The R36S on the RK3326 card: ROCKNIX's R36S tree; its R33S tree (what ROCKNIX's U-Boot script would pick) has no profile.
+        r.file("etc/os-release", b"OS_NAME=\"ROCKNIX\"\nHW_DEVICE=\"RK3326\"\nHW_ARCH=\"aarch64\"\n");
+        r.file("sys/firmware/devicetree/base/model", b"Game Console R36S\0");
+        r.file("sys/firmware/devicetree/base/compatible", b"gameconsole,r35s\0gameconsole,r36s\0rockchip,rk3326\0");
+        let rep = check(&sd, &needs("GLIBC_2.38", &[]));
+        assert!(rep.warnings().is_empty() && rep.blocking().is_empty(), "{}", rep.text());
+        r.file("sys/firmware/devicetree/base/model", b"Game Console R33S\0");
+        r.file("sys/firmware/devicetree/base/compatible", b"gameconsole,r33s\0rockchip,rk3326\0");
+        let rep = check(&sd, &needs("GLIBC_2.38", &[]));
+        assert_eq!(rep.warnings().len(), 2, "an RK3326 handheld without a profile still warns");
+        std::fs::remove_file(r.0.join("sys/firmware/devicetree/base/compatible")).unwrap();
         r.file("etc/os-release", b"OS_NAME=\"ROCKNIX\"\nHW_DEVICE=\"H700\"\nHW_ARCH=\"aarch64\"\n");
         let rep = check(&sd, &needs("GLIBC_2.38", &[]));
         assert!(rep.warnings().is_empty() && rep.blocking().is_empty(), "{}", rep.text());
@@ -1290,7 +1316,7 @@ pub(crate) mod tests {
         // setsettings.sh's keys are the Runs on page's; input_sense's the function keys pocket-ui sets.
         let keys = |path: &str| -> Vec<String> { of(&rows, "keys").filter(|r| r[3] == path).flat_map(|r| r[4].split_whitespace().map(str::to_string)).collect() };
         let set = keys("usr/bin/setsettings.sh");
-        for s in crate::emu_choice::RA_SETTINGS {
+        for s in crate::emu_choice::RA_SETTINGS.iter().filter(|s| !s.own) {
             assert!(set.iter().any(|k| k == s.key), "Runs on offers {}: add it to setsettings.sh's keys row", s.key);
         }
         let sense = keys("usr/bin/input_sense");

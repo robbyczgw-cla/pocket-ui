@@ -23,7 +23,7 @@ bottom):
 5. The **smart shelves you pinned to Home**, each as a row of its own. Each part of Curator can be
    switched off in [Settings → Games → Curator](settings.md#curator); without the Lens there is no Curator row on
    top. In the Cabinet look they are shelves (see below).
-6. **PC streaming**, only when Moonlight is installed (it is on ROCKNIX) and you ticked it in Settings → Look →
+6. **PC streaming**, only when Moonlight is installed (it is on ROCKNIX) and you ticked it in Settings → Games →
    Systems on the shelf. It starts Moonlight, an app that has no pause menu and does not count as a game. See
    [PC streaming](pc-streaming.md).
 7. **Your systems**, in alphabetical order. Only systems with at least one game are shown, and not the ones you
@@ -95,14 +95,14 @@ list: **A** plays the game, **Y** stars it, **X** opens its card, **B** goes bac
 game from the search, the search closes and the game's system list is where you come back to.
 
 With nothing typed, the list shows your last five searches; A on one searches it again. A search counts once you
-go to its list or start a game from it. Systems you hid (Settings → Look → Systems on the shelf) are not
+go to its list or start a game from it. Systems you hid (Settings → Games → Systems on the shelf) are not
 searched. On the touch screen, tap the keys to type, tap a game to select it and tap it again to play it.
 
 ## Looks
 
 The shelf has four looks. Choose one in Settings → Look → **Layout**, with a live preview. The look you
 choose is remembered. Each look comes dark or light: Appearance in Settings ([Appearance](settings.md#appearance)),
-and how much the menus move is [Motion](settings-sound.md#motion).
+and how much the menus move is [Motion](settings.md#motion).
 
 | Look | What it shows |
 |---|---|
@@ -116,7 +116,7 @@ Minimal and Cards were looks until 0.4. If you had one of them, pocket-ui starts
 
 Cover art, when you have it, appears on the front of the case shown above the shelf (Shelf), in the detail panel (Split)
 and on the front of the case you pull out (Cabinet), whose spine also takes the
-cover's colour. See [Extras](extras.md#box-art). In Split the picture also changes
+cover's colour. See [Box art & downloads](extras.md#box-art). In Split the picture also changes
 by itself: after you stay on a game for a moment it fades from the box art to the game running and to the title
 screen, when you have them ([Pictures](extras.md#pictures)); with Motion Off it stays on the box art. In Split, Curator,
 Favourites and the pinned rows show their covers in the panel, as on the Shelf look (below).
@@ -132,9 +132,10 @@ case, the GameCube's, the white Wii case, the slim PSP case, the DS and 3DS case
 system has pocket-ui's own case with its name and colour at the top. The cartridge or disc is inside, and a disc is
 printed like the real one: the cover's art on its label and the game's name round its rim, in its system's look (the
 PlayStation's black disc, the GameCube's small disc, the Dreamcast's silver ring, the white Wii disc, the UMD in its
-shell); a game without a cover gets a plain print with its name. Each spine takes
+shell). Each spine takes
 its colours from the game's cover and has its name on it (a long name gets smaller or a second line before anything is
-left off); a game without a cover has its system's colour. Every case has its real size: a PS2 case stands tall, a Game
+left off). A game with no box art at all looks home-made: masking tape with its name in marker on a plain box and a
+blank cartridge, or a hand-written CD-R and insert; once it gets box art, the art takes its place. Every case has its real size: a PS2 case stands tall, a Game
 Boy Advance box low, all on the shelf's board. Where a shelf has room, a bookend holds its games up
 and a plant, a lamp or a cactus stands beside them, never in front of one. The shelves grow with your play: the
 plant starts as a sprout and grows with the hours you play, a trophy appears after your first completed game, a
@@ -145,13 +146,15 @@ and stands on top of the cabinet, right over its shelf, turned to its cover; the
 the picked shelf you see the next ones, as many as fit whole. The top shelf holds the recent games, the next one your Favourites, then
 come Curator's shelves, then one shelf per system. A starts the game: its cartridge or disc goes into the console.
 
+![A game with no box art: masking tape with its name in marker on a plain box, and a blank cartridge beside it](pictures/tape-label.webp)
+
 ### Starting a game
 
 In Shelf and Cabinet, A starts the emulator while the case opens and its cartridge or disc goes into the console,
 with a quiet click and glow. **Quick** shows the game as soon as it is ready. Any button skips the animation.
-**Animations: Cozy** (Settings → Sound & feel → Animations; the default in these looks) takes about a second.
+**Animations: Cozy** (Settings → Look → Game start animation; the default in these looks) takes about a second.
 pocket-core waits for it: the shelf fades to black, then the game opens from a bright TV line over a third of a
-second, including handhelds and Continue. A “Remind me where I was” card keeps its saved picture while you read.
+second, including handhelds and Continue. With Remind me where I was switched on, its card keeps its saved picture while you read.
 With menu sounds on, you hear the case, insertion and TV's soft thunk. Other looks skip this animation.
 
 With **Cozy** and **Playful cases** the big consoles really take their game: the PlayStation's, GameCube's, Dreamcast's
@@ -159,12 +162,12 @@ and Saturn's lid opens, the disc's case opens too, the disc is lifted out and lo
 takes the disc in; a SNES, N64 or Mega Drive cartridge is pushed down behind the slot's lip and clicks; a Game Boy or GBA
 cartridge turns its label away and goes in behind the top edge (also on Game Boy Color); a DS card turns its label away before going behind the upper screen, and the Wii pulls its disc in through the slot. It takes about 1.6 seconds, and any button skips it at once.
 
-For GBA you can choose **Game Boy Advance SP** in Settings → Look → [Cozy extras](settings-sound.md#cozy-extras)
+For GBA you can choose **Game Boy Advance SP** in Settings → Look → [Cozy extras](settings.md#cozy-extras)
 → **GBA console**. Its clamshell opens and stays open while the cartridge enters the bottom/front slot,
 contacts first and label facing the underside. Quick keeps that slot and orientation on its shorter timeline.
 The console pictures throughout the menus follow the choice; it starts with the original Game Boy Advance.
 
-On the other systems each game still goes in its own way (Settings → Sound & feel, on with Cozy): a
+On the other systems each game still goes in its own way (Settings → Look → Cozy extras → Playful cases, on with Cozy): a
 cartridge is pushed into its slot and seats with a little squash as it clicks; a game card clicks all the way in; a disc
 console's tray slides out, the disc drops in and the tray shuts with the sound's clunk; the GameCube, PlayStation,
 Dreamcast and Mega-CD open their lid instead; the Wii takes the disc in through the slot. The PSP's UMD goes in a door at the PSP's back, so for now its start only lights the PSP up. A case you
@@ -177,7 +180,7 @@ on it; a long name gets a little smaller or a second line before anything is lef
 colours, a system with its short name ("SNES"). Left and Right (or Up and Down) move along the shelf, L1 and R1 five at a
 time. The one you pick rises out of the row and is shown large above the shelf, turned to its front with the cover
 (at once with Motion Off); beside it are its name and what is known about it: when you last played it, a system's facts,
-the covers of Curator's pick or your Favourites. A game without a cover shows a front with its name printed on it.
+the covers of Curator's pick or your Favourites. A game without a cover shows its home-made front.
 Where a shelf has room left, a bookend holds the games up and a plant or a lamp stands beside them, with what your
 play has earned (the growing plant, the trophy, the framed "100 %", the system's figurine), and the light follows the
 time of day, as in the Cabinet.
@@ -193,12 +196,15 @@ system's shelf.
 ### The TV on the cabinet
 
 In the Cabinet look a small old TV stands on the cabinet's top board, at the right, and shows the selected game: its
-screenshot when pocket-ui has downloaded one (Settings → Games → Extras → Box art), else the latest picture of your
+screenshot when pocket-ui has downloaded one (Settings → Games → Box art & downloads → Box art), else the latest picture of your
 own play (the one Continue starts from), else its cover; a game with none of these shows its console. The picture
 changes with a short crossfade as you move (at once with Motion off). On a small screen the TV is smaller; where it
 would be too small to see it is left out.
-Newly downloaded pictures and the picture kept after playing appear on the TV when you return, without restarting pocket-ui.
-Opening a card or Settings while its picture loads lets the work finish in the background.
+With Settings → Look → [Cozy extras](settings.md#cozy-extras) → **TV plays the game** on (it starts **off**), a game you
+have never played plays on the TV after a two-second rest (its own demo, silent, up to 25 seconds); press A and its
+picture grows to the whole screen and you play on from there (a game still in its plastic wrap, [Sealed new games](settings.md#cozy-extras), starts the usual way instead: the wrap tears off first). It runs the game in a second, hidden player, which
+costs processor time and battery while it plays, so it is your choice; with the switch off nothing extra runs and
+the TV keeps its still picture. New pictures appear when you return.
 
 ### Easy
 
@@ -219,7 +225,7 @@ What the shelf already shows of it while the system is selected depends on the l
 
 The page itself shows, from top to bottom:
 
-- the console's name, maker, year and generation, a short summary, and its picture
+- the console's name, maker, year and generation, a short summary, and its picture ([other colours](settings.md#console-colours))
 - **Timeline**: the release date in each region, when it was discontinued, and how many were sold
 - **Hardware**: processor, graphics, memory, media, and the screen for handhelds
 - **Launch price** in the regions it is known for
@@ -287,7 +293,7 @@ text) when the data was built; anything that couldn't be checked was left out. T
 
 Select a game and press A ("Play"). The rest of the shelf fades out and the game starts. A game you
 played before fades in from the picture of where you left it, the same picture Recent games shows,
-so you see your place while the emulator starts; then the screen frame around it fades in. After a break of more than
+so you see your place while the emulator starts; then the screen frame around it fades in. With Settings → Playing → Remind me where I was switched on (it is off by default), after a break of more than
 two weeks a quiet card on that picture says when you played last and shows your note, for a few seconds or until a button ([Where was I?](continue.md#where-was-i)). When you
 quit, you come back to where you were; on Home the selection goes back to the top, so your last game
 is ready to continue. Settings → Playing → **On start** can open that game right when the Pocket starts
@@ -332,7 +338,7 @@ The [Easy](easy.md) look has no switcher: SELECT does nothing there.
 ## Screenshots
 
 **Hold HOME and press A** while you play. The picture is saved as a PNG and "Screenshot saved" shows for a moment;
-with Settings → Sound & feel → [Sounds](#menu-sounds) on there is also a quiet camera click. The game does not pause
+with Settings → Screen & sound → [Menu sounds](#menu-sounds) on there is also a quiet camera click. The game does not pause
 and the pause menu does not open.
 
 - **Where:** `roms/screenshots/<system>/<game> <date> <time>.png` on the SD card, for example
@@ -344,7 +350,7 @@ and the pause menu does not open.
   picture is 160 x 144 pixels), without the screen frame, the overlays and the scaling. It is saved while the game
   goes on. Options → Shortcuts → **Screenshot** switches it off.
 - **PlayStation 2, GameCube, Wii, 3DS and PortMaster ports:** pocket-ui takes a picture of the whole screen, as the
-  game shows it. Nothing can be drawn over these games, so there is no message: you hear the camera click (Sounds on),
+  game shows it. Nothing can be drawn over these games, so there is no message: you hear the camera click (Menu sounds on),
   or the low double sound if it did not work. This shortcut cannot be switched off there.
 - **RetroArch** games have their own screenshot key; this one does not apply to them.
 - **If it does not work,** the message says why: "Screenshot not saved: the SD card is full", "...: the folder can't be
@@ -376,7 +382,7 @@ comes back to the card.
   such as a Game Boy's, is shown at a whole multiple of its size (so no pixel is wider than the next), a larger one
   fitted to the screen.
 - **Shelf picture (Y):** the screenshot becomes the game's "In the game" picture, the one the shelf's Split look and
-  the game card show ([Extras](extras.md#pictures)). It replaces the one from the collection. Y only shows while
+  the game card show ([Box art & downloads](extras.md#pictures)). It replaces the one from the collection. Y only shows while
   Game pictures shows screenshots.
 - **Nothing there yet:** the page says "No screenshots yet" and how to take one. While the SD card is still being read
   it says "Looking for screenshots…".
@@ -447,7 +453,7 @@ sounds while the console is asleep or the volume is muted or at 0.
 Connecting or disconnecting Bluetooth headphones in the menus adjusts the sound output's buffering within two seconds.
 Muted menu audio also stops running in the background.
 
-Settings → Sound & feel → **Sounds** controls them:
+Settings → Screen & sound → **Menu sounds** controls them:
 
 - **A** switches the sounds on or off. They start on, and quiet.
 - **Left** and **Right** set how loud they are, in ten steps (30% by default). This is separate from

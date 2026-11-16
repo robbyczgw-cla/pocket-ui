@@ -138,6 +138,20 @@ returns, backslashes, NUL bytes, links and non-regular files are refused. The up
 The previous version retains its manifest for a later rollback; the next update discards that older previous version before
 starting its own transaction.
 
+**Unchanged parts of the app itself** (`update/brick_delta.rs`): the same machinery moves what did not change in the app tarball, so
+an update writes about what changed (0.3.2 to 0.4.0 on a `sync`-mounted FAT32 image: 68.2 MB written unpacking everything, 33.2 MB with the parts moved;
+zoneinfo, licences, sources, message pictures and libraries stayed the same, the two programs changed). Before unpacking, the updater compares the
+tarball with the running `app/` (size, then SHA-256 of every file that exists there; nothing is written). A **folder** is moved whole
+when every file in it is byte for byte the tarball's, nothing else is in it on the card (no extra file or folder, no link) and the start
+check opens nothing in it; otherwise its **files** of 64 KiB and more that are unchanged move one by one, smaller ones are unpacked (a
+rename costs about as much as writing them). The files the start check opens (`BRICK_REQUIRED`), the start script, `RELEASE` and
+anything with a hidden name are always unpacked. These go into the manifest as `move:<path>` lines (a file or a folder, never
+a trailing slash), after the plain asset lines; `boot.sh` accepts a `move:` line for a plain relative path without hidden parts, not
+`start.sh`, `RELEASE`, `VERSION`, `asset-packages.json` or `storage/`, checks it as strictly as an asset (no links, in at least one
+of the two trees) and restores a missing folder or file with one `mv`, so every cut and every rollback behaves as for a moved core.
+If the comparison cannot be made (no readable `app/`, too many entries) nothing is moved and the update unpacks everything as before.
+A card whose updater predates this unpacks everything: the saving starts with the update after the one that brings the new updater.
+
 On a power cut before the first program-folder rename, `boot.sh` checks the **whole** manifest and both trees before changing
 anything, revokes `app.new/.ready`, and restores missing old files from `app.new`. A file already present in the old version is
 kept. Every restored rename is synced; the manifest is removed only after restoration is durable. If `app` is absent, a ready

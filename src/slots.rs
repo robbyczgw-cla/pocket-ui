@@ -40,7 +40,21 @@ fn moved_from(value: Option<&str>) -> bool {
 
 /// `<states>/<system>/<stem>`: the common start of every file of one game.
 pub fn base(system: &str, stem: &str) -> PathBuf {
-    states_dir().join(system).join(stem)
+    base_with(RESOLVER.get().map(|f| &**f as &dyn Fn(&str, &str) -> Option<PathBuf>), system, stem)
+}
+
+type Resolver = Box<dyn Fn(&str, &str) -> Option<PathBuf> + Send + Sync>;
+static RESOLVER: std::sync::OnceLock<Resolver> = std::sync::OnceLock::new();
+
+/// Before the first game is looked up: something else decides where a game's files are (Android's handheld view keeps them
+/// in the player's `states/<key>/`, `android_handheld::StateKeys`). It answers None for a game it doesn't know.
+pub fn set_resolver(resolver: impl Fn(&str, &str) -> Option<PathBuf> + Send + Sync + 'static) {
+    let _ = RESOLVER.set(Box::new(resolver));
+}
+
+/// `base` with a resolver in front; None from it is Linux's folder.
+pub fn base_with(resolver: Option<&dyn Fn(&str, &str) -> Option<PathBuf>>, system: &str, stem: &str) -> PathBuf {
+    resolver.and_then(|f| f(system, stem)).unwrap_or_else(|| states_dir().join(system).join(stem))
 }
 
 fn with_suffix(base: &Path, suffix: &str) -> PathBuf {
@@ -286,6 +300,13 @@ pub fn load_preview(base: &Path, slot: usize) -> Option<(Option<Image>, SystemTi
     Some((image::load_png(&preview_path(&state_path(base, slot))), when))
 }
 
+/// Why Load can't take the pause menu's place `place` (the slots, then kept moments), as Linux's grey Load row says it
+/// (`states::note`): an empty slot has nothing to load. None when there is a moment there. Android's player showed the
+/// raw "No such file or directory (os error 2)" for an empty slot (13.11.2026).
+pub fn load_refusal(filled: &[bool], place: usize) -> Option<String> {
+    filled.get(place).is_some_and(|f| !f).then(|| format!("No save in slot {} yet", place + 1))
+}
+
 /// `slot` moved by `delta`, wrapping around the eight slots.
 pub fn step(slot: usize, delta: i32) -> usize {
     (slot as i32 + delta).rem_euclid(SLOTS as i32) as usize
@@ -309,6 +330,18 @@ pub fn set_current(data_dir: &Path, system: &str, stem: &str, slot: usize) {
 mod tests {
     use super::*;
     use crate::testutil::TestDir;
+
+    /// Load on an empty slot of Android's pause menu showed "No such file or directory (os error 2)" (13.11.2026): an
+    /// empty slot can't be loaded and says so, as Linux's grey Load row does; a filled slot and a kept moment can.
+    #[test]
+    fn an_empty_slot_can_t_be_loaded_and_says_so() {
+        let mut filled = [false; SLOTS];
+        filled[0] = true;
+        assert_eq!(load_refusal(&filled, 1).as_deref(), Some("No save in slot 2 yet"));
+        assert_eq!(load_refusal(&filled, 0), None, "a filled slot loads");
+        assert_eq!(load_refusal(&filled, SLOTS), None, "a kept moment (after the slots) loads");
+        assert_eq!(load_refusal(&filled, 1), Some(crate::states::note(crate::states::Target::Slot(2), None, false)), "Linux's words");
+    }
 
     #[test]
     fn slot_one_is_the_file_that_always_existed() {

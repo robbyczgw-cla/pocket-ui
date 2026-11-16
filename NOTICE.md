@@ -187,10 +187,37 @@ The photographers do not endorse this application.
 | `gbc-back.png` | Christopher Wells | [Harvest Moon 3 GBC cartridge (JP), 02_cartridge_back.jpg](https://archive.org/details/harvest-moon-3-gbc-cartridge-jp) | [CC0 1.0](https://creativecommons.org/publicdomain/zero/1.0/) | modified via PixelLab |
 | `ds-back.png` | Christopher Wells | [Lux-Pain cartridge (NA), 02_cartridge_back.jpg](https://archive.org/details/lux-pain-cartridge-na) | [CC0 1.0](https://creativecommons.org/publicdomain/zero/1.0/) | modified via PixelLab |
 | `gg-back.png` | AOMAF2024 (Wikimedia Commons user) | [Game gear cartridge.jpg](https://commons.wikimedia.org/wiki/File:Game_gear_cartridge.jpg) (the front; no free photo of the back was found) | [CC0 1.0](https://creativecommons.org/publicdomain/zero/1.0/) | the front picture `gg.png` (modified via PixelLab) with its label and SEGA oval filled with its own shell plastic, mirrored as seen from behind |
+| `ngp-back.png` | Joho345 (photo), Hic et nunc (cut-out) | [DonkeyKongAtari2600-(white background).JPG](https://commons.wikimedia.org/wiki/File:DonkeyKongAtari2600-(white_background).JPG) (the plain cartridge picture `cart.png`; no free photo of a Neo Geo Pocket cartridge was found) | [CC0 1.0](https://creativecommons.org/publicdomain/zero/1.0/) | `cart.png` (modified via PixelLab) with its label filled with its own shell plastic, mirrored as seen from behind, coloured to the system plastic |
 
 Full preparation and attribution: [assets/media/game/REAR-SOURCES.md](assets/media/game/REAR-SOURCES.md).
 
+## Masking tape
+
+The masking tape on the home-made label of a game without box art (`assets/media/tape/tape.png`, `src/tape_label.rs`)
+is cut from a CC0 photo: "A roll of beige masking tape partially unwound" by Manjil Aryal,
+[WordPress Photo Directory](https://wordpress.org/photos/photo/38768c59e6/),
+[CC0 1.0](https://creativecommons.org/publicdomain/zero/1.0/); straightened, cut, recoloured cream and mirrored to
+repeat. The derived picture is CC0 1.0 as well. How it was made: [assets/media/tape/SOURCES.md](assets/media/tape/SOURCES.md).
+
 ## System pictures
+
+### Console colours (Game Boy Advance, Game Boy Color, Nintendo 64, GameCube)
+
+Each file is a **PixelLab** image-to-pixelart conversion of a photograph of the real console in that colour, with the
+brand lettering painted out; no console was drawn from code. The pictures are photos by Evan-Amos, public domain; the Nintendo 64 and GameCube colours also name the photo their plastic colour was measured from. Licence of
+the derived files: as the general system-picture licence below.
+
+| Derived asset | Photo | Original licence | Changes |
+|---|---|---|---|
+| `assets/systems/colours/gba-milky.png`, `assets/media/rig/gba-milky/base.png` | [Nintendo-Game-Boy-Advance-Milky-Blue-FL.jpg](https://commons.wikimedia.org/wiki/File:Nintendo-Game-Boy-Advance-Milky-Blue-FL.jpg) | Public domain | modified via PixelLab; stickers, emboss and button lettering painted out |
+| `assets/systems/colours/gba-pink.png`, `assets/media/rig/gba-pink/base.png` | [Nintendo-Game-Boy-Advance-Pink-FL.jpg](https://commons.wikimedia.org/wiki/File:Nintendo-Game-Boy-Advance-Pink-FL.jpg) | Public domain | as above |
+| `assets/systems/colours/gbc-dandelion.png`, `assets/media/rig/gbc-dandelion/base.png` | [Game-Boy-Color-Yellow.jpg](https://commons.wikimedia.org/wiki/File:Game-Boy-Color-Yellow.jpg) | Public domain | modified via PixelLab; lettering and emboss painted out, turned onto the original rig's pose |
+| `assets/systems/colours/n64-iceblue.png`, `assets/media/rig/n64-iceblue/` | [N64-Console-Orange.jpg](https://commons.wikimedia.org/wiki/File:N64-Console-Orange.jpg) (Evan-Amos, public domain); plastic colour measured from [N64 Clear Blue with Super Mario 64](https://commons.wikimedia.org/wiki/File:N64_Clear_Blue_with_Super_Mario_64_20100603.jpg) by Noa Kosanovic | Public domain; colour source CC BY 3.0 | modified via PixelLab; recoloured, lettering painted out |
+| `assets/systems/colours/n64-jungle.png`, `assets/media/rig/n64-jungle/` | as above; plastic colour measured from [Jungle green Nintendo 64](https://commons.wikimedia.org/wiki/File:Jungle_green_Nintendo_64_(10448842084).jpg) by Valentin Kozin | Public domain; colour source CC BY 2.0 | as above |
+| `assets/systems/colours/gamecube-jetblack.png`, `assets/media/rig/gamecube-jetblack/` | [GameCube-Set.jpg](https://commons.wikimedia.org/wiki/File:GameCube-Set.jpg) and the GameCube rig photos (Evan-Amos, public domain); plastic colour measured from [12 Gamecubes](https://commons.wikimedia.org/wiki/File:12_Gamecubes.JPG) by Ursinx | Public domain; colour source CC BY-SA 4.0 | modified via PixelLab; recoloured, lettering painted out |
+
+The Nintendo 64 and GameCube colour files take only the **colour** of the plastic from the CC BY / CC BY-SA photos (named
+above, credited here); their pictures are the public-domain photos, changed.
 
 ### Optional Game Boy Advance SP pictures
 
@@ -261,6 +288,7 @@ described file by file in [assets/ui-art/SOURCES.md](assets/ui-art/SOURCES.md). 
 | Barlow Medium, Barlow Condensed SemiBold (version 1.408) | `assets/fonts/`; compiled into the binaries (`src/text.rs`, `src/font_style.rs`) | SIL Open Font License 1.1 | Copyright 2017 The Barlow Project Authors ([source](https://github.com/jpt/barlow)), designer Jeremy Tribby. Licence text: `assets/fonts/OFL.txt` |
 | Pixelify Sans SemiBold and Regular | `assets/fonts/`; compiled into the binaries (`src/font_style.rs`), used by Settings → Theme → Font (Pixel) | SIL Open Font License 1.1 | Copyright 2021 The Pixelify Sans Project Authors ([source](https://github.com/eifetx/Pixelify-Sans)). Static Latin instances of the official variable fonts; the Pixelify Sans files are modified: the letters C and c (the original's read as O and o), Z and 5 are redrawn (`scripts/pixelify-glyphs.py`), advance widths and spacing unchanged, no Reserved Font Name is declared. Licence texts: `assets/fonts/OFL.txt` |
 | Departure Mono Regular (version 1.500) | `assets/fonts/DepartureMono-Regular.otf`; compiled into the binaries (`src/font_style.rs`), the Retro style's letters (Settings → Look → Style → Retro) | SIL Open Font License 1.1 | Copyright 2022–2024 Helena Zhang ([source](https://github.com/rektdeckard/departure-mono), release `DepartureMono-1.500.zip`). The release's OTF file unchanged; no Reserved Font Name is declared. Licence text: `assets/fonts/OFL.txt` |
+| Caveat Brush Regular | `assets/fonts/CaveatBrush-Regular.ttf`; compiled into the binaries (`src/tape_label.rs`), the handwriting on the label of a game without box art | SIL Open Font License 1.1 | Copyright 2015 Google Inc. ([source](https://github.com/googlefonts/caveat), designer Impallari Type; the file of google/fonts `ofl/caveatbrush`). Cut down to Latin with fonttools (U+0020-007E, U+00A0-017F, punctuation), hinting dropped, no glyph changed; no Reserved Font Name is declared. Licence text: `assets/fonts/OFL.txt` |
 | Titillium Web Regular, Bold | `store/test-catalog/src/fonts/`; packed into the test store's `type-titillium` package only, not compiled in | SIL Open Font License 1.1 | Copyright (c) 2009-2011 Accademia di Belle Arti di Urbino and students of MA course of Visual design. Licence text: `store/test-catalog/src/fonts/OFL.txt` (also inside the package as `Titillium-OFL.txt`) |
 | Noto Sans CJK SC Regular | Not shipped: pocket-ui uses the system's copy if present (ROCKNIX installs it at `/usr/share/fonts/truetype/noto-cjk/`), for Japanese, Chinese and Korean letters (`src/text_fallback.rs`) | SIL Open Font License 1.1 (ROCKNIX's package) | Nothing of it is in this repository or our binaries |
 | 8x8 bitmap glyphs (crate `font8x8` 0.3.1) | linked as a Rust crate | MIT | The crate says the glyph data comes from public-domain IBM VGA fonts |
@@ -273,6 +301,12 @@ that means shipping `assets/fonts/OFL.txt` with it.
 - **UI sounds:** short sample files (`assets/ui-sounds/`, the menu sounds and the sounds of the cases, cartridges,
   discs, cards and the CRT) generated with ElevenLabs sound effects under a paid plan, which allows commercial use and
   redistribution; edited by us. Details in `docs/LICENCES.md`.
+- **The film tearing off a sealed case** (`assets/ui-sounds/wrap-tear.wav`): cut from "sound saran plastic wrap unroll
+  tear wrap put down - homemade.wav" by buzzatsea ([Freesound 431217](https://freesound.org/people/buzzatsea/sounds/431217/)),
+  CC0 1.0 (public domain dedication), a real recording, not generated; cut, filtered and levelled by us.
+- **The film over a sealed case** (`assets/media/shrink-wrap/glare.png`): the glare of shrink film measured in the photo
+  "Cellofan.jpg" by Holger.Ellgaard ([Wikimedia Commons](https://commons.wikimedia.org/wiki/File:Cellofan.jpg)), marked
+  public domain; how in `assets/media/shrink-wrap/SOURCES.md`.
 - **Shaders** (`src/shaders/`): written for the project; they carry no third-party notice.
 - **Test ROMs:** `scripts/testroms.py` writes small original test ROMs (colour bars and a tone) for systems with
   no free game. They are generated, not stored, and are ours.

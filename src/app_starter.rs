@@ -1,4 +1,4 @@
-//! The App's side of the starter pack (`pocket_ui::starter`, docs/STARTER-PACK.md): Settings → Games → Extras → Starter pack,
+//! The App's side of the starter pack (`pocket_ui::starter`, docs/STARTER-PACK.md): Settings → Games → Box art & downloads → Starter pack,
 //! and the calm hint on Home while the card has no games at all ("Get the starter pack", A).
 //!
 //! The page lists the pack's games, each with its size or "On your card"; A downloads one, or "Get all". A download
@@ -21,6 +21,9 @@ use pocket_ui::touch::Area;
 enum Marker { None, Text(String) }
 fn row_h() -> i32 { pocket_ui::type_scale::row(66, 36) }
 use crate::{App, Screen, SettingsPage, UserEvent, CANCEL, CONFIRM, EMPTY_ART_TOP, NU_BTN_PAD, NU_PAD, NU_PILL, NU_SMALL};
+
+/// What Home says (here and as the note) when the whole system list can't be read.
+pub(crate) const SYSTEM_LIST_LINE: &str = "Your system list can't be read, so pocket-ui uses its built-in list. Settings › Games › Game check says why.";
 
 /// The name of the Settings row.
 pub(crate) const SETTINGS_NAME: &str = "Starter pack";
@@ -182,10 +185,12 @@ impl App {
     /// Whether Home's one button is "Connect to Wi-Fi": the games come over the internet and this handheld has a Wi-Fi
     /// chip and no network. Without a chip the pack's page says what is missing.
     pub(crate) fn starter_home_offline(&self) -> bool {
-        self.starter.demo_offline.unwrap_or_else(|| pocket_ui::device::current().has_wifi() && pocket_ui::wifi::ip().is_none())
+        let chip = pocket_ui::device::current().has_wifi();
+        // A snapshot's made-up "offline" too: a handheld without a chip has no Wi-Fi to connect to.
+        self.starter.demo_offline.map_or_else(|| chip && pocket_ui::wifi::ip().is_none(), |d| d && chip)
     }
 
-    /// Settings → Games → Extras → Starter pack (`from_home`: opened by A on Home's hint).
+    /// Settings → Games → Box art & downloads → Starter pack (`from_home`: opened by A on Home's hint).
     pub(crate) fn open_starter(&mut self, from_home: bool) -> Option<SettingsPage> {
         self.starter.from_home = from_home;
         self.starter.from_extras = false;
@@ -349,9 +354,9 @@ impl App {
                 self.starter.cancel.cancel();
                 if self.starter.from_extras {
                     self.setup = Some(self.new_extras_setup().only(pocket_ui::setup::Only::Extras).at_starter());
-                    return Some(SettingsPage::List(crate::settings_row("Extras")));
+                    return Some(SettingsPage::List(crate::settings_row(crate::EXTRAS_ROW)));
                 }
-                return if self.starter.from_home { None } else { Some(SettingsPage::List(crate::settings_row("Extras"))) };
+                return if self.starter.from_home { None } else { Some(SettingsPage::List(crate::settings_row(crate::EXTRAS_ROW))) };
             }
             b if b == CONFIRM && self.starter.busy.is_none() && self.starter.scanned => match rows.get(self.starter.sel).copied() {
                 Some(Row::All) => {
@@ -417,13 +422,65 @@ impl App {
     }
 
     /// Home with no games: what the card needs, and the one thing to press.
+    /// How far `paint_starter_home` lifts the page so that its last line stands over the hint bar: the same lines it
+    /// paints, counted without painting (at most 70 px; the picture and the heading go up with the rest).
+    fn starter_home_lift(&mut self, c: &Canvas) -> i32 {
+        if self.starter.busy_text().is_some() {
+            return 0;
+        }
+        let max_w = c.w - 2 * MARGIN;
+        let line28 = pocket_ui::type_scale::line(28, 10);
+        let mut y = 350 + 38 * self.text.wrap_prose(Face::Body, 28, "Get a few free games to start playing right away.", max_w).len() as i32;
+        let own = if pocket_ui::card_health::image_card() {
+            pocket_ui::card_health::IMAGE_CARD_NOTE
+        } else if pocket_ui::card_health::games_drive() {
+            "Or copy your own: put the card in your computer and copy them to the GAMES drive."
+        } else if pocket_ui::device::no_wifi_chip() {
+            // No phone or file sharing without Wi-Fi: Add games shows the second card (or the computer) instead.
+            "Or copy your own: Settings › Games › Add games shows how."
+        } else {
+            "Or copy your own: Settings › Games › Add games shows the ways (phone, file sharing)."
+        };
+        y += line28 * self.text.wrap_prose(Face::Body, 28, own, max_w).len() as i32;
+        if self.library_ui.unread.is_some_and(|n| n > 0) {
+            y += line28 * self.text.wrap(Face::Body, 28, "Some game files in your ROM folders can't be read. Settings › Games › Game check says why.", max_w).len() as i32;
+        }
+        if self.system_list_fallback {
+            y += line28 * self.text.wrap(Face::Body, 28, SYSTEM_LIST_LINE, max_w).len() as i32;
+        }
+        y += 24;
+        let (label, own_label) = (if self.starter_home_offline() { "Connect to Wi-Fi" } else { "Get the starter pack" }, "Add games");
+        let (w, own_w) = (self.text.width(Face::Body, 34, label) + 2 * NU_BTN_PAD, self.text.width(Face::Body, 34, own_label) + 2 * NU_BTN_PAD);
+        let h = if MARGIN + w + 20 + own_w <= c.w - MARGIN { 72 } else { 72 * 2 + 16 };
+        let note = if pocket_ui::wifi::ip().is_none() && !pocket_ui::device::current().has_wifi() {
+            "Needs a network, and this handheld has no Wi-Fi.".to_string()
+        } else if self.starter_home_offline() {
+            "Free games come over Wi-Fi. The starter pack waits here.".to_string()
+        } else {
+            format!("{} small games, free to share, from their authors.", starter::games().len())
+        };
+        let note_lines = self.text.wrap_prose(Face::Body, 24, &note, max_w).len() as i32;
+        let extra = (note_lines - 1).max(0) * pocket_ui::type_scale::line(24, 10);
+        let last = match &self.starter.message {
+            Some((m, true)) => {
+                let m = m.clone();
+                let n = self.text.wrap_prose(Face::Body, 26, &m, max_w).len() as i32;
+                y + h + 90 + extra + (n - 1).max(0) * pocket_ui::type_scale::line(26, 10)
+            }
+            _ => y + h + 44 + (note_lines - 1).max(0) * pocket_ui::type_scale::line(24, 10),
+        };
+        (last - (pocket_ui::kit::content_bottom(c.h) - 6)).clamp(0, 110)
+    }
+
     pub(crate) fn paint_starter_home(&mut self, c: &mut Canvas, with_hints: bool) {
-        // An empty shelf with a plant above the words (`ui_art`); the words move down as far as it needs.
-        let dy = pocket_ui::ui_art::above_words(c, pocket_ui::ui_art::Art::NoGames, MARGIN, false, EMPTY_ART_TOP, 300, 50);
-        self.text.draw(c, Face::Title, 50, MARGIN, 300 + dy, pal().chalk, "No games yet");
+        // An empty shelf with a plant above the words (`ui_art`); the words move down as far as it needs. Where the lines
+        // under the buttons would run under the hint bar (German, Large text, 1280x800) the whole page stands higher.
+        let up = self.starter_home_lift(c);
+        let dy = pocket_ui::ui_art::above_words(c, pocket_ui::ui_art::Art::NoGames, MARGIN, false, EMPTY_ART_TOP - up, 300 - up, 50);
+        self.text.draw(c, Face::Title, 50, MARGIN, 300 - up + dy, pal().chalk, "No games yet");
         let max_w = c.w - 2 * MARGIN;
         let lines = self.text.wrap_prose(Face::Body, 28, "Get a few free games to start playing right away.", max_w);
-        let mut y = 350 + dy;
+        let mut y = 350 - up + dy;
         for line in &lines {
             self.text.draw(c, Face::Body, 28, MARGIN, y, pal().dust, line);
             y += 38;
@@ -432,12 +489,22 @@ impl App {
             pocket_ui::card_health::IMAGE_CARD_NOTE
         } else if pocket_ui::card_health::games_drive() {
             "Or copy your own: put the card in your computer and copy them to the GAMES drive."
+        } else if pocket_ui::device::no_wifi_chip() {
+            // No phone or file sharing without Wi-Fi: Add games shows the second card (or the computer) instead.
+            "Or copy your own: Settings › Games › Add games shows how."
         } else {
             "Or copy your own: Settings › Games › Add games shows the ways (phone, file sharing)."
         };
         for line in self.text.wrap_prose(Face::Body, 28, own, max_w) {
             self.text.draw(c, Face::Body, 28, MARGIN, y, pal().dust, &line);
             y += pocket_ui::type_scale::line(28, 10);
+        }
+        // The system list itself can't be read (the shelf runs on the built-in one and found nothing): the cause, here too.
+        if self.system_list_fallback {
+            for line in self.text.wrap(Face::Body, 28, SYSTEM_LIST_LINE, max_w) {
+                self.text.draw(c, Face::Body, 28, MARGIN, y, pal().chalk, &line);
+                y += pocket_ui::type_scale::line(28, 10);
+            }
         }
         // Files in the ROM folders that the shelf leaves out: said here, so the copy doesn't look like it never happened.
         if self.library_ui.unread.is_some_and(|n| n > 0) {
@@ -521,6 +588,13 @@ impl App {
         for line in self.text.wrap_prose(Face::Body, 28, "Press A for the starter pack and the ways to add your own games.", max_w) {
             self.text.draw(c, Face::Body, 28, MARGIN, y, pal().dust, &line);
             y += 38;
+        }
+        // An unreadable system list is the likely cause of an empty shelf: said here too.
+        if self.system_list_fallback {
+            for line in self.text.wrap_prose(Face::Body, 28, SYSTEM_LIST_LINE, max_w) {
+                self.text.draw(c, Face::Body, 28, MARGIN, y, pal().chalk, &line);
+                y += 38;
+            }
         }
         if with_hints {
             self.paint_hint_row(c, &[("A", "Show the starter pack"), ("START", "Settings")]);

@@ -1,0 +1,7 @@
+#!/bin/sh
+# dArkOS port: ROCKNIX's `volume N` (percent). The control dArkOS's own volume keys (ogage) move: the softvol "Master" of its
+# ALSA default on the RK3566, the codec's "Playback" on the RK3326. The level stays as the player set it.
+case "${1:-}" in ''|*[!0-9]*) exit 2 ;; esac
+ctl=Master; amixer scontrols 2>/dev/null | grep -q "'Master'" || ctl=Playback
+amixer -q -M sset "$ctl" "$1%" || exit 1
+exit 0

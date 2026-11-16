@@ -876,13 +876,8 @@ done
             self.timed_press('a',('games',),'game_system_open_ms')
             self.select_trace(lambda selected:selected.startswith('game:gb/'))
         before=max((e['t'] for e in self.trace()),default=0)
-        mark=len(self.log())
         self.cmd('a')
         time.sleep(.3)
-        if 'controls card: first start' in self.log()[mark:]:
-            self.metrics['first_controls_card']=True
-            self.shot('02-first-controls-card')
-            self.cmd('a')  # The displayed first-console card: any button continues.
         fr=self.until(lambda: game_frame(self.trace(),before),25)
         confirmations=[e for e in self.trace() if e['pid']==self.ui and e['event']=='input' and e.get('down') and e['t']>before]
         if confirmations:self.metrics['game_confirm_to_frame_ms']=(fr['t']-confirmations[-1]['t'])/1000

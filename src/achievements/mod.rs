@@ -15,7 +15,8 @@
 //! - [`cards`]: the unlock cards and notes a game shows (the Android player paints them; Linux's HUD has its own line).
 //! - [`chime`]: the unlock sound, mixed into the game's own sound when UI sounds are on.
 //!
-//! Softcore only: hardcore would forbid loading states, and instant resume is a state load (docs/user/achievements.md).
+//! - [`hardcore`]: Hardcore, switched on Settings > RetroAchievements: no state loads, rewind, fast-forward or cheats,
+//!   Continue starts from the in-game save; softcore otherwise (docs/user/achievements.md "Hardcore").
 
 pub mod account;
 pub mod api;
@@ -26,6 +27,7 @@ pub mod ffi;
 // pocket-core's HUD side; Android's player has its own (android/src/achievements.rs).
 #[cfg(not(target_os = "android"))]
 pub mod game;
+pub mod hardcore;
 pub mod http;
 pub mod lookup;
 pub mod mastery;

@@ -156,6 +156,8 @@ impl Sys {
     /// `tint`: false while the pause menu shows a captured game frame (it is tinted already).
     pub fn paint(&mut self, c: &mut Canvas, text: &mut Text, tint: bool) {
         self.hits.clear();
+        // A wide screen's rows and type are larger (`type_scale::wide_page`), as Settings' are.
+        let wide = crate::type_scale::panel(crate::type_scale::wide_page(c.w, c.h));
         match &self.screen {
             Screen::Closed => {}
             Screen::Quick { .. } if self.over_game => crate::palette::scoped(0, || self.paint_quick(c, text)),
@@ -170,6 +172,7 @@ impl Sys {
                 crate::palette::scoped(0, || self.paint_power(c, text))
             }
         }
+        drop(wide);
         if let Some(osd) = &self.osd {
             osd.paint(c, text);
         }
@@ -187,8 +190,15 @@ impl Sys {
                 text.draw(c, Face::Body, 28, c.w / 2 - w / 2 + 24, 72 + dy, CHALK, msg);
             });
         }
-        if tint && self.look.soft {
-            self.look.apply_soft(c.buf);
+        let tinting = tint && self.look.soft && (self.look.warmth != 0 || self.look.night != 0 || self.look.dim != 0);
+        // On the Brick's GPU when pocket-fb draws with it (`brick_gpu::tint`), none there when this frame has none.
+        #[cfg(feature = "brick")]
+        if crate::brick_gpu::tint(if tinting { self.look.multipliers() } else { crate::brick_gl::NO_GAIN }) {
+            return;
+        }
+        if tinting {
+            // A colour per pixel: the screen's pixels as they are, painted natively or not.
+            self.look.apply_soft(c.pixels_mut());
         }
     }
 
@@ -336,15 +346,13 @@ impl Sys {
                 // From memory only (`Sys::view`, the background's look): "…" until the first look is in.
                 Row::Brightness => {
                     let b = self.brightness_now(now);
-                    // Below the lowest backlight: the extra dim step, with an empty bar.
-                    let label = self.look.dim_label().or_else(|| b.map(|b| format!("{b}%")));
-                    let mut v = RowView::new(Row::Brightness.label(), label.unwrap_or_else(|| NOT_YET.to_string()));
+                    let mut v = RowView::new(Row::Brightness.label(), self.level_label(Row::Brightness, now));
                     v.bar = Some((if self.look.dim > 0 { 0.0 } else { b.unwrap_or(0) as f32 / 100.0 }, false));
                     v
                 }
                 Row::Volume => {
                     let vol = self.volume_now(now);
-                    let mut v = RowView::new(Row::Volume.label(), vol.map_or(NOT_YET.to_string(), |vol| volume_label(vol, self.view.muted == Some(true))));
+                    let mut v = RowView::new(Row::Volume.label(), self.level_label(Row::Volume, now));
                     v.bar = Some((vol.unwrap_or(0) as f32 / 100.0, false));
                     v.note = Some(sound_label(self.view.sound.as_ref()));
                     v
@@ -354,8 +362,9 @@ impl Sys {
                 Row::Performance => profile(Which::Performance),
                 Row::Fan => profile(Which::Fan),
                 Row::Power => RowView::new(Row::Power.label(), ""),
+                Row::BackToEs => RowView::new(Row::BackToEs.label(), ""),
             };
-            if i > 0 && matches!(row, Row::Wifi | Row::Performance | Row::Power) {
+            if i > 0 && matches!(row, Row::Wifi | Row::Performance | Row::Power | Row::BackToEs) {
                 v.gap = 18;
             }
             views.push(v);
@@ -363,11 +372,7 @@ impl Sys {
         let top = PAD + PILL + 12;
         self.paint_rows(c, text, top, &views, sel, c.h - PAD - PILL - 140);
         let (desc, color) = match rows[sel] {
-            Row::Brightness => (
-                "Left and right change it. On the shelf and in games: START + Vol+ or Vol-.".to_string(),
-                pal().text,
-            ),
-            Row::Volume => ("Left and right change it. Vol+ and Vol- work everywhere.".to_string(), pal().text),
+            Row::Brightness | Row::Volume => (level_line(rows[sel], crate::device::android_profile()).to_string(), pal().text),
             // A switch that did not work says so here, in the alert colour, until the next try or the panel closes.
             Row::Wifi if self.wifi_failed.is_some() => (self.wifi_failed.as_ref().map_or(String::new(), |n| n.line(false).to_string()), pal().alert),
             Row::Wifi => ("A turns Wi-Fi on or off. While it is off, file sharing and updates don't work.".to_string(), pal().text),
@@ -379,6 +384,7 @@ impl Sys {
                 pal().alert,
             ),
             Row::Power => ("Sleep, Restart, Power off and Restart pocket-ui.".to_string(), pal().text),
+            Row::BackToEs => (crate::rescue::BACK_QUICK_HELP.to_string(), pal().text),
         };
         let hints: &[(&str, &str)] = match rows[sel] {
             Row::Brightness | Row::Volume => &[("< >", "Change"), ("B", "Close")],
@@ -413,16 +419,25 @@ impl Sys {
         let inner_w = panel_w - 2 * BTN_PAD;
         // Restart pocket-ui: Kids Mode).
         let brick = { #[cfg(feature = "brick")] { crate::device::brick() } #[cfg(not(feature = "brick"))] { false } };
-        let note: Vec<String> = if choices.contains(&Choice::BootMenu) || !choices.contains(&Choice::RestartUi) || brick {
+        let mut note: Vec<String> = if choices.contains(&Choice::BootMenu) || !choices.contains(&Choice::RestartUi) || brick {
             Vec::new()
         } else {
             text.wrap_prose(Face::Body, HINT_SIZE, power_menu::NO_BOOT_MENU_HINT, inner_w)
         };
         let title_h = 112 + crate::type_scale::grow(50);
         let note_step = crate::type_scale::line(HINT_SIZE, 10);
-        let note_h = if note.is_empty() { 0 } else { 28 + note.len() as i32 * note_step };
-        let panel_h = title_h + choices.len() as i32 * row_h + note_h + 30;
-        let (x, y) = ((c.w - panel_w) / 2, ((c.h - panel_h) / 2 - 30).max(PAD));
+        let note_h = |note: &[String]| if note.is_empty() { 0 } else { 28 + note.len() as i32 * note_step };
+        // The panel stands over the hint bar's band. Where it would not fit there (Large German on 1024x768) only the
+        // selected row keeps its explanation line, and then the note under the rows goes.
+        let room_h = c.h - (PAD + PILL + 12) - PAD - 6;
+        let n = choices.len() as i32;
+        let compact = title_h + n * row_h + note_h(&note) + 30 > room_h;
+        if compact && title_h + (n - 1) * top_h + row_h + note_h(&note) + 30 > room_h {
+            note.clear();
+        }
+        let rows_h = if compact { (n - 1).max(0) * top_h + row_h } else { n * row_h };
+        let panel_h = title_h + rows_h + note_h(&note) + 30;
+        let (x, y) = ((c.w - panel_w) / 2, (((c.h - panel_h) / 2 - 30).min(c.h - (PAD + PILL + 12) - 6 - panel_h)).max(PAD));
         if crate::retro::on() {
             crate::retro::frame(c, x, y, panel_w, panel_h, crate::palette::pal().pill);
         } else {
@@ -453,10 +468,11 @@ impl Sys {
         for (i, choice) in choices.iter().enumerate() {
             let selected = i == sel;
             let (rx, rw) = (x + 14, panel_w - 28);
-            self.hits.row(Area::new(rx, ry, rw, row_h), i);
-            crate::nav_probe::row(c, (rx, ry, rw, row_h));
+            let rh = if compact && !selected { top_h } else { row_h };
+            self.hits.row(Area::new(rx, ry, rw, rh), i);
+            crate::nav_probe::row(c, (rx, ry, rw, rh));
             if selected {
-                crate::nav_probe::focus(c, (rx, ry, rw, row_h));
+                crate::nav_probe::focus(c, (rx, ry, rw, rh));
             }
             let label = choice.label();
             let label_x = rx + MARK_W + 10;
@@ -464,10 +480,10 @@ impl Sys {
             let bg = if selected {
                 let name_w = MARK_W + 10 + text.width(Face::Body, FONT, label) + BTN_PAD;
                 if crate::retro::on() {
-                    crate::retro::plain_bar(c, rx, ry + 4, rw, row_h - 8, crate::palette::pal().select);
+                    crate::retro::plain_bar(c, rx, ry + 4, rw, rh - 8, crate::palette::pal().select);
                     crate::palette::pal().select
                 } else {
-                    c.round_rect(rx, ry + 4, rw, row_h - 8, 30, ACCENT);
+                    c.round_rect(rx, ry + 4, rw, rh - 8, 30, ACCENT);
                     c.round_rect(rx, ry + 4, name_w, top_h - 4, (top_h - 4) / 2, NAME_PILL);
                     NAME_PILL
                 }
@@ -491,8 +507,10 @@ impl Sys {
                 (true, false) => 0xffffff,
                 _ => 0xb8b4ac,
             };
-            text.draw(c, Face::Body, hint_px, label_x, hint_base, hint_fg, &hint);
-            ry += row_h;
+            if rh == row_h {
+                text.draw(c, Face::Body, hint_px, label_x, hint_base, hint_fg, &hint);
+            }
+            ry += rh;
         }
         if !note.is_empty() {
             let line_y = ry + 14;
@@ -562,17 +580,27 @@ impl Sys {
                     format!("{:02}:{:02}", tm.tm_hour, tm.tm_min)
                 });
                 let info = [("Local time", local), ("Date", date_label_at(shown)), ("Offset", offset)];
-                for (i, (name, value)) in info.iter().enumerate() {
-                    // One free row between the list and the facts; a quarter of one on a short screen, so the facts stay above the footer.
-                    let free = if crate::kit::short_screen(c.h) { row() / 4 } else { row() };
-                    let base = top + 3 * row() + free + i as i32 * row() + row() / 2 + crate::type_scale::mid(FONT);
-                    text.draw(c, Face::Body, FONT, PAD + BTN_PAD, base, pal().dust, name);
-                    text.draw_right(c, Face::Body, FONT, c.w - PAD - BTN_PAD, base, pal().text, value);
-                }
                 let (desc, wrong) = self.time_note(sel, at);
                 // Date and time while network time has set the clock: nothing to open, A only says why, and the bar says so
                 // (it showed B alone: the explorer found A working unnamed once it reached this page, 2026-11-08).
                 let hints: &[(&str, &str)] = if sel == BY_HAND_ROW && synced { &[("B", "Back"), ("A", "Explain")] } else { &[("B", "Back"), ("A", "Open")] };
+                // One free row between the list and the facts; a quarter of one on a short screen, so the facts stay above the footer.
+                let short = crate::kit::short_screen(c.h);
+                let free = if short { row() / 4 } else { row() };
+                // On a short screen (1280x720 and 1024x768, Large text) the facts take a closer step, and give way, the
+                // last first (Offset, then Date), where the footer's lines (a clock warning has three or four) would
+                // stand over them.
+                let step = if short { row().min(crate::type_scale::px(FONT) as i32 + 8) } else { row() };
+                let pill_x = c.w - PAD - crate::kit::pill_width(text, c.w, hints);
+                let footer_lines = crate::kit::footer_lines(text, &desc, c.w, pill_x, 4).len() as i32;
+                let footer_top = crate::kit::footer_baseline(c.h) - (footer_lines - 1).max(0) * crate::type_scale::line(crate::kit::footer_px(text, &desc, pill_x), 10) - crate::type_scale::px(SMALL) as i32;
+                let facts_end = |n: i32| top + 3 * row() + free + (n - 1) * step + row() / 2 + crate::type_scale::mid(FONT) + 8;
+                let n_facts = if short { (1..=3).rev().find(|n| facts_end(*n) <= footer_top).unwrap_or(0) as usize } else { 3 };
+                for (i, (name, value)) in info.iter().enumerate().take(n_facts) {
+                    let base = top + 3 * row() + free + i as i32 * step + row() / 2 + crate::type_scale::mid(FONT);
+                    text.draw(c, Face::Body, FONT, PAD + BTN_PAD, base, pal().dust, name);
+                    text.draw_right(c, Face::Body, FONT, c.w - PAD - BTN_PAD, base, pal().text, value);
+                }
                 self.footer(c, text, hints, &desc, if wrong == Clock::Fine { pal().text } else { pal().amber });
             }
             TimePage::Regions { sel } => {
@@ -647,11 +675,18 @@ impl Sys {
             "Pick your region and city. The clock changes at once."
         } else if sel == BY_HAND_ROW {
             match ntp {
+                // A handheld without Wi-Fi (`device::no_wifi_chip`): a network, if any, came another way; none to wait for.
+                NtpState::Synced if crate::device::no_wifi_chip() => "Network time has set the clock, so there is nothing to set by hand.",
                 NtpState::Synced => "Network time has set the clock over Wi-Fi, so there is nothing to set by hand.",
                 NtpState::Off => "Set the date and time by hand. Network time is off, so the clock keeps what you set.",
+                _ if crate::device::no_wifi_chip() => "Set the date and time by hand. This handheld has no Wi-Fi, so the clock keeps what you set.",
                 _ if self.clock_by_hand => "Set by hand. Once Wi-Fi reaches a time server, network time sets the clock again.",
                 _ => "Set the date and time by hand. Once Wi-Fi reaches a time server, network time sets it again.",
             }
+        } else if crate::device::no_wifi_chip() && ntp == NtpState::Synced {
+            "The clock sets itself from a time server. A asks again now."
+        } else if crate::device::no_wifi_chip() {
+            "No Wi-Fi here, so the clock doesn't set itself."
         } else if ntp == NtpState::Waiting {
             "The clock is set from a time server over Wi-Fi. No answer yet: check that Wi-Fi is connected. A asks again."
         } else {
@@ -729,14 +764,26 @@ impl Sys {
 
 /// A small filled triangle pointing up or down, centred on (cx, cy): drawn, not a glyph (docs/DESIGN.md).
 fn chevron(c: &mut Canvas, cx: i32, cy: i32, up: bool, color: u32) {
-    for i in 0..13 {
-        let y = if up { cy - 6 + i } else { cy + 6 - i };
-        c.rect(cx - i, y, 2 * i + 1, 1, color);
-    }
+    // One shape of rows (gfx::Canvas::fill_rects): painted natively, its tip doesn't grow a pixel.
+    let rows: Vec<_> = (0..13).map(|i| (cx - i, if up { cy - 6 + i } else { cy + 6 - i }, 2 * i + 1, 1)).collect();
+    c.fill_rects(&rows, color);
 }
 
 /// A row's value before the first look in the background is in (a moment after the start): neutral, never a guess.
 pub const NOT_YET: &str = "…";
+
+impl Sys {
+    /// The value of the Brightness or Volume row, from memory only: the panel's and Settings → Screen & sound's (one
+    /// label for both). Below the lowest backlight the extra dim step; "…" until the first background look.
+    pub fn level_label(&self, row: Row, now: Instant) -> String {
+        match row {
+            Row::Brightness => self.look.dim_label().or_else(|| self.brightness_now(now).map(|b| format!("{b}%"))),
+            Row::Volume => self.volume_now(now).map(|v| volume_label(v, self.view.muted == Some(true))),
+            _ => None,
+        }
+        .unwrap_or_else(|| NOT_YET.to_string())
+    }
+}
 
 impl Sys {
     /// A switch row's value; "…" while nothing was looked at yet (`Polled::seq` 0), "Not available" after.
@@ -772,9 +819,8 @@ fn paint_mark(c: &mut Canvas, cx: i32, cy: i32, mark: power_menu::Mark, fg: u32,
             // A ring open at the top right, an arrow head at the end of the arc pointing into the gap.
             c.ring(cx, cy, 12, 3, fg);
             c.rect(cx + 1, cy - 13, 13, 11, bg);
-            for dy in -6..=6 {
-                c.rect(cx - 1, cy - 11 + dy, 7 - dy.abs(), 1, fg);
-            }
+            let head: Vec<_> = (-6..=6).map(|dy| (cx - 1, cy - 11 + dy, 7 - dy.abs(), 1)).collect();
+            c.fill_rects(&head, fg);
         }
         Mark::Power => {
             c.ring(cx, cy + 1, 12, 3, fg);
@@ -793,6 +839,18 @@ fn paint_mark(c: &mut Canvas, cx: i32, cy: i32, mark: power_menu::Mark, fg: u32,
                 c.round_rect(cx - 11, cy + dy - 1, 22, 3, 1, fg);
             }
         }
+    }
+}
+
+
+/// The line under Brightness and Volume. Linux's keys are START with Vol+ or Vol-; on Android the device's own volume buttons work
+/// as everywhere, and brightness has no key of ours (the Odin 2 Mini's panel said "START + Vol+ or Vol-", 13.11.).
+pub fn level_line(row: Row, android: bool) -> &'static str {
+    match (row, android) {
+        (Row::Volume, true) => "Left and right change it. The device's volume buttons work too.",
+        (Row::Volume, false) => "Left and right change it. Vol+ and Vol- work everywhere.",
+        (_, true) => "Left and right change it.",
+        (_, false) => "Left and right change it. On the shelf and in games: START + Vol+ or Vol-.",
     }
 }
 

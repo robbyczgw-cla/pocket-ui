@@ -252,10 +252,22 @@ mod tests {
         assert_eq!(xbox(100), nin(99), "top");
     }
 
+    /// In a game every face button keeps the place the original console gives it (libretro A right, B bottom), on the
+    /// Odin in both Controller styles and on other pads, from the keys as Android hands them over (`recorded`).
+    #[test]
+    fn in_the_game_the_right_button_is_the_consoles_a_in_both_odin_styles_and_on_every_pad() {
+        use crate::pad::android::recorded::{ODIN, OTHERS};
+        for p in ODIN.iter().chain(OTHERS.iter()) {
+            let bit = retro_bit_on(p.key, arrangement(p.vendor, p.product));
+            let want = if p.place == "right" { 8 } else { 0 };
+            assert_eq!(bit, Some(want), "{} ({:04x}:{:04x}) {} button, key {}", p.pad, p.vendor, p.product, p.place, p.key);
+        }
+    }
+
     #[test]
     fn the_odin_is_read_by_its_controller_style_device_and_other_pads_by_make() {
         // The Odin's style switch shows another device: 0112 "Xbox Wireless Controller" is Xbox style (flip_button_layout 1),
-        // 0111 "Odin Controller" the Odin style (0), with its own Nintendo lettering.
+        // 0111 "Odin Controller" the Odin style (0), which sends BUTTON_A from the right button.
         assert_eq!(arrangement(0x2020, 0x0112), Arrangement::Xbox);
         assert_eq!(arrangement(0x2020, 0x0111), Arrangement::Nintendo);
         // A Switch Pro Controller (057e:2009) has A on the right.

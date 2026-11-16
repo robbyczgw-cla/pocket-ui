@@ -2,7 +2,7 @@
 //! names, rendered with `pocket-ui --snapshot` on the shelf (a system's list in Split and in Cards), on the game card
 //! and in the search, dark and light, Normal and Large text, with ROCKNIX's Noto Sans CJK (`POCKETUI_CJK_FONT`) and
 //! without it. With the font the names are painted from it and run into nothing the plain names don't; without it
-//! every screen still renders, as before ("?" for each letter).
+//! every screen still renders, its names written in Latin letters (`src/latinise.rs`, `tests/cjk_glyphs.rs`).
 //!
 //! Needs the font: `POCKETUI_TEST_CJK_FONT`, else the one of an unpacked ROCKNIX image at
 //! /tmp/rocknix-root-20261001; without it the test says so and passes. On Linux without a compositor it starts
@@ -114,7 +114,7 @@ fn japanese_names_are_painted_from_the_system_font_and_run_into_nothing() {
                 if with == without {
                     problems.push(format!("{what}: the same picture with the font as without it"));
                 }
-                // No more text running into text, touching or cut by the edge than with the names as "?" (the strings
+                // No more text running into text, touching or cut by the edge than with the names in Latin letters (the strings
                 // differ: a name is cut short at another letter). The jump's big letter covers the selected card's
                 // name on purpose, with either.
                 for kind in ["O\t", "T\t", "E\t"] {

@@ -19,7 +19,7 @@ where
 
 pub use crate::look_settings::{Appearance, Motion, Theme};
 
-/// Settings > Sound & feel > Animations: Cozy plays the game's launch animation so that it reads (about a second, the
+/// Settings > Look > Game start animation: Cozy plays the game's launch animation so that it reads (about a second, the
 /// pocket-core game's window waits for it) and slows the other transitions a little; Quick is the timings as designed,
 /// straight into the game. Unset follows the look (`Animations::default_for`).
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, serde::Serialize, serde::Deserialize)]
@@ -116,10 +116,10 @@ pub struct Settings {
     /// Store catalog (catalog.json, `file://` works too); the built-in one when unset.
     #[serde(default, deserialize_with = "lenient", skip_serializing_if = "Option::is_none")]
     pub store_url: Option<String>,
-    /// Settings > Look > Systems on the shelf: system ids left off the shelf (all shown when empty).
+    /// Settings > Games > Systems on the shelf: system ids left off the shelf (all shown when empty).
     #[serde(default, deserialize_with = "lenient", skip_serializing_if = "Vec::is_empty")]
     pub hidden_systems: Vec<String>,
-    /// Settings > Look > Systems on the shelf: "PC streaming" (Moonlight) on Home. Off until ticked, because
+    /// Settings > Games > Systems on the shelf: "PC streaming" (Moonlight) on Home. Off until ticked, because
     /// ROCKNIX installs Moonlight on every device and most players have no PC to stream from.
     #[serde(default, deserialize_with = "lenient", skip_serializing_if = "std::ops::Not::not")]
     pub streaming_on_home: bool,
@@ -134,22 +134,27 @@ pub struct Settings {
     /// where the emulator can leave it out (`quit::offers_quit_without_saving`; not RetroArch).
     #[serde(default, deserialize_with = "lenient", skip_serializing_if = "std::ops::Not::not")]
     pub forget_where_quit: bool,
-    /// Settings > Playing > Remind me where I was ("Where was I?", `where_was_i`), kept as its opposite so that unset is
-    /// On: a moment continued after more than two weeks shows when it was played last and the game's note.
+    /// Settings > Playing > Remind me where I was ("Where was I?", `where_was_i`): a moment continued after more than
+    /// two weeks shows when it was played last and the game's note. Off unless switched on (0.5: it was On); only On is
+    /// written, so a new device and every settings.json from before are Off. The old `no_where_was_i` is ignored.
     #[serde(default, deserialize_with = "lenient", skip_serializing_if = "std::ops::Not::not")]
-    pub no_where_was_i: bool,
-    /// Settings > Sound & feel > Zoom in the pause menu: the Zoom row sits in the pause menu's main page. Off unless switched on
+    pub where_was_i: bool,
+    /// Settings > Look > Zoom in the pause menu: the Zoom row sits in the pause menu's main page. Off unless switched on
     /// (Big text shows it too, `features::reading_on`); Zoom is always in Options.
     #[serde(default, deserialize_with = "lenient", skip_serializing_if = "std::ops::Not::not")]
     pub zoom_in_pause: bool,
+    /// Settings > Playing > Console boot screen (`boot_screen`): a fresh start of a Game Boy, Game Boy Advance or PlayStation game runs
+    /// through the console's own boot screen when the player's BIOS file is there. Off unless switched on; only On is written.
+    #[serde(default, deserialize_with = "lenient", skip_serializing_if = "std::ops::Not::not")]
+    pub boot_screen: bool,
     /// Read, never written: Easy began as a switch of this name. `load` turns it into the look.
     #[serde(default, deserialize_with = "lenient", skip_serializing)]
     pub big_shelf: bool,
-    /// Settings > Playing > Button layout: which face button confirms in pocket-ui's menus (`button_layout`); Nintendo
+    /// Settings > Controls > Buttons > Button layout: which face button confirms in pocket-ui's menus (`button_layout`); Nintendo
     /// (A on the right) except Odin 2 Mini/Portal (Xbox) when unset. An explicit saved choice wins.
     #[serde(default, deserialize_with = "lenient")]
     pub button_layout: crate::button_layout::ButtonLayout,
-    /// Settings > Playing → Buttons → Button symbols: how the hints draw A, B, X and Y (`button_prompts`);
+    /// Settings > Controls → Buttons → Button symbols: how the hints draw A, B, X and Y (`button_prompts`);
     /// the device's (Xbox-style on Retroid and AYN, plain letters on Anbernic) when unset. A saved choice wins.
     #[serde(default, deserialize_with = "lenient")]
     pub prompts: crate::button_prompts::PromptStyle,
@@ -170,7 +175,11 @@ pub struct Settings {
     /// Settings → Look → Cozy extras → GBA console. Only the hardware picture changes.
     #[serde(default, deserialize_with = "lenient")]
     pub gba_model: crate::system_art::GbaModel,
-    /// Settings > Sound & feel > Motion; Full when unset.
+    /// The console page's colour per console (Left/Right there): picture id → colour id, e.g. `gba` → `pink`. A console not
+    /// in the list, or a colour this version does not know, stays as it was first made.
+    #[serde(default, deserialize_with = "lenient")]
+    pub console_colours: std::collections::BTreeMap<String, String>,
+    /// Settings > Look > Motion; Full when unset.
     #[serde(default, deserialize_with = "lenient")]
     pub motion: Motion,
     /// Settings > Screen frames; Off when unset (the start setting since 2026-10-23, also for a settings.json from before it).
@@ -187,12 +196,12 @@ pub struct Settings {
     /// (`Lang::system_default`).
     #[serde(default, deserialize_with = "lenient", skip_serializing_if = "Option::is_none")]
     pub language: Option<crate::i18n::Lang>,
-    /// Settings > Games > Extras > Game pictures: "Box art only" instead of "Box art and screenshots". Kept as the
+    /// Settings > Games > Box art & downloads > Game pictures: "Box art only" instead of "Box art and screenshots". Kept as the
     /// opposite so that unset (a new device, a settings.json from before it) shows the screenshots and title
     /// screens too, as the same background download that fetches the box art brings them.
     #[serde(default, deserialize_with = "lenient", skip_serializing_if = "std::ops::Not::not")]
     pub box_art_only: bool,
-    /// Settings > Games > Extras > Pictures: "Off", nothing is downloaded by itself (`Art::Off`, which also means box
+    /// Settings > Games > Box art & downloads > Pictures: "Off", nothing is downloaded by itself (`Art::Off`, which also means box
     /// art only). Written only with `box_art_only`, so a settings.json from before it downloads as it always did.
     #[serde(default, deserialize_with = "lenient", skip_serializing_if = "std::ops::Not::not")]
     pub art_off: bool,
@@ -204,7 +213,7 @@ pub struct Settings {
     /// Options (`over_game`). Off when unset (and not written then).
     #[serde(default, deserialize_with = "lenient", skip_serializing_if = "is_off")]
     pub over_game: crate::over_game::Level,
-    /// Settings → Sound & feel → Animations, once chosen; unset follows the look (`Animations::default_for`).
+    /// Settings → Look → Game start animation, once chosen; unset follows the look (`Animations::default_for`).
     #[serde(default, deserialize_with = "lenient", skip_serializing_if = "Option::is_none")]
     pub animations: Option<Animations>,
     /// The "Launch animation" switch of 0.1.2 and the first 0.1.3 builds, kept as its opposite; no longer written. Read
@@ -226,6 +235,10 @@ pub struct Settings {
     /// Split. pocket-ui says so once at the start and saves, so the file says "split" from then on (`retired_look`).
     #[serde(skip)]
     pub retired_look: bool,
+    /// Never written: the file is there but neither it nor its backup could be read, so every setting is back at its
+    /// start value. pocket-ui says so once at the start (`DAMAGED_NOTE`) instead of looking as if nothing happened.
+    #[serde(skip)]
+    pub damaged: bool,
 }
 
 /// The looks 0.4 took out, by their settings.json names. A file that still says one is read as Split (the serde
@@ -234,6 +247,7 @@ pub struct Settings {
 pub const RETIRED_LOOKS: [&str; 2] = ["minimal", "cards"];
 
 /// The one line said at the first start after a retired look became Split.
+pub const DAMAGED_NOTE: &str = "Your settings file couldn't be read, so pocket-ui started with its standard settings. Your games and saves are not affected.";
 pub const RETIRED_LOOK_NOTE: &str = "Minimal and Cards are gone in this version, so your games are in the Split look now. Settings › Look › Layout changes it.";
 
 /// Whether the settings file (or its backup, which `load` falls back to) still names a retired look.
@@ -289,6 +303,7 @@ impl Settings {
                     path.display()
                 );
                 s.onboarded = true;
+                s.damaged = true;
             }
             s
         })
@@ -323,7 +338,7 @@ pub fn over_game(data_dir: &Path) -> crate::over_game::Level {
     std::fs::read(data_dir.join(FILE)).ok().and_then(|b| serde_json::from_slice::<Only>(&b).ok()).unwrap_or_default().over_game
 }
 
-/// Settings > Games > Extras > Pictures: what pocket-ui fetches from the libretro thumbnail collection by itself.
+/// Settings > Games > Box art & downloads > Pictures: what pocket-ui fetches from the libretro thumbnail collection by itself.
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
 pub enum Art {
     /// Box art only.
@@ -374,7 +389,7 @@ impl Art {
     }
 }
 
-/// Whether the screenshots and title screens beside the box art are on (Settings → Games → Extras → Game pictures), as
+/// Whether the screenshots and title screens beside the box art are on (Settings → Games → Box art & downloads → Game pictures), as
 /// saved; on when unset. For the web companion, which reads only this field.
 pub fn game_pictures(data_dir: &Path) -> bool {
     #[derive(serde::Deserialize, Default)]
@@ -410,6 +425,17 @@ pub fn language(data_dir: &Path) -> crate::i18n::Lang {
         .unwrap_or_default()
         .language
         .unwrap_or_else(crate::i18n::Lang::system_default)
+}
+
+/// Settings → Playing → Console boot screen alone (pocket-core reads it once at a game's start, `boot_screen`): Off when the
+/// file or the field is missing or unreadable.
+pub fn boot_screen(data_dir: &Path) -> bool {
+    #[derive(serde::Deserialize, Default)]
+    struct Only {
+        #[serde(default, deserialize_with = "lenient")]
+        boot_screen: bool,
+    }
+    std::fs::read(data_dir.join(FILE)).ok().and_then(|b| serde_json::from_slice::<Only>(&b).ok()).unwrap_or_default().boot_screen
 }
 
 /// Settings → Look → Style, Retro's palette and its letters alone (pocket-core's overlays paint with them, `retro`): read
@@ -448,8 +474,9 @@ mod tests {
             appearance: Appearance::Light,
             on_start: crate::on_start::OnStart::Continue,
             forget_where_quit: true,
-            no_where_was_i: true,
+            where_was_i: true,
             zoom_in_pause: true,
+            boot_screen: true,
             big_shelf: false,
             button_layout: crate::button_layout::ButtonLayout::Xbox,
             prompts: crate::button_prompts::PromptStyle::PlayStation,
@@ -458,6 +485,7 @@ mod tests {
             retro_colours: crate::retro::Colours::Pea,
             retro_letters: crate::font_style::RetroLetters::Pixelify,
             gba_model: crate::system_art::GbaModel::Sp,
+            console_colours: [("gba".to_string(), "pink".to_string())].into(),
             motion: Motion::Reduced,
             frames: Frames::Every,
             seen_version: Some("0.2.0".into()),
@@ -473,6 +501,7 @@ mod tests {
             open_case_told: true,
             extras: crate::cozy_extras::Extras { cabinet_tv: false, ..Default::default() },
             retired_look: false,
+            damaged: false,
         }
     }
 
@@ -568,6 +597,19 @@ mod tests {
         let s = Settings::load(&d);
         assert_eq!(s.gba_model, GbaModel::Advance);
         assert!(s.onboarded);
+    }
+
+    #[test]
+    fn the_console_colours_are_none_until_chosen_survive_a_restart_and_a_wrong_value_costs_only_them() {
+        let d = dir("console-colours");
+        std::fs::write(d.join(FILE), r#"{"onboarded":true}"#).unwrap();
+        assert!(Settings::load(&d).console_colours.is_empty(), "a settings.json from before the colours");
+        Settings { console_colours: [("gbc".to_string(), "dandelion".to_string())].into(), ..chosen() }.save(&d);
+        assert_eq!(Settings::load(&d).console_colours, [("gbc".to_string(), "dandelion".to_string())].into());
+        // A value of another shape loses the colours, not the rest of the player's settings.
+        std::fs::write(d.join(FILE), r#"{"console_colours":["pink"],"onboarded":true}"#).unwrap();
+        let s = Settings::load(&d);
+        assert!(s.console_colours.is_empty() && s.onboarded);
     }
 
     #[test]
@@ -918,12 +960,37 @@ mod tests {
         assert!(Settings::load(&d).forget_where_quit);
         Settings { forget_where_quit: false, ..chosen() }.save(&d);
         assert!(!std::fs::read_to_string(d.join(FILE)).unwrap().contains("forget_where_quit"), "On is not written");
-        // Remind me where I was: the same way round, On unless switched off.
-        Settings { no_where_was_i: false, ..chosen() }.save(&d);
-        assert!(!Settings::load(&d).no_where_was_i, "unset: On");
-        assert!(!std::fs::read_to_string(d.join(FILE)).unwrap().contains("no_where_was_i"), "On is not written");
-        Settings { no_where_was_i: true, ..chosen() }.save(&d);
-        assert!(Settings::load(&d).no_where_was_i);
+    }
+
+    /// Remind me where I was is Off by default since 0.5 (it was On): a new device, a settings.json from before, and
+    /// one that only holds the old `no_where_was_i` are all Off; only an On choice is written and kept.
+    #[test]
+    fn remind_me_where_i_was_is_off_until_switched_on_and_survives_a_restart() {
+        let d = dir("remind-where");
+        assert!(!Settings::load(&d).where_was_i, "a new device: Off");
+        std::fs::write(d.join(FILE), br#"{"theme": "split", "onboarded": true}"#).unwrap();
+        assert!(!Settings::load(&d).where_was_i, "a settings.json from before 0.5 (it never wrote On): Off");
+        std::fs::write(d.join(FILE), br#"{"theme": "split", "onboarded": true, "no_where_was_i": true}"#).unwrap();
+        assert!(!Settings::load(&d).where_was_i, "an old explicit Off stays Off");
+        std::fs::write(d.join(FILE), br#"{"theme": "split", "onboarded": true, "where_was_i": "yes"}"#).unwrap();
+        assert!(!Settings::load(&d).where_was_i, "a value this version doesn't read");
+        Settings { where_was_i: true, ..chosen() }.save(&d);
+        assert!(Settings::load(&d).where_was_i, "On is written and kept");
+        Settings { where_was_i: false, ..chosen() }.save(&d);
+        assert!(!std::fs::read_to_string(d.join(FILE)).unwrap().contains("where_was_i"), "Off is not written");
+    }
+
+    #[test]
+    fn console_boot_screen_is_off_until_switched_on_and_pocket_core_reads_it_alone() {
+        let d = dir("boot-screen");
+        assert!(!Settings::load(&d).boot_screen && !boot_screen(&d), "a new device: Off");
+        std::fs::write(d.join(FILE), br#"{"theme": "split", "onboarded": true, "boot_screen": "yes"}"#).unwrap();
+        assert!(!Settings::load(&d).boot_screen && !boot_screen(&d), "a value this version doesn't read");
+        Settings { boot_screen: true, ..chosen() }.save(&d);
+        assert!(Settings::load(&d).boot_screen && boot_screen(&d), "On is written and kept; pocket-core sees it");
+        Settings { boot_screen: false, ..chosen() }.save(&d);
+        assert!(!std::fs::read_to_string(d.join(FILE)).unwrap().contains("boot_screen"), "Off is not written");
+        assert!(!boot_screen(&d));
     }
 
     #[test]
@@ -982,6 +1049,18 @@ mod tests {
         std::fs::write(d.join(FILE), b"{\"theme\": \"ca").unwrap();
         let s = Settings::load(&d);
         assert!(s.onboarded, "a settings file only exists once the setup ran");
+        assert!(s.damaged, "and the start says that the settings were lost, not nothing");
+    }
+
+    #[test]
+    fn a_missing_or_restored_settings_file_is_no_damage() {
+        let d = dir("not-damaged");
+        assert!(!Settings::load(&d).damaged, "first start: no file, nothing lost");
+        chosen().save(&d);
+        chosen().save(&d); // the second save leaves the first as the backup
+        let whole = std::fs::read(d.join(FILE)).unwrap();
+        std::fs::write(d.join(FILE), &whole[..whole.len() / 2]).unwrap();
+        assert!(!Settings::load(&d).damaged, "the last good copy came back: nothing to say");
     }
 
     #[test]

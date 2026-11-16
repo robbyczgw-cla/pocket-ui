@@ -10,7 +10,7 @@
 
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
-#[cfg(not(target_os = "android"))]
+#[cfg(not(all(target_os = "android", not(feature = "handheld"))))]
 use std::process::{Command, Stdio};
 use std::time::Duration;
 
@@ -54,7 +54,7 @@ pub fn tools_dir(data_dir: &Path) -> PathBuf {
 /// The core file pocket-core should load: one installed into `/storage/cores` wins over the
 /// image's, the same order the `/tmp/cores` overlay gives RetroArch.
 pub fn core_path(core: &str) -> PathBuf {
-    #[cfg(not(target_os = "android"))]
+    #[cfg(not(all(target_os = "android", not(feature = "handheld"))))]
     if core == "gpsp" {
         let bundled = crate::h700_gba::bundled_path();
         if bundled.is_file() { return bundled }
@@ -217,14 +217,14 @@ impl Store {
     }
 
     /// Downloads with curl, checks the hash, then installs.
-    #[cfg(not(target_os = "android"))]
+    #[cfg(not(all(target_os = "android", not(feature = "handheld"))))]
     pub fn install(&mut self, p: &Package) -> Result<(), String> {
         self.install_from(p, "", &|_| {})
     }
 
     /// Like `install`, with `p.url` relative to `catalog_url`; `progress` gets the bytes downloaded
     /// so far while the download runs.
-    #[cfg(not(target_os = "android"))]
+    #[cfg(not(all(target_os = "android", not(feature = "handheld"))))]
     pub fn install_from(&mut self, p: &Package, catalog_url: &str, progress: &dyn Fn(u64)) -> Result<(), String> {
         self.usable()?;
         std::fs::create_dir_all(&self.dir).map_err(|e| e.to_string())?;
@@ -501,7 +501,7 @@ pub fn resolve(catalog_url: &str, url: &str) -> String {
     }
 }
 
-#[cfg(not(target_os = "android"))]
+#[cfg(not(all(target_os = "android", not(feature = "handheld"))))]
 fn download(url: &str) -> Result<Vec<u8>, String> {
     let out = Command::new("curl").args(["-fsSL", "--max-time", "60", url]).output().map_err(|e| e.to_string())?;
     if out.status.success() {
@@ -546,7 +546,7 @@ pub(crate) fn unreachable_code(code: Option<i32>) -> bool {
 
 /// Downloads `url` into `dest` with curl, reporting the bytes so far every quarter of a second. `max`: the size the
 /// catalog gives for it.
-#[cfg(not(target_os = "android"))]
+#[cfg(not(all(target_os = "android", not(feature = "handheld"))))]
 fn download_to(url: &str, dest: &Path, max: Option<u64>, progress: &dyn Fn(u64)) -> Result<(), String> {
     download_with_cause(url, dest, max, progress).map_err(|f| match f {
         DownloadFailure::Unreachable => crate::net_check::refine("The download didn't finish. Check Wi-Fi and try again."),
@@ -557,7 +557,7 @@ fn download_to(url: &str, dest: &Path, max: Option<u64>, progress: &dyn Fn(u64))
 
 /// `download_to` with the cause of a failure told apart (`DownloadFailure`); the starter pack uses it, so a missing
 /// network is not reported as a broken download. Same curl, same limits.
-#[cfg(not(target_os = "android"))]
+#[cfg(not(all(target_os = "android", not(feature = "handheld"))))]
 pub fn download_with_cause(url: &str, dest: &Path, max: Option<u64>, progress: &dyn Fn(u64)) -> Result<(), DownloadFailure> {
     #[cfg(feature = "brick")]
     {
@@ -573,7 +573,7 @@ pub fn download_with_cause(url: &str, dest: &Path, max: Option<u64>, progress: &
     download_network(url, dest, max, progress)
 }
 
-#[cfg(not(target_os = "android"))]
+#[cfg(not(all(target_os = "android", not(feature = "handheld"))))]
 fn download_network(url: &str, dest: &Path, max: Option<u64>, progress: &dyn Fn(u64)) -> Result<(), DownloadFailure> {
     let broke = |e: std::io::Error| DownloadFailure::Broke(e.to_string());
     let _ = std::fs::remove_file(dest);
@@ -629,7 +629,7 @@ impl Drop for Changing {
 
 /// Fetches and verifies the catalog from `url` (with `url.sig` next to it), and checks that it is
 /// neither expired nor older than one already seen (`check_fresh`).
-#[cfg(not(target_os = "android"))]
+#[cfg(not(all(target_os = "android", not(feature = "handheld"))))]
 pub fn fetch_catalog(url: &str, data_dir: &Path) -> Result<Catalog, String> {
     if url.trim().is_empty() {
         return Err("There is no store yet.".into());

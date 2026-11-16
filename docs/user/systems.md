@@ -183,6 +183,14 @@ in core options still applies. Set the handheld's time correctly for berries and
 If pocket-core cannot start a game, a card at the top of the shelf says why for about eight
 seconds.
 
+With **Animations: Cozy** and **Motion: Full** (Cabinet and Shelf looks) the start's picture runs backwards first: the
+cartridge or disc comes back out of the console, the case closes and returns to the shelf, and then one friendly sentence
+says what is missing and what to do, for example "Pocket CD Demo can't start yet. Sega CD needs a file from your own
+console that isn't on the card: bios_CD_U.bin, bios_CD_E.bin or bios_CD_J.bin. Copy one of them into roms/bios, then try
+again." The error sound comes with the sentence. Any button ends the picture and shows the sentence at once; that press is
+only that, so it doesn't close the sentence before you've read it, and A closes it. Easy and Kids Mode keep their own failure
+pages, and other looks keep the short card.
+
 When pocket-core fails before showing the first game picture, pocket-ui may try ROCKNIX's default emulator
 for that system once (RetroArch for most, YabaSanshiro for Saturn, standalone ScummVM for ScummVM).
 The card says which emulator is being tried. The next launch tries pocket-core again; choose another emulator
@@ -225,16 +233,30 @@ Wi-Fi first) and shows "Loading Java, once" with how far it is. The game starts 
 later start goes straight in. B stops the loading; nothing half-loaded is kept, and it starts again with the next
 phone game. Without Wi-Fi a note says so and nothing waits. Java takes about 170 MB on the card, in `/storage/jdk`.
 
+**Without Wi-Fi** (the RG28XX, the RG35XX 2024, the R36S, or Wi-Fi off): put the Java file from pocketui.xyz/java,
+`zulu11.48.21-ca-jdk11.0.11-linux_aarch64.tar.gz` (the same file ROCKNIX downloads from Azul, 197 MB), on the card
+where a computer sees it: the first part of a ROCKNIX card, the GAMES drive, or a second card (also in its `roms`
+folder). Then start the phone game: pocket-ui checks the file (its size and fingerprint must be Azul's), puts Java in
+place and deletes the file from the card. A file that doesn't match is left where it is and nothing is installed.
+
+On the shelf phone games have their own case with a phone on it. When one starts, nothing goes in: an old candy-bar
+phone comes up, a bar fills on its display while the case goes, and its display lights up, the way a handheld's
+does.
+
+**Keys.** The game's card says it in one line: A is OK, SELECT and START are the soft keys. A is OK (the phone's
+middle key, which jumps, shoots or confirms in most games), SELECT and START are the left and right soft keys under a
+phone's screen, the D-pad is the arrow keys, Y is 9, B is 7, X is 0, L1 and R1 are 1 and 3, L2 and R2 are * and #. The
+number keys 2, 4, 6 and 8 are on the left stick, and 5 is a press of it. On a handheld without sticks most games play with the arrows and OK; a game that only takes the number keys plays
+when you set [Runs on](options.md#runs-on) › **D-pad** to **Number keys 2 4 6 8** (for the game or for all phone games):
+the D-pad then presses 2, 4, 6 and 8 and Y is 5. FreeJ2ME-Plus itself puts OK on Y and 9 on A; pocket-ui swaps the two
+with a RetroArch remap for the phone games' core, unless you made one of your own.
+
 Every phone game runs at the screen size it was made for: 176 × 208 for many Nokia games, 240 × 320 for most later
 ones, 360 × 640 for touch phones. pocket-ui reads it from the game (its name, its own description or its full-screen
 pictures) and uses 240 × 320 when the game doesn't say. The picture then fills the screen in its own shape: by whole
 numbers where twice the size fits (176 × 208 becomes 352 × 416 on a 640 × 480 screen, every pixel the same size), else
-as large as it fits.
-
-The phone's middle key (OK), which jumps, shoots or confirms in most games, is on **A**; Y is 9, B is 7, X is 0, L1
-and R1 are 1 and 3, SELECT and START the left and right soft keys, and the left stick is 2, 4, 6 and 8 (5 is a press of
-it). FreeJ2ME-Plus itself puts OK on Y; pocket-ui swaps the two with a RetroArch remap for the phone games' core, unless
-you made one of your own.
+as large as it fits. If a game still sits small in a corner or is cut off, set its size in Options › Runs on ›
+**Screen size** (**Automatic** is the default).
 
 Not every phone game plays well. Games in 3D (made for the phones' 3D extras, such as 3D Bomberman) often show broken
 or noisy 3D pictures: the phone emulator on the card draws 3D only in part. 2D games play as they should. Games made
@@ -325,7 +347,10 @@ in-game save feature before quitting. Continuing where you left off is not avail
 
 Nintendo 64, PSP, Dreamcast and DS moved to pocket-ui's own host, and the Saturn does when its BIOS is there; it measured at least as well as
 ROCKNIX's emulators for them (docs/HOST.md). A game that does not start there still starts with
-ROCKNIX's emulator for its system.
+ROCKNIX's emulator for its system. On the Anbernic H700 handhelds Nintendo 64, PSP, Dreamcast and DS stay on ROCKNIX's
+emulators (RetroArch for N64 and Dreamcast, PPSSPP for PSP, DraStic for DS): their chip is too slow for the others. Those
+handhelds have no sticks, so there the D-pad moves the left stick in N64, PSP and Dreamcast games
+([Runs on › D-pad](options.md#runs-on)).
 
 ## Folder names
 

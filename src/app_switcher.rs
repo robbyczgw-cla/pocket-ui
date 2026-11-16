@@ -205,7 +205,7 @@ impl App {
             .recents
             .list
             .iter()
-            // A hidden system's games stay out (Settings > Look > Systems on the shelf), and games hidden on their card;
+            // A hidden system's games stay out (Settings > Games > Systems on the shelf), and games hidden on their card;
             // the one being played stays in.
             .filter(|r| current.as_ref().is_none_or(|c| c.2 != r.path) && self.recent_visible(r))
         {

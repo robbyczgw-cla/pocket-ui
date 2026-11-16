@@ -22,7 +22,7 @@ Steady, breathing, fading, pulsing or off; "Like the rest" follows the colour ab
 Its own brightness, or the one above.	Su propio brillo o el de arriba.
 Lights & buttons	Luces y botones
 F1/F2 are shortcuts, not game buttons.	F1/F2 son atajos, no botones de juego.
-Set them in Settings › Sound & feel › Lights & buttons.	Se configuran en Ajustes › Sonido y tacto › Luces y botones.
+Set them in Settings › Controls › Lights & buttons.	Se configuran en Ajustes › Controles › Luces y botones.
 Shortcuts for all games; not game buttons. Choose their action here.	Atajos para todos los juegos; no botones de juego. Elige aquí su acción.
 Each light	Cada luz
 F1 button	Botón F1
@@ -30,7 +30,6 @@ F2 button	Botón F2
 Mute slider	Interruptor de silencio
 The Brick's lights, the F1 and F2 keys and the mute slider.	Las luces del Brick, las teclas F1 y F2 y el interruptor de silencio.
 Lights off	Luces apagadas
-Animations, playful cases, old-TV switch-on, motion, zoom, sounds, case sounds, haptics, lights & buttons.	Animaciones, cajas juguetonas, encendido de tele antigua, movimiento, lupa, sonidos, sonidos de caja, vibración, luces y botones.
 A soft tick as you move, and how strong it is. Games rumble on their own (pause menu, Options).	Un leve toque al moverte, y su fuerza. Los juegos vibran por su cuenta (menú de pausa, Opciones).
 Left grip	Empuñadura izquierda
 Right grip	Empuñadura derecha
@@ -93,3 +92,6 @@ Saves the game and puts the Brick to sleep. The power button wakes it; the game 
 Only the screen goes dark and the game waits. The power button turns it back on.	Solo se oscurece la pantalla y el juego espera. El botón de encendido la enciende de nuevo.
 Saves the game. The power button wakes it.	Guarda el juego. El botón de encendido lo despierta.
 The power button wakes it.	El botón de encendido lo despierta.
+Back to EmulationStation	Volver a EmulationStation
+Back to EmulationStation?	¿Volver a EmulationStation?
+pocket-ui closes and EmulationStation comes back. Your games, saves and settings stay as they are.	pocket-ui se cierra y vuelve EmulationStation. Tus juegos, partidas guardadas y ajustes se quedan como están.

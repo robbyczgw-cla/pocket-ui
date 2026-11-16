@@ -26,7 +26,7 @@ const LABEL_TOP: i32 = 112;
 const LABEL_H: i32 = 300;
 /// The scrolling part starts under the label and ends above the hints.
 const BODY_TOP: i32 = LABEL_TOP + LABEL_H + 28;
-const BODY_BOTTOM_GAP: i32 = 100;
+const BODY_BOTTOM_GAP: i32 = 130;
 const LINE: i32 = 40;
 /// The status picker's row after the five statuses: the player's rating, set with left and right.
 const RATING_ROW: usize = Status::ALL.len();
@@ -186,6 +186,9 @@ pub struct Card {
     pub info: Option<crate::game_info::InfoView>,
     /// Opened as the info page: SELECT goes between it and the full page, and the box is never shown.
     pub info_look: bool,
+    /// The page was turned to from the box (SELECT): stickers put on or taken off on it go back to the box, where the case
+    /// shows them land (`App::card_back_to_box`).
+    pub from_box: bool,
 }
 
 /// The baseline of the body's first headings ("About the game", "Your game") below `top`: lower by what Large adds to
@@ -213,6 +216,7 @@ impl Card {
             boxed: None,
             info: None,
             info_look: false,
+            from_box: false,
         }
     }
 
@@ -409,6 +413,7 @@ impl Card {
                 }
                 Button::Select => {
                     self.boxed = None;
+                    self.from_box = true;
                     return Out::Details { boxed: false };
                 }
                 _ => {}
@@ -430,6 +435,7 @@ impl Card {
                 }
                 Button::Select => {
                     self.boxed = Some(crate::game_box::BoxView::new());
+                    self.from_box = false;
                     Out::Details { boxed: true }
                 }
                 Button::Up => self.up(),
@@ -708,23 +714,20 @@ impl Card {
         let view_h = bottom - top;
         let w = c.w;
         {
-            let start = (top * w) as usize;
-            let end = (bottom * w) as usize;
-            let mut body = Canvas::new(&mut c.buf[start..end], w as u32, view_h as u32);
+            let mut body = c.rows(top, bottom);
             let height = self.paint_body(&mut body, text, -self.scroll);
             self.view_h = view_h;
             self.max_scroll = (height - view_h).max(0);
             self.scroll = self.scroll.min(self.max_scroll);
             // Text running under an edge fades out there instead of being cut off mid-line.
             const FADE: i32 = 36;
-            for k in 0..FADE {
-                let amount = (255 - k * 255 / FADE) as u8;
-                if self.scroll > 0 {
-                    body.shade_rect(0, k, w, 1, pal().void, amount);
-                }
-                if self.scroll < self.max_scroll {
-                    body.shade_rect(0, view_h - 1 - k, w, 1, pal().void, amount);
-                }
+            let down: Vec<u8> = (0..FADE).map(|k| (255 - k * 255 / FADE) as u8).collect();
+            if self.scroll > 0 {
+                body.shade_rows(0, 0, w, pal().void, &down);
+            }
+            if self.scroll < self.max_scroll {
+                let up: Vec<u8> = down.iter().rev().copied().collect();
+                body.shade_rows(0, view_h - FADE, w, pal().void, &up);
             }
         }
         if self.max_scroll > 0 && view_h > 0 {
@@ -853,7 +856,7 @@ impl Card {
         fx += text.draw(c, Face::Body, 28, fx, foot, pal().ink, d.status.label());
         let time = match d.played {
             Some((last, secs)) => format!("{} played, last {}", crate::recents::duration(secs), crate::recents::ago(last)),
-            None => "Not played yet".to_string(),
+            None => if d.was_played() { d.not_played() } else { "Not played yet" }.to_string(),
         };
         let time = text.fit(Face::Body, 28, &time, tx + text_w - fx - 40);
         text.draw(c, Face::Body, 28, fx + 40, foot, pal().label_dust, &time);
@@ -920,8 +923,23 @@ impl Card {
         let mut ry = heading_baseline(top);
         text.draw(c, Face::Title, 37, rx, ry, pal().dust, "Your game");
         ry += row();
+        // Where the player is, from the game's own save (`case_knows`), as on the box's back.
+        if let Some(progress) = &d.progress {
+            let lines = crate::case_knows_read::lines(text, Face::Body, 28, progress, rw);
+            for l in &lines {
+                text.draw_name(c, Face::Body, 28, rx, ry, pal().chalk, l);
+                ry += tight();
+            }
+            let k = crate::case_knows_art::scale();
+            let top = ry - tight() + type_scale::base(10, 28) + 6 * k;
+            let h = crate::case_knows_art::paint_strip(c, d.case_art.as_deref(), d.case_meter, (rx, top, rw), k, (pal().chalk, pal().dust, pal().void));
+            if h > 0 {
+                ry = top + h + tight() + 2 * k;
+            }
+            ry += row() - tight();
+        }
         // The labels' column holds the widest label in use (a face wider than Barlow, a German label), as the left one.
-        let rkey = ["Status", "Rating", "Played", "Last", "Battery", "Save slots", "Continue", "Note"]
+        let rkey = ["Status", "Rating", "Controls", "Played", "Last", "Battery", "Save slots", "Continue", "Note"]
             .iter()
             .map(|k| text.width(Face::Body, 28, k) + 24)
             .fold(type_scale::wide(150, 28), i32::max)
@@ -933,6 +951,15 @@ impl Card {
             let hint = text.fit(Face::Body, 28, &format!("{}? Press Y", s.label()), rw - rkey);
             text.draw(c, Face::Body, 28, rx + rkey, ry - 6, pal().amber, &hint);
             ry += row();
+        }
+        // A phone game: which buttons are its keys, seen before it starts (they are no console's).
+        if let Some(keys) = d.keys {
+            text.draw(c, Face::Body, 28, rx, ry, pal().dust, "Controls");
+            let lines = text.wrap(Face::Body, 28, keys, rw - rkey);
+            for (i, line) in lines.iter().enumerate() {
+                text.draw(c, Face::Body, 28, rx + rkey, ry + i as i32 * tight(), pal().chalk, line);
+            }
+            ry += row() + (lines.len() as i32 - 1).max(0) * tight();
         }
         // The player's rating: five small stars, the given ones in the text colour; none yet says how to give one.
         text.draw(c, Face::Body, 28, rx, ry, pal().dust, "Rating");
@@ -951,7 +978,7 @@ impl Card {
         };
         let played = d
             .played
-            .map_or("Not yet".to_string(), |(_, secs)| format!("{}{sessions}", crate::recents::duration(secs)));
+            .map_or(d.not_played().to_string(), |(_, secs)| format!("{}{sessions}", crate::recents::duration(secs)));
         text.draw(c, Face::Body, 28, rx, ry, pal().dust, "Played");
         let played = text.fit(Face::Body, 28, &played, rw - rkey);
         text.draw(c, Face::Body, 28, rx + rkey, ry, pal().chalk, &played);
@@ -989,6 +1016,12 @@ impl Card {
         }
         // A waiting moment, as the shelf's open case and the pause menu's "Where I quit" know it: one quiet line under the
         // slots; a game without slots (RetroArch, a standalone emulator) gets it as a row of its own, in the same place.
+        // Hardcore: no moment is continued; the card says what a start does instead, in the same place.
+        if d.hardcore && d.continue_at.is_none() && d.saves.is_some() {
+            let line = text.fit(Face::Body, 28, crate::achievements::hardcore::CARD_LINE, rw - rkey);
+            text.draw(c, Face::Body, 28, rx + rkey, ry - 6, pal().dust, &line);
+            ry += row();
+        }
         if let Some(at) = d.continue_at {
             let ago = crate::recents::ago(at);
             if d.saves.is_some() {
@@ -1060,7 +1093,7 @@ impl Card {
         }
         let mut y = ly.max(ry) + 30;
 
-        // The game running and its title screen, when the collection has them (Settings > Games > Extras).
+        // The game running and its title screen, when the collection has them (Settings > Games > Box art & downloads).
         if !self.pictures.is_empty() {
             let bw = picture_box(c.w).0;
             let mut tallest = 0;
@@ -1192,7 +1225,7 @@ impl Card {
         let row = 96 + type_scale::grow(37) + type_scale::grow(26);
         let x = (c.w - w) / 2;
         let total = 2 * (row + gap) - gap;
-        let top = (c.h - 100 - total) / 2 + 50;
+        let top = (crate::kit::content_bottom(c.h) - total) / 2 + 50;
         sheet(c, x - 48, top - 110, w + 96, total + 158);
         let title = text.fit_name(Face::Title, 50, &self.data.title, w);
         text.draw_name(c, Face::Title, 50, x, top - 32, pal().chalk, &title);
@@ -1211,7 +1244,7 @@ impl Card {
             let meta = text.fit(Face::Body, 26, meta, w - STRIPE - 56);
             text.draw(c, Face::Body, 26, x + STRIPE + 28, y + 78 + type_scale::grow(37) + type_scale::grow(26), dim, &meta);
         }
-        c.rect(0, c.h - 100, c.w, 100, pal().void);
+        c.rect(0, crate::kit::content_bottom(c.h), c.w, c.h - crate::kit::content_bottom(c.h), pal().void);
         crate::setup::hints(c, text, &self.hints());
     }
 
@@ -1243,7 +1276,7 @@ impl Card {
         let ready = matches!(d.info, Some(Ok(_)));
         let (lines, rows) = (say.len() as i32, if ready { 2 } else { 0 });
         let total = lines * step + if ready { 24 + rows * (row + gap) - gap } else { 0 };
-        let top = (c.h - 100 - total) / 2 + 50;
+        let top = (crate::kit::content_bottom(c.h) - total) / 2 + 50;
         sheet(c, x - 48, top - 110, w + 96, total + 158);
         let head = text.fit(Face::Title, 50, &format!("Delete {}?", self.data.title), w);
         text.draw(c, Face::Title, 50, x, top - 32, pal().chalk, &head);
@@ -1252,7 +1285,7 @@ impl Card {
             text.draw(c, Face::Body, 28, x, top + 20 + type_scale::grow(28) + k as i32 * step, *color, &line);
         }
         if !ready {
-            c.rect(0, c.h - 100, c.w, 100, pal().void);
+            c.rect(0, crate::kit::content_bottom(c.h), c.w, c.h - crate::kit::content_bottom(c.h), pal().void);
             crate::setup::hints(c, text, &self.hints());
             return;
         }
@@ -1291,32 +1324,42 @@ impl Card {
                 text.draw_right(c, Face::Body, 28, x + w - 28, y + row / 2 + type_scale::base(10, 28), dim, value);
             }
         }
-        c.rect(0, c.h - 100, c.w, 100, pal().void);
+        c.rect(0, crate::kit::content_bottom(c.h), c.w, c.h - crate::kit::content_bottom(c.h), pal().void);
         crate::setup::hints(c, text, &self.hints());
     }
 
     /// The status choices over the dimmed card, as a short shelf.
     fn paint_picker(&self, c: &mut Canvas, text: &mut Text, sel: usize, stars: u8) {
         c.shade_rect(0, 0, c.w, c.h, pal().void, 225);
-        let (w, mut row, gap) = (type_scale::wide(620, 37), type_scale::row(72, 37), 8);
+        let (w, mut row, mut gap) = (type_scale::wide(620, 37), type_scale::row(72, 37), 8);
         let x = (c.w - w) / 2;
         // The five statuses, the rating a little apart, then quieter, "Wrong game? Choose another" and "Wrong pictures?
         // Look up again".
-        let (extra_gap, mut extra_h) = (18, type_scale::row(60, 28));
+        let (mut extra_gap, mut extra_h) = (18, type_scale::row(60, 28));
         let quiet = if self.data.look_up { 2 } else { 1 };
-        let rows_h = |row: i32, extra_h: i32| (Status::ALL.len() as i32 + 1) * (row + gap) - gap + 2 * extra_gap + quiet * extra_h;
-        let mut total = rows_h(row, extra_h);
+        let rows_h = |row: i32, extra_h: i32, gap: i32, extra_gap: i32| (Status::ALL.len() as i32 + 1) * (row + gap) - gap + 2 * extra_gap + quiet * extra_h;
+        let mut total = rows_h(row, extra_h, gap, extra_gap);
         // On a short screen (1024x768 in Large text) the rows give up height, down to what their type needs,
         // so the heading stays on the picture: room above the first row for it, and the hint bar below.
-        let room = c.h - 100 - HEADING_ROOM;
+        let room = crate::kit::content_bottom(c.h) - HEADING_ROOM;
         if total > room {
-            let fixed = rows_h(0, 0);
+            let fixed = rows_h(0, 0, gap, extra_gap);
             let (min_row, min_extra) = (type_scale::px(37) as i32 + 14, type_scale::px(28) as i32 + 14);
             let k = (room - fixed) as f32 / (total - fixed) as f32;
             (row, extra_h) = (((row as f32 * k) as i32).max(min_row), ((extra_h as f32 * k) as i32).max(min_extra));
-            total = rows_h(row, extra_h);
+            total = rows_h(row, extra_h, gap, extra_gap);
         }
-        let top = ((c.h - 100 - total) / 2 + 60).max(HEADING_ROOM);
+        // Still too tall (1280x720 in Large text: "Wrong pictures? Look up again" ran under the hint bar, in every
+        // language): closer rows and gaps, down to what their type needs.
+        if total > room {
+            (gap, extra_gap) = (3, 8);
+            let fixed = rows_h(0, 0, gap, extra_gap);
+            let (min_row, min_extra) = (type_scale::px(37) as i32 + 8, type_scale::px(28) as i32 + 8);
+            let k = ((room - fixed) as f32 / (rows_h(row, extra_h, gap, extra_gap) - fixed) as f32).min(1.0);
+            (row, extra_h) = (((row as f32 * k) as i32).max(min_row), ((extra_h as f32 * k) as i32).max(min_extra));
+            total = rows_h(row, extra_h, gap, extra_gap);
+        }
+        let top = ((crate::kit::content_bottom(c.h) - total) / 2 + 60).max(HEADING_ROOM);
         // A black sheet under the heading and the rows, so nothing of the card runs through them.
         sheet(c, x - 48, top - 120, w + 96, total + 168);
         text.draw(c, Face::Title, 50, x, top - 36, pal().chalk, "Status and rating");
@@ -1373,7 +1416,7 @@ impl Card {
             let fg = if selected { pal().ink } else { pal().dust };
             text.draw(c, Face::Body, 28, x + STRIPE + 64, y + extra_h / 2 + type_scale::base(10, 28), fg, "Wrong pictures? Look up again");
         }
-        c.rect(0, c.h - 100, c.w, 100, pal().void);
+        c.rect(0, crate::kit::content_bottom(c.h), c.w, c.h - crate::kit::content_bottom(c.h), pal().void);
         crate::setup::hints(c, text, &self.hints());
     }
 
@@ -1383,7 +1426,7 @@ impl Card {
         let (w, row, gap) = (900, type_scale::row(84, 37), 8);
         let x = (c.w - w) / 2;
         let total = rows.len() as i32 * (row + gap) - gap;
-        let top = (c.h - 100 - total) / 2 + 50;
+        let top = (crate::kit::content_bottom(c.h) - total) / 2 + 50;
         sheet(c, x - 48, top - 110, w + 96, total + 158);
         text.draw(c, Face::Title, 50, x, top - 32, pal().chalk, "Which game is this?");
         for (i, r) in rows.iter().enumerate() {
@@ -1411,7 +1454,7 @@ impl Card {
                 text.draw_right(c, Face::Body, 28, x + w - 28, y + row / 2 + type_scale::base(10, 28), dim, side);
             }
         }
-        c.rect(0, c.h - 100, c.w, 100, pal().void);
+        c.rect(0, crate::kit::content_bottom(c.h), c.w, c.h - crate::kit::content_bottom(c.h), pal().void);
         crate::setup::hints(c, text, &self.hints());
     }
 }
@@ -1503,6 +1546,7 @@ mod tests {
             sentence: None,
             summary: Summary::None,
             played: None,
+            ever_played: true,
             sessions: 2,
             status: Status::NotStarted,
             suggestion: Some(Status::Playing),
@@ -1515,6 +1559,7 @@ mod tests {
             battery: None,
             port: None,
             port_update: false,
+            keys: None,
             surprise: None,
             look_up: false,
             from_gamelist: false,
@@ -1523,6 +1568,10 @@ mod tests {
             favorite: false,
             saves: None,
             continue_at: None,
+            hardcore: false,
+            progress: None,
+            case_art: None,
+            case_meter: None,
             links: Vec::new(),
             plain: false,
         }
@@ -1673,8 +1722,8 @@ mod tests {
         let mut text = Text::new();
         let inputs = crate::game_box::Inputs {
             medium: crate::media::Medium::Keep,
-            look: crate::cabinet_art::Look { color: 0x777777, band: 0x555555, plastic: 0x333333 },
-            front: None, game: None, cover: None, console: None,
+            look: crate::cabinet_art::Look { color: 0x777777, band: 0x555555, plastic: 0x333333, tape: false },
+            front: None, game: None, cover: None, console: None, moving: &[],
         };
         let paint = |card: &mut Card, px: &mut [u32], text: &mut Text| {
             card.paint_box(&mut Canvas::new(px, w as u32, h as u32), text, &inputs, None);

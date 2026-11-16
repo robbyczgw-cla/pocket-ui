@@ -98,11 +98,11 @@ in the SM8250 SYSTEM (only two sleep scripts of the Anbernic RG DS name it).
 | Partition | Added | Removed |
 |---|---|---|
 | FAT, label `ROCKNIX` (`/flash`) | `EFI/BOOT/BOOTAA64.EFI`, `boot/grub/grub.cfg`, `boot/grub/grub-efi-arm64-bin.version`, `boot/pocket/{Image,miniv2-noufs.dtb,KERNEL.source.md5}`, `loader/entries/pocket-ui.conf`, `post-flash.sh`, `mount-storage.sh`, `pocket-ui-info/` (`README.txt`, `SOURCE-OFFER.txt`, `LICENSE`, `NOTICE.md`, `licences/`, `rocknix-licenses/`, `firmware-licences/`) | `rocknix_abl/`: ROCKNIX's replacement for Retroid's bootloader and the scripts that flash it. This boot path never uses it, and flashing it is what this setup avoids. `SYSTEM` and `SYSTEM.md5` are replaced by the repacked SYSTEM (above) |
-| STORAGE, ext4 | `pocket-ui/` (launcher, `releases/<version>/` with pocket-ui, pocket-core and pocket-splash, `current` and the three links, as `dev.sh` and the updater lay it out), `.pocket-seed/.config/system.d/`: `essway.service.d/10-pocket-ui.conf`, and the boot screen `pocket-splash.service` with its link `sysinit.target.wants/pocket-splash.service` ([BOOT-SPLASH.md](BOOT-SPLASH.md)) | nothing (`.please_resize_me` and `lost+found` stay) |
+| STORAGE, ext4 | `pocket-ui/` (launcher, `releases/<version>/` with pocket-ui, pocket-core and pocket-splash, `current` and the three links, as `dev.sh` and the updater lay it out; `games-card.sh`), `.pocket-seed/.config/system.d/`: `essway.service.d/10-pocket-ui.conf`, `rocknix-automount.service.d/20-pocket-games-card.conf` (an ArkOS card in the second slot, below), and the boot screen `pocket-splash.service` with its link `sysinit.target.wants/pocket-splash.service` ([BOOT-SPLASH.md](BOOT-SPLASH.md)) | nothing (`.please_resize_me` and `lost+found` stay) |
 
-Partition table, partition sizes and KERNEL are unchanged; SYSTEM only lost the paths above. Image: 2,198,863,872 bytes raw, 1,518,697,476
-bytes as `.img.xz` (version 0.1.0, commit 4cc9c97, 2026-10-26). STORAGE holds 16 MB of its 32 MB before the first start
-(6.9 MB on 2026-10-22: the programs have grown; the check warns above 24 MB).
+Partition table (but p2's size), p1 and KERNEL are unchanged; SYSTEM only lost the paths above. p2 is 128 MiB instead of ROCKNIX's 32 MiB (see
+"STORAGE room"), so the image is 96 MiB longer than ROCKNIX's 2,198,863,872 bytes. The 0.1.0 image (commit 4cc9c97, 2026-10-26) was
+2,198,863,872 bytes raw, 1,518,697,476 bytes as `.img.xz`, with 16 MB of its 32 MB STORAGE in use before the first start.
 
 ## How ROCKNIX sets up a new card, and how our files get through it
 
@@ -110,19 +110,19 @@ Sources: ROCKNIX tag `20261001` (commit `c445081a…`), and the same files read 
 SYSTEM. The initramfs `init` inside the kernel matches
 `projects/ROCKNIX/packages/sysutils/busybox/scripts/init` except for the build-time `@…@` substitutions. [V]
 
-- **STORAGE exists in the image**, 32 MiB ext4, label `STORAGE`, holding only `lost+found` and
-  `.please_resize_me`. [V]
+- **STORAGE exists in the image**, ext4, label `STORAGE`, holding only `lost+found` and `.please_resize_me`: 32 MiB in
+  ROCKNIX's image, 128 MiB in ours (`build.sh` grows it, see "STORAGE room"). [V]
 - **First boot.** `init` sees `/storage/.please_resize_me` and starts systemd with `--unit=fs-resize.target`
   (end of `init`). `fs-resize.service` runs `/usr/lib/rocknix/fs-resize`: `parted resizepart 2 100%`, `e2fsck`,
   `resize2fs`, new UUIDs (`tune2fs -U random`, `fatlabel -i -r`; the labels stay), then a reboot. [V]
 - **`resize_inode` is off on our STORAGE** (ROCKNIX's has it). `fs-resize` ignores what `resize2fs` returns and prints
   "done". With `resize_inode` and our programs on STORAGE, `resize2fs` fails on a card over about 36 GB once more than
   about 18 MB is in use, after moving the root directory: the next boot says "Filesystem corruption", and the repair
-  leaves an empty 32 MB STORAGE with everything in `lost+found`. Nothing needs the feature: it serves online growing
+  leaves an empty STORAGE (32 MB at the time, 128 MB now) with everything in `lost+found`. Nothing needs the feature: it serves online growing
   only. `scripts/image/grow-check.sh`, part of the image checks, replays the steps from 8 GB to 2 TB. [V]
 - **The catch:** `fs-resize` refuses to grow STORAGE if `/storage/.config` or `/storage/.cache` already exists
   ("Resizing is not permitted - the system has already been initialised"): it deletes the marker, reboots, and the
-  card keeps a 32 MB STORAGE for good. [V] Our essway drop-in has to live in `/storage/.config/system.d`, so it
+  card keeps the STORAGE of the image (128 MB; ROCKNIX's own was 32 MB) for good. [V] Our essway drop-in has to live in `/storage/.config/system.d`, so it
   cannot be on the card from the start.
 - **`/storage/.config` is filled later**, at the second boot, by ROCKNIX's autostart: `001-setup` runs
   `chksysconfig verify`, which runs `rsync -a /usr/config/ /storage/.config` when its key files are missing. It has
@@ -157,6 +157,32 @@ own mount of `/storage` (`mount_flash`, `mount_sysroot`, `mount_storage`). [V]
   shell, redefines `check_update` as a no-op for this start: the foreign file stays untouched and the start goes on
   normally. Every doubt ends in "refuse and boot normally". ROCKNIX's cleanup after an
   install removes the approval with the tar.
+- **An ArkOS card in the second slot is used as it is** (every family; the R36S is the case it is for). ROCKNIX's
+  `/usr/bin/automount` (`rocknix-automount.service`, restarted by udev for a card put in) mounts the first big
+  FAT/exFAT/NTFS/ext4 partition of a card that isn't mounted on `/storage/games-external`, writes a probe file
+  `.tmp-rocknix` on it (`fsck` if that fails), creates `<card>/roms` with ~100 empty system folders (`systemd-tmpfiles`) and
+  binds `<card>/roms` on `/storage/roms`. ArkOS, dArkOS and stock R36S cards keep `gba/`, `snes/`, `psx/`, `bios/` ... at
+  the root of their games partition (stock R36S: BOOT FAT, rootfs ext4, EASYROMS exFAT; dArkOS's games card: one exFAT
+  partition), so that hid every game and littered the card. The seed's drop-in
+  `rocknix-automount.service.d/20-pocket-games-card.conf` (`deploy/image/rocknix-automount-games-card.conf`) replaces the
+  unit's `ExecStart` with `deploy/image/games-card.sh` (`/storage/pocket-ui/games-card.sh`; without it, automount as
+  before). The script takes the partitions automount would (mmcblk/sd/nvme, a device over 8 GiB, not mounted, not an
+  Android `boot0` device, not the card `/storage` or `/flash` are on), FAT/exFAT/NTFS only, and mounts each read-only on
+  `/run/pocket-ui/probe`. An ArkOS card has no entry `roms` at its root in any case (Anbernic's stock card with `Roms/`
+  goes ROCKNIX's way) and at least two known system folders there. Found: mounted read-write on `/storage/games-external`
+  as automount mounts it (BusyBox `mount`, `-t ntfs3` for NTFS), with no probe file, no fsck, no folders made on it;
+  `/storage/games-internal/roms` bound on `/storage/roms` and ROCKNIX's system folders made there (only when the last
+  mount on `/storage/roms` isn't the card), as automount does without a card; the card's `bios/` files copied into
+  `/storage/roms/bios/` where missing (never over a file, at most 512 MiB each, through a `.pocket-part` name); and
+  `/run/pocket-ui/games-card-root` holds `/storage/games-external`: pocket-ui reads the game folders at that root.
+  Anything else (no such card, a card with `roms/`, a blank card, a probe that fails, `system.automount=0`, a
+  `system.gamesdevice` set, the first start) execs ROCKNIX's automount unchanged and removes the marker. A failure on the
+  ArkOS way (the read-write mount, the probe's unmount) ends with the internal folder only; automount never gets an
+  ArkOS card. Log: `/var/log/pocket-ui-games-card.log`. `deploy/image/test-games-card.sh` (run by
+  `test-mount-storage.sh`, in the gate) covers a stock R36S card, a dArkOS card, NTFS, the card byte for byte unchanged,
+  the BIOS copy, the restart by udev, the cards that go to automount and each failure, with stand-ins for mount and
+  blkid. [I] on a device: never run on a real one yet. Cards flashed before this have no drop-in (the seed is only read at
+  the first start).
 - `deploy/image/post-flash.sh` replaces `init`'s `load_splash` with the same function minus the call to
   `/usr/bin/rocknix-splash`, which draws the ROCKNIX logo. It prints "pocket-ui, based on ROCKNIX" and ROCKNIX's
   version line instead. It stays on the card and runs at every boot.
@@ -252,7 +278,8 @@ pocket-ui on STORAGE. The partition table is MBR (the Mini V2's is GPT) with the
 The images differ in `dtb.img` and in the model name in the notes, nothing else. The newer screen revisions of the Plus
 and the SP (`rg35xx-plus-r6` for the Plus's rev6 panel, `rg35xx-sp-v2` for the SP's v2 panel; short names so the hostname
 `pocket-<model>` stays within 24 characters) have their own trees; a unit with a broken picture on the plain one needs that
-variant. The other panel trees (RG35XX 2024 and H rev6, RG40XX H and V v2, RG34XX-SP v2) are not built yet.
+variant. The RG34XX-SP's v2 panel has its tree as `rg34xx-sp-v2` (its 2026 batch needs it with DDR3, below). The other panel
+trees (RG35XX 2024 and H rev6, RG40XX H and V v2) are not built yet.
 
 **RAM type.** The base is the DDR4 image: U-Boot for LPDDR4 units. The RG35XX Plus reads `vdd-dram` 1.1 V (DDR4). The
 RG35XX SP and the RG28XX are **expected** to be DDR4 (ROCKNIX's device pages), not confirmed on the units; a DDR3 unit
@@ -264,6 +291,14 @@ line, `FDTOVERLAYS /overlays/sun50i-h700-anbernic-rg35xx-2024-ddr3.dtbo`). KERNE
 (`build.sh` checks that against the DDR4 pins and refuses otherwise). `make-image-family.sh --models "... rg40xx-h-ddr3"` downloads
 and pins the DDR3 image by itself; `check-image-family.sh` checks the loader and extlinux.conf against `H700_DDR3_LOADER_MD5` and
 `H700_DDR3_EXTLINUX_MD5`. The notes name DDR3 and say it is a test build.
+**More DDR3 cards** (same build, a line each): `rg34xx-sp-v2-ddr3` (DDR3 U-Boot and the RG34XX-SP's v2 panel tree) for the
+2026 RG34XX-SP batch (Metallic Blue, sold since May 2026 with 1 GB or less): teardowns found an LPDDR3 chip, the screen is a
+new panel, and a player's blue unit (2026-11-14) stayed dark on `rg34xx-sp` and booted ROCKNIX only as DDR3 with the v2 tree.
+`rg-sp-ddr3` for the RG-SP: a measured unit reads `vdd-dram` 1.2 V and its stock boot0 has `dram_type` 7 (LPDDR3), so the plain
+`rg-sp` card (DDR4) most likely never starts on one. A DDR3 line needs its DDR4 twin with the same tree (`rg34xx-sp-v2`), which
+the build takes too. How to tell: the RAM type is set by the board (Anbernic's stock boot0 reads a pin, PH6, and picks LPDDR3 or
+LPDDR4); nothing on the box says it. A card for the wrong RAM type leaves the screen dark (no picture at all), a wrong panel
+tree gives a dark or garbled screen while the system runs; neither harms the handheld.
 
 **SYSTEM without a few files** (`H700_SYSTEM_REMOVE`; read again for this family on 2026-10-30 with
 `scripts/check-release-tree.py` on the unpacked SYSTEM): the six SKick tables loose and in Amiberry's `boot-data.zip`
@@ -310,7 +345,7 @@ Windows PC opens as a normal drive, with `roms/<system>/` ready. What and why:
   if it's exFAT and labelled GAMES. A third partition that isn't ours is never touched.
 - *Finding it.* ROCKNIX's `automount` (`find_games`) takes any unmounted ext4/btrfs/FAT/NTFS partition of a device over
   8 GiB, in `sort -r` order, whether on the boot card or not, so no `system.gamesdevice` is needed. A card in the second
-  slot sorts first and wins: an existing games card works as before, and GAMES waits. It binds `games-external/roms` to
+  slot sorts first and wins: an existing games card works as before (an ArkOS card through `games-card.sh`, below the hooks), and GAMES waits. It binds `games-external/roms` to
   `/storage/roms`, with no overlay on exFAT (`.ms_unsupported`; `system.merged.storage=0` is the default anyway).
 - *Its mount.* The seed's drop-in `rocknix-automount.service.d/10-pocket-games.conf` runs `deploy/image/games-mount.sh` after
   automount, for this drive only: mounted again with `noatime` (exFAT ignores options on a remount; file sharing writes as
@@ -403,6 +438,7 @@ check also proves every firmware the model's device tree names is still in SYSTE
 points to ROCKNIX's repository at the tag (see the GPL source section).
 
 
+
 ## Offline check (`scripts/check-image.sh`)
 
 Runs on the `.img.xz` (unpacks it into `build/image/check/`) or a raw `.img`. 58 checks until 2026-10-26, 63 with the
@@ -412,7 +448,8 @@ program answering `--version`; [BOOT-SPLASH.md](BOOT-SPLASH.md)), 64 since 2026-
 the three `--version` ones, which warned because the virtual device's base image was not built there
 (`scripts/vdev.sh image`); on 2026-10-26 both programs printed `0.1.0` in that base image on the Mac instead:
 
-- SHA256SUMS; GPT with exactly ROCKNIX's two partitions (start, size, type, name); image size unchanged.
+- SHA256SUMS; GPT (H700: MBR) with exactly ROCKNIX's two partitions (start, type, name; p2's size is `P2_SIZE`, 128 MiB), `sfdisk -V`
+  clean, image size `IMG_BYTES` (ROCKNIX's plus the 96 MiB p2 grew by).
 - FAT: label `ROCKNIX`; **exactly** the expected file list (ROCKNIX's licence folder counted, `ROCKNIX_LICENSE_FILES`);
   KERNEL and SYSTEM md5 against the pins and their `.md5` files.
 - Inside SYSTEM (since 2026-10-28): none of `SYSTEM_REMOVE`; `ssh.enabled=0`, `samba.enabled=0`,
@@ -440,7 +477,7 @@ the three `--version` ones, which warned because the virtual device's base image
 - STORAGE: label `STORAGE`, `e2fsck -fn` clean, **exactly** the expected files with owner `0:0` and mode;
   `.please_resize_me` present, no `.config`/`.cache`; drop-in, boot screen unit, launcher and `portmaster-setup.sh` are
   the repository's; the three programs are aarch64 ELF; a failure when fewer than `P2_MIN_HEADROOM_BLOCKS` (128 blocks of
-  4 KiB = 512 KiB) are free before the first start (see "STORAGE room").
+  4 KiB = 512 KiB) are free before the first start (see "STORAGE room"); `grow-check.sh` replays the first boot's grow for 8 GB to 2 TB cards.
 - Nothing from a developer device: no `.config/pocket-ui` (so the first-start setup runs), no `dev-ssh`, no `.ssh`
   or host keys, no Wi-Fi files (`*.psk`, iwd, NetworkManager, wpa_supplicant), no recents, saves, ROMs or BIOS
   files, no `update-pending`, `previous` or `dev.env`.
@@ -560,25 +597,32 @@ which card is in it.
 ## STORAGE room
 
 ROCKNIX's STORAGE is a 32 MiB ext4 (8192 blocks of 4 KiB, a 4 MiB journal, 7027 blocks free; the same on the SM8250, SM8550
-and H700 base images, `pins.sh` `P2_FREE_BLOCKS`) and stays that size until the first start grows it to the card. The three
-programs are about 27.6 MB of it and grow with every release (0.3.0 to 0.3.1: 67 blocks). On 2026-11-08 the 0.3.1 images
-stopped in `build.sh` ("Could not allocate block"): with the licence texts stored a second time (303 blocks) the programs were
-43 blocks short. Since then the licence texts are on the card once, in `pocket-ui-info/licences` on the FAT partition, and
-`/storage/pocket-ui/licences` is a link to `/flash/pocket-ui-info/licences`; an update (`install.sh`) replaces the link with a
-real folder on the grown STORAGE. The journal cannot be made smaller (4 MiB is the least ext4 takes at 4 KiB blocks), and
-ROCKNIX keeps it when it grows the file system, so it is left as it is.
+and H700 base images, `pins.sh` `P2_ROCKNIX_FREE_BLOCKS`) and stays that size until the first start grows it to the card. The three
+programs grow with every release (0.3.0 to 0.3.1: 67 blocks; 0.4.1 to 0.4.2: 430 KB, mostly the Portuguese table). On
+2026-11-08 the 0.3.1 images stopped in `build.sh` ("Could not allocate block"), and by 2026-11-14 main was 27 blocks over the
+limit again (0.4.2 had 307 of the 512 spare blocks asked for). Compressing the translation tables would have bought about
+2.4 MB; the simpler fix was chosen: **our STORAGE is 128 MiB.**
 
-Three things keep it from happening again: `build.sh` stops when ROCKNIX's free block count is not the pinned one;
-`check.sh` and `check-h700.sh` fail an image with fewer than `P2_MIN_HEADROOM_BLOCKS` (128 blocks, about two releases) free;
-and `scripts/image/storage-budget.sh BIN_DIR` works it out from the release programs without building an image: the release
-check runs it (`POCKET_STORAGE_BIN_DIR`, or a build in `target/aarch64-unknown-linux-gnu*/release`) and fails when the
-programs no longer fit or leave too little. With the link the 0.3.1 programs leave about 1 MiB.
+- `pins.sh`: `P2_SIZE=262144` sectors (128 MiB: the most one ext4 block group holds at 4 KiB blocks, so the file system grows
+  without new group descriptors; the inode count stays 2048), `IMG_BYTES` (ROCKNIX's 2,198,863,872 plus 96 MiB),
+  `P2_FREE_BLOCKS=31603` (free blocks of the grown file system before anything is written = ROCKNIX's 7027 + 24576).
+- `build.sh` checks ROCKNIX's free blocks, runs `resize2fs` on the extracted p2 offline (clean before and after), writes everything
+  into it, and then `grow_image` extends the image, rewrites the partition table (only p2's size and, on GPT, the last usable sector
+  change; sfdisk with no signature wiping, the boot code of sector 0 put back byte for byte; the second GPT lands at the new end)
+  and writes p2 back. The new space is zeros: for the same programs the H700 `.img.xz` went from 1,252,074,588 to 1,252,089,980 bytes (+15 KB), not +96 MiB.
+- The first boot is unchanged: ROCKNIX's `fs-resize` still grows partition 2 over the whole card. `grow-check.sh` (image checks)
+  replays that on the finished p2 for 8 GB to 2 TB cards, and the image checks run `sfdisk -V`.
+- Cards with a GAMES drive (`games-first-start.sh`) place p2 and p3 from the card's size, not from p2's old size: unchanged.
+- The licence texts are on the card once, in `pocket-ui-info/licences` on the FAT partition, and `/storage/pocket-ui/licences` is a
+  link to `/flash/pocket-ui-info/licences`; an update (`install.sh`) replaces the link with a real folder on the grown STORAGE.
 
-For future release programs, `storage-budget.sh` now requires 2 MiB free (or a larger pinned image minimum).
-Full LTO recovers 1.95 MiB in the measured successor build, leaving a conservative 730 blocks (2.85 MiB)
-without changing the partition layout. The historical finished-image/receipt minimum above stays unchanged,
-so existing immutable 0.3.1 image attestations remain valid. See [BINARY-SIZE.md](BINARY-SIZE.md) for attribution,
-alternatives and runtime measurements.
+Three things keep the budget honest: `build.sh` stops when the free block counts are not the pinned ones;
+`check.sh` and `check-h700.sh` fail an image with fewer than `P2_MIN_HEADROOM_BLOCKS` (128 blocks) free; and
+`scripts/image/storage-budget.sh BIN_DIR` works it out from the release programs without building an image: the release check runs it
+(`POCKET_STORAGE_BIN_DIR`, or a build in `target/aarch64-unknown-linux-gnu*/release`) and fails when the programs no longer fit; less
+than 512 blocks (2 MiB) left is a NOTE to grow STORAGE again, not a stop. Against 31603 blocks that is about 24,500 blocks (95 MiB) to spare with today's programs.
+The historical finished-image/receipt minimum (128) stays unchanged, so existing immutable 0.3.1 image attestations remain valid.
+See [BINARY-SIZE.md](BINARY-SIZE.md) for the size attribution and why the translation tables stay uncompressed.
 
 ## Experimental SM8250 tester cards (Pocket 5 and Flip 2)
 

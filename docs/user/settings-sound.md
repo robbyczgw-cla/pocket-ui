@@ -1,94 +1,118 @@
-# Settings: Sound & feel
+# Settings: Screen & sound, Controls
 
-The **Sound & feel** category of [Settings](settings.md), on a page of its own.
+The **Screen & sound** and **Controls** categories of [Settings](settings.md), on a page of their own. Until this version
+they were one category, Controls & sound (Sound & feel before that); Brightness and Volume were only in the
+[quick settings](quick-settings.md), Screen colour and Night light were in Look, and Zoom in the pause menu was here (it
+is in [Look](settings.md#zoom-in-the-pause-menu) now).
 
-## Sound & feel
+## Screen & sound
 
-Settings → **Sound & feel**. What moves, what you hear and what you feel in your hands.
+Settings → **Screen & sound**. What the device puts out: how bright and how loud, the screen's colour, and what you hear
+besides the game.
 
 | Entry | What it holds |
 |---|---|
-| **Animations** | **Cozy**: watch your game slide into the console, and after Quit come back out of it into its case, and the pages, the box and the menus move a little slower and softer. **Quick**: straight into the game, the animations as short as they get. A or Left/Right switches it. Cozy in the Shelf and Cabinet looks until you choose, Quick in the others. See [Animations](#animations) |
-| **Playful cases** | Cases spring out and wiggle, each game goes into its console its own way, the open box's disc turns, spines lean as you scroll ([Playing](playing.md#starting-a-game)). Shelf and Cabinet looks only, with Motion on Full. **On with Cozy, Off with Quick** until you switch it. A or Left/Right switches it |
-| **Old-TV switch-on** | The game's picture comes on like an old TV when it starts (a handheld's display just lights up), and goes off like one (to a line and a dot) after Quit; a handheld's game just goes dark. In looks with the insertion animation, with Animations on Cozy and Motion on Full. **On** at the start. A or Left/Right switches it |
-| **Motion** | **Full** (the default), **Reduced** or **Off**: how much the menus move. A or Left/Right switches it. See [Motion](#motion) |
-| **Zoom in the pause menu** | Whether the pause menu's first page lists Zoom: **Off** (the default) or **On**. Zoom is always under Options, and listed here too while Big text is on. A switches it. See [Zoom in the pause menu](#zoom-in-the-pause-menu) |
-| **Sounds** | Soft clicks in the menus (not the game's volume or the screen brightness: those are on HOME, [Quick settings](quick-settings.md)). A turns them on or off, Left/Right set how loud. See [Playing](playing.md#menu-sounds) |
-| **Case sounds** | Cases click open, cartridges and discs go in with a sound, the old TV hums on. Shelf and Cabinet looks only. Needs Sounds on; the menu sounds are not affected. **On** at the start. A or Left/Right switches it |
+| **Brightness** | How bright the screen is: the same value as the [quick settings](quick-settings.md)' Brightness and START + Vol, so they always agree. Left/Right change it, one step at a time; below the lowest backlight the screen gets darker still (extra dim), as in the quick settings |
+| **Volume** | How loud games and menus are: the same value as the quick settings' Volume and the volume keys. Left/Right change it, one step at a time |
+| **Screen colour** | The screen's white: **Cooler 10** … **Neutral** … **Warmer 10**. Left/Right changes it, you see it at once; A goes back to Neutral. The same setting as [SELECT + Vol](controls-settings.md#volume-and-brightness-keys), so the two always agree |
+| **Night light** | Warmer, less blue colours in the evening, in the menus and in games: **Off** (the default), **On** or **Scheduled**, with a strength. See [Night light](#night-light) |
+| **Menu sounds** | Soft clicks in the menus, not the game's volume (that is **Volume** above). A turns them on or off, Left/Right set how loud. See [Playing](playing.md#menu-sounds) |
+| **Case sounds** | Cases click open, cartridges and discs go in with a sound, the old TV hums on. Shelf and Cabinet looks only. Needs Menu sounds on; the menu sounds are not affected. **On** at the start. A or Left/Right switches it |
+
+Case sounds sits beside Menu sounds, which it needs. While Menu sounds is off, the line at the bottom says so.
+
+### Night light
+
+Settings → Screen & sound → **Night light** has its own page: [Night light](night-light.md).
+
+
+## Controls
+
+Settings → **Controls**. The buttons in one place, then what you feel in your hands and see on the controller.
+
+| Entry | What it holds |
+|---|---|
+| **Buttons** | Which face button confirms in pocket-ui's menus, and how the buttons look in the hints, with a picture of the four buttons. See [Buttons](#buttons) |
+| **Controller setup** | A separate layout for each controller, in menus and games: which of its buttons is which. Controllers are paired in Connections → [Bluetooth](bluetooth.md). See [Controller setup](#controller-setup) |
+| **Test buttons** | Every controller's buttons, triggers and sticks light up while you press them, and the page says what each press does in menus and in games. See [Test buttons](#test-buttons) |
 | **Haptics** | A very short tick in the menus as the selection moves, on every page where a move also clicks. A turns it on or off. Off by default |
 | **LEDs** | The lights around the sticks: off, one colour, or the battery colours. Only on a device with sticks. On the TrimUI Brick the row is called **Lights & buttons** and holds the Brick's own lights, the F1 and F2 keys and the mute slider. See [LEDs](#leds) |
 
-Playful cases, Old-TV switch-on and Case sounds sit beside the switches they need (Animations, Motion, Sounds). While
-one of those keeps them from showing, the line at the bottom says which.
+### Buttons
 
-### Animations
+Settings → Controls → **Buttons** has two rows and, under them, a picture of the four face buttons where they sit on
+your device, each with the symbol the hints show for it; the one that confirms is named **Confirm** and the one that
+goes back **Back**. A line under the picture says which button confirms right now. A or Left/Right switches the
+selected row, and the next button you press already works the new way. Both choices are saved at once.
 
-Settings → Sound & feel → **Animations**. The first start doesn't ask: the look decides until you choose here.
+#### Button layout
 
-- **Cozy**: when you start a game in the Shelf or the Cabinet look, you watch its case open and the cartridge or disc slide into the console
-  (about a second, with a click). Pages, the game's box and the menus take about a third longer and ease in more softly.
-- **Quick**: straight into the game; the animations as short as they get.
+Which face button plays A, B, X and Y in pocket-ui's own screens.
 
-Until you choose, the look decides: Cozy for Shelf and Cabinet, Quick for Split. Once you choose, it stays
-yours, whatever look you pick later. With Cozy, a game of pocket-core's is shown once the animation is over, so it starts
-about a second later than with Quick (a game that needs longer to load is not held at all); any button skips the rest.
-The shelf fades to black before the picture comes on like an old TV, in a third of a second: a bright line grows out of
-the middle, and the picture opens out of it, squeezed at first. A handheld's game (Game Boy, GBA, DS, PSP) has no TV: its
-display lights up instead. Continue follows the same order: an open case plays the whole scene too, its moment waiting, still, until the game is in;
-the saved picture behind a reminder stays visible
-(with Motion on Full; Quick and Reduced skip it, and a button press cuts it short).
-**Motion** (Reduced, Off) still overrides it: nothing slides where Motion says so.
+- **Nintendo**, the default: A on the right, B at the bottom, X on top, Y on the left, as printed on the Mini V2.
+- **Xbox**: A at the bottom, B on the right, X on the left, Y on top, as on an Xbox controller.
 
-After Quit, Cozy plays the way back in every look that puts games into consoles, including Easy and Kids Mode.
-The shelf is already usable: any button or touch ends the effect and takes its usual action. A handheld display
-goes dark; with Old-TV switch-on enabled a TV picture closes to a line and a dot. The cartridge or disc returns
-to its case, which stays a little open when Continue waits. Quick and Motion Reduced or Off show the shelf at once.
+Menus only: games and safe mode keep the printed buttons. What it changes and what it leaves alone is in
+[Controls](controls.md#button-layout).
 
-### Motion
+Not on Android: there the handheld's own setting decides which button confirms (on the Odin its Controller style),
+and the Buttons page only has Button symbols ([Android](android-mvp.md)).
 
-Settings → Sound & feel → **Motion**; A or Left/Right switches it (the first start keeps the default; its Big text,
-L2, switches Reduced on with Large text).
+On experimental **AYN Odin 2 Mini** and **Odin 2 Portal**, the default menu layout is **Xbox** (A bottom,
+B right, X left, Y top), matching the printed letters. The original Odin 2 defaults to Nintendo. A saved choice
+wins. Safe mode follows the device’s printed layout. Games keep their positional controls: the screenshot
+shortcut is HOME + the right face button (printed B on Mini/Portal), regardless of the menu layout.
 
-- **Full**, the default: the selection glides to the row you move to, lists scroll smoothly, pages slide in,
-  the game card rises out of its label, the hints and small messages fade.
-- **Reduced**: only fades. Pages and messages still fade in, but nothing slides, grows or glides.
-- **Off**: no animation at all; every press shows its result in the next frame.
+#### Button symbols
 
-Moving menus aim for up to 60 frames a second. Still pages rest until something changes.
+How the hints show the four face buttons, everywhere a key is shown (the hint bars, dialogs, the pause menu, this
+manual's key chips and its controls picture).
 
-None of them makes anything slower: a press changes what is selected or opened at once, whichever you choose,
-and pressing again in the middle of a movement takes it straight to the new place. The choice is saved at once.
+- **Nintendo**: plain letters A, B, X and Y.
+- **Xbox**: A, B, X and Y on green, red, blue and yellow.
+- **PlayStation**: cross, circle, square and triangle. Cross stands for A, circle for B, square for X and triangle
+  for Y.
 
-### Zoom in the pause menu
+Retroid and AYN handhelds start with Xbox, Anbernic handhelds with Nintendo; your choice wins. It only changes the
+pictures of the keys: which button confirms is [Button layout](#button-layout)'s job, and the two can be
+combined freely. The explanations under a list still name the keys by their letter.
 
-Settings → Sound & feel → **Zoom in the pause menu**: the [pause menu](pause-menu.md) on pocket-ui's own host lists **Zoom** before
-Quit. **Off** is the default, because the magnifier is a help for small text and most players never need it: then Zoom is a
-row of Options, next to Picture and Controls, and can be a [shortcut](options.md#shortcuts) (HOME + X). While
-[Big text](big-text.md#big-text) is on, the row is on the first page whatever this switch says. A switches it.
-See [Zoom](big-text.md#zoom).
+### Controller setup
 
-### Cozy extras
+Settings → Controls → **Controller setup** gives each controller a layout of its own, kept through reconnects:
+choose the controller at the top, then press the button you want for each action. It was the third row of Buttons. The
+same page opens from the pause menu, Options → Controls. See [Controller setup](controls-settings.md#controller-setup).
 
-Settings → Look → **Cozy extras** switches the little touches you see, one by one, for when you like some of them and
-not others. Up/Down move, A (or Left/Right) switches the selected one **On** or **Off**; it takes effect at once and is
-kept across restarts. The line under the list says what the selected one does and in which looks you see it. Reset
-settings (System → Backup & reset) puts them back as they start. The extras you hear or that move are entries of
-Sound & feel (Playful cases, Old-TV switch-on, Case sounds).
+### Test buttons
 
-| Extra | What it does | Start |
-|---|---|---|
-| **TV on the cabinet** | A small old TV on top of the cabinet shows the selected game. Cabinet look only | On |
-| **Stickers on cases** | Your stickers on the cases. Off hides them on the shelf and the box; they stay on the game and on its card's Stickers row. Shelf and Cabinet looks only | On |
-| **Printed discs** | Discs printed with their cover's art and title. Off: a plain disc in its console's colour. Shelf and Cabinet looks only | On |
-| **Light by time of day** | The room's light follows your Pocket's clock: cool and bright in the morning, warm in the evening with the lamp glowing, dim at night. Very gentle: covers and text keep their colours. Shelf and Cabinet looks only | On |
-| **Decorations** | Things on your shelves that grow with your play: the plant grows with your hours, a trophy after your first completed game, a framed "100 %" after your first 100 % sticker, a small figurine for each system you played for 10 hours. Only where a shelf has room. This works with Light by time of day on or off. Off: the shelves as they were. Shelf and Cabinet looks only | On |
-| **Game connections** | The developer, publisher, series and genre on the info page and the box's back lead to your other games with the same one ([Connections](library.md#connections)). Off: they are only shown | On |
-| **Rediscover** | Games you haven't played for a long time, as a row in Curator's list | On |
-| **GBA console** | **Game Boy Advance** or **Game Boy Advance SP**. Changes the GBA hardware picture everywhere, including the shelf, console page and cabinet. The SP opens before its cartridge slides into the bottom slot, label facing the underside. Up/Down reaches the row; A or Left/Right changes it and keeps the choice across restarts. Your games and emulator stay the same | Game Boy Advance |
+Settings → Controls → **Test buttons** shows what a controller really sends, for a button that seems dead, a
+trigger that feels off, a stick that drifts, or when you want to see what your own layout does.
+
+![Test buttons: the controller drawn, a trigger half pulled, the last button pressed](pictures/test-buttons.webp)
+
+- **Left: the controllers.** The Pocket's own buttons, every Bluetooth controller and every USB controller, each with
+  its player number and how it is connected. A small light burns while something of that controller is down. The one
+  you press a button on (or push a stick of) is drawn on the right.
+- **The drawing.** Face buttons, D-pad, L1 and R1, SELECT, START, HOME and both sticks light up while they are down.
+  The letters on the four face buttons are what those buttons are in the menus, after the [Button layout](settings-sound.md#button-layout)
+  and your own layout in Controller setup. A small dot on a button means your own layout moved it.
+- **Triggers** show how far they are pulled, in percent. The tick on the bar is where they count as pressed (55%); they
+  are let go again below 40%. A trigger that is only a button (some controllers) fills at once.
+- **Sticks** show where the stick is, as two numbers from -100 to 100. The small square in the middle is the dead zone:
+  menus ignore a stick that stays inside it.
+- **The last button pressed**, on which controller and player, and what it is **in menus** (A, B, X, Y or its own name)
+  and **in games** (the console's button, through your layout). If your layout moved it, the page says **Remapped to**
+  and the button it acts as. A press that pocket-ui does not know is shown as **Not recognised**, with the name the
+  controller gave it: useful in a bug report.
+
+Every button is a test here, B, START and HOME too, so none of them leaves the page. **Hold HOME for 2 seconds, or B and
+START together on one controller**; a bar shows how long to keep holding. A tap on the hint at the bottom right leaves
+as well. The volume and power keys keep their meaning. With two controllers, both can be pressed at the same time: each
+keeps its own lights, and the page names the one that pressed last.
 
 ### LEDs
 
-Settings → Sound & feel → **LEDs** is for the lights around the two sticks. They are **off** unless you turn them on here:
+Settings → Controls → **LEDs** is for the lights around the two sticks. They are **off** unless you turn them on here:
 ROCKNIX lights them at full brightness out of the box, and pocket-ui switches them off the first time it starts.
 
 - **Lights** has three choices. **Off** keeps them dark. **Colour** makes both sticks glow in one colour. **Battery**
@@ -99,6 +123,5 @@ ROCKNIX lights them at full brightness out of the box, and pocket-ui switches th
 
 Left/Right change the selected row, A moves on to the next choice. The choice takes effect at once, is kept across restarts,
 and is the one ROCKNIX applies at the next boot. The lights also go dark while the device sleeps, as ROCKNIX does it.
-
 
 On the experimental TrimUI Brick Pro, **Lights & buttons** offers only the separate F1/F2 assignments. L3/R3 are stick clicks; the side switch and light controls stay disabled.

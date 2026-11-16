@@ -1,5 +1,7 @@
 //! Small screens must not crash (docs/DEVICES.md "Layouts"): every state of `tests/i18n-states.txt` is rendered at
-//! 640x480, the screen of the RG28XX and the RG35XX SP, and the test fails when one of them does not come out.
+//! 640x480, the screen of the RG28XX and the RG35XX SP, and the test fails when one of them does not come out. The release
+//! check does the same at 960x544, the Anbernic RG503's (an RK3566 handheld; the only panel size of ours that is neither
+//! 4:3, 3:2, square nor 1024x720 and more, so the canvas is reduced by a fraction, `scaled_layout::logical_size`).
 //!
 //! Small panels now use a supported logical canvas and area reduction. This retains the regression coverage for
 //! the 62 states that aborted before and verifies the PNG is still the physical panel size.
@@ -13,7 +15,6 @@ use std::process::Command;
 use std::sync::{Arc, Mutex};
 
 include!("common/root.rs");
-const SIZE: &str = "640x480";
 
 fn states() -> Vec<(bool, String)> {
     std::fs::read_to_string(Path::new(&ROOT).join("tests/i18n-states.txt"))
@@ -78,6 +79,16 @@ fn copy_dir(from: &Path, to: &Path) {
 
 #[test]
 fn every_state_renders_at_640x480_without_panicking() {
+    every_state_renders_at("640x480", (640, 480));
+}
+
+#[test]
+#[ignore = "release check: every state at the RG503's 960x544"]
+fn every_state_renders_at_960x544_without_panicking() {
+    every_state_renders_at("960x544", (960, 544));
+}
+
+fn every_state_renders_at(size: &'static str, want: (u32, u32)) {
     let _tmp_guard = tempfile::tempdir().unwrap();
     let tmp = _tmp_guard.path().to_path_buf();
     fake_library(&tmp);
@@ -106,14 +117,14 @@ fn every_state_renders_at_640x480_without_panicking() {
                     .env("POCKETUI_MOCK", "1").env("POCKETUI_MOCK_NOW", FIXTURE_NOW)
                     .env("POCKETUI_LANG", "en")
                     .env("POCKETUI_TEXT_SIZE", "normal")
-                    .env("POCKETUI_SNAPSHOT_SIZE", SIZE)
+                    .env("POCKETUI_SNAPSHOT_SIZE", size)
                     .env("POCKETUI_ES_SYSTEMS", tmp.join("es_systems.cfg"))
                     .env("POCKETUI_DATA", &data)
                     .output()
                     .expect("run pocket-ui");
                 let dimensions = std::fs::File::open(&png).ok().and_then(|f| png::Decoder::new(f).read_info().ok())
                     .map(|r| (r.info().width, r.info().height));
-                if !out.status.success() || dimensions != Some((640, 480)) {
+                if !out.status.success() || dimensions != Some(want) {
                     failed.lock().unwrap().push(format!("{state}: {}", String::from_utf8_lossy(&out.stderr)));
                 }
             })
@@ -124,5 +135,5 @@ fn every_state_renders_at_640x480_without_panicking() {
     }
     drop(wayland);
     let failed = failed.lock().unwrap();
-    assert!(failed.is_empty(), "{} snapshot(s) at {SIZE} did not render:\n{}", failed.len(), failed.join("\n"));
+    assert!(failed.is_empty(), "{} snapshot(s) at {size} did not render:\n{}", failed.len(), failed.join("\n"));
 }

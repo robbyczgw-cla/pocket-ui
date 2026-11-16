@@ -273,6 +273,18 @@ fn every_string_in_the_portuguese_snapshots_is_translated_or_a_name() {
     every_string_is_translated_or_a_name("pt");
 }
 
+#[test]
+#[ignore = "release check: sh scripts/release-check.sh"]
+fn every_string_in_the_french_snapshots_is_translated_or_a_name() {
+    every_string_is_translated_or_a_name("fr");
+}
+
+#[test]
+#[ignore = "release check: sh scripts/release-check.sh"]
+fn every_string_in_the_italian_snapshots_is_translated_or_a_name() {
+    every_string_is_translated_or_a_name("it");
+}
+
 fn every_string_is_translated_or_a_name(lang: &'static str) {
     let _tmp_guard = tempfile::tempdir().unwrap();
     let tmp = _tmp_guard.path().to_path_buf();
@@ -448,13 +460,21 @@ fn the_system_language_decides_until_one_is_chosen() {
     let german_welcome = welcome("de");
     let spanish_welcome = welcome("es");
     let portuguese_welcome = welcome("pt");
+    let french_welcome = welcome("fr");
     assert!(german_welcome != spanish_welcome && spanish_welcome != portuguese_welcome && german_welcome != portuguese_welcome, "the welcome must distinguish the test languages");
+    assert!(french_welcome != german_welcome && french_welcome != spanish_welcome && french_welcome != portuguese_welcome, "the French welcome must differ too");
+    let italian_welcome = welcome("it");
+    assert!([&german_welcome, &spanish_welcome, &portuguese_welcome, &french_welcome].iter().all(|w| **w != italian_welcome), "the Italian welcome must differ too");
     let german = shot("de_DE.UTF-8", None, "de");
     assert!(german.lines().any(|line| line == german_welcome), "ROCKNIX set to German, nothing chosen:\n{german}");
     let spanish = shot("es_MX.UTF-8", None, "es");
     assert!(spanish.lines().any(|line| line == spanish_welcome), "ROCKNIX set to Spanish, nothing chosen:\n{spanish}");
     let portuguese = shot("pt_BR.UTF-8", None, "pt");
     assert!(portuguese.lines().any(|line| line == portuguese_welcome), "ROCKNIX set to Brazilian Portuguese, nothing chosen:\n{portuguese}");
+    let french = shot("fr_FR.UTF-8", None, "fr");
+    assert!(french.lines().any(|line| line == french_welcome), "ROCKNIX set to French, nothing chosen:\n{french}");
+    let italian = shot("it_IT.UTF-8", None, "it");
+    assert!(italian.lines().any(|line| line == italian_welcome), "ROCKNIX set to Italian, nothing chosen:\n{italian}");
     let english = shot("en_US.UTF-8", None, "en");
     assert!(!english.contains("O\t"), "ROCKNIX set to English:\n{english}");
     let chosen = shot("de_DE.UTF-8", Some(r#"{"language": "en"}"#), "chosen");

@@ -41,7 +41,9 @@ bool retro_unserialize(const void *d, size_t s) { return true; }
 /// Builds the stub, loads it on a thread of its own (the host state is per thread) and takes one state through `calls`.
 /// The thread of a hanging stub never ends; the test process does.
 fn save_state_on_thread(name: &str, hang: bool, calls: std::sync::Arc<CoreCalls>) -> std::sync::mpsc::Receiver<Option<Vec<u8>>> {
-    let dir = tempfile::Builder::new().prefix(&format!("pocketui-exit-guard-{name}-")).tempdir().unwrap().keep();
+    // Dropped with the thread (or at once when the stub does not build or load): no folder is left in the temp dir.
+    let guard = tempfile::Builder::new().prefix(&format!("pocketui-exit-guard-{name}-")).tempdir().unwrap();
+    let dir = guard.path().to_path_buf();
     std::fs::write(dir.join("stub.c"), STUB).unwrap();
     std::fs::write(dir.join("game.gb"), [0u8; 32]).unwrap();
     let core = dir.join("stub_libretro.so");
@@ -54,6 +56,7 @@ fn save_state_on_thread(name: &str, hang: bool, calls: std::sync::Arc<CoreCalls>
     assert!(out.status.success(), "cc: {}", String::from_utf8_lossy(&out.stderr));
     let (tx, rx) = channel();
     std::thread::spawn(move || {
+        let _guard = guard;
         let core = Core::load(&core, &dir.join("game.gb"), &dir, &dir, &[]).expect("the stub loads");
         // dlopen keeps the library mapped; the stub does not access these files again.
         let _ = std::fs::remove_dir_all(&dir);

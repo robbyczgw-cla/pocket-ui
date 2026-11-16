@@ -1,0 +1,5 @@
+#!/bin/sh
+# dArkOS port (docs/DARKOS.md): pocket-ui leaves dArkOS's network, Bluetooth, clock and services as they are. `busctl` is not
+# available here (exit 1), so pocket-ui shows its "not available" path and changes nothing.
+echo "busctl: not available in pocket-ui on dArkOS" >&2
+exit 1

@@ -10,6 +10,8 @@ fn letters(kb: &Keyboard, row: usize) -> String {
 
 #[test]
 fn the_german_search_keyboard_has_z_in_the_top_row_and_y_at_the_bottom_left() {
+    // This thread's language only: the other tests in this program keep theirs.
+    let _language = i18n::for_this_thread(Lang::En);
     i18n::set(Lang::En);
     let kb = Keyboard::for_search();
     assert_eq!((letters(&kb, 1), letters(&kb, 3)), ("qwertyuiop".into(), "zxcvbnm".into()));

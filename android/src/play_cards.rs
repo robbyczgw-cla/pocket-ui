@@ -10,10 +10,9 @@ use pocket_ui::{
     type_scale,
 };
 
-/// These bundled cores have no release qualification on Android yet. Nintendo DS left the list on 12.11.2026
-/// (three games, 180 s each, zero underruns, Continue with sound: ANDROID-BIG-SYSTEMS.md).
+/// These bundled cores have no release qualification on Android yet (`play_route::experimental`, shared with the handheld view).
 pub fn experimental(system: &str) -> bool {
-    matches!(system, "n64" | "psp" | "saturn" | "dreamcast")
+    pocket_ui::play_route::experimental(system)
 }
 /// A system's name on a case: "Experimental" after it while our own player starts it (`Ui::experimental`; the app a
 /// game plays with in Settings → Plays with is not what that word is about).

@@ -475,6 +475,7 @@ pub fn choices(ctx: &Ctx) -> Vec<Runner> {
 /// GameCube and Wii Dolphin's own two). pocket-core is there when it is offered. `exists` stands in for the file
 /// system in tests.
 pub fn installed(r: &Runner, system: &str, exists: impl Fn(&Path) -> bool) -> bool {
+    if crate::device::darkos_port() && r.emulator == "darkos" { return true; }
     match r.kind() {
         Kind::PocketCore => true,
         Kind::RetroArch => {
@@ -611,6 +612,7 @@ pub fn emulator_label(emulator: &str) -> String {
     let known = match emulator {
         "retroarch" => "RetroArch",
         POCKET_CORE => "pocket-core",
+        "darkos" => "dArkOS",
         "mednafen" => "Mednafen",
         "vicesa" => "VICE",
         "hatarisa" => "Hatari",
@@ -716,6 +718,11 @@ pub struct RaSetting {
     pub unset: &'static str,
     /// Systems setsettings.sh switches it off for (its NO_REWIND / NO_RUNAHEAD): the row isn't shown there.
     pub not_for: &'static [&'static str],
+    /// Only these systems have the row (empty: every system).
+    pub only: &'static [&'static str],
+    /// pocket-ui applies it at the start itself (not setsettings.sh): phone games' D-pad (`j2me_keys`) and screen size
+    /// (`j2me_size`).
+    pub own: bool,
 }
 
 const fn ch(value: &'static str, label: &'static str) -> RaChoice {
@@ -762,6 +769,8 @@ pub const RA_SETTINGS: &[RaSetting] = &[
         ],
         unset: "core",
         not_for: &[],
+        only: &[],
+        own: false,
     },
     RaSetting {
         key: "integerscale",
@@ -770,6 +779,8 @@ pub const RA_SETTINGS: &[RaSetting] = &[
         choices: ON_OFF,
         unset: "0",
         not_for: &[],
+        only: &[],
+        own: false,
     },
     RaSetting {
         key: "smooth",
@@ -778,6 +789,8 @@ pub const RA_SETTINGS: &[RaSetting] = &[
         choices: ON_OFF,
         unset: "0",
         not_for: &[],
+        only: &[],
+        own: false,
     },
     RaSetting {
         key: "shaderset",
@@ -786,6 +799,8 @@ pub const RA_SETTINGS: &[RaSetting] = &[
         choices: &[ch(SHADER_NONE, "None")],
         unset: SHADER_NONE,
         not_for: &[],
+        only: &[],
+        own: false,
     },
     RaSetting {
         key: "rewind",
@@ -794,6 +809,8 @@ pub const RA_SETTINGS: &[RaSetting] = &[
         choices: ON_OFF,
         unset: "0",
         not_for: NO_REWIND,
+        only: &[],
+        own: false,
     },
     RaSetting {
         key: "runahead",
@@ -802,6 +819,8 @@ pub const RA_SETTINGS: &[RaSetting] = &[
         choices: &[ch("0", "Off"), ch("1", "1 frame"), ch("2", "2 frames")],
         unset: "0",
         not_for: NO_RUNAHEAD,
+        only: &[],
+        own: false,
     },
     RaSetting {
         key: "autosave",
@@ -810,12 +829,56 @@ pub const RA_SETTINGS: &[RaSetting] = &[
         choices: &[ch("1", "On"), ch("0", "Off")],
         unset: "0",
         not_for: &[],
+        only: &[],
+        own: false,
+    },
+    RaSetting {
+        key: crate::j2me_keys::KEY,
+        name: "D-pad",
+        desc: "Arrow keys suit most phone games. Some games only take the number keys 2, 4, 6 and 8: then the D-pad presses those and Y is 5.",
+        choices: &[ch(crate::j2me_keys::ARROWS, "Arrow keys"), ch(crate::j2me_keys::NUMBERS, "Number keys 2 4 6 8")],
+        unset: crate::j2me_keys::ARROWS,
+        not_for: &[],
+        only: &["j2me"],
+        own: true,
+    },
+    RaSetting {
+        key: crate::dpad_stick_rocknix::KEY,
+        name: "D-pad",
+        desc: "Left stick: the D-pad moves the left stick, for games that need one. Automatic does that on a handheld without sticks.",
+        choices: &[ch(crate::dpad_stick_rocknix::AUTO, "Automatic"), ch(crate::dpad_stick_rocknix::STICK, "Left stick"), ch(crate::dpad_stick_rocknix::DPAD, "D-pad")],
+        unset: crate::dpad_stick_rocknix::AUTO,
+        not_for: &[],
+        only: crate::dpad_stick_rocknix::SYSTEMS,
+        own: true,
+    },
+    RaSetting {
+        key: crate::j2me_size::KEY,
+        name: "Screen size",
+        desc: "The phone screen the game was made for. Automatic reads it from the game.",
+        choices: &[
+            ch(crate::j2me_size::AUTO, "Automatic"),
+            ch("128x128", "128 × 128"),
+            ch("128x160", "128 × 160"),
+            ch("176x208", "176 × 208"),
+            ch("176x220", "176 × 220"),
+            ch("208x208", "208 × 208"),
+            ch("240x320", "240 × 320"),
+            ch("320x240", "320 × 240"),
+            ch("240x400", "240 × 400"),
+            ch("360x640", "360 × 640"),
+            ch("640x360", "640 × 360"),
+        ],
+        unset: crate::j2me_size::AUTO,
+        not_for: &[],
+        only: &["j2me"],
+        own: true,
     },
 ];
 
 impl RaSetting {
     pub fn applies(&self, system: &str) -> bool {
-        !self.not_for.contains(&system)
+        !self.not_for.contains(&system) && (self.only.is_empty() || self.only.contains(&system))
     }
 
     /// The label of `value`: a choice's, a shader's file name, else the value as ES wrote it ("8/7").

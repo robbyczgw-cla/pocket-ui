@@ -7,11 +7,13 @@ use pocket_ui::text::{Face, Text};
 
 #[test]
 fn a_name_on_two_lines_is_not_translated_word_by_word() {
+    // This thread's language only: the other tests in this program keep theirs.
+    let _language = i18n::for_this_thread(Lang::En);
     let paint = |lang| {
         i18n::set(lang);
         let mut t = Text::builtin();
         let mut p = Pic::new(120, 160, 0);
-        plain_label(&mut t, &mut p, (0, 0, 120, 160), Look { color: 0x804020, band: 0, plastic: 0 }, "Sonic Adventure", None);
+        plain_label(&mut t, &mut p, (0, 0, 120, 160), Look { color: 0x804020, band: 0, plastic: 0, tape: false }, "Sonic Adventure", None);
         p.px
     };
     let ui = |lang| {

@@ -193,6 +193,12 @@ pub fn system(id: &str) -> Option<(&'static str, &'static str, &'static str, u32
         },
     })
 }
+/// What a player calls the system with folder or id `id`: "Super Nintendo" for "snes". An id this list doesn't know is its
+/// own name, as before. A raw folder name must never reach the screen where a system is named (polish review 12.11.:
+/// "snes, just now" under a game's title).
+pub fn system_name(id: &str) -> String {
+    system(id).map_or_else(|| id.to_string(), |s| s.1.to_string())
+}
 /// The canonical id of every system above.
 pub const SYSTEM_IDS: [&str; 28] = [
     "gb", "gbc", "gba", "nes", "snes", "mastersystem", "gamegear", "megadrive", "n64", "nds", "ps2", "psp", "psx", "gamecube", "3ds", "psvita", "saturn", "dreamcast", "segacd", "pcengine", "wonderswan",
@@ -634,7 +640,7 @@ mod tests {
         // Every language says it, and whole: Android shows a toast in two lines and cuts the rest, which was what to do
         // (seen on the Odin 2 Mini). About 35 letters a line there.
         assert!(PS1_BIOS_MISSING.chars().count() <= 72, "{}", PS1_BIOS_MISSING.chars().count());
-        for table in [include_str!("../assets/i18n/de.tsv"), include_str!("../assets/i18n/es.tsv"), include_str!("../assets/i18n/pt.tsv")] {
+        for table in [include_str!("../assets/i18n/de.tsv"), include_str!("../assets/i18n/es.tsv"), include_str!("../assets/i18n/pt.tsv"), include_str!("../assets/i18n/fr.tsv"), include_str!("../assets/i18n/it.tsv")] {
             let line = table.lines().find_map(|l| l.split_once('\t').filter(|(en, _)| *en == PS1_BIOS_MISSING)).map(|(_, t)| t);
             assert!(line.is_some_and(|t| t.chars().count() <= 72), "{line:?}");
         }

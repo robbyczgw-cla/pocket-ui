@@ -133,7 +133,7 @@ theirs is changed by TV mode.
 | Touch off on the TV | `App::touch_event` (`app_touch.rs`) | |
 | Notes on the shelf | `App::display_changed`, `change_message` | German in `assets/i18n/de.tsv` |
 | Sound decision | `sound_route`, `profile_change` | Tested, **not wired** (phase 2) |
-| Layout for other sizes | `ui_fit` | Tested, only the 1:1 case is in use. On a 1080p TV the pages of rows and text (Settings, the Shelf look, search) are painted in a 1440 px column in the middle, as on the Pocket 5 ([DEVICES.md](DEVICES.md#layouts)) |
+| Layout for other sizes | `ui_fit` | Tested, only the 1:1 case is in use. On a 1080p TV the Shelf look and search are painted in a 1440 px column in the middle, Settings in a 1800 px one with larger type and rows, as on the Pocket 5 ([DEVICES.md](DEVICES.md#layouts)) |
 | Snapshot at TV size | `POCKETUI_SNAPSHOT_SIZE=1920x1080 pocket-ui --snapshot …` | |
 | A TV in a test sway | `POCKETUI_TV_OUTPUT=HEADLESS-2` treats that output as external (with `swaymsg create_output` in a headless sway) | |
 

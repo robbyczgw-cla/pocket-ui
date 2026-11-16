@@ -46,7 +46,8 @@ else:
             selected.update(all_tests)
 # Absolute CPU/frame-time limits describe the gate/shipping optimisation level, not the development profile.
 # They remain mandatory in the full merge gate, with nextest's narrowly scoped load retries when selected.
-selected.difference_update({'settings_open', 'shelf_moves'})
+# launch_frames: its frame-cost net is relative, but the opt-level 1 profile skews it (its shelf-paint count runs in the gate).
+selected.difference_update({'settings_open', 'shelf_moves', 'launch_frames'})
 for suite in sorted(selected):
     print('--test')
     print(suite)

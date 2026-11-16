@@ -121,6 +121,82 @@ impl Drop for Card {
     }
 }
 
+/// A bench on the RG35XX Plus (14.11.2026) lit the owner's sleeping screen: every start, `--snapshot` too, turned a dark
+/// backlight on and deleted its note (`Sleep::new` → `recover`). A snapshot or bench runs beside the real pocket-ui and
+/// must leave the screen, its note and the device's sleep exactly as they were. Missed before because no snapshot test
+/// had a backlight to touch: they all ran without one.
+#[test]
+fn a_snapshot_leaves_a_dark_screen_dark_and_its_note_in_place() {
+    let card = Card::new("dark-screen");
+    let light = card.tmp.join("backlight");
+    std::fs::create_dir_all(&light).unwrap();
+    std::fs::write(light.join("brightness"), "0").unwrap();
+    std::fs::write(light.join("max_brightness"), "2047").unwrap();
+    let note = card.tmp.join("brightness-note");
+    std::fs::write(&note, "1124").unwrap();
+    let png = card.tmp.join("home.png");
+    let mut cmd = Command::new(env!("CARGO_BIN_EXE_pocket-ui"));
+    if let Some(stub) = card.stub.as_ref() {
+        cmd.env("WAYLAND_DISPLAY", &stub.path);
+    }
+    let data = card.tmp.join("data");
+    std::fs::create_dir_all(&data).unwrap();
+    let out = cmd
+        .args(["--snapshot", "home", png.to_str().unwrap()])
+        .env("POCKETUI_MOCK", "1")
+        .env("POCKETUI_DATA", &data)
+        .env("POCKETUI_ES_SYSTEMS", card.tmp.join("es_systems.cfg"))
+        .env("POCKETUI_BACKLIGHT", &light)
+        .env("POCKETUI_DARK_FILE", &note)
+        .output()
+        .unwrap();
+    assert!(out.status.success() && png.exists(), "stderr: {}", String::from_utf8_lossy(&out.stderr));
+    assert_eq!(std::fs::read_to_string(light.join("brightness")).unwrap(), "0", "the screen stays dark: {}", String::from_utf8_lossy(&out.stdout));
+    assert_eq!(std::fs::read_to_string(&note).ok().as_deref(), Some("1124"), "the dark screen's note stays");
+}
+
+/// Package 5 of native painting compared every state twice and found the Load page saying slot 1 in one run and 3 in the
+/// next, the Cheats page one cheat or two: all snapshots kept their made-up states and cheat files in one shared
+/// `pocketui-snapshot` folder, and four running side by side deleted each other's. Each snapshot has its own folder now,
+/// gone when it is done. Missed before because the checks ran one snapshot at a time.
+#[test]
+fn snapshots_side_by_side_each_keep_their_own_made_up_saves() {
+    let card = Card::new("snapshot-tmp");
+    let tmpdir = card.tmp.join("tmpdir");
+    std::fs::create_dir_all(&tmpdir).unwrap();
+    let run = |i: usize, state: &str| {
+        let data = card.tmp.join(format!("data-{i}"));
+        std::fs::create_dir_all(&data).unwrap();
+        let mut cmd = Command::new(env!("CARGO_BIN_EXE_pocket-ui"));
+        if let Some(stub) = card.stub.as_ref() {
+            cmd.env("WAYLAND_DISPLAY", &stub.path);
+        }
+        cmd.args(["--snapshot", state, card.tmp.join(format!("{i}.png")).to_str().unwrap()])
+            .env("POCKETUI_MOCK", "1")
+            .env("POCKETUI_LANG", "en")
+            .env("TMPDIR", &tmpdir)
+            .env("POCKETUI_VISIBLE_TEXT", card.tmp.join(format!("{i}.txt")))
+            .env("POCKETUI_DATA", &data)
+            .env("POCKETUI_ES_SYSTEMS", card.tmp.join("es_systems.cfg"))
+            .spawn()
+            .unwrap()
+    };
+    let states = ["slot-empty", "slot-save", "cheats-more", "slot-undo"];
+    let children: Vec<_> = (0..12).map(|i| run(i, states[i % states.len()])).collect();
+    for mut child in children {
+        assert!(child.wait().unwrap().success());
+    }
+    for i in 0..12 {
+        let text = std::fs::read_to_string(card.tmp.join(format!("{i}.txt"))).unwrap();
+        let first = std::fs::read_to_string(card.tmp.join(format!("{}.txt", i % states.len()))).unwrap();
+        assert_eq!(text, first, "{}: the same page every time", states[i % states.len()]);
+    }
+    let slot_empty = std::fs::read_to_string(card.tmp.join("0.txt")).unwrap();
+    assert!(slot_empty.contains("No save in slot 4 yet"), "slot-empty is slot 4: {slot_empty}");
+    let left: Vec<_> = std::fs::read_dir(&tmpdir).unwrap().flatten().map(|e| e.file_name()).filter(|n| n.to_string_lossy().starts_with("pocketui-snapshot")).collect();
+    assert!(left.is_empty(), "each snapshot removes its own folder: {left:?}");
+}
+
 /// New-player walk 2026-11-02: the list of recent games had five names. The button, the screen and the pause menu's hint say
 /// one: Recent games.
 #[test]
@@ -158,7 +234,7 @@ fn the_pause_menu_has_one_way_to_the_quick_settings_and_its_options_pages_have_t
 }
 
 /// Taste pass 2026-11-04: Zoom is a niche help and sat right above Save & quit in every pocket-core game. The pause menu's main
-/// page lists it only for a player who asked (Big text, or Settings → Sound & feel → Zoom in the pause menu); everyone can
+/// page lists it only for a player who asked (Big text, or Settings → Look → Zoom in the pause menu); everyone can
 /// reach it under Options.
 #[test]
 fn zoom_is_under_options_and_on_the_main_page_only_for_whoever_asked() {
@@ -299,10 +375,9 @@ mod fifo {
             });
             // Both the 0.4.x categories and the newer tabbed Settings reach the same Game check.
             let groups = std::fs::read_to_string(ui.card.tmp.join("ui.status")).unwrap().contains("place=settings:Groups");
-            // 0.4.x: Look, Sound & feel, Playing, then Games; its second row is the Game check.
-            ui.send(if groups { "down\ndown\ndown\na" } else { "r1\nr1\nr1\nr1" });
+            ui.send(if groups { "down\ndown\ndown\ndown\na" } else { "r1\nr1\nr1\nr1\nr1" });
             ui.sees("Add games");
-            ui.send(if groups { "down\na" } else { "down\ndown\na" });
+            ui.send("down\ndown\na");
             ui.sees("Folders that can't be read");
             ui.send("a");
             ui.sees("broken");
@@ -310,6 +385,60 @@ mod fifo {
             let detail = ui.sees("One system was left out");
             assert!(detail.contains("es_systems.cfg"), "the detail names the file to repair: {detail}");
         }
+    }
+
+    /// A card whose system list can't be read at all (never a gap on Home, never silence): games in the standard folders
+    /// still show and a notice says why; with no standard folder the empty page says it, and Game check names the file.
+    #[test]
+    fn an_unreadable_system_list_is_said_on_home_and_the_standard_folders_still_show() {
+        for (broken, standard_folders) in [("<systemList><system><name>gb", true), ("", true), ("<systemList></systemList>", false)] {
+            let label = format!("{broken:?} standard={standard_folders}");
+            let mut ui = Driver::start("system-list-gone", true, |tmp, cmd| {
+                let cfg = tmp.join("es_systems.cfg");
+                if broken.is_empty() { std::fs::remove_file(&cfg).unwrap(); } else { std::fs::write(&cfg, broken).unwrap(); }
+                let roms = if standard_folders { tmp.to_path_buf() } else { tmp.join("no-standard-folders") };
+                std::fs::create_dir_all(&roms).unwrap();
+                cmd.env("POCKETUI_BUILT_IN_ROMS", roms);
+            });
+            let shown = ui.sees("can't be read");
+            let flat = shown.lines().collect::<Vec<_>>().join(" ");
+            assert!(flat.contains("pocket-ui uses its built-in list") || flat.contains("System list can't be read"), "{label}: Home says the list is the problem: {shown}");
+            if standard_folders {
+                assert!(flat.contains("Game Boy") || flat.contains("Tobu Tobu Girl"), "{label}: the games in their standard folders are on the shelf: {shown}");
+            } else {
+                // The note is closed (the press goes on to Home's page: B is "Look around"); the empty page under it, the starter
+                // pack's or the look's own, says it again in its own place.
+                ui.send("b");
+                let shown = ui.wait_frame(|t| !t.contains("Press A to close") && t.contains("built-in list"));
+                assert!(shown.lines().collect::<Vec<_>>().join(" ").contains("Game check says why"), "{label}: an empty Home names its cause: {shown}");
+            }
+            ui.send("b\nstart");
+            ui.wait(|d| {
+                d.frame();
+                std::fs::read_to_string(d.card.tmp.join("ui.status")).unwrap_or_default().contains("place=settings:")
+            });
+            let groups = std::fs::read_to_string(ui.card.tmp.join("ui.status")).unwrap().contains("place=settings:Groups");
+            ui.send(if groups { "down\ndown\ndown\ndown\na" } else { "r1\nr1\nr1\nr1\nr1" });
+            ui.sees("Add games");
+            ui.send("down\ndown\na");
+            let report = ui.sees("Folders that can't be read");
+            assert!(!report.contains("All good"), "{label}: Game check must not say All good: {report}");
+            // The group lists the file; its detail says what happened and what to do.
+            ui.send("a");
+            ui.sees("es_systems.cfg");
+            ui.send("a");
+            let detail = ui.wait_frame(|t| t.contains("built-in list"));
+            let flat = detail.lines().collect::<Vec<_>>().join(" ");
+            assert!(flat.contains("fix this file"), "{label}: the detail says what to do: {detail}");
+        }
+    }
+
+    /// A settings file that can't be read (no backup) is said at the start, not a silent reset.
+    #[test]
+    fn unreadable_settings_are_said_at_the_start() {
+        let mut ui = Driver::start("settings-damaged", true, |tmp, _| std::fs::write(tmp.join("data/settings.json"), "{\"theme\": \"ca").unwrap());
+        let shown = ui.sees("settings file couldn't be read");
+        assert!(shown.lines().collect::<Vec<_>>().join(" ").contains("standard settings"), "{shown}");
     }
 
     struct Driver {
@@ -526,8 +655,7 @@ while [ "$i" -lt 2400 ]; do sleep 0.05; i=$((i+1)); done
                 std::fs::write(&rom, b"game").unwrap();
                 std::fs::write(tmp.join("es_systems.cfg"), format!("<systemList><system><name>{system}</name><fullname>Fixture console</fullname><path>{}</path><extension>.rom</extension><command>true</command></system></systemList>", tmp.display())).unwrap();
                 std::fs::write(tmp.join("host"), b"").unwrap();
-                std::fs::write(tmp.join("data/controls-card-seen"), format!("{system}\n")).unwrap();
-                std::fs::write(tmp.join("data/settings.json"), format!(r#"{{"onboarded":true,"seen_version":"9.9.9","theme":"shelf","motion":"full","animations":"cozy","frames":"every","art":"off","extras":{{"tv_switch_on":{crt}}}}}"#)).unwrap();
+                std::fs::write(tmp.join("data/settings.json"), format!(r#"{{"onboarded":true,"seen_version":"9.9.9","theme":"shelf","motion":"full","animations":"cozy","frames":"every","art":"off","where_was_i":true,"extras":{{"tv_switch_on":{crt}}}}}"#)).unwrap();
                 let states = tmp.join("states").join(system);
                 std::fs::create_dir_all(&states).unwrap();
                 if !continue_row { std::fs::write(states.join("Game.pstate.auto"), b"moment").unwrap(); }
@@ -743,6 +871,51 @@ sleep 30
         assert!(!shelf.contains("is ready"), "{shelf}");
     }
 
+    /// 0.5 (the RG28XX and the R36S had no way to update without Wi-Fi): an update file on the card is said on the shelf at
+    /// the start, and A goes to Updates and installs it at once (here the stand-in file is gone, so the install's own check
+    /// says why, on the page); the file is remembered as said.
+    #[test]
+    fn an_update_file_on_the_card_is_said_once_and_a_installs_it() {
+        let mut d = Driver::start("card-update-a", true, |_, cmd| {
+            cmd.env("POCKETUI_CARD_UPDATE", "99.0.0");
+        });
+        let text = d.sees("Update to pocket-ui 99.0.0 found on the card");
+        assert!(text.contains("Press A to install it"), "{text}");
+        d.send("a");
+        let page = d.sees("Copy it onto the card again");
+        assert!(page.contains("Nothing was installed") && !page.contains("found on the card"), "the install ran and said why: {page}");
+        let seen = d.card.tmp.join("data").join("card-update-seen");
+        assert_eq!(std::fs::read_to_string(&seen).unwrap(), "mock|99.0.0");
+        drop(d);
+    }
+
+    /// A file on the GAMES drive that isn't ours (here: signed by no one) is said on the shelf with its reason, through the
+    /// real look, and stays where the player put it; once said (the same name, size and time), a start doesn't say it again.
+    #[test]
+    fn an_update_file_not_signed_by_us_is_explained_once_and_never_installed() {
+        fn place(tmp: &Path, cmd: &mut Command, said: bool) {
+            let games = tmp.join("games-external");
+            let folder = games.join("pocket-ui-update-99.0.0-rocknix");
+            std::fs::create_dir_all(&folder).unwrap();
+            std::fs::write(folder.join("update.json"), br#"{"format":1,"app":{"version":"99.0.0","url":"pocket-ui-99.0.0-aarch64.tar.gz","sha256":"00","size":1}}"#).unwrap();
+            std::fs::write(folder.join("update.json.sig"), "AAAA").unwrap();
+            if said {
+                let mtime = std::fs::metadata(&folder).unwrap().modified().unwrap().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs();
+                std::fs::write(tmp.join("data/card-update-seen"), format!("{}|0|{mtime}", folder.display())).unwrap();
+            }
+            cmd.env("POCKETUI_CARD_PLACES", games);
+        }
+        let mut d = Driver::start("card-update-unsigned", true, |tmp, cmd| place(tmp, cmd, false));
+        let text = d.sees("isn't signed by us");
+        assert!(text.contains("Nothing was installed"), "{text}");
+        assert!(d.card.tmp.join("games-external/pocket-ui-update-99.0.0-rocknix/update.json").exists(), "a refused file stays");
+        drop(d);
+        let mut again = Driver::start("card-update-unsigned-said", true, |tmp, cmd| place(tmp, cmd, true));
+        std::thread::sleep(Duration::from_millis(2500));
+        let shelf = again.frame();
+        assert!(!shelf.is_empty() && !shelf.contains("isn't signed by us"), "said once: {shelf}");
+    }
+
     /// 0.3.1: the notice's A lands on the page with the new version and its notes; "Install" asks first ("Install now" /
     /// "Later"), B and Later go back to the page, and nothing is installed by a single press.
     #[test]
@@ -823,8 +996,8 @@ sleep 30
         });
         assert_eq!(dark_words, clockless(light.frame()), "the same game and controls remain visible in either appearance");
         assert!(brightness(&mut light) > dark_brightness + 100, "the player's Light setting must paint a light page");
-        // Look's fourth row, Appearance (after Layout, Systems on the shelf, Cozy extras).
-        dark.send("start\na\ndown\ndown\ndown\na\nb\nb");
+        // Look, the second category (R1 from Connections, where START opens); its second row, Appearance (after Layout); B out.
+        dark.send("start\nr1\ndown\na\nb");
         assert_eq!(dark_words, clockless(dark.frame()), "changing Appearance comes back to the same game");
         assert!(brightness(&mut dark) > dark_brightness + 100, "a Light choice in Settings takes effect in the next capture too");
     }
@@ -844,6 +1017,29 @@ sleep 30
         }
     }
 
+    /// Settings → Playing → Console boot screen with the D-pad and A: Off for everyone who never touched it, A switches it On (saved
+    /// for pocket-core, which reads settings.json itself) and the row's line says what it needs; A again is Off and nothing is saved.
+    #[test]
+    fn console_boot_screen_is_a_playing_row_that_is_off_and_saved_with_a_press() {
+        let mut d = Driver::start("boot-screen-row", true, |_, _| {});
+        // Playing is the fifth category (R1 four times from Connections), Console boot screen its third row.
+        d.send("start\nr1\nr1\nr1\nr1\ndown\ndown");
+        let row = d.frame();
+        assert!(row.contains("Console boot screen"), "{row}");
+        let saved = |d: &Driver| {
+            let s: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(d.card.tmp.join("data/settings.json")).unwrap_or_else(|_| "{}".into())).unwrap();
+            s["boot_screen"].as_bool().unwrap_or(false)
+        };
+        assert!(!saved(&d), "Off until switched on");
+        d.send("a");
+        let on = d.frame();
+        assert!(saved(&d), "A switches it On and saves it\n{on}");
+        assert!(on.contains("BIOS"), "On says it needs the player's BIOS file\n{on}");
+        d.send("a");
+        d.frame();
+        assert!(!saved(&d), "A again: Off, nothing saved");
+    }
+
     /// Settings → Playing → Over the game with the D-pad and A: Off, FPS, FPS + sensors and round again for everyone;
     /// Pixel Path comes after FPS + sensors only with the pause menu's Pixel Path on (the Enthusiast profile's).
     #[test]
@@ -854,8 +1050,8 @@ sleep 30
                     std::fs::write(tmp.join("data/curator.json"), r#"{"pixel_path":true}"#).unwrap();
                 }
             });
-            // Playing is the third category, Over the game its fifth row.
-            d.send("start\ndown\ndown\na\ndown\ndown\ndown\ndown");
+            // Playing is the fifth category (R1 four times from Connections), Over the game its sixth row.
+            d.send("start\nr1\nr1\nr1\nr1\ndown\ndown\ndown\ndown\ndown");
             let row = d.frame();
             assert!(row.contains("Over the game"), "{row}");
             let saved = |d: &Driver| {
@@ -963,94 +1159,37 @@ sleep 30
         assert_ne!(s["font"], "retro", "B leaves the style as it was");
     }
 
-    fn controls_card_game(name: &str, resume: Option<&str>) -> Driver {
+    fn first_start_game(name: &str) -> Driver {
         Driver::start(name, true, |tmp, cmd| {
-            std::fs::write(tmp.join("gb/Tobu Two.gb"), "game").unwrap();
-            std::fs::write(tmp.join("data/search.json"), r#"{"list":["Tobu"]}"#).unwrap();
             std::fs::write(tmp.join("data/curator.json"), r#"{"lens":false}"#).unwrap();
             let host = tmp.join("pocket-core-stand-in");
             std::fs::write(&host, "").unwrap();
-            let states = tmp.join("states");
-            cmd.env("POCKETUI_HOST_BIN", host).env("POCKETUI_STATES", &states);
-            if let Some(suffix) = resume {
-                std::fs::create_dir_all(states.join("gb")).unwrap();
-                std::fs::write(states.join("gb").join(format!("Tobu Tobu Girl (World).pstate.auto{suffix}")), "resume").unwrap();
-            }
+            cmd.env("POCKETUI_HOST_BIN", host).env("POCKETUI_STATES", tmp.join("states"));
         })
     }
 
-    fn ask_for_controls_game(d: &mut Driver) {
+    /// The 0.5 hand test (15.11.2026): the controls card at a console's first start was bloat. The first game of a
+    /// console pocket-core plays starts with the one A, as every other start: no card over it, nothing to press away, no
+    /// twelve-second wait. (Before, the card came first and the game only after another press or the timeout.)
+    #[test]
+    fn a_consoles_first_start_goes_straight_to_the_game_without_a_card() {
+        let mut d = first_start_game("first-start-no-card");
         d.sees("Game Boy");
         d.send("a");
         d.sees("Tobu Tobu Girl");
+        let asked = Instant::now();
         d.send("a");
-    }
-
-    #[test]
-    #[ignore = "timing tier: scripts/test-timing.sh (serial)"]
-    fn timing_controls_card_home_starts_immediately_without_opening_a_shortcut() {
-        let mut d = controls_card_game("controls-home", None);
-        ask_for_controls_game(&mut d);
-        d.sees("Controls · Game Boy");
-        assert!(!d.card.tmp.join("run-game.started").exists(), "no game input while the card is up: the game hasn't started");
-        assert!(std::fs::read_to_string(d.card.tmp.join("data/controls-card-seen")).unwrap().contains("gb\n"), "remember before starting, even if the game fails");
-        let pressed = Instant::now();
-        d.send("home");
         d.wait(|d| d.card.tmp.join("run-game.started").exists());
-        assert!(pressed.elapsed() < test_clock::timeout(Duration::from_secs(3)), "one press must start without waiting for the card's timeout");
-        let text = d.frame();
-        assert!(!text.contains("Brightness") && !text.contains("Controls ·"), "the dismissing HOME is consumed: {text}");
+        let log = d.log();
+        assert!(!log.contains("controls card"), "no controls card before the game: {log}");
+        assert!(asked.elapsed() < test_clock::timeout(Duration::from_secs(8)), "the one A starts the game, no card waits for a press or its timeout: {log}");
+        assert!(!d.card.tmp.join("data/controls-card-seen").exists(), "no list of consoles that had a card is kept");
     }
 
+    /// Just Play's one button too: the console's first game starts at once.
     #[test]
-    #[ignore = "timing tier: scripts/test-timing.sh (serial)"]
-    fn timing_controls_card_starts_after_twelve_seconds_even_without_more_input() {
-        let mut d = controls_card_game("controls-timeout", None);
-        ask_for_controls_game(&mut d);
-        d.sees("Controls · Game Boy");
-        // No further frame requests or button events: the card must schedule its own deadline.
-        let started = Instant::now();
-        d.wait(|d| d.card.tmp.join("run-game.started").exists());
-        assert!(started.elapsed() >= Duration::from_secs(10), "give the player time to read the card");
-        assert!(started.elapsed() < test_clock::timeout(Duration::from_secs(15)), "the card must not wait for unrelated events");
-    }
-
-    #[test]
-    #[ignore = "timing tier: scripts/test-timing.sh (serial)"]
-    fn timing_controls_card_never_interrupts_a_resume_after_quit_or_a_crash() {
-        for suffix in ["", ".taken", ".taken.retry"] {
-            let mut d = controls_card_game("controls-resume", Some(suffix));
-            ask_for_controls_game(&mut d);
-            let started = Instant::now();
-            d.wait(|d| d.card.tmp.join("run-game.started").exists());
-            assert!(started.elapsed() < test_clock::timeout(Duration::from_secs(3)), "Continue must start immediately ({suffix})");
-            assert!(!d.log().contains("controls card: first start"), "no first-start card over a resume: {}", d.log());
-        }
-    }
-
-    #[test]
-    #[ignore = "timing tier: scripts/test-timing.sh (serial)"]
-    fn timing_controls_card_tap_cannot_select_a_search_result_underneath() {
-        let mut d = controls_card_game("controls-search-tap", None);
-        d.sees("Game Boy");
-        d.send("up\na");
-        d.sees("Recent searches");
-        d.send("start\na");
-        d.sees("Tobu Two");
-        d.send("a");
-        let card = d.sees("Controls · Game Boy");
-        let chosen = if card.contains("Tobu Two") { "Tobu Two.gb" } else { "Tobu Tobu Girl (World).gb" };
-        // This is another result's row under the overlay. It must dismiss the card, not select that result.
-        let tapped = Instant::now();
-        d.send("tap 0.5 0.35");
-        d.wait(|d| d.card.tmp.join("run-game.started").exists());
-        assert!(tapped.elapsed() < test_clock::timeout(Duration::from_secs(3)), "a tap must start immediately, not wait for auto-continue");
-        assert!(d.log().contains(chosen), "the game named on the card must start ({chosen}): {}", d.log());
-    }
-
-    #[test]
-    fn controls_card_also_precedes_a_consoles_first_game_from_just_play() {
-        let mut d = Driver::start("controls-just-play", true, |tmp, cmd| {
+    fn just_play_starts_a_consoles_first_game_without_a_card() {
+        let mut d = Driver::start("first-start-just-play", true, |tmp, cmd| {
             cmd.env("POCKETUI_TEST_PREPARE_MS", "500");
             let cfg = std::fs::read_to_string(tmp.join("es_systems.cfg")).unwrap();
             let only_gb = cfg.lines().filter(|line| !line.contains("<name>segacd</name>")).collect::<Vec<_>>().join("\n");
@@ -1063,42 +1202,84 @@ sleep 30
         d.wait(|d| d.log().contains("curator: 1 games"));
         d.send("up");
         d.sees("Just Play");
-        // One A starts preparation. Wait for the controls card itself; a second
-        // A during the asynchronous hand-over can dismiss the card we must read.
-        d.send("a");
-        d.wait(|d| d.log().contains("controls card: first start"));
-        let text = d.frame();
-        assert!(text.contains("Controls · Game Boy"), "one A must leave the controls readable before starting: {text}");
-        d.sees("Controls · Game Boy");
-        assert!(!d.card.tmp.join("run-game.started").exists());
         d.send("a");
         d.wait(|d| d.card.tmp.join("run-game.started").exists());
+        let log = d.log();
+        assert!(!log.contains("controls card"), "no controls card before the game: {log}");
     }
 
+    /// 15.11.2026 (0.5 candidate on the RG35XX Plus): the first SNES start showed the controls card instead of the Cozy
+    /// insert scene. A never-played console's first game, not sealed: A plays the insert scene (the picture moves frame
+    /// after frame), the game starts after it, and nothing called the card at any frame.
     #[test]
-    #[ignore = "timing tier: scripts/test-timing.sh (serial)"]
-    // Atari 2600: a console whose button names are still unknown before its first game (the Mega Drive got its own since the
-    // names with the controls card of 11.11.; this journey still used it and ran red in the timing tier, which no merge gate runs.)
-    fn timing_controls_card_for_a_console_without_names_explains_home_and_accepts_a_tap() {
-        let mut d = Driver::start("controls-unknown-tap", true, |tmp, cmd| {
-            let games = tmp.join("atari2600");
-            std::fs::create_dir_all(&games).unwrap();
-            std::fs::write(games.join("Card Demo.a26"), "game").unwrap();
-            std::fs::write(tmp.join("es_systems.cfg"), format!("<systemList><system><name>atari2600</name><fullname>Atari 2600</fullname><path>{}</path><extension>.a26</extension><command>true</command></system></systemList>", games.display())).unwrap();
-            let host = tmp.join("pocket-core-stand-in");
-            std::fs::write(&host, "").unwrap();
-            cmd.env("POCKETUI_HOST_BIN", host).env("POCKETUI_STATES", tmp.join("states"));
+    fn a_consoles_first_start_plays_the_insert_scene_and_no_card() {
+        let mut d = Driver::start("first-start-insert-scene", true, |tmp, cmd| {
+            std::fs::write(tmp.join("Game.rom"), b"game").unwrap();
+            std::fs::write(tmp.join("es_systems.cfg"), format!("<systemList><system><name>snes</name><fullname>Super Nintendo</fullname><path>{}</path><extension>.rom</extension><command>true</command></system></systemList>", tmp.display())).unwrap();
+            std::fs::write(tmp.join("host"), b"").unwrap();
+            std::fs::write(tmp.join("data/settings.json"), r#"{"onboarded":true,"seen_version":"9.9.9","theme":"shelf","motion":"full","animations":"cozy","frames":"every","art":"off"}"#).unwrap();
+            cmd.env("POCKETUI_HOST_BIN", tmp.join("host")).env("POCKETUI_STATES", tmp.join("states")).env("POCKETUI_SEALED", "0")
+                .env("POCKETUI_TEST_PREPARE_MS", "50");
+            std::fs::write(tmp.join("take.txt"), "# open the console, let the case turn, A on the game\n40 a\n120 a\nend 420\n").unwrap();
+            cmd.env("POCKETUI_FRAME_DUMP", tmp.join("dump")).env("POCKETUI_FRAME_DUMP_SCRIPT", tmp.join("take.txt"));
+            executable(&tmp.join("run-game"), "#!/bin/sh\nprintf 'started\\n' > \"$0.started\"\nsleep 30\n");
         });
-        d.sees("Atari 2600");
-        d.send("a");
-        d.sees("Card Demo");
-        d.send("a");
-        d.sees("Play with the D-pad and the buttons.");
-        assert!(!d.card.tmp.join("run-game.started").exists());
-        let tapped = Instant::now();
-        d.send("tap 0.5 0.5");
+        let dir = d.card.tmp.join("dump");
+        let log = || std::fs::read_to_string(dir.join("events.log")).unwrap_or_default();
+        d.wait(|_| log().lines().any(|l| l.starts_with("end ")));
+        let events = log();
+        let asked = events.lines().filter_map(|l| l.split_once(' ')).filter(|(_, l)| *l == "script a").nth(1)
+            .and_then(|(t, _)| t.parse::<u64>().ok()).unwrap_or_else(|| panic!("A on the game was expected: {events}"));
+        let frames = pocket_ui::frame_dump::read(&dir.join("frames.pfd")).unwrap();
+        // The insert scene: the picture moves in most of the half second after A.
+        let moving = (asked + 2..asked + 32).filter(|&k| frames[k as usize].pixels != frames[k as usize - 1].pixels).count();
+        assert!(moving >= 20, "the insert scene plays after A: {moving} of 30 frames moved: {events}");
+        assert!(!events.contains("controls-card"), "no controls card at any frame: {events}");
         d.wait(|d| d.card.tmp.join("run-game.started").exists());
-        assert!(tapped.elapsed() < test_clock::timeout(Duration::from_secs(3)), "a tap must start immediately, not wait for auto-continue");
+        let after = d.log();
+        assert!(!after.contains("controls card"), "{after}");
+    }
+
+    /// 15.11.2026 (Android night, also Linux): at the first start of a console the sealed game's tear was covered within
+    /// 50 ms of A (its sound dropped with it). The tear plays in full and with its sound, once, and the game starts after it.
+    #[test]
+    fn a_sealed_games_first_start_tears_its_film_in_full_and_then_starts_the_game() {
+        let mut d = Driver::start("sealed-tear-then-game", true, |tmp, cmd| {
+            std::fs::write(tmp.join("Game.rom"), b"game").unwrap();
+            std::fs::write(tmp.join("es_systems.cfg"), format!("<systemList><system><name>gb</name><fullname>Fixture console</fullname><path>{}</path><extension>.rom</extension><command>true</command></system></systemList>", tmp.display())).unwrap();
+            std::fs::write(tmp.join("host"), b"").unwrap();
+            // As a player has it: Cozy, Motion Full, the shelf; a library nobody played, so every game is in its film.
+            std::fs::write(tmp.join("data/settings.json"), r#"{"onboarded":true,"seen_version":"9.9.9","theme":"shelf","motion":"full","animations":"cozy","frames":"every","art":"off"}"#).unwrap();
+            cmd.env("POCKETUI_HOST_BIN", tmp.join("host")).env("POCKETUI_STATES", tmp.join("states")).env("POCKETUI_SEALED", "1")
+                // About what the real preparation takes: ready well before the tear is over.
+                .env("POCKETUI_TEST_PREPARE_MS", "50");
+            std::fs::write(tmp.join("take.txt"), "# open the console, let the case turn, A on the game\n40 a\n120 a\nend 420\n").unwrap();
+            cmd.env("POCKETUI_FRAME_DUMP", tmp.join("dump")).env("POCKETUI_FRAME_DUMP_SCRIPT", tmp.join("take.txt"));
+            executable(&tmp.join("run-game"), "#!/bin/sh\nprintf 'started\\n' > \"$0.started\"\nsleep 30\n");
+        });
+        let dir = d.card.tmp.join("dump");
+        let log = || std::fs::read_to_string(dir.join("events.log")).unwrap_or_default();
+        d.wait(|_| log().lines().any(|l| l.starts_with("end ")));
+        let events = log();
+        let lines: Vec<(u64, &str)> = events.lines().filter_map(|l| l.split_once(' ')).filter_map(|(t, rest)| Some((t.parse().ok()?, rest))).collect();
+        let tick = |what: &str| lines.iter().find(|(_, l)| l.contains(what)).map(|(t, _)| *t);
+        let asked = lines.iter().filter(|(_, l)| *l == "script a").nth(1).map(|(t, _)| *t)
+            .unwrap_or_else(|| panic!("A on the game was expected: {events}\n{}", d.log()));
+        let tear = tick("sound WrapTear").unwrap_or_else(|| panic!("the film's tear sound was never asked for: {events}"));
+        assert!(tear <= asked + 2, "the tear's sound starts with A: A at {asked}, sound at {tear}: {events}");
+        let frames = pocket_ui::frame_dump::read(&dir.join("frames.pfd")).unwrap();
+        // The tear (`shrink_wrap::TEAR`, 560 ms = 34 frames) is seen in full: the picture moves in nearly every frame of it.
+        let torn = pocket_ui::shrink_wrap::TEAR.as_secs_f64() * 60.0;
+        let moving = (asked + 2..asked + torn as u64 - 2).filter(|&k| frames[k as usize].pixels != frames[k as usize - 1].pixels).count();
+        assert!(moving >= torn as usize - 8, "the film tears in {moving} different pictures of {torn:.0}: {events}");
+        // Nothing stopped the sound while it played.
+        let cut = lines.iter().filter(|(t, l)| *l == "sound stop" && *t > tear && *t <= asked + torn as u64).count();
+        assert_eq!(cut, 0, "the sound was stopped while the film tore: {events}");
+        // The one A started the game, with no card on the way.
+        let after = d.log();
+        d.wait(|d| d.card.tmp.join("run-game.started").exists());
+        assert!(!after.contains("controls card"), "{after}");
+        assert_eq!(events.lines().filter(|l| l.contains("sound WrapTear")).count(), 1, "{events}");
     }
 
     /// A Kids Mode card whose one game is the Game Boy one, routed to pocket-core (a stand-in), `run-game` exiting with an error.
@@ -1221,13 +1402,13 @@ raise SystemExit(1)
         let mut d = Driver::new("home-in-settings", true);
         d.sees("Game Boy");
         d.send("start");
-        d.sees("Sound & feel");
-        // Two levels down: a category's list.
-        d.send("a");
-        d.sees("Appearance");
+        d.sees("Bluetooth");
+        // Two levels down: a plain page of a category's list (Look's Cozy extras, its ninth row).
+        d.send("r1\ndown\ndown\ndown\ndown\ndown\ndown\ndown\ndown\na");
+        d.sees("TV on the cabinet");
         d.send("home");
         let shelf = d.sees("Game Boy");
-        assert!(!shelf.contains("Sound & feel") && !shelf.contains("Appearance"), "HOME leaves Settings for Home: {shelf}");
+        assert!(!shelf.contains("TV on the cabinet") && !shelf.contains("Bluetooth"), "HOME leaves Settings for Home: {shelf}");
         // Quick settings are still HOME's on the shelf itself.
         d.send("home");
         d.sees("Brightness");
@@ -1481,7 +1662,8 @@ raise SystemExit(1)
         ui.sticker_sheet();
         ui.send("a\nb\nb");
         let text = ui.sees("Could not save: is the SD card full?");
-        assert!(text.contains("Details"), "the error must remain visible after returning to the shelf: {text}");
+        // The shelf is back: its bar says START Settings (Details gives way first when the one bar has no room for four hints).
+        assert!(text.contains("Settings"), "the error must remain visible after returning to the shelf: {text}");
     }
 
     /// First-start walk 2026-11-06, on a clock nobody set (UTC, no Wi-Fi region): the time zone came up every time the
@@ -1751,13 +1933,16 @@ raise SystemExit(1)
 
     #[test]
     fn a_stale_preview_never_holds_a_fresh_start_for_a_reminder() {
-        for (emulator, state, early) in [("pocket-core", false, false), ("pocket-core", true, false), ("retroarch", false, false), ("retroarch", true, false), ("pocket-core", true, true)] {
+        // `remind`: Settings → Playing → Remind me where I was is On; the last case is a player who never touched it
+        // (Off since 0.5): a moment after a long break starts at once, with no card and no hold.
+        for (emulator, state, early, remind) in [("pocket-core", false, false, true), ("pocket-core", true, false, true), ("retroarch", false, false, true), ("retroarch", true, false, true), ("pocket-core", true, true, true), ("pocket-core", true, false, false), ("retroarch", true, false, false)] {
             let mut ui = Driver::start("reminder-moment", true, |tmp, cmd| {
                 let cfg = tmp.join("es_systems.cfg");
                 let text = std::fs::read_to_string(&cfg).unwrap().replace("</command>", "</command><emulators><emulator name=\"retroarch\"><cores><core default=\"true\">gambatte</core></cores></emulator></emulators>");
                 std::fs::write(cfg, text).unwrap();
                 let game = tmp.join("gb/Tobu Tobu Girl (World).gb");
-                std::fs::write(tmp.join("data/settings.json"), r#"{"onboarded":true,"seen_version":"9.9.9","theme":"split","motion":"off","art":"off"}"#).unwrap();
+                let on = if remind { r#","where_was_i":true"# } else { "" };
+                std::fs::write(tmp.join("data/settings.json"), format!(r#"{{"onboarded":true,"seen_version":"9.9.9","theme":"split","motion":"off","art":"off"{on}}}"#)).unwrap();
                 let recent = serde_json::json!([{"system":"gb", "name":"Tobu Tobu Girl", "path":game,
                     "last_played": pocket_ui::recents::now_secs() - 23 * 86400, "play_secs":7200}]);
                 std::fs::write(tmp.join("data/recents.json"), recent.to_string()).unwrap();
@@ -1798,17 +1983,17 @@ sleep 30
             }
             ui.wait(|d| d.card.tmp.join("run-game.started").exists());
             let hold = std::fs::read_to_string(ui.card.tmp.join("run-game.hold")).unwrap();
-            assert_eq!(!hold.trim().is_empty(), state && !early && emulator == "pocket-core", "{emulator}, state {state}: {hold:?}");
+            assert_eq!(!hold.trim().is_empty(), state && !early && remind && emulator == "pocket-core", "{emulator}, state {state}, remind {remind}: {hold:?}");
             if early {
                 assert!(!ui.frame().contains("Last played"), "an early button must not reopen the reminder after preparation");
                 assert!(ui.card.tmp.join("pocket-launch-skip").exists());
-            } else if state {
+            } else if state && remind {
                 ui.sees("Last played 3 weeks ago");
                 ui.send("volup");
                 ui.wait(|d| !d.frame().contains("Last played"));
                 assert!(ui.card.tmp.join("pocket-launch-skip").exists(), "even a volume key dismisses the reminder and releases the game");
             } else {
-                assert!(!ui.frame().contains("Last played"), "{emulator}: no reminder on a fresh start");
+                assert!(!ui.frame().contains("Last played"), "{emulator}: no reminder on a fresh start, or with the reminder Off");
             }
         }
     }
@@ -1980,12 +2165,10 @@ sleep 30
     fn controller_capture_page() -> Driver {
         let mut ui = Driver::new("controller-hotplug", true);
         ui.send("tconnect 11 builtin Pocket\ntconnect 12 bt:freeze-proof Pro Controller\nstart");
-        controller_sees(&mut ui, "Sound & feel");
-        ui.send("down\ndown\na"); // Playing
-        controller_sees(&mut ui, "Continue where I quit");
-        ui.send("down\ndown\ndown\na"); // Buttons
-        controller_sees(&mut ui, "Button symbols");
-        ui.send("down\ndown\na"); // Controller setup
+        controller_sees(&mut ui, "Wi-Fi"); // START: Connections' rows
+        ui.send("r1\nr1\nr1"); // Controls
+        controller_sees(&mut ui, "Test buttons");
+        ui.send("down\na"); // Controller setup, the row under Buttons
         controller_sees(&mut ui, "Choose a controller");
         ui.send("right"); // external pad, header selected
         controller_sees(&mut ui, "Pro Controller");
@@ -2014,8 +2197,9 @@ sleep 30
         controller_sees(&mut ui, "Buttons swapped. Every action still has a button.");
         let profiles = pocket_ui::pad::bindings::Profiles::load(&ui.card.tmp.join("data"));
         assert_eq!(profiles.layout("bt:freeze-proof").role(pocket_ui::pad::Button::L2), pocket_ui::pad::Button::South);
+        // B: back to its own row in Controls (it was a row of Buttons until the tree of 2026-11-13).
         ui.send("b");
-        controller_sees(&mut ui, "Button symbols");
+        controller_sees(&mut ui, "Test buttons");
     }
 
     #[test]
@@ -2091,11 +2275,12 @@ sleep 30
         pad.dev.take(); // disconnect with L2 held: its release must precede Disconnected
         pad.forward(&mut ui, |e| matches!(e, PadEvent::Button { button: Button::L2, pressed: false, .. }));
         pad.forward(&mut ui, |e| matches!(e, PadEvent::Disconnected { .. }));
+        // B: back to its own row in Controls (it was a row of Buttons until the tree of 2026-11-13).
         ui.send("b");
-        controller_sees(&mut ui, "Button symbols");
+        controller_sees(&mut ui, "Test buttons");
     }
 
-    /// Settings → Help & tools → Test buttons: every button is a test, B, START and HOME too (they must not leave the
+    /// Settings → Controls → Test buttons: every button is a test, B, START and HOME too (they must not leave the
     /// page, open quick settings or the Settings list), two controllers keep their own lights, a trigger shows its travel,
     /// and the page is left by holding HOME for two seconds, by B and START together, or by a tap on its hint.
     /// Controllers and their presses come through the driver's own verbs (`tconnect`, `tbtn`, `taxis`), with sources of
@@ -2104,11 +2289,12 @@ sleep 30
     fn the_button_tester_takes_every_button_and_is_left_by_a_hold() {
         let mut ui = Driver::new("test-buttons", true);
         ui.send("start");
-        ui.sees("Sound & feel");
-        // Help & tools, the last category; its seventh row is Test buttons (after For tinkerers and Tools).
-        ui.send("down\ndown\ndown\ndown\ndown\ndown\na");
+        ui.sees("Wi-Fi");
+        // Controls, the fourth category (R1 three times from Connections); its third row is Test buttons (after Buttons and
+        // Controller setup).
+        ui.send("r1\nr1\nr1");
         ui.sees("Test buttons");
-        ui.send("down\ndown\ndown\ndown\ndown\ndown\na");
+        ui.send("down\ndown\na");
         // The keys sent so far came from no controller (the command FIFO): the Pocket's own buttons stand for them.
         ui.sees("Player 1 · Built-in");
         ui.send("tconnect 11 builtin Pocket\ntconnect 12 bt:e4:17:d8:00:00:02 8BitDo Pro 2");
@@ -2160,63 +2346,87 @@ sleep 30
             std::fs::write(tmp.join("data/settings.json"), r#"{"onboarded":true,"seen_version":"9.9.9","motion":"off","art":"off","theme":"cabinet"}"#).unwrap();
         });
         ui.sees("Game Boy");
-        ui.send("start");
-        ui.sees("Sound & feel");
-        // The categories' rows on the driver's 1240x1080 window: their middles at 165 + 66 px each. Taps across the
-        // whole page, never twice in a row on the same category nor first on the selected one (that would open it), so wherever a case
-        // stood one of them lands on it; each only selects its category. A frame between taps, as on the device.
-        let row = |g: usize| (165.0 + 66.0 * g as f32) / 1080.0;
+        ui.send("start\nr1");
+        ui.sees("Appearance");
+        // Look's rows on the driver's 1240x1080 window: their middles at 213 + 66 px each (under the category's name on
+        // its own line: the row of symbols with a whole name doesn't fit beside the widest status pill there). Taps across the whole page,
+        // never twice in a row on the same row nor first on the selected one (that would open or switch it), so wherever a
+        // case stood one of them lands on it; each only selects its row. A frame between taps, as on the device.
+        let row = |g: usize| (213.0 + 66.0 * g as f32) / 1080.0;
         for x in [0.1, 0.3, 0.5, 0.7, 0.9] {
             for g in [2, 4, 6, 1, 3, 5, 0] {
                 ui.send(&format!("tap {x} {:.4}", row(g)));
                 ui.frame();
             }
         }
-        // Then Playing, the third: the first tap selects it, the second opens it.
-        ui.send(&format!("tap 0.5 {:.4}", row(2)));
+        // Then Cozy extras, the ninth (Settings v2): the first tap selects it, the second opens it.
+        ui.send(&format!("tap 0.5 {:.4}", row(8)));
         ui.frame();
-        ui.send(&format!("tap 0.5 {:.4}", row(2)));
-        let text = ui.sees("Continue where I quit");
-        assert!(!text.contains("Systems on the shelf"), "the Look list (the row that was selected) did not open: {text}");
+        ui.send(&format!("tap 0.5 {:.4}", row(8)));
+        let text = ui.sees("TV on the cabinet");
+        assert!(!text.contains("Easy"), "the Layout page (the row that was selected) did not open: {text}");
     }
 
     /// The cozy extras where they live since 2026-10-30 answer a finger as every Settings row does: a tap selects a
-    /// row, the next one on it switches it. Sound & feel → Playful cases, Look → Cozy extras → Stickers on cases and
+    /// row, the next one on it switches it. Look → Cozy extras → Playful cases and Stickers on cases and
     #[test]
     fn a_tap_switches_the_cozy_extras_where_they_live_now() {
         let mut ui = Driver::new("extras-tap", true);
-        ui.send("start");
-        ui.sees("Sound & feel");
-        // On the driver's 1240x1080 window the rows' middles are at 165 + 66 px each, the categories' and the lists' alike.
-        let tap = |ui: &mut Driver, r: usize| {
-            ui.send(&format!("tap 0.5 {:.4}", (165.0 + 66.0 * r as f32) / 1080.0));
+        ui.send("start\nr1");
+        ui.sees("Cozy extras");
+        // On the driver's 1240x1080 window the rows' middles are at 165 + 66 px each on a page with a title, 48 px lower
+        // in a category's list (under the category's name line).
+        let tap_at = |ui: &mut Driver, top: f32, r: usize| {
+            ui.send(&format!("tap 0.5 {:.4}", (top + 66.0 * r as f32) / 1080.0));
             ui.frame();
         };
+        let tap = |ui: &mut Driver, r: usize| tap_at(ui, 165.0, r);
         let settings = ui.card.tmp.join("data/settings.json");
         let extra = move |key: &str| -> serde_json::Value {
             let s: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(&settings).unwrap_or_default()).unwrap_or_default();
             s["extras"][key].clone()
         };
-        // Sound & feel, the second category: select, open; Playful cases, its second row: select, switch.
-        tap(&mut ui, 1);
-        tap(&mut ui, 1);
-        ui.sees("Playful cases");
-        tap(&mut ui, 1);
-        tap(&mut ui, 1);
-        ui.wait(|_| extra("playful_animations").is_boolean());
-        // Look, then its third row Cozy extras (after Layout and Systems on the shelf): the page; Stickers on cases, its
-        // second row.
-        ui.send("b");
-        ui.sees("Help & tools");
-        tap(&mut ui, 0);
-        tap(&mut ui, 0);
-        ui.sees("Systems on the shelf");
-        tap(&mut ui, 2);
-        tap(&mut ui, 2);
+        // Look (R1 from where START opens): its ninth row Cozy extras (Settings v2): the page (since the tree of 2026-11-13 with
+        // Playful cases on it, its fifth row since TV plays the game); Stickers on cases, its third row: select, switch.
+        tap_at(&mut ui, 213.0, 8);
+        tap_at(&mut ui, 213.0, 8);
         ui.sees("TV on the cabinet");
-        tap(&mut ui, 1);
-        tap(&mut ui, 1);
+        tap(&mut ui, 4);
+        tap(&mut ui, 4);
+        ui.wait(|_| extra("playful_animations").is_boolean());
+        tap(&mut ui, 2);
+        tap(&mut ui, 2);
         ui.wait(|_| extra("case_stickers") == serde_json::json!(false));
+    }
+
+    /// The symbols at the top of Settings answer a finger (Android's handheld view, a touch screen): a tap on R1 is R1, the
+    /// next category; a tap on a symbol goes to its category (SETTINGS-IA package 2). Where they are comes from the
+    /// navigation record (L1's and R1's keys are hints there); the first symbol stands right after L1.
+    #[test]
+    fn a_tap_on_r1_or_on_a_symbol_changes_the_category() {
+        let mut d = Driver::start("settings-tabs-tap", true, |tmp, cmd| {
+            cmd.env("POCKETUI_NAV_PROBE", tmp.join("nav.txt"));
+        });
+        d.sees("Game Boy");
+        d.send("start");
+        d.wait(|d| status_of(d).contains("\tplace=settings:List Connections\t"));
+        let record = nav_record(&mut d);
+        let hint = |key: &str| -> [i32; 4] {
+            record.lines().find_map(|l| {
+                let v: Vec<&str> = l.splitn(6, '\t').collect();
+                (v.get(4).copied() == Some(&format!("‹nav:hint›{key}")[..])).then(|| [v[0].parse().unwrap(), v[1].parse().unwrap(), v[2].parse().unwrap(), v[3].parse().unwrap()])
+            }).unwrap_or_else(|| panic!("no {key} hint at the top:\n{record}"))
+        };
+        let (l1, r1) = (hint("L1"), hint("R1"));
+        let tap = |d: &mut Driver, x: i32, y: i32| d.send(&format!("tap {:.4} {:.4}", x as f32 / 1240.0, y as f32 / 1080.0));
+        // The driver paints only when asked: `sees` asks for frames until the page is there (and the status says so).
+        tap(&mut d, (r1[0] + r1[2]) / 2, (r1[1] + r1[3]) / 2);
+        d.sees("Appearance");
+        assert!(status_of(&d).contains("\tplace=settings:List Look\t"), "{}", status_of(&d));
+        // The first symbol, Connections: 16 px after L1's key, 32 px wide.
+        tap(&mut d, l1[2] + 16 + 16, (l1[1] + l1[3]) / 2);
+        d.sees("Remote access (SSH)");
+        assert!(status_of(&d).contains("\tplace=settings:List Connections\t"), "{}", status_of(&d));
     }
 
     #[test]
@@ -2224,7 +2434,7 @@ sleep 30
         let mut ui = Driver::new("wifi", true);
         ui.send("home\ndown\ndown\na");
         ui.sees("Wi-Fi\nOff");
-        ui.send("b\nstart\ndown\ndown\ndown\ndown\na\na");
+        ui.send("b\nstart\na");
         let off = ui.sees("Wi-Fi is off");
         assert!(
             !off.contains("Connected") && !off.contains("Connect\n"),
@@ -2233,7 +2443,7 @@ sleep 30
         // Back from Wi-Fi and Settings, switch the same radio on again, then reopen the Wi-Fi page.
         ui.send("b\nb\nb\nhome\ndown\ndown\na");
         ui.sees("Wi-Fi\nOn");
-        ui.send("b\nstart\ndown\ndown\ndown\ndown\na\na");
+        ui.send("b\nstart\na");
         let mut text = String::new();
         ui.wait(|d| {
             text = d.frame();
@@ -2322,10 +2532,16 @@ true
         ui.sees("Password for Wifi");
         ui.send(&("right\n".to_string() + &"a\n".repeat(8) + "start"));
         ui.sees("Connected to Wifi");
-        // The list after the connection marks it in use (and saved: Y forgets).
+        // A player who waits: the first start goes on by itself a moment later (`ADVANCE_AFTER`). This waits for that
+        // instead of racing it; a loaded gate's next press came after the moment and found the next page (14.11.).
+        let next = ui.wait_frame(|f| !f.contains("Scan again"));
+        assert!(!next.contains("Password for Wifi"), "{next}");
+        // B goes back to the Wi-Fi step, which never goes on by itself again. Its list marks the network in use (and
+        // saved: Y forgets), first in the list.
+        ui.send("b");
         ui.sees("Wifi\nConnected");
         // Forget it, then a second Y Y on the same row: the first forgets, the second has nothing left to forget.
-        ui.send("up\nup\ny\ny");
+        ui.send(&("up\n".repeat(8) + "y\ny"));
         ui.sees("Forgot Wifi");
         ui.send("y\ny");
         let after = ui.frame();
@@ -2477,7 +2693,8 @@ true
         std::thread::sleep(Duration::from_millis(500));
         assert_eq!(launches(&ui), 1, "{}", ui.log());
         assert!(ui.log().contains("curator: just play"), "{}", ui.log());
-        assert!(!ui.log().contains("fallback"), "{}", ui.log());
+        // The optional CJK font can be missing; its text-renderer diagnostic says nothing about game selection or retries.
+        assert!(!ui.log().lines().any(|line| line.contains("fallback") && !line.starts_with("text: no fallback font for CJK (")), "{}", ui.log());
     }
 
     /// A game whose file is gone is passed over; when every file is gone it says so, starts nothing and Home stays usable.
@@ -2634,10 +2851,10 @@ true
         });
         ui.sees("Game Boy");
         ui.send("start");
-        ui.sees("Sound & feel");
-        ui.send("down\ndown\ndown\na");
+        ui.sees("Wi-Fi");
+        ui.send("r1\nr1\nr1\nr1\nr1"); // Games
         ui.sees("Add games");
-        ui.send("down\na");
+        ui.send("down\ndown\na");
         let groups = ui.sees("Same game twice");
         assert!(groups.contains("BIOS files") && groups.contains("games ready"), "{groups}");
         ui.send("down\na");
@@ -2652,15 +2869,15 @@ true
         assert!(!left.contains("Same game twice"), "{left}");
 
         ui.send("b");
-        ui.sees("Extras");
+        ui.sees("Box art & downloads");
         std::fs::write(ui.card.tmp.join("gb/Pokemon Blau.gb"), b"game").unwrap();
-        ui.send("up\na");
+        ui.send("up\nup\na");
         ui.sees("Game Boy");
         ui.send("b");
         let offer = ui.sees("1 new game");
         assert!(offer.contains("Check"), "{offer}");
         ui.send("b");
-        ui.sees("Extras");
+        ui.sees("Box art & downloads");
     }
 
     #[test]
@@ -2672,10 +2889,10 @@ true
         });
         ui.sees("Game Boy");
         ui.send("start");
-        ui.sees("Sound & feel");
-        ui.send("down\ndown\ndown\na");
+        ui.sees("Wi-Fi");
+        ui.send("r1\nr1\nr1\nr1\nr1"); // Games
         ui.sees("Add games");
-        ui.send("down\na");
+        ui.send("down\ndown\na");
         ui.sees("Wrong folder or file type");
         // This card has missing Sega CD BIOS first, then the stray-folder group.
         ui.send("down\na");
@@ -2798,7 +3015,7 @@ true
         std::fs::remove_file(&config).unwrap();
         let fifo = std::ffi::CString::new(config.to_str().unwrap()).unwrap();
         assert_eq!(unsafe { libc::mkfifo(fifo.as_ptr(), 0o600) }, 0);
-        ui.send("start\ndown\ndown\ndown\na\ndown\ndown\na\ndown\ndown\ndown\na");
+        ui.send("start\nr1\nr1\nr1\nr1\nr1\ndown\na\ndown\ndown\ndown\na");
         let loading = ui.sees("Looking at your games folder…");
         assert!(loading.contains("Starter pack"), "the header alone is visible before Confirm is accepted: {loading}");
         let mut fd = -1;
@@ -2910,8 +3127,8 @@ true
         let rom = ui.card.tmp.join("gb/Tobu Tobu Girl (World).gb");
         // The game's card (X), turned over (right), its second page (SELECT), down to the last row: Hide or delete.
         ui.send("a\nx\nright\nselect");
-        // The rows run on past the window (Controls came before it): Down scrolls to the last one.
-        ui.sees("Controls");
+        // The rows run on past the window: Down scrolls to the last one.
+        ui.sees("Stickers");
         ui.send(&"down\n".repeat(10));
         ui.sees("Hide or delete");
         ui.send("a");
@@ -3032,10 +3249,10 @@ true
         ui.sees("Game Boy");
         // Extras paints the actual cached IP state on every frame. Wait for online readiness before using a
         // network-dependent card action; curl is a child-local failing stub, so no request leaves the fixture.
-        ui.send("start\ndown\ndown\ndown\na\ndown\ndown\na");
+        ui.send("start\nr1\nr1\nr1\nr1\nr1\ndown\na");
         let extras = ui.sees("Download");
-        assert!(extras.contains("Extras") && extras.contains("Box art"), "online Extras is ready: {extras}");
-        ui.send("b\nb\nb");
+        assert!(extras.contains("Box art & downloads") && extras.contains("Box art"), "online Box art & downloads is ready: {extras}");
+        ui.send("b\nb");
         ui.sees("Game Boy");
         ui.send("a");
         ui.sees("Mario Land 2");
@@ -3147,7 +3364,7 @@ true
         assert!(page.contains("No Wikipedia article for this game"), "{page}");
         assert!(!page.contains("Turn over"), "the info page, not the box: {page}");
         ui.send("select");
-        ui.sees("Controls");
+        ui.sees("Stickers");
         ui.send(&"down\n".repeat(10));
         ui.sees("Hide or delete");
         ui.send("select");
@@ -3193,7 +3410,7 @@ true
     fn bluetooth_page_connects_an_audio_device() {
         let mut ui = Driver::new("bluetooth", true);
         ui.sees("Game Boy");
-        ui.send("start\ndown\ndown\ndown\ndown\na\ndown\na");
+        ui.send("start\ndown\na");
         ui.sees("Search for devices");
         ui.send("down\na");
         ui.sees("JBL Flip 5");
@@ -3326,7 +3543,7 @@ true
             after_step.as_deref().is_some_and(|f| !f.starts_with("Tobu"))
         });
         d.send("start");
-        d.wait(|d| status_of(d).contains("\tplace=settings:Groups\t"));
+        d.wait(|d| status_of(d).contains("\tplace=settings:List Connections\t"));
         std::thread::sleep(Duration::from_millis(1500));
         d.send("tbtn 21 down up\nb");
         d.wait(|d| status_of(d).contains("\tplace=shelf:Home\tcover=none\t"));
@@ -3339,7 +3556,7 @@ true
     fn home_from_settings_lands_on_the_shelf_without_the_quick_settings() {
         let mut d = release_card("release-home-settings");
         d.send("start");
-        d.wait(|d| status_of(d).contains("\tplace=settings:Groups\t"));
+        d.wait(|d| status_of(d).contains("\tplace=settings:List Connections\t"));
         d.send("tbtn 21 home down");
         d.wait(|d| status_of(d).contains("\tplace=shelf:Home\t"));
         d.send("tbtn 21 home up");
@@ -3529,7 +3746,7 @@ true
         d.sees("Settings");
         d.wait(|d| std::fs::read_to_string(d.card.tmp.join("probe.status")).is_ok_and(|s| s.contains("place=shelf:Home")));
         d.send("start");
-        d.wait(|d| std::fs::read_to_string(d.card.tmp.join("probe.status")).is_ok_and(|s| s.contains("place=settings:Groups")));
+        d.wait(|d| std::fs::read_to_string(d.card.tmp.join("probe.status")).is_ok_and(|s| s.contains("place=settings:List Connections")));
         let status = std::fs::read_to_string(d.card.tmp.join("probe.status")).unwrap();
         assert!(status.contains(&format!("\tpid={}\t", d.child.id())), "{status}");
         assert_eq!(std::fs::read_to_string(d.card.tmp.join("ui.status")).unwrap(), "owner status\n");
@@ -3553,8 +3770,8 @@ true
         assert!(line.starts_with("v=1\trev=") && line.contains("\tplace=shelf:Home\tcover=none\tsleep=awake\tgame=none"), "{line}");
         // The incident's shape, guarded: Settings open, then "B, A" for a page that is no longer there.
         assert_eq!(ui_status(&d, &["send", "--at", "shelf:Home", "start"]).0, 0);
-        assert_eq!(ui_status(&d, &["expect", "settings:Groups", "10"]).0, 0);
-        let (rc, _, err) = ui_status(&d, &["send", "--at", "settings:Groups", "b", "a"]);
+        assert_eq!(ui_status(&d, &["expect", "settings:List Connections", "10"]).0, 0);
+        let (rc, _, err) = ui_status(&d, &["send", "--at", "settings:List Connections", "b", "a"]);
         assert_eq!(rc, 3, "A on the shelf after B must be refused: {err}");
         assert!(err.contains("starts a game"), "{err}");
         assert_eq!(ui_status(&d, &["expect", "shelf:Home", "5"]).0, 0, "B went back to the shelf");
@@ -3565,7 +3782,7 @@ true
         assert!(!d.card.tmp.join("run-game.started").exists(), "no game was started: {}", d.log());
         // A dark screen: a key would only wake it (and the next one would land on a page the helper didn't mean).
         assert_eq!(ui_status(&d, &["send", "start"]).0, 0);
-        assert_eq!(ui_status(&d, &["expect", "settings:Groups", "10"]).0, 0);
+        assert_eq!(ui_status(&d, &["expect", "settings:List Connections", "10"]).0, 0);
         d.send("power");
         d.wait(|d| d.log().contains("sleep: power key, screen off"));
         d.wait(|d| std::fs::read_to_string(d.card.tmp.join("ui.status")).is_ok_and(|l| l.contains("\tsleep=light\t")));
@@ -3573,8 +3790,8 @@ true
         assert_eq!(rc, 4, "a key on a dark screen is refused: {err}");
         let (rc, _, err) = ui_status(&d, &["send", "wake"]);
         assert_eq!(rc, 0, "{err}");
-        let (rc, out, err) = ui_status(&d, &["expect", "settings:Groups", "5"]);
-        assert_eq!((rc, out.trim()), (0, "settings:Groups"), "wake pressed nothing: still on the page it woke on ({err})");
+        let (rc, out, err) = ui_status(&d, &["expect", "settings:List Connections", "5"]);
+        assert_eq!((rc, out.trim()), (0, "settings:List Connections"), "wake pressed nothing: still on the page it woke on ({err})");
     }
 
     #[test]

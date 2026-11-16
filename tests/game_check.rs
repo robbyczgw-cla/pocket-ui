@@ -84,11 +84,18 @@ fn screen(tmp: &Path, stub: &Option<Stub>, cfg: &Path, state: &str, lang: &str, 
     (shown.lines().collect::<Vec<_>>().join(" "), faults)
 }
 
-fn tmp(tag: &str) -> PathBuf {
-    let dir = std::env::temp_dir().join(format!("gc{}-{tag}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&dir);
-    std::fs::create_dir_all(&dir).unwrap();
-    dir
+/// A scratch folder that goes with the test, also when it panics; it derefs to `&Path`.
+struct Tmp(tempfile::TempDir);
+
+impl std::ops::Deref for Tmp {
+    type Target = Path;
+    fn deref(&self) -> &Path {
+        self.0.path()
+    }
+}
+
+fn tmp(tag: &str) -> Tmp {
+    Tmp(tempfile::Builder::new().prefix(&format!("gc-{tag}-")).tempdir().unwrap())
 }
 
 #[test]
@@ -103,7 +110,6 @@ fn a_clean_card_says_all_good_and_counts_its_games() {
         assert!(shown.contains(good) && shown.contains(ready), "{lang}: {shown}");
         assert_eq!(faults, Vec::<String>::new(), "{lang} {size}");
     }
-    let _ = std::fs::remove_dir_all(&t);
 }
 
 #[test]
@@ -113,7 +119,6 @@ fn nothing_on_the_card_says_so() {
     let cfg = card(&t);
     let (shown, _) = screen(&t, &stub, &cfg, "game-check:real", "de", "640x480", "large");
     assert!(shown.contains("Noch keine Spiele") || shown.contains("No games yet"), "never an empty page: {shown}");
-    let _ = std::fs::remove_dir_all(&t);
 }
 
 #[test]
@@ -139,7 +144,6 @@ fn the_usual_mistakes_are_named_with_what_to_do() {
     let (de, faults) = screen(&t, &stub, &cfg, "game-check:real", "de", "640x480", "large");
     assert!(de.contains("Leere Dateien") && de.contains("Falscher Ordner"), "{de}");
     assert_eq!(faults, Vec::<String>::new());
-    let _ = std::fs::remove_dir_all(&t);
 }
 
 #[test]
@@ -155,5 +159,4 @@ fn a_broken_system_is_visible_while_the_other_games_stay() {
     let (shown, _) = screen(&t, &stub, &cfg, "game-check:real", "en", "1280x720", "normal");
     assert!(shown.contains("Folders that can't be read"), "the skipped system is visible in Game check: {shown}");
     assert!(!shown.contains("All good"), "{shown}");
-    let _ = std::fs::remove_dir_all(&t);
 }

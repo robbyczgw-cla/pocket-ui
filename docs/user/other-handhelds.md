@@ -23,7 +23,7 @@ work, but nobody has tried pocket-ui on one yet.
 - **What you see.** The first start says once that pocket-ui hasn't been tested on your device, unless the project has
   played on it ([DEVICES](../DEVICES.md)); Settings → Help & tools →
   About shows the device with "(experimental)". Everything else is the same as on the Mini V2. On the Pocket 5's and
-  Flip 2's wider screen, Settings and the Shelf look sit in a column in the middle; on the Flip 2, closing the lid
+  Flip 2's wider screen, the Shelf look sits in a column in the middle, and Settings use nearly the whole width in larger type; on the Flip 2, closing the lid
   puts it to sleep.
 - **If something doesn't work**, Settings → Help & tools → About → Report a problem saves a file to attach to a report.
 
@@ -89,7 +89,8 @@ doesn't change them.
 2. Download ROCKNIX's **H700 image** from the [official ROCKNIX H700 install page](https://rocknix.org/configure/h700-installation/)
    (version 20261001 or newer) and flash it with balenaEtcher or Raspberry Pi Imager. There is one image per memory
    type: **try the DDR4 image first. If the handheld doesn't start from it** (the screen stays black), flash the **DDR3**
-   image onto the same card instead; only the card is at risk.
+   image onto the same card instead; only the card is at risk. The **RG-SP** and the **RG34XX-SP sold since 2026**
+   (Metallic Blue, 1 GB or less) have DDR3 memory as far as we know: take the DDR3 image first on those.
 3. Take the card out and in again so your computer shows the **ROCKNIX** drive. Copy your model's device tree file
    from its `device_trees` folder to the top folder of that drive and name the copy **`dtb.img`** (all lower case).
    Eject the card properly: skipping this step can leave the card unable to start.
@@ -105,7 +106,7 @@ doesn't change them.
    | RG40XX H | `sun50i-h700-anbernic-rg40xx-h.dtb` (`...-h-v2-panel.dtb`) |
    | RG40XX V | `sun50i-h700-anbernic-rg40xx-v.dtb` (`...-v-v2-panel.dtb`) |
    | RG34XX | `sun50i-h700-anbernic-rg34xx.dtb` |
-   | RG34XX-SP | `sun50i-h700-anbernic-rg34xx-sp.dtb` (`...-sp-v2-panel.dtb`) |
+   | RG34XX-SP | `sun50i-h700-anbernic-rg34xx-sp.dtb` (`...-sp-v2-panel.dtb`; the 2026 Metallic Blue units need this one) |
    | RG-SP | `sun50i-h700-anbernic-rg-sp.dtb` |
 
    The name in brackets is for a newer panel revision: if the first file shows a garbled or striped picture, hold
@@ -134,8 +135,10 @@ doesn't change them.
   only smaller. Small hint text can be hard to read on the 640×480 handhelds; Settings → Look → Text size
   makes it larger.
 - **Hidden or reduced.** Fan settings say "No fan"; there is no touch setup. The RG28XX and RG35XX 2024 say
-  "This device has no Wi-Fi" on the Wi-Fi page and offer nothing to switch on there: everything else works offline,
-  while online features (covers, updates, RetroAchievements, file sharing) wait for a network. On the
+  "This device has no Wi-Fi" on the Wi-Fi page and offer nothing to switch on there: everything else works offline.
+  Pages that need a network (Tailscale, Sync, Web companion, Remote access, RetroAchievements, the starter pack) say
+  "Needs a network, and this handheld has no Wi-Fi." instead of asking you to connect, and Box art says how to copy
+  covers from a computer ([Box art without Wi-Fi](extras.md#without-wi-fi)). On the
   handhelds without sticks, no stick lights are offered.
 - **Time zone** is set the H700 way (ROCKNIX's system setting); the first-start step is there as on the other devices.
 - **To go back:** take the card out and put your stock card in, or run `sh /storage/pocket-ui/uninstall.sh`, or

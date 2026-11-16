@@ -100,7 +100,7 @@ impl Ui {
                         return Command::UpdateInstall;
                     }
                     UpdateAction::Later => { self.updates.confirming = false; self.menu = 0; }
-                    UpdateAction::Auto => {}
+                    UpdateAction::Auto | UpdateAction::Card => {}
                 }
             }
             _ => {}

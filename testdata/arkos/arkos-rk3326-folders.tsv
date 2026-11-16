@@ -1,0 +1,127 @@
+advision	advision	Adventure Vision
+amiga	amiga	Amiga
+amigacd32	amigacd32	Amiga CD32
+amstradcpc	amstradcpc	CPC
+apple2	apple2	Apple II
+bbcmicro	bbcmicro	BBC Micro
+cavestory	cavestory	Cave Story
+vmac	macintosh	Macintosh
+gx4000	gx4000	GX4000
+arcade	arcade	Arcade
+astrocde	astrocade	Astrocade
+channelf	channelf	ChannelF
+cps1	cps1	Capcom System I
+cps2	cps2	Capcom System II
+cps3	cps3	Capcom System III
+megaduck	megaduck	Mega Duck
+daphne	Daphne	Daphne
+alg	alg	American Laser Games
+mame2003	mame2003	MAME2003
+mame	mame2010	MAME2010
+atomiswave	Sega Atomiswave	Atomiswave
+naomi	naomi	Naomi
+3do	3do	3DO
+pokemonmini	pokemonmini	Pokemon Mini
+atari800	atari800	Atari 800
+atari2600	atari2600	Atari 2600
+atari5200	atari5200	Atari 5200
+atari7800	atari7800	Atari 7800
+atarist	atarist	Atari ST
+atarixegs	atarixegs	Atari XEGS
+atarijaguar	jaguar	Atari Jaguar
+atarilynx	atarilynx	Atari Lynx
+wonderswan	wonderswan	WonderSwan
+wonderswancolor	wonderswancolor	WonderSwan Color
+odyssey2	odyssey2	Odyssey2
+pcengine	pcengine	PC Engine
+pcenginecd	pcenginecd	PC Engine CD
+turbografx	turbografx16	Turbografx 16
+turbografxcd	turbografxcd	Turbografx CD
+supergrafx	supergrafx	Super Grafx
+famicom	famicom	Famicom
+fds	famicom disk system	Famicom Disk System
+sfc	sfc	Super Famicom
+nes	nes	NES
+sufami	snes	SuFami Turbo
+satellaview	satellaview	Satellaview
+snes	snes	Super NES
+snesmsu1	snesmsu	Super NES CD
+snes-hacks	snes-hacks	Super NES Hacks
+n64	n64	N64
+n64dd	n64dd	N64DD
+love2d	love2d	Love2d
+virtualboy	virtualboy	Virtualboy
+gb	gb	Game Boy
+gbc	gbc	Game Boy Color
+gba	gba	Game Boy Advance
+gameandwatch	gameandwatch	Game and Watch
+sgb	sgb	Super Game Boy
+nds	nds	NDS
+sg-1000	sg-1000	SG-1000
+mastersystem	mastersystem	Master System
+megadrive	megadrive	Megadrive
+msumd	megadrivemsu	Megadrive MSU
+genesis	genesis	Genesis
+segacd	segacd	Sega CD
+sega32x	sega32x	Sega 32X
+saturn	saturn	Saturn
+dreamcast	dreamcast	Dreamcast
+vmu	vmu	Dreamcast VMU
+gamegear	gamegear	Game Gear
+pico	pico	Pico
+neogeo	neogeo	Neo Geo
+neogeocd	neogeocd	Neo Geo CD
+ngp	ngp	Neo Geo Pocket
+ngpc	ngpc	Neo Geo Pocket Color
+openbor	openbor	OpenBOR
+psx	psx	PlayStation
+psp	ppsspp	PlayStation Portable
+pspminis	pspminis	Playstation Portable Minis
+intellivision	intellivision	Intellivision
+coleco	coleco	ColecoVision
+tic80	tic-80	Tic-80
+vectrex	vectrex	Vectrex
+msx	msx	MSX
+msx2	msx2	MSX 2
+zx81	zx81	ZX81
+zxspectrum	zxspectrum	ZX Spectrum
+x1	x1	Sharp X1
+x68000	x68000	Sharp x68000
+c16	c16	C16
+c64	c64	C64
+c128	c128	C128
+vic20	vic20	VIC-20
+videopac	videopac	Videopac G7000
+pc98	pc98	PC98
+pcfx	pcfx	PC-FX
+dos	msdos	DOS
+ti99	ti99	TI99
+supervision	supervision	Supervision
+doom	doom	Doom
+wolf	wolf	Wolfenstein
+arduboy	arduboy	Arduboy
+easyrpg	easyrpg	EasyRPG
+scv	scv	Super Cassette Vision
+mv	microvision	Microvision
+onscripter	onscripter	ONScripter
+carts	pico-8	PICO-8
+palm	palm	Palm
+piece	piece	P/ECE
+puzzlescript	puzzlescript	PuzzleScript
+j2me	j2me	J2ME
+enterprise	enterprise	Enterprise 64/128
+tvc	videoton	TV-Computer
+vircon32	vircon32	Vircon32
+thomson	thomson	Theodore Thomson
+dragon32	dragon32	Dragon 32/64
+coco3	coco	Color Computer 3
+gametank	gametank	GameTank
+wasm4	wasm-4	WASM-4
+lowresnx	lowresnx	LowRes NX
+solarus	solarus	Solarus
+ports	ports	Ports
+scummvm	scummvm	SCUMM Virtual Machine
+uzebox	uzebox	Uzebox
+zeebo	zeebo	Zeebo
+movies	videos	Movies
+cmds	retroarch	Retroarch

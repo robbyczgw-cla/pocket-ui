@@ -25,6 +25,10 @@ pub struct Notice {
     report: bool,
     /// The hint that a newer pocket-ui is ready: A goes to Settings → System → Updates, B closes (`update_hint`).
     updates: bool,
+    /// Android's installer is at work (`update_hint::android_progress`): B cancels it, A only closes the card.
+    cancels: bool,
+    /// An update on the card (`update::card`): A installs it, B closes.
+    card: bool,
 }
 
 impl Notice {
@@ -37,6 +41,8 @@ impl Notice {
             text: text.to_string(),
             report: true,
             updates: false,
+            cancels: false,
+            card: false,
         })
     }
 
@@ -55,12 +61,37 @@ impl Notice {
 
     /// A message of pocket-ui's own.
     pub fn new(text: impl Into<String>) -> Notice {
-        Notice { text: text.into(), report: false, updates: false }
+        Notice { text: text.into(), report: false, updates: false, cancels: false, card: false }
+    }
+
+    /// The same notice (its report hint, its way of closing) in other words (`start_failed`).
+    pub fn reworded(self, text: String) -> Notice {
+        Notice { text, ..self }
     }
 
     /// "pocket-ui <version> is ready": the card whose A opens the Updates page.
     pub fn update_ready(version: &str) -> Notice {
-        Notice { text: crate::update_hint::text(version), report: false, updates: true }
+        Notice { text: crate::update_hint::text(version), report: false, updates: true, cancels: false, card: false }
+    }
+
+    /// Android's handheld view while its installer works: what it is doing, and with `cancels` the line that B stops it.
+    pub fn update_progress(text: impl Into<String>, cancels: bool) -> Notice {
+        Notice { text: text.into(), report: false, updates: false, cancels, card: false }
+    }
+
+    /// "Update to pocket-ui … found on the card": A opens Settings → System → Updates and installs it (`app_card_update`).
+    pub fn card_update(version: &str) -> Notice {
+        Notice { text: crate::update::card::found(version), report: false, updates: true, cancels: false, card: true }
+    }
+
+    /// Whether A on this notice installs the update on the card.
+    pub fn installs_from_card(&self) -> bool {
+        self.card
+    }
+
+    /// Whether B on this card stops Android's installer.
+    pub fn cancels_update(&self) -> bool {
+        self.cancels
     }
 
     /// Whether A on this card goes to Settings → System → Updates instead of only closing it.
@@ -86,15 +117,19 @@ impl Notice {
             return 0;
         }
         let clear = c.w - 2 * (MARGIN + CORNER);
-        let (report, updates) = (self.report, self.updates);
+        let (report, updates, cancels, card) = (self.report, self.updates, self.cancels, self.card);
         let mut wrapped = |max: i32| {
             let mut lines = text.wrap_prose(Face::Body, 30, &self.text, max - 64);
             let own = lines.len();
             if report {
                 lines.extend(text.wrap_prose(Face::Body, 30, REPORT_HINT, max - 64));
             }
-            if updates {
-                lines.extend(text.wrap_prose(Face::Body, 30, crate::update_hint::ACTIONS, max - 64));
+            if card {
+                lines.extend(text.wrap_prose(Face::Body, 30, crate::update::card::FOUND_ACTIONS, max - 64));
+            } else if updates {
+                lines.extend(text.wrap_prose(Face::Body, 30, crate::update_hint::actions(crate::device::android_profile()), max - 64));
+            } else if cancels {
+                lines.extend(text.wrap_prose(Face::Body, 30, crate::update_hint::ANDROID_CANCEL, max - 64));
             } else {
                 lines.push(CLOSE_HINT.to_string());
             }

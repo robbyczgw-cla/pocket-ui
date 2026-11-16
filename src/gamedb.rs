@@ -125,6 +125,17 @@ impl Relation {
 }
 
 impl GameInfo {
+    /// The same entry without the developers, publishers, genres and series that could only be painted as letters no
+    /// font here draws (`latinise`): for the card, which would show an empty row or "by ." for them. The entry the
+    /// library matches by is not changed.
+    pub fn sayable(&self) -> GameInfo {
+        let mut info = self.clone();
+        for list in [&mut info.developers, &mut info.publishers, &mut info.genres, &mut info.series, &mut info.modes] {
+            list.retain(|v| crate::latinise::shows(v));
+        }
+        info
+    }
+
     /// The work this game is a version of: versions of one work share it across systems (Chrono Trigger
     /// on the SNES, PlayStation and DS, including the DS edition item, all give Q761815); a remake has its
     /// own. Falls back to the game's own QID.

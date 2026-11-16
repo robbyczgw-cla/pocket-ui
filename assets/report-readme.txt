@@ -5,8 +5,9 @@ Made on {when} by pocket-ui {version}, with Settings > System > About > Report a
 
 Where to send it
 ----------------
-Open a bug report on pocket-ui's GitHub page (Issues > New issue > Bug report), say what happened and what you
-expected, and attach this zip file. Nothing was sent anywhere: the file stays on your SD card until you attach it.
+Open a bug report on pocket-ui's GitHub page (Issues > New issue > Bug report), or write to {contact}.
+Say what happened and what you expected, and attach this zip file. Nothing was sent anywhere: the file stays on your
+SD card until you attach it.
 All files are plain text, so you can look through them first.
 
 What is inside

@@ -271,21 +271,53 @@ impl App {
 
         // What the selected row is for and what its choice does.
         let (left, width) = (pad + NU_BTN_PAD, c.w - 2 * (pad + NU_BTN_PAD));
-        let mut y = top + rows.len() as i32 * row + 44;
         let [what, choice] = page.describe(page.row());
-        for (text, color) in [(what.as_str(), pal().dust), (choice.as_str(), pal().text)] {
-            for line in self.text.wrap_prose(Face::Body, NU_SMALL, text, width) {
-                self.text.draw(c, Face::Body, NU_SMALL, left, y, color, &line);
-                y += pocket_ui::type_scale::line(NU_SMALL, 12);
-            }
-            y += 6;
-        }
-        y += 14;
         let note = if page.fan_control { "These apply to this port from its next start. What every port starts with is \
 in Settings › Playing › Performance & fan." } else { "These apply to this port from its next start. What every port starts with is in Settings › Playing › Performance." };
-        for line in self.text.wrap_prose(Face::Body, 24, note, width) {
-            self.text.draw(c, Face::Body, 24, left, y, pal().quiet, &line);
-            y += pocket_ui::type_scale::line(24, 8);
+        let (what_lines, choice_lines) = (self.text.wrap_prose(Face::Body, NU_SMALL, what.as_str(), width), self.text.wrap_prose(Face::Body, NU_SMALL, choice.as_str(), width));
+        let note_lines = self.text.wrap_prose(Face::Body, 24, note, width);
+        let (ss, ns) = (pocket_ui::type_scale::line(NU_SMALL, 12), pocket_ui::type_scale::line(24, 8));
+        // Everything keeps above the hint bar (1024x768 and 1280x720 in Large text, German and Spanish): the gap over the
+        // explanation gives up to 8 px, then the note goes, then the first paragraph is cut with "…" (the second says what
+        // the selected value does), and last that one. `w`, `ch`, `n`: how many lines of each are shown.
+        let y_base = top + rows.len() as i32 * row + 44;
+        let hint_top = pocket_ui::kit::hint_bar_top(c.h);
+        let last_baseline = |w: usize, ch: usize, n: usize, squeeze: i32| -> i32 {
+            let (w, ch, n) = (w as i32, ch as i32, n as i32);
+            let first = y_base - squeeze;
+            if n > 0 {
+                first + (w + ch) * ss + 6 * i32::from(w > 0) + 6 * i32::from(ch > 0) + 14 + (n - 1) * ns
+            } else {
+                first + (w + ch - 1).max(0) * ss + 6 * i32::from(w > 0 && ch > 0)
+            }
+        };
+        let fits = |w: usize, ch: usize, n: usize| last_baseline(w, ch, n, 8) + 8 <= hint_top;
+        let (mut w, mut ch, mut n) = (what_lines.len(), choice_lines.len(), note_lines.len());
+        if !fits(w, ch, n) {
+            n = 0;
+        }
+        while !fits(w, ch, n) && w > 0 {
+            w -= 1;
+        }
+        while !fits(w, ch, n) && ch > 1 {
+            ch -= 1;
+        }
+        let squeeze = (last_baseline(w, ch, n, 0) + 8 - hint_top).clamp(0, 8);
+        let mut y = y_base - squeeze;
+        for (lines, shown, color, text) in [(what_lines, w, pal().dust, what.as_str()), (choice_lines, ch, pal().text, choice.as_str())] {
+            let cut = if shown < lines.len() { self.text.wrap_prose_at_most(Face::Body, NU_SMALL, text, width, shown) } else { lines };
+            for line in cut.iter().take(shown) {
+                self.text.draw(c, Face::Body, NU_SMALL, left, y, color, line);
+                y += ss;
+            }
+            if shown > 0 {
+                y += 6;
+            }
+        }
+        y += 14;
+        for line in note_lines.iter().take(n) {
+            self.text.draw(c, Face::Body, 24, left, y, pal().quiet, line);
+            y += ns;
         }
         let hints = page.hints();
         self.nu_hints(c, &hints);

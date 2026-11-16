@@ -226,7 +226,7 @@ impl Extras {
         if game_performance(Performance::Auto) != Performance::Auto && cfg.performance == Performance::Auto {
             ex.power.set_performance(game_performance(Performance::Auto));
         }
-        if cfg.performance == Performance::Auto && crate::device::current().model.is_some_and(|m| m.is_h700()) {
+        if cfg.performance == Performance::Auto && crate::device::current().model.is_some_and(|m| m.h700_class()) {
             ex.power.set_performance(Performance::Auto);
         }
         // Always, Auto too: pocket-ui otherwise goes by Games: fan, which this game may have overridden.

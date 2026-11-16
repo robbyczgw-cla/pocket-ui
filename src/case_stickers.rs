@@ -290,7 +290,7 @@ fn stick(p: &mut Pic, s: &Pic, x: i32, y: i32) {
 /// Where each sticker goes on a front whose cover is `label` (x, y, w, h), as (kind, x, y) of its turned picture's
 /// top left: the round ones in a row from the label's top right corner leftwards, side by side and not quite on one
 /// line; Game of the year at the bottom left. `sizes` are the turned pictures' sizes, in [`Kind::ALL`]'s order.
-pub fn layout(on: &[Kind], label: (i32, i32, i32, i32), sizes: &[(i32, i32)], seed: u64) -> Vec<(Kind, i32, i32)> {
+fn layout_plain(on: &[Kind], label: Rect, sizes: &[(i32, i32)], seed: u64) -> Vec<(Kind, i32, i32)> {
     let (lx, ly, lw, lh) = label;
     let inset = (lw / 24).max(2);
     let mut out = Vec::new();
@@ -318,19 +318,138 @@ pub fn layout(on: &[Kind], label: (i32, i32, i32, i32), sizes: &[(i32, i32)], se
     out
 }
 
+/// The places of the round stickers and the Game of the year one on a cover (`layout_plain`), nothing kept clear.
+pub fn layout(on: &[Kind], label: (i32, i32, i32, i32), sizes: &[(i32, i32)], seed: u64) -> Vec<(Kind, i32, i32)> {
+    layout_around(on, label, sizes, seed, &[])
+}
+
+/// A rectangle: x, y, width, height.
+pub type Rect = (i32, i32, i32, i32);
+
+/// [`layout`] with places kept clear: a sticker that would land on one of `keep` (the printed name and console of a
+/// case with no cover) moves to the nearest place in the label that touches none of them (all first, then the name
+/// alone), and is left off when there is no such place: a sticker never hides the name.
+pub fn layout_around(on: &[Kind], label: Rect, sizes: &[(i32, i32)], seed: u64, keep: &[Rect]) -> Vec<(Kind, i32, i32)> {
+    let placed = layout_plain(on, label, sizes, seed);
+    if keep.is_empty() {
+        return placed;
+    }
+    placed
+        .into_iter()
+        .filter_map(|(k, x, y)| {
+            let (w, h) = sizes[Kind::ALL.iter().position(|q| *q == k).unwrap_or(0)];
+            clear_of((x, y, w, h), label, keep).map(|(x, y)| (k, x, y))
+        })
+        .collect()
+}
+
+fn touches(a: Rect, b: Rect) -> bool {
+    a.0 < b.0 + b.2 && b.0 < a.0 + a.2 && a.1 < b.1 + b.3 && b.1 < a.1 + a.3
+}
+
+/// Where a `w` x `h` sticker at (`x`, `y`) goes so that it touches none of `keep`, inside `label`: where it is, or the
+/// nearest place above, below or beside a kept rectangle. `keep[0]` is the name, which is kept clear at any price.
+fn clear_of((x, y, w, h): Rect, label: Rect, keep: &[Rect]) -> Option<(i32, i32)> {
+    let (lx, ly, lw, lh) = label;
+    let inside = |x: i32, y: i32| (x.clamp(lx, (lx + lw - w).max(lx)), y.clamp(ly, (ly + lh - h).max(ly)));
+    for set in [keep, &keep[..1]] {
+        let free = |x: i32, y: i32| !set.iter().any(|k| touches((x, y, w, h), *k));
+        if free(x, y) {
+            return Some((x, y));
+        }
+        let mut best: Option<(i32, (i32, i32))> = None;
+        for k in set {
+            for (cx, cy) in [(x, k.1 - h - 1), (x, k.1 + k.3 + 1), (k.0 - w - 1, y), (k.0 + k.2 + 1, y)] {
+                let (cx, cy) = inside(cx, cy);
+                if free(cx, cy) {
+                    let d = (cx - x).abs() + (cy - y).abs();
+                    if best.is_none_or(|(b, _)| d < b) {
+                        best = Some((d, (cx, cy)));
+                    }
+                }
+            }
+        }
+        if let Some((_, at)) = best {
+            return Some(at);
+        }
+    }
+    None
+}
+
 /// The stickers on a case's front `p` (made by `media::front`), over its cover `label`; `seed` (the game's file)
 /// keeps each one's tilt and place the same every time.
 pub fn on_front(text: &mut Text, p: &mut Pic, case: &CaseStickers, label: (i32, i32, i32, i32), seed: u64) {
-    let on = case.on();
-    if on.is_empty() {
+    on_front_around(text, p, case, label, seed, &[]);
+}
+
+/// [`on_front`] for a front made by `media::front` at `k` with `title` (as printed) and `console`: with no `cover`
+/// it is the printed title card, and the stickers keep off its name and console.
+pub fn on_front_of(text: &mut Text, p: &mut Pic, case: &CaseStickers, m: crate::media::Medium, k: f32, title: &str, cover: bool, console: Option<&crate::system_art::Sprite>, seed: u64) {
+    let label = crate::media::label_rect(m, k);
+    let keep = kept_clear(text, case, label, title, cover, console);
+    on_front_around(text, p, case, label, seed, &keep);
+}
+
+/// What the stickers of `case` keep off on a front whose cover area is `label`: the printed name and console of a title
+/// card (no `cover`), nothing on a cover.
+pub fn kept_clear(text: &mut Text, case: &CaseStickers, label: Rect, title: &str, cover: bool, console: Option<&crate::system_art::Sprite>) -> Vec<Rect> {
+    if cover || case.is_empty() {
+        Vec::new()
+    } else {
+        crate::cabinet_art::plain_zones(text, label, title, console)
+    }
+}
+
+/// [`on_front`] with `keep` clear of stickers ([`layout_around`]).
+pub fn on_front_around(text: &mut Text, p: &mut Pic, case: &CaseStickers, label: Rect, seed: u64, keep: &[Rect]) {
+    on_front_but(text, p, case, label, seed, keep, &[]);
+}
+
+/// [`on_front_around`] with the places of all of `case`'s stickers, but those in `skip` not stuck on: the case just before
+/// they land on it (`sticker_press`), where every other one already sits as it will.
+pub fn on_front_but(text: &mut Text, p: &mut Pic, case: &CaseStickers, label: Rect, seed: u64, keep: &[Rect], skip: &[Kind]) {
+    if case.is_empty() {
         return;
     }
-    let f = (p.w as f32 * SHARE / ROUND).max(0.5);
+    let (pics, places) = front_stickers(text, p.w, case, label, seed, keep);
+    for (k, x, y) in places {
+        if !skip.contains(&k) {
+            stick(p, &pics[Kind::ALL.iter().position(|x| *x == k).unwrap_or(0)], x, y);
+        }
+    }
+}
+
+/// The turned pictures of `case`'s stickers (in [`Kind::ALL`]'s order, a 1x1 clear one for each that is not on) and
+/// where each goes on a front `front_w` wide whose cover is `label`, with `keep` clear.
+fn front_stickers(text: &mut Text, front_w: i32, case: &CaseStickers, label: Rect, seed: u64, keep: &[Rect]) -> (Vec<Pic>, Vec<(Kind, i32, i32)>) {
+    let f = (front_w as f32 * SHARE / ROUND).max(0.5);
     let pics: Vec<Pic> = Kind::ALL.iter().map(|k| if case.has(*k) { rotated(&sticker_pic(text, *k, f, case.goty, true), tilt(seed, *k)) } else { Pic::new(1, 1, 0) }).collect();
     let sizes: Vec<(i32, i32)> = pics.iter().map(|q| (q.w, q.h)).collect();
-    for (k, x, y) in layout(&on, label, &sizes, seed) {
-        stick(p, &pics[Kind::ALL.iter().position(|x| *x == k).unwrap_or(0)], x, y);
+    let places = layout_around(&case.on(), label, &sizes, seed, keep);
+    (pics, places)
+}
+
+/// One sticker of `case` as it is stuck on a front `front_w` wide (`on_front_around`'s picture and place): its turned
+/// picture and its top left on the front; None when `case` doesn't have it or it found no place clear of `keep`. What
+/// lands on the case or lifts off it (`sticker_press`).
+pub fn placed(text: &mut Text, front_w: i32, case: &CaseStickers, label: Rect, seed: u64, keep: &[Rect], k: Kind) -> Option<(Pic, i32, i32)> {
+    if !case.has(k) {
+        return None;
     }
+    let (mut pics, places) = front_stickers(text, front_w, case, label, seed, keep);
+    let (_, x, y) = places.into_iter().find(|(q, _, _)| *q == k)?;
+    Some((pics.swap_remove(Kind::ALL.iter().position(|x| *x == k).unwrap_or(0)), x, y))
+}
+
+/// The side its tilt leans to, +1 or -1 (the sign of [`tilt`]).
+pub fn lean(seed: u64, k: Kind) -> f32 {
+    tilt(seed, k).signum()
+}
+
+/// `stick` for the tests of the press (`sticker_press`): the case's own way of laying a sticker on.
+#[cfg(test)]
+pub fn stick_for_test(p: &mut Pic, s: &Pic, x: i32, y: i32) {
+    stick(p, s, x, y);
 }
 
 /// The one small sticker on a spine `p`, in `room` (x, y, w, h: the spine above its title's label, where a collector
@@ -352,6 +471,39 @@ pub fn on_spine(text: &mut Text, p: &mut Pic, case: &CaseStickers, room: (i32, i
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Every sticker's rectangle on a front, for every kind of case, against what it prints (title cards).
+    fn sticker_rects(text: &mut Text, m: crate::media::Medium, k: f32, title: &str, console: Option<&crate::system_art::Sprite>, case: &CaseStickers) -> (Vec<(Kind, Rect)>, Vec<Rect>) {
+        let label = crate::media::label_rect(m, k);
+        let keep = kept_clear(text, case, label, title, false, console);
+        let (pics, places) = front_stickers(text, crate::media::front_size(m, k).0, case, label, 7, &keep);
+        let rects = places.into_iter().map(|(kind, x, y)| { let q = &pics[Kind::ALL.iter().position(|a| *a == kind).unwrap()]; (kind, (x, y, q.w, q.h)) }).collect();
+        (rects, keep)
+    }
+
+    #[test]
+    fn no_sticker_covers_the_title_of_a_title_card_on_any_kind_of_case() {
+        let mut text = Text::new();
+        let all = CaseStickers { completed: true, hundred: true, favourite: true, playing: true, goty: Some(2001) };
+        let one = CaseStickers { goty: Some(2001), ..Default::default() };
+        let console = crate::system_art::get("snes");
+        let mut seen = 0;
+        for m in crate::media::Medium::ALL {
+            for k in [1.0f32, 0.7, 0.45] {
+                for title in ["Zelda", "Gran Turismo 4", "The Legend of Zelda: Ocarina of Time Master Quest", "Überraschung"] {
+                    for case in [&all, &one] {
+                        let (rects, keep) = sticker_rects(&mut text, m, k, title, console, case);
+                        let words = keep[0];
+                        for (kind, r) in &rects {
+                            seen += 1;
+                            assert!(!touches(*r, words), "{m:?} at {k}, \"{title}\": the {kind:?} sticker {r:?} lies on the name {words:?}");
+                        }
+                    }
+                }
+            }
+        }
+        assert!(seen > 200, "the stickers are still put on, not all dropped: {seen}");
+    }
 
     #[test]
     fn stickers_go_on_and_off_and_name_themselves() {
@@ -429,6 +581,70 @@ mod tests {
                 }
             }
         }
+    }
+
+    #[test]
+    fn a_sticker_that_lands_on_a_title_card_lands_clear_of_the_name_where_the_case_keeps_it() {
+        // The press in the game box (`sticker_press`) puts a sticker where the resting case has it: on a title card that is
+        // beside or under the name, never on it.
+        let mut text = Text::new();
+        // A Super Nintendo case at its shelf size: its Game of the year ticket lies on the name unless it is kept clear.
+        let m = crate::media::Medium::Snes;
+        let (fw, fh) = crate::media::front_size(m, 1.0);
+        let bare = Pic::new(fw, fh, 0xff20_4060);
+        let label = crate::media::label_rect(m, 1.0);
+        let case = CaseStickers { completed: true, hundred: true, favourite: true, goty: Some(2001), ..Default::default() };
+        let keep = kept_clear(&mut text, &case, label, "Gran Turismo 4", false, crate::system_art::get("snes"));
+        let words = keep[0];
+        let mut moved = 0;
+        for k in [Kind::Completed, Kind::Hundred, Kind::Favourite, Kind::Goty] {
+            let (_, bx, by) = placed(&mut text, bare.w, &case, label, 1, &[], k).expect("on the cover");
+            let Some((pic, x, y)) = placed(&mut text, bare.w, &case, label, 1, &keep, k) else { continue };
+            assert!(!touches((x, y, pic.w, pic.h), words), "{k:?} lands on the name");
+            moved += ((x, y) != (bx, by)) as i32;
+            // The front the box paints under the landing sticker has every other one where the resting case has it.
+            let (pics, places) = front_stickers(&mut text, bare.w, &case, label, 1, &keep);
+            let at = places.iter().find(|(q, _, _)| *q == k).map(|(_, x, y)| (*x, *y));
+            assert_eq!(at, Some((x, y)), "{k:?}: the press and the resting case agree");
+            assert_eq!(pics.len(), Kind::ALL.len());
+        }
+        assert!(moved > 0, "on a title card at least one place differs from the cover's");
+    }
+
+    #[test]
+    fn a_front_without_one_sticker_plus_that_sticker_is_the_whole_front() {
+        // What the box paints while a sticker lands (`sticker_press`): the front without it, then it over the front, which
+        // must end as the case's own picture, where the stickers do not overlap (one under another differs by the order).
+        let mut text = Text::new();
+        let bare = Pic::new(240, 340, 0xff20_4060);
+        let label = (10, 10, 220, 320);
+        let case = CaseStickers { completed: true, hundred: true, goty: Some(1998), ..Default::default() };
+        let mut whole = bare.clone();
+        on_front(&mut text, &mut whole, &case, label, 1);
+        let (pics, places) = front_stickers(&mut text, bare.w, &case, label, 1, &[]);
+        let rect = |k: Kind| {
+            let (_, x, y) = places.iter().find(|(q, _, _)| *q == k).copied().unwrap();
+            let q = &pics[Kind::ALL.iter().position(|a| *a == k).unwrap()];
+            (x, y, x + q.w, y + q.h)
+        };
+        for k in [Kind::Completed, Kind::Hundred, Kind::Goty] {
+            let mut part = bare.clone();
+            on_front_but(&mut text, &mut part, &case, label, 1, &[], &[k]);
+            assert_ne!(part.px, whole.px, "{k:?} is missing from the front without it");
+            let (pic, x, y) = placed(&mut text, bare.w, &case, label, 1, &[], k).expect("it is on");
+            assert_eq!((x, y), (rect(k).0, rect(k).1));
+            stick(&mut part, &pic, x, y);
+            let r = rect(k);
+            let alone = [Kind::Completed, Kind::Hundred, Kind::Goty].iter().filter(|o| **o != k).all(|o| {
+                let q = rect(*o);
+                q.2 <= r.0 || r.2 <= q.0 || q.3 <= r.1 || r.3 <= q.1
+            });
+            if alone {
+                assert_eq!(part.px, whole.px, "{k:?} over the rest is the whole front");
+            }
+        }
+        assert!(placed(&mut text, bare.w, &case, label, 1, &[], Kind::Favourite).is_none(), "a sticker the case does not have");
+        assert_eq!(lean(1, Kind::Completed), tilt(1, Kind::Completed).signum());
     }
 
     #[test]

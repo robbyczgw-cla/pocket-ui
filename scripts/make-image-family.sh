@@ -1,11 +1,11 @@
 #!/bin/sh
 # Builds the ready-to-flash SD card images of a family that boots ROCKNIX's own way (docs/SD-IMAGE.md, "H700" and
-# "SM8550", "RK3566"), one per model: build/image-<family>/pocket-ui-<version>-<model>.img.xz, the notes (.txt) and SHA256SUMS.
+# "SM8550", "RK3566", "RK3326"), one per model: build/image-<family>/pocket-ui-<version>-<model>.img.xz, the notes (.txt) and SHA256SUMS.
 # A new family is a block of pins in scripts/image/pins.sh, its notes (deploy/image/README-<family>.txt.in,
 # SOURCE-OFFER-<family>.txt.in, firmware-licences-<family>/) and its boot checks in scripts/image/check-h700.sh.
 #
-#   scripts/make-image-family.sh --family H700|SM8550|SM4450|RK3566 [--version V] [--bin-dir DIR] [--models "m1 m2"] [--source TEXT]
-#                              [--release-url URL] [--out DIR] [--keep-work] [--no-check]
+#   scripts/make-image-family.sh --family H700|SM8550|SM4450|RK3566|RK3326 [--version V] [--bin-dir DIR] [--models "m1 m2"] [--source TEXT]
+#                              [--release-url URL] [--out DIR] [--keep-work] [--no-check] [--authorized-keys FILE]
 #     --family       the block of pins (pins.sh <FAMILY>_*)
 #     --version      pocket-ui version (default: Cargo.toml); the binaries are built with POCKETUI_VERSION=V
 #     --bin-dir      take pocket-ui, pocket-core and pocket-splash from DIR instead of building them (must answer --version V)
@@ -16,11 +16,15 @@
 #     --out          output directory (default build/image-<family>, gitignored)
 #     --keep-work    keep the unpacked images in OUT/work
 #     --no-check     skip scripts/check-image-family.sh at the end
+#     --authorized-keys  public SSH keys (one per line) for the RK3326 device-test card (pins.sh is_devtest); needed for it, refused
+#                    for any other card, never stored in the repository
 #
 # Starts from the family's official ROCKNIX image (20261001; the RK3566's 20261101), downloaded once into
 # downloads/rocknix-<tag>-<family>/ of the main checkout, or ROCKNIX_CACHE; sha256 pinned in scripts/image/pins.sh. It only
 # adds files: two initramfs hooks (deploy/image/), the notes, the source offer and the licence texts (pocket-ui-info/),
-# pocket-ui on STORAGE, on the H700 dtb.img (the model's device tree); on the RK3566 extlinux.conf names the model's tree; the
+# pocket-ui on STORAGE, on the H700 dtb.img (the model's device tree); on the RK3566 extlinux.conf names the model's tree (a
+# "generic" RK3566 card takes the Generic image's U-Boot and extlinux.conf instead, which pick the tree themselves; on the RK3326
+# extlinux.conf names the R36S tree, and r36s-panels/ holds ROCKNIX's prebuilt screen overlays, pinned in pins-rk3326.sh); the
 # SM8550 Retroids (pins.sh SM8550_EFI_MODELS) also get GRUB, the Image, their tree and a BLS entry (scripts/make-sd-efi.sh). SYSTEM is repacked without the few files in pins.sh <FAMILY>_SYSTEM_REMOVE; the
 # partition table (but p1's type on the SM8550 Retroids: EFI system partition), KERNEL and what boots the card (the H700's
 # U-Boot 8 KiB in) stay as shipped.
@@ -45,6 +49,7 @@ MODELS=
 OUT=
 KEEP=0
 CHECK=1
+KEYS=
 while [ $# -gt 0 ]; do
   case $1 in
     --family) FAMILY=$2; shift ;;
@@ -58,12 +63,13 @@ while [ $# -gt 0 ]; do
     --out) OUT=$2; shift ;;
     --keep-work) KEEP=1 ;;
     --no-check) CHECK=0 ;;
+    --authorized-keys) KEYS=$2; shift ;;
     -h | --help) sed -n '2,25p' "$0"; exit 0 ;;
     *) echo "unknown argument: $1" >&2; exit 2 ;;
   esac
   shift
 done
-case $FAMILY in H700 | SM8550 | SM4450 | RK3566) ;; *) echo "--family must be H700, SM8550, SM4450 or RK3566, not '$FAMILY'" >&2; exit 2 ;; esac
+case $FAMILY in H700 | SM8550 | SM4450 | RK3566 | RK3326) ;; *) echo "--family must be H700, SM8550, SM4450, RK3566 or RK3326, not '$FAMILY'" >&2; exit 2 ;; esac
 family_pins "$FAMILY"
 [ -n "$FAM_IMG" ] || { echo "this tree has no pins for the $FAMILY family" >&2; exit 2; }
 FAM=$(echo "$FAMILY" | tr 'A-Z' 'a-z')
@@ -76,6 +82,16 @@ ALL_MODELS=$(echo "$FAM_MODELS" | awk 'NF { printf "%s ", $1 }')
 for m in $MODELS; do
   case " $ALL_MODELS" in *" $m "*) ;; *) echo "unknown model '$m' (${FAMILY}_MODELS: $ALL_MODELS)" >&2; exit 2 ;; esac
 done
+# The device-test card's keys: public keys only, and only for that card (pins.sh is_devtest).
+DEVTEST_MODELS=
+for m in $MODELS; do ! is_devtest "$FAMILY" "$m" || DEVTEST_MODELS="$DEVTEST_MODELS $m"; done
+if [ -n "$DEVTEST_MODELS" ]; then
+  [ -n "$KEYS" ] && [ -f "$KEYS" ] || { echo "the device-test card(s)$DEVTEST_MODELS need --authorized-keys FILE (public keys)" >&2; exit 2; }
+  ! grep -q PRIVATE "$KEYS" && [ -z "$(grep -Ev '^(ssh-ed25519|ssh-rsa|ecdsa-sha2-nistp(256|384|521)) [A-Za-z0-9+/=]+( .*)?$' "$KEYS")" ] && [ -s "$KEYS" ] ||
+    { echo "--authorized-keys: $KEYS must hold public keys only, one per line" >&2; exit 2; }
+elif [ -n "$KEYS" ]; then
+  echo "--authorized-keys is only for a device-test card (pins.sh is_devtest)" >&2; exit 2
+fi
 mkdir -p "$OUT/work"
 OUT=$(cd "$OUT" && pwd)
 W=$OUT/work
@@ -138,6 +154,38 @@ for m in $MODELS; do
     break
   fi
 done
+# Generic RK3566 models (pins.sh, "generic" as the fifth field): the Specific card with the Generic image's first 16 MiB and
+# extlinux.conf (scripts/image/build.sh), so that image too is only read.
+for m in $MODELS; do
+  if is_generic "$FAMILY" "$m"; then
+    say "ROCKNIX $ROCKNIX_TAG ($RK3566_GENERIC_IMG), for $m"
+    fetch_base "$RK3566_GENERIC_IMG" "$RK3566_GENERIC_URL" "$RK3566_GENERIC_GZ_SHA256" "$RK3566_GENERIC_IMG_SHA256" "$W/base-generic.img"
+    break
+  fi
+done
+
+# RK3326: ROCKNIX's prebuilt R36S screen overlays (pins-rk3326.sh RK3326_PANELS), downloaded once into the cache, checked by sha256.
+rm -rf "$W/panels" "$W/devtest"
+if [ "$FAMILY" = RK3326 ]; then
+  say "R36S screen overlays ($(echo "$RK3326_PANELS" | grep -c .) files, $RK3326_PANELS_URL)"
+  mkdir -p "$ROCKNIX_CACHE/panels" "$W/panels"
+  echo "$RK3326_PANELS" | while read -r p want; do
+    [ -n "$p" ] || continue
+    c=$ROCKNIX_CACHE/panels/mipi-panel.dtbo.$p
+    if [ ! -f "$c" ] || [ "$(sha "$c")" != "$want" ]; then
+      curl -fsSL --retry 3 -A "$UA" -o "$c.part" "$RK3326_PANELS_URL/mipi-panel.dtbo.$p"
+      mv "$c.part" "$c"
+    fi
+    [ "$(sha "$c")" = "$want" ] || die "$c: sha256 $(sha "$c") is not the pinned $want"
+    cp "$c" "$W/panels/$p.dtbo"
+  done
+  [ "$(ls "$W/panels" | wc -l)" = "$(echo "$RK3326_PANELS" | grep -c .)" ] || die "not every screen overlay is there"
+  cp "$ROOT/deploy/image/r36s-panels-README.txt" "$W/panels/README.txt"
+fi
+if [ -n "$DEVTEST_MODELS" ]; then
+  mkdir -p "$W/devtest"
+  cp "$KEYS" "$W/devtest/authorized_keys"
+fi
 
 if [ -n "$SYSTEM_FILE" ]; then
   [ -f "$SYSTEM_FILE" ] || die "--system-file is not a file"
@@ -224,8 +272,9 @@ for MODEL in $MODELS; do
       -e "s|@POCKET_UI_SOURCE@|$SOURCE|g" -e "s|@RELEASE_URL@|$RELEASE_URL|g" -e "s|@ISSUES_URL@|$ISSUES|g" \
       -e "s|@OS_NAME@|$POCKET_OS_NAME|g" -e "s|@MODEL_NAME@|$MODEL_NAME|g" -e "s|@IMAGE_NAME@|$NAME|g" -e "s|@DTB_NAME@|$DTB_NAME|g" \
       -e "s|@RAM@|$RAM|g" -e "s|@GRUB_VERSION@|$GRUB_VERSION|g" -e "s|@GRUB_SOURCE_URL@|$GRUB_SOURCE_URL|g" \
-      -e "s|@EFI_DTB_FILE@|${EFI_DTB_FILE:-}|g" \
-      "$ROOT/deploy/image/$f-$FAM.txt.in" | notes_blocks "$(has_games_drive "$FAMILY" "$MODEL" && echo 1 || echo 0)" "$EFI" >"$W/info/$f.txt"
+      -e "s|@EFI_DTB_FILE@|${EFI_DTB_FILE:-}|g" -e "s|@HOSTNAME@|$(image_hostname "$MODEL")|g" \
+      "$ROOT/deploy/image/$f-$FAM.txt.in" | notes_blocks "$(has_games_drive "$FAMILY" "$MODEL" && echo 1 || echo 0)" "$EFI" \
+      "$(is_generic "$FAMILY" "$MODEL" && echo 1 || echo 0)" "$(is_devtest "$FAMILY" "$MODEL" && echo 1 || echo 0)" >"$W/info/$f.txt"
     if [ "$RAM" = DDR3 ] && [ "$f" = README ]; then
       { printf '%s\n\n' "Test build for $MODEL_NAME units with DDR3 memory (if the normal image stays black). Not tested on hardware yet."; cat "$W/info/$f.txt"; } >"$W/info/$f.new"
       mv "$W/info/$f.new" "$W/info/$f.txt"
@@ -260,7 +309,7 @@ for MODEL in $MODELS; do
   cp "$W/info/README.txt" "$OUT/$NAME.txt"
   NAMES="$NAMES $NAME"
 done
-rm -rf "$W/image.img" "$W/base-ddr3.img" "$W/grub" "$W/sd-efi"
+rm -rf "$W/image.img" "$W/base-ddr3.img" "$W/base-generic.img" "$W/grub" "$W/sd-efi" "$W/devtest"
 (cd "$OUT" && for n in $NAMES; do shasum -a 256 "$n.img.xz" "$n.txt"; done >SHA256SUMS)
 [ $KEEP = 1 ] || rm -rf "$W"
 for n in $NAMES; do ls -l "$OUT/$n.img.xz" "$OUT/$n.txt"; done

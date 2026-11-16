@@ -2,7 +2,6 @@
 //! exactly the same fitting/truncation, so this checks names rather than prescribing layout.
 use pocket_ui::{cabinet_art::Look, game_card::CardData, gamedb::GameDb, gfx::Canvas, i18n::{self, Lang}, media::{self, Medium}, text::{Face, Text}, title_block};
 use std::collections::BTreeSet;
-static LANGUAGE: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
 fn corpus() -> BTreeSet<String> {
     let mut names = BTreeSet::from(["Golden Sun".into(), "Game Boy".into(), "Game Boy Advance".into(), "Game Boy Color".into(), "Black: Sun".into(), "Time to Play".into()]);
@@ -48,23 +47,23 @@ fn paint(text: &mut Text, title: &str, path: usize, buf: &mut [u32]) {
             }
         }
         2 => {
-            let p = media::spine(text, Medium::Gb, 0.5, Look { color: 0x555555, band: 0x777777, plastic: 0xaaaaaa }, title);
-            for (to, from) in c.buf.iter_mut().zip(p.px) { *to = from; }
+            let p = media::spine(text, Medium::Gb, 0.5, Look { color: 0x555555, band: 0x777777, plastic: 0xaaaaaa, tape: false }, title);
+            for (to, from) in c.pixels_mut().iter_mut().zip(p.px) { *to = from; }
         }
         3 => {
             let lines = title_block::name_layout_in(text, Face::Title, 50, title, 160, 170);
             title_block::paint(text, &mut c, Face::Title, &lines, 120, 55, 0xffffff, 0xaaaaaa, true);
         }
         _ => {
-            let p = media::front(text, Medium::GenericCart, 0.5, Look { color: 0x555555, band: 0x777777, plastic: 0xaaaaaa }, title, None, None, title);
-            for (to, from) in c.buf.iter_mut().zip(p.px) { *to = from; }
+            let p = media::front(text, Medium::GenericCart, 0.5, Look { color: 0x555555, band: 0x777777, plastic: 0xaaaaaa, tape: false }, title, None, None, title);
+            for (to, from) in c.pixels_mut().iter_mut().zip(p.px) { *to = from; }
         }
     }
 }
 
 #[test]
 fn every_database_fixture_and_system_name_stays_literal_in_de_and_es() {
-    let _language = LANGUAGE.lock().unwrap();
+    let _language = i18n::for_this_thread(Lang::En);
     let names = corpus();
     for name in &names { assert_eq!(media::printed_title(name, true), name.as_str()); }
     eprintln!("name corpus: {} names, 5 painters, DE + ES", names.len());
@@ -97,7 +96,7 @@ fn every_database_fixture_and_system_name_stays_literal_in_de_and_es() {
 #[test]
 fn wrapped_names_keep_their_language_at_both_fonts_and_text_sizes() {
     use pocket_ui::{font_style::FontStyle, type_scale::{self, TextSize}};
-    let _language = LANGUAGE.lock().unwrap();
+    let _language = i18n::for_this_thread(Lang::En);
     for lang in [Lang::De, Lang::Es] {
         i18n::set(lang);
         lang.table().unwrap();
@@ -128,14 +127,14 @@ fn wrapped_names_keep_their_language_at_both_fonts_and_text_sizes() {
 #[test]
 fn our_labels_on_cases_still_translate_while_names_with_the_same_words_do_not() {
     use pocket_ui::shelf::Item;
-    let _language = LANGUAGE.lock().unwrap();
+    let _language = i18n::for_this_thread(Lang::En);
     for item in [Item::Game(0, 0), Item::Recent(0), Item::System(0), Item::SmartShelf(0), Item::Sticker(1)] {
         assert!(item.title_is_name());
     }
     for item in [Item::Favorites, Item::Search, Item::JustPlay, Item::Streaming] {
         assert!(!item.title_is_name());
     }
-    let look = Look { color: 0x555555, band: 0x777777, plastic: 0xaaaaaa };
+    let look = Look { color: 0x555555, band: 0x777777, plastic: 0xaaaaaa, tape: false };
     for (lang, labels) in [
         (Lang::De, [("Search", "Suchen"), ("Favourites", "Favoriten"), ("Just Play", "Einfach spielen")]),
         (Lang::Es, [("Search", "Buscar"), ("Favourites", "Favoritos"), ("Just Play", "Jugar ya")]),
@@ -160,7 +159,7 @@ fn our_labels_on_cases_still_translate_while_names_with_the_same_words_do_not() 
 #[test]
 fn mixed_card_metadata_and_the_no_match_choice_still_translate_our_words() {
     use pocket_ui::{game_card::{Card, ChoiceRow}, gamedb::Choice};
-    let _language = LANGUAGE.lock().unwrap();
+    let _language = i18n::for_this_thread(Lang::En);
     for lang in [Lang::De, Lang::Es] {
         i18n::set(lang);
         lang.table().unwrap();
@@ -191,7 +190,7 @@ fn mixed_card_metadata_and_the_no_match_choice_still_translate_our_words() {
 #[test]
 fn printed_card_lines_fit_at_the_uniform_size_returned_to_the_painter() {
     use pocket_ui::{font_style::FontStyle, type_scale::{self, TextSize}};
-    let _language = LANGUAGE.lock().unwrap();
+    let _language = i18n::for_this_thread(Lang::En);
     for font in [FontStyle::Barlow, FontStyle::Retro] {
         for size in [TextSize::Normal, TextSize::Large] {
             type_scale::set(size);

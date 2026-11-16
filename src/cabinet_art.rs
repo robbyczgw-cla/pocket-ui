@@ -6,29 +6,83 @@
 //! case being turned is drawn pixel by pixel.
 
 use crate::cabinet::{ink_on, luma, Size, BOARD};
-use crate::gfx::{mix, Canvas};
+use crate::gfx::{avg4, mix, Canvas};
 use crate::image::Image;
 use crate::system_art::Sprite;
 use crate::text::{Face, Text};
 
 /// A picture with straight alpha, 0xAARRGGBB.
-#[derive(Clone)]
+///
+/// Painted natively at `n` = 2 (docs/dev/native-paint.md) a picture keeps a half copy for each of the four places it
+/// can sit within a screen pixel (`half`), made the first time it is drawn there: a blit then reads one value per screen
+/// pixel instead of four. The copy is dropped when a method of `Pic` changes it and is not cloned; code that writes
+/// `px` itself does so before the picture is first drawn (making it), as everywhere today.
 pub struct Pic {
     pub w: i32,
     pub h: i32,
     pub px: Vec<u32>,
+    half: [std::sync::OnceLock<Vec<u32>>; 4],
+}
+
+impl Clone for Pic {
+    fn clone(&self) -> Pic {
+        Pic::of(self.w, self.h, self.px.clone())
+    }
 }
 
 const OPAQUE: u32 = 0xff00_0000;
 
+/// In a half copy (`Pic::half`): all four design pixels see-through (the screen pixel stays), and some solid and some
+/// not (worked out from the four). Solid pixels keep their mean; four identical translucent pixels keep that
+/// pixel too, so a flat film needs one alpha blend, not four identical ones.
+const HALF_CLEAR: u32 = 0;
+const HALF_MIXED: u32 = 0x0100_0000;
+
 impl Pic {
     pub fn new(w: i32, h: i32, argb: u32) -> Pic {
         let (w, h) = (w.max(1), h.max(1));
-        Pic {
-            w,
-            h,
-            px: vec![argb; (w * h) as usize],
+        Pic::of(w, h, vec![argb; (w * h) as usize])
+    }
+
+    /// The picture `w` x `h` of `px` (row by row, `w * h` pixels).
+    pub fn of(w: i32, h: i32, px: Vec<u32>) -> Pic {
+        Pic { w, h, px, half: Default::default() }
+    }
+
+    /// Something of the picture changed: its half copies are out of date.
+    pub fn changed(&mut self) {
+        for h in &mut self.half {
+            if h.get().is_some() {
+                h.take();
+            }
         }
+    }
+
+    /// Its half copy for a place `fx`, `fy` (0 or 1) design pixels into a screen pixel: `(fx + w).div_ceil(2)` x
+    /// `(fy + h).div_ceil(2)` screen pixels, each the mean of its four design pixels when all are solid (`OPAQUE` set),
+    /// `HALF_CLEAR` when none is, the original pixel when all four are identical and translucent, `HALF_MIXED`
+    /// otherwise (also where the cell reaches past the picture's edge).
+    pub fn half(&self, fx: u8, fy: u8) -> (&[u32], usize) {
+        let (fx, fy) = (fx as i32 & 1, fy as i32 & 1);
+        let (hw, hh) = ((fx + self.w + 1) / 2, (fy + self.h + 1) / 2);
+        let v = self.half[(fy * 2 + fx) as usize].get_or_init(|| {
+            let mut out = Vec::with_capacity((hw * hh) as usize);
+            let at = |x: i32, y: i32| if x < 0 || y < 0 || x >= self.w || y >= self.h { None } else { Some(self.px[(y * self.w + x) as usize]) };
+            for j in 0..hh {
+                for i in 0..hw {
+                    let (x, y) = (2 * i - fx, 2 * j - fy);
+                    let q = [at(x, y), at(x + 1, y), at(x, y + 1), at(x + 1, y + 1)];
+                    out.push(match q {
+                        [Some(a), Some(b), Some(c), Some(d)] if (a & b & c & d) >> 24 == 255 => OPAQUE | avg4(a, b, c, d),
+                        _ if q.iter().all(|p| p.is_none_or(|p| p >> 24 == 0)) => HALF_CLEAR,
+                        [Some(a), Some(b), Some(c), Some(d)] if a == b && a == c && a == d => a,
+                        _ => HALF_MIXED,
+                    });
+                }
+            }
+            out
+        });
+        (v, hw as usize)
     }
 
     #[inline]
@@ -39,6 +93,13 @@ impl Pic {
     /// Paints `rgb` over (x, y) with coverage `a` (0-255); the pixel becomes at least that solid.
     #[inline]
     pub fn blend(&mut self, x: i32, y: i32, rgb: u32, a: u32) {
+        self.changed();
+        self.blend_changed(x, y, rgb, a);
+    }
+
+    /// `blend` for a painter that called `changed` once before many pixels (`plain_label`: a front's name and console
+    /// pixel by pixel, the check per pixel cost more than the mixing).
+    fn blend_changed(&mut self, x: i32, y: i32, rgb: u32, a: u32) {
         if x < 0 || y < 0 || x >= self.w || y >= self.h || a == 0 {
             return;
         }
@@ -54,6 +115,7 @@ impl Pic {
     }
 
     pub fn fill(&mut self, x: i32, y: i32, w: i32, h: i32, argb: u32) {
+        self.changed();
         for yy in y.max(0)..(y + h).min(self.h) {
             for xx in x.max(0)..(x + w).min(self.w) {
                 self.px[(yy * self.w + xx) as usize] = argb;
@@ -63,6 +125,7 @@ impl Pic {
 
     /// Mixes `rgb` into the solid pixels of a rectangle with `a` (0-255).
     pub fn tint(&mut self, x: i32, y: i32, w: i32, h: i32, rgb: u32, a: u32) {
+        self.changed();
         for yy in y.max(0)..(y + h).min(self.h) {
             for xx in x.max(0)..(x + w).min(self.w) {
                 let i = (yy * self.w + xx) as usize;
@@ -76,6 +139,7 @@ impl Pic {
 
     /// Cuts the corners round (anti-aliased): radii top-left, top-right, bottom-right, bottom-left.
     pub fn round(&mut self, radii: [f32; 4]) {
+        self.changed();
         let (w, h) = (self.w as f32, self.h as f32);
         for (k, r) in radii.into_iter().enumerate() {
             if r <= 0.0 {
@@ -161,32 +225,334 @@ fn shaded(p: u32, shade: u32) -> u32 {
     ((p & 0xff00ff) * shade >> 8 & 0xff00ff) | ((p & 0x00ff00) * shade >> 8 & 0x00ff00)
 }
 
+/// At `n` = 2 (docs/dev/native-paint.md): every screen pixel under the design rectangle `x0..x1`, `y0..y1` (cut to the
+/// canvas) becomes the mean of `f(x, y, bg)` at its four design pixels, `bg` being what the screen pixel shows now;
+/// design pixels of the cell outside the rectangle stay `bg`. `f` returns the design pixel as the old way painted it
+/// over `bg` (`bg` itself where nothing is painted). The 2:1 filter's picture bit for bit wherever the part painted over
+/// was even within each screen pixel; one pass over the screen pixels, no design-size copy.
+#[inline]
+pub fn cells_over(c: &mut Canvas, x0: i32, x1: i32, y0: i32, y1: i32, mut f: impl FnMut(i32, i32, u32) -> u32) {
+    let (x0, x1, y0, y1) = (x0.max(0), x1.min(c.w), y0.max(0), y1.min(c.h));
+    if x0 >= x1 || y0 >= y1 {
+        return;
+    }
+    let stride = c.stride();
+    let rows = (c.pixels().len() / stride.max(1)) as i32;
+    let (_, sr0, _, fy) = c.cell(0, y0);
+    let (_, sr1, _, _) = c.cell(0, y1 - 1);
+    let (sc0, sc1) = ((x0 / 2) as usize, (((x1 - 1) / 2 + 1) as usize).min(stride));
+    let px = c.pixels_mut();
+    for sr in sr0.max(0)..(sr1 + 1).min(rows) {
+        // The cell's two design rows; the first or the last screen row may hold only one of the rectangle's.
+        let top = y0 - fy as i32 + 2 * (sr - sr0);
+        let (in0, in1) = (top >= y0, top + 1 < y1);
+        let line = &mut px[sr as usize * stride..][..stride];
+        for sc in sc0..sc1 {
+            let x = sc as i32 * 2;
+            let (l, r) = (x >= x0, x + 1 < x1);
+            let bg = line[sc];
+            let a = if in0 && l { f(x, top, bg) } else { bg };
+            let b = if in0 && r { f(x + 1, top, bg) } else { bg };
+            let cc = if in1 && l { f(x, top + 1, bg) } else { bg };
+            let d = if in1 && r { f(x + 1, top + 1, bg) } else { bg };
+            line[sc] = avg4(a, b, cc, d);
+        }
+    }
+}
+
+/// `cells_over` for an `f` that does not depend on the column (a band darkened or faded row by row): `f` is worked out
+/// once per design row of a screen pixel instead of once per design pixel. Bit for bit what `cells_over` makes of it.
+pub fn rows_over(c: &mut Canvas, x0: i32, x1: i32, y0: i32, y1: i32, mut f: impl FnMut(i32, u32) -> u32) {
+    let (x0, x1, y0, y1) = (x0.max(0), x1.min(c.w), y0.max(0), y1.min(c.h));
+    if x0 >= x1 || y0 >= y1 {
+        return;
+    }
+    let stride = c.stride();
+    let rows = (c.pixels().len() / stride.max(1)) as i32;
+    let (_, sr0, _, fy) = c.cell(0, y0);
+    let (_, sr1, _, _) = c.cell(0, y1 - 1);
+    let (sc0, sc1) = ((x0 / 2) as usize, (((x1 - 1) / 2 + 1) as usize).min(stride));
+    let px = c.pixels_mut();
+    for sr in sr0.max(0)..(sr1 + 1).min(rows) {
+        let top = y0 - fy as i32 + 2 * (sr - sr0);
+        let (in0, in1) = (top >= y0, top + 1 < y1);
+        let line = &mut px[sr as usize * stride..][..stride];
+        for sc in sc0..sc1 {
+            let x = sc as i32 * 2;
+            let (l, r) = (x >= x0, x + 1 < x1);
+            let bg = line[sc];
+            let t = if in0 { f(top, bg) } else { bg };
+            let u = if in1 { f(top + 1, bg) } else { bg };
+            line[sc] = avg4(if l { t } else { bg }, if r { t } else { bg }, if l { u } else { bg }, if r { u } else { bg });
+        }
+    }
+}
+
+/// `px` (solid design pixels, `w` wide, whole rows) copied 1:1 to (x, y), cut to the canvas: `Canvas::copy_design`
+/// without see-through, but at `n` = 2 straight from two rows at any place, odd ones included (the Shelf look's strip
+/// sits wherever the row's tallest case puts it). Bit for bit the old picture; where the block covers only part of a
+/// screen pixel, the rest is what the screen shows.
+pub fn copy_solid(c: &mut Canvas, x: i32, y: i32, w: usize, px: &[u32]) {
+    if c.n() == 1 || w == 0 {
+        return c.copy_design(x, y, w, px, None);
+    }
+    let h = (px.len() / w) as i32;
+    let wi = w as i32;
+    let (x0, x1, y0, y1) = (x.max(0), (x + wi).min(c.w), y.max(0), (y + h).min(c.h));
+    if x0 >= x1 || y0 >= y1 {
+        return;
+    }
+    let stride = c.stride();
+    let rows = (c.pixels().len() / stride.max(1)) as i32;
+    let (_, sr0, _, gy) = c.cell(x0, y0);
+    let (_, sr1, _, _) = c.cell(x0, y1 - 1);
+    let (sc0, sc1) = (x0 / 2, ((x1 - 1) / 2 + 1).min(stride as i32));
+    let line_of = |yy: i32| &px[(yy - y) as usize * w..][..w];
+    let out = c.pixels_mut();
+    for sr in sr0.max(0)..(sr1 + 1).min(rows) {
+        let top = y0 - gy as i32 + 2 * (sr - sr0);
+        let (a, b) = ((top >= y0).then(|| line_of(top)), (top + 1 < y1).then(|| line_of(top + 1)));
+        let line = &mut out[sr as usize * stride..][..stride];
+        // The screen columns whose two design columns are both inside: two rows, no tests.
+        let (f0, f1) = ((x0 + 1) / 2, (x1 / 2).min(sc1));
+        if let (Some(a), Some(b)) = (a, b) {
+            let k0 = (2 * f0 - x) as usize;
+            for (i, d) in line[f0 as usize..f1.max(f0) as usize].iter_mut().enumerate() {
+                let k = k0 + 2 * i;
+                *d = avg4(a[k], a[k + 1], b[k], b[k + 1]);
+            }
+        }
+        for sc in sc0..sc1 {
+            if let (Some(_), Some(_)) = (a, b) {
+                if sc >= f0 && sc < f1 {
+                    continue;
+                }
+            }
+            let xx = 2 * sc;
+            let bg = line[sc as usize];
+            let at = |l: Option<&[u32]>, col: i32| match l {
+                Some(l) if col >= x0 && col < x1 => l[(col - x) as usize],
+                _ => bg,
+            };
+            line[sc as usize] = avg4(at(a, xx), at(a, xx + 1), at(b, xx), at(b, xx + 1));
+        }
+    }
+}
+
+/// A tile of solid design pixels (`w` wide, `px.len() / w` rows) at half size for a place `fx`, `fy` (0 or 1) into a
+/// screen pixel: cell (i, j) is the mean of design columns `2i - fx`, `2i - fx + 1` and rows `2j - fy`, `2j - fy + 1`
+/// (`(fx + w).div_ceil(2)` x `(fy + h).div_ceil(2)` cells). Cells reaching past the tile's edge hold 0 and are never read
+/// (`paint_strip`). Made once per tile and place, kept beside the tile (the Shelf look's row).
+pub fn half_tile(px: &[u32], w: usize, fx: u8, fy: u8) -> Vec<u32> {
+    let h = px.len() / w.max(1);
+    let (fx, fy) = (fx as usize & 1, fy as usize & 1);
+    let (hw, hh) = ((fx + w).div_ceil(2), (fy + h).div_ceil(2));
+    let mut out = vec![0u32; hw * hh];
+    for j in 0..hh {
+        let Some(y) = (2 * j).checked_sub(fy).filter(|y| y + 1 < h) else { continue };
+        let (a, b) = (&px[y * w..][..w], &px[(y + 1) * w..][..w]);
+        for i in 0..hw {
+            let Some(x) = (2 * i).checked_sub(fx).filter(|x| x + 1 < w) else { continue };
+            out[j * hw + i] = avg4(a[x], a[x + 1], b[x], b[x + 1]);
+        }
+    }
+    out
+}
+
+/// At `n` = 2: a strip of solid tiles (`tiles[k]` is tile `first + k`, each `tile_w` design pixels wide and `room` rows
+/// tall, `halves[k]` its `half_tile` for this place) shown from the strip's column `scroll` on, `view` design pixels wide
+/// at design (`left`, `top`): what `copy_solid` makes of the strip put together in design pixels, bit for bit, without
+/// putting it together. Cells inside one tile are copied from its half, row by row; a cell across two tiles or past the
+/// strip's edge takes the mean of its four (the screen where it has none). `tile_w` is even.
+#[allow(clippy::too_many_arguments)]
+pub fn paint_strip(c: &mut Canvas, (left, top): (i32, i32), (view, room): (i32, i32), scroll: i32, first: i32, tile_w: i32, tiles: &[&[u32]], halves: &[&[u32]]) {
+    let (x0, x1, y0, y1) = (left.max(0), (left + view).min(c.w), top.max(0), (top + room).min(c.h));
+    if x0 >= x1 || y0 >= y1 || tiles.is_empty() {
+        return;
+    }
+    let fx = (left - scroll).rem_euclid(2);
+    let stride = c.stride();
+    let rows = (c.pixels().len() / stride.max(1)) as i32;
+    let (_, sr0, _, gy) = c.cell(x0, y0);
+    let (_, sr1, _, _) = c.cell(x0, y1 - 1);
+    let fy = (gy as i32 + y0 - top).rem_euclid(2) as usize;
+    let hw = ((fx + tile_w + 1) / 2) as usize;
+    let end = first + tiles.len() as i32;
+    // The design pixel of the strip at (x, y), when the strip has one there.
+    let at = |x: i32, y: i32| -> Option<u32> {
+        if x < x0 || x >= x1 || y < y0 || y >= y1 {
+            return None;
+        }
+        let col = x - left + scroll;
+        let t = col.div_euclid(tile_w);
+        if t < first || t >= end {
+            return None;
+        }
+        Some(tiles[(t - first) as usize][((y - top) * tile_w + col - t * tile_w) as usize])
+    };
+    // Screen columns of cells inside one tile: (from, to, tile, the tile's first cell's screen column).
+    let (sc0, sc1) = (x0 / 2, ((x1 - 1) / 2 + 1).min(stride as i32));
+    let mut runs: Vec<(i32, i32, usize, i32)> = Vec::new();
+    for k in 0..tiles.len() as i32 {
+        let xa = left - scroll + (first + k) * tile_w;
+        let (lo, hi) = (xa.max(x0), (xa + tile_w).min(x1));
+        let (a, b) = ((lo + 1).div_euclid(2), hi.div_euclid(2));
+        if a < b {
+            runs.push((a, b, k as usize, (xa - fx).div_euclid(2)));
+        }
+    }
+    let out = c.pixels_mut();
+    for sr in sr0.max(0)..(sr1 + 1).min(rows) {
+        let yy = y0 - gy as i32 + 2 * (sr - sr0);
+        let line = &mut out[sr as usize * stride..][..stride];
+        let mut cell = |line: &mut [u32], sc: i32| {
+            let bg = line[sc as usize];
+            let x = 2 * sc;
+            let q = |x: i32, y: i32| at(x, y).unwrap_or(bg);
+            line[sc as usize] = avg4(q(x, yy), q(x + 1, yy), q(x, yy + 1), q(x + 1, yy + 1));
+        };
+        if yy < y0 || yy + 1 >= y1 {
+            for sc in sc0..sc1 {
+                cell(line, sc);
+            }
+            continue;
+        }
+        let j = ((yy - top) as usize + fy) / 2;
+        let mut next = sc0;
+        for &(a, b, k, base) in &runs {
+            for sc in next..a {
+                cell(line, sc);
+            }
+            let h = &halves[k][j * hw..][..hw];
+            line[a as usize..b as usize].copy_from_slice(&h[(a - base) as usize..(b - base) as usize]);
+            next = b;
+        }
+        for sc in next..sc1 {
+            cell(line, sc);
+        }
+    }
+}
+
+/// One source pixel over `bg` as `put` paints it, the result returned (`cells_over`).
+#[inline]
+fn over(bg: u32, s: u32, shade: u32) -> u32 {
+    let a = s >> 24;
+    if a == 255 {
+        shaded(s, shade)
+    } else if a != 0 {
+        mix(bg, shaded(s, shade), a)
+    } else {
+        bg
+    }
+}
+
 /// `p` with its colours multiplied by `shade`/256 as [`blit`] paints it, its alpha kept: a case taken off a page
 /// (Android's start and way back) looks as it stood there.
 pub fn lit(p: &Pic, shade: u32) -> Pic {
     if shade >= 256 {
         return p.clone();
     }
-    Pic { w: p.w, h: p.h, px: p.px.iter().map(|&s| (s & 0xff00_0000) | shaded(s, shade)).collect() }
+    Pic::of(p.w, p.h, p.px.iter().map(|&s| (s & 0xff00_0000) | shaded(s, shade)).collect())
 }
 
 /// Copies `p` onto the canvas at (x, y), its colours multiplied by `shade`/256, only rows from `clip.0` to
 /// `clip.1` (exclusive).
 pub fn blit(c: &mut Canvas, p: &Pic, x: i32, y: i32, shade: u32, clip: (i32, i32)) {
+    blit_cols(c, p, x, y, shade, clip, (0, p.w));
+}
+
+/// `blit` of the picture's columns `cols.0..cols.1` only (a spine cut off at the cabinet's inner walls): nothing is made.
+#[allow(clippy::too_many_arguments)]
+pub fn blit_cols(c: &mut Canvas, p: &Pic, x: i32, y: i32, shade: u32, clip: (i32, i32), cols: (i32, i32)) {
     let (y0, y1) = (y.max(clip.0).max(0), (y + p.h).min(clip.1).min(c.h));
-    let (x0, x1) = (x.max(0), (x + p.w).min(c.w));
-    if x0 >= x1 {
+    let (x0, x1) = ((x + cols.0.max(0)).max(0), (x + cols.1.min(p.w)).min(c.w));
+    if x0 >= x1 || y0 >= y1 {
         return;
     }
+    if c.n() != 1 {
+        return blit_half(c, p, (x, y), shade, (x0, x1, y0, y1));
+    }
+    let c_w = c.w;
     for row in y0..y1 {
         let src = &p.px[((row - y) * p.w + (x0 - x)) as usize..((row - y) * p.w + (x1 - x)) as usize];
-        let dst = &mut c.buf[(row * c.w + x0) as usize..(row * c.w + x1) as usize];
+        let dst = &mut c.pixels_mut()[(row * c_w + x0) as usize..(row * c_w + x1) as usize];
         for (d, &s) in dst.iter_mut().zip(src) {
             let a = s >> 24;
             if a == 255 {
                 *d = shaded(s, shade);
             } else if a != 0 {
                 *d = mix(*d, shaded(s, shade), a);
+            }
+        }
+    }
+}
+
+/// `blit` at `n` = 2 of the design rectangle `x0..x1`, `y0..y1` (inside the picture and the canvas): a screen pixel
+/// the rectangle covers whole takes the picture's half copy (`Pic::half`), one value, shaded after the mean (within a
+/// step of the old picture where `shade` is below 256, the same where it is 256); the rest, and pixels partly
+/// see-through, the mean of the four as the old picture made it.
+fn blit_half(c: &mut Canvas, p: &Pic, (x, y): (i32, i32), shade: u32, (x0, x1, y0, y1): (i32, i32, i32, i32)) {
+    let (sx, sy, fx, fy) = c.cell(x, y);
+    let (half, hw) = p.half(fx, fy);
+    let stride = c.stride();
+    let rows = (c.pixels().len() / stride.max(1)) as i32;
+    let (_, sr0, _, gy) = c.cell(x0, y0);
+    let (_, sr1, _, _) = c.cell(x0, y1 - 1);
+    let (sc0, sc1) = (x0 / 2, ((x1 - 1) / 2 + 1).min(stride as i32));
+    let pw = p.w;
+    let sample = |xx: i32, yy: i32, bg: u32| over(bg, p.px[((yy - y) * pw + xx - x) as usize], shade);
+    let px = c.pixels_mut();
+    // The columns whose two design columns both lie inside x0..x1: in a row inside y0..y1 too they need no edge checks.
+    let (ci0, ci1) = ((x0 + 1).div_euclid(2).clamp(sc0, sc1), x1.div_euclid(2).clamp(sc0, sc1));
+    for sr in sr0.max(0)..(sr1 + 1).min(rows) {
+        let top = y0 - gy as i32 + 2 * (sr - sr0);
+        let (in0, in1) = (top >= y0, top + 1 < y1);
+        let hrow = &half[(sr - sy) as usize * hw..][..hw];
+        let line = &mut px[sr as usize * stride..][..stride];
+        // One screen pixel the slow way: the mean of its four design pixels over what is there (outside: what is there).
+        let general = |d: &mut u32, sc: i32| {
+            let xx = sc * 2;
+            let (l, r) = (xx >= x0, xx + 1 < x1);
+            if in0 && in1 && l && r {
+                let v = hrow[(sc - sx) as usize];
+                if v >> 24 == 255 {
+                    *d = shaded(v, shade);
+                    return;
+                }
+                if v != HALF_MIXED {
+                    put(d, v, shade);
+                    return;
+                }
+            }
+            let bg = *d;
+            let a = if in0 && l { sample(xx, top, bg) } else { bg };
+            let b = if in0 && r { sample(xx + 1, top, bg) } else { bg };
+            let cc = if in1 && l { sample(xx, top + 1, bg) } else { bg };
+            let e = if in1 && r { sample(xx + 1, top + 1, bg) } else { bg };
+            *d = avg4(a, b, cc, e);
+        };
+        if in0 && in1 && ci0 < ci1 {
+            // A whole row: solid cells straight from the half copy, see-through ones skipped, mixed ones the slow way.
+            for sc in sc0..ci0 {
+                general(&mut line[sc as usize], sc);
+            }
+            let src = &hrow[(ci0 - sx) as usize..(ci1 - sx) as usize];
+            for (i, &v) in src.iter().enumerate() {
+                let d = &mut line[ci0 as usize + i];
+                if v >> 24 == 255 {
+                    *d = shaded(v, shade);
+                } else if v != HALF_MIXED {
+                    put(d, v, shade);
+                } else {
+                    general(d, ci0 + i as i32);
+                }
+            }
+            for sc in ci1..sc1 {
+                general(&mut line[sc as usize], sc);
+            }
+        } else {
+            for sc in sc0..sc1 {
+                general(&mut line[sc as usize], sc);
             }
         }
     }
@@ -203,6 +569,56 @@ fn put(d: &mut u32, s: u32, shade: u32) {
     }
 }
 
+/// A picture (a sticker) drawn with its middle at (cx, cy), `scale` times its size and turned by `angle` radians (the
+/// direction of `case_stickers::rotated`'s positive degrees), nearest pixel so it stays pixel art. `alpha` 0 to 255 over
+/// what is there; `flat` paints every solid pixel in that one colour instead (a shadow). Only the turned rectangle is
+/// visited, rows inside `clip` (top, bottom). At scale 1 and angle 0 on a whole-pixel middle it is the picture exactly.
+#[allow(clippy::too_many_arguments)]
+pub fn blit_pose(c: &mut Canvas, p: &Pic, cx: f32, cy: f32, scale: f32, angle: f32, alpha: u32, flat: Option<u32>, clip: (i32, i32)) {
+    if alpha == 0 || scale <= 0.0 {
+        return;
+    }
+    let alpha = alpha.min(255) as u8;
+    let (sin, cos) = angle.sin_cos();
+    let (pcx, pcy) = (p.w as f32 / 2.0, p.h as f32 / 2.0);
+    let (hw, hh) = ((p.w as f32 * cos.abs() + p.h as f32 * sin.abs()) * scale / 2.0, (p.w as f32 * sin.abs() + p.h as f32 * cos.abs()) * scale / 2.0);
+    let (x0, x1) = (((cx - hw).floor() as i32).max(0), ((cx + hw).ceil() as i32).min(c.w));
+    let (y0, y1) = (((cy - hh).floor() as i32).max(clip.0).max(0), ((cy + hh).ceil() as i32).min(clip.1).min(c.h));
+    let inv = 1.0 / scale;
+    if c.n() != 1 {
+        // Painted natively: each design pixel as below, the four of a screen pixel averaged (`cells_over`).
+        return cells_over(c, x0, x1, y0, y1, |x, y, bg| {
+            let (dx, dy) = (x as f32 + 0.5 - cx, y as f32 + 0.5 - cy);
+            let sx = ((dx * cos + dy * sin) * inv + pcx).floor() as i32;
+            let sy = ((-dx * sin + dy * cos) * inv + pcy).floor() as i32;
+            if sx < 0 || sy < 0 || sx >= p.w || sy >= p.h {
+                return bg;
+            }
+            let v = p.px[(sy * p.w + sx) as usize];
+            if v >> 24 != 0 {
+                mix(bg, flat.unwrap_or(v & 0xff_ffff), alpha as u32)
+            } else {
+                bg
+            }
+        });
+    }
+    for y in y0..y1 {
+        let dy = y as f32 + 0.5 - cy;
+        for x in x0..x1 {
+            let dx = x as f32 + 0.5 - cx;
+            let sx = ((dx * cos + dy * sin) * inv + pcx).floor() as i32;
+            let sy = ((-dx * sin + dy * cos) * inv + pcy).floor() as i32;
+            if sx < 0 || sy < 0 || sx >= p.w || sy >= p.h {
+                continue;
+            }
+            let v = p.px[(sy * p.w + sx) as usize];
+            if v >> 24 != 0 {
+                c.blend(x, y, flat.unwrap_or(v & 0xff_ffff), alpha);
+            }
+        }
+    }
+}
+
 /// `blit` with the rows pushed sideways, the top row by `top_dx` and the bottom one not at all: the picture rocks on
 /// its bottom edge (`playful::wiggle`) or leans. A copy with offsets, nothing is made.
 pub fn blit_sheared(c: &mut Canvas, p: &Pic, x: i32, y: i32, top_dx: f32, shade: u32, clip: (i32, i32)) {
@@ -211,6 +627,22 @@ pub fn blit_sheared(c: &mut Canvas, p: &Pic, x: i32, y: i32, top_dx: f32, shade:
     }
     let (y0, y1) = (y.max(clip.0).max(0), (y + p.h).min(clip.1).min(c.h));
     let last = (p.h - 1).max(1) as f32;
+    if c.n() != 1 {
+        if y0 >= y1 {
+            return;
+        }
+        // Painted natively: each row's push worked out once, the four design pixels of a screen pixel averaged.
+        let dxs: Vec<i32> = (y0..y1).map(|row| (top_dx * (1.0 - (row - y) as f32 / last)).round() as i32).collect();
+        let reach = top_dx.abs().ceil() as i32 + 1;
+        return cells_over(c, x - reach, x + p.w + reach, y0, y1, |cx, cy, bg| {
+            let sx = cx - x - dxs[(cy - y0) as usize];
+            if sx < 0 || sx >= p.w {
+                return bg;
+            }
+            over(bg, p.px[((cy - y) * p.w + sx) as usize], shade)
+        });
+    }
+    let c_w = c.w;
     for row in y0..y1 {
         let dx = (top_dx * (1.0 - (row - y) as f32 / last)).round() as i32;
         let (x0, x1) = ((x + dx).max(0), (x + dx + p.w).min(c.w));
@@ -218,7 +650,7 @@ pub fn blit_sheared(c: &mut Canvas, p: &Pic, x: i32, y: i32, top_dx: f32, shade:
             continue;
         }
         let src = &p.px[((row - y) * p.w + (x0 - x - dx)) as usize..][..(x1 - x0) as usize];
-        let dst = &mut c.buf[(row * c.w + x0) as usize..(row * c.w + x1) as usize];
+        let dst = &mut c.pixels_mut()[(row * c_w + x0) as usize..(row * c_w + x1) as usize];
         for (d, &s) in dst.iter_mut().zip(src) {
             put(d, s, shade);
         }
@@ -237,10 +669,20 @@ pub fn blit_scaled(c: &mut Canvas, p: &Pic, x: i32, y: i32, w: i32, h: i32, shad
     }
     let (y0, y1) = (y.max(clip.0).max(0), (y + h).min(clip.1).min(c.h));
     let (x0, x1) = (x.max(0), (x + w).min(c.w));
+    if c.n() != 1 {
+        if x0 >= x1 || y0 >= y1 {
+            return;
+        }
+        // Painted natively: the source column and row of each design pixel worked out once.
+        let sxs: Vec<i32> = (x0..x1).map(|col| (((col - x) as i64 * p.w as i64 / w as i64) as i32).min(p.w - 1)).collect();
+        let sys: Vec<i32> = (y0..y1).map(|row| (((row - y) as i64 * p.h as i64 / h as i64) as i32).min(p.h - 1)).collect();
+        return cells_over(c, x0, x1, y0, y1, |cx, cy, bg| over(bg, p.px[(sys[(cy - y0) as usize] * p.w + sxs[(cx - x0) as usize]) as usize], shade));
+    }
+    let c_w = c.w;
     for row in y0..y1 {
         let sy = (((row - y) as i64 * p.h as i64 / h as i64) as i32).min(p.h - 1);
         let src = &p.px[(sy * p.w) as usize..][..p.w as usize];
-        let dst = &mut c.buf[(row * c.w) as usize..][..c.w as usize];
+        let dst = &mut c.pixels_mut()[(row * c_w) as usize..][..c_w as usize];
         for col in x0..x1 {
             let sx = (((col - x) as i64 * p.w as i64 / w as i64) as i32).min(p.w - 1);
             put(&mut dst[col as usize], src[sx as usize], shade);
@@ -260,17 +702,43 @@ pub fn blit_spun(c: &mut Canvas, p: &Pic, cx: f32, cy: f32, angle: f32, clip: (i
     let fx = |v: f32| (v * 65536.0) as i64;
     let (y0, y1) = (((cy - r).floor() as i32).max(clip.0).max(0), ((cy + r).ceil() as i32).min(clip.1).min(c.h));
     let (pw, ph) = (p.w as i64, p.h as i64);
-    for row in y0..y1 {
+    let (du, dv) = (fx(cos), fx(sin));
+    let c_w = c.w;
+    // Each row's columns inside the circle and where in the picture its first one reads.
+    let span = |row: i32| {
         let dy = row as f32 + 0.5 - cy;
         let half = (r * r - dy * dy).max(0.0).sqrt();
-        let (x0, x1) = (((cx - half).ceil() as i32).max(0), ((cx + half).floor() as i32).min(c.w));
+        let (x0, x1) = (((cx - half).ceil() as i32).max(0), ((cx + half).floor() as i32).min(c_w));
+        let dx0 = x0 as f32 + 0.5 - cx;
+        (x0, x1, fx(pcx + dx0 * cos - dy * sin), fx(pcy + dx0 * sin + dy * cos))
+    };
+    if c.n() != 1 {
+        if y0 >= y1 {
+            return;
+        }
+        // Painted natively: the same steps (u + k·du is the walk's k-th step exactly), four design pixels a screen pixel.
+        let spans: Vec<(i32, i32, i64, i64)> = (y0..y1).map(span).collect();
+        let (lo, hi) = spans.iter().fold((i32::MAX, i32::MIN), |(lo, hi), s| (lo.min(s.0), hi.max(s.1)));
+        return cells_over(c, lo, hi, y0, y1, |col, row, bg| {
+            let (x0, x1, u, v) = spans[(row - y0) as usize];
+            if col < x0 || col >= x1 {
+                return bg;
+            }
+            let k = (col - x0) as i64;
+            let (iu, iv) = ((u + k * du) >> 16, (v + k * dv) >> 16);
+            if iu >= 0 && iv >= 0 && iu < pw && iv < ph {
+                over(bg, p.px[(iv * pw + iu) as usize], 256)
+            } else {
+                bg
+            }
+        });
+    }
+    for row in y0..y1 {
+        let (x0, x1, mut u, mut v) = span(row);
         if x0 >= x1 {
             continue;
         }
-        let dx0 = x0 as f32 + 0.5 - cx;
-        let (mut u, mut v) = (fx(pcx + dx0 * cos - dy * sin), fx(pcy + dx0 * sin + dy * cos));
-        let (du, dv) = (fx(cos), fx(sin));
-        let dst = &mut c.buf[(row * c.w + x0) as usize..(row * c.w + x1) as usize];
+        let dst = &mut c.pixels_mut()[(row * c_w + x0) as usize..(row * c_w + x1) as usize];
         for d in dst.iter_mut() {
             let (iu, iv) = (u >> 16, v >> 16);
             if iu >= 0 && iv >= 0 && iu < pw && iv < ph {
@@ -354,15 +822,25 @@ fn lid_face(c: &mut Canvas, cx: i32, rx: i32, (y0, y1): (i32, i32), color: u32) 
 
 /// A filled ellipse.
 fn ellipse(c: &mut Canvas, cx: i32, cy: i32, rx: i32, ry: i32, color: u32) {
+    let half = |dy: i32| (rx as f32 * (1.0 - (dy as f32 / ry as f32).powi(2)).max(0.0).sqrt()) as i32;
+    if c.n() != 1 {
+        // Painted natively: the same spans, each screen pixel by how much of it they cover.
+        let halves: Vec<i32> = (-ry..=ry).map(half).collect();
+        return cells_over(c, cx - rx, cx + rx + 1, cy - ry, cy + ry + 1, |x, y, bg| {
+            let h = halves[(y - cy + ry) as usize];
+            if (cx - h..=cx + h).contains(&x) { color } else { bg }
+        });
+    }
+    let c_w = c.w;
     for dy in -ry..=ry {
         let row = cy + dy;
         if row < 0 || row >= c.h {
             continue;
         }
-        let half = (rx as f32 * (1.0 - (dy as f32 / ry as f32).powi(2)).max(0.0).sqrt()) as i32;
+        let half = half(dy);
         let (x0, x1) = ((cx - half).max(0), (cx + half + 1).min(c.w));
         if x0 < x1 {
-            c.buf[(row * c.w + x0) as usize..(row * c.w + x1) as usize].fill(color);
+            c.pixels_mut()[(row * c_w + x0) as usize..(row * c_w + x1) as usize].fill(color);
         }
     }
 }
@@ -373,7 +851,42 @@ pub fn dim(c: &mut Canvas, y0: i32, y1: i32, keep: u32) {
         return;
     }
     let (y0, y1) = (y0.clamp(0, c.h), y1.clamp(0, c.h));
-    for p in &mut c.buf[(y0 * c.w) as usize..(y1 * c.w) as usize] {
+    if c.n() != 1 {
+        // Painted natively: a screen pixel holding only part of the band is darkened by that part (`rows_over`). A
+        // screen row wholly inside it has its design pixels darkened alike, and their mean is that one darkened pixel:
+        // the same bits in one multiply (the launch darkens the whole screen every frame, H700 14.11.).
+        let w = c.w;
+        if y0 >= y1 {
+            return;
+        }
+        let (_, sr0, _, fy0) = c.cell(0, y0);
+        let (_, sr1, _, fy1) = c.cell(0, y1 - 1);
+        // The screen rows the band covers whole: from the first whose top design row is `y0` or later, to the last whose
+        // bottom one is before `y1`.
+        let (full0, full1) = (if fy0 == 0 { sr0 } else { sr0 + 1 }, if fy1 as i32 == c.n() - 1 { sr1 } else { sr1 - 1 });
+        let stride = c.stride();
+        let rows = (c.pixels().len() / stride.max(1)) as i32;
+        let cols = (w.max(0) as usize).div_ceil(2).min(stride);
+        if (full0..=full1).is_empty() || cols * 2 != w as usize {
+            return rows_over(c, 0, w, y0, y1, |_, bg| shaded(bg, keep));
+        }
+        if fy0 != 0 {
+            rows_over(c, 0, w, y0, y0 + 1, |_, bg| shaded(bg, keep));
+        }
+        if fy1 as i32 != c.n() - 1 {
+            rows_over(c, 0, w, y1 - 1, y1, |_, bg| shaded(bg, keep));
+        }
+        let (r0, r1) = (full0.max(0), (full1 + 1).min(rows));
+        let px = c.pixels_mut();
+        for r in r0..r1 {
+            for p in &mut px[r as usize * stride..][..cols] {
+                *p = shaded(*p, keep);
+            }
+        }
+        return;
+    }
+    let c_w = c.w;
+    for p in &mut c.pixels_mut()[(y0 * c_w) as usize..(y1 * c_w) as usize] {
         *p = shaded(*p, keep);
     }
 }
@@ -388,20 +901,41 @@ pub fn glow(c: &mut Canvas, cx: i32, cy: i32, rx: i32, ry: i32, color: u32, stre
     let (x0, x1) = ((cx - rx).max(0), (cx + rx).min(c.w));
     let (y0, y1) = ((cy - ry).max(0), (cy + ry).min(c.h));
     let max = (strength.min(1.0) * 200.0) as u32;
+    let lit = |x: i32, y: i32, bg: u32| {
+        let (dx, dy) = ((x - cx) as f32 / rx as f32, (y - cy) as f32 / ry as f32);
+        let d = dx * dx + dy * dy;
+        if d >= 1.0 {
+            return bg;
+        }
+        // 1, 3/4, 1/2, 1/4 of the light in rings from the middle out.
+        let step = ((1.0 - d) * 4.0).ceil() / 4.0;
+        mix(bg, color, (max as f32 * step * step) as u32)
+    };
+    if c.n() != 1 {
+        // Painted natively: the four design pixels of each screen pixel lit as below and averaged.
+        return cells_over(c, x0, x1, y0, y1, lit);
+    }
+    let c_w = c.w;
     for y in y0..y1 {
-        let dy = (y - cy) as f32 / ry as f32;
         for x in x0..x1 {
-            let dx = (x - cx) as f32 / rx as f32;
-            let d = dx * dx + dy * dy;
-            if d >= 1.0 {
-                continue;
-            }
-            // 1, 3/4, 1/2, 1/4 of the light in rings from the middle out.
-            let step = ((1.0 - d) * 4.0).ceil() / 4.0;
-            let i = (y * c.w + x) as usize;
-            c.buf[i] = mix(c.buf[i], color, (max as f32 * step * step) as u32);
+            let i = (y * c_w + x) as usize;
+            c.pixels_mut()[i] = lit(x, y, c.pixels()[i]);
         }
     }
+}
+
+/// The first row of a band of `n` rows from `y0` towards `y1` (`fade_band`).
+#[inline]
+fn band_top(y0: i32, y1: i32, n: i32) -> i32 {
+    if y1 > y0 { y0 } else { y0 - n + 1 }
+}
+
+/// How much of row `row` a band from `y0` to `y1` (`n` rows) keeps, 0-256, as `fade_band` and `fade_band_to` fade it.
+#[inline]
+fn band_keep(y0: i32, y1: i32, n: i32, row: i32) -> u32 {
+    let k = if y1 > y0 { row - y0 } else { y0 - row };
+    let keep = 256 - (k * 256 / n) as u32;
+    keep * keep / 256
 }
 
 /// `fade_band` towards `page` instead of black (the light page); black is `fade_band` itself.
@@ -410,6 +944,12 @@ pub fn fade_band_to(c: &mut Canvas, y0: i32, y1: i32, page: u32) {
         return fade_band(c, y0, y1);
     }
     let n = (y1 - y0).abs().max(1);
+    if c.n() != 1 {
+        // Painted natively: each design row's share as below, the two of a screen row averaged.
+        let w = c.w;
+        return rows_over(c, 0, w, band_top(y0, y1, n), band_top(y0, y1, n) + n, |row, bg| mix(bg, page, 255 - band_keep(y0, y1, n, row).min(255)));
+    }
+    let c_w = c.w;
     for k in 0..n {
         let row = if y1 > y0 { y0 + k } else { y0 - k };
         if row < 0 || row >= c.h {
@@ -417,7 +957,7 @@ pub fn fade_band_to(c: &mut Canvas, y0: i32, y1: i32, page: u32) {
         }
         let keep = 256 - (k * 256 / n) as u32;
         let keep = keep * keep / 256;
-        for p in &mut c.buf[(row * c.w) as usize..((row + 1) * c.w) as usize] {
+        for p in &mut c.pixels_mut()[(row * c_w) as usize..((row + 1) * c_w) as usize] {
             *p = mix(*p, page, 255 - keep.min(255));
         }
     }
@@ -426,6 +966,12 @@ pub fn fade_band_to(c: &mut Canvas, y0: i32, y1: i32, page: u32) {
 /// Black rising over rows `y0..y1`: none at `y0`, all at `y1` (or the other way round when `y0 > y1`).
 pub fn fade_band(c: &mut Canvas, y0: i32, y1: i32) {
     let n = (y1 - y0).abs().max(1);
+    if c.n() != 1 {
+        // Painted natively: each design row's share as below, the two of a screen row averaged.
+        let w = c.w;
+        return rows_over(c, 0, w, band_top(y0, y1, n), band_top(y0, y1, n) + n, |row, bg| shaded(bg, band_keep(y0, y1, n, row)));
+    }
+    let c_w = c.w;
     for k in 0..n {
         let row = if y1 > y0 { y0 + k } else { y0 - k };
         if row < 0 || row >= c.h {
@@ -433,7 +979,7 @@ pub fn fade_band(c: &mut Canvas, y0: i32, y1: i32) {
         }
         let keep = 256 - (k * 256 / n) as u32;
         let keep = keep * keep / 256;
-        for p in &mut c.buf[(row * c.w) as usize..((row + 1) * c.w) as usize] {
+        for p in &mut c.pixels_mut()[(row * c_w) as usize..((row + 1) * c_w) as usize] {
             *p = shaded(*p, keep);
         }
     }
@@ -442,6 +988,7 @@ pub fn fade_band(c: &mut Canvas, y0: i32, y1: i32) {
 /// A soft shadow: the rectangle (x, y, w, h) darkened by `strength` (0-1), fading out over `blur` pixels.
 /// The fall-off is the product of one across and one down, so a frame pays a multiply per pixel.
 pub fn soft_shadow(c: &mut Canvas, x: i32, y: i32, w: i32, h: i32, blur: i32, strength: f32, clip: (i32, i32)) {
+    let c_w = c.w;
     if strength <= 0.0 || w <= 0 || h <= 0 {
         return;
     }
@@ -470,19 +1017,55 @@ pub fn soft_shadow(c: &mut Canvas, x: i32, y: i32, w: i32, h: i32, blur: i32, st
             })
         })
         .collect();
-    for row in (y - blur).max(clip.0).max(0)..(y + h + blur).min(clip.1).min(c.h) {
-        let fy = strength
+    let fy_at = |row: i32| {
+        strength
             * fall(if row < y {
                 y - row
             } else if row >= y + h {
                 row - (y + h) + 1
             } else {
                 0
-            });
+            })
+    };
+    let (r0, r1) = ((y - blur).max(clip.0).max(0), (y + h + blur).min(clip.1).min(c.h));
+    if c.n() != 1 {
+        // Painted natively: the fall-off of each design pixel as below, the four of a screen pixel averaged.
+        if r0 >= r1 {
+            return;
+        }
+        // The fall-off is a product of one across and one down, so its mean over a screen pixel's four is the product
+        // of the two means: one multiply per screen pixel (within a step of the old picture's rounding).
+        let fx = |col: i32| if (x0..x1).contains(&col) { cols[(col - x0) as usize] } else { 0.0 };
+        let fy = |row: i32| if (r0..r1).contains(&row) { fy_at(row) } else { 0.0 };
+        let (sc0, sc1) = (x0 / 2, ((x1 - 1) / 2 + 1).min(c.stride() as i32));
+        let across: Vec<f32> = (sc0..sc1).map(|sc| (fx(2 * sc) + fx(2 * sc + 1)) / 2.0).collect();
+        let (_, sr0, _, gy) = c.cell(0, r0);
+        let (_, sr1, _, _) = c.cell(0, r1 - 1);
+        let stride = c.stride();
+        let rows = (c.pixels().len() / stride.max(1)) as i32;
+        let px = c.pixels_mut();
+        for sr in sr0.max(0)..(sr1 + 1).min(rows) {
+            let top = r0 - gy as i32 + 2 * (sr - sr0);
+            let down = (fy(top) + fy(top + 1)) / 2.0;
+            if down <= 0.0 {
+                continue;
+            }
+            let line = &mut px[sr as usize * stride + sc0 as usize..][..across.len()];
+            for (p, k) in line.iter_mut().zip(&across) {
+                let a = down * k;
+                if a > 0.004 {
+                    *p = shaded(*p, 256 - (a * 256.0) as u32);
+                }
+            }
+        }
+        return;
+    }
+    for row in r0..r1 {
+        let fy = fy_at(row);
         if fy <= 0.0 {
             continue;
         }
-        let line = &mut c.buf[(row * c.w + x0) as usize..(row * c.w + x1) as usize];
+        let line = &mut c.pixels_mut()[(row * c_w + x0) as usize..(row * c_w + x1) as usize];
         for (p, fx) in line.iter_mut().zip(&cols) {
             let a = fy * fx;
             if a > 0.004 {
@@ -684,6 +1267,9 @@ pub struct Look {
     pub color: u32,
     pub band: u32,
     pub plastic: u32,
+    /// A game without any box art: its case, cartridge and disc are home-made (masking tape and marker,
+    /// `tape_label`), `color` the plain case's.
+    pub tape: bool,
 }
 
 /// Cartridge plastic per system, muted; others get a dark grey.
@@ -704,6 +1290,7 @@ pub fn plastic(system: &str) -> u32 {
 /// The title along a spine in `face`, read top to bottom: `len` pixels from `y0`, centred across `x0 .. x0 + thick`.
 #[allow(clippy::too_many_arguments)]
 pub fn spine_title(text: &mut Text, p: &mut Pic, face: Face, title: &str, px: u32, x0: i32, thick: i32, y0: i32, len: i32, ink: u32) {
+    p.changed();
     // As thick as the case: the design's size whatever Settings → Text size says (`type_scale`).
     let _fixed = crate::type_scale::fixed();
     let title = text.fit(face, px, title, len);
@@ -815,6 +1402,13 @@ pub fn cover_fit(img: &Image, w: i32, h: i32) -> Image {
 /// search's glass) and the name under it, centred, the pair a little above the label's middle (it read as an empty
 /// box with both at the top, Muse's review of 2026-10-29).
 pub fn plain_label(text: &mut Text, p: &mut Pic, (x, y, w, h): (i32, i32, i32, i32), look: Look, title: &str, art: Option<&Sprite>) {
+    p.changed();
+    // A game without any box art: plain, with the name on a strip of masking tape (`tape_label`).
+    if look.tape {
+        p.fill(x, y, w, h, OPAQUE | look.color);
+        crate::tape_label::on_label(text, p, (x, y, w, h), title);
+        return;
+    }
     text.literal(|text| {
     for row in 0..h {
         let c = mix(look.color, 0x000000, 20 + (row as u32 * 90 / h.max(1) as u32));
@@ -823,6 +1417,57 @@ pub fn plain_label(text: &mut Text, p: &mut Pic, (x, y, w, h): (i32, i32, i32, i
     let ink = ink_on(mix(look.color, 0x000000, 60));
     // Printed on the cover: its size follows the case, not Settings → Text size.
     let _fixed = crate::type_scale::fixed();
+    let plan = plain_plan(text, (w, h), title, art);
+    if let Some(fitted) = &plan.fitted {
+        let ax = x + (w - fitted.w as i32) / 2;
+        for sy in 0..fitted.h as i32 {
+            for sx in 0..fitted.w as i32 {
+                let s = fitted.px[(sy * fitted.w as i32 + sx) as usize];
+                if s >> 24 != 0 {
+                    p.blend_changed(ax + sx, y + plan.art_top + sy, s & 0xffffff, 255);
+                }
+            }
+        }
+    }
+    let px = plan.px;
+    let mut base = y + plan.words_top + px as i32;
+    for line in plan.lines.iter().take(3) {
+        let line = text.fit(Face::Title, px, line, plan.max_w);
+        let lw = text.width(Face::Title, px, &line);
+        let mut buf = vec![0u32; (w * (px as i32 * 3 / 2)) as usize];
+        {
+            let mut c = Canvas::new(&mut buf, w as u32, (px * 3 / 2) as u32);
+            text.draw(&mut c, Face::Title, px, (w - lw) / 2, px as i32, 0xffffff, &line);
+        }
+        for ty in 0..px as i32 * 3 / 2 {
+            for tx in 0..w {
+                let a = buf[(ty * w + tx) as usize] & 0xff;
+                p.blend_changed(x + tx, base - px as i32 + ty, ink, a);
+            }
+        }
+        base += plan.step;
+        if base > y + h {
+            break;
+        }
+    }
+    })
+}
+
+/// How a plain label of `w` x `h` sets its picture and name: the same numbers paint it ([`plain_label`]) and say where
+/// the printed words are ([`plain_zones`]).
+struct PlainPlan {
+    px: u32,
+    lines: Vec<String>,
+    step: i32,
+    max_w: i32,
+    /// The console, fitted, where it fits above the name.
+    fitted: Option<Sprite>,
+    /// Tops of the picture and of the name's first line, from the label's top.
+    art_top: i32,
+    words_top: i32,
+}
+
+fn plain_plan(text: &mut Text, (w, h): (i32, i32), title: &str, art: Option<&Sprite>) -> PlainPlan {
     // A game's name as it is, word for word: split over two lines, each is measured and painted as a string of its own,
     // and "Sonic Adventure" read "Sonic Aventura" in Spanish (new-player walk 2026-11-02).
     // A sixth of the label, or smaller until the name fits in two lines (never a lone word of it on a line of its
@@ -860,43 +1505,32 @@ pub fn plain_label(text: &mut Text, p: &mut Pic, (x, y, w, h): (i32, i32, i32, i
     let gap = h / 16;
     let fitted = art
         .filter(|_| h > 120 && h - h / 5 - words_h - gap >= h / 4)
-        .map(|art| art.fitted(w * 4 / 5, (h / 2).min(h - h / 5 - words_h - gap)))
+        .map(|art| art.fitted_kept(w * 4 / 5, (h / 2).min(h - h / 5 - words_h - gap)))
         .filter(|f| f.w > 0 && f.h > 0);
     let block_h = fitted.as_ref().map_or(0, |f| f.h as i32 + gap) + words_h;
     // A little above the middle, where the eye puts the middle of a card.
-    let mut top = y + ((h - block_h) * 2 / 5).max(h / 12);
-    if let Some(fitted) = &fitted {
-        let ax = x + (w - fitted.w as i32) / 2;
-        for sy in 0..fitted.h as i32 {
-            for sx in 0..fitted.w as i32 {
-                let s = fitted.px[(sy * fitted.w as i32 + sx) as usize];
-                if s >> 24 != 0 {
-                    p.blend(ax + sx, top + sy, s & 0xffffff, 255);
-                }
-            }
+    let art_top = ((h - block_h) * 2 / 5).max(h / 12);
+    let words_top = art_top + fitted.as_ref().map_or(0, |f| f.h as i32 + gap);
+    PlainPlan { px, lines, step, max_w, fitted, art_top, words_top }
+}
+
+/// What a plain label of `label` (x, y, w, h) prints, as rectangles on the front: the name (its lines, as wide as the
+/// widest) and, where it fits, the console above it. Stickers keep off them (`case_stickers::layout_around`).
+pub fn plain_zones(text: &mut Text, (x, y, w, h): (i32, i32, i32, i32), title: &str, art: Option<&Sprite>) -> Vec<(i32, i32, i32, i32)> {
+    text.literal(|text| {
+        let _fixed = crate::type_scale::fixed();
+        let plan = plain_plan(text, (w, h), title, art);
+        let mut widest = 0;
+        for l in plan.lines.iter().take(3) {
+            let l = text.fit(Face::Title, plan.px, l, plan.max_w);
+            widest = widest.max(text.width(Face::Title, plan.px, &l));
         }
-        top += fitted.h as i32 + gap;
-    }
-    let mut base = top + px as i32;
-    for line in lines.iter().take(3) {
-        let line = text.fit(Face::Title, px, line, max_w);
-        let lw = text.width(Face::Title, px, &line);
-        let mut buf = vec![0u32; (w * (px as i32 * 3 / 2)) as usize];
-        {
-            let mut c = Canvas::new(&mut buf, w as u32, (px * 3 / 2) as u32);
-            text.draw(&mut c, Face::Title, px, (w - lw) / 2, px as i32, 0xffffff, &line);
+        let words = (x + (w - widest) / 2, y + plan.words_top, widest, plan.lines.len().min(3) as i32 * plan.step);
+        let mut out = vec![words];
+        if let Some(f) = &plan.fitted {
+            out.push((x + (w - f.w as i32) / 2, y + plan.art_top, f.w as i32, f.h as i32));
         }
-        for ty in 0..px as i32 * 3 / 2 {
-            for tx in 0..w {
-                let a = buf[(ty * w + tx) as usize] & 0xff;
-                p.blend(x + tx, base - px as i32 + ty, ink, a);
-            }
-        }
-        base += step;
-        if base > y + h {
-            break;
-        }
-    }
+        out
     })
 }
 
@@ -925,6 +1559,7 @@ fn balanced(text: &mut Text, px: u32, title: &str, max: i32) -> Option<Vec<Strin
 
 /// A soft diagonal reflection of clear plastic over the front.
 pub fn sheen(p: &mut Pic, strength: u32) {
+    p.changed();
     let (w, h) = (p.w as f32, p.h as f32);
     for y in 0..p.h {
         // Only the columns the band crosses on this row (d within 0.16 of 0.42).
@@ -1025,32 +1660,30 @@ fn face(c: &mut Canvas, tex: &Pic, a: (f32, f32), b: (f32, f32), cy: f32, h: f32
         return;
     }
     let (x0, x1) = (a.0.floor() as i32, b.0.ceil() as i32);
-    for col in x0.max(0)..x1.min(c.w) {
-        let t = ((col as f32 + 0.5 - a.0) / (b.0 - a.0)).clamp(0.0, 1.0);
-        // Perspective-correct position across the face.
-        let u = t * b.1 / ((1.0 - t) * a.1 + t * b.1);
-        let k = a.1 + (b.1 - a.1) * t;
-        let ch = h * k;
-        let top = cy - ch / 2.0;
-        let tx = ((u * tex.w as f32) as i32).clamp(0, tex.w - 1);
-        let (r0, r1) = ((top.floor() as i32).max(clip.0).max(0), ((top + ch).ceil() as i32).min(clip.1).min(c.h));
-        if r0 >= r1 {
-            continue;
-        }
-        let step = tex.h as f32 / ch;
-        covered.0 = covered.0.min(col);
-        covered.2 = covered.2.max(col + 1);
-        covered.1 = covered.1.min(r0);
-        covered.3 = covered.3.max(r1);
-        for row in r0..r1 {
-            let ty = (((row as f32 + 0.5 - top) * step) as i32).clamp(0, tex.h - 1);
-            let s = tex.px[(ty * tex.w + tx) as usize];
-            let alpha = s >> 24;
-            if alpha == 0 {
-                continue;
-            }
-            let i = (row * c.w + col) as usize;
-            // Edge columns are only partly covered.
+    let (c0, c1) = (x0.max(0), x1.min(c.w));
+    if c0 >= c1 {
+        return;
+    }
+    // Each column once: its rows (r0..r1), the picture's column, where its top is, the step down the picture and how
+    // much of the column the face covers (edge columns only partly).
+    struct Col {
+        r0: i32,
+        r1: i32,
+        tx: i32,
+        top: f32,
+        step: f32,
+        edge: f32,
+    }
+    let cols: Vec<Col> = (c0..c1)
+        .map(|col| {
+            let t = ((col as f32 + 0.5 - a.0) / (b.0 - a.0)).clamp(0.0, 1.0);
+            // Perspective-correct position across the face.
+            let u = t * b.1 / ((1.0 - t) * a.1 + t * b.1);
+            let k = a.1 + (b.1 - a.1) * t;
+            let ch = h * k;
+            let top = cy - ch / 2.0;
+            let tx = ((u * tex.w as f32) as i32).clamp(0, tex.w - 1);
+            let (r0, r1) = ((top.floor() as i32).max(clip.0).max(0), ((top + ch).ceil() as i32).min(clip.1).min(c.h));
             let edge = if col == x0 {
                 1.0 - (a.0 - x0 as f32)
             } else if col == x1 - 1 {
@@ -1058,12 +1691,66 @@ fn face(c: &mut Canvas, tex: &Pic, a: (f32, f32), b: (f32, f32), cy: f32, h: f32
             } else {
                 1.0
             };
-            let alpha = (alpha as f32 * edge.clamp(0.0, 1.0)) as u32;
-            c.buf[i] = if alpha >= 255 {
-                shaded(s, shade)
-            } else {
-                mix(c.buf[i], shaded(s, shade), alpha)
-            };
+            Col { r0, r1, tx, top, step: tex.h as f32 / ch, edge: edge.clamp(0.0, 1.0) }
+        })
+        .collect();
+    let (mut lo, mut hi) = (i32::MAX, i32::MIN);
+    for (col, k) in (c0..).zip(&cols) {
+        if k.r0 < k.r1 {
+            covered.0 = covered.0.min(col);
+            covered.2 = covered.2.max(col + 1);
+            covered.1 = covered.1.min(k.r0);
+            covered.3 = covered.3.max(k.r1);
+            lo = lo.min(k.r0);
+            hi = hi.max(k.r1);
+        }
+    }
+    if lo >= hi {
+        return;
+    }
+    let paint = |col: i32, row: i32, bg: u32| {
+        let k = &cols[(col - c0) as usize];
+        if row < k.r0 || row >= k.r1 {
+            return bg;
+        }
+        let ty = (((row as f32 + 0.5 - k.top) * k.step) as i32).clamp(0, tex.h - 1);
+        let s = tex.px[(ty * tex.w + k.tx) as usize];
+        let alpha = s >> 24;
+        if alpha == 0 {
+            return bg;
+        }
+        let alpha = (alpha as f32 * k.edge) as u32;
+        if alpha >= 255 {
+            shaded(s, shade)
+        } else {
+            mix(bg, shaded(s, shade), alpha)
+        }
+    };
+    if c.n() != 1 {
+        // Painted natively: the four design pixels of each screen pixel as below, averaged.
+        return cells_over(c, c0, c1, lo, hi, paint);
+    }
+    // Row by row: column by column every pixel was 4 KB from the last on the Brick's 1024x768, and the A53 paid a cache miss
+    // for each (a turning case took 12.7 of a Shelf frame's 22 ms, BRICK-60FPS.md). Each pixel is the one `paint` gives, with
+    // the column's numbers at hand and a whole column's alpha left alone.
+    let c_w = c.w as usize;
+    let (tw, last) = (tex.w as usize, tex.h - 1);
+    let px = c.pixels_mut();
+    for row in lo..hi {
+        let line = &mut px[row as usize * c_w..][c0 as usize..c1 as usize];
+        let at = row as f32 + 0.5;
+        for (k, d) in cols.iter().zip(line.iter_mut()) {
+            if row < k.r0 || row >= k.r1 {
+                continue;
+            }
+            let ty = (((at - k.top) * k.step) as i32).clamp(0, last) as usize;
+            let s = tex.px[ty * tw + k.tx as usize];
+            let alpha = s >> 24;
+            if alpha == 0 {
+                continue;
+            }
+            let alpha = if k.edge >= 1.0 { alpha } else { (alpha as f32 * k.edge) as u32 };
+            *d = if alpha >= 255 { shaded(s, shade) } else { mix(*d, shaded(s, shade), alpha) };
         }
     }
 }
@@ -1073,53 +1760,57 @@ fn face(c: &mut Canvas, tex: &Pic, a: (f32, f32), b: (f32, f32), cy: f32, h: f32
 /// A compact disc seen from its data side, radius `r`, a hint of the cover's colour in the sheen.
 pub fn disc(c: &mut Canvas, cx: i32, cy: i32, r: i32, tint: u32, clip_bottom: i32) {
     let rf = r as f32;
-    for dy in -r..=r {
-        let row = cy + dy;
-        if row < 0 || row >= c.h || row >= clip_bottom {
-            continue;
+    let base = mix(0xc4c8ce, tint, 18);
+    let paint = |col: i32, row: i32, bg: u32| {
+        let (dx, dy) = (col - cx, row - cy);
+        let d = ((dx * dx + dy * dy) as f32).sqrt();
+        let cover = (rf - d + 0.5).clamp(0.0, 1.0);
+        if cover <= 0.0 || d < rf * 0.075 {
+            return bg;
         }
-        for dx in -r..=r {
-            let col = cx + dx;
-            if col < 0 || col >= c.w {
-                continue;
-            }
-            let d = ((dx * dx + dy * dy) as f32).sqrt();
-            let cover = (rf - d + 0.5).clamp(0.0, 1.0);
-            if cover <= 0.0 || d < rf * 0.075 {
-                continue;
-            }
+        let color = if d < rf * 0.2 {
+            0x8e939a
+        } else if d < rf * 0.3 {
+            0xb9bec5
+        } else {
+            // Silver with a rainbow arc where the light falls.
             let ang = (dy as f32).atan2(dx as f32);
-            let color = if d < rf * 0.2 {
-                0x8e939a
-            } else if d < rf * 0.3 {
-                0xb9bec5
-            } else {
-                // Silver with a rainbow arc where the light falls.
-                let sheen = (ang * 2.0 + 0.6).cos().max(0.0).powi(3);
-                let hue = ((ang + std::f32::consts::PI) * 3.0 + d * 0.05) % 6.0;
-                let rainbow = match hue as i32 {
-                    0 => 0xe8a0c0,
-                    1 => 0xa8a0e8,
-                    2 => 0x90d0e8,
-                    3 => 0xa0e8b0,
-                    4 => 0xe8e0a0,
-                    _ => 0xe8b890,
-                };
-                let base = mix(0xc4c8ce, tint, 18);
-                mix(mix(base, 0x7c8088, ((d / rf) * 60.0) as u32), rainbow, (sheen * 120.0) as u32)
+            let sheen = (ang * 2.0 + 0.6).cos().max(0.0).powi(3);
+            let hue = ((ang + std::f32::consts::PI) * 3.0 + d * 0.05) % 6.0;
+            let rainbow = match hue as i32 {
+                0 => 0xe8a0c0,
+                1 => 0xa8a0e8,
+                2 => 0x90d0e8,
+                3 => 0xa0e8b0,
+                4 => 0xe8e0a0,
+                _ => 0xe8b890,
             };
-            let i = (row * c.w + col) as usize;
-            c.buf[i] = mix(c.buf[i], color, (cover * 255.0) as u32);
+            mix(mix(base, 0x7c8088, ((d / rf) * 60.0) as u32), rainbow, (sheen * 120.0) as u32)
+        };
+        mix(bg, color, (cover * 255.0) as u32)
+    };
+    let (y0, y1) = ((cy - r).max(0), (cy + r + 1).min(c.h).min(clip_bottom));
+    let (x0, x1) = ((cx - r).max(0), (cx + r + 1).min(c.w));
+    if c.n() != 1 {
+        // Painted natively: the four design pixels of each screen pixel as below, averaged.
+        return cells_over(c, x0, x1, y0, y1, paint);
+    }
+    let c_w = c.w;
+    for row in y0..y1 {
+        for col in x0..x1 {
+            let i = (row * c_w + col) as usize;
+            c.pixels_mut()[i] = paint(col, row, c.pixels()[i]);
         }
     }
 }
 
-/// A UMD: a disc in a small shell with a window.
+/// A UMD: a disc in a small shell with a window. As a real one with its label upright (photos of "Pursuit Force UMD" and
+/// "Cars UMD", Commons): the shell is straight at the top and rounded at the bottom, hugging the label.
 pub fn umd(c: &mut Canvas, cx: i32, cy: i32, r: i32, tint: u32, clip_bottom: i32) {
     let (w, h) = (r * 2, r * 2 + r / 5);
     let mut p = Pic::new(w, h, OPAQUE | 0x2a2b30);
     p.tint(0, 0, w, 2, 0xffffff, 60);
-    p.round([r as f32 * 0.5, r as f32 * 0.5, r as f32 * 0.25, r as f32 * 0.25]);
+    p.round([r as f32 * 0.25, r as f32 * 0.25, r as f32 * 0.5, r as f32 * 0.5]);
     blit(c, &p, cx - w / 2, cy - h / 2, 256, (0, clip_bottom));
     disc(c, cx, cy + r / 12, r * 4 / 5, tint, clip_bottom);
 }
@@ -1135,7 +1826,172 @@ pub fn plate_ink(bg: u32) -> u32 {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn dim_at_n2_is_rows_over_bit_for_bit_whatever_its_edges() {
+        // Whole screen rows take one multiply (`dim`); the band's edges at odd rows still mix by their share.
+        let back: Vec<u32> = (0..40 * 30).map(|i: u32| i.wrapping_mul(2654435761) & 0xffffff).collect();
+        for (y0, y1) in [(0, 60), (5, 41), (1, 2), (1, 3), (2, 4), (7, 8), (-3, 70), (59, 60), (0, 1), (13, 58)] {
+            for keep in [0, 1, 100, 153, 255] {
+                let (mut a, mut b) = (back.clone(), back.clone());
+                dim(&mut Canvas::screen(&mut a, (40, 30), 2), y0, y1, keep);
+                rows_over(&mut Canvas::screen(&mut b, (40, 30), 2), 0, 80, y0, y1, |_, bg| shaded(bg, keep));
+                assert_eq!(a, b, "band {y0}..{y1}, keep {keep}");
+            }
+        }
+    }
+
+    #[test]
+    fn rows_over_is_cells_over_for_a_band_whatever_its_edges() {
+        // A background that changes from screen pixel to screen pixel, bands with odd and even edges.
+        let back: Vec<u32> = (0..40 * 30).map(|i: u32| i.wrapping_mul(2654435761) & 0xffffff).collect();
+        for (x0, x1, y0, y1) in [(0, 80, 0, 60), (3, 77, 5, 41), (1, 2, 1, 2), (10, 11, 7, 8), (-4, 90, -3, 70)] {
+            let f = |row: i32, bg: u32| shaded(bg, (row as u32 * 7) % 256);
+            let (mut a, mut b) = (back.clone(), back.clone());
+            cells_over(&mut Canvas::screen(&mut a, (40, 30), 2), x0, x1, y0, y1, |_, row, bg| f(row, bg));
+            rows_over(&mut Canvas::screen(&mut b, (40, 30), 2), x0, x1, y0, y1, f);
+            assert_eq!(a, b, "band {x0}..{x1} x {y0}..{y1}");
+        }
+    }
+
     use super::*;
+
+    /// 15.11.: the code-drawn UMD (a game without a picture of the real shell) is as a real one with its label upright: straight at
+    /// the top, rounded at the bottom. It was round on top, a UMD upside down.
+    #[test]
+    fn the_drawn_umd_is_straight_at_the_top_and_rounded_at_the_bottom() {
+        let mut buf = vec![0u32; 120 * 120];
+        let mut c = Canvas::new(&mut buf, 120, 120);
+        umd(&mut c, 60, 60, 40, 0x808080, 120);
+        let row = |y: usize| buf[y * 120..(y + 1) * 120].iter().filter(|p| **p != 0).count();
+        let (top, bottom) = (row(60 - 44), row(60 + 43));
+        assert!(top > bottom + 10, "straight end up ({top} px wide), rounded end down ({bottom} px wide)");
+    }
+
+    /// One picture painted the old way (design pixels, then the 2:1 filter) and natively (`Canvas::screen`, `n` = 2),
+    /// on a background that varies from screen pixel to screen pixel but is even within each (as a page is wherever
+    /// these paint): the two must be the same, bit for bit (docs/dev/native-paint.md).
+    fn old_and_new(w: u32, h: u32, paint: impl Fn(&mut Canvas)) -> (Vec<u32>, Vec<u32>) {
+        let back = |x: u32, y: u32| 0x203040 + ((x * 7 + y * 13) % 32) * 0x010203;
+        let mut design: Vec<u32> = (0..h * 2).flat_map(|y| (0..w * 2).map(move |x| back(x / 2, y / 2))).collect();
+        paint(&mut Canvas::new(&mut design, w * 2, h * 2));
+        let mut old = vec![0u32; (w * h) as usize];
+        crate::scaled_layout::ScaledFrame::default().downscale(&design, (w * 2, h * 2), &mut old, (w, h));
+        let mut new: Vec<u32> = (0..h).flat_map(|y| (0..w).map(move |x| back(x, y))).collect();
+        paint(&mut Canvas::screen(&mut new, (w, h), 2));
+        (old, new)
+    }
+
+    fn same(what: &str, (old, new): (Vec<u32>, Vec<u32>)) {
+        let off = old.iter().zip(&new).filter(|(a, b)| a != b).count();
+        assert_eq!(off, 0, "{what}: {off} of {} screen pixels differ from the old picture", old.len());
+    }
+
+    /// As `same`, but each channel may be `steps` apart (a mean shaded after it is taken, `blit_half`).
+    fn close(what: &str, (old, new): (Vec<u32>, Vec<u32>), steps: u32) {
+        let far = |a: u32, b: u32| [16, 8, 0].iter().map(|s| ((a >> s & 0xff) as i32 - (b >> s & 0xff) as i32).unsigned_abs()).max().unwrap();
+        let worst = old.iter().zip(&new).map(|(a, b)| far(*a, *b)).max().unwrap_or(0);
+        assert!(worst <= steps, "{what}: {worst} steps from the old picture, at most {steps}");
+    }
+
+    /// A picture with solid, see-through and half-solid pixels, in colours that change from pixel to pixel.
+    fn sample_pic(w: i32, h: i32) -> Pic {
+        let mut p = Pic::new(w, h, 0);
+        for (i, px) in p.px.iter_mut().enumerate() {
+            let i = i as u32;
+            let a = match i % 7 {
+                0 => 0,
+                3 => 0x80,
+                _ => 0xff,
+            };
+            *px = a << 24 | (i * 0x0a0b0c & 0xffffff);
+        }
+        p
+    }
+
+    #[test]
+    fn the_shelf_strip_from_half_tiles_is_the_old_picture_at_every_scroll() {
+        let (tw, room) = (16usize, 11usize);
+        let tiles: Vec<Vec<u32>> = (0..5u32).map(|t| (0..(tw * room) as u32).map(|i| (i * 0x0a0b0c + t * 0x402010) & 0xffffff).collect()).collect();
+        for (left, top) in [(6, 4), (7, 5), (6, 5), (7, 4)] {
+            for scroll in [0, 1, 5, 16, 17, 30] {
+                let (view, first) = (37, scroll / tw as i32);
+                // The old way: the strip put together in design pixels, then copied.
+                let strip: Vec<u32> = (0..room).flat_map(|y| (0..view).map(move |x| (x + scroll, y))).map(|(c, y)| tiles[c as usize / tw][y * tw + c as usize % tw]).collect();
+                let fy = |c: &Canvas| c.cell(0, top).3;
+                let at = format!("at ({left}, {top}), scroll {scroll}");
+                same(&at, old_and_new(32, 12, |c| {
+                    if c.n() == 1 {
+                        return copy_solid(c, left, top, view as usize, &strip);
+                    }
+                    let fx = (left - scroll).rem_euclid(2) as u8;
+                    let used: Vec<&[u32]> = tiles[first as usize..].iter().map(|t| t.as_slice()).collect();
+                    let halves: Vec<Vec<u32>> = used.iter().map(|t| half_tile(t, tw, fx, fy(c))).collect();
+                    let halves: Vec<&[u32]> = halves.iter().map(|h| h.as_slice()).collect();
+                    paint_strip(c, (left, top), (view, room as i32), scroll, first, tw as i32, &used, &halves);
+                }));
+            }
+        }
+    }
+
+    #[test]
+    fn a_translucent_film_is_pixel_exact_at_every_place_and_shade() {
+        for alpha in [1, 8, 38, 85, 128, 254] {
+            let film = Pic::new(23, 17, (alpha << 24) | crate::shrink_wrap::FILM);
+            for (x, y) in [(10, 8), (11, 9), (10, 9), (11, 8), (-3, -5), (90, 60)] {
+                for shade in [80, 180, 256] {
+                    same("flat film", old_and_new(48, 32, |c| blit(c, &film, x, y, shade, (y + 1, y + 16))));
+                }
+            }
+        }
+        // The mixed-cell sentinel can itself be a real (almost transparent black) pixel.
+        let film = Pic::new(23, 17, HALF_MIXED);
+        same("sentinel colour", old_and_new(48, 32, |c| blit(c, &film, 11, 9, 256, (0, c.h))));
+    }
+
+    #[test]
+    fn a_solid_block_painted_natively_is_the_old_picture_at_every_place() {
+        let block: Vec<u32> = (0..17 * 9).map(|i| i * 0x030507 & 0xffffff).collect();
+        for (x, y) in [(10, 8), (11, 9), (10, 9), (11, 8), (-3, -5), (90, 60)] {
+            same(&format!("copy_solid at ({x}, {y})"), old_and_new(48, 32, |c| copy_solid(c, x, y, 17, &block)));
+        }
+    }
+
+    #[test]
+    fn the_cases_and_the_cabinet_painted_natively_are_the_old_picture() {
+        let p = sample_pic(23, 17);
+        let disc_pic = sample_pic(30, 30);
+        for (x, y) in [(10, 8), (11, 9), (10, 9), (-5, -3), (70, 40)] {
+            let at = format!(" at ({x}, {y})");
+            same(&format!("blit{at}"), old_and_new(48, 32, |c| blit(c, &p, x, y, 256, (0, c.h))));
+            close(&format!("blit shaded, clipped{at}"), old_and_new(48, 32, |c| blit(c, &p, x, y, 180, (y + 3, y + 12))), 1);
+            let solid = Pic::of(p.w, p.h, p.px.iter().map(|q| q | OPAQUE).collect());
+            same(&format!("blit solid{at}"), old_and_new(48, 32, |c| blit(c, &solid, x, y, 256, (0, c.h))));
+            close(&format!("blit solid, shaded{at}"), old_and_new(48, 32, |c| blit(c, &solid, x, y, 200, (0, c.h))), 1);
+            same(&format!("blit_cols{at}"), old_and_new(48, 32, |c| blit_cols(c, &solid, x, y, 256, (0, c.h), (3, 18))));
+            same(&format!("blit_sheared{at}"), old_and_new(48, 32, |c| blit_sheared(c, &p, x, y, 5.3, 230, (0, c.h))));
+            same(&format!("blit_scaled{at}"), old_and_new(48, 32, |c| blit_scaled(c, &p, x, y, 31, 13, 256, (0, c.h))));
+            same(&format!("blit_spun{at}"), old_and_new(48, 32, |c| blit_spun(c, &disc_pic, x as f32 + 15.3, y as f32 + 14.7, 0.7, (0, c.h))));
+            same(&format!("blit_affine{at}"), old_and_new(48, 32, |c| blit_affine(c, &p, (x as f32 + 0.3, y as f32), (0.9, 0.2), (-0.3, 1.1), 240, (0, c.h))));
+            same(&format!("blit_pose{at}"), old_and_new(48, 32, |c| blit_pose(c, &p, x as f32 + 12.0, y as f32 + 9.0, 1.3, 0.4, 200, None, (0, c.h))));
+            same(&format!("ellipse{at}"), old_and_new(48, 32, |c| ellipse(c, x + 10, y + 8, 9, 5, 0x804020)));
+            same(&format!("glow{at}"), old_and_new(48, 32, |c| glow(c, x + 10, y + 8, 13, 7, 0xffe0a0, 0.8)));
+            close(&format!("soft_shadow{at}"), old_and_new(48, 32, |c| soft_shadow(c, x, y, 21, 11, 5, 0.6, (0, c.h))), 2);
+            close(&format!("soft_shadow clipped{at}"), old_and_new(48, 32, |c| soft_shadow(c, x, y, 21, 11, 5, 0.6, (y + 3, y + 10))), 2);
+            same(&format!("disc{at}"), old_and_new(48, 32, |c| disc(c, x + 14, y + 13, 12, 0x3060c0, y + 20)));
+            same(&format!("dim{at}"), old_and_new(48, 32, |c| dim(c, y, y + 19, 150)));
+            same(&format!("fade_band{at}"), old_and_new(48, 32, |c| fade_band(c, y, y + 15)));
+            same(&format!("fade_band up{at}"), old_and_new(48, 32, |c| fade_band(c, y + 15, y)));
+            same(&format!("fade_band_to{at}"), old_and_new(48, 32, |c| fade_band_to(c, y + 14, y + 1, 0xe8e0d0)));
+            let turn = Turn { cx: x as f32 + 20.5, cy: y as f32 + 14.0, scale: 0.37, turned: 0.43, shade: 240 };
+            // The front is painted over the spine's last screen column, which at `n` = 2 is already their mean: only
+            // that one column of the seam may differ from the old picture.
+            let (old, new) = old_and_new(48, 32, |c| {
+                draw_turning(c, &p, &disc_pic, Size { spine: 14, front: 80, h: 60, front_h: 60 }, turn, (0, c.h));
+            });
+            let cols: std::collections::BTreeSet<usize> = old.iter().zip(&new).enumerate().filter(|(_, (a, b))| a != b).map(|(i, _)| i % 48).collect();
+            assert!(cols.len() <= 1, "draw_turning{at}: columns {cols:?} differ from the old picture, only the seam may");
+        }
+    }
 
     #[test]
     fn a_shadow_beside_the_canvas_darkens_nothing() {
@@ -1173,6 +2029,37 @@ mod tests {
         );
     }
 
+    /// A case turning on the Brick's 1024x768 (the Shelf's large front, the Cabinet's case coming out) was painted column by column:
+    /// each pixel a row's width from the one before, a cache miss each on the A53. Its moving frames took 22 ms (Shelf) and 15 ms
+    /// (Cabinet), 12.7 and 6.2 of them the turn (BRICK-60FPS.md, "Damage"). Painted row by row, the same turn costs the same on a canvas
+    /// 16384 pixels wide as on one just wider than the case; column by column the wide one cost several times more on every machine.
+    #[test]
+    #[ignore = "timing tier: scripts/test-timing.sh (serial)"]
+    fn timing_a_turning_case_costs_the_same_on_a_wide_screen() {
+        let size = Size { spine: 40, front: 300, h: 420, front_h: 420 };
+        let (spine, front) = (Pic::of(40, 420, sample_pic(40, 420).px.iter().map(|q| q | OPAQUE).collect()), Pic::of(300, 420, sample_pic(300, 420).px.iter().map(|q| q | OPAQUE).collect()));
+        let turn = Turn { cx: 200.0, cy: 384.0, scale: 1.4, turned: 0.6, shade: 256 };
+        let cost = |w: u32| {
+            let mut buf = vec![0x203040u32; (w * 768) as usize];
+            let mut c = Canvas::new(&mut buf, w, 768);
+            let mut covered = (0, 0, 0, 0);
+            let took = (0..15)
+                .map(|_| {
+                    let t = thread_cpu();
+                    covered = draw_turning(&mut c, &spine, &front, size, turn, (0, 768));
+                    thread_cpu() - t
+                })
+                .min()
+                .unwrap();
+            (took, covered)
+        };
+        let ((narrow, covered), (wide, _)) = (cost(400), cost(16384));
+        assert!(covered.2 > 300 && covered.3 > 550 && covered.0 + covered.2 <= 400, "a large case inside the narrow canvas: {covered:?}");
+        eprintln!("turning {covered:?}: {narrow:?} on 400 pixels wide, {wide:?} on 16384");
+        // Measured: column by column 3.3x on the Air, 2.25x on x86; row by row 1.0x and 1.15x.
+        assert!(wide * 5 < narrow * 8, "{wide:?} on a wide canvas against {narrow:?} on a narrow one");
+    }
+
     #[test]
     fn a_case_facing_you_keeps_its_size_and_turned_shows_its_front_only() {
         let mut buf = vec![0u32; 800 * 600];
@@ -1196,9 +2083,9 @@ mod tests {
             (0, 600),
         );
         assert!((r.2 - size.spine).abs() <= 1 && (r.3 - size.h).abs() <= 1, "spine at its shelf size: {r:?}");
-        let green = c.buf.iter().filter(|p| **p & 0xffffff == 0x00ff00).count();
+        let green = c.pixels().iter().filter(|p| **p & 0xffffff == 0x00ff00).count();
         assert_eq!(green, 0, "no front yet");
-        c.buf.fill(0);
+        c.clear(0);
         let r = draw_turning(
             &mut c,
             &spine,
@@ -1214,9 +2101,9 @@ mod tests {
             (0, 600),
         );
         assert!((r.2 - (size.front as f32 * 1.5) as i32).abs() <= 2, "front at 1.5x: {r:?}");
-        assert_eq!(c.buf.iter().filter(|p| **p & 0xff0000 == 0xff0000).count(), 0, "the spine has turned away");
+        assert_eq!(c.pixels().iter().filter(|p| **p & 0xff0000 == 0xff0000).count(), 0, "the spine has turned away");
         // Halfway, both show and the whole thing is narrower than spine plus front.
-        c.buf.fill(0);
+        c.clear(0);
         let r = draw_turning(
             &mut c,
             &spine,
@@ -1231,7 +2118,7 @@ mod tests {
             },
             (0, 600),
         );
-        assert!(c.buf.iter().any(|p| *p & 0xff0000 != 0) && c.buf.iter().any(|p| *p & 0x00ff00 != 0));
+        assert!(c.pixels().iter().any(|p| *p & 0xff0000 != 0) && c.pixels().iter().any(|p| *p & 0x00ff00 != 0));
         assert!(r.2 < size.spine + size.front, "{r:?}");
     }
 
@@ -1273,8 +2160,8 @@ mod tests {
         let mut p = Pic::new(2, 2, OPAQUE | 0x808080);
         p.px[1] = 0;
         blit(&mut c, &p, 0, 0, 128, (0, 2));
-        assert_eq!(c.buf[0], 0x404040);
-        assert_eq!(c.buf[1], 0x101010, "transparent pixel left alone");
+        assert_eq!(c.pixels()[0], 0x404040);
+        assert_eq!(c.pixels()[1], 0x101010, "transparent pixel left alone");
     }
 }
 
@@ -1307,16 +2194,18 @@ pub fn blit_affine_rows(c: &mut Canvas, p: &Pic, o: (f32, f32), u: (f32, f32), v
         hi_y = hi_y.max(k.1);
     }
     let (y0, y1) = ((lo_y.floor() as i32).max(clip.0).max(0), (hi_y.ceil() as i32).min(clip.1).min(c.h));
+    let c_w = c.w;
     const ONE: f32 = 65536.0;
     let (step_s, step_t) = ((ds_dx * ONE) as i64, (dt_dx * ONE) as i64);
     let (max_s, min_t, max_t) = ((p.w as i64) << 16, (t_lo * ONE) as i64, ((t_hi * ONE) as i64).min((p.h as i64) << 16));
-    for row in y0..y1 {
+    // Each row's columns and where in the picture its first one reads (16.16).
+    let span = |row: i32| -> (i32, i32, i64, i64) {
         let dy = row as f32 + 0.5 - o.1;
         // At the row's first column (x = 0.5).
         let s0 = (0.5 - o.0) * ds_dx + dy * ds_dy;
         let t0 = (0.5 - o.0) * dt_dx + dy * dt_dy;
         // The columns where s stays in 0..w and t in 0..h.
-        let (mut a, mut b) = (0.0f32, c.w as f32);
+        let (mut a, mut b) = (0.0f32, c_w as f32);
         for (v0, d, max) in [(s0, ds_dx, pw), (t0 - t_lo, dt_dx, t_hi - t_lo)] {
             if d.abs() < 1e-6 {
                 if v0 < 0.0 || v0 >= max {
@@ -1328,13 +2217,36 @@ pub fn blit_affine_rows(c: &mut Canvas, p: &Pic, o: (f32, f32), u: (f32, f32), v
                 b = b.min(e0.max(e1));
             }
         }
-        let (x0, x1) = ((a.ceil() as i32).max(0), (b.floor() as i32 + 1).min(c.w));
+        let (x0, x1) = ((a.ceil() as i32).max(0), (b.floor() as i32 + 1).min(c_w));
+        (x0, x1, ((s0 + x0 as f32 * ds_dx) * ONE) as i64, ((t0 + x0 as f32 * dt_dx) * ONE) as i64)
+    };
+    if c.n() != 1 {
+        // Painted natively: the same walk (s + k·step is its k-th step exactly), four design pixels a screen pixel.
+        if y0 >= y1 {
+            return;
+        }
+        let spans: Vec<(i32, i32, i64, i64)> = (y0..y1).map(span).collect();
+        let (lo, hi) = spans.iter().fold((i32::MAX, i32::MIN), |(lo, hi), s| (lo.min(s.0), hi.max(s.1)));
+        return cells_over(c, lo, hi, y0, y1, |col, row, bg| {
+            let (x0, x1, s, t) = spans[(row - y0) as usize];
+            if col < x0 || col >= x1 {
+                return bg;
+            }
+            let k = (col - x0) as i64;
+            let (s, t) = (s + k * step_s, t + k * step_t);
+            if s >= 0 && t >= min_t && s < max_s && t < max_t {
+                over(bg, p.px[((t >> 16) * p.w as i64 + (s >> 16)) as usize], shade)
+            } else {
+                bg
+            }
+        });
+    }
+    for row in y0..y1 {
+        let (x0, x1, mut s, mut t) = span(row);
         if x0 >= x1 {
             continue;
         }
-        let mut s = ((s0 + x0 as f32 * ds_dx) * ONE) as i64;
-        let mut t = ((t0 + x0 as f32 * dt_dx) * ONE) as i64;
-        let dst = &mut c.buf[(row * c.w + x0) as usize..(row * c.w + x1) as usize];
+        let dst = &mut c.pixels_mut()[(row * c_w + x0) as usize..(row * c_w + x1) as usize];
         for d in dst {
             if s >= 0 && t >= min_t && s < max_s && t < max_t {
                 put(d, p.px[((t >> 16) * p.w as i64 + (s >> 16)) as usize], shade);

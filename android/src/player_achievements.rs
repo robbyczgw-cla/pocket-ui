@@ -44,7 +44,8 @@ impl Achievements {
     /// Starts achievements for this game when an account is signed in and its system has them. `rom` is the path the
     /// core was given: for a game opened without a copy that is the alias of the document's descriptor
     /// (`android_content::DirectGame`), which hashes like the file itself.
-    pub fn start(data: &Path, system: &str, rom: &Path, key: &str, core: &Core) -> Option<Self> {
+    /// `hardcore`: this start is in Hardcore (`hardcore::at_start`, decided before the resume).
+    pub fn start(data: &Path, system: &str, rom: &Path, key: &str, core: &Core, hardcore: bool) -> Option<Self> {
         let snapshot = snapshot_path(data);
         // The last game's list goes, so the pause menu never shows one that isn't this session's.
         let _ = std::fs::remove_file(&snapshot);
@@ -63,6 +64,7 @@ impl Achievements {
             snapshot: snapshot.clone(),
             verbose: false,
             mastery_key: Some(key.to_string()),
+            hardcore,
         };
         let agent = http::user_agent(Some((&core.name, &core.version)));
         #[cfg(not(feature = "ra-replay"))]
@@ -87,6 +89,11 @@ impl Achievements {
         if let Some(s) = self.session.as_mut() {
             s.idle();
         }
+    }
+
+    /// Whether Hardcore's rules hold now (`Session::hardcore`): no state loads or saves, no cheats.
+    pub fn hardcore(&self) -> bool {
+        self.session.as_ref().is_some_and(|s| s.hardcore())
     }
 
     /// A state was loaded: achievements start again from waiting, so the loaded moment can't unlock anything.

@@ -29,6 +29,13 @@ fn available() -> bool {
     })
 }
 
+/// Whether pocket-ui's frames should say the rows they changed (`frame::Presenter::track_damage`): pocket-fb with the GPU puts only
+/// those into its texture (the whole 1024x768 upload was 6.8-7.9 ms of every frame, BRICK-60FPS.md). Finding them costs a read of the
+/// frame, so not without the GPU, where pocket-fb copies whole frames. A pocket-fb from before reads the rows as no news: whole uploads.
+pub fn upload_rows() -> bool {
+    available()
+}
+
 /// A page has just opened (`motion_frame_begin`): its transition goes to the GPU, if there is one, and not to the CPU.
 pub fn begin(transition: &mut Option<Transition>) {
     if transition.is_some() && available() {
@@ -39,11 +46,37 @@ pub fn begin(transition: &mut Option<Transition>) {
 /// The page is painted (`motion_after_paint`): the transition goes out with the page colour, before the picture does.
 pub fn after_paint(c: &Canvas) {
     let Some(t) = PENDING.with(|p| p.take()) else { return };
-    let bg = c.buf.get((c.h / 2 * c.w + c.w - 2).max(0) as usize).copied().unwrap_or(0) & 0xff_ffff;
+    let bg = c.get(c.w - 2, c.h / 2) & 0xff_ffff;
     let command = format!("pocket_transition {} {bg:06x} {} {}", words(t), u8::from(motion::cozy()), u8::from(motion::allowed(Kind::Move)));
     if !ipc::request(ipc::RUN_COMMAND, &command, ASK).is_ok_and(|r| ipc::all_succeeded(&r)) {
         println!("brick: the GPU didn't take a page transition, the page came without one");
     }
+}
+
+thread_local! {
+    /// The Soft look pocket-fb draws over pocket-ui's pictures now (`tint`); it starts with none.
+    static TINT: Cell<[u32; 3]> = const { Cell::new(crate::brick_gl::NO_GAIN) };
+}
+
+/// The frame's Soft look (`Look::multipliers`, `NO_GAIN` for none) drawn by the GPU instead of the CPU: on the Brick's A53 the pass over
+/// 1024x768 pixels cost 5 ms of every frame (BRICK-60FPS.md), a multiply in pocket-fb's shader nothing. Sent only when it changes, and
+/// before the picture: pocket-fb reads the answer's request before the picture's commit. False without the GPU, or when pocket-fb
+/// refused: then the CPU tints the frame, as before.
+pub fn tint(gain: [u32; 3]) -> bool {
+    if !available() {
+        return false;
+    }
+    if TINT.with(Cell::get) == gain {
+        return true;
+    }
+    let command = format!("pocket_tint {} {} {}", gain[0], gain[1], gain[2]);
+    let ok = ipc::request(ipc::RUN_COMMAND, &command, ASK).is_ok_and(|r| ipc::all_succeeded(&r));
+    if ok {
+        TINT.with(|t| t.set(gain));
+    } else {
+        println!("brick: the GPU didn't take the colour look, the CPU draws it");
+    }
+    ok
 }
 
 /// The transition as `pocket_transition` reads it: kind, the label's row (Rise) and the page's top.

@@ -14,6 +14,15 @@ More: [Updates](updates.md).
 
 ![Settings → System with the Updates row](pictures/updates.webp)
 
+## Update without Wi-Fi
+
+1. Download the update file for your card from pocketui.xyz/install. Don't unpack it.
+2. Copy it onto the card: the GAMES drive on the RG28XX, else the card's small first part or the games card in the
+   second slot; on the Brick next to the `pocket-ui` folder.
+3. Switch on and press **A** on "Update to pocket-ui … found on the card".
+
+More: [No Wi-Fi? Update from the card](updates.md#no-wi-fi-update-from-the-card).
+
 ## A game won't start
 
 1. Settings → Games → **Game check**. It looks through the card and never deletes anything.
@@ -33,8 +42,8 @@ still doesn't start.
 3. Select the controller and press **A**. It pairs, trusts and connects in one go.
 
 It reconnects by itself the next time you switch it on. Buttons in the wrong place? Give it its own layout in Settings →
-Playing → Buttons → [Controller setup](controls-settings.md#controller-setup), and check it with Settings → Help & tools →
-[Test buttons](settings-system.md#test-buttons). Headphones and speakers pair the same way. More: [Bluetooth](bluetooth.md).
+Controls → [Controller setup](controls-settings.md#controller-setup), and check it with Settings → Controls →
+[Test buttons](settings-sound.md#test-buttons). Headphones and speakers pair the same way. More: [Bluetooth](bluetooth.md).
 
 ![Bluetooth with a controller found](pictures/bluetooth.webp)
 
@@ -53,7 +62,7 @@ A restore never overwrites a newer save: you keep both. More: [Backup & reset](s
 
 ## Keep saves the same on two devices
 
-1. Connect to Wi-Fi, then Settings → Help & tools → For tinkerers → **Sync** → **Syncthing**, **A**.
+1. Connect to Wi-Fi, then Settings → Connections → **Sync** → **Syncthing**, **A**.
 2. Install Syncthing on your computer, phone or second handheld and add this handheld by its **Device ID** (or scan
    the QR code on the Sync page).
 3. Share the "Pocket saves" and "Pocket save states" folders with it, as [Pair a computer](sync.md#pair-a-computer)

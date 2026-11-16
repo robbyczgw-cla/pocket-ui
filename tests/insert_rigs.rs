@@ -33,18 +33,20 @@ struct World {
     tmp: PathBuf,
     lib: PathBuf,
     stub: Option<Stub>,
+    /// Last, so the stub is gone before the folder is.
+    _dir: tempfile::TempDir,
 }
 
 impl World {
     fn new(name: &str) -> World {
-        let tmp = std::env::temp_dir().join(format!("pui-rigs-{name}-{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&tmp);
-        std::fs::create_dir_all(&tmp).unwrap();
+        // Removed with the World, also when the test panics (docs/dev/tests.md "A test that needs a folder").
+        let dir = tempfile::Builder::new().prefix(&format!("pui-rigs-{name}-")).tempdir().unwrap();
+        let tmp = dir.path().to_path_buf();
         let lib = tmp.join("lib");
         let done = Command::new("python3").env("POCKETUI_MOCK_NOW", FIXTURE_NOW).args(["-I", &format!("{ROOT}/scripts/curator-fake-library.py"), lib.to_str().unwrap(), "dark"]).output().expect("python3");
         assert!(done.status.success(), "{}", String::from_utf8_lossy(&done.stderr));
         let stub = wayland(&tmp);
-        World { tmp, lib, stub }
+        World { tmp, lib, stub, _dir: dir }
     }
 
     /// The launch `ms` after A, on the first game of `system`: RGB rows.
@@ -54,9 +56,14 @@ impl World {
 
     /// [`frame`] of row `row`, with the `frozen` newest games standing open (`POCKETUI_SNAPSHOT_FROZEN`).
     fn frame_with(&self, system: &str, settings: &str, ms: u32, row: u32, frozen: u32) -> Vec<u8> {
+        self.frame_sized(system, settings, ms, row, frozen, "1280x960")
+    }
+
+    /// [`frame_with`] on a screen of `size`.
+    fn frame_sized(&self, system: &str, settings: &str, ms: u32, row: u32, frozen: u32, size: &str) -> Vec<u8> {
         let data = self.lib.join("data");
         std::fs::write(data.join("settings.json"), settings).unwrap();
-        let png = self.tmp.join(format!("{system}-{ms}.png"));
+        let png = self.tmp.join(format!("{system}-{ms}-{size}.png"));
         let mut cmd = Command::new(env!("CARGO_BIN_EXE_pocket-ui"));
         if let Some(s) = &self.stub {
             cmd.env("WAYLAND_DISPLAY", &s.1);
@@ -65,7 +72,7 @@ impl World {
             .args(["--snapshot", &format!("shelf:{system}:shelf:games:{row}"), png.to_str().unwrap()])
             .env("POCKETUI_MOCK", "1").env("POCKETUI_MOCK_NOW", FIXTURE_NOW)
             .env("POCKETUI_LANG", "en")
-            .env("POCKETUI_SNAPSHOT_SIZE", "1280x960")
+            .env("POCKETUI_SNAPSHOT_SIZE", size)
             .env("POCKETUI_SNAPSHOT_LAUNCH_MS", ms.to_string())
             .env("POCKETUI_SNAPSHOT_FROZEN", frozen.to_string())
             .env("POCKETUI_ES_SYSTEMS", self.lib.join("es_systems.cfg"))
@@ -148,4 +155,45 @@ fn in_light_nothing_of_the_case_stays_where_it_stood() {
     // The middle of where the case stood (it has faded by now) against empty page in the same row.
     let (place, page) = (at(150, 230), at(1180, 230));
     assert!(place.iter().zip(&page).all(|(a, b)| (a - b).abs() <= 6), "a block stays where the case stood: {place:?}, the page {page:?}");
+}
+
+/// What the display's light changes: the pixels of `on` that differ from `off` by more than a rounding, their bounding box
+/// (x0, y0, x1, y1), and how many of them are brighter in `on`.
+fn lit_glass(on: &[u8], off: &[u8], w: usize) -> (usize, (usize, usize, usize, usize), usize) {
+    let (mut n, mut brighter) = (0, 0);
+    let mut bb = (usize::MAX, usize::MAX, 0, 0);
+    for (i, (a, b)) in on.chunks(3).zip(off.chunks(3)).enumerate() {
+        if a.iter().zip(b).any(|(x, y)| x.abs_diff(*y) > 12) {
+            n += 1;
+            let (x, y) = (i % w, i / w);
+            bb = (bb.0.min(x), bb.1.min(y), bb.2.max(x), bb.3.max(y));
+            if a.iter().map(|v| u32::from(*v)).sum::<u32>() > b.iter().map(|v| u32::from(*v)).sum::<u32>() {
+                brighter += 1;
+            }
+        }
+    }
+    (n, bb, brighter)
+}
+
+/// A handheld's start (Cozy, Motion Full, Old-TV switch-on on) lights its display once the game is in: 1450 ms after A
+/// (the display has come up, the fade round it has barely begun) the glass is brighter than with the switch-on off, a
+/// block of the console and nothing else, at the H700's 640x480 (painted natively), the Brick's 1024x768 and 1280x720.
+/// Brick night check 14.11.2026: only the power light came on there (tests/brick_settings_walk.rs has the Brick's build).
+#[test]
+fn a_handhelds_display_lights_up_at_every_screen_size() {
+    let w = World::new("power-on");
+    let off = r#"{"onboarded": true, "theme": "shelf", "animations": "cozy", "extras": {"playful_animations": true, "tv_switch_on": false}}"#;
+    for size in ["640x480", "1024x768", "1280x720"] {
+        let (sw, sh) = size.split_once('x').map(|(a, b)| (a.parse::<usize>().unwrap(), b.parse::<usize>().unwrap())).unwrap();
+        for system in ["gba", "gb", "nds"] {
+            let (on, dark) = (w.frame_sized(system, COZY, 1450, 0, 0, size), w.frame_sized(system, off, 1450, 0, 0, size));
+            let (n, (x0, y0, x1, y1), brighter) = lit_glass(&on, &dark, sw);
+            assert!(n * 300 > sw * sh, "{system} {size}: its display lights up ({n} px changed)");
+            assert!(brighter * 10 >= n * 9, "{system} {size}: lit means brighter ({brighter} of {n})");
+            assert!((x1 - x0) * (y1 - y0) * 4 < sw * sh, "{system} {size}: only the glass, {x0}-{x1} x {y0}-{y1}");
+        }
+        // A console on a TV has no display of its own to light: the switch-on is the tube's, in pocket-core.
+        let (on, dark) = (w.frame_sized("snes", COZY, 1450, 0, 0, size), w.frame_sized("snes", off, 1450, 0, 0, size));
+        assert_eq!(lit_glass(&on, &dark, sw).0, 0, "snes {size}: nothing lights on the console");
+    }
 }

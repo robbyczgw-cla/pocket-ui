@@ -74,7 +74,7 @@ impl Model {
             Model::Odin2 => "AYN Odin 2",
             Model::Odin2Mini => "AYN Odin 2 Mini",
             Model::Odin2Portal => "AYN Odin 2 Portal",
-            Model::H700(b) => b.name,
+            Model::H700(b) | Model::Rk3566(b) | Model::Rk3326(b) => b.name,
             Model::RgDsPlus => "Anbernic RG DS Plus",
             #[cfg(feature = "brick")] Model::Brick(b) => b.name(),
         }
@@ -86,7 +86,7 @@ impl Model {
             Model::MiniV2 | Model::PocketClassic => MINI_V2_SCREEN,
             Model::MiniV1 | Model::Nova => (1280, 960),
             Model::RgDsPlus => (1024, 768),
-            Model::H700(b) => b.screen,
+            Model::H700(b) | Model::Rk3566(b) | Model::Rk3326(b) => b.screen,
             #[cfg(feature = "brick")] Model::Brick(b) => b.screen(),
             Model::Pocket5 | Model::Flip2 | Model::Pocket6 | Model::Odin2 | Model::Odin2Mini | Model::Odin2Portal => (1920, 1080),
         }
@@ -114,7 +114,7 @@ impl Model {
     pub fn has_lid(self) -> bool {
         match self {
             Model::Flip2 | Model::RgDsPlus => true,
-            Model::H700(b) => b.lid,
+            Model::H700(b) | Model::Rk3566(b) | Model::Rk3326(b) => b.lid,
             _ => false,
         }
     }
@@ -128,7 +128,24 @@ impl Model {
     /// (`hostsys::H700_STAYS_ON_ROCKNIX`): the H700's Cortex-A53, and the RG DS Plus's Cortex-A55 until it is measured
     /// (its DS games need DraStic anyway, which puts them on both screens).
     pub fn small_chip(self) -> bool {
-        self.is_h700() || self == Model::RgDsPlus
+        self.is_h700() || self.is_rk3566() || self.is_rk3326() || self == Model::RgDsPlus
+    }
+
+    /// The one-screen RK3566 handhelds (`RK3566_BOARDS`): Cortex-A55, no fan; sticks, Wi-Fi and HOME per model.
+    pub fn is_rk3566(self) -> bool {
+        matches!(self, Model::Rk3566(_))
+    }
+
+    /// The R36S on ROCKNIX's RK3326 image (`RK3326_BOARDS`): Cortex-A35, no fan.
+    pub fn is_rk3326(self) -> bool {
+        matches!(self, Model::Rk3326(_))
+    }
+
+    /// The slowest chips, where games keep the full clock in Auto and Battery (`power`), GBA plays on the bundled gpSP
+    /// (`h700_gba`) and the native audio keeps the H700's longer ring and PipeWire quantum (`platform::linux_audio`): the
+    /// H700's Cortex-A53 (measured) and the RK3326's Cortex-A35 (slower per clock, not measured yet).
+    pub fn h700_class(self) -> bool {
+        self.is_h700() || self.is_rk3326()
     }
 
 
@@ -145,7 +162,7 @@ impl Model {
             Model::Odin2 => "odin2",
             Model::Odin2Mini => "odin2mini",
             Model::Odin2Portal => "odin2portal",
-            Model::H700(b) => b.key,
+            Model::H700(b) | Model::Rk3566(b) | Model::Rk3326(b) => b.key,
             Model::RgDsPlus => "rgdsplus",
             #[cfg(feature = "brick")] Model::Brick(b) => b.key(),
         }
@@ -179,30 +196,30 @@ impl Device {
     /// A fan the system can run. None on the H700 handhelds and the RG DS Plus: the fan page says so instead of offering a fan.
     #[cfg(not(feature = "brick"))]
     pub fn has_fan(&self) -> bool {
-        !self.model.is_some_and(|m| m.is_h700() || m == Model::RgDsPlus)
+        !self.model.is_some_and(|m| m.small_chip())
     }
 
     #[cfg(feature = "brick")]
     pub fn has_fan(&self) -> bool {
-        !self.model.is_some_and(|m| m.is_h700() || m == Model::RgDsPlus || { #[cfg(feature = "brick")] { matches!(m, Model::Brick(_)) } #[cfg(not(feature = "brick"))] { false } })
+        !self.model.is_some_and(|m| m.small_chip() || { #[cfg(feature = "brick")] { matches!(m, Model::Brick(_)) } #[cfg(not(feature = "brick"))] { false } })
     }
 
-    /// A touch screen. None on the H700 handhelds (the kernel has no touch driver there).
+    /// A touch screen. None on the H700 handhelds (the kernel has no touch driver there) and the R36S (no touch panel).
     #[cfg(not(feature = "brick"))]
     pub fn has_touch(&self) -> bool {
-        !self.model.is_some_and(Model::is_h700)
+        !self.model.is_some_and(|m| m.is_h700() || m.is_rk3326())
     }
 
     #[cfg(feature = "brick")]
     pub fn has_touch(&self) -> bool {
-        !self.model.is_some_and(|m| m.is_h700() || { #[cfg(feature = "brick")] { matches!(m, Model::Brick(_)) } #[cfg(not(feature = "brick"))] { false } })
+        !self.model.is_some_and(|m| m.is_h700() || m.is_rk3326() || { #[cfg(feature = "brick")] { matches!(m, Model::Brick(_)) } #[cfg(not(feature = "brick"))] { false } })
     }
 
     /// A second card slot, for a games card ROCKNIX reads by itself: every H700 handheld has one (TF2; every H700 device
     /// tree in ROCKNIX's image has `mmc@4020000` and `mmc@4022000`, both with `cd-gpios`), and the RG DS Plus (two TF
-    /// slots). The SM8250 and SM8550 trees have one card slot (`sdhc_2`).
+    /// slots) and the R36S (TF1 for the system, TF2 for games). The SM8250 and SM8550 trees have one card slot (`sdhc_2`).
     pub fn has_second_card_slot(&self) -> bool {
-        self.model.is_some_and(|m| m.is_h700() || m == Model::RgDsPlus)
+        self.model.is_some_and(|m| m.is_h700() || m.is_rk3326() || m == Model::RgDsPlus || matches!(m, Model::Rk3566(b) if b.key.starts_with("rg")))
     }
 
     /// The card's games folder shows up on Windows and macOS as it is: the TrimUI Brick's own FAT card. On the ROCKNIX
@@ -217,24 +234,24 @@ impl Device {
     /// Analog sticks, and so the lights around them. Per model on the H700 handhelds.
     #[cfg(not(feature = "brick"))]
     pub fn has_sticks(&self) -> bool {
-        !self.model.is_some_and(|m| m == Model::PocketClassic) && !matches!(self.model, Some(Model::H700(b)) if !b.sticks)
+        !self.model.is_some_and(|m| m == Model::PocketClassic) && !matches!(self.model, Some(Model::H700(b) | Model::Rk3566(b) | Model::Rk3326(b)) if !b.sticks)
     }
 
     #[cfg(feature = "brick")]
     pub fn has_sticks(&self) -> bool {
-        !self.model.is_some_and(|m| m == Model::PocketClassic) && !{ #[cfg(feature = "brick")] { matches!(self.model, Some(Model::Brick(b)) if !b.sticks()) } #[cfg(not(feature = "brick"))] { false } } && !matches!(self.model, Some(Model::H700(b)) if !b.sticks)
+        !self.model.is_some_and(|m| m == Model::PocketClassic) && !{ #[cfg(feature = "brick")] { matches!(self.model, Some(Model::Brick(b)) if !b.sticks()) } #[cfg(not(feature = "brick"))] { false } } && !matches!(self.model, Some(Model::H700(b) | Model::Rk3566(b) | Model::Rk3326(b)) if !b.sticks)
     }
 
     /// A Wi-Fi chip. Not on the RG28XX and RG35XX 2024 (their device trees enable one anyway, the Plus tree they
     /// come from, so a chip that does answer still wins: `system_ctl::AutoHw` only calls it absent when none shows up).
     #[cfg(not(feature = "brick"))]
     pub fn has_wifi(&self) -> bool {
-        !matches!(self.model, Some(Model::H700(b)) if !b.wifi)
+        !matches!(self.model, Some(Model::H700(b) | Model::Rk3566(b) | Model::Rk3326(b)) if !b.wifi)
     }
 
     #[cfg(feature = "brick")]
     pub fn has_wifi(&self) -> bool {
-        !matches!(self.model, Some(Model::H700(b)) if !b.wifi) && !{ #[cfg(feature = "brick")] { matches!(self.model, Some(Model::Brick(_))) && !crate::brick_profile::standalone() } #[cfg(not(feature = "brick"))] { false } }
+        !matches!(self.model, Some(Model::H700(b) | Model::Rk3566(b) | Model::Rk3326(b)) if !b.wifi) && !{ #[cfg(feature = "brick")] { matches!(self.model, Some(Model::Brick(_))) && !crate::brick_profile::standalone() } #[cfg(not(feature = "brick"))] { false } }
     }
 
     /// Memory in MB where the device is known to have less than the Mini V2's (1 GB on the H700 and the RG DS Plus, no swap).
@@ -257,12 +274,12 @@ impl Device {
         }
     }
 
-    /// Settings → Playing → Buttons → Button symbols when unset (`button_prompts`): Xbox-style caps on
+    /// Settings → Controls → Buttons → Button symbols when unset (`button_prompts`): Xbox-style caps on
     /// Retroid's and AYN's handhelds, plain letters on Anbernic's and anything unknown. A saved choice wins.
     pub fn prompt_style(&self) -> crate::button_prompts::PromptStyle {
         use crate::button_prompts::PromptStyle;
         match self.model {
-            Some(Model::H700(_) | Model::RgDsPlus) | None => PromptStyle::Nintendo,
+            Some(Model::H700(_) | Model::Rk3566(_) | Model::Rk3326(_) | Model::RgDsPlus) | None => PromptStyle::Nintendo,
             Some(_) => PromptStyle::Xbox,
         }
     }
@@ -351,7 +368,8 @@ pub fn identify(model: &str, compatible: &[u8]) -> Device {
         })
         .or_else(|| {
             let names: Vec<&str> = compatible.split(|b| *b == 0).filter_map(|c| std::str::from_utf8(c).ok()).collect();
-            h700_board("", &names).map(Model::H700)
+            // The RG353M carries the RG353P's tree with only `model` changed: `model` first there.
+            rk3566_board(model, &names).map(Model::Rk3566).or_else(|| h700_board("", &names).map(Model::H700)).or_else(|| rk3326_board("", &names).map(Model::Rk3326))
         });
     let found = by_compatible.or(match model.strip_suffix(" Visionox").unwrap_or(model) {
         "Retroid Pocket Mini V2" => Some(Model::MiniV2),
@@ -365,7 +383,7 @@ pub fn identify(model: &str, compatible: &[u8]) -> Device {
         "AYN Odin 2 Mini" => Some(Model::Odin2Mini),
         "AYN Odin 2 Portal" => Some(Model::Odin2Portal),
         "Anbernic RG DS Plus" => Some(Model::RgDsPlus),
-        other => h700_board(other, &[]).map(Model::H700),
+        other => h700_board(other, &[]).map(Model::H700).or_else(|| rk3566_board(other, &[]).map(Model::Rk3566)).or_else(|| rk3326_board(other, &[]).map(Model::Rk3326)),
     });
     let panel = if model.ends_with(" Visionox") { Panel::Visionox } else { Panel::Original };
     Device { model: found, panel, reported: model.to_string() }
@@ -373,7 +391,7 @@ pub fn identify(model: &str, compatible: &[u8]) -> Device {
 
 /// `POCKETUI_DEVICE`'s value: a short name or a `model` string.
 pub fn from_override(v: &str) -> Device {
-    let v = v.trim(); #[cfg(feature = "brick")] if let Some(b) = crate::brick_profile::Board::by_key(v) { return Device { model: Some(Model::Brick(b)), panel: Panel::Original, reported: format!("{v} (POCKETUI_DEVICE)") }; }
+    let v = v.trim(); #[cfg(feature = "brick")] if let Some(b) = crate::brick_profile::Board::by_key(v) { return Device { model: Some(Model::Brick(b)), panel: Panel::Original, reported: format!("{v} (POCKETUI_DEVICE)") }; } #[cfg(feature = "brick")] if let Some(b) = crate::darkos::board_by_key(v) { return Device { model: Some(Model::H700(b)), panel: Panel::Original, reported: format!("{} (dArkOS)", b.name) }; }
     let lower = v.to_ascii_lowercase();
     let (key, panel) = match lower.strip_suffix("-visionox") {
         Some(k) => (k, Panel::Visionox),
@@ -382,6 +400,8 @@ pub fn from_override(v: &str) -> Device {
     match [Model::PocketClassic, Model::MiniV2, Model::MiniV1, Model::Pocket5, Model::Flip2, Model::Pocket6, Model::Nova, Model::Odin2, Model::Odin2Mini, Model::Odin2Portal, Model::RgDsPlus]
         .into_iter()
         .chain(H700_BOARDS.iter().map(Model::H700))
+        .chain(RK3566_BOARDS.iter().map(Model::Rk3566))
+        .chain(RK3326_BOARDS.iter().map(Model::Rk3326))
         .find(|m| m.key() == key)
     {
         Some(m) => Device {
@@ -426,6 +446,20 @@ pub fn rocknix_screen_off_only(root: &Path) -> bool {
 
 static DEVICE: OnceLock<Device> = OnceLock::new();
 
+/// No Wi-Fi chip on this handheld (the RG28XX, the RG35XX 2024, the R36S: `Device::has_wifi`). A page that needs a
+/// network says so (`NEEDS_NETWORK`) or names the way without one, never "Connect to Wi-Fi" (tests/no_wifi_walk.rs).
+pub fn no_wifi_chip() -> bool {
+    !current().has_wifi()
+}
+
+/// What a page that needs a network says on a handheld without Wi-Fi.
+pub const NEEDS_NETWORK: &str = "Needs a network, and this handheld has no Wi-Fi.";
+
+/// `wifi` where the handheld has Wi-Fi, `none` where it has none (`no_wifi_chip`).
+pub fn wifi_or<'a>(wifi: &'a str, none: &'a str) -> &'a str {
+    if no_wifi_chip() { none } else { wifi }
+}
+
 /// This device, read once (two small sysfs files).
 pub fn current() -> &'static Device {
     DEVICE.get_or_init(|| match std::env::var("POCKETUI_DEVICE") {
@@ -443,9 +477,66 @@ pub fn snapshot_state(state: &str) -> (&str, Option<Device>) {
     }
 }
 
+/// Android's handheld view (android/handheld): on Android, and on Linux for the tests and snapshots with
+/// `POCKETUI_ANDROID_PROFILE=1` (tests/nav_explorer.rs walks the pages as the Odin's Android shows them).
+pub fn android_profile() -> bool {
+    static ON: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    cfg!(all(target_os = "android", feature = "handheld")) || *ON.get_or_init(|| std::env::var_os(ANDROID_PROFILE_ENV).is_some_and(|v| v == "1"))
+}
+
+/// The variable that puts the Linux build in Android's profile ([`android_profile`]).
+pub const ANDROID_PROFILE_ENV: &str = "POCKETUI_ANDROID_PROFILE";
+
+/// What Android's handheld view (android/handheld) leaves to Android or doesn't have: the radios (Wi-Fi, Bluetooth, remote
+/// access), sleep and power, the fan, the LEDs and the motor, the clock, the card and its backup, ROCKNIX's updates, and
+/// the services of a Linux handheld (Syncthing, Tailscale, the web share, PC streaming, tools), the screen's own colour,
+/// EmulationStation's gamelists, the backup to the card and the button test (it reads Linux's input devices).
+pub const ANDROID_HIDES: &[&str] = &["leds", "haptics", "sync", "tailscale", "tools", "perf_fan", "radios", "time", "updates", "sleep",
+    "storage", "web", "pc_streaming", "night_light", "screen_colour", "battery", "gamelist", "backup", "test_buttons",
+    // The report is written to the card's reports folder; Android's way is the Mobile view's Report a problem (Settings → View).
+    "report",
+    // What only pocket-core's pause menu and overlay have: the Android player's menu has Zoom always, one Save & quit, no frame-rate
+    // or Pixel Path line and no run-ahead, no console boot screen (it has no BIOS folder to read), and its Screenshot button saves into the player's folder, not the one this view reads.
+    "zoom_pause", "boot_screen", "over_game", "remember_quit", "quit_without_saving", "pixel_path", "pixel_path_live", "run_ahead", "screenshots"];
+
+/// What a game's "This game" page offers on Android's handheld view: the settings of the picture the Android player draws
+/// (scaling, the Look, the frame; its four effects are the Look's four values, so Custom with Sharpness and Effect is not there). Everything else of Linux's list is pocket-core's: the
+/// player has no rewind or Earlier setting, no fast-forward, rumble, fan or run-ahead, no screen turn, no Over the game and no
+/// HOME shortcuts, so a row for them would be a switch that does nothing.
+pub const ANDROID_PLAYER_SETTINGS: &[&str] = &["scaling", "look", "frame"];
+
+/// Whether a game setting is out of the page, given Android's profile.
+pub fn game_setting_out_in(key: &str, android: bool) -> bool {
+    android && !ANDROID_PLAYER_SETTINGS.contains(&key)
+}
+
 /// Settings pages and feature cards a device lacks, by key: the one list behind the Settings rows (`app_settings_groups`)
 /// and the Tour / first-start cards (`features::available`). `leds` is the lights around the sticks; the rest are what
 pub fn hides(key: &str, sticks: bool, nextui_owned: bool) -> bool {
+    hides_in(key, sticks, nextui_owned, android_profile())
+}
+
+/// [`hides`] with Android's profile given.
+pub fn hides_in(key: &str, sticks: bool, nextui_owned: bool, android: bool) -> bool {
+    if android && ANDROID_HIDES.contains(&key) {
+        return true;
+    }
+    // Settings → View (handheld or Mobile) is Android's alone.
+    if key == "android_view" {
+        return !android;
+    }
+    // Settings → System → Back to EmulationStation is dArkOS's alone (src/darkos.rs).
+    if key == "darkos_es" {
+        #[cfg(feature = "brick")]
+        return !crate::darkos::host();
+        #[cfg(not(feature = "brick"))]
+        return true;
+    }
+    // dArkOS keeps its own system; the port has a separate signed app-only update channel.
+    #[cfg(feature = "brick")]
+    if crate::darkos::hides(key) {
+        return true;
+    }
     match key {
         "leds" => !sticks,
         "haptics" | "sync" | "tailscale" | "tools" | "perf_fan" | "radios" | "time" | "updates" | "kids" => nextui_owned,
@@ -511,6 +602,20 @@ pub fn force(d: Device) -> bool {
 
 #[cfg(test)]
 mod tests {
+    /// Android's handheld view leaves out what Android owns (Wi-Fi, sleep, the fan ...) and only it has Settings → View; a
+    /// Linux handheld keeps every row and has no View row.
+    #[test]
+    fn android_hides_what_android_owns_and_only_android_has_the_view_row() {
+        for key in super::ANDROID_HIDES {
+            assert!(super::hides_in(key, true, false, true), "{key} on Android");
+        }
+        for key in ["radios", "sleep", "updates", "gamelist", "backup"] {
+            assert!(!super::hides_in(key, true, false, false), "{key} on Linux");
+        }
+        assert!(super::hides_in("android_view", true, false, false), "no View row on Linux");
+        assert!(!super::hides_in("android_view", true, false, true), "the View row on Android");
+    }
+
     /// docs/TRIMUI-BRICK-MORE.md: the Tour leaves out the cards whose page the Brick has no row for, and every card it keeps names a real id.
     #[cfg(feature = "brick")]
     #[test]
@@ -818,7 +923,49 @@ mod tests {
         assert_eq!(d.prompt_style(), crate::button_prompts::PromptStyle::Nintendo, "Anbernic: plain letters");
         assert_eq!(d.menu_layout(), crate::button_layout::ButtonLayout::Nintendo);
         assert_eq!(d.about_line().as_deref(), Some("Anbernic RG DS Plus (experimental)"));
-        assert!(include_str!("../deploy/package/install.sh").contains("MODELS_RK3566=\"Anbernic RG DS Plus\""));
+        assert!(include_str!("../deploy/package/install.sh").contains("MODELS_RK3566=\"Anbernic RG DS Plus|"));
+    }
+
+    /// ROCKNIX 20261101's RK3566 trees (`device_trees/` of its Generic image, read 2026-11-15): each one-screen model by its own
+    /// strings, the RG353M by `model` on the RG353P's tree (U-Boot changes only `model`), and what each has.
+    #[test]
+    fn rk3566_profiles_are_told_by_their_trees_and_say_what_each_has() {
+        // (model, compatible, key, screen, wifi, HOME)
+        use crate::device::Rk3566Home::{FKey, RightStickClick};
+        let rows: &[(&str, &[u8], &str, (u32, u32), bool, Rk3566Home)] = &[
+            ("Anbernic RG353M\0", b"anbernic,rg353p\0rockchip,rk3566\0", "rg353m", (640, 480), true, FKey),
+            ("Anbernic RG353P\0", b"anbernic,rg353p\0rockchip,rk3566\0", "rg353p", (640, 480), true, FKey),
+            ("Anbernic RG353PS\0", b"anbernic,rg353ps\0rockchip,rk3566\0", "rg353ps", (640, 480), true, FKey),
+            ("Anbernic RG353V\0", b"anbernic,rg353v\0rockchip,rk3566\0", "rg353v", (640, 480), true, FKey),
+            ("Anbernic RG353VS\0", b"anbernic,rg353vs\0rockchip,rk3566\0", "rg353vs", (640, 480), true, FKey),
+            ("Anbernic RG503\0", b"anbernic,rg503\0rockchip,rk3566\0", "rg503", (960, 544), true, FKey),
+            ("Powkiddy RGB30\0", b"powkiddy,rgb30\0rockchip,rk3566\0", "rgb30", (720, 720), true, RightStickClick),
+            ("Powkiddy RGB20SX\0", b"powkiddy,rgb20sx\0rockchip,rk3566\0", "rgb20sx", (720, 720), true, RightStickClick),
+            ("Powkiddy RK2023\0", b"powkiddy,rk2023\0rockchip,rk3566\0", "rk2023", (640, 480), false, RightStickClick),
+        ];
+        for &(model, compatible, key, screen, wifi, home) in rows {
+            let d = identify(model, compatible);
+            let m = d.model.unwrap_or_else(|| panic!("{key} not found"));
+            let Model::Rk3566(b) = m else { panic!("{key}: {m:?}") };
+            assert_eq!(m.key(), key);
+            assert_eq!(identify(model, b"").model, Some(m), "{key}: the model alone says the same");
+            assert_eq!(from_override(key).model, Some(m), "{key}");
+            assert!(m.small_chip() && m.is_rk3566() && !m.is_h700() && d.experimental() && !d.screen_off_only() && !d.is_sm8550());
+            assert_eq!(d.screen(), screen, "{key}");
+            assert_eq!(d.has_wifi(), wifi, "{key}");
+            assert!(d.has_sticks() && !d.has_lid() && !d.has_fan(), "{key}");
+            assert_eq!(crate::device::rk3566_home(b), home, "{key}");
+            assert_eq!(d.prompt_style(), crate::button_prompts::PromptStyle::Nintendo, "{key}: plain letters");
+            assert_eq!(d.about_line(), Some(format!("{} (experimental)", m.name())));
+        }
+        assert_eq!(rows.iter().map(|r| r.2).collect::<std::collections::BTreeSet<_>>().len(), RK3566_BOARDS.len(), "every row of the table is tested");
+        // The RG353P's own tree stays the RG353P; trees of the image without a profile stay unknown.
+        assert_eq!(identify("Anbernic RG353P\0", b"anbernic,rg353p\0").model.map(|m| m.key()), Some("rg353p"));
+        for (model, compatible) in [("Powkiddy x35s\0", &b"powkiddy,x35s\0rockchip,rk3566\0"[..]), ("Powkiddy RGB10MAX3\0", b"powkiddy,rgb10max3\0rockchip,rk3566\0"), ("Anbernic RG ARC-D\0", b"anbernic,rg-arc-d\0rockchip,rk3566\0")] {
+            assert_eq!(identify(model, compatible).model, None, "{model}");
+        }
+        // The RG DS Plus keeps its own profile.
+        assert_eq!(identify("Anbernic RG DS Plus\0", b"anbernic,rg-ds-plus\0rockchip,rk3568\0").model, Some(Model::RgDsPlus));
     }
 
     /// The installers keep their own lists of the models (shell, no Rust): the same names as `H700_BOARDS`, in the same order.
@@ -835,6 +982,39 @@ mod tests {
         assert_eq!(list(install, "MODELS_H700="), want, "deploy/package/install.sh MODELS_H700");
         let hook = include_str!("../deploy/fat/mount-storage.sh.in");
         assert_eq!(list(hook, "pu_h700_models="), want, "deploy/fat/mount-storage.sh.in pu_h700_models");
+        // RK3566: the RG DS Plus, then `RK3566_BOARDS`.
+        let want: Vec<String> = std::iter::once(Model::RgDsPlus.name()).chain(RK3566_BOARDS.iter().map(|b| b.name)).map(str::to_string).collect();
+        assert_eq!(list(install, "MODELS_RK3566="), want, "deploy/package/install.sh MODELS_RK3566");
+        assert_eq!(list(hook, "pu_rk3566_models="), want, "deploy/fat/mount-storage.sh.in pu_rk3566_models");
+        // RK3326: `RK3326_BOARDS`.
+        let want: Vec<String> = RK3326_BOARDS.iter().map(|b| b.name.to_string()).collect();
+        assert_eq!(list(install, "MODELS_RK3326="), want, "deploy/package/install.sh MODELS_RK3326");
+        assert_eq!(list(hook, "pu_rk3326_models="), want, "deploy/fat/mount-storage.sh.in pu_rk3326_models");
+    }
+
+    /// ROCKNIX's R36S tree (`rk3326-gameconsole-r36s.dts`, tag 20261001), which the RK3326 card boots by name: the R36S
+    /// profile with what a player notices (640x480, two sticks, a second card slot, no fan, no touch, no Wi-Fi promised,
+    /// plain letters), the slow chip's game rules; the R33S tree (ROCKNIX's U-Boot script's guess for an R36S) stays unknown.
+    #[test]
+    fn the_r36s_is_told_by_rocknix_r36s_tree_and_says_what_it_has() {
+        let d = identify("Game Console R36S\0", b"gameconsole,r35s\0gameconsole,r36s\0rockchip,rk3326\0");
+        let m = d.model.expect("the R36S tree has a profile");
+        assert!(matches!(m, Model::Rk3326(b) if b.key == "r36s"), "{m:?}");
+        assert_eq!(identify("Game Console R36S\0", b"").model, Some(m), "the model alone says the same");
+        assert_eq!(identify("", b"gameconsole,r36s\0rockchip,rk3326\0").model, Some(m), "the compatible alone too");
+        assert_eq!(from_override("r36s").model, Some(m));
+        assert!(m.is_rk3326() && m.small_chip() && m.h700_class() && !m.is_h700() && !m.is_rk3566());
+        assert!(d.experimental() && !d.screen_off_only() && !d.is_sm8550());
+        assert_eq!(d.screen(), (640, 480));
+        assert!(d.has_sticks() && d.has_second_card_slot() && !d.has_fan() && !d.has_lid() && !d.has_touch());
+        assert!(!d.has_wifi(), "no Wi-Fi by the maker's specification: no page promises it");
+        assert_eq!(d.prompt_style(), crate::button_prompts::PromptStyle::Nintendo);
+        assert_eq!(d.about_line().as_deref(), Some("Game Console R36S (experimental)"));
+        for (model, compatible) in [("Game Console R33S\0", &b"gameconsole,r33s\0rockchip,rk3326\0"[..]), ("Anbernic RG351M\0", b"anbernic,rg351m\0rockchip,rk3326\0")] {
+            assert_eq!(identify(model, compatible).model, None, "{model}");
+        }
+        // dArkOS's R36S row stays the port's (an H700-shaped row, found by start.sh), not this one.
+        assert_ne!(from_override("darkos-r36s").model, Some(m));
     }
 
     #[test]
@@ -860,4 +1040,12 @@ mod tests {
 #[cfg(feature = "brick")]
 pub fn brick() -> bool {
     matches!(current().model, Some(Model::Brick(_)))
+}
+
+/// Running as the dArkOS port, whose native games and signed updater belong to its own host.
+pub fn darkos_port() -> bool {
+    #[cfg(feature = "brick")]
+    { crate::darkos::host() }
+    #[cfg(not(feature = "brick"))]
+    { false }
 }

@@ -129,9 +129,9 @@ mod tests {
         let mut w = Writer::new(dir.join("ui.status"));
         assert!(w.offer(&line("shelf:Home")).unwrap());
         assert!(!w.offer(&line("shelf:Home")).unwrap(), "same line: no write");
-        assert!(w.offer(&line("settings:Groups")).unwrap());
+        assert!(w.offer(&line("settings:List Connections")).unwrap());
         let text = std::fs::read_to_string(w.path()).unwrap();
-        assert!(text.contains("\trev=2\t") && text.contains("place=settings:Groups"), "{text}");
+        assert!(text.contains("\trev=2\t") && text.contains("place=settings:List Connections"), "{text}");
     }
 
     #[test]
@@ -141,9 +141,9 @@ mod tests {
         let private = dir.join("probe.status");
         std::fs::write(&owner, "owner status\n").unwrap();
         let mut probe = Writer::new(output_path(Some(&dir.join("")), Some(private.clone().into_os_string())));
-        probe.offer(&line("settings:Groups")).unwrap();
+        probe.offer(&line("settings:List Connections")).unwrap();
         assert_eq!(std::fs::read_to_string(&owner).unwrap(), "owner status\n", "probe replaced the owner's status");
-        assert!(std::fs::read_to_string(&private).unwrap().contains("place=settings:Groups"));
+        assert!(std::fs::read_to_string(&private).unwrap().contains("place=settings:List Connections"));
         assert_eq!(output_path(None, Some(private.clone().into_os_string())), private);
         assert_eq!(output_path(None, None), PathBuf::from(FILE));
         assert_eq!(output_path(None, Some(OsString::new())), PathBuf::from(FILE));

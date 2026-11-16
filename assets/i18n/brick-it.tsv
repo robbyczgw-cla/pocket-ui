@@ -1,0 +1,97 @@
+Back to NextUI	Torna a NextUI
+Back to NextUI?	Tornare a NextUI?
+Back to NextUI. Your games, saves and settings stay as they are.	Torna a NextUI. I tuoi giochi, i save e le impostazioni restano come sono.
+Couldn't reach the update server over Tailscale. Is Tailscale on and connected?	Impossibile raggiungere il server degli aggiornamenti via Tailscale. Tailscale è attivo e connesso?
+The SD card is too full for this update: it needs {n} MB more. Nothing was changed.	La scheda SD è troppo piena per questo aggiornamento: servono altri {n} MB. Non è stato cambiato nulla.
+The update list names no usable version. Nothing was changed.	L'elenco degli aggiornamenti non indica nessuna versione utilizzabile. Non è stato cambiato nulla.
+The update is missing {s}. Nothing was changed.	All'aggiornamento manca {s}. Non è stato cambiato nulla.
+The update is not version {s} inside. Nothing was changed.	L'aggiornamento non contiene la versione {s}. Non è stato cambiato nulla.
+The update's start script is broken. Nothing was changed.	Lo script di avvio dell'aggiornamento è rotto. Non è stato cambiato nulla.
+Couldn't switch to the new version: {s}. Nothing was changed.	Impossibile passare alla nuova versione: {s}. Non è stato cambiato nulla.
+No space left to unpack the download.	Spazio esaurito per estrarre il download.
+Battery & charging	Batteria e ricarica
+Like the rest	Come le altre
+Customised	Personalizzato
+How bright the lights glow.	Quanto brillano le luci.
+Colour, effect and brightness of the grips, the middle and the two F keys one by one. A: open.	Colore, effetto e luminosità di impugnature, centro e dei due tasti F, uno per uno. A: apri.
+Quick save, quick load, screenshot, Recent games, the pause menu, or nothing.	Salvataggio rapido, caricamento rapido, screenshot, Recenti, il menu di pausa o niente.
+The slider on the side mutes the sound, or does nothing.	Il cursore sul lato silenzia l'audio oppure non fa nulla.
+Which light to set.	Quale luce impostare.
+Its own colour, or the one above.	Colore proprio o quello sopra.
+Steady, breathing, fading, pulsing or off; "Like the rest" follows the colour above.	Fissa, respiro, dissolvenza, pulsazione o spenta; "Come le altre" segue il colore sopra.
+Its own brightness, or the one above.	Luminosità propria o quella sopra.
+Lights & buttons	Luci e tasti
+F1/F2 are shortcuts, not game buttons.	F1/F2 sono scorciatoie, non tasti di gioco.
+Set them in Settings › Controls › Lights & buttons.	Impostali in Impostazioni › Controlli › Luci e tasti.
+Shortcuts for all games; not game buttons. Choose their action here.	Scorciatoie per tutti i giochi, non tasti di gioco. Scegli qui la loro azione.
+Each light	Ogni luce
+F1 button	Tasto F1
+F2 button	Tasto F2
+Mute slider	Cursore muto
+The Brick's lights, the F1 and F2 keys and the mute slider.	Le luci del Brick, i tasti F1 e F2 e il cursore muto.
+Lights off	Luci spente
+A soft tick as you move, and how strong it is. Games rumble on their own (pause menu, Options).	Un lieve tic mentre ti muovi, e quanto è forte. I giochi vibrano da soli (menu di pausa, Opzioni).
+Left grip	Impugnatura sinistra
+Right grip	Impugnatura destra
+Middle	Centro
+F1 key	Tasto F1
+F2 key	Tasto F2
+Nothing	Niente
+Quick save	Salvataggio rapido
+Quick load	Caricamento rapido
+Pause menu	Menu di pausa
+Mutes	Silenzia
+Does nothing	Non fa nulla
+Steady	Fissa
+Breathing	Respiro
+Fading	Dissolvenza
+Pulsing	Pulsazione
+{s} (heavy)	{s} (pesante)
+Warm light in the menus. While a game runs, the main colour of its cover.	Luce calda nei menu. Durante un gioco, il colore principale della sua copertina.
+The colour of the Brick's lights.	Il colore delle luci del Brick.
+The Brick's lights stay dark.	Le luci del Brick restano spente.
+The grips, the middle and the F keys glow in the colour you pick.	Impugnature, centro e tasti F brillano del colore che scegli.
+Dark while all is well. Orange breathing while it charges, green when it is full, red breathing when it runs low.	Spente se va tutto bene. Arancione che respira durante la ricarica, verde a batteria piena, rosso che respira quando è scarica.
+That cover is not a PNG picture.	Questa copertina non è un'immagine PNG.
+No game called {s} is on the card. Send the game first, then its cover with the same name.	Sulla scheda non c'è nessun gioco chiamato {s}. Invia prima il gioco, poi la sua copertina con lo stesso nome.
+Several systems take this cover: more than one has a game with that name.	Più sistemi accettano questa copertina: più di uno ha un gioco con quel nome.
+The time zone could not be kept on the card: {s}	Impossibile salvare il fuso orario sulla scheda: {s}
+The system didn't take the new time zone: {s}	Il sistema non ha accettato il nuovo fuso orario: {s}
+PC Engine CD needs a BIOS file in Roms/bios: syscard3.pce	PC Engine CD richiede un file BIOS in Roms/bios: syscard3.pce
+Switched off after {n} min asleep to save the battery.	Spento dopo {n} min in standby per risparmiare la batteria.
+Switched off after {n} min with the screen off to save the battery.	Spento dopo {n} min a schermo spento per risparmiare la batteria.
+
+# Update 5: own colour, speed, colour cycle
+Hue	Tonalità
+Saturation	Saturazione
+Own colour	Colore proprio
+Colour cycle	Ciclo di colori
+Slow	Lento
+Its own colour, or the one above. Own colour: pick the hue and the saturation below.	Colore proprio o quello sopra. Colore proprio: scegli sotto tonalità e saturazione.
+Round the colour wheel: red, yellow, green, blue, violet and back.	Gira sulla ruota dei colori: rosso, giallo, verde, blu, viola e di nuovo rosso.
+From pale to full colour.	Da pallido a colore pieno.
+Steady, breathing, fading, pulsing, a colour cycle, the battery and charger, or off; "Like the rest" follows the colour above.	Fissa, respiro, dissolvenza, pulsazione, ciclo di colori, batteria e caricatore, o spenta; "Come le altre" segue il colore sopra.
+How fast it breathes, fades, pulses or cycles.	Quanto veloce respira, sfuma, pulsa o cambia colore.
+
+Not saved.	Non salvato.
+The emulator choice couldn't be saved on the card. Nothing was changed.	Impossibile salvare sulla scheda la scelta dell'emulatore. Non è stato cambiato nulla.
+Controllers and headphones. Connected headphones take the sound of games and menus; it comes back to the speaker when they go.	Controller e cuffie. Le cuffie collegate ricevono l'audio di giochi e menu; torna all'altoparlante quando si scollegano.
+
+# Settings walk 06.11.: the leave dialog on the Brick's own card
+Restart pocket-ui?	Riavviare pocket-ui?
+Only pocket-ui starts again, in seconds. Your games, saves and settings stay as they are.	Riparte solo pocket-ui, in pochi secondi. I tuoi giochi, i save e le impostazioni restano come sono.
+New versions of pocket-ui.	Nuove versioni di pocket-ui.
+User	Utente
+(unchanged)	(invariato)
+How fast the processor may run, in games and in menus.	Quanto veloce può girare il processore, nei giochi e nei menu.
+A choice saved in the pause menu (Options › Speed, rumble, fan) wins over this one.	Una scelta salvata nel menu di pausa (Opzioni › Velocità, vibrazione, ventola) vale più di questa.
+Battery saves and save states. No games, no BIOS files.	Save su batteria e save state. Niente giochi, niente file BIOS.
+To {s} on the SD card. Copy it to a computer too.	In {s} sulla scheda SD. Copialo anche su un computer.
+The screen goes off and the game waits; the power button wakes it.	Lo schermo si spegne e il gioco aspetta; il tasto di accensione lo risveglia.
+Saves the game and puts the Brick to sleep. The power button wakes it; the game waits in its pause menu.	Salva il gioco e mette il Brick in standby. Il tasto di accensione lo risveglia; il gioco aspetta nel menu di pausa.
+Only the screen goes dark and the game waits. The power button turns it back on.	Si spegne solo lo schermo e il gioco aspetta. Il tasto di accensione lo riaccende.
+Saves the game. The power button wakes it.	Salva il gioco. Il tasto di accensione lo risveglia.
+The power button wakes it.	Il tasto di accensione lo risveglia.
+Back to EmulationStation?	Tornare a EmulationStation?
+pocket-ui closes and EmulationStation comes back. Your games, saves and settings stay as they are.	pocket-ui si chiude e EmulationStation torna. I tuoi giochi, i save e le impostazioni restano come sono.
+Back to EmulationStation	Torna a EmulationStation

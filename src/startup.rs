@@ -84,7 +84,7 @@ impl Drop for LoadWatch {
 pub const LAUNCHED_AT: &str = "POCKET_LAUNCHED_AT";
 
 /// Environment variable with the `clock_ms` until which pocket-core keeps its window back: Cozy's launch animation
-/// (Settings > Sound & feel > Animations) plays over the shelf meanwhile. Unset in Quick.
+/// (Settings > Look > Game start animation) plays over the shelf meanwhile. Unset in Quick.
 pub const HOLD_UNTIL: &str = "POCKET_LAUNCH_HOLD_UNTIL";
 
 /// pocket-core's window is still to be held back (`HOLD_UNTIL`). A visible reminder waits for a button; only an animation uses a deadline.
@@ -116,8 +116,9 @@ pub fn stands_still(hold: bool, still: bool, resume_pending: bool) -> bool {
 /// behind the launch animation, as before.
 pub const HOLD_STILL: &str = "POCKET_LAUNCH_HOLD_STILL";
 
-/// Environment variable: "1" when the game stands still through a hold with a deadline, no button awaited: an open case
-/// started on Cozy, its moment waits behind the scene (0.4.2: from main's showcase hand-over, its hold part only).
+/// Environment variable: "1" when the game stands still through a hold with a deadline, no button awaited: A on the
+/// Cabinet's playing TV, whose picture grows to the full screen meanwhile; the game then goes on from that very frame
+/// (`showcase`). Its sound comes with the game. Also an open case started on Cozy: its moment waits behind the scene.
 pub const HOLD_PAUSE: &str = "POCKET_LAUNCH_HOLD_PAUSE";
 
 /// pocket-core: this start's hold keeps the game still (`HOLD_PAUSE`).

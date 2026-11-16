@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """The screenshots of the user guide (docs/user/pictures/*.webp): pocket-ui's own renderer (--snapshot) at 640 x 480, the
-screen of the H700 handhelds, on the made-up Curator library with real box art of official games only.
+screen of the H700 handhelds, on the made-up Curator library with real box art of official games only, in the Retro style (Departure Mono, Cocoa) and
+with Sealed new games as a player has it (a game never played stands in its film). The tape label's picture is the one
+exception to "official games only": a freely licensed homebrew game that has no box art, which is the point.
 
     python3 -I scripts/manual-pictures.py POCKET_UI_BINARY [OUT]      (OUT default: docs/user/pictures)
 
@@ -42,12 +44,16 @@ SHOTS = [
     ("shelf", "shelf:snes:shelf:games:0", {}, False),
     ("easy", "big-shelf", {}, False),
     ("pause-menu", "menu:pocket-core", {"POCKETUI_SNAPSHOT_GAME": GAME}, True),
-    ("where-was-i", "where-was-i", {}, True),
-    ("controls-card", "controls-card:snes", {}, False),
+    ("where-was-i", "where-was-i", {"POCKETUI_SNAPSHOT_PROGRESS": "chrono"}, True),
+    ("case-back", "box:snes:Super Metroid:r", {"POCKETUI_SNAPSHOT_PROGRESS": "metroid"}, False),
+    ("sealed-case", "box:snes:Super Mario Kart", {}, False),
+    ("tape-label", "box:gbc:Tobu Tobu Girl", {"POCKETUI_SEALED": "0"}, False),
+    ("cozy-extras", "cozy:8", {}, False),
+    ("extra-dim", "sys:quick", {"DIM": 2}, False),
     ("add-games", "setup:games", {}, False),
     ("game-check", "game-check", {}, False),
     ("settings", "settings", {}, False),
-    ("updates", "settings:5:4", {}, False),
+    ("updates", "settings:6:0", {}, False),
     ("bluetooth", "bluetooth:found", {}, False),
     ("test-buttons", "test-buttons:bt", {}, False),
     ("backup", "backup", {}, False),
@@ -74,6 +80,30 @@ def fetch(playlist, kind, stem, dest):
         return False
 
 
+def wiki_text(data, title):
+    """The card's description as pocket-ui keeps it (`wiki_text.rs`: <data>/wikipedia/<title>.txt, whole sentences up to 700
+    characters), loaded once here, because a snapshot ends before the card's own request is answered."""
+    cached = pathlib.Path(tempfile.gettempdir()) / "pocketui-manual-thumbs" / "wikipedia" / (title + ".txt")
+    if not cached.exists():
+        url = "https://en.wikipedia.org/api/rest_v1/page/summary/" + urllib.parse.quote(title.replace(" ", "_"))
+        req = urllib.request.Request(url, headers={"User-Agent": "pocket-ui-wiki/0.1"})
+        try:
+            with urllib.request.urlopen(req, timeout=20) as r:
+                extract = " ".join(json.load(r)["extract"].split())
+        except Exception:
+            return
+        text = ""
+        for sentence in extract.replace(". ", ".\n").split("\n"):
+            if len(text) + len(sentence) > 700 and text:
+                break
+            text += (" " if text else "") + sentence
+        cached.parent.mkdir(parents=True, exist_ok=True)
+        cached.write_text(text)
+    dest = data / "wikipedia" / (title + ".txt")
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copyfile(cached, dest)
+
+
 def make_library(lib, cache):
     shutil.rmtree(lib, ignore_errors=True)
     subprocess.run([sys.executable, "-I", str(ROOT / "scripts/curator-fake-library.py"), str(lib), "dark", "/storage/roms"],
@@ -98,12 +128,15 @@ def make_library(lib, cache):
                     dst = lib / "data" / kind / sysdir.name / f"{stem}.png"
                     dst.parent.mkdir(parents=True, exist_ok=True)
                     shutil.copyfile(src, dst)
+    # A real homebrew game that has no box art in the collection: the tape label's picture.
+    (lib / "roms/gbc/Tobu Tobu Girl (World) (Homebrew).gbc").write_bytes(b"\0" * 32768)
     for s in DROP:
         shutil.rmtree(lib / "roms" / s, ignore_errors=True)
         for k in KINDS:
             shutil.rmtree(lib / "data" / k / s, ignore_errors=True)
     cfg = lib / "es_systems.cfg"
     cfg.write_text("\n".join(l for l in cfg.read_text().splitlines() if not any(f"<name>{s}</name>" in l for s in DROP)) + "\n")
+    wiki_text(lib / "data", "Super Metroid")
     now = int(time.time())
     (lib / "data/recents.json").write_text(json.dumps([
         {"system": s, "name": n, "path": f"/storage/roms/{s}/{f}", "last_played": now - h * 3600, "play_secs": p}
@@ -118,13 +151,29 @@ def snapshot(binary, lib, wl, state, png, extra, frame):
     before = settings.read_text()
     cfg = json.loads(before)
     cfg["theme"] = extra.pop("THEME", cfg.get("theme"))
+    dim = extra.pop("DIM", 0)
+    # Phone games (J2ME) are a folder of their own, only here: the other pictures show the shelf without it.
+    j2me = extra.pop("J2ME", 0)
+    cfg_file = lib / "es_systems.cfg"
+    cfg_before = cfg_file.read_text()
+    if j2me:
+        (lib / "roms/j2me").mkdir(exist_ok=True)
+        (lib / "roms/j2me/Bounce Tales (Nokia).jar").write_bytes(b"PK")
+        cfg_file.write_text(cfg_before.replace("</systemList>", "  <system><name>j2me</name><fullname>Phone games (J2ME)</fullname>"
+                            "<path>/storage/roms/j2me</path><extension>.jar</extension></system>\n</systemList>"))
+    display = lib / "data/display.json"
+    display_before = display.read_text() if display.exists() else None
+    if dim:
+        display.write_text(json.dumps({"dim": dim}))
+    # One look for the whole manual: Retro in Departure Mono with the Cocoa colours (the style of the README's pictures).
+    cfg.update({"font": "retro", "retro_letters": "departure", "retro_colours": "cocoa"})
     settings.write_text(json.dumps(cfg))
     cmd = ["bwrap", "--tmpfs", "/", "--ro-bind", "/usr", "/usr", "--symlink", "usr/lib", "/lib", "--symlink", "usr/lib64", "/lib64",
            "--symlink", "usr/bin", "/bin", "--ro-bind", "/etc", "/etc", "--proc", "/proc", "--dev", "/dev", "--tmpfs", "/run",
            "--bind", str(lib.parent), str(lib.parent), "--bind", str(lib / "roms"), "/storage/roms",
            "--bind", str(lib / "data"), "/storage/pocket-data", "--ro-bind", str(lib / "es_systems.cfg"), "/storage/es_systems.cfg",
            "--ro-bind", str(binary.resolve()), "/pocket-ui",
-           "env", "POCKETUI_MOCK=1", "POCKETUI_SNAPSHOT_WIFI=1", "POCKETUI_SNAPSHOT_SIZE=640x480", f"WAYLAND_DISPLAY={wl}",
+           "env", "POCKETUI_MOCK=1", "POCKETUI_SNAPSHOT_WIFI=1", "POCKETUI_SNAPSHOT_SIZE=640x480", "POCKETUI_SEALED=1", f"WAYLAND_DISPLAY={wl}",
            "POCKETUI_ES_SYSTEMS=/storage/es_systems.cfg", "POCKETUI_DATA=/storage/pocket-data", "HOME=/storage"]
     cmd += [f"{k}={v}" for k, v in extra.items()]
     cmd += ["nice", "-n", "19", "/pocket-ui", "--snapshot", state, str(png)] + ([str(frame)] if frame else [])
@@ -132,6 +181,12 @@ def snapshot(binary, lib, wl, state, png, extra, frame):
         subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=120)
     finally:
         settings.write_text(before)
+        cfg_file.write_text(cfg_before)
+        shutil.rmtree(lib / "roms/j2me", ignore_errors=True)
+        if display_before is None:
+            display.unlink(missing_ok=True)
+        else:
+            display.write_text(display_before)
 
 
 def main():

@@ -219,6 +219,33 @@ fn directory_in(f: &mut (impl std::io::Read + std::io::Seek)) -> Result<Option<V
     directory(&cd, count).map(Some)
 }
 
+/// The stored (not compressed) files of a zip: name, where its bytes start in the file and how many there are. For the
+/// update file on the card (`update::card`), which keeps the app's .tar.gz as it is, so it is read straight from the card.
+/// None: no directory at the end (a copy that stopped on the way, or no zip). Compressed, encrypted and ZIP64 entries, and
+/// ones whose bytes would end past the file, are left out.
+pub fn stored_entries(zip_path: &Path) -> Result<Option<Vec<(String, u64, u64)>>, String> {
+    use std::io::{Read, Seek, SeekFrom};
+    let mut f = std::fs::File::open(zip_path).map_err(|e| e.to_string())?;
+    let len = f.metadata().map_err(|e| e.to_string())?.len();
+    let Some(list) = directory_in(&mut f)? else { return Ok(None) };
+    let mut out = Vec::new();
+    for e in list {
+        if e.method != 0 || e.flags & 1 != 0 || e.csize != e.usize || e.csize == 0xFFFF_FFFF || e.name.ends_with('/') {
+            continue;
+        }
+        let mut head = [0u8; 30];
+        if f.seek(SeekFrom::Start(e.local as u64)).is_err() || f.read_exact(&mut head).is_err() || !head.starts_with(b"PK\x03\x04") {
+            continue;
+        }
+        let at = e.local as u64 + 30 + le16(&head, 26).unwrap_or(0) as u64 + le16(&head, 28).unwrap_or(0) as u64;
+        if at.checked_add(e.csize as u64).is_none_or(|end| end > len) {
+            continue;
+        }
+        out.push((e.name, at, e.csize as u64));
+    }
+    Ok(Some(out))
+}
+
 /// The sentence a zip would be refused with, from its directory alone (Settings → Games → Game check, `game_check`):
 /// `extract_rom`'s refusals without unpacking anything, so the checksum of the game inside is not looked at. With
 /// `only_cut_off` just a zip cut off on the way counts: an arcade set is many files by design. None: nothing against it,

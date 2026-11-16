@@ -312,6 +312,7 @@ pub struct StickerName {
 /// What the player did with one game.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct UserGame {
+    pub evidence: bool,
     pub status: Status,
     /// Seconds played (the larger of the library's count and the recent games').
     pub secs: u64,
@@ -321,6 +322,12 @@ pub struct UserGame {
     pub stickers: Vec<u32>,
     /// The player's rating, 1 to 5; 0: none.
     pub rating: u8,
+}
+
+impl UserGame {
+    pub fn ever_played(&self) -> bool {
+        crate::play_evidence::Evidence { recorded: self.evidence || self.secs > 0 || self.last_played.is_some() || self.status != Status::NotStarted, ..Default::default() }.ever_played()
+    }
 }
 
 /// The player's side, one entry per game of the catalog, plus the stickers and preferred versions.
@@ -417,7 +424,8 @@ impl Index {
                         match u.last_played {
                             Some(t) if user.now.saturating_sub(t) <= MONTH => month.set(i),
                             Some(_) => long_ago.set(i),
-                            None if u.secs > 0 => long_ago.set(i),
+                            None if u.secs > 0 => long_ago.set(i), // Keep the legacy timed-history bucket.
+                            None if u.ever_played() => {}, // Save-only, no known date: neither Never nor Long ago.
                             None => never.set(i),
                         }
                     }

@@ -12,8 +12,6 @@ slot-save:psx
 slot-load:snes
 slot-save:psx:card
 box:gba:advance:saves:end
-controls-card:psx
-controls-card:snes:remap
 cabinet:ddrra
 setup:first:device=mini
 setup:first:device=rp5
@@ -29,10 +27,15 @@ setup:wifi-portal-signin=hotel
 setup:wifi-portal-signin=email:ddddd
 settings
 settings:0:4
-settings:2:7
-settings:3:4
+settings:1:2
+settings:2:1
+settings:3:1
+settings:4:5
+settings:4:6
 settings:5:5
-settings:6:4
+settings:6:2
+settings:6:5
+settings:7:2
 buttons:1
 about:device=flip2
 sys:quick

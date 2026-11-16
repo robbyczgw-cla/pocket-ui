@@ -174,7 +174,10 @@ s=s[:a]+('EXPERIMENTAL — tested: no; testers wanted. No hardware boot has been
 'Made for Retroid\'s stock bootloader with a working Retroid u-boot in loader ("Boot mode: Loader").\n'
 'The card also carries the files OpenABL (ROCKNIX\'s bootloader, "Boot mode: Linux") and other UEFI\n'
 'loaders start from a card; those ways are untested too.\n'
-'No bootloader flashing is included or required by this image. Panel: original, not Visionox.\n\n')+s[b:]
+'Boot menu shows "UEFI" next to Android? Retroid\'s UEFI does not start cards. Set up OpenABL once as\n'
+'ROCKNIX\'s guide for your device says (https://rocknix.org, Run Script as Root, backup first; Android\n'
+'stays), then pick "Boot mode: Linux" and "Boot source: SD card". 12 GB devices (Visionox screen): not yet.\n'
+'This image itself flashes no bootloader. Panel: original, not Visionox.\n\n')+s[b:]
 p.write_text(s)
 PYNOTES
 fi

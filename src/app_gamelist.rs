@@ -76,6 +76,17 @@ impl App {
         }
     }
 
+    fn gamelist_played(&mut self) {
+        for system in &self.systems {
+            for game in &system.games {
+                if self.gamelist.index.get(&system.name, &game.path).is_some_and(|e| e.last_played > 0) {
+                    self.played_files.insert(game.path.clone());
+                }
+            }
+        }
+        self.cases_look_changed();
+    }
+
     /// The gamelists were read and differ from what the App has.
     pub(crate) fn gamelist_event(&mut self, index: Arc<Index>) {
         // The first read comes back even when it found nothing new (the box art download waits for it): then the App has
@@ -83,6 +94,18 @@ impl App {
         let changed = !index.same_as(&self.gamelist.index);
         self.gamelist.index = index;
         self.gamelist.read_once = true;
+        self.gamelist_played();
+        // A fresh list starts from what EmulationStation last played (an ArkOS card's gamelists, `Recents::seed_from_es`).
+        if self.recents.list.is_empty() {
+            let index = &self.gamelist.index;
+            let played: Vec<(String, String, std::path::PathBuf, u64)> = self.systems.iter()
+                .flat_map(|s| s.games.iter().filter_map(move |g| index.get(&s.name, &g.path).map(|e| (s.name.clone(), g.name.clone(), g.path.clone(), e.last_played))))
+                .collect();
+            if self.recents.seed_from_es(played) {
+                self.recents.save();
+                self.request_redraw();
+            }
+        }
         if changed {
             // Their developers, publishers, genres and "last played" go into Connections and Rediscover: both are made again
             // with the next index, on the catalog there is (`app_connections`).
@@ -266,6 +289,7 @@ impl App {
         let sources = pocket_ui::library::read_sources(&self.es_systems);
         self.gamelist.index = Arc::new(Index::load(&self.data_dir, &Locations::device(), &sources));
         self.gamelist.read_once = true;
+        self.gamelist_played();
         self.gamelist.covers.borrow_mut().clear();
     }
 

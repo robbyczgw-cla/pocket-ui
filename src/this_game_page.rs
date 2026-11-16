@@ -82,6 +82,15 @@ pub struct ThisGamePage {
     rev: u32,
 }
 
+/// What the Runs on row says about itself: on Android's handheld view the phone's own ways, not ROCKNIX's emulators.
+fn runs_on_words() -> &'static str {
+    if crate::play_route::phone().is_some() {
+        "Which way plays this game: pocket-ui's own player or another emulator app on this device."
+    } else {
+        "Which emulator plays this game or this console: pocket-core, RetroArch or another."
+    }
+}
+
 impl ThisGamePage {
     pub fn new(subject: Subject, data_dir: &Path, files: Files) -> ThisGamePage {
         let settings = subject.hosted.then(|| GameSettings::load(data_dir, &subject.system, &subject.rom));
@@ -133,11 +142,11 @@ impl ThisGamePage {
                 // Rewind and Over the game are in Speed, rumble, fan and Shortcuts both: the shortcut says so.
                 let shortcut = options::GROUPS.iter().any(|g| g.name == "Shortcuts" && g.settings.iter().any(|x| x.key == key));
                 let name = if shortcut { format!("Shortcut: {}", setting.name) } else { setting.name.to_string() };
-                (name, setting.choices[s.index(setting)].label.to_string(), options::describe(setting, Some(s)))
+                (name, options::label_in(setting, setting.choices[s.index(setting)].value, crate::device::android_profile()).to_string(), options::describe(setting, Some(s)))
             }
             Row::Standalone(i) => self.standalone.as_ref().and_then(|m| m.rows().into_iter().nth(i)).unwrap_or_default(),
             Row::Controls => ("Controls".into(), ">".into(), "Which button does what, and the left stick. The pause menu shows this console's own button names.".into()),
-            Row::RunsOn => ("Runs on".into(), if self.subject.runs_on.is_empty() { "Default".into() } else { self.subject.runs_on.clone() }, "Which emulator plays this game or this console: pocket-core, RetroArch or another.".into()),
+            Row::RunsOn => ("Runs on".into(), if self.subject.runs_on.is_empty() { "Default".into() } else { self.subject.runs_on.clone() }, runs_on_words().into()),
             Row::Reset => ("Use the console's settings".into(), String::new(), "Takes this game off its own settings: it starts like the other games on this console.".into()),
         }
     }
@@ -159,7 +168,7 @@ impl ThisGamePage {
             }
             Row::Standalone(i) => self.standalone.as_ref().and_then(|m| m.rows().into_iter().nth(i)).unwrap_or_default(),
             Row::Controls => ("Controls".into(), ">".into(), "Which button does what, and the left stick. The pause menu shows this console's own button names.".into()),
-            Row::RunsOn => ("Runs on".into(), if self.subject.runs_on.is_empty() { "Default".into() } else { self.subject.runs_on.clone() }, "Which emulator plays this game or this console: pocket-core, RetroArch or another.".into()),
+            Row::RunsOn => ("Runs on".into(), if self.subject.runs_on.is_empty() { "Default".into() } else { self.subject.runs_on.clone() }, runs_on_words().into()),
             Row::Reset => ("Use the console's settings".into(), String::new(), "Takes this game off its own settings: it starts like the other games on this console.".into()),
         }
     }
@@ -193,6 +202,10 @@ impl ThisGamePage {
     /// picture settings are for.
     pub fn footer(&self) -> Option<&'static str> {
         if self.subject.hosted && !self.subject.on_pocket_core {
+            // Android's handheld view: another emulator app, and pocket-ui's own player is what these settings are for.
+            if crate::device::android_profile() {
+                return Some("This game plays in another app now. These settings apply when pocket-ui's own player runs it.");
+            }
             Some("This game plays on another emulator now. These settings apply when it runs on pocket-core.")
         } else if !self.subject.hosted && self.standalone.is_none() {
             Some("This emulator has no picture settings here. Its own menu has them.")

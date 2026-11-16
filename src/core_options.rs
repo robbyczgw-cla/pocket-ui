@@ -538,7 +538,88 @@ pub fn android_curation(core: &str) -> Curation {
             ],
             ..curation(core)
         },
+        // SNES on Android. bsnes declares 26 knobs in its own words ("PPU Deinterlace", "Coprocessor Prefer HLE"); a player
+        // gets the six that change what they see or feel, in plain words (`plain_name`). The rest keep bsnes's defaults.
+        "bsnes" => Curation {
+            only: &["bsnes_aspect_ratio", "bsnes_ppu_no_sprite_limit", "bsnes_ppu_show_overscan", "bsnes_blur_emulation", "bsnes_cpu_overclock", "bsnes_sfx_overclock"],
+            ..curation(core)
+        },
         _ => curation(core),
+    }
+}
+
+/// An emulator option's name as a player reads it (Android's pause sheet, Options): for the options whose core words say
+/// nothing to someone who only plays ("PPU No sprite limit", "SuperFX Coprocessor Overclocking"). None: the core's name
+/// stays.
+pub fn plain_name(key: &str) -> Option<&'static str> {
+    Some(match key {
+        "bsnes_aspect_ratio" => "Aspect ratio",
+        "bsnes_ppu_no_sprite_limit" | "snes9x_reduce_sprite_flicker" => "Less sprite flicker",
+        "bsnes_ppu_show_overscan" => "Show screen edges",
+        "bsnes_blur_emulation" => "TV blur",
+        "bsnes_cpu_overclock" => "Console speed (less slowdown)",
+        "bsnes_sfx_overclock" => "Super FX speed (Star Fox)",
+        _ => return None,
+    })
+}
+
+/// The option as a player reads it: its plain name (`plain_name`) and, for a speed in percent, "120%" instead of "120".
+pub fn make_plain(option: &mut FileOption) {
+    if let Some(name) = plain_name(&option.key) {
+        option.label = name.into();
+    }
+    if option.key.ends_with("_overclock") {
+        for value in &mut option.values {
+            if !value.label.is_empty() && value.label.bytes().all(|b| b.is_ascii_digit()) {
+                value.label = format!("{}%", value.label);
+            }
+        }
+    }
+}
+
+/// Whether an option's name is in the emulator's own words, for those who know that core: a chip's or a technique's
+/// name (PPU, DSP, HLE, VRAM, "Coprocessor", "Overclocking", "Hack"). Android's pause sheet puts those in the closed
+/// "Advanced (this emulator)" group, whatever the core, so the open sections read as a player's settings.
+pub fn insider_words(label: &str) -> bool {
+    // Short capitals a player knows: picture and console names.
+    const KNOWN: [&str; 25] = ["TV", "CRT", "LCD", "HD", "GB", "GBC", "GBA", "NES", "SNES", "DS", "PAL", "NTSC", "RGB", "FPS",
+        "3D", "2D", "VMU", "UI", "ON", "OFF", "N64", "PSP", "PS1", "FM", "FX"];
+    let lower = label.to_lowercase();
+    // Phrases anywhere ("Overclocking", "Speed Hack"); short ones only as a whole word ("Controller" has no "LLE").
+    let phrases = ["overclock", "coprocessor", "hack", "recompiler", "deinterlac", "entropy", "hotfix", "fast math", "interpolation",
+        "delayed sync", "shadow ram", "blocking", "bios"];
+    let short = ["hle", "lle", "jit", "vram", "dynarec"];
+    phrases.iter().any(|w| lower.contains(w))
+        || lower.split(|c: char| !c.is_alphanumeric()).any(|t| short.contains(&t))
+        || label.split(|c: char| !c.is_alphanumeric()).any(|t| {
+            t.len() >= 2 && t.chars().any(|c| c.is_ascii_alphabetic()) && t.chars().all(|c| c.is_ascii_uppercase() || c.is_ascii_digit())
+                && !KNOWN.contains(&t)
+        })
+}
+
+/// The section of Android's Options page an emulator option goes in: 0 Picture, 1 Sound, 2 Controls, 3 Speed, 5 the closed
+/// "Advanced (this emulator)" group (4 is Cheats, the player's own). By words of its key and name; one that needs a
+/// `restart`, one in the emulator's own words (`insider_words`) and anything unknown go to Advanced. An option with a
+/// plain name (`plain_name`) goes by that name alone: `bsnes_cpu_overclock` has "clock" in its key.
+pub fn player_section(key: &str, label: &str, restart: bool) -> usize {
+    let s = if plain_name(key).is_some() { label.to_lowercase() } else { format!("{key} {label}").to_lowercase() };
+    let has = |words: &[&str]| words.iter().any(|w| s.contains(w));
+    if restart
+        || insider_words(label)
+        || has(&["bios", "model", "hardware", "preset", "sgb", "super game boy", "region", "boot", "firmware", "rtc", "system type", "revision", "memory", "ram ", "language", "date", "clock", "debug", "log"])
+    {
+        return 5;
+    }
+    if has(&["audio", "sound", "volume", "apu", "channel", "sample", "music", "sfx", "psg", "reverb", "stereo", "mono"]) {
+        1
+    } else if has(&["input", "controller", "pad", "turbo", "analog", "rumble", "mouse", "touch", "stylus", "button", "joystick", "lightgun", "gun", "keyboard", "deadzone"]) {
+        2
+    } else if has(&["frameskip", "frame skip", "overclock", "cpu", "speed", "cycle", "runahead", "sync", "lag", "timing", "accuracy", "underclock", "threads"]) {
+        3
+    } else if has(&["palette", "color", "colour", "filter", "blend", "blur", "video", "scale", "border", "aspect", "overscan", "crop", "resolution", "render", "screen", "display", "layout", "gamma", "lcd", "ghost", "interlac", "scanline", "texture", "upscal", "brightness", "contrast", "sprite"]) {
+        0
+    } else {
+        5
     }
 }
 
@@ -787,6 +868,60 @@ pub fn saved_from(values: &BTreeMap<String, String>) -> Vec<(String, String)> {
 
 #[cfg(test)]
 mod tests {
+    /// bsnes on Android, as declared at the pinned revision (android/cores.lock.json): every option a player sees has a
+    /// plain name, in no emulator's words, and the others are not shown (Odin 2 Mini 13.11.: "PPU Deinterlace" and
+    /// "PPU No sprite limit" in the player's Picture section).
+    #[test]
+    fn a_player_reads_the_snes_options_in_plain_words() {
+        let declared = [("bsnes_aspect_ratio", "Aspect Ratio"), ("bsnes_blur_emulation", "Blur emulation"), ("bsnes_entropy", "Entropy (randomization)"),
+            ("bsnes_hotfixes", "Hotfixes"), ("bsnes_cpu_overclock", "CPU Overclocking"), ("bsnes_cpu_fastmath", "CPU Fast Math"),
+            ("bsnes_sa1_overclock", "SA1 Coprocessor Overclocking"), ("bsnes_sfx_overclock", "SuperFX Coprocessor Overclocking"),
+            ("bsnes_ppu_fast", "PPU Fast mode"), ("bsnes_ppu_deinterlace", "PPU Deinterlace"), ("bsnes_ppu_no_sprite_limit", "PPU No sprite limit"),
+            ("bsnes_ppu_no_vram_blocking", "PPU No VRAM blocking"), ("bsnes_ppu_show_overscan", "Show Overscan"), ("bsnes_mode7_scale", "HD Mode 7 Scale"),
+            ("bsnes_mode7_perspective", "HD Mode 7 Perspective correction"), ("bsnes_mode7_supersample", "HD Mode 7 Supersampling"),
+            ("bsnes_mode7_mosaic", "HD Mode 7 HD->SD Mosaic"), ("bsnes_dsp_fast", "DSP Fast mode"), ("bsnes_dsp_cubic", "DSP Cubic interpolation"),
+            ("bsnes_dsp_echo_shadow", "DSP Echo shadow RAM"), ("bsnes_coprocessor_delayed_sync", "Coprocessor Delayed Sync"),
+            ("bsnes_coprocessor_prefer_hle", "Coprocessor Prefer HLE"), ("bsnes_sgb_bios", "Preferred Super GameBoy BIOS (restart)"),
+            ("bsnes_run_ahead_frames", "Amount of frames for run-ahead"), ("bsnes_touchscreen_lightgun", "Enable Touchscreen Lightgun"),
+            ("bsnes_touchscreen_lightgun_superscope_reverse", "Super Scope Reverse Trigger Buttons")];
+        let curation = android_curation("bsnes");
+        let mut shown = Vec::new();
+        for (key, label) in declared {
+            if !curation.shows(key) {
+                continue;
+            }
+            let mut option = FileOption { key: key.into(), label: label.into(),
+                values: ["100", "120"].iter().map(|v| FileValue { value: (*v).into(), label: (*v).into() }).collect(), ..Default::default() };
+            make_plain(&mut option);
+            assert!(!insider_words(&option.label), "{key} shows as {:?}", option.label);
+            assert_ne!(option.label, label, "{key} keeps the core's name");
+            shown.push(option);
+        }
+        assert_eq!(shown.len(), 6, "{:?}", shown.iter().map(|o| &o.label).collect::<Vec<_>>());
+        // Each in the open section a player looks in (emulator 13.11.: blur and both speeds fell into Advanced).
+        let section = |key: &str| { let o = shown.iter().find(|o| o.key == key).unwrap(); player_section(&o.key, &o.label, false) };
+        for (key, want) in [("bsnes_aspect_ratio", 0), ("bsnes_ppu_no_sprite_limit", 0), ("bsnes_ppu_show_overscan", 0), ("bsnes_blur_emulation", 0),
+            ("bsnes_cpu_overclock", 3), ("bsnes_sfx_overclock", 3)] {
+            assert_eq!(section(key), want, "{key}");
+        }
+        let speed = shown.iter().find(|o| o.key == "bsnes_cpu_overclock").unwrap();
+        assert_eq!(speed.label_of("120"), "120%");
+        assert!(!curation.shows("bsnes_ppu_deinterlace") && !curation.shows("bsnes_coprocessor_prefer_hle"));
+    }
+    /// The class: any core's option in its emulator's words goes to the closed Advanced group on Android; a player's
+    /// words stay where a player looks.
+    #[test]
+    fn emulator_words_are_told_from_a_players_words() {
+        for insider in ["PPU Deinterlace", "PPU No sprite limit", "DSP Cubic interpolation", "Coprocessor Prefer HLE", "CPU Overclocking",
+            "GPU Hack: Skip frames", "Dynarec", "PSX BIOS", "SPU IRQ Always Enabled", "Enhanced Resolution (Speed Hack)"] {
+            assert!(insider_words(insider), "{insider}");
+        }
+        for player in ["Color Correction", "Aspect ratio", "Less sprite flicker", "Show screen edges", "TV blur", "Interframe Blending",
+            "GB Colorization", "Internal Palette", "Console speed (less slowdown)", "Super FX speed (Star Fox)", "3D resolution", "Screen layout", "Controller type", "Parallel port"] {
+            assert!(!insider_words(player), "{player}");
+        }
+    }
+
     use super::*;
     use crate::testutil::TestDir;
 

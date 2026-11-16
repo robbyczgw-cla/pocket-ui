@@ -378,7 +378,8 @@ impl App {
         let mut y = y0 + if short { 102 } else { 110 } + pocket_ui::type_scale::grow(44);
         let status = snap.status.as_ref().filter(|_| snap.state() == State::Connected);
         if let Some(s) = status {
-            let label_w = 190;
+            // Wider on a wide screen's page, as its type is ("Dispositivos" in Large ran into its value).
+            let label_w = pocket_ui::type_scale::on_wide(190);
             let mut line = |app: &mut App, c: &mut Canvas, name: &str, value: &str| {
                 app.text.draw(c, Face::Body, 26, left, y, pal().dust, name);
                 let value = app.text.fit(Face::Title, 37, value, right - left - label_w);
@@ -404,9 +405,15 @@ impl App {
         }
         let lines: &[&str] = match snap.state() {
             State::NotInstalled => &["This system image has no Tailscale."],
+            State::NoNetwork if pocket_ui::device::no_wifi_chip() => &[pocket_ui::device::NEEDS_NETWORK],
             State::NoNetwork => &["Tailscale connects once you're online. Connect to Wi-Fi or a hotspot in Settings › Connections."],
             State::LoggedOut => &["Select Sign in: a QR code appears. Scan it with your phone and approve this Pocket there."],
             State::WaitingForApproval => &["Approve this Pocket in the Tailscale admin console, then it connects by itself."],
+            // No Wi-Fi chip: a USB network adapter can still bring it online, but nothing here promises Wi-Fi.
+            _ if pocket_ui::device::no_wifi_chip() => &[
+                "Tailscale links the Pocket with your phone, computer and other devices in one private network.",
+                pocket_ui::device::NEEDS_NETWORK,
+            ],
             _ => &[
                 "Tailscale links the Pocket with your phone, computer and other devices in one private network, over Wi-Fi or a hotspot, wherever you are.",
                 "Switch it on, then sign in with a QR code. It stays on after a restart.",

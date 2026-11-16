@@ -2,14 +2,16 @@
 
 A game you have played comes back where you left it. **A** on it goes straight back to the moment you left, with no
 question. Nothing keeps running and nothing extra goes on your card: it is the moment Quit or sleep wrote. With
-[Animations](settings-sound.md#animations) on Cozy (and Motion on Full) you watch the game go into its console first, as at
+[Game start animation](settings.md#game-start-animation) on Cozy (and Motion on Full) you watch the game go into its console first, as at
 every start; the moment loads meanwhile and waits, still, until the scene is over. Quick skips the scene.
 
 ## An open case means a moment is waiting
 
 Your last five games with a saved moment stand a little open on the shelf: on Home's recent row and in their system's row,
 the game peeks out over the case's top, and when you pick one its cartridge, card or disc comes a little out of the side.
-In the Split and Cabinet looks the word **Continue** beside the game says the same. The first time an open case is on screen, one line says what it means: "Open means your moment is waiting"
+In the Split and Cabinet looks the word **Continue** beside the game says the same. For a game whose save pocket-ui can
+read, the line beside it says where you are in it ("8 badges · Charizard Lv. 45 · game clock 31:12",
+[Where you are in the game](library.md#where-you-are-in-the-game)) instead of when you played it. The first time an open case is on screen, one line says what it means: "Open means your moment is waiting"
 (once, never in Kids Mode).
 Other games with a moment continue the same way when you start them; they just don't stand open.
 
@@ -59,14 +61,17 @@ stand still.
 
 Back to a game after more than two weeks: while its moment loads, a quiet card at the bottom of its picture says when you
 played it last ("Last played 3 weeks ago"), how long you have played it, and your note from the
-[game card](library.md) if you wrote one. Nothing asks you anything. On pocket-ui's own host the game stands still at your
+[game card](library.md) if you wrote one. For a game whose save pocket-ui can read, where you are in it ("8 badges ·
+Charizard Lv. 45 · game clock 31:12", [Where you are in the game](library.md#where-you-are-in-the-game)) takes the place of the
+time played: the game's own clock is in it. Nothing asks you anything. On pocket-ui's own host the game stands still at your
 moment until you press any button, without sound, so you can read it and miss nothing. That button just starts play. Other emulators show it until the game
 is there. A press while the picture is still loading also skips the card. If the picture or moment cannot be loaded,
 the game starts without waiting for the reminder. A game played within the last two weeks, a game that starts fresh and
-Kids Mode show no card. Easy shows only when you played last and your note. Settings → Playing →
-[Remind me where I was](settings.md#remind-me-where-i-was) switches it off.
+Kids Mode show no card. Easy shows only when you played last and your note. It is **off** until you switch it on:
+Settings → Playing → [Remind me where I was](settings.md#remind-me-where-i-was). The lines about where you are in the
+game on the shelf and the box's back don't depend on it.
 
-![Where was I?: last played 3 weeks ago, the play time and your note, over the game](pictures/where-was-i.webp)
+![Where was I?: last played 3 weeks ago, where you are in the game ("Crono Lv. 24 · game clock 11:38") and your note, over the game](pictures/where-was-i.webp)
 
 ## On an Android phone
 
@@ -83,9 +88,9 @@ continue this way and stand closed.
 - **The file is gone, or Android took back access to its folder:** a message says so and nothing is touched. Put the file back
   or choose the folder again, and the moment is still there.
 
-After more than two weeks, the internal player can show the **Where was I?** card on the
+With **Remind me where I was** switched on (it is off until you do; the row is in the Android app's own Settings), the internal player shows the **Where was I?** card after more than two weeks on the
 restored frame for as long as you need. Any press or touch starts play immediately. Easy leaves
-out the total play time. In the Android app, the **Remind me where I was** row in its own Settings switches it off.
+out the total play time.
 A failed resume shows no reminder. In particular, a short old PSP moment opens **Recovery**
 with an explanation; the moment remains under Load and the in-game save is kept safe.
 

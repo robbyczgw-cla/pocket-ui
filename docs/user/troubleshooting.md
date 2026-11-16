@@ -49,7 +49,7 @@ for PlayStation 2, GameCube & Wii and 3DS saves are new and not yet checked on a
 [Sync](sync.md#what-is-shared)).
 
 **Bluetooth controllers have been paired on one handheld so far** (an Anbernic H700 model). Reconnecting after sleep,
-two controllers at once and every controller model are still to be confirmed on real hardware; [Test buttons](settings-system.md#test-buttons)
+two controllers at once and every controller model are still to be confirmed on real hardware; [Test buttons](settings-sound.md#test-buttons)
 shows what your controller sends (see [Bluetooth](bluetooth.md)).
 
 **PC streaming has not been tried with a real PC** for the same reason. Starting it, the lookup and the way back
@@ -123,8 +123,8 @@ was paired with a phone or a console before often tries to reconnect there first
 or start pairing mode again. Keep it close to the Pocket.
 
 **A button on my controller does nothing, or the wrong thing.**
-Open Settings → Help & tools → [Test buttons](settings-system.md#test-buttons) and press it: if it lights up, the
-controller is fine and Settings → Playing → Buttons → [Controller setup](controls-settings.md#controller-setup) puts it
+Open Settings → Controls → [Test buttons](settings-sound.md#test-buttons) and press it: if it lights up, the
+controller is fine and Settings → Controls → [Controller setup](controls-settings.md#controller-setup) puts it
 where you want it; if it stays dark or shows **Not recognised**, send a report (Report a problem) with that name.
 
 **My device was paired, but it does not reconnect.**
@@ -143,8 +143,10 @@ holds at least one game.
 
 **A symbol in a game's name is missing.**
 The Pocket's font has no ticks, stars or emoji, so a game whose file name has one shows without it. Japanese,
-Chinese and Korean names are shown with the system's Japanese font. Letters that neither has show as "?". The file
-itself is not changed.
+Chinese and Korean names are shown with the system's Japanese font where it has one. Where it has none, kana and hangul
+are written in Latin letters ("Suupaa Mario"), and kanji, which cannot be, are left out; a name of kanji alone shows
+as "…". Facts and descriptions that nobody could read that way are left off the game's card. Nothing shows as "?". The
+file itself is not changed.
 
 **Load is greyed out in the pause menu.**
 There is no save to load yet. On pocket-ui's own host this means the selected slot is empty: press
@@ -233,7 +235,7 @@ player timing problem from a game that is too demanding. On H700 handhelds, GBA 
 moments can still use mGBA. Changing the player can require starting the game again; keep your in-game save first.
 
 **The menus make no sound.**
-Settings → Sound & feel → Sounds must be on, and the console's volume must be above 0 and not muted. The clicks never play while
+Settings → Screen & sound → Menu sounds must be on, and the console's volume must be above 0 and not muted. The clicks never play while
 a game runs, and not while the device sleeps (see [Playing](playing.md#menu-sounds)).
 
 **Wi-Fi says "Wrong password. Try again."**
@@ -276,7 +278,7 @@ EmulationStation emptied there, is repaired at the next start from the saved net
 sides, Connect asks for it once: nothing has to be forgotten first.
 
 **Box art found nothing for some games, or the wrong picture.**
-Cartridge games are recognised by their checksum, other games by file name ([Extras](extras.md#box-art)). For one
+Cartridge games are recognised by their checksum, other games by file name ([Box art & downloads](extras.md#box-art)). For one
 game, open its card, press Y and choose **Wrong pictures? Look up again**
 ([the game card](library.md#wrong-pictures-look-up-again)): it deletes that game's pictures and looks it up afresh.
 Games without a match are otherwise skipped on later runs. A disc game or a homebrew game the list doesn't know is
@@ -348,8 +350,8 @@ Sensor readings and logs may contain Unicode (for example °C and µs); these ar
 **Where it is.** In the `reports` folder of the games share, the same place as `screenshots`: `roms/reports` on the SD
 card. Copy it to your computer over [file sharing](getting-started.md#over-wi-fi-file-sharing), or with the SD card in a computer.
 
-**What to do with it.** Open a bug report on pocket-ui's GitHub page (Issues → New issue → Bug report), say what
-happened, and attach the zip. Nothing is sent by the Pocket itself.
+**What to do with it.** Open a bug report on pocket-ui's GitHub page (Issues → New issue → Bug report) or write to
+robby@robbyczesany.com. Say what happened, and attach the zip. Nothing is sent by the Pocket itself.
 
 **What is inside.** All plain text, so you can look through it first:
 
@@ -428,7 +430,7 @@ In `/storage/.config/pocket-ui/` on the SD card:
 
 | File or folder | Contents |
 |---|---|
-| `settings.json` | Your look, appearance, motion, On start, the systems on the shelf, and whether the first start is done |
+| `settings.json` | Your look, appearance, motion, On start, the systems on the shelf, and whether the first start is done. If it can't be read (and its backup can't either), pocket-ui says so at the start and uses the standard settings |
 | `recents.json` | Recent games and play times |
 | `game-settings/` | The pause menu's Options (picture, emulator, controls, shortcuts, extras) per console and per game |
 | `slots/` | The save slot each game used last |
@@ -458,7 +460,7 @@ slots are `<game>.pstate` and `<game>.pstate1` to `<game>.pstate7`, the moment y
 `<game>.pstate.auto`, and each has a `.png` preview next to it.
 
 **How do I run the first-start setup again?**
-Each step is in Settings: Look (Look), Wi-Fi (Connections), Extras and Add games (both under Games).
+Each step is in Settings: Look (Look), Wi-Fi (Connections), Box art & downloads and Add games (both under Games).
 <!-- TODO: if a full reset of the first start is wanted, document it (today: set "onboarded" to
      false in settings.json). -->
 

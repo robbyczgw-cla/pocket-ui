@@ -5,7 +5,7 @@ use std::path::{Path, PathBuf};
 
 #[path = "library_systems.rs"]
 mod system_list;
-pub use system_list::{issues as system_list_issues, Issue as SystemListIssue};
+pub use system_list::{issues as system_list_issues, status as system_list_status, Fallback as SystemListFallback, Issue as SystemListIssue, Status as SystemListStatus};
 
 #[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct Game {
@@ -68,7 +68,7 @@ pub struct Gamelists<'a> {
 /// `gamelists` says where to look. The names are in the list before it is sorted and told apart, and so in the cache,
 /// the search, Recent and Favorites, which all follow the list.
 pub fn load_with(es_systems: &Path, gamelists: Option<&Gamelists>) -> Result<Vec<System>, String> {
-    let (xml, _) = system_list::read(es_systems)?;
+    let (xml, _) = system_list::read(es_systems);
     let doc = roxmltree::Document::parse(&xml).map_err(|e| format!("{}: {e}", es_systems.display()))?;
     let child_text = |node: roxmltree::Node, tag: &str| {
         node.children().find(|n| n.has_tag_name(tag)).and_then(|n| n.text()).map(|t| t.trim().to_string())
@@ -98,6 +98,11 @@ pub fn load_with(es_systems: &Path, gamelists: Option<&Gamelists>) -> Result<Vec
                 }
             }
             games.retain(|g| !crate::hostsys::not_a_game(&name, &g.path));
+            #[cfg(feature = "brick")]
+            if crate::darkos::host() && name == "ports" {
+                games.retain(|g| !g.path.starts_with("/storage/roms/ports/pocket-ui")
+                    && g.path.file_name().is_none_or(|n| !n.eq_ignore_ascii_case("pocket-ui.sh")));
+            }
             let listed: Vec<PathBuf> = games.iter().map(|g| g.path.clone()).collect();
             let roms = Path::new("/storage/roms");
             for dir in crate::hostsys::folder_games(&name, &path, roms, &listed) {
@@ -141,7 +146,9 @@ pub fn load_with(es_systems: &Path, gamelists: Option<&Gamelists>) -> Result<Vec
                 game.name = title_case(&game.name);
             }
             (!games.is_empty()).then(|| System {
-                fullname: child_text(sys, "fullname").unwrap_or_else(|| name.clone()),
+                // A few systems get pocket-ui's own name instead of ES's (`system_names::own_long`), in the player's language.
+                fullname: crate::system_names::own_long(&name).map(crate::i18n::tr)
+                    .or_else(|| child_text(sys, "fullname")).unwrap_or_else(|| crate::document_library::system_name(&name)),
                 name,
                 emulator,
                 core,
@@ -150,9 +157,27 @@ pub fn load_with(es_systems: &Path, gamelists: Option<&Gamelists>) -> Result<Vec
             })
         })
         .collect();
+    let mut systems = join_same_systems(systems);
     systems.sort_by_key(|s| s.fullname.to_lowercase());
     learn_names(&systems);
     Ok(systems)
+}
+
+/// Entries of one system in several folders are one system on the shelf (Android's handheld view lists a system's folder on
+/// internal storage and on a card, `android_handheld::es_systems`): the first entry's facts, the games of all, in name order.
+fn join_same_systems(systems: Vec<System>) -> Vec<System> {
+    let mut out: Vec<System> = Vec::with_capacity(systems.len());
+    for s in systems {
+        match out.iter_mut().find(|o| o.name == s.name) {
+            Some(first) => {
+                first.games.extend(s.games);
+                first.games.sort_by_key(|g| g.name.to_lowercase());
+                tell_apart(&mut first.games);
+            }
+            None => out.push(s),
+        }
+    }
+    out
 }
 
 /// Every ROM folder of the card `es_systems` describes as (system id, folder): the systems' own and the folders of another
@@ -160,22 +185,49 @@ pub fn load_with(es_systems: &Path, gamelists: Option<&Gamelists>) -> Result<Vec
 pub fn read_sources(es_systems: &Path) -> Vec<(String, PathBuf)> {
     let catalog = all_systems(es_systems).unwrap_or_default();
     let mut sources: Vec<(String, PathBuf)> = catalog.iter().map(|s| (s.id.clone(), s.path.clone())).collect();
-    if let Some(roms) = roms_root(&catalog) {
-        sources.extend(foreign_folders(&roms, &catalog));
-    }
+    sources.extend(other_folders(roms_root(&catalog).as_deref(), &catalog));
     sources
 }
 
-/// `foreign_folders` of the card `es_systems` describes, by system id. Empty without a roms folder.
+/// `other_folders` of the card `es_systems` describes, by system id.
 fn foreign_by_system(es_systems: &Path) -> std::collections::HashMap<String, Vec<PathBuf>> {
     let mut by_system: std::collections::HashMap<String, Vec<PathBuf>> = Default::default();
     let Ok(catalog) = all_systems(es_systems) else { return by_system };
-    if let Some(roms) = roms_root(&catalog) {
-        for (id, dir) in foreign_folders(&roms, &catalog) {
-            by_system.entry(id).or_default().push(dir);
-        }
+    for (id, dir) in other_folders(roms_root(&catalog).as_deref(), &catalog) {
+        by_system.entry(id).or_default().push(dir);
     }
     by_system
+}
+
+/// The folders read besides the systems' own: another card's in `roms` (`foreign_folders`) and those at the top of a games
+/// card of another system in the second slot (`card_folders`).
+pub fn other_folders(roms: Option<&Path>, catalog: &[SysInfo]) -> Vec<(String, PathBuf)> {
+    let mut out = roms.map(|r| foreign_folders(r, catalog)).unwrap_or_default();
+    if let Some(top) = games_card_root().filter(|t| roms != Some(t.as_path())) {
+        out.extend(card_folders(&top, catalog));
+    }
+    out
+}
+
+/// Where the image's `games-card.sh` names the top of a games card it mounted as it is (docs/OTHER-LAYOUTS.md, "ArkOS cards").
+pub const GAMES_CARD_MARKER: &str = "/run/pocket-ui/games-card-root";
+
+/// The top of a games card of another system in the second slot, read where its folders are: ArkOS, dArkOS and the R36S's
+/// stock cards keep them there (`/gba`, `/psx`, `/bios`), not in a `roms` folder. The image's `games-card.sh` mounts such a
+/// card without ROCKNIX's `roms` folder and writes its top into [`GAMES_CARD_MARKER`]; `POCKETUI_GAMES_CARD_ROOT` stands in
+/// for the marker (tests, the virtual device). None without a card, or when the folder is gone (the card came out).
+pub fn games_card_root() -> Option<PathBuf> {
+    let named = std::env::var("POCKETUI_GAMES_CARD_ROOT").ok().filter(|v| !v.trim().is_empty())
+        .or_else(|| fs::read_to_string(GAMES_CARD_MARKER).ok().and_then(|t| t.lines().next().map(str::to_string)))?;
+    Some(PathBuf::from(named.trim())).filter(|p| p.is_absolute() && p.is_dir())
+}
+
+/// The folders at the top of a games card that are a system's, read in place like another card's (`foreign_folders`): its
+/// `gba` is read as Game Boy Advance, `turbografx` as PC Engine. Its `ports` stay unread: ArkOS's port scripts start
+/// ArkOS's own programs, which this system doesn't have. `bios` is no system (its files are copied to the system's BIOS
+/// folder when the card is mounted).
+pub fn card_folders(top: &Path, catalog: &[SysInfo]) -> Vec<(String, PathBuf)> {
+    foreign_folders(top, catalog).into_iter().filter(|(id, _)| id != "ports").collect()
 }
 
 /// Tells the interface that these are names of games (`i18n::learn_names`): a game called "Black" or "Time to Play"
@@ -211,7 +263,7 @@ pub fn load_shown(es_systems: &Path, data_dir: &Path) -> Result<Vec<System>, Str
 
 /// Every game system in `es_systems` (not Tools or Music), sorted by full name.
 pub fn all_systems(es_systems: &Path) -> Result<Vec<SysInfo>, String> {
-    let (xml, _) = system_list::read(es_systems)?;
+    let (xml, _) = system_list::read(es_systems);
     let doc = roxmltree::Document::parse(&xml).map_err(|e| format!("{}: {e}", es_systems.display()))?;
     let child_text = |node: roxmltree::Node, tag: &str| {
         node.children().find(|n| n.has_tag_name(tag)).and_then(|n| n.text()).map(|t| t.trim().to_string())
@@ -238,7 +290,7 @@ pub fn all_systems(es_systems: &Path) -> Result<Vec<SysInfo>, String> {
                     extensions.push(e);
                 }
             }
-            Some(SysInfo { name: child_text(sys, "fullname").unwrap_or_else(|| id.clone()), id, folder, path: PathBuf::from(path), extensions })
+            Some(SysInfo { name: child_text(sys, "fullname").unwrap_or_else(|| crate::document_library::system_name(&id)), id, folder, path: PathBuf::from(path), extensions })
         })
         .collect();
     all.sort_by_key(|s| s.name.to_lowercase());
@@ -715,6 +767,34 @@ mod tests {
     use super::{all_systems, display_name, SysInfo};
     use crate::testutil::TestDir;
 
+    /// One system in two folders (internal storage and a card in Android's handheld view): one entry on the shelf with the
+    /// games of both, not two "Game Boy Advance" (review of 12.11.2026, #3).
+    #[test]
+    fn phone_games_get_a_name_players_read_not_rocknixs_bare_j2me() {
+        let dir = crate::testutil::TestDir::new("library-j2me");
+        let roms = dir.join("j2me");
+        std::fs::create_dir_all(&roms).unwrap();
+        std::fs::write(roms.join("Shooter.jar"), b"PK").unwrap();
+        let cfg = dir.join("es_systems.cfg");
+        std::fs::write(&cfg, format!("<systemList><system><name>j2me</name><fullname>J2ME</fullname><path>{}</path><extension>.jar</extension></system></systemList>", roms.display())).unwrap();
+        assert_eq!(super::load(&cfg).unwrap()[0].fullname, "Java phone games (J2ME)");
+    }
+
+    #[test]
+    fn a_system_in_two_folders_is_one_system_with_the_games_of_both() {
+        let dir = TestDir::new("twofolders");
+        for (d, f) in [("a/gba", "Golden Sun.gba"), ("b/GBA", "Advance Wars.gba")] {
+            std::fs::create_dir_all(dir.join(d)).unwrap();
+            std::fs::write(dir.join(d).join(f), b"x").unwrap();
+        }
+        let cfg = dir.join("es_systems.cfg");
+        std::fs::write(&cfg, format!("<systemList>\n  <system><name>gba</name><fullname>Game Boy Advance</fullname><path>{}</path><extension>.gba</extension></system>\n  <system><name>gba</name><fullname>Game Boy Advance</fullname><path>{}</path><extension>.gba</extension></system>\n</systemList>", dir.join("a/gba").display(), dir.join("b/GBA").display())).unwrap();
+        let systems = super::load(&cfg).unwrap();
+        assert_eq!(systems.len(), 1, "one Game Boy Advance");
+        let names: Vec<&str> = systems[0].games.iter().map(|g| g.name.as_str()).collect();
+        assert_eq!(names, ["Advance Wars", "Golden Sun"]);
+    }
+
     #[test]
     fn all_systems_lists_every_game_system_without_games() {
         let dir = TestDir::new("allsys");
@@ -772,6 +852,20 @@ mod tests {
         std::fs::write(roms.join("gamelist.xml"), b"\xff\xfe<<<not xml & garbage").unwrap();
         let broken = load_with(&cfg, Some(&Gamelists { data_dir: &data, places: &places })).unwrap();
         assert_eq!(names(broken), ["kof98", "Mslug", "sf2ce", "Tetris"]);
+    }
+
+    /// A system the list gives no full name ("snes" with no `<fullname>`) is named as the player knows it everywhere a
+    /// system is named ("Super Nintendo, played just now"), never by its folder (polish review 12.11.: "snes, just now").
+    #[test]
+    fn a_system_without_a_full_name_is_not_named_by_its_folder() {
+        let dir = TestDir::new("nofullname");
+        let roms = dir.join("roms/snes");
+        std::fs::create_dir_all(&roms).unwrap();
+        std::fs::write(roms.join("Super Metroid (USA).sfc"), b"x").unwrap();
+        let cfg = dir.join("es_systems.cfg");
+        std::fs::write(&cfg, format!("<systemList><system><name>snes</name><path>{}</path><extension>.sfc</extension></system></systemList>", roms.display())).unwrap();
+        assert_eq!(super::load(&cfg).unwrap()[0].fullname, "Super Nintendo");
+        assert_eq!(all_systems(&cfg).unwrap()[0].name, "Super Nintendo");
     }
 
     /// PlayStation 1/2 discs: the shelf shows the title the disc's serial gave (`disc_serial`), a gamelist's name

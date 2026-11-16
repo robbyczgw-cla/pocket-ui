@@ -68,9 +68,10 @@ const PLATFORM: &str = "Android";
 fn app_version() -> &'static str {
     crate::update::app_version()
 }
+/// The APK's version (`android:versionName`), the same in the Mobile view, the handheld view and the player.
 #[cfg(target_os = "android")]
 fn app_version() -> &'static str {
-    env!("CARGO_PKG_VERSION")
+    crate::update_channel::android_version_name()
 }
 
 /// The User-Agent: client and version, the platform, the core and rcheevos.
@@ -186,6 +187,26 @@ pub fn parse_bridge_reply(reply: &str) -> Response {
         Ok(status) if status > 0 => Response { status, body: body.as_bytes().to_vec() },
         _ => Response::unreachable(),
     }
+}
+
+/// QA builds only: another transport for `system` (a server answered from the device, `android/src/ra_replay.rs`). No
+/// release build sets it.
+static QA_TRANSPORT: std::sync::OnceLock<fn(String) -> Box<dyn Transport>> = std::sync::OnceLock::new();
+
+pub fn set_qa_transport(make: fn(String) -> Box<dyn Transport>) {
+    let _ = QA_TRANSPORT.set(make);
+}
+
+/// The platform's way to the server: Android's HTTPS through the Activity (`RaHttp.java`; a handheld may have no curl, and the
+/// Mobile view and the player use this one), the system's curl elsewhere.
+pub fn system(user_agent: String) -> Box<dyn Transport> {
+    if let Some(make) = QA_TRANSPORT.get() {
+        return make(user_agent);
+    }
+    #[cfg(target_os = "android")]
+    return Box::new(AndroidHttp { user_agent });
+    #[cfg(not(target_os = "android"))]
+    Box::new(Curl::new(user_agent))
 }
 
 /// Android's HTTPS (the system's certificate store) through the Activity (`RaHttp.java`): the same one-request,

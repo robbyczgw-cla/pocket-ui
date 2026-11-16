@@ -22,6 +22,8 @@ pub(crate) const HEAD_BASE: i32 = 162;
 /// The scrolling part: under the headline, above the credit line and the hints.
 pub(crate) const BODY_TOP: i32 = 184;
 const BODY_BOTTOM_GAP: i32 = 130;
+/// The line of sources over the hint bar.
+const SOURCE_ROOM: i32 = 36;
 const ROW: i32 = 40;
 const SMALL_LINE: i32 = 28;
 
@@ -41,6 +43,8 @@ fn value_line() -> i32 {
 const RIGHT_X: i32 = 700;
 const ART_W: i32 = 420;
 const ART_H: i32 = 276;
+/// The line under the picture that names its colour ("‹ Milky Blue ›"), when the console has more than one.
+const COLOUR_ROW: i32 = 44;
 /// One press of up/down scrolls this far.
 pub(crate) const STEP: i32 = 2 * ROW;
 
@@ -61,6 +65,9 @@ pub struct PageData {
     pub bios: Option<String>,
     /// RetroAchievements over the console's games with a set: "35 of 120 achievements in 3 games" (`achievements::snapshot`).
     pub achievements: Option<String>,
+    /// The name of the colour the console is shown in ("Original", "Milky Blue"); None for a console that comes in one
+    /// colour only. Left and Right change it (`Out::Colour`), the label under the picture says so.
+    pub colour: Option<&'static str>,
 }
 
 /// The page's colours that depend on the look: the page itself and its quieter text (the Split look's are its own).
@@ -99,6 +106,8 @@ pub enum Out {
     Credits,
     /// A on a link of Credits & links.
     Open(Link),
+    /// Left (-1) or Right (1): the console in its next colour; the App changes it and the page's `colour`.
+    Colour(i32),
 }
 
 /// What the last paint offers to touch: the hint keys, and the scroll position as a list (row, rows, pitch).
@@ -186,6 +195,8 @@ impl Page {
             Button::South => Out::Back,
             Button::East => Out::Games,
             Button::Start => Out::Emulator,
+            Button::Left if self.data.colour.is_some() => Out::Colour(-1),
+            Button::Right if self.data.colour.is_some() => Out::Colour(1),
             Button::North if self.has_credits() => Out::Credits,
             Button::West => {
                 self.sources = Some(0);
@@ -239,13 +250,14 @@ impl Page {
         let corner_w = c.w - MARGIN - crate::status_corner::room_left_of(left, c.w - MARGIN);
         let full_w = c.w - 2 * MARGIN;
         let mut hits = Hits::default();
+        let mut body_gap = BODY_BOTTOM_GAP;
         if self.sources.is_some() {
             let title = text.fit(Face::Title, 67, "Sources", full_w - corner_w);
             text.draw(c, Face::Title, 67, MARGIN, TITLE_BASE, pal().text, &title);
             let sub = text.fit(Face::Body, 28, &console.name, full_w);
             text.draw(c, Face::Body, 28, MARGIN, HEAD_BASE, look.dim, &sub);
             let at = self.sources.unwrap_or(0);
-            let (height, view) = scrolled(c, BODY_TOP, c.h - 100, at, look.bg, |body, y0| paint_sources(body, text, console, y0));
+            let (height, view) = scrolled(c, BODY_TOP, c.h - BODY_BOTTOM_GAP, at, look.bg, |body, y0| paint_sources(body, text, console, y0));
             self.sources_max = (height - view).max(0);
             let at = at.min(self.sources_max);
             self.sources = Some(at);
@@ -262,21 +274,33 @@ impl Page {
                 let h = text.fit(Face::Body, 28, h, full_w);
                 text.draw(c, Face::Body, 28, MARGIN, HEAD_BASE, look.dim, &h);
             }
+            // The line of where the facts come from stands over the hint bar, and the body ends a line higher (the bar's
+            // width follows the page's state, so the line does not stand beside it).
+            let names = console.source_names().join(" · ");
+            let gap = BODY_BOTTOM_GAP + SOURCE_ROOM;
             let data = &self.data;
-            let (height, view) = scrolled(c, BODY_TOP, c.h - BODY_BOTTOM_GAP, self.scroll, look.bg, |body, y0| {
+            let (height, view) = scrolled(c, BODY_TOP, c.h - gap, self.scroll, look.bg, |body, y0| {
                 paint_body(body, text, data, art, look, y0)
             });
             self.max_scroll = (height - view).max(0);
             self.scroll = self.scroll.min(self.max_scroll);
             hits.scroll = Some(scroll_list(self.scroll, self.max_scroll));
+            // A tap on the left or right half of the colour label is Left or Right (when it is in view).
+            if let (Some(_), Some(_)) = (art, self.data.colour) {
+                let (x, y) = (c.w - MARGIN - ART_W, BODY_TOP - self.scroll + ART_H);
+                if y >= BODY_TOP && y + COLOUR_ROW <= c.h - gap {
+                    hits.buttons.push((Area::new(x, y, ART_W / 2, COLOUR_ROW), Button::Left));
+                    hits.buttons.push((Area::new(x + ART_W / 2, y, ART_W / 2, COLOUR_ROW), Button::Right));
+                }
+            }
             // Where the facts come from; Y lists the pages.
-            let names = console.source_names().join(" · ");
             let names = text.fit(Face::Body, 21, &names, full_w);
-            text.draw_right(c, Face::Body, 21, c.w - MARGIN, c.h - 104, pal().dust, &names);
+            text.draw(c, Face::Body, 21, MARGIN, crate::kit::hint_bar_top(c.h) - 12, pal().dust, &names);
+            body_gap = gap;
         }
         let (at, max, top, bottom) = match self.sources {
-            Some(at) => (at, self.sources_max, BODY_TOP, c.h - 100),
-            None => (self.scroll, self.max_scroll, BODY_TOP, c.h - BODY_BOTTOM_GAP),
+            Some(at) => (at, self.sources_max, BODY_TOP, c.h - BODY_BOTTOM_GAP),
+            None => (self.scroll, self.max_scroll, BODY_TOP, c.h - body_gap),
         };
         if max > 0 {
             // A thin bar on the right: where in the page the view is.
@@ -287,7 +311,7 @@ impl Page {
             c.rect(c.w - 28, top, 4, view_h, pal().spine);
             c.rect(c.w - 28, bar_y, 4, bar_h, pal().dust);
         }
-        hits.buttons = paint_hints(c, text, &self.hints());
+        hits.buttons.extend(paint_hints(c, text, &self.hints()));
         hits
     }
 }
@@ -307,19 +331,18 @@ fn scroll_list(at: i32, max: i32) -> (usize, usize, f32) {
 pub(crate) fn scrolled(c: &mut Canvas, top: i32, bottom: i32, scroll: i32, bg: u32, f: impl FnOnce(&mut Canvas, i32) -> i32) -> (i32, i32) {
     let w = c.w;
     let view_h = bottom - top;
-    let mut body = Canvas::new(&mut c.buf[(top * w) as usize..(bottom * w) as usize], w as u32, view_h as u32);
+    let mut body = c.rows(top, bottom);
     let height = f(&mut body, -scroll);
     let max = (height - view_h).max(0);
     const FADE: i32 = 36;
-    for k in 0..FADE {
-        let amount = (255 - k * 255 / FADE) as u8;
-        // (Not over the stripe down the left edge.)
-        if scroll > 0 {
-            body.shade_rect(STRIPE, k, w - STRIPE, 1, bg, amount);
-        }
-        if scroll < max {
-            body.shade_rect(STRIPE, view_h - 1 - k, w - STRIPE, 1, bg, amount);
-        }
+    let down: Vec<u8> = (0..FADE).map(|k| (255 - k * 255 / FADE) as u8).collect();
+    // (Not over the stripe down the left edge.)
+    if scroll > 0 {
+        body.shade_rows(STRIPE, 0, w - STRIPE, bg, &down);
+    }
+    if scroll < max {
+        let up: Vec<u8> = down.iter().rev().copied().collect();
+        body.shade_rows(STRIPE, view_h - FADE, w - STRIPE, bg, &up);
     }
     (height, view_h)
 }
@@ -400,6 +423,13 @@ fn paint_body(c: &mut Canvas, text: &mut Text, d: &PageData, art: Option<&Sprite
         let (aw, ah) = (a.w as i32, a.h as i32);
         c.blit_sprite(a, art_x + (ART_W - aw) / 2, y0 + (ART_H - ah) / 2, 0);
         ry = y0 + ART_H + 56;
+        // Under the picture: the colour it is shown in, and that Left and Right change it, as the arrows of a row do.
+        if let Some(name) = d.colour {
+            let shown = text.fit(Face::Body, 28, &format!("‹ {name} ›"), ART_W);
+            let w = text.width(Face::Body, 28, &shown);
+            text.draw(c, Face::Body, 28, art_x + (ART_W - w) / 2, y0 + ART_H + 34, look.dim, &shown);
+            ry += COLOUR_ROW;
+        }
     }
     // The summary runs beside the picture, or within its column when there is none.
     let summary_w = if art.is_some() { art_x - 40 - lx } else { lw };
@@ -597,6 +627,7 @@ mod tests {
             runs_on: Some("Flycast on pocket-core".into()),
             bios: None,
             achievements: None,
+            colour: None,
         }
     }
 
@@ -764,5 +795,37 @@ mod tests {
             "all six in the Split look"
         );
         assert_eq!(paint_facts(&mut c, &mut text, &rows, 588, 728, 604, 830, 0x777777, 0xdddddd), 3);
+    }
+
+    #[test]
+    fn left_and_right_choose_the_colour_only_on_a_console_that_comes_in_more() {
+        let mut one = Page::new(data("snes"));
+        assert_eq!((one.press(Button::Left), one.press(Button::Right)), (Out::None, Out::None), "one colour: nothing to choose");
+        let mut many = Page::new(PageData { colour: Some("Original"), ..data("gba") });
+        assert_eq!((many.press(Button::Left), many.press(Button::Right)), (Out::Colour(-1), Out::Colour(1)));
+        // Sources and Credits are other pages: Left/Right do not change the colour behind them.
+        many.press(Button::West);
+        assert_eq!(many.press(Button::Right), Out::None);
+    }
+
+    #[test]
+    fn the_colour_is_named_under_the_picture_and_a_tap_on_either_half_is_left_or_right() {
+        let art = crate::system_art::Sprite { w: 120, h: 80, px: vec![0xff80_8080; 120 * 80] };
+        let paint_with = |colour: Option<&'static str>| {
+            let mut page = Page::new(PageData { colour, ..data("gba") });
+            let (w, h) = (1240, 1080);
+            let mut px = vec![0u32; (w * h) as usize];
+            let mut text = Text::new();
+            let hits = page.paint(&mut Canvas::new(&mut px, w as u32, h as u32), &mut text, Some(&art), None, Look::plain());
+            (px, hits)
+        };
+        let (plain, plain_hits) = paint_with(None);
+        let (named, hits) = paint_with(Some("Milky Blue"));
+        let (x0, y0) = (1240 - MARGIN - ART_W, BODY_TOP + ART_H);
+        let differs = (y0..y0 + COLOUR_ROW).any(|y| (x0..x0 + ART_W).any(|x| plain[(y * 1240 + x) as usize] != named[(y * 1240 + x) as usize]));
+        assert!(differs, "the colour's name is painted under the picture");
+        let tap = |hits: &Hits, x: i32| hits.buttons.iter().find(|(a, _)| x >= a.x && x < a.x + a.w && y0 + 10 >= a.y && y0 + 10 < a.y + a.h).map(|(_, b)| *b);
+        assert_eq!((tap(&hits, x0 + 20), tap(&hits, x0 + ART_W - 20)), (Some(Button::Left), Some(Button::Right)));
+        assert_eq!(tap(&plain_hits, x0 + 20), None, "nothing to tap without a colour");
     }
 }

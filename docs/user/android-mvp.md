@@ -17,9 +17,11 @@ SELECT opens quick settings and R2 opens [your other apps](#your-other-apps). Th
 when you touch the screen again.
 
 The player has touch controls on a phone. Back, Pause or the controller's Menu opens Continue, Save, Load, Earlier,
-Options, Controls, Zoom, Screenshot and Save & quit. With touch the menu is made of large buttons: one tap does it, and the arrows beside "Slot N"
+Options, Zoom, Screenshot and Save & quit. A game started from the Handheld view has the handhelds' pause menu instead
+(rows at the left, the save's picture at the right; Zoom and Screenshot under Options). With touch the menu is made of large buttons: one tap does it, and the arrows beside "Slot N"
 choose one of eight manual slots; Options shows each setting with arrows to change it and scrolls by dragging. With a controller the
-same page shows a selection ring (A chooses, B continues, L/R choose the slot).
+same page shows a selection ring (A chooses, B continues, L/R choose the slot). The D-pad moves the ring the way the buttons sit on
+the screen, also between two buttons side by side; on "Slot N" Left and Right choose the slot.
 GBA and SNES also have on-screen L/R shoulder buttons.
 A game's first still picture stays visible until the game sends a newer picture.
 Save & quit writes a separate auto state; the next start continues there. It closes the game only after that state is written, however long the phone takes, and a write is never half done. Two games with one file name in different folders keep their own states on the phone. Android Home suspends/saves the game. Back through Android's recent apps it waits paused; through the app icon (or Home,
@@ -38,10 +40,12 @@ On a handheld every button of its pad works: L2/R2 (also as analog triggers) and
 and R2 on a game card opens its Controls. A trigger resting part way in doesn't count as pressed. The Odin's "L2/R2 mode"
 (analog, digital or both) makes no difference.
 
-**A and B.** In menus the button Android calls A confirms and B goes back, whichever physical button the handheld's
-"Controller style" makes of it. In a game the buttons keep their places like on the original console (the right-hand
-button is the console's A), on the Odin in either style, and on Xbox- and Switch-style pads. Changing the Odin's
-Controller style during a game pauses it and the pad stays player 1.
+**A and B.** In menus (Mobile and Handheld view) the button Android calls A confirms and B goes back, whichever physical
+button the handheld's "Controller style" makes of it: on the Odin, Xbox style confirms with the bottom button and Odin
+style with the right one. The hints show A for the button that confirms. The Handheld view has no Button layout of its
+own: Settings → Buttons there only chooses the Button symbols. In a game the buttons keep their places like on the
+original console (the right-hand button is the console's A), on the Odin in either style, and on Xbox- and
+Switch-style pads. Changing the Odin's Controller style during a game pauses it and the pad stays player 1.
 
 **A second controller.** A Bluetooth or USB pad plugged in or switched on is player 2 in a game that has a second player
 port, the handheld's own pad stays player 1. In a game with only one player port every pad plays player 1. A pad that
@@ -116,7 +120,7 @@ covers and pictures, more systems, controls, and ready. Continue advances, Back 
 for later. If you close the app or return from the folder picker, setup resumes where you left it.
 Settings → First start opens the eight-step guide again. You can finish without games or a network connection.
 
-Choose English, German, Spanish or Brazilian Portuguese, one of the four looks (Shelf, Easy, Split, Cabinet; Minimal or Cards from an
+Choose English, German, Spanish, Brazilian Portuguese, French or Italian, one of the four looks (Shelf, Easy, Split, Cabinet; Minimal or Cards from an
 earlier build open as Split), Cozy or Quick animations, and dark or light pages.
 Choose your ROM folder through Android's own picker and allow read access. Choosing another folder
 adds it to your library; existing folder permissions stay in place. An empty folder is harmless:
@@ -140,7 +144,17 @@ frame (None, Console or CRT TV), and Picture effect (Sharp, Smooth, CRT or Scanl
 phone default: landscape uses the available height with side bars; portrait places the picture at
 the top, above the touch controls. Integer uses whole physical source scanlines while keeping the
 core's display aspect. Stretch fills the available picture area and changes the aspect ratio.
-Frames use a small border; they do not reduce the default frameless picture. Effects run in GLES
+With a controller (the built-in pad of a handheld or one attached, so no touch controls on the screen) the picture uses
+the whole screen and sits exactly where pocket-ui OS puts it on a screen of that size: a Game Boy Advance game at
+Integer on a 1920×1080 handheld is 6× (1440×960), Fit fills the height, a frame fills what the picture leaves.
+The frames are Linux's, the same pictures drawn by the same code (see [Screen frame](options.md#screen-frame)).
+**Console** is the one Linux's Auto picks for the console: a Game Boy, Game Boy Color or Game Boy Advance shell, the Nintendo
+DS with its hinge, the PSP's piano black, a monitor surround for the home consoles. **CRT TV** is the old tube TV in its
+cabinet. With the touch controls on the screen the frame stands around the picture inside the safe area (never under the system bars, the camera hole or the
+gesture zones), above the touch controls on an upright phone and between the two groups of buttons when the phone is turned,
+so it does not lie under a button; only on a nearly square screen (a foldable's inner display), where the controls have
+no room beside the picture, they lie over the frame's edge as they do over the picture. There it takes a margin of about a twelfth of the shorter side, so the picture is a little
+smaller than without a frame; None, the start choice, keeps the full size. With a controller the picture keeps its size, as on pocket-ui OS. Effects run in GLES
 for software and hardware cores. Sharp uses nearest filtering; Smooth uses linear filtering;
 CRT adds scanlines and edge shading, and Scanlines adds just the line pattern.
 Save settings for selects This system or This game. A game override wins at the next launch;
@@ -150,7 +164,8 @@ Version 0.1.5-android.6: a USB or Bluetooth controller works in the whole app, n
 stick move through the shelves and menus; the key hints appear as soon as you use it. The pause menu is the same
 large page with a controller (a ring shows where you are) and always fits on the screen, also in landscape. Options
 are grouped into Picture, Sound, Controls and Speed; settings that belong to one emulator (its model, BIOS and
-others that need a restart) are under "Advanced (this emulator)", closed until you open it.
+others that need a restart, and those named in the emulator's own terms) are under "Advanced (this emulator)", closed
+until you open it. SNES games show six options in plain words, such as "Less sprite flicker" and "Show screen edges".
 The touch controls look like a pad: a round D-pad you can roll your thumb around (diagonals too), round buttons in
 each system's own layout (PlayStation shapes on PSP, C buttons on N64, six buttons on Mega Drive), shoulder buttons
 and small Select/Start pills. They are see-through, sit beside the picture in landscape and under it in portrait,
@@ -343,7 +358,7 @@ and the end of the logs of the app and of the player. It has three rows:
 
 - **Share the report** opens Android's share sheet with the text: send it to yourself, to a chat or to a mail app.
 - **Copy the report** puts the text on the clipboard, to paste into a new issue on pocket-ui's GitHub page
-  (Issues → New issue → Bug report). Say what happened and, if it matters, which game.
+  (Issues → New issue → Bug report) or into a mail to robby@robbyczesany.com. Say what happened and, if it matters, which game.
 - **Back**.
 
 Nothing is sent by the app, and no file is left on the phone. The text is at most 60,000 characters, so it fits an
@@ -374,11 +389,10 @@ an internal moment remain on their system shelf. Easy keeps its single-game orde
 
 ## Android 0.2
 
-[Controls](controls-card.md#on-android) shows where the console's buttons are on your gamepad
-or touch pad, from a game's card or the pause sheet. [Zoom and Hold to toggle](controls.md#on-android) help
+[Zoom and Hold to toggle](controls.md#on-android) help
 with small dialogue and keeping one game button pressed. Android's font scale and the app's
-Text size use the larger choice, up to 200% system text. After a long break, [Where was I?](continue.md#on-an-android-phone)
-can hold a resumed picture briefly for reading; Settings → Remind me where I was turns it off.
+Text size use the larger choice, up to 200% system text. With Settings → Remind me where I was switched on (it is off by default), [Where was I?](continue.md#on-an-android-phone)
+can hold a resumed picture briefly for reading after a long break.
 Back returns one page, and only Save & quit leaves gameplay. A controller disconnect pauses
 play and brings back the touch pad. Battery saver pauses optional media downloads and the startup animation; it leaves the game speed and saved preferences alone.
 A refused old PSP moment opens Recovery with a clear explanation and keeps the original
@@ -400,7 +414,7 @@ library** to close that session safely. Earlier saves are kept. **Where was I?**
 only dismisses the reminder.
 
 Settings → **Updates** downloads a newer, matching signed APK over Wi-Fi and asks Android to install it.
-Games and settings stay. Do not uninstall to update: uninstalling removes private saves (Settings → Save backup keeps them in a file). The preview does not use
+Games and settings stay. Do not uninstall to update. If you do uninstall, Android asks whether to **Keep app data**: tick it and your saves, moments and settings are there again when you install pocket-ui later. Without it they are gone (Settings → Save backup keeps them in a file). The preview does not use
 the SD-card updater and does not announce Linux releases as Android updates.
 
 Game and system names keep their original spelling in every language, including phone rows, title bands, box headers and the pause header. Buttons and instructions follow the selected language.
@@ -419,9 +433,8 @@ Choosing it again resumes the saved bytes when the server supports it. A lost Wi
 After a download is checked and installed, its row says Installed and the game can start normally.
 Starting a game for a missing system opens Extras with that system selected and an explanation.
 PPSSPP's system files come with its download. No games or console BIOS are included.
-Until the download channel is public, these systems are listed as **Coming soon**: first start and Extras show them
-without a size or a choice, and starting a game for one says that the system is coming soon, with no download and no error.
-Once the channel is public the same pages offer the downloads.
+Until the download channel is public, these systems are listed as **Not available here**: first start and Extras show them
+without a size or a choice, and starting a game for one says that the system can't be downloaded in this version of the app, with no download and no error.
 
 ## Licences
 
@@ -447,3 +460,5 @@ Android still asks you to confirm the installation. pocket-ui closes afterwards;
 opening confirms the installed version. Games, app settings,
 ROM-folder access and saves stay in place. Android's Cancel button cancels its confirmation dialog.
 Automatic checks run while the launcher is idle on Wi-Fi; they never install an update by themselves.
+The handheld view looks at the same channel from its shelf (once a day, on Wi-Fi, not during a game) and says a newer
+version once on a card: **A** installs it the same way, **B** closes the card. The Mobile view's switch turns both off.

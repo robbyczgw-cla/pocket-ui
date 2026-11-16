@@ -58,9 +58,12 @@ pub enum Emblem {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Icon {
     Look,
-    /// Sound & feel: a speaker with its waves.
+    /// Screen & sound: a speaker with its waves.
     Sound,
+    /// Controls (and the pause menu's achievements and players): a gamepad.
     Playing,
+    /// Settings' Playing: a play button in a ring.
+    Play,
     Games,
     Connections,
     System,
@@ -105,6 +108,7 @@ const FILES: &[(Art, &[u8])] = &[
     (Art::Device(Model::Nova), include_bytes!("../assets/ui-art/device-nova.png")),
     (Art::Icon(Icon::Look), include_bytes!("../assets/ui-art/icon-look.png")),
     (Art::Icon(Icon::Playing), include_bytes!("../assets/ui-art/icon-playing.png")),
+    (Art::Icon(Icon::Play), include_bytes!("../assets/ui-art/icon-play.png")),
     (Art::Icon(Icon::Games), include_bytes!("../assets/ui-art/icon-games.png")),
     (Art::Icon(Icon::Connections), include_bytes!("../assets/ui-art/icon-connections.png")),
     (Art::Icon(Icon::System), include_bytes!("../assets/ui-art/icon-system.png")),
@@ -309,7 +313,7 @@ mod tests {
         for m in [Model::MiniV2, Model::MiniV1, Model::Pocket5, Model::Flip2, Model::Pocket6, Model::Nova] {
             assert!(get(Art::Device(m)).is_some(), "{m:?}");
         }
-        for i in [Icon::Look, Icon::Playing, Icon::Games, Icon::Connections, Icon::System, Icon::Favourites, Icon::Search, Icon::Curator] {
+        for i in [Icon::Look, Icon::Playing, Icon::Play, Icon::Games, Icon::Connections, Icon::System, Icon::Favourites, Icon::Search, Icon::Curator] {
             let s = get(Art::Icon(i)).unwrap();
             assert_eq!((s.w, s.h), (16, 16), "{i:?}");
             assert!(s.px.iter().all(|p| *p == 0 || *p == 0xffff_ffff), "{i:?}: white on clear, so it takes the row's colour");
@@ -340,7 +344,7 @@ mod tests {
         // Heading at 300: the picture can't fit above it under the top line, so the words move.
         let dy = above_words(&mut c, Art::NoGames, 72, false, 120, 300, 50);
         assert_eq!(dy, 120 + h + 28 - (300 - crate::type_scale::px(50) as i32 * 3 / 4));
-        assert!(c.buf.iter().any(|p| *p != 0), "painted");
+        assert!(c.pixels().iter().any(|p| *p != 0), "painted");
         // Heading low enough: nothing moves.
         assert_eq!(above_words(&mut c, Art::NoGames, 620, true, 120, 700, 50), 0);
     }

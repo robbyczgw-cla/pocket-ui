@@ -22,11 +22,29 @@ pub struct Account {
     /// The name shown on the site, when it differs from the user name.
     #[serde(default)]
     pub display_name: String,
+    /// Hardcore (Settings > RetroAchievements > Hardcore): no save-state loads, rewind, fast-forward or cheats, and the
+    /// unlocks count as hardcore on the site (`super::hardcore`). Off for an account signed in before it existed.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub hardcore: bool,
+}
+
+/// Where the account lives when something else owns it (Android's handheld view: the app's folder, which the player and
+/// the Mobile view read, not the handheld view's own).
+static SHARED: std::sync::OnceLock<PathBuf> = std::sync::OnceLock::new();
+
+/// From now on the account is in `dir`, whatever data folder a page asks with. Before the first page is opened.
+pub fn share_in(dir: &Path) {
+    let _ = SHARED.set(dir.to_path_buf());
+}
+
+/// The account's file: in `shared` when there is one, else in `data_dir`.
+pub fn path_with(shared: Option<&Path>, data_dir: &Path) -> PathBuf {
+    shared.unwrap_or(data_dir).join(FILE)
 }
 
 impl Account {
     pub fn path(data_dir: &Path) -> PathBuf {
-        data_dir.join(FILE)
+        path_with(SHARED.get().map(PathBuf::as_path), data_dir)
     }
 
     /// The account, if one is signed in (a file without a token counts as signed out).
@@ -76,6 +94,16 @@ impl Account {
         Ok(())
     }
 
+    /// A new sign-in of the same user keeps what they chose before it (Hardcore): signing in again after a password
+    /// change must not quietly turn Hardcore off.
+    pub fn keeping_choices(mut self, data_dir: &Path) -> Account {
+        let before = fs::read(Self::path(data_dir)).ok().and_then(|b| serde_json::from_slice::<Account>(&b).ok());
+        if before.is_some_and(|b| b.username.eq_ignore_ascii_case(&self.username) && b.hardcore) {
+            self.hardcore = true;
+        }
+        self
+    }
+
     /// Signs out: the token is deleted. True when no account is left.
     pub fn remove(data_dir: &Path) -> bool {
         let path = Self::path(data_dir);
@@ -100,6 +128,7 @@ mod tests {
             username: "Alex".into(),
             token: "Tk123".into(),
             display_name: String::new(),
+            hardcore: false,
         };
         a.save(&dir).unwrap();
         assert_eq!(Account::load(&dir), Some(a.clone()));
@@ -123,6 +152,16 @@ mod tests {
         assert!(Account::remove(&dir));
         assert_eq!(Account::load(&dir), None);
         assert!(Account::remove(&dir), "signing out twice is fine");
+    }
+
+    #[test]
+    fn signing_in_again_keeps_hardcore_for_the_same_user_only() {
+        let dir = scratch("again");
+        let fresh = |name: &str| Account { username: name.into(), token: "New".into(), display_name: String::new(), hardcore: false };
+        assert!(!fresh("Alex").keeping_choices(&dir).hardcore, "nothing before");
+        Account { hardcore: true, ..fresh("Alex") }.save(&dir).unwrap();
+        assert!(fresh("alex").keeping_choices(&dir).hardcore);
+        assert!(!fresh("Someone").keeping_choices(&dir).hardcore, "another account starts with its own choice");
     }
 
     #[test]

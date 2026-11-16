@@ -61,6 +61,7 @@ impl App {
 
     /// Reads again which games stand open: on a thread, the answer comes as an event.
     pub(crate) fn frozen_refresh(&mut self) {
+        self.played_refresh();
         self.big_moments_refresh();
         if !wanted() {
             FROZEN_GEN.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
@@ -181,7 +182,7 @@ impl App {
         let turn = if pocket_ui::motion::level() == pocket_ui::motion::Motion::Off { 0 } else { (since.elapsed().as_millis() / SPIN_STEP.as_millis()) as i32 };
         let word = "Going back to your moment…";
         let w = self.text.width(Face::Body, 28, word);
-        let (x, y) = ((c.w - w + 44) / 2, c.h - 72);
+        let (x, y) = ((c.w - w + 44) / 2, pocket_ui::kit::hint_bar_top(c.h) - 24);
         spinner(c, x - 28, y - 10, turn);
         self.text.draw(c, Face::Body, 28, x, y, pal().chalk, word);
     }

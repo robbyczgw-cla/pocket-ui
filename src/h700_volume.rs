@@ -1,4 +1,4 @@
-//! Scoped workaround for ROCKNIX 20261001's H616 UCM Speaker mixer assignment.
+//! Scoped speaker ceiling and persisted-mute repair for ROCKNIX 20261001's H616 UCM.
 //! All helpers run on one worker. No mixer watchdog: unchanged wishes never overwrite an external ALSA edit.
 //! See docs/H700-VOLUME.md for the dB curve, ownership, handover and hardware-test limits.
 
@@ -150,6 +150,8 @@ struct Session {
     first_wish: Option<(u8, bool)>,
     first_sink: Option<String>,
     pending: bool,
+    /// The observed Line Out zero-volume mute may arrive after the sink wish.
+    zero_line_muted: bool,
     owned: [Option<Raw>; 5],
     last: Option<(Wish, bool, u64)>,
     /// An external mixer edit gives up ownership until the next deliberate wish.
@@ -227,7 +229,13 @@ impl Session {
                 self.migration_raised = inherited;
             }
         }
-        if self.last.as_ref() == Some(&(wish.clone(), mixer.jack, revision)) && !self.force && !was_pending {
+        // Both raw 0 and 1 are hardware mute in the validated Line Out TLV. Use the exact zero-volume
+        // readback here; never power a route on from the sink wish alone, before PipeWire has silenced it.
+        let zero_line_muted = wish.percent == 0 && !wish.muted
+            && mixer.values[Control::Line.index()] == [0; 2]
+            && mixer.values[Control::LineOn.index()] == [1; 2];
+        if self.last.as_ref() == Some(&(wish.clone(), mixer.jack, revision)) && !self.force && !was_pending
+            && self.zero_line_muted == zero_line_muted {
             self.pending = false;
             return;
         }
@@ -267,7 +275,16 @@ impl Session {
             self.put(io, &mut mixer, Control::DacOn, [0; 2]);
             return;
         }
-        if silent {
+        if silent && zero_line_muted && !self.yielded {
+            // Powering down this codec stops its PCM clock: RetroArch's blocking audio queue then hangs N64
+            // after "Init new dynarec". Line Out is already physically muted at zero (read back above), so keep
+            // the selected route clocked with extra DAC attenuation. PipeWire alone still owns Line Out.
+            if !self.put(io, &mut mixer, Control::Dac, [0; 2])
+                || !self.put(io, &mut mixer, Control::DacOn, [1; 2])
+                || !self.put(io, &mut mixer, Control::Speaker, [u8::from(!headphones); 2]) {
+                return;
+            }
+        } else if silent {
             // Try every independent way to silence even if a switch/helper fails. Never Line Out's switch: it is
             // PipeWire's mute of both codec sinks (UCM PlaybackMixerElem), which WirePlumber would store for good.
             let mut ok = true;
@@ -294,8 +311,8 @@ impl Session {
             let restore_dac = ours_off(Control::DacOn);
             let restore_speaker = ours_off(Control::Speaker);
             let target = if headphones { 63 } else { self.dac_target(wish.percent) };
-            // At attach we may only turn down; an existing hardware mute belongs to the user, unless it came with a
-            // lifted sink mute (then it is what an earlier version left behind for that mute).
+            // At attach preserve existing levels except a recognized inherited 0.4.0 gain (ramped) or a lifted
+            // stored sink mute. A different hardware level or hardware mute still belongs to the user.
             let target = if initial && !heal && !inherited { target.min(mixer.values[Control::Dac.index()][0]) } else { target };
             let current = mixer.values[Control::Dac.index()][0];
             let next = if (initial && !heal && !inherited) || (route_changed && !headphones && current > target) {
@@ -331,6 +348,7 @@ impl Session {
         self.last = Some(key);
         self.force = false;
         self.pending = ramping;
+        self.zero_line_muted = zero_line_muted;
         if self.migration == Migration::Correcting && !ramping {
             self.migration = Migration::Done;
         }
@@ -566,7 +584,8 @@ fn parse_mixer(text: &str) -> Option<Mixer> {
     };
     let dac = section("DAC Playback Volume")?;
     let line = section("Line Out Playback Volume")?;
-    if !dac.contains("min=0,max=63") || !dac.contains("dBscale-min=-73.08dB,step=1.16dB") || !line.contains("min=0,max=31") {
+    if !dac.contains("min=0,max=63") || !dac.contains("dBscale-min=-73.08dB,step=1.16dB") || !line.contains("min=0,max=31")
+        || !line.contains("rangemin=0,,rangemax=1") || !line.contains("dBscale-min=-99999.99dB,step=0.00dB,mute=1") {
         return None;
     }
     let mut raw = [[0; 2]; 5];
@@ -773,6 +792,7 @@ mod tests {
     const SPEAKER: &str = "alsa_output._sys_devices_platform_soc_5096000.codec_sound_card0.HiFi__Speaker__sink";
     const HEADPHONES: &str = "alsa_output._sys_devices_platform_soc_5096000.codec_sound_card0.HiFi__Headphones__sink";
     const CAPTURE: &str = include_str!("../testdata/audio/h616-muted-amixer.txt");
+    const TOPOLOGY: &str = include_str!("../testdata/audio/h616-speaker-topology.txt");
 
     struct Fake {
         mixer: Mixer,
@@ -829,6 +849,7 @@ mod tests {
                 }
             }
             // Device DAPM connects Speaker to LINEOUT: both hardware gains are in the signal path.
+            // fake_speaker_wiring_matches_the_device_capture binds this to the recorded amixer/DAPM fixture.
             true
         }
         fn unmute(&mut self, _: &str) -> bool {
@@ -895,6 +916,59 @@ mod tests {
             "PipeWire keeps both Line Out controls");
         apply(&mut s, &mut f, volume(0), 1);
         assert!(!f.audible(), "zero still uses hardware mute");
+    }
+
+    /// On the Plus, turning either codec switch off stalls the PCM clock. RetroArch's blocking audio
+    /// queue then stops Mario 64 immediately after "Init new dynarec", even with plenty of free RAM.
+    #[test]
+    fn zero_volume_keeps_n64_audio_clock_running_behind_line_out_mute() {
+        let (mut s, mut f) = (Session::default(), Fake::playing());
+        f.set(Control::Line, 0); // PipeWire's observed zero-volume hardware mute, before any power-on.
+        apply(&mut s, &mut f, volume(0), 0);
+        assert!(!f.audible(), "Line Out at zero still silences the serial speaker path");
+        assert_eq!(f.value(Control::Dac), [0; 2], "keep the extra DAC attenuation");
+        assert_eq!(f.value(Control::DacOn), [1; 2], "RetroArch must still drain its audio queue");
+        assert_eq!(f.value(Control::Speaker), [1; 2], "the H700 PCM clock needs the speaker route");
+        assert_eq!(f.value(Control::Line), [0; 2], "never raise PipeWire's mute");
+        s.restore(&mut f);
+        assert!(!f.audible(), "exit cannot undo zero volume");
+    }
+
+    #[test]
+    fn zero_volume_waits_for_pipewire_mute_before_enabling_clock() {
+        let (mut s, mut f) = (Session::default(), Fake::playing());
+        apply(&mut s, &mut f, volume(0), 0); // The sink wish can arrive before the mixer catches up.
+        assert!(!f.audible());
+        assert_eq!(f.value(Control::DacOn), [0; 2]);
+        f.set(Control::Line, 0);
+        apply(&mut s, &mut f, volume(0), 0); // Same wish: the observed mute must still be noticed.
+        assert_eq!(f.value(Control::DacOn), [1; 2]);
+        assert_eq!(f.value(Control::Speaker), [1; 2]);
+        assert!(!f.audible());
+        f.set(Control::Speaker, 0); // A subsequent external power-off stays the user's.
+        f.set(Control::DacOn, 0);
+        f.writes.clear();
+        apply(&mut s, &mut f, volume(0), 0);
+        assert!(f.writes.is_empty(), "no watchdog fighting an external codec edit");
+    }
+
+    #[test]
+    fn zero_volume_keeps_headphones_silent_and_a_sleep_mute_powers_down() {
+        let (mut s, mut f) = (Session::default(), Fake::playing());
+        f.set(Control::Line, 0);
+        f.mixer.jack = true;
+        let mut wish = volume(0);
+        wish.sink = HEADPHONES.into();
+        apply(&mut s, &mut f, wish.clone(), 0);
+        assert_eq!(f.value(Control::Speaker), [0; 2]);
+        assert_eq!(f.value(Control::DacOn), [1; 2]);
+        assert!(!f.audible());
+        // Sleep's brief sink mute must retain the existing power-down behavior.
+        wish.muted = true;
+        s.force = true;
+        apply(&mut s, &mut f, wish, 0);
+        assert_eq!(f.value(Control::DacOn), [0; 2]);
+        assert_eq!(f.value(Control::Speaker), [0; 2]);
     }
 
     #[test]
@@ -1102,6 +1176,8 @@ mod tests {
         for text in [
             CAPTURE.replace("max=63", "max=255"),
             CAPTURE.replace("step=1.16dB", "step=1.00dB"),
+            CAPTURE.replace("rangemin=0,,rangemax=1", "rangemin=1,,rangemax=2"),
+            CAPTURE.replace("dBscale-min=-99999.99dB,step=0.00dB,mute=1", "dBscale-min=-46.50dB,step=1.50dB,mute=0"),
             CAPTURE.replace(": values=on,on", ": values=on"),
             CAPTURE.replace("name='Headphone Jack'", "name='Other Jack'"),
         ] {
@@ -1183,10 +1259,28 @@ mod tests {
     }
 
     #[test]
+    fn fake_speaker_wiring_matches_the_device_capture() {
+        // Review a changed hardware topology before changing this fake: the old unverified bypass
+        // assumption made thousands of passing tests unable to detect double attenuation.
+        assert!(TOPOLOGY.contains("Speaker: Off  in 0 out 1\n widget-type spk\n in  \"static\" \"LINEOUT\""));
+        assert!(TOPOLOGY.contains("in  \"static\" \"Line Out Ramp Controller\" \"5096000.codec\""));
+        let captured = parse_mixer(TOPOLOGY).expect("real codec ranges/TLV and controls");
+        assert_eq!(captured.values[Control::Line.index()], [24; 2]);
+        let mut f = Fake::playing();
+        assert!(f.audible());
+        for raw in [0, 1] {
+            f.set(Control::Line, raw);
+            assert!(!f.audible(), "LINEOUT's finite hardware mute must also silence Speaker");
+        }
+        f.set(Control::Line, 2);
+        assert!(f.audible());
+        f.set(Control::LineOn, 0);
+        assert!(!f.audible(), "the captured serial path includes the Line Out switch");
+    }
+
+    #[test]
     fn inherited_correction_is_remembered_and_not_repeated_on_a_later_start() {
-        let dir = std::env::temp_dir().join(format!("h700-volume-041-{}-{}", std::process::id(),
-            std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos()));
-        std::fs::create_dir(&dir).unwrap();
+        let dir = crate::testutil::TestDir::new("h700-volume-041");
         let marker = dir.join("h700-volume-041");
         let mut s = Session::start(None, &marker);
         let mut f = Fake::playing();
@@ -1202,8 +1296,6 @@ mod tests {
         apply(&mut next, &mut f, volume(50), 0);
         assert_eq!(f.value(Control::Dac), [31; 2]);
         assert!(f.writes.is_empty());
-        std::fs::remove_file(marker).unwrap();
-        std::fs::remove_dir(dir).unwrap();
     }
 
     #[test]

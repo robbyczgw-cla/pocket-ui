@@ -17,7 +17,7 @@
 //! load earlier<n>|started<n> <time> (Earlier, see `load_earlier`),
 //! reload (settings), set <key> <value>, disc next | disc <n> (multi-disc games: the pause menu's Disc row reads what
 //! `pocket_ui::disc::FILE` says, see `publish_discs`), cheats (read the game's switched-on
-//! cheats again, see `cheats`), quit, quit nosave (the pause menu's "Quit without saving": the battery save but no
+//! cheats again, see `cheats`), hardcore on|off (RetroAchievements' Hardcore switched during the game, `switch_hardcore`), quit, quit nosave (the pause menu's "Quit without saving": the battery save but no
 //! new auto-resume state, see `App::exit_without_saving`), quit handoff (the game switcher: `quit`, and a line on
 //! pocket-ui's pipe once the save is done, see `fast_switch`). `pocket-core --rumble-test` shakes the motor through the path a core's
 //! rumble takes (see `rumble`).
@@ -41,7 +41,7 @@
 //! now, before the system suspends or powers off); and
 //! `preview <w> <h> [<seq>]` (renders the last frame with the current settings into
 //! `pocket_ui::preview::FILE`, see `src/preview.rs`). `opt <core option key> <value>` and
-//! `ctl <button|stick_dpad|hold_toggle> <value>` come from the Emulator and Controls pages, which read
+//! `ctl <button|stick_dpad|dpad_stick|hold_toggle> <value>` come from the Emulator and Controls pages, which read
 //! /storage/.config/pocket-ui/core-options/<system>.json; this process rewrites it whenever the
 //! core's options, their visibility or the button layout change.
 //!
@@ -318,9 +318,11 @@ struct App {
     /// The hold is "Where was I?"'s (`startup::HOLD_STILL`): the game doesn't run until it is over, once its moment is
     /// loaded (a 3D core's moment waits for its first frames, `resume_in`, which run as in any hold).
     hold_still: bool,
-    /// The hold keeps the game still until its deadline, no button awaited (`startup::HOLD_PAUSE`): an open case on Cozy,
-    /// its moment waits behind the insert scene.
+    /// The hold keeps the game still until its deadline, no button awaited (`startup::HOLD_PAUSE`): A on the Cabinet's
+    /// playing TV, the game goes on from the frame the TV stopped at once its picture has grown (`showcase`).
     hold_pause: bool,
+    /// The sound coming up softly after that hand-over (`showcase::FadeIn`; nothing for any other start).
+    fade_in: pocket_ui::showcase::FadeIn,
     /// The buttons down when the hold was last looked at (`startup::new_press`).
     hold_down: Option<[u16; players::MAX]>,
     /// The old-TV power-on over the game's first 300 ms (`crt_on`): wanted by pocket-ui (Cozy, Motion Full) and not yet
@@ -366,6 +368,13 @@ struct App {
     ra_options: Vec<(String, String)>,
     /// RetroAchievements for this game, when an account is signed in (`pocket_ui::achievements`).
     cheevos: Option<pocket_ui::achievements::session::Session>,
+    /// RetroAchievements' Hardcore for this game (`pocket_ui::achievements::hardcore`): chosen, and the session runs. Its
+    /// rules hold while [`App::hardcore`] says so: no state loads or saves, rewind or cheats (fast-forward stays, as in
+    /// RetroArch: RetroAchievements forbids slowing the game down, not speeding it up).
+    hardcore: bool,
+    /// A pause asked for in Hardcore before the game had run long enough since the last one (`Session::can_pause`): it
+    /// comes once the game has.
+    pause_wait: bool,
     /// The unlock sound over the game's sound, and how loud (0: UI sounds are off).
     chime: pocket_ui::achievements::chime::Player,
     chime_gain: f32,
@@ -394,29 +403,40 @@ impl App {
     }
 
     fn try_create_gfx(&mut self, el: &ActiveEventLoop) -> Result<(), String> { #[cfg(feature = "brick")] if std::env::var_os("POCKET_CORE_SOFTWARE").is_some() { self.soft = Some(pocket_ui::soft_screen::SoftScreen::new(el)?); if hw_render::requested().is_some() { let g = self.core.av.geometry; self.brick_gles = Some(pocket_ui::brick_gles::BrickGles::new((g.max_width, g.max_height))?); } return Ok(()); }
+        pocket_ui::startup::mark("gfx begin");
         let attrs = Window::default_attributes().with_title("pocket-core").with_fullscreen(Some(Fullscreen::Borderless(None)));
         let template = ConfigTemplateBuilder::new().with_alpha_size(0);
         let (window, config) = DisplayBuilder::new()
             .with_window_attributes(Some(attrs))
-            .build(el, template, |mut configs| configs.next().unwrap_or_else(|| fail("The graphics couldn't start: no EGL configuration.")))
+            .build(el, template, |mut configs| {
+                let config = configs.next().unwrap_or_else(|| fail("The graphics couldn't start: no EGL configuration."));
+                pocket_ui::startup::mark("gfx display/EGL");
+                config
+            })
             .map_err(|e| format!("display: {e}"))?;
+        pocket_ui::startup::mark("gfx window");
         let window = window.ok_or("no window")?;
         let handle = window.window_handle().ok().map(|h| h.as_raw());
         let display = config.display();
         let ctx_attrs = hw_render::main_context_attributes(handle);
         let not_current = unsafe { display.create_context(&config, &ctx_attrs).map_err(|e| format!("GLES 3 context: {e}"))? };
+        pocket_ui::startup::mark("gfx context");
         let surface_attrs = window.build_surface_attributes(Default::default()).map_err(|e| format!("surface attributes: {e}"))?;
         let surface = unsafe { display.create_window_surface(&config, &surface_attrs).map_err(|e| format!("window surface: {e}"))? };
+        pocket_ui::startup::mark("gfx surface");
         let context = not_current.make_current(&surface).map_err(|e| format!("make current: {e}"))?;
         surface.set_swap_interval(&context, SwapInterval::Wait(NonZeroU32::new(1).unwrap())).ok();
         let gl = unsafe { glow::Context::from_loader_function_cstr(|s| display.get_proc_address(s)) };
 
+        pocket_ui::startup::mark("gfx current/GL");
         let mut video = Renderer::new(gl).map_err(|e| format!("video shaders: {e}"))?;
+        pocket_ui::startup::mark("gfx renderer");
         video.set_frame_source(&self.video_src.0, &data_dir().join("frames"));
         // The screen frame doesn't hold up the first frame: read from the cache or drawn on a thread, it fades in when
         // it is there (perf/bezel-cache, docs/FRAMES.md "Cache"). Off again once it has faded in (`draw`).
         video.set_frame_async(true);
         let overlay = Overlay::new(video.gl()).map_err(|e| eprintln!("overlay shaders: {e}")).ok();
+        pocket_ui::startup::mark("gfx overlay");
         // A 3D core gets its context now that ours exists; from here on the core's is current
         // except while we draw (and render previews).
         let hw = match hw_render::requested() {
@@ -602,6 +622,11 @@ impl App {
                 self.toggled[p].apply(pressed, self.mapping.hold_toggle)
             };
             sticks[p] = if self.dark { [0; 4] } else { controls::turn_sticks(s.analog(!self.mapping.stick_dpad), turn) };
+            // D-pad as left stick (N64/PSP/Dreamcast on a handheld without sticks): the console's D-pad, after the
+            // Controls mapping, becomes the left stick.
+            if self.mapping.dpad_stick {
+                (buttons[p], sticks[p]) = controls::dpad_to_stick(buttons[p], sticks[p]);
+            }
         }
         (buttons, sticks)
     }
@@ -666,7 +691,12 @@ impl App {
         for p in 1..players::MAX {
             self.core.set_player(p, if home { 0 } else { players[p] }, sticks[p]);
         }
-        if rewind_held && !self.ex.rewind_was_held && !self.ex.cfg.rewind {
+        // Hardcore: no rewind (one look at the session, only while the shortcut is held). Fast-forward stays, as in
+        // RetroArch.
+        let hardcore = rewind_held && self.hardcore();
+        if rewind_held && !self.ex.rewind_was_held && hardcore {
+            self.hud.toast(pocket_ui::achievements::hardcore::NO_REWIND);
+        } else if rewind_held && !self.ex.rewind_was_held && !self.ex.cfg.rewind {
             self.hud.toast("Rewind is off. Switch it on under Speed, rumble, fan.");
         }
         if self.ex.rewind_was_held && !rewind_held && self.ex.rewound > 0 {
@@ -678,7 +708,7 @@ impl App {
             }
         }
         self.ex.rewind_was_held = rewind_held;
-        let back = rewind_held && self.ex.cfg.rewind;
+        let back = rewind_held && self.ex.cfg.rewind && !hardcore;
         let ff = if back || self.dark { None } else { self.ex.fast_forward() };
 
         let (mut frame, mut samples, mut av, mut geometry) = (None, Vec::new(), None, None);
@@ -837,6 +867,10 @@ impl App {
             } else {
                 if !samples.is_empty() {
                     self.nominal_samples = samples.len();
+                }
+                self.fade_in.apply(&mut samples);
+                if let Some(line) = self.fade_in.report() {
+                    println!("showcase: {line}");
                 }
                 audio.push(&samples);
             }
@@ -1108,7 +1142,7 @@ impl App {
                 backend: a.backend.to_string(),
                 core_rate: self.core.av.timing.sample_rate,
                 in_rate: a.input_rate(),
-                out_rate: pocket_ui::audio::OUT_RATE,
+                out_rate: pocket_ui::audio::out_rate(),
                 target_ms: a.target_ms() as f32,
                 queue_ms: a.buffered_ms() as f32,
                 server_ms: a.server_ms() as f32,
@@ -1129,9 +1163,50 @@ impl App {
         PROGRESS.busy(was);
     }
 
+    /// The state the Cabinet's TV run handed over (`showcase`): loaded instead of a fresh start, for a game that has
+    /// nothing of its own (`showcase::may_continue`, asked again here: a save may have come since). False: the usual
+    /// start, and no still hold.
+    fn continue_showcase(&mut self, state: &Path) -> bool {
+        let (system, rom) = (self.video_src.0.clone(), self.video_src.1.clone());
+        let outcome = if pocket_ui::showcase::may_continue(&system, &rom) {
+            pocket_ui::showcase::continue_from(&self.core, state, Duration::from_millis(1500))
+        } else {
+            Err("the game has a save of its own".into())
+        };
+        pocket_ui::showcase::clear(&[state]);
+        match outcome {
+            Ok(()) => {
+                println!("showcase: continued from the TV");
+                // As after a resume: achievements and rewind start from this moment.
+                if let Some(a) = self.cheevos.as_mut() {
+                    a.reset();
+                }
+                self.ex.rewind.clear();
+                self.ex.verify.iter_mut().for_each(|v| v.hashes.clear());
+                true
+            }
+            Err(e) => {
+                println!("showcase: not continued: {e}");
+                self.hold_pause = false;
+                self.fade_in = Default::default();
+                false
+            }
+        }
+    }
+
     fn resume_moment(&mut self) {
         // "Before load" of a session that didn't end with a Quit (a crash) is gone with it.
         slots::clear_undo(&self.states);
+        if self.hardcore() {
+            self.start_hardcore();
+            return;
+        }
+        // A on the Cabinet's playing TV: the game goes on from where the TV was (`showcase`).
+        if let Some(state) = std::env::var_os(pocket_ui::showcase::STATE_ENV).map(PathBuf::from) {
+            if self.continue_showcase(&state) {
+                return;
+            }
+        }
         let path = slots::auto_path(&self.states);
         // A moment set aside while every slot was taken goes into the first free one (`frozen_phone::set_aside`).
         pocket_ui::frozen_phone::restore_kept(&self.states);
@@ -1204,6 +1279,68 @@ impl App {
                 self.hud.toast("In-game save is newer: not resumed");
             }
             Resume::NoState => {}
+        }
+    }
+
+    /// Continue in Hardcore: the game starts from its in-game save, never from a state (not the Cabinet TV's either). The
+    /// moment stays where it is (Load has it once Hardcore is off); a line says why the game didn't continue.
+    fn start_hardcore(&mut self) {
+        if let Some(state) = std::env::var_os(pocket_ui::showcase::STATE_ENV).map(PathBuf::from) {
+            pocket_ui::showcase::clear(&[state.as_path()]);
+            self.hold_pause = false;
+            self.fade_in = Default::default();
+        }
+        // The "Where was I?" hold is for a continued moment only.
+        if self.hold_still {
+            self.hold = false;
+        }
+        let auto = slots::auto_path(&self.states);
+        let kept = slots::auto_candidates(&auto, false).iter().any(|p| p.exists());
+        println!("not resumed: hardcore{}", if kept { ", the moment stays" } else { "" });
+        if kept {
+            self.hud.note(pocket_ui::achievements::hardcore::STARTED_FRESH);
+        }
+    }
+
+    /// Whether Hardcore's rules hold now: chosen for this game, and its achievements are loading or running
+    /// (`Session::hardcore`; one uncontended lock).
+    fn hardcore(&self) -> bool {
+        self.hardcore && self.cheevos.as_ref().is_none_or(|a| a.hardcore())
+    }
+
+    /// Hardcore refuses this (a load, a save, cheats): says so over the game. True when refused.
+    fn hardcore_refuses(&mut self, why: &str) -> bool {
+        if !self.hardcore() {
+            return false;
+        }
+        println!("hardcore: refused ({why})");
+        self.hud.toast(why.to_string());
+        true
+    }
+
+    /// `hardcore on|off` (pause menu → Achievements): on starts the game again, as RetroAchievements asks (pocket-ui asked
+    /// first), and takes the cheats out; off gives states, rewind and cheats back at once.
+    fn switch_hardcore(&mut self, on: bool) {
+        match self.cheevos.as_mut() {
+            Some(a) => a.set_hardcore(on),
+            // The host tests drive the rules without a session (`hardcore_rules`).
+            None if cfg!(test) => {}
+            None => {
+                println!("hardcore {}: no achievements in this game", if on { "on" } else { "off" });
+                return;
+            }
+        }
+        self.hardcore = on;
+        println!("hardcore {}", if on { "on" } else { "off" });
+        if on {
+            self.core.set_cheats(&[]);
+            self.pixel_live.cheats = 0;
+            self.start_over();
+            self.hud.toast(pocket_ui::achievements::hardcore::RESTARTED);
+        } else {
+            let n = pocket_ui::cheats::apply(&self.core, &data_dir(), &self.video_src.0, &self.video_src.1);
+            self.pixel_live.cheats = n;
+            self.hud.toast(pocket_ui::achievements::hardcore::OFF_NOW);
         }
     }
 
@@ -1314,6 +1451,9 @@ impl App {
     }
 
     fn save_slot(&mut self, slot: usize) {
+        if self.hardcore_refuses(pocket_ui::achievements::hardcore::NO_SAVE) {
+            return;
+        }
         let ok = self.save_to(&slots::state_path(&self.states, slot)).is_ok();
         if ok {
             self.flash_frame_light();
@@ -1349,6 +1489,10 @@ impl App {
     /// Loads a state file, after keeping what is running now as "Before load" (a Load can be undone, whatever it
     /// brings back; loading "Before load" itself swaps the two, the file being read first).
     fn load_state_file(&mut self, path: &Path, label: &str) {
+        // Every Load comes here: a slot, Where I quit, Before load, Earlier, the shortcut.
+        if self.hardcore_refuses(pocket_ui::achievements::hardcore::NO_LOAD) {
+            return;
+        }
         self.toggled.iter_mut().for_each(controls::HoldToggle::clear);
         // The order of it is `slots::load_keeping_undo`'s (tested there).
         let loaded = slots::load_keeping_undo(
@@ -1610,6 +1754,13 @@ impl App {
         }
         // Only the newest preview request is worth drawing; it runs after the settings before it.
         let mut preview = None;
+        // Hardcore: a pause that had to wait comes once the game has run long enough (`Session::can_pause`).
+        let cmds: Vec<String> = if self.pause_wait && !self.paused && self.cheevos.as_mut().is_none_or(|a| a.can_pause().is_ok()) {
+            self.pause_wait = false;
+            std::iter::once("pause".to_string()).chain(cmds).collect()
+        } else {
+            cmds
+        };
         for cmd in cmds {
             match CoreCommand::parse(&cmd, std::env::var_os("POCKET_CORE_TEST").is_some()) {
                 CoreCommand::AudioStats => {
@@ -1621,6 +1772,14 @@ impl App {
                         println!("audio sample {{\"schema\":1,\"available\":false,\"reason\":\"audio stream did not open\"}}");
                     }
                 }
+                // Hardcore: straight after the last pause the game plays a moment more first (no frame stepping). The
+                // menu is up already; the game stops behind it a few frames later.
+                CoreCommand::Pause if !self.paused && !self.pause_wait && self.hardcore() && self.cheevos.as_mut().is_some_and(|a| a.can_pause().is_err()) => {
+                    self.pause_wait = true;
+                    PROGRESS.answered();
+                    println!("play pausing soon (hardcore)");
+                }
+                CoreCommand::Pause if !self.paused && self.pause_wait => PROGRESS.answered(),
                 CoreCommand::Pause if !self.paused => {
                     self.toggled.iter_mut().for_each(controls::HoldToggle::clear);
                     self.hold = false;
@@ -1645,6 +1804,7 @@ impl App {
                 }
                 // Paused already (or asleep): it draws nothing, so it says so again.
                 CoreCommand::Pause => { PROGRESS.answered(); pocket_ui::fast_switch::announce_paused(); },
+                CoreCommand::Resume if self.pause_wait => self.pause_wait = false,
                 CoreCommand::Resume if self.paused => {
                     self.paused = false;
                     self.paused_at = None;
@@ -1742,6 +1902,8 @@ impl App {
                 CoreCommand::Reload => self.reload_settings(),
                 // "players": the pause menu's Players page wrote a new order (`players::COMMAND`).
                 CoreCommand::Players => self.input.reorder(players::Order::load(&data_dir()).order),
+                CoreCommand::Cheats if self.hardcore_refuses(pocket_ui::achievements::hardcore::NO_CHEATS) => {}
+                CoreCommand::Hardcore(on) => self.switch_hardcore(on),
                 CoreCommand::Cheats => {
                     let n = pocket_ui::cheats::apply(&self.core, &data_dir(), &self.video_src.0, &self.video_src.1);
                     println!("cheats: {n} on");
@@ -1801,7 +1963,7 @@ impl App {
                         println!("core option: {key} = {value} ({})", if took { "the core reads it on its next frame" } else { "not one of the core's values, or already so" });
                     }
                 }
-                // "ctl <button> <console button|none>", "ctl stick_dpad on|off" or "ctl hold_toggle <console button|none>": the Controls page.
+                // "ctl <button> <console button|none>", "ctl stick_dpad on|off", "ctl dpad_stick on|off" or "ctl hold_toggle <console button|none>": the Controls page.
                 CoreCommand::Control(key, value) => {
                     if self.mapping.set(key, value) {
                         self.write_snapshot();
@@ -2000,6 +2162,7 @@ impl ApplicationHandler for App {
         }
         // Commands save and load states, which takes seconds: no frame (`exit_guard::Limits`).
         PROGRESS.busy(true);
+        let signalled = TERMINATE.load(Ordering::SeqCst);
         let exit = if self.should_exit() { Some(Quit::Save) } else { self.handle_commands() };
         if let Some(exit) = exit {
             PROGRESS.exiting();
@@ -2009,7 +2172,8 @@ impl ApplicationHandler for App {
             if let Some(a) = &self.audio {
                 a.pause(true);
             }
-            pocket_ui::fast_switch::mark("quit received");
+            // Why, in the log: pocket-ui's command, or a signal (SIGTERM: pocket-ui's escalation, a parent that died).
+            pocket_ui::fast_switch::mark(if signalled { "quit received (SIGTERM)" } else { "quit received" });
             match exit {
                 _ if self.bench.is_some() => {}
                 Quit::Save => { self.save_exit(); }
@@ -2232,6 +2396,10 @@ fn main() {
     if frame_tools(&args) {
         return;
     }
+    // The Cabinet's TV playing a game (prototype, `pocket_ui::showcase`): no window, no sound, no saves of the player's.
+    if args.get(1).map(String::as_str) == Some("--showcase") {
+        std::process::exit(pocket_ui::showcase::headless(&args));
+    }
     // pocket-ui runs this after a game ends, in case pocket-core was killed before it could put the CPU
     // and fan settings back; and at its start and the launcher after it ended, for pocket-ui's own fan profile
     // outside games (Settings > Performance & fan), which it only keeps while no game runs.
@@ -2376,6 +2544,27 @@ fn main() {
     options.extend(ra.iter().map(|(k, v)| (k.as_str(), v.as_str())));
     // Fill missing keys only, below saved game/console and imported RetroArch choices.
     core_options::add_game_defaults(&mut options, &core_options::core_id(core_so), &rom);
+    // Settings → Playing → Console boot screen: a start that loads no moment runs the console's own boot screen when the player's
+    // BIOS file is there (the core's load-time options, so decided here); the file's name for a note when it isn't.
+    let auto = pocket_ui::slots::auto_path(&states);
+    let boot_missing = match pocket_ui::boot_screen::for_start(&pocket_ui::boot_screen::Start {
+        on: pocket_ui::settings::boot_screen(&data_dir()),
+        auto: &auto,
+        skip_resume: std::env::var_os(pocket_ui::frozen::SKIP_RESUME_ENV).is_some(),
+        handed_over: std::env::var_os(pocket_ui::showcase::STATE_ENV).is_some(),
+        core: &core_options::core_id(core_so),
+        system: &system,
+        rom: &rom,
+        bios_dir: &bios_dir,
+    }) {
+        pocket_ui::boot_screen::Boot::Screen(screen) => {
+            pocket_ui::boot_screen::apply(&mut options, screen);
+            println!("console boot screen: on");
+            None
+        }
+        pocket_ui::boot_screen::Boot::Missing(file) => Some(file),
+        pocket_ui::boot_screen::Boot::NotHere => None,
+    };
     // ScummVM's ROCKNIX list names the game folder rather than being a game (`hostsys::content_path`).
     let content = hostsys::content_path(&system, &rom);
     if core_options::core_id(core_so) == "scummvm" {
@@ -2385,9 +2574,9 @@ fn main() {
         #[cfg(not(feature = "brick"))]
         hostsys::prepare_scummvm(&bios_dir);
     }
-    // PPSSPP's atlas, VFPU tables and fonts live in <system dir>/PPSSPP; ROCKNIX ships them only for its standalone PPSSPP.
+    // PPSSPP's atlas, VFPU tables and fonts live in <system dir>/PPSSPP; ROCKNIX and dArkOS ship them only for their standalone PPSSPP.
     if core_options::core_id(core_so) == "ppsspp" {
-        hostsys::prepare_ppsspp(Path::new(hostsys::PPSSPP_ASSETS_SRC), &bios_dir);
+        hostsys::prepare_ppsspp(&hostsys::ppsspp_assets_src(), &bios_dir);
     }
     let loaded = {
         let _loading = pocket_ui::startup::watch_load();
@@ -2507,6 +2696,8 @@ fn main() {
     }
     let event_loop = EventLoop::new().expect("event loop");
     event_loop.set_control_flow(ControlFlow::Poll);
+    // After A on the Cabinet's playing TV the sound comes up softly (`showcase::FadeIn`).
+    let fade_in = pocket_ui::showcase::FadeIn::from_env(core.av.timing.sample_rate);
     let mut app = App {
         // Host test cores isolate the new diagnostic file just like their existing command FIFO.
         status: pocket_ui::core_status::Publisher::new(if std::env::var_os("POCKET_CORE_TEST").is_some() {
@@ -2540,6 +2731,7 @@ fn main() {
         hold: pocket_ui::startup::held(),
         hold_still: pocket_ui::startup::hold_still(),
         hold_pause: pocket_ui::startup::hold_pause(),
+        fade_in,
         hold_down: None,
         crt_on: pocket_ui::startup::held() && pocket_ui::crt_on::wanted(),
         crt_started: false,
@@ -2560,6 +2752,8 @@ fn main() {
         resume_in: None,
         ra_options,
         cheevos: None,
+        hardcore: false,
+        pause_wait: false,
         chime: Default::default(),
         shots: None,
         chime_gain: {
@@ -2573,8 +2767,14 @@ fn main() {
         paused_at: None,
     };
     // RetroAchievements (an account signed in, a console that has them): returns at once, works on its own threads.
+    // Hardcore is decided before the resume below: it doesn't load the moment then (`achievements::hardcore`).
     if bench.is_none() {
-        app.cheevos = pocket_ui::achievements::game::start(&data, &app.video_src.0, &app.video_src.1, &app.core);
+        let hardcore = pocket_ui::achievements::hardcore::at_start(&data, &app.video_src.0, &app.video_src.1);
+        app.cheevos = pocket_ui::achievements::game::start(&data, &app.video_src.0, &app.video_src.1, &app.core, hardcore);
+        app.hardcore = hardcore && app.cheevos.is_some();
+        if app.hardcore {
+            println!("achievements: hardcore");
+        }
     }
     // Instant resume: continue exactly where the last session ended (not in bench runs). A 3D core
     // gets its state once it has presented frames with its GL context (see `hw_frame`).
@@ -2585,7 +2785,8 @@ fn main() {
             app.resume();
         }
     }
-    let cheats = pocket_ui::cheats::apply(&app.core, &data, &app.video_src.0, &app.video_src.1);
+    // Hardcore: the game's switched-on cheats wait until Hardcore is off.
+    let cheats = if app.hardcore() { 0 } else { pocket_ui::cheats::apply(&app.core, &data, &app.video_src.0, &app.video_src.1) };
     if cheats > 0 {
         println!("cheats: {cheats} on");
     }
@@ -2599,6 +2800,9 @@ fn main() {
     app.hud.set_look(&look);
     if took_dsv {
         app.hud.note("Took over the DraStic save");
+    }
+    if let Some(file) = boot_missing {
+        app.hud.note(pocket_ui::boot_screen::missing_note(file));
     }
     app.write_snapshot();
     app.core.take_snapshot_dirty();
@@ -2864,6 +3068,10 @@ mod psp_quit_regression;
 #[cfg(test)]
 #[path = "pocket_core/save_safety.rs"]
 mod save_safety;
+
+#[cfg(test)]
+#[path = "pocket_core/hardcore_rules.rs"]
+mod hardcore_rules;
 
 #[cfg(test)]
 #[path = "pocket_core/core_contract.rs"]

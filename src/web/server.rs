@@ -1,6 +1,6 @@
 //! The companion's threads: a supervisor that opens the listening sockets the address plan asks for (`net::plan`),
-//! sleeps in `poll` until a browser connects (or 30 s pass, to notice a new Tailscale address), checks that each
-//! connection comes from a Tailscale address and hands it to one of three workers. All four run at the lowest priority
+//! sleeps in `poll` until a browser connects (or 30 s pass, to notice a new Tailscale or Wi-Fi address), checks that
+//! each connection comes from that socket's network (`net::peer_allowed_on`) and hands it to one of three workers. All four run at the lowest priority
 //! (`web::lower_priority`). Stopping wakes the supervisor through a pipe; the sockets close at once, a request under
 //! way finishes on its worker.
 
@@ -37,7 +37,13 @@ const STOP_WAIT: Duration = Duration::from_secs(1);
 impl Server {
     /// Starts the supervisor and the workers. The listening addresses come from `net::plan` (or `fixed`, for tests
     /// and the development server: those addresses as they are, without interface binding).
-    pub fn start(mut ctx: Ctx, fixed: Option<Vec<Listen>>) -> std::io::Result<Server> {
+    pub fn start(ctx: Ctx, fixed: Option<Vec<Listen>>) -> std::io::Result<Server> {
+        Server::start_with(ctx, fixed.map(|v| Arc::new(move || v.clone()) as Fixed), RECHECK)
+    }
+
+    /// `start` with addresses that a test changes while the server runs (as the Wi-Fi's address changes), looked at
+    /// every `recheck`.
+    pub(crate) fn start_with(mut ctx: Ctx, fixed: Option<Fixed>, recheck: Duration) -> std::io::Result<Server> {
         let mut fds = [0 as libc::c_int; 2];
         // SAFETY: pipe fills two descriptors that this server owns and closes.
         if unsafe { libc::pipe(fds.as_mut_ptr()) } != 0 {
@@ -63,7 +69,7 @@ impl Server {
         let (stop2, wake_r) = (stop.clone(), fds[0]);
         let (done_tx, done) = std::sync::mpsc::channel();
         let thread = std::thread::Builder::new().name("web".into()).spawn(move || {
-            supervise(&ctx, tx, &stop2, wake_r, fixed);
+            supervise(&ctx, tx, &stop2, wake_r, fixed, recheck);
             // SAFETY: the read end belongs to this thread from here on.
             unsafe { libc::close(wake_r) };
             let _ = done_tx.send(());
@@ -131,7 +137,11 @@ pub fn why_not(e: &std::io::Error) -> String {
     }
 }
 
-fn supervise(ctx: &Ctx, tx: SyncSender<(std::net::TcpStream, Conn)>, stop: &AtomicBool, wake: RawFd, fixed: Option<Vec<Listen>>) {
+/// Addresses named from outside (tests, the development server): bound as they are, without interface binding or a
+/// check of the peer.
+pub(crate) type Fixed = Arc<dyn Fn() -> Vec<Listen> + Send + Sync>;
+
+fn supervise(ctx: &Ctx, tx: SyncSender<(std::net::TcpStream, Conn)>, stop: &AtomicBool, wake: RawFd, fixed: Option<Fixed>, recheck: Duration) {
     lower_priority();
     let shared: &Shared = &ctx.shared;
     let mut open: Vec<(Listen, TcpListener)> = Vec::new();
@@ -139,9 +149,9 @@ fn supervise(ctx: &Ctx, tx: SyncSender<(std::net::TcpStream, Conn)>, stop: &Atom
     let mut refused = 0u64;
     while !stop.load(Ordering::Relaxed) {
         #[cfg(feature = "brick")]
-        let want = fixed.clone().unwrap_or_else(|| net::plan_here(&net::interfaces(), PORT));
+        let want = fixed.as_ref().map(|f| f()).unwrap_or_else(|| net::plan_here(&net::interfaces(), PORT));
         #[cfg(not(feature = "brick"))]
-        let want = fixed.clone().unwrap_or_else(|| net::plan(&net::interfaces(), PORT));
+        let want = fixed.as_ref().map(|f| f()).unwrap_or_else(|| net::plan(&net::interfaces(), PORT));
         let now: Vec<Listen> = open.iter().map(|(l, _)| l.clone()).collect();
         if now != want {
             open.retain(|(l, _)| want.contains(l));
@@ -169,7 +179,12 @@ fn supervise(ctx: &Ctx, tx: SyncSender<(std::net::TcpStream, Conn)>, stop: &Atom
             }
             let mut addrs: Vec<std::net::SocketAddr> = open.iter().filter_map(|(_, s)| s.local_addr().ok()).collect();
             addrs.sort();
+            let mut lan: Vec<std::net::SocketAddr> = open.iter().filter(|(l, _)| l.lan).filter_map(|(_, s)| s.local_addr().ok()).collect();
+            lan.sort();
+            // The Wi-Fi's mDNS name ("sm8250.local"), looked up when the Wi-Fi socket changes (not for test addresses).
+            *shared.lan_name.lock().unwrap() = if lan.is_empty() || fixed.is_some() { None } else { net::mdns_name() };
             *shared.listening.lock().unwrap() = addrs;
+            *shared.lan.lock().unwrap() = lan;
             shared.notify();
         }
         // The Pocket's tailnet name for the Settings page, once.
@@ -180,7 +195,7 @@ fn supervise(ctx: &Ctx, tx: SyncSender<(std::net::TcpStream, Conn)>, stop: &Atom
         let mut fds: Vec<libc::pollfd> = open.iter().map(|(_, s)| libc::pollfd { fd: s.as_raw_fd(), events: libc::POLLIN, revents: 0 }).collect();
         fds.push(libc::pollfd { fd: wake, events: libc::POLLIN, revents: 0 });
         // SAFETY: poll over descriptors that stay open for the call.
-        let n = unsafe { libc::poll(fds.as_mut_ptr(), fds.len() as libc::nfds_t, RECHECK.as_millis() as libc::c_int) };
+        let n = unsafe { libc::poll(fds.as_mut_ptr(), fds.len() as libc::nfds_t, recheck.as_millis() as libc::c_int) };
         if n <= 0 {
             continue;
         }
@@ -190,24 +205,24 @@ fn supervise(ctx: &Ctx, tx: SyncSender<(std::net::TcpStream, Conn)>, stop: &Atom
             }
             while let Ok((stream, peer)) = s.accept() {
                 #[cfg(feature = "brick")]
-                if !net::peer_allowed(peer.ip()) && !(net::is_userspace(l) && peer.ip().is_loopback()) && fixed.is_none() {
+                if !net::peer_allowed_on(l, peer.ip()) && !(net::is_userspace(l) && peer.ip().is_loopback()) && fixed.is_none() {
                     refused += 1;
                     if refused.is_power_of_two() {
-                        eprintln!("web: refused {refused} connection(s) from outside the tailnet");
+                        eprintln!("web: refused {refused} connection(s) from outside the tailnet and the home network");
                     }
                     continue;
                 }
                 #[cfg(not(feature = "brick"))]
-                if !net::peer_allowed(peer.ip()) && fixed.is_none() {
+                if !net::peer_allowed_on(l, peer.ip()) && fixed.is_none() {
                     refused += 1;
                     if refused.is_power_of_two() {
-                        eprintln!("web: refused {refused} connection(s) from outside the tailnet");
+                        eprintln!("web: refused {refused} connection(s) from outside the tailnet and the home network");
                     }
                     continue;
                 }
                 let _ = stream.set_nonblocking(false);
                 let local = stream.local_addr().unwrap_or(l.addr);
-                match tx.try_send((stream, Conn { peer, local, accepted: std::time::Instant::now() })) {
+                match tx.try_send((stream, Conn { peer, local, accepted: std::time::Instant::now(), lan: l.lan })) {
                     Ok(()) => {}
                     Err(TrySendError::Full((stream, _))) => reply_busy(stream),
                     Err(TrySendError::Disconnected(_)) => return,
@@ -216,4 +231,5 @@ fn supervise(ctx: &Ctx, tx: SyncSender<(std::net::TcpStream, Conn)>, stop: &Atom
         }
     }
     shared.listening.lock().unwrap().clear();
+    shared.lan.lock().unwrap().clear();
 }

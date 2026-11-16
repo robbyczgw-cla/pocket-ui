@@ -31,6 +31,9 @@ const REST_MS: f32 = 110.0;
 /// A console with a front picture turns round to its back between these moments (ms after A): as long as the game box's
 /// turn on the card (280 ms), eased at both ends, while the console comes up and before its cover opens.
 pub const TURN_MS: (f32, f32) = (180.0, 460.0);
+/// A handheld's display comes up between these moments (ms after the medium is in), a moment after its power light
+/// (which takes 90 to 240).
+pub const LIT_AFTER: (f32, f32) = (110.0, 270.0);
 /// A front-loader's cartridge, slid in, is pressed down over this long, ending with the click at `IN_AT_COZY`.
 const PRESS_MS: f32 = 110.0;
 
@@ -172,6 +175,109 @@ pub struct Led {
     pub color: u32,
 }
 
+/// A handheld's display (or its two): the part of the console's picture its light comes up in, found by filling out from
+/// a point on it (`display_mask`), so it follows the picture's tilt and the glass's edge whatever the console. Nothing is
+/// drawn for it; the picture's own pixels are lit (`lit_pixels`).
+#[derive(Clone, Copy, Debug, Deserialize)]
+pub struct Display {
+    /// A point on the display, art pixels; a second display (the DS's lower, the 3DS's) has its own.
+    pub a: V,
+    #[serde(default)]
+    pub b: Option<V>,
+    /// How far a pixel may differ (per channel, of 255) from the one at the point and still be the display.
+    #[serde(default = "Display::default_fuzz")]
+    pub fuzz: u32,
+    /// The light it ends in, 0xRRGGBB (`light_of` says it for a picture; a test keeps the two together).
+    pub lit: u32,
+}
+
+impl Display {
+    fn default_fuzz() -> u32 {
+        24
+    }
+
+    /// The points to fill out from.
+    pub fn seeds_of(&self) -> impl Iterator<Item = V> {
+        std::iter::once(self.a).chain(self.b)
+    }
+}
+
+/// The pixels of an `w` x `h` picture (0xAARRGGBB, solid from alpha 255) that are the display: filled out from `seeds`
+/// over neighbours within `fuzz` of the seed's own colour.
+pub fn display_mask(px: &[u32], w: usize, h: usize, seeds: impl IntoIterator<Item = V>, fuzz: u32) -> Vec<bool> {
+    let mut mask = vec![false; w * h];
+    let mut stack = Vec::new();
+    for (sx, sy) in seeds {
+        let (x, y) = ((sx.round().max(0.0) as usize).min(w.saturating_sub(1)), (sy.round().max(0.0) as usize).min(h.saturating_sub(1)));
+        let at = y * w + x;
+        if px.len() < w * h || px[at] >> 24 != 255 || mask[at] {
+            continue;
+        }
+        let seed = px[at];
+        let near = |p: u32| p >> 24 == 255 && [16u32, 8, 0].iter().all(|s| ((p >> s & 0xff) as i32 - (seed >> s & 0xff) as i32).unsigned_abs() <= fuzz);
+        mask[at] = true;
+        stack.push((x, y));
+        while let Some((x, y)) = stack.pop() {
+            for (nx, ny) in [(x.wrapping_sub(1), y), (x + 1, y), (x, y.wrapping_sub(1)), (x, y + 1)] {
+                if nx < w && ny < h && !mask[ny * w + nx] && near(px[ny * w + nx]) {
+                    mask[ny * w + nx] = true;
+                    stack.push((nx, ny));
+                }
+            }
+        }
+    }
+    mask
+}
+
+/// The brightest a lit display may be, per channel (of 255): a muted tone, not white.
+pub const MUTED_MAX: u32 = 0xb0;
+
+/// How much of the display's own picture is kept when it is lit (of 255): its edge and shading stay, its colour goes to
+/// the light.
+const LIT_KEEPS: u32 = 40;
+
+/// The light a display is lit in, from the glass in the picture: its mean colour taken towards white, the darker the glass
+/// the further, but muted ([`MUTED_MAX`] at most per channel): in a dark room only the display is bright and it must not
+/// glare (12.11., Fable 5.2: the first version lit nearly white). One rule for every handheld; `Display::lit` keeps its
+/// result, and a test keeps the two together.
+pub fn display_light(px: &[u32], mask: &[bool]) -> u32 {
+    let (mut sum, mut n) = ([0u64; 3], 0u64);
+    for (&p, _) in px.iter().zip(mask).filter(|(_, &on)| on) {
+        for (i, s) in [16u32, 8, 0].iter().enumerate() {
+            sum[i] += (p >> s & 0xff) as u64;
+        }
+        n += 1;
+    }
+    if n == 0 {
+        return 0xdd_e0dc;
+    }
+    let mean = ((sum[0] / n) as u32) << 16 | ((sum[1] / n) as u32) << 8 | (sum[2] / n) as u32;
+    let lum = (0.30 * (mean >> 16 & 0xff) as f32 + 0.59 * (mean >> 8 & 0xff) as f32 + 0.11 * (mean & 0xff) as f32) / 255.0;
+    let lit = crate::gfx::mix(mean, 0xff_ffff, ((0.22 + 0.3 * (1.0 - lum)) * 255.0).round() as u32);
+    // However light the glass was, never past the muted top.
+    let cap = |shift: u32| ((lit >> shift & 0xff).min(MUTED_MAX)) << shift;
+    cap(16) | cap(8) | cap(0)
+}
+
+/// The display lit: the picture's pixels on `mask` (a picture `w` wide) taken to `light`, and the ring of pixels around it
+/// (the glass's anti-aliased edge, which the fill leaves out), nothing elsewhere (0): laid over the console it brightens
+/// only the glass.
+pub fn lit_pixels(px: &[u32], mask: &[bool], w: usize, light: u32) -> Vec<u32> {
+    let at = |i: usize| mask.get(i).copied().unwrap_or(false);
+    (0..px.len())
+        .map(|i| {
+            let (x, p) = (i % w.max(1), px[i]);
+            let near = at(i) || (x > 0 && at(i - 1)) || (x + 1 < w && at(i + 1)) || (i >= w && at(i - w)) || at(i + w);
+            // A transparent pixel stays so; a ring pixel is as solid as the picture's own.
+            if near && p >> 24 == 255 {
+                0xff00_0000 | crate::gfx::mix(light & 0xff_ffff, p & 0xff_ffff, LIT_KEEPS)
+            } else {
+                0
+            }
+        })
+        .collect()
+}
+
 /// How a rig's medium moves.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Kind {
@@ -209,6 +315,9 @@ pub struct Rig {
     pub mouth: Option<(V, V)>,
     #[serde(default)]
     pub led: Option<Led>,
+    /// The handheld's display, which lights up with its power light (Cozy, Motion Full; `insert_scene`).
+    #[serde(default)]
+    pub display: Option<Display>,
 }
 
 /// `lid` or `tray` in `rig.json`; neither: it goes in by itself.
@@ -385,7 +494,7 @@ pub fn thickness(game: Game) -> f32 {
 
 /// These handhelds are viewed from their screen side, with a cartridge slot behind them.
 pub fn label_away(system: &str) -> bool {
-    matches!(system, "gb" | "gbh" | "gbc" | "gbch" | "gba" | "gbah" | "gba-sp" | "nds" | "ndsh" | "gamegear" | "ggh" | "3ds" | "n3ds")
+    matches!(system, "gb" | "gbh" | "gbc" | "gbch" | "gba" | "gbah" | "gba-sp" | "nds" | "ndsh" | "gamegear" | "ggh" | "3ds" | "n3ds" | "ngp" | "ngpc")
 }
 
 /// Everything that moves, at one moment.
@@ -411,6 +520,8 @@ pub struct Pose {
     pub dip: f32,
     /// The power light: 0 off, 1 on.
     pub led: f32,
+    /// A handheld's display lit: 0 off, 1 on (a moment after its power light).
+    pub lit: f32,
     /// A disc's lid has shut over it: nothing of it to draw.
     pub shut_in: bool,
     /// A console with a front picture (`Files::front`): 0 its front, 1 turned round to its back, where the game goes in.
@@ -437,6 +548,7 @@ pub fn pose(kind: Kind, t: Duration) -> Pose {
     let fly = ease_in_out(phase(ms, 420.0, 900.0));
     let after = ms - in_at;
     let led = phase(ms, in_at + 90.0, in_at + 240.0);
+    let lit = ease_in_out(phase(ms, in_at + LIT_AFTER.0, in_at + LIT_AFTER.1));
     let landed = if ms >= in_at { 1.0 } else { 0.0 };
     if kind == Kind::Cart {
         // Pushed: slowly at first, then home.
@@ -445,7 +557,7 @@ pub fn pose(kind: Kind, t: Duration) -> Pose {
         let settle = 2.0 * swing(after, 5.0, 100.0);
         let squash = 0.9 * (-after.max(0.0) / 85.0).exp() * landed;
         let dip = 2.0 * swing(after, 6.0, 110.0).abs();
-        return Pose { out, fly, drop, landed, settle, squash, open: 0.0, dip, led, shut_in: false, press: 0.0, face: 1.0 };
+        return Pose { out, fly, drop, landed, settle, squash, open: 0.0, dip, led, shut_in: false, press: 0.0, face: 1.0, lit };
     }
     // Falling: slow off the hover, fast at the end; it rocks on the spindle, then lies still. A front-loader's cartridge
     // slides in, then is pressed down with the click.
@@ -468,7 +580,18 @@ pub fn pose(kind: Kind, t: Duration) -> Pose {
     };
     let open = opening * (1.0 - closing) + open_over * (1.0 - closing) + rebound;
     let face = ease_in_out(phase(ms, TURN_MS.0, TURN_MS.1));
-    Pose { out, fly, drop, press, landed, settle, squash: 0.0, open, dip, led, shut_in: ms >= shut, face }
+    Pose { out, fly, drop, press, landed, settle, squash: 0.0, open, dip, led, lit, shut_in: ms >= shut, face }
+}
+
+/// How far [`Pose::out`] has gone when the case visibly opens: a jewel or UMD case's cover has swung about 3 % of its width
+/// (a few pixels), a cartridge or card has slid out of its case by a finger's width.
+const OPEN_SEEN: f32 = 0.15;
+
+/// When, after A, the case on the shelf visibly opens with a rig's scene (Cozy, Playful): the sound of its opening
+/// (`ui_sound::opening`) comes then, not at A. The timeline starts slowly (eased in), so this is a good 0.2 s after the press,
+/// the same for every console.
+pub fn case_opens_at() -> Duration {
+    (0..IN_AT_COZY.as_millis() as u64).map(Duration::from_millis).find(|t| pose(Kind::Cart, *t).out >= OPEN_SEEN).unwrap_or_default()
 }
 
 /// The compiled-in rigs by system: its names, `rig.json`, base, over, top, under.
@@ -496,6 +619,7 @@ const RIGS: &[Row] = &[
     (&["dreamcast"], bytes!("dreamcast", "rig.json"), bytes!("dreamcast", "base.png"), Some(bytes!("dreamcast", "over.png")), Some(bytes!("dreamcast", "top.png")), Some(bytes!("dreamcast", "under.png"))),
     (&["saturn"], bytes!("saturn", "rig.json"), bytes!("saturn", "base.png"), Some(bytes!("saturn", "over.png")), Some(bytes!("saturn", "top.png")), Some(bytes!("saturn", "under.png"))),
     (&["xbox"], bytes!("xbox", "rig.json"), bytes!("xbox", "base.png"), Some(bytes!("xbox", "over.png")), Some(bytes!("xbox", "tray.png")), None),
+    (&["ngpc"], bytes!("ngpc", "rig.json"), bytes!("ngpc", "base.png"), None, None, None),
     (&["3ds"], bytes!("3ds", "rig.json"), bytes!("3ds", "base.png"), None, None, None),
     (&["nds"], bytes!("nds", "rig.json"), bytes!("nds", "base.png"), None, None, None),
     (&["wii"], bytes!("wii", "rig.json"), bytes!("wii", "base.png"), Some(bytes!("wii", "over.png")), None, None),
@@ -528,6 +652,12 @@ fn rig_id(system: &str, game: Game) -> &str {
     }
 }
 
+/// The light a handheld's display ends in (0xRRGGBB), from its console's picture, as the launch scene lights it and the
+/// game's picture comes up out of it (`crt_on`); None for a system without a lit display of its own in a rig.
+pub fn light_of(system: &str, game: Game) -> Option<u32> {
+    files(system, game)?.rig.display.map(|d| d.lit)
+}
+
 /// A game's rig has a lid, tray or door to shut after the medium is in (the launch splits its sound for that, and the way
 /// back starts with it shut).
 pub fn takes_disc(system: &str, game: Game) -> bool {
@@ -542,7 +672,17 @@ pub fn files(system: &str, game: Game) -> Option<Files> {
     }
     let r = RIGS.iter().find(|r| r.0.contains(&id))?;
     let front = FRONTS.iter().find(|f| f.0 == r.0[0]).map(|f| Cow::Borrowed(f.1));
-    Some(Files { rig: serde_json::from_slice(r.1).ok()?, front, base: Cow::Borrowed(r.2), over: r.3.map(Cow::Borrowed), top: r.4.map(Cow::Borrowed), under: r.5.map(Cow::Borrowed) })
+    // The console in the colour the player chose (Console page, Left/Right): the same rig, its own base picture.
+    let coloured = crate::system_art::colour_rig(system).filter(|_| id == crate::system_art::picture_id(system));
+    let (base, layers) = coloured.unwrap_or((r.2, Default::default()));
+    Some(Files {
+        rig: serde_json::from_slice(r.1).ok()?,
+        front,
+        base: Cow::Borrowed(base),
+        over: layers.over.or(r.3).map(Cow::Borrowed),
+        top: layers.top.or(r.4).map(Cow::Borrowed),
+        under: layers.under.or(r.5).map(Cow::Borrowed),
+    })
 }
 
 #[cfg(test)]
@@ -648,6 +788,8 @@ mod tests {
             ("xbox", Kind::Tray, false, (1, -1), false),
             ("nds", Kind::Cart, true, (-1, 1), true),
             ("3ds", Kind::Cart, true, (-1, 1), true),
+            // The Neo Geo Pocket's cartridge goes into the top at the back, label to the back, like the GBA's.
+            ("ngpc", Kind::Cart, true, (-1, 1), true),
             ("wii", Kind::Cart, false, (1, 1), false),
             // Slid in towards the back (up and right on the picture), then pressed down: checked below.
             ("nes", Kind::Door, false, (1, -1), false),
@@ -722,7 +864,7 @@ mod tests {
 
     #[test]
     fn the_label_turns_only_after_leaving_the_case_and_is_away_before_insertion() {
-        for (system, away) in [("gb", true), ("gbh", true), ("gbc", true), ("gbch", true), ("gba", true), ("gbah", true), ("gba-sp", true), ("nds", true), ("gamegear", true), ("3ds", true), ("snes", false), ("n64", false), ("psx", false)] {
+        for (system, away) in [("gb", true), ("gbh", true), ("gbc", true), ("gbch", true), ("gba", true), ("gbah", true), ("gba-sp", true), ("nds", true), ("gamegear", true), ("3ds", true), ("ngp", true), ("ngpc", true), ("snes", false), ("n64", false), ("psx", false)] {
             assert_eq!(label_away(system), away, "{system}: plain animation has the same physical face");
             assert_eq!(face_at(away, 0.0), (1.0, false), "{system}: label beside the case");
             assert_eq!(face_at(away, 1.0), (1.0, away), "{system}: seated face");
@@ -730,6 +872,17 @@ mod tests {
         let (edge, _) = face_at(true, 0.5);
         assert!(edge < 0.001, "the cartridge turns through its edge rather than changing pictures face-on");
         assert!(!label_away("gbasp"), "SP is a different bottom-slot console, never treated as the AGB-001");
+    }
+
+    #[test]
+    fn the_cartridge_turns_its_label_away_exactly_where_the_rig_says_so() {
+        // 15.11.: the Neo Geo Pocket's rig said `label_away`, the function the scene asks (`label_away`) did not know it: its cartridge
+        // went in showing its label. Two lists said the same thing; now one says it and this test holds the other to it.
+        for r in RIGS {
+            let id = r.0[0];
+            let f = files(id, Game::Disc).expect(id);
+            assert_eq!(label_away(id), f.rig.label_away, "{id}: the rig's flag and `label_away` agree");
+        }
     }
 
     /// How far a rig's medium sits from the console's own middle, art pixels across (in its own axes): the console's outline
@@ -860,6 +1013,34 @@ mod tests {
         let (x0, y0) = lid.at;
         assert!(r.seat.at.0 - r.seat.u.0 >= x0 - 1.0 && r.seat.at.0 + r.seat.u.0 <= x0 + top.w as f32 + 1.0, "the UMD fits under its cover across");
         assert!(r.seat.at.1 - r.seat.v.1 >= y0 - 1.0 && r.seat.at.1 + r.seat.v.1 <= y0 + top.h as f32 + 1.0, "and down");
+    }
+
+    #[test]
+    fn the_umd_goes_into_the_psp_with_its_label_upright_all_the_way() {
+        // 15.11. (Lead: the label must not be upside down; a real UMD's label reads upright, its rounded end down).
+        let f = files("psp", Game::Umd).unwrap();
+        let r = f.rig;
+        let near = (60.0, 64.0);
+        let (u1, v1) = (mul(r.seat.u, SCALE), mul(r.seat.v, SCALE));
+        let close = |a: V, b: V| (a.0 - b.0).abs() < 0.01 && (a.1 - b.1).abs() < 0.01;
+        let end = r.medium_at((300.0, 300.0), |p| p, near, &at(Kind::Lid, IN_AT_COZY.as_millis() as u64), SCALE);
+        assert!(close(end.u, u1) && close(end.v, v1), "in the cover it is not turned: {end:?} against {u1:?} {v1:?}");
+        for ms in (0..=IN_AT_COZY.as_millis() as u64).step_by(10) {
+            let m = r.medium_at((300.0, 300.0), |p| p, near, &at(Kind::Lid, ms), SCALE);
+            assert!(m.u.0 > 0.0 && m.v.1 > 0.0 && m.u.1.abs() < 1e-3 && m.v.0.abs() < 1e-3, "{ms} ms: upright, not turned: {m:?}");
+        }
+    }
+
+    #[test]
+    fn a_cartridge_that_turns_its_label_away_has_a_rear_shell_to_show() {
+        // 15.11.: the Neo Geo Pocket's cartridge went in showing its label, because it had no rear shell (`media::game_back`).
+        for r in RIGS {
+            let f = files(r.0[0], Game::Disc).expect(r.0[0]);
+            if f.rig.label_away {
+                let game = Game::of(if r.0[0] == "gba-sp" { "gba" } else { r.0[0] }, "x.rom");
+                assert!(crate::media::game_back(game).is_some(), "{}: {game:?} turns its label away and has no rear shell", r.0[0]);
+            }
+        }
     }
 
     /// The front-loaders: the consoles whose cartridge slides in under a door.
@@ -1025,5 +1206,48 @@ mod tests {
             }
             assert!(compared > 10, "{system}: the lid and the console overlap in the picture ({compared} columns)");
         }
+    }
+
+    #[test]
+    fn every_displays_glass_is_found_and_its_stored_light_is_what_the_picture_gives() {
+        let mut wrong = Vec::new();
+        for system in ["gb", "gbc", "gba", "gamegear", "nds", "3ds"] {
+            let f = files(system, Game::of(system, "x.rom")).unwrap();
+            let d = f.rig.display.unwrap_or_else(|| panic!("{system}: no display in rig.json"));
+            let s = crate::system_art::decode(&f.base).unwrap();
+            let (w, h) = (s.w as usize, s.h as usize);
+            let solid = s.px.iter().filter(|p| **p >> 24 == 255).count();
+            let a = display_mask(&s.px, w, h, [d.a], d.fuzz).iter().filter(|m| **m).count();
+            assert!(a > 400 && a * 4 < solid, "{system}: the glass is a part of the console ({a} of {solid})");
+            if let Some(b) = d.b {
+                let only_b = display_mask(&s.px, w, h, [b], d.fuzz).iter().filter(|m| **m).count();
+                assert!(only_b > 400 && only_b * 4 < solid, "{system}: the second display ({only_b} of {solid})");
+            }
+            let mask = display_mask(&s.px, w, h, d.seeds_of(), d.fuzz);
+            let light = display_light(&s.px, &mask);
+            if light != d.lit {
+                wrong.push(format!("{system}: rig.json lit {:#08x}, the picture gives {light:#08x}", d.lit));
+            }
+        }
+        assert!(wrong.is_empty(), "{wrong:#?}");
+    }
+
+    #[test]
+    fn a_lit_display_is_a_muted_tone_never_white() {
+        for system in ["gb", "gbc", "gba", "gamegear", "nds", "3ds"] {
+            let lit = files(system, Game::of(system, "x.rom")).unwrap().rig.display.unwrap().lit;
+            assert!([16u32, 8, 0].iter().all(|s| (lit >> s & 0xff) <= MUTED_MAX), "{system}: {lit:06x} glares");
+        }
+        assert!(display_light(&[0xffff_ffff; 4], &[true; 4]) & 0xff <= MUTED_MAX, "a white glass is capped too");
+    }
+
+    #[test]
+    fn a_lit_display_is_brighter_than_the_glass_was_and_nothing_else_is_touched() {
+        // One row: glass, its edge pixel, a pixel two away, transparent.
+        let px = vec![0xff30_3038u32, 0xff30_3038, 0xff80_0000, 0];
+        let lit = lit_pixels(&px, &[true, false, false, false], 4, 0xe0e0e0);
+        assert!(lit[0] >> 24 == 255 && (lit[0] & 0xff) > 0xb0, "{:08x}", lit[0]);
+        assert!(lit[1] >> 24 == 255, "the edge ring is lit with it");
+        assert_eq!(&lit[2..], &[0, 0], "past the ring and transparent: nothing");
     }
 }

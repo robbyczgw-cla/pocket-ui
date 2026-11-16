@@ -5,7 +5,7 @@
 //! text into the foot or cut a line short, or drew sticks the Brick hasn't.
 //!
 //! Needs python3 for the made-up library and, on Linux without a compositor, scripts/wayland-stub.py (as
-//! tests/controls_card_snapshots.rs).
+//! tests/empty_views.rs).
 #![cfg(feature = "brick")]
 
 use std::path::PathBuf;
@@ -91,7 +91,24 @@ impl Card {
     }
 }
 
-const LANGS: [&str; 4] = ["en", "de", "es", "pt"];
+const LANGS: [&str; 6] = ["en", "de", "es", "pt", "fr", "it"];
+
+/// The Brick's printed menu key is MENU in the hints, in every language and both appearances, never HOME. (It was checked
+/// on the controls card's snapshots until the card went, 15.11.2026.)
+#[test]
+fn printed_menu_key_is_used_in_the_brick_hints_in_both_appearances() {
+    let card = Card::new();
+    for appearance in ["dark", "light"] {
+        let settings = card.tmp.join("lib/data/settings.json");
+        let mut saved: serde_json::Value = serde_json::from_slice(&std::fs::read(&settings).unwrap()).unwrap();
+        saved["appearance"] = appearance.into();
+        std::fs::write(&settings, serde_json::to_vec(&saved).unwrap()).unwrap();
+        for lang in LANGS {
+            let (visible, _) = card.shot("home", lang, "normal");
+            assert!(visible.contains("MENU") && !visible.contains("HOME"), "{appearance} {lang}: {visible}");
+        }
+    }
+}
 
 /// A player pressing F1/F2 during Controller setup got eight seconds of waiting and then "No button pressed".
 /// Feed the real evdev codes into capture and check the page explains the shortcut instead.
@@ -104,7 +121,9 @@ fn fkeys_remapping_explains_where_shortcuts_are_changed() {
         ("es", "F1/F2 son atajos, no botones de juego.", "Luces y botones"),
     ] {
         for size in ["normal", "large"] {
-            for state in ["controllers:1:brick-f1", "controllers:1:brick-f2", "controls"] {
+            // "controls:19": the pause menu's Controls page on its last row, Controller setup (a Game Boy Color game: the stick,
+            // sixteen buttons, Hold to toggle and Reset controls before it).
+            for state in ["controllers:1:brick-f1", "controllers:1:brick-f2", "controls:19"] {
                 let (shown, _) = card.shot(state, lang, size);
                 assert!(shown.contains(explanation) && shown.contains(settings), "{lang} {size} {state}: {shown}");
             }
@@ -135,10 +154,10 @@ fn fkeys_lights_help_explains_that_the_assignment_is_global() {
 fn the_bricks_pages_call_it_the_brick() {
     let card = Card::new();
     for lang in LANGS {
-        for state in ["tailscale", "sync:off", "sys:power-noboot", "settings:4:3"] {
+        for state in ["tailscale", "sync:off", "sys:power-noboot", "settings:0:3"] {
             let (shown, _) = card.shot(state, lang, "normal");
             // The German and Spanish line under Remote access names no device at all.
-            assert!(shown.contains("Brick") || (state == "settings:4:3" && lang != "en"), "{lang} {state}: {shown}");
+            assert!(shown.contains("Brick") || (state == "settings:0:3" && lang != "en"), "{lang} {state}: {shown}");
             assert!(!shown.contains("Pocket"), "{lang} {state}: {shown}");
         }
     }
@@ -235,7 +254,7 @@ fn the_bricks_pages_offer_only_what_the_brick_has() {
     let card = Card::new();
     for lang in LANGS {
         let (about, _) = card.shot("about", lang, "normal");
-        assert!(about.contains("TrimUI Brick") && !about.contains("experiment"), "{lang}: {about}");
+        assert!(about.contains("TrimUI Brick") && !about.contains("experiment") && !about.contains("expériment") && !about.contains("sperimental"), "{lang}: {about}");
         let (perf, _) = card.shot("perf", lang, "normal");
         assert!(!["fan", "Lüfter", "ventilador", "Fan"].iter().any(|w| perf.contains(w)), "{lang}: {perf}");
         let (sync, _) = card.shot("sync:off:6", lang, "normal");
@@ -281,15 +300,17 @@ fn add_games_names_the_cards_roms_folders() {
 }
 
 
-/// The Brick's Normal text is a step above the design (hint bar 21 → 25 px, Body 28 → 31: readable at arm's length on a 3.2" panel):
-/// Home's hint bar still shows all four hints whole, in English, German and Spanish, and nothing runs into it.
+/// The Brick's Normal text is a step above the design (a note's 21 → 25 px, Body 28 → 31, the hint pill's 30 → 32: readable at
+/// arm's length on a 3.2" panel): Home's one hint bar (the same pill as on every page) shows three whole hints, in English,
+/// German and Spanish, and nothing runs into it. A fourth (SELECT, the recent games) does not fit the 1024 px beside them
+/// and goes first (`kit::top_hints`); the manual and the tour name it.
 #[test]
 fn the_bricks_larger_type_keeps_homes_whole_hint_bar() {
     let card = Card::new();
     for (lang, labels) in [
-        ("en", ["Open", "Quick settings", "Recent", "Settings"]),
-        ("de", ["Öffnen", "Schnellmenü", "Zuletzt", "Einstellungen"]),
-        ("es", ["Abrir", "Ajustes rápidos", "Recientes", "Ajustes"]),
+        ("en", ["Open", "Quick settings", "Settings"]),
+        ("de", ["Öffnen", "Schnellmenü", "Einstellungen"]),
+        ("es", ["Abrir", "Ajustes rápidos", "Ajustes"]),
     ] {
         let (shown, boxes) = card.shot("home", lang, "normal");
         assert!(labels.iter().all(|label| shown.lines().any(|l| l == *label)), "{lang}: the hint bar lost hints: {shown}");
@@ -306,7 +327,7 @@ fn the_smart_pro_is_called_by_its_name_and_experimental() {
     let card = Card::smart_pro();
     for lang in LANGS {
         let (about, _) = card.shot("about", lang, "normal");
-        assert!(about.contains("TrimUI Smart Pro") && about.contains("experiment"), "{lang}: {about}");
+        assert!(about.contains("TrimUI Smart Pro") && (about.contains("experiment") || about.contains("expériment") || about.contains("sperimental")), "{lang}: {about}");
         for state in ["tailscale", "sync:off", "sys:power-noboot"] {
             let (shown, _) = card.shot(state, lang, "normal");
             assert!(shown.contains("Smart Pro"), "{lang} {state}: {shown}");
@@ -345,7 +366,7 @@ fn text_fits_on_the_smart_pros_1280x720() {
     let wide = Card { device: ("mini", "1280x960"), ..Card::new() };
     let brick = Card::new();
     let states = ["home", "setup:first", "setup:first-games", "setup:first-look", "settings", "settings:0", "settings:1", "settings:2",
-        "settings:3", "settings:4", "settings:5", "settings:6", "about", "sleep", "sleep:1", "perf", "sync:off", "test-buttons", "updates:note", "leave"];
+        "settings:3", "settings:4", "settings:5", "settings:6", "settings:7", "about", "sleep", "sleep:1", "perf", "sync:off", "test-buttons", "updates:note", "leave"];
     let findings = |shown: &str, boxes: &str| -> Vec<String> {
         let cut = shown.lines().filter(|l| l.ends_with('…') || l.ends_with("...")).map(|l| format!("cut: {l}"));
         // A box line names its kind and the strings involved, no places: the same finding reads the same at both sizes.
@@ -378,13 +399,36 @@ fn text_fits_on_the_smart_pros_1280x720() {
     assert!(bad.is_empty(), "{} findings neither the 1280x960 layout nor the Brick's 1024x768 has:\n{}", bad.len(), bad.join("\n"));
 }
 
+/// 0.5 candidate check, 15.11.: on the Smart Pro (1280x720) in Large text the Updates page's note was cut in every language. Every
+/// Updates state there shows its whole note and step line, nothing cut, nothing running into the actions or the hints; no forgiving
+/// a cut the larger layouts share, as `text_fits_on_the_smart_pros_1280x720` does.
+#[test]
+fn the_updates_page_shows_its_whole_note_on_the_smart_pro_in_large_text() {
+    let card = Card::smart_pro();
+    let states = ["updates:note", "updates:refused", "updates:ready", "updates:confirm", "updates:confirm-low", "updates:card",
+        "updates:card-refused", "updates:no-wifi", "updates:timeout", "updates:unreachable", "updates:connecting", "updates:fallback",
+        "updates:unpacking", "updates:moving", "updates:restarting"];
+    let mut bad = Vec::new();
+    for lang in LANGS {
+        for font in ["barlow", "retro"] {
+            for state in states {
+                let (shown, boxes) = card.shot_style(state, lang, "large", font);
+                // A cut line ends in " …"; German's "Startet neu …" (Restarting…) is whole.
+                bad.extend(shown.lines().filter(|l| (l.ends_with(" …") && !l.ends_with("Startet neu …")) || l.ends_with("...")).map(|l| format!("{lang} {font} {state}: cut: {l}")));
+                bad.extend(boxes.lines().filter(|l| ['O', 'E', 'T', 'V'].iter().any(|k| l.starts_with(*k))).map(|l| format!("{lang} {font} {state}: {l}")));
+            }
+        }
+    }
+    assert!(bad.is_empty(), "{} findings on the Smart Pro's Updates page:\n{}", bad.len(), bad.join("\n"));
+}
+
 /// Brick Pro keeps the Brick framebuffer layout and has the larger panel's type, two sticks and separate F keys.
 #[test]
 fn brickpro_names_the_experiment_and_shows_only_its_proven_controls() {
     let card = Card { device: ("brickpro", "1024x768"), ..Card::new() };
     for lang in LANGS {
         let (about, _) = card.shot("about", lang, "normal");
-        assert!(about.contains("TrimUI Brick Pro") && about.contains("experiment"), "{lang}: {about}");
+        assert!(about.contains("TrimUI Brick Pro") && (about.contains("experiment") || about.contains("expériment") || about.contains("sperimental")), "{lang}: {about}");
     }
     let (keys, _) = card.shot("leds:colour", "en", "normal");
     assert!(keys.contains("F1 button") && keys.contains("F2 button"), "{keys}");
@@ -395,4 +439,58 @@ fn brickpro_names_the_experiment_and_shows_only_its_proven_controls() {
     for key in ["F1", "F2"] { assert!(pad.lines().any(|l| l == key), "missing {key}: {pad}"); }
     let readout = |l: &str| l.split_once(" · ").is_some_and(|(x,y)| x.trim_start_matches('-').parse::<i32>().is_ok() && y.trim_start_matches('-').parse::<i32>().is_ok());
     assert!(pad.lines().filter(|l| readout(l)).count() >= 2, "both sticks: {pad}");
+}
+
+/// A handheld's start on the Brick (Cozy, Motion Full, Old-TV switch-on on, as the Brick ships): once the game is in, the
+/// GBA's power light and then its display light up; 1450 ms after A the glass is brighter than with the switch-on off, a
+/// block of the console and nothing else. Night check 14.11.2026 on a real Brick: only the power light came on, because
+/// the Brick's build left the display's light out (it once spread over the whole screen for pocket-core to clear).
+#[test]
+fn a_handhelds_start_lights_its_display_on_the_brick() {
+    let card = Card::new();
+    let frame = |system: &str, crt: bool| -> Vec<u8> {
+        let settings = format!(r#"{{"onboarded": true, "theme": "shelf", "animations": "cozy", "motion": "full", "extras": {{"playful_animations": true, "tv_switch_on": {crt}}}}}"#);
+        std::fs::write(card.tmp.join("lib/data/settings.json"), settings).unwrap();
+        let png = card.tmp.join(format!("launch-{system}-{crt}.png"));
+        let mut cmd = Command::new(env!("CARGO_BIN_EXE_pocket-ui"));
+        if let Some(s) = &card.stub {
+            cmd.env("WAYLAND_DISPLAY", &s.path);
+        }
+        let out = cmd
+            .args(["--snapshot", &format!("shelf:{system}:shelf:games:0"), png.to_str().unwrap()])
+            .env("POCKETUI_MOCK", "1").env("POCKETUI_MOCK_NOW", FIXTURE_NOW)
+            .env("POCKETUI_DEVICE", "brick")
+            .env("POCKETUI_BRICK_STANDALONE", "1")
+            .env("POCKETUI_ES_SYSTEMS", card.tmp.join("lib/es_systems.cfg"))
+            .env("POCKETUI_DATA", card.tmp.join("lib/data"))
+            .env("POCKETUI_LANG", "en")
+            .env("POCKETUI_SNAPSHOT_SIZE", "1024x768")
+            .env("POCKETUI_SNAPSHOT_LAUNCH_MS", "1450")
+            .env_remove("SWAYSOCK")
+            .output()
+            .expect("run pocket-ui");
+        assert!(out.status.success(), "{system}: {}", String::from_utf8_lossy(&out.stderr));
+        let mut reader = png::Decoder::new(std::fs::File::open(&png).unwrap()).read_info().unwrap();
+        let mut px = vec![0; reader.output_buffer_size()];
+        let info = reader.next_frame(&mut px).unwrap();
+        assert_eq!((info.width, info.height), (1024, 768));
+        px
+    };
+    for system in ["gba", "gb"] {
+        let (on, off) = (frame(system, true), frame(system, false));
+        let (mut n, mut brighter, mut bb) = (0usize, 0usize, (usize::MAX, usize::MAX, 0usize, 0usize));
+        for (i, (a, b)) in on.chunks(3).zip(off.chunks(3)).enumerate() {
+            if a.iter().zip(b).any(|(x, y)| x.abs_diff(*y) > 12) {
+                n += 1;
+                let (x, y) = (i % 1024, i / 1024);
+                bb = (bb.0.min(x), bb.1.min(y), bb.2.max(x), bb.3.max(y));
+                if a.iter().map(|v| u32::from(*v)).sum::<u32>() > b.iter().map(|v| u32::from(*v)).sum::<u32>() {
+                    brighter += 1;
+                }
+            }
+        }
+        assert!(n * 300 > 1024 * 768, "{system}: its display lights up on the Brick ({n} px changed)");
+        assert!(brighter * 10 >= n * 9, "{system}: lit means brighter ({brighter} of {n})");
+        assert!((bb.2 - bb.0) * (bb.3 - bb.1) * 4 < 1024 * 768, "{system}: only the glass, {bb:?}");
+    }
 }

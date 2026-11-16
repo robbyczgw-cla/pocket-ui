@@ -242,6 +242,7 @@ impl App {
         };
         let systems: Vec<SystemName> = self.systems.iter().map(|s| SystemName { id: s.name.clone(), name: s.fullname.clone(), short: system_short(&self.systems, &s.name) }).collect();
         let player = Player {
+            played: self.systems.iter().flat_map(|s| &s.games).filter(|g| self.play_evidence(&g.path).ever_played()).map(|g| g.path.clone()).collect(),
             meta: self.library.games(),
             stickers: self.library.stickers().to_vec(),
             preferred: self.library.preferred().clone(),
@@ -821,6 +822,8 @@ impl App {
 
     /// Input while a Curator page is open.
     pub(crate) fn curator_input(&mut self, b: Button) {
+        // Any button ends a sticker's landing or lift: it sits (or is gone) at once.
+        self.end_sticker_press();
         let Some(page) = self.curator.page.take() else { return };
         self.curator.page = match page {
             Page::Lens(mut p) => {
@@ -896,6 +899,14 @@ impl App {
                 SheetOut::None => Some(Page::Stickers { sheet, path, ids, case, year }),
                 SheetOut::Back => {
                     self.curator_card_refresh();
+                    // The sheet is on the card's page, which the box looks reach with SELECT: a change made there goes back
+                    // to the box, so the case is seen with it (Brick check 14.11.2026: the press was never seen).
+                    if CaseKind::ALL.iter().any(|k| case.has(*k) != self.cabinet.stickers_opened.has(*k)) {
+                        self.card_back_to_box();
+                    }
+                    // In the game box, with the sheet gone, what was put on lands on the case and what was taken off lifts
+                    // away (`sticker_press`).
+                    self.start_sticker_press(&path, self.cabinet.stickers_opened, case);
                     None
                 }
                 // A case sticker: on or off at once, the case on the shelf follows (`case_stickers`).
@@ -1098,7 +1109,7 @@ impl App {
         let Some(Item::Game(s, g)) = self.curator_item(game) else { return };
         self.card = None;
         let (sys, game) = (&self.systems[s], &self.systems[s].games[g]);
-        self.launch_asking(sys.name.clone(), game.name.clone(), game.path.clone());
+        self.launch(sys.name.clone(), game.name.clone(), game.path.clone());
     }
 
     /// Whether Home offers "Just Play": with its own switch (Settings → Games → Curator, on unless the player had the Lens off
@@ -1167,7 +1178,7 @@ impl App {
         let (system, name, path) = (self.systems[s].name.clone(), self.systems[s].games[g].name.clone(), self.systems[s].games[g].path.clone());
         // The title for a moment, without holding the start back (it is only painted when the shelf is).
         self.toast = Some((format!("Starting {name}"), Instant::now()));
-        self.launch_asking(system, name, path);
+        self.launch(system, name, path);
     }
 
     /// "Just Play", X on its row and Right on the card it opened: the game it would start, on its card with the reason, so
@@ -1294,8 +1305,6 @@ impl App {
             RowKind::Manage => self.open_card_manage(),
             // The game's screenshots (`app_gallery`).
             RowKind::Screenshots => self.open_gallery_for_card(),
-            // Which button of the Pocket does what (`app_controls_card`).
-            RowKind::Controls => self.open_controls_card_for_card(),
         }
     }
 
@@ -1390,7 +1399,7 @@ impl App {
                 });
                 match u.last_played {
                     Some(t) => saves.push(format!("last played {}", pocket_ui::recents::ago(t))),
-                    None if u.secs == 0 => saves.push("not played yet".into()),
+                    None if !u.ever_played() => saves.push("not played yet".into()),
                     None => {}
                 }
                 if u.secs > 0 {
@@ -1444,6 +1453,7 @@ impl App {
         let ids = Vec::new();
         let goty = CaseKind::ALL.iter().position(|k| *k == CaseKind::Goty);
         let sheet = Sheet { title: "Stickers".into(), rows, sel: 0, single: false, adjust: goty };
+        self.cabinet.stickers_opened = case;
         self.curator.page = Some(Page::Stickers { sheet, path: path.to_path_buf(), ids, case, year });
     }
 
@@ -1547,7 +1557,7 @@ impl App {
         self.text.draw(c, Face::Body, 28, MARGIN, 208, pal().dust, &sub);
 
         let facets = ix.shown_facets();
-        let (top, bottom, row, gap) = (246, c.h - 110, pocket_ui::type_scale::row(64, 37), 8);
+        let (top, bottom, row, gap) = (246, pocket_ui::kit::content_bottom(c.h), pocket_ui::type_scale::row(64, 37), 8);
         let pitch = row + gap;
         let visible = ((bottom - top) / pitch).max(1) as usize;
         let (lx, lw) = (MARGIN, pocket_ui::type_scale::wide(360, 37));
@@ -1648,7 +1658,7 @@ impl App {
         let (g1, g2) = (pocket_ui::type_scale::grow(37), pocket_ui::type_scale::grow(28));
         let (top, row, gap) = (246, 124 + (g1 + g2) * 6 / 5, 10);
         let pitch = row + gap;
-        let bottom = c.h - 110;
+        let bottom = pocket_ui::kit::content_bottom(c.h);
         let elsewhere_h = if p.elsewhere.is_empty() { 0 } else { 120 };
         let visible = (((bottom - top) / pitch) as usize).max(1);
         let first = super::window_start(p.sel, visible, p.echoes.len());
@@ -1720,7 +1730,7 @@ impl App {
         let (g1, g2) = (pocket_ui::type_scale::grow(37), pocket_ui::type_scale::grow(28));
         let (top, row, gap) = (246, 196 + (g1 + 3 * g2) * 6 / 5, 12);
         let pitch = row + gap;
-        let visible = (((c.h - 110 - top) / pitch) as usize).max(1);
+        let visible = (((pocket_ui::kit::content_bottom(c.h) - top) / pitch) as usize).max(1);
         let first = super::window_start(p.sel, visible, p.rows.len());
         let w = c.w - 2 * MARGIN;
         // The list scrolls smoothly under its edges (`app_motion`).
@@ -1770,11 +1780,11 @@ impl App {
         let x = (c.w - w) / 2;
         // The whole sheet (title, rows and bottom padding) stays above the hints. In Large, eight rows no longer
         // fit on a native 768-line output; the window must shrink with the available height as well as grow in type.
-        let room = (c.h - 100 - 32 - 168).max(row);
+        let room = (pocket_ui::kit::content_bottom(c.h) - 32 - 168).max(row);
         let shown = sheet.rows.len().min(8).min(((room + gap) / (row + gap)).max(1) as usize);
         let first = super::window_start(sheet.sel, shown, sheet.rows.len());
         let total = shown as i32 * (row + gap) - gap;
-        let top = (c.h - 100 - total - 168) / 2 + 120;
+        let top = (pocket_ui::kit::content_bottom(c.h) - total - 168) / 2 + 120;
         let (sx, sy, sw, sh) = (x - 48, top - 120, w + 96, total + 168);
         c.rect(sx, sy, sw, sh, pal().void);
         if pal().t > 0 {
@@ -1820,7 +1830,7 @@ impl App {
             c.rect(sx + sw - 24, top + bar_y, 4, bar_h.max(12), pal().chip);
         }
         self.hits.list(sheet.sel, sheet.rows.len(), 0.0, (row + gap) as f32);
-        c.rect(0, c.h - 100, c.w, 100, pal().void);
+        c.rect(0, pocket_ui::kit::content_bottom(c.h), c.w, c.h - pocket_ui::kit::content_bottom(c.h), pal().void);
         self.paint_hint_row(c, &sheet.hints());
     }
 
@@ -2054,7 +2064,7 @@ impl App {
                 self.settings_page = self.open_curator_settings();
                 self.curator.settings_sel = parts.get(1).and_then(|n| n.parse().ok()).unwrap_or(0);
             }
-            "card" | "echoes" | "versions" | "stickers" => {
+            "card" | "echoes" | "versions" | "stickers" | "walk" => {
                 let Some((s, g)) = game(self) else {
                     eprintln!("curator:{rest}: no such game");
                     return;
@@ -2121,6 +2131,31 @@ impl App {
                 }
             }
             _ => eprintln!("curator:{rest}: unknown"),
+        }
+    }
+
+    /// A key of a snapshot's walk (`info:<look>:walk:…`), where the pad's press would go (`UserEvent::Pad`): an open
+    /// Curator page, else the card, else Home. `r l u d a b x y s` as `curator_snapshot`'s keys, `S` SELECT.
+    pub(crate) fn walk_key(&mut self, k: char) {
+        let b = match k {
+            'r' => Button::Right,
+            'l' => Button::Left,
+            'u' => Button::Up,
+            'd' => Button::Down,
+            'a' => CONFIRM,
+            'b' => CANCEL,
+            'x' => Button::North,
+            'y' => Button::West,
+            's' => Button::Start,
+            'S' => Button::Select,
+            _ => return,
+        };
+        if self.curator.page.is_some() {
+            self.curator_input(b);
+        } else if self.card.is_some() {
+            self.card_input(b);
+        } else {
+            self.press(b);
         }
     }
 

@@ -183,6 +183,7 @@ fn real_renderer_keeps_its_pixels_and_each_probe(tmp: &Path) {
             }
             if let Some(first) = outputs.first() {
                 if &files != first {
+                    // test-tmp-ok: the proof of a red run, written only when the test fails (the gate keeps it, scripts/run-tmp.sh)
                     let evidence = std::env::temp_dir().join(format!("snapshot-equivalence-{}", std::process::id()));
                     fs::create_dir_all(&evidence).unwrap();
                     for (i, (expected, actual)) in first.iter().zip(&files).enumerate() {

@@ -120,6 +120,8 @@ pub fn trimui_standalone() -> bool {
 
 /// Whether the existing PortMaster browser can install games on this system.
 pub fn offered() -> bool {
+    // PortMaster is a Linux program: Android's handheld view has none (`device::ANDROID_HIDES`'s kind of row).
+    if crate::device::android_profile() { return false; }
     #[cfg(feature = "brick")]
     if crate::device::brick() { return crate::brick_profile::standalone(); }
     true

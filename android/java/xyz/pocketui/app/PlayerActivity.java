@@ -17,6 +17,7 @@ public final class PlayerActivity extends Activity {
     private SemanticView semantics;
     private android.media.AudioFocusRequest focus;
     private boolean ready;
+    private AlertDialog startError;
     private volatile boolean paused;
     private boolean hapticsEnabled;
     private android.view.ScaleGestureDetector pinch;
@@ -135,6 +136,9 @@ public final class PlayerActivity extends Activity {
         orientFor("true".equals(hasGamepad()));
         getWindow().addFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
         if(android.os.Build.VERSION.SDK_INT>=28){android.view.WindowManager.LayoutParams attrs=getWindow().getAttributes();attrs.layoutInDisplayCutoutMode=android.view.WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES;getWindow().setAttributes(attrs);}
+        // The handheld view's brightness row holds in the game it starts (extra set by launchPath); Android's own is the default.
+        int shelfBrightness=getIntent().getIntExtra("brightness",-1);
+        if(shelfBrightness>=0){android.view.WindowManager.LayoutParams attrs=getWindow().getAttributes();attrs.screenBrightness=Math.max(5,Math.min(100,shelfBrightness))/100f;getWindow().setAttributes(attrs);}
         try{hapticsEnabled=new org.json.JSONObject(playerSettings()).optBoolean("haptics",false);}catch(org.json.JSONException ignored){hapticsEnabled=false;}
         immersive();
         surface=new GLSurfaceView(this); surface.setEGLContextClientVersion(3); surface.setPreserveEGLContextOnPause(true);
@@ -143,15 +147,21 @@ public final class PlayerActivity extends Activity {
                 String error=nativeCreate(getIntent().getStringExtra("core"),getIntent().getStringExtra("rom"),getIntent().getStringExtra("system"),getIntent().getStringExtra("key"),getIntent().getStringExtra("title"));
                 ready=error.isEmpty();
                 if(ready)nativeRoster(rosterText);
-                if (!ready) runOnUiThread(() -> new AlertDialog.Builder(PlayerActivity.this).setTitle("Game couldn't start").setMessage(error).setPositiveButton("OK",(d,w)->finish()).setOnCancelListener(d->finish()).show());
+                if (!ready) runOnUiThread(() -> {
+                    if(isFinishing()||isDestroyed())return;
+                    startError=new AlertDialog.Builder(PlayerActivity.this).setTitle("Game couldn't start").setMessage(error).setPositiveButton("OK",(d,w)->finish()).setOnCancelListener(d->finish()).create();
+                    startError.setOnKeyListener((dialog,key,event)->closeStartError(key,event));
+                    startError.show();
+                });
             }
             public void onSurfaceChanged(GL10 unused,int width,int height) { }
             public void onDrawFrame(GL10 unused) {
                 if (!ready) return;
                 int state=nativeFrame(surface.getWidth(),surface.getHeight(),getResources().getDisplayMetrics().density,getResources().getConfiguration().fontScale,safeLeft,safeTop,safeRight,safeBottom);
-                paused=state==1;
+                paused=state==1||state==3;
                 if (state==2) {ready=false;runOnUiThread(()->finish());}
                 else if (state==1) surface.setRenderMode(GLSurfaceView.RENDERMODE_WHEN_DIRTY);
+                else if (state==3) surface.setRenderMode(GLSurfaceView.RENDERMODE_CONTINUOUSLY);
             }
         });
         pinch=new android.view.ScaleGestureDetector(this,new android.view.ScaleGestureDetector.SimpleOnScaleGestureListener(){
@@ -188,6 +198,7 @@ public final class PlayerActivity extends Activity {
         if(focused)immersive();}
     @Override public boolean dispatchKeyEvent(KeyEvent event) {
         int key=event.getKeyCode();
+        if(closeStartError(key,event))return true;
         if(key==KeyEvent.KEYCODE_VOLUME_UP||key==KeyEvent.KEYCODE_VOLUME_DOWN)return super.dispatchKeyEvent(event);
         if(event.getRepeatCount()>0&&event.getAction()==KeyEvent.ACTION_DOWN&&!(key>=KeyEvent.KEYCODE_DPAD_UP&&key<=KeyEvent.KEYCODE_DPAD_RIGHT))return true;
         final boolean down=event.getAction()==KeyEvent.ACTION_DOWN;
@@ -215,7 +226,15 @@ public final class PlayerActivity extends Activity {
         return super.onGenericMotionEvent(event);
     }
     @Override public void onBackPressed(){backRequested();}
-    private void backRequested(){android.util.Log.i("PocketMvp","player system back");surface.queueEvent(()->{if(nativeKey(KeyEvent.KEYCODE_BACK,true,false,-1))surface.setRenderMode(GLSurfaceView.RENDERMODE_CONTINUOUSLY);});surface.requestRender();}
+    private boolean closeStartError(int key,KeyEvent event){
+        if(startError==null||!PlayerExitKeys.closesError(key))return false;
+        if(event.getAction()==KeyEvent.ACTION_UP){startError.dismiss();finish();}
+        return true;
+    }
+    private void backRequested(){
+        if(startError!=null){startError.dismiss();finish();return;}
+        android.util.Log.i("PocketMvp","player system back");surface.queueEvent(()->{if(nativeKey(KeyEvent.KEYCODE_BACK,true,false,-1))surface.setRenderMode(GLSurfaceView.RENDERMODE_CONTINUOUSLY);});surface.requestRender();
+    }
     @Override public void onConfigurationChanged(android.content.res.Configuration config){super.onConfigurationChanged(config);surface.requestApplyInsets();surface.requestRender();}
     @Override protected void onResume(){super.onResume();surface.onResume();immersive();
         inputs.registerInputDeviceListener(inputListener,null);surface.queueEvent(()->nativeForeground());controllersChanged(false);

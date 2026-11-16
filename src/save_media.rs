@@ -283,6 +283,9 @@ pub struct Slots<'a> {
     /// The slot the menu is on (none: Auto or Before load, or read-only).
     pub ring: Option<usize>,
     pub icon: Icon<'a>,
+    /// The cover on a cartridge's label when `icon` is not the cover (the box's back leaves its slots plain and
+    /// still shows the game's own label).
+    pub label: Option<&'a Image>,
     /// The system's stripe: a cartridge's label without a cover, a slot's icon without one.
     pub stripe: u32,
     /// The slots' numbers (off where they would be too small to read).
@@ -363,7 +366,8 @@ pub fn paint(c: &mut Canvas, text: &mut Text, kind: Kind, x: i32, y: i32, l: &La
 /// cover (painting it is a copy).
 #[allow(clippy::too_many_arguments)]
 fn cartridge(c: &mut Canvas, text: &mut Text, game: Game, plastic: u32, x: i32, y: i32, l: &Layout, s: &Slots) {
-    type Key = (Game, u32, i32, usize, u32);
+    // The last is the fingerprint of a cover lent as `label` (not kept: it lives only for the paint).
+    type Key = (Game, u32, i32, usize, u32, u64);
     struct Made {
         key: Key,
         // Keep the source alive while its address is the key. Otherwise the picture loader's eviction can free it
@@ -378,18 +382,19 @@ fn cartridge(c: &mut Canvas, text: &mut Text, game: Game, plastic: u32, x: i32, 
         Icon::Cover(img) => Some(img),
         _ => None,
     };
+    let art: Option<&Image> = cover.map(|i| &**i).or(s.label);
     let console = match s.icon {
         Icon::Console(sp) => Some(sp),
         _ => None,
     };
     // `media::game_pic` currently ignores `console`; only the uncached slot blocks use it. If a cartridge label
     // starts drawing it, retain its owner here too and include its identity separately in this key.
-    let key: Key = (game, plastic, l.h, cover.map_or(0, |i| Rc::as_ptr(i) as usize), s.stripe);
+    let key: Key = (game, plastic, l.h, cover.map_or(0, |i| Rc::as_ptr(i) as usize), s.stripe, s.label.filter(|_| cover.is_none()).map_or(0, Image::fingerprint));
     MADE.with(|made| {
         let mut made = made.borrow_mut();
         if !made.iter().any(|m| m.key == key) {
-            let look = Look { color: mix(s.stripe, 0x101010, 70), band: s.stripe, plastic };
-            let Some(pic) = crate::media::game_pic(text, game, l.h, look, "", cover.map(Rc::as_ref), console) else { return };
+            let look = Look { color: mix(s.stripe, 0x101010, 70), band: s.stripe, plastic, tape: false };
+            let Some(pic) = crate::media::game_pic(text, game, l.h, look, "", art, console) else { return };
             if made.len() >= 4 {
                 made.remove(0);
             }
@@ -528,6 +533,32 @@ mod tests {
         assert_eq!((l.slot(3).1, l.slot(4)), (l.first.1, (l.first.0, l.first.1 + l.step)));
     }
 
+    /// The box's back gives the cartridge its cover as `label` and leaves the slots plain (`Icon::None`): only the
+    /// cartridge's own pixels differ from a cartridge without art, the slots and the paper label are untouched.
+    #[test]
+    fn a_label_cover_prints_on_the_cartridge_and_leaves_the_slots_alone() {
+        let kind = Kind::Cartridge(Game::Gba, 0x9c99a2);
+        let cover = Rc::new(Image { w: 48, h: 32, px: (0..48 * 32).map(|i| if (i % 48 / 4 + i / 48 / 4) % 2 == 0 { 0xd02080 } else { 0x2080d0 }).collect() });
+        let mut text = Text::new();
+        let mut draw = |label: Option<&Image>| {
+            let l = Layout::new(kind, 8, 644);
+            let mut px = vec![0u32; (l.w * l.h) as usize];
+            let slots = Slots { filled: &[true; 8], ring: None, icon: Icon::None, label, stripe: 0x40a040, numbers: false };
+            paint(&mut Canvas::new(&mut px, l.w as u32, l.h as u32), &mut text, kind, 0, 0, &l, &slots);
+            (l, px)
+        };
+        let (l, plain) = draw(None);
+        let (_, printed) = draw(Some(&*cover));
+        let magenta = |p: &u32| (p >> 16 & 0xff) > 0xb0 && (p >> 8 & 0xff) < 0x50;
+        assert_eq!(plain.iter().filter(|p| magenta(p)).count(), 0, "no art: the stripe's plain label");
+        assert!(printed.iter().filter(|p| magenta(p)).count() > 200, "the cover is printed on the label");
+        for (i, (a, b)) in plain.iter().zip(&printed).enumerate() {
+            if a != b {
+                assert!((i as i32 % l.w) < l.object_w, "pixel {i} outside the cartridge changed");
+            }
+        }
+    }
+
     #[test]
     fn cached_cartridge_labels_keep_their_cover_alive_until_eviction() {
         let kind = Kind::Cartridge(Game::Gb, 0x9c99a2);
@@ -538,7 +569,7 @@ mod tests {
         for i in 0..5 {
             let cover = Rc::new(Image { w: 24, h: 24, px: vec![0xc03020 + i; 24 * 24] });
             let weak = Rc::downgrade(&cover);
-            let slots = Slots { filled: &[false; 8], ring: None, icon: Icon::Cover(&cover), stripe: 0x40a040, numbers: false };
+            let slots = Slots { filled: &[false; 8], ring: None, icon: Icon::Cover(&cover), label: None, stripe: 0x40a040, numbers: false };
             paint(&mut Canvas::new(&mut pixels, layout.w as u32, layout.h as u32), &mut text, kind, 0, 0, &layout, &slots);
             drop(cover);
             assert!(weak.upgrade().is_some(), "the address used by the cache must still belong to its cover");

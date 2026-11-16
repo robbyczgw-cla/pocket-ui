@@ -16,6 +16,10 @@ pub(super) struct Graphics {
     // 0xRRGGBB behind the picture and in the system-bar insets: the touch pause sheet's page colour, else black.
     pub(super) backdrop: u32,
     pub(super) effect: usize,
+    // Linux's screen frames (`bezel::Layer`): the same frame code and the same GL layer behind the picture.
+    frame: pocket_ui::bezel::Layer,
+    // What the frame layer last reported (drawn or not yet), so a change is logged once: a frame that never shows must be findable.
+    frame_state: Option<bool>,
 }
 impl Graphics {
     #[cfg(target_os = "android")]
@@ -89,8 +93,25 @@ impl Graphics {
                 game_size: (0, 0),
                 backdrop: 0,
                 effect: 0,
+                frame_state: None,
+                frame: {
+                    // A frame that is not ready is drawn on a thread: the picture never waits for it (`Layer::set_async`).
+                    let mut layer = pocket_ui::bezel::Layer::new();
+                    layer.set_async(true);
+                    layer
+                },
             })
         }
+    }
+    /// A state was saved: the frame's power light flashes (frames without a light ignore it).
+    #[cfg_attr(test, allow(dead_code))]
+    pub(super) fn flash_frame_light(&mut self) {
+        self.frame.flash_light();
+    }
+    /// Whether a frame still to be drawn is drawn on a thread (the player) or waited for (tests that compare it).
+    #[cfg(test)]
+    pub(super) fn frame_in_background(&mut self, on: bool) {
+        self.frame.set_async(on);
     }
     unsafe fn upload(gl: &glow::Context, pixels: &[u32], size: (i32, i32), previous: &mut (i32, i32)) {
         // SAFETY: tightly packed u32 pixels cover exactly this texture; GLES consumes the slice synchronously.
@@ -133,7 +154,12 @@ impl Graphics {
         game: Option<(&Image, Area)>,
         dirty: bool,
         crt: &[pocket_ui::crt_on::Quad],
+        frame: Option<&pocket_ui::bezel::Placed>,
+        // The size and viewport the picture, its switch-on and its frame are in (`picture::Space`); the overlay is in
+        // `size` on `view`.
+        picture: ((i32, i32), (i32, i32, i32, i32)),
     ) {
+        let (pic_size, pic_view) = picture;
         unsafe {
             let gl = &self.gl;
             let channel = |shift: u32| ((self.backdrop >> shift) & 0xff) as f32 / 255.0;
@@ -144,6 +170,21 @@ impl Graphics {
             gl.use_program(Some(self.program));
             gl.bind_vertex_array(Some(self.vao));
             gl.active_texture(glow::TEXTURE0);
+            // The frame first, on the cleared screen: it draws only the bands around the picture, never a pixel of it, and
+            // never outside its room, which lies inside `view` (the system bars' insets stay clear).
+            if let Some(f) = frame {
+                let (x, y, w, h) = f.room;
+                gl.viewport(pic_view.0 + x, pic_view.1 + y, w as i32, h as i32);
+                self.frame.set_origin(pic_view.0 + x, pic_view.1 + y);
+                let drawn = self.frame.draw(gl, w, h, f.hole, f.px, Some(f.style));
+                if self.frame_state != Some(drawn) {
+                    self.frame_state = Some(drawn);
+                    #[cfg(target_os = "android")]
+                    log::info!("player frame: drawn={drawn} style={:?} room={:?} hole={:?} px={:.2} gl_error={:#x} shader_error={:?}", f.style, f.room, f.hole, f.px, gl.get_error(), self.frame.shader_error);
+                }
+                gl.use_program(Some(self.program));
+                gl.active_texture(glow::TEXTURE0);
+            }
             let overlay = gl.get_uniform_location(self.program, "overlay");
             if let Some((image, rect)) = game {
                 // Upload the core's native framebuffer, not a CPU enlargement of it. The phone's
@@ -156,13 +197,21 @@ impl Graphics {
                 gl.uniform_1_i32(gl.get_uniform_location(self.program, "effect").as_ref(), self.effect as i32);
                 gl.uniform_1_f32(gl.get_uniform_location(self.program, "sourceHeight").as_ref(), image.h as f32);
                 gl.uniform_1_i32(overlay.as_ref(), 0);
+                // The same arithmetic as `picture::Space::on_window`.
                 gl.viewport(
-                    view.0 + rect.x * view.2 / size.0,
-                    view.1 + view.3 - (rect.y + rect.h) * view.3 / size.1,
-                    rect.w * view.2 / size.0,
-                    rect.h * view.3 / size.1,
+                    pic_view.0 + rect.x * pic_view.2 / pic_size.0,
+                    pic_view.1 + pic_view.3 - (rect.y + rect.h) * pic_view.3 / pic_size.1,
+                    rect.w * pic_view.2 / pic_size.0,
+                    rect.h * pic_view.3 / pic_size.1,
                 );
                 gl.draw_arrays(glow::TRIANGLES, 0, 3);
+            }
+            // A frame's inlay (the DS frame's hinge in the gap between its screens) goes over the picture, as on Linux.
+            if let Some(f) = frame {
+                let (x, y, w, h) = f.room;
+                gl.viewport(pic_view.0 + x, pic_view.1 + y, w as i32, h as i32);
+                self.frame.draw_inlay(gl, w, h, f.hole);
+                gl.use_program(Some(self.program));
             }
             // Shared CRT geometry over the game only; GPU quads keep the normal native-size upload path.
             if !crt.is_empty() {
@@ -170,12 +219,12 @@ impl Graphics {
                 let tint = gl.get_uniform_location(self.solid_program, "tint");
                 for quad in crt {
                     let (x, y, w, h) = quad.rect;
-                    let (sx, sy) = (view.2 as f32 / size.0 as f32, view.3 as f32 / size.1 as f32);
+                    let (sx, sy) = (pic_view.2 as f32 / pic_size.0 as f32, pic_view.3 as f32 / pic_size.1 as f32);
                     let x0 = (x * sx).floor() as i32;
                     let x1 = ((x + w) * sx).ceil() as i32;
                     let y0 = (y * sy).floor() as i32;
                     let y1 = ((y + h) * sy).ceil() as i32;
-                    gl.viewport(view.0 + x0, view.1 + view.3 - y1, x1 - x0, y1 - y0);
+                    gl.viewport(pic_view.0 + x0, pic_view.1 + pic_view.3 - y1, x1 - x0, y1 - y0);
                     let value = if quad.white { 1.0 } else { 0.0 };
                     gl.uniform_4_f32(tint.as_ref(), value, value, value, quad.alpha);
                     gl.draw_arrays(glow::TRIANGLES, 0, 3);

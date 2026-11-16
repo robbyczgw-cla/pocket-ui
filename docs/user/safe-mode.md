@@ -39,7 +39,7 @@ the start. Under it:
 | **Open EmulationStation…** | ROCKNIX's own menu, after the warning below. |
 | **Power off** | Switches the Pocket off. |
 
-Use the D-pad and A, or tap a row. B closes a question without doing anything. Safe mode follows the device’s printed buttons: A bottom and B right on Odin 2 Mini/Portal, A right and B bottom elsewhere, whatever Settings → Playing → Buttons → [**Button layout**](settings.md#button-layout) says.
+Use the D-pad and A, or tap a row. B closes a question without doing anything. Safe mode follows the device’s printed buttons: A bottom and B right on Odin 2 Mini/Portal, A right and B bottom elsewhere, whatever Settings → Controls → Buttons → [**Button layout**](settings-sound.md#button-layout) says.
 
 If safe mode comes back after a reset as well, send the files described in
 [What to send when something crashes](troubleshooting.md#what-to-send-when-something-crashes).

@@ -197,6 +197,15 @@ pub enum Row {
     PowerOff,
 }
 
+/// Where the way back to EmulationStation is, on the first start's welcome (test 2: a player did not find it).
+pub const BACK_HINT: &str = "To go back to EmulationStation: Settings › System › Back to EmulationStation, or hold SELECT + START.";
+/// Settings → System's row and Quick settings' row (HOME): the dialog of `LEAVE_TITLE`.
+pub const BACK_ROW: &str = "Back to EmulationStation";
+/// Under that row in Settings.
+pub const BACK_ROW_HELP: &str = "Closes pocket-ui and EmulationStation comes back. SELECT + START held does the same.";
+/// Under that row in Quick settings.
+pub const BACK_QUICK_HELP: &str = "Closes pocket-ui, EmulationStation comes back.";
+
 /// The dialogs: in front of EmulationStation, and in front of a reset.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum DialogKind {
@@ -239,7 +248,7 @@ impl Choice {
             Choice::Cancel => "Cancel",
             Choice::RestartUi => "Restart pocket-ui",
             Choice::BackToNextui => "Back to NextUI",
-            Choice::OpenEs => "Open EmulationStation",
+            Choice::OpenEs if crate::darkos::host() => "Back to EmulationStation", Choice::OpenEs => "Open EmulationStation",
             Choice::Reset => "Reset settings",
             Choice::Report => crate::report::ROW,
         }
@@ -286,7 +295,7 @@ impl Dialog {
 
     pub fn title(&self) -> &'static str {
         match self.kind {
-            #[cfg(feature = "brick")] DialogKind::Leave if crate::device::brick() && crate::brick_profile::standalone() => BRICK_CARD_LEAVE, #[cfg(feature = "brick")] DialogKind::Leave if crate::device::brick() => "Back to NextUI?",
+            #[cfg(feature = "brick")] DialogKind::Leave if crate::device::brick() && crate::brick_profile::standalone() => BRICK_CARD_LEAVE, #[cfg(feature = "brick")] DialogKind::Leave if crate::device::brick() => "Back to NextUI?", #[cfg(feature = "brick")] DialogKind::Leave | DialogKind::OpenEs if crate::darkos::host() => crate::darkos::LEAVE_TITLE,
             DialogKind::Leave => "Leave pocket-ui?",
             DialogKind::OpenEs => "Open EmulationStation?",
             DialogKind::Reset => "Reset pocket-ui settings?",
@@ -296,7 +305,7 @@ impl Dialog {
     /// The paragraphs under the title.
     pub fn body(&self) -> Vec<String> {
         match self.kind {
-            DialogKind::OpenEs => ES_WARNING.iter().map(|s| s.to_string()).collect(),
+            #[cfg(feature = "brick")] DialogKind::Leave | DialogKind::OpenEs if crate::darkos::host() => vec![crate::darkos::LEAVE_BODY.to_string()], DialogKind::OpenEs => ES_WARNING.iter().map(|s| s.to_string()).collect(),
             #[cfg(feature = "brick")] DialogKind::Leave if crate::device::brick() && crate::brick_profile::standalone() => vec![BRICK_CARD_LEAVE_BODY.to_string()], #[cfg(feature = "brick")] DialogKind::Leave if crate::device::brick() => vec!["Back to NextUI. Your games, saves and settings stay as they are.".to_string()],
             DialogKind::Leave => std::iter::once(format!("Restart pocket-ui starts it afresh. {}", ES_WARNING[0])).chain(ES_WARNING[1..].iter().map(|s| s.to_string())).collect(),
             DialogKind::Reset => vec![
@@ -312,7 +321,7 @@ impl Dialog {
 
     pub fn choices(&self) -> &'static [Choice] {
         match self.kind {
-            #[cfg(feature = "brick")] DialogKind::Leave if crate::device::brick() && crate::brick_profile::standalone() => &[Choice::Cancel, Choice::RestartUi], #[cfg(feature = "brick")] DialogKind::Leave if crate::device::brick() => &[Choice::Cancel, Choice::BackToNextui],
+            #[cfg(feature = "brick")] DialogKind::Leave if crate::device::brick() && crate::brick_profile::standalone() => &[Choice::Cancel, Choice::RestartUi], #[cfg(feature = "brick")] DialogKind::Leave if crate::device::brick() => &[Choice::Cancel, Choice::BackToNextui], #[cfg(feature = "brick")] DialogKind::Leave if crate::darkos::host() => &[Choice::Cancel, Choice::OpenEs],
             DialogKind::Leave => &[Choice::Cancel, Choice::RestartUi, Choice::Report, Choice::OpenEs],
             DialogKind::OpenEs => &[Choice::Cancel, Choice::OpenEs],
             DialogKind::Reset => &[Choice::Cancel, Choice::Reset],

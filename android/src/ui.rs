@@ -150,14 +150,19 @@ impl Preferences {
         pocket_ui::system_art::set_gba_model(self.gba_model);
     }
 }
-/// The rows of the Cozy extras sheet, in the Linux page's order (`Extra::PAGE_ROWS`): every one has its feature on a
-/// phone. Case sounds, the old-TV switch-on and the playful cases are rows of Settings itself, beside Animations, Motion
-/// and UI sounds, as in Linux's Sound & feel.
-pub const PHONE_EXTRAS: [pocket_ui::cozy_extras::Extra; 7] = pocket_ui::cozy_extras::Extra::PAGE_ROWS;
+/// The rows of the Cozy extras sheet, in the Linux page's order (`Extra::PAGE_ROWS`) without the two that move: every one
+/// has its feature on a phone. Case sounds, the old-TV switch-on and the playful cases are rows of this Settings itself,
+/// beside Animations, Motion and UI sounds (Linux keeps the two on its Cozy extras page since 2026-11-13).
+pub const PHONE_EXTRAS: [pocket_ui::cozy_extras::Extra; 7] = {
+    use pocket_ui::cozy_extras::Extra;
+    [Extra::CabinetTv, Extra::Stickers, Extra::PrintedDiscs, Extra::TimeOfDayLight, Extra::Decorations, Extra::Connections, Extra::Rediscover]
+};
 /// The rows of Settings in page order; only what exists on a phone (no LEDs, fan, sleep or Tailscale rows).
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum Setting {
     Look,
+    /// Handheld (the Linux pages for the built-in pad) or Mobile (these pages): the app opens in the chosen one (`Views.java`).
+    View,
     Appearance,
     Colours,
     Font,
@@ -166,7 +171,7 @@ enum Setting {
     Animations,
     Motion,
     CozyExtras,
-    /// A cozy extra you hear or that moves: a switch of its own (`Extra::home` is Sound & feel on Linux).
+    /// A cozy extra you hear or that moves: a switch of its own (`Extra::home` is Linux's Cozy extras page or Screen & sound).
     Extra(pocket_ui::cozy_extras::Extra),
     Sounds,
     Haptics,
@@ -193,7 +198,7 @@ enum Setting {
     /// Settings → RetroAchievements: sign in once, log out.
     Achievements,
 }
-const SETTINGS: [Setting; 29] = [
+const SETTINGS: [Setting; 30] = [
     Setting::Look,
     Setting::Appearance,
     Setting::Colours,
@@ -220,6 +225,7 @@ const SETTINGS: [Setting; 29] = [
     Setting::CuratorTab,
     Setting::Updates,
     Setting::Licences,
+    Setting::View,
     Setting::FirstStart,
     Setting::Help,
     Setting::Report,
@@ -265,7 +271,6 @@ pub enum Action {
     /// A fact on the open card that leads to the player's other games.
     Link(usize),
     JustPlay,
-    Controls,
     /// The landscape shelf's arrows: the shelf above (-1) or below (1).
     Shelf(i32),
     /// The Game of the year sticker's year, back (-1) or on (1).
@@ -300,6 +305,8 @@ pub enum Command {
     None,
     Launch,
     Folder,
+    /// Settings → View: the handheld view opens instead of this one.
+    HandheldView,
     Persist,
     /// Start the Game check on a worker.
     Check,
@@ -324,6 +331,8 @@ pub enum Command {
     /// log out (delete the token).
     RaLogin(String, String),
     RaLogout,
+    /// Settings → RetroAchievements → Hardcore switched (kept with the account).
+    RaHardcore(bool),
     /// Start this app (a package name) the way a home screen does.
     OpenApp(String),
 }
@@ -378,9 +387,6 @@ pub struct Ui {
     /// Tests: where the last header put its title, note and corner, as (name, left, right) in canvas pixels.
     #[cfg(test)]
     pub header_rects: Vec<(&'static str, i32, i32)>,
-    pub controls_open: bool,
-    controls_scroll: usize,
-    control_names: Vec<pocket_ui::controls::Target>,
     pub keyboard: Option<Keyboard>,
     pub query: String,
     pub lens: pocket_ui::curator::Lens,
@@ -391,7 +397,7 @@ pub struct Ui {
     pub wifi_ready: bool,
     pub core_offers: Vec<pocket_ui::android_cores::CorePackage>,
     /// Whether the system download channel is public (`core-channel.url` in the APK's assets, or an intent's override). While
-    /// it is not, the extra systems are shown as "Coming soon": nothing is offered, nothing ends in an error. Off until set.
+    /// it is not, the extra systems are shown as "Not available here": nothing is offered, nothing ends in an error. Off until set.
     pub core_channel_open: bool,
     pub installed_cores: HashSet<String>,
     pub core_busy: Option<String>,
@@ -441,6 +447,8 @@ pub struct Ui {
     shelves: Vec<((i32, i32, usize), art::Pic)>,
     /// Games a board of the portrait shelves holds (0 when the page is not that grid).
     grid_cols: usize,
+    /// Where the landscape shelf's two buttons end when the page's title had to push them along (`phone.rs` `header`); 0 at the shelf's end.
+    arrows_end: i32,
     /// The landscape game card's own canvas (narrower than the page, beside its buttons).
     card_buf: Vec<u32>,
     /// The next paint is the page under a game's start (`insert`): the selected case isn't drawn, `front_at` says where
@@ -451,6 +459,9 @@ pub struct Ui {
     /// That paint is the page under the way back from a game (`eject`): the case's place keeps its shadow and the
     /// selection's frame, so nothing appears there when the case is back.
     pub returning: bool,
+    /// What that paint left out round the case's place (the selection's frame, its shadow on the board): the way back draws
+    /// it with the case (`pocket_ui::insert_scene::Mark`), canvas pixels as `front_at`.
+    pub page_marks: Vec<pocket_ui::insert_scene::Mark>,
     /// The case of the game just back (`eject`, its key): what is in it stays inside (None) while the way back plays,
     /// then comes out of its side from that moment on (`pocket_ui::eject::AJAR_IN`), as on the handhelds.
     pub ajar: Option<(String, Option<std::time::Instant>)>,
@@ -494,9 +505,6 @@ impl Ui {
             system_bar: false,
             #[cfg(test)]
             header_rects: Vec::new(),
-            controls_open: false,
-            controls_scroll: 0,
-            control_names: Vec::new(),
             keyboard: None,
             query: String::new(),
             lens: Default::default(),
@@ -545,9 +553,11 @@ impl Ui {
             shelves: Vec::new(),
             card_buf: Vec::new(),
             grid_cols: 0,
+            arrows_end: 0,
             launching: false,
             front_at: None,
             returning: false,
+            page_marks: Vec::new(),
             ajar: None,
             card_origin: (0, 0),
             rows: None,
@@ -743,26 +753,7 @@ impl Ui {
     fn sheet(&self) -> bool {
         matches!(self.screen, Screen::Settings | Screen::Extras | Screen::GameCheck | Screen::Updates | Screen::Licences | Screen::Saves | Screen::Report | Screen::Help | Screen::Achievements | Screen::PlaysWith | Screen::Quick | Screen::Curator | Screen::Facet | Screen::Stickers)
     }
-    pub fn open_controls(&mut self) {
-        // Read once at the explicit open, like the game card's save details; never in the painter.
-        self.control_names = self.game().map(|g| play_cards::remembered_names(&super::data_dir(), &game_key(g,self.prefs.gameboy_gambatte))).unwrap_or_default();
-        self.controls_open = true;
-        self.controls_scroll = 0;
-    }
     pub fn press(&mut self, b: Button) -> Command {
-        if self.controls_open {
-            match b {
-                Button::South | Button::East => self.controls_open = false,
-                Button::Up | Button::Left => self.controls_scroll = self.controls_scroll.saturating_sub(1),
-                Button::Down | Button::Right => self.controls_scroll += 1,
-                _ => (),
-            }
-            return Command::None;
-        }
-        if self.screen == Screen::Box && b == Button::R2 && self.game().is_some_and(|g| super::bundled_core(g.system_id).is_some() && self.plays_in_app(g).is_none()) {
-            self.open_controls();
-            return Command::None;
-        }
         if !self.prefs.onboarding_done {
             return self.setup_press(b);
         }
@@ -950,12 +941,13 @@ impl Ui {
                     Setting::TextSize => self.prefs.text_size = self.prefs.text_size.next(),
                     Setting::Sounds => self.prefs.muted = !self.prefs.muted,
                     Setting::Haptics => self.prefs.haptics = !self.prefs.haptics,
-                    Setting::RemindWhere => self.prefs.remind_where = Some(!self.prefs.remind_where.unwrap_or(true)),
+                    Setting::RemindWhere => self.prefs.remind_where = Some(!self.prefs.remind_where.unwrap_or(false)),
                     Setting::Motion => self.prefs.motion = self.prefs.motion.next(),
                     Setting::ButtonSymbols => self.prefs.prompts = self.prefs.prompts.step(true),
                     Setting::GameBoy => self.prefs.gameboy_gambatte = !self.prefs.gameboy_gambatte,
                     Setting::PlaysWith => return self.open_plays_with(),
                     Setting::Folder => return Command::Folder,
+                    Setting::View => return Command::HandheldView,
                     Setting::GameCheck => return self.open_check(),
                     Setting::Saves => return self.open_saves(),
                     Setting::Updates => return self.open_updates(),
@@ -1499,10 +1491,6 @@ impl Ui {
         }
         let action = self.regions.iter().rev().find(|r| r.area.contains(x, y)).map(|r| r.action.clone());
         match action {
-            Some(Action::Controls) => {
-                self.open_controls();
-                Command::None
-            }
             Some(Action::JustPlay) => self.just_play(),
             Some(Action::Apps) => self.open_apps(),
             Some(Action::App(i)) => self.app_tap(i, false),
@@ -1597,14 +1585,6 @@ impl Ui {
     }
     /// A finger moved by (dx, dy) canvas pixels: the page follows it (the landscape shelf moves a game per step).
     pub fn drag(&mut self, dx: f32, dy: f32) -> bool {
-        if self.controls_open {
-            self.drag_rest += dy;
-            if self.drag_rest.abs() > 35.0 {
-                self.controls_scroll = (self.controls_scroll as i32 + if self.drag_rest < 0.0 {1} else {-1}).max(0) as usize;
-                self.drag_rest = 0.0;
-            }
-            return true;
-        }
         self.touch_mode = true;
         if !self.prefs.onboarding_done {
             return false;
@@ -1754,16 +1734,6 @@ impl Ui {
             self.paint_setup(c, text);
             return;
         }
-        if self.controls_open {
-            let system = self.game().map_or("", |g| g.system_id).to_string();
-            let game = self.game().map_or(String::new(), |g| g.name.clone());
-            let touch = !self.controller_connected;
-            let (back, max) = play_cards::paint_controls(c, text, &system, &game, &self.control_names, touch, self.controls_scroll);
-            self.controls_scroll = self.controls_scroll.min(max);
-            self.target(back, "Back", Action::Press(Button::South));
-            self.target(play_cards::controls_area(c), &play_cards::control_lines(&system, &game, &self.control_names, touch).join(". "), Action::Label);
-            return;
-        }
         self.paint_phone(c, text, cover);
     }
     /// The rows of the sheet pages: Settings, quick settings, Curator and a facet's values.
@@ -1791,11 +1761,12 @@ impl Ui {
                     Setting::Extra(e) => row(e.label(), on_off(self.prefs.extras.get(*e))),
                     Setting::Sounds => row("UI sounds", on_off(!self.prefs.muted)),
                     Setting::Haptics => row("Haptics", on_off(self.prefs.haptics)),
-                    Setting::RemindWhere => row("Remind me where I was", on_off(self.prefs.remind_where.unwrap_or(true))),
+                    Setting::RemindWhere => row("Remind me where I was", on_off(self.prefs.remind_where.unwrap_or(false))),
                     Setting::ButtonSymbols => row("Button symbols", self.prefs.prompts.label()),
                     Setting::GameBoy => row("Game Boy core", if self.prefs.gameboy_gambatte { "Gambatte" } else { "mGBA" }),
                     Setting::PlaysWith => row("Plays with", ""),
                     Setting::Folder => row("Choose your ROM folder", ""),
+                    Setting::View => row("View", "Mobile"),
                     Setting::GameCheck => row("Game check", &self.check_value()),
                     Setting::Saves => row("Save backup", ""),
                     Setting::Media => row("Covers and pictures", on_off(self.prefs.download_media.unwrap_or(false))),
@@ -1813,7 +1784,7 @@ impl Ui {
                 rows.push(row("GBA console", self.prefs.gba_model.label()));
                 for p in &self.core_offers {
                     let value = if self.installed_cores.contains(&p.core) { tr("Installed") }
-                        else if !self.core_channel_open { tr("Coming soon") }
+                        else if !self.core_channel_open { tr("Not available here") }
                         else if self.core_busy.as_deref() == Some(&p.core) { format!("{} · {}", self.core_note, tr("Cancel")) }
                         else if self.prefs.selected_cores.contains(&p.core) && self.prefs.core_download_consent { format!("{} · {}", tr("Downloads wait for unmetered Wi-Fi."), tr("Cancel")) }
                         else { format!("{} · {}", core_size(p.package.size), tr("Download now")) };
@@ -1881,6 +1852,7 @@ impl Ui {
             color: game.color,
             band: game.color,
             plastic: art::plastic(game.system_id),
+            tape: false,
         };
         if self.prefs.theme == Theme::Split {
             let (cw, ch) = pocket_ui::game_info::cover_room(c.w, c.h, &lib.cards[index]);
@@ -1907,7 +1879,7 @@ impl Ui {
         let console = pocket_ui::system_art::get(game.system_id);
         let mut front = media::front(text, m, k, look, &game.name, cover, console, game.system);
         let stickers = self.prefs.stickers_shown(&game.key);
-        pocket_ui::case_stickers::on_front(text, &mut front, &stickers, media::label_rect(m, k), index as u64);
+        pocket_ui::case_stickers::on_front_of(text, &mut front, &stickers, m, k, &game.name, cover.is_some(), console, index as u64);
         let inside = game_inside(text, game, (m, front.h), look, cover, self.prefs.extras.printed_discs);
         self.box_view.hide_case = self.launching;
         self.box_view.front_rect = None;
@@ -1923,6 +1895,7 @@ impl Ui {
                 game: inside.as_ref(),
                 cover,
                 console,
+                moving: &[],
             },
         );
         if self.launching {
@@ -1936,7 +1909,7 @@ impl Ui {
         self.info_cover = None;
     }
     pub fn animating(&self) -> bool {
-        let now = std::time::Instant::now();
+        let now = pocket_ui::frame_clock::now();
         self.screen == Screen::Box && self.box_view.animating(now) || self.ajar_moving(now)
     }
     /// How far the game of `key` is out of its open case at `now`, 0 (inside) to 1 (where it stands open).
@@ -2096,8 +2069,8 @@ pub fn library(games: Vec<Game>) -> Library {
 
 /// What a press on an extra system says while its download channel is not public (no error, nothing is tried).
 /// The first start's step "More systems?" while the channel is not public.
-pub const COMING_SOON_STEP: &str = "These systems are coming to this app later. There is nothing to download yet.";
-pub const COMING_SOON_NOTE: &str = "This system is coming soon. It can't be downloaded yet.";
+pub const COMING_SOON_STEP: &str = "These systems can't be downloaded in this version of the app.";
+pub const COMING_SOON_NOTE: &str = "This system can't be downloaded in this version of the app.";
 
 pub fn core_size(bytes: u64) -> String { format!("{:.1} MB", bytes as f64 / 1_000_000.0) }
 

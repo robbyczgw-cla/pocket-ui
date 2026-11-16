@@ -261,12 +261,40 @@ fn paint_page(c: &mut Canvas, text: &mut Text, hits: &mut HitMap, page: &RescueP
 // ---- the App: the dialog before EmulationStation ----------------------------------------------------------------
 
 impl App {
+    /// dArkOS's Back to EmulationStation menu rows are one press, without a confirmation.
+    pub(crate) fn request_back_to_es(&self) {
+        let _ = self.proxy.send_event(UserEvent::BackToEs);
+    }
+
+    pub(crate) fn back_to_es(&mut self, el: &ActiveEventLoop) {
+        #[cfg(feature = "brick")]
+        let port = pocket_ui::darkos::host();
+        #[cfg(not(feature = "brick"))]
+        let port = false;
+        if !port || self.kids_live() || pocket_ui::device::android_profile() { return; }
+        self.exit_since = None;
+        self.select_alone = false;
+        self.start_tap.disarm();
+        self.power_paused_game = false;
+        self.leave = None;
+        self.exit_code = rescue::OPEN_ES_CODE;
+        println!("rescue: Back to EmulationStation, without confirmation");
+        if self.running.is_some() {
+            // The existing save/quit worker; take_restart keeps the requested exit code 77.
+            self.sleep.shut_down(pocket_ui::system_ctl::PowerAction::RestartUi);
+        } else {
+            el.exit();
+        }
+    }
+
     /// SELECT + START held, Escape, Settings → About: the dialog instead of leaving at once.
     pub(crate) fn open_leave(&mut self, kind: DialogKind) {
         self.exit_since = None;
-        // Not behind a running game: the pause menu has the pad then (the FIFO's `leave` could ask at any time). Never in
+        // Usually not behind a running game: the pause menu has the pad then (the FIFO can ask at any time). Never in
         // Kids Mode: its way out is the PIN, and a keyboard's Escape comes here without passing `kids_pad`.
-        if self.running.is_some() || self.kids_live() {
+        // Nor in Android's handheld view: its ways out (EmulationStation, restarting the app) are a Linux handheld's;
+        // Android has Home (review of 12.11.2026, #12).
+        if self.running.is_some() || self.kids_live() || pocket_ui::device::android_profile() {
             return;
         }
         self.select_alone = false;
@@ -569,7 +597,8 @@ impl Rescue {
         let size = window.inner_size();
         let (Some(w), Some(h)) = (NonZeroU32::new(size.width), NonZeroU32::new(size.height)) else { return };
         let mut surface = std::mem::replace(&mut self.surface, pocket_ui::frame::Presenter::empty());
-        let drawn = surface.draw_scaled(w, h, &mut |pixels, lw, lh| self.paint(&mut Canvas::new(pixels, lw, lh)));
+        // Safe mode keeps the old way of painting whatever POCKETUI_PAINT says: it must come up when anything else fails.
+        let drawn = surface.draw_scaled_as(pocket_ui::scaled_layout::Paint::Scaled, w, h, &mut |c| self.paint(c));
         self.surface = surface;
         if drawn && !self.drew_first {
             self.drew_first = true;
@@ -602,8 +631,8 @@ impl ApplicationHandler<UserEvent> for Rescue {
         };
         let for_surface = window.clone();
         self.surface.set_factory(move || {
-            let context = softbuffer::Context::new(for_surface.clone()).map_err(|e| format!("context: {e}"))?;
-            softbuffer::Surface::new(&context, for_surface.clone()).map_err(|e| format!("surface: {e}"))
+            let context = softbuffer::Context::new(for_surface.clone()).map_err(|e| pocket_ui::frame::FrameError(format!("context: {e}")))?;
+            softbuffer::Surface::new(&context, for_surface.clone()).map_err(|e| pocket_ui::frame::FrameError(format!("surface: {e}")))
         });
         self.window = Some(window);
         self.redraw();

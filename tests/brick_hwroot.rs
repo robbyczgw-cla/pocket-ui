@@ -130,6 +130,19 @@ esac"#,
     real.set_volume(95);
     assert_eq!(real.volume(), Some(95));
     assert_eq!(std::fs::read_to_string(&mixer).unwrap().trim(), "2");
+    // The menu sounds' mute check reads the state files in-process (`system_ctl::brick_sink`) and must give what the
+    // `pactl` stand-in gives (`sleep::sink_volume` without the Brick's own path): 15.11.2026 it ran the stand-in twice per
+    // move, about 90 processes per 20 moves.
+    let same = |what: &str| assert_eq!(pocket_ui::system_ctl::brick_sink(&state), pocket_ui::sleep::sink_volume(), "{what}");
+    same("95 %");
+    std::fs::write(state.join("brick-muted"), "").unwrap();
+    same("muted at 95 %");
+    std::fs::remove_file(state.join("brick-muted")).unwrap();
+    for pct in [30, 1, 0, 50] {
+        real.set_volume(pct);
+        same(&format!("{pct} %"));
+    }
+    real.set_volume(95);
 
     // The Wi-Fi switch: the soft block follows, and the interface.
     real.set_wifi(false).unwrap();

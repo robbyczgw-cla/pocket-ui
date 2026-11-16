@@ -16,7 +16,7 @@ for look in dark light; do
     lens lens:dddddra lens:rddda lens:ddrada save:dralddddra ready ready:lens \
     card:ps2:revenge card:ps2:revenge:1 card:snes:chrono:1 \
     echoes:ps2:revenge echoes:snes:chrono echoes:gba:maximum echoes:gamecube:double versions:snes:chrono versions:ps2:dominator versions:n64:ocarina card:n64:ocarina:2 stickers:snes:mario \
-    settings settings:2 settings:5 \
+    settings settings:2 settings:6 \
     lens:dddddrada lens:dddddddddr lens:ddddddddddrda lens:dddddddddddddr echoes:psp:ridge \
     upnext:ps2:revenge upnext:ps2:revenge:cabinet upnext:ps2:revenge:split \
     cabinet:dd cabinet:ddd cabinet:ddrrra cabinet:ddrrrrra cabinetlens:rda \

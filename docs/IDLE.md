@@ -14,8 +14,9 @@ input, surface recovery, or an animation in progress may request a frame.
   Notices are static. The Battery page refreshes when its deadline is due. Hidden Shelf/Cabinet animations do not
   drive the loop. Raw controller diagnostics and unused stick drift request no menu frame; the manual still scrolls.
 - `app_sync.rs`: a still sync confirmation has one expiry deadline.
-- Menu sound stays warm during browsing, with a two-second activity lease. After quiet it closes, so there is no
-  silent audio stream keeping PipeWire running. The next sound reopens on the sound thread; input handling never waits.
+- Menu sound stays warm during browsing, with a one-minute activity lease (`ui_sound::WARM_LEASE`; two seconds until
+  15.11.2026 made every click after a short pause 0.1 to 1 s late on the H700, H700-MENU-FEEL). Left alone it closes, so
+  there is no silent audio stream keeping PipeWire running. The next sound reopens on the sound thread; input handling never waits.
 
 ## Repeating a measurement
 

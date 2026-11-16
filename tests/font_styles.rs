@@ -1,6 +1,6 @@
 //! Settings → Look → Style (`src/font_style.rs`): settings.json's `"font"` reaches a start (and the styles that went with
 //! 0.4, Rounded and Pixel, start as Barlow), a store theme's own fonts are used, and a running `Text` follows a change
-//! of the style (one process, so one test owns the process-wide setting). Retro's text fit is tests/text_size.rs's
+//! of the style (on its own thread's style, `font_style::for_this_thread`, so the tests can run side by side). Retro's text fit is tests/text_size.rs's
 //! (`POCKETUI_RETRO`). Until 0.4 this suite also rendered the layout-risk states in the Pixel style, about 120
 //! snapshots. Needs python3 (made-up library, wayland stub).
 
@@ -140,7 +140,8 @@ fn a_text_follows_the_style_and_a_pinned_one_does_not() {
         let top = (0..120).find(|y| buf[*y as usize * 200..(*y as usize + 1) * 200].iter().any(|p| *p != 0)).unwrap();
         (top, w)
     };
-    font_style::set(FontStyle::Barlow);
+    // This thread's style only: the other tests in this program keep theirs.
+    let _style = font_style::for_this_thread(FontStyle::Barlow, Default::default());
     let mut text = Text::new();
     let mut safe = Text::builtin();
     let mut pinned = Text::new().pinned_to(FontStyle::Retro);
@@ -165,4 +166,28 @@ fn a_text_follows_the_style_and_a_pinned_one_does_not() {
     }
     font_style::set(FontStyle::Barlow);
     assert_eq!(text.width(Face::Title, 50, "Game Boy Advance"), barlow_w, "and back");
+}
+
+/// Tests run side by side in one program: a style of one thread's own (`font_style::for_this_thread`) stays on that thread
+/// and comes back when the guard is dropped, also when the test fails.
+#[test]
+fn a_threads_own_style_stays_on_that_thread_and_comes_back() {
+    use pocket_ui::font_style::{self, FontStyle, RetroLetters};
+    let program = || std::thread::spawn(|| (font_style::get(), font_style::retro_letters())).join().unwrap();
+    let start = (font_style::get(), font_style::retro_letters());
+    {
+        let _retro = font_style::for_this_thread(FontStyle::Retro, RetroLetters::Pixelify);
+        assert_eq!((font_style::get(), font_style::retro_letters()), (FontStyle::Retro, RetroLetters::Pixelify));
+        font_style::set(FontStyle::Barlow);
+        font_style::set_retro_letters(RetroLetters::Departure);
+        assert_eq!(font_style::get(), FontStyle::Barlow, "set changes this thread's own style");
+        assert_eq!(program(), start, "another thread keeps the program's style");
+    }
+    assert_eq!((font_style::get(), font_style::retro_letters()), start);
+    let failed = std::panic::catch_unwind(|| {
+        let _retro = font_style::for_this_thread(FontStyle::Retro, RetroLetters::Pixelify);
+        panic!("a failing test");
+    });
+    assert!(failed.is_err());
+    assert_eq!((font_style::get(), font_style::retro_letters()), start, "a failing test gives the style back");
 }

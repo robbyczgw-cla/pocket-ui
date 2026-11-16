@@ -1,16 +1,25 @@
 #!/usr/bin/env python3
 """Merge gate (fast tier): pick the slow parts a change list needs; print shell assignments for scripts/gate.sh.
 
-stdin: changed paths, one per line. argv[1]: the tree. Output, one per line:
-  tier=fast|full           full: the change can affect the gate itself or every test (Cargo, gate scripts, test harness)
+stdin: changed paths, one per line. argv[1]: the tree. Environment: GATE_I18N_KEYS, a file with the English text of the
+translation lines the change touched (optional; without it a translation change always counts for Android). Output, one per line:
+  tier=fast|full           full: the change can affect the gate itself or every test (Cargo, gate scripts, test harness): every
+                           suite runs (the layout matrices as their sample, see below), the Brick stage too
   heavy='a b'              slow layout suites (HEAVY) to run anyway: their own file or their inputs changed
-  skip='c d'               the slow suites this gate leaves to the nightly run
-  shell_tests=0|1 why_shell=<path>
-  brick_full=0|1           Brick corpus/UI walk; otherwise only `cargo check --features brick`
+  skip='c d'               the slow suites and the time budgets (BUDGET) this gate leaves to the nightly run
+  nightly_tests='a::b c'   single tests this gate leaves to the nightly run (NIGHTLY_TESTS), as nextest names them after the binary
+  shell_tests=0|1 why_shell=<path>   the shell suites: only for deploy/, scripts/ and the licence texts the package carries
+  brick_full=0|1           Brick corpus/UI walk, the Brick text-fit cases and the Brick navigation; otherwise only `cargo check --features brick`
+  brick_text=0|1           at least the Brick text-fit cases (the same as brick_full since 14.11.: both follow Brick paths only)
   i18n_matrix=0|1          German/Spanish snapshot matrix
-The nightly run and release check use GATE_FULL=1: every suite, the timing tier, Brick and Android.
+  android=0|1              the Android page tests of the library (android_02_tests, android_eject_tests); android_skip='a b' names
+                           the ones this gate leaves to the nightly run
+The merge gate runs every layout matrix it picks as a sample (scripts/gate.sh sets POCKETUI_TEST_QUICK: a dozen states, one size,
+the longest language, plus the states the change adds). The nightly run and the release check use GATE_FULL=1: every suite with its
+whole matrix, the time budgets alone, the timing tier, Brick and Android (docs/dev/merge-gate.md, "What runs where").
 """
 from pathlib import Path
+import os
 import re
 import shlex
 import sys
@@ -18,67 +27,160 @@ import sys
 # The slow layout/matrix suites (about 70 % of the test seconds in a full run, 2026-11-09 junit).
 HEAVY = ["connections", "home_panel_labels", "info_page", "long_titles", "names_never_translated",
          "nav_explorer", "small_screen", "spine_names", "spine_titles", "stickers_tv", "text_size"]
-# Absolute CPU/frame-time budgets: each runs alone (threads-required) and goes red on an overloaded host. They are
-# timing checks like the timing tier: nightly and before a release, or when their own file changes.
-BUDGET = ["settings_open", "shelf_moves"]
+# Absolute CPU/frame-time budgets: each runs alone (threads-required) and goes red on an overloaded host (4 red trains in 3 days,
+# 12.-14.11., none a real slowdown). They are measurements like the timing tier: nightly and before a release, never in the merge
+# gate, not even when their own file changes (preflight-air.sh runs a changed one on the Air).
+BUDGET = ["launch_frames", "settings_open", "shelf_moves"]
+# Single tests the merge gate leaves to the nightly run and the release check: the Android twin of a check the Linux suite makes
+# in every merge gate (eject::the_way_back_hands_over_…, 31 of 59 flake entries 12.-14.11.), and the case's gap on the way back,
+# both 130+ s frame-by-frame walks.
+# Also the library's pure time budgets (5,000 games indexed and searched within a time): they run alone (nextest.toml), so in
+# the merge gate they also held up every other test while they measured.
+NIGHTLY_TESTS = ["android_eject_tests::the_way_back_hands_over_to_the_still_shelf_without_a_jump",
+                 "android_eject_tests::the_case_s_place_stays_an_empty_gap_until_the_case_comes_home",
+                 "connections::tests::speed_of_the_index_for_5000_games",
+                 "curator::tests::speed_index_build_lens_keypress_and_echoes_for_5000_games",
+                 "curator::tests::speed_catalog_from_gamedb_for_a_real_library",
+                 "search::tests::five_thousand_games_index_and_search_in_time"]
+# What the shell suites read (launcher, package, image, device scripts): their own directories and the licence texts the package
+# carries. A Rust source a script mentions by name is not an input: the suites run stand-in binaries (14.11., test audit).
+SHELL = re.compile(r"^(deploy|scripts)/|(^|/)(LICEN[CS]E[^/]*|COPYING[^/]*|NOTICE\.md|OFL\.txt)$")
+# The Brick's own code: its corpus/UI walk, F keys, text-fit and navigation cases run in the merge gate only for these.
+BRICK = re.compile(r"brick|^src/(input_corpus|fn_keys)")
 TEXT = ["text_size", "long_titles", "spine_titles", "spine_names", "small_screen", "home_panel_labels", "info_page"]
+# Library tests that draw the Android pages (src/android_*_tests.rs include android/src/*.rs). 240 s for one of them on a busy host.
+ANDROID_TESTS = ["android_02_tests", "android_eject_tests"]
+ANDROID_SOURCES = ["src/android_02_tests.rs", "src/android_phones_tests.rs", "src/android_drawer_tests.rs", "src/android_eject_tests.rs"]
+# Text and layout sources: what the text-fit suites and the Android pages both read.
+TEXT_SOURCE = re.compile(r"^(assets/fonts/|assets/i18n/(?!skip\.txt$)|src/(text|textfit|type_scale|font|letters|name_lines|kit|layouts|scaled_layout|wiki_text|auto_texts|i18n)|tests/i18n)")
 # Paths that define the gate, the build or every test: these run the complete gate.
 FULL = re.compile(r"^(Cargo\.(toml|lock)|build\.rs|rust-toolchain(\.toml)?|\.cargo/|\.config/|tests/common/|"
                   r"scripts/(gate|test-gate|test-timing)[^/]*$)")
 
 
-def parts(root, names):
-    heavy, why_shell, shell = set(), "", 0
-    brick = i18n = 0
-    shell_scripts = list(root.joinpath("scripts").rglob("*.sh")) + list(root.joinpath("deploy").rglob("*.sh"))
-    srcrefs = set()
-    for script in shell_scripts:
-        # These two name invented Rust paths as fixture data; neither is a gate shell suite.
-        if script.name in ("test-gate-paths.sh", "test-export-public.sh"):
-            continue
+def android_modules(root):
+    """The library modules the Android page tests and android/src use directly (`pocket_ui::<module>`): a change to one of
+    them can change what those tests see. Read from the sources, so a new dependency joins the list without an edit here."""
+    mods = set()
+    files = [root / f for f in ANDROID_SOURCES] + sorted(root.joinpath("android", "src").glob("*.rs"))
+    for path in files:
         try:
-            srcrefs.update(re.findall(r"(?:src|tests)/[a-zA-Z0-9_./-]+\.rs", script.read_text(errors="replace")))
+            text = path.read_text(errors="replace")
+        except OSError:
+            continue
+        mods.update(re.findall(r"pocket_ui::([a-z_0-9]+)", text))
+        for group in re.findall(r"pocket_ui::\{([^}]*)\}", text):
+            mods.update(re.findall(r"\b([a-z_0-9]+)\b", group))
+    return {m for m in mods if root.joinpath("src", m + ".rs").exists() or root.joinpath("src", m).is_dir()}
+
+
+def changed_keys(root):
+    """The English source strings of the translation lines this change adds, edits or removes (one per line in the file
+    named by GATE_I18N_KEYS; gate.sh writes it from the diff, tools/remote-gate.sh uploads it). None: not known."""
+    path = os.environ.get("GATE_I18N_KEYS", "")
+    try:
+        return [k for k in Path(path).read_text(errors="replace").split("\n") if k] if path else None
+    except OSError:
+        return None
+
+
+def android_corpus(root, modules):
+    """The text of every source an Android page can draw a string from: android/, src/android*.rs (not their tests) and the
+    library modules the Android code uses directly."""
+    files = [p for p in root.joinpath("android").rglob("*.rs")]
+    files += [p for p in root.joinpath("src").glob("android*.rs") if not p.name.endswith("_tests.rs")]
+    for m in modules:
+        single = root.joinpath("src", m + ".rs")
+        files += [single] if single.exists() else list(root.joinpath("src", m).rglob("*.rs"))
+    text = []
+    for f in files:
+        try:
+            text.append(f.read_text(errors="replace"))
         except OSError:
             pass
+    return "\n".join(text).replace('\\"', '"').replace("\\'", "'")
+
+
+def key_can_reach_android(key, corpus):
+    """Does the English text of a translation line occur in a source Android draws from? Placeholders ({s}, {n2}) are cut
+    out and the longest remaining piece is searched. Anything unclear (no piece of 6 characters, a backslash, a tab) says yes."""
+    pieces = [p.strip() for p in re.split(r"\{[a-z0-9]*\}", key)]
+    longest = max(pieces, key=len, default="")
+    if len(longest) < 6 or "\\" in longest or "\t" in longest:
+        return True
+    return longest in corpus
+
+
+def touches_android(name, modules):
+    """Android, text, translations, fonts, assets, or a library module the Android tests use."""
+    if name == "assets/i18n/skip.txt":
+        return False
+    if name.startswith(("android/", "src/android", "assets/")) or TEXT_SOURCE.match(name):
+        return True
+    if name.startswith("docs/user/"):
+        return False
+    m = re.match(r"src/([a-z_0-9]+)(?:\.rs|/)", name)
+    return bool(m and m.group(1) in modules)
+
+
+def parts(root, names):
+    heavy, why_shell, shell = set(), "", 0
+    brick = i18n = android = 0
+    modules = android_modules(root)
+    keys = changed_keys(root)
+    corpus = None
+    full = False
     for name in names:
         if not name:
             continue
         if FULL.match(name):
-            return {"tier": "full"}
+            full = True
         stem = Path(name).stem
-        # Shell suites use stand-in binaries, not the Rust test executables: Rust files are safe unless a script names them.
-        if name.startswith("docs/") and name.endswith(".md"):
-            pass
-        elif re.fullmatch(r"(src|tests)/[a-zA-Z0-9_./-]+\.rs", name):
-            if name in srcrefs:
-                shell, why_shell = 1, name
-        elif name.endswith(".md") and "/" not in name and name != "NOTICE.md":
-            pass
-        else:
+        if SHELL.search(name) and not shell:
             shell, why_shell = 1, name
-        if name.startswith("tests/") and name.endswith(".rs") and stem in HEAVY + BUDGET:
+        if name.startswith("tests/") and name.endswith(".rs") and stem in HEAVY:
             heavy.add(stem)
         if name.startswith(("tests/snapshots/", "tests/fixtures/")):
             heavy.update(HEAVY)
         if name in ("tests/i18n-states.txt", "tests/layout-risk-states.txt"):
             heavy.add("text_size")
             i18n = 1
+        if re.fullmatch(r"assets/i18n/(de|es|pt|fr|it)\.tsv", name) and keys is not None:
+            # A translation line only matters to the Android pages when its English text is drawn from a source they use.
+            corpus = corpus if corpus is not None else android_corpus(root, modules)
+            if any(key_can_reach_android(k, corpus) for k in keys):
+                android = 1
+        elif touches_android(name, modules):
+            android = 1
         if name.startswith("assets/fonts/") or re.match(r"src/(text|textfit|type_scale|font|letters|name_lines|kit|layouts|scaled_layout|wiki_text|auto_texts)", name):
             heavy.update(TEXT)
         if (name.startswith(("assets/i18n/", "docs/user/", "tests/i18n")) and name != "assets/i18n/skip.txt") \
                 or name == "src/i18n.rs":
             heavy.update({"text_size", "names_never_translated"})
             i18n = 1
+        # Where a console's name on a card or spine comes from (13.11.: a short-name table left the Atari 800 as "8-bit family"
+        # and only the nightly run saw it): the two name suites run, 6 s together when the host is quiet.
+        if re.match(r"src/(system_names|app_home_panel|home_panel|consoles|document_library|library|app_cabinet)\.rs$", name) \
+                or name == "assets/data/consoles.json":
+            heavy.update({"home_panel_labels", "spine_names"})
         if name in ("src/nav_probe.rs", "src/app_nav_probe.rs"):
             heavy.add("nav_explorer")
-        if "brick" in name or name.startswith(("src/input_corpus", "src/fn_keys", "src/manual")):
+        if BRICK.search(name):
             brick = 1
-    # The Brick runs its own text-fit cases of these suites (gate.sh's Brick tier): a text change runs them too.
-    if heavy & {"text_size", "long_titles", "nav_explorer"} or "tests/search_titles.rs" in names:
-        brick = 1
+    # The Brick stage follows Brick paths only (14.11., both test audits: 30 % of all merge-gate seconds, in 74 % of the gates). A
+    # font, a layout source, a translation or the manual leave it to the nightly run and the release check; an overlong text on the
+    # Brick's screens is found there, before any release. `cargo check --features brick` stays in every gate (compile-first).
     present = {p.stem for p in root.joinpath("tests").glob("*.rs")}
-    return {"tier": "fast", "heavy": " ".join(sorted(heavy)), "skip": " ".join(sorted(present & set(HEAVY + BUDGET) - heavy)), "shell_tests": shell, "why_shell": why_shell,
-            "brick_full": brick, "i18n_matrix": i18n}
+    if full:
+        # Every suite (their matrices as the sample), Android, the German/Spanish matrix and the Brick stage; the time budgets and
+        # the timing tier stay with the nightly run.
+        return {"tier": "full", "heavy": " ".join(sorted(present & set(HEAVY))), "skip": " ".join(sorted(present & set(BUDGET))),
+                "nightly_tests": " ".join(NIGHTLY_TESTS), "shell_tests": shell, "why_shell": why_shell,
+                "brick_full": 1, "brick_text": 1, "i18n_matrix": 1, "android": 1, "android_skip": ""}
+    return {"tier": "fast", "heavy": " ".join(sorted(heavy)), "skip": " ".join(sorted(present & set(HEAVY + BUDGET) - heavy)),
+            "nightly_tests": " ".join(NIGHTLY_TESTS), "shell_tests": shell, "why_shell": why_shell,
+            "brick_full": brick, "brick_text": brick, "i18n_matrix": i18n, "android": android,
+            "android_skip": "" if android else " ".join(n for n in ANDROID_TESTS)}
 
 
 if __name__ == "__main__":

@@ -30,6 +30,8 @@ pub enum Command<'a> {
     Restart, Slot(usize), Reload, Players, Cheats, Look(i8, i8, u16, u8), Note(&'a str), Osd(&'a str),
     Disc(&'a str), Press(u16, u64), AchievementDemo, Peek(usize), Axis(crate::pad::Axis, f32),
     Option(&'a str, &'a str), Control(&'a str, &'a str), Set(&'a str, &'a str), Quit(Quit),
+    /// `hardcore on|off`: RetroAchievements' Hardcore switched during the game (`achievements::hardcore`).
+    Hardcore(bool),
 }
 
 impl<'a> Command<'a> {
@@ -58,6 +60,8 @@ impl<'a> Command<'a> {
             ["load", ..] => Self::Load(Load::Slot(slot())),
             ["slot", ..] => slot().map(Self::Slot).unwrap_or(Self::Unknown),
             ["reload"] => Self::Reload, [crate::players::COMMAND] => Self::Players, ["cheats"] => Self::Cheats,
+            [crate::achievements::hardcore::COMMAND, "on"] => Self::Hardcore(true),
+            [crate::achievements::hardcore::COMMAND, "off"] => Self::Hardcore(false),
             ["look", w, c, rest @ ..] => Self::Look(w.parse().unwrap_or(0), c.parse().unwrap_or(0), rest.first().and_then(|n| n.parse().ok()).unwrap_or(0), rest.get(1).and_then(|n| n.parse().ok()).unwrap_or(0)),
             ["note", ..] => cmd.strip_prefix("note ").map(|s| Self::Note(s.trim())).unwrap_or(Self::Unknown),
             ["osd", ..] => cmd.strip_prefix("osd ").map(|s| Self::Osd(s.trim())).unwrap_or(Self::Unknown),
@@ -109,7 +113,8 @@ mod tests {
             ("disc bad",Command::Disc("bad")), ("pixelpath 7",Command::PixelPath(7)),
             ("load earlier3 42 extra",Command::Load(Load::Earlier("earlier3",Some(42)))),
             ("load started1 invalid",Command::Load(Load::Earlier("started1",None))),
-            ("load earlier0 42",Command::Load(Load::Slot(None)))] {
+            ("load earlier0 42",Command::Load(Load::Slot(None))), ("hardcore on",Command::Hardcore(true)),
+            ("hardcore off",Command::Hardcore(false)), ("hardcore",Command::Unknown), ("hardcore maybe",Command::Unknown)] {
             assert_eq!(Command::parse(line,false),want,"{line}");
             assert_eq!(Command::parse(line,false).urgent(),matches!(want,Command::Pause));
         }

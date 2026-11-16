@@ -111,13 +111,12 @@ fn the_detector_finds_an_english_value_and_a_piece_of_one() {
 }
 
 #[test]
-fn german_spanish_and_portuguese_settings_in_large_text_show_no_english_where_a_translation_exists() {
-    let tmp = std::env::temp_dir().join(format!("svt{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&tmp);
-    std::fs::create_dir_all(&tmp).unwrap();
+fn german_spanish_portuguese_french_and_italian_settings_in_large_text_show_no_english_where_a_translation_exists() {
+    let dir = tempfile::Builder::new().prefix("svt-").tempdir().unwrap();
+    let tmp = dir.path().to_path_buf();
     let stub = wayland(&tmp);
     let mut problems = Vec::new();
-    for (lang, retro) in [("de", false), ("de", true), ("es", false), ("es", true), ("pt", false), ("pt", true)] {
+    for (lang, retro) in [("de", false), ("de", true), ("es", false), ("es", true), ("pt", false), ("pt", true), ("fr", false), ("fr", true), ("it", false), ("it", true)] {
         let keys = translated_keys(lang);
         let states = states();
         assert!(states.len() > 30, "the settings states are listed: {states:?}");
@@ -136,23 +135,19 @@ fn german_spanish_and_portuguese_settings_in_large_text_show_no_english_where_a_
             }
         });
     }
-    let _ = std::fs::remove_dir_all(&tmp);
     assert!(problems.is_empty(), "English painted where the table has a translation (640x480, Large text):\n{}", problems.join("\n"));
 }
 
 #[test]
-fn the_pc_streaming_value_shows_whole_in_german_spanish_and_portuguese() {
-    let tmp = std::env::temp_dir().join(format!("svp{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&tmp);
-    std::fs::create_dir_all(&tmp).unwrap();
+fn the_pc_streaming_value_shows_whole_in_every_translated_language() {
+    let dir = tempfile::Builder::new().prefix("svp-").tempdir().unwrap();
+    let tmp = dir.path().to_path_buf();
     let stub = wayland(&tmp);
-    for (lang, retro, row, value) in [("de", false, "PC-Streaming", "Kein PC"), ("de", true, "PC-Streaming", "Kein PC"), ("es", false, "Streaming desde PC", "Ningún PC"), ("es", true, "Streaming desde PC", "Ningún PC"), ("pt", false, "Streaming do PC", "Nenhum PC"), ("pt", true, "Streaming do PC", "Nenhum PC")] {
-        // 0.4.x: PC streaming is in the eighth category, For tinkerers (Connections leads only from 0.5).
-        let shown = painted(&tmp, &stub, "settings:7:1", lang, retro);
+    for (lang, retro, row, value) in [("de", false, "PC-Streaming", "Kein PC"), ("de", true, "PC-Streaming", "Kein PC"), ("es", false, "Streaming desde PC", "Ningún PC"), ("es", true, "Streaming desde PC", "Ningún PC"), ("pt", false, "Streaming do PC", "Nenhum PC"), ("pt", true, "Streaming do PC", "Nenhum PC"), ("fr", false, "Streaming PC", "Aucun PC"), ("fr", true, "Streaming PC", "Aucun PC"), ("it", false, "Streaming dal PC", "Nessun PC"), ("it", true, "Streaming dal PC", "Nessun PC")] {
+        let shown = painted(&tmp, &stub, "settings:0", lang, retro);
         let all = shown.join(" | ");
         assert!(shown.iter().any(|s| s.contains(row)), "{lang} retro={retro}: the row is there: {all}");
         assert!(shown.iter().any(|s| s.trim_end_matches(" >").trim() == value), "{lang} retro={retro}: the value {value:?} whole: {all}");
         assert!(!all.contains("No PC"), "{lang} retro={retro}: {all}");
     }
-    let _ = std::fs::remove_dir_all(&tmp);
 }

@@ -83,6 +83,43 @@ English card shows a sentence made of the facts; in German the back leaves it ou
 screen with the console and "No picture yet", "No description yet", or the line that the game isn't in the offline
 list. Under "No description yet" a line says why: "No Wikipedia article for this game" when there is none (it stays that way), or "Offline: the description comes with Wi-Fi" when the game has an article that isn't loaded yet (it arrives on its own with the next connection).
 
+## Where you are in the game
+
+Turn the box over, and for a game pocket-ui can read, the line right under its name says where you are, taken from
+your own save: "8 badges · Charizard Lv. 45 · game clock 31:12" in Pokémon, "62% items · game clock 4:31" in Super Metroid, "43 of 96
+exits" in Super Mario World, "2 of 3 pendants · 9 hearts" in A Link to the Past. Under it, small: in Pokémon Gold, Silver, Crystal, Ruby, Sapphire, Emerald, FireRed and LeafGreen your team's
+little icons and the row of badges (the ones you won bright), in the DS games up to SoulSilver the icons, taken from your own game file as the game draws them;
+in Super Metroid and Super Mario World a slim bar; in A Link to the Past the pause menu's pendants or crystals, again from your own game file. The same line stands beside
+**Continue** on the shelf and on the [Where was I?](continue.md#where-was-i) card. No account, no Wi-Fi. Cozy extras →
+**Progress from saves** switches it off: no line, and no save is read.
+
+![The back of the Super Metroid box: "62% items · game clock 4:31" with its bar at the top, then a picture from the game and the description](pictures/case-back.webp)
+
+It reads the game's own save (the `.srm`, `.sav` or `.dsv` the game writes when you save in it), not a save state, so it is the
+same on every Pocket and with every emulator. The badges, items or exits are what the game had when you last saved in
+it; the game clock is the game's own, as its menu shows it, and not the time pocket-ui counted under Played. A game you
+played on another Pocket or emulator says "Played: Not here yet" until you play it here. The Pokémon is the first of your team that isn't an egg, by the name the game
+shows.
+
+| Games | Versions |
+|---|---|
+| Pokémon Red, Blue, Yellow, Gold, Silver, Crystal, Ruby, Sapphire, Emerald, FireRed, LeafGreen | USA and Europe in English |
+| Super Metroid, Metroid: Zero Mission, Zelda: A Link to the Past, Link's Awakening DX, Oracle of Ages, Oracle of Seasons, The Minish Cap, Ocarina of Time | USA |
+| Super Mario World, Super Mario All-Stars + Super Mario World, Super Mario 64, Mario Kart 64, Star Fox 64, Paper Mario, Zelda: Majora's Mask, Donkey Kong Country 1–3 | USA |
+| Diddy Kong Racing | USA, Europe |
+| Pokémon Diamond, Pearl, Platinum, HeartGold, SoulSilver, Black, White, Black 2, White 2 | USA and Europe in English |
+| Golden Sun, Golden Sun: The Lost Age | USA and Europe in English |
+| Final Fantasy III (VI), EarthBound, Chrono Trigger, Fire Emblem, The Sacred Stones, Kirby & the Amazing Mirror | USA |
+| Role-playing games: Super Mario RPG, Lufia II, Pokémon Mystery Dungeon: Red Rescue Team, Final Fantasy VI Advance, Tactics Ogre: The Knight of Lodis, Breath of Fire II, Mario & Luigi: Superstar Saga | USA |
+| Mother 3 | the English fan translation 1.3a (HQ Sound) |
+
+Each of these was checked against saves the game wrote, so the line says what the game's own screens say.
+
+pocket-ui recognises the game by what is in its file, not by its name, and checks the save the way the game itself
+does. A hack, a fan translation, another version, a save the game would call damaged, or a game that hasn't been saved
+yet shows no line at all, never a wrong one. A Link to the Past, Super Mario All-Stars and others keep several files: the line is
+the file you saved last (with only one file, that one; with several, from the next time you save).
+
 ## Stickers on the case
 
 Collectors mark their cases, and you can too: five stickers that go on the game's case, slightly crooked as if you put
@@ -90,7 +127,7 @@ them on yourself. **Completed** (a green tick), **100 %** (a gold seal), **Favou
 **Game of the year** with a year you choose. On the card (or the box, or the info page, then SELECT for the page),
 move down to the **Stickers** row and press A: the list contains those five stickers. The list scrolls to fit your screen and text size. A puts one on or takes it off. On Game of the year, Left and Right change its
 year first (it starts at the game's release year, or this year when that isn't known); with the sticker on, the new
-year is kept at once. B closes the list.
+year is kept at once. B closes the list. In the box with Playful cases, when you close the list, each sticker you put on is pressed onto the case in front of you (a short spring, a quiet click) and each one you took off lifts away. Any button skips it.
 
 The Shelf and Cabinet looks show them: on the case's front when it is out of the shelf, on the game box, and one small
 sticker at the top of the case's spine on the shelf (Game of the year, 100 %, Completed, Playing now or Favourite,
@@ -122,21 +159,21 @@ card then shows **Series** Burnout. It takes two different games, never one game
 
 A value only leads somewhere when you have another game with it. One you don't (the only game of a studio on your
 card) is plain text without an arrow, and a game without any facts has nothing to pick: Down scrolls, A plays.
-If the library is still getting ready when you open a card, its connections appear there as soon as they are ready. Settings → Look → [Cozy extras](settings-sound.md#cozy-extras) → **Game connections** switches
+If the library is still getting ready when you open a card, its connections appear there as soon as they are ready. Settings → Look → [Cozy extras](settings.md#cozy-extras) → **Game connections** switches
 them off; the values are then only shown.
 
 ## What the card shows
 
-- **The label at the top**: the box art (when cover art was downloaded, see [Extras](extras.md)), the
+- **The label at the top**: the box art (when cover art was downloaded, see [Box art & downloads](extras.md)), the
   name, system, year and number of players, and your status with the time played.
 - **Pictures**: under the facts, the game running and its title screen ("In the game", "Title screen"), when the
-  free collection has them and Settings → Games → Extras → **Pictures** is Box art and screenshots ([Extras](extras.md#pictures)).
+  free collection has them and Settings → Games → Box art & downloads → **Pictures** is Box art and screenshots ([Box art & downloads](extras.md#pictures)).
   A game without them has no such heading and no gap.
 - **About the game**: developer, publisher, genre, series and review scores where they are known.
   A score reads, for example, "Metacritic 92 · via Wikidata". When the offline game list spells the game
   differently from your file, "Listed as" shows its name, so you can see what the card is about.
 - **Your game**: status, your rating (five stars, or "None. Press Y" before you give one), time played and number
-  of sessions, when you last played, your note, **Save slots** on the game's memory card or cartridge (games on
+  of sessions, when you last played, your note, **Save slots** on the game's memory card or cartridge, the cartridge wearing the game's own label (games on
   pocket-ui's own host, as in the [pause menu](pause-menu-saves.md#save-slots-where-i-quit-and-before-load)), "Continue: 2 h ago"
   when the game is waiting where you quit (under the slots, or on its own row for a game without them), and how many of
   the game's achievements you unlocked when it has some on RetroAchievements ([Achievements](achievements.md)).
@@ -158,8 +195,6 @@ them off; the values are then only shown.
 - **Screenshots (3)**: only on a game you took screenshots of (HOME + A while you play). The row says how many, and when
   the newest was taken ("Newest: Today"). A opens a [gallery](playing.md#looking-at-your-screenshots) of this game's
   screenshots; B comes back to the card.
-- **Controls**: for a console the emulator knows (or one that ran before): which button of the Pocket is which button of
-  the console, and the HOME keys. A opens [the controls card](controls-card.md), B comes back to the card.
 - **Description**: a few sentences from the game's English Wikipedia article (see below). Without a
   connection, a short line made of the facts above. A game with a description in your
   [EmulationStation gamelist](#your-emulationstation-gamelists) shows that one, unless Wikipedia's text is on the
@@ -288,7 +323,7 @@ loaded only once. Delete the folder to load them again.
 
 While Wi-Fi is on and no game runs, pocket-ui loads the missing descriptions on its own, one after the
 other with a pause between them, the way it downloads missing cover art; the shelf shows
-"Descriptions 7 of 30" at the top right while it does. Starting a game stops it after the current one, and it
+a small dot at the top right (the one the covers show) while it does. Starting a game stops it after the current one, and it
 goes on after the game. Only games with an entry in the offline game list and a Wikipedia article are
 asked for.
 
@@ -341,7 +376,7 @@ again; a changed file is read again, and deleting the cache file does no harm.
 A PlayStation disc is recognised by the **serial on the disc itself**, not by its file name. pocket-ui reads the
 short boot file in the disc's file system (`SYSTEM.CNF`, whose `BOOT` line says "SLES_556.73") — a few kilobytes at
 the start of the image, never the whole image — and looks that serial up in the list of PlayStation 1 and 2 releases
-(Redump, through libretro-database), the same way a cartridge is recognised by its checksum ([Extras](extras.md#box-art)).
+(Redump, through libretro-database), the same way a cartridge is recognised by its checksum ([Box art & downloads](extras.md#box-art)).
 A file called `SLES_556.73.Something.iso` or `SLUS_209.46.iso` then shows the game's name on the shelf ("Final Fantasy
 VII", "Gran Turismo 4"), gets that game's facts and its box art and pictures. The list is downloaded once for the
 console you have games for, when the Pocket is online (about 4 MB per console), and kept on the SD card.

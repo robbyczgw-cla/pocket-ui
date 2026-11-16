@@ -1,7 +1,7 @@
 #!/bin/sh
 # Tests of the SD image's initramfs hook deploy/image/mount-storage.sh: the first-start seed, the guard against
 # system updates pocket-ui did not stage (docs/SD-IMAGE.md "Updates on the card"), and the GAMES drive's two scripts
-# games-first-start.sh and games-mount.sh (docs/SD-IMAGE.md "The GAMES drive").
+# games-first-start.sh and games-mount.sh (docs/SD-IMAGE.md "The GAMES drive"); runs deploy/image/test-games-card.sh too.
 #   sh deploy/image/test-mount-storage.sh
 # The hook runs under BusyBox sh with a PATH that holds ONLY applets ROCKNIX's initramfs has (busybox-init.conf of
 # 20261001: no date, no test, no printf applet; ash has them as builtins), so a tool missing there fails here too.
@@ -60,7 +60,7 @@ boot() {
   '
 }
 
-echo "== first boot: STORAGE still 32 MB, ROCKNIX will grow it"
+echo "== first boot: STORAGE still 128 MB, ROCKNIX will grow it"
 setup resize
 boot
 check "mounts STORAGE as ROCKNIX does" 'grep -qx "mount_part LABEL=STORAGE /storage rw,noatime" $T/calls'
@@ -332,10 +332,10 @@ newcard() {
   rm -rf "$G"
   mkdir -p "$G/storage" "$G/block/mmcblk0" "$G/block/mmcblk0p2"
   : >"$G/storage/.please_resize_me"
-  printf '1 32768 4227071\n2 4227072 4292607\n' >"$G/table"
+  printf '1 32768 4227071\n2 4227072 4489215\n' >"$G/table"
   : >"$G/fs"
   echo $((${1:-64000} * 2048)) >"$G/block/mmcblk0/size"
-  echo 65536 >"$G/block/mmcblk0p2/size"
+  echo 262144 >"$G/block/mmcblk0p2/size"
   echo "/dev/mmcblk0p2 $G/storage ext4 rw 0 0" >"$G/mounts"
   printf 'd\t/storage/roms/gba\t\t\t0777 root root - -\nd\t/storage/roms/snes\t\t\t0777 root root - -\nd\t/tmp/x\n' >"$G/dirs"
   # Stands for ROCKNIX's own script: what it does to the card is not this test's.
@@ -453,7 +453,7 @@ check "formatted" '[ "$(wc -l <$G/formatted)" = 1 ] && [ "$(cat $G/fs)" = "exfat
 
 echo "== a third partition that isn't ours"
 newcard
-printf '1 32768 4227071\n2 4227072 4292607\n3 16809984 131071999\n' >"$G/table"
+printf '1 32768 4227071\n2 4227072 4489215\n3 16809984 131071999\n' >"$G/table"
 echo "ext4 mine" >"$G/fs"
 firststart
 check "left alone: ROCKNIX's script, no format, table as it was" '[ "$(cat $G/end)" = stock ] && [ ! -e $G/formatted ] && [ "$(cat $G/fs)" = "ext4 mine" ] && grep -q "^3 16809984" $G/table && ! grep -q mkpart $G/calls && ! grep -q " rm 3" $G/calls'
@@ -543,6 +543,10 @@ printf '/dev/mmcblk0p2 /storage ext4 rw 0 0\n' >"$M/mounts"
 rm -f "$M/calls"
 gamesmount
 check "no drive mounted (games in STORAGE): nothing" '[ ! -e $M/calls ]'
+
+echo "== games-card.sh: an ArkOS card in the second slot (deploy/image/test-games-card.sh)"
+bash "$HERE/test-games-card.sh" >"$T/games-card.out" 2>&1 || cat "$T/games-card.out"
+check "test-games-card.sh passes" 'grep -qx "all passed" "$T/games-card.out"'
 
 echo
 if [ $fails -eq 0 ]; then echo "all passed"; else echo "$fails failed"; exit 1; fi

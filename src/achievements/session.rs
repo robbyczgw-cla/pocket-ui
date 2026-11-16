@@ -45,6 +45,9 @@ pub struct Config {
     /// Android: the game's identity. When every achievement of the game is unlocked, a mark for the launcher is left
     /// (`mastery`), which turns it into the golden sticker. None on Linux.
     pub mastery_key: Option<String>,
+    /// Hardcore from the start (`super::hardcore`): rc_client sends the unlocks as hardcore, and the host keeps to its
+    /// rules while [`Session::hardcore`] says so. [`Session::set_hardcore`] changes it during the game.
+    pub hardcore: bool,
 }
 
 /// News for the game thread.
@@ -285,7 +288,7 @@ fn net_loop(shared: Arc<Shared>, jobs: Receiver<Job>) {
         // An unlock is written down before it is sent: a crash or the end of the game can't lose it.
         if let Some(id) = award {
             let mut p = shared.pending.lock().unwrap_or_else(|e| e.into_inner());
-            p.add(id, &hash, now_secs());
+            p.add(id, &hash, now_secs(), offline::param(&post, "h") == Some("1"));
             p.save(&shared.config.data_dir);
         }
         let pending = shared.pending.lock().unwrap_or_else(|e| e.into_inner()).clone();
@@ -326,6 +329,7 @@ fn snapshot_of(shared: &Shared) -> Snapshot {
         state: status.state,
         message: status.message.clone(),
         user: shared.config.account.shown_name().to_string(),
+        hardcore: hardcore_applies(client, status.state),
         waiting: shared.pending.lock().unwrap_or_else(|e| e.into_inner()).ids_for(&status.hash).len() as u32,
         ..Default::default()
     };
@@ -346,6 +350,13 @@ fn snapshot_of(shared: &Shared) -> Snapshot {
         }
     }
     snap
+}
+
+/// Whether Hardcore's rules hold now: rc_client is in Hardcore and the game's achievements are loading or running. A
+/// game RetroAchievements doesn't know, or one whose achievements couldn't load (offline the first time, the sign-in
+/// refused, a CHD), has none to protect: the player gets states, rewind and cheats back, as in RetroArch.
+fn hardcore_applies(client: *mut RcClient, state: State) -> bool {
+    !client.is_null() && matches!(state, State::Loading | State::Ready) && unsafe { ffi::rc_client_get_hardcore_enabled(client) } != 0
 }
 
 /// Writes the pause menu's snapshot and the game's tally.
@@ -403,7 +414,7 @@ fn send_pending(shared: &Shared) {
             continue;
         }
         let ago = now_secs().saturating_sub(u.when).min(u32::MAX as u64) as u32;
-        match super::api::award(shared.transport.as_ref(), &shared.config.account, u.id, &u.hash, ago) {
+        match super::api::award(shared.transport.as_ref(), &shared.config.account, u.id, &u.hash, ago, u.hardcore) {
             super::api::Award::Later => break,
             done => {
                 if let super::api::Award::Refused(why) = done {
@@ -535,7 +546,8 @@ impl Session {
             event: on_event,
             log: on_log,
         };
-        let client = unsafe { ffi::pocket_rc_create(&hooks, verbose as c_int) };
+        let hardcore = shared.config.hardcore;
+        let client = unsafe { ffi::pocket_rc_create(&hooks, verbose as c_int, hardcore as c_int) };
         if client.is_null() {
             return None;
         }
@@ -608,6 +620,32 @@ impl Session {
     /// can't unlock anything.
     pub fn reset(&mut self) {
         unsafe { ffi::rc_client_reset(self.client) };
+    }
+
+    /// Whether Hardcore's rules hold for the game now ([`hardcore_applies`]): no state loads, rewind, fast-forward or
+    /// cheats. A few calls a second at most (commands, a held shortcut), never per frame.
+    pub fn hardcore(&self) -> bool {
+        hardcore_applies(self.client, self.shared.state())
+    }
+
+    /// Hardcore switched during the game. On: rc_client stops checking until the game has started again, which the
+    /// host does at once (its Load → From the start, then [`Session::reset`]): a moment brought in by a state, rewind
+    /// or a cheat can't count. Off: at once, nothing restarts (RetroAchievements allows leaving Hardcore any time).
+    pub fn set_hardcore(&mut self, on: bool) {
+        unsafe { ffi::rc_client_set_hardcore_enabled(self.client, on as c_int) };
+        self.shared.send(Work::Dirty);
+    }
+
+    /// Hardcore allows no pause straight after the last one (rc_client counts the frames in between, longer each time
+    /// it is asked too soon): Err with the frames still to play. Ok always outside Hardcore. Asked only when the
+    /// player pauses.
+    pub fn can_pause(&mut self) -> Result<(), u32> {
+        let mut frames = 0u32;
+        if unsafe { ffi::rc_client_can_pause(self.client, &mut frames) } != 0 {
+            Ok(())
+        } else {
+            Err(frames.max(1))
+        }
     }
 
     pub fn take_notices(&self) -> Vec<Notice> {
@@ -752,6 +790,7 @@ mod tests {
                 username: "Alex".into(),
                 token: "ApiToken".into(),
                 display_name: String::new(),
+                hardcore: false,
             },
             system: "nes".into(),
             rom,
@@ -760,6 +799,7 @@ mod tests {
             snapshot: dir.join("snapshot.json"),
             verbose: false,
             mastery_key: mastery_key.map(str::to_string),
+            hardcore: false,
         };
         let memory = AchievementMemory {
             descriptors: Vec::new(),
@@ -860,6 +900,63 @@ mod tests {
         let menu = until(|| read().filter(|s| (s.unlocked, s.total) == (2, 2))).expect("the menu's list");
         assert_eq!((menu.unlocked, menu.total, menu.points_unlocked, menu.points), (2, 2, 7, 7));
         assert_eq!(until(|| Summary::load(&dir, "nes", &dir.join("Game.nes"))).expect("the summary").text().as_deref(), Some("2 of 2"));
+        close_cleanly(s);
+    }
+
+    /// Hardcore switched on mid-game: rc_client checks nothing until the host has started the game again (its reset),
+    /// what was earned in softcore doesn't count, the next unlock goes to the site as hardcore (h=1), and a pause
+    /// straight after a pause waits. Off again: softcore at once.
+    #[test]
+    fn hardcore_mid_game_waits_for_the_restart_and_unlocks_as_hardcore() {
+        let _one = ONE_AT_A_TIME.lock().unwrap_or_else(|e| e.into_inner());
+        *RAM.lock().unwrap() = [0; 0x800];
+        let dir = scratch("hardcore");
+        let mock = Arc::new(server(SETS, r#"{"Success":true,"Unlocks":[{"ID":5502,"When":1234567899}],"HardcoreUnlocks":[]}"#));
+        let mut s = start(&dir, mock.clone());
+        until_ready(&mut s);
+        assert!(!s.hardcore() && !s.snapshot().hardcore, "softcore until switched");
+        assert_eq!(s.can_pause(), Ok(()), "softcore pauses whenever");
+        s.set_hardcore(true);
+        assert!(s.hardcore() && s.snapshot().hardcore, "the pause menu reads it from the snapshot");
+        assert_eq!(s.snapshot().unlocked, 0, "a softcore unlock is no hardcore one");
+        // The condition holds, but nothing counts before the game started again.
+        poke(1, 3);
+        poke(2, 7);
+        for _ in 0..3 {
+            run_frame(&mut s);
+        }
+        let unlocked = |n: Vec<Notice>| n.into_iter().any(|n| matches!(n, Notice::Unlocked { .. }));
+        assert!(!unlocked(s.take_notices()), "no unlock before the restart");
+        // The host's restart: the game from its power-on, then the condition again.
+        s.reset();
+        poke(1, 0);
+        run_frame(&mut s);
+        poke(1, 3);
+        let mut got = false;
+        for _ in 0..3 {
+            run_frame(&mut s);
+            got |= unlocked(s.take_notices());
+        }
+        assert!(got, "unlocks after the restart");
+        s.settle();
+        let asked: Vec<String> = mock.asked.lock().unwrap().iter().filter_map(|r| r.post_data.clone()).collect();
+        assert!(asked.iter().any(|p| p.starts_with("r=awardachievement&u=Alex&t=ApiToken&a=5501&h=1")), "{asked:?}");
+        // A pause one frame after the last one: Hardcore makes it wait (no frame stepping through the pause menu);
+        // asked again within the same pause it is the same pause.
+        for _ in 0..30 {
+            run_frame(&mut s);
+        }
+        assert_eq!(s.can_pause(), Ok(()));
+        assert_eq!(s.can_pause(), Ok(()), "the same pause, asked twice");
+        run_frame(&mut s);
+        assert!(matches!(s.can_pause(), Err(n) if n > 1 && n < 60), "{:?}", s.can_pause());
+        for _ in 0..20 {
+            run_frame(&mut s);
+        }
+        assert_eq!(s.can_pause(), Ok(()), "after a moment of play it pauses");
+        s.set_hardcore(false);
+        assert!(!s.hardcore() && !s.snapshot().hardcore);
+        assert_eq!(s.can_pause(), Ok(()));
         close_cleanly(s);
     }
 
@@ -1015,6 +1112,7 @@ mod tests {
                 username: "Alex".into(),
                 token: "ApiToken".into(),
                 display_name: String::new(),
+                hardcore: false,
             },
             system: "nes".into(),
             rom,
@@ -1023,6 +1121,7 @@ mod tests {
             snapshot: dir.join("snapshot.json"),
             verbose: false,
             mastery_key: None,
+            hardcore: false,
         };
         let memory = AchievementMemory {
             descriptors: Vec::new(),

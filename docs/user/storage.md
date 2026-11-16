@@ -32,7 +32,7 @@ A does it, B keeps it. Moving to another row cancels the question. What each one
   them, even when its state files are older. The slots you saved into yourself and your saves are never touched. Such a
   game starts from its last slot or its save next time, not where you quit.
 - **Box art and pictures**: the whole picture cache, including pictures you put there yourself. They are downloaded
-  again when the Pocket is online and no game runs ([Extras](extras.md)).
+  again when the Pocket is online and no game runs ([Box art & downloads](extras.md)).
 - **Logs**: the logs of earlier starts. The ones of this start stay (pocket-ui keeps those of three starts anyway).
 - **Backups**: every backup of pocket-ui's settings but the newest ([Backup & reset](settings-system.md#backup--reset)). Backups of
   your saves and other files in the backup folder stay; delete those yourself, over file sharing.

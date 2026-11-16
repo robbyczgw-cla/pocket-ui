@@ -86,9 +86,8 @@ fn build_apk_stops_without_a_signing_key_unless_a_new_one_is_asked_for() {
         }
         cmd.output().unwrap()
     };
-    let none = std::env::temp_dir().join(format!("pocket-no-key-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&none);
-    std::fs::create_dir_all(&none).unwrap();
+    let none_dir = tempfile::Builder::new().prefix("pocket-no-key-").tempdir().unwrap();
+    let none = none_dir.path().to_path_buf();
     // No key: stopped, with words that say why and what to do; nothing was created.
     let out = run(&none, false);
     let err = String::from_utf8_lossy(&out.stderr);
@@ -102,13 +101,22 @@ fn build_apk_stops_without_a_signing_key_unless_a_new_one_is_asked_for() {
     std::fs::write(none.join("store-password"), b"").unwrap();
     let out = run(&none, false);
     assert!(out.status.success(), "a folder with its own key is not stopped:\n{}", String::from_utf8_lossy(&out.stderr));
-    std::fs::remove_dir_all(&none).unwrap();
     // On purpose: a new throwaway key is allowed (the check passes; the check-only run still creates nothing).
-    let fresh = std::env::temp_dir().join(format!("pocket-new-key-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&fresh);
-    std::fs::create_dir_all(&fresh).unwrap();
+    let fresh_dir = tempfile::Builder::new().prefix("pocket-new-key-").tempdir().unwrap();
+    let fresh = fresh_dir.path().to_path_buf();
     assert!(run(&fresh, true).status.success(), "ANDROID_ALLOW_NEW_KEY=1 lets a throwaway key be made");
-    std::fs::remove_dir_all(&fresh).unwrap();
     // The check ran before the script touched anything: the manifest is as it was.
     assert_eq!(std::fs::read_to_string(format!("{root}/android/AndroidManifest.xml")).unwrap(), manifest_before, "the key check comes before the version rewrite");
+}
+
+/// Saves live in the app's private storage (`getFilesDir()`, `allowBackup="false"`): a plain uninstall deleted every save
+/// without a word (Fable 5.2 gaps #4, SAVE-SAFETY-REVIEW R5). `hasFragileUserData` makes Android's uninstall dialog offer
+/// "Keep app data", so a reinstall finds the saves again.
+#[test]
+fn uninstalling_asks_whether_to_keep_the_saves() {
+    let manifest = std::fs::read_to_string(format!("{}/android/AndroidManifest.xml", std::env::var("CARGO_MANIFEST_DIR").unwrap())).unwrap();
+    let application = manifest.split("<application ").nth(1).and_then(|a| a.split('>').next()).expect("<application> tag");
+    assert!(application.contains("android:hasFragileUserData=\"true\""), "uninstalling would delete the saves without asking");
+    let manual = std::fs::read_to_string(format!("{}/docs/user/android-mvp.md", std::env::var("CARGO_MANIFEST_DIR").unwrap())).unwrap();
+    assert!(manual.contains("Keep app data"), "the Android manual says what to answer when uninstalling");
 }

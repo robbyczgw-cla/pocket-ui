@@ -13,8 +13,8 @@ phone's page), `src/setup.rs` (`Step::Phone`).
 > 100 MB at a flat 3.4 MB RSS; the port closed afterwards. Still open: the Pocket's page itself, closing on sleep and a
 > real phone (iOS Safari, Android Chrome) on hardware.
 
-It is not the [web companion](WEB-COMPANION.md). The companion stays Tailscale-only and unchanged; this is the first
-thing pocket-ui serves on the Wi-Fi LAN, so it is kept as small as it can be.
+It is not the [web companion](WEB-COMPANION.md), which since 0.5 also listens on the Wi-Fi (port 80, pairing code)
+while it is switched on; this page is separate, short-lived and kept as small as it can be.
 
 ## Lifetime
 

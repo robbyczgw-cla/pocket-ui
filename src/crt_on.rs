@@ -2,13 +2,15 @@
 //! has run out), its first 300 ms start dark, a bright line grows out of the middle of the screen, and the picture opens
 //! out of it, vertically, squeezed into what is lit as a tube's picture is while its sweep comes up (the reverse of
 //! `eject::tv_off`), with a glow at the two edges that settles. A handheld's game (Game Boy, GBA, DS, PSP: no TV) gets a
-//! display switching on instead: dark, then its light coming up, no line ([`Screen::Lcd`]). The game itself runs
+//! display's start instead: its console's power light and display came on in the launch scene (`insert_scene`), the screen
+//! went dark with the fade, and the picture comes up out of the dark, no line ([`Screen::Lcd`]). The game itself runs
 //! meanwhile (the window is no longer held back, nothing waits for the effect); a button press ends it at once.
 //!
 //! Only in Cozy with Motion on Full: pocket-ui sets [`ENV`] for pocket-core then (`1` a TV, [`LCD`] a handheld's
 //! display). `plan` is the whole effect as rectangles for a moment in time, `picture` where the squeezed picture goes;
 //! pocket-core draws the picture there and the rectangles as a handful of solid quads (`Overlay::draw_solid`), so the
 //! cost is a few fill-rate passes over a part of the screen and no shader of its own.
+//!
 //!
 //! Smooth at 60 Hz: the line grows instead of standing still, and the opening starts and ends softly, so no frame
 //! opens more than about a tenth of the picture (`tests::no_frame_jumps_at_60_hz`; the first version opened a quarter of
@@ -21,7 +23,7 @@ use std::time::Duration;
 pub const ENV: &str = "POCKET_LAUNCH_CRT";
 /// [`ENV`]'s value for a handheld's game: its display switches on, no tube.
 pub const LCD: &str = "lcd";
-/// `1`: the effect without its sound (Settings → Sound & feel → Case sounds off, `cozy_extras`).
+/// `1`: the effect without its sound (Settings → Screen & sound → Case sounds off, `cozy_extras`).
 pub const SILENT_ENV: &str = "POCKET_LAUNCH_CRT_SILENT";
 
 /// The name the CRT sound hooks in on: [`start`] writes it as a trace event (`POCKETUI_TRACE`) and as the line
@@ -37,16 +39,17 @@ const LINE_END: f32 = 0.2;
 const OPEN_END: f32 = 0.85;
 /// The line is this many pixels thick at 720 px of screen height (scaled with the screen).
 const LINE_PX: f32 = 3.0;
-/// A handheld's display: dark this long (fraction of [`DURATION`]), then its light comes up until [`LIT_AT`].
-const LCD_DARK: f32 = 0.04;
-const LIT_AT: f32 = 0.85;
+/// A handheld's picture comes up out of the dark this long: dark for [`LCD_HOLD`] of it, then clearing. Shorter than the
+/// tube's [`DURATION`]: the launch scene already did the switching on (its power light and display).
+pub const LCD_LEN: Duration = Duration::from_millis(200);
+const LCD_HOLD: f32 = 0.1;
 
 /// What the game is shown on, for its switch-on.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Screen {
     /// An old TV: a line, the picture opening out of it.
     Tv,
-    /// A handheld's own display: its light comes up.
+    /// A handheld's own display: its picture comes up out of the dark.
     Lcd,
 }
 
@@ -77,6 +80,14 @@ pub fn screen() -> Screen {
 /// Whether pocket-ui asked for it without its sound.
 pub fn silent() -> bool {
     std::env::var_os(SILENT_ENV).is_some_and(|v| v == "1")
+}
+
+/// How long the effect lasts on `screen`.
+pub fn len(screen: Screen) -> Duration {
+    match screen {
+        Screen::Tv => DURATION,
+        Screen::Lcd => LCD_LEN,
+    }
 }
 
 /// The effect starts now: the hook for the sound.
@@ -136,14 +147,14 @@ pub fn plan(since: Duration, area: (f32, f32, f32, f32)) -> Vec<Quad> {
 /// [`plan`] for what the game is shown on.
 pub fn plan_for(screen: Screen, since: Duration, area: (f32, f32, f32, f32)) -> Vec<Quad> {
     let (ax, ay, view_w, view_h) = area;
-    let t = since.as_secs_f32() / DURATION.as_secs_f32();
+    let t = since.as_secs_f32() / len(screen).as_secs_f32();
     if t >= 1.0 || view_w < 1.0 || view_h < 1.0 {
         return Vec::new();
     }
     let at = |(x, y, w, h): (f32, f32, f32, f32)| (ax + x, ay + y, w, h);
     if screen == Screen::Lcd {
-        // Dark a moment, then the light comes up softly over the whole display: no line, no glow.
-        let dark = 1.0 - smooth((t - LCD_DARK) / (LIT_AT - LCD_DARK));
+        // Dark a moment (the scene's fade left it so), then the picture comes up softly over the whole picture: no line, no glow.
+        let dark = 1.0 - smooth((t - LCD_HOLD) / (1.0 - LCD_HOLD));
         return if dark > 0.0 { vec![Quad { rect: at((0.0, 0.0, view_w, view_h)), white: false, alpha: dark }] } else { Vec::new() };
     }
     let mid = view_h / 2.0;
@@ -276,8 +287,10 @@ mod tests {
                     assert!(dopen <= 0.14 && dl <= 0.09, "{screen:?} {w}x{h}: frame {} jumps: opens {dopen:.3}, light {dl:.3}\n{s:.3?}", k + 1);
                 }
                 // Until it is over, every frame changes something: nothing stands still.
-                let still = s.iter().take(17).skip(1).position(|f| !f.2);
-                assert!(still.is_none(), "{screen:?} {w}x{h}: frame {} is the same as the one before: {s:.3?}", still.unwrap_or(0) + 1);
+                // The display's light covers the picture for its first 20 ms (two frames) and is over after 12 frames.
+                let (live, first) = if screen == Screen::Tv { (17, 1) } else { (11, 3) };
+                let still = s.iter().take(live).skip(first).position(|f| !f.2);
+                assert!(still.is_none(), "{screen:?} {w}x{h}: frame {} is the same as the one before: {s:.3?}", still.unwrap_or(0) + first);
             }
         }
     }
@@ -299,15 +312,19 @@ mod tests {
     }
 
     #[test]
-    fn a_handhelds_display_comes_up_without_a_line() {
-        for t in (0..300).step_by(10) {
-            assert!(plan_for(Screen::Lcd, ms(t), (0.0, 0.0, 640.0, 480.0)).iter().all(|q| !q.white), "{t} ms: no white line or glow");
+    fn a_handhelds_picture_comes_up_out_of_the_dark_without_a_line_and_never_flashes_light() {
+        let area = (0.0, 0.0, 640.0, 480.0);
+        for t in (0..200).step_by(10) {
+            let quads = plan_for(Screen::Lcd, ms(t), area);
+            assert_eq!(quads.len(), 1, "{t} ms: one cover, no line, no glow, no light bands");
+            assert!(!quads[0].white && quads[0].rect == area, "{t} ms: black over the picture, {:?}", quads[0]);
         }
-        let dark = |t| plan_for(Screen::Lcd, ms(t), (0.0, 0.0, 640.0, 480.0)).first().map_or(0.0, |q| q.alpha);
-        assert!(dark(10) > 0.99, "dark at first");
-        assert!(dark(150) > 0.2 && dark(150) < 0.8, "coming up halfway: {}", dark(150));
-        assert!(dark(260) == 0.0, "lit before the end");
-        assert!(plan_for(Screen::Lcd, DURATION, (0.0, 0.0, 640.0, 480.0)).is_empty());
+        let dark = |t| plan_for(Screen::Lcd, ms(t), area).first().map_or(0.0, |q| q.alpha);
+        assert!(dark(0) > 0.99 && dark(10) > 0.99, "dark at first (the scene's fade left it so)");
+        assert!(dark(100) > 0.2 && dark(100) < 0.8, "clearing halfway: {}", dark(100));
+        assert!(dark(190) < 0.05, "clear before the end");
+        assert!(plan_for(Screen::Lcd, LCD_LEN, area).is_empty());
+        assert!(LCD_LEN < DURATION, "shorter than the tube: the scene did the switching on");
     }
 
     #[test]

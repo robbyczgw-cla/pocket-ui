@@ -166,9 +166,9 @@ fn the_tour_explains_six_basics_then_offers_easier_reading() {
 fn the_reading_cards_path_to_the_settings_is_whole_and_clear_of_the_hint_bar_in_every_language_and_size() {
     let card = Card::new();
     for (lang, path) in [
-        ("en", "Settings › Look › Text size, Settings › Sound & feel › Motion"),
-        ("de", "Einstellungen › Aussehen › Schriftgröße, Einstellungen › Klang & Gefühl › Bewegung"),
-        ("es", "Ajustes › Aspecto › Tamaño de texto, Ajustes › Sonido y tacto › Movimiento"),
+        ("en", "Settings › Look › Text size, Settings › Look › Motion"),
+        ("de", "Einstellungen › Aussehen › Schriftgröße, Einstellungen › Aussehen › Bewegung"),
+        ("es", "Ajustes › Aspecto › Tamaño de texto, Ajustes › Aspecto › Movimiento"),
     ] {
         for size in ["640x480", "1024x768", "1240x1080"] {
             for text in ["normal", "medium", "large"] {
@@ -179,6 +179,32 @@ fn the_reading_cards_path_to_the_settings_is_whole_and_clear_of_the_hint_bar_in_
             }
         }
     }
+}
+
+/// The 0.5 hand test (15.11.2026): the controls card was bloat. The pause menu's Controls page opens on its own
+/// rows: the stick first, then what each button presses; no "Controls card" line before them. Controller setup stays, last.
+#[test]
+fn the_pause_controls_page_starts_with_the_stick_and_button_rows() {
+    let card = Card::new();
+    for size in ["640x480", "1024x768"] {
+        let top = card.screen("controls:0", size);
+        assert!(!top.contains("Controls card"), "{size}: no controls card on the page: {top}");
+        assert!(top.contains("Left stick as D-pad") && top.contains("The left stick works as the D-pad."), "{size}: the first row, selected, is the stick: {top}");
+    }
+}
+
+/// The game card has no Controls row any more (the controls card is gone): from its top down to its end, Hide or delete,
+/// no row says which button does what.
+#[test]
+fn the_game_card_has_no_controls_row() {
+    let card = Card::new();
+    let mut seen = String::new();
+    for downs in [0, 2, 4, 6, 8, 10, 12, 14, 16, 20, 24, 60] {
+        seen += &card.screen(&format!("curator:card:snes:chrono:{downs}"), "640x480");
+        seen.push('\n');
+    }
+    assert!(seen.contains("Hide or delete"), "the card's end: {seen}");
+    assert!(!seen.contains("Which button of the") && !seen.lines().any(|l| l.trim() == "Controls"), "no Controls row on the card: {seen}");
 }
 
 #[test]
@@ -192,8 +218,8 @@ fn the_hold_to_toggle_row_is_visible_with_its_default_on_every_panel() {
     };
     assert!(file.write(&pocket_ui::core_options::file_path(&data, "gbc")));
     for size in ["640x480", "1024x768", "1240x1080", "1920x1080"] {
-        // Controls card and controller setup precede the stick and sixteen button mappings.
-        let screen = card.screen("controls:19", size);
+        // The stick and sixteen button mappings come before it.
+        let screen = card.screen("controls:17", size);
         assert!(screen.contains("Hold to toggle"), "{size}: {screen}");
         assert!(screen.lines().any(|l| l == "Off"), "{size}: {screen}");
         assert!(screen.contains("Pick a button"), "the selected control explains itself: {size}: {screen}");
@@ -429,23 +455,41 @@ fn the_update_notice_views_are_whole_in_every_language_size_and_style() {
 }
 
 /// The dot: with a newer pocket-ui known, Settings → System and its Updates row carry a small amber dot; without, none.
+/// Since START shows the rows at once (SETTINGS-IA package 2) the System dot is on System's symbol at the top of every
+/// list; among the rows only Updates has one.
 #[test]
 fn a_newer_pocket_ui_puts_a_dot_on_system_and_on_updates_and_nowhere_else() {
     let card = Card::new();
-    let amber = |state: &str| -> usize {
+    // Amber pixels in the top line (the symbols, above the first row) and under it (the rows).
+    let amber = |state: &str| -> (usize, usize) {
         card.screen_styled(state, "1024x768", "en", "normal", "barlow");
         let mut reader = png::Decoder::new(std::fs::File::open(card.dir.path().join("shot.png")).unwrap()).read_info().unwrap();
         let mut pixels = vec![0; reader.output_buffer_size()];
         let info = reader.next_frame(&mut pixels).unwrap();
         let bpp = info.color_type.samples();
         let want = pocket_ui::palette::DARK.amber;
-        pixels[..info.buffer_size()].chunks(bpp).filter(|p| u32::from(p[0]) << 16 | u32::from(p[1]) << 8 | u32::from(p[2]) == want & 0xffffff).count()
+        let (w, h) = (info.width as usize, info.height as usize);
+        // Above the first row: the symbols' line, also where the category's name stands on its own line over it (one layout
+        // for every category, tests/settings_tabbar_stable.rs).
+        let header = h * 23 / 100;
+        let mut out = (0, 0);
+        for (i, p) in pixels[..info.buffer_size()].chunks(bpp).enumerate() {
+            if u32::from(p[0]) << 16 | u32::from(p[1]) << 8 | u32::from(p[2]) == want & 0xffffff {
+                if i / w < header { out.0 += 1 } else { out.1 += 1 }
+            }
+        }
+        let _ = h;
+        out
     };
-    for (plain, with_dot) in [("settings:5", "settings:5:dot"), ("settings:5:5", "settings:5:5:dot")] {
+    // System's list with its second row selected: Updates, its first row since the tree of 2026-11-13, is in view.
+    for (plain, with_dot) in [("settings:6", "settings:6:dot"), ("settings:6:1", "settings:6:1:dot")] {
         let (none, some) = (amber(plain), amber(with_dot));
-        assert!(some > none + 20, "{with_dot}: the dot is painted ({some} amber pixels, {none} without)");
+        assert!(some.0 > none.0 + 20, "{with_dot}: the dot on System's symbol ({some:?} amber pixels, {none:?} without)");
+        assert!(some.1 > none.1 + 20, "{with_dot}: the dot on the Updates row ({some:?} amber pixels, {none:?} without)");
     }
-    assert_eq!(amber("settings:0:0:dot"), amber("settings:0:0"), "a list without the Updates row shows no dot");
+    let (none, some) = (amber("settings:0:0"), amber("settings:0:0:dot"));
+    assert!(some.0 > none.0 + 20, "Connections' list: System's symbol has the dot ({some:?}, {none:?})");
+    assert_eq!(some.1, none.1, "a list without the Updates row shows no dot among its rows");
 }
 
 /// A main artifact has newer code than the published release but an older Cargo version: do not offer a downgrade.

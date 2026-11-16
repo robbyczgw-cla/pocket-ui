@@ -7,10 +7,12 @@
 #   build.sh assemble VERSION EPOCH
 #       /w/image.img (a copy of base.img) gets the boot files from /w/sd-efi, the initramfs hooks, the notes from
 #       /w/info, and pocket-ui from /w/bin on STORAGE. EPOCH (seconds) is the time stamp of every added file.
-# FAMILY=H700, SM8550 or RK3566 (scripts/make-image-family.sh): that family's pins instead; strip-system works on its SYSTEM,
+# FAMILY=H700, SM8550, RK3566 or RK3326 (scripts/make-image-family.sh): that family's pins instead; strip-system works on its SYSTEM,
 # and assemble takes MODEL (and no boot files from /w/sd-efi): no GRUB; on the H700 the FAT root gets dtb.img, a copy of
 # that model's tree from device_trees/, and on the RK3566 extlinux.conf names that model's tree instead of the X55's. The
 # SM8550 Retroids (pins.sh SM8550_EFI_MODELS) are the exception: they take /w/sd-efi as the SM8250 cards do, next to KERNEL.
+# On the RK3326 extlinux.conf's commented FDT line names the R36S tree, the FAT gets r36s-panels/ (/w/panels) and STORAGE the
+# screen hook; the device-test card (pins.sh is_devtest) also the USB network preset, SSH and /w/devtest/authorized_keys.
 set -eu
 . /repo/scripts/image/pins.sh
 FAMILY=${FAMILY:-SM8250}
@@ -155,6 +157,29 @@ assemble() {
     cp "$E/loader/entries/pocket-ui.conf" "$S/fat/loader/entries/"
   elif [ "$FAMILY" = SM8550 ] || [ "$FAMILY" = SM4450 ]; then
     : # KERNEL carries the trees, ROCKNIX's ABL starts it: no boot files to add.
+  elif [ "$FAMILY" = RK3566 ] && is_generic RK3566 "$MODEL"; then
+    # The Generic card: the Specific card with the Generic image's first 16 MiB (GPT, idbloader, the U-Boot that detects the
+    # handheld) and its extlinux.conf (FDTDIR, no FDT line), both unchanged. KERNEL, SYSTEM and the trees are the same bytes in
+    # both images (the pins and the check below), so nothing else differs.
+    [ -f "$W/base-generic.img" ] || die "$MODEL needs the Generic image at /w/base-generic.img"
+    [ "$(head -c $((P1_START * 512)) "$W/base-generic.img" | md5sum | cut -d' ' -f1)" = "$RK3566_GENERIC_LOADER_MD5" ] || die "the Generic image's first 16 MiB are not the pinned ones"
+    G="$W/base-generic.img@@$((P1_START * 512))"
+    for f in KERNEL SYSTEM; do
+      got=$(mcopy -n -i "$G" "::/$f" - | md5sum | cut -d' ' -f1)
+      want=$RK3566_KERNEL_MD5
+      [ "$f" = SYSTEM ] && want=$RK3566_SYSTEM_MD5
+      [ "$got" = "$want" ] || die "the Generic image's $f (md5 $got) is not the Specific image's ($want): it needs its own build"
+    done
+    [ "$(mdir -/ -b -i "$G" ::/ | sed 's#^::/##' | grep -v '^extlinux/' | sort | md5sum)" = "$(mdir -/ -b -i "$FAT" ::/ | sed 's#^::/##' | grep -v '^extlinux/' | sort | md5sum)" ] \
+      || die "the Generic image's FAT partition has other files than the Specific one's"
+    for d in $(mdir -b -i "$G" ::/device_trees | sed 's#.*/##'); do
+      [ "$(mcopy -n -i "$G" "::/device_trees/$d" - | md5sum)" = "$(mcopy -n -i "$FAT" "::/device_trees/$d" - | md5sum)" ] || die "device_trees/$d differs between the Generic and the Specific image"
+    done
+    mcopy -n -i "$G" ::/extlinux/extlinux.conf "$W/extlinux.conf"
+    [ "$(md5 "$W/extlinux.conf")" = "$RK3566_GENERIC_EXTLINUX_MD5" ] || die "the Generic image's extlinux.conf is not the pinned one"
+    grep -qx '  FDTDIR /device_trees' "$W/extlinux.conf" && ! grep -q '^ *FDT ' "$W/extlinux.conf" || die "the Generic extlinux.conf has no FDTDIR line or an FDT line"
+    dd if="$W/base-generic.img" of="$IMG" bs=512 count="$P1_START" conv=notrunc status=none
+    [ "$(head -c $((P1_START * 512)) "$IMG" | md5sum | cut -d' ' -f1)" = "$RK3566_GENERIC_LOADER_MD5" ] || die "the Generic loader did not land on the image"
   elif [ "$FAMILY" = RK3566 ]; then
     # ROCKNIX's extlinux.conf with its one FDT line (the Powkiddy X55's tree) naming this model's tree; the rest unchanged.
     mcopy -n -i "$FAT" "::/device_trees/$DTB_NAME.dtb" /tmp/tree.dtb
@@ -164,6 +189,40 @@ assemble() {
     [ "$(grep -c "^  FDT $RK3566_DEFAULT_FDT\$" /tmp/extlinux.orig)" = 1 ] || die "extlinux.conf has no single FDT $RK3566_DEFAULT_FDT line"
     sed "s#^  FDT $RK3566_DEFAULT_FDT\$#  FDT /device_trees/$DTB_NAME.dtb#" /tmp/extlinux.orig >"$W/extlinux.conf"
     [ "$(diff /tmp/extlinux.orig "$W/extlinux.conf" | grep -c '^[<>]')" = 2 ] || die "extlinux.conf: more than the FDT line changed"
+  elif [ "$FAMILY" = RK3326 ]; then
+    # ROCKNIX's extlinux.conf (FDTDIR /, the trees in the FAT root) with its commented "# FDT" line made into the model's FDT line,
+    # what ROCKNIX's own extlinux.conf.r36s says (boot.scr has no R36S branch). The rest, FDTOVERLAYS /overlays/mipi-panel.dtbo
+    # included, unchanged; boot.scr too. No overlay in overlays/: the 2023 screen needs none, the newer ones are in r36s-panels/.
+    mcopy -n -i "$FAT" "::/$DTB_NAME.dtb" /tmp/tree.dtb
+    [ "$(md5 /tmp/tree.dtb)" = "$DTB_MD5_WANT" ] || die "$DTB_NAME.dtb is not the expected tree (md5 $DTB_MD5_WANT)"
+    mcopy -n -i "$FAT" ::/boot.scr /tmp/boot.scr
+    [ "$(md5 /tmp/boot.scr)" = "$RK3326_BOOTSCR_MD5" ] || die "boot.scr is not ROCKNIX's (md5 $RK3326_BOOTSCR_MD5)"
+    mcopy -n -i "$FAT" ::/extlinux/extlinux.conf /tmp/extlinux.orig
+    [ "$(md5 /tmp/extlinux.orig)" = "$RK3326_EXTLINUX_MD5" ] || die "extlinux/extlinux.conf is not ROCKNIX's (md5 $RK3326_EXTLINUX_MD5)"
+    [ "$(grep -cxF "$RK3326_FDT_COMMENT" /tmp/extlinux.orig)" = 1 ] && ! grep -q '^ *FDT ' /tmp/extlinux.orig || die "extlinux.conf has no single '$RK3326_FDT_COMMENT' line, or an FDT line"
+    awk -v c="$RK3326_FDT_COMMENT" -v n="  FDT /$DTB_NAME.dtb" '$0 == c { print n; next } { print }' /tmp/extlinux.orig >"$W/extlinux.conf"
+    [ "$(diff /tmp/extlinux.orig "$W/extlinux.conf" | grep -c '^[<>]')" = 2 ] || die "extlinux.conf: more than the FDT line changed"
+    grep -qx '  FDTOVERLAYS /overlays/mipi-panel.dtbo' "$W/extlinux.conf" || die "extlinux.conf lost its FDTOVERLAYS line"
+    ! mdir -b -i "$FAT" ::/overlays/mipi-panel.dtbo >/dev/null 2>&1 || die "ROCKNIX's image already has overlays/mipi-panel.dtbo"
+    mkdir -p "$S/fat/r36s-panels"
+    echo "$RK3326_PANELS" | while read -r p want; do
+      [ -n "$p" ] || continue
+      [ "$(sha256sum "$W/panels/$p.dtbo" | cut -d' ' -f1)" = "$want" ] || die "r36s-panels/$p.dtbo is not the pinned file"
+      cp "$W/panels/$p.dtbo" "$S/fat/r36s-panels/"
+    done
+    cmp -s "$W/panels/README.txt" /repo/deploy/image/r36s-panels-README.txt || die "r36s-panels/README.txt is not deploy/image/r36s-panels-README.txt"
+    cp "$W/panels/README.txt" "$S/fat/r36s-panels/README.txt"
+    install -m 755 /repo/deploy/image/r36s-stock-panel.sh "$S/storage/pocket-ui-r36s-panel"
+    if is_devtest RK3326 "$MODEL"; then
+      [ -s "$W/devtest/authorized_keys" ] || die "$MODEL needs /w/devtest/authorized_keys (make-image-family.sh --authorized-keys)"
+      ! grep -q PRIVATE "$W/devtest/authorized_keys" || die "authorized_keys holds a private key"
+      install -m 600 "$W/devtest/authorized_keys" "$S/storage/authorized_keys"
+      install -m 755 /repo/deploy/image/r36s-devtest.sh "$S/storage/pocket-ui-devtest"
+      printf 'USB_MODE=cdc\n' >"$S/storage/usbgadget.conf"
+      chmod 644 "$S/storage/usbgadget.conf"
+      : >"$S/storage/dev-ssh"
+      chmod 644 "$S/storage/dev-ssh"
+    fi
   elif [ "$FAMILY" = H700 ]; then
     # The model's tree from ROCKNIX's own device_trees/, as ROCKNIX's install page has the player copy it by hand.
     mcopy -n -i "$FAT" "::/device_trees/$DTB_NAME.dtb" "$S/fat/dtb.img"
@@ -196,6 +255,9 @@ assemble() {
   cp /repo/deploy/image/post-flash.sh /repo/deploy/image/mount-storage.sh "$S/fat/"
   # The GAMES drive (docs/SD-IMAGE.md, "The GAMES drive"), only on the models pins.sh names: the first start's script, and at
   # every start the drive's mount. All other cards have neither: ROCKNIX's fs-resize, STORAGE over the whole card.
+  # Every card: an ArkOS/dArkOS/R36S stock games card in the second slot is used as it is (docs/SD-IMAGE.md, the hooks).
+  install -m 755 /repo/deploy/image/games-card.sh "$S/storage/games-card.sh"
+  install -m 644 /repo/deploy/image/rocknix-automount-games-card.conf "$S/storage/rocknix-automount-games-card.conf"
   if has_games_drive "$FAMILY" "${MODEL:-}"; then
     cp /repo/deploy/image/games-first-start.sh "$S/fat/"
     install -m 755 /repo/deploy/image/games-mount.sh "$S/storage/games-mount.sh"
@@ -223,7 +285,7 @@ assemble() {
   echo "== FAT partition"
   # rocknix_abl/ holds ROCKNIX's replacement for Retroid's bootloader (abl) and scripts that flash it. This boot
   # path never uses it, and flashing it is what this setup avoids, so it is not on the card.
-  case $FAMILY in H700 | RK3566) ;; SM4450)
+  case $FAMILY in H700 | RK3566 | RK3326) ;; SM4450)
     mdeltree -i "$FAT" ::/openabl
     # This private beta is for the four-button Classic Rev Q only.
     for tree in $(mdir -b -i "$FAT" ::/dtbs/ | sed 's#^.*/##'); do
@@ -243,7 +305,7 @@ assemble() {
   mdel -i "$FAT" ::/SYSTEM ::/SYSTEM.md5
   mcopy -m -i "$FAT" "$W/SYSTEM" ::/SYSTEM
   mcopy -m -i "$FAT" "$S/SYSTEM.md5" ::/SYSTEM.md5
-  if [ "$FAMILY" = RK3566 ] || { [ "$FAMILY" = H700 ] && is_ddr3 H700 "$MODEL"; }; then
+  if [ "$FAMILY" = RK3566 ] || [ "$FAMILY" = RK3326 ] || { [ "$FAMILY" = H700 ] && is_ddr3 H700 "$MODEL"; }; then
     touch -d "@$EPOCH" "$W/extlinux.conf"
     mdel -i "$FAT" ::/extlinux/extlinux.conf
     mcopy -m -i "$FAT" "$W/extlinux.conf" ::/extlinux/extlinux.conf
@@ -277,12 +339,20 @@ assemble() {
 
   echo "== STORAGE partition"
   P2=$W/p2.ext4
-  dd if="$IMG" of="$P2" bs=512 skip="$P2_START" count="$P2_SIZE" status=none
+  dd if="$IMG" of="$P2" bs=512 skip="$P2_START" count="$P2_ROCKNIX_SIZE" status=none
   [ "$(e2label "$P2")" = STORAGE ] || die "partition 2 is not STORAGE"
   [ -n "$(debugfs -R 'stat /.please_resize_me' "$P2" 2>/dev/null)" ] || die "STORAGE has no .please_resize_me"
-  # The room ROCKNIX leaves is what storage-budget.sh and pins.sh P2_MIN_HEADROOM_BLOCKS are worked out from.
+  # ROCKNIX's 32 MiB STORAGE with the room it leaves (pins.sh P2_ROCKNIX_FREE_BLOCKS), then grown to P2_SIZE (128 MiB) before
+  # anything is written: the programs have room for many releases. The file system is grown here, offline, with everything
+  # still in it clean; the partition table and the image follow when it is written back (grow_image below).
+  [ "$(dumpe2fs -h "$P2" 2>/dev/null | sed -n 's/^Free blocks: *//p')" = "$P2_ROCKNIX_FREE_BLOCKS" ] ||
+    die "ROCKNIX's STORAGE has not $P2_ROCKNIX_FREE_BLOCKS free blocks (pins.sh P2_ROCKNIX_FREE_BLOCKS)"
+  e2fsck -fn "$P2" >/dev/null 2>&1 || die "ROCKNIX's STORAGE is not clean before it is grown"
+  truncate -s $((P2_SIZE * 512)) "$P2"
+  resize2fs "$P2" >/tmp/resize2fs.log 2>&1 || { cat /tmp/resize2fs.log >&2; die "resize2fs could not grow STORAGE to $P2_SIZE sectors"; }
+  e2fsck -fn "$P2" >/dev/null 2>&1 || die "STORAGE is not clean after it is grown"
   [ "$(dumpe2fs -h "$P2" 2>/dev/null | sed -n 's/^Free blocks: *//p')" = "$P2_FREE_BLOCKS" ] ||
-    die "ROCKNIX's STORAGE has not $P2_FREE_BLOCKS free blocks (pins.sh P2_FREE_BLOCKS): work out the new room, storage-budget.sh"
+    die "the grown STORAGE has $(dumpe2fs -h "$P2" 2>/dev/null | sed -n 's/^Free blocks: *//p') free blocks, not $P2_FREE_BLOCKS (pins.sh P2_FREE_BLOCKS): work out the new room, storage-budget.sh"
   R=pocket-ui/releases/$VERSION
   UNITS=.pocket-seed/.config/system.d
   SEED=$UNITS/essway.service.d
@@ -316,12 +386,34 @@ assemble() {
     # ROCKNIX settings that differ on this card (updates off, hostname), run once by ROCKNIX's autostart.
     echo "mkdir /.pocket-seed/.config/autostart"
     echo "write $S/storage/pocket-ui-image-defaults /.pocket-seed/.config/autostart/pocket-ui-image-defaults"
-    GAMES_PATHS=
+    # ROCKNIX's automount sees an ArkOS card's own layout first (deploy/image/games-card.sh), on every card.
+    echo "write $S/storage/games-card.sh /pocket-ui/games-card.sh"
+    echo "mkdir /$GAMES_UNIT"
+    echo "write $S/storage/rocknix-automount-games-card.conf /$GAMES_UNIT/20-pocket-games-card.conf"
+    GAMES_PATHS="/pocket-ui/games-card.sh /$GAMES_UNIT /$GAMES_UNIT/20-pocket-games-card.conf"
     if has_games_drive "$FAMILY" "${MODEL:-}"; then
       echo "write $S/storage/games-mount.sh /pocket-ui/games-mount.sh"
-      echo "mkdir /$GAMES_UNIT"
       echo "write $S/storage/rocknix-automount-games.conf /$GAMES_UNIT/10-pocket-games.conf"
-      GAMES_PATHS="/pocket-ui/games-mount.sh /$GAMES_UNIT /$GAMES_UNIT/10-pocket-games.conf"
+      GAMES_PATHS="$GAMES_PATHS /pocket-ui/games-mount.sh /$GAMES_UNIT/10-pocket-games.conf"
+    fi
+    # RK3326: the screen hook (both cards); the device-test card's USB network preset, key, dev-ssh marker and SSH script.
+    if [ "$FAMILY" = RK3326 ]; then
+      echo "write $S/storage/pocket-ui-r36s-panel /.pocket-seed/.config/autostart/pocket-ui-r36s-panel"
+      GAMES_PATHS="$GAMES_PATHS /.pocket-seed/.config/autostart/pocket-ui-r36s-panel"
+    fi
+    if [ "$FAMILY" = RK3326 ] && is_devtest RK3326 "$MODEL"; then
+      echo "write $S/storage/pocket-ui-devtest /.pocket-seed/.config/autostart/pocket-ui-devtest"
+      echo "mkdir /.pocket-seed/.cache"
+      echo "mkdir /.pocket-seed/.cache/usbgadget"
+      echo "write $S/storage/usbgadget.conf /.pocket-seed/.cache/usbgadget/usbgadget.conf"
+      echo "mkdir /.pocket-seed/.ssh"
+      echo "set_inode_field /.pocket-seed/.ssh mode 040700"
+      echo "write $S/storage/authorized_keys /.pocket-seed/.ssh/authorized_keys"
+      echo "mkdir /.pocket-seed/.config/pocket-ui"
+      echo "write $S/storage/dev-ssh /.pocket-seed/.config/pocket-ui/dev-ssh"
+      GAMES_PATHS="$GAMES_PATHS /.pocket-seed/.config/autostart/pocket-ui-devtest /.pocket-seed/.cache /.pocket-seed/.cache/usbgadget
+        /.pocket-seed/.cache/usbgadget/usbgadget.conf /.pocket-seed/.ssh /.pocket-seed/.ssh/authorized_keys /.pocket-seed/.config/pocket-ui
+        /.pocket-seed/.config/pocket-ui/dev-ssh"
     fi
     for p in / /pocket-ui /pocket-ui/releases "/$R" "/$R/pocket-ui" "/$R/pocket-core" "/$R/pocket-splash" "/$R/portmaster-setup.sh" \
       /pocket-ui/run-pocket-ui.sh /pocket-ui/current /pocket-ui/pocket-ui /pocket-ui/pocket-core \
@@ -345,9 +437,39 @@ assemble() {
   tune2fs -O ^resize_inode "$P2" >/dev/null 2>&1 || die "tune2fs could not take resize_inode off STORAGE"
   e2fsck -fy "$P2" >/dev/null 2>&1 || [ $? = 1 ] || die "e2fsck failed after taking resize_inode off STORAGE"
   e2fsck -fn "$P2" >/dev/null || die "STORAGE file system not clean after writing"
+  grow_image
   dd if="$P2" of="$IMG" bs=512 seek="$P2_START" conv=notrunc status=none
   rm -f "$P2"
-  echo "  pocket-ui/ ($R), .pocket-seed/.config/: system.d/essway.service.d/10-pocket-ui.conf, system.d/pocket-splash.service, autostart/pocket-ui-image-defaults"
+  echo "  pocket-ui/ ($R, games-card.sh), .pocket-seed/.config/: system.d/essway.service.d/10-pocket-ui.conf, system.d/pocket-splash.service, system.d/rocknix-automount.service.d/20-pocket-games-card.conf, autostart/pocket-ui-image-defaults"
+}
+
+# p2 gets P2_SIZE sectors instead of ROCKNIX's P2_ROCKNIX_SIZE and the image grows by the difference; the tail after p2 (room for
+# the second GPT) and everything else in the table stay as shipped (scripts/image/p2-table.sh): on MBR (H700) only p2's size field
+# is patched, on GPT sfdisk writes the table again (both copies, the second at the new end; no signature wiping) and the boot code
+# of sector 0 is put back byte for byte.
+. /repo/scripts/image/p2-table.sh
+grow_image() {
+  [ "$(stat -c %s "$IMG")" = "$IMG_ROCKNIX_BYTES" ] || die "$IMG is not ROCKNIX's $IMG_ROCKNIX_BYTES bytes long"
+  sfdisk -d "$IMG" >"$W/table.before" 2>/dev/null || die "no partition table to read"
+  truncate -s "$IMG_BYTES" "$IMG"
+  if grep -qx 'label: dos' "$W/table.before"; then
+    [ "$(mbr_p2_size "$IMG")" = "$P2_ROCKNIX_SIZE" ] || die "sector 0's second table entry is not a $P2_ROCKNIX_SIZE-sector p2"
+    [ "$(mbr_p2_size "$IMG" "$P2_SIZE")" = "$P2_SIZE" ] || die "p2's size did not land in sector 0"
+    changed=2
+  else
+    dd if="$IMG" of="$W/sector0.before" bs=446 count=1 status=none
+    sed -E -e "s/^(last-lba: )[0-9]+/\\1$((IMG_BYTES / 512 - 34))/" \
+           -e "s/^($(printf '%s' "$IMG" | sed 's/[.\/]/\\&/g')2 *: *start= *[0-9]+, size= *)[0-9]+/\\1$P2_SIZE/" "$W/table.before" >"$W/table.after"
+    grep -q "size= *$P2_SIZE," "$W/table.after" || die "the partition table dump has no p2 line to change"
+    sfdisk -q --no-reread --no-tell-kernel --wipe never --wipe-partitions never "$IMG" <"$W/table.after" || die "sfdisk could not write the grown partition table"
+    dd if="$W/sector0.before" of="$IMG" bs=446 count=1 conv=notrunc status=none
+    changed=4
+  fi
+  sfdisk -d "$IMG" >"$W/table.now" 2>/dev/null || die "the grown partition table can't be read"
+  # Only p2's size (and on GPT the last usable sector) may differ from what ROCKNIX shipped.
+  [ "$(diff "$W/table.before" "$W/table.now" | grep -c '^[<>]')" = "$changed" ] ||
+    { diff "$W/table.before" "$W/table.now" >&2; die "the grown partition table differs in more than p2's size"; }
+  rm -f "$W/table.before" "$W/table.after" "$W/table.now" "$W/sector0.before"
 }
 
 case ${1:-} in

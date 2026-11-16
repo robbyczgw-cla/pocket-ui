@@ -14,16 +14,16 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 
 use crate::library::SysInfo;
-#[cfg(not(target_os = "android"))]
+#[cfg(not(all(target_os = "android", not(feature = "handheld"))))]
 use crate::systems_grid::Bios;
 
 /// Findings kept per group; the rest are counted (`Report::more`).
 pub const MAX_PER_GROUP: usize = 200;
 /// A BIOS file larger than this is not hashed.
-#[cfg(not(target_os = "android"))]
+#[cfg(not(all(target_os = "android", not(feature = "handheld"))))]
 const MAX_BIOS_BYTES: u64 = 128 << 20;
 /// Directory entries looked at per folder of a system.
-#[cfg(not(target_os = "android"))]
+#[cfg(not(all(target_os = "android", not(feature = "handheld"))))]
 const MAX_ENTRIES: usize = 50_000;
 
 /// What the green result says when the look at files stopped at `MAX_ENTRIES` (`Report::capped`).
@@ -124,15 +124,31 @@ impl Report {
         self.findings.iter().all(|f| f.group == Group::Tips)
     }
 
-    /// Include the systems the shelf had to leave out, with the entry's place in the original file.
+    /// Include what the system list cost: the whole list given up (the shelf runs on the built-in one) and the systems the
+    /// shelf had to leave out, with the entry's place in the original file.
     #[cfg(not(all(target_os = "android", not(feature = "handheld"))))]
     pub fn note_system_list(&mut self, path: &Path) {
-        let Ok(issues) = crate::library::system_list_issues(path) else { return };
-        if issues.is_empty() { return; }
+        use crate::library::SystemListFallback as Why;
+        let status = crate::library::system_list_status(path);
+        if status.is_clean() { return; }
         let old = std::mem::take(self);
         let mut found = Findings::default();
         for f in old.findings { found.add(f); }
-        for issue in issues {
+        if let Some(why) = &status.fallback {
+            let what = match why {
+                Why::Missing => "The system list is missing, so pocket-ui uses its built-in list.",
+                Why::Unreadable(_) => "The system list can't be read, so pocket-ui uses its built-in list.",
+                Why::NoSystems => "The system list has no system in it, so pocket-ui uses its built-in list.",
+                Why::AllBroken => "Every entry of the system list is damaged, so pocket-ui uses its built-in list.",
+            }.to_string();
+            found.add(Finding {
+                group: Group::Access, name: "es_systems.cfg".into(), system: String::new(),
+                what,
+                todo: "Games in their standard folders show anyway. To use your own list, fix this file or put a good one back, then scan your games again.".into(),
+                place: Some(path.display().to_string()), fix: None,
+            });
+        }
+        for issue in status.skipped {
             found.add(Finding {
                 group: Group::Access, name: issue.name, system: String::new(),
                 what: "One system was left out because its entry can't be read.".into(),
@@ -161,7 +177,7 @@ impl Report {
 }
 
 /// A BIOS file pocket-ui knows, as libretro-database's System.dat lists it.
-#[cfg(not(target_os = "android"))]
+#[cfg(not(all(target_os = "android", not(feature = "handheld"))))]
 struct Known {
     name: &'static str,
     size: u64,
@@ -170,7 +186,7 @@ struct Known {
 
 /// One line per system: its known-good BIOS files, and for a system that plays without one the sentence the tip starts
 /// with. A system without a line has its files named by `hostsys`, or none to check by hash (NAOMI's zips differ by packer).
-#[cfg(not(target_os = "android"))]
+#[cfg(not(all(target_os = "android", not(feature = "handheld"))))]
 struct SystemBios {
     systems: &'static [&'static str],
     files: &'static [Known],
@@ -178,17 +194,17 @@ struct SystemBios {
 }
 
 /// The known file with this size and checksum.
-#[cfg(not(target_os = "android"))]
+#[cfg(not(all(target_os = "android", not(feature = "handheld"))))]
 fn known_as(files: &[Known], size: u64, crc: u32) -> Option<&Known> {
     files.iter().find(|k| k.size == size && k.crc == crc)
 }
 
-#[cfg(not(target_os = "android"))]
+#[cfg(not(all(target_os = "android", not(feature = "handheld"))))]
 const fn k(name: &'static str, size: u64, crc: u32) -> Known {
     Known { name, size, crc }
 }
 
-#[cfg(not(target_os = "android"))]
+#[cfg(not(all(target_os = "android", not(feature = "handheld"))))]
 const KNOWN_BIOS: &[SystemBios] = &[
     SystemBios {
         systems: &["psx"],
@@ -222,7 +238,7 @@ const KNOWN_BIOS: &[SystemBios] = &[
 
 /// The systems ROCKNIX's H700 image has no emulator for (docs/user/getting-started.md, "What works, what is hidden"), by
 /// the plain folder names people give them.
-#[cfg(not(target_os = "android"))]
+#[cfg(not(all(target_os = "android", not(feature = "handheld"))))]
 const NOT_ON_H700: &[(&str, &str)] = &[
     ("ps2", "PlayStation 2"),
     ("playstation2", "PlayStation 2"),
@@ -294,7 +310,7 @@ fn zeros_inside(files: &dyn Files, path: &Path, len: u64) -> bool {
 }
 
 /// The first `MAX_ENTRIES` entries of a folder; `capped` is set when there were more.
-#[cfg(not(target_os = "android"))]
+#[cfg(not(all(target_os = "android", not(feature = "handheld"))))]
 fn read_capped(dir: &Path, capped: &mut bool) -> Vec<std::fs::DirEntry> {
     let mut it = std::fs::read_dir(dir).into_iter().flatten().flatten();
     let first: Vec<_> = it.by_ref().take(MAX_ENTRIES).collect();
@@ -355,12 +371,12 @@ pub fn breath(stop: &AtomicBool, n: usize) -> Option<()> {
 }
 
 /// The handheld's card.
-#[cfg(not(target_os = "android"))]
+#[cfg(not(all(target_os = "android", not(feature = "handheld"))))]
 struct Disk<'a> {
     roms: &'a Path,
 }
 
-#[cfg(not(target_os = "android"))]
+#[cfg(not(all(target_os = "android", not(feature = "handheld"))))]
 impl Files for Disk<'_> {
     fn size(&self, path: &Path) -> Option<u64> {
         std::fs::metadata(path).ok().filter(|m| m.is_file()).map(|m| m.len())
@@ -381,7 +397,7 @@ impl Files for Disk<'_> {
     }
 }
 
-#[cfg(not(target_os = "android"))]
+#[cfg(not(all(target_os = "android", not(feature = "handheld"))))]
 const HANDHELD: Words = Words {
     copy_again: "Copy the game to the SD card again.",
     empty_todo: "A copy or a download stopped early. Copy the game to the SD card again.",
@@ -392,7 +408,7 @@ const HANDHELD: Words = Words {
 };
 
 /// What the check is given: the App's lists, so what counts as a game is what the shelf says.
-#[cfg(not(target_os = "android"))]
+#[cfg(not(all(target_os = "android", not(feature = "handheld"))))]
 pub struct Input {
     pub catalog: Vec<SysInfo>,
     /// The games on the shelf per system id, hidden ones left out.
@@ -406,7 +422,7 @@ pub struct Input {
 }
 
 /// Collects the findings and how far the work has come.
-#[cfg(not(target_os = "android"))]
+#[cfg(not(all(target_os = "android", not(feature = "handheld"))))]
 struct Run<'a> {
     input: &'a Input,
     disk: Disk<'a>,
@@ -420,7 +436,7 @@ struct Run<'a> {
 }
 
 /// Goes through the card. None: stopped.
-#[cfg(not(target_os = "android"))]
+#[cfg(not(all(target_os = "android", not(feature = "handheld"))))]
 pub fn check(input: &Input, stop: &AtomicBool, progress: &mut dyn FnMut(usize, usize, &str)) -> Option<Report> {
     let total = input.shelf.iter().map(|(_, g)| g.len()).sum();
     let mut run = Run { input, disk: Disk { roms: &input.roms }, stop, progress, done: 0, total, found: Findings::default(), blocked_systems: HashSet::new(), blocked_games: HashSet::new() };
@@ -433,7 +449,7 @@ pub fn check(input: &Input, stop: &AtomicBool, progress: &mut dyn FnMut(usize, u
     Some(run.found.report(total, total - blocked_by_system - blocked_alone))
 }
 
-#[cfg(not(target_os = "android"))]
+#[cfg(not(all(target_os = "android", not(feature = "handheld"))))]
 impl Run<'_> {
     fn add(&mut self, f: Finding) {
         self.found.add(f);
@@ -853,7 +869,7 @@ fn twins(found: &mut Findings, files: &dyn Files, words: &Words, info: &SysInfo,
 }
 
 /// CRC-32 of a file, chunk by chunk. Outer None: stopped; inner None: can't be read.
-#[cfg(not(target_os = "android"))]
+#[cfg(not(all(target_os = "android", not(feature = "handheld"))))]
 fn crc_of(path: &Path, stop: &AtomicBool) -> Option<Option<u32>> {
     let Ok(mut f) = std::fs::File::open(path) else { return Some(None) };
     let mut hasher = crc32fast::Hasher::new();
@@ -991,14 +1007,14 @@ fn game_tag_ext(ext: &str) -> bool {
     ext.chars().all(|c| c.is_ascii_digit()) || ext.len() < 2
 }
 
-#[cfg(not(target_os = "android"))]
+#[cfg(not(all(target_os = "android", not(feature = "handheld"))))]
 fn is_litter(path: &Path) -> bool {
     path.file_name().and_then(|n| n.to_str()).is_some_and(crate::library::computer_litter)
 }
 
 /// Where to copy a missing BIOS file on this model: over the file share where there is Wi-Fi (`bios` is on the share),
 /// into `roms/bios` on a second card where the model has a slot.
-#[cfg(not(target_os = "android"))]
+#[cfg(not(all(target_os = "android", not(feature = "handheld"))))]
 fn bios_copy_way() -> &'static str {
     let d = crate::device::current();
     match (d.has_wifi(), d.has_second_card_slot()) {
@@ -1213,6 +1229,22 @@ mod tests {
         assert!(r.all_good());
         assert_eq!((r.total, r.ready), (2, 2));
         assert_eq!(r.summary(), "All good");
+    }
+
+    /// GitHub issue #4: a player's own cheat files (beside the game, in a cheats folder, RetroArch's `cheats/<system>/`) are
+    /// kept with the games; the check says nothing about them, not even "unknown file".
+    #[test]
+    fn cheat_files_are_no_unknown_games() {
+        let c = Card::new("cht-files");
+        c.put("gba/Metroid Fusion (USA).gba", b"game");
+        c.put("gba/Metroid Fusion (USA).cht", b"cheat0_desc = \"x\"\ncheat0_code = \"AAAA\"\n");
+        c.put("gba/METROID FUSION (USA).CHT", b"x");
+        c.put("gba/cheats/Metroid Fusion (USA).cht", b"x");
+        c.put("cheats/gba/Metroid Fusion (USA).cht", b"x");
+        c.put("cheats/mGBA/Metroid Fusion (USA).cht", b"x");
+        let r = c.report();
+        assert_eq!(r.findings, Vec::new());
+        assert_eq!((r.total, r.ready), (1, 1));
     }
 
     #[test]

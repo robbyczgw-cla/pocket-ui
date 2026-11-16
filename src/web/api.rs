@@ -71,6 +71,9 @@ pub struct Conn {
     /// When the supervisor accepted it: the head's deadline counts from here, so a connection that waited in the
     /// queue has had its time (review F2).
     pub accepted: Instant,
+    /// It came in on the Wi-Fi socket: a browser on the home network, which always pairs with the code (Tailscale's
+    /// `whois` is never asked about it).
+    pub lan: bool,
 }
 
 /// Who is asking.
@@ -241,7 +244,8 @@ impl Ctx {
         w
     }
 
-    /// Who is asking: a paired browser by its cookie, else (when the player allows it) the owner's tailnet device.
+    /// Who is asking: a paired browser by its cookie, else (when the player allows it, and only over Tailscale) the
+    /// owner's tailnet device.
     pub fn principal(&self, conn: &Conn, req: &Request) -> Option<Principal> {
         // Every cookie of that name is tried: one set for a wider domain by another site can't hide the real one
         // (review F16).
@@ -250,7 +254,7 @@ impl Ctx {
                 return Some(Principal::Browser(b));
             }
         }
-        if self.shared.prefs().trust_tailnet {
+        if self.shared.prefs().trust_tailnet && !conn.lan {
             let me = self.me()?;
             let peer = self.whois(conn.peer)?;
             if net::owner_allows(&me, &peer) {
@@ -264,7 +268,8 @@ impl Ctx {
     fn host_ok(&self, req: &Request) -> bool {
         let Some(host) = req.host() else { return false };
         let listening = self.shared.listening.lock().unwrap().clone();
-        let names = self.me().map(|m| m.names()).unwrap_or_default();
+        let mut names = self.me().map(|m| m.names()).unwrap_or_default();
+        names.extend(self.shared.lan_name.lock().unwrap().clone());
         net::host_allowed(&host, &names, &listening)
     }
 
@@ -273,7 +278,8 @@ impl Ctx {
         let Some(host) = req.host() else { return false };
         let mut listening = self.shared.listening.lock().unwrap().clone();
         let me = self.me();
-        let names = me.as_ref().map(|m| m.names()).unwrap_or_default();
+        let mut names = me.as_ref().map(|m| m.names()).unwrap_or_default();
+        names.extend(self.shared.lan_name.lock().unwrap().clone());
         // The node's own tailnet addresses: on the Brick's userspace Tailscale the socket listens on 127.0.0.1 and the browser comes by 100.x.
         listening.extend(me.iter().flat_map(|m| m.addrs.iter().map(|a| SocketAddr::new(*a, 0))));
         net::host_allowed(&host, &names, &listening)
@@ -453,7 +459,7 @@ fn pair(ctx: &Ctx, conn: &Conn, req: &Request, body: &mut impl Read) -> Response
     match tried {
         Tried::Paired => {
             let mut name = auth::browser_name(req.header("user-agent").unwrap_or(""));
-            if let Some(w) = ctx.whois(conn.peer).filter(|w| !w.device.is_empty()) {
+            if let Some(w) = Some(conn).filter(|c| !c.lan).and_then(|c| ctx.whois(c.peer)).filter(|w| !w.device.is_empty()) {
                 name = format!("{name} ({})", w.device);
             }
             let token = ctx.shared.sessions.lock().unwrap().pair(&name);
@@ -583,6 +589,9 @@ fn library_overview(ctx: &Ctx) -> Response {
             "stickers": stickers,
             "shelves": shelves,
             "shelvesReady": have_index,
+            // The pictures of the player's own shelf (Settings → Games → Screenshots → "My shelf as a picture"), newest
+            // first: only the time of each, served by `/api/shot?shelf=1&at=`.
+            "shelfPictures": crate::screenshot::list(&ctx.roots.screenshots, crate::share_shelf::FOLDER, crate::share_shelf::NAME).into_iter().take(SHOTS_MAX).map(|e| e.at).collect::<Vec<_>>(),
             "noteMax": crate::library_meta::NOTE_MAX,
             "shelfMax": crate::curator::prefs::SHELF_NAME_MAX,
         }),
@@ -725,12 +734,17 @@ fn cover(ctx: &Ctx, req: &Request) -> Result<Response, Response> {
 /// only; `at` is checked to be exactly such a time, so nothing else on the card can be asked for.
 fn shot(ctx: &Ctx, req: &Request) -> Result<Response, Response> {
     let none = || Response::error(404, "No screenshot.");
-    let lib = ctx.library();
-    let (s, g) = req.query("id").and_then(|id| lib.game(id)).ok_or_else(none)?;
     let at = req.query("at").ok_or_else(none)?;
-    let game = &lib.systems[s].games[g];
-    let stem = game.path.file_stem().and_then(|s| s.to_str()).unwrap_or_default();
-    let path = crate::screenshot::find(&ctx.roots.screenshots, &lib.systems[s].name, stem, at).ok_or_else(none)?;
+    let path = if req.query("shelf").is_some() {
+        // A picture of the player's shelf: no game behind it.
+        crate::screenshot::find(&ctx.roots.screenshots, crate::share_shelf::FOLDER, crate::share_shelf::NAME, at).ok_or_else(none)?
+    } else {
+        let lib = ctx.library();
+        let (s, g) = req.query("id").and_then(|id| lib.game(id)).ok_or_else(none)?;
+        let game = &lib.systems[s].games[g];
+        let stem = game.path.file_stem().and_then(|s| s.to_str()).unwrap_or_default();
+        crate::screenshot::find(&ctx.roots.screenshots, &lib.systems[s].name, stem, at).ok_or_else(none)?
+    };
     // The size first, like the covers: a huge file in that folder is never read into memory.
     let small = std::fs::metadata(&path).is_ok_and(|m| m.is_file() && m.len() <= SHOT_MAX);
     let mut bytes = Vec::new();

@@ -22,10 +22,20 @@ The manually built comparison has development version strings; release labels ca
 and conservatively counts directories. It gives 730 blocks = 2.852 MiB free after the change, versus 231 blocks =
 0.902 MiB on the same source with thin LTO. Historical 0.3.1 left about 1.05 MiB in the actual images; subsequent
 code growth accounts for the smaller comparison baseline here. This is a budget calculation, not a newly built image.
-The release-program budget now requires 512 blocks = 2 MiB (or a larger pinned image minimum). Old release
-binaries physically fit but deliberately fail that reserve for future releases. The finished-image/receipt pin
+The release-program budget wishes for 512 blocks = 2 MiB on top (or a larger pinned image minimum); since 14.11.2026 less than that is
+a NOTE (raise STORAGE generously), only programs that do not fit fail. The finished-image/receipt pin
 stays at 128 blocks so existing immutable 0.3.1 image attestations remain valid. The test first failed with the old
 release floor; it checks the measured program sizes and both sides of the new boundary.
+
+## STORAGE is 128 MiB since 14.11.2026
+
+The numbers above are for ROCKNIX's 32 MiB STORAGE. pocket-ui ARM then grew 18.46 → 18.94 MB in 0.4.2 (almost all the Portuguese
+table), main was 27 blocks over the limit on 14.11., and the next releases would have needed new savings every time. The decision was
+to make the image's STORAGE 128 MiB instead (`pins.sh` `P2_SIZE`, `build.sh` `grow_image`, [SD-IMAGE.md](SD-IMAGE.md) "STORAGE room"):
+`storage-budget.sh` now gives 24,549 blocks (95 MiB) to spare for main's programs (pocket-ui 20,140,616, pocket-core 6,222,048,
+pocket-splash 2,418,144 bytes), still asking for 512 blocks (2 MiB) on top. A prototype that packed the translation tables with
+zlib at build time (`feat/i18n-compressed`, not merged) saved 2.40 MB over the three programs (28.78 → 26.38 MB) and left 560
+blocks in the old 32 MiB: enough for one more release, not for many.
 
 ## Where the bytes were
 

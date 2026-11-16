@@ -1,11 +1,13 @@
 #!/bin/sh
-# Offline checks of a pocket-ui SD image of a family that boots ROCKNIX's own way: FAMILY=H700, SM8550 or RK3566 (the other half
+# Offline checks of a pocket-ui SD image of a family that boots ROCKNIX's own way: FAMILY=H700, SM8550, RK3566 or RK3326 (the other half
 # of scripts/image/check.sh). Runs in the pocket-image-tools container (scripts/check-image-family.sh starts it), with the
 # repository at /repo. Only reads the image: the FAT partition through mtools, STORAGE as a copy.
 #   FAMILY=H700 check-h700.sh IMG VERSION WORKDIR MODEL
 set -u
 . /repo/scripts/image/pins.sh
 . /repo/scripts/image/grub-checks.sh
+. /repo/scripts/image/p2-table.sh
+. /repo/scripts/image/tools.sh
 IMG=$1
 VERSION=$2
 W=$3
@@ -13,6 +15,9 @@ MODEL=$4
 FAMILY=${FAMILY:-H700}
 FAM=$(echo "$FAMILY" | tr 'A-Z' 'a-z')
 family_pins "$FAMILY"
+# The RK3326 device-test card (pins.sh is_devtest): the USB network preset, SSH on and a public key; never on any other card.
+DEVTEST=0
+[ "$FAMILY" != RK3326 ] || ! is_devtest RK3326 "$MODEL" || DEVTEST=1
 # This model's card makes a GAMES drive (pins.sh); every other one is ROCKNIX's layout, with none of its files on it.
 GAMES=0
 has_games_drive "$FAMILY" "$MODEL" && GAMES=1
@@ -63,34 +68,47 @@ mkdir -p "$W/fat" "$W/lists"
 
 echo "== partition table"
 sfdisk -d "$IMG" >"$W/lists/sfdisk" 2>/dev/null
-part() { grep "^$IMG$1 " "$W/lists/sfdisk" | sed 's/^[^:]*: *//; s/, uuid=[^,]*//'; }
+part() { grep "^$IMG$1 " "$W/lists/sfdisk" | sed 's/^[^:]*: *//; s/, uuid=[^,]*//' | tr -s ' '; }
 check "exactly two partitions" '[ "$(grep -c "^$IMG[0-9]" "$W/lists/sfdisk")" = 2 ]'
-if [ "$FAMILY" = H700 ]; then
-check "MBR (dos), as ROCKNIX's H700 image" 'grep -qx "label: dos" "$W/lists/sfdisk"'
+if [ "$FAMILY" = H700 ] || [ "$FAMILY" = RK3326 ]; then
+check "MBR (dos), as ROCKNIX's $FAMILY image" 'grep -qx "label: dos" "$W/lists/sfdisk"'
 check "p1 FAT32 (LBA), bootable, as in ROCKNIX $ROCKNIX_TAG" \
-  '[ "$(part 1)" = "start=       $P1_START, size=     $P1_SIZE, type=c, bootable" ]'
-check "p2 Linux, as in ROCKNIX $ROCKNIX_TAG" '[ "$(part 2)" = "start=     $P2_START, size=       $P2_SIZE, type=83" ]'
+  '[ "$(part 1)" = "start= $P1_START, size= $P1_SIZE, type=c, bootable" ]'
+check "p2 Linux, start as in ROCKNIX $ROCKNIX_TAG, size $P2_SIZE sectors (pins.sh: 128 MiB)" '[ "$(part 2)" = "start= $P2_START, size= $P2_SIZE, type=83" ]'
 else
 check "GPT, as ROCKNIX's $FAMILY image" 'grep -qx "label: gpt" "$W/lists/sfdisk"'
 [ $EFI = 0 ] || echo "     (p1 typed as EFI system partition: Retroid's \"UEFI\" starts GRUB from it)"
 check "p1 \"system\", as in ROCKNIX $ROCKNIX_TAG (type $P1_TYPE)" \
-  '[ "$(part 1)" = "start=       $P1_START, size=     $P1_SIZE, type=$P1_TYPE, name=\"system\", attrs=\"LegacyBIOSBootable\"" ]'
-check "p2 \"storage\", as in ROCKNIX $ROCKNIX_TAG" '[ "$(part 2)" = "start=     $P2_START, size=       $P2_SIZE, type=0FC63DAF-8483-4772-8E79-3D69D8477DE4, name=\"storage\"" ]'
+  '[ "$(part 1)" = "start= $P1_START, size= $P1_SIZE, type=$P1_TYPE, name=\"system\", attrs=\"LegacyBIOSBootable\"" ]'
+check "p2 \"storage\", start as in ROCKNIX $ROCKNIX_TAG, size $P2_SIZE sectors (pins.sh: 128 MiB)" '[ "$(part 2)" = "start= $P2_START, size= $P2_SIZE, type=0FC63DAF-8483-4772-8E79-3D69D8477DE4, name=\"storage\"" ]'
 fi
-check "image size unchanged (2,198,863,872 bytes)" '[ "$(stat -c %s "$IMG")" = 2198863872 ]'
+check "image size: ROCKNIX's, plus the 96 MiB STORAGE grew by ($IMG_BYTES bytes, pins.sh)" '[ "$(stat -c %s "$IMG")" = "$IMG_BYTES" ]'
+check "partition table verifies, second GPT/last partition end inside the image (sfdisk -V)" 'sfdisk -V "$IMG" >/dev/null 2>&1'
 # ROCKNIX's U-Boot sits before the first partition at 8 KiB (dd seek=8, bootloader/update.sh): the card's boot chain.
 tail -c +8193 "$IMG" | head -c 666105 >"$W/lists/uboot"
 DDR3=0
 [ "$FAMILY" != H700 ] || ! is_ddr3 H700 "$MODEL" || DDR3=1
 if [ "$FAMILY" = H700 ] && [ $DDR3 = 0 ]; then
   check "ROCKNIX's DDR4 U-Boot is 8 KiB into the card, unchanged" '[ "$(md5 "$W/lists/uboot")" = f7008775f3e7b5fa45f869288752d3a3 ]'
-  check "the first 16 MiB (partition table, U-Boot) are the DDR4 image's" '[ "$(head -c $((P1_START * 512)) "$IMG" | md5sum | cut -d" " -f1)" = "$H700_LOADER_MD5" ]'
+  check "the first 16 MiB (partition table, U-Boot) are the DDR4 image's, but for p2's size" '[ "$(loader_md5 "$IMG")" = "$H700_LOADER_MD5" ]'
 elif [ $DDR3 = 1 ]; then
-  check "ROCKNIX's DDR3 U-Boot is 8 KiB into the card, unchanged (the whole first 16 MiB are the DDR3 image's)" '[ "$(head -c $((P1_START * 512)) "$IMG" | md5sum | cut -d" " -f1)" = "$H700_DDR3_LOADER_MD5" ]'
+  check "ROCKNIX's DDR3 U-Boot is 8 KiB into the card, unchanged (the whole first 16 MiB are the DDR3 image's, but for p2's size)" '[ "$(loader_md5 "$IMG")" = "$H700_DDR3_LOADER_MD5" ]'
 fi
-# RK3566: ROCKNIX's idbloader and U-Boot sit in the 16 MiB before the first partition, with the GPT.
-[ "$FAMILY" != RK3566 ] || check "ROCKNIX's idbloader, U-Boot and GPT (the card's first 16 MiB) unchanged" \
-  '[ "$(head -c $((P1_START * 512)) "$IMG" | md5sum | cut -d" " -f1)" = "$RK3566_LOADER_MD5" ]'
+# RK3566: ROCKNIX's idbloader and U-Boot sit in the 16 MiB before the first partition, with the GPT (the Generic card: the
+# Generic image's).
+GENERIC=0
+[ "$FAMILY" != RK3566 ] || ! is_generic RK3566 "$MODEL" || GENERIC=1
+if [ "$FAMILY" = RK3566 ] && [ $GENERIC = 0 ]; then
+  check "ROCKNIX's idbloader, U-Boot and GPT (the card's first 16 MiB) unchanged, but for p2's size" \
+    '[ "$(loader_md5 "$IMG")" = "$RK3566_LOADER_MD5" ]'
+elif [ $GENERIC = 1 ]; then
+  check "the Generic image's idbloader, U-Boot (anbernic-rgxx3) and GPT (the card's first 16 MiB) unchanged, but for p2's size" \
+    '[ "$(loader_md5 "$IMG")" = "$RK3566_GENERIC_LOADER_MD5" ]'
+fi
+
+# RK3326: ROCKNIX's legacy U-Boot (image "a") in the 16 MiB before the first partition.
+[ "$FAMILY" != RK3326 ] || check "ROCKNIX's legacy U-Boot and the MBR (the card's first 16 MiB) unchanged, but for p2's size" \
+  '[ "$(loader_md5 "$IMG")" = "$RK3326_LOADER_MD5" ]'
 
 echo "== FAT partition (/flash)"
 check "label ROCKNIX (boot=LABEL=ROCKNIX)" 'mlabel -i "$FAT" -s :: 2>/dev/null | grep -q "Volume label is ROCKNIX"'
@@ -135,6 +153,15 @@ if [ "$FAMILY" = RK3566 ]; then
   printf 'overlays/rk3566-undervolt-cpu-l%s.dtbo\n' 1 2 3 >>"$W/lists/fat.expected.new"
   mv "$W/lists/fat.expected.new" "$W/lists/fat.expected"
 fi
+# RK3326: the trees in the FAT root (FDTDIR /), boot.scr, ROCKNIX's extlinux variants and READMEs, and r36s-panels/; no overlay.
+if [ "$FAMILY" = RK3326 ]; then
+  grep -Ev '^(device_trees/|dtb\.img|overlays/sun50i-)' "$W/lists/fat.expected" >"$W/lists/fat.expected.new"
+  printf '%s\n' boot.scr extlinux/README.txt extlinux/extlinux.conf.g350 extlinux/extlinux.conf.r36s extlinux/extlinux.conf.rgb20s \
+    overlays/README.txt stock/ stock/README.txt r36s-panels/ r36s-panels/README.txt >>"$W/lists/fat.expected.new"
+  echo "$RK3326_PANELS" | awk 'NF { print "r36s-panels/" $1 ".dtbo" }' >>"$W/lists/fat.expected.new"
+  mdir -b -i "$FAT" ::/ 2>/dev/null | sed -n 's#^::/\(.*\.dtb\)$#\1#p' >>"$W/lists/fat.expected.new"
+  mv "$W/lists/fat.expected.new" "$W/lists/fat.expected"
+fi
 # The firmware's terms, as in the repository.
 echo "pocket-ui-info/firmware-licences/" >>"$W/lists/fat.expected"
 for f in $(ls "/repo/deploy/image/firmware-licences-$FAM") $FAM_FW_SHARED; do echo "pocket-ui-info/firmware-licences/$f" >>"$W/lists/fat.expected"; done
@@ -151,7 +178,7 @@ check "exactly the expected files (ROCKNIX's, dtb.img, the hooks, pocket-ui-info
 check "rocknix-licenses/: ROCKNIX's LICENSE.md and its licenses folder ($ROCKNIX_LICENSE_FILES files)" \
   '[ "$(grep -c "^pocket-ui-info/rocknix-licenses/.*[^/]$" "$W/lists/fat")" = "$ROCKNIX_LICENSE_FILES" ] && grep -qx "pocket-ui-info/rocknix-licenses/LICENSE.md" "$W/lists/fat" && grep -qx "pocket-ui-info/rocknix-licenses/licenses/GPL-2.0-only.txt" "$W/lists/fat"'
 for f in KERNEL KERNEL.md5 SYSTEM.md5 dtb.img extlinux/extlinux.conf mount-storage.sh post-flash.sh games-first-start.sh \
-  pocket-ui-info/README.txt pocket-ui-info/pocket-ui-os.txt; do
+  pocket-ui-info/README.txt pocket-ui-info/pocket-ui-os.txt boot.scr extlinux/extlinux.conf.r36s; do
   mkdir -p "$W/fat/$(dirname "$f")"
   mcopy -n -i "$FAT" "::/$f" "$W/fat/$f" 2>/dev/null
 done
@@ -188,7 +215,7 @@ for k in ssh.enabled samba.enabled syncthing.enabled; do
 done
 check "no SSH keys or host keys in SYSTEM (usr/config/ssh/authorized_keys, ssh_host_*)" \
   '! grep -Eq "(^usr/config/ssh/authorized_keys|ssh_host_.*key)" "$W/lists/system"'
-if [ "$FAMILY" = H700 ] || [ "$FAMILY" = RK3566 ]; then
+if [ "$FAMILY" = H700 ] || [ "$FAMILY" = RK3566 ] || [ "$FAMILY" = RK3326 ]; then
 [ "$FAMILY" != H700 ] || check "the kernel command line does not turn SSH on (no ssh word)" '! grep -Eq "^ *APPEND .* ssh( |$)" "$W/fat/extlinux/extlinux.conf"'
 check "the only BIOS files in SYSTEM are DraStic's open replacement pair (BSD, drastic_bios_arm7/arm9.bin)" \
   '[ "$(grep -i "bios.*\\.bin$" "$W/lists/system" | sort | tr "\n" " ")" = "usr/config/drastic/system/drastic_bios_arm7.bin usr/config/drastic/system/drastic_bios_arm9.bin " ]'
@@ -222,10 +249,12 @@ fi
 rm -f "$W/SYSTEM"
 
 echo "== boot files"
+# check_tree_firmware TREE [none-ok]: none-ok for a tree that asks for no firmware at all (the R36S's: no Wi-Fi, no Bluetooth).
 check_tree_firmware() {
-  dtc -q -I dtb -O dts "$1" 2>/dev/null | python3 -I /repo/scripts/image/tree-firmware.py >"$W/lists/tree-firmware"
+  dtc -q -I dtb -O dts "$1" 2>/dev/null | python3 -I /repo/scripts/image/tree-firmware.py | sed '/^$/d' >"$W/lists/tree-firmware"
+  pu_none_ok=${2:-} pu_tree=$1
   check "every firmware the tree asks for ($(wc -l <"$W/lists/tree-firmware") files) is in SYSTEM" \
-    '[ -s "$W/lists/tree-firmware" ] && ( while read -r f; do grep -qx "usr/lib/kernel-overlays/base/lib/firmware/$f" "$W/lists/system" || { echo "     missing: $f"; exit 1; }; done <"$W/lists/tree-firmware" )'
+    '{ [ -s "$W/lists/tree-firmware" ] || { [ "$pu_none_ok" = none-ok ] && fdtget -t s "$pu_tree" / model >/dev/null 2>&1; }; } && ( while read -r f; do grep -qx "usr/lib/kernel-overlays/base/lib/firmware/$f" "$W/lists/system" || { echo "     missing: $f"; exit 1; }; done <"$W/lists/tree-firmware" )'
 }
 boot_sm4450() {
   mkdir -p "$W/fat/dtbs" "$W/fat/loader/entries"
@@ -273,6 +302,23 @@ check "dtb.img is a device tree ROCKNIX ships and this model's only: no other mo
 }
 boot_rk3566() {
 X=$W/fat/extlinux/extlinux.conf
+if [ $GENERIC = 1 ]; then
+# The Generic card: the Generic image's extlinux.conf as it is. Its U-Boot finds the handheld by an ADC value and sets fdtfile;
+# FDTDIR makes extlinux take that tree from device_trees/.
+check "extlinux.conf is the Generic image's, unchanged (md5 $RK3566_GENERIC_EXTLINUX_MD5): LINUX /KERNEL, FDTDIR /device_trees, no FDT line" \
+  '[ "$(md5 "$X")" = "$RK3566_GENERIC_EXTLINUX_MD5" ] && grep -qx "  LINUX /KERNEL" "$X" && grep -qx "  FDTDIR /device_trees" "$X" && ! grep -q "^ *FDT " "$X"'
+check "the kernel command line does not turn SSH on (no ssh word)" '! grep -Eq "^ *APPEND .* ssh( |$)" "$X"'
+check "no GRUB, no EFI folder, no boot/ folder, no dtb.img (ROCKNIX's U-Boot boots it)" '! grep -Eq "^(EFI|boot)/|^dtb\.img$" "$W/lists/fat"'
+while read -r t m n; do
+  [ -n "$t" ] || continue
+  mcopy -n -i "$FAT" "::/device_trees/$t.dtb" "$W/fat/tree.dtb" 2>/dev/null
+  check "device_trees/$t.dtb is ROCKNIX's (md5 $m), model $(echo "$n" | tr _ ' ') as pocket-ui's profile" \
+    '[ "$(md5 "$W/fat/tree.dtb")" = "$m" ] && [ "$(fdtget -t s "$W/fat/tree.dtb" / model)" = "$(echo "$n" | tr _ " ")" ]'
+done <<TREES
+$RK3566_GENERIC_TREES
+TREES
+return
+fi
 # ROCKNIX's U-Boot reads extlinux/extlinux.conf. Ours is ROCKNIX's with one line changed: the FDT names this model's tree.
 check "extlinux.conf: LINUX /KERNEL, FDT /device_trees/$DTB_NAME.dtb, boot=LABEL=ROCKNIX disk=LABEL=STORAGE" \
   'grep -qx "  LINUX /KERNEL" "$X" && grep -qx "  FDT /device_trees/$DTB_NAME.dtb" "$X" && grep -Eq "^  APPEND boot=LABEL=ROCKNIX disk=LABEL=STORAGE " "$X"'
@@ -283,6 +329,37 @@ check "no GRUB, no EFI folder, no boot/ folder, no dtb.img (ROCKNIX's U-Boot boo
 mcopy -n -i "$FAT" "::/device_trees/$DTB_NAME.dtb" "$W/fat/tree.dtb" 2>/dev/null
 check "device_trees/$DTB_NAME.dtb is ROCKNIX's (md5 $DTB_MD5_WANT), model $DT_MODEL" \
   '[ "$(md5 "$W/fat/tree.dtb")" = "$DTB_MD5_WANT" ] && [ "$(fdtget -t s "$W/fat/tree.dtb" / model)" = "$DT_MODEL" ]'
+}
+boot_rk3326() {
+X=$W/fat/extlinux/extlinux.conf
+# ROCKNIX's legacy U-Boot runs boot.scr (no R36S branch), then extlinux.conf. Ours is ROCKNIX's with its "# FDT" comment made into
+# the R36S's FDT line, which is what ROCKNIX's own extlinux.conf.r36s says.
+check "boot.scr is ROCKNIX's (md5 $RK3326_BOOTSCR_MD5)" '[ "$(md5 "$W/fat/boot.scr")" = "$RK3326_BOOTSCR_MD5" ]'
+check "extlinux.conf: LINUX /KERNEL, FDT /$DTB_NAME.dtb (no space after it), FDTOVERLAYS /overlays/mipi-panel.dtbo, ROCKNIX's APPEND" \
+  'grep -qx "  LINUX /KERNEL" "$X" && [ "$(grep -c "^ *FDT " "$X")" = 1 ] && grep -qx "  FDT /$DTB_NAME.dtb" "$X" && grep -qx "  FDTOVERLAYS /overlays/mipi-panel.dtbo" "$X" && grep -Eq "^  APPEND boot=\\\$\{partition_boot\} disk=\\\$\{partition_storage\} " "$X"'
+check "extlinux.conf is ROCKNIX's with only that line changed (back to \"$RK3326_FDT_COMMENT\")" \
+  '[ "$(awk -v n="  FDT /$DTB_NAME.dtb" -v c="$RK3326_FDT_COMMENT" "\$0 == n { print c; next } { print }" "$X" | md5sum | cut -d" " -f1)" = "$RK3326_EXTLINUX_MD5" ]'
+check "that FDT line is the one in ROCKNIX's extlinux.conf.r36s" 'grep -qx "  FDT /$DTB_NAME.dtb" "$W/fat/extlinux/extlinux.conf.r36s"'
+check "the kernel command line does not turn SSH on (no ssh word)" '! grep -Eq "^ *APPEND .* ssh( |$)" "$X"'
+check "no GRUB, no EFI folder, no boot/ folder, no dtb.img, no overlays/mipi-panel.dtbo (the 2023 screen needs none)" \
+  '! grep -Eq "^(EFI|boot)/|^dtb\.img$|^overlays/mipi-panel\.dtbo$" "$W/lists/fat"'
+mcopy -n -i "$FAT" "::/$DTB_NAME.dtb" "$W/fat/tree.dtb" 2>/dev/null
+check "$DTB_NAME.dtb is ROCKNIX's (md5 $DTB_MD5_WANT), model $DT_MODEL, pad r36s_Gamepad" \
+  '[ "$(md5 "$W/fat/tree.dtb")" = "$DTB_MD5_WANT" ] && [ "$(fdtget -t s "$W/fat/tree.dtb" / model)" = "$DT_MODEL" ] && [ "$(fdtget -t s "$W/fat/tree.dtb" /odroidgo3-joypad joypad-name)" = r36s_Gamepad ]'
+check_tree_firmware "$W/fat/tree.dtb" none-ok
+mkdir -p "$W/fat/r36s-panels"
+while read -r p want; do
+  [ -n "$p" ] || continue
+  mcopy -n -i "$FAT" "::/r36s-panels/$p.dtbo" "$W/fat/r36s-panels/$p.dtbo" 2>/dev/null
+  check "r36s-panels/$p.dtbo is the pinned overlay and applies to the R36S tree" \
+    '[ "$(sha256sum "$W/fat/r36s-panels/$p.dtbo" | cut -d" " -f1)" = "$want" ] && fdtoverlay -i "$W/fat/tree.dtb" -o "$W/lists/applied.dtb" "$W/fat/r36s-panels/$p.dtbo" 2>/dev/null'
+done <<PANELS
+$RK3326_PANELS
+PANELS
+rm -f "$W/lists/applied.dtb"
+mcopy -n -i "$FAT" ::/r36s-panels/README.txt "$W/fat/r36s-panels/README.txt" 2>/dev/null
+check "r36s-panels/README.txt is deploy/image/r36s-panels-README.txt: copy one to overlays/mipi-panel.dtbo, delete it to go back" \
+  'same "$W/fat/r36s-panels/README.txt" /repo/deploy/image/r36s-panels-README.txt && grep -q "mipi-panel.dtbo" "$W/fat/r36s-panels/README.txt" && grep -q "delete overlays/mipi-panel.dtbo" "$W/fat/r36s-panels/README.txt"'
 }
 # The SM8550 Retroids' second way in (deploy/sd-efi-sm8550/): GRUB and the BLS entry start the Image unpacked from KERNEL with
 # the model's tree, internal UFS off, and KERNEL's own command line.
@@ -323,7 +400,7 @@ boot_sm8550_efi() {
   check "GRUB version recorded: $(cat "$W/fat/boot/grub/grub-efi-arm64-bin.version" 2>/dev/null)" 'grep -q "^grub-efi-arm64-bin " "$W/fat/boot/grub/grub-efi-arm64-bin.version"'
   rm -f "$W/lists/efi.img"* "$W/lists/efi-back.dtb"
 }
-case $FAMILY in H700) boot_h700 ;; SM8550) boot_sm8550 ;; SM4450) boot_sm4450 ;; RK3566) boot_rk3566 ;; esac
+case $FAMILY in H700) boot_h700 ;; SM8550) boot_sm8550 ;; SM4450) boot_sm4450 ;; RK3566) boot_rk3566 ;; RK3326) boot_rk3326 ;; esac
 check "KERNEL.md5 is KERNEL's" '[ "$(cut -d" " -f1 "$W/fat/KERNEL.md5")" = "$(md5 "$W/fat/KERNEL")" ]'
 check "initramfs hook mount-storage.sh is deploy/image/mount-storage.sh" 'same "$W/fat/mount-storage.sh" /repo/deploy/image/mount-storage.sh'
 check "initramfs hook post-flash.sh is deploy/image/post-flash.sh" 'same "$W/fat/post-flash.sh" /repo/deploy/image/post-flash.sh'
@@ -338,11 +415,30 @@ check "pocket-ui-info/pocket-ui-os.txt: $POCKET_OS_NAME $VERSION, for Settings >
 
 echo "== notes on the card (pocket-ui-info/README.txt)"
 R=$W/fat/pocket-ui-info/README.txt
-if [ "$FAMILY" = RK3566 ]; then
+if [ $GENERIC = 1 ]; then
+check "names the handhelds it is for, and that U-Boot picks the tree" 'grep -q "for the $DT_MODEL: SD card image" "$R" && grep -q "RG353M, RG353P, RG353PS, RG353V, RG353VS and RG503, Powkiddy RGB30" "$R" && grep -q "picks its device tree by itself" "$R"'
+check "clearly labels the card Experimental or a test image" 'image_test_warning "$R"'
+check "says the RG353M/P/V start it only with Android wiped from the eMMC, and that the card never writes there" \
+  'grep -q "only once Android has been wiped" "$R" && grep -q "never writes to the internal memory" "$R"'
+check "says where HOME is: the F key, the right stick on the RGB30 and RK2023" 'grep -q "F key on the Anbernics" "$R" && grep -q "right stick on the RGB30 and RK2023" "$R"'
+check "says nothing of the RG DS Plus's charging or of two screens" '! grep -q "3539" "$R" && ! grep -q "lower screen" "$R"'
+check "says the firmware not traced and the Mali driver's terms are open" 'grep -q "not traced" "$R" && grep -q "Mali" "$R"'
+elif [ "$FAMILY" = RK3566 ]; then
 check "names the model: $DT_MODEL, and that extlinux.conf names its tree device_trees/$DTB_NAME.dtb" 'grep -q "for the $DT_MODEL: SD card image" "$R" && grep -q "device_trees/$DTB_NAME.dtb" "$R"'
-check "says it is a test image, not a release" 'grep -q "test image" "$R"'
+check "clearly labels the card Experimental or a test image" 'image_test_warning "$R"'
 check "warns about charging (ROCKNIX PR #3539): weak 5 V chargers, charge fully under the original system first" 'grep -q "3539" "$R" && grep -q "5 V" "$R" && grep -q "original system" "$R"'
 check "says the firmware not traced and the Mali driver's terms are open" 'grep -q "not traced" "$R" && grep -q "Mali" "$R"'
+elif [ "$FAMILY" = RK3326 ]; then
+check "names the model: $DT_MODEL, and that extlinux.conf names its tree $DTB_NAME.dtb" 'grep -q "for the $DT_MODEL: SD card image" "$R" && grep -q "$DTB_NAME.dtb" "$R"'
+check "says it is a test card, not a release, never published" 'grep -q "private test card" "$R"'
+check "black screen: points to r36s-panels/ and overlays/mipi-panel.dtbo, and to stock/ for the original card's .dtb" 'grep -q "r36s-panels" "$R" && grep -q "overlays/mipi-panel.dtbo" "$R" && grep -q "stock/" "$R"'
+check "says there is no Wi-Fi: games by a second card or the computer, no updates over the air" 'grep -q "no Wi-Fi" "$R"'
+check "says the firmware not traced and the Mali driver's terms are open" 'grep -q "not traced" "$R" && grep -q "Mali" "$R"'
+if [ $DEVTEST = 1 ]; then
+check "the device-test notes: USB network, 169.254.170.2, SSH on with a key, not to be handed out" 'grep -q "169.254.170.2" "$R" && grep -q "DEVICE TEST" "$R" && grep -q "never hand" "$R"'
+else
+check "the normal card's notes say nothing of a device-test setup" '! grep -q "169.254.170.2" "$R" && ! grep -q "DEVICE TEST" "$R"'
+fi
 elif [ "$FAMILY" = H700 ]; then
 RAMW=DDR4
 [ $DDR3 = 0 ] || RAMW=DDR3
@@ -388,7 +484,10 @@ fi
 check "no #if lines of the notes' template left" '! grep -Eq "^#(if|else|endif)" "$R"'
 [ "$FAMILY" != H700 ] || check "going back: the original card, into the first slot (TF1)" 'grep -q "original card back" "$R"'
 [ "$FAMILY" != RK3566 ] || check "going back: the original card" 'grep -q "original card back" "$R"'
+[ "$FAMILY" != RK3326 ] || check "going back: the original card" 'grep -q "original card back" "$R"'
+if [ $DEVTEST = 0 ]; then
 check "says remote access is off, and that pocket-ui makes the password" 'grep -q "Remote access (SSH), file sharing and Syncthing are off" "$R"'
+fi
 check "points to the source next to the image and to SOURCE-OFFER.txt" 'grep -q "pocket-ui-info/SOURCE-OFFER.txt" "$R"'
 warn "names a clean pocket-ui source (no -dirty commit)" '! grep -q -- "-dirty" "$R"'
 mcopy -n -i "$FAT" ::/pocket-ui-info/SOURCE-OFFER.txt "$W/fat/pocket-ui-info/SOURCE-OFFER.txt" 2>/dev/null
@@ -460,12 +559,33 @@ sort >"$W/lists/storage.expected" <<EOF
 755 0:0 f ./pocket-ui/releases/$V/pocket-splash
 755 0:0 f ./pocket-ui/releases/$V/portmaster-setup.sh
 EOF
+# Every card: an ArkOS card in the second slot (deploy/image/games-card.sh) and its automount drop-in.
+sort -o "$W/lists/storage.expected" - "$W/lists/storage.expected" <<CARDFILES
+755 0:0 d ./.pocket-seed/.config/system.d/rocknix-automount.service.d
+644 0:0 f ./.pocket-seed/.config/system.d/rocknix-automount.service.d/20-pocket-games-card.conf
+755 0:0 f ./pocket-ui/games-card.sh
+CARDFILES
 if [ $GAMES = 1 ]; then
   sort -o "$W/lists/storage.expected" - "$W/lists/storage.expected" <<GAMESFILES
-755 0:0 d ./.pocket-seed/.config/system.d/rocknix-automount.service.d
 644 0:0 f ./.pocket-seed/.config/system.d/rocknix-automount.service.d/10-pocket-games.conf
 755 0:0 f ./pocket-ui/games-mount.sh
 GAMESFILES
+fi
+if [ "$FAMILY" = RK3326 ]; then
+  echo "755 0:0 f ./.pocket-seed/.config/autostart/pocket-ui-r36s-panel" >>"$W/lists/storage.expected"
+  sort -o "$W/lists/storage.expected" "$W/lists/storage.expected"
+fi
+if [ $DEVTEST = 1 ]; then
+  sort -o "$W/lists/storage.expected" - "$W/lists/storage.expected" <<DEVFILES
+755 0:0 f ./.pocket-seed/.config/autostart/pocket-ui-devtest
+755 0:0 d ./.pocket-seed/.cache
+755 0:0 d ./.pocket-seed/.cache/usbgadget
+644 0:0 f ./.pocket-seed/.cache/usbgadget/usbgadget.conf
+700 0:0 d ./.pocket-seed/.ssh
+600 0:0 f ./.pocket-seed/.ssh/authorized_keys
+755 0:0 d ./.pocket-seed/.config/pocket-ui
+644 0:0 f ./.pocket-seed/.config/pocket-ui/dev-ssh
+DEVFILES
 fi
 if [ -d "$S/pocket-ui/releases/$V/cores" ]; then
   check "bundled gpSP is the pinned ARM64 core with intact licence, source and recipe" \
@@ -481,6 +601,8 @@ check "drop-in waiting in .pocket-seed is deploy/essway-pocket-ui.conf" \
   'same "$S/.pocket-seed/.config/system.d/essway.service.d/10-pocket-ui.conf" /repo/deploy/essway-pocket-ui.conf'
 check "boot screen unit waiting in .pocket-seed is deploy/pocket-splash.service" \
   'same "$S/.pocket-seed/.config/system.d/pocket-splash.service" /repo/deploy/pocket-splash.service'
+check "an ArkOS card in the second slot: deploy/image/games-card.sh, started by the seed's automount drop-in" \
+  'same "$S/pocket-ui/games-card.sh" /repo/deploy/image/games-card.sh && same "$S/.pocket-seed/.config/system.d/rocknix-automount.service.d/20-pocket-games-card.conf" /repo/deploy/image/rocknix-automount-games-card.conf'
 [ $GAMES = 0 ] || check "the GAMES drive's mount is deploy/image/games-mount.sh, started by the seed's automount drop-in" \
   'same "$S/pocket-ui/games-mount.sh" /repo/deploy/image/games-mount.sh && same "$S/.pocket-seed/.config/system.d/rocknix-automount.service.d/10-pocket-games.conf" /repo/deploy/image/rocknix-automount-games.conf'
 # deploy/image/image-defaults.sh with the model's hostname on its NAME line (image_hostname, pins.sh), a valid name that is not
@@ -491,14 +613,30 @@ check "first-start settings waiting in .pocket-seed are deploy/image/image-defau
   'same "$S/.pocket-seed/.config/autostart/pocket-ui-image-defaults" "$W/lists/image-defaults.expected" && grep -qx "NAME=$HOST" "$S/.pocket-seed/.config/autostart/pocket-ui-image-defaults" && printf %s "$HOST" | grep -Eq "^[a-z][a-z0-9-]{0,23}\$" && [ "$HOST" != ROCKNIX ]'
 check "licence texts: STORAGE links to the FAT partition's copy, which has the repository's LICENSE and NOTICE.md, the fonts' OFL, the crates' texts" \
   '[ "$(readlink "$S/pocket-ui/licences")" = /flash/pocket-ui-info/licences ] && same "$W/fat/pocket-ui-info/licences/LICENSE" /repo/LICENSE && same "$W/fat/pocket-ui-info/licences/NOTICE.md" /repo/NOTICE.md && same "$W/fat/pocket-ui-info/licences/FONTS-OFL.txt" /repo/assets/fonts/OFL.txt && [ -s "$W/fat/pocket-ui-info/licences/THIRD-PARTY-CRATES.md" ] && grep -q "^adler2 " "$W/fat/pocket-ui-info/licences/THIRD-PARTY-LICENSES.txt"'
+[ "$FAMILY" != RK3326 ] || check "the screen hook waiting in .pocket-seed is deploy/image/r36s-stock-panel.sh (ROCKNIX's importpanel.py, screen only)" \
+  'same "$S/.pocket-seed/.config/autostart/pocket-ui-r36s-panel" /repo/deploy/image/r36s-stock-panel.sh && grep -q "generic-dsi/importpanel.py" "$S/.pocket-seed/.config/autostart/pocket-ui-r36s-panel" && grep -q -- "-O dtbo" "$S/.pocket-seed/.config/autostart/pocket-ui-r36s-panel"'
+if [ $DEVTEST = 1 ]; then
+  check "device test: ROCKNIX's USB gadget preset USB_MODE=cdc (081-usbgadget's usbgadget --start reads it)" \
+    '[ "$(cat "$S/.pocket-seed/.cache/usbgadget/usbgadget.conf")" = USB_MODE=cdc ]'
+  check "device test: authorized_keys holds public keys only, one per line" \
+    '[ -s "$S/.pocket-seed/.ssh/authorized_keys" ] && ! grep -q PRIVATE "$S/.pocket-seed/.ssh/authorized_keys" && [ -z "$(grep -Ev "^(ssh-ed25519|ssh-rsa|ecdsa-sha2-nistp(256|384|521)) [A-Za-z0-9+/=]+( .*)?\$" "$S/.pocket-seed/.ssh/authorized_keys")" ]'
+  check "device test: SSH script is deploy/image/r36s-devtest.sh (ssh.enabled=1, sshd, gadget on); dev-ssh marker empty" \
+    'same "$S/.pocket-seed/.config/autostart/pocket-ui-devtest" /repo/deploy/image/r36s-devtest.sh && [ ! -s "$S/.pocket-seed/.config/pocket-ui/dev-ssh" ]'
+fi
 check "launcher is deploy/run-pocket-ui.sh" 'same "$S/pocket-ui/run-pocket-ui.sh" /repo/deploy/run-pocket-ui.sh'
 check "portmaster-setup.sh is deploy/portmaster-setup.sh" 'same "$S/pocket-ui/releases/$V/portmaster-setup.sh" /repo/deploy/portmaster-setup.sh'
 for b in pocket-ui pocket-core pocket-splash; do
   check "$b is an aarch64 Linux program" 'file -b "$S/pocket-ui/releases/$V/$b" | grep -q "ELF 64-bit LSB.*ARM aarch64"'
 done
 echo "-- first start, nothing from a developer device:"
+if [ $DEVTEST = 1 ]; then
+check "no pocket-ui settings but the dev-ssh marker (first-start setup runs)" '[ "$(find "$S" -path "*/.config/pocket-ui*" | sort | tr "\n" " ")" = "$S/.pocket-seed/.config/pocket-ui $S/.pocket-seed/.config/pocket-ui/dev-ssh " ]'
+check "no SSH host keys, no other key files" '[ -z "$(find "$S" -name "ssh_host_*" -o -name "id_*")" ]'
+else
 check "no pocket-ui settings (first-start setup runs)" '[ -z "$(find "$S" -path "*/.config/pocket-ui*")" ]'
 check "no dev-ssh marker, no SSH keys" '[ -z "$(find "$S" -name dev-ssh -o -name .ssh -o -name "*authorized_keys*" -o -name "ssh_host_*")" ]'
+check "no device-test files (USB gadget preset, its SSH script)" '[ -z "$(find "$S" -name usbgadget -o -name "usbgadget.conf" -o -name pocket-ui-devtest)" ]'
+fi
 check "no Wi-Fi credentials (iwd, NetworkManager, wpa_supplicant)" \
   '[ -z "$(find "$S" -name "*.psk" -o -name "*.8021x" -o -name "*.nmconnection" -o -name "wpa_supplicant*" -o -path "*/iwd*")" ]'
 check "the card has no GAMES drive yet (the first start makes it), and no state of a first start" '[ ! -e "$S/.pocket-games-state" ] && [ ! -e "$S/.pocket-games-tries" ]'
@@ -506,10 +644,10 @@ check "no recents, saves or games" '[ -z "$(find "$S" -name "recents*" -o -name 
 check "no BIOS files" '[ -z "$(find "$S" -iname "*bios*")" ] && ! grep -qi bios "$W/lists/fat"'
 check "no update left pending (update-pending, previous, dev.env)" \
   '[ ! -e "$S/pocket-ui/update-pending" ] && [ ! -L "$S/pocket-ui/previous" ] && [ ! -e "$S/pocket-ui/dev.env" ]'
-# The programs grow with every release and STORAGE stays 32 MiB until the first boot grows it (debugfs fails when full: 0.3.1).
+# The programs grow with every release and STORAGE stays $((P2_SIZE / 2048)) MiB until the first boot grows it (debugfs fails when full: 0.3.1).
 # A finished image has to keep P2_MIN_HEADROOM_BLOCKS free, about two releases of growth: a failure, not a warning.
 FREE=$(dumpe2fs -h "$W/p2.ext4" 2>/dev/null | sed -n 's/^Free blocks: *//p')
-echo "STORAGE before the first boot: $(du -sh "$S" | cut -f1) used of 32 MB, ${FREE:-?} of $P2_FREE_BLOCKS blocks (4 KiB) free"
+echo "STORAGE before the first boot: $(du -sh "$S" | cut -f1) used of $((P2_SIZE / 2048)) MB, ${FREE:-?} of $P2_FREE_BLOCKS blocks (4 KiB) free"
 check "STORAGE keeps at least $P2_MIN_HEADROOM_BLOCKS blocks ($((P2_MIN_HEADROOM_BLOCKS * 4)) KiB) free for the programs to grow" '[ "${FREE:-0}" -ge "$P2_MIN_HEADROOM_BLOCKS" ]'
 # For the --version check outside (scripts/check-image.sh).
 [ -d "$S/pocket-ui/releases" ] && cp -r "$S/pocket-ui/releases" "$W/releases"

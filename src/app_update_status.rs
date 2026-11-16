@@ -29,6 +29,28 @@ impl Updates {
         line.field("update.bytes.scope", if file.is_some() { "current-file" } else { "none" });
         line.field("update.cancel", if !cancellable { "unavailable" } else if worker.is_some_and(|w| w.cancel_effective) { "effective" } else { "too-late" });
         line.field("update.cancel.requested", if requested { "yes" } else { "no" });
+        line.field("update.source", if self.card.is_some() { "card" } else { "server" });
+        // Added 15.11.: the page's step (Downloading → Unpacking → Installing → Restarting) and its progress, whatever it counts.
+        let (step, done, total) = self.step_status();
+        line.field("update.step", step);
+        line.field("update.step.done", done.to_string());
+        line.field("update.step.total", total.to_string());
+    }
+}
+
+impl Updates {
+    fn step_status(&self) -> (&'static str, u64, u64) {
+        match &self.phase {
+            UpdatePhase::Running(job) if matches!(job.task, UpdateTask::App { .. }) => {
+                let w = job.worker;
+                match w.phase.step() {
+                    update::Step::Downloading => (update::Step::Downloading.code(), if w.scope == update::BytesScope::CurrentFile { w.bytes } else { 0 }, w.total),
+                    step => (step.code(), w.work_done, w.work_total),
+                }
+            }
+            UpdatePhase::Finished(r) if matches!(r.outcome, crate::UpdateOutcome::Installed) && matches!(r.target, crate::UpdateTarget::App(_)) => (update::Step::Restarting.code(), 1, 1),
+            _ => ("none", 0, 0),
+        }
     }
 }
 
@@ -77,7 +99,7 @@ mod tests {
         assert_eq!(initial["update.job"], "1");
         assert_eq!(initial["update.cancel"], "effective");
         if let UpdatePhase::Running(job) = &mut updates.phase {
-            job.worker = update::WorkerSnapshot { phase: update::WorkerPhase::Flushing, bytes: 100, total: 100, scope: update::BytesScope::CurrentFile, cancel_effective: false };
+            job.worker = update::WorkerSnapshot { phase: update::WorkerPhase::Flushing, bytes: 100, total: 100, scope: update::BytesScope::CurrentFile, cancel_effective: false, work_done: 3, work_total: 7 };
         }
         updates.request_cancel();
         let late = fields(&updates);
@@ -85,9 +107,12 @@ mod tests {
         assert_eq!(late["update.cancel"], "too-late");
         assert_eq!(late["update.cancel.requested"], "yes");
         assert_eq!(late["update.bytes.scope"], "current-file");
+        assert_eq!((&*late["update.step"], &*late["update.step.done"], &*late["update.step.total"]), ("installing", "3", "7"),
+            "the page's step and what it counted, beside the unchanged fields");
         updates.finish(UpdateOutcome::Installed);
         let done = fields(&updates);
         assert_eq!(done["update"], "installed");
+        assert_eq!(done["update.step"], "restarting");
         assert_eq!(done["update.cancel"], "unavailable");
         assert_eq!(done["update.cancel.requested"], "yes");
         assert_eq!(done["update.job"], initial["update.job"]);

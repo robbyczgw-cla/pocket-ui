@@ -1,6 +1,6 @@
 # Web companion: protocol, endpoints, threat model
 
-The web companion serves the player's library to a browser on the tailnet: browse and search, edit status, notes,
+The web companion serves the player's library to a browser on the home Wi-Fi or the tailnet (Wi-Fi since 0.5): browse and search, edit status, notes,
 stickers, favourites, smart shelves and the preferred version, upload games, BIOS files and PortMaster files, play
 time, the battery history and a screenshot. User guide: [user/web-companion.md](user/web-companion.md). Code:
 `src/web/` (library), `src/web_page.rs` (Settings → Connections → Web companion's state), `src/app_web.rs` (the App's side).
@@ -18,11 +18,11 @@ pocket-ui runs as root. The companion is therefore built small, with no new crat
 | State | What runs |
 |---|---|
 | Off (the default) | Nothing: no thread, no socket. `App::web_sync` returns at its first line; `web::Shared` is not even made until the Settings page opens |
-| On, no browser | A supervisor thread in `poll` on its listening sockets and a wake pipe, waking every 30 s to compare the Tailscale addresses (one `getifaddrs`); three workers blocked on a channel. All four at nice 19 and the idle I/O class (`web::lower_priority`) |
+| On, no browser | A supervisor thread in `poll` on its listening sockets and a wake pipe, waking every 30 s to compare the Tailscale and Wi-Fi addresses (one `getifaddrs`); three workers blocked on a channel. All four at nice 19 and the idle I/O class (`web::lower_priority`) |
 | On, a browser | One worker per request (`Connection: close`, one request per connection). Reads come from the App's files and a library cache (five minutes; read again after an upload). Edits go to the App as `UserEvent::Web(Event::Edit)` and are applied with the same functions a button press uses; the worker waits at most 3 s for the answer |
 | A game runs | Everything but `/api/session`, `/api/status`, `/api/screenshot` (one `grim` capture per 10 s at most, otherwise the last picture again) and `/api/pair` answers `503 {"playing": true}`. An upload under way pauses between 256 KB chunks until the game ends (and gives up after 30 minutes) |
 | Switched off | The listening sockets close at once; `Server::stop` waits for the supervisor at most 1 s (it never blocks: the queue-full `503` is one non-blocking write) and never for a worker. Workers close what is still queued unanswered, an upload stops at its next chunk and removes its temporary file, an edit still on its way to the App is answered "off" and not applied |
-| On, but the port can't be opened | The supervisor keeps the reason (`Shared::problem`: port 80 in use, not allowed) and tries again every 30 s; Settings → Connections → Web companion shows **Not listening** and the reason instead of "Waiting for Tailscale" |
+| On, but the port can't be opened | The supervisor keeps the reason (`Shared::problem`: port 80 in use, not allowed) and tries again every 30 s; Settings → Connections → Web companion shows **Not listening** and the reason instead of "Waiting for Wi-Fi" |
 
 The UI thread's share: `web_sync` per loop turn, which calls `WebUi::turn` (start when due, then a few comparisons;
 stores into `Shared` only when the game, Curator's index or the private-screen flag changed; a start that failed is
@@ -33,20 +33,26 @@ a second only while the pairing code is shown.
 
 ## Where it listens
 
-`net::plan` takes the addresses of interfaces whose name starts with `tailscale` and whose address is in Tailscale's
-ranges (100.64.0.0/10, fd7a:115c:a1e0::/48), port 80. Never `0.0.0.0`/`::`, never loopback, never the Wi-Fi: there is
-no switch for any other network. Each socket is bound to its address **and** tied to its interface with
-`SO_BINDTODEVICE` (`net::bind`): on Linux's weak host model, a packet for 100.x arriving on wlan0 would otherwise be
-accepted. Every accepted connection is checked again (`net::peer_allowed`: a Tailscale address) before a worker sees
-it; refusals are counted in the log. A CGNAT address that a phone hotspot hands to wlan0 is in the same range and is
-ignored because of the interface name. When Tailscale comes up later or its address changes, the supervisor notices
-within 30 s; the plan includes the interface's index, so a `tailscale0` made anew by a restarted tailscaled with the
-same name and address is listened on anew too (a socket tied to the old index would hear nothing).
+`net::plan` takes, on port 80, (1) the addresses of interfaces whose name starts with `tailscale` and whose address
+is in Tailscale's ranges (100.64.0.0/10, fd7a:115c:a1e0::/48), and (2) since 0.5 the Wi-Fi's IPv4 address (`wlan0`,
+`POCKETUI_WIFI_IFACE` in the virtual device) when it is a home network's (`net::is_home`: 10/8, 172.16/12, 192.168/16,
+169.254/16, and 100.64/10, which phone hotspots hand out). Never `0.0.0.0`/`::`, never loopback, never IPv6 on the
+Wi-Fi (a global IPv6 address may be reachable from the internet), never a public Wi-Fi address, never another
+interface. Each socket is bound to its address **and** tied to its interface with `SO_BINDTODEVICE` (`net::bind`): on
+Linux's weak host model, a packet for 100.x arriving on wlan0 would otherwise be accepted. Every accepted connection is
+checked again (`net::peer_allowed_on`: a Tailscale address on the Tailscale socket, a home-network address on the
+Wi-Fi socket) before a worker sees it; refusals are counted in the log. A CGNAT address that a phone hotspot hands to
+wlan0 counts as the Wi-Fi's, because of the interface name (`Listen::lan`). When Tailscale or the Wi-Fi comes up later
+or an address changes (another network), the supervisor notices within 30 s, opens the new socket and closes the old;
+the plan includes the interface's index, so a `tailscale0` made anew by a restarted tailscaled with the same name and
+address is listened on anew too (a socket tied to the old index would hear nothing). When the Wi-Fi socket opens, the
+Pocket's mDNS name is read from avahi-daemon's process title (`net::mdns_name`, "avahi-daemon: running
+[SM8250.local]" on ROCKNIX); without avahi (the Brick's card) there is none and the page shows the address only.
 
 ## Who gets in
 
 1. **Host check** (DNS rebinding): `Host` must be one of the Pocket's names from tailscaled (host name, MagicDNS name,
-   its first label) or an address it listens on; otherwise `421`.
+   its first label), its mDNS name on the Wi-Fi, or an address it listens on; otherwise `421`.
 2. **Principal** (`api::Ctx::principal`):
    - a paired browser: cookie `pocket_session` (32 random bytes, base64url; `HttpOnly; SameSite=Strict; Path=/`,
      a year). The Pocket keeps only SHA-256 of the token in `<data>/web/browsers.json` (folder 0700, file written
@@ -60,13 +66,17 @@ same name and address is listened on anew too (a socket tied to the old index wo
      of them tagged (`net::owner_allows`). A device shared into the tailnet by another user, or a tagged one, needs a
      code. The unit of trust is the Tailscale **account**, not the device: every untagged device of the owner's
      account gets in (the manual says so), and revoking a paired browser on such a device does not lock it out while
-     the switch is Open.
+     the switch is Open. **Only on the Tailscale socket:** a connection on the Wi-Fi socket (`Conn::lan`) is never
+     asked about with `whois` and is never the owner, so every browser on the Wi-Fi pairs with the code, the owner's
+     phone too (when it opens the Wi-Fi address).
 3. **Pairing** (`auth::Pairing`, `POST /api/pair`): Settings → Pair a browser makes a six-digit code from
    `/dev/urandom` (rejection sampling, uniform), valid five minutes, for one browser. Five wrong tries end it; leaving
    the page ends it. Tries are answered one at a time and at most one a second, whichever connection they come from
    and whether a code is showing or not (the check holds a lock across the wait). A wrong code and a try without a
    code get the same answer (`api::NOT_PAIRED`, no count of tries left), so nobody can watch for the moment a code
-   appears. The QR code holds `http://<name>/#pair=<code>`: the fragment never reaches a server or a log.
+   appears. The QR code holds `http://<address>/#pair=<code>`, the first address on the page: the Wi-Fi's when it
+   listens there (every browser at home can open it), else the tailnet name. The fragment never reaches a server or a
+   log. The same code, limits and expiry on both networks.
    `GET /api/session` does not say whether a code is showing.
 4. **CSRF**: every `POST` needs `X-CSRF-Token` = the first 16 bytes of HMAC-SHA256(key, principal) in hex, where the
    key is 32 random bytes in `browsers.json` that never leave the Pocket. The page gets it from `GET /api/session`,
@@ -115,7 +125,7 @@ owner's device; every `POST` also needs the CSRF token and passes the origin che
 | `GET /api/games?system=` \| `favorites=1` \| `sticker=<id>` \| `shelf=<index>` \| `q=<text>` [`&offset=`] | yes | no | A list (600 per answer; search: 80 characters, 200 hits) |
 | `GET /api/game?id=` | yes | no | One game: the list row, note, file name, gamedb facts, `shots` (the times of its screenshots), Curator's versions |
 | `GET /api/shot?id=&at=` | yes | no | One of the game's screenshots (HOME + A in a game, `src/screenshot.rs`) as PNG, read only: `at` is the time part of the file name (`YYYY-MM-DD HH-MM-SS`, optional ` (n)`) as `/api/game` lists it in `shots` (newest 60); anything else is `404`, so no path or other file can be asked for. 16 MB at most, PNG only. The folder is `Roots::screenshots` (`/storage/roms/screenshots/<system>/<game> <at>.png`) |
-| `GET /api/cover?id=[&kind=snap\|title]` | yes | no | The game's cover PNG from the covers folder (8 MB at most, PNG only); `kind=snap` or `title` the screenshot or title screen from the `snaps/` or `titles/` folder instead (404 for any other kind, and with Settings → Games → Extras → Game pictures on Box art only). `/api/game` lists the kinds the game has as `pictures` |
+| `GET /api/cover?id=[&kind=snap\|title]` | yes | no | The game's cover PNG from the covers folder (8 MB at most, PNG only); `kind=snap` or `title` the screenshot or title screen from the `snaps/` or `titles/` folder instead (404 for any other kind, and with Settings → Games → Box art & downloads → Game pictures on Box art only). `/api/game` lists the kinds the game has as `pictures` |
 | `GET /api/stats` | yes | no | Totals from `library.json` and `recents.json`: time, sessions, games played, per system, the top 30, and `history` (below), with every path removed |
 | `GET /api/battery` | yes | no | `battery_history`'s last 48 hours |
 | `GET /api/uploads` | yes | no | Where uploads may go: systems (with extensions), BIOS needs, ports waiting for files, free space, limits |
@@ -193,8 +203,8 @@ Out of scope: someone with SSH or the card in hand.
 
 | Attacker | Can reach the port? | What stops them |
 |---|---|---|
-| A device on the same Wi-Fi | No | Not bound to the Wi-Fi address; `SO_BINDTODEVICE` drops packets for 100.x arriving on wlan0; the peer check refuses non-Tailscale sources |
-| The internet | No | Only the tailnet; tailscaled's WireGuard |
+| A device on the same Wi-Fi (0.5) | Yes, while the companion is on | By design (whoever is on the home Wi-Fi and sees the code is trusted): a code from the Pocket's screen, as for any browser; one try a second, five per code, 1 in 200 000 per code. Plain HTTP: someone on the same Wi-Fi can read the code or a cookie on the way (the page and the manual say "use it at home") |
+| The internet | No | The Wi-Fi socket takes only home-network peers and only binds a private IPv4 address (no IPv6 on the Wi-Fi), so a router forwarding port 80 reaches nothing; the tailnet through tailscaled's WireGuard |
 | Another user's device on the tailnet (shared node) or a tagged node | Yes, if the tailnet's ACLs allow | `whois` names another user or a tag: a code is needed, which only the Pocket's screen shows. Guessing: one try a second, five per code, 1 in 200 000 per code |
 | The owner's own device, with a malicious website open | Yes (the browser can send requests to 100.x) | No CORS; the origin check refuses requests marked cross-site; writes need the CSRF token, which the other site can't read; `SameSite=Strict` cookies; the Host check stops DNS rebinding; `X-Frame-Options`/`frame-ancestors` stop framing |
 | A paired browser that is lost | Yes | Revoke it in Settings → Connections → Web companion → Paired browsers; the token is useless from then on (only its hash was kept) |
@@ -239,7 +249,8 @@ uploads refuse scripts; invisible and look-alike characters are cleaned from nam
 are swept; `blob:` images are allowed for the screenshot.
 
 Known limits: plain HTTP inside the tailnet (WireGuard encrypts it; a certificate would need Tailscale's HTTPS
-feature, which is a tailnet-wide setting); the cookie has no `Secure` flag and can't carry the `__Host-` prefix for
+feature, which is a tailnet-wide setting) and on the Wi-Fi (not encrypted: someone on the same Wi-Fi can read a code
+or a cookie; accepted for a home network, 0.5); the cookie has no `Secure` flag and can't carry the `__Host-` prefix for
 that reason. A paired browser stays valid for a year unless revoked. Uploaded files are root's (0644), like files
 copied over SSH.
 
@@ -295,9 +306,10 @@ paths; with Settings open the screenshot is a placeholder (check 5, first half).
 1. Off (default): `ss -ltnp` shows nothing on port 80, `ps -T` no `web` threads. Then switch it on in Settings
    (more than 3 s after pocket-ui started: the path review F1 found crashing), off, on again; restart pocket-ui with
    it on: it starts listening about 3 s after the start, and pocket-ui keeps running.
-2. On with Tailscale connected: `ss -ltnp` shows port 80 only on the `100.x` and `fd7a:…` addresses with
-   `%tailscale0`; from another device on the same Wi-Fi, `curl http://<wlan ip>/` and `curl --interface wlan0
-   http://100.x/` (with a route) both fail; from a tailnet device the page opens.
+2. On with Tailscale connected: port 80 on the `100.x` and `fd7a:…` addresses with `%tailscale0` and on the wlan0
+   IPv4 address with `%wlan0`; from another device on the same Wi-Fi, `curl http://<wlan ip>/` gives the page and
+   `/api/library` `401` until it pairs with the code; `curl --interface wlan0 http://100.x/` (with a route) fails; from a
+   tailnet device the page opens. Another Wi-Fi network: within 30 s it listens on the new address, not the old.
 3. Owner's device opens without a code; a device of another user (or Your Tailscale devices = Code) gets the
    pairing page; the QR code pairs; five wrong codes end the code; revoking ends a browser at once.
 4. Uploads: a GBA game appears on Home after returning there; a BIOS file ticks off its line; a port's files move in

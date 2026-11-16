@@ -66,7 +66,7 @@ impl Index {
             let pref = self.preferred_game[w] as usize;
             let Some(g) = std::iter::once(pref).chain(members.iter().map(|&m| m as usize)).find(|&m| (offer.allowed)(m)) else { continue };
             let u = &self.user.games[g];
-            let played = u.secs > 0 || u.last_played.is_some();
+            let played = u.ever_played();
             let tier = match u.status {
                 Status::Playing | Status::Paused => 0,
                 Status::NotStarted if played => 0,

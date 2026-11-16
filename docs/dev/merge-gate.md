@@ -28,10 +28,24 @@ or with `GATE_PARALLEL=0`, the gate keeps its serial schedule.
 After the leak scan, `scripts/check-compile.sh` checks Linux `--all-targets` (including examples),
 Brick `--all-targets` and Android, in that order, stopping at the first error. It derives optional checks from
 the checked tree: the Brick feature and Android manifests, so a removed platform is never requested. Both gate tiers run this stage before
-code generation, fixtures or tests; the strictly docs-only path keeps its short checks. The queue client uses the same
-helper before publishing requests, in a heavy slot with two Cargo jobs. `MQ_SKIP_PRECHECK=1` is an explicit emergency
-override for the client only; it never skips the gate. The client rejects a dirty or changed caller and never publishes a
-partially checked batch.
+code generation, fixtures or tests; the strictly docs-only path keeps its short checks. Right after it the gate runs the
+**cheap checks** (`scripts/preflight.sh --cheap-tests`, log `/tmp/gate-cheap-<worktree>.log`): the translation audit
+(`scripts/i18n-extract.py --check`) and the unit tests `doc_checks::`, `document_check::`, `manual::` and `i18n::`, each of which
+must run at least one test. They are the reds that cost most trains (a broken link, a missing German line, a placeholder that
+differs, a duplicate key), so they fail after the compile stage, not after the full test build (`GATE: cheap checks FAILED`).
+Bookkeeping (an unlinked doc, an undocumented variable or module, a code-shape cap, a manual page past 30 000 px, a missing
+Spanish or Portuguese line) never blocks a merge since 14.11.: `sh scripts/bookkeeping.sh` prints it as warnings in the
+nightly run and the release check ([Documentation checks](tests.md#documentation-checks)).
+
+**Before you queue, run one command:** `~/bin/heavy timeout 1500 sh scripts/preflight.sh` in your worktree (about 10 minutes with a warm target at two Cargo jobs, more cold). It rebases on `main` (a clean
+tree is required; `PREFLIGHT_NO_REBASE=1` skips it), runs the leak scan, the compile stage (Linux `--all-targets`, Brick, Android with
+`android/player` and `android/handheld`) and then the same cheap checks the gate runs, and stops at the first failure with its output.
+`--git-only` (rebase, leak scan) and `--build-only` (compile, cheap checks; a copy of the tree without `.git` is enough) split it so the build part can run on another machine. `sh scripts/test-preflight.sh` tests it with stand-ins; `scripts/test-gate-paths.sh` proves the gate runs the cheap checks right after
+the compile stage and stops there when one is red. The queue client's own copy of the compile check (a heavy-slot run on the builder before a
+request is published) is off by default since 2026-11-13, because the gate repeats it within minutes; `MQ_SKIP_PRECHECK=0` turns it
+back on. The client does check one thing before it publishes: `git merge-tree` against `main`; a branch that cannot merge is told so at once
+(exit 2, nothing queued), and a waiting request is told the same as soon as `main` moves under it. The client rejects a dirty or changed
+caller and never publishes a partially checked batch.
 
 Default test compilation then finishes. Ordinary Rust tests/doctests, the launcher lane and the small shell lane then
 overlap on their own groups. Both shell coordinators join before the Brick feature build: separate CPUs do not
@@ -63,20 +77,67 @@ tiers. Real in-game device-family smokes remain a separate release requirement.
 (`GATE_FULL=1 scripts/gate.sh`) runs every night on `origin/main` (maintainer tooling, result in a status file) and
 inside `scripts/release-check.sh`; red there means a fix on main before the release, not a blocked merge queue.
 
-The fast tier compiles every program (`cargo test --no-run`: all integration test programs, so a broken suite still
-fails), runs all unit tests (with the documentation checks), the doctests and every integration suite except the slow
+**Comment-only lane (since 2026-11-13).** A change that touches nothing but comments (and unembedded documents) does not run the
+suites. `scripts/gate-comments.py` proves it against the base version of every changed file: a Rust, shell or Python file counts when
+it is the same without its plain comments, whitespace and blank lines (strings, doc comments `///`/`//!`, doctests, heredoc bodies,
+quoted text and directives such as `# noqa` or a coding line are code). New, deleted, symlinked or other-type files, and embedded
+documents (the on-device manual `docs/user/`, anything an `include_str!` reads), leave the lane; so does one changed value.
+The gate then runs the compile stage, the cheap checks (`preflight.sh --cheap-tests`: translation audit, `doc_checks::`, `document_check::`, `manual::`, `i18n::`), the leak scan and its own self-tests: about 3 minutes on the train host instead of
+18 (`gate: comment-only lane …`, `gate: SKIPPED player, Brick, timing, platform and shell tiers`). A remote gate has no `.git`, so
+`tools/remote-gate.sh` runs the proof where `.git` is and writes `.gate-lane` next to `.gate-changed`. The proof is against the tree the train was built on (`GATE_LANE_BASE`), so a train behind another one in flight, which carries that one's changes, can still take the lane for its own comment-only change. The queue also batches comment-only requests only with each other, never with code changes; the gate reads that file only
+together with the change list and never with `GATE_FULL=1` (nightly and release runs everything). A changed string literal is not a
+comment: text that paints on screen keeps the normal tiers, because its layout has to be checked.
+
+The fast tier checks every program (the compile-first stage, `cargo check --all-targets`: examples and all integration test
+programs, so a broken suite still fails), builds and runs only the programs it runs (`cargo test --no-run` with the same
+list; the skipped suites are built by the nightly run), runs all unit tests (with the documentation checks), the doctests and every integration suite except the slow
 layout matrices listed in `scripts/gate-parts.py` (`text_size`, `long_titles`, `nav_explorer`, `small_screen`, …)
-and the absolute CPU budgets `settings_open` and `shelf_moves` (they run alone and go red on an overloaded host).
-The compile-first stage checks Brick and Android. `scripts/gate-parts.py` adds what the change touches:
+and the absolute CPU budgets (`BUDGET`: `launch_frames`, `settings_open`, `shelf_moves`; they run alone and went red on an
+overloaded host in 4 trains of 3 days, none a real slowdown). The budgets never run in the merge gate, not even when their own
+file changes; the timing tier neither. The compile-first stage checks Brick and Android. `scripts/gate-parts.py` adds what the
+change touches:
 
 | Change | Also runs |
 |---|---|
 | a slow suite's own `tests/<suite>.rs`, `tests/snapshots/`, `tests/fixtures/` | that suite (all of them for the shared folders) |
-| fonts, `src/text*` (also `text_size.rs`), `src/textfit*`, `src/type_scale*`, `src/font*`, `src/letters*`, `src/name_lines*`, the shared layout parts `src/kit.rs`, `src/layouts.rs`, `src/scaled_layout.rs`, `src/wiki_text.rs`, `src/auto_texts.rs` | the text-fit suites and the Brick's own text-fit cases (Brick tier) |
+| fonts, `src/text*` (also `text_size.rs`), `src/textfit*`, `src/type_scale*`, `src/font*`, `src/letters*`, `src/name_lines*`, the shared layout parts `src/kit.rs`, `src/layouts.rs`, `src/scaled_layout.rs`, `src/wiki_text.rs`, `src/auto_texts.rs` | the text-fit suites |
+| `src/system_names.rs`, `src/app_home_panel.rs`, `src/home_panel.rs`, `src/consoles.rs`, `src/document_library.rs`, `src/library.rs`, `src/app_cabinet.rs`, `assets/data/consoles.json` (where a console's name on a card or spine comes from) | `home_panel_labels`, `spine_names` (about 6 s together on a quiet host) |
 | `assets/i18n/` (not `skip.txt`), `docs/user/`, `tests/i18n*`, `src/i18n.rs`, the state lists | the German/Spanish matrix, `text_size`, `names_never_translated` |
-| a path with `brick` in it, `src/input_corpus*`, `src/fn_keys*`, `src/manual*` | the Brick corpus, manual pages, slider and UI walk |
-| a script/deploy/asset/unknown path, or a Rust file a shell script names | the shell suites |
-| `Cargo.*`, `build.rs`, `.cargo/`, `.config/`, `tests/common/`, the gate's own scripts | the full gate |
+| a path with `brick` in it (`src/brick*`, `deploy/brick/`, `scripts/brick*`, …), `src/input_corpus*`, `src/fn_keys*` | the Brick stage: corpus, slider, UI walk, the Brick text-fit cases, navigation and title search |
+| `android/`, `src/android*`, `assets/`, the text, layout and translation sources above, or a library module the Android tests use directly (`pocket_ui::<module>` in `src/android_*_tests.rs` and `android/src/`, read at gate time) | the Android page tests of the library (`android_02_tests`, `android_eject_tests`) |
+| anything under `deploy/` or `scripts/`, a licence text the package carries (`LICENSE*`, `COPYING*`, `NOTICE.md`, `OFL.txt`) | the shell suites (launcher, package, image, device scripts); a Rust file a script names does not count, the suites run stand-ins |
+| `Cargo.*`, `build.rs`, `.cargo/`, `.config/`, `tests/common/`, the gate's own scripts | every suite and the Brick stage; the time budgets and the timing tier still wait for the nightly run |
+
+**Samples, not matrices (14.11., test audit).** The merge gate sets `POCKETUI_TEST_QUICK=1`: the layout matrices it runs
+(`text_size`, `long_titles`, `spine_names`, `search_titles`, the German/Spanish snapshots, the Android fit tests) take their
+sample, a dozen states (the list in `tests/text_size.rs`), one size and the longest language (German; the Android fit tests German
+only), plus every state the change adds to `tests/i18n-states.txt` (`POCKETUI_TEST_STATES`; a remote gate gets them from
+`tools/remote-gate.sh` as `.gate-states`). The whole matrices run nightly and in `release-check.sh` (`GATE_FULL=1`); a red one
+there is a fix for the next morning. Single tests the merge gate leaves to the nightly run are listed in `NIGHTLY_TESTS` in
+`scripts/gate-parts.py` (the Android twins of two `eject` walks the Linux suite makes in every gate, and the library's
+5,000-game time budgets), skipped like the flaky ones; the gate prints `gate: left to the nightly run: …`.
+
+**Exceptions that wait for the nightly run (13.11.).** Each has a case in `scripts/test-gate-paths.sh` that was red before
+the change; `GATE_FULL=1` (nightly, `release-check.sh`) runs everything, so a miss shows up the next morning, not never.
+
+- *Android page tests.* `android_02_tests` and `android_eject_tests` (about 1 500 of 4 300 test seconds, one of them 240 s)
+  run only when the change can reach them (last row of the table). Any other change passes `--skip` (cargo) or
+  `-E 'not (test(~android_02_tests::) | …)'` (nextest) and the gate prints `Android page tests no (nightly)`. The modules
+  they use come from the sources, not from a list here, so a new dependency joins by itself. The longest of them split into
+  one child process per language (`fit_children` in `src/android_02_tests.rs`), so a test lasts as long as its slowest
+  language, not the sum.
+- *Brick, everything but Brick paths (14.11.).* Only a Brick path (table above) runs Brick tests; translation lines, the manual,
+  a font, a layout source or a text suite run none, the Brick compile check stays. The Brick stage was 30 % of all merge-gate
+  seconds and ran in 74 % of the gates; the nightly run and `release-check.sh` find an overlong text on the Brick's screens before
+  any release. Who changes texts the Brick shows runs its text-fit cases first
+  (`cargo test --profile gate --features brick --test text_size textfit_brick_031_`, or a Brick snapshot of the screen).
+- *Sources the caller stamped.* `tools/remote-gate.sh` copies with `rsync --checksum --no-times`, so exactly the files whose
+  content differs carry the time of the copy and cargo rebuilds them; it passes `GATE_SOURCES_STAMPED=1` and `gate.sh` no
+  longer touches every file of `src/`, `tests/`, `examples/` and `assets/`. A local run still does (file times say nothing there).
+  Proof: `scripts/test-gate-stamp.sh` (changed source, data file and a document outside the old touch list, with an older
+  time than the build, two slots in turn, a file changed back; and a control copy that keeps file times, which cargo does
+  not see). The library fingerprints in a shared target are deleted once per slot (`.fingerprint-owner` in the slot),
+  not in every gate.
 
 The timing tier and the remaining slow suites never run in the fast tier. The gate prints the tier and what it chose
 (`gate: fast tier …`, `gate: tier fast; compile N s`).
@@ -107,8 +168,8 @@ During development run `scripts/gate.sh --quick` from your worktree. It runs all
 (including documentation checks), then selects integration suites from committed branch changes, local edits and
 untracked tests against `main` (`GATE_BASE=<ref>` changes the base). Source, assets and build changes select all integration suites; script or deploy changes also run the five shell
 suites. Render suites use a small representative matrix plus every newly added snapshot state in this tier.
-The absolute CPU benchmarks (`settings_open`, `shelf_moves`) stay in the full opt-level 3 gate: timing an opt-level 1
-build against a production frame-time limit gives a false result. Their thresholds and full-gate coverage are unchanged.
+The absolute CPU benchmarks (`launch_frames`, `settings_open`, `shelf_moves`) run only with `GATE_FULL=1` (nightly, release
+check), alone: timing an opt-level 1 build against a production frame-time limit gives a false result. Their thresholds are unchanged.
 The target is under three minutes
 on an idle machine with a warm build; a clean build or a heavily loaded shared builder can take longer.
 
@@ -214,7 +275,11 @@ gate log as `gate:   flaky: <test>` and the gate stays green; a test that fails 
 unchanged (`GATE: ok (N passed)`; N is now every test, about 2,900, not only the first Cargo binary's count). Tests that
 assert a time budget (thread CPU time per frame, the Curator's and the search's 5,000 games) are in an override that runs
 them alone (`threads-required = "num-test-threads"`), so a busy gate cannot fail them and their thresholds stay as they
-are; a new budget test belongs in that filter. Compile speed was measured too: a small change rebuilds in about 20 s, so
+are; a new budget test belongs in that filter. **Flaky tests** (friction audit, 14.11.): a test with three flaky entries goes to the nightly run the same day
+through `GATE_SKIP_TESTS` (space-separated names as nextest prints them after the binary, `eject::tests::x` for a unit
+test, `the_way_back_hands_over_y` for an integration test); the merge gate prints `gate: left to the nightly run (flaky):
+<names>` and passes them to nextest as `-E 'not (test(=name) | …)'` (cargo: `--skip name`). Only without `GATE_FULL`: the
+nightly run and `release-check.sh` still run them. Take the name out again with the fix. Compile speed was measured too: a small change rebuilds in about 20 s, so
 the test run, not the compile, is the gate's time; `mold` as the linker and `opt-level = 1` for the gate profile gained
 nothing measurable (and `opt-level = 1` made the frame benchmarks fail), so `[profile.gate]` is unchanged. The JUnit
 report is under `target/nextest/default/junit.xml`.

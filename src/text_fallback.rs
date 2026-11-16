@@ -1,7 +1,8 @@
 //! The second font of the text painter (`text.rs`): the system's Noto Sans CJK, for the Japanese, Chinese and Korean
 //! letters Barlow has no picture for ("ファイナルファンタジーVI", "スーパーマリオワールド"). Not ours and not shipped:
 //! ROCKNIX installs it (`packages/fonts/noto-sans-cjk`, one 16 MB OpenType file with 65 535 glyphs). The virtual device has
-//! it too (its root is the ROCKNIX image's). Without it (a desktop computer) the painter does what it did before: "?" for a letter, nothing for a mark.
+//! it too (its root is the ROCKNIX image's), Android has its own (`OTHER_SYSTEM_CJK`). Without one the painter writes
+//! kana and hangul in Latin letters and leaves the other letters out (`latinise`), never "?" or an empty box.
 //!
 //! fontdue, which paints Barlow, turns every glyph of a font into an outline when it loads it: for this font seconds
 //! and well over a hundred MB. So this one is read differently: the file is mapped into memory (the kernel reads
@@ -21,13 +22,34 @@ use ttf_parser::{Face, OutlineBuilder};
 /// Where ROCKNIX puts the font (`noto-sans-cjk/package.mk`, ROCKNIX 20261001).
 pub const SYSTEM_CJK: &str = "/usr/share/fonts/truetype/noto-cjk/NotoSansCJKsc-Regular.otf";
 
+/// Where else a system keeps Noto Sans CJK (or a font of the same letters), in the order they are tried: Android's own
+/// (`/system/fonts`, a collection whose first face is the Japanese one: every kana, kanji and hangul), Debian/Ubuntu,
+/// Arch and Fedora. The Brick and the other systems without such a font fall back to Latin letters (`latinise`).
+pub const OTHER_SYSTEM_CJK: [&str; 8] = [
+    "/system/fonts/NotoSansCJK-Regular.ttc",
+    "/system/fonts/NotoSansCJKjp-Regular.otf",
+    "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
+    "/usr/share/fonts/truetype/noto/NotoSansCJK-Regular.ttc",
+    "/usr/share/fonts/noto-cjk/NotoSansCJK-Regular.ttc",
+    "/usr/share/fonts/google-noto-cjk/NotoSansCJK-Regular.ttc",
+    "/usr/share/fonts/OTF/NotoSansCJK-Regular.ttc",
+    "/usr/share/fonts/opentype/noto/NotoSansCJKsc-Regular.otf",
+];
+
 /// The font file to fall back to: `POCKETUI_CJK_FONT` if set (empty or `off`: none, as without the font), else
-/// ROCKNIX's. The snapshots and tests point it at the file of an unpacked ROCKNIX image.
+/// ROCKNIX's, else the first of `OTHER_SYSTEM_CJK` that is there. The snapshots and tests point it at the file of an
+/// unpacked ROCKNIX image.
 pub fn path() -> Option<PathBuf> {
-    match std::env::var_os("POCKETUI_CJK_FONT") {
+    pick(std::env::var_os("POCKETUI_CJK_FONT"), &|p| p.is_file())
+}
+
+/// `path` with the environment's value and the question "is this a file" given.
+fn pick(env: Option<std::ffi::OsString>, exists: &dyn Fn(&Path) -> bool) -> Option<PathBuf> {
+    match env {
         Some(p) if p.is_empty() || p == "off" => None,
         Some(p) => Some(PathBuf::from(p)),
-        None => Some(PathBuf::from(SYSTEM_CJK)),
+        // Nothing found: ROCKNIX's path, so that the one line in the log says where the font was expected.
+        None => [SYSTEM_CJK].iter().chain(OTHER_SYSTEM_CJK.iter()).map(Path::new).find(|p| exists(p)).or(Some(Path::new(SYSTEM_CJK))).map(Path::to_path_buf),
     }
 }
 
@@ -49,7 +71,7 @@ pub fn open(path: &Path) -> Option<Arc<Fallback>> {
     if let Some((_, f)) = opened.iter().find(|(p, _)| p == path) {
         return f.clone();
     }
-    let font = load(path).map_err(|e| eprintln!("text: no fallback font for CJK ({}: {e}), \"?\" stands in for those letters", path.display())).ok().map(Arc::new);
+    let font = load(path).map_err(|e| eprintln!("text: no fallback font for CJK ({}: {e}), those letters are written in Latin where that can be done", path.display())).ok().map(Arc::new);
     opened.push((path.to_path_buf(), font.clone()));
     font
 }
@@ -370,5 +392,22 @@ mod tests {
         assert!(open(&not_a_font).is_none());
         let _ = std::fs::remove_file(&not_a_font);
         assert!(open(&not_a_font).is_none(), "remembered: not opened again");
+    }
+
+    #[test]
+    fn the_font_is_found_where_the_system_keeps_it() {
+        let rocknix = Path::new(SYSTEM_CJK);
+        let android = Path::new("/system/fonts/NotoSansCJK-Regular.ttc");
+        let debian = Path::new("/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc");
+        let only = |p: &'static Path| move |q: &Path| q == p;
+        // ROCKNIX first, then Android's, then the desktop's; nothing found: ROCKNIX's path (the log says where it was expected).
+        assert_eq!(pick(None, &|q| q == rocknix || q == android), Some(rocknix.to_path_buf()));
+        assert_eq!(pick(None, &only(android)), Some(android.to_path_buf()));
+        assert_eq!(pick(None, &only(debian)), Some(debian.to_path_buf()));
+        assert_eq!(pick(None, &|_| false), Some(rocknix.to_path_buf()));
+        // The environment decides before any of that.
+        assert_eq!(pick(Some("off".into()), &|_| true), None);
+        assert_eq!(pick(Some("".into()), &|_| true), None);
+        assert_eq!(pick(Some("/x/font.otf".into()), &|_| false), Some(PathBuf::from("/x/font.otf")));
     }
 }

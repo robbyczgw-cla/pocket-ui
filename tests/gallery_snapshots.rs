@@ -69,6 +69,12 @@ fn render(bin: &Path, tmp: &Path, library: &str, state: &str, stub: Option<&Stub
 /// [`render`], with the text painter's notes (`POCKETUI_I18N_MISSES`: `C` lines are strings cut short with "…") in
 /// `notes`.
 fn render_noting(bin: &Path, tmp: &Path, library: &str, state: &str, stub: Option<&Stub>, notes: Option<&Path>) -> (usize, usize, Vec<u32>) {
+    render_into(bin, tmp, library, state, stub, notes, None)
+}
+
+/// [`render_noting`], with the screenshots folder (`POCKETUI_SCREENSHOTS`) somewhere of the test's choosing: a state that
+/// writes a picture (`gallery:pressed`) must never write into a real card's.
+fn render_into(bin: &Path, tmp: &Path, library: &str, state: &str, stub: Option<&Stub>, notes: Option<&Path>, shots: Option<&Path>) -> (usize, usize, Vec<u32>) {
     let data = tmp.join(format!("data-{library}-{}", state.replace(':', "-")));
     copy_dir(&tmp.join(library).join("data"), &data);
     let png = tmp.join(format!("{library}-{}.png", state.replace(':', "-")));
@@ -85,6 +91,7 @@ fn render_noting(bin: &Path, tmp: &Path, library: &str, state: &str, stub: Optio
         .env("POCKETUI_ES_SYSTEMS", tmp.join(library).join("es_systems.cfg"))
         .env("POCKETUI_DATA", &data)
         .env_remove("POCKETUI_SCREENSHOTS")
+        .envs(shots.map(|d| ("POCKETUI_SCREENSHOTS", d.to_path_buf())))
         .output()
         .expect("run pocket-ui");
     assert!(out.status.success(), "{state}: {}", String::from_utf8_lossy(&out.stderr));
@@ -126,6 +133,20 @@ fn the_gallery_says_something_in_every_state_in_both_appearances() {
         // A damaged file in the list: the row is there and its small picture says '?', the others show theirs.
         let some_broken = render(&bin, &tmp, library, "gallery:broken", stub.as_ref());
         assert!(ink(&some_broken, (60, 150, 1120, 700)) > 150_000, "{library}: the list with damaged files");
+        // The first row, "My shelf as a picture": there with the list, there on an empty page (it is the way to share the
+        // shelf before the first screenshot), and its answer is read whole beside the two hints.
+        let list_top = (40, 100, 1150, 120);
+        assert!(ink(&list, list_top) > 15_000, "{library}: the row above the list");
+        assert!(ink(&empty, list_top) > 15_000, "{library}: the row on an empty page too");
+        let make = render(&bin, &tmp, library, "gallery:make", stub.as_ref());
+        let (lit, unlit) = (&make, &list);
+        let changed = (list_top.1..list_top.1 + list_top.3).flat_map(|row| (list_top.0..list_top.0 + list_top.2).map(move |col| row * lit.0 + col)).filter(|&i| lit.2[i] != unlit.2[i]).count();
+        assert!(changed > 10_000, "{library}: selected, the row is a lit spine, not the same as when the list has the selection ({changed} pixels differ)");
+        let notes = tmp.join(format!("notes-{library}-made.tsv"));
+        let made = render_noting(&bin, &tmp, library, "gallery:made", stub.as_ref(), Some(&notes));
+        let cut = std::fs::read_to_string(&notes).unwrap_or_default();
+        assert!(!cut.lines().any(|l| l.starts_with("C\tSaved.")), "{library}: the answer is cut:\n{cut}");
+        assert!(ink(&made, (40, 960, 700, 80)) > 1_000, "{library}: the answer beside the hint bar");
         // What Y came to is read whole, in the list and over the picture, though four hints leave little room beside
         // them (VDEV-ROUND-2026-10-25: "This is no…").
         for state in ["gallery:shelf", "gallery:full-shelf"] {
@@ -135,5 +156,45 @@ fn the_gallery_says_something_in_every_state_in_both_appearances() {
             assert!(!cut.lines().any(|l| l.starts_with("C\tThis is now")), "{library} {state}: the message is cut:\n{cut}");
             assert!(ink(&shot, (60, 870, 1120, 60)) > 1_000, "{library} {state}: the message above the hint bar");
         }
+    }
+}
+
+/// A on "My shelf as a picture" makes the picture where the screenshots go and says so; on a card that cannot be written
+/// to it says that instead of leaving the player with nothing, and writes nothing.
+#[test]
+fn a_on_the_shelf_picture_row_writes_the_picture_or_says_why_not() {
+    let _tmp_guard = tempfile::tempdir().unwrap();
+    let tmp = _tmp_guard.path().to_path_buf();
+    for appearance in ["dark", "light"] {
+        let status = Command::new("python3").env("POCKETUI_MOCK_NOW", FIXTURE_NOW)
+            .args(["-I", &format!("{ROOT}/scripts/curator-fake-library.py"), tmp.join(appearance).to_str().unwrap(), appearance])
+            .stdout(std::process::Stdio::null())
+            .status()
+            .expect("python3 for scripts/curator-fake-library.py");
+        assert!(status.success(), "curator-fake-library.py failed");
+    }
+    let bin = PathBuf::from(env!("CARGO_BIN_EXE_pocket-ui"));
+    let stub = wayland(&tmp);
+    for library in ["dark", "light"] {
+        let shots = tmp.join(format!("shots-{library}"));
+        let notes = tmp.join(format!("notes-pressed-{library}.tsv"));
+        let page = render_into(&bin, &tmp, library, "gallery:pressed", stub.as_ref(), Some(&notes), Some(&shots));
+        let made: Vec<PathBuf> = std::fs::read_dir(shots.join("shelf")).expect("the shelf's folder is made").flatten().map(|e| e.path()).collect();
+        assert_eq!(made.len(), 1, "{library}: one picture: {made:?}");
+        let name = made[0].file_name().unwrap().to_string_lossy().into_owned();
+        assert!(name.starts_with("pocket-ui shelf 20") && name.ends_with(".png"), "{library}: named the way the gallery and the phone page list it: {name}");
+        let picture = read_png(&made[0]);
+        assert_eq!((picture.0, picture.1), (1440, 1440), "{library}: the picture is square");
+        assert!(ink(&picture, (0, 0, 1440, 1440)) > 200_000, "{library}: with cases on it");
+        let cut = std::fs::read_to_string(&notes).unwrap_or_default();
+        assert!(!cut.lines().any(|l| l.starts_with("C\tSaved.")), "{library}: the answer is cut:\n{cut}");
+        assert!(ink(&page, (40, 960, 700, 80)) > 1_000, "{library}: the page says it is saved");
+        // The card refuses (its screenshots folder is a file): the page says so, nothing is written, no crash.
+        let blocked = tmp.join(format!("blocked-{library}"));
+        std::fs::write(&blocked, b"not a folder").unwrap();
+        let notes = tmp.join(format!("notes-blocked-{library}.tsv"));
+        let page = render_into(&bin, &tmp, library, "gallery:pressed", stub.as_ref(), Some(&notes), Some(&blocked.join("screenshots")));
+        assert!(ink(&page, (40, 960, 700, 80)) > 1_000, "{library}: the page says it could not be saved");
+        assert!(!blocked.join("screenshots").exists(), "{library}: nothing written");
     }
 }

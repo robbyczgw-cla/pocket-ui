@@ -68,6 +68,8 @@ const LINK_H: i32 = 64;
 const KEY_W: i32 = 300;
 const LINK_GAP: i32 = 8;
 const BOTTOM_GAP: i32 = 130;
+/// The credit line over the hint bar.
+const CREDIT_ROOM: i32 = 36;
 
 impl CreditsData {
     /// The links in the order they are painted (and selected): same chip, family, games.
@@ -223,7 +225,10 @@ impl CreditsPage {
         text.draw(c, Face::Title, 67, MARGIN, TITLE_BASE, pal().text, &title);
         let sub = text.fit(Face::Body, 28, &self.data.console_name, full_w);
         text.draw(c, Face::Body, 28, MARGIN, HEAD_BASE, pal().quiet, &sub);
-        let bottom = c.h - BOTTOM_GAP;
+        // The credit line stands over the hint bar, and the body ends a line higher (the bar's width follows the selection,
+        // so the line does not stand beside it: the page would change size as the selection moves).
+        const CREDIT: &str = "Facts: Wikidata (CC0), Wikipedia · summaries written for pocket-ui";
+        let bottom = c.h - BOTTOM_GAP - CREDIT_ROOM;
         let mut view = 0;
         // Twice only on the first paint, when it selects a link (the links' places are known after a paint).
         for _ in 0..2 {
@@ -249,8 +254,8 @@ impl CreditsPage {
             }
         }
         // The credit line: where the facts come from.
-        let (px, credit) = text.fit_sizes(Face::Body, &[21, 18], "Facts: Wikidata (CC0), Wikipedia · summaries written for pocket-ui", full_w);
-        text.draw_right(c, Face::Body, px, c.w - MARGIN, c.h - 104, pal().dust, &credit);
+        let (px, credit) = text.fit_sizes(Face::Body, &[21, 18], CREDIT, full_w);
+        text.draw(c, Face::Body, px, MARGIN, crate::kit::hint_bar_top(c.h) - 12, pal().dust, &credit);
         if self.max_scroll > 0 {
             let total = view + self.max_scroll;
             let bar_h = (view * view / total).max(40);

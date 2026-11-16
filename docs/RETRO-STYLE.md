@@ -37,7 +37,7 @@ the pause menu's slot "‹ 3 ›"; the frame's line and the selection bar at 3:1
 (`tests/text_size.rs`: every state, Large German, 1240x1080 and 640x480; and the pause menu, Save/Load, Options, quick
 settings and pocket-core's notes in Large German and Spanish at 1240x1080, 640x480 and 1024x768 behind a long real
 name, where the windows' lines count as text no string may touch, `retro::frame_lines_are_no_text`, and the longest
-names must show whole; and Help & tools → Test buttons, every case in Large English, German and Spanish at the same three
+names must show whole; and Controls → Test buttons, every case in Large English, German and Spanish at the same three
 sizes, where the last-press panel's lines count as text too and the hints before the first press must show whole),
 `text.rs`'s `retro_letters_are_crisp_and_digits_tell_apart_from_letters`, `retro.rs`'s own
 (icons decode, the switch and palette steps), `ui_sound`'s blip tests.

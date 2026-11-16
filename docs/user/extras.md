@@ -1,6 +1,6 @@
-# Extras
+# Box art & downloads
 
-Settings → Games → **Extras**. These optional downloads are always here; the first start only points you to this page.
+Settings → Games → **Box art & downloads**. These optional downloads are always here; the first start only points you to this page.
 Select a row with Up/Down. Its right side says what A does, and the line below explains the selected extra. B returns to Games.
 The list scrolls when the screen or Large text needs more room.
 
@@ -13,7 +13,7 @@ The pause menu has a separate group for fast-forward, rewind, rumble, fan and mo
 ## Starter pack
 
 Choose **Starter pack** to browse free games their authors share for anyone to play. Pick one or take them all with A.
-B stops a download safely and returns to its row in Extras. The same pack is offered on Home while the SD card has no games. See
+B stops a download safely and returns to its row in Box art & downloads. The same pack is offered on Home while the SD card has no games. See
 [Getting started](getting-started.md#nothing-on-the-sd-card-yet-the-starter-pack).
 
 ## Cheats
@@ -22,6 +22,11 @@ On TrimUI, **Cheats** offers **Get · 30 MB**. A downloads codes for many games;
 The pause menu offers the same Get row when the database is missing. Opening either page alone downloads nothing.
 The row shows progress, checking and saving. B stops a download safely; the next try continues from its saved checkpoint.
 The free-space check also reserves room to save that checkpoint.
+
+**Without a network** the row says **Look on the card**: put the cheats file from pocketui.xyz/cheats (a
+`cheats-….pack` file) on the card, in its top folder or in the pocket-ui folder, then press A. pocket-ui checks it
+against the size and fingerprint this version expects, installs it and deletes it from the card. With no file there,
+or a file that doesn't match, the row says so and nothing is installed.
 
 Once installed, the database works offline. A offers to remove it; a second A confirms. This removes the downloaded codes,
 while each game's saved cheat switches are kept. Reinstalling the codes restores those choices.
@@ -42,10 +47,19 @@ Covers come without asking whenever the Pocket is online and some games have non
 - when pocket-ui starts and Wi-Fi is up (it waits up to three minutes for the connection),
 - when the game list is read again and has new games, for example after Settings → Games → Add games.
 
-It runs in the background. The only sign is a small note at the top right of the shelf, "Covers 3 of 12", and
-the covers appearing as they arrive. It never runs while a game is played: starting a game stops it after the
+It runs in the background. The only sign is a small dot at the top right of the shelf, beside the clock, and
+the covers appearing as they arrive (no count, no words). It never runs while a game is played: starting a game stops it after the
 cover it is on, and it goes on when you are back on the shelf. A game it found nothing for is not looked up
 again (see below); a game it could not look up because the connection dropped is tried again at the next start.
+
+### Without Wi-Fi
+
+On a handheld without Wi-Fi (the RG28XX, the RG35XX 2024, the R36S) the Box art row says **From a computer**: let a
+scraper on your computer (Skraper, for example) make the covers, then copy them into a folder called `covers` beside
+the games of each system, each picture named like its game file: `roms/gba/covers/Golden Sun (USA).png` for
+`roms/gba/Golden Sun (USA).gba`. The folders `boxart`, `box2d` and an EmulationStation `images` folder are read too
+([Your EmulationStation gamelists](library.md#your-emulationstation-gamelists)). The PortMaster games and Starter pack
+rows say **No Wi-Fi** there.
 
 ### By hand
 
@@ -102,13 +116,13 @@ Left/Right) moves to the next:
   "Wrong pictures? Look up again" still works; those are things you ask for. Choosing another value starts the
   download again.
 
-On the first start, Your games has a simple Box art switch. The finer Pictures choice stays in Settings → Games → Extras.
+On the first start, Your games has a simple Box art switch. The finer Pictures choice stays in Settings → Games → Box art & downloads.
 
 Where they show:
 
 - **Split**: the picture on the right shows the box art; when you stay on a game for a moment (about two and a half
   seconds) it fades to the game running, then to the title screen, then back to the box art, a few seconds each. It makes one pass and rests until you select another game. The
-  next game starts again from its box art. With [Motion](settings-sound.md#motion) Off nothing changes by itself: the box
+  next game starts again from its box art. With [Motion](settings.md#motion) Off nothing changes by itself: the box
   art stays.
 - **The game card** ([What the card shows](library.md#what-the-card-shows)): the screenshot and the title screen under the facts,
   as "In the game" and "Title screen".
@@ -170,7 +184,7 @@ PortMaster itself is prepared automatically the first time you install something
 
 On the standalone TrimUI card, accept **Get PortMaster (~300 MB, one time)** first. This optional download
 needs Wi-Fi and at least 700 MiB free while installing. Progress and errors appear here; B stops the download
-and returns to Extras. Retry keeps the completed download checkpoint. Downloads stop while a game is played. The runtime stays on this card across
+and returns to Box art & downloads. Retry keeps the completed download checkpoint. Downloads stop while a game is played. The runtime stays on this card across
 ordinary pocket-ui updates; a changed runtime version offers **Update PortMaster**.
 On the original Brick, preparation writes slowly to protect the SD card. Allow about 2½ minutes for
 277 MB, plus download and card delays. **Preparing PortMaster…** shows changing MB counts; B still cancels. It is not included in each
@@ -181,7 +195,7 @@ Port saves belong to each engine: some keep them inside `Roms/ports/<game>`, oth
 `pocket-ui/storage/home` on the TrimUI card. Keep both when backing up ports. There are no general port
 savestates; use the game's own save feature.
 
-On TrimUI, **X** on the PortMaster row in Extras offers to remove PortMaster. **A** confirms; **B** cancels.
+On TrimUI, **X** on the PortMaster row in Box art & downloads offers to remove PortMaster. **A** confirms; **B** cancels.
 Only PortMaster itself is removed. Games, their own files, engine runtimes and PortMaster settings stay on the card;
 the next Get uses them again. Removal also works offline.
 

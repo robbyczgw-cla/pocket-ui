@@ -39,8 +39,6 @@ fn a_game_starts_animating_before_slow_preparation_finishes() {
     let wayland = wayland_for_snapshots(tmp);
     assert!(Command::new("python3").args(["-I", &format!("{ROOT}/scripts/curator-fake-library.py"), tmp.to_str().unwrap(), "dark"])
         .stdout(std::process::Stdio::null()).status().unwrap().success());
-    // Already explained: A means Play, without the intentional first-start controls card.
-    std::fs::write(tmp.join("data/controls-card-seen"), "gba\n").unwrap();
     // A large library exercises the actual chosen-game path, not a helper that merely starts a timer.
     for n in 0..3000 {
         std::fs::write(tmp.join(format!("roms/gba/Fixture {n:04}.gba")), b"game").unwrap();

@@ -7,10 +7,12 @@
 #   pocket-ui back afterwards (verify-device.sh). With the default sink muted, MS_SINK=null records a null sink made the
 #   default for the run (the speaker's volume and mute are never touched). CORE_BIN=<pocket-core built for the device>:
 #   that one is bind-mounted over the installed pocket-core for the run and unmounted after it (nothing is replaced).
-#   Take the device lock around it.
+#   Take the device lock around it. JOURNEY=nav-click.py runs that journey instead of device-ui.py (the Nav click after
+#   rests, docs/HOST.md "UI sounds").
 set -eu
 BIN=$1
 OUT=${2:-/tmp/media-ui}
+JOURNEY=${JOURNEY:-device-ui.py}
 HERE=$(cd "$(dirname "$0")" && pwd)
 ROOT=$(cd "$HERE/../.." && pwd)
 . "$ROOT/scripts/host.sh"
@@ -23,7 +25,7 @@ scp -q "$ROMS/sms-test.sms" "$HOST:/tmp/ms-roms/mastersystem/"
 rm -rf "$ROMS"
 scp -q "$BIN" "$HOST:/tmp/ms-root/pocket-ui"
 [ -n "${CORE_BIN:-}" ] && scp -q "$CORE_BIN" "$HOST:/tmp/ms-pocket-core"
-scp -q "$HERE/capture.py" "$HERE/device-ui.py" "$ROOT/scripts/latency.py" "$HOST:/tmp/"
+scp -q "$HERE/capture.py" "$HERE/$JOURNEY" "$ROOT/scripts/latency.py" "$HOST:/tmp/"
 # shellcheck disable=SC2029
 ssh "$HOST" "set -u
   for f in /storage/pocket-ui/*; do [ \"\${f##*/}\" = pocket-ui ] || ln -s \"\$f\" /tmp/ms-root/; done
@@ -48,14 +50,14 @@ PY
   rm -f /tmp/media-ui.*
   core=\$(readlink -f /storage/pocket-ui/pocket-core); bound=
   if [ -f /tmp/ms-pocket-core ]; then mount --bind /tmp/ms-pocket-core \"\$core\" && bound=1 && echo \"pocket-core for the run: /tmp/ms-pocket-core over \$core\"; fi
-  python3 /tmp/capture.py /tmp/media-ui \"\$target\" -- python3 /tmp/device-ui.py /tmp/ms-root /tmp/ms-data /tmp/ms-roms/es_systems.cfg; rc=\$?
+  python3 /tmp/capture.py /tmp/media-ui \"\$target\" -- python3 /tmp/$JOURNEY /tmp/ms-root /tmp/ms-data /tmp/ms-roms/es_systems.cfg; rc=\$?
   if [ -n \"\$null\" ]; then wpctl set-default \$old; pw-cli destroy \$null >/dev/null; echo \"default sink back to \$old, null sink removed\"; fi
   for p in \$(pidof pocket-ui) \$(pidof pocket-core); do kill \$p 2>/dev/null; done
   i=0; while [ -n \"\$(pidof pocket-ui)\$(pidof pocket-core)\" ] && [ \$i -lt 30 ]; do sleep 0.1; i=\$((i+1)); done
   [ -n \"\$bound\" ] && umount \"\$core\" && echo \"pocket-core unmounted, \$core is the installed one again\"; rm -f /tmp/ms-pocket-core
   rm -f /tmp/pocket-ui.es-only; systemctl reset-failed essway 2>/dev/null; systemctl restart essway
   cp /tmp/media-ui-pocket-ui.log /tmp/media-ui.log 2>/dev/null
-  rm -rf /tmp/ms-root /tmp/ms-data /tmp/ms-roms /tmp/device-ui.py /tmp/capture.py
+  rm -rf /tmp/ms-root /tmp/ms-data /tmp/ms-roms /tmp/$JOURNEY /tmp/capture.py
   exit \$rc" || echo "device-ui: the run failed (above)" >&2
 mkdir -p "$(dirname "$OUT")"
 for f in wav start events log; do scp -q "$HOST:/tmp/media-ui.$f" "$OUT.$f" 2>/dev/null || true; done

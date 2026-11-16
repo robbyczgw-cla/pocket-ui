@@ -23,6 +23,8 @@ pub(crate) enum IdentifyEvent {
     Done(Identified),
     /// "Look up again" for this game came out so; `name` is what its checksum gave.
     LookedUp { path: PathBuf, name: Option<String>, outcome: Again },
+    /// The game that was started got its proper name while it ran (`settle_started_name`).
+    Settled { path: PathBuf, name: String },
 }
 
 #[derive(Default)]
@@ -43,6 +45,9 @@ pub(crate) struct Identify {
     last_games: Vec<(String, PathBuf)>,
     /// A changed (or removed) recognized name still needs to reach the shelf, even across a stopped run.
     names_rescan_due: bool,
+    /// A game started while the run was going: it stops for it, and then this game's own name is looked up
+    /// (`settle_started_name`), not beside the run's reading of the same cache.
+    settle_after: Option<(String, PathBuf)>,
 }
 
 impl Identify {
@@ -114,8 +119,53 @@ impl App {
         true
     }
 
+    /// A game starts whose name no list has given yet (a card filled a minute ago, the run stopped for this very game):
+    /// its own checksum is read and looked up in the background while it runs, so the shelf it comes back to already has
+    /// its proper name ("Donkey Kong Country", not the file's "Donkey Kong 1 - Country") and the title never changes under
+    /// the player's eyes on the way back (polish review 12.11.). One file, at the lowest priority; the other games wait
+    /// for the normal run after the game (`identify.due`).
+    pub(crate) fn settle_started_name(&mut self, system: &str, path: &std::path::Path) {
+        let named = self.identify.names.contains_key(path);
+        let identifiable = pocket_ui::disc_serial::dat(system).is_some() || rom_id::dat_name(system).is_some();
+        if named || !identifiable || !path.is_file() {
+            return;
+        }
+        // The run is going and a game cuts it short: its stop comes at the next file (`Done`), then this game is looked up.
+        if self.identify.running {
+            self.identify.settle_after = Some((system.to_string(), path.to_path_buf()));
+            return;
+        }
+        let allowed = !self.art_off && self.setup.as_ref().is_none_or(|s| s.past_wifi());
+        let online = pocket_ui::wifi::ip().is_some() && allowed;
+        let (proxy, data_dir, game) = (self.proxy.clone(), self.data_dir.clone(), [(system.to_string(), path.to_path_buf())]);
+        std::thread::spawn(move || {
+            pocket_ui::web::lower_priority();
+            // Named on the card already (the lists and checksums of an earlier run): nothing to settle.
+            if !rom_id::known(&data_dir, &game).is_empty() {
+                return;
+            }
+            let fetch = |dat: &str| online.then(|| rom_id::fetch_dat(dat)).flatten();
+            let run = rom_id::run_until(&data_dir, &game, &fetch, false, || false);
+            let [(_, path)] = game;
+            if let Some(name) = run.names.get(&path) {
+                println!("identify: {} named while it runs: {name}", path.display());
+                let _ = proxy.send_event(UserEvent::Identify(IdentifyEvent::Settled { path, name: name.clone() }));
+            }
+        });
+    }
+
     pub(crate) fn identify_event(&mut self, e: IdentifyEvent) {
         match e {
+            IdentifyEvent::Settled { path, name } => {
+                let mut names = (*self.identify.names).clone();
+                names.insert(path, name);
+                self.identify.names = Arc::new(names);
+                pocket_ui::library::names_ready(true);
+                self.names_changed();
+                // The list is read again now, behind the game; it is swapped in before the way back's first picture
+                // (`game_exited`), and when the game is long over by then, at the next quiet moment as always.
+                self.identify.names_rescan_due = !self.library_rescan("games recognised");
+            }
             IdentifyEvent::Done(run) => {
                 let i = &mut self.identify;
                 i.running = false;
@@ -138,6 +188,10 @@ impl App {
                 }
                 if std::mem::take(&mut self.identify.again) {
                     self.identify.due = true;
+                }
+                // A game started while it ran and it is still on: its own name next (`settle_started_name`).
+                if let Some((system, path)) = self.identify.settle_after.take().filter(|_| self.running.is_some()) {
+                    self.settle_started_name(&system, &path);
                 }
                 // The covers and descriptions waited for the names (or this runs once more first). Not after a run
                 // a game stopped: the game runs.

@@ -1,7 +1,8 @@
 //! Part of the pocket-ui binary: Settings → Look → Cozy extras (`pocket_ui::cozy_extras` has the switches). A list of
 //! switches in the Settings style, one per extra you see (`Extra::PAGE_ROWS`), each On or Off, followed by the GBA
 //! console-model choice; the selected one's line
-//! under the list, with the looks it is seen in. The extras you hear or that move are rows of Sound & feel.
+//! under the list, with the looks it is seen in. Playful cases and old-TV switch-on came here from Sound & feel with the
+//! tree of 2026-11-13; case sounds is a row of Screen & sound.
 //!
 //! A switch takes effect at once (an atomic, read where the extra is drawn or heard) and is saved at once with the
 //! other settings. Nothing here reads a file or starts work.
@@ -38,7 +39,7 @@ impl App {
         }
     }
 
-    /// Extra `e` the other way, used and saved at once: from the page, a row of Sound & feel or of Sleep & power.
+    /// Extra `e` the other way, used and saved at once: from the page or Screen & sound's row.
     pub(crate) fn switch_extra(&mut self, e: Extra) {
         let mut x = cozy_extras::get();
         x.set(e, !x.get(e));
@@ -47,8 +48,8 @@ impl App {
         self.save_settings();
     }
 
-    /// The line under Settings row `line` for extra `e` (a row of Sound & feel): what keeps it from showing, while
-    /// another switch does and it is on, else the row's own line.
+    /// The line under extra `e` (`line` its own): what keeps it from showing, while another switch does and it is on,
+    /// else the row's own line (Playful cases: that it follows Animations until switched).
     pub(crate) fn extra_row_line(&self, e: Extra, line: &'static str) -> &'static str {
         match e.needs().filter(|n| cozy_extras::on(e) && !self.cozy_need_met(*n)) {
             Some(n) => n.note(),
@@ -81,8 +82,14 @@ impl App {
 
     /// What was made with the old switch and is kept is made again: the cases' pictures (stickers), the box's disc.
     fn cozy_extras_changed(&mut self, e: Extra) {
-        if matches!(e, Extra::Stickers | Extra::PrintedDiscs) {
+        // Progress from saves: the box's back is made again (without or with its line); the shelf's meta lines, the card and
+        // "Where was I?" ask `App::case_progress` each time they are painted.
+        if matches!(e, Extra::Stickers | Extra::PrintedDiscs | Extra::ShrinkWrap | Extra::ProgressFromSaves) {
             self.cases_look_changed();
+        }
+        // The TV playing the game switched off: a run on the glass ends now (on, it starts after the next rest).
+        if e == Extra::TvPlaysGame && !cozy_extras::on(e) {
+            self.cabinet.tv.showcase_stop();
         }
     }
 
@@ -103,9 +110,10 @@ impl App {
         // The selected row's line and the looks it is seen in, under the list over the hints.
         let desc = match list.get(sel) {
             None => "Choose the GBA console: Game Boy Advance or Game Boy Advance SP. Changes its picture everywhere and its cartridge slot at launch.".to_string(),
+            // Playful cases and old-TV switch-on say what keeps them from showing (Animations, Motion), as their rows did.
             Some(e) => match e.only() {
-            Some(only) => format!("{}\n{only}", e.blurb()),
-            None => e.blurb().to_string(),
+                Some(only) => format!("{}\n{only}", self.extra_row_line(*e, e.blurb())),
+                None => self.extra_row_line(*e, e.blurb()).to_string(),
             },
         };
         let foot = pocket_ui::kit::footer(c, &mut self.text, &mut self.hits, &[("B", "Back"), ("A", "Change")], &desc, 4, pal().text);
@@ -185,12 +193,15 @@ impl App {
 mod tests {
     use super::*;
 
-    /// Eight switches you see, no links to rows elsewhere (they are siblings of Animations and Sounds now).
+    /// The switches you see or that move, playful cases and old-TV switch-on among them (the tree of 2026-11-13), no
+    /// links to rows elsewhere; case sounds stays beside Sounds.
     #[test]
     fn the_page_has_the_extras_you_see_and_nothing_else() {
         let r = rows();
         assert_eq!(r, Extra::PAGE_ROWS);
-        assert!(r.len() <= 8);
+        assert!(r.contains(&Extra::Playful) && r.contains(&Extra::CrtOn) && !r.contains(&Extra::CaseSounds));
+        // Twelve switches since Sealed new games, Progress from saves and the TV playing the game (14.11.2026); the page scrolls.
+        assert!(r.len() < 13);
         assert!(r.iter().all(|e| e.home() == pocket_ui::cozy_extras::Home::Page));
     }
 }

@@ -123,7 +123,7 @@ impl Item {
     }
 }
 
-/// What a tick in Settings > Look > Systems on the shelf did.
+/// What a tick in Settings > Games > Systems on the shelf did.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Toggle {
     Hidden,

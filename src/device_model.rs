@@ -28,6 +28,12 @@ pub enum Model {
     /// Anbernic RG DS Plus (ROCKNIX's RK3566 image; an RK3568, 1 GB): two 1024x768 panels, one above the other, touch only
     /// on the lower one, a lid, one stick, no fan. pocket-ui uses the main output.
     RgDsPlus,
+    /// A one-screen handheld of ROCKNIX's RK3566 image on the Generic U-Boot (RG353 family, RG503, RGB30, RK2023): one
+    /// profile like the H700's (1 GB counted, no fan; Cortex-A55), one row per model in `RK3566_BOARDS`.
+    Rk3566(&'static H700Board),
+    /// A handheld of ROCKNIX's RK3326 image (the R36S): four Cortex-A35, 1 GB, no fan, our slowest chip. The card boots the
+    /// R36S tree by name (ROCKNIX's U-Boot script has no R36S branch, docs/SD-IMAGE-RK3326.md); one row in `RK3326_BOARDS`.
+    Rk3326(&'static H700Board),
     #[cfg(feature = "brick")] Brick(crate::brick_profile::Board),
 }
 
@@ -82,4 +88,85 @@ pub fn h700_board(model: &str, compatible: &[&str]) -> Option<&'static H700Board
         H700_BOARDS.iter().find(|b| b.compatible.contains(&c.as_str()))
     });
     by_compatible.or_else(|| H700_BOARDS.iter().find(|b| b.name.eq_ignore_ascii_case(model)))
+}
+
+/// The one-screen handhelds of ROCKNIX's RK3566 image that its Generic U-Boot tells apart (`doc/board/anbernic/rgxx3.rst` in
+/// U-Boot; ROCKNIX 20261101's `device_trees/`), in the same shape as `H700_BOARDS` (docs/DEVICES.md, "RK3566"). Sizes are the
+/// panels' (rocknix.org's device pages). The RG353M has no tree of its own: U-Boot gives it the RG353P's and only changes
+/// `model`, so it is found by `model` first. Wi-Fi: the RK2023's chip is optional (a chip that answers wins either way).
+/// The RG353M/P/V start a ROCKNIX card only with Android wiped from their eMMC (ROCKCHIP-NATIVE.md); the profile is the same.
+pub const RK3566_BOARDS: &[H700Board] = &[
+    board("rg353m", "Anbernic RG353M", &[], (640, 480), true, true, false),
+    board("rg353p", "Anbernic RG353P", &["anbernic,rg353p"], (640, 480), true, true, false),
+    board("rg353ps", "Anbernic RG353PS", &["anbernic,rg353ps"], (640, 480), true, true, false),
+    board("rg353v", "Anbernic RG353V", &["anbernic,rg353v"], (640, 480), true, true, false),
+    board("rg353vs", "Anbernic RG353VS", &["anbernic,rg353vs"], (640, 480), true, true, false),
+    // 5", 960x544 (OLED): no layout of its own, the canvas is scaled down from 1694x960 (`scaled_layout::logical_size`).
+    board("rg503", "Anbernic RG503", &["anbernic,rg503"], (960, 544), true, true, false),
+    // Square like the CubeXX: laid out on 1440x1440 and halved. ROCKNIX's quirk boots a second RGB30 revision (another
+    // Wi-Fi chip) on the RGB20SX's tree, so that row is here too.
+    board("rgb30", "Powkiddy RGB30", &["powkiddy,rgb30"], (720, 720), true, true, false),
+    board("rgb20sx", "Powkiddy RGB20SX", &["powkiddy,rgb20sx"], (720, 720), true, true, false),
+    board("rk2023", "Powkiddy RK2023", &["powkiddy,rk2023"], (640, 480), true, false, false),
+];
+
+/// The RK3566 model with this device tree `model` or `compatible` entry: `model` first (the RG353M), as `h700_board` the other way round.
+pub fn rk3566_board(model: &str, compatible: &[&str]) -> Option<&'static H700Board> {
+    let by_model = RK3566_BOARDS.iter().find(|b| !model.trim().is_empty() && b.name.eq_ignore_ascii_case(model.trim()));
+    by_model.or_else(|| {
+        compatible.iter().find_map(|c| {
+            let c = c.trim().to_ascii_lowercase();
+            RK3566_BOARDS.iter().find(|b| b.compatible.contains(&c.as_str()))
+        })
+    })
+}
+
+/// Which key is HOME on an RK3566 board under ROCKNIX's InputPlumber (its `anbernic_gen1` and `powkiddy` maps, 20261101):
+/// the F key where there is one (it comes as the InputPlumber keyboard's F1, or `BTN_BACK` without InputPlumber), else the
+/// right stick's click, as pocket-ui's dArkOS port does on boards without a menu key. InputPlumber's own Guide on these
+/// boards is a copy of SELECT (`pad_linux_decode`'s echo filter drops it).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Rk3566Home {
+    FKey,
+    RightStickClick,
+}
+
+pub fn rk3566_home(b: &H700Board) -> Rk3566Home {
+    match b.key {
+        "rgb30" | "rgb20sx" | "rk2023" => Rk3566Home::RightStickClick,
+        _ => Rk3566Home::FKey,
+    }
+}
+
+/// The handhelds of ROCKNIX's RK3326 image pocket-ui has a profile for (docs/DEVICES.md, "RK3326"): the R36S, read from
+/// ROCKNIX's `rk3326-gameconsole-r36s.dts` (tag 20261001; model "Game Console R36S", compatible `gameconsole,r35s`,
+/// `gameconsole,r36s`, pad `r36s_Gamepad` with two sticks, L2/R2 as keys and FN as BTN_MODE). 640x480 on every panel
+/// revision (the 2024 panels only need another overlay, the screen size stays). No Wi-Fi by the maker's specification;
+/// a chip that answers (some later boards, a USB dongle) still wins (`system_ctl::AutoHw`). The R35S shares the tree.
+pub const RK3326_BOARDS: &[H700Board] = &[
+    board("r36s", "Game Console R36S", &["gameconsole,r36s"], (640, 480), true, false, false),
+];
+
+/// The RK3326 model with this device tree `model` or `compatible` entry.
+pub fn rk3326_board(model: &str, compatible: &[&str]) -> Option<&'static H700Board> {
+    let by_compatible = compatible.iter().find_map(|c| {
+        let c = c.trim().to_ascii_lowercase();
+        RK3326_BOARDS.iter().find(|b| b.compatible.contains(&c.as_str()))
+    });
+    by_compatible.or_else(|| RK3326_BOARDS.iter().find(|b| !model.trim().is_empty() && b.name.eq_ignore_ascii_case(model.trim())))
+}
+
+/// The Android player (`android_modules.rs`, where this file is `device`): phones and Android handhelds have Wi-Fi, so
+/// the words for a handheld without it (`device::no_wifi_chip` on Linux) are never chosen there.
+#[cfg(all(target_os = "android", not(feature = "handheld")))]
+pub fn no_wifi_chip() -> bool {
+    false
+}
+
+#[cfg(all(target_os = "android", not(feature = "handheld")))]
+pub const NEEDS_NETWORK: &str = "Needs a network, and this handheld has no Wi-Fi.";
+
+#[cfg(all(target_os = "android", not(feature = "handheld")))]
+pub fn wifi_or<'a>(wifi: &'a str, _none: &'a str) -> &'a str {
+    wifi
 }

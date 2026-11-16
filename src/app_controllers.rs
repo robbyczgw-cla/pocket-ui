@@ -186,7 +186,7 @@ impl App {
         if self.controller_setup.capture.is_some() { return Some(SettingsPage::Controllers(sel)); }
         // B leaves while a layout is still being written: the worker's note just isn't seen.
         if b == CANCEL {
-            return if self.controller_setup.pause { None } else { Some(SettingsPage::Buttons(2)) };
+            return if self.controller_setup.pause { None } else { Some(SettingsPage::List(super::settings_row(super::app_buttons::CONTROLLERS_NAME))) };
         }
         let n = BUTTONS.len() + 2;
         let sel = sel.min(n - 1);

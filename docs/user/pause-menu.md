@@ -48,7 +48,11 @@ and Quit, where saving is: for example "This emulator keeps its own saves. Save 
 
 - **Continue** returns to the game. B or another tap on HOME does the same.
 - **Save** saves the game's current moment into one of your save slots (1 to 8; see
-  [Save slots](pause-menu-saves.md#save-slots-where-i-quit-and-before-load)).
+  [Save slots](pause-menu-saves.md#save-slots-where-i-quit-and-before-load)). With **Animations: Cozy** and **Motion: Full**
+  you see it: a copy of the picture you just saved flies out of the big preview, which stays as it is, shrinks into its slot,
+  and the slot lights up as it lands with a quiet card click; then the game goes on (about half a second). The save is
+  written the moment you press A, the picture is only a picture, and any button or touch ends it and takes you back to the game at once. Only pocket-ui's own
+  host with slots shows it (not RetroArch's single save or a standalone emulator).
 - **Load** goes back to a saved moment: the one from your last quit ("Where I quit"), the one a Load just
   replaced ("Before load"), or one of your slots. It is greyed out and cannot be chosen while the
   selected entry holds nothing to load.
@@ -126,14 +130,14 @@ it found (even across restarts). It only says what it measured:
 | "About 3 h 20 min left in this game" | This game has been measured for at least 20 minutes on battery, and the charge dropped by 3% or more in that time |
 | "About 4 h left (PS2 games)" | This game hasn't been measured enough yet: the other games of its console stand in |
 | "About 5 h left (all games)" | No game of this console has been measured enough either: all the games you played stand in |
-| "Battery: not enough play to tell yet" | Not played long enough on battery yet |
+| "83%" (just the charge) | Not played long enough on battery yet to tell how long it lasts |
 | "Charging" | The Pocket is on the charger and charging |
 | "Full" | The Pocket is on the charger and the battery is full |
 
 Time asleep, on the charger or starting and ending a game is never counted. The newest play counts most, so after a change
 (another [Performance](performance.md) setting, an older battery) the time follows within a few hours. The game's own time left
 also shows on its [card](library.md#what-the-card-shows), and the whole Pocket's in
-[Settings → Playing → Battery](settings-system.md#battery).
+[Settings → System → Battery](settings-system.md#battery).
 
 ## Players
 

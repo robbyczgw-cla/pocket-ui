@@ -1,4 +1,4 @@
-# German interface: English source string<TAB>German. Keyed by the exact English text the code paints.
+# Brazilian Portuguese interface: English source string<TAB>Portuguese. Keyed by the exact English text the code paints.
 # Placeholders: {n} {m} {k} {n2}... a number, {s} {s2}... text kept as it is, {t} {t2}... text translated in turn.
 # How to add lines: docs/dev/translations.md "Translations". Terms: docs/i18n-glossary.md. Lines of a description that the
 # code draws line by line are separate entries.
@@ -48,7 +48,7 @@ Locked.	Bloqueada.
 1 point · Locked.	1 ponto · Bloqueada.
 1 point · Unlocked.	1 ponto · Desbloqueada.
 Earn achievements in the games pocket-core plays: unlocks are checked as you play and count on retroachievements.org.	Ganhe conquistas nos jogos que o pocket-core roda: elas são verificadas enquanto você joga e contam no retroachievements.org.
-Save states, rewind and cheats stay usable. Without Wi-Fi, unlocks are kept and sent the next time a game starts online.	Save states, rebobinar e cheats continuam disponíveis. Sem Wi-Fi, as conquistas ficam guardadas e são enviadas na próxima vez que um jogo iniciar online.
+With Hardcore off, save states, rewind and cheats stay usable. With it on they are off, a game starts from its in-game save, and the site counts your unlocks as hardcore. Without Wi-Fi, unlocks are kept and sent the next time a game starts online.	Com o Hardcore desligado, save states, rebobinar e cheats continuam disponíveis. Ligado, ficam desligados, o jogo começa do save do jogo e o site conta suas conquistas como hardcore. Sem Wi-Fi, as conquistas ficam guardadas e são enviadas na próxima vez que um jogo iniciar online.
 You need a free account from retroachievements.org. Your password is sent once to sign in and is not kept; the Pocket keeps only the sign-in key the site gives back.	Você precisa de uma conta gratuita do retroachievements.org. Sua senha é enviada uma vez para entrar e não é guardada; o Pocket guarda só a chave de acesso que o site devolve.
 Invalid user/password combination. Please try again.	Usuário ou senha inválidos. Tente de novo.
 User name	Usuário
@@ -191,6 +191,7 @@ No save states	Sem save states
 {n} save states	{n} save states
 last played {t}	jogado {t}
 not played yet	ainda não jogado
+not here yet	ainda não jogado aqui
 {s} played	{s} de jogo
 Release not named in the file	Lançamento não indicado no arquivo
 · performance {t}	· desempenho {t}
@@ -670,7 +671,6 @@ Settings reset. pocket-ui starts again…	Configurações redefinidas. O pocket-
 Restored. pocket-ui starts again…	Restaurado. O pocket-ui inicia de novo…
 Reset	Redefinir
 Restore	Restaurar
-
 # --- Battery
 Charging	Carregando
 Full	Cheia
@@ -792,6 +792,14 @@ All off	Todos desligados
 {n} cheats use a format pocket-core can't apply yet	{n} cheats usam um formato que o pocket-core ainda não consegue aplicar
 It sets a value in memory instead of giving a code. It is in the cheat file, but pocket-core can't use it yet.	Define um valor na memória em vez de dar um código. Está no arquivo de cheats, mas o pocket-core ainda não consegue usar.
 They set a value in memory instead of giving a code. They are in the cheat file, but pocket-core can't use them yet.	Definem um valor na memória em vez de dar um código. Estão no arquivo de cheats, mas o pocket-core ainda não consegue usar.
+[Your file]	[Seu arquivo]
+{s} [Your file]	{s} [Seu arquivo]
+Your cheat file is too big	Seu arquivo de cheats é grande demais
+A cheat file can be up to 256 KB. Yours is larger, so it was left out.	Um arquivo de cheats pode ter até 256 KB. O seu é maior, por isso foi deixado de fora.
+Your cheat file can't be read	Não foi possível ler seu arquivo de cheats
+pocket-ui found a .cht file for this game but could not open it, so it was left out.	O pocket-ui encontrou um arquivo .cht para este jogo, mas não conseguiu abri-lo, por isso foi deixado de fora.
+Your cheat file has no cheats in it	Seu arquivo de cheats não tem nenhum cheat
+pocket-ui found a .cht file for this game but no cheat lines in it (cheat0_desc and cheat0_code), so it was left out.	O pocket-ui encontrou um arquivo .cht para este jogo, mas sem linhas de cheat (cheat0_desc e cheat0_code), por isso foi deixado de fora.
 
 # --- Console pages
 Before	Antes
@@ -878,6 +886,13 @@ China	China
 Worldwide	No mundo todo
 As of {t}.	Dados de {t}.
 As of {t}. {t2}	Dados de {t}. {t2}
+{n} million	{n} milhões
+over {n} million	mais de {n} milhões
+{n} million (all models)	{n} milhões (todos os modelos)
+{n} million (with Game Boy Color)	{n} milhões (com Game Boy Color)
+{n} million, counted with the Game Boy	{n} milhões, contados com o Game Boy
+{n} million by March 2001 (Sega)	{n} milhões até março de 2001 (Sega)
+{s}, {n} million	{s}, {n} milhões
 CPU	CPU
 Graphics	Gráficos
 Memory	Memória
@@ -1040,6 +1055,9 @@ Restore defaults	Restaurar padrões
 L1 and R1 skip five choices at a time.	L1 e R1 pulam cinco opções por vez.
 Left stick as D-pad	Analógico esquerdo como direcional
 The left stick works as the D-pad.	O analógico esquerdo funciona como direcional.
+D-pad as left stick	Direcional como analógico esquerdo
+The D-pad moves the left stick, for games that need one.	O direcional move o analógico esquerdo, para jogos que precisam de um.
+On by itself on a handheld without sticks.	Ativado sozinho num portátil sem analógicos.
 Turn it off for games that use an analogue stick.	Desligue em jogos que usam um analógico.
 {t} does nothing in this game.	{t} não faz nada neste jogo.
 {t} presses {t2}.	{t} aperta {t2}.
@@ -1253,7 +1271,7 @@ Continue where I quit	Continuar de onde parei
 On: Quit keeps the moment and the next start continues there. Off: only the game's own saves stay.	Ligado: Sair guarda o momento e o próximo início continua dali. Desligado: ficam só os saves do próprio jogo.
 Motion	Movimento
 Selections glide and pages slide in. Off shows every press at once, without animation.	As seleções deslizam e as páginas entram deslizando. Desligado mostra cada aperto na hora, sem animação.
-Settings › Sound & feel › Motion	Configurações › Som e sensação › Movimento
+Settings › Look › Motion	Configurações › Visual › Movimento
 Menu sounds	Sons de menu
 Soft clicks as you move through the menus. Never in games.	Cliques suaves ao navegar pelos menus. Nunca nos jogos.
 A very short tick in your hands as the selection moves.	Um toque bem curto nas suas mãos quando a seleção se move.
@@ -1354,7 +1372,6 @@ Wrong pictures? Look up again	Imagens erradas? Busque de novo
 Which game is this?	Que jogo é este?
 by {s}	de {s}
 , part of the {s} series	, da série {s}
-
 # --- Game facts (gamedb)
 {n}–{m} players	{n}–{m} jogadores
 1 player	1 jogador
@@ -1459,6 +1476,7 @@ Open EmulationStation…	Abrir EmulationStation…
 unknown	desconhecido
 {n} GB free	{n} GB livres
 {n}%, charging	{n}%, carregando
+100%, charging	100%, carregando
 {n}%, plugged in	{n}%, na tomada
 
 # --- Settings → Battery
@@ -1511,7 +1529,7 @@ Previous	Anterior
 # --- Settings list
 Settings	Configurações
 Choose how the shelf looks, dark or light.	Escolha o visual da estante, escuro ou claro.
-Menus and messages in English, German, Spanish or Portuguese.	Menus e mensagens em inglês, alemão, espanhol ou português.
+The language of menus and messages.	O idioma de menus e mensagens.
 Text size	Tamanho do texto
 Larger text on every screen, fewer rows on a page.	Texto maior em todas as telas, menos linhas por página.
 Larger text on every screen.	Texto maior em todas as telas.
@@ -1542,7 +1560,7 @@ Turn over	Virar
 No picture yet	Ainda sem imagem
 No pictures yet. HOME + A in the game takes one.	Ainda sem imagens. HOME + A no jogo tira uma.
 No description yet.	Ainda sem descrição.
-Soft clicks in menus, not in games. Left/right: how loud. Game volume and brightness: HOME.	Cliques suaves nos menus, não nos jogos. Esq./Dir.: volume. Volume do jogo e brilho: HOME.
+Soft clicks in menus, not in games. Left/right: how loud.	Cliques suaves nos menus, não nos jogos. Esq./Dir.: volume.
 The lights around the sticks. Off unless you turn them on.	As luzes ao redor dos analógicos. Apagadas, a menos que você ligue.
 Home, or straight back into the game you played last.	Home, ou direto no último jogo que você jogou.
 Quit keeps the moment for the next start.	Sair guarda o momento para a próxima vez.
@@ -1560,7 +1578,7 @@ Every feature on a card, with a picture: switch it on or off.	Cada recurso com u
 Manual	Manual
 The user guide, on the device.	O guia do usuário, no aparelho.
 About	Sobre
-Saves a file for a bug report, to attach on GitHub.	Salva um arquivo para um relatório de bug, para anexar no GitHub.
+Saves a file for a bug report, to attach on GitHub or send by mail.	Salva um arquivo para um relatório de bug, para anexar no GitHub ou enviar por e-mail.
 Version, storage and network.	Versão, armazenamento e rede.
 
 # --- Settings → Updates
@@ -1999,7 +2017,6 @@ Couldn't load the PortMaster catalogue. Check Wi-Fi.	Não foi possível carregar
 Couldn't prepare PortMaster.	Não foi possível preparar o PortMaster.
 PortMaster reported an error	O PortMaster informou um erro
 PortMaster finished, but the game is missing.	O PortMaster terminou, mas o jogo não está lá.
-
 # --- Power menu
 Choose Switch boot mode › Android there	Escolha lá Switch boot mode › Android
 To start Android: Power off, then Vol Down + Power › Switch boot mode	Para iniciar o Android: Desligar, depois Vol Down + Power › Switch boot mode
@@ -2487,7 +2504,7 @@ Paused, not by pocket-ui. X resumes it.	Pausado, não pelo pocket-ui. X retoma.
 Paused, not by pocket-ui. X resumes both folders.	Pausado, não pelo pocket-ui. X retoma as duas pastas.
 Not while a game runs.	Não durante um jogo.
 Syncthing isn't answering.	O Syncthing não responde.
-Saves and states, in step across devices.	Saves e states, em sincronia entre aparelhos.
+Saves and states, in step across devices.	Saves e states, em sincronia.
 Look for new saves as soon as a game ends.	Procurar saves novos assim que o jogo termina.
 Sync after playing	Sincronizar após jogar
 
@@ -2646,7 +2663,6 @@ Phone hotspot	Hotspot do celular
 {t}, {t2}	{t}, {t2}
 {t}   {t2}	{t}   {t2}
 {t} >	{t} >
-
 # --- Console headlines
 first generation	primeira geração
 second generation	segunda geração
@@ -3015,7 +3031,7 @@ No PC paired	Nenhum PC
 Power…	Energia…
 Asked again in Settings › Help & tools › Tour. Changed any time in	Será perguntado de novo em Configurações › Ajuda e ferramentas › Tour. Mude quando quiser em
 Settings › System › Time has the rest.	Configurações › Sistema › Hora tem o resto.
-Games from systems taken off the shelf stay out of this list (Settings › Look › Systems on the shelf).	Jogos de sistemas tirados da estante ficam fora desta lista (Configurações › Visual › Sistemas na estante).
+Games from systems taken off the shelf stay out of this list (Settings › Games › Systems on the shelf).	Jogos de sistemas removidos da estante não aparecem nesta lista (Configurações › Jogos › Sistemas na estante).
 {s} ended at once with an error. The log has the details (Settings › Help & tools › About shows where it is).	{s} terminou na hora com um erro. O registro tem os detalhes (Configurações › Ajuda e ferramentas › Sobre mostra onde ele fica).
 File sharing is off. Turn it on in Settings › Games › Add games (X).	Compartilhar arquivos está desligado. Ligue em Configurações › Jogos › Adicionar jogos (X).
 Connect to Wi-Fi first (Settings › Connections › Wi-Fi).	Conecte-se primeiro ao Wi-Fi (Configurações › Conexões › Wi-Fi).
@@ -3078,7 +3094,6 @@ Measured the last time it ran: one thread at {n}% of a core while the rest of th
 under 1% an hour	menos de 1% por hora
 {n}% an hour	{n}% por hora
 About {n}% an hour	Cerca de {n}% por hora
-Battery: not enough play to tell yet	Bateria: ainda pouco jogo para dizer
 Measuring this game…	Medindo este jogo…
 {t} in this game	{t} neste jogo
 
@@ -3169,8 +3184,8 @@ Open on your phone or computer	Abra no celular ou computador
 or http:{s}	ou http:{s}
 Not listening	Sem escutar
 {t} It tries again every 30 seconds.	{t} Tenta de novo a cada 30 segundos.
-Waiting for Tailscale	Esperando o Tailscale
-It listens only on the Tailscale network. Switch Tailscale on and sign in (Settings › Connections › Tailscale).	Só escuta na rede Tailscale. Ligue o Tailscale e entre (Configurações › Conexões › Tailscale).
+Waiting for Wi-Fi	Esperando o Wi-Fi
+It listens on your Wi-Fi and on Tailscale. Connect to Wi-Fi (Settings › Connections › Wi-Fi) or switch Tailscale on.	Escuta no seu Wi-Fi e no Tailscale. Conecte-se ao Wi-Fi (Configurações › Conexões › Wi-Fi) ou ligue o Tailscale.
 Pair a browser	Parear um navegador
 No code: the Pocket gave no random numbers.	Sem código: o Pocket não gerou números aleatórios.
 1.  Scan this with your phone's camera,	1.  Escaneie isto com a câmera do celular,
@@ -3337,7 +3352,6 @@ pocket-ui doesn't see the sound on its way, so gaps aren't counted and this stag
 {s} is not there	{s} não existe
 {s}: none of the settings Pixel Path reads are in it	{s}: não tem nenhuma das configurações que o Pixel Path lê
 in {n}	em {n}
-
 # --- Play history: dates, sessions, cards
 {n} January	{n} de janeiro
 {n} Jan	{n} jan
@@ -3409,7 +3423,7 @@ Auto (default)	Auto (padrão)
 Auto: the system decides; for PS2, GameCube and 3DS that is full speed.	Auto: o sistema decide; em PS2, GameCube e 3DS isso é a velocidade máxima.
 The fan on the shelf, in the lists and in Settings.	A ventoinha na estante, nas listas e nas Configurações.
 This port keeps one core busy all the time. Battery performance keeps it cooler and quieter; if it stutters, go back to Auto.	Este port mantém um core ocupado o tempo todo. O desempenho de Bateria o mantém mais frio e silencioso; se travar, volte para Auto.
-Only over Tailscale: your own devices get in, any other browser needs a code. Pauses while a game runs.	Só pelo Tailscale: seus próprios dispositivos entram, qualquer outro navegador precisa de um código. Pausa enquanto um jogo roda.
+On the Wi-Fi every browser needs a code; your own Tailscale devices get in without one. Not encrypted on the Wi-Fi: use it at home. Pauses while a game runs.	No Wi-Fi todo navegador precisa de um código; seus próprios dispositivos do Tailscale entram sem ele. Sem criptografia no Wi-Fi: use em casa. Pausa enquanto um jogo roda.
 Valid for {s} more, for one browser.	Válido por mais {s}, para um navegador.
 smooth	suave
 Tailscale	Tailscale
@@ -3430,8 +3444,8 @@ Lens, smart shelves, labels and your play history	Lens, estantes inteligentes, e
 Your {n}: the games, the hours, the streaks	Seu {n}: os jogos, as horas, as sequências
 !Your {t}: the games, the hours, the streaks	Seu {t}: os jogos, as horas, as sequências
 !{t}, fan {t2}	{t}, ventoinha {t2}
-Needs Tailscale. Set it up first (Settings › Connections › Tailscale), then switch this on. The address to open shows here.	Precisa do Tailscale. Configure-o primeiro (Configurações › Conexões › Tailscale) e depois ligue isto. O endereço para abrir aparece aqui.
-Only over Tailscale, and every browser needs a code, yours too. Pauses while a game runs.	Só pelo Tailscale, e todo navegador precisa de um código, o seu também. Pausa enquanto um jogo roda.
+Switch it on to open your library in a browser on the same Wi-Fi, or over Tailscale. The address to open shows here.	Ligue para abrir sua biblioteca num navegador na mesma rede Wi-Fi ou pelo Tailscale. O endereço aparece aqui.
+Every browser needs a code, yours too. Not encrypted on the Wi-Fi: use it at home. Pauses while a game runs.	Todo navegador precisa de um código, o seu também. Sem criptografia no Wi-Fi: use em casa. Pausa enquanto um jogo roda.
 Code: every browser needs a code, yours too.	Código: todo navegador precisa de um código, o seu também.
 {t} · 1 filter	{t} · 1 filtro
 Max: CPU and GPU at full speed, smoothest, but warmer and uses more battery. Auto: the system decides (ROCKNIX's own setting for this system). Battery: lower top speeds, light games only.	Máximo: CPU e GPU na velocidade máxima, o mais fluido, mas mais quente e gasta mais bateria. Auto: o sistema decide (a configuração própria do ROCKNIX para este sistema). Bateria: velocidades máximas menores, só jogos leves.
@@ -3573,10 +3587,10 @@ Saves changed on two devices before they could sync. Choose which version to kee
 Saves changed on two devices. Choose which to keep.	Os saves mudaram em dois dispositivos. Escolha qual manter.
 Keeping…	Mantendo…
 Kept. The other version is in {s}.	Mantida. A outra versão está em {s}.
-A save has two versions: {s} and {n} more – choose in Settings › Help & tools › For tinkerers › Sync	Um save tem duas versões: {s} e mais {n} – escolha em Configurações › Ajuda e ferramentas › Para curiosos › Sincronizar
-A memory card has two versions: {s} and {n} more – choose in Settings › Help & tools › For tinkerers › Sync	Um Memory Card tem duas versões: {s} e mais {n} – escolha em Configurações › Ajuda e ferramentas › Para curiosos › Sincronizar
-A save has two versions: {s} – choose in Settings › Help & tools › For tinkerers › Sync	Um save tem duas versões: {s} – escolha em Configurações › Ajuda e ferramentas › Para curiosos › Sincronizar
-A memory card has two versions: {s} – choose in Settings › Help & tools › For tinkerers › Sync	Um Memory Card tem duas versões: {s} – escolha em Configurações › Ajuda e ferramentas › Para curiosos › Sincronizar
+A save has two versions: {s} and {n} more – choose in Settings › Connections › Sync	Um save tem duas versões: {s} e mais {n} – escolha em Configurações › Conexões › Sincronizar
+A memory card has two versions: {s} and {n} more – choose in Settings › Connections › Sync	Um Memory Card tem duas versões: {s} e mais {n} – escolha em Configurações › Conexões › Sincronizar
+A save has two versions: {s} – choose in Settings › Connections › Sync	Um save tem duas versões: {s} – escolha em Configurações › Conexões › Sincronizar
+A memory card has two versions: {s} – choose in Settings › Connections › Sync	Um Memory Card tem duas versões: {s} – escolha em Configurações › Conexões › Sincronizar
 A save has two versions: {s} – open the game's card to choose	Um save tem duas versões: {s} – abra a ficha do jogo para escolher
 A memory card has two versions: {s} – open the game's card to choose	Um Memory Card tem duas versões: {s} – abra a ficha do jogo para escolher
 Nothing waiting	Nada pendente
@@ -3838,6 +3852,14 @@ Screenshot deleted	Captura de tela excluída
 Could not delete the screenshot	Não foi possível excluir a captura de tela
 This is now the game's picture on the shelf	Esta agora é a imagem do jogo na estante
 That game is not on the shelf	Esse jogo não está na estante
+My shelf as a picture	Minha estante como imagem
+My shelf	Minha estante
+A picture of your cases to post. It is saved here.	Uma imagem das suas caixas para postar. Ela é salva aqui.
+Making the picture…	Criando a imagem…
+Make the picture	Criar a imagem
+Saved. It is the newest picture in the list below.	Salva. É a imagem mais recente da lista abaixo.
+Could not save the picture	Não foi possível salvar a imagem
+Your shelf is empty. Add a game first, then share it.	Sua estante está vazia. Adicione um jogo primeiro, depois compartilhe.
 Could not save it as the shelf picture	Não foi possível salvar como imagem da estante
 That file is not a picture the Pocket can read	Esse arquivo não é uma imagem que o Pocket consiga ler
 Could not read the screenshot	Não foi possível ler a captura de tela
@@ -3847,13 +3869,13 @@ Could not save it: is the SD card full?	Não foi possível salvar: o cartão SD 
 # --- Report a problem (Settings > System > About, app_report.rs, report.rs)
 Report a problem	Relatar um problema
 To report it, hold SELECT + START and choose Report a problem.	Para relatar, segure SELECT + START e escolha Relatar um problema.
-Saves a file with the logs and settings that help find a problem. You attach it to your report on GitHub.	Salva um arquivo com os registros e configurações que ajudam a achar um problema. Você o anexa ao seu relato no GitHub.
+Saves a file with the logs and settings that help find a problem. Attach it to a GitHub issue or mail it to robby@robbyczesany.com.	Salva um arquivo com os registros e configurações que ajudam a achar um problema. Anexe-o a um issue do GitHub ou envie para robby@robbyczesany.com.
 ROCKNIX's own menu, after a warning. Restart the Pocket to come back.	O menu próprio do ROCKNIX, depois de um aviso. Reinicie o Pocket para voltar.
 Writing the report…	Escrevendo o relato…
 Report saved	Relato salvo
 One text with your device, cores, sound counters and the end of the logs. You choose where it goes; the app sends nothing.	Um texto com seu dispositivo, os cores, contadores de som e o fim dos registros. Você escolhe para onde vai; o app não envia nada.
 The share sheet is open. Choose where the report goes, for example a message to yourself.	A janela de compartilhamento está aberta. Escolha para onde o relato vai, por exemplo uma mensagem para você mesmo.
-Copied. Paste it into your report on GitHub.	Copiado. Cole no seu relato no GitHub.
+Copied. Paste it into a GitHub issue or a mail to robby@robbyczesany.com.	Copiado. Cole em um issue do GitHub ou em um e-mail para robby@robbyczesany.com.
 Android has no app to share with. Use Copy the report instead.	O Android não tem app para compartilhar. Use “Copiar o relato”.
 Android would not copy the report. Use Share the report instead.	O Android não copiou o relato. Use “Compartilhar o relato”.
 The report could not be written. Try again after restarting the app.	Não foi possível escrever o relato. Tente de novo depois de reiniciar o app.
@@ -3862,7 +3884,7 @@ Share the report	Compartilhar o relato
 Copy the report	Copiar o relato
 Report not saved	Relato não salvo
 In the reports folder of the games share (roms/reports on the SD card).	Na pasta de relatos do compartilhamento de jogos (roms/reports no cartão SD).
-Attach this file to your report on GitHub.	Anexe este arquivo ao seu relato no GitHub.
+Attach this file to a GitHub issue or mail it to robby@robbyczesany.com.	Anexe este arquivo a um issue do GitHub ou envie para robby@robbyczesany.com.
 Left out: Wi-Fi names and passwords, network addresses, Tailscale, RetroAchievements and sync details, passwords and tokens. Game names are replaced by a short code, so name the game in your report if it matters.	Ficam de fora: nomes e senhas de Wi-Fi, endereços de rede, dados do Tailscale, RetroAchievements e sincronização, senhas e tokens. Nomes de jogos viram um código curto, então cite o jogo no seu relato se for importante.
 The SD card is full. Make some room, for example by deleting old screenshots, and try again.	O cartão SD está cheio. Abra espaço, por exemplo excluindo capturas de tela antigas, e tente de novo.
 The SD card can't be written to right now. Restart the Pocket and try again.	Não é possível gravar no cartão SD agora. Reinicie o Pocket e tente de novo.
@@ -3897,6 +3919,17 @@ Only the processor speed can be changed here.	Aqui só dá para mudar a velocida
 None on this device	Nenhum neste dispositivo
 This device has no Wi-Fi. Everything else works without it.	Este dispositivo não tem Wi-Fi. Todo o resto funciona sem ele.
 This device has no Wi-Fi.	Este dispositivo não tem Wi-Fi.
+No Wi-Fi on this handheld: put the update file from pocketui.xyz/install on the card, then choose Look on the card.	Sem Wi-Fi neste portátil: coloque o arquivo de atualização de pocketui.xyz/install no cartão SD e escolha Procurar no cartão.
+Look on the card	Procurar no cartão
+The update file on the card is incomplete or damaged. Copy it onto the card again. Nothing was installed.	O arquivo de atualização no cartão SD está incompleto ou danificado. Copie de novo para o cartão. Nada foi instalado.
+The update file on the card isn't signed by us. Nothing was installed.	O arquivo de atualização no cartão SD não é assinado por nós. Nada foi instalado.
+The update file on the card is for another kind of handheld. Get the one for this handheld at pocketui.xyz/install. Nothing was installed.	O arquivo de atualização no cartão SD é para outro portátil. Baixe o deste portátil em pocketui.xyz/install. Nada foi instalado.
+No update file on the card. Put the update file from pocketui.xyz/install on the card, then look again.	Nenhum arquivo de atualização no cartão SD. Coloque o arquivo de atualização de pocketui.xyz/install no cartão e procure de novo.
+This update needs files that aren't in the update file on the card. Get the newest update file, or update over Wi-Fi. Nothing was installed.	Esta atualização precisa de arquivos que não estão no arquivo de atualização do cartão SD. Baixe o mais recente ou atualize pelo Wi-Fi. Nada foi instalado.
+The update on the card ({s}) isn't newer than this pocket-ui. Nothing was changed.	A atualização no cartão SD ({s}) não é mais nova que este pocket-ui. Nada foi alterado.
+Update to pocket-ui {s} found on the card. Your games and settings stay.	Atualização para pocket-ui {s} encontrada no cartão SD. Seus jogos e configurações ficam.
+Update to pocket-ui {s} found on the card.	Atualização para pocket-ui {s} encontrada no cartão SD.
+Press A to install it, B to close.	Aperte A para instalar, B para fechar.
 {s} didn't start. The system's core may not be installed: add it in RetroArch (Flatpak) > Online Updater > Core Downloader.	{s} não iniciou. O core do sistema pode não estar instalado: adicione-o em RetroArch (Flatpak) > Online Updater > Core Downloader.
 This game · {s}	Este jogo · {s}
 Controls · {s}	Controles · {s}
@@ -3908,6 +3941,7 @@ This game has its own settings.	Este jogo tem configurações próprias.
 Using this console's settings. Changing a row gives this game its own.	Usando as configurações deste console. Mudar uma linha dá ao jogo as dele.
 Using the defaults. Changing a row gives this game its own settings.	Usando os padrões. Mudar uma linha dá a este jogo configurações próprias.
 This game plays on another emulator now. These settings apply when it runs on pocket-core.	Este jogo agora roda em outro emulador. Estas configurações valem quando ele roda no pocket-core.
+This game plays in another app now. These settings apply when pocket-ui's own player runs it.	Este jogo agora roda em outro app. Estas configurações valem quando o player do próprio pocket-ui o roda.
 This emulator has no picture settings here. Its own menu has them.	Este emulador não tem configurações de imagem aqui. O menu dele tem.
 This game starts like the others on this console now.	Este jogo agora inicia como os outros deste console.
 Couldn't save. Is the card full or read-only?	Não foi possível salvar. O cartão está cheio ou é somente leitura?
@@ -4025,10 +4059,11 @@ after a restart	após reiniciar
 A Choose · ‹ › Change · B Back	A Escolher · ‹ › Alterar · B Voltar
 Advanced (this emulator)	Avançado (este emulador)
 Cozy extras	Extras aconchegantes
-The cabinet's TV, stickers, printed discs and more: each on or off.	A TV da vitrine, stickers, discos impressos e mais: cada um ligado ou desligado.
+The cabinet's TV, stickers, playful cases, old-TV switch-on and more: each on or off.	A TV da vitrine, stickers, caixas divertidas, ligar de TV antiga e mais: cada um ligado ou desligado.
 Case sounds	Sons de caixa
 Old-TV switch-on	Ligar de TV antiga
 TV on the cabinet	TV na vitrine
+TV plays the game	TV roda o jogo
 Stickers on cases	Stickers nas caixas
 Memory card in the pause menu	Memory Card no menu de pausa
 Printed discs	Discos impressos
@@ -4040,6 +4075,7 @@ Playful cases	Caixas divertidas
 Cases click open, cartridges and discs go in with a sound. Menu sounds stay as they are.	As caixas abrem com um clique, cartuchos e discos entram com som. Os sons de menu não mudam.
 The game's picture comes on like an old TV when it starts.	A imagem do jogo acende como uma TV antiga ao iniciar.
 A small old TV on top of the cabinet shows the selected game.	Uma pequena TV antiga em cima da vitrine mostra o jogo selecionado.
+The TV shows a game you haven't played running live, without sound. Uses more power while it plays; off, nothing extra runs.	A TV mostra ao vivo um jogo que você ainda não jogou, sem som. Gasta mais energia enquanto roda; desligado, nada extra é executado.
 Show your stickers on the cases. Off hides them; they stay on the game's card.	Mostra seus stickers nas caixas. Desligado os esconde; eles continuam na ficha do jogo.
 The game's memory card or cartridge with its blocks under Save and Load, instead of the slim row.	O Memory Card ou cartucho do jogo, com seus blocos em Salvar e Carregar, no lugar da linha fina.
 Discs printed with their cover's art and title. Off: a plain disc in its console's colour.	Discos impressos com a arte e o título da capa. Desligado: um disco liso na cor do console.
@@ -4048,16 +4084,16 @@ Games you haven't played for a long time, as a row in Curator.	Jogos que você n
 The room's light follows the time of day: morning sun, evening lamp.	A luz da sala acompanha a hora do dia: sol da manhã, luminária da noite.
 Little things appear on your shelf the more you play.	Coisinhas aparecem na sua estante quanto mais você joga.
 When you put the Pocket down for a while, your games show one after another.	Quando você deixa o Pocket de lado um tempo, seus jogos aparecem um após o outro.
-Cases spring and wiggle, discs drop into trays, cartridges click in, spines lean as you scroll.	Caixas quicam e balançam, discos caem na bandeja, cartuchos encaixam com clique, lombadas inclinam ao rolar.
+Cases spring and wiggle, discs drop into trays, cartridges click in, spines lean as you scroll.	As caixas quicam e balançam, discos caem nas bandejas, cartuchos encaixam com um clique, as lombadas se inclinam ao rolar.
 Cases spring and wiggle. Follows Animations: on with Cozy, off with Quick, until you switch it.	As caixas quicam e balançam. Segue Animações: ligado com Aconchegante, desligado com Rápido, até você mudar.
 Shelf and Cabinet looks only.	Só nos visuais Estante e Vitrine.
 Cabinet look only.	Só no visual Vitrine.
-Silent now: Sounds is off (Sound & feel › Sounds).	Em silêncio agora: Sons está desligado (Som e sensação › Sons).
-Not shown now: it needs Animations on Cozy and Motion on Full (Sound & feel).	Não aparece agora: precisa de Animações em Aconchegante e Movimento em Cheia (Som e sensação).
-Not shown now: needs Motion on Full (Sound & feel).	Não aparece agora: precisa de Movimento em Cheia (Som e sensação).
+Silent now: Menu sounds is off (Screen & sound › Menu sounds).	Em silêncio agora: Sons de menu está desligado (Tela e som › Sons de menu).
+Not shown now: it needs Animations on Cozy (Playing) and Motion on Full (Look).	Não aparece agora: precisa de Animações em Aconchegante (Jogando) e Movimento em Completo (Visual).
+Not shown now: needs Motion on Full (Look).	Não aparece agora: precisa de Movimento em Completo (Visual).
 A slideshow of your games when the Deck sits idle.	Uma apresentação dos seus jogos quando o Deck fica parado.
 
-# Settings → Look → Colours, Font; Playing → Buttons (src/button_prompts.rs)
+# Settings → Look → Colours, Font; Controls → Buttons (src/button_prompts.rs)
 Button symbols	Símbolos dos botões
 The hints show A, B, X and Y as plain letters.	As dicas mostram A, B, X e Y como letras simples.
 The hints show A, B, X and Y on green, red, blue and yellow.	As dicas mostram A, B, X e Y em verde, vermelho, azul e amarelo.
@@ -4073,9 +4109,6 @@ From your save	Do seu save
 Font	Fonte
 # Settings in seven categories (2026-10-30). The Look category's key ends with a zero-width mark.
 Look​	Visual
-Sound & feel	Som e sensação
-Animations, playful cases, old-TV switch-on, motion, zoom, sounds, case sounds, haptics, LEDs.	Animações, caixas divertidas, ligar de TV antiga, movimento, zoom, sons, sons de caixa, vibração, LEDs.
-On start, continue, where I was, buttons, over the game, frames, performance, battery, achievements.	Ao iniciar, continuar, onde parei, botões, sobreposição, molduras, desempenho, bateria, RetroAchievements.
 Help & tools	Ajuda e ferramentas
 Shelf, Cabinet, Minimal, Cards or Split, with a live preview.	Estante, Vitrine, Minimalista, Fichas ou Dividido, com pré-visualização ao vivo.
 Dark, Light, or Automatic by the time of day.	Escuro, Claro ou Automático conforme a hora do dia.
@@ -4100,58 +4133,6 @@ Where each system's games go.	Onde vão os jogos de cada sistema.
 Box art and game pictures.	Capas e imagens de jogos.
 Nothing to rediscover yet	Nada para redescobrir ainda
 Games you haven't played for a year, or played a year ago today, show up here.	Jogos que você não joga há um ano, ou que jogou há um ano hoje, aparecem aqui.
-# Add games → Y: Send from your phone (src/phone_upload_page.rs)
-Send from your phone	Enviar do celular
-From your phone	Do seu celular
-Scan the code with your phone's camera and pick games there.	Escaneie o código com a câmera do celular e escolha os jogos lá.
-Your phone and the Pocket need to be on the same Wi-Fi. A opens the Wi-Fi settings.	O celular e o Pocket precisam estar no mesmo Wi-Fi. A abre as configurações de Wi-Fi.
-Wi-Fi settings	Configurações de Wi-Fi
-Open again	Abrir de novo
-The page couldn't open	Não foi possível abrir a página
-A tries again.	A tenta de novo.
-Can't open the page.	Não foi possível abrir a página.
-No Wi-Fi address.	Sem endereço Wi-Fi.
-The Wi-Fi address is gone.	O endereço Wi-Fi sumiu.
-Can't open the page: {s}	Não foi possível abrir a página: {s}
-Closed after 10 minutes	Fechada após 10 minutos
-Nothing came from the phone for 10 minutes, so the page closed.	Nada veio do celular em 10 minutos, então a página fechou.
-Closed while the Pocket slept	Fechada enquanto o Pocket estava suspenso
-Files that were on their way were not kept.	Arquivos que estavam a caminho não foram mantidos.
-Closed: someone was guessing	Fechada: alguém estava tentando códigos
-Too many tries without the right code came over the Wi-Fi.	Tentativas demais sem o código certo chegaram pelo Wi-Fi.
-A opens it again with a new code.	A abre de novo com um código novo.
-Or type this, a computer works too	Ou digite isto, no computador também funciona
-Receiving 1 file	Recebendo 1 arquivo
-Receiving {n} files	Recebendo {n} arquivos
-Added: 1 game	Adicionado: 1 jogo
-Added: {n} games	Adicionados: {n} jogos
-Phone connected	Celular conectado
-Waiting for your phone	Esperando o celular
-Pick games on the phone; they show up here as they arrive.	Escolha jogos no celular; eles aparecem aqui conforme chegam.
-Open the camera on your phone and point it at the code.	Abra a câmera do celular e aponte para o código.
-Added, {s}	Adicionado, {s}
-Saves can't be sent this way.	Saves não podem ser enviados assim.
-That is a BIOS file. BIOS files go in roms/bios with the SD card or the web companion.	Esse é um arquivo BIOS. Arquivos BIOS vão em roms/bios, pelo cartão SD ou pelo companheiro web.
-Several systems take this kind of file: choose one.	Vários sistemas aceitam este tipo de arquivo: escolha um.
-That folder name can't be used.	Esse nome de pasta não pode ser usado.
-Can't make the folder {s}: {s2}	Não foi possível criar a pasta {s}: {s2}
-The phone did not say how large the file is.	O celular não informou o tamanho do arquivo.
-Not encrypted, so use it on your own Wi-Fi at home. Nothing can be downloaded from the Pocket. B ends it.	Sem criptografia, então use só no seu Wi-Fi de casa. Nada pode ser baixado do Pocket. B encerra.
-Closed after an hour	Fechada após uma hora
-The page stays open for an hour at most.	A página fica aberta por uma hora, no máximo.
-No system takes this kind of file here.	Nenhum sistema aceita este tipo de arquivo aqui.
-That system doesn't take this kind of file here.	Esse sistema não aceita este tipo de arquivo aqui.
-{s} files are at most {s2} here.	Arquivos {s} têm no máximo {s2} aqui.
-The SD card has no room for more files.	O cartão SD não tem espaço para mais arquivos.
-This page has taken enough files. Close it and open it again for more.	Esta página já recebeu arquivos demais. Feche e abra de novo para receber mais.
-That disc sheet is too large.	Essa folha de disco é grande demais.
-This disc sheet names "{s}": it may name only files in its own folder.	Esta folha de disco cita “{s}”: ela só pode citar arquivos da própria pasta.
-{s} is there already.	{s} já está aí.
-Can't make the uploads folder: {s}	Não foi possível criar a pasta de uploads: {s}
-{s} is in the way.	{s} está no caminho.
-{s} is too big to load ({n} MB; at most {n2} MB)	{s} é grande demais para carregar ({n} MB; máximo {n2} MB)
-A name with ".{s}" inside can't be sent this way. Rename the file first.	Um nome com “.{s}” não pode ser enviado assim. Renomeie o arquivo primeiro.
-A folder with ".{s}" in its name can't be used. Rename it first.	Uma pasta com “.{s}” no nome não pode ser usada. Renomeie primeiro.
 Language, time, sleep & power, second screen, kids mode, updates, storage, backup & reset.	Idioma, hora, suspensão e energia, segunda tela, modo infantil, atualizações, armazenamento, backup e redefinição.
 Going back to your moment…	Voltando ao seu momento…
 Couldn't go back to that moment: started fresh	Não foi possível voltar a esse momento: começou do zero
@@ -4159,7 +4140,6 @@ Another game has this file name and shares its save states. Saving here can over
 Its saved moment is gone: started fresh	O momento salvo dele não existe mais: começou do zero
 Started fresh: its saved moment belongs to its other emulator	Começou do zero: o momento salvo dele pertence ao outro emulador
 The game's file changed: started fresh. The moment is still under Load	O arquivo do jogo mudou: começou do zero. O momento continua em Carregar
-
 # --- Settings → Games → Game check
 Game check	Verificação de jogos
 Will your games start? What's missing, in plain words.	Seus jogos vão iniciar? O que falta, em palavras simples.
@@ -4180,9 +4160,6 @@ Copy games into their system's folder (Settings › Games › Add games) or get 
 1 game ready	1 jogo pronto
 {n} games ready	{n} jogos prontos
 All good	Tudo certo
-Some systems couldn't be read. Settings › Games › Game check says why.	Alguns sistemas não puderam ser lidos. Configurações › Jogos › Verificação de jogos explica por quê.
-One system was left out because its entry can't be read.	Um sistema ficou de fora porque a entrada dele não pode ser lida.
-Check this entry in es_systems.cfg, then scan your games again.	Confira esta entrada no es_systems.cfg e depois busque seus jogos de novo.
 First 50,000 files checked	Primeiros 50.000 arquivos verificados
 {n} of {n2} games ready	{n} de {n2} jogos prontos
 And {n} more. Fix these first, then check again.	E mais {n}. Corrija estes primeiro e verifique de novo.
@@ -4249,9 +4226,9 @@ Its moment is in slot {n}	Seu momento está no slot {n}
 All slots are full: its moment is under Load, after the last slot	Todos os slots estão cheios: o momento está em Carregar, depois do último slot
 All slots are full: the moment is kept and goes into the first free slot	Todos os slots estão cheios: o momento é mantido e vai para o primeiro slot livre
 Kept moment {n}	Momento mantido {n}
-Missing disc files: {t}	Faltam arquivos do disco: {t}
 Loaded the kept moment	Momento mantido carregado
 A kept moment can only be loaded: pick a slot to save	Um momento mantido só pode ser carregado: escolha um slot para salvar
+Missing disc files: {t}	Faltam arquivos do disco: {t}
 Its moment couldn't be moved and stays where it is	Não foi possível mover seu momento, e ele fica onde está
 The game didn't close normally: back at your last saved moment	O jogo não fechou normalmente: de volta ao seu último momento salvo
 # --- Android: Game check (document_check, android/src/check_page.rs)
@@ -4313,6 +4290,57 @@ Your games card came out. Put it back to play: your games and saves are on it. A
 Games card found. While it's in, only its games show; your other games come back when you take it out.	Cartão SD de jogos encontrado. Enquanto ele estiver aí, só os jogos dele aparecem; os outros voltam quando você o retirar.
 Games card in	Cartão SD de jogos inserido
 Your games are read from your games card. To add more, put that card in your computer and copy them into its roms folder.	Seus jogos são lidos do cartão SD de jogos. Para adicionar mais, coloque esse cartão no computador e copie para a pasta roms dele.
+A folder with ".{s}" in its name can't be used. Rename it first.	Uma pasta com “.{s}” no nome não pode ser usada. Renomeie primeiro.
+A name with ".{s}" inside can't be sent this way. Rename the file first.	Um nome com “.{s}” não pode ser enviado assim. Renomeie o arquivo primeiro.
+A opens it again with a new code.	A abre de novo com um código novo.
+A tries again.	A tenta de novo.
+Added, {s}	Adicionado, {s}
+Added: 1 game	Adicionado: 1 jogo
+Added: {n} games	Adicionados: {n} jogos
+Can't make the folder {s}: {s2}	Não foi possível criar a pasta {s}: {s2}
+Can't make the uploads folder: {s}	Não foi possível criar a pasta de uploads: {s}
+Can't open the page.	Não foi possível abrir a página.
+Can't open the page: {s}	Não foi possível abrir a página: {s}
+Closed after 10 minutes	Fechada após 10 minutos
+Closed after an hour	Fechada após uma hora
+Closed while the Pocket slept	Fechada enquanto o Pocket estava suspenso
+Closed: someone was guessing	Fechada: alguém estava tentando códigos
+Files that were on their way were not kept.	Arquivos que estavam a caminho não foram mantidos.
+From your phone	Do seu celular
+No Wi-Fi address.	Sem endereço Wi-Fi.
+No system takes this kind of file here.	Nenhum sistema aceita este tipo de arquivo aqui.
+Not encrypted, so use it on your own Wi-Fi at home. Nothing can be downloaded from the Pocket. B ends it.	Sem criptografia, então use só no seu Wi-Fi de casa. Nada pode ser baixado do Pocket. B encerra.
+Nothing came from the phone for 10 minutes, so the page closed.	Nada veio do celular em 10 minutos, então a página fechou.
+Open again	Abrir de novo
+Open the camera on your phone and point it at the code.	Abra a câmera do celular e aponte para o código.
+Or type this, a computer works too	Ou digite isto, no computador também funciona
+Phone connected	Celular conectado
+Pick games on the phone; they show up here as they arrive.	Escolha jogos no celular; eles aparecem aqui conforme chegam.
+Receiving 1 file	Recebendo 1 arquivo
+Receiving {n} files	Recebendo {n} arquivos
+Saves can't be sent this way.	Saves não podem ser enviados assim.
+Scan the code with your phone's camera and pick games there.	Escaneie o código com a câmera do celular e escolha os jogos lá.
+Send from your phone	Enviar do celular
+Several systems take this kind of file: choose one.	Vários sistemas aceitam este tipo de arquivo: escolha um.
+That disc sheet is too large.	Essa folha de disco é grande demais.
+That folder name can't be used.	Esse nome de pasta não pode ser usado.
+That is a BIOS file. BIOS files go in roms/bios with the SD card or the web companion.	Esse é um arquivo BIOS. Arquivos BIOS vão em roms/bios, pelo cartão SD ou pelo companheiro web.
+That system doesn't take this kind of file here.	Esse sistema não aceita este tipo de arquivo aqui.
+The SD card has no room for more files.	O cartão SD não tem espaço para mais arquivos.
+The Wi-Fi address is gone.	O endereço Wi-Fi sumiu.
+The page couldn't open	Não foi possível abrir a página
+The page stays open for an hour at most.	A página fica aberta por uma hora, no máximo.
+The phone did not say how large the file is.	O celular não informou o tamanho do arquivo.
+This disc sheet names "{s}": it may name only files in its own folder.	Esta folha de disco cita “{s}”: ela só pode citar arquivos da própria pasta.
+This page has taken enough files. Close it and open it again for more.	Esta página já recebeu arquivos demais. Feche e abra de novo para receber mais.
+Too many tries without the right code came over the Wi-Fi.	Tentativas demais sem o código certo chegaram pelo Wi-Fi.
+Waiting for your phone	Esperando o celular
+Wi-Fi settings	Configurações de Wi-Fi
+Your phone and the Pocket need to be on the same Wi-Fi. A opens the Wi-Fi settings.	O celular e o Pocket precisam estar no mesmo Wi-Fi. A abre as configurações de Wi-Fi.
+{s} files are at most {s2} here.	Arquivos {s} têm no máximo {s2} aqui.
+{s} is in the way.	{s} está no caminho.
+{s} is there already.	{s} já está aí.
+{s} is too big to load ({n} MB; at most {n2} MB)	{s} é grande demais para carregar ({n} MB; máximo {n2} MB)
 Card is read-only: copying won't work	Cartão SD somente leitura: não dá para copiar
 File sharing	Compartilhar arquivos
 Connect to Wi-Fi	Conectar ao Wi-Fi
@@ -4320,21 +4348,14 @@ Turn on USB file transfer	Ligar transferência por USB
 Turn off USB file transfer	Desligar transferência por USB
 Switching{s}	Alternando{s}
 Or a computer's browser, same Wi-Fi	Ou o navegador de um computador, mesmo Wi-Fi
-
-# Console sales figures (data/consoles.json)
-{n} million	{n} milhões
-over {n} million	mais de {n} milhões
-{n} million (all models)	{n} milhões (todos os modelos)
-{n} million (with Game Boy Color)	{n} milhões (com Game Boy Color)
-{n} million, counted with the Game Boy	{n} milhões, contados com o Game Boy
-{n} million by March 2001 (Sega)	{n} milhões até março de 2001 (Sega)
-{s}, {n} million	{s}, {n} milhões
 Get started	Começar
 Shelf above	Estante acima
 Shelf below	Estante abaixo
 Stickers on cases is off	Stickers nas caixas estão desligados
 This look shows no cases	Este visual não mostra caixas
 Runs on this handheld, but not every game runs smoothly.	Roda neste portátil, mas nem todo jogo roda bem.
+
+# Kids Mode
 No games here yet	Ainda não há jogos aqui
 Ask a grown-up to pick some.	Peça a um adulto para escolher alguns.
 This game won't start. Ask a grown-up.	Este jogo não inicia. Peça a um adulto.
@@ -4379,6 +4400,7 @@ Ready	Pronto
 Hand it over any time. To get back in:	Pode entregar quando quiser. Para voltar:
 Hold SELECT and START for 5 seconds, then enter your PIN.	Segure SELECT e START por 5 segundos e digite seu PIN.
 Forgot the PIN? Make a file called {s} on the card (a phone with a card reader or the Wi-Fi share will do) and restart. Kids mode goes off, and saves and games stay.	Esqueceu o PIN? Crie um arquivo chamado {s} no cartão (serve um celular com leitor de cartão ou o compartilhamento por Wi-Fi) e reinicie. O modo infantil desliga; saves e jogos ficam.
+Forgot the PIN? Make a file called {s} on the card (a computer or a phone with a card reader will do) and restart. Kids mode goes off, and saves and games stay.	Esqueceu o PIN? Crie um arquivo chamado {s} no cartão (serve um computador ou um celular com leitor de cartão) e reinicie. O modo infantil desliga; saves e jogos ficam.
 Go on	Avançar
 Pick the games	Escolha os jogos
 {n} of {m} picked. At least {k}.	{n} de {m} escolhidos. No mínimo {k}.
@@ -4393,9 +4415,6 @@ A big, simple shelf for a child, with a PIN.	Uma estante grande e simples para u
 1 hour	1 hora
 Pink	Rosa
 Battery low. Please charge.	Bateria baixa. Carregue, por favor.
-Forgot the PIN? Make a file called {s} on the card (a computer or a phone with a card reader will do) and restart. Kids mode goes off, and saves and games stay.	Esqueceu o PIN? Crie um arquivo chamado {s} no cartão (serve um computador ou um celular com leitor de cartão) e reinicie. O modo infantil desliga; saves e jogos ficam.
-
-# Kids Mode
 Start today's time again	Reiniciar o tempo de hoje
 The clock is behind the last date it knew, so today's time goes on counting. Start it again here if that's wrong.	O relógio está atrás da última data que ele conhecia, então o tempo de hoje continua contando. Se estiver errado, reinicie aqui.
 {n} minutes left	Faltam {n} minutos
@@ -4537,9 +4556,13 @@ For buttons you would hold, like run.	Para botões que você seguraria, como cor
 Big text	Texto grande
 larger text and calmer menus	texto maior e menus mais calmos
 Larger text, menus that only fade, and Zoom in the pause menu. Switches Text size and Motion together.	Texto maior, menus que só esmaecem e Zoom no menu de pausa. Muda Tamanho do texto e Movimento juntos.
-Settings › Look › Text size, Settings › Sound & feel › Motion	Configurações › Visual › Tamanho do texto, Configurações › Som e sensação › Movimento
+Settings › Look › Text size, Settings › Look › Motion	Configurações › Visual › Tamanho do texto, Configurações › Visual › Movimento
 {s} held	{s} segurado
 # --- Where was I? (the card over a moment continued after a long break)
+Console boot screen	Tela de início do console
+A fresh start shows the console's own boot screen. Needs your BIOS file.	Um início novo mostra a tela de início do console. Precisa do seu arquivo BIOS.
+Game Boy, Game Boy Advance and PlayStation games start with their boot screen when nothing is continued. Needs your BIOS file in roms/bios.	Os jogos de Game Boy, Game Boy Advance e PlayStation começam com a tela de início quando nada é continuado. Precisa do seu arquivo BIOS em roms/bios.
+No boot screen: needs the original {s} in roms/bios	Sem tela de início: precisa do arquivo {s} original em roms/bios
 Remind me where I was	Lembrar onde parei
 Zoom in the pause menu	Zoom no menu de pausa
 Zoom on the pause menu's first page. It is always under Options.	Zoom na primeira página do menu de pausa. Em Opções ele sempre está.
@@ -4550,10 +4573,46 @@ Last played {n} months ago	Jogado pela última vez há {n} meses
 Last played a year ago	Jogado pela última vez há um ano
 Last played {n} years ago	Jogado pela última vez há {n} anos
 {t} played	{t} de jogo
+# --- The case knows where you are (case_knows: a line read from the game's own save)
+No badges yet	Sem emblemas ainda
+1 badge	1 emblema
+{n} badges	{n} emblemas
+{s} Lv. {n}	{s} Nv. {n}
+game clock {n}:{n2}	relógio do jogo {n}:{n2}
+Not here yet	Não chegou aqui
+{n}% items	{n}% de itens
+{n} of {m} exits	{n} de {m} saídas
+{n} of {m} pendants	{n} de {m} pingentes
+{n} of {m} crystals	{n} de {m} cristais
+{n} hearts	{n} corações
+{n} of {m} stars	{n} de {m} estrelas
+{n} of {m} gold cups	{n} de {m} taças de ouro
+{n} of {m} golden balloons	{n} de {m} balões dourados
+1 medal	1 medalha
+{n} medals	{n} medalhas
+{n} in Expert	{n} em Expert
+{n} of {m} Star Spirits	{n} de {m} Star Spirits
+Mario Lv. {n}	Mario Nv. {n}
+{n} of {m} spiritual stones	{n} de {m} pedras espirituais
+{n} of {m} medallions	{n} de {m} medalhões
+1 friend	1 amigo
+{n} friends	{n} amigos
+{n} of {m} instruments	{n} de {m} instrumentos
+{n} of {m} elements	{n} de {m} elementos
+{n} of {m} essences	{n} de {m} essências
+{n} of {m} remains	{n} de {m} restos
+Prologue	Prólogo
+Chapter {n}	Capítulo {n}
+Chapter {n}x	Capítulo {n}x
+Final chapter	Capítulo final
+Epilogue	Epílogo
+Easy mode	Modo fácil
+Normal mode	Modo normal
+Hard mode	Modo difícil
+Difficult mode	Modo difícil
+{n}% complete	{n} % concluído
+{n} of {m} mirror shards	{n} de {m} fragmentos do espelho
 # Controls card 2026-11-04
-Controls card	Ficha de controles
-Which button is which on this console, and what HOME does.	Qual botão é qual neste console, e o que o HOME faz.
-Which button of the Pocket does what	O que cada botão do Pocket faz
 This console's button names show here after your first game on it.	Os nomes dos botões deste console aparecem aqui depois do seu primeiro jogo nele.
 D-pad (changed)	Direcional (alterado)
 Menu	Menu
@@ -4567,11 +4626,11 @@ Darken solar sensor	Sensor solar: menos luz
 
 Brighten Solar Sensor	Sensor solar: mais luz
 Darken Solar Sensor	Sensor solar: menos luz
-Choose a game: its box shows here.	Escolha um jogo: a caixa dele aparece aqui.
 # Settings → System → Second screen (two screens: the RG DS Plus, src/second_screen.rs)
 Second screen	Segunda tela
 Game info	Info do jogo
 The lower screen: the selected game's box and info, or off. Off in games; DS games use it.	A tela de baixo: a caixa e as infos do jogo selecionado, ou desligada. Desligada nos jogos; jogos de DS a usam.
+Choose a game: its box shows here.	Escolha um jogo: a caixa dele aparece aqui.
 
 # Android 0.2
 Android gamepad / Touch controls: Console	Controle Android / Controles de toque: Console
@@ -4627,7 +4686,6 @@ The clock looks wrong, so the update server can't be checked. Set it in Settings
 Checking installed cores and data…	Verificando cores e dados instalados…
 The update's asset list is invalid. Nothing was changed.	A lista de componentes da atualização é inválida. Nada foi alterado.
 The update's core or data file is damaged. Nothing was changed.	Um core ou arquivo de dados da atualização está danificado. Nada foi alterado.
-Layout, systems, extras, appearance, colours, style, text size, screen colour, night light.	Layout, sistemas, extras, aparência, cores, estilo, tamanho do texto, cor da tela, luz noturna.
 How your games stand: Shelf, Easy, Split or Cabinet, with a live preview.	Como seus jogos se organizam: Estante, Easy, Dividido ou Vitrine, com prévia ao vivo.
 First-start setup	Configuração inicial
 Language, Wi-Fi, your games and the look again, step by step. Your games and saves stay.	Idioma, Wi-Fi, seus jogos e o visual de novo, passo a passo. Seus jogos e saves ficam.
@@ -4739,6 +4797,11 @@ Choose the GBA console: Game Boy Advance or Game Boy Advance SP. Changes its pic
 Game Boy Advance	Game Boy Advance
 Game Boy Advance SP	Game Boy Advance SP
 Couldn't keep this moment. Your earlier saves are kept.	Não foi possível manter este momento. Seus saves anteriores foram mantidos.
+Couldn't load this moment. Your game is unchanged.	Não foi possível carregar este momento. Seu jogo continua igual.
+Couldn't save the screenshot.	Não foi possível salvar a captura de tela.
+Couldn't keep this setting for the next start.	Não foi possível manter esta configuração para o próximo início.
+The emulator couldn't start this game.	O emulador não conseguiu iniciar este jogo.
+Nothing earlier yet: a moment is kept every 5 min of play.	Nada anterior ainda: um momento é guardado a cada 5 min de jogo.
 A save state couldn't be put back in its place on the SD card. It is kept and goes back the next time this game starts.	Um save state não pôde voltar ao lugar dele no cartão SD. Ele foi mantido e volta na próxima vez que este jogo iniciar.
 Couldn't load: Before load couldn't be saved. Your game is unchanged.	Não foi possível carregar: Antes de carregar não pôde ser salvo. Seu jogo continua igual.
 Which button of the Deck does what	O que cada botão do Deck faz
@@ -4783,7 +4846,6 @@ Forget this port's own choice: Settings › Playing › Performance applies agai
 There: Games: performance {s}.	Lá: Jogos: desempenho {s}.
 Battery: the processor's top speeds are held at about half. Cooler, and the battery lasts longer; a demanding port may stutter.	Bateria: as velocidades máximas do processador ficam em cerca de metade. Mais frio, e a bateria dura mais; um port exigente pode engasgar.
 These apply to this port from its next start. What every port starts with is in Settings › Playing › Performance.	Estes valem para este port a partir do próximo início. O que todo port usa ao iniciar está em Configurações › Jogando › Desempenho.
-
 # --- Short optional runtime row statuses
 Downloading…	Baixando…
 Preparing…	Preparando…
@@ -4840,13 +4902,12 @@ Settings › Games	Configurações › Jogos
 Retry	Tentar de novo
 Box art, game pictures and starter pack.	Capas, imagens de jogos e pacote inicial.
 Box art, PortMaster games, cheats.	Capas, jogos do PortMaster, cheats.
-Games, game check, extras, EmulationStation, screenshots, Curator.	Jogos, verificação de jogos, extras, EmulationStation, capturas de tela, Curator.
 Box art, PortMaster games and starter pack.	Capas, jogos do PortMaster e pacote inicial.
 A few free games to get you started. Pick one or take them all.	Alguns jogos grátis para começar. Escolha um ou baixe todos.
-More to get any time: Settings › Games › Extras.	Mais para baixar quando quiser: Configurações › Jogos › Extras.
+More to get any time: Settings › Games › Box art & downloads.	Mais a qualquer hora: Configurações › Jogos › Capas e downloads.
 No ports yet	Nenhum port ainda
 X offers to remove the installed cheats.	X permite remover os cheats instalados.
-Get PC and indie games from PortMaster in Settings › Games › Extras.	Baixe jogos de PC e indie do PortMaster em Configurações › Jogos › Extras.
+Get PC and indie games from PortMaster in Settings › Games › Box art & downloads.	Jogos de PC e indie do PortMaster: Configurações › Jogos › Capas e downloads.
 Get PortMaster	Obter PortMaster
 The download was stopped. Try again.	O download foi interrompido. Tente de novo.
 There isn't enough free memory. Close the game and try again.	Não há memória livre suficiente. Feche o jogo e tente de novo.
@@ -4919,18 +4980,13 @@ Curator tab	Aba Curator
 Put it on a game from its card: X, then Stickers.	Coloque em um jogo pela ficha dele: X, depois Stickers.
 The little touches, each on its own: real cases, stickers, printed discs and more.	Pequenos toques, um a um: caixas reais, stickers, discos impressos e mais.
 Barlow or Pixel type, or Retro: pixel letters, frames and icons everywhere.	Fonte Barlow ou Pixel, ou Retro: letras de pixel, molduras e ícones em todo lugar.
-First-start setup, how you like to play, Tour, manual, for tinkerers, tools, test buttons, report a problem, about.	Configuração inicial, como você gosta de jogar, Tour, manual, para curiosos, ferramentas, testar botões, relatar um problema, sobre.
-Language, time, sleep & power, kids mode, updates, storage, backup & reset.	Idioma, hora, suspensão e energia, modo infantil, atualizações, armazenamento, backup e redefinição.
-Wi-Fi, Bluetooth, Tailscale, remote access, web companion.	Wi-Fi, Bluetooth, Tailscale, acesso remoto, companheiro web.
 Lens, smart shelves, Echoes, versions and play history.	Lens, estantes inteligentes, Echoes, versões e histórico de jogo.
 Back to NextUI	Voltar ao NextUI
 New versions of pocket-ui.	Versões novas do pocket-ui.
 Stickers	Stickers
 Development build: install a release package to use app updates.	Versão de desenvolvimento: instale um pacote de lançamento para usar as atualizações do app.
 pocket-ui {s}-dev ({s2})	pocket-ui {s}-dev ({s2})
-For tinkerers	Para curiosos
-Sync, PC streaming.	Sincronizar, streaming do PC.
-Sync and PC streaming.	Sincronizar e streaming do PC.
+Box art & downloads	Capas e downloads
 More systems?	Mais sistemas?
 Choose extra systems to download on Wi-Fi. All are optional. You can add them later in Extras.	Escolha sistemas extras para baixar por Wi-Fi. Todos são opcionais. Você pode adicionar depois em Extras.
 Download now	Baixar agora
@@ -4994,9 +5050,8 @@ The buttons on the screen have the same names.	Os botões na tela têm os mesmos
 Less sunlight	Menos sol
 More sunlight	Mais sol
 Pause	Pausa
-Coming soon	Em breve
-These systems are coming to this app later. There is nothing to download yet.	Estes sistemas chegam a este app mais tarde. Ainda não há nada para baixar.
-This system is coming soon. It can't be downloaded yet.	Este sistema chega em breve. Ainda não dá para baixar.
+These systems can't be downloaded in this version of the app.	Estes sistemas não podem ser baixados nesta versão do app.
+This system can't be downloaded in this version of the app.	Este sistema não pode ser baixado nesta versão do app.
 Patches	Patches
 In the app	No app
 Optional download	Download opcional
@@ -5046,9 +5101,109 @@ Couldn't reach RetroAchievements. Is this device online?	Não foi possível aces
 A CHD disc can't be identified. A CUE/BIN, ISO or M3U copy of it can	Um disco CHD não pode ser identificado. Uma cópia dele em CUE/BIN, ISO ou M3U pode
 Earn achievements in the games pocket-ui plays itself.	Ganhe conquistas nos jogos que o próprio pocket-ui roda.
 Your password is sent once and never kept.	Sua senha é enviada uma vez e nunca guardada.
-Settings › Report a problem: Share sends one text with your device and logs to a chat or mail, Copy puts it on the clipboard for a GitHub issue. Nothing goes out by itself.	Configurações › Relatar um problema: Compartilhar envia um texto com seu dispositivo e os registros para um chat ou e-mail; Copiar põe na área de transferência para um issue do GitHub. Nada sai sozinho.
+Settings › Report a problem: Share sends one text with your device and logs to a chat or mail, Copy puts it on the clipboard for a GitHub issue or a mail to robby@robbyczesany.com. Nothing goes out by itself.	Configurações › Relatar um problema: Compartilhar envia um texto com seu dispositivo e os registros para um chat ou e-mail; Copiar põe na área de transferência para um issue do GitHub ou um e-mail para robby@robbyczesany.com. Nada sai sozinho.
 The extra systems can't be downloaded yet. Try again later; every system already in the app works as it is.	Os sistemas extras ainda não podem ser baixados. Tente mais tarde; todos os sistemas que já estão no app funcionam normalmente.
 The download server isn't answering right now. Try again later.	O servidor de download não está respondendo agora. Tente mais tarde.
+{s} can't start yet. {s2} needs a file from your own console that isn't on the card: {s3} or {s4}. Copy one of them into roms/bios, then try again.	{s} ainda não pode iniciar. {s2} precisa de um arquivo do seu próprio console que não está no cartão SD: {s3} ou {s4}. Copie um deles para roms/bios e tente de novo.
+{s} can't start yet. {s2} needs a file from your own console that isn't on the card: {s3}. Copy it into roms/bios, then try again.	{s} ainda não pode iniciar. {s2} precisa de um arquivo do seu próprio console que não está no cartão SD: {s3}. Copie para roms/bios e tente de novo.
+{s} can't start: its emulator ({s2}) is missing. The game itself is fine. Look for an update in Settings › System › Updates.	{s} não pode iniciar: falta o emulador ({s2}). O jogo em si está bem. Procure uma atualização em Configurações › Sistema › Atualizações.
+{s} can't start: this system's emulator is missing. The game itself is fine. Look for an update in Settings › System › Updates.	{s} não pode iniciar: falta o emulador deste sistema. O jogo em si está bem. Procure uma atualização em Configurações › Sistema › Atualizações.
+{s} can't start. The game file may be damaged. Copy it to the card again.	{s} não pode iniciar. O arquivo do jogo pode estar danificado. Copie de novo para o cartão SD.
+{s} can't start. The game file may be damaged, or the system needs a file from your own console. Copy the game to the card again, or add the file in Settings › Games › Add games.	{s} não pode iniciar. O arquivo do jogo pode estar danificado, ou o sistema precisa de um arquivo do seu próprio console. Copie o jogo de novo para o cartão SD ou adicione o arquivo em Configurações › Jogos › Adicionar jogos.
+{s} can't start. It may need files that aren't on the card. Reinstall it in Ports.	{s} não pode iniciar. Talvez precise de arquivos que não estão no cartão SD. Reinstale em Ports.
+pocket-ui player	player do pocket-ui
+Which way plays this game: pocket-ui's own player or another emulator app on this device.	Com o que este jogo roda: o player do pocket-ui ou outro app emulador neste dispositivo.
+Which way plays this console's games: pocket-ui's own player or another emulator app on this device.	Com o que os jogos deste console rodam: o player do pocket-ui ou outro app emulador neste dispositivo.
+pocket-ui's own player: Continue where you left off, Save & quit and the shelf's start and end.	Player do próprio pocket-ui: Continuar de onde você parou, Salvar e sair e o começo e o fim da estante.
+Adds this system to pocket-ui's own player. It downloads on unmetered Wi-Fi.	Adiciona este sistema ao player do pocket-ui. Baixa só em Wi-Fi sem limite de dados.
+{s} in pocket-ui	{s} no pocket-ui
+No app on this device plays this system.	Nenhum app neste dispositivo roda este sistema.
+# Console page: the colours a console comes in (system_art::COLOURS).
+Original	Original
+Milky Blue	Azul leitoso
+Dandelion	Dente-de-leão
+Ice Blue	Azul gelo
+Jungle Green	Verde selva
+Jet Black	Preto azeviche
+View	Exibição
+Mobile	Celular
+Handheld	Portátil
+Handheld: these pages, for the built-in pad. Mobile: touch pages and a folder you pick.	Portátil: estas páginas, para o controle embutido. Celular: páginas de toque e uma pasta que você escolhe.
+Put your games in the ROMs folder of this device, one folder per system: ROMs/gba, ROMs/snes, ROMs/psx and so on.	Coloque seus jogos na pasta ROMs deste dispositivo, uma pasta por sistema: ROMs/gba, ROMs/snes, ROMs/psx e assim por diante.
+Language, your games and the look again, step by step. Your games and saves stay.	Idioma, seus jogos e o visual de novo, passo a passo. Seus jogos e saves ficam.
+Version, games, free space and battery.	Versão, jogos, espaço livre e bateria.
+Where each system's games and BIOS files go.	Onde vão os jogos e os arquivos BIOS de cada sistema.
+Box art and starter pack.	Capas e pacote inicial.
+Fills the space around the picture. Console draws the console's own frame.	Preenche o espaço ao redor da imagem. Console desenha a moldura do próprio console.
+CRT TV puts an old tube TV around it.	TV CRT põe uma TV de tubo antiga em volta.
+None leaves just the picture.	Nenhum deixa só a imagem.
+This version of pocket-ui can't download this system. {s} on this device plays it: choose it under Runs on.	Esta versão do pocket-ui não pode baixar este sistema. {s} neste dispositivo roda ele: escolha em Roda em.
+This version of pocket-ui can't play this system, and no emulator app on this device plays it.	Esta versão do pocket-ui não pode rodar este sistema, e nenhum app emulador neste dispositivo roda ele.
+This version of pocket-ui can't download this system.	Esta versão do pocket-ui não pode baixar este sistema.
+HOME on the shelf	HOME na estante
+Brightness and volume in one panel, over the shelf.	Brilho e volume em um painel, sobre a estante.
+Games go in a ROMs folder, one folder per system, in the device's storage or on a memory card. Add games shows the folders and BIOS files.	Os jogos ficam em uma pasta ROMs, uma pasta por sistema, na memória do dispositivo ou em um cartão de memória. Adicionar jogos mostra as pastas e os arquivos BIOS.
+Larger text and menus that only fade. Switches Text size and Motion together.	Texto maior e menus que só esmaecem. Muda Tamanho do texto e Movimento juntos.
+Left and right change it.	Esquerda e direita mudam.
+Left and right change it. The device's volume buttons work too.	Esquerda e direita mudam. Os botões de volume do dispositivo também funcionam.
+Earn achievements in the games pocket-ui's own player plays: unlocks are checked as you play and count on retroachievements.org.	Ganhe conquistas nos jogos que o player do pocket-ui roda: os desbloqueios são conferidos enquanto você joga e contam em retroachievements.org.
+With Hardcore off, save states stay usable. With it on they are off, a game starts from its in-game save, and the site counts your unlocks as hardcore. Without a connection, unlocks are kept and sent the next time a game starts online.	Com o Hardcore desligado, os save states ficam disponíveis. Com ele ligado, ficam desligados, o jogo começa do save do jogo e o site conta suas conquistas como hardcore. Sem conexão, as conquistas são guardadas e enviadas na próxima vez que um jogo iniciar online.
+You need a free account from retroachievements.org. Your password is sent once to sign in and is not kept; pocket-ui keeps only the sign-in key the site gives back.	Você precisa de uma conta grátis em retroachievements.org. Sua senha é enviada uma vez para entrar e não é guardada; o pocket-ui guarda só a chave de login que o site devolve.
+Sent once to sign in, never kept. pocket-ui keeps only the sign-in key.	Enviada uma vez para entrar, nunca guardada. O pocket-ui guarda só a chave de login.
+When pocket-ui starts, the game you played last continues where you left off.	Quando o pocket-ui inicia, o último jogo que você jogou continua de onde você parou.
+# --- RetroAchievements Hardcore (Settings → RetroAchievements, the pause menu, notes over the game)
+Hardcore	Hardcore
+Off in Hardcore	Desligado no Hardcore
+Hardcore: no save states, rewind or cheats. Save in the game before you quit.	Hardcore: sem save states, rebobinar nem cheats. Salve no jogo antes de sair.
+Hardcore: started from the in-game save	Hardcore: começou do save do jogo
+Loading states is off in Hardcore	Carregar states está desligado no Hardcore
+Save states are off in Hardcore	Save states estão desligados no Hardcore
+Rewind is off in Hardcore	Rebobinar está desligado no Hardcore
+Cheats are off in Hardcore	Cheats estão desligados no Hardcore
+Hardcore: the menu opens in a moment	Hardcore: o menu abre já já
+Hardcore on: the game started again	Hardcore ligado: o jogo recomeçou
+Hardcore off: save states, rewind and cheats are back	Hardcore desligado: save states, rebobinar e cheats voltaram
+Hardcore: starts from the in-game save	Hardcore: começa do save do jogo
+Off: save states, rewind and cheats work. Unlocks count as softcore.	Desligado: save states, rebobinar e cheats funcionam. As conquistas contam como softcore.
+On: no save states, rewind or cheats. Continue starts from the in-game save.	Ligado: sem save states, rebobinar nem cheats. Continuar começa do save do jogo.
+No save states, rewind or cheats; unlocks count as hardcore.	Sem save states, rebobinar nem cheats; as conquistas contam como hardcore.
+A turns it off for every game: states and rewind come back.	A desliga para todos os jogos: states e rebobinar voltam.
+Start again?	Recomeçar?
+Press A again: the game starts again in Hardcore, from its power-on.	Aperte A de novo: o jogo recomeça em Hardcore, desde o início.
+What you did since your last in-game save is lost. B keeps Hardcore off.	O que você fez desde seu último save do jogo se perde. B mantém o Hardcore desligado.
+Hardcore: unlocks count as hardcore on the site, without states, rewind or cheats.	Hardcore: as conquistas contam como hardcore no site, sem states, rebobinar nem cheats.
+A turns it on for every game; this game starts again.	A liga para todos os jogos; este jogo recomeça.
+
+# --- Settings tree, second pass
+Less sprite flicker	Menos cintilação de sprites
+Show screen edges	Mostrar bordas da tela
+TV blur	Desfoque de TV
+Console speed (less slowdown)	Velocidade do console (menos lentidão)
+Super FX speed (Star Fox)	Velocidade do Super FX (Star Fox)
+Save states, rewind and cheats stay usable. Without Wi-Fi, unlocks are kept and sent the next time a game starts online.	Save states, rebobinar e cheats continuam disponíveis. Sem Wi-Fi, as conquistas ficam guardadas e são enviadas na próxima vez que um jogo iniciar online.
+Save states stay usable. Without a connection, unlocks are kept and sent the next time a game starts online.	Os save states continuam disponíveis. Sem conexão, as conquistas ficam guardadas e são enviadas na próxima vez que um jogo iniciar online.
+Settings at once	Configurações na hora
+START shows the settings straight away; L1 and R1 go through the categories. Tailscale, SSH and Sync are in Connections.	START abre as configurações na hora; L1 e R1 passam pelas categorias. Tailscale, SSH e Sync ficam em Conexões.
+START, then L1 / R1	START, depois L1 / R1
+Category	Categoria
+No PC paired >	Nenhum PC >
+Bluetooth	Bluetooth
+
+# --- Added after the first translation: sealed games, Java phone games (J2ME), the game check note
+Sealed new games	Jogos novos lacrados
+Games you have never played stand in plastic wrap. It tears off the first time you start one.	Jogos que você nunca jogou ficam embalados em plástico. Ele se rasga na primeira vez que você inicia um.
+Progress from saves	Progresso dos saves
+Badges, stars and hearts from your own saves on the case; off keeps it spoiler-free.	Emblemas, estrelas e corações do seu próprio save na caixa; desligado, sem spoilers.
+Some systems couldn't be read. Settings › Games › Game check says why.	Alguns sistemas não puderam ser lidos. Configurações › Jogos › Verificação de jogos explica por quê.
+One system was left out because its entry can't be read.	Um sistema ficou de fora porque a entrada dele não pode ser lida.
+Check this entry in es_systems.cfg, then scan your games again.	Confira esta entrada no es_systems.cfg e depois busque seus jogos de novo.
+Your system list can't be read, so pocket-ui uses its built-in list. Settings › Games › Game check says why.	Sua lista de sistemas não pôde ser lida, então o pocket-ui usa a lista integrada. Configurações › Jogos › Verificação de jogos explica por quê.
+The system list is missing, so pocket-ui uses its built-in list.	A lista de sistemas não existe, então o pocket-ui usa a lista integrada.
+The system list can't be read, so pocket-ui uses its built-in list.	A lista de sistemas não pôde ser lida, então o pocket-ui usa a lista integrada.
+The system list has no system in it, so pocket-ui uses its built-in list.	A lista de sistemas não tem nenhum sistema, então o pocket-ui usa a lista integrada.
+Every entry of the system list is damaged, so pocket-ui uses its built-in list.	Todas as entradas da lista de sistemas estão danificadas, então o pocket-ui usa a lista integrada.
+Games in their standard folders show anyway. To use your own list, fix this file or put a good one back, then scan your games again.	Os jogos nas pastas padrão aparecem mesmo assim. Para usar sua própria lista, corrija este arquivo ou coloque um que funcione de volta e busque seus jogos de novo.
+Your settings file couldn't be read, so pocket-ui started with its standard settings. Your games and saves are not affected.	Seu arquivo de configurações não pôde ser lido, então o pocket-ui começou com as configurações padrão. Seus jogos e saves não foram afetados.
 Loading Java, once (about 200 MB)	Carregando o Java, só uma vez (cerca de 200 MB)
 {n} of {m} MB	{n} de {m} MB
 Unpacking…	Descompactando…
@@ -5061,3 +5216,61 @@ The Java download didn't finish. Check Wi-Fi, then start the game again.	O downl
 The Java download took too long. Check Wi-Fi, then start the game again.	O download do Java demorou demais. Confira o Wi-Fi e inicie o jogo de novo.
 java is missing in the download	falta o java no download
 tar ended with {s}	o tar terminou com {s}
+Left soft key	Soft key esquerda
+Right soft key	Soft key direita
+The D-pad is the phone's arrow keys, OK its middle key.	O direcional são as setas do celular, e o OK é a tecla do meio.
+Arrow keys	Setas
+Number keys 2 4 6 8	Teclas numéricas 2 4 6 8
+Arrow keys suit most phone games. Some games only take the number keys 2, 4, 6 and 8: then the D-pad presses those and Y is 5.	As setas servem para a maioria dos jogos de celular. Alguns só aceitam as teclas numéricas 2, 4, 6 e 8: aí o direcional aperta essas e o Y é o 5.
+Left stick: the D-pad moves the left stick, for games that need one. Automatic does that on a handheld without sticks.	Analógico esquerdo: o direcional move o analógico esquerdo, para jogos que precisam de um. Automático faz isso num portátil sem analógicos.
+Screen size	Tamanho da tela
+The phone screen the game was made for. Automatic reads it from the game.	A tela de celular para a qual o jogo foi feito. Automático lê isso do jogo.
+Java phone games (J2ME)	Jogos de celular em Java (J2ME)
+Press A to install it, B to close. pocket-ui closes after the update; open it again.	Pressione A para instalar, B para fechar. O pocket-ui fecha após a atualização; abra-o novamente.
+Press B to cancel.	Pressione B para cancelar.
+Downloading the update… {n}%	Baixando a atualização… {n}%
+Step {n} of {m}: Downloading the update… {n2}%	Passo {n} de {m}: Baixando a atualização… {n2}%
+Step {n} of {m}: Unpacking the update… {n2}%	Passo {n} de {m}: Descompactando a atualização… {n2}%
+Step {n} of {m}: Installing the update… {n2}%	Passo {n} de {m}: Instalando a atualização… {n2}%
+Step {n} of {m}: Restarting…	Passo {n} de {m}: Reiniciando…
+Back to EmulationStation	Voltar ao EmulationStation
+Closes pocket-ui and EmulationStation comes back. SELECT + START held does the same.	Fecha o pocket-ui e o EmulationStation volta. Segurar SELECT + START faz o mesmo.
+Closes pocket-ui, EmulationStation comes back.	Fecha o pocket-ui, o EmulationStation volta.
+To go back to EmulationStation: Settings › System › Back to EmulationStation, or hold SELECT + START.	Para voltar ao EmulationStation: Configurações › Sistema › Voltar ao EmulationStation, ou segure SELECT + START.
+Tailscale links the Pocket with your phone, computer and other devices in one private network.	O Tailscale liga o Pocket ao seu celular, computador e outros dispositivos numa rede privada.
+Waiting for a network	Esperando uma rede
+Other browsers need a code; your own Tailscale devices get in without one. Pauses while a game runs.	Os outros navegadores precisam de um código; seus próprios dispositivos do Tailscale entram sem ele. Pausa enquanto um jogo roda.
+Every browser needs a code, yours too. Pauses while a game runs.	Todo navegador precisa de um código, o seu também. Pausa enquanto um jogo roda.
+RetroAchievements needs the internet, and this handheld has no Wi-Fi.	O RetroAchievements precisa de internet, e este aparelho não tem Wi-Fi.
+Or copy your own: Settings › Games › Add games shows how.	Ou copie os seus: Configurações › Jogos › Adicionar jogos mostra como.
+No Wi-Fi	Sem Wi-Fi
+No Wi-Fi here: put box art from a scraper on your computer in a covers folder beside the games, named like each game (roms/gba/covers/Game.png).	Sem Wi-Fi aqui: coloque as capas de um scraper no computador numa pasta covers ao lado dos jogos, com o nome de cada jogo (roms/gba/covers/Game.png).
+This handheld has no Wi-Fi, so file sharing can't copy them. Copy them to the folder above the way you add games (Settings › Games › Add games).	Este aparelho não tem Wi-Fi, então compartilhar arquivos não pode copiá-los. Copie-os para a pasta acima do jeito que você adiciona jogos (Configurações › Jogos › Adicionar jogos).
+Brightness, volume, Bluetooth, fan and power in one panel, over the shelf and over a game.	Brilho, volume, Bluetooth, ventoinha e energia em um painel, sobre a estante e sobre um jogo.
+Games go in each system's folder on the SD card. Add games shows the folders and BIOS files.	Os jogos vão na pasta de cada sistema no cartão SD. Adicionar jogos mostra as pastas e os arquivos BIOS.
+The clock looks wrong. Play history, the night light and the dates on saves follow it. Set it under Date and time.	O relógio parece errado. O histórico de jogo, a luz noturna e as datas dos saves dependem dele. Ajuste em Data e hora.
+The clock looks wrong. Play history and the dates on saves will be off until it is set. Set it in Settings › System › Time.	O relógio parece errado. O histórico de jogo e as datas dos saves ficarão errados até ele ser ajustado. Ajuste em Configurações › Sistema › Hora.
+Network time has set the clock, so there is nothing to set by hand.	A hora da rede acertou o relógio, então não há nada a ajustar à mão.
+Set the date and time by hand. This handheld has no Wi-Fi, so the clock keeps what you set.	Ajuste a data e a hora à mão. Este aparelho não tem Wi-Fi, então o relógio guarda o que você definir.
+Log in to this Pocket from a computer, with SSH.	Entre neste Pocket por SSH, de um computador.
+The clock sets itself from a time server. A asks again now.	O relógio se ajusta sozinho por um servidor de hora. A consulta de novo agora.
+Phone games need Java, loaded once (about 200 MB). Put the Java file from pocketui.xyz/java on the card, then start the game again.	Jogos de celular precisam do Java, carregado uma só vez (cerca de 200 MB). Coloque o arquivo do Java de pocketui.xyz/java no cartão e inicie o jogo de novo.
+The Java file on the card is incomplete or damaged. Copy it onto the card again. Nothing was installed.	O arquivo do Java no cartão está incompleto ou danificado. Copie de novo para o cartão. Nada foi instalado.
+With Hardcore off, save states, rewind and cheats stay usable. With it on they are off, a game starts from its in-game save, and the site counts your unlocks as hardcore.	Com o Hardcore desligado, save states, rebobinar e cheats continuam disponíveis. Ligado, ficam desligados, o jogo começa do save do jogo e o site conta suas conquistas como hardcore.
+Save states, rewind and cheats stay usable.	Save states, rebobinar e cheats continuam disponíveis.
+No cheats file on the card. Put the cheats file from pocketui.xyz/cheats on the card, then look again.	Nenhum arquivo de cheats no cartão. Coloque o arquivo de cheats de pocketui.xyz/cheats no cartão e procure de novo.
+The cheats file on the card is incomplete or damaged. Copy it onto the card again. Nothing was installed.	O arquivo de cheats no cartão está incompleto ou danificado. Copie de novo para o cartão. Nada foi instalado.
+Put the cheats file from pocketui.xyz/cheats on the card, then choose Look on the card. Or connect to Wi-Fi.	Coloque o arquivo de cheats de pocketui.xyz/cheats no cartão e escolha Procurar no cartão. Ou conecte-se ao Wi-Fi.
+Put the cheats file from pocketui.xyz/cheats on the card, then choose Look on the card.	Coloque o arquivo de cheats de pocketui.xyz/cheats no cartão e escolha Procurar no cartão.
+Cheats weren't installed.	Os cheats não foram instalados.
+Back to the moment from {t} · one is kept every 5 min of play	Volta ao momento: {t} · um é guardado a cada 5 min de jogo
+Nothing earlier yet · a moment is kept every 5 min of play	Ainda nada anterior · um momento é guardado a cada 5 min de jogo
+A picture of the game as it is now.	Uma imagem do jogo como está agora.
+# Phone games: the game card's keys line 2026-11-15
+A is OK, SELECT and START are the soft keys.	A é OK, SELECT e START são as soft keys.
+Screen & sound	Tela e som
+Screen	Tela
+Game start animation	Animação de início
+How bright the screen is. The same as in the quick settings.	O brilho da tela. O mesmo das configurações rápidas.
+How loud games and menus are. The same as in the quick settings.	O volume de jogos e menus. O mesmo das configurações rápidas.
+A separate layout for each controller, in menus and games. Pairing: Connections › Bluetooth.	Um layout para cada controle, em menus e jogos. Parear: Conexões › Bluetooth.

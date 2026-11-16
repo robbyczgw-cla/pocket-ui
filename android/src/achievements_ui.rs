@@ -48,10 +48,23 @@ impl Ui {
         self.ra.name = account.map(|a| a.shown_name().to_string()).unwrap_or_default();
     }
     pub(super) fn achievements_rows(&self) -> Vec<MenuRow> {
-        vec![
-            MenuRow { label: tr(self.ra.page.label()), value: self.ra.page.value(), check: None, stepper: false },
-            MenuRow { label: tr("Back"), value: String::new(), check: None, stepper: false },
-        ]
+        let mut rows = vec![MenuRow { label: tr(self.ra.page.label()), value: self.ra.page.value(), check: None, stepper: false }];
+        // Hardcore, signed in and where pocket-ui offers it (`achievements::hardcore::OFFERED`): A or Left/Right switch it.
+        if self.ra.page.rows() > 1 {
+            rows.push(MenuRow { label: tr("Hardcore"), value: tr(self.ra.page.hardcore_value()), check: None, stepper: false });
+        }
+        rows.push(MenuRow { label: tr("Back"), value: String::new(), check: None, stepper: false });
+        rows
+    }
+    /// The row of Back (after Hardcore when signed in).
+    fn achievements_back(&self) -> usize {
+        self.ra.page.rows()
+    }
+    /// The host: Hardcore couldn't be kept; the row shows what is true.
+    pub fn achievements_hardcore_failed(&mut self, on: bool) {
+        if let Some(a) = self.ra.page.account.as_mut() {
+            a.hardcore = !on;
+        }
     }
     /// The on-screen keyboard shows what the page's keyboard holds (the page owns it; the painter and the touch targets
     /// read `Ui::keyboard`).
@@ -79,6 +92,7 @@ impl Ui {
             }
             page::Action::Login { username, password } => Command::RaLogin(username, password),
             page::Action::Logout => Command::RaLogout,
+            page::Action::Hardcore(on) => Command::RaHardcore(on),
         }
     }
     pub(super) fn achievements_press(&mut self, b: Button) -> Command {
@@ -86,7 +100,16 @@ impl Ui {
             let action = self.ra.page.press(b, Button::East, Button::South);
             return self.achievements_do(action);
         }
+        // The page acts on the row the phone layout has selected (Back is the layout's own).
+        self.ra.page.sel = if self.menu < self.ra.page.rows() { self.menu } else { 0 };
+        let hardcore_row = self.ra.page.rows() > 1 && self.menu == 1;
         match b {
+            Button::Left | Button::Right if hardcore_row => {
+                let action = self.ra.page.press(b, Button::East, Button::South);
+                let command = self.achievements_do(action);
+                self.menu = 1;
+                return command;
+            }
             Button::Up | Button::Left => {
                 self.ra.page.press(b, Button::East, Button::South);
                 self.move_by(-1);
@@ -96,7 +119,7 @@ impl Ui {
                 self.move_by(1);
             }
             Button::Start => self.navigate(Screen::Library),
-            Button::East if self.menu == 1 => self.navigate(Screen::Settings),
+            Button::East if self.menu == self.achievements_back() => self.navigate(Screen::Settings),
             Button::East | Button::South => {
                 let was = self.menu;
                 let action = self.ra.page.press(b, Button::East, Button::South);
@@ -137,6 +160,8 @@ impl Ui {
         let mut words = vec![tr(&status)];
         if self.ra.page.confirm_logout {
             words.push(tr("Press A again to log out. B keeps you signed in."));
+        } else if self.ra.page.rows() > 1 && self.menu == 1 {
+            words.push(tr(if self.ra.page.hardcore() { page::HARDCORE_ON } else { page::HARDCORE_OFF }));
         } else {
             words.extend(ABOUT.iter().map(|line| tr(line)));
         }

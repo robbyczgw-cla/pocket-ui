@@ -16,11 +16,8 @@ pub const NONE: &str = "Nothing to choose yet: none of your systems has another 
 /// The own player's name in a row; the apps keep the name the phone gives them.
 const OWN: &str = "pocket-ui";
 
-#[derive(Clone, Debug, PartialEq)]
-pub struct App {
-    pub package: String,
-    pub label: String,
-}
+/// An emulator app on the phone (`pocket_ui::play_route`: the handheld view's "Runs on" page lists the same).
+pub use pocket_ui::play_route::PhoneApp as App;
 /// A system with our player and at least one app to play it with.
 struct Offer {
     system_id: String,
@@ -36,22 +33,7 @@ pub struct PlaysUi {
     profiles: Vec<(String, String, String)>,
 }
 
-/// The name of an app as a row's value: the phone's label without a "(...)" tail, in words that fit beside a system's
-/// name on a narrow screen (the package when the phone gave none).
-fn short(label: &str, package: &str) -> String {
-    let label = label.split('(').next().unwrap_or_default().trim();
-    let mut out = String::new();
-    for word in label.split_whitespace() {
-        if !out.is_empty() && out.chars().count() + 1 + word.chars().count() > 16 {
-            break;
-        }
-        if !out.is_empty() {
-            out.push(' ');
-        }
-        out.push_str(word);
-    }
-    if out.is_empty() { package.to_string() } else { out }
-}
+use pocket_ui::play_route::short;
 
 impl Ui {
     /// The profiles of the library's own-player systems, comma separated: the question for `installedApps`.
@@ -100,8 +82,9 @@ impl Ui {
     }
     /// The app this system plays with, when one is chosen and still on the phone; None: our own player.
     pub fn plays_in_app_of(&self, system_id: &str) -> Option<&App> {
-        let chosen = self.prefs.plays_with.get(system_id)?;
-        self.plays.offers.iter().find(|o| o.system_id == system_id)?.apps.iter().find(|a| &a.package == chosen)
+        // One rule for both views: `pocket_ui::play_route::chosen_app`.
+        let offer = self.plays.offers.iter().find(|o| o.system_id == system_id)?;
+        pocket_ui::play_route::chosen_app(true, None, self.prefs.plays_with.get(system_id).map(String::as_str), &offer.apps)
     }
     pub fn plays_in_app(&self, game: &Game) -> Option<&App> {
         self.plays_in_app_of(game.system_id)
@@ -181,14 +164,11 @@ impl Ui {
     }
     /// The words, whole, then the rows in the room that is left (they scroll when a big type leaves little).
     pub(super) fn paint_plays_with(&mut self, c: &mut Canvas, text: &mut Text, room: Room) {
-        let size = self.sp(15.0);
-        let step = size as i32 + self.d(7.0);
         let w = c.w - 2 * room.margin;
         let words = self.plays_words();
         let mut y = room.top + self.d(4.0);
-        // At most half the page for the words, so the rows always have room.
-        let most = ((room.bottom - room.top) / 2 / step).max(2) as usize;
-        let lines: Vec<String> = words.lines().flat_map(|line| text.wrap(Face::Body, size, line, w)).collect();
+        // The words get the room the rows can spare (`words_limit`), as on Licences and Saves.
+        let (lines, size, step, most) = self.words_lines(text, &room, &words, w);
         for line in lines.iter().take(most) {
             text.draw(c, Face::Body, size, room.margin, y + size as i32, pal().dust, line);
             y += step;

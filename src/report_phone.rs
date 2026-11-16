@@ -29,7 +29,7 @@ pub const ROW: &str = "Report a problem";
 pub const ABOUT: &str = "One text with your device, cores, sound counters and the end of the logs. You choose where it goes; the app sends nothing.";
 pub const WRITING: &str = "Writing the report\u{2026}";
 pub const SHARED: &str = "The share sheet is open. Choose where the report goes, for example a message to yourself.";
-pub const COPIED: &str = "Copied. Paste it into your report on GitHub.";
+pub const COPIED: &str = concat!("Copied. Paste it into a GitHub issue or a mail to ", crate::contact_address!(), ".");
 pub const NO_SHARE: &str = "Android has no app to share with. Use Copy the report instead.";
 pub const NO_COPY: &str = "Android would not copy the report. Use Share the report instead.";
 pub const FAILED: &str = "The report could not be written. Try again after restarting the app.";
@@ -77,7 +77,7 @@ pub fn build(facts: &Facts, games: &[GameName]) -> String {
     let mut head = String::new();
     head.push_str("pocket-ui problem report (Android)\n");
     head.push_str(&format!("Made: {}\n", or_unknown(d("time"))));
-    head.push_str("Paste this into a new issue on pocket-ui's GitHub page (Issues, New issue, Bug report), say what happened and name the game if it matters.\n");
+    head.push_str(&format!("Paste this into a new issue on pocket-ui's GitHub page (Issues, New issue, Bug report) or mail it to {}, say what happened and name the game if it matters.\n", crate::CONTACT));
     head.push_str(&format!("{LEFT_OUT}\n\n"));
 
     head.push_str("== App ==\n");

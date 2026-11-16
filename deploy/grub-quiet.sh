@@ -27,8 +27,7 @@ ECHO_LINE='^[[:space:]]*echo "pocket-ui: loading[.][.][.]"[[:space:]]*$'
 LINUX_LINE='^[[:space:]]*linux[[:space:]][[:space:]]*/boot/pocket/Image[[:space:]]'
 
 say() { printf '%s\n' "$@"; }
-TMP=$(mktemp -d) || exit 1
-trap 'rm -rf "$TMP"' EXIT
+TMP=
 RO=0
 die() {
   say "STOPPED: $*" >&2
@@ -115,6 +114,9 @@ case $ACTION in
       say "quiet start: already on; nothing changed"
       exit 0
     fi
+    # Made only here: a `status` whose reader hung up (SIGPIPE) never reached an EXIT trap and left the folder behind.
+    TMP=$(mktemp -d) || exit 1
+    trap 'rm -rf "$TMP"' EXIT
     C=$TMP/grub.cfg
     quieten "$CFG" >"$C" || { rm -f "$C"; die "cannot work out the new file"; }
     # Nothing but the kernel line and the echo line may differ, and the result has to be quiet.

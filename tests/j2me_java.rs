@@ -142,3 +142,76 @@ fn b_stops_the_java_load_and_leaves_nothing_behind() {
     assert!(line.contains("started=false") && line.contains("Java wasn't loaded"), "{line}");
     assert!(storage(tmp).is_empty(), "a stopped load leaves no half runtime ROCKNIX's script would take for a whole one");
 }
+
+/// A phone game's keys are not a console's (15.11.2026, the controls card went): its card says in one line which buttons
+/// are OK and the soft keys, on the Plus and a Retroid Pocket Mini, English and German, normal and large text, nothing
+/// clipped.
+#[test]
+fn a_phone_games_card_says_which_buttons_are_its_keys() {
+    let dir = tempfile::tempdir().unwrap();
+    let tmp = dir.path();
+    handheld(tmp);
+    let wayland = wayland_for_snapshots(tmp);
+    for (device, size) in [("rg35xx-plus", "640x480"), ("miniv2", "1240x1080")] {
+        for (lang, line) in [("en", "A is OK, SELECT and START are the soft keys."), ("de", "A ist OK, SELECT und START sind die Softtasten.")] {
+            for text in ["normal", "large"] {
+                let tag = format!("{device}-{lang}-{text}");
+                let png = tmp.join(format!("card-{tag}.png"));
+                let (boxes, seen) = (tmp.join(format!("boxes-{tag}")), tmp.join(format!("seen-{tag}")));
+                let mut cmd = Command::new(env!("CARGO_BIN_EXE_pocket-ui"));
+                cmd.args(["--snapshot", "curator:card:j2me:shooter", png.to_str().unwrap()])
+                    .env("POCKETUI_MOCK", "1").env("POCKETUI_DEVICE", device)
+                    .env("POCKETUI_ES_SYSTEMS", tmp.join("es_systems.cfg")).env("POCKETUI_DATA", tmp.join("data"))
+                    .env("POCKETUI_SNAPSHOT_SIZE", size).env("POCKETUI_TEXT_SIZE", text).env("POCKETUI_LANG", lang)
+                    .env("POCKETUI_TEXT_BOXES", &boxes).env("POCKETUI_VISIBLE_TEXT", &seen);
+                if let Some(w) = &wayland { cmd.env("WAYLAND_DISPLAY", &w.path); }
+                let out = cmd.output().unwrap();
+                assert!(out.status.success(), "{tag}: {}", String::from_utf8_lossy(&out.stderr));
+                let problems = std::fs::read_to_string(&boxes).unwrap_or_default();
+                assert!(problems.trim().is_empty(), "{tag}: the card's text must be readable and separate: {problems}");
+                let shown = std::fs::read_to_string(&seen).unwrap();
+                let words = shown.split_whitespace().collect::<Vec<_>>().join(" ");
+                assert!(words.contains(line), "{tag}: the card names the phone's keys: {shown}");
+                if let Some(keep) = std::env::var_os("J2ME_SHOTS") {
+                    std::fs::create_dir_all(&keep).unwrap();
+                    std::fs::copy(&png, Path::new(&keep).join(format!("card-{tag}.png"))).unwrap();
+                }
+            }
+        }
+    }
+}
+
+/// A handheld without sticks: Runs on › D-pad offers the number keys for a phone game (and only for it).
+#[test]
+fn phone_games_can_put_the_number_keys_on_the_dpad() {
+    let dir = tempfile::tempdir().unwrap();
+    let tmp = dir.path();
+    handheld(tmp);
+    let wayland = wayland_for_snapshots(tmp);
+    let shoot = |state: &str, tag: &str| -> String {
+        let png = tmp.join(format!("{tag}.png"));
+        let seen = tmp.join(format!("seen-{tag}"));
+        let boxes = tmp.join(format!("boxes-{tag}"));
+        let mut cmd = Command::new(env!("CARGO_BIN_EXE_pocket-ui"));
+        cmd.args(["--snapshot", state, png.to_str().unwrap()])
+            .env("POCKETUI_MOCK", "1").env("POCKETUI_DEVICE", "rg35xx-plus")
+            .env("POCKETUI_ES_SYSTEMS", tmp.join("es_systems.cfg")).env("POCKETUI_DATA", tmp.join("data"))
+            .env("POCKETUI_SNAPSHOT_SIZE", "640x480").env("POCKETUI_LANG", "en")
+            .env("POCKETUI_TEXT_BOXES", &boxes).env("POCKETUI_VISIBLE_TEXT", &seen);
+        if let Some(w) = &wayland { cmd.env("WAYLAND_DISPLAY", &w.path); }
+        let out = cmd.output().unwrap();
+        assert!(out.status.success(), "{tag}: {}", String::from_utf8_lossy(&out.stderr));
+        if let Some(keep) = std::env::var_os("J2ME_SHOTS") {
+            std::fs::create_dir_all(&keep).unwrap();
+            std::fs::copy(&png, Path::new(&keep).join(format!("{tag}.png"))).unwrap();
+        }
+        std::fs::read_to_string(&seen).unwrap()
+    };
+    let page = shoot("emu:j2me:Shooter.jar:retroarch/freej2me:8", "runs-on-dpad");
+    assert!(page.contains("D-pad") && page.contains("Arrow keys"), "the phone game's Runs on has the D-pad row: {page}");
+    // Below it the game's screen size (`j2me_size`): Automatic unless one is picked, its explanation in full.
+    let size = shoot("emu:j2me:Shooter.jar:retroarch/freej2me:9", "runs-on-size");
+    assert!(size.contains("Screen size") && size.contains("Automatic"), "the phone game's Runs on has the screen size row: {size}");
+    let snes = shoot("emu:j2me:Shooter.jar:retroarch/freej2me:0", "runs-on-top");
+    assert!(!snes.contains("Number keys 2 4 6 8") || snes.contains("D-pad"), "{snes}");
+}

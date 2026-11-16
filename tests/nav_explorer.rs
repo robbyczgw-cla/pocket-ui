@@ -310,9 +310,9 @@ impl Card {
         let data = tmp.join("template-data");
         std::fs::create_dir_all(&data).unwrap();
         // The language as a player picked it (`POCKETUI_LANG` would pin it, and Settings › System › Language could not change it).
-        // A Portuguese profile starts in Portuguese the way a player's card does: the choice in settings.json (and the system's
+        // A Portuguese, French or Italian profile starts in its language the way a player's card does: the choice in settings.json (and the system's
         // `LANG` for the first start, where there is none yet).
-        let language = if profile.extra_env.iter().any(|(k, v)| *k == "LANG" && v.starts_with("pt")) { "pt" } else { "en" };
+        let language = ["pt", "fr", "it"].into_iter().find(|code| profile.extra_env.iter().any(|(k, v)| *k == "LANG" && v.starts_with(code))).unwrap_or("en");
         std::fs::write(data.join("settings.json"), format!(r#"{{"onboarded":true,"seen_version":"9.9.9","motion":"off","art":"off","language":"{language}"}}"#)).unwrap();
         let stub = if std::env::var_os("WAYLAND_DISPLAY").is_some_and(|w| !w.is_empty()) {
             None
@@ -382,6 +382,8 @@ impl Ui {
             .env("POCKETUI_TEXT_SIZE", profile.text_size)
             .env("POCKETUI_NAV_PROBE", run.join("nav.txt"))
             .env("POCKETUI_DATA", &data)
+            // The page of screenshots makes the picture of the shelf on A: into this run's folder, never a real card's.
+            .env("POCKETUI_SCREENSHOTS", run.join("screenshots"))
             .env("POCKETUI_ES_SYSTEMS", card.path().join("es_systems.cfg"))
             .env("POCKETUI_RTC_ALARM", run.join("wakealarm"))
             .env("POCKETUI_SUSPEND_CMD", "false")
@@ -523,9 +525,14 @@ impl Drop for Ui {
 
 /// Rows of A that are not pressed: they end what is being explored for reasons that are no page's (the program restarts or
 /// quits, a game starts, the card is written over). Their pages are still opened when they are pages.
-const NOT_PRESSED: &[&str] = &["Restart pocket-ui", "Power off", "Switch off", "Restart", "Quit", "Save & quit", "Leave", "Start EmulationStation", "Reset", "Erase", "Delete", "Format",
+// "View" (Android's handheld view): A ends this view and opens the Mobile one, as Restart pocket-ui ends the app.
+const NOT_PRESSED: &[&str] = &["Restart pocket-ui", "Power off", "Switch off", "Restart", "Quit", "Save & quit", "Leave", "Start EmulationStation", "Reset", "Erase", "Delete", "Format", "View",
     // The same rows in Brazilian Portuguese (the explorer's pt profiles).
-    "Reiniciar pocket-ui", "Desligar", "Reiniciar", "Sair", "Salvar e sair", "Redefinir", "Excluir", "Apagar", "Formatar", "Iniciar o EmulationStation"];
+    "Reiniciar pocket-ui", "Desligar", "Reiniciar", "Sair", "Salvar e sair", "Redefinir", "Excluir", "Apagar", "Formatar", "Iniciar o EmulationStation", "Exibição",
+    // And in French.
+    "Redémarrer pocket-ui", "Éteindre", "Redémarrer", "Quitter", "Sauver, quitter", "Réinitialiser", "Supprimer", "Effacer", "Formater", "Lancer EmulationStation", "Interface",
+    // And in Italian.
+    "Riavvia pocket-ui", "Spegni", "Riavvia", "Esci", "Salva ed esci", "Elimina", "Apri EmulationStation", "Vista"];
 
 /// Unhinted keys tried once per page: a key that works there is either named or doing something no player finds.
 const OTHER_KEYS: &[&str] = &["x", "y", "l1", "r1"];
@@ -703,6 +710,17 @@ impl<'a> Explorer<'a> {
     fn check_where(&mut self, f: &Frame) {
         if !f.painted.is_empty() && !f.painter.is_empty() && f.painted != f.painter {
             self.fail(format!("{}: the {} painter painted it, but @where names a page of the {} painter", f.at, f.painted, f.painter));
+        }
+        // A handheld without a Wi-Fi chip (tests/no_wifi_walk.rs, fable52 gap #6): no page it reaches tells the player to
+        // use Wi-Fi. Updates is its own (update-from-card).
+        // The Manual is docs/user for every handheld; its pages say per feature what needs Wi-Fi.
+        if NO_WIFI_DEVICES.contains(&self.profile.device) && !f.at.contains("Updates") && !f.at.starts_with("settings:Manual") {
+            let text = f.strings.iter().map(|(_, s)| s.as_str()).collect::<Vec<_>>().join(" ");
+            for advice in WIFI_ADVICE {
+                if text.contains(advice) {
+                    self.fail(format!("{}: tells a handheld without Wi-Fi “{advice}”", spot(f)));
+                }
+            }
         }
     }
 
@@ -927,13 +945,19 @@ impl<'a> Explorer<'a> {
                     match self.changes(&[key], &here) {
                         Ok((f, changed)) => {
                             works |= changed;
-                            if f.at != here.at && !leaves(&f.at) && !ancestors.contains(&f.at) && !self.report.pages.contains_key(&f.at) && depth < self.max_depth {
+                            // Settings' categories are tabs (L1/R1, the symbols at the top): side by side, not one inside
+                            // another. They are walked at the same depth, and the other key comes back instead of B
+                            // (B closes Settings from every category).
+                            let tab = matches!(key, "l1" | "r1") && here.at.starts_with("settings:List ") && f.at.starts_with("settings:List ");
+                            if f.at != here.at && !leaves(&f.at) && !ancestors.contains(&f.at) && !self.report.pages.contains_key(&f.at) && (tab || depth < self.max_depth) {
                                 let child_path: Vec<String> = row_path.iter().cloned().chain([key.to_string()]).collect();
                                 let mut more = ancestors.clone();
                                 more.push(here.at.clone());
-                                self.explore(child_path.clone(), f.clone(), more, depth + 1);
-                                // B undoes what another key opened; not what B itself did.
-                                if key != "b" {
+                                self.explore(child_path.clone(), f.clone(), more, if tab { depth } else { depth + 1 });
+                                if tab {
+                                    self.check_tab_back(&here, &f, &child_path, if key == "l1" { "r1" } else { "l1" });
+                                } else if key != "b" {
+                                    // B undoes what another key opened; not what B itself did.
                                     self.check_back(&here, &f, &child_path, false);
                                 }
                             }
@@ -1086,6 +1110,20 @@ impl<'a> Explorer<'a> {
     /// outside Settings (a deep link: the update card's A, the leave dialog's Report a problem) goes back into Settings.
     /// `by_a`: A opened it, so B comes back to that row; a shortcut key (Y "From your phone" on a system tile) only has to come
     /// back to the page.
+    /// A Settings category reached with L1 or R1: the other key (`back`) goes to the category it came from, and the hint
+    /// bar of the header names both.
+    fn check_tab_back(&mut self, parent: &Frame, child_entry: &Frame, child_path: &[String], back: &str) {
+        let Some(child) = self.replay_to(child_path, Some(child_entry)) else { return };
+        if !(child.names_hint("l1") && child.names_hint("r1")) {
+            self.fail(format!("{}: a category without L1 and R1 at the top ({})", child.at, child.hint_keys().join(" ")));
+        }
+        match self.press(&[back]) {
+            Ok(g) if g.at == parent.at => {}
+            Ok(g) => self.fail(format!("{}: {} goes to {} instead of {}", child.at, back.to_uppercase(), g.at, parent.at)),
+            Err(_) => self.fail(format!("{}: {} ended pocket-ui", child.at, back.to_uppercase())),
+        }
+    }
+
     fn check_back(&mut self, parent: &Frame, child_entry: &Frame, child_path: &[String], by_a: bool) {
         // Where the walk of the child page left the UI: still on that page, B goes from there; else a fresh start.
         let here = self.press(&[]).ok().filter(|f| f.at == child_entry.at);
@@ -1106,7 +1144,11 @@ impl<'a> Explorer<'a> {
                 return;
             };
             // The parent's page, also when what covered it has closed since (the quick settings, a card said once).
-            let landed = page_of(&g.at) == page_of(&parent.at) || (deep_link && g.at.starts_with("settings:") && g.at != child.at);
+            // A first-start stage goes back a stage, opened as when reached forward (`Setup::go_back_a_stage`): from your
+            // games reached by a time zone's list (no Wi-Fi chip, so the time zone is the stage before), B shows the time
+            // zone's card, not that list (R36S explorer, 15.11.).
+            let stage_back = !self.onboarded && parent.at.starts_with("setup:zone: ") && !child.at.starts_with("setup:zone") && page_of(&g.at) == "setup:zone";
+            let landed = page_of(&g.at) == page_of(&parent.at) || stage_back || (deep_link && g.at.starts_with("settings:") && g.at != child.at);
             if landed {
                 if by_a && g.at == parent.at && !g.same_row(parent) {
                     self.fail(format!("{}: B goes back to {} but not to the row it came from ({:?} instead of {:?})", child.at, parent.at, g.focused(), parent.focused()));
@@ -1165,7 +1207,11 @@ impl<'a> Explorer<'a> {
             self.fail(format!("{keys:?} from a fresh start ended pocket-ui"));
             return;
         };
-        self.explore(path, f, ancestors.iter().map(|a| a.to_string()).collect(), 0);
+        // START opens a category's list at once (SETTINGS-IA package 2): it stands where the categories page's lists stood,
+        // one level in, so the walk reaches as deep into Settings as before (the first start behind Help & tools is
+        // `Part::FirstStart`'s walk).
+        let depth = usize::from(f.at.starts_with("settings:List "));
+        self.explore(path, f, ancestors.iter().map(|a| a.to_string()).collect(), depth);
     }
 
     fn finish(mut self) -> (Report, usize, usize) {
@@ -1265,6 +1311,10 @@ fn run(profile: Profile, part: Part) {
     assert!(all.failures.is_empty(), "{} navigation failures:\n{}", all.failures.len(), all.failures.iter().cloned().collect::<Vec<_>>().join("\n"));
 }
 
+/// Handhelds without a Wi-Fi chip (`device::Device::has_wifi`), and what no page may tell a player there.
+const NO_WIFI_DEVICES: &[&str] = &["r36s", "rg28xx", "rg35xx-2024"];
+const WIFI_ADVICE: &[&str] = &["Check Wi-Fi", "Connect to Wi-Fi", "connect to Wi-Fi", "turn Wi-Fi on", "Turn Wi-Fi on", "over Wi-Fi", "same Wi-Fi", "Needs Wi-Fi", "Waiting for Wi-Fi", "needs Wi-Fi"];
+
 /// The Mini V2 (1240x1080), an RG35XX Plus (640x480, no touch, no fan) and the RG DS Plus (1024x768): the three sizes.
 const MINI_V2: Profile = Profile { name: "miniv2-1240x1080", device: "miniv2", text_size: "normal", extra_env: &[] };
 const RG35XX_PLUS: Profile = Profile { name: "rg35xx-plus-640x480", device: "rg35xx-plus", text_size: "normal", extra_env: &[] };
@@ -1279,7 +1329,32 @@ const BRICK: Profile = Profile { name: "brick-1024x768", device: "brick", text_s
 const SMART_PRO: Profile = Profile { name: "smartpro-1280x720", device: "smartpro", text_size: "normal", extra_env: &[("POCKETUI_BRICK_STANDALONE", "1")] };
 /// The Anbernic RG CubeXX's square 720x720 panel (an H700 board; the logical canvas is scaled down to it, docs/H700-SCALED-LAYOUT.md).
 const RG_CUBEXX: Profile = Profile { name: "rgcubexx-720x720", device: "rgcubexx", text_size: "normal", extra_env: &[] };
+/// The Anbernic RG503's 960x544 (an RK3566 handheld; the canvas, 1694x960, is reduced by a fraction to it).
+const RG503: Profile = Profile { name: "rg503-960x544", device: "rg503", text_size: "normal", extra_env: &[] };
+/// The R36S (ROCKNIX's RK3326 image): 640x480 like the RG35XX Plus, but no Wi-Fi, two sticks and a second card slot, so the
+/// Wi-Fi, stick-light and Add games pages differ.
+const R36S: Profile = Profile { name: "r36s-640x480", device: "r36s", text_size: "normal", extra_env: &[] };
+/// The RG28XX (H700, 640x480 like the RG35XX Plus): no Wi-Fi chip, no sticks.
+const RG28XX: Profile = Profile { name: "rg28xx-640x480", device: "rg28xx", text_size: "normal", extra_env: &[] };
 const ODIN_2_MINI: Profile = Profile { name: "odin2mini", device: "odin2mini", text_size: "normal", extra_env: &[] };
+/// Android's handheld view on the Odin 2 Mini (android/handheld): the rows Android owns are gone (`device::ANDROID_HIDES`),
+/// Settings → View is there, the quick settings have Brightness and Volume only.
+const ANDROID_ODIN: Profile = Profile { name: "android-odin2mini", device: "odin2mini", text_size: "normal", extra_env: &[("POCKETUI_ANDROID_PROFILE", "1")] };
+
+/// A row of two lines that start at the same x is named by its top line, whichever first letter's ink starts a pixel
+/// further left: the Mini V2's power menu ("Power off" at 129, its line at 127) was named "Saves the game, then switches
+/// off.", the explorer pressed A on it as on any row, and reported that B does not leave "powering off" (14.11.).
+#[test]
+fn a_row_of_two_lines_is_named_by_its_top_line() {
+    let record = format!(
+        "@where\tpause:Main / power\n140\t300\t1100\t420\t{ROW}\n140\t300\t1100\t420\t{FOCUS}\n129\t320\t300\t360\tPower off\n127\t372\t700\t400\tSaves the game, then switches off.\n"
+    );
+    let f = Frame::parse(&record);
+    assert_eq!(f.focused().as_deref(), Some("Power off"));
+    // A string truly further left still names the row (a value at the left of a wide row is no second line).
+    let record = format!("@where\tx\n100\t300\t1100\t420\t{ROW}\n110\t340\t300\t380\tLeft\n400\t310\t600\t340\tTop right\n");
+    assert_eq!(Frame::parse(&record).controls()[0].name, "Left");
+}
 
 /// Brazilian Portuguese on the three screens that matter (docs/i18n-glossary.md): the RG35XX Plus's 640x480, the Brick's 1024x768 and
 /// the CubeXX's square 720x720, each in Normal and Large text. `LANG` is the system language of a first start, and the card's settings.json says "pt" (`POCKETUI_LANG` would pin it).
@@ -1320,19 +1395,80 @@ fn portuguese_every_page_overlay_and_first_start_step_on_the_cubexx() {
     }
 }
 
-/// A row of two lines that start at the same x is named by its top line, whichever first letter's ink starts a pixel
-/// further left: the Mini V2's power menu ("Power off" at 129, its line at 127) was named "Saves the game, then switches
-/// off.", the explorer pressed A on it as on any row, and reported that B does not leave "powering off" (14.11.).
+/// French on the same three screens (docs/i18n-glossary.md "French glossary"), Normal and Large text; `LANG` as for Portuguese.
+const FR_640: Profile = Profile { name: "rg35xx-plus-640x480-fr", device: "rg35xx-plus", text_size: "normal", extra_env: &[("LANG", "fr_FR.UTF-8")] };
+const FR_640_LARGE: Profile = Profile { name: "rg35xx-plus-640x480-fr-large", device: "rg35xx-plus", text_size: "large", extra_env: &[("LANG", "fr_FR.UTF-8")] };
+const FR_1024: Profile = Profile { name: "rgdsplus-1024x768-fr", device: "rgdsplus", text_size: "normal", extra_env: &[("LANG", "fr_FR.UTF-8")] };
+const FR_1024_LARGE: Profile = Profile { name: "rgdsplus-1024x768-fr-large", device: "rgdsplus", text_size: "large", extra_env: &[("LANG", "fr_FR.UTF-8")] };
+const FR_CUBEXX: Profile = Profile { name: "rgcubexx-720x720-fr", device: "rgcubexx", text_size: "normal", extra_env: &[("LANG", "fr_FR.UTF-8")] };
+const FR_CUBEXX_LARGE: Profile = Profile { name: "rgcubexx-720x720-fr-large", device: "rgcubexx", text_size: "large", extra_env: &[("LANG", "fr_FR.UTF-8")] };
+
 #[test]
-fn a_row_of_two_lines_is_named_by_its_top_line() {
-    let record = format!(
-        "@where\tpause:Main / power\n140\t300\t1100\t420\t{ROW}\n140\t300\t1100\t420\t{FOCUS}\n129\t320\t300\t360\tPower off\n127\t372\t700\t400\tSaves the game, then switches off.\n"
-    );
-    let f = Frame::parse(&record);
-    assert_eq!(f.focused().as_deref(), Some("Power off"));
-    // A string truly further left still names the row (a value at the left of a wide row is no second line).
-    let record = format!("@where\tx\n100\t300\t1100\t420\t{ROW}\n110\t340\t300\t380\tLeft\n400\t310\t600\t340\tTop right\n");
-    assert_eq!(Frame::parse(&record).controls()[0].name, "Left");
+#[ignore = "release check: the explorer in French at 640x480"]
+fn french_every_page_overlay_and_first_start_step_at_640x480() {
+    for profile in [FR_640, FR_640_LARGE] {
+        for part in [Part::Settings, Part::Overlays, Part::FirstStart] {
+            run(profile, part);
+        }
+    }
+}
+
+#[test]
+#[ignore = "release check: the explorer in French at 1024x768"]
+fn french_every_page_overlay_and_first_start_step_at_1024x768() {
+    for profile in [FR_1024, FR_1024_LARGE] {
+        for part in [Part::Settings, Part::Overlays, Part::FirstStart] {
+            run(profile, part);
+        }
+    }
+}
+
+#[test]
+#[ignore = "release check: the explorer in French on the square 720x720 CubeXX"]
+fn french_every_page_overlay_and_first_start_step_on_the_cubexx() {
+    for profile in [FR_CUBEXX, FR_CUBEXX_LARGE] {
+        for part in [Part::Settings, Part::Overlays, Part::FirstStart] {
+            run(profile, part);
+        }
+    }
+}
+
+/// Italian on the same three screens, Normal and Large text (docs/i18n-glossary.md "Italian glossary").
+const IT_640: Profile = Profile { name: "rg35xx-plus-640x480-it", device: "rg35xx-plus", text_size: "normal", extra_env: &[("LANG", "it_IT.UTF-8")] };
+const IT_640_LARGE: Profile = Profile { name: "rg35xx-plus-640x480-it-large", device: "rg35xx-plus", text_size: "large", extra_env: &[("LANG", "it_IT.UTF-8")] };
+const IT_1024: Profile = Profile { name: "rgdsplus-1024x768-it", device: "rgdsplus", text_size: "normal", extra_env: &[("LANG", "it_IT.UTF-8")] };
+const IT_1024_LARGE: Profile = Profile { name: "rgdsplus-1024x768-it-large", device: "rgdsplus", text_size: "large", extra_env: &[("LANG", "it_IT.UTF-8")] };
+const IT_CUBEXX: Profile = Profile { name: "rgcubexx-720x720-it", device: "rgcubexx", text_size: "normal", extra_env: &[("LANG", "it_IT.UTF-8")] };
+const IT_CUBEXX_LARGE: Profile = Profile { name: "rgcubexx-720x720-it-large", device: "rgcubexx", text_size: "large", extra_env: &[("LANG", "it_IT.UTF-8")] };
+
+#[test]
+#[ignore = "release check: the explorer in Italian at 640x480"]
+fn italian_every_page_overlay_and_first_start_step_at_640x480() {
+    for profile in [IT_640, IT_640_LARGE] {
+        for part in [Part::Settings, Part::Overlays, Part::FirstStart] {
+            run(profile, part);
+        }
+    }
+}
+
+#[test]
+#[ignore = "release check: the explorer in Italian at 1024x768"]
+fn italian_every_page_overlay_and_first_start_step_at_1024x768() {
+    for profile in [IT_1024, IT_1024_LARGE] {
+        for part in [Part::Settings, Part::Overlays, Part::FirstStart] {
+            run(profile, part);
+        }
+    }
+}
+
+#[test]
+#[ignore = "release check: the explorer in Italian on the square 720x720 CubeXX"]
+fn italian_every_page_overlay_and_first_start_step_on_the_cubexx() {
+    for profile in [IT_CUBEXX, IT_CUBEXX_LARGE] {
+        for part in [Part::Settings, Part::Overlays, Part::FirstStart] {
+            run(profile, part);
+        }
+    }
 }
 
 // The merge gate: each part once, at a different size (1024x768 is the tightest page, where hints give way first).
@@ -1355,6 +1491,12 @@ fn the_first_start_step_by_step() {
     run(MINI_V2, Part::FirstStart);
 }
 
+#[test]
+#[cfg_attr(feature = "brick", ignore = "release check: the ROCKNIX sizes; main's gate runs them, a Brick build runs the Brick's")]
+fn every_settings_page_in_android_s_handheld_view() {
+    run(ANDROID_ODIN, Part::Settings);
+}
+
 // The release check (scripts/release-check.sh): the other sizes and Large text.
 
 #[test]
@@ -1373,6 +1515,18 @@ fn every_settings_page_at_640x480() {
 #[ignore = "release check: the explorer on an SM8550 handheld"]
 fn every_settings_page_on_the_odin_2_mini() {
     run(ODIN_2_MINI, Part::Settings);
+}
+
+#[test]
+#[ignore = "release check: the explorer in Android's handheld view"]
+fn quick_settings_power_menu_pause_menu_and_update_card_in_android_s_handheld_view() {
+    run(ANDROID_ODIN, Part::Overlays);
+}
+
+#[test]
+#[ignore = "release check: the explorer in Android's handheld view"]
+fn the_first_start_step_by_step_in_android_s_handheld_view() {
+    run(ANDROID_ODIN, Part::FirstStart);
 }
 
 #[test]
@@ -1409,6 +1563,48 @@ fn quick_settings_power_menu_pause_menu_and_update_card_on_the_cubexx() {
 #[ignore = "release check: the explorer on the square 720x720 CubeXX"]
 fn the_first_start_step_by_step_on_the_cubexx() {
     run(RG_CUBEXX, Part::FirstStart);
+}
+
+#[test]
+#[ignore = "release check: the explorer on the RG503's 960x544"]
+fn every_settings_page_on_the_rg503() {
+    run(RG503, Part::Settings);
+}
+
+#[test]
+#[ignore = "release check: the explorer on the RG503's 960x544"]
+fn quick_settings_power_menu_pause_menu_and_update_card_on_the_rg503() {
+    run(RG503, Part::Overlays);
+}
+
+#[test]
+#[ignore = "release check: the explorer on the RG503's 960x544"]
+fn the_first_start_step_by_step_on_the_rg503() {
+    run(RG503, Part::FirstStart);
+}
+
+#[test]
+#[ignore = "release check: the explorer on the R36S (640x480, no Wi-Fi)"]
+fn every_settings_page_on_the_r36s() {
+    run(R36S, Part::Settings);
+}
+
+#[test]
+#[ignore = "release check: the explorer on the R36S (640x480, no Wi-Fi)"]
+fn quick_settings_power_menu_pause_menu_and_update_card_on_the_r36s() {
+    run(R36S, Part::Overlays);
+}
+
+#[test]
+#[ignore = "release check: the explorer on the R36S (640x480, no Wi-Fi)"]
+fn the_first_start_step_by_step_on_the_r36s() {
+    run(R36S, Part::FirstStart);
+}
+
+#[test]
+#[ignore = "release check: the explorer on the RG28XX (640x480, no Wi-Fi)"]
+fn every_settings_page_on_the_rg28xx() {
+    run(RG28XX, Part::Settings);
 }
 
 // A Brick build's gate: the three parts on the Brick, where Settings › Look › Layout's unreachable rows were found.
@@ -1467,21 +1663,47 @@ fn select_named(ui: &mut Ui, name: &str) -> Frame {
     panic!("cannot focus {name:?} on {}:\n{}", f.at, f.text());
 }
 
+/// Settings' category `name` (English, as `@where` names it), from anywhere in Settings' lists: R1 until the symbols at
+/// the top have it selected. START shows the first category's rows; there is no page of categories (SETTINGS-IA package 2).
+fn open_category(ui: &mut Ui, name: &str) -> Frame {
+    let want = format!("settings:List {name}");
+    let mut f = ui.settled(&[]).unwrap();
+    for _ in 0..8 {
+        if f.at == want {
+            return f;
+        }
+        f = ui.settled(&["r1"]).unwrap();
+    }
+    panic!("R1 never reached {want}: {}", f.at);
+}
+
 fn open_named(ui: &mut Ui, name: &str) -> Frame {
     select_named(ui, name);
     ui.settled(&["a"]).unwrap()
 }
 
-/// Connections must expose both network tools directly, reachable with the built-in pad.
+/// Connections must expose every network service directly, reachable with the built-in pad: Tailscale and SSH
+/// (13.11.: they were hidden in Help & tools › For tinkerers), Sync and PC streaming (the tree of 2026-11-13).
 fn connections_network_tools(profile: Profile) {
     let card = Card::new(&profile);
     let mut ui = Ui::start(&card, &profile, true, 1, &[]);
-    ui.settled(&["start"]).unwrap();
-    let connections = open_named(&mut ui, "Connections");
-    let names: Vec<_> = connections.controls().into_iter().map(|c| c.name).collect();
-    assert_eq!(names, ["Wi-Fi", "Bluetooth", "Tailscale", "Remote access (SSH)", "Web companion"],
-        "{}: Connections must show both network tools", profile.name);
-    for name in ["Tailscale", "Remote access (SSH)"] {
+    // START shows Connections' rows at once, on Wi-Fi (SETTINGS-IA package 2: no page of categories in between).
+    let connections = ui.settled(&["start"]).unwrap();
+    assert_eq!(connections.at, "settings:List Connections", "{}: START lands on Connections' rows", profile.name);
+    assert_eq!(connections.focused().as_deref(), Some("Wi-Fi"));
+    assert!(connections.names_hint("l1") && connections.names_hint("r1"), "{}: L1 and R1 at the top: {:?}", profile.name, connections.hints);
+    // Every row with Down (round to the first again): a list may be longer than the screen (eight categories since Settings
+    // v2 put the Brick's header on two lines, and Web companion under the fold).
+    let names = walk_rows(&mut ui, &connections);
+    // The Brick's card has no Moonlight (`brick_hides`).
+    let want: &[&str] = if profile.device == "brick" {
+        &["Wi-Fi", "Bluetooth", "Tailscale", "Remote access (SSH)", "Sync", "Web companion"]
+    } else {
+        &["Wi-Fi", "Bluetooth", "Tailscale", "Remote access (SSH)", "Sync", "Web companion", "PC streaming"]
+    };
+    assert_eq!(names, want, "{}: Connections must show every network service", profile.name);
+    let services: &[&str] = if profile.device == "brick" { &["Tailscale", "Remote access (SSH)", "Sync"] } else { &["Tailscale", "Remote access (SSH)", "Sync", "PC streaming"] };
+    for name in services.iter().copied() {
         let selected = select_named(&mut ui, name);
         let page = ui.settled(&["a"]).unwrap();
         assert_ne!(page.at, selected.at, "A opens {name}");
@@ -1489,8 +1711,8 @@ fn connections_network_tools(profile: Profile) {
         assert_eq!(back.at, connections.at, "B returns to Connections");
         assert_eq!(back.focused().as_deref(), Some(name), "B keeps the row");
     }
-    let categories = ui.settled(&["b"]).unwrap();
-    assert_eq!(categories.focused().as_deref(), Some("Connections"));
+    let shelf = ui.settled(&["b"]).unwrap();
+    assert!(leaves(&shelf.at), "{}: B in the list goes back to the shelf at once: {}", profile.name, shelf.at);
 }
 
 #[test]
@@ -1502,6 +1724,262 @@ fn connections_network_tools_on_rocknix() {
 #[test]
 fn connections_network_tools_on_brick() {
     connections_network_tools(BRICK);
+}
+
+/// Settings › Connections › Web companion, off and on (0.5: it listens on the Wi-Fi too): every row is reached with
+/// Down, the page says where it works (the Wi-Fi first), and B comes back to its row in Connections. On, the server
+/// runs for real; the Wi-Fi is a name no machine has, so it waits for one (or, where a tailnet exists and port 80 is not
+/// allowed, says why it is not listening). A is never pressed on the page's rows: the switch would change the card.
+fn web_companion_page(profile: Profile) {
+    let card = Card::new(&profile);
+    for (run, on) in [(1, false), (2, true)] {
+        if on {
+            let data = card.path().join(format!("run-{run}/data"));
+            std::fs::create_dir_all(&data).unwrap();
+            std::fs::write(data.join("web.json"), r#"{"enabled":true,"trust_tailnet":true}"#).unwrap();
+        }
+        let mut ui = Ui::start(&card, &profile, true, run, &[("POCKETUI_WIFI_IFACE", "pocketnav0")]);
+        let connections = ui.settled(&["start"]).unwrap();
+        assert_eq!(connections.at, "settings:List Connections", "{}", profile.name);
+        let page = open_named(&mut ui, "Web companion");
+        assert_ne!(page.at, connections.at, "{}: A opens the Web companion", profile.name);
+        let text = page.text();
+        if on {
+            assert!(text.contains("Waiting for Wi-Fi") || text.contains("Not listening"), "{}: on, without a network: {text}", profile.name);
+        } else {
+            assert!(text.contains("same Wi-Fi") && !text.contains("Needs Tailscale"), "{}: the Off page names the Wi-Fi: {text}", profile.name);
+        }
+        let mut seen = vec![page.focused().unwrap_or_default()];
+        let mut f = page;
+        for _ in 0..6 {
+            f = ui.settled(&["down"]).unwrap();
+            let name = f.focused().unwrap_or_default();
+            if seen.contains(&name) {
+                break;
+            }
+            seen.push(name);
+        }
+        for row in ["Web companion", "Pair a browser", "Paired browsers", "Your Tailscale devices"] {
+            assert!(seen.iter().any(|s| s == row), "{} (on: {on}): Down never reached {row:?}: {seen:?}", profile.name);
+        }
+        assert!(f.names_hint("b"), "{}: the bar names B: {:?}", profile.name, f.hints);
+        let back = ui.settled(&["b"]).unwrap();
+        assert_eq!(back.at, connections.at, "{}: B returns to Connections", profile.name);
+        assert_eq!(back.focused().as_deref(), Some("Web companion"), "{}: B keeps the row", profile.name);
+    }
+}
+
+#[test]
+fn web_companion_page_on_rocknix() {
+    web_companion_page(RG35XX_PLUS);
+}
+
+#[cfg(feature = "brick")]
+#[test]
+fn web_companion_page_on_brick() {
+    web_companion_page(BRICK);
+}
+
+/// A hand test of 0.5 (15.11.): L1/R1 must not be the only way between Settings' categories. The tab pattern of
+/// console settings, with the D-pad alone: Up on the first row puts the focus on the symbols at the top (a focus mark there,
+/// no row selected, the hint bar naming Left/Right); Left/Right reach every category this device has and come round, the
+/// rows under them changing live; Down goes into the chosen category's first row; B leaves Settings from up there too.
+fn settings_tabs_with_the_dpad(profile: Profile) {
+    let card = Card::new(&profile);
+    let mut ui = Ui::start(&card, &profile, true, 1, &[]);
+    let start = ui.settled(&["start"]).unwrap();
+    assert!(start.at.starts_with("settings:List "), "{}: START shows a category's rows: {}", profile.name, start.at);
+    let first = start.at.trim_start_matches("settings:List ").to_string();
+    let first_row = start.focused().expect("a row is selected");
+    let bar = ui.settled(&["up"]).unwrap();
+    assert_eq!(bar.at, format!("settings:Tabs {first}"), "{}: Up on the first row goes to the categories", profile.name);
+    assert!(!bar.focus.is_empty(), "{}: the focus is shown up there:\n{}", profile.name, bar.text());
+    assert_ne!(bar.focused().as_deref(), Some(first_row.as_str()), "{}: no row stays selected", profile.name);
+    assert!(bar.names_hint("left") && bar.names_hint("right"), "{}: the hint bar names Left/Right: {:?}", profile.name, bar.hints);
+    assert!(bar.names_hint("b"), "{}: and B: {:?}", profile.name, bar.hints);
+    assert_eq!(ui.settled(&["up"]).unwrap().at, bar.at, "{}: Up up there stays", profile.name);
+    // Right all the way round: each category once, the rows under the symbols those of the category named.
+    let mut seen = vec![first.clone()];
+    let mut f = bar.clone();
+    for _ in 0..10 {
+        f = ui.settled(&["right"]).unwrap();
+        let name = f.at.strip_prefix("settings:Tabs ").unwrap_or_else(|| panic!("{}: Right left the categories: {}", profile.name, f.at)).to_string();
+        if name == first {
+            break;
+        }
+        assert!(!seen.contains(&name), "{}: {name} twice before coming round: {seen:?}", profile.name);
+        seen.push(name);
+    }
+    assert_eq!(f.at, bar.at, "{}: Right comes round to the first", profile.name);
+    let want = if profile.extra_env.iter().any(|(k, _)| *k == "POCKETUI_ANDROID_PROFILE") { 7 } else { 8 };
+    assert_eq!(seen.len(), want, "{}: every category: {seen:?}", profile.name);
+    // Left goes the other way: the last one, and Down into its rows on the first.
+    let last = ui.settled(&["left"]).unwrap();
+    assert_eq!(last.at, format!("settings:Tabs {}", seen.last().unwrap()), "{}: Left from the first: the last", profile.name);
+    let rows = ui.settled(&["down"]).unwrap();
+    assert_eq!(rows.at, format!("settings:List {}", seen.last().unwrap()), "{}: Down goes into the category chosen", profile.name);
+    assert!(rows.focused().is_some(), "{}: on a row: {}", profile.name, rows.text());
+    // L1/R1 still work from the rows; B from the categories leaves Settings.
+    assert_eq!(ui.settled(&["r1"]).unwrap().at, start.at, "{}: R1 still goes on", profile.name);
+    ui.settled(&["up"]).unwrap();
+    assert!(leaves(&ui.settled(&["b"]).unwrap().at), "{}: B on the categories leaves Settings", profile.name);
+}
+
+#[test]
+fn settings_tabs_with_the_dpad_at_640x480() {
+    settings_tabs_with_the_dpad(RG35XX_PLUS);
+}
+
+#[test]
+fn settings_tabs_with_the_dpad_at_1024x768_in_large_text() {
+    settings_tabs_with_the_dpad(RG_DS_PLUS_LARGE);
+}
+
+#[test]
+fn settings_tabs_with_the_dpad_in_android_s_handheld_view() {
+    settings_tabs_with_the_dpad(ANDROID_ODIN);
+}
+
+#[cfg(feature = "brick")]
+#[test]
+fn settings_tabs_with_the_dpad_on_the_brick() {
+    settings_tabs_with_the_dpad(BRICK);
+}
+
+#[cfg(feature = "brick")]
+#[test]
+fn settings_tabs_with_the_dpad_on_the_smart_pro() {
+    settings_tabs_with_the_dpad(SMART_PRO);
+}
+
+/// The rows of the Settings list `f` is on, from its selected row with Down until the first comes round again (also the
+/// ones under the fold): each once, Down never leaving the list. Ends on the row it started on.
+fn walk_rows(ui: &mut Ui, f: &Frame) -> Vec<String> {
+    let first = f.focused().unwrap_or_else(|| panic!("{} opens on a row:\n{}", f.at, f.text()));
+    let mut rows = vec![first.clone()];
+    for _ in 0..MAX_WALK {
+        let g = ui.settled(&["down"]).unwrap();
+        assert_eq!(g.at, f.at, "Down stays in the list");
+        let row = g.focused().unwrap_or_else(|| panic!("a row selected on {}:\n{}", g.at, g.text()));
+        if row == first {
+            return rows;
+        }
+        assert!(!rows.contains(&row), "{}: {row} twice before coming round: {rows:?}", f.at);
+        rows.push(row);
+    }
+    panic!("Down never came round on {}: {rows:?}", f.at);
+}
+
+/// Settings v2 (2026-11-16): the eight categories in their order with R1 from START, back with L1, and every row of each
+/// one reached with Down (round to the first), on the built-in pad. Android's handheld view has no Connections.
+fn every_category_by_r1_l1_and_every_row_by_the_dpad(profile: Profile) {
+    let android = profile.extra_env.iter().any(|(k, _)| *k == "POCKETUI_ANDROID_PROFILE");
+    let all = ["Connections", "Look", "Screen & sound", "Controls", "Playing", "Games", "System", "Help & tools"];
+    let want: Vec<&str> = all.iter().copied().filter(|c| !(android && *c == "Connections")).collect();
+    let card = Card::new(&profile);
+    let mut ui = Ui::start(&card, &profile, true, 1, &[]);
+    let mut f = ui.settled(&["start"]).unwrap();
+    let mut seen = Vec::new();
+    for _ in 0..want.len() {
+        let name = f.at.strip_prefix("settings:List ").unwrap_or_else(|| panic!("{}: R1 left the lists: {}", profile.name, f.at)).to_string();
+        // Every row with Down, the first again after the last: none is skipped or a dead end.
+        let rows = walk_rows(&mut ui, &f);
+        assert!(rows.len() >= 2, "{}: {name} has rows: {rows:?}", profile.name);
+        match name.as_str() {
+            "Screen & sound" => assert_eq!(rows[..2], ["Brightness", "Volume"], "{}: the levels first", profile.name),
+            "Controls" => assert_eq!(rows[..2], ["Buttons", "Controller setup"], "{}", profile.name),
+            "Look" => assert!(rows.iter().any(|r| r == "Game start animation"), "{}: {rows:?}", profile.name),
+            _ => {}
+        }
+        seen.push(name);
+        f = ui.settled(&["r1"]).unwrap();
+    }
+    assert_eq!(seen, want, "{}: R1 visits every category once, in order", profile.name);
+    assert_eq!(f.at, format!("settings:List {}", want[0]), "{}: and comes round", profile.name);
+    let mut back = Vec::new();
+    for _ in 0..want.len() {
+        f = ui.settled(&["l1"]).unwrap();
+        back.push(f.at.trim_start_matches("settings:List ").to_string());
+    }
+    // From the first: the last, the one before … and the first again.
+    let rev: Vec<String> = want.iter().rev().map(|s| s.to_string()).collect();
+    assert_eq!(back.last().map(String::as_str), Some(want[0]), "{}: L1 comes round: {back:?}", profile.name);
+    assert_eq!(back, rev, "{}: L1 goes back the same way", profile.name);
+}
+
+#[test]
+fn every_category_and_row_by_the_pad_at_640x480() {
+    every_category_by_r1_l1_and_every_row_by_the_dpad(RG35XX_PLUS);
+}
+
+#[test]
+fn every_category_and_row_by_the_pad_at_1024x768() {
+    every_category_by_r1_l1_and_every_row_by_the_dpad(RG_DS_PLUS);
+}
+
+#[test]
+fn every_category_and_row_by_the_pad_in_android_s_handheld_view() {
+    every_category_by_r1_l1_and_every_row_by_the_dpad(ANDROID_ODIN);
+}
+
+#[cfg(feature = "brick")]
+#[test]
+fn every_category_and_row_by_the_pad_at_1280x720() {
+    every_category_by_r1_l1_and_every_row_by_the_dpad(SMART_PRO);
+}
+
+/// Settings v2: Settings → Screen & sound → Brightness and Volume change with Left/Right on the pad, like the quick settings.
+#[test]
+fn the_brightness_and_volume_rows_change_with_left_and_right() {
+    let profile = RG35XX_PLUS;
+    let card = Card::new(&profile);
+    let mut ui = Ui::start(&card, &profile, true, 1, &[]);
+    ui.settled(&["start"]).unwrap();
+    open_category(&mut ui, "Screen & sound");
+    for name in ["Brightness", "Volume"] {
+        let before = select_named(&mut ui, name);
+        assert!(before.names_hint("left"), "{name}: the hints offer Left/Right: {:?}", before.hints);
+        let value = |f: &Frame| {
+            let rect = f.controls().into_iter().find(|c| c.focused).unwrap().rect;
+            f.strings.iter().filter(|(r, _)| inside(centre(r), &rect)).map(|(_, s)| s.clone()).collect::<Vec<_>>().join(" ")
+        };
+        let (was, mut now) = (value(&before), String::new());
+        for key in ["left", "left", "right"] {
+            let f = ui.settled(&[key]).unwrap();
+            assert!(f.same_row(&before), "{name}: {key} keeps the row");
+            now = value(&f);
+        }
+        assert_ne!(now, was, "{name}: two steps down and one up is another level: {was} → {now}");
+        assert!(now.contains('%'), "{name}: a level in percent: {now}");
+    }
+}
+
+/// The tree of 2026-11-13: the buttons in one place. Controls (Controls & sound until Settings v2) starts with Buttons,
+/// Controller setup and Test buttons; Controller setup is a row of its own (it was the third row of Buttons), A opens it and B
+/// comes back to its row; L1 from Controls is Screen & sound, and B leaves Settings.
+#[test]
+fn controller_setup_is_a_row_of_controls_and_sound_and_b_comes_back_to_it() {
+    let profile = RG35XX_PLUS;
+    let card = Card::new(&profile);
+    let mut ui = Ui::start(&card, &profile, true, 1, &[]);
+    ui.settled(&["start"]).unwrap();
+    let list = open_category(&mut ui, "Controls");
+    let names: Vec<_> = list.controls().into_iter().map(|c| c.name).collect();
+    assert_eq!(names[..3], ["Buttons", "Controller setup", "Test buttons"], "the buttons first, one place: {names:?}");
+    let row = select_named(&mut ui, "Controller setup");
+    let page = ui.settled(&["a"]).unwrap();
+    assert_ne!(page.at, row.at, "A opens Controller setup");
+    assert!(page.text().contains("Controller setup"), "{}", page.text());
+    let back = ui.settled(&["b"]).unwrap();
+    assert_eq!(back.at, row.at, "B comes back to Controls");
+    assert_eq!(back.focused().as_deref(), Some("Controller setup"), "on its row");
+    // Buttons keeps its two rows; Controller setup is not one of them any more.
+    let buttons = open_named(&mut ui, "Buttons");
+    assert!(!buttons.text().contains("Controller setup"), "{}", buttons.text());
+    ui.settled(&["b"]).unwrap();
+    assert_eq!(ui.settled(&["l1"]).unwrap().at, "settings:List Screen & sound", "L1: the category before");
+    assert_eq!(ui.settled(&["r1"]).unwrap().at, "settings:List Controls", "R1: back");
+    assert!(leaves(&ui.settled(&["b"]).unwrap().at), "B leaves Settings");
 }
 
 /// One working network and one saved network outside its range. The helpers only read these stand-ins.
@@ -1568,7 +2046,7 @@ fn rc03_add_games_grid_keeps_every_selected_tile_visible_on_each_device() {
         std::fs::write(cfg, xml).unwrap();
         let mut ui = Ui::start(&card, &profile, true, 1, &[]);
         ui.settled(&["start"]).unwrap();
-        open_named(&mut ui, "Games");
+        open_category(&mut ui, "Games");
         let grid = open_named(&mut ui, "Add games");
         assert!(grid.at.contains("games"), "{}", grid.at);
         let mut names = BTreeSet::new();
@@ -1588,7 +2066,7 @@ fn rc03_performance_fan_rows_only_offer_arrows_when_they_can_change() {
         let card = Card::new(&profile);
         let mut ui = Ui::start(&card, &profile, true, 1, &[]);
         ui.settled(&["start"]).unwrap();
-        open_named(&mut ui, "Playing");
+        open_category(&mut ui, "Playing");
         open_named(&mut ui, "Performance & fan");
         for name in ["Games: fan", "Fan outside games", "Smooth fan"] {
             let before = select_named(&mut ui, name);
@@ -1621,12 +2099,8 @@ fn retro_letters_are_one_step_on_the_style_row_and_kept() {
         f.strings.iter().filter(|(r, _)| inside(centre(r), &rect)).map(|(_, s)| s.clone()).collect::<Vec<_>>().join(" ")
     };
     let open_style = |ui: &mut Ui| {
-        let mut f = ui.settled(&["start"]).unwrap();
-        for _ in 0..MAX_WALK {
-            if f.focused().is_some_and(|n| n.starts_with("Look")) { break; }
-            f = ui.settled(&["down"]).unwrap();
-        }
-        ui.settled(&["a"]).unwrap();
+        ui.settled(&["start"]).unwrap();
+        open_category(ui, "Look");
         select_named(ui, "Style")
     };
     // settings.json as written, its spaces left out ("retro_letters": "pixelify").
@@ -1664,8 +2138,8 @@ fn rc03_starter_pack_left_right_keep_the_focused_game() {
     let card = Card::new(&profile);
     let mut ui = Ui::start(&card, &profile, true, 1, &[]);
     ui.settled(&["start"]).unwrap();
-    open_named(&mut ui, "Games");
-    open_named(&mut ui, "Extras");
+    open_category(&mut ui, "Games");
+    open_named(&mut ui, "Box art & downloads");
     open_named(&mut ui, "Starter pack");
     let before = ui.settled(&["down"]).unwrap();
     for key in ["left", "right"] {
@@ -1680,12 +2154,13 @@ fn extras_rows_are_reachable_and_b_returns_from_starter_and_to_games_in_each_lan
     #[cfg(feature = "brick")]
     let profiles = { let mut p = profiles; p.push(Profile { text_size: "large", ..BRICK }); p };
     for profile in profiles {
-        for (lang, games, starter) in [("en", "Games", "Starter pack"), ("de", "Spiele", "Startpaket"), ("es", "Juegos", "Pack inicial")] {
+        for (lang, games, starter, extras) in [("en", "Games", "Starter pack", "Box art & downloads"), ("de", "Spiele", "Startpaket", "Cover & Downloads"), ("es", "Juegos", "Pack inicial", "Carátulas y descargas")] {
             let card = Card::new(&profile);
             let mut ui = Ui::start(&card, &profile, true, 1, &[("POCKETUI_LANG", lang)]);
             ui.settled(&["start"]).unwrap();
-            open_named(&mut ui, games);
-            let parent = select_named(&mut ui, "Extras");
+            open_category(&mut ui, "Games");
+            let _ = games;
+            let parent = select_named(&mut ui, extras);
             let mut page = ui.settled(&["a"]).unwrap();
             assert!(page.at.contains("extras"), "{} {lang}: {}", profile.name, page.at);
             let count = page.list.expect("Extras registers its full list").1;
@@ -1806,7 +2281,8 @@ exit 0
     let mut ex = Explorer::new(&card, profile, true, Vec::new());
     let mut path = vec!["start".to_string()];
     let mut f = ex.replay(&path).unwrap();
-    for name in ["Connections", "Remote access (SSH)"] {
+    // START: Connections' rows at once.
+    for name in ["Remote access (SSH)"] {
         for _ in 0..MAX_WALK {
             if f.focused().as_deref() == Some(name) { break; }
             path.push("down".to_string());
@@ -1835,7 +2311,7 @@ fn textfit_031_sleep_rows_scroll_into_view_in_large_spanish() {
     let mut ui = Ui::start(&card, &profile, true, 1,
         &[("POCKETUI_LANG", "es"), ("POCKETUI_RETRO", "cocoa"), ("POCKETUI_TEXT_BOXES", boxes.to_str().unwrap())]);
     ui.settled(&["start"]).unwrap();
-    open_named(&mut ui, "Sistema");
+    open_category(&mut ui, "System");
     let mut f = ui.settled(&[]).unwrap();
     for _ in 0..MAX_WALK {
         if f.focused().is_some_and(|name| name.starts_with("Suspensión")) { break; }
@@ -1903,7 +2379,7 @@ fn tools_same_result_refresh_paints_loading_before_settling() {
     let card = Card::new(&RG35XX_PLUS);
     let mut ui = Ui::start(&card, &RG35XX_PLUS, true, 1, &[]);
     ui.settled(&["start"]).unwrap();
-    open_named(&mut ui, "Help & tools");
+    open_category(&mut ui, "Help & tools");
     let before = open_named(&mut ui, "Tools");
     assert_eq!(before.at, "settings:Tools");
     ui.capture_delay = Duration::from_millis(50);
@@ -1951,8 +2427,7 @@ fn sync_a_pause_not_by_pocket_ui_is_shown_x_resumes_both_folders_and_b_leaves() 
         let root = paused_syncthing(&card);
         let mut ui = Ui::start(&card, &profile, true, 1, &[("POCKETUI_SYNC_ROOT", root.to_str().unwrap())]);
         ui.settled(&["start"]).unwrap();
-        open_named(&mut ui, "Help & tools");
-        open_named(&mut ui, "For tinkerers");
+        open_category(&mut ui, "Connections");
         let list = select_named(&mut ui, "Sync");
         ui.settled(&["a"]).unwrap();
         // The poller reads Syncthing on a thread: wait for its first report, not a fixed time.
@@ -1981,7 +2456,7 @@ fn sync_a_pause_not_by_pocket_ui_is_shown_x_resumes_both_folders_and_b_leaves() 
         assert!(!f.names_hint("x"), "{}: nothing left to resume: {:?}", profile.name, f.hints);
         let asked = std::fs::read_to_string(card.path().join("bin/resumed.log")).unwrap_or_default();
         assert_eq!(asked, "pocket-gc-cards\npocket-wii-saves\n", "{}", profile.name);
-        // B leaves to For tinkerers, on the Sync row.
+        // B leaves to Connections, on the Sync row.
         let back = ui.settled(&["b"]).unwrap();
         assert_eq!(back.at, list.at, "{}: B leaves Sync", profile.name);
         assert!(back.same_row(&list), "{}: back on the Sync row", profile.name);
@@ -2051,7 +2526,7 @@ fn portmaster_runtime_offer_states_return_to_extras_and_reopen_ports() {
         let (before, _) = rc03_snapshot(&card, profile, &state, &env);
         assert!(before.names_hint("b"), "{state} names its way back");
         let (back, _) = rc03_snapshot(&card, profile, &format!("{state}:b"), &env);
-        assert!(back.text().contains("Extras"), "{state}: B paints Extras: {}", back.text());
+        assert!(back.text().contains("Box art & downloads"), "{state}: B paints Box art & downloads: {}", back.text());
         assert!(back.strings.iter().any(|(_, text)| text == "PortMaster games"), "{state}: B keeps the complete PortMaster row label readable: {}", back.text());
         let (again, _) = rc03_snapshot(&card, profile, &format!("{state}:ba"), &env);
         assert!(again.text().contains("PortMaster games"), "{state}: reopening paints Ports: {}", again.text());
@@ -2075,7 +2550,8 @@ fn bricks_short_press_sleeps_by_default_and_screen_off_is_kept() {
         if let Some(r) = retro { env.push(("POCKETUI_RETRO", r)); }
         let mut ui = Ui::start(&card, &profile, true, 1, &env);
         ui.settled(&["start"]).unwrap();
-        open_named(&mut ui, system);
+        open_category(&mut ui, "System");
+        let _ = system;
         let mut f = ui.settled(&[]).unwrap();
         for _ in 0..MAX_WALK {
             if f.focused().is_some_and(|name| name.starts_with(sleep_row)) { break; }
@@ -2108,7 +2584,7 @@ fn bricks_fkeys_are_reachable_changeable_and_kept_after_restart() {
     let card = Card::new(&BRICK);
     let mut ui = Ui::start(&card, &BRICK, true, 1, &[]);
     ui.settled(&["start"]).unwrap();
-    open_named(&mut ui, "Sound & feel");
+    open_category(&mut ui, "Controls");
     let mut frame = open_named(&mut ui, "Lights & buttons");
     for (row, wanted) in [("F1 button", "Quick load"), ("F2 button", "Screenshot")] {
         for _ in 0..MAX_WALK {
@@ -2127,7 +2603,7 @@ fn bricks_fkeys_are_reachable_changeable_and_kept_after_restart() {
     std::fs::copy(saved, card.path().join("template-data/brick-keys.json")).unwrap();
     let mut ui = Ui::start(&card, &BRICK, true, 2, &[]);
     ui.settled(&["start"]).unwrap();
-    open_named(&mut ui, "Sound & feel");
+    open_category(&mut ui, "Controls");
     let frame = open_named(&mut ui, "Lights & buttons");
     assert!(frame.text().lines().any(|s| s == "Quick load"), "F1 action after restart: {}", frame.text());
     assert!(frame.text().lines().any(|s| s == "Screenshot"), "F2 action after restart: {}", frame.text());

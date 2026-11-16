@@ -78,15 +78,6 @@ impl App {
         let gesture = self.touch_rec.feed(ev.phase, x, y, std::time::Instant::now(), self.hits.pitch());
         // The page in front takes the finger (`app_where`, the page `paint` painted): never one under it.
         let place = self.where_now().place;
-        // This overlay owns its hit map; search, a cabinet or the game card underneath must never take its tap.
-        if place == Place::ControlsCard {
-            if let Some(Gesture::Tap { x, y }) = gesture {
-                if let TapAction::Press(b) = self.hits.tap(x, y) {
-                    self.tap_button(el, b);
-                }
-            }
-            return;
-        }
         // Add games: a tap on a way selects it, a tap on the selected one does it; its hints are buttons. (The manual opened
         // over it with SELECT is a page of its own: its links and its swipe, not the ways behind it.)
         if matches!(place, Place::Setup { .. }) {

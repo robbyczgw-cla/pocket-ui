@@ -259,11 +259,11 @@ impl TailscalePage {
         if self.offline() {
             match self.row() {
                 Row::Account if self.signed_in() => {
-                    self.note = Some(LOG_OUT_NEEDS_NETWORK);
+                    self.note = Some(crate::device::wifi_or(LOG_OUT_NEEDS_NETWORK, crate::device::NEEDS_NETWORK));
                     return Action::Nothing;
                 }
                 Row::Account | Row::AuthKey => {
-                    self.note = Some(SIGN_IN_NEEDS_NETWORK);
+                    self.note = Some(crate::device::wifi_or(SIGN_IN_NEEDS_NETWORK, crate::device::NEEDS_NETWORK));
                     return Action::Nothing;
                 }
                 Row::Switch | Row::Hostname => {}
@@ -399,7 +399,7 @@ impl TailscalePage {
                     Err(msg) if msg != "Cancelled" && (msg == NO_NETWORK || self.offline()) => {
                         // The network went while it ran: said calmly. A "Timed out" or a dial error would only be noise.
                         eprintln!("tailscale: sign-in ended without a network: {msg}");
-                        self.note = Some(SIGN_IN_NEEDS_NETWORK);
+                        self.note = Some(crate::device::wifi_or(SIGN_IN_NEEDS_NETWORK, crate::device::NEEDS_NETWORK));
                         None
                     }
                     Err(msg) if msg != "Cancelled" => Some(msg),
@@ -413,7 +413,7 @@ impl TailscalePage {
                     // why nothing happened.
                     if msg == NO_NETWORK || self.offline() {
                         eprintln!("tailscale: log out ended without a network: {msg}");
-                        self.note = Some(LOG_OUT_NEEDS_NETWORK);
+                        self.note = Some(crate::device::wifi_or(LOG_OUT_NEEDS_NETWORK, crate::device::NEEDS_NETWORK));
                     } else {
                         self.error = Some(msg);
                     }

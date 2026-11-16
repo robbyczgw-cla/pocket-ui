@@ -35,6 +35,18 @@ use pocket_ui::{
 };
 use std::time::{Duration, Instant};
 
+/// Each test owns its thread's animation clock, including on panic.
+struct FrameClock;
+impl FrameClock {
+    fn hold() -> Self {
+        pocket_ui::frame_clock::hold();
+        Self
+    }
+}
+impl Drop for FrameClock {
+    fn drop(&mut self) { pocket_ui::frame_clock::thaw(); }
+}
+
 const FRAME: Duration = Duration::from_micros(16_667);
 /// The Odin 2 Mini (1920 x 1080 at 2.0 dp per pixel... the launcher's own measure) and a phone held upright.
 const SCREENS: [((u32, u32), f32); 2] = [((1920, 1080), 2.0), ((1080, 2340), 2.6)];
@@ -69,8 +81,12 @@ fn shelf(played: &Game, theme: Theme, (size, dp): ((u32, u32), f32)) -> ui::Ui {
 
 fn page(u: &mut ui::Ui, (w, h): (u32, u32)) -> Vec<u32> {
     let mut px = vec![0; (w * h) as usize];
-    u.paint(&mut Canvas::new(&mut px, w, h), &mut Text::builtin(), None);
+    paint_page(u, (w, h), &mut px, &mut Text::builtin());
     px
+}
+
+fn paint_page(u: &mut ui::Ui, (w, h): (u32, u32), px: &mut [u32], text: &mut Text) {
+    u.paint(&mut Canvas::new(px, w, h), text, None);
 }
 
 /// The player's note at Save & quit: a game picture (blue with a bright square) standing in the middle of the window.
@@ -101,6 +117,7 @@ fn begin(u: &mut ui::Ui, played: &Game, size: (u32, u32), note: &LastPicture, at
     u.back_from(&played.key, note.saved);
     u.launching = true;
     u.returning = true;
+    u.page_marks.clear();
     let pixels = page(u, size);
     u.launching = false;
     u.returning = false;
@@ -108,20 +125,34 @@ fn begin(u: &mut ui::Ui, played: &Game, size: (u32, u32), note: &LastPicture, at
         u.ajar = None;
         return None;
     };
-    let page = eject::Page { pixels, size, window: size, offset: (0, 0), scale: (1.0, 1.0) };
+    let page = eject::Page { pixels, size, window: size, offset: (0, 0), scale: (1.0, 1.0), marks: std::mem::take(&mut u.page_marks) };
     Some(eject::begin(played, case, page, note, None, false, &mut Text::builtin(), at))
-}
-
-/// The page `since` its case came home (`Ui::case_home`): its own clock, set as far back.
-fn page_since(u: &mut ui::Ui, key: &str, size: (u32, u32), since: Duration) -> Vec<u32> {
-    u.case_home(key, Instant::now().checked_sub(since).unwrap());
-    page(u, size)
 }
 
 /// Mean difference of two pictures of the same size, 0-255 per colour channel (as tests/eject.rs).
 fn diff(a: &[u32], b: &[u32]) -> f64 {
     let ch = |p: u32, s: u32| (p >> s & 0xff) as i64;
     a.iter().zip(b).map(|(x, y)| (0..3).map(|i| (ch(*x, i * 8) - ch(*y, i * 8)).unsigned_abs()).sum::<u64>()).sum::<u64>() as f64 / (a.len() * 3) as f64
+}
+
+/// Rendering or scheduling a frame may take real time; the same animation moment must still show the same picture.
+/// The old `front_pic` read the real clock after `case_home`, so even the first shelf frame had already moved.
+#[test]
+fn the_same_shelf_moment_survives_a_slow_frame() {
+    let _clock = FrameClock::hold();
+    let at = pocket_ui::frame_clock::now();
+    let played = game("snes", "snes/Fixture.sfc", "Fixture");
+    let size = (1920, 1080);
+    let mut u = shelf(&played, Theme::Shelf, (size, 2.0));
+    u.back_from(&played.key, true);
+    u.case_home(&played.key, at);
+    let first = page(&mut u, size);
+    std::thread::sleep(Duration::from_millis(40));
+    let delayed = page(&mut u, size);
+    assert_eq!(diff(&first, &delayed), 0.0, "the same shelf moment moved while a frame was delayed");
+    pocket_ui::frame_clock::step(pocket_ui::eject::AJAR_IN);
+    let out = page(&mut u, size);
+    assert!(diff(&first, &out) > 0.2, "stepping the clock must still slide the game out of its case");
 }
 
 /// The systems of the handhelds' test, the consoles with their own scene since 11.11., and one without any art.
@@ -149,14 +180,15 @@ fn the_way_back_hands_over_to_the_still_shelf_without_a_jump() {
     const SAME: f64 = 0.2;
     const STILL: f64 = 0.5;
     const AFTER: f64 = 1.5;
+    let _clock = FrameClock::hold();
     let mut failures = Vec::new();
     for (system, relative, name) in SYSTEMS {
         let played = game(system, relative, name);
         for theme in [Theme::Shelf, Theme::Cabinet] {
             for screen in SCREENS {
                 let size = screen.0;
+                let t0 = pocket_ui::frame_clock::hold_settled();
                 let mut u = shelf(&played, theme, screen);
-                let t0 = Instant::now();
                 let mut ej = begin(&mut u, &played, size, &note(&played, size, true), t0).unwrap_or_else(|| panic!("{system} {theme:?}: no way back"));
                 let len = ej.way.len();
                 let n = (len.as_secs_f64() / FRAME.as_secs_f64()).ceil() as u32;
@@ -164,23 +196,34 @@ fn the_way_back_hands_over_to_the_still_shelf_without_a_jump() {
                 // Late in the way back the scene stands over the page: something other than the still page.
                 ej.paint(&mut buf, t0 + len.mul_f32(0.75));
                 let mid = buf.clone();
-                let mut frames = Vec::new();
+                // Retain consecutive pictures only; still compare every pixel of every 60 Hz frame.
+                let mut previous = buf.clone();
+                let mut steps = Vec::new();
                 for k in n.saturating_sub(4)..n {
                     assert!(!ej.done(t0 + FRAME * k), "{system}: over before its length");
                     ej.paint(&mut buf, t0 + FRAME * k);
-                    frames.push(buf.clone());
+                    if k > n.saturating_sub(4) {
+                        steps.push(diff(&previous, &buf));
+                    }
+                    std::mem::swap(&mut previous, &mut buf);
                 }
                 assert!(ej.done(t0 + FRAME * n));
                 ej.paint(&mut buf, t0 + FRAME * n);
                 let end = buf.clone();
                 // Home at the frame it ended on, then the still shelf's own frames.
+                let home = t0 + FRAME * n;
+                u.case_home(&played.key, home);
+                // Like the app: keep the fonts and their glyph cache across frames.
+                let mut text = Text::builtin();
+                let mut rest = 0.0;
                 for k in 0..42u32 {
-                    frames.push(page_since(&mut u, &played.key, size, FRAME * k));
+                    pocket_ui::frame_clock::freeze(home + FRAME * k);
+                    paint_page(&mut u, size, &mut buf, &mut text);
+                    if k == 0 { rest = diff(&end, &buf); }
+                    steps.push(diff(&previous, &buf));
+                    std::mem::swap(&mut previous, &mut buf);
                 }
-                let still = frames.last().unwrap();
-                assert!(diff(&mid, still) > 1.0, "{system} {theme:?} {size:?}: the way back shows nothing over the page");
-                let rest = diff(&end, &frames[4]);
-                let steps: Vec<f64> = frames.windows(2).map(|p| diff(&p[0], &p[1])).collect();
+                assert!(diff(&mid, &previous) > 1.0, "{system} {theme:?} {size:?}: the way back shows nothing over the page");
                 let hand = steps[3];
                 let after = steps[4..].iter().cloned().fold(0.0, f64::max);
                 if rest > SAME || hand > (steps[2] * 1.25).max(STILL) || after > AFTER {
@@ -394,6 +437,113 @@ fn the_medium_comes_down_into_a_console_standing_whole_on_the_screen() {
     }
 }
 
+/// 12.11. (Alex, on the Odin 2 Mini): with the console at Linux's size the way back showed, where the case stood on the
+/// shelf, a black field with the selection's frame (600-900 ms), until the case came into it. On the handhelds that place is
+/// a plain gap and the case comes home into it. The page under the way back keeps nothing of the case's in its place now,
+/// no frame and no shadow on the board; they belong to the case and come with it (`pocket_ui::insert_scene::Mark`), so the place is empty
+/// while the case is away and the way back still ends on the shelf's own picture (the hand-over test above). Every system
+/// with a scene, both looks with a case, the Odin, a phone held upright and across. Missed before: the way back was only
+/// compared with the still shelf at its end and in its last frames, never with what stood in the case's place meanwhile.
+#[test]
+fn the_case_s_place_stays_an_empty_gap_until_the_case_comes_home() {
+    let chalk = pocket_ui::palette::pal().chalk;
+    let screens = [((1920, 1080), 2.0), ((1080, 2340), 2.6), ((2340, 1080), 2.6)];
+    let mut failures = Vec::new();
+    for (system, relative, name) in SYSTEMS {
+        let played = game(system, relative, name);
+        for theme in [Theme::Shelf, Theme::Cabinet] {
+            for (size, dp) in screens {
+                let at = format!("{system} {theme:?} on {}x{}", size.0, size.1);
+                let (w, h) = (size.0 as i32, size.1 as i32);
+                let mut u = shelf(&played, theme, (size, dp));
+                u.back_from(&played.key, true);
+                u.launching = true;
+                u.returning = true;
+                u.page_marks.clear();
+                let pixels = page(&mut u, size);
+                u.launching = false;
+                u.returning = false;
+                let (from, front) = u.front_at.take().unwrap_or_else(|| panic!("{at}: no case on the page"));
+                let marks = std::mem::take(&mut u.page_marks);
+                // The gap: round the case's place, a few dp wide, nothing of the selection's frame.
+                let grow = (4.0 * dp) as i32;
+                let ring = |buf: &[u32], count: &mut dyn FnMut(u32)| {
+                    for y in (from.1 - grow).max(0)..(from.1 + from.3 + grow).min(h) {
+                        for x in (from.0 - grow).max(0)..(from.0 + from.2 + grow).min(w) {
+                            let inside = x >= from.0 && x < from.0 + from.2 && y >= from.1 && y < from.1 + from.3;
+                            if !inside {
+                                count(buf[(y * w + x) as usize] & 0xff_ffff);
+                            }
+                        }
+                    }
+                };
+                let (mut total, mut framed) = (0, 0);
+                ring(&pixels, &mut |p| {
+                    total += 1;
+                    framed += (p == chalk & 0xff_ffff) as u32;
+                });
+                if framed > 0 {
+                    failures.push(format!("{at}: {framed} of {total} pixels round the case's place are the selection's frame while the case is away"));
+                }
+                let mut launch = insert::Launch::new(&played, front, from, pixels, size, size, None, false, true, &mut Text::builtin());
+                launch.marks = marks.clone();
+                let mut bare = vec![0; (w * h) as usize];
+                let mut shown = vec![0; (w * h) as usize];
+                // While the case is away (it fades out of its place at the start and comes back at the end of the scene's
+                // time) the marks add nothing; once it is home they are its frame again.
+                let away = |ms: u64| {
+                    let st = pocket_ui::cabinet::insert_at(Duration::from_millis(ms), true);
+                    (st.carry - 0.3) / 0.4 >= 1.0
+                };
+                let mut away_frames = 0;
+                for ms in (0..=1600u64).step_by(20).filter(|ms| away(*ms)) {
+                    launch.marks = Vec::new();
+                    launch.paint_scene(&mut bare, Duration::from_millis(ms));
+                    launch.marks = marks.clone();
+                    launch.paint_scene(&mut shown, Duration::from_millis(ms));
+                    away_frames += 1;
+                    if bare != shown {
+                        failures.push(format!("{at}: the frame or shadow shows at {ms} ms while the case is not back"));
+                        break;
+                    }
+                }
+                assert!(away_frames > 10, "{at}: the case is away for a while ({away_frames} frames)");
+                // Home: the frame stands round it, as on the shelf.
+                launch.paint_scene(&mut shown, Duration::ZERO);
+                let (mut total, mut framed) = (0, 0);
+                ring(&shown, &mut |p| {
+                    total += 1;
+                    framed += (p == chalk & 0xff_ffff) as u32;
+                });
+                if !marks.iter().any(|m| matches!(m, pocket_ui::insert_scene::Mark::Frame { .. })) || framed * 20 < total {
+                    failures.push(format!("{at}: the frame is not back with the case ({framed} of {total}, {} marks)", marks.len()));
+                }
+            }
+        }
+    }
+    assert!(failures.is_empty(), "the case's place is not a clean gap:\n{}", failures.join("\n"));
+}
+
+/// 12.11. (Alex, on the Odin 2 Mini): the first start of a big disc copies it first, and the copy's window (the app's own
+/// dialog, made at the copy's first report) came up over the start's scene, hiding the console and the case going into it.
+/// It comes once the scene is over now: no start's picture has a window over it. The window is Java and has no host to run
+/// on, so this holds the Java side to the scene's own length: its delay is at least the Cozy start's (the fade's end), and
+/// the first report waits for it. Missed before: nothing tied the window's moment to the picture it came over.
+#[test]
+fn the_first_start_s_copy_window_waits_for_the_start_s_picture_to_end() {
+    let java = include_str!("../android/java/xyz/pocketui/app/PocketActivity.java");
+    let after: u64 = java
+        .lines()
+        .find_map(|l| l.split("COPY_BAR_AFTER_MS =").nth(1))
+        .and_then(|rest| rest.trim().trim_end_matches(';').trim().parse().ok())
+        .expect("PocketActivity says when the copy window may come (COPY_BAR_AFTER_MS)");
+    let picture = (pocket_ui::cabinet::fade_delay(true) + pocket_ui::insert_scene::FADE).as_millis() as u64;
+    assert!(after >= picture, "the window comes at {after} ms, the picture ends at {picture} ms");
+    assert!(after <= picture + 400, "and not much later than that ({after} ms): the bar is what says a long copy is on its way");
+    let at = java.split("public boolean at(").nth(1).expect("the copy window's report").split("private void draw").next().unwrap();
+    assert!(at.contains("first&&now-began<COPY_BAR_AFTER_MS"), "the first report doesn't wait for the picture's end:\n{at}");
+}
+
 /// 12.11. (Alex: "slow"): the player was told to come when the start's fade had run, and the Odin 2 Mini then stayed
 /// black for its window, core and first picture (214-580 ms), where Linux shows the game as the fade ends. It is told a
 /// player's start earlier now; never before the medium is in, so even the quickest player's first picture comes after a
@@ -413,13 +563,48 @@ fn the_player_is_told_to_come_a_player_s_start_before_the_fade_ends() {
         let mut launch = insert::Launch::new(&played, front, from, pixels, size, size, None, false, cozy, &mut Text::builtin());
         (0..200u64).map(|ms| Duration::from_millis(ms * 10)).find(|d| launch.take_release(launch.at + *d)).unwrap()
     };
-    let hold = insert_scene::hold(true).unwrap();
+    let hold = insert_scene::hold(true, false).unwrap();
     let at = release_at(true);
     assert_eq!(at, hold - insert::PLAYER_START, "a player's start before the fade has run");
     assert!(at >= cabinet::IN_AT_COZY, "never before the medium is in");
     // The quickest start measured on the Odin 2 Mini (GBA, 214 ms): its first picture after a lid or tray has shut.
     assert!(at + Duration::from_millis(214) >= cabinet::IN_AT_COZY + ir::SHUT_AFTER);
     assert_eq!(release_at(false), Duration::ZERO, "the quick way: at once");
+}
+
+/// 12.11. (Alex's idea "a handheld switches on like a handheld"): on Android too a handheld's start lights its display
+/// and ends dark (never in a light over the screen), the player is told to come with the light's end (sooner than the fade's), the colour is the
+/// console's own, a console on a TV keeps its black, and any button ends it at once.
+#[test]
+fn a_handhelds_start_on_android_lights_its_display_and_ends_dark() {
+    use pocket_ui::insert_scene;
+    let size = (1920, 1080);
+    for (system, file, name, handheld) in [("gba", "gba/Kirby.gba", "Kirby", true), ("gb", "gb/Tetris.gb", "Tetris", true), ("nds", "nds/Mario Kart DS.nds", "Mario Kart DS", true), ("snes", "snes/Chrono Trigger (USA).sfc", "Chrono Trigger", false)] {
+        let played = game(system, file, name);
+        let mut u = shelf(&played, Theme::Shelf, (size, 2.0));
+        u.launching = true;
+        let pixels = page(&mut u, size);
+        u.launching = false;
+        let (from, front) = u.front_at.take().unwrap();
+        let mut launch = insert::Launch::new(&played, front, from, pixels, size, size, None, false, true, &mut Text::builtin());
+        launch.set_power_on(true, true);
+        assert_eq!(launch.power_on().is_some(), handheld, "{system}");
+        let (t0, ms) = (launch.at, |n: u64| Duration::from_millis(n));
+        let end = insert_scene::hold(true, handheld).unwrap();
+        let mut buf = vec![0; (size.0 * size.1) as usize];
+        let mut text = Text::builtin();
+        launch.paint(&mut buf, &mut text, t0 + end + ms(5));
+        assert!(buf.iter().all(|p| p & 0xff_ffff == 0), "{system}: the screen ends dark, never in a light");
+        // The player comes a player's start before the end, and the end is sooner than the black fade's.
+        assert!(!launch.take_release(t0 + end - insert::PLAYER_START - ms(1)), "{system}");
+        assert!(launch.take_release(t0 + end - insert::PLAYER_START), "{system}");
+        if handheld {
+            assert!(end < insert_scene::hold(true, false).unwrap(), "{system}: sooner than the fade");
+        }
+        // A button: at once, whatever the light was doing.
+        launch.set_power_on(true, true);
+        assert!(launch.skip() && launch.take_release(t0), "{system}: any button ends it");
+    }
 }
 
 /// 12.11.: Android pauses the launcher as the player starts, and winit asks it for no frame then; it paints the start's

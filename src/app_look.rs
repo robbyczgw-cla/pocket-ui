@@ -34,7 +34,7 @@ impl App {
 
     /// The first start's step (not the look step), in the column on a wide screen.
     pub(crate) fn paint_setup_in_column(&mut self, c: &mut Canvas) {
-        self.in_column(c, |app, c| {
+        self.in_page_column(c, |app, c| {
             if let Some(setup) = app.setup.as_mut() {
                 setup.paint(c, &mut app.text);
                 setup.register_touch(&mut app.hits);
@@ -106,9 +106,9 @@ impl App {
             self.sel = 0;
             self.prev_sel = self.sel;
             let mut c = Canvas::new(&mut buf, frame_w, frame_h);
-            // As `App::paint` has it: the Shelf look in the column on a wide screen (`app_column`).
+            // As `App::paint` has it: the Shelf look in the column on a wide Linux screen (`app_column`).
             if t == Theme::Shelf {
-                self.in_column(&mut c, |app, c| app.paint_home(c, true));
+                self.paint_shelf_look(&mut c);
             } else {
                 self.paint_home(&mut c, true);
             }
@@ -162,7 +162,7 @@ impl App {
     }
 }
 
-/// The colours, font and button symbols in use (Settings → Look → Colours and Font, Playing → Buttons): the previews are
+/// The colours, font and button symbols in use (Settings → Look → Colours and Font, Controls → Buttons): the previews are
 /// painted again when one changes.
 pub(crate) fn style_mark() -> u32 {
     // Retro's own colours too: Cocoa or Pea on the first start's Colours row changes the previews.

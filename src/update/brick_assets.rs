@@ -4,6 +4,8 @@ use serde::Deserialize;
 use std::collections::HashSet;
 use std::io::Read;
 
+use super::brick_delta::Delta;
+
 const ASSET_LIMIT: u64 = 80_000_000;
 const UNPACKED_LIMIT: u64 = 2 << 30;
 const HELPERS: [&str; 6] = ["bin/brick-egl", "bin/curl", "bin/dropbearmulti", "bin/syncthing", "bin/tailscale", "bin/tailscaled"];
@@ -32,6 +34,9 @@ fn safe_old(card: &Path, asset: &Asset) -> bool {
 pub(super) struct Plan {
     entries: Vec<(Asset, Option<PathBuf>)>,
     pub(super) reused: Vec<String>,
+    /// Unchanged parts of the app tarball (files and whole folders) that move from `app/` instead of being unpacked
+    /// (brick_delta.rs). Their manifest lines start with `move:`.
+    pub(super) delta: Delta,
 }
 
 /// Inspect the signed app archive without extracting it. Even its inventory is read before any SD write.
@@ -56,7 +61,7 @@ pub(super) fn fetch(
     }).map_err(|e| e.to_string())?;
     let plan = from_json(tools, card, json.as_deref(), ram, manifest_url, cancel, progress, free)?;
     if json.is_some() && inventory.iter().any(|e| !e.dir &&
-        (e.path.starts_with("cores/") || e.path.starts_with("bios-data/") || HELPERS.contains(&e.path.as_str()))) {
+        (e.path.starts_with("cores/") || (e.path.starts_with("bios-data/") || e.path.starts_with("port-data/")) || HELPERS.contains(&e.path.as_str()))) {
         return Err(INVALID.into());
     }
     Ok(plan)
@@ -66,14 +71,14 @@ fn from_json(
     tools: &Tools, card: &Path, json: Option<&[u8]>, ram: &mut super::brick_io::Ram,
     manifest_url: &str, cancel: &Cancel, progress: &dyn Fn(u64), free: &dyn Fn(&Path) -> Option<u64>,
 ) -> Result<Plan, String> {
-    let Some(json) = json else { return Ok(Plan { entries: Vec::new(), reused: Vec::new() }); };
+    let Some(json) = json else { return Ok(Plan { entries: Vec::new(), reused: Vec::new(), delta: Delta::default() }); };
     let assets: Assets = serde_json::from_slice(json).map_err(|_| INVALID)?;
     if assets.format != 1 || assets.assets.is_empty() || assets.assets.len() > 1024 { return Err(INVALID.into()); }
     let mut paths = HashSet::new();
     let mut total = 0u64;
     for asset in &assets.assets {
         let parts: Vec<_> = asset.path.split('/').collect();
-        if parts.len() < 2 || (!matches!(parts[0], "cores" | "bios-data") && !HELPERS.contains(&asset.path.as_str()))
+        if parts.len() < 2 || (!matches!(parts[0], "cores" | "bios-data" | "port-data") && !HELPERS.contains(&asset.path.as_str()))
             || parts.iter().any(|p| p.is_empty() || *p == "." || *p == ".." || p.contains(['\\', '\n', '\r', '\0']))
             || !paths.insert(&asset.path) || asset.size > UNPACKED_LIMIT || asset.package.size > ASSET_LIMIT || asset.package.size == 0
             || asset.sha256.len() != 64 || !asset.sha256.bytes().all(|b| b.is_ascii_hexdigit()) { return Err(INVALID.into()); }
@@ -101,10 +106,23 @@ fn from_json(
     for (asset, archive) in &entries {
         if let Some(archive) = archive { download_checked(tools, &asset.package, manifest_url, archive, cancel, progress)?; }
     }
-    Ok(Plan { entries, reused })
+    Ok(Plan { entries, reused, delta: Delta::default() })
 }
 
 impl Plan {
+    /// The changed parts' packages that `stage` unpacks, in bytes (the Updates page's step 2 after the tarball).
+    pub(super) fn staged_bytes(&self) -> u64 {
+        self.entries.iter().filter_map(|(_, archive)| archive.as_ref()).map(|a| std::fs::metadata(a).map_or(0, |m| m.len())).sum()
+    }
+    /// How many parts `move_reused` moves.
+    pub(super) fn move_count(&self) -> u64 {
+        if self.reused.is_empty() && self.delta.moves.is_empty() { 0 } else { (self.reused.len() + self.delta.moves.len()) as u64 }
+    }
+    /// The files those parts hold now in `app/`; after the move they are in the new folder too, which is synced as a whole.
+    pub(super) fn moved_files(&self, card: &Path) -> u64 {
+        if self.move_count() == 0 { return 0; }
+        self.reused.iter().chain(self.delta.moves.iter()).map(|p| crate::fsutil::count_files(&card.join("app").join(p))).sum()
+    }
     pub(super) fn stage(&self, staging: &Path, cancel: &Cancel) -> Result<(), String> {
         for (asset, archive) in &self.entries {
             if cancel.is_cancelled() { return Err("Download cancelled.".into()); }
@@ -119,39 +137,47 @@ impl Plan {
                 || !matches(&temp.join(&asset.path), asset) { return Err(DAMAGED.into()); }
             std::fs::rename(temp.join(&asset.path), &dest).map_err(|e| e.to_string())?;
             std::fs::remove_dir_all(&temp).map_err(|e| e.to_string())?;
+            cancel.work_add(std::fs::metadata(archive).map_or(0, |m| m.len()));
         }
         Ok(())
     }
     /// Only after downloads, extraction and build validation succeed. The fixed boot script is durable before
     /// the first asset moves; a power loss restores the old app or completes/rolls back the new version.
-    pub(super) fn move_reused(&self, card: &Path, staging: &Path) -> Result<(), String> {
-        if self.reused.is_empty() { return Ok(()); }
+    pub(super) fn move_reused(&self, card: &Path, staging: &Path, cancel: &Cancel) -> Result<(), String> {
+        if self.reused.is_empty() && self.delta.moves.is_empty() { return Ok(()); }
         if self.entries.iter().any(|(asset, archive)| archive.is_none() && !safe_old(card, asset)) { return Err(DAMAGED.into()); }
-        crate::fsutil::write_atomic(&card.join("start.sh"), include_bytes!("../../deploy/brick/boot.sh")).map_err(|e| e.to_string())?;
         let app = card.join("app");
-        crate::fsutil::write_atomic(&app.join(".asset-moves"), format!("{}\n", self.reused.join("\n")).as_bytes()).map_err(|e| e.to_string())?;
+        // The planned parts are still there (nothing writes into app/ meanwhile) and nothing is in their way in app.new.
+        if self.delta.moves.iter().any(|m| !delta_still_there(&app.join(m), &staging.join(m))) { return Err(DAMAGED.into()); }
+        crate::fsutil::write_atomic(&card.join("start.sh"), include_bytes!("../../deploy/brick/boot.sh")).map_err(|e| e.to_string())?;
+        let lines: Vec<String> = self.reused.iter().cloned().chain(self.delta.moves.iter().map(|m| format!("move:{m}"))).collect();
+        crate::fsutil::write_atomic(&app.join(".asset-moves"), format!("{}\n", lines.join("\n")).as_bytes()).map_err(|e| e.to_string())?;
         // FAT may refuse directory fsync. The fixed recovery script and manifest must both survive
         // before a single old asset is removed from its original path.
         crate::fsutil::flush_all();
-        for path in &self.reused {
-            std::fs::rename(app.join(path), staging.join(path)).map_err(|e| e.to_string())?;
+        for path in self.reused.iter().chain(self.delta.moves.iter()) {
+            let to = staging.join(path);
+            if self.delta.moves.contains(path) {
+                std::fs::create_dir_all(to.parent().ok_or(DAMAGED)?).map_err(|e| e.to_string())?;
+            }
+            std::fs::rename(app.join(path), &to).map_err(|e| e.to_string())?;
             if path.starts_with("bin/") {
                 use std::os::unix::fs::PermissionsExt;
-                let dest = staging.join(path);
-                let mode = std::fs::metadata(&dest).map_err(|e| e.to_string())?.permissions().mode();
+                let mode = std::fs::metadata(&to).map_err(|e| e.to_string())?.permissions().mode();
                 if mode & 0o111 == 0 {
-                    std::fs::set_permissions(dest, std::fs::Permissions::from_mode(0o755)).map_err(|e| e.to_string())?;
+                    std::fs::set_permissions(&to, std::fs::Permissions::from_mode(0o755)).map_err(|e| e.to_string())?;
                 }
             }
             crate::fsutil::sync_dir(app.join(path).parent().unwrap());
-            crate::fsutil::sync_dir(staging.join(path).parent().unwrap());
+            crate::fsutil::sync_dir(to.parent().unwrap());
+            cancel.work_add(1);
         }
         Ok(())
     }
     pub(super) fn undo_moves(&self, card: &Path, staging: &Path) -> Result<(), String> {
         let app = card.join("app");
-        for path in &self.reused {
-            if !app.join(path).exists() {
+        for path in self.reused.iter().chain(self.delta.moves.iter()) {
+            if std::fs::symlink_metadata(app.join(path)).is_err() {
                 std::fs::rename(staging.join(path), app.join(path)).map_err(|e| e.to_string())?;
                 crate::fsutil::sync_dir(app.join(path).parent().unwrap());
             }
@@ -164,6 +190,11 @@ impl Plan {
     }
 }
 
+/// A planned move still has its source in place (no link) and nothing in its way at the destination.
+fn delta_still_there(from: &Path, to: &Path) -> bool {
+    std::fs::symlink_metadata(from).is_ok_and(|m| m.is_file() || m.is_dir()) && std::fs::symlink_metadata(to).is_err()
+}
+
 #[cfg(test)]
 fn prepare(tools: &Tools, card: &Path, staging: &Path, manifest_url: &str, cancel: &Cancel,
     progress: &dyn Fn(u64), free: &dyn Fn(&Path) -> Option<u64>) -> Result<(), String> {
@@ -172,7 +203,7 @@ fn prepare(tools: &Tools, card: &Path, staging: &Path, manifest_url: &str, cance
     let result = (|| {
         let plan = from_json(tools, card, Some(&json), &mut ram, manifest_url, cancel, progress, free)?;
         plan.stage(staging, cancel)?;
-        plan.move_reused(card, staging)?;
+        plan.move_reused(card, staging, cancel)?;
         Ok(())
     })();
     let _ = std::fs::remove_dir_all(&ram.dir);
@@ -289,6 +320,29 @@ cp "${{url#file://}}" "$out"
             assert_eq!(std::fs::read(staging.join("cores/core.so")).unwrap(), data);
             assert_eq!(std::fs::read(card.join("app/cores/core.so")).ok().as_deref(), installed);
         }
+    }
+    /// The Brick and dArkOS update file on the card (`update::card`) carries the component packages: a changed core comes
+    /// from it without a server, checked by its signed hash; one it lacks is said (no Wi-Fi to fall back on).
+    #[test]
+    fn a_changed_core_comes_from_the_update_file_on_the_card_without_a_server() {
+        let dir = TestDir::new("asset-from-card");
+        let card = dir.join("card");
+        let staging = card.join("app.new");
+        let data = b"new signed core";
+        let mut rel = package(&dir, "cores/core.so", data);
+        let bytes = std::fs::read(dir.join("core.tar.gz")).unwrap();
+        rel.url = "https://blocked.invalid/assets/core.tar.gz".into();
+        std::fs::create_dir_all(card.join("app/cores")).unwrap();
+        std::fs::write(card.join("app/cores/core.so"), b"old core").unwrap();
+        let file = dir.join("pocket-ui-update-9-trimui");
+        std::fs::create_dir_all(file.join("assets")).unwrap();
+        let offline = Tools { curl: "/missing-curl", ..TOOLS };
+        inventory(&staging, "cores/core.so", data, &rel);
+        let err = super::super::card::with_file(&file, "app", || prepare(&offline, &card, &staging, "file:///u.json", &Cancel::new(), &|_| {}, &|_| Some(u64::MAX))).unwrap();
+        assert_eq!(err.unwrap_err(), super::super::card::NEEDS_MORE);
+        std::fs::write(file.join("assets/darkos-asset-1234.tar.gz"), &bytes).unwrap();
+        super::super::card::with_file(&file, "app", || prepare(&offline, &card, &staging, "file:///u.json", &Cancel::new(), &|_| {}, &|_| Some(u64::MAX))).unwrap().unwrap();
+        assert_eq!(std::fs::read(staging.join("cores/core.so")).unwrap(), data);
     }
     #[test]
     fn bad_package_unsafe_path_and_low_space_leave_active_app_untouched() {

@@ -219,6 +219,14 @@ fn read_png<R: std::io::Read>(source: R) -> Option<Image> {
 }
 
 impl Image {
+    /// What this picture is, cheaply: its size and a hash of up to 4096 of its pixels. For caches that are keyed by
+    /// a picture lent for one paint and so cannot keep it alive (a freed picture's address is reused).
+    pub fn fingerprint(&self) -> u64 {
+        let step = (self.px.len() / 4096).max(1);
+        let h = self.px.iter().step_by(step).fold(0xcbf2_9ce4_8422_2325u64, |h, p| (h ^ u64::from(*p)).wrapping_mul(0x100_0000_01b3));
+        (h ^ u64::from(self.w)).wrapping_mul(0x100_0000_01b3) ^ u64::from(self.h)
+    }
+
     /// Size that fits inside `max_w` x `max_h` while keeping the aspect ratio.
     pub fn fit(&self, max_w: i32, max_h: i32) -> (i32, i32) {
         if self.w == 0 || self.h == 0 {

@@ -79,7 +79,7 @@ requires recovery from `config-before.tar`, because RAM backups disappeared.
 Initial kernel/pstore snapshots are already saved on the host before the UI starts.
 
 The journey covers scratch onboarding; D-pad selection and A on the scratch
-cartridge (including the first-console controls card); game → pause → Save → Quit →
+cartridge (a console's first game starts at once); game → pause → Save → Quit →
 Continue; real F1/F2 input events; the installed slider watcher and volume helper;
 D-pad reachability of Settings; a brief WLAN radio off/on cycle; an automatic
 check against the Brick update channel without pressing Install; and new app,

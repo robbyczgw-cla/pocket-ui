@@ -19,15 +19,15 @@ pub fn star(c: &mut Canvas, cx: i32, cy: i32, r: i32, color: u32) {
         }
         odd
     };
-    for y in cy - r - 1..=cy + r + 1 {
-        for x in cx - r - 1..=cx + r + 1 {
-            // 4 x 4 samples per pixel.
-            let n = (0..16)
-                .filter(|k| inside(x as f32 + (k % 4) as f32 / 4.0 + 0.125, y as f32 + (k / 4) as f32 / 4.0 + 0.125))
-                .count();
-            if n > 0 {
-                c.blend(x, y, color, (n * 255 / 16) as u8);
-            }
-        }
+    // The coverage of each pixel (4 x 4 samples), painted as one mask: natively averaged per screen pixel.
+    let side = (2 * r + 3).max(0) as usize;
+    let mut cover = vec![0u8; side * side];
+    for (i, a) in cover.iter_mut().enumerate() {
+        let (x, y) = (cx - r - 1 + (i % side) as i32, cy - r - 1 + (i / side) as i32);
+        let n = (0..16)
+            .filter(|k| inside(x as f32 + (k % 4) as f32 / 4.0 + 0.125, y as f32 + (k / 4) as f32 / 4.0 + 0.125))
+            .count();
+        *a = (n * 255 / 16) as u8;
     }
+    c.mask(cx - r - 1, cy - r - 1, side, side, &cover, color);
 }

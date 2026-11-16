@@ -1,4 +1,4 @@
-//! Settings → Help & tools → Test buttons (`app_test_buttons.rs` paints it): what every connected controller is doing
+//! Settings → Controls → Test buttons (`app_test_buttons.rs` paints it): what every connected controller is doing
 //! right now. For a player ("is this button broken?") and for support ("what does the pad really send?").
 //!
 //! It reads what the App gets from the pad threads, one controller at a time (`App::merge_pad` hands every event over
@@ -60,7 +60,7 @@ impl Kind {
 pub struct Mapping {
     /// The player's layout of this controller (`controllers.json`).
     pub layout: Layout,
-    /// Settings → Playing → Buttons → Button layout.
+    /// Settings → Controls → Buttons → Button layout.
     pub menu: ButtonLayout,
 }
 

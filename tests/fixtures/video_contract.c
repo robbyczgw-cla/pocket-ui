@@ -33,6 +33,21 @@ bool retro_serialize(void *d,size_t n){if(n<sizeof scene)return false;memcpy(d,&
 bool retro_unserialize(const void *d,size_t n){if(n<sizeof scene)return false;memcpy(&scene,d,sizeof scene);last=99;return true;}
 void retro_run(void){
     ++tick;
+    if(input(0,1,0,2)) {
+        /* PS1 intro/game and SNES low/high/interlaced modes keep their display aspect. */
+        static const struct av modes[] = {
+            {320,240,640,480,4.f/3.f,60,48000}, {512,256,640,480,4.f/3.f,60,48000},
+            {640,480,640,480,4.f/3.f,60,48000}, {256,224,640,480,4.f/3.f,60,48000},
+            {512,448,640,480,4.f/3.f,60,48000}, {640,360,640,480,16.f/9.f,60,48000}
+        };
+        const struct av *g=&modes[(tick-1)%6];
+        env(37,(void *)g);
+        unsigned format=1;env(10,&format);
+        static uint32_t dynamic[640*480];
+        for(unsigned i=0;i<g->w*g->h;++i)dynamic[i]=0x0080c040;
+        video(dynamic,g->w,g->h,g->w*4);
+        return;
+    }
     if(input(0,1,0,5))scene=1; /* Down: red, RGB1555. */
     if(input(0,1,0,4))scene=2; /* Up: blue, XRGB8888. */
     if(input(0,1,0,7))scene=0; /* Right: green, RGB565. */

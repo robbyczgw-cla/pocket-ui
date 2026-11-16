@@ -1,4 +1,4 @@
-//! Part of the pocket-ui binary: the App's side of `pocket_ui::night_light`. Settings → Look → Night light, the
+//! Part of the pocket-ui binary: the App's side of `pocket_ui::night_light`. Settings → Screen & sound → Night light, the
 //! thread that fades the display warmer in the evening, and what its steps do on the UI thread (one event each, no
 //! work per frame). The choices, the schedule, the fade and the thread are in `src/night_light.rs`; how the white
 //! point becomes ramps or a tint is `display.rs` (`Look::night`), applied by `Sys::set_night`.
@@ -198,10 +198,18 @@ impl App {
         if self.sys.backend() == Backend::Soft {
             lines.push(("Here it warms the menus and the games pocket-core runs, not RetroArch or the other emulators.".to_string(), pal().dust));
         }
+        // Above the hint bar (1280x720 and 1024x768 in Large text): the last paragraph that doesn't fit is cut with "…",
+        // the ones after it go; what the row does and the night light's state come first.
+        let step = pocket_ui::type_scale::line(NU_SMALL, 12);
+        let hint_top = pocket_ui::kit::hint_bar_top(c.h);
         for (text, color) in lines {
-            for line in self.text.wrap_prose(Face::Body, NU_SMALL, &text, width) {
+            let fit = if hint_top - 16 < y { 0 } else { ((hint_top - 16 - y) / step + 1) as usize };
+            if fit == 0 {
+                break;
+            }
+            for line in self.text.wrap_prose_at_most(Face::Body, NU_SMALL, &text, width, fit) {
                 self.text.draw(c, Face::Body, NU_SMALL, left, y, color, &line);
-                y += pocket_ui::type_scale::line(NU_SMALL, 12);
+                y += step;
             }
             y += 14;
         }

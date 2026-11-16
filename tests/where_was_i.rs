@@ -35,6 +35,8 @@ struct Ctx {
     tmp: PathBuf,
     stub: Option<Stub>,
     n: std::cell::Cell<u32>,
+    /// Last, so the stub is gone before the folder is; removes the folder with the Ctx, also on a panic.
+    _dir: tempfile::TempDir,
 }
 
 struct Shot {
@@ -53,7 +55,9 @@ impl Ctx {
         std::fs::create_dir_all(&data).unwrap();
         std::fs::create_dir_all(&tmpdir).unwrap();
         std::fs::copy(self.tmp.join("lib/data/recents.json"), data.join("recents.json")).unwrap();
-        std::fs::write(data.join("settings.json"), format!(r#"{{"onboarded": true, "theme": "{look}", "appearance": "{appearance}"{more}}}"#)).unwrap();
+        // The reminder is Off until switched on (0.5); every shot but the ones that say otherwise has it on.
+        let on = if more.contains("where_was_i") { "" } else { r#", "where_was_i": true"# };
+        std::fs::write(data.join("settings.json"), format!(r#"{{"onboarded": true, "theme": "{look}", "appearance": "{appearance}"{on}{more}}}"#)).unwrap();
         let (visible, boxes) = (self.tmp.join(format!("{n}.txt")), self.tmp.join(format!("{n}.tsv")));
         let mut cmd = Command::new(env!("CARGO_BIN_EXE_pocket-ui"));
         cmd.args(["--snapshot", state, self.tmp.join(format!("{n}.png")).to_str().unwrap()])
@@ -86,9 +90,8 @@ fn has(v: &[String], s: &str) -> bool {
 
 #[test]
 fn the_card_after_a_long_break_its_note_a_button_and_the_switch() {
-    let tmp = std::env::temp_dir().join(format!("pocketui-where-was-i-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&tmp);
-    std::fs::create_dir_all(&tmp).unwrap();
+    let dir = tempfile::Builder::new().prefix("pocketui-where-was-i-").tempdir().unwrap();
+    let tmp = dir.path().to_path_buf();
     // The made-up library behind the fading shelf, as a player's start leaves it.
     let ok = Command::new("python3").env("POCKETUI_MOCK_NOW", FIXTURE_NOW)
         .args(["-I", &format!("{ROOT}/scripts/curator-fake-library.py"), tmp.join("lib").to_str().unwrap(), "dark"])
@@ -96,7 +99,7 @@ fn the_card_after_a_long_break_its_note_a_button_and_the_switch() {
         .status()
         .expect("python3");
     assert!(ok.success());
-    let c = Ctx { stub: wayland(&tmp), tmp: tmp.clone(), n: Default::default() };
+    let c = Ctx { stub: wayland(&tmp), tmp: tmp.clone(), n: Default::default(), _dir: dir };
 
     for (lang, ago, played) in [("en", "Last played 3 weeks ago", "12 h 05 min played"), ("de", "Zuletzt vor 3 Wochen gespielt", "12 h 05 min gespielt"), ("es", "Jugado por última vez hace 3 semanas", "12 h 05 min de juego")] {
         for size in ["640x480", "1024x768", "1240x1080"] {
@@ -146,9 +149,12 @@ fn the_card_after_a_long_break_its_note_a_button_and_the_switch() {
         assert!(s.skipped, "{state}: an early button or failed picture releases the hold");
     }
 
-    // Settings → Playing → Remind me where I was off: no card.
-    let s = c.shot("shelf", "dark", "where-was-i", "en", "1240x1080", r#", "no_where_was_i": true"#);
-    assert!(!has(&s.visible, "Last played"), "switched off: {:?}", s.visible);
+    // Settings → Playing → Remind me where I was off: no card. Off is also what a player who never touched the switch
+    // has (0.5): a settings.json without the key, and one from before with the old `no_where_was_i`.
+    for more in [r#", "where_was_i": false"#, r#", "no_where_was_i": false"#, r#", "no_where_was_i": true"#] {
+        let s = c.shot("shelf", "dark", "where-was-i", "en", "1240x1080", more);
+        assert!(!has(&s.visible, "Last played"), "{more}: no card: {:?}", s.visible);
+    }
 
     let _ = std::fs::remove_dir_all(&tmp);
 }
@@ -157,16 +163,15 @@ fn the_card_after_a_long_break_its_note_a_button_and_the_switch() {
 /// launch says so, readable at the Brick's 1024x768 in every language, beside the card.
 #[test]
 fn a_slow_start_on_the_brick_says_it_is_loading() {
-    let tmp = std::env::temp_dir().join(format!("pocketui-brick-loading-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&tmp);
-    std::fs::create_dir_all(&tmp).unwrap();
+    let dir = tempfile::Builder::new().prefix("pocketui-brick-loading-").tempdir().unwrap();
+    let tmp = dir.path().to_path_buf();
     let ok = Command::new("python3").env("POCKETUI_MOCK_NOW", FIXTURE_NOW)
         .args(["-I", &format!("{ROOT}/scripts/curator-fake-library.py"), tmp.join("lib").to_str().unwrap(), "dark"])
         .stdout(std::process::Stdio::null())
         .status()
         .expect("python3");
     assert!(ok.success());
-    let c = Ctx { stub: wayland(&tmp), tmp: tmp.clone(), n: Default::default() };
+    let c = Ctx { stub: wayland(&tmp), tmp: tmp.clone(), n: Default::default(), _dir: dir };
     for (lang, word) in [("en", "Loading the game…"), ("de", "Spiel wird geladen…"), ("es", "Cargando el juego…")] {
         for appearance in ["dark", "light"] {
             let s = c.shot("shelf", appearance, "where-was-i:loading", lang, "1024x768", "");
@@ -180,7 +185,8 @@ fn a_slow_start_on_the_brick_says_it_is_loading() {
             let (mut light, mut dark) = (0, 0);
             // The line the player reads: enough bright letter ink against a dark backing. Before the fix,
             // Light painted dark letters into the game's black border; recording the words alone missed it.
-            for y in h - 100..h - 42 {
+            // (Over the hint bar's top edge, 144 lines from the bottom: `app_loading::paint_loading`.)
+            for y in h - 172..h - 114 {
                 for x in w / 4..w * 3 / 4 {
                     let rgb = &pixels[(y * w + x) * channels..][..3];
                     light += usize::from(rgb.iter().all(|v| *v >= 192));

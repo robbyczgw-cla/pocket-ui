@@ -17,6 +17,9 @@ use crate::pad::Button;
 use crate::palette::*;
 use crate::text::{Face, Text};
 
+/// "From a computer" on a handheld without Wi-Fi (`device::no_wifi_chip`): file sharing can't run there.
+const NO_SHARING: &str = "This handheld has no Wi-Fi, so file sharing can't copy them. Copy them to the folder above the way you add games (Settings › Games › Add games).";
+
 /// The ports folder's name inside the share (the share is /storage/roms).
 const PORTS_SHARE_NAME: &str = "ports";
 
@@ -444,7 +447,7 @@ pub fn make_place(port: &Path, e: &Expect) {
     }
 }
 
-/// Whether the page itself switches file sharing (X, in Settings > Extras) or only says where to.
+/// Whether the page itself switches file sharing (X, in Settings > Games > Box art & downloads) or only says where to.
 #[derive(Clone, Debug, PartialEq)]
 pub enum Toggle {
     Here { busy: bool, dots: String },
@@ -629,7 +632,11 @@ impl FilesPage {
                 (Toggle::InSettings, true) => "File sharing is off. Turn it on in Settings › Games › Add games (X).".to_string(),
             };
             let folder = self.share_dir.replace('/', "\\");
-            let lines = [first, format!("Then put {what} into games-roms\\{PORTS_SHARE_NAME}\\{folder}.")];
+            let mut lines = vec![first, format!("Then put {what} into games-roms\\{PORTS_SHARE_NAME}\\{folder}.")];
+            // No Wi-Fi chip: no file sharing to wait for; the folder above, filled the way games are added.
+            if share.ip.is_none() && crate::device::no_wifi_chip() {
+                lines = vec![NO_SHARING.to_string()];
+            }
             let wrapped: Vec<String> = lines.iter().flat_map(|l| text.wrap_prose(Face::Body, 24, l, w)).take(3).collect();
             for l in wrapped {
                 text.draw(c, Face::Body, 24, MARGIN, y + 40, pal().chalk, &l);
@@ -642,7 +649,7 @@ impl FilesPage {
         y += 56;
         text.draw(c, Face::Body, 24, MARGIN, y, pal().dust, "PortMaster says");
         let lines = inst_lines(text, &self.inst, w - 24);
-        let (top, bottom, pitch) = (y + 40, c.h - 110, 32);
+        let (top, bottom, pitch) = (y + 40, crate::kit::content_bottom(c.h), 32);
         self.room = ((bottom - top) / pitch).max(1) as usize;
         self.lines = lines.len();
         self.scroll = self.scroll.min(self.lines.saturating_sub(self.room));

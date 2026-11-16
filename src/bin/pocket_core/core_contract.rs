@@ -35,6 +35,24 @@ fn core_contract_wake_keeps_the_menu_paused_and_screen_off_keeps_playing() {
     });
 }
 
+/// HOME (pause, and HOME again: resume), the screen going dark and on again, all while the start is still held (the
+/// Cabinet TV's hand-over or an open case on Cozy, `startup::HOLD_PAUSE`, the first start of a console after its
+/// controls card): the game is kept, nothing in it asks to end. 15.11.2026: the crash sweep saw such games end by
+/// themselves; it was its parallel runs answering each other's Quit on one /tmp (`scripts/crash-sweep.py` `private_tmp`).
+#[test]
+fn core_contract_home_and_screen_off_while_the_start_is_held_keep_the_game() {
+    save_safety::child("core_contract::core_contract_home_and_screen_off_while_the_start_is_held_keep_the_game", |root| {
+        let mut app = save_safety::app(root);
+        app.hold = true;
+        app.hold_pause = true;
+        for wire in ["pause", "pause", "resume", "sleep", "wake", "screen off", "pause", "wake", "resume"] {
+            assert_eq!(command(&mut app, wire), None, "{wire}: the game goes on");
+            assert!(!app.should_exit(), "{wire}: nothing asks the game to end");
+        }
+        assert_eq!(flags(&app), (false, false, false, false), "playing again, the hold is over");
+    });
+}
+
 #[test]
 fn core_contract_slot_defaults_extra_words_and_exact_named_loads_stay_compatible() {
     save_safety::child("core_contract::core_contract_slot_defaults_extra_words_and_exact_named_loads_stay_compatible", |root| {

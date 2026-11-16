@@ -138,7 +138,9 @@ fn player() -> Player {
     set(path("ps2", "Burnout 3 - Takedown (USA).iso"), Status::Completed, 14 * 3600, vec![1]);
     set(path("ps2", "Gran Turismo 4 (USA).iso"), Status::Playing, 30 * 3600, vec![]);
     set(path("gba", "Pokemon - Emerald Version (USA, Europe).gba"), Status::Dropped, 2 * 3600, vec![]);
-    set(path("snes", "Super Mario Kart (USA).sfc"), Status::NotStarted, 0, vec![1]);
+    // A sticker alone is no session: this game is the fixture's untouched game.
+    meta.insert(path("snes", "Super Mario Kart (USA).sfc").to_string_lossy().into_owned(),
+        GameMeta { stickers: vec![1], ..Default::default() });
     let mut recents = HashMap::new();
     recents.insert(path("ps2", "Gran Turismo 4 (USA).iso"), (1_700_000_000, 30 * 3600));
     recents.insert(path("nds", "Chrono Trigger (USA) (En,Fr).nds"), (1_000_000_000, 3 * 3600));
@@ -148,6 +150,7 @@ fn player() -> Player {
         preferred: Default::default(),
         favorites: HashSet::from([path("snes", "Chrono Trigger (USA).sfc")]),
         recents,
+        played: Default::default(),
         now: 1_700_100_000,
     }
 }
@@ -440,6 +443,7 @@ fn big_user(cat: &Catalog) -> UserState {
     UserState {
         games: (0..cat.len())
             .map(|i| UserGame {
+                evidence: false,
                 status: [Status::NotStarted, Status::Playing, Status::Completed, Status::Dropped, Status::NotStarted][i % 5],
                 secs: (i % 13) as u64 * 1800,
                 last_played: (i % 4 == 0).then_some(1_700_000_000 - i as u64 * 1000),
@@ -976,7 +980,7 @@ fn today_is_one_pick_a_day_and_the_games_waiting_without_it() {
 /// Curator knows only what the shelf lists (`app_curator`): with a Mac's and Windows' litter next to a game, one game.
 #[test]
 fn a_macs_and_windows_litter_never_reaches_the_curator() {
-    let dir = std::env::temp_dir().join(format!("curator-litter-{}", std::process::id()));
+    let dir = crate::testutil::TestDir::new("curator-litter");
     let gba = dir.join("gba");
     for f in ["._Metroid Fusion.gba", ".Spotlight-V100/Store-V2/Stray.gba", ".Trashes/501/Deleted.gba", "System Volume Information/Indexed.gba", "$RECYCLE.BIN/S-1/$R1.gba"] {
         let p = gba.join(f);
@@ -989,7 +993,6 @@ fn a_macs_and_windows_litter_never_reaches_the_curator() {
     let systems = crate::library::load(&es).unwrap();
     let names: Vec<&str> = systems.iter().flat_map(|s| s.games.iter().map(|g| g.name.as_str())).collect();
     assert_eq!(names, ["Metroid Fusion"]);
-    let _ = std::fs::remove_dir_all(&dir);
 }
 
 // ---- Just Play (justplay.rs) -------------------------------------------------------------------------------------
@@ -1240,4 +1243,21 @@ fn retired_labels_still_filter_saved_shelves_but_are_not_offered() {
     assert_eq!(Facet::Stickers.label(), "Labels");
     // What a saved smart shelf stores is not a word the player reads: it stays.
     assert_eq!(Facet::Stickers.id(), "stickers");
+}
+
+#[test]
+fn a_save_without_a_timed_session_is_never_offered_as_never_played() {
+    let cat = catalog(&NoFeel);
+    let mut p = Player::default();
+    let game = cat.games.iter().position(|g| g.name.contains("Super Metroid")).unwrap();
+    p.played.insert(cat.games[game].path.clone());
+    let ix = Index::build(cat.clone(), user_state(&cat, &p));
+    assert!(ix.user.games[game].ever_played());
+    assert!(!ix.surprise_reason(game).contains("Never played"));
+    let never = ix.facet(Facet::Played).values.iter().find(|v| v.key == "never");
+    assert!(never.is_none_or(|v| !v.bits.get(game)));
+    let long_ago = ix.facet(Facet::Played).values.iter().find(|v| v.key == "long_ago");
+    assert!(long_ago.is_none_or(|v| !v.bits.get(game)), "a save without a date is no proof of a long break");
+    assert_eq!(ix.user.games[game].last_played, None, "no fabricated date");
+    assert_eq!(ix.user.games[game].secs, 0, "no fabricated duration");
 }

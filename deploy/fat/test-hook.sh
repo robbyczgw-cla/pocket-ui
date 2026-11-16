@@ -206,6 +206,31 @@ for m in "Anbernic RG99XX|anbernic,rg99xx" "Trimui Smart Pro|trimui,smart-pro"; 
   boot
   check "${m%%|*}: refused with a sentence, nothing installed, files stay, ROCKNIX goes on" '[ ! -e "$T/storage/pocket-ui" ] && [ -f "$T/flash/mount-storage.sh" ] && [ -f "$T/flash/pocket-ui-seed.tar.gz" ] && grep -q "has no profile for it" "$T/flash/pocket-ui-install.log" && grep -q "NOT INSTALLED: this H700 handheld is .${m%%|*}." "$T/flash/pocket-ui-install.log" && grep -q "^mount_part LABEL=STORAGE" "$T/calls"'
 done
+for m in "Anbernic RG353M|anbernic,rg353p" "Anbernic RG503|anbernic,rg503" "Powkiddy RGB30|powkiddy,rgb30" "Powkiddy RK2023|powkiddy,rk2023"; do
+  echo "== RK3566 card: ${m%%|*}"
+  dt "${m%%|*}" "${m##*|}" rockchip,rk3566
+  setup resized
+  boot
+  check "${m%%|*}: installed, the log names the device" '[ -x "$T/storage/pocket-ui/current/pocket-ui" ] && [ ! -e "$T/flash/mount-storage.sh" ] && grep -q "device: ${m%%|*} (RK3566 image, experimental)" "$T/flash/pocket-ui-install.log"'
+done
+for m in "Powkiddy x35s|powkiddy,x35s|rockchip,rk3566" "Anbernic RG DS|anbernic,rg-ds|rockchip,rk3568"; do
+  soc=${m##*|}; rest=${m%|*}
+  echo "== RK3566 card, no profile: ${rest%%|*}"
+  dt "${rest%%|*}" "${rest##*|}" "$soc"
+  setup resized
+  boot
+  check "${rest%%|*}: refused with a sentence, nothing installed, files stay, ROCKNIX goes on" '[ ! -e "$T/storage/pocket-ui" ] && [ -f "$T/flash/mount-storage.sh" ] && grep -q "has no profile for it" "$T/flash/pocket-ui-install.log" && grep -q "NOT INSTALLED: this RK3566 handheld is .${rest%%|*}." "$T/flash/pocket-ui-install.log"'
+done
+echo "== RK3326 card: Game Console R36S"
+dt "Game Console R36S" "gameconsole,r35s" rockchip,rk3326
+setup resized
+boot
+check "R36S: installed, the log names the device" '[ -x "$T/storage/pocket-ui/current/pocket-ui" ] && [ ! -e "$T/flash/mount-storage.sh" ] && grep -q "device: Game Console R36S (RK3326 image, experimental)" "$T/flash/pocket-ui-install.log"'
+echo "== RK3326 card, no profile: Game Console R33S"
+dt "Game Console R33S" "gameconsole,r33s" rockchip,rk3326
+setup resized
+boot
+check "R33S: refused with a sentence, nothing installed, files stay, ROCKNIX goes on" '[ ! -e "$T/storage/pocket-ui" ] && [ -f "$T/flash/mount-storage.sh" ] && grep -q "has no profile for it" "$T/flash/pocket-ui-install.log" && grep -q "NOT INSTALLED: this RK3326 handheld is .Game Console R33S." "$T/flash/pocket-ui-install.log"'
 echo "== a Snapdragon device is not asked about H700 profiles"
 dt "Retroid Pocket Mini V2" "retroidpocket,rpminiv2" qcom,sm8250
 setup resized

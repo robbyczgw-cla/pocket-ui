@@ -281,6 +281,15 @@ impl Sink {
 impl Drop for Sink {
     fn drop(&mut self) {
         let _ = self.stream.request_stop();
+        // What the stream lived through, in logcat beside "AAudio opened": a test on a real handheld counts dropouts here
+        // (xruns: AAudio's own; callback underruns: the callback found the handoff empty).
+        log_line(4, &format!(
+            "AAudio closed: xruns={} callback_underruns={} written_frames={} game={}",
+            self.stream.x_run_count(),
+            self.pcm.underruns.load(Ordering::Relaxed),
+            self.stream.frames_written(),
+            self.game
+        ));
         if let Some(capture) = &self.capture {
             // Beside the app's other files on shared storage when Android has such a place: a test on a real handheld
             // can fetch it over adb without root. Only a diagnostic launch writes here.

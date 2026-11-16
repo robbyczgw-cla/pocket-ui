@@ -361,13 +361,7 @@ impl Live {
                     let (bw, bh) = ((img.w as i32).min(w), (img.h as i32).min(h));
                     let (ox, oy) = (x + (w - bw) / 2, y + (h - bh) / 2);
                     let (sx, sy) = ((img.w as i32 - bw) / 2, (img.h as i32 - bh) / 2);
-                    for row in 0..bh {
-                        let src = ((sy + row) as u32 * img.w + sx as u32) as usize;
-                        let dst = ((oy + row) * c.w + ox) as usize;
-                        if oy + row >= 0 && oy + row < c.h && ox >= 0 && ox + bw <= c.w {
-                            c.buf[dst..dst + bw as usize].copy_from_slice(&img.px[src..src + bw as usize]);
-                        }
-                    }
+                    c.blit_region(img, (sx as u32, sy as u32, bw as u32, bh as u32), ox, oy, bw, bh);
                 }
             }
             None => {

@@ -162,6 +162,11 @@ pub(crate) fn copy_to_card(source: &Path, dest: &Path) -> Result<(), String> {
 }
 
 /// Called by the update worker before retiring a legacy app folder. A failed copy keeps that app active.
+///
+/// The pack is on the same card as `storage/`, so it is MOVED: a rename writes a directory entry, a copy wrote the whole
+/// ~31 MB again (paced at 2 MB/s, then read back twice for the hash check) and made the first update from a card with the
+/// bundled pack write 102 MB instead of ~70. Every version that looks for cheats checks `storage/` first, so the running
+/// app and the way back keep the cheats. A copy is the fallback when the rename is refused.
 pub fn preserve_legacy(card: &Path) -> Result<(), String> {
     let source = [card.join("app/cores/cht.pack"), card.join("app.previous/cores/cht.pack")]
         .into_iter().find(|p| p.is_file());
@@ -170,6 +175,12 @@ pub fn preserve_legacy(card: &Path) -> Result<(), String> {
     let Some(source) = source else { return Ok(()); };
     let parent = dest.parent().unwrap();
     std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+    // A link is copied (its target stays where it is); only a plain file is moved.
+    if std::fs::symlink_metadata(&source).is_ok_and(|m| m.is_file()) && std::fs::rename(&source, &dest).is_ok() {
+        crate::fsutil::sync_dir(parent);
+        if let Some(old) = source.parent() { crate::fsutil::sync_dir(old); }
+        return Ok(());
+    }
     let temp = parent.join(".legacy.part");
     copy_to_card(&source, &temp)?;
     if std::fs::metadata(&source).map_err(|e| e.to_string())?.len() != std::fs::metadata(&temp).map_err(|e| e.to_string())?.len()
@@ -349,6 +360,35 @@ mod tests {
         assert_eq!(menu.rows()[0].value, "On", "per-game preferences survive removal and reinstallation");
     }
 
+    /// The bundled pack is ~31 MB. The update used to copy it (write it a second time, paced at 2 MB/s, hashed twice); on the
+    /// same card it is moved: same file (inode), nothing written but a directory entry.
+    #[test]
+    fn the_legacy_pack_is_moved_not_copied_and_a_link_is_copied_not_moved() {
+        use std::os::unix::fs::MetadataExt;
+        let dir = TestDir::new("cheats-legacy-move");
+        let bytes = crate::cheat_pack::build(&[("Nintendo - Game Boy", vec![("Tetris.cht".into(), b"cheat0_code = \"01\"\n".to_vec())])]);
+        std::fs::create_dir_all(dir.join("app/cores")).unwrap();
+        let source = dir.join("app/cores/cht.pack");
+        std::fs::write(&source, &bytes).unwrap();
+        let inode = std::fs::metadata(&source).unwrap().ino();
+        preserve_legacy(&dir).unwrap();
+        let saved = dir.join("storage/pocket-ui/cheats/cht.pack");
+        assert_eq!(std::fs::metadata(&saved).unwrap().ino(), inode, "the file itself moved, no second copy was written");
+        assert!(!source.exists() && !dir.join("storage/pocket-ui/cheats/.legacy.part").exists());
+        assert_eq!(std::fs::read(&saved).unwrap(), bytes);
+        assert!(available(&[saved], "gb"));
+
+        let other = TestDir::new("cheats-legacy-link");
+        std::fs::create_dir_all(other.join("app/cores")).unwrap();
+        std::fs::write(other.join("elsewhere.pack"), &bytes).unwrap();
+        std::os::unix::fs::symlink(other.join("elsewhere.pack"), other.join("app/cores/cht.pack")).unwrap();
+        preserve_legacy(&other).unwrap();
+        assert!(other.join("elsewhere.pack").is_file(), "a link's target is never moved");
+        let saved = other.join("storage/pocket-ui/cheats/cht.pack");
+        assert_ne!(std::fs::metadata(&saved).unwrap().ino(), std::fs::metadata(other.join("elsewhere.pack")).unwrap().ino());
+        assert_eq!(std::fs::read(&saved).unwrap(), bytes);
+    }
+
     #[test]
     fn a_later_download_is_never_overwritten_with_a_legacy_pack() {
         let dir = TestDir::new("cheats-preserve-newer");
@@ -358,6 +398,57 @@ mod tests {
         std::fs::write(dir.join("storage/pocket-ui/cheats/cht.pack"), "newer").unwrap();
         preserve_legacy(&dir).unwrap();
         assert_eq!(std::fs::read(dir.join("storage/pocket-ui/cheats/cht.pack")).unwrap(), b"newer");
+    }
+
+    /// GitHub issue #4 on a TrimUI card that has no database yet: the player's own file's cheats are listed (they need no
+    /// download), and the Get row stays below them.
+    #[test]
+    fn an_own_cht_without_a_database_lists_its_cheats_and_keeps_the_get_row_below() {
+        let dir = TestDir::new("cheats-own-and-get");
+        let mut request = request(&dir);
+        request.rom = dir.join("roms/gb/Tetris.gb");
+        std::fs::create_dir_all(dir.join("roms/gb")).unwrap();
+        std::fs::write(dir.join("roms/gb/Tetris.cht"), "cheat0_desc = \"Mine\"\ncheat0_code = \"AA11\"\ncheat1_desc = \"Also\"\ncheat1_code = \"BB22\"\n").unwrap();
+        let bytes = crate::cheat_pack::build(&[("Nintendo - Game Boy", vec![("Tetris.cht".into(),
+            b"cheat0_desc = \"Lives\"\ncheat0_code = \"01\"\n".to_vec())])]);
+        let source = dir.join("source.pack");
+        std::fs::write(&source, &bytes).unwrap();
+        std::fs::write(&request.descriptor, serde_json::to_vec(&serde_json::json!({
+            "version":"1", "url":format!("file://{}", source.display()),
+            "size":bytes.len(), "sha256":crate::store::sha256_hex(&bytes)
+        })).unwrap()).unwrap();
+        let mut menu = CheatMenu::optional(request.clone());
+        menu.open(); settle_menu(&mut menu);
+        let names = |m: &CheatMenu| m.rows().into_iter().map(|r| r.name).collect::<Vec<_>>();
+        assert_eq!(names(&menu), ["Mine [Your file]", "Also [Your file]", "All off", "Cheats"], "own cheats first, All off, the Get row last");
+        assert_eq!(menu.count(), 4);
+        assert!(menu.actionable(0) && menu.actionable(2) && menu.actionable(3));
+        assert!(!menu.download_page(), "not the download alone: Left and Right still flip cheats");
+        assert!(menu.on_download_row(3) && !menu.on_download_row(0));
+        assert!(menu.press(1), "an own cheat switches on without any download");
+        assert_eq!(crate::cheats::active_codes_in(&request.data, "gb", &request.rom, &[]), ["BB22"]);
+        assert!(!request.destination.exists());
+        // The Get row downloads; the database's cheats then follow the player's, the row is gone.
+        menu.press(3); settle_menu(&mut menu);
+        assert_eq!(names(&menu), ["Mine [Your file]", "Also [Your file]", "Lives", "All off"]);
+        assert_eq!(menu.rows()[1].value, "On", "what was switched on is remembered");
+        assert!(request.destination.exists());
+    }
+
+    /// The same for a file that can't be used: its explanation first, the download below.
+    #[test]
+    fn a_broken_own_cht_without_a_database_is_explained_above_the_get_row() {
+        let dir = TestDir::new("cheats-own-broken-and-get");
+        let mut request = request(&dir);
+        request.rom = dir.join("roms/gb/Tetris.gb");
+        std::fs::create_dir_all(dir.join("roms/gb")).unwrap();
+        std::fs::write(dir.join("roms/gb/Tetris.cht"), "no cheats here").unwrap();
+        let mut menu = CheatMenu::optional(request);
+        menu.open(); settle_menu(&mut menu);
+        let names: Vec<String> = menu.rows().into_iter().map(|r| r.name).collect();
+        assert_eq!(names, ["Your cheat file has no cheats in it", "Cheats"]);
+        assert_eq!(menu.count(), 2);
+        assert!(!menu.actionable(0) && menu.actionable(1));
     }
 
 }

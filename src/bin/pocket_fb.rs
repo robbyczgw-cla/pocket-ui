@@ -17,12 +17,13 @@ use std::collections::HashMap;
 use std::io::{ErrorKind, Read, Write};
 use std::os::fd::{AsRawFd, FromRawFd, OwnedFd, RawFd};
 use std::os::unix::net::{UnixListener, UnixStream};
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::time::{Duration, Instant};
 
 use pocket_ui::brick_gl::{Look, Presenter};
 use pocket_ui::brick_picture;
 use pocket_ui::motion::Transition;
+use pocket_ui::damage::Rows;
 
 const GLOBALS: [(u32, &str, u32); 3] = [(1, "wl_compositor", 4), (2, "wl_shm", 1), (3, "xdg_wm_base", 2)];
 const WL_SHM_ARGB8888: u32 = 0;
@@ -84,6 +85,9 @@ const FBIOGET_VSCREENINFO: libc::c_ulong = 0x4600;
 const FBIOGET_FSCREENINFO: libc::c_ulong = 0x4602;
 const FBIOBLANK: libc::c_ulong = 0x4611;
 const FBIOPAN_DISPLAY: libc::c_ulong = 0x4606;
+const FBIOPUT_VSCREENINFO: libc::c_ulong = 0x4601;
+/// `FB_ACTIVATE_NOW | FB_ACTIVATE_FORCE`: set the mode again even when nothing in it changed.
+const FB_ACTIVATE_NOW_FORCE: u32 = 0x80;
 const FBIO_WAITFORVSYNC: libc::c_ulong = 0x4004_4620;
 const FB_BLANK_UNBLANK: libc::c_ulong = 0;
 const FB_BLANK_POWERDOWN: libc::c_ulong = 4;
@@ -311,6 +315,23 @@ impl Fb {
         }
     }
 
+    /// `--take` (dArkOS, docs/DARKOS.md): fb0 is the DRM driver's fbdev emulation there, and the last picture on the panel is
+    /// EmulationStation's KMS one until fbdev's mode is set again. Setting the mode we read (forced) and panning to our page makes the
+    /// kernel put fbdev's framebuffer back on the panel; it refuses (EBUSY) while another program still holds the display.
+    fn take(&mut self) {
+        let Some(mut var) = self.found.filter(|_| !self.plain_file) else { return };
+        self.blank(false);
+        var.rest[1] = FB_ACTIVATE_NOW_FORCE; // `activate`, right after `nonstd`
+        // SAFETY: both ioctls read the struct given, which is the kernel's own from FBIOGET_VSCREENINFO.
+        let put = unsafe { libc::ioctl(self.file.as_raw_fd(), FBIOPUT_VSCREENINFO as _, &mut var as *mut VarInfo) };
+        let put = if put == 0 { "ok".to_string() } else { std::io::Error::last_os_error().to_string() };
+        var.rest[1] = 0;
+        let pan = unsafe { libc::ioctl(self.file.as_raw_fd(), FBIOPAN_DISPLAY as _, &mut var as *mut VarInfo) };
+        let pan = if pan == 0 { "ok".to_string() } else { std::io::Error::last_os_error().to_string() };
+        eprintln!("pocket-fb: take the screen: mode set {put}, pan {pan}");
+        self.follow_pan();
+    }
+
     fn blank(&mut self, off: bool) {
         self.blanked = off;
         let level = if off { FB_BLANK_POWERDOWN } else { FB_BLANK_UNBLANK };
@@ -388,7 +409,6 @@ impl Drop for Pool {
 }
 
 /// A window (an xdg_toplevel's surface), or a surface without a role yet.
-#[derive(Default)]
 struct Surface {
     pending: Option<Option<u32>>,
     /// The buffer on show or next up, a client's wl_buffer id.
@@ -404,6 +424,46 @@ struct Surface {
     waiting_map: bool,
     /// The sway container id, as in GET_TREE and `[con_id=N]`.
     con: i64,
+    /// This surface among all surfaces ever made (`next_surface`): what the GPU's texture holds (`brick_gl::Presenter::upload_rows`).
+    id: u64,
+    /// Rows said changed (`damage`, `damage_buffer`) since the last commit, and whether anything was said at all.
+    asked: Rows,
+    said: bool,
+    /// Rows changed since this surface's picture last went into the GPU's texture. A picture nobody said anything about is all new.
+    changed: Rows,
+}
+
+impl Default for Surface {
+    fn default() -> Surface {
+        Surface {
+            pending: None,
+            current: None,
+            frames: Vec::new(),
+            toplevel: None,
+            xdg_surface: None,
+            app_id: String::new(),
+            configured: false,
+            waiting_map: false,
+            con: 0,
+            id: next_surface(),
+            asked: Rows::none(),
+            said: false,
+            changed: Rows::All,
+        }
+    }
+}
+
+fn next_surface() -> u64 {
+    static NEXT: AtomicU64 = AtomicU64::new(1);
+    NEXT.fetch_add(1, Ordering::Relaxed)
+}
+
+/// The rows of a `damage` or `damage_buffer` request (x, y, width, height; pocket-fb's surfaces are at scale 1, so both are the same).
+fn damaged_rows(body: &[u8]) -> Option<(u32, u32)> {
+    let (y, h) = (word(body, 4)? as i32, word(body, 12)? as i32);
+    let top = y.max(0) as u32;
+    let end = (i64::from(y) + i64::from(h.max(0))).clamp(0, i64::from(u32::MAX)) as u32;
+    Some((top, end))
 }
 
 struct Client {
@@ -522,6 +582,14 @@ struct Server {
     frames: u64,
     copy: Duration,
     worst: Duration,
+    /// Of `copy` on the GPU's way: the picture into its texture, and the draw with the swap (which waits for a free page).
+    upload: Duration,
+    present: Duration,
+    /// Pictures into the texture, and their rows (only the changed ones, `damage`).
+    uploads: u64,
+    uploaded_rows: u64,
+    /// `POCKET_FB_SLOW_PAINT_MS` (the tests): each picture takes this much longer to show, as a slow screen would.
+    slow_paint: Duration,
     /// The GPU's way to the screen (`--gl`); without it, the copy.
     gl: Option<Presenter>,
     /// `--gl-window pbuffer` on a computer: what was drawn also goes to the file, so a test can see it.
@@ -547,6 +615,8 @@ struct Server {
     hud: Option<(glow::Context, pocket_ui::overlay::Overlay, pocket_ui::overlay::Hud)>,
     /// SDL on stock TrimUI draws directly to the display, outside Wayland.
     native_port: Option<(i32, u64, i64)>,
+    /// `pocket_tint`: the Soft look (`Look::multipliers`) of the sender's windows, drawn here instead of on its CPU.
+    tint: Option<(i32, [u32; 3])>,
 }
 
 const NATIVE_PORT: (u64, u32) = (u64::MAX, 0);
@@ -668,6 +738,11 @@ impl Server {
             }
         }
         client.input.drain(..at);
+        // The answers go out before the screen work below, above all the release of the picture this commit replaced:
+        // softbuffer waits for that release before it paints the next frame. Sent after the upload and the swap (~10 ms on
+        // the Brick), pocket-ui's painting and ours ran one after the other, 13.7 + 9.7 ms a frame: two refreshes or three.
+        // Sent now, pocket-ui paints the next frame into the released buffer while this one goes to the screen.
+        client.flush();
         if let Some(surface) = fx.mapped {
             self.raise(key, surface);
         }
@@ -720,12 +795,29 @@ impl Server {
 
     fn paint(&mut self) {
         let Some((key, surface)) = self.focus else { return };
+        // The rows this window changed since its picture last went into the texture: taken now, put back when it didn't.
+        let Some((whose, changed)) = self.clients.get_mut(&key).and_then(|c| c.surfaces.get_mut(&surface)).map(|s| (s.id, std::mem::take(&mut s.changed))) else { return };
+        let mut into_texture = false;
+        self.paint_rows(key, surface, whose, &changed, &mut into_texture);
+        if !into_texture {
+            if let Some(s) = self.clients.get_mut(&key).and_then(|c| c.surfaces.get_mut(&surface)) {
+                s.changed.union(&changed);
+            }
+        }
+    }
+
+    fn paint_rows(&mut self, key: u64, surface: u32, whose: u64, changed: &Rows, into_texture: &mut bool) {
         let Some(c) = self.clients.get(&key) else { return };
         let Some(buffer) = c.surfaces.get(&surface).and_then(|s| s.current) else { return };
         let Some(Obj::Buffer(b)) = c.objects.get(&buffer) else { return };
         let Some(pixels) = c.pools.get(b.pool).and_then(Option::as_ref).and_then(|p| p.bytes(b)) else { return };
         let t = Instant::now();
+        std::thread::sleep(self.slow_paint);
         let mut lost = None;
+        let gain = match (self.tint, peer_pid(&c.stream)) {
+            (Some((pid, m)), Some(p)) if p == pid => m,
+            _ => pocket_ui::brick_gl::NO_GAIN,
+        };
         let by_picture = self.picture_pid.is_some() && self.picture_pid == peer_pid(&c.stream) && c.surfaces.get(&surface).is_some_and(|s| s.app_id != "pocket-ui") && self.picture.as_ref().is_some_and(brick_picture::Layer::active);
         match self.gl.as_mut() {
             // A game with shaders or a frame: pocket-core's renderer draws its picture at the picture's own size, on the screen.
@@ -758,7 +850,17 @@ impl Server {
                     Anim::start(&mut self.anim, Moving::Page(t, bg));
                 }
                 // While the GPU animates, the loop draws (`animate`); a picture only replaces what it moves.
-                let shown = gl.upload(pixels, b.width, b.height, b.stride).and_then(|()| if self.anim.is_some() { Ok(()) } else { gl.compose(Look::STILL).and_then(|()| gl.egl.swap()) });
+                let up = Instant::now();
+                let uploaded = gl.upload_rows(pixels, b.width, b.height, b.stride, Some(whose), changed);
+                *into_texture = uploaded.is_ok();
+                gl.set_gain(gain);
+                let drawn = Instant::now();
+                self.upload += drawn - up;
+                self.uploads += 1;
+                self.uploaded_rows += *uploaded.as_ref().unwrap_or(&0) as u64;
+                let uploaded = uploaded.map(|_| ());
+                let shown = uploaded.and_then(|()| if self.anim.is_some() { Ok(()) } else { gl.compose(Look::STILL).and_then(|()| gl.egl.swap()) });
+                self.present += drawn.elapsed();
                 if let Err(e) = shown {
                     lost = Some(e);
                 } else if self.gl_to_file && self.anim.is_none() {
@@ -767,14 +869,14 @@ impl Server {
                 }
             }
             Some(_) => {}
-            None => show_copy(&mut self.fb, pixels, b.width, b.height, b.stride),
+            None => show_copy(&mut self.fb, &tinted(pixels, gain), b.width, b.height, b.stride),
         }
         if let Some(e) = lost {
             // As `lose_gl`, field by field: the picture is still borrowed from its client.
             eprintln!("pocket-fb: GL failed: {e}; back to the CPU copy");
             (self.gl, self.anim, self.picture, self.picture_pid) = (None, None, None, None);
             self.fb.restore_pan();
-            show_copy(&mut self.fb, pixels, b.width, b.height, b.stride);
+            show_copy(&mut self.fb, &tinted(pixels, gain), b.width, b.height, b.stride);
         }
         let took = t.elapsed();
         self.frames += 1;
@@ -924,6 +1026,18 @@ impl Server {
             ("pocket_port", None) => self.native_command(action.trim_start_matches("pocket_port").trim()),
             // Shaders and screen frames (`brick_picture`): yes only with a GPU and a renderer that compiled.
             ("pocket_shaders", None) => self.gl.is_some() && self.picture.is_some(),
+            // `pocket_tint <r> <g> <b>`: the sender's Soft look as `Look::multipliers` (65536 = unchanged), drawn by the GPU from its next
+            // picture on, or in the CPU copy. pocket-ui then leaves it out of its own frames.
+            ("pocket_tint", None) => {
+                let m: Vec<u32> = action.split_whitespace().skip(1).filter_map(|w| w.parse().ok()).filter(|m| *m <= 65536).collect();
+                match (&m[..], self.ipc_pid) {
+                    (&[r, g, b], Some(pid)) => {
+                        self.tint = Some((pid, [r, g, b]));
+                        true
+                    }
+                    _ => false,
+                }
+            }
             ("pocket_picture_shot", None) => self.picture_shot(action.trim_start_matches("pocket_picture_shot").trim()),
             ("pocket_overlay", None) => self.overlay_command(action.trim_start_matches("pocket_overlay").trim()),
             ("pocket_picture_preview", None) => self.picture_preview(action.trim_start_matches("pocket_picture_preview").trim()),
@@ -1157,6 +1271,16 @@ fn show_copy(fb: &mut Fb, pixels: &[u8], width: u32, height: u32, stride: usize)
     fb.show(&bytes, sw, sh, sw as usize * 4);
 }
 
+/// The picture with the Soft look multiplied in (`pocket_tint`), for the CPU copy; as it is without one.
+fn tinted(pixels: &[u8], gain: [u32; 3]) -> std::borrow::Cow<'_, [u8]> {
+    if gain == pocket_ui::brick_gl::NO_GAIN {
+        return std::borrow::Cow::Borrowed(pixels);
+    }
+    let ch = |v: u8, m: u32| ((u32::from(v) * m + 0x8000) >> 16) as u8;
+    // wl_shm's XRGB8888: blue, green, red, unused.
+    std::borrow::Cow::Owned(pixels.chunks_exact(4).flat_map(|p| [ch(p[0], gain[2]), ch(p[1], gain[1]), ch(p[2], gain[0]), p[3]]).collect())
+}
+
 fn peer_pid(stream: &UnixStream) -> Option<i32> {
     let mut cred: libc::ucred = unsafe { std::mem::zeroed() };
     let mut len = std::mem::size_of::<libc::ucred>() as libc::socklen_t;
@@ -1260,6 +1384,12 @@ fn request(c: &mut Client, next_con: &mut i64, fx: &mut Effects, id: u32, opcode
             let buffer = word(body, 0)?;
             c.surfaces.get_mut(&s)?.pending = Some((buffer != 0).then_some(buffer));
         }
+        (Obj::Surface(s), 2 | 9) => {
+            let (top, end) = damaged_rows(body)?;
+            let surface = c.surfaces.get_mut(&s)?;
+            surface.said = true;
+            surface.asked.add(top, end);
+        }
         (Obj::Surface(s), 3) => {
             let cb = word(body, 0)?;
             c.objects.insert(cb, Obj::Callback);
@@ -1269,6 +1399,13 @@ fn request(c: &mut Client, next_con: &mut i64, fx: &mut Effects, id: u32, opcode
             let surface = c.surfaces.get_mut(&s)?;
             let first_configure = surface.toplevel.is_some() && !surface.configured;
             let mut released = None;
+            // What changed: the rows said; a new picture without a word is all new (an old client, or one that doesn't say).
+            let asked = std::mem::take(&mut surface.asked);
+            if std::mem::take(&mut surface.said) {
+                surface.changed.union(&asked);
+            } else if surface.pending.is_some_and(|p| p.is_some()) {
+                surface.changed = Rows::All;
+            }
             if let Some(next) = surface.pending.take() {
                 released = surface.current.filter(|old| Some(*old) != next);
                 surface.current = next;
@@ -1436,10 +1573,12 @@ struct Args {
     /// `--gl-trust`: the GPU's picture counts as shown without reading it back from fb0. The Smart Pro's display shows the GL layer,
     /// not fb0 (docs/TRIMUI-SMART-PRO.md), so the Brick's proof (fb0's visible page holds what was drawn) would always fail there.
     gl_trust: bool,
+    /// `--take`: put fbdev's picture on the panel first (`Fb::take`, dArkOS).
+    take: bool,
 }
 
 fn parse_args(args: impl Iterator<Item = String>) -> Result<Args, String> {
-    let mut out = Args { wayland: String::new(), ipc: String::new(), fb: "/dev/fb0".into(), mode: None, vsync: true, bgr: false, picture: None, message: None, ipc_send: None, hold: 5, gl: false, gl_window: "null".into(), gl_trust: false };
+    let mut out = Args { wayland: String::new(), ipc: String::new(), fb: "/dev/fb0".into(), mode: None, vsync: true, bgr: false, picture: None, message: None, ipc_send: None, hold: 5, gl: false, gl_window: "null".into(), gl_trust: false, take: false };
     let mut it = args;
     while let Some(a) = it.next() {
         match a.as_str() {
@@ -1450,6 +1589,7 @@ fn parse_args(args: impl Iterator<Item = String>) -> Result<Args, String> {
             "--bgr" => out.bgr = true,
             "--gl" => out.gl = true,
             "--gl-trust" => out.gl_trust = true,
+            "--take" => out.take = true,
             "--gl-window" => out.gl_window = it.next().ok_or("--gl-window <null|pbuffer>")?,
             "--picture" => out.picture = Some(it.next().ok_or("--picture <file.png>")?),
             "--message" => out.message = Some(it.next().ok_or("--message <text, | starts a new line>")?),
@@ -1468,7 +1608,7 @@ fn parse_args(args: impl Iterator<Item = String>) -> Result<Args, String> {
         }
     }
     if out.picture.is_none() && out.message.is_none() && out.ipc_send.is_none() && (out.wayland.is_empty() || out.ipc.is_empty()) {
-        return Err("usage: pocket-fb --wayland <socket> --ipc <socket> [--fb /dev/fb0] [--mode 1024x768x32] [--no-vsync] [--bgr] [--gl] [--gl-trust] [--gl-window null]".into());
+        return Err("usage: pocket-fb --wayland <socket> --ipc <socket> [--fb /dev/fb0] [--mode 1024x768x32] [--no-vsync] [--bgr] [--gl] [--gl-trust] [--gl-window null] [--take]".into());
     }
     Ok(out)
 }
@@ -1533,17 +1673,44 @@ fn hold_still(fb: &mut Fb, xrgb: &[u8], (w, h): (u32, u32), hold: u64, gl: Optio
     }
 }
 
-/// `--message`: white 8x8 letters at 4x on dark blue, `|` starts a new line, for `hold` seconds. What the launcher says when
+/// `--message`'s lines and letter size for a screen `w` pixels wide: 4x when every line fits beside the 32-pixel margins,
+/// else the largest size down to 2x at which they do, lines longer than that broken at spaces (a 640-pixel screen takes 36
+/// letters a line at 2x). `|` starts a new line.
+fn message_layout(text: &str, w: usize) -> (usize, Vec<String>) {
+    let room = |scale: usize| w.saturating_sub(64) / (8 * scale);
+    let longest = text.split('|').map(|l| l.chars().count()).max().unwrap_or(0);
+    if let Some(scale) = (2..=4).rev().find(|s| longest <= room(*s)) {
+        return (scale, text.split('|').map(str::to_string).collect());
+    }
+    let max = room(2).max(1);
+    let mut lines = Vec::new();
+    for part in text.split('|') {
+        let mut line = String::new();
+        for word in part.split(' ') {
+            if !line.is_empty() && line.chars().count() + 1 + word.chars().count() > max {
+                lines.push(std::mem::take(&mut line));
+            }
+            if !line.is_empty() {
+                line.push(' ');
+            }
+            line.push_str(word);
+        }
+        lines.push(line);
+    }
+    (2, lines)
+}
+
+/// `--message`: white 8x8 letters (4x, smaller on a narrow screen: `message_layout`) on dark blue, `|` starts a new line, for `hold` seconds. What the launcher says when
 /// a library, a game or the framebuffer is missing and pocket-ui cannot run to say it itself.
 fn show_message(fb: &mut Fb, text: &str, hold: u64, gl: Option<&str>) -> Result<(), String> {
     use font8x8::legacy::BASIC_LEGACY;
-    const SCALE: usize = 4;
     let (w, h) = (fb.width as usize, fb.height as usize);
+    let (scale, lines) = message_layout(text, w);
     let mut xrgb = vec![0u8; w * h * 4];
     for px in xrgb.chunks_exact_mut(4) {
         px.copy_from_slice(&[0x40, 0x20, 0x10, 0]);
     }
-    for (row, line) in text.split('|').enumerate() {
+    for (row, line) in lines.iter().enumerate() {
         for (col, ch) in line.chars().enumerate() {
             let glyph = BASIC_LEGACY.get(ch as usize).or_else(|| BASIC_LEGACY.get(b'?' as usize)).copied().unwrap_or([0; 8]);
             for (gy, bits) in glyph.iter().enumerate() {
@@ -1551,8 +1718,8 @@ fn show_message(fb: &mut Fb, text: &str, hold: u64, gl: Option<&str>) -> Result<
                     if bits >> gx & 1 == 0 {
                         continue;
                     }
-                    for (dy, dx) in (0..SCALE).flat_map(|dy| (0..SCALE).map(move |dx| (dy, dx))) {
-                        let (x, y) = (32 + (col * 8 + gx) * SCALE + dx, 48 + (row * 10 + gy) * SCALE + dy);
+                    for (dy, dx) in (0..scale).flat_map(|dy| (0..scale).map(move |dx| (dy, dx))) {
+                        let (x, y) = (32 + (col * 8 + gx) * scale + dx, 48 + (row * 10 + gy) * scale + dy);
                         if x < w && y < h {
                             xrgb[(y * w + x) * 4..(y * w + x) * 4 + 3].copy_from_slice(&[0xff; 3]);
                         }
@@ -1644,6 +1811,9 @@ fn run() -> Result<(), String> {
         return ipc_send(socket, command);
     }
     let mut fb = Fb::open(&args.fb, args.mode, args.vsync, args.bgr)?;
+    if args.take {
+        fb.take();
+    }
     if let Some(path) = &args.picture {
         return show_picture(&mut fb, path, args.hold, args.gl.then_some(args.gl_window.as_str()));
     }
@@ -1669,7 +1839,8 @@ fn run() -> Result<(), String> {
             None
         }
     });
-    let mut server = Server { fb, clients: HashMap::new(), focus: None, next_con: 100, next_client: 0, frames: 0, copy: Duration::ZERO, worst: Duration::ZERO, gl, gl_to_file, pace: Pace::default(), anim: None, next_page: None, cross_next: false, picture, picture_pid: None, shown_by_picture: false, ipc_pid: None, hud: None, native_port: None };
+    let slow_paint = Duration::from_millis(std::env::var("POCKET_FB_SLOW_PAINT_MS").ok().and_then(|v| v.parse().ok()).unwrap_or(0));
+    let mut server = Server { fb, clients: HashMap::new(), focus: None, next_con: 100, next_client: 0, frames: 0, copy: Duration::ZERO, worst: Duration::ZERO, upload: Duration::ZERO, present: Duration::ZERO, uploads: 0, uploaded_rows: 0, slow_paint, gl, gl_to_file, pace: Pace::default(), anim: None, next_page: None, cross_next: false, picture, picture_pid: None, shown_by_picture: false, ipc_pid: None, hud: None, native_port: None, tint: None };
     let mut ipcs: Vec<(UnixStream, Vec<u8>)> = Vec::new();
     while !STOP.load(Ordering::Relaxed) {
         let mut polls = vec![libc::pollfd { fd: wayland.as_raw_fd(), events: libc::POLLIN, revents: 0 }, libc::pollfd { fd: ipc.as_raw_fd(), events: libc::POLLIN, revents: 0 }];
@@ -1734,7 +1905,14 @@ fn run() -> Result<(), String> {
     }
     if server.frames > 0 {
         let way = if server.gl.is_some() { "gl" } else { "copy" };
-        eprintln!("pocket-fb: {} frames, {way} {:.2} ms each, worst {:.2} ms", server.frames, server.copy.as_secs_f64() * 1000.0 / server.frames as f64, server.worst.as_secs_f64() * 1000.0);
+        let each = |d: Duration| d.as_secs_f64() * 1000.0 / server.frames as f64;
+        eprintln!("pocket-fb: {} frames, {way} {:.2} ms each, worst {:.2} ms", server.frames, each(server.copy), server.worst.as_secs_f64() * 1000.0);
+        if server.gl.is_some() {
+            eprintln!("pocket-fb: of that, upload {:.2} ms, draw and swap {:.2} ms", each(server.upload), each(server.present));
+            if server.uploads > 0 {
+                eprintln!("pocket-fb: {} rows a picture into the texture ({} pictures)", server.uploaded_rows / server.uploads, server.uploads);
+            }
+        }
         let p = &server.pace;
         if p.gaps > 0 {
             eprintln!("pocket-fb: while moving: {} frames, {:.2} ms apart ({:.1} fps), late (over {} ms) {}, worst {:.2} ms", p.gaps, p.total.as_secs_f64() * 1000.0 / p.gaps as f64, p.gaps as f64 / p.total.as_secs_f64(), LATE.as_millis(), p.late, p.worst.as_secs_f64() * 1000.0);
@@ -1759,6 +1937,17 @@ fn main() {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_message_fits_a_640_pixel_screen_and_keeps_its_big_letters_where_it_fits() {
+        let text = "pocket-ui can't start|The RGB30's 720x720 screen is not supported by this test version yet.|Only 640x480 handhelds for now.|(details: ports/pocket-ui/logs/start.log)";
+        let (scale, lines) = message_layout(text, 640);
+        assert_eq!(scale, 2);
+        assert!(lines.iter().all(|l| 32 + l.chars().count() * 8 * scale <= 640 - 32), "{lines:?}");
+        assert_eq!(lines.join(" "), text.replace('|', " "), "every word kept, in order");
+        assert_eq!(message_layout("No screen.|Copy it again.", 640), (4, vec!["No screen.".to_string(), "Copy it again.".to_string()]));
+        assert_eq!(message_layout(text, 1024).0, 2, "the Brick: its longest line fits at 2x");
+    }
 
     const BLUE_ISH: [u8; 4] = [0x10, 0x20, 0x30, 0x00];
 

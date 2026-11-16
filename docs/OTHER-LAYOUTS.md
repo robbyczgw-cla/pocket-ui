@@ -27,6 +27,21 @@ needs no setting. A folder that is a system's folder already (a link, or the sam
 twice. A folder nobody knows (`Atari Jaguar` on a device without Jaguar) stays unread and is still named by Settings → Games →
 Game check. Games found this way are listed and started like any other; the folder keeps its name.
 
+**ArkOS cards (the folders at a card's top).** ArkOS, dArkOS and the R36S's stock card keep their system folders at the top
+of EASYROMS or of a second card (`/gba`, `/psx`, `/bios`), not in a `roms` folder. On pocket-ui's own image such a card in
+the second slot is mounted as it is (`deploy/image/games-card.sh`, last section), and its top is named in
+`/run/pocket-ui/games-card-root` (`library::GAMES_CARD_MARKER`; `POCKETUI_GAMES_CARD_ROOT` for tests). `library::other_folders`
+then reads the folders there like another card's (`card_folders`: `foreign_folders` of the top, without `ports`, whose ArkOS
+scripts start ArkOS's own programs), beside the device's own `roms`. ArkOS's names were checked against dArkOS's own
+`es_systems.cfg.rk3326` (127 folders) and ROCKNIX 20261101's RK3326 systems: 88 are ROCKNIX folders or ids already, 14 more
+are `layouts::ALIASES` (`turbografx` → PC Engine, `pokemonmini`, `neogeocd`, `tic80`, `dos`, `carts` → PICO-8, `vmac`,
+`thomson` → MO/TO, `mame2003`, `atarixegs`, `snes-hacks`, `sgb`, `msumd`), 25 have no ROCKNIX system and stay unread
+(`tests/arkos_card.rs`, with both lists in `testdata/arkos/`). Battery saves sit next to the games in RetroArch's format
+there as here (dArkOS: `savefiles_in_content_dir`), so pocket-core and the case read them where they are
+(`tests/arkos_card_top.rs`). ArkOS's EmulationStation writes `gamelist.xml` into the system folders (its
+`getGamelistPath`): names, box art and `<lastplayed>` come from there, and an empty recent list starts from that
+(`Recents::seed_from_es`), so Continue offers the game last played under ArkOS.
+
 **Names.** Unchanged rule: a file name that says little (`sf2ce`) takes the gamelist's `<name>`; a file name that already reads as a name
 keeps pocket-ui's cleaned one, because tags and regions are what tells two versions apart.
 
@@ -48,7 +63,7 @@ Picture folders are listed once, on the gamelist thread after the first frame (`
 
 ## Not covered (on purpose)
 
-- **Saves.** They stay next to the game / in pocket-ui's own folders as before; a MinUI/NextUI `Saves/<TAG>/` or a muOS save folder is not read here
+- **Saves.** They stay next to the game / in pocket-ui's own folders as before (an ArkOS card's included: they are next to its games); a MinUI/NextUI `Saves/<TAG>/` or a muOS save folder is not read here
   (the Brick card does that itself).
 - **Names from `map.txt`, muOS `MUOS/info/name`, MinUI collections, Anbernic stock's `*.db` lists.** Not read.
 - **Systems the device has no emulator for** (`Pico-8 (P8)` on a device without PICO-8, `Commodore PET`): the folder is left alone.
@@ -100,3 +115,15 @@ What would make 13,000 unusable, and what does not:
   If a Brick test shows it, move the pass onto the gamelist thread.
 - **The box art download itself** is as before: 13,000 games without pictures on the card are fetched one by one over Wi-Fi at the lowest priority, which takes hours. Games with a box on the card are left out.
 - **My first version** of the folder merge was quadratic (866 ms for 5,000 games); the timing test and an app-level run showed it, and it is fixed (a stale binary of mine briefly showed 3.9 s for 13,000).
+
+## ArkOS cards in the second slot (the mount)
+
+On pocket-ui's own SD images an ArkOS, dArkOS or stock R36S games card in the second slot is used exactly as it is. ROCKNIX
+alone would mount it, write a probe file and make `roms/` with about 100 empty folders on it, and show only that empty
+`roms/`: the games at the card's root (`gba/`, `snes/`, `psx/`, `bios/` ...) would be hidden. `deploy/image/games-card.sh` looks
+at the card read-only first: no `roms` folder at its root (in any case) and at least two known system folders there make it an
+ArkOS card. Such a card is mounted on `/storage/games-external` and nothing is written on it; `/storage/roms` stays the internal
+folder; BIOS files from the card's `bios/` are copied into the internal `bios/` where one is missing; and
+`/run/pocket-ui/games-card-root` tells pocket-ui to read the game folders at the card's root. Every other card (a ROCKNIX card
+with `roms/`, an Anbernic stock card with `Roms/`, a blank one) goes through ROCKNIX's automount as before. Details and the
+failure cases: [SD-IMAGE.md](SD-IMAGE.md), "How ROCKNIX sets up a new card".

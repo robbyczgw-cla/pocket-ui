@@ -43,13 +43,13 @@ pub fn retry_after(failures: u32) -> Duration {
 
 /// Whether installing should first suggest the charger: under [`LOW_BATTERY`] and not charging. An unknown battery
 /// (for example, on the desktop) never warns.
-#[cfg(not(target_os = "android"))]
+#[cfg(not(all(target_os = "android", not(feature = "handheld"))))]
 pub fn low_battery(battery: Option<crate::status_corner::Battery>) -> bool {
     battery.is_some_and(|b| !b.charging && b.percent < LOW_BATTERY)
 }
 
 /// The line under "Install now / Later" when the battery is low and not charging: the charger first. Nothing otherwise.
-#[cfg(not(target_os = "android"))]
+#[cfg(not(all(target_os = "android", not(feature = "handheld"))))]
 pub fn battery_warning(battery: Option<crate::status_corner::Battery>) -> Option<String> {
     battery.filter(|b| low_battery(Some(*b))).map(|b| format!("The battery is at {}%. Plug in the charger first, so it cannot run out during the update.", b.percent))
 }
@@ -129,10 +129,15 @@ impl State {
     }
 }
 
-/// Whether the shelf looks for a newer version at all: only a release build, not switched off, not on a device whose
-/// OS owns updates.
+/// Whether the shelf looks for a newer version: a release build with automatic checks enabled.
+/// Each host selects its own signed app channel, including the dArkOS test port.
 pub fn looks(release_build: bool, state: &State) -> bool {
     release_build && !state.off
+}
+
+#[cfg(test)]
+pub(crate) fn looks_on_for_tests(release_build: bool, state: &State, _darkos: bool) -> bool {
+    looks(release_build, state)
 }
 
 /// The version to say: the list's `app` when it is later than the running one and not said yet.
@@ -148,6 +153,40 @@ pub fn text(version: &str) -> String {
 
 /// The notice's last line: how it goes away, and the one press to the page.
 pub const ACTIONS: &str = "Press A for Settings › System › Updates, B to close.";
+
+/// [`ACTIONS`] in Android's handheld view. It has no Settings › System › Updates (`device::ANDROID_HIDES` "updates"): A
+/// hands the APK of Android's own list (`updates/android/update.json`, the Mobile view's) to Android's installer, which
+/// asks before it installs and closes pocket-ui afterwards (`UpdateInstaller.java`).
+pub const ANDROID_ACTIONS: &str = "Press A to install it, B to close. pocket-ui closes after the update; open it again.";
+
+/// The notice's last line in this profile.
+pub fn actions(android: bool) -> &'static str {
+    if android { ANDROID_ACTIONS } else { ACTIONS }
+}
+
+/// The last line while Android's installer works: B stops it until Android's own confirmation is up.
+pub const ANDROID_CANCEL: &str = "Press B to cancel.";
+
+/// Whether the shelf looks at all, [`looks`] with Android's handheld view: its APK is always a numbered release
+/// (`update_channel::android_version_name`, written by build-apk.sh), never a build that carries Cargo.toml's version, so
+/// it looks as the Mobile view does (14.11.: the handheld view never said a version was out, `release_build` is false there).
+pub fn looks_in(release_build: bool, android_apk: bool, state: &State) -> bool {
+    looks(release_build || android_apk, state)
+}
+
+/// What the card says while Android's installer works (`UpdateInstaller.status`: phase, bytes, total, message), and whether
+/// B still cancels it. None: nothing to say (not started, or done: Android closes the app itself).
+pub fn android_progress(phase: &str, bytes: u64, total: u64, message: &str, cancellable: bool) -> Option<(String, bool)> {
+    let line = match phase {
+        "connecting" => "Connecting to the download server…".to_string(),
+        "downloading" => format!("Downloading the update… {}%", (bytes.saturating_mul(100) / total.max(1)).min(100)),
+        "checking" => "Checking the download…".to_string(),
+        // Android asks to allow installs from pocket-ui, and confirms the install itself: its own words are in `message`.
+        "permission" | "installing" | "failed" | "cancelled" if !message.is_empty() => message.to_string(),
+        _ => return None,
+    };
+    Some((line, cancellable))
+}
 
 #[cfg(test)]
 mod tests {
@@ -292,6 +331,39 @@ mod tests {
         let mut on = back;
         on.set_auto(true);
         assert!(looks(true, &on) && !on.off);
+    }
+
+    /// 14.11.: Android's handheld view never looked (its build has no POCKETUI_VERSION), so a Handheld player never learnt
+    /// of an update; the Mobile view did.
+    #[test]
+    fn the_android_apk_looks_like_a_release_and_off_still_stops_it() {
+        let fresh = State::default();
+        assert!(looks_in(false, true, &fresh), "the handheld view's APK looks for a newer one");
+        assert!(!looks_in(false, true, &State { off: true, ..State::default() }), "Off in the Mobile view's Updates stops it");
+        assert!(!looks_in(false, false, &fresh), "a Linux development build still never looks");
+        assert_eq!(due(&list(Some("0.4.0-android.10")), "0.4.0-android.9", &fresh).as_deref(), Some("0.4.0-android.10"));
+        assert_eq!(due(&list(Some("0.4.0-android.3")), "0.4.0-android.3", &fresh), None);
+    }
+
+    /// The hint on Android must not send the player to a page Android's view doesn't have.
+    #[test]
+    fn the_android_notice_installs_instead_of_naming_a_hidden_page() {
+        assert!(crate::device::ANDROID_HIDES.contains(&"updates"));
+        assert!(!actions(true).contains("Settings"), "{}", actions(true));
+        assert!(actions(true).contains("A ") && actions(true).contains("B "));
+        assert_eq!(actions(false), ACTIONS);
+    }
+
+    #[test]
+    fn the_installer_s_progress_reads_as_words() {
+        assert_eq!(android_progress("connecting", 0, 0, "", true), Some(("Connecting to the download server…".into(), true)));
+        assert_eq!(android_progress("downloading", 21, 42, "", true), Some(("Downloading the update… 50%".into(), true)));
+        assert_eq!(android_progress("downloading", 99, 0, "", true).unwrap().0, "Downloading the update… 100%");
+        assert_eq!(android_progress("installing", 1, 1, "Confirm in Android.", false), Some(("Confirm in Android.".into(), false)));
+        assert_eq!(android_progress("failed", 0, 0, "Connect to Wi-Fi to download updates. Nothing was installed.", false).unwrap().0,
+            "Connect to Wi-Fi to download updates. Nothing was installed.");
+        assert_eq!(android_progress("idle", 0, 0, "", false), None);
+        assert_eq!(android_progress("done", 0, 0, "", false), None);
     }
 
     #[test]

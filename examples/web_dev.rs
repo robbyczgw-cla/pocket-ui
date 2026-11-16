@@ -239,7 +239,7 @@ fn main() {
         let mut ctx = Ctx::new(shared.clone(), Roots::under(&roms), Box::new(Fake { owner }));
         ctx.screenshot = Box::new(screen);
         ctx.history = Some(dev_history);
-        let listen = vec![Listen { addr: SocketAddr::from(([127, 0, 0, 1], at)), iface: "lo".into(), index: 0 }];
+        let listen = vec![Listen { addr: SocketAddr::from(([127, 0, 0, 1], at)), iface: "lo".into(), index: 0, lan: !owner }];
         servers.push(pocket_ui::web::server::Server::start(ctx, Some(listen)).unwrap());
     }
     println!("web_dev: http://127.0.0.1:{port} (owner), http://127.0.0.1:{} (pairing), data in {}", port + 1, dir.display());

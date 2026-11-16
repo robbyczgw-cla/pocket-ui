@@ -136,6 +136,7 @@ pub enum Failure {
 impl Failure {
     pub fn message(&self) -> String {
         match self {
+            Failure::Offline if crate::device::no_wifi_chip() => crate::device::NEEDS_NETWORK.into(),
             Failure::Offline => "The Pocket isn't online. Connect to Wi-Fi in Settings, then try again.".into(),
             Failure::NoSpace { free, need } => format!("Not enough space on the SD card: {} MB free, {} MB needed.", free / 1_048_576, need.div_ceil(1_048_576)),
             Failure::Broke(m) => m.clone(),

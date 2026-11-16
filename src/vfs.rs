@@ -22,6 +22,7 @@ const STAT_CHAR_SPECIAL: c_int = 4;
 pub struct File {
     stream: *mut libc::FILE,
     path: CString,
+    writable: bool,
 }
 
 pub struct Dir {
@@ -112,6 +113,7 @@ unsafe extern "C" fn open(path: *const c_char, mode: c_uint, _hints: c_uint) -> 
     Box::into_raw(Box::new(File {
         stream,
         path: CStr::from_ptr(path).to_owned(),
+        writable: mode & WRITE != 0,
     }))
 }
 
@@ -122,7 +124,9 @@ unsafe extern "C" fn close(f: *mut File) -> c_int {
 
 unsafe extern "C" fn size(f: *mut File) -> i64 {
     let mut st: libc::stat = std::mem::zeroed();
-    if libc::fflush((*f).stream) == 0 && libc::fstat(libc::fileno((*f).stream), &mut st) == 0 {
+    // Bionic rejects fflush on a read-only stream (EBADF), even before its first read.
+    // ROM size must not depend on an output operation; writable save files still flush pending bytes.
+    if (!(*f).writable || libc::fflush((*f).stream) == 0) && libc::fstat(libc::fileno((*f).stream), &mut st) == 0 {
         st.st_size as i64
     } else {
         -1
@@ -167,6 +171,7 @@ unsafe extern "C" fn write(f: *mut File, buf: *const c_void, len: u64) -> i64 {
 }
 
 unsafe extern "C" fn flush(f: *mut File) -> c_int {
+    if !(*f).writable { return 0; }
     if libc::fflush((*f).stream) != 0 { return -1; }
     libc::fsync(libc::fileno((*f).stream))
 }
@@ -301,6 +306,30 @@ pub struct InterfaceInfo {
 mod tests {
     use super::*;
     use crate::testutil::TestDir;
+
+    #[test]
+    fn a_core_can_size_and_rewind_read_only_content_without_flushing_an_output_stream() {
+        let dir = TestDir::new("vfs-rom-size");
+        for ext in ["md", "bin", "gen", "a26", "sfc", "gba", "chd", "pbp"] {
+            let path = dir.join(format!("Game (日本語).{ext}"));
+            std::fs::write(&path, b"ROM contents").unwrap();
+            let name = CString::new(path.as_os_str().as_encoded_bytes()).unwrap();
+            unsafe {
+                let f = open(name.as_ptr(), READ, 0);
+                assert!(!f.is_null());
+                assert_eq!(size(f), 12);
+                let mut bytes = [0; 12];
+                assert_eq!(read(f, bytes.as_mut_ptr().cast(), 3), 3);
+                assert_eq!(size(f), 12);
+                assert_eq!(tell(f), 3);
+                assert_eq!(flush(f), 0);
+                assert_eq!(seek(f, 0, 0), 0);
+                assert_eq!(read(f, bytes.as_mut_ptr().cast(), 12), 12);
+                assert_eq!(&bytes, b"ROM contents");
+                assert_eq!(close(f), 0);
+            }
+        }
+    }
 
     // PCSX formats a missing second memory card one byte at a time. On the Brick's
     // sync-mounted FAT card every unbuffered write waits for the card; the game

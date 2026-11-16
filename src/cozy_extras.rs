@@ -1,11 +1,12 @@
 //! The **Cozy extras** (docs/user/settings.md "Cozy extras"): the little touches that make the shelf feel like a real
 //! one, each switched on its own. Not everyone likes them, so each can go without the others; most are on until the
 //! player turns one off. Each has one home in Settings, where it is seen or heard ([`Extra::home`]): the ones you see
-//! on the page Settings → Look → Cozy extras ([`Extra::PAGE_ROWS`]); case sounds, playful cases and old-TV switch-on live in Sound & feel.
+//! or that move on the page Settings → Look → Cozy extras ([`Extra::PAGE_ROWS`], playful cases and old-TV switch-on
+//! since the tree of 2026-11-13); case sounds live in Screen & sound, beside Menu sounds (Settings v2).
 //!
 //! - Kept in `settings.json` under `"extras"` ([`Extras`]), one `true`/`false` per [`Extra::key`]. A file from before
 //!   them, a key this version doesn't know or a value that isn't a bool leaves that extra on. Only extras that are off
-//!   are written, so a new extra starts on for everyone. Reset settings starts from `Extras::default()`: all on.
+//!   are written, so a new extra starts on for everyone, except the one that costs power, `TvPlaysGame`: off until written `true`. Reset settings starts from `Extras::default()`: all on.
 //! - Read anywhere with [`on`]: one relaxed atomic load, no lock, no file. pocket-ui sets it at the start and on every
 //!   switch ([`set`]). pocket-core doesn't read it: what it needs comes in the start's environment (the old-TV
 //!   switch-on and its sound, `crt_on::ENV`, `crt_on::SILENT_ENV`).
@@ -28,10 +29,8 @@ pub const PAGE: &str = "Settings › Look › Cozy extras";
 pub enum Home {
     /// A row of the Cozy extras page ([`PAGE`]).
     Page,
-    /// A row of Settings → Sound & feel, beside Animations and Sounds.
-    SoundAndFeel,
-    /// A row of Settings → System, under Sleep & power: Playing, beside Continue where I quit, has its eight.
-    System,
+    /// A row of Settings → Screen & sound, beside Menu sounds.
+    ControlsAndSound,
 }
 
 /// One switch of the page, in the page's order.
@@ -39,7 +38,7 @@ pub enum Home {
 pub enum Extra {
     /// The sounds of the cases and what is in them: a case or box opening, the cartridge, disc or card going in, the
     /// old TV switching on (`ui_sound::Sound::CaseOpen` to `CrtOn`, and the Quick launch's click). Menu sounds are
-    /// Settings → Sound & feel → Sounds.
+    /// Settings → Screen & sound → Menu sounds.
     CaseSounds,
     /// The old-TV switch-on over a game's first moments at the end of the Cozy launch (`crt_on`).
     CrtOn,
@@ -61,10 +60,19 @@ pub enum Extra {
     /// Cases that spring, wiggle and lean, and each medium going into its console its own way (`playful`). Its start
     /// follows Animations: on with Cozy, off with Quick, until the player switches it ([`Extras::playful_animations`]).
     Playful,
+    /// Games never played stand in the shop's plastic film, torn off at their first start (`shrink_wrap`).
+    ShrinkWrap,
+    /// The line read from a game's own battery save ("8 badges · Charizard Lv. 45 · 31:12 h", `case_knows`): on the box's
+    /// back, beside Continue and on "Where was I?". Off: no line anywhere and no save read at all, so it stays spoiler-free.
+    ProgressFromSaves,
+    /// The TV on the cabinet plays a game you never played, live, in a second player without window and sound
+    /// (`showcase`). **Off at the start**, unlike the others: it costs CPU and battery while it plays. Off: no player
+    /// is ever started.
+    TvPlaysGame,
 }
 
 impl Extra {
-    pub const ALL: [Extra; 10] = [
+    pub const ALL: [Extra; 13] = [
         Extra::CaseSounds,
         Extra::CrtOn,
         Extra::CabinetTv,
@@ -75,16 +83,24 @@ impl Extra {
         Extra::TimeOfDayLight,
         Extra::Decorations,
         Extra::Playful,
+        Extra::ShrinkWrap,
+        Extra::ProgressFromSaves,
+        Extra::TvPlaysGame,
     ];
 
-    /// The page's rows, in its order: the things you see on the shelf, the cabinet, the case, the disc and the game
-    /// card. (`ALL`'s order is the bits' and stays.)
-    pub const PAGE_ROWS: [Extra; 7] = [
+    /// The page's rows, in its order: the things you see on the shelf, the cabinet, the case, the disc, a game
+    /// starting and the game card. (`ALL`'s order is the bits' and stays.)
+    pub const PAGE_ROWS: [Extra; 12] = [
         Extra::CabinetTv,
+        Extra::TvPlaysGame,
         Extra::Stickers,
         Extra::PrintedDiscs,
+        Extra::Playful,
+        Extra::ShrinkWrap,
+        Extra::CrtOn,
         Extra::TimeOfDayLight,
         Extra::Decorations,
+        Extra::ProgressFromSaves,
         Extra::Connections,
         Extra::Rediscover,
     ];
@@ -92,7 +108,7 @@ impl Extra {
     /// Where its switch is in Settings: one place each.
     pub const fn home(self) -> Home {
         match self {
-            Extra::CaseSounds | Extra::CrtOn | Extra::Playful => Home::SoundAndFeel,
+            Extra::CaseSounds => Home::ControlsAndSound,
             _ => Home::Page,
         }
     }
@@ -110,6 +126,9 @@ impl Extra {
             Extra::TimeOfDayLight => "time_of_day_light",
             Extra::Decorations => "decorations",
             Extra::Playful => "playful_animations",
+            Extra::ShrinkWrap => "sealed_new_games",
+            Extra::ProgressFromSaves => "progress_from_saves",
+            Extra::TvPlaysGame => "tv_plays_game",
         }
     }
 
@@ -126,6 +145,9 @@ impl Extra {
             Extra::TimeOfDayLight => "Light by time of day",
             Extra::Decorations => "Decorations",
             Extra::Playful => "Playful cases",
+            Extra::ShrinkWrap => "Sealed new games",
+            Extra::ProgressFromSaves => "Progress from saves",
+            Extra::TvPlaysGame => "TV plays the game",
         }
     }
 
@@ -142,6 +164,9 @@ impl Extra {
             Extra::TimeOfDayLight => "The room's light follows the time of day: morning sun, evening lamp.",
             Extra::Decorations => "Little things appear on your shelf the more you play.",
             Extra::Playful => "Cases spring and wiggle, discs drop into trays, cartridges click in, spines lean as you scroll.",
+            Extra::ShrinkWrap => "Games you have never played stand in plastic wrap. It tears off the first time you start one.",
+            Extra::ProgressFromSaves => "Badges, stars and hearts from your own saves on the case; off keeps it spoiler-free.",
+            Extra::TvPlaysGame => "The TV shows a game you haven't played running live, without sound. Uses more power while it plays; off, nothing extra runs.",
         }
     }
 
@@ -151,8 +176,8 @@ impl Extra {
             Extra::CaseSounds | Extra::CrtOn | Extra::Stickers | Extra::PrintedDiscs | Extra::TimeOfDayLight | Extra::Decorations | Extra::Playful => {
                 Some("Shelf and Cabinet looks only.")
             }
-            Extra::CabinetTv => Some("Cabinet look only."),
-            Extra::Connections | Extra::Rediscover => None,
+            Extra::CabinetTv | Extra::TvPlaysGame => Some("Cabinet look only."),
+            Extra::Connections | Extra::Rediscover | Extra::ShrinkWrap | Extra::ProgressFromSaves => None,
         }
     }
 
@@ -166,10 +191,11 @@ impl Extra {
         }
     }
 
-    /// Playful animations as Animations is (on with Cozy, `motion::cozy`).
+    /// Playful animations as Animations is (on with Cozy, `motion::cozy`); the TV playing the game starts off.
     pub fn default_on(self) -> bool {
         match self {
             Extra::Playful => crate::motion::cozy(),
+            Extra::TvPlaysGame => false,
             _ => true,
         }
     }
@@ -178,6 +204,8 @@ impl Extra {
     /// so a feature can read its switch before its row is shown.
     pub fn built(self) -> bool {
         // Every extra has its feature now; a new one starts as `!matches!(self, Extra::<New>)` until it is built.
+        // Sealed new games too on Android's handheld view (14.11.): it has its own play history, and the Mobile view's comes
+        // in (`android_handheld::take_mobile_history`, `mobile_played`).
         let _ = self;
         true
     }
@@ -195,7 +223,7 @@ impl Extra {
 /// A switch elsewhere in Settings that an extra needs.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Needs {
-    /// Settings → Sound & feel → Sounds on.
+    /// Settings → Screen & sound → Menu sounds on.
     Sounds,
     /// Animations on Cozy and Motion on Full.
     CozyFull,
@@ -207,9 +235,9 @@ impl Needs {
     /// What the page says while the other switch keeps the extra from showing.
     pub fn note(self) -> &'static str {
         match self {
-            Needs::Sounds => "Silent now: Sounds is off (Sound & feel \u{203a} Sounds).",
-            Needs::CozyFull => "Not shown now: it needs Animations on Cozy and Motion on Full (Sound & feel).",
-            Needs::MotionFull => "Not shown now: needs Motion on Full (Sound & feel).",
+            Needs::Sounds => "Silent now: Menu sounds is off (Screen & sound \u{203a} Menu sounds).",
+            Needs::CozyFull => "Not shown now: it needs Animations on Cozy (Playing) and Motion on Full (Look).",
+            Needs::MotionFull => "Not shown now: needs Motion on Full (Look).",
         }
     }
 }
@@ -229,13 +257,25 @@ fn lenient_on<'de, D: serde::Deserializer<'de>>(d: D) -> Result<bool, D::Error> 
     Ok(v.as_bool().unwrap_or(true))
 }
 
+/// A switch that stays off when its value isn't a bool: one wrong value never starts work the player didn't choose.
+fn lenient_off<'de, D: serde::Deserializer<'de>>(d: D) -> Result<bool, D::Error> {
+    let v = <serde_json::Value as serde::Deserialize>::deserialize(d)?;
+    Ok(v.as_bool().unwrap_or(false))
+}
+
+/// Written only when on (the extras that start off).
+fn is_off(b: &bool) -> bool {
+    !*b
+}
+
 /// Playful animations' value: missing or not a bool, it follows Animations.
 fn lenient_choice<'de, D: serde::Deserializer<'de>>(d: D) -> Result<Option<bool>, D::Error> {
     let v = <serde_json::Value as serde::Deserialize>::deserialize(d)?;
     Ok(v.as_bool())
 }
 
-/// `settings.json`'s `"extras"`: visual and sound switches are on unless written `false`; Playful follows Animations.
+/// `settings.json`'s `"extras"`: visual and sound switches are on unless written `false`; Playful follows Animations;
+/// the TV playing the game is off unless written `true`.
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, serde::Serialize, serde::Deserialize)]
 pub struct Extras {
     #[serde(default = "yes", deserialize_with = "lenient_on", skip_serializing_if = "is_on")]
@@ -256,6 +296,13 @@ pub struct Extras {
     pub time_of_day_light: bool,
     #[serde(default = "yes", deserialize_with = "lenient_on", skip_serializing_if = "is_on")]
     pub decorations: bool,
+    #[serde(default = "yes", deserialize_with = "lenient_on", skip_serializing_if = "is_on")]
+    pub sealed_new_games: bool,
+    #[serde(default = "yes", deserialize_with = "lenient_on", skip_serializing_if = "is_on")]
+    pub progress_from_saves: bool,
+    /// Off until the player switches it on: it costs power while it plays (`showcase`).
+    #[serde(default, deserialize_with = "lenient_off", skip_serializing_if = "is_off")]
+    pub tv_plays_game: bool,
     /// None until the player switches it: then on with Cozy, off with Quick (`Extra::default_on`); written once chosen.
     #[serde(default, deserialize_with = "lenient_choice", skip_serializing_if = "Option::is_none")]
     pub playful_animations: Option<bool>,
@@ -280,6 +327,9 @@ impl Extras {
             Extra::Rediscover => &mut self.rediscover,
             Extra::TimeOfDayLight => &mut self.time_of_day_light,
             Extra::Decorations => &mut self.decorations,
+            Extra::ShrinkWrap => &mut self.sealed_new_games,
+            Extra::ProgressFromSaves => &mut self.progress_from_saves,
+            Extra::TvPlaysGame => &mut self.tv_plays_game,
             Extra::Playful => return None,
         })
     }
@@ -324,6 +374,9 @@ impl Extras {
             rediscover: false,
             time_of_day_light: false,
             decorations: false,
+            sealed_new_games: false,
+            progress_from_saves: false,
+            tv_plays_game: false,
             playful_animations: None,
         };
         for e in Extra::ALL.into_iter().filter(|e| *e != Extra::Playful) {
@@ -334,8 +387,8 @@ impl Extras {
     }
 }
 
-/// Animations until it is [`CHOSEN`]; a test keeps this equal to `default_on`.
-const DEFAULT_BITS: u32 = ((1 << Extra::ALL.len()) - 1) & !(1 << (Extra::Playful as u32));
+/// Animations until it is [`CHOSEN`], the TV playing the game off; a test keeps this equal to `default_on`.
+const DEFAULT_BITS: u32 = ((1 << Extra::ALL.len()) - 1) & !(1 << (Extra::Playful as u32)) & !(1 << (Extra::TvPlaysGame as u32));
 /// Playful animations was switched by the player: its bit holds the choice.
 const CHOSEN: u32 = 1 << 31;
 
@@ -343,7 +396,7 @@ const CHOSEN: u32 = 1 << 31;
 static ON: AtomicU32 = AtomicU32::new(DEFAULT_BITS);
 
 /// The line under Playful cases while it still follows Animations: what it is, and that Cozy switches it on (the Brick,
-/// 2026-11-07: Sound & feel → Animations flipping Playful cases as well looked like a fault).
+/// 2026-11-07: Animations flipping Playful cases as well looked like a fault).
 pub const PLAYFUL_FOLLOWS: &str = "Cases spring and wiggle. Follows Animations: on with Cozy, off with Quick, until you switch it.";
 
 /// The line under an extra's row in Settings: `line`, or for Playful cases that it follows Animations until switched.
@@ -409,8 +462,9 @@ mod tests {
         assert_eq!(Extras::from_bits(DEFAULT_BITS), Extras::default());
     }
 
-    /// Every extra has exactly one home: a row of the page, or one of Sound & feel or Sleep & power (2026-10-30), and the
-    /// page holds at most eight rows.
+    /// Every extra has exactly one home: a row of the page, or one of Screen & sound (2026-10-30, the tree of
+    /// 2026-11-13), and the page with its GBA console row holds at most thirteen rows (ten until Sealed new games, eleven
+    /// until Progress from saves, twelve with the TV playing the game, 14.11.2026; the page scrolls).
     #[test]
     fn every_extra_has_one_home() {
         for e in Extra::ALL {
@@ -418,9 +472,9 @@ mod tests {
         }
         let mut seen = std::collections::BTreeSet::new();
         assert!(Extra::PAGE_ROWS.iter().all(|e| seen.insert(e.key())), "no row twice");
-        assert!(Extra::PAGE_ROWS.len() <= 8);
-        // What needs another switch lives beside it: none of the page's rows does.
-        assert!(Extra::PAGE_ROWS.iter().all(|e| e.needs().is_none()));
+        assert!(Extra::PAGE_ROWS.len() < 13);
+        // What needs another switch says which (`Needs::note`), wherever its row is.
+        assert!(Extra::ALL.iter().filter_map(|e| e.needs()).all(|n| !n.note().is_empty()));
     }
 
 
@@ -448,6 +502,35 @@ mod tests {
         assert_eq!(row_line(Extra::Playful, &x, Extra::Playful.blurb()), PLAYFUL_FOLLOWS);
         assert_eq!(row_line(Extra::Playful, &y, Extra::Playful.blurb()), Extra::Playful.blurb(), "chosen: its own line");
         assert_eq!(row_line(Extra::CrtOn, &x, Extra::CrtOn.blurb()), Extra::CrtOn.blurb());
+    }
+
+    /// Lead, 14.11.: Sealed new games was off on Android with "no play history of its own"; the handheld view has one and
+    /// takes the Mobile view's. Same row, same switch, on by default, whatever the target.
+    #[test]
+    fn sealed_new_games_has_its_row_and_is_on_by_default_on_android_too() {
+        assert!(Extra::ShrinkWrap.built());
+        assert!(Extra::shown().contains(&Extra::ShrinkWrap));
+        assert!(Extra::ShrinkWrap.default_on());
+        let src = include_str!("cozy_extras.rs");
+        let body = src.split("pub fn built(self) -> bool {").nth(1).and_then(|b| b.split("\n    }").next()).unwrap_or_default();
+        assert!(!body.contains("target_os"), "no platform takes a row off the page: {body}");
+    }
+
+    /// The TV playing the game costs power: off at the start and after anything unreadable, written only when on.
+    #[test]
+    fn the_tv_playing_the_game_starts_off_and_only_a_true_turns_it_on() {
+        assert!(!Extras::default().get(Extra::TvPlaysGame));
+        assert!(!Extra::TvPlaysGame.default_on());
+        for json in ["{}", r#"{"tv_plays_game": "yes"}"#, r#"{"tv_plays_game": 1}"#, r#"{"tv_plays_game": null}"#, r#"{"tv_plays_game": false}"#] {
+            let x: Extras = serde_json::from_str(json).unwrap();
+            assert!(!x.get(Extra::TvPlaysGame) && x.is_default(), "{json}");
+        }
+        let x: Extras = serde_json::from_str(r#"{"tv_plays_game": true}"#).unwrap();
+        assert!(x.get(Extra::TvPlaysGame) && !x.is_default());
+        assert_eq!(serde_json::to_value(x).unwrap(), serde_json::json!({ "tv_plays_game": true }), "kept across restarts");
+        assert_eq!(Extras::from_bits(x.bits()), x);
+        // Its row follows the cabinet's own TV on the page.
+        assert_eq!(Extra::PAGE_ROWS[..2], [Extra::CabinetTv, Extra::TvPlaysGame]);
     }
 
     #[test]

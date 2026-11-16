@@ -1,0 +1,4 @@
+#!/bin/sh
+# dArkOS port: ROCKNIX's `brightness set N`. pocket-ui has already written the backlight in sysfs; there is nothing to store,
+# and start.sh puts the brightness it found back at the end.
+case "${1:-}" in set) exit 0 ;; *) exit 2 ;; esac

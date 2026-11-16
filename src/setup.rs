@@ -227,8 +227,6 @@ enum WifiRow {
 enum LookRow {
     Layout,
     Appearance,
-    Motion,
-    Animations,
     /// The first start: Barlow or Retro (Settings › Look › Style).
     Font,
     /// The first start: the colour set (Retro's own two while it is on; Settings › Look › Colours).
@@ -527,7 +525,7 @@ pub struct Setup {
     theme: usize,
     /// Settings > Look > Appearance: a row of the look step opened from Settings, and of the first start's.
     appearance: Appearance,
-    /// Settings > Sound & feel > Motion: a row of the look step opened from Settings.
+    /// Settings > Look > Motion: a row of the look step opened from Settings.
     motion: Motion,
     /// The look step's focused row, Up/Down as in every list (`LookRow`): the layouts, then the rows under them. Left/Right
     /// change the focused one (Brick, 2026-11-07: the rows under the layouts were drawn and unreachable).
@@ -558,7 +556,7 @@ pub struct Setup {
     covers_running: bool,
     /// The last run found no answer from the picture server (`SetupEvent::CoversUnreachable`).
     covers_unreachable: bool,
-    /// Settings > Games > Extras > Pictures: what is fetched by itself, and whether the last press changed it
+    /// Settings > Games > Box art & downloads > Pictures: what is fetched by itself, and whether the last press changed it
     /// (`take_art`).
     art: Art,
     art_changed: bool,
@@ -605,7 +603,7 @@ pub struct Setup {
     back_to_games: Option<(bool, bool)>,
     /// The system controls: the time zone step reads and sets the zone through them.
     hw: SharedHw,
-    /// Settings > Look > Systems on the shelf: the systems with games, the hidden ones, whether that changed,
+    /// Settings > Games > Systems on the shelf: the systems with games, the hidden ones, whether that changed,
     /// and why the last tick was refused.
     shelf: Vec<ShelfSystem>,
     hidden: Vec<String>,
@@ -671,7 +669,7 @@ impl PortTab {
 
 /// Where BIOS files go (see docs/user/getting-started.md): `crate::hostsys::bios_dir()` (`POCKETUI_BIOS` can override it).
 
-/// A system with games, for Settings > Look > Systems on the shelf.
+/// A system with games, for Settings > Games > Systems on the shelf.
 #[derive(Clone, Debug)]
 pub struct ShelfSystem {
     pub id: String,
@@ -738,7 +736,7 @@ impl Setup {
         self.text_size_chosen.take()
     }
 
-    /// The animations after L1 on the look step changed them, once; the app keeps them (Settings → Sound & feel →
+    /// The animations after L1 on the look step changed them, once; the app keeps them (Settings → Playing →
     /// Animations).
     pub fn take_animations(&mut self) -> Option<Animations> {
         std::mem::take(&mut self.animations_changed).then(|| self.animations_shown())
@@ -929,11 +927,15 @@ impl Setup {
         let ways_h = if ways.is_empty() { 0 } else { WAY_H + 10 };
         let grid_rows = ((c.h + up - 228 - 336 - ways_h) / (GRID_TILE_H + GRID_GAP)).clamp(1, 3) as usize;
         self.touch.borrow_mut().clear();
+        // The tiles are drawn to a fixed size: their type as on any other screen, also where a wide screen's page is
+        // larger (`type_scale::wide_page`; their names ran into their folders).
         if let Some(grid) = &self.grid {
+            let _tiles = crate::type_scale::panel(1.0);
             self.paint_grid(c, text, grid, 228 - up, width, grid_rows);
         }
         let mut top = 228 - up + grid_rows as i32 * (GRID_TILE_H + GRID_GAP) + 6;
         if !ways.is_empty() {
+            let _tiles = crate::type_scale::panel(1.0);
             self.paint_ways(c, text, &ways, top - 6, width, dots);
             top += ways_h;
         }
@@ -1270,6 +1272,14 @@ fn ways_for(wifi: bool) -> Vec<Way> {
 /// The first start's "Your games" without games, on a handheld with Wi-Fi and a second card slot. A computer can't read
 /// this card's STORAGE part, and Windows offers to format it: that is the warning, not "put them in the roms folder".
 const FOUND_WIFI_SLOT_WAY: &str = "Copy them over Wi-Fi from a computer or phone, or use a second SD card. If Windows offers to format a card, press Cancel.";
+/// The first start's heading. "Your Pocket" is the Linux handheld's name for the device; on Android the app welcomes you
+/// (the Odin 2 Mini's first start said "Welcome to your Pocket", 13.11.).
+pub fn welcome_title(android: bool) -> &'static str {
+    if android { "Welcome to pocket-ui" } else { "Welcome to your Pocket" }
+}
+
+/// Android's handheld view: the games are read where they are, in one folder per system (android/handheld/app_android.rs).
+const ANDROID_WAY: &str = "Put your games in the ROMs folder of this device, one folder per system: ROMs/gba, ROMs/snes, ROMs/psx and so on.";
 /// The same on a handheld with Wi-Fi and one slot.
 const FOUND_WIFI_WAY: &str = "Copy them over Wi-Fi from a computer or phone. If you put the card in a computer and Windows offers to format it, press Cancel.";
 
@@ -1333,14 +1343,18 @@ pub(crate) fn tick(c: &mut Canvas, x: i32, y: i32, s: i32, color: u32) {
     let (ax, ay) = (x + s * 2 / 9, y + s / 2);
     let (bx, by) = (x + s * 4 / 10, y + s * 7 / 10);
     let (cx, cy) = (x + s * 7 / 9, y + s * 3 / 10);
+    // Squares along both strokes, painted as one shape (gfx::Canvas::fill_rects): natively an odd square doesn't
+    // round to a thicker or thinner one at each step.
+    let mut squares = Vec::new();
     for (x0, y0, x1, y1) in [(ax, ay, bx, by), (bx, by, cx, cy)] {
         let steps = (x1 - x0).abs().max((y1 - y0).abs()).max(1);
         for i in 0..=steps {
             let px = x0 + (x1 - x0) * i / steps;
             let py = y0 + (y1 - y0) * i / steps;
-            c.rect(px - t / 2, py - t / 2, t, t, color);
+            squares.push((px - t / 2, py - t / 2, t, t));
         }
     }
+    c.fill_rects(&squares, color);
 }
 
 /// Which top-level step a (sub)screen belongs to.
@@ -1426,6 +1440,10 @@ fn look_zone(hw: &dyn crate::system_ctl::Hw) -> ZoneStep {
     z
 }
 
+/// Box art on a handheld without Wi-Fi: pictures from a scraper on a computer, in a folder the library reads
+/// (`layouts::folder_kind`: `covers`, `boxart`, `images`… beside the games), named like the game file.
+pub(crate) const COVERS_FROM_COMPUTER: &str = "No Wi-Fi here: put box art from a scraper on your computer in a covers folder beside the games, named like each game (roms/gba/covers/Game.png).";
+
 /// The Extras step's line under the title. A handheld without a Wi-Fi chip (the RG28XX) can't "connect to Wi-Fi first":
 /// it says so instead (first-start test 2026-11-01).
 fn extras_sub(online: bool, has_wifi: bool) -> &'static str {
@@ -1484,7 +1502,7 @@ fn count_catalog(catalog: &[SysInfo]) -> Counted {
     if let Some(roms) = library::roms_root(catalog) {
         found.strays = library::stray_folders(&roms, catalog);
         // Folders of another card ("Game Boy Advance (GBA)") are read as the system they are: their games count too.
-        for (id, dir) in library::foreign_folders(&roms, catalog) {
+        for (id, dir) in library::other_folders(Some(&roms), catalog) {
             if let Some(s) = catalog.iter().find(|s| s.id == id) {
                 let n = library::count_games(&id, &dir, &s.extensions);
                 if n > 0 {
@@ -2902,7 +2920,7 @@ impl Setup {
                     };
                     (value, crate::cheat_data::CONTINUE.into())
                 }
-                _ if !online && !matches!(self.portmaster, Some(PortMasterState::Ready)) => ("Needs Wi-Fi".into(), crate::cheat_data::CONNECT.into()),
+                _ if !online && !matches!(self.portmaster, Some(PortMasterState::Ready)) => (crate::cheat_data::offline_value().into(), crate::cheat_data::connect().into()),
                 _ if self.portmaster_note.is_some() => ("Retry".into(), self.portmaster_note.clone().unwrap()),
                 Some(PortMasterState::Offer(_)) if self.portmaster_low_space().is_some() => {
                     let space = self.portmaster_low_space().unwrap();
@@ -3064,7 +3082,9 @@ impl Setup {
     #[cfg(not(feature = "brick"))]
     fn ways(&self) -> Vec<Way> {
         let d = crate::device::current();
-        ways_for(d.has_wifi())
+        // Android's handheld view: no file sharing or phone page of ours (Android has its own ways in; the games are
+        // read where they are).
+        ways_for(d.has_wifi() && !crate::device::android_profile())
     }
 
     #[cfg(feature = "brick")]
@@ -3297,6 +3317,8 @@ impl Setup {
             (None, remote::Mode::Dev) => ("Always on: this is a developer device (dev-ssh).".into(), pal().chalk),
             (None, remote::Mode::DevDown) => ("Developer device: SSH is not running.".into(), pal().alert),
             (None, remote::Mode::External) => ("On, switched on outside pocket-ui. No time limit.".into(), pal().chalk),
+            // No Wi-Fi chip (`device::no_wifi_chip`): the lines above already say it needs a network; nothing to connect.
+            (None, remote::Mode::Off) if self.ip.is_none() && crate::device::no_wifi_chip() => ("Not connected".into(), pal().dust),
             (None, remote::Mode::Off) if self.ip.is_none() => ("Connect to Wi-Fi first.".into(), pal().dust),
             (None, remote::Mode::Off) => ("Remote access is off.".into(), pal().dust),
         }
@@ -3308,7 +3330,7 @@ impl Setup {
         self.remote_looking = true;
         let notify = self.notify.clone();
         std::thread::spawn(move || {
-            let result = remote::keep_dev_ssh().map(|r| r.map_err(|e| e.to_string()));
+            let result = remote::keep_dev_ssh();
             notify(SetupEvent::Remote { mode: remote::current(), password: remote::password(), result })
         });
     }
@@ -3361,7 +3383,7 @@ impl Setup {
             Step::Done => 9u8.hash(&mut h),
             Step::ShelfSystems { sel } => (11u8, sel, &self.hidden, self.streaming).hash(&mut h),
             Step::Zone(z) => match &z.view {
-                ZoneView::Card => (10u8, 0u8).hash(&mut h),
+                ZoneView::Card => (10u8, 0u8, z.card_row).hash(&mut h),
                 ZoneView::Regions { sel } => (10u8, 1u8, sel).hash(&mut h),
                 ZoneView::List { heading, sel, .. } => (10u8, 2u8, heading, sel).hash(&mut h),
                 ZoneView::Search(kb) => (10u8, 3u8, &kb.text, kb.row, kb.col, kb.shift, kb.symbols).hash(&mut h),
@@ -3460,6 +3482,12 @@ impl Setup {
 
     /// On from the welcome: Wi-Fi; the time zone where there is no Wi-Fi chip; your games where the system owns both
     fn after_welcome(&mut self) {
+        // Android's handheld view: Android owns Wi-Fi and the clock; your games come next.
+        if crate::device::android_profile() {
+            self.zone_asked = true;
+            self.enter_found();
+            return;
+        }
         if self.no_wifi {
             self.enter_zone();
         } else {
@@ -3973,6 +4001,11 @@ impl Setup {
                 self.step = Step::Welcome;
                 true
             }
+            // Android's handheld view has no Wi-Fi stage (`after_welcome`): back to the welcome.
+            Step::Found { .. } if crate::device::android_profile() => {
+                self.step = Step::Welcome;
+                true
+            }
             Step::Found { .. } => {
                 self.after_welcome();
                 true
@@ -4333,7 +4366,7 @@ impl Setup {
                     self.remote_busy = true;
                     let notify = self.notify.clone();
                     std::thread::spawn(move || {
-                        let result = remote::keep_dev_ssh().unwrap_or(Ok(())).map_err(|e| e.to_string());
+                        let result = remote::keep_dev_ssh().unwrap_or(Ok(()));
                         notify(SetupEvent::Remote { mode: remote::current(), password: remote::password(), result: Some(result) })
                     });
                 }
@@ -4424,14 +4457,22 @@ impl Setup {
                 // device isn't known).
                 let model = crate::device::current().model.unwrap_or(crate::device::Model::MiniV2);
                 let row = [crate::ui_art::Art::Logo, crate::ui_art::Art::Device(model)];
-                let lines = [
-                    if self.no_wifi {
+                #[cfg_attr(not(feature = "brick"), allow(unused_mut))]
+                let mut lines = vec![
+                    if crate::device::android_profile() {
+                        "Next: your games, then a look you like."
+                    } else if self.no_wifi {
                         "Next: your time zone, your games, then a look you like."
                     } else {
                         "Next: Wi-Fi, your games, then a look you like."
                     },
                     "You can skip any of them and come back later.",
                 ];
+                // dArkOS: pocket-ui is a port there, and the way back to EmulationStation is not one a player would guess (test 2).
+                #[cfg(feature = "brick")]
+                if crate::darkos::host() {
+                    lines.push(crate::rescue::BACK_HINT);
+                }
                 // On a handheld nobody on the project has played on: one calm line, once (this step is only on the
                 // first start; docs/DEVICES.md).
                 let untested = crate::device::current().model.filter(|m| m.experimental() && !m.played_on()).map(|m| {
@@ -4471,7 +4512,7 @@ impl Setup {
                 } else {
                     -lift
                 };
-                let (heading_px, heading) = text.fit_sizes(Face::Title, &[67, 50], "Welcome to your Pocket", c.w - 2 * MARGIN);
+                let (heading_px, heading) = text.fit_sizes(Face::Title, &[67, 50], welcome_title(crate::device::android_profile()), c.w - 2 * MARGIN);
                 text.draw(c, Face::Title, heading_px, MARGIN, 300 + dy, pal().chalk, &heading);
                 let mut below = paragraphs(c, text, &lines, 360 + dy);
                 if let Some(line) = &untested {
@@ -4558,7 +4599,7 @@ impl Setup {
                 // Why the password is asked for again ("Wrong password. Try again."), between the field and the keys.
                 if let Some((msg, alert)) = &self.note {
                     let msg = text.fit(Face::Body, 24, msg, c.w - 2 * MARGIN);
-                    text.draw(c, Face::Body, 24, MARGIN, 272, if *alert { pal().alert } else { pal().dust }, &msg);
+                    text.draw(c, Face::Body, 24, MARGIN, if c.h < 768 { 256 } else { 272 }, if *alert { pal().alert } else { pal().dust }, &msg);
                 }
                 let done = if *hidden { "Connect (empty: open network)" } else { "Connect" };
                 // With something in the field, L1 empties it at once (then B leaves); in an empty one B leaves.
@@ -4611,10 +4652,12 @@ impl Setup {
             }
             Step::Remote => {
                 text.draw(c, Face::Title, 67, MARGIN, 140, pal().chalk, "Remote access");
-                let lines = [
-                    "Log in to this Pocket from a computer on the same Wi-Fi, with SSH.",
-                    "It stays on until you turn it off or the Pocket restarts.",
-                ];
+                // A handheld without Wi-Fi (`device::no_wifi_chip`): no "same Wi-Fi"; it needs a network all the same.
+                let lines: &[&str] = if crate::device::no_wifi_chip() {
+                    &["Log in to this Pocket from a computer, with SSH.", crate::device::NEEDS_NETWORK, "It stays on until you turn it off or the Pocket restarts."]
+                } else {
+                    &["Log in to this Pocket from a computer on the same Wi-Fi, with SSH.", "It stays on until you turn it off or the Pocket restarts."]
+                };
                 // Wrapped: at Large text the second line ran off the right edge
                 // (Mini V2 1240x1080, English; monkey run 2026-10-31, seed 102).
                 let mut y = 210;
@@ -4715,6 +4758,9 @@ impl Setup {
 
     /// "Your games" without games: the way that works here, in a sentence (Add games… has the details).
     fn found_way(&self) -> &'static str {
+        if crate::device::android_profile() {
+            return ANDROID_WAY;
+        }
         let d = crate::device::current();
         no_games_way(crate::card_health::image_card(), crate::games_card::in_use(), crate::card_health::games_drive(),
             d.card_reads_in_computer(), d.has_wifi(), d.has_second_card_slot())
@@ -4741,7 +4787,7 @@ impl Setup {
         // The rows from the bottom up, always above the hints (1024x768: Add more… and Box art ran under them), and the
         // line about the selected one over them: both come before the consoles, which give way on a short screen.
         let rows = self.found_rows();
-        let row = crate::type_scale::row(70, 37);
+        let row = found_row(c.h);
         let top = found_rows_top(c.h, rows.len());
         let note = match rows.get(sel) {
             Some(FoundRow::BoxArt) => Some(BOX_ART_NOTE),
@@ -4769,8 +4815,9 @@ impl Setup {
                 // smallest would run into it they stay out ("Found 81 games" says it).
                 let art_room = note_top - y - 30 - name_line - step;
                 let art_h = art_room.clamp(44, 76);
-                let (tile, gap) = (150, 18);
-                let more_w = 120;
+                // As much wider as a wide screen's type is (`type_scale::wide_page`), so "Game Boy Advance" stays whole.
+                let (tile, gap) = (crate::type_scale::on_wide(150), 18);
+                let more_w = crate::type_scale::on_wide(120);
                 let fit = ((width - more_w + gap) / (tile + gap)).max(1) as usize;
                 let shown = if art_room < 44 { 0 } else if with.len() > fit { fit } else { with.len() };
                 for (k, (sys, n)) in with.iter().take(shown).enumerate() {
@@ -4859,12 +4906,15 @@ impl Setup {
         let offline = extras_sub(false, device.has_wifi());
         let about = format!("{}\n{}", "The front of each game's box, from a free collection online.", PICTURES_NOTE);
         let covers_error = self.covers_unreachable && !self.covers_running;
-        let covers = if !online { "Needs Wi-Fi".into() }
+        // No Wi-Fi chip: the way without one, pictures from a computer (`COVERS_FROM_COMPUTER`).
+        let no_chip = !online && !device.has_wifi();
+        let covers = if no_chip { "From a computer".into() }
+            else if !online { "Needs Wi-Fi".into() }
             else if covers_error { "Retry".into() }
             else if self.covers_running || self.covers.is_some() { extras_status(self.covers, self.covers_running, self.art == Art::Pictures, self.games_known(), dots) }
             else { "Download".into() };
         let mut rows = vec![
-            crate::emu_menu::Row { name: "Box art".into(), value: covers, desc: if online && covers_error { "Couldn't reach the picture server. Try again later.".into() } else { about } },
+            crate::emu_menu::Row { name: "Box art".into(), value: covers, desc: if online && covers_error { "Couldn't reach the picture server. Try again later.".into() } else if no_chip { COVERS_FROM_COMPUTER.into() } else { about } },
             crate::emu_menu::Row { name: "Pictures".into(), value: if sel == 1 { format!("‹ {} ›", self.art.label()) } else { self.art.label().into() },
                 desc: PICTURES_NOTE.into() },
         ];
@@ -4874,7 +4924,7 @@ impl Setup {
         if extras_cheats() {
             rows.push(self.cheat_data.as_ref().map_or_else(|| crate::cheat_data::get_row(31_367_177, online, Some(crate::update::cheats::UNAVAILABLE)), |page| page.row(online)));
         }
-        rows.push(crate::emu_menu::Row { name: "Starter pack".into(), value: if online { "Browse" } else { "Needs Wi-Fi" }.into(),
+        rows.push(crate::emu_menu::Row { name: "Starter pack".into(), value: if online { "Browse" } else { crate::cheat_data::offline_value() }.into(),
             desc: "A few free games to get you started. Pick one or take them all.".into() });
         let cheat = extras_cheats() && sel == 3;
         let runtime = ports::trimui_standalone() && sel == 2;
@@ -4954,7 +5004,8 @@ impl Setup {
         }
 
         // List on the left, preview and description on the right.
-        let (top, row, list_w) = (276, 58, 520);
+        // The list as much wider on a wide screen's page as its type is (`type_scale::on_wide`).
+        let (top, row, list_w) = (276, 58, crate::type_scale::on_wide(520));
         let visible = ((c.h - 130 - top) / row).max(1) as usize;
         let sel = self.port_sel[self.port_tab.index()].min(list.len() - 1);
         let first = sel.saturating_sub(visible / 2).min(list.len().saturating_sub(visible));
@@ -5063,7 +5114,7 @@ impl Setup {
         }
         y += row_h + 44;
         let note = self.portmaster_note.clone().unwrap_or_else(|| {
-            if !self.portmaster_online() && !matches!(self.portmaster, Some(PortMasterState::Downloading(_))) { "Connect to Wi-Fi to get PortMaster.".into() }
+            if !self.portmaster_online() && !matches!(self.portmaster, Some(PortMasterState::Downloading(_))) { crate::device::wifi_or("Connect to Wi-Fi to get PortMaster.", crate::device::NEEDS_NETWORK).into() }
             else if matches!(self.portmaster, Some(PortMasterState::Downloading(_))) { self.portmaster_progress_line() }
             else { "No download starts until you press A.".into() }
         });
@@ -5073,7 +5124,7 @@ impl Setup {
             y += crate::type_scale::line(26, 10);
         }
         if let Some(PortMasterState::Downloading(progress)) = &self.portmaster {
-            if progress.total > 0 && y + 20 < c.h - 100 {
+            if progress.total > 0 && y + 20 < crate::kit::content_bottom(c.h) {
                 c.rect(MARGIN, y + 8, width, 10, pal().spine);
                 c.rect(MARGIN, y + 8, (width as u64 * progress.done.min(progress.total) / progress.total) as i32, 10, pal().label);
             }
@@ -5250,12 +5301,13 @@ impl Setup {
         }
     }
 
-    /// The look step's rows from the top: the layouts, then Appearance, Motion and Animations (Settings > Look; Style and
-    /// Colours are rows of Settings › Look itself) or Style, Colours and Appearance (the first start: how every page
-    /// looks, shown on the previews as it changes; 2026-11-07: Retro is to be seen, not hidden behind a key).
+    /// The look step's rows from the top: the layouts alone (Settings › Look › Layout: Appearance, Motion and Animations
+    /// are rows of Settings themselves, the tree of 2026-11-13 took them off this page) or the layouts, Style, Colours and
+    /// Appearance (the first start: how every page looks, shown on the previews as it changes; 2026-11-07: Retro is to be
+    /// seen, not hidden behind a key).
     fn look_rows(&self) -> &'static [LookRow] {
         if self.only.is_some() {
-            &[LookRow::Layout, LookRow::Appearance, LookRow::Motion, LookRow::Animations]
+            &[LookRow::Layout]
         } else {
             &[LookRow::Layout, LookRow::Font, LookRow::Colours, LookRow::Appearance]
         }
@@ -5299,11 +5351,6 @@ impl Setup {
                 self.theme = if forward { (self.theme + 1) % n } else { (self.theme + n - 1) % n };
             }
             Some(LookRow::Appearance) => self.appearance = turn(&Appearance::ALL, self.appearance, forward),
-            Some(LookRow::Motion) => self.motion = turn(&Motion::ALL, self.motion, forward),
-            Some(LookRow::Animations) => {
-                self.animations = Some(turn(&Animations::ALL, self.animations_shown(), forward));
-                self.animations_changed = true;
-            }
             // The app steps them (`take_font_step`, `take_colours_step`), as Settings › Look's rows do.
             Some(LookRow::Font) => self.font_step = Some(forward),
             Some(LookRow::Colours) => self.colours_step = Some(forward),
@@ -5333,6 +5380,8 @@ impl Setup {
         self.paint_step_count(c, text);
         // The first start has a line under its rows (what HOME does in a game): the pictures give up its height.
         let (pw, ph) = look_preview((c.w, c.h));
+        // The hint bar is as large as on a 1080-line screen on every one: the pictures give up its extra height.
+        let (pw, ph) = (pw * (ph - 36) / ph, ph - 36);
         let (pw, ph) = if first { let short = (ph - 3 * crate::type_scale::line(24, 8)).max(44); (pw * short / ph, short) } else { (pw, ph) };
         let (x, y) = ((c.w - pw) / 2, 226);
         let n = self.themes.len();
@@ -5368,8 +5417,8 @@ impl Setup {
             c.rect(mx, base - 18, 16, 16, color);
         }
         // The rows under the layouts, slimmer rows of pills one under the other as `look_rows` has them; the focused
-        // one has the bar beside it. Settings > Look: Appearance, Motion, Animations. The first start: Style, Colours,
-        // Appearance, the previews above changing with them.
+        // one has the bar beside it. Settings > Look > Layout: none. The first start: Style, Colours, Appearance, the
+        // previews above changing with them.
         let top = base + 63 + crate::type_scale::grow(28);
         let step = pill_h() + 15;
         let label_w = self.label_w(text);
@@ -5396,17 +5445,6 @@ impl Setup {
                 let on = Appearance::ALL.iter().position(|a| *a == self.appearance).unwrap_or(0);
                 pill_row(c, text, top, "Appearance", &names, on, self.appearance.blurb(), label_w);
             }
-            LookRow::Motion => {
-                let names: Vec<&str> = Motion::ALL.iter().map(|m| m.name()).collect();
-                let on = Motion::ALL.iter().position(|m| *m == self.motion).unwrap_or(0);
-                pill_row(c, text, top, "Motion", &names, on, self.motion.blurb(), label_w);
-            }
-            LookRow::Animations => {
-                let names: Vec<&str> = Animations::ALL.iter().map(|a| a.name()).collect();
-                let shown = self.animations_shown();
-                let on = Animations::ALL.iter().position(|a| *a == shown).unwrap_or(0);
-                pill_row(c, text, top, "Animations", &names, on, shown.blurb(), label_w);
-            }
             // Barlow, Retro: as Settings › Look › Style, and every page in it from the next frame on.
             LookRow::Font => {
                 let now = crate::font_style::get();
@@ -5432,7 +5470,7 @@ impl Setup {
     fn paint_look_end(&self, c: &mut Canvas, text: &mut Text, top: i32) {
         let width = c.w - 2 * MARGIN;
         let step = crate::type_scale::line(24, 8);
-        let more = text.wrap_prose_at_most(Face::Body, 24, "More to get any time: Settings › Games › Extras.", width, 2);
+        let more = text.wrap_prose_at_most(Face::Body, 24, "More to get any time: Settings › Games › Box art & downloads.", width, 2);
         let last = crate::kit::hint_bar_top(c.h) - 16 - more.len() as i32 * step;
         let mut lines: Vec<&str> = Vec::new();
         if self.kids_skipped {
@@ -5742,7 +5780,12 @@ fn signal_bars(c: &mut Canvas, x: i32, base: i32, signal: u8, color: u32) {
 
 /// Where "Your games" puts the first of its `rows` rows: from the bottom up, clear of the hint bar.
 fn found_rows_top(h: i32, rows: usize) -> i32 {
-    crate::kit::hint_bar_top(h) - 24 - rows as i32 * crate::type_scale::row(70, 37)
+    crate::kit::hint_bar_top(h) - 12 - rows as i32 * found_row(h)
+}
+
+/// The pitch of those rows: a little closer on a short screen (1024x768), where the hint bar is as tall as on 1080 lines.
+fn found_row(h: i32) -> i32 {
+    crate::type_scale::row(if h < 900 { 62 } else { 70 }, 37)
 }
 
 /// The look step's hint bar: the keys that work on the focused row (`below`: a row under the layouts). Left/Right change
@@ -5817,7 +5860,7 @@ pub fn paint_keyboard_noted(c: &mut Canvas, text: &mut Text, kb: &Keyboard, done
     let reserve = if short { 40 } else { 0 };
     paint_keyboard_room(c, text, kb, done, &kb.text, reserve);
     let (px, note) = text.fit_sizes(Face::Body, &[24, 21], note, c.w - 2 * MARGIN);
-    let y = if short { c.h - 100 - reserve + 30 } else { 790 };
+    let y = if short { crate::kit::content_bottom(c.h) - reserve + 30 } else { 790 };
     text.draw(c, Face::Body, px, MARGIN, y, pal().dust, &note);
 }
 
@@ -5836,8 +5879,8 @@ fn paint_keyboard_room(c: &mut Canvas, text: &mut Text, kb: &Keyboard, done: &st
     // 82 px keys on 1080 lines; the five rows share what is left above the hints on a screen of fewer (1024x768: 67).
     // Under 768 lines (the Smart Pro's 720) they start 28 px higher, closer under the text field (it ends at 234): at Large
     // text the note under them ran into the bottom row.
-    let (gap, top) = (10, if c.h < 768 { 262 } else { 290 });
-    let key_h = ((c.h - 100 - reserve - top - 4 * gap) / 5).clamp(48, 82);
+    let (gap, top) = (10, if c.h < 768 { 268 } else { 290 });
+    let key_h = ((crate::kit::content_bottom(c.h) - reserve - top - 4 * gap) / 5).clamp(48, 82);
     for (r, row) in kb.rows().iter().enumerate() {
         let y = top + r as i32 * (key_h + gap);
         // Character rows share one key width; the special row gets wider keys.
@@ -5890,15 +5933,21 @@ fn pill_row(c: &mut Canvas, text: &mut Text, top: i32, label: &str, names: &[&st
     let (h, px) = (if label_w > 0 { pill_h() } else { crate::type_scale::row(44, 24) }, 24u32);
     let base = top + h / 2 + crate::type_scale::mid(px);
     let mut x = MARGIN + text.draw(c, Face::Body, px, MARGIN, base, pal().dust, label).max(label_w) + 20;
-    // Four languages ("Português (Brasil)" is the longest name) leave the welcome step's note little room beside its pills: the
-    // pills give up some of their padding (40, 32, 24 px) before the note loses its end.
-    let inner: Vec<i32> = names.iter().map(|n| text.width(Face::Body, px, n)).collect();
+    // Several languages ("Português (Brasil)" is the longest name) leave the welcome step's note little room beside its pills: the
+    // pills give up some of their padding (40, 32, 24 px) before the note loses its end. They also stay on the screen whatever
+    // the names: with six languages (Large text at 1024 px) they give up padding down to 16 px and then size (22, 20 px).
+    let room = c.w - MARGIN - x - 8;
     let note_w = text.width(Face::Body, 20, blurb);
-    let pad = if label_w > 0 {
-        [40, 32, 24].into_iter().find(|p| c.w - MARGIN - (x + inner.iter().sum::<i32>() + p * inner.len() as i32 + 8) - 28 >= note_w).unwrap_or(24)
-    } else {
-        40
+    let mut width_at = |size: u32, p: i32| names.iter().map(|n| text.width(Face::Body, size, n) + p).sum::<i32>();
+    let with_note = if label_w > 0 { [40, 32, 24].into_iter().find(|&p| room - 28 - width_at(px, p) >= note_w) } else { None };
+    let (ppx, pad) = match with_note {
+        Some(p) => (px, p),
+        None if label_w == 0 && width_at(px, 40) <= room => (px, 40),
+        None if label_w > 0 && width_at(px, 24) <= room => (px, 24),
+        None => [px, 22, 20].into_iter().flat_map(|size| [40, 32, 24, 16].map(move |p| (size, p))).find(|&(size, p)| width_at(size, p) <= room).unwrap_or((20, 16)),
     };
+    let pbase = top + h / 2 + crate::type_scale::mid(ppx);
+    let inner: Vec<i32> = names.iter().map(|n| text.width(Face::Body, ppx, n)).collect();
     let widths: Vec<i32> = inner.iter().map(|w| w + pad).collect();
     crate::retro::pill(c, x, top, widths.iter().sum::<i32>() + 8, h, h / 2, pal().keycap);
     x += 4;
@@ -5906,7 +5955,7 @@ fn pill_row(c: &mut Canvas, text: &mut Text, top: i32, label: &str, names: &[&st
         if i == on {
             crate::retro::pill(c, x, top + 4, *w, h - 8, (h - 8) / 2, pal().label);
         }
-        text.draw(c, Face::Body, px, x + pad / 2, base, if i == on { pal().ink } else { pal().chalk }, n);
+        text.draw(c, Face::Body, ppx, x + pad / 2, pbase, if i == on { pal().ink } else { pal().chalk }, n);
         x += w;
     }
     // A row of choices a player expects to reach and change (the explorer, `nav_probe`): its label and its pills.
@@ -5938,6 +5987,12 @@ fn pill_row(c: &mut Canvas, text: &mut Text, top: i32, label: &str, names: &[&st
             }
             return;
         }
+    }
+    // Room for less than the whole note at the smallest type (1024x768 in Large text, or the classic's 1240x1080 in medium text,
+    // five languages): no note at all rather than "Yo…" or "Tu pourras le…". The setting itself is in Settings.
+    let whole = text.translated(blurb).to_string();
+    if room < text.width_plain(Face::Body, 20, &whole) {
+        return;
     }
     let (npx, note) = text.fit_sizes(Face::Body, &[px, 22, 20], blurb, room);
     text.draw(c, Face::Body, npx, x + 28, base, pal().dust, &note);
@@ -6126,7 +6181,7 @@ mod tests {
             notify,
             vec![("Dusk", "dark"), ("Dawn", "light")],
             0,
-            std::env::temp_dir().join(format!("pocketui-setup-data-{name}")),
+            data_dir(name),
             Vec::new(),
             hw,
         );
@@ -6181,9 +6236,17 @@ mod tests {
         (s.at(), s.step_of())
     }
 
-    /// A fresh data folder of its own for a test.
+    /// The data folder of the setup `name` in this test: a folder of its own that goes when the test's thread ends.
+    fn data_dir(name: &str) -> std::path::PathBuf {
+        thread_local! {
+            static FOLDERS: std::cell::RefCell<std::collections::HashMap<String, crate::testutil::TestDir>> = Default::default();
+        }
+        FOLDERS.with(|f| f.borrow_mut().entry(name.to_string()).or_insert_with(|| crate::testutil::TestDir::new("setup-data")).to_path_buf())
+    }
+
+    /// A fresh data folder of its own for a test (the folder does not exist yet).
     fn fresh(name: &str) -> std::path::PathBuf {
-        let dir = std::env::temp_dir().join(format!("pocketui-setup-data-{name}"));
+        let dir = data_dir(name);
         let _ = std::fs::remove_dir_all(&dir);
         dir
     }
@@ -6459,6 +6522,31 @@ mod tests {
         press(&mut s, &[Button::East, Button::L1]);
         assert_eq!(s.at(), "welcome");
         assert!(!shelf_setup("l1-zone-settings").only(Only::Wifi).l1_goes_back(), "Settings pages have no stages");
+    }
+
+    /// R36S nav explorer 2026-11-15 (no Wi-Fi, so the time zone card comes after the welcome): Up and Down between
+    /// "Looks right" and "Choose another…" moved the selection without the UI sound and the haptic tick, because the
+    /// card's row was not part of `ui_mark`. Every device shows the card when the zone is not known.
+    #[test]
+    fn moving_between_the_time_zone_cards_rows_clicks() {
+        fresh("zone-card-mark");
+        let (mut s, _hw) = setup("zone-card-mark", "UTC", None);
+        at_wifi(&mut s);
+        wifi_continue(&mut s);
+        assert_eq!(s.at(), "zone");
+        let top = s.ui_mark();
+        press(&mut s, &[Button::Down]);
+        assert!(matches!(&s.step, Step::Zone(z) if z.card_row == 1));
+        assert_ne!(s.ui_mark(), top, "Down to Choose another… is a move: it clicks");
+        press(&mut s, &[Button::Up]);
+        assert_eq!(s.ui_mark(), top, "back on Looks right");
+        let (mut s, _hw) = setup("zone-card-mark-nowifi", "UTC", None);
+        s.no_wifi = true;
+        press(&mut s, &[Button::East]);
+        assert_eq!(s.at(), "zone", "without a Wi-Fi chip the card comes after the welcome");
+        let top = s.ui_mark();
+        press(&mut s, &[Button::Down]);
+        assert_ne!(s.ui_mark(), top);
     }
 
     /// The zone search: no hit offers no "A Set" (A did nothing there), and L1 empties the field as in the password.
@@ -7884,7 +7972,7 @@ mod tests {
         assert!(s.press(Button::South), "B leaves the page that Settings opened straight");
     }
 
-    /// Cozy or Quick follows the look until the player chooses (Settings › Sound & feel › Animations); the first start
+    /// Cozy or Quick follows the look until the player chooses (Settings › Look › Game start animation); the first start
     /// doesn't ask.
     #[test]
     fn the_look_decides_the_animations_until_they_are_chosen() {
@@ -7918,31 +8006,25 @@ mod tests {
     }
 
     #[test]
-    fn settings_look_reaches_every_row_it_draws_with_the_d_pad() {
+    fn settings_look_is_the_layouts_alone_and_b_puts_them_back() {
         // The Brick, 2026-11-07: Settings › Look › Layout drew Appearance, Motion and Animations under the layouts, and
-        // Up/Down only turned the layouts: the rows could not be reached, and the hint bar had no B.
+        // Up/Down only turned the layouts: the rows could not be reached, and the hint bar had no B. The tree of
+        // 2026-11-13 took the three off the page: each is a row of Settings of its own (Look, Look, Playing), and a
+        // second place for them only said the same twice.
         let (s, _) = setup("look-rows", "UTC", None);
         let mut s = s.with_appearance(Appearance::Dark).only(Only::Look);
         let (theme, motion, animations) = (s.theme, s.motion(), s.animations_shown());
+        assert_eq!(s.look_rows(), &[LookRow::Layout], "the layouts and nothing under them");
         press(&mut s, &[Button::Down, Button::Right]);
-        assert_eq!((s.appearance(), s.theme), (Appearance::Light, theme), "Down, Right: the next appearance, the same layout");
-        press(&mut s, &[Button::Down, Button::Right]);
-        assert_ne!(s.motion(), motion, "the second row: Motion");
-        press(&mut s, &[Button::Down, Button::Left]);
-        assert_ne!(s.animations_shown(), animations, "the third row: Animations");
-        assert_eq!(s.take_animations(), Some(s.animations_shown()), "and the app keeps it");
-        press(&mut s, &[Button::Down, Button::Up, Button::Up, Button::Up, Button::Up, Button::Right]);
-        assert_eq!(s.previewing(), Some((theme + 1) % s.themes.len()), "Up from the rows: the layouts again");
-        assert_eq!(s.appearance(), Appearance::Light, "the rows keep what was chosen");
-        for row in [0, 1] {
-            let bar = look_hints(true, row == 1);
-            assert!(bar.iter().any(|(k, _)| *k == "B"), "B goes back and says so: {bar:?}");
-            assert!(bar.iter().any(|(k, _)| *k == "Left/Right"), "{bar:?}");
-        }
+        assert_eq!(s.look_row, 0, "Down stays on the layouts");
+        assert_eq!((s.appearance(), s.motion(), s.animations_shown()), (Appearance::Dark, motion, animations), "nothing else changes");
+        assert_eq!(s.previewing(), Some((theme + 1) % s.themes.len()), "Right: the next layout");
+        let bar = look_hints(true, false);
+        assert!(bar.iter().any(|(k, _)| *k == "B"), "B goes back and says so: {bar:?}");
+        assert!(bar.iter().any(|(k, _)| *k == "Left/Right"), "{bar:?}");
         assert!(s.press(Button::South), "B leaves the page");
         assert_eq!(s.take_profile_look(), Some(theme), "and puts the layout back");
-        assert_eq!((s.appearance(), s.motion(), s.animations_shown()), (Appearance::Dark, motion, animations), "and the rows");
-        assert_eq!(s.take_animations(), Some(animations), "the app takes the animations back too");
+        assert_eq!(s.take_animations(), None, "the page chose no animations");
         // A keeps what is shown.
         let (s, _) = setup("look-keep", "UTC", None);
         let mut s = s.only(Only::Look);
@@ -8264,7 +8346,7 @@ mod tests {
         assert_eq!(hw.state().zone, "UTC");
     }
 
-    /// The PortMaster browser, opened from Settings > Extras, with two ready ports and two that need files.
+    /// The PortMaster browser, opened from Settings > Games > Box art & downloads, with two ready ports and two that need files.
     fn ports_setup(name: &str) -> Setup {
         let json = br#"{"ports":{
             "2048.zip":{"name":"2048.zip","items":["2048.sh","2048/"],"attr":{"title":"2048","rtr":true,"arch":["aarch64"]},"source":{"size":1}},
@@ -8564,7 +8646,7 @@ mod hint_bars {
         assert!(GAMES_DRIVE_FIRST_WAY.contains("GAMES") && GAMES_DRIVE_FIRST_WAY.contains("first start"));
         let mut text = Text::new();
         let col_w = (1280 - 2 * MARGIN - 40) / 2;
-        for (lang, table) in [("en", None), ("de", Some(crate::i18n::Lang::De)), ("es", Some(crate::i18n::Lang::Es)), ("pt", Some(crate::i18n::Lang::Pt))] {
+        for (lang, table) in [("en", None), ("de", Some(crate::i18n::Lang::De)), ("es", Some(crate::i18n::Lang::Es)), ("pt", Some(crate::i18n::Lang::Pt)), ("fr", Some(crate::i18n::Lang::Fr)), ("it", Some(crate::i18n::Lang::It))] {
             let line = match table {
                 None => GAMES_DRIVE_FIRST_WAY.to_string(),
                 Some(l) => l.table().and_then(|t| t.translate(GAMES_DRIVE_FIRST_WAY)).unwrap_or_else(|| panic!("{lang}: no line")).into_owned(),
@@ -8603,7 +8685,7 @@ mod hint_bars {
         let mut text = Text::new();
         let width = 1024 - 2 * MARGIN; // the narrowest canvas (the 4:3 handhelds paint at 1024 wide)
         for line in [FOUND_WIFI_SLOT_WAY, FOUND_WIFI_WAY, BRICK_CARD_WAY] {
-            for (lang, table) in [("en", None), ("de", Some(crate::i18n::Lang::De)), ("es", Some(crate::i18n::Lang::Es)), ("pt", Some(crate::i18n::Lang::Pt))] {
+            for (lang, table) in [("en", None), ("de", Some(crate::i18n::Lang::De)), ("es", Some(crate::i18n::Lang::Es)), ("pt", Some(crate::i18n::Lang::Pt)), ("fr", Some(crate::i18n::Lang::Fr)), ("it", Some(crate::i18n::Lang::It))] {
                 let shown = match table {
                     None => line.to_string(),
                     Some(l) => l.table().and_then(|t| t.translate(line)).unwrap_or_else(|| panic!("{lang}: no line for {line}")).into_owned(),

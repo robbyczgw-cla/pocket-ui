@@ -7,6 +7,8 @@ use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 
 use pocket_ui::achievements::account::Account;
+use pocket_ui::cheats::CheatMenu;
+use pocket_ui::control;
 use pocket_ui::achievements::snapshot::{self, Snapshot, Summary, SNAPSHOT_FILE};
 use pocket_ui::achievements::{api, http, lookup};
 use pocket_ui::achievements_page::{self as page, AchievementsPage, Action, Event, Tone, Typing, View};
@@ -17,7 +19,10 @@ use pocket_ui::palette::*;
 use pocket_ui::text::Face;
 use pocket_ui::touch::Area;
 
-use super::{App, SettingsPage, UserEvent, CANCEL, CONFIRM, NU_BTN_PAD, NU_PAD, NU_PILL};
+use super::{App, QuickMenu, SettingsPage, UserEvent, CANCEL, CONFIRM, NU_BTN_PAD, NU_PAD, NU_PILL};
+use pocket_ui::achievements::hardcore;
+use pocket_ui::achievements::snapshot::State;
+use pocket_ui::pause_saves::Saves;
 
 /// The name in the Settings list, to come back to.
 pub(crate) const SETTINGS_NAME: &str = "RetroAchievements";
@@ -68,6 +73,10 @@ impl App {
         let Some(page) = self.achievements.page.as_mut() else { return back };
         // From memory, never waits (`wifi::ip`).
         page.online = pocket_ui::wifi::ip().is_some();
+        if matches!(page.view, View::List) && matches!(b, Button::Up | Button::Down) {
+            page.step(if b == Button::Up { -1 } else { 1 });
+            return Some(SettingsPage::Achievements);
+        }
         match page.press(b, CONFIRM, CANCEL) {
             Action::Nothing => {}
             Action::Close => {
@@ -78,11 +87,12 @@ impl App {
                 let (proxy, data) = (self.proxy.clone(), self.data_dir.clone());
                 let spawned = std::thread::Builder::new().name("ra-login".into()).spawn(move || {
                     // One request with the password; the token it brings back is saved, the password forgotten.
-                    let curl = http::Curl::new(http::user_agent(None));
-                    let result = api::login(&curl, &username, &password);
+                    let curl = http::system(http::user_agent(None));
+                    let result = api::login(&*curl, &username, &password);
                     page::wipe(&mut password);
                     let result = result
                         .map_err(|e| e.to_string())
+                        .map(|a| a.keeping_choices(&data))
                         .and_then(|a| a.save(&data).map(|_| a).map_err(|e| format!("Couldn't keep the sign-in: {e}")));
                     match &result {
                         Ok(a) => println!("achievements: signed in as {}", a.username),
@@ -93,6 +103,23 @@ impl App {
                 if spawned.is_err() {
                     page.event(Event::LoggedIn(Err("Couldn't start the sign-in".into())));
                 }
+            }
+            // Hardcore for every game from the next start (no game runs while Settings is open).
+            Action::Hardcore(on) => {
+                let kept = Account::load(&self.data_dir).is_some_and(|mut a| {
+                    a.hardcore = on;
+                    a.save(&self.data_dir).is_ok()
+                });
+                if kept {
+                    println!("achievements: hardcore {}", if on { "on" } else { "off" });
+                } else {
+                    pocket_ui::ui_sound::refuse();
+                    if let Some(a) = page.account.as_mut() {
+                        a.hardcore = !on;
+                    }
+                }
+                // The shelf's open cases follow: in Hardcore no game continues from its moment.
+                self.frozen_refresh();
             }
             Action::Logout => {
                 if !Account::remove(&self.data_dir) {
@@ -127,8 +154,8 @@ impl App {
     }
 
     /// Where the page stands: a change is what the menu sounds and haptics answer.
-    pub(crate) fn achievements_row(&self) -> Option<(u8, bool, bool)> {
-        self.achievements.page.as_ref().map(|p| (view_kind(&p.view), p.signed_in(), p.confirm_logout))
+    pub(crate) fn achievements_row(&self) -> Option<(u8, bool, bool, usize, bool)> {
+        self.achievements.page.as_ref().map(|p| (view_kind(&p.view), p.signed_in(), p.confirm_logout, p.sel, p.hardcore()))
     }
 
     /// "12 of 40" for a game's card: what is known now, and a lookup in the background when that is old or missing
@@ -140,8 +167,8 @@ impl App {
             if let Some(account) = Account::load(&self.data_dir) {
                 let (proxy, data, system, rom) = (self.proxy.clone(), self.data_dir.clone(), system.to_string(), path.to_path_buf());
                 let _ = std::thread::Builder::new().name("ra-lookup".into()).spawn(move || {
-                    let curl = http::Curl::new(http::user_agent(None));
-                    let summary = lookup::lookup(&curl, &data, &account, &system, &rom, now_secs());
+                    let curl = http::system(http::user_agent(None));
+                    let summary = lookup::lookup(&*curl, &data, &account, &system, &rom, now_secs());
                     let _ = proxy.send_event(UserEvent::Achievements(Event::Tally { system, rom, summary }));
                 });
             }
@@ -171,9 +198,17 @@ impl App {
             username: "RetroFan".into(),
             token: "x".into(),
             display_name: String::new(),
+            hardcore: false,
         };
-        let signed_in = matches!(mode, "in" | "confirm");
+        // "hardcore" / "hardcore-on": signed in, the Hardcore row selected, off or on.
+        let signed_in = matches!(mode, "in" | "confirm" | "hardcore" | "hardcore-on");
+        let account = Account { hardcore: mode == "hardcore-on", ..account };
         let mut p = AchievementsPage::new(signed_in.then_some(account));
+        // The row shows here even while pocket-ui doesn't offer Hardcore (`hardcore::OFFERED`): its words are checked.
+        if mode.starts_with("hardcore") {
+            p.hardcore_offered = true;
+            p.sel = 1;
+        }
         match mode {
             "user" => {
                 p.press(CONFIRM, CONFIRM, CANCEL);
@@ -243,7 +278,7 @@ impl App {
         let done = if typing == Typing::User { "Next" } else { "Sign in" };
         let note = match typing {
             Typing::User => "Your user name on retroachievements.org.",
-            Typing::Password => "Sent once to sign in, never kept. The Pocket keeps only the sign-in key.",
+            Typing::Password => page::password_note_in(pocket_ui::device::android_profile()),
         };
         pocket_ui::setup::paint_keyboard_noted(c, &mut self.text, &shown, done, note);
         pocket_ui::setup::hints(
@@ -257,21 +292,29 @@ impl App {
         let (pad, row, font) = (NU_PAD, pocket_ui::type_scale::row(66, 36), 36u32);
         self.sheet_header(c, SETTINGS_NAME);
         let (top, right) = (pad + NU_PILL + 12, c.w - pad);
-        // One row: Sign in, or Log out with the account at the right.
-        let y = top;
-        self.hits.row(Area::new(pad, y, right - pad, row), 0);
-        let base = y + row / 2 + pocket_ui::type_scale::mid(font);
-        let name = page.label();
-        let w = self.text.width(Face::Body, font, name) + 2 * NU_BTN_PAD;
-        pocket_ui::kit::selection(c, pad, y, right - pad, row);
-        self.text.draw(c, Face::Body, font, pad + NU_BTN_PAD, base, pal().ink, name);
-        let value = self.text.fit(Face::Body, font, &page.value(), right - pad - 2 * NU_BTN_PAD - w - 40);
-        self.text.draw_right(c, Face::Body, font, right - NU_BTN_PAD, base, pal().ink, &value);
-        self.hits.list(0, 1, 0.0, row as f32);
+        // Sign in, or Log out with the account at the right and Hardcore under it (`achievements::hardcore`).
+        let rows: Vec<(&str, String)> = std::iter::once((page.label(), page.value()))
+            .chain((page.rows() > 1).then(|| ("Hardcore", page.hardcore_value().to_string())))
+            .collect();
+        for (i, (name, value)) in rows.iter().enumerate() {
+            let y = top + i as i32 * row;
+            self.hits.row(Area::new(pad, y, right - pad, row), i);
+            let base = y + row / 2 + pocket_ui::type_scale::mid(font);
+            let selected = i == page.sel;
+            let ink = if selected { pal().ink } else { pal().text };
+            let w = self.text.width(Face::Body, font, name) + 2 * NU_BTN_PAD;
+            if selected {
+                pocket_ui::kit::selection(c, pad, y, right - pad, row);
+            }
+            self.text.draw(c, Face::Body, font, pad + NU_BTN_PAD, base, ink, name);
+            let value = self.text.fit(Face::Body, font, value, right - pad - 2 * NU_BTN_PAD - w - 40);
+            self.text.draw_right(c, Face::Body, font, right - NU_BTN_PAD, base, ink, &value);
+        }
+        self.hits.list(page.sel, rows.len(), 0.0, row as f32);
 
         // The status, then what RetroAchievements is and how it works here.
         let (left, width) = (pad + NU_BTN_PAD, c.w - 2 * (pad + NU_BTN_PAD));
-        let mut y = top + row + 44;
+        let mut y = top + rows.len() as i32 * row + 44;
         let (status, tone) = page.status();
         let (status, color) = match tone {
             Tone::Good => (status, pal().chalk),
@@ -294,6 +337,7 @@ impl App {
         y = y.max(panel_top + panel_h + 40);
         let action = match (&page.view, page.signed_in()) {
             (View::SigningIn, _) => None,
+            (_, true) if page.sel == 1 => Some("Change"),
             (_, true) => Some("Log out"),
             (_, false) => Some("Sign in"),
         };
@@ -304,10 +348,10 @@ impl App {
         let first = if pocket_ui::kit::short_screen(c.h) { 24 } else { 28 };
         let room = foot_top - 12 - y;
         let height = |text: &mut pocket_ui::text::Text, px: u32| -> i32 {
-            page::ABOUT.iter().map(|p| text.wrap_prose(Face::Body, px, p, width).len() as i32 * pocket_ui::type_scale::line(px, 10) + 14).sum()
+            page::about_in(pocket_ui::device::android_profile()).iter().map(|p| text.wrap_prose(Face::Body, px, p, width).len() as i32 * pocket_ui::type_scale::line(px, 10) + 14).sum()
         };
         let about = if height(&mut self.text, first) <= room { first } else { first - 4 };
-        'paragraphs: for p in page::ABOUT {
+        'paragraphs: for p in page::about_in(pocket_ui::device::android_profile()) {
             for line in self.text.wrap_prose(Face::Body, about, p, width) {
                 if y + pocket_ui::type_scale::px(about) as i32 / 4 > foot_top - 12 {
                     break 'paragraphs;
@@ -316,6 +360,76 @@ impl App {
                 y += pocket_ui::type_scale::line(about, 10);
             }
             y += 14;
+        }
+    }
+}
+
+/// Hardcore (`achievements::hardcore`): pocket-core's slots aren't in the menu then, one line says why.
+pub(crate) fn hardcore_saves(saves: Saves, hardcore: bool) -> Saves {
+    if hardcore && saves == Saves::Slots {
+        Saves::InGame(hardcore::MENU_LINE)
+    } else {
+        saves
+    }
+}
+
+/// The pause menu's Achievements page's first row, while the game's achievements load or run: Hardcore, On or Off,
+/// with what A does. None for a game they don't run in (nothing for Hardcore to keep).
+pub(crate) fn hardcore_row(menu: &QuickMenu) -> Option<(String, String, String)> {
+    if !hardcore::OFFERED {
+        return None;
+    }
+    let snap = menu.achievements.as_ref().filter(|s| menu.hosted && matches!(s.state, State::Loading | State::Ready))?;
+    let (value, desc) = match (snap.hardcore, menu.hardcore_ask) {
+        (true, _) => ("On", "No save states, rewind or cheats; unlocks count as hardcore.\nA turns it off for every game: states and rewind come back."),
+        (false, true) => ("Start again?", "Press A again: the game starts again in Hardcore, from its power-on.\nWhat you did since your last in-game save is lost. B keeps Hardcore off."),
+        (false, false) => ("Off", "Hardcore: unlocks count as hardcore on the site, without states, rewind or cheats.\nA turns it on for every game; this game starts again."),
+    };
+    Some(("Hardcore".into(), value.into(), desc.into()))
+}
+
+/// The pause menu's Achievements page: the Hardcore row first (when there is one), then the game's list.
+pub(crate) fn menu_page_rows(menu: &QuickMenu) -> Vec<(String, String, String)> {
+    let snap = menu.achievements.clone().unwrap_or_default();
+    hardcore_row(menu).into_iter().chain(page::menu_rows(&snap)).collect()
+}
+
+impl App {
+    /// A on the pause menu's Hardcore row. Off → asks once, then keeps Hardcore for every game, tells pocket-core (which
+    /// starts the game again, as RetroAchievements asks) and goes back to the game. On → off at once: Save, Load,
+    /// Earlier and Cheats are back in the menu.
+    pub(crate) fn hardcore_pressed(&mut self) {
+        let Some(menu) = self.menu.as_mut() else { return };
+        let on = menu.achievements.as_ref().is_some_and(|a| a.hardcore);
+        if !on && !menu.hardcore_ask {
+            menu.hardcore_ask = true;
+            return;
+        }
+        menu.hardcore_ask = false;
+        let kept = Account::load(&self.data_dir).is_some_and(|mut a| {
+            a.hardcore = !on;
+            a.save(&self.data_dir).is_ok()
+        });
+        if !kept || !control::pocket_core(&format!("{} {}", hardcore::COMMAND, if on { "off" } else { "on" })) {
+            pocket_ui::ui_sound::refuse();
+            return;
+        }
+        println!("achievements: hardcore {} in the game", if on { "off" } else { "on" });
+        if !on {
+            self.resume_game(None);
+            return;
+        }
+        if let Some(a) = menu.achievements.as_mut() {
+            a.hardcore = false;
+        }
+        menu.saves = Saves::Slots;
+        if let Some(s) = menu.settings.as_mut() {
+            s.hardcore = false;
+        }
+        menu.without_saving = !self.remember_quit;
+        if let Some(run) = self.running.as_ref() {
+            menu.cheats = CheatMenu::load(&self.data_dir, &run.system, &run.path);
+            menu.earlier = super::app_earlier::row_at_open(run, menu.saves, menu.settings.as_ref());
         }
     }
 }
@@ -356,6 +470,7 @@ pub(crate) fn demo_snapshot() -> Snapshot {
         points,
         points_unlocked,
         waiting: 0,
+        hardcore: false,
         achievements,
     }
 }

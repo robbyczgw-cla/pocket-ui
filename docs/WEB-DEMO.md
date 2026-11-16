@@ -17,7 +17,7 @@ sway; the mock hardware (`POCKETUI_MOCK`, on by itself off Linux) answers for br
 |---|---|
 | `web/Cargo.toml`, `web/build.rs` | The web crate: `../src/lib.rs` and `../src/main.rs`, the root build script's C parts, and `assets/gamedb.bin` cut to the demo's systems (`POCKETUI_WEB_GAMEDB`) |
 | `web/shims/winit`, `web/shims/softbuffer` | Stand-ins with the parts of winit 0.30 and softbuffer 0.4 the App uses: one window that is the page's canvas, an event loop that turns as winit's does (events, the frame, `about_to_wait`, a sleep as the control flow says), and a buffer that becomes the page's frame |
-| `web/web_audio.rs`, `web/demo/page/sound.js` | Sound: `platform::audio_backend` for the web. pocket-ui's UI mixer writes 48 kHz stereo into a ring in shared memory, an AudioWorklet plays it. So the sounds, Retro's blips and Settings → Sound & feel → Sounds (off, how loud) are the device's own. The page starts its AudioContext with the first press or tap (the browsers' autoplay rule); until then the samples are dropped at their own pace, so nothing plays late. The writer stays at most 45 ms ahead |
+| `web/web_audio.rs`, `web/demo/page/sound.js` | Sound: `platform::audio_backend` for the web. pocket-ui's UI mixer writes 48 kHz stereo into a ring in shared memory, an AudioWorklet plays it. So the sounds, Retro's blips and Settings → Screen & sound → Menu sounds (off, how loud) are the device's own. The page starts its AudioContext with the first press or tap (the browsers' autoplay rule); until then the samples are dropped at their own pace, so nothing plays late. The writer stays at most 45 ms ahead |
 | `web/app_web_demo.rs` | Compiled into `pocket-ui` only for the web (`mod` at the end of `src/main.rs`): what the page calls (`pocket_web_button`, `pocket_web_touch`, `pocket_web_resize`, `pocket_web_frame`, …), the web's `spawn_game`, and a stand-in for pocket-core |
 | `web/make-demo-library.py` | The demo library in `web/demo/storage` (not in git): fourteen GBA, SNES, N64 and PlayStation games with their covers, screenshots and title screens from libretro-thumbnails, one line of text where the ROM would be, settings past the first start |
 | `web/build.sh` | `release` (what a site gets), `fast` (no LTO, for trying things), `data` (only the library again); writes `web/demo/dist`: the library and `pad.js` at the top, the program in `simd/` (wasm SIMD) or `base/` (`WEB_SIMD=0`, for browsers without SIMD such as Safari before 16.4). A site gets both; the page picks one. Source paths in panic messages are remapped (`/pocket-ui`, `/cargo`, `/rust`), and the library is packed with relative names, so no folder of the build machine is in the files |
@@ -33,7 +33,7 @@ the canvas. The App paints at the H700 handhelds' 640 × 480 (`POCKETUI_DEVICE=r
 confirms); a finger or the mouse on the canvas becomes `UserEvent::Touch`, the touch screen's path (`app_touch`).
 
 **A start.** pocket-core "is installed" (an empty `/storage/pocket-ui/pocket-core`), so a game starts the way it does on
-a handheld, with the controls card on a system's first start and the case going into the console; N64 runs on
+a handheld, with the case going into the console; N64 runs on
 ROCKNIX's RetroArch as on the H700s (`hostsys::H700_STAYS_ON_ROCKNIX`, the demo's `es_systems.cfg`). The web's
 `spawn_game` starts nothing and runs a thread that plays the game's side. It reads what pocket-ui writes to
 `/tmp/pocket-core.cmd`, a device file the page makes (`pad.js`) that keeps the commands in order as the FIFO does:
@@ -81,4 +81,5 @@ SIMD needs Safari 16.4 or later (2023); `WEB_SIMD=0` builds without it.
 
 Game sound (no game runs), the Cabinet's TV and other looks were not walked
 through, the update, Wi-Fi, Bluetooth and Tailscale pages show the mock hardware, and the settings live only as long as
-the tab (a reload starts fresh).
+the tab (a reload starts fresh). The game cards' descriptions aren't loaded in the background (`App::auto_texts` stops
+on the web: no Wikipedia from the page, no "Descriptions 3 of 14" in the corner).

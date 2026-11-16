@@ -85,7 +85,7 @@ if [ ! -e "$INPUTD_FLAG" ]; then
 fi
 # No rfkill here, ever: Bluetooth's cut the XR829 combo chip's Bluetooth firmware under its attach (it answered nothing
 # after the wake, 08.11.), and a Wi-Fi rfkill cycle restarted the kernel (08.11. 03:16). The services stop instead,
-# as NextUI's suspend does.
+# as the Brick's stock suspend does.
 # Our Bluetooth service ends cleanly (the headphones hear a disconnect) and keeps Settings' "on" for the wake.
 if "$BT" status >/dev/null 2>&1; then
  bt=1

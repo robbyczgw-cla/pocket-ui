@@ -10,7 +10,7 @@
 //!   painted ([`LEAD`]), so the first frame after a press already shows a good part of the move.
 //! * **Nothing moves, nothing is drawn.** Each animation knows when it is done and reports it to [`busy`], which
 //!   the app's redraw scheduler asks; once everything has settled, no frame is drawn until the next input.
-//! * **The player decides.** Settings > Sound & feel > Motion: Full, Reduced (fades only, nothing moves) or Off
+//! * **The player decides.** Settings > Look > Motion: Full, Reduced (fades only, nothing moves) or Off
 //!   ([`set_level`]). `POCKETUI_MOTION_SCALE=<n>` slows everything down n times, for recording frame sequences.
 
 use std::cell::Cell;
@@ -38,7 +38,7 @@ thread_local! {
     static LEVEL: Cell<Motion> = const { Cell::new(Motion::Full) };
     /// `POCKETUI_MOTION_SCALE`, read on first use.
     static SCALE: Cell<Option<f32>> = const { Cell::new(None) };
-    /// Settings > Sound & feel > Animations: Cozy (`set_cozy`).
+    /// Settings > Look > Game start animation: Cozy (`set_cozy`).
     static COZY: Cell<bool> = const { Cell::new(false) };
 }
 
@@ -363,25 +363,32 @@ impl Transition {
         if !self.active(now) {
             return false;
         }
-        let w = c.w as usize;
+        // Painted on the screen's own pixels (docs/dev/native-paint.md): at n = 2 a row of the screen is two design rows,
+        // it takes the look of the first; an odd slide moves by half a screen pixel, as the 2:1 filter showed it.
+        let n = c.n();
+        let stride = c.stride();
+        let screen_rows = c.pixels().len() / stride.max(1);
         let looks: Vec<(i32, u32)> = (0..=STAGGER_CAP.min(rows.len() as u32)).map(|k| self.slide_fade(self.progress_of(k, now))).collect();
+        let cols: Vec<(usize, usize)> = rows.iter().map(|&(x, _, bw, _)| (c.screen_x(x).clamp(0, stride as i32) as usize, c.screen_x(x + bw).clamp(0, stride as i32) as usize)).collect();
         let mut r = 0;
-        for y in 0..c.h {
+        for sr in 0..screen_rows {
+            let y = sr as i32 * n;
             while r < rows.len() && rows[r].1 + rows[r].3 <= y {
                 r += 1;
             }
-            let line = &mut c.buf[y as usize * w..(y as usize + 1) * w];
+            let line = &mut c.pixels_mut()[sr * stride..(sr + 1) * stride];
             match rows.get(r).filter(|b| b.1 <= y) {
-                Some(&(x, _, bw, _)) => {
-                    let (x0, x1) = (x.clamp(0, c.w) as usize, (x + bw).clamp(0, c.w) as usize);
+                Some(_) => {
+                    let (x0, x1) = cols[r];
+                    let x1 = x1.max(x0);
                     let row = looks[(r as u32).min(STAGGER_CAP) as usize];
                     let (left, rest) = line.split_at_mut(x0);
                     let (mid, right) = rest.split_at_mut(x1 - x0);
                     for (seg, (dx, fade)) in [(left, looks[0]), (mid, row), (right, looks[0])] {
-                        slide_fade_row(seg, dx, fade, bg);
+                        slide_fade_row_at(seg, dx, n, fade, bg);
                     }
                 }
-                None => slide_fade_row(line, looks[0].0, looks[0].1, bg),
+                None => slide_fade_row_at(line, looks[0].0, n, looks[0].1, bg),
             }
         }
         if let Enter::Rise { from_y } = self.enter {
@@ -398,13 +405,28 @@ impl Transition {
 /// One stretch of a line: shifted `dx` and mixed `fade` (0-255) towards `bg`. The mix works on two channels at
 /// once and has no branch, so the compiler can vectorise it: a whole frame costs about a millisecond on the device.
 fn slide_fade_row(line: &mut [u32], dx: i32, fade: u32, bg: u32) {
+    slide_fade_row_at(line, dx, 1, fade, bg);
+}
+
+/// `slide_fade_row` on screen pixels with `n` design pixels each, `dx` in design pixels: at n = 2 an odd `dx` moves the
+/// row half a screen pixel (each pixel the mean of two neighbours), as the old 2:1 filter showed an odd shift.
+fn slide_fade_row_at(line: &mut [u32], dx: i32, n: i32, fade: u32, bg: u32) {
     // A stretch of nothing but the page colour stays as it is, shifted or mixed towards itself (`(bg * 256) >> 8`),
     // and most of a page is that: only read, never written (on the Mini V2 the frame's writes are what costs).
     let page = bg & 0xff_ffff;
     if line.iter().fold(0, |any, &p| any | (p ^ page)) == 0 {
         return;
     }
-    shift_row(line, dx);
+    if n == 1 {
+        shift_row(line, dx);
+    } else {
+        shift_row(line, dx.div_euclid(2));
+        if dx % 2 != 0 {
+            for i in (1..line.len()).rev() {
+                line[i] = avg2(line[i - 1], line[i]);
+            }
+        }
+    }
     if fade == 0 {
         return;
     }
@@ -439,24 +461,47 @@ fn shift_row(line: &mut [u32], dx: i32) {
 
 /// Moves rows `y0..y1` down by `dy` (up when negative) inside that band, filling the gap with `bg`.
 fn shift_rows(c: &mut Canvas, y0: i32, y1: i32, dy: i32, bg: u32) {
-    let w = c.w as usize;
-    let (y0, y1) = (y0.max(0) as usize, y1.min(c.h) as usize);
+    // In screen rows (docs/dev/native-paint.md): at n = 2 half the rows, and an odd `dy` half a screen row more (each
+    // row the mean of two), as the old 2:1 filter showed it.
+    let w = c.stride();
+    let rows = (c.pixels().len() / w.max(1)) as i32;
+    let (y0, y1) = (c.screen_y(y0).clamp(0, rows) as usize, c.screen_y(y1).clamp(0, rows) as usize);
+    let half = c.n() == 2 && dy % 2 != 0;
+    let dy = if c.n() == 1 { dy } else { dy.div_euclid(2) };
     let d = dy.unsigned_abs() as usize;
-    if y1 <= y0 || d == 0 {
+    if y1 <= y0 || (d == 0 && !half) {
         return;
     }
+    let px = c.pixels_mut();
     if d >= y1 - y0 {
-        c.buf[y0 * w..y1 * w].fill(bg);
+        px[y0 * w..y1 * w].fill(bg);
         return;
     }
     if dy > 0 {
-        c.buf.copy_within(y0 * w..(y1 - d) * w, (y0 + d) * w);
-        c.buf[y0 * w..(y0 + d) * w].fill(bg);
-    } else {
-        c.buf.copy_within((y0 + d) * w..y1 * w, y0 * w);
-        c.buf[(y1 - d) * w..y1 * w].fill(bg);
+        px.copy_within(y0 * w..(y1 - d) * w, (y0 + d) * w);
+        px[y0 * w..(y0 + d) * w].fill(bg);
+    } else if dy < 0 {
+        px.copy_within((y0 + d) * w..y1 * w, y0 * w);
+        px[(y1 - d) * w..y1 * w].fill(bg);
+    }
+    if half {
+        for r in (y0 + 1..y1).rev() {
+            let (above, row) = px[(r - 1) * w..(r + 1) * w].split_at_mut(w);
+            for (p, a) in row.iter_mut().zip(above.iter()) {
+                *p = avg2(*a, *p);
+            }
+        }
     }
 }
+
+/// The mean of two 0RGB pixels, rounded as the 2:1 filter rounds two pairs of them (`gfx::avg4(a, a, b, b)`).
+#[inline]
+fn avg2(a: u32, b: u32) -> u32 {
+    let rb = (a & 0xff00ff) + (b & 0xff00ff) + 0x010001;
+    let g = (a & 0x00ff00) + (b & 0x00ff00) + 0x000100;
+    ((rb >> 1) & 0xff00ff) | ((g >> 1) & 0x00ff00)
+}
+
 
 // ---- layers -----------------------------------------------------------------------------------------------
 
@@ -473,14 +518,24 @@ pub fn layer(c: &mut Canvas, x: i32, y: i32, w: i32, h: i32, alpha: u8, paint: i
         return;
     }
     // Painted even at alpha 0: what it registers besides pixels (taps) stays.
-    let cw = c.w as usize;
-    let (x0, x1) = (x0 as usize, x1 as usize);
-    let saved: Vec<u32> = (y0..y1).flat_map(|row| c.buf[row as usize * cw + x0..row as usize * cw + x1].iter().copied()).collect();
+    // The screen pixels holding the rectangle (docs/dev/native-paint.md): kept, painted natively, the two mixed.
+    let stride = c.stride();
+    let rows = c.pixels().len() / stride.max(1);
+    let (sx0, sy0, _, _) = c.cell(x0, y0);
+    let (sx1, sy1, _, _) = c.cell(x1 - 1, y1 - 1);
+    let (sx0, sx1) = (sx0.max(0) as usize, ((sx1 + 1).max(0) as usize).min(stride));
+    let (sy0, sy1) = (sy0.max(0) as usize, ((sy1 + 1).max(0) as usize).min(rows));
+    if sx1 <= sx0 || sy1 <= sy0 {
+        paint(c);
+        return;
+    }
+    let px = c.pixels();
+    let saved: Vec<u32> = (sy0..sy1).flat_map(|row| px[row * stride + sx0..row * stride + sx1].iter().copied()).collect();
     paint(c);
     let a = alpha as u32;
-    let span = x1 - x0;
-    for (k, row) in (y0..y1).enumerate() {
-        let line = &mut c.buf[row as usize * cw + x0..row as usize * cw + x1];
+    let span = sx1 - sx0;
+    for (k, row) in (sy0..sy1).enumerate() {
+        let line = &mut c.pixels_mut()[row * stride + sx0..row * stride + sx1];
         for (px, old) in line.iter_mut().zip(&saved[k * span..(k + 1) * span]) {
             if *px != *old {
                 *px = mix(*old, *px, a);
@@ -707,7 +762,7 @@ mod tests {
             buf[row * w as usize + 4] = 0x000000;
         }
         let rows = [(0, 100, 64, 80), (0, 190, 64, 80), (0, 280, 64, 80), (0, 370, 64, 80), (0, 460, 64, 80)];
-        let at = |c: &Canvas, x: usize, y: usize| c.buf[y * w as usize + x];
+        let at = |c: &Canvas, x: usize, y: usize| c.pixels()[y * w as usize + x];
         let mark = |c: &Canvas, y: usize| (0..w as usize).min_by_key(|x| at(c, *x, y) & 0xff).unwrap();
         let darkest = |c: &Canvas, y: usize| at(c, mark(c, y), y) & 0xff;
         let fresh = buf.clone();
@@ -845,8 +900,8 @@ mod tests {
         let mut c = Canvas::new(&mut buf, 4, 4);
         layer(&mut c, 1, 1, 2, 2, 128, |c| c.clear(0xfefefe));
         // Inside: half way; outside the rectangle the paint shows unmixed (layers are for things inside their box).
-        assert_eq!(c.buf[5] & 0xff, 0x7f);
-        assert_eq!(c.buf[0], 0xfefefe);
+        assert_eq!(c.pixels()[5] & 0xff, 0x7f);
+        assert_eq!(c.pixels()[0], 0xfefefe);
     }
 
     #[test]
@@ -858,6 +913,88 @@ mod tests {
         assert_eq!(appear(t0, t0 + PAGE, 40.0), (0, 255));
         assert!(appearing(t0, t0 + ms(50)));
         assert!(!appearing(t0, t0 + PAGE));
+    }
+
+    // ---- painted natively (n = 2, docs/dev/native-paint.md) against the old way: design canvas, 2:1 filter ----
+
+    /// A page: its colour, list rows with Departure Mono names, a bright panel on the right.
+    fn page(c: &mut Canvas, t: &mut crate::text::Text) {
+        use crate::text::Face;
+        c.clear(0x1b1712);
+        for k in 0..6 {
+            let y = 112 + k * 82;
+            c.rect(72, y + 6, 700, 70, if k == 1 { 0x3a332a } else { 0x241f19 });
+            t.draw(c, Face::Body, 28, 96, y + 52, 0xece9e1, &format!("Link's Awakening DX {k}"));
+        }
+        c.round_rect(820, 120, 380, 500, 24, 0xd8cfc0);
+        t.draw(c, Face::Title, 37, 850, 700, 0xffcc00, "Shelf 12");
+    }
+
+    /// `paint` the old way (a 2w x 2h design canvas reduced 2:1) and natively (straight into w x h at n = 2).
+    fn old_and_new(w: u32, h: u32, mut paint: impl FnMut(&mut Canvas)) -> (Vec<u32>, Vec<u32>) {
+        crate::scaled_layout::set_step((w * 2, h * 2), (w, h));
+        let mut design = vec![0u32; (w * h * 4) as usize];
+        paint(&mut Canvas::new(&mut design, w * 2, h * 2));
+        let mut old = vec![0u32; (w * h) as usize];
+        crate::scaled_layout::ScaledFrame::default().downscale(&design, (w * 2, h * 2), &mut old, (w, h));
+        let mut new = vec![0u32; (w * h) as usize];
+        paint(&mut Canvas::screen(&mut new, (w, h), 2));
+        crate::scaled_layout::set_step((1240, 1080), (1240, 1080));
+        (old, new)
+    }
+
+    /// (share of pixels more than 32 steps apart in a channel, largest step).
+    fn apart((old, new): &(Vec<u32>, Vec<u32>)) -> (f32, u32) {
+        let step = |a: u32, b: u32| [0, 8, 16].iter().map(|s| ((a >> s) & 0xff).abs_diff((b >> s) & 0xff)).max().unwrap_or(0);
+        let far = old.iter().zip(new).filter(|(a, b)| step(**a, **b) > 32).count();
+        (far as f32 / old.len() as f32, old.iter().zip(new).map(|(a, b)| step(*a, *b)).max().unwrap_or(0))
+    }
+
+    #[test]
+    fn painted_natively_a_page_transition_looks_as_before_frame_by_frame() {
+        at_level(Motion::Full);
+        crate::font_style::set_retro_letters(crate::font_style::RetroLetters::Departure);
+        let mut t = crate::text::Text::builtin().pinned_to(crate::font_style::FontStyle::Retro);
+        let rows: Vec<(i32, i32, i32, i32)> = (0..6).map(|k| (72, 112 + k * 82, 700, 82)).collect();
+        let t0 = Instant::now();
+        for enter in [Enter::Push, Enter::Pop, Enter::Fade, Enter::Rise { from_y: 400 }] {
+            let tr = Transition { enter, at: t0, top: 112 };
+            for at in [0, 16, 33, 50, 83, 116, 150, 300] {
+                let now = t0 + ms(at);
+                let pair = old_and_new(640, 480, |c| {
+                    page(c, &mut t);
+                    tr.apply(c, now, 0x1b1712, &rows);
+                });
+                let (share, worst) = apart(&pair);
+                // Only edges a half screen pixel apart (an odd slide is rounded to the screen's grid); the fade the same.
+                assert!(share < 0.02, "{enter:?} at {at} ms: {:.2} % of the pixels apart", share * 100.0);
+                if !tr.active(now) || matches!(enter, Enter::Fade) {
+                    assert!(worst <= 3, "{enter:?} at {at} ms: {worst} steps apart where nothing moves");
+                }
+                if !tr.active(now) {
+                    assert_eq!(pair.0, pair.1, "over: the page itself, Departure Mono bit for bit");
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn painted_natively_a_toast_fading_in_looks_as_before() {
+        at_level(Motion::Full);
+        let mut t = crate::text::Text::builtin().pinned_to(crate::font_style::FontStyle::Retro);
+        for alpha in [0u8, 40, 128, 200, 255] {
+            for (x, y) in [(400, 300), (401, 301)] {
+                let pair = old_and_new(640, 480, |c| {
+                    page(c, &mut t);
+                    layer(c, x, y, 480, 120, alpha, |c| {
+                        c.round_rect(x, y, 480, 120, 30, 0x302a22);
+                        t.draw(c, crate::text::Face::Body, 28, x + 30, y + 72, 0xffffff, "Volume 8");
+                    });
+                });
+                let (share, worst) = apart(&pair);
+                assert!(share == 0.0 && worst <= 3, "alpha {alpha} at {x},{y}: {:.2} %, {worst} steps", share * 100.0);
+            }
+        }
     }
 }
 

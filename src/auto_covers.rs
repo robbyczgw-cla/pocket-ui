@@ -1,10 +1,10 @@
 //! Cover art without asking: when Wi-Fi is up and games have no box art yet, `covers::scrape` runs in the
 //! background (after the first start's Wi-Fi step, at boot once online, and when the library finds new games).
 //! It is quiet: a small note on the shelf at most, never while a game runs (it would take CPU and network from
-//! the game), and a game that starts stops it after the cover it is on. Settings > Extras > Cover art stays the
+//! the game), and a game that starts stops it after the cover it is on. Settings > Games > Box art & downloads > Cover art stays the
 //! way to ask for it by hand.
 //!
-//! With Settings > Games > Extras > Game pictures on (the default) the same run goes on to the games'
+//! With Settings > Games > Box art & downloads > Game pictures on (the default) the same run goes on to the games'
 //! screenshots and title screens once the box art is done (`game_pictures`): the same rules, the same note on the
 //! shelf ("Pictures 3 of 40" for that part).
 

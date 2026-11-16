@@ -10,7 +10,7 @@ fn classic_welcome_is_readable_and_fan_rows_are_read_only() {
     let _stub = Stub(Command::new("python3").args(["-I", &format!("{ROOT}/scripts/wayland-stub.py"), socket.to_str().unwrap()]).spawn().unwrap());
     test_clock::wait_for(|| socket.exists(), std::time::Duration::from_secs(2), "Wayland stub");
     let bin = std::env::var_os("POCKETUI_NAV_BINARY").map(PathBuf::from).unwrap_or_else(|| PathBuf::from(env!("CARGO_BIN_EXE_pocket-ui")));
-    for lang in ["en", "de", "es", "pt"] {
+    for lang in ["en", "de", "es", "pt", "fr", "it"] {
         for size in ["normal", "medium", "large"] {
             for state in ["setup:first", "perf"] {
                 let misses = tmp.path().join("misses");

@@ -10,17 +10,21 @@
 //! * Entries that give no code but a memory address and a value (RetroArch's newer cht format, `cheatN_address`)
 //!   are not applied: `retro_cheat_set` only takes codes, and a memory write would need each core's memory map
 //!   (`docs/HOST.md`, Cheats). They are counted, and the Cheats page says so.
+//! * A player's own `.cht` for a game (`read_own`): beside the game, in a `cheats` folder there, or in the
+//!   RetroArch layout `cheats/<system, core or database folder>/` of the folder above. Its cheats come first,
+//!   marked "[Your file]", then the database's; what is on is remembered the same way. A file that can't be used
+//!   (over 256 KiB, unreadable, nothing in it) is said on the page, never a crash and never a silent gap.
 //! * `active_codes` is what pocket-core hands to the core with `retro_cheat_reset` / `retro_cheat_set`,
 //!   at the start of a game and after every change.
 
 use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 
-#[cfg(not(target_os = "android"))]
+#[cfg(not(all(target_os = "android", not(feature = "handheld"))))]
 use crate::control;
-#[cfg(not(target_os = "android"))]
+#[cfg(not(all(target_os = "android", not(feature = "handheld"))))]
 use crate::emu_menu::Row;
-#[cfg(target_os = "android")]
+#[cfg(all(target_os = "android", not(feature = "handheld")))]
 pub struct Row { pub name: String, pub value: String, pub desc: String }
 
 #[derive(Clone, PartialEq, Eq, Debug)]
@@ -352,11 +356,49 @@ pub fn find(system: &str, rom: &Path, roots: &[PathBuf]) -> Vec<Cheat> {
 
 /// `find`, and how many different entries of those files can't be applied (`Parsed::unsupported`).
 pub fn find_all(system: &str, rom: &Path, roots: &[PathBuf]) -> (Vec<Cheat>, usize) {
-    let Some(folder) = folder(system) else { return (Vec::new(), 0) };
+    let c = collect(system, rom, roots);
+    (c.cheats, c.unsupported)
+}
+
+/// Everything a game's Cheats page is made of.
+pub struct Collected {
+    /// The player's own file's cheats (labelled `[Your file]`), then the database's.
+    pub cheats: Vec<Cheat>,
+    /// How many of the first `cheats` are the player's.
+    pub own: usize,
+    pub unsupported: usize,
+    /// Why the player's own file for this game is not on the list; None when there is none or it is used.
+    pub problem: Option<Unusable>,
+}
+
+pub fn collect(system: &str, rom: &Path, roots: &[PathBuf]) -> Collected {
+    let (mut cheats, mut unsupported, mut problem) = (Vec::new(), BTreeSet::new(), None);
+    match read_own(system, rom) {
+        Some(Own::Parsed(p)) => {
+            cheats = p.cheats.into_iter().map(|c| Cheat { desc: format!("{} {OWN_LABEL}", c.desc), code: c.code }).collect();
+            unsupported.extend(p.unsupported);
+        }
+        Some(Own::Unusable(u)) => problem = Some(u),
+        None => {}
+    }
+    let own = cheats.len();
+    let db = database(system, rom, roots);
+    for c in db.0 {
+        if !cheats.iter().any(|x| x.code.eq_ignore_ascii_case(&c.code)) {
+            cheats.push(c);
+        }
+    }
+    unsupported.extend(db.1);
+    Collected { cheats, own, unsupported: unsupported.len(), problem }
+}
+
+/// The cheats of the database under `roots` for `rom`, and its entries that can't be applied.
+fn database(system: &str, rom: &Path, roots: &[PathBuf]) -> (Vec<Cheat>, BTreeSet<String>) {
+    let Some(folder) = folder(system) else { return (Vec::new(), BTreeSet::new()) };
     let stem = rom.file_stem().and_then(|s| s.to_str()).unwrap_or_default();
     let want = base(stem);
     if want.is_empty() {
-        return (Vec::new(), 0);
+        return (Vec::new(), BTreeSet::new());
     }
     let rom_regions = regions(&tags(stem));
     for root in roots {
@@ -402,9 +444,130 @@ pub fn find_all(system: &str, rom: &Path, roots: &[PathBuf]) -> (Vec<Cheat>, usi
                 all.push(c);
             }
         }
-        return (all, unsupported.len());
+        return (all, unsupported);
     }
-    (Vec::new(), 0)
+    (Vec::new(), BTreeSet::new())
+}
+
+// ---- the player's own file ------------------------------------------------------------------------------
+
+/// The most a player's own cheat file may hold (the same as the Android view's sidecar).
+pub const OWN_MAX: u64 = 262_144;
+/// What marks a cheat of the player's own file in the list.
+const OWN_LABEL: &str = "[Your file]";
+
+/// Why a game's own `.cht` is not on the list.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum Unusable {
+    /// More than `OWN_MAX` bytes: not a cheat list.
+    TooBig,
+    /// It is there but could not be read.
+    Unreadable,
+    /// Read, but no cheat line in it (a text of something else, a file cut short).
+    Empty,
+}
+
+pub enum Own {
+    Parsed(Parsed),
+    Unusable(Unusable),
+}
+
+/// The name as letters and digits only, lower case: "Nintendo - Game Boy Advance" and "nintendo game boy advance" agree.
+fn plain(name: &str) -> String {
+    name.chars().filter(|c| c.is_alphanumeric()).flat_map(char::to_lowercase).collect()
+}
+
+/// The folder `name` inside `dir`, any case.
+fn child_dir(dir: &Path, name: &str) -> Option<PathBuf> {
+    let exact = dir.join(name);
+    if exact.is_dir() {
+        return Some(exact);
+    }
+    std::fs::read_dir(dir).ok()?.flatten().find(|e| e.file_name().to_str().is_some_and(|n| n.eq_ignore_ascii_case(name)) && e.path().is_dir()).map(|e| e.path())
+}
+
+#[cfg(not(all(target_os = "android", not(feature = "handheld"))))]
+fn core_name(system: &str) -> Option<&'static str> {
+    crate::hostsys::find(system).map(|h| h.core).or_else(|| crate::hostsys::HANDHELD_CORES.iter().find(|(s, _)| *s == system).map(|(_, c)| *c))
+}
+#[cfg(all(target_os = "android", not(feature = "handheld")))]
+fn core_name(_system: &str) -> Option<&'static str> {
+    None
+}
+
+/// Where a player may keep `.cht` files for the games of this folder, best first: beside the game, in a `cheats` folder
+/// there, and RetroArch's layout one folder up: `cheats/<system, core or database folder>/` (RetroArch names it by core,
+/// "mGBA", the database by console, "Nintendo - Game Boy Advance"; the ROM folder's name works too).
+fn own_dirs(system: &str, rom: &Path) -> Vec<PathBuf> {
+    let Some(dir) = rom.parent() else { return Vec::new() };
+    let mut out = vec![dir.to_path_buf()];
+    out.extend(child_dir(dir, "cheats"));
+    if let Some(shared) = dir.parent().and_then(|up| child_dir(up, "cheats")) {
+        let mut wants = vec![plain(system), plain(folder(system).unwrap_or_default())];
+        wants.extend(dir.file_name().and_then(|n| n.to_str()).map(plain));
+        wants.extend(core_name(system).map(plain));
+        wants.retain(|w| !w.is_empty());
+        if let Ok(entries) = std::fs::read_dir(&shared) {
+            let mut subs: Vec<PathBuf> = entries
+                .flatten()
+                .filter(|e| e.path().is_dir() && e.file_name().to_str().is_some_and(|n| wants.contains(&plain(n))))
+                .map(|e| e.path())
+                .collect();
+            subs.sort();
+            out.extend(subs);
+        }
+    }
+    out
+}
+
+/// The `.cht` with the game's name in `dir` (extension and name in any case; the exact spelling first).
+fn own_in(dir: &Path, stem: &str) -> Option<PathBuf> {
+    let mut found: Vec<PathBuf> = std::fs::read_dir(dir)
+        .ok()?
+        .flatten()
+        .map(|e| e.path())
+        .filter(|p| {
+            p.extension().is_some_and(|x| x.eq_ignore_ascii_case("cht"))
+                && p.file_stem().and_then(|s| s.to_str()).is_some_and(|s| s.eq_ignore_ascii_case(stem))
+                && p.is_file()
+        })
+        .collect();
+    found.sort_by_key(|p| (p.file_stem().and_then(|s| s.to_str()) != Some(stem), p.clone()));
+    found.into_iter().next()
+}
+
+/// The player's own cheat file for `rom` (the first place that has one).
+pub fn own_file(system: &str, rom: &Path) -> Option<PathBuf> {
+    let stem = rom.file_stem()?.to_str()?;
+    own_dirs(system, rom).iter().find_map(|d| own_in(d, stem))
+}
+
+/// What the player's own `.cht` for `rom` gives: its cheats, why it can't be used, or None when there is none.
+/// Reads at most `OWN_MAX` bytes; never fails loudly.
+pub fn read_own(system: &str, rom: &Path) -> Option<Own> {
+    let path = own_file(system, rom)?;
+    Some(match std::fs::metadata(&path) {
+        Ok(m) if m.len() > OWN_MAX => Own::Unusable(Unusable::TooBig),
+        Ok(_) => match std::fs::read(&path) {
+            Ok(bytes) if bytes.len() as u64 > OWN_MAX => Own::Unusable(Unusable::TooBig),
+            Ok(bytes) => {
+                let parsed = parse_cht_full(&String::from_utf8_lossy(&bytes));
+                if parsed.cheats.is_empty() && parsed.unsupported.is_empty() { Own::Unusable(Unusable::Empty) } else { Own::Parsed(parsed) }
+            }
+            Err(_) => Own::Unusable(Unusable::Unreadable),
+        },
+        Err(_) => Own::Unusable(Unusable::Unreadable),
+    })
+}
+
+/// The page's line for a file of the player's that is not on the list. Plain words: what, why, what happens instead.
+fn unusable_row(why: Unusable) -> Row {
+    let (name, desc) = match why {
+        Unusable::TooBig => ("Your cheat file is too big", "A cheat file can be up to 256 KB. Yours is larger, so it was left out."),
+        Unusable::Unreadable => ("Your cheat file can't be read", "pocket-ui found a .cht file for this game but could not open it, so it was left out."),
+        Unusable::Empty => ("Your cheat file has no cheats in it", "pocket-ui found a .cht file for this game but no cheat lines in it (cheat0_desc and cheat0_code), so it was left out."),
+    };
+    Row { name: name.into(), value: String::new(), desc: desc.into() }
 }
 
 // ---- what is on, per game ----------------------------------------------------------------------------
@@ -494,13 +657,15 @@ pub struct CheatMenu {
     cheats: Vec<Cheat>,
     /// Entries of the game's files that give no code (`Parsed::unsupported`): said on the page, never applied.
     unsupported: usize,
+    /// Why the player's own `.cht` for this game is not used: said in the page's first line.
+    problem: Option<Unusable>,
     keys: Vec<String>,
     on: BTreeSet<String>,
     store: PathBuf,
     notify: bool,
-    #[cfg(not(target_os = "android"))]
+    #[cfg(not(all(target_os = "android", not(feature = "handheld"))))]
     download: Option<crate::cheat_download::Page>,
-    #[cfg(not(target_os = "android"))]
+    #[cfg(not(all(target_os = "android", not(feature = "handheld"))))]
     request: Option<crate::cheat_download::Request>,
 }
 
@@ -519,7 +684,7 @@ impl CheatMenu {
         Self::load_in(data_dir, system, rom, &roots, true)
     }
 
-    #[cfg(not(target_os = "android"))]
+    #[cfg(not(all(target_os = "android", not(feature = "handheld"))))]
     fn pending(request: crate::cheat_download::Request) -> Self {
         let mut menu = Self::empty();
         menu.download = Some(crate::cheat_download::Page::new(request.clone()));
@@ -528,26 +693,26 @@ impl CheatMenu {
     }
 
     /// Workers and fixtures only: inspecting database files never belongs to menu navigation.
-    #[cfg(not(target_os = "android"))]
+    #[cfg(not(all(target_os = "android", not(feature = "handheld"))))]
     pub fn optional(request: crate::cheat_download::Request) -> Self {
         let mut menu = Self::load_in(&request.data, &request.system, &request.rom, &request.roots, true).unwrap_or_else(Self::empty);
         // The worker checks installed databases before any network access, including unmatched games.
-        if menu.cheats.is_empty() && menu.unsupported == 0 && folder(&request.system).is_some()
-            && !crate::cheat_download::installed(&request.roots) {
+        // Without a database the cheats found are the player's own file's: the download is still offered, below them.
+        if folder(&request.system).is_some() && !crate::cheat_download::installed(&request.roots) {
             menu.download = Some(crate::cheat_download::Page::new(request.clone()));
         }
         menu.request = Some(request);
         menu
     }
 
-    #[cfg(not(target_os = "android"))]
+    #[cfg(not(all(target_os = "android", not(feature = "handheld"))))]
     pub fn download_snapshot(state: &str) -> Self {
         let mut menu = Self::empty();
         menu.download = Some(crate::cheat_download::Page::snapshot(state));
         menu
     }
 
-    #[cfg(not(target_os = "android"))]
+    #[cfg(not(all(target_os = "android", not(feature = "handheld"))))]
     pub fn open(&mut self) {
         // Extras may have installed, updated or removed data since this pause menu was built.
         if let Some(request) = self.request.clone() {
@@ -556,39 +721,66 @@ impl CheatMenu {
             self.download = Some(page);
         }
     }
-    #[cfg(not(target_os = "android"))]
+    #[cfg(not(all(target_os = "android", not(feature = "handheld"))))]
     pub fn close(&mut self) { if let Some(download) = &mut self.download { download.stop(); } }
-    #[cfg(not(target_os = "android"))]
+    #[cfg(not(all(target_os = "android", not(feature = "handheld"))))]
     pub(crate) fn download_size(&mut self, size: u64) {
         if let Some(download) = &mut self.download { download.set_size(size); }
     }
-    #[cfg(not(target_os = "android"))]
+    #[cfg(not(all(target_os = "android", not(feature = "handheld"))))]
     pub fn downloading(&self) -> bool { self.download.as_ref().is_some_and(|d| d.busy()) }
-    #[cfg(not(target_os = "android"))]
-    pub fn download_page(&self) -> bool { self.download.is_some() }
+    #[cfg(not(all(target_os = "android", not(feature = "handheld"))))]
+    pub fn download_page(&self) -> bool { self.alone() }
+
+    /// Whether row `sel` is the download (A starts it; Left and Right don't).
+    #[cfg(not(all(target_os = "android", not(feature = "handheld"))))]
+    pub fn on_download_row(&self, sel: usize) -> bool { self.alone() || self.get_at() == Some(sel) }
+
+    /// The page is the download row alone: nothing of this game to list yet.
+    #[cfg(not(all(target_os = "android", not(feature = "handheld"))))]
+    fn alone(&self) -> bool {
+        self.download.is_some() && self.cheats.is_empty() && self.unsupported == 0 && self.problem.is_none()
+    }
+    #[cfg(all(target_os = "android", not(feature = "handheld")))]
+    fn alone(&self) -> bool { false }
+
+    /// The row of the download below the game's cheats (the player's own file, no database yet): None when it is
+    /// the page's only row, when there is no download, or while it is only checking what is installed.
+    #[cfg(not(all(target_os = "android", not(feature = "handheld"))))]
+    fn get_at(&self) -> Option<usize> {
+        let d = self.download.as_ref().filter(|d| !self.alone() && d.status().0 != "checking")?;
+        let _ = d;
+        Some(self.rows_before_download())
+    }
+    #[cfg(all(target_os = "android", not(feature = "handheld")))]
+    fn get_at(&self) -> Option<usize> { None }
+
+    fn rows_before_download(&self) -> usize {
+        self.lead() + self.cheats.len() + usize::from(!self.cheats.is_empty()) + usize::from(self.unsupported > 0)
+    }
     /// Called only while the worker is active; no file or network work on the UI thread.
-    #[cfg(not(target_os = "android"))]
+    #[cfg(not(all(target_os = "android", not(feature = "handheld"))))]
     pub fn poll_download(&mut self) {
         if let Some(menu) = self.download.as_mut().and_then(|d| d.poll()) { *self = menu; }
     }
 
-    #[cfg(not(target_os = "android"))]
+    #[cfg(not(all(target_os = "android", not(feature = "handheld"))))]
     pub fn download_status(&self) -> (&'static str, u64, u64) {
         self.download.as_ref().map_or((if self.cheats.is_empty() && self.unsupported == 0 { "empty" } else { "ready" }, 0, 0), |d| d.status())
     }
 
     /// Keep the page discoverable on a card even when this game has no database entry.
     pub fn empty() -> Self {
-        Self { cheats: Vec::new(), unsupported: 0, keys: Vec::new(), on: BTreeSet::new(), store: PathBuf::new(), notify: false,
-            #[cfg(not(target_os = "android"))]
+        Self { cheats: Vec::new(), unsupported: 0, problem: None, keys: Vec::new(), on: BTreeSet::new(), store: PathBuf::new(), notify: false,
+            #[cfg(not(all(target_os = "android", not(feature = "handheld"))))]
             download: None,
-            #[cfg(not(target_os = "android"))]
+            #[cfg(not(all(target_os = "android", not(feature = "handheld"))))]
             request: None }
     }
 
     pub fn load_in(data_dir: &Path, system: &str, rom: &Path, roots: &[PathBuf], notify: bool) -> Option<CheatMenu> {
-        let (cheats, unsupported) = find_all(system, rom, roots);
-        if cheats.is_empty() && unsupported == 0 {
+        let Collected { cheats, unsupported, problem, .. } = collect(system, rom, roots);
+        if cheats.is_empty() && unsupported == 0 && problem.is_none() {
             return None;
         }
         let keys = keys(&cheats);
@@ -597,13 +789,14 @@ impl CheatMenu {
         Some(CheatMenu {
             cheats,
             unsupported,
+            problem,
             keys,
             on,
             store: store_path(data_dir, system, rom),
             notify,
-            #[cfg(not(target_os = "android"))]
+            #[cfg(not(all(target_os = "android", not(feature = "handheld"))))]
             download: None,
-            #[cfg(not(target_os = "android"))]
+            #[cfg(not(all(target_os = "android", not(feature = "handheld"))))]
             request: None,
         })
     }
@@ -615,10 +808,10 @@ impl CheatMenu {
         let keys = keys(&parsed.cheats);
         let saved = crate::fsutil::read_json_or_backup::<serde_json::Value>(&store);
         let on = saved.and_then(|v| serde_json::from_value::<BTreeSet<String>>(v["on"].clone()).ok()).unwrap_or_default().into_iter().filter(|k| keys.contains(k)).collect();
-        Some(Self { cheats: parsed.cheats, unsupported: parsed.unsupported.len(), keys, on, store, notify: false,
-            #[cfg(not(target_os = "android"))]
+        Some(Self { cheats: parsed.cheats, unsupported: parsed.unsupported.len(), problem: None, keys, on, store, notify: false,
+            #[cfg(not(all(target_os = "android", not(feature = "handheld"))))]
             download: None,
-            #[cfg(not(target_os = "android"))]
+            #[cfg(not(all(target_os = "android", not(feature = "handheld"))))]
             request: None })
     }
 
@@ -630,6 +823,7 @@ impl CheatMenu {
     /// A failed write leaves both the visible switch and the running core unchanged.
     pub fn try_press(&mut self, sel: usize) -> Result<bool, &'static str> {
         if !self.actionable(sel) { return Ok(false); }
+        let sel = sel - self.lead();
         let before = self.on.clone();
         if sel == self.cheats.len() { self.on.clear(); }
         else if !self.on.remove(&self.keys[sel]) { self.on.insert(self.keys[sel].clone()); }
@@ -643,9 +837,9 @@ impl CheatMenu {
 
     /// The cheats, then "All off" (when there are cheats), then the line about those that can't be applied.
     pub fn count(&self) -> usize {
-        #[cfg(not(target_os = "android"))]
-        if self.download.is_some() { return 1; }
-        (self.cheats.len() + usize::from(!self.cheats.is_empty()) + usize::from(self.unsupported > 0)).max(1)
+        #[cfg(not(all(target_os = "android", not(feature = "handheld"))))]
+        if self.alone() { return 1; }
+        (self.rows_before_download() + usize::from(self.get_at().is_some())).max(1)
     }
 
     /// How many entries of the game's files pocket-core can't apply (the last line of the page says so).
@@ -653,11 +847,18 @@ impl CheatMenu {
         self.unsupported
     }
 
+    /// The line about the player's own file that could not be used comes first; the rows after it shift by one.
+    fn lead(&self) -> usize {
+        usize::from(self.problem.is_some())
+    }
+
     /// Whether this row offers a switch rather than an explanation only.
     pub fn actionable(&self, sel: usize) -> bool {
-        #[cfg(not(target_os = "android"))]
-        if let Some(download) = &self.download { return !download.busy(); }
-        !self.cheats.is_empty() && sel <= self.cheats.len()
+        #[cfg(not(all(target_os = "android", not(feature = "handheld"))))]
+        if let Some(download) = &self.download {
+            if self.alone() || self.get_at() == Some(sel) { return !download.busy(); }
+        }
+        sel.checked_sub(self.lead()).is_some_and(|i| !self.cheats.is_empty() && i <= self.cheats.len())
     }
 
     pub fn enabled(&self) -> usize {
@@ -665,16 +866,18 @@ impl CheatMenu {
     }
 
     pub fn rows(&self) -> Vec<Row> {
-        #[cfg(not(target_os = "android"))]
-        if let Some(download) = &self.download { return vec![download.row()]; }
-        if self.cheats.is_empty() && self.unsupported == 0 {
+        #[cfg(not(all(target_os = "android", not(feature = "handheld"))))]
+        #[cfg(not(all(target_os = "android", not(feature = "handheld"))))]
+        if let Some(download) = self.download.as_ref().filter(|_| self.alone()) { return vec![download.row()]; }
+        if self.cheats.is_empty() && self.unsupported == 0 && self.problem.is_none() {
             return vec![Row {
                 name: "No cheats found for this game".into(),
                 value: String::new(),
                 desc: "The cheat database has no matching codes. You can keep playing normally.".into(),
             }];
         }
-        let mut rows: Vec<Row> = self
+        let mut rows: Vec<Row> = self.problem.map(unusable_row).into_iter().collect();
+        rows.extend(self
             .cheats
             .iter()
             .zip(&self.keys)
@@ -689,8 +892,7 @@ impl CheatMenu {
                     value: if self.on.contains(k) { "On" } else { "Off" }.into(),
                     desc: format!("Code {code}\nA turns it on or off. What is on is remembered for this game."),
                 }
-            })
-            .collect();
+            }));
         if !self.cheats.is_empty() {
             rows.push(Row {
                 name: "All off".into(),
@@ -701,17 +903,25 @@ impl CheatMenu {
         if self.unsupported > 0 {
             rows.push(unsupported_row(self.unsupported));
         }
+        #[cfg(not(all(target_os = "android", not(feature = "handheld"))))]
+        if let Some(download) = self.download.as_ref().filter(|_| self.get_at().is_some()) {
+            rows.push(download.row());
+        }
         rows
     }
 
     /// A on a line (or Left/Right): flips a cheat, or switches all off on the last line. Stores the
     /// change and tells pocket-core. False when nothing changed.
     pub fn press(&mut self, sel: usize) -> bool {
-        #[cfg(not(target_os = "android"))]
-        if let Some(download) = &mut self.download {
-            if sel == 0 { download.start(); }
+        #[cfg(not(all(target_os = "android", not(feature = "handheld"))))]
+        #[cfg(not(all(target_os = "android", not(feature = "handheld"))))]
+        if self.download.is_some() && self.on_download_row(sel) {
+            if sel == self.get_at().unwrap_or(0) {
+                if let Some(download) = &mut self.download { download.start(); }
+            }
             return false;
         }
+        let Some(sel) = sel.checked_sub(self.lead()) else { return false };
         if sel < self.cheats.len() {
             let k = self.keys[sel].clone();
             if !self.on.remove(&k) {
@@ -724,7 +934,7 @@ impl CheatMenu {
             self.on.clear();
         }
         save_on(&self.store, &self.on);
-        #[cfg(not(target_os = "android"))]
+        #[cfg(not(all(target_os = "android", not(feature = "handheld"))))]
         if self.notify { control::pocket_core("cheats"); }
         true
     }
@@ -1064,5 +1274,218 @@ cheat0_desc = \"Rumble on energy loss\"\ncheat0_handler = \"1\"\ncheat0_rumble_t
         assert!(!m.press(0), "nothing to switch");
         assert!(active_codes_in(&data, "atarilynx", rom, std::slice::from_ref(&dbdir.to_path_buf())).is_empty());
         assert!(!store_path(&data, "atarilynx", rom).exists());
+    }
+
+    // ---- the player's own file (GitHub issue #4) ---------------------------------------------------------
+
+    const MINE: &str = "cheat0_desc = \"Mine: Infinite Lives\"\ncheat0_code = \"MINE0001\"\ncheat1_desc = \"Mine: Full Energy\"\ncheat1_code = \"MINE0002\"\n\
+cheat2_desc = \"Mine: Coins\"\ncheat2_address = \"100\"\ncheat2_value = \"9\"\ncheat2_cheat_type = \"1\"\n";
+    const THEIRS: &str = "cheat0_desc = \"Infinite Lives\"\ncheat0_code = \"DB000001\"\ncheat1_desc = \"Same as mine\"\ncheat1_code = \"mine0001\"\n";
+
+    /// A roms folder with one GBA game and a database with cheats for it.
+    struct Card {
+        root: crate::testutil::TestDir,
+        db: PathBuf,
+        data: PathBuf,
+        rom: PathBuf,
+    }
+
+    fn card(tag: &str) -> Card {
+        let root = scratch(tag);
+        let rom = root.join("roms/gba/Game (USA).gba");
+        std::fs::create_dir_all(root.join("roms/gba")).unwrap();
+        std::fs::write(&rom, b"rom").unwrap();
+        db(&root.join("db"), "Nintendo - Game Boy Advance", &[("Game (USA).cht", THEIRS)]);
+        Card { db: root.join("db"), data: root.join("data"), rom, root }
+    }
+
+    impl Card {
+        fn menu(&self) -> Option<CheatMenu> {
+            CheatMenu::load_in(&self.data, "gba", &self.rom, std::slice::from_ref(&self.db), false)
+        }
+        fn put(&self, rel: &str, body: impl AsRef<[u8]>) {
+            let p = self.root.join(rel);
+            std::fs::create_dir_all(p.parent().unwrap()).unwrap();
+            std::fs::write(p, body).unwrap();
+        }
+        fn names(&self) -> Vec<String> {
+            self.menu().unwrap().rows().into_iter().map(|r| r.name).collect()
+        }
+    }
+
+    #[test]
+    fn a_cht_beside_the_game_is_listed_first_as_your_file_then_the_database_ones() {
+        let c = card("own-beside");
+        assert_eq!(c.names(), ["Infinite Lives", "Same as mine", "All off"], "before: the database alone");
+        c.put("roms/gba/Game (USA).cht", MINE);
+        let m = c.menu().unwrap();
+        let rows = m.rows();
+        assert_eq!(
+            rows.iter().map(|r| r.name.as_str()).collect::<Vec<_>>(),
+            ["Mine: Infinite Lives [Your file]", "Mine: Full Energy [Your file]", "Infinite Lives", "All off", "1 cheat uses a format pocket-core can't apply yet"],
+            "own first, marked; the database's cheat with the same code as one of mine once; the memory write is counted"
+        );
+        assert_eq!(m.count(), rows.len());
+        assert_eq!(m.unsupported(), 1);
+        assert!(rows[0].desc.contains("MINE0001"));
+    }
+
+    #[test]
+    fn the_name_and_the_extension_of_the_file_may_be_in_any_case() {
+        for name in ["GAME (USA).CHT", "game (usa).cht", "Game (USA).Cht"] {
+            let c = card("own-case");
+            c.put(&format!("roms/gba/{name}"), MINE);
+            assert_eq!(c.names()[0], "Mine: Infinite Lives [Your file]", "{name}");
+            assert_eq!(own_file("gba", &c.rom).unwrap().file_name().unwrap().to_str().unwrap(), name);
+        }
+        // The exact spelling wins over another case.
+        let c = card("own-case-two");
+        c.put("roms/gba/GAME (USA).cht", "cheat0_desc = \"Other\"\ncheat0_code = \"OTHER001\"\n");
+        c.put("roms/gba/Game (USA).cht", MINE);
+        assert_eq!(c.names()[0], "Mine: Infinite Lives [Your file]");
+    }
+
+    #[test]
+    fn a_cheats_folder_is_looked_in_too_the_retroarch_way() {
+        // Another game's file, and another system's folder, are not this game's.
+        let c = card("own-folders");
+        c.put("roms/gba/Other Game.cht", MINE);
+        c.put("roms/cheats/snes/Game (USA).cht", MINE);
+        c.put("roms/cheats/gba/Game (USA).txt", MINE);
+        assert_eq!(c.names()[0], "Infinite Lives");
+        for rel in [
+            "roms/gba/cheats/Game (USA).cht",
+            "roms/gba/Cheats/Game (USA).cht",
+            "roms/cheats/gba/Game (USA).cht",
+            "roms/Cheats/GBA/Game (USA).cht",
+            "roms/cheats/mGBA/Game (USA).cht",
+            "roms/cheats/Nintendo - Game Boy Advance/Game (USA).cht",
+        ] {
+            let c = card("own-folders-one");
+            c.put(rel, MINE);
+            assert_eq!(c.names()[0], "Mine: Infinite Lives [Your file]", "{rel}");
+        }
+        // Beside the game wins over a cheats folder.
+        let c = card("own-folders-order");
+        c.put("roms/cheats/gba/Game (USA).cht", "cheat0_desc = \"Far\"\ncheat0_code = \"FAR00001\"\n");
+        c.put("roms/gba/Game (USA).cht", MINE);
+        assert_eq!(c.names()[0], "Mine: Infinite Lives [Your file]");
+    }
+
+    #[test]
+    fn a_game_without_a_database_entry_or_system_folder_still_has_its_own_file() {
+        let c = card("own-nodb");
+        let rom = c.root.join("roms/scummvm/Monkey.svm");
+        std::fs::create_dir_all(c.root.join("roms/scummvm")).unwrap();
+        std::fs::write(&rom, b"x").unwrap();
+        assert!(CheatMenu::load_in(&c.data, "scummvm", &rom, std::slice::from_ref(&c.db), false).is_none(), "nothing: no page");
+        c.put("roms/scummvm/Monkey.cht", MINE);
+        let m = CheatMenu::load_in(&c.data, "scummvm", &rom, std::slice::from_ref(&c.db), false).expect("a page for the player's file");
+        assert_eq!(m.rows().len(), 4, "two cheats, All off, the memory-write line");
+    }
+
+    #[test]
+    fn the_on_off_memory_is_the_same_as_for_the_database() {
+        let c = card("own-memory");
+        c.put("roms/gba/Game (USA).cht", MINE);
+        let mut m = c.menu().unwrap();
+        assert!(m.press(1), "my second cheat on");
+        assert!(m.press(2), "the database's on");
+        assert_eq!(m.rows()[1].value, "On");
+        let roots = std::slice::from_ref(&c.db);
+        assert_eq!(active_codes_in(&c.data, "gba", &c.rom, roots), ["MINE0002", "DB000001"], "what pocket-core hands to the core: mine first");
+        assert_eq!(c.menu().unwrap().enabled(), 2, "remembered for the game");
+        // The file goes: its On drops out of the page and the core gets only the database's.
+        std::fs::remove_file(c.root.join("roms/gba/Game (USA).cht")).unwrap();
+        assert_eq!(active_codes_in(&c.data, "gba", &c.rom, roots), ["DB000001"]);
+        assert_eq!(c.menu().unwrap().enabled(), 1);
+        // Back again: its names are the same, so is the memory (the database's own On is untouched).
+        c.put("roms/gba/Game (USA).cht", MINE);
+        assert_eq!(active_codes_in(&c.data, "gba", &c.rom, roots), ["MINE0002", "DB000001"]);
+    }
+
+    #[test]
+    fn a_file_of_exactly_256_kib_is_read_one_byte_more_is_explained() {
+        let c = card("own-size");
+        let mut body = MINE.as_bytes().to_vec();
+        body.resize(OWN_MAX as usize, b'\n');
+        c.put("roms/gba/Game (USA).cht", &body);
+        assert_eq!(c.names()[0], "Mine: Infinite Lives [Your file]");
+        body.push(b'\n');
+        c.put("roms/gba/Game (USA).cht", &body);
+        let mut m = c.menu().unwrap();
+        let rows = m.rows();
+        assert_eq!(rows[0].name, "Your cheat file is too big");
+        assert!(rows[0].desc.contains("256 KB"));
+        assert_eq!(rows.len(), m.count());
+        assert_eq!(rows.len(), 4, "the explanation, then the database's cheats and All off as before");
+        assert!(!m.actionable(0) && m.actionable(1) && m.actionable(3) && !m.actionable(4));
+        assert!(!m.press(0), "the explanation switches nothing");
+        assert!(m.press(1), "the first row after it is the first cheat");
+        assert_eq!(active_codes_in(&c.data, "gba", &c.rom, std::slice::from_ref(&c.db)), ["DB000001"]);
+        assert!(m.press(3) && m.enabled() == 0, "All off is still All off");
+    }
+
+    #[test]
+    fn a_broken_file_is_explained_on_the_page_never_a_crash_or_a_silent_gap() {
+        let junk: Vec<(&str, Vec<u8>, Unusable)> = vec![
+            ("empty", Vec::new(), Unusable::Empty),
+            ("text", b"This is my shopping list.\nEggs\n".to_vec(), Unusable::Empty),
+            ("binary", (0..=255u8).cycle().take(5000).collect(), Unusable::Empty),
+            ("cut", b"cheat0_desc = \"Half a li".to_vec(), Unusable::Empty),
+            ("no number", b"cheat_desc = \"x\"\ncheat_code = \"y\"\ncheatx_code = \"z\"\n".to_vec(), Unusable::Empty),
+            ("rumble only", b"cheat0_desc = \"Rumble\"\ncheat0_address = \"1\"\ncheat0_value = \"2\"\ncheat0_cheat_type = \"0\"\n".to_vec(), Unusable::Empty),
+            ("huge number", b"cheat99999999999999999999_desc = \"x\"\n".to_vec(), Unusable::Empty),
+        ];
+        for (what, body, why) in junk {
+            let c = card("own-broken");
+            c.put("roms/gba/Game (USA).cht", &body);
+            let mut m = c.menu().unwrap_or_else(|| panic!("{what}: the page is there"));
+            assert_eq!(m.rows().len(), m.count(), "{what}");
+            assert_eq!(m.rows()[0].name, "Your cheat file has no cheats in it", "{what}");
+            assert_eq!(read_own("gba", &c.rom).map(|o| matches!(o, Own::Unusable(u) if u == why)), Some(true), "{what}");
+            assert_eq!(m.rows()[1].name, "Infinite Lives", "{what}: the database's cheats follow");
+            assert!(m.press(1), "{what}");
+            assert!(!m.press(99) && !m.press(0));
+        }
+        // A folder that is called like a cheat file, and a file in the way of the cheats folder: no file, no crash.
+        let c = card("own-broken-dir");
+        std::fs::create_dir_all(c.root.join("roms/gba/Game (USA).cht")).unwrap();
+        c.put("roms/gba/cheats", "a file, not a folder");
+        assert_eq!(c.names()[0], "Infinite Lives");
+        // A link that leads nowhere is no file; a file the program may not open is explained.
+        let c = card("own-broken-link");
+        std::os::unix::fs::symlink("/nonexistent/x.cht", c.root.join("roms/gba/Game (USA).cht")).unwrap();
+        assert_eq!(c.names()[0], "Infinite Lives", "a dangling link is no file");
+        let c = card("own-broken-mode");
+        c.put("roms/gba/Game (USA).cht", MINE);
+        let file = c.root.join("roms/gba/Game (USA).cht");
+        std::fs::set_permissions(&file, std::os::unix::fs::PermissionsExt::from_mode(0o000)).unwrap();
+        if std::fs::read(&file).is_err() {
+            assert_eq!(c.names()[0], "Your cheat file can't be read");
+            assert_eq!(c.names()[1], "Infinite Lives");
+        }
+        // Only the player's broken file and no database: the explanation alone, still a page.
+        let c = card("own-broken-alone");
+        let rom = c.root.join("roms/scummvm/x.svm");
+        c.put("roms/scummvm/x.cht", "nothing");
+        let m = CheatMenu::load_in(&c.data, "scummvm", &rom, &[], false).unwrap();
+        assert_eq!((m.count(), m.rows()[0].name.as_str()), (1, "Your cheat file has no cheats in it"));
+        assert!(!m.actionable(0));
+    }
+
+    #[test]
+    fn own_file_with_invalid_utf8_and_odd_names_does_not_break_the_list() {
+        let c = card("own-utf8");
+        let mut body = b"cheat0_desc = \"Caf\xe9 Lives\"\ncheat0_code = \"CAFE0001\"\n".to_vec();
+        body.extend_from_slice(b"\xff\xfe\x00 junk\n");
+        c.put("roms/gba/Game (USA).cht", &body);
+        let names = c.names();
+        assert!(names[0].ends_with("Lives [Your file]"), "{names:?}");
+        // A duplicate name inside the file keeps its own switch.
+        c.put("roms/gba/Game (USA).cht", "cheat0_desc = \"A\"\ncheat0_code = \"A1\"\ncheat1_desc = \"A\"\ncheat1_code = \"A2\"\n");
+        let mut m = c.menu().unwrap();
+        assert!(m.press(1));
+        assert_eq!(active_codes_in(&c.data, "gba", &c.rom, std::slice::from_ref(&c.db)), ["A2"]);
     }
 }

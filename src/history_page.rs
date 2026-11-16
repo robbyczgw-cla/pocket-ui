@@ -375,8 +375,8 @@ pub fn paint_history(c: &mut Canvas, text: &mut Text, page: &HistoryPage, names:
     // On 768 lines the chart is 84 px high from 240 and the five slimmer rows start at 394, so the labels stay apart and
     // the fifth row ends above the hints.
     let on_768 = crate::kit::short_screen(c.h);
-    let short = if on_768 { 154 } else { (1080 - c.h).max(0) * 2 / 3 };
-    let (cx, cy, cw, ch) = if on_768 { (MARGIN + 72, 240, c.w - 2 * MARGIN - 72, 84) } else { (MARGIN + 72, 256, c.w - 2 * MARGIN - 72, 196 - short) };
+    let short = if on_768 { 188 } else { (1080 - c.h).max(0) * 2 / 3 };
+    let (cx, cy, cw, ch) = if on_768 { (MARGIN + 72, 240, c.w - 2 * MARGIN - 72, 54) } else { (MARGIN + 72, 256, c.w - 2 * MARGIN - 72, 196 - short) };
     let Some(s) = page.summary.as_ref() else {
         text.draw(c, Face::Body, 28, MARGIN, 208, p.dust, "Counting…");
         c.rect(cx, cy + ch, cw, 2, p.pick(0x26262a, 0xdcd6ca));
@@ -408,6 +408,10 @@ pub fn paint_history(c: &mut Canvas, text: &mut Text, page: &HistoryPage, names:
         text.draw(c, Face::Body, 21, lx, top, p.dust, "Most played");
         let (row, gap) = (crate::type_scale::row(64, 37), 8);
         let (row, gap) = if on_768 { (row * 3 / 4, 6) } else { (row, gap) };
+        // Under 768 lines (1280x720) the gaps are 4 px and a row may go down to 36: at 44 the fifth row ran under the bar.
+        let (gap, least) = if c.h < 768 { (4, 36) } else { (gap, 44) };
+        // The five rows end over the hint bar, whatever the text size makes of a row.
+        let row = row.min(((crate::kit::content_bottom(c.h) - (top + 20) + gap) / ROWS as i32 - gap).max(least));
         for (i, g) in s.games.iter().take(ROWS).enumerate() {
             let y = top + 20 + i as i32 * (row + gap);
             let selected = i == page.sel;
@@ -436,7 +440,7 @@ pub fn paint_history(c: &mut Canvas, text: &mut Text, page: &HistoryPage, names:
         let lines = text.wrap_prose(Face::Body, 28, &line, fw);
         let step = crate::type_scale::line(28, 10);
         let need = 30 + lines.len().min(2) as i32 * step;
-        if y + need > if on_768 { c.h - 84 } else { c.h - 120 } {
+        if y + need > crate::kit::content_bottom(c.h) {
             break;
         }
         text.draw(c, Face::Body, 21, fx, y, p.dust, &head);
@@ -708,24 +712,40 @@ pub fn paint_review(c: &mut Canvas, text: &mut Text, page: &ReviewPage, names: N
         right = c.w - MARGIN - 40 - aw - 48;
     }
     let width = right - MARGIN;
-    text.draw(c, Face::Body, 28, MARGIN, 330, p.dust, &kicker);
-    let mut y = 330 + 110;
-    // 67 when it doesn't fit on a line, smaller when a word of it is wider than the line (German, Large text).
+    // The words, laid out from the kicker at 330 down; where the last line would end under the dots and the hint bar
+    // (German, Large text, 1024x768: two lines of detail), the whole block stands higher, as far as the header allows.
     let big_px = if text.width(Face::Title, 96, &big) <= width { 96 } else { text.title_px(Face::Title, 67, &big, width, 37) };
-    for line in text.wrap(Face::Title, big_px, &big, width).iter().take(2) {
-        let line = text.fit(Face::Title, big_px, line, width);
-        text.draw(c, Face::Title, big_px, MARGIN, y, p.chalk, &line);
+    let big_lines: Vec<String> = text.wrap(Face::Title, big_px, &big, width).iter().take(2).map(|l| text.fit(Face::Title, big_px, l, width)).collect();
+    let detail_lines: Vec<String> = text.wrap(Face::Title, 37, &detail, width).into_iter().take(3).collect();
+    let quiet_lines: Vec<String> = text.wrap_prose(Face::Body, 28, &quiet, width).into_iter().take(2).collect();
+    let (detail_step, quiet_step) = (crate::type_scale::line(37, 13), crate::type_scale::line(28, 12));
+    let (nb, nd, nq) = (big_lines.len() as i32, detail_lines.len() as i32, quiet_lines.len() as i32);
+    let detail_first = 330 + 110 + nb * (big_px as i32 + 14) + 24;
+    let quiet_first = detail_first + nd * detail_step + 10;
+    let last = if nq > 0 {
+        quiet_first + (nq - 1) * quiet_step
+    } else if nd > 0 {
+        detail_first + (nd - 1) * detail_step
+    } else {
+        330 + 110 + (nb - 1).max(0) * (big_px as i32 + 14)
+    };
+    // ... and clear of the row of dots (at `c.h - 150`) as well.
+    let up = (last - (crate::kit::hint_bar_top(c.h) - 16).min(c.h - 150 - 22)).clamp(0, 330 - 150);
+    text.draw(c, Face::Body, 28, MARGIN, 330 - up, p.dust, &kicker);
+    let mut y = 330 + 110 - up;
+    for line in &big_lines {
+        text.draw(c, Face::Title, big_px, MARGIN, y, p.chalk, line);
         y += big_px as i32 + 14;
     }
     y += 24;
-    for line in text.wrap(Face::Title, 37, &detail, width).iter().take(3) {
+    for line in &detail_lines {
         text.draw(c, Face::Title, 37, MARGIN, y, p.chalk, line);
-        y += crate::type_scale::line(37, 13);
+        y += detail_step;
     }
     y += 10;
-    for line in text.wrap_prose(Face::Body, 28, &quiet, width).iter().take(2) {
+    for line in &quiet_lines {
         text.draw(c, Face::Body, 28, MARGIN, y, p.dust, line);
-        y += crate::type_scale::line(28, 12);
+        y += quiet_step;
     }
     // A dot per card.
     let n = r.cards.len() as i32;

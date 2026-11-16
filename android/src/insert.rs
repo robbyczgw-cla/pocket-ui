@@ -54,6 +54,8 @@ pub struct Launch {
     pub trace: bool,
     /// Test only: no game comes, the page comes back at the end (`insertRehearsal`).
     pub rehearsal: bool,
+    /// The way back's marks of the case's place: they show as much as the case does (`paint_scene`).
+    pub marks: Vec<insert_scene::Mark>,
 }
 
 /// The console a game goes into: Android keeps Wii and GameCube on one shelf (`document_library`), their consoles differ.
@@ -78,7 +80,7 @@ pub fn play_cues(cozy: bool, game: &Game) {
     let kind = media::Game::of(system, &game.relative);
     let disc_rig = cozy && pocket_ui::playful::on() && ir::takes_disc(system, kind);
     let ctx = ui_sound::Ctx { config: Default::default(), in_game: false, pause_menu: false, asleep: false };
-    for cue in insert_scene::cues(cozy, Medium::of(system), disc_rig) {
+    for cue in insert_scene::cues(cozy, Medium::of(system), disc_rig, pocket_ui::playful::on()) {
         let after = if cue.after.is_zero() { cue.after } else { cue.after + PICTURE_LATE };
         ui_sound::play_after(cue.sound, &ctx, after, cue.db);
     }
@@ -91,7 +93,7 @@ impl Launch {
         let system = rig_system(game);
         let kind = media::Game::of(system, &game.relative);
         let medium = Medium::of(system);
-        let look = Look { color: game.color, band: game.color, plastic: art::plastic(system) };
+        let look = Look { color: game.color, band: game.color, plastic: art::plastic(system), tape: false };
         let (w, h) = (size.0 as i32, size.1 as i32);
         let rig_files = (cozy && pocket_ui::playful::on()).then(|| ir::files(system, kind)).flatten();
         let rig = rig_files.as_ref().and_then(|f| Some((f.rig, png_size(&f.base)?)));
@@ -123,6 +125,8 @@ impl Launch {
             rig: None,
             rig_asked: false,
             home: None,
+            power_on: None,
+            plain_lit: None,
         };
         scene.load_rig(blocks);
         let seated = scene.rig.as_ref().map_or(0, |r| r.rig.seated_h(r.scale));
@@ -152,12 +156,25 @@ impl Launch {
             backdrop,
             size,
             window,
-            hand_over: HandOver::new(cozy),
+            hand_over: HandOver::new(cozy, false),
             released_at: None,
             end_shown: None,
             trace: false,
             rehearsal: false,
+            marks: Vec::new(),
         }
+    }
+
+    /// A handheld's start (its display lit, then dark round it, `Scene::power_on`), when the old-TV switch-on extra is on and
+    /// the battery saver is off (the player makes the same decision, `crt_done`), and the hold with it.
+    pub fn set_power_on(&mut self, extra_on: bool, cozy: bool) {
+        self.scene.power_on = insert_scene::power_on_light(&self.scene.system, cozy, true, extra_on);
+        self.hand_over = HandOver::new(cozy, self.scene.power_on.is_some());
+    }
+
+    /// The colour the start lights the console's display in (0xRRGGBB), None: no power-on (`set_power_on`).
+    pub fn power_on(&self) -> Option<u32> {
+        self.scene.power_on
     }
 
     /// Time to tell the player to come (once): a player's start (`PLAYER_START`) before Cozy's hold has run, or at once the
@@ -229,9 +246,9 @@ impl Launch {
             }
             return;
         }
-        c.buf.copy_from_slice(&self.backdrop);
+        c.pixels_mut().copy_from_slice(&self.backdrop);
         self.scene.paint(&mut c, elapsed, self.sprite.as_ref(), self.stage);
-        c.fade((self.scene.fade_at(elapsed) * 255.0) as u8);
+        self.scene.veil(&mut c, self.scene.fade_at(elapsed));
     }
 
     /// The colour around the safe area now (the cutout's row, the gesture bar): it goes dark with the page.
@@ -254,10 +271,17 @@ impl Launch {
     pub fn paint_scene(&mut self, buf: &mut [u32], elapsed: Duration) {
         let (w, h) = self.size;
         let mut c = Canvas::new(buf, w, h);
-        if self.backdrop.len() == c.buf.len() {
-            c.buf.copy_from_slice(&self.backdrop);
+        if self.backdrop.len() == c.pixels().len() {
+            c.pixels_mut().copy_from_slice(&self.backdrop);
         } else {
             c.clear(0);
+        }
+        // The case's place is empty until the case is back in it: its frame and shadow come with it, under the console.
+        let shown = (self.scene.case_shown(elapsed).clamp(0.0, 1.0) * 256.0).round() as u32;
+        if shown > 0 {
+            for mark in &self.marks {
+                mark.paint(&mut c, shown);
+            }
         }
         self.scene.paint(&mut c, elapsed, self.sprite.as_ref(), self.stage);
     }

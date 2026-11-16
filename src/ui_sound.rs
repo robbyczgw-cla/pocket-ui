@@ -79,12 +79,15 @@ pub enum Sound {
     /// The Cozy launch's end: a CRT switched on, a thunk and a faint whine. pocket-core plays it into the game's sound
     /// as the picture's old-TV power-on starts (`crt_on`, its hook `crt-on`).
     CrtOn,
+    /// A sealed game's first start (`shrink_wrap`): the shop's plastic film ripped off its case. A CC0 recording
+    /// (Freesound 431217 by buzzatsea, `assets/ui-sounds/SOURCES.md`), not generated.
+    WrapTear,
 }
 
-/// The sounds of the cases and what goes into the console, which Settings → Sound & feel → Case sounds
+/// The sounds of the cases and what goes into the console, which Settings → Screen & sound → Case sounds
 /// switches apart from the menu sounds (`cozy_extras`).
 pub fn is_case_sound(sound: Sound) -> bool {
-    matches!(sound, Sound::Insert | Sound::CaseOpen | Sound::BoxOpen | Sound::CartIn | Sound::DiscIn | Sound::DiscDrop | Sound::DiscShut | Sound::CardIn | Sound::CrtOn)
+    matches!(sound, Sound::Insert | Sound::CaseOpen | Sound::BoxOpen | Sound::CartIn | Sound::DiscIn | Sound::DiscDrop | Sound::DiscShut | Sound::CardIn | Sound::CrtOn | Sound::WrapTear)
 }
 
 /// How much quieter than the other UI sounds the Quick launch's click plays, in dB.
@@ -119,6 +122,7 @@ pub fn hit_at(sound: Sound) -> Duration {
         Sound::DiscShut => 14,
         Sound::CardIn => 33,
         Sound::Insert => 30,
+        Sound::WrapTear => 203,
         _ => 0,
     })
 }
@@ -284,7 +288,15 @@ impl Config {
     }
 }
 
-pub const RATE: u32 = crate::audio::OUT_RATE;
+/// The sample files' rate.
+const WAV_RATE: u32 = 48_000;
+/// The rate the UI's sounds are made at: the output's (`audio::out_rate`, 44.1 kHz on dArkOS).
+pub fn rate() -> u32 {
+    crate::audio::out_rate()
+}
+/// What the tests count in: they run with the default output.
+#[cfg(test)]
+const RATE: u32 = WAV_RATE;
 
 /// The sample files, mono 16-bit 48 kHz WAV (`assets/ui-sounds/`, made with ElevenLabs sound effects, docs/LICENCES.md).
 /// The menu ones are trimmed, faded in and out, and normalised to a peak of -1.5 dBFS (the nav tick -3 dBFS); the media
@@ -310,16 +322,17 @@ fn wav(sound: Sound) -> &'static [u8] {
         Sound::DiscShut => include_bytes!("../assets/ui-sounds/disc-shut.wav"),
         Sound::CardIn => include_bytes!("../assets/ui-sounds/card-in.wav"),
         Sound::CrtOn => include_bytes!("../assets/ui-sounds/crt-on.wav"),
+        Sound::WrapTear => include_bytes!("../assets/ui-sounds/wrap-tear.wav"),
     }
 }
 
-/// The samples of `sound` (mono, `RATE`), at full UI volume.
+/// The samples of `sound` (mono, `rate()`), at full UI volume.
 pub fn synth(sound: Sound) -> Vec<i16> {
-    synth_at(sound, RATE)
+    synth_at(sound, rate())
 }
 
-/// [`synth`] at another sample rate (linear interpolation; the sounds hold little above 8 kHz): pocket-core mixes the
-/// shutter into the game's own sound at the core's rate.
+/// [`synth`] at another sample rate, through the sinc resampler (`resample::convert_mono`): the output's on dArkOS, and the
+/// core's when pocket-core mixes the shutter or the CRT sound into the game's own sound.
 pub fn synth_at(sound: Sound, rate: u32) -> Vec<i16> {
     let bytes = wav(sound);
     // The `data` chunk of a plain PCM file: after the 12-byte RIFF header, chunks of id + length.
@@ -329,23 +342,15 @@ pub fn synth_at(sound: Sound, rate: u32) -> Vec<i16> {
     }
     let data = bytes.get(at + 8..).unwrap_or(&[]);
     let pcm: Vec<i16> = data.chunks_exact(2).map(|b| i16::from_le_bytes([b[0], b[1]])).collect();
-    if rate == RATE || pcm.is_empty() {
+    if rate == WAV_RATE || pcm.is_empty() {
         return pcm;
     }
-    let n = (pcm.len() as u64 * rate as u64 / RATE as u64) as usize;
-    (0..n)
-        .map(|i| {
-            let pos = i as f64 * RATE as f64 / rate as f64;
-            let (k, frac) = (pos as usize, pos.fract());
-            let (a, b) = (pcm[k.min(pcm.len() - 1)] as f64, pcm[(k + 1).min(pcm.len() - 1)] as f64);
-            (a + (b - a) * frac).round() as i16
-        })
-        .collect()
+    crate::resample::convert_mono(&pcm, WAV_RATE, rate)
 }
 
 // ---- playing ----------------------------------------------------------------------------------------------
 
-const ALL: [Sound; 17] = [
+const ALL: [Sound; 18] = [
     Sound::Nav,
     Sound::Confirm,
     Sound::Back,
@@ -363,6 +368,7 @@ const ALL: [Sound; 17] = [
     Sound::DiscShut,
     Sound::CardIn,
     Sound::CrtOn,
+    Sound::WrapTear,
 ];
 /// The sounds the Retro style swaps for blips while `retro::on()`: the menu's own, in this order in the bank after [`ALL`].
 const RETRO_SOUNDS: [Sound; 5] = [Sound::Nav, Sound::Confirm, Sound::Back, Sound::Menu, Sound::Error];
@@ -389,12 +395,12 @@ fn blip_notes(sound: Sound) -> Option<(&'static [Note], f32)> {
     })
 }
 
-/// The Retro blip for `sound`, mono at [`RATE`], or `None` for a sound with no blip. Synthesised here, nothing sampled: a
+/// The Retro blip for `sound`, mono at [`rate`], or `None` for a sound with no blip. Synthesised here, nothing sampled: a
 /// pulse wave with a pitch step or sweep, 1 ms attack and a 6 ms release on every note (no clicks), a decay across each
 /// note, two one-pole low-passes at 7 kHz so it is not harsh, scaled to the level in [`blip_notes`].
 pub fn blip(sound: Sound) -> Option<Vec<i16>> {
     let (notes, target_db) = blip_notes(sound)?;
-    let rate = RATE as f32;
+    let rate = rate() as f32;
     let (mut phase, mut lp1, mut lp2) = (0.0f32, 0.0f32, 0.0f32);
     let a = 1.0 - (-2.0 * std::f32::consts::PI * 7000.0 / rate).exp();
     let mut out: Vec<f32> = Vec::new();
@@ -430,7 +436,7 @@ pub fn blip(sound: Sound) -> Option<Vec<i16>> {
 /// RMS in dBFS of the loudest 50 ms of `pcm` (a shorter sound counts as padded with silence to 50 ms): what a short
 /// sound sounds as loud as. Used to level the blips against the sample files.
 pub fn loudest_rms_db(pcm: &[i16]) -> f32 {
-    let w = RATE as usize / 20;
+    let w = rate() as usize / 20;
     let sq: Vec<f64> = pcm.iter().map(|v| (*v as f64 / 32768.0).powi(2)).collect();
     let mut sum: f64 = sq.iter().take(w).sum();
     let mut best = sum;
@@ -456,6 +462,19 @@ const MAX_AFTER: Duration = Duration::from_secs(3);
 /// How long the output stays open after the last sound, writing silence: moving through a list then
 /// costs no reopening, and an idle shelf keeps no stream (and no PipeWire graph) running.
 const KEEP_OPEN: Duration = Duration::from_secs(2);
+/// How long after the last press the output stays warm while pocket-ui is in front and awake ([`keep_warm`], asked by
+/// main.rs every turn of its loop). On the H700 handhelds opening it costs 100 to 220 ms (PipeWire's stream setup) and a
+/// speaker sink suspended after 5 s of quiet up to 0.84 s more, against a picture that moves 15 to 40 ms after the press:
+/// with a lease of 2 s every press after a short pause clicked late, and the menus felt slow there (a hand test, 15.11.2026;
+/// the Brick plays to the chip's dmix and opens at once). A minute covers reading a page between presses; a menu left alone
+/// still closes the stream, so an idle shelf keeps no silent PipeWire graph running. Warm costs about 0.7 % of a core.
+pub const WARM_LEASE: Duration = Duration::from_secs(60);
+
+/// Whether a press `since` ago still keeps the output warm ([`WARM_LEASE`]).
+pub fn warm_lease_holds(since: Duration) -> bool {
+    since < WARM_LEASE
+}
+
 /// Frames per write: 2.7 ms at 48 kHz, how soon a new sound can start while the output is open.
 const CHUNK_FRAMES: usize = 128;
 /// PipeWire's quantum while the output is open on the shelf (`POCKETUI_SOUND_QUANTUM`, 0 keeps ROCKNIX's 1024).
@@ -839,7 +858,7 @@ pub fn close_when_done(restore_quantum: bool) {
 }
 
 /// Whether pocket-ui is actively being browsed, awake with sounds on: the output stays open between presses.
-/// The app revokes this lease after two seconds without a press, so an idle shelf keeps no silent audio stream. Opening it costs 20 to 60 ms on a
+/// The app revokes this lease [`WARM_LEASE`] after the last press, so an idle shelf keeps no silent audio stream. Opening it costs 20 to 60 ms on a
 /// Mini V2 and 100 to 220 ms on an H700 (PipeWire's stream setup), and a speaker sink suspended after 5 s of quiet takes
 /// up to 0.8 s more to wake there (scripts/ui-sounds `ui_open_bench`). Called every turn of the event loop; only a
 /// change is sent. A press after a longer rest reopens the output on the sound thread.
@@ -868,6 +887,7 @@ pub fn stop() {
 /// [`stop`] for a game: `restore` false for pocket-core, which sets the shelf's 256 itself, so nothing changes under
 /// the launch animation's click (pocket-ui gives it back when the game ends, `game_ended`).
 pub fn stop_for(restore: bool) {
+    crate::frame_dump::event(|| "sound stop".into());
     SHELF_REQUESTED.store(false, Ordering::SeqCst);
     if let Some(tx) = TX.get() {
         // Never waits on the UI thread; the queue holds 16 and the mixer empties it every chunk.
@@ -877,6 +897,7 @@ pub fn stop_for(restore: bool) {
 
 /// The launch animation was skipped: its sounds still waiting aren't played over the game. Never waits.
 pub fn forget_waiting() {
+    crate::frame_dump::event(|| "sound forget-waiting".into());
     if let Some(tx) = TX.get() {
         let _ = tx.try_send(Msg::ForgetWaiting);
     }
@@ -926,7 +947,7 @@ fn keep_their_moment<O: MixerOutput>(voices: &mut [Voice], o: &mut O) {
     let now = Instant::now();
     for v in voices.iter_mut().filter(|v| v.pos < v.wait) {
         let left = v.due.saturating_duration_since(now).as_micros().saturating_sub(ahead);
-        v.wait = v.pos + (left * RATE as u128 / 1_000_000) as usize;
+        v.wait = v.pos + (left * rate() as u128 / 1_000_000) as usize;
     }
 }
 
@@ -1208,7 +1229,7 @@ fn mixer_with<O: MixerOutput>(
                 }
             }
             // The wait counts from when it was asked: the time it took to get here (opening the output) is part of it.
-            let wait = (RATE as u128 * after.saturating_sub(asked.elapsed()).as_micros() / 1_000_000) as usize;
+            let wait = (rate() as u128 * after.saturating_sub(asked.elapsed()).as_micros() / 1_000_000) as usize;
             let voice = Voice {
                 // One atomic load: Retro on swaps the menu sounds for blips.
                 sound: bank_index(sound, crate::retro::on()),
@@ -1342,6 +1363,20 @@ fn take_answer(checking: &mut Option<Receiver<bool>>, mute: &mut Option<(Instant
 mod tests {
     use super::*;
     use crate::testutil::TestDir;
+
+    /// H700-MENU-FEEL (15.11.2026): the click after a pause came 100 ms to 1 s late on the RG35XX Plus, because the warm
+    /// output closed 2 s after the last press and its sink suspended 5 s later. A pause to read a page keeps it warm now.
+    #[test]
+    fn a_pause_between_presses_keeps_the_sound_output_warm() {
+        for pause in [2, 5, 6, 10, 30] {
+            assert!(warm_lease_holds(Duration::from_secs(pause)), "{pause} s after a press the next click would reopen the output");
+        }
+        // Longer than the speaker sink's suspend after quiet (5 s on ROCKNIX), or the next press pays its wake.
+        assert!(WARM_LEASE > Duration::from_secs(5) * 6, "{WARM_LEASE:?}");
+        // A menu left alone still releases the silent stream (docs/IDLE.md), well before the screen goes dark by itself.
+        assert!(!warm_lease_holds(WARM_LEASE));
+        assert!(!warm_lease_holds(Duration::from_secs(120)));
+    }
 
     fn at(at: u64) -> View {
         View { overlay: Overlay::None, at }
@@ -1935,7 +1970,7 @@ mod tests {
             let ms = pcm.len() as u32 * 1000 / RATE;
             // A disc spinning up and a CRT coming on take longer than a click; still under a second.
             // The media sounds (a slide before the click, a disc spinning up) take longer than a menu tick.
-            let longest = if matches!(s, Sound::CaseOpen | Sound::BoxOpen | Sound::CartIn | Sound::DiscIn | Sound::DiscShut | Sound::CardIn | Sound::CrtOn) { 1200 } else { 450 };
+            let longest = if matches!(s, Sound::CaseOpen | Sound::BoxOpen | Sound::CartIn | Sound::DiscIn | Sound::DiscShut | Sound::CardIn | Sound::CrtOn | Sound::WrapTear) { 1200 } else { 450 };
             assert!(ms > 10 && ms <= longest, "{s:?}: {ms} ms");
             // No click: the files fade in over 2 ms and out over up to 30 ms, from and to exactly zero.
             let edge = RATE as usize / 1000;
@@ -2087,7 +2122,7 @@ mod tests {
     /// right there (the click), not before it (the slide) or long after.
     #[test]
     fn the_hit_is_where_hit_at_says() {
-        for s in [Sound::CartIn, Sound::DiscIn, Sound::DiscDrop, Sound::DiscShut, Sound::CardIn, Sound::Insert] {
+        for s in [Sound::CartIn, Sound::DiscIn, Sound::DiscDrop, Sound::DiscShut, Sound::CardIn, Sound::Insert, Sound::WrapTear] {
             let pcm = synth(s);
             let loudest = pcm.iter().enumerate().max_by_key(|(_, v)| v.unsigned_abs()).unwrap().0;
             let ms = loudest as f32 * 1000.0 / RATE as f32;

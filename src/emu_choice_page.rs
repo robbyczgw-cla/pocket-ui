@@ -27,11 +27,57 @@ pub struct Subject {
     /// pocket-core takes the game's file; pocket-core couldn't start it before (`fallback.json`).
     pub file_ok: bool,
     pub fell_back: bool,
+    /// Android's handheld view: the page speaks of the phone's ways (our player, apps) instead of ROCKNIX's emulators.
+    pub phone: Option<PhoneSubject>,
+}
+
+/// What the page needs to know about a phone (`play_route`, `app_runs_on_android`).
+#[derive(Clone, Debug, Default)]
+pub struct PhoneSubject {
+    /// The emulator apps that take the system: package and the name the phone shows.
+    pub labels: Vec<(String, String)>,
+    /// pocket-ui's own player for the system: its core, whether it is on the phone, what the download is. None where the
+    /// own player has no core for the system (PS2, GameCube and Wii, 3DS, Xbox).
+    pub own: Option<OwnCore>,
+}
+
+/// The Download row's line while this version has no download channel: an emulator app on the phone that takes the system is named,
+/// with where to choose it; without one the page says plainly that the system can't be played here. Never "an emulator app can
+/// play it" on a phone that has none (Odin 2 Mini 13.11.: N64, PSP, DS and Dreamcast said so with no app installed).
+pub fn closed_line(labels: &[(String, String)]) -> String {
+    match labels.first() {
+        Some((_, app)) => format!("This version of pocket-ui can't download this system. {app} on this device plays it: choose it under Runs on."),
+        None => "This version of pocket-ui can't play this system, and no emulator app on this device plays it.".to_string(),
+    }
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct OwnCore {
+    pub core: String,
+    /// The core as the download channel names it ("PSP"), and its size in bytes.
+    pub name: String,
+    pub size: u64,
+    pub present: bool,
+    /// The channel has an address; without one a download core reads "Not available here".
+    pub channel_open: bool,
+}
+
+/// How the Download row stands.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub enum Download {
+    #[default]
+    Idle,
+    /// Running: the line it shows ("Downloading · 4.1 MB / 18.6 MB").
+    Busy(String),
+    /// It ended without the core: why, in a sentence.
+    Failed(String),
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum Row {
     RunsOn,
+    /// Android: adds our player's core for this system; only while our player is the way and its core is not there.
+    Download,
     /// An entry of `RA_SETTINGS`.
     Ra(usize),
     Save,
@@ -68,6 +114,8 @@ pub enum Mode {
 pub enum Action {
     Nothing,
     Close,
+    /// Android: fetch this core (the Download row).
+    Download { core: String },
     /// Write these to system.cfg (None removes the key); `clear_fallback`: pocket-core was chosen for a game it
     /// couldn't start before, so it gets another try (`fallback.json`).
     Save {
@@ -95,6 +143,8 @@ pub struct EmuChoicePage {
     pub mode: Mode,
     /// Shown after a save ("Saved for this game.").
     pub note: Option<String>,
+    /// Android: the Download row's state.
+    pub download: Download,
 }
 
 impl EmuChoicePage {
@@ -111,6 +161,7 @@ impl EmuChoicePage {
             sel: 0,
             mode: Mode::List,
             note: None,
+            download: Download::Idle,
         };
         page.choices = emu_choice::choices(&page.ctx(page.subject.fell_back))
             .into_iter()
@@ -175,6 +226,9 @@ impl EmuChoicePage {
     /// The rows top to bottom: the RetroArch settings only while RetroArch is chosen.
     pub fn rows(&self) -> Vec<Row> {
         let mut v = vec![Row::RunsOn];
+        if self.download_offered() {
+            v.push(Row::Download);
+        }
         if self.runner.kind() == Kind::RetroArch {
             v.extend(
                 RA_SETTINGS
@@ -186,6 +240,11 @@ impl EmuChoicePage {
         }
         v.push(Row::Save);
         v
+    }
+
+    /// Android: our player is what plays now and its core is not on the phone: the page says so in a row of its own.
+    pub fn download_offered(&self) -> bool {
+        self.runner.is_pocket_core() && self.subject.phone.as_ref().and_then(|p| p.own.as_ref()).is_some_and(|o| !o.present)
     }
 
     pub fn row(&self) -> Row {
@@ -204,12 +263,20 @@ impl EmuChoicePage {
     pub fn label(&self, row: Row) -> &'static str {
         match row {
             Row::RunsOn => "Runs on",
+            Row::Download => "Download",
             Row::Ra(i) => RA_SETTINGS[i].name,
             Row::Save => "Save changes",
         }
     }
 
     pub fn runner_label(&self, r: &Runner) -> String {
+        if let Some(phone) = &self.subject.phone {
+            return match phone.labels.iter().find(|(package, _)| *package == r.emulator) {
+                _ if r.is_pocket_core() => "pocket-ui player".to_string(),
+                Some((_, name)) => name.clone(),
+                None => emu_choice::emulator_label(&r.emulator),
+            };
+        }
         emu_choice::label(r, &self.subject.emulators)
     }
 
@@ -221,13 +288,48 @@ impl EmuChoicePage {
                 let s = &RA_SETTINGS[i];
                 s.value_label(self.ra.get(s.key).map_or(s.unset, String::as_str))
             }
+            Row::Download => self.download_value(),
             Row::Save => ">".to_string(),
+        }
+    }
+
+    fn download_value(&self) -> String {
+        let Some(own) = self.subject.phone.as_ref().and_then(|p| p.own.as_ref()) else { return String::new() };
+        match &self.download {
+            Download::Busy(line) => line.clone(),
+            Download::Failed(why) => why.clone(),
+            Download::Idle if !own.channel_open => "Not available here".to_string(),
+            Download::Idle => format!("{} · {:.1} MB", own.name, own.size as f64 / 1_000_000.0),
         }
     }
 
     /// The selected row's explanation, and what its value means.
     pub fn describe(&self, row: Row) -> [String; 2] {
         match row {
+            Row::RunsOn if self.subject.phone.is_some() => {
+                let what = match self.subject.game {
+                    Some(_) => "Which way plays this game: pocket-ui's own player or another emulator app on this device.",
+                    None => "Which way plays this console's games: pocket-ui's own player or another emulator app on this device.",
+                }
+                .to_string();
+                let choice = if self.runner.is_pocket_core() {
+                    if self.download_offered() {
+                        "This system is not installed yet. Choose Download now to add it on Wi-Fi."
+                    } else {
+                        "pocket-ui's own player: Continue where you left off, Save & quit and the shelf's start and end."
+                    }
+                } else {
+                    "Another app starts the game and brings you back here. Continue and the pause menu are then that app's own."
+                };
+                [what, choice.to_string()]
+            }
+            Row::Download => {
+                let open = self.subject.phone.as_ref().and_then(|p| p.own.as_ref()).is_some_and(|o| o.channel_open);
+                [
+                    "Adds this system to pocket-ui's own player. It downloads on unmetered Wi-Fi.".to_string(),
+                    if open { "This system is not installed yet. Choose Download now to add it on Wi-Fi.".to_string() } else { closed_line(self.subject.phone.as_ref().map_or(&[][..], |p| &p.labels[..])) },
+                ]
+            }
             Row::RunsOn => {
                 let what = match self.subject.game {
                     Some(_) => "Which emulator plays this game. Save states don't carry over to another one.",
@@ -318,7 +420,11 @@ impl EmuChoicePage {
 
     /// Left/Right (and A) change `row`: Runs on only when there is another emulator to step to.
     pub fn changes(&self, row: Row) -> bool {
-        row != Row::RunsOn || self.runners().len() > 1
+        match row {
+            Row::RunsOn => self.runners().len() > 1,
+            Row::Download => false,
+            _ => true,
+        }
     }
 
     /// The runners Left/Right step through: the default first, then the installed ones and the one in use.
@@ -355,7 +461,7 @@ impl EmuChoicePage {
                     self.ra.insert(key, v);
                 }
             }
-            Row::Save => {}
+            Row::Download | Row::Save => {}
         }
         self.note = None;
     }
@@ -372,6 +478,7 @@ impl EmuChoicePage {
                     Button::Left => self.step(row, -1),
                     Button::Right => self.step(row, 1),
                     b if b == confirm && row == Row::Save => self.mode = Mode::Save { sel: 0 },
+                    b if b == confirm && row == Row::Download => return self.download_pressed(),
                     b if b == confirm => self.step(row, 1),
                     b if b == cancel => return Action::Close,
                     _ => {}
@@ -408,6 +515,45 @@ impl EmuChoicePage {
                 }
                 Action::Nothing
             }
+        }
+    }
+
+    /// A on the Download row: the host fetches the core, unless it is already busy or the channel isn't open.
+    fn download_pressed(&mut self) -> Action {
+        let Some(own) = self.subject.phone.as_ref().and_then(|p| p.own.clone()) else { return Action::Nothing };
+        if !own.channel_open || self.download_busy() {
+            return Action::Nothing;
+        }
+        self.download = Download::Busy(String::new());
+        self.note = None;
+        Action::Download { core: own.core }
+    }
+
+    /// A on the Download row does something: the channel is open and no download runs.
+    pub fn download_ready(&self) -> bool {
+        self.subject.phone.as_ref().and_then(|p| p.own.as_ref()).is_some_and(|o| o.channel_open) && !self.download_busy()
+    }
+
+    pub fn download_busy(&self) -> bool {
+        matches!(self.download, Download::Busy(_))
+    }
+
+    /// The host's word on the download: the core is on the phone now (the row goes, our player is ready), it failed, or
+    /// how far it is.
+    pub fn download_state(&mut self, state: Download, installed: Option<bool>) {
+        if installed == Some(true) {
+            if let Some(own) = self.subject.phone.as_mut().and_then(|p| p.own.as_mut()) {
+                own.present = true;
+            }
+            for (_, ok) in &mut self.choices {
+                *ok = true;
+            }
+            self.download = Download::Idle;
+            self.note = Some("System installed. You can start your game now.".to_string());
+            let rows = self.rows().len();
+            self.sel = self.sel.min(rows - 1);
+        } else {
+            self.download = state;
         }
     }
 
@@ -568,6 +714,7 @@ mod tests {
             default_override: None,
             file_ok: true,
             fell_back: false,
+            phone: None,
         }
     }
 
@@ -593,6 +740,7 @@ mod tests {
             default_override: None,
             file_ok: true,
             fell_back: false,
+            phone: None,
         };
         let mut p = EmuChoicePage::new(psp(), Cfg::default(), Cfg::default(), |_| true);
         assert_eq!(p.runner, Runner::new("ppsspp", "ppsspp-sa"), "the page shows what the game starts with");
@@ -645,7 +793,8 @@ mod tests {
         // On RetroArch the RetroArch rows appear, with what setsettings.sh would use now.
         p.runner = Runner::new("retroarch", "mgba");
         let rows = p.rows();
-        assert_eq!(rows.len(), 2 + RA_SETTINGS.len());
+        assert_eq!(rows.len(), 2 + RA_SETTINGS.iter().filter(|s| s.applies("gba")).count(), "phone games' D-pad row is not a GBA's");
+        assert!(RA_SETTINGS.iter().any(|s| !s.applies("gba")));
         assert_eq!(p.value(Row::Ra(0)), "3:2", "gba.ratio from the shipped file");
         assert_eq!(p.value(Row::Ra(6)), "On", "global.autosave=1");
         assert!(p.unsaved());
@@ -842,5 +991,110 @@ mod tests {
         p.runner = Runner::new("pocket-core", "mgba");
         p.press(Button::Right, A, B);
         assert!(p.sel < p.rows().len());
+    }
+
+    // ---- Android's handheld view (`play_route`, `app_runs_on_android`) ----
+
+    fn app(package: &str) -> EsEmulator {
+        EsEmulator { name: package.into(), cores: vec![], default_core: None }
+    }
+
+    /// PSP on an Odin: our core to download (18.6 MB), PPSSPP and its gold edition installed.
+    fn phone_page(present: bool, channel_open: bool, cfg: &str) -> EmuChoicePage {
+        let subject = Subject {
+            system: "psp".into(),
+            system_name: "PlayStation Portable".into(),
+            game: Some(("Lumines".into(), "Lumines.iso".into())),
+            emulators: vec![app("org.ppsspp.ppsspp"), app("org.ppsspp.ppssppgold")],
+            pocket_core: Some("ppsspp".into()),
+            pocket_cores: &[],
+            default_override: None,
+            file_ok: true,
+            fell_back: false,
+            phone: Some(PhoneSubject {
+                labels: vec![("org.ppsspp.ppsspp".into(), "PPSSPP".into()), ("org.ppsspp.ppssppgold".into(), "PPSSPP Gold".into())],
+                own: Some(OwnCore { core: "ppsspp".into(), name: "PSP".into(), size: 18_600_000, present, channel_open }),
+            }),
+        };
+        EmuChoicePage::new(subject, Cfg::parse(cfg), Cfg::default(), |r| !r.is_pocket_core() || present)
+    }
+
+    fn press(p: &mut EmuChoicePage, b: Button) -> Action {
+        p.press(b, Button::East, Button::South)
+    }
+
+    #[test]
+    fn phone_every_row_is_reached_with_up_and_down_and_b_closes() {
+        let mut p = phone_page(false, true, "");
+        assert_eq!(p.rows(), [Row::RunsOn, Row::Download, Row::Save]);
+        let mut seen = vec![p.row()];
+        for _ in 0..3 {
+            press(&mut p, Button::Down);
+            seen.push(p.row());
+        }
+        assert_eq!(seen, [Row::RunsOn, Row::Download, Row::Save, Row::RunsOn], "Down visits every row and wraps");
+        press(&mut p, Button::Up);
+        assert_eq!(p.row(), Row::Save);
+        press(&mut p, Button::Up);
+        assert_eq!(p.row(), Row::Download);
+        assert_eq!(press(&mut p, Button::South), Action::Close);
+    }
+
+    #[test]
+    fn phone_the_download_row_downloads_once_and_only_while_the_channel_is_open() {
+        let mut p = phone_page(false, true, "");
+        press(&mut p, Button::Down);
+        assert!(p.download_ready() && p.changes(Row::Download) == false);
+        assert_eq!(p.value(Row::Download), "PSP · 18.6 MB");
+        // Left/Right do nothing on it; A asks the host, then nothing more while it runs.
+        assert_eq!(press(&mut p, Button::Right), Action::Nothing);
+        assert_eq!(press(&mut p, Button::East), Action::Download { core: "ppsspp".into() });
+        assert!(p.download_busy() && !p.download_ready());
+        assert_eq!(press(&mut p, Button::East), Action::Nothing);
+        p.download_state(Download::Busy("Downloading · 4.0 MB / 18.6 MB".into()), None);
+        assert_eq!(p.value(Row::Download), "Downloading · 4.0 MB / 18.6 MB");
+        // Failed: the reason is in the row and A tries again.
+        p.download_state(Download::Failed("Downloads wait for unmetered Wi-Fi.".into()), None);
+        assert_eq!(p.value(Row::Download), "Downloads wait for unmetered Wi-Fi.");
+        assert_eq!(press(&mut p, Button::East), Action::Download { core: "ppsspp".into() });
+        // Installed: the row is gone, the selection stays on a row, our player is ready.
+        p.download_state(Download::Idle, Some(true));
+        assert_eq!(p.rows(), [Row::RunsOn, Row::Save]);
+        assert!(p.row() == Row::Save || p.row() == Row::RunsOn);
+        assert!(p.note.as_deref().is_some_and(|n| n.starts_with("System installed")));
+        // A closed channel: the row says so and A does nothing.
+        let mut closed = phone_page(false, false, "");
+        press(&mut closed, Button::Down);
+        assert_eq!(closed.value(Row::Download), "Not available here");
+        assert_eq!((closed.download_ready(), press(&mut closed, Button::East)), (false, Action::Nothing));
+    }
+
+    #[test]
+    fn phone_the_page_names_the_phones_ways_and_a_chosen_app_takes_the_download_row_away() {
+        let p = phone_page(false, true, "");
+        assert_eq!(p.value(Row::RunsOn), "Default (pocket-ui player)");
+        let words = p.describe(Row::RunsOn).join(" ");
+        assert!(words.contains("not installed yet") && !words.contains("ROCKNIX") && !words.contains("Pocket"), "{words}");
+        // The console's choice of an app: the game starts there by default, no download, the app's own name.
+        let p = phone_page(false, true, "psp.emulator=org.ppsspp.ppssppgold");
+        assert_eq!(p.value(Row::RunsOn), "Default (PPSSPP Gold)");
+        assert_eq!(p.rows(), [Row::RunsOn, Row::Save]);
+        let words = p.describe(Row::RunsOn).join(" ");
+        assert!(words.contains("Another app starts the game") && !words.contains("RetroArch"), "{words}");
+        // Left/Right step through the ways: the default, then PPSSPP.
+        let mut p = phone_page(true, true, "");
+        assert_eq!(p.rows(), [Row::RunsOn, Row::Save], "a core on the phone has no Download row");
+        press(&mut p, Button::Right);
+        assert_eq!(p.value(Row::RunsOn), "PPSSPP");
+    }
+
+    #[test]
+    fn phone_a_saved_choice_is_a_plain_emulator_key() {
+        let mut p = phone_page(true, true, "");
+        press(&mut p, Button::Right);
+        press(&mut p, Button::Down);
+        press(&mut p, Button::East);
+        let Action::Save { edits, .. } = press(&mut p, Button::East) else { panic!("saved") };
+        assert!(edits.contains(&("psp.emulator".into(), Some("org.ppsspp.ppsspp".into()))), "{edits:?}");
     }
 }

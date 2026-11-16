@@ -23,6 +23,7 @@
 //! A store theme's `fonts/title.ttf` and `body.ttf` still win over the built-in style, and `Text::builtin()` (safe mode)
 //! stays Barlow.
 
+use std::cell::Cell;
 use std::sync::atomic::{AtomicU8, Ordering};
 use std::sync::{Arc, OnceLock};
 
@@ -269,53 +270,73 @@ pub(crate) fn fit_scale(font: &[u8], barlow: &[u8]) -> f32 {
     }
 }
 
-/// The style in use. Process wide, because `Text`s on several threads read it and the UI thread sets it. Per thread in
-/// the unit tests, which run side by side (the Theme page's test switches it).
-#[cfg(not(test))]
+/// The style in use. Process wide, because `Text`s on several threads read it and the UI thread sets it.
 static STYLE: AtomicU8 = AtomicU8::new(0);
-#[cfg(test)]
-thread_local! {
-    static STYLE: AtomicU8 = const { AtomicU8::new(0) };
-}
 
 /// Retro's letters (`RetroLetters`), process wide as the style is; kept while another style is in use.
-#[cfg(not(test))]
 static LETTERS: AtomicU8 = AtomicU8::new(0);
-#[cfg(test)]
+
+/// "This thread follows the program's style" in `THREAD_STYLE` / `THREAD_LETTERS`.
+const PROCESS: u8 = u8::MAX;
+// Tests run side by side in one process (the Theme page's test switches the style). A thread can have a style of its own
+// (`for_this_thread`); then `set`, `get` and the letters on that thread use it and nothing else sees it. The library's own unit
+// tests start per thread (Barlow); integration tests, where the library is built without `cfg(test)`, take the guard. The
+// program never sets it: one `Cell` read per lookup. Same as `i18n::for_this_thread`.
+const THREAD_START: u8 = if cfg!(test) { 0 } else { PROCESS };
 thread_local! {
-    static LETTERS: AtomicU8 = const { AtomicU8::new(0) };
+    static THREAD_STYLE: Cell<u8> = const { Cell::new(THREAD_START) };
+    static THREAD_LETTERS: Cell<u8> = const { Cell::new(THREAD_START) };
+}
+
+fn store(global: &AtomicU8, own: &'static std::thread::LocalKey<Cell<u8>>, v: u8) {
+    if own.with(|t| t.get()) != PROCESS {
+        own.with(|t| t.set(v));
+    } else {
+        global.store(v, Ordering::Relaxed);
+    }
+}
+
+fn load(global: &AtomicU8, own: &'static std::thread::LocalKey<Cell<u8>>) -> u8 {
+    match own.with(|t| t.get()) {
+        PROCESS => global.load(Ordering::Relaxed),
+        v => v,
+    }
 }
 
 /// Retro's letters from the next glyph on (settings.json, the Style row); every `Text` in Retro follows by itself.
 pub fn set_retro_letters(l: RetroLetters) {
-    #[cfg(not(test))]
-    LETTERS.store(l as u8, Ordering::Relaxed);
-    #[cfg(test)]
-    LETTERS.with(|v| v.store(l as u8, Ordering::Relaxed));
+    store(&LETTERS, &THREAD_LETTERS, l as u8);
 }
 
 pub fn retro_letters() -> RetroLetters {
-    #[cfg(not(test))]
-    let v = LETTERS.load(Ordering::Relaxed);
-    #[cfg(test)]
-    let v = LETTERS.with(|v| v.load(Ordering::Relaxed));
-    RetroLetters::from_u8(v)
+    RetroLetters::from_u8(load(&LETTERS, &THREAD_LETTERS))
 }
 
 /// The style in use from the next glyph on (Settings, the start); every `Text` follows by itself.
 pub fn set(s: FontStyle) {
-    #[cfg(not(test))]
-    STYLE.store(s.to_u8(), Ordering::Relaxed);
-    #[cfg(test)]
-    STYLE.with(|v| v.store(s.to_u8(), Ordering::Relaxed));
+    store(&STYLE, &THREAD_STYLE, s.to_u8());
 }
 
 pub fn get() -> FontStyle {
-    #[cfg(not(test))]
-    let v = STYLE.load(Ordering::Relaxed);
-    #[cfg(test)]
-    let v = STYLE.with(|v| v.load(Ordering::Relaxed));
-    FontStyle::from_u8(v)
+    FontStyle::from_u8(load(&STYLE, &THREAD_STYLE))
+}
+
+/// A style (and Retro's letters) for this thread only, until the guard is dropped (also when the test panics): for tests
+/// that run side by side in one process. `set` and `set_retro_letters` on this thread change only this thread's; dropping
+/// the guard brings back what the thread had before.
+#[must_use = "the thread's style goes back when the guard is dropped"]
+pub fn for_this_thread(style: FontStyle, letters: RetroLetters) -> ThreadStyle {
+    ThreadStyle(THREAD_STYLE.with(|t| t.replace(style.to_u8())), THREAD_LETTERS.with(|t| t.replace(letters as u8)))
+}
+
+/// See `for_this_thread`.
+pub struct ThreadStyle(u8, u8);
+
+impl Drop for ThreadStyle {
+    fn drop(&mut self) {
+        THREAD_STYLE.with(|t| t.set(self.0));
+        THREAD_LETTERS.with(|t| t.set(self.1));
+    }
 }
 
 #[cfg(test)]
@@ -393,10 +414,10 @@ mod tests {
 
     /// A letter a font lacks comes out as a hole in a word, in the fonts of Settings → Look → Style as much as in Barlow.
     #[test]
-    fn every_font_has_every_letter_of_the_spanish_and_portuguese_tables() {
-        let table = concat!(include_str!("../assets/i18n/es.tsv"), include_str!("../assets/i18n/pt.tsv"));
+    fn every_font_has_every_letter_of_the_spanish_portuguese_french_and_italian_tables() {
+        let table = concat!(include_str!("../assets/i18n/es.tsv"), include_str!("../assets/i18n/pt.tsv"), include_str!("../assets/i18n/fr.tsv"), include_str!("../assets/i18n/it.tsv"));
         let translated = table.lines().filter(|l| !l.starts_with('#')).filter_map(|l| l.split_once('\t')).flat_map(|(_, t)| t.chars());
-        let mut need: Vec<char> = "ñÑ¿¡áéíóúüÁÉÍÓÚÜãõâêôçÃÕÂÊÔÇà“”…".chars().chain(translated.filter(|c| !c.is_ascii())).collect();
+        let mut need: Vec<char> = "ñÑ¿¡áéíóúüÁÉÍÓÚÜãõâêôçÃÕÂÊÔÇàèûïîùœëÈÀÙÎÏŒòì«»\u{a0}“”…".chars().chain(translated.filter(|c| !c.is_ascii())).collect();
         need.sort_unstable();
         need.dedup();
         let barlow = [BARLOW_TITLE, BARLOW_BODY].map(|b| Font::from_bytes(b, FontSettings::default()).unwrap());

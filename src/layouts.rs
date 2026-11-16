@@ -188,6 +188,21 @@ const ALIASES: &[(&str, &str)] = &[
     ("microsoftmsx", "msx"),
     ("dos", "pc"),
     ("msdos", "pc"),
+    // ArkOS / dArkOS folder names (their `es_systems.cfg`, the R36S's stock cards) for systems ROCKNIX keeps under another
+    // name or plays with the same emulator (tests/arkos_card.rs).
+    ("vmac", "macintosh"),
+    ("macintosh", "macintosh"),
+    ("mame2003", "mame"),
+    ("mame2010", "mame"),
+    ("atarixegs", "atari800"),
+    ("sneshacks", "snes"),
+    ("sgb", "gb"),
+    ("supergameboy", "gb"),
+    ("msumd", "megadrive"),
+    ("neogeocd", "neocd"),
+    ("carts", "pico-8"),
+    ("pico8", "pico-8"),
+    ("thomson", "moto"),
 ];
 
 /// The part of a folder name in brackets at its end: "Game Boy Advance (GBA)" → ("Game Boy Advance", Some("GBA")).

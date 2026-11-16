@@ -83,7 +83,8 @@ impl App {
         let turn = if pocket_ui::motion::level() == pocket_ui::motion::Motion::Off { 0 } else { (since.elapsed().as_millis() / SPIN_STEP.as_millis()) as i32 };
         let word = "Loading the game…";
         let w = self.text.width(Face::Body, 28, word);
-        let (x, y) = ((c.w - w + 44) / 2, c.h - 72);
+        // Over the hint bar's top edge (the bar is at the bottom right and as tall on every screen).
+        let (x, y) = ((c.w - w + 44) / 2, pocket_ui::kit::hint_bar_top(c.h) - 24);
         // The launch picture can be light or letterboxed, regardless of the menu appearance.
         // Keep the whole note readable over either, without changing the reminder card above it.
         pocket_ui::palette::scoped(0, || {

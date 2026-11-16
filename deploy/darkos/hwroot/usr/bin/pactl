@@ -1,0 +1,15 @@
+#!/bin/sh
+# dArkOS port: the few `pactl` questions pocket-ui asks (there is no PulseAudio or PipeWire running on dArkOS), from the ALSA
+# control dArkOS's volume keys move (softvol "Master" on the RK3566, the codec's "Playback" on the RK3326). Volume and mute only.
+ctl=Master; amixer scontrols 2>/dev/null | grep -q "'Master'" || ctl=Playback
+master() { amixer -M sget "$ctl" 2>/dev/null; }
+case "${1:-}" in
+  get-sink-volume)
+    pct=$(master | sed -n 's/.*\[\([0-9]*\)%\].*/\1/p' | head -1)
+    [ -n "$pct" ] || exit 1
+    echo "Volume: front-left: $((pct * 655)) / ${pct}% / 0 dB,   front-right: $((pct * 655)) / ${pct}% / 0 dB"
+    ;;
+  get-sink-mute) if master | grep -q '\[off\]'; then echo "Mute: yes"; else echo "Mute: no"; fi ;;
+  get-default-sink) echo "alsa_output.darkos" ;;
+  *) exit 1 ;;
+esac

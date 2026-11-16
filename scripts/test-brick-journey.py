@@ -172,7 +172,7 @@ class NightSoak(unittest.TestCase):
                 (root/'control-write').unlink()
                 # The first check passed; a real press wakes the owner during backup.
                 for changed in (quiet.replace('sleep=light','sleep=awake'),quiet.replace('game=none','game=playing'),
-                                quiet.replace('place=shelf:Home','place=settings:Groups'),quiet.replace('pid='+str(os.getpid()),'pid=1')):
+                                quiet.replace('place=shelf:Home','place=settings:List Connections'),quiet.replace('pid='+str(os.getpid()),'pid=1')):
                     status.write_text(changed)
                     self.assertNotEqual(run_guard().returncode,0)
                     self.assertFalse((root/'control-write').exists())
@@ -395,7 +395,7 @@ class Safety(unittest.TestCase):
         class Remote:
             def text(self,command):
                 calls.append(command)
-                return 'v=1\trev=1\tpid=8044\tplace=settings:Groups\n' if command=="cat '/tmp/private status/ui.status'" else 'v=1\trev=1\tpid=15502\t'
+                return 'v=1\trev=1\tpid=8044\tplace=settings:List Connections\n' if command=="cat '/tmp/private status/ui.status'" else 'v=1\trev=1\tpid=15502\t'
             def run(self,command):calls.append(command)
         j=object.__new__(journey.Journey);j.work='/tmp/private status';j.ui=8044;j.boot_id='same-boot';j.r=Remote()
         j.cmd('b')

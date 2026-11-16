@@ -14,6 +14,9 @@
 #   STATES="home;settings" (some states, ";" between)   BIN=<pocket-ui> (default target/release/pocket-ui)
 #   KEEP=problems keeps only snapshots with findings, plus their text records.
 #   DEVICE=rp5 (POCKETUI_DEVICE for every snapshot; default none, the generic fallback)
+#   VISIBLE=1 adds the text each snapshot shows (POCKETUI_VISIBLE_TEXT) to its findings as V lines: two runs whose layout
+#   is the same show the same lines.
+#   SWEEP_WORK=<dir> (a fixed work folder, emptied first and removed after: pages that show its paths come out the same)
 #   scripts/size-sweep.sh [OUT]   (default /tmp/pocketui-size-sweep; nothing of it belongs in git)
 # On Linux without a Wayland compositor it starts scripts/wayland-stub.py.
 set -eu
@@ -26,8 +29,15 @@ LANGS=${LANGS:-en}
 JOBS=${JOBS:-4}
 KEEP=${KEEP:-0}
 DEVICE=${DEVICE:-}
+VISIBLE=${VISIBLE:-}
 BIN=${BIN:-$ROOT/target/release/pocket-ui}
-WORK=$(mktemp -d "${TMPDIR:-/tmp}/pocketui-size-sweep.XXXXXX")
+# SWEEP_WORK: a fixed work folder instead of a new one (paths the pages show stay the same from run to run).
+if [ -n "${SWEEP_WORK:-}" ]; then
+  WORK=$SWEEP_WORK
+  rm -rf "$WORK" && mkdir -p "$WORK"
+else
+  WORK=$(mktemp -d "${TMPDIR:-/tmp}/pocketui-size-sweep.XXXXXX")
+fi
 STUB_PID=
 cleanup() {
   [ -n "$STUB_PID" ] && kill "$STUB_PID" 2>/dev/null || true
@@ -57,6 +67,7 @@ name=$(printf '%s' "$line" | tr ':/ ,=()' '-------')
 data="$WORK/d/$(basename "$dir")-$name"
 rm -rf "$data" && mkdir -p "$WORK/d" && cp -R "$WORK/lib-$look/data" "$data"
 if [ -n "$DEVICE" ]; then export POCKETUI_DEVICE="$DEVICE"; fi
+if [ -n "$VISIBLE" ]; then export POCKETUI_VISIBLE_TEXT="$dir/$name.vis"; fi
 # shellcheck disable=SC2086
 POCKETUI_MOCK=1 POCKETUI_LANG=$lang POCKETUI_TEXT_SIZE=$text POCKETUI_SNAPSHOT_SIZE=$size \
   POCKETUI_TEXT_BOXES="$dir/$name.box" POCKETUI_LAYOUT_AUDIT="$dir/$name.audit" POCKETUI_I18N_MISSES="$dir/$name.tsv" \
@@ -64,7 +75,7 @@ POCKETUI_MOCK=1 POCKETUI_LANG=$lang POCKETUI_TEXT_SIZE=$text POCKETUI_SNAPSHOT_S
   "$BIN" $safe --snapshot "$state" "$dir/$name.png" >/dev/null 2>&1 || echo "failed: $line" >"$dir/$name.failed"
 rm -rf "$data"
 EOF
-export WORK BIN DEVICE
+export WORK BIN DEVICE VISIBLE
 for look in $LOOKS; do
   python3 -I "$ROOT/scripts/curator-fake-library.py" "$WORK/lib-$look" "$look" >/dev/null
   for size in $SIZES; do
@@ -83,7 +94,7 @@ for look in $LOOKS; do
             continue
           fi
           [ -f "$dir/$name.png" ] && printf '%s\t%s\n' "$(md5sum <"$dir/$name.png" | cut -d' ' -f1)" "$line" >>"$OUT/$tag.md5"
-          { cat "$dir/$name.box" "$dir/$name.audit" 2>/dev/null; grep '^[CXW]	' "$dir/$name.tsv" 2>/dev/null; } | sed "s|^|$line	|" >>"$OUT/$tag.problems" || true
+          { cat "$dir/$name.box" "$dir/$name.audit" 2>/dev/null; grep '^[CXW]	' "$dir/$name.tsv" 2>/dev/null; sed 's/^/V	/' "$dir/$name.vis" 2>/dev/null; } | sed "s|^|$line	|" >>"$OUT/$tag.problems" || true
         done <"$WORK/states"
         if [ "$KEEP" = problems ]; then
           rm -rf "${OUT:?}/$tag"

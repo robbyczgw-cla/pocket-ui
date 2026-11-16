@@ -7,7 +7,7 @@ local network, written `<device-ip>` below, and the extracted image of the virtu
 > **Status:** the file sharing changes and the SSH switch (Settings → Connections → Remote access) are implemented and were checked
 > on the device. `scripts/harden-ssh.sh` is prepared and only meant for development devices. The "rollout" steps
 > for release devices and the optional rpcbind and LLMNR changes are **planned**. The Syncthing switch
-> (Settings → Help & tools → For tinkerers → Sync) is implemented and was checked on the device, see [Syncthing](#syncthing-settings--sync-implemented-checked-on-the-device-22102026). The Tailscale page (Settings → Connections → Tailscale) is implemented and was tried in the virtual device with stand-ins only, see [Tailscale](#tailscale-settings--tailscale); the test device itself is on a real tailnet, and the web companion's check over it is in [WEB-COMPANION.md](WEB-COMPANION.md#device-checks-partly-done). The ledger is [STATUS.md](STATUS.md).
+> (Settings → Connections → Sync) is implemented and was checked on the device, see [Syncthing](#syncthing-settings--sync-implemented-checked-on-the-device-22102026). The Tailscale page (Settings → Connections → Tailscale) is implemented and was tried in the virtual device with stand-ins only, see [Tailscale](#tailscale-settings--tailscale); the test device itself is on a real tailnet, and the web companion's check over it is in [WEB-COMPANION.md](WEB-COMPANION.md#device-checks-partly-done). The ledger is [STATUS.md](STATUS.md).
 
 ## What ROCKNIX does by default
 

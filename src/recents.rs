@@ -88,6 +88,41 @@ impl Recents {
         self.list.truncate(KEEP);
     }
 
+    /// Play another view kept for this game (Android's Mobile view, `android_handheld::take_mobile_history`): `add_secs` more
+    /// play time, and `last_played` when it is newer than this list's. A game not on the list comes in where its time puts it,
+    /// so the order stays newest first. Memory only; `save` follows.
+    pub fn take_over(&mut self, system: &str, name: &str, path: &Path, last_played: u64, add_secs: u64) {
+        let previous = self.list.iter().position(|r| r.path == path).map(|i| self.list.remove(i));
+        let entry = match previous {
+            Some(mut r) => {
+                r.last_played = r.last_played.max(last_played);
+                r.play_secs += add_secs;
+                r
+            }
+            None => Recent { system: system.to_string(), name: name.to_string(), path: path.to_path_buf(), last_played, play_secs: add_secs, frozen: None },
+        };
+        let at = self.list.iter().position(|r| r.last_played < entry.last_played).unwrap_or(self.list.len());
+        self.list.insert(at, entry);
+        self.list.truncate(KEEP);
+    }
+
+    /// A list that is still empty (a fresh card) starts from what EmulationStation last played (`<lastplayed>` of the
+    /// gamelists: another system's card, ArkOS's or ROCKNIX's own), newest first, so Continue offers the game the player
+    /// left there. `played`: (system, name, path, unix seconds); a game never played (0) is left out. Never touches a list
+    /// that has anything on it: the player's own history always wins. True when something was added (save follows).
+    pub fn seed_from_es(&mut self, mut played: Vec<(String, String, PathBuf, u64)>) -> bool {
+        if !self.list.is_empty() {
+            return false;
+        }
+        played.retain(|p| p.3 > 0);
+        played.sort_by(|a, b| b.3.cmp(&a.3).then_with(|| a.2.cmp(&b.2)));
+        played.dedup_by(|a, b| a.2 == b.2);
+        for (system, name, path, at) in played.into_iter().take(KEEP) {
+            self.list.push(Recent { system, name, path, last_played: at, play_secs: 0, frozen: None });
+        }
+        !self.list.is_empty()
+    }
+
     /// Takes the game off the list and saves; false if it wasn't on it.
     pub fn remove(&mut self, path: &Path) -> bool {
         let before = self.list.len();
@@ -153,6 +188,11 @@ pub fn when_at(then: u64, now: u64, tz: i32) -> String {
 
 pub use crate::play_time::duration;
 
+/// The shelf's line under a game of a system's list: "Not played yet", or when it was last played and how long in all.
+pub fn played_line(r: Option<&Recent>) -> String {
+    r.map_or("Not played yet".to_string(), |r| format!("Last played {}, {} in total", ago(r.last_played), duration(r.play_secs)))
+}
+
 
 #[cfg(test)]
 mod tests {
@@ -162,6 +202,29 @@ mod tests {
 
     fn data_dir(tag: &str) -> crate::testutil::TestDir {
         TestDir::new(&format!("recents-{tag}"))
+    }
+
+    /// R36S 2026-11-15: someone coming from ArkOS has no history in pocket-ui yet; Continue offers the game ArkOS's
+    /// EmulationStation last started, and the player's own history is never reordered by it.
+    #[test]
+    fn an_empty_list_starts_from_what_emulationstation_last_played() {
+        let dir = data_dir("seed-es");
+        let mut r = Recents::load(&dir);
+        let p = |s: &str| std::path::PathBuf::from(s);
+        let played = vec![
+            ("gba".to_string(), "Golden Sun".to_string(), p("/storage/games-external/gba/Golden Sun (USA).gba"), 1_700_000_500),
+            ("snes".to_string(), "Super Metroid".to_string(), p("/storage/games-external/snes/Super Metroid.sfc"), 1_700_000_900),
+            ("psx".to_string(), "Never Played".to_string(), p("/storage/games-external/psx/Never.chd"), 0),
+        ];
+        assert!(r.seed_from_es(played.clone()));
+        assert_eq!(r.list.iter().map(|e| e.name.as_str()).collect::<Vec<_>>(), ["Super Metroid", "Golden Sun"], "newest first, never played left out");
+        assert_eq!((r.list[0].last_played, r.list[0].play_secs, r.list[0].frozen.is_none()), (1_700_000_900, 0, true));
+        // A list with anything on it stays as it is.
+        let own_dir = data_dir("seed-es-own");
+        let mut own = Recents::load(&own_dir);
+        own.record("nes", "Own", Path::new("/storage/roms/nes/Own.nes"), 60);
+        assert!(!own.seed_from_es(played));
+        assert_eq!(own.list.len(), 1);
     }
 
     #[test]

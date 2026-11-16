@@ -9,6 +9,8 @@
 
 use std::collections::HashMap;
 use std::path::Path;
+#[cfg(test)]
+use std::path::PathBuf;
 
 use crate::control;
 use crate::controls::{self, Mapping, MENU_ORDER};
@@ -79,6 +81,12 @@ impl EmuMenu {
         } else {
             settings.values.remove(&stick);
         }
+        let dpad = format!("{}{}", controls::KEY_PREFIX, controls::DPAD_STICK_KEY);
+        if mapping.dpad_stick != defaults.dpad_stick {
+            settings.values.insert(dpad, on_off(mapping.dpad_stick).into());
+        } else {
+            settings.values.remove(&dpad);
+        }
         let hold = format!("{}{}", controls::KEY_PREFIX, controls::HOLD_KEY);
         if mapping.hold_toggle != defaults.hold_toggle {
             settings.values.insert(hold, mapping.hold_value().into());
@@ -94,11 +102,6 @@ impl EmuMenu {
         let mapping = Mapping::from_values(system, &settings.values);
         let file = CoreOptionsFile { controls: mapping.to_file(Vec::new()), ..CoreOptionsFile::default() };
         EmuMenu { file, values: HashMap::new(), mapping, system: system.to_string() }
-    }
-
-    /// The controls card (`controls_card`) of the game that runs: the live mapping and the core's own button names.
-    pub fn controls_card(&self, system_name: &str, game: &str, shortcuts: Option<crate::controls_card::Shortcuts>) -> crate::controls_card::Card {
-        crate::controls_card::build(&crate::controls_card::Input { system: &self.system, system_name, game, mapping: &self.mapping, core_names: &self.file.controls.targets, shortcuts, layout: Some(crate::device::current().menu_layout()), menu_key: "HOME", touch: false })
     }
 
     /// Whether the core has anything to show on the Emulator page.
@@ -204,13 +207,26 @@ impl EmuMenu {
         c
     }
 
-    /// Row 0 is the stick, then the Mini V2's buttons in `MENU_ORDER`, then "Hold to toggle" and "Reset controls".
+    /// Rows before the buttons: "Left stick as D-pad", and "D-pad as left stick" for a system whose games use a stick.
+    fn stick_rows(&self) -> usize {
+        1 + controls::offers_dpad_stick(&self.system) as usize
+    }
+
+    /// Row 0 is the stick, then D-pad as left stick (`stick_rows`), the Mini V2's buttons in `MENU_ORDER`, then "Hold to
+    /// toggle" and "Reset controls".
     pub fn control_rows(&self) -> Vec<Row> {
         let mut rows = vec![Row {
             name: "Left stick as D-pad".into(),
             value: if self.mapping.stick_dpad { "On" } else { "Off" }.into(),
             desc: "The left stick works as the D-pad.\nTurn it off for games that use an analogue stick.".into(),
         }];
+        if self.stick_rows() == 2 {
+            rows.push(Row {
+                name: "D-pad as left stick".into(),
+                value: if self.mapping.dpad_stick { "On" } else { "Off" }.into(),
+                desc: "The D-pad moves the left stick, for games that need one.\nOn by itself on a handheld without sticks.".into(),
+            });
+        }
         for &id in &MENU_ORDER {
             let target = self.mapping.target[id as usize];
             let name = self.target_name(target);
@@ -236,7 +252,7 @@ impl EmuMenu {
     }
 
     pub fn control_count(&self) -> usize {
-        MENU_ORDER.len() + 3
+        MENU_ORDER.len() + 2 + self.stick_rows()
     }
 
     pub fn control_step(&mut self, sel: usize, delta: i32, settings: &mut GameSettings) {
@@ -251,8 +267,20 @@ impl EmuMenu {
                 settings.values.insert(format!("{prefix}{key}"), value.into());
             }
             control::pocket_core(&format!("ctl {key} {value}"));
-        } else if sel <= MENU_ORDER.len() {
-            let id = MENU_ORDER[sel - 1];
+            return;
+        }
+        let sel = sel + 2 - self.stick_rows();
+        if sel == 1 {
+            self.mapping.dpad_stick = !self.mapping.dpad_stick;
+            let (key, value) = (controls::DPAD_STICK_KEY, on_off(self.mapping.dpad_stick));
+            if self.mapping.dpad_stick == defaults.dpad_stick {
+                settings.values.remove(&format!("{prefix}{key}"));
+            } else {
+                settings.values.insert(format!("{prefix}{key}"), value.into());
+            }
+            control::pocket_core(&format!("ctl {key} {value}"));
+        } else if sel <= MENU_ORDER.len() + 1 {
+            let id = MENU_ORDER[sel - 2];
             let choices = self.choices();
             let current = self.mapping.target[id as usize];
             let now = choices.iter().position(|c| *c == current).unwrap_or(0) as i32;
@@ -267,7 +295,7 @@ impl EmuMenu {
                 }
                 control::pocket_core(&format!("ctl {key} {value}"));
             }
-        } else if sel == MENU_ORDER.len() + 1 {
+        } else if sel == MENU_ORDER.len() + 2 {
             let choices = self.hold_choices();
             let now = choices.iter().position(|c| *c == self.mapping.hold_toggle).unwrap_or(0) as i32;
             self.mapping.hold_toggle = choices[(now + delta).rem_euclid(choices.len() as i32) as usize];
@@ -285,6 +313,7 @@ impl EmuMenu {
                 control::pocket_core(&format!("ctl {} {}", controls::KEYS[id], self.mapping.value_of(id as u8)));
             }
             control::pocket_core(&format!("ctl {} {}", controls::STICK_KEY, on_off(self.mapping.stick_dpad)));
+            control::pocket_core(&format!("ctl {} {}", controls::DPAD_STICK_KEY, on_off(self.mapping.dpad_stick)));
             control::pocket_core(&format!("ctl {} {}", controls::HOLD_KEY, self.mapping.hold_value()));
         }
     }
@@ -325,15 +354,50 @@ mod tests {
     }
 
     fn menu_with(file: CoreOptionsFile, saved: &[(&str, &str)]) -> (EmuMenu, GameSettings) {
+        menu_for("gbc", file, saved)
+    }
+
+    fn menu_for(system: &str, mut file: CoreOptionsFile, saved: &[(&str, &str)]) -> (EmuMenu, GameSettings) {
         let dir = crate::testutil::TestDir::new("emumenu");
-        let rom = Path::new("/roms/gbc/g.gbc");
-        let mut s = GameSettings::load(&dir, "gbc", rom);
+        let rom = if system == "gbc" { PathBuf::from(&file.rom) } else { PathBuf::from(format!("/roms/{system}/g.rom")) };
+        file.rom = rom.to_string_lossy().into_owned();
+        let mut s = GameSettings::load(&dir, system, &rom);
         for (k, v) in saved {
             s.values.insert(k.to_string(), v.to_string());
         }
-        assert!(file.write(&core_options::file_path(&dir, "gbc")));
-        let m = EmuMenu::load(&dir, "gbc", rom, &mut s).expect("snapshot is readable");
+        assert!(file.write(&core_options::file_path(&dir, system)));
+        let m = EmuMenu::load(&dir, system, &rom, &mut s).expect("snapshot is readable");
         (m, s)
+    }
+
+    #[test]
+    fn an_n64_game_offers_the_d_pad_as_its_left_stick_and_a_game_boy_does_not() {
+        // Fable 5.2 gaps #8: on a Brick or RG35XX Plus (no sticks) Mario 64 could not walk. The row sits under the stick row.
+        let (mut m, mut s) = menu_for("n64", with_controls(), &[]);
+        let rows = m.control_rows();
+        assert_eq!(rows.len(), m.control_count());
+        assert_eq!(rows[1].name, "D-pad as left stick");
+        assert_eq!(rows[1].value, if pocket_ui_has_sticks() { "Off" } else { "On" });
+        assert_eq!(rows[2].name, "A", "the buttons follow");
+        let before = m.mapping.dpad_stick;
+        m.control_step(1, 1, &mut s);
+        assert_eq!(m.mapping.dpad_stick, !before);
+        assert_eq!(s.values["ctl.dpad_stick"], on_off(!before), "a change from the device's default is kept for the game");
+        m.control_step(1, 1, &mut s);
+        assert!(!s.values.contains_key("ctl.dpad_stick"));
+        // A button row still remaps its own button, Hold to toggle and Reset keep working from the end.
+        m.control_step(2, 1, &mut s);
+        assert!(s.values.contains_key("ctl.a"));
+        let last = m.control_count() - 1;
+        m.control_step(last, 1, &mut s);
+        assert!(s.values.keys().all(|k| !k.starts_with("ctl.")));
+        let (gb, _) = menu_with(with_controls(), &[]);
+        assert!(gb.control_rows().iter().all(|r| r.name != "D-pad as left stick"));
+        assert_eq!(gb.control_rows()[1].name, "A");
+    }
+
+    fn pocket_ui_has_sticks() -> bool {
+        crate::device::current().has_sticks()
     }
 
     fn sample() -> CoreOptionsFile {

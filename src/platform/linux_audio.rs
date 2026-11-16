@@ -1,5 +1,5 @@
 //! Linux audio sink. Queueing, resampling and rate control stay in audio.rs.
-use crate::audio::OUT_RATE;
+use crate::audio::out_rate;
 use crate::audio_diagnostics::{Diagnostics, WriterObservation};
 use libloading::Library;
 use std::ffi::{c_char, c_int, c_long, c_uint, c_ulong, c_void};
@@ -172,7 +172,7 @@ pub(crate) fn game_quantum() -> u32 {
 }
 
 fn is_h700() -> bool {
-    crate::device::current().model.is_some_and(|m| m.is_h700())
+    crate::device::current().model.is_some_and(|m| m.h700_class())
 }
 
 fn cycle_latency_us(h700: bool) -> c_uint {
@@ -322,10 +322,10 @@ impl Sink {
         };
         let spec = SampleSpec {
             format: PA_SAMPLE_S16LE,
-            rate: OUT_RATE,
+            rate: out_rate(),
             channels: 2,
         };
-        let server_bytes = OUT_RATE * 4 * SERVER_MS / 1000;
+        let server_bytes = out_rate() * 4 * SERVER_MS / 1000;
         let attr = BufferAttr {
             maxlength: u32::MAX,
             tlength: server_bytes,
@@ -380,12 +380,16 @@ impl Sink {
         if unsafe { open(&mut pcm, device.as_ptr(), 0, 0) } < 0 || pcm.is_null() {
             return None;
         }
-        if unsafe { set_params(pcm, SND_PCM_FORMAT_S16_LE, SND_PCM_ACCESS_RW_INTERLEAVED, 2, OUT_RATE, 1, latency_us) } < 0 {
+        if unsafe { set_params(pcm, SND_PCM_FORMAT_S16_LE, SND_PCM_ACCESS_RW_INTERLEAVED, 2, out_rate(), 1, latency_us) } < 0 {
             unsafe { close(pcm) };
             return None;
         }
         #[allow(unused_mut)]
         let mut observation = Observation::alsa(&lib, pcm);
+        #[cfg(feature = "brick")]
+        if crate::darkos::host() {
+            log_alsa_chain_once(&lib, pcm, &device.to_string_lossy());
+        }
         // Brick's "pipewire" name is its native chip, not a PipeWire graph.
         // BlueALSA keeps its existing streaming/pause behaviour.
         #[cfg(feature = "brick")]
@@ -508,7 +512,7 @@ impl Sink {
                     }
                     return 0;
                 }
-                frames.max(0) as u64 * 1_000_000 / OUT_RATE as u64
+                frames.max(0) as u64 * 1_000_000 / out_rate() as u64
             }
         }
     }
@@ -561,6 +565,63 @@ fn write_alsa(pcm: *mut c_void, writei: SndWritei, recover: SndRecover, samples:
 /// route, else the given device or "pipewire" (the chip). Only a plain Bluetooth address goes into the name: anything else could add
 /// arguments, so it counts as no headset.
 #[cfg(feature = "brick")]
+/// dArkOS (docs/DARKOS.md): what ALSA built behind the device, once per program, in the log the tester sends back. Its
+/// `default` is plug, softvol and a dmix at 44.1 kHz; a rate converter in that chain would be alsa-lib's linear one.
+#[cfg(feature = "brick")]
+fn log_alsa_chain_once(lib: &Library, pcm: *mut c_void, device: &str) {
+    static DONE: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+    if DONE.swap(true, std::sync::atomic::Ordering::Relaxed) {
+        return;
+    }
+    type OutOpen = unsafe extern "C" fn(*mut *mut c_void) -> c_int;
+    type Dump = unsafe extern "C" fn(*mut c_void, *mut c_void) -> c_int;
+    type OutString = unsafe extern "C" fn(*mut c_void, *mut *mut c_char) -> usize;
+    type OutClose = unsafe extern "C" fn(*mut c_void) -> c_int;
+    // SAFETY: the symbols are alsa-lib's own, used on a PCM that is open; the buffer output is closed before returning.
+    let chain = unsafe {
+        let (Ok(open), Ok(dump), Ok(string), Ok(close)) = (
+            lib.get::<OutOpen>(b"snd_output_buffer_open"),
+            lib.get::<Dump>(b"snd_pcm_dump"),
+            lib.get::<OutString>(b"snd_output_buffer_string"),
+            lib.get::<OutClose>(b"snd_output_close"),
+        ) else { return };
+        let mut out = std::ptr::null_mut();
+        if open(&mut out) < 0 || out.is_null() {
+            return;
+        }
+        let mut text = std::ptr::null_mut();
+        let chain = if dump(pcm, out) >= 0 {
+            let n = string(out, &mut text);
+            if text.is_null() { String::new() } else { String::from_utf8_lossy(std::slice::from_raw_parts(text as *const u8, n)).into_owned() }
+        } else {
+            String::new()
+        };
+        close(out);
+        chain
+    };
+    eprintln!("{}", alsa_chain_line(device, out_rate(), &chain));
+}
+
+/// The log line for `log_alsa_chain_once`: the device, our rate, whether ALSA converts it, and the chain's PCMs.
+#[cfg(feature = "brick")]
+pub(crate) fn alsa_chain_line(device: &str, rate: u32, dump: &str) -> String {
+    // "Plug PCM: Soft volume PCM", "Slave: Direct Stream Mixing PCM", ...: the PCMs in the order ALSA stacked them.
+    let pcms: Vec<&str> = dump
+        .lines()
+        .filter(|l| !l.starts_with([' ', '\t']))
+        .flat_map(|l| l.strip_prefix("Slave: ").unwrap_or(l).split(": "))
+        .map(str::trim)
+        .filter(|p| p.contains("PCM"))
+        .collect();
+    let converter = dump.lines().find_map(|l| l.trim().strip_prefix("Converter: ")).map(str::trim);
+    let converts = dump.contains("Rate conversion PCM");
+    format!(
+        "audio out: ALSA {device:?} at {rate} Hz, rate converted by ALSA: {}; chain: {}",
+        if converts { format!("YES ({})", converter.unwrap_or("unknown converter")) } else { "no".into() },
+        if pcms.is_empty() { "(no dump)".into() } else { pcms.join(" > ") }
+    )
+}
+
 pub(crate) fn brick_device(route: Option<&str>, env: Option<String>) -> String {
     let address = route.filter(|a| a.len() == 17 && a.bytes().enumerate().all(|(i, b)| if i % 3 == 2 { b == b':' } else { b.is_ascii_hexdigit() }));
     match address {
@@ -572,6 +633,19 @@ pub(crate) fn brick_device(route: Option<&str>, env: Option<String>) -> String {
 #[cfg(all(test, feature = "brick"))]
 mod brick_tests {
     use super::brick_device;
+
+    #[test]
+    fn the_darkos_log_says_whether_alsa_converts_our_rate() {
+        // snd_pcm_dump of dArkOS's `default` (plug > softvol > dmix 44.1 kHz), as alsa-lib prints it, abridged.
+        let same = "Plug PCM: Soft volume PCM\nControl: Master\nIts setup is:\n  rate         : 44100\nSlave: Direct Stream Mixing PCM\nIts setup is:\n  rate         : 44100\nSlave: Hardware PCM card 0 'rockchip,rk817-codec' device 0 subdevice 0\n";
+        let line = super::alsa_chain_line("default", 44_100, same);
+        assert!(line.contains("rate converted by ALSA: no"), "{line}");
+        assert!(line.contains("chain: Plug PCM > Soft volume PCM > Direct Stream Mixing PCM > Hardware PCM card 0"), "{line}");
+        let converted = "Plug PCM: Rate conversion PCM (44100, sformat=S16_LE)\nConverter: linear-interpolation\nProtocol version: 10002\nIts setup is:\n  rate         : 48000\nSlave: Soft volume PCM\n";
+        let line = super::alsa_chain_line("default", 48_000, converted);
+        assert!(line.contains("rate converted by ALSA: YES (linear-interpolation)"), "{line}");
+        assert!(super::alsa_chain_line("hw:0,0", 44_100, "").ends_with("chain: (no dump)"));
+    }
 
     #[test]
     fn the_brick_opens_its_headphones_by_address_and_nothing_odd_goes_into_the_name() {
@@ -598,7 +672,7 @@ mod tests {
     fn h700_pcm_holds_a_graph_cycle_and_two_writer_chunks() {
         let quantum = default_game_quantum(true);
         assert!(!crate::audio_route::short_quantum(Some(quantum)), "the short ring cannot hold this cycle");
-        let pcm_frames = cycle_latency_us(true) as usize * OUT_RATE as usize / 1_000_000;
+        let pcm_frames = cycle_latency_us(true) as usize * out_rate() as usize / 1_000_000;
         assert!(pcm_frames >= quantum as usize + 2 * crate::audio::CHUNK_FRAMES, "PCM must fit a graph cycle plus two writer chunks");
         assert!(pcm_frames >= quantum as usize * 2, "H700 PCM must hold two graph cycles");
         assert!(crate::audio_route::short_quantum(Some(default_game_quantum(false))), "other devices retain the measured small cycle");

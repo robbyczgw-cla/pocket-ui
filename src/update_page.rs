@@ -2,7 +2,7 @@
 use crate::update_channel::{self, Manifest, Release};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum Action { Check, InstallApp, InstallNow, Later, Auto }
+pub enum Action { Check, InstallApp, InstallNow, Later, Auto, Card }
 
 impl Action {
     pub fn label(self, version: Option<&str>) -> String {
@@ -12,6 +12,7 @@ impl Action {
             Self::InstallNow => "Install now".into(),
             Self::Later => "Later".into(),
             Self::Auto => "Check for updates automatically".into(),
+            Self::Card => "Look on the card".into(),
         }
     }
 }
@@ -25,6 +26,14 @@ pub fn actions(available: bool, confirming: bool) -> Vec<Action> {
     let mut rows = Vec::new();
     if available { rows.push(Action::InstallApp); }
     rows.extend([Action::Check, Action::Auto]);
+    rows
+}
+
+/// The handhelds' page (not Android's): "Look on the card" last, under the switch, for an update file copied onto the card
+/// (`update::card`); the rows above keep their places.
+pub fn actions_with_card(available: bool, confirming: bool) -> Vec<Action> {
+    let mut rows = actions(available, confirming);
+    if !(available && confirming) { rows.push(Action::Card); }
     rows
 }
 
@@ -43,5 +52,8 @@ mod tests {
         assert_eq!(actions(true, false), vec![Action::InstallApp, Action::Check, Action::Auto]);
         assert_eq!(actions(true, true), vec![Action::InstallNow, Action::Later]);
         assert_eq!(actions(false, true), vec![Action::Check, Action::Auto]);
+        assert_eq!(actions_with_card(true, false), vec![Action::InstallApp, Action::Check, Action::Auto, Action::Card]);
+        assert_eq!(actions_with_card(false, false), vec![Action::Check, Action::Auto, Action::Card]);
+        assert_eq!(actions_with_card(true, true), vec![Action::InstallNow, Action::Later], "the question stays two rows");
     }
 }

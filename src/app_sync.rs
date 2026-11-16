@@ -347,7 +347,7 @@ impl App {
         // The details under the list keep their room above the hints: with larger text (Settings → Text size) the
         // list shows fewer rows and scrolls, with a bar at the edge.
         let need = DETAILS_H + 6 * pocket_ui::type_scale::grow(28);
-        // Three rows at the least; two on short screens (1024x768, the Smart Pro's 720) with the largest text, where the details under them must stay over the hint bar.
+        // Three rows at the least; two on 1024x768 with the largest text, where the details under them must stay over the hint bar.
         let least = if pocket_ui::kit::short_screen(c.h) { 2 } else { 3 };
         let visible = (((c.h - pad - NU_PILL - 10 - need - 14 - top) / row).max(least) as usize).min(rows().len());
         let first = super::window_start(page.sel, visible, rows().len());
@@ -359,7 +359,11 @@ impl App {
             let y = top + (i - first) as i32 * row;
             self.hits.row(Area::new(pad, y, right - pad, row), i);
             let base = y + row / 2 + pocket_ui::type_scale::mid(font);
-            let name = r.label();
+            // The label leaves the value its room: a long name next to a long value ("GameCube- & Wii-Spielspeicher" and
+            // "Wird fortgesetzt", German at 1024x768 in Large text) is cut with "…" before it runs into it.
+            let value = page.value(*r);
+            let value_w = self.text.width(Face::Body, font, &value);
+            let name = &self.text.fit(Face::Body, font, r.label(), right - pad - 2 * NU_BTN_PAD - value_w - 24);
             if i == page.sel {
                 let w = self.text.width(Face::Body, font, name) + 2 * NU_BTN_PAD;
                 // On a 480-line screen the rows are 24 px apart: the pill keeps 2 px above and below, not 4.
@@ -371,7 +375,6 @@ impl App {
                 self.text.draw(c, Face::Body, font, pad + NU_BTN_PAD, base, pal().text, name);
             }
             // The switch row is the status of the service; the recommended shares are marked.
-            let value = page.value(*r);
             self.text.draw_right(c, Face::Body, font, right - NU_BTN_PAD, base, pal().text, &value);
         }
         self.hits.list(page.sel, rows().len(), 0.0, row as f32);
@@ -386,13 +389,22 @@ impl App {
             _ if page.can_resume() => &[("B", "Back"), ("A", "Change"), ("X", "Resume")],
             _ => &[("B", "Back"), ("A", "Change")],
         };
-        let foot = pocket_ui::kit::footer(c, &mut self.text, &mut self.hits, hints, page.describe(page.row()), 2, pal().text);
-        self.paint_sync_details(c, &page, top + visible as i32 * row + 14, foot);
+        let y0 = top + visible as i32 * row + 14;
+        let pill_x = c.w - NU_PAD - pocket_ui::kit::pill_width(&mut self.text, c.w, hints);
+        // The explanation under the details is one line where a second one would stand over the login line (1280x720 in
+        // Large text, whatever the language): the login is what the page is for, the explanation is cut with "…".
+        let g = |px: u32| pocket_ui::type_scale::grow(px) * 7 / 10;
+        let d6 = g(44) + g(24) + g(37) + pocket_ui::type_scale::grow(37) + g(24) + g(37) + g(28);
+        let two_lines_top = pocket_ui::kit::footer_baseline(c.h) - pocket_ui::type_scale::line(pocket_ui::kit::SMALL, 10) - pocket_ui::type_scale::px(pocket_ui::kit::SMALL) as i32 * 4 / 5;
+        // (Its login line is 47 px higher on such a screen, `paint_sync_details`.)
+        let lines = if page.on() && c.h < 768 && y0 + 314 + d6 - 47 + 6 > two_lines_top { 1 } else { 2 };
+        let foot = pocket_ui::kit::footer(c, &mut self.text, &mut self.hits, hints, page.describe(page.row()), lines, pal().text);
+        self.paint_sync_details(c, &page, y0, foot, pill_x);
         self.sync.page = Some(page);
     }
 
     /// Below the list: the status, then (when it is on) the device ID with its QR code and the web interface.
-    fn paint_sync_details(&mut self, c: &mut Canvas, page: &SyncPage, y0: i32, foot: i32) {
+    fn paint_sync_details(&mut self, c: &mut Canvas, page: &SyncPage, y0: i32, foot: i32, pill_x: i32) {
         // Each line a little lower than the one before with larger text: by the part of its type's growth above the
         // baseline (`d1` .. `d6`, all 0 in Normal).
         let g = |px: u32| pocket_ui::type_scale::grow(px) * 7 / 10;
@@ -409,7 +421,11 @@ impl App {
             app.text.draw(c, Face::Body, 24, left, y, pal().dust, s);
         };
         // Status. Off, under 768 lines (the Smart Pro's 720), without its label and 24 higher: the third paragraph kept its end.
-        let lift = if !page.on() && c.h < 768 { 24 } else { 0 };
+        // On, the same: without its label, 24 higher, and the lines under it a little closer (`tight`), so the explanation at
+        // the foot keeps its two lines over 720 lines in Large text.
+        let lift = if c.h < 768 { 24 } else { 0 };
+        let tight = c.h < 768;
+        let (id_step, up_id, up_web, up_url, up_login) = if tight { (id_step - 5, lift + 6, lift + 11, lift + 17, lift + 23) } else { (id_step, 0, 0, 0, 0) };
         if lift == 0 {
             label(self, c, y0 + 20, "Status");
         }
@@ -451,7 +467,8 @@ impl App {
             if page.ip.is_none() {
                 // Smaller, or without the way there, where it would run off the screen (German at 1024 wide, the Brick).
                 let full = "Connect to Wi-Fi first (Settings › Connections › Wi-Fi).";
-                let line = if self.text.width(Face::Body, 25, full) <= right - left { full } else { "Connect to Wi-Fi first." };
+                let line = if pocket_ui::device::no_wifi_chip() { pocket_ui::device::NEEDS_NETWORK }
+                    else if self.text.width(Face::Body, 25, full) <= right - left { full } else { "Connect to Wi-Fi first." };
                 let (px, line) = self.text.fit_sizes(Face::Body, &[28, 25], line, right - left);
                 self.text.draw(c, Face::Body, px, left, y + 10, pal().alert, &line);
             }
@@ -461,26 +478,30 @@ impl App {
         // Device ID: two lines of four groups, with the QR code at the right.
         let qr = 260;
         let qx = right - qr;
-        label(self, c, y0 + 104 + d2, "Device ID");
+        label(self, c, y0 + 104 + d2 - lift, "Device ID");
         match page.cfg.as_ref() {
             Some(cfg) if !cfg.device_id.is_empty() => {
                 let groups: Vec<&str> = cfg.device_id.split('-').collect();
+                // Left of the QR code, whatever the screen's width and the text's size (1024x768 in Large text: the end of
+                // each line ran under the code).
+                let id_room = qx - 16 - left;
                 for (i, line) in groups.chunks(4).enumerate() {
-                    self.text.draw(c, Face::Title, 37, left, y0 + 146 + d3 + i as i32 * id_step, pal().chalk, &line.join("-"));
+                    let (px, line) = self.text.fit_sizes(Face::Title, &[37, 34, 31, 28], &line.join("-"), id_room);
+                    self.text.draw(c, Face::Title, px, left, y0 + 146 + d3 - up_id + i as i32 * id_step, pal().chalk, &line);
                 }
                 paint_qr(c, qx, y0 + 4, qr, &cfg.device_id);
             }
             _ => {
-                self.text.draw(c, Face::Title, 37, left, y0 + 146 + d3, pal().dust, "Waiting for Syncthing");
+                self.text.draw(c, Face::Title, 37, left, y0 + 146 + d3 - up_id, pal().dust, "Waiting for Syncthing");
             }
         }
         // Web interface
-        label(self, c, y0 + 232 + d4, "Web interface (to pair from a computer)");
+        label(self, c, y0 + 232 + d4 - up_web, "Web interface (to pair from a computer)");
         let url = page.cfg.as_ref().map_or_else(
             || format!("https://{}:{}", page.ip.as_deref().unwrap_or("<device address>"), sync::GUI_PORT),
             |cfg| cfg.gui_url(page.ip.as_deref()),
         );
-        self.text.draw(c, Face::Title, 37, left, y0 + 274 + d5, pal().chalk, &url);
+        self.text.draw(c, Face::Title, 37, left, y0 + 274 + d5 - up_url, pal().chalk, &url);
         // The login is what the config says; the password is ours only when the user is (ROCKNIX's script logs in as root).
         let user = page.cfg.as_ref().map_or(sync::GUI_USER, |cfg| cfg.gui_user.as_str());
         let password = if user == sync::GUI_USER {
@@ -492,13 +513,20 @@ impl App {
         let problems = page.problems();
         // With larger text (Settings → Text size) the last line can run into the hints: a problem then takes the
         // login's line, and the note about the certificate is left out.
-        let (login_y, note_y) = (y0 + 314 + d6, y0 + 352 + d6 + g(24));
+        let (login_y, note_y) = (y0 + 314 + d6 - up_login, y0 + 352 + d6 + g(24) - up_login);
         // The foot's explanation counts too: two lines of it stand higher than the hints.
         let last = if note_y > (c.h - NU_PAD - NU_PILL).min(foot) - 10 { login_y } else { note_y };
         if last == note_y || problems.is_empty() {
-            // Cut with "…" where it is wider than the page (larger text, a long password).
-            let login = self.text.fit(Face::Body, 28, &login, right - left);
-            self.text.draw(c, Face::Body, 28, left, login_y, pal().chalk, &login);
+            // Where it stands in the hint bar's band (1280x720 in Large text), it ends left of the bar, smaller as far as
+            // 24 px, whole where it can be (the password is what it is for); else it is cut with "…" where it is wider than
+            // the page (a long password).
+            let room = if login_y + 8 > pocket_ui::kit::hint_bar_top(c.h) {
+                pill_x - 24 - left
+            } else {
+                right - left
+            };
+            let (px, login) = self.text.fit_sizes(Face::Body, &[28, 26, 24], &login, room);
+            self.text.draw(c, Face::Body, px, left, login_y, pal().chalk, &login);
         }
         if let Some(p) = problems.first() {
             let msg = match p {
@@ -506,8 +534,11 @@ impl App {
                 Problem::RocknixLogin => "The web interface uses ROCKNIX's login (root). Turn Syncthing off and on again to secure it.",
                 Problem::ClearText => "The web interface is not encrypted. Turn Syncthing off and on again.",
             };
-            let msg = self.text.fit(Face::Body, 24, msg, right - left);
-            self.text.draw(c, Face::Body, 24, left, last, pal().alert, &msg);
+            // Left of the hint bar where it stands in the bar's band (as the login line does).
+            let room = if last + 8 > pocket_ui::kit::hint_bar_top(c.h) { pill_x - 24 - left } else { right - left };
+            // A step smaller before it is cut, and then at a word (never "…to sec…").
+            let (px, msg) = self.text.fit_sizes(Face::Body, &[24, 22, 20], msg, room);
+            self.text.draw(c, Face::Body, px, left, last, pal().alert, &msg);
         } else if last == note_y {
             self.text.draw(
                 c,

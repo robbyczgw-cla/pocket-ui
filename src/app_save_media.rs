@@ -6,7 +6,9 @@
 //! slot the row is on (none on Auto and Before load), the same note under it. A slot with a save shows the game's
 //! cover, which the picture loader fits on its thread (`App::picture`; until it is there, the console's picture).
 
+use pocket_ui::control;
 use pocket_ui::gfx::Canvas;
+use pocket_ui::image::Image;
 use pocket_ui::save_media::{self, Icon, Kind, Layout, Slots};
 
 use super::App;
@@ -27,7 +29,103 @@ pub(crate) fn pause_memory_card() -> bool {
     SNAPSHOT_CARD.load(std::sync::atomic::Ordering::Relaxed)
 }
 
+/// Whether this menu's Save is the one that can be shown: pocket-core's own slots (not RetroArch's one save, not a
+/// standalone emulator, whose game must run to save).
+pub(crate) fn fills(menu: &super::QuickMenu) -> bool {
+    menu.hosted && !menu.retroarch && menu.states.is_some() && menu.saves == pocket_ui::pause_saves::Saves::Slots && menu.filled.len() > 1 && !pocket_ui::standalone::active()
+}
+
 impl App {
+    /// Animations on Cozy and Motion on Full: the only way Save is shown (no setting of its own).
+    pub(crate) fn save_fill_on(&self) -> bool {
+        self.cozy() && pocket_ui::motion::level() == pocket_ui::motion::Motion::Full
+    }
+
+    /// A is pressed on Save: the state is written now (the command goes to pocket-core at the press, as it did before),
+    /// the saved picture flies from the preview into its slot, a quiet click comes when it lands,
+    /// and the game goes on after `save_fill::LEN` at the latest, or at once with any button (`skip_save_fill`).
+    pub(crate) fn begin_save_fill(&mut self) {
+        let now = pocket_ui::frame_clock::now();
+        let Some(menu) = self.menu.as_mut() else { return };
+        if menu.saving.is_some() {
+            return;
+        }
+        let slot = menu.slot;
+        // Not written: nothing is shown as saved and the menu stays, as the error sound says.
+        // (POCKETUI_MOCK, the snapshots and the tests have no pocket-core to send to.)
+        if !pocket_ui::proc::mock() && !control::pocket_core(&format!("save {}", slot + 1)) {
+            pocket_ui::ui_sound::refuse();
+            return;
+        }
+        // The preview shows the new picture, which flies into its slot; the slot holds a save from now on.
+        menu.saved = Some((menu.frame.as_ref().map(|f| Image { w: f.w, h: f.h, px: f.px.clone() }), std::time::SystemTime::now()));
+        if let Some(f) = menu.filled.get_mut(slot) {
+            *f = true;
+        }
+        menu.saving = Some(pocket_ui::save_fill::Saving::new(slot, now));
+        // The press's own sound is the confirm; the click comes with the full block.
+        pocket_ui::ui_sound::played();
+        self.play_sound(pocket_ui::ui_sound::Sound::Confirm);
+        let cue = pocket_ui::save_fill::cue();
+        self.play_sound_after(cue.sound, cue.after, cue.db);
+        self.request_redraw();
+    }
+
+    /// Whether the picture of a Save is playing (the frames keep coming).
+    pub(crate) fn save_filling(&self) -> bool {
+        self.menu.as_ref().is_some_and(|m| m.saving.is_some())
+    }
+
+    /// Any button or touch while it plays: it ends, the click that was still waiting is dropped, the game comes back.
+    /// True when there was one (the press is then used up).
+    pub(crate) fn skip_save_fill(&mut self) -> bool {
+        if !self.save_filling() {
+            return false;
+        }
+        pocket_ui::ui_sound::forget_waiting();
+        self.end_save_fill();
+        true
+    }
+
+    /// Before the loop waits: the picture has run its length, the game goes on.
+    pub(crate) fn save_fill_tick(&mut self) {
+        let now = pocket_ui::frame_clock::now();
+        if self.menu.as_ref().and_then(|m| m.saving.as_ref()).is_some_and(|s| s.moment(now).is_none()) {
+            self.end_save_fill();
+        }
+    }
+
+    /// The game goes on: the save was written at the press, so this is only the way back (`resume_game`).
+    fn end_save_fill(&mut self) {
+        if let Some(menu) = self.menu.as_mut() {
+            menu.saving = None;
+        }
+        self.resume_game(None);
+        self.request_redraw();
+    }
+
+    /// Over the preview and the slot's row while Save plays (`save_fill::paint`): the saved picture flying from the preview
+    /// into its slot, then the slot lit. `preview`: where the menu painted the picture (None: there was none, nothing flies);
+    /// `block`: where the row or the card puts that slot's block.
+    fn paint_save_fill_over(&mut self, c: &mut Canvas, preview: Option<(i32, i32, i32, i32)>, block: impl FnOnce(usize) -> (i32, i32, i32)) {
+        let Some(menu) = self.menu.as_ref() else { return };
+        let Some(saving) = menu.saving else { return };
+        let Some(m) = saving.moment(pocket_ui::frame_clock::now()) else { return };
+        // The picture that was saved; without one (the game gave no picture) the system's colour, so a slot is still seen to fill.
+        let stripe = self.running.as_ref().map_or(0x444444, |r| super::stripe(&r.system));
+        let fallback;
+        let block = block(saving.slot);
+        let (picture, preview) = match (menu.saved.as_ref().and_then(|(img, _)| img.as_ref()), preview) {
+            (Some(img), Some(p)) => (img, p),
+            (img, _) => {
+                fallback = pocket_ui::image::Image { w: 2, h: 2, px: vec![stripe; 4] };
+                // Nothing in the preview to fly out of: it lands from the middle of the row, small.
+                (img.unwrap_or(&fallback), (block.0, block.1, block.2, block.2))
+            }
+        };
+        pocket_ui::save_fill::paint(c, picture, preview, block, m);
+    }
+
     /// How much height the slots take under the picture: the slim row as much as the old dots did (28), the full
     /// medium its own.
     pub(crate) fn save_strip_h(&self, w: i32) -> i32 {
@@ -39,7 +137,7 @@ impl App {
     }
 
     /// The slim row centred on (cx, cy): `filled` one per slot, `ring` the slot the row is on.
-    pub(crate) fn paint_save_row(&mut self, c: &mut Canvas, cx: i32, cy: i32, filled: &[bool], ring: Option<usize>) {
+    pub(crate) fn paint_save_row(&mut self, c: &mut Canvas, cx: i32, cy: i32, filled: &[bool], ring: Option<usize>, preview: Option<(i32, i32, i32, i32)>) {
         let Some(run) = self.running.as_ref() else { return };
         let (system, path) = (run.system.clone(), run.path.clone());
         let kind = Kind::of(&system);
@@ -56,6 +154,8 @@ impl App {
             _ => Icon::None,
         };
         save_media::paint_row(c, kind, cx, cy, ROW_BLOCK, ROW_GAP, filled, ring, icon);
+        let n = filled.len();
+        self.paint_save_fill_over(c, preview, |slot| pocket_ui::save_fill::row_block(cx, cy, ROW_BLOCK, ROW_GAP, n, slot));
     }
 
     /// The running game's save medium and its strip `w` wide.
@@ -66,7 +166,7 @@ impl App {
 
     /// Paints the medium with its slots in the middle of a room `w` wide from (x, y): `filled` one per slot, `ring`
     /// the slot the row is on.
-    pub(crate) fn paint_save_strip(&mut self, c: &mut Canvas, x: i32, y: i32, w: i32, filled: &[bool], ring: Option<usize>) {
+    pub(crate) fn paint_save_strip(&mut self, c: &mut Canvas, x: i32, y: i32, w: i32, filled: &[bool], ring: Option<usize>, preview: Option<(i32, i32, i32, i32)>) {
         let Some(run) = self.running.as_ref() else { return };
         let (system, path) = (run.system.clone(), run.path.clone());
         let (kind, _) = self.save_strip(w);
@@ -87,8 +187,12 @@ impl App {
             (None, Some(sp)) => Icon::Console(sp),
             _ => Icon::None,
         };
-        let slots = Slots { filled, ring, icon, stripe: super::stripe(&system), numbers: true };
+        let slots = Slots { filled, ring, icon, label: None, stripe: super::stripe(&system), numbers: true };
         save_media::paint(c, &mut self.text, kind, x + (w - l.w) / 2, y, &l, &slots);
+        self.paint_save_fill_over(c, preview, |slot| {
+            let (bx, by) = l.slot(slot);
+            (x + (w - l.w) / 2 + bx, y + by, l.block)
+        });
     }
 }
 
@@ -197,7 +301,7 @@ pub(crate) fn save_card_snapshot(c: &mut Canvas, text: &mut pocket_ui::text::Tex
     }
     let Kind::Cartridge(game, plastic) = Kind::of(name) else { return };
     let stripe = super::stripe(name);
-    let look = pocket_ui::cabinet_art::Look { color: pocket_ui::gfx::mix(stripe, 0x101010, 70), band: stripe, plastic };
+    let look = pocket_ui::cabinet_art::Look { color: pocket_ui::gfx::mix(stripe, 0x101010, 70), band: stripe, plastic, tape: false };
     let mut x = 40;
     for size in [h, 128] {
         if let Some(p) = pocket_ui::media::game_pic(text, game, size, look, "", None, None) {

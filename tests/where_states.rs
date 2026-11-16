@@ -53,7 +53,6 @@ fn painter_of(at: &str) -> &'static str {
             "app" => "app starting",
             "tour" => "tour",
             "port files" => "port files",
-            "controls card" => "controls card",
             "runs on" => "runs on",
             "this game" => "this game",
             "port performance" => "port perf",
@@ -182,7 +181,7 @@ fn at(records: &[(String, Option<Record>)], state: &str) -> String {
 const GATE_STATES: &[&str] = &[
     "settings", "settings:0:4", "sys:time", "sys:quick", "sys:power", "tour", "search:results:mario", "curator:lens",
     "card-manage:ps2:revenge:delete", "kids-pin", "kids-shelf", "this-game:gba", "port-perf", "conflicts:card",
-    "controls-card:psx", "setup:wifi", "menu:pocket-core", "notice:bios", "main",
+    "setup:wifi", "menu:pocket-core", "notice:bios", "main",
 ];
 
 #[test]

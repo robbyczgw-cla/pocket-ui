@@ -23,7 +23,7 @@ enum Family {
     Sd865,
     Sd8Gen2,
     H700,
-    /// The RG DS Plus's RK3568 (four Cortex-A55): DS full speed on DraStic, N64/PSP/Dreamcast only some games.
+    /// The RG DS Plus's RK3568 and the RK3566 handhelds (four Cortex-A55): DS full speed on DraStic, N64/PSP/Dreamcast only some games.
     Rk3566,
 }
 
@@ -31,8 +31,9 @@ fn family(model: Model) -> Option<Family> {
     match model {
         Model::MiniV2 | Model::MiniV1 | Model::Pocket5 | Model::Flip2 => Some(Family::Sd865),
         Model::Pocket6 | Model::Nova | Model::Odin2 | Model::Odin2Mini | Model::Odin2Portal => Some(Family::Sd8Gen2),
-        Model::H700(_) => Some(Family::H700),
-        Model::RgDsPlus => Some(Family::Rk3566),
+        // The R36S's Cortex-A35 is slower than the H700's A53: the same systems get the note.
+        Model::H700(_) | Model::Rk3326(_) => Some(Family::H700),
+        Model::RgDsPlus | Model::Rk3566(_) => Some(Family::Rk3566),
         Model::PocketClassic => None,
         #[cfg(feature = "brick")] Model::Brick(_) => None,
     }

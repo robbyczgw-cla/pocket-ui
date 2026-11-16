@@ -88,6 +88,37 @@ impl Trouble {
     }
 }
 
+/// A moment that couldn't be read or put back: the game goes on as it was.
+pub const LOAD_FAILED: &str = "Couldn't load this moment. Your game is unchanged.";
+/// The pause menu's Screenshot couldn't be written.
+pub const SCREENSHOT_FAILED: &str = "Couldn't save the screenshot.";
+/// A setting of the pause menu's Options couldn't be kept for the next start.
+pub const SETTING_FAILED: &str = "Couldn't keep this setting for the next start.";
+/// The player couldn't start the game (its emulator, its folders, its file).
+pub const START_FAILED: &str = "The emulator couldn't start this game.";
+/// Earlier before the first moment it keeps.
+pub const NOTHING_EARLIER: &str = "Nothing earlier yet: a moment is kept every 5 min of play.";
+
+/// What the player shows for an error: a sentence of ours as it is (one the interface translates), anything else (an
+/// OS error, a core's or a library's words) as `instead` (the caller logs the raw text). Android's player showed "No
+/// such file or directory (os error 2)" for Load on an empty slot (13.11.2026); every error that reaches its screen
+/// goes through here (`android/src/player.rs`, `said`).
+pub fn shown(error: &str, instead: &'static str) -> String {
+    // A line of the table as it stands, or with numbers in it ("No save in slot {n} yet"); never a pattern with a
+    // value in it: "{s} failed" would take "load libmgba.so: dlopen failed".
+    static SHAPES: std::sync::OnceLock<std::collections::HashSet<String>> = std::sync::OnceLock::new();
+    let shapes = SHAPES.get_or_init(|| crate::i18n::german().entries().into_iter().map(|(english, _)| english).collect());
+    let mut shape = String::new();
+    for (i, c) in error.char_indices() {
+        if !c.is_ascii_digit() {
+            shape.push(c);
+        } else if !error[..i].ends_with(|p: char| p.is_ascii_digit()) {
+            shape.push_str("{n}");
+        }
+    }
+    if shapes.contains(error) || shapes.contains(&shape) { error.to_string() } else { instead.to_string() }
+}
+
 /// A failed state write leaves older saves alone; shown after exit and over the game.
 pub const MOMENT_FAILED: &str = "Couldn't keep this moment. Your earlier saves are kept.";
 /// Load is refused before calling the core when its undo point could not be kept.
@@ -131,18 +162,18 @@ pub fn take() -> Option<Trouble> {
 pub const STATE_NOT_BACK: &str = "A save state couldn't be put back in its place on the SD card. It is kept and goes back the next time this game starts.";
 
 // Not on Android: no standalone emulators there (`standalone` is in linux_modules.rs).
-#[cfg(not(target_os = "android"))]
+#[cfg(not(all(target_os = "android", not(feature = "handheld"))))]
 static STATE_NOT_BACK_NOTED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 
 /// pocket-ui: that a parked save state didn't go back (the rename failed), for the shelf after the game.
-#[cfg(not(target_os = "android"))]
+#[cfg(not(all(target_os = "android", not(feature = "handheld"))))]
 pub(crate) fn note_state_not_back(e: &io::Error) {
     eprintln!("save_trouble: a parked save state did not go back: {e}");
     STATE_NOT_BACK_NOTED.store(true, std::sync::atomic::Ordering::Relaxed);
 }
 
 /// pocket-ui: [`STATE_NOT_BACK`] once after a standalone game when its parked save state didn't go back.
-#[cfg(not(target_os = "android"))]
+#[cfg(not(all(target_os = "android", not(feature = "handheld"))))]
 pub(crate) fn take_state_not_back() -> Option<&'static str> {
     STATE_NOT_BACK_NOTED.swap(false, std::sync::atomic::Ordering::Relaxed).then_some(STATE_NOT_BACK)
 }
@@ -150,6 +181,54 @@ pub(crate) fn take_state_not_back() -> Option<&'static str> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The player's words for what went wrong: a sentence of ours as it is, an OS error or a core's or library's words
+    /// never (Load on an empty slot showed "No such file or directory (os error 2)", 13.11.2026).
+    #[test]
+    fn the_player_shows_our_sentences_and_never_raw_error_text() {
+        let missing = std::fs::read("/nonexistent/pocket-ui/state.pstate2").unwrap_err().to_string();
+        let full = io::Error::from_raw_os_error(libc::ENOSPC).to_string();
+        let json = serde_json::from_str::<serde_json::Value>("{").unwrap_err().to_string();
+        for raw in [missing.as_str(), full.as_str(), json.as_str(), "Unwritable", "load /data/app/x/libmgba.so: dlopen failed", "No frame yet"] {
+            assert_eq!(shown(raw, LOAD_FAILED), LOAD_FAILED, "{raw:?} is not ours");
+        }
+        let slot = crate::slots::load_refusal(&[false; 8], 1).unwrap();
+        for ours in [LOAD_FAILED, SCREENSHOT_FAILED, SETTING_FAILED, START_FAILED, NOTHING_EARLIER, MOMENT_FAILED, UNDO_FAILED,
+            Trouble::Full.line(), Trouble::Unwritable.line(), Trouble::Unreadable.line(), slot.as_str(),
+            "Could not load or restore the game. Load another moment or return to the library. Your earlier saves are kept.",
+            "A kept moment can only be loaded: pick a slot to save", "The emulator's files could not be prepared.", "The game's document could not be opened"] {
+            assert_eq!(shown(ours, START_FAILED), ours, "our sentence {ours:?} stays (and is translated)");
+        }
+    }
+
+    /// Every way an error reaches the screen of Android's player goes through `said` (`shown` and a log line): the
+    /// pause menu's line (`message`), the start dialog. A new raw path fails here.
+    #[test]
+    fn every_error_on_the_android_player_s_screen_goes_through_said() {
+        const PLAYER: &str = include_str!("../android/src/player.rs");
+        let mut raw = vec![];
+        for (n, line) in PLAYER.lines().enumerate() {
+            let Some(at) = line.find("message = ").or_else(|| line.find("message=")) else { continue };
+            let rhs = &line[at..];
+            let ours = rhs.contains("said(")
+                || rhs.contains("pocket_ui::i18n::tr(\"")
+                // The Ok sentences of the pause menu; its Err arm is checked below.
+                || rhs.starts_with("message = match (result, self.row)")
+                // A pad's note (`android_pads::Pads::roster`): our sentence with the pad's name.
+                || rhs.contains("note.clone()");
+            if !ours { raw.push(format!("{}: {}", n + 1, line.trim())); }
+        }
+        assert!(raw.is_empty(), "an error reaches the player's screen as it is:\n{}", raw.join("\n"));
+        let arms = &PLAYER[PLAYER.find("message = match (result, self.row)").unwrap()..];
+        let arm = &arms[arms.find("(Err(e)").expect("the Err arm")..];
+        assert!(arm[..arm.find(')').unwrap() + 30].contains("said(e"), "the pause menu's errors: {}", &arm[..80]);
+        // Load on an empty slot never reads the missing file: refused with the slot's line, its button grey.
+        assert!(PLAYER.contains("2 => match pocket_ui::slots::load_refusal(&self.filled_slots, self.slot)"), "Load asks first");
+        assert!(PLAYER.contains("grey: [pocket_ui::slots::load_refusal(&self.filled_slots, self.slot).is_some()"), "Load is grey");
+        let start = &PLAYER[PLAYER.find("match Player::new(").unwrap()..];
+        let start = &start[start.find("Err(e) =>").expect("the start's error")..];
+        assert!(start.lines().next().unwrap().contains("said(e"), "the start dialog: {}", start.lines().next().unwrap());
+    }
     use crate::testutil::TestDir;
 
     #[test]

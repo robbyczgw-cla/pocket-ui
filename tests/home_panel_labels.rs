@@ -53,7 +53,9 @@ fn every_console_keeps_its_identity_on_a_narrow_curator_title_card() {
                 let output = cmd.output().unwrap();
                 assert!(output.status.success(), "{}: {}", console.id, String::from_utf8_lossy(&output.stderr));
                 let seen = std::fs::read_to_string(&visible).unwrap();
-                let allowed = |line: &str| line == console.name || line == console.id.to_uppercase() ||
+                // The table's own spine names (system_names, polish review 12.11.) that differ from the short names above:
+                // "Vita" for the PS Vita, "Atari 800" for the Atari 8-bit family (13.11.; "8-bit family" alone was no name).
+                let allowed = |line: &str| line == console.name || (matches!(console.id.as_str(), "psvita" | "atari800") && pocket_ui::system_names::short(&console.id) == Some(line)) || line == console.id.to_uppercase() ||
                     (!short.is_empty() && line == short) || console.aka.iter().any(|a| a == line);
                 if !seen.lines().any(allowed) {
                     failures.push(format!("{} {style} {size}: no whole console name or known short name:\n{seen}", console.id));

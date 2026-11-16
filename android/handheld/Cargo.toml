@@ -1,0 +1,75 @@
+# The handheld view on Android (prototype, docs: ~/pocket-review/ANDROID-LINUX-UI.md): the Linux app itself (../../src/main.rs
+# with the Linux module set, feature `handheld`) as a second native library in the APK, libpocket_handheld.so, started by
+# HandheldActivity. A manifest of its own, as web/Cargo.toml: the root Cargo.toml and Cargo.lock and the launcher's
+# (android/Cargo.toml) stay exactly as they are. Built with `cargo build --release --example pocket_handheld`.
+[package]
+name = "pocket-ui-handheld"
+version = "0.2.0"
+edition = "2021"
+authors = ["Robby Czesany"]
+license = "GPL-2.0-or-later"
+publish = false
+build = "build.rs"
+
+[lib]
+name = "pocket_ui"
+path = "../../src/lib.rs"
+test = false
+doctest = false
+
+# The App (main.rs) as the Activity's library: android_main at its end is what NativeActivity calls.
+[[example]]
+name = "pocket_handheld"
+path = "../../src/main.rs"
+crate-type = ["cdylib"]
+test = false
+
+[dependencies]
+font8x8 = { version = "0.3", default-features = false }
+fontdue = "0.9"
+ttf-parser = { version = "0.25", default-features = false, features = ["std"] }
+memmap2 = "0.9"
+png = "0.17"
+jpeg-decoder = { version = "0.3", default-features = false }
+roxmltree = "0.20"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+libc = "0.2"
+ed25519-dalek = { version = "2", default-features = false, features = ["std"] }
+sha2 = "0.10"
+base64 = "0.22"
+libloading = "0.8"
+miniz_oxide = "0.8"
+crc32fast = "1"
+glow = "0.14"
+raw-window-handle = "0.6"
+qrcode = { version = "0.14.1", default-features = false }
+# Android's own: the same winit and softbuffer as the launcher (android/Cargo.toml), JNI and AAudio as the shared library's.
+winit = { version = "0.30.13", default-features = false, features = ["rwh_06", "android-native-activity"] }
+android-activity = { version = "0.6", features = ["native-activity"] }
+softbuffer = { version = "0.4.6", default-features = false }
+jni = "0.21"
+ndk = { version = "0.9", features = ["audio", "api-level-26"] }
+log = "0.4"
+android_logger = "0.15"
+
+[build-dependencies]
+cc = "1"
+
+[features]
+default = ["handheld"]
+# The Linux module set on Android (src/lib.rs); always on in this manifest.
+handheld = []
+brick = []
+# QA only: a RetroAchievements server answered from the device (../src/ra_replay.rs), as the player's. Off in every release APK.
+ra-replay = []
+
+[profile.release]
+opt-level = 3
+lto = "thin"
+strip = true
+panic = "abort"
+
+# The pad's D-pad and sticks as arrow keys, L2/R2 as keys: the launcher's patched winit (android/Cargo.toml).
+[patch.crates-io]
+winit = { path = "../../vendor/winit-0.30.13-android" }

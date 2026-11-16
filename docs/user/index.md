@@ -26,7 +26,8 @@ and say clearly where something is still being built or has not been confirmed o
   ROCKNIX; see [Getting started](getting-started.md).
 - Your own game files. pocket-ui does not come with games or BIOS files.
 - Wi-Fi is optional. You need it for cover art, game descriptions, PortMaster games, RetroAchievements, updates
-  and copying games over the network.
+  and copying games over the network. Without it, updates come as a file you copy onto the card
+  ([Updates](updates.md#no-wi-fi-update-from-the-card)).
 
 ## What it does
 
@@ -56,13 +57,13 @@ and say clearly where something is still being built or has not been confirmed o
   it to look for new saves when a game ends ([Sync](sync.md)).
 - Pairs Bluetooth controllers in one press, and uses them in the menus as soon as they connect ([Bluetooth](bluetooth.md)).
   Each controller keeps its own button layout through reconnects ([Controller setup](controls-settings.md#controller-setup)),
-  and [Test buttons](settings-system.md#test-buttons) shows every button, trigger and stick light up.
+  and [Test buttons](settings-sound.md#test-buttons) shows every button, trigger and stick light up.
 - Gives every menu an old handheld's look with one switch: the [Retro style](theme.md#style), pixel letters and frames,
   little icons and blips, in Cocoa or Pea.
 - Starts in four calm steps on a new card: language, Wi-Fi, your games, the look ([First start](getting-started.md#3-first-start)).
   Help & tools → First-start setup runs them again.
 - Puts the Pocket on your Tailscale network, with a QR code to sign in, so it can be reached from anywhere ([Tailscale](remote.md)).
-- Opens your library in a browser on your phone or computer, over Tailscale only: edit, upload games, BIOS and
+- Opens your library in a browser on your phone or computer, on your home Wi-Fi or over Tailscale: edit, upload games, BIOS and
   PortMaster files, see play time and the screen ([Web companion](web-companion.md)). Off until you switch it on.
 - Counts RetroAchievements while you play on its own host: a small card for each unlock, the list in the pause
   menu, and your tally on the game card ([Achievements](achievements.md)).
@@ -84,13 +85,13 @@ and say clearly where something is still being built or has not been confirmed o
 
 1. [Getting started](getting-started.md): installing, first start, Wi-Fi, adding games; [Other handhelds](other-handhelds.md): other Retroid devices, SM8550 and Anbernic H700; [The GAMES drive](games-drive.md): games from a computer; [Second card](copy-games.md): games without Wi-Fi; [Game check](game-check.md): will your games start?; [games from your phone](phone-upload.md) over the same Wi-Fi; [Kids mode](kids-mode.md): a big simple shelf for a child.
 2. [How to](how-to.md): update over Wi-Fi, a game that won't start, pair a controller, back up saves, sync with a second device.
-3. [Coming from ROCKNIX or Android](coming-from.md): what happens to your saves, states, favourites and settings.
+3. [Coming from ROCKNIX, ArkOS or Android](coming-from.md): what happens to your saves, states, favourites and settings.
 4. [Playing](playing.md): Home, finding a game, the looks, console pages, Recent games; [Easy](easy.md): the look with one big game at a time; [Big text, Zoom and Hold to toggle](big-text.md): larger text in one switch, a magnifier for the pause menu, buttons that stay down. [Continue](continue.md): an open case means your moment is waiting, and A goes straight back.
 5. [The pause menu](pause-menu.md): what each emulator offers, quitting, Pixel Path; [Saving in the pause menu](pause-menu-saves.md): save slots, Where I quit and Before load, Earlier, when a save fails.
 6. [Options](options.md): picture, screen frames, controls, shortcuts, extras and run-ahead in a game, and [Cheats](options-cheats.md); [their shorter list](options-big.md) for PlayStation 2, GameCube, Wii and 3DS.
-7. [Controls](controls.md): every button, screen by screen; [in Settings, setup and on the touch screen](controls-settings.md), with the power and volume keys; [the controls card](controls-card.md), which button is which on each console.
-8. [Settings](settings.md): the Settings categories and the entries of Look, Playing and Games; [Sound & feel](settings-sound.md); [Connections, System and Help & tools](settings-system.md): Wi-Fi, Bluetooth, the clock, sleep, backups, the Tour, this guide and For tinkerers (Sync and PC streaming); [quick settings, sleep and power](quick-settings.md); [storage](storage.md): what takes up space on the SD card, clean-ups, hidden games; [Bluetooth](bluetooth.md): pairing controllers, headphones and speakers.
-9. [Language](language.md): English, German or Spanish menus, and what stays English.
+7. [Controls](controls.md): every button, screen by screen; [in Settings, setup and on the touch screen](controls-settings.md), with the power and volume keys.
+8. [Settings](settings.md): the Settings categories and the entries of Look, Playing and Games; [Screen & sound, Controls](settings-sound.md): brightness, volume, the screen and sounds; the buttons and controllers; [Connections, System and Help & tools](settings-system.md): Wi-Fi, Bluetooth, Tailscale, SSH, Sync, PC streaming, the clock, sleep, backups, the Tour and this guide; [quick settings, sleep and power](quick-settings.md); [storage](storage.md): what takes up space on the SD card, clean-ups, hidden games; [Bluetooth](bluetooth.md): pairing controllers, headphones and speakers.
+9. [Language](language.md): English, German, Spanish, Brazilian Portuguese, French or Italian menus, and what stays English.
 10. [Night light](night-light.md): warmer, less blue colours in the evening, on a schedule or all the time.
 11. [Colours and style](theme.md): the colour sets, fonts and the Retro style for every screen, switched in place.
 12. [Performance and fan](performance.md): what games start with, the fan in the menus, Smooth fan, the readout.
@@ -100,10 +101,10 @@ and say clearly where something is still being built or has not been confirmed o
 16. [Systems](systems.md): which systems run on which emulator.
 17. [Arcade games](arcade.md): which core plays them, matching romsets, parents, BIOS and CHD files, when a game does not start.
 18. [Patches, translations and MSU-1](patches-msu1.md): patching a game on a computer or with RetroArch, and one MSU-1 recipe (not checked on the device).
-19. [Extras](extras.md): box art, PortMaster games, tools.
+19. [Box art & downloads](extras.md): box art, PortMaster games, tools.
 20. [Sync](sync.md): saves and states on all your devices, with Syncthing.
 21. [Tailscale](remote.md): reach the Pocket from anywhere on your private network.
-22. [Web companion](web-companion.md): your library, uploads and play time in a browser, over Tailscale.
+22. [Web companion](web-companion.md): your library, uploads and play time in a browser, on your Wi-Fi or over Tailscale.
 23. [PC streaming](pc-streaming.md): Moonlight, pairing and leaving a stream.
 24. [Updates](updates.md): updating pocket-ui and the system safely.
 25. [Safe mode and EmulationStation](safe-mode.md): what happens when pocket-ui won't start, and ROCKNIX's own menu.

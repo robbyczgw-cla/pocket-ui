@@ -228,10 +228,20 @@ impl System for Real {
 
 /// The output now, asking PipeWire only when there is a Bluetooth link (UI sounds on the shelf).
 pub fn current(sys: &impl System) -> Output {
-    if may_be_bluetooth(&sys.connections()) {
-        output_of(sys.default_sink().as_deref())
-    } else {
-        Output::Speaker
+    // Android's handheld view (android/handheld): Android routes the sound and says where it goes (`platform::is_speaker`,
+    // the Mobile view's `android_route`); there is no /sys/class/bluetooth to read and no PipeWire to ask.
+    #[cfg(target_os = "android")]
+    {
+        let _ = sys;
+        if crate::platform::is_speaker() { Output::Speaker } else { Output::Bluetooth }
+    }
+    #[cfg(not(target_os = "android"))]
+    {
+        if may_be_bluetooth(&sys.connections()) {
+            output_of(sys.default_sink().as_deref())
+        } else {
+            Output::Speaker
+        }
     }
 }
 

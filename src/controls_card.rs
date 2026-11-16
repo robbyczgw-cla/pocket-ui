@@ -1,5 +1,5 @@
 //! The controls card: one picture per console of where the console's buttons are on the handheld, and what HOME does
-//! on top (docs/user/controls-card.md). A player should get it in three seconds.
+//! on top. A player should get it in three seconds.
 //!
 //! The picture is the handheld's own buttons in their places, and in each the console's name for it: on a SNES the
 //! right button says A, on a PlayStation the bottom one has the cross. Buttons the console does not have stay a faint
@@ -12,8 +12,9 @@
 //! table, the core's names as far as they are a console button's plain name (`plain_name`). A console with neither
 //! gets the short card: D-pad and buttons play, HOME is the menu.
 //!
-//! Model and painter live here so the shelf (the game card's Controls row, the first start of a console), the pause
-//! menu (Options > Controls) and the Android launcher and player draw the same card; the colours differ (`Colors`).
+//! The shelf's card (a game card's Controls row, a console's first start, the pause menu's Controls card) went in 0.5
+//! (the 0.5 hand test, 15.11.2026: bloat). What is left: the console's button names (`console_targets`, the Android
+//! player's touch buttons and Controls page) and the painter the Android player's pause menu still draws.
 
 use crate::controls::{self, Mapping, Target};
 use crate::gfx::Canvas;
@@ -148,49 +149,6 @@ pub struct Input<'a> {
     pub touch: bool,
 }
 
-/// One line per console that has had its card at a first start.
-const SEEN_FILE: &str = "controls-card-seen";
-
-fn seen_console(system: &str) -> &str {
-    match system {
-        "sfc" | "snesh" => "snes",
-        "famicom" | "nesh" => "nes",
-        "gbh" => "gb",
-        "gbch" => "gbc",
-        "gbah" | "gbav" => "gba",
-        _ => system,
-    }
-}
-
-/// Whether the first-start card is due for `system`, written down as shown: once for each console, never to a child.
-/// The mark is written here, so a game that dies right after still counts as told.
-pub fn first_start_due(data_dir: &std::path::Path, system: &str, kids: bool, resuming: bool) -> bool {
-    if kids {
-        return false;
-    }
-    let system = seen_console(system);
-    let file = data_dir.join(SEEN_FILE);
-    let seen = match std::fs::read_to_string(&file) {
-        Ok(s) => s,
-        Err(e) if e.kind() == std::io::ErrorKind::NotFound => String::new(),
-        Err(e) => {
-            eprintln!("controls card: could not read previous consoles: {e}");
-            return false;
-        }
-    };
-    if seen.lines().any(|l| seen_console(l) == system) {
-        return false;
-    }
-    // Persist before showing: a failed launch or a power cut must never erase earlier consoles.
-    // If storage cannot remember it, skip the interruption instead of showing it on every start.
-    if let Err(e) = crate::fsutil::write_atomic(&file, format!("{seen}{system}\n").as_bytes()) {
-        eprintln!("controls card: could not remember {system}: {e}");
-        return false;
-    }
-    // An existing game continues immediately, also on the first start after an update adds this card.
-    !resuming
-}
-
 /// A console whose buttons the table knows.
 struct Pad {
     /// The ROCKNIX folder names, and (on Linux) every folder pocket-core plays with one of `cores`: `snesh` and `sfc` are
@@ -309,6 +267,20 @@ const PADS: &[Pad] = &[
         extras: &[],
         special: (&[], &[]),
     },
+    // FreeJ2ME-Plus (RetroArch, phone games): its own table, `freej2me_libretro.c` and `Mobile.getMobileKey`. The D-pad is
+    // the phone's arrow keys (the card's D-pad), Select and Start the two keys under the screen; 2 4 6 8 are the left
+    // stick, 5 a press of it, CLR the right stick's press. FreeJ2ME puts the middle key (Nokia's centre key, fire and OK)
+    // on Y and 9 on A; pocket-ui's remap (`j2me_keys::DEFAULT_REMAP`) swaps the two, so A is OK.
+    Pad {
+        systems: &["j2me"],
+        cores: &["freej2me"],
+        buttons: &[(8, "OK"), (0, "7"), (9, "0"), (1, "9"), (10, "1"), (11, "3"), (12, "*"), (13, "#"), (14, "5"), (15, "CLR"), (2, "Left soft key"), (3, "Right soft key")],
+        left_stick: Some("2 4 6 8"),
+        right_stick: None,
+        note: Some("The D-pad is the phone's arrow keys, OK its middle key."),
+        extras: &[],
+        special: (&[], &[]),
+    },
     // Mupen64Plus-Next (Independent C-button Controls off, its default): A and B on the bottom and left face button,
     // the C buttons on the right stick, or on the face buttons while R2 is held.
     Pad {
@@ -345,7 +317,7 @@ fn pad(system: &str) -> Option<&'static Pad> {
 }
 
 /// Whether the card can name the console's buttons before a game of it ran.
-pub fn has_names(system: &str) -> bool {
+fn has_names(system: &str) -> bool {
     pad(system).is_some() || !crate::platform::console_buttons(system).is_empty()
 }
 
@@ -369,6 +341,9 @@ pub fn plain_name(core: &str) -> Option<&'static str> {
     PLAIN.iter().find(|(raw, _)| raw.eq_ignore_ascii_case(core)).map(|(_, plain)| *plain)
 }
 
+/// Table names that are words, not a button's print: translated on the card (`console_name`).
+const WORD_NAMES: &[&str] = &["Left soft key", "Right soft key"];
+
 /// The name of console button `id`, or None when the console has no such button. The table first, then the core's
 /// plain names; a raw core string never.
 fn console_name(system: &str, core_names: &[Target], id: u8) -> Option<String> {
@@ -381,7 +356,8 @@ fn console_name(system: &str, core_names: &[Target], id: u8) -> Option<String> {
         if let Some(plain) = core.and_then(plain_name).filter(|_| core_moved(p, core_names)) {
             return Some(plain.to_string());
         }
-        return p.buttons.iter().find(|(i, _)| *i == id).map(|(_, n)| n.to_string());
+        // Button names stay as printed; the phone's soft keys are words, said in the player's language.
+        return p.buttons.iter().find(|(i, _)| *i == id).map(|(_, n)| if WORD_NAMES.contains(n) { crate::i18n::tr(n) } else { n.to_string() });
     }
     if !core_names.is_empty() {
         return core.and_then(plain_name).map(str::to_string);
@@ -433,6 +409,16 @@ fn device_name(id: usize, faces: Option<[&'static str; 4]>) -> &'static str {
 }
 
 pub fn build(i: &Input) -> Card {
+    // The Mobile view's lib has the small device model (no profile): its player draws its own card, with no shortcuts.
+    #[cfg(all(target_os = "android", not(feature = "handheld")))]
+    let android = false;
+    #[cfg(not(all(target_os = "android", not(feature = "handheld"))))]
+    let android = crate::device::android_profile();
+    build_in(i, android)
+}
+
+/// [`build`] with Android's profile given: the Android player has no HOME shortcuts, so the card names none.
+pub fn build_in(i: &Input, android: bool) -> Card {
     let defaults = Mapping::defaults(i.system);
     let table = pad(i.system);
     let game = i.game.to_lowercase();
@@ -457,8 +443,13 @@ pub fn build(i: &Input) -> Card {
         }
     }
     let dpad_same = (4..8).all(|id| i.mapping.target[id] == defaults.target[id]);
-    let dpad = Slot { label: Some(if dpad_same { "D-pad" } else { "D-pad (changed)" }.to_string()), changed: !dpad_same };
     let analog = !controls::stick_dpad_default(i.system);
+    // D-pad as left stick: the D-pad does what the stick does in this game.
+    let dpad = if i.mapping.dpad_stick {
+        Slot { label: Some(table.and_then(|p| p.left_stick).unwrap_or("Analog stick").to_string()), changed: i.mapping.dpad_stick != defaults.dpad_stick }
+    } else {
+        Slot { label: Some(if dpad_same { "D-pad" } else { "D-pad (changed)" }.to_string()), changed: !dpad_same }
+    };
     let left_stick = if i.mapping.stick_dpad {
         Slot { label: Some("D-pad".into()), changed: i.mapping.stick_dpad != defaults.stick_dpad }
     } else if analog {
@@ -472,7 +463,7 @@ pub fn build(i: &Input) -> Card {
         _ => Slot::default(),
     };
     let mut shortcuts = Vec::new();
-    if let Some(on) = i.shortcuts {
+    if let Some(on) = i.shortcuts.filter(|_| !android) {
         if on.save {
             shortcuts.push(("HOME + R1", "Save"));
         }
@@ -501,18 +492,6 @@ pub fn build(i: &Input) -> Card {
     }
 }
 
-/// The Brick's two extra keys under the shortcuts, with what they do now (Settings > Lights & buttons); one that does
-/// nothing is left out.
-#[cfg(feature = "brick")]
-pub fn with_brick_keys(mut card: Card, keys: crate::brick_hw::FKeys) -> Card {
-    for (name, key) in [("F1", keys.f1), ("F2", keys.f2)] {
-        if key != crate::brick_hw::FKey::Nothing {
-            card.shortcuts.push((name, key.label()));
-        }
-    }
-    card
-}
-
 /// The card's colours: the shelf takes the palette in use, the pause menu its dark one.
 #[derive(Clone, Copy)]
 pub struct Colors {
@@ -531,7 +510,9 @@ const SMALL: u32 = 24;
 /// player changed. "Analog stick" under a drawn stick says nothing.
 fn stick_caption(s: &Slot, left: bool) -> Option<&str> {
     let l = s.label.as_deref()?;
-    (s.changed || (!left && l != "Right stick" && l != "Analog stick")).then_some(l)
+    // The left stick is said only when it is more than the console's stick: changed, or a phone's 2 4 6 8.
+    let plain = ["Analog stick", "Left stick", "Control stick", "D-pad"].contains(&l);
+    (s.changed || (!left && l != "Right stick" && l != "Analog stick") || (left && !plain)).then_some(l)
 }
 
 /// A left stick worth drawing: an analog one, or one the player switched.
@@ -777,8 +758,12 @@ fn paint_pad(c: &mut Canvas, text: &mut Text, card: &Card, area: (i32, i32, i32,
         c.round_rect(lx - arm + inset, cy - t / 2 + inset, 2 * arm - 2 * inset, t - 2 * inset, 3, colr);
         c.round_rect(lx - t / 2 + inset, cy - arm + inset, t - 2 * inset, 2 * arm - 2 * inset, 3, colr);
     }
-    if card.dpad.changed {
-        centered(c, text, Face::Body, SMALL, lx, cy + arm + 10 + crate::type_scale::px(SMALL) as i32, col.accent, "D-pad (changed)");
+    // Changed by the player, or a D-pad that is more than a D-pad.
+    let own = card.dpad.label.as_deref().filter(|l| *l != "D-pad" && *l != "D-pad (changed)");
+    if card.dpad.changed || own.is_some() {
+        let said = card.dpad.label.as_deref().unwrap_or("D-pad (changed)");
+        let ink = if card.dpad.changed { col.accent } else { col.text };
+        centered(c, text, Face::Body, SMALL, lx, cy + arm + 10 + crate::type_scale::px(SMALL) as i32, ink, said);
     }
     let faces = [(9usize, rx, cy - d, 0usize), (1, rx - d, cy, 1), (8, rx + d, cy, 2), (0, rx, cy + d, 3)];
     for (id, fx, fy, place) in faces {
@@ -954,6 +939,19 @@ mod tests {
 
 
     #[test]
+    fn phone_games_show_the_number_keys_freej2me_puts_on_the_buttons() {
+        let c = card_for("j2me", &[], &[], None);
+        assert!(c.known, "a phone game's card names its keys before the first game");
+        // FreeJ2ME-Plus puts OK (the middle key, fire: Bounce Tales jumps, 3D Bomberman drops a bomb with it) on Y and 9 on
+        // A; pocket-ui's remap (`j2me_keys::DEFAULT_REMAP`) swaps them, so A is the main key as in every other game.
+        assert_eq!([label(&c, "a"), label(&c, "b"), label(&c, "x"), label(&c, "y")], [Some("OK".into()), Some("7".into()), Some("0".into()), Some("9".into())]);
+        assert_eq!([label(&c, "l"), label(&c, "r"), label(&c, "l2"), label(&c, "r2")], [Some("1".into()), Some("3".into()), Some("*".into()), Some("#".into())]);
+        assert_eq!([label(&c, "select"), label(&c, "start")], [Some("Left soft key".into()), Some("Right soft key".into())]);
+        assert_eq!(c.left_stick.label.as_deref(), Some("2 4 6 8"));
+        assert!(c.note.as_deref().is_some_and(|n| n.contains("arrow")), "the card says the D-pad is the phone's arrows: {:?}", c.note);
+    }
+
+    #[test]
     fn gba_has_its_two_shoulders_and_a_b() {
         let c = card_for("gba", &[], &[], None);
         assert_eq!([label(&c, "a"), label(&c, "b"), label(&c, "l"), label(&c, "r")], [Some("A".into()), Some("B".into()), Some("L".into()), Some("R".into())]);
@@ -992,6 +990,14 @@ mod tests {
         // A swapped D-pad is said.
         let c = card_for("snes", &[("up", "down")], &[], None);
         assert_eq!(c.dpad.label.as_deref(), Some("D-pad (changed)"));
+    }
+
+    #[test]
+    fn with_d_pad_as_left_stick_the_card_says_the_d_pad_is_the_control_stick() {
+        let c = card_for("n64", &[("dpad_stick", "on")], &[], None);
+        assert_eq!(c.dpad.label.as_deref(), Some("Control stick"));
+        let c = card_for("n64", &[("dpad_stick", "off")], &[], None);
+        assert_eq!(c.dpad.label.as_deref(), Some("D-pad"));
     }
 
     #[test]
@@ -1101,6 +1107,16 @@ mod tests {
         assert_eq!(card_for("snes", &[], &[], None).shortcuts, vec![], "another emulator: only the menu (Card::menu_key) is ours");
     }
 
+    /// Android's player has no HOME shortcuts: its handheld view's card names none ("HOME + L1 Load" was a button that did nothing there).
+    #[test]
+    fn the_card_names_no_home_shortcuts_where_the_player_has_none() {
+        let mapping = Mapping::from_values("snes", &BTreeMap::new());
+        let all = Shortcuts { save: true, load: true, zoom: true };
+        let input = Input { system: "snes", system_name: "snes", game: "", mapping: &mapping, core_names: &[], shortcuts: Some(all), layout: Some(crate::button_layout_model::ButtonLayout::Nintendo), menu_key: "HOME", touch: false };
+        assert_eq!(build_in(&input, true).shortcuts, vec![], "Android");
+        assert_eq!(build_in(&input, false).shortcuts.len(), 3, "Linux");
+    }
+
     #[test]
     fn zoom_is_listed_only_once_its_shortcut_is_switched_on() {
         let values = |zoom: Option<&str>| -> std::collections::BTreeMap<String, String> {
@@ -1125,47 +1141,6 @@ mod tests {
     }
 
     #[test]
-    fn the_first_start_card_comes_once_for_each_console_and_never_to_a_child() {
-        let dir = crate::testutil::TestDir::new("controls-card-seen");
-        assert!(first_start_due(&dir, "snes", false, false), "the first SNES game");
-        assert!(!first_start_due(&dir, "snes", false, false), "never again for the SNES");
-        assert!(first_start_due(&dir, "gba", false, false), "the GBA has its own first time");
-        assert!(!first_start_due(&dir, "gba", false, false));
-        assert!(!first_start_due(&dir, "psx", true, false), "not to a child");
-        assert!(first_start_due(&dir, "psx", false, false), "and a child's start used no mark: the PlayStation is still new");
-        // A prefix of a console's name is not that console.
-        assert!(first_start_due(&dir, "ps", false, false));
-    }
-
-    #[test]
-    fn a_full_card_never_loses_earlier_consoles_or_repeatedly_interrupts_launch() {
-        let dir = crate::testutil::TestDir::new("controls-card-full");
-        assert!(first_start_due(&dir, "snes", false, false));
-        crate::fsutil::fail_next_write();
-        assert!(!first_start_due(&dir, "gba", false, false), "an unremembered card must not delay a launch");
-        assert!(!first_start_due(&dir, "snes", false, false), "a failed write must preserve the earlier mark");
-        assert!(first_start_due(&dir, "gba", false, false), "a later healthy write can remember the new console");
-    }
-
-    #[test]
-    fn resuming_an_existing_game_skips_and_consumes_the_first_start_card() {
-        let dir = crate::testutil::TestDir::new("controls-card-resume");
-        assert!(!first_start_due(&dir, "snes", false, true), "Continue after an update must start immediately");
-        assert!(!first_start_due(&dir, "snes", false, false), "another game of this console must not interrupt later");
-    }
-
-    #[test]
-    fn hack_and_translation_folders_do_not_repeat_a_consoles_first_card() {
-        let dir = crate::testutil::TestDir::new("controls-card-alias");
-        assert!(first_start_due(&dir, "snesh", false, false));
-        assert!(!first_start_due(&dir, "snes", false, false));
-        assert!(!first_start_due(&dir, "sfc", false, false));
-        assert!(first_start_due(&dir, "gb", false, false));
-        assert!(first_start_due(&dir, "gbc", false, false), "Game Boy Color is a separate console");
-        assert!(!first_start_due(&dir, "gbch", false, false));
-    }
-
-    #[test]
     fn independent_n64_controls_do_not_claim_r2_selects_c_mode() {
         let core = vec![Target { id: 13, label: "R Shoulder".into() }, Target { id: 8, label: "C-Down".into() }];
         let card = card_for("n64", &[], &core, None);
@@ -1183,15 +1158,5 @@ mod tests {
             assert_eq!(ids.len(), p.buttons.len(), "{:?}: one name per button", p.systems);
             assert!(ids.iter().all(|i| controls::MENU_ORDER.contains(i) && !(4..=7).contains(i)), "{:?}", p.systems);
         }
-    }
-
-    #[cfg(feature = "brick")]
-    #[test]
-    fn the_brick_card_says_what_f1_and_f2_do_and_leaves_out_one_that_does_nothing() {
-        use crate::brick_hw::{FKey, FKeys};
-        let c = with_brick_keys(card_for("snes", &[], &[], None), FKeys { f1: FKey::Save, f2: FKey::Load });
-        assert_eq!(c.shortcuts, vec![("F1", "Quick save"), ("F2", "Quick load")]);
-        let c = with_brick_keys(card_for("snes", &[], &[], None), FKeys { f1: FKey::Nothing, f2: FKey::Screenshot });
-        assert_eq!(c.shortcuts, vec![("F2", "Screenshot")]);
     }
 }

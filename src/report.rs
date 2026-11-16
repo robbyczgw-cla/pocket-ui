@@ -72,13 +72,13 @@ const VERSION_WAIT: Duration = Duration::from_secs(2);
 /// The About page's row.
 pub const ROW: &str = "Report a problem";
 /// Under the rows while the row is selected.
-pub const ROW_HELP: &str = "Saves a file with the logs and settings that help find a problem. You attach it to your report on GitHub.";
+pub const ROW_HELP: &str = concat!("Saves a file with the logs and settings that help find a problem. Attach it to a GitHub issue or mail it to ", contact_address!(), ".");
 pub const WRITING: &str = "Writing the report\u{2026}";
 pub const SAVED_TITLE: &str = "Report saved";
 pub const FAILED_TITLE: &str = "Report not saved";
 /// Where the file is, under its name.
 pub const WHERE: &str = "In the reports folder of the games share (roms/reports on the SD card).";
-pub const ATTACH: &str = "Attach this file to your report on GitHub.";
+pub const ATTACH: &str = concat!("Attach this file to a GitHub issue or mail it to ", contact_address!(), ".");
 /// What [`Redactor`] takes out, in the player's words.
 pub const LEFT_OUT: &str = "Left out: Wi-Fi names and passwords, network addresses, Tailscale, RetroAchievements and sync details, passwords and tokens. Game names are replaced by a short code, so name the game in your report if it matters.";
 
@@ -287,6 +287,7 @@ fn readme(now: u64, local: &Stamp, files: &[(String, Vec<u8>)], missing: &[&str]
     }
     let missing = if missing.is_empty() { "  (nothing)\n".to_string() } else { missing.iter().map(|m| format!("  {m}\n")).collect() };
     include_str!("../assets/report-readme.txt")
+        .replace("{contact}", crate::CONTACT)
         .replace("{when}", &format!(
             "{:04}-{:02}-{:02} {:02}:{:02}:{:02} on the Pocket's clock ({}, the time in the logs)",
             local.year,
@@ -1100,6 +1101,7 @@ mod tests {
         assert!(text("logs/portal-last.html").contains("please wait"), "{}", text("logs/portal-last.html"));
         let readme = text("README.txt");
         assert!(readme.contains("logs/pocket-ui.log") && readme.contains("GitHub"), "{readme}");
+        assert!(readme.contains(&format!("write to {}.", crate::CONTACT)) && !readme.contains("{contact}"), "{readme}");
         assert!(readme.contains("logs/portal-last.html") && readme.contains("needed a full browser"), "{readme}");
         assert!(!std::fs::read_dir(&src.out_dir).unwrap().flatten().any(|e| e.file_name().to_string_lossy().ends_with(".part")));
     }
@@ -1159,5 +1161,28 @@ mod tests {
         let mut src = pocket(&d);
         src.out_dir = d.join("reports");
         assert!(write(&src, &[], NOW, &LOCAL).is_err());
+    }
+
+    /// A player without a GitHub account must find the address wherever we say "report a problem": the device texts (all
+    /// six languages), the manual and the repository pages. They spell the same address as `contact_address!`.
+    #[test]
+    fn contact_address_is_the_same_everywhere() {
+        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
+        let mut missing = Vec::new();
+        for lang in ["de", "es", "pt", "fr", "it"] {
+            let tsv = std::fs::read_to_string(root.join(format!("assets/i18n/{lang}.tsv"))).unwrap();
+            let lines = tsv.lines().filter(|l| l.contains(crate::CONTACT)).count();
+            // The device texts that carry it: row help, attach, copied, Android help (the Source request offer has none).
+            if lines < 4 { missing.push(format!("assets/i18n/{lang}.tsv has it on {lines} lines, wants 4")); }
+            for l in tsv.lines().filter(|l| l.contains("@robbyczesany.com") && !l.contains(crate::CONTACT)) {
+                missing.push(format!("{lang}.tsv: another address: {l}"));
+            }
+        }
+        for file in ["README.md", "CONTRIBUTING.md", "SECURITY.md", "docs/user/troubleshooting.md", "docs/user/android-mvp.md", "assets/report-readme.txt"] {
+            let text = std::fs::read_to_string(root.join(file)).unwrap();
+            let has = text.contains(crate::CONTACT) || (file.ends_with("readme.txt") && text.contains("{contact}"));
+            if !has { missing.push(format!("{file} lacks the address")); }
+        }
+        assert!(missing.is_empty(), "{missing:#?}");
     }
 }

@@ -1,0 +1,92 @@
+Back to NextUI	Retour à NextUI
+Back to NextUI?	Retour à NextUI ?
+Back to NextUI. Your games, saves and settings stay as they are.	Retour à NextUI. Tes jeux, sauvegardes et réglages restent comme ils sont.
+Couldn't reach the update server over Tailscale. Is Tailscale on and connected?	Impossible de joindre le serveur de mises à jour via Tailscale. Tailscale est-il activé et connecté ?
+The SD card is too full for this update: it needs {n} MB more. Nothing was changed.	La carte SD est trop pleine pour cette mise à jour : il faut {n} Mo de plus. Rien n'a été modifié.
+The update list names no usable version. Nothing was changed.	La liste des mises à jour n'indique aucune version utilisable. Rien n'a été modifié.
+The update is missing {s}. Nothing was changed.	Il manque {s} dans la mise à jour. Rien n'a été modifié.
+The update is not version {s} inside. Nothing was changed.	La mise à jour n'est pas en version {s} à l'intérieur. Rien n'a été modifié.
+The update's start script is broken. Nothing was changed.	Le script de démarrage de la mise à jour est cassé. Rien n'a été modifié.
+Couldn't switch to the new version: {s}. Nothing was changed.	Impossible de passer à la nouvelle version : {s}. Rien n'a été modifié.
+No space left to unpack the download.	Plus de place pour décompresser le téléchargement.
+Battery & charging	Batterie et charge
+Like the rest	Comme les autres
+Customised	Personnalisé
+How bright the lights glow.	L'intensité des lumières.
+Colour, effect and brightness of the grips, the middle and the two F keys one by one. A: open.	Couleur, effet et luminosité des poignées, du centre et des deux touches F, une par une. A : ouvrir.
+Quick save, quick load, screenshot, Recent games, the pause menu, or nothing.	Sauver l'état, charger l'état, capture, Récents, le menu pause, ou rien.
+The slider on the side mutes the sound, or does nothing.	L'interrupteur latéral coupe le son, ou ne fait rien.
+Which light to set.	Quelle lumière régler.
+Its own colour, or the one above.	Sa propre couleur, ou celle du dessus.
+Steady, breathing, fading, pulsing or off; "Like the rest" follows the colour above.	Fixe, respiration, fondu, pulsation ou éteinte ; « Comme les autres » suit la couleur du dessus.
+Its own brightness, or the one above.	Sa propre luminosité, ou celle du dessus.
+Lights & buttons	Lumières et boutons
+F1/F2 are shortcuts, not game buttons.	F1/F2 sont des raccourcis, pas des boutons de jeu.
+Set them in Settings › Controls › Lights & buttons.	Règle-les dans Paramètres › Commandes › Lumières et boutons.
+Shortcuts for all games; not game buttons. Choose their action here.	Raccourcis pour tous les jeux ; pas des boutons de jeu. Choisis ici leur action.
+Each light	Chaque lumière
+F1 button	Bouton F1
+F2 button	Bouton F2
+Mute slider	Interrupteur muet
+The Brick's lights, the F1 and F2 keys and the mute slider.	Les lumières du Brick, les touches F1 et F2 et l'interrupteur muet.
+Lights off	Lumières éteintes
+A soft tick as you move, and how strong it is. Games rumble on their own (pause menu, Options).	Un léger tic quand tu bouges, et sa force. Les jeux vibrent d'eux-mêmes (menu pause, Options).
+Left grip	Poignée gauche
+Right grip	Poignée droite
+Middle	Centre
+F1 key	Touche F1
+F2 key	Touche F2
+Nothing	Rien
+Quick save	Sauver l'état
+Quick load	Charger l'état
+Pause menu	Menu pause
+Mutes	Coupe le son
+Does nothing	Ne fait rien
+Steady	Fixe
+Breathing	Respiration
+Fading	Fondu
+Pulsing	Pulsation
+{s} (heavy)	{s} (fort)
+Warm light in the menus. While a game runs, the main colour of its cover.	Lumière chaude dans les menus. Pendant un jeu, la couleur principale de sa jaquette.
+The colour of the Brick's lights.	La couleur des lumières du Brick.
+The Brick's lights stay dark.	Les lumières du Brick restent éteintes.
+The grips, the middle and the F keys glow in the colour you pick.	Les poignées, le centre et les touches F brillent de la couleur choisie.
+Dark while all is well. Orange breathing while it charges, green when it is full, red breathing when it runs low.	Éteintes quand tout va bien. Orange en respiration pendant la charge, vert quand elle est pleine, rouge en respiration quand elle est faible.
+That cover is not a PNG picture.	Cette jaquette n'est pas une image PNG.
+No game called {s} is on the card. Send the game first, then its cover with the same name.	Aucun jeu nommé {s} sur la carte. Envoie d'abord le jeu, puis sa jaquette avec le même nom.
+Several systems take this cover: more than one has a game with that name.	Plusieurs systèmes acceptent cette jaquette : plus d'un a un jeu de ce nom.
+The time zone could not be kept on the card: {s}	Le fuseau horaire n'a pas pu être gardé sur la carte : {s}
+The system didn't take the new time zone: {s}	Le système n'a pas pris le nouveau fuseau horaire : {s}
+PC Engine CD needs a BIOS file in Roms/bios: syscard3.pce	PC Engine CD a besoin d'un fichier BIOS dans Roms/bios : syscard3.pce
+Switched off after {n} min asleep to save the battery.	Éteint après {n} min en veille pour économiser la batterie.
+Switched off after {n} min with the screen off to save the battery.	Éteint après {n} min avec l'écran éteint pour économiser la batterie.
+Hue	Teinte
+Saturation	Saturation
+Own colour	Couleur propre
+Colour cycle	Cycle de couleurs
+Slow	Lent
+Its own colour, or the one above. Own colour: pick the hue and the saturation below.	Sa propre couleur, ou celle du dessus. Couleur propre : choisis la teinte et la saturation en dessous.
+Round the colour wheel: red, yellow, green, blue, violet and back.	Le tour de la roue des couleurs : rouge, jaune, vert, bleu, violet et retour.
+From pale to full colour.	Du pâle à la couleur pleine.
+Steady, breathing, fading, pulsing, a colour cycle, the battery and charger, or off; "Like the rest" follows the colour above.	Fixe, respiration, fondu, pulsation, cycle de couleurs, batterie et chargeur, ou éteinte ; « Comme les autres » suit la couleur du dessus.
+How fast it breathes, fades, pulses or cycles.	La vitesse de respiration, de fondu, de pulsation ou de cycle.
+Not saved.	Non enregistré.
+The emulator choice couldn't be saved on the card. Nothing was changed.	Le choix de l'émulateur n'a pas pu être enregistré sur la carte. Rien n'a été modifié.
+Controllers and headphones. Connected headphones take the sound of games and menus; it comes back to the speaker when they go.	Manettes et casques. Un casque connecté reçoit le son des jeux et des menus ; il revient sur le haut-parleur quand il est débranché.
+Restart pocket-ui?	Redémarrer pocket-ui ?
+Only pocket-ui starts again, in seconds. Your games, saves and settings stay as they are.	Seul pocket-ui redémarre, en quelques secondes. Tes jeux, sauvegardes et réglages restent comme ils sont.
+New versions of pocket-ui.	Nouvelles versions de pocket-ui.
+User	Utilisateur
+(unchanged)	(inchangé)
+How fast the processor may run, in games and in menus.	La vitesse maximale du processeur, en jeu et dans les menus.
+A choice saved in the pause menu (Options › Speed, rumble, fan) wins over this one.	Un choix enregistré dans le menu pause (Options › Vitesse, vibration, ventilateur) l'emporte sur celui-ci.
+Battery saves and save states. No games, no BIOS files.	Sauvegardes et save states. Ni jeux, ni fichiers BIOS.
+To {s} on the SD card. Copy it to a computer too.	Vers {s} sur la carte SD. Copie-la aussi sur un ordinateur.
+The screen goes off and the game waits; the power button wakes it.	L'écran s'éteint et le jeu attend ; le bouton d'alimentation le réveille.
+Saves the game and puts the Brick to sleep. The power button wakes it; the game waits in its pause menu.	Sauve le jeu et met le Brick en veille. Le bouton d'alimentation le réveille ; le jeu attend dans son menu pause.
+Only the screen goes dark and the game waits. The power button turns it back on.	Seul l'écran s'éteint et le jeu attend. Le bouton d'alimentation le rallume.
+Saves the game. The power button wakes it.	Sauve le jeu. Le bouton d'alimentation le réveille.
+The power button wakes it.	Le bouton d'alimentation le réveille.
+Back to EmulationStation	Retour à EmulationStation
+Back to EmulationStation?	Retour à EmulationStation ?
+pocket-ui closes and EmulationStation comes back. Your games, saves and settings stay as they are.	pocket-ui se ferme et EmulationStation revient. Tes jeux, sauvegardes et réglages restent comme ils sont.

@@ -1,8 +1,9 @@
 #!/bin/sh
-# Merge gate, two tiers (docs/dev/merge-gate.md "Merge gate"). Default: the fast tier (target <= 8 min on the train host) - every
-# program compiles, unit tests, doctests, the integration suites except the slow layout matrices, plus what the change
-# touches (scripts/gate-parts.py). GATE_FULL=1 (nightly on main, scripts/release-check.sh): the tests at release level
-# (exit code, not grep), the serial timing tier, the Brick corpus and UI walk and the German/Spanish matrix,
+# Merge gate, two tiers (docs/dev/merge-gate.md "Merge gate"). Default: the fast tier (target 8-10 min on the train host) - every
+# program compiles, unit tests, doctests, the integration suites except the slow layout matrices and the time budgets, plus what
+# the change touches (scripts/gate-parts.py), the layout matrices as their sample (POCKETUI_TEST_QUICK). GATE_FULL=1 (nightly on
+# main, scripts/release-check.sh): the tests at release level with their whole matrices (exit code, not grep), the time budgets
+# alone, the serial timing tier, the Brick corpus and UI walk and the German/Spanish matrix,
 # then the launcher tests, the verify-device test, the
 # core-licence check's test, the install package's test and the quiet start script's test.
 # Usage: scripts/gate.sh [--quick] [worktree]      (default: the repository this script is in)
@@ -42,8 +43,16 @@ eval "$allocation"
 if [ "${GATE_CPUSET+x}" = x ]; then
     taskset -pc "$gate_allowed" $$ >/dev/null || { echo "GATE: cannot enforce CPU cap"; exit 1; }
 fi
+# This run's own TMPDIR, removed when the gate ends (scripts/run-tmp.sh): a test that leaves folders behind can't fill /tmp
+# across runs (14.11.: 8,700 leftovers, "Disk quota exceeded" in a train). Under 2 GB free it cleans old run folders first.
+[ ! -f scripts/run-tmp.sh ] || { . scripts/run-tmp.sh; run_tmp_begin gate; }
 # Refresh source and embedded inputs after rsync, while the remote caller holds the shared target slot lock.
-for input in src tests examples assets; do [ ! -d "$input" ] || find "$input" -type f -exec touch {} + || exit 1; done
+# GATE_SOURCES_STAMPED=1 (tools/remote-gate.sh): its rsync --checksum --no-times already stamped exactly the files whose
+# content differs, so cargo sees every changed file as new and every other one as built. Touching them all too would
+# recompile the library and every test program for a change that only touched one test or one asset.
+if [ -z "${GATE_SOURCES_STAMPED:-}" ]; then
+    for input in src tests examples assets; do [ ! -d "$input" ] || find "$input" -type f -exec touch {} + || exit 1; done
+fi
 name=$(basename "$(pwd)")
 T=/tmp/gate-test-$name.log L=/tmp/gate-launcher-$name.log V=/tmp/gate-verify-$name.log C=/tmp/gate-licences-$name.log
 P=/tmp/gate-package-$name.log Q=/tmp/gate-grub-$name.log G=/tmp/gate-image-grub-$name.log F=/tmp/gate-fat-hook-$name.log
@@ -77,7 +86,7 @@ if [ "$quick" -eq 1 ]; then
     }
     # All branch changes plus local edits; override the comparison base explicitly when needed.
     suites=$(python3 scripts/quick-tests.py "${GATE_BASE:-main}") || exit 1
-    # Only this tier narrows render matrices; the merge gate never sets this variable.
+    # The render matrices as their sample, as in the merge gate (GATE_FULL=1 runs them whole).
     if [ -n "$suites" ]; then
         extra_states=$(python3 scripts/quick-tests.py --states "${GATE_BASE:-main}") || exit 1
         POCKETUI_TEST_QUICK=1 POCKETUI_TEST_STATES="$extra_states" nice -n "$nice_increment" cargo test $pflag $suites -q >>"$T" 2>&1 || {
@@ -95,7 +104,6 @@ if [ "$quick" -eq 1 ]; then
     exit 0
 fi
 
-unset POCKETUI_TEST_QUICK
 start=$(date +%s)
 
 # What did the branch change? Against the merge base with main (committed, uncommitted and new files). A remote gate has no .git:
@@ -112,18 +120,62 @@ if [ -n "$changed" ] && [ -z "${GATE_FULL:-}" ] && [ -f scripts/gate-select.py ]
     mode=$(printf '%s\n' "$changed" | python3 scripts/gate-select.py "$(pwd)") || exit 1
     [ "$mode" != docs ] || docs_only=1
 fi
+# The comment-only lane (13.11.): a change whose every file differs from main only in plain comments (Rust, shell, Python) and
+# unembedded documents needs no suites - the compile stage, the cheap checks and the gate's own self-tests are the whole gate.
+# scripts/gate-comments.py proves it against the base versions. A remote gate has no .git: tools/remote-gate.sh runs the proof
+# where .git is and writes .gate-lane next to .gate-changed. Anything but "comments" keeps the normal tiers.
+comments_only=0
+if [ "$docs_only" -eq 0 ] && [ -n "$changed" ] && [ -z "${GATE_FULL:-}" ] && [ -f scripts/gate-comments.py ]; then
+    if [ -f .gate-changed ]; then lane=$(cat .gate-lane 2>/dev/null)
+    else
+        # Proved against the tree this train was built on (GATE_LANE_BASE): a train behind another one in flight carries that
+        # one's changes, which its own gate tests. Without it: the same base as the change list.
+        lbase=${GATE_LANE_BASE:-${GATE_BASE:-main}}
+        lane=$( { git diff --name-only "$(git merge-base "$lbase" HEAD)"; git ls-files -o --exclude-standard; } 2>/dev/null | sort -u \
+                | python3 -I scripts/gate-comments.py "$(pwd)" "$lbase" 2>/dev/null) || lane=
+    fi
+    [ "$lane" != comments ] || comments_only=1
+fi
 # The merge gate's fast tier (2026-11-10, target <= 8 min on the train host): every program compiles, the unit tests, every
 # integration suite except the slow layout matrices, the ones the change touches (scripts/gate-parts.py), a Brick and
 # Android compile checks, and the shell suites when a script or a path they read changed. The timing tier, the full Brick
 # tier, the German/Spanish matrix and the other slow suites run when the change touches them, every night on
 # main (tools/nightly-gate.sh) and before a release (scripts/release-check.sh): GATE_FULL=1 runs all of it.
-tier=full heavy= brick_full=1 i18n_matrix=1
-if [ "$docs_only" -eq 0 ] && [ -n "$changed" ] && [ -z "${GATE_FULL:-}" ] && [ -f scripts/gate-parts.py ]; then
-    selection=$(printf '%s\n' "$changed" | python3 scripts/gate-parts.py "$(pwd)") || exit 1
+tier=full heavy= skip= nightly_tests= parts_ran=0 brick_full=1 brick_text=1 i18n_matrix=1 android=1 android_skip=
+if [ "$docs_only" -eq 0 ] && [ "$comments_only" -eq 0 ] && [ -n "$changed" ] && [ -z "${GATE_FULL:-}" ] && [ -f scripts/gate-parts.py ]; then
+    # The English text of the translation lines the change touched: scripts/gate-parts.py sends a translation-only change to
+    # the Android page tests only when one of those texts is drawn from a source Android uses. A remote gate gets the file
+    # from tools/remote-gate.sh (.gate-i18n-changed); without it, or without git, every translation change counts.
+    i18n_keys=
+    if printf '%s\n' "$changed" | grep -Eq '^assets/i18n/(de|es|pt|fr|it)\.tsv$'; then
+        if [ -f .gate-i18n-changed ]; then i18n_keys=$(pwd)/.gate-i18n-changed
+        elif [ -n "${base:-}" ]; then
+            i18n_keys=$(mktemp "${TMPDIR:-/tmp}/gate-i18n-keys.XXXXXX") || exit 1
+            git diff -U0 "$base" -- assets/i18n/de.tsv assets/i18n/es.tsv assets/i18n/pt.tsv assets/i18n/fr.tsv assets/i18n/it.tsv | sed -n '/^+++/d; /^---/d; s/^[-+]\([^#\t][^\t]*\)\t.*/\1/p' | sort -u >"$i18n_keys"
+        fi
+    fi
+    selection=$(printf '%s\n' "$changed" | GATE_I18N_KEYS="$i18n_keys" python3 scripts/gate-parts.py "$(pwd)") || exit 1
     eval "$selection"
+    parts_ran=1
+    case $i18n_keys in ''|"$(pwd)"/.gate-i18n-changed) ;; *) rm -f "$i18n_keys" ;; esac
 fi
-if [ "$tier" = fast ]; then
-    echo "gate: fast tier (GATE_FULL=1 runs everything); slow suites run: ${heavy:-none}; Brick ${brick_full:+$([ "$brick_full" -eq 1 ] && echo tests || echo check)}; shells $([ "$shell_tests" -eq 1 ] && echo "yes ($why_shell)" || echo no)"
+# The layout matrices (text_size, long_titles, the name and search suites, the German/Spanish snapshots) run as their sample in
+# the merge gate: a dozen states, one size, the longest language, plus the states the change adds to tests/i18n-states.txt
+# (a remote gate: .gate-states from tools/remote-gate.sh). Their whole matrix runs nightly and in the release check (GATE_FULL=1).
+unset POCKETUI_TEST_QUICK POCKETUI_TEST_STATES
+if [ -z "${GATE_FULL:-}" ] && [ "$docs_only" -eq 0 ] && [ "$comments_only" -eq 0 ] && [ -n "$changed" ]; then
+    if [ -f .gate-states ]; then new_states=$(cat .gate-states)
+    elif [ -n "${base:-}" ] && [ -f scripts/quick-tests.py ]; then new_states=$(python3 scripts/quick-tests.py --states "$base" 2>/dev/null) || new_states=
+    else new_states=; fi
+    export POCKETUI_TEST_QUICK=1 POCKETUI_TEST_STATES="$new_states"
+    echo "gate: layout matrices as their sample (POCKETUI_TEST_QUICK; $(printf '%s' "$new_states" | grep -c .) added states too; the whole matrix runs nightly)"
+fi
+if [ "$tier" = fast ] || [ "$parts_ran" -eq 1 ]; then
+    brick_what=check
+    [ "$brick_text" -ne 1 ] || brick_what="text-fit cases"
+    [ "$brick_full" -ne 1 ] || brick_what=tests
+    echo "gate: $tier tier (GATE_FULL=1 runs everything); slow suites run: ${heavy:-none}; Brick $brick_what; Android page tests $([ "$android" -eq 1 ] && echo yes || echo "no (nightly)"); shells $([ "$shell_tests" -eq 1 ] && echo "yes ($why_shell)" || echo no)"
+    echo "gate: left to the nightly run: the time budgets, the timing tier, the layout matrices beyond their sample${skip:+; suites $skip}${nightly_tests:+; $(echo $nightly_tests | wc -w) single tests (gate-parts.py NIGHTLY_TESTS)}"
 fi
 # Check every Rust configuration before any test or lane can start. In particular,
 # examples and Android cfg errors must not wait for codegen or the player suites.
@@ -141,6 +193,19 @@ if [ "$docs_only" -eq 0 ]; then
     grep -E '^(compile-first:|check-platforms:)' "$compile_log"
 fi
 compile_check_done=$(date +%s)
+# Cheap checks first (13.11.): the list scripts/preflight.sh gives every agent before queueing - translation audit and the
+# doc_checks/document_check/manual/i18n unit tests - runs right after the compile stage, so the cheap reds that cost most trains
+# show up here (minutes) and not after the full build and the suites. Same script, same list.
+if [ "$docs_only" -eq 0 ] && [ -f scripts/preflight.sh ]; then
+    cheap_started=$(date +%s)
+    cheap_log=/tmp/gate-cheap-$name.log
+    nice -n "$nice_increment" sh scripts/preflight.sh --cheap-tests "$(pwd)" >"$cheap_log" 2>&1 || {
+        echo "GATE: cheap checks FAILED ($(( $(date +%s) - start )) s; $cheap_log; the list of scripts/preflight.sh)"
+        tail -30 "$cheap_log"
+        exit 1
+    }
+    echo "gate: cheap checks ok ($(( $(date +%s) - cheap_started )) s)"
+fi
 
 # Run selection regressions even when this branch would skip the shell suites. Fixture trees omit this script,
 # preventing recursion; its cargo and shell commands are stand-ins and never build or access a device.
@@ -150,12 +215,37 @@ if [ -f scripts/test-gate-paths.sh ]; then
         echo "GATE: path-selection tests FAILED ($paths_log)"; tail -10 "$paths_log"; exit 1;
     }
 fi
+if [ -f scripts/test-preflight.sh ]; then
+    preflight_log=/tmp/gate-preflight-$name.log
+    sh scripts/test-preflight.sh >"$preflight_log" 2>&1 || {
+        echo "GATE: preflight script tests FAILED ($preflight_log)"; tail -10 "$preflight_log"; exit 1;
+    }
+fi
+if [ -f scripts/test-run-tmp.sh ]; then
+    runtmp_log=/tmp/gate-run-tmp-$name.log
+    sh scripts/test-run-tmp.sh >"$runtmp_log" 2>&1 || {
+        echo "GATE: run-folder script tests FAILED ($runtmp_log)"; tail -10 "$runtmp_log"; exit 1;
+    }
+fi
 if [ -f scripts/test-gate-schedule.py ]; then
     schedule_log=/tmp/gate-schedule-$name.log
     python3 scripts/test-gate-schedule.py >"$schedule_log" 2>&1 || {
         echo "GATE: scheduling fixtures FAILED ($schedule_log)"; tail -20 "$schedule_log"; exit 1;
     }
     tail -1 "$schedule_log"
+fi
+if [ -f scripts/test-gate-comments.py ]; then
+    comments_log=/tmp/gate-comments-$name.log
+    python3 -I scripts/test-gate-comments.py >"$comments_log" 2>&1 || {
+        echo "GATE: comment-only proof tests FAILED ($comments_log)"; tail -20 "$comments_log"; exit 1;
+    }
+fi
+if [ "$comments_only" -eq 1 ]; then
+    cheap_passed=$(sed -n 's/.*cheap tests ok.*, \([0-9][0-9]*\) passed).*/\1/p' "$cheap_log" 2>/dev/null | tail -1)
+    echo "gate: comment-only lane ($(( $(date +%s) - start )) s): every changed file differs from main only in comments or unembedded documents (scripts/gate-comments.py)"
+    echo "gate: SKIPPED player, Brick, timing, platform and shell tiers; compile stage, cheap checks and the gate self-tests ran"
+    echo "GATE: ok (${cheap_passed:-0} passed)"
+    exit 0
 fi
 if [ "$docs_only" -eq 1 ]; then
     # These are the same active document, link/index and translation contracts
@@ -186,7 +276,7 @@ fi
 RCD=$(mktemp -d "${TMPDIR:-/tmp}/gate-rc.XXXXXX") || { echo "GATE: cannot create shell test result directory"; exit 1; }
 # A fresh scope per gate; no render is reused across runs or different binaries.
 export POCKETUI_SNAPSHOT_CACHE_DIR="$RCD/snapshots"
-trap 'rm -rf "$RCD"' EXIT
+trap 'rc=$?; rm -rf "$RCD"; if command -v run_tmp_end >/dev/null 2>&1; then run_tmp_end "$rc"; fi' EXIT
 trap 'exit 143' HUP INT TERM
 shell_tests_run() {
     sh scripts/gate-shell.sh launcher "$name" "$RCD"
@@ -212,9 +302,13 @@ shell_rc() {
 # A retry would conceal a scheduling assumption; a red verdict stays red.
 case ${GATE_RUNNER:-auto} in auto|cargo|nextest) ;; *) echo "GATE: unknown GATE_RUNNER (use auto, cargo or nextest)"; exit 2 ;; esac
 cores=$gate_cores
-# The fast tier runs only some integration suites, but every test program still compiles.
+# The merge gate runs only some integration suites (a full-tier change: all but the time budgets), but every test program still
+# compiles (compile-first). GATE_FULL=1 builds and runs them all.
 rust_targets=
-if [ "$tier" = fast ]; then
+# merge_full: scripts/gate-parts.py said "full" (Cargo, the gate's own scripts, the test harness) in a merge gate.
+merge_full=0
+[ "$tier" != full ] || [ "$parts_ran" -eq 0 ] || merge_full=1
+if [ "$tier" = fast ] || [ "$merge_full" -eq 1 ]; then
     rust_targets="--lib --bins"
     for suite in tests/*.rs; do
         [ -f "$suite" ] || continue
@@ -222,10 +316,12 @@ if [ "$tier" = fast ]; then
         case " $skip " in *" $suite "*) ;; *) rust_targets="$rust_targets --test $suite" ;; esac
     done
 fi
-if [ "$gate_parallel" -eq 1 ] || [ "$tier" = fast ]; then
+if [ "$gate_parallel" -eq 1 ] || [ -n "$rust_targets" ]; then
     # Finish compilation before watchdogs, and finish default tests before any
     # Brick build can overwrite the unversioned CARGO_BIN_EXE_pocket-ui.
-    nice -n "$nice_increment" cargo test $pflag --no-run >"$T" 2>&1 || {
+    # The fast tier builds only the programs it runs: compile-first has already checked every other target (examples,
+    # the skipped suites), and the nightly run builds them all.
+    nice -n "$nice_increment" cargo test $pflag --no-run $rust_targets >"$T" 2>&1 || {
         echo "GATE: compilation FAILED ($T)"; tail -20 "$T"; exit 1;
     }
 fi
@@ -240,6 +336,15 @@ else
     echo "gate: serial schedule (no exclusive host, disabled, or insufficient separate cores)"
 fi
 
+# Known flaky tests the merge gate leaves to the nightly run (docs/dev/merge-gate.md, "Flaky tests"): GATE_SKIP_TESTS names
+# them as nextest prints them after the binary (`eject::tests::x`, `the_way_back_hands_over_y`); GATE_FULL=1 runs them.
+flaky_skip=
+[ -n "${GATE_FULL:-}" ] || flaky_skip=${GATE_SKIP_TESTS:-}
+[ -z "$flaky_skip" ] || echo "gate: left to the nightly run (flaky): $flaky_skip"
+# Single tests scripts/gate-parts.py leaves to the nightly run (NIGHTLY_TESTS), skipped the same way.
+[ -n "${GATE_FULL:-}" ] || flaky_skip="$flaky_skip${nightly_tests:+ $nightly_tests}"
+cargo_flaky=
+for skipped in $flaky_skip; do cargo_flaky="$cargo_flaky --skip $skipped"; done
 # shellcheck disable=SC2086  # pflag is one or two words
 runner=${GATE_RUNNER:-auto}
 # auto: nextest when it is installed (one process per test, all test binaries side by side, one retry), else cargo test.
@@ -250,11 +355,14 @@ case $runner in
     cargo)
         if [ "$docs_only" -eq 1 ]; then
             # Unit tests only: they hold the doc-drift checks (src/doc_checks.rs); no source changed, so cargo has nothing to build.
-            run_rust cargo test $pflag --lib --bins -q >"$T" 2>&1
-        elif [ "$tier" = fast ]; then
-            run_rust cargo test $pflag $rust_targets -q >>"$T" 2>&1 && run_rust cargo test $pflag --doc -q >>"$T" 2>&1
+            run_rust cargo test $pflag --lib --bins -q ${cargo_flaky:+-- $cargo_flaky} >"$T" 2>&1
+        elif [ -n "$rust_targets" ]; then
+            cargo_skips=$cargo_flaky
+            for skipped in $android_skip; do cargo_skips="$cargo_skips --skip ${skipped}::"; done
+            # shellcheck disable=SC2086
+            run_rust cargo test $pflag $rust_targets -q -- $cargo_skips >>"$T" 2>&1 && run_rust cargo test $pflag --doc -q >>"$T" 2>&1
         else
-            run_rust cargo test $pflag -q >"$T" 2>&1
+            run_rust cargo test $pflag -q ${cargo_flaky:+-- $cargo_flaky} >"$T" 2>&1
         fi
         trc=$?
         ;;
@@ -264,7 +372,12 @@ case $runner in
         nthreads=$cores; [ "$nthreads" -le 8 ] || nthreads=8   # a shared computer: remote-gate.sh passes GATE_TEST_THREADS
         export NEXTEST_TEST_THREADS=${GATE_TEST_THREADS:-${NEXTEST_TEST_THREADS:-$nthreads}}
         if [ "$docs_only" -eq 1 ]; then ntargets="--lib --bins"; else ntargets=$rust_targets; fi
-        run_rust cargo nextest run --cargo-profile "$profile" $ntargets --no-fail-fast \
+        # Library tests this change cannot reach wait for the nightly run (gate-parts.py "android").
+        nextest_filter=
+        for skipped in $android_skip; do nextest_filter="${nextest_filter:+$nextest_filter | }test(~${skipped}::)"; done
+        for skipped in $flaky_skip; do nextest_filter="${nextest_filter:+$nextest_filter | }test(=${skipped})"; done
+        if [ -n "$nextest_filter" ]; then set -- -E "not ($nextest_filter)"; else set --; fi
+        run_rust cargo nextest run --cargo-profile "$profile" $ntargets --no-fail-fast "$@" \
             --status-level retry --final-status-level flaky >"$T" 2>&1
         trc=$?
         # nextest doesn't execute Rust documentation examples. Keep the complete gate's doctest protection.
@@ -291,18 +404,25 @@ fi
 # public exports without this feature keep their ordinary integration tier.
 has_brick=0
 if [ -f src/input_corpus_tests.rs ] && grep -Eq '^[[:space:]]*brick[[:space:]]*=' Cargo.toml; then has_brick=1; fi
-if [ "$trc" -eq 0 ] && [ "$docs_only" -eq 0 ] && [ "$has_brick" -eq 1 ] && [ "$brick_full" -eq 1 ]; then
-    nice -n "$nice_increment" cargo test $pflag --features brick --lib input_corpus_tests -q >>"$T" 2>&1 || trc=1
-    # The Brick's manual has its own pages: none may outgrow the screen's limit (the default run checks the others).
-    nice -n "$nice_increment" cargo test $pflag --features brick --lib manual_pages_are_not_too_long_for_the_screen -q >>"$T" 2>&1 || trc=1
+# brick_full=0 with brick_text=1 (only translations or manual text changed): the Brick's text-fit cases run, the
+# corpus, slider, navigation and title search wait for the nightly run (gate-parts.py).
+if [ "$trc" -eq 0 ] && [ "$docs_only" -eq 0 ] && [ "$has_brick" -eq 1 ] && { [ "$brick_full" -eq 1 ] || [ "$brick_text" -eq 1 ]; }; then
+    # The library's unit tests with the Brick feature are the Brick stage's biggest build (measured with two build jobs: 390 s of the
+    # ~700 s); the text-fit cases below are integration tests and do not need it.
+    if [ "$brick_full" -eq 1 ]; then
+        nice -n "$nice_increment" cargo test $pflag --features brick --lib input_corpus_tests -q >>"$T" 2>&1 || trc=1
+    fi
     # The Settings writer and the card's hardware watcher must agree on the slider file, including legacy cards.
-    nice -n "$nice_increment" cargo test $pflag --features brick --lib the_saved_slider_choice_reaches_the_card_watcher -q >>"$T" 2>&1 || trc=1
+    if [ "$brick_full" -eq 1 ]; then
+        nice -n "$nice_increment" cargo test $pflag --features brick --lib the_saved_slider_choice_reaches_the_card_watcher -q >>"$T" 2>&1 || trc=1
+    fi
     # The ordinary integration tier excludes the Brick settings walk and the
     # Brick-only text regressions. Run those cases, keeping the public text matrix in its usual tier. The Smart Pro's
     # D-pad explorer (same card, 1280x720; its text fit is in brick_settings_walk) runs here too.
     for suite in brick_settings_walk text_size long_titles search_titles nav_explorer; do
         [ "$trc" -eq 0 ] || break
         [ -f "tests/$suite.rs" ] || continue
+        [ "$brick_full" -eq 1 ] || case $suite in search_titles|nav_explorer) continue ;; esac
         case $suite in
             nav_explorer)
                 # libtest's filters are ORed: every present/future Brick case, plus the Smart Pro's walks.
@@ -322,7 +442,7 @@ timing_started=$(date +%s)
 unset POCKETUI_SNAPSHOT_CACHE_DIR
 # The ignored timing tier is mandatory for both cargo and nextest. It gets one
 # attempt, one test thread, and runs after compilation; failure stays red.
-if [ "$tier" = fast ]; then
+if [ -z "${GATE_FULL:-}" ] && { [ "$tier" = fast ] || [ "$merge_full" -eq 1 ]; }; then
     :   # the timing tier runs nightly and before a release (GATE_FULL=1)
 elif [ "$trc" -eq 0 ] && [ "$shell_run_rc" -eq 0 ]; then
     if [ "$docs_only" -eq 1 ]; then timing_targets="--lib --bins"; else timing_targets=; fi
@@ -394,7 +514,7 @@ if [ "$docs_only" -eq 1 ]; then
     echo "gate: SKIPPED integration tests: only documents changed ($(echo "$changed" | wc -l) files, none read by the Rust build or the manual); unit tests with the doc checks ran"
 fi
 if [ "$shell_tests" -eq 0 ]; then
-    echo "gate: SKIPPED launcher and other shell tests: only Markdown or Rust sources not named by shell scripts changed (GATE_FULL=1 runs everything)"
+    echo "gate: SKIPPED launcher and other shell tests: nothing under deploy/ or scripts/ and no licence text changed (GATE_FULL=1 runs everything)"
 fi
 
 fail=0

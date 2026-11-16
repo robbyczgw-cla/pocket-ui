@@ -1,4 +1,4 @@
-//! Part of the pocket-ui binary: Settings → Help & tools → Test buttons, the App's side of `pocket_ui::button_test`.
+//! Part of the pocket-ui binary: Settings → Controls → Test buttons, the App's side of `pocket_ui::button_test`.
 //!
 //! The page lists every controller (the handheld's own buttons, Bluetooth, USB) and draws the selected one: face buttons,
 //! D-pad, shoulders, triggers with their travel and the point they count as pressed, SELECT, START, HOME and both sticks

@@ -13,6 +13,9 @@ The ROCKNIX 20261001 H700 rootfs assigns Speaker's mixer to Line Out, while its 
 2..31 from −43.5 dB in 1.5 dB steps. The backend checks this DAC TLV and the control ranges before writing.
 `testdata/audio/h616-muted-amixer.txt` is a control-only capture used by the parser regression test.
 
+The Line Out assignment matches the real speaker signal path. It is not evidence of a hardware bypass or
+an incorrect UCM mixer: the double attenuation came from pocket-ui adding a second percentage curve.
+
 ROCKNIX's `volume` helper (used by EmulationStation and the physical keys) changes the default PipeWire sink and
 persists `audio.volume`; it contains no separate DAC volume write. RetroArch's shipped configuration documents
 `audio_volume = 0.0` as unity gain in dB ([RetroArch reference](https://github.com/libretro/RetroArch/blob/master/retroarch.cfg)). Neither is evidence for a calibrated safe speaker maximum. The workaround
@@ -28,7 +31,8 @@ clipping threshold. The device session was stopped at the operator’s request; 
 Nonzero speaker wishes target that fixed DAC ceiling (or the downward-only diagnostic ceiling). PipeWire alone
 applies the system volume through Line Out plus a software residual: `60*log10(percent/100)` dB relative to the
 maximum, following [PulseAudio's cubic conversion](https://github.com/pulseaudio/pulseaudio/blob/master/src/pulse/volume.c).
-Zero percent still mutes the hardware switches. The DAC is not another percentage control.
+At zero percent the observed Line Out hardware mute keeps playback silent while the codec stays clocked.
+The DAC is not another percentage control.
 
 The RG35XX Plus's actual DAPM graph connects `Speaker <- LINEOUT <- Line Out Ramp Controller`. The
 [H616 codec driver](https://code.googlesource.com/linux/torvalds/linux/+/de03b17ec046d81c4713bc54306579b9024fc513/sound/soc/sunxi/sun4i-codec.c)
@@ -41,12 +45,28 @@ A 10..100% control sweep confirmed the fixed-ceiling path on one RG35XX Plus. Tw
 signals at 50%, source peak -39.99 dBFS, exited successfully with the PCM hardware pointer advancing.
 No high-level listening or analog recording was performed.
 
+Every H700 release now requires the [silent real-device volume curve](DEVICE-TESTS.md#silent-release-volume-curve)
+through `scripts/device-check.sh --volume`. Its amixer/DAPM capture establishes the serial path and its ten
+readbacks include PipeWire's actual software residual; ±1.5 dB is the gain tolerance. A closed PCM and no
+audio streams keep the measurement silent. `scripts/release-check.sh` verifies fresh evidence from the exact
+release binary and exact restoration. The unit fake is also bound to the recorded topology fixture rather
+than to the old documentation assumption. Brick/Retroid profiles remain TODO, not inferred from H700.
+
 PipeWire retains control of Line Out: its attenuation and its playback switch. Both UCM devices name "Line Out" as PlaybackMixerElem, so that switch *is* the mute PipeWire shows for the
 Speaker and the Headphones sink, and WirePlumber stores it per route, across restarts. pocket-ui never writes it.
 
-At 0 percent or sink mute, Speaker Switch, DAC Playback Switch (both channels) and DAC volume are set to zero. All
-independent mute mechanisms are attempted even if one control fails; successful writes are read back before being
-owned. Read/write failures cannot prove physical silence.
+At 0 percent, once Line Out reads back raw 0 and its switch remains on, DAC volume stays at raw 0 but the
+selected codec route stays powered (DAC on; Speaker on only without headphones). Line Out raw 0 is the validated
+hardware mute in the serial signal path. Turning the codec switches off stops the H700 PCM clock: RetroArch's
+blocking audio queue then hangs N64 immediately after "Init new dynarec". This was reproduced with 433 MiB
+available RAM and released in the same RetroArch process by powering the route again, without changing its
+core/options/remap. A nullmatrix before the same PipeWire slave kept the test silent; no stream gain was edited.
+The readback transition is checked even when the volume wish has not changed. External codec edits still stay
+untouched until a new deliberate wish. Headphone-clock behavior has unit coverage only.
+
+Before that Line Out mute is observed, or during sleep's sink mute, Speaker Switch, DAC Playback Switch and DAC
+volume are set to zero as before. All independent mute mechanisms are attempted even if one control fails;
+successful writes are read back before being owned. Read/write failures cannot prove physical silence.
 
 A muted codec sink is never the player's choice on H700: pocket-ui offers no mute there (0 % is the silent level) and
 ROCKNIX's `volume` helper never unmutes. Up to 0.3.1 the 0 % mute also switched Line Out off, which PipeWire showed as a
@@ -73,8 +93,8 @@ ramp forks no subprocess and never opens/reopens a PCM stream. ABI signatures fo
 
 DAC changes when restoring sound or changing routes move **one raw DAC step at most every 20 ms**.
 Faster key notifications are coalesced; only the newest target is followed. Ordinary nonzero volume steps keep
-the same DAC ceiling and leave the gain change to PipeWire; no mixer switch or route is toggled. Zero/mute bypasses the gain ramp and immediately writes the physical mute controls once
-the wish is observed. An external ALSA edit cancels an in-progress ramp. Smooth steps reduce discontinuities but
+the same DAC ceiling and leave the gain change to PipeWire; no mixer switch or route is toggled. Zero/mute bypasses the gain ramp; the read-back Line Out mute at zero keeps the codec clocked, while
+a sink mute or a missing Line Out mute powers it off once the wish is observed. An external ALSA edit cancels an in-progress ramp. Smooth steps reduce discontinuities but
 are not proof of click-free analog output; that still needs the operator's listening A/B.
 
 The default sink and its JSON volume/mute are polled with two bounded pactl helpers: every 500 ms when idle,

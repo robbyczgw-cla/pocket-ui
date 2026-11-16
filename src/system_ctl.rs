@@ -525,12 +525,8 @@ impl Hw for RealHw {
 
     fn volume(&self) -> Option<u8> {
         #[cfg(feature = "brick")]
-        if let Some(state) = self.brick_volume_state() {
-            for file in ["brick-volume-curve3", "brick-volume-curve2"] {
-                if let Some(pct) = std::fs::read_to_string(state.join(file)).ok().and_then(|s| s.trim().parse::<u8>().ok()).filter(|v| *v <= 100) {
-                    return Some(pct);
-                }
-            }
+        if let Some((pct, _)) = self.brick_volume_state().and_then(|state| brick_sink(&state)) {
+            return Some(pct as u8);
         }
         run_out("pactl", &["get-sink-volume", "@DEFAULT_SINK@"]).as_deref().and_then(parse_pactl_volume)
     }
@@ -538,9 +534,7 @@ impl Hw for RealHw {
     fn muted(&self) -> Option<bool> {
         #[cfg(feature = "brick")]
         if let Some(state) = self.brick_volume_state() {
-            // The speaker amplifier override also applies while other outputs remain audible.
-            // Only the slider marker may freeze the shared headphone/Bluetooth volume.
-            return Some(state.join("brick-muted").exists());
+            return Some(brick_muted(&state));
         }
         run_out("pactl", &["get-sink-mute", "@DEFAULT_SINK@"]).as_deref().and_then(parse_pactl_mute)
     }
@@ -1206,8 +1200,13 @@ impl AutoHw {
     }
 }
 
+#[cfg_attr(all(target_os = "android", feature = "handheld"), allow(unreachable_code))]
 impl Hw for AutoHw {
     fn brightness(&self) -> Option<u8> {
+        #[cfg(all(target_os = "android", feature = "handheld"))]
+        {
+            return crate::android_controls::brightness();
+        }
         if self.caps.backlight {
             self.real.brightness()
         } else {
@@ -1215,6 +1214,10 @@ impl Hw for AutoHw {
         }
     }
     fn set_brightness(&self, pct: u8) {
+        #[cfg(all(target_os = "android", feature = "handheld"))]
+        {
+            return crate::android_controls::set_brightness(pct);
+        }
         if self.caps.backlight {
             self.real.set_brightness(pct)
         } else {
@@ -1222,6 +1225,10 @@ impl Hw for AutoHw {
         }
     }
     fn persist_brightness(&self, pct: u8) {
+        #[cfg(all(target_os = "android", feature = "handheld"))]
+        {
+            return crate::android_controls::set_brightness(pct); // the Activity keeps it
+        }
         if self.caps.backlight {
             self.real.persist_brightness(pct)
         } else {
@@ -1229,6 +1236,10 @@ impl Hw for AutoHw {
         }
     }
     fn volume(&self) -> Option<u8> {
+        #[cfg(all(target_os = "android", feature = "handheld"))]
+        {
+            return crate::android_controls::levels().map(|l| l.percent());
+        }
         if self.caps.volume {
             self.real.volume()
         } else {
@@ -1236,6 +1247,10 @@ impl Hw for AutoHw {
         }
     }
     fn muted(&self) -> Option<bool> {
+        #[cfg(all(target_os = "android", feature = "handheld"))]
+        {
+            return crate::android_controls::levels().map(|l| l.muted);
+        }
         if self.caps.volume {
             self.real.muted()
         } else {
@@ -1243,6 +1258,10 @@ impl Hw for AutoHw {
         }
     }
     fn set_volume(&self, pct: u8) {
+        #[cfg(all(target_os = "android", feature = "handheld"))]
+        {
+            return crate::android_controls::set_volume(pct);
+        }
         if self.caps.volume {
             self.real.set_volume(pct)
         } else {
@@ -1250,6 +1269,10 @@ impl Hw for AutoHw {
         }
     }
     fn sound(&self) -> Option<crate::audio_route::Sound> {
+        #[cfg(all(target_os = "android", feature = "handheld"))]
+        {
+            return Some(if crate::platform::is_speaker() { crate::audio_route::Sound::Speaker } else { crate::audio_route::Sound::Bluetooth(None) });
+        }
         if self.caps.volume {
             self.real.sound()
         } else {
@@ -1457,11 +1480,43 @@ impl Worker {
 
 pub type SharedHw = Arc<dyn Hw>;
 
+/// The TrimUI Brick's sound as pocket-ui keeps it in its state folder (`BRICK_STATE`): the volume in percent (the
+/// newest curve's file, the older one's) and whether the slider mutes it (`brick-muted`). What `hwroot/usr/bin/pactl`
+/// answers, read without starting a process: that stand-in is a shell script running `amixer`, `sed` and `head`, and
+/// the menu sounds' mute check started it twice per move (about 90 processes per 20 moves, 15.11.2026). None without
+/// a volume file.
+pub fn brick_sink(state: &Path) -> Option<(u32, bool)> {
+    let pct = ["brick-volume-curve3", "brick-volume-curve2"]
+        .iter()
+        .find_map(|file| std::fs::read_to_string(state.join(file)).ok().and_then(|s| s.trim().parse::<u32>().ok()).filter(|v| *v <= 100))?;
+    Some((pct, brick_muted(state)))
+}
+
+/// The slider's mute. The speaker amplifier override also applies while other outputs remain audible: only the slider
+/// marker freezes the shared headphone/Bluetooth volume.
+fn brick_muted(state: &Path) -> bool {
+    state.join("brick-muted").exists()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::testutil::TestDir;
     use std::sync::atomic::{AtomicUsize, Ordering};
+
+    #[test]
+    fn the_bricks_sound_is_read_from_its_state_files() {
+        let d = TestDir::new("brick-sink");
+        assert_eq!(brick_sink(&d), None, "no volume file: ask pactl");
+        std::fs::write(d.join("brick-volume-curve2"), "35\n").unwrap();
+        assert_eq!(brick_sink(&d), Some((35, false)));
+        std::fs::write(d.join("brick-volume-curve3"), "42\n").unwrap();
+        assert_eq!(brick_sink(&d), Some((42, false)), "the newest curve first");
+        std::fs::write(d.join("brick-muted"), "").unwrap();
+        assert_eq!(brick_sink(&d), Some((42, true)));
+        std::fs::write(d.join("brick-volume-curve3"), "250\n").unwrap();
+        assert_eq!(brick_sink(&d), Some((35, true)), "a damaged file is passed over");
+    }
 
     #[test]
     fn an_unset_gpu_overclock_gets_the_stock_clock() {

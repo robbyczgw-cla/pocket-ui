@@ -79,6 +79,8 @@ pub struct Player {
     /// The recent games: path -> (last played, seconds played).
     pub recents: HashMap<PathBuf, (u64, u64)>,
     pub now: u64,
+    /// Shared play evidence, including saves imported without a session.
+    pub played: HashSet<PathBuf>,
 }
 
 /// The player's state lined up with the catalog's games.
@@ -90,6 +92,7 @@ pub fn user_state(catalog: &Catalog, p: &Player) -> UserState {
             let meta = p.meta.get(&g.path.to_string_lossy().into_owned());
             let recent = p.recents.get(&g.path);
             UserGame {
+                evidence: p.played.contains(&g.path) || meta.is_some_and(|m| m.unwrapped || m.sessions > 0 || m.status_set),
                 status: meta.map(|m| m.status).unwrap_or_default(),
                 secs: meta.map_or(0, |m| m.secs).max(recent.map_or(0, |r| r.1)),
                 last_played: recent.map(|r| r.0),

@@ -339,20 +339,24 @@ impl App {
         // On 768 lines (rows 59 px) a value and its line don't fit in a row at all: the rows show the values, and the
         // selected stage's line is read under them, above the last seconds of play.
         let cramped = row < 70;
-        let (lift, line_dy) = if cramped { (0, 26) } else if tight { (0, 40) } else { ((full - row) / 2, 40 - (full - row) / 2) };
+        // Cramped (rows of 51 px at Large text on 720 lines): the grade word under the stage's name, a step smaller there,
+        // must end above the next stage's name, or its letters touch the next name's ("Originalgetreu" on "Ansicht").
+        let tiny = cramped && row < 54;
+        let (lift, line_dy) = if cramped { (0, 26i32.min(row - if tiny { 31 } else { 28 })) } else if tight { (0, 40) } else { ((full - row) / 2, 40 - (full - row) / 2) };
         let (dot_x, name_x, value_x) = (pad + 34, pad + 74, pad + 74 + pocket_ui::type_scale::wide(162, 28));
         let Some(path) = path else {
             self.text.draw(c, Face::Body, 30, name_x, top + 60, 0x9a978f, "Reading the path…");
             self.nu_hints(c, &[("B", "Back")]);
             return;
         };
+        // The selected stage's band first: the grade word under the stage above it reaches into it, and was painted over.
+        if !about && sel < path.stages.len() {
+            pocket_ui::retro::pill(c, pad, top + sel as i32 * row + 2, right - pad, row - 6, 24, 0x222225);
+        }
         for (i, s) in path.stages.iter().enumerate() {
             let y0 = top + i as i32 * row;
             let cy = y0 + 34 - lift;
             let colour = s.grade.colour();
-            if i == sel && !about {
-                pocket_ui::retro::pill(c, pad, y0 + 2, right - pad, row - 6, 24, 0x222225);
-            }
             // The line to the next stage, in this stage's colour, quieter than the dots.
             if i + 1 < path.stages.len() {
                 c.rect(dot_x - 1, cy + 14, 3, row - 28, mix(colour, 0x000000, 150));
@@ -371,7 +375,7 @@ impl App {
             if s.grade != Grade::Unknown {
                 if large {
                     // The short rows have no value explanation beside this line: keep the whole grade there, one step smaller.
-                    let (px, width) = if cramped { (18, right - NU_BTN_PAD - name_x) } else { (22, value_x - name_x - 16) };
+                    let (px, width) = if cramped { (if tiny { 16 } else { 18 }, right - NU_BTN_PAD - name_x) } else { (22, value_x - name_x - 16) };
                     let word = self.text.fit(Face::Body, px, s.grade.name(), width);
                     self.text.draw(c, Face::Body, px, name_x, base + line_dy, colour, &word);
                 } else {
@@ -387,7 +391,8 @@ impl App {
         }
 
         // The last seconds of play (the game is paused behind the menu).
-        let mut live_base = top + 7 * row + 26 + pocket_ui::type_scale::grow(28) + if cramped { 12 } else { 0 };
+        // Cramped, the last stage's grade word stands under its name: the lines below start under it.
+        let mut live_base = top + 7 * row + 26 + pocket_ui::type_scale::grow(28) + if cramped { 12 + (60 - row).clamp(0, 8) } else { 0 };
         if cramped {
             if let Some(s) = path.stages.get(sel).filter(|s| !s.line.is_empty()) {
                 let line = self.text.fit(Face::Body, 28, &s.line, right - NU_BTN_PAD - name_x);

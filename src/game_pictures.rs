@@ -13,7 +13,7 @@
 //! reaches the shelf; the download is cut off at [`MAX_BYTES`].
 //!
 //! `run_until` is the whole job (box art first, then the pictures), for the automatic download and for
-//! Settings > Games > Extras > Cover art alike.
+//! Settings > Games > Box art & downloads > Cover art alike.
 
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};

@@ -1,6 +1,8 @@
 //! CPU layout canvas for small panels. Both live frames and snapshots use this path.
 //! Large outputs keep their native canvas; output size wins over the profile (HDMI).
 
+use crate::gfx::Canvas;
+
 /// The supported layouts start at 1280×960, with the panel's aspect ratio preserved.
 /// Outputs above 720 lines and panels of 1024×720 or more (the Smart Pro's 1280×720) keep their native canvas. A panel
 /// whose double already holds 1280×960 and stays within 1440×1440 gets exactly that double (every H700 panel: 640×480, 720×480 and the CubeXX's 720×720): the cheap 2:1
@@ -59,6 +61,11 @@ pub struct ScaledFrame {
     packed_area: bool,
     horizontal: Vec<u64>,
     row_sums: Vec<u64>,
+    /// Keep the whole logical frame after painting, also where it is the panel's own size (the showcase's partial
+    /// frames, `render_partial`).
+    pub retain: bool,
+    /// The logical size of the frame kept in `pixels`, whole and valid (None: nothing to paint over).
+    kept: Option<(u32, u32)>,
 }
 
 /// How many canvas pixels make one pixel of the screen: 2 where a 640x480 panel shows a 1280x960 canvas, 1 on a native
@@ -88,17 +95,122 @@ pub fn step() -> u32 {
     v
 }
 
+/// How a small panel's frame is painted (`POCKETUI_PAINT`, docs/dev/native-paint.md): `native` (the default) paints
+/// straight into the panel's buffer at a whole divisor (`gfx::Canvas::screen`); `scaled` (the fallback, and always
+/// safe mode) paints the design canvas at its size and reduces it. Read once; the tests set it per thread (`set_paint`).
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum Paint {
+    Scaled,
+    Native,
+}
+
+impl Paint {
+    /// `POCKETUI_PAINT`'s value: `scaled` (or `old`) paints the old way; anything else, or nothing, natively.
+    pub fn parse(v: Option<&str>) -> Paint {
+        match v.map(str::trim) {
+            Some("scaled" | "old") => Paint::Scaled,
+            _ => Paint::Native,
+        }
+    }
+}
+
+#[cfg(not(test))]
+static PAINT: std::sync::OnceLock<std::sync::atomic::AtomicU8> = std::sync::OnceLock::new();
+#[cfg(test)]
+thread_local! {
+    static PAINT: std::sync::atomic::AtomicU8 = const { std::sync::atomic::AtomicU8::new(1) };
+}
+
+/// The way frames are painted (`Paint`).
+pub fn paint() -> Paint {
+    #[cfg(not(test))]
+    let v = PAINT
+        .get_or_init(|| std::sync::atomic::AtomicU8::new((Paint::parse(std::env::var("POCKETUI_PAINT").ok().as_deref()) == Paint::Native) as u8))
+        .load(std::sync::atomic::Ordering::Relaxed);
+    #[cfg(test)]
+    let v = PAINT.with(|p| p.load(std::sync::atomic::Ordering::Relaxed));
+    if v == 1 { Paint::Native } else { Paint::Scaled }
+}
+
+/// Paint from now on as `p` (the A/B bench and the tests; a running pocket-ui reads `POCKETUI_PAINT` once).
+pub fn set_paint(p: Paint) {
+    let v = (p == Paint::Native) as u8;
+    #[cfg(not(test))]
+    PAINT.get_or_init(|| std::sync::atomic::AtomicU8::new(v)).store(v, std::sync::atomic::Ordering::Relaxed);
+    #[cfg(test)]
+    PAINT.with(|s| s.store(v, std::sync::atomic::Ordering::Relaxed));
+}
+
+/// Design pixels per screen pixel when `panel` is painted natively: 2 where the design canvas is exactly twice the
+/// panel (640x480, 720x480, 720x720: 1280x960, 1440x960, 1440x1440) and `paint` says `native`; `None` otherwise (the
+/// old way, or a panel painted at its own size). Fractional ratios (1280x720's 1707x960) stay scaled.
+pub fn native_divisor(panel: (u32, u32)) -> Option<u32> {
+    native_divisor_for(paint(), panel)
+}
+
+pub fn native_divisor_for(p: Paint, panel: (u32, u32)) -> Option<u32> {
+    (p == Paint::Native && panel.0 > 0 && logical_size(panel) == (panel.0 * 2, panel.1 * 2)).then_some(2)
+}
+
 impl ScaledFrame {
-    pub fn render(&mut self, output: &mut [u32], panel: (u32, u32), paint: &mut dyn FnMut(&mut [u32], u32, u32)) {
+    /// One frame for `panel` into `output` (`panel`'s size): `paint` gets the design canvas, at its own size and
+    /// reduced afterwards (`Paint::Scaled`) or straight on the screen (`Paint::Native`, `native_divisor`).
+    pub fn render(&mut self, output: &mut [u32], panel: (u32, u32), paint: &mut dyn FnMut(&mut Canvas)) {
+        self.render_as(self::paint(), output, panel, paint);
+    }
+
+    /// `render` painted as `how` whatever `POCKETUI_PAINT` says (safe mode keeps the old way).
+    pub fn render_as(&mut self, how: Paint, output: &mut [u32], panel: (u32, u32), paint: &mut dyn FnMut(&mut Canvas)) {
         let logical = logical_size(panel);
         set_step(logical, panel);
         if logical == panel {
-            paint(output, panel.0, panel.1);
+            if self.retain {
+                self.pixels.resize(output.len(), 0);
+                paint(&mut Canvas::new(&mut self.pixels, panel.0, panel.1));
+                output.copy_from_slice(&self.pixels);
+                self.kept = Some(panel);
+            } else {
+                paint(&mut Canvas::new(output, panel.0, panel.1));
+                self.kept = None;
+            }
+            return;
+        }
+        if let Some(n) = native_divisor_for(how, panel) {
+            // Painted natively there is no whole design frame to paint over later (`render_partial`): a full frame.
+            paint(&mut Canvas::screen(output, panel, n));
+            self.kept = None;
             return;
         }
         self.prepare(logical, panel);
-        paint(&mut self.pixels, logical.0, logical.1);
+        paint(&mut Canvas::new(&mut self.pixels, logical.0, logical.1));
         self.reduce(output);
+        self.kept = Some(logical);
+    }
+
+    /// Paints over the last whole frame (only what changed, e.g. the Cabinet's TV) and shows it. False, painting
+    /// nothing, when there is no whole frame of this size to paint over.
+    pub fn render_partial(&mut self, output: &mut [u32], panel: (u32, u32), paint: &mut dyn FnMut(&mut [u32], u32, u32)) -> bool {
+        let logical = logical_size(panel);
+        if self.kept != Some(logical) || self.pixels.len() != logical.0 as usize * logical.1 as usize {
+            return false;
+        }
+        if logical != panel && self.sizes != Some((logical, panel)) {
+            return false;
+        }
+        set_step(logical, panel);
+        paint(&mut self.pixels, logical.0, logical.1);
+        if logical == panel {
+            output.copy_from_slice(&self.pixels);
+        } else {
+            self.reduce(output);
+        }
+        true
+    }
+
+    /// Whether `render_partial` has a whole frame for this panel.
+    pub fn can_partial(&self, panel: (u32, u32)) -> bool {
+        let logical = logical_size(panel);
+        self.kept == Some(logical) && (logical == panel || self.sizes == Some((logical, panel)))
     }
 
     fn prepare(&mut self, logical: (u32, u32), panel: (u32, u32)) {
@@ -275,20 +387,52 @@ mod tests {
     }
 
     #[test]
-    fn native_path_paints_directly_and_small_path_reuses_its_canvas() {
+    fn the_scaled_fallback_paints_big_panels_directly_and_reuses_its_small_canvas() {
         let mut frame = ScaledFrame::default();
         let mut output = vec![0; 640 * 480];
-        frame.render(&mut output, (640, 480), &mut |p, w, h| {
-            assert_eq!((w, h), (1280, 960));
-            p.fill(0xabcdef);
+        frame.render_as(Paint::Scaled, &mut output, (640, 480), &mut |c| {
+            assert_eq!((c.w, c.h, c.n()), (1280, 960, 1));
+            c.clear(0xabcdef);
         });
         assert!(output.iter().all(|p| *p == 0xabcdef));
         let pointer = frame.pixels.as_ptr();
-        frame.render(&mut output, (640, 480), &mut |p, _, _| p.fill(0));
+        frame.render_as(Paint::Scaled, &mut output, (640, 480), &mut |c| c.clear(0));
         assert_eq!(pointer, frame.pixels.as_ptr());
         let mut native = vec![0; 1240 * 1080];
         let native_pointer = native.as_ptr();
-        frame.render(&mut native, (1240, 1080), &mut |p, _, _| assert_eq!(p.as_ptr(), native_pointer));
+        frame.render_as(Paint::Scaled, &mut native, (1240, 1080), &mut |c| assert_eq!(c.pixels().as_ptr(), native_pointer));
+    }
+
+    #[test]
+    fn paint_native_lays_out_the_same_design_canvas_straight_on_the_panel() {
+        assert_eq!(Paint::parse(None), Paint::Native, "painting natively is the default");
+        assert_eq!(Paint::parse(Some("scaled")), Paint::Scaled, "the old way stays as a fallback");
+        assert_eq!(Paint::parse(Some(" old ")), Paint::Scaled);
+        assert_eq!(Paint::parse(Some("typo")), Paint::Native);
+        assert_eq!(Paint::parse(Some("native")), Paint::Native);
+        assert_eq!(paint(), Paint::Native, "tests paint as players get it unless they say otherwise");
+        for (panel, n) in [((640, 480), Some(2)), ((720, 480), Some(2)), ((720, 720), Some(2)), ((1280, 720), None), ((1024, 768), None), ((1240, 1080), None)] {
+            assert_eq!(native_divisor_for(Paint::Native, panel), n, "{panel:?}");
+            assert_eq!(native_divisor_for(Paint::Scaled, panel), None);
+        }
+        set_paint(Paint::Native);
+        let mut frame = ScaledFrame::default();
+        let mut output = vec![0; 640 * 480];
+        let out = output.as_ptr();
+        frame.render(&mut output, (640, 480), &mut |c| {
+            // The pages see the same 1280x960 as before; the pixels are the panel's own.
+            assert_eq!((c.w, c.h, c.n(), c.stride()), (1280, 960, 2, 640));
+            assert_eq!(c.pixels().as_ptr(), out);
+            assert_eq!(step(), 2, "a pixel font still knows two design pixels are one of the screen's");
+            c.rect(0, 0, 640, 960, 0xffffff);
+        });
+        assert!(frame.pixels.is_empty(), "no design-size buffer");
+        assert_eq!((output[0], output[319], output[320]), (0xffffff, 0xffffff, 0));
+        // No whole design frame is kept to paint the Showcase's TV over (`render_partial`): the caller paints a whole one.
+        frame.retain = true;
+        frame.render(&mut output, (640, 480), &mut |c| c.clear(0));
+        assert!(!frame.can_partial((640, 480)));
+        assert!(!frame.render_partial(&mut output, (640, 480), &mut |_, _, _| panic!("nothing to paint over")));
     }
 }
 

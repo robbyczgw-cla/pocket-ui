@@ -4,7 +4,8 @@
 //!
 //! Before a FreeJ2ME start pocket-ui finds the game's size (`detect`) and sets it as that core option, in
 //! RetroArch's options file for the game when the player keeps one, else in the core's (`set_resolution`).
-//! Where the size comes from, first match wins:
+//! Runs on › Screen size (`emu_choice::RA_SETTINGS`, per game or console in system.cfg) can fix one size instead
+//! of Automatic. Where the size comes from, first match wins:
 //! 1. a size in the file name ("Snake (176x208).jar"), as phone game collections name their files;
 //! 2. the game's manifest or a `.jad` beside it: `Nokia-MIDlet-Original-Display-Size` and the other screen-size keys;
 //! 3. full-screen pictures in the jar: two or more of one phone screen size, or one when nothing else fits;
@@ -12,7 +13,7 @@
 //!
 //! The picture then fills the screen like other handhelds' (`integer`): by whole numbers when at least twice the size
 //! fits (176×208 on 640×480: 352×416), else as large as fits in its shape, through a RetroArch override for the game.
-//! An Integer scaling chosen in Runs on wins over this. (0.4.2: no Runs on › Screen size row; main has it.)
+//! An Integer scaling chosen in Runs on wins over this.
 use std::path::{Path, PathBuf};
 
 /// The system.cfg key (`j2me["<game>"].j2mesize`, `j2me.j2mesize`).
@@ -404,8 +405,10 @@ pub fn before_start(system: &str, core: &str, rom: &Path) {
     use crate::emu_choice::{self as ec, Level};
     let cfg = ec::Cfg::read(Path::new(ec::SYSTEM_CFG));
     let file = rom.file_name().and_then(|f| f.to_str());
+    let Some(setting) = ec::RA_SETTINGS.iter().find(|s| s.key == KEY) else { return };
+    let value = ec::effective_value(&cfg, system, file, setting);
     let t = std::time::Instant::now();
-    let (size, from) = detect(rom);
+    let (size, from) = chosen(&value, rom);
     let dir = Path::new(CONFIG);
     if let Err(e) = set_resolution(dir, rom, size) {
         eprintln!("j2me: screen size for {}: {e}", rom.display());
@@ -659,5 +662,15 @@ Nokia-MIDlet-Original-Display-Size: 176,208\r\nNokia-MIDlet-Target-Display-Size:
         assert_eq!(chosen("240x320", &jar).0, (240, 320));
         assert_eq!(chosen(AUTO, &jar).0, (176, 208));
         assert_eq!(chosen("", &jar).0, (176, 208));
+    }
+
+    #[test]
+    fn the_screen_size_row_is_only_on_phone_games_and_offers_sizes_freej2me_takes() {
+        let s = crate::emu_choice::RA_SETTINGS.iter().find(|s| s.key == KEY).unwrap();
+        assert!(s.applies("j2me") && !s.applies("gba") && s.own);
+        assert_eq!(s.unset, AUTO);
+        for c in s.choices.iter().filter(|c| c.value != AUTO) {
+            assert!(pair(c.value).is_some_and(|p| SIZES.contains(&p)), "{} is a size the core lists", c.value);
+        }
     }
 }

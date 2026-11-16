@@ -34,87 +34,131 @@ pub(crate) enum Opener {
 
 #[derive(Default)]
 pub(crate) struct EmuChoiceUi {
-    page: Option<(EmuChoicePage, Opener)>,
+    pub(crate) page: Option<(EmuChoicePage, Opener)>,
 }
 
 /// What `resolve_runner` and the page need besides system.cfg.
-struct Inputs {
-    pocket_core: Option<&'static str>,
-    pocket_cores: &'static [&'static str],
-    file_ok: bool,
-    fell_back: bool,
-    default_override: Option<(&'static str, &'static str)>,
+pub(crate) struct Inputs<'a> {
+    pub(crate) pocket_core: Option<&'a str>,
+    pub(crate) pocket_cores: &'static [&'static str],
+    pub(crate) file_ok: bool,
+    pub(crate) fell_back: bool,
+    pub(crate) default_override: Option<(&'static str, &'static str)>,
+}
+
+/// What `resolve_runner` needs besides system.cfg, without the app: also on a thread (`App::core_prewarm_start`).
+#[cfg(not(feature = "brick"))]
+pub(crate) fn inputs_for<'a>(sys: &'a System, path: Option<&Path>, host_bin: bool, fell_back: bool) -> Inputs<'a> {
+    if pocket_ui::device::darkos_port() {
+        return Inputs {
+            pocket_core: host_bin.then(|| sys.emulators.iter().find(|e| e.name == "pocket-core")
+                .and_then(|e| e.cores.first()).map(String::as_str)).flatten(),
+            pocket_cores: &[],
+            file_ok: path.is_none_or(|p| !p.extension().is_some_and(|e| e.eq_ignore_ascii_case("7z"))
+                && hostsys::hosts_file(&sys.name, p)),
+            fell_back,
+            default_override: None,
+        };
+    }
+    let system = sys.name.as_str();
+    let bios = hostsys::bios_dir();
+    let bios = bios.as_path();
+    // pocket-core opens zip files itself but not 7z: those games stay with RetroArch.
+    let file_ok = path.is_none_or(|path| {
+        let is_7z = path.extension().is_some_and(|e| e.eq_ignore_ascii_case("7z"));
+        !is_7z && hostsys::hosts_file(system, path)
+    });
+    let pocket_core = HOST_CORES
+        .iter()
+        .find(|(s, _)| *s == system)
+        .map(|(_, core)| *core)
+        .or_else(|| hostsys::route(system, bios))
+        .filter(|_| host_bin);
+    let gba = pocket_ui::h700_gba::is_gba(system) && pocket_ui::h700_gba::enabled() && pocket_core.is_some();
+    let pocket_core = if gba { Some(pocket_ui::h700_gba::default_core(system, path)) } else { pocket_core };
+    Inputs {
+        pocket_core,
+        pocket_cores: if gba { pocket_ui::h700_gba::CORES } else { &[] },
+        file_ok,
+        fell_back,
+        // PICO-8 without the official binary: RetroArch's fake08 instead of start_pico8.sh (`hostsys`).
+        default_override: hostsys::default_emulator(system, bios),
+    }
+}
+
+#[cfg(feature = "brick")]
+pub(crate) fn inputs_for<'a>(sys: &'a System, path: Option<&Path>, host_bin: bool, fell_back: bool) -> Inputs<'a> {
+    if pocket_ui::device::darkos_port() {
+        return Inputs {
+            pocket_core: host_bin.then(|| sys.emulators.iter().find(|e| e.name == "pocket-core")
+                .and_then(|e| e.cores.first()).map(String::as_str)).flatten(),
+            pocket_cores: &[],
+            file_ok: path.is_none_or(|p| !p.extension().is_some_and(|e| e.eq_ignore_ascii_case("7z"))
+                && hostsys::hosts_file(&sys.name, p)),
+            fell_back,
+            default_override: None,
+        };
+    }
+    let system = sys.name.as_str();
+    let bios = Path::new(hostsys::BIOS_DIR);
+    // pocket-core opens zip files itself but not 7z: those games stay with RetroArch.
+    let file_ok = path.is_none_or(|path| {
+        let is_7z = path.extension().is_some_and(|e| e.eq_ignore_ascii_case("7z"));
+        !is_7z && hostsys::hosts_file(system, path)
+    });
+    let pocket_core = HOST_CORES.iter().find(|(s, _)| *s == system).map(|(_, core)| *core).or_else(|| hostsys::route(system, bios));
+    // The Brick has other cores than the default ones (`brick_profile::core_for`), for the verified systems (PlayStation, Sega) as well.
+    #[cfg(feature = "brick")]
+    let pocket_core = pocket_ui::brick_profile::additional_core(system).or_else(|| pocket_core.map(pocket_ui::brick_profile::core_for));
+    let pocket_core = pocket_core.filter(|_| host_bin);
+    // dArkOS's boards are H700 rows: gpSP by default, mGBA kept for a Continue moment it made (`h700_gba`), with the
+    // gpSP of dArkOS's RetroArch (start.sh points POCKETUI_GBA_CORE at it). Never on a Brick (not an H700 model).
+    let gba = pocket_ui::h700_gba::is_gba(system) && pocket_ui::h700_gba::enabled() && pocket_core.is_some();
+    let pocket_core = if gba { Some(pocket_ui::h700_gba::default_core(system, path)) } else { pocket_core };
+    Inputs {
+        pocket_core,
+        // The Brick lists its pocket-core cores in its own es_systems.cfg (`emu_choice`'s Brick `choices`).
+        pocket_cores: if gba { pocket_ui::h700_gba::CORES } else { &[] },
+        file_ok,
+        fell_back,
+        // PICO-8 without the official binary: RetroArch's fake08 instead of start_pico8.sh (`hostsys`).
+        default_override: hostsys::default_emulator(system, bios),
+    }
+}
+
+/// The launch's choice from `inputs` and system.cfg's cached choices (`emu_choice::cached`).
+pub(crate) fn resolve_with(sys: &System, path: Option<&Path>, i: Inputs<'_>) -> Resolved {
+    let ctx = emu_choice::Ctx {
+        system: &sys.name,
+        emulators: &sys.emulators,
+        pocket_core: i.pocket_core,
+        pocket_cores: i.pocket_cores,
+        file_ok: i.file_ok,
+        fell_back: i.fell_back,
+        default_override: i.default_override,
+    };
+    let file = path.and_then(|p| p.file_name()).and_then(|n| n.to_str());
+    emu_choice::resolve(&ctx, &emu_choice::cached(), file)
 }
 
 impl App {
-    #[cfg(not(feature = "brick"))]
-    fn runner_inputs(&self, sys: &System, path: Option<&Path>, host_bin: bool) -> Inputs {
-        let system = sys.name.as_str();
-        let bios = hostsys::bios_dir();
-        let bios = bios.as_path();
-        // pocket-core opens zip files itself but not 7z: those games stay with RetroArch.
-        let file_ok = path.is_none_or(|path| {
-            let is_7z = path.extension().is_some_and(|e| e.eq_ignore_ascii_case("7z"));
-            !is_7z && hostsys::hosts_file(system, path)
-        });
-        let pocket_core = HOST_CORES
-            .iter()
-            .find(|(s, _)| *s == system)
-            .map(|(_, core)| *core)
-            .or_else(|| hostsys::route(system, bios))
-            .filter(|_| host_bin);
-        let gba = pocket_ui::h700_gba::is_gba(system) && pocket_ui::h700_gba::enabled() && pocket_core.is_some();
-        let pocket_core = if gba { Some(pocket_ui::h700_gba::default_core(system, path)) } else { pocket_core };
-        Inputs {
-            pocket_core,
-            pocket_cores: if gba { pocket_ui::h700_gba::CORES } else { &[] },
-            file_ok,
-            fell_back: path.is_some_and(|p| self.fallback.contains(p)),
-            // PICO-8 without the official binary: RetroArch's fake08 instead of start_pico8.sh (`hostsys`).
-            default_override: hostsys::default_emulator(system, bios),
+    /// `inputs_for` with the phone's own ways first (Android's handheld view, `app_runs_on_android`) and this game's
+    /// failed start (`fallback.json`).
+    fn runner_inputs<'a>(&self, sys: &'a System, path: Option<&Path>, host_bin: bool) -> Inputs<'a> {
+        if let Some(phone) = pocket_ui::play_route::phone() {
+            return self.phone_inputs(sys, &phone);
         }
-    }
-
-    #[cfg(feature = "brick")]
-    fn runner_inputs(&self, sys: &System, path: Option<&Path>, host_bin: bool) -> Inputs {
-        let system = sys.name.as_str();
-        let bios = Path::new(hostsys::BIOS_DIR);
-        // pocket-core opens zip files itself but not 7z: those games stay with RetroArch.
-        let file_ok = path.is_none_or(|path| {
-            let is_7z = path.extension().is_some_and(|e| e.eq_ignore_ascii_case("7z"));
-            !is_7z && hostsys::hosts_file(system, path)
-        });
-        let pocket_core = HOST_CORES.iter().find(|(s, _)| *s == system).map(|(_, core)| *core).or_else(|| hostsys::route(system, bios));
-        // The Brick has other cores than the default ones (`brick_profile::core_for`), for the verified systems (PlayStation, Sega) as well.
-        #[cfg(feature = "brick")]
-        let pocket_core = pocket_ui::brick_profile::additional_core(system).or_else(|| pocket_core.map(pocket_ui::brick_profile::core_for));
-        let pocket_core = pocket_core.filter(|_| host_bin);
-        Inputs {
-            pocket_core,
-            // The Brick lists its pocket-core cores in its own es_systems.cfg (`emu_choice`'s Brick `choices`).
-            pocket_cores: &[],
-            file_ok,
-            fell_back: path.is_some_and(|p| self.fallback.contains(p)),
-            // PICO-8 without the official binary: RetroArch's fake08 instead of start_pico8.sh (`hostsys`).
-            default_override: hostsys::default_emulator(system, bios),
-        }
+        inputs_for(sys, path, host_bin, path.is_some_and(|p| self.fallback.contains(p)))
     }
 
     /// The emulator and core `sys`'s game at `path` (None: the system as a whole) starts with, and why: the game's
     /// choice, the console's, or the default (`emu_choice::resolve`). `host_bin`: pocket-core is installed.
     pub(crate) fn resolve_runner(&self, sys: &System, path: Option<&Path>, host_bin: bool) -> Resolved {
-        let i = self.runner_inputs(sys, path, host_bin);
-        let ctx = emu_choice::Ctx {
-            system: &sys.name,
-            emulators: &sys.emulators,
-            pocket_core: i.pocket_core,
-            pocket_cores: i.pocket_cores,
-            file_ok: i.file_ok,
-            fell_back: i.fell_back,
-            default_override: i.default_override,
-        };
-        let file = path.and_then(|p| p.file_name()).and_then(|n| n.to_str());
-        emu_choice::resolve(&ctx, &emu_choice::cached(), file)
+        // Android's handheld view: `play_route`'s one decision, the Mobile view's too (`app_runs_on_android`).
+        if let Some(resolved) = self.phone_resolve(sys, path) {
+            return resolved;
+        }
+        resolve_with(sys, path, self.runner_inputs(sys, path, host_bin))
     }
 
     /// Whether pocket-core can play `path` of `sys` (its host and core), whatever plays it now: the picture, extras and
@@ -126,11 +170,13 @@ impl App {
     fn emu_subject(&self, system: &str, game: Option<(&str, &Path)>, host_bin: bool) -> Option<Subject> {
         let sys = self.systems.iter().find(|s| s.name == system)?;
         let i = self.runner_inputs(sys, game.map(|(_, p)| p), host_bin);
+        let phone = pocket_ui::play_route::phone();
         Some(Subject {
             system: sys.name.clone(),
             system_name: sys.fullname.clone(),
             game: game.and_then(|(name, p)| Some((name.to_string(), p.file_name()?.to_str()?.to_string()))),
-            emulators: sys.emulators.clone(),
+            emulators: phone.as_ref().map_or_else(|| sys.emulators.clone(), |phone| App::phone_emulators(phone, &sys.name)),
+            phone: phone.as_ref().map(|phone| App::phone_subject(phone, &sys.name)),
             pocket_core: i.pocket_core.map(str::to_string),
             pocket_cores: i.pocket_cores,
             default_override: i.default_override.map(|(e, c)| (e.to_string(), c.to_string())),
@@ -147,9 +193,21 @@ impl App {
         let Some(subject) = self.emu_subject(system, game, host_bin) else {
             return false;
         };
-        let cfg = Cfg::read(Path::new(emu_choice::SYSTEM_CFG));
-        let shipped = Cfg::read(Path::new(emu_choice::SHIPPED_CFG));
-        let page = EmuChoicePage::new(subject, cfg, shipped, |r| emu_choice::installed(r, system, |p| p.exists()));
+        let sys = self.systems.iter().find(|s| s.name == system);
+        let (cfg, shipped, on_phone) = match (pocket_ui::play_route::phone(), sys) {
+            // Android: the choices of launcher.json in system.cfg's words; no ROCKNIX file to read.
+            (Some(_), Some(sys)) => (self.phone_cfg(sys, None), Cfg::default(), true),
+            _ => (Cfg::read(Path::new(emu_choice::SYSTEM_CFG)), Cfg::read(Path::new(emu_choice::SHIPPED_CFG)), false),
+        };
+        let own_ready = subject.phone.as_ref().and_then(|p| p.own.as_ref()).is_none_or(|o| o.present);
+        let page = EmuChoicePage::new(subject, cfg, shipped, |r| {
+            if on_phone {
+                // Our player where its core is on the phone; every app in the list is installed.
+                !r.is_pocket_core() || own_ready
+            } else {
+                emu_choice::installed(r, system, |p| p.exists())
+            }
+        });
         emu_choice::find_shaders_in_background();
         println!("emulator choice: page for {system} opened in {:?}", started.elapsed());
         self.emu.page = Some((page, from));
@@ -203,6 +261,7 @@ impl App {
                     self.emu_choice_back_to_menu();
                 }
             }
+            Action::Download { core } => self.phone_download(&core),
             Action::Save { edits, clear_fallback } => {
                 println!(
                     "emulator choice: {}",
@@ -212,6 +271,12 @@ impl App {
                         .collect::<Vec<_>>()
                         .join(", ")
                 );
+                // Android: launcher.json, the Mobile view's file, and what the next launch asks.
+                if pocket_ui::play_route::phone().is_some() {
+                    self.phone_save(&edits);
+                    self.emu_choice_refresh_console();
+                    return;
+                }
                 // The next start sees it at once; the file is written on a thread, under ROCKNIX's lock.
                 emu_choice::apply_to_cache(&edits);
                 #[cfg(feature = "brick")]
@@ -311,7 +376,7 @@ impl App {
         self.emu.page.as_ref().map(|(p, _)| p.mark())
     }
 
-    /// `--snapshot emu:<system>[:<game file>][:<runner emulator>/<core>][:save][:<row>]`: the page with a made-up
+    /// `--snapshot emu:<system>[:<game file>][:<runner emulator>/<core>][:save][:launch|:play][:<row>]`: the page with a made-up
     /// system.cfg (a RetroArch choice made in EmulationStation for `gba`), the presets of a Mini V2.
     pub(crate) fn emu_choice_snapshot(&mut self, state: &str) -> bool {
         let Some(rest) = state.strip_prefix("emu:") else { return false };
@@ -319,10 +384,15 @@ impl App {
         let system = parts.next().unwrap_or("gba").to_string();
         let mut game: Option<String> = None;
         let mut runner: Option<Runner> = None;
-        let (mut save, mut row) = (false, 0usize);
+        let (mut save, mut row, mut launch, mut play) = (false, 0usize, false, false);
         for p in parts {
             if p == "save" {
                 save = true;
+            } else if p == "launch" {
+                launch = true;
+            } else if p == "play" {
+                // A on the game as a player presses it: the start goes on until it has decided.
+                (launch, play) = (true, true);
             } else if let Ok(n) = p.parse() {
                 row = n;
             } else if let Some((e, c)) = p.split_once('/') {
@@ -342,6 +412,33 @@ impl App {
                 .map_or_else(|| PathBuf::from(format!("/storage/roms/{system}/{g}")), |x| x.path.clone())
         });
         let name = path.as_ref().map(|p| p.file_stem().and_then(|s| s.to_str()).unwrap_or_default().to_string());
+        // Android's handheld view (`POCKETUI_PHONE`): the page as a player opens it, or what A on the game does (`launch`).
+        if pocket_ui::play_route::phone().is_some() {
+            let (Some(name), Some(path)) = (name.clone(), path.clone()) else { return self.open_emu_choice(&system, None, Opener::Shelf) };
+            if launch {
+                self.queue_launch(system.clone(), name, path);
+                // `play`: as on a device, the start goes on after its first frame (`launch_response_painted`) until it has
+                // decided (the game's start, or a notice).
+                if play {
+                    self.launch_response_painted();
+                    let t0 = std::time::Instant::now();
+                    while self.pending_launch.is_some() && t0.elapsed() < std::time::Duration::from_secs(5) {
+                        std::thread::sleep(std::time::Duration::from_millis(10));
+                        self.launch_poll();
+                    }
+                }
+            } else if !self.open_emu_choice(&system, Some((&name, &path)), Opener::Shelf) {
+                return false;
+            }
+            if let Some((page, _)) = self.emu.page.as_mut().filter(|_| !launch) {
+                page.sel = row.min(page.rows().len() - 1);
+                if save {
+                    page.sel = page.rows().len() - 1;
+                    page.mode = Mode::Save { sel: 0 };
+                }
+            }
+            return true;
+        }
         let Some(subject) = self.emu_subject(&system, name.as_deref().zip(path.as_deref()), true) else {
             return false;
         };
@@ -437,8 +534,15 @@ impl App {
         // Nine rows of 54 ended under the hints on 720 lines (the Smart Pro): 48 there.
         let long = if c.h < 768 { 48 } else { 54 };
         let row = pocket_ui::type_scale::row(if lines.len() > 6 { long } else { 66 }, font);
-        for (i, (name, value)) in lines.iter().enumerate() {
-            let y = top + i as i32 * row;
+        // As many rows as stand above the hint bar (1280x720 and 1024x768 in Large text: nine rows ran under it); the list
+        // scrolls, with a bar at the edge, when there are more.
+        let visible = (((pocket_ui::kit::hint_bar_top(c.h) - 8 - top) / row).max(3) as usize).min(lines.len());
+        let first = crate::window_start(sel, visible, lines.len());
+        if lines.len() > visible {
+            pocket_ui::kit::scrollbar(c, top, visible as i32 * row, first, visible, lines.len());
+        }
+        for (i, (name, value)) in lines.iter().enumerate().skip(first).take(visible) {
+            let y = top + (i - first) as i32 * row;
             self.hits.row(Area::new(pad, y, right - pad, row), i);
             let base = y + row / 2 + pocket_ui::type_scale::mid(font);
             let selected = i == sel;
@@ -472,7 +576,7 @@ impl App {
 
         // What the selected row is for and what its value means, then where the settings come from.
         let (left, width) = (pad + NU_BTN_PAD, c.w - 2 * (pad + NU_BTN_PAD));
-        let mut y = top + lines.len() as i32 * row + 36;
+        let mut y = top + visible as i32 * row + 36;
         let [what, choice] = match page.mode {
             Mode::List => page.describe(page.row()),
             Mode::Save { sel } => [
@@ -507,6 +611,9 @@ impl App {
 
         let hints: &[(&str, &str)] = match page.mode {
             Mode::List if page.row() == Row::Save => &[("B", "Back"), ("A", "Open")],
+            // Download: A only while the channel is open and no download runs (the navigation explorer's rule: no hint for a key that does nothing).
+            Mode::List if page.row() == Row::Download && page.download_ready() => &[("B", "Back"), ("A", "Download now")],
+            Mode::List if page.row() == Row::Download => &[("B", "Back")],
             // One emulator for this console: nothing for A or Left/Right to step to (the navigation explorer, 2026-11-07).
             Mode::List if !page.changes(page.row()) => &[("B", "Back")],
             Mode::List => &[("B", "Back"), ("A", "Next"), ("< >", "Change")],

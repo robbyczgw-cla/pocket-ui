@@ -28,7 +28,7 @@ fn extras_optional_data_states_are_readable_in_all_languages_at_640x480_large() 
             for (family, states) in [("cheats", &[
                 ("missing", "Get · 30 MB"), ("downloading", "42%"), ("checking", "Checking…"),
                 ("saving", "Saving…"), ("installed", "Installed · 30 MB"), ("installed-offline", "Installed · 30 MB"),
-                ("update", "Update · 30 MB"), ("offline", "Needs Wi-Fi"), ("no-space", "Needs 62 MB"),
+                ("update", "Update · 30 MB"), ("offline", "Look on the card"), ("no-space", "Needs 62 MB"),
                 ("update-no-space", "Needs 62 MB"),
                 ("error", "Retry"), ("remove", "Remove?"),
             ][..]), ("portmaster", &[
@@ -56,7 +56,8 @@ fn extras_optional_data_states_are_readable_in_all_languages_at_640x480_large() 
                     .env("POCKETUI_TEXT_BOXES", &boxes).output().unwrap();
                 assert!(result.status.success(), "{file}: {}", String::from_utf8_lossy(&result.stderr));
                 let text = std::fs::read_to_string(visible).unwrap().split_whitespace().collect::<Vec<_>>().join(" ");
-                assert!(text.contains("Extras"), "{file}: the page title is visible: {text}");
+                let title = match lang { "de" => "Cover & Downloads", "es" => "Carátulas y descargas", _ => "Box art & downloads" };
+                assert!(text.contains(title), "{file}: the page title is visible: {text}");
                 let cheats = if lang == "es" { "Trucos" } else { "Cheats" };
                 assert!(text.contains(cheats), "{file}: {text}");
                 // Scrolling can put the lower row outside the window; every selected row still paints whole.
@@ -80,7 +81,8 @@ fn extras_optional_data_states_are_readable_in_all_languages_at_640x480_large() 
                     ("de", "installed" | "installed-offline") => "Installiert · 30 MB",
                     ("es", "installed" | "installed-offline") => "Instalado · 30 MB",
                     ("de", "update") => "Update · 30 MB", ("es", "update") => "Actualizar · 30 MB",
-                    ("de", "offline") => "Braucht WLAN", ("es", "offline") => "Necesita Wi-Fi",
+                    // Without a network: the cheats file from the card (`update::cheats::install_from_card`).
+                    ("de", "offline") => "Auf der Karte suchen", ("es", "offline") => "Buscar en la tarjeta",
                     ("de", "no-space" | "update-no-space") => "Braucht 62 MB", ("es", "no-space" | "update-no-space") => "Necesita 62 MB",
                     ("de", "error") => "Erneut versuchen", ("es", "error") => "Reintentar",
                     ("de", "remove") => "Entfernen?", ("es", "remove") => "¿Eliminar?",

@@ -97,9 +97,14 @@ pub const KEYS: [(&str, &str); 3] = [
 
 /// True if a process named `input_sense` runs (`/proc/<pid>/comm`; `root` is "/" except in tests).
 pub fn rocknix_handles_volume(root: &Path) -> bool {
+    process_runs(root, "input_sense")
+}
+
+/// True if a process whose `/proc/<pid>/comm` is `comm` runs (`root` is "/" except in tests).
+pub fn process_runs(root: &Path, comm: &str) -> bool {
     std::fs::read_dir(root.join("proc")).into_iter().flatten().flatten().any(|e| {
         e.file_name().to_string_lossy().bytes().all(|b| b.is_ascii_digit())
-            && std::fs::read_to_string(e.path().join("comm")).is_ok_and(|c| c.trim() == "input_sense")
+            && std::fs::read_to_string(e.path().join("comm")).is_ok_and(|c| c.trim() == comm)
     })
 }
 

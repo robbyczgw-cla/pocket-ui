@@ -6,6 +6,8 @@ use pocket_ui::search;
 
 #[test]
 fn a_painter_goes_from_one_table_to_the_other_without_old_words_and_the_keyboard_follows() {
+    // This thread's language only: the other tests in this program keep theirs.
+    let _language = i18n::for_this_thread(Lang::En);
     let mut cache = Cache::default();
     i18n::set(Lang::Es);
     // A pattern's result stays in the painter's cache: from a table to the next it must not stay on the screen.

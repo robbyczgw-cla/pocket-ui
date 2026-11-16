@@ -90,83 +90,85 @@ pub fn city_of(zone: &str) -> String {
     }
 }
 
-/// Cities whose German, Spanish or Portuguese name is not the English one, by zone: (zone, German, Spanish, Portuguese). The
+/// Cities whose German, Spanish, Portuguese, French or Italian name is not the English one, by zone: (zone, German, Spanish, Portuguese, French, Italian). The
 /// search finds a zone by any of them, and the lists show the player's (first-start walk 2026-11-06: "wien" found nothing, and the German
 /// hint itself suggested "vie"). Only the well-known ones; the rest keep the zone's own name in every language.
-const LOCAL_CITIES: &[(&str, &str, &str, &str)] = &[
-    ("Africa/Addis_Ababa", "Addis Abeba", "Adís Abeba", "Adis Abeba"),
-    ("Africa/Algiers", "Algier", "Argel", "Argel"),
-    ("Africa/Cairo", "Kairo", "El Cairo", "Cairo"),
-    ("Africa/Khartoum", "Khartum", "Jartum", "Cartum"),
-    ("Africa/Tunis", "Tunis", "Túnez", "Túnis"),
-    ("America/Asuncion", "Asunción", "Asunción", "Assunção"),
-    ("America/Belem", "Belem", "Belem", "Belém"),
-    ("America/Cuiaba", "Cuiaba", "Cuiaba", "Cuiabá"),
-    ("America/Maceio", "Maceio", "Maceio", "Maceió"),
-    ("America/Santarem", "Santarem", "Santarem", "Santarém"),
-    ("America/Araguaina", "Araguaina", "Araguaina", "Araguaína"),
-    ("America/Eirunepe", "Eirunepe", "Eirunepe", "Eirunepé"),
-    ("America/Noronha", "Noronha", "Noronha", "Fernando de Noronha"),
-    ("America/Bogota", "Bogotá", "Bogotá", "Bogotá"),
-    ("America/Havana", "Havanna", "La Habana", "Havana"),
-    ("America/Los_Angeles", "Los Angeles", "Los Ángeles", "Los Angeles"),
-    ("America/Mexico_City", "Mexiko-Stadt", "Ciudad de México", "Cidade do México"),
-    ("America/New_York", "New York", "Nueva York", "Nova York"),
-    ("America/Panama", "Panama", "Panamá", "Panamá"),
-    ("America/Sao_Paulo", "São Paulo", "São Paulo", "São Paulo"),
-    ("Asia/Baghdad", "Bagdad", "Bagdad", "Bagdá"),
-    ("Asia/Damascus", "Damaskus", "Damasco", "Damasco"),
-    ("Asia/Ho_Chi_Minh", "Ho-Chi-Minh-Stadt", "Ciudad Ho Chi Minh", "Ho Chi Minh"),
-    ("Asia/Hong_Kong", "Hongkong", "Hong Kong", "Hong Kong"),
-    ("Asia/Jakarta", "Jakarta", "Yakarta", "Jacarta"),
-    ("Asia/Jerusalem", "Jerusalem", "Jerusalén", "Jerusalém"),
-    ("Asia/Kathmandu", "Kathmandu", "Katmandú", "Katmandu"),
-    ("Asia/Kolkata", "Kalkutta", "Calcuta", "Calcutá"),
-    ("Asia/Riyadh", "Riad", "Riad", "Riade"),
-    ("Asia/Seoul", "Seoul", "Seúl", "Seul"),
-    ("Asia/Shanghai", "Shanghai", "Shanghái", "Xangai"),
-    ("Asia/Singapore", "Singapur", "Singapur", "Singapura"),
-    ("Asia/Taipei", "Taipeh", "Taipéi", "Taipé"),
-    ("Asia/Tehran", "Teheran", "Teherán", "Teerã"),
-    ("Asia/Tokyo", "Tokio", "Tokio", "Tóquio"),
-    ("Atlantic/Azores", "Azoren", "Azores", "Açores"),
-    ("Atlantic/Canary", "Kanaren", "Canarias", "Canárias"),
-    ("Europe/Amsterdam", "Amsterdam", "Ámsterdam", "Amsterdã"),
-    ("Europe/Athens", "Athen", "Atenas", "Atenas"),
-    ("Europe/Belgrade", "Belgrad", "Belgrado", "Belgrado"),
-    ("Europe/Berlin", "Berlin", "Berlín", "Berlim"),
-    ("Europe/Brussels", "Brüssel", "Bruselas", "Bruxelas"),
-    ("Europe/Bucharest", "Bukarest", "Bucarest", "Bucareste"),
-    ("Europe/Copenhagen", "Kopenhagen", "Copenhague", "Copenhague"),
-    ("Europe/Dublin", "Dublin", "Dublín", "Dublin"),
-    ("Europe/Istanbul", "Istanbul", "Estambul", "Istambul"),
-    ("Europe/Kiev", "Kiew", "Kiev", "Kiev"),
-    ("Europe/Kyiv", "Kiew", "Kiev", "Kiev"),
-    ("Europe/Lisbon", "Lissabon", "Lisboa", "Lisboa"),
-    ("Europe/London", "London", "Londres", "Londres"),
-    ("Europe/Luxembourg", "Luxemburg", "Luxemburgo", "Luxemburgo"),
-    ("Europe/Monaco", "Monaco", "Mónaco", "Mônaco"),
-    ("Europe/Moscow", "Moskau", "Moscú", "Moscou"),
-    ("Europe/Paris", "Paris", "París", "Paris"),
-    ("Europe/Prague", "Prag", "Praga", "Praga"),
-    ("Europe/Rome", "Rom", "Roma", "Roma"),
-    ("Europe/Sofia", "Sofia", "Sofía", "Sófia"),
-    ("Europe/Stockholm", "Stockholm", "Estocolmo", "Estocolmo"),
-    ("Europe/Vatican", "Vatikan", "Vaticano", "Vaticano"),
-    ("Europe/Vienna", "Wien", "Viena", "Viena"),
-    ("Europe/Vilnius", "Vilnius", "Vilna", "Vilnius"),
-    ("Europe/Warsaw", "Warschau", "Varsovia", "Varsóvia"),
-    ("Europe/Zurich", "Zürich", "Zúrich", "Zurique"),
-    ("Indian/Maldives", "Malediven", "Maldivas", "Maldivas"),
+const LOCAL_CITIES: &[(&str, &str, &str, &str, &str, &str)] = &[
+    ("Africa/Addis_Ababa", "Addis Abeba", "Adís Abeba", "Adis Abeba", "Addis-Abeba", "Addis Abeba"),
+    ("Africa/Algiers", "Algier", "Argel", "Argel", "Alger", "Algeri"),
+    ("Africa/Cairo", "Kairo", "El Cairo", "Cairo", "Le Caire", "Il Cairo"),
+    ("Africa/Khartoum", "Khartum", "Jartum", "Cartum", "Khartoum", "Khartum"),
+    ("Africa/Tunis", "Tunis", "Túnez", "Túnis", "Tunis", "Tunisi"),
+    ("America/Asuncion", "Asunción", "Asunción", "Assunção", "Asunción", "Asunción"),
+    ("America/Belem", "Belem", "Belem", "Belém", "Belém", "Belém"),
+    ("America/Cuiaba", "Cuiaba", "Cuiaba", "Cuiabá", "Cuiabá", "Cuiabá"),
+    ("America/Maceio", "Maceio", "Maceio", "Maceió", "Maceió", "Maceió"),
+    ("America/Santarem", "Santarem", "Santarem", "Santarém", "Santarém", "Santarém"),
+    ("America/Araguaina", "Araguaina", "Araguaina", "Araguaína", "Araguaína", "Araguaína"),
+    ("America/Eirunepe", "Eirunepe", "Eirunepe", "Eirunepé", "Eirunepé", "Eirunepé"),
+    ("America/Noronha", "Noronha", "Noronha", "Fernando de Noronha", "Fernando de Noronha", "Fernando de Noronha"),
+    ("America/Bogota", "Bogotá", "Bogotá", "Bogotá", "Bogota", "Bogotá"),
+    ("America/Havana", "Havanna", "La Habana", "Havana", "La Havane", "L'Avana"),
+    ("America/Los_Angeles", "Los Angeles", "Los Ángeles", "Los Angeles", "Los Angeles", "Los Angeles"),
+    ("America/Mexico_City", "Mexiko-Stadt", "Ciudad de México", "Cidade do México", "Mexico", "Città del Messico"),
+    ("America/New_York", "New York", "Nueva York", "Nova York", "New York", "New York"),
+    ("America/Panama", "Panama", "Panamá", "Panamá", "Panama", "Panama"),
+    ("America/Sao_Paulo", "São Paulo", "São Paulo", "São Paulo", "São Paulo", "San Paolo"),
+    ("Asia/Baghdad", "Bagdad", "Bagdad", "Bagdá", "Bagdad", "Baghdad"),
+    ("Asia/Damascus", "Damaskus", "Damasco", "Damasco", "Damas", "Damasco"),
+    ("Asia/Ho_Chi_Minh", "Ho-Chi-Minh-Stadt", "Ciudad Ho Chi Minh", "Ho Chi Minh", "Hô-Chi-Minh-Ville", "Ho Chi Minh"),
+    ("Asia/Hong_Kong", "Hongkong", "Hong Kong", "Hong Kong", "Hong Kong", "Hong Kong"),
+    ("Asia/Jakarta", "Jakarta", "Yakarta", "Jacarta", "Jakarta", "Giacarta"),
+    ("Asia/Jerusalem", "Jerusalem", "Jerusalén", "Jerusalém", "Jérusalem", "Gerusalemme"),
+    ("Asia/Kathmandu", "Kathmandu", "Katmandú", "Katmandu", "Katmandou", "Katmandu"),
+    ("Asia/Kolkata", "Kalkutta", "Calcuta", "Calcutá", "Calcutta", "Calcutta"),
+    ("Asia/Riyadh", "Riad", "Riad", "Riade", "Riyad", "Riad"),
+    ("Asia/Seoul", "Seoul", "Seúl", "Seul", "Séoul", "Seul"),
+    ("Asia/Shanghai", "Shanghai", "Shanghái", "Xangai", "Shanghai", "Shanghai"),
+    ("Asia/Singapore", "Singapur", "Singapur", "Singapura", "Singapour", "Singapore"),
+    ("Asia/Taipei", "Taipeh", "Taipéi", "Taipé", "Taipei", "Taipei"),
+    ("Asia/Tehran", "Teheran", "Teherán", "Teerã", "Téhéran", "Teheran"),
+    ("Asia/Tokyo", "Tokio", "Tokio", "Tóquio", "Tokyo", "Tokyo"),
+    ("Atlantic/Azores", "Azoren", "Azores", "Açores", "Açores", "Azzorre"),
+    ("Atlantic/Canary", "Kanaren", "Canarias", "Canárias", "Canaries", "Canarie"),
+    ("Europe/Amsterdam", "Amsterdam", "Ámsterdam", "Amsterdã", "Amsterdam", "Amsterdam"),
+    ("Europe/Athens", "Athen", "Atenas", "Atenas", "Athènes", "Atene"),
+    ("Europe/Belgrade", "Belgrad", "Belgrado", "Belgrado", "Belgrade", "Belgrado"),
+    ("Europe/Berlin", "Berlin", "Berlín", "Berlim", "Berlin", "Berlino"),
+    ("Europe/Brussels", "Brüssel", "Bruselas", "Bruxelas", "Bruxelles", "Bruxelles"),
+    ("Europe/Bucharest", "Bukarest", "Bucarest", "Bucareste", "Bucarest", "Bucarest"),
+    ("Europe/Copenhagen", "Kopenhagen", "Copenhague", "Copenhague", "Copenhague", "Copenaghen"),
+    ("Europe/Dublin", "Dublin", "Dublín", "Dublin", "Dublin", "Dublino"),
+    ("Europe/Istanbul", "Istanbul", "Estambul", "Istambul", "Istanbul", "Istanbul"),
+    ("Europe/Kiev", "Kiew", "Kiev", "Kiev", "Kiev", "Kiev"),
+    ("Europe/Kyiv", "Kiew", "Kiev", "Kiev", "Kiev", "Kiev"),
+    ("Europe/Lisbon", "Lissabon", "Lisboa", "Lisboa", "Lisbonne", "Lisbona"),
+    ("Europe/London", "London", "Londres", "Londres", "Londres", "Londra"),
+    ("Europe/Luxembourg", "Luxemburg", "Luxemburgo", "Luxemburgo", "Luxembourg", "Lussemburgo"),
+    ("Europe/Monaco", "Monaco", "Mónaco", "Mônaco", "Monaco", "Monaco"),
+    ("Europe/Moscow", "Moskau", "Moscú", "Moscou", "Moscou", "Mosca"),
+    ("Europe/Paris", "Paris", "París", "Paris", "Paris", "Parigi"),
+    ("Europe/Prague", "Prag", "Praga", "Praga", "Prague", "Praga"),
+    ("Europe/Rome", "Rom", "Roma", "Roma", "Rome", "Roma"),
+    ("Europe/Sofia", "Sofia", "Sofía", "Sófia", "Sofia", "Sofia"),
+    ("Europe/Stockholm", "Stockholm", "Estocolmo", "Estocolmo", "Stockholm", "Stoccolma"),
+    ("Europe/Vatican", "Vatikan", "Vaticano", "Vaticano", "Vatican", "Città del Vaticano"),
+    ("Europe/Vienna", "Wien", "Viena", "Viena", "Vienne", "Vienna"),
+    ("Europe/Vilnius", "Vilnius", "Vilna", "Vilnius", "Vilnius", "Vilnius"),
+    ("Europe/Warsaw", "Warschau", "Varsovia", "Varsóvia", "Varsovie", "Varsavia"),
+    ("Europe/Zurich", "Zürich", "Zúrich", "Zurique", "Zurich", "Zurigo"),
+    ("Indian/Maldives", "Malediven", "Maldivas", "Maldivas", "Maldives", "Maldive"),
 ];
 
-/// The city of a zone as `lang` calls it: "Wien" in German, "Viena" in Spanish and Portuguese, `city_of` where the name is the same.
+/// The city of a zone as `lang` calls it: "Wien" in German, "Viena" in Spanish and Portuguese, "Vienne" in French, "Vienna" in Italian, `city_of` where the name is the same.
 pub fn city_in(zone: &str, lang: crate::i18n::Lang) -> String {
     let local = LOCAL_CITIES.iter().find(|(z, ..)| *z == zone);
     match (lang, local) {
         (crate::i18n::Lang::De, Some((_, de, ..))) => de.to_string(),
-        (crate::i18n::Lang::Es, Some((_, _, es, _))) => es.to_string(),
-        (crate::i18n::Lang::Pt, Some((.., pt))) => pt.to_string(),
+        (crate::i18n::Lang::Es, Some((_, _, es, ..))) => es.to_string(),
+        (crate::i18n::Lang::Pt, Some((_, _, _, pt, ..))) => pt.to_string(),
+        (crate::i18n::Lang::Fr, Some((_, _, _, _, fr, _))) => fr.to_string(),
+        (crate::i18n::Lang::It, Some((.., it))) => it.to_string(),
         _ => city_of(zone),
     }
 }
@@ -210,7 +212,7 @@ pub fn zones_in<'a>(zones: &'a [String], region: &str) -> Vec<&'a str> {
     v
 }
 
-/// Zones whose region or city contains every word of `query`, the city in English, German, Spanish or Portuguese ("wien", "viena"
+/// Zones whose region or city contains every word of `query`, the city in English, German, Spanish, Portuguese, French or Italian ("wien", "viena", "vienne"
 /// and "vie" find Vienna; case, accents, spaces and underscores ignored).
 pub fn search<'a>(zones: &'a [String], query: &str) -> Vec<&'a str> {
     let words: Vec<String> = plain(query).split_whitespace().map(str::to_string).collect();
@@ -222,8 +224,8 @@ pub fn search<'a>(zones: &'a [String], query: &str) -> Vec<&'a str> {
         .map(String::as_str)
         .filter(|z| {
             let mut hay = plain(z);
-            if let Some((_, de, es, pt)) = LOCAL_CITIES.iter().find(|(zone, ..)| zone == z) {
-                hay = format!("{hay} {} {} {}", plain(de), plain(es), plain(pt));
+            if let Some((_, de, es, pt, fr, it)) = LOCAL_CITIES.iter().find(|(zone, ..)| zone == z) {
+                hay = format!("{hay} {} {} {} {} {}", plain(de), plain(es), plain(pt), plain(fr), plain(it));
             }
             words.iter().all(|w| hay.contains(w.as_str()))
         })
@@ -891,6 +893,21 @@ mod tests {
         assert_eq!(city_in("America/New_York", Lang::Pt), "Nova York");
         assert_eq!(city_in("America/Belem", Lang::Pt), "Belém");
         assert_eq!(city_in("America/Belem", Lang::De), "Belem", "a Brazilian city only the Portuguese writes with an accent");
+        assert_eq!(city_in("Europe/Vienna", Lang::Fr), "Vienne");
+        assert_eq!(city_in("America/New_York", Lang::Fr), "New York");
+        assert_eq!(city_in("Africa/Cairo", Lang::Fr), "Le Caire");
+        assert_eq!(city_in("Europe/Vienna", Lang::It), "Vienna");
+        assert_eq!(city_in("Europe/Rome", Lang::It), "Roma");
+        assert_eq!(city_in("Europe/Zurich", Lang::It), "Zurigo");
+        assert_eq!(city_in("America/Sao_Paulo", Lang::It), "San Paolo");
+        assert_eq!(city_in("America/Mexico_City", Lang::It), "Città del Messico");
+        assert_eq!(search(&more, "zurigo"), ["Europe/Zurich"]);
+        assert_eq!(search(&more, "lisbona"), ["Europe/Lisbon"]);
+        assert_eq!(search(&more, "praga"), ["Europe/Prague"]);
+        assert_eq!(search(&more, "vienne"), ["Europe/Vienna"]);
+        let capitals = list(&["Europe/London", "Europe/Brussels"]);
+        assert_eq!(search(&capitals, "londres"), ["Europe/London"]);
+        assert_eq!(search(&capitals, "bruxelles"), ["Europe/Brussels"]);
         assert_eq!(search(&more, "nova york"), ["America/New_York"]);
         assert_eq!(search(&more, "belem"), ["America/Belem"]);
         assert_eq!(city_in("Europe/Vienna", Lang::En), "Vienna");
@@ -905,9 +922,9 @@ mod tests {
     #[test]
     fn local_city_names_are_complete() {
         let mut seen = std::collections::HashSet::new();
-        for (zone, de, es, pt) in LOCAL_CITIES {
+        for (zone, de, es, pt, fr, it) in LOCAL_CITIES {
             assert!(is_valid(zone) && zone.contains('/') && seen.insert(*zone), "{zone}");
-            assert!(![de, es, pt].iter().any(|n| n.trim().is_empty()), "{zone}");
+            assert!(![de, es, pt, fr, it].iter().any(|n| n.trim().is_empty()), "{zone}");
         }
     }
 

@@ -1,4 +1,4 @@
-//! Settings → Playing → Buttons → Button symbols: how the hints show the four face buttons.
+//! Settings → Controls → Buttons → Button symbols: how the hints show the four face buttons.
 //!
 //! pocket-ui's hints speak in roles (A confirms, B goes back, X and Y are the two extra actions, `button_layout`);
 //! this only decides how those four keys look wherever a key is drawn (the hint bars of both families, dialogs, the
@@ -11,7 +11,7 @@
 //! | PlayStation | ✕ | ○ | □ | △, shapes drawn here (no logo, no font) |
 //!
 //! The PlayStation shapes stand where an Xbox pad has the letter of the same role (✕ is A, ○ B, □ X, △ Y). Which
-//! physical button confirms stays Settings → Playing → Button layout's business: the two are independent.
+//! physical button confirms stays Settings → Controls → Buttons → Button layout's business: the two are independent.
 //!
 //! The shapes are four characters of Unicode's private use area (`CROSS` ...) that `Text` rasterises with `raster`
 //! instead of a font, at the size and cap height of the face they are drawn in, and caches like any letter: measuring,

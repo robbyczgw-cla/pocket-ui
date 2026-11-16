@@ -18,8 +18,16 @@ version_of() {
 
 # The notes for one model, on stdin: keeps what's between "#if GAMES" and "#else" (GAMES = 1) or "#else" and "#endif"
 # (GAMES = 0), and drops those lines; "#if EFI" blocks the same way. $1: 1 for a card with the GAMES drive, else 0; $2: 1 for
-# a card that also starts through UEFI and OpenABL's BLS entry (pins.sh SM8550_EFI_MODELS), else 0 (the default). No nesting.
+# a card that also starts through UEFI and OpenABL's BLS entry (pins.sh SM8550_EFI_MODELS), else 0 (the default); "#if GENERIC"
+# with $3: 1 for an RK3566 card on ROCKNIX's Generic U-Boot (pins.sh is_generic), else 0 (the default); "#if DEVTEST" with $4: 1 for
+# an RK3326 device-test card (pins.sh is_devtest), else 0. No nesting.
 notes_blocks() {
-  awk -v g="$1" -v e="${2:-0}" 'BEGIN { s = 1 } /^#if (GAMES|EFI)$/ { v = ($2 == "GAMES") ? g : e; s = (v == 1); next }
+  awk -v g="$1" -v e="${2:-0}" -v n="${3:-0}" -v d="${4:-0}" 'BEGIN { s = 1 } /^#if (GAMES|EFI|GENERIC|DEVTEST)$/ { v = ($2 == "GAMES") ? g : ($2 == "EFI") ? e : ($2 == "GENERIC") ? n : d; s = (v == 1); next }
     /^#else$/ { s = (v != 1); next } /^#endif$/ { s = 1; next } s'
+}
+
+# A prominent test warning in the card notes. Incidental mentions of tests or
+# experimental settings elsewhere are not a warning about the whole card.
+image_test_warning() {
+  LC_ALL=C grep -Eq '^[[:space:]]*Experimental(:|[[:space:]]*$)|^[[:space:]]*([Tt]his is a |[Ii]t is a |[Aa] )?[Tt]est image([[:space:][:punct:]]|$)' "$@"
 }

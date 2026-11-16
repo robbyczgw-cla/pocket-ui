@@ -25,6 +25,10 @@ struct Bridge {
 
 impl Bridge {
     fn start(bits: u32) -> Bridge {
+        Bridge::start_env(bits, &[])
+    }
+
+    fn start_env(bits: u32, env: &[(&str, &str)]) -> Bridge {
         let dir = tempfile::tempdir().unwrap();
         let bytes = if bits == 16 { 2 } else { 4 };
         let original = vec![0x5au8; (W * H) as usize * bytes];
@@ -32,6 +36,7 @@ impl Bridge {
         let child = Command::new(env!("CARGO_BIN_EXE_pocket-fb"))
             .args(["--wayland", dir.path().join("w").to_str().unwrap(), "--ipc", dir.path().join("i").to_str().unwrap()])
             .args(["--fb", dir.path().join("fb").to_str().unwrap(), "--mode", &format!("{W}x{H}x{bits}")])
+            .envs(env.iter().copied())
             .stderr(Stdio::null())
             .spawn()
             .unwrap();
@@ -217,6 +222,11 @@ impl Client {
 
     /// One picture in one colour; returns its frame callback.
     fn show(&mut self, offset_page: u32, rgb: u32) -> u32 {
+        self.show_saying(offset_page, rgb, &[])
+    }
+
+    /// As `show`, saying (`damage_buffer`) that only rows `rows` (start, end) changed; nothing said for none.
+    fn show_saying(&mut self, offset_page: u32, rgb: u32, rows: &[(u32, u32)]) -> u32 {
         use std::os::unix::fs::FileExt;
         let offset = offset_page * W * H * 4;
         let pixels: Vec<u8> = rgb.to_le_bytes().iter().copied().cycle().take((W * H * 4) as usize).collect();
@@ -230,6 +240,13 @@ impl Client {
         let mut b = buffer.to_le_bytes().to_vec();
         b.extend_from_slice(&[0; 8]);
         self.send(self.surface, 1, &b);
+        for &(top, end) in rows {
+            let mut b = Vec::new();
+            for v in [0, top, W, end - top] {
+                b.extend_from_slice(&v.to_le_bytes());
+            }
+            self.send(self.surface, 9, &b);
+        }
         let cb = self.new_id();
         self.send(self.surface, 3, &cb.to_le_bytes());
         self.send(self.surface, 6, &[]);
@@ -265,6 +282,31 @@ const BLUE_ON_FB: [u8; 4] = [0xff, 0, 0, 0xff];
 
 const GAMES: &str = r#"[app_id="^(?!pocket-ui$).*"]"#;
 const UI: &str = r#"[app_id="pocket-ui"]"#;
+
+/// softbuffer (pocket-ui's window) paints a frame only once the buffer it painted last time is released. pocket-fb sent that
+/// release after putting the new picture on the screen, so on the Brick pocket-ui's paint (13.7 ms) and pocket-fb's upload and
+/// swap (9.7 ms) ran one after the other, every frame: two or three refreshes, 25-27 fps in every animation (BRICK-60FPS.md).
+/// The release must go out when the new picture comes, so the next paint runs while this picture goes to the screen.
+#[test]
+fn the_window_gets_its_last_buffer_back_before_the_new_picture_is_on_the_screen() {
+    const SLOW: Duration = Duration::from_millis(800);
+    let bridge = Bridge::start_env(32, &[("POCKET_FB_SLOW_PAINT_MS", "800")]);
+    let mut c = Client::connect(&bridge.path("w"), "pocket-ui");
+    // `show` makes the buffer, then the frame callback: the buffer is the id before.
+    let first = c.show(0, RED);
+    let first_buffer = first - 1;
+    wait_for("the first picture", || c.has_event(first, 0));
+    let at = Instant::now();
+    let second = c.show(1, GREEN);
+    wait_for("the release of the first buffer", || c.has_event(first_buffer, 0));
+    let released = at.elapsed();
+    let shown_yet = c.has_event(second, 0);
+    wait_for("the second picture", || c.has_event(second, 0));
+    let shown = at.elapsed();
+    assert!(shown >= SLOW, "the screen took its {SLOW:?} ({shown:?})");
+    assert!(released < SLOW / 2 && !shown_yet, "the first buffer came back after {released:?}, with the screen work of the second ({shown:?}): the client could not paint meanwhile");
+    assert_eq!(bridge.pixel(), GREEN_ON_FB);
+}
 
 #[test]
 fn a_native_port_keeps_the_screen_until_the_pause_menu_and_returns_after_quit() {
@@ -523,6 +565,105 @@ fn the_gpus_way_shows_the_right_colours_and_follows_the_focus() {
     wait_for("the frame callback", || ui.has_event(cb, 0));
     assert!(bridge.command_ok(&format!(r#"{UI} fullscreen disable; {GAMES} focus"#)));
     wait_for("the game back", || rgb_of(&bridge) == RED_ON_FB[..3]);
+}
+
+/// Row `y` of the file, colours only.
+fn rgb_at(bridge: &Bridge, y: u32) -> [u8; 3] {
+    let at = (y * W * 4) as usize;
+    bridge.fb()[at..at + 3].try_into().unwrap()
+}
+
+/// pocket-ui says which rows each picture changed (`damage`), and the GPU's texture takes only those: the whole 1024x768 upload
+/// cost 6.8-7.9 ms of every Brick frame, memory-bound beside pocket-ui's paint (BRICK-60FPS.md). Rows not said keep the picture before;
+/// rows said while the picture couldn't go in (dark screen, another window on show) go in with the next; a picture without a word, and
+/// the first into a texture another window's picture is in, go in whole.
+#[test]
+fn the_gpu_takes_only_the_rows_a_picture_says_it_changed() {
+    let dir = tempfile::tempdir().unwrap();
+    let log = tempfile::NamedTempFile::new().unwrap();
+    let mut bridge = gl_bridge(None, "pbuffer", log.path(), dir);
+    if std::fs::read_to_string(log.path()).unwrap().contains("GL failed") {
+        eprintln!("no software GPU here, this test has nothing to check");
+        return;
+    }
+    let rows = |b: &Bridge| [0, 5, 22, 30, 40].map(|y| rgb_at(b, y));
+    let rgb = |c: [u8; 4]| -> [u8; 3] { [c[0], c[1], c[2]] };
+    let (r, g, b) = (rgb(RED_ON_FB), rgb(GREEN_ON_FB), rgb(BLUE_ON_FB));
+    let mut ui = Client::connect(&bridge.path("w"), "pocket-ui");
+    ui.show(0, BLUE);
+    wait_for("the first picture", || rows(&bridge) == [b; 5]);
+    // Red everywhere, said for rows 0 to 9: those rows red, the rest still the blue before.
+    let cb = ui.show_saying(1, RED, &[(0, 10)]);
+    wait_for("its frame callback", || ui.has_event(cb, 0));
+    assert_eq!(rows(&bridge), [r, r, b, b, b], "rows not said changed are the picture before");
+    // Said over two pictures on a dark screen: both go in when it is back.
+    assert!(bridge.command_ok("output * power off"));
+    ui.show_saying(0, GREEN, &[(20, 25)]);
+    ui.show_saying(1, GREEN, &[(30, 31)]);
+    std::thread::sleep(Duration::from_millis(100));
+    assert!(bridge.command_ok("output * power on"));
+    wait_for("both pictures' rows", || rows(&bridge) == [r, r, g, g, b]);
+    // Without a word a picture is all new.
+    ui.show(0, GREEN);
+    wait_for("a whole picture", || rows(&bridge) == [g; 5]);
+    // A game takes the screen (the other texture); the UI's rows said meanwhile go into the UI's texture when it is back.
+    let mut game = Client::connect(&bridge.path("w"), "pocket-core");
+    game.show(0, RED);
+    wait_for("the game", || rows(&bridge) == [r; 5]);
+    ui.show_saying(1, BLUE, &[(0, 1)]);
+    assert!(bridge.command_ok(r#"[app_id="pocket-core"] fullscreen disable; [app_id="pocket-ui"] focus"#));
+    wait_for("the UI back with its row", || rows(&bridge) == [b, g, g, g, g]);
+    // Two other windows in turn fill both textures: the UI comes back whole.
+    let mut other = Client::connect(&bridge.path("w"), "other");
+    other.show(0, RED);
+    wait_for("the other window", || rows(&bridge) == [r; 5]);
+    assert!(bridge.command_ok(r#"[app_id="pocket-core"] focus"#));
+    std::thread::sleep(Duration::from_millis(400));
+    assert!(bridge.command_ok(r#"[app_id="pocket-ui"] focus"#));
+    wait_for("the UI whole", || rows(&bridge) == [b; 5]);
+    std::thread::sleep(Duration::from_millis(300));
+    bridge.stop();
+    let said = std::fs::read_to_string(log.path()).unwrap();
+    assert!(said.contains("rows a picture into the texture"), "{said}");
+}
+
+/// The Soft look (colour temperature, night light, extra dim) multiplied in by pocket-fb for the window of the process that sent it:
+/// pocket-ui's CPU pass over the whole frame cost 5 ms of every Brick frame (BRICK-60FPS.md). `pocket_tint` from another process
+/// (the `--ipc-send` child) takes it off this one's windows.
+fn the_soft_look_is_drawn_for_the_senders_window(bridge: &Bridge, exact: bool) {
+    let mut ui = Client::connect(&bridge.path("w"), "pocket-ui");
+    let grey = 0x00c8_c8c8;
+    ui.show(0, grey);
+    wait_for("the plain picture", || rgb_of(bridge) == [200, 200, 200]);
+    // Red unchanged, green at 80 %, blue at half: as `Look::multipliers` says them.
+    assert!(bridge.command_ok("pocket_tint 65536 52429 32768"));
+    ui.show(1, grey);
+    let near = |got: [u8; 3], want: [u8; 3]| got.iter().zip(want).all(|(g, w)| if exact { *g == w } else { (i32::from(*g) - i32::from(w)).abs() <= 1 });
+    wait_for("the tinted picture", || near(rgb_of(bridge), [100, 160, 200]));
+    let other = Command::new(env!("CARGO_BIN_EXE_pocket-fb")).args(["--ipc-send", bridge.path("i").to_str().unwrap(), "pocket_tint 65536 65536 0"]).output().unwrap();
+    assert!(other.status.success(), "{other:?}");
+    ui.show(0, grey);
+    wait_for("this window's picture without the other's look", || rgb_of(bridge) == [200, 200, 200]);
+    assert!(!bridge.command_ok("pocket_tint 65536 65536"), "three channels");
+    assert!(!bridge.command_ok("pocket_tint 65536 65536 70000"), "at most unchanged");
+}
+
+#[test]
+fn the_soft_look_is_drawn_by_the_gpu_for_the_senders_window() {
+    let dir = tempfile::tempdir().unwrap();
+    let log = tempfile::NamedTempFile::new().unwrap();
+    let bridge = gl_bridge(None, "pbuffer", log.path(), dir);
+    let said = std::fs::read_to_string(log.path()).unwrap();
+    if said.contains("GL failed") {
+        eprintln!("no software GPU here, this test has nothing to check: {said}");
+        return;
+    }
+    the_soft_look_is_drawn_for_the_senders_window(&bridge, false);
+}
+
+#[test]
+fn the_soft_look_is_drawn_by_the_copy_without_a_gpu() {
+    the_soft_look_is_drawn_for_the_senders_window(&Bridge::start(32), true);
 }
 
 /// What a row looks like in GL is the top of the screen here: a picture with a differently coloured first row, and a stride wider than it.

@@ -71,14 +71,22 @@ its marks. A 4 px scroll bar at the right edge when the list is longer than its 
 start): spine-coloured rows, the selected one paper with ink, the label's lift shadow in Light. The sheet's lists
 wrap at their ends; the shelf stops at its ends (it is a physical shelf with bookends).
 
-**Hint bar.** Shelf pages: loose round key caps with Dust labels at the bottom left, A first (`kit::page_hints`).
-Sheet pages: one pill at the bottom right, A last, next to the face buttons (`kit::pill_hints`). The explanation of
+**Hint bar.** One form on every page: a dark pill at the bottom right, 30 px from the page's right and bottom edges, 90 high,
+a round chip per key and its label in Soft, A last, next to the face buttons (`kit::pill_hints`; the shelf's pages, the game
+card, the console pages, search, Curator and the first start paint the same pill through `kit::page_hints`). Until
+2026-11-13 the shelf's pages had loose small keys at the bottom left (polish review 12.11., point 10); the pill is the
+one that reads at arm's length on a 640x480 panel (its labels are 15 px there, the loose keys' were 10) and on any picture
+behind it, so it was kept. Where the screen is wider than 1600 px the Shelf look, search, Settings and the first start's
+steps stand in a column (`app_column`; Settings and the first start in the wider `page_column_width`) and the pill ends at the column's edge; the other pages end it at the screen's. A page
+keeps its content above the bar (`kit::hint_bar_top`, `kit::content_bottom`: what lists, keyboards, boxes and the
+Easy look's lines may reach), and `tests/hint_bar.rs` checks place, size and clearance on every look, style, language and
+size. The explanation of
 the selected row stands at the bottom left, never under the pill: its last line on the pill's line, the two lowest
 lines in the column beside the pill, longer ones across the page above (`kit::footer`: `settings:0:0`, `sys:quick`,
 `options`, `picture`). Every page has hints, the pause menu's pages too: B Back first in the pill, then A Open (a
 row that opens a page), A Choose (an action) or "< >" Change (a value). Same word, same action: Back goes up a level,
 Close shuts an overlay (quick settings), Cancel leaves a dialog. A key never stands without its word: at most four
-hints (Easy three), and where they don't fit whole hints go, the least needed first (A, B, HOME and START last, then
+hints (Easy three). A fitting bar keeps its spacing and type. When the chosen hints do not fit, the gaps close first, then the letters get a little smaller; only after that do whole hints go, the least needed first (A, B, HOME and START last, then
 the page's order from the front; `kit::top_hints`, `type_scale::hints_that_fit`). On Home that is `A · HOME Quick
 settings · START Settings` plus Details; SELECT and Star are in the manual and the tour. The pause menu keeps START
 (the way to the quick settings) before SELECT.
@@ -103,7 +111,14 @@ Lens's glass, a smart shelf's row of cartridges, the history's notebook) over th
 centred, the pair a little above the label's middle; the name on two lines of about the same width, never a lone
 word or number on the second (`home`, `curator:hub`, `sys:osd-warmth`).
 
-**Icons.** Drawn, one colour, 16 x 16 painted twice their size in the row's colour (Settings' categories); status
+**Games without any box art** (no cover file at all; `Look::tape`, `src/tape_label.rs`) are home-made instead of
+printed: a plain kraft box with a strip of masking tape (a CC0 photo, `assets/media/tape/`) and the name in marker
+(Caveat Brush), a blank cartridge with tape on its label recess, a burned silver CD-R written on above the hole, a
+disc case with a handwritten paper insert. Tilt, tape length, torn ends, writing jitter and pen (black or blue) come
+from the name (`tape_label::seed`): the same game looks the same everywhere. Names the hand font has no letters for
+are printed in the title face on the same tape. Real art always wins; Curator's boxes keep their emblems.
+
+**Icons.** Drawn, one colour, 16 x 16 painted twice their size (Settings' categories, in a row at the top of each list with L1/R1); status
 marks are drawn (dot, bars, tick, dash); keys are their printed names in chips ("A", "SELECT", "< >"), never glyphs.
 
 **Motion** (details under [Motion](#motion-srcmotionrs-srcapp_motionrs)): only in answer to input, ease-out, no
@@ -115,9 +130,9 @@ down 20 px in 150 ms, hints crossfade in 120 ms. Motion Off: everything at once.
 both surfaces. Selection or value moved: Nav. Chosen, switched, the box turned: Confirm. Up a level or closed: Back.
 Pause menu or quick settings opened: Menu. Switcher: Switcher. Refused: Error. Vol+/Vol-: Volume. Screenshot:
 Shutter. X on a game in the Shelf or Cabinet: CaseOpen (plastic) or BoxOpen (a cartridge's cardboard box), instead of
-Confirm. The launch, Quick: Insert, a quiet click (-6 dB) that lands with the motion at 180 ms. Cozy: the case opens at
-A, the game goes in with its medium's sound (CartIn, DiscIn, CardIn), its click on `IN_AT_COZY`, and CrtOn with the
-old-TV power-on (pocket-core plays it into the game's sound). Never during play.
+Confirm. The launch, Quick: Insert, a quiet click (-6 dB) that lands with the motion at 180 ms. Cozy: the case opens
+when it visibly does (about 0.2 s after A: the timeline eases in, `insert_rig::case_opens_at`), the game goes in with its medium's sound (CartIn, DiscIn, CardIn), its click on `IN_AT_COZY`, and CrtOn with the
+old-TV power-on (pocket-core plays it into the game's sound; a handheld has no tube, so none). Never during play.
 
 **Voice.** Plain gamer words, short, sentence case; say what happens, then what to do ("No screenshots yet" / "Hold
 HOME and press A while you play to take one."). No hi-fi or engineering jargon, no exclamation marks, "…" for
@@ -142,9 +157,9 @@ PS1 `#9AA3AD`, N64 `#2E7D32`, PSP `#3B3B3B`, others hashed from the system name 
 One family in two widths: **Barlow Condensed SemiBold** for spine titles (condensed type fits spines, like
 printed cartridge and label-maker type) and **Barlow Medium** for meta text and hints. Both are OFL, embedded.
 Scale, a perfect fourth (×1.333) from 21 px: 21 / 28 / 37 / 50 / 67. Pulled-out titles are 67, spines 37,
-meta 28, hints 21. Sentence case everywhere, never all caps. The panel is 3.92" at 1240×1080 (about 16 px a
+meta 28, hint pill 30. Sentence case everywhere, never all caps. The panel is 3.92" at 1240×1080 (about 16 px a
 millimetre) and held at arm's length, so Body 28 (capitals about 1.2 mm high) is the smallest size for text that is
-read rather than glanced at (a fact, an explanation, a note under a list); 21 is for the hint bar, credits and short
+read rather than glanced at (a fact, an explanation, a note under a list); 21 is for credits and short
 notes beside larger text. Section headings on a page are Title 37 (the console page, credits, the game card).
 
 ### A game's big name (`src/title_block.rs`)
@@ -193,9 +208,22 @@ Barlow has no kana or kanji. A letter it lacks comes from the system's **Noto Sa
 the capitals' middle, so kana and Latin letters share a line; and it is painted bolder (the outline drawn again up to
 0.04 em right and up next to Barlow Condensed SemiBold, 0.018 em next to Barlow Medium; on a small circle above 1.5 px,
 so a big letter keeps clean diagonals). Kana keep their full width. Only letters Barlow (or a theme's font) lacks come
-from it; Latin letters and "?" stay Barlow to the pixel. The virtual device has the font too (its root is the ROCKNIX image's). Without it (a desktop computer) a letter
-is painted as "?" and a mark (a tick, a star, an emoji) is left out, never an empty box, as before; the same for a
-character neither font has.
+from it; Latin letters and "?" stay Barlow to the pixel. The virtual device has the font too (its root is the ROCKNIX image's). Where the system keeps it elsewhere
+(`text_fallback::OTHER_SYSTEM_CJK`: Android's `/system/fonts`, Debian, Arch, Fedora) that file is used.
+
+**Without a CJK font** (a desktop computer, the Brick, a phone that lacks it) nothing is painted as "?" or as an empty
+box any more (`src/latinise.rs`, the web demo and the Brick included). The text painter runs every string with a letter
+none of its faces has (`Text::translated` → `drawable`, one scan for ASCII, one lookup for a name it has seen) through
+`latinise::fold`: kana become Hepburn ("ニンテンドーゲームキューブ" → "Nintendoogeemukyuubu"), hangul Revised Romanization
+("마리오 카트" → "Mario Kateu"), full-width letters and CJK punctuation their ASCII twins, and the letters nothing can say
+in Latin (kanji, hanzi, Thai, ...) are left out, with the brackets and spaces they leave empty tidied. A name of nothing
+but such letters is "…", never a gap. Strings that every face can draw are not touched or copied. The content leaves out
+what has a better way to say nothing: a console's other names that need such letters (`consoles.rs`), a fact (developer,
+publisher, genre, series) that would say nothing, a description of which less than nine in ten letters could be drawn
+(a Japanese description on a device without the font; the card says there is none), "Listed as" with only such a name
+(`CardData::leave_out_unsayable`, `GameInfo::sayable`). A character neither a face nor `fold` knows is still left out by
+`text::raster`, never "?". `tests/cjk_glyphs.rs` renders every console page and the cards of games with Japanese and
+Korean metadata, with and without the font, and fails when a painted string holds a letter no font has.
 
 **Cost.** fontdue turns every glyph of a font into an outline when it loads it, for this font seconds and well over
 100 MB, so the CJK font is read another way (`src/text_fallback.rs`): the file is memory-mapped (only the pages a
@@ -222,12 +250,24 @@ Medium is 1.12 times, at most 6 px more, never past 64, rounded to the nearest p
 | Large | 25 | 26 | 30 | 33 | 35 | 38 | 45 | 46 | 54 | 56 | 60 | the same |
 
 Medium was added after trying Large on the device ("an extra step in between would be ideal"): Body 28 becomes 31 and
-the hint bar's 21 becomes 24, about half the way to Large, and the rows (`row`: 70 px for Settings' 66) follow by the
+the small notes' 21 become 24, about half the way to Large, and the rows (`row`: 70 px for Settings' 66) follow by the
 same rule. Large's Body 28 becomes 35 (capitals about 1.5 mm high instead of 1.2; the 2.2 mm of reading glasses would need 44-52 px, too
 big for the panel's rows). Titles of 64 px and more (a pulled-out label, the switcher, the battery figure, the letter
 of a jump) are large already. A third, larger step was left out: in Large the densest pages (Sync, Performance & fan,
 the look step) already scroll their list or shorten a note to stay above the hints, and half as much again would not
 fit them.
+
+**Wide screens** (at least 1600 px across: the Pocket 5's, Flip 2's and Odin's 1920x1080, a 20:9 phone turned, a 1080p
+TV). The design's sizes are made for the Mini V2's 1240x1080; on 1920x1080 a category's rows filled a third of the height
+in small type inside a ¾ column (a hand test on the Odin, 15.11.2026). The pages of rows and text (Settings and the manual,
+the first start's steps, quick settings, the pause menu's pages) are painted with `type_scale::wide_page`'s factor, the
+screen's height over 830 lines (1.3 at 1080, at most 1.6): Body 36 is 47, a row 86 px instead of 66, a line's gap 1.3
+times as large (`type_scale::panel`, `px`, `row`, `line`). Medium and Large add half of their own growth on top (36 px:
+49 and 51); all of it (58) ran the fixed steps of the denser pages (the pause menu's notes, the Status labels) into
+each other. A category of eight rows and its explanation fit without scrolling at 1080 lines. Drawings of a fixed size
+keep their type: Pixel Path's diagram, the Add games tiles and ways, the play step's preview frame (`panel(1.0)`); the
+first start's row of consoles grows its cells with the type. Screens under 1600 px wide (the Mini V2 and V1, the
+Brick, the Smart Pro, the H700 panels) are painted exactly as before.
 
 The layouts follow the same rule: a row that was `h` px around type of `font` px is `type_scale::row(h, font)` (taller by
 the type's growth and a fifth of it again: Settings' 66 px rows at 36 px are 76, a 72 px spine 82), the step between two
@@ -248,8 +288,8 @@ bar, and the category keeps that room for all its rows, so the list does not mov
 the Tour's pictures of screens. pocket-core's overlay over a game is not scaled.
 
 **The TrimUI Brick** (`brick` feature, `type_scale::brick_base`) has a 3.2" panel at 1024×768, about 15.75 px a millimetre, and the
-design's small sizes are too small there at arm's length (Body 28 is 1.8 mm high, the hint bar's 21 only 1.3 mm). Its Normal is
-therefore a little larger for the sizes up to Body 28: 18 to 21 px four more (the hint bar's 21 is 25, 1.6 mm), 22 to 28 three
+design's small sizes are too small there at arm's length (Body 28 is 1.8 mm high, a note's 21 only 1.3 mm). Its Normal is
+therefore a little larger for the sizes up to Body 28: 18 to 21 px four more (a note's 21 is 25, 1.6 mm), 22 to 28 three
 more (Body 28 is 31, 2.0 mm; facts and counters at 24 are 27), the Settings family's 30 two more (32), and from 36 up (rows, titles, the
 pause menu) nothing. Medium and Large keep the sizes of the table above where they are larger, so on the Brick Normal is about what
 Medium is elsewhere. The case spines and shelf cards stay fixed (`unscaled`). Other devices and the default build are the design
@@ -312,6 +352,9 @@ Keep the canvas and coverage tables between frames, and reduce only when the UI 
 rasterised on the logical canvas with the rest of the page; there is no second text pass that could move glyphs away
 from their measured layout. Normal, Medium and Large remain the player's text-size choices. Snapshots use the same
 logical dimensions and reduction; their text-box findings describe the logical canvas before reduction.
+By default (`POCKETUI_PAINT=scaled` and safe mode keep the reduction above) 640×480, 720×480 and 720×720 are
+painted without the logical buffer: the same layout in the same logical coordinates, divided by 2 as it is painted ([dev/native-paint.md](dev/native-paint.md)); page painters
+keep using `c.w`/`c.h` and canvas calls, never the buffer itself.
 [H700 scaled-layout measurements](H700-SCALED-LAYOUT.md) record JPEG inspection and performance limits.
 
 ## Layout (1240×1080, left aligned, 72 px margin)
@@ -355,7 +398,8 @@ logical dimensions and reduction; their text-box findings describe the logical c
   ends a bookend holds it up and a plant, lamp or cactus (`media::Prop`, the same for the same list) stands further
   along, so a system with three games is not an empty board.
 - **On a wide screen** (1920x1080) the shelf stands in the 1440 px column in the middle, as Settings does
-  (`app_column`): more spines in view than on the Mini V2, the same sizes.
+  (`app_column`): more spines in view than on the Mini V2, the same sizes. Android's handheld view gives it the
+  whole width instead (the Odin's 1920x1080, a 20:9 phone turned; `app_column::shelf_fills_width`), margin to margin.
 - **Status corner** (`src/status_corner.rs`): the top line's right end on Home (every look), the game card, console pages, the search and Curator's pages. The time (24 h), a Wi-Fi symbol only while
   connected (a fan of a wedge and two arcs, 45° to either side, drawn with the canvas, as big as the figures), the
   battery ("76 %", "76 %, charging"), 24 px apart, Body 28. A part that is not known is left out, not shown as a
@@ -383,7 +427,7 @@ logical dimensions and reduction; their text-box findings describe the logical c
   out, never the words. The same house style as the console pictures: one dark outline pixel, three or four tones a
   material, transparent, warm and muted; each picture is decoded the first time it is painted and kept (a vignette
   costs about 20 µs a frame).
-- **Settings' categories have icons**: 16 x 16, one colour, painted twice their size in the colour of the row's name,
+- **Settings' categories have icons**: 16 x 16, one colour, painted twice their size in a row at the top of each category's list (the selected one in the text's colour and named, the others dimmed, L1 and R1 at the ends),
   so one picture fits dark and light, selected or not.
 - **The handheld:** first start's welcome and About show the device pocket-ui runs on (`device::current()`, the Mini
   V2 where it isn't known), drawn in pixels with pocket-ui's shelf on its screen; About only where the room above the
@@ -392,7 +436,7 @@ logical dimensions and reduction; their text-box findings describe the logical c
   scale, so both are about as tall (`ui_art::above_words_row`); on About it sits before the version on the Version row,
   one pixel a pixel, where it clears the row's name. The boot screen shows the mark alone over the wordmark ([BOOT-SPLASH.md](BOOT-SPLASH.md)). The manual's Controls page shows the Mini V2 three or two times its pixels, every control named
   beside it: button names as the text's chips, "D-pad" and the sticks in the interface's language, the face buttons
-  lettered as Settings › Playing › Button layout has them (`manual::controls_picture`, from the line of
+  lettered as Settings › Controls › Buttons › Button layout has them (`manual::controls_picture`, from the line of
   `docs/user/controls.md` whose image line points at `pocket-ui:controls`).
 - **Never a blank where a figure goes.** A preview, panel or side text that has nothing to show yet says so in words
   ("Nothing this week", "No PC paired"; a Curator row before its index shows no words rather than a placeholder that looks broken), and the Lens with nothing picked shows what it looks
@@ -438,7 +482,7 @@ full beginning once, then stays there until reselected. Its still pauses use tim
 | Split's preview | after 2.5 s on a game the box art fades to its screenshot, 3.5 s later to its title screen, and round again (`picture_cycle`); a fade is not movement, so Reduced keeps it, Off keeps the box art still | 400 ms |
 | Appearance | dark ↔ light crossfade as before; Off switches at once | 600 ms |
 
-**Settings → Sound & feel → Motion** (R1): **Full**; **Reduced**, only fades (pages fade in without sliding, glides and
+**Settings → Look → Motion** (R1): **Full**; **Reduced**, only fades (pages fade in without sliding, glides and
 the pull-out jump, toasts fade); **Off**, everything at once. Saved as `"motion"` in settings.json.
 
 **How a page transition is painted.** No second picture is kept: the old page is gone with the press and the new
@@ -480,7 +524,7 @@ and rare: they never add a frame, a row or a badge to a list.
   PNG header), so nothing moves when it arrives.
 - **Never an empty frame.** A game without a screenshot cycles nothing and shows its box art; without box art but
   with a screenshot it shows the screenshot; with nothing, the console and the count as before. "Box art"
-  or "Off" (Settings → Games → Extras → Pictures) hides them all.
+  or "Off" (Settings → Games → Box art & downloads → Pictures) hides them all.
 - **Cost.** PNGs are decoded and scaled on one loader thread into the box art's image cache (16 pictures at most),
   never on the UI thread; the files are stat'ed by their 24-byte header once.
 
@@ -811,7 +855,7 @@ Two rows of Settings → Look → Cozy extras, both on from the start, Shelf loo
   board, above its own slot as far as the screen lets it: nothing of the shelves is under it. It is never taller
   than the showcase (`show_scale`). Simple perspective: each face is a run of columns whose height
   follows its distance; at rest the front is copied as it is, sharp.
-- **Starting** a game (Settings → Sound & feel → Animations, Cabinet and Shelf looks; `app_cabinet::launch_animation`). The
+- **Starting** a game (Settings → Look → Game start animation, Cabinet and Shelf looks; `app_cabinet::launch_animation`). The
   numbers below are Quick; Cozy plays the same shape over `cabinet::INSERT_COZY` (2000 ms, in at `IN_AT_COZY` 1200 ms, the fade from `FADE_AT_COZY` 1350 ms; sounds:
   the case opening at A, `ui_sound::going_in` seated at 1200 ms, `Sound::CrtOn` from pocket-core with the old-TV power-on), slows every timed animation by `motion::COZY_SLOWER` (1.4) and holds a pocket-core game's window
   until the fade has run (`startup::HOLD_UNTIL`; pocket-core draws nothing and is silent meanwhile, a button ends it):
@@ -837,7 +881,7 @@ Two rows of Settings → Look → Cozy extras, both on from the start, Shelf loo
 
 - **A console's real mechanism** (Cozy + Playful cases, `src/insert_rig.rs`, `insert_scene::Scene::paint`): PS1, GameCube,
   Dreamcast, Saturn (lid); PS2, Xbox (tray, the disc comes from the front lying flat); SNES (US and PAL/JP rigs by the cartridge's
-  region), N64, Mega Drive, Game Boy, Game Boy Color, GBA (cartridge); Master System (cartridge, three fifths out of the top slot); Game Gear (its cartridge turns its back to the player and goes in behind the top edge, as on the Game Boy); PC Engine (the HuCard slides in lying on the slot's ramp, contacts first, and stays half out); 3DS (the card goes in behind, at the rear of the lower half, as on the DS; the DS card stands in for the 3DS card); PSP (it comes up showing its front and turns round to its back in 280 ms, `insert_rig::TURN_MS` and `front.png`, as the game box turns on the card; the UMD cover springs open, the UMD slides down into it label to the player and the cover shuts over it, `Lid::medium_behind`; the way back turns it to its front again); DS (the card goes in behind the upper screen, where its slot is); Wii (the disc goes into its slot on the front, along the console's depth); NES (front-loader, `Mech::Door`: the door lifts about its hinge at the back, the cartridge turns round on its way from the case and slides in lying flat, label up and connector first, what of it is inside is in the console's shadow and shows only through the opening, `rig.json`'s `mouth`; it is pressed down with the cartridge's click at `IN_AT_COZY` and the door drops shut with the lid's clunk `Sound::DiscShut`; the way back opens the door first; the Famicom keeps the plain animation). The console alone is shown larger than its system picture (2 screen pixels an art pixel). One timeline,
+  region), N64, Mega Drive, Game Boy, Game Boy Color, GBA (cartridge); Master System (cartridge, three fifths out of the top slot); Game Gear and Neo Geo Pocket / Color (the cartridge turns its back to the player and goes in behind the top edge, as on the Game Boy and the GBA; the power light and the display come on);  PC Engine (the HuCard slides in lying on the slot's ramp, contacts first, and stays half out); 3DS (the card goes in behind, at the rear of the lower half, as on the DS; the DS card stands in for the 3DS card); PSP (it comes up showing its front and turns round to its back in 280 ms, `insert_rig::TURN_MS` and `front.png`, as the game box turns on the card; the UMD cover springs open, the UMD (its shell straight at the top and rounded at the bottom, as a real one looks with its label upright) slides down into the cover rounded end first, label to the player and readable, and the cover shuts over it, `Lid::medium_behind`; the way back turns it to its front again); DS (the card goes in behind the upper screen, where its slot is); Wii (the disc goes into its slot on the front, along the console's depth); NES (front-loader, `Mech::Door`: the door lifts about its hinge at the back, the cartridge turns round on its way from the case and slides in lying flat, label up and connector first, what of it is inside is in the console's shadow and shows only through the opening, `rig.json`'s `mouth`; it is pressed down with the cartridge's click at `IN_AT_COZY` and the door drops shut with the lid's clunk `Sound::DiscShut`; the way back opens the door first; the Famicom keeps the plain animation). The console alone is shown larger than its system picture (2 screen pixels an art pixel). One timeline,
   `insert_rig::pose`, a pure function of the time since A: in at `IN_AT_COZY` with the sound's hit (`Sound::DiscDrop`), a disc rests on its
   spindle for 110 ms, the lid or tray shut 280 ms after it is down with the clunk (`Sound::DiscShut`; the two are `disc-in.wav`
   cut in two at its quiet point, `scripts/ui-sounds/split_disc_in.py`, the other systems keep the whole sound); a cartridge clicks at
@@ -876,7 +920,19 @@ Two rows of Settings → Look → Cozy extras, both on from the start, Shelf loo
   frames of the backs (and, while the case's front is not made yet, the cardboard box's front) are PixelLab pixel art
   (`assets/media/back`, `tools/` there), nine-slice at a whole number of screen pixels a template pixel; the back's
   paper is the cover's colour, deep, with white type; missing pictures and text get their own plain places.
-- **Playful animations** (Settings → Sound & feel → Playful cases, `src/playful.rs`; on with Cozy, off with Quick until the
+- **Sealed new games** (Settings → Look → Cozy extras → Sealed new games, `src/shrink_wrap.rs`, `app_shrink_wrap.rs`;
+  on): a game never played (no time, sessions or status in `library.json`, not in the recent games, never torn open)
+  stands in the shop's clear film on the Shelf, the Cabinet, Easy, Split's box art, the card's cover and the box's front
+  and back. The film is clear: two slanted glare bands with the profile of the glare in a public-domain photo of
+  shrink film (`assets/media/shrink-wrap/glare.png`: a sharp edge, a soft fade, the edge not ruled straight), in screen
+  pixels so they are crisp at any size, a hint of milkiness, a fine light rim round the case's outline and the sealed
+  seam near the top with creases into the top corners; the cover reads as before. The box (X) of a sealed game shows
+  the case shut, its game inside. All of it is made into the case's cached pictures where they are made (`sealed` in `CaseKey`): nothing per frame. At its
+  first start (Cozy, Motion Full) the film is pulled taut for 203 ms, rips with a CC0 recording of plastic wrap
+  (`Sound::WrapTear`, its crack on the rip) and flies off in two ragged halves, turning and fading by 560 ms; the
+  launch's own scene starts 20 frames (333 ms) later than usual, once, and goes on under the pieces. Quick or Motion
+  below Full: the film is simply gone. Unwrapped for good either way (`GameMeta::unwrapped`).
+- **Playful animations** (Settings → Look → Cozy extras → Playful cases, `src/playful.rs`; on with Cozy, off with Quick until the
   player switches it, nothing with Motion Reduced or Off), after Socket's playful feel in our 2D pixel style. Every one is
   a transform of a picture already made (an offset, a row shear, a nearest-pixel scale, the box disc's turn), nothing
   is made or decoded per frame:
@@ -894,6 +950,20 @@ Two rows of Settings → Look → Cozy extras, both on from the start, Shelf loo
   - *In the open box* a disc (not a UMD, in its shell) turns slowly, one turn in 9 s, for 12 s after the box opens or
     turns back to its front, slowing to a stop over the last 2 s (`playful::spin`): no frames after that. A frame per
     refresh, or every other one where the box costs more than half a refresh (the H700, `BoxView::spin_wake`).
+  - *Pressing a sticker on*, in the game box, when the card's Stickers sheet closes (`src/sticker_press.rs`,
+    `app_case_stickers`; the sheet's panel is over the case while it is open, so the landing waits until the case is in
+    view): each sticker put on while the sheet was open is let go above the case, 35 % large and about 8 degrees more
+    crooked than it will sit, falls evenly for 120 ms, is pressed a few percent into the case, springs back past its
+    place once and sits (320 ms; 448 ms at Cozy's pace). The fall and the case's surface as a damped spring are one
+    motion with the same speed at the touch (`sticker_press::press`); its shadow and extra tilt are gone as it touches.
+    The click is the Quick launch's seat sound (`Sound::Insert`, 6 dB down, under Case sounds) timed to the touch. Each
+    one taken off lifts, floats up a third of its height, grows a hair and fades in 200 ms (`sticker_press::peel`). The
+    front under them is the case without the stickers that land, made once when the sheet closes
+    (`case_stickers::on_front_but`); any button ends it and the case's own picture, which has them already, shows. The
+    sheet is on the card's page, which the box reaches with SELECT: a sticker put on or taken off there takes the card
+    back to the box when the sheet closes (`App::card_back_to_box`, only when the page was turned to from the box), so the
+    press is seen. A sheet closed with no sticker changed, a Game of the year's year changed, Stickers on cases off, or a
+    card that is not the box (a card opened as its page): nothing moves. No setting of its own.
   - *Scrolling fast* on the Shelf, the spines lean against the move, at most about 2 degrees, and swing back when it
     stops (`playful::Lean`: a spring pulled by the row's speed, so a single step barely tips them). Each row of the
     strip is copied a little sideways.

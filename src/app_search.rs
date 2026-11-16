@@ -33,20 +33,17 @@ const FIELD_H: i32 = 84;
 /// Under "No game matches …": a game that isn't on the SD card is the likelier reason before a typo, which the search
 /// mostly forgives (the first-day run, 2026-10-26, searched "mario kart" on a card without it and was told to spell).
 const NO_MATCH: &str = "It may not be in your games folder. Or check the spelling, or type less of the name.";
-/// Where the list starts, and where the keyboard starts while it is shown: measured from the screen's bottom edge,
-/// so the keyboard stays above the hints on a shorter screen (612 on 1080 lines, 492 on the Mini V1's 960).
+/// Where the list starts, and where the keyboard starts while it is shown: its last row ends over the hint bar
+/// (`kit::content_bottom`), so the keyboard stays clear of it on every screen (610 on 1080 lines, 490 on the Mini V1's 960).
 const LIST_TOP: i32 = 208;
-const KB_FROM_BOTTOM: i32 = 1080 - 612;
 
 fn kb_top(h: i32) -> i32 {
-    // A short screen (768 lines) has lower keys, and the keyboard ends where it did: more room for what is above it.
-    h - KB_FROM_BOTTOM + 5 * (KEY_H - key_h(h))
+    pocket_ui::kit::content_bottom(h) - (5 * key_h(h) + 4 * KEY_GAP)
 }
-/// The height of a key: 66, 58 on a short screen.
+/// The height of a key: 62, 58 on a short screen (768 lines: more room for what is above the keyboard).
 fn key_h(h: i32) -> i32 {
-    if pocket_ui::kit::short_screen(h) { 58 } else { KEY_H }
+    if pocket_ui::kit::short_screen(h) { 58 } else { 62 }
 }
-const KEY_H: i32 = 66;
 const KEY_GAP: i32 = 8;
 /// Rows of results while typing (four fit over the keyboard) and in the results (the keyboard stepped aside).
 const TYPING_ROW: (i32, i32) = (88, 72);
@@ -218,6 +215,7 @@ impl App {
 
     /// The library was read again: the index is made anew (an open search fills in when it is there).
     pub(crate) fn find_library_changed(&mut self) {
+        self.played_refresh();
         self.find.index = None;
         self.find.building = None;
         self.find_build_index();
@@ -375,7 +373,7 @@ impl App {
             Action::Close => self.close_search(),
             Action::Play(hit) => {
                 let Some((system, name, path)) = self.hit_game(hit) else { return };
-                self.launch_asking(system, name, path);
+                self.launch(system, name, path);
             }
             Action::Star(hit) => {
                 let Some((system, name, path)) = self.hit_game(hit) else { return };
@@ -510,7 +508,7 @@ impl App {
             c.rect(text_x + w + 4, FIELD_Y + 16, 4, 52, ink);
         }
 
-        let bottom = if typing { kb_top(c.h) - 16 } else { c.h - 110 };
+        let bottom = if typing { kb_top(c.h) - 16 } else { pocket_ui::kit::content_bottom(c.h) };
         if page.showing_recent() {
             self.paint_recent(c, page, bottom);
         } else if page.hits.is_empty() && !page.waiting() {
@@ -531,7 +529,10 @@ impl App {
             let mut y = LIST_TOP + if over_keys { 82 } else { 106 } + pocket_ui::type_scale::grow(28);
             let font = if over_keys { 24 } else { 28 };
             let step = pocket_ui::type_scale::line(font, 10);
-            for line in self.text.wrap_prose_at_most(Face::Body, font, NO_MATCH, width, 2) {
+            // Over the keys, only the lines that end above them (1280x720 and 1024x768 in Large text: the reason ran
+            // under the first key row); the last one that fits ends with "…".
+            let fit = if over_keys { (if kb_top(c.h) - 16 < y { 0 } else { (kb_top(c.h) - 16 - y) / step + 1 }).clamp(0, 2) as usize } else { 2 };
+            for line in self.text.wrap_prose_at_most(Face::Body, font, NO_MATCH, width, fit).into_iter().take(fit) {
                 self.text.draw(c, Face::Body, font, MARGIN, y, pal().dust, &line);
                 y += step;
             }
@@ -858,14 +859,17 @@ fn tail_fit(text: &mut pocket_ui::text::Text, s: &str, max: i32) -> String {
 #[allow(clippy::too_many_arguments)]
 fn blend_round_rect(c: &mut Canvas, x: i32, y: i32, w: i32, h: i32, r: i32, color: u32, alpha: u8) {
     let r = r.min(w / 2).min(h / 2);
-    for dy in 0..h {
-        // How far this row is inset at the corners.
-        let from_edge = if dy < r { r - dy } else if dy >= h - r { dy - (h - r - 1) } else { 0 };
-        let inset = if from_edge > 0 { r - ((r * r - from_edge * from_edge) as f32).sqrt() as i32 } else { 0 };
-        for dx in inset..w - inset {
-            c.blend(x + dx, y + dy, color, alpha);
-        }
-    }
+    // Its rows as one shape (gfx::Canvas::fill_rects_at): natively each screen pixel mixed by how much of it the shape
+    // covers, not only every fourth design pixel.
+    let rows: Vec<_> = (0..h)
+        .map(|dy| {
+            // How far this row is inset at the corners.
+            let from_edge = if dy < r { r - dy } else if dy >= h - r { dy - (h - r - 1) } else { 0 };
+            let inset = if from_edge > 0 { r - ((r * r - from_edge * from_edge) as f32).sqrt() as i32 } else { 0 };
+            (x + inset, y + dy, w - 2 * inset, 1)
+        })
+        .collect();
+    c.fill_rects_at(&rows, color, alpha);
 }
 
 #[cfg(test)]

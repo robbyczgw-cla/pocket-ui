@@ -275,12 +275,24 @@ impl<R: Read> Read for Gz<R> {
 /// when the tar marks it executable, else 0644) and is never chmod'ed afterwards, because the card's FAT refuses mode changes.
 /// At most `limit` bytes come out. On any failure `into` is removed again; `Refused::Full` when the target ran out of space.
 pub fn unpack_file(archive: &Path, into: &Path, limit: u64) -> Result<Vec<Entry>, Refused> {
-    unpack_inner(archive, into, limit, None)
+    unpack_inner(archive, into, limit, None, &|_| false, &|_| {})
+}
+
+/// `unpack_file` without the entries `skip` names (by path in the tar): they are read and checked as always, but nothing of them
+/// is created. The Brick update moves those unchanged parts from the running program folder instead (update/brick_delta.rs).
+/// `progress` hears how many bytes of `archive` (as it is on the card, compressed) have been read so far: the Updates page's bar.
+pub fn unpack_file_skipping(archive: &Path, into: &Path, limit: u64, skip: &dyn Fn(&str) -> bool, progress: &dyn Fn(u64)) -> Result<Vec<Entry>, Refused> {
+    unpack_inner(archive, into, limit, None, skip, progress)
 }
 
 /// Bulk SD writes are bounded to 2 MiB/s, with at most 256 KiB between fsyncs.
 pub fn unpack_file_throttled(archive: &Path, into: &Path, limit: u64) -> Result<Vec<Entry>, Refused> {
-    unpack_inner(archive, into, limit, Some(crate::update::brick_io::Pacer::new()))
+    unpack_inner(archive, into, limit, Some(crate::update::brick_io::Pacer::new()), &|_| false, &|_| {})
+}
+
+/// `unpack_file_throttled` that creates nothing for the entries `skip` names; `progress` as in `unpack_file_skipping`.
+pub fn unpack_file_throttled_skipping(archive: &Path, into: &Path, limit: u64, skip: &dyn Fn(&str) -> bool, progress: &dyn Fn(u64)) -> Result<Vec<Entry>, Refused> {
+    unpack_inner(archive, into, limit, Some(crate::update::brick_io::Pacer::new()), skip, progress)
 }
 
 /// Store packages already held in RAM may be plain tar as well as gzip.
@@ -288,18 +300,35 @@ pub fn unpack_bytes_throttled(archive: &[u8], into: &Path) -> Result<Vec<Entry>,
     let tar = super::decompress(archive).map_err(Refused::Invalid)?;
     super::entries(&tar).map_err(Refused::Invalid)?;
     let _idle = crate::update::brick_io::IdleIo::enter()?;
-    unpack_reader(&mut tar.as_ref(), into, Some(crate::update::brick_io::Pacer::new()))
+    unpack_reader(&mut tar.as_ref(), into, Some(crate::update::brick_io::Pacer::new()), &|_| false)
 }
 
-fn unpack_inner(archive: &Path, into: &Path, limit: u64, pacer: Option<crate::update::brick_io::Pacer>) -> Result<Vec<Entry>, Refused> {
-    let mut gz = Gz::new(std::fs::File::open(archive)?, limit)?;
-    unpack_reader(&mut gz, into, pacer)
+fn unpack_inner(archive: &Path, into: &Path, limit: u64, pacer: Option<crate::update::brick_io::Pacer>, skip: &dyn Fn(&str) -> bool, progress: &dyn Fn(u64)) -> Result<Vec<Entry>, Refused> {
+    let mut gz = Gz::new(Counted { inner: std::fs::File::open(archive)?, read: 0, progress }, limit)?;
+    unpack_reader(&mut gz, into, pacer, skip)
 }
 
-fn unpack_reader(reader: &mut dyn Read, into: &Path, mut pacer: Option<crate::update::brick_io::Pacer>) -> Result<Vec<Entry>, Refused> {
+/// A reader that tells `progress` how much of it has been read (`unpack_inner`: the compressed bytes, which the archive's size bounds).
+struct Counted<'a, R: Read> { inner: R, read: u64, progress: &'a dyn Fn(u64) }
+
+impl<R: Read> Read for Counted<'_, R> {
+    fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+        let n = self.inner.read(buf)?;
+        if n > 0 {
+            self.read += n as u64;
+            (self.progress)(self.read);
+        }
+        Ok(n)
+    }
+}
+
+fn unpack_reader(reader: &mut dyn Read, into: &Path, mut pacer: Option<crate::update::brick_io::Pacer>, skip: &dyn Fn(&str) -> bool) -> Result<Vec<Entry>, Refused> {
     use std::os::unix::fs::{DirBuilderExt, OpenOptionsExt};
     std::fs::DirBuilder::new().mode(0o755).create(into)?;
     let result = walk(reader, |e, mode, data| {
+        if skip(&e.path) {
+            return Ok(());
+        }
         let path = into.join(&e.path);
         if e.dir {
             std::fs::DirBuilder::new().recursive(true).mode(0o755).create(&path)?;

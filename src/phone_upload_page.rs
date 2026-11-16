@@ -60,7 +60,8 @@ const QR_TOP: i32 = 228;
 
 pub fn offered() -> bool {
     let d = crate::device::current();
-    d.has_wifi()
+    // Not in Android's handheld view: the games are read where they are; Android has its own ways in.
+    d.has_wifi() && !crate::device::android_profile()
 }
 
 impl PhonePage {
@@ -355,7 +356,7 @@ mod tests {
             let help = crate::i18n::tr_in(lang, HELP);
             let (lines, ..) = layout(&mut text, &help, 1240, 1080);
             assert!(lines.len() <= 2, "{lang:?}: {lines:?}");
-            assert!(["encrypted", "verschlüsselt", "cifrar", "criptograf"].iter().any(|w| help.contains(w)), "{help}");
+            assert!(["encrypted", "verschlüsselt", "cifrar", "criptograf", "chiffr", "cifrat"].iter().any(|w| help.contains(w)), "{help}");
         }
     }
 

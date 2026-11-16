@@ -9,14 +9,76 @@ pub struct Issue {
     pub reason: String,
 }
 
-/// The entries that had to be left out or repaired; an unreadable file is the I/O error (the library says that one itself).
-pub fn issues(path: &Path) -> std::io::Result<Vec<Issue>> {
-    std::fs::read_to_string(path).map(|xml| recover(&xml).1)
+/// Why the whole list is not used: no system in it can be read. The shelf then runs on the built-in list (`BUILT_IN`) and
+/// says so; it never goes empty and silent.
+#[derive(Clone, Debug, PartialEq)]
+pub enum Fallback {
+    /// There is no file.
+    Missing,
+    /// The file is there but can't be read (rights, a folder, not text); the system's words.
+    Unreadable(String),
+    /// Nothing in the file is a system: not XML at all, or a list without a `<system>`.
+    NoSystems,
+    /// Every entry is damaged (the skipped ones are in [`Status::skipped`]).
+    AllBroken,
 }
 
-pub(super) fn read(path: &Path) -> Result<(String, Vec<Issue>), String> {
-    let xml = std::fs::read_to_string(path).map_err(|e| format!("{}: {e}", path.display()))?;
-    Ok(recover(&xml))
+/// What reading `es_systems.cfg` found: the entries left out one by one, and whether the whole list was given up.
+#[derive(Clone, Debug, Default)]
+pub struct Status {
+    pub fallback: Option<Fallback>,
+    pub skipped: Vec<Issue>,
+}
+
+impl Status {
+    pub fn is_clean(&self) -> bool {
+        self.fallback.is_none() && self.skipped.is_empty()
+    }
+}
+
+/// The systems of the Brick and ROCKNIX: the standard folders under `/storage/roms`. What the shelf uses when the player's
+/// list can't be read at all, so games in their standard folders still show.
+const BUILT_IN: &str = include_str!("../deploy/brick/es_systems.cfg");
+
+/// Where the built-in list looks for the folders: `/storage/roms`, as on every card (`POCKETUI_BUILT_IN_ROMS` moves it,
+/// for a test on a computer).
+fn built_in(roms: Option<&str>) -> String {
+    let root = roms.map_or_else(|| std::env::var("POCKETUI_BUILT_IN_ROMS").unwrap_or_else(|_| "/storage/roms".into()), str::to_string);
+    let root = root.trim_end_matches('/');
+    BUILT_IN.replace("<path>/storage/roms/", &format!("<path>{root}/"))
+}
+
+/// What reading the list found, for the notice and Game check. Reads the file the way the shelf does.
+pub fn status(path: &Path) -> Status {
+    read(path).1
+}
+
+/// The entries left out one by one (empty when the whole list was given up: [`status`] says that).
+pub fn issues(path: &Path) -> Result<Vec<Issue>, String> {
+    Ok(status(path).skipped)
+}
+
+/// The list as XML text: the player's, with the unreadable entries left out; the built-in one when none of theirs can be
+/// read (missing, unreadable, no system in it, all damaged). Never fails, never empty.
+pub(super) fn read(path: &Path) -> (String, Status) {
+    let xml = match std::fs::read(path) {
+        // A name in another encoding (Latin-1 "Pokémon") must not cost the whole list: bad bytes become "\u{FFFD}".
+        Ok(bytes) => String::from_utf8_lossy(&bytes).into_owned(),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return fall_back(Fallback::Missing, Vec::new()),
+        Err(e) => return fall_back(Fallback::Unreadable(e.to_string()), Vec::new()),
+    };
+    let (out, skipped) = recover(&xml);
+    let readable = roxmltree::Document::parse(&out).ok().is_some_and(|d| d.descendants().any(|n| n.has_tag_name("system")));
+    if readable {
+        return (out, Status { fallback: None, skipped });
+    }
+    // Nothing left. A list that has entries, all damaged, is named for that; anything else has no system in it.
+    let why = if skipped.is_empty() { Fallback::NoSystems } else { Fallback::AllBroken };
+    fall_back(why, skipped)
+}
+
+fn fall_back(why: Fallback, skipped: Vec<Issue>) -> (String, Status) {
+    (built_in(None), Status { fallback: Some(why), skipped })
 }
 
 fn required(sys: roxmltree::Node, tag: &str) -> Option<String> {
@@ -90,9 +152,6 @@ fn recover(xml: &str) -> (String, Vec<Issue>) {
             .or_else(|| fragment.split_once("<name>")?.1.split_once("</name>").map(|(s, _)| s.trim().to_string()))
             .filter(|s| !s.is_empty()).unwrap_or_else(|| "es_systems.cfg".to_string());
         issues.push(Issue { name, line: xml[..from].bytes().filter(|b| *b == b'\n').count() + 1, reason });
-    }
-    if out.len() == header.len() + 1 && issues.is_empty() {
-        issues.push(Issue { name: "es_systems.cfg".into(), line: 1, reason: "no readable system list".into() });
     }
     out.push_str("</systemList>");
     (out, issues)

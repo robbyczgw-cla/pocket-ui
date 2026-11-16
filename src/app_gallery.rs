@@ -54,6 +54,8 @@ pub(crate) enum Event {
     Scanned(Index),
     /// A screenshot was copied to the shelf's picture of its game (or was not).
     Shelf(Result<(), String>),
+    /// The picture of the player's shelf was written (or was not): `app_share_shelf`.
+    Shared(Result<(), pocket_ui::share_shelf::Error>),
 }
 
 pub(crate) struct GalleryUi {
@@ -140,6 +142,20 @@ impl App {
                     self.gallery_card_row_refresh();
                 }
             }
+            Event::Shared(result) => {
+                if let Some(page) = self.gallery.page.as_mut() {
+                    page.making(false);
+                    match &result {
+                        Ok(()) => page.said(pocket_ui::share_shelf::SAVED),
+                        Err(why) => page.failed(why.words()),
+                    }
+                }
+                if result.is_ok() {
+                    // The new file joins the list.
+                    self.gallery_refresh("shelf picture");
+                }
+                self.request_redraw();
+            }
             Event::Shelf(result) => {
                 let done = result.is_ok();
                 if let Some(page) = self.gallery.page.as_mut() {
@@ -156,6 +172,11 @@ impl App {
                 self.request_redraw();
             }
         }
+    }
+
+    /// The open page (the shelf picture's answer lands on it).
+    pub(crate) fn gallery_page_mut(&mut self) -> Option<&mut Gallery> {
+        self.gallery.page.as_mut()
     }
 
     /// The open page takes the new list.
@@ -189,9 +210,9 @@ impl App {
                 rows.remove(i);
                 open.card.focus = None;
             }
-            // Before "Controls" and "Hide or delete", the last rows.
+            // Before "Hide or delete", the last row.
             (None, Some(row)) => {
-                let at = rows.iter().position(|r| matches!(r.kind, RowKind::Controls | RowKind::Manage)).unwrap_or(rows.len());
+                let at = rows.iter().position(|r| r.kind == RowKind::Manage).unwrap_or(rows.len());
                 rows.insert(at, row);
                 open.card.focus = None;
             }
@@ -277,6 +298,7 @@ impl App {
             }
             Out::Delete(path) => self.gallery_delete(&path),
             Out::UseOnShelf(shot) => self.gallery_use_on_shelf(&shot),
+            Out::MakeShelf => self.share_shelf_make(),
         }
         false
     }
@@ -439,12 +461,21 @@ impl App {
         };
         let title = self.text.fit(Face::Title, 50, &title, pill_left - 24 - left);
         self.text.draw(c, Face::Title, 50, left, pad + 58, pal().chalk, &title);
-        let (top, mut bottom) = (pad + NU_PILL + 12, c.h - pad - NU_PILL - 16);
+        let (mut top, mut bottom) = (pad + NU_PILL + 12, c.h - pad - NU_PILL - 16);
         // What a delete or Y came to may need its own line above the hints (`paint_gallery`): the list ends above it,
         // so the message never covers a row's name (the square CubeXX page ended a row right under it).
         if page.message.is_some() {
             bottom -= type_scale::line(NU_SMALL, 8) + 8;
         }
+        let (shot_h, gap) = (type_scale::row(92, 37) + type_scale::grow(28), 8);
+        // The page's first row (every game's screenshots only): the picture of the player's shelf, to post. Fixed
+        // above the list, it is what Up reaches from the first screenshot.
+        let has_make = page.has_make_row();
+        if has_make {
+            self.paint_gallery_make(c, page, (left, top, right - left, shot_h));
+            top += shot_h + gap;
+        }
+        let offset = has_make as usize;
 
         if page.shots().is_empty() {
             let (head, line) = match (page.loaded, &page.scope) {
@@ -460,7 +491,7 @@ impl App {
         }
 
         let all = matches!(page.scope, Scope::All);
-        let (day_h, shot_h, gap) = (type_scale::row(56, 37), type_scale::row(92, 37) + type_scale::grow(28), 8);
+        let day_h = type_scale::row(56, 37);
         let first = page.follow(bottom - top, (day_h, shot_h + gap));
         let rows = page.rows();
         let today = page.today;
@@ -481,20 +512,45 @@ impl App {
                 }
                 Row::Shot(i) => {
                     let shot = page.shots()[i].clone();
-                    let selected = i == page.sel;
-                    self.hits.row(Area::new(left, y, right - left, shot_h), i);
+                    let selected = i == page.sel && !page.make;
+                    self.hits.row(Area::new(left, y, right - left, shot_h), i + offset);
                     self.paint_gallery_row(c, &shot, (left, y, right - left, shot_h), selected, all);
                 }
             }
             y += h;
         }
-        self.hits.list(page.sel, page.shots().len(), 0.0, (shot_h + gap) as f32);
+        self.hits.list(if page.make { 0 } else { page.sel + offset }, page.shots().len() + offset, 0.0, (shot_h + gap) as f32);
         if rows.len() > last_drawn - first + 1 {
             let track = bottom - top;
             let (bar_h, bar_y) = (track * (last_drawn - first + 1) as i32 / rows.len() as i32, track * first as i32 / rows.len() as i32);
             c.rect(c.w - 12, top, 4, track, pal().pill);
             c.rect(c.w - 12, top + bar_y, 4, bar_h.max(12), pal().chip);
         }
+    }
+
+    /// "My shelf as a picture": the first row of Settings → Games → Screenshots. A spine like the screenshots' own, with
+    /// pocket-ui's mark in the tile where their small pictures are.
+    fn paint_gallery_make(&mut self, c: &mut Canvas, page: &Gallery, (x, y, w, h): (i32, i32, i32, i32)) {
+        let selected = page.make;
+        pocket_ui::kit::shelf_row(c, x, y, w, h, selected);
+        c.rect(x, y, STRIPE, h, if selected { pal().amber } else { pocket_ui::gfx::mix(pal().amber, pal().spine, 150) });
+        let (fg, dim) = if selected { (pal().ink, pal().label_dust) } else { (pal().chalk, pal().dust) };
+        let (tx, ty) = (x + STRIPE + 16, y + (h - THUMB.1) / 2);
+        c.rect(tx, ty, THUMB.0, THUMB.1, pal().void);
+        let (mw, mh) = pocket_ui::ui_art::size(pocket_ui::ui_art::Art::Logo, 1);
+        pocket_ui::ui_art::paint(c, pocket_ui::ui_art::Art::Logo, tx + (THUMB.0 - mw) / 2, ty + (THUMB.1 - mh) / 2, 1);
+        let text_x = tx + THUMB.0 + 20;
+        let block = type_scale::px(37) as i32 + 6 + type_scale::px(28) as i32;
+        let top = y + (h - block) / 2;
+        let base1 = top + type_scale::px(37) as i32 * 4 / 5;
+        let base2 = top + type_scale::px(37) as i32 + 6 + type_scale::px(28) as i32 * 4 / 5;
+        let title = self.text.fit(Face::Title, 37, MAKE_TITLE, x + w - 24 - text_x);
+        self.text.draw(c, Face::Title, 37, text_x, base1, fg, &title);
+        let line = if page.making { MAKE_BUSY } else { MAKE_LINE };
+        let line = self.text.fit(Face::Body, 28, line, x + w - 24 - text_x);
+        self.text.draw(c, Face::Body, 28, text_x, base2, dim, &line);
+        // Touch: a tap on the row selects it, the second tap makes the picture (the page's own rows work the same).
+        self.hits.row(Area::new(x, y, w, h), 0);
     }
 
     /// One screenshot's spine: its system's stripe, the small picture, the game (or the time) and what else.
@@ -631,7 +687,8 @@ impl App {
     /// alone, `:delete` and `:full-delete` the question X asks, `:broken` the list with a damaged file on top selected
     /// (`:broken-full` the picture view of it), `:empty` nothing there, `:loading` before the folder is read, `:game` the
     /// list of one game, `:game-full` its picture, `:card` the game's card on its "Screenshots (N)" row, `:shelf` and
-    /// `:full-shelf` the list and the picture after Y made it the shelf's picture.
+    /// `:mine` and `:full-mine` the list and the picture with a picture of the player's own shelf on top, `:full-shelf` the list and the picture after Y made it the shelf's picture, `:make`, `:making` and `:made` the first row
+    /// ("My shelf as a picture") selected, while it works and after it saved, `:pressed` after A on it (the picture is written).
     pub(crate) fn gallery_snapshot(&mut self, state: &str) -> bool {
         let Some(rest) = state.strip_prefix("gallery") else { return false };
         let mut what = "list";
@@ -651,10 +708,16 @@ impl App {
         if what != "empty" && what != "loading" {
             let named: Vec<(String, String, (u32, u32))> = games.iter().map(|&(s, i, size)| (self.systems[s].name.clone(), stem_of(&self.systems[s].games[i].path), size)).collect();
             made_up_screenshots(&dir, &named, what.starts_with("broken"));
+            // ":mine" and ":full-mine": a picture of the player's own shelf is the newest one, titled "My shelf".
+            if what.ends_with("mine") {
+                let folder = dir.join(pocket_ui::share_shelf::FOLDER);
+                let _ = std::fs::create_dir_all(&folder);
+                let _ = std::fs::write(folder.join(format!("{} 2026-10-24 18-10-00.png", pocket_ui::share_shelf::NAME)), made_up_picture(240, 240, 5));
+            }
         }
         self.gallery.made_up = Some((today, dir.clone()));
         self.gallery.index = if what == "loading" { Index::default() } else { Index::load(&dir) };
-        let full = what.ends_with("full") || what == "full-delete" || what == "full-shelf";
+        let full = what.ends_with("full") || what == "full-mine" || what == "full-delete" || what == "full-shelf";
         let scope_game = what.starts_with("game") || what == "card";
         if scope_game {
             let Some((s, i, _)) = games.first().cloned() else { return true };
@@ -679,6 +742,22 @@ impl App {
             if what.ends_with("shelf") {
                 page.said(SHELF_SAID);
             }
+            // ":make" the page's first row selected, ":making" while the picture is written, ":made" after it.
+            if matches!(what, "make" | "making" | "made") {
+                page.make = true;
+                page.making(what == "making");
+                if what == "made" {
+                    page.said(pocket_ui::share_shelf::SAVED);
+                }
+            }
+        }
+        // ":pressed": A on the first row, as the player does it: the picture is made and written (where
+        // POCKETUI_SCREENSHOTS says), and the page answers.
+        if what == "pressed" {
+            if let Some(page) = self.gallery.page.as_mut() {
+                page.make = true;
+            }
+            self.gallery_press(CONFIRM);
         }
         true
     }
@@ -716,6 +795,11 @@ impl App {
 fn g_place(page: &Gallery) -> String {
     page.place()
 }
+
+/// The page's first row.
+const MAKE_TITLE: &str = "My shelf as a picture";
+const MAKE_LINE: &str = "A picture of your cases to post. It is saved here.";
+const MAKE_BUSY: &str = "Making the picture…";
 
 /// What Y came to, beside the hint bar (or above it, where four hints leave no room).
 const SHELF_SAID: &str = "This is now the game's picture on the shelf";

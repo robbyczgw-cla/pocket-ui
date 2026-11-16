@@ -18,9 +18,9 @@ these files. Run it again after a change to the screens.
 | ![Lens](lens.png) | Curator's Lens: filters with live counts |
 | ![Pause menu](pause-menu.png) | The pause menu on HOME (over a pocket-core game; a snapshot has no game picture behind it) |
 | ![Save slots](save-slots.png) | Save with the slot strip |
-| ![Settings](settings.png) | Settings, in seven categories |
-| ![Cozy extras](cozy-extras.png) | Settings, Look, Cozy extras: each little touch on or off |
-| ![Look](theme.png) | Settings → Look: colours, font and more, as rows |
+| ![Settings](settings.png) | Settings: the seven categories as symbols at the top (L1 and R1 go through them), here the first, Connections |
+| ![Cozy extras](cozy-extras.png) | Settings, Look, Cozy extras: each little touch on or off, with Sealed new games and Progress from saves |
+| ![Look](theme.png) | Settings → Look: layout, colours, style and more, as rows |
 
 The four pictures under the README's hero show the released 0.4 in the Retro look with Cocoa colours and real box art,
 on a 640×480 screen. The insert and the Retro shelf are stills from the 0.4 video (recorded on a handheld); the box back

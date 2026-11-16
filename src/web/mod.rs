@@ -1,4 +1,4 @@
-//! The web companion: open `http://<pocket>` on a phone or computer in the same tailnet to browse the library, edit
+//! The web companion: open `http://<pocket>` on a phone or computer on the same Wi-Fi or in the same tailnet to browse the library, edit
 //! what the player says about a game, upload games, BIOS files and PortMaster data, and see play time and the battery
 //! (docs/user/web-companion.md; protocol, endpoints and threat model: docs/WEB-COMPANION.md).
 //!
@@ -7,11 +7,11 @@
 //! - **Off** until the player switches it on (Settings → Connections → Web companion); then a supervisor thread and three workers
 //!   run, all at the lowest CPU and I/O priority. Nothing of it runs on the UI thread: edits reach the App as one
 //!   `UserEvent` each and are applied there like a button press (`app_web.rs`).
-//! - **Where it listens** ([`net`]): only on the Tailscale interface's own addresses (100.64.0.0/10 and
-//!   fd7a:115c:a1e0::/48 on an interface called `tailscale…`), with `SO_BINDTODEVICE`, never on `0.0.0.0` and never on
-//!   the Wi-Fi (there is no switch for that); every connection is checked again by address.
-//! - **Who gets in** ([`auth`]): the device owner's own tailnet devices, recognised by tailscaled's LocalAPI `whois`,
-//!   or a browser paired with a six-digit code shown on the Pocket (then an HttpOnly, SameSite=Strict cookie). Every
+//! - **Where it listens** ([`net`]): on the Tailscale interface's own addresses (100.64.0.0/10 and
+//!   fd7a:115c:a1e0::/48 on an interface called `tailscale…`) and on the Wi-Fi's private IPv4 address (since 0.5), each
+//!   with `SO_BINDTODEVICE`, never on `0.0.0.0`; every connection is checked again by address.
+//! - **Who gets in** ([`auth`]): the device owner's own tailnet devices, recognised by tailscaled's LocalAPI `whois`
+//!   (only on the Tailscale socket), or a browser paired with a six-digit code shown on the Pocket (then an HttpOnly, SameSite=Strict cookie). Every
 //!   write needs a CSRF token in a header; requests whose Host is not one of the Pocket's names are refused (DNS
 //!   rebinding).
 //! - **What it touches** ([`files`]): uploads only into a system's ROM folder, `roms/bios` and the PortMaster drop
@@ -141,6 +141,10 @@ pub struct Shared {
     pub curator: Mutex<Option<Arc<crate::curator::Index>>>,
     /// The addresses the server listens on now ("100.101.102.103"), for the Settings page.
     pub listening: Mutex<Vec<std::net::SocketAddr>>,
+    /// Of `listening`, the Wi-Fi's addresses ("192.168.1.42"): shown first on the Settings page and in the QR code.
+    pub lan: Mutex<Vec<std::net::SocketAddr>>,
+    /// The Pocket's mDNS name on the Wi-Fi ("sm8250.local") while it listens there and avahi-daemon runs.
+    pub lan_name: Mutex<Option<String>>,
     /// Why it does not listen although Tailscale is up (port 80 taken), for the Settings page; None when it listens.
     pub problem: Mutex<Option<String>>,
     /// The Pocket's name in the tailnet ("pocket"), once tailscaled said it.
@@ -170,6 +174,8 @@ impl Shared {
             notice: Mutex::new(None),
             curator: Mutex::new(None),
             listening: Mutex::new(Vec::new()),
+            lan: Mutex::new(Vec::new()),
+            lan_name: Mutex::new(None),
             problem: Mutex::new(None),
             tailnet_name: Mutex::new(None),
             requests: AtomicU64::new(0),

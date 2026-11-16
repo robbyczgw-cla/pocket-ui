@@ -2,70 +2,77 @@
 
 ## Open Settings
 
-Press **START** on Home or in a system's game list. Settings is not an entry of the list. Settings opens on seven
-categories, one line each with a small icon and its name, all on one screen; the line at the bottom names what is in the
-selected one. Use Up/Down to move and A to open a category: its own short list of entries, with their values on the
-right and the selected entry's line at the bottom. In that list A opens an entry (or switches it), B goes back to
-the categories with the one you came from selected, and B there comes back to where you were.
+Press **START** on Home or in a system's game list. Settings is not an entry of the list. Settings opens straight on the
+entries of its first category, Connections, with their values on the right and the selected entry's line at the bottom.
+At the top the eight categories stand as small symbols in a row, the one you are in named beside its symbol, with **L1**
+and **R1** at the ends: L1 and R1 go to the previous and the next category (round at the ends), each opening on its
+first entry; a tap on a symbol goes to it. Without the shoulder buttons: **Up** on the first entry moves to the symbols,
+**Left/Right** there change the category (the entries under them change with it), and **Down** or **A** goes back into
+the entries. Up/Down move, A opens an entry (or switches it), and B comes back to where you were in one press. The symbols stay in the same place on every category: a long name is
+shortened there ("Screen" for Screen & sound, "Help" for Help & tools), and where even that doesn't fit beside the
+clock (large text in German, the TrimUI Brick), every category's name stands on its own line with the symbols in a slim
+line under it.
 The values ("Home" on Wi-Fi, "Shelf · Dark" on Look, "Auto · Quiet" on Performance & fan: what games run with)
 are short; one that is looked up comes a moment later. An entry that opens a page ends in a small arrow **>**; one
 without it is a switch: Appearance, Colours, Style, Text size, Motion, Screen frames and the like change with A or
 Left/Right, right in the list, and the selected one shows **‹ ›** round its value. The hint at the bottom says
 **A Open** or **A Change**.
 
-![Settings: Look, Sound & feel, Playing, Games, Connections, System, Help & tools](pictures/settings.webp)
+![Settings: Connections' entries, the categories' symbols at the top with L1 and R1](pictures/settings.webp)
 
 | Category | What is in it |
 |---|---|
-| **Look** | Layout, Systems on the shelf, Cozy extras, Appearance, Colours, Style, Text size, Screen colour, Night light. See [Look](#look) |
-| **Sound & feel** | Animations, Playful cases, Old-TV switch-on, Motion, Zoom in the pause menu, Sounds, Case sounds, Haptics, LEDs. See [Sound & feel](settings-sound.md) |
-| **Playing** | On start, Continue where I quit, Remind me where I was, Buttons, Over the game, Screen frames, Performance & fan, Battery, RetroAchievements. See [Playing](#playing) |
-| **Games** | Add games, Game check, Extras, From EmulationStation, Screenshots, Curator. See [Games](#games) |
-| **Connections** | Wi-Fi, Bluetooth, Tailscale, Remote access (SSH), Web companion. See [Connections](settings-system.md#connections) |
-| **System** | Language, Time, Sleep & power, Kids mode, Updates, Storage, Backup & reset. See [System](settings-system.md#system) |
-| **Help & tools** | First-start setup, How you like to play, Tour, Manual, For tinkerers (Sync, PC streaming), Tools, Test buttons, Report a problem, About. See [Help & tools](settings-system.md#help--tools) |
+| **Connections** | Wi-Fi, Bluetooth, Tailscale, Remote access (SSH), Sync, Web companion, PC streaming. See [Connections](settings-system.md#connections) |
+| **Look** | Layout, Appearance, Colours, Style, Text size, Zoom in the pause menu, Motion, Game start animation, Cozy extras. See [Look](#look) |
+| **Screen & sound** | Brightness, Volume, Screen colour, Night light, Menu sounds, Case sounds. See [Screen & sound](settings-sound.md#screen--sound) |
+| **Controls** | Buttons, Controller setup, Test buttons, Haptics, LEDs. See [Controls](settings-sound.md#controls) |
+| **Playing** | On start, Continue where I quit, Console boot screen, Remind me where I was, Screen frames, Over the game, Performance & fan, RetroAchievements. See [Playing](#playing) |
+| **Games** | Add games, Box art & downloads, Game check, Systems on the shelf, Curator, Screenshots, From EmulationStation. See [Games](#games) |
+| **System** | Back to EmulationStation (dArkOS only), Updates, Language, View (Android only), Sleep & power, Battery, Time, Storage, Backup & reset, Kids mode. See [System](settings-system.md#system) |
+| **Help & tools** | Manual, Tour, How you like to play, First-start setup, Tools, Report a problem, About. See [Help & tools](settings-system.md#help--tools) |
 
-The second half of Settings, [Connections, System and Help & tools](settings-system.md), has its own page.
+Every entry is in one category only, and no entry opens a list of more entries: a page opens from an entry only for a
+step of its own (choosing a network, a password, a QR code, a list to look through).
+**Screen & sound** (brightness, volume, the screen's colour, the menu sounds) and **Controls** (the buttons, the
+controllers and what you feel) share a page of their own: [Settings: Screen & sound, Controls](settings-sound.md). Connections, System and Help & tools are on
+[Settings: Connections, System and Help & tools](settings-system.md).
 
 A page that opens from somewhere else (a hint, a feature card, the pause menu) goes back with B to its category's
-list, and from there to the categories, as if you had opened it from Settings. In this guide a place in Settings is
-written as its path: Settings → Playing → **Battery** is the Battery entry in the Playing category.
+list, as if you had opened it from Settings. In this guide a place in Settings is
+written as its path: Settings → System → **Battery** is the Battery entry in the System category.
 
 The first start's pages (Wi-Fi, Add games, the look) are the same pages. Opened from Settings, B returns to the
 category's list instead of moving on. The first start's time zone has no page of its own here: Settings → System →
 **Time** does the same job. Settings → Help & tools → **First-start setup** runs the whole first start again
 ([Getting started](getting-started.md#3-first-start)).
 
-**Sound & feel** (what moves, what you hear and what you feel) has a page of its own: [Settings: Sound & feel](settings-sound.md).
-
 ## Look
 
-Settings → **Look**. How pocket-ui looks, in the first start's order: first how your games stand (the layout, which
-systems, the cozy extras), then the style (appearance, colours, type, the screen). Every choice has a row of its own.
+Settings → **Look**. How pocket-ui looks: first how your games stand (the layout), then the style (appearance, colours, type),
+the reading aids (text size, zoom), what moves (motion, the game start) and the little touches you see. The screen's
+brightness and colour are in [Screen & sound](settings-sound.md#screen--sound). Every choice has a row of its own.
 Big text, Large text and Reduced motion together, is a card of the [Tour](tour.md) and a key of the first start.
 
 | Entry | What it holds |
 |---|---|
 | **Layout** | How your games stand: Shelf, Easy, Split or Cabinet, each a live preview of your own shelf. See [Choose a look](#choose-a-look) |
-| **Systems on the shelf** | Which systems are on Home, a tick each. The row says "1 hidden" (or 2, 3...) while a system with games is off the shelf: this is the way back. See [Systems on the shelf](#systems-on-the-shelf) |
-| **Cozy extras** | The little touches you see, each on or off on its own: the TV on the cabinet, stickers, printed discs, the memory card in the pause menu, light by time of day, decorations, game connections, Rediscover. See [Cozy extras](settings-sound.md#cozy-extras) |
 | **Appearance** | **Dark** (the default), **Light** or **Automatic**. A or Left/Right switches it. See [Appearance](#appearance) |
 | **Colours** | The colours of every page: Warm, Indigo Cube, Grey Brick, Green X or Blue Station; with the Retro style, Cocoa or Pea. A or Left/Right switches it. See [Colours and style](theme.md) |
 | **Style** | Barlow type, or **Retro**: pixel letters, frames and icons everywhere, with its own colours and menu sounds; **Retro Pixelify** is Retro with Pixelify's rounder letters. A or Left/Right switches it. See [Colours and style](theme.md#style) |
 | **Text size** | **Normal** (the default), **Medium** or **Large**: larger text on every screen, fewer rows on a page. A or Left/Right switches it. See [Text size](#text-size) |
-| **Screen colour** | The screen's white: **Cooler 10** … **Neutral** … **Warmer 10**. Left/Right changes it, you see it at once; A goes back to Neutral. The same setting as [SELECT + Vol](controls-settings.md#volume-and-brightness-keys), so the two always agree |
-| **Night light** | Warmer, less blue colours in the evening, in the menus and in games: **Off** (the default), **On** or **Scheduled**, with a strength. See [Night light](night-light.md) |
+| **Zoom in the pause menu** | Whether the pause menu's first page lists Zoom: **Off** (the default) or **On**. Zoom is always under Options, and listed here too while Big text is on. A switches it. See [Zoom in the pause menu](#zoom-in-the-pause-menu) |
+| **Motion** | **Full** (the default), **Reduced** or **Off**: how much the menus move. A or Left/Right switches it. See [Motion](#motion) |
+| **Game start animation** | **Cozy**: watch your game slide into the console, and after Quit come back out of it into its case, and the pages, the box and the menus move a little slower and softer. **Quick**: straight into the game, the animations as short as they get. A or Left/Right switches it. Cozy in the Shelf and Cabinet looks until you choose, Quick in the others. See [Game start animation](#game-start-animation) |
+| **Cozy extras** | The little touches you see, each on or off on its own: the TV on the cabinet (and whether it plays a game you haven't played), stickers, printed discs, playful cases, the old-TV switch-on, light by time of day, decorations, progress from your saves, game connections, Rediscover. See [Cozy extras](#cozy-extras) |
 
 ### Choose a look
 
 Settings → Look → **Layout** is the first start's last page ("How your games stand"): a scaled-down picture of your shelf in each look, drawn by
 the shelf itself with a few of your systems and one game (with its box art when it has one; on an SD card without
 games, a built-in set of "Sample game"s). It works like every list: Left/Right switch between the four looks, and the
-shelf behind Settings takes the look at once. See [Playing](playing.md#looks) for what each look does. Under the
-preview are three rows, the [appearance](#appearance), the [motion](settings-sound.md#motion) and the [animations](settings-sound.md#animations):
-Down reaches each one (a bar beside it shows which), Left/Right change it, Up goes back to the looks. A keeps
-everything as shown; B ("Cancel") goes back to Settings and puts back the look and the rows as they were when you
-came. The hint bar names the keys of the row you are on.
+shelf behind Settings takes the look at once. See [Playing](playing.md#looks) for what each look does. The
+[appearance](#appearance), the [motion](#motion) and the [animations](#game-start-animation) are entries of their own in Settings,
+not rows of this page. A keeps the look as shown; B ("Cancel") goes back to Settings and puts back the look you came with.
 
 ### Appearance
 
@@ -117,45 +124,116 @@ The first start has **Big text** on every page (**L2**, and a row on its first p
 the start.
 Safe mode uses the size chosen here too.
 
-### Night light
+### Zoom in the pause menu
 
-Settings → Look → **Night light** has its own page: [Night light](night-light.md).
+Settings → Look → **Zoom in the pause menu**: the [pause menu](pause-menu.md) on pocket-ui's own host lists **Zoom** before
+Quit. **Off** is the default, because the magnifier is a help for small text and most players never need it: then Zoom is a
+row of Options, next to Picture and Controls, and can be a [shortcut](options.md#shortcuts) (HOME + X). While
+[Big text](big-text.md#big-text) is on, the row is on the first page whatever this switch says. A switches it.
+See [Zoom](big-text.md#zoom).
 
-### Systems on the shelf
+### Motion
 
-Settings → Look → **Systems on the shelf** . The list has every system that has games, each with a tick
-box, its console and the number of games. All are ticked by default. When Moonlight is installed, the last row is
-**PC streaming**, unticked by default: tick it to have the [PC streaming](pc-streaming.md) entry on Home.
+Settings → Look → **Motion**; A or Left/Right switches it (the first start keeps the default; its Big text,
+L2, switches Reduced on with Large text).
 
-- **A** unticks the selected system: its card leaves Home, and its games leave Home's recent games and the game
-  switcher (SELECT). A again puts it back.
-- The games themselves stay where they are. **Starred games stay in Favourites**, even those of a hidden system:
-  a star is a choice for that one game. A recent game of a hidden system comes back the moment its system is
-  ticked again.
-- The last ticked system cannot be unticked; the page says why.
-- The choice is saved at once (in `settings.json`) and kept across restarts and updates.
-- **B** goes back to the Settings list.
+- **Full**, the default: the selection glides to the row you move to, lists scroll smoothly, pages slide in,
+  the game card rises out of its label, the hints and small messages fade.
+- **Reduced**: only fades. Pages and messages still fade in, but nothing slides, grows or glides.
+- **Off**: no animation at all; every press shows its result in the next frame.
 
-The first start does not have this list; every system is on the shelf until you change it here.
+Moving menus aim for up to 60 frames a second. Still pages rest until something changes.
 
-When no system has games yet, the page says so and shows how they come: once games are on the SD card, their systems
-show up here.
+None of them makes anything slower: a press changes what is selected or opened at once, whichever you choose,
+and pressing again in the middle of a movement takes it straight to the new place. The choice is saved at once.
+
+### Game start animation
+
+Settings → Look → **Game start animation**. The first start doesn't ask: the look decides until you choose here.
+
+- **Cozy**: when you start a game in the Shelf or the Cabinet look, you watch its case open and the cartridge or disc slide into the console
+  (about a second, with a click). Pages, the game's box and the menus take about a third longer and ease in more softly.
+- **Quick**: straight into the game; the animations as short as they get.
+
+Until you choose, the look decides: Cozy for Shelf and Cabinet, Quick for Split. Once you choose, it stays
+yours, whatever look you pick later. With Cozy, a game of pocket-core's is shown once the animation is over, so it starts
+about a second later than with Quick (a game that needs longer to load is not held at all); any button skips the rest.
+The shelf fades to black before the picture comes on like an old TV, in a third of a second: a bright line grows out of
+the middle, and the picture opens out of it, squeezed at first. A handheld's game (Game Boy, GBA, DS, PSP) has no TV and
+no tube: once the game is in, the console's power light comes on and its display lights up (a muted tone, nothing else gets bright),
+the rest of the screen goes dark round it and the picture comes up out of the dark, a little sooner than the tube's would have. Continue follows the same order: an open case plays the whole scene too, its moment waiting, still, until the game is in; the saved picture behind a reminder stays visible
+(with Motion on Full; Quick and Reduced skip it, and a button press cuts it short).
+**Motion** (Reduced, Off) still overrides it: nothing slides where Motion says so.
+
+After Quit, Cozy plays the way back in every look that puts games into consoles, including Easy and Kids Mode.
+The shelf is already usable: any button or touch ends the effect and takes its usual action. A handheld display
+goes dark; with Old-TV switch-on enabled a TV picture closes to a line and a dot. The cartridge or disc returns
+to its case, which stays a little open when Continue waits. Quick and Motion Reduced or Off show the shelf at once.
+
+### Cozy extras
+
+Settings → Look → **Cozy extras** switches the little touches you see, one by one, for when you like some of them and
+not others. Up/Down move, A (or Left/Right) switches the selected one **On** or **Off**; it takes effect at once and is
+kept across restarts. The line under the list says what the selected one does and in which looks you see it. Reset
+settings (System → Backup & reset) puts them back as they start. Playful cases and Old-TV switch-on need the
+[animations](#game-start-animation) or the [motion](#motion) to be seen; while one of those keeps them from showing, the line at
+the bottom says which. Case sounds, the one you hear, is an entry of [Screen & sound](settings-sound.md#screen--sound), beside Menu sounds.
+
+![Settings → Look → Cozy extras: Sealed new games and Progress from saves in the list, the selected one explained below](pictures/cozy-extras.webp)
+
+| Extra | What it does | Start |
+|---|---|---|
+| **TV on the cabinet** | A small old TV on top of the cabinet shows the selected game. Cabinet look only | On |
+| **TV plays the game** | The TV on the cabinet shows a game you have never played running live, without sound, after you rest on it for two seconds, for 25 seconds at most ([The TV on the cabinet](playing.md#the-tv-on-the-cabinet)). It runs a second, hidden player, so the handheld works harder and the battery drains faster while it plays. Off: no second player is ever started and nothing extra runs; the TV shows its still picture as before. Cabinet look only | Off |
+| **Stickers on cases** | Your stickers on the cases. Off hides them on the shelf and the box; they stay on the game and on its card's Stickers row. Shelf and Cabinet looks only | On |
+| **Printed discs** | Discs printed with their cover's art and title. Off: a plain disc in its console's colour. Shelf and Cabinet looks only | On |
+| **Playful cases** | Cases spring out and wiggle, each game goes into its console its own way, the open box's disc turns, spines lean as you scroll, stickers you put on are pressed onto the case in the game box ([Playing](playing.md#starting-a-game)). Shelf and Cabinet looks only, with Motion on Full | On with Cozy, Off with Quick |
+| **Sealed new games** | A game you have never played stands in the shop's clear plastic wrap: on the shelf, in the cabinet, in Easy, on Split's box art and on its card, and the box's front and back. The first time you start it the wrap tears off with a rip (with Animations on Cozy and Motion on Full; otherwise it is simply gone), for good. A game counts as played when it has playing time, a status you chose, a save or state, a clock file, a memory card or known progress, or is in your recent games | On |
+| **Old-TV switch-on** | The game's picture comes on like an old TV when it starts, and goes off like one (to a line and a dot) after Quit. A handheld (Game Boy, GBA, DS, PSP …) switches on like a handheld instead: its power light and display come on in the console, then the picture comes up; after Quit its game just goes dark. In looks with the insertion animation, with Animations on Cozy and Motion on Full | On |
+| **Light by time of day** | The room's light follows your Pocket's clock: cool and bright in the morning, warm in the evening with the lamp glowing, dim at night. Very gentle: covers and text keep their colours. Shelf and Cabinet looks only | On |
+| **Decorations** | Things on your shelves that grow with your play: the plant grows with your hours, a trophy after your first completed game, a framed "100 %" after your first 100 % sticker, a small figurine for each system you played for 10 hours. Only where a shelf has room. This works with Light by time of day on or off. Off: the shelves as they were. Shelf and Cabinet looks only | On |
+| **Progress from saves** | Where you are, from your own save: on the box's back, beside Continue and on Where was I? ([details](library.md#where-you-are-in-the-game)). Off: no line anywhere and no save is read, so nothing is given away | On |
+| **Game connections** | The developer, publisher, series and genre on the info page and the box's back lead to your other games with the same one ([Connections](library.md#connections)). Off: they are only shown | On |
+| **Rediscover** | Games you haven't played for a long time, as a row in Curator's list | On |
+| **GBA console** | **Game Boy Advance** or **Game Boy Advance SP**. Changes the GBA hardware picture everywhere, including the shelf, console page and cabinet. The SP opens before its cartridge slides into the bottom slot, label facing the underside. Up/Down reaches the row; A or Left/Right changes it and keeps the choice across restarts. Your games and emulator stay the same | Game Boy Advance |
+
+#### Sealed new games
+
+A game you have never played comes in the shop's clear plastic wrap, like a new one off the shelf, so your untouched games
+look different from the ones you have played. The first time you start it, the wrap tears off with a rip (with
+Animations on Cozy and Motion on Full; otherwise it is simply gone) and stays off for good, also if you never finish the game.
+A game counts as played when it has playing time, a session, a status you chose or a place in your recent games,
+or when a save, save state, clock file or memory card belongs to it, or pocket-ui knows its progress. Saves copied
+from another device or frontend count too, even with no recent entry or measured time here. The shelf, box and
+"Never played" lists use this same rule. A save without a timed session says "Not here yet" for its play time;
+pocket-ui does not invent a duration or last-played date. "Where was I?" still needs a known date and a resumable moment.
+
+![A game you have never played: Super Mario Kart's box in its wrap, the cartridge beside it](pictures/sealed-case.webp)
+
+#### Console colours
+
+Some consoles come in more than one colour, as the real ones did: the **Game Boy Advance** (Original, Milky Blue, Pink), the
+**Game Boy Color** (Original, Dandelion), the **Nintendo 64** (Original, Ice Blue, Jungle Green) and the **GameCube**
+(Original, Jet Black). It is not a row here: on the console's page (X on the system) a line under the picture, like
+**‹ Milky Blue ›**, names the colour, and **Left** and **Right** go to the next one and round again to the Original (a tap on
+the left or right half of that line does the same). The colour shows everywhere: the console on the shelf, its page, the
+cabinet's TV, and the moment a game goes into it and comes out again. It is kept across restarts. The Advance SP (GBA console
+above) has its own picture. A colour a later version does not know yet shows the Original.
 
 ## Playing
 
-Settings → **Playing**. What happens when you start and quit, the buttons, how fast games run, the battery and achievements.
+Settings → **Playing**. What happens when you start and quit, how a game goes in and what is drawn over it, how fast games run, and achievements.
 
 | Entry | What it holds |
 |---|---|
 | **On start** | What you see when the Pocket starts: **Home** (the default) or **Last game**, straight back into the game you played last. A or Left/Right switches it. See [On start](#on-start) |
 | **Continue where I quit** | Whether the pause menu's Quit keeps the moment you are at for the next start: **On** (the default) or **Off**, only the game's own saves. A switches it. See [Continue where I quit](#continue-where-i-quit) |
-| **Remind me where I was** | Back to a game after more than two weeks: when you played it last and your note, while its moment loads. **On** (the default) or **Off**. A switches it. See [Remind me where I was](#remind-me-where-i-was) |
-| **Buttons** | Which face button confirms in pocket-ui's menus, and how the buttons look in the hints, with a picture of the four buttons. See [Buttons](#buttons) |
-| **Over the game** | The frame rate, the sensors or (with Pixel Path in the pause menu) Pixel Path's line over every game, or nothing (the default). See [Over the game](#over-the-game) |
+| **Console boot screen** | Whether a fresh start of a Game Boy, Game Boy Color, Game Boy Advance or PlayStation game runs through the console's own boot screen (needs your own BIOS file): **Off** (the default) or **On**. A switches it. See [Console boot screen](#console-boot-screen) |
+| **Remind me where I was** | Back to a game after more than two weeks: when you played it last and your note, while its moment loads. **Off** (the default) or **On**. A switches it. See [Remind me where I was](#remind-me-where-i-was) |
 | **Screen frames** | Where a game gets a frame when you haven't chosen one: **Off** (the default), **Handhelds** or **Every console**. A or Left/Right switches it. See [Screen frames](#screen-frames) |
+| **Over the game** | The frame rate, the sensors or (with Pixel Path in the pause menu) Pixel Path's line over every game, or nothing (the default). See [Over the game](#over-the-game) |
 | **Performance & fan** | How fast the processor runs and how early the fan starts in games, the fan in the menus, and the temperatures right now. See [Performance and fan](performance.md) |
-| **Battery** | Battery history, time left, what a game costs. See [Battery](settings-system.md#battery) |
-| **RetroAchievements** | Sign in to retroachievements.org to earn achievements in pocket-core games. See [RetroAchievements](settings-system.md#retroachievements) |
+| **RetroAchievements** | Sign in to retroachievements.org to earn achievements in pocket-core games. See [RetroAchievements](#retroachievements) |
 
 ### On start
 
@@ -189,52 +267,39 @@ switches it.
 This is how NextUI and MinUI quit: their in-game menu has one Quit that writes the game's own saves, and they keep a
 moment to resume only when the device sleeps or switches off. With the switch off, the Pocket does the same.
 
+### Console boot screen
+
+Settings → Playing → **Console boot screen**: with **On**, a game that starts from the beginning runs through its console's own boot
+screen first: the Nintendo logo of the Game Boy, Game Boy Color and Game Boy Advance, the start-up of the PlayStation. **Off** is the
+default and starts the game at once. A switches it.
+
+It needs your own BIOS file in the BIOS folder (`roms/bios`; pocket-ui ships none). The file must be the original, of exactly this size:
+
+| Console | File | Size |
+|---|---|---|
+| Game Boy (and games without Color) | `gb_bios.bin` | 256 bytes |
+| Game Boy Color (a game with Color support runs through this one) | `gbc_bios.bin` | 2304 bytes |
+| Game Boy Advance | `gba_bios.bin` | 16384 bytes |
+| PlayStation | `scph5501.bin` or another usual PlayStation BIOS name (`scph1001.bin`, `scph5500.bin`, …) | 512 KB |
+
+Without the file the game starts as before and a short note on the game's first picture names the file it needs. The other
+consoles (SNES, Mega Drive, N64 and the rest) have no boot screen to run and start as before.
+
+Only a fresh start runs it, never one that continues a moment: with [Continue where I quit](#continue-where-i-quit) **On** (the
+default) the next start picks up the moment Quit kept, so there is no boot screen. For a game that always starts fresh, with the
+logo, switch **Continue where I quit** **Off** and set [On start](#on-start) to **Last game**: the Pocket then starts into
+the last game through its boot screen. A game's own saves (battery, memory card) carry on as usual.
+
 ### Remind me where I was
 
 Settings → Playing → **Remind me where I was**: when a game continues its moment and you last played it more than two
 weeks ago, a quiet card shows while the moment loads: when you played it last, how long you have played it, and your note
-from the game card if there is one. On pocket-ui’s own host the game stands still at that moment until you press any button. That button just starts play. **On** is the default; A switches it. See [Where was I?](continue.md#where-was-i).
+from the game card if there is one. On pocket-ui’s own host the game stands still at that moment until you press any button. That button just starts play. **Off** is the default; A switches it. See [Where was I?](continue.md#where-was-i).
 
 The switch applies to pocket-ui's own host and to PlayStation 2, GameCube, Wii and 3DS. **RetroArch games still save
 the moment on Quit** with the switch off: ROCKNIX sets RetroArch to save on every exit, and RetroArch has no way to
 leave it out. Sleep, Power off and [Recent games](playing.md#recent-games) always keep the moment, whatever
 the switch says.
-
-### Buttons
-
-Settings → Playing → **Buttons** has two rows and, under them, a picture of the four face buttons where they sit on
-your device, each with the symbol the hints show for it; the one that confirms is named **Confirm** and the one that
-goes back **Back**. A line under the picture says which button confirms right now. A or Left/Right switches the
-selected row, and the next button you press already works the new way. Both choices are saved at once.
-
-#### Button layout
-
-Which face button plays A, B, X and Y in pocket-ui's own screens.
-
-- **Nintendo**, the default: A on the right, B at the bottom, X on top, Y on the left, as printed on the Mini V2.
-- **Xbox**: A at the bottom, B on the right, X on the left, Y on top, as on an Xbox controller.
-
-Menus only: games and safe mode keep the printed buttons. What it changes and what it leaves alone is in
-[Controls](controls.md#button-layout).
-
-On experimental **AYN Odin 2 Mini** and **Odin 2 Portal**, the default menu layout is **Xbox** (A bottom,
-B right, X left, Y top), matching the printed letters. The original Odin 2 defaults to Nintendo. A saved choice
-wins. Safe mode follows the device’s printed layout. Games keep their positional controls: the screenshot
-shortcut is HOME + the right face button (printed B on Mini/Portal), regardless of the menu layout.
-
-#### Button symbols
-
-How the hints show the four face buttons, everywhere a key is shown (the hint bars, dialogs, the pause menu, this
-manual's key chips and its controls picture).
-
-- **Nintendo**: plain letters A, B, X and Y.
-- **Xbox**: A, B, X and Y on green, red, blue and yellow.
-- **PlayStation**: cross, circle, square and triangle. Cross stands for A, circle for B, square for X and triangle
-  for Y.
-
-Retroid and AYN handhelds start with Xbox, Anbernic handhelds with Nintendo; your choice wins. It only changes the
-pictures of the keys: which button confirms is [Button layout](#button-layout)'s job, and the two can be
-combined freely. The explanations under a list still name the keys by their letter.
 
 ### Over the game
 
@@ -263,18 +328,51 @@ way. The choice applies from the next game you start.
 Settings → Playing → **Performance & fan**: how fast the processor runs and how early the fan starts in games, the fan in the
 menus, **Smooth fan**, and the temperatures right now. It has its own page: [Performance and fan](performance.md).
 
+### RetroAchievements
+
+Settings → Playing → **RetroAchievements** signs the Pocket in to your free account on retroachievements.org, so the games on
+pocket-ui's own host count achievements. See [Achievements](achievements.md) for everything that follows.
+
+1. Select **Sign in** and press A. Type your user name on the gamepad keyboard, START; then your password, START.
+   The Pocket needs Wi-Fi for this.
+2. The page shows **Signed in as** your name. The password is not kept: only the sign-in key the site answers with.
+3. **Log out** asks twice and removes the key. Your unlocks stay on the site.
+
+In the Playing list the row shows your name when you are signed in, "Off" otherwise.
+
 ## Games
 
-Settings → **Games**. Getting games and what runs them onto the Pocket, and the tools around them.
+Settings → **Games**. Getting games and what runs them onto the Pocket, which systems are on the shelf, and the tools around them.
 
 | Entry | What it holds |
 |---|---|
 | **Add games** | A tile per system with its folder, file types and BIOS needs, file sharing, sending games from your phone (Y), and folders or disc games it can't read. See [Getting started](getting-started.md#the-systems-grid) and [From your phone](phone-upload.md) |
+| **Box art & downloads** | Box art, the Pictures choice and Starter pack; PortMaster games on ROCKNIX and TrimUI, and optional Cheats on TrimUI. The row was called Extras. See [Box art & downloads](extras.md) |
 | **Game check** | "Will my games start?": goes through your card and says, in plain words, what is missing and what to do. Only looks; it can hide a duplicate from the shelf when you press A. See [Getting started](game-check.md) |
-| **Extras** | Box art, the Pictures choice and Starter pack; PortMaster games on ROCKNIX and TrimUI, and optional Cheats on TrimUI. See [Extras](extras.md) |
-| **From EmulationStation** | The favourites and ratings in your EmulationStation `gamelist.xml` files: A adds the favourites to Favourites or uses the ratings as My rating, without changing a thing in EmulationStation. Says "No gamelist" when there is none. See [Your EmulationStation gamelists](library.md#your-emulationstation-gamelists) |
-| **Screenshots** | The pictures you took with HOME + A, newest first, in groups by day, with a small picture each. A opens one full screen, X deletes it. The value at the right is how many there are; with none the page says how to take one. See [Looking at your screenshots](playing.md#looking-at-your-screenshots) |
+| **Systems on the shelf** | Which systems are on Home, a tick each. The row says "1 hidden" (or 2, 3...) while a system with games is off the shelf: this is the way back. See [Systems on the shelf](#systems-on-the-shelf) |
 | **Curator** | The Lens and smart shelves, Echoes, versions and play history, each on or off. See [Curator](#curator) |
+| **Screenshots** | The pictures you took with HOME + A, newest first, in groups by day, with a small picture each. A opens one full screen, X deletes it. The first row, **My shelf as a picture**, makes one square picture (1440 × 1440, in the colours of your page, whichever look the shelf is in) of your shelf to post: up to 20 of your games, the favourites, stickered and box-art ones first, with the trophy, the plant and a small pocket-ui mark. A shelf with no game says so. The value at the right is how many there are; with none the page says how to take one. See [Looking at your screenshots](playing.md#looking-at-your-screenshots) |
+| **From EmulationStation** | The favourites and ratings in your EmulationStation `gamelist.xml` files: A adds the favourites to Favourites or uses the ratings as My rating, without changing a thing in EmulationStation. Says "No gamelist" when there is none. See [Your EmulationStation gamelists](library.md#your-emulationstation-gamelists) |
+
+### Systems on the shelf
+
+Settings → Games → **Systems on the shelf** . The list has every system that has games, each with a tick
+box, its console and the number of games. All are ticked by default. When Moonlight is installed, the last row is
+**PC streaming**, unticked by default: tick it to have the [PC streaming](pc-streaming.md) entry on Home.
+
+- **A** unticks the selected system: its card leaves Home, and its games leave Home's recent games and the game
+  switcher (SELECT). A again puts it back.
+- The games themselves stay where they are. **Starred games stay in Favourites**, even those of a hidden system:
+  a star is a choice for that one game. A recent game of a hidden system comes back the moment its system is
+  ticked again.
+- The last ticked system cannot be unticked; the page says why.
+- The choice is saved at once (in `settings.json`) and kept across restarts and updates.
+- **B** goes back to the Settings list.
+
+The first start does not have this list; every system is on the shelf until you change it here.
+
+When no system has games yet, the page says so and shows how they come: once games are on the SD card, their systems
+show up here.
 
 ### Curator
 

@@ -64,10 +64,14 @@ English
 Deutsch
 Español
 Português (Brasil)
+Français
+Italiano
 ‹ English ›
 ‹ Deutsch ›
 ‹ Español ›
 ‹ Português (Brasil) ›
+‹ Français ›
+‹ Italiano ›
 ‹ Normal ›
 Ports
 Vulkan
@@ -151,6 +155,7 @@ Green X
 Blue Station
 ‹ Warm ›
 ‹ Scanlines ›
+‹ Original ›
 Barlow
 Pixel
 GBA
@@ -522,6 +527,16 @@ Anbernic RG34XX
 Anbernic RG34XX-SP
 Anbernic RG-SP
 Anbernic RG CubeXX
+Anbernic RG353M
+Anbernic RG353P
+Anbernic RG353PS
+Anbernic RG353V
+Anbernic RG353VS
+Anbernic RG503
+Powkiddy RGB30
+Powkiddy RGB20SX
+Powkiddy RK2023
+Game Console R36S
 PlayStation Vita
 PS Vita
 Tearaway
@@ -646,3 +661,53 @@ re:^8BitDo SN30 Pro · -pad-
 Retroid Pocket Classic
 Retroid Pocket Classic Rev Q
 Stardew Valley
+
+# Short names of systems on the shelf's spines (src/system_names.rs): names, never translated
+Virtual Boy
+Pokémon Mini
+Vita
+Naomi
+PC-FX
+Atari 5200
+Atari 7800
+Atari 800
+Atari ST
+Intellivision
+Vectrex
+Odyssey 2
+Channel F
+CD-i
+Xbox 360
+CD32
+Amstrad CPC
+Lutro
+Sega
+Atari
+pocket-ui shelf
+# The case knows (src/case_knows.rs): Fire Emblem's lords, whose story the save is, by the games' own names
+Lyn
+Eliwood
+Hector
+Eirika
+Ephraim
+
+# dArkOS's handhelds (src/darkos.rs): makers' model names, and the name of a board dArkOS has but the table not.
+Anbernic RG353M
+Anbernic RG353V/VS
+Powkiddy RK2023
+Anbernic RG503
+Powkiddy RGB30
+Powkiddy RGB20 Pro
+MiniLoong Pocket 1
+Anbernic RG351MP
+BatleXP G350
+A10 Mini
+Powkiddy RGB10
+dArkOS handheld
+dArkOS
+Luigi
+# French writes "points" as the English does: RetroAchievements points.
+re:^\d points$
+re:^\d\d points$
+re:^\d\d\d points$
+re:^\d\d\d\d points$

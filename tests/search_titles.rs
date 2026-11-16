@@ -172,7 +172,7 @@ fn search_results_show_long_names_whole_or_telling_the_game_apart() {
     for size in if quick { vec!["1024x768"] } else { vec!["640x480", "1024x768", "1240x1080", "1280x720"] } {
         for retro in [false, true] {
             for text in if quick { vec!["normal"] } else { vec!["normal", "large"] } {
-                for lang in if quick { vec!["en"] } else { vec!["en", "de", "es", "pt"] } {
+                for lang in if quick { vec!["en"] } else { vec!["en", "de", "es", "pt", "fr", "it"] } {
                     for (q, _) in QUERIES {
                         jobs.push(Job { state: format!("search:results:{q}"), size, retro, text, lang });
                     }

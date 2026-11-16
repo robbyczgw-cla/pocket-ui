@@ -3,8 +3,9 @@
 //! (`app_pictures.rs`). Used for box art, in-game screenshots and title screens. One thread, one picture at a
 //! time, started on the first request; the same decoder and box filter as the synchronous snapshots.
 
+use std::collections::VecDeque;
 use std::path::PathBuf;
-use std::sync::mpsc;
+use std::sync::{mpsc, Arc, Mutex};
 
 use crate::image::{self, Image};
 
@@ -25,36 +26,58 @@ pub fn load_fitted(key: &Key) -> Option<Image> {
 }
 
 pub struct Loader {
-    tx: mpsc::Sender<Key>,
+    tx: mpsc::Sender<Option<Key>>,
+    /// Pictures the selection is heading for (`App::cover_prefetch`): decoded only when nothing asked for is waiting,
+    /// nearest first, and replaced by the next window.
+    soon: Arc<Mutex<VecDeque<Key>>>,
 }
 
 impl Loader {
-    /// `done` runs on the thread for every request, with the picture or `None`.
+    /// `done` runs on the thread for every request, with the picture or `None`. Prefetched pictures are answered the same
+    /// way; the cache tells them apart (`App::picture_arrived`).
     pub fn start(done: impl Fn(Key, Option<Image>) + Send + 'static) -> Loader {
-        let (tx, rx) = mpsc::channel::<Key>();
+        let (tx, rx) = mpsc::channel::<Option<Key>>();
+        let soon: Arc<Mutex<VecDeque<Key>>> = Arc::default();
+        let next_soon = soon.clone();
         let _ = std::thread::Builder::new().name("pictures".into()).spawn(move || {
             let mut waiting = Vec::new();
             loop {
-                if waiting.is_empty() {
-                    let Ok(key) = rx.recv() else { break };
-                    waiting.push(key);
-                }
                 // Drain before every decode: the newest selection goes next. Keep older
-                // jobs so gallery/cache consumers still receive every answer.
-                for key in rx.try_iter() {
+                // jobs so gallery/cache consumers still receive every answer. `None` only wakes the thread for `soon`.
+                for key in rx.try_iter().flatten() {
                     waiting.retain(|old| old != &key);
                     waiting.push(key);
                 }
-                let key = waiting.pop().unwrap();
+                let key = match waiting.pop() {
+                    Some(key) => key,
+                    // Nothing asked for: the next picture of the window, unless a game runs.
+                    None => match (!crate::covers::game_on()).then(|| next_soon.lock().unwrap().pop_front()).flatten() {
+                        Some(key) => key,
+                        None => match rx.recv() {
+                            Ok(key) => {
+                                waiting.extend(key);
+                                continue;
+                            }
+                            Err(_) => break,
+                        },
+                    },
+                };
                 let img = load_fitted(&key);
                 done(key, img);
             }
         });
-        Loader { tx }
+        Loader { tx, soon }
     }
 
     pub fn request(&self, key: Key) {
-        let _ = self.tx.send(key);
+        self.soon.lock().unwrap().retain(|k| k != &key);
+        let _ = self.tx.send(Some(key));
+    }
+
+    /// The pictures to decode in the background, nearest first, in place of the last window's that are not done yet.
+    pub fn prefetch(&self, keys: Vec<Key>) {
+        *self.soon.lock().unwrap() = keys.into();
+        let _ = self.tx.send(None);
     }
 }
 

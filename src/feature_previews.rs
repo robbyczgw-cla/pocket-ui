@@ -321,6 +321,7 @@ fn card(c: &mut Canvas, text: &mut Text, focus: usize) {
         summary: Summary::None,
         // Two days ago, six hours in all.
         played: Some((crate::recents::now_secs().saturating_sub(2 * 86_400), 6 * 3600)),
+        ever_played: true,
         sessions: 14,
         status: Status::Playing,
         suggestion: None,
@@ -332,6 +333,7 @@ fn card(c: &mut Canvas, text: &mut Text, focus: usize) {
         battery: None,
         port: None,
         port_update: false,
+        keys: None,
         surprise: None,
         look_up: true,
         from_gamelist: false,
@@ -340,6 +342,10 @@ fn card(c: &mut Canvas, text: &mut Text, focus: usize) {
         favorite: false,
         saves: None,
         continue_at: None,
+        hardcore: false,
+        progress: None,
+        case_art: None,
+        case_meter: None,
         links: Vec::new(),
         plain: false,
         rows: vec![
@@ -463,40 +469,98 @@ pub fn last_game(c: &mut Canvas, text: &mut Text) {
     g.clear(VOID);
     scene_on_screen(&mut g, (240, 160));
     let (from, to) = (W * 30 / 100, W * 75 / 100);
-    for (i, p) in c.buf.iter_mut().enumerate() {
-        let x = i as i32 % W;
-        if x >= from {
-            let t = (((x - from) * 255) / (to - from)).clamp(0, 255) as u32;
-            *p = mix(*p, game[i], t);
+    // Each screen pixel mixed with the game by its own design pixels' columns (one at `n` = 1, as it always was; painted
+    // natively the mean of the four, over the screen pixel the page left there).
+    let t = |x: i32| (((x - from) * 255) / (to - from)).clamp(0, 255) as u32;
+    let (n, stride, cw, ch) = (c.n(), c.stride(), c.w, c.h);
+    let g = |x: i32, y: i32| game[(y.min(ch - 1).min(H - 1) * W + x.min(cw - 1).min(W - 1)) as usize];
+    for (i, p) in c.pixels_mut().iter_mut().enumerate() {
+        let (x, y) = ((i % stride) as i32 * n, (i / stride) as i32 * n);
+        if x + n - 1 < from {
+            continue;
         }
+        *p = if n == 1 {
+            mix(*p, g(x, y), t(x))
+        } else {
+            let under = *p;
+            let at = |dx: i32, dy: i32| mix(under, g(x + dx, y + dy), t(x + dx));
+            crate::gfx::avg4(at(0, 0), at(1, 0), at(0, 1), at(1, 1))
+        };
     }
 }
 
 // ---- the menus' feel -------------------------------------------------------------------------------------------
 
-/// Settings → Sound & feel, where these switches are (`SETTINGS_GROUPS` in main.rs).
-const SETTINGS_ROWS: [&str; 8] = ["Animations", "Playful cases", "Old-TV switch-on", "Motion", "Sounds", "Case sounds", "Haptics", "LEDs"];
-const SETTINGS_TITLE: &str = "Sound & feel";
+/// Settings → Controls and Settings → Screen & sound, where these switches are (`SETTINGS_GROUPS` in main.rs).
+const CONTROLS_ROWS: [&str; 5] = ["Buttons", "Controller setup", "Test buttons", "Haptics", "LEDs"];
+const CONTROLS_TITLE: &str = "Controls";
+const SOUND_ROWS: [&str; 6] = ["Brightness", "Volume", "Screen colour", "Night light", "Menu sounds", "Case sounds"];
+const SOUND_TITLE: &str = "Screen & sound";
+/// The values of the rows that are no switch: the layout, the levels, and the pages' angle.
+const PAGE_VALUES: [(&str, &str); 7] = [("Buttons", "Nintendo"), ("Controller setup", ">"), ("Test buttons", ">"), ("Brightness", "60%"), ("Volume", "70%"), ("Screen colour", "Neutral"), ("Night light", "Off >")];
 
-fn settings_rows(values: &[(&str, &str)]) -> Vec<(&'static str, String)> {
-    SETTINGS_ROWS
+fn rows_of(names: &[&'static str], values: &[(&str, &str)]) -> Vec<(&'static str, String)> {
+    names
         .iter()
-        .map(|n| (*n, values.iter().find(|(k, _)| k == n).map_or("On".to_string(), |(_, v)| v.to_string())))
+        .map(|n| (*n, values.iter().chain(PAGE_VALUES.iter()).find(|(k, _)| k == n).map_or("On".to_string(), |(_, v)| v.to_string())))
         .collect()
 }
 
+fn settings_rows(values: &[(&str, &str)]) -> Vec<(&'static str, String)> {
+    rows_of(&CONTROLS_ROWS, values)
+}
+
 pub fn motion(c: &mut Canvas, text: &mut Text) {
-    // The paper has just glided from Sounds down to LEDs: where it was a moment ago, fainter the longer ago.
+    // The paper has just glided from Buttons down to LEDs: where it was a moment ago, fainter the longer ago.
     c.clear(pal().void);
     let (pad, row, top) = (30, 66, 132);
     let right = c.w - pad;
-    for (k, amount) in [(5.0f32, 40u32), (5.5, 70), (6.0, 105), (6.5, 145)] {
+    for (k, amount) in [(2.0f32, 40u32), (2.5, 70), (3.0, 105), (3.5, 145)] {
         let y = top + (k * row as f32) as i32;
         c.round_rect(pad, y + 4, right - pad, row - 8, (row - 8) / 2, mix(pal().void, pal().select, amount / 2));
     }
-    let rows = settings_rows(&[("Animations", "Cozy"), ("Motion", "Full"), ("Sounds", "30%"), ("Haptics", "Off"), ("LEDs", "Off >")]);
-    list_page(c, text, SETTINGS_TITLE, &rows, 7, top);
+    let rows = settings_rows(&[("Haptics", "Off"), ("LEDs", "Off >")]);
+    list_page(c, text, CONTROLS_TITLE, &rows, 4, top);
     hints(c, text, &[("B", "Back"), ("A", "Open")]);
+}
+
+/// The Look rows the Big text card's picture shows: Android's Look has no Zoom in the pause menu (`device::ANDROID_HIDES`
+/// "zoom_pause"), so its card doesn't show one (the Odin 2 Mini's Tour showed Screen colour, then in Look, 13.11.).
+pub fn easy_to_read_rows(android: bool) -> Vec<(&'static str, String)> {
+    let mut rows: Vec<(&str, String)> = vec![("Appearance", "Dark".into()), ("Colours", "Warm".into()), ("Font", "Barlow".into()), ("Text size", "Large".into())];
+    if !android {
+        rows.push(("Zoom in the pause menu", "Off".into()));
+    }
+    rows
+}
+
+/// Settings as START opens it since the tree of 2026-11-13: the rows of Connections at once, the categories' symbols in a
+/// row at the top with L1 and R1 at its ends (`App::paint_settings_header`).
+pub fn settings_tabs(c: &mut Canvas, text: &mut Text) {
+    use crate::ui_art::{paint_tinted, Art, Icon};
+    c.clear(pal().void);
+    let rows: Vec<(&str, String)> = ["Wi-Fi", "Bluetooth", "Tailscale", "Remote access (SSH)", "Sync", "Web companion"]
+        .iter()
+        .map(|n| (*n, if *n == "Wi-Fi" { "Home".to_string() } else { "Off".to_string() }))
+        .collect();
+    list_page(c, text, "", &rows, 0, 132);
+    let (mid, mut x) = (30 + 35, 66);
+    let caps = |c: &mut Canvas, text: &mut Text, x: i32, key: &str| {
+        crate::kit::key_cap(c, text, (x, mid - 22, 64, 44), key, 28, mid + crate::type_scale::mid(28), (pal().chip, pal().pill));
+    };
+    caps(c, text, x, "L1");
+    x += 64 + 16;
+    for (i, icon) in [Icon::Connections, Icon::Look, Icon::Sound, Icon::Playing, Icon::Play, Icon::Games, Icon::System, Icon::Help].into_iter().enumerate() {
+        paint_tinted(c, Art::Icon(icon), x, mid - 16, 2, if i == 0 { pal().chalk } else { pal().dust });
+        x += 32;
+        if i == 0 {
+            x += 12;
+            x += text.draw(c, Face::Title, 50, x, 30 + 58, pal().chalk, "Connections");
+        }
+        x += 18;
+    }
+    caps(c, text, x - 2, "R1");
+    hints(c, text, &[("L1/R1", "Category"), ("B", "Back"), ("A", "Open")]);
 }
 
 pub fn easy_to_read(c: &mut Canvas, text: &mut Text) {
@@ -504,7 +568,7 @@ pub fn easy_to_read(c: &mut Canvas, text: &mut Text) {
     let before = crate::type_scale::get();
     crate::type_scale::set(crate::settings::TextSize::Large);
     c.clear(pal().void);
-    let rows: Vec<(&str, String)> = vec![("Appearance", "Dark".into()), ("Colours", "Warm".into()), ("Font", "Barlow".into()), ("Text size", "Large".into()), ("Screen colour", "Neutral".into())];
+    let rows = easy_to_read_rows(crate::device::android_profile());
     list_page(c, text, "Look", &rows, 3, 132);
     hints(c, text, &[("B", "Back"), ("A", "Switch")]);
     crate::type_scale::set(before);
@@ -531,8 +595,8 @@ pub fn retro_look(c: &mut Canvas, text: &mut Text) {
 
 pub fn sounds(c: &mut Canvas, text: &mut Text) {
     c.clear(pal().void);
-    let rows = settings_rows(&[("Animations", "Cozy"), ("Motion", "Full"), ("Sounds", "‹ 30% ›"), ("Haptics", "Off"), ("LEDs", "Off")]);
-    list_page(c, text, SETTINGS_TITLE, &rows, 4, 132);
+    let rows = rows_of(&SOUND_ROWS, &[("Menu sounds", "‹ 30% ›")]);
+    list_page(c, text, SOUND_TITLE, &rows, 4, 132);
     // A soft click: a short tone that dies away.
     let (x0, y0, w, amp) = (MARGIN + 40, 830, c.w - 2 * MARGIN - 80, 70.0f32);
     for x in 0..w {
@@ -546,8 +610,8 @@ pub fn sounds(c: &mut Canvas, text: &mut Text) {
 
 pub fn haptics(c: &mut Canvas, text: &mut Text) {
     c.clear(pal().void);
-    let rows = settings_rows(&[("Animations", "Cozy"), ("Motion", "Full"), ("Sounds", "30%"), ("Haptics", "‹ On ›"), ("LEDs", "Off")]);
-    list_page(c, text, SETTINGS_TITLE, &rows, 6, 132);
+    let rows = settings_rows(&[("Haptics", "‹ On ›"), ("LEDs", "Off")]);
+    list_page(c, text, CONTROLS_TITLE, &rows, 3, 132);
     hints(c, text, &[("B", "Back"), ("A", "Change")]);
 }
 
@@ -778,17 +842,19 @@ pub fn pixel_path_live(c: &mut Canvas, text: &mut Text) {
         let at = crate::pixel_live::place(&strip, |st| crate::pixel_live::measure(text, &strip, st));
         let (w, h, buf) = crate::pixel_live::paint(text, &strip, at.style);
         let alpha = (at.style.alpha() * 255.0) as u32;
-        for row in 0..h {
-            for col in 0..w {
-                let (x, y) = (at.x + col, at.y + row);
-                let p = buf[(row * w + col) as usize];
-                if p == crate::pixel_live::KEY || x < 0 || y < 0 || x >= c.w || y >= c.h {
-                    continue;
-                }
-                let i = (y * c.w + x) as usize;
-                c.buf[i] = mix(c.buf[i], p, alpha);
+        // Under the line: the game as `blit_scaled` put it there, or the page.
+        let under = |x: i32, y: i32| {
+            if x >= px && y >= py && x < px + pw && y < py + ph {
+                let (sx, sy) = ((x - px) as u64 * scene.w as u64 / pw as u64, (y - py) as u64 * scene.h as u64 / ph as u64);
+                scene.px[(sy * scene.w as u64 + sx) as usize]
+            } else {
+                VOID
             }
-        }
+        };
+        c.per_pixel(at.x, at.x + w, at.y, at.y + h, |x, y| {
+            let p = buf[((y - at.y) * w + (x - at.x)) as usize];
+            (p != crate::pixel_live::KEY).then(|| mix(under(x, y), p, alpha))
+        });
     });
 }
 
@@ -842,6 +908,27 @@ pub fn console_credits(c: &mut Canvas, text: &mut Text) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Painted natively (`n` = 2; the cards paint at the screen's size, but the code must not depend on it): Pixel Path's
+    /// line over the game is the old picture bit for bit; the last game (its fade and Barlow) within two steps of rounding.
+    #[test]
+    fn painted_natively_the_mixed_previews_are_the_old_picture() {
+        let (w, h) = ((W / 2) as u32, (H / 2) as u32);
+        crate::scaled_layout::set_step((W as u32, H as u32), (w, h));
+        let mut t = Text::builtin();
+        for (name, paint, most) in [("pixel_path_live", pixel_path_live as fn(&mut Canvas, &mut Text), 0u32), ("last_game", last_game, 2)] {
+            let mut design = vec![0u32; (W * H) as usize];
+            paint(&mut Canvas::new(&mut design, W as u32, H as u32), &mut t);
+            let mut old = vec![0u32; (w * h) as usize];
+            crate::scaled_layout::ScaledFrame::default().downscale(&design, (W as u32, H as u32), &mut old, (w, h));
+            let mut new = vec![0u32; (w * h) as usize];
+            paint(&mut Canvas::screen(&mut new, (w, h), 2), &mut t);
+            let worst = old.iter().zip(&new).map(|(a, b)| [0, 8, 16].iter().map(|s| ((a >> s) & 0xff).abs_diff((b >> s) & 0xff)).max().unwrap()).max().unwrap();
+            let far = old.iter().zip(&new).filter(|(a, b)| a != b).count();
+            assert!(worst <= most, "{name}: {worst} steps apart ({far} pixels differ)");
+        }
+        crate::scaled_layout::set_step((1240, 1080), (1240, 1080));
+    }
 
     #[test]
     fn the_sample_scene_is_not_one_colour() {

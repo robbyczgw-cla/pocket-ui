@@ -83,7 +83,7 @@ pub struct CardLink {
 
 /// Everything the card shows; filled in by the app from the library, `gamedb`, `library_meta` and the
 /// EmulationStation gamelist (`gamelist::fill_card`).
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug, Default, PartialEq)]
 pub struct CardData {
     pub title: String,
     /// "Game Boy".
@@ -104,6 +104,8 @@ pub struct CardData {
     pub summary: Summary,
     /// Unix seconds of the last session and total seconds played, from the recent games.
     pub played: Option<(u64, u64)>,
+    /// Shared play evidence, even when this frontend has measured no session.
+    pub ever_played: bool,
     pub sessions: u32,
     pub status: Status,
     pub suggestion: Option<Status>,
@@ -132,6 +134,8 @@ pub struct CardData {
     /// Some of the facts above (year, players, Developer, Publisher, Genre, the rating line) come from the player's
     /// EmulationStation gamelist (`gamelist::fill_card`): the card says so under them.
     pub from_gamelist: bool,
+    /// A phone game: which buttons are its keys, one line (`j2me_keys::CARD_LINE`).
+    pub keys: Option<&'static str>,
     /// The patch next to the game that pocket-core applies when it starts it ("Game (USA).ips", `softpatch`).
     pub patch: Option<String>,
     /// Why the game can't be played, in a sentence ("its file is empty"); every card surface shows the cause and
@@ -145,11 +149,62 @@ pub struct CardData {
     /// When the moment a start would continue from was written (Unix seconds), under "Save slots": None without a
     /// waiting moment (`frozen::moment_time`).
     pub continue_at: Option<u64>,
+    /// RetroAchievements' Hardcore holds for a start of this game: it starts from its in-game save, and the card says
+    /// so where "Continue" would be (`achievements::hardcore::CARD_LINE`).
+    pub hardcore: bool,
+    /// Where the player is, read from the game's own battery save ("8 badges · Charizard Lv. 45 · 31:12 h",
+    /// `case_knows`), in the interface's language: the first line under "Your game". Set when painted (`paint_card`);
+    /// None for a game not read or a save that says nothing for sure.
+    pub progress: Option<String>,
+    /// Under it, pictures from the player's own ROM (the team, the badges: `case_knows_art`) or a small measure
+    /// (`case_knows::Meter`); set with `progress`.
+    pub case_art: Option<std::sync::Arc<crate::case_knows_art::Art>>,
+    pub case_meter: Option<crate::case_knows::Meter>,
     /// The facts that lead to the player's other games: (index into `facts`, where it leads), in the facts' order.
     /// A fact without one is plain text, never a way into an empty list (`app_connections`).
     pub links: Vec<(usize, CardLink)>,
     /// Opened from Easy: only the picture, the sentence, year, players and time played, and nothing to change here.
     pub plain: bool,
+}
+
+impl CardData {
+    pub fn play_evidence(&self) -> crate::play_evidence::Evidence {
+        crate::play_evidence::Evidence {
+            recorded: self.ever_played || self.played.is_some() || self.sessions > 0 || self.status != Status::NotStarted,
+            files: self.continue_at.is_some() || self.saves.as_ref().is_some_and(|s| s.newest.is_some() || s.filled.iter().any(|filled| *filled)),
+            progress: self.progress.is_some(),
+        }
+    }
+
+    pub fn was_played(&self) -> bool {
+        self.play_evidence().ever_played()
+    }
+
+    /// The Played row's word when pocket-ui hasn't timed the game yet: "Not yet", or, when the game's own save says it
+    /// has been played (the shared evidence, including another Pocket or emulator), "Not here yet", so it never stands under a game
+    /// clock as if the game were new.
+    pub fn not_played(&self) -> &'static str {
+        if self.was_played() { "Not here yet" } else { "Not yet" }
+    }
+
+    /// Leaves out what could only be painted as letters nothing here can draw (`latinise`): a fact in Japanese
+    /// ("Developer: 任天堂") would be an empty row, a description in Korean a block of nothing, "Listed as" a line of
+    /// "????". Text that has a Latin part or a font for the rest stays, the painter writes the rest in Latin letters.
+    /// A card without a description says so (`Summary::note`).
+    pub fn leave_out_unsayable(&mut self) {
+        self.facts.retain(|(_, v)| crate::latinise::shows(v));
+        if self.listed_as.as_deref().is_some_and(|l| !crate::latinise::shows(l)) {
+            self.listed_as = None;
+        }
+        if let Summary::Gamelist(text) = &self.summary {
+            if !crate::latinise::readable(text) {
+                self.summary = Summary::None;
+            }
+        }
+        if self.sentence.as_deref().is_some_and(|t| !crate::latinise::readable(t)) {
+            self.sentence = None;
+        }
+    }
 }
 
 /// A game's save slots as the card shows them, read-only.
@@ -167,7 +222,7 @@ pub struct CardSaves {
 impl CardSaves {
     /// The slots of a game pocket-core runs with save states (`hostsys`): a few file checks, no reading, like the
     /// patch's. None for every other game.
-    #[cfg(any(target_os = "linux", target_os = "emscripten"))]
+    #[cfg(any(target_os = "linux", target_os = "emscripten", all(target_os = "android", feature = "handheld")))]
     pub fn of(system: &str, rom: &std::path::Path, stripe: u32) -> Option<CardSaves> {
         // The handhelds and the two Nintendo home consoles are `HANDHELD_CORES`, not in `SYSTEMS`.
         let handheld = crate::hostsys::HANDHELD_CORES.iter().any(|(s, _)| *s == system);
@@ -198,8 +253,6 @@ pub enum RowKind {
     SaveVersions,
     /// "Screenshots (3)": the game's own, after Curator's rows (`app_gallery`).
     Screenshots,
-    /// "Controls": the console's controls card (`app_controls_card`), after Screenshots.
-    Controls,
     /// "Hide or delete": the last thing on the card, under everything else (`app_storage`).
     Manage,
 }
@@ -258,9 +311,8 @@ pub fn lift_shadow(c: &mut Canvas, x: i32, y: i32, w: i32, strength: u8) {
     if strength == 0 {
         return;
     }
-    for k in 0..6 {
-        c.shade_rect(x + 4, y + k, w - 4, 1, 0, ((6 - k) as u32 * 6 * strength as u32 / 255) as u8);
-    }
+    let amounts: Vec<u8> = (0..6).map(|k| ((6 - k) as u32 * 6 * strength as u32 / 255) as u8).collect();
+    c.shade_rows(x + 4, y, w - 4, 0, &amounts);
 }
 
 /// A persistent card problem, outside the facts so Connections keeps its fact indices and selection. `base` is the
@@ -298,6 +350,29 @@ mod saves_tests {
         }
         for s in ["scummvm", "pico-8", "tic-80", "nosuchsystem"] {
             assert!(CardSaves::of(s, Path::new("/storage/roms/x/Game.rom"), 0).is_none(), "{s} has no save states");
+        }
+    }
+}
+
+#[cfg(test)]
+mod played_tests {
+    use super::{CardData, CardSaves};
+
+    #[test]
+    fn known_save_slots_or_a_resume_moment_mean_played_without_a_timed_session() {
+        let fresh = CardData { saves: Some(CardSaves { filled: vec![false; 8], ..Default::default() }), ..Default::default() };
+        assert!(!fresh.was_played());
+        assert_eq!(fresh.not_played(), "Not yet");
+        let mut slot = fresh.clone();
+        slot.saves.as_mut().unwrap().filled[3] = true;
+        let mut dated = fresh.clone();
+        dated.saves.as_mut().unwrap().newest = Some(1234);
+        let resume = CardData { continue_at: Some(1234), ..Default::default() };
+        for card in [slot, dated, resume] {
+            assert!(card.play_evidence().files);
+            assert!(card.was_played());
+            assert_eq!(card.not_played(), "Not here yet");
+            assert_eq!(card.played, None, "a save does not invent measured play time");
         }
     }
 }

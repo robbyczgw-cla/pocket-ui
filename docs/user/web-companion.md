@@ -2,32 +2,32 @@
 
 Settings → Connections → **Web companion** lets you open the Pocket's library on your phone or computer: browse and search your
 games, set a game's status, rating, note and manage smart shelves, upload games, BIOS files and
-PortMaster files, see your play time and the battery, and look at the Pocket's screen. It works only over
-[Tailscale](remote.md), and it is **off** until you switch it on.
+PortMaster files, see your play time and the battery, and look at the Pocket's screen. It works on your home Wi-Fi
+and over [Tailscale](remote.md), and it is **off** until you switch it on.
 
-> **No Tailscale, no companion.** Set up [Tailscale](remote.md) first (Settings → Connections → Tailscale); until then the
-> page only says so. For a quick copy of games over Wi-Fi without it, use file sharing or [From your phone](phone-upload.md).
+> **Status:** switching it on and off, listening on Tailscale, signing in over a real tailnet and the screenshot
+> placeholder were checked on a Mini V2. The Wi-Fi side (new in 0.5), pairing a browser with a code, uploading files
+> and using it while a game runs were only tried on a computer with a stand-in library. Please tell us what happens.
 
-> **Status:** switching it on and off, where it listens (only on Tailscale), signing in over a real tailnet and the
-> screenshot placeholder were checked on a Mini V2. Pairing a browser with a code, uploading files and using it while
-> a game runs were only tried on a computer with a stand-in library. Please tell us what happens.
-
-To send a few games from a phone on the same Wi-Fi without Tailscale, use Add games → Y instead ([From your
-phone](phone-upload.md)): a page that exists only while it is open on the Pocket. It is separate from the
-companion, which stays Tailscale-only.
+To send a few games from a phone without switching anything on, Add games → Y works too ([From your
+phone](phone-upload.md)): a page that exists only while it is open on the Pocket.
 
 ## Turn it on
 
-1. Set up Tailscale first: Settings → Connections → **Tailscale**, switch it on and sign in ([Tailscale](remote.md)). Your phone or
-   computer needs Tailscale too, signed in to the same tailnet.
+1. Connect the Pocket to your Wi-Fi (Settings → Connections → **Wi-Fi**). Your phone or computer must be on the same
+   Wi-Fi. Away from home, [Tailscale](remote.md) works instead (the Pocket and your phone signed in to the same tailnet).
 2. Settings → Connections → **Web companion**. Select **Web companion** and press **A**. It says **On**.
-3. Below the list the page shows the address to open, for example `http://pocket-mini`, and the Pocket's Tailscale
-   addresses (`http://100.x.y.z`). Open one of them in a browser on your phone or computer.
+3. Below the list the page shows the address to open: the Pocket's Wi-Fi address, for example `http://192.168.1.42`,
+   and below it its name on the Wi-Fi (for example `http://sm8250.local`) and, with Tailscale, its Tailscale name
+   (`http://pocket-mini`). Open one of them in a browser on your phone or computer.
+4. A browser on the Wi-Fi needs a code once: **Pair a browser** shows it with a QR code (see [Who gets in](#who-gets-in)).
 
 If the page says **Not listening**, it gives the reason (for example something else is using the address) and tries again
-every 30 seconds. If it says **Waiting for Tailscale**, Tailscale is off or not signed in; the companion starts listening by
-itself as soon as Tailscale is connected. The short name (`http://pocket-mini`) needs MagicDNS, which Tailscale
-switches on by default; the `100.x.y.z` address always works.
+every 30 seconds. If it says **Waiting for Wi-Fi**, neither the Wi-Fi nor Tailscale is connected; the companion starts
+listening by itself as soon as one is. When the Pocket joins another Wi-Fi, it follows within 30 seconds, with the new
+address on the page. The `.local` name works on most phones and computers (not on every Android phone); the numbers
+always work. The Brick shows the numbers only. The Tailscale name (`http://pocket-mini`) needs MagicDNS, which
+Tailscale switches on by default; the `100.x.y.z` address always works.
 
 The switch is kept across restarts. When it is on, the companion starts a few seconds after the Pocket, so it never
 slows down the start.
@@ -37,22 +37,24 @@ slows down the start.
 | **Web companion** | On or Off. Off by default. Off, nothing listens and nothing runs |
 | **Pair a browser** | Shows a one-time code for a browser that needs one (see below). Only while the companion is on |
 | **Paired browsers** | The browsers paired with a code, newest first. A, then A again, revokes one |
-| **Your Tailscale devices** | **Open** (the default): your own devices on your tailnet get in without a code. **Code**: every browser needs a code, yours too |
+| **Your Tailscale devices** | **Open** (the default): your own devices on your tailnet get in without a code. **Code**: every browser needs a code, yours too. On the Wi-Fi every browser needs a code either way |
 
 ## Who gets in
 
-- **Your own devices**: a phone or computer signed in to Tailscale with **your** account opens the companion straight
-  away. The Pocket asks Tailscale who is connecting; nothing to type. This means **every** device signed in with your
+- **Any browser on your Wi-Fi** needs the code once (below), then stays paired. Whoever is on your Wi-Fi and can see
+  the code on the Pocket's screen is trusted, the same as for file sharing.
+- **Your own devices over Tailscale**: a phone or computer signed in to Tailscale with **your** account opens the
+  companion straight away, through the Tailscale name or address (on the Wi-Fi address it needs the code like any browser). The Pocket asks Tailscale who is connecting; nothing to type. This means **every** device signed in with your
   Tailscale account, unless it is tagged: including a computer someone else in your family uses with your account, or a
   server you added with your own key. Switch **Your Tailscale devices** to **Code** if that is not what you want; then
   every browser needs a code, and revoking one locks that device out (with Open, a device of your account gets in
   again through Tailscale even after its browser was revoked). A device you take out of your account in Tailscale may
   get in for up to a minute more, or until you switch Your Tailscale devices.
 - **Any other browser** on your tailnet (a device shared with you by someone else, a tagged device, or every browser
-  when Your Tailscale devices is set to Code) needs a code:
+  when Your Tailscale devices is set to Code) needs a code too. Pairing goes like this:
   1. On the Pocket: Settings → Connections → Web companion → **Pair a browser**. A QR code and six digits appear.
-  2. Scan the QR code with the phone's camera (it opens the address with the code and pairs by itself), or open the
-     address and type the six digits.
+  2. Scan the QR code with the phone's camera (it opens the Pocket's Wi-Fi address with the code and pairs by itself),
+     or open the address and type the six digits.
   3. The browser stays paired for a year; then it needs a new code. **Forget this browser** at the bottom of the
      page, or revoking it under **Paired browsers** on the Pocket, ends that at once.
 
@@ -71,6 +73,9 @@ Pocket then.
 - **Screenshots**: a game's page lists the screenshots you took in that game (HOME + A, see
   [Screenshots](playing.md#screenshots)), newest first. Tap one to open it full size. The page only reads them: it
   cannot delete or add any (use the file share for that). They are not available while a game is running.
+- **Your shelf as a picture**: the Library page shows the pictures you made on the Pocket (Settings › Games ›
+  Screenshots › **My shelf as a picture**), newest first. Tap one to open it, then save it to your phone to post it.
+  Like the screenshots, the page only reads them.
 - **Shelves**: Favourites and Curator's smart shelves (rename, delete; make them on the
   Pocket with the Lens). A smart shelf lists its games in the order chosen for it on the Pocket. Deleting a shelf never deletes a game.
 - **Upload**:
@@ -80,7 +85,7 @@ Pocket then.
     Pocket's own emulator still misses, and ticks it off after the upload.
   - **PortMaster files**: for each installed port that waits for your own game files, its instructions and a place to
     drop files or a whole folder. They go straight into the port's folder, `roms/ports/<port>/<folder>`, as with file
-    sharing ([Extras](extras.md)); scripts and programs are refused.
+    sharing ([Box art & downloads](extras.md)); scripts and programs are refused.
   - A file of the same name is only replaced after you say so. An upload that is cut off (the browser closed, the
     network dropped) leaves nothing behind. At most 9 GB per game or port file and 128 MB per BIOS file, and at
     least 256 MB stay free on the SD card, even with several uploads at once. Scripts and programs (`.sh`, `.py`, `.so`,
@@ -109,9 +114,11 @@ itself). An upload that was already running pauses and continues when the game e
 
 ## How it is kept safe
 
-- **Only over Tailscale.** The companion listens only on the Pocket's Tailscale addresses, never on the Wi-Fi, so
-  devices on the same Wi-Fi network cannot reach it. Tailscale encrypts the connection end to end. There is no
-  switch to open it to the local network.
+- **Your Wi-Fi and Tailscale, nothing else.** The companion listens on the Pocket's Wi-Fi address and its Tailscale
+  addresses. It takes browsers only from your home network or your tailnet, never from the internet, and on the Wi-Fi
+  every browser needs the code. Over Tailscale the connection is encrypted end to end. **On the Wi-Fi it is not
+  encrypted:** someone else on the same Wi-Fi could read the code or what the page sends. Use it on your own Wi-Fi at
+  home; on a Wi-Fi you don't trust (a hotel, a café), switch it off or use Tailscale.
 - **Off by default.** While it is off, nothing listens at all. Switching it off closes it at once: an upload under way
   stops and leaves nothing, and what was still waiting is not done.
 - **Only you, or a browser you paired.** The Pocket keeps only a fingerprint of each paired browser, readable by the
@@ -129,7 +136,7 @@ Who on your tailnet may reach the Pocket at all is set in the Tailscale admin co
 
 | What you see | What to do |
 |---|---|
-| The browser can't connect | Check that Tailscale is on and connected on both devices, and that Web companion says On. Try the `100.x.y.z` address |
+| The browser can't connect | Check that Web companion says On and that the phone is on the same Wi-Fi as the Pocket (not on mobile data or a guest network). Try the numbers (`http://192.168…`) instead of the `.local` name. Over Tailscale: Tailscale on and connected on both devices; try the `100.x.y.z` address |
 | **Not listening** on the Pocket | The line below it says why; the companion tries again every 30 seconds |
 | **Play history is off, or nothing has been recorded yet** on Stats | Switch on Settings → Games → Curator → Play history, and play a game; the library's totals show in the meantime |
 | **Open the companion with the Pocket's own name or address** | Open it with the address the Pocket shows, not another name |

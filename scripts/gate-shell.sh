@@ -3,6 +3,7 @@
 set -u
 lane=$1 name=$2 RCD=$3
 unset POCKETUI_SNAPSHOT_CACHE_DIR
+# scripts/test-release-fast.sh runs only where it exists: the gate's own fixture trees (scripts/test-gate-paths.sh) count the suites they stub.
 L=/tmp/gate-launcher-$name.log V=/tmp/gate-verify-$name.log C=/tmp/gate-licences-$name.log
 P=/tmp/gate-package-$name.log Q=/tmp/gate-grub-$name.log G=/tmp/gate-image-grub-$name.log F=/tmp/gate-fat-hook-$name.log
 date +%s >"$RCD/$lane.start"
@@ -11,7 +12,7 @@ case $lane in
     sh deploy/test-run-pocket-ui.sh >"$L" 2>&1; echo $? >"$RCD/l"
     ;;
  small)
-    { sh scripts/test-verify-device.sh && python3 scripts/test-device-portability.py && python3 scripts/test-device-transfer.py && python3 -I scripts/android/test-release-check.py; } >"$V" 2>&1; echo $? >"$RCD/v"
+    { sh scripts/test-verify-device.sh && python3 scripts/test-device-portability.py && python3 scripts/test-device-transfer.py && python3 -I scripts/android/test-release-check.py && { [ ! -f scripts/test-release-fast.sh ] || bash scripts/test-release-fast.sh; }; } >"$V" 2>&1; echo $? >"$RCD/v"
     bash scripts/test-check-core-licences.sh >"$C" 2>&1; echo $? >"$RCD/c"
     sh deploy/package/test-package.sh >"$P" 2>&1; echo $? >"$RCD/p"
     sh deploy/test-grub-quiet.sh >"$Q" 2>&1; echo $? >"$RCD/q"

@@ -116,6 +116,29 @@ painting the slide and fade itself; the bridge slides and fades the page's pictu
 ending) crossfades on the GPU for 150 ms. Each animation writes a line `pocket-fb: gpu page push: N frames in M ms, worst gap G ms`. Without
 the GPU the bridge answers no and pocket-ui keeps its CPU transitions. The glide along the shelf is still painted by the CPU each frame.
 
+**Paint and present side by side, and the colour look on the GPU (2026-11-16, BRICK-60FPS.md).** Measured in the real UI on the device,
+pocket-ui's frame took 13.7 ms of CPU and pocket-fb's present 11.4 ms (texture upload 7.9, draw and swap 3.5), and they ran one after
+the other: softbuffer paints a frame only into a buffer pocket-fb has released, and pocket-fb sent that release after its upload and
+swap. So every animation frame took two or three refreshes (25-35 fps). pocket-fb now sends its answers, the release first, before the
+screen work, and pocket-ui paints the next frame while this one goes on the screen. Second: the Soft colour look (temperature, night
+light, extra dim; the Brick has no gamma ramps) was a pass over every pixel of every frame, 5 ms on the A53 even as one multiply per
+channel, because that is the memory's speed there. With the GPU, pocket-ui sends the look's multipliers when they change
+(`pocket_tint <r> <g> <b>`, 16-bit fixed point, 65536 = unchanged; `brick_gpu::tint`) and leaves the pass out; pocket-fb multiplies
+the sender's pictures in its shader (each texture keeps its own, so a crossfade with a game is right), and in the CPU copy when the GPU
+is gone. Screenshots (`pocket_grab`) are the window's own pixels, without the look, as under sway's gamma. pocket-ui and pocket-fb come
+from the same `app/bin` and restart together: an older pocket-fb would answer yes to `pocket_tint` without drawing it. pocket-fb's
+exit report splits its time: `of that, upload X ms, draw and swap Y ms`.
+
+**Only the changed rows into the texture; cases turn row by row (2026-11-16, BRICK-60FPS.md part 2).** With pocket-fb's GPU, pocket-ui
+hashes every row after painting (`damage::RowHashes`, 2-2.5 ms on the A53: one read of the frame) and says the changed spans with the
+picture (`wl_surface.damage_buffer`). pocket-fb keeps per window the rows said since its picture last went into the texture and uploads
+only those (`brick_gl::Presenter::upload_rows`); each of its two textures knows whose picture it holds. A picture without damage, a new
+size or a texture that holds another window's picture get the whole upload, so an older pocket-ui (or a game) is uploaded whole as
+before, and an older pocket-fb ignores the damage. On the Shelf 190 of 768 rows a picture, the upload 2.7 ms instead of ~7; the exit report
+says `N rows a picture into the texture`. The bigger part of the moving frames was elsewhere: a turning case (`cabinet_art::face`, the
+Shelf's large front, the Cabinet's case coming out) was painted column by column at 1:1, a cache miss per pixel on the A53 (12.7 ms of
+a 22 ms Shelf frame); now row by row (2.7 ms). Keep pixel loops row by row on the Brick (`timing_a_turning_case_costs_the_same_on_a_wide_screen`).
+
 **The launch animation (2026-11-03).** On the standalone card the cartridge's insert froze and the game came before the cartridge was
 in. pocket-fb gave the screen to pocket-core's window at its configure, before it had a picture; pocket-core draws only after the
 launch's hold, so pocket-ui lost its frame callbacks and its animation stopped. Now a window takes the screen with its first picture, as
@@ -178,7 +201,7 @@ build keeps every panic location and its bytes. Keep it that way, and compare wi
 
 The panel is about 15.75 px a millimetre (400 ppi), the RG35XX's logical 1280×960 canvas about 18 and the Mini's 1240×1080 about 16.5,
 so a design size is not smaller on the Brick than elsewhere, but all of them are under what is comfortable at arm's length (Body 2.0 mm,
-the hint bar 1.6 mm). The Brick's Normal text size is therefore a step above the design for the small sizes (hint bar 21 → 25, Body 28 → 31,
+a note 1.6 mm). The Brick's Normal text size is therefore a step above the design for the small sizes (note 21 → 25, Body 28 → 31,
 Settings' explanations 30 → 32; rows, titles and the pause menu stay), and Medium and Large are never smaller than it. The rule is
 `type_scale::brick_base`, the table is in docs/DESIGN.md ("Text size").
 
@@ -195,6 +218,6 @@ NES, PlayStation, the final shelf, and return navigation. The scanner is unchang
 A pocket-core load still busy after three seconds shows “Loading the game…” and a spinner. The due timer requests a redraw
 before moving its next wake; otherwise the launch fade has already stopped painting and pocket-fb keeps the old black picture.
 `app_frozen::loading_tests` covers the timer, and the RAM CUE/FIFO device check covers the real framebuffer.
-The Brick's printed menu key is **MENU** throughout hints, Controls cards and help. Text uses that device name after translation,
+The Brick's printed menu key is **MENU** throughout hints and help. Text uses that device name after translation,
 before measuring and wrapping, including the manual; learned game names stay untouched. Other profiles retain HOME.
-`controls_card_snapshots::printed_menu_key_is_used_on_brick_cards_and_hints_in_both_appearances` covers both devices and appearances.
+`brick_settings_walk::printed_menu_key_is_used_in_the_brick_hints_in_both_appearances` covers both appearances.

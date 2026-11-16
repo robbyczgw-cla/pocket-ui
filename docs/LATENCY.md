@@ -42,6 +42,7 @@ the power key (2026-10-26). The measured pocket-ui never switches the Pocket off
 | `input N <button> down\|up` | pocket-ui | a pad button reaches the event loop; N counts them |
 | `frame <screen> in=N sel=<entry>` | pocket-ui | a frame was handed to the compositor (`src/app_trace.rs`): which screen, the last input it already shows, the selected entry |
 | `paint <ms> <w>x<h>` | pocket-ui | right after each `frame`: how long painting and handing it over took, and the window's size then |
+| `stages paint <ms> wait <ms> page=… notice=… transition=… corner=… leave=… damage=<ms> rows=<n>` | pocket-ui | right after each whole frame's `paint`: the painting by part (`frame::SECTIONS`; `corner` includes the CPU's colour look), the rest (mostly the wait for a free buffer), and on the Brick's GPU the search for the rows the frame changed and their number (`damage`, 0 when not searched) |
 | `step <what>` | both | one step inside a Quit, the pause menu opening or a game's teardown (`trace::step`; the `switch-time` steps of `fast_switch::mark` come here too), for `latency.py phases` |
 | `launch <system> <rom>` | pocket-ui | just before pocket-core is started |
 | `game-exited <system> <rom>` | pocket-ui | the game has ended and pocket-ui knows (after a hand-over: its exit save is on the card, the process may still be tearing down) |
@@ -822,6 +823,49 @@ took a fifth of those frames under 16.7 ms. The box's turning disc costs 3.5 ms 
 first, bilinear version cost 29 ms); the box itself already takes 16.8 ms there, so the disc turns at every other
 refresh where the box costs more than half a refresh (`BoxView::spin_wake`), at every refresh on faster handhelds.
 
+### Launch frames on the H700 (2026-11-14)
+
+The Shelf look's launch (case into its console, Cozy, Playful off, 630 frames: five launches) on the RG35XX Plus at 640x480,
+`bench-playful:gbc:launch` on 300 made-up Game Boy Color games, thread CPU per frame, two rounds each:
+
+| | p50 | p95 | frames over 16.7 ms |
+|---|---|---|---|
+| main c53b908, painted natively | 13.0 ms | 16.1 ms | 19 |
+| the same, `POCKETUI_PAINT=scaled` (0.4.1's way) | 33.2 ms | 35.7 ms | 630 |
+| `dim` at n = 2: a whole screen row in one multiply | 11.7 ms | 15.1 ms | 7 |
+| and the shelf under the launch kept | **9.8 ms** | **11.5 ms** | 1 |
+
+Earlier tables measured 23 to 28 ms: until 14.11. `bench-playful` painted the 1280x960 design canvas without the reduction,
+which is neither the native way nor the scaled one. It now paints as `draw` does (`App::device_frame`, shared with
+`bench-shelf`). The profile of the native frame (`perf` on the Plus): `cabinet_art::dim` 26 % (two multiplies and a mean per
+screen pixel for a band that darkens every design pixel alike), the shelf page 9 % plus its spines, the console's picture
+10 %, the handheld's lit display 8 %. Nothing on the shelf moves during a launch (the case and its shadow are the scene's),
+so the first frame keeps the page and the others copy it (`app_cabinet::LaunchShelf`); the case's shadow is painted over
+the copy each frame. Both are the same picture bit for bit: 2192 frames of the launch series
+(`POCKETUI_SNAPSHOT_LAUNCH_SERIES`, 640x480 and 720x720, dark and light, Cozy and Quick, Playful on and off, sealed and
+not) with and without the kept page, all identical; `dim` against `rows_over` in `cabinet_art` tests.
+`tests/launch_frames.rs` guards it: the page is painted once per launch (before: every frame), and a launch frame stays
+under 8 frames of the shelf standing still (5.4 on the Plus now, 7.7 before).
+
+The Cabinet (`bench-shelf:cabinet:gbc` as on main a72abe5: one move per refresh on a held clock), on the Plus, main
+45ec255 against the branch, two interleaved rounds that agree within 0.2 ms, p50 / p95:
+
+| | main | branch |
+|---|---|---|
+| 720x720 (RG CubeXX layout) | 17.6 / 26.3 ms | **13.5 / 22.8 ms** |
+| 720x720, sealed games | 18.9 / 28.4 ms | 15.5 / 24.0 ms |
+| 640x480 | 13.2 / 18.0 ms | 10.9 / 16.2 ms |
+| 640x480, sealed games | 14.1 / 18.6 ms | 11.8 / 17.1 ms |
+
+The frame log (`POCKETUI_FRAME_LOG=1`) showed why 720x720 cost so much more: more than half of the moves made a "plain
+front" (6.9 ms) and a "big spine" (1.6 ms) for the case coming out, the stand-in until its cover cut comes from the art
+thread. Each started by scaling the plastic case's template pixel by pixel and fitting the console's picture again, the
+same for every GBC case, and blended the name's pixels one by one with a check of the picture's half copies each time.
+Now the template is scaled once per size and tint (`media::template_scaled`), the console fitted once
+(`Sprite::fitted_kept`), and `plain_label` clears the half copies once: a plain front costs 2.8 ms, a big spine 0.9 ms.
+The p95 is the moves that still make one. Same picture: 50 snapshots (Cabinet, Shelf, the box; 640x480, 720x720,
+1024x768; dark and light) with and without, identical; unit tests compare the kept pictures with freshly made ones.
+
 ## pocket-ui against ROCKNIX (EmulationStation)
 
 The numbers above come from pocket-ui's own trace, which EmulationStation and RetroArch don't have. For the
@@ -939,6 +983,45 @@ makes the tables. Notes that matter when reading the numbers:
 - `docs/latency/vdev.json`, `docs/latency/device.json`: the baselines
 - `scripts/rocknix-compare.sh`, `scripts/rocknix-compare-device.sh`, `scripts/rocknix-compare.py`, `scripts/rocknix-compare-plan.json`, `scripts/rocknix-compare-video.py`, `scripts/test-rocknix-compare.sh`: pocket-ui against ROCKNIX, from outside ([COMPARE-ROCKNIX.md](COMPARE-ROCKNIX.md))
 
+### Box turn on the Brick (2026-11-15)
+
+"Turn over" on a game's box (LEFT/RIGHT) hitched now and then on the TrimUI Brick (Kirby's Dream Course: two screenshots, a
+description and the year on its back). Measured on the Brick itself: the box alone at 1024x768, Kirby's back, 20 turns in a
+row and 10 turns after a real 2.5 s pause each, thread CPU per frame, the clock stepped by the refreshes each frame took
+(`game_box::tests::bench_turns`; on the Brick the same loop as a Cargo example, because the Brick's glibc is 2.33):
+
+| | frames a turn | p50 | p95 | worst |
+|---|---|---|---|---|
+| main d25880b, turns in a row (clock 1.0 to 2.0 GHz) | 3 | 151.8 ms | 241.6 ms | 276.9 ms |
+| main, turns after a pause (408 to 816 MHz) | 2 | 267.0 ms | 416.2 ms | 420.5 ms |
+| back made while the box stands open, turns in a row | 3 | 152.1 ms | 230.4 ms | 312.3 ms |
+| and the turn painted row by row, turns in a row (1.2 GHz) | 7 | 31.3 ms | 57.7 ms | 59.6 ms |
+| and the turning face painted once a half, turns after a pause | 4 to 7 | 41.7 ms | 159.4 ms | 165.8 ms |
+| and `ondemand` at 40 ms (set by hand for the run, as pocket-ui now does), turns in a row (2.0 GHz) | **10** | **20.1 ms** | **38.6 ms** | **39.1 ms** |
+| the same, turns after a pause (408 MHz at the press, 2.0 GHz within the turn) | 9 to 10 | 18.1 ms | 66.1 ms | 68.5 ms |
+
+The worst frame left is a turn's first: it paints the face it turns away from (38 ms at 2 GHz, 67 ms when the press finds
+the clock at 408 MHz). The frame after the box has come up costs 39 ms instead of 9: it makes the back, and shows the same
+picture as the frame before it.
+
+Causes, all fixed (`game_box`, `power::quick_ondemand`):
+- **The turn went down the screen column by column.** At n = 1 (the Brick paints at its design size) `face_columns` and
+  `edge_columns` read and wrote every pixel a whole row (4 KB) away from the one before. The A53's caches missed on almost
+  every pixel: 150 to 260 ms a turning frame at 2 GHz, so a 280 ms turn showed two or three frames. On the Air the same frame
+  takes 1 to 5 ms, and 640x480 screens (n = 2) go through `cells_over`, which works row by row, so no bench saw it. They
+  now go row by row as well, pixel for pixel the same (`the_turn_paints_row_by_row_what_it_painted_column_by_column`).
+- **Every turn laid out the back again** (its text, its screenshots scaled), the first turn twice: the back's pixels were
+  kept for one canvas only, and the turn's copy off screen (without the scroll bar) never matched the back at rest. The
+  back is now made while the box stands open, for the turn and for the screen, and the turn shows the scroll bar as the back
+  at rest does (`a_turn_copies_the_back_made_while_the_box_stood_open`, red before).
+- **Each turning frame cleared a whole canvas and painted the face on it again**, which does not change during half a turn:
+  now once a half.
+- **The CPU's clock.** In the menus the Brick runs `ondemand`, which its kernel lets look at the load only every 2 s. The
+  menus idle at 408 MHz, so a turn after a pause ran at 408 to 816 MHz to its end: "sometimes". pocket-ui sets
+  `sampling_rate` to the kernel's quickest (40 ms) at its start and after every game ([TrimUI Brick](TRIMUI-BRICK-STANDALONE.md#power-covers-gba-core-governor)).
+  The idle clock stays where it was, also with the screen dark (`sleep=light`): 408 MHz in 12 to 14 of 20 readings 250 ms
+  apart at 40 ms as at 2 s (the others at 600 to 1200 MHz, from the measuring itself over ssh).
+
 ### First box in the Shelf and Cabinet looks (2026-10-30)
 
 With the 0.1.4 art, the first X on a game cost ~50 ms more on the RG35XX Plus (H700, 2,000 games): the case front and the
@@ -951,3 +1034,21 @@ later opens stay at 47 / 40 / 23 ms. Cost: about 9 MB more RSS in the Shelf look
 The box-front cache shared by Shelf, Cabinet and the idle warmer keeps at most 12 entries, evicting the least recently
 used when inserting. This bound does not depend on drawing the Shelf look or advancing its frame counter. An active
 box or launch retains its own front and undecorated cartridge-label source until that owner releases it.
+
+Performance snapshots (`bench-*`, `POCKETUI_FRAME_BENCH`, `POCKETUI_BENCH_FRAMES`, launch series) use the default Sealed new games extra on never-played fixture games. Use `POCKETUI_SEALED=0` for an opened collection, `1` to explicitly seal it. `bench-shelf` reports `sealed=<count>` to make the workload visible. `tests/shelf_moves.rs` compares a fresh 80-game collection with opened games at 640×480 (Cabinet/Easy/Split) and 720×720 (Cabinet), beyond the front caches’ capacity.
+
+The repeated x86-64 film guard failure on 2026-11-14 was exposed by faster case templates (`f5e7e7e82`), rather than an absolute slowdown of sealed games. With the same 80-game fixture, Easy at 640×480 and the first refresh after every press, the x86 build host measured these thread CPU times (p50 / p95, µs):
+
+| Stand | Opened | Sealed |
+| --- | --- | --- |
+| Before the template cache (`1e874da75`) | 1351 / 1751 | 1559 / 1914 |
+| Main, with the template cache | 683 / 749 | 937 / 1125 |
+| With the film blend fix | 717 / 826 | 891 / 973 |
+
+Both collections became faster, but the remaining film blend exceeded the relative guard once the bare case was cheap. The glare cache lookup took about 2 µs for a 360×500 front; the pixel blend took 178 µs. On x86-64 the blend now uses baseline SSE2 with 16-bit channel products (86 µs in the same isolated probe). The packed red/blue scalar formula needs 32-bit products, expensive to emulate with SSE2. A constant-film rewrite needs one product per channel, and an unsigned high-word product divides by 255 exactly over the blend’s range. The batch path preserves every source alpha and the exact floor division by 255. The existing scrolling guard and its limits remain unchanged; exhaustive colour/alpha checks cover distinct neighbouring pixels and partial groups.
+
+AArch64 already handles the ordinary loop efficiently and keeps that path. On the Air, the same Easy guard passed before and after (sealed p50 / p95: 351 / 389 µs before, 327 / 341 µs after; opened 276 / 314 and 261 / 279 µs). These host timings are not H700 measurements: the Plus was offline; a fresh Plus comparison remains open. The guard also passed Cabinet at 640×480 and 720×720, Split, and Easy at 100 ms.
+
+The shelf benchmark freezes animation time: each measured image is the first refresh (16.7 ms) after a press, with continuous moves one refresh apart. Add `:settled` after the system (for example `bench-shelf:big:gbc:settled`) to paint at 100 ms, including Easy’s neighbour fronts after their 80 ms delay. Both moments are covered by the film regression guard. Faster hosts therefore paint the same turning cases as handhelds. Box timings report `boxed` and `sealed`; use a Shelf/Cabinet theme to measure a box (Split opens the information card).
+
+`bench-shelf:big[:system]` selects the actual Easy look and moves with Left/Right; older builds silently measured Split for this name. `look` and `changes` in the result confirm the view and that presses really selected games. The old 14 November Plus “Easy 2.8/9.5 ms” measurements therefore describe Split.

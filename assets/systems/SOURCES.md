@@ -1,5 +1,40 @@
 # System pictures: sources and licences
 
+## Console colours (2026-11-12)
+
+`colours/gba-milky.png`, `colours/gba-pink.png` and `colours/gbc-dandelion.png` (shelf and console page) and the insert
+scene bases `../media/rig/gba-milky/`, `gba-pink/`, `gbc-dandelion/` are PixelLab image-to-pixelart conversions of photos
+of the real consoles in that colour, Evan-Amos, public domain (Commons API, 2026-11-12), brand lettering painted out
+with the plastic round it, the photo placed in the pose of the original so the original's `rig.json` fits.
+
+| Colour | Commons file page | Author | Licence on Commons | Checked |
+|---|---|---|---|---|
+| gba-milky | https://commons.wikimedia.org/wiki/File:Nintendo-Game-Boy-Advance-Milky-Blue-FL.jpg | Evan-Amos | Public domain | 2026-11-12 |
+| gba-pink | https://commons.wikimedia.org/wiki/File:Nintendo-Game-Boy-Advance-Pink-FL.jpg | Evan-Amos | Public domain | 2026-11-12 |
+| gbc-dandelion | https://commons.wikimedia.org/wiki/File:Game-Boy-Color-Yellow.jpg | Evan-Amos | Public domain | 2026-11-12 |
+
+PixelLab credits (probe, 2026-11-12): 6 for the two Advance colours; 16 for the Game Boy Color work, which also made a
+Teal that is not built in (a hue-turned photo, not a real teal console).
+
+## Console colours 2 (2026-11-13): N64 Ice Blue, N64 Jungle Green, GameCube Jet Black
+
+`colours/n64-iceblue.png`, `colours/n64-jungle.png`, `colours/gamecube-jetblack.png` and the insert scene pictures
+`../media/rig/n64-iceblue/` and `n64-jungle/` (`base.png`, `over.png`), `../media/rig/gamecube-jetblack/` (`base.png`,
+`top.png`, `under.png`) are PixelLab image-to-pixelart conversions of retouched photos, never drawn in code, brand lettering
+painted out with the plastic round it. The **picture** is the original's public-domain photo (Evan-Amos); the **colour** of
+the plastic is measured from a photo of the real console in that colour (brightness-rank matching of the shell's plastic;
+cartridge, ports and buttons kept; no picture content is taken from the colour photo). The original's `rig.json` fits.
+
+| Colour | Picture from (Public domain, Evan-Amos) | Colour of the plastic measured from | Author | Licence on Commons | Checked |
+|---|---|---|---|---|---|
+| n64-iceblue | https://commons.wikimedia.org/wiki/File:N64-Console-Orange.jpg | https://commons.wikimedia.org/wiki/File:N64_Clear_Blue_with_Super_Mario_64_20100603.jpg | Noa Kosanovic | CC BY 3.0 | 2026-11-13 |
+| n64-jungle | https://commons.wikimedia.org/wiki/File:N64-Console-Orange.jpg | https://commons.wikimedia.org/wiki/File:Jungle_green_Nintendo_64_(10448842084).jpg | Valentin Kozin | CC BY 2.0 | 2026-11-13 |
+| gamecube-jetblack | https://commons.wikimedia.org/wiki/File:GameCube-Set.jpg and the GameCube rig photos (`../media/rig/SOURCES.md`) | https://commons.wikimedia.org/wiki/File:12_Gamecubes.JPG | Ursinx | CC BY-SA 4.0 | 2026-11-13 |
+
+Credits for the credits page: "N64 Clear Blue with Super Mario 64" by Noa Kosanovic, CC BY 3.0; "Jungle green Nintendo 64" by
+Valentin Kozin, CC BY 2.0; "12 Gamecubes" by Ursinx, CC BY-SA 4.0 (colour measured; the pictures are Evan-Amos's public-domain
+photos, changed).
+
 ## Optional Game Boy Advance SP (2026-11-08)
 
 `gba-sp.png` is a photo-derived **CC0 1.0** asset, **modified via PixelLab** from
@@ -22,6 +57,12 @@ at a glance. Every logo, brand name and product name printed on the hardware or 
 painted over, so the pictures carry no trademarks. Names such as "Game Boy" or "Mega Drive" belong to their
 owners and appear in pocket-ui only as plain text labels.
 
+## Phone games (2026-11-14)
+
+`j2me.png` (128x318) is a PixelLab image-to-pixelart conversion (seed 3) of Evan Amos's public-domain photo of a Nokia
+5125, with the NOKIA lettering on the faceplate painted out with the faceplate round it, so it stands for any phone of
+the 2000s; the photo's outline cuts it out. PixelLab credits: 2.
+
 ## Photos
 
 All photos are by Evan Amos on Wikimedia Commons. The licence was read from the Commons API
@@ -40,6 +81,7 @@ thumbnail of each was used.
 | dreamcast | https://commons.wikimedia.org/wiki/File:Sega-Dreamcast-Console-FL.jpg | Evan-Amos | Public domain | 2026-10-22 |
 | fds | https://commons.wikimedia.org/wiki/File:Nintendo-Famicom-Disk-System.jpg | Evan-Amos | Public domain | 2026-10-27 |
 | gamecube | https://commons.wikimedia.org/wiki/File:GameCube-Set.jpg | Evan-Amos | Public domain | 2026-10-22 |
+| j2me | https://commons.wikimedia.org/wiki/File:Nokia-5125-Cobalt-Front-Upright.jpg | Evan-Amos | Public domain | 2026-11-14 |
 | gamegear | https://commons.wikimedia.org/wiki/File:Game-Gear-Handheld.jpg | Evan-Amos | Public domain | 2026-10-22 |
 | gb | https://commons.wikimedia.org/wiki/File:Game-Boy-FL.jpg | Evan-Amos | Public domain | 2026-10-22 |
 | gba | https://commons.wikimedia.org/wiki/File:Nintendo-Game-Boy-Advance-Purple-FL.jpg | Evan-Amos | Public domain | 2026-10-22 |
@@ -184,7 +226,7 @@ Neither drawing copies a real product or carries a logo.
 | pc (DOS) | Drawn for this project: two 3.5 inch floppy disks with blank labels (`tools/draw_pixel.py`) | GPL-2.0-or-later, like pocket-ui | Drawn in pixels directly, no photo and no conversion |
 | scummvm | Drawn for this project: a beige CRT monitor showing a plain adventure scene, a pointer and blank verb bars | GPL-2.0-or-later | The same |
 | tic-80 | Drawn for this project: a small handheld computer whose screen shows a 16 colour palette | GPL-2.0-or-later | The same |
-| streaming | Drawn for this project: a monitor with a play triangle, radio waves and a small handheld; used by the "PC streaming" row in Settings > Look > Systems on the shelf | GPL-2.0-or-later | The same |
+| streaming | Drawn for this project: a monitor with a play triangle, radio waves and a small handheld; used by the "PC streaming" row in Settings > Games > Systems on the shelf | GPL-2.0-or-later | The same |
 
 DOS has no console, ScummVM and TIC-80 are software, and "PC streaming" is an app, so none has a device to
 photograph (Evan Amos's Commons photos cover consoles; an IBM PC photo would have shown a brand's logo and

@@ -65,10 +65,15 @@ struct Bench {
     p95_us: f64,
     glyphs: usize,
     patterns: usize,
+    sealed: usize,
     line: String,
 }
 
 fn run(tmp: &Path, wayland: &Option<Stub>, look: &str, lang: &str) -> Bench {
+    run_case(tmp, wayland, look, lang, "1024x768", None)
+}
+
+fn run_case(tmp: &Path, wayland: &Option<Stub>, look: &str, lang: &str, size: &str, sealed: Option<&str>) -> Bench {
     // Its own copy of the data folder: the start writes into it.
     let data = tmp.join(format!("data-{look}-{lang}"));
     let _ = std::fs::remove_dir_all(&data);
@@ -76,9 +81,12 @@ fn run(tmp: &Path, wayland: &Option<Stub>, look: &str, lang: &str) -> Bench {
     let mut cmd = Command::new(env!("CARGO_BIN_EXE_pocket-ui"));
     cmd.args(["--snapshot", &format!("bench-shelf:{look}"), tmp.join("bench.png").to_str().unwrap()])
         .env("POCKETUI_MOCK", "1").env("POCKETUI_MOCK_NOW", FIXTURE_NOW)
+        .env_remove("POCKETUI_SEALED")
+        .env("POCKETUI_SNAPSHOT_SIZE", size)
         .env("POCKETUI_LANG", lang)
         .env("POCKETUI_ES_SYSTEMS", tmp.join("es_systems.cfg"))
         .env("POCKETUI_DATA", &data);
+    if let Some(sealed) = sealed { cmd.env("POCKETUI_SEALED", sealed); }
     if let Some(w) = wayland {
         cmd.env("WAYLAND_DISPLAY", &w.path);
     }
@@ -99,6 +107,7 @@ fn run(tmp: &Path, wayland: &Option<Stub>, look: &str, lang: &str) -> Bench {
         p95_us: field("p95_us"),
         glyphs: field("glyphs") as usize,
         patterns: field("patterns") as usize,
+        sealed: field("sealed") as usize,
         line,
     }
 }
@@ -108,9 +117,8 @@ fn check(look: &str, lang: &str, b: &Bench) -> Result<(), String> {
     if !(b.moves + 1 >= b.items && b.items > 8) {
         return Err(format!("{look} {lang}: over the whole list ({b:?})"));
     }
-    // A letter drawn now and then (the clock's next minute) is fine; one in every frame is not. Not the cabinet:
-    // its cases glide and grow, and a busy computer catches them at sizes whose letters are drawn on the spot
-    // (9df5564 the same; 0 when the computer is idle).
+    // A letter drawn now and then (the clock's next minute) is fine; one in every frame is not. Cabinet’s moving
+    // cases are built at intermediate sizes; its separate film guard compares the same animation moment.
     if look != "cabinet" {
         if b.glyphs * 10 >= b.moves {
             return Err(format!("{look} {lang}: frames drew letters of their own ({b:?})"));
@@ -159,4 +167,34 @@ fn a_move_on_home_draws_no_letters_runs_no_patterns_and_is_quick_in_every_look()
         assert!(failures.is_empty(), "failed in all 3 runs:\n{}", failures.join("\n"));
     }
     drop(wayland);
+}
+
+/// A new library must scroll as quickly in its default film as an opened collection. More games than the front
+/// caches retain: a tiny or already-played library hides the cost of making the next sealed cover.
+#[test]
+fn new_games_in_film_scroll_as_quickly_as_opened_games() {
+    let tmp = tempfile::tempdir().unwrap();
+    assert!(Command::new("python3").args(["-I", &format!("{ROOT}/scripts/perf-library.py"), tmp.path().to_str().unwrap(), "80", "400", "560"])
+        .stdout(std::process::Stdio::null()).status().unwrap().success());
+    let wayland = wayland_for_snapshots(tmp.path());
+    for (look, size) in [("cabinet:gbc", "640x480"), ("split:gbc", "640x480"), ("big:gbc", "640x480"), ("big:gbc:settled", "640x480"), ("cabinet:gbc", "720x720")] {
+        let mut failures = Vec::new();
+        for _ in 0..3 {
+            let opened = run_case(tmp.path(), &wayland, look, "en", size, Some("0"));
+            let sealed = run_case(tmp.path(), &wayland, look, "en", size, None);
+            assert_eq!(opened.sealed, 0);
+            assert_eq!(sealed.sealed, 80, "the bench must actually exercise its default film");
+            let theme = if look.starts_with("big") { "look=Big" } else if look.starts_with("split") { "look=Split" } else { "look=Cabinet" };
+            assert!(sealed.line.contains(theme), "{}", sealed.line);
+            assert!(sealed.line.contains(&format!("changes={}", sealed.moves)), "every measured press must select another game: {}", sealed.line);
+            assert!(sealed.line.contains(if look.ends_with(":settled") { "moment_ms=100.0" } else { "moment_ms=16.7" }), "{}", sealed.line);
+            println!("opened: {}\nsealed by default: {}", opened.line, sealed.line);
+            // Thread CPU, relative to the same frame and machine. Allow clock/cache noise, but not rebuilding the
+            // expensive glare at every newly selected case (the original regression was 3–5 times slower). The
+            // remaining pixel blend must stay cheap too: faster bare case templates exposed its cost on x86-64.
+            if sealed.p50_us <= opened.p50_us * 1.20 + 100.0 && sealed.p95_us <= opened.p95_us * 1.20 + 150.0 { failures.clear(); break; }
+            failures.push(format!("{look} {size}: film {:.0}/{:.0} vs opened {:.0}/{:.0} us (p50/p95)", sealed.p50_us, sealed.p95_us, opened.p50_us, opened.p95_us));
+        }
+        assert!(failures.is_empty(), "{}", failures.join("\n"));
+    }
 }

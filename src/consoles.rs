@@ -138,8 +138,15 @@ fn ordered<'de, D: Deserializer<'de>>(d: D) -> Result<Vec<(String, String)>, D::
 
 fn file() -> &'static File {
     static FILE: OnceLock<File> = OnceLock::new();
-    FILE.get_or_init(|| match serde_json::from_str(DATA) {
-        Ok(f) => f,
+    FILE.get_or_init(|| match serde_json::from_str::<File>(DATA) {
+        Ok(mut f) => {
+            // Another name in letters this system has no font for ("ゲームキューブ") is left out, not painted as
+            // "????" (`latinise`); with Noto Sans CJK on the system (ROCKNIX, Android) it stays.
+            for console in &mut f.systems {
+                console.aka.retain(|name| crate::latinise::paintable(name));
+            }
+            f
+        }
         Err(e) => {
             // Checked by the tests; a broken file means no console pages, never a crash.
             eprintln!("consoles.json: {e}");
@@ -425,6 +432,14 @@ pub fn emulator_name(emulator: &str) -> String {
 
 /// "Flycast on pocket-core", "Stella in RetroArch", "ARMSX2 (standalone)"; None when es_systems.cfg names nothing.
 pub fn runner_text(emulator: &str, core: &str) -> Option<String> {
+    // Android's handheld view: our own player, or the app the phone gave a name (`play_route`).
+    if let Some(phone) = crate::play_route::phone() {
+        return match (emulator, core) {
+            ("", "") => None,
+            ("pocket-core" | "retroarch", core) => Some(format!("{} in pocket-ui", core_name(core))),
+            (package, _) => Some(phone.apps.values().flatten().find(|a| a.package == package).map_or_else(|| emulator_name(package), |a| a.label.clone())),
+        };
+    }
     match (emulator, core) {
         ("", "") => None,
         ("pocket-core", core) => Some(format!("{} on pocket-core", core_name(core))),
@@ -646,6 +661,24 @@ mod tests {
             assert!(!c.sources.is_empty(), "{}: sources", c.id);
             assert!(!c.released.is_empty(), "{}: released", c.id);
         }
+    }
+
+    /// "Also known as Nintendo GameCube, ????????????" (snapshot 2026-11-12): a name in letters that no font here draws.
+    #[test]
+    fn no_other_name_needs_a_letter_that_no_font_can_draw() {
+        for c in all() {
+            for name in &c.aka {
+                assert!(crate::latinise::paintable(name), "{}: {name:?}", c.id);
+            }
+            // What the page shows besides: all of it in letters the faces have.
+            let texts = [Some(&c.name), c.maker.as_ref(), c.summary.as_ref(), c.lines.headline.as_ref()];
+            for t in texts.into_iter().flatten() {
+                assert!(crate::latinise::paintable(t), "{}: {t:?}", c.id);
+            }
+        }
+        // The file still has the Japanese names (they show where the system has a CJK font); only the loading drops them.
+        let raw: File = serde_json::from_str(DATA).unwrap();
+        assert!(raw.systems.iter().any(|c| c.aka.iter().any(|a| a.contains("ゲームキューブ"))));
     }
 
     #[test]

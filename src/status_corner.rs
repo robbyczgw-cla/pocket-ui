@@ -5,10 +5,10 @@
 //! On Android only the types, the layout and the painting are compiled: its facts come from the Activity (`phone_corner`).
 
 use std::path::{Path, PathBuf};
-#[cfg(not(target_os = "android"))]
+#[cfg(not(all(target_os = "android", not(feature = "handheld"))))]
 use std::sync::atomic::{AtomicBool, AtomicU8, Ordering};
 use std::sync::Mutex;
-#[cfg(not(target_os = "android"))]
+#[cfg(not(all(target_os = "android", not(feature = "handheld"))))]
 use std::sync::OnceLock;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
@@ -21,6 +21,8 @@ pub const PX: u32 = 28;
 pub const GAP: i32 = 24;
 /// Between the corner and what stands left of it ("Saves synced", a page's title).
 pub const ROOM: i32 = 32;
+/// The quiet dot left of the corner while covers and descriptions load in the background (no count, no words).
+pub const SIGN_RADIUS: i32 = 5;
 /// A clock before this (2024-01-01 UTC) was never set: no time is shown rather than "00:00" from 1970.
 pub const TIME_SET_AFTER: i64 = 1_704_067_200;
 /// How often the thread reads Wi-Fi and the battery while the corner is on screen.
@@ -38,6 +40,10 @@ pub struct Battery {
 impl Battery {
     /// "87 %", "87 %, charging".
     pub fn label(&self) -> String {
+        // Android's handheld view says it in the player's language, as the Mobile view's corner does.
+        #[cfg(all(target_os = "android", feature = "handheld"))]
+        return format!("{}%{}", self.percent, if self.charging { format!(", {}", crate::i18n::tr("charging")) } else { String::new() });
+        #[cfg(not(all(target_os = "android", feature = "handheld")))]
         format!("{}%{}", self.percent, if self.charging { ", charging" } else { "" })
     }
 }
@@ -66,7 +72,7 @@ pub enum Part<'a> {
 }
 
 impl Corner {
-#[cfg(not(target_os = "android"))]
+#[cfg(not(all(target_os = "android", not(feature = "handheld"))))]
     /// The corner now: the time, and Wi-Fi and battery as the thread last read them.
     pub fn now() -> Corner {
         let s = status();
@@ -209,14 +215,8 @@ pub fn wifi_height(px: u32) -> i32 {
 /// status corner's thread before the first frame that needs it; the frame only blends.
 pub fn paint_wifi(c: &mut Canvas, x: i32, baseline: i32, px: u32, colour: u32) {
     let mask = wifi_mask(px);
-    for (row, line) in mask.cover.chunks(mask.cols).enumerate() {
-        let py = baseline - mask.above + row as i32;
-        for (col, &alpha) in line.iter().enumerate() {
-            if alpha > 0 {
-                c.blend(x - 1 + col as i32, py, colour, alpha);
-            }
-        }
-    }
+    // Painted natively, averaged per screen pixel (blending pixel by pixel would keep only every fourth one).
+    c.mask(x - 1, baseline - mask.above, mask.cols, mask.cover.len() / mask.cols.max(1), &mask.cover, colour);
 }
 
 /// The coverage (0-255) of every pixel of the Wi-Fi symbol at one type size, relative to its left edge and baseline.
@@ -295,6 +295,25 @@ pub fn parse_battery(capacity: Option<&str>, status: Option<&str>) -> Option<Bat
 
 /// Reads Wi-Fi (`<net>/operstate`) and the battery (`<battery>/capacity`, `status`): three small sysfs files.
 pub fn read(net: &Path, battery: &Path) -> Status {
+    // Android's handheld view: the battery is what Android says (`PocketBase.statusCorner`, as in the Mobile view): sysfs
+    // isn't open to an app there. Wi-Fi is Android's business (its own status bar), not shown here.
+    #[cfg(all(target_os = "android", feature = "handheld"))]
+    {
+        let _ = (net, battery);
+        return Status { wifi: false, battery: android_reading().battery };
+    }
+    #[cfg(not(all(target_os = "android", feature = "handheld")))]
+    read_files(net, battery)
+}
+
+/// What the Activity says of the time and the battery: the system's 12/24-hour choice, the local time, the battery.
+#[cfg(all(target_os = "android", feature = "handheld"))]
+fn android_reading() -> crate::phone_corner::Reading {
+    crate::phone_corner::Reading::parse(&crate::platform::android::string("statusCorner"))
+}
+
+#[cfg(not(all(target_os = "android", feature = "handheld")))]
+fn read_files(net: &Path, battery: &Path) -> Status {
     let file = |p: PathBuf| std::fs::read_to_string(p).ok();
     Status {
         wifi: file(net.join("operstate")).is_some_and(|s| parse_operstate(&s)),
@@ -324,7 +343,7 @@ pub fn unix_now() -> Option<i64> {
 
 /// Local time as "13:28" (24 hours, as everywhere in pocket-ui), None while the clock was never set. Worked out at
 /// most once a second: a zone chosen in Settings shows within that second.
-#[cfg(not(target_os = "android"))]
+#[cfg(not(all(target_os = "android", not(feature = "handheld"))))]
 pub fn clock() -> Option<String> {
     static KEPT: Mutex<Option<(i64, Option<String>)>> = Mutex::new(None);
     let now = unix_now()?;
@@ -337,17 +356,25 @@ pub fn clock() -> Option<String> {
     s
 }
 
-#[cfg(not(target_os = "android"))]
+#[cfg(not(all(target_os = "android", not(feature = "handheld"))))]
 fn local_clock(now: i64) -> Option<String> {
-    let t = now as libc::time_t;
-    let mut tm: libc::tm = unsafe { std::mem::zeroed() };
-    // A time zone chosen in Settings applies at once.
-    crate::timezone::tzset();
-    // SAFETY: localtime_r only writes into the provided struct.
-    if unsafe { libc::localtime_r(&t, &mut tm) }.is_null() {
-        return None;
+    // Android's handheld view: the time as the system writes it, "13:28" or "1:28 PM" (`phone_corner`).
+    #[cfg(all(target_os = "android", feature = "handheld"))]
+    {
+        android_reading().clock_text(Some(now))
     }
-    format_clock(now, tm.tm_hour, tm.tm_min)
+    #[cfg(not(all(target_os = "android", feature = "handheld")))]
+    {
+        let t = now as libc::time_t;
+        let mut tm: libc::tm = unsafe { std::mem::zeroed() };
+        // A time zone chosen in Settings applies at once.
+        crate::timezone::tzset();
+        // SAFETY: localtime_r only writes into the provided struct.
+        if unsafe { libc::localtime_r(&t, &mut tm) }.is_null() {
+            return None;
+        }
+        format_clock(now, tm.tm_hour, tm.tm_min)
+    }
 }
 
 /// How long from `since_epoch` (the wall clock) until just after the next minute begins. Zones are whole minutes
@@ -364,21 +391,21 @@ pub fn next_minute_in() -> Duration {
 
 // The thread. `STATUS` is None until its first read; `SHOWN` says whether the corner is on screen (set by the UI on
 // every pass of its loop: two atomics), `PARKED` that the thread sleeps until it is again.
-#[cfg(not(target_os = "android"))]
+#[cfg(not(all(target_os = "android", not(feature = "handheld"))))]
 static STATUS: Mutex<Option<Status>> = Mutex::new(None);
-#[cfg(not(target_os = "android"))]
+#[cfg(not(all(target_os = "android", not(feature = "handheld"))))]
 static SHOWN: AtomicBool = AtomicBool::new(false);
-#[cfg(not(target_os = "android"))]
+#[cfg(not(all(target_os = "android", not(feature = "handheld"))))]
 static PARKED: AtomicBool = AtomicBool::new(false);
-#[cfg(not(target_os = "android"))]
+#[cfg(not(all(target_os = "android", not(feature = "handheld"))))]
 static THREAD: OnceLock<std::thread::Thread> = OnceLock::new();
 /// Snapshots: 0 = as read, 1 = Wi-Fi off, 2 = connected (`force_wifi`).
-#[cfg(not(target_os = "android"))]
+#[cfg(not(all(target_os = "android", not(feature = "handheld"))))]
 static FORCED_WIFI: AtomicU8 = AtomicU8::new(0);
 
 /// Starts the thread that reads Wi-Fi and the battery every `EVERY` while the corner is on screen and sleeps
 /// (parked, no wake-ups) while it is not. `notify` is called from it when what it read changed.
-#[cfg(not(target_os = "android"))]
+#[cfg(not(all(target_os = "android", not(feature = "handheld"))))]
 pub fn start(notify: impl Fn() + Send + 'static) {
     // The virtual device has no Wi-Fi chip: POCKETUI_WIFI_IFACE=eth0 there stands in for it (docs/VIRTUAL-DEVICE.md).
     let iface = std::env::var("POCKETUI_WIFI_IFACE").unwrap_or_else(|_| "wlan0".into());
@@ -414,7 +441,7 @@ pub fn start(notify: impl Fn() + Send + 'static) {
 }
 
 /// Whether the corner is on screen right now (the UI, after each frame); unparks the thread when it comes back.
-#[cfg(not(target_os = "android"))]
+#[cfg(not(all(target_os = "android", not(feature = "handheld"))))]
 pub fn set_shown(shown: bool) {
     SHOWN.store(shown, Ordering::SeqCst);
     if shown && PARKED.swap(false, Ordering::SeqCst) {
@@ -425,7 +452,7 @@ pub fn set_shown(shown: bool) {
 }
 
 /// What the thread read last. Without the thread (snapshots, tests) read now, from the same files.
-#[cfg(not(target_os = "android"))]
+#[cfg(not(all(target_os = "android", not(feature = "handheld"))))]
 pub fn status() -> Status {
     let kept = *STATUS.lock().unwrap_or_else(|e| e.into_inner());
     let mut s = kept.unwrap_or_else(|| {
@@ -445,7 +472,7 @@ pub fn status() -> Status {
 
 /// Whether Wi-Fi is connected now, read afresh (`operstate`, one small file) instead of the thread's last look, which
 /// sleeps on pages without the corner (the Wi-Fi page): Settings → Connections right after a connect. Not on the UI thread.
-#[cfg(not(target_os = "android"))]
+#[cfg(not(all(target_os = "android", not(feature = "handheld"))))]
 pub fn wifi_now() -> bool {
     match FORCED_WIFI.load(Ordering::Relaxed) {
         1 => false,
@@ -458,13 +485,13 @@ pub fn wifi_now() -> bool {
 }
 
 /// Snapshots (`POCKETUI_SNAPSHOT_WIFI`): the corner as if Wi-Fi were connected or not, whatever this computer has.
-#[cfg(not(target_os = "android"))]
+#[cfg(not(all(target_os = "android", not(feature = "handheld"))))]
 pub fn force_wifi(connected: bool) {
     FORCED_WIFI.store(if connected { 2 } else { 1 }, Ordering::Relaxed);
 }
 
 /// Snapshots: the battery as made up, without the thread (the Updates page's "plug in first").
-#[cfg(not(target_os = "android"))]
+#[cfg(not(all(target_os = "android", not(feature = "handheld"))))]
 pub fn force_battery(battery: Battery) {
     let mut kept = STATUS.lock().unwrap_or_else(|e| e.into_inner());
     kept.get_or_insert_with(Status::default).battery = Some(battery);
@@ -640,7 +667,7 @@ mod tests {
         let mut c = Canvas::new(&mut buf, w, h);
         let (x, base) = (10, 30);
         paint_wifi(&mut c, x, base, PX, 0xffffff);
-        let at = |c: &Canvas, x: i32, y: i32| c.buf[(y * c.w + x) as usize] & 0xff;
+        let at = |c: &Canvas, x: i32, y: i32| c.pixels()[(y * c.w + x) as usize] & 0xff;
         let (r, ww) = (wifi_height(PX), wifi_width(PX));
         let cx = x + ww / 2;
         // Up the middle: the wedge, a gap, the inner arc, a gap, the outer arc, then nothing.

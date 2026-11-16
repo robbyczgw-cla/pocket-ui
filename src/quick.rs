@@ -78,6 +78,8 @@ pub struct Out {
     pub volume_step: bool,
     /// The power menu was closed without choosing anything (B, or the power button again).
     pub power_cancelled: bool,
+    /// "Back to EmulationStation" was chosen (dArkOS): main saves a game and returns directly.
+    pub leave: bool,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -93,11 +95,13 @@ pub enum Row {
     /// Opens the power menu (Sleep, Restart, Power off, Restart pocket-ui, Restart to boot menu), which comes back
     /// here on B.
     Power,
+    /// dArkOS only, on the shelf: direct return to EmulationStation (`Out::leave`).
+    BackToEs,
 }
 
 impl Row {
     /// Every row in panel order, as on a device with all of them (docs/user/settings.md, "Quick settings").
-    pub const ALL: [Row; 7] = [Row::Brightness, Row::Volume, Row::Wifi, Row::Bluetooth, Row::Performance, Row::Fan, Row::Power];
+    pub const ALL: [Row; 8] = [Row::Brightness, Row::Volume, Row::Wifi, Row::Bluetooth, Row::Performance, Row::Fan, Row::Power, Row::BackToEs];
 
     pub fn label(self) -> &'static str {
         match self {
@@ -108,6 +112,7 @@ impl Row {
             Row::Performance => "Performance",
             Row::Fan => "Fan",
             Row::Power => "Power…",
+            Row::BackToEs => crate::rescue::BACK_ROW,
         }
     }
 }
@@ -263,6 +268,8 @@ pub struct Sys {
     pub(crate) view: Polled,
     seen: u64,
     next_refresh: Option<Instant>,
+    /// When Settings last asked for a look at the levels (`watch_levels`).
+    levels_watch: Option<Instant>,
     /// When the first look in the background is due (`WARM_AFTER` after the start); None once it ran.
     warm_at: Option<Instant>,
     /// A step of a level asked before the level was known: the worker took it, the OSD shows when its answer is in
@@ -283,6 +290,8 @@ pub struct Sys {
     shutdown: Option<std::sync::Arc<dyn Fn(PowerAction) + Send + Sync>>,
     /// The power menu was closed by B or the power button (reported once through `Out`).
     power_cancelled: bool,
+    /// "Back to EmulationStation" was chosen, reported once through `Out`.
+    leave_asked: bool,
     /// The UTC offsets of the zones the time page lists, filled by the worker (`load_offsets`); painting only looks.
     pub(crate) offsets: Arc<Mutex<HashMap<String, Option<i32>>>>,
     pub(crate) now_unix: i64,
@@ -366,7 +375,7 @@ impl Sys {
             soft_saved: false,
             mods: Mods::default(),
             home_tap: false,
-            rocknix_keys: crate::fn_keys::rocknix_handles_volume(std::path::Path::new("/")),
+            rocknix_keys: crate::fn_keys::rocknix_handles_volume(std::path::Path::new("/")) || host_keys_volume(),
             quiet_game_osd: crate::mako_osd::quiet_h700_games(),
             #[cfg(feature = "brick")]
             brick_slider: crate::brick_profile::board().is_some_and(|b| b.slider()),
@@ -383,6 +392,7 @@ impl Sys {
             view: Polled::default(),
             seen: 0,
             next_refresh: None,
+            levels_watch: None,
             warm_at: Some(Instant::now() + WARM_AFTER),
             pending_osd: None,
             toast: None,
@@ -393,6 +403,7 @@ impl Sys {
             osd_lost: false,
             shutdown: None,
             power_cancelled: false,
+            leave_asked: false,
             offsets: Arc::new(Mutex::new(HashMap::new())),
             now_unix: unix_now(),
             clock_fake: None,
@@ -790,7 +801,7 @@ impl Sys {
     }
 
     /// The screen colour at `warmth` (clamped to the range), applied and saved like the SELECT + Vol keys do; Settings →
-    /// Look → Screen colour calls it too. Whether it changed.
+    /// Screen & sound → Screen colour calls it too. Whether it changed.
     pub fn set_warmth(&mut self, warmth: i8, game: Game) -> bool {
         let r = crate::display::RANGE;
         let next = warmth.clamp(-r, r);
@@ -1031,6 +1042,7 @@ impl Sys {
         Out {
             consumed: true,
             power_cancelled: std::mem::take(&mut self.power_cancelled),
+            leave: std::mem::take(&mut self.leave_asked),
             ..Out::default()
         }
     }
@@ -1377,7 +1389,11 @@ impl Sys {
             b if b == CONFIRM => {
                 let action = m.choices[m.sel.min(n - 1)].action();
                 self.close();
-                self.run_power(action, now);
+                if let Some(action) = action {
+                    self.run_power(action, now);
+                } else {
+                    self.leave_asked = true;
+                }
             }
             _ => {}
         }
@@ -1450,8 +1466,8 @@ impl Sys {
             self.seen = p.seq;
             let (volume_moved, brightness_moved) = (p.volume != self.view.volume, p.brightness != self.view.brightness);
             self.view = p;
-            // A frame only when the panel shows it (the look at the start comes with the shelf on screen).
-            changed |= self.is_open();
+            // A frame only when the panel or Settings' level rows show it (the look at the start comes with the shelf on screen).
+            changed |= self.is_open() || self.levels_watch.is_some_and(|at| now < at + REFRESH_EVERY);
             let first_look = self.observe.as_ref().is_some_and(|o| o.last.is_none());
             match (self.observe.as_ref().map(|o| o.what), self.view.volume, self.view.brightness) {
                 (Some(What::Volume), Some(v), _) if volume_moved || first_look => {
@@ -1619,6 +1635,18 @@ fn poll_all(hw: &dyn crate::system_ctl::Hw, net: &Arc<NetState>, polled: &Mutex<
 // ---------------------------------------------------------------------------------------------------------
 // Quick settings
 
+/// Android's handheld view keeps what Android lets an app change without a permission: Brightness (this app's window) and
+/// Volume (the media volume), both `android_controls`. Where Android doesn't answer for the volume (after the first look)
+/// the row is not there, never a pretend level; Brightness drops out the same way through `view.brightness` (`rows`).
+#[cfg_attr(not(all(target_os = "android", feature = "handheld")), allow(dead_code))]
+fn android_rows(mut rows: Vec<Row>, unknown: bool, volume: Option<u8>) -> Vec<Row> {
+    rows.retain(|r| matches!(r, Row::Brightness | Row::Volume));
+    if !unknown && volume.is_none() {
+        rows.retain(|r| *r != Row::Volume);
+    }
+    rows
+}
+
 impl Sys {
     #[cfg(not(feature = "brick"))]
     pub(crate) fn rows(&self) -> Vec<Row> {
@@ -1640,6 +1668,10 @@ impl Sys {
             Which::Fan => Row::Fan,
         }));
         rows.push(Row::Power);
+        // Android's handheld view: Android owns the radios, the performance profiles and power (`device::ANDROID_HIDES`).
+        if crate::device::android_profile() {
+            rows = android_rows(rows, unknown, self.view.volume);
+        }
         rows
     }
 
@@ -1663,6 +1695,8 @@ impl Sys {
             Which::Fan => Row::Fan,
         }));
         if !{ #[cfg(feature = "brick")] { crate::device::brick() } #[cfg(not(feature = "brick"))] { false } } { rows.push(Row::Power); }
+        // dArkOS: the way back to EmulationStation, where a player looks for it (not over a game: the pause menu has its own).
+        if crate::darkos::host() && !self.over_game { rows.push(Row::BackToEs); }
         rows
     }
 
@@ -1701,6 +1735,30 @@ impl Sys {
         }
     }
 
+    /// One step of Brightness or Volume from Settings → Screen & sound: the panel's own step (`adjust`), so the two rows
+    /// change the same value with the same limits (extra dim below the lowest backlight, Kids Mode's ceiling, the Brick's
+    /// slider). Settings keeps its rows painted from `level_label` and asks for a fresh look with `watch_levels`.
+    pub fn step_level(&mut self, row: Row, dir: i32, game: Game, now: Instant) {
+        if matches!(row, Row::Brightness | Row::Volume) {
+            self.adjust(row, dir, &Ctx { shelf: false, game }, now);
+        }
+    }
+
+    /// A snapshot of Settings: the look at the levels runs here, so the picture has them (never so in the running app).
+    pub fn look_levels_now(&mut self) {
+        poll_all(&*self.hw, &self.net, &self.polled, false);
+        self.view = self.polled.lock().unwrap().clone();
+    }
+
+    /// Settings shows the Brightness or Volume row: one background look at the levels when the last is older than the
+    /// panel's refresh, so a level changed elsewhere (the keys, Android) shows; its answer repaints (`tick`).
+    pub fn watch_levels(&mut self, now: Instant) {
+        if self.levels_watch.is_none_or(|at| now >= at + REFRESH_EVERY) {
+            self.levels_watch = Some(now);
+            self.poll(false);
+        }
+    }
+
     fn adjust(&mut self, row: Row, dir: i32, ctx: &Ctx, now: Instant) {
         // The panel covers the shelf, so no OSD: the row itself moves.
         match row {
@@ -1735,6 +1793,10 @@ impl Sys {
             Row::Fan => self.step_profile(Which::Fan, 1, true, now),
             // Over the panel; B gives the panel back.
             Row::Power => self.open_power(now),
+            Row::BackToEs => {
+                self.leave_asked = true;
+                self.close();
+            }
             _ => {}
         }
     }
@@ -2061,6 +2123,18 @@ impl Sys {
     }
 }
 
+/// dArkOS's `ogage` moves the volume on Vol+/Vol- and the brightness on HOME + Vol by itself (docs/DARKOS.md), like
+/// ROCKNIX's `input_sense`: pocket-ui then only shows what it did.
+#[cfg(feature = "brick")]
+fn host_keys_volume() -> bool {
+    crate::darkos::host() && crate::darkos::ogage_runs(std::path::Path::new("/"))
+}
+
+#[cfg(not(feature = "brick"))]
+fn host_keys_volume() -> bool {
+    false
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -2179,7 +2253,7 @@ mod tests {
         assert!(Look::load(&s.data_dir).soft);
     }
 
-    /// Settings → Look → Screen colour: the same look, the same file and the same range as SELECT + Vol.
+    /// Settings → Screen & sound → Screen colour: the same look, the same file and the same range as SELECT + Vol.
     #[test]
     fn the_screen_colour_row_sets_the_look_the_keys_set() {
         let (mut s, _hw) = sys();
@@ -2332,6 +2406,43 @@ mod tests {
         tap(&mut s, Button::VolUp, &SHELF, later);
         assert_eq!((s.dim(), hw.brightness()), (0, Some(10)));
         assert_eq!(Look::load(&s.data_dir).dim, 0);
+    }
+
+    /// Settings v2: Settings → Screen & sound's Brightness and Volume rows step the very values the quick settings' rows do,
+    /// with the same limits (extra dim below the lowest backlight, the top at 100) and the same label: one logic, two places.
+    #[test]
+    fn settings_level_rows_change_what_the_quick_settings_change() {
+        let now = Instant::now();
+        let (mut panel, hw_p) = sys();
+        let (mut rows, hw_r) = sys();
+        for (s, hw) in [(&mut panel, &hw_p), (&mut rows, &hw_r)] {
+            hw.set_brightness(20);
+            hw.set_volume(90);
+            poll_all(&*s.hw, &s.net, &s.polled, false);
+            s.take_polled();
+        }
+        panel.open_quick(now);
+        assert!(!rows.is_open(), "Settings' rows need no panel");
+        // Down past the lowest backlight into extra dim, and up again.
+        for dir in [-1, -1, -1, -1, -1, 1, 1, 1] {
+            panel.adjust(Row::Brightness, dir, &SHELF, now);
+            rows.step_level(Row::Brightness, dir, Game::None, now);
+            assert_eq!((hw_r.brightness(), rows.dim()), (hw_p.brightness(), panel.dim()), "brightness {dir}");
+            assert_eq!(rows.level_label(Row::Brightness, now), panel.level_label(Row::Brightness, now));
+        }
+        assert!(hw_r.brightness() != Some(20) || rows.dim() > 0, "the rows moved it");
+        // Up to the top and down.
+        for dir in [1, 1, 1, -1] {
+            panel.adjust(Row::Volume, dir, &SHELF, now);
+            rows.step_level(Row::Volume, dir, Game::None, now);
+            assert_eq!(hw_r.volume(), hw_p.volume(), "volume {dir}");
+            assert_eq!(rows.level_label(Row::Volume, now), panel.level_label(Row::Volume, now));
+        }
+        assert_eq!(hw_r.volume(), Some(95), "90, up to 100 and no further, then a step down");
+        // Only the two levels: another row of the panel is not Settings' business.
+        let before = (hw_r.brightness(), hw_r.volume(), rows.profile_change.is_some());
+        rows.step_level(Row::Performance, 1, Game::None, now);
+        assert_eq!((hw_r.brightness(), hw_r.volume(), rows.profile_change.is_some()), before);
     }
 
     #[test]
@@ -3176,6 +3287,18 @@ mod tests {
     }
 
     #[test]
+    fn back_to_es_from_power_menu_requests_return_without_a_power_command() {
+        let (mut s, hw) = sys();
+        let now = Instant::now();
+        s.open_power(now);
+        if let Screen::Power(m) = &mut s.screen { m.choices = vec![Choice::BackToEs]; }
+        let out = key(&mut s, Button::East, true, &SHELF, now);
+        assert!(out.leave);
+        assert!(!s.power_menu_open());
+        assert!(hw.state().power_log.is_empty());
+    }
+
+    #[test]
     fn each_power_menu_entry_runs_its_own_system_action_and_closes_the_menu() {
         let expected = [
             (Choice::Sleep, PowerAction::Sleep),
@@ -3463,5 +3586,14 @@ mod tests {
         assert!(s.clock_by_hand, "the worker never answered");
         assert_eq!(spy.inner.state().clock_log.len(), 1);
         assert!(!spy.on_ui.lock().unwrap().iter().any(|w| w.starts_with("set_clock")), "set on the UI thread");
+    }
+
+    #[test]
+    fn android_handheld_view_keeps_brightness_and_volume_and_drops_a_row_android_does_not_answer() {
+        let all = Row::ALL.to_vec();
+        assert_eq!(android_rows(all.clone(), false, Some(40)), vec![Row::Brightness, Row::Volume], "Linux's radios, profiles and power are Android's");
+        assert_eq!(android_rows(all.clone(), true, None), vec![Row::Brightness, Row::Volume], "before the first look both rows stand, with \"…\"");
+        assert_eq!(android_rows(all.clone(), false, None), vec![Row::Brightness], "no volume steps from Android: no row, no pretend level");
+        assert_eq!(android_rows(vec![Row::Wifi, Row::Power], false, Some(5)), Vec::<Row>::new());
     }
 }

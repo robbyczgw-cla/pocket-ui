@@ -67,8 +67,18 @@ pub struct Shot {
 }
 
 impl Shot {
-    /// The game as the shelf names it ("Tetris").
+    /// A picture of the player's own shelf (`share_shelf`), not a screenshot of a game.
+    pub fn is_shelf_picture(&self) -> bool {
+        self.system == crate::share_shelf::FOLDER && self.game == crate::share_shelf::NAME
+    }
+
+    /// The game as the shelf names it ("Tetris"). The player's own shelf picture (`share_shelf`) is no game: its file
+    /// name ("pocket-ui shelf <time>.png") must not be title-cased into "Pocket-Ui Shelf", it is "My shelf" (the key
+    /// is translated where it is painted).
     pub fn title(&self) -> String {
+        if self.is_shelf_picture() {
+            return "My shelf".into();
+        }
         let name = crate::library::shelf_name(&self.game);
         if name.is_empty() {
             self.game.clone()
@@ -256,6 +266,8 @@ pub enum Out {
     Delete(PathBuf),
     /// Y: this file becomes the game's picture on the shelf.
     UseOnShelf(Shot),
+    /// A on the first row of Settings → Games → Screenshots: make the picture of the player's shelf (`share_shelf`).
+    MakeShelf,
 }
 
 /// The page: the list, the full-screen view, the delete question.
@@ -276,8 +288,12 @@ pub struct Gallery {
     pub message: Option<(String, bool)>,
     /// The day the page calls "Today".
     pub today: (i32, u32, u32),
-    /// Y can do something: the shelf shows game pictures (Settings → Games → Extras → Game pictures).
+    /// Y can do something: the shelf shows game pictures (Settings → Games → Box art & downloads → Game pictures).
     pub shelf: bool,
+    /// The selection is on the page's first row, "My shelf as a picture" (Scope::All only; the list's pictures follow).
+    pub make: bool,
+    /// The picture of the shelf is being made (the row does nothing until it is done).
+    pub making: bool,
 }
 
 /// How many rows L1 and R1 move.
@@ -285,7 +301,13 @@ const PAGE: usize = 5;
 
 impl Gallery {
     pub fn new(scope: Scope, shots: Vec<Shot>, loaded: bool, today: (i32, u32, u32), shelf: bool) -> Gallery {
-        Gallery { scope, shots, loaded, sel: 0, view: View::List, armed: false, top: 0, message: None, today, shelf }
+        let make = scope == Scope::All && shots.is_empty();
+        Gallery { scope, shots, loaded, sel: 0, view: View::List, armed: false, top: 0, message: None, today, shelf, make, making: false }
+    }
+
+    /// The page starts with the row that makes the picture of the shelf: every game's screenshots, not one game's.
+    pub fn has_make_row(&self) -> bool {
+        self.scope == Scope::All
     }
 
     pub fn shots(&self) -> &[Shot] {
@@ -299,20 +321,26 @@ impl Gallery {
     /// The list was read again: the page takes it and keeps the selected picture if it is still there.
     pub fn refresh(&mut self, shots: Vec<Shot>) {
         let keep = self.current().map(|s| s.path.clone());
+        let first_reading = !self.loaded;
         self.shots = shots;
         self.loaded = true;
+        // The page opened before the folder was read: the screenshots that turn up are what the player came for.
+        if first_reading && !self.shots.is_empty() {
+            self.make = false;
+        }
         self.sel = keep.and_then(|p| self.shots.iter().position(|s| s.path == p)).unwrap_or(self.sel.min(self.shots.len().saturating_sub(1)));
         if self.shots.is_empty() {
             self.view = View::List;
             self.armed = false;
+            self.make = self.has_make_row();
         }
     }
 
-    /// A press. `confirm` and `cancel` are the buttons for A and B (Settings → Playing → Button layout).
+    /// A press. `confirm` and `cancel` are the buttons for A and B (Settings → Controls → Buttons → Button layout).
     pub fn press(&mut self, b: Button, confirm: Button, cancel: Button) -> Out {
-        let before = (self.sel, self.view);
+        let before = (self.sel, self.view, self.make);
         let out = self.act(b, confirm, cancel);
-        if (self.sel, self.view) != before {
+        if (self.sel, self.view, self.make) != before {
             self.armed = false;
             self.message = None;
         }
@@ -340,7 +368,23 @@ impl Gallery {
         }
         let last = self.shots.len().saturating_sub(1);
         let full = self.view == View::Full;
+        if self.make && !full {
+            return match b {
+                b if b == cancel => Out::Close,
+                b if b == confirm && !self.making => Out::MakeShelf,
+                Button::Down | Button::R1 if !self.shots.is_empty() => {
+                    self.make = false;
+                    self.sel = 0;
+                    Out::None
+                }
+                _ => Out::None,
+            };
+        }
         match b {
+            Button::Up if !full && self.sel == 0 && self.has_make_row() => {
+                self.make = true;
+                Out::None
+            }
             b if b == cancel => {
                 if full {
                     self.view = View::List;
@@ -401,10 +445,18 @@ impl Gallery {
         self.message = Some((text.to_string(), false));
     }
 
+    /// The picture of the shelf is being made, or it came to something (`said`/`failed` say what).
+    pub fn making(&mut self, on: bool) {
+        self.making = on;
+    }
+
     /// The hint bar.
     pub fn hints(&self) -> Vec<(&'static str, &'static str)> {
         if self.armed {
             return vec![("A", "Delete now"), ("B", "Keep it")];
+        }
+        if self.make && self.view == View::List {
+            return if self.making { vec![("B", "Back")] } else { vec![("A", "Make the picture"), ("B", "Back")] };
         }
         if self.shots.is_empty() {
             return vec![("B", "Back")];
@@ -624,6 +676,72 @@ mod tests {
         vec![shot("gba", "Alpha", "2026-10-24 18-05-09", 1), shot("gba", "Alpha", "2026-10-24 17-00-00", 1), shot("gb", "Tetris", "2026-10-23 09-00-00", 1)]
     }
 
+    // ---- the first row: "My shelf as a picture" -------------------------------------------------------------------
+
+    #[test]
+    fn up_from_the_first_screenshot_reaches_the_shelf_picture_row_and_a_makes_it() {
+        let mut p = page(three());
+        assert!(!p.make, "the page opens on the screenshots: that is what most come for");
+        assert_eq!(p.press(Button::Up, A, B), Out::None);
+        assert!(p.make, "Up from the first one is the row");
+        assert_eq!(p.hints(), vec![("A", "Make the picture"), ("B", "Back")]);
+        assert_eq!(p.press(A, A, B), Out::MakeShelf);
+        // Down comes back to the first screenshot, and A there opens it as before.
+        assert_eq!(p.press(Button::Down, A, B), Out::None);
+        assert!((!p.make, p.sel) == (true, 0));
+        p.press(A, A, B);
+        assert_eq!(p.view, View::Full);
+    }
+
+    #[test]
+    fn an_empty_page_still_has_the_row_so_the_shelf_can_be_shared_before_the_first_screenshot() {
+        let p = Gallery::new(Scope::All, Vec::new(), true, (2026, 10, 24), true);
+        assert!(p.make);
+        assert_eq!(p.hints(), vec![("A", "Make the picture"), ("B", "Back")]);
+        let mut p = p;
+        assert_eq!(p.press(Button::Down, A, B), Out::None, "nothing below it");
+        assert!(p.make);
+        assert_eq!(p.press(A, A, B), Out::MakeShelf);
+        assert_eq!(p.press(B, A, B), Out::Close);
+        // X and Y have nothing to act on there.
+        assert_eq!((p.press(Button::North, A, B), p.press(Button::West, A, B)), (Out::None, Out::None));
+        assert!(!p.armed);
+    }
+
+    #[test]
+    fn a_game_s_own_list_has_no_shelf_picture_row() {
+        let mut p = Gallery::new(Scope::Game("Alpha".into()), three(), true, (2026, 10, 24), true);
+        assert!(!p.has_make_row());
+        assert_eq!(p.press(Button::Up, A, B), Out::None);
+        assert!(!p.make);
+        let e = Gallery::new(Scope::Game("Alpha".into()), Vec::new(), true, (2026, 10, 24), true);
+        assert!(!e.make);
+        assert_eq!(e.hints(), vec![("B", "Back")]);
+    }
+
+    #[test]
+    fn while_the_picture_is_made_a_second_a_does_nothing() {
+        let mut p = Gallery::new(Scope::All, Vec::new(), true, (2026, 10, 24), true);
+        assert_eq!(p.press(A, A, B), Out::MakeShelf);
+        p.making(true);
+        assert_eq!(p.press(A, A, B), Out::None, "it would make two pictures");
+        assert_eq!(p.hints(), vec![("B", "Back")]);
+        p.making(false);
+        p.said("Saved");
+        assert_eq!(p.press(A, A, B), Out::MakeShelf);
+    }
+
+    #[test]
+    fn a_page_that_opened_before_the_folder_was_read_lands_on_the_screenshots_when_they_turn_up() {
+        let mut p = Gallery::new(Scope::All, Vec::new(), false, (2026, 10, 24), true);
+        assert!(p.make, "nothing yet: the row is all there is");
+        p.refresh(three());
+        assert!(!p.make && p.sel == 0, "what the player came for");
+        // A later reading that finds none leaves the row.
+        p.refresh(Vec::new());
+        assert!(p.make);
+    }
+
     #[test]
     fn file_names_are_read_from_the_end() {
         let (g, w, n) = split_name("Tetris (World) (Rev 1) 2026-10-24 18-05-09.png").unwrap();
@@ -778,7 +896,8 @@ mod tests {
     #[test]
     fn a_new_reading_keeps_the_picture_you_are_on() {
         let mut p = Gallery::new(Scope::All, Vec::new(), false, (2026, 10, 24), true);
-        assert!(!p.loaded && p.hints() == [("B", "Back")]);
+        // Before the folder is read the page has the shelf picture row and nothing else to act on.
+        assert!(!p.loaded && p.hints() == [("A", "Make the picture"), ("B", "Back")]);
         p.refresh(three());
         assert!(p.loaded);
         p.sel = 1;
@@ -902,4 +1021,25 @@ mod tests {
         assert!(use_on_shelf(&dir.join("gba/None 2026-10-24 18-05-11.png"), &dest).is_err());
         assert_eq!(std::fs::read(&dest).unwrap(), std::fs::read(&shot_file).unwrap());
     }
+    #[test]
+    fn the_shelf_picture_is_titled_my_shelf_in_every_language_not_pocket_ui_shelf() {
+        let dir = scratch("shelf-title");
+        let stamp = crate::screenshot::Stamp { year: 2026, month: 11, day: 16, hour: 9, min: 30, sec: 5 };
+        // The file the shelf picture is really saved under (`app_share_shelf`).
+        let path = crate::screenshot::target(&dir, crate::share_shelf::FOLDER, crate::share_shelf::NAME, &stamp);
+        put(&dir, "shelf", path.file_name().unwrap().to_str().unwrap());
+        put(&dir, "gba", "pocket-ui shelf 2026-11-16 09-30-06.png");
+        let shots = scan(&dir);
+        let shelf = shots.iter().find(|s| s.system == "shelf").expect("the picture is listed");
+        assert!(shelf.is_shelf_picture());
+        assert_eq!(shelf.title(), "My shelf", "not the file name title-cased into \"Pocket-Ui Shelf\"");
+        for lang in crate::i18n::Lang::ALL {
+            let shown = crate::i18n::tr_in(lang, &shelf.title());
+            assert!(!shown.to_lowercase().contains("pocket"), "{lang:?}: {shown:?}");
+            assert_eq!(lang == crate::i18n::Lang::En, shown == "My shelf", "{lang:?} has its own words for it: {shown:?}");
+        }
+        // A game's screenshot is no shelf picture, even when its file is called alike.
+        assert!(!shots.iter().find(|s| s.system == "gba").unwrap().is_shelf_picture());
+    }
+
 }

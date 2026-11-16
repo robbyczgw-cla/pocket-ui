@@ -35,6 +35,7 @@ its emulator can draw. Nothing that the first frame doesn't need runs before it 
     the display look (`Sys::new`, gamma), recent games, favourites, `library.json` (pinned stickers), Curator's
     switches (Lens and Home rows), the retired fallback list and the fan profile (a game On start continues needs it),
     sleep's settings.
+- The library worker also indexes save/state file names before its result is used, so the first painted cases already know which games have saves. `play_evidence::Files` lists each shared folder once and uses name sets for game lookups; it reads no save contents. Refreshes after a library change or game run happen on workers. Device cold-start cost of this added directory pass still needs measurement.
 - **pocket-core** opens the pads, the touch screen and the sound device while its window and GL come up, and makes
   its command FIFO with `mkfifo(3)` instead of the program.
 - **The launcher** asks sway every 50 ms at boot (it was 250 ms).
@@ -63,7 +64,7 @@ about 42 ms after `main` (2026-10-23), once the display look was applied at star
 The slow-load note has its own dark backing and light type, independent of the menu appearance, so a light launch picture or black letterbox cannot hide it.
 
 **Immediate launch response** (`src/app_launch.rs`): A starts the insertion before filesystem preparation. A worker
-checks the selected file, the first-controls-card marker, resume compatibility, window rules and emulator settings.
+checks the selected file, resume compatibility, window rules and emulator settings.
 The captured game and route stay fixed while it works; a list rescan waits. The process starts after a presented
 response frame and a successful preparation. Errors still show their original notice. The loading spinner also covers
 preparation lasting over three seconds. A button during preparation skips the insertion and any later reminder.
@@ -72,8 +73,8 @@ animation frame at 50 ms, continued painting while waiting and the exact game ev
 `step launch …` lines bracket preparation and `launch first response painted` records the response independently
 of the existing `launch` process-start marker.
 On a Mini V2 with an existing resume state, the installed 0.3.2 spent 49 ms of 52 ms before `launch` in the
-file and directory fsyncs of `controls-card-seen`: the first-console marker was persisted even though resuming
-suppressed the controls card. An earlier trace showed 1,289 ms before `launch`; that outlier was not repeated
+file and directory fsyncs of `controls-card-seen`: the first-console marker of the controls card (gone since 0.5) was
+persisted even though resuming suppressed the card. An earlier trace showed 1,289 ms before `launch`; that outlier was not repeated
 under step profiling. Other fsyncs on the same card took over one second. The regression injects a slow worker
 rather than depending on the current SD-card cache or writeback timing. After the change, the Mini V2 presented
 its response at 9.4 ms while the controls-marker check completed at 31.4 ms (same fixture, no recorder).
@@ -113,7 +114,7 @@ A missing or corrupt picture cancels the reminder and its hold;
 pocket-core also drops that hold if the resume fails, is skipped, or keeps a newer battery save. Pause, sleep and screen
 off end the launch hold so returning to play never waits for an obsolete card. Ordinary launches retain their 2 s
 deadline safety bound; `HOLD_STILL=1` waits for a button. Other emulators can't be held: the card stays until the game covers it.
-Off: settings.json `no_where_was_i`; never in Kids Mode; Easy drops the time played.
+Off by default (0.5), On: settings.json `where_was_i` (only On is written; the old `no_where_was_i` is ignored); never in Kids Mode; Easy drops the time played.
 The Playing category's summary includes the reminder as its own part, keeping device-specific omissions aligned with
 their rows. Snapshots:
 `where-was-i[:plain|long|easy|wait|press|early-press|missing]` (an optional third argument is a frame to show); tests:
@@ -124,7 +125,7 @@ their rows. Snapshots:
 `<data>/started-boot`), without a crash notice, and when `<data>/last-game.json` says the game ended normally. In the
 virtual device the boot id never changes: remove `started-boot` to try a "first start".
 
-**Settings → Playing → Buttons → Button layout** (`src/button_layout.rs`; pure shared `ButtonLayout` in `src/button_layout_model.rs`, also used by Android controls cards): the menus' code and hints speak in four roles on
+**Settings → Controls → Buttons → Button layout** (`src/button_layout.rs`; pure shared `ButtonLayout` in `src/button_layout_model.rs`, also used by the Android player's button names): the menus' code and hints speak in four roles on
 `Button::East` (A, confirm), `South` (B, back), `North` (X) and `West` (Y). The setting (Nintendo: as printed; Xbox:
 A and B swapped, X and Y swapped) decides which physical button plays which role. The one place it is applied is the
 closure `main` hands to `pad::linux::supervise` (`Remap::event`, on the pad threads, before the event reaches the UI
@@ -137,7 +138,7 @@ safe mode (`app_rescue::run` has its own loop and runs before settings.json is r
 the others; a new thing that must stay physical belongs outside the UI thread's event path. Tests: `button_layout.rs`
 and `tests/button_layout.rs`.
 
-**Settings → Playing → Buttons → Button symbols** (`src/button_prompts.rs`, the page `src/app_buttons.rs`, which also holds Button layout):
+**Settings → Controls → Buttons → Button symbols** (`src/button_prompts.rs`, the page `src/app_buttons.rs`, which also holds Button layout):
 how a hint key looks, never which button it is. Every key is drawn by `kit::key_cap` (both hint bars, the picture of the four buttons on
 the Buttons page, the manual's chips; the manual's controls picture asks `button_prompts::shown`/`colours` itself): Nintendo
 draws the letter on the hint's cap, Xbox the letter on its colour (`colours`), PlayStation the shape for the role
@@ -153,3 +154,27 @@ of every set for 4.5:1 in both appearances and a page colour of its own per set 
 keyed by it). The constants (`VOID`, `CHALK` …) and `DARK` stay Warm's: overlays over a game keep them.
 `POCKETUI_COLOURS=warm|indigo-cube|grey-brick|green-x|blue-station` overrides settings.json for snapshots;
 `POCKETUI_RETRO=cocoa|pea` paints a snapshot in the Retro style.
+
+## H700 game graphics and the page cache
+
+`core_prewarm` runs only after the shelf's first frame. On H700 it reads the chosen libretro core, the exact
+`POCKETUI_HOST_BIN` executable (default `/storage/pocket-ui/pocket-core`), and the installed EGL/Mesa libraries,
+including the versioned Gallium driver, into the page cache. It creates no context or surface and calls no library
+code. The existing idle I/O and nice 19 worker has one 35 MiB budget for the whole set; canonical paths avoid
+reading symlinks twice, and missing or oversized files are skipped. A launch or sleep cancels the next 256 KiB
+piece. Other devices keep the single-core warm-up; Android keeps none. `POCKETUI_NO_CORE_PREWARM=1` disables
+both the core and H700 runtime reads for measurement. No player preference or persistent cache is changed.
+
+`pocket-core`'s first-frame log splits graphics into display/EGL, window, context, surface, make-current/GL entry points,
+renderer shaders and overlay. The remaining `graphics` marker is the optional hardware-rendered core's setup.
+Texture upload, first drawing and swap follow in `first frame`. Do not compare one substep with the older combined
+`graphics` number, or a Cozy hold with Quick. Cold tests must state whether Mesa's disk cache was present and when
+`drop_caches` ran; the page cache and shader cache are separate. The Plus report `PLUS-START-TIMES.md` in the
+review workspace records the five-run device comparisons and the limits of the boot analysis.
+
+On the RG35XX Plus (16 November 2026), five alternating cold Quick starts per version, with an empty private Mesa
+shader cache and five seconds on the shelf: core-only warm-up 991 ms median, runtime warm-up 656 ms (33.8% less).
+Renderer setup fell from 167.9 to 41.9 ms, GL entry-point setup from 34.8 to 8.8 ms. The shelf's own first-frame
+medians were 1377 and 1374 ms; those small differences are within the observed spread. The warm-up read about
+30.6 MiB in about 1.3–1.7 seconds after the shelf appeared. This does not measure an immediate A before the worker can
+finish, nor power-on time, and the older 2.6-second game-start result was not reproduced in this setup.

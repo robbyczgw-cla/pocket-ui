@@ -1,4 +1,4 @@
-//! Settings → Playing → Button layout, from a physical button to what a screen does (docs/DEVELOPING.md): a pad's
+//! Settings → Controls → Buttons → Button layout, from a physical button to what a screen does (docs/DEVELOPING.md): a pad's
 //! button goes through `Remap`, then `PadState::merge` as in `user_event`, then the screen's own `press`/`input`.
 //! The screens here are the ones that take roles the way all of them do (`Button::East` confirms).
 

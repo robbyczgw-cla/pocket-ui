@@ -69,7 +69,7 @@ in Settings → Connections → Wi-Fi, and the Pocket and your computer (on Tail
 
 Moonlight can use the tailnet too: put the PC's Tailscale address in `moonlight.conf` ([PC streaming](pc-streaming.md)).
 
-The [web companion](web-companion.md) works only over the tailnet: your library, uploads and play time in a browser.
+The [web companion](web-companion.md) works over the tailnet and on your home Wi-Fi: your library, uploads and play time in a browser. Your own Tailscale devices need no code.
 
 ## What the status says
 

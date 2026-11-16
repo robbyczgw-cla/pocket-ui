@@ -615,14 +615,33 @@ pub fn bands_around(view_w: u32, view_h: u32, game: Rect) -> Vec<(u32, u32, u32,
 /// Draws the bound program's quad on the bands around `game` only (scissored): whatever is drawn
 /// behind the picture costs nothing where the picture covers it.
 pub(crate) fn draw_around(gl: &glow::Context, view_w: u32, view_h: u32, game: Rect) {
+    draw_around_at(gl, view_w, view_h, game, (0, 0));
+}
+
+/// `draw_around` for a view that does not start at the framebuffer's bottom-left corner: `origin` is where the view's
+/// bottom-left corner is (the scissor box counts in framebuffer pixels, the viewport only moves what is drawn).
+pub(crate) fn draw_around_at(gl: &glow::Context, view_w: u32, view_h: u32, game: Rect, origin: (i32, i32)) {
     unsafe {
         gl.enable(glow::SCISSOR_TEST);
         for (x, y, w, h) in bands_around(view_w, view_h, game) {
-            gl.scissor(x as i32, (view_h - y - h) as i32, w as i32, h as i32);
+            gl.scissor(origin.0 + x as i32, origin.1 + (view_h - y - h) as i32, w as i32, h as i32);
             gl.draw_arrays(glow::TRIANGLE_STRIP, 0, 4);
         }
         gl.disable(glow::SCISSOR_TEST);
     }
+}
+
+/// A frame for a part of the screen: Android's player draws the frame in the room its touch controls leave, around a
+/// picture it placed itself (`Layer::draw` is given the room's size and the picture's hole in it).
+#[derive(Clone, Copy, PartialEq, Debug)]
+pub struct Placed {
+    pub style: Style,
+    /// The room in the viewport, in pixels from its bottom-left corner: x, y, width, height.
+    pub room: (i32, i32, u32, u32),
+    /// The picture in the room, origin top-left, exactly the rectangle the picture is drawn on.
+    pub hole: Rect,
+    /// Output pixels per game pixel.
+    pub px: f32,
 }
 
 /// What the texture holds.
@@ -658,6 +677,10 @@ pub struct Layer {
     job: Option<Job>,
     /// The cache's folder (`frame_cache::dir`), looked up once; None inside: no cache.
     cache: Option<Option<PathBuf>>,
+    /// Where the view's bottom-left corner is in the framebuffer (`set_origin`).
+    origin: (i32, i32),
+    /// Why the frame shader did not compile (the GL log), for a caller that has no stderr (Android's player logs it).
+    pub shader_error: Option<String>,
 }
 
 impl Layer {
@@ -676,7 +699,16 @@ impl Layer {
             asynchronous: false,
             job: None,
             cache: None,
+            origin: (0, 0),
+            shader_error: None,
         }
+    }
+
+    /// For a view that is a part of the framebuffer (Android's player draws the frame in the room the touch controls
+    /// leave; its viewport is set by the caller): the framebuffer pixel of the view's bottom-left corner, which the
+    /// scissor boxes count from. The default (0, 0) is the whole framebuffer, as on Linux.
+    pub fn set_origin(&mut self, x: i32, y_from_bottom: i32) {
+        self.origin = (x, y_from_bottom);
     }
 
     /// On: a frame that isn't ready is prepared (read from the cache or drawn) on a thread, and `draw` draws no frame
@@ -714,6 +746,7 @@ impl Layer {
                 },
                 Err(log) => {
                     eprintln!("bezel: shader failed: {log}");
+                    self.shader_error = Some(log);
                     return true;
                 }
             }
@@ -747,7 +780,7 @@ impl Layer {
         self.update_light(gl);
         if self.bind(gl, view_w, view_h, game) {
             // The picture covers its own rectangle, so only the bands around it are drawn.
-            draw_around(gl, view_w, view_h, game);
+            draw_around_at(gl, view_w, view_h, game, self.origin);
         }
         true
     }
@@ -833,7 +866,7 @@ impl Layer {
         }
         unsafe {
             gl.enable(glow::SCISSOR_TEST);
-            gl.scissor(r.x as i32, (view_h - r.y - r.h) as i32, r.w as i32, r.h as i32);
+            gl.scissor(self.origin.0 + r.x as i32, self.origin.1 + (view_h - r.y - r.h) as i32, r.w as i32, r.h as i32);
             gl.draw_arrays(glow::TRIANGLE_STRIP, 0, 4);
             gl.disable(glow::SCISSOR_TEST);
         }

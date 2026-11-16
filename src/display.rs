@@ -144,13 +144,20 @@ impl Look {
         v
     }
 
-    /// 256-entry lookup tables for the Soft backend (multiply only).
+    /// The Soft backend's multiply per channel in 16-bit fixed point: a value v becomes `(v * m + 0x8000) >> 16`.
+    pub fn multipliers(&self) -> [u32; 3] {
+        // Rounded up: a value exactly half way (255 at 70 %) goes up, as the float multiply did.
+        self.gains().map(|g| (g.clamp(0.0, 1.0) * 65536.0).ceil() as u32)
+    }
+
+    /// 256-entry lookup tables for the Soft backend (multiply only): `multipliers`, so pocket-core's lookups and pocket-ui's
+    /// multiply give the same picture.
     pub fn tables(&self) -> [[u8; 256]; 3] {
-        let gains = self.gains();
+        let m = self.multipliers();
         let mut t = [[0u8; 256]; 3];
-        for (c, gain) in gains.iter().enumerate() {
-            for (i, out) in t[c].iter_mut().enumerate() {
-                *out = (i as f32 * gain + 0.5).min(255.0) as u8;
+        for (c, m) in m.iter().enumerate() {
+            for (v, out) in t[c].iter_mut().enumerate() {
+                *out = ((v as u32 * m + 0x8000) >> 16).min(255) as u8;
             }
         }
         t
@@ -161,10 +168,13 @@ impl Look {
         if self.warmth == 0 && self.night == 0 && self.dim == 0 {
             return;
         }
-        let t = self.tables();
+        // One multiply per channel, the same as the tables: a few vector instructions per four pixels, where three
+        // lookups per pixel took 7.4 ms of every 1024x768 frame on the Brick's A53 (BRICK-60FPS.md).
+        let m = self.multipliers();
         for px in buf.iter_mut() {
             let p = *px;
-            *px = (t[0][(p >> 16 & 0xff) as usize] as u32) << 16 | (t[1][(p >> 8 & 0xff) as usize] as u32) << 8 | t[2][(p & 0xff) as usize] as u32;
+            let ch = |shift: u32, m: u32| ((p >> shift & 0xff) * m + 0x8000) >> 16;
+            *px = ch(16, m[0]) << 16 | ch(8, m[1]) << 8 | ch(0, m[2]);
         }
     }
 
@@ -235,6 +245,43 @@ mod tests {
 
     fn look(warmth: i8, contrast: i8) -> Look {
         Look { warmth, contrast, soft: false, night: 0, dim: 0 }
+    }
+
+    /// Every look the player can make: the temperature steps, the night light's range, extra dim, and mixes of them.
+    fn every_look() -> Vec<Look> {
+        let mut all = Vec::new();
+        for warmth in -10..=10i8 {
+            for night in [0u16, 1000, 1900, 2700, 3200, 3800, 4500, 5200, 6000, 6400] {
+                for dim in 0..=DIM_STEPS {
+                    all.push(Look { warmth, contrast: 0, soft: true, night, dim });
+                }
+            }
+        }
+        // The night light fades in by the kelvin: every value it passes through.
+        all.extend((1000..=6500u16).step_by(7).map(|night| Look { night, soft: true, ..look(0, 0) }));
+        all
+    }
+
+    /// The Soft look is one multiply per channel (`apply_soft`: before, three table lookups per pixel cost 7.4 ms of each
+    /// Brick frame) and gives exactly what pocket-core's tables give: every value of every channel, for every look. The
+    /// tables stay within one step of the float multiply they were before.
+    #[test]
+    fn the_soft_look_multiplies_exactly_as_its_tables_for_every_look() {
+        let grey: Vec<u32> = (0..256u32).map(|v| 0xff00_0000 | v << 16 | v << 8 | v).collect();
+        for l in every_look().into_iter().filter(|l| !l.is_neutral()) {
+            let t = l.tables();
+            let mut px = grey.clone();
+            l.apply_soft(&mut px);
+            for (v, got) in px.iter().enumerate() {
+                let want = (t[0][v] as u32) << 16 | (t[1][v] as u32) << 8 | t[2][v] as u32;
+                assert_eq!(*got, want, "{l:?} at {v}");
+                for (c, g) in l.gains().iter().enumerate() {
+                    let float = (v as f32 * g + 0.5).min(255.0) as i32;
+                    assert!((i32::from(t[c][v]) - float).abs() <= 1, "{l:?} channel {c} at {v}: {} against {float}", t[c][v]);
+                }
+            }
+            assert_eq!(t[0][0] | t[1][0] | t[2][0], 0, "black stays black");
+        }
     }
 
     #[test]

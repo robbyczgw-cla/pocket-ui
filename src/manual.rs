@@ -59,7 +59,6 @@ pub const PAGES: &[(&str, &str)] = &[
     #[cfg(feature = "brick")]
     ("controls", include_str!("../docs/user/brick-controls.md.inc")),
     ("controls-settings", include_str!("../docs/user/controls-settings.md")),
-    ("controls-card", include_str!("../docs/user/controls-card.md")),
     ("settings", include_str!("../docs/user/settings.md")),
     ("settings-sound", include_str!("../docs/user/settings-sound.md")),
     ("settings-system", include_str!("../docs/user/settings-system.md")),
@@ -97,6 +96,24 @@ pub const PAGES: &[(&str, &str)] = &[
     ("troubleshooting", include_str!("../docs/user/troubleshooting.md")),
 ];
 
+/// The manual in Android's handheld view: its own short pages (`docs/user/android-*.md.inc`), not the Linux guide, whose pages are
+/// about ROCKNIX, the SD card, Wi-Fi and the fan (the Odin 2 Mini's Manual opened on "replaces ROCKNIX's usual menu", 13.11.). The
+/// names are the pages' link names, so `playing.md` in them opens Android's Playing page.
+pub const ANDROID_PAGES: &[(&str, &str)] = &[
+    ("index", include_str!("../docs/user/android-index.md.inc")),
+    ("playing", include_str!("../docs/user/android-playing.md.inc")),
+    ("settings", include_str!("../docs/user/android-settings.md.inc")),
+];
+
+/// The pages this device's manual has: Android's handheld view has its own (`ANDROID_PAGES`), everything else `PAGES`.
+pub fn pages() -> &'static [(&'static str, &'static str)] {
+    #[cfg(not(feature = "brick"))]
+    if crate::device::android_profile() {
+        return ANDROID_PAGES;
+    }
+    PAGES
+}
+
 /// Pages of `docs/user/` that are not in the manual on the device, because they only make sense on a computer.
 pub const DESKTOP_ONLY: &[&str] = &["android-spike", "android-mvp"];
 
@@ -106,7 +123,7 @@ pub const BRICK_SKIPS: &[&str] = &["getting-started", "other-handhelds", "games-
 
 /// The text of the page called `name` (a file of `docs/user/` without `.md`).
 pub fn page(name: &str) -> Option<&'static str> {
-    PAGES.iter().find(|(n, _)| *n == name).map(|(_, md)| *md)
+    pages().iter().find(|(n, _)| *n == name).map(|(_, md)| *md)
 }
 
 /// The page of the manual a link points at: `playing.md`, `playing.md#looks`, `./playing.md`; `None` for an outside
@@ -117,7 +134,7 @@ fn page_of_link(target: &str) -> Option<usize> {
     }
     let file = target.split('#').next()?.trim_start_matches("./");
     let name = file.strip_suffix(".md")?;
-    PAGES.iter().position(|(n, _)| *n == name)
+    pages().iter().position(|(n, _)| *n == name)
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
@@ -1284,11 +1301,14 @@ pub fn layout(blocks: &[Block], text: &mut Text, width: i32) -> Laid {
 /// Draws the part of `laid` that lies in the band (top .. top + view_h), its top-left at (x, top); what
 /// is cut off by the band stays as it was.
 pub fn paint(laid: &Laid, text: &mut Text, c: &mut Canvas, x: i32, top: i32, scroll: i32, view_h: i32) {
-    // Items are drawn whole; whatever they put above or below the band is put back afterwards.
-    let (w, margin) = (c.w as usize, 120);
-    let above = (top - margin).max(0) as usize..top.clamp(0, c.h) as usize;
-    let below = (top + view_h).clamp(0, c.h) as usize..(top + view_h + margin).clamp(0, c.h) as usize;
-    let saved: Vec<Vec<u32>> = [above.clone(), below.clone()].iter().map(|r| c.buf[r.start * w..r.end * w].to_vec()).collect();
+    // Items are drawn whole; whatever they put above or below the band is put back afterwards: the screen rows
+    // outside the band's edges (design rows at `n` = 1), rounded as `rect` rounds the band's own.
+    let (w, margin) = (c.stride(), 120);
+    let rows = (c.pixels().len() / w.max(1)) as i32;
+    let at = |y: i32| c.screen_y(y.clamp(0, c.h)).clamp(0, rows) as usize;
+    let above = at(top - margin)..at(top);
+    let below = at(top + view_h)..at(top + view_h + margin);
+    let saved: Vec<Vec<u32>> = [above.clone(), below.clone()].iter().map(|r| c.pixels()[r.start * w..r.end.max(r.start) * w].to_vec()).collect();
     let mark = crate::text::boxes::mark();
     let (lo, hi) = (scroll - 60, scroll + view_h + 60);
     for item in &laid.items {
@@ -1328,7 +1348,7 @@ pub fn paint(laid: &Laid, text: &mut Text, c: &mut Canvas, x: i32, top: i32, scr
         }
     }
     for (r, rows) in [above, below].into_iter().zip(saved) {
-        c.buf[r.start * w..r.end * w].copy_from_slice(&rows);
+        c.pixels_mut()[r.start * w..r.end.max(r.start) * w].copy_from_slice(&rows);
     }
     // For the snapshot checks of Settings → Text size: what was put back is not on the picture.
     crate::text::boxes::clip_since(mark, c, top, top + view_h);
@@ -1396,7 +1416,7 @@ fn chip(c: &mut Canvas, text: &mut Text, x: i32, cy: i32, label: &str) -> i32 {
 }
 
 /// The Mini V2 `k` times its pixels in the middle of a box `w` wide at (x, y), every control named beside it with a thin
-/// line to it, the face buttons lettered as the button layout in use has them (Settings › Playing › Button layout).
+/// line to it, the face buttons lettered as the button layout in use has them (Settings › Controls › Buttons › Button layout).
 fn controls_picture(c: &mut Canvas, text: &mut Text, x: i32, y: i32, w: i32, k: i32) {
     use crate::pad::Button;
     use crate::ui_art::anchors;
@@ -1474,7 +1494,7 @@ fn controls_picture(c: &mut Canvas, text: &mut Text, x: i32, y: i32, w: i32, k: 
 
 /// Reading position: which page, how far down each page, and the speed a held stick or button scrolls at.
 /// What a page was laid out for: the width and the text size.
-type LaidFor = (i32, crate::type_scale::TextSize);
+type LaidFor = (i32, crate::type_scale::TextSize, crate::i18n::Lang);
 
 pub struct Reader {
     pub page: usize,
@@ -1514,8 +1534,8 @@ impl Reader {
     pub fn new() -> Self {
         Reader {
             page: 0,
-            scroll: vec![0; PAGES.len()],
-            laid: (0..PAGES.len()).map(|_| None).collect(),
+            scroll: vec![0; pages().len()],
+            laid: (0..pages().len()).map(|_| None).collect(),
             laid_for: crate::palette::DARK.void,
             laid_other: (crate::palette::LIGHT.void, Vec::new()),
             view_h: 0,
@@ -1616,7 +1636,7 @@ impl Reader {
 
     /// The next page (`dir` 1) or the one before, round and round.
     pub fn turn(&mut self, dir: i32) {
-        let n = PAGES.len() as i32;
+        let n = pages().len() as i32;
         self.page = (self.page as i32 + dir).rem_euclid(n) as usize;
         self.vel = 0.0;
         self.carry = 0.0;
@@ -1656,12 +1676,12 @@ impl Reader {
             let fresh = if self.laid_other.0 == void { std::mem::take(&mut self.laid_other.1) } else { Vec::new() };
             let old = std::mem::replace(&mut self.laid, fresh);
             self.laid_other = (self.laid_for, old);
-            self.laid.resize_with(PAGES.len(), || None);
+            self.laid.resize_with(pages().len(), || None);
             self.laid_for = void;
         }
-        let key = (w, crate::type_scale::get());
+        let key = (w, crate::type_scale::get(), crate::i18n::current());
         if self.laid[page].as_ref().map(|(k, _)| *k) != Some(key) {
-            self.laid[page] = Some((key, layout(&parse(PAGES[page].1), text, w)));
+            self.laid[page] = Some((key, layout(&parse(pages()[page].1), text, w)));
         }
         let height = self.laid[page].as_ref().map_or(0, |(_, l)| l.height);
         let max = (height - h).max(0);
@@ -1702,6 +1722,25 @@ impl Reader {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Lead, 14.11.: the Android manual's first page said the menus "can be German or Spanish", and Portuguese was left out
+    /// although Settings → Language offers it there. Its language line names every language the menus have.
+    #[test]
+    fn the_android_manual_names_every_language_the_menus_have() {
+        let index = ANDROID_PAGES.iter().find(|(n, _)| *n == "index").map(|(_, md)| *md).unwrap();
+        let line = index.lines().find(|l| l.contains("the menus themselves can be")).expect("the language line");
+        for lang in crate::i18n::Lang::ALL {
+            let english = match lang {
+                crate::i18n::Lang::En => continue,
+                crate::i18n::Lang::De => "German",
+                crate::i18n::Lang::Es => "Spanish",
+                crate::i18n::Lang::Pt => "Portuguese",
+                crate::i18n::Lang::Fr => "French",
+                crate::i18n::Lang::It => "Italian",
+            };
+            assert!(line.contains(english), "{lang:?} is missing: {line}");
+        }
+    }
 
     #[test]
     fn a_focused_manual_link_stays_readable_in_every_appearance_and_retro_palette() {
@@ -1763,6 +1802,33 @@ mod tests {
         assert!(r.tap_link(2.0, 2.0));
         assert_eq!(r.page, 3);
         assert!(!r.tap_link(500.0, 2.0));
+    }
+
+    /// Painted natively (`n` = 2) against the old way (the design canvas and the 2:1 filter): the band shows the page as
+    /// before (Departure Mono bit for bit, the rest within the rounding of a rectangle's edge), and above and below the
+    /// band the screen stays exactly as it was.
+    #[test]
+    fn painted_natively_the_band_is_the_old_picture_and_nothing_spills_out() {
+        use crate::font_style::{self, FontStyle, RetroLetters};
+        font_style::set_retro_letters(RetroLetters::Departure);
+        let (w, h) = (640u32, 480u32);
+        crate::scaled_layout::set_step((w * 2, h * 2), (w, h));
+        let mut text = Text::builtin().pinned_to(FontStyle::Retro);
+        let md = "# The pause menu\n\nPress **HOME** during a game. The game stops where it is.\n\n## Saving\n\n- one\n- two\n- three\n\nMore text below the band that must not show above or below it.\n";
+        let laid = layout(&parse(md), &mut text, 1100);
+        let back = 0x1b1712;
+        let (top, view_h, scroll) = (200, 520, 40);
+        let mut design = vec![back; (w * h * 4) as usize];
+        paint(&laid, &mut text, &mut Canvas::new(&mut design, w * 2, h * 2), 60, top, scroll, view_h);
+        let mut old = vec![0u32; (w * h) as usize];
+        crate::scaled_layout::ScaledFrame::default().downscale(&design, (w * 2, h * 2), &mut old, (w, h));
+        let mut new = vec![back; (w * h) as usize];
+        paint(&laid, &mut text, &mut Canvas::screen(&mut new, (w, h), 2), 60, top, scroll, view_h);
+        let (b0, b1) = ((top / 2) as usize * w as usize, ((top + view_h) / 2) as usize * w as usize);
+        assert!(new[..b0].iter().chain(&new[b1..]).all(|p| *p == back), "nothing above or below the band");
+        assert_eq!(old[b0..b1], new[b0..b1], "the band as before");
+        assert!(new[b0..b1].iter().filter(|p| **p != back).count() > 500, "the page is there");
+        crate::scaled_layout::set_step((1240, 1080), (1240, 1080));
     }
 
     /// Release review 0.1.12: a link of several words is one stop for X, not one per word.
@@ -2163,9 +2229,10 @@ mod tests {
 
     /// Editorial advice, not a renderer limit (the page scrolls): about 30 screens at 1240x1080 still read well.
     /// playing.md grew past 40 000 and was split into playing, pause-menu and options (2026-10-23); options.md again
-    /// (Cheats, 2026-11-09). In the merge gate (it took a red release check to find that one), for the Brick's pages too;
-    /// split a page that grows past this, don't raise it.
+    /// (Cheats, 2026-11-09). Bookkeeping since 14.11.: a warning in the nightly run and the release check
+    /// (scripts/bookkeeping.sh, the Brick's pages too); split a page that grows past this.
     #[test]
+    #[ignore = "release check: bookkeeping (scripts/bookkeeping.sh)"]
     fn manual_pages_are_not_too_long_for_the_screen() {
         let mut text = Text::new();
         for (name, md) in PAGES {
@@ -2258,5 +2325,41 @@ mod tests {
         assert!(a != b);
         // Nothing above the view's top edge is touched by the page itself (the header lives there).
         assert!(a[..1240 * 100].iter().all(|p| *p == 0), "the area above the document stays empty");
+    }
+}
+
+#[cfg(test)]
+mod language_cache_tests {
+    use super::*;
+
+    #[test]
+    fn reopening_the_manual_after_a_language_change_matches_a_fresh_reader() {
+        let _lang = crate::i18n::for_this_thread(crate::i18n::Lang::En);
+        let _font = crate::font_style::for_this_thread(crate::font_style::FontStyle::Retro, crate::font_style::RetroLetters::Departure);
+        let page = pages().iter().position(|(id, _)| *id == "controls").unwrap();
+        let mut measure = Text::new();
+        measure.set_translate(false); // Like App::paint_manual: the prose stays English.
+        let widths: Vec<_> = (600..1600).map(|w| (w, controls_scale(&mut measure, w))).collect();
+        crate::i18n::set(crate::i18n::Lang::De);
+        let width = widths.into_iter().find(|(w, en)| controls_scale(&mut measure, *w) != *en).map(|(w, _)| w)
+            .expect("translated controls labels change the room needed beside the picture");
+        crate::i18n::set(crate::i18n::Lang::En);
+        let paint = |reader: &mut Reader, text: &mut Text| {
+            text.set_translate(false);
+            let mut pixels = vec![crate::palette::pal().void; (width as usize + 96) * 1080];
+            reader.paint(&mut Canvas::new(&mut pixels, width as u32 + 96, 1080), text, 48, 48, width, 984);
+            pixels
+        };
+        let mut reader = Reader::new();
+        reader.page = page;
+        let mut text = Text::new();
+        let english = paint(&mut reader, &mut text);
+        crate::i18n::set(crate::i18n::Lang::De);
+        let changed = paint(&mut reader, &mut text);
+        let mut cold = Reader::new();
+        cold.page = page;
+        let german = paint(&mut cold, &mut Text::new());
+        assert!(changed == german, "cached line breaks and words must match a reader opened in German");
+        assert!(english != german, "the test page must exercise translated words or line breaks");
     }
 }

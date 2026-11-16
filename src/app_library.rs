@@ -29,6 +29,20 @@ pub(crate) enum AfterStart {
     Store(Key),
 }
 
+/// The file in the data folder with the count of unread things the last look counted, so a new start tells only a rise.
+pub(crate) const UNREAD_KNOWN: &str = "library-unread-known";
+
+/// The count the last run left in [`UNREAD_KNOWN`], if any.
+pub(crate) fn known_unread(data_dir: &std::path::Path) -> Option<usize> {
+    std::fs::read_to_string(data_dir.join(UNREAD_KNOWN)).ok()?.trim().parse().ok()
+}
+
+/// Whether a look that counts `n` unread things is worth a word: more than were known (`before` is that count plus one, 0 for
+/// nothing known), and no game arrived with it (a copy that is still coming in is not a fault).
+pub(crate) fn unread_rose(before: usize, n: usize, added: usize) -> bool {
+    added == 0 && n > 0 && before < n + 1
+}
+
 #[derive(Default)]
 pub(crate) struct LibraryUi {
     pub after_start: AfterStart,
@@ -63,8 +77,8 @@ impl LibraryUi {
 pub(crate) fn settings_page_holds_games(page: &SettingsPage) -> bool {
     match page {
         SettingsPage::Curator => true,
-        SettingsPage::Groups(_)
-        | SettingsPage::List(_)
+        SettingsPage::List(_)
+        | SettingsPage::Tabs(_)
         | SettingsPage::Starter
         | SettingsPage::Updates
         | SettingsPage::Battery(_)
@@ -150,8 +164,9 @@ impl App {
         // Also for cached lists and for Home with Continue: the empty-page error would be hidden there.
         let (proxy, es_systems) = (self.proxy.clone(), self.es_systems.clone());
         let _ = std::thread::Builder::new().name("system-list-check".into()).spawn(move || {
-            if library::system_list_issues(&es_systems).is_ok_and(|issues| !issues.is_empty()) {
-                let _ = proxy.send_event(UserEvent::SystemListUnread);
+            let status = library::system_list_status(&es_systems);
+            if !status.is_clean() {
+                let _ = proxy.send_event(UserEvent::SystemListUnread { fallback: status.fallback.is_some() });
             }
         });
     }
@@ -214,14 +229,26 @@ impl App {
             match &result {
                 Rescan::Same => println!("library: read again ({why}) in {took:?}, nothing changed"),
                 Rescan::Changed { systems: fresh, .. } => println!("library: read again ({why}) in {took:?}: {}", library_cache::difference(&shown, fresh)),
-                Rescan::Failed(e) => eprintln!("library: reading again ({why}) failed after {took:?}: {e}"),
+                Rescan::Failed(e) => {
+                    eprintln!("library: reading again ({why}) failed after {took:?}: {e}");
+                    // The shelf keeps what it shows; Game check says what is wrong with the list.
+                    let _ = proxy.send_event(UserEvent::SystemListUnread { fallback: false });
+                }
             }
             if look_for_unread {
                 let added = if let Rescan::Changed { systems: fresh, .. } = &result { library_cache::games_added(&shown, fresh) } else { 0 };
                 let n = library::all_systems(&es_systems).map_or(0, |c| library::unread_count(&c));
                 // A rise (or the first look finding some) while nothing arrived: the copy that vanished without a word.
-                let before = seen.swap(n + 1, Ordering::SeqCst);
-                let rose = added == 0 && n > 0 && before < n + 1;
+                // The first look of this run compares with the count the last run knew (`UNREAD_KNOWN`): Android starts the
+                // handheld view's process at every launch, and a folder with 56 strays said "can't be read" every time (13.11.).
+                let before = match seen.swap(n + 1, Ordering::SeqCst) {
+                    0 => known_unread(&data_dir).map_or(0, |k| k + 1),
+                    b => b,
+                };
+                let rose = unread_rose(before, n, added);
+                if before != n + 1 {
+                    let _ = std::fs::write(data_dir.join(UNREAD_KNOWN), n.to_string());
+                }
                 let _ = proxy.send_event(UserEvent::LibraryUnread { count: n, rose });
             }
             busy.store(false, Ordering::SeqCst);
@@ -335,6 +362,21 @@ impl App {
 
 #[cfg(test)]
 mod tests {
+    /// "Some game files can't be read" came at every start of the Odin 2 Mini's handheld view (13.11.): the count it had told
+    /// was only in memory. A new run tells only a rise over what the last run counted; a first count, or a rise, is told once.
+    #[test]
+    fn the_unread_notice_comes_only_for_new_finds_across_starts() {
+        let dir = tempfile::tempdir().unwrap();
+        assert_eq!(super::known_unread(dir.path()), None);
+        assert!(super::unread_rose(0, 56, 0), "the first count ever is told");
+        std::fs::write(dir.path().join(super::UNREAD_KNOWN), "56").unwrap();
+        let before = super::known_unread(dir.path()).map_or(0, |k| k + 1);
+        assert!(!super::unread_rose(before, 56, 0), "the same 56 at the next start: no word");
+        assert!(!super::unread_rose(before, 40, 0), "fewer: no word");
+        assert!(super::unread_rose(before, 57, 0), "one more: told");
+        assert!(!super::unread_rose(before, 57, 3), "games arriving: a copy under way, no word");
+    }
+
     use super::*;
     use pocket_ui::library::Game;
 
@@ -398,7 +440,7 @@ mod tests {
     /// EmulationStation's offers until Settings was left, because any Settings page held the new list back.
     #[test]
     fn a_settings_page_does_not_hold_the_new_list_back_but_curators_does() {
-        for page in [SettingsPage::Groups(0), SettingsPage::List(0), SettingsPage::Storage, SettingsPage::Gamelist, SettingsPage::Screenshots, SettingsPage::Starter, SettingsPage::About] {
+        for page in [SettingsPage::List(0), SettingsPage::Storage, SettingsPage::Gamelist, SettingsPage::Screenshots, SettingsPage::Starter, SettingsPage::About] {
             assert!(!settings_page_holds_games(&page));
         }
         assert!(settings_page_holds_games(&SettingsPage::Curator));

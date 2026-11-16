@@ -23,9 +23,20 @@ use super::{App, SettingsPage, UserEvent, CANCEL, CONFIRM, NU_BTN_PAD, NU_PAD, N
 /// The name in the Settings list, to come back to.
 pub(crate) const SETTINGS_NAME: &str = "Web companion";
 
-/// What the page says while the companion is off: that it needs Tailscale and where to set that up. Without it a player
-/// without Tailscale saw a switch that looked as if it would just work (it only listens on the tailnet).
-const OFF_NOTE: &str = "Needs Tailscale. Set it up first (Settings › Connections › Tailscale), then switch this on. The address to open shows here.";
+/// What the page says while the companion is off: what switching it on gives and where it works (the home Wi-Fi, or
+/// Tailscale; since 0.5 it no longer needs Tailscale).
+const OFF_NOTE: &str = "Switch it on to open your library in a browser on the same Wi-Fi, or over Tailscale. The address to open shows here.";
+/// On, but neither the Wi-Fi nor Tailscale is connected.
+const WAITING: &str = "Waiting for Wi-Fi";
+const WAITING_NOTE: &str = "It listens on your Wi-Fi and on Tailscale. Connect to Wi-Fi (Settings › Connections › Wi-Fi) or switch Tailscale on.";
+/// The note under the address, by "Your Tailscale devices".
+const NOTE_OPEN: &str = "On the Wi-Fi every browser needs a code; your own Tailscale devices get in without one. Not encrypted on the Wi-Fi: use it at home. Pauses while a game runs.";
+const NOTE_CODE: &str = "Every browser needs a code, yours too. Not encrypted on the Wi-Fi: use it at home. Pauses while a game runs.";
+/// The same on a handheld without Wi-Fi (`device::no_wifi_chip`): no Wi-Fi to wait for or to warn about; it needs a
+/// network all the same (`device::NEEDS_NETWORK`, for the Off and Waiting notes).
+const WAITING_NO_WIFI: &str = "Waiting for a network";
+const NOTE_OPEN_NO_WIFI: &str = "Other browsers need a code; your own Tailscale devices get in without one. Pauses while a game runs.";
+const NOTE_CODE_NO_WIFI: &str = "Every browser needs a code, yours too. Pauses while a game runs.";
 
 /// The server starts this long after pocket-ui did, when it is on: never in the way of the first frame.
 const START_AFTER: Duration = Duration::from_secs(3);
@@ -362,7 +373,6 @@ impl App {
     }
 
     /// The page's lists from the shared state: paired browsers, addresses, the code's time left.
-    #[cfg(not(feature = "brick"))]
     fn web_page_refresh(&mut self) {
         let shared = self.web.shared();
         let browsers: Vec<Paired> = shared
@@ -375,6 +385,8 @@ impl App {
             .map(|b| Paired { id: b.id.clone(), name: b.name.clone(), when: web_page::short_date(b.paired) })
             .collect();
         let listening = shared.listening.lock().unwrap().clone();
+        let lan = shared.lan.lock().unwrap().clone();
+        let lan_name = shared.lan_name.lock().unwrap().clone();
         let name = shared.tailnet_name.lock().unwrap().clone();
         let pairing = shared.pairing.lock().unwrap().clone();
         let running = self.web.server.is_some();
@@ -385,64 +397,13 @@ impl App {
         if let View::Browsers { sel, .. } = &mut page.view {
             *sel = (*sel).min(page.browsers.len().saturating_sub(1));
         }
-        page.addresses = if running { listening.iter().map(|a| address(*a)).collect() } else { Vec::new() };
-        let tailnet = listening.iter().find(|a| pocket_ui::web::net::is_tailnet(a.ip()));
-        page.address = match (running, &name, tailnet) {
-            (true, Some(n), Some(_)) => Some(format!("http://{n}")),
-            (true, None, Some(a)) => Some(address(*a)),
-            (true, _, None) => listening.first().map(|a| address(*a)),
-            _ => None,
-        };
-        match pairing {
-            Some(p) if !p.expired(Instant::now()) => {
-                page.code = Some(p.code.clone());
-                page.code_left = p.until.saturating_duration_since(Instant::now()).as_secs();
-            }
-            _ => {
-                // Used, run out or five wrong tries: the code goes from the screen.
-                if page.view == View::Pairing && page.code.is_some() {
-                    page.view = View::List;
-                }
-                page.code = None;
-            }
-        }
-    }
-
-    #[cfg(feature = "brick")]
-    fn web_page_refresh(&mut self) {
-        let shared = self.web.shared();
-        let browsers: Vec<Paired> = shared
-            .sessions
-            .lock()
-            .unwrap()
-            .browsers
-            .iter()
-            .rev()
-            .map(|b| Paired { id: b.id.clone(), name: b.name.clone(), when: web_page::short_date(b.paired) })
-            .collect();
-        let listening = shared.listening.lock().unwrap().clone();
-        let name = shared.tailnet_name.lock().unwrap().clone();
-        let pairing = shared.pairing.lock().unwrap().clone();
-        let running = self.web.server.is_some();
-        let problem = shared.problem.lock().unwrap().clone();
-        let Some(page) = self.web.page.as_mut() else { return };
-        page.problem = problem.filter(|_| page.prefs.enabled);
-        page.browsers = browsers;
-        if let View::Browsers { sel, .. } = &mut page.view {
-            *sel = (*sel).min(page.browsers.len().saturating_sub(1));
-        }
-        let tailnet = listening.iter().find(|a| pocket_ui::web::net::is_tailnet(a.ip()));
-        // The Brick's userspace Tailscale: the socket is on 127.0.0.1, the address to open is the node's (shown once it is known).
-        let loopback_only = !listening.is_empty() && listening.iter().all(|a| a.ip().is_loopback()) && { #[cfg(feature = "brick")] { pocket_ui::brick_profile::standalone() } #[cfg(not(feature = "brick"))] { false } };
-        page.addresses = if running && !loopback_only { listening.iter().map(|a| address(*a)).collect() } else { Vec::new() };
-        page.address = match (running, &name, tailnet) {
-            (true, Some(n), Some(_)) => Some(format!("http://{n}")),
-            (true, None, Some(a)) => Some(address(*a)),
-            (true, Some(n), None) if loopback_only => Some(format!("http://{n}")),
-            (true, None, None) if loopback_only => None,
-            (true, _, None) => listening.first().map(|a| address(*a)),
-            _ => None,
-        };
+        // The Brick's userspace Tailscale: that socket is on 127.0.0.1, the address to open is the node's (shown once it is known).
+        #[cfg(feature = "brick")]
+        let userspace = pocket_ui::brick_profile::standalone();
+        #[cfg(not(feature = "brick"))]
+        let userspace = false;
+        page.addresses = if running { page_addresses(&listening, &lan, lan_name.as_deref(), name.as_deref(), userspace) } else { Vec::new() };
+        page.address = page.addresses.first().cloned();
         match pairing {
             Some(p) if !p.expired(Instant::now()) => {
                 page.code = Some(p.code.clone());
@@ -537,8 +498,14 @@ impl App {
             page.problem = Some(web::server::why_not(&std::io::Error::from(std::io::ErrorKind::AddrInUse)));
         }
         if on && !matches!(mode, "waiting" | "busy") {
-            page.address = Some("http://pocket".into());
-            page.addresses = vec!["http://100.77.12.34".into(), "http://[fd7a:115c:a1e0::4f01:2a3b]".into()];
+            page.addresses = page_addresses(
+                &["192.168.1.42:80".parse().unwrap(), "100.77.12.34:80".parse().unwrap(), "[fd7a:115c:a1e0::4f01:2a3b]:80".parse().unwrap()],
+                &["192.168.1.42:80".parse().unwrap()],
+                Some("sm8250.local"),
+                Some("pocket"),
+                false,
+            );
+            page.address = page.addresses.first().cloned();
         }
         match mode {
             "pair" => {
@@ -629,9 +596,9 @@ impl App {
                 }
             }
             (None, true) => {
-                self.text.draw(c, Face::Title, 44, left, y, pal().dust, "Waiting for Tailscale");
+                self.text.draw(c, Face::Title, 44, left, y, pal().dust, pocket_ui::device::wifi_or(WAITING, WAITING_NO_WIFI));
                 y += 44;
-                for l in self.text.wrap_prose(Face::Body, 26, "It listens only on the Tailscale network. Switch Tailscale on and sign in (Settings › Connections › Tailscale).", width) {
+                for l in self.text.wrap_prose(Face::Body, 26, pocket_ui::device::wifi_or(WAITING_NOTE, pocket_ui::device::NEEDS_NETWORK), width) {
                     self.text.draw(c, Face::Body, 26, left, y, pal().dust, &l);
                     y += pocket_ui::type_scale::line(26, 8);
                 }
@@ -639,7 +606,7 @@ impl App {
             (None, false) => {
                 self.text.draw(c, Face::Title, 44, left, y, pal().dust, "Off");
                 y += 44;
-                for l in self.text.wrap_prose(Face::Body, 26, OFF_NOTE, width) {
+                for l in self.text.wrap_prose(Face::Body, 26, pocket_ui::device::wifi_or(OFF_NOTE, pocket_ui::device::NEEDS_NETWORK), width) {
                     self.text.draw(c, Face::Body, 26, left, y, pal().dust, &l);
                     y += pocket_ui::type_scale::line(26, 8);
                 }
@@ -647,9 +614,9 @@ impl App {
         }
         y += 16;
         let note = if page.prefs.trust_tailnet {
-            "Only over Tailscale: your own devices get in, any other browser needs a code. Pauses while a game runs."
+            pocket_ui::device::wifi_or(NOTE_OPEN, NOTE_OPEN_NO_WIFI)
         } else {
-            "Only over Tailscale, and every browser needs a code, yours too. Pauses while a game runs."
+            pocket_ui::device::wifi_or(NOTE_CODE, NOTE_CODE_NO_WIFI)
         };
         // Pair opens only while the companion is on, the browsers' list only with a browser in it: no A where A does nothing
         // (the row's line says why; the navigation explorer, 2026-11-07).
@@ -715,15 +682,19 @@ impl App {
             self.hits.row(Area::new(pad, y, right - pad, row), i);
             let base = y + row / 2 + pocket_ui::type_scale::mid(font);
             let when = format!("paired {}", b.when);
+            // The name leaves the date (or "A again: revoke") its room: a long name ("Safari on iPhone (alexs-iphone)")
+            // is cut with "…" before it touches it (German's "gekoppelt 21. Okt." is wider than English's).
+            let side_w = self.text.width(Face::Body, 28, &when).max(self.text.width(Face::Body, 28, "A again: revoke"));
+            let name_room = right - pad - 2 * NU_BTN_PAD - side_w - 24;
             if i == sel {
                 pocket_ui::retro::select(c, pad, y + 4, right - pad, row - 8, (row - 8) / 2, if confirm { pal().alert } else { pal().select });
-                let name = self.text.fit(Face::Body, font, &b.name, right - pad - 2 * NU_BTN_PAD - 260);
+                let name = self.text.fit(Face::Body, font, &b.name, name_room);
                 let fg = if confirm { pal().on_alert } else { pal().ink };
                 self.text.draw(c, Face::Body, font, pad + NU_BTN_PAD, base, fg, &name);
                 let side = if confirm { "A again: revoke" } else { &when };
                 self.text.draw_right(c, Face::Body, 28, right - NU_BTN_PAD, base, fg, side);
             } else {
-                let name = self.text.fit(Face::Body, font, &b.name, right - pad - 2 * NU_BTN_PAD - 260);
+                let name = self.text.fit(Face::Body, font, &b.name, name_room);
                 self.text.draw(c, Face::Body, font, pad + NU_BTN_PAD, base, pal().text, &name);
                 self.text.draw_right(c, Face::Body, 28, right - NU_BTN_PAD, base, pal().dust, &when);
             }
@@ -738,6 +709,24 @@ impl App {
     pub(crate) fn web_exit(&mut self) {
         self.web.stop();
     }
+}
+
+/// Where to open the companion, the first one large on the page and in the QR code: the Wi-Fi's address
+/// (`http://192.168.1.42`, which every browser at home can open) and its mDNS name, then the Pocket's tailnet name and
+/// addresses. `userspace`: the Brick's userspace Tailscale, whose 127.0.0.1 socket is no address to open (its name is).
+fn page_addresses(listening: &[std::net::SocketAddr], lan: &[std::net::SocketAddr], lan_name: Option<&str>, tailnet_name: Option<&str>, userspace: bool) -> Vec<String> {
+    let mut out: Vec<String> = lan.iter().map(|a| address(*a)).collect();
+    if let Some(n) = lan_name.filter(|_| !lan.is_empty()) {
+        out.push(format!("http://{n}"));
+    }
+    let tailnet: Vec<&std::net::SocketAddr> = listening.iter().filter(|a| !lan.contains(a)).collect();
+    let on_tailnet = tailnet.iter().any(|a| pocket_ui::web::net::is_tailnet(a.ip()) || (userspace && a.ip().is_loopback()));
+    if let Some(n) = tailnet_name.filter(|n| on_tailnet && !n.is_empty()) {
+        out.push(format!("http://{n}"));
+    }
+    out.extend(tailnet.iter().filter(|a| !(userspace && a.ip().is_loopback())).map(|a| address(**a)));
+    out.dedup();
+    out
 }
 
 /// "http://100.77.12.34", "http://[fd7a::1]" (port 80 left out).
@@ -758,14 +747,37 @@ mod tests {
     use super::*;
     use std::io::{Read, Write};
 
+    /// 0.5: the companion works on the home Wi-Fi too, so the Off page no longer says it needs Tailscale; it names
+    /// the Wi-Fi first, in every language.
     #[test]
-    fn the_off_page_says_plainly_that_tailscale_is_needed_in_every_language() {
-        assert!(OFF_NOTE.contains("Tailscale") && OFF_NOTE.contains("Settings › Connections › Tailscale"));
-        for (lang, word) in [("de", "Braucht Tailscale"), ("es", "Necesita Tailscale"), ("pt", "Precisa do Tailscale")] {
+    fn the_off_page_names_the_wifi_and_tailscale_in_every_language() {
+        assert!(OFF_NOTE.contains("Wi-Fi") && OFF_NOTE.contains("Tailscale") && !OFF_NOTE.contains("Needs Tailscale"));
+        for (lang, wifi) in [("de", "WLAN"), ("es", "Wi-Fi"), ("pt", "Wi-Fi"), ("fr", "Wi-Fi"), ("it", "Wi-Fi")] {
             let tsv = std::fs::read_to_string(format!("{}/assets/i18n/{lang}.tsv", env!("CARGO_MANIFEST_DIR"))).unwrap();
-            let row = tsv.lines().find(|l| l.starts_with(&format!("{OFF_NOTE}\t"))).unwrap_or_else(|| panic!("{lang}: no translation"));
-            assert!(row.contains(word) && row.contains("Tailscale)"), "{lang}: {row}");
+            for line in [OFF_NOTE, WAITING, WAITING_NOTE, NOTE_OPEN, NOTE_CODE, WAITING_NO_WIFI, NOTE_OPEN_NO_WIFI, NOTE_CODE_NO_WIFI] {
+                let row = tsv.lines().find(|l| l.starts_with(&format!("{line}\t"))).unwrap_or_else(|| panic!("{lang}: no translation of {line}"));
+                assert!(row.split('\t').nth(1).is_some_and(|t| !t.is_empty() && t != line), "{lang}: {row}");
+            }
+            let off = tsv.lines().find(|l| l.starts_with(&format!("{OFF_NOTE}\t"))).unwrap();
+            assert!(off.split('\t').nth(1).unwrap().contains(wifi), "{lang}: {off}");
         }
+    }
+
+    /// The address to open: the Wi-Fi's first (every browser at home can open it, and the QR code holds it), then its
+    /// mDNS name and the tailnet name; without the Wi-Fi the tailnet name as before.
+    #[test]
+    fn the_wifi_address_comes_first_then_mdns_and_tailscale() {
+        let sa = |s: &str| s.parse::<std::net::SocketAddr>().unwrap();
+        let both = page_addresses(&[sa("192.168.1.42:80"), sa("100.77.12.34:80")], &[sa("192.168.1.42:80")], Some("sm8250.local"), Some("pocket"), false);
+        assert_eq!(both, ["http://192.168.1.42", "http://sm8250.local", "http://pocket", "http://100.77.12.34"]);
+        let no_avahi = page_addresses(&[sa("192.168.1.42:80")], &[sa("192.168.1.42:80")], None, Some("pocket"), false);
+        assert_eq!(no_avahi, ["http://192.168.1.42"], "no .local without avahi, no tailnet name without Tailscale");
+        let tailnet = page_addresses(&[sa("100.77.12.34:80")], &[], Some("sm8250.local"), Some("pocket"), false);
+        assert_eq!(tailnet, ["http://pocket", "http://100.77.12.34"], "Tailscale alone: as before 0.5");
+        // The Brick's userspace Tailscale: the loopback socket is no address; its name is.
+        let brick = page_addresses(&[sa("127.0.0.1:80"), sa("192.168.1.77:80")], &[sa("192.168.1.77:80")], None, Some("brick"), true);
+        assert_eq!(brick, ["http://192.168.1.77", "http://brick"]);
+        assert!(page_addresses(&[], &[], None, None, false).is_empty());
     }
 
     /// A WebUi as `main` makes it, over a temporary data folder, listening on 127.0.0.1 instead of the tailnet.
@@ -780,7 +792,7 @@ mod tests {
         }
         let mut ui = WebUi::load(&root.join("data"), &root.join("es_systems.cfg"));
         ui.roots = web::files::Roots::under(&root.join("roms"));
-        ui.listen = Some(vec![web::net::Listen { addr: "127.0.0.1:0".parse().unwrap(), iface: "lo".into(), index: 0 }]);
+        ui.listen = Some(vec![web::net::Listen { addr: "127.0.0.1:0".parse().unwrap(), iface: "lo".into(), index: 0, lan: false }]);
         (ui, guard)
     }
 
@@ -824,6 +836,23 @@ mod tests {
         assert!(page_answers(&ui));
         ui.stop();
         assert!(ui.server.is_none());
+    }
+
+    /// Off means nothing listens, on the Wi-Fi too: the Wi-Fi socket closes at once and the page's Wi-Fi address goes.
+    #[test]
+    fn off_nothing_listens_on_the_wifi() {
+        let (mut ui, _root_dir) = web_ui("off-wifi", false);
+        ui.listen = Some(vec![web::net::Listen { addr: "127.0.0.1:0".parse().unwrap(), iface: "lo".into(), index: 0, lan: true }]);
+        let installs = std::cell::Cell::new(0);
+        loop_turn(&mut ui, Duration::from_secs(600), &installs);
+        assert!(ui.server.is_none() && ui.shared.is_none(), "off from the start: nothing at all");
+        assert!(ui.set_prefs(Prefs { enabled: true, ..Prefs::default() }, |_| installs.set(installs.get() + 1)));
+        assert!(page_answers(&ui));
+        let shared = ui.shared.clone().unwrap();
+        let addr = shared.lan.lock().unwrap().first().copied().expect("the Wi-Fi socket");
+        ui.set_prefs(Prefs::default(), |_| unreachable!("switching off starts nothing"));
+        assert!(shared.lan.lock().unwrap().is_empty() && shared.listening.lock().unwrap().is_empty());
+        assert!(std::net::TcpStream::connect(addr).is_err(), "nothing listens on the Wi-Fi once it is off");
     }
 
     /// Review F1: switched on in Settings long after the start, off, and on again.

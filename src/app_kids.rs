@@ -688,19 +688,30 @@ impl App {
             return super::app_big_shelf::paint_background(c);
         }
         let theme = self.kids.cfg.theme;
+        // Kept as the screen shows it: painted natively (`n` = 2) the picture made at design size once, reduced once,
+        // then copied each frame.
+        let len = c.pixels().len();
         let pic = match &self.kids.background {
-            Some((t, w, h, pic)) if *t == theme && *w == c.w && *h == c.h => pic.clone(),
+            Some((t, w, h, pic)) if *t == theme && *w == c.w && *h == c.h && pic.len() == len => pic.clone(),
             _ => {
                 let mut buf = vec![0u32; (c.w * c.h) as usize];
                 let mut b = Canvas::new(&mut buf, c.w as u32, c.h as u32);
                 let (w, h) = (b.w, b.h);
                 paint_backdrop(&mut b, 0, 0, w, h, theme);
-                let pic = Rc::new(buf);
+                let pic = if c.n() == 1 {
+                    buf
+                } else {
+                    let stride = c.stride();
+                    let mut screen = vec![0u32; len];
+                    Canvas::screen(&mut screen, (stride as u32, (len / stride.max(1)) as u32), c.n() as u32).copy_design(0, 0, c.w as usize, &buf, None);
+                    screen
+                };
+                let pic = Rc::new(pic);
                 self.kids.background = Some((theme, c.w, c.h, pic.clone()));
                 pic
             }
         };
-        c.buf.copy_from_slice(&pic);
+        c.pixels_mut().copy_from_slice(&pic);
     }
 
     fn kids_paint_shelf(&mut self, c: &mut Canvas) {
@@ -744,7 +755,7 @@ impl App {
             let p = (pocket_ui::frame_clock::now().saturating_duration_since(t).saturating_sub(self.cabinet.launch_delay()).as_secs_f32() / FADE.as_secs_f32()).min(1.0);
             self.paint_insert(c, pocket_ui::frame_clock::now());
             let p = self.cabinet.launch_fade_at(p);
-            c.fade((p * 255.0) as u8);
+            self.cabinet.launch_veil(c, p);
             if !self.cabinet_inserting() {
                 self.shelf_relight(c);
             }
@@ -774,7 +785,8 @@ impl App {
         let top = (c.h as f32 * top) as i32;
         let fy = top + (room_h as i32 - fh) / 2;
         let fx = (c.w - fw) / 2;
-        let moving = self.moved_at.elapsed() < Duration::from_millis(80);
+        // The same animation clock as the slide, including deterministic performance snapshots.
+        let moving = now.saturating_duration_since(self.moved_at) < Duration::from_millis(80);
         for (step, side) in [(n - 1, -1), (1, 1)] {
             if n < 2 || (n == 2 && side < 0) {
                 continue;
@@ -1048,15 +1060,18 @@ impl App {
         c.disc(cx, cy, r, 0xffffff);
         // The minutes left, as a slice of the clock from twelve o'clock on.
         let part = left.min(60) as f32 / 60.0 * std::f32::consts::TAU;
-        for y in (cy - r)..(cy + r) {
-            for x in (cx - r)..(cx + r) {
-                let (dx, dy) = ((x - cx) as f32, (y - cy) as f32);
-                let angle = dx.atan2(-dy).rem_euclid(std::f32::consts::TAU);
-                if dx * dx + dy * dy < (r * r) as f32 && angle < part {
-                    c.blend(x, y, colours.accent, 255);
+        // Pixel by pixel as one shape (gfx::Canvas::blend_with): natively its edges are averaged, not every fourth pixel.
+        c.blend_with((cx - r, cy - r, 2 * r, 2 * r), colours.accent, |put| {
+            for y in (cy - r)..(cy + r) {
+                for x in (cx - r)..(cx + r) {
+                    let (dx, dy) = ((x - cx) as f32, (y - cy) as f32);
+                    let angle = dx.atan2(-dy).rem_euclid(std::f32::consts::TAU);
+                    if dx * dx + dy * dy < (r * r) as f32 && angle < part {
+                        put(x, y, 255);
+                    }
                 }
             }
-        }
+        });
         let hand = (8.0 * u).max(2.0) as i32;
         c.rect(cx - hand / 2, cy - r * 8 / 10, hand, r * 8 / 10, colours.on_accent);
         c.disc(cx, cy, hand * 2, colours.on_accent);
@@ -1133,10 +1148,8 @@ impl App {
             let cy = y + bh / 2;
             match i {
                 0 => {
-                    for row in 0..icon {
-                        let half = (row.min(icon - 1 - row)) * 2 / 2;
-                        c.rect(tx, cy - icon / 2 + row, half.max(1) * 2, 1, 0x1f9d3a);
-                    }
+                    let rows: Vec<_> = (0..icon).map(|row| (tx, cy - icon / 2 + row, (row.min(icon - 1 - row)).max(1) * 2, 1)).collect();
+                    c.fill_rects(&rows, 0x1f9d3a);
                 }
                 1 => c.round_rect(tx, cy - icon / 2 + icon / 8, icon * 3 / 4, icon * 3 / 4, (12.0 * u) as i32, 0xd9302f),
                 // More: three dots, in the row's own ink.
@@ -1156,12 +1169,14 @@ impl App {
         };
         let spx = px(46.0);
         if self.big_on() {
-            // Longer sentences in other languages, with larger text: two lines, never cut. Over the hint of START.
+            // Longer sentences in other languages, with larger text: two lines, never cut. Over the hint bar.
             let lines = self.text.wrap_at_most(Face::Body, spx, line, c.w - (60.0 * u) as i32, 2);
             let step = (spx as f32 * 1.2) as i32;
+            // The last line stands clear over the hint bar (which keeps its size on a small screen).
+            let last = (c.h - (135.0 * u) as i32).min(pocket_ui::kit::hint_bar_top(c.h) - 24);
             for (i, l) in lines.iter().enumerate() {
                 let w = self.text.width(Face::Body, spx, l);
-                self.text.draw(c, Face::Body, spx, (c.w - w) / 2, c.h - (135.0 * u) as i32 - (lines.len() - 1 - i) as i32 * step, colours.ink, l);
+                self.text.draw(c, Face::Body, spx, (c.w - w) / 2, last - (lines.len() - 1 - i) as i32 * step, colours.ink, l);
             }
             self.paint_hint_row(c, &[("START", "Quick settings")]);
         } else {
@@ -1190,14 +1205,17 @@ impl App {
         }
         // From the first look: the grown-up who forgot the PIN should not have to guess wrong three times to learn this.
         lines.push(format!("Forgot it? Put a file called {} in the top folder of the card's ROCKNIX drive and restart.", kids::RESET_FILE));
-        let (spx, mut y) = ((38.0 * u).round() as u32, (810.0 * u) as i32);
+        let spx = (38.0 * u).round() as u32;
         let width = c.w - (100.0 * u) as i32;
-        for line in lines {
-            for l in self.text.wrap_prose_at_most(Face::Body, spx, &line, width, 2) {
-                let w = self.text.width(Face::Body, spx, &l);
-                self.text.draw(c, Face::Body, spx, (c.w - w) / 2, y, colours.ink, &l);
-                y += (spx as f32 * 1.3) as i32;
-            }
+        let wrapped: Vec<String> = lines.iter().flat_map(|line| self.text.wrap_prose_at_most(Face::Body, spx, line, width, 2)).collect();
+        // Above the hint bar whatever the text's size and language (Spanish, Large text, 1024x768: the second line of
+        // "Forgot it?" touched it): the block stands higher where it needs to.
+        let step = (spx as f32 * 1.3) as i32;
+        let mut y = ((810.0 * u) as i32).min(pocket_ui::kit::hint_bar_top(c.h) - 16 - (wrapped.len() as i32 - 1).max(0) * step);
+        for l in wrapped {
+            let w = self.text.width(Face::Body, spx, &l);
+            self.text.draw(c, Face::Body, spx, (c.w - w) / 2, y, colours.ink, &l);
+            y += step;
         }
         self.paint_hint_row(c, &[("D-PAD", "Numbers"), ("A", "Next"), ("B", "Back")]);
     }
@@ -1413,8 +1431,15 @@ impl App {
         self.kids_title(c, pal().chalk, "Pick the games", &format!("{} of {} picked. At least {needed}.", picked.len(), kids::MAX_GAMES));
         let (x, top, row_h) = ((72.0 * u) as i32, (246.0 * u) as i32, (76.0 * u) as i32);
         let w = (c.w as f32 * 0.62) as i32;
-        let below = if left_out_line.is_some() { 210.0 } else { 130.0 };
-        let rows = ((c.h - top - (below * u) as i32) / row_h).max(1) as usize;
+        // The grey line stands above the hint bar and the list ends above it.
+        let below_px = match &left_out_line {
+            Some(l) => {
+                let (_, first) = self.kids_grey_layout(c, c.h - (178.0 * u) as i32, l);
+                ((210.0 * u) as i32).max(c.h - first + (40.0 * u) as i32)
+            }
+            None => (130.0 * u) as i32,
+        };
+        let rows = ((c.h - top - below_px) / row_h).max(1) as usize;
         let first = crate::window_start(sel, rows, library.len());
         let lpx = (36.0 * u).round() as u32;
         for (i, game) in library.iter().enumerate().skip(first).take(rows) {
@@ -1470,11 +1495,22 @@ impl App {
     fn kids_grey_line(&mut self, c: &mut Canvas, y: i32, line: &str) {
         let u = c.h as f32 / 1080.0;
         let (x, spx) = ((72.0 * u) as i32, (30.0 * u).round() as u32);
-        let mut y = y;
-        for l in self.text.wrap_prose_at_most(Face::Body, spx, line, c.w - 2 * x, 2) {
+        let (lines, mut y) = self.kids_grey_layout(c, y, line);
+        for l in lines {
             self.text.draw(c, Face::Body, spx, x, y, pal().dust, &l);
             y += (spx as f32 * 1.3) as i32;
         }
+    }
+
+    /// The grown-up's grey line as lines and the baseline of the first: where it would reach the hint bar's band
+    /// (German, Large text, 1024x768) it stands higher, so its last line ends above the bar.
+    fn kids_grey_layout(&mut self, c: &Canvas, y: i32, line: &str) -> (Vec<String>, i32) {
+        let u = c.h as f32 / 1080.0;
+        let (x, spx) = ((72.0 * u) as i32, (30.0 * u).round() as u32);
+        let lines = self.text.wrap_prose_at_most(Face::Body, spx, line, c.w - 2 * x, 2);
+        let step = (spx as f32 * 1.3) as i32;
+        let y = y.min(pocket_ui::kit::hint_bar_top(c.h) - 14 - (lines.len() as i32 - 1).max(0) * step);
+        (lines, y)
     }
 
     fn kids_library_item(&self, pick: &Pick) -> Option<Item> {
@@ -1680,32 +1716,32 @@ fn paint_dials(app: &mut App, c: &mut Canvas, dials: kids::Dials, top: i32, colo
 fn arrow(c: &mut Canvas, cx: i32, cy: i32, size: i32, dir: i32, k: Colours) {
     pocket_ui::retro::disc(c, cx, cy, size + size / 3, k.accent);
     let tip = size * 3 / 4;
-    for dx in 0..tip {
-        let half = tip - dx;
-        c.rect(cx + dir * (dx - tip / 3), cy - half, 2, half * 2, k.on_accent);
-    }
+    // Columns that overlap, painted as one shape (gfx::Canvas::fill_rects).
+    let cols: Vec<_> = (0..tip).map(|dx| (cx + dir * (dx - tip / 3), cy - (tip - dx), 2, (tip - dx) * 2)).collect();
+    c.fill_rects(&cols, k.on_accent);
 }
 
 fn up_arrow(c: &mut Canvas, cx: i32, cy: i32, size: i32, dir: i32, k: Colours) {
-    for dy in 0..size {
-        let half = size - dy;
-        c.rect(cx - half, cy + dir * dy, half * 2, 2, k.accent);
-    }
+    let rows: Vec<_> = (0..size).map(|dy| (cx - (size - dy), cy + dir * dy, (size - dy) * 2, 2)).collect();
+    c.fill_rects(&rows, k.accent);
 }
 
 /// A disc with a smooth edge, at `alpha`, within `clip` (x, y, w, h).
 fn soft_disc(c: &mut Canvas, cx: i32, cy: i32, r: i32, colour: u32, alpha: u8, clip: (i32, i32, i32, i32)) {
     let (x0, y0) = ((cx - r - 1).max(clip.0), (cy - r - 1).max(clip.1));
     let (x1, y1) = ((cx + r + 1).min(clip.0 + clip.2), (cy + r + 1).min(clip.1 + clip.3));
-    for y in y0..y1 {
-        for x in x0..x1 {
-            let d = (((x - cx).pow(2) + (y - cy).pow(2)) as f32).sqrt();
-            let edge = (r as f32 - d + 0.5).clamp(0.0, 1.0);
-            if edge > 0.0 {
-                c.blend(x, y, colour, (edge * alpha as f32) as u8);
+    // Natively averaged per screen pixel (gfx::Canvas::blend_with), the soft edge as before.
+    c.blend_with((x0, y0, x1 - x0, y1 - y0), colour, |put| {
+        for y in y0..y1 {
+            for x in x0..x1 {
+                let d = (((x - cx).pow(2) + (y - cy).pow(2)) as f32).sqrt();
+                let edge = (r as f32 - d + 0.5).clamp(0.0, 1.0);
+                if edge > 0.0 {
+                    put(x, y, (edge * alpha as f32) as u8);
+                }
             }
         }
-    }
+    });
 }
 
 /// A theme's backdrop on a part of the screen: a gradient and big shapes, all made here (no objects): Blue a night sky with
@@ -1757,17 +1793,20 @@ pub(crate) fn paint_backdrop(c: &mut Canvas, x: i32, y: i32, w: i32, h: i32, the
                 let (r1, r2, r3) = (next(), next(), next());
                 let (sx, sy) = at((r1 % 1000) as f32 / 1000.0, (r2 % 300) as f32 / 1000.0);
                 let r = ((3 + r3 % 8) as f32 * s).max(2.0) as i32;
-                // A four-pointed sparkle.
-                for i in 0..r {
-                    let t = (r - i).max(1) / 2 + 1;
-                    for (dx, dy) in [(i, 0), (-i, 0), (0, i), (0, -i)] {
-                        if sx + dx >= x && sx + dx < x + w && sy + dy >= y && sy + dy < y + h {
-                            for a in 0..t {
-                                c.blend(sx + dx + if dy != 0 { a - t / 2 } else { 0 }, sy + dy + if dx != 0 { a - t / 2 } else { 0 }, k.spark, 220);
+                // A four-pointed sparkle, its 1 px strokes averaged natively (gfx::Canvas::blend_with).
+                let reach = r + r / 2 + 2;
+                c.blend_with((sx - reach, sy - reach, 2 * reach + 1, 2 * reach + 1), k.spark, |put| {
+                    for i in 0..r {
+                        let t = (r - i).max(1) / 2 + 1;
+                        for (dx, dy) in [(i, 0), (-i, 0), (0, i), (0, -i)] {
+                            if sx + dx >= x && sx + dx < x + w && sy + dy >= y && sy + dy < y + h {
+                                for a in 0..t {
+                                    put(sx + dx + if dy != 0 { a - t / 2 } else { 0 }, sy + dy + if dx != 0 { a - t / 2 } else { 0 }, 220);
+                                }
                             }
                         }
                     }
-                }
+                });
             }
         }
     }

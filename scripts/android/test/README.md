@@ -1,5 +1,23 @@
 # Android 0.2 emulator probes
 
+## Odin recording regressions
+
+Host checks: `cargo test --profile gate --lib android_video_tests`, `--lib player_title_tests`, `--lib vfs::tests` and
+`--lib pad::tests`. The video tests run the production Earlier writer, exercise replacement without a frame, and feed
+PS1/SNES resolution changes through the real libretro callback and Android picture-placement policy. Set
+`POCKET_REQUIRE_GL=1` to require the software compositor checks too.
+
+Compile `PlayerExitKeys.java` and `PlayerExitKeysTest.java` with Java 8 compatibility, then run
+`xyz.pocketui.app.PlayerExitKeysTest`. No Android runtime is needed for this key policy test.
+
+Build `--example vfs_contract --example android_core_probe --target aarch64-linux-android --release`, push the two
+executables to an owned ARM64 emulator, and run `vfs_contract SCRATCH` and `android_core_probe CORE ROM SCRATCH [FRAMES]`.
+Use separate scratch folders for games; the core may write SRAM there. The VFS contract must also run on Android:
+glibc accepts `fflush` on read-only streams but Bionic returns EBADF. The unfixed Android probe reports `md: size=-1`;
+ClownMDEmu then rejects even a plain `.md` ROM with fully readable permissions. The contract covers cartridge and disc
+suffixes, Unicode/space-containing paths, buffered reads, rewind and cursor preservation. Use an actual bundled core
+and known-good content for the core probe; it requires at least one video delivery and never opens an audio device.
+
 These helpers run only in a disposable, rootable Android 35 ARM64 AVD. They are not
 APK code. `02-smoke.py` rejects non-emulator serials and requires emulator root before
 changing its generated games, app preferences or fixture states.
@@ -78,4 +96,3 @@ analog triggers of a Bluetooth/USB pad, any name/vendor/product, driven line by 
 `zig cc -target aarch64-linux-musl -O2 -static vpad.c -o vpad`, push to `/data/local/tmp`, remove afterwards.
 `StickKeysTest.java` (with `StickKeys.java`) runs on the JVM: `javac -d out android/java/xyz/pocketui/app/StickKeys.java
 scripts/android/test/StickKeysTest.java && java -cp out xyz.pocketui.app.StickKeysTest`.
-

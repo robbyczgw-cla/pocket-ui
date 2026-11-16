@@ -18,19 +18,21 @@ impl App {
     /// Paints one frame with `paint` in the appearance in use. While it crossfades, the frame is painted dark
     /// and light and the two pictures are mixed (a mix of the two palettes would pass the text through the grey
     /// of its background halfway).
-    pub(crate) fn paint_in_appearance(&mut self, pixels: &mut [u32], w: u32, h: u32, paint: &mut dyn FnMut(&mut App, &mut Canvas)) {
+    pub(crate) fn paint_in_appearance(&mut self, c: &mut Canvas, paint: &mut dyn FnMut(&mut App, &mut Canvas)) {
         let t = self.fader.value(Instant::now());
         if t == 0 || t == 255 {
             palette::set_blend(t);
-            paint(self, &mut Canvas::new(pixels, w, h));
+            paint(self, c);
             return;
         }
         palette::set_blend(0);
-        paint(self, &mut Canvas::new(pixels, w, h));
-        let dark = pixels.to_vec();
+        paint(self, c);
+        // The two pictures are mixed pixel by pixel: the screen's pixels as they are (a quarter of them painted
+        // natively, `Canvas::screen`).
+        let dark = c.pixels().to_vec();
         palette::set_blend(255);
-        paint(self, &mut Canvas::new(pixels, w, h));
-        for (p, d) in pixels.iter_mut().zip(dark) {
+        paint(self, c);
+        for (p, d) in c.pixels_mut().iter_mut().zip(dark) {
             *p = mix(d, *p, t as u32);
         }
     }

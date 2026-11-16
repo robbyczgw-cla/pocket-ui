@@ -6,6 +6,10 @@ use std::collections::BTreeMap;
 const DB: &str = include_str!("../assets/controllers/gamecontrollerdb.txt");
 pub const PRESS: f32 = 0.55;
 pub const RELEASE: f32 = 0.40;
+/// A stick or trigger value older than this when it is read waited in the kernel's queue: nothing read the device
+/// for a while (pocket-ui stopped by a test harness and let go on again, a long stall). Readers normally take an
+/// event within milliseconds.
+pub const STALE: std::time::Duration = std::time::Duration::from_secs(1);
 
 #[derive(Clone, Copy)]
 enum Target { Button(Button), Axis(Axis) }
@@ -17,6 +21,35 @@ pub struct Decoder {
     hats: BTreeMap<u16, Vec<(Button, i32)>>,
     held: BTreeMap<(u16, u16, Button), bool>,
     name: String,
+    /// The newest value of each stick and trigger that came out of the kernel's queue late (`event_read_at`).
+    backlog: BTreeMap<u16, i32>,
+    /// On an RK3566 board ROCKNIX's InputPlumber sends Guide (BTN_MODE) with every SELECT (`anbernic_gen1` and `powkiddy`
+    /// maps, "Guide Button (Select)", listed after "Select Button"): a BTN_MODE press that comes within `GUIDE_ECHO` of a
+    /// SELECT press is that copy, and it and its release are dropped. Otherwise SELECT would be HOME held, and a game would
+    /// never get SELECT (`hotkeys`). HOME there is the F key or the right stick's click (`pad::linux::rk3566_home_key`).
+    guide_echo: bool,
+    select_down_at: Option<std::time::SystemTime>,
+    guide_dropped: bool,
+}
+
+/// How close behind a SELECT press a Guide press counts as InputPlumber's copy of it (both come from one source event).
+pub const GUIDE_ECHO: std::time::Duration = std::time::Duration::from_millis(60);
+
+/// One read's events with BTN_SELECT ahead of BTN_MODE (the order InputPlumber's map sends them in), so the echo filter
+/// sees SELECT first also when both arrive in one report. Nothing else moves.
+pub fn select_before_guide(batch: &mut [InputEvent]) {
+    let rank = |e: &InputEvent| match e.destructure() {
+        EventSummary::Key(_, KeyCode::BTN_SELECT, _) => 0,
+        EventSummary::Key(_, KeyCode::BTN_MODE, _) => 1,
+        _ => 2,
+    };
+    let (mut s, mut m) = (None, None);
+    for (i, e) in batch.iter().enumerate() {
+        match rank(e) { 0 if s.is_none() => s = Some(i), 1 if m.is_none() => m = Some(i), _ => {} }
+    }
+    if let (Some(s), Some(m)) = (s, m) {
+        if m < s { batch[m..=s].rotate_right(1); }
+    }
 }
 
 impl Decoder {
@@ -45,7 +78,9 @@ impl Decoder {
         // Same two loops as SDL_sysjoystick.c (BTN_JOYSTICK first, then smaller key codes).
         keys.sort_by_key(|k| (*k < 0x120, *k));
         ranges.sort_by_key(|a| a.0);
-        let mut out = Self { keys: BTreeMap::new(), axes: BTreeMap::new(), hats: BTreeMap::new(), held: BTreeMap::new(), name: name.into() };
+        let guide_echo = crate::device::current().model.is_some_and(|m| m.is_rk3566());
+        let mut out = Self { keys: BTreeMap::new(), axes: BTreeMap::new(), hats: BTreeMap::new(), held: BTreeMap::new(), name: name.into(), backlog: BTreeMap::new(),
+            guide_echo, select_down_at: None, guide_dropped: false };
         // The built-in Brick pad borrows the Xbox 360 USB ID. Its measured layout
         // (including F1/F2 and analog triggers) wins over generic Xbox/SDL guesses.
         let brick = name.trim() == "TRIMUI Player1";
@@ -140,9 +175,62 @@ impl Decoder {
         if was != now { out.push(PadEvent::Button { source, button: b, pressed: now }); }
     }
 
+    /// `event`, for an event read at `now` (the live reader). Stick and trigger values that waited in the kernel's
+    /// queue (`STALE`) are history: only the newest of each axis goes on, at `flush`, once the queue is read empty.
+    /// So a stick pushed and sprung back, or one bad report, while nothing read the device is nothing (it woke Alex's
+    /// dark Mini V2 on 2026-11-14 the moment a stopped pocket-ui went on); a stick still held then is still held.
+    /// Buttons and the d-pad go on as they came: each press is one.
+    pub fn event_read_at(&mut self, source: usize, event: InputEvent, now: std::time::SystemTime) -> Vec<PadEvent> {
+        if let EventSummary::AbsoluteAxis(_, code, value) = event.destructure() {
+            if self.axes.contains_key(&code.0) {
+                if now.duration_since(event.timestamp()).is_ok_and(|age| age > STALE) {
+                    self.backlog.insert(code.0, value);
+                    return Vec::new();
+                }
+                // A value read in time is newer than what waited.
+                self.backlog.remove(&code.0);
+            }
+        }
+        self.event(source, event)
+    }
+
+    /// Whether late stick or trigger values wait for `flush`.
+    pub fn has_backlog(&self) -> bool {
+        !self.backlog.is_empty()
+    }
+
+    /// The newest late value of each stick and trigger (`event_read_at`), now that the queue is read empty.
+    pub fn flush(&mut self, source: usize) -> Vec<PadEvent> {
+        let backlog = std::mem::take(&mut self.backlog);
+        backlog.into_iter().flat_map(|(code, value)| self.event(source, InputEvent::new(evdev::EventType::ABSOLUTE.0, code, value))).collect()
+    }
+
+    /// The RK3566 Guide-echo filter on or off (`guide_echo`), for tests; live readers take it from the device.
+    #[doc(hidden)]
+    pub fn with_guide_echo(mut self, on: bool) -> Self {
+        self.guide_echo = on;
+        self
+    }
+
+    /// `guide_echo`: whether this key event is InputPlumber's Guide copy of SELECT (or its release), to be dropped.
+    fn guide_copy(&mut self, code: KeyCode, value: i32, at: std::time::SystemTime) -> bool {
+        if !self.guide_echo { return false; }
+        match code {
+            KeyCode::BTN_SELECT => { self.select_down_at = (value != 0).then_some(at); false }
+            KeyCode::BTN_MODE if value != 0 => {
+                let copy = self.select_down_at.is_some_and(|s| at.duration_since(s).map_or(true, |d| d <= GUIDE_ECHO));
+                self.guide_dropped = copy;
+                copy
+            }
+            KeyCode::BTN_MODE => std::mem::take(&mut self.guide_dropped),
+            _ => false,
+        }
+    }
+
     pub fn event(&mut self, source: usize, event: InputEvent) -> Vec<PadEvent> {
         let mut out = Vec::new();
         match event.destructure() {
+            EventSummary::Key(_, code, value) if value != 2 && self.guide_copy(code, value, event.timestamp()) => {}
             EventSummary::Key(_, code, value) if value != 2 => {
                 if let Some(&b) = self.keys.get(&code.0) {
                     self.button(source, 1, code.0, b, value != 0, &mut out);
@@ -417,5 +505,190 @@ mod tests {
             reader.join().unwrap();
             assert!(dev2.fetch_events().unwrap().any(|e|e.event_type().0==1 && e.code()==KeyCode::BTN_SOUTH.0 && e.value()==1));
         }
+    }
+}
+
+#[cfg(test)]
+mod noise_tests {
+    use super::*;
+    use crate::pad::{counts_as_input, Controller, PadState};
+    use std::time::{Duration, SystemTime};
+
+    const ABS: u16 = 3;
+    const KEY: u16 = 1;
+
+    /// The Mini V2's built-in pad as InputPlumber shows it (`/proc/bus/input/devices`, 2026-11-14): a virtual DualSense,
+    /// sticks and triggers 0-255, the d-pad a hat.
+    fn mini_v2() -> Decoder {
+        let keys = vec![304, 305, 307, 308, 310, 311, 312, 313, 314, 315, 316, 317, 318];
+        let axes = vec![(0, 0, 255), (1, 0, 255), (2, 0, 255), (3, 0, 255), (4, 0, 255), (5, 0, 255), (16, -1, 1), (17, -1, 1)];
+        Decoder::with_caps(3, 0x054c, 0x0ce6, 0x8111, "Sony Interactive Entertainment DualSense Wireless Controller", keys, axes)
+    }
+
+    /// Reads `events` the way the live reader does when they all come out of the queue `late` after they happened,
+    /// then the queue is empty.
+    fn read(dec: &mut Decoder, events: &[(u16, u16, i32)], late: Duration) -> Vec<PadEvent> {
+        let at = SystemTime::now() + late;
+        let mut out: Vec<PadEvent> = events.iter().flat_map(|&(k, c, v)| dec.event_read_at(5, InputEvent::new_now(k, c, v), at)).collect();
+        if dec.has_backlog() {
+            out.extend(dec.flush(5));
+        }
+        out
+    }
+
+    fn any_input(events: &[PadEvent]) -> bool {
+        events.iter().any(counts_as_input)
+    }
+
+    /// 2026-11-14 ~22:17: Alex's Mini V2 lay dark ("light" sleep) while a test harness held his pocket-ui stopped.
+    /// The left stick went out and back meanwhile; when pocket-ui went on, it read the queue and "sleep: awake (a
+    /// stick)" turned the screen on. What waited in the queue is history: a stick that is back at rest by now is
+    /// nothing, never a wake.
+    #[test]
+    fn a_stick_pushed_and_back_while_nothing_read_is_nothing_when_read_late() {
+        let mut dec = mini_v2();
+        let stream = [(ABS, 0, 142), (ABS, 0, 240), (ABS, 0, 255), (ABS, 1, 30), (ABS, 0, 180), (ABS, 1, 128), (ABS, 0, 142)];
+        let out = read(&mut dec, &stream, Duration::from_secs(240));
+        assert!(!any_input(&out), "late stick history woke the screen: {out:?}");
+        assert!(!dec.has_backlog());
+    }
+
+    /// One bad report while nothing read (a value far out and straight back) is the same: nothing.
+    #[test]
+    fn one_wild_report_in_the_queue_is_nothing_when_read_late() {
+        let mut dec = mini_v2();
+        let out = read(&mut dec, &[(ABS, 3, 0), (ABS, 3, 132)], Duration::from_secs(5));
+        assert!(!any_input(&out), "{out:?}");
+    }
+
+    /// A stick still held when the queue is read is still held, and a trigger still pulled still pulled: the newest
+    /// value of each goes on, once.
+    #[test]
+    fn a_stick_still_held_after_a_late_read_is_still_held() {
+        let mut dec = mini_v2();
+        let out = read(&mut dec, &[(ABS, 0, 200), (ABS, 0, 255), (ABS, 5, 255)], Duration::from_secs(30));
+        let axes: Vec<_> = out.iter().filter_map(|e| match *e { PadEvent::Axis { axis, value, .. } => Some((axis, value)), _ => None }).collect();
+        assert_eq!(axes, vec![(Axis::LeftX, 1.0), (Axis::R2, 1.0)], "{out:?}");
+        assert!(out.iter().any(|e| matches!(e, PadEvent::Button { source: 5, button: Button::R2, pressed: true })));
+    }
+
+    /// Buttons and the d-pad are not history: each press that waited in the queue goes on, down and up.
+    #[test]
+    fn late_buttons_and_dpad_presses_all_go_on() {
+        let mut dec = mini_v2();
+        let out = read(&mut dec, &[(KEY, 304, 1), (KEY, 304, 0), (ABS, 17, 1), (ABS, 17, 0)], Duration::from_secs(30));
+        let presses: Vec<_> = out.iter().filter_map(|e| match *e { PadEvent::Button { source: 5, button, pressed } => Some((button, pressed)), _ => None }).collect();
+        assert_eq!(presses, vec![(Button::South, true), (Button::South, false), (Button::Down, true), (Button::Down, false)], "{out:?}");
+        assert_eq!(presses.len(), out.len(), "{out:?}");
+    }
+
+    /// Read in time, every stick value goes on as it came (menus scroll with it, games get it).
+    #[test]
+    fn stick_values_read_in_time_go_on_as_they_came() {
+        let mut dec = mini_v2();
+        let out = read(&mut dec, &[(ABS, 0, 200), (ABS, 0, 255), (ABS, 0, 128)], Duration::ZERO);
+        assert_eq!(out.len(), 3, "{out:?}");
+        assert!(any_input(&out), "a real push counts");
+    }
+
+    /// A value read in time after late ones is newer: the late ones of that axis are dropped, not sent after it.
+    #[test]
+    fn a_value_read_in_time_replaces_what_waited() {
+        let mut dec = mini_v2();
+        let at = SystemTime::now();
+        assert!(dec.event_read_at(5, InputEvent::new_now(ABS, 0, 255), at + Duration::from_secs(9)).is_empty());
+        let fresh = dec.event_read_at(5, InputEvent::new_now(ABS, 0, 128), at);
+        assert_eq!(fresh.len(), 1);
+        assert!(!dec.has_backlog(), "the late 255 must not come after the newer 128");
+    }
+
+    /// A lying pad never counts as somebody using it: ten minutes of 100 Hz jitter around the Mini V2's resting
+    /// offsets (left X rests at 142 = +0.11, the others near 128) and of a trigger at rest, read in time, through the
+    /// menu's pad: nothing counts as input (sleep's timers, the dark screen, the UI's quiet spells), not even the
+    /// menus' smaller dead zone's edge.
+    #[test]
+    fn ten_minutes_of_stick_and_trigger_jitter_never_count_as_input() {
+        let mut dec = mini_v2();
+        let mut menu = PadState::new(vec![]);
+        menu.merge(PadEvent::Connected { source: 5, controller: Controller::builtin() });
+        let mut seed = 0x2545_f491_u32;
+        let mut noise = |spread: i32| {
+            seed ^= seed << 13;
+            seed ^= seed >> 17;
+            seed ^= seed << 5;
+            (seed % (2 * spread as u32 + 1)) as i32 - spread
+        };
+        let now = SystemTime::now();
+        for _ in 0..60_000 {
+            for (code, rest, spread) in [(0u16, 142, 8), (1, 128, 6), (3, 132, 6), (4, 126, 6), (2, 0, 3), (5, 0, 3)] {
+                let value = (rest + noise(spread)).clamp(0, 255);
+                for e in dec.event_read_at(5, InputEvent::new_now(ABS, code, value), now) {
+                    assert!(!counts_as_input(&e), "jitter counted as input: {e:?}");
+                    for merged in menu.merge(e) {
+                        assert!(!counts_as_input(&merged), "merged jitter counted as input: {merged:?}");
+                    }
+                }
+            }
+        }
+    }
+}
+
+/// ROCKNIX's InputPlumber on the RK3566 boards (20261101, `anbernic_gen1` and `powkiddy` maps) sends Guide with every SELECT.
+#[cfg(test)]
+mod rk3566_guide_echo_tests {
+    use super::*;
+    use std::time::{Duration, UNIX_EPOCH};
+
+    fn at(ms: u64, code: KeyCode, value: i32) -> InputEvent {
+        let e = InputEvent::new(evdev::EventType::KEY.0, code.0, value);
+        // InputEvent::new has no time of its own: give it one, as the kernel does.
+        let t = UNIX_EPOCH + Duration::from_millis(1_000_000 + ms);
+        let d = t.duration_since(UNIX_EPOCH).unwrap();
+        InputEvent::from(libc::input_event {
+            time: libc::timeval { tv_sec: d.as_secs() as _, tv_usec: d.subsec_micros() as _ },
+            type_: e.event_type().0, code: e.code(), value: e.value(),
+        })
+    }
+
+    fn pad(echo: bool) -> Decoder {
+        // InputPlumber's DS5 target: face buttons, SELECT/START/MODE, the stick clicks.
+        Decoder::with_caps_profile((3, 0x054c, 0x0ce6, 0x8111), "Sony Interactive Entertainment DualSense Wireless Controller",
+            vec![304, 305, 307, 308, 310, 311, 312, 313, 314, 315, 316, 317, 318], vec![], false).with_guide_echo(echo)
+    }
+
+    fn buttons(events: &[PadEvent]) -> Vec<(Button, bool)> {
+        events.iter().filter_map(|e| match e { PadEvent::Button { button, pressed, .. } => Some((*button, *pressed)), _ => None }).collect()
+    }
+
+    #[test]
+    fn the_guide_copy_of_select_is_dropped_and_select_reaches_the_game() {
+        let mut d = pad(true);
+        let mut got = Vec::new();
+        for e in [at(0, KeyCode::BTN_SELECT, 1), at(1, KeyCode::BTN_MODE, 1), at(120, KeyCode::BTN_SELECT, 0), at(121, KeyCode::BTN_MODE, 0)] {
+            got.extend(d.event(0, e));
+        }
+        assert_eq!(buttons(&got), [(Button::Select, true), (Button::Select, false)]);
+        // A real HOME on its own still comes through (a Bluetooth pad on the same handheld), and so does SELECT + HOME later.
+        let got: Vec<_> = [at(500, KeyCode::BTN_MODE, 1), at(560, KeyCode::BTN_MODE, 0)].into_iter().flat_map(|e| d.event(0, e)).collect();
+        assert_eq!(buttons(&got), [(Button::Mode, true), (Button::Mode, false)]);
+        let got: Vec<_> = [at(1000, KeyCode::BTN_SELECT, 1), at(1300, KeyCode::BTN_MODE, 1), at(1400, KeyCode::BTN_MODE, 0)].into_iter().flat_map(|e| d.event(0, e)).collect();
+        assert_eq!(buttons(&got), [(Button::Select, true), (Button::Mode, true), (Button::Mode, false)]);
+    }
+
+    #[test]
+    fn both_in_one_report_are_put_select_first() {
+        let mut batch = vec![at(0, KeyCode::BTN_MODE, 1), at(0, KeyCode::BTN_SOUTH, 1), at(0, KeyCode::BTN_SELECT, 1)];
+        select_before_guide(&mut batch);
+        assert_eq!(batch.iter().map(|e| e.code()).collect::<Vec<_>>(), [KeyCode::BTN_SELECT.0, KeyCode::BTN_MODE.0, KeyCode::BTN_SOUTH.0]);
+        let mut d = pad(true);
+        let got: Vec<_> = batch.into_iter().flat_map(|e| d.event(0, e)).collect();
+        assert_eq!(buttons(&got), [(Button::Select, true), (Button::South, true)]);
+    }
+
+    #[test]
+    fn other_devices_keep_select_and_home_together() {
+        let mut d = pad(false);
+        let got: Vec<_> = [at(0, KeyCode::BTN_SELECT, 1), at(1, KeyCode::BTN_MODE, 1)].into_iter().flat_map(|e| d.event(0, e)).collect();
+        assert_eq!(buttons(&got), [(Button::Select, true), (Button::Mode, true)]);
     }
 }

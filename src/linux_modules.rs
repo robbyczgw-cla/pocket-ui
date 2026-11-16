@@ -4,9 +4,18 @@ pub mod platform;
 pub mod control;
 pub mod proc;
 pub mod frame;
+/// The rows a frame changed, for the Brick's partial upload (`pocket-fb`).
+pub mod damage;
+/// The canvas as the bytes of an Android window (R, G, B, X), one vector pass.
+pub mod rgbx;
+/// The handheld view's window on Android: a canvas kept between frames, painted before the buffer is locked (`rgbx`).
+#[cfg(target_os = "android")]
+pub mod native_surface;
 pub mod scaled_layout;
 /// Save slots drawn on the save medium of their era: memory card, cartridge, a plain row (`save_media`).
 pub mod save_media;
+/// Save made visible in the pause menu: the saved picture flies from the preview into its slot, Cozy and Motion Full (`save_fill`).
+pub mod save_fill;
 pub mod crash;
 pub mod logs;
 pub mod net_log;
@@ -45,13 +54,19 @@ pub mod this_game_page;
 pub mod splash;
 /// The first frame after the Pocket starts fades in from black (docs/BOOT-SPLASH.md).
 pub mod boot_fade;
+/// Settings → Playing → Console boot screen: a fresh start runs the console's own boot screen (the player's BIOS file).
+pub mod boot_screen;
 pub mod crt_on;
 pub mod eject;
+/// A start that failed: the medium comes back out, the case goes back on the shelf, one friendly sentence (`start_failed`).
+pub mod start_failed;
 pub mod cozy_extras;
 pub mod insert_rig;
 pub mod insert_scene;
 pub mod playful;
+pub mod sticker_press;
 pub mod text_fallback;
+pub mod latinise;
 pub mod type_scale;
 /// The interface in German: the table the text painter looks every string up in (Settings → Language).
 pub mod i18n;
@@ -94,11 +109,12 @@ pub mod resample;
 pub mod clock_check;
 pub mod manual_time;
 pub mod libretro;
-#[cfg_attr(target_os = "emscripten", path = "platform/android_hw_render.rs")] pub mod hw_render;
+#[cfg_attr(any(target_os = "emscripten", target_os = "android"), path = "platform/android_hw_render.rs")] pub mod hw_render;
 pub mod options;
 pub mod look;
 pub mod j2me_java;
 pub mod j2me_keys;
+pub mod dpad_stick_rocknix;
 pub mod j2me_size;
 pub mod starter;
 pub mod store;
@@ -162,6 +178,7 @@ pub mod emu_settings;
 pub mod fallback;
 pub mod first_game;
 pub mod h700_gba;
+pub mod core_prewarm;
 pub mod emu_choice;
 pub mod emu_choice_page;
 pub mod cheats;
@@ -176,7 +193,7 @@ pub mod favorites;
 pub mod marquee;
 pub mod motion;
 pub mod button_layout;
-/// Settings → Help & tools → Test buttons: what each connected controller does, with the remaps shown (`app_test_buttons.rs` paints it).
+/// Settings → Controls → Test buttons: what each connected controller does, with the remaps shown (`app_test_buttons.rs` paints it).
 pub mod button_test;
 pub mod button_prompts;
 pub mod font_style;
@@ -229,13 +246,20 @@ pub mod settings_values;
 pub mod shelf;
 pub mod cabinet;
 pub mod cabinet_art;
+pub mod share_shelf;
 // Stickers on a game's case (Completed, 100 %, Favourite, Playing now, Game of the year): kept, painted on fronts and spines.
 pub mod case_stickers;
+pub mod shrink_wrap;
 // The CRT TV on the Cabinet showing the selected game's screenshot (its own thread, cached, crossfaded).
 pub mod cabinet_tv;
+// The Cabinet's TV plays the real game, and A goes on with it (`showcase`).
+pub mod showcase;
 pub mod media;
+pub mod tape_label;
 pub mod title_block;
 pub mod pause_head;
+/// The handhelds' pause menu for Android's player when the game came from the Handheld view (`pause_list`).
+pub mod pause_list;
 pub mod quit;
 pub mod exit_guard;
 pub mod fast_switch;
@@ -252,6 +276,12 @@ pub mod curatordb;
 pub mod romfacts;
 /// Games recognised by their checksum: the No-Intro name for covers, pictures and the game facts (`rom_id`).
 pub mod rom_id;
+/// "The case knows where you are": one line read from a game's own battery save, checked by the game's checksum
+/// (`case_knows`), and the files, cache and thread behind it (`case_knows_read`).
+pub mod case_knows;
+pub mod case_knows_read;
+/// Pictures for it from the player's own ROM (`case_knows_art`): the team's icons and the badges.
+pub mod case_knows_art;
 /// PlayStation discs recognised by the serial on the disc: the Redump name for covers, pictures and the game facts
 /// (`disc_serial`, the disc half of `rom_id`).
 pub mod disc_serial;
@@ -302,6 +332,8 @@ pub mod history_page;
 pub mod startup;
 pub mod on_start;
 pub mod launch_picture;
+/// Android's handheld view: where the games are and the Mobile view's key of each (android/handheld/app_android.rs).
+pub mod android_handheld;
 // "Where was I?": the card over a moment continued after a long break.
 pub mod where_was_i;
 /// RetroAchievements: rcheevos (vendor/rcheevos) for pocket-core games, the account, the files pocket-ui reads.
@@ -385,12 +417,15 @@ pub mod touch_ui;
 
 pub mod document_library;
 pub mod document_check;
+pub mod system_names;
 
 pub mod device_model;
 #[cfg(feature = "brick")]
 pub mod soft_screen;
 #[cfg(feature = "brick")]
 pub mod brick_profile;
+#[cfg(feature = "brick")]
+pub mod darkos;
 #[cfg(feature = "brick")]
 pub mod brick_gl;
 #[cfg(feature = "brick")]
@@ -410,4 +445,11 @@ pub mod core_status;
 pub mod document_art;
 
 pub mod android_cores;
+/// Which way a game starts on Android (our player, a core to download, another app), for the Mobile and the handheld view.
+pub mod play_route;
+#[cfg(target_os = "android")]
+pub mod android_core_run;
+pub mod play_route_cfg;
 pub mod phone_corner;
+/// Android's handheld view: the volume and brightness rows act on Android's media volume and this app's window.
+pub mod android_controls;

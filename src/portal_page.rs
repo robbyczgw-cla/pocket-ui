@@ -251,22 +251,50 @@ impl PortalPage {
         let title = if self.online { "You're online" } else { "This network wants a sign-in" };
         let title = text.fit(Face::Title, 67, title, w);
         text.draw(c, Face::Title, 67, MARGIN, 140, pal().chalk, &title);
-        let step = crate::type_scale::line(28, 12);
-        let mut y = 200;
         let lead = if self.online {
             format!("{} lets this Pocket in now. Games, the store and updates can go online.", self.ssid)
         } else {
             "Hotel, train and café networks often ask you to accept their terms or type a room number before anything goes online.".to_string()
         };
-        y = text.paragraph(c, Face::Body, 28, (MARGIN, y), w, step, y + 2 * step, pal().dust, &lead) + 8;
-        if !self.online {
-            let line = text.fit(Face::Body, 28, &self.where_line(), w);
-            text.draw(c, Face::Body, 28, MARGIN, y, pal().chalk, &line);
-            y += step + 8;
-            let again = format!("pocket-ui checks again every {RECHECK_SECS} seconds and says when you're online.");
-            y = text.paragraph(c, Face::Body, 28, (MARGIN, y), w, step, y + step, pal().dust, &again);
-        }
+        let again = format!("pocket-ui checks again every {RECHECK_SECS} seconds and says when you're online.");
+        // Keep a fitting page exactly as it was. Otherwise close the spare gaps first, then make the prose a little
+        // smaller, before giving up any words. Long French/Large prose used to push Other ways into the hint bar.
         let row = crate::type_scale::row(70, 37);
+        let hint_left = c.w - crate::kit::PAD - crate::kit::pill_width(text, c.w, &[("A", "Open"), ("B", "Back")]);
+        let last_name = text.width(Face::Title, 37, "Other ways").min(w - text.width(Face::Body, 24, "Hotspot, front desk") - 100);
+        let mut layout = None;
+        for (px, spacing, gap, start) in [(28, 12, 8, 200), (28, 4, 4, 188), (25, 4, 4, 188), (22, 4, 4, 188)] {
+            let step = crate::type_scale::line(px, spacing);
+            let lead_lines = text.wrap(Face::Body, px, &lead, w);
+            let again_lines = if self.online { Vec::new() } else { text.wrap(Face::Body, px, &again, w) };
+            let end = start + lead_lines.len() as i32 * step + gap
+                + if self.online { 0 } else { step + gap + again_lines.len() as i32 * step };
+            // Only text at the right shares room with the hints. The left end of the row can extend beside them
+            // (English Retro/Large already fits); counting its bottom padding would unnecessarily move that page.
+            let last_row = end + 12 + (self.rows().len() as i32 - 1) * row;
+            let side_bottom = last_row + (row - 8) / 2 + crate::type_scale::base(10, 24) + crate::type_scale::px(24) as i32 / 4;
+            let name_bottom = last_row + (row - 8) / 2 + crate::type_scale::base(13, 37) + crate::type_scale::px(37) as i32 / 4;
+            let name_fits = MARGIN + 28 + last_name <= hint_left || name_bottom <= crate::kit::hint_bar_top(c.h);
+            if (side_bottom <= crate::kit::hint_bar_top(c.h) && name_fits) || px == 22 {
+                layout = Some((px, step, gap, start, lead_lines, again_lines));
+                break;
+            }
+        }
+        let (px, step, gap, mut y, lead_lines, again_lines) = layout.expect("last layout always taken");
+        for line in lead_lines {
+            text.draw(c, Face::Body, px, MARGIN, y, pal().dust, &line);
+            y += step;
+        }
+        y += gap;
+        if !self.online {
+            let line = text.fit(Face::Body, px, &self.where_line(), w);
+            text.draw(c, Face::Body, px, MARGIN, y, pal().chalk, &line);
+            y += step + gap;
+            for line in again_lines {
+                text.draw(c, Face::Body, px, MARGIN, y, pal().dust, &line);
+                y += step;
+            }
+        }
         let top = y + 12;
         for (i, r) in self.rows().iter().enumerate() {
             let ry = top + i as i32 * row;
@@ -301,7 +329,7 @@ impl PortalPage {
         let (heading_px, heading) = text.fit_sizes(Face::Title, &[67, 50], "Other ways online", w);
         text.draw(c, Face::Title, heading_px, MARGIN, 140, pal().chalk, &heading);
         // The ways scroll under the title and above the hint bar.
-        let (top, bottom) = (180, c.h - 100);
+        let (top, bottom) = (180, crate::kit::content_bottom(c.h));
         let mark = crate::text::boxes::mark();
         let mut band = c.rows(top, bottom);
         let step = crate::type_scale::line(28, 12);

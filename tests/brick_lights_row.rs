@@ -1,4 +1,4 @@
-//! Settings > Sound & feel: the row that opens the lights page carries the page's name (device report, 06.11.: the row said
+//! Settings > Controls: the row that opens the lights page carries the page's name (device report, 06.11.: the row said
 //! "LEDs" and opened "Lights & buttons"). Read from what the screen paints (`POCKETUI_VISIBLE_TEXT`), at the Brick's 1024x768 in
 //! Large text, in English, German and Spanish:
 //! - the Brick's row is called as its page is, its value is the short "Lights off" (the lights are dark at the first start),
@@ -61,8 +61,8 @@ fn painted(tmp: &Path, stub: &Option<Stub>, device: &str, lang: &str, state: &st
     std::fs::read_to_string(&seen).unwrap_or_default().lines().map(|l| l.trim().to_string()).collect()
 }
 
-/// The last row of Sound & feel (category 1): the lights row, on the Brick and on a handheld with sticks.
-const LIST: &str = "settings:1:99";
+/// The last row of Controls (category 3): the lights row, on the Brick and on a handheld with sticks.
+const LIST: &str = "settings:3:99";
 
 #[cfg(feature = "brick")]
 #[test]

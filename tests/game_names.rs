@@ -6,14 +6,16 @@
 
 use pocket_ui::i18n::{self, Cache, Lang};
 
-fn german() {
-    i18n::set(Lang::De);
+/// German for this test's thread only (the other tests in this program keep theirs), until the guard is dropped.
+fn german() -> i18n::ThreadLang {
+    let language = i18n::for_this_thread(Lang::De);
     i18n::german();
+    language
 }
 
 #[test]
 fn a_learned_name_is_painted_as_it_is_and_the_interface_word_still_is_translated() {
-    german();
+    let _german = german();
     let mut c = Cache::default();
     // The case that was wrong: the table has these words (whole, or as a pattern).
     assert_eq!(&*c.get("Black"), "Schwarz", "the interface's word, before any game of that name is known");
@@ -36,7 +38,7 @@ fn a_learned_name_is_painted_as_it_is_and_the_interface_word_still_is_translated
 
 #[test]
 fn the_games_of_a_library_read_are_names() {
-    german();
+    let _german = german();
     let _dir_guard = tempfile::tempdir().unwrap();
     let dir = _dir_guard.path().to_path_buf();
     std::fs::create_dir_all(dir.join("gb")).unwrap();
@@ -58,7 +60,7 @@ fn the_games_of_a_library_read_are_names() {
 
 #[test]
 fn a_name_made_for_painting_from_a_file_name_is_learned_but_one_made_for_matching_is_not() {
-    german();
+    let _german = german();
     let mut c = Cache::default();
     assert_eq!(&*c.get("Options"), "Optionen");
     assert_eq!(pocket_ui::library::display_name("Options (World)"), "Options");
@@ -71,7 +73,7 @@ fn a_name_made_for_painting_from_a_file_name_is_learned_but_one_made_for_matchin
 /// months" was left in English for "WarioWare, Inc. - Mega Microgame$!" (the span rule of `kept_spans_too_much`).
 #[test]
 fn a_title_with_sentence_punctuation_fills_a_placeholder() {
-    german();
+    let _german = german();
     let titles = ["WarioWare, Inc. - Mega Microgame$!", "Dr. Mario", "Mr. Driller", "Super Mario Bros. 3"];
     i18n::learn_names(titles);
     let mut c = Cache::default();

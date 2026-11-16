@@ -1,4 +1,4 @@
-//! The optional TrimUI cheat database in Settings → Games → Extras.
+//! The optional TrimUI cheat database in Settings → Games → Box art & downloads.
 //! All inspection, hashing and card writes run on the same worker lock as the pause-menu download.
 use std::path::{Path, PathBuf};
 use std::sync::{atomic::{AtomicU64, Ordering}, Arc, mpsc};
@@ -8,16 +8,31 @@ pub const ABOUT: &str = "Codes for many games, used from the pause menu (HOME �
 pub const CONTINUE: &str = "You can go back. The next try continues the download.";
 pub const CONNECT: &str = "Connect to Wi-Fi first to use these.";
 pub const REMOVE: &str = "Remove cheats? A again removes them.";
+/// Without a network: the cheats file on the card (`update::cheats::install_from_card`), on a handheld with Wi-Fi
+/// and without it.
+pub const CARD_WAY: &str = "Put the cheats file from pocketui.xyz/cheats on the card, then choose Look on the card. Or connect to Wi-Fi.";
+pub const CARD_WAY_NO_WIFI: &str = "Put the cheats file from pocketui.xyz/cheats on the card, then choose Look on the card.";
+pub const LOOK: &str = "Look on the card";
 const REMOVE_ERROR: &str = "Cheats couldn't be removed. Check the SD card and try again.";
 const OFFER_SIZE: u64 = 31_367_177;
+
+/// A download row's value and line without a network: "Needs Wi-Fi" and "Connect to Wi-Fi first", or on a handheld
+/// without Wi-Fi (`device::no_wifi_chip`) "No Wi-Fi" and `device::NEEDS_NETWORK`: nothing to connect to there.
+pub fn offline_value() -> &'static str {
+    crate::device::wifi_or("Needs Wi-Fi", "No Wi-Fi")
+}
+
+pub fn connect() -> &'static str {
+    crate::device::wifi_or(CONNECT, crate::device::NEEDS_NETWORK)
+}
 
 pub fn mb(bytes: u64) -> u64 { bytes.saturating_add((1 << 20) - 1) >> 20 }
 
 /// Shared by the pause menu and Extras; the action is always an explicit A press.
 pub fn get_row(size: u64, online: bool, error: Option<&str>) -> Row {
     Row { name: "Cheats".into(),
-        value: if !online { "Needs Wi-Fi".into() } else if error.is_some() { "Retry".into() } else { format!("Get · {} MB", mb(size)) },
-        desc: if !online { CONNECT.into() } else { error.unwrap_or(ABOUT).into() } }
+        value: if !online { offline_value().into() } else if error.is_some() { "Retry".into() } else { format!("Get · {} MB", mb(size)) },
+        desc: if !online { connect().into() } else { error.unwrap_or(ABOUT).into() } }
 }
 
 #[derive(Clone)]
@@ -26,13 +41,16 @@ pub struct Source {
     pub destination: PathBuf,
     // Only optional, known pack files; never a cheat preference directory or a custom database.
     legacy: Vec<PathBuf>,
+    /// Where a computer puts the cheats file (`update::card::places`): Look on the card, without a network.
+    pub card_places: Vec<PathBuf>,
 }
 
 impl Source {
     pub fn for_card(card: &Path) -> Self {
         Self { descriptor: card.join("app/database/cheats-download.json"),
             destination: card.join("storage/pocket-ui/cheats/cht.pack"),
-            legacy: vec![card.join("app/cores/cht.pack"), card.join("app.previous/cores/cht.pack")] }
+            legacy: vec![card.join("app/cores/cht.pack"), card.join("app.previous/cores/cht.pack")],
+            card_places: update::card::places() }
     }
     fn inspect(&self, cancel: &Cancel) -> Facts {
         let offered = update::cheats::description(&self.descriptor).ok();
@@ -96,7 +114,7 @@ impl Default for Facts {
 }
 
 #[derive(Clone, Copy, PartialEq)]
-enum Work { Inspect, Download, Remove }
+enum Work { Inspect, Download, Remove, FromCard }
 struct Reply { facts: Facts, error: Option<String> }
 
 pub struct Page {
@@ -123,7 +141,7 @@ impl Page {
     pub fn status(&self) -> (&'static str, u64, u64) {
         if self.busy() {
             let phase = match self.work {
-                Work::Inspect => "checking", Work::Remove => "removing",
+                Work::Inspect | Work::FromCard => "checking", Work::Remove => "removing",
                 Work::Download if self.cancel.phase() == Some(update::WorkerPhase::SavingCheats) => "saving",
                 Work::Download if self.cancel.progress_total() == 0 => "checking",
                 Work::Download => "downloading",
@@ -154,12 +172,13 @@ impl Page {
             if !self.facts.available { self.error = Some(update::cheats::UNAVAILABLE.into()); }
             else if !self.low_space() { self.start(Work::Download); }
         }
+        else if self.facts.available && !self.low_space() { self.start(Work::FromCard); }
     }
     /// X also allows removing an older installed database instead of taking its offered update.
     pub fn confirm_remove(&mut self) { if self.installed() && !self.busy() { self.confirm = true; } }
     pub fn can_activate(&self, online: bool) -> bool {
         !self.busy() && (self.confirm || (self.installed() && (!self.facts.update || !online))
-            || (online && self.facts.available && !self.low_space()))
+            || (self.facts.available && !self.low_space()))
     }
     fn low_space(&self) -> bool { self.facts.free.is_some_and(|free| free < update::cheats::space_needed(self.facts.size)) }
     fn start(&mut self, work: Work) {
@@ -178,6 +197,8 @@ impl Page {
             let result = match work {
                 Work::Inspect => Ok(()),
                 Work::Remove => source.remove(),
+                Work::FromCard => update::cheats::install_from_card(&source.descriptor, &source.destination, &source.card_places, &cancel,
+                    &|n| { bytes.store(n, Ordering::Relaxed); }),
                 Work::Download => {
                     if crate::covers::game_on() { Err("Close the game before downloading extras.".into()) }
                     else { update::cheats::replace(&source.descriptor, &source.destination, &cancel,
@@ -193,7 +214,7 @@ impl Page {
     pub fn row(&self, online: bool) -> Row {
         if self.busy() {
             let value = match self.work {
-                Work::Inspect => "Checking…".into(), Work::Remove => "Removing…".into(),
+                Work::Inspect | Work::FromCard => "Checking…".into(), Work::Remove => "Removing…".into(),
                 Work::Download if self.cancel.phase() == Some(update::WorkerPhase::SavingCheats) => "Saving…".into(),
                 Work::Download => {
                     let total = self.cancel.progress_total();
@@ -207,6 +228,10 @@ impl Page {
         if self.installed() && (!self.facts.update || !online) {
             return Row { name: "Cheats".into(), value: format!("Installed · {} MB", mb(self.facts.installed.unwrap())),
                 desc: self.error.clone().unwrap_or_else(|| "Codes for many games. A offers to remove the downloaded cheats.".into()) };
+        }
+        if !online && self.facts.available {
+            let way = crate::device::wifi_or(CARD_WAY, CARD_WAY_NO_WIFI);
+            return Row { name: "Cheats".into(), value: LOOK.into(), desc: self.error.clone().unwrap_or_else(|| way.into()) };
         }
         if !online { return get_row(self.facts.size, false, None); }
         if !self.facts.available {
@@ -230,7 +255,7 @@ impl Page {
     }
     pub fn action(&self, online: bool) -> &'static str {
         if self.confirm { "Remove" } else if self.installed() && (!self.facts.update || !online) { "Choose" }
-        else if self.error.is_some() { "Retry" } else if self.facts.update { "Update" } else { "Get" }
+        else if !online { LOOK } else if self.error.is_some() { "Retry" } else if self.facts.update { "Update" } else { "Get" }
     }
     /// Render fixtures use exactly the same state-to-row code, without card or network access.
     pub fn snapshot(state: &str) -> Self {
@@ -307,6 +332,28 @@ mod tests {
         assert!(!source.destination.exists()); assert!(!source.legacy[0].exists()); assert!(!partial.exists());
         assert_eq!(std::fs::read_to_string(prefs).unwrap(), "remember my switches"); assert!(unrelated.exists());
         assert_eq!(page.row(false).value, "Needs Wi-Fi");
+    }
+    /// Wi-Fi off or none: A on Cheats looks on the card; the file is checked, installed and removed from the card. With
+    /// nothing there, the row says so.
+    #[test]
+    fn offline_a_looks_on_the_card_and_installs_the_cheats_file_from_there() {
+        let dir = TestDir::new("extras-cheats-card"); let mut source = fixture(&dir);
+        let pack = std::fs::read(&source.destination).unwrap();
+        std::fs::remove_file(&source.destination).unwrap();
+        let card = dir.join("card"); std::fs::create_dir_all(&card).unwrap();
+        source.card_places = vec![card.clone()];
+        let mut page = Page::new(source.clone()); page.inspect(); finish(&mut page);
+        assert_eq!(page.row(false).value, LOOK);
+        assert!(page.row(false).desc.contains("on the card"), "{}", page.row(false).desc);
+        assert!(page.can_activate(false)); assert_eq!(page.action(false), LOOK);
+        page.activate(false); finish(&mut page);
+        assert_eq!(page.row(false).desc, update::cheats::CARD_NOTHING, "nothing on the card yet");
+        let file = card.join("cheats-from-the-site.pack");
+        std::fs::write(&file, &pack).unwrap();
+        page.activate(false); finish(&mut page);
+        assert!(page.installed(), "{:?}", page.error);
+        assert_eq!(std::fs::read(&source.destination).unwrap(), pack);
+        assert!(!file.exists(), "removed from the card");
     }
     #[test]
     fn low_space_counts_checkpoint_room_and_does_not_start_a_download() {

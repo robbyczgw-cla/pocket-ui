@@ -73,6 +73,8 @@ pub struct Page {
     pub window: (u32, u32),
     pub offset: (i32, i32),
     pub scale: (f32, f32),
+    /// What the page leaves out round the case's place, canvas pixels (`Ui::page_marks`): it comes with the case.
+    pub marks: Vec<pocket_ui::insert_scene::Mark>,
 }
 
 /// The start's own scene of `game` (Cozy, as on the handhelds also for a game that was frozen) from where its case
@@ -83,7 +85,9 @@ pub fn scene(game: &Game, ((x, y, w, h), mut front): ((i32, i32, i32, i32), Pic)
     if (from.2, from.3) != (front.w, front.h) {
         front = front.scaled_smooth(from.2, from.3);
     }
-    Launch::new(game, front, from, page.pixels, page.size, page.window, cover, printed, true, text)
+    let mut launch = Launch::new(game, front, from, page.pixels, page.size, page.window, cover, printed, true, text);
+    launch.marks = page.marks.into_iter().map(|m| m.scaled(page.scale)).collect();
+    launch
 }
 
 /// The way back of `game` with the player's note, its scene from the page at once (the tests; the app makes the scene

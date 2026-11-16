@@ -289,7 +289,13 @@ function libraryView() {
   const list = h("ul", { class: "shelf" },
     lib.systems.map((s) => h("li", {}, h("a", { class: "spine", href: "#/system/" + encodeURIComponent(s.id), stripe: s.stripe },
       h("span", { class: "name" }, s.name), h("span", { class: "side" }, String(s.games))))));
-  view(searchBox(), lib.systems.length ? list : h("p", { class: "quiet" }, "No games on the Pocket yet. Add some under Upload."));
+  // The pictures made of your shelf (Settings › Games › Screenshots on the Pocket): tap one, then save or share it from the phone.
+  const pics = lib.shelfPictures && lib.shelfPictures.length ? [h("h3", {}, "Your shelf as a picture"),
+    h("div", { class: "shots" }, lib.shelfPictures.map((at) => {
+      const src = "/api/shot?shelf=1&at=" + encodeURIComponent(at);
+      return h("a", { href: src, target: "_blank", rel: "noopener", download: "pocket-ui shelf " + at + ".png", title: at.replace(/^(\d+-\d+-\d+ \d+)-(\d+)-(\d+)/, "$1:$2:$3") }, h("img", { src, alt: "Shelf picture " + at, loading: "lazy" }));
+    }))] : null;
+  view(searchBox(), lib.systems.length ? list : h("p", { class: "quiet" }, "No games on the Pocket yet. Add some under Upload."), pics);
 }
 
 function gameSpine(g) {

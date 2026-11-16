@@ -5,6 +5,8 @@
 set -u
 R=$(cd "$(dirname "$0")" && pwd); REPO=$R
 T=$(mktemp -d "${TMPDIR:-/tmp}/test-odin-dc.XXXXXX"); trap 'rm -rf "$T"' EXIT
+# device-check.sh makes a folder of its own below TMPDIR (and the harness replaces its name): inside $T, so the trap removes it.
+export TMPDIR=$T
 fail=0; ok() { echo "ok   $1"; }; bad() { echo "FAIL $1"; fail=1; }
 mkdir -p "$T/work" "$T/out" "$T/bin" "$T/cfg/logs"
 cp "$R/ui-status.sh" "$T/work/"

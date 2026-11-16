@@ -19,12 +19,47 @@ import java.io.*;
 import java.net.*;
 import java.util.*;
 
-/** Framework I/O only: the Rust library owns matching, drawing and navigation. */
-public class PocketActivity extends NativeActivity {
+/** The Mobile view: Android's own launcher pages (libpocket_android). Everything it asks of Android is in PocketBase. */
+public class PocketActivity extends PocketBase {
     // NativeActivity dlopen alone does not register JNI methods with this Java class loader.
     static { System.loadLibrary("pocket_android"); }
+    /** Opened from the launcher or as Home while the handheld view is chosen (`Views`): that view comes up instead, and this
+     *  library returns at once (`routedAway`). An explicit start (adb, the tests' `am start -n`) is always this view. */
+    private boolean routedAway;
+    @Override protected void onCreate(Bundle saved) {
+        routedAway = fromLauncher(getIntent()) && Views.HANDHELD.equals(Views.chosen(this));
+        if (routedAway) Views.show(this, Views.HANDHELD);
+        super.onCreate(saved);
+        if (routedAway) finish();
+    }
+    @Override protected void onNewIntent(Intent intent) {
+        super.onNewIntent(intent);
+        if (fromLauncher(intent) && Views.HANDHELD.equals(Views.chosen(this))) { Views.show(this, Views.HANDHELD); finish(); }
+    }
+    /** Finished (Settings → View, or Android ending it): its process ends before NativeActivity's onDestroy, which waits for
+     *  the native loop, and the loop never ends (review of 12.11.2026, #1: the next start of this view hung). Not when it
+     *  handed over at once (`routedAway`): its library returned, nothing waits. */
+    @Override protected void onDestroy() {
+        if (!routedAway) Views.endProcess(this);
+        super.onDestroy();
+    }
+    private static boolean fromLauncher(Intent intent) {
+        return intent != null && intent.hasCategory(Intent.CATEGORY_LAUNCHER) || intent != null && intent.hasCategory(Intent.CATEGORY_HOME);
+    }
+    public String routedAway() { return Boolean.toString(routedAway); }
+    @Override protected native boolean nativeBack();
+    @Override protected native void nativeConfigurationChanged();
+    @Override protected native String nativePrepareDocument(int fd,String key,String name);
+}
+
+/** Framework I/O only: the Rust library owns matching, drawing and navigation. Shared by the Mobile view (PocketActivity)
+ *  and the handheld view (HandheldActivity); each loads its own native library and names its own native methods, so
+ *  this class loads none (JNI binds a native method by its class's name). */
+abstract class PocketBase extends NativeActivity {
     private static final int PICK_TREE = 41, SAVES_OUT = 42, SAVES_IN = 43;
     private static final String TAG = "PocketMvp";
+    /** A big game's copy bar comes once the start's picture is over (`insert_scene`: the medium is in by 1.2 s, the fade ends at 1.6 s): a window over it hides the console and the case going in. A copy done sooner shows none. */
+    private static final long COPY_BAR_AFTER_MS = 1700;
     private final StickKeys stickKeys = new StickKeys();
     private volatile boolean audioFocus;
     private android.media.AudioFocusRequest focusRequest;
@@ -32,8 +67,8 @@ public class PocketActivity extends NativeActivity {
     private final java.util.concurrent.atomic.AtomicBoolean launching = new java.util.concurrent.atomic.AtomicBoolean();
 
     private SemanticView semantics;
-    private native boolean nativeBack();
-    private native void nativeConfigurationChanged();
+    protected abstract boolean nativeBack();
+    protected abstract void nativeConfigurationChanged();
     private void backRequested(){android.util.Log.i(TAG,"launcher system back");if(!nativeBack())backRequests.incrementAndGet();}
     private final java.util.concurrent.atomic.AtomicInteger backRequests=new java.util.concurrent.atomic.AtomicInteger();
     private volatile String metrics = "1,1,0,0,0,0,0";
@@ -127,10 +162,10 @@ public class PocketActivity extends NativeActivity {
     public synchronized String coreRequested(){String value=requestedCore;requestedCore="";return value;}
     public String offerCoreDownload(String core,String name,String size,String settings){
         runOnUiThread(()->new AlertDialog.Builder(this)
-            .setTitle(inLanguage(settings,"System not installed","System noch nicht installiert","Sistema no instalado"))
-            .setMessage(inLanguage(settings,name+" needs an extra download over Wi-Fi. Your games and saves stay where they are.",name+" braucht einen zusätzlichen Download über WLAN. Deine Spiele und Spielstände bleiben erhalten.",name+" necesita una descarga adicional por wifi. Tus juegos y partidas guardadas se conservan."))
-            .setPositiveButton(inLanguage(settings,"Download now","Jetzt laden","Descargar ahora")+" · "+size,(dialog,which)->{synchronized(this){requestedCore=core;}})
-            .setNegativeButton(inLanguage(settings,"Not now","Nicht jetzt","Ahora no"),null).show());
+            .setTitle(inLanguage(settings,"System not installed","System noch nicht installiert","Sistema no instalado","Sistema não instalado","Système non installé","Sistema non installato"))
+            .setMessage(inLanguage(settings,name+" needs an extra download over Wi-Fi. Your games and saves stay where they are.",name+" braucht einen zusätzlichen Download über WLAN. Deine Spiele und Spielstände bleiben erhalten.",name+" necesita una descarga adicional por wifi. Tus juegos y partidas guardadas se conservan.",name+" precisa de um download extra por Wi-Fi. Seus jogos e saves continuam onde estão.",name+" a besoin d'un téléchargement supplémentaire en Wi-Fi. Tes jeux et tes sauvegardes restent où ils sont.",name+" richiede un download aggiuntivo via Wi-Fi. I tuoi giochi e i save restano dove sono."))
+            .setPositiveButton(inLanguage(settings,"Download now","Jetzt laden","Descargar ahora","Baixar agora","Télécharger maintenant","Scarica ora")+" · "+size,(dialog,which)->{synchronized(this){requestedCore=core;}})
+            .setNegativeButton(inLanguage(settings,"Not now","Nicht jetzt","Ahora no","Agora não","Pas maintenant","Non ora"),null).show());
         return "";
     }
     /** The system download channel: an intent's address (tests), else the one built into the APK (assets/core-channel.url, from android/core-channel.url). Empty: no public channel yet. */
@@ -519,6 +554,49 @@ public class PocketActivity extends NativeActivity {
         int value = audio.getStreamVolume(AudioManager.STREAM_MUSIC);
         return (max == 0 ? 0 : value * 100 / max) + "," + (audio.isStreamMute(AudioManager.STREAM_MUSIC) || !audioFocus);
     }
+    /** The media volume as the handheld view's row has it (`android_controls.rs`): "index,max,muted", the device's own steps. */
+    public String volumeLevels() {
+        AudioManager audio = (AudioManager)getSystemService(Context.AUDIO_SERVICE);
+        return audio.getStreamVolume(AudioManager.STREAM_MUSIC) + "," + audio.getStreamMaxVolume(AudioManager.STREAM_MUSIC) + "," + audio.isStreamMute(AudioManager.STREAM_MUSIC);
+    }
+    /** Sets the media volume to a step (no permission, no system panel: the row has its own bar). */
+    public String setVolumeIndex(String index) {
+        AudioManager audio = (AudioManager)getSystemService(Context.AUDIO_SERVICE);
+        try {
+            int max = audio.getStreamMaxVolume(AudioManager.STREAM_MUSIC);
+            int to = Math.max(0, Math.min(max, Integer.parseInt(index.trim())));
+            audio.setStreamVolume(AudioManager.STREAM_MUSIC, to, 0);
+            android.util.Log.i(TAG, "handheld volume: step " + to + " of " + max);
+            return "";
+        } catch (RuntimeException e) { return "Volume not changed: " + e.getMessage(); }
+    }
+    /** Only the handheld view sets this window's brightness (its Quick settings row); the Mobile view leaves Android's. */
+    protected boolean ownsBrightness() { return false; }
+    private static final int MIN_BRIGHTNESS = 5;
+    private int storedBrightness() { return getSharedPreferences("handheld", MODE_PRIVATE).getInt("brightness", -1); }
+    private void applyBrightness(int percent) {
+        android.view.WindowManager.LayoutParams attrs = getWindow().getAttributes();
+        attrs.screenBrightness = percent < 0 ? android.view.WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_NONE : Math.max(MIN_BRIGHTNESS, Math.min(100, percent)) / 100f;
+        getWindow().setAttributes(attrs);
+    }
+    /** The window's brightness in percent: this window's own level once the row set one, else Android's (readable without a permission); "" when neither is known. */
+    public String brightnessState() {
+        float own = getWindow().getAttributes().screenBrightness;
+        if (own >= 0) return Integer.toString(Math.round(own * 100));
+        int stored = ownsBrightness() ? storedBrightness() : -1;
+        if (stored >= 0) return Integer.toString(stored);
+        try { return Integer.toString(android.provider.Settings.System.getInt(getContentResolver(), android.provider.Settings.System.SCREEN_BRIGHTNESS) * 100 / 255); }
+        catch (Exception e) { return ""; }
+    }
+    /** This window, now, and kept for the next start and for the player the shelf starts (launchPath). Android's own brightness stays as it is. */
+    public String setBrightness(String percent) {
+        int value;
+        try { value = Math.max(MIN_BRIGHTNESS, Math.min(100, Integer.parseInt(percent.trim()))); } catch (RuntimeException e) { return "Brightness not changed"; }
+        getSharedPreferences("handheld", MODE_PRIVATE).edit().putInt("brightness", value).apply();
+        runOnUiThread(() -> applyBrightness(value));
+        android.util.Log.i(TAG, "handheld brightness: window " + value + " %");
+        return "";
+    }
     @SuppressWarnings("deprecation") public String speakerState() {
         AudioManager audio = (AudioManager)getSystemService(Context.AUDIO_SERVICE);
         return Boolean.toString(!audio.isBluetoothA2dpOn());
@@ -589,12 +667,54 @@ public class PocketActivity extends NativeActivity {
         synchronized(handOver){if(turn!=launchTurn){android.util.Log.i(TAG,"launch: cancelled start ended: "+e);return;}holding=false;heldStart=null;launching.set(false);}
         launchFailed=true;error(title,e);
     }
+    /** Settings → View in either view: keeps the choice (`Views`) and opens that view; this one ends. */
+    public String setView(String view) {
+        if (!view.equals(Views.HANDHELD) && !view.equals(Views.MOBILE)) return "Unknown view";
+        Views.save(this, view);
+        runOnUiThread(() -> { Views.show(this, view); finish(); });
+        return "";
+    }
+    /** The handheld view reads the games where they are: "true" once Android lets it (All files access, or storage read
+     *  before Android 11). */
+    public String filesAccess() {
+        if (android.os.Build.VERSION.SDK_INT >= 30) return Boolean.toString(android.os.Environment.isExternalStorageManager());
+        return Boolean.toString(checkSelfPermission(android.Manifest.permission.READ_EXTERNAL_STORAGE) == android.content.pm.PackageManager.PERMISSION_GRANTED);
+    }
+    /** The handheld view's start (android/handheld): a game by its real path (the view has All files access), in our own
+     *  player, without a copy; it comes when the start's scene lets it (`holdLaunch`/`releaseLaunch`). "" or why not. */
+    public String launchPath(String path,String core,String key,String title,String system,String settings,String bios){
+        if(!core.matches("[a-z][a-z0-9_]{0,39}")||corePath(core).isEmpty())return "System not downloaded: "+core;
+        if(!key.matches("[a-f0-9]{16}"))return "Invalid game identity";
+        if(!new File(path).canRead())return "Can't read "+path;
+        // The BIOS files in the ROMs folders' bios, into the player's own folder (as launchInternal does with the chosen folders').
+        try{copyBios(new JSONArray(bios));}catch(org.json.JSONException e){android.util.Log.w(TAG,"bios list",e);}
+        if(core.equals("yabasanshiro")&&!BiosFiles.hasSaturn(new File(getFilesDir(),"bios")))
+            return inLanguage(settings,"Saturn needs a BIOS. Put saturn_bios.bin, sega_101.bin or mpr-17933.bin in ROMs/bios.","Saturn braucht ein BIOS. Lege saturn_bios.bin, sega_101.bin oder mpr-17933.bin in ROMs/bios.","Saturn necesita una BIOS. Añade saturn_bios.bin, sega_101.bin o mpr-17933.bin a ROMs/bios.","O Saturn precisa de uma BIOS. Coloque saturn_bios.bin, sega_101.bin ou mpr-17933.bin em ROMs/bios.","Saturn a besoin d'un BIOS. Mets saturn_bios.bin, sega_101.bin ou mpr-17933.bin dans ROMs/bios.","Saturn richiede un BIOS. Metti saturn_bios.bin, sega_101.bin o mpr-17933.bin in ROMs/bios.");
+        final int turn;
+        synchronized(handOver){if(!launching.compareAndSet(false,true))return "Already opening a game";turn=launchTurn;}
+        Intent player=new Intent(this,PlayerActivity.class).putExtra("core",corePath(core)).putExtra("rom",path).putExtra("system",system).putExtra("key",key).putExtra("title",title).putExtra("settings",settings).addFlags(Intent.FLAG_ACTIVITY_NO_ANIMATION);
+        if(ownsBrightness()&&storedBrightness()>=0)player.putExtra("brightness",storedBrightness()); // the level chosen on the shelf holds in the game
+        whenReleased(turn,()->{try{startActivity(player);}finally{launching.set(false);}});
+        return "";
+    }
+    /** The handheld view's start in another emulator app (`EmulatorIntents.createForPath`): the game by its real path, when the
+     *  start's scene lets it (`holdLaunch`/`releaseLaunch`). "" or why not. */
+    public String launchApp(String path,String pkg,String profile){
+        java.io.File file=new java.io.File(path);
+        if(!file.canRead())return "Can't read "+path;
+        final Intent intent;
+        try{intent=EmulatorIntents.createForPath(this,file,profile,pkg);}catch(Exception e){return String.valueOf(e.getMessage());}
+        final int turn;
+        synchronized(handOver){if(!launching.compareAndSet(false,true))return "Already opening a game";turn=launchTurn;}
+        whenReleased(turn,()->{try{startActivity(intent);}catch(Exception e){android.util.Log.w(TAG,"launchApp: "+e);}finally{launching.set(false);}});
+        return "";
+    }
     /**
      * Check direct access or stage a game on a worker, then enter our own EGL player. URI identity owns its saves. `parts`: a disc sheet's files as
      * `[{"uri","name"}]` (`document_library::Part`), copied beside it; `bios`: the supported BIOS files among the chosen
      * folders, the same way, for the player's private BIOS folder. Both "[]" for a cartridge.
      */
-    private native String nativePrepareDocument(int fd,String key,String name);
+    protected abstract String nativePrepareDocument(int fd,String key,String name);
     /** Large-file CRC work stays on the content worker while the insertion animation runs. */
     private void prepareDirectDocument(String document,String key,String name) throws IOException {
         try(android.os.ParcelFileDescriptor fd=getContentResolver().openFileDescriptor(Uri.parse(document),"r")){
@@ -626,10 +746,10 @@ public class PocketActivity extends NativeActivity {
                 try{
                     copyBios(new JSONArray(bios));
                     if(core.equals("yabasanshiro")&&!BiosFiles.hasSaturn(new File(getFilesDir(),"bios")))
-                        throw new IOException(inLanguage(settings,"Saturn needs a BIOS. Put saturn_bios.bin, sega_101.bin or mpr-17933.bin in a selected folder, then run Game check.","Saturn braucht ein BIOS. Lege saturn_bios.bin, sega_101.bin oder mpr-17933.bin in einen gewählten Ordner und starte Spiele prüfen.","Saturn necesita una BIOS. Añade saturn_bios.bin, sega_101.bin o mpr-17933.bin a una carpeta seleccionada y ejecuta Revisar juegos."));
+                        throw new IOException(inLanguage(settings,"Saturn needs a BIOS. Put saturn_bios.bin, sega_101.bin or mpr-17933.bin in a selected folder, then run Game check.","Saturn braucht ein BIOS. Lege saturn_bios.bin, sega_101.bin oder mpr-17933.bin in einen gewählten Ordner und starte Spiele prüfen.","Saturn necesita una BIOS. Añade saturn_bios.bin, sega_101.bin o mpr-17933.bin a una carpeta seleccionada y ejecuta Revisar juegos.","O Saturn precisa de uma BIOS. Coloque saturn_bios.bin, sega_101.bin ou mpr-17933.bin em uma pasta escolhida e execute Verificação de jogos.","Saturn a besoin d'un BIOS. Mets saturn_bios.bin, sega_101.bin ou mpr-17933.bin dans un dossier choisi, puis lance la vérification des jeux.","Saturn richiede un BIOS. Metti saturn_bios.bin, sega_101.bin o mpr-17933.bin in una cartella scelta, poi avvia Controllo giochi."));
                     // A provider can have listed a BIOS that it no longer lets us read. Explain the actual fallback too.
                     if(core.equals("flycast")&&!BiosFiles.hasDreamcast(new File(getFilesDir(),"bios"))&&new JSONArray(bios).length()>0)
-                        runOnUiThread(()->android.widget.Toast.makeText(this,inLanguage(settings,"No Dreamcast BIOS. Flycast uses its built-in replacement. For better compatibility, add dc_boot.bin and dc_flash.bin to a selected bios folder.","Kein Dreamcast-BIOS. Flycast nutzt seinen eingebauten Ersatz. Für bessere Kompatibilität lege dc_boot.bin und dc_flash.bin in einen gewählten bios-Ordner.","No hay BIOS de Dreamcast. Flycast usa su reemplazo integrado. Para mayor compatibilidad, añade dc_boot.bin y dc_flash.bin a una carpeta bios seleccionada."),android.widget.Toast.LENGTH_LONG).show());
+                        runOnUiThread(()->android.widget.Toast.makeText(this,inLanguage(settings,"No Dreamcast BIOS. Flycast uses its built-in replacement. For better compatibility, add dc_boot.bin and dc_flash.bin to a selected bios folder.","Kein Dreamcast-BIOS. Flycast nutzt seinen eingebauten Ersatz. Für bessere Kompatibilität lege dc_boot.bin und dc_flash.bin in einen gewählten bios-Ordner.","No hay BIOS de Dreamcast. Flycast usa su reemplazo integrado. Para mayor compatibilidad, añade dc_boot.bin y dc_flash.bin a una carpeta bios seleccionada.","Sem BIOS do Dreamcast. O Flycast usa a substituta embutida. Para mais compatibilidade, coloque dc_boot.bin e dc_flash.bin em uma pasta bios escolhida.","Pas de BIOS Dreamcast. Flycast utilise son remplacement intégré. Pour une meilleure compatibilité, ajoute dc_boot.bin et dc_flash.bin à un dossier bios choisi.","Nessun BIOS Dreamcast. Flycast usa il suo sostituto integrato. Per una migliore compatibilità, aggiungi dc_boot.bin e dc_flash.bin a una cartella bios scelta."),android.widget.Toast.LENGTH_LONG).show());
                     if(direct)prepareDirectDocument(document,key,name);
                     rom=direct?new File(name):set.isEmpty()?new GameCopy(this).prepare(Uri.parse(document),key,name,name+"."+turn+".part",core,copyWords(settings),window)
                         :new GameCopy(this).prepareSet(Uri.parse(document),name,set,key,turn,core,copyWords(settings),window);
@@ -641,15 +761,15 @@ public class PocketActivity extends NativeActivity {
                 if(direct)player.putExtra("rom",name).putExtra("document",document);
                 whenReleased(turn,()->{try{startActivity(player);}finally{launching.set(false);}});
             }catch(GameCopy.Cancelled e){android.util.Log.i(TAG,"launch: cancelled start ended");if(launchCurrent(turn)){cancelLaunch();launchFailed=true;} // Its Cancel: back to the shelf. Home has moved on already.
-            }catch(Exception e){launchError(turn,inLanguage(settings,"Game couldn't start","Das Spiel konnte nicht starten","No se pudo iniciar el juego"),e);}
+            }catch(Exception e){launchError(turn,inLanguage(settings,"Game couldn't start","Das Spiel konnte nicht starten","No se pudo iniciar el juego","O jogo não pôde iniciar","Le jeu n'a pas pu démarrer","Il gioco non è partito"),e);}
         },"pocket-content").start();return "";
     }
     private static GameCopy.Words copyWords(String settings){
         return new GameCopy.Words(){
-            @Override public String tooBig(String size,String most){return inLanguage(settings,"This game is "+size+". This app's player loads it into memory whole and takes games up to "+most+" on this system.","Dieses Spiel hat "+size+". Der Player dieser App lädt es ganz in den Speicher und nimmt auf diesem System Spiele bis "+most+".","Este juego pesa "+size+". El emulador de esta app lo carga entero en la memoria y admite juegos de hasta "+most+" en este sistema.");}
-            @Override public String noRoom(String size,String free){return inLanguage(settings,"This game needs "+size+" free on your phone for its first start, and "+free+" is free. Make some room and start it again. Your saves are safe.","Für den ersten Start braucht dieses Spiel "+size+" freien Speicher auf deinem Handy, frei sind "+free+". Schaff Platz und starte es noch einmal. Deine Spielstände bleiben erhalten.","Para su primer inicio este juego necesita "+size+" libres en tu móvil, y hay "+free+" libres. Libera espacio e inícialo de nuevo. Tus partidas guardadas están a salvo.");}
-            @Override public String outside(){return inLanguage(settings,"This game's .cue or .m3u names a file outside its folder. Put it and all its files in one folder and start the game again.","Die .cue- oder .m3u-Datei dieses Spiels nennt eine Datei außerhalb ihres Ordners. Leg sie mit allen ihren Dateien in einen Ordner und starte das Spiel noch einmal.","El .cue o .m3u de este juego nombra un archivo fuera de su carpeta. Ponlo con todos sus archivos en una carpeta e inicia el juego de nuevo.");}
-            @Override public String full(){return inLanguage(settings,"Your phone's storage is full. Make some room and start the game again. Your saves are safe.","Der Speicher deines Handys ist voll. Schaff Platz und starte das Spiel noch einmal. Deine Spielstände bleiben erhalten.","El almacenamiento de tu móvil está lleno. Libera espacio e inicia el juego de nuevo. Tus partidas guardadas están a salvo.");}
+            @Override public String tooBig(String size,String most){return inLanguage(settings,"This game is "+size+". This app's player loads it into memory whole and takes games up to "+most+" on this system.","Dieses Spiel hat "+size+". Der Player dieser App lädt es ganz in den Speicher und nimmt auf diesem System Spiele bis "+most+".","Este juego pesa "+size+". El emulador de esta app lo carga entero en la memoria y admite juegos de hasta "+most+" en este sistema.","Este jogo tem "+size+". O player deste app carrega o jogo inteiro na memória e aceita jogos de até "+most+" neste sistema.","Ce jeu fait "+size+". Le lecteur de cette appli le charge entièrement en mémoire et accepte les jeux jusqu'à "+most+" sur ce système.","Questo gioco pesa "+size+". Il player di questa app lo carica tutto in memoria e accetta giochi fino a "+most+" su questo sistema.");}
+            @Override public String noRoom(String size,String free){return inLanguage(settings,"This game needs "+size+" free on your phone for its first start, and "+free+" is free. Make some room and start it again. Your saves are safe.","Für den ersten Start braucht dieses Spiel "+size+" freien Speicher auf deinem Handy, frei sind "+free+". Schaff Platz und starte es noch einmal. Deine Spielstände bleiben erhalten.","Para su primer inicio este juego necesita "+size+" libres en tu móvil, y hay "+free+" libres. Libera espacio e inícialo de nuevo. Tus partidas guardadas están a salvo.","Para a primeira inicialização, este jogo precisa de "+size+" livres no seu celular, e só há "+free+". Libere espaço e inicie de novo. Seus saves estão seguros.","Ce jeu a besoin de "+size+" libres sur ton téléphone pour son premier démarrage, et il en reste "+free+". Fais de la place et relance-le. Tes sauvegardes sont en sécurité.","Per il primo avvio questo gioco ha bisogno di "+size+" liberi sul telefono, e ne sono liberi "+free+". Libera spazio e riavvialo. I tuoi save sono al sicuro.");}
+            @Override public String outside(){return inLanguage(settings,"This game's .cue or .m3u names a file outside its folder. Put it and all its files in one folder and start the game again.","Die .cue- oder .m3u-Datei dieses Spiels nennt eine Datei außerhalb ihres Ordners. Leg sie mit allen ihren Dateien in einen Ordner und starte das Spiel noch einmal.","El .cue o .m3u de este juego nombra un archivo fuera de su carpeta. Ponlo con todos sus archivos en una carpeta e inicia el juego de nuevo.","O .cue ou .m3u deste jogo aponta para um arquivo fora da pasta dele. Coloque-o com todos os arquivos em uma única pasta e inicie o jogo de novo.","Le .cue ou .m3u de ce jeu cite un fichier hors de son dossier. Mets-le avec tous ses fichiers dans un seul dossier et relance le jeu.","Il .cue o .m3u di questo gioco indica un file fuori dalla sua cartella. Mettilo con tutti i suoi file in un'unica cartella e riavvia il gioco.");}
+            @Override public String full(){return inLanguage(settings,"Your phone's storage is full. Make some room and start the game again. Your saves are safe.","Der Speicher deines Handys ist voll. Schaff Platz und starte das Spiel noch einmal. Deine Spielstände bleiben erhalten.","El almacenamiento de tu móvil está lleno. Libera espacio e inicia el juego de nuevo. Tus partidas guardadas están a salvo.","O armazenamento do seu celular está cheio. Libere espaço e inicie o jogo de novo. Seus saves estão seguros.","Le stockage de ton téléphone est plein. Fais de la place et relance le jeu. Tes sauvegardes sont en sécurité.","La memoria del telefono è piena. Libera spazio e riavvia il gioco. I tuoi save sono al sicuro.");}
         };
     }
     /** Install only known BIOS names, to the private system folder. Unreadable copies preserve any kept BIOS. */
@@ -683,11 +803,12 @@ public class PocketActivity extends NativeActivity {
             if(!big)return !stop&&launchCurrent(turn);
             long now=android.os.SystemClock.elapsedRealtime();
             boolean first=!open;
+            if(first&&now-began<COPY_BAR_AFTER_MS)return !stop&&launchCurrent(turn);
             if(first||now-drawn>=250){
                 drawn=now;open=true;
                 long left=total>0&&done>0&&now-began>=2000?(total-done)*(now-began)/done/1000+1:-1;
-                String of=total>0?GameCopy.shown(done)+inLanguage(settings," of "," von "," de ")+GameCopy.shown(total):GameCopy.shown(done);
-                String text=left>=0?of+inLanguage(settings," · about "," · noch etwa "," · unos ")+(left>=90?(left+30)/60+" min":left+" s"):of;
+                String of=total>0?GameCopy.shown(done)+inLanguage(settings," of "," von "," de "," de "," sur "," di ")+GameCopy.shown(total):GameCopy.shown(done);
+                String text=left>=0?of+inLanguage(settings," · about "," · noch etwa "," · unos "," · cerca de "," · encore environ "," · ancora circa ")+(left>=90?(left+30)/60+" min":left+" s"):of;
                 int percent=total>0?(int)(done*1000/total):0;
                 runOnUiThread(()->draw(first,total>0,percent,text));
             }
@@ -695,18 +816,18 @@ public class PocketActivity extends NativeActivity {
         }
         private void draw(boolean first,boolean known,int percent,String text){
             if(first&&dialog==null&&!isFinishing()){
-                bar=new android.widget.ProgressBar(PocketActivity.this,null,android.R.attr.progressBarStyleHorizontal);
+                bar=new android.widget.ProgressBar(PocketBase.this,null,android.R.attr.progressBarStyleHorizontal);
                 bar.setMax(1000);bar.setIndeterminate(!known);
-                line=new android.widget.TextView(PocketActivity.this);
-                android.widget.TextView about=new android.widget.TextView(PocketActivity.this);
-                about.setText(inLanguage(settings,"The first start copies this big game into the app's own storage. After that it starts without this wait.","Beim ersten Start kommt dieses große Spiel in den Speicher der App, danach startet es ohne Warten.","El primer inicio copia este juego grande al almacenamiento de la app. Después arranca sin esta espera."));
-                android.widget.LinearLayout box=new android.widget.LinearLayout(PocketActivity.this);
+                line=new android.widget.TextView(PocketBase.this);
+                android.widget.TextView about=new android.widget.TextView(PocketBase.this);
+                about.setText(inLanguage(settings,"The first start copies this big game into the app's own storage. After that it starts without this wait.","Beim ersten Start kommt dieses große Spiel in den Speicher der App, danach startet es ohne Warten.","El primer inicio copia este juego grande al almacenamiento de la app. Después arranca sin esta espera.","Na primeira inicialização, este jogo grande é copiado para o armazenamento do app. Depois ele inicia sem essa espera.","Au premier démarrage, ce gros jeu est copié dans le stockage de l'appli. Ensuite, il démarre sans cette attente.","Il primo avvio copia questo grande gioco nella memoria dell'app. Poi parte senza questa attesa."));
+                android.widget.LinearLayout box=new android.widget.LinearLayout(PocketBase.this);
                 box.setOrientation(android.widget.LinearLayout.VERTICAL);
                 int pad=(int)(20*getResources().getDisplayMetrics().density);
                 box.setPadding(pad,pad/2,pad,0);
                 box.addView(about);box.addView(bar);box.addView(line);
-                dialog=new AlertDialog.Builder(PocketActivity.this).setTitle(title).setView(box)
-                    .setNegativeButton(inLanguage(settings,"Cancel","Abbrechen","Cancelar"),(d,w)->stop=true).setOnCancelListener(d->stop=true).create();
+                dialog=new AlertDialog.Builder(PocketBase.this).setTitle(title).setView(box)
+                    .setNegativeButton(inLanguage(settings,"Cancel","Abbrechen","Cancelar","Cancelar","Annuler","Annulla"),(d,w)->stop=true).setOnCancelListener(d->stop=true).create();
                 dialog.setCanceledOnTouchOutside(false);
                 dialog.getWindow().addFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
                 dialog.show();
@@ -723,18 +844,24 @@ public class PocketActivity extends NativeActivity {
     /** Room for a first copy of this game (`document_check::Host`); -1: it has one. */
     public String roomForCopy(String key){return Long.toString(new GameCopy(this).room(key));}
     /** The player's language: Settings' choice ("language", an older version's "german"), else the phone's. English for any other. */
-    private static String inLanguage(String settings,String english,String german,String spanish) {
+    private static String inLanguage(String settings,String english,String german,String spanish,String portuguese,String french,String italian) {
         String system=java.util.Locale.getDefault().getLanguage();
         boolean de=settings.contains("\"language\":\"de\"")||settings.contains("\"german\":true");
         boolean es=settings.contains("\"language\":\"es\"");
-        boolean chosen=de||es||settings.contains("\"language\":\"en\"")||settings.contains("\"german\":false");
+        boolean pt=settings.contains("\"language\":\"pt\"");
+        boolean fr=settings.contains("\"language\":\"fr\"");
+        boolean it=settings.contains("\"language\":\"it\"");
+        boolean chosen=de||es||pt||fr||it||settings.contains("\"language\":\"en\"")||settings.contains("\"german\":false");
         if(de||(!chosen&&system.equals("de")))return german;
+        if(pt||(!chosen&&system.equals("pt")))return portuguese;
+        if(fr||(!chosen&&system.equals("fr")))return french;
+        if(it||(!chosen&&system.equals("it")))return italian;
         return es||(!chosen&&system.equals("es"))?spanish:english;
     }
     /** Nothing was replaced: the copy before this start, the moments and the in-game saves are as they were. */
     private static String cannotRead(String settings,boolean gone) {
-        if(gone)return inLanguage(settings,"This game's file isn't in its folder any more. Your moment and your saves are safe; put the file back to carry on.","Die Datei des Spiels ist nicht mehr in seinem Ordner. Dein Moment und deine Spielstände bleiben erhalten; leg die Datei zurück, dann geht es weiter.","El archivo de este juego ya no está en su carpeta. Tu momento y tus partidas guardadas siguen a salvo; vuelve a poner el archivo para continuar.");
-        return inLanguage(settings,"Android no longer lets pocket-ui read this file. Choose its folder again in Settings. Your moment and your saves are safe.","Android lässt pocket-ui diese Datei nicht mehr lesen. Wähle den Ordner in den Einstellungen unter „ROM-Ordner“ noch einmal. Dein Moment und deine Spielstände bleiben erhalten.","Android ya no deja que pocket-ui lea este archivo. Vuelve a elegir su carpeta en Ajustes. Tu momento y tus partidas guardadas siguen a salvo.");
+        if(gone)return inLanguage(settings,"This game's file isn't in its folder any more. Your moment and your saves are safe; put the file back to carry on.","Die Datei des Spiels ist nicht mehr in seinem Ordner. Dein Moment und deine Spielstände bleiben erhalten; leg die Datei zurück, dann geht es weiter.","El archivo de este juego ya no está en su carpeta. Tu momento y tus partidas guardadas siguen a salvo; vuelve a poner el archivo para continuar.","O arquivo deste jogo não está mais na pasta dele. Seu momento e seus saves estão seguros; coloque o arquivo de volta para continuar.","Le fichier de ce jeu n'est plus dans son dossier. Ton instant et tes sauvegardes sont en sécurité\u00a0; remets le fichier pour continuer.","Il file di questo gioco non è più nella sua cartella. Il tuo momento e i tuoi save sono al sicuro; rimetti il file al suo posto per continuare.");
+        return inLanguage(settings,"Android no longer lets pocket-ui read this file. Choose its folder again in Settings. Your moment and your saves are safe.","Android lässt pocket-ui diese Datei nicht mehr lesen. Wähle den Ordner in den Einstellungen unter „ROM-Ordner“ noch einmal. Dein Moment und deine Spielstände bleiben erhalten.","Android ya no deja que pocket-ui lea este archivo. Vuelve a elegir su carpeta en Ajustes. Tu momento y tus partidas guardadas siguen a salvo.","O Android não deixa mais o pocket-ui ler este arquivo. Escolha a pasta dele de novo em Configurações. Seu momento e seus saves estão seguros.","Android ne laisse plus pocket-ui lire ce fichier. Choisis de nouveau son dossier dans les paramètres. Ton instant et tes sauvegardes sont en sécurité.","Android non lascia più leggere questo file a pocket-ui. Scegli di nuovo la sua cartella in Impostazioni. Il tuo momento e i tuoi save sono al sicuro.");
     }
     public String launchState() { return launchStatus; }
     /**
@@ -772,6 +899,7 @@ public class PocketActivity extends NativeActivity {
     @Override protected void onResume() {
         super.onResume();
         immersive();
+        if (ownsBrightness() && storedBrightness() >= 0) applyBrightness(storedBrightness());
         AudioManager audio = (AudioManager)getSystemService(Context.AUDIO_SERVICE);
         focusRequest = new android.media.AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN_TRANSIENT_MAY_DUCK)
             .setAudioAttributes(new android.media.AudioAttributes.Builder().setUsage(android.media.AudioAttributes.USAGE_GAME)

@@ -160,6 +160,113 @@ asset_recovery_tests() {
     check 'legacy copy-based update still rolls back and keeps the original data' 'rollback_done'
   done
 }
+# The same power-cut battery for the parts an update moves unchanged (`move:` lines: whole folders and big files of the program folder,
+# src/update/brick_delta.rs): at every step the old version gets all of them back, the new one keeps them, and a bad line fails closed.
+delta_recovery_tests() {
+  echo '== boot recovery of moved folders and files (move: lines)'
+  B=$WORK/delta-recovery
+  mkdir -p "$WORK/recovery-tools"
+  printf '#!/bin/sh\nexit 0\n' >"$WORK/recovery-tools/sync"; chmod +x "$WORK/recovery-tools/sync"
+  D_ENTRIES='sources zoneinfo msg/big.raw licences/cores'
+  d_files='sources/a.zip sources/b.zip zoneinfo/Europe/Berlin zoneinfo/UTC msg/big.raw licences/cores/mgba.txt'
+  delta_fixture() {
+    rm -rf "$B"; mkdir -p "$B/app/sources" "$B/app/zoneinfo/Europe" "$B/app/msg" "$B/app/licences/cores" "$B/app.new" "$B/storage/pocket-ui"
+    cp "$ROOT/deploy/brick/boot.sh" "$B/start.sh"
+    printf '#!/bin/sh\necho old >>"$BRICK_DATA/started"\nexit 0\n' >"$B/app/start.sh"
+    printf '#!/bin/sh\necho new >>"$BRICK_DATA/started"\nrm -f "$BRICK_DATA/storage/pocket-ui/update-pending"\nexit 0\n' >"$B/app.new/start.sh"
+    echo 1 >"$B/app/RELEASE"; echo 2 >"$B/app.new/RELEASE"
+    for f in $d_files; do printf 'original %s\n' "$f" >"$B/app/$f"; done
+    for e in $D_ENTRIES; do printf 'move:%s\n' "$e"; done >"$B/app/.asset-moves"
+    : >"$B/app.new/.ready"
+  }
+  delta_move() { # number of entries to move from app to app.new
+    n=0
+    while IFS= read -r line; do
+      [ "$n" -lt "$1" ] || break
+      p=${line#move:}; case $p in */*) mkdir -p "$B/app.new/${p%/*}";; esac; mv "$B/app/$p" "$B/app.new/$p"; n=$((n + 1))
+    done <"$B/app/.asset-moves"
+  }
+  boot_delta() {
+    PATH="$WORK/recovery-tools:$PATH" BRICK_DATA=$B timeout 5 $SH "$B/start.sh" >"$B/output" 2>&1
+    boot_rc=$?
+  }
+  d_originals() {
+    for f in $d_files; do [ "$(cat "$B/app/$f" 2>/dev/null)" = "original $f" ] || return 1; done
+  }
+  d_rolled_back() {
+    [ "$boot_rc" = 0 ] && d_originals && [ "$(cat "$B/app/RELEASE")" = 1 ] && [ "$(cat "$B/storage/pocket-ui/rolled-back")" = 2 ] &&
+      [ ! -e "$B/storage/pocket-ui/update-pending" ] && [ ! -e "$B/app/.restore-assets" ] && [ ! -e "$B/app/.asset-moves" ] && grep -qx old "$B/started"
+  }
+  for SH in dash 'busybox ash'; do
+    echo "-- moved parts under $SH"
+    for count in 0 1 2 3 4; do
+      delta_fixture; delta_move "$count"; boot_delta
+      check "moved parts $count/4 interrupted: the old version has every folder and file again, readiness revoked" \
+        '[ "$boot_rc" = 0 ] && d_originals && grep -qx old "$B/started" && [ ! -e "$B/app/.asset-moves" ] && [ ! -e "$B/app.new/.ready" ]'
+      boot_delta
+      check "moved parts $count/4 recovery is idempotent" '[ "$boot_rc" = 0 ] && d_originals'
+      delta_fixture; delta_move "$count"; rm "$B/app.new/.ready"; mv "$B/app" "$B/app.previous"; echo 2 >"$B/storage/pocket-ui/update-pending"; boot_delta
+      check "incomplete activation after $count/4 moved parts restores the previous version whole" \
+        '[ "$boot_rc" = 0 ] && d_originals && grep -qx old "$B/started" && [ ! -e "$B/storage/pocket-ui/update-pending" ]'
+    done
+    delta_fixture; delta_move 4; mv "$B/app" "$B/app.previous"; echo 2 >"$B/storage/pocket-ui/update-pending"; boot_delta
+    check 'a ready activation between the swaps boots the new version, which keeps the moved parts; the old manifest stays for the way back' \
+      '[ "$boot_rc" = 0 ] && grep -qx new "$B/started" && [ "$(cat "$B/app/sources/a.zip")" = "original sources/a.zip" ] && [ -d "$B/app/zoneinfo/Europe" ] && [ -f "$B/app.previous/.asset-moves" ]'
+    delta_fixture; delta_move 4; printf '#!/bin/sh\nexit 139\n' >"$B/app.new/start.sh"
+    mv "$B/app" "$B/app.previous"; mv "$B/app.new" "$B/app"; echo 2 >"$B/storage/pocket-ui/update-pending"; boot_delta
+    check 'a new version that does not start gets every moved folder and file back, the very same ones' 'd_rolled_back && [ "$(cat "$B/app.failed/RELEASE")" = 2 ]'
+    for boundary in marked restored-1 restored-2 restored-4 failed-renamed old-renamed cleaned; do
+      delta_fixture; delta_move 4
+      mv "$B/app" "$B/app.previous"; mv "$B/app.new" "$B/app"
+      echo 2 >"$B/storage/pocket-ui/update-pending"; echo 2 >"$B/app.previous/.restore-assets"
+      count=0
+      case "$boundary" in restored-1) count=1;; restored-2) count=2;; restored-4|failed-renamed|old-renamed|cleaned) count=4;; esac
+      n=0
+      while IFS= read -r line; do
+        [ "$n" -lt "$count" ] || break
+        p=${line#move:}; case $p in */*) mkdir -p "$B/app.previous/${p%/*}";; esac; mv "$B/app/$p" "$B/app.previous/$p"; n=$((n + 1))
+      done <"$B/app.previous/.asset-moves"
+      case "$boundary" in failed-renamed|old-renamed|cleaned) mv "$B/app" "$B/app.failed";; esac
+      case "$boundary" in old-renamed|cleaned) mv "$B/app.previous" "$B/app";; esac
+      if [ "$boundary" = cleaned ]; then rm "$B/app/.asset-moves" "$B/storage/pocket-ui/update-pending"; fi
+      boot_delta
+      check "rollback of moved parts resumes at persisted boundary $boundary" 'd_rolled_back'
+    done
+    # A move: line is checked as strictly as a core: nothing is restored from a manifest that is bad anywhere.
+    for invalid in 'move:' 'move:../outside' 'move:sources/../../outside' 'move:sources//a.zip' 'move:sources/./a.zip' 'move:/sources' 'move:sources/' \
+        'move:.hidden' 'move:sources/.hidden' 'move:storage' 'move:storage/save' 'move:start.sh' 'move:RELEASE' 'move:asset-packages.json' 'move:back\slash' $'move:cr\rname'; do
+      delta_fixture; delta_move 1
+      printf '%s\n' "$invalid" >>"$B/app/.asset-moves"; boot_delta
+      check "invalid line [$invalid] leaves both trees untouched and starts nothing" \
+        '[ "$boot_rc" = 1 ] && [ ! -e "$B/started" ] && [ ! -e "$B/app/sources" ] && [ -f "$B/app.new/sources/a.zip" ] && [ -f "$B/app.new/.ready" ] && [ -f "$B/app/.asset-moves" ]'
+    done
+    for invalid in missing-everywhere link-in-old link-in-new link-parent link-tree nul truncated; do
+      delta_fixture; delta_move 1
+      case "$invalid" in
+        missing-everywhere) printf 'move:docs\n' >>"$B/app/.asset-moves";;
+        link-in-old) mv "$B/app/zoneinfo" "$B/outside"; ln -s "$B/outside" "$B/app/zoneinfo";;
+        link-in-new) mkdir -p "$B/outside-dir"; ln -s "$B/outside-dir" "$B/app.new/msg-link"; printf 'move:msg-link\n' >>"$B/app/.asset-moves";;
+        link-parent) mv "$B/app/licences" "$B/outside"; ln -s "$B/outside" "$B/app/licences";;
+        link-tree) mv "$B/app.new" "$B/outside"; ln -s "$B/outside" "$B/app.new";;
+        nul) printf 'move:sources\000x\n' >>"$B/app/.asset-moves";;
+        truncated) printf 'move:docs' >>"$B/app/.asset-moves";;
+      esac
+      boot_delta
+      check "manifest case $invalid fails closed before anything is restored" \
+        '[ "$boot_rc" = 1 ] && [ ! -e "$B/started" ] && [ ! -e "$B/app/sources" ] && [ -f "$B/app/.asset-moves" ]'
+    done
+    # Both trees have the folder: the old one wins and the other is not touched or deleted.
+    delta_fixture; mkdir -p "$B/app.new/sources"; echo replacement >"$B/app.new/sources/a.zip"; boot_delta
+    check 'when both trees have a moved folder the old original stays and the other copy is left alone' \
+      'd_originals && [ "$(cat "$B/app.new/sources/a.zip")" = replacement ]'
+    # A manifest with old plain lines and move: lines together (cores moved by the asset packages, the rest by the delta).
+    delta_fixture; mkdir -p "$B/app/cores"; echo c >"$B/app/cores/x.so"
+    printf 'cores/x.so\n' >>"$B/app/.asset-moves"; mkdir -p "$B/app.new/cores"; mv "$B/app/cores/x.so" "$B/app.new/cores/x.so"; delta_move 2; boot_delta
+    check 'plain asset lines and move: lines in one manifest are restored together' \
+      '[ "$boot_rc" = 0 ] && d_originals && [ "$(cat "$B/app/cores/x.so")" = c ]'
+  done
+}
+if [ "${BRICK_LICENCE_TESTS_ONLY:-0}" != 1 ] && [ "${BRICK_SLIDER_TESTS_ONLY:-0}" != 1 ]; then delta_recovery_tests; fi
 if [ "${BRICK_LICENCE_TESTS_ONLY:-0}" != 1 ] && [ "${BRICK_SLIDER_TESTS_ONLY:-0}" != 1 ]; then asset_recovery_tests; fi
 if [ "${BRICK_BOOT_TESTS_ONLY:-0}" = 1 ]; then
   if [ "$fails" = 0 ]; then echo 'test-brick-card recovery: all passed'; else echo "test-brick-card recovery: $fails FAILED"; exit 1; fi

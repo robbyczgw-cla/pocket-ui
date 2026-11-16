@@ -467,7 +467,7 @@ Shaders and Performance (any big game; Mario Kart: Double Dash for numbers):
 5. `kill -9 $(pidof pocket-ui)` during a game, then Quit the game by HOME+START (ROCKNIX): after pocket-ui is back,
    the governors are ROCKNIX's within ~5 s of the emulator ending.
 6. Numbers to take, Max against Auto, 5 min of the same race each, on battery: `deploy/bench.sh 300
-   dolphin-emu-nogui` (fps, CPU/GPU °C, watts on battery) and Settings → Playing → Battery's per-system draw for gamecube; also
+   dolphin-emu-nogui` (fps, CPU/GPU °C, watts on battery) and Settings → System → Battery's per-system draw for gamecube; also
    whether `schedutil` on policy4/7 (written by hand) keeps up as well as `performance`.
 
 GameCube and Wii, More… and the button layout:

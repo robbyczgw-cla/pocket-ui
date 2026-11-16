@@ -33,7 +33,7 @@ pub(crate) const REST: Duration = Duration::from_millis(400);
 const KEEP: usize = 16;
 
 pub(crate) struct PicturesUi {
-    /// Settings > Games > Extras > Game pictures: on, or "Box art only".
+    /// Settings > Games > Box art & downloads > Game pictures: on, or "Box art only".
     wanted: bool,
     /// What the header of a picture file said: its size; `None` when the file is not there (or not a PNG that may
     /// be decoded). Looked at once per file, until the files change.
@@ -51,11 +51,15 @@ pub(crate) struct PicturesUi {
     wake: Option<Instant>,
     /// `--snapshot`: pictures are decoded on the spot instead of on the loader thread.
     pub(crate) sync: bool,
+    /// The box Split's preview draws the selected game's box art in: the size its neighbours' are read ahead at.
+    pub(crate) cover_box: Option<(i32, i32)>,
+    /// Read ahead (`app_cover_prefetch`), not asked for by a frame.
+    prefetching: HashSet<Key>,
 }
 
 impl PicturesUi {
     pub fn new(wanted: bool) -> Self {
-        PicturesUi { wanted, sizes: HashMap::new(), loader: None, pending: HashSet::new(), visible: HashSet::new(), loaded: VecDeque::new(), focus: None, since: Instant::now(), wake: None, sync: false }
+        PicturesUi { wanted, sizes: HashMap::new(), loader: None, pending: HashSet::new(), visible: HashSet::new(), loaded: VecDeque::new(), focus: None, since: Instant::now(), wake: None, sync: false, cover_box: None, prefetching: HashSet::new() }
     }
 
     pub fn wanted(&self) -> bool {
@@ -81,6 +85,7 @@ impl App {
         self.pictures.sizes.clear();
         self.pictures.loaded.clear();
         self.pictures.pending.clear();
+        self.pictures.prefetching.clear();
         self.pictures.focus = None;
     }
 
@@ -115,32 +120,82 @@ impl App {
             self.covers.insert(key, img.clone());
             return img;
         }
-        if self.pictures.pending.insert(key.clone()) {
+        // Asked for by a frame: a picture still waiting in the read-ahead window goes first now.
+        if self.pictures.pending.insert(key.clone()) || self.pictures.prefetching.remove(&key) {
             self.request_picture(key);
         }
         None
     }
 
+    /// Pictures for the loader to decode when it has nothing else to do, in place of the last ones (`app_cover_prefetch`).
+    pub(crate) fn pictures_prefetch(&mut self, keys: Vec<Key>) {
+        if self.pictures.sync || (keys.is_empty() && self.pictures.loader.is_none()) {
+            return;
+        }
+        // Not what is here already or asked for by a frame; what the last window still waits for stays in.
+        let keys: Vec<Key> = keys
+            .into_iter()
+            .filter(|k| !self.covers.contains_key(k) && (!self.pictures.pending.contains(k) || self.pictures.prefetching.contains(k)))
+            .collect();
+        for key in &keys {
+            self.pictures.pending.insert(key.clone());
+        }
+        // The last window's pictures not decoded yet are dropped: no longer waited for.
+        let dropped: Vec<Key> = self.pictures.prefetching.drain().filter(|k| !keys.contains(k)).collect();
+        for key in dropped {
+            self.pictures.pending.remove(&key);
+        }
+        self.pictures.prefetching.extend(keys.iter().cloned());
+        self.picture_loader().prefetch(keys);
+    }
+
     /// Asks the loader thread for a picture (starting it at the first request); the answer is `UserEvent::Picture`.
     /// The gallery's pictures go through the same thread (`app_gallery`).
     pub(crate) fn request_picture(&mut self, key: Key) {
+        self.picture_loader().request(key);
+    }
+
+    /// The benches: the loader's answers on a channel instead of the event loop's (which does not run in a snapshot).
+    pub(crate) fn pictures_bench_loader(&mut self) -> std::sync::mpsc::Receiver<(Key, Option<Image>)> {
+        let (tx, rx) = std::sync::mpsc::channel();
+        self.pictures.sync = false;
+        self.pictures.loader = Some(Loader::start(move |key, img| {
+            let _ = tx.send((key, img));
+        }));
+        rx
+    }
+
+    fn picture_loader(&mut self) -> &Loader {
         let proxy = self.proxy.clone();
-        let loader = self.pictures.loader.get_or_insert_with(|| {
+        self.pictures.loader.get_or_insert_with(|| {
             Loader::start(move |key, img| {
                 let _ = proxy.send_event(super::UserEvent::Picture(key, img));
             })
-        });
-        loader.request(key);
+        })
     }
 
     /// The loader thread has a picture: into the image cache, and a frame to show it.
     pub(crate) fn picture_arrived(&mut self, key: Key, img: Option<Image>) {
         // A picture of the gallery has caches of its own (`app_gallery`).
         let Some(img) = self.gallery_picture_arrived(&key, img) else { return };
-        self.pictures.pending.remove(&key);
+        let prefetched = self.pictures.prefetching.remove(&key);
+        if !self.pictures.pending.remove(&key) || self.covers.contains_key(&key) {
+            // A window dropped meanwhile, or already here: nothing waits for it.
+            return;
+        }
+        // Full: the oldest picture not in view goes. A read-ahead one never pushes out one in view; it is dropped instead.
         while self.pictures.loaded.len() >= KEEP {
-            if let Some(old) = self.pictures.loaded.pop_front() {
-                self.covers.remove(&old);
+            let visible = &self.pictures.visible;
+            match self.pictures.loaded.iter().position(|k| !visible.contains(k)) {
+                Some(i) => {
+                    let old = self.pictures.loaded.remove(i).unwrap();
+                    self.covers.remove(&old);
+                }
+                None if prefetched => return,
+                None => {
+                    let old = self.pictures.loaded.pop_front().unwrap();
+                    self.covers.remove(&old);
+                }
             }
         }
         self.covers.insert(key.clone(), img.map(Rc::new));
@@ -163,7 +218,9 @@ impl App {
                 true
             });
         }
-        let box_art = self.cover(item, w, h);
+        // A sealed game's box art is in its film (`app_shrink_wrap`); the game's own pictures are not.
+        self.pictures.cover_box = Some((w, h));
+        let box_art = self.sealed_cover(item, w, h);
         // The same game as the last frame goes on with its cycle; another one starts it.
         if self.pictures.focus != rom {
             self.pictures.focus = rom;
@@ -209,6 +266,14 @@ impl App {
             motion::keep_alive(now + left);
         }
         self.pictures.wake = wake;
+        true
+    }
+
+    /// Split's preview of a game with no box art and no pictures: its home-made case front (`homemade_front`), in the
+    /// middle of the box. False for anything else (the caller shows the console).
+    pub(crate) fn paint_homemade_preview(&mut self, c: &mut Canvas, item: Item, (x, y, w, h): (i32, i32, i32, i32)) -> bool {
+        let Some(pic) = self.homemade_front(item, w, h) else { return false };
+        pocket_ui::cabinet_art::blit(c, &pic, x + (w - pic.w) / 2, y + (h - pic.h) / 2, 256, (0, c.h));
         true
     }
 

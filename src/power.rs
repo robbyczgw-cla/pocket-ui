@@ -217,6 +217,71 @@ fn write(p: &Path, v: &str) -> bool {
     std::fs::write(p, v).is_ok()
 }
 
+/// What [`quick_ondemand`] found.
+#[derive(Debug, PartialEq, Eq)]
+pub enum Sampling {
+    /// `ondemand` samples at the kernel's quickest rate now (it did not before).
+    Set,
+    /// It already did.
+    Quick,
+    /// No cluster is on `ondemand` (a game's profile, `powersave` behind a dark screen): nothing written.
+    NotOndemand,
+}
+
+/// The TrimUI Brick's kernel lets `ondemand` look at the load only every 2 s: its default, set again each time the
+/// governor starts, so after every game too. The menus idle at 408 MHz of 2000, so an animation after a pause ran at a
+/// fraction of the CPU until the next look: the box turned over in hitches (15.11.2026). The kernel's quickest rate
+/// (`min_sampling_rate`, 40 ms there) lifts the clock within a few frames and lets it drop as quickly when nothing
+/// moves. Written only where it differs, and only to the tunables of `ondemand` (global, or per cluster).
+pub fn quick_ondemand(root: &Path) -> Sampling {
+    let cpufreq = root.join("sys/devices/system/cpu/cpufreq");
+    let ondemand: Vec<PathBuf> = std::fs::read_dir(&cpufreq)
+        .into_iter()
+        .flatten()
+        .flatten()
+        .map(|e| e.path())
+        .filter(|p| read(&p.join("scaling_governor")).as_deref() == Some("ondemand"))
+        .collect();
+    if ondemand.is_empty() {
+        return Sampling::NotOndemand;
+    }
+    let mut set = false;
+    for dir in std::iter::once(cpufreq.join("ondemand")).chain(ondemand.iter().map(|p| p.join("ondemand"))) {
+        let num = |f: &str| read(&dir.join(f)).and_then(|v| v.parse::<u64>().ok());
+        if let (Some(now), Some(min)) = (num("sampling_rate"), num("min_sampling_rate")) {
+            if now != min && write(&dir.join("sampling_rate"), &min.to_string()) {
+                set = true;
+            }
+        }
+    }
+    if set { Sampling::Set } else { Sampling::Quick }
+}
+
+/// [`quick_ondemand`] once `ondemand` is back: a game's profile is put back by its own process, a little after the
+/// game is gone, and that start of `ondemand` brings the 2 s with it. `wait` between up to `tries` looks.
+pub fn quick_ondemand_once_back(root: &Path, tries: u32, mut wait: impl FnMut()) -> Sampling {
+    for _ in 1..tries {
+        match quick_ondemand(root) {
+            Sampling::NotOndemand => wait(),
+            found => return found,
+        }
+    }
+    quick_ondemand(root)
+}
+
+/// The menus have the screen (pocket-ui's start, a game's end): on the Brick, `ondemand` at its quickest rate again
+/// ([`quick_ondemand`]), on a thread that waits up to 10 s for the game's profile to be put back.
+pub fn ui_took_over() {
+    #[cfg(feature = "brick")]
+    if crate::device::brick() && !crate::proc::mock() {
+        std::thread::spawn(|| {
+            if quick_ondemand_once_back(Path::new("/"), 20, || std::thread::sleep(Duration::from_millis(500))) == Sampling::Set {
+                println!("power: ondemand looks at the load every 40 ms again (the kernel's 2 s made the menus stutter)");
+            }
+        });
+    }
+}
+
 impl Power {
     /// The real system.
     pub fn system() -> Self {
@@ -347,7 +412,7 @@ impl Power {
     /// nothing was).
     #[cfg(not(feature = "brick"))]
     pub fn set_performance(&mut self, mode: Performance) -> bool {
-        self.set_performance_on(mode, crate::device::current().model.is_some_and(|m| m.is_h700()))
+        self.set_performance_on(mode, crate::device::current().model.is_some_and(|m| m.h700_class()))
     }
 
     fn set_performance_on(&mut self, mode: Performance, h700: bool) -> bool {
@@ -489,7 +554,7 @@ impl Power {
     /// The whole plan (every file, what goes in, what was there) is noted and written to the note first; only then
     /// is sysfs touched, so a crash at any point leaves a note that undoes all of it.
     fn set_guest(&mut self, mode: Performance, battery_caps_all: bool) -> bool {
-        self.set_guest_on(mode, battery_caps_all, crate::device::current().model.is_some_and(|m| m.is_h700()))
+        self.set_guest_on(mode, battery_caps_all, crate::device::current().model.is_some_and(|m| m.h700_class()))
     }
 
     fn set_guest_on(&mut self, mode: Performance, battery_caps_all: bool, h700: bool) -> bool {
@@ -706,6 +771,68 @@ mod tests {
     use super::fake::Fake;
     use super::*;
     use crate::testutil::TestDir;
+
+    /// The Brick's cpufreq: one cluster on `governor`, `ondemand`'s global tunables at `rate` while it is the governor.
+    fn brick_cpufreq(root: &Path, governor: &str, rate: u64) {
+        let d = root.join("sys/devices/system/cpu/cpufreq");
+        std::fs::create_dir_all(d.join("policy0")).unwrap();
+        std::fs::write(d.join("policy0/scaling_governor"), format!("{governor}\n")).unwrap();
+        let tunables = d.join("ondemand");
+        if governor == "ondemand" {
+            std::fs::create_dir_all(&tunables).unwrap();
+            std::fs::write(tunables.join("sampling_rate"), format!("{rate}\n")).unwrap();
+            std::fs::write(tunables.join("min_sampling_rate"), "40000\n").unwrap();
+        } else {
+            let _ = std::fs::remove_dir_all(&tunables);
+        }
+    }
+
+    fn rate(root: &Path) -> String {
+        std::fs::read_to_string(root.join("sys/devices/system/cpu/cpufreq/ondemand/sampling_rate")).unwrap().trim().to_string()
+    }
+
+    #[test]
+    fn ondemand_looks_at_the_load_at_the_kernels_quickest_rate() {
+        let d = TestDir::new("quick-ondemand");
+        brick_cpufreq(&d, "ondemand", 2_000_000);
+        assert_eq!(quick_ondemand(&d), Sampling::Set);
+        assert_eq!(rate(&d), "40000");
+        assert_eq!(quick_ondemand(&d), Sampling::Quick, "only where it differs");
+        // A game's profile: no ondemand, nothing written.
+        brick_cpufreq(&d, "performance", 0);
+        assert_eq!(quick_ondemand(&d), Sampling::NotOndemand);
+        assert!(!d.join("sys/devices/system/cpu/cpufreq/ondemand").exists());
+        // Per-cluster tunables (a kernel with a governor per policy).
+        let d = TestDir::new("quick-ondemand-policy");
+        brick_cpufreq(&d, "ondemand", 2_000_000);
+        let own = d.join("sys/devices/system/cpu/cpufreq/policy0/ondemand");
+        std::fs::rename(d.join("sys/devices/system/cpu/cpufreq/ondemand"), &own).unwrap();
+        assert_eq!(quick_ondemand(&d), Sampling::Set);
+        assert_eq!(std::fs::read_to_string(own.join("sampling_rate")).unwrap(), "40000");
+    }
+
+    #[test]
+    fn after_a_game_ondemand_comes_back_with_2_s_and_is_made_quick_again() {
+        // The menus had it quick; the game ran on `performance`; its process puts `ondemand` back a moment after the game
+        // ended, and the kernel starts it with its 2 s again.
+        let d = TestDir::new("quick-ondemand-game");
+        brick_cpufreq(&d, "ondemand", 2_000_000);
+        assert_eq!(quick_ondemand(&d), Sampling::Set);
+        brick_cpufreq(&d, "performance", 0);
+        let mut looks = 0;
+        let found = quick_ondemand_once_back(&d, 20, || {
+            looks += 1;
+            if looks == 3 {
+                brick_cpufreq(&d, "ondemand", 2_000_000);
+            }
+        });
+        assert_eq!((found, rate(&d).as_str(), looks), (Sampling::Set, "40000", 3));
+        // A game that leaves another governor behind: looked at up to 20 times, then left alone.
+        brick_cpufreq(&d, "performance", 0);
+        let mut looks = 0;
+        assert_eq!(quick_ondemand_once_back(&d, 20, || looks += 1), Sampling::NotOndemand);
+        assert_eq!(looks, 19);
+    }
 
     #[cfg(feature = "brick")]
     #[test]

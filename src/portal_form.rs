@@ -558,7 +558,7 @@ impl SignIn {
         let top = y + 18;
         let row = crate::type_scale::row(70, 37);
         let desc_lines = 2;
-        let bottom = c.h - 100 - desc_lines * crate::type_scale::line(24, 8);
+        let bottom = crate::kit::content_bottom(c.h) - desc_lines * crate::type_scale::line(24, 8);
         let visible = ((bottom - top) / row).max(1) as usize;
         let first = f.sel.saturating_sub(visible.saturating_sub(1)).min(f.rows.len().saturating_sub(visible));
         // Whether the selected row's name was cut short: then it is written out in full below the rows.
@@ -658,7 +658,7 @@ impl SignIn {
         let name = if f.page.name().is_empty() { self.host.clone() } else { f.page.name().to_string() };
         let name = text.fit(Face::Title, 50, &name, w);
         text.draw(c, Face::Title, 50, MARGIN, 110, pal().chalk, &name);
-        let (top, bottom) = (140, c.h - 100);
+        let (top, bottom) = (140, crate::kit::content_bottom(c.h));
         let mark = crate::text::boxes::mark();
         let mut band = c.rows(top, bottom);
         let step = crate::type_scale::line(28, 12);

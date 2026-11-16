@@ -42,7 +42,7 @@ take it off the shelf, click it in, and continue right where you stopped.</p>
 Plus a Retro look in one switch, games sent from your phone, Game check, Kids Mode and updates over Wi-Fi.
 [See everything it does](https://pocketui.xyz/features).
 
-No account, no tracking, free and open source. Menus in English, German, Spanish and Brazilian Portuguese.
+No account, no tracking, free and open source. Menus in English, German, Spanish, Brazilian Portuguese, French and Italian.
 
 **What it plays:** Game Boy, Game Boy Color and Advance, NES, Super Nintendo, Mega Drive, Master System, Game Gear,
 PC Engine, PlayStation, Nintendo 64, PSP, Dreamcast, Nintendo DS, Saturn, arcade and PortMaster ports. On the stronger
@@ -56,7 +56,6 @@ handhelds, such as the AYN Odin 2, also PlayStation 2, GameCube, Wii and 3DS.
   got their own scenes.
 - **Smoother everywhere:** cases turn over in perspective, the TV switches on out of a growing line.
 - **Arcade games** stand on the shelf as an upright cabinet.
-- **A controls card** with your handheld's buttons under the console's own names.
 - **TrimUI Brick, finished:** no more Beta label, and a short press on Power puts it to sleep with the game saved.
 - **0.4.1:** an SD card for the Anbernic RG CubeXX, and sound at middle volume is back on Anbernic handhelds.
 
@@ -113,7 +112,7 @@ More in the [FAQ](https://pocketui.xyz/faq).
 - [Status](docs/STATUS.md): every feature and where it has been played
 
 Something off? **Settings → Help & tools → About → Report a problem** makes a file for a report, or
-[open an issue](../../issues). Reports from your handheld help a lot.
+[open an issue](../../issues) or write to robby@robbyczesany.com. Reports from your handheld help a lot.
 
 ## How it's made
 

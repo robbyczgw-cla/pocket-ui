@@ -14,8 +14,8 @@ Feature {
     title: "Night light",                // the card's title, sentence case
     plain: "warmer colours after sunset", // what it does in everyday words, lower case, no feature names: the first start's "On: …, …" lists these
     line: "Warmer colours after sunset.",  // one sentence, ends with a full stop
-    place: "Settings › Look › Night light", // where it is changed later (the fonts have no →, the UI writes ›)
-    guide: "settings.md#night-light",    // its section in docs/user/, checked by doc_checks
+    place: "Settings › Screen & sound › Night light", // where it is changed later (the fonts have no →, the UI writes ›)
+    guide: "settings-sound.md#night-light",    // its section in docs/user/, checked by doc_checks
     since: "0.3.0",                      // the version it ships in: "New in this version" shows it after that update
     switch: Some(Switch { get: |s| s.night_light, set: |s, on| s.night_light = on }),
     simple: Pick::Off,                   // what the profiles do with it: On, Off or Keep

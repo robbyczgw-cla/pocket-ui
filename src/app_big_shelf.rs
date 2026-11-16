@@ -59,8 +59,8 @@ pub(crate) struct Big {
 }
 
 /// Where the case row starts and how much of the screen it may take: smaller than Kids Mode's (0.095, (0.64, 0.61)).
-const SHELF_TOP: f32 = 0.10;
-const SHELF_ROOM: (f32, f32) = (0.55, 0.46);
+const SHELF_TOP: f32 = 0.09;
+const SHELF_ROOM: (f32, f32) = (0.55, 0.41);
 /// The pause screen's three rows, in a 1080-high screen's pixels: where the first starts, how tall each is, the gap.
 pub(crate) const PAUSE_TOP: f32 = 232.0;
 pub(crate) const PAUSE_ROW: f32 = 150.0;
@@ -538,7 +538,9 @@ impl App {
         self.cabinet.shelf_lit = None;
         let item = self.items[self.sel.min(self.items.len() - 1)];
         // Calmer than a child's shelf: the case, the name and the lines a little smaller, with more air between them.
-        let below = self.kids_case_row(c, colours, SHELF_TOP, SHELF_ROOM);
+        // On a screen under 1000 lines (1024x768, the small panels at 1280x960) the hint bar is as large as on 1080 while the type shrinks with the screen: the case row gives the lines under it more room.
+        let (top, room) = if c.h < 1000 { (SHELF_TOP - 0.02, (SHELF_ROOM.0, SHELF_ROOM.1 - 0.05)) } else { (SHELF_TOP, SHELF_ROOM) };
+        let below = self.kids_case_row(c, colours, top, room);
         if self.launch_at.is_some() {
             return;
         }
@@ -552,6 +554,9 @@ impl App {
         let info = self.big_info(item);
         let wide = c.w - (80.0 * u) as i32;
         let mut line = baseline;
+        // The lowest baseline a line may have: clear of the hint bar, which keeps its size on a small screen. A line that
+        // would not fit is left out, the last ones first, like a part of the top line.
+        let limit = pocket_ui::kit::hint_bar_top(c.h) - 16;
         if !info.top.is_empty() {
             let px = (30.0 * u).round() as u32;
             let sep = "  ·  ";
@@ -576,11 +581,14 @@ impl App {
             let room = ((c.w as f32 * 0.72) as i32).min(wide);
             for l in self.big_about_lines(about, px, room) {
                 let w = self.text.width(Face::Body, px, &l);
+                if line + (40.0 * u) as i32 > limit {
+                    break;
+                }
                 line += (40.0 * u) as i32;
                 self.text.draw(c, Face::Body, px, (c.w - w) / 2, line, pal().chalk, &l);
             }
         }
-        if let Some(played) = info.played.as_deref() {
+        if let Some(played) = info.played.as_deref().filter(|_| line + (44.0 * u) as i32 <= limit) {
             let px = (28.0 * u).round() as u32;
             let played = self.text.fit(Face::Body, px, played, wide);
             let w = self.text.width(Face::Body, px, &played);
@@ -592,7 +600,7 @@ impl App {
             self.big_paint_resume_mark(c, colours);
         }
         // The first open case ever on screen says what open means, once (`big_open_told`).
-        self.big.open_hint_up = moment && !self.big.open_case_told;
+        self.big.open_hint_up = moment && !self.big.open_case_told && line + (56.0 * u) as i32 <= limit;
         if self.big.open_hint_up {
             let px = (30.0 * u).round() as u32;
             let said = self.text.fit(Face::Body, px, "Open means your moment is waiting", c.w - (80.0 * u) as i32);

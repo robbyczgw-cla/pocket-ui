@@ -73,20 +73,9 @@ pub extern "system" fn Java_xyz_pocketui_app_PocketActivity_nativePrepareDocumen
     env.new_string(result.err().unwrap_or_default()).map(|s| s.into_raw()).unwrap_or(std::ptr::null_mut())
 }
 
+/// pocket-ui's own core for a system (`pocket_ui::play_route`, the handheld view's too).
 fn bundled_core(system: &str) -> Option<&'static str> {
-    static CORES: std::sync::OnceLock<serde_json::Value> = std::sync::OnceLock::new();
-    CORES
-        .get_or_init(|| serde_json::from_str(include_str!("../cores.lock.json")).expect("bundled core lock"))
-        .get("cores")?
-        .as_array()?
-        .iter()
-        .find(|c| {
-            c["systems"]
-                .as_array()
-                .is_some_and(|systems| systems.iter().any(|s| s.as_str() == Some(system)))
-        })?
-        .get("id")?
-        .as_str()
+    pocket_ui::play_route::bundled_core(system)
 }
 /// The core of our own player that would start this game; None when another app would (no moment of ours: never frozen).
 /// Another app starts it when Settings → Plays with says so for its system (and the app is on the phone), and for the
@@ -509,7 +498,7 @@ impl App {
                     let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_secs());
                     let reminder = if self.ui.is_frozen(&game.key) {
                         pocket_ui::where_was_i::card(&pocket_ui::where_was_i::Facts {
-                            on: self.ui.prefs.remind_where.unwrap_or(true), kids: false,
+                            on: self.ui.prefs.remind_where.unwrap_or(false), kids: false,
                             easy: self.ui.prefs.theme == pocket_ui::settings::Theme::Big,
                             last_played: self.ui.prefs.played.get(&game.key).copied(),
                             play_secs: self.ui.prefs.play_secs.get(&game.key).copied().unwrap_or(0),
@@ -565,6 +554,10 @@ impl App {
                     }
                 }
             }
+            Command::HandheldView => {
+                self.persist();
+                bridge("setView", &["handheld"]);
+            }
             Command::Folder => {
                 if !self.ui.prefs.onboarding_done {
                     let _ = pocket_ui::fsutil::write_json(&pocket_ui::platform::data_dir().join("launcher.json"), &self.ui.prefs);
@@ -614,6 +607,12 @@ impl App {
                 bridge("savesCancel", &[]);
             }
             Command::RaLogin(username, password) => self.ra_login(username, password),
+            // Hardcore for every game from its next start (`achievements::hardcore`); the page shows it already.
+            Command::RaHardcore(on) => {
+                let kept = pocket_ui::achievements::account::Account::load(&data_dir()).is_some_and(|mut a| { a.hardcore = on; a.save(&data_dir()).is_ok() });
+                log::info!("retroachievements: hardcore {} ({})", if on { "on" } else { "off" }, if kept { "kept" } else { "not kept" });
+                if !kept { self.ui.achievements_hardcore_failed(on); }
+            }
             Command::RaLogout => {
                 let gone = pocket_ui::achievements::account::Account::remove(&data_dir());
                 log::info!("retroachievements: signed out ({})", if gone { "key deleted" } else { "key still there" });
@@ -648,7 +647,8 @@ impl App {
             let result = api::login(&transport, &username, &password);
             pocket_ui::achievements_page::wipe(&mut password);
             let _ = tx.send(match result {
-                Ok(account) => account.save(&data_dir()).map(|_| account).map_err(|e| format!("Couldn't keep the sign-in key: {e}")),
+                // A new sign-in of the same user keeps Hardcore as it was (`Account::keeping_choices`).
+                Ok(account) => { let account = account.keeping_choices(&data_dir()); account.save(&data_dir()).map(|_| account).map_err(|e| format!("Couldn't keep the sign-in key: {e}")) }
                 Err(api::LoginError::Unreachable) => Err("Couldn't reach RetroAchievements. Is this device online?".to_string()),
                 Err(why) => Err(why.to_string()),
             });
@@ -996,6 +996,7 @@ impl App {
         let backdrop = std::mem::take(&mut self.scaled);
         let mut launch = insert::Launch::new(game, front, from, backdrop, (v.w, v.h), (painted_size.width, painted_size.height), cover, self.ui.prefs.extras.printed_discs, cozy, &mut self.text);
         launch.trace = bridge("diagnosticAudio", &[]) == "true";
+        launch.set_power_on(self.ui.prefs.extras.tv_switch_on && bridge("batterySaver", &[]) != "true", cozy);
         if cozy {
             // The player comes when the fade has run; `launchInternal` only gets it ready.
             bridge("holdLaunch", &[]);
@@ -1059,6 +1060,7 @@ impl App {
         let game = self.ui.game().cloned().filter(|g| g.key == key);
         self.ui.launching = true;
         self.ui.returning = true;
+        self.ui.page_marks.clear();
         self.ui.follow_selection();
         let painted = self.page_frame();
         self.ui.launching = false;
@@ -1076,6 +1078,7 @@ impl App {
             window: (painted_size.width, painted_size.height),
             offset: (v.left as i32, v.top as i32),
             scale: (v.w as f32 / v.lw.max(1) as f32, v.h as f32 / v.lh.max(1) as f32),
+            marks: std::mem::take(&mut self.ui.page_marks),
         };
         let cover = self.cover.as_ref().filter(|_| self.cover_key == game.key);
         let scene = eject::scene(&game, case, page, cover, self.ui.prefs.extras.printed_discs, &mut self.text);
@@ -1833,6 +1836,11 @@ fn android_main(android: AndroidApp) {
     unsafe {
         pocket_ui::platform::android::initialize(android.vm_as_ptr().cast(), android.activity_as_ptr().cast()).expect("Activity bridge");
     }
+    // The handheld view is the chosen one (Views.java): PocketActivity handed over to it and is ending; nothing starts here.
+    if bridge("routedAway", &[]) == "true" {
+        log::info!("android_main: the handheld view is chosen, the Mobile view does not start");
+        return;
+    }
     let prefs: Preferences = pocket_ui::fsutil::read_json_or_backup(&pocket_ui::platform::data_dir().join("launcher.json")).unwrap_or_default();
     i18n::set(prefs.chosen_language().unwrap_or_else(|| i18n::Lang::from_locale(&bridge("language", &[]))));
     prefs.apply_look();
@@ -1973,7 +1981,7 @@ impl App {
         }
     }
     fn cores_poll(&mut self) {
-        // Nothing is requested, started or retried while there is no public channel: the systems read "Coming soon".
+        // Nothing is requested, started or retried while there is no public channel: the systems read "Not available here".
         if !self.ui.core_channel_open { return; }
         let requested = bridge("coreRequested", &[]);
         if self.ui.core_offers.iter().any(|p| p.core == requested) {
@@ -1988,7 +1996,7 @@ impl App {
                 self.ui.core_busy = None;
                 self.ui.core_note = match result {
                     Ok(()) => { self.ui.installed_cores.insert(core); ui::tr("System installed. You can start your game now.") }
-                    Err(e) => { log::warn!("core download: {e}"); ui::tr(&e) }
+                    Err(e) => { log::warn!("core download: {e}"); ui::tr(&e.0) }
                 };
                 self.core_run = None;
                 self.persist();

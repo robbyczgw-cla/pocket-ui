@@ -36,6 +36,117 @@ pub fn set_gba_model(model: GbaModel) {
     GBA_MODEL.store(model == GbaModel::Sp, std::sync::atomic::Ordering::Relaxed);
 }
 
+/// One other colour of a console (assets/systems/colours): its saved id, its name as the console page shows it, the
+/// shelf and console-page picture, and the insert scene's pictures (the rig is the original's: same pose, same slot).
+pub struct Colour {
+    pub id: &'static str,
+    pub name: &'static str,
+    art: &'static [u8],
+    rig_base: &'static [u8],
+    /// The layers of the console's own plastic besides the base (the N64's front, the GameCube's lid and its underside); a
+    /// layer the colour does not list stays the original's.
+    rig_over: Option<&'static [u8]>,
+    rig_top: Option<&'static [u8]>,
+    rig_under: Option<&'static [u8]>,
+    decoded: std::sync::OnceLock<Option<Sprite>>,
+}
+
+/// The insert scene's pictures of a colour besides the base; `None` is the original's own.
+#[derive(Clone, Copy, Default)]
+pub struct RigLayers {
+    pub over: Option<&'static [u8]>,
+    pub top: Option<&'static [u8]>,
+    pub under: Option<&'static [u8]>,
+}
+
+macro_rules! colour {
+    ($id:literal, $name:literal, $system:literal $(, $layer:ident)*) => {
+        Colour {
+            id: $id,
+            name: $name,
+            art: include_bytes!(concat!("../assets/systems/colours/", $system, "-", $id, ".png")),
+            rig_base: include_bytes!(concat!("../assets/media/rig/", $system, "-", $id, "/base.png")),
+            rig_over: colour!(@layer over, $system, $id $(, $layer)*),
+            rig_top: colour!(@layer top, $system, $id $(, $layer)*),
+            rig_under: colour!(@layer under, $system, $id $(, $layer)*),
+            decoded: std::sync::OnceLock::new(),
+        }
+    };
+    (@layer over, $system:literal, $id:literal, over $(, $rest:ident)*) => { Some(include_bytes!(concat!("../assets/media/rig/", $system, "-", $id, "/over.png")).as_slice()) };
+    (@layer top, $system:literal, $id:literal, top $(, $rest:ident)*) => { Some(include_bytes!(concat!("../assets/media/rig/", $system, "-", $id, "/top.png")).as_slice()) };
+    (@layer under, $system:literal, $id:literal, under $(, $rest:ident)*) => { Some(include_bytes!(concat!("../assets/media/rig/", $system, "-", $id, "/under.png")).as_slice()) };
+    (@layer $which:ident, $system:literal, $id:literal, $skip:ident $(, $rest:ident)*) => { colour!(@layer $which, $system, $id $(, $rest)*) };
+    (@layer $which:ident, $system:literal, $id:literal) => { None };
+}
+
+/// The consoles that come in more than one colour, by picture id (the original is always the first stop and has no entry).
+/// All from photos of the real consoles; the Advance only (the SP picture has its own, `gba-sp`).
+static GBA_COLOURS: [Colour; 2] = [colour!("milky", "Milky Blue", "gba"), colour!("pink", "Pink", "gba")];
+static GBC_COLOURS: [Colour; 1] = [colour!("dandelion", "Dandelion", "gbc")];
+static N64_COLOURS: [Colour; 2] = [colour!("iceblue", "Ice Blue", "n64", over), colour!("jungle", "Jungle Green", "n64", over)];
+static GAMECUBE_COLOURS: [Colour; 1] = [colour!("jetblack", "Jet Black", "gamecube", top, under)];
+static COLOURS: &[(&str, &[Colour])] = &[("gba", &GBA_COLOURS), ("gbc", &GBC_COLOURS), ("n64", &N64_COLOURS), ("gamecube", &GAMECUBE_COLOURS)];
+
+/// The player's colour per console (picture id → colour id), process-wide like the GBA model; absent means the original.
+static CHOSEN: std::sync::Mutex<Vec<(String, String)>> = std::sync::Mutex::new(Vec::new());
+
+/// The other colours a system's picture comes in (empty: only the original).
+pub fn colours_of(system: &str) -> &'static [Colour] {
+    let id = picture_id(system);
+    COLOURS.iter().find(|(s, _)| *s == id).map_or(&[], |(_, c)| c)
+}
+
+/// The colour chosen for a system; None is the original (also when the saved one no longer exists).
+pub fn colour(system: &str) -> Option<&'static Colour> {
+    let id = picture_id(system);
+    let chosen = CHOSEN.lock().ok()?.iter().find(|(s, _)| s == id)?.1.clone();
+    colours_of(system).iter().find(|c| c.id == chosen)
+}
+
+/// The chosen colour's name; "Original" for the console as it was first.
+pub fn colour_name(system: &str) -> &'static str {
+    colour(system).map_or("Original", |c| c.name)
+}
+
+/// One stop along Original, then each colour, round and round (`step` is -1 or 1). False for a system with one colour only.
+pub fn step_colour(system: &str, step: i32) -> bool {
+    let list = colours_of(system);
+    if list.is_empty() {
+        return false;
+    }
+    let now = colour(system).and_then(|c| list.iter().position(|x| x.id == c.id)).map_or(0, |i| i + 1);
+    let next = stop_after(list.len(), now, step);
+    set_colour(system, if next == 0 { None } else { Some(list[next - 1].id) });
+    true
+}
+
+/// The stop after `now` (0 is the original, 1.. the colours) among `colours` colours, `step` of -1 or 1, round and round.
+fn stop_after(colours: usize, now: usize, step: i32) -> usize {
+    (now as i32 + step).rem_euclid(colours as i32 + 1) as usize
+}
+
+fn set_colour(system: &str, id: Option<&str>) {
+    let key = picture_id(system).to_string();
+    let Ok(mut chosen) = CHOSEN.lock() else { return };
+    chosen.retain(|(s, _)| *s != key);
+    if let Some(id) = id {
+        chosen.push((key, id.to_string()));
+    }
+}
+
+/// The saved choices (picture id → colour id), only the ones that name a colour that exists, in a fixed order.
+pub fn colours_chosen() -> std::collections::BTreeMap<String, String> {
+    let chosen = CHOSEN.lock().map(|c| c.clone()).unwrap_or_default();
+    chosen.into_iter().filter(|(s, id)| COLOURS.iter().any(|(sys, list)| sys == s && list.iter().any(|c| c.id == *id))).collect()
+}
+
+/// Takes the saved choices at the start (an unknown system or colour is dropped, the console stays as it was).
+pub fn set_colours_chosen(saved: &std::collections::BTreeMap<String, String>) {
+    if let Ok(mut chosen) = CHOSEN.lock() {
+        *chosen = saved.iter().map(|(s, id)| (s.clone(), id.clone())).collect();
+    }
+}
+
 /// Shared by every console picture and the launch rig; `canonical` keeps the actual ROM system.
 pub fn picture_id(system: &str) -> &str {
     if canonical(system) == "gba" && gba_model() == GbaModel::Sp { "gba-sp" } else { canonical(system) }
@@ -76,6 +187,8 @@ const ART: &[(&str, &[u8])] = &[
     ("pcengine", include_bytes!("../assets/systems/pcengine.png")),
     ("pcenginecd", include_bytes!("../assets/systems/pcenginecd.png")),
     ("pokemini", include_bytes!("../assets/systems/pokemini.png")),
+    // Phone games (J2ME): a candy-bar phone of the 2000s, no brand on it.
+    ("j2me", include_bytes!("../assets/systems/j2me.png")),
     ("pico-8", include_bytes!("../assets/systems/pico-8.png")),
     ("pc", include_bytes!("../assets/systems/pc.png")),
     ("ports", include_bytes!("../assets/systems/ports.png")),
@@ -91,7 +204,7 @@ const ART: &[(&str, &[u8])] = &[
     ("sg-1000", include_bytes!("../assets/systems/sg-1000.png")),
     ("snes", include_bytes!("../assets/systems/snes.png")),
     ("supergrafx", include_bytes!("../assets/systems/supergrafx.png")),
-    // Settings > Look > Systems on the shelf: the row of "PC streaming" (an app, not a system with games).
+    // Settings > Games > Systems on the shelf: the row of "PC streaming" (an app, not a system with games).
     ("streaming", include_bytes!("../assets/systems/streaming.png")),
     ("tic-80", include_bytes!("../assets/systems/tic-80.png")),
     ("vectrex", include_bytes!("../assets/systems/vectrex.png")),
@@ -162,7 +275,17 @@ pub fn png(system: &str) -> Option<&'static [u8]> {
 pub fn get(system: &str) -> Option<&'static Sprite> {
     static DECODED: [std::sync::OnceLock<Option<Sprite>>; ART.len()] = [const { std::sync::OnceLock::new() }; ART.len()];
     let i = slot(system)?;
+    // The chosen colour's picture, decoded once.
+    if let Some(c) = colour(system) {
+        return c.decoded.get_or_init(|| decode(c.art)).as_ref();
+    }
     DECODED[i].get_or_init(|| decode(ART[i].1)).as_ref()
+}
+
+/// The insert scene's base picture of a system's chosen colour, if it has one other than the original, and the layers of
+/// its own plastic that go with it.
+pub fn colour_rig(system: &str) -> Option<(&'static [u8], RigLayers)> {
+    colour(system).map(|c| (c.rig_base, RigLayers { over: c.rig_over, top: c.rig_top, under: c.rig_under }))
 }
 
 /// PNG (palette with tRNS, RGB or RGBA) to a sprite; partial alpha counts as solid from half on.
@@ -196,6 +319,29 @@ impl Sprite {
     /// The largest copy that fits `max_w` x `max_h`: whole-number upscales so pixel art stays crisp (a
     /// nearest-neighbour fractional one when the whole number would leave it below three quarters of the
     /// box), area-averaged downscales (with transparency taken into account) when the box is smaller.
+    /// `fitted`, the last few kept: a plain case front fits the same console for every game of a system (the Cabinet
+    /// made it anew for each case it pulled out, H700 14.11.). Found by its pixels, so any picture may ask.
+    pub fn fitted_kept(&self, max_w: i32, max_h: i32) -> Sprite {
+        type Kept = Vec<((u32, u32, i32, i32), Vec<u32>, Sprite)>;
+        thread_local! {
+            static KEPT: std::cell::RefCell<Kept> = const { std::cell::RefCell::new(Vec::new()) };
+        }
+        let key = (self.w, self.h, max_w, max_h);
+        let copy = |s: &Sprite| Sprite { w: s.w, h: s.h, px: s.px.clone() };
+        if let Some(f) = KEPT.with(|k| k.borrow().iter().find(|(k, px, _)| *k == key && *px == self.px).map(|(_, _, f)| copy(f))) {
+            return f;
+        }
+        let f = self.fitted(max_w, max_h);
+        KEPT.with(|k| {
+            let mut k = k.borrow_mut();
+            if k.len() >= 4 {
+                k.remove(0);
+            }
+            k.push((key, self.px.clone(), copy(&f)));
+        });
+        f
+    }
+
     pub fn fitted(&self, max_w: i32, max_h: i32) -> Sprite {
         if self.w == 0 || self.h == 0 || max_w <= 0 || max_h <= 0 {
             return Sprite { w: 0, h: 0, px: Vec::new() };
@@ -245,6 +391,19 @@ impl Sprite {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_kept_fit_is_the_fit_itself_also_after_another_picture_took_its_place() {
+        let pic = |seed: u32| Sprite { w: 40, h: 30, px: (0..1200).map(|i: u32| (i.wrapping_mul(2654435761) ^ seed) | 0xff00_0000).collect() };
+        let (a, b) = (pic(1), pic(2));
+        for (s, w, h) in [(&a, 25, 25), (&a, 25, 25), (&b, 25, 25), (&a, 80, 70), (&b, 13, 40), (&a, 25, 25)] {
+            let (kept, fresh) = (s.fitted_kept(w, h), s.fitted(w, h));
+            assert_eq!((kept.w, kept.h, kept.px), (fresh.w, fresh.h, fresh.px), "{w}x{h}");
+        }
+        // Same size, same pixel count, other pixels: never the other's fit.
+        let c = pic(3);
+        assert_eq!(c.fitted_kept(25, 25).px, c.fitted(25, 25).px);
+    }
     use crate::gfx::Canvas;
 
     /// Every system the shelf shows a card for (src/main.rs `stripe`, src/hostsys.rs, pocket-core's own).
@@ -446,5 +605,84 @@ mod tests {
         let mut c = Canvas::new(&mut buf, 2, 2);
         c.blit_sprite(&s, 0, 0, 0);
         assert_eq!(buf[..2], [0x0012_3456, 0x00ff_0000]);
+    }
+
+    #[test]
+    fn the_stops_go_round_from_the_original_through_every_colour_both_ways() {
+        // The Advance: original, Milky Blue, Pink.
+        assert_eq!([0, 1, 2].map(|now| stop_after(2, now, 1)), [1, 2, 0]);
+        assert_eq!([0, 1, 2].map(|now| stop_after(2, now, -1)), [2, 0, 1]);
+        // The Game Boy Color: original and Dandelion, either key goes to the other.
+        assert_eq!([stop_after(1, 0, 1), stop_after(1, 1, 1)], [1, 0]);
+        assert_eq!([stop_after(1, 0, -1), stop_after(1, 1, -1)], [1, 0]);
+    }
+
+    #[test]
+    fn every_colour_is_a_picture_the_size_of_its_console_with_the_rig_of_the_original() {
+        for (system, list) in COLOURS {
+            let original = decode(ART.iter().find(|(id, _)| id == system).expect(system).1).unwrap();
+            assert!(!list.is_empty());
+            for c in list.iter() {
+                let art = decode(c.art).unwrap_or_else(|| panic!("{system}/{}: the picture", c.id));
+                // The same console in the same pose, so it fits where the original does (within a few pixels).
+                assert!(art.w.abs_diff(original.w) <= 12 && art.h.abs_diff(original.h) <= 12, "{system}/{}: {}x{} against {}x{}", c.id, art.w, art.h, original.w, original.h);
+                assert!(art.px.iter().filter(|p| **p >> 24 == 255).count() > (art.w * art.h) as usize / 3, "{system}/{}: a console, not a speck", c.id);
+                // The insert scene's base lies on the original's rig: exactly its canvas.
+                let base = decode(c.rig_base).unwrap_or_else(|| panic!("{system}/{}: the rig base", c.id));
+                let rig_original = decode(rig_layer(system, "base")).unwrap();
+                assert_eq!((base.w, base.h), (rig_original.w, rig_original.h), "{system}/{}: the original rig's canvas", c.id);
+                // Each other layer of its own plastic is the original's size too, and the colour gives the layers the console
+                // has: a colour without its lid would be the original's lid on another colour's base.
+                for (layer, own) in [("over", c.rig_over), ("top", c.rig_top), ("under", c.rig_under)] {
+                    let Some(original_layer) = rig_layer_if(system, layer) else {
+                        assert!(own.is_none(), "{system}/{}: the original has no {layer}", c.id);
+                        continue;
+                    };
+                    let original_layer = decode(original_layer).unwrap();
+                    let own = decode(own.unwrap_or_else(|| panic!("{system}/{}: needs its own {layer} (the original has one)", c.id))).unwrap_or_else(|| panic!("{system}/{}: {layer}", c.id));
+                    assert_eq!((own.w, own.h), (original_layer.w, original_layer.h), "{system}/{}: {layer}'s canvas", c.id);
+                }
+                assert!(!c.name.is_empty() && c.id.chars().all(|ch| ch.is_ascii_lowercase()), "{}", c.id);
+            }
+            let mut ids: Vec<_> = list.iter().map(|c| c.id).collect();
+            ids.dedup();
+            assert_eq!(ids.len(), list.len(), "{system}: ids are unique");
+        }
+    }
+
+    fn rig_layer(system: &str, layer: &str) -> &'static [u8] {
+        rig_layer_if(system, layer).unwrap_or_else(|| panic!("{system}: add its rig {layer} here"))
+    }
+
+    /// A layer of the original's rig for a console with colours; None where the console has no such layer.
+    fn rig_layer_if(system: &str, layer: &str) -> Option<&'static [u8]> {
+        Some(match (system, layer) {
+            ("gba", "base") => include_bytes!("../assets/media/rig/gba/base.png").as_slice(),
+            ("gbc", "base") => include_bytes!("../assets/media/rig/gbc/base.png"),
+            ("n64", "base") => include_bytes!("../assets/media/rig/n64/base.png"),
+            ("n64", "over") => include_bytes!("../assets/media/rig/n64/over.png"),
+            ("gamecube", "base") => include_bytes!("../assets/media/rig/gamecube/base.png"),
+            ("gamecube", "top") => include_bytes!("../assets/media/rig/gamecube/top.png"),
+            ("gamecube", "under") => include_bytes!("../assets/media/rig/gamecube/under.png"),
+            ("gba" | "gbc" | "n64" | "gamecube", _) => return None,
+            (other, _) => panic!("{other}: add its rig layers here"),
+        })
+    }
+
+    #[test]
+    fn only_the_consoles_with_a_colour_list_offer_one_and_a_saved_unknown_colour_is_the_original() {
+        assert_eq!(colours_of("gba").len(), 2);
+        assert_eq!(colours_of("gbah").len(), 2, "an alias is the same console");
+        assert_eq!(colours_of("gbc").len(), 1);
+        assert_eq!((colours_of("n64").len(), colours_of("gamecube").len()), (2, 1));
+        for none in ["snes", "nes", "arcade", "unknown-system"] {
+            assert!(colours_of(none).is_empty(), "{none}");
+            assert!(!step_colour(none, 1), "{none}: nothing to step");
+        }
+        let saved = std::collections::BTreeMap::from([("gba".to_string(), "neon".to_string()), ("zzz".to_string(), "pink".to_string())]);
+        set_colours_chosen(&saved);
+        assert!(colours_chosen().is_empty(), "only a colour that exists is kept");
+        assert!(colour("gba").is_none() && colour_name("gba") == "Original");
+        set_colours_chosen(&Default::default());
     }
 }

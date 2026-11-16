@@ -4,6 +4,8 @@
     scripts/i18n-extract.py               coverage, then every string without a translation (file:line)
     scripts/i18n-extract.py --summary     only the coverage line
     scripts/i18n-extract.py --stub        the missing ones as table lines to fill in ("English<TAB>")
+    scripts/i18n-extract.py --check       exit 1 when a string has no German line; Spanish, Portuguese and French lines that
+                                          de.tsv has and es.tsv/pt.tsv/fr.tsv/it.tsv lack are only a warning (filled before a release)
     scripts/i18n-extract.py FILE...       only these files
 
 A heuristic, not a parser: it reads string literals outside tests, logs, panics and attributes, keeps the ones
@@ -29,7 +31,9 @@ SKIP_FILES = {"doc_checks.rs", "bin/hello_pad.rs", "bin/store_tool.rs", "manual.
               # Where the UI is: machine codes for `@where`, /tmp/pocket-ui.status and logs, never painted (DEVICE-TESTS.md).
               "app_where.rs", "ui_status.rs",
               # pocket-core's FIFO contract tests (`#[cfg(test)]`): command words, never painted.
-              "bin/pocket_core/core_contract.rs"}
+              "bin/pocket_core/core_contract.rs",
+              # The case-knows fuzzer (`#[cfg(test)]`): made-up names in made-up saves, never painted.
+              "case_knows_fuzz_tests.rs"}
 # Calls whose strings are for a log, a developer or the machine.
 SKIP_CALLS = {
     "println", "eprintln", "print", "eprint", "panic", "assert", "assert_eq", "assert_ne", "debug_assert",
@@ -266,6 +270,28 @@ def hole_rx(p, i=0):
     return f"(?P<t{i}>.+?)" if p.startswith("{t") else ".+?"
 
 
+def first_fields(lang):
+    """The English sides of a language's tables (with the Brick's), as written."""
+    out = set()
+    for name in (f"{lang}.tsv", f"brick-{lang}.tsv"):
+        path = os.path.join(ROOT, "assets", "i18n", name)
+        if os.path.isfile(path):
+            with open(path, encoding="utf-8") as f:
+                out |= {l.split("\t", 1)[0] for l in f if l.strip() and not l.startswith("#") and "\t" in l}
+    return out
+
+
+def warn_other_languages():
+    """Lines German has and Spanish, Portuguese or French lacks: English shows there until a release fills them in."""
+    german = first_fields("de")
+    for lang in ("es", "pt", "fr", "it"):
+        gaps = sorted(german - first_fields(lang))
+        if gaps:
+            print(f"i18n: WARNING {lang}.tsv lacks {len(gaps)} lines de.tsv has (English shows; filled in one commit before "
+                  f"a release, sh scripts/bookkeeping.sh lists them): " + ", ".join(repr(g) for g in gaps[:5])
+                  + (" ..." if len(gaps) > 5 else ""))
+
+
 def load_table():
     """The exact lines, and the patterns as (normalised English, regex, an instance with made-up values)."""
     exact, patterns = {}, []
@@ -412,6 +438,8 @@ def main(argv):
             print(k.replace("\n", "\\n") + "\t")
         else:
             print(f"{missing[k][0]}\t{k!r}")
+    if "--check" in flags:
+        warn_other_languages()
     if "--check" in flags and missing:
         print(
             f"\n{len(missing)} strings have no German line: translate them in assets/i18n/de.tsv (scripts/i18n-extract.py "

@@ -1,0 +1,10 @@
+# The text and settings checks of the release (#[ignore = "release check: ..."]). One name per line, libtest filters.
+# scripts/release-check.sh and scripts/pre-release.sh both run exactly this list (with --lib --bins --test i18n_snapshots),
+# so the release check finds nothing the pre-release step did not (docs/dev/release.md).
+every_string_in_the_source_has_a_german_line_or_is_listed
+every_string_in_the_german_snapshots_is_translated_or_a_name
+every_string_in_the_spanish_snapshots_is_translated_or_a_name
+settings_paths_on_the_screen_use_the_glossarys_arrow
+every_path_in_settings_names_a_category_and_one_of_its_rows
+every_category_line_names_its_rows_in_order
+every_language_has_every_line

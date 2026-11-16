@@ -6,20 +6,23 @@ and the power and volume keys. The Mini V2's picture, the shelf, games, the paus
 
 ## In Settings
 
-Settings opens on seven categories (Look, Sound & feel, Playing, Games, Connections, System, Help & tools); each holds a short list
-([Open Settings](settings.md#open-settings)).
+Settings opens straight on the rows of its first category, Connections; L1 and R1 go to the other six (Look, Controls &
+sound, Playing, Games, System, Help & tools), each a short list ([Open Settings](settings.md#open-settings)). Their
+symbols stand in a row at the top, the one you are in named. Up on the first row moves to that row of symbols, where
+Left/Right change the category and Down goes back into its rows.
 
-Connections holds Wi-Fi, Bluetooth, Tailscale, Remote access (SSH) and Web companion, where the device supports them.
-Use Up/Down to select either network tool, A to open it, and B to return to its row in Connections.
-Sync and PC streaming are under Help & tools → For tinkerers.
+Connections holds Wi-Fi, Bluetooth, Tailscale, Remote access (SSH), Sync, Web companion and PC streaming, where the
+device supports them. Use Up/Down to select one, A to open it, and B to return to its row in Connections.
 
 | Button | What it does |
 |---|---|
-| D-pad Up / Down | Move. The list wraps around at the ends. |
-| HOME | Back to Home from wherever you are in Settings (the categories, a list, About, Battery, Lights, Night light, Cozy extras, Sleep & power, Curator). Pages with something under way (an update or a download, a sign-in, a pairing, a clean-up, a button being remapped) keep it: B goes back there. On Home and the shelf HOME still opens the quick settings. |
-| A | On a category: open its list. In the list: open. On Screen colour: back to Neutral. On Appearance, Colours, Style, Text size, Motion, Zoom in the pause menu, Animations, Sounds, Haptics, On start, Continue where I quit, Remind me where I was, Over the game, Screen frames and Language: switch. On Buttons: open its page. |
+| D-pad Up / Down | Move. Down on the last row goes round to the first; Up on the first row goes to the categories' symbols at the top. |
+| On the symbols at the top | Left / Right (or L1 / R1): the previous or the next category, round at the ends; its rows show under it. Down or A: into its rows, on the first. B: back to where you came from. |
+| L1 / R1 | The previous or the next category, at its first row; round at the ends. A tap on a category's symbol at the top goes there. |
+| HOME | Back to Home from wherever you are in Settings (a list, About, Battery, Lights, Night light, Cozy extras, Sleep & power, Curator). Pages with something under way (an update or a download, a sign-in, a pairing, a clean-up, a button being remapped) keep it: B goes back there. On Home and the shelf HOME still opens the quick settings. |
+| A | In the list: open. On Screen colour: back to Neutral. On Appearance, Colours, Style, Text size, Motion, Zoom in the pause menu, Animations, Sounds, Haptics, On start, Continue where I quit, Console boot screen, Remind me where I was, Over the game, Screen frames and Language: switch. On Buttons: open its page. |
 | D-pad Left / Right | On Sounds: how loud. On Screen colour, Appearance, Colours, Style, Text size, Motion, Zoom in the pause menu, Animations, On start, Over the game, Screen frames and Language: switch. On the Buttons page: A or Left / Right switch the selected row, Button layout or Button symbols. Controller setup opens the separate layout for each connected controller. |
-| B | In a category's list: back to the categories, the one you came from selected. On the categories: back to where you came from (the shelf, or a system's game list). |
+| B | In a category's list: back to where you came from (the shelf, or a system's game list), in one press. |
 
 A page of Settings (Wi-Fi, Tools, Battery and the others below) goes back with B to its category's list, even when
 it was opened from somewhere else.
@@ -132,10 +135,10 @@ START on a PortMaster port's card ([Performance & fan](performance.md#portmaster
 | Tour (Settings → Help & tools → Tour) | A: next card, the last one closes. L1 / R1 or Left / Right: previous / next card. B: close. The first six cards explain; on Big text, Up/Down choose and A applies Large text and Reduced motion. |
 | Wi-Fi | Up / Down: the networks, then Other network…, Wi-Fi country and Scan again. A: connect; on a saved network its menu (Connect, Forget; the first start's connected one: Continue, Forget). X: scan again. Y: forget a saved network straight away. B: back. |
 | On-screen keyboard | D-pad: move. A: type. B: delete (back to the list when empty). L1: empty the field. X: Shift. Y: symbols. START: connect. |
-| Extras | Up / Down: choose. A: download (cover art) or browse (PortMaster). On Pictures, A or Left / Right: the next choice (Box art, Box art and screenshots, Off). |
+| Box art & downloads | Up / Down: choose. A: download (cover art) or browse (PortMaster). On Pictures, A or Left / Right: the next choice (Box art, Box art and screenshots, Off). |
 | PortMaster games | Up / Down: move. L1 / R1: page. Left / Right: Ready to play or Bring your own game files. A: install or remove. X: how to copy a game's files. B: back. |
-| PortMaster on TrimUI, first use | A: accept the optional runtime download. Progress and retry appear here. B: back to Extras while the accepted download continues. MENU in a port: pause menu. |
-| Copy your game files | Up / Down: scroll. X: turn file sharing on or off (from Extras). A or B: back. |
+| PortMaster on TrimUI, first use | A: accept the optional runtime download. Progress and retry appear here. B: back to Box art & downloads while the accepted download continues. MENU in a port: pause menu. |
+| Copy your game files | Up / Down: scroll. X: turn file sharing on or off (from Box art & downloads). A or B: back. |
 | Add your games | D-pad: move on the grid (L1 / R1: three rows). A on **All systems**: show every system, A again closes the list. X: turn file sharing on or off. |
 | Remote access (SSH) | A: turn remote access on or off. B: back. |
 
@@ -195,14 +198,14 @@ These work on the shelf, in quick settings and in games. A bar at the top of the
 | Vol+ / Vol- | Volume |
 | START + Vol+ / Vol- | Brightness, in steps of 5%. Below 5% come three [Extra dim](quick-settings.md#extra-dim) steps that darken the picture itself |
 | HOME + Vol+ / Vol- | Brightness (ROCKNIX does the change, pocket-ui shows the bar); below ROCKNIX's lowest level, the [Extra dim](quick-settings.md#extra-dim) steps |
-| SELECT + Vol+ / Vol- | Colour: Vol+ goes warmer (more yellow-red), Vol- goes cooler (more blue). The bar shows **Cooler 1…10**, **Neutral** or **Warmer 1…10**; if the screen looks yellowish, press SELECT + Vol- a few times. The same setting as Settings → Look → **Screen colour** (Left/Right there, A for Neutral) |
+| SELECT + Vol+ / Vol- | Colour: Vol+ goes warmer (more yellow-red), Vol- goes cooler (more blue). The bar shows **Cooler 1…10**, **Neutral** or **Warmer 1…10**; if the screen looks yellowish, press SELECT + Vol- a few times. The same setting as Settings → Screen & sound → **Screen colour** (Left/Right there, A for Neutral) |
 
 RetroArch games and the standalone emulators get no bar; the changes still apply. The colour temperature and Extra dim
 reach RetroArch, PlayStation 2, GameCube and PortMaster games only when the screen supports it system-wide.
 
 ### The power menu
 
-At the top right: the battery level and the time left, as on Settings → Playing → [Battery](settings-system.md#battery).
+At the top right: the battery level and the time left, as on Settings → System → [Battery](settings-system.md#battery).
 Under each entry, a line says what it does.
 
 | Entry | What it does |
@@ -229,14 +232,14 @@ wins over this default. If effects look wrong, change the readback option in Emu
 
 ### Test buttons
 
-**Settings → Help & tools → Test buttons** lights up every button, trigger and stick of each connected controller and
+**Settings → Controls → Test buttons** lights up every button, trigger and stick of each connected controller and
 says what the last press does in menus and in games after your layout. A handheld without sticks (the TrimUI Brick, the RG35XX Plus)
 is drawn without them. Hold HOME for 2 seconds (or B and START
-together) to leave. See [Test buttons](settings-system.md#test-buttons).
+together) to leave. See [Test buttons](settings-sound.md#test-buttons).
 
 ### Controller setup
 
-Open **Settings → Playing → Buttons → Controller setup**, or **Pause → Options → Controls → Controller setup**
+Open **Settings → Controls → Controller setup**, or **Pause → Options → Controls → Controller setup**
 in a pocket-core game. The first row chooses the controller; its identity suffix distinguishes two pads with the
 same name, and its player number shows the remembered order. A or Left/Right switches the controller.
 
@@ -248,7 +251,7 @@ up by itself and nothing changes. Input from another controller cannot change th
 **Reset controller layout** restores only the selected controller.
 
 On the TrimUI Brick, F1/F2 are reserved shortcuts. Pressing one during capture ends it with an explanation;
-no game button changes. Choose their global shortcut actions in Settings → Sound & feel → **Lights & buttons**.
+no game button changes. Choose their global shortcut actions in Settings → Controls → **Lights & buttons**.
 
 If the selected controller disconnects while the page waits, capture ends without changing the layout.
 Reconnect it and choose the action again. Held buttons are released when its input reader is replaced too,

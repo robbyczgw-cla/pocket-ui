@@ -345,7 +345,7 @@ impl Medium {
 pub fn is_digital(system: &str) -> bool {
     matches!(
         system,
-        "ports" | "android" | "pico-8" | "pico8" | "tic-80" | "tic80" | "scummvm" | "openbor" | "easyrpg" | "solarus" | "lutro" | "love" | "pygame" | "wiiware" | "pspockets" | "steam" | "moonlight" | "streaming"
+        "ports" | "android" | "j2me" | "pico-8" | "pico8" | "tic-80" | "tic80" | "scummvm" | "openbor" | "easyrpg" | "solarus" | "lutro" | "love" | "pygame" | "wiiware" | "pspockets" | "steam" | "moonlight" | "streaming"
     )
 }
 
@@ -406,6 +406,31 @@ fn scaled(s: &Sprite, f: f32, tint: Option<u32>) -> Pic {
             }
         }
     }
+    p
+}
+
+/// `scaled` for a case's own template (`Medium::pics`, decoded once for the program's life): every case of a kind at
+/// one size and tint starts from the same picture, so the last few are kept and copied (the Cabinet made it anew for
+/// each case it pulled out: 2-3 ms of a move on the H700 at 720x720, 14.11.). Only `'static` templates: the key is
+/// where the template lives.
+fn template_scaled(s: &'static Sprite, f: f32, tint: Option<u32>) -> Pic {
+    type Made = Vec<((usize, u32, Option<u32>), Pic)>;
+    thread_local! {
+        static MADE: std::cell::RefCell<Made> = const { std::cell::RefCell::new(Vec::new()) };
+    }
+    let key = (s as *const Sprite as usize, f.to_bits(), tint);
+    if let Some(p) = MADE.with(|m| m.borrow().iter().find(|(k, _)| *k == key).map(|(_, p)| p.clone())) {
+        return p;
+    }
+    let p = scaled(s, f, tint);
+    MADE.with(|m| {
+        let mut m = m.borrow_mut();
+        // A spine and a front of a few kinds and sizes: the Shelf look's and the Cabinet's, out and on the shelf.
+        if m.len() >= 8 {
+            m.remove(0);
+        }
+        m.push((key, p.clone()));
+    });
     p
 }
 
@@ -479,11 +504,12 @@ pub fn spine_px(w: i32, want: f32) -> u32 {
 /// look's spines, whose title follows Settings → Text size.
 pub fn spine_with(text: &mut Text, m: Medium, k: f32, look: Look, title: &str, want: f32) -> Pic {
     text.literal(|text| {
-    let look = spine_print(m).map_or(look, |(paper, band)| Look { color: paper.unwrap_or(look.color), band, ..look });
+    // A home-made case has no printed spine: its own plain colour, the name on tape (or on the insert of a disc case).
+    let look = if look.tape { look } else { spine_print(m).map_or(look, |(paper, band)| Look { color: paper.unwrap_or(look.color), band, ..look }) };
     let t = m.template();
     let f = shelf_scale() * k;
     let (spine, _) = m.pics();
-    let mut p = scaled(spine, f / t.res as f32, tint_of(m, look));
+    let mut p = template_scaled(spine, f / t.res as f32, tint_of(m, look));
     card_edge(&mut p, m, f);
     if let Some(band) = t.band {
         let (x, y, w, h) = t.at(band, f);
@@ -497,6 +523,10 @@ pub fn spine_with(text: &mut Text, m: Medium, k: f32, look: Look, title: &str, w
     let pad = (4.0 * k).round() as i32;
     let (lines, px, face) = spine_fit(text, title, w, h - 2 * pad, want);
     note_spine(m, title, &lines, px);
+    if look.tape {
+        crate::tape_label::on_spine(text, &mut p, (x, y, w, h), title, &lines, (px, face), !is_disc_case(m));
+        return p;
+    }
     let ink = ink_on(look.color);
     match lines.as_slice() {
         [one] => art::spine_title(text, &mut p, face, one, px, x, w, y + pad, h - 2 * pad, ink),
@@ -760,7 +790,7 @@ pub fn spine_label_rect(m: Medium, k: f32) -> (i32, i32, i32, i32) {
 pub fn front(text: &mut Text, m: Medium, k: f32, look: Look, title: &str, cover: Option<&Image>, console: Option<&Sprite>, system: &str) -> Pic {
     let (_, tpl) = m.pics();
     let t = m.template();
-    let mut p = scaled(tpl, shelf_scale() * k / t.res as f32, tint_of(m, look));
+    let mut p = template_scaled(tpl, shelf_scale() * k / t.res as f32, tint_of(m, look));
     card_edge(&mut p, m, shelf_scale() * k);
     if let Some(band) = t.front_band {
         system_band(text, &mut p, t.at(band, shelf_scale() * k), look.band, console, system);
@@ -776,6 +806,16 @@ pub fn front(text: &mut Text, m: Medium, k: f32, look: Look, title: &str, cover:
                     *d = 0xff00_0000 | s;
                 }
             }
+        }
+        // No box art at all: a plain insert written on by hand (a disc case), or tape across the plain front.
+        None if look.tape && is_disc_case(m) => {
+            paper(&mut p, (lx, ly, lw, lh), crate::tape_label::INSERT);
+            let pad = lw / 10;
+            crate::tape_label::write_on(text, &mut p, (lx + pad, ly + lh / 6, lw - 2 * pad, lh * 2 / 3), title, 3);
+        }
+        None if look.tape => {
+            paper(&mut p, (lx, ly, lw, lh), look.color);
+            crate::tape_label::on_label(text, &mut p, (lx, ly, lw, lh), title);
         }
         None => art::plain_label(text, &mut p, (lx, ly, lw, lh), look, title, console),
     }
@@ -1091,6 +1131,14 @@ pub fn game_pic(text: &mut Text, g: Game, h: i32, look: Look, title: &str, cover
                 }
             }
         }
+        // No box art: a blank cartridge, its label recess bare, a strip of tape on it with the name in marker (too
+        // small for a name: the tape alone).
+        _ if look.tape => {
+            let recess = mix(flat & 0xffffff, 0x000000, crate::tape_label::RECESS_DARKEN);
+            paper(&mut p, (lx, ly, lw, lh), recess);
+            let name = if lh < 32 || lw < 40 { "" } else { title };
+            crate::tape_label::on_label(text, &mut p, (lx, ly, lw, lh), name);
+        }
         // A label too small for a title (a game card at the shelf's size): the cover's colour only.
         _ if lh < 32 || lw < 40 => paper(&mut p, (lx, ly, lw, lh), look.color),
         _ => {
@@ -1108,18 +1156,19 @@ pub fn game_pic(text: &mut Text, g: Game, h: i32, look: Look, title: &str, cover
 /// opposite face. Decoded once, on the first launch frame, just like the front templates.
 /// Photo sources, retouching and licences: assets/media/game/REAR-SOURCES.md.
 pub fn game_back(g: Game) -> Option<&'static Pic> {
-    const PNGS: [&[u8]; 5] = [
+    const PNGS: [&[u8]; 6] = [
         include_bytes!("../assets/media/game/gb-back.png"),
         include_bytes!("../assets/media/game/gbc-back.png"),
         include_bytes!("../assets/media/game/gba-back.png"),
         include_bytes!("../assets/media/game/ds-back.png"),
         include_bytes!("../assets/media/game/gg-back.png"),
+        include_bytes!("../assets/media/game/ngp-back.png"),
     ];
-    static PICS: [std::sync::OnceLock<Pic>; 5] = [const { std::sync::OnceLock::new() }; 5];
-    let i = match g { Game::Gb => 0, Game::Gbc => 1, Game::Gba => 2, Game::Card | Game::Card3ds => 3, Game::GameGear => 4, _ => return None };
+    static PICS: [std::sync::OnceLock<Pic>; 6] = [const { std::sync::OnceLock::new() }; 6];
+    let i = match g { Game::Gb => 0, Game::Gbc => 1, Game::Gba => 2, Game::Card | Game::Card3ds => 3, Game::GameGear => 4, Game::NeoGeoPocket => 5, _ => return None };
     Some(PICS[i].get_or_init(|| {
         let s = crate::system_art::decode(PNGS[i]).expect("rear cartridge image");
-        Pic { w: s.w as i32, h: s.h as i32, px: s.px }
+        Pic::of(s.w as i32, s.h as i32, s.px)
     }))
 }
 
@@ -1366,6 +1415,10 @@ impl DiscKind {
 /// enough to read it. Without a cover the print is the cover's colour with the title above the hole. Made once per
 /// case and size (`App::box_game`, the launch's first frame), never per frame.
 pub fn disc_pic(text: &mut Text, kind: DiscKind, h: i32, look: Look, title: &str, cover: Option<&Image>) -> Pic {
+    // No box art: a burned disc. A CD-R or DVD-R's plain silver (the GameCube's mini disc and the UMD keep their
+    // shape), nothing printed, the name written on it in marker.
+    let blank = look.tape && cover.is_none_or(|c| c.w == 0 || c.h == 0);
+    let kind = if blank && !matches!(kind, DiscKind::GameCube | DiscKind::Umd) { DiscKind::Cd } else { kind };
     // Made at the size it is shown: the template's colours sampled smoothly between its pixels, every edge (the rim,
     // the hole, the print, the ring) worked out as a circle and anti-aliased, the cover and the title at full
     // resolution. A pixel-art template scaled by whole pixels looked blocky beside the smooth case and cover.
@@ -1386,7 +1439,7 @@ pub fn disc_pic(text: &mut Text, kind: DiscKind, h: i32, look: Look, title: &str
     let cover = cover.filter(|c| c.w > 0 && c.h > 0);
     // The ring at the rim, in the cover's colour darkened: an eighth of the disc's radius, never more than a third of
     // the print (the GameCube's hub is large).
-    let ring = (kind.is_round() && kind.has_ring()).then(|| r_out - (r_out * 0.13).min((r_out - r_in) / 3.0)).filter(|r| r_out - r > 3.0);
+    let ring = (kind.is_round() && kind.has_ring() && !blank).then(|| r_out - (r_out * 0.13).min((r_out - r_in) / 3.0)).filter(|r| r_out - r > 3.0);
     let ring_c = kind.ring().unwrap_or(mix(look.color, 0x000000, 110));
     let fitted = cover.map(|img| art::cover_fill(&trim_zones(&trim_bands(img), kind.band_zones()), bw.max(1), bh.max(1)));
     let (sw, sh) = (s.w as i32, s.h as i32);
@@ -1421,7 +1474,8 @@ pub fn disc_pic(text: &mut Text, kind: DiscKind, h: i32, look: Look, title: &str
             // How much of it is print, and what is printed there.
             let dp = ((fx - pcx).powi(2) + (fy - pcy).powi(2)).sqrt();
             let pc = inside(dp, r_out) * if r_in > 0.0 { 1.0 - inside(dp, r_in) } else { 1.0 };
-            let printed = (pc > 0.0).then(|| {
+            // A burned disc has no print: its silver all the way (a UMD's label stays, as paper).
+            let printed = (pc > 0.0 && !(blank && kind.is_round())).then(|| {
                 let (ax, ay) = ((x - bx).clamp(0, bw.max(1) - 1), (y - by).clamp(0, bh.max(1) - 1));
                 let mut c = match &fitted {
                     Some(f) => f.px[(ay.min(f.h as i32 - 1) as u32 * f.w + ax.min(f.w as i32 - 1) as u32) as usize] & 0xffffff,
@@ -1452,10 +1506,28 @@ pub fn disc_pic(text: &mut Text, kind: DiscKind, h: i32, look: Look, title: &str
             };
             let rgb = match printed {
                 Some(c) => mix(base, c, k(pc)),
+                // A burned disc's top: plain bright silver where a pressed one has its print.
+                None if blank => mix(base, 0xd6d9dd, k(pc * 0.6)),
                 None => base,
             };
             p.px[(y * w + x) as usize] = k(a) << 24 | rgb;
         }
+    }
+    if blank {
+        if kind.is_round() {
+            // Above the hole and below it, where a marker writes on a disc: between the hub and the rim.
+            let chord = |yy: f32| (r_out * r_out - (yy - cy).powi(2)).max(0.0).sqrt();
+            let (t0, t1) = (cy - r_out * 0.86, cy - r_in - 2.0);
+            let half = chord(t0 + (t1 - t0) * 0.35) * 0.9;
+            let top = ((cx - half) as i32, t0 as i32, (2.0 * half) as i32, (t1 - t0) as i32);
+            let (b0, b1) = (cy + r_in + 2.0, cy + r_out * 0.86);
+            let half = chord(b0 + (b1 - b0) * 0.65) * 0.9;
+            let bottom = ((cx - half) as i32, b0 as i32, (2.0 * half) as i32, (b1 - b0) as i32);
+            crate::tape_label::on_disc(text, &mut p, top, bottom, title);
+        } else if bh >= 24 && bw >= 40 {
+            crate::tape_label::write_on(text, &mut p, (bx + bw / 8, by + bh / 5, bw * 3 / 4, bh * 3 / 5), title, 2);
+        }
+        return p;
     }
     match (cover, ring) {
         (Some(_), Some(r)) => ring_title(text, &mut p, (cx, cy), (r + 1.0, r_out), ink_on(ring_c), title),
@@ -1704,6 +1776,41 @@ pub fn cover_colors(px: &[u32]) -> Option<(u32, u32)> {
     Some((main, accent))
 }
 
+/// A case's colours: its label and band from its cover's `colors` (the main colour and an accent, `cover_colors`), the
+/// system's `stripe` otherwise; a cartridge's plastic is its system's. The Cabinet and the picture of the shelf to
+/// share (`share_shelf`) make their cases the same way.
+pub fn case_look(system: &str, stripe: u32, m: Medium, colors: Option<(u32, u32)>) -> Look {
+    let fallback = (mix(stripe, 0x101010, 70), stripe);
+    let (color, accent) = colors.unwrap_or(fallback);
+    // The plastic of the cartridge or card inside the case (a cardboard box itself takes the cover's colour).
+    let plastic = if m.game().is_round() { 0x141416 } else { art::plastic(system) };
+    Look {
+        color,
+        // pocket-ui's own case wears the system's colour in its band, whatever the cover.
+        band: if m.is_generic() { stripe } else { apart(accent, color) },
+        plastic,
+        tape: false,
+    }
+}
+
+/// The case of a game without any box art (`look`, its `case_look` without a cover) made home-made: a plain kraft box
+/// with a strip of masking tape for a cartridge system, a plain insert of white paper written on by hand in a disc case
+/// (`tape_label`). pocket-ui's own case keeps its band in the system's colour.
+pub fn homemade(look: Look, m: Medium) -> Look {
+    let color = if is_disc_case(m) { crate::tape_label::INSERT } else { crate::tape_label::KRAFT };
+    Look { color, band: if m.is_generic() { look.band } else { mix(color, 0x000000, 70) }, plastic: look.plastic, tape: true }
+}
+
+/// A case that holds a disc or a UMD: its home-made label is written on its paper insert, not on tape.
+pub fn is_disc_case(m: Medium) -> bool {
+    matches!(m.game(), Game::Disc | Game::MiniDisc | Game::Umd)
+}
+
+/// A title's main part, without its subtitle (" - ", ": "): None when it has none.
+pub fn main_part(title: &str) -> Option<&str> {
+    main_title(title).map(|(main, _)| main)
+}
+
 /// A lighter or darker shade of `c` that stands apart from `bg` (a band in the cover's own colour, say).
 pub fn apart(c: u32, bg: u32) -> u32 {
     if luma(c).abs_diff(luma(bg)) > 40 {
@@ -1806,9 +1913,27 @@ impl Prop {
 #[cfg(test)]
 mod tests {
     #[test]
+    fn a_kept_template_is_the_scaled_template_at_every_size_and_tint_also_after_it_was_let_go() {
+        // More sizes and tints than are kept (8): asked again, each is the same picture as scaled on the spot.
+        let asks: Vec<(Medium, f32, Option<u32>)> = [Medium::Gb, Medium::Ps1, Medium::Gba]
+            .into_iter()
+            .flat_map(|m| [0.5f32, 0.75, 1.0, 1.3].into_iter().map(move |f| (m, f, None)))
+            .chain([(Medium::Gb, 1.0, Some(0x3a2a6a)), (Medium::Gb, 1.0, Some(0x123456))])
+            .collect();
+        for round in 0..2 {
+            for &(m, f, tint) in &asks {
+                let (spine, front) = m.pics();
+                for s in [spine, front] {
+                    assert_eq!(template_scaled(s, f, tint).px, scaled(s, f, tint).px, "{m:?} {f} {tint:?}, round {round}");
+                }
+            }
+        }
+    }
+
+    #[test]
     fn what_shows_of_a_frozen_game_is_its_own_picture_for_every_system_and_as_wide_as_asked() {
         let mut text = Text::new();
-        let look = Look { color: 0x3a2a6a, band: 0x7a6cb0, plastic: 0x9c99a2 };
+        let look = Look { color: 0x3a2a6a, band: 0x7a6cb0, plastic: 0x9c99a2, tape: false };
         for system in ["gb", "gbc", "gba", "snes", "nes", "n64", "megadrive", "nds", "3ds", "psx", "ps2", "gamecube", "wii", "psp", "dreamcast", "xbox"] {
             let top = game_top(&mut text, system, "/roms/Game (USA).rom", 30, 12, look).unwrap_or_else(|| panic!("{system}: no picture"));
             assert_eq!((top.w, top.h), (30, 12), "{system}");
@@ -1963,7 +2088,7 @@ mod tests {
     #[test]
     fn the_game_inside_shows_its_cover_or_its_name() {
         let mut text = Text::new();
-        let look = Look { color: 0x3a2a6a, band: 0x7a6cb0, plastic: 0x9c99a2 };
+        let look = Look { color: 0x3a2a6a, band: 0x7a6cb0, plastic: 0x9c99a2, tape: false };
         let cover = Image { w: 40, h: 30, px: vec![0xd02020; 1200] };
         for g in Game::DRAWN {
             let h = if g == Game::Card { 120 } else { 200 };
@@ -2016,12 +2141,26 @@ mod tests {
         }
     }
 
+    /// 15.11. (tester and Lead; the photos of real UMDs, Commons "Pursuit Force UMD (front)" and "Cars UMD"): with its label upright a
+    /// UMD is straight at the top (its chamfered corner) and rounded at the bottom, where PSP and the controller symbol are printed.
+    /// Ours was the other way up: round end on top, which is a UMD upside down.
+    /// Missed before: the tests checked that the print was filled, never the shell's shape.
+    #[test]
+    fn a_umd_is_straight_at_the_top_and_rounded_at_the_bottom_as_with_its_label_upright() {
+        let mut text = Text::new();
+        let look = Look { color: 0x3a2a6a, band: 0x7a6cb0, plastic: 0x141416, tape: false };
+        let p = disc_pic(&mut text, DiscKind::Umd, 300, look, "Burnout Dominator", None);
+        let row = |y: i32| (0..p.w).filter(|&x| p.get(x, y) >> 24 != 0).count();
+        let (top, bottom) = (row(0), row(p.h - 1));
+        assert!(top > bottom + p.w as usize / 10, "straight end up ({top} px wide), rounded end down ({bottom} px wide)");
+    }
+
     /// A printed disc shows the cover in its print and the title on its ring when large enough; no cover, the title
     /// on the cover's colour; nothing of the template's print colour is left, and the hole stays clear.
     #[test]
     fn a_disc_is_printed_with_its_cover_or_its_title() {
         let mut text = Text::new();
-        let look = Look { color: 0x3a2a6a, band: 0x7a6cb0, plastic: 0x141416 };
+        let look = Look { color: 0x3a2a6a, band: 0x7a6cb0, plastic: 0x141416, tape: false };
         // Red art with some texture (a flat colour would be trimmed as a margin, `trim_bands`).
         let (cw, ch) = (140u32, 200u32);
         let cover = Image { w: cw, h: ch, px: (0..cw * ch).map(|i| 0xd00000 | ((i % cw * 37 + i / cw * 11) % 64) << 8 | (i % cw * 5 % 48)).collect() };
@@ -2062,7 +2201,7 @@ mod tests {
         for k in DiscKind::ALL {
             let name = format!("{k:?}").to_lowercase();
             let cover = crate::image::load_image(&covers.join(format!("{name}.png")));
-            let look = cover.as_ref().and_then(|c| cover_colors(&c.px)).map_or(Look { color: 0x2a3a6a, band: 0x7a6cb0, plastic: 0x141416 }, |(c, a)| Look { color: c, band: a, plastic: 0x141416 });
+            let look = cover.as_ref().and_then(|c| cover_colors(&c.px)).map_or(Look { color: 0x2a3a6a, band: 0x7a6cb0, plastic: 0x141416, tape: false }, |(c, a)| Look { color: c, band: a, plastic: 0x141416, tape: false });
             let title = std::fs::read_to_string(covers.join(format!("{name}.txt"))).unwrap_or_else(|_| "Game Title".into());
             for (tag, h) in [("big", 300), ("small", 126)] {
                 for (with, c) in [("cover", cover.as_ref()), ("plain", None)] {
@@ -2083,7 +2222,7 @@ mod tests {
     #[test]
     fn a_playstation_or_saturn_disc_is_printed_almost_to_its_rim() {
         let mut text = Text::new();
-        let look = Look { color: 0x2a3a6a, band: 0x7a6cb0, plastic: 0x141416 };
+        let look = Look { color: 0x2a3a6a, band: 0x7a6cb0, plastic: 0x141416, tape: false };
         let (w, h) = (64u32, 64u32);
         let cover = Image { w, h, px: (0..w * h).map(|i| (((i % w) * 5 + (i / w) * 3) % 24) | 0xd02000).collect() };
         for kind in [DiscKind::Ps1, DiscKind::Saturn] {
@@ -2104,7 +2243,7 @@ mod tests {
     #[test]
     fn cartridge_labels_keep_their_shape_and_show_the_title_end() {
         let mut text = Text::new();
-        let look = Look { color: 0x3a2a6a, band: 0x7a6cb0, plastic: 0x9c99a2 };
+        let look = Look { color: 0x3a2a6a, band: 0x7a6cb0, plastic: 0x9c99a2, tape: false };
         // Square box art: a red top half (the title), a blue bottom half, both with some texture (a flat area at an
         // edge would be taken for a case's margin, `trim_bands`).
         let (w, h) = (100u32, 100u32);
@@ -2136,7 +2275,7 @@ mod tests {
     #[test]
     fn an_n64_spine_is_its_cover_with_the_red_block() {
         let mut text = Text::new();
-        let look = Look { color: 0x2a6ab0, band: 0x7a6cb0, plastic: 0x9c99a2 };
+        let look = Look { color: 0x2a6ab0, band: 0x7a6cb0, plastic: 0x9c99a2, tape: false };
         let s = spine(&mut text, Medium::N64, 1.0, look, "Super Mario 64");
         let t = Medium::N64.template();
         let (bx, by, bw, bh) = t.at(t.band.unwrap(), shelf_scale());
@@ -2231,7 +2370,7 @@ mod tests {
     #[test]
     fn a_label_title_fits_its_label() {
         let mut text = Text::new();
-        let look = Look { color: 0x3a2a6a, band: 0x7a6cb0, plastic: 0x9c99a2 };
+        let look = Look { color: 0x3a2a6a, band: 0x7a6cb0, plastic: 0x9c99a2, tape: false };
         for (w, h) in [(120, 80), (90, 70), (200, 120)] {
             let mut p = Pic::new(w + 10, h + 10, 0xff000000);
             label_title(&mut text, &mut p, (5, 5, w, h), look, "N64 Game Title Long Name");
@@ -2252,7 +2391,7 @@ mod tests {
     #[test]
     fn the_cover_is_taken_off_a_front_whole() {
         let mut text = Text::new();
-        let look = Look { color: 0x3a2a6a, band: 0x7a6cb0, plastic: 0x9c99a2 };
+        let look = Look { color: 0x3a2a6a, band: 0x7a6cb0, plastic: 0x9c99a2, tape: false };
         for m in [Medium::Snes, Medium::Ps2, Medium::Ds] {
             let (_, _, lw, lh) = label_rect(m, 1.0);
             let cover = art::cover_fit(&Image { w: 4, h: 3, px: vec![0x20c040; 12] }, lw, lh);
@@ -2268,7 +2407,7 @@ mod tests {
     #[test]
     fn without_a_cover_a_case_still_shows_its_name() {
         let mut text = Text::new();
-        let look = Look { color: 0x3a2a6a, band: 0x7a6cb0, plastic: 0x9c99a2 };
+        let look = Look { color: 0x3a2a6a, band: 0x7a6cb0, plastic: 0x9c99a2, tape: false };
         for m in Medium::ALL {
             let spine = spine(&mut text, m, 1.0, look, "Chrono Trigger");
             let (x, y, w, h) = m.template().at(m.template().spine_label, shelf_scale());
@@ -2288,9 +2427,9 @@ mod tests {
     fn every_box_of_one_system_has_the_same_size_and_edge() {
         let mut text = Text::new();
         let looks = [
-            Look { color: 0xf4f4f0, band: 0xd02020, plastic: 0x9c99a2 },
-            Look { color: 0x101014, band: 0x2050c0, plastic: 0x9c99a2 },
-            Look { color: 0xc02030, band: 0xf0d020, plastic: 0x9c99a2 },
+            Look { color: 0xf4f4f0, band: 0xd02020, plastic: 0x9c99a2, tape: false },
+            Look { color: 0x101014, band: 0x2050c0, plastic: 0x9c99a2, tape: false },
+            Look { color: 0xc02030, band: 0xf0d020, plastic: 0x9c99a2, tape: false },
         ];
         let titles = ["F-Zero", "Castlevania - Aria of Sorrow", "Mario & Luigi - Superstar Saga", "Boktai - The Sun Is in Your Hand"];
         for m in Medium::ALL {

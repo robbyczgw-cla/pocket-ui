@@ -213,21 +213,13 @@ fn app_icons_are_read_whole_and_muted_and_a_broken_file_is_no_icon() {
 #[test]
 fn the_drawer_fits_retroid_screens_whole_in_english_german_and_spanish() {
     use pocket_ui::i18n::{self, Lang};
-    if std::env::var_os("ANDROID_DRAWER_FIT_CHILD").is_none() {
-        let ink = tempfile::tempdir().unwrap();
-        let result = std::process::Command::new(std::env::current_exe().unwrap())
-            .args(["--exact", "android_02_tests::drawer::the_drawer_fits_retroid_screens_whole_in_english_german_and_spanish", "--nocapture"])
-            .env("ANDROID_DRAWER_FIT_CHILD", "1").env("POCKETUI_TEXT_BOXES", ink.path().join("ink"))
-            .env("POCKETUI_VISIBLE_TEXT", ink.path().join("visible")).output().unwrap();
-        assert!(result.status.success() && String::from_utf8_lossy(&result.stdout).contains("1 passed; 0 failed"), "{}\n{}", String::from_utf8_lossy(&result.stdout), String::from_utf8_lossy(&result.stderr));
-        return;
-    }
+    let Some(langs) = super::fit_children("android_02_tests::drawer::the_drawer_fits_retroid_screens_whole_in_english_german_and_spanish", "ANDROID_DRAWER_FIT_CHILD", true) else { return };
     let apps: Vec<AndroidApp> = phone_apps().into_iter().map(|mut a| {
         a.label = a.label.replace("chess", "Chess");
         a
     }).collect();
     let mut faults = Vec::new();
-    for lang in [Lang::En, Lang::De, Lang::Es] {
+    for lang in langs {
         i18n::set(lang);
         for (w, h, dp) in [(1240, 1080, 2.0), (1240, 1080, 2.5), (1920, 1080, 2.5), (1920, 1080, 3.0), (1280, 960, 2.0)] {
             for scale in [1.0f32, 1.3] {

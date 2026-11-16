@@ -73,6 +73,7 @@ pub fn login_response(resp: &Response) -> Result<Account, LoginError> {
             display_name: if display == username { String::new() } else { display },
             username,
             token: ffi::text(token),
+            hardcore: false,
         });
     }
     let mut out: Option<Account> = None;
@@ -186,10 +187,13 @@ pub enum Award {
     Refused(String),
 }
 
-/// Sends one unlock (softcore) that happened `seconds_ago`.
-pub fn award(transport: &dyn Transport, account: &Account, achievement_id: u32, hash: &str, seconds_ago: u32) -> Award {
+/// Sends one unlock that happened `seconds_ago`, as earned: in hardcore (`hardcore`) or softcore. rc_client sends a
+/// hardcore unlock it couldn't deliver the same way later, with how long ago it happened.
+pub fn award(transport: &dyn Transport, account: &Account, achievement_id: u32, hash: &str, seconds_ago: u32, hardcore: bool) -> Award {
     let (u, t, h) = (cstr(&account.username), cstr(&account.token), cstr(hash));
-    let Some(req) = build(|sink, ud| unsafe { ffi::pocket_rc_award_request(u.as_ptr(), t.as_ptr(), achievement_id, h.as_ptr(), seconds_ago, sink, ud) }) else {
+    let Some(req) = build(|sink, ud| unsafe {
+        ffi::pocket_rc_award_request(u.as_ptr(), t.as_ptr(), achievement_id, h.as_ptr(), seconds_ago, hardcore as c_int, sink, ud)
+    }) else {
         return Award::Refused("request".into());
     };
     let resp = transport.call(&req);
@@ -262,7 +266,8 @@ pub(crate) mod tests {
             Account {
                 username: "Alex".into(),
                 token: "ApiToken".into(),
-                display_name: String::new()
+                display_name: String::new(),
+                hardcore: false,
             }
         );
         let asked = mock.asked.lock().unwrap();
@@ -309,6 +314,7 @@ pub(crate) mod tests {
             username: "Alex".into(),
             token: "Tk".into(),
             display_name: String::new(),
+            hardcore: false,
         };
         let mut list = all_progress(&mock, &account, 7).unwrap();
         list.sort_by_key(|p| p.game_id);
@@ -340,19 +346,24 @@ pub(crate) mod tests {
             username: "Alex".into(),
             token: "Tk".into(),
             display_name: String::new(),
+            hardcore: false,
         };
         let ok = Mock::new(vec![(
             "awardachievement",
             Response::ok(r#"{"Success":true,"Score":5432,"SoftcoreScore":777,"AchievementID":5501,"AchievementsRemaining":6}"#),
         )]);
-        assert_eq!(award(&ok, &account, 5501, "0123456789abcdef0123456789abcdef", 3600), Award::Done);
+        assert_eq!(award(&ok, &account, 5501, "0123456789abcdef0123456789abcdef", 3600, false), Award::Done);
         let post = ok.asked.lock().unwrap()[0].post_data.clone().unwrap();
         assert!(
             post.starts_with("r=awardachievement&u=Alex&t=Tk&a=5501&h=0&m=0123456789abcdef0123456789abcdef&o=3600&v="),
             "{post}"
         );
-        assert_eq!(award(&Mock::new(vec![]), &account, 5501, "ab", 1), Award::Later);
+        // An unlock earned in Hardcore goes as one: the site counts it as hardcore, not softcore.
+        assert_eq!(award(&ok, &account, 5501, "0123456789abcdef0123456789abcdef", 60, true), Award::Done);
+        let post = ok.asked.lock().unwrap()[1].post_data.clone().unwrap();
+        assert!(post.starts_with("r=awardachievement&u=Alex&t=Tk&a=5501&h=1&m=0123456789abcdef0123456789abcdef&o=60&v="), "{post}");
+        assert_eq!(award(&Mock::new(vec![]), &account, 5501, "ab", 1, false), Award::Later);
         let gone = Mock::new(vec![("awardachievement", Response::ok(r#"{"Success":false,"Error":"Achievement not found"}"#))]);
-        assert!(matches!(award(&gone, &account, 5501, "ab", 1), Award::Refused(_)));
+        assert!(matches!(award(&gone, &account, 5501, "ab", 1, false), Award::Refused(_)));
     }
 }

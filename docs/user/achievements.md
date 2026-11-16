@@ -31,11 +31,11 @@ removes the key from the Pocket. What you unlocked stays on the site.
   ("Achievements: 12 of 40"). A game that has no achievements on the site gets no note.
 - When you unlock one, a small card appears at the top of the screen for four seconds: the achievement's picture,
   "Achievement unlocked" with its points, and its title. Several unlocks come one after the other.
-- With **Sounds** on (Settings → Sound & feel → Sounds), a short chime plays with the card, at the menu sounds' volume. With
+- With **Menu sounds** on (Settings → Screen & sound → Menu sounds), a short chime plays with the card, at the menu sounds' volume. With
   Sounds off, the card comes silently.
 - Saving and loading states, rewind, fast-forward and cheats all stay available. RetroAchievements calls this
-  *softcore*. Hardcore mode, which forbids loading states, is not offered: pocket-ui's instant resume is a state
-  load. After you load a state or rewind, achievements start watching again from that moment, so loading a state
+  *softcore*. Hardcore mode is not offered: RetroAchievements counts hardcore unlocks only from emulators it has
+  approved. After you load a state or rewind, achievements start watching again from that moment, so loading a state
   can't unlock anything by itself.
 
 ## The pause menu
@@ -57,6 +57,8 @@ this game online, the page says so instead.
 - Unlocks that the site hasn't confirmed yet are kept on the Pocket and sent the next time a game starts with Wi-Fi,
   with the time you earned them. The pause menu's top line shows how many are waiting ("2 to send").
 - A game you have never started online can't load its achievements offline; it plays normally.
+- RetroAchievements needs the internet. On a handheld without Wi-Fi (the RG28XX, the RG35XX 2024, the R36S) the page
+  says so: "RetroAchievements needs the internet, and this handheld has no Wi-Fi."
 
 ## On the game card and the console page
 

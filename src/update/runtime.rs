@@ -52,6 +52,41 @@ impl WorkerPhase {
     }
 }
 
+/// The four steps the Updates page names (Downloading → Unpacking → Installing → Restarting). Restarting comes after the worker,
+/// when the page has its result. A phase never moves the step back: the Brick's checks of installed parts still count as the download.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub enum Step { Downloading, Unpacking, Installing, Restarting }
+
+const STEPS: u32 = 4;
+
+impl Step {
+    pub fn code(self) -> &'static str {
+        match self { Self::Downloading => "downloading", Self::Unpacking => "unpacking", Self::Installing => "installing", Self::Restarting => "restarting" }
+    }
+    /// 1 to 4, for "Step 2 of 4".
+    pub fn number(self) -> u32 { self as u32 + 1 }
+
+    /// The Updates page's line for an app install in this step, `percent` done (assets/i18n has each line whole).
+    pub fn line(self, percent: u32) -> String {
+        match self {
+            Self::Downloading => format!("Step {} of {}: Downloading the update… {}%", self.number(), STEPS, percent),
+            Self::Unpacking => format!("Step {} of {}: Unpacking the update… {}%", self.number(), STEPS, percent),
+            Self::Installing => format!("Step {} of {}: Installing the update… {}%", self.number(), STEPS, percent),
+            Self::Restarting => format!("Step {} of {}: Restarting…", self.number(), STEPS),
+        }
+    }
+}
+
+impl WorkerPhase {
+    pub fn step(self) -> Step {
+        match self {
+            Self::Unpacking | Self::Validating => Step::Unpacking,
+            Self::MovingAssets | Self::Flushing | Self::Activating | Self::Pruning | Self::StagingSystem => Step::Installing,
+            _ => Step::Downloading,
+        }
+    }
+}
+
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum CancelBoundary {
     /// App/OS downloads: a valid completed download has no later cancellation check.
@@ -71,6 +106,10 @@ pub struct WorkerSnapshot {
     pub total: u64,
     pub scope: BytesScope,
     pub cancel_effective: bool,
+    /// Work done in the current step after the download (bytes unpacked, parts moved, files written), out of `work_total`;
+    /// both 0 until the step names its total. Never goes back within a step.
+    pub work_done: u64,
+    pub work_total: u64,
 }
 
 #[derive(Default)]
@@ -79,6 +118,7 @@ struct Progress {
     boundary: CancelBoundary,
     bytes: u64,
     scope: BytesScope,
+    work: (u64, u64),
 }
 
 impl Progress {
@@ -88,7 +128,7 @@ impl Progress {
             CancelBoundary::Activation => !matches!(self.phase, WorkerPhase::MovingAssets | WorkerPhase::Flushing | WorkerPhase::Activating | WorkerPhase::Pruning | WorkerPhase::StagingSystem),
         };
         let (bytes, total) = if self.scope == BytesScope::CurrentFile { (self.bytes, total) } else { (0, 0) };
-        WorkerSnapshot { phase: self.phase, bytes, total, scope: self.scope, cancel_effective }
+        WorkerSnapshot { phase: self.phase, bytes, total, scope: self.scope, cancel_effective, work_done: self.work.0, work_total: self.work.1 }
     }
 }
 
@@ -146,6 +186,7 @@ impl Cancel {
 
     pub fn set_phase(&self, phase: WorkerPhase) {
         self.change(|p| {
+            if phase.step() != p.phase.step() { p.work = (0, 0); }
             p.phase = phase;
             if phase == WorkerPhase::CheckingAssets { p.scope = BytesScope::None; p.bytes = 0; }
         });
@@ -157,15 +198,84 @@ impl Cancel {
         self.change(|p| { self.0.total.store(total, Ordering::Relaxed); p.scope = BytesScope::CurrentFile; p.bytes = 0; });
     }
 
+    /// The current step's amount of work (bytes, parts, files); its progress starts at 0.
+    pub(crate) fn work_begin(&self, total: u64) { self.change(|p| p.work = (0, total)); }
+
+    /// `n` more done in the current step.
+    pub(crate) fn work_add(&self, n: u64) { self.work_with(|done, _| done.saturating_add(n)); }
+
+    /// `done` in all of the current step, never less than before.
+    pub(crate) fn work_at(&self, done: u64) { self.work_with(|_, _| done); }
+
+    /// The page hears of the step's progress once per tenth of a percent, not for every block.
+    fn work_with(&self, next: impl FnOnce(u64, u64) -> u64) {
+        let snapshot = {
+            let mut p = self.0.progress.lock().unwrap_or_else(|e| e.into_inner());
+            let (done, total) = p.work;
+            let now = next(done, total).clamp(done, total);
+            p.work.0 = now;
+            let permille = |d: u64| if total == 0 { 0 } else { d.saturating_mul(1000) / total };
+            (permille(now) != permille(done)).then(|| p.snapshot(self.progress_total()))
+        };
+        if let Some(snapshot) = snapshot { self.notify(snapshot); }
+    }
+
     /// Runs immediately before the existing progress callback, without changing its count or order.
     pub(super) fn bytes(&self, bytes: u64) {
         self.0.progress.lock().unwrap_or_else(|e| e.into_inner()).bytes = bytes;
     }
 }
 
+/// Tests: what the worker told the page in `step` shows real progress: a total, more than nothing done while `phase` ran, never
+/// less than before, and all of it at the end.
+#[cfg(test)]
+pub(crate) fn assert_step_progress(seen: &[WorkerSnapshot], step: Step, phase: WorkerPhase) {
+    let in_step: Vec<&WorkerSnapshot> = seen.iter().filter(|s| s.phase.step() == step && s.work_total > 0).collect();
+    assert!(!in_step.is_empty(), "{step:?} names no amount of work: {seen:?}");
+    assert!(seen.iter().any(|s| s.phase == phase && s.work_done > 0 && s.work_total > 0), "nothing done while {phase:?} ran: {seen:?}");
+    for pair in in_step.windows(2) {
+        assert!(pair[1].work_done >= pair[0].work_done && pair[1].work_total == pair[0].work_total, "{step:?} went back: {pair:?}");
+    }
+    let last = in_step.last().unwrap();
+    assert_eq!(last.work_done, last.work_total, "{step:?} ends with all of its work done");
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn every_step_line_is_translated_whole() {
+        use crate::i18n::Lang;
+        let de = Lang::De.table().unwrap();
+        assert_eq!(de.translate(&Step::Unpacking.line(42)).as_deref(), Some("Schritt 2 von 4: Update wird entpackt… 42 %"));
+        assert_eq!(de.translate(&Step::Restarting.line(100)).as_deref(), Some("Schritt 4 von 4: Startet neu …"));
+        for lang in [Lang::Es, Lang::Pt, Lang::Fr, Lang::It] {
+            for step in [Step::Downloading, Step::Unpacking, Step::Installing, Step::Restarting] {
+                let line = step.line(7);
+                let got = lang.table().unwrap().translate(&line);
+                assert!(got.as_deref().is_some_and(|t| t != line && t.contains(&step.number().to_string())), "{lang:?} {line:?}: {got:?}");
+            }
+        }
+    }
+
+    #[test]
+    fn step_progress_never_goes_back_and_a_new_step_starts_from_nothing() {
+        let cancel = Cancel::new();
+        cancel.set_phase(WorkerPhase::Unpacking);
+        cancel.work_begin(1000);
+        cancel.work_at(400);
+        cancel.work_at(300);
+        assert_eq!(cancel.snapshot().work_done, 400, "a smaller count is not a step back");
+        cancel.work_add(5000);
+        assert_eq!(cancel.snapshot().work_done, 1000, "never more than the total");
+        cancel.set_phase(WorkerPhase::Validating);
+        assert_eq!((cancel.snapshot().work_done, cancel.snapshot().work_total), (1000, 1000), "the same step keeps its count");
+        cancel.set_phase(WorkerPhase::MovingAssets);
+        assert_eq!((cancel.snapshot().work_done, cancel.snapshot().work_total), (0, 0));
+        assert_eq!(WorkerPhase::CheckingAssets.step(), Step::Downloading, "the Brick's checks between downloads keep step 1");
+        assert!(WorkerPhase::Preparing.step() < WorkerPhase::Unpacking.step() && WorkerPhase::Unpacking.step() < WorkerPhase::Flushing.step());
+    }
 
     #[test]
     fn phase_observations_preserve_labels_file_scope_and_cancellation_boundaries() {

@@ -1,5 +1,9 @@
-//! Settings-style painter for the existing Extras page. Rows stay visible offline and scroll at Large text.
+//! Settings-style painter for the existing Extras page (Settings › Games › Box art & downloads). Rows stay visible
+//! offline and scroll at Large text.
 use crate::{emu_menu::Row, gfx::Canvas, kit, palette::*, text::{Face, Text}, touch::HitMap};
+
+/// The page's title and its row's name in Settings › Games (it was "Extras" until the tree of 2026-11-13).
+pub const TITLE: &str = "Box art & downloads";
 
 pub fn hints(action: Option<&str>) -> Vec<(&str, &str)> {
     let mut hints = Vec::new();
@@ -15,7 +19,7 @@ pub fn paint(c: &mut Canvas, text: &mut Text, hits: &mut HitMap, rows: &[Row], s
     hits.clear();
     c.clear(pal().void);
     let left = kit::PAD + kit::BTN_PAD;
-    text.draw(c, Face::Title, 50, left, kit::PAD + 58, pal().chalk, "Extras");
+    text.draw(c, Face::Title, 50, left, kit::PAD + 58, pal().chalk, TITLE);
     text.draw_right(c, Face::Body, 21, c.w - left, kit::PAD + 56, pal().dust, "Settings › Games");
     let selected = rows.get(sel);
     let mut hints = hints(footer.action);

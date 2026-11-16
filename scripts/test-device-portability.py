@@ -39,7 +39,8 @@ class Firmware(unittest.TestCase):
             with self.subTest(shell=shell), tempfile.TemporaryDirectory() as temp:
                 root=Path(temp); work=root/'work'; work.mkdir()
                 env=dict(os.environ, PATH=firmware_path(root,shell), DC_LOCAL='1', DC_SOURCE_ONLY='1',
-                         DC_WORK=str(work), DC_FIFO=str(root/'fifo'), DC_CORECMD=str(root/'core'))
+                         DC_WORK=str(work), DC_FIFO=str(root/'fifo'), DC_CORECMD=str(root/'core'),
+                         TMPDIR=str(root))  # device-check.sh's own folder goes with the test's
                 shutil.copy(HERE/'ui-status.sh',work/'ui-status.sh')
                 readers=[]
                 try:

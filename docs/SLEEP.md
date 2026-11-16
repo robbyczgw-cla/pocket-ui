@@ -54,6 +54,15 @@ then does what ROCKNIX's wake hook did). Deep sleep and its wake were then measu
 | Screen off, the game on | Power, short press, with "Short press: Screen off" (`Sleep::screen_off_now`) | backlight 0; the game goes on with its sound: pocket-core gets `screen off` (it draws nothing and gives the game no buttons), other emulators keep drawing; no deep sleep by the timers; any button but Vol± wakes it ([below](#screen-off-with-the-game-running-2026-10-26)) |
 | Switch off after sleeping | Settings → System → Sleep & power "Switch off after sleeping" (**Off by default** since 2026-10-26, 1, 3, 8 h) in deep sleep, on battery | the RTC alarm wakes it with the screen dark, then the Power off path (`src/auto_off.rs`, [below](#l3-switch-off-after-sleeping-2026-10-25)) |
 
+- **What counts as input** (waking a dark screen, the idle timers, the UI's own quiet spells; one rule,
+  `pad::counts_as_input`, 2026-11-14): a button pressed, a stick pushed past 0.35, an analog trigger past half its
+  travel. Not: releases, a stick resting off centre or jittering (the Mini V2's left stick rests at +0.12), a
+  controller connecting. A controller's motion sensors and touchpad are never read (`pad::linux::wanted`; the Mini
+  V2's built-in pad is InputPlumber's virtual DualSense, with both). Stick and trigger values that waited in the
+  kernel's queue for more than a second (nothing read the device: pocket-ui stopped by a test harness) are history:
+  only the newest of each axis goes on (`pad::decode::Decoder::event_read_at`), so a stick that is back at rest
+  wakes nothing; buttons and the d-pad go on as they came. The log names a stick wake's axis, value and source
+  (`sleep: awake (a stick (LeftX 0.62, source 5))`).
 - Idle, menu and lid suspends, and every RTC/clock-step re-suspend, use `systemctl suspend --check-inhibitors=yes`.
   A logind sleep block leaves the Pocket in light sleep, logs the refusal and uses the usual retry delay. Only the
   first suspend requested by the physical power key keeps the ordinary `systemctl suspend` behaviour. Explicit
@@ -74,6 +83,8 @@ then does what ROCKNIX's wake hook did). Deep sleep and its wake were then measu
 - A pocket-ui that ends while the screen is dark leaves `/tmp/pocket-ui.brightness`; the next one turns
   the screen back on. `POCKETUI_DARK_FILE` redirects that note, matching the launcher's cleanup path. Device probes
   use their own note so sleeping or waking a probe cannot overwrite or consume the player's level.
+  A `--snapshot` (benches included) is no start of that kind: it leaves the screen, the note, sleep and power
+  alone (`Sleep::offline`; `tests/user_journeys.rs` `a_snapshot_leaves_a_dark_screen_dark_and_its_note_in_place`).
 - A wake or start with a dark panel and no usable saved level restores a dim picture (10% of `max_brightness`,
   at least one hardware step; one step when the range is unreadable). A valid saved raw level takes precedence.
   This uses the selected backlight directory on Brick, Pocket Mini V2 and H700 alike. A failed backlight write keeps the
@@ -81,7 +92,7 @@ then does what ROCKNIX's wake hook did). Deep sleep and its wake were then measu
 - Battery: a sample a minute into `<data>/battery-history.bin` (48 hours, `src/battery_history.rs`: a checksummed
   file rewritten atomically each minute, about 46 kB, with a `.bak`). A wake takes a sample at once, on a thread of its own
   (`battery_history::sample_soon`: three reads 100 ms apart and a write the screen doesn't wait for), and the sleep is
-  a gap in the history, not a line. Settings > Playing > Battery shows the graph (3/6/12/24/48 h with L1/R1, green while
+  a gap in the history, not a line. Settings > System > Battery shows the graph (3/6/12/24/48 h with L1/R1, green while
   charging, hatched gaps) and a time-left estimate (`src/battery_estimate.rs`) only after 20 min on battery
   without sleep and a 2-point drop; a run of samples ends at a gap, at plugging in or out, and at a jump of the gauge.
 - Battery per game (`src/battery_games.rs`): the sampler also adds each minute on battery to the game running at both
@@ -287,7 +298,7 @@ amixer -c 0 -M set "${DEVICE_AUDIO_MIXER}" ${DEVICE_VOLUME}%
 ## Sleep & power settings (2026-10-26)
 `src/sleep_settings.rs` (the choices, `sleep.json`, the page's keys), `src/app_sleep_power.rs` (painting). One page, Settings → System → Sleep & power, in the manner of NextUI's System settings (Screen timeout, Suspend
 timeout): **Screen off after** (Never, 30 s, 1, 2, 5 min), **Sleep after** (Never, 1, 2, 5, 15 min), **Switch off
-after sleeping** (Off, 1, 3, 8 h; moved from Settings → Playing → Battery, which keeps the graph and the estimates),
+after sleeping** (Off, 1, 3, 8 h; moved from Settings → System → Battery, which keeps the graph and the estimates),
 and under the heading Power button **Short press** (Sleep, Screen off) and **Hold** (Power menu, Sleep). Kept in
 `sleep.json` with the keys `screen_off_secs`, `sleep_after_min` (0 = never), `off_after`, `short_press`, `hold`;
 `Sleep::set_config` applies a change at once. The painter uses the same footer and scrolling row window as Controllers

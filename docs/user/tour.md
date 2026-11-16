@@ -39,12 +39,12 @@ this device, Pixel Path, frames and "Continue your last game" are off by default
 |---|---|---|---|
 | **Continue where I quit** | As it is | As it is | Settings → Playing → [Continue where I quit](settings.md#continue-where-i-quit) |
 | **Continue your last game** | Off | On | Settings → Playing → [On start](settings.md#on-start) (Last game) |
-| **Motion** | On | On | Settings → Sound & feel → [Motion](settings-sound.md#motion) (Off on the card is Motion Off) |
-| **Big text** | As it is | As it is | Settings → Look → [Text size](settings.md#text-size) and Settings → Sound & feel → [Motion](settings-sound.md#motion) ([Big text](big-text.md#big-text)): On is Large text and Reduced motion, Off is Normal text and Full motion; while it is on, the pause menu lists [Zoom](big-text.md#zoom) |
+| **Motion** | On | On | Settings → Look → [Motion](settings.md#motion) (Off on the card is Motion Off) |
+| **Big text** | As it is | As it is | Settings → Look → [Text size](settings.md#text-size) and Settings → Look → [Motion](settings.md#motion) ([Big text](big-text.md#big-text)): On is Large text and Reduced motion, Off is Normal text and Full motion; while it is on, the pause menu lists [Zoom](big-text.md#zoom) |
 | **Retro** | As it is | As it is | Settings → Look → [Style](theme.md#style) → Retro; Off goes back to Barlow. After the update to 0.3.0 its card starts on On: A tries it, B leaves everything as it is |
-| **Menu sounds** | As it is | As it is | Settings → Sound & feel → Sounds |
-| **Haptics** | As it is | As it is | Settings → Sound & feel → Haptics |
-| **Stick lights** | As it is | As it is | Settings → Sound & feel → [LEDs](settings-sound.md#leds) (On is Colour, unless Battery was chosen) |
+| **Menu sounds** | As it is | As it is | Settings → Screen & sound → Menu sounds |
+| **Haptics** | As it is | As it is | Settings → Controls → Haptics |
+| **Stick lights** | As it is | As it is | Settings → Controls → [LEDs](settings-sound.md#leds) (On is Colour, unless Battery was chosen) |
 | **Screen frames on every console** | Off | On | Settings → Playing → [Screen frames](settings.md#screen-frames) |
 | **Echoes** | Off | On | Settings → Games → Curator |
 | **Versions** | Off | On | Settings → Games → Curator ("Merge versions in mixed lists") |
@@ -56,7 +56,9 @@ this device, Pixel Path, frames and "Continue your last game" are off by default
 
 Cards without a switch, after those: **Search and the letter jump**, **Console credits**, **Players**, **Run-ahead**, **Runs on**,
 **RetroAchievements**, **Sync**, **Tailscale**, **Tools**, **Cozy extras** (real cases, the memory card, stickers and the other
-little touches, each switched in Settings → Look → [Cozy extras](settings-sound.md#cozy-extras)) and **Performance & fan**.
+little touches, each switched in Settings → Look → [Cozy extras](settings.md#cozy-extras)), **Performance & fan** and
+**Settings at once** (START shows the entries straight away, L1 and R1 go through the categories; see
+[Open Settings](settings.md#open-settings)).
 
 The profile **For a child** sets none of these: [Kids mode](kids-mode.md) keeps its own choices and leaves the switches as they are.
 
@@ -66,7 +68,9 @@ After an update, pocket-ui shows the cards of the features that are new since th
 once: when you are on Home with nothing open, never over a game (if the Pocket went straight into your last game, they
 wait until you are back on Home). Each has its switch, as on the feature cards above. A takes the choice and goes on, B
 puts the cards away. A new look you can try starts on On instead: in 0.3.0 the **Retro** card's A says "Try Retro" and
-switches Settings → Look → Style to Retro at once, B leaves your style as it is. They don't come back; every switch is in Settings. A version without new features shows nothing, and so does the first start of a new Pocket.
+switches Settings → Look → Style to Retro at once, B leaves your style as it is. The card **Settings at once** says where
+things are in the new Settings: START shows the entries at once, L1 and R1 change the category, and Tailscale, SSH and
+Sync are in Connections. They don't come back; every switch is in Settings. A version without new features shows nothing, and so does the first start of a new Pocket.
 
 While you read a card, a long game title hidden behind it stops scrolling, so it uses no extra refreshes.
 Hidden Shelf and Cabinet artwork also leaves the card still while you read.

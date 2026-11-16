@@ -33,7 +33,7 @@ pause-menu dark menu:pocket-core
 save-slots dark slot-save:snes
 settings dark settings
 cozy-extras dark cozy
-theme dark settings:0:2
+theme dark settings:1:2
 EOT
 }
 

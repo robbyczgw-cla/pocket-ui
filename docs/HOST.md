@@ -107,7 +107,10 @@ and `bench` / `ra` next to it (see the header of `scripts/syscheck.sh`), then se
   page remaps them per console or game (`ctl.<button>` = a console button or `none`), showing the console's own
   names from `SET_INPUT_DESCRIPTORS` ("A", "Select", "D-Pad Up", …). The left stick presses the D-pad
   (`ctl.stick_dpad`, on by default except for systems with analog sticks, `controls::ANALOG_SYSTEMS`); with it off,
-  both sticks go to the core as analog input. **Hold to toggle** (`ctl.hold_toggle` = one console button or `none`,
+  both sticks go to the core as analog input. **D-pad as left stick** (`ctl.dpad_stick`, offered for
+  `controls::ANALOG_SYSTEMS`, on by default for N64/PSP/Dreamcast when `Device::has_sticks` is false,
+  `controls::dpad_stick_default`) turns the console's D-pad, after the mapping, into a full left-stick push
+  (`controls::dpad_to_stick`, diagonals at the round edge; a moved stick wins). **Hold to toggle** (`ctl.hold_toggle` = one console button or `none`,
   `controls::HoldToggle`, one per player, applied in `read_players` after the mapping) turns a press of that button into
   "held until the next press"; it is cleared at every pause, wake, dark screen, state load and restart. HOME shortcut edges are observed without toggling; controller seat changes clear only the affected player’s latch (`Inputs::take_seat_changes`) so no held button survives a disconnect or moves to another player. Hold-to-quit (SELECT+START) and the menu's HOME tap always read the
   physical buttons, whatever the layout. Up to four players, each from their own controller (ports 0-3, the same
@@ -1871,6 +1874,17 @@ log says `audio: Cycle buffer (32 ms)` on headphones.
   Genie / Action Replay / Code Breaker variants, identical codes once, a clashing name gets "[Game Genie]".
   `&eacute;` and friends are decoded. On a Brick card an unmatched game keeps a Cheats page explaining
   that the included database has no matching codes. Other hosts hide the page when there are no entries.
+- **The player's own file** (`cheats::read_own`, GitHub issue #4): a `.cht` named like the game (name and extension in any
+  case; the exact spelling first) beside it, in a `cheats` folder there, or in `cheats/<system | core | database
+  folder>/` of the folder above (RetroArch's layout; compared by letters and digits, so "mGBA" = `mgba`). Its cheats come
+  first, labelled "[Your file]" in the name (so their On/Off key stays unique and remembered), then the database's;
+  a database cheat with the same code is dropped; entries without a code add to the "can't apply" count. Over
+  `OWN_MAX` (256 KiB), unreadable or without a single cheat/memory entry: `Unusable`, the page's first row says why and
+  the database follows (the rows after it shift by one, `CheatMenu::lead`). Works for systems without a database
+  folder. On a Brick card without the database the download row (`CheatMenu::get_at`) is the last row below the player's
+  cheats; it is the page's only row (`alone`) when there is nothing of the game's to list. The Android handheld view's `sidecar_cheats` reads the same limit. The Game check and the library skip `.cht`
+  (`game_check::NOT_GAMES`; test `cheat_files_are_no_unknown_games`); fuzzed in `case_knows_fuzz_tests.rs`
+  (`a_players_own_cheat_file_never_panics_whatever_it_holds`, part of the crash sweep).
 - **Entries without a code** (`cheats::parse_cht_full`): the newer cht format has `cheatN_address`, `_value`,
   `_cheat_type` (0 none, 1 set to value, 2 increase ... as RetroArch's cheat manager), `_handler = 1` and an empty
   `_code`. Those are counted (`Parsed::unsupported`, equal ones of several files once) and the page ends with
@@ -1926,7 +1940,7 @@ log says `audio: Cycle buffer (32 ms)` on headphones.
   end of the game stop it. A game that never rumbles never starts the thread or opens the device.
 - **Strength**: Options > Extras > Rumble Off / Low / Medium / High (default Medium; `rumble` in `options.rs`, scale 0 /
   0.4 / 0.7 / 1.0), per console or game like the other Extras.
-- **Menu haptics**: Settings > Sound & feel > Haptics On / Off (default Off, stored in `<data>/haptics.json`). pocket-ui compares where
+- **Menu haptics**: Settings > Controls > Haptics On / Off (default Off, stored in `<data>/haptics.json`). pocket-ui compares where
   the menus stand (shelf, Settings, pause menu pages, values) before and after Up / Down / Left / Right / L1 / R1 and
   sends one tick when it changed, at most one per 55 ms. A tick is 22 ms at 36000 of 65535; tune on the device with
   `POCKET_HAPTIC_TICK=<ms>,<strength>` in pocket-ui's environment.
@@ -2147,7 +2161,7 @@ the Pocket's motor at the same time, and the Players page (A on each controller)
   (10 ms ALSA buffer; `POCKET_CORE_AUDIO=pulse` applies here too). It opens it for the first sound, mixes up to four
   voices in 128-frame chunks (2.7 ms), writes silence between sounds and closes the stream 2 s after the last one,
   with a short warm lease while pocket-ui is in front, awake with its sounds on (`ui_sound::keep_warm`, asked after
-  every sleep tick). The lease ends two seconds after the last button press, so a still shelf closes the stream too.
+  every sleep tick). The lease ends a minute after the last button press (`ui_sound::WARM_LEASE`; it was two seconds from 05.11. to 15.11.2026, and every click after a pause to read then came 105 ms to 1 s late on the RG35XX Plus), so a shelf left alone closes the stream too.
   Browsing keeps the output ready between presses; the first sound after a longer rest reopens it off the UI thread. Screen off, a game, sounds off or a muted sink close it as before, so a dark Pocket keeps no stream and its
   sink suspends. `ui_sound::stop` closes it at once when a game starts, unless it is kept warm and open: then it closes
   once the launch's own sounds have played (`close_when_done`), instead of opening again for them while the game starts.
@@ -2232,7 +2246,7 @@ the Pocket's motor at the same time, and the Players page (A on each controller)
     moves right after and 10 after the pause; the quantum went 256 on the shelf, 1024 (announced) at the game's start,
     and at its end 1024 then 256 within 31 ms, before the first sound on the shelf. One gap of exactly one cycle in
     the game's own sound as HOME paused RetroArch: its stream stops hard (not a menu sound).
-- **Volume**: Settings > Sound & feel > Sounds, A switches, Left/Right 1 to 10 (default on, 7), stored in `<data>/sounds.json`
+- **Volume**: Settings > Screen & sound > Menu sounds, A switches, Left/Right 1 to 10 (default on, 7), stored in `<data>/sounds.json`
   through `fsutil::write_json`. Gain is 2.5 dB per step below 10: step 3 is -17.5 dB, so the loudest default sound
   (Confirm) peaks near -24 dBFS before the system volume.
 - **Tests**: `ui_sound::tests` (which event gives which sound, every suppression, settings, the synthesis: length,
@@ -2250,6 +2264,9 @@ pocket-core counts [RetroAchievements](https://retroachievements.org) with the o
 12.5.0 (MIT), vendored in `vendor/rcheevos/` (`UPSTREAM` lists the files) and compiled by `build.rs` with the `cc`
 crate, for the host and under `cargo zigbuild` for aarch64. `src/rc_shim.c` flattens rc_client and the rapi calls into
 plain functions and structs for Rust (`src/achievements/ffi.rs`), so a newer rcheevos only touches the shim.
+`build.rs` judges the C by content, not file time: it also runs when the library's Rust changes, compiles only when
+the sources or the compiler setup differ from what OUT_DIR holds, and passes the shims' hash (`POCKETUI_C_SHIMS`) that
+`ffi.rs` checks at compile time, so a target folder shared by several source trees never links another tree's shim.
 User guide: [docs/user/achievements.md](user/achievements.md).
 
 | Part | What it does |
@@ -2263,6 +2280,7 @@ User guide: [docs/user/achievements.md](user/achievements.md).
 | `lookup.rs` | The card's background lookup: `r=gameid` once per game, `r=allprogress` once an hour per console (kept in `achievements/progress/`) |
 | `chime.rs` | The unlock sound, synthesised at the core's rate and mixed into the game's samples |
 | `game.rs` | pocket-core's three calls: `start`, and `show` for the HUD |
+| `hardcore.rs` | Hardcore: the switch (`Account::hardcore`), whether a start is in Hardcore (`at_start`: chosen, a console with achievements, not known to have no set), the shelf's question (`skips_moments`) and the words the host, the menu and the Android player show |
 
 **Threads.** The game thread calls `Session::frame()` after every emulated frame (`rc_client_do_frame`; fast-forward:
 after each run), `idle()` while paused, asleep or rewinding (rc_client's timers: retries, the rich-presence ping every
@@ -2287,8 +2305,24 @@ whose memory appears only once the game runs is retried once a second; the set i
 every address once at load). `rc_libretro_is_system_allowed` keeps cores RetroAchievements doesn't trust for a console
 out. Session end: `close(300 ms)` before the core unloads; whatever is still on its way is in `pending.json`.
 
-**Softcore only.** Hardcore forbids loading states, and instant resume is a state load. Leaderboards are hardcore-only
-in rc_client, so they don't run.
+**Hardcore** (`hardcore.rs`; not offered yet: `hardcore::OFFERED` is false until RetroAchievements approves
+pocket-ui, which hides the Settings and pause-menu rows and makes `at_start` false; the guide's text waits in
+[dev/hardcore-guide.md](dev/hardcore-guide.md)). Softcore by default. With Settings →
+RetroAchievements → Hardcore on, pocket-core decides before its resume (`hardcore::at_start`) and creates rc_client in
+hardcore (`pocket_rc_create(…, hardcore)`); `App::hardcore()` is that and `Session::hardcore()` (rc_client in hardcore,
+the set loading or loaded: a game without a set, or one whose set couldn't load, gets its states back, as in RetroArch).
+While it holds: `resume_moment` loads nothing (`start_hardcore`, the moment stays and the Cabinet TV's hand-over is
+dropped), `load_state_file` (every Load, Earlier, the shortcut) and `save_slot` refuse with a note, rewind doesn't
+run (fast-forward does, as in RetroArch: RetroAchievements forbids slow motion and frame advance, not speeding up), `cheats` is refused and none are applied at the start, and `pause` waits for
+`rc_client_can_pause` (`pause_wait`: the game plays the few frames left, then pauses; `PROGRESS.answered` keeps the
+hang guard calm). Command `hardcore on` (pause menu → Achievements → Hardcore, after asking) sets rc_client to hardcore,
+takes the cheats out and starts the game over (`start_over`, then `rc_client_reset`, which rc_client waits for after
+its RESET event); `hardcore off` gives everything back at once. Unlocks go with `h=1`; `pending.json` keeps each
+unlock's mode, so a late one is sent as earned, and the offline copy lists hardcore unlocks under `HardcoreUnlocks`.
+pocket-ui reads `Snapshot::hardcore`: no Save, Load, Earlier (`pause_saves::Saves::InGame(MENU_LINE)`), no Cheats, no
+rewind/state-shortcut rows (`options::HARDCORE_OUT`), Quit without a moment. Leaderboards: rc_client runs and submits them in Hardcore by itself; pocket-ui shows none of their events (not
+built). Tests: `hardcore_rules` (pocket-core, stub core), `session::tests::hardcore_mid_game_…`, `offline`, `api`,
+`hardcore`, `achievements_page`.
 
 **Testing without an account.** `cargo test --lib achievements` runs rc_client against canned server answers (the
 formats of rcheevos' own tests): login, set, unlock by memory, award, reset after a state load, offline start from the

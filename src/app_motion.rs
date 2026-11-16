@@ -29,8 +29,6 @@ pub(crate) enum Page {
     Screen(u64, u8),
     /// The first-start setup (depth 0) or a Settings page made of it (Look, Wi-Fi, ...; depth 3).
     Setup(u8),
-    /// Settings' categories.
-    Settings,
     /// A category's list (which category).
     SettingsList(u8),
     /// A page of Settings (Battery, Updates, ...), opened from a category's list.
@@ -49,7 +47,7 @@ impl Page {
     fn depth(self) -> u8 {
         match self {
             Page::Home => 0,
-            Page::Shelf(_) | Page::Favorites | Page::Settings | Page::Switcher => 1,
+            Page::Shelf(_) | Page::Favorites | Page::Switcher => 1,
             Page::Screen(_, d) | Page::Setup(d) | Page::Card(d) | Page::Console(d) | Page::Curator(_, d) | Page::Search(d) => d,
             Page::SettingsList(_) | Page::PortFiles => 2,
             Page::Sub(_) | Page::Manual => 3,
@@ -245,8 +243,7 @@ impl App {
         }
         if let Some(p) = self.settings_page {
             return Some(match p {
-                SettingsPage::Groups(_) => Page::Settings,
-                SettingsPage::List(row) => Page::SettingsList(super::app_settings_groups::group_of(row) as u8),
+                SettingsPage::List(row) | SettingsPage::Tabs(row) => Page::SettingsList(super::app_settings_groups::group_of(row) as u8),
                 SettingsPage::Manual => Page::Manual,
                 other => Page::Sub(std::mem::discriminant(&other)),
             });
@@ -346,10 +343,28 @@ impl App {
         let Some(t) = self.motion.transition else { return };
         // The page colour, from the right edge half way down (the Split look and the Cards wash have their own).
         // Easy has a neighbour's case there, whose colour would flash over the shelf: its own background instead.
-        let bg = if self.big_live() { super::app_big_shelf::page_colour() } else { c.buf[(c.h / 2 * c.w + c.w - 2).max(0) as usize] };
+        let bg = if self.big_live() { super::app_big_shelf::page_colour() } else { c.get(c.w - 2, c.h / 2) };
         if !t.apply(c, Instant::now(), bg, &rows) {
             self.motion.transition = None;
         }
+    }
+
+    /// `--snapshot` with `POCKETUI_SNAPSHOT_TRANSITION=<push|pop|fade|rise>:<ms>`: the page painted again with its
+    /// transition that long after it began (docs/dev/native-paint.md: the frames compared old against new).
+    pub(crate) fn transition_snapshot(&mut self, c: &mut Canvas) {
+        let Some((kind, ms)) = std::env::var("POCKETUI_SNAPSHOT_TRANSITION").ok().and_then(|v| v.split_once(':').and_then(|(k, m)| Some((k.to_string(), m.parse::<u64>().ok()?)))) else { return };
+        let enter = match kind.as_str() {
+            "push" => Enter::Push,
+            "pop" => Enter::Pop,
+            "rise" => Enter::Rise { from_y: c.h / 2 },
+            _ => Enter::Fade,
+        };
+        motion::set_level(motion::Motion::Full);
+        self.motion.rows.clear();
+        self.paint(c);
+        self.motion.transition = Some(Transition { enter, at: Instant::now() - Duration::from_millis(ms), top: 112 });
+        self.motion_after_paint(c);
+        self.motion.transition = None;
     }
 
     /// Frames are needed for an animation of this module (only while our screens are on view).
@@ -435,8 +450,8 @@ mod tests {
     fn deeper_pages_push_and_shallower_ones_pop() {
         assert!(Page::Shelf(0).depth() > Page::Home.depth());
         assert!(Page::Card(2).depth() > Page::Shelf(0).depth());
-        // Settings: the categories, a category's list, its pages (and the setup steps it opens, such as Look).
-        assert!(Page::SettingsList(0).depth() > Page::Settings.depth());
+        // Settings: a category's list (START opens it from the shelf), its pages (and the setup steps it opens, such as Look).
+        assert!(Page::SettingsList(0).depth() > Page::Shelf(0).depth());
         assert!(Page::Sub(std::mem::discriminant(&SettingsPage::About)).depth() > Page::SettingsList(4).depth());
         assert!(Page::Manual.depth() > Page::SettingsList(4).depth());
         assert!(Page::Setup(3).depth() > Page::SettingsList(0).depth(), "Settings › Look › Layout");

@@ -18,5 +18,8 @@
 - Retroid's [u-boot for the Pocket devices](https://github.com/RetroidPocket/u-boot), used by the dual-boot setup.
 - [NextUI](https://github.com/LoveRetro/NextUI) and MinUI for the ideas behind the interface.
 - Barlow, by Jeremy Tribby, for the interface font, and Titillium Web for the test store's font package.
+- Caveat Brush, by Impallari Type (SIL OFL 1.1), for the handwriting on the home-made label of a game without box art,
+  and Manjil Aryal's CC0 photo of a roll of masking tape (WordPress Photo Directory) for its tape
+  ([assets/media/tape/SOURCES.md](assets/media/tape/SOURCES.md)).
 - [Evan Amos](https://commons.wikimedia.org/wiki/User:Evan-Amos), whose public-domain console photographs on Wikimedia
   Commons are the base of the system pictures ([assets/systems/SOURCES.md](assets/systems/SOURCES.md)).

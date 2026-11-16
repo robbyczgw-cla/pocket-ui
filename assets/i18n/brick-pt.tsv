@@ -22,7 +22,7 @@ Steady, breathing, fading, pulsing or off; "Like the rest" follows the colour ab
 Its own brightness, or the one above.	Brilho próprio ou o de cima.
 Lights & buttons	Luzes e botões
 F1/F2 are shortcuts, not game buttons.	F1/F2 são atalhos, não botões de jogo.
-Set them in Settings › Sound & feel › Lights & buttons.	Configure em Configurações › Som e sensação › Luzes e botões.
+Set them in Settings › Controls › Lights & buttons.	Configure em Configurações › Controles › Luzes e botões.
 Shortcuts for all games; not game buttons. Choose their action here.	Atalhos para todos os jogos; não são botões de jogo. Escolha a ação aqui.
 Each light	Cada luz
 F1 button	Botão F1
@@ -30,7 +30,6 @@ F2 button	Botão F2
 Mute slider	Chave de silêncio
 The Brick's lights, the F1 and F2 keys and the mute slider.	As luzes do Brick, as teclas F1 e F2 e a chave de silêncio.
 Lights off	Luzes apagadas
-Animations, playful cases, old-TV switch-on, motion, zoom, sounds, case sounds, haptics, lights & buttons.	Animações, caixas divertidas, ligar de TV antiga, movimento, zoom, sons, sons de caixa, vibração, luzes e botões.
 A soft tick as you move, and how strong it is. Games rumble on their own (pause menu, Options).	Um toque suave ao se mover, e a intensidade. Os jogos vibram por conta própria (menu de pausa, Opções).
 Left grip	Apoio esquerdo
 Right grip	Apoio direito
@@ -93,3 +92,6 @@ Saves the game and puts the Brick to sleep. The power button wakes it; the game 
 Only the screen goes dark and the game waits. The power button turns it back on.	Só a tela escurece e o jogo espera. O botão de energia liga de novo.
 Saves the game. The power button wakes it.	Salva o jogo. O botão de energia o acorda.
 The power button wakes it.	O botão de energia acorda.
+Back to EmulationStation	Voltar ao EmulationStation
+Back to EmulationStation?	Voltar ao EmulationStation?
+pocket-ui closes and EmulationStation comes back. Your games, saves and settings stay as they are.	O pocket-ui fecha e o EmulationStation volta. Seus jogos, saves e ajustes ficam como estão.

@@ -1,0 +1,24 @@
+#!/bin/sh
+# dArkOS port (docs/DARKOS.md): pocket-ui's `systemctl` calls. dArkOS's own services (ssh, samba, Bluetooth, EmulationStation)
+# are never started, stopped or restarted from pocket-ui: every such verb says "not available" (exit 1) and pocket-ui shows its
+# "did not work" path. Power off, restart and sleep are the player's choice (or pocket-ui's sleep after a while without input,
+# its game saved first), and they must reach the real systemd: but pocket-ui runs in a chroot (the view of start.sh), and
+# systemctl does nothing there ("Running in chroot, ignoring command", exit 0), which left the screen on "Shutting down".
+# So the request goes to start.sh (outside the chroot, `power_watch`): it runs the real systemctl and the answer comes back
+# here. dArkOS's sleep hooks then save and restore the backlight and the sound.
+for a in "$@"; do case "$a" in --*) ;; *) if [ -z "${verb:-}" ]; then verb=$a; else unit=${unit:-$a}; fi ;; esac; done
+case "${verb:-}" in
+  poweroff|reboot|suspend)
+    sync
+    d=${DARKOS_STATE:-/tmp/pocket-ui-darkos}/power
+    [ -d "$d" ] || { echo "systemctl $verb: pocket-ui's start.sh is not listening" >&2; exit 1; }
+    rm -f "$d/$$.done"
+    echo "$verb" >"$d/$$.tmp" && mv "$d/$$.tmp" "$d/$$.req" || exit 1
+    # A suspend answers after the wake, a power off never (the system ends us): wait for as long as it takes, at most two minutes of awake time.
+    n=0
+    while [ ! -e "$d/$$.done" ] && [ $n -lt "${DARKOS_POWER_WAIT:-1200}" ]; do sleep 0.1; n=$((n + 1)); done
+    [ -e "$d/$$.done" ] || exit 1
+    read -r rc <"$d/$$.done"; rm -f "$d/$$.done"; exit "${rc:-1}" ;;
+  is-active) echo inactive; exit 3 ;;
+  *) echo "systemctl ${verb:-} ${unit:-}: not available in pocket-ui on dArkOS" >&2; exit 1 ;;
+esac

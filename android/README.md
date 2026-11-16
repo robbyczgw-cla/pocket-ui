@@ -134,9 +134,8 @@ ROCKNIX core. Actual GLES/device validation remains necessary.
 
 ## Android 0.2 preview
 
-The game card and the pause sheet offer **Controls**: the shared controls card
-(`controls_card::paint`), the console's button names in the places of the gamepad's buttons. A first start on each console opens this card;
-Back or A goes on, while an existing moment continues directly. **Zoom** in the pause sheet
+Since 0.5 there is no controls card: a console's first start goes straight to the game, and neither the game card
+nor the pause sheet has a Controls button. **Zoom** in the pause sheet
 holds the frame still: pinch from the paused picture or on Zoom, drag to pan, or use the
 D-pad and A (2x/3x). Back returns to the pause sheet. It never changes the game's picture settings.
 
@@ -160,6 +159,16 @@ pauses and commits the moment; returning stays paused. Gamepad disconnection cle
 pauses and restores touch controls. Both Activities use safe areas for cutouts, system bars
 and gesture edges. Battery saver suppresses optional media downloads and the
 player's startup animation without changing saved preferences or slowing the game.
+
+A failed start's dialog handles the same Back/Menu/BUTTON_MODE keys as the player, plus B, Escape and confirmation;
+BUTTON_MODE is the handheld HOME button. Android's system HOME remains an OS action. The Handheld view carries the
+shelf's resolved game title into the player, including gamelist and checksum corrections. Earlier's initial and periodic
+captures share the same state/preview writer; a replaced capture never retains another moment's picture.
+
+The shared VFS sizes read-only ROMs without `fflush`: Android's Bionic rejects flushing a read-only stream with EBADF,
+which previously prevented ClownMDEmu from loading ordinary `.md` files. Writable saves still flush before sizing.
+The `vfs_contract` and `android_core_probe` examples can run headlessly in an ARM64 emulator; see the
+[Android test notes](../scripts/android/test/README.md#odin-recording-regressions).
 
 An old short PSP moment is refused by the shared size guard. The **Recovery** page explains
 that it could not load safely and where it is kept; Load still lists the preserved moment.

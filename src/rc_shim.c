@@ -108,7 +108,7 @@ static void RC_CCONV log_message(const char* message, const rc_client_t* client)
     p->hooks.log(p->hooks.userdata, message);
 }
 
-rc_client_t* pocket_rc_create(const pocket_rc_hooks_t* hooks, int verbose) {
+rc_client_t* pocket_rc_create(const pocket_rc_hooks_t* hooks, int verbose, int hardcore) {
   pocket_rc_t* p = (pocket_rc_t*)calloc(1, sizeof(*p));
   rc_client_t* client;
   if (!p)
@@ -124,8 +124,9 @@ rc_client_t* pocket_rc_create(const pocket_rc_hooks_t* hooks, int verbose) {
   rc_client_enable_logging(client, verbose ? RC_CLIENT_LOG_LEVEL_VERBOSE : RC_CLIENT_LOG_LEVEL_INFO, log_message);
   /* Memory is read on the game thread only (rc_client_do_frame / rc_client_idle), never from the network thread. */
   rc_client_set_allow_background_memory_reads(client, 0);
-  /* Softcore: save states, rewind and cheats stay usable (docs/user/achievements.md). */
-  rc_client_set_hardcore_enabled(client, 0);
+  /* Softcore unless the player chose Hardcore, before the game loads (docs/user/achievements.md "Hardcore"): then the
+   * host refuses state loads, rewind, fast-forward and cheats, and rc_client sends the unlocks as hardcore. */
+  rc_client_set_hardcore_enabled(client, hardcore ? 1 : 0);
   rc_client_set_unofficial_enabled(client, 0);
   return client;
 }
@@ -312,14 +313,14 @@ int pocket_rc_all_progress_request(const char* username, const char* token, uint
 }
 
 int pocket_rc_award_request(const char* username, const char* token, uint32_t achievement_id, const char* hash,
-                            uint32_t seconds_since_unlock, pocket_rc_request_sink sink, void* userdata) {
+                            uint32_t seconds_since_unlock, int hardcore, pocket_rc_request_sink sink, void* userdata) {
   rc_api_award_achievement_request_t params;
   rc_api_request_t request;
   memset(&params, 0, sizeof(params));
   params.username = username;
   params.api_token = token;
   params.achievement_id = achievement_id;
-  params.hardcore = 0;
+  params.hardcore = hardcore ? 1 : 0;
   params.game_hash = hash;
   params.seconds_since_unlock = seconds_since_unlock;
   return hand_over(rc_api_init_award_achievement_request(&request, &params), &request, sink, userdata);

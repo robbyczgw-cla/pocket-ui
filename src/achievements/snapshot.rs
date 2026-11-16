@@ -72,6 +72,10 @@ pub struct Snapshot {
     /// Unlocks not confirmed by the server yet (offline); they are sent later.
     #[serde(default)]
     pub waiting: u32,
+    /// Hardcore's rules hold for this game now (`session::hardcore_applies`): the pause menu leaves out Save, Load,
+    /// Earlier and Cheats and says why.
+    #[serde(default)]
+    pub hardcore: bool,
     #[serde(default)]
     pub achievements: Vec<Entry>,
 }

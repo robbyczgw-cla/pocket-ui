@@ -157,7 +157,7 @@ mod tests {
             let shown = download_failure(raw);
             assert_eq!(shown, said, "{raw}");
             assert!(!shown.contains("HTTP") && !shown.contains("404") && !shown.contains("pocketui.xyz"), "{raw}: {shown}");
-            for lang in [Lang::De, Lang::Es, Lang::Pt] { assert_ne!(tr_in(lang, &shown), shown, "{lang:?}: {shown}"); }
+            for lang in [Lang::De, Lang::Es, Lang::Pt, Lang::Fr, Lang::It] { assert_ne!(tr_in(lang, &shown), shown, "{lang:?}: {shown}"); }
         }
     }
     #[test]

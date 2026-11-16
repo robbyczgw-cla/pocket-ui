@@ -84,6 +84,10 @@ pub struct GameMeta {
     /// and the game box. An older pocket-ui skips the field.
     #[serde(default, skip_serializing_if = "crate::case_stickers::CaseStickers::is_empty")]
     pub case: crate::case_stickers::CaseStickers,
+    /// The shop's film was torn off this game's case at its first start (`shrink_wrap`): it stays unwrapped, whatever
+    /// else is known of its play. An older pocket-ui skips the field.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub unwrapped: bool,
 }
 
 fn is_zero(n: &u8) -> bool {
@@ -331,6 +335,23 @@ impl LibraryMeta {
     /// The stickers on the game's case, without copying the rest of its entry (the shelves ask for every case).
     pub fn case(&self, path: &Path) -> crate::case_stickers::CaseStickers {
         self.games.get(&key(path)).map(|g| g.case).unwrap_or_default()
+    }
+
+    /// Whether the game was ever played or touched here as far as `library.json` knows: time or sessions counted, a status
+    /// the player chose, or its film torn off before (`shrink_wrap`; the recent games are the App's to add).
+    pub fn ever_played(&self, path: &Path) -> bool {
+        self.games.get(&key(path)).is_some_and(|g| g.unwrapped || g.secs > 0 || g.sessions > 0 || g.status_set || g.status != Status::NotStarted)
+    }
+
+    /// The film is torn off `path`'s case for good: kept now, saved on the card writer's thread (`done` hears how).
+    pub fn set_unwrapped_soon(&mut self, path: &Path, done: impl FnOnce(io::Result<crate::fsutil::WriteStatus>) + Send + 'static) -> io::Result<()> {
+        let g = self.games.entry(key(path)).or_default();
+        if g.unwrapped {
+            return Ok(());
+        }
+        g.unwrapped = true;
+        self.case_generation = next_case_generation();
+        crate::fsutil::write_json_checked_soon(&self.file, &self.contents(), done)
     }
 
     /// Changes when case artwork may have changed, including a fresh load or a sync batch's mutable access.

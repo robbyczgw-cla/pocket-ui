@@ -84,8 +84,6 @@ const WAKE_GUARD: Duration = Duration::from_millis(1500);
 /// reaction (about 400-500 ms) plus the thumb's travel; what comes sooner was pressed blind, which is the case this
 /// guards against. Shorter would let the pocket press of 2026-10-23 through again.
 const WAKE_QUIET: Duration = Duration::from_millis(600);
-/// Stick movement smaller than this is drift, not input.
-const STICK_DEADZONE: f32 = 0.35;
 /// A suspend that hasn't happened this long after asking for it failed.
 const SUSPEND_TIMEOUT: Duration = Duration::from_secs(30);
 /// A suspend command that blocks this long stands for a suspend (`POCKETUI_SUSPEND_CMD` in tests and the virtual
@@ -758,6 +756,13 @@ fn wake_timeline(resumed: u64, key: u64, screen: u64, game: Option<u64>, hooks: 
 
 /// The default sink's volume in percent and whether it is muted, from `pactl`.
 pub fn sink_volume() -> Option<(u32, bool)> {
+    // The Brick: its own state files, not its `pactl` stand-in (a shell script and three programs, twice per menu sound).
+    #[cfg(feature = "brick")]
+    if crate::device::brick() {
+        if let Some(sink) = std::env::var_os("BRICK_STATE").filter(|p| !p.is_empty()).and_then(|p| crate::system_ctl::brick_sink(Path::new(&p))) {
+            return Some(sink);
+        }
+    }
     let vol = crate::proc::run_with_timeout(Command::new("pactl").args(["get-sink-volume", "@DEFAULT_SINK@"]), crate::proc::HELPER).ok()?;
     let mute = crate::proc::run_with_timeout(Command::new("pactl").args(["get-sink-mute", "@DEFAULT_SINK@"]), crate::proc::HELPER).ok()?;
     Some((
@@ -978,27 +983,19 @@ fn quiet_after_wake(woke_at: Option<Instant>, now: Instant, e: &PadEvent) -> boo
         )
 }
 
-/// What woke the screen, for the log ("A", "a stick").
+/// What woke the screen, for the log ("A", "a stick (LeftX 0.62, source 5)"): with the value and the device, so a
+/// wake nobody asked for can be traced to its controller.
 fn wake_reason(e: &PadEvent) -> String {
     match e {
         PadEvent::Button { button, .. } => format!("{button:?}"),
+        PadEvent::Axis { source, axis, value } => format!("a stick ({axis:?} {value:.2}, source {source})"),
         _ => "a stick".into(),
     }
 }
 
+/// `pad::counts_as_input`: the one rule, shared with the UI's own quiet spells.
 fn is_input(e: &PadEvent) -> bool {
-    match e {
-        PadEvent::Button { pressed, .. } => *pressed,
-        PadEvent::Axis {
-            axis: Axis::L2 | Axis::R2,
-            value,
-            ..
-        } => *value > 0.5,
-        PadEvent::Axis { value, .. } => value.abs() > STICK_DEADZONE,
-        // A controller connecting (it may do so by itself after a sleep) is nobody pressing anything. The lid has its
-        // own rules (`Sleep::on_lid`).
-        PadEvent::Raw { .. } | PadEvent::Connected { .. } | PadEvent::Disconnected { .. } | PadEvent::Lid { .. } => false,
-    }
+    crate::pad::counts_as_input(e)
 }
 
 /// The steps of a deep sleep, as its worker thread runs them (`deep_sequence`); the tests run them on a fake and
@@ -1428,7 +1425,9 @@ impl Sleep {
     #[cfg(feature = "brick")]
     pub fn new(data_dir: PathBuf, notify: Arc<dyn Fn() + Send + Sync>) -> Sleep {
         let nextui_owned = { #[cfg(feature = "brick")] { crate::device::brick() } #[cfg(not(feature = "brick"))] { false } };
-        let mut sleep = Sleep::build(data_dir, System::from_env(), notify, InhibitorSlot::take_soon_unless(nextui_owned));
+        // dArkOS uses an exclusive evdev power-key grab instead of a logind inhibitor (docs/DARKOS.md).
+        let host_power_key = nextui_owned || crate::darkos::host();
+        let mut sleep = Sleep::build(data_dir, System::from_env(), notify, InhibitorSlot::take_soon_unless(host_power_key));
         sleep.sys.recover();
         // Switched off after sleeping: the backlight was 0 then. One small file, and only that start finds one.
         sleep.switched_off = crate::auto_off::take_note(&sleep.data_dir);
@@ -1447,6 +1446,19 @@ impl Sleep {
         }
         sleep.spawn_rtc_check();
         sleep
+    }
+
+    /// A `--snapshot`'s or a bench's sleep: the timers and settings alone, nothing of the device. No backlight or panel
+    /// (a dark screen stays dark, its note stays), no suspend or power command, no logind inhibitor, the switched-off
+    /// note not taken, no watcher, battery guard or RTC check: a picture of a page beside a running pocket-ui must not
+    /// wake, suspend or switch off the device it runs on (a bench on the RG35XX Plus lit its sleeping screen, 14.11.2026).
+    pub fn offline(data_dir: PathBuf, notify: Arc<dyn Fn() + Send + Sync>) -> Sleep {
+        let mut sys = System::new(None, "true".into(), false);
+        sys.poweroff_cmd = "true".into();
+        sys.reboot_cmd = "true".into();
+        sys.bootloader_cmd = "true".into();
+        sys.dark_file = data_dir.join("offline-dark-note");
+        Sleep::build(data_dir, sys, notify, InhibitorSlot::Have(None))
     }
 
     /// An alarm a run before this one left armed is cleared (and the RTC's state logged) on a thread of its own: a start
@@ -1469,7 +1481,9 @@ impl Sleep {
     /// The state alone: no threads, no inhibitor, nothing read but the settings (`new` adds those; the tests don't).
     #[cfg(not(feature = "brick"))]
     fn build(data_dir: PathBuf, sys: System, notify: Arc<dyn Fn() + Send + Sync>, inhibitor: InhibitorSlot) -> Sleep {
-        Sleep::build_on(false, data_dir, sys, notify, inhibitor)
+        // Android's handheld view (android/handheld): Android owns the screen and sleep, as NextUI does on the Brick. Without
+        // this the idle timers went "dark" behind a lit screen and the next press only woke it (Odin, 12.11.2026).
+        Sleep::build_on(cfg!(all(target_os = "android", feature = "handheld")), data_dir, sys, notify, inhibitor)
     }
 
     #[cfg(feature = "brick")]
@@ -1671,7 +1685,7 @@ impl Sleep {
 
     /// pocket-ui handles the power key: logind's handling is inhibited (or forced for tests).
     fn power_key_ours(&mut self) -> bool {
-        self.force_power_key || self.inhibitor.get().is_some_and(Inhibitor::held)
+        self.force_power_key || { #[cfg(feature = "brick")] { crate::darkos::host() } #[cfg(not(feature = "brick"))] { false } } || self.inhibitor.get().is_some_and(Inhibitor::held)
     }
 
     /// Every pad event goes through here first. Returns true when it was sleep's (it woke the device,
@@ -2839,6 +2853,20 @@ mod tests {
         assert!(!quiet_after_wake(Some(t0), t0, &PadEvent::Button { button: Button::South, pressed: false, source: 0 }));
     }
 
+    /// Where the system owns sleep (Android's handheld view, NextUI's Brick), a long time without input never makes pocket-ui
+    /// dark, and the next press does what it does on the page (the first A after coming back was lost on the Odin, 12.11.2026).
+    #[test]
+    fn where_the_system_owns_sleep_a_press_after_a_long_idle_is_not_swallowed() {
+        let dir = TestDir::new("sleep-host-owned");
+        let sys = System::new(None, "false".into(), false);
+        let mut sleep = Sleep::build_on(true, dir.to_path_buf(), sys, Arc::new(|| {}), InhibitorSlot::Have(None));
+        sleep.timers.last_input = Instant::now() - Duration::from_secs(3600);
+        sleep.tick(Ctx::default());
+        assert!(matches!(sleep.state, State::Awake), "an hour without input: still awake");
+        let a = PadEvent::Button { button: Button::South, pressed: true, source: 0 };
+        assert!(!sleep.on_pad(&a, Ctx::default()), "the press reaches the page");
+    }
+
     #[test]
     fn idle_goes_light_then_deep() {
         let t0 = Instant::now();
@@ -2898,6 +2926,36 @@ mod tests {
         assert!(is_input(&a(Axis::LeftY, -0.8)));
         assert!(!is_input(&a(Axis::L2, 0.2)));
         assert!(is_input(&a(Axis::R2, 0.9)));
+    }
+
+    /// 2026-11-14: a lying Mini V2's sticks and triggers (resting off centre, jittering a few hundredths) neither
+    /// wake the dark screen nor keep the awake one from going dark; a real push does both. The values are what the
+    /// pad reader passes on for the Mini V2 (left X rests at +0.11) plus jitter up to the menus' dead zone and beyond.
+    #[test]
+    fn stick_and_trigger_jitter_never_wakes_the_dark_screen_nor_keeps_it_awake() {
+        let (_dir, mut s, _) = test_sleep("jitter-no-wake");
+        let a = |axis, value| PadEvent::Axis { source: 5, axis, value };
+        let jitter = [a(Axis::LeftX, 0.11), a(Axis::LeftX, 0.18), a(Axis::LeftY, -0.05), a(Axis::RightX, 0.2), a(Axis::RightY, -0.22), a(Axis::L2, 0.02), a(Axis::R2, 0.3), a(Axis::LeftX, 0.0)];
+        // Awake: jitter does not count as use, the idle time goes on.
+        let idle_since = Instant::now() - Duration::from_secs(90);
+        s.timers.last_input = idle_since;
+        for e in &jitter {
+            s.on_pad(e, Ctx::default());
+        }
+        assert_eq!(s.timers.last_input, idle_since, "stick jitter reset the idle time");
+        // Dark: jitter is swallowed and does not wake.
+        s.light(Ctx::default());
+        for e in &jitter {
+            assert!(s.on_pad(e, Ctx::default()), "dark: no pad event reaches the UI");
+            assert_eq!(s.state(), State::Light, "{e:?} woke the dark screen");
+        }
+        // A real push wakes it (the Brick's own card: only the power key does).
+        #[cfg(not(feature = "brick"))]
+        {
+            assert!(s.on_pad(&a(Axis::LeftX, 0.9), Ctx::default()));
+            assert_ne!(s.state(), State::Light, "a stick pushed out wakes");
+            s.screen_job.take().map(|j| j.join().unwrap());
+        }
     }
 
     #[test]

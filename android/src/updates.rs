@@ -1,21 +1,13 @@
 //! Signed channel reads run on a worker; Android streams and installs the verified APK offer.
 use super::*;
-use pocket_ui::{signed_data::PUBLIC_KEY, update_channel::{self, Manifest}, update_hint};
+use pocket_ui::{update_channel::{self, Manifest}, update_hint};
 
 #[derive(Default, serde::Deserialize)]
 #[serde(default)]
 struct Status { phase: String, bytes: u64, total: u64, message: String, cancellable: bool }
 
 fn fetch(url: &str) -> Result<Manifest, String> {
-    let read = |url: &str, limit: &str| -> Result<String, String> {
-        let result = pocket_ui::platform::android::strings("updateRead", &[url, limit])?;
-        result.strip_prefix("OK\n").map(String::from).ok_or_else(|| result.strip_prefix("ERR\n").unwrap_or("Couldn't reach the update server. Check Wi-Fi.").to_string())
-    };
-    let json = read(url, "1048576")?;
-    let signature = read(&format!("{url}.sig"), "1024")?;
-    let manifest = update_channel::parse_manifest(json.as_bytes(), &signature, &PUBLIC_KEY)?;
-    update_channel::android_offer(&manifest, url)?;
-    Ok(manifest)
+    update_channel::android_fetch(url)
 }
 impl App {
     pub(crate) fn update_check(&mut self, automatic: bool) {

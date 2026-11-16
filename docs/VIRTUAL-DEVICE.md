@@ -236,7 +236,7 @@ Do not take performance numbers from here.
 - **Services.** No systemd: `systemctl` calls in `run-pocket-ui.sh` (`essway`) and the `smbd` check fail and are
   ignored; the Samba switch in Add games cannot work. There is no EmulationStation to hand the screen back to.
 - **Syncthing and Moonlight.** `extract-rocknix.sh` drops `usr/bin/syncthing`; `moonlight` is in the image but
-  finds no PC. To try Settings → Help & tools → For tinkerers → Sync (as done for `docs/user/sync.md`): copy the device's `/usr/bin/syncthing` into
+  finds no PC. To try Settings → Connections → Sync (as done for `docs/user/sync.md`): copy the device's `/usr/bin/syncthing` into
   the container (`docker cp`), put a small `systemctl` stand-in in front of the real one (`start`, `restart`, `stop`,
   `is-active`, `daemon-reload` for `syncthing`, running the `ExecStart` of the drop-in), create
   `/storage/.config/system/configs/system.cfg`, and give the container a `wlan0` address (`ip link add wlan0 type

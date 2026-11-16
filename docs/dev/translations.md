@@ -1,14 +1,14 @@
 # Translations
 
-*Part of [DEVELOPING.md](../DEVELOPING.md). Read this when you add or change UI text, German/Spanish/Portuguese lines or the i18n snapshots.*
+*Part of [DEVELOPING.md](../DEVELOPING.md). Read this when you add or change UI text, German/Spanish/Portuguese/French/Italian lines or the i18n snapshots.*
 
 ## Translations
 
-The interface is in English, German, Spanish or Brazilian Portuguese (Settings → System → Language, `src/i18n.rs`). Nothing in the code is wrapped for
+The interface is in English, German, Spanish, Brazilian Portuguese, French or Italian (Settings → System → Language, `src/i18n.rs`). Nothing in the code is wrapped for
 translation: the text painter (`Text::draw`, `width`, `fit`, `wrap`, `draw_right`, `draw_clipped`) looks every string
-up by its exact English wording in the language's table (`assets/i18n/de.tsv`, `es.tsv`, `pt.tsv`) and paints that line instead. A new page needs no code
-for it, only lines in the tables. A new language is a `Lang` value, a line of `TRAITS`, and a table with every line (`i18n`'s test
-`every_language_has_every_line_with_its_placeholders`). Words and tone: [i18n-glossary.md](../i18n-glossary.md). pocket-core reads the
+up by its exact English wording in the language's table (`assets/i18n/de.tsv`, `es.tsv`, `pt.tsv`, `fr.tsv`, `it.tsv`) and paints that line instead. A new page needs no code
+for it, only lines in the tables. A new language is a `Lang` value, a line of `TRAITS`, and a table with every line (`i18n`'s
+release check `every_language_has_every_line`; the gate's `every_line_keeps_its_placeholders_and_german_has_every_line`). Words and tone: [i18n-glossary.md](../i18n-glossary.md). pocket-core reads the
 same setting, so its notes over the game are German too. The one line put together in code is FPS + sensors
 over the game: its numbers change twice a second, so `osd_sensors` looks up each part with words ("Fan {n}%") itself,
 on its reading thread. The manual (`docs/user/`) stays English: the painter is
@@ -23,22 +23,27 @@ status-file page identifiers belong in `skip.txt`, and the literal hostname `poc
 | File | What it holds |
 |---|---|
 | `assets/i18n/de.tsv` | `English<TAB>German`, one line each, compiled into both programs. Placeholders for strings with numbers or names: `{n}` `{m}` `{k}` `{n2}`… a number, `{s}` `{s2}`… text kept as it is (a game, a network), `{t}` `{t2}`… text looked up in the table in turn ("Set to {t}" makes "Set to Dark" "Auf Dunkel gestellt"). The German side may put them in any order. `\n` is a line break. A `!` in front of the English (`!{t} and {t2}`) uses a pattern only when every `{t}` is a line of the table, so a short one doesn't take a game's name apart ("Rock and Roll Racing"). A `{s}` never takes in " · " or the end of a sentence; a paragraph of sentences the table has is translated sentence by sentence. Lines that don't parse are left out (and printed); the unit tests refuse them |
-| `assets/i18n/es.tsv` | `English<TAB>Spanish`, the same lines as `de.tsv` in the same order, the same placeholders |
-| `assets/i18n/pt.tsv` | `English<TAB>Brazilian Portuguese` (language code `pt`, shown as "Português (Brasil)"), the same lines and placeholders; any `pt` locale starts it. `brick-de.tsv`, `brick-es.tsv` and `brick-pt.tsv` hold the few lines only the Brick build adds |
+| `assets/i18n/es.tsv` | `English<TAB>Spanish`, the same lines as `de.tsv` in the same order (complete before a release), the same placeholders |
+| `assets/i18n/pt.tsv` | `English<TAB>Brazilian Portuguese` (language code `pt`, shown as "Português (Brasil)"), the same lines and placeholders; any `pt` locale starts it. |
+| `assets/i18n/fr.tsv` | `English<TAB>French` (language code `fr`, shown as "Français"; "tu", « guillemets » and `? ! : ; %` after a no-break space U+00A0, which `Text::wrap` never breaks at), the same lines and placeholders; any `fr` locale starts it. `brick-de.tsv`, `brick-es.tsv`, `brick-pt.tsv` and `brick-fr.tsv` hold the few lines only the Brick build adds |
+| `assets/i18n/it.tsv` | `English<TAB>Italian` (language code `it`, shown as "Italiano"; "tu"), the same lines and placeholders; any `it` locale starts it. `brick-it.tsv` holds its Brick-only lines |
 | `assets/i18n/keep.txt` | Strings shown in English on purpose: names, brands, addresses; `re:` lines are patterns (`^` `$` `.*`, `\d` digits, `\` for a literal character) |
 | `assets/i18n/skip.txt` | Strings the extraction script finds that are never painted on their own: log lines, keys of other programs' files, pieces of longer strings the table translates whole |
-| `scripts/i18n-extract.py` | Lists the strings of `src/` that read like words for a person and the ones without a German line (`--stub`: as table lines to fill in; `--summary`: only the numbers; `--check`: exit 1 if one is missing; `--stale`: table lines whose English the source no longer has) |
-| `tests/i18n_snapshots.rs`, `tests/i18n-states.txt`, `tests/spanish.rs`, `tests/portuguese.rs` | The test (above) and the snapshot states it renders in each language; the Spanish and Portuguese specifics |
+| `scripts/i18n-extract.py` | Lists the strings of `src/` that read like words for a person and the ones without a German line (`--stub`: as table lines to fill in; `--summary`: only the numbers; `--check`: exit 1 if one is missing, and a warning for lines `de.tsv` has and `es.tsv`/`pt.tsv`/`fr.tsv`/`it.tsv` lack; `--stale`: table lines whose English the source no longer has) |
+| `tests/i18n_snapshots.rs`, `tests/i18n-states.txt`, `tests/spanish.rs`, `tests/portuguese.rs`, `tests/french.rs`, `tests/italian.rs` | The test (above) and the snapshot states it renders in each language; the Spanish, Portuguese and French specifics |
 | `tests/settings_value_text.rs` | Settings at 640x480 in Large text (Barlow and Retro): no string with a translation is painted in English, nor a piece of one cut with "…". A row's value that doesn't fit is cut from its translation (`settings_values::fit_translated`), never from the English, because the painter looks the painted piece up and a piece of a sentence has no line |
-| `scripts/i18n-shots.sh` | The same states as contact sheets (`SHOT_LANG=es` for Spanish, `SHOT_LANG=pt` for Portuguese), dark and light; lists what is cut short or runs past the edge only in German |
+| `scripts/i18n-shots.sh` | The same states as contact sheets (`SHOT_LANG=es` for Spanish, `SHOT_LANG=pt` for Portuguese, `SHOT_LANG=fr` for French, `SHOT_LANG=it` for Italian), dark and light; lists what is cut short or runs past the edge only in German |
 
 ### Adding or changing a string
 
 1. Write the English string in the code as usual.
 2. Run `scripts/i18n-extract.py`. It prints the numbers and every string without a German line, with its file and
    line; `scripts/i18n-extract.py --stub` prints them as table lines to fill in.
-3. Translate in `assets/i18n/de.tsv`, `es.tsv` and `pt.tsv`, in the section of its page, with the words of the
-   [glossary](../i18n-glossary.md). A format string comes out of the script with `{s}` for each hole: make it `{n}` for a
+3. Translate in `assets/i18n/de.tsv`, in the section of its page, with the words of the
+   [glossary](../i18n-glossary.md). German is required in the merge gate (the owner tests in German), and every line keeps
+   its placeholders. Add `es.tsv`, `pt.tsv`, `fr.tsv` and `it.tsv` too when you can; a missing Spanish, Portuguese, French or Italian line shows English, is
+   only a warning (`i18n-extract.py --check`, `sh scripts/bookkeeping.sh` in the nightly run) and is filled before a
+   release: one agent fills all gaps in one commit, then `scripts/release-check.sh` holds every language complete. A format string comes out of the script with `{s}` for each hole: make it `{n}` for a
    number and `{t}` for a value the table translates, keep `{s}` for a name. Put a name into `keep.txt` and a log
    line or a key into `skip.txt` instead. Every string painted is looked up, game names and descriptions too: a line
    of only `{s}` holes and a short word (`{s} of {s2}`) turns "The Legend of Zelda" into "The Legend von Zelda".

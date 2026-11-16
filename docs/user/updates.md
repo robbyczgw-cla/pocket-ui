@@ -1,6 +1,7 @@
 # Updates
 
-Settings → System → **Updates** ("New versions of pocket-ui and the system."). It needs Wi-Fi.
+Settings → System → **Updates** ("New versions of pocket-ui and the system."). It needs Wi-Fi, or the update file on the
+card: [No Wi-Fi? Update from the card](#no-wi-fi-update-from-the-card).
 
 New versions of pocket-ui come over Wi-Fi, with one press. Your games, saves and settings stay. On the TrimUI Brick, unchanged engine data stays in place when an update starts; changed files are prepared at a limited write speed before the menu opens.
 
@@ -31,6 +32,40 @@ update: it needs … MB more. Nothing was changed."). If the clock is far behind
 battery, before network time has set it), secure connections fail and the page says "The clock
 looks wrong, so the update server can't be checked. Set it in Settings › System › Time, or wait
 for network time over Wi-Fi."
+
+## No Wi-Fi? Update from the card
+
+Handhelds without Wi-Fi (the RG28XX, the R36S and its clones), or with Wi-Fi off or broken, update from a file you copy
+onto the card. Your games, saves and settings stay, exactly as with a Wi-Fi update.
+
+1. Download the update file for your card from [pocketui.xyz/install](https://pocketui.xyz/install):
+   `pocket-ui-update-<version>-rocknix.zip` for the pocket-ui cards, `…-trimui.zip` for the TrimUI Brick card,
+   `…-darkos.zip` for pocket-ui on dArkOS. One file; don't unpack it.
+2. Switch the handheld off and put the card in your computer. Copy the file, as it is, onto a part the computer shows:
+   - the RG28XX card: the **GAMES** drive ([The GAMES drive](games-drive.md));
+   - other pocket-ui cards: the small first part, or the games card in the second slot (the R36S's TF2);
+   - the TrimUI Brick: the card itself, next to the `pocket-ui` folder;
+   - dArkOS: the **EASYROMS** part.
+3. Put the card back and switch on. On the shelf: "Update to pocket-ui … found on the card. Your games and settings stay."
+   **A** installs it (with the battery under 20 % the page asks you to plug in the charger first), **B** closes it.
+   It restarts by itself ("Installed. Restarting…"), and the file is deleted from the card.
+
+Any time later, Settings → System → Updates → **Look on the card** looks again. On a handheld without Wi-Fi the page says
+"No Wi-Fi on this handheld: put the update file from pocketui.xyz/install on the card, then choose Look on the card."
+
+The file is checked the same way as a download ([What makes it safe](#what-makes-it-safe)), and the new version has the
+same way back. What the page says when the file can't be used; nothing is installed then:
+
+| Situation | Message |
+|---|---|
+| No file on the card | No update file on the card. Put the update file from pocketui.xyz/install on the card, then look again. |
+| Copied only half (the card came out too early), or changed | The update file on the card is incomplete or damaged. Copy it onto the card again. Nothing was installed. |
+| Not one of ours | The update file on the card isn't signed by us. Nothing was installed. |
+| The file for another card | The update file on the card is for another kind of handheld. Get the one for this handheld at pocketui.xyz/install. Nothing was installed. |
+| The version you have, or an older one | The update on the card (0.4.2) isn't newer than this pocket-ui. Nothing was changed. |
+| The Brick or dArkOS file lacks a part the update needs (you skipped versions) | This update needs files that aren't in the update file on the card. Get the newest update file, or update over Wi-Fi. Nothing was installed. |
+
+The shelf says each file once. A Mac that unpacked the zip by itself leaves a folder of the same name; it works too.
 
 ## The hint on the shelf
 
@@ -63,12 +98,18 @@ Below that are the actions that apply right now:
 |---|---|
 | **Install pocket-ui …** | Asks first: **Install now** downloads and installs the new pocket-ui and restarts it by itself ("Installed. Restarting…"), **Later** (or B) goes back. If the battery is under 20 % and not charging, the page says to plug in the charger first. |
 | **Check again** | Checks for updates again. |
+| **Look on the card** | Looks for an update file copied onto the card ([No Wi-Fi? Update from the card](#no-wi-fi-update-from-the-card)). |
 
 While something downloads, a progress bar shows how far it is, and **A** cancels the download
 ("Download cancelled."). A download that sends nothing new for 30 seconds goes on from the
 next download server; slow Wi-Fi is fine as long as data keeps coming. When no server works, the page says why
 ("The download server stopped responding…" or "Download failed. Check Wi-Fi."). The release notes of the selected
 update appear at the bottom. If everything is current, the page says "Everything is up to date."
+
+After the download the bar keeps going: an app update shows one line per step, "Step 1 of 4: Downloading",
+"Step 2 of 4: Unpacking", "Step 3 of 4: Installing" (with how far each is) and "Step 4 of 4: Restarting…" once it is
+installed. **A** cancels as long as that still stops the update; from Installing on there is only **B**. On a slow card
+Unpacking and Installing can take half a minute.
 
 Development builds show "Development build: install a release package to use app updates." Their internal version
 number does not establish their order relative to published releases, so they offer no app OTA updates, including

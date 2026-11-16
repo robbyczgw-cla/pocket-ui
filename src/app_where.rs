@@ -37,7 +37,6 @@ pub(crate) enum Place {
     /// A step of the first start, or of a Settings row that opens it (`from_settings`).
     Setup { at: String, from_settings: bool, network_menu: bool },
     PortFiles,
-    ControlsCard,
     /// A Curator page over the shelf or the card.
     Curator(&'static str),
     /// "Runs on", over the card or the console page.
@@ -98,8 +97,9 @@ pub(crate) struct Where {
 fn settings_name(page: SettingsPage) -> String {
     use SettingsPage::*;
     match page {
-        Groups(_) => "Groups",
         List(row) => return format!("List {}", SETTINGS_GROUPS[app_settings_groups::group_of(row)].0.trim_end_matches('\u{200b}')),
+        // The focus on the categories' symbols at the top, the list of this one under them.
+        Tabs(row) => return format!("Tabs {}", SETTINGS_GROUPS[app_settings_groups::group_of(row)].0.trim_end_matches('\u{200b}')),
         Starter => "Starter",
         GameCheck => "GameCheck",
         Updates => "Updates",
@@ -145,7 +145,7 @@ fn kids_name(view: KidsView) -> &'static str {
 }
 
 /// A Curator page by name ("curator:Lens").
-fn curator_name(page: &CuratorPage) -> &'static str {
+pub(crate) fn curator_name(page: &CuratorPage) -> &'static str {
     match page {
         CuratorPage::Lens(_) => "Lens",
         CuratorPage::Echoes(_) => "Echoes",
@@ -180,7 +180,6 @@ fn pause_name(page: Page) -> String {
         Page::Group { group, .. } => format!("Group {{ group: {group} }}"),
         Page::Emulator { cat, .. } => format!("Emulator {{ cat: {cat:?} }}"),
         Page::Controls { .. } => "Controls".into(),
-        Page::ControlsCard => "ControlsCard".into(),
         Page::Cheats { .. } => "Cheats".into(),
         Page::Standalone { .. } => "Standalone".into(),
         Page::Achievements { .. } => "Achievements".into(),
@@ -236,7 +235,6 @@ impl fmt::Display for Place {
                 Ok(())
             }
             Place::PortFiles => f.write_str("port files"),
-            Place::ControlsCard => f.write_str("controls card"),
             Place::Curator(page) => write!(f, "curator:{page}"),
             Place::RunsOn => f.write_str("runs on"),
             Place::ThisGame => f.write_str("this game"),
@@ -279,7 +277,6 @@ pub(crate) enum Painter {
     Setup,
     Settings,
     PortFiles,
-    ControlsCard,
     Curator,
     RunsOn,
     ThisGame,
@@ -307,7 +304,6 @@ impl Painter {
             Painter::Setup => "setup",
             Painter::Settings => "settings",
             Painter::PortFiles => "port files",
-            Painter::ControlsCard => "controls card",
             Painter::Curator => "curator",
             Painter::RunsOn => "runs on",
             Painter::ThisGame => "this game",
@@ -337,7 +333,6 @@ impl Place {
             Place::Tour => Painter::Tour,
             Place::Setup { .. } => Painter::Setup,
             Place::PortFiles => Painter::PortFiles,
-            Place::ControlsCard => Painter::ControlsCard,
             Place::Curator(_) => Painter::Curator,
             Place::RunsOn => Painter::RunsOn,
             Place::ThisGame => Painter::ThisGame,
@@ -383,9 +378,6 @@ impl App {
         let shelf = self.running.is_none();
         if shelf && self.port_files.is_some() {
             return Place::PortFiles;
-        }
-        if shelf && self.controls_card_open() {
-            return Place::ControlsCard;
         }
         if let Some(page) = self.curator.page.as_ref().filter(|_| shelf) {
             return Place::Curator(curator_name(page));
@@ -582,7 +574,6 @@ impl App {
             Place::Tour => self.tour_mark().hash(h),
             Place::Setup { .. } => self.setup.as_ref().map(|s| s.ui_mark()).hash(h),
             Place::PortFiles => self.port_files.as_ref().map(|(page, _)| (&page.dir, page.scroll())).hash(h),
-            Place::ControlsCard => self.controls_card_mark().hash(h),
             Place::Curator(_) => self.curator_mark().hash(h),
             Place::RunsOn => self.emu_choice_mark().hash(h),
             Place::ThisGame => self.this_game_mark().hash(h),
@@ -681,12 +672,12 @@ impl App {
 
 /// A probe may redirect status; otherwise beside the test FIFO or /tmp. None where there is no FIFO.
 pub(crate) fn status_writer() -> Option<pocket_ui::ui_status::Writer> {
-    #[cfg(any(target_os = "linux", target_os = "emscripten"))]
+    #[cfg(any(target_os = "linux", target_os = "emscripten", all(target_os = "android", feature = "handheld")))]
     {
         let path = pocket_ui::ui_status::output_path(super::test_driver_dir().map(|d| d.as_path()), std::env::var_os("POCKETUI_STATUS"));
         Some(pocket_ui::ui_status::Writer::new(path))
     }
-    #[cfg(not(any(target_os = "linux", target_os = "emscripten")))]
+    #[cfg(not(any(target_os = "linux", target_os = "emscripten", all(target_os = "android", feature = "handheld"))))]
     None
 }
 

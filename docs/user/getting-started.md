@@ -2,7 +2,7 @@
 
 This page takes you from a ROCKNIX card to your first game in pocket-ui. You need a computer once, to copy files to the card.
 
-> **Already play on ROCKNIX or Android?** [Coming from ROCKNIX or Android](coming-from.md) says what happens to your
+> **Already play on ROCKNIX, ArkOS or Android?** [Coming from ROCKNIX, ArkOS or Android](coming-from.md) says what happens to your
 > saves, states, favourites and settings.
 
 > **Not a Mini V2?** The two-file card install below is for the Mini V2 only. Other Retroid devices and the Anbernic H700
@@ -90,7 +90,7 @@ switches **Big text** on every stage (larger text and calmer menus, at once, als
 ![The first start: choose the language, then a few short steps](pictures/first-start.webp)
 
 1. **Your language.** The Spanish welcome reads **Bienvenido a tu Pocket**. Under the cartridge and your handheld,
-   Left/Right choose **English**, **Deutsch**, **Español** or **Português (Brasil)**:
+   Left/Right choose **English**, **Deutsch**, **Español**, **Português (Brasil)**, **Français** or **Italiano**:
    the screen changes at once, and the choice is kept ([Language](language.md)). It starts on the system language
    ROCKNIX was set to. The row under it is **Big text**: Down reaches it and Left/Right switch it there (L2 does it
    from anywhere), Up goes back to the language. Setting the Pocket up for a child? The third row, **For a child**
@@ -108,7 +108,7 @@ switches **Big text** on every stage (larger text and calmer menus, at once, als
    the systems, their folders and file sharing ([Add games](#5-add-games)), and B comes back from there. Something in
    the roms folder that isn't read (a folder of no system, a disc game missing a file) is named in a line of its own.
    **Box art** is one switch, **On** as it ships: the boxes come in the background while you're online, only a game's
-   name is sent ([Extras](extras.md#box-art) has the finer choice). Nothing is downloaded before you leave
+   name is sent ([Box art & downloads](extras.md#box-art) has the finer choice). Nothing is downloaded before you leave
    this page. No switch on a handheld without Wi-Fi.
 4. **How your games stand.** A small picture of the shelf in each look, the one shown in the middle and its
    neighbours at the sides: your own games when the card has some, else games called "Sample game". Left/Right
@@ -119,7 +119,7 @@ switches **Big text** on every stage (larger text and calmer menus, at once, als
    straight to your shelf, with the look shown, from any row; B goes back to your games, so pressing B a few times
    never ends the setup by surprise. Under the rows: in a game, HOME opens the menu (save, load, quit), and the look
    changes any time in Settings → Look (as far as the screen has room). See [Playing](playing.md#looks) for the six
-   looks. The last line points to optional downloads any time: Settings → Games → Extras.
+   looks. The last line points to optional downloads any time: Settings → Games → Box art & downloads.
 
 For a child (the third row of the first page): after your games, Kids Mode's own steps (a PIN, the games a child may play, its
 colour, time and volume) take the look's place, and the setup ends with them ([Kids mode](kids-mode.md)). B on their
@@ -228,7 +228,7 @@ system starts. If the connection drops while pocket-ui runs, it reconnects by it
 
 A card with no games shows **No games yet** on Home, with **Get the starter pack** (A) and **Add games** (X) for your own. The pack is
 a handful of small games that their authors share for anyone to play, from Game Boy to Super Nintendo, Mega Drive and GBA. You can
-also open it from Settings → Games → Extras → **Starter pack**.
+also open it from Settings → Games → Box art & downloads → **Starter pack**.
 
 1. Offline, Home's button says **Connect to Wi-Fi** (A opens the Wi-Fi page; B comes back here).
 2. Press A on **Get the starter pack**. **Get all** takes every game, A on a game takes just that one. Each is checked and put into
@@ -312,7 +312,7 @@ Without Wi-Fi there's also a second card on a handheld with two slots: [Second c
 
 ### Coming from EmulationStation
 
-The whole move, saves included, is on [Coming from ROCKNIX or Android](coming-from.md). Only the gamelists are here.
+The whole move, saves included, is on [Coming from ROCKNIX, ArkOS or Android](coming-from.md). Only the gamelists are here.
 
 If your games were on ROCKNIX's EmulationStation, KNULLI, Batocera or ES-DE, copy each system's `gamelist.xml` with the games:
 pocket-ui reads the names, descriptions and pictures in it, and never changes it. More:

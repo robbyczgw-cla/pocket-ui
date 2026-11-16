@@ -55,7 +55,7 @@ for supported behavior and the remaining picture/player differences.
 
 The pause-menu shot reader (`preview.rs`) accepts older one-image shots and an optional 4×1 game rectangle before the picture (the initial picture-first layout is also accepted), ignores invalid crop bounds, retries incomplete files, and bounds decoding to eight nonempty images, 4096² pixels each and 128 MiB per file. Both preview and shot reads use one open file handle so an atomic rename cannot mix requests.
 
-The controls card remembers each console in `<data>/controls-card-seen` using `fsutil::write_atomic` before showing it; a failed write skips the interruption. Existing auto-resume states (including taken/retry states) consume the first-start mark without showing a card. Its twelve-second deadline participates in the event loop wake-up schedule. The card consumes the dismissing press before HOME/START shortcut handling. `user_journeys` exercises dismissal, an idle timeout and existing resume states with a stand-in game. Overlay taps take priority over the search and game card underneath; The Tour remains behind the card.
+A console's first start goes straight to the game (0.5: the controls card at a first start went, and a `controls-card-seen` file of older versions is ignored). `user_journeys::a_consoles_first_start_goes_straight_to_the_game_without_a_card` guards it with a stand-in game.
 
 Android chooses the shared heavy audio reserve with `audio::needs_jitter_reserve` for N64, PSP and DS,
 on initial open and after audio focus returns. The callback/endpoint policy stays separate.

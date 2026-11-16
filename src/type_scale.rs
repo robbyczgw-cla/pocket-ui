@@ -7,9 +7,9 @@
 //!
 //! **Normal** is the design as it is: [`px`] gives the size back unchanged and nothing else differs (one
 //! thread-local read per string). **Medium** is the step between: every size under 64 px about an eighth larger
-//! (1.12), at most 6 px larger, on the same rules as Large: Body 28 is 31, the hint bar's 21 is 24, Title 37 is 41, 50 is
+//! (1.12), at most 6 px larger, on the same rules as Large: Body 28 is 31, a small note's 21 is 24, Title 37 is 41, 50 is
 //! 56. **Large** sets every size under 64 px a quarter larger, at most 10 px larger: Body
-//! 28 is 35 (capitals about 1.5 mm high instead of 1.2 mm), the hint bar's 21 is 26, Title 37 is 46, 50 is 60. Sizes
+//! 28 is 35 (capitals about 1.5 mm high instead of 1.2 mm), a small note's 21 is 26, Title 37 is 46, 50 is 60. Sizes
 //! of 64 px and more (the pulled-out title, the big letter of a jump, the battery figure) are large already and stay.
 //!
 //! Per thread, as `motion`'s level: the screens are painted on the UI thread, and tests running side by side each get
@@ -24,6 +24,55 @@ thread_local! {
     static SIZE: Cell<TextSize> = const { Cell::new(TextSize::Normal) };
     /// Off while something drawn to a fixed physical size is painted (`unscaled`): a case's spine, a key cap.
     static FIXED: Cell<bool> = const { Cell::new(false) };
+    /// The wide screen's pages of rows and text (`wide_page`, `panel`): 1 everywhere else.
+    static PANEL: Cell<f32> = const { Cell::new(1.0) };
+}
+
+/// Screens at least this wide are "wide" (the Retroid Pocket 5's, Flip 2's and Odin's 1920x1080, a 20:9 phone, a TV):
+/// the Mini V2 (1240) and the Mini V1 (1280) never are. `app_column` boxes pages in by the same width.
+pub const WIDE_FROM: i32 = 1600;
+
+/// How much larger the pages of rows and text (Settings, the manual, the first start, quick settings, the pause menu's
+/// pages) are painted on a screen `w` x `h` (docs/DESIGN.md "Type", wide screens): the design is made for the Mini V2's
+/// 1240x1080, a page whose rows filled a third of a 1920x1080 screen in small type. On a wide screen the type, the rows
+/// and the lines grow by the screen's height over 830 lines (1080 lines: 1.3, so a category of eight rows and its explanation still fit
+/// without scrolling), at most 1.6; every other screen 1.
+pub fn wide_page(w: i32, h: i32) -> f32 {
+    if w < WIDE_FROM {
+        1.0
+    } else {
+        (h as f32 / 830.0).clamp(1.0, 1.6)
+    }
+}
+
+/// Paints with every size `factor` times larger until the value is dropped (`wide_page`), Medium and Large a little
+/// larger still (`wide_px`). A factor of 1 changes nothing.
+pub fn panel(factor: f32) -> Panel {
+    Panel(PANEL.with(|p| p.replace(if factor.is_finite() { factor.clamp(1.0, 2.0) } else { 1.0 })))
+}
+
+/// The factor `panel` set (1 outside of one).
+pub fn panel_factor() -> f32 {
+    PANEL.with(|p| p.get())
+}
+
+/// A width `w` of the design grown by a wide page's factor (`panel`; `w` itself everywhere else): a column of labels or
+/// a cell that holds type, where the text size's own growth was already allowed for.
+pub fn on_wide(w: i32) -> i32 {
+    if paneled() { (w as f32 * panel_factor()).round() as i32 } else { w }
+}
+
+pub struct Panel(f32);
+
+impl Drop for Panel {
+    fn drop(&mut self) {
+        PANEL.with(|p| p.set(self.0));
+    }
+}
+
+#[inline]
+fn paneled() -> bool {
+    PANEL.with(|p| p.get()) != 1.0 && !FIXED.with(|f| f.get())
 }
 
 /// The size in use from the next frame on (Settings, the start; `App::set_text_size`).
@@ -43,11 +92,11 @@ pub fn get() -> TextSize {
 
 /// Whether type is painted larger than the design right now (Medium or Large).
 pub fn scaled() -> bool {
-    (get() != TextSize::Normal || SYSTEM.with(|s| s.get()) != 1.0 || on_brick()) && !FIXED.with(|f| f.get())
+    paneled() || (get() != TextSize::Normal || SYSTEM.with(|s| s.get()) != 1.0 || on_brick()) && !FIXED.with(|f| f.get())
 }
 
 /// The TrimUI Brick's screen is 3.2" at 1024x768 (about 15.75 px a millimetre), so the design's sizes are smaller there
-/// than what is comfortable at arm's length: Body 28 is 1.8 mm high (em), the hint bar's 21 only 1.3 mm. The Brick's
+/// than what is comfortable at arm's length: Body 28 is 1.8 mm high (em), a small note's 21 only 1.3 mm. The Brick's
 /// "Normal" therefore starts a little larger ([`brick_base`]); Medium and Large keep their sizes where those are larger, so on
 /// the Brick Normal is about what Medium is elsewhere and Large is Large. Every other build and
 /// device is the design as before (the `brick` feature is not in the default build). The Smart Pro's panel is a third coarser (`Board::larger_small_type`): it keeps the design's sizes.
@@ -63,8 +112,8 @@ fn on_brick() -> bool {
     false
 }
 
-/// The Brick's Normal for a design size `px`: the hint bar's and the small notes' 18 to 21 px are four pixels larger (the
-/// hint bar's 21 is 25, 1.6 mm high), 22 to 28 three (Body 28 is 31, 1.97 mm; facts and counters at 24 are 27); the
+/// The Brick's Normal for a design size `px`: the small notes' 18 to 21 px are four pixels larger (the
+/// small note's 21 is 25, 1.6 mm high), 22 to 28 three (Body 28 is 31, 1.97 mm; facts and counters at 24 are 27); the
 /// Settings family's 30 (hint pill, explanations) is 32; its rows' 36, the titles (37 and up) and the pause menu's 46 are
 /// comfortable already and stay.
 #[cfg(feature = "brick")]
@@ -93,7 +142,26 @@ fn brick_floor(px: u32) -> u32 {
 /// The size `Text` paints a design size `px` at.
 #[inline]
 pub fn px(px: u32) -> u32 {
-    if scaled() {
+    let sized = sized_px(px);
+    if paneled() {
+        wide_px(px, sized)
+    } else {
+        sized
+    }
+}
+
+/// A wide page's size for the design's `px` that the text size makes `sized` (`panel`): the design's size times the
+/// factor, and half of what Medium or Large add on top (36 px: 47 in Normal, 49 in Medium, 51 in Large). The whole of it
+/// times the factor (58 in Large) ran the pages' fixed steps into each other (the pause menu's notes, the Status labels).
+#[inline]
+fn wide_px(px: u32, sized: u32) -> u32 {
+    (px as f32 * panel_factor()).round() as u32 + sized.saturating_sub(px) / 2
+}
+
+/// `px` without a wide page's factor (`panel`).
+#[inline]
+fn sized_px(px: u32) -> u32 {
+    if (get() != TextSize::Normal || SYSTEM.with(|s| s.get()) != 1.0 || on_brick()) && !FIXED.with(|f| f.get()) {
         // On the Brick no size is smaller than its Normal (Medium's 31 is 32 there), and Large stays as it was.
         let floor = brick_floor(px);
         grown_in(get(), px).max(floor).max(SYSTEM.with(|s| (px as f32 * s.get()).round() as u32))
@@ -119,14 +187,20 @@ pub fn grown_in(size: TextSize, px: u32) -> u32 {
 /// again for the air around it (Settings' 66 px rows at 36 px are 76 in Large). `h` itself in Normal.
 #[inline]
 pub fn row(h: i32, font: u32) -> i32 {
-    h + grow(font) * 6 / 5
+    let air = (sized_px(font) as i32 - font as i32) * 6 / 5;
+    if paneled() {
+        // A wide page (`wide_px`): the row times the factor, and half of what the text size adds.
+        (h as f32 * panel_factor()).round() as i32 + air / 2
+    } else {
+        h + air
+    }
 }
 
 /// The step from one line of `font` px to the next, `gap` pixels between them in the design: the line grows with
 /// its type and the gap stays (`NU_SMALL + 12` is 42 in Normal, 50 in Large).
 #[inline]
 pub fn line(font: u32, gap: i32) -> i32 {
-    px(font) as i32 + gap
+    px(font) as i32 + if paneled() { (gap as f32 * panel_factor()).round() as i32 } else { gap }
 }
 
 /// A width `w` that was made to hold text of `font` px (a column of labels, a picker), grown as the type is.
@@ -230,6 +304,30 @@ mod tests {
         assert_eq!(unscaled(|| px(24)), 24, "a case's spine stays as thick as the case");
         assert_eq!(px(24), 30);
         set(TextSize::Normal);
+    }
+
+    #[test]
+    fn a_wide_screen_s_pages_grow_type_rows_and_lines_together_and_large_stays_larger() {
+        assert_eq!(wide_page(1240, 1080), 1.0, "the Mini V2");
+        assert_eq!(wide_page(1024, 768), 1.0);
+        assert_eq!(wide_page(1280, 720), 1.0, "the Smart Pro (painted at 1707x960)");
+        assert!((wide_page(1920, 1080) - 1.3).abs() < 0.01 && wide_page(2400, 1080) == wide_page(1920, 1080));
+        assert_eq!(wide_page(3840, 2160), 1.6, "at most");
+        set(TextSize::Normal);
+        {
+            let _wide = panel(wide_page(1920, 1080));
+            assert_eq!((px(36), row(66, 36), line(30, 12), px(30)), (47, 86, 55, 39));
+            assert_eq!(unscaled(|| px(24)), 24, "a case's spine stays as thick as the case");
+            set(TextSize::Large);
+            assert!(px(36) > 47 && row(66, 36) > 86, "Large is larger still: {} {}", px(36), row(66, 36));
+            for s in 10..200 {
+                assert!(px(s + 1) >= px(s), "{s}");
+            }
+            set(TextSize::Normal);
+        }
+        assert_eq!((px(36), row(66, 36)), (36, 66), "back to the design outside");
+        let _one = panel(1.0);
+        assert!(!scaled());
     }
 
     /// The Brick's panel is 3.2" at 1024x768: about 15.75 px a millimetre. Read at arm's length the hint bar's type wants

@@ -6,7 +6,7 @@ pocket-ui runs on ROCKNIX, on the three ROCKNIX images it ships for: **SM8250**,
 below has a ROCKNIX device tree on that image (its path is given under the table) and a pocket-ui profile that knows its
 screen, sticks, fan, Wi-Fi and lid. The installers accept exactly these devices. 🎮 means the project has played on it;
 ✅ means the same chip, the same ROCKNIX image and a pocket-ui profile. ⏸ means parked: a profile from a
-prototype, not offered and not supported (the RG DS Plus on the RK3566 image). 🧪 means experimental on the same card as a played-on
+prototype, not offered and not supported (the RG DS Plus on the RK3566 image); "beta" means a profile and a test card, not offered yet (the RK3566 one-screen handhelds, the R36S on the RK3326 image). 🧪 means experimental on the same card as a played-on
 sibling: a profile from public sources on a chip the project plays on, the device itself never held (the TrimUI Smart Pro). Reports are welcome (Settings › System ›
 About › Report a problem). How far each feature is proven: [STATUS.md](STATUS.md).
 
@@ -15,7 +15,7 @@ runs in [STATUS.md](STATUS.md) and [BIG-EMULATORS.md](BIG-EMULATORS.md), in orde
 
 Add games shows one sentence under a system's Files and BIOS lines where the chip runs it, but not every game smoothly
 (`src/system_notes.rs`, the sources are named there): Snapdragon 865: PS2, GameCube, Wii, 3DS, Xbox. Snapdragon 8 Gen 2:
-PS2, GameCube, Xbox, PS3, Wii U, PS Vita. H700: Nintendo 64, PSP, Dreamcast, Nintendo DS, Saturn. RK3568 (RG DS Plus): Nintendo 64, PSP, Dreamcast, Saturn. Unknown handhelds
+PS2, GameCube, Xbox, PS3, Wii U, PS Vita. H700 and RK3326 (R36S): Nintendo 64, PSP, Dreamcast, Nintendo DS, Saturn. RK3568 (RG DS Plus) and RK3566: Nintendo 64, PSP, Dreamcast, Saturn. Unknown handhelds
 show none. It changes nothing about which emulator plays a system.
 
 ### Snapdragon 865: ROCKNIX SM8250 image
@@ -91,7 +91,79 @@ two-screen code stay in the source for later.
 | ⏸ | Anbernic RG DS Plus (clamshell, two screens) | 2 × 1024 × 768, touch on the lower one | 1 | yes |
 
 ROCKNIX: `projects/ROCKNIX/devices/RK3566/linux/dts/rockchip/rk3568-anbernic-rg-ds-plus.dts` (the "Specific" RK3566 build).
-The other handhelds of that image, the first RG DS among them, have no pocket-ui profile, and the installers refuse them.
+The first RG DS and the other handhelds of that image not listed below have no pocket-ui profile, and the installers refuse them.
+
+### Rockchip RK3566: ROCKNIX RK3566 image, one screen (beta, no card offered yet)
+
+Profiles since 2026-11-15 (`Model::Rk3566`, one row per model in `device::RK3566_BOARDS`, like the H700's). A test card is
+built from ROCKNIX's **Generic** RK3566 image (`scripts/make-image-family.sh --family RK3566 --models rk3566`): its U-Boot
+tells these handhelds apart by an ADC value and picks the tree itself. Not started on any of them yet.
+
+**Plays:** as the RG DS Plus above (four Cortex-A55; Nintendo 64, Dreamcast, PSP and DS start with ROCKNIX's own emulators,
+`Model::small_chip`). No fan, Nintendo button labels, plain letters.
+
+| | Device | Screen | Sticks | Wi-Fi | HOME |
+|---|---|---|---|---|---|
+| beta | Anbernic RG353M, RG353P, RG353V | 640 × 480 | 2 | yes | F key |
+| beta | Anbernic RG353VS, RG353PS | 640 × 480 | 2 | yes | F key |
+| beta | Anbernic RG503 | 960 × 544 (canvas 1694 × 960, reduced) | 2 | yes | F key |
+| beta | Powkiddy RGB30, RGB20SX | 720 × 720 (laid out on 1440 × 1440, halved) | 2 | yes | right stick click |
+| beta | Powkiddy RK2023 | 640 × 480 | 2 | optional chip | right stick click |
+
+ROCKNIX: the mainline trees `rk3566-anbernic-rg353*.dts`, `rk3566-anbernic-rg503.dts`, `rk3566-powkiddy-rgb30.dts`,
+`-rgb20sx.dts`, `-rk2023.dts` (20261101's `device_trees/`). The RG353M has no tree of its own: U-Boot boots the RG353P's
+and only changes `model` to "Anbernic RG353M", so `device_model::rk3566_board` looks at `model` first. ROCKNIX's quirk
+boots a second RGB30 revision (another Wi-Fi chip) on the RGB20SX's tree, hence that row.
+
+**Buttons.** On 20261101 the pad is three kernel devices (`gpio-keys-control`, `adc-joystick`, `adc-keys-home`) that
+ROCKNIX's InputPlumber joins into one virtual DualSense plus a keyboard (`/usr/share/inputplumber/devices/01-anbernic-gen1.yaml`,
+`01-powkiddy.yaml`, `01-rgb20sx.yaml`; X/Y are put right there). Its maps send **Guide with every SELECT** ("Guide Button
+(Select)"): `pad_linux_decode`'s echo filter drops a BTN_MODE that comes within 60 ms of a SELECT press, so SELECT reaches
+the game and is not HOME held. HOME is the F key (InputPlumber's keyboard F1, or BTN_BACK without InputPlumber) on the
+Anbernics; the RGB30, RGB20SX and RK2023 have no menu key, so there the right stick's click is HOME, as in the dArkOS port
+(`device_model::rk3566_home`, `pad::linux::rk3566_home_key`). Battery: ROCKNIX renames the rk817's supply to `battery`
+(`devices/RK3566/patches/linux/0002-...`), the path pocket-ui reads.
+
+**eMMC.** The RG353M, P and V have Android on a 32 GB eMMC whose loader runs before the card: a ROCKNIX card starts there
+only after Android is wiped (ROCKNIX's RG353 page). The card never writes to the eMMC. The others have none.
+
+**Not checked on a device:** the buttons (above, read from ROCKNIX's files), sleep, sound, the RG503's speed with the
+reduced canvas, the RK2023 without Wi-Fi chip.
+
+### Rockchip RK3326: ROCKNIX RK3326 image, the R36S (beta, no card offered yet)
+
+Profile since 2026-11-15 (`Model::Rk3326`, one row in `device::RK3326_BOARDS`). A test card is built from ROCKNIX's RK3326
+image **a** (the one for the genuine R36S; image b is for the EE clones) with the R36S's own tree set in
+`extlinux/extlinux.conf`: ROCKNIX's U-Boot script picks a tree by an ADC value and has no R36S branch, so without that line
+an R36S would very likely start on the R33S tree (no sticks). Not started on an R36S yet.
+
+| | Device | Screen | Sticks | Wi-Fi | HOME |
+|---|---|---|---|---|---|
+| beta | R36S (ROCKNIX tree `rk3326-gameconsole-r36s.dtb`, model "Game Console R36S") | 640 × 480 | 2 | none promised | FN key |
+
+**Plays:** four Cortex-A35 (slower per clock than the H700's A53, not measured), 1 GB, no fan, no touch, Nintendo button
+labels. It gets the H700's rules for slow chips (`Model::h700_class`): games keep the full clock in Auto and Battery, GBA
+plays on the bundled gpSP, the native audio keeps the H700's longer ring and quantum, and the same systems get "not every
+game runs smoothly" (`system_notes`).
+
+**Buttons** (ROCKNIX's `rk3326-gameconsole-r36s.dts`, pad `r36s_Gamepad`, no InputPlumber on this image): the usual codes,
+X and Y where they belong, L2/R2 as keys, both sticks, FN is BTN_MODE and so HOME without a rule of its own. Power is the
+rk817's key, volume `gpio-keys-vol`; battery the rk817's supply renamed `battery` (ROCKNIX's RK3326 patch).
+
+**Wi-Fi.** The R36S has none (`wifi: false`): the Wi-Fi page says the device has none, Add games offers the second card
+(TF2, `has_second_card_slot`), no page offers downloads or phone upload, and Updates says "This device has no Wi-Fi."
+instead of "Check Wi-Fi" when it can't reach the server (`update::no_wifi_here`, also on the RG28XX). Every other page
+that needs a network (Tailscale, Sync, Web companion, Remote access, RetroAchievements, starter pack, PortMaster, cheats,
+the time and clock lines, the Tour) says so or the way without one (`device::no_wifi_chip`, `device::NEEDS_NETWORK`;
+Box art: covers from a computer), never "Connect to Wi-Fi": `tests/no_wifi_walk.rs` paints every snapshot state as an
+RG28XX, and the navigation explorer's R36S and RG28XX walks check every frame. A chip that does answer (some later boards, a USB
+dongle on the OTG port) still wins (`system_ctl::AutoHw`).
+
+**Panels.** R36S units since 2024 have other panels that need `overlays/mipi-panel.dtbo` on the card's first partition; the
+screen size stays 640 × 480, so the profile is the same (docs/SD-IMAGE-RK3326.md).
+
+**Not checked on a device:** everything above (read from ROCKNIX's files), sleep, sound (ROCKNIX swaps the speaker and
+headphone paths on this board), speed.
 
 ## The four devices
 
@@ -155,7 +227,12 @@ the hints, text cut by an edge, strings cut short), and every page was looked at
   1,880 px apart and a paragraph ran to 200 characters. On a screen at least 1600 px wide the pages of rows and text
   (Settings and the manual, the Shelf look, the search, the first start) are painted into a **column of 1440 px in the
   middle** (`src/app_column.rs`: the page paints into a buffer of the column's size, which is copied into the frame;
-  touch areas and the text records move with it; one copy per frame, only on such a screen). The looks made for the
+  touch areas and the text records move with it; one copy per frame, only on such a screen). Android's handheld view
+  keeps the column for those pages but gives the Shelf look the whole width (the Odin 2 Mini, 20:9 phones turned).
+  Since 15.11.2026 Settings, the manual and the first start take a wider column (`app_column::page_column_width`: 1800
+  of 1920, 2160 of a 20:9 2400) and are painted larger with the rows and lines (`type_scale::wide_page`, 1.3 at 1080
+  lines; quick settings and the pause menu's pages too, across the whole width): on the Odin a category's rows filled a
+  third of the height in small type (DESIGN.md "Type", wide screens). The looks made for the
   whole width keep it: Split shows all six facts beside the shelf, Cards shows five whole cards, Minimal and Cabinet
   fill the screen, as do the game card, the console page and the pause menu over the game. The look step's
   previews are painted at the screen's size (960x540 at 1920x1080). The same column applies on a 1080p TV
@@ -355,7 +432,7 @@ checklist. `Model::RgDsPlus`: `anbernic,rg-ds-plus` / `Anbernic RG DS Plus`, 102
 landscape, the Goodix's `touchscreen-size`), lid, one stick, touch, two card slots, no fan, 1 GB, Nintendo labels and
 plain letters. `Model::small_chip` puts it with the H700 handhelds where the chip matters: N64, PSP, Dreamcast and DS stay
 on ROCKNIX (`hostsys::H700_STAYS_ON_ROCKNIX`), the game check's stray folders, `ram_mb`. The installer takes
-`HW_DEVICE=RK3566` with this model only (`MODELS_RK3566`); the first RG DS and every other RK3566 handheld are refused.
+`HW_DEVICE=RK3566` with this model and the one-screen ones below (`MODELS_RK3566`); the first RG DS and every other RK3566 handheld are refused.
 Not checked yet: ROCKNIX's contract on the RK3566 image (`scripts/rocknix-contract.sh --host` on the device), the
 buttons (F is `BTN_MODE`, the HOME key), sleep on the RK3568, the charge current (ROCKNIX PR #3539).
 
@@ -398,7 +475,7 @@ What pocket-ui does about what is missing (`Device::has_fan`, `has_touch`, `has_
 - **Fan:** Settings › Playing › Performance & fan keeps the processor-speed row; the three fan rows read "No fan" and
   their help line says "This device has no fan." The fan curve thread, the trip profiles and every fan sysfs write are
   not started. Quick settings already hide the Fan row when the probe finds no fan.
-- **Stick lights:** the LEDs row is not in Settings (Sound & feel) on models without sticks.
+- **Stick lights:** the LEDs row is not in Settings (Controls & sound) on models without sticks.
 - **Touch:** nothing to hide; no touch device means no touch events. The vdev has no touch panel for these.
 - **Tools:** the gamepad-calibration helper's `inputplumber` restart is skipped where the service file is absent (already
   so); the H700 image has no InputPlumber.

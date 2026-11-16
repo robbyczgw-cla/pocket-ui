@@ -369,7 +369,7 @@ impl Group {
     pub fn visible(&self, values: Option<&GameSettings>) -> Vec<&Setting> {
         self.settings
             .iter()
-            .filter(|s| values.is_none_or(|v| applies(s.key, &v.system)))
+            .filter(|s| values.is_none_or(|v| applies(s.key, &v.system) && !(v.hardcore && HARDCORE_OUT.contains(&s.key))))
             .filter(|s| match s.shown_when {
                 None => true,
                 Some((key, value)) => {
@@ -408,7 +408,7 @@ impl Group {
 
     /// Every explanation the group can show, for the room the longest needs.
     pub fn descs(&self) -> Vec<&'static str> {
-        self.settings.iter().flat_map(|s| std::iter::once(s.desc).chain(value_descs(s.key).iter().map(|(_, d)| *d)).chain(extra_descs(s.key))).collect()
+        self.settings.iter().flat_map(|s| std::iter::once(s.desc).chain(android_desc(s.key)).chain(value_descs(s.key).iter().map(|(_, d)| *d)).chain(extra_descs(s.key))).collect()
     }
 }
 
@@ -449,6 +449,14 @@ fn extra_descs(key: &str) -> Vec<&'static str> {
 
 /// What the row says about its current value: the Look's and the Custom rows' value explanation, else the row's own `desc`.
 pub fn describe(setting: &Setting, values: Option<&GameSettings>) -> String {
+    describe_in(setting, values, crate::device::android_profile())
+}
+
+/// [`describe`] with Android's profile given.
+pub fn describe_in(setting: &Setting, values: Option<&GameSettings>, android: bool) -> String {
+    if let Some(text) = android.then(|| android_desc(setting.key)).flatten() {
+        return text.to_string();
+    }
     if setting.key == LOOK {
         let look = values.map_or(look::Look::Clean, |v| v.look());
         let gba_colours = values.is_some_and(|v| v.value_of("lcd_colour") == "on" && applies("lcd_colour", &v.system));
@@ -477,9 +485,65 @@ fn frame_systems(value: &str) -> Option<&'static [&'static str]> {
     }
 }
 
+/// What the Android player draws of the picture rows, row by row: the values its pause menu has (`android/src/picture.rs`:
+/// Scaling Fit / Integer / Stretch, Screen frame None / Console / CRT TV, Picture effect Sharp / Smooth / CRT / Scanlines, which
+/// the Look row stands for). Android's handheld view offers these and no others: every other Linux value is a row value that
+/// draws the same as one of these (`android_reading`) or nothing.
+pub const ANDROID_VALUES: &[(&str, &[&str])] =
+    &[("scaling", &["native", "aspect", "fullscreen"]), (LOOK, &["clean", "smooth", "scanlines", "oldtv"]), ("frame", &["none", "auto", "crt"])];
+
+/// A saved value as Android's player draws it, in the values it offers (`ANDROID_VALUES`): what a Linux card or an older
+/// version saved reads as the value that looks the same there.
+pub fn android_reading<'a>(key: &str, value: &'a str) -> &'a str {
+    match (key, value) {
+        // The player has one Integer.
+        ("scaling", "integer-smaller") => "native",
+        // Ambient and Glow are Linux's fills around the picture: the player draws none. Every console's own frame is its Console.
+        ("frame", "ambient" | "glow") => "none",
+        ("frame", "none" | "crt") => value,
+        ("frame", _) => "auto",
+        _ => value,
+    }
+}
+
+/// The Look Android's player draws for these values.
+pub fn android_look(sharpness: &str, effect: &str) -> look::Look {
+    match (effect, sharpness) {
+        ("scanlines", _) => look::Look::Scanlines,
+        ("crt", _) => look::Look::OldTv,
+        ("smooth", _) | (_, "soft") => look::Look::Smooth,
+        _ => look::Look::Clean,
+    }
+}
+
+/// The explanation of a picture row on Android: only the player's values (`android_handheld::picture_choice` is the other side).
+fn android_desc(key: &str) -> Option<&'static str> {
+    match key {
+        "scaling" => Some("Integer scales by whole numbers (integer scaling): every pixel the same size, the sharpest.\nAspect is as large as fits, in the console's shape.\nFullscreen fills the screen and stretches pixels."),
+        "frame" => Some("Fills the space around the picture. Console draws the console's own frame.\nCRT TV puts an old tube TV around it.\nNone leaves just the picture."),
+        _ => None,
+    }
+}
+
+/// The choice's name on this device: Linux's "Auto" frame is the Android player's "Console".
+pub fn label_in(setting: &Setting, value: &str, android: bool) -> &'static str {
+    if android && setting.key == "frame" && value == "auto" {
+        return "Console";
+    }
+    setting.choices.iter().find(|c| c.value == value).map_or("", |c| c.label)
+}
+
 /// Whether `value` of `setting` is offered for `system`: a console's own frame only for that console.
 /// A saved value is kept either way.
 pub fn offered(setting: &Setting, value: &str, system: &str) -> bool {
+    offered_in(setting, value, system, crate::device::android_profile())
+}
+
+/// [`offered`] with Android's profile given.
+pub fn offered_in(setting: &Setting, value: &str, system: &str, android: bool) -> bool {
+    if android && ANDROID_VALUES.iter().any(|(k, vs)| *k == setting.key && !vs.contains(&value)) {
+        return false;
+    }
     match setting.key {
         "frame" => frame_systems(value).is_none_or(|systems| systems.contains(&system)),
         // LCD grid for the handhelds, Scanlines and Old TV for the rest (`look::kind`).
@@ -499,6 +563,14 @@ fn current_value<'a>(key: &str, value: &'a str) -> &'a str {
 
 /// Whether a setting means anything for `system`: run-ahead only for the light systems, Earlier only with save states.
 pub fn applies(key: &str, system: &str) -> bool {
+    applies_in(key, system, crate::device::android_profile())
+}
+
+/// [`applies`] with Android's profile given: its handheld view lists only what its player draws (`device::ANDROID_PLAYER_SETTINGS`).
+pub fn applies_in(key: &str, system: &str, android: bool) -> bool {
+    if crate::device::game_setting_out_in(key, android) {
+        return false;
+    }
     match key {
         "run_ahead" => crate::run_ahead::available_for(system),
         // Game Boy Color colours are the emulator's (gambatte corrects them out of the box).
@@ -537,7 +609,15 @@ pub struct GameSettings {
     custom_open: bool,
     /// Over the game offers its Pixel Path level (`over_game::pixel_path_offered`, read at `load`).
     pixel_path: bool,
+    /// RetroAchievements' Hardcore holds for the running game (`achievements::hardcore`): the rows it switches off
+    /// ([`HARDCORE_OUT`]) aren't shown. Set by the pause menu; not saved.
+    pub hardcore: bool,
 }
+
+/// The rows Hardcore has no use for: state shortcuts, rewind and Earlier (the pause menu leaves them out
+/// while it holds; their values stay for the games without it).
+/// Fast-forward and its shortcut stay: RetroAchievements allows speeding up in Hardcore (RetroArch does too).
+pub const HARDCORE_OUT: &[&str] = &["hk_save", "hk_load", "hk_slot", "hk_rewind", "rewind", crate::timeline::KEY];
 
 impl GameSettings {
     pub fn load(data_dir: &Path, system: &str, rom: &Path) -> Self {
@@ -584,7 +664,7 @@ impl GameSettings {
         for v in [values.get_mut(crate::over_game::KEY), globals.get_mut(crate::over_game::KEY)].into_iter().flatten() {
             *v = crate::over_game::Level::parse(v).offered(pixel_path).value().to_string();
         }
-        GameSettings { dir, system: system.to_string(), game, values, level, globals, custom_open: false, pixel_path }
+        GameSettings { dir, system: system.to_string(), game, values, level, globals, custom_open: false, pixel_path, hardcore: false }
     }
 
     /// Index of the current choice for `setting`: saved value (this game's, else this console's), else the default
@@ -594,7 +674,8 @@ impl GameSettings {
             let value = self.look().value();
             return setting.choices.iter().position(|c| c.value == value).unwrap_or(setting.default);
         }
-        let find = |v: &str| setting.choices.iter().position(|c| c.value == v);
+        let android = crate::device::android_profile();
+        let find = |v: &str| setting.choices.iter().position(|c| c.value == if android { android_reading(setting.key, v) } else { v });
         self.values
             .get(setting.key)
             .and_then(|v| find(current_value(setting.key, v)))
@@ -620,6 +701,10 @@ impl GameSettings {
 
     /// The Look shown for the values in use: Custom while it is open, else worked out from Sharpness and Effect.
     pub fn look(&self) -> look::Look {
+        // Android's player has four effects, which are four Looks: what is saved reads as the one it draws.
+        if crate::device::android_profile() {
+            return android_look(self.value_of("sharpness"), self.value_of("effect"));
+        }
         if self.custom_open {
             look::Look::Custom
         } else {
@@ -637,12 +722,17 @@ impl GameSettings {
     /// one for a setting, the two or three behind a Look (`look::Look::canonical`, and `lcd_colour` on for the GBA's LCD
     /// grid), none for Custom, which only opens Sharpness and Effect and changes no picture.
     pub fn step(&mut self, setting: &Setting, delta: i32) -> Vec<(&'static str, String)> {
+        self.step_in(setting, delta, crate::device::android_profile())
+    }
+
+    /// [`step`](Self::step) with Android's profile given.
+    pub fn step_in(&mut self, setting: &Setting, delta: i32, android: bool) -> Vec<(&'static str, String)> {
         let n = setting.choices.len() as i32;
         let mut i = self.index(setting) as i32;
         for _ in 0..n {
             i = (i + delta).rem_euclid(n);
             let value = setting.choices[i as usize].value;
-            if offered(setting, value, &self.system) && (setting.key != crate::over_game::KEY || self.pixel_path || value != "pixel") {
+            if offered_in(setting, value, &self.system, android) && (setting.key != crate::over_game::KEY || self.pixel_path || value != "pixel") {
                 break;
             }
         }
@@ -776,6 +866,100 @@ impl Session {
 mod tests {
     use super::*;
     use crate::testutil::TestDir;
+
+    /// Android's handheld view lists only the picture settings its player draws; Rewind, Earlier states, the shortcuts and the rest
+    /// of Linux's list are not there (a row for them is a switch that does nothing). Linux keeps every row.
+    #[test]
+    fn android_lists_only_the_picture_rows_its_player_draws() {
+        let keys: Vec<&str> = GROUPS.iter().flat_map(|g| g.settings.iter().map(|s| s.key)).collect();
+        for key in ["rewind", "timeline", "hk_save", "hk_load", "hk_rewind", "ff_speed", "rumble", "performance", "run_ahead", "orientation", "over_game", "hk_over", "frame_colour"] {
+            assert!(keys.contains(&key), "{key} is a setting");
+            assert!(!applies_in(key, "gba", true), "{key} on Android");
+            assert!(applies_in(key, "gba", false) || key == "frame_colour", "{key} on Linux");
+        }
+        for key in ["scaling", LOOK, "frame"] {
+            assert!(applies_in(key, "gba", true), "{key} on Android");
+        }
+        // Whatever Linux adds later is out until the player draws it.
+        let shown: Vec<&str> = keys.iter().copied().filter(|k| applies_in(k, "gba", true)).collect();
+        assert_eq!(shown, ["scaling", "look", "frame"]);
+    }
+
+    /// Every value Android's handheld view offers for a picture row changes what its player draws, and no two values draw the same
+    /// (Bloom, LCD grid, Integer smaller, Ambient ... drew a plain picture there). Walked with the pad's Left/Right.
+    #[test]
+    fn every_picture_value_android_offers_changes_what_its_player_draws() {
+        let dir = TestDir::new("android-values");
+        for system in ["gba", "gb", "nds", "psp", "nes", "snes", "megadrive", "psx", "n64", "arcade"] {
+            for key in ["scaling", LOOK, "frame"] {
+                let row = setting(key).unwrap();
+                let mut s = GameSettings::load(&dir, system, Path::new("x.rom"));
+                let mut seen: Vec<(String, serde_json::Value)> = Vec::new();
+                for _ in 0..=row.choices.len() {
+                    let (value, drawn) = (row.choices[s.index(row)].value.to_string(), crate::android_handheld::picture_choice(&s.effective()));
+                    if !seen.iter().any(|(v, _)| *v == value) {
+                        seen.push((value, drawn));
+                    }
+                    s.step_in(row, 1, true);
+                }
+                for (i, (a, da)) in seen.iter().enumerate() {
+                    assert!(ANDROID_VALUES.iter().any(|(k, vs)| *k == key && vs.contains(&a.as_str())), "{system} {key}: {a} is offered on Android, the player has no such value");
+                    for (b, db) in &seen[i + 1..] {
+                        assert_ne!(da, db, "{system} {key}: {a} and {b} draw the same picture on Android");
+                    }
+                }
+                let offered: Vec<&str> = seen.iter().map(|(v, _)| v.as_str()).collect();
+                let all = ANDROID_VALUES.iter().find(|(k, _)| *k == key).unwrap().1;
+                if system != "psp" {
+                    assert!(all.iter().all(|v| offered.contains(v) || !offered_in(row, v, system, true)), "{system} {key}: a value of the player's is not reachable: {offered:?}");
+                }
+            }
+        }
+    }
+
+    /// A value saved on Linux (or before) that the player has no choice for shows as the choice that draws the same, so the row
+    /// says what the player does.
+    #[test]
+    fn a_saved_value_android_cannot_offer_reads_as_the_one_that_looks_the_same() {
+        let drawn = |pairs: &[(&str, &str)]| crate::android_handheld::picture_choice(&pairs.iter().map(|(k, v)| (k.to_string(), v.to_string())).collect());
+        for key in ["scaling", "frame"] {
+            let row = setting(key).unwrap();
+            let offers = ANDROID_VALUES.iter().find(|(k, _)| *k == key).unwrap().1;
+            for c in row.choices {
+                let read = android_reading(key, c.value);
+                assert!(offers.contains(&read), "{key} {}: reads as {read}, which Android does not offer", c.value);
+                assert_eq!(drawn(&[(key, c.value)]), drawn(&[(key, read)]), "{key} {}: reads as {read}, which draws something else", c.value);
+            }
+        }
+        let offers = ANDROID_VALUES.iter().find(|(k, _)| *k == LOOK).unwrap().1;
+        for sharpness in ["sharp", "crisp", "soft"] {
+            for effect in ["none", "grid", "scanlines", "crt", "softglow", "smooth"] {
+                let look = android_look(sharpness, effect);
+                assert!(offers.contains(&look.value()), "{sharpness}/{effect} reads as the Look {}, which Android does not offer", look.value());
+                let (sh, ef) = look.canonical().unwrap();
+                assert_eq!(drawn(&[("sharpness", sharpness), ("effect", effect)]), drawn(&[("sharpness", sh), ("effect", ef)]), "{sharpness}/{effect} reads as {}", look.value());
+            }
+        }
+    }
+
+    /// The words of Android's picture rows name only what the player has: the frame row's Auto is "Console", and the explanations of
+    /// Screen scaling and Screen frame don't list Linux's Integer smaller, Ambient, Glow, DMG to PSP, Woodgrain.
+    #[test]
+    fn android_s_picture_rows_say_only_what_the_player_has() {
+        let dir = TestDir::new("android-words");
+        let s = GameSettings::load(&dir, "gba", Path::new("x.rom"));
+        assert_eq!(label_in(setting("frame").unwrap(), "auto", true), "Console");
+        assert_eq!(label_in(setting("frame").unwrap(), "auto", false), "Auto");
+        for key in ["scaling", "frame"] {
+            let text = describe_in(setting(key).unwrap(), Some(&s), true);
+            for gone in ["smaller", "Ambient", "Glow", "DMG", "PSP", "Woodgrain", "Arcade", "Auto", "cabinet"] {
+                assert!(!text.contains(gone), "{key}: {gone} in Android's text: {text}");
+            }
+        }
+        // The room the longest text needs counts them (the page is laid out for it).
+        let picture = &GROUPS[0];
+        assert!(picture.descs().contains(&describe_in(setting("frame").unwrap(), Some(&s), true).as_str()), "Android's frame text is in the room count");
+    }
 
     #[test]
     fn an_old_balanced_performance_reads_as_auto_and_a_global_can_change_below_it() {

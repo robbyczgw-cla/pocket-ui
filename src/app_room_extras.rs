@@ -161,9 +161,21 @@ pub(crate) fn lamp_glow(c: &mut Canvas, lamp: &Pic, x: i32, y: i32, strength: u8
     let (x0, x1) = (left.max(clip.0).max(0), (left + mw).min(clip.2).min(c.w));
     let (y0, y1) = (top.max(clip.1).max(0), (top + mh).min(clip.3).min(c.h));
     let (gr, gg, gb) = (room_light::LAMP_GLOW >> 16 & 0xff, room_light::LAMP_GLOW >> 8 & 0xff, room_light::LAMP_GLOW & 0xff);
+    if c.n() != 1 {
+        // Painted natively (docs/dev/native-paint.md): the four design pixels of each screen pixel as below, averaged.
+        return pocket_ui::cabinet_art::cells_over(c, x0, x1, y0, y1, |xx, yy, d| {
+            let a = mask[((yy - top) * mw + xx - left) as usize] as u32;
+            if a == 0 {
+                return d;
+            }
+            let mixc = |dc: u32, gc: u32| (dc * (256 - a) + gc * a) >> 8;
+            mixc(d >> 16 & 0xff, gr) << 16 | mixc(d >> 8 & 0xff, gg) << 8 | mixc(d & 0xff, gb)
+        });
+    }
+    let c_w = c.w;
     for yy in y0..y1 {
         let m = &mask[((yy - top) * mw) as usize..][..mw as usize];
-        let row = &mut c.buf[(yy * c.w) as usize..][..c.w as usize];
+        let row = &mut c.pixels_mut()[(yy * c_w) as usize..][..c_w as usize];
         for xx in x0..x1 {
             let a = m[(xx - left) as usize] as u32;
             if a == 0 {

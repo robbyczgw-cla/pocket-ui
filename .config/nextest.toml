@@ -10,10 +10,11 @@ retries = 1
 path = "junit.xml"
 
 # The tests that assert a time budget (thread CPU time: frames of a few ms, the Curator's and the search's 5,000 games, the
-# fast glow) run alone: nothing else is executing while they measure, so a busy gate (hyper-threads, caches) does not fail
-# them. Thresholds stay as they are. A new budget test belongs in this filter.
+# fast glow, the launch frames against the shelf's) run alone: nothing else is executing while they measure, so a busy host
+# (hyper-threads, caches) does not fail them. Thresholds stay as they are. A new budget test belongs in this filter and in
+# scripts/gate-parts.py BUDGET (nightly and release check only, never the merge gate).
 [[profile.default.overrides]]
-filter = 'binary(settings_open) | binary(shelf_moves) | test(/::speed_/) | test(=search::tests::five_thousand_games_index_and_search_in_time) | test(=switcher::tests::the_fast_glow_looks_like_the_float_one_and_is_fast)'
+filter = 'binary(launch_frames) | binary(settings_open) | binary(shelf_moves) | test(/::speed_/) | test(=search::tests::five_thousand_games_index_and_search_in_time) | test(=switcher::tests::the_fast_glow_looks_like_the_float_one_and_is_fast)'
 threads-required = "num-test-threads"
 
 # Real scheduling/deadline scenarios are ignored here and run once in the

@@ -84,7 +84,7 @@ def optional_cheats(app, release, channel, optional=None):
     return info
 
 
-def prepare(app, release, channel, github, version, optional=None):
+def prepare(app, release, channel, github, version, optional=None, platform='brick', mirror=None):
     if app.resolve() in release.resolve().parents or app.resolve() in channel.resolve().parents:
         raise ValueError('output must be outside the input app')
     release.mkdir(parents=True, exist_ok=True)
@@ -97,7 +97,7 @@ def prepare(app, release, channel, github, version, optional=None):
             if path.is_symlink():
                 raise ValueError('unsupported cheat link')
             continue
-        if relative.parts[0] in ('cores', 'bios-data') or relative.as_posix() in HELPERS:
+        if relative.parts[0] in ('cores', 'bios-data', 'port-data') or relative.as_posix() in HELPERS:
             if path.is_symlink():
                 raise ValueError(f'unsupported asset link: {path}')
             if path.is_dir():
@@ -107,21 +107,21 @@ def prepare(app, release, channel, github, version, optional=None):
             temp = release / 'asset.part'
             archive(app, [path], temp)
             digest = sha(temp)
-            name = f'brick-asset-{digest}.tar.gz'
+            name = f'{platform}-asset-{digest}.tar.gz'
             target = release / name
             temp.replace(target)
             import shutil
             shutil.copyfile(target, channel / 'assets' / name)
             assets.append({'path': str(relative), 'size': path.stat().st_size, 'sha256': sha(path),
                            'package': {'version': version, 'url': f'{github}/{name}',
-                                       'mirrors': [f'https://pocketui.xyz/updates/brick/assets/{name}'], 'size': target.stat().st_size, 'sha256': digest}})
+                                       'mirrors': [f'https://pocketui.xyz/updates/{mirror or ("darkos-test" if platform == "darkos" else "brick")}/assets/{name}'], 'size': target.stat().st_size, 'sha256': digest}})
         else:
             if relative.as_posix() == 'asset-packages.json':
                 raise ValueError('input already contains asset-packages.json')
             regular.append(path)
     if not assets:
         raise ValueError('card has no cores or data assets')
-    name = f'pocket-ui-brick-{version}.tar.gz'
+    name = f'pocket-ui-{platform}-{version}.tar.gz'
     archive(app, regular, release / name, {'format': 1, 'assets': assets}, cheats)
     import shutil
     shutil.copyfile(release / name, channel / name)
@@ -133,11 +133,13 @@ def prepare(app, release, channel, github, version, optional=None):
 
 if __name__ == '__main__':
     p = argparse.ArgumentParser(description=__doc__)
+    p.add_argument('--platform', choices=['brick', 'darkos'], default='brick')
     p.add_argument('app', type=Path)
     p.add_argument('release', type=Path)
     p.add_argument('channel', type=Path)
     p.add_argument('github')
     p.add_argument('version')
     p.add_argument('--optional', type=Path)
+    p.add_argument('--mirror-channel', help='the website folder under updates/ that mirrors the packages (default: brick, darkos-test for darkos)')
     a = p.parse_args()
-    prepare(a.app, a.release, a.channel, a.github.rstrip('/'), a.version, a.optional)
+    prepare(a.app, a.release, a.channel, a.github.rstrip('/'), a.version, a.optional, a.platform, a.mirror_channel)

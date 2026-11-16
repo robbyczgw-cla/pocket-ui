@@ -5,7 +5,7 @@ style. Both are rows that
 switch in place: Up/Down pick the row, A or Left/Right change the value, and the whole screen shows the change at once.
 The choices are saved with the look, and [Reset settings](settings-system.md#backup--reset) puts them back. How the hints
 draw the buttons (letters, Xbox colours, PlayStation shapes) is under
-[Settings → Playing → Buttons](settings.md#button-symbols).
+[Settings → Controls → Buttons](settings-sound.md#button-symbols).
 
 ## Colours
 
@@ -31,7 +31,7 @@ The type of every screen, or the Retro style.
 - **Barlow**, the default: clean and narrow.
 - **Retro**: every menu like an old handheld's. Pixel letters everywhere (sharp on every screen, with clear
   LCD-style numbers), chunky pixel frames round the menus, the hint
-  keys and the messages, a flat selection bar with a small cursor, little colour pictures beside the Settings categories
+  keys and the messages, a flat selection bar with a small cursor, little colour pictures for the Settings categories
   and the pause menu's rows, and short blips as menu sounds (when [menu sounds](settings-sound.md) are on). Your
   shelf, the box art and Continue stay as they are, in every look. While Retro is on, the Colours row offers its own two
   sets, each dark and light:

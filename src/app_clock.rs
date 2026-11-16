@@ -34,7 +34,7 @@ impl App {
             return None;
         }
         if self.shelf_notice_free() {
-            self.notice = Some(Notice::new(clock_check::SHELF_NOTICE));
+            self.notice = Some(Notice::new(clock_check::shelf_notice()));
             self.clock_look = None;
             self.request_redraw();
             return None;

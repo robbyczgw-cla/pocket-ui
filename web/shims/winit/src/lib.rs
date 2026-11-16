@@ -511,3 +511,30 @@ pub mod web {
         shared().cv.notify_all();
     }
 }
+
+/// winit's pump_events, only so that `app_frame_dump` (POCKETUI_FRAME_DUMP, a device recording tool) compiles: the page
+/// never turns a frame dump on, so this is never called.
+pub mod platform {
+    pub mod pump_events {
+        use crate::application::ApplicationHandler;
+        use crate::event_loop::EventLoop;
+        use std::time::Duration;
+
+        pub enum PumpStatus {
+            Continue,
+            Exit(i32),
+        }
+
+        pub trait EventLoopExtPumpEvents {
+            type UserEvent: 'static;
+            fn pump_app_events<A: ApplicationHandler<Self::UserEvent>>(&mut self, timeout: Option<Duration>, app: &mut A) -> PumpStatus;
+        }
+
+        impl<T: 'static> EventLoopExtPumpEvents for EventLoop<T> {
+            type UserEvent = T;
+            fn pump_app_events<A: ApplicationHandler<T>>(&mut self, _timeout: Option<Duration>, _app: &mut A) -> PumpStatus {
+                PumpStatus::Exit(0)
+            }
+        }
+    }
+}

@@ -42,10 +42,20 @@ impl App {
         if !(self.notice_painted && self.notice.is_some() && self.running.is_none()) || !(*button == CONFIRM || *button == CANCEL) {
             return false;
         }
+        // Android's installer at work (`app_update_hint`): B stops it, A leaves the card up (it is what is going on).
+        if self.notice.as_ref().is_some_and(Notice::cancels_update) {
+            if *button == CANCEL {
+                self.cancel_android_install();
+            }
+            return true;
+        }
         // The "newer pocket-ui is ready" card: A goes to the Updates page, B only closes (`app_update_hint`).
         let to_updates = *button == CONFIRM && self.notice.as_ref().is_some_and(Notice::opens_updates);
+        let from_card = to_updates && self.notice.as_ref().is_some_and(Notice::installs_from_card);
         self.drop_notice();
-        if to_updates {
+        if from_card {
+            self.install_card_update_from_notice();
+        } else if to_updates {
             self.open_updates_from_notice();
         }
         true

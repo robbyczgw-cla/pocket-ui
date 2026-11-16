@@ -222,6 +222,12 @@ impl Cache {
         self.files.get(rom).filter(|k| (k.size, k.mtime) == at).map(|k| k.sums)
     }
 
+    /// The checksums kept for `rom` at its size and time `at` (None: not in the cache, or the file changed since; an inner
+    /// None: looked at, nothing to compare). For `case_knows_read`, which has the file's stamp already.
+    pub fn sums_of(&self, rom: &Path, at: (u64, u64)) -> Option<Option<Sums>> {
+        self.valid(rom, at)
+    }
+
     pub fn len(&self) -> usize {
         self.files.len()
     }
@@ -476,6 +482,7 @@ impl Again {
     pub fn message(&self) -> String {
         match self {
             Again::Working => "Looking up this game again…".into(),
+            Again::Offline if crate::device::no_wifi_chip() => crate::device::NEEDS_NETWORK.into(),
             Again::Offline => "Connect to Wi-Fi first to look up pictures.".into(),
             Again::Busy => "Pictures are being looked up. Try again in a moment.".into(),
             // The count first: a long name is what gets shortened.
@@ -552,6 +559,24 @@ game (
         assert_eq!(known(&d, &games), run.names);
         let again = run_until(&d, &games, &|_| panic!("the list is on the SD card"), true, || false);
         assert_eq!((again.hashed, again.names), (0, run.names));
+    }
+
+    /// The game that was just started is named while it runs, alone (`App::settle_started_name`): the other games' lines of
+    /// the cache stay (`prune: false`), and the name is on the card for the shelf's next read (`known`).
+    #[test]
+    fn one_game_is_named_alone_and_the_others_keep_their_cache_lines() {
+        let d = dir("settle");
+        let (other, started) = (d.join("roms/gba/other.gba"), d.join("roms/gba/0902 - MM&B (U)(Venom).gba"));
+        write(&other, b"abc");
+        write(&started, b"mmbs");
+        let games = vec![("gba".to_string(), other.clone()), ("gba".to_string(), started.clone())];
+        assert!(run_until(&d, &games[..1], &|_| Some(GBA_DAT.into()), true, || false).names.contains_key(&other));
+        let one = vec![games[1].clone()];
+        assert!(known(&d, &one).is_empty(), "not named yet: the shelf shows the file's name");
+        let run = run_until(&d, &one, &|_| Some(GBA_DAT.into()), false, || false);
+        assert_eq!(run.names.get(&started).map(String::as_str), Some("Mega Man & Bass (USA)"));
+        assert_eq!(known(&d, &one).get(&started).map(String::as_str), Some("Mega Man & Bass (USA)"));
+        assert_eq!(known(&d, &games).len(), 2, "the first game's line is still in the cache");
     }
 
     #[test]

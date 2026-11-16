@@ -25,7 +25,7 @@ goes up again. Your choice is kept after a restart.
 ### Where the sound goes
 
 The small text beside the Volume bar is where the sound plays right now: **Speaker**, or **Bluetooth: name** for Bluetooth
-headphones or a speaker ([Bluetooth](bluetooth.md)). The mute slider on the side mutes the sound (Settings → Sound & feel →
+headphones or a speaker ([Bluetooth](bluetooth.md)). The mute slider on the side mutes the sound (Settings → Controls →
 **Lights & buttons** → Mute slider). Wired headphones in the jack are not followed by the row.
 
 The lower half of the volume range has gentler steps and is easier to hear. Levels from 50% upward and
@@ -35,7 +35,7 @@ to choose the new lowest step. The mute slider remembers the level and ignores v
 
 ## Lights and F1/F2
 
-Settings → Sound & feel → **Lights & buttons**. Choose **F1 button** or **F2 button** with Up/Down;
+Settings → Controls → **Lights & buttons**. Choose **F1 button** or **F2 button** with Up/Down;
 Left/Right changes its action and saves it immediately. Choices are Quick save, Quick load, Screenshot,
 Recent games, Pause menu and Nothing. They are shortcuts for all games; the game-button setup is separate.
 Without a choice, F1 stays Quick save and F2 stays Quick load. A new game uses the saved choice.

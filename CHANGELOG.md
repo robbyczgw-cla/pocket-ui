@@ -5,6 +5,260 @@ and versions follow [Semantic Versioning](https://semver.org/) (before 1.0, a mi
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-11-17
+
+### Removed
+
+- Android: the starters for Switch emulators (Eden, Citron) and the tip about console keys are gone, and the Switch is no system of the library any more: its files and folder are skipped quietly, with no shelf, no card and no line in the Game check.
+- Experimental Steam Deck and dual-screen support (archived before removal), MTP controls, the unused Store page, system-update actions, Up next, custom labels, the pause-menu memory-card switch and the idle slideshow on Linux and Android. Package downloads, game info and case-back memory cards stay. Rounded migrates to Barlow while keeping other saved choices.
+- **The controls card.** A console's first game starts with the one A again, on the handhelds, the Brick, dArkOS, the Android player and its handheld view: no card over the start, no press or twelve-second wait before the game. The game card's **Controls** row (R2 on Android's game card) and the pause menu's **Controls card** line are gone too; Options → Controls now starts with the stick and what each button presses, and ends with Controller setup. A phone game's card says in one line which buttons are its keys (A is OK, SELECT and START the soft keys).
+- **Style: Barlow or Retro.** The Pixel style is gone; if you had it, pocket-ui starts in Barlow (not Retro, whose colours and
+  frames are a look of their own). Retro Pixelify keeps the Pixelify letters.
+
+### Added
+
+- **Console boot screen** (Settings → Playing, off by default): a fresh start of a Game Boy, Game Boy Color, Game Boy Advance or PlayStation game runs through the console's own boot screen (the Nintendo logo, the PlayStation start-up) when your own BIOS file is in `roms/bios` (`gb_bios.bin`, `gbc_bios.bin`, `gba_bios.bin`, a `scph….bin`). Never when a moment is continued; with Continue where I quit Off and On start → Last game, the Pocket boots straight into the last game through its logo. Without the file the game starts as before and a note names the file. No BIOS files are shipped.
+- **Your own cheat files on the handhelds**: a `.cht` file with the game's name, next to the game, in a `cheats` folder there or in RetroArch's `cheats/<system>/` folder, is listed first on Options → Cheats (marked [Your file]), then the database's cheats. A file that is too big, unreadable or empty is explained on the page.
+- **Web companion on your home Wi-Fi**: switched on, it now works on the Pocket's Wi-Fi too, not only over Tailscale. Open the address the page shows (`http://192.168…`, or its `.local` name) on a phone or computer on the same Wi-Fi and pair it once with the six-digit code or the QR code; it stays paired. Your own Tailscale devices still get in without a code. Off by default, as before.
+- **Android, handheld view: updates on the shelf.** When a newer pocket-ui for Android is out, the shelf says so once; A downloads it and Android asks before it installs (B cancels). Off with the Mobile view's Settings → Updates → Check for updates automatically.
+- **Android: Sealed new games**, as on the handhelds: games you never played stand in their shop film in the handheld view, and the film tears off at the first start. Games played in the Mobile view count as played.
+- **Português (Brasil)**: a fourth language of the interface, next to English, Deutsch and Español (Settings → System → Language, the first start's Welcome page, and the Android app's). Every menu, hint, message and note over a game is in Brazilian Portuguese ("você", the words Brazilian gamers use: save, save state, slot, cheats); it starts by itself when the system language is Portuguese. The time zone list and search know Portuguese city names ("Nova York", "Belém"); the manual stays English, as in German and Spanish.
+- **Italiano**: a new language of the interface (Settings → System → Language, the first start's Welcome page, and the Android app's). Every menu, hint, message and note over a game is in friendly gamer Italian ("tu", with save, slot and cheat as Italian players say them); it starts by itself when the system language is Italian. The time zone list and search know Italian city names ("Roma", "Zurigo", "Città del Messico"); the manual stays English, as in the other languages. The first start's language pills shrink to stay on the screen with six names.
+- **The case knows Metroid: Zero Mission** (USA, Europe): "62% items · game clock 4:31" from your save, counted as the
+  ending counts, Hard's smaller tanks included, with the slim bar under it.
+- **A Link to the Past's pendants and crystals** under its line, drawn from your own game file as its pause menu draws
+  them, on a dark plate like the menu's window.
+- **The case knows Super Mario 64**: "62 of 120 stars" from your save, counted as the file select counts them, with a
+  slim bar under it.
+- **The case knows Ocarina of Time**: "2 of 3 spiritual stones · 5 hearts", later "4 of 6 medallions · 14 hearts",
+  from your save.
+- **The case knows Paper Mario**: "3 of 7 Star Spirits · Mario Lv. 9 · game clock 12:03", as its file select shows it.
+- **The case knows Mario Kart 64**: "7 of 16 gold cups" from your Grand Prix trophies.
+- **The case knows Star Fox 64**: "9 medals · 2 in Expert" from your save.
+- **The case knows Diddy Kong Racing**: "34 of 47 golden balloons" from your save.
+- **The case knows Final Fantasy III (VI)**: "Terra Lv. 32 · game clock 18:44", the leader of your party, from your save.
+- **The case knows EarthBound**: "Ness Lv. 23 · 3 friends" from your save.
+- **The case knows Link's Awakening DX**: "5 of 8 instruments · 9 hearts" from your save.
+- **The case knows The Minish Cap**: "3 of 4 elements · 11 hearts" from your save.
+- **The case knows Majora's Mask**: "2 of 4 remains · 9 hearts" from your save, the owl save first.
+- **The case knows Oracle of Ages and Oracle of Seasons**: "5 of 8 essences · 10 hearts" from your save.
+- **The case knows Super Mario All-Stars + Super Mario World**: its Super Mario World's "43 of 96 exits", as in Super Mario
+  World alone.
+- **Pokémon Gold, Silver and Crystal show your team** under their line: the party menu's little icons in its colours and
+  the trainer card's Johto badges, drawn from your own game file.
+- **The case shows your team.** Under "where you are" on the box's back, the card and "Where was I?": your Pokémon
+  team's little icons and your badges (Ruby, Sapphire, Emerald, FireRed, LeafGreen), drawn from your own game file as
+  the game draws them, and a slim bar or marks for Super Metroid, Super Mario World and A Link to the Past.
+- **The case knows where you are.** Turn a game's box over and the first line under "Your game" says where you are in it,
+  read from your own save: "8 badges · Charizard Lv. 45 · game clock 31:12" in Pokémon Red to Emerald, FireRed and LeafGreen,
+  "62% items · game clock 4:31" in Super Metroid, "43 of 96 exits" in Super Mario World, "2 of 3 pendants · 9 hearts" in A Link
+  to the Past (English, German, Spanish, French and Italian releases). The same line stands beside Continue and on
+  "Where was I?". No setting, no account, no Wi-Fi; a hack, a translation or a damaged save shows no line, never a wrong
+  one ([Where you are in the game](docs/user/library.md#where-you-are-in-the-game)).
+- Android, handheld view: **one decision for how a game starts**, shared with the Mobile view (`play_route`). "Runs on" there shows the real ways: pocket-ui's own player, a core to download (PSP, DS, N64, Saturn, Dreamcast: a Download row with its size, and A on such a game opens it instead of failing), or an emulator app on the phone (PPSSPP, Dolphin, Azahar, ARMSX2, RetroArch ...), chosen for a console or one game; the choice is Mobile's "Plays with" and holds in both views. PS2, GameCube, Wii, 3DS and Xbox folders show their games and start in the first app that takes them (or say which app is missing). Another app reads a game by a read-only content URI, nothing is copied.
+- **Consoles in other colours.** The Game Boy Advance comes in Milky Blue and Pink, the Game Boy Color in Dandelion, the
+  Nintendo 64 in Ice Blue and Jungle Green and the GameCube in Jet Black, from photos of the real ones. On the console page, **Left** and **Right** change the colour (the line under the picture
+  names it); it shows everywhere: the shelf, the page, the cabinet's TV and the moment a game goes in and comes out.
+  It is kept across restarts and takes no row in Settings.
+
+- **My shelf as a picture.** Settings → Games → Screenshots has a new first row that makes one picture of your shelf to post on
+  Reddit or Discord: your cases with their box art and stickers, the trophy and the plant, and a small pocket-ui mark. It is a
+  square 1440 × 1440 picture in the colours of your page, good with five games and with a full shelf, saved with your
+  screenshots and on the web companion's Library page, where you can save it to your phone.
+- **Stickers are pressed onto the case.** In the game box, when you close the card's Stickers sheet, each sticker you put on comes down onto the case a little large and crooked, is pressed in, springs once and sits, with a quiet click; each one you took off lifts away. Short (under half a second), only with Playful cases, any button ends it. The sheet is on the card's page (SELECT in the box): when you put a sticker on or take one off there, closing the sheet takes you back to the box to see it land; before, it stayed on the page and the press was never seen.
+
+- Android: the **Screen frame** in the player is Linux's now. Console draws the frame Linux's Auto picks for the console (the
+  Game Boy, Game Boy Color, Game Boy Advance and PSP shells, the DS with its hinge, a monitor surround for the home consoles), CRT
+  TV the old tube TV in its cabinet, by the same code and in the same pictures; before, both were a flat painted border. The
+  frame stays inside the safe area and off the touch buttons, upright and turned, on every phone, foldable and tablet format.
+- Cozy with Motion Full: Save in the pause menu shows itself. A copy of the picture you just saved flies out of the big
+  preview, which stays as it is, and shrinks into its slot, the slot lights up as it lands with a quiet card click; about half a second, any button ends it, and the save is
+  written the moment you press A.
+- Cozy with Motion Full: a game that doesn't start comes back out of the console like a medium ejected, the case goes back on
+  the shelf, and one friendly sentence says what is missing and what to do (a missing emulator, a missing BIOS file, a
+  damaged or missing game file, a port without its files). Any button ends the picture and shows the sentence.
+
+- A handheld's game starts like a handheld (Cozy, Motion Full, Old-TV switch-on on; Linux and Android): once the game is in,
+  the console's power light comes on (where its picture has one) and its display lights up in a muted tone (nothing else
+  gets bright), then the rest of the screen goes dark round it and the game's picture comes up out of the dark. Before, it
+  faded to black and the display lit up from dark. Game Boy, Game Boy Color, GBA, Game Gear, DS, 3DS, Lynx, Neo Geo Pocket,
+  WonderSwan, Pokémon mini and Vita light their display on the console's picture, the PSP only on its plain picture (its
+  animated one shows its back); the other handhelds (Virtual Boy, Supervision …) only go dark round it. The window comes
+  40 ms sooner than the fade it replaces, and the picture comes up in 200 ms where the tube took 300; any button skips it.
+  Consoles on a TV are unchanged. On the TrimUI Brick the display now lights up too (only the power light came on there);
+  its game's picture comes in at once after the dark, as before, without the 200 ms.
+- Arcade games (MAME, FinalBurn Neo, CPS, NAOMI and the other arcade folders) now have a picture: an upright arcade
+  cabinet on their card, their cases and when a game starts, where its screen lights up. Before, their card was plain and
+  the game went into the crate.
+
+- Android: **RetroAchievements** in pocket-ui's own player, as on the handhelds. Sign in once under Settings →
+  RetroAchievements (your password is sent once and never kept); then a small card comes up for each unlock, the pause menu
+  has an **Achievements** row with the game's list, unlocks without a network are kept and sent the next time, and a game with
+  every achievement unlocked gets the golden "100 %" sticker by itself, which counts for the trophy on the shelf. Games opened
+  straight from your folder, zipped games and ISO, CUE and M3U discs are recognised; a CHD disc isn't (the list says so).
+
+- Android preview: **Settings → Licences** lists pocket-ui's licence and every emulator (the optional downloads too) with its
+  licence, upstream commit and patches. The APK carries a written source offer and all licence texts and patches; the release
+  gets the same offer. The build stops if a core lacks its licence, source or patches.
+
+- Android: as the home screen, pocket-ui now reaches your other apps. **Apps** on the Games page (R2) opens a drawer
+  with the Play Store, Settings and your Android games as quiet cards; hold one (Y) to put a game on its own
+  **Android** shelf beside the consoles, where it starts like any game.
+
+- Cozy on handhelds now has a way back after Quit: a TV picture closes to a line and dot, a handheld display goes dark,
+  and the cartridge or disc returns to its case. Cabinet, Shelf, Easy and Kids Mode accept input immediately; any button
+  or touch skips the effect. Quick and Motion Reduced/Off go straight to the shelf.
+
+- Android preview: PSP (including its system files), DS, N64 and Dreamcast use optional signed packages, keeping the
+  small cores through PS1 and Saturn in the APK. First start offers “More systems?” with no systems preselected; Extras
+  offers the same downloads later. Downloads use unmetered Wi-Fi, keep partial files on cancellation, and resume
+  when chosen again. A missing system offers its download size before Play. Until the download channel is public these systems read "Coming soon" instead, without a download or an error.
+
+- Android: Settings → Updates downloads signed APK updates over Wi-Fi, with progress and B to cancel. Android confirms installation and closes the app; open it again to see the installed version. Settings and saves stay. The Android channel and release files are prepared locally; publishing remains separate.
+
+- Android preview: pocket-ui can be the home screen of an Android handheld (Android asks at the Home button). L2/R2,
+  also as analog triggers, and L3/R3 now reach games, and R2 on a game card opens its Controls as its hint says. On a
+  square screen (720x720) the pause menu takes its two columns, so Save & quit no longer falls off the bottom. A search
+  without hits says so while the keyboard is up.
+- Android preview: PlayStation games start in the app's own player (PCSX ReARMed). A `.cue` with its tracks, `.chd`, `.pbp`, `.iso` and an `.m3u` for several discs are one game each; the first start copies all of a game's files with one bar, later starts don't wait. A BIOS is optional: one such as `scph5501.bin` in a `bios` folder among your folders is used, without one the game starts with the player's built-in stand-in and the first start says so. Options → Disc changes the disc.
+- Android preview: PlayStation 2, GameCube and Wii, 3DS and Xbox games start straight into the game in their emulator app (ARMSX2 or NetherSX2, Dolphin, Azahar, hakuX), and closing the game there comes back to pocket-ui. Xbox discs (`.iso` in an `xbox` folder) and 3DS homebrew (`.3dsx`) are on the shelf. Without the app, Play says which app it is and where to get it, and nothing counts as played.
+- Android preview: Settings → Save backup. Export saves writes every game's saves and save states into one file where you choose; Import saves brings them back, also after the app was installed again, and asks before a game that already has saves here would get the backup's.
+- Android: the pause menu's heading shows a long game name and its status line whole (wrapped, a step smaller only when the buttons need the room) instead of cutting them with "…"; the name stays as it is in every language.
+- Settings → Connections → Sync shows a paused folder on its row ("Paused") and says whether pocket-ui paused it for a game or not. X resumes it when you choose to (GameCube & Wii saves: both folders); nothing is resumed by itself, not while a game runs, and not while Syncthing isn't answering.
+- The UI status file also reports update job phases, current-file progress, cancellation boundaries, notice suppression and existing recovery/known-good evidence. Update jobs and notice scheduling now use typed in-memory states; installed marker formats and power-cut ordering stay compatible.
+- Android preview: Retro with saved Cocoa/Pea colours, complete selected names, read-only box art and folder aliases from other cards, same-game cheat sidecars on supported bundled cores, and protected recovery after a failed Load rollback. Android updates remain signed APK installations.
+- Settings → Games → Box art & downloads brings box art, Pictures, PortMaster games, optional TrimUI Cheats and Starter pack together. The last first-start page points there. Cheats in the pause menu offers the same explicit Get row; installed codes work offline and can be removed or updated without losing each game's saved switches. Optional downloads stop with B and keep checked resumable checkpoints; cards and regular updates omit the cheat pack.
+
+
+- **Cards from other systems work as they are.** Next to the usual folders, pocket-ui reads a folder with the name another system gives ("Game Boy Advance (GBA)", "GBA", "Sega Genesis", "Nintendo Game Boy Advance"), in place and without a rename. Box art already on the card (`images`, `Imgs`, `.media`, `covers`, a gamelist's pictures, ES-DE's `downloaded_media`) is used before anything is downloaded, boxes before mixes before screenshots; nothing on the card is written.
+- Brick: a short press of the power button puts the Brick to sleep: the game is saved, the Brick really sleeps, and the
+  power button wakes it into the pause menu, the game paused where it was. Wi-Fi and Bluetooth come back by themselves a few
+  seconds later. Switch back to screen-off in Settings → System → Sleep & power.
+
+### Changed
+
+- **Settings in eight categories.** Controls & sound is split in two. **Screen & sound** has **Brightness** and **Volume** as rows of their own (the same values as the quick settings on HOME), Screen colour and Night light (from Look), **Menu sounds** (it was called Sounds) and Case sounds. **Controls** has Buttons, Controller setup, Test buttons, Haptics and LEDs (on the Brick: Lights & buttons). Look gains Zoom in the pause menu (under Text size) and **Game start animation** (it was Animations, in Playing). In German, Playing is now „Im Spiel“. Each category has its own symbol: the controller for Controls, the speaker for Screen & sound, a play button for Playing. No setting changes value.
+- **"Where was I?" is off until you switch it on.** The card after a long break no longer shows by itself: Settings →
+  Playing → **Remind me where I was** is Off on a new Pocket and on one that had never changed it, on the Android app and
+  its handheld view too. Switch it On and it works as before. The "where you are" lines on the shelf and the box's back are
+  not affected.
+- Tailscale and Remote access (SSH) are back in Settings → Connections.
+
+- TrimUI Brick: an update no longer unpacks what has not changed. The new program folder is compared with the one that runs; whole folders (time zones, licences, sources, start pictures) and big files that are byte for byte the same are moved over instead of written again, and a version that does not start gets them back with the old one as before. Going from 0.3.2 to 0.4.0 this writes 33 MB to the card instead of 68 MB. It begins with the update after the one that brings this.
+- **The Linux edition is called pocket-ui OS** now (it was "pocket-ui for Linux"): for players it is a system of its own on the card, not a program for Linux. README and the Android store text use the new name.
+- **A calmer shelf.** While covers, pictures and descriptions load in the background the shelf shows a small dot beside the
+  clock, no longer "Covers 41 of 184 · Descriptions 16 of 198". On the way into a game the title, the hint bar and the shelf
+  dim together in every look, the console comes up from below the hint bar instead of over it, and it stands on a soft
+  shadow. The spines of the systems shelf all use the short names (GBC, GBA, PS3, 3DS, Master System, Dreamcast), and a note
+  like "(experimental)" stays on the system's own page and the game card. In the pause menu a game that hasn't been measured
+  yet shows just the battery's percent instead of "not enough play to tell yet". A system whose list gives no full name
+  is named "Super Nintendo", not "snes", wherever a system is named.
+  A game you start before its checksum has been read gets its proper name while it runs, so on the way back its title no longer
+  changes on the shelf ("Donkey Kong 1 - Country" to "Donkey Kong Country").
+
+- Android: **Nintendo DS** is no longer marked "Experimental" (case, Play and Continue line, Controls, Plays with, store text). Three
+  games ran 180 seconds each without a sound dropout, and Continue brought the picture and the sound back. N64, PSP, Saturn and
+  Dreamcast keep the label.
+
+- **Just Play and Surprise me are one button.** On Home, A on **Just Play** still starts a game at once; X now shows the game
+  first, on its card with a line saying why ("Never played · you like platformers"), and Right on that card brings another.
+  Surprise me in the Curator list is gone (on Android, its first row of the Curator tab, too; there X on the Just Play row of
+  Quick settings shows the card). Just Play has its own switch, Settings → Games → Curator → Just Play on Home. It no longer
+  follows the Lens switch; if you had the Lens off, Just Play stays off until you switch it on.
+- **Connections brings the ways to connect together.** Wi-Fi, Bluetooth, Tailscale, Remote access (SSH), Sync, Web companion and PC streaming are in Settings → Connections. The old "For tinkerers" page is gone.
+- **Curator's depth is for the Enthusiast profile.** A new Pocket starts without the Lens and smart shelves, Echoes and Merge
+  versions; Just Play on Home is the one way to "pick me something". Settings → Games → Curator and the profile Enthusiast
+  switch them on. A Pocket that was set up before keeps them as they were (on, unless you had switched them off).
+- **"Easy to read" is now "Big text"** (German "Große Schrift", Spanish "Texto grande"): the Tour card, the first start's
+  row and the manual. The look keeps its name, Easy.
+
+### Removed
+
+- **Four looks instead of six: Minimal and Cards are gone.** Shelf, Easy, Split and Cabinet stay. If you had Minimal or
+  Cards, pocket-ui starts in Split, the look closest to them, with the same quick game start, and says so once.
+- **Over the game: Pixel Path is for enthusiasts now.** Its level comes with Settings → Games → Curator → Pixel Path in
+  the pause menu (the Enthusiast profile turns it on). Everyone else has Off, FPS and FPS + sensors, on the Settings row
+  and on HOME + Y; a Pixel Path chosen before shows the FPS line.
+- Android preview: four looks (Shelf, Easy, Split, Cabinet); Minimal or Cards from an earlier build open as Split. The
+  tab bar has four tabs; Curator comes back as a fifth with Settings → Curator tab.
+
+### Fixed
+
+- **Settings: the row of category symbols stays put.** On small screens (the RG28XX, while charging) a long category name moved onto a line of its own, and the symbols and every entry slid down when you paged with Left/Right or L1/R1. Now each screen uses one layout for every category: a long name is shortened beside its symbol ("Screen", "Help"), or, where even that doesn't fit, every category shows its name on the line above.
+- **Android: the pages fit a Retroid Pocket Mini V2 (1240x1080) at 2 and 2.5 dp, at Android's larger font size and in German.** A console's name on the shelf page read "Game…" (the shelf buttons now move along behind a title that is too long for them), the Settings tab read "Einstellung…" (a near-square screen puts its icons over the words, as a phone upright does), "PlayStation Portable · Experimental" was cut in the list and the game card (a step or two smaller; a list row that still cannot hold it drops "Experimental", which the selected game's panel beside the list keeps saying), and the words of Plays with, Licences and the first page without games ran out of room (a step or two smaller, and Plays with takes the room Licences and Save backup already had). Screens that fit render as before.
+- **Android: the first start fits square and 4:3 screens.** On a 4:3 or square window (a fold open, a desktop window, a small square phone) the language step tore words ("Deuts / ch", "Franç / ais") or cut them to "E …" and "D …", and Continue read "Fortset…"; the step bar was a row of hairlines. Now the list goes one to a row, the words keep their column or Back and Continue run across the whole width, and only then is the type a little smaller; no word is torn and no language name is cut, in all six languages. Screens that fit look as before; the Odin's handheld view is not touched.
+- **The menu click comes with the move again on the ROCKNIX handhelds** (most noticeable on the Anbernic RG35XX family): after a short pause (reading a page, a second or two), the next move's click came up to a second after the picture had moved, so the menus felt slow there. The sound now stays ready for a minute after your last press.
+- **A Neo Geo Pocket game starts like a GBA game**: the cartridge goes into the top of the handheld, label to its back, and the power light and the display come on (it was a flat cartridge dropped on the screen). GBA Video, GP32, Mega Duck and Palm games no longer start on a TV, and Supervision, Game & Watch, Gamate, Arduboy, DSiWare and PSP Minis games go into a handheld instead of the crate of games.
+- **The PSP's UMD is the right way up**: its shell is straight at the top and rounded at the bottom, as a real UMD looks with its label upright (it was drawn round end up, the wrong way), and it slides into the cover rounded end first with its title readable.
+- **Chrono Trigger's game clock on the case**: it was read from the wrong bytes, so a game at 18:44 said "game clock 4:04". The case now shows the clock as the game's own menu does.
+- **A system list that can't be read at all no longer leaves an empty shelf without a word.** When `es_systems.cfg` is missing, not readable, has no system in it, or every entry is damaged, pocket-ui uses its built-in list (the standard folders under `/storage/roms`), so games in their usual folders still show. A note on the shelf says the list can't be read, an empty shelf says why instead of "No games yet", and Game check names the file and what to do. Add games and Game check use the same list as the shelf. A settings file that can't be read (and has no backup) is said at the start too, instead of silently starting from the standard settings.
+- A Pocket lying dark could light its screen by itself when nobody touched it: stick movements from a moment when pocket-ui wasn't reading (a test tool had paused it) counted once it went on. Now a stick wakes the screen only when it is pushed out now, a stick resting slightly off centre never keeps the Pocket awake, and a controller's motion sensors and touchpad are never read.
+- Sealed new games no longer wraps the Curator and Just Play boxes in film.
+- Large text on the 1280×720 and 1024×768 screens (and German, Spanish and Portuguese words, which run longer): text no longer ends under the hint bar or runs into its neighbour on Pixel Path, the status-and-rating sheet, Performance & fan (and a port's), Sync, the year and month review, Kids mode, the empty Home, paired browsers, the Wi-Fi sign-in page and the clock picker. Where a page has too much for the screen, the note goes first.
+- **Starting a game on a short screen (1024x768: Brick, Smart Pro):** the console is as small beside the case as the cases are, so it no
+  longer stands over the title and the case.
+- **Starting a game in the Shelf look:** the case that went into the console goes back to its place in the row instead of staying up
+  in the air over the shelf as a bare grey spine.
+- **Starting an NES game:** the cartridge flies to the console's door in front of it and in full colour, no longer dark behind its lid.
+- German and Spanish: Settings → Connections → PC streaming said "No PC paire…" in English when the row was too narrow (Large text, small screens). The value is now short ("Kein PC", "Ningún PC") and a value that is still too long is cut in your language.
+- German and Spanish: a busy line with two or three moving dots ("Looking at your games...", "Sending..", "Switching
+  file sharing...") is translated like the one with one dot; it showed in English two times in three.
+- **TrimUI Smart Pro:** the menus are fast and sharp. Its 1280×720 screen is now painted directly, as the Brick's, instead
+  of a larger picture shrunk to fit: a frame on Home takes about 5 ms instead of over 100 on this kind of processor, the
+  Retro letters are sharp, and text is the size it was meant to be. Pages that ran into the button hints on 720 lines fit.
+- Quitting a game on Cozy (Motion Full): the way back no longer jumps. The picture that switches off like an old TV is now the
+  last picture of the game as it stood on the screen, screen frame and black borders included, so the frame no longer
+  vanishes at once and the game no longer stands a moment smaller or elsewhere before it pulls together to the line. A
+  handheld's display going dark takes its frame with it.
+- Cozy: the sound of a case opening now comes when the case visibly opens, about 0.2 s after A, not at the press. Before, it
+  was 0.17 to 0.27 s early on every console (most noticeable on the PSP, which comes up and turns round first).
+- **Stickers no longer cover the name on a case without box art.** On the printed title card the stickers (the Game of the year ticket, the stars and ticks) move to the nearest free place beside or below the name and the console, or stay off the case when there is none; before, "2001" could lie across the title. The same on the Shelf, the Cabinet, the game box, the picture of your shelf and on Android.
+- The Atari 800 is named "Atari 800" on a small title card and a spine (it read "8-bit family"); a name that would be left as a number or a family keeps its maker.
+- Android: with the system list missing on the website or the network failing, a download for PSP, DS, N64 or Dreamcast says in plain words that the extra systems can't be downloaded yet (or that the server isn't answering, or to check Wi-Fi) instead of "HTTP 404" or a host name; the systems already in the app are not affected.
+- Android: the store listing and the user guide no longer call Nintendo DS experimental or say that every game is copied into private storage; Saturn is listed as bundled and experimental, PSP, N64 and Dreamcast as experimental downloads.
+
+- Android on phones, folding phones and tablets: a game's card kept its five buttons in one row, so on a 411 dp phone they
+  read "Favo…", "Turn ov…", "Stick…", "Contr…" (every language, worse at larger text); they now stand in two rows when their
+  words need it. Names in Settings rows ("Buscar actualizaciones automáticamente"), the facts of a game ("Herausgeber",
+  "Desarrollador"), the sentence in Search, the words of Saves, Licences and Report a problem and the empty pages go a step
+  smaller or onto a second line before a word is cut, also on a 720p phone held across. The touch pad's buttons no longer
+  lie on each other on a 300 dp-wide phone (N64's Z over R, the face buttons over the D-pad) or on a 304 dp-high one held
+  across (Start over B), and the N64's R pill stands clear of its C-up button. On a phone held across, the search keyboard no
+  longer covers the search field and the library's side panel no longer writes the game's name over its system line.
+
+- Android: a game's start looks as on the handhelds. The console stands low in the middle of the screen at the handhelds' size, the cartridge or disc comes down into it from above, and the game's picture comes up to 0.3 s sooner after the fade.
+- Android: on the way back from a game the case's place on the shelf stays an empty gap, as on the handhelds, until the case comes home into it: before, a black field with the selection's frame showed there. The frame and the shadow under the case now come with it. The window of a big game's first copy no longer comes up over the start's picture; it waits until the picture is over.
+- Android N64 keeps its normal audio latency during continuous music. The extra cold-start reserve is disabled because it could remain above 380 ms; short startup and loading audio gaps remain a known limit.
+- Android: the actual Saturn/Dreamcast touch painter now shares the Controls-card table, restoring missing face buttons and correct trigger bits.
+
+- Android: size the Saturn cold-start reserve at 132 ms and return it through measured quiet intervals with a short crossfade. N64 and Dreamcast use normal latency without an additional reserve; startup/load gaps remain a known limit.
+
+- Android: Continue works for PSP games. PPSSPP reports a 128 MiB state size until its picture is up, and Continue refused the
+  40 MiB state it had saved at quit ("wrong size"); it is now handed over padded to the size asked, as Flycast's already was.
+  A damaged, cut-off or foreign state is still refused. Linux gets the same fix for a PSP state that grew past a size step.
+- Android: an automatic update check no longer opens Updates instead of starting the game when you press Play. Downloads and installations you have started still need to finish or be cancelled first.
+
+- Developer deployments keep bundled player cores, so GBA on H700 keeps its gpSP default after switching from a public release to a main build.
+
+- Android preview: on a handheld the app no longer turns upright when the device lies on its side. With a controller it stays in landscape.
+- Anbernic H700: the speaker no longer stays silent with "muted" in Quick settings after headphones were unplugged or the
+  volume was turned all the way down and up again; it also stayed after a restart. A handheld already stuck like this
+  gets its sound back on the first start of this version.
+- Host sleep monitors and inhibitors end with pocket-ui and close unrelated inherited file descriptors, including after an abrupt exit. Deterministic snapshot lighting now follows the injected fixture clock.
+
+- Brick: Controls and Lights & buttons explain that F1/F2 choose global shortcuts, not game-button bindings. Pressing
+  an F key during Controller setup now explains where to change it instead of waiting until capture times out.
+- Brick: the mute slider's Does nothing choice now reaches the hardware watcher and volume restore. Existing choices
+  are kept, including an older choice saved beside the storage folder.
+- SD image uploads require a hash-bound check receipt for every image and its notes, plus a matching release receipt. Existing checked builds can be certified from their original logs and checksums without rebuilding; missing, changed or unchecked files are refused before upload.
+
+- The Ports installer repairs missing or damaged files even when the version is unchanged. A GAMES card interrupted during first-start cleanup keeps its completed split; first-start seed files remain available until their copy is synced.
+
+- **SD card images keep room in STORAGE.** The 0.3.1 programs no longer fitted next to a second copy of the licence texts in the image's 32 MiB STORAGE, and the image build stopped. The licence texts are on the card once (`pocket-ui-info/licences` on the FAT partition); `/storage/pocket-ui/licences` is a link to them. The image check now fails a card with less than 512 KiB of STORAGE left, and the release check works out from the release programs whether they still fit.
+
+- TrimUI Brick: the sound no longer drops out for a moment in the seconds after a wake, while Wi-Fi comes back: the system's
+  log messages held it up.
+
 ## [0.4.2] - 2026-11-14
 
 ### Added

@@ -65,11 +65,14 @@ pub struct Places {
     pub storage: PathBuf,
     /// ROCKNIX's `/usr/bin/freej2me.sh`: where it is missing, nobody needs this runtime.
     pub script: PathBuf,
+    /// Where a computer puts files on the card (`update::card::places`): the same package as [`URL`], under its own
+    /// name, is taken from there instead of the network (a handheld without Wi-Fi), checked the same way.
+    pub card: Vec<PathBuf>,
 }
 
 impl Places {
     pub fn device() -> Places {
-        Places { storage: "/storage".into(), script: "/usr/bin/freej2me.sh".into() }
+        Places { storage: "/storage".into(), script: "/usr/bin/freej2me.sh".into(), card: crate::update::card::places() }
     }
 
     /// The handheld's places; under `POCKETUI_MOCK`, `POCKETUI_J2ME_ROOT` stands in for them (`root/storage`,
@@ -77,7 +80,7 @@ impl Places {
     pub fn here() -> Places {
         if !crate::proc::mock() { return Places::device(); }
         let root = std::env::var_os("POCKETUI_J2ME_ROOT").map(PathBuf::from).unwrap_or_else(|| "/nonexistent-j2me".into());
-        Places { storage: root.join("storage"), script: root.join("freej2me.sh") }
+        Places { storage: root.join("storage"), script: root.join("freej2me.sh"), card: crate::update::card::places() }
     }
 
     pub fn jdk(&self) -> PathBuf {
@@ -170,6 +173,9 @@ impl Fetch {
     }
 }
 
+/// Where the Java package is offered for the card (the same file as [`URL`]).
+pub const SITE: &str = "pocketui.xyz/java";
+
 /// The title over the start while Java loads.
 pub const TITLE: &str = "Loading Java, once (about 200 MB)";
 
@@ -182,11 +188,20 @@ pub enum Failure {
     Damaged,
     Unpack(String),
     Stopped,
+    /// The file on the card is not the package (size or SHA-256): nothing was installed.
+    CardDamaged,
 }
 
 impl Failure {
     pub fn message(&self) -> String {
+        self.message_for(crate::device::no_wifi_chip())
+    }
+
+    /// [`message`](Self::message) on a handheld with (`no_chip` false) or without Wi-Fi.
+    pub fn message_for(&self, no_chip: bool) -> String {
         match self {
+            Failure::CardDamaged => "The Java file on the card is incomplete or damaged. Copy it onto the card again. Nothing was installed.".into(),
+            Failure::Offline if no_chip => "Phone games need Java, loaded once (about 200 MB). Put the Java file from pocketui.xyz/java on the card, then start the game again.".into(),
             Failure::Offline => "Phone games need Java, loaded once (about 200 MB). Connect to Wi-Fi in Settings, then start the game again.".into(),
             Failure::NoSpace { free, need } => format!("Not enough space on the SD card for Java: {} MB free, {} MB needed.", free / 1_000_000, need.div_ceil(1_000_000)),
             Failure::Broke(m) => m.clone(),
@@ -233,6 +248,9 @@ pub fn install(places: &Places, source: &Source, online: bool, free: Option<u64>
         fetch.set(Phase::Done, 1, 1);
         return Ok(());
     }
+    if let Some(on_card) = on_card(places, source) {
+        return from_card(places, source, &on_card, free, fetch);
+    }
     if !online {
         return Err(Failure::Offline);
     }
@@ -256,8 +274,42 @@ pub fn install(places: &Places, source: &Source, online: bool, free: Option<u64>
         return Err(Failure::Damaged);
     }
     if fetch.stopped() { return Err(Failure::Stopped); }
+    put_in_place(places, source, &file, &unpack, fetch)
+}
+
+/// The package under its own name (the last part of `source.url`) in one of the card's places, if a computer put it there.
+fn on_card(places: &Places, source: &Source) -> Option<PathBuf> {
+    let name = source.url.rsplit('/').next().filter(|n| !n.is_empty())?;
+    places.card.iter().map(|dir| dir.join(name)).find(|f| f.is_file())
+}
+
+/// Java from the card: the size and SHA-256 checked as for a download, unpacked from where it lies (no copy), and the
+/// file removed from the card once Java is in place (`update::card::remove_after_use`). A file that is not the package
+/// stays where the player put it.
+fn from_card(places: &Places, source: &Source, file: &Path, free: Option<u64>, fetch: &Fetch) -> Result<(), Failure> {
+    let need = source.unpacked + SLACK;
+    if let Some(free) = free.filter(|f| *f < need) {
+        return Err(Failure::NoSpace { free, need });
+    }
+    fetch.set(Phase::Checking, 0, 1);
+    let got = std::fs::metadata(file).map(|m| m.len()).unwrap_or(0);
+    if got != source.size || !crate::store::sha256_file(file).is_ok_and(|h| h.eq_ignore_ascii_case(&source.sha256)) {
+        return Err(Failure::CardDamaged);
+    }
+    if fetch.stopped() { return Err(Failure::Stopped); }
+    let unpack = places.unpack();
+    let _leftovers = Leftovers(vec![unpack.clone()]);
+    put_in_place(places, source, file, &unpack, fetch)?;
+    if !crate::update::card::remove_after_use(file) {
+        eprintln!("j2me: Java is in place, but {} couldn't be removed from the card", file.display());
+    }
+    Ok(())
+}
+
+/// `bin`, `lib` and `conf` of a checked package into `places.jdk()`, through `unpack` (removed by the caller).
+fn put_in_place(places: &Places, source: &Source, file: &Path, unpack: &Path, fetch: &Fetch) -> Result<(), Failure> {
     fetch.set(Phase::Unpacking, 0, source.entries.max(1));
-    unpack_jdk(&file, &unpack, &source.top, fetch)?;
+    unpack_jdk(file, unpack, &source.top, fetch)?;
     let inner = unpack.join(&source.top);
     if let Ok(zips) = std::fs::read_dir(inner.join("lib")) {
         for z in zips.flatten().filter(|e| e.path().extension().is_some_and(|x| x == "zip")) {
@@ -394,7 +446,7 @@ mod tests {
         std::fs::create_dir_all(&storage).unwrap();
         let script = dir.join("freej2me.sh");
         std::fs::write(&script, b"#!/bin/bash\n").unwrap();
-        Places { storage, script }
+        Places { storage, script, card: vec![dir.join("card")] }
     }
 
     fn copy_from(file: PathBuf) -> impl Fn(&str, &Path, u64, &Fetch) -> Result<(), DownloadFailure> {
@@ -474,6 +526,49 @@ mod tests {
         assert!(matches!(e, Failure::NoSpace { free: 5_000_000, .. }), "{e:?}");
     }
 
+    /// No Wi-Fi (the RG28XX, the R36S, 15.11.): the same package, put on the card by a computer under its own name, is
+    /// checked like the download, unpacked from there and removed; nothing is downloaded.
+    #[test]
+    fn the_java_file_on_the_card_is_checked_installed_and_removed_without_a_network() {
+        let dir = tempfile::tempdir().unwrap();
+        let (file, source) = archive(dir.path());
+        let places = places(dir.path());
+        std::fs::create_dir_all(&places.card[0]).unwrap();
+        let on_card = places.card[0].join("jdk.tar.gz");
+        std::fs::copy(&file, &on_card).unwrap();
+        let never = |_: &str, _: &Path, _: u64, _: &Fetch| -> Result<(), DownloadFailure> { panic!("the card has it: no download") };
+        let fetch = Fetch::default();
+        install(&places, &source, false, None, &fetch, &never).unwrap();
+        assert!(places.ready(), "Java from the card");
+        assert!(!places.jdk().join("lib/src.zip").exists());
+        assert!(!on_card.exists(), "the file on the card is removed after a good install");
+        assert_eq!(left_in(&places.storage), ["jdk"]);
+        assert_eq!(fetch.phase(), Phase::Done);
+    }
+
+    /// A file on the card that is not the package (cut short, another version) is refused before anything is unpacked.
+    #[test]
+    fn a_damaged_java_file_on_the_card_installs_nothing() {
+        let dir = tempfile::tempdir().unwrap();
+        let (_, source) = archive(dir.path());
+        let places = places(dir.path());
+        std::fs::create_dir_all(&places.card[0]).unwrap();
+        std::fs::write(places.card[0].join("jdk.tar.gz"), b"half a file").unwrap();
+        let never = |_: &str, _: &Path, _: u64, _: &Fetch| -> Result<(), DownloadFailure> { panic!("no download offline") };
+        assert_eq!(install(&places, &source, false, None, &Fetch::default(), &never), Err(Failure::CardDamaged));
+        assert!(!places.ready());
+        assert!(left_in(&places.storage).is_empty(), "nothing of it stays on the handheld");
+        assert!(Failure::CardDamaged.message_for(true).contains("on the card"), "{}", Failure::CardDamaged.message_for(true));
+    }
+
+    /// Offline on a handheld without Wi-Fi the notice names the card way, never "Connect to Wi-Fi".
+    #[test]
+    fn offline_without_a_wifi_chip_the_notice_names_the_card() {
+        let no_chip = Failure::Offline.message_for(true);
+        assert!(no_chip.contains("on the card") && no_chip.contains(SITE) && !no_chip.contains("Connect to Wi-Fi"), "{no_chip}");
+        assert!(Failure::Offline.message_for(false).contains("Wi-Fi"), "with a chip: Wi-Fi first");
+    }
+
     #[test]
     fn the_handheld_source_is_the_one_rocknix_downloads() {
         let s = Source::azul();
@@ -485,7 +580,7 @@ mod tests {
     #[test]
     fn without_the_rocknix_script_no_start_waits_for_java() {
         let dir = tempfile::tempdir().unwrap();
-        let p = Places { storage: dir.path().into(), script: dir.path().join("missing.sh") };
+        let p = Places { storage: dir.path().into(), script: dir.path().join("missing.sh"), card: Vec::new() };
         assert!(!needed(&p, "freej2me"));
     }
 }

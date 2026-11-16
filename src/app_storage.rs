@@ -270,7 +270,7 @@ impl App {
     /// A notice put on the shelf now would be seen: Home or a list, nothing over it and no notice up (`app_clock` asks
     /// the same).
     pub(crate) fn shelf_notice_free(&self) -> bool {
-        // The shelf itself with nothing over it (`app_where`): not a console page, the controls card, the quick settings or
+        // The shelf itself with nothing over it (`app_where`): not a console page, the quick settings or
         // another notice.
         self.shelf_alone()
     }

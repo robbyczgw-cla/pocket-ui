@@ -43,3 +43,8 @@ standard rear shell used here, so the attributed CC BY-SA 4.0 photograph was ret
 CC0 photo above) with its label and its moulded SEGA oval filled with that shell's own plastic (median colour, a little
 grain) and mirrored, as the back is seen from behind: a plain black shell with the front's outline and top ridges. The
 3DS uses the DS card's back (`ds-back.png`): no free photo of a 3DS card was found (the Commons ones are CC BY-SA).
+
+`ngp-back.png` (2026-11-15) is not a photo either (no free photo of a Neo Geo Pocket cartridge exists, see SOURCES.md): it is the
+plain cartridge picture (`cart.png`, the CC0 photo of Joho345 / Hic et nunc through PixelLab) with its label filled with the shell's
+own plastic, mirrored as the back is seen from behind, and coloured to the system's plastic (`cabinet_art::plastic`, as the
+front is tinted). Same size as the front, so the turn keeps the cartridge's size.

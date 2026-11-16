@@ -12,11 +12,16 @@ pub mod shelf;
 pub mod system_art;
 pub mod text;
 pub mod text_fallback;
+pub mod latinise;
 pub mod type_scale;
 pub mod text_size;
 pub mod covers;
 pub mod game_pictures;
 pub mod rom_id;
+/// "The case knows where you are" (`case_knows`, `case_knows_read`): the box's back paints the line here too.
+pub mod case_knows;
+pub mod case_knows_read;
+pub mod case_knows_art;
 pub mod disc_serial;
 pub mod archive;
 pub mod fsutil;
@@ -31,10 +36,14 @@ pub mod connections;
 pub mod curator_page;
 pub mod cabinet;
 pub mod cabinet_art;
+pub mod share_shelf;
 pub mod phone_shelves;
 pub mod media;
+pub mod tape_label;
 pub mod title_block;
 pub mod pause_head;
+/// The handhelds' pause menu for Android's player when the game came from the Handheld view (`pause_list`).
+pub mod pause_list;
 pub mod motion;
 pub mod keyboard;
 mod library_names;
@@ -67,6 +76,7 @@ pub mod search;
 
 pub mod document_library;
 pub mod document_check;
+pub mod system_names;
 pub mod game_check;
 pub mod game_check_page;
 pub mod game_files;
@@ -99,6 +109,7 @@ pub mod save_transfer;
 pub mod save_copy;
 pub mod save_media;
 pub mod case_stickers;
+pub mod shrink_wrap;
 pub mod crt_on;
 pub mod eject;
 pub mod game_info;
@@ -116,6 +127,7 @@ pub mod cozy_extras;
 pub mod insert_rig;
 pub mod insert_scene;
 pub mod playful;
+pub mod sticker_press;
 
 pub mod where_was_i;
 pub mod zoom;
@@ -137,9 +149,30 @@ pub mod document_art;
 pub mod store;
 pub mod untar;
 pub mod android_cores;
+/// Which way a game starts on Android (our player, a core to download, another app), for the Mobile and the handheld view.
+pub mod play_route;
+#[cfg(target_os = "android")]
+pub mod android_core_run;
 pub mod status_corner;
 pub mod phone_corner;
 
 pub mod update_hint;
 pub mod report_redact;
 pub mod report_phone;
+
+// Linux's screen frames around the picture in the player (docs/user/android-mvp.md, Screen frame): the same drawing code and GL
+// layer. The picture renderer's two small parts they use, and the battery's folder for the power light (read where the phone
+// lets the app; steady green where not).
+pub mod bezel;
+pub mod frames;
+pub mod frames_more;
+pub mod frames_tv;
+pub mod frame_cache;
+pub mod frame_led;
+pub mod video { pub use crate::video_basics::*; }
+pub mod battery {
+    /// As Linux's `battery::dir`.
+    pub fn dir() -> std::path::PathBuf {
+        std::path::PathBuf::from(std::env::var("POCKETUI_BATTERY").unwrap_or_else(|_| "/sys/class/power_supply/battery".into()))
+    }
+}

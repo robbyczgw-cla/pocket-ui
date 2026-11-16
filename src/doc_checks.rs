@@ -253,7 +253,8 @@ fn names(text: &str, word: &str) -> bool {
 
 #[test]
 fn the_settings_table_lists_every_settings_row_in_order() {
-    // Settings is two pages (the manual's 30 000 px limit): Look, Sound & feel, Playing and Games, then Connections, System and Help & tools.
+    // Settings is three pages (the manual's 30 000 px limit): how it opens, Look, Playing and Games; Screen & sound and Controls; then
+    // Connections, System and Help & tools.
     let md = format!("{}\n{}\n{}", read("docs/user/settings.md"), read("docs/user/settings-sound.md"), read("docs/user/settings-system.md"));
     // The categories, in their order, each naming its entries.
     let open = first_table(&section(&md, "Open Settings"));
@@ -264,14 +265,14 @@ fn the_settings_table_lists_every_settings_row_in_order() {
         doc, code,
         "docs/user/settings.md, \"Open Settings\": one row per category of main.rs SETTINGS_GROUPS, in its order"
     );
-    for (row, (name, _, entries)) in open.iter().zip(super::SETTINGS_GROUPS.iter()) {
+    for (row, (name, entries)) in open.iter().zip(super::SETTINGS_GROUPS.iter()) {
         for (entry, _, _) in entries.iter() {
             assert!(row[1].contains(entry), "docs/user/settings.md, \"Open Settings\": the row of {name} names {entry}");
         }
     }
     // Under each category's own heading, one row per entry, in its order: together every row of SETTINGS.
     let mut all = Vec::new();
-    for (name, _, entries) in super::SETTINGS_GROUPS.iter() {
+    for (name, entries) in super::SETTINGS_GROUPS.iter() {
         let name = name.trim_end_matches('\u{200b}');
         let doc: Vec<String> = first_table(&section(&md, name)).iter().map(|r| bold(&r[0])).collect();
         let code: Vec<&str> = entries.iter().map(|s| s.0).collect();
@@ -284,13 +285,14 @@ fn the_settings_table_lists_every_settings_row_in_order() {
 
 #[test]
 fn every_cozy_extra_is_described_with_its_start() {
-    let rows = first_table(&section(&read("docs/user/settings-sound.md"), "Cozy extras"));
+    let rows = first_table(&section(&read("docs/user/settings.md"), "Cozy extras"));
     let doc: Vec<String> = rows.iter().map(|r| bold(&r[0])).collect();
     let mut code: Vec<&str> = pocket_ui::cozy_extras::Extra::shown().iter().map(|e| e.label()).collect();
     code.push(super::app_cozy_extras::GBA_MODEL_NAME);
     assert_eq!(doc, code, "docs/user/settings.md, \"Cozy extras\": every switch and the GBA model selector, in page order");
     for (r, e) in rows.iter().zip(pocket_ui::cozy_extras::Extra::shown()) {
-        let start = if e.default_on() { "On" } else { "Off" };
+        // Playful cases follows Animations until it is switched (`Extras::playful_animations`).
+        let start = if e == pocket_ui::cozy_extras::Extra::Playful { "On with Cozy, Off with Quick" } else if e.default_on() { "On" } else { "Off" };
         assert_eq!(r[2], start, "docs/user/settings.md, \"Cozy extras\": {}'s start", e.label());
     }
     assert_eq!(rows.last().unwrap()[2], pocket_ui::system_art::GbaModel::default().label(), "Cozy extras: the GBA selector starts with the classic model");
@@ -484,7 +486,13 @@ fn the_pause_menu_table_matches_the_menu_of_each_emulator() {
     let mut seen = BTreeSet::new();
     for row in first_table(&md) {
         let kind = row[0].as_str();
-        let (key, want) = if kind.contains("signed in") {
+        // RetroAchievements' Hardcore has its row once it is offered (`achievements::hardcore::OFFERED`,
+        // docs/dev/hardcore-guide.md); until then the guide has none.
+        let (key, want) = if kind.contains("Hardcore") {
+            assert!(pocket_ui::achievements::hardcore::OFFERED, "docs/user/pause-menu.md has a Hardcore row, but Hardcore is not offered");
+            let saves = super::app_achievements::hardcore_saves(pocket_ui::pause_saves::Saves::of(Saver::PocketCore { states: true }, true, None), true);
+            ("pocket-core hardcore", super::main_items(true, saves, true))
+        } else if kind.contains("signed in") {
             ("pocket-core signed in", page(Saver::PocketCore { states: true }, false, true))
         } else if kind.contains("no save states") {
             ("pocket-core without states", page(Saver::PocketCore { states: false }, false, false))
@@ -510,7 +518,8 @@ fn the_pause_menu_table_matches_the_menu_of_each_emulator() {
         assert_eq!(doc, code, "docs/user/pause-menu.md, the row {kind:?}");
         seen.insert(key);
     }
-    assert_eq!(seen.len(), 8, "docs/user/pause-menu.md: a row for each kind of emulator, {seen:?}");
+    let kinds = if pocket_ui::achievements::hardcore::OFFERED { 9 } else { 8 };
+    assert_eq!(seen.len(), kinds, "docs/user/pause-menu.md: a row for each kind of emulator, {seen:?}");
     // What Quit does is a setting, not a row: the guide names it beside Quit.
     let name = super::SETTINGS.iter().find(|s| matches!(s.1, super::Opens::RememberQuit)).expect("the Settings row").0;
     assert!(md.contains(&format!("**{name}**")), "docs/user/pause-menu.md names Settings → **{name}** under Quit");
@@ -670,6 +679,7 @@ fn the_first_page_lists_the_manual_pages_in_their_order() {
 // ---- the developer documents ----------------------------------------------------------------------------------------
 
 #[test]
+#[ignore = "release check: bookkeeping (scripts/bookkeeping.sh)"]
 fn the_documentation_index_lists_every_document() {
     let index = read("docs/README.md");
     let linked: BTreeSet<String> = links(&index).into_iter().map(|(_, t)| t).collect();
@@ -690,8 +700,9 @@ fn the_documentation_index_lists_every_document() {
     assert!(missing.is_empty(), "docs/README.md links every document; missing: {missing:?}");
 }
 
-// In the fast merge gate since 12.11. (main went red here twice; the check reads files for under a second).
+// Bookkeeping, not a guard (Fable 5.2 friction audit, 14.11.): a warning in the nightly run and the release check.
 #[test]
+#[ignore = "release check: bookkeeping (scripts/bookkeeping.sh)"]
 fn developing_md_names_every_source_module() {
     let layout = section(&read("docs/dev/layout.md"), "Repository layout");
     let binaries = section(&read("docs/dev/building.md"), "Building");
@@ -717,8 +728,9 @@ fn developing_md_names_every_source_module() {
     );
 }
 
-// In the fast merge gate since 12.11. (main went red here twice; the check reads files for under a second).
+// Bookkeeping, not a guard (Fable 5.2 friction audit, 14.11.): a warning in the nightly run and the release check.
 #[test]
+#[ignore = "release check: bookkeeping (scripts/bookkeeping.sh)"]
 fn every_environment_variable_is_documented() {
     let env = section(&read("docs/dev/environment.md"), "Environment variables");
     let prefix = ["\"", "POCKET"].concat();
@@ -858,7 +870,7 @@ fn the_status_ledger_rows_have_a_known_status_and_no_private_data() {
 #[ignore = "release check: sh scripts/release-check.sh"]
 fn settings_paths_on_the_screen_use_the_glossarys_arrow() {
     // Put together, so this test's own lines don't count.
-    let (en, de, es, pt) = (["Settings", " > "].concat(), ["Einstellungen", " > "].concat(), ["Ajustes", " > "].concat(), ["Configurações", " > "].concat());
+    let (en, de, es, pt, fr, it) = (["Settings", " > "].concat(), ["Einstellungen", " > "].concat(), ["Ajustes", " > "].concat(), ["Configurações", " > "].concat(), ["Paramètres", " > "].concat(), ["Impostazioni", " > "].concat());
     let mut bad = Vec::new();
     for f in rust_sources() {
         let src = std::fs::read_to_string(&f).unwrap();
@@ -872,9 +884,9 @@ fn settings_paths_on_the_screen_use_the_glossarys_arrow() {
             }
         }
     }
-    for file in ["de.tsv", "es.tsv", "pt.tsv"] {
+    for file in ["de.tsv", "es.tsv", "pt.tsv", "fr.tsv", "it.tsv"] {
         for (n, line) in read(&format!("assets/i18n/{file}")).lines().enumerate() {
-            if !line.starts_with('#') && (line.contains(&en) || line.contains(&de) || line.contains(&es) || line.contains(&pt)) {
+            if !line.starts_with('#') && (line.contains(&en) || line.contains(&de) || line.contains(&es) || line.contains(&pt) || line.contains(&fr) || line.contains(&it)) {
                 bad.push(format!("assets/i18n/{file}:{}: {line}", n + 1));
             }
         }
@@ -909,7 +921,10 @@ fn android_source_text() -> String {
             all.push_str(&std::fs::read_to_string(e.path()).unwrap());
         }
     }
-    all.replace("\\\"", "\"").replace("\\u{203a}", "\u{203a}")
+    // A line built with concat!(…, pocket_ui::contact_address!(), …) reads as one text on the device (a430e78ab): join it so
+    // the path check finds it as Android's and not as a Linux line.
+    let joined = all.replace("\", pocket_ui::contact_address!(), \"", pocket_ui::CONTACT);
+    joined.replace("\\\"", "\"").replace("\\u{203a}", "\u{203a}")
 }
 
 /// The problems in the Settings paths of one Android line: "Settings › R" (or with an arrow) where R must be a row of Android's
@@ -1044,7 +1059,7 @@ fn settings_names(table: Option<&std::collections::HashMap<String, String>>) -> 
     };
     super::SETTINGS_GROUPS
         .iter()
-        .map(|(c, _, rows)| {
+        .map(|(c, rows)| {
             let mut names: Vec<String> = rows.iter().map(|r| tr(r.0)).collect();
             // The Brick calls the lights row as its page (`app_settings_groups::row_name`): a path may name it either way.
             if rows.iter().any(|r| matches!(r.1, super::Opens::Leds)) {
@@ -1101,7 +1116,7 @@ fn every_path_in_settings_names_a_category_and_one_of_its_rows() {
         }
     }
     // Both sides of each table: the English key as the code paints it, the translation with the translated names.
-    for (file, word) in [("de.tsv", "Einstellungen"), ("es.tsv", "Ajustes"), ("pt.tsv", "Configurações")] {
+    for (file, word) in [("de.tsv", "Einstellungen"), ("es.tsv", "Ajustes"), ("pt.tsv", "Configurações"), ("fr.tsv", "Paramètres"), ("it.tsv", "Impostazioni")] {
         let tsv = read(&format!("assets/i18n/{file}"));
         let map: std::collections::HashMap<String, String> = tsv
             .lines()
@@ -1260,14 +1275,94 @@ fn code_shape_counts() -> (Vec<(&'static str, usize)>, usize) {
     (capped, count("pub fn "))
 }
 
+/// A canvas's pixels by hand (docs/dev/native-paint.md "Interfaces for packages 2 to 4"): `.buf[` only in the files `tests/code-shape.txt`
+/// lists as `only .buf[`, the design guard (`.design()`, `.design_area(`) only in those it lists as `only guard`. Painted
+/// natively, code that indexes the pixels by design coordinates paints the wrong place or slices past the buffer (a crash
+/// with `panic = "abort"`); a guard paints right but costs two passes. The lists only shrink: a file that no longer needs
+/// its line is printed, a file that isn't listed fails.
+#[test]
+fn canvas_pixels_by_hand_stay_in_the_listed_files() {
+    let list = read("tests/code-shape.txt");
+    let only = |what: &str| -> BTreeSet<String> {
+        list.lines().filter_map(|l| l.strip_prefix("only ")).filter_map(|l| l.split_once('\t')).filter(|(k, _)| *k == what).map(|(_, f)| f.trim().to_string()).collect()
+    };
+    let (bufs, guards) = (only(".buf["), only("guard"));
+    assert!(bufs.contains("src/gfx.rs"), "tests/code-shape.txt: `only .buf[\tsrc/gfx.rs` is the canvas itself");
+    let sources = rust_sources();
+    let tests = test_only_files(&sources);
+    let (mut wrong, mut stale_buf, mut stale_guard) = (Vec::new(), bufs.clone(), guards.clone());
+    for f in sources.iter().filter(|f| !tests.contains(*f)) {
+        let path = f.to_string_lossy();
+        let name = path.find("src/").map_or(path.to_string(), |i| path[i..].to_string());
+        let code = without_tests(&std::fs::read_to_string(f).unwrap());
+        if code.contains(".buf[") {
+            stale_buf.remove(&name);
+            if !bufs.contains(&name) {
+                wrong.push(format!("{name}: `.buf[` (paint through the Canvas calls, or `pixels_mut` with `stride`)"));
+            }
+        }
+        // A soft edge built from 1 px shaded rows: painted natively two rows land on one screen row and mix it twice
+        // (package 5 found the scrolled pages' edges twice as dark). `shade_rows` paints such an edge as one.
+        if name != "src/gfx.rs" {
+            for call in [".shade_rect(", ".darken_rect("] {
+                for (at, _) in code.match_indices(call) {
+                    let args = call_args(&code[at + call.len()..]);
+                    if args.get(3).map(|h| h.trim()) == Some("1") {
+                        let line = code[..at].lines().count();
+                        wrong.push(format!("{name}:{line}: `{}…, 1, …)`: a 1 px shaded row; paint the rows as one with `shade_rows`", call.trim_start_matches('.')));
+                    }
+                }
+            }
+        }
+        // The canvas itself makes the guard.
+        if name != "src/gfx.rs" && (code.contains(".design()") || code.contains(".design_area(")) {
+            stale_guard.remove(&name);
+            if !guards.contains(&name) {
+                wrong.push(format!("{name}: a design guard (`design()`/`design_area()`): paint it natively instead"));
+            }
+        }
+    }
+    assert!(wrong.is_empty(), "canvas pixels by hand outside tests/code-shape.txt's lists (docs/dev/native-paint.md):\n{}", wrong.join("\n"));
+    for f in stale_buf.iter().map(|f| format!("only .buf[\t{f}")).chain(stale_guard.iter().map(|f| format!("only guard\t{f}"))) {
+        eprintln!("code shape: no longer needed, remove from tests/code-shape.txt: {f}");
+    }
+}
+
+/// The arguments of a call, `rest` starting just after its `(`: split at the commas outside brackets, up to its `)`.
+fn call_args(rest: &str) -> Vec<&str> {
+    let (mut depth, mut start, mut args) = (0i32, 0, Vec::new());
+    for (i, ch) in rest.char_indices() {
+        match ch {
+            '(' | '[' | '{' => depth += 1,
+            ')' | ']' | '}' if depth == 0 => {
+                args.push(&rest[start..i]);
+                return args;
+            }
+            ')' | ']' | '}' => depth -= 1,
+            ',' if depth == 0 => {
+                args.push(&rest[start..i]);
+                start = i + 1;
+            }
+            _ => {}
+        }
+    }
+    args
+}
+
+#[test]
+fn a_call_splits_into_its_arguments_at_the_outer_commas() {
+    assert_eq!(call_args("x, y + k, f(a, b), 1, pal().void, 3) more"), ["x", " y + k", " f(a, b)", " 1", " pal().void", " 3"]);
+}
+
 /// Four counts of "Code shape" (DEVELOPING.md) may only go down: each is capped by its line in
 /// `tests/code-shape.txt`. Whoever lowers one lowers its cap in the same commit. `pub fn` is printed, not capped.
 #[test]
+#[ignore = "release check: bookkeeping (scripts/bookkeeping.sh)"]
 fn the_code_shape_counts_never_go_up() {
     let caps = read("tests/code-shape.txt");
     let caps: Vec<(&str, usize)> = caps
         .lines()
-        .filter(|l| !l.starts_with('#') && !l.trim().is_empty())
+        .filter(|l| !l.starts_with('#') && !l.starts_with("only ") && !l.trim().is_empty())
         .map(|l| {
             let (k, v) = l.rsplit_once('\t').unwrap_or_else(|| panic!("tests/code-shape.txt: no tab in {l:?}"));
             (k, v.trim().parse().unwrap_or_else(|_| panic!("tests/code-shape.txt: no number in {l:?}")))

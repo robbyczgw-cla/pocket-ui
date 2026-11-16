@@ -1,6 +1,6 @@
 pocket-ui is a game frontend with its own player. Point it at the folders with your games and they stand on a shelf, with their box, a few facts about each game and a big Continue button for the one you played last. Nothing to set up first: the emulators are inside the app.
 
-<b>This is a preview.</b> It is the Android version of the pocket-ui that runs on ROCKNIX handhelds. It works, but it has been tested mostly on one handheld (AYN Odin 2 Mini, Android 13) and not everything of the Linux version is here yet.
+<b>This is a preview.</b> It is the Android version of the pocket-ui that runs on ROCKNIX handhelds. It works, but it has been tested mostly on one handheld (AYN Odin 2 Mini, Android 13) and not everything of pocket-ui OS is here yet.
 
 <b>What it does</b>
 • Shelves, a cabinet, cards and other looks for your library, with search, favourites and a Curator with filters

@@ -191,7 +191,7 @@ impl Feature {
     pub fn place_here(&self) -> &'static str {
         #[cfg(feature = "brick")]
         if self.id == "leds" && crate::device::brick() {
-            return "Settings › Sound & feel › Lights & buttons";
+            return "Settings › Controls › Lights & buttons";
         }
         self.place
     }
@@ -263,8 +263,8 @@ pub static FEATURES: &[Feature] = &[
         title: "Motion",
         plain: "gentle animations",
         line: "Selections glide and pages slide in. Off shows every press at once, without animation.",
-        place: "Settings › Sound & feel › Motion",
-        guide: "settings-sound.md#motion",
+        place: "Settings › Look › Motion",
+        guide: "settings.md#motion",
         since: "0.1.0",
         // Off is Motion Off; Reduced counts as not Full, and a card left on Off keeps it.
         switch: Some(Switch {
@@ -282,7 +282,7 @@ pub static FEATURES: &[Feature] = &[
         title: "Big text",
         plain: "larger text and calmer menus",
         line: "Larger text, menus that only fade, and Zoom in the pause menu. Switches Text size and Motion together.",
-        place: "Settings › Look › Text size, Settings › Sound & feel › Motion",
+        place: "Settings › Look › Text size, Settings › Look › Motion",
         guide: "big-text.md#big-text",
         since: "0.2.0",
         // On is Large text and Reduced motion (an Off motion stays Off); off is the design's Normal text and Full motion.
@@ -333,7 +333,7 @@ pub static FEATURES: &[Feature] = &[
         title: "Menu sounds",
         plain: "soft clicks in the menus",
         line: "Soft clicks as you move through the menus. Never in games.",
-        place: "Settings › Sound & feel › Sounds",
+        place: "Settings › Screen & sound › Menu sounds",
         guide: "playing.md#menu-sounds",
         since: "0.1.0",
         switch: Some(Switch {
@@ -351,7 +351,7 @@ pub static FEATURES: &[Feature] = &[
         title: "Haptics",
         plain: "a light tick as you move",
         line: "A very short tick in your hands as the selection moves.",
-        place: "Settings › Sound & feel › Haptics",
+        place: "Settings › Controls › Haptics",
         guide: "settings.md#open-settings",
         since: "0.1.0",
         switch: Some(Switch {
@@ -369,7 +369,7 @@ pub static FEATURES: &[Feature] = &[
         title: "Stick lights",
         plain: "lights around the sticks",
         line: "The lights around the sticks glow in one calm colour. Colour and brightness in Settings.",
-        place: "Settings › Sound & feel › LEDs",
+        place: "Settings › Controls › LEDs",
         guide: "settings-sound.md#leds",
         since: "0.1.0",
         switch: Some(Switch {
@@ -645,7 +645,7 @@ pub static FEATURES: &[Feature] = &[
         title: "Sync",
         plain: "Sync",
         line: "Keeps saves and save states in step with your other devices, with Syncthing.",
-        place: "Settings › Help & tools › For tinkerers › Sync",
+        place: "Settings › Connections › Sync",
         guide: "sync.md#turn-it-on",
         since: "0.1.0",
         switch: None,
@@ -691,7 +691,7 @@ pub static FEATURES: &[Feature] = &[
         plain: "Cozy extras",
         line: "The little touches, each on its own: real cases, stickers, printed discs and more.",
         place: crate::cozy_extras::PAGE,
-        guide: "settings-sound.md#cozy-extras",
+        guide: "settings.md#cozy-extras",
         since: "0.1.0",
         switch: None,
         simple: Pick::Keep,
@@ -715,6 +715,22 @@ pub static FEATURES: &[Feature] = &[
         todo: None,
         try_it: None,
     },
+    Feature {
+        // The tree of 2026-11-13 (SETTINGS-IA-DECISION, package 2): nothing to switch, the card says what moved.
+        id: "settings_at_once",
+        title: "Settings at once",
+        plain: "Settings at once",
+        line: "START shows the settings straight away; L1 and R1 go through the categories. Tailscale, SSH and Sync are in Connections.",
+        place: "START, then L1 / R1",
+        guide: "settings.md#open-settings",
+        since: "0.4.1",
+        switch: None,
+        simple: Pick::Keep,
+        enthusiast: Pick::Keep,
+        preview: pv::settings_tabs,
+        todo: None,
+        try_it: None,
+    },
 ];
 
 /// The wired entries this device offers, as in Settings: no Stick lights without sticks, and services owned by
@@ -730,7 +746,12 @@ pub fn available() -> impl Iterator<Item = (usize, &'static Feature)> {
 }
 
 pub fn available_on(sticks: bool, nextui_owned: bool) -> impl Iterator<Item = (usize, &'static Feature)> {
-    FEATURES.iter().enumerate().filter(move |(_, f)| f.todo.is_none() && !crate::device::hides(f.id, sticks, nextui_owned))
+    available_in(sticks, nextui_owned, crate::device::android_profile())
+}
+
+/// [`available_on`] with Android's profile given.
+pub fn available_in(sticks: bool, nextui_owned: bool, android: bool) -> impl Iterator<Item = (usize, &'static Feature)> {
+    FEATURES.iter().enumerate().filter(move |(_, f)| f.todo.is_none() && !crate::device::hides_in(f.id, sticks, nextui_owned, android))
 }
 
 pub fn by_id(id: &str) -> Option<usize> {
@@ -738,6 +759,7 @@ pub fn by_id(id: &str) -> Option<usize> {
 }
 
 /// One of the Tour’s six basic cards, explained without a switch. The reading choice follows these.
+#[derive(Clone, Copy, Debug)]
 pub struct Basic {
     /// Stable name, used by the snapshots (`--snapshot tour:<id>`).
     pub id: &'static str,
@@ -795,6 +817,45 @@ pub static BASICS: &[Basic] = &[
         guide: "settings.md#settings",
     },
 ];
+
+/// What the basics say instead on Android's handheld view, by id: `(id, text, place)`. Its quick settings are brightness and volume
+/// on the shelf (`quick::android_rows`; the player's pause menu has none), its games are in `ROMs` folders read through Android,
+/// with no file sharing (`android_handheld`). The Tour on the Odin 2 Mini promised Wi-Fi, Bluetooth, fan and power (13.11.).
+pub const ANDROID_BASICS: &[(&str, &str, &str)] = &[
+    ("quick", "Brightness and volume in one panel, over the shelf.", "HOME on the shelf"),
+    ("add_games", "Games go in a ROMs folder, one folder per system, in the device's storage or on a memory card. Add games shows the folders and BIOS files.", "START › Settings › Games › Add games"),
+];
+
+/// The basics that promise Wi-Fi, as they read on a handheld without it (`device::no_wifi_chip`): no Wi-Fi tile in the
+/// quick settings, no file sharing in Add games.
+pub const NO_WIFI_BASICS: &[(&str, &str)] = &[
+    ("quick", "Brightness, volume, Bluetooth, fan and power in one panel, over the shelf and over a game."),
+    ("add_games", "Games go in each system's folder on the SD card. Add games shows the folders and BIOS files."),
+];
+
+/// A basic card as it reads on this device: Android's handheld view has its own words for some (`ANDROID_BASICS`), and
+/// so has a handheld without Wi-Fi (`NO_WIFI_BASICS`).
+pub fn basic_in(b: &Basic, android: bool) -> Basic {
+    match ANDROID_BASICS.iter().find(|(id, _, _)| *id == b.id).filter(|_| android) {
+        Some((_, text, place)) => Basic { text: *text, place: *place, ..*b },
+        None => match NO_WIFI_BASICS.iter().find(|(id, _)| *id == b.id).filter(|_| !android && crate::device::no_wifi_chip()) {
+            Some((_, text)) => Basic { text: *text, ..*b },
+            None => *b,
+        },
+    }
+}
+
+/// What a feature card's line says instead on Android's handheld view, by id: Zoom is pocket-core's pause menu, which the Android
+/// player does not have (`device::ANDROID_HIDES` "zoom_pause").
+pub const ANDROID_LINES: &[(&str, &str)] = &[
+    ("easy_to_read", "Larger text and menus that only fade. Switches Text size and Motion together."),
+    ("last_game", "When pocket-ui starts, the game you played last continues where you left off."),
+];
+
+/// A feature card's line as it reads on this device (`ANDROID_LINES`).
+pub fn line_in(f: &Feature, android: bool) -> &'static str {
+    ANDROID_LINES.iter().find(|(id, _)| *id == f.id).filter(|_| android).map_or(f.line, |(_, line)| *line)
+}
 
 /// The six basics followed by Big text. Tour indices after BASICS refer to FEATURES.
 pub fn tour_list() -> Vec<usize> {
@@ -972,11 +1033,11 @@ impl Cards {
     }
 
     /// The basic card shown (the Tour only).
-    pub fn basic(&self) -> Option<&'static Basic> {
+    pub fn basic(&self) -> Option<Basic> {
         if self.mode != Mode::Tour {
             return None;
         }
-        self.list.get(self.at).and_then(|i| BASICS.get(*i))
+        self.list.get(self.at).and_then(|i| BASICS.get(*i)).map(|b| basic_in(b, crate::device::android_profile()))
     }
 
     pub fn choice(&self) -> usize {
@@ -1090,7 +1151,7 @@ impl Cards {
         c.clear(pal().void);
         let mut hits = Hits::default();
         if let Some(b) = self.basic() {
-            return self.paint_basic(c, text, b);
+            return self.paint_basic(c, text, &b);
         }
         let Some(f) = self.feature() else { return hits };
         let heading = match &self.mode {
@@ -1112,7 +1173,7 @@ impl Cards {
         }
         let title = text.fit(Face::Title, 67, f.title, c.w - 2 * MARGIN);
         text.draw(c, Face::Title, 67, MARGIN, 160, pal().chalk, &title);
-        for (k, line) in text.wrap_prose(Face::Body, 28, f.line, c.w - 2 * MARGIN).iter().take(2).enumerate() {
+        for (k, line) in text.wrap_prose(Face::Body, 28, line_in(f, crate::device::android_profile()), c.w - 2 * MARGIN).iter().take(2).enumerate() {
             text.draw(c, Face::Body, 28, MARGIN, 208 + k as i32 * 38, pal().dust, line);
         }
 
@@ -1262,13 +1323,13 @@ const PROFILE_PREVIEW_W: i32 = 320;
 pub fn paint_profiles(c: &mut Canvas, text: &mut Text, sel: usize, profiles: &[Profile], later: bool, previews: &[Image]) -> Hits {
     c.clear(pal().void);
     let mut hits = Hits { sel, ..Default::default() };
-    // A short screen (768 lines) takes the heading and the five rows closer, so the last row clears the hints (it ran 14 px
-    // under them at pitch 108); the Smart Pro's 720 lines closer again.
+    // A short screen (768 lines) takes the heading and the five rows closer, so the last row clears the hint bar (the pill
+    // is as tall as on 1080 lines: its top is at 648); the Smart Pro's 720 lines (pill top 600) closer again.
     let short = crate::kit::short_screen(c.h);
     let (head, sub, first, pitch, row_h) = if short && c.h < 768 {
         (88, 130, 150, 86, 80)
     } else if short {
-        (100, 148, 172, 100, 92)
+        (96, 142, 162, 94, 86)
     } else {
         (140, 192, 230, 124, 112)
     };
@@ -1293,6 +1354,8 @@ pub fn paint_profiles(c: &mut Canvas, text: &mut Text, sel: usize, profiles: &[P
             // Nothing to show for these two: the choice's own name, not an empty frame.
             other => {
                 c.rect(px, py, pw, ph, pal().spine);
+                // In the preview's frame, as small as the pictures: not a wide page's larger type (`type_scale::wide_page`).
+                let _frame = crate::type_scale::panel(1.0);
                 let name = text.fit(Face::Title, 37, other.name(), pw - 24);
                 text.draw(c, Face::Title, 37, px + 12, py + ph / 2, pal().dust, &name);
             }
@@ -1349,7 +1412,7 @@ pub fn paint_profiles(c: &mut Canvas, text: &mut Text, sel: usize, profiles: &[P
     };
     // As many lines as stay clear of the hints, the last cut with "…" (larger text on the Mini V1's 960 lines,
     // docs/DEVICES.md; on 1080 lines everything fits).
-    let (step, last) = (crate::type_scale::line(24, 10), c.h - 100 - crate::type_scale::grow(24));
+    let (step, last) = (crate::type_scale::line(24, 10), crate::kit::hint_bar_top(c.h) - 16 - crate::type_scale::grow(24));
     for (line, colour) in lines {
         // Five rows on 960 lines leave no room: the rows say enough.
         if y > last {

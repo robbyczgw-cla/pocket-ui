@@ -1,4 +1,4 @@
-//! Part of the pocket-ui binary: Settings → Playing → **Buttons**. The two settings about the face buttons on one page
+//! Part of the pocket-ui binary: Settings → Controls → **Buttons**. The two settings about the face buttons on one page
 //! (2026-10-30: they were in two places): **Button layout**, which button confirms in the menus
 //! (`pocket_ui::button_layout`), and **Button symbols**, how the hints draw them (`pocket_ui::button_prompts`). Under
 //! the rows a small picture of the four buttons where they sit on the device, each with the symbol it shows in the
@@ -19,22 +19,36 @@ use super::{settings_row, App, SettingsPage, CANCEL, CONFIRM, NU_BTN_PAD, NU_PAD
 
 /// The name in the Settings list, to come back to.
 pub(crate) const SETTINGS_NAME: &str = "Buttons";
+/// The row under it, a page of its own (`app_controllers`): it was this page's third row until the tree of 2026-11-13.
+pub(crate) const CONTROLLERS_NAME: &str = "Controller setup";
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 enum Row {
     Layout,
     Symbols,
-    Controllers,
 }
 
-const ROWS: [Row; 3] = [Row::Layout, Row::Symbols, Row::Controllers];
+const ROWS: [Row; 2] = [Row::Layout, Row::Symbols];
+
+/// The rows shown. Android's Handheld view has no Button layout: Android's A confirms there and the handheld's own
+/// setting (the Odin's Controller style) decides which button that is (`button_layout::effective_on`).
+fn rows() -> &'static [Row] {
+    rows_on(pocket_ui::device::android_profile())
+}
+
+fn rows_on(android: bool) -> &'static [Row] {
+    if android {
+        &ROWS[1..]
+    } else {
+        &ROWS
+    }
+}
 
 impl Row {
     fn label(self) -> &'static str {
         match self {
             Row::Layout => "Button layout",
             Row::Symbols => "Button symbols",
-            Row::Controllers => "Controller setup",
         }
     }
 }
@@ -44,33 +58,35 @@ fn desc(row: Row, layout: ButtonLayout) -> String {
     let what = match row {
         Row::Layout => "Which button confirms in the menus. Games keep their own buttons.",
         Row::Symbols => "How the buttons look in the hints: letters, Xbox colours or PlayStation shapes.",
-        Row::Controllers => "A separate layout for each controller, in menus and games.",
     };
     let now = match layout {
         ButtonLayout::Nintendo => "The right button confirms, the bottom one goes back.",
         ButtonLayout::Xbox => "The bottom button confirms, the right one goes back.",
     };
+    if pocket_ui::device::android_profile() {
+        // Which physical button confirms is the handheld's own setting there, not known here.
+        return what.to_string();
+    }
     format!("{what}\n{now}")
 }
 
 impl App {
     pub(crate) fn open_buttons(&mut self, sel: usize) -> Option<SettingsPage> {
-        Some(SettingsPage::Buttons(sel.min(ROWS.len() - 1)))
+        Some(SettingsPage::Buttons(sel.min(rows().len() - 1)))
     }
 
     /// A key on the page: Up/Down move, A, Left or Right change the selected row; used and saved at once.
     pub(crate) fn buttons_input(&mut self, sel: usize, b: Button) -> Option<SettingsPage> {
-        let sel = sel.min(ROWS.len() - 1);
+        let sel = sel.min(rows().len() - 1);
         match b {
-            Button::Up => return Some(SettingsPage::Buttons((sel + ROWS.len() - 1) % ROWS.len())),
-            Button::Down => return Some(SettingsPage::Buttons((sel + 1) % ROWS.len())),
+            Button::Up => return Some(SettingsPage::Buttons((sel + rows().len() - 1) % rows().len())),
+            Button::Down => return Some(SettingsPage::Buttons((sel + 1) % rows().len())),
             b if b == CANCEL => return Some(SettingsPage::List(settings_row(SETTINGS_NAME))),
             _ => {}
         }
         if b == CONFIRM || matches!(b, Button::Left | Button::Right) {
-            match ROWS[sel] {
+            match rows()[sel] {
                 Row::Layout => self.switch_button_layout(),
-                Row::Controllers => { self.open_controllers(false); return self.settings_page; },
                 Row::Symbols => {
                     button_prompts::set(button_prompts::get().step(b != Button::Left));
                     self.save_settings();
@@ -80,10 +96,13 @@ impl App {
         Some(SettingsPage::Buttons(sel))
     }
 
-    /// The Playing row's value: the layout, and the symbols when they are another style ("Nintendo · Xbox").
+    /// The Controls row's value: the layout, and the symbols when they are another style ("Nintendo · Xbox");
+    /// on Android, with no layout row, the symbols.
     pub(crate) fn buttons_list_value(&self) -> String {
         let (layout, symbols) = (self.button_layout.label(), button_prompts::get().label());
-        if layout == symbols {
+        if pocket_ui::device::android_profile() {
+            symbols.to_string()
+        } else if layout == symbols {
             layout.to_string()
         } else {
             format!("{layout} · {symbols}")
@@ -95,24 +114,26 @@ impl App {
         let (pad, row, font) = (NU_PAD, pocket_ui::type_scale::row(66, 36), 36u32);
         self.sheet_header(c, SETTINGS_NAME);
         let (top, right) = (pad + NU_PILL + 12, c.w - pad);
-        let sel = sel.min(ROWS.len() - 1);
-        let foot = pocket_ui::kit::footer(c, &mut self.text, &mut self.hits, &[("B", "Back"), ("A", "Change")], &desc(ROWS[sel], self.button_layout), 4, pal().text);
-        for (i, r) in ROWS.iter().enumerate() {
+        let sel = sel.min(rows().len() - 1);
+        let foot = pocket_ui::kit::footer(c, &mut self.text, &mut self.hits, &[("B", "Back"), ("A", "Change")], &desc(rows()[sel], self.button_layout), 4, pal().text);
+        for (i, r) in rows().iter().enumerate() {
             let y = top + i as i32 * row;
             self.hits.row(Area::new(pad, y, right - pad, row), i);
             let v = match r {
                 Row::Layout => self.button_layout.label(),
                 Row::Symbols => button_prompts::get().label(),
-                Row::Controllers => ">",
             };
-            let shown = if i == sel && *r != Row::Controllers { format!("‹ {v} ›") } else { v.to_string() };
+            let shown = if i == sel { format!("‹ {v} ›") } else { v.to_string() };
             let vw = self.text.width(Face::Body, font, &shown);
             let name = self.text.fit(Face::Body, font, r.label(), right - pad - 2 * NU_BTN_PAD - vw - 24);
             let base = pocket_ui::kit::row_label(c, &mut self.text, (pad, y, right - pad, row), font, &name, i == sel);
             pocket_ui::kit::row_value(c, &mut self.text, font, right - NU_BTN_PAD, base, &shown, i == sel);
         }
-        self.hits.list(sel, ROWS.len(), 0.0, row as f32);
-        self.paint_button_diamond(c, top + ROWS.len() as i32 * row + 16, foot - 16);
+        self.hits.list(sel, rows().len(), 0.0, row as f32);
+        // Where the buttons sit is the handheld's own setting on Android: no picture that could say otherwise.
+        if !pocket_ui::device::android_profile() {
+            self.paint_button_diamond(c, top + rows().len() as i32 * row + 16, foot - 16);
+        }
     }
 
     /// The four face buttons as they sit on the device, between `top` and `bottom`: each shows the symbol of the role
@@ -166,7 +187,7 @@ impl App {
         }
         let mut parts = rest.trim_start_matches(':').split(':');
         let row: usize = parts.next().and_then(|r| r.parse().ok()).unwrap_or(0);
-        let mut page = SettingsPage::Buttons(row.min(ROWS.len() - 1));
+        let mut page = SettingsPage::Buttons(row.min(rows().len() - 1));
         for key in parts.next().unwrap_or_default().chars() {
             let b = match key {
                 'u' => Button::Up,
@@ -190,6 +211,13 @@ impl App {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn android_has_no_button_layout_row() {
+        // Android's own setting (the Odin's Controller style) decides there; a row would change nothing.
+        assert_eq!(rows_on(true), &[Row::Symbols]);
+        assert_eq!(rows_on(false), &ROWS);
+    }
 
     #[test]
     fn the_line_says_which_button_confirms_in_each_layout() {

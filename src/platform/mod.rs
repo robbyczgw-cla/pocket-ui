@@ -3,14 +3,20 @@
 #[path = "linux_http.rs"]
 pub(crate) mod http;
 
-#[cfg(any(target_os = "linux", target_os = "emscripten"))]
+// Android's handheld view runs the Linux app: its adapters, and the Activity bridge below beside them.
+#[cfg(any(target_os = "linux", target_os = "emscripten", all(target_os = "android", feature = "handheld")))]
 mod linux;
-#[cfg(any(target_os = "linux", target_os = "emscripten"))]
+#[cfg(any(target_os = "linux", target_os = "emscripten", all(target_os = "android", feature = "handheld")))]
 pub use linux::*;
 #[cfg(target_os = "android")]
 pub mod android;
-#[cfg(target_os = "android")]
+#[cfg(all(target_os = "android", not(feature = "handheld")))]
 pub use android::{data_dir, is_speaker, sink_volume, wiki_json, console_buttons, screenshot_hint};
+// The handheld view keeps the Linux app's own adapters and the rest (`linux`), but what Android answers for itself is
+// Android's: whether the sound goes to the speaker and the media volume (`AudioManager`), not ROCKNIX's PipeWire.
+#[cfg(all(target_os = "android", feature = "handheld"))]
+pub use android::{data_dir, is_speaker, sink_volume};
+// Android, the handheld view too: HTTPS through the Activity (covers, pictures, descriptions), no curl.
 #[cfg(target_os = "android")]
 #[path = "android_http.rs"]
 pub(crate) mod http;
@@ -18,6 +24,7 @@ pub(crate) mod http;
 #[cfg(any(target_os = "linux", target_os = "emscripten"))]
 #[cfg_attr(not(target_os = "emscripten"), path = "linux_audio.rs")] #[cfg_attr(target_os = "emscripten", path = "../../web/web_audio.rs")]
 pub(crate) mod audio_backend;
+// Android's handheld view sounds through AAudio like the Mobile view: PulseAudio/PipeWire don't exist there.
 #[cfg(target_os="android")]
 #[path="android_audio.rs"]
 pub(crate) mod audio_backend;

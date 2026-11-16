@@ -16,6 +16,38 @@ press. Detailed procedures: docs/SLEEP.md, docs/SYSTEM-CONTROLS.md, docs/HOST.md
 - Restart and Power off end the session. With the dual-boot install, Power + Vol Up brings pocket-ui back; after a
   RAM boot (`fastboot boot`) a restart lands in Android and ROCKNIX has to be started from the computer again.
 
+## Silent release volume curve
+
+Allocate an idle H700 explicitly, with pocket-ui running and the internal speaker selected. No game or audio
+stream may be active, and the hardware PCM must be closed. From the host:
+
+```sh
+scripts/device-check.sh --volume --family h700 --host root@<device-host> --out volume-proof.json
+# Add --jump <jump-host> when needed. The lock is a file ON the device (default /tmp/plus-device.lock, --lock to change):
+# busy = exit 75, nothing measured.
+```
+
+`scripts/volume-device-check.py` takes the lock on the device (`flock -n`) for one bounded session, reads the real amixer TLV and
+kernel DAPM graph, then sets 10..100% without opening any PCM. It sums the serial DAC, Line Out and software
+residual gains, checking both channels against `-22.04 + 60*log10(percent/100)` dB, tolerance ±1.5 dB.
+Unknown topology/TLV, open PCM, active streams, physical input or a battery below 20% abort the test. It restores the exact sink
+volume/mute, mixer controls and saved WirePlumber bytes, including after a curve failure. A changed output route
+is reported as an incomplete restore rather than forcing old speaker switches onto headphones or another output.
+No UI key, game, sound source, restart or background mute guard is used.
+
+The JSON records all ten levels, real topology, closed PCM, exact restoration and the running UI binary's SHA256.
+Before `scripts/release-check.sh`, set `POCKET_VOLUME_CHECK_EVIDENCE` to that JSON. The release check recomputes the
+gain and refuses incomplete/failed evidence, evidence older than 24 hours, or a different binary from
+`POCKET_STORAGE_BIN_DIR/pocket-ui`. Copy the evidence alongside the release binaries when the release check runs
+on another host. This is control-path evidence, not a microphone recording or an acoustic listening approval.
+
+`--family brick` and `--family retroid` are explicit TODO profiles (exit 3, no device access): capture their own
+mixer/DAPM topology and volume conversion before enabling them. An H700 pass does not validate either family.
+The H700 fake mixer is checked against `testdata/audio/h616-speaker-topology.txt`, a real amixer/DAPM capture,
+including the LINEOUT connection and hardware mute. `python3 scripts/test-volume-device-check.py` covers the
+old double attenuation, unchanged maximum, topology/TLV refusal, exact restore after interruption, stale/wrong
+binary evidence and the TODO profiles. It also runs from `scripts/test-device-check.sh`.
+
 ## Where the UI is: `/tmp/pocket-ui.status`
 
 A script or an agent that presses buttons reads where pocket-ui is first, and never presses blind: B and A mean
@@ -45,7 +77,7 @@ game names.
 | `v` | The schema, 1. A new number only when a field changes its meaning or goes away |
 | `rev` | One more with every write, from 1 in each pocket-ui process |
 | `pid` | pocket-ui's process: a file whose pid is gone is stale |
-| `place` | The page in front, as the navigation explorer's `@where` names it: `shelf:Home`, `shelf:Games(3)`, `settings:Groups`, `settings:List Look`, `settings:Updates`, `settings:Controllers (pause)` (opened from the pause menu), `settings:Manual (setup)`, `setup:wifi`, `setup:wifi (settings)`, `pause:Main`, `pause:Options`, `pause:Big`, `card`, `card:Delete` (and `Status`, `Note`, `Choose`, `Manage`), `box`, `console`, `this game`, `runs on`, `curator:Lens`, `search`, `recent games`, `recent games (game)`, `tour`, `kids:shelf`, `kids:pin`, `game`, `app`, `powering off` |
+| `place` | The page in front, as the navigation explorer's `@where` names it: `shelf:Home`, `shelf:Games(3)`, `settings:List Connections` (what START opens), `settings:List Look`, `settings:Updates`, `settings:Controllers (pause)` (opened from the pause menu), `settings:Manual (setup)`, `setup:wifi`, `setup:wifi (settings)`, `pause:Main`, `pause:Options`, `pause:Big`, `card`, `card:Delete` (and `Status`, `Note`, `Choose`, `Manage`), `box`, `console`, `this game`, `runs on`, `curator:Lens`, `search`, `recent games`, `recent games (game)`, `tour`, `kids:shelf`, `kids:pin`, `game`, `app`, `powering off` |
 | `cover` | What is painted over the page, comma-separated, or `none`: `where was I`, `notice`, `quick`, `time` (`time:regions`, `time:zones`, `time:search`, `time:clock`), `power`, `leave`, `slideshow` |
 | `sleep` | `awake`; `waking` (just woke: presses are still swallowed for 0.6 s); `light` (dark: a press only wakes it); `deep`; `powering-off` |
 | `game` | `none`, `starting`, `playing`, `paused` (the pause menu), `quitting` (saving on its way out), `app` (a tool, PC streaming) |
@@ -53,6 +85,7 @@ game names.
 | `cheats`, `cheats.bytes`, `cheats.total` | While the pause menu owns a Cheats page, or Extras manages its database: `available`, `checking`, `downloading`, `saving`, `offline`, `retry`, `ready`, `empty`, `update`, `confirming-remove` or `removing`, plus received/expected pack bytes. Read from memory; optional data is independent of the app update job |
 | `update.job`, `update.kind`, `update.version` | Process-local job number or `none`; `check`, `app`, `system`, or `none`; public target version or `none` |
 | `update.bytes`, `update.total`, `update.bytes.scope` | Bytes received and expected for the **current file**, with scope `current-file` or `none`. Brick components reset this counter; it is not a whole-package percentage |
+| `update.step`, `update.step.done`, `update.step.total` | The page's step of an app install: `downloading`, `unpacking`, `installing`, `restarting` (installed, waiting for the restart) or `none`, and its progress: bytes of the current file while downloading; then bytes unpacked, parts moved and files written to the card. Never goes back within a step; starts again from 0 with the next one |
 | `update.cancel`, `update.cancel.requested` | `unavailable`, `effective`, or `too-late`; whether the player requested it (`yes` / `no`). A late request does not interrupt the existing commit sequence |
 | `update.notice`, `update.notice.reason`, `update.notice.version` | `stopped`, `waiting`, `checking`, or `shown`; the suppression reason; pending or most recently consumed public version, or `none` |
 | `update.notice.schedule` | The actual hint-schedule phase: `stopped`, `waiting`, or `checking`, including when a previously consumed notice is still `shown` |
@@ -96,7 +129,7 @@ pocket-core's own `/tmp/pocket-core.status` uses the same head (`v`, `rev`, `pid
 ```sh
 scripts/dev.sh status                               # shelf:Home  sleep=awake game=none rev=7
 scripts/dev.sh expect 'settings:*' 5                # waits for the page (instead of a fixed sleep), exit 1 on timeout
-scripts/dev.sh send --at 'settings:Groups' down a   # waits for the page first, else presses nothing (exit 3)
+scripts/dev.sh send --at 'settings:List Connections' down a   # waits for the page first, else presses nothing (exit 3)
 scripts/dev.sh send wake                            # the screen on from light sleep, no button pressed
 scripts/dev.sh send --launch a                      # A where it starts a game: only with --launch
 ```
@@ -145,6 +178,16 @@ the sheet again with the copies' names (`scripts/device_game_files.py`; a sheet 
 copy's size, then flushes the card (`sync`, wait until Dirty/Writeback are below 2 MB) and drops the page cache (`DC_DROP_CACHES=0` keeps it: a player starts a game from a cold cache, not one the copy has just left in memory) before the game starts: the first Brick try started
 right behind a 260 MB write and the loader hung in uninterruptible sleep. The copies go with the rest of the test folder at the end of the
 game. Use a games line like `psx|Crash Bandicoot 2.cue|`; tested in `scripts/test-device-check.sh`.
+The owner's games are never started (12.11.2026: a check on the RG35XX Plus overwrote a real Auto moment). The Brick plays a copy below
+`.pocket-ui-test` (its `play` door refuses other paths); a ROCKNIX handheld starts from the shelf by buttons, so there the games line must
+name a copy the tester put in the ROM folder as `pocketcheck.<ext>`, and any other game is refused (`SKIP: refused ...`). A glob of `*` picks
+the smallest real game of the folder; saves, states, pictures, lists and hidden files are never games (a GBA `.srm` once was the "game").
+pocket-ui puts the player's saved volume back when a game starts and ends: the watcher mutes again within 2 s, the run mutes once more
+after each game, and `mute_events` is a note; only a sound that keeps switching on (more than `DC_MUTE_EVENTS_MAX`, default 8) or cannot
+be muted again fails. When the run ends, its work folder on the device (`.pocket-ui-test/device-check` on the Brick, `/storage/.device-check`
+on ROCKNIX; the card's `.pocket-ui-test` too when this run made it and it is empty) is removed and the result says `work=removed`; it stays
+(`work=kept: ...`) while a game's restore is not proven or a helper of the check still runs, because then it holds the only copy of the
+owner's files.
 A game that takes long to show its first picture is waited for up to `DC_FIRST_FRAME_S` seconds (default 45, also for Continue). While it
 loads, the check writes down every 5 s what the core process does (run state, kernel wait point, resident memory, bytes read from the
 card) as `load_trace` in the result, so a "no first frame" says why. After a failed start on a Brick the copy made for the run is removed.
@@ -271,12 +314,12 @@ combination of the four flags, revisions, failed-write retries, and old-publishe
 - [ ] Power key on the shelf: screen off, device sleeps; Power again: back, sound at the old volume.
 - [ ] The same in a GBA game: it continues where it was, sound right away, no crackle.
 - [ ] Idle 3 min: screen goes dark (light sleep); any button wakes it. Then 2 more min: deep sleep.
-- [ ] Settings > Playing > Battery: the graph fills over time (needs ~20 min on battery for "time left").
+- [ ] Settings > System > Battery: the graph fills over time (needs ~20 min on battery for "time left").
 
 ## Buttons and display
 - [ ] Vol± on the shelf and in a game: volume changes, the bar shows it.
 - [ ] Start+Vol±: brightness. Select+Vol±: warmer/colder (works system-wide here: gamma ramps found).
-- [ ] Settings > Look > Night light ([user/night-light.md](user/night-light.md)): `grep "display look" /var/log/pocket-ui.log`
+- [ ] Settings > Screen & sound > Night light ([user/night-light.md](user/night-light.md)): `grep "display look" /var/log/pocket-ui.log`
   says whether the screen takes gamma ramps (then everything is warmed) or the software tint (menus and pocket-core
   games only; the page says so). On: the colours turn warm over ~1.5 s, no jump; Off: back. Scheduled with From/Until a
   few minutes ahead (30-minute grid: set the clock with `POCKETUI_CLOCK_SHIFT` or wait for a half hour): it switches
@@ -292,11 +335,11 @@ combination of the four flags, revisions, failed-write retries, and old-publishe
 ## Feel and sound
 - [ ] Rumble: a game that rumbles (PS1 with DualShock, GBA rumble carts); Extras > Rumble Low/Medium/High.
   Quick check over SSH: `/storage/pocket-ui/pocket-core --rumble-test 700`.
-- [ ] Settings > Sound & feel > Haptics On: a short tick while moving in menus. Pleasant or annoying?
-- [x] Settings > Sound & feel > Sounds (on by default, 70 %): clicks on the shelf, in Settings, switcher, quick settings.
+- [ ] Settings > Controls > Haptics On: a short tick while moving in menus. Pleasant or annoying?
+- [x] Settings > Screen & sound > Menu sounds (on by default, 70 %): clicks on the shelf, in Settings, switcher, quick settings.
   2026-10-22 at 20 % system volume: loudness and sound right, slightly late (about 55 ms queued), not disturbing.
 - [ ] Sounds in the pause menu (Error on Load of an empty slot), Vol± tick; none while playing, none when muted.
-- [ ] Settings > Sound & feel > LEDs (the stick lights; they are off after the first start of this version). Colour: both sticks
+- [ ] Settings > Controls > LEDs (the stick lights; they are off after the first start of this version). Colour: both sticks
   glow, brightness steps are visibly different, "The game's" turns the sticks the system's colour in a game and back
   to warm after it. Battery: green at a good charge. Off: dark. After a restart the same state; after sleep and wake
   the same. What to read over SSH before and after: docs/LEDS.md.
@@ -354,7 +397,7 @@ Touch was seen on the real panel once, with a DS game, and was wrong (taps mirro
   Starting a game stops it after the file it is on and it goes on after Quit. Split look: stay on a game with box art,
   screenshot and title screen: after about 2.5 s it fades to the screenshot, then the title screen, then the box art;
   scrolling the list never stalls (no decoding on the UI thread), a game without a screenshot stays on its box art, with
-  Motion Off nothing fades. The game card shows both under the facts. Settings > Games > Extras > Pictures
+  Motion Off nothing fades. The game card shows both under the facts. Settings > Games > Box art & downloads > Pictures
   "Box art": all of the screenshots gone, and nothing but box art downloads; "Off": nothing downloads by itself (the
   log says "covers (...): off"), and the first start waits for that step before it downloads anything.
 - [ ] Y on a game: star; the Favorites row appears.

@@ -95,16 +95,16 @@ mod imp {
     /// A developer device (`dev-ssh`) whose sshd is not running: starts it. ROCKNIX's sshd.service only starts with
     /// `SERVICE_FLAG`, which its boot script removes when `ssh.enabled` is not 1, so the flag is made again first; the
     /// Brick's card has its own stand-in for `systemctl`. `None`: nothing to do (no marker, or sshd runs).
-    pub fn keep_dev_ssh() -> Option<std::io::Result<()>> {
+    pub fn keep_dev_ssh() -> Option<Result<(), String>> {
         if !needs_start(current()) {
             return None;
         }
         #[cfg(feature = "brick")]
         if brick_card() {
-            return Some(sh("systemctl start sshd", &[]).map_err(|e| std::io::Error::other(format!("SSH did not start: {e}"))));
+            return Some(sh("systemctl start sshd", &[]).map_err(|e| format!("SSH did not start: {e}")));
         }
         let started = sh("mkdir -p /storage/.cache/services && touch \"$1\" && systemctl start sshd", &[SERVICE_FLAG]);
-        Some(started.map_err(|e| std::io::Error::other(format!("SSH did not start: {e}"))))
+        Some(started.map_err(|e| format!("SSH did not start: {e}")))
     }
 
     /// Sets this device's password (created once) as root's, then starts sshd for this session.
@@ -188,7 +188,7 @@ mod imp {
         Ok(())
     }
 
-    pub fn keep_dev_ssh() -> Option<std::io::Result<()>> {
+    pub fn keep_dev_ssh() -> Option<Result<(), String>> {
         None
     }
 

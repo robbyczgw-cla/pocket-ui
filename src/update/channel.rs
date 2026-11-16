@@ -48,6 +48,15 @@ pub struct Manifest {
     pub install_zip: Option<Release>,
 }
 
+/// The APK's own version, as Android's app info shows it: `android:versionName` of android/AndroidManifest.xml, which
+/// scripts/android/build-apk.sh writes before it builds the libraries (so the release's "0.4.0-android.3", not the crates'
+/// Cargo versions). About and the RetroAchievements User-Agent on Android say this.
+pub fn android_version_name() -> &'static str {
+    const MANIFEST: &str = include_str!("../../android/AndroidManifest.xml");
+    const KEY: &str = "android:versionName=\"";
+    MANIFEST.split_once(KEY).and_then(|(_, rest)| rest.split_once('"')).map_or("unknown", |(v, _)| v)
+}
+
 /// True when `candidate` is a later version than `current`: number groups compared in order
 /// ("0.10.0" > "0.9.3", "20261101" > "20261001"); anything else in the string is ignored.
 pub fn newer(candidate: &str, current: &str) -> bool {
@@ -68,6 +77,21 @@ pub fn resolve(manifest_url: &str, url: &str) -> String {
 pub fn parse_manifest(json: &[u8], sig_b64: &str, key: &[u8; 32]) -> Result<Manifest, String> {
     crate::signed_data::verify_signed(json, sig_b64, key).map_err(|_| "The update list isn't signed by us. Nothing was changed.".to_string())?;
     serde_json::from_slice(json).map_err(|e| format!("update list: {e}"))
+}
+
+/// Android's signed list (`updates/android/update.json` and its `.sig`), read through the app's Wi-Fi-only reader
+/// (`UpdateInstaller.read`): the Mobile view's Updates page and the handheld view's quiet look share it.
+#[cfg(target_os = "android")]
+pub fn android_fetch(url: &str) -> Result<Manifest, String> {
+    let read = |url: &str, limit: &str| -> Result<String, String> {
+        let result = crate::platform::android::strings("updateRead", &[url, limit])?;
+        result.strip_prefix("OK\n").map(String::from).ok_or_else(|| result.strip_prefix("ERR\n").unwrap_or("Couldn't reach the update server. Check Wi-Fi.").to_string())
+    };
+    let json = read(url, "1048576")?;
+    let signature = read(&format!("{url}.sig"), "1024")?;
+    let manifest = parse_manifest(json.as_bytes(), &signature, &crate::signed_data::PUBLIC_KEY)?;
+    android_offer(&manifest, url)?;
+    Ok(manifest)
 }
 
 /// Android can install only one bounded APK from this separate channel. Never interpret an OS entry as an APK.

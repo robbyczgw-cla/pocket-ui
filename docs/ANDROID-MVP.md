@@ -281,7 +281,8 @@ The pinned source declarations (`android/cores.lock.json` and the corresponding-
   file as for one. `Game::size` is the set's total for room checks; `Game::document_size` is the selected entry's own size for the Continue check against `Mark::rom_bytes`. A mark keeps its existing sheet size and full-set fingerprint; no saved moment or mark needs conversion. A name that leaves the sheet's
   folder (`../`) is refused with a sentence; files of an older copy under other names are removed after the renames.
 - **Up to 64 MiB**, when a copy is required (`COPIED_EVERY_START`, `frozen::WHOLE_UP_TO`), it is refreshed at every start without a window.
-- **Over 64 MiB** the first start shows a window with a bar, the size, the time left and Cancel (Back too), the screen stays on. `.stage` beside
+- **Over 64 MiB** the first start shows a window with a bar, the size, the time left and Cancel (Back too), the screen stays on. The window comes
+  once the start's picture is over (`COPY_BAR_AFTER_MS`, 1.7 s after A), never over the console and the case going in; a copy done sooner shows none. `.stage` beside
   the copy holds `size time crc`. A later start doesn't copy when the document has the same size and time and the same bytes at 16 places.
   The document is opened at every start, so a lost grant or a missing file says the usual sentence and the copy isn't played behind its back.
 - **Space.** Before a copy the room is asked of `StorageManager` (which may free other apps' caches) and reserved (`allocateBytes`). If it can't
@@ -501,7 +502,7 @@ release) can follow it. Nothing here publishes anything: the release itself need
    needs `--build N+1`. The manifest in the private tree is bumped to what was released in the commit after the release.
 3. `scripts/android/release-check.sh DIR/pocket-ui-android.apk --sources <tree>/android/build/cores/corresponding-source --previous-code <last published versionCode>`
    from the private tree on the same host. It checks the signature (the signer's certificate must be the release key, fingerprint in
-   `android/release-cert.sha256`), package and version, minSdk 26 and arm64-v8a only, the size (30 MB, the IzzyOnDroid line), the 16 KB
+   `android/release-cert.sha256`), package and version, minSdk 26 and arm64-v8a only, the size (45 MB: IzzyOnDroid's 30 MB line plus the handheld view's library, which needs their size exception), the 16 KB
    page alignment of every library, that `assets/cores.json` matches the packed libraries and names a source archive for each core,
    the store listing, and the export's leak scan over the APK's contents. Its parts that need no Android SDK are tested by
    `scripts/android/test-release-check.py` (part of the shell lane of the gate).
@@ -592,7 +593,7 @@ A game's start is the handhelds' (`src/insert_scene.rs`, shared with `app_cabine
 
 The way back after Save & quit is the handhelds' too (`src/eject.rs`, `android/src/eject.rs`): the player writes `last-picture.json` beside the saves (the game's key, the auto state's preview PNG, the game's rectangle in its window, the time); the launcher reads it once when it is back (older than 10 s: ignored), and when the page shows the game's case (Cozy, Motion Full, Shelf or Cabinet look, the game just played selected) the picture switches off where it stood (an old TV's line and dot with Old-TV switch-on, a handheld's display going dark), black lifts off the page and the start's scene runs backwards to the case's place; the game stands open from the first frame back (`Ui::back_from`) and comes a little out of its case at the end (`Ui::ajar`). The page under it is the live shelf: any button or touch ends it and does what it does there (a held button's repeats do neither). `log`: `quit: saved=… at`, `back: resumed at`, `back: first frame at … eject=` (the quit's time, monotonic ms). `src/android_eject_tests.rs`.
 
-Remaining parity work: the This-game page (its rows are Linux's `options::GameSettings`, `emu_menu` and `standalone` files; on a phone the pause menu has the picture and the options) and Linux's screen frames. The TV uses a downloaded game screenshot, falling back to cover or console art; the
+Remaining parity work: the This-game page (its rows are Linux's `options::GameSettings`, `emu_menu` and `standalone` files; on a phone the pause menu has the picture and the options). The TV uses a downloaded game screenshot, falling back to cover or console art; the
 resume-picture carousel is still to connect. Sharing the remaining Home controller
 requires replacing its Linux services with Android library/session adapters, rather than compiling nmcli,
 standalone guest control or hardware settings into the APK. Real-hardware audio/core compatibility is a separate validation pass.
@@ -650,8 +651,21 @@ core options and carry the Picture category for grouped menus. Integer sizing qu
 source scanlines, preserving the core display aspect; landscape touch targets overlay a full-height
 picture, portrait targets occupy the lower control region. Native framebuffer uploads remain unchanged.
 The GLES game pass supports nearest/linear filtering and CRT/scanline shading, independently of the
-menu texture. The small Console/CRT TV surrounds are Android procedural frames; imported Linux frame
-packs and its full collection are not yet exposed here.
+menu texture. The Console/CRT TV rows draw Linux's own frames (`bezel::Layer`, behind the picture in the GLES pass:
+`player_graphics.rs`): Console is Auto's `bezel::style_for(system)`, CRT TV is `Style::Crt` in its start cabinet. The
+geometry is `picture.rs` (`Settings::place`). With a controller (no touch pad on the screen) the picture is Linux's: `video::dest_rect`
+(shared in `video_basics.rs`) on the whole window in physical pixels, so Integer counts the screen's own lines (Odin 2 Mini 1920×1080:
+GBA 6×, 1440×960; before 15.11. it was laid out in the 1782×951 safe area and got 5×), and the picture, its switch-on and its frame
+are drawn in that space (`picture::Space`, `Graphics::present`'s last argument); a frame never makes it smaller, as on Linux.
+`with_a_controller_the_picture_is_where_linux_puts_it_on_the_same_screen` compares every Scaling row, frame and the handheld view's
+start choice with Linux on five screens. With the touch pad, the picture keeps a margin (8 % of the room's shorter side, at least 24 logical px) and, with a frame, stands
+in the middle of its room (without one an upright phone keeps it at the top); `frame_room` is what the frame may fill (above
+the pad upright, between the pad's two sides turned, measured with the pad's own layout, `player_touch::pad_extent`); `frame_plan`
+turns both into the viewport pixels the picture is drawn on, so the frame's hole is exactly the picture and the room lies inside
+the viewport (the insets stay clear). The frame is drawn on a thread while the game's first frames show without it
+(`Layer::set_async`). Packs, Ambient and the other 14 frames of Linux's list are not offered here; the row stays None / Console /
+CRT TV. `src/android_phones_tests.rs`: every format and console (`screen_frames_fit_phone_formats_with_the_touch_pad`), the
+real GLES compositor against Linux's composition pixel for pixel, `FRAME_SHEETS=<dir>` contact sheets.
 
 ## 0.1.5-android.6: controller everywhere, pause sheet, touch pad
 
@@ -662,8 +676,12 @@ packs and its full collection are not yet exposed here.
 - Player pause: one sheet for touch and controller (`touch_pause`), a focus ring and a hint line for the controller;
   the handheld list is gone. Landscape is two columns that always fit (buttons shrink to 48 dp before anything
   scrolls). Options: sections Picture (the player's own picture settings first), Sound, Controls, Speed, sorted by
-  key/name words (`option_section`); model/BIOS/preset/restart options in "Advanced (this emulator)", one row that
-  opens it; values On/Off; "(Restart)" becomes "after a restart" in the name line; Up/Down follow the page order.
+  key/name words (`option_section`, its word lists in `core_options::player_section`; an option with a plain name goes by
+  that name alone); model/BIOS/preset/restart options and any option in its emulator's own words
+  (chip names such as PPU/DSP/HLE, "Overclocking", "Hack": `core_options::insider_words`, any core) in "Advanced (this
+  emulator)", one row that opens it. Where we know a better name it replaces the core's (`core_options::plain_name`,
+  `make_plain`: "Less sprite flicker", speeds as "120%"); SNES (bsnes) shows six of its 26 options
+  (`android_curation`); values On/Off; "(Restart)" becomes "after a restart" in the name line; Up/Down follow the page order.
 - Touch pad (`touch_controls`): drawn with real transparency (the overlay's top byte is alpha; the shader falls back to
   "non-black is opaque" for pixels without one, such as text and the picture's frame). An 8-way D-pad from the
   finger's angle (`Player::bits_at`), face buttons per system, shoulders, Select/Pause/Start pills, at least 56 dp;
@@ -753,8 +771,9 @@ cartridge media, stickers, the Cabinet TV, light/dark sets, the new logo and the
 Settings (flat sheet, `ui.rs` `SETTINGS`): Look, Appearance, **Colours**, **Font**, Text size, **Cozy extras** (own sheet),
 Language, Animations, Playful cases, Old-TV switch-on, **Motion**, UI sounds, Case sounds,
 **Button symbols**, Frozen games, Game Boy core, **Plays with** (0.4), ROM folder, Game check, Save backup (0.3.2), Covers and pictures, Updates, **Licences**, First start, **Help**, Report a problem. The cozy extras you hear or that move, and
-the slideshow, are rows of their own as on Linux (Sound & feel, Sleep & power; `cozy_extras::Extra::home`); the sheet holds
-the eight of Linux's Cozy extras page in its order (`Extra::PAGE_ROWS`). These look settings are kept in `launcher.json` (`Preferences`, a wrong value costs that value only), handed to
+the slideshow, are rows of their own (Linux has Case sounds in Controls & sound and, since 2026-11-13, Playful cases and
+Old-TV switch-on on its Cozy extras page); the sheet holds the seven others of Linux's Cozy extras page in its order
+(`ui::PHONE_EXTRAS`). These look settings are kept in `launcher.json` (`Preferences`, a wrong value costs that value only), handed to
 the shared painters' process-wide switches by `Preferences::apply_look` (every paint, at start, and in the player from
 the launch's `playerSettings`).
 Cozy extras on a phone (as rows of Settings or of the sheet, above): Case sounds, Old-TV switch-on (player), TV on the cabinet (landscape Cabinet panel), Stickers on
@@ -820,8 +839,8 @@ history facts before recording this launch. The player shows the reminder only a
 `Core::resume` actually succeeds and a restored frame exists; it runs no further ticks or
 audio while the card is being read. Android has no editable per-game notes yet.
 
-`Preferences.haptics` defaults false; `remind_where: Option<bool>` defaults to enabled for
-older preferences. Per-game toggle selections live under private `android-controls/<key>.json`;
+`Preferences.haptics` defaults false; `remind_where: Option<bool>` is off unless set On (0.5; it defaulted to On before: unset is Off for everyone, an
+explicit choice stays). Per-game toggle selections live under private `android-controls/<key>.json`;
 core descriptor snapshots use `android-buttons/<key>.json`, loaded once on explicit Controls open.
 They use the game/core identity, so one game's action names cannot describe another game.
 These settings change no SAF permission, game-file location or manual slot format.
@@ -1014,7 +1033,7 @@ source archive and its patches, and that each download package carries its licen
 (`android/SOURCE-OFFER.txt.in`) is the written offer in the APK and, with the patches, in the release assets.
 Tests: `scripts/android/test-core-licences.py`, `test-release-check.py`, `android_02_tests`. The system download channel is
 `android/core-channel.url` (copied to `assets/core-channel.url`; `ANDROID_CORE_CHANNEL_URL` for one build): empty until it is
-public, and then `Ui::core_channel_open` is false, the extra systems read "Coming soon" (first start, Extras, the press on
+public, and then `Ui::core_channel_open` is false, the extra systems read "Not available here" (first start, Extras, the press on
 a game) and `cores_poll` never starts a download. An address ending in `/catalog.json` switches the offers on, without
 code changes. Not to be confused with the intent extra `coreCatalogUrl`, which overrides it in tests.
 
@@ -1103,7 +1122,11 @@ The same code as pocket-core on Linux: `src/achievements/` (session, offline cop
   notes are `achievements::cards` (tested on Linux) painted with `unlock_card` (shared with pocket-core's HUD). The
   pause menu's **Achievements** row is the last one (index 9, the others keep their numbers) and opens `Menu::Achievements`,
   the list as lines (`achievements_page::list_lines`), read from `<data>/achievements/running.json` once a second.
-  Softcore only, as on Linux (hardcore would forbid states).
+  Hardcore as on Linux (`achievements::hardcore`, hidden while `OFFERED` is false): `Player::new` decides before the resume (`hardcore::at_start`; no
+  resume then, a note when a moment waited), the session runs rc_client in hardcore, `Player::load` refuses every load,
+  Save/Load/Earlier stay in place (rows by number) but grey with "Off in Hardcore", and no cheats are applied. The
+  switch is on Settings → RetroAchievements (Mobile view: `achievements_ui.rs`, `Command::RaHardcore`; handheld view: the
+  Linux page); switching during a game is not offered on Android yet.
 - **Recognising the game:** `achievements::hash_rom` on the path the core was given. A game opened without a copy is the
   alias `/proc/self/fd/N` of the document (`android_content::DirectGame`) under its original name; `hash_tests.rs` proves
   it hashes like the file itself, also in a zip, as an ISO, a CUE sheet and an M3U playlist. A CHD is not identified: rcheevos
@@ -1127,9 +1150,15 @@ Menus use the keys as Android sends them (A confirms, B goes back) on every pad.
   OdinSettings.apk, `ControllerStylePreference`) does not change a key layout: the input service replaces the whole virtual
   pad, 2020:0112 "Xbox Wireless Controller" (Xbox style) by 2020:0111 "Odin Controller" (Odin style) and sends other evdev
   codes for the same buttons (measured 11.11.2026: the same scan codes give the same keys in both). So the style is read from
-  the device, and the game must keep player 1 over the switch (`is_odin_pad`: one controller in both). Xbox style reads
-  as Xbox places, Odin style as the pad's own Nintendo lettering. That mapping follows from the settings app and the
-  names; pressing the real buttons in both styles was not possible without a person.
+  the device, and the game must keep player 1 over the switch (`is_odin_pad`: one controller in both). The Odin prints
+  A at the bottom; Xbox style sends `BUTTON_A` from the bottom button, Odin style from the right one (pressed by hand,
+  15.11.2026). So menus confirm with the bottom button in Xbox style and the right one in Odin style, and a game keeps
+  the console's A on the right in both.
+- **Handheld view.** The Linux app's Button layout is not used on Android (`button_layout::effective_on`): Android's
+  `BUTTON_A` is role A as it is. The Odin's device default (Xbox) used to swap it a second time, so in both styles the
+  button the style calls B confirmed (0.5.0-android.2). Settings → Buttons there has only Button symbols. Test:
+  `on_android_the_button_the_pads_setting_calls_a_confirms_in_both_odin_styles_and_on_every_pad` with the presses in
+  `pad::android::recorded`.
 - **Other pads.** Read by make: vendor 057e (Switch Pro, Joy-Con, 8BitDo in Switch mode) is Nintendo-lettered (A on the
   right), everything else Xbox-lettered. A press's scan code can not tell instead: a simulated 057e pad on the Odin delivered
   its right-hand button as `BUTTON_A` with the bottom button's scan code. Retroid pads: not checked (no device); they are read
@@ -1143,4 +1172,82 @@ Menus use the keys as Android sends them (A confirms, B goes back) on every pad.
   player 1. A pad that leaves pauses the game (as before) and returns to its player; a pad is known by make, model and name, the
   Odin's own pad (both styles) as one. The roster goes out 250 ms after the last change (a new pad is reported added, then
   changed, a few ms apart).
+- **The D-pad in the pause menu.** Every press is one step (measured on the Odin 2 Mini and the Retroid Pocket Mini V2: six
+  presses 1.5 s apart, eight within a second, no press lost, hat and keys alike). The D-pad moves as the sheet looks
+  (13.11.: "simply natural"): Up, Down, Left and Right go to the button that way on screen, half buttons side by
+  side included (Save | Load, Earlier | Options; Zoom has a row of its own since the controls card went, 15.11.), and the slot picker is a stop of its own between Continue
+  and Save | Load, where Left and Right change the slot. L / R change the slot from anywhere; A on the slot does nothing.
+  Up/Down keep the column they started in past a wide button (Options, Zoom, Options). The painter and the pad share one
+  layout, `pause_head::places`; the walk is `pause_head::grid_step`, checked on Android's screens (16:9, 4:3, 1:1, 3:2,
+  a phone both ways, memory card, Achievements) by `pause_head::tests` (direction tables, reachability, no step the wrong
+  way). Before the first picture of the sheet, Up/Down fall back to reading order (`pause_head::pad_step`). A hat is an axis:
+  Android reports its press and its let-go and nothing between, so a held hat repeats by itself (after 400 ms, then every
+  90 ms, `pad::android::DirectionRepeat`; a held D-pad *key* is repeated by Android). While one is held the player keeps
+  drawing frames, which is what drives the repeat. Tests: `pause_head::tests`, `pad::tests` (single, quick, slow, held).
 
+
+## Handheld view: "Runs on" and the way a game starts
+
+One function decides what starts a game on Android, for the Mobile view and the handheld view: `pocket_ui::play_route`
+(`Phone::way`, `chosen_app`). The game's own choice comes first, then its system's (`plays_with_game`, `plays_with` in launcher.json, the
+Mobile view's file; the handheld view reads and writes the same two keys, so a choice made in one view holds in the other). An app
+that is gone from the phone is no choice (the system's way applies, and the choice holds again when the app is back).
+
+| Way | When | In the handheld view |
+|---|---|---|
+| Our player | the system has a core of ours (`android/cores.lock.json`) and it is on the phone (bundled, or downloaded) | starts as pocket-core's games do on Linux (hosted): the start's scene in full, the game held until it ends or a button skips it |
+| Core to download | the core is a download (PSP, DS, N64, Saturn, Dreamcast) and not on the phone | A on the game doesn't start it: its "Runs on" page opens on the **Download** row ("PSP · 18.6 MB", the same job and consent as Mobile, unmetered Wi-Fi) with "This system is not installed yet. Choose Download now to add it on Wi-Fi."; without a public channel the row says "Coming soon" |
+| Another app | an installed app is chosen for the system or the game, or the system has no player of ours (PS2, GameCube/Wii, 3DS, Xbox: the first app that takes it) | `EmulatorIntents.createForPath`: RetroArch gets the path, the others a read-only content URI of `RomProvider` (no copy); the app starts at once (no hold); play time and the way back are as for our player |
+| Nobody | no player of ours and no app | the Game check's sentence for the profile ("PlayStation 2 games play in ARMSX2, which isn't installed …") |
+
+The handheld view lists PS2, GameCube, Wii, 3DS and Xbox folders under `ROMs` always (their games show even before an app is installed). The "Runs on"
+page there has no ROCKNIX words: rows are Runs on (pocket-ui player, or an app by the name the phone gives it), Download (only while our player is the way
+and its core is missing) and Save changes (this console, this game, restore defaults). `emu_choice_page::PhoneSubject` carries what the page needs. The phone
+(apps by profile, cores on disk, offers, channel) is read by `app_android::refresh_phone` at start and whenever the view comes back to the front;
+tests describe one with `POCKETUI_PHONE=<json>` (`play_route::Phone::from_json`).
+
+**Play history from the Mobile view (13.11.2026).** The Mobile view keeps when each game was last started and its play time in
+`launcher.json` (`played`, `play_secs`, by the storage provider's document key `com.android.externalstorage.documents:primary:ROMs/…`);
+the handheld view keeps its own recent games (`recents.json` in `files/handheld`, by path). At its start and whenever it comes back to the
+front without a game, the handheld view takes Mobile's history over (`android_handheld::take_mobile_history`): the document id gives
+the path (`primary:` is `/storage/emulated/0`, a card's volume is `/storage/<volume>`), es_systems.cfg the system; the game comes into
+the recent games where its last start puts it (`Recents::take_over`), with Mobile's time added and the newer last start kept.
+`mobile-history.json` beside it notes what was taken per key, so the next start adds only what Mobile played since: time from both
+views adds up, nothing counts twice. Mobile's file missing or broken, another provider's document, a file outside this view's
+system folders: nothing is taken, the shelf says "Not played yet" as before. The way back (handheld play time in Mobile's file) is not
+done: Mobile counts only its own starts. The card's Status stays the player's choice as on Linux; with Mobile's minute or more it
+offers "Playing now? Press Y" (`LibraryMeta::suggestion`). Tests: `android_handheld::tests::a_game_played_in_the_mobile_view_shows_its_history_in_the_handheld_view`,
+`missing_or_broken_mobile_history_leaves_the_shelf_as_it_is`.
+
+**Android's own words (13.11.2026).** Pages the handheld view shares with Linux say only what Android has. About and its Settings row
+show the APK's version (`update::shown_version`, `android:versionName` read from AndroidManifest.xml at build time; `app_version`
+and `release_build` stay the library's, so no Linux update look starts on Android). The manual is three pages of its own
+(`manual::ANDROID_PAGES`, `docs/user/android-*.md.inc`). The Tour's quick-settings and add-games cards and Big text's line have Android
+texts (`features::ANDROID_BASICS`, `ANDROID_LINES`), quick settings' Brightness/Volume lines name no START + Vol keys
+(`quick_paint::level_line`), RetroAchievements names no pocket-core, rewind or Pocket (`achievements_page::about_in`), and the
+Download row without a channel names an emulator app only when the phone has one for the system (`emu_choice_page::closed_line`).
+The first start welcomes "to pocket-ui" (`setup::welcome_title`) in the device's language (the view sets `LANG` from the
+Activity's `language()` before settings are read); the files dialog makes no Linux comparison; Big text's picture has no Screen
+colour row; the system names say "(experimental)" by Android's list (`play_route::experimental`, shared with the Mobile view;
+DS is not on it); and "Some game files can't be read" is told only for a rise over the count the last start knew
+(`<data>/library-unread-known`). The class test is `android_pages_name_nothing_only_linux_has` (every such text, every language, a table of Linux-only words);
+`tests/android_handheld_pages.rs` paints the pages in Android's profile and reads them back.
+
+The manifest has `RomProvider` (authority `<package>.roms`, `RomProvider.authority`) beside `HandheldActivity` and All files access; a QA
+package renames the authority with its package.
+
+## The Handheld view's pause menu (15.11.2026)
+
+A game started from the Handheld view gets the handhelds' (Linux's) pause menu in the player, not the Mobile view's sheet
+(the Odin hand test: "the pause menu is completely different on Android"). `src/pause_list.rs` paints it with Linux's
+sizes, colours and Retro frames; `android/src/player.rs` (`list_menu`, set by `launch_settings`' `"pause_menu": "handheld"`)
+gives it its rows and keys:
+
+- Continue, Save, Load, Earlier, Options, Achievements (signed in), Save & quit under each other; Up/Down go round.
+- Save and Load show the slot ("‹ 2 ›"), Left/Right (L/R from any row) change it; the window at the right shows the slot's
+  picture, the slots under it and "Slot 2 · saved 5 min ago".
+- Earlier shows how long ago its moment is ("12 min ago"); Left/Right go through the kept moments (`earlier0`…`earlier5`,
+  newest first) and the line under the picture says what A does and how moments come about.
+- Options is a list: Zoom and Screenshot first (Linux has Zoom under Options too), then the sections. B goes back onto
+  the row it came from; Zoom's B back to Options.
+- Touch stays an extra: a tap on a row does it, on a hint key does that key.

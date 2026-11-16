@@ -110,12 +110,13 @@ impl Index {
     pub fn surprise_reason(&self, g: usize) -> String {
         let u = &self.user.games[g];
         let when = match (u.last_played.map(|t| self.user.now.saturating_sub(t)), u.secs) {
-            (None, 0) => "Never played".to_string(),
+            (None, 0) if !u.ever_played() => "Never played".to_string(),
+            (None, 0) => "Played".to_string(),
             (None, _) => "Not played for a long time".to_string(),
             (Some(a), _) => since(a),
         };
         let first = match u.status {
-            Status::Playing | Status::Paused if u.last_played.is_some() || u.secs > 0 => format!("Started, {}", lower_first(&when)),
+            Status::Playing | Status::Paused if u.ever_played() => format!("Started, {}", lower_first(&when)),
             Status::Completed => format!("Finished, {}", lower_first(&when)),
             _ => when,
         };

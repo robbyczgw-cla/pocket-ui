@@ -111,6 +111,10 @@ settings:3
 settings:4
 settings:5
 settings:6
+settings:7
+settings-tabs
+settings-tabs:1
+settings-tabs:7
 settings:0:0
 settings:0:1
 settings:0:2
@@ -118,8 +122,6 @@ settings:0:3
 settings:0:4
 settings:0:5
 settings:0:6
-settings:0:7
-settings:0:8
 settings:1:0
 settings:1:1
 settings:1:2
@@ -128,39 +130,49 @@ settings:1:4
 settings:1:5
 settings:1:6
 settings:1:7
+settings:1:8
 settings:2:0
 settings:2:1
 settings:2:2
 settings:2:3
 settings:2:4
 settings:2:5
-settings:2:6
-settings:2:7
 settings:3:0
 settings:3:1
 settings:3:2
 settings:3:3
 settings:3:4
-settings:3:5
-settings:3:6
 settings:4:0
 settings:4:1
 settings:4:2
 settings:4:3
 settings:4:4
+settings:4:5
+settings:4:6
+settings:4:7
 settings:5:0
 settings:5:1
 settings:5:2
 settings:5:3
 settings:5:4
 settings:5:5
+settings:5:6
 settings:6:0
 settings:6:1
-settings:7:0
-settings:7:1
 settings:6:2
 settings:6:3
 settings:6:4
+settings:6:5
+settings:6:6
+settings:6:7
+settings:6:8
+settings:7:0
+settings:7:1
+settings:7:2
+settings:7:3
+settings:7:4
+settings:7:5
+settings:7:6
 buttons:0
 buttons:1
 buttons:0:r
@@ -178,8 +190,13 @@ updates:ready
 updates:confirm
 updates:confirm-low
 updates:off
-settings:5:dot
-settings:5:5:dot
+updates:card
+updates:card-refused
+updates:card-none
+updates:card-older
+updates:no-wifi
+settings:6:dot
+settings:6:5:dot
 manual
 leave
 leave:1
@@ -339,6 +356,8 @@ achievements:password
 achievements:signing
 achievements:error
 achievements:confirm
+achievements:hardcore
+achievements:hardcore-on
 game-check
 game-check:1
 game-check:running
@@ -439,16 +458,6 @@ this-game:gba::18
 this-game:psx
 this-game:xbox:emu=hakux
 this-game:xbox
-# The controls card (src/controls_card.rs): per console with the player's changes, a console without names yet, the first start,
-# the game card's Controls row, and Options > Controls in the pause menu.
-controls-card:snes:remap
-controls-card:snes:zoom
-controls-card:psx
-controls-card:n64
-controls-card:gba:first
-controls-card:megadrive
-controls-card-row:snes:chrono
-controls-card-pause
 
 # Search
 search:home
@@ -551,8 +560,8 @@ extras:3:pixel
 save
 emulator
 controls
-controls:1
-controls:18
+controls:16
+controls:19
 controllers:1:brick-f1
 controllers:1:brick-f2
 leds:off:1
@@ -564,6 +573,7 @@ cheats-empty
 notice:twin
 notice:bios:toast
 notice:update
+notice:card-update
 game-twin-note
 notice:several
 notice:password
@@ -587,6 +597,8 @@ gc-more
 wii-more
 achievements-menu
 achievements-list:0
+hardcore-menu
+extras:0:hardcore
 pixel-path-menu
 pixel-path-menu:full
 pixel-path:gba
@@ -794,6 +806,11 @@ gallery:game
 gallery:game-full
 gallery:card
 gallery:shelf
+gallery:mine
+gallery:full-mine
+gallery:make
+gallery:making
+gallery:made
 gallery:full-shelf
 
 sleep:device=nova
@@ -884,6 +901,9 @@ safe rescue:kids-pin
 updates:connecting
 updates:fallback
 updates:timeout
+updates:unpacking
+updates:moving
+updates:restarting
 
 # Safe one-launch retry and a set-aside moment waiting for card space.
 notice:fallback

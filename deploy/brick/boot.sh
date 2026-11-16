@@ -22,19 +22,26 @@ release() { cat "$1/RELEASE" 2>/dev/null || echo unknown; }
 # symlink, overwrite an old file, or silently continue with an asset missing in both.
 asset_path() {
   case "$1" in
-    cores/*|bios-data/*|bin/brick-egl|bin/curl|bin/dropbearmulti|bin/syncthing|bin/tailscale|bin/tailscaled) ;;
+    cores/*|bios-data/*|port-data/*|bin/brick-egl|bin/curl|bin/dropbearmulti|bin/syncthing|bin/tailscale|bin/tailscaled) ;;
     *) return 1 ;;
   esac
   case "/$1/" in *'\'*|*"$(printf '\r')"*|*'//'*|*'/./'*|*'/../'*) return 1 ;; esac
 }
-asset_location() { # tree, relative file: absent is OK, links/non-files are not
+asset_location() { # tree, relative path [any]: absent is OK, links are not; the last part is a file (a file or a folder with `any`)
   tree=$1; rest=$2
   [ ! -L "$tree" ] && { [ ! -e "$tree" ] || [ -d "$tree" ]; } || return 1
   while [ "${rest#*/}" != "$rest" ]; do
     tree=$tree/${rest%%/*}; rest=${rest#*/}
     [ ! -L "$tree" ] && { [ ! -e "$tree" ] || [ -d "$tree" ]; } || return 1
   done
-  [ ! -L "$tree/$rest" ] && { [ ! -e "$tree/$rest" ] || [ -f "$tree/$rest" ]; }
+  [ ! -L "$tree/$rest" ] && { [ ! -e "$tree/$rest" ] || [ -f "$tree/$rest" ] || { [ "${3:-}" = any ] && [ -d "$tree/$rest" ]; }; }
+}
+# `move:<path>` lines: a file or a whole folder of the program folder that the update moved unchanged instead of unpacking it
+# again (src/update/brick_delta.rs). Any plain relative path, no hidden part, nothing of the start itself or of storage/.
+move_path() {
+  case "$1" in ''|/*|.*|*/|*/.*|*'\'*|*"$(printf '\r')"*) return 1 ;; esac
+  case "/$1/" in *'//'*|*'/./'*|*'/../'*) return 1 ;; esac
+  case "$1" in start.sh|RELEASE|VERSION|asset-packages.json|storage|storage/*) return 1 ;; esac
 }
 check_assets() { # old, source; a missing manifest is the legacy copy-based update
   old=$1; source=$2
@@ -50,18 +57,34 @@ check_assets() { # old, source; a missing manifest is the legacy copy-based upda
     IFS= read -r asset
     read_rc=$?
     if [ "$read_rc" != 0 ]; then [ -z "$asset" ] && break; return 1; fi
-    asset_path "$asset" && asset_location "$old" "$asset" && asset_location "$source" "$asset" || return 1
-    [ -f "$old/$asset" ] || [ -f "$source/$asset" ] || return 1
+    case "$asset" in
+      move:*)
+        asset=${asset#move:}
+        move_path "$asset" && asset_location "$old" "$asset" any && asset_location "$source" "$asset" any || return 1
+        [ -e "$old/$asset" ] || [ -e "$source/$asset" ] || return 1 ;;
+      *)
+        asset_path "$asset" && asset_location "$old" "$asset" && asset_location "$source" "$asset" || return 1
+        [ -f "$old/$asset" ] || [ -f "$source/$asset" ] || return 1 ;;
+    esac
   done <"$old/.asset-moves"
 }
-restore_assets() { # first check the WHOLE manifest, then restore only absent old files
+restore_assets() { # first check the WHOLE manifest, then restore only absent old files and folders
   check_assets "$1" "$2" || return 1
   old=$1; source=$2
   [ -f "$old/.asset-moves" ] || return 0
   while IFS= read -r asset; do
-    if [ ! -f "$old/$asset" ]; then
-      mkdir -p "${old}/${asset%/*}" && mv "$source/$asset" "$old/$asset" && sync || return 1
-    fi
+    case "$asset" in
+      move:*)
+        asset=${asset#move:}
+        if [ ! -e "$old/$asset" ]; then
+          case "$asset" in */*) mkdir -p "${old}/${asset%/*}" || return 1 ;; esac
+          mv "$source/$asset" "$old/$asset" && sync || return 1
+        fi ;;
+      *)
+        if [ ! -f "$old/$asset" ]; then
+          mkdir -p "${old}/${asset%/*}" && mv "$source/$asset" "$old/$asset" && sync || return 1
+        fi ;;
+    esac
   done <"$old/.asset-moves"
 }
 blocked() { say "asset recovery blocked: $*; kept program folders for recovery"; exit 1; }

@@ -121,14 +121,44 @@ pub fn paint(c: &mut Canvas, p: &Prepared, alpha: u8) {
     if alpha == 0 {
         return;
     }
-    let (w, h) = (p.img.w as i32, p.img.h as i32);
-    let (x0, x1) = (p.x.max(0), (p.x + w).min(c.w));
-    for row in p.y.max(0)..(p.y + h).min(c.h) {
-        let src = &p.img.px[((row - p.y) * w) as usize..((row - p.y + 1) * w) as usize];
-        let dst = &mut c.buf[(row * c.w) as usize..((row + 1) * c.w) as usize];
-        for x in x0..x1 {
-            let s = src[(x - p.x) as usize];
-            dst[x as usize] = if alpha == 255 { s } else { mix(dst[x as usize], s, alpha as u32) };
+    if c.n() == 1 {
+        let c_w = c.w;
+        let (w, h) = (p.img.w as i32, p.img.h as i32);
+        let (x0, x1) = (p.x.max(0), (p.x + w).min(c.w));
+        for row in p.y.max(0)..(p.y + h).min(c.h) {
+            let src = &p.img.px[((row - p.y) * w) as usize..((row - p.y + 1) * w) as usize];
+            let dst = &mut c.pixels_mut()[(row * c_w) as usize..((row + 1) * c_w) as usize];
+            for x in x0..x1 {
+                let s = src[(x - p.x) as usize];
+                dst[x as usize] = if alpha == 255 { s } else { mix(dst[x as usize], s, alpha as u32) };
+            }
+        }
+        return;
+    }
+    // Painted natively (docs/dev/native-paint.md): the picture's 2:1 mean (`copy_design`, the old picture bit for bit
+    // at full alpha); while it fades in, that mixed with the screen pixels it covers (the mean of the mix, within a
+    // step of rounding).
+    let stride = c.stride();
+    let rows = c.pixels().len() / stride.max(1);
+    let (x0, y0) = (p.x.max(0), p.y.max(0));
+    let (x1, y1) = ((p.x + p.img.w as i32).min(c.w), (p.y + p.img.h as i32).min(c.h));
+    if x1 <= x0 || y1 <= y0 {
+        return;
+    }
+    let (sx0, sy0, _, _) = c.cell(x0, y0);
+    let (sx1, sy1, _, _) = c.cell(x1 - 1, y1 - 1);
+    let (sx0, sx1) = (sx0.max(0) as usize, ((sx1 + 1).max(0) as usize).min(stride));
+    let (sy0, sy1) = (sy0.max(0) as usize, ((sy1 + 1).max(0) as usize).min(rows));
+    let saved: Vec<u32> = if alpha == 255 { Vec::new() } else { (sy0..sy1).flat_map(|r| c.pixels()[r * stride + sx0..r * stride + sx1].to_vec()).collect() };
+    c.copy_design(p.x, p.y, p.img.w as usize, &p.img.px, None);
+    if alpha == 255 {
+        return;
+    }
+    let span = sx1 - sx0;
+    for (k, r) in (sy0..sy1).enumerate() {
+        let line = &mut c.pixels_mut()[r * stride + sx0..r * stride + sx1];
+        for (px, old) in line.iter_mut().zip(&saved[k * span..(k + 1) * span]) {
+            *px = mix(*old, *px, alpha as u32);
         }
     }
 }
@@ -197,8 +227,36 @@ mod tests {
         let mut buf = vec![0u32; 5 * 4];
         let mut c = Canvas::new(&mut buf, 5, 4);
         paint(&mut c, &p, 128);
-        assert_eq!(c.buf[3], mix(0, 0xffffff, 128));
+        assert_eq!(c.pixels()[3], mix(0, 0xffffff, 128));
         paint(&mut c, &p, 0);
-        assert_eq!(c.buf[3], mix(0, 0xffffff, 128), "alpha 0 paints nothing");
+        assert_eq!(c.pixels()[3], mix(0, 0xffffff, 128), "alpha 0 paints nothing");
+    }
+
+    #[test]
+    fn painted_natively_the_picture_and_its_fade_look_as_before() {
+        // A game's picture over a page, at full alpha the old picture bit for bit, fading in within steps of rounding.
+        let img = Image { w: 160, h: 144, px: (0..160 * 144).map(|i| (i * 0x01_07_13) & 0xff_ffff).collect() };
+        for (x, y, w, h) in [(80, 40, 960, 864), (81, 41, 961, 863), (-30, -10, 1340, 1000)] {
+            let p = Prepared { rom: PathBuf::new(), x, y, img: scaled(&img, w, h) };
+            for alpha in [255u8, 1, 90, 200] {
+                let paint = |c: &mut Canvas| {
+                    c.clear(0x1b1712);
+                    c.rect(0, 600, 1280, 360, 0xd8cfc0);
+                    paint(c, &p, alpha);
+                };
+                let mut design = vec![0u32; 1280 * 960];
+                paint(&mut Canvas::new(&mut design, 1280, 960));
+                let mut old = vec![0u32; 640 * 480];
+                crate::scaled_layout::ScaledFrame::default().downscale(&design, (1280, 960), &mut old, (640, 480));
+                let mut new = vec![0u32; 640 * 480];
+                paint(&mut Canvas::screen(&mut new, (640, 480), 2));
+                let worst = old.iter().zip(&new).map(|(a, b)| [0, 8, 16].iter().map(|s| ((a >> s) & 0xff).abs_diff((b >> s) & 0xff)).max().unwrap()).max().unwrap();
+                if alpha == 255 {
+                    assert_eq!(old, new, "at {x},{y} {w}x{h}: the old picture");
+                } else {
+                    assert!(worst <= 2, "at {x},{y} {w}x{h} alpha {alpha}: {worst} steps apart");
+                }
+            }
+        }
     }
 }

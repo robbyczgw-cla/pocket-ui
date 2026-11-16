@@ -3,7 +3,8 @@
 ## Quick settings
 
 Tap **HOME** on the shelf, or press **START** in a game's pause menu (the game stays paused and
-visible behind the panel). Rows, top to bottom:
+visible behind the panel). Brightness and Volume are also rows of Settings → Screen & sound, with the same values.
+Rows, top to bottom:
 
 | Row | Left/Right and A |
 |---|---|
@@ -14,6 +15,7 @@ visible behind the panel). Rows, top to bottom:
 | **Performance** | Left/Right: Battery, Auto, Max; A goes on to the next. What games run with |
 | **Fan** | Left/Right: Very quiet, Quiet, Auto, Cool; A goes on to the next. On the shelf the fan in the menus, over a game the fan in games |
 | **Power…** | A opens the power menu: Sleep, Restart, Power off, Restart pocket-ui (and Restart to boot menu where the device can) |
+| **Back to EmulationStation** | dArkOS only (the test port): A returns directly to EmulationStation without a confirmation. On the shelf, not over a game; the power menu also offers it in a game, saving and closing the game first |
 
 The time, the Wi-Fi symbol and the battery level are at the top right, as on Home. B or HOME closes the panel; opened from the pause menu, it
 goes back to the pause menu. In a game, a HOME tap opens the pause menu, not this panel. The rows can also be touched:
@@ -27,7 +29,11 @@ text stays readable on the darkest step. Turning Brightness up takes the extra d
 goes up again. Your choice is kept after a restart. On Android, use Android's own Extra dim (in Android's settings, under Accessibility)
 instead.
 
+![Quick settings with Brightness turned down past 5%: "Extra dim 2" and an empty bar](pictures/extra-dim.webp)
+
 ### Where the sound goes
+
+On Anbernic H700 handhelds with ROCKNIX, games also keep running silently at 0% volume, including Nintendo 64.
 
 On Anbernic H700 handhelds with ROCKNIX, volume steps below the maximum are louder than in 0.4.0, which made
 middle levels too quiet. The maximum stays the same; 0% stays silent. A speaker level left by the old curve is corrected
@@ -138,5 +144,5 @@ heading **Power button**. On a short screen or with larger text, the list scroll
   settings, under **Power…**.
 - **Retroid Pocket Flip 2** (experimental): closing the lid does what the short press does, Sleep or Screen off;
   opening it wakes the screen.
-- Settings from before this page (the times used to be in Settings → Playing → Battery) are kept: 3 minutes there is
+- Settings from before this page (the times used to be in Settings → System → Battery) are kept: 3 minutes there is
   3 min under Screen off after until you change it.

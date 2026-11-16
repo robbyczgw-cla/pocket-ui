@@ -24,16 +24,17 @@ until the Brick's hardware page ([TRIMUI-BRICK-HW.md](TRIMUI-BRICK-HW.md)) is in
 
 ## The web companion on the card
 
-The companion listens only on Tailscale's own interface (`tailscale0`, `SO_BINDTODEVICE`) and recognises the owner's devices with tailscaled's
-`whois`. The card's tailscaled may run **in userspace** (the firmware has no `/dev/net/tun`, or the tunnel did not come up): then there
+The companion listens on Tailscale's own interface (`tailscale0`, `SO_BINDTODEVICE`), where it recognises the owner's devices with
+tailscaled's `whois`, and since 0.5 on the Wi-Fi (`wlan0`, its private IPv4 address, as on ROCKNIX), where every browser pairs with the code.
+The card runs no avahi-daemon, so the page shows the Wi-Fi's address without a `.local` name. The card's tailscaled may run **in userspace** (the firmware has no `/dev/net/tun`, or the tunnel did not come up): then there
 is no `tailscale0`, and tailscaled hands a connection to the node's tailnet address on to `127.0.0.1` by itself (TRIMUI-BRICK-REMOTE.md). So:
 
 - `web::net::plan_here` is `plan_userspace` on the card: with a `tailscale0` it is the usual plan; without one the companion listens on
-  **127.0.0.1:80** (the Wi-Fi cannot reach it) and `server.rs` lets loopback peers in on that listener only.
+  **127.0.0.1:80** for Tailscale (besides the Wi-Fi socket) and `server.rs` lets loopback peers in on that listener only.
 - tailscaled's `whois` sees the loopback peer, so nobody is the owner: **every browser pairs with the six-digit code** on the Brick's screen
   (Settings > Web companion > Pair a browser, with the QR code). The page says so.
-- The page's address is the node's name (`http://brick.<tailnet>.ts.net`) once tailscaled reports it; before that it reads "Waiting for
-  Tailscale". A browser may also use the node's 100.x address as the Host (`SelfNode::addrs`), not other names (DNS rebinding stays refused).
+- The page's first address is the Wi-Fi's (`http://192.168.x.y`, also in the QR code); then the node's name (`http://brick.<tailnet>.ts.net`)
+  once tailscaled reports it. With neither it reads "Waiting for Wi-Fi". A browser may also use the node's 100.x address as the Host (`SelfNode::addrs`), not other names (DNS rebinding stays refused).
 - tailscaled's socket is the card's: `POCKETUI_TAILSCALED_SOCKET=$RUN/tailscaled.sock` (start.sh), `LocalApi::default` reads it.
 - Not the phone page: that one (`phone_upload.rs`) is a separate, short-lived Wi-Fi server with a code in its path;
   it stays as it is, and its upload code is the companion's file code (`web::files`), so a file arrives by the same checks either way.

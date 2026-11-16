@@ -44,15 +44,22 @@ enum Val {
     Stars(u8),
     /// The save slots on their medium (`save_media`), two lines high.
     Medium(CardSaves),
+    /// Where the player is, from the game's own save (`case_knows`), in the interface's language already: painted as
+    /// it is, across the column.
+    Line(String),
+    /// The pictures from the player's own ROM or the small measure under it (`case_knows_art::paint_strip`).
+    Strip(Option<std::sync::Arc<crate::case_knows_art::Art>>, Option<crate::case_knows::Meter>),
 }
 
 impl Val {
     /// Lines it takes.
     fn lines(&self) -> i32 {
-        if matches!(self, Val::Medium(_)) {
-            2
-        } else {
-            1
+        match self {
+            Val::Medium(_) => 2,
+            // The team and, under it when the column is narrow, the badges.
+            Val::Strip(Some(a), _) if !a.team.is_empty() && !a.badges.is_empty() => 3,
+            Val::Strip(Some(_), _) => 2,
+            _ => 1,
         }
     }
 }
@@ -81,17 +88,22 @@ fn left_w(w: i32, side: i32) -> i32 {
 
 /// The player's own lines: what the box's back says under "Your game", and a note when there is one.
 fn your_rows(d: &CardData) -> Vec<(&'static str, Val)> {
+    let strip = d.progress.as_ref().filter(|_| d.case_art.is_some() || d.case_meter.is_some()).map(|_| ("", Val::Strip(d.case_art.clone(), d.case_meter)));
+    let progress = d.progress.clone().map(|p| ("", Val::Line(p))).into_iter().chain(strip).collect::<Vec<_>>();
     if d.plain {
-        return match d.played {
+        let played = match d.played {
             Some((last, secs)) => vec![("Played", Val::Text(crate::recents::duration(secs))), ("Last", Val::Text(crate::recents::ago(last)))],
-            None => vec![("Played", Val::Quiet("Not yet"))],
+            None => vec![("Played", Val::Quiet(d.not_played()))],
         };
+        return progress.into_iter().chain(played).collect();
     }
-    // The status first, across the column: its mark says what it is, and "Wird gespielt" needs the room.
+    // The status first, across the column: its mark says what it is, and "Wird gespielt" needs the room. Then where the
+    // player is, read from the game's own save.
     let mut rows = vec![("", Val::Status(d.status))];
+    rows.extend(progress);
     rows.push(match d.played {
         Some((_, secs)) => ("Played", Val::Text(crate::recents::duration(secs))),
-        None => ("Played", Val::Quiet("Not yet")),
+        None => ("Played", Val::Quiet(d.not_played())),
     });
     if let Some((last, _)) = d.played {
         rows.push(("Last", Val::Text(crate::recents::ago(last))));
@@ -281,14 +293,13 @@ impl InfoView {
         }
         // Text running under an edge fades out there, as on the card's page; a thin bar says where the view is.
         let fade = (view_h / 6).min(36);
-        for k in 0..fade {
-            let amount = (255 - k * 255 / fade.max(1)) as u8;
-            if self.scroll > 0 {
-                c.shade_rect(tx, dtop + k, tw, 1, pal().void, amount);
-            }
-            if self.scroll < self.max_scroll {
-                c.shade_rect(tx, dbot - 1 - k, tw, 1, pal().void, amount);
-            }
+        let down: Vec<u8> = (0..fade.max(0)).map(|k| (255 - k * 255 / fade.max(1)) as u8).collect();
+        if self.scroll > 0 {
+            c.shade_rows(tx, dtop, tw, pal().void, &down);
+        }
+        if self.scroll < self.max_scroll {
+            let up: Vec<u8> = down.iter().rev().copied().collect();
+            c.shade_rows(tx, dbot - fade.max(0), tw, pal().void, &up);
         }
         if self.max_scroll > 0 {
             let bar_h = (view_h * view_h / (view_h + self.max_scroll)).max(30);
@@ -367,6 +378,8 @@ fn your_w(text: &mut Text, rows: &[(&'static str, Val)]) -> i32 {
             let at = if k.is_empty() { 0 } else { key_w };
             at + match v {
                 Val::Text(s) => text.width(Face::Body, 28, s),
+                Val::Line(s) => text.width_plain(Face::Body, 28, s),
+                Val::Strip(..) => 0,
                 Val::Quiet(s) => text.width(Face::Body, 28, s),
                 Val::Status(s) => 32 + text.width(Face::Body, 28, s.label()),
                 Val::Stars(_) => type_scale::wide(13, 28) * 10,
@@ -396,6 +409,15 @@ fn paint_your(c: &mut Canvas, text: &mut Text, rows: &[(&'static str, Val)], cov
                 let s = text.fit(Face::Body, 28, s, vw);
                 text.draw(c, Face::Body, 28, vx, y, pal().chalk, &s);
             }
+            Val::Line(s) => {
+                let s = crate::case_knows_read::fit(text, Face::Body, 28, s, vw);
+                text.draw_name(c, Face::Body, 28, vx, y, pal().chalk, &s);
+            }
+            Val::Strip(art, meter) => {
+                let k = crate::case_knows_art::scale();
+                let top = y - type_scale::mid(28) - row / 2 + 4;
+                crate::case_knows_art::paint_strip(c, art.as_deref(), *meter, (vx, top, vw), k, (pal().chalk, pal().dust, pal().void));
+            }
             Val::Quiet(s) => {
                 // Keep the rating's action whole even when Retro's next size shares the same pixel grid.
                 let source = if *s == "None. Press Y" && text.width(Face::Body, 24, s) > vw { "None · Y" } else { s };
@@ -419,7 +441,7 @@ fn paint_your(c: &mut Canvas, text: &mut Text, rows: &[(&'static str, Val)], cov
             Val::Medium(s) => {
                 let (kind, l) = medium_layout(s, vw);
                 let icon = cover.map_or(crate::save_media::Icon::None, crate::save_media::Icon::Cover);
-                let slots = crate::save_media::Slots { filled: &s.filled, ring: None, icon, stripe: s.stripe, numbers: l.block >= 20 };
+                let slots = crate::save_media::Slots { filled: &s.filled, ring: None, icon, label: None, stripe: s.stripe, numbers: l.block >= 20 };
                 let top = y - type_scale::mid(28) - row / 2 + 6;
                 crate::save_media::paint(c, text, kind, vx, top, &l, &slots);
                 // When the newest was saved, beside it (left out where there is no room).

@@ -60,7 +60,7 @@ impl Index {
 
     fn waits(&self, g: usize, kind: Waiting) -> bool {
         let u = &self.user.games[g];
-        let played = u.secs > 0 || u.last_played.is_some();
+        let played = u.ever_played();
         match kind {
             Waiting::Rediscover => {
                 let unfinished = matches!(u.status, Status::Playing | Status::Paused) || (u.status == Status::NotStarted && played);

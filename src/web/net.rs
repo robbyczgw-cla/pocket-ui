@@ -2,10 +2,12 @@
 //! ([`peer_allowed`], [`host_allowed`]), binding to one interface (`SO_BINDTODEVICE`), and tailscaled's LocalAPI
 //! (`whois` and this node's own status) over its Unix socket.
 //!
-//! Binding to the Tailscale address alone is not enough on Linux: with the weak host model a packet for 100.x that
-//! arrives on wlan0 is accepted too, so a device on the Wi-Fi with a route to the Pocket could reach it. Each
-//! listening socket is therefore tied to its interface (`tailscale0`, `SO_BINDTODEVICE`), and each accepted
-//! connection must come from a Tailscale address. There is no switch for any other network.
+//! It listens on two networks (0.5): Tailscale's own addresses and the Wi-Fi's IPv4 address (a home network's private
+//! range). Binding to an address alone is not enough on Linux: with the weak host model a packet for 100.x that arrives
+//! on wlan0 is accepted too. Each listening socket is therefore tied to its interface (`tailscale0` or `wlan0`,
+//! `SO_BINDTODEVICE`), and each accepted connection must come from that network's kind of address ([`peer_allowed_on`]):
+//! a Tailscale address on the Tailscale socket, a private one on the Wi-Fi socket. A browser on the Wi-Fi is never an
+//! owner's device: it always pairs with the code (`api::Ctx::principal` looks at `Conn::lan`).
 
 use std::io::{Read, Write};
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr, TcpListener};
@@ -49,18 +51,51 @@ pub struct Listen {
     /// The interface's index when the plan was made: part of the comparison, so that a socket tied to an interface
     /// that was made anew with the same name and address is opened again (review F13). 0 for fixed addresses.
     pub index: u32,
+    /// The Wi-Fi (home network) socket: its browsers always pair with the code, nobody is let in by Tailscale.
+    pub lan: bool,
 }
 
-/// Where to listen, given the interfaces: only Tailscale's addresses on an interface called `tailscale…` (a CGNAT
-/// address handed out by a phone hotspot on wlan0 is in the same range and must not count). Never an unspecified or
-/// loopback address, never the Wi-Fi.
+/// The Wi-Fi interface: `wlan0` on ROCKNIX and the Brick, `POCKETUI_WIFI_IFACE` in the virtual device (as `wifi::ip`).
+pub fn wifi_iface() -> String {
+    std::env::var("POCKETUI_WIFI_IFACE").ok().filter(|v| !v.is_empty()).unwrap_or_else(|| "wlan0".into())
+}
+
+/// An IPv4 address of a home network: 10/8, 172.16/12, 192.168/16, link-local 169.254/16, and 100.64/10 (what a phone
+/// hotspot hands out). Never a public address: a Pocket that got one, or a browser that comes from one, is on no home
+/// network, and the companion stays off it.
+pub fn is_home(ip: IpAddr) -> bool {
+    let v4 = match ip {
+        IpAddr::V4(v4) => v4,
+        IpAddr::V6(v6) => match v6.to_ipv4_mapped() {
+            Some(v4) => v4,
+            None => return false,
+        },
+    };
+    let o = v4.octets();
+    v4.is_private() || v4.is_link_local() || (o[0] == 100 && (o[1] & 0xc0) == 64)
+}
+
+/// Where to listen, given the interfaces: Tailscale's addresses on an interface called `tailscale…`, and the Wi-Fi's
+/// home-network IPv4 address (`wifi_iface`). Never an unspecified or loopback address, never IPv6 on the Wi-Fi (a
+/// global IPv6 address may be reachable from the internet), never another interface.
 pub fn plan(ifaces: &[Iface], port: u16) -> Vec<Listen> {
+    plan_on(ifaces, port, &wifi_iface())
+}
+
+/// `plan` with the Wi-Fi interface's name given (tests).
+pub fn plan_on(ifaces: &[Iface], port: u16, wifi: &str) -> Vec<Listen> {
     let mut out: Vec<Listen> = Vec::new();
     for i in ifaces {
-        if i.addr.is_unspecified() || i.addr.is_loopback() || !i.name.starts_with("tailscale") || !is_tailnet(i.addr) {
+        if i.addr.is_unspecified() || i.addr.is_loopback() {
             continue;
         }
-        let l = Listen { addr: SocketAddr::new(i.addr, port), iface: i.name.clone(), index: i.index };
+        // A CGNAT address handed out by a phone hotspot on wlan0 is in Tailscale's range: it counts as the Wi-Fi's.
+        let tailnet = i.name.starts_with("tailscale") && is_tailnet(i.addr);
+        let lan = !wifi.is_empty() && i.name == wifi && i.addr.is_ipv4() && is_home(i.addr);
+        if !tailnet && !lan {
+            continue;
+        }
+        let l = Listen { addr: SocketAddr::new(i.addr, port), iface: i.name.clone(), index: i.index, lan };
         if !out.contains(&l) {
             out.push(l);
         }
@@ -68,18 +103,45 @@ pub fn plan(ifaces: &[Iface], port: u16) -> Vec<Listen> {
     out
 }
 
+/// The name the Pocket has on the Wi-Fi by mDNS ("sm8250.local"), when avahi-daemon runs: from its process title
+/// (`avahi-daemon: running [SM8250.local]`), which carries the name it really got (`-2` after a clash). None without it.
+pub fn mdns_name() -> Option<String> {
+    for e in std::fs::read_dir("/proc").ok()?.flatten() {
+        let name = e.file_name();
+        if !name.to_string_lossy().bytes().all(|b| b.is_ascii_digit()) {
+            continue;
+        }
+        let Ok(comm) = std::fs::read_to_string(e.path().join("comm")) else { continue };
+        if comm.trim() != "avahi-daemon" {
+            continue;
+        }
+        let Ok(cmd) = std::fs::read(e.path().join("cmdline")) else { continue };
+        if let Some(n) = mdns_from_title(&String::from_utf8_lossy(&cmd)) {
+            return Some(n);
+        }
+    }
+    None
+}
+
+/// "avahi-daemon: running [SM8250.local]" → "sm8250.local"; None while it is still registering or for anything else.
+pub fn mdns_from_title(title: &str) -> Option<String> {
+    let rest = title.trim_end_matches('\0').strip_prefix("avahi-daemon: running [")?;
+    let name = rest.split(']').next()?.trim().to_ascii_lowercase();
+    let ok = name.ends_with(".local") && name.len() > 6 && name.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'.');
+    ok.then_some(name)
+}
+
 /// `plan` for the Brick's own card (docs/TRIMUI-BRICK-MORE.md): when its tailscaled runs in userspace networking (the firmware has no
 /// tunnel device, or the tunnel did not come up) there is no `tailscale0` to bind to, and tailscaled hands a connection to the node's
-/// tailnet address on to 127.0.0.1 itself. Then the companion listens on 127.0.0.1 alone (never the Wi-Fi: that cannot reach it) and every
+/// tailnet address on to 127.0.0.1 itself. Then the companion listens on 127.0.0.1 for Tailscale (besides the Wi-Fi socket) and every
 /// browser pairs with a code, because tailscaled's `whois` sees only the loopback peer. With a tunnel it is `plan` as on every device.
 #[cfg(feature = "brick")]
 pub fn plan_userspace(ifaces: &[Iface], port: u16) -> Vec<Listen> {
-    let tunnel = plan(ifaces, port);
-    if tunnel.is_empty() {
-        vec![Listen { addr: SocketAddr::new(IpAddr::V4(Ipv4Addr::LOCALHOST), port), iface: String::new(), index: 0 }]
-    } else {
-        tunnel
+    let mut plan = plan(ifaces, port);
+    if plan.iter().all(|l| l.lan) {
+        plan.insert(0, Listen { addr: SocketAddr::new(IpAddr::V4(Ipv4Addr::LOCALHOST), port), iface: String::new(), index: 0, lan: false });
     }
+    plan
 }
 
 /// The plan for this device: `plan_userspace` on the Brick's own card, `plan` everywhere else.
@@ -98,10 +160,20 @@ pub fn is_userspace(l: &Listen) -> bool {
     l.iface.is_empty() && l.addr.ip().is_loopback()
 }
 
-/// Whether a connection from `peer` may be served: only from a Tailscale address (a device on the Wi-Fi that
-/// routes a packet for 100.x to the Pocket is refused even before the interface binding would drop it).
+/// Whether a connection from `peer` may be served on the Tailscale socket: only from a Tailscale address (a device on
+/// the Wi-Fi that routes a packet for 100.x to the Pocket is refused even before the interface binding would drop it).
 pub fn peer_allowed(peer: IpAddr) -> bool {
     is_tailnet(peer)
+}
+
+/// Whether a connection from `peer` may be served on `l`: a Tailscale address on the Tailscale socket, a home-network
+/// address on the Wi-Fi socket (never one from the internet, should the router forward port 80 to the Pocket).
+pub fn peer_allowed_on(l: &Listen, peer: IpAddr) -> bool {
+    if l.lan {
+        is_home(peer)
+    } else {
+        peer_allowed(peer)
+    }
 }
 
 /// Whether the browser asked for one of the Pocket's own names or addresses (`host` as `Request::host` gives it).

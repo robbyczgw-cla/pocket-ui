@@ -9,6 +9,7 @@ use std::ffi::{c_void, CStr, CString};
 
 use glow::HasContext;
 use libloading::Library;
+use crate::damage::Rows;
 
 type Handle = *mut c_void;
 const EGL_NONE: i32 = 0x3038;
@@ -266,7 +267,12 @@ const VERTEX: &str = "#version 300 es\nout vec2 uv; void main() { vec2 p = vec2(
 /// wl_shm's XRGB8888 is B, G, R, X in memory, uploaded as RGBA without a conversion: the shader puts the channels back. `picture` is the
 /// newest picture, slid by `shift` (a part of the screen; the edge repeats, as the CPU's `shift_row` does) and faded towards the page colour
 /// `bg`; `mixing` shows it over the picture `before` (1 only the new one: a page transition; between: a crossfade between two windows).
-const FRAGMENT: &str = "#version 300 es\nprecision mediump float; uniform sampler2D picture; uniform sampler2D before; uniform vec2 shift; uniform float fade; uniform vec3 bg; uniform float mixing; in vec2 uv; out vec4 colour; void main() { vec3 now = mix(texture(picture, clamp(uv - shift, 0.0, 1.0)).bgr, bg, fade); vec3 was = texture(before, uv).bgr; colour = vec4(mix(was, now, mixing), 1.0); }";
+/// `gain` and `gain_before` are each picture's Soft look (`Presenter::set_gain`): the colour temperature, night light and extra dim that
+/// pocket-ui multiplied into every pixel on the CPU before (5 ms of a Brick frame), in highp, so it rounds as the CPU's multiply does.
+const FRAGMENT: &str = "#version 300 es\nprecision highp float; uniform sampler2D picture; uniform sampler2D before; uniform vec2 shift; uniform float fade; uniform vec3 bg; uniform float mixing; uniform vec3 gain; uniform vec3 gain_before; in vec2 uv; out vec4 colour; void main() { vec3 now = mix(texture(picture, clamp(uv - shift, 0.0, 1.0)).bgr, bg, fade) * gain; vec3 was = texture(before, uv).bgr * gain_before; colour = vec4(mix(was, now, mixing), 1.0); }";
+
+/// No Soft look: every channel times one (`Look::multipliers`' fixed point).
+pub const NO_GAIN: [u32; 3] = [65536; 3];
 
 /// How a frame shows the pictures: the newest at rest is `Look::STILL`.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -296,7 +302,14 @@ pub struct Presenter {
     /// The texture's size, what the last client sent.
     size: (i32, i32),
     previous_size: (i32, i32),
-    uniforms: [Option<glow::UniformLocation>; 6],
+    /// The Soft look of `texture` and of `previous`, 16-bit fixed point per channel.
+    gain: [u32; 3],
+    previous_gain: [u32; 3],
+    /// Whose picture `texture` and `previous` hold (`upload_rows`: a window's own number), so a window's next picture can replace
+    /// only the rows it changed; None: something else, the next upload is whole.
+    holds: Option<u64>,
+    previous_holds: Option<u64>,
+    uniforms: [Option<glow::UniformLocation>; 8],
 }
 
 impl Presenter {
@@ -321,10 +334,10 @@ impl Presenter {
                 *t = Some(texture);
             }
             gl.use_program(Some(program));
-            let uniforms = ["picture", "before", "shift", "fade", "bg", "mixing"].map(|n| gl.get_uniform_location(program, n));
+            let uniforms = ["picture", "before", "shift", "fade", "bg", "mixing", "gain", "gain_before"].map(|n| gl.get_uniform_location(program, n));
             gl.uniform_1_i32(uniforms[0].as_ref(), 0);
             gl.uniform_1_i32(uniforms[1].as_ref(), 1);
-            Ok(Presenter { egl, screen, program, texture: textures[0].unwrap(), previous: textures[1].unwrap(), size: (1, 1), previous_size: (1, 1), uniforms })
+            Ok(Presenter { egl, screen, program, texture: textures[0].unwrap(), previous: textures[1].unwrap(), size: (1, 1), previous_size: (1, 1), gain: NO_GAIN, previous_gain: NO_GAIN, holds: None, previous_holds: None, uniforms })
         }
     }
 
@@ -332,10 +345,24 @@ impl Presenter {
     pub fn keep_previous(&mut self) {
         std::mem::swap(&mut self.texture, &mut self.previous);
         std::mem::swap(&mut self.size, &mut self.previous_size);
+        std::mem::swap(&mut self.gain, &mut self.previous_gain);
+        std::mem::swap(&mut self.holds, &mut self.previous_holds);
+    }
+
+    /// The Soft look of the picture uploaded last (`NO_GAIN`: none), drawn from the next `compose` on.
+    pub fn set_gain(&mut self, gain: [u32; 3]) {
+        self.gain = gain;
     }
 
     /// Uploads the picture (top left, what is larger than the screen is cut). No drawing.
     pub fn upload(&mut self, pixels: &[u8], width: u32, height: u32, stride: usize) -> Result<(), String> {
+        self.upload_rows(pixels, width, height, stride, None, &Rows::All).map(|_| ())
+    }
+
+    /// Uploads `rows` of window `whose` picture (`upload`): only those rows when the texture holds that window's picture before
+    /// this one at this size, else the whole picture. The whole 1024x768 cost 6.8-7.9 ms on the Brick, memory-bound beside
+    /// pocket-ui's paint (BRICK-60FPS.md). Returns the rows it uploaded.
+    pub fn upload_rows(&mut self, pixels: &[u8], width: u32, height: u32, stride: usize, whose: Option<u64>, rows: &Rows) -> Result<u32, String> {
         let (w, h) = ((width as i32).min(self.screen.0), (height as i32).min(self.screen.1));
         if w <= 0 || h <= 0 || stride < width as usize * 4 || stride % 4 != 0 {
             return Err(format!("a picture of {width}x{height}, {stride} bytes per row"));
@@ -349,15 +376,25 @@ impl Presenter {
             gl.active_texture(glow::TEXTURE0);
             gl.bind_texture(glow::TEXTURE_2D, Some(self.texture));
             gl.pixel_store_i32(glow::UNPACK_ROW_LENGTH, (stride / 4) as i32);
+            let partial = self.size == (w, h) && whose.is_some() && self.holds == whose && *rows != Rows::All;
+            let mut uploaded = h as u32;
             if self.size != (w, h) {
                 gl.tex_image_2d(glow::TEXTURE_2D, 0, glow::RGBA8 as i32, w, h, 0, glow::RGBA, glow::UNSIGNED_BYTE, Some(pixels));
                 self.size = (w, h);
+            } else if partial {
+                uploaded = 0;
+                for (a, b) in rows.spans(h as u32) {
+                    let from = a as usize * stride;
+                    gl.tex_sub_image_2d(glow::TEXTURE_2D, 0, 0, a as i32, w, (b - a) as i32, glow::RGBA, glow::UNSIGNED_BYTE, glow::PixelUnpackData::Slice(&pixels[from..]));
+                    uploaded += b - a;
+                }
             } else {
                 gl.tex_sub_image_2d(glow::TEXTURE_2D, 0, 0, 0, w, h, glow::RGBA, glow::UNSIGNED_BYTE, glow::PixelUnpackData::Slice(pixels));
             }
             gl.pixel_store_i32(glow::UNPACK_ROW_LENGTH, 0);
+            self.holds = whose;
+            Ok(uploaded)
         }
-        Ok(())
     }
 
     /// Draws the newest picture as `look` says, black around a picture smaller than the screen. No swap.
@@ -377,6 +414,10 @@ impl Presenter {
             let c = |s: u32| ((look.bg >> s) & 0xff) as f32 / 255.0;
             gl.uniform_3_f32(u[4].as_ref(), c(16), c(8), c(0));
             gl.uniform_1_f32(u[5].as_ref(), look.mixing);
+            let g = |m: [u32; 3]| m.map(|v| v as f32 / 65536.0);
+            let (now, was) = (g(self.gain), g(self.previous_gain));
+            gl.uniform_3_f32(u[6].as_ref(), now[0], now[1], now[2]);
+            gl.uniform_3_f32(u[7].as_ref(), was[0], was[1], was[2]);
             gl.viewport(0, 0, self.screen.0, self.screen.1);
             if (w, h) != self.screen {
                 gl.clear_color(0.0, 0.0, 0.0, 1.0);

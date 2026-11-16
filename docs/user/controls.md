@@ -2,11 +2,11 @@
 
 Button names follow what is printed on the Mini V2: **A is the right face button, B the bottom
 one.** pocket-ui uses A to confirm and B to go back. The hints at the bottom of each screen
-show the buttons that screen uses.
+show the buttons that screen uses. Long labels first use closer spacing, then slightly smaller letters, so the Mini can keep **X Details** beside Quick settings, Settings and Continue.
 
 ![The Mini V2's controls: the D-pad and the left stick on the left, A, B, X and Y and the right stick on the right, SELECT and START at the top corners, HOME and BACK at the bottom corners, L1, L2, R1 and R2 on the shoulders.](pocket-ui:controls)
 
-**Used to an Xbox controller?** Settings → Playing → Buttons → [**Button layout**](settings.md#button-layout) set to **Xbox**
+**Used to an Xbox controller?** Settings → Controls → Buttons → [**Button layout**](settings-sound.md#button-layout) set to **Xbox**
 puts A at the bottom and B on the right in every menu of pocket-ui; games keep their own ([Button layout](#button-layout)).
 
 <!-- TODO: confirm on the device that X is the top face button and Y the left one (Nintendo
@@ -26,7 +26,7 @@ puts A at the bottom and B on the right in every menu of pocket-ui; games keep t
 | Y | Star the selected game, or unstar it. Starred games are listed under Favourites on Home. On a smart shelf or label: pin it to Home, or take it off. |
 | X | Open the selected game's [card](library.md): facts, play status, your note, related games you own. On a system: its [console page](playing.md#console-pages); on a console page: its [Credits & links](playing.md#credits--links). On a smart shelf or label: its options (rename, delete …). |
 | SELECT (press and release) | Open [Recent games](playing.md#recent-games). |
-| START (press and release) | Open [Settings](controls-settings.md#in-settings), from Home and from a system's game list or Favourites alike. Settings is a button, not an entry of the list. It opens on its categories; B there comes back to the list you came from. START held together with SELECT or a volume key is a combo, not this. |
+| START (press and release) | Open [Settings](controls-settings.md#in-settings), from Home and from a system's game list or Favourites alike. Settings is a button, not an entry of the list. It opens on the rows of its first category, L1/R1 (or Up to the symbols at the top, then Left/Right) go to the others; B comes back to the list you came from. START held together with SELECT or a volume key is a combo, not this. |
 | SELECT + START, held for 1 second | Asks what to do: **Cancel**, **Restart pocket-ui** or **Open EmulationStation** (ROCKNIX's own menu, with a warning first; see [Safe mode and EmulationStation](safe-mode.md#opening-emulationstation)). Escape on a keyboard does the same. |
 
 In the **Cabinet** look, Left / Right move along a shelf and Up / Down go to the shelf above or below
@@ -93,7 +93,7 @@ part of the chart (of a review card) for the one before or after. A tap on Week,
 
 ## Button layout
 
-Settings → Playing → Buttons → [**Button layout**](settings.md#button-layout) chooses which face button plays A, B, X and Y:
+Settings → Controls → Buttons → [**Button layout**](settings-sound.md#button-layout) chooses which face button plays A, B, X and Y:
 
 | Layout | A (confirm) | B (back) | X | Y |
 |---|---|---|---|---|
@@ -119,7 +119,7 @@ What it does not change:
 A paired controller (Settings → Connections → [Bluetooth](bluetooth.md)) works in the menus as soon as it is connected,
 without a restart. pocket-ui goes by where a button sits, not by what is printed on it: the **right** face button
 confirms and the **bottom** one goes back, as on the Pocket. On an Xbox controller that is B to confirm and A to go
-back; on a PlayStation controller Circle and Cross. With [Button layout](settings.md#button-layout) on **Xbox** it is
+back; on a PlayStation controller Circle and Cross. With [Button layout](settings-sound.md#button-layout) on **Xbox** it is
 the other way round, on the Pocket and on every controller: the bottom button confirms (an Xbox controller's A, a
 PlayStation controller's Cross) and the right one goes back. D-pad, sticks, shoulder buttons, START and SELECT work as on
 the Pocket.
@@ -148,7 +148,7 @@ GameCube, Wii, 3DS and the rest) have their own controller settings, which pocke
 ## In a game
 
 **Button layout does not reach the game.** The buttons that go to the game, the shortcuts below and Options → Controls
-use the Pocket's buttons as printed (A on the right) whatever [Button layout](settings.md#button-layout) says; only
+use the Pocket's buttons as printed (A on the right) whatever [Button layout](settings-sound.md#button-layout) says; only
 pocket-ui's own screens, the pause menu and quick settings among them, follow it. To play a game with A and B swapped,
 use Options → Controls for that game.
 
@@ -172,7 +172,7 @@ Shortcuts on pocket-ui's own host (each can be switched off in Options → Short
 | Hold HOME + L2 | Rewind while held (only when Rewind is on under Speed, rumble, fan). |
 | HOME + Y | [Over the game](pause-menu.md#over-the-game): the next of Off, FPS, FPS + sensors and Pixel Path, until you quit. |
 | HOME + X | [Zoom](big-text.md#zoom): the paused picture larger; B goes back into the game. Off until Options → Shortcuts → Zoom is switched on. |
-| HOME + A | [Screenshot](playing.md#screenshots): a picture of the game, saved to the SD card. "Screenshot saved" shows for a moment. Always the button printed A, whatever [Button layout](settings.md#button-layout) says. |
+| HOME + A | [Screenshot](playing.md#screenshots): a picture of the game, saved to the SD card. "Screenshot saved" shows for a moment. Always the button printed A, whatever [Button layout](settings-sound.md#button-layout) says. |
 
 HOME + A also works in the games of the standalone emulators (PlayStation 2, GameCube, Wii, 3DS) and in PortMaster
 ports, where pocket-ui takes the picture of the screen; there it cannot be switched off and nothing shows over the game
@@ -185,7 +185,7 @@ While HOME is held, the game gets no buttons. See [Options](options.md#shortcuts
 
 ## In the pause menu
 
-Not sure which button is which? Options → Controls → **Controls card** draws them ([The controls card](controls-card.md)).
+Options → Controls lists what each button presses in this game, and lets you change it ([Controls](options.md#controls)).
 
 | Button | What it does |
 |---|---|
@@ -236,7 +236,7 @@ shortcut is HOME + the right face button (printed B on Mini/Portal), regardless 
 System **Back** (gesture or button) opens the pause sheet during play. On a player subpage
 it returns to that sheet; it does not quit the game. Use **Save & quit** to leave. A gamepad
 that disconnects pauses play and brings the touch pad back. Android's A/B/X/Y labels follow
-their physical positions; the [Controls card](controls-card.md#on-android) shows their console jobs.
+their physical positions.
 
 The pause sheet's **Zoom** keeps the picture still. Pinch to enlarge it, drag to move it,
 or use the D-pad and A to switch 2x/3x. Back returns to the sheet. **Options → Controls →

@@ -137,9 +137,10 @@ impl App {
         let key = (frame.px.as_ptr() as usize, frame.px.len(), c.w, c.h, fade);
         let behind = &mut self.menu_shot.behind;
         // Made from another picture or for another size: gone.
-        behind.retain(|((ptr, len, w, h, _), px)| (*ptr, *len, *w, *h) == (key.0, key.1, key.2, key.3) && px.len() == c.buf.len());
+        behind.retain(|((ptr, len, w, h, _), px)| (*ptr, *len, *w, *h) == (key.0, key.1, key.2, key.3) && px.len() == c.pixels().len());
         if let Some((_, px)) = behind.iter().find(|(k, _)| *k == key) {
-            c.buf.copy_from_slice(px);
+            // The screen's pixels as they were (a quarter of them painted natively): kept and put back as they are.
+            c.pixels_mut().copy_from_slice(px);
             return;
         }
         c.clear(void);
@@ -148,7 +149,7 @@ impl App {
         if behind.len() >= BEHIND_KEPT {
             behind.remove(0);
         }
-        behind.push((key, c.buf.to_vec()));
+        behind.push((key, c.pixels().to_vec()));
     }
 
     /// When the frame held back for the full size is to be painted anyway (None: no frame is held back).

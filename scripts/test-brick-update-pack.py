@@ -61,6 +61,42 @@ class Packaging(unittest.TestCase):
             self.assertIn('optional-cheats\t', listed, 'release preflight checks that the optional download is actually hosted')
             self.assertIn(info['url'], listed)
 
+    def test_darkos_parts_keep_a_separate_channel_and_reuse_content_addresses(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            app = root / 'app'
+            (app / 'port-data').mkdir(parents=True)
+            (app / 'port-data/systems.py').write_bytes(b'unchanged')
+            (app / 'start.sh').write_bytes(b'#!/bin/sh\nexit 0\n')
+            (app / 'DARKOS-PORT').write_bytes(b'1\n')
+            urls = []
+            for version in ('1', '2'):
+                (app / 'RELEASE').write_text(version)
+                channel = root / ('channel' + version)
+                pack.prepare(app, root / ('release' + version), channel, 'https://example.org/darkos-test', version, platform='darkos')
+                with tarfile.open(channel / ('pocket-ui-darkos-' + version + '.tar.gz')) as archive:
+                    inventory = json.load(archive.extractfile('asset-packages.json'))
+                    self.assertNotIn('port-data/systems.py', archive.getnames())
+                    asset = inventory['assets'][0]
+                    self.assertEqual(asset['path'], 'port-data/systems.py')
+                    self.assertIn('/updates/darkos-test/assets/', asset['package']['mirrors'][0])
+                    self.assertNotIn('/updates/brick/', json.dumps(inventory))
+                    urls.append(asset['package']['url'])
+            self.assertEqual(urls[0], urls[1])
+
+    def test_darkos_release_channel_mirrors_its_parts_in_its_own_folder(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            app = root / 'app'
+            (app / 'port-data').mkdir(parents=True)
+            (app / 'port-data/systems.py').write_bytes(b'x')
+            (app / 'start.sh').write_bytes(b'#!/bin/sh\nexit 0\n')
+            (app / 'RELEASE').write_text('0.5.0')
+            pack.prepare(app, root / 'release', root / 'channel', 'https://example.org/v0.5.0', '0.5.0', platform='darkos', mirror='darkos')
+            with tarfile.open(root / 'channel/pocket-ui-darkos-0.5.0.tar.gz') as archive:
+                asset = json.load(archive.extractfile('asset-packages.json'))['assets'][0]
+            self.assertEqual(asset['package']['mirrors'], ['https://pocketui.xyz/updates/darkos/assets/' + asset['package']['url'].rsplit('/', 1)[1]])
+
     def test_oversized_file_and_symlinks_refuse_the_package(self):
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)

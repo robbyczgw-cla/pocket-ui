@@ -1,6 +1,6 @@
 [package]
 name = "pocket-ui"
-version = "0.4.2"
+version = "0.5.0"
 edition = "2021"
 authors = ["Robby Czesany"]
 license = "GPL-2.0-or-later"
@@ -65,6 +65,8 @@ qrcode = { version = "0.14.1", default-features = false }
 [features]
 # TrimUI Brick under Knulli (docs/TRIMUI-BRICK.md): the framebuffer bridge. Off for the handhelds of the ROCKNIX image.
 brick = []
+# Android's handheld view (android/handheld/Cargo.toml): the Linux module set on Android. Never on in this manifest.
+handheld = []
 
 [build-dependencies]
 # Builds src/log_shim.c (see build.rs); already in the tree through other crates.
@@ -122,6 +124,13 @@ codegen-units = 256
 [profile.quick.package."*"]
 opt-level = 3
 codegen-units = 16
+
+# The crash sweep's (scripts/crash-sweep.sh): `quick` with overflow checks on, so a debug build's panics (an overflow,
+# a subtraction below zero) show in a build fast enough to play games. Its own folder (target/sweep): never the
+# binaries another job built with `quick`.
+[profile.sweep]
+inherits = "quick"
+overflow-checks = true
 
 [target.'cfg(target_os = "android")'.dependencies]
 jni = "0.21"

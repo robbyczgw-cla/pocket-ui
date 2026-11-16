@@ -159,6 +159,8 @@ mod tests {
             assert!(crate::i18n::german().translate(line).is_some(), "German: {line}");
             assert!(crate::i18n::Lang::Es.table().and_then(|t| t.translate(line)).is_some(), "Spanish: {line}");
             assert!(crate::i18n::Lang::Pt.table().and_then(|t| t.translate(line)).is_some(), "Portuguese: {line}");
+            assert!(crate::i18n::Lang::Fr.table().and_then(|t| t.translate(line)).is_some(), "French: {line}");
+            assert!(crate::i18n::Lang::It.table().and_then(|t| t.translate(line)).is_some(), "Italian: {line}");
         }
     }
 }

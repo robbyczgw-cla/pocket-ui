@@ -42,12 +42,13 @@ pub fn install_brick(rel: &Release, manifest_url: &str, card: &Path, cancel: &Ca
         cancel,
         progress,
         &|p| crate::starter::free_bytes(p),
-        &crate::untar::unpack_file_throttled,
+        &crate::untar::unpack_file_throttled_skipping,
     )
 }
 
-/// How `install_brick` unpacks (`untar::unpack_file`); the tests put a full card in its place.
-type Unpack<'a> = &'a dyn Fn(&Path, &Path, u64) -> Result<Vec<crate::untar::Entry>, crate::untar::Refused>;
+/// How `install_brick` unpacks (`untar::unpack_file_skipping`: the fourth argument names what is not to be unpacked, the last one
+/// hears the archive's bytes read so far); the tests put a full card in its place.
+type Unpack<'a> = &'a dyn Fn(&Path, &Path, u64, &dyn Fn(&str) -> bool, &dyn Fn(u64)) -> Result<Vec<crate::untar::Entry>, crate::untar::Refused>;
 
 pub(super) fn install_brick_with(
     tools: &Tools,
@@ -59,6 +60,21 @@ pub(super) fn install_brick_with(
     free: &dyn Fn(&Path) -> Option<u64>,
     unpack: Unpack,
 ) -> Result<(), String> {
+    install_folder_with(tools, rel, manifest_url, card, cancel, progress, free, unpack, false)
+}
+
+/// The dArkOS port uses the same transactions and boot recovery as the Brick.
+pub fn install_darkos(rel: &Release, manifest_url: &str, card: &Path, cancel: &Cancel, progress: &dyn Fn(u64)) -> Result<(), String> {
+    install_folder_with(&TOOLS, rel, manifest_url, card, cancel, progress,
+        &|p| crate::starter::free_bytes(p), &crate::untar::unpack_file_throttled_skipping, true)
+}
+
+pub(super) fn install_folder_with(
+    tools: &Tools, rel: &Release, manifest_url: &str, card: &Path, cancel: &Cancel,
+    progress: &dyn Fn(u64), free: &dyn Fn(&Path) -> Option<u64>, unpack: Unpack, darkos: bool,
+) -> Result<(), String> {
+    const DARKOS_REQUIRED: &[&str] = &["start.sh", "RELEASE", "DARKOS-PORT", "bin/pocket-ui", "bin/pocket-core", "bin/pocket-fb"];
+    let required = if darkos { DARKOS_REQUIRED } else { &BRICK_REQUIRED };
     cancel.boundary(super::CancelBoundary::Activation);
     if rel.version.is_empty() || rel.version.len() > 120 || rel.version.contains(['/', '\\', '\n', '\r', '\0']) {
         return Err("The update list names no usable version. Nothing was changed.".into());
@@ -89,10 +105,13 @@ pub(super) fn install_brick_with(
     }
     ram.reserve(rel.size)?;
     download_checked(tools, rel, manifest_url, &tarball, cancel, progress)?;
-    let plan = super::brick_assets::fetch(tools, card, &tarball, &mut ram, manifest_url, cancel, progress, free)?;
+    let mut plan = super::brick_assets::fetch(tools, card, &tarball, &mut ram, manifest_url, cancel, progress, free)?;
     if cancel.is_cancelled() { return Err("Download cancelled.".into()); }
     // Every network child has exited before the first update write on the card, including changed components.
     let _idle = super::brick_io::IdleIo::enter().map_err(|e| e.to_string())?;
+    // What the running program folder already holds, byte for byte, is moved over later instead of being unpacked again.
+    cancel.set_phase(super::WorkerPhase::CheckingAssets);
+    plan.delta = super::brick_delta::plan(&tarball, card, required);
     cancel.set_phase(super::WorkerPhase::Unpacking);
     let work = card.join(".update");
     std::fs::create_dir_all(&work).map_err(|e| e.to_string())?;
@@ -102,7 +121,10 @@ pub(super) fn install_brick_with(
     let staging = card.join("app.new");
     let _ = std::fs::remove_dir_all(&staging);
     let _ = std::fs::remove_dir_all(card.join("app.failed"));
-    let unpacked = unpack(&tarball, &staging, BRICK_MAX_UNPACKED);
+    // Step 2 on the page: the tarball as it is read, then the changed parts (`Plan::stage`), in bytes on the card.
+    let tarball_size = std::fs::metadata(&tarball).map_or(0, |m| m.len());
+    cancel.work_begin(tarball_size + plan.staged_bytes());
+    let unpacked = unpack(&tarball, &staging, BRICK_MAX_UNPACKED, &|path| plan.delta.skips(path), &|read| cancel.work_at(read.min(tarball_size)));
     let fail = |msg: String| {
         if !card.join("app/start.sh").is_file() && card.join("app.previous/.asset-moves").exists() {
             return Err(format!("{msg} Recovery will finish at the next start."));
@@ -117,7 +139,7 @@ pub(super) fn install_brick_with(
         Err(msg)
     };
     match unpacked {
-        Ok(_) => {}
+        Ok(_) => cancel.work_at(tarball_size),
         Err(crate::untar::Refused::Full) => {
             let _ = std::fs::remove_dir_all(&staging);
             // The download stays for the next try, once there is room.
@@ -130,8 +152,11 @@ pub(super) fn install_brick_with(
     }
     let _ = std::fs::remove_file(&tarball);
     cancel.set_phase(super::WorkerPhase::Validating);
-    if let Some(missing) = BRICK_REQUIRED.iter().find(|f| !staging.join(f).is_file()) {
+    if let Some(missing) = required.iter().find(|f| !staging.join(f).is_file()) {
         return fail(format!("The update is missing {missing}. Nothing was changed."));
+    }
+    if darkos && std::fs::read_to_string(staging.join("DARKOS-PORT")).ok().as_deref() != Some("1\n") {
+        return fail("This update is not a dArkOS port. Nothing was changed.".into());
     }
     if std::fs::read_to_string(staging.join("RELEASE")).map(|v| v.trim().to_string()).ok().as_deref() != Some(rel.version.as_str()) {
         return fail(format!("The update is not version {} inside. Nothing was changed.", rel.version));
@@ -162,11 +187,13 @@ pub(super) fn install_brick_with(
         return fail("Download cancelled.".into());
     }
     cancel.set_phase(super::WorkerPhase::MovingAssets);
+    // Step 3 on the page: every part moved over, then every file of the new folder made durable.
+    cancel.work_begin(plan.move_count() + crate::fsutil::count_files(&staging) + plan.moved_files(card));
     if let Err(e) = crate::cheat_download::preserve_legacy(card) { return fail(e); }
-    if let Err(e) = plan.move_reused(card, &staging) { return fail(e); }
+    if let Err(e) = plan.move_reused(card, &staging, cancel) { return fail(e); }
     cancel.set_phase(super::WorkerPhase::Flushing);
     // Make newly created parent directories and all moved assets durable BEFORE .ready can reach disk.
-    if let Err(e) = crate::fsutil::sync_tree(&staging) { return fail(e.to_string()); }
+    if let Err(e) = crate::fsutil::sync_tree_with(&staging, &mut || cancel.work_add(1)) { return fail(e.to_string()); }
     crate::fsutil::sync_dir(card);
     // FAT's directory fsync can be unsupported; order .ready after all asset/directory metadata.
     crate::fsutil::flush_all();

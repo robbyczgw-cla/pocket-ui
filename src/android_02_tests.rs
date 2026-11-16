@@ -29,6 +29,41 @@ fn paint(u: &mut ui::Ui, w: u32, h: u32) -> Vec<u32> {
     u.paint(&mut Canvas::new(&mut p, w, h), &mut Text::builtin(), None);
     p
 }
+/// The languages the fit tests walk: English, German and Spanish; in the merge gate's sample (`POCKETUI_TEST_QUICK`,
+/// scripts/gate.sh) German only, the longest of them. The nightly run and the release check walk all three.
+pub(crate) fn sample_languages() -> &'static [&'static str] {
+    if std::env::var_os("POCKETUI_TEST_QUICK").is_some() { &["de"] } else { &["en", "de", "es"] }
+}
+/// The text record is process-wide, and the long fit tests walk three languages. Their parent only
+/// supervises: it starts one child process per language, all at once (the test then takes as long as its slowest
+/// language, not the sum), and fails with the child's output. In a child it returns that child's one language.
+fn fit_children(test: &str, marker: &str, visible: bool) -> Option<Vec<pocket_ui::i18n::Lang>> {
+    use pocket_ui::i18n::Lang;
+    if let Ok(code) = std::env::var(marker) {
+        return Some(vec![match code.as_str() { "de" => Lang::De, "es" => Lang::Es, _ => Lang::En }]);
+    }
+    let mut children = Vec::new();
+    for &code in sample_languages() {
+        let ink = tempfile::tempdir().unwrap();
+        let mut command = std::process::Command::new(std::env::current_exe().unwrap());
+        command.args(["--exact", test, "--nocapture"]).env(marker, code).env("POCKETUI_TEXT_BOXES", ink.path().join("ink"));
+        if visible {
+            command.env("POCKETUI_VISIBLE_TEXT", ink.path().join("visible"));
+        }
+        let child = command.stdout(std::process::Stdio::piped()).stderr(std::process::Stdio::piped()).spawn().unwrap();
+        // Read each child's output on its own thread: a failing child may write more than a pipe holds.
+        children.push((code, ink, std::thread::spawn(move || child.wait_with_output().unwrap())));
+    }
+    let mut failed = Vec::new();
+    for (code, _ink, reader) in children {
+        let out = reader.join().unwrap();
+        if !(out.status.success() && String::from_utf8_lossy(&out.stdout).contains("1 passed; 0 failed")) {
+            failed.push(format!("--- {code}\n{}\n{}", String::from_utf8_lossy(&out.stdout), String::from_utf8_lossy(&out.stderr)));
+        }
+    }
+    assert!(failed.is_empty(), "{}", failed.join("\n"));
+    None
+}
 fn tap(u: &mut ui::Ui, label: &str) {
     u.drag(0.0, 10000.0);
     for _ in 0..12 {
@@ -72,7 +107,7 @@ fn accessibility_preferences_survive_reload_and_back() {
     reloaded.navigate(ui::Screen::Settings);
     paint(&mut reloaded, 960, 1600);
     assert!(reloaded.prefs.haptics);
-    assert_eq!(reloaded.prefs.remind_where, Some(false));
+    assert_eq!(reloaded.prefs.remind_where, Some(true), "Off by default (0.5): the one tap switched it On");
     assert_eq!(reloaded.prefs.text_size, TextSize::Medium);
     assert!(!page().prefs.haptics, "a fresh install never vibrates by surprise");
 }
@@ -186,48 +221,10 @@ fn a_return_after_a_long_break_is_quiet_and_optional() {
     assert!(card(&Facts { on: false, ..f }, 101 + AWAY).is_none());
 }
 
+/// The 0.5 hand test (15.11.2026): the controls card was bloat. The Android game card has no Controls button and
+/// no "R2 Controls" hint, and R2 on it opens nothing (on an Odin 2 Mini it opened the card): the card stays.
 #[test]
-fn the_game_card_controls_page_returns_to_the_same_game() {
-    use pocket_ui::{document_library::Game, pad::Button};
-    let mut u = page();
-    let game = Game {
-        name: "Garden".into(),
-        key: "test:garden".into(),
-        uri: "content://test/garden".into(),
-        relative: "gb/Garden.gb".into(),
-        system: "Game Boy",
-        system_id: "gb",
-        profile: "retroarch:mgba",
-        color: 0,
-        size: 32768, document_size: 32768,
-        missing: vec![],
-        covers: vec![], pictures: vec![], cheats: String::new(), parts: vec![],
-    };
-    // The core reported plain names in other places than the table's (a core option): the card follows the core.
-    play_cards::remember_names(&data_dir(), &ui::game_key(&game, false), &[Target { id: 0, label: "A".into() }, Target { id: 8, label: "B".into() }]).unwrap();
-    u.install(ui::library(vec![game]));
-    u.press(Button::North);
-    assert!(u.screen == ui::Screen::Box);
-    tap(&mut u, "Controls");
-    paint(&mut u, 960, 1600);
-    assert!(
-        u.regions.iter().any(|r| r.label.contains("Bottom button: A")),
-        "game-card Controls keeps the running core's names after returning to the launcher"
-    );
-    u.back();
-    assert!(u.screen == ui::Screen::Box);
-    assert_eq!(u.game().unwrap().name, "Garden");
-    u.press(Button::R2);
-    paint(&mut u, 1600, 960);
-    assert!(u.regions.iter().any(|r| r.label.contains("Bottom button: A")));
-    u.back();
-    assert!(u.screen == ui::Screen::Box);
-}
-
-/// The game card's hint says "R2 Controls". On an Odin 2 Mini R2 did nothing: the launcher turned Android's keys into
-/// buttons with its own short list, which had no L2/R2/L3/R3 (the test above presses `Button::R2` itself and never saw it).
-#[test]
-fn android_r2_on_the_game_card_opens_its_controls_as_the_hint_says() {
+fn android_the_game_card_has_no_controls_and_r2_keeps_the_card() {
     use pocket_ui::{document_library::Game, pad::android};
     let mut u = page();
     let game = Game {
@@ -239,11 +236,15 @@ fn android_r2_on_the_game_card_opens_its_controls_as_the_hint_says() {
     const BUTTON_R2: i32 = 105;
     u.press(android::button(99).expect("Android X"));
     assert!(u.screen == ui::Screen::Box, "X turns the game over");
+    for (w, h) in [(1600, 960), (960, 1600)] {
+        paint(&mut u, w, h);
+        let words = u.regions.iter().map(|r| r.label.as_str()).collect::<Vec<_>>().join(" | ");
+        assert!(!words.contains("Controls"), "{w}x{h}: no Controls on the game card: {words}");
+    }
     u.press(android::button(BUTTON_R2).expect("Android R2 reaches the launcher"));
     paint(&mut u, 1600, 960);
-    assert!(u.regions.iter().any(|r| r.label.contains("Pause menu")), "R2 opened the Controls card");
-    u.press(android::button(97).expect("Android B"));
-    assert!(u.screen == ui::Screen::Box, "B closes the card, the game card stays");
+    assert!(u.screen == ui::Screen::Box && u.game().is_some_and(|g| g.name == "Garden"), "R2 leaves the game card as it was");
+    assert!(!u.regions.iter().any(|r| r.label.contains("Pause menu")), "R2 opened no controls card");
 }
 
 /// The whole class: every button a launcher or player hint can name comes from some key of an Android pad, and every
@@ -1103,17 +1104,9 @@ fn android_update_lookup_keeps_play_available_while_installation_requires_attent
 #[test]
 fn android_first_start_and_empty_pages_fit_retroid_screens_whole() {
     use pocket_ui::i18n::{self, Lang};
-    if std::env::var_os("ANDROID_RETROID_FIT_CHILD").is_none() {
-        let ink = tempfile::tempdir().unwrap();
-        let result = std::process::Command::new(std::env::current_exe().unwrap())
-            .args(["--exact", "android_02_tests::android_first_start_and_empty_pages_fit_retroid_screens_whole", "--nocapture"])
-            .env("ANDROID_RETROID_FIT_CHILD", "1").env("POCKETUI_TEXT_BOXES", ink.path().join("ink"))
-            .env("POCKETUI_VISIBLE_TEXT", ink.path().join("visible")).output().unwrap();
-        assert!(result.status.success() && String::from_utf8_lossy(&result.stdout).contains("1 passed; 0 failed"), "{}\n{}", String::from_utf8_lossy(&result.stdout), String::from_utf8_lossy(&result.stderr));
-        return;
-    }
+    let Some(langs) = fit_children("android_02_tests::android_first_start_and_empty_pages_fit_retroid_screens_whole", "ANDROID_RETROID_FIT_CHILD", true) else { return };
     let mut faults = Vec::new();
-    for lang in [Lang::En, Lang::De, Lang::Es] {
+    for lang in langs {
         i18n::set(lang);
         for (w, h, dp) in [(1240, 1080, 2.0), (1240, 1080, 2.5), (1920, 1080, 2.5), (1920, 1080, 3.0), (1280, 960, 2.0)] {
             for scale in [1.0f32, 1.3] {
@@ -1277,15 +1270,7 @@ fn android_a_chosen_folder_without_new_games_says_which_folder_to_choose() {
 #[test]
 fn controls_card_fits_every_format_language_and_text_size() {
     use pocket_ui::{controls_card, font_style::FontStyle, i18n::{self, Lang}, text_size::TextSize};
-    if std::env::var_os("CONTROLS_CARD_FIT_CHILD").is_none() {
-        let ink = tempfile::tempdir().unwrap();
-        let result = std::process::Command::new(std::env::current_exe().unwrap())
-            .args(["--exact", "android_02_tests::controls_card_fits_every_format_language_and_text_size", "--nocapture"])
-            .env("CONTROLS_CARD_FIT_CHILD", "1").env("POCKETUI_TEXT_BOXES", ink.path().join("ink"))
-            .env("POCKETUI_VISIBLE_TEXT", ink.path().join("visible")).output().unwrap();
-        assert!(result.status.success() && String::from_utf8_lossy(&result.stdout).contains("1 passed; 0 failed"), "{}\n{}", String::from_utf8_lossy(&result.stdout), String::from_utf8_lossy(&result.stderr));
-        return;
-    }
+    let Some(langs) = fit_children("android_02_tests::controls_card_fits_every_format_language_and_text_size", "CONTROLS_CARD_FIT_CHILD", true) else { return };
     // Raw strings cores report for these consoles; none may be painted.
     let core = |system: &str| -> Vec<Target> {
         let raw: &[(u8, &str)] = match system {
@@ -1313,7 +1298,7 @@ fn controls_card_fits_every_format_language_and_text_size() {
     };
     for style in [FontStyle::Barlow, FontStyle::Retro] {
         pocket_ui::font_style::set(style);
-        for lang in [Lang::En, Lang::De, Lang::Es] {
+        for lang in langs.iter().copied() {
             i18n::set(lang);
             for size in [TextSize::Normal, TextSize::Large] {
                 type_scale::set(size);
@@ -1492,7 +1477,7 @@ fn android_report_a_problem_says_in_words_where_it_stands_at_every_step() {
     assert!(!u.report_busy() && page_words(&mut u).contains("The share sheet is open"), "{}", page_words(&mut u));
     assert!(matches!(choose(&mut u, "Copy the report"), ui::Command::ReportCopy));
     u.report_said(report::COPIED);
-    assert!(page_words(&mut u).contains("Copied. Paste it into your report"), "{}", page_words(&mut u));
+    assert!(page_words(&mut u).contains("Copied. Paste it into a GitHub issue or a mail to"), "{}", page_words(&mut u));
     // Android with no share target, and a clipboard that refuses: the answer names the other row.
     u.report_said(report::NO_SHARE);
     assert!(page_words(&mut u).contains("Use Copy the report instead"));
@@ -1525,18 +1510,11 @@ fn report_settings_row_cut() -> String {
 fn android_report_a_problem_fits_retroid_screens_whole_in_english_german_and_spanish() {
     use pocket_ui::{i18n::{self, Lang}, report_phone as report};
     use ui::report_page::Step;
-    if std::env::var_os("ANDROID_REPORT_FIT_CHILD").is_none() {
-        let ink = tempfile::tempdir().unwrap();
-        let result = std::process::Command::new(std::env::current_exe().unwrap())
-            .args(["--exact", "android_02_tests::android_report_a_problem_fits_retroid_screens_whole_in_english_german_and_spanish", "--nocapture"])
-            .env("ANDROID_REPORT_FIT_CHILD", "1").env("POCKETUI_TEXT_BOXES", ink.path().join("ink")).env("POCKETUI_VISIBLE_TEXT", ink.path().join("visible")).output().unwrap();
-        assert!(result.status.success() && String::from_utf8_lossy(&result.stdout).contains("1 passed; 0 failed"), "{}\n{}", String::from_utf8_lossy(&result.stdout), String::from_utf8_lossy(&result.stderr));
-        return;
-    }
+    let Some(langs) = fit_children("android_02_tests::android_report_a_problem_fits_retroid_screens_whole_in_english_german_and_spanish", "ANDROID_REPORT_FIT_CHILD", true) else { return };
     let steps: Vec<Step> = [Step::Rest, Step::Busy].into_iter()
         .chain([report::SHARED, report::COPIED, report::NO_SHARE, report::NO_COPY, report::FAILED].map(|s| Step::Said(s.to_string()))).collect();
     let mut faults = Vec::new();
-    for lang in [Lang::En, Lang::De, Lang::Es] {
+    for lang in langs {
         i18n::set(lang);
         for (w, h, dp) in [(1240, 1080, 2.0), (1240, 1080, 2.5), (1920, 1080, 2.5), (1920, 1080, 3.0), (1280, 960, 2.0)] {
             for scale in [1.0f32, 1.3] {
@@ -1590,15 +1568,44 @@ fn offers(names: &[(&str, &str, u64)]) -> Vec<pocket_ui::android_cores::CorePack
 }
 const SYSTEMS: [(&str, &str, u64); 4] = [("ppsspp", "PSP", 18_600_000), ("melondsds", "DS", 1_900_000), ("mupen64plus_next", "N64", 1_620_000), ("flycast", "Dreamcast", 4_800_000)];
 
+/// The first start with the pad (Mobile view on a handheld, 13.11.2026): Skip is reached by Down and by START, and the pad's focus on
+/// it is a frame as visible as on Continue and Back (a dark pill on a black page was no focus anyone could see).
+#[test]
+fn the_pad_s_focus_on_skip_is_a_visible_frame() {
+    use pocket_ui::pad::Button;
+    let mut u = page();
+    u.prefs.onboarding_done = false;
+    u.prefs.onboarding_step = 0;
+    u.touch_mode = false;
+    paint(&mut u, 1240, 1080);
+    // Continue has the pad's focus first; Down moves it to Skip.
+    u.press(Button::Down);
+    let p = paint(&mut u, 1240, 1080);
+    let skip = u.regions.iter().find(|r| r.label == "Skip").expect("Skip is on the page").area;
+    let chalk = pocket_ui::palette::pal().chalk & 0x00ff_ffff;
+    let (x, y) = ((skip.x + skip.w / 2) as usize, (skip.y + 1) as usize);
+    assert_eq!(p[y * 1240 + x] & 0x00ff_ffff, chalk, "the top edge of Skip's focus frame at ({x}, {y})");
+    // START is the other way to Skip.
+    u.press(Button::Start);
+    assert_eq!(u.prefs.onboarding_step, 1, "START skips the step");
+}
+
 /// The release preview ships before the download channel is public: PSP, DS, N64 and Dreamcast ended in "Download now" and a
 /// red error. Until `android/core-channel.url` holds an address, nothing is offered and nothing fails.
 #[test]
-fn without_a_public_download_channel_the_extra_systems_read_coming_soon_and_nothing_can_fail() {
+fn without_a_public_download_channel_the_extra_systems_read_not_available_here_and_nothing_can_fail() {
     use pocket_ui::pad::Button;
-    // The language is process-wide: the other languages are checked through `tr_in`, not by switching it under parallel tests.
-    for text in ["Coming soon", ui::COMING_SOON_STEP, ui::COMING_SOON_NOTE] {
+    // The other languages are checked through `tr_in`, this thread stays English.
+    for text in ["Not available here", ui::COMING_SOON_STEP, ui::COMING_SOON_NOTE] {
         for lang in [pocket_ui::i18n::Lang::De, pocket_ui::i18n::Lang::Es] {
             assert_ne!(pocket_ui::i18n::tr_in(lang, text), text, "{lang:?}: {text}");
+        }
+        // The systems start through an emulator app on the device: the words say what is, never what will come.
+        for lang in pocket_ui::i18n::Lang::ALL {
+            let said = pocket_ui::i18n::tr_in(lang, text).to_lowercase();
+            for future in ["soon", "later", "coming", "demnächst", "bald", "später", "kommen", "próximamente", "pronto", "llegar"] {
+                assert!(!said.contains(future), "{lang:?}: {text:?} announces something ({future})");
+            }
         }
     }
     for lang in [pocket_ui::i18n::Lang::En] {
@@ -1608,9 +1615,9 @@ fn without_a_public_download_channel_the_extra_systems_read_coming_soon_and_noth
         u.prefs.onboarding_step = 5;
         u.core_offers = offers(&SYSTEMS);
         paint(&mut u, 720, 1600);
-        let soon = ui::tr("Coming soon");
+        let soon = ui::tr("Not available here");
         for (_, name, size) in SYSTEMS {
-            assert!(u.regions.iter().any(|r| r.label == format!("{name} · {soon}")), "{lang:?} {name} lists as coming soon: {:?}", u.regions.iter().map(|r| &r.label).collect::<Vec<_>>());
+            assert!(u.regions.iter().any(|r| r.label == format!("{name} · {soon}")), "{lang:?} {name} lists as not available here: {:?}", u.regions.iter().map(|r| &r.label).collect::<Vec<_>>());
             assert!(!u.regions.iter().any(|r| r.label.contains(&ui::core_size(size))), "{lang:?}: no download size is shown");
         }
         let said = page_words_of(&u);
@@ -1634,7 +1641,7 @@ fn without_a_public_download_channel_the_extra_systems_read_coming_soon_and_noth
     for (_, name, _) in SYSTEMS {
         dpad_to(&mut u, name);
         let rows = sheet_rows(&mut u);
-        assert!(rows.iter().any(|r| r == &format!("{name} · Coming soon")), "{name}: {rows:?}");
+        assert!(rows.iter().any(|r| r == &format!("{name} · Not available here")), "{name}: {rows:?}");
         assert!(!rows.iter().any(|r| r.contains("Download now") || r.contains("MB")), "{rows:?}");
     }
     assert!(matches!(choose(&mut u, "PSP"), ui::Command::None));
@@ -1751,16 +1758,9 @@ fn android_help_is_in_german_and_spanish_and_points_at_rows_that_exist() {
 #[test]
 fn android_help_fits_retroid_and_odin_screens_whole_in_english_german_and_spanish() {
     use pocket_ui::i18n::{self, Lang};
-    if std::env::var_os("ANDROID_HELP_FIT_CHILD").is_none() {
-        let ink = tempfile::tempdir().unwrap();
-        let result = std::process::Command::new(std::env::current_exe().unwrap())
-            .args(["--exact", "android_02_tests::android_help_fits_retroid_and_odin_screens_whole_in_english_german_and_spanish", "--nocapture"])
-            .env("ANDROID_HELP_FIT_CHILD", "1").env("POCKETUI_TEXT_BOXES", ink.path().join("ink")).env("POCKETUI_VISIBLE_TEXT", ink.path().join("visible")).output().unwrap();
-        assert!(result.status.success() && String::from_utf8_lossy(&result.stdout).contains("1 passed; 0 failed"), "{}\n{}", String::from_utf8_lossy(&result.stdout), String::from_utf8_lossy(&result.stderr));
-        return;
-    }
+    let Some(langs) = fit_children("android_02_tests::android_help_fits_retroid_and_odin_screens_whole_in_english_german_and_spanish", "ANDROID_HELP_FIT_CHILD", true) else { return };
     let mut faults = Vec::new();
-    for lang in [Lang::En, Lang::De, Lang::Es] {
+    for lang in langs {
         i18n::set(lang);
         for (w, h, dp) in [(1240, 1080, 2.0), (1240, 1080, 2.5), (1920, 1080, 2.5), (1920, 1080, 3.0), (1280, 960, 2.0), (1920, 1080, 2.625), (1920, 1080, 2.0)] {
             for scale in [1.0f32, 1.3] {
@@ -1811,6 +1811,33 @@ fn android_help_fits_retroid_and_odin_screens_whole_in_english_german_and_spanis
 fn licence_list() -> &'static str {
     "mgba\tgb,gbc,gba\tMPL-2.0\tgithub.com/libretro/mgba\t7a12d6d4b9acb14c0ae62c9166b6a2f3d08007f6\tapk\t\n\
      ppsspp\tpsp\tGPL-2.0-or-later\tgithub.com/hrydgard/ppsspp\tfa50bb1976065c4f8b1b47af227d367fe9771555\tdownload\tppsspp-no-xbrz.patch,ppsspp-pause-drain.patch\n"
+}
+
+/// The handheld view and the Mobile view call a game by the same key (review of 12.11.2026, #4: Gambatte and the folders'
+/// real names gave the handheld view keys of its own, and so saves of its own): for a card's game and internal storage's,
+/// with Gambatte on and off.
+#[test]
+fn the_handheld_view_s_key_of_a_game_is_the_mobile_view_s() {
+    use pocket_ui::document_library::{scan, Document};
+    for (volume, root, relative, system) in [("primary", "Roms", "GBA/Golden Sun.gba", "gba"), ("1234-ABCD", "ROMs", "gb/Tetris.gb", "gb"), ("primary", "roms", "GBC/Zelda DX.gbc", "gbc")] {
+        let id = format!("{volume}:{root}/{relative}");
+        let games = scan(vec![Document { root_name: root.into(), uri: format!("content://x/{id}"), id: id.clone(), authority: pocket_ui::android_handheld::STORAGE_AUTHORITY.into(), relative: relative.into(), sheet: String::new(), size: 100 }]);
+        assert_eq!(games[0].system_id, system, "{relative}");
+        let path = if volume == "primary" { format!("/storage/emulated/0/{root}/{relative}") } else { format!("/storage/{volume}/{root}/{relative}") };
+        for gambatte in [false, true] {
+            assert_eq!(pocket_ui::android_handheld::game_key(std::path::Path::new(&path), system, gambatte).as_deref(), Some(ui::game_key(&games[0], gambatte).as_str()), "{path}, Gambatte {gambatte}");
+        }
+    }
+}
+
+/// Settings → View in the Mobile view: reached with the D-pad, it says Mobile and A hands over to the handheld view (`Views`).
+#[test]
+fn settings_view_says_mobile_and_a_opens_the_handheld_view() {
+    let mut u = page();
+    u.navigate(ui::Screen::Settings);
+    dpad_to(&mut u, "View");
+    assert!(sheet_rows(&mut u).iter().any(|r| r.starts_with("View")), "{:?}", sheet_rows(&mut u));
+    assert!(matches!(choose(&mut u, "View"), ui::Command::HandheldView));
 }
 
 #[test]
@@ -1878,7 +1905,8 @@ fn the_status_corner_fits_every_screen_and_gives_way_instead_of_cutting() {
     let readings = ["0,23,59,5,1", "1,9,5,-1,0"];
     let mut shown = 0;
     let mut dropped = 0;
-    for lang in [Lang::En, Lang::De] {
+    let langs: &[Lang] = if std::env::var_os("POCKETUI_TEST_QUICK").is_some() { &[Lang::De] } else { &[Lang::En, Lang::De] };
+    for &lang in langs {
         for theme in Theme::PHONE {
             for &(w, h, dp) in &formats {
                 for scale in [1.0f32, 2.0] {
@@ -1940,7 +1968,7 @@ fn the_status_corner_fits_every_screen_and_gives_way_instead_of_cutting() {
             }
         }
     }
-    assert!(shown > 200, "the corner shows in most cases ({shown} shown, {dropped} given way)");
+    assert!(shown > 100 * langs.len(), "the corner shows in most cases ({shown} shown, {dropped} given way)");
     assert!(dropped > 0, "at the largest font on the narrow phone there is no room, and the corner is gone then");
 }
 
@@ -2076,7 +2104,7 @@ fn the_choice_is_saved_and_a_game_then_plays_with_that_app() {
 #[cfg(test)]
 #[test]
 fn experimental_belongs_to_our_player_and_goes_when_another_app_starts_the_game() {
-    use pocket_ui::{pad::Button, settings::Theme};
+    use pocket_ui::settings::Theme;
     for theme in Theme::PHONE {
         for (w, h) in [(960, 540), (540, 960)] {
             // Only the PSP game on the shelf: other systems that are "Experimental" would be on the page too.
@@ -2096,12 +2124,9 @@ fn experimental_belongs_to_our_player_and_goes_when_another_app_starts_the_game(
             u.prefs.plays_with.insert("psp".into(), "org.ppsspp.ppsspp".into());
             u.cover_changed();
             assert!(!words(&mut u).contains("Experimental"), "{theme:?} {w}x{h}: PPSSPP starts it, the word is about our player");
-            // The case's Controls page describes our player's buttons: not offered for another app's game.
-            u.press(Button::North);
-            assert!(!words(&mut u).contains("Controls"), "{theme:?} {w}x{h}: controls card for an external game");
             u.prefs.plays_with.remove("psp");
             u.cover_changed();
-            assert!(words(&mut u).contains("Experimental") && words(&mut u).contains("Controls"), "{theme:?} {w}x{h}: back on our player");
+            assert!(words(&mut u).contains("Experimental"), "{theme:?} {w}x{h}: back on our player");
         }
     }
 }
@@ -2112,17 +2137,9 @@ fn experimental_belongs_to_our_player_and_goes_when_another_app_starts_the_game(
 #[test]
 fn plays_with_fits_phone_and_retroid_screens_in_english_german_and_spanish() {
     use pocket_ui::i18n::{self, Lang};
-    if std::env::var_os("ANDROID_PLAYS_FIT_CHILD").is_none() {
-        let ink = tempfile::tempdir().unwrap();
-        let result = std::process::Command::new(std::env::current_exe().unwrap())
-            .args(["--exact", "android_02_tests::plays_with_fits_phone_and_retroid_screens_in_english_german_and_spanish", "--nocapture"])
-            .env("ANDROID_PLAYS_FIT_CHILD", "1").env("POCKETUI_TEXT_BOXES", ink.path().join("ink"))
-            .env("POCKETUI_VISIBLE_TEXT", ink.path().join("visible")).output().unwrap();
-        assert!(result.status.success() && String::from_utf8_lossy(&result.stdout).contains("1 passed; 0 failed"), "{}\n{}", String::from_utf8_lossy(&result.stdout), String::from_utf8_lossy(&result.stderr));
-        return;
-    }
+    let Some(langs) = fit_children("android_02_tests::plays_with_fits_phone_and_retroid_screens_in_english_german_and_spanish", "ANDROID_PLAYS_FIT_CHILD", true) else { return };
     let mut faults = Vec::new();
-    for lang in [Lang::En, Lang::De, Lang::Es] {
+    for lang in langs {
         i18n::set(lang);
         for (w, h, dp) in [(720, 1600, 2.0), (1600, 720, 2.0), (1240, 1080, 2.0), (1240, 1080, 2.5), (1920, 1080, 2.5), (1920, 1080, 3.0), (1280, 960, 2.0)] {
             for scale in [1.0f32, 1.3] {
@@ -2187,7 +2204,7 @@ fn the_start_hands_the_chosen_app_to_android_with_the_same_number_of_words_on_bo
 // ---- RetroAchievements (Settings → RetroAchievements, the golden sticker) -------------------------------------------
 
 fn ra_account() -> pocket_ui::achievements::account::Account {
-    pocket_ui::achievements::account::Account { username: "Ravi".into(), token: "Tk".into(), display_name: String::new() }
+    pocket_ui::achievements::account::Account { username: "Ravi".into(), token: "Tk".into(), display_name: String::new(), hardcore: false }
 }
 
 #[test]
@@ -2267,7 +2284,18 @@ fn android_retroachievements_signs_in_once_and_never_shows_the_password_or_keeps
     ra_account().save(&data_dir()).unwrap();
     u.achievements_login_done(Ok(ra_account()));
     assert!(page_words(&mut u).contains("Signed in as Ravi"), "{}", page_words(&mut u));
-    assert_eq!(sheet_rows(&mut u), ["Log out · Ravi", "Back"]);
+    // No Hardcore row while pocket-ui doesn't offer it (`achievements::hardcore::OFFERED`).
+    assert_eq!(sheet_rows(&mut u).len(), if pocket_ui::achievements::hardcore::OFFERED { 3 } else { 2 }, "{:?}", sheet_rows(&mut u));
+    u.ra.page.hardcore_offered = true;
+    assert_eq!(sheet_rows(&mut u), ["Log out · Ravi", "Hardcore · Off", "Back"]);
+    // Hardcore, under Log out: A switches it for every game (the host keeps it with the account), the line says what
+    // it changes, and Log out stays where it was (never pressed by the Hardcore row).
+    assert!(matches!(choose(&mut u, "Hardcore"), ui::Command::RaHardcore(true)));
+    assert_eq!(sheet_rows(&mut u), ["Log out · Ravi", "Hardcore · On", "Back"]);
+    assert!(page_words(&mut u).contains(pocket_ui::achievements_page::HARDCORE_ON), "{}", page_words(&mut u));
+    assert!(matches!(u.press(pocket_ui::pad::Button::Right), ui::Command::RaHardcore(false)));
+    assert_eq!(sheet_rows(&mut u), ["Log out · Ravi", "Hardcore · Off", "Back"]);
+    u.ra.page.hardcore_offered = pocket_ui::achievements::hardcore::OFFERED;
     // Settings' own row names the account (kept in memory: the painter reads no file).
     u.back();
     assert!(sheet_rows(&mut u).iter().any(|r| r == "RetroAchievements · Ravi"), "{:?}", sheet_rows(&mut u));
@@ -2293,17 +2321,10 @@ fn android_retroachievements_signs_in_once_and_never_shows_the_password_or_keeps
 #[test]
 fn android_retroachievements_fits_retroid_screens_whole_in_english_german_and_spanish() {
     use pocket_ui::{i18n::{self, Lang}, pad::Button};
-    if std::env::var_os("ANDROID_RA_FIT_CHILD").is_none() {
-        let ink = tempfile::tempdir().unwrap();
-        let result = std::process::Command::new(std::env::current_exe().unwrap())
-            .args(["--exact", "android_02_tests::android_retroachievements_fits_retroid_screens_whole_in_english_german_and_spanish", "--nocapture"])
-            .env("ANDROID_RA_FIT_CHILD", "1").env("POCKETUI_TEXT_BOXES", ink.path().join("ink")).env("POCKETUI_VISIBLE_TEXT", ink.path().join("visible")).output().unwrap();
-        assert!(result.status.success() && String::from_utf8_lossy(&result.stdout).contains("1 passed; 0 failed"), "{}\n{}", String::from_utf8_lossy(&result.stdout), String::from_utf8_lossy(&result.stderr));
-        return;
-    }
-    let steps = ["signed out", "signing in", "failed", "signed in", "asks to log out", "user name", "password"];
+    let Some(langs) = fit_children("android_02_tests::android_retroachievements_fits_retroid_screens_whole_in_english_german_and_spanish", "ANDROID_RA_FIT_CHILD", true) else { return };
+    let steps = ["signed out", "signing in", "failed", "signed in", "asks to log out", "hardcore", "user name", "password"];
     let mut faults = Vec::new();
-    for lang in [Lang::En, Lang::De, Lang::Es] {
+    for lang in langs {
         i18n::set(lang);
         for (w, h, dp) in [(1240, 1080, 2.0), (1240, 1080, 2.5), (1920, 1080, 2.5), (1920, 1080, 3.0), (1280, 960, 2.0)] {
             for scale in [1.0f32, 1.3] {
@@ -2325,6 +2346,8 @@ fn android_retroachievements_fits_retroid_screens_whole_in_english_german_and_sp
                         "failed" => u.achievements_login_done(Err(long)),
                         "signed in" => u.achievements_login_done(Ok(ra_account())),
                         "asks to log out" => { u.achievements_login_done(Ok(ra_account())); choose(&mut u, &ui::tr("Log out")); }
+                        // The Hardcore row selected: its line under the status.
+                        "hardcore" => { u.achievements_login_done(Ok(ra_account())); u.ra.page.hardcore_offered = true; dpad_to(&mut u, &ui::tr("Hardcore")); }
                         "user name" => { choose(&mut u, &ui::tr("Sign in")); for _ in 0..30 { u.press(Button::East); } }
                         _ => {}
                     }

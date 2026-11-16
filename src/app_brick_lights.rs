@@ -13,7 +13,7 @@ use pocket_ui::touch::Area;
 
 use super::{App, SettingsPage, CANCEL, CONFIRM, NU_BTN_PAD, NU_PAD, NU_PILL, NU_SMALL};
 
-/// The page's title, and the name of its row in Settings > Sound & feel on the Brick (`app_settings_groups::row_name`): row and page
+/// The page's title, and the name of its row in Settings > Controls on the Brick (`app_settings_groups::row_name`): row and page
 /// carry the same words (Alex, 06.11.: the row said "LEDs" and opened "Lights & buttons").
 pub(crate) const TITLE: &str = "Lights & buttons";
 

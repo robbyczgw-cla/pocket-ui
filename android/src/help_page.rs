@@ -38,7 +38,7 @@ pub const TOPICS: [(&str, &str); 8] = [
     ),
     (
         "Report a problem",
-        "Settings › Report a problem: Share sends one text with your device and logs to a chat or mail, Copy puts it on the clipboard for a GitHub issue. Nothing goes out by itself.",
+        concat!("Settings › Report a problem: Share sends one text with your device and logs to a chat or mail, Copy puts it on the clipboard for a GitHub issue or a mail to ", pocket_ui::contact_address!(), ". Nothing goes out by itself."),
     ),
 ];
 

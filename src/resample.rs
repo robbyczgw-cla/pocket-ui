@@ -285,6 +285,23 @@ impl Sinc {
     }
 }
 
+/// A whole mono sound from `from` to `to` Hz through the sinc converter (the UI's sounds, 48 kHz files, to dArkOS's
+/// 44.1 kHz output or a core's rate): the same length in time, the kernel's tail flushed with silence.
+pub fn convert_mono(pcm: &[i16], from: u32, to: u32) -> Vec<i16> {
+    if from == to || pcm.is_empty() || to == 0 {
+        return pcm.to_vec();
+    }
+    let step = from as f64 / to as f64;
+    let mut r = Resampler::new(true);
+    r.prepare(step);
+    let mut input: Vec<i16> = pcm.iter().flat_map(|&v| [v, v]).collect();
+    input.resize(input.len() + 2 * (KEEP + HALF), 0);
+    let mut out = Vec::new();
+    r.process(&input, step, &mut out);
+    let n = (pcm.len() as u64 * to as u64).div_ceil(from as u64) as usize;
+    out.chunks_exact(2).map(|f| f[0]).take(n).collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -497,5 +514,39 @@ mod tests {
         assert!(out.iter().all(|&s| s == 0));
         let out = run(&mut r, &vec![i16::MAX; 20000], 0.7);
         assert!(out.iter().skip(200).all(|&s| s > 32000), "DC full scale");
+    }
+
+    #[test]
+    fn a_whole_sound_goes_to_44_1_khz_at_its_pitch_and_length_and_far_less_folded_back_than_linear() {
+        let mono = |hz: f64, secs: f64| -> Vec<i16> { tone(hz, 48_000.0, secs, 16000.0).chunks_exact(2).map(|f| f[0]).collect() };
+        // 1 kHz stays 1 kHz, as long and as loud.
+        let a = mono(1000.0, 0.5);
+        let b = convert_mono(&a, 48_000, 44_100);
+        assert_eq!(b.len(), 22_050);
+        let mid = &b[2_000..20_000];
+        let crossings = mid.windows(2).filter(|w| (w[0] < 0) != (w[1] < 0)).count() as f64;
+        let hz = crossings / 2.0 / (mid.len() as f64 / 44_100.0);
+        assert!((hz - 1000.0).abs() < 2.0, "{hz} Hz");
+        let peak = mid.iter().map(|v| v.unsigned_abs()).max().unwrap();
+        assert!(peak.abs_diff(16000) < 160, "peak {peak}");
+        // What 44.1 kHz cannot carry (above 22.05 kHz) must not fold back into what it can. alsa-lib's linear converter
+        // (dArkOS has no other) is the same as ours with `sinc` off: compare both on the same tones.
+        let db = |pcm: &[i16]| {
+            let rms = (pcm[2_000..20_000].iter().map(|&v| (v as f64).powi(2)).sum::<f64>() / 18_000.0).sqrt();
+            20.0 * (rms.max(1e-9) / (16000.0 / 2f64.sqrt())).log10()
+        };
+        let linear = |pcm: &[i16]| {
+            let mut r = Resampler::new(false);
+            let stereo: Vec<i16> = pcm.iter().flat_map(|&v| [v, v]).collect();
+            let mut out = Vec::new();
+            r.process(&stereo, 48_000.0 / 44_100.0, &mut out);
+            out.chunks_exact(2).map(|f| f[0]).collect::<Vec<_>>()
+        };
+        for hz in [23_000.0, 23_500.0] {
+            let (ours, lin) = (db(&convert_mono(&mono(hz, 0.5), 48_000, 44_100)), db(&linear(&mono(hz, 0.5))));
+            println!("{hz} Hz at 48 kHz to 44.1 kHz: sinc {ours:.1} dB, linear {lin:.1} dB");
+            assert!(ours < -50.0 && ours < lin - 30.0, "{hz} Hz: sinc {ours:.1} dB, linear {lin:.1} dB");
+        }
+        assert_eq!(convert_mono(&a, 48_000, 48_000), a);
     }
 }

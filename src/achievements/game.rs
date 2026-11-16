@@ -13,7 +13,8 @@ use crate::overlay::Hud;
 
 /// Starts achievements for this game when an account is signed in and the console has them. Never blocks: hashing,
 /// signing in and loading the set run on the session's threads. None otherwise (nothing runs then, nothing costs).
-pub fn start(data_dir: &Path, system: &str, rom: &Path, core: &Core) -> Option<Session> {
+/// `hardcore`: this start is in Hardcore (`hardcore::at_start`, decided by the caller before its resume).
+pub fn start(data_dir: &Path, system: &str, rom: &Path, core: &Core, hardcore: bool) -> Option<Session> {
     // The last game's list goes, so the pause menu never shows one that isn't this session's.
     let _ = std::fs::remove_file(SNAPSHOT_FILE);
     let account = Account::load(data_dir)?;
@@ -32,6 +33,7 @@ pub fn start(data_dir: &Path, system: &str, rom: &Path, core: &Core) -> Option<S
         snapshot: SNAPSHOT_FILE.into(),
         verbose: std::env::var_os("POCKET_CORE_TRACE").is_some(),
         mastery_key: None,
+        hardcore,
     };
     Session::start(config, core.achievement_memory(), Box::new(Curl::new(agent)))
 }

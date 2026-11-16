@@ -17,7 +17,7 @@ pub fn bundled_path() -> PathBuf {
 }
 pub fn enabled() -> bool {
     static ENABLED: OnceLock<bool> = OnceLock::new();
-    *ENABLED.get_or_init(|| (crate::device::current().model.is_some_and(|m| m.is_h700())
+    *ENABLED.get_or_init(|| (crate::device::current().model.is_some_and(|m| m.h700_class())
         || std::env::var_os("POCKETUI_GBA_CORE").is_some()) && bundled_path().is_file())
 }
 

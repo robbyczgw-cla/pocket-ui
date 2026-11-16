@@ -1,9 +1,9 @@
-//! The interface in another language (German, Spanish, Brazilian Portuguese): Settings → Language, docs/dev/translations.md "Translations".
+//! The interface in another language (German, Spanish, Brazilian Portuguese, French): Settings → Language, docs/dev/translations.md "Translations".
 //!
 //! Nothing in the rest of the code is wrapped for translation. The text painter (`Text::draw`, `width`, `fit`, `wrap`,
 //! `draw_right`, `draw_clipped`) looks every string it is given up here, by its exact English wording, and paints the
 //! translation instead. So the hint bar, toasts, notices, dialogs, page titles and rows are translated wherever they
-//! are drawn, and a new page needs no code for it: only lines in `assets/i18n/de.tsv`, `es.tsv` and `pt.tsv`. One exception: pocket-core's
+//! are drawn, and a new page needs no code for it: only lines in `assets/i18n/de.tsv`, `es.tsv`, `pt.tsv`, `fr.tsv` and `it.tsv`. One exception: pocket-core's
 //! FPS + sensors line is put together from parts whose numbers change twice a second, so it looks its words up itself
 //! (`osd_sensors::Sensors::text_in`).
 //!
@@ -42,6 +42,8 @@ pub enum Lang {
     De,
     Es,
     Pt,
+    Fr,
+    It,
 }
 
 /// What differs by language besides the words. A new language is a line here, one in `Lang`, and its table.
@@ -57,15 +59,17 @@ struct Traits {
 }
 
 /// In the order of `Lang`.
-const TRAITS: [Traits; 4] = [
+const TRAITS: [Traits; 6] = [
     Traits { code: "en", name: "English", accept_language: "Accept-Language: en,de;q=0.5", qwertz: false },
     Traits { code: "de", name: "Deutsch", accept_language: "Accept-Language: de,en;q=0.8", qwertz: true },
     Traits { code: "es", name: "Español", accept_language: "Accept-Language: es,en;q=0.8", qwertz: false },
     Traits { code: "pt", name: "Português (Brasil)", accept_language: "Accept-Language: pt-BR,pt;q=0.9,en;q=0.7", qwertz: false },
+    Traits { code: "fr", name: "Français", accept_language: "Accept-Language: fr-FR,fr;q=0.9,en;q=0.7", qwertz: false },
+    Traits { code: "it", name: "Italiano", accept_language: "Accept-Language: it,en;q=0.8", qwertz: false },
 ];
 
 impl Lang {
-    pub const ALL: [Lang; 4] = [Lang::En, Lang::De, Lang::Es, Lang::Pt];
+    pub const ALL: [Lang; 6] = [Lang::En, Lang::De, Lang::Es, Lang::Pt, Lang::Fr, Lang::It];
 
     fn traits(self) -> &'static Traits {
         &TRAITS[self as usize]
@@ -103,6 +107,8 @@ impl Lang {
             Lang::De => (&GERMAN, DE, "de.tsv"),
             Lang::Es => (&SPANISH, ES, "es.tsv"),
             Lang::Pt => (&PORTUGUESE, PT, "pt.tsv"),
+            Lang::Fr => (&FRENCH, FR, "fr.tsv"),
+            Lang::It => (&ITALIAN, IT, "it.tsv"),
         };
         Some(slot.get_or_init(|| {
             let (table, errors) = Table::parse(src);
@@ -142,22 +148,63 @@ impl Lang {
     }
 }
 
+/// The language of the whole program: the UI thread sets it, `Text`s on several threads read it.
 static LANG: AtomicU8 = AtomicU8::new(0);
 
+/// "This thread follows the program's language" in `THREAD_LANG`.
+const PROCESS: u8 = u8::MAX;
+// Tests run side by side in one process, and a test that switches the language must not change another test's words. A
+// thread can have a language of its own (`for_this_thread`); then `set` and `current` on that thread use it and nothing
+// else sees it. The library's own unit tests start per thread (English), the way `font_style` does; integration tests,
+// where the library is built without `cfg(test)`, take a guard. The program never sets it: one `Cell` read per lookup.
+const THREAD_START: u8 = if cfg!(test) { Lang::En as u8 } else { PROCESS };
+thread_local! {
+    static THREAD_LANG: std::cell::Cell<u8> = const { std::cell::Cell::new(THREAD_START) };
+}
+
 /// Switches the whole interface at once: the next frame is painted in it (no restart, nothing to reload).
-/// `POCKETUI_LANG` (`de`, `es`, `pt` or `en`) overrides it, for snapshots and tests.
+/// `POCKETUI_LANG` (`de`, `es`, `pt`, `fr` or `en`) overrides it, for snapshots and tests. On a thread with a language of its own
+/// (`for_this_thread`) only that thread's language changes.
 pub fn set(lang: Lang) {
     let lang = std::env::var("POCKETUI_LANG").ok().map_or(lang, |l| Lang::from_locale(&l));
-    LANG.store(lang as u8, Ordering::Relaxed);
-    // The table is read (1.3 ms on the build computer, `examples/i18n_cost.rs`) on a thread of its own, so the
-    // first frame doesn't wait for it; one painted before it is ready waits only for what is left.
+    if THREAD_LANG.with(|t| t.get()) != PROCESS {
+        THREAD_LANG.with(|t| t.set(lang as u8));
+    } else {
+        LANG.store(lang as u8, Ordering::Relaxed);
+    }
+    load_soon(lang);
+}
+
+/// The table is read (1.3 ms on the build computer, `examples/i18n_cost.rs`) on a thread of its own, so the first frame
+/// doesn't wait for it; one painted before it is ready waits only for what is left.
+fn load_soon(lang: Lang) {
     if lang != Lang::En {
         std::thread::spawn(move || lang.table());
     }
 }
 
 pub fn current() -> Lang {
-    Lang::ALL.get(LANG.load(Ordering::Relaxed) as usize).copied().unwrap_or_default()
+    let own = THREAD_LANG.with(|t| t.get());
+    let v = if own != PROCESS { own } else { LANG.load(Ordering::Relaxed) };
+    Lang::ALL.get(v as usize).copied().unwrap_or_default()
+}
+
+/// A language for this thread only, until the guard is dropped (also when the test panics): for tests that run side by
+/// side in one process. `set` on this thread changes it, other threads keep theirs. Dropping it brings back what the thread
+/// had before (a nested guard restores the outer one).
+#[must_use = "the thread's language goes back when the guard is dropped"]
+pub fn for_this_thread(lang: Lang) -> ThreadLang {
+    load_soon(lang);
+    ThreadLang(THREAD_LANG.with(|t| t.replace(lang as u8)))
+}
+
+/// See `for_this_thread`.
+pub struct ThreadLang(u8);
+
+impl Drop for ThreadLang {
+    fn drop(&mut self) {
+        THREAD_LANG.with(|t| t.set(self.0));
+    }
 }
 
 /// The tables, compiled in.
@@ -173,6 +220,14 @@ const ES: &str = concat!(include_str!("../assets/i18n/es.tsv"), include_str!("..
 const PT: &str = include_str!("../assets/i18n/pt.tsv");
 #[cfg(feature = "brick")]
 const PT: &str = concat!(include_str!("../assets/i18n/pt.tsv"), include_str!("../assets/i18n/brick-pt.tsv"));
+#[cfg(not(feature = "brick"))]
+const FR: &str = include_str!("../assets/i18n/fr.tsv");
+#[cfg(feature = "brick")]
+const FR: &str = concat!(include_str!("../assets/i18n/fr.tsv"), include_str!("../assets/i18n/brick-fr.tsv"));
+#[cfg(not(feature = "brick"))]
+const IT: &str = include_str!("../assets/i18n/it.tsv");
+#[cfg(feature = "brick")]
+const IT: &str = concat!(include_str!("../assets/i18n/it.tsv"), include_str!("../assets/i18n/brick-it.tsv"));
 
 /// FNV-1a: the keys are short, and SipHash's protection against crafted keys buys nothing here.
 #[derive(Default, Clone, Copy)]
@@ -488,6 +543,7 @@ impl Table {
                                         out.push_str(v);
                                     }
                                 },
+                                Hole::Num => out.push_str(&decimal_comma(v)),
                                 _ => out.push_str(v),
                             }
                         }
@@ -516,6 +572,19 @@ struct Made {
 impl Made {
     fn of(text: Cow<'static, str>) -> Made {
         Made { text, left: Vec::new() }
+    }
+}
+
+/// A number in a translated line: every language with a table writes its decimals with a comma ("7,4 Go", "118,1 GB
+/// frei"; a device showed "7.4 Go" on 15.11.). Only one point between digits is a decimal point: "0.5.0" (a version)
+/// and "1,204" stay as they are.
+fn decimal_comma(v: &str) -> Cow<'_, str> {
+    let b = v.as_bytes();
+    match v.find('.') {
+        Some(at) if v.matches('.').count() == 1 && !v.contains(',') && at > 0 && b[at - 1].is_ascii_digit() && b.get(at + 1).is_some_and(u8::is_ascii_digit) => {
+            Cow::Owned(format!("{},{}", &v[..at], &v[at + 1..]))
+        }
+        _ => Cow::Borrowed(v),
     }
 }
 
@@ -604,6 +673,8 @@ fn match_segs<'s>(segs: &[Seg], s: &'s str, caps: &mut Vec<(&'static str, &'s st
 static GERMAN: OnceLock<Table> = OnceLock::new();
 static SPANISH: OnceLock<Table> = OnceLock::new();
 static PORTUGUESE: OnceLock<Table> = OnceLock::new();
+static FRENCH: OnceLock<Table> = OnceLock::new();
+static ITALIAN: OnceLock<Table> = OnceLock::new();
 
 type NameSet = HashSet<Box<str>, BuildHasherDefault<Fnv>>;
 
@@ -689,15 +760,17 @@ pub fn brick_text(s: &str) -> String {
 /// Page names the Brick shortens (it has no fan: Settings › Playing › Performance, `perf_fan_page::title`), in every
 /// language as the tables have them: the pause menu's notes and the Tour pointed at "Performance & fan".
 #[cfg(feature = "brick")]
-const BRICK_PAGE_NAMES: [(&str, &str); 4] = [
+const BRICK_PAGE_NAMES: [(&str, &str); 6] = [
     ("Performance & fan", "Performance"),
     ("Leistung & Lüfter", "Leistung"),
     ("Rendimiento y ventilador", "Rendimiento"),
     ("Desempenho e ventoinha", "Desempenho"),
+    ("Performances et ventilateur", "Performances"),
+    ("Prestazioni e ventola", "Prestazioni"),
 ];
 
 /// The Brick's own name where a line calls the handheld "the Pocket" (the Mini V2's word, in every language: "this Pocket",
-/// "dem Pocket", "el Pocket", "o Pocket"): Settings, Tailscale, Sync, the power menu and Test buttons said "Pocket" on a Brick. Other things
+/// "dem Pocket", "el Pocket", "o Pocket", "le Pocket"): Settings, Tailscale, Sync, the power menu and Test buttons said "Pocket" on a Brick. Other things
 /// called Pocket keep it: "Retroid Pocket 5", "Neo Geo Pocket", "Game Boy Pocket", "GB Pocket", PocketCore, Pocket5.
 #[cfg(feature = "brick")]
 pub fn brick_words(s: &str) -> String {
@@ -955,7 +1028,7 @@ mod tests {
     }
 
     /// Every language's table, by its file's name.
-    const SHIPPED: [(&str, &str); 3] = [("de.tsv", DE), ("es.tsv", ES), ("pt.tsv", PT)];
+    const SHIPPED: [(&str, &str); 5] = [("de.tsv", DE), ("es.tsv", ES), ("pt.tsv", PT), ("fr.tsv", FR), ("it.tsv", IT)];
 
     /// A table's lines: the English side as it is written, the rest of the line.
     fn lines_of(src: &'static str) -> Vec<(&'static str, &'static str)> {
@@ -971,32 +1044,46 @@ mod tests {
         }
     }
 
-    /// No language can lose a string or a placeholder without a test failing: what one table translates, every table
-    /// translates, and each line keeps its English side's placeholders (`Table::parse` says so for the second).
-    /// The German table is held to every string of `src/` by `tests/i18n_snapshots.rs`, so all of them are.
+    /// No line shows wrong: each line keeps its English side's placeholders and says something (`Table::parse` checks the
+    /// placeholders too), and German has every line any table has (the owner tests in German; `tests/i18n_snapshots.rs`
+    /// holds it to every string of `src/`). A missing Spanish or Portuguese line shows English: a warning in the nightly
+    /// run, filled before a release (`every_language_has_every_line`).
     #[test]
-    fn every_language_has_every_line_with_its_placeholders() {
-        let all: BTreeSet<&str> = SHIPPED.iter().flat_map(|(_, src)| lines_of(src)).map(|(en, _)| en).collect();
-        let mut bad = Vec::new();
+    fn every_line_keeps_its_placeholders_and_german_has_every_line() {
+        let holes = |s: &str| {
+            let mut h: Vec<String> = s.split('{').skip(1).filter_map(|p| p.split_once('}').map(|(n, _)| n.to_string())).collect();
+            h.sort();
+            h
+        };
+        let mut bad = missing_lines("de.tsv");
         for (file, src) in SHIPPED {
-            let lines = lines_of(src);
-            let has: BTreeSet<&str> = lines.iter().map(|(en, _)| *en).collect();
-            bad.extend(all.iter().filter(|en| !has.contains(**en)).map(|en| format!("{file} has no line for {en:?}")));
-            for (en, tr) in lines {
+            for (en, tr) in lines_of(src) {
                 if tr.trim().is_empty() {
                     bad.push(format!("{file}: an empty line for {en:?}"));
                 }
-                let holes = |s: &str| {
-                    let mut h: Vec<String> = s.split('{').skip(1).filter_map(|p| p.split_once('}').map(|(n, _)| n.to_string())).collect();
-                    h.sort();
-                    h
-                };
                 if holes(en) != holes(tr) {
                     bad.push(format!("{file}: other placeholders in {tr:?} than in {en:?}"));
                 }
             }
         }
         assert!(bad.is_empty(), "{} problems:\n{}", bad.len(), bad.join("\n"));
+    }
+
+    /// What one table translates, every table translates. Release check (scripts/bookkeeping.sh warns about it every
+    /// night, scripts/release-check.sh fails on it): one commit fills the Spanish and Portuguese gaps before a release.
+    #[test]
+    #[ignore = "release check: every language complete (scripts/release-check.sh)"]
+    fn every_language_has_every_line() {
+        let bad: Vec<String> = SHIPPED.iter().flat_map(|(file, _)| missing_lines(file)).collect();
+        assert!(bad.is_empty(), "{} lines missing:\n{}", bad.len(), bad.join("\n"));
+    }
+
+    /// The lines some shipped table has and `file` has not.
+    fn missing_lines(file: &str) -> Vec<String> {
+        let all: BTreeSet<&str> = SHIPPED.iter().flat_map(|(_, src)| lines_of(src)).map(|(en, _)| en).collect();
+        let src = SHIPPED.iter().find(|(f, _)| *f == file).unwrap().1;
+        let has: BTreeSet<&str> = lines_of(src).into_iter().map(|(en, _)| en).collect();
+        all.into_iter().filter(|en| !has.contains(en)).map(|en| format!("{file} has no line for {en:?}")).collect()
     }
 
     #[test]
@@ -1021,6 +1108,8 @@ mod tests {
                 // In keep.txt because they read the same in German, not because they are names.
                 .filter(|l| !(file == "es.tsv" && (*l == "‹ Warm ›" || *l == "‹ Scanlines ›" || l.starts_with("Code "))))
                 .filter(|l| !(file == "pt.tsv" && (*l == "‹ Warm ›" || *l == "‹ Scanlines ›" || l.starts_with("Code "))))
+                .filter(|l| !(file == "fr.tsv" && (*l == "‹ Warm ›" || *l == "‹ Scanlines ›" || l.starts_with("Code "))))
+                .filter(|l| !(file == "it.tsv" && (*l == "‹ Warm ›" || *l == "‹ Normal ›" || *l == "‹ Scanlines ›" || l.starts_with("Code "))))
                 .filter_map(|name| t.translate(name).filter(|g| g != name).map(|g| format!("{name:?} -> {g:?}")))
                 .collect();
             assert!(changed.is_empty(), "{file}: {} names the table changes:\n{}", changed.len(), changed.join("\n"));
@@ -1028,9 +1117,11 @@ mod tests {
                 assert_eq!(t.translate(name), None, "{file}: {name}");
             }
         }
-        assert_eq!(german().translate("56.1 GB of 63.1 GB").as_deref(), Some("56.1 GB von 63.1 GB"), "the card's sizes still are");
-        assert_eq!(Lang::Es.table().unwrap().translate("56.1 GB of 63.1 GB").as_deref(), Some("56.1 GB de 63.1 GB"));
-        assert_eq!(Lang::Pt.table().unwrap().translate("56.1 GB of 63.1 GB").as_deref(), Some("56.1 GB de 63.1 GB"));
+        assert_eq!(german().translate("56.1 GB of 63.1 GB").as_deref(), Some("56,1 GB von 63,1 GB"), "the card's sizes still are");
+        assert_eq!(Lang::Es.table().unwrap().translate("56.1 GB of 63.1 GB").as_deref(), Some("56,1 GB de 63,1 GB"));
+        assert_eq!(Lang::Pt.table().unwrap().translate("56.1 GB of 63.1 GB").as_deref(), Some("56,1 GB de 63,1 GB"));
+        assert_eq!(Lang::Fr.table().unwrap().translate("56.1 GB of 63.1 GB").as_deref(), Some("56,1 GB sur 63,1 GB"));
+        assert_eq!(Lang::It.table().unwrap().translate("56.1 GB of 63.1 GB").as_deref(), Some("56,1 GB di 63,1 GB"));
     }
 
     #[test]
@@ -1057,6 +1148,18 @@ mod tests {
         assert_eq!(t.translate("only English"), None, "painted in English, never empty");
         let (empty, _) = Table::parse("");
         assert_eq!(empty.translate("Settings"), None, "no table: English");
+    }
+
+    #[test]
+    fn a_number_with_decimals_takes_the_languages_comma() {
+        // 15.11. on a pocket in French: "7.4 Go libres", and "118.1 GB frei" in German.
+        let t = table("{n} GB free\t{n} Go libres\npocket-ui {s}\tpocket-ui {s}\n{n} of {m} exits\t{n} sur {m} sorties\n");
+        assert_eq!(t.translate("7.4 GB free").as_deref(), Some("7,4 Go libres"));
+        assert_eq!(t.translate("118 GB free").as_deref(), Some("118 Go libres"));
+        assert_eq!(t.translate("6 of 96 exits").as_deref(), Some("6 sur 96 sorties"));
+        assert_eq!(decimal_comma("0.5.0"), "0.5.0", "a version stays");
+        assert_eq!(decimal_comma("1,204"), "1,204");
+        assert_eq!(decimal_comma("60.00"), "60,00");
     }
 
     #[test]
@@ -1096,7 +1199,7 @@ mod tests {
         let t = table("Soft blends pixels.\tWeich mischt Pixel.\nAt {n}× whole it would be sharp.\tBei ganzen {n}× wäre es scharf.\nDrawn {n} times as large. {t} {t2}\t{n}-mal so groß. {t} {t2}\nSet to {t}\tAuf {t} gestellt\n");
         assert_eq!(
             t.translate("Drawn 2.5 times as large. Soft blends pixels. At 3× whole it would be sharp.").as_deref(),
-            Some("2.5-mal so groß. Weich mischt Pixel. Bei ganzen 3× wäre es scharf.")
+            Some("2,5-mal so groß. Weich mischt Pixel. Bei ganzen 3× wäre es scharf.")
         );
         assert_eq!(t.translate("Set to Fuchsia").as_deref(), Some("Auf Fuchsia gestellt"), "still: an unknown value is kept");
     }
@@ -1118,7 +1221,7 @@ mod tests {
         let t = table("The game runs {n} % faster. It keeps its pitch.\tDas Spiel läuft {n} % schneller. Es behält seine Tonhöhe.\n{n} pictures came too late.\t{n} Bilder kamen zu spät.\n");
         assert_eq!(
             t.translate("The game runs 0.46 % faster. It keeps its pitch. 13 pictures came too late.").as_deref(),
-            Some("Das Spiel läuft 0.46 % schneller. Es behält seine Tonhöhe. 13 Bilder kamen zu spät.")
+            Some("Das Spiel läuft 0,46 % schneller. Es behält seine Tonhöhe. 13 Bilder kamen zu spät.")
         );
         assert_eq!(t.translate("Dr. Mario"), None);
         assert_eq!(t.translate("The game runs 2 % faster. It keeps its pitch. Super Mario World."), None, "a sentence it doesn't have");
@@ -1207,19 +1310,29 @@ mod tests {
         for portuguese in ["pt", "PT", "pt_BR", "pt-BR", "pt_BR.UTF-8", "pt_PT", "pt-PT"] {
             assert_eq!(Lang::from_locale(portuguese), Lang::Pt, "{portuguese}");
         }
-        for other in ["est", "et_EE", "eo", "ptx", "fr_FR", "it_IT", "C.UTF-8"] {
+        for french in ["fr", "FR", "fr_FR", "fr-FR", "fr_FR.UTF-8", "fr_CA", "fr-BE", "fr_CH.UTF-8"] {
+            assert_eq!(Lang::from_locale(french), Lang::Fr, "{french}");
+        }
+        for italian in ["it", "IT", "it_IT", "it-IT", "it_CH.UTF-8", "it-CH", "it.UTF-8"] {
+            assert_eq!(Lang::from_locale(italian), Lang::It, "{italian}");
+        }
+        for other in ["est", "et_EE", "eo", "ptx", "fra", "frp", "ita", "itx_IT", "C.UTF-8"] {
             assert_eq!(Lang::from_locale(other), Lang::En, "{other}");
         }
     }
 
     #[test]
     fn the_row_walks_through_every_language_both_ways() {
-        assert_eq!([Lang::En.next(), Lang::De.next(), Lang::Es.next(), Lang::Pt.next()], [Lang::De, Lang::Es, Lang::Pt, Lang::En]);
-        assert_eq!([Lang::En.previous(), Lang::De.previous(), Lang::Es.previous(), Lang::Pt.previous()], [Lang::Pt, Lang::En, Lang::De, Lang::Es]);
-        assert_eq!(Lang::ALL.map(Lang::name), ["English", "Deutsch", "Español", "Português (Brasil)"]);
+        assert_eq!([Lang::En.next(), Lang::De.next(), Lang::Es.next(), Lang::Pt.next(), Lang::Fr.next(), Lang::It.next()], [Lang::De, Lang::Es, Lang::Pt, Lang::Fr, Lang::It, Lang::En]);
+        assert_eq!([Lang::En.previous(), Lang::De.previous(), Lang::Es.previous(), Lang::Pt.previous(), Lang::Fr.previous(), Lang::It.previous()], [Lang::It, Lang::En, Lang::De, Lang::Es, Lang::Pt, Lang::Fr]);
+        assert_eq!(Lang::ALL.map(Lang::name), ["English", "Deutsch", "Español", "Português (Brasil)", "Français", "Italiano"]);
         assert_eq!(serde_json::to_string(&Lang::Es).unwrap(), "\"es\"");
         assert_eq!(serde_json::to_string(&Lang::Pt).unwrap(), "\"pt\"");
         assert_eq!(serde_json::from_str::<Lang>("\"pt\"").unwrap(), Lang::Pt);
+        assert_eq!(serde_json::to_string(&Lang::Fr).unwrap(), "\"fr\"");
+        assert_eq!(serde_json::from_str::<Lang>("\"fr\"").unwrap(), Lang::Fr);
+        assert_eq!(serde_json::to_string(&Lang::It).unwrap(), "\"it\"");
+        assert_eq!(serde_json::from_str::<Lang>("\"it\"").unwrap(), Lang::It);
     }
 
     #[test]
@@ -1228,7 +1341,9 @@ mod tests {
         assert_eq!(Lang::En.accept_language(), "Accept-Language: en,de;q=0.5");
         assert!(Lang::Es.accept_language().contains("es,"));
         assert!(Lang::Pt.accept_language().contains("pt-BR,"));
-        assert!(Lang::De.qwertz() && !Lang::En.qwertz() && !Lang::Es.qwertz() && !Lang::Pt.qwertz());
+        assert!(Lang::Fr.accept_language().contains("fr-FR,"));
+        assert!(Lang::It.accept_language().contains("it,"));
+        assert!(Lang::De.qwertz() && !Lang::En.qwertz() && !Lang::Es.qwertz() && !Lang::Pt.qwertz() && !Lang::Fr.qwertz() && !Lang::It.qwertz());
     }
 
     #[test]
@@ -1236,12 +1351,16 @@ mod tests {
         assert_eq!(Lang::from_system(None, || None), Lang::En, "a fresh install: no LANG, no system.language");
         assert_eq!(Lang::from_system(Some(""), || None), Lang::En);
         assert_eq!(Lang::from_system(Some("C.UTF-8"), || Some("de_DE".into())), Lang::En, "LANG comes first");
-        assert_eq!(Lang::from_system(Some("fr_FR.UTF-8"), || None), Lang::En);
-        assert_eq!(Lang::from_system(None, || Some("it_IT".into())), Lang::En);
+        assert_eq!(Lang::from_system(Some("ja_JP.UTF-8"), || None), Lang::En);
+        assert_eq!(Lang::from_system(None, || Some("nl_NL".into())), Lang::En);
         assert_eq!(Lang::from_system(None, || Some("es_ES".into())), Lang::Es);
         assert_eq!(Lang::from_system(Some("es_MX.UTF-8"), || None), Lang::Es);
         assert_eq!(Lang::from_system(None, || Some("pt_BR".into())), Lang::Pt);
         assert_eq!(Lang::from_system(Some("pt_BR.UTF-8"), || None), Lang::Pt);
+        assert_eq!(Lang::from_system(None, || Some("fr_FR".into())), Lang::Fr);
+        assert_eq!(Lang::from_system(Some("fr_FR.UTF-8"), || None), Lang::Fr);
+        assert_eq!(Lang::from_system(None, || Some("it_IT".into())), Lang::It);
+        assert_eq!(Lang::from_system(Some("it_IT.UTF-8"), || None), Lang::It);
         assert_eq!(Lang::from_system(Some(""), || Some("de_DE".into())), Lang::De);
         assert_eq!(Lang::from_system(Some("de_AT.UTF-8"), || None), Lang::De);
         assert_eq!(Lang::default(), Lang::En);
@@ -1263,6 +1382,8 @@ mod brick_tests {
             ("Erreiche den Pocket von deinen anderen Geräten.", "Erreiche den Brick von deinen anderen Geräten."),
             ("Los ajustes de este Pocket.", "Los ajustes de este Brick."),
             ("As configurações deste Pocket.", "As configurações deste Brick."),
+            ("Les paramètres de ce Pocket.", "Les paramètres de ce Brick."),
+            ("Le impostazioni di questo Pocket.", "Le impostazioni di questo Brick."),
             ("die Einstellungen dieses Pockets", "die Einstellungen dieses Bricks"),
             ("Retroid Pocket 5, Neo Geo Pocket Color, Game Boy Pocket, GB Pocket", "Retroid Pocket 5, Neo Geo Pocket Color, Game Boy Pocket, GB Pocket"),
             ("PocketCore, Pocket5, PocketSlim, pocket-ui", "PocketCore, Pocket5, PocketSlim, pocket-ui"),
@@ -1276,12 +1397,12 @@ mod brick_tests {
     #[cfg(feature = "brick")]
     #[test]
     fn the_brick_names_its_performance_page_without_the_fan_in_every_language() {
-        for (lang, page) in [(Lang::En, "Performance"), (Lang::De, "Leistung"), (Lang::Es, "Rendimiento"), (Lang::Pt, "Desempenho")] {
+        for (lang, page) in [(Lang::En, "Performance"), (Lang::De, "Leistung"), (Lang::Es, "Rendimiento"), (Lang::Pt, "Desempenho"), (Lang::Fr, "Performances"), (Lang::It, "Prestazioni")] {
             let line = "What games use unless you save one here: Quick settings, or Settings › Playing › Performance & fan.";
             let translated = lang.table().and_then(|t| t.translate(line)).map_or_else(|| line.to_string(), Cow::into_owned);
             let note = brick_text(&translated);
             assert!(note.ends_with(&format!("{page}.")), "{lang:?}: {note}");
-            assert!(!note.contains("fan") && !note.contains("Lüfter") && !note.contains("ventilador") && !note.contains("ventoinha"), "{lang:?}: {note}");
+            assert!(!note.contains("fan") && !note.contains("Lüfter") && !note.contains("ventilador") && !note.contains("ventoinha") && !note.contains("ventilateur") && !note.contains("ventola"), "{lang:?}: {note}");
         }
     }
 }

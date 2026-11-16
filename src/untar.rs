@@ -243,7 +243,7 @@ pub fn entries(tar: &[u8]) -> Result<Vec<Entry>, String> {
 #[cfg(feature = "brick")]
 mod brick;
 #[cfg(feature = "brick")]
-pub use brick::{walk, unpack_file, unpack_file_throttled, unpack_bytes_throttled, Gz, Refused};
+pub use brick::{walk, unpack_file, unpack_file_skipping, unpack_file_throttled, unpack_file_throttled_skipping, unpack_bytes_throttled, Gz, Refused};
 
 /// Sets folders and executables to 0755 and every other file to 0644 below `dir` (and `dir`
 /// itself); anything that is neither a file nor a folder is an error.
@@ -271,6 +271,11 @@ pub fn normalise_modes(dir: &Path) -> Result<(), String> {
 /// Checks `archive` (.tar or .tar.gz bytes) and unpacks it into `into`, which must not exist yet.
 /// On success `into` holds only plain files and folders with normalised modes; on failure it is gone.
 pub fn unpack(archive: &[u8], into: &Path) -> Result<Vec<Entry>, String> {
+    unpack_reporting(archive, into, &|_, _| {})
+}
+
+/// `unpack` that tells `progress` (done, total) how many bytes of the unpacked tar went to `tar` so far.
+pub fn unpack_reporting(archive: &[u8], into: &Path, progress: &dyn Fn(u64, u64)) -> Result<Vec<Entry>, String> {
     use std::os::unix::fs::{DirBuilderExt, PermissionsExt};
     let tar = decompress(archive)?;
     let list = entries(&tar)?;
@@ -291,7 +296,16 @@ pub fn unpack(archive: &[u8], into: &Path) -> Result<Vec<Entry>, String> {
             .spawn()
             .map_err(|e| e.to_string())?;
         // A write error means tar stopped early; its exit status says so.
-        let _ = child.stdin.take().map(|mut s| s.write_all(&tar));
+        let total = tar.len() as u64;
+        progress(0, total);
+        if let Some(mut stdin) = child.stdin.take() {
+            let mut done = 0u64;
+            for chunk in tar.chunks(256 << 10) {
+                if stdin.write_all(chunk).is_err() { break; }
+                done += chunk.len() as u64;
+                progress(done, total);
+            }
+        }
         let ok = child.wait().is_ok_and(|s| s.success());
         if !ok {
             return Err("Couldn't unpack the download.".to_string());

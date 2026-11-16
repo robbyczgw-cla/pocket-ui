@@ -250,9 +250,8 @@ pub fn paint_graph(c: &mut Canvas, text: &mut Text, samples: &[Sample], now: u64
         let (xa, xb) = (px(from.max(t0)), px(to.min(now)).min(x + w));
         for gx in xa.max(x)..xb {
             if (gx - x) % 12 == 0 {
-                for fy in y..y + h {
-                    c.blend(gx, fy, hatch, 20);
-                }
+                // A 1 px line: natively a whole screen column (the hairline rule), not every other pixel.
+                c.shade_rect(gx, y, 1, h, hatch, 20);
             }
         }
     };
@@ -283,6 +282,8 @@ pub fn paint_graph(c: &mut Canvas, text: &mut Text, samples: &[Sample], now: u64
         text.draw(c, Face::Body, 24, (gx - lw / 2).clamp(x - 20, x + w - lw), y + h + 36, label_c, &label);
     }
     // On the long ranges several samples share a column; each column is drawn once, or the fill adds up.
+    // Each column: (x, the line's y, its colour); painted below as one shape per colour.
+    let mut cols: Vec<(i32, i32, u32)> = Vec::new();
     let mut done = i32::MIN;
     for pair in visible.windows(2) {
         let (a, b) = (pair[0], pair[1]);
@@ -295,12 +296,25 @@ pub fn paint_graph(c: &mut Canvas, text: &mut Text, samples: &[Sample], now: u64
             done = gx;
             let f = (gx - xa) as f32 / (xb - xa) as f32;
             let gy = py(a.capacity as f32 + f * (b.capacity as f32 - a.capacity as f32));
-            // Soft fill down to the axis, then the line itself, 4 px thick.
-            for fy in gy..y + h {
-                c.blend(gx, fy, color, 28);
-            }
-            c.rect(gx, gy - 2, 1, 4, color);
+            cols.push((gx, gy, color));
         }
+    }
+    // Soft fill down to the axis, then the line itself, 4 px thick: each a shape of columns, so painted natively the
+    // 1 px columns are averaged per screen pixel as before instead of each taking a whole one.
+    for color in [line, charge] {
+        let mine = || cols.iter().filter(move |k| k.2 == color);
+        let Some(left) = mine().map(|k| k.0).min() else { continue };
+        let right = mine().map(|k| k.0 + 1).max().unwrap_or(left);
+        let top = mine().map(|k| k.1).min().unwrap_or(y).min(y + h);
+        c.blend_with((left, top, right - left, y + h - top), color, |put| {
+            for &(gx, gy, _) in mine() {
+                for fy in gy..y + h {
+                    put(gx, fy, 28);
+                }
+            }
+        });
+        let strokes: Vec<_> = mine().map(|&(gx, gy, _)| (gx, gy - 2, 1, 4)).collect();
+        c.fill_rects(&strokes, color);
     }
     // The newest sample is a dot, if it is recent.
     if let Some(s) = visible.last().filter(|l| now.saturating_sub(l.t) <= GAP) {

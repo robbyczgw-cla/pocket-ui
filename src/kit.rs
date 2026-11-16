@@ -1,4 +1,4 @@
-//! The interface's shared parts (docs/DESIGN.md, "Design language"): the hint bar in its two places, a list row in
+//! The interface's shared parts (docs/DESIGN.md, "Design language"): the hint bar, a list row in
 //! the Settings style, the scroll bar, a panel, a sheet and an empty page's picture with its words. Pages paint with
 //! these instead of copies of their own, so a selected row, a hint key or an empty page looks and measures the same
 //! wherever it is. Everything takes its colours from `pal()` (an overlay over a game paints them in
@@ -69,57 +69,43 @@ fn hints_shown<'a>(hints: &[(&'a str, &'a str)], widths: &[i32], room: i32) -> V
     hints.iter().copied().enumerate().zip(keep).filter(|(_, k)| *k).map(|(h, _)| h).collect()
 }
 
-/// The top edge of the keys of `page_hints` on a screen `h` px high: what a page paints above them stays above this.
+/// The top edge of the hint bar on a screen `h` px high: what a page paints above it stays above this.
 pub fn hint_bar_top(h: i32) -> i32 {
-    h - 52 - 9 - type_scale::row(36, 21) / 2 - type_scale::grow(21) / 3
+    h - PAD - PILL
 }
 
-/// The hint keys at the bottom left of a page of the shelf family (Home and its looks, the game card, console
-/// pages, search, Curator, the first start), as loose keys on the page: a round key cap with the key's name, then its
-/// label in Dust. Never a key without its word: at most four hints, and when they don't fit whole hints go, the least
-/// needed first (A, B, HOME and START stay longest; `type_scale::hints_that_fit`). Returns where each key can be tapped.
+/// The lowest a page's content may reach: a little over the hint bar's top edge.
+pub fn content_bottom(h: i32) -> i32 {
+    hint_bar_top(h) - 8
+}
+
+/// The hint keys of a page of the shelf family (Home and its looks, the game card, console pages, search, Curator, the
+/// first start): the same pill as every other page's (`pill_hints`), at the bottom right. Never a key without its word;
+/// at most four hints, and when they don't fit whole hints go, the least needed first. Returns where each key can be tapped.
 pub fn page_hints(c: &mut Canvas, text: &mut Text, hints: &[(&str, &str)]) -> Vec<(Area, Button)> {
     #[cfg(feature = "brick")]
     let concise: Vec<_> = hints.iter().map(|&(key, label)|
         (key, if crate::device::brick() && short_screen(c.h) && label == "Recent games" { "Recent" } else { label })).collect();
     #[cfg(feature = "brick")]
     let hints = concise.as_slice();
-    let (mut x, base) = (MARGIN, c.h - 52);
-    let mut areas = Vec::new();
-    // Between two hints: a little less on 1024x768, where the larger Brick type would otherwise push the fourth hint out.
-    let gap = if short_screen(c.h) { 24 } else { 36 };
-    // The keys are 36 px around Body 21, taller with larger text (`type_scale`).
-    let key_h = type_scale::row(36, 21);
-    let key_top = hint_bar_top(c.h);
-    // One letter in a round key, a word in a key as wide as it.
-    let widths: Vec<(i32, i32)> = hints.iter().map(|(k, l)| (text.width(Face::Body, 21, button_prompts::shown(k)), text.width(Face::Body, 21, l))).collect();
-    let whole: Vec<i32> = widths.iter().map(|(kw, lw)| (kw + 24).max(key_h) + 10 + lw + gap).collect();
-    let shown = hints_shown(hints, &whole, c.w - MARGIN - 24 + gap);
-    for (k, (key, label)) in shown {
-        let key_w = (widths[k].0 + 24).max(key_h);
-        let start = x;
-        key_cap(c, text, (x, key_top, key_w, key_h), key, 21, base - 1, (pal().keycap, pal().chalk));
-        x += key_w + 10;
-        x += text.draw(c, Face::Body, 21, x, base, pal().dust, label);
-        x += gap;
-        crate::nav_probe::hint(c, (start, key_top, x - start - gap, key_h), key, label);
-        if let Some(b) = hint_button(key) {
-            areas.push((Area::new(start - 8, base - 46, x - start - gap + 16, 64), b));
-        }
-    }
-    // For the snapshot checks of Settings → Text size: nothing else may run into the hint bar.
-    crate::text::boxes::area(c, (MARGIN - 4, key_top, x - gap - MARGIN + 8, key_h), "‹hints›");
-    areas
+    paint_bar(c, text, hints).1
 }
 
-/// The hint keys of the Settings family (Settings and its pages, quick settings, the pause menu, dialogs, safe mode)
-/// in a pill at the bottom right: a chip per key, then its label. At most four hints; when they don't fit, whole hints
-/// go, the least needed first (`page_hints`). Registers each key with `hits`; returns where the pill starts (a
-/// description beside it ends 24 px short).
+/// The one hint bar of every page (docs/DESIGN.md "Hint bar"): the keys in a pill at the bottom right, a chip per key,
+/// then its label, A last, next to the face buttons. At most four hints; when they don't fit, whole hints go, the least
+/// needed first (A, B, HOME and START stay longest; `type_scale::hints_that_fit`). Registers each key with `hits`;
+/// returns where the pill starts (a description beside it ends 24 px short).
 pub fn pill_hints(c: &mut Canvas, text: &mut Text, hits: &mut HitMap, hints: &[(&str, &str)]) -> i32 {
-    let gap = (PILL - BUTTON) / 2;
-    let (w, shown) = pill_layout(text, c.w, hints);
-    let (x0, y0) = (c.w - PAD - w, c.h - PAD - PILL);
+    let (x0, areas) = paint_bar(c, text, hints);
+    for (area, b) in areas {
+        hits.button(area, b);
+    }
+    x0
+}
+
+fn paint_bar(c: &mut Canvas, text: &mut Text, hints: &[(&str, &str)]) -> (i32, Vec<(Area, Button)>) {
+    let (w, px, gap, shown) = pill_layout(text, c.w, hints);
+    let (x0, y0) = (c.w - PAD - w, hint_bar_top(c.h));
     if crate::retro::on() {
         crate::retro::frame(c, x0, y0, w, PILL, pal().pill);
     } else {
@@ -127,21 +113,22 @@ pub fn pill_hints(c: &mut Canvas, text: &mut Text, hits: &mut HitMap, hints: &[(
     }
     // For the snapshot checks of Settings → Text size: nothing else may run under the pill.
     crate::text::boxes::area(c, (x0, y0, w, PILL), "‹hints›");
+    let mut areas = Vec::new();
     let mut x = x0 + gap;
     for ((key, label), (kw, lw)) in shown {
         let bw = (kw + 16).max(BUTTON);
         let start = x;
-        let base = y0 + PILL / 2 + type_scale::mid(SMALL);
-        key_cap(c, text, (x, y0 + gap, bw, BUTTON), key, SMALL, base, (pal().chip, pal().pill));
+        let base = y0 + PILL / 2 + type_scale::mid(px);
+        key_cap(c, text, (x, y0 + (PILL - BUTTON) / 2, bw, BUTTON), key, px, base, (pal().chip, pal().pill));
         x += bw + gap;
-        text.draw(c, Face::Body, SMALL, x, base, pal().soft, label);
+        text.draw(c, Face::Body, px, x, base, pal().soft, label);
         x += lw + gap * 2;
         crate::nav_probe::hint(c, (start, y0, x - start - gap, PILL), key, label);
         if let Some(b) = hint_button(key) {
-            hits.button(Area::new(start - gap, y0 - 8, x - start - gap, PILL + 16), b);
+            areas.push((Area::new(start - gap, y0 - 8, x - start - gap, PILL + 16), b));
         }
     }
-    x0
+    (x0, areas)
 }
 
 /// A hint key: its round cap (`x`, `y`, `w`, `h`) in `bg` and `key` centred on it in Body `px` in `fg`, its baseline at
@@ -166,14 +153,22 @@ pub fn pill_width(text: &mut Text, screen_w: i32, hints: &[(&str, &str)]) -> i32
 
 /// The pill's width and the hints it shows with each key's and label's width (`pill_hints`).
 #[allow(clippy::type_complexity)]
-fn pill_layout<'a>(text: &mut Text, screen_w: i32, hints: &[(&'a str, &'a str)]) -> (i32, Vec<((&'a str, &'a str), (i32, i32))>) {
-    let gap = (PILL - BUTTON) / 2;
-    let widths: Vec<(i32, i32)> = hints.iter().map(|(k, l)| (text.width(Face::Body, SMALL, button_prompts::shown(k)).max(BUTTON - 16), text.width(Face::Body, SMALL, l))).collect();
-    // Larger text (`type_scale`) or a long translation: whole hints that don't fit on the line go.
-    let whole: Vec<i32> = widths.iter().map(|(kw, lw)| (kw + 16).max(BUTTON) + gap + lw + gap * 2).collect();
-    let shown: Vec<((&str, &str), (i32, i32))> = hints_shown(hints, &whole, screen_w - 2 * PAD - gap).into_iter().map(|(i, h)| (h, widths[i])).collect();
-    let inner: i32 = shown.iter().map(|(_, (kw, lw))| (kw + 16).max(BUTTON) + gap + lw + gap * 2).sum();
-    (inner + gap, shown)
+fn pill_layout<'a>(text: &mut Text, screen_w: i32, hints: &[(&'a str, &'a str)]) -> (i32, u32, i32, Vec<((&'a str, &'a str), (i32, i32))>) {
+    let hints = top_hints(hints, MAX_HINTS);
+    // A fitting bar keeps its exact old spacing and type. Before losing a whole hint (French/Italian Details on the
+    // Mini), close the gaps, then try slightly smaller letters. Only the last layout may drop a hint by priority.
+    let layouts = [(SMALL, 15), (SMALL, 10), (SMALL, 6), (27, 6), (24, 6), (22, 6)];
+    for (index, &(px, gap)) in layouts.iter().enumerate() {
+        let widths: Vec<(i32, i32)> = hints.iter().map(|(k, l)| (text.width(Face::Body, px, button_prompts::shown(k)).max(BUTTON - 16), text.width(Face::Body, px, l))).collect();
+        let whole: Vec<i32> = widths.iter().map(|(kw, lw)| (kw + 16).max(BUTTON) + gap + lw + gap * 2).collect();
+        if whole.iter().sum::<i32>() + gap > screen_w - 2 * PAD && index + 1 < layouts.len() { continue; }
+        let mut shown: Vec<_> = hints_shown(&hints, &whole, screen_w - 2 * PAD - gap).into_iter().map(|(i, h)| (h, widths[i])).collect();
+        // A stands last, next to the face buttons, whichever order the page lists them in.
+        shown.sort_by_key(|((key, _), _)| *key == "A");
+        let inner: i32 = shown.iter().map(|(_, (kw, lw))| (kw + 16).max(BUTTON) + gap + lw + gap * 2).sum();
+        return (inner + gap, px, gap, shown);
+    }
+    unreachable!("last layout always taken")
 }
 
 /// The foot of a page of the Settings family: the hint pill at the bottom right (`pill_hints`) and the explanation of
@@ -337,12 +332,20 @@ fn angle(c: &mut Canvas, tip: i32, mid: i32, h: i32, right: bool, color: u32, na
     let r = (h / 12).max(1);
     let half = (h / 2 - r).max(1);
     let reach = half * 2 / 3;
+    // A disc per step down each stroke, all of them one shape: each disc as its rows (as `Canvas::disc` paints them),
+    // painted once (gfx::Canvas::fill_rects), so the discs' soft edges don't pile up where they overlap.
+    let mut rows = Vec::new();
     for k in 0..=half {
         let dx = reach * k / half;
         let x = if right { tip - r - dx } else { tip + r + dx };
-        c.disc(x, mid - k, r, color);
-        c.disc(x, mid + k, r, color);
+        for y in [mid - k, mid + k] {
+            for dy in -r..=r {
+                let w = ((r * r - dy * dy) as f32).sqrt() as i32;
+                rows.push((x - w, y + dy, w * 2 + 1, 1));
+            }
+        }
     }
+    c.fill_rects(&rows, color);
     let w = reach + 2 * r + 1;
     crate::text::boxes::area(c, (if right { tip - w } else { tip }, mid - h / 2, w, h), name);
 }
@@ -479,9 +482,9 @@ pub fn link_value(c: &mut Canvas, text: &mut Text, (x, base, w): (i32, i32, i32)
 /// A small arrow pointing right, `w` wide, its point on `mid`.
 fn arrow(c: &mut Canvas, x: i32, mid: i32, w: i32, color: u32) {
     let s = (w * 7 / 10).max(3);
-    for dy in -s..=s {
-        c.rect(x, mid + dy, (w * (s - dy.abs()) / s).max(1), 1, color);
-    }
+    // One shape of rows: painted natively, its rows don't each keep a whole screen pixel (gfx::Canvas::fill_rects).
+    let rows: Vec<_> = (-s..=s).map(|dy| (x, mid + dy, (w * (s - dy.abs()) / s).max(1), 1)).collect();
+    c.fill_rects(&rows, color);
 }
 
 /// An empty page: its picture (`art`, an `ui_art` vignette) above the words, the heading in Title 37 and what to do in
@@ -515,6 +518,23 @@ pub fn empty_state(c: &mut Canvas, text: &mut Text, art: Option<Art>, (x, w): (i
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn arrows_and_angles_painted_natively_are_the_old_picture_not_a_pixel_thicker() {
+        // The link arrow (1 px rows) and a row's angle (a disc per step) at even and odd places on a 640x480 panel
+        // painted natively: the same picture as the design canvas through the 2:1 filter (they grew a pixel at the
+        // bottom and the angle's overlapping discs piled up their soft edges when each piece rounded by itself).
+        use crate::gfx::tests::{old_and_new, close};
+        for (x, mid) in [(20, 30), (21, 31), (20, 31), (21, 30)] {
+            for w in [10, 13, 22] {
+                let pair = old_and_new(60, 40, |c| arrow(c, x, mid, w, 0xffffff));
+                assert_eq!(pair.0, pair.1, "arrow {w} wide at {x},{mid}");
+            }
+            for (h, right) in [(15, true), (24, false), (33, true)] {
+                close(&format!("angle {h} at {x},{mid}"), 0, old_and_new(60, 40, |c| angle(c, x + 30, mid, h, right, 0xf0e0d0, ">")));
+            }
+        }
+    }
 
     #[test]
     fn a_hint_bar_shows_at_most_four_whole_hints_and_the_needed_ones_stay() {

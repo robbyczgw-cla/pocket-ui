@@ -12,7 +12,8 @@ fn put(c: &mut Canvas, x: i32, y: i32, color: u32, alpha: u32) {
     if x < 0 || y < 0 || x >= c.w || y >= c.h || alpha == 0 {
         return;
     }
-    let p = &mut c.buf[(y * c.w + x) as usize];
+    let i = (y * c.w + x) as usize;
+    let p = &mut c.pixels_mut()[i];
     let (old, old_a) = (*p & 0xff_ffff, *p >> 24);
     if old != 0 && old_a == 0 {
         // An opaque pixel already (text or a frame): mix into it and keep it opaque.
@@ -249,4 +250,17 @@ pub(super) fn touch_controls(c: &mut Canvas, text: &mut Text, system: &str, (w, 
         }
     }
     (controls, dpad, menu)
+}
+/// Where the pad reaches (overlay pixels): how far in from each side of a turned phone, and the top of its highest button; what a
+/// screen frame leaves alone. Lays the pad out with the painter itself on a one-pixel canvas, so the two can never disagree.
+pub(super) fn pad_extent(text: &mut Text, system: &str, (w, h): (i32, i32), dp: f32, game: Option<Area>) -> (i32, i32) {
+    let mut none = [0u32; 1];
+    let (controls, dpad, menu) = touch_controls(&mut Canvas::new(&mut none, 1, 1), text, system, (w, h), dp, game, 0);
+    let mut inset = dpad.map_or(0, |(cx, _, r)| if cx < w as f32 / 2.0 { (cx + r).ceil() as i32 } else { (w as f32 - cx + r).ceil() as i32 });
+    let mut top = dpad.map_or(h, |(_, cy, r)| (cy - r).floor() as i32);
+    for a in controls.iter().map(|(a, _)| *a).chain([menu]).filter(|a| a.w > 0) {
+        inset = inset.max(if a.x + a.w / 2 < w / 2 { a.x + a.w } else { w - a.x });
+        top = top.min(a.y);
+    }
+    (inset.clamp(0, w / 2), top.clamp(0, h))
 }

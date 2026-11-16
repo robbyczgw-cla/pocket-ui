@@ -15,6 +15,8 @@ pub enum Choice {
     RestartUi,
     /// Restart into the bootloader, where the boot mode can be switched to Android.
     BootMenu,
+    /// Leave the dArkOS port directly (save a running game first).
+    BackToEs,
 }
 
 /// The small drawn mark at the left of an entry (docs/DESIGN.md: marks are drawn, not glyphs).
@@ -40,6 +42,15 @@ pub const NO_BOOT_MENU_HINT: &str = "To start Android: Power off, then Vol Down 
 /// The entries, in order: the everyday ones first, Restart pocket-ui for when something is stuck, "Restart to boot
 /// menu" last and only where the device can do it.
 pub fn choices(boot_menu: bool) -> Vec<Choice> {
+    #[cfg(feature = "brick")]
+    let darkos = crate::darkos::host();
+    #[cfg(not(feature = "brick"))]
+    let darkos = false;
+    choices_for(boot_menu, darkos)
+}
+
+fn choices_for(boot_menu: bool, darkos: bool) -> Vec<Choice> {
+    if darkos { return vec![Choice::Sleep, Choice::Restart, Choice::PowerOff, Choice::BackToEs]; }
     let mut v = vec![Choice::Sleep, Choice::Restart, Choice::PowerOff, Choice::RestartUi];
     if boot_menu {
         v.push(Choice::BootMenu);
@@ -49,7 +60,7 @@ pub fn choices(boot_menu: bool) -> Vec<Choice> {
 
 /// Kids Mode's power menu: what a child can use. The others are ways out of it.
 pub fn for_a_child(c: Choice) -> bool {
-    !matches!(c, Choice::RestartUi | Choice::BootMenu)
+    !matches!(c, Choice::RestartUi | Choice::BootMenu | Choice::BackToEs)
 }
 
 /// What the menu knows when it opens: a game is running (it is saved first), ROCKNIX was started from a computer
@@ -69,6 +80,7 @@ impl Choice {
             Choice::PowerOff => "Power off",
             Choice::RestartUi => "Restart pocket-ui",
             Choice::BootMenu => "Restart to boot menu",
+            Choice::BackToEs => "Back to EmulationStation",
         }
     }
 
@@ -87,6 +99,7 @@ impl Choice {
             Choice::RestartUi if ctx.game => "Saves the game. Only pocket-ui starts again.",
             Choice::RestartUi => "Only pocket-ui starts again, in seconds.",
             Choice::BootMenu => BOOT_MENU_HINT,
+            Choice::BackToEs => crate::rescue::BACK_QUICK_HELP,
         }
     }
 
@@ -107,6 +120,7 @@ impl Choice {
             Choice::RestartUi if ctx.game => "Saves the game. Only pocket-ui starts again.",
             Choice::RestartUi => "Only pocket-ui starts again, in seconds.",
             Choice::BootMenu => BOOT_MENU_HINT,
+            Choice::BackToEs => crate::rescue::BACK_QUICK_HELP,
         }
     }
 
@@ -116,19 +130,20 @@ impl Choice {
             Choice::Restart => Mark::Round,
             Choice::PowerOff => Mark::Power,
             Choice::RestartUi => Mark::Shelf,
-            Choice::BootMenu => Mark::Lines,
+            Choice::BootMenu | Choice::BackToEs => Mark::Lines,
         }
     }
 
-    /// What the entry does (Restart pocket-ui is no system command: `PowerAction::RestartUi`).
-    pub fn action(self) -> PowerAction {
-        match self {
+    /// System/UI restart action; None requests a direct return to EmulationStation.
+    pub fn action(self) -> Option<PowerAction> {
+        Some(match self {
             Choice::Sleep => PowerAction::Sleep,
             Choice::Restart => PowerAction::Reboot,
             Choice::PowerOff => PowerAction::PowerOff,
             Choice::RestartUi => PowerAction::RestartUi,
             Choice::BootMenu => PowerAction::RebootBootloader,
-        }
+            Choice::BackToEs => return None,
+        })
     }
 }
 
@@ -177,6 +192,13 @@ mod tests {
     }
 
     #[test]
+    fn darkos_menu_returns_to_es_without_a_system_action() {
+        assert_eq!(choices_for(true, true), [Choice::Sleep, Choice::Restart, Choice::PowerOff, Choice::BackToEs]);
+        assert_eq!(Choice::BackToEs.action(), None);
+        assert!(!for_a_child(Choice::BackToEs));
+    }
+
+    #[test]
     fn labels_are_the_ones_the_owner_asked_for() {
         let labels: Vec<_> = choices(true).into_iter().map(Choice::label).collect();
         assert_eq!(labels, ["Sleep", "Restart", "Power off", "Restart pocket-ui", "Restart to boot menu"]);
@@ -184,9 +206,9 @@ mod tests {
 
     #[test]
     fn each_entry_maps_to_its_system_command_and_restart_pocket_ui_to_none() {
-        let commands: Vec<String> = choices(true).into_iter().map(|c| c.action().argv().join(" ")).collect();
+        let commands: Vec<String> = choices(true).into_iter().map(|c| c.action().unwrap().argv().join(" ")).collect();
         assert_eq!(commands, ["suspend", "reboot", "poweroff", "", "reboot --reboot-argument=bootloader"]);
-        assert_eq!(Choice::RestartUi.action(), PowerAction::RestartUi);
+        assert_eq!(Choice::RestartUi.action(), Some(PowerAction::RestartUi));
     }
 
     #[test]

@@ -6,7 +6,7 @@
 #
 # 1. First start only: once STORAGE has been grown, it moves the files from /storage/.pocket-seed into place.
 #    At the first boot ROCKNIX grows STORAGE to the size of the card (/usr/lib/rocknix/fs-resize, started because
-#    /storage/.please_resize_me exists), but refuses and leaves it at 32 MB if /storage/.config or /storage/.cache
+#    /storage/.please_resize_me exists), but refuses and leaves it at its image size (128 MB) if /storage/.config or /storage/.cache
 #    already exists ("Resizing is not permitted"). The essway drop-in that starts pocket-ui has to be in
 #    /storage/.config/system.d, so the image carries it in /storage/.pocket-seed until the second boot.
 #

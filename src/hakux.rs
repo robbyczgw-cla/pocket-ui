@@ -444,9 +444,7 @@ mod tests {
 
     #[test]
     fn installed_needs_core_info_and_retroarch() {
-        let d = std::env::temp_dir().join(format!("hakux-inst-{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&d);
-        std::fs::create_dir_all(&d).unwrap();
+        let d = crate::testutil::TestDir::new("hakux-inst");
         let ra = d.join("retroarch");
         assert!(!installed_in(&d, &ra));
         std::fs::write(d.join(CORE_FILE), b"x").unwrap();
@@ -454,7 +452,6 @@ mod tests {
         assert!(!installed_in(&d, &ra), "no RetroArch");
         std::fs::write(&ra, b"x").unwrap();
         assert!(installed_in(&d, &ra));
-        let _ = std::fs::remove_dir_all(&d);
     }
 
     #[test]

@@ -55,7 +55,12 @@ impl FormFactor {
         use FormFactor::*;
         match system {
             "gb" | "gbh" | "gbc" | "gbch" | "gba" | "gbah" | "gamegear" | "ggh" | "ngp" | "ngpc" | "wonderswan" | "wonderswancolor" | "atarilynx" | "lynx"
-            | "virtualboy" | "pokemini" | "supervision" | "gamate" | "gameandwatch" | "arduboy" | "pico-8" | "pico8" | "tic-80" | "tic80" => HandheldCart,
+            | "virtualboy" | "pokemini" | "supervision" | "gamate" | "gameandwatch" | "arduboy" | "pico-8" | "pico8" | "tic-80" | "tic80"
+            // Phone games: the phone is the handheld, its display goes on (`insert_scene::lights_up_only`).
+            | "j2me"
+            // The other handhelds of ROCKNIX's list: Game Boy Advance Video, GamePark 32, Mega Duck and the Palm (15.11.: they
+            // started on a TV); DSiWare goes into the DS's card box below.
+            | "gbav" | "gp32" | "megaduck" | "palm" => HandheldCart,
             "nes" | "nesh" | "famicom" | "fds" | "snes" | "snesh" | "sfc" | "satellaview" | "sufami" | "n64" | "megadrive" | "megadriveh"
             | "megadrive-japan" | "genesis" | "genh" | "sega32x" | "mastersystem" | "sg-1000" | "sg1000" | "atari2600" | "atari5200" | "atari7800"
             | "colecovision" | "intellivision" | "vectrex" | "odyssey2" | "videopac" | "channelf" | "neogeo" | "msx" | "msx2"
@@ -63,7 +68,7 @@ impl FormFactor {
             | "pcengine" | "tg16" | "supergrafx" => ConsoleCart,
             "ps2" | "gamecube" | "wii" | "wiiware" | "wiiu" | "xbox" | "ps3" => DvdCase,
             "psp" | "pspockets" => UmdCase,
-            "nds" | "3ds" | "n3ds" | "psvita" => CardBox,
+            "nds" | "ndsiware" | "3ds" | "n3ds" | "psvita" => CardBox,
             _ => JewelCase,
         }
     }
@@ -307,12 +312,12 @@ pub const PUSH: Duration = Duration::from_millis(160);
 /// Moving the view to another shelf or along one.
 pub const SCROLL: Duration = Duration::from_millis(220);
 /// From A to the cartridge or disc sitting in the console and its glow fading: the launch animation
-/// (Settings → Sound & feel → Launch animation). The game is started at A, not at the end of it: the animation plays
+/// (Settings → Look → Game start animation). The game is started at A, not at the end of it: the animation plays
 /// while the emulator loads (150-300 ms on a Mini V2), and a game whose window comes up sooner simply covers it.
 pub const INSERT: Duration = Duration::from_millis(300);
 /// When the cartridge or disc is in: the click (`ui_sound::Sound::Insert`) and the glow come here.
 pub const IN_AT: Duration = Duration::from_millis(180);
-/// The same in Cozy (Settings > Sound & feel > Animations): long enough to read, the same shape (IN_AT at 0.6).
+/// The same in Cozy (Settings > Look > Game start animation): long enough to read, the same shape (IN_AT at 0.6).
 pub const INSERT_COZY: Duration = Duration::from_millis(2000);
 pub const IN_AT_COZY: Duration = Duration::from_millis(1200);
 /// When Cozy's launch fade starts: a moment after the medium is in, for the lid or tray to shut and to see it.
@@ -367,7 +372,7 @@ pub fn ease_in_out(t: f32) -> f32 {
     }
 }
 
-/// How far `now` is through `dur` from `at`, 0-1. Settings > Sound & feel > Motion: Reduced and Off make the cases
+/// How far `now` is through `dur` from `at`, 0-1. Settings > Look > Motion: Reduced and Off make the cases
 /// move at once (`motion::span`); the start of a game (`insert_at`) keeps its own clock.
 fn progress(at: Instant, now: Instant, dur: Duration) -> f32 {
     let dur = crate::motion::span(crate::motion::Kind::Move, dur);
@@ -504,6 +509,12 @@ pub struct Insert {
     pub sink: f32,
     pub glow: f32,
     pub dim: f32,
+}
+
+/// When, after A, the case visibly gives its game up in the plain animation (no rig: Playful off): the carry has gone a
+/// twentieth of the way. The sound of the case's opening comes then (`insert_scene::cues`).
+pub fn plain_case_opens_at(cozy: bool) -> Duration {
+    (0..insert_len(cozy).as_millis() as u64).map(Duration::from_millis).find(|t| insert_at(*t, cozy).carry >= 0.05).unwrap_or_default()
 }
 
 pub fn insert_at(elapsed: Duration, cozy: bool) -> Insert {

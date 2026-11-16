@@ -1,5 +1,8 @@
 # H700 scaled layouts (2026-10-28)
 
+These panels are now painted natively by default, the same layout divided by 2 as it is painted
+([dev/native-paint.md](dev/native-paint.md)); the box filter below is the fallback (`POCKETUI_PAINT=scaled`, safe mode).
+
 ## CubeXX: 1440×1440 and the box filter (2026-11-13)
 
 The 720×720 panel used to paint 1280×1280 and reduce it by 16:9 with the exact-area filter. Measured on an RG35XX Plus
@@ -15,7 +18,18 @@ live reduction since this change):
 
 Every H700 panel is now exactly doubled (`scaled_layout::logical_size`), so a pixel font lands on whole screen pixels
 (`step` 2). On the A53 the scalar 2:1 box reduction itself costs about 5.6 ms (640×480) and 8.5 ms (720×720), half the
-frame; a NEON version is the next step. These are measurements on a Plus, not on a CubeXX (no CubeXX has run pocket-ui).
+frame. A NEON version (bit for bit the same) was tried and was not faster on the Plus (11.8 vs 11.6 ms at 640×480,
+16.5 vs 16.4 ms at 720×720): the reduction waits on memory, reading the freshly painted canvas back, not on arithmetic.
+Less memory traffic (paint a band, halve it while it is still in the cache) would be the way to go faster.
+
+Moves through 300 games (`bench-shelf:<look>:gbc`, 240 moves), p50 / p95 in ms:
+
+| Panel | Split | Shelf | Cabinet |
+|---|---|---|---|
+| 640×480 | 9.9 / 10.7 | 13.3 / 14.8 | 28.7 / 30.5 |
+| 720×720 | 16.4 / 17.6 | 26.6 / 32.4 | 43.8 / 45.7 |
+
+These are measurements on a Plus, not on a CubeXX (no CubeXX has run pocket-ui).
 
 The live softbuffer presenter, snapshots and safe mode paint the same logical layouts and area filter.
 640×480, 720×480 and (since 2026-11-13, see "CubeXX" below) 720×720 use a rounded 2:1 box filter; other fractional

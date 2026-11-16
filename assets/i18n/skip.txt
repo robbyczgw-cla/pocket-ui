@@ -74,6 +74,7 @@ box game
 plain front
 standing spine
 shown front
+film halves
 shelf tile
 
 # src/app_curator.rs
@@ -185,6 +186,13 @@ no SWAYSOCK
 C Buttons Mode
 
 # src/core_options.rs
+super game boy
+system type
+frame skip
+NTSC
+fast math
+delayed sync
+shadow ram
 VMU A1
 wild arms xf
 Odin 2 Mini 04.11.2026: after Load, every Quit hung (2/2). PPSSPP's emulation thread waits in a framebuffer read-back for the main thread, which waits in retro_serialize_size for that thread to pause. Without read-backs they never meet.
@@ -378,7 +386,9 @@ Das
 systemList
 <systemList>
 missing system name or ROM folder
-no readable system list
+
+# src/library_cache.rs: a log line (the rescan that kept the list on screen)
+the system list can't be read
 
 # src/libretro.rs
 {s} (device {s})
@@ -424,6 +434,15 @@ note {s}
 # src/moonlight.rs
 re:^<?xml version="1\.0"?>
 re:^<game>
+
+# src/native_surface.rs
+window handle: {s}
+not an Android window
+set_buffers_geometry: {s}
+lock: {s}
+buffer is {s}x{s}, the canvas {s}x{s}
+buffer without a pixel size
+misaligned buffer
 
 # src/on_start.rs
 On start is Home
@@ -1141,6 +1160,7 @@ the core wants GLES 3; only GLES 2 here
 cut short by the next
 window crossfade
 pocket_transition {s} {s} {s} {s}
+pocket_tint {s} {s} {s}
 top left
 top right
 bottom left
@@ -1236,6 +1256,7 @@ head takes the rows' room ({s} + {s} > {s}): {s}
 
 # src/os_compat.rs: the HW_DEVICE value in ROCKNIX's os-release
 RK3566
+RK3326
 
 # src/update/download_tests.rs: HTTP responses of the test servers; src/main.rs: the Updates page's download line
 # (its phase and percent are translated through "Downloading the update…" and "{t} {n}%")
@@ -1265,7 +1286,6 @@ FBNeo - Arcade Games
 # 0.3.1 release check: never painted on their own: translation tables (timezone.rs city names in de/es, i18n.rs), log and probe labels, step names of the first-start walk, update/BIOS error texts, mock notes
 gamelists read
 settings:List {s}
-controls card
 port files
 where was I
 recent games
@@ -1419,6 +1439,7 @@ invalid BIOS data release
 # 0.3.1 release check: log/report and command-line texts, never painted
 TrimUI Smart Pro (NextUI)
 usage: pocket-fb --wayland <socket> --ipc <socket> [--fb /dev/fb0] [--mode 1024x768x32] [--no-vsync] [--bgr] [--gl] [--gl-trust] [--gl-window null]
+usage: pocket-fb --wayland <socket> --ipc <socket> [--fb /dev/fb0] [--mode 1024x768x32] [--no-vsync] [--bgr] [--gl] [--gl-trust] [--gl-window null] [--take]
 
 # src/app_where.rs, app_curator.rs, app_kids.rs, game_card.rs: stable page/painter
 # identifiers for @where, /tmp/pocket-ui.status and navigation tests; never painted.
@@ -1507,7 +1528,6 @@ exit shelf state ready
 exit sound ready
 launch animation ready
 launch bookkeeping ready
-launch controls check ready
 launch defaults ready
 launch drain ready
 launch environment ready
@@ -1548,7 +1568,7 @@ No lines.
 (the last {s} of {s} lines)
 pocket-ui problem report (Android)
 Made: {s}
-Paste this into a new issue on pocket-ui's GitHub page (Issues, New issue, Bug report), say what happened and name the game if it matters.
+Paste this into a new issue on pocket-ui's GitHub page (Issues, New issue, Bug report) or mail it to {s}, say what happened and name the game if it matters.
 pocket-ui {s} (build {s})
 Package: {s}\nUpdate channel: {s}
 Model: {s} ({s})
@@ -1620,6 +1640,102 @@ Press A again
 Password for
 Sent once
 said in English ({s}): {s}
+
+# src/android_phones_tests.rs
+{s} {s} {s} frame {s} touch {s}: {s}
+generate {s}:
+The file may be damaged: copy the game to the card again.
+setVolumeIndex
+brightnessState
+setBrightness
+shelf picture
+shelfPictures
+Roms
+ROMs
+1234-ABCD
+GBA/Golden Sun.gba
+GBC/Zelda DX.gbc
+
+# src/case_knows.rs: the No-Intro names of the releases read (never painted)
+re:^Pokemon - .*\)$
+re:^Super Metroid \(.*\)$
+re:^Metroid - Zero Mission \(.*\)$
+re:^Final Fantasy III \(.*\)$
+EarthBound (USA)
+re:^Super Mario World .*\)$
+re:^Super Mario All-Stars \+ Super Mario World \(.*\)$
+re:^Super Mario 64 \(.*\)$
+re:^Paper Mario \(.*\)$
+re:^Mario Kart 64 \(.*\)$
+re:^Star Fox 64 \(.*\)$
+re:^Lylat Wars \(.*\)$
+re:^Diddy Kong Racing \(.*\)$
+re:^Legend of Zelda, The - Ocarina of Time \(.*\)$
+re:^Legend of Zelda, The - Majora's Mask \(.*\)$
+re:^Legend of Zelda, The - A Link to the Past \(.*\)$
+re:^Legend of Zelda, The - Link's Awakening DX \(.*\)$
+re:^Legend of Zelda, The - The Minish Cap \(.*\)$
+re:^Legend of Zelda, The - Oracle of Ages \(.*\)$
+re:^Legend of Zelda, The - Oracle of Seasons \(.*\)$
+re:^Donkey Kong Country .*\)$
+re:^Chrono Trigger \(.*\)$
+re:^Golden Sun .*\)$
+re:^Kirby & The Amazing Mirror \(.*\)$
+re:^Fire Emblem .*\)$
+re:^Super Mario RPG .*\)$
+re:^Lufia II .*\)$
+re:^Pokemon Mystery Dungeon .*\)$
+re:^Final Fantasy VI Advance .*\)$
+re:^Tactics Ogre .*\)$
+re:^Breath of Fire II .*\)$
+re:^Mario & Luigi .*\)$
+re:^Mother 3 .*\]$
+
+# src/app_case_knows.rs: snapshot data
+Charizard
+Glurak
+Mudkip
+Crono
+Isaac
+Felix
+Mario
+Maxim
+Pikachu
+Rob
+Alphonse
+Ryu
+Lucas
+Flint
+Wedge
+Biggs
+Tina
+
+# src/case_knows_read.rs: the picture cache's key, never painted
+zelda {s} {s}
+gb {s} {s} {s} {s} {s} {s}
+nds {s} {s} {s}
+Terra
+Ness
+Typhlosion
+Tornupto
+Samurott
+
+# src/showcase.rs, src/app_cabinet_tv.rs, src/bin/pocket_core.rs: the showcase hand-over, log lines and trace marks
+showcase grown
+its film tears off first
+it has a save of its own
+another core
+the game has a save of its own
+sound came up over {s} ms, dBFS per 50 ms: {s}
+Unlocks
+load 1
+load auto
+load undo
+load earlier1 0
+load started1 0
+save 2
+hardcore off
+hardcore on
 {s}-linux_aarch64
 # Brazilian Portuguese: the Brick wording tests and the time zone cities (src/i18n.rs, src/timezone.rs).
 As configurações deste Pocket.
@@ -1676,7 +1792,117 @@ Cairo
 
 # src/j2me_keys.rs
 FreeJ2ME-Plus.rmp
+input_player1_btn_up = "19"\ninput_player1_btn_down = "18"\ninput_player1_btn_left = "17"\ninput_player1_btn_right = "16"\ninput_player1_btn_y = "14"
 
 # src/j2me_size.rs
 {s} = "{s}"
 FreeJ2ME-Plus.opt
+# src/update/channel.rs: the Android bridge call of the shared update-list reader
+updateRead
+# src/ui_sound.rs: the frame dump's event lines (events.log)
+sound stop
+sound forget-waiting
+sound forget-later
+# src/darkos.rs, src/device.rs, src/platform/linux_audio.rs: dArkOS's pad name (evdev), the log line of the device's
+# source and of ALSA's chain, and the chain test's alsa-lib dumps.
+GO-Super Gamepad
+# src/darkos.rs: the attribute names of es_input.cfg's <inputConfig> that are read, never painted.
+deviceGUID
+deviceName
+{s} (dArkOS)
+YES ({s})
+unknown converter
+(no dump)
+re:^Plug PCM: Soft volume PCM
+re:^Plug PCM: Rate conversion PCM \(44100, sformat=S16_LE\)
+# src/update/brick.rs: a file name the dArkOS update must hold (checked, never shown)
+DARKOS-PORT
+# …and in French.
+Accept-Language: fr-FR,fr;q=0.9,en;q=0.7
+# French: the Brick wording tests and the time zone cities (src/i18n.rs, src/timezone.rs).
+Les paramètres de ce Pocket.
+Les paramètres de ce Brick.
+Performances et ventilateur
+Performances
+Khartoum
+Bogota
+La Havane
+Mexico
+Damas
+Hô-Chi-Minh-Ville
+Jérusalem
+Katmandou
+Calcutta
+Riyad
+Séoul
+Singapour
+Taipei
+Téhéran
+Tokyo
+Canaries
+Athènes
+Belgrade
+Bruxelles
+Lisbonne
+Luxembourg
+Prague
+Rome
+Vatican
+Vienne
+Varsovie
+Zurich
+Maldives
+Addis-Abeba
+Alger
+Le Caire
+# Italian: the Accept-Language header, the Brick wording tests and the time zone cities.
+# …and in Italian.
+Accept-Language: it,en;q=0.8
+# Italian: the same tests.
+Le impostazioni di questo Pocket.
+Le impostazioni di questo Brick.
+Prestazioni e ventola
+Prestazioni
+# Italian city names of the time zone list (src/timezone.rs).
+Algeri
+Atene
+Azzorre
+Baghdad
+Berlino
+Canarie
+Città del Messico
+Città del Vaticano
+Copenaghen
+Dublino
+Gerusalemme
+Giacarta
+Il Cairo
+Lisbona
+Londra
+Lussemburgo
+Maldive
+Mosca
+Parigi
+San Paolo
+Singapore
+Stoccolma
+Tunisi
+Varsavia
+Vienna
+Zurigo
+src/timezone.rs:111	"L'Avana"
+L'Avana
+round {s}: panic
+round {s}: offered a changed app
+Flycast GLES2
+Up
+Down
+Left
+Right
+scaling {s} frame {s}
+
+# src/core_prewarm.rs
+no game in front
+{s} plays it
+{s} is never read ahead
+{s} is {s} MB

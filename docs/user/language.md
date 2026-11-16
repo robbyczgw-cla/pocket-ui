@@ -1,14 +1,14 @@
 # Language
 
 Settings → System → **Language**: menus, hints, messages and the notes over a game are in **English**,
-**Deutsch** (German), **Español** (Spanish) or **Português (Brasil)** (Brazilian Portuguese). A or Left/Right on the row walks through them; the screen changes at
+**Deutsch** (German), **Español** (Spanish), **Português (Brasil)** (Brazilian Portuguese), **Français** (French) or **Italiano** (Italian). A or Left/Right on the row walks through them; the screen changes at
 once, nothing restarts. The first start's Welcome page has the same choice (Left/Right).
 
 Until you choose, pocket-ui uses the system language set in ROCKNIX's own menu (EmulationStation, in its system
-settings): German when that is German, Spanish when that is Spanish in any country's form, Portuguese when that is Portuguese (it speaks Brazilian Portuguese), English for every other language. Once you choose here or on the
+settings): German when that is German, Spanish when that is Spanish in any country's form, Portuguese when that is Portuguese (it speaks Brazilian Portuguese), French when that is French in any country's form, Italian when that is Italian (Italy or Switzerland), English for every other language. Once you choose here or on the
 Welcome page, pocket-ui keeps its own choice, even when the system language changes later.
 
-What stays in English in the German, Spanish and Portuguese interfaces:
+What stays in English in the German, Spanish, Portuguese, French and Italian interfaces:
 
 - **This manual** (Settings → Help & tools → **Manual**). Its title line and buttons are in your language, its pages
   are not translated yet.
@@ -24,4 +24,4 @@ What stays in English in the German, Spanish and Portuguese interfaces:
 
 A sentence pocket-ui has no translation for yet appears in English, never as an empty line.
 
-Menu entries printed on cases use the chosen language. Names on those cases, including your own shelves or stickers, keep their wording.
+Menu entries printed on cases use the chosen language at once, including Search, Just Play and Favourites on shelf spines and case fronts. Names on those cases, including your own shelves or stickers, keep their wording.

@@ -10,7 +10,6 @@ use super::{App, Notice, Player, Run, UserEvent};
 enum Outcome {
     Missing(String),
     Empty(String),
-    Controls,
     Ready { at: frozen::AtLaunch, wait: bool, resumable: bool, preview: bool, env: Vec<(&'static str, String)> },
 }
 
@@ -25,13 +24,19 @@ pub(crate) struct Pending {
 }
 
 impl App {
-    pub(crate) fn queue_launch(&mut self, system: String, name: String, path: PathBuf, controls: bool) {
+    pub(crate) fn queue_launch(&mut self, system: String, name: String, path: PathBuf) {
         if self.pending_launch.is_some() { return; }
         let asked = pocket_ui::startup::clock_ms();
         // PortMaster's missing-files page uses its own cached installation state and no insertion scene.
-        if matches!(system.as_str(), "ports") && self.port_needs_files(&path) { return; }
+        if matches!(system.as_str(), "ports") && !pocket_ui::device::darkos_port() && self.port_needs_files(&path) { return; }
         let Some(sys) = self.systems.iter().find(|s| s.name == system) else { return };
-        let (emulator, core) = self.route(sys, Some(&path), std::path::Path::new(super::host_bin()).exists());
+        // Android (a phone, `play_route`): our player is always there, it is the APK's.
+        let host = std::path::Path::new(super::host_bin()).exists() || pocket_ui::play_route::phone().is_some();
+        let (emulator, core) = self.route(sys, Some(&path), host);
+        // Android's handheld view: a core to download first, or no app for the system, is told here instead of started.
+        if self.phone_prelaunch(&system, &name, &path) { return; }
+        // Our own player on Android stays pocket-core's route (hosted), as on Linux (Lead, 13.11.2026: the ritual first): the
+        // start's scene runs in full and holds the game, and the moments and open cases are pocket-core's (`frozen`). Another app's game is that app's (`play_route::Way::App`) and starts at once.
         if self.kids_route_closed(&system, &emulator, &core, &path) {
             println!("kids mode: stopped, {} would start on {emulator}", path.display());
             return self.kids_stuck();
@@ -67,10 +72,15 @@ impl App {
         let java = (!hosted && pocket_ui::j2me_java::needed(&pocket_ui::j2me_java::Places::here(), &core))
             .then(|| std::sync::Arc::new(pocket_ui::j2me_java::Fetch::default()));
         self.java_fetch = java.clone();
-        let run = Run { player, system: system.clone(), core, path: path.clone() };
+        let run = Run { name: name.clone(), player, system: system.clone(), core, path: path.clone() };
         pocket_ui::motion::set_cozy(self.cozy());
         pocket_ui::ui_sound::stop_for(!hosted);
-        let animation = if port { None } else { self.launch_animation(&path, hosted) };
+        // A on the Cabinet's playing TV: the game goes on from there, its picture growing out of the TV, no insertion
+        // (`App::showcase_hand_over`); pocket-core holds it still until the picture has grown.
+        let grow = hosted && !port && self.showcase_hand_over(&path, &run.core);
+        let animation = if port { None } else if grow { Some(super::app_cabinet_tv::HAND_HOLD) } else { self.launch_animation(&path, hosted) };
+        // A sealed game is unwrapped for good now, in every look (the Cozy launch tore its film off already).
+        self.unseal(&path);
         self.launch_at = Some(Instant::now());
         self.launch_picture = None;
         self.loading_start();
@@ -79,11 +89,17 @@ impl App {
         // Prepare the skip file before accepting another button; a worker must never erase an early skip.
         pocket_ui::startup::prepare_skip();
         let (tx, rx) = mpsc::channel();
+        // The Cabinet's TV stops playing before the game starts (prototype, `pocket_ui::showcase`), unless A just
+        // took its game over (`grow`): then the run is ending by itself.
+        self.cabinet.tv.showcase_stop();
+        if !grow {
+            self.cabinet.tv.grow = None;
+        }
         self.pending_launch = Some(Pending { run, name: name.clone(), asked, animation, painted: false, skipped: false, rx });
         pocket_ui::trace::step("launch preparation queued");
         let fan = self.perf_fan_prepare_launch();
         std::thread::spawn(move || {
-            let prepared = prepare(&name, &game, &data, kids, pixel, controls, shared(), shown, drains, java.as_deref(), fan);
+            let prepared = prepare(&name, &game, &data, kids, pixel, shared(), shown, drains, java.as_deref(), fan);
             let _ = tx.send(prepared);
             let _ = proxy.send_event(UserEvent::LaunchPrepared);
         });
@@ -102,7 +118,9 @@ impl App {
     }
 
     pub(crate) fn launch_poll(&mut self) {
-        let Some(p) = self.pending_launch.as_ref().filter(|p| p.painted) else { return };
+        // Android's handheld view: a core download's progress (`app_runs_on_android`).
+        self.phone_poll();
+        let Some(p) = self.pending_launch.as_mut().filter(|p| p.painted) else { return };
         let (outcome, fan) = match p.rx.try_recv() {
             Ok((o, fan)) => (o, Some(fan)),
             Err(mpsc::TryRecvError::Empty) => return,
@@ -114,6 +132,8 @@ impl App {
         match outcome {
             Outcome::Ready { at, wait, resumable, preview, env } => self.launch_prepared(p, at, wait, resumable, preview, env),
             outcome => {
+                // A start that never began: how far its animation had got, for the way back out (`begin_failed_start`).
+                let ran = self.launch_at.map_or(Duration::ZERO, |t| t.elapsed());
                 self.launch_at = None;
                 self.end_insert();
                 pocket_ui::ui_sound::forget_waiting();
@@ -124,12 +144,13 @@ impl App {
                         self.library_rescan("a game's file was missing");
                         #[cfg(feature = "brick")]
                         self.rebuild();
+                        self.begin_failed_start(&path, &system, &p.name, ran);
                     }
                     Outcome::Empty(msg) => {
                         self.notice = Some(Notice::new(msg));
                         self.big_note_failure(&path, &system, &p.name);
+                        self.begin_failed_start(&path, &system, &p.name, ran);
                     }
-                    Outcome::Controls => self.open_launch_controls(system, p.name, path),
                     Outcome::Ready { .. } => unreachable!(),
                 }
                 self.request_redraw();
@@ -144,7 +165,7 @@ impl App {
 pub(crate) static TEST_PREPARE_RELEASED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 pub(crate) static TEST_PREPARED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 
-fn prepare(name: &str, game: &frozen::Game, data: &std::path::Path, kids: bool, pixel: bool, controls: bool,
+fn prepare(name: &str, game: &frozen::Game, data: &std::path::Path, kids: bool, pixel: bool,
     shared: bool, shown: bool, drains: Vec<i32>, java: Option<&pocket_ui::j2me_java::Fetch>, fan: impl FnOnce(bool) -> pocket_ui::perf_fan::FanKeeper) -> (Outcome, pocket_ui::perf_fan::FanKeeper) {
     pocket_ui::trace::step("launch preparation begin");
     if pocket_ui::proc::mock() {
@@ -172,13 +193,6 @@ fn prepare(name: &str, game: &frozen::Game, data: &std::path::Path, kids: bool, 
             return (Outcome::Empty(e.message()), fan(false));
         }
     }
-    if controls && !kids && hosted {
-        let stem = path.file_stem().and_then(|s| s.to_str()).unwrap_or("game");
-        let states = pocket_ui::states::StateSet::pocket_core(&pocket_ui::slots::base(system, stem));
-        let resuming = states.path(pocket_ui::states::Target::Auto).is_some();
-        if pocket_ui::controls_card::first_start_due(data, system, false, resuming) { return (Outcome::Controls, fan(false)); }
-    }
-    pocket_ui::trace::step("launch controls check ready");
     for pgid in drains {
         if !pocket_ui::fast_switch::wait_ended(pgid, pocket_ui::quit::WINDOW_GRACE) {
             control::terminate_game(pgid, true);
@@ -204,8 +218,10 @@ fn prepare(name: &str, game: &frozen::Game, data: &std::path::Path, kids: bool, 
     let preview = hosted && pocket_ui::launch_picture::source(data, system, path).is_some();
     pocket_ui::trace::step("launch frozen checked");
     if matches!(at, frozen::AtLaunch::Fresh(_)) && !hosted { standalone::skip_next_resume(); }
-    // Phone games: A is the phone's OK key (`j2me_keys`).
-    pocket_ui::j2me_keys::before_start(core);
+    // Phone games: Runs on › D-pad as RetroArch's remap for this game (`j2me_keys`).
+    pocket_ui::j2me_keys::before_start(system, core, path);
+    // N64, PSP, Dreamcast on ROCKNIX's emulators (H700): Runs on › D-pad, the left stick from the D-pad (`dpad_stick_rocknix`).
+    pocket_ui::dpad_stick_rocknix::before_start(system, core, path);
     // Phone games at their own screen size, filling the screen (`j2me_size`).
     pocket_ui::j2me_size::before_start(system, core, path);
     standalone::set_kids(kids);

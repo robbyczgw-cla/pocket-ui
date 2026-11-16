@@ -20,10 +20,32 @@ pub const FADE: Duration = Duration::from_millis(250);
 /// A sound goes a little before its moment: the output takes about that long to play what it is given.
 const SOUND_LEAD: Duration = Duration::from_millis(10);
 
-/// How long after A the game's window may come up: Cozy holds it until the medium is in and the fade has run, the quick
-/// way doesn't hold it at all.
-pub fn hold(cozy: bool) -> Option<Duration> {
-    cozy.then(|| cabinet::fade_delay(true) + FADE)
+/// A handheld's power-on (`Scene::power_on`) lets its display stay lit while the rest of the screen goes dark: the fade to
+/// black runs between these moments after it would begin (`cabinet::fade_delay`), and the game's window comes when it
+/// has, shorter than the fade it replaces (the game is on screen sooner, not later).
+pub const WASH: (Duration, Duration) = (Duration::from_millis(90), Duration::from_millis(210));
+
+/// How long after A the game's window may come up: Cozy holds it until the medium is in and the fade has run (a handheld's
+/// power-on: its light has spread), the quick way doesn't hold it at all.
+pub fn hold(cozy: bool, power_on: bool) -> Option<Duration> {
+    cozy.then(|| cabinet::fade_delay(true) + if power_on { WASH.1 } else { FADE })
+}
+
+/// The light a handheld's start ends in, when it ends so (`Scene::power_on`): Cozy, a handheld (its game had no TV), and
+/// both the motion level and the old-TV switch-on extra allow it, as for the tube (`crt_on`). `system`'s own picture says
+/// the colour (`insert_rig::light_of`), a handheld without one a neutral light.
+pub fn power_on_light(system: &str, cozy: bool, motion_full: bool, extra_on: bool) -> Option<u32> {
+    let lcd = crate::eject::Screen::of(FormFactor::of(system)) == crate::eject::Screen::Lcd;
+    (cozy && motion_full && extra_on && lcd).then(|| light_of(system))
+}
+
+/// The light of a handheld's display without a picture of its own: a muted grey.
+const DISPLAY_LIGHT_DEFAULT: u32 = 0x9fa3a2;
+
+/// The light of `system`'s display: its rig's, the plain picture's (`DISPLAYS`) or a neutral one.
+pub fn light_of(system: &str) -> u32 {
+    let game = Game::of(system, "x.rom");
+    ir::light_of(system, game).or_else(|| plain_display(system).map(|d| d.lit)).unwrap_or(DISPLAY_LIGHT_DEFAULT)
 }
 
 /// When a game's window may come, for a host that starts it itself at that moment (Android's `PlayerActivity`): when the
@@ -36,8 +58,8 @@ pub struct HandOver {
 }
 
 impl HandOver {
-    pub fn new(cozy: bool) -> HandOver {
-        HandOver { hold: hold(cozy), released: false, skipped: false }
+    pub fn new(cozy: bool, power_on: bool) -> HandOver {
+        HandOver { hold: hold(cozy, power_on), released: false, skipped: false }
     }
 
     /// A tap or any button: the picture ends and the game comes now. True the first time.
@@ -77,14 +99,16 @@ pub struct Cue {
 /// The sounds of a start, all queued at A with their waits: the sound thread plays them on time. Quick: a quiet click as
 /// it goes in (`cabinet::IN_AT`). Cozy: the case opens, and the game goes into the console with its own sound, seated as
 /// it is in (`IN_AT_COZY`). A rig's disc (`disc_rig`): down on its spindle, a pause, and the lid or tray shuts with the
-/// rest of the sound; a front-loader's cartridge clicks with its own sound and the door shuts with that clunk.
-pub fn cues(cozy: bool, medium: Medium, disc_rig: bool) -> Vec<Cue> {
+/// rest of the sound; a front-loader's cartridge clicks with its own sound and the door shuts with that clunk. The case's
+/// opening sounds when the case visibly opens, not at A (`playful`: the rig's scene, else the plain animation).
+pub fn cues(cozy: bool, medium: Medium, disc_rig: bool, playful: bool) -> Vec<Cue> {
     let in_at = cabinet::in_at(cozy).saturating_sub(SOUND_LEAD);
     let at = |sound: Sound, moment: Duration, db: f32| Cue { sound, after: moment.saturating_sub(ui_sound::hit_at(sound)), db };
     if !cozy {
         return vec![at(Sound::Insert, in_at, ui_sound::QUICK_DB)];
     }
-    let opening = Cue { sound: ui_sound::opening(medium), after: Duration::ZERO, db: 0.0 };
+    let opens = if playful { ir::case_opens_at() } else { cabinet::plain_case_opens_at(true) };
+    let opening = Cue { sound: ui_sound::opening(medium), after: opens.saturating_sub(SOUND_LEAD + ui_sound::hit_at(ui_sound::opening(medium))), db: 0.0 };
     if disc_rig {
         // A front-loader's cartridge clicks as itself; its door drops shut with the lid's clunk.
         let down = if medium.game().is_round() { Sound::DiscDrop } else { ui_sound::going_in(medium) };
@@ -161,6 +185,8 @@ const SLOTS: &[(&str, f32, f32, f32)] = &[
     ("atari5200", 0.50, 0.30, 1.0),
     ("amiga", 0.90, 0.42, 1.0),
     ("zxspectrum", 0.77, 0.25, 1.0),
+    // The phone (J2ME): nothing goes in, its display lights up where `PLAIN_DISPLAYS` has it.
+    ("j2me", 0.48, 0.42, 1.0),
     // The arcade cabinet: no medium goes in (`lights_up_only`), its screen lights up.
     ("arcade", 0.45, 0.38, 1.0),
     // The crate of games: where a system without a picture of its own puts its medium (`STAND_IN`).
@@ -169,6 +195,24 @@ const SLOTS: &[(&str, f32, f32, f32)] = &[
 
 /// What stands in for the console of a system without a picture: the crate of games, its medium goes into it.
 pub const STAND_IN: &str = "ports";
+
+/// The system whose console picture, rig and display a start shows: a handheld without a picture of its own shows the
+/// closest handheld that has one, never the crate of games (a TV or a box would say the game runs somewhere else).
+pub fn scene_system(system: &str) -> &str {
+    match system {
+        // Their games are the bigger console's (a GBA Video is a GBA cartridge, PSP Minis go into the PSP, DSiWare into the DS).
+        "gbav" => "gba",
+        "pspockets" => "psp",
+        "ndsiware" => "nds",
+        // Handhelds without a picture of their own: the closest we have. Landscape ones and the tiny Arduboy: the Game Gear; the
+        // upright ones of the Game Boy's build: the Game Boy; the GP32 (a GBA-shaped handheld): the GBA; the Palm: the phone.
+        "gp32" => "gba",
+        "gameandwatch" | "arduboy" => "gamegear",
+        "supervision" | "gamate" | "megaduck" => "gb",
+        "palm" => "j2me",
+        _ => system,
+    }
+}
 
 /// Where the medium goes on `system`'s picture; a picture not listed has its console in its middle.
 pub fn slot_of(system: &str) -> SlotAt {
@@ -187,6 +231,8 @@ pub fn lights_up_only(system: &str) -> bool {
             crate::system_art::canonical(system),
             "psp" | "arcade" | "c64" | "c128" | "c16" | "vic20" | "pet" | "amiga" | "amiga500" | "amiga1200" | "zxspectrum" | "zx81" | "msx" | "msx2" | "atarist"
                 | "atari800" | "amstradcpc" | "x68000" | "x1" | "pc-8800" | "pc-9800" | "bbcmicro" | "apple2" | "dragon" | "trs-80"
+                // A phone game comes over the air: nothing goes in, it loads onto the phone (`paint_plain_display`).
+                | "j2me"
         )
 }
 
@@ -201,6 +247,8 @@ pub struct Rigged {
     pub under: Option<Pic>,
     /// Screen pixels per pixel of the rig's art.
     pub scale: f32,
+    /// The handheld's display lit: its pixels taken to its light, nothing elsewhere, at the base's size (`Display`).
+    pub lit: Option<Pic>,
     /// A cartridge's edge, one column of its own plastic (`edge_of`), made the first time it turns and kept.
     pub edge: std::cell::OnceCell<Pic>,
 }
@@ -208,12 +256,22 @@ pub struct Rigged {
 impl Rigged {
     /// `blocks`: screen pixels per pixel of the art (`ir::SCALE` on Linux).
     pub fn load(system: &str, game: Game, blocks: i32) -> Option<Rigged> {
+        Self::load_scaled(system, game, blocks as f32)
+    }
+
+    /// `load` at any number of screen pixels per pixel of the art (not whole on a short screen).
+    pub fn load_scaled(system: &str, game: Game, blocks: f32) -> Option<Rigged> {
         let f = ir::files(system, game)?;
         let pic = |data: &[u8]| {
             let s = crate::system_art::decode(data)?;
-            Some(Pic { w: s.w as i32, h: s.h as i32, px: s.px })
+            Some(Pic::of(s.w as i32, s.h as i32, s.px))
         };
-        let (mut base, over) = (enlarged(pic(&f.base)?, blocks), f.over.and_then(|d| pic(&d)).map(|p| enlarged(p, blocks)));
+        let art = pic(&f.base)?;
+        let lit = f.rig.display.map(|d| {
+            let mask = ir::display_mask(&art.px, art.w as usize, art.h as usize, d.seeds_of(), d.fuzz);
+            enlarged_to(Pic::of(art.w, art.h, ir::lit_pixels(&art.px, &mask, art.w as usize, d.lit)), blocks)
+        });
+        let (mut base, over) = (enlarged_to(art, blocks), f.over.and_then(|d| pic(&d)).map(|p| enlarged_to(p, blocks)));
         // What `over` covers whole is never seen on the base: each frame only copies a console's pixels once.
         if let Some(o) = over.as_ref().filter(|o| (o.w, o.h) == (base.w, base.h)) {
             for (b, t) in base.px.iter_mut().zip(&o.px) {
@@ -222,22 +280,93 @@ impl Rigged {
                 }
             }
         }
-        Some(Rigged { rig: f.rig, front: f.front.and_then(|d| pic(&d)), base, over, top: f.top.and_then(|d| pic(&d)), under: f.under.and_then(|d| pic(&d)), scale: blocks as f32, edge: Default::default() })
+        Some(Rigged { rig: f.rig, front: f.front.and_then(|d| pic(&d)), base, over, top: f.top.and_then(|d| pic(&d)), under: f.under.and_then(|d| pic(&d)), scale: blocks, lit, edge: Default::default() })
     }
 }
 
 /// The console's picture at (`x`, `y`) painted again over the screen rows `rows`, solid pixels only: what the medium
 /// sinks behind is the console's outline, whatever its tilt.
 fn paint_over(c: &mut Canvas, sp: &crate::system_art::Sprite, (x, y): (i32, i32), rows: (i32, i32)) {
-    for row in rows.0.max(y).max(0)..rows.1.min(y + sp.h as i32).min(c.h) {
+    let (r0, r1) = (rows.0.max(y).max(0), rows.1.min(y + sp.h as i32).min(c.h));
+    if c.n() != 1 {
+        // Painted natively (docs/dev/native-paint.md): the four design pixels of each screen pixel as below, averaged.
+        return crate::cabinet_art::cells_over(c, x, x + sp.w as i32, r0, r1, |col, row, bg| {
+            let p = sp.px[((row - y) as u32 * sp.w) as usize + (col - x) as usize];
+            if p >> 24 == 255 { p & 0xffffff } else { bg }
+        });
+    }
+    let c_w = c.w;
+    for row in r0..r1 {
         let src = &sp.px[((row - y) as u32 * sp.w) as usize..][..sp.w as usize];
         for (i, &p) in src.iter().enumerate() {
             let col = x + i as i32;
             if p >> 24 == 255 && col >= 0 && col < c.w {
-                c.buf[(row * c.w + col) as usize] = p & 0xffffff;
+                c.pixels_mut()[(row * c_w + col) as usize] = p & 0xffffff;
             }
         }
     }
+}
+
+/// A display's lit pixels (`Rigged::lit`) laid over the console drawn at (`x`, `y`), `amount` of the way (0-1) from the
+/// picture's own to its light. Only the glass is touched, so only the glass's rows are walked.
+fn lit_over(c: &mut Canvas, lit: &Pic, x: i32, y: i32, amount: f32) {
+    let t = (amount.clamp(0.0, 1.0) * 255.0).round() as u32;
+    if t == 0 {
+        return;
+    }
+    if c.n() != 1 {
+        // Painted natively (docs/dev/native-paint.md): the four design pixels of each screen pixel as below, averaged.
+        let (y0, y1) = (y.max(0), (y + lit.h).min(c.h));
+        return crate::cabinet_art::cells_over(c, x, x + lit.w, y0, y1, |col, row, bg| {
+            let p = lit.px[((row - y) * lit.w + col - x) as usize];
+            if p >> 24 == 255 { mix(bg, p & 0xff_ffff, t) } else { bg }
+        });
+    }
+    let c_w = c.w;
+    for row in y.max(0)..(y + lit.h).min(c.h) {
+        let src = &lit.px[((row - y) * lit.w) as usize..][..lit.w as usize];
+        for (i, &p) in src.iter().enumerate() {
+            let col = x + i as i32;
+            if p >> 24 == 255 && col >= 0 && col < c.w {
+                let d = &mut c.pixels_mut()[(row * c_w + col) as usize];
+                *d = mix(*d, p & 0xff_ffff, t);
+            }
+        }
+    }
+}
+
+/// Where a handheld's display is on its plain picture (`assets/systems`), for the handhelds without a rig: points on the
+/// glass as parts of the picture, filled out as a rig's (`insert_rig::display_mask`), and the light it ends in.
+#[derive(Clone, Copy, Debug)]
+pub struct PlainDisplay {
+    pub at: &'static [(f32, f32)],
+    pub fuzz: u32,
+    pub lit: u32,
+}
+
+/// `(picture, display)`.
+const DISPLAYS: &[(&str, PlainDisplay)] = &[
+    ("gb", PlainDisplay { at: &[(0.576, 0.311)], fuzz: 24, lit: 0xabb080 }),
+    ("gbc", PlainDisplay { at: &[(0.546, 0.289)], fuzz: 24, lit: 0xa3b0b0 }),
+    ("gba", PlainDisplay { at: &[(0.506, 0.411)], fuzz: 24, lit: 0x919191 }),
+    ("gba-sp", PlainDisplay { at: &[(0.6625, 0.262)], fuzz: 24, lit: 0x9c9d9e }),
+    ("gamegear", PlainDisplay { at: &[(0.5125, 0.331)], fuzz: 24, lit: 0x8c9298 }),
+    ("atarilynx", PlainDisplay { at: &[(0.544, 0.396)], fuzz: 15, lit: 0x808a94 }),
+    ("ngpc", PlainDisplay { at: &[(0.480, 0.430)], fuzz: 24, lit: 0x9ea8af }),
+    ("wonderswan", PlainDisplay { at: &[(0.5, 0.427)], fuzz: 24, lit: 0x9aabb0 }),
+    ("pokemini", PlainDisplay { at: &[(0.574, 0.383)], fuzz: 24, lit: 0xb0b0b0 }),
+    ("nds", PlainDisplay { at: &[(0.591, 0.230), (0.467, 0.631)], fuzz: 24, lit: 0x878891 }),
+    ("3ds", PlainDisplay { at: &[(0.539, 0.255), (0.415, 0.634)], fuzz: 24, lit: 0xb0b0b0 }),
+    ("psp", PlainDisplay { at: &[(0.502, 0.376)], fuzz: 13, lit: 0x838b94 }),
+    // The phone (`assets/systems/j2me.png`): its one display, a soft green-grey LCD.
+    ("j2me", PlainDisplay { at: &[(0.48, 0.42)], fuzz: 24, lit: 0xa0b09c }),
+    ("psvita", PlainDisplay { at: &[(0.492, 0.420)], fuzz: 13, lit: 0x83868e }),
+];
+
+/// The display of a system's plain picture, if it has one listed.
+pub fn plain_display(system: &str) -> Option<&'static PlainDisplay> {
+    let id = crate::system_art::picture_id(system);
+    DISPLAYS.iter().find(|d| d.0 == id).map(|d| &d.1)
 }
 
 /// `p` `n` times as large, each pixel a block.
@@ -250,7 +379,17 @@ fn enlarged(p: Pic, n: i32) -> Pic {
             px.push(row[(x / n) as usize]);
         }
     }
-    Pic { w, h, px }
+    Pic::of(w, h, px)
+}
+
+/// `p` at `blocks` screen pixels a pixel: whole blocks as `enlarged`; between two whole numbers (a short screen's console,
+/// `Scene::load_rig_scaled`) made two blocks large and averaged down, so the console is as sharp as it is small.
+fn enlarged_to(p: Pic, blocks: f32) -> Pic {
+    if (blocks - blocks.round()).abs() < 0.01 {
+        return enlarged(p, blocks.round() as i32);
+    }
+    let (w, h) = (((p.w as f32 * blocks).round() as i32).max(1), ((p.h as f32 * blocks).round() as i32).max(1));
+    enlarged(p, 2).scaled_smooth(w, h)
 }
 
 /// A front-loader's cartridge inside the console, seen through its opening: in its shadow (of 256).
@@ -271,7 +410,7 @@ fn edge_of(p: &Pic) -> Pic {
             }
         })
         .collect();
-    Pic { w: 1, h: p.h, px }
+    Pic::of(1, p.h, px)
 }
 
 /// How far open a lid is (0 shut, 1 all the way) before it is drawn behind its console's rear wall instead of over it.
@@ -287,9 +426,15 @@ const CASE_TRAY: u32 = 0x15161a;
 /// A rectangle of `rgb` over what is on `c`, `alpha` of 256.
 fn fill_alpha(c: &mut Canvas, x: i32, y: i32, w: i32, h: i32, rgb: u32, alpha: u32) {
     let keep = 256 - alpha.min(256);
+    if c.n() != 1 {
+        // Painted natively (docs/dev/native-paint.md): a screen pixel the rectangle covers only partly by that part.
+        let (x0, x1, y0, y1) = (x.max(0), (x + w).min(c.w), y.max(0), (y + h).min(c.h));
+        return crate::cabinet_art::cells_over(c, x0, x1, y0, y1, |_, _, bg| mix(bg & 0xffffff, rgb, 255 - (keep * 255 / 256)));
+    }
+    let c_w = c.w;
     for yy in y.max(0)..(y + h).min(c.h) {
         for xx in x.max(0)..(x + w).min(c.w) {
-            let d = &mut c.buf[(yy * c.w + xx) as usize];
+            let d = &mut c.pixels_mut()[(yy * c_w + xx) as usize];
             *d = mix(*d & 0xffffff, rgb, 255 - (keep * 255 / 256));
         }
     }
@@ -328,6 +473,99 @@ pub fn case_back(elapsed: Duration, opens: bool) -> (f32, f32) {
     }
 }
 
+/// What the page draws round a case's place (the selection's frame, its shadow on the board), canvas pixels. On the way
+/// back from a game (`eject`) the place is empty, as on the handhelds, and these come with the case (`Launch::paint_scene`).
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum Mark {
+    Frame { x: i32, y: i32, w: i32, h: i32, t: i32, color: u32 },
+    Shadow { x: i32, y: i32, w: i32, h: i32, amount: u8 },
+}
+
+impl Mark {
+    /// The same on a canvas `sx`, `sy` times as big.
+    pub fn scaled(self, (sx, sy): (f32, f32)) -> Mark {
+        let by = |v: i32, k: f32| (v as f32 * k) as i32;
+        match self {
+            Mark::Frame { x, y, w, h, t, color } => Mark::Frame { x: by(x, sx), y: by(y, sy), w: by(w, sx), h: by(h, sy), t: by(t, sx.min(sy)).max(1), color },
+            Mark::Shadow { x, y, w, h, amount } => Mark::Shadow { x: by(x, sx), y: by(y, sy), w: by(w, sx), h: by(h, sy), amount },
+        }
+    }
+
+    /// Over what is on `c`, `shown` of 256.
+    pub fn paint(self, c: &mut Canvas, shown: u32) {
+        match self {
+            Mark::Shadow { x, y, w, h, amount } => c.shade_rect(x, y, w, h, 0, (amount as u32 * shown / 256) as u8),
+            Mark::Frame { x, y, w, h, t, color } => {
+                // `shade_rect` mixes as `blend` does, pixel for pixel at `n` = 1, whole screen pixels at `n` = 2.
+                for (rx, ry, rw, rh) in [(x, y, w, t), (x, y + h - t, w, t), (x, y + t, t, h - 2 * t), (x + w - t, y + t, t, h - 2 * t)] {
+                    if rw > 0 && rh > 0 {
+                        c.shade_rect(rx, ry, rw, rh, color, shown.min(255) as u8);
+                    }
+                }
+            }
+        }
+    }
+}
+
+/// Where the phone's display is in its picture (`assets/systems/j2me.png`), as parts of its width and height: found once
+/// from the picture with the display's own seed (`plain_display`).
+fn phone_display() -> Option<(f32, f32, f32, f32)> {
+    static AT: std::sync::OnceLock<Option<(f32, f32, f32, f32)>> = std::sync::OnceLock::new();
+    *AT.get_or_init(|| {
+        let sp = crate::system_art::get("j2me")?;
+        let d = plain_display("j2me")?;
+        let (w, h) = (sp.w as usize, sp.h as usize);
+        let mask = ir::display_mask(&sp.px, w, h, d.at.iter().map(|&(x, y)| (x * w as f32, y * h as f32)), d.fuzz);
+        let (mut x0, mut y0, mut x1, mut y1) = (w, h, 0, 0);
+        for (i, _) in mask.iter().enumerate().filter(|(_, on)| **on) {
+            let (x, y) = (i % w, i / w);
+            (x0, y0, x1, y1) = (x0.min(x), y0.min(y), x1.max(x + 1), y1.max(y + 1));
+        }
+        (x1 > x0 && y1 > y0).then(|| (x0 as f32 / w as f32, y0 as f32 / h as f32, x1 as f32 / w as f32, y1 as f32 / h as f32))
+    })
+}
+
+/// How full the phone's loading bar is `elapsed` after A: from when a medium would leave its case until it would be in
+/// (the shared timeline, `insert_rig::pose`), so the phone keeps the other consoles' beat: loaded at 1.2 s, lit at 1.4 s.
+pub fn phone_loaded(elapsed: Duration, cozy: bool) -> f32 {
+    let (a, b) = (Duration::from_millis(420), cabinet::in_at(cozy));
+    let a = if cozy { a } else { a.mul_f32(b.as_secs_f32() / cabinet::IN_AT_COZY.as_secs_f32()) };
+    ((elapsed.as_secs_f32() - a.as_secs_f32()) / (b - a).as_secs_f32()).clamp(0.0, 1.0)
+}
+
+/// A phone game "loading" onto the phone: a bar on its still dark display fills while the case fades, where another
+/// console's medium would go in; then the display goes on as every handheld's (`paint_plain_display`). Painted where
+/// `paint_plain` has the phone, risen or rising.
+fn phone_loading(c: &mut Canvas, elapsed: Duration, sp: &Sprite, cozy: bool, Stage { floor, k }: Stage) {
+    let Some((fx0, fy0, fx1, fy1)) = phone_display() else { return };
+    let loaded = phone_loaded(elapsed, cozy);
+    let st = cabinet::insert_at(elapsed, cozy);
+    if elapsed < Duration::from_millis(300) || st.rise < 0.9 {
+        return;
+    }
+    let (sw, sh) = (sp.w as i32, sp.h as i32);
+    let px = |n: i32| (n as f32 * k) as i32;
+    let sx = (c.w - sw) / 2;
+    let sy_final = floor - px(10) - sh;
+    let sy = sy_final + ((1.0 - st.rise) * (sh + px(160)).max(c.h - sy_final) as f32) as i32;
+    let (dx0, dy0) = (sx + (fx0 * sw as f32) as i32, sy + (fy0 * sh as f32) as i32);
+    let (dw, dh) = (((fx1 - fx0) * sw as f32) as i32, ((fy1 - fy0) * sh as f32) as i32);
+    // An LCD's own dark: an outlined bar a little under the display's middle, filling from the left.
+    let ink = 0x24301f;
+    // At least 7 pixels high, so the frame, a gap and the fill all show on a small screen.
+    let (bw, bh) = ((dw * 64 / 100).max(10), (dh / 5).max(7));
+    let (bx, by) = (dx0 + (dw - bw) / 2, dy0 + dh * 3 / 5 - bh / 2);
+    let t = (bh / 7).max(1);
+    c.rect(bx, by, bw, t, ink);
+    c.rect(bx, by + bh - t, bw, t, ink);
+    c.rect(bx, by, t, bh, ink);
+    c.rect(bx + bw - t, by, t, bh, ink);
+    let inner = ((bw - 4 * t) as f32 * loaded) as i32;
+    if inner > 0 {
+        c.rect(bx + 2 * t, by + 2 * t, inner, bh - 4 * t, ink);
+    }
+}
+
 /// The case going into the console while the game starts.
 pub struct Scene {
     pub system: String,
@@ -356,6 +594,12 @@ pub struct Scene {
     pub rig_asked: bool,
     /// Where the case goes back to (Cozy): None, it fades out.
     pub home: Option<Home>,
+    /// A handheld's start: its power light and its display (lit in this colour, 0xRRGGBB, muted) come on once the game is
+    /// in, then the screen goes dark round it and the game's picture comes up out of the dark (`crt_on`), without the tube.
+    /// None: the fade only, as for a console on a TV (`power_on_light`).
+    pub power_on: Option<u32>,
+    /// A plain picture's display lit (made once from the picture on the stage, `plain_display`).
+    pub plain_lit: Option<Rc<Pic>>,
 }
 
 impl Scene {
@@ -372,6 +616,17 @@ impl Scene {
             true => 1.0 - case_back(elapsed, self.opens()).1,
             false => case_shown(cabinet::insert_at(elapsed, self.cozy)),
         }
+    }
+
+    /// The rectangle `r` (x, y, w, h) of something that stands under the case at its place on the page (its shadow), `elapsed`
+    /// after A: moved and shrunk with the case on its way to its [`Home`], where it goes there.
+    pub fn with_case(&self, elapsed: Duration, r: (i32, i32, i32, i32)) -> (i32, i32, i32, i32) {
+        let Some(home) = self.home.as_ref().filter(|_| self.returning()) else { return r };
+        let back = case_back(elapsed, self.opens()).1;
+        let lerp = |a: f32, b: f32| a + (b - a) * back;
+        let (w, h) = (lerp(r.2 as f32, home.spine.w as f32), lerp(r.3 as f32, home.spine.h as f32));
+        let (cx, cy) = (lerp(r.0 as f32 + r.2 as f32 / 2.0, home.at.0), lerp(r.1 as f32 + r.3 as f32 / 2.0, home.at.1));
+        ((cx - w / 2.0) as i32, (cy - h / 2.0) as i32, w as i32, h as i32)
     }
 
     /// The case goes back to its [`Home`] instead of fading: Cozy, with a home.
@@ -445,8 +700,21 @@ impl Scene {
         true
     }
 
+    /// The launch fade `p` (0-1, `fade_at`) over what is painted, for Linux and Android: to black, also for a handheld's
+    /// power-on (12.11. a light spread over the whole screen was glaring in a dark room: only the console's display is
+    /// bright, the rest goes dark as it did before).
+    pub fn veil(&self, c: &mut Canvas, p: f32) {
+        c.fade((p * 255.0) as u8);
+    }
+
     /// The fade `p` as it shows with this scene's rig.
     pub fn rig_fade(&self, p: f32) -> f32 {
+        if self.power_on.is_some() {
+            // The fade to black is the shorter `WASH`, softly at both ends; `p` is the fade's 250 ms.
+            let (a, b) = (WASH.0.as_secs_f32() / FADE.as_secs_f32(), WASH.1.as_secs_f32() / FADE.as_secs_f32());
+            let q = ((p - a) / (b - a)).clamp(0.0, 1.0);
+            return q * q * (3.0 - 2.0 * q);
+        }
         if self.rig.is_some() {
             ((p - 0.55) / 0.45).clamp(0.0, 1.0)
         } else {
@@ -456,13 +724,18 @@ impl Scene {
 
     /// Asks for the console's own mechanism, once: Cozy + Playful, and the SP's bottom slot in every mode.
     pub fn load_rig(&mut self, blocks: i32) {
+        self.load_rig_scaled(blocks as f32);
+    }
+
+    /// `load_rig` at any screen pixels per pixel of the art: a short screen's console is smaller in the proportion its cases are.
+    pub fn load_rig_scaled(&mut self, blocks: f32) {
         if !self.rig_asked {
             if ir::label_away(&self.system) {
                 self.game_back = crate::media::game_back(self.kind).map(|p| Rc::new(p.clone()));
             }
             // The SP also needs its bottom-slot geometry in Quick and without playful motion.
             let sp = crate::system_art::picture_id(&self.system) == "gba-sp";
-            self.rig = ((self.cozy && crate::playful::on()) || sp).then(|| Rigged::load(&self.system, self.kind, blocks)).flatten().map(Rc::new);
+            self.rig = ((self.cozy && crate::playful::on()) || sp).then(|| Rigged::load_scaled(&self.system, self.kind, blocks)).flatten().map(Rc::new);
             self.rig_asked = true;
         }
     }
@@ -474,6 +747,32 @@ impl Scene {
             return self.paint_rig(c, elapsed, stage);
         }
         self.paint_plain(c, elapsed, sprite, stage);
+        self.paint_plain_display(c, elapsed, sprite, stage);
+    }
+
+    /// A handheld's display lit on its plain picture (`plain_display`), over the console once its game is in: where the
+    /// rig lights its own (`power_on`).
+    fn paint_plain_display(&mut self, c: &mut Canvas, elapsed: Duration, sprite: Option<&Sprite>, Stage { floor, k }: Stage) {
+        if let (Some(sp), true) = (sprite, self.system == "j2me") {
+            phone_loading(c, elapsed, sp, self.cozy, Stage { floor, k });
+        }
+        let (Some(_), Some(sp), Some(d)) = (self.power_on, sprite, plain_display(&self.system)) else { return };
+        let lit = ir::pose(ir::Kind::Cart, elapsed).lit;
+        if lit <= 0.0 {
+            return;
+        }
+        let pic = self
+            .plain_lit
+            .get_or_insert_with(|| {
+                let at = d.at.iter().map(|&(x, y)| (x * sp.w as f32, y * sp.h as f32));
+                let mask = ir::display_mask(&sp.px, sp.w as usize, sp.h as usize, at, d.fuzz);
+                // The rig's light when the system has one (so the wash and the display are one colour), else the table's.
+                let light = ir::light_of(&self.system, self.kind).unwrap_or(d.lit);
+                Rc::new(Pic::of(sp.w as i32, sp.h as i32, ir::lit_pixels(&sp.px, &mask, sp.w as usize, light)))
+            })
+            .clone();
+        // It stands where `paint_plain` put it once risen.
+        lit_over(c, &pic, (c.w - sp.w as i32) / 2, floor - (10.0 * k) as i32 - sp.h as i32, lit);
     }
 
     /// Every system without a rig, and every system in Quick: the console comes up from below and the medium goes in.
@@ -502,6 +801,9 @@ impl Scene {
         let sy_final = base - sh;
         // From wholly under the screen's edge, also on a tall phone held upright (its floor is high up the screen).
         let sy = sy_final + ((1.0 - st.rise) * (sh + px(160)).max(c.h - sy_final) as f32) as i32;
+        // It stands on something: a soft contact shadow under it, as under the case on the shelf (art::soft_shadow), a
+        // console that floated over the floor looked pasted on (polish review 12.11.).
+        art::soft_shadow(c, sx + sw / 12, sy + sh - px(5), sw - sw / 6, px(9), px(12), 0.6 * st.rise, (0, c.h));
         if let Some(sp) = &sprite {
             c.blit_sprite(sp, sx, sy, ((1.0 - st.rise) * 200.0) as u8);
         } else {
@@ -675,6 +977,8 @@ impl Scene {
         let top = floor - px(10) - bh;
         // From wholly under the screen's edge, also on a tall phone held upright (its floor is high up the screen).
         let oy = top as f32 + (1.0 - st.rise) * (bh + px(160)).max(c.h - top) as f32 + pose.dip * scale;
+        // The same contact shadow as under a plain console (`paint_plain`).
+        art::soft_shadow(c, ox as i32 + bw / 12, (oy + bh as f32) as i32 - px(5), bw - bw / 6, px(9), px(12), 0.6 * st.rise, (0, c.h));
         let shade = 256 - ((1.0 - st.rise) * 200.0) as u32;
         let screen = |p: (f32, f32)| (ox + p.0 * scale, oy + p.1 * scale);
         let all = (0, c.h);
@@ -786,7 +1090,11 @@ impl Scene {
             if case_fade > 0 {
                 art::blit(c, &front, from.0, from.1, case_fade, all);
             }
-            let inside = flying && !pose.shut_in;
+            // Only once it is at the opening (`fly` 1): on its way there it is wholly outside and in front of the console, not
+            // dark and behind its lid, where its path crosses the console's top (ritual review 14.11.: the NES cartridge
+            // dived behind the console and came out in front again).
+            let on_its_way = flying && pose.fly < 1.0;
+            let inside = flying && !on_its_way && !pose.shut_in;
             if inside {
                 draw_part(c, INSIDE_SHADE, (0.0, 1.0));
             }
@@ -796,6 +1104,9 @@ impl Scene {
             draw_lid_as(c, door, &pics, (ox, oy), pose.open, shade, false);
             if inside {
                 draw_part(c, 256, (0.0, rig.outside(&m, &pose, screen)));
+            }
+            if on_its_way {
+                draw_medium(c);
             }
             if let (Some(led), true) = (rig.led, pose.led > 0.0) {
                 let at = screen(led.at);
@@ -858,7 +1169,10 @@ impl Scene {
                 draw_lid(c, l, &pics, (ox, oy), pose.open, shade);
             }
         }
-        // The console takes it: its power light comes on.
+        // The console takes it: its power light comes on, a moment later its display (a handheld's start, `power_on`).
+        if let (Some(lit), true, true) = (&pics.lit, self.power_on.is_some(), pose.lit > 0.0) {
+            lit_over(c, lit, ox.round() as i32, oy.round() as i32, pose.lit);
+        }
         if let (Some(led), true) = (rig.led, pose.led > 0.0) {
             let at = screen(led.at);
             art::glow(c, at.0 as i32, at.1 as i32, px(16), px(16), led.color, 0.9 * pose.led);
@@ -1013,10 +1327,10 @@ mod tests {
         let hardware = if system == "gba-sp" { "gba" } else { system };
         let kind = Game::of(hardware, "x.rom");
         let medium = Medium::of(hardware);
-        let look = Look { color: 0x8040c0, band: 0x8040c0, plastic: art::plastic(system) };
+        let look = Look { color: 0x8040c0, band: 0x8040c0, plastic: art::plastic(system), tape: false };
         let front = Rc::new(Pic::new(120, 180, 0xff40_6080));
         let game = Rc::new(Pic::new(90, 90, 0xffc0_c0c0));
-        Scene { system: system.into(), ff: FormFactor::of(hardware), medium, look, title: "T".into(), kind, has_cover: false, front, from: (40, 40, 120, 180), game: Some(game), game_back: None, cozy, at_drive: None, rig: None, rig_asked: false, home: None }
+        Scene { system: system.into(), ff: FormFactor::of(hardware), medium, look, title: "T".into(), kind, has_cover: false, front, from: (40, 40, 120, 180), game: Some(game), game_back: None, cozy, at_drive: None, rig: None, rig_asked: false, home: None, power_on: None, plain_lit: None }
     }
 
     fn frame(s: &mut Scene, ms: u64, stage: Stage) -> Vec<u32> {
@@ -1139,54 +1453,54 @@ mod tests {
         for motion in [Off, Reduced] {
             let cozy = cabinet::starts_cozy(true, motion);
             assert!(!cozy, "{motion:?}");
-            assert_eq!(hold(cozy), None);
+            assert_eq!(hold(cozy, false), None);
             let mut s = scene("psx", cozy);
             s.load_rig(2);
             assert!(s.rig.is_none());
-            assert_eq!(cues(cozy, Medium::of("psx"), false).iter().map(|c| c.sound).collect::<Vec<_>>(), [Sound::Insert]);
+            assert_eq!(cues(cozy, Medium::of("psx"), false, true).iter().map(|c| c.sound).collect::<Vec<_>>(), [Sound::Insert]);
         }
         assert!(cabinet::starts_cozy(true, Full));
     }
 
     #[test]
     fn the_window_is_held_until_the_fade_has_run_and_the_fade_ends_black() {
-        assert_eq!(hold(true), Some(Duration::from_millis(1600)));
+        assert_eq!(hold(true, false), Some(Duration::from_millis(1600)));
         for system in ["psx", "psp"] {
             let mut s = scene(system, true);
             s.load_rig(2);
             assert_eq!(s.fade_at(cabinet::IN_AT_COZY), 0.0, "{system}");
-            assert_eq!(s.fade_at(hold(true).unwrap()), 1.0, "{system}");
+            assert_eq!(s.fade_at(hold(true, false).unwrap()), 1.0, "{system}");
         }
     }
 
     #[test]
     fn a_skip_brings_the_game_at_once_and_only_once() {
         let at = |ms| Duration::from_millis(ms);
-        let mut cozy = HandOver::new(true);
+        let mut cozy = HandOver::new(true, false);
         assert!(!cozy.take_release(at(0)) && !cozy.take_release(at(1599)), "held while the animation plays");
         assert!(cozy.skip() && cozy.skipped());
         assert!(cozy.take_release(at(300)), "a skip ends the hold");
         assert!(!cozy.take_release(at(301)) && !cozy.skip(), "once");
-        let mut played = HandOver::new(true);
+        let mut played = HandOver::new(true, false);
         assert!(played.take_release(at(1600)) && played.released());
         // Quick, Motion below Full, a frozen game: nothing to wait for.
-        assert!(HandOver::new(false).take_release(at(0)));
+        assert!(HandOver::new(false, false).take_release(at(0)));
     }
 
     #[test]
     fn each_sound_hits_on_its_moment_of_the_picture() {
         let hit = |c: &Cue| c.after + ui_sound::hit_at(c.sound) + SOUND_LEAD;
-        let disc = cues(true, Medium::of("psx"), true);
+        let disc = cues(true, Medium::of("psx"), true, true);
         assert_eq!(disc.iter().map(|c| c.sound).collect::<Vec<_>>(), [Sound::CaseOpen, Sound::DiscDrop, Sound::DiscShut]);
         assert_eq!(hit(&disc[1]), cabinet::IN_AT_COZY);
         assert_eq!(hit(&disc[2]), cabinet::IN_AT_COZY + ir::SHUT_AFTER);
-        let cart = cues(true, Medium::of("snes"), false);
+        let cart = cues(true, Medium::of("snes"), false, true);
         assert_eq!(cart[0].sound, ui_sound::opening(Medium::of("snes")));
         assert_eq!((cart[1].sound, hit(&cart[1])), (Sound::CartIn, cabinet::IN_AT_COZY));
         // The plain animation's disc keeps the whole sound, on the same moment.
-        let plain = cues(true, Medium::of("psp"), false);
+        let plain = cues(true, Medium::of("psp"), false, true);
         assert_eq!(hit(&plain[1]), cabinet::IN_AT_COZY);
-        let quick = cues(false, Medium::of("psx"), false);
+        let quick = cues(false, Medium::of("psx"), false, true);
         assert_eq!((hit(&quick[0]), quick[0].db), (cabinet::IN_AT, ui_sound::QUICK_DB));
     }
 
@@ -1368,7 +1682,7 @@ mod tests {
     #[test]
     fn a_bigger_phone_only_scales_the_handhelds_picture() {
         // At the handhelds' 2 the blocks are the art's old doubling.
-        let p = Pic { w: 2, h: 1, px: vec![1, 2] };
+        let p = Pic::of(2, 1, vec![1, 2]);
         assert_eq!(enlarged(p, 2).px, vec![1, 1, 2, 2, 1, 1, 2, 2]);
     }
 
@@ -1495,6 +1809,30 @@ mod tests {
         }
     }
 
+    /// Ritual review 14.11.: the NES cartridge flew to its console dark and behind the lid, and came out in front of it again.
+    /// On its whole way to the door (420 to 900 ms) it is in front of the console, lit as ever: its colour is on screen in
+    /// every frame of it, never gone to the inside's shadow.
+    #[test]
+    fn a_front_loaders_cartridge_flies_to_the_door_in_front_of_the_console_and_never_dark() {
+        crate::cozy_extras::set(crate::cozy_extras::Extras::default());
+        crate::motion::set_cozy(true);
+        // Bright magenta, found nowhere else in the picture; in the inside's shadow (48 of 256) it is a dark purple.
+        let magenta = |p: &u32| {
+            let (r, g, b) = (p >> 16 & 0xff, p >> 8 & 0xff, p & 0xff);
+            r > 150 && b > 150 && g < 60
+        };
+        for system in ["nes"] {
+            let mut s = scene(system, true);
+            s.load_rig(2);
+            assert!(s.rig.as_ref().is_some_and(|r| r.rig.kind() == ir::Kind::Door), "{system}: a front-loader");
+            s.game = Some(Rc::new(Pic::new(60, 70, 0xffe0_00e0)));
+            let counts: Vec<usize> = (26..=53).map(|k| frame(&mut s, k * 1000 / 60, STAGE).iter().filter(|p| magenta(p)).count()).collect();
+            let most = counts.iter().copied().max().unwrap();
+            let least = counts.iter().copied().min().unwrap();
+            assert!(most > 1_000 && least as f32 >= 0.4 * most as f32, "{system}: lit pixels of the cartridge on its way {least} of {most}: {counts:?}");
+        }
+    }
+
     /// Review 11.11.: the 3DS looked off the middle. Every console with its own scene stands in the middle of the
     /// screen as the player sees it, its game in it (Cozy, seated, before the fade): the middle of what is drawn over the
     /// page is within a fiftieth of the screen's width of the screen's middle, its weight within a thirtieth.
@@ -1576,5 +1914,378 @@ mod tests {
             let middle = 40 + 120 / 2;
             assert!(sx / n.max(1) < middle + 12 && sx / n.max(1) + 12 > middle, "{system}: the disc rests at the case's middle, its mean x is {}", sx / n.max(1));
         }
+    }
+
+    // ---- A handheld's power-on: power light, display, then the game's picture (instead of the tube's / the fade) ----
+
+    /// Every system whose game had no TV: the whole class (`eject::Screen::Lcd`), rigs and plain pictures and systems
+    /// without any picture of their own.
+    const HANDHELDS: &[&str] = &[
+        "gb", "gbh", "gbc", "gbch", "gba", "gbah", "gamegear", "ggh", "ngp", "ngpc", "wonderswan", "wonderswancolor", "atarilynx", "lynx", "virtualboy", "pokemini",
+        "supervision", "gamate", "gameandwatch", "arduboy", "pico-8", "tic-80", "psp", "pspockets", "nds", "3ds", "n3ds", "psvita",
+    ];
+    /// Handhelds with a rig and a display in it (`rig.json`): the power light, then the display on the console's picture.
+    const RIG_DISPLAYS: &[&str] = &["gb", "gbc", "gba", "gamegear", "nds", "3ds", "ngpc", "ngp"];
+
+    #[test]
+    fn a_handhelds_start_ends_in_its_display_light_a_consoles_on_a_tv_in_the_fade() {
+        for system in HANDHELDS {
+            assert!(power_on_light(system, true, true, true).is_some(), "{system}: its start ends in its display's light");
+            for (cozy, full, extra) in [(false, true, true), (true, false, true), (true, true, false)] {
+                assert!(power_on_light(system, cozy, full, extra).is_none(), "{system}: cozy {cozy} motion full {full} extra {extra}: the fade as before");
+            }
+        }
+        for system in ["snes", "nes", "n64", "psx", "ps2", "gamecube", "wii", "xbox", "megadrive", "dreamcast", "saturn", "mastersystem", "pcengine", "atari2600", "arcade", "c64"] {
+            assert!(power_on_light(system, true, true, true).is_none(), "{system}: a console on a TV keeps its fade and the tube");
+        }
+    }
+
+    #[test]
+    fn a_phone_game_loads_onto_the_phone_on_the_other_consoles_beat_and_its_display_goes_on() {
+        // Nothing goes in: no disc or cartridge flies, the phone lights up as a handheld does.
+        assert!(lights_up_only("j2me"));
+        assert_eq!(crate::media::Medium::of("j2me"), crate::media::Medium::GenericDigital, "a download's case, not a CD case");
+        assert!(power_on_light("j2me", true, true, true).is_some(), "the phone's display goes on, no TV");
+        assert!(phone_display().is_some_and(|(x0, y0, x1, y1)| x1 - x0 > 0.3 && y1 - y0 > 0.1), "the display is found in the picture");
+        // Loaded when another console's medium is in (1.2 s), lit by the shared 1.4 s.
+        let ms = Duration::from_millis;
+        assert_eq!(phone_loaded(ms(300), true), 0.0);
+        assert!(phone_loaded(ms(800), true) > 0.3 && phone_loaded(ms(800), true) < 0.7);
+        assert_eq!(phone_loaded(cabinet::IN_AT_COZY, true), 1.0);
+        assert!(ir::pose(ir::Kind::Cart, ms(1400)).lit > 0.5, "the display is on at 1.4 s");
+        assert_eq!(ir::pose(ir::Kind::Cart, cabinet::IN_AT_COZY).lit, 0.0, "and not before it has loaded");
+        assert_eq!(phone_loaded(cabinet::in_at(false), false), 1.0, "Quick: loaded when its quicker medium would be in");
+    }
+
+    #[test]
+    fn the_power_on_takes_no_longer_than_the_fade_it_replaces_and_the_picture_is_whole_sooner() {
+        let (old, new) = (hold(true, false).unwrap(), hold(true, true).unwrap());
+        assert!(new < old, "the window comes {new:?} after A, not {old:?}");
+        // The tube's switch-on was 300 ms after the window, the display's light clears in LCD_LEN.
+        assert!(new + crate::crt_on::LCD_LEN < old + crate::crt_on::DURATION, "whole picture: {:?} against {:?}", new + crate::crt_on::LCD_LEN, old + crate::crt_on::DURATION);
+        assert_eq!(hold(false, true), None, "the quick way never holds");
+    }
+
+    #[test]
+    fn the_steps_come_in_order_light_display_spreading_picture() {
+        use crate::cabinet::{FADE_AT_COZY, IN_AT_COZY};
+        let ms = |d: Duration| d.as_secs_f32() * 1000.0;
+        let (led_on, led_full) = (IN_AT_COZY.as_secs_f32() * 1000.0 + 90.0, IN_AT_COZY.as_secs_f32() * 1000.0 + 240.0);
+        let (lit_on, lit_full) = (IN_AT_COZY.as_secs_f32() * 1000.0 + ir::LIT_AFTER.0, IN_AT_COZY.as_secs_f32() * 1000.0 + ir::LIT_AFTER.1);
+        let (wash_on, wash_full) = (ms(FADE_AT_COZY + WASH.0), ms(FADE_AT_COZY + WASH.1));
+        assert!(led_on < lit_on, "the power light first, then the display");
+        assert!(lit_on > IN_AT_COZY.as_secs_f32() * 1000.0, "nothing lights before the game is in");
+        assert!(lit_full <= wash_full && lit_on < wash_on + 1.0, "the display is lit before the screen goes dark round it");
+        assert!(led_full <= wash_full && wash_on < wash_full);
+        // The scene itself: nothing before the game is in, the display coming up, then the end.
+        for system in RIG_DISPLAYS {
+            let rig_kind = ir::files(system, Game::of(system, "x.rom")).unwrap().rig.kind();
+            for k in 0..=40u64 {
+                let (a, b) = (ir::pose(rig_kind, Duration::from_millis(k * 50)), ir::pose(rig_kind, Duration::from_millis(k * 50 + 50)));
+                assert!(b.lit + 1e-6 >= a.lit && b.led + 1e-6 >= a.led, "{system}: they only come on");
+                if a.led < 1.0 {
+                    assert!(a.lit <= a.led + 1e-6, "{system} {} ms: the display never before its light", k * 50);
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn the_fade_of_a_power_on_is_the_light_spreading_and_ends_when_the_window_comes() {
+        let mut s = scene("gba", true);
+        s.power_on = Some(0xc0c8d0);
+        let at = |ms: u64| s.fade_at(Duration::from_millis(ms));
+        assert_eq!(at(0), 0.0);
+        assert_eq!(at(cabinet::fade_delay(true).as_millis() as u64), 0.0, "it waits for the display");
+        assert!(at(1500) > 0.0 && at(1500) < 1.0, "fading at 1500 ms: {}", at(1500));
+        let end = hold(true, true).unwrap().as_millis() as u64;
+        assert_eq!(at(end), 1.0, "all dark when the window comes");
+        let mut last = 0.0;
+        for ms in (0..=end + 100).step_by(10) {
+            assert!(at(ms) + 1e-6 >= last, "{ms} ms: never goes back");
+            last = at(ms);
+        }
+        // Painted: all black at the end, never a light over the screen.
+        let mut buf = vec![0x202020u32; 100 * 100];
+        s.veil(&mut Canvas::new(&mut buf, 100, 100), at(end));
+        assert!(buf.iter().all(|p| *p == 0), "black at the end");
+    }
+
+    #[test]
+    fn any_button_ends_a_power_on_at_once() {
+        let mut hand = HandOver::new(true, true);
+        assert!(!hand.take_release(Duration::from_millis(900)), "held while it plays");
+        assert!(hand.skip(), "the first button");
+        assert!(hand.take_release(Duration::from_millis(900)), "the game comes at once");
+        assert!(!hand.skip(), "once");
+        let mut late = HandOver::new(true, true);
+        assert!(!late.take_release(hold(true, true).unwrap() - Duration::from_millis(1)));
+        assert!(late.take_release(hold(true, true).unwrap()), "else when the hold has run");
+    }
+
+    /// The scene with its display light on or off, as the player would see it.
+    fn lit_scene(system: &str, on: bool) -> Scene {
+        let mut s = scene(system, true);
+        s.power_on = on.then(|| light_of(system));
+        s.load_rig(2);
+        s
+    }
+
+    #[test]
+    fn a_rig_handhelds_display_lights_only_after_the_game_is_in_and_only_the_glass() {
+        crate::cozy_extras::set(crate::cozy_extras::Extras::default());
+        crate::motion::set_cozy(true);
+        for system in RIG_DISPLAYS {
+            let (mut on, mut off) = (lit_scene(system, true), lit_scene(system, false));
+            assert!(on.rig.as_ref().is_some_and(|r| r.lit.is_some()), "{system}: a rig with its display");
+            for before in [200u64, 700, 1190] {
+                assert!(frame(&mut on, before, STAGE) == frame(&mut off, before, STAGE), "{system} {before} ms: nothing lit before the game is in");
+            }
+            let (a, b) = (frame(&mut on, 1560, STAGE), frame(&mut off, 1560, STAGE));
+            let changed: Vec<usize> = (0..a.len()).filter(|&i| a[i] != b[i]).collect();
+            assert!(changed.len() > 400, "{system}: the glass is lit ({} px)", changed.len());
+            // Only the glass: one block (or two for the DS pair) of the console, a small part of the screen.
+            let rows = |f: &dyn Fn(usize) -> usize| changed.iter().map(|&i| f(i)).fold((usize::MAX, 0), |(lo, hi), v| (lo.min(v), hi.max(v)));
+            let ((y0, y1), (x0, x1)) = (rows(&|i| i / 720), rows(&|i| i % 720));
+            assert!((y1 - y0) * (x1 - x0) < 720 * 600, "{system}: the lit part is the display, {x0}-{x1} x {y0}-{y1}");
+            // Brighter, not darker.
+            let bright = |p: u32| (p >> 16 & 0xff) + (p >> 8 & 0xff) + (p & 0xff);
+            assert!(changed.iter().filter(|&&i| bright(a[i]) >= bright(b[i])).count() * 10 >= changed.len() * 9, "{system}: lit means brighter");
+            // The last step before the fade: the display (all of it) is at its light.
+            let (full, none) = (frame(&mut on, 1500, STAGE), frame(&mut off, 1500, STAGE));
+            let still = (0..full.len()).filter(|&i| full[i] != none[i]).count();
+            assert!(still >= changed.len() * 9 / 10, "{system}: the display stays lit ({still} of {})", changed.len());
+        }
+    }
+
+    #[test]
+    fn every_handheld_start_paints_without_a_gap_with_or_without_a_display_of_its_own() {
+        crate::cozy_extras::set(crate::cozy_extras::Extras::default());
+        crate::motion::set_cozy(true);
+        for system in HANDHELDS {
+            let mut s = lit_scene(system, true);
+            let mut last = None;
+            for ms in [300u64, 700, 1100, 1300, 1450, 1560] {
+                let f = frame(&mut s, ms, STAGE);
+                assert!(lit(&f) > 3000, "{system} {ms} ms: a console (or its stand-in) stands there");
+                if ms >= 1300 {
+                    last = Some(f);
+                }
+            }
+            assert!(last.is_some());
+            assert!(light_of(system) != 0, "{system}: it ends in some light");
+        }
+    }
+
+    /// Every handheld of ROCKNIX's list (and the phone), by the ids a library has them under.
+    const EVERY_HANDHELD: &[&str] = &[
+        "arduboy", "atarilynx", "gameandwatch", "gamate", "gb", "gbh", "gbc", "gbch", "gba", "gbah", "gbav", "gamegear", "ggh", "gp32", "j2me", "megaduck", "nds", "ndsiware", "3ds", "n3ds",
+        "ngp", "ngpc", "palm", "pico-8", "pokemini", "psp", "pspockets", "psvita", "supervision", "tic-80", "virtualboy", "wonderswan", "wonderswancolor",
+    ];
+
+    /// 15.11. (tester, RG353: "NGP/NGPC should look like GBA"; Ritual review 14.11. found, too, that GP32, Mega Duck, Palm, DSiWare and
+    /// GBA Video started on a TV and Supervision, Game & Watch, Gamate, Arduboy and PSP Minis put their game into the crate): a
+    /// handheld's game goes into a handheld on its own display, never a TV, a crate or an empty box.
+    /// Missed before: the tests only listed the handhelds that already had a picture.
+    #[test]
+    fn every_handheld_starts_in_a_handheld_on_its_own_display_never_a_tv_or_the_crate() {
+        for id in EVERY_HANDHELD {
+            assert_eq!(crate::eject::Screen::of(FormFactor::of(id)), crate::eject::Screen::Lcd, "{id}: its own display, no TV");
+            let shown = scene_system(id);
+            assert!(crate::system_art::get(shown).is_some(), "{id}: shows {shown}, which has no picture");
+            assert_ne!(slot_of(shown), slot_of(STAND_IN), "{id}: not the crate of games");
+            assert!(power_on_light(shown, true, true, true).is_some(), "{id}: its display lights");
+            // A handheld with a picture of its own shows it as it is (the Virtual Boy's goggles glow, PICO-8 and TIC-80 draw their own
+            // display); one that stands in for another needs the glass of the picture it shows.
+            let own = shown == *id;
+            assert!(own || plain_display(shown).is_some() || ir::files(shown, Game::of(shown, "x.rom")).is_some_and(|f| f.rig.display.is_some()), "{id}: shows {shown}: a display to light");
+        }
+    }
+
+    /// 15.11. (tester: "NGP/NGPC should look like GBA"): the cartridge goes into the console's slot, label to its back, as the GBA's
+    /// does, and the display lights; the plain animation (a flat cartridge dropped on the screen) was all the Neo Geo Pockets had.
+    #[test]
+    fn a_neo_geo_pocket_takes_its_cartridge_like_the_gba_in_its_rig() {
+        for system in ["ngp", "ngpc"] {
+            let game = Game::of(system, "x.ngc");
+            let f = ir::files(system, game).unwrap_or_else(|| panic!("{system}: a rig, not the plain animation"));
+            let gba = ir::files("gba", Game::of("gba", "x.gba")).unwrap().rig;
+            assert!(f.rig.behind && f.rig.label_away && f.rig.kind() == ir::Kind::Cart, "{system}: slot at the back, label turned away");
+            assert!(f.rig.display.is_some() && f.rig.led.is_some(), "{system}: its power light and its display");
+            assert_eq!((f.rig.behind, f.rig.label_away), (gba.behind, gba.label_away), "{system}: as the GBA");
+        }
+    }
+
+    /// 15.11. (Lead: "the label must not be upside down"): a UMD flies from its case to the PSP's back and lies in the cover with
+    /// its label upright, never turned. Painted with a red corner at its top left and a blue one at its bottom right: red stays the
+    /// upper one all the way. Missed before: the tests checked its size and its place, never which way up it lay.
+    #[test]
+    fn a_umd_goes_into_the_psp_with_its_label_upright() {
+        crate::cozy_extras::set(crate::cozy_extras::Extras::default());
+        crate::motion::set_cozy(true);
+        let mut s = scene("psp", true);
+        let mut px = vec![0xffc0_c0c0u32; 90 * 90];
+        for y in 0..24 {
+            for x in 0..24 {
+                px[y * 90 + x] = 0xffff_0000;
+                px[(89 - y) * 90 + 89 - x] = 0xff00_00ff;
+            }
+        }
+        s.game = Some(Rc::new(Pic::of(90, 90, px)));
+        s.load_rig(2);
+        assert!(s.rig.is_some(), "the PSP's rig");
+        let mut seen = 0;
+        for ms in [700u64, 800, 900, 1000, 1050] {
+            let f = frame(&mut s, ms, STAGE);
+            let centre = |hit: &dyn Fn(u32) -> bool| {
+                let (mut n, mut x, mut y) = (0i64, 0i64, 0i64);
+                for (i, p) in f.iter().enumerate().filter(|(_, p)| hit(**p)) {
+                    let _ = p;
+                    n += 1;
+                    x += (i % 720) as i64;
+                    y += (i / 720) as i64;
+                }
+                (n > 12).then(|| (x / n, y / n))
+            };
+            let red = centre(&|p| (p >> 16 & 0xff) > (p >> 8 & 0xff) + 70 && (p >> 16 & 0xff) > (p & 0xff) + 70);
+            let blue = centre(&|p| (p & 0xff) > (p >> 16 & 0xff) + 70 && (p & 0xff) > (p >> 8 & 0xff) + 70);
+            if let (Some(r), Some(b)) = (red, blue) {
+                seen += 1;
+                assert!(r.1 < b.1 && r.0 < b.0, "{ms} ms: red {r:?} blue {b:?}: the UMD's label is not upright");
+            }
+        }
+        assert!(seen >= 2, "the UMD was seen on only {seen} of 5 frames");
+    }
+
+    #[test]
+    fn a_plain_handheld_picture_lights_its_glass_too() {
+        crate::cozy_extras::set(crate::cozy_extras::Extras::default());
+        crate::motion::set_cozy(true);
+        // No `load_rig`: the plain animation, whatever the global switches say (other tests set them in parallel).
+        for system in ["gb", "gbc", "gba", "gamegear", "atarilynx", "ngpc", "wonderswan", "pokemini", "nds", "3ds", "psp", "psvita", "j2me"] {
+            let (mut on, mut off) = (scene(system, true), scene(system, true));
+            on.power_on = Some(light_of(system));
+            assert!(on.rig.is_none(), "{system}: plain animation");
+            let (a, b) = (frame(&mut on, 1500, STAGE), frame(&mut off, 1500, STAGE));
+            let n = (0..a.len()).filter(|&i| a[i] != b[i]).count();
+            assert!(n > 300, "{system}: its glass is lit ({n} px)");
+            assert!(frame(&mut on, 900, STAGE) == frame(&mut off, 900, STAGE), "{system}: not before the game is in");
+        }
+    }
+
+    #[test]
+    fn a_phone_games_bar_fills_on_the_phones_display_while_the_case_fades() {
+        let mut s = scene("j2me", true);
+        let ink = |px: &[u32]| px.iter().filter(|p| **p & 0xffffff == 0x24301f).count();
+        let (early, half, full) = (ink(&frame(&mut s, 200, STAGE)), ink(&frame(&mut s, 800, STAGE)), ink(&frame(&mut s, 1180, STAGE)));
+        assert_eq!(early, 0, "no bar before the phone is up");
+        assert!(half > 20 && full > half + 20, "the bar fills: {early} {half} {full}");
+    }
+
+    #[test]
+    fn every_plain_displays_glass_is_found_and_its_light_is_what_the_picture_gives() {
+        let mut wrong = Vec::new();
+        for (id, d) in DISPLAYS {
+            let sp = crate::system_art::get(id).unwrap_or_else(|| panic!("{id}: no picture"));
+            let at = d.at.iter().map(|&(x, y)| (x * sp.w as f32, y * sp.h as f32));
+            let mask = ir::display_mask(&sp.px, sp.w as usize, sp.h as usize, at, d.fuzz);
+            let n = mask.iter().filter(|m| **m).count();
+            let solid = sp.px.iter().filter(|p| **p >> 24 == 255).count();
+            assert!(n > 300 && n * 2 < solid, "{id}: the glass is a part of the console ({n} of {solid})");
+            let light = ir::display_light(&sp.px, &mask);
+            if light != d.lit {
+                wrong.push(format!("{id}: table lit {:#08x}, the picture gives {light:#08x}", d.lit));
+            }
+        }
+        assert!(wrong.is_empty(), "{wrong:#?}");
+    }
+
+    /// Fable 5.2 (12.11.): the power-on spread an almost white light over the whole screen for about 100 ms, glaring in a dark
+    /// room. Only the console's display may be bright; everything else of the start stays as dark as the fade it replaced.
+    /// Missed before: the test only asked whether the glass lit, never how much of the screen was bright.
+    #[test]
+    fn a_handhelds_start_never_floods_the_screen_with_white_only_the_display_is_bright() {
+        crate::cozy_extras::set(crate::cozy_extras::Extras::default());
+        crate::motion::set_cozy(true);
+        // Past the muted top of a lit display (`MUTED_MAX`, a little of the glass's own bright pixel kept): white.
+        let near_white = |p: u32| (p >> 16 & 0xff) > 0xc4 && (p >> 8 & 0xff) > 0xc4 && (p & 0xff) > 0xc4;
+        for system in HANDHELDS {
+            let (mut on, mut off) = (lit_scene(system, true), lit_scene(system, false));
+            for ms in (1200..=1600u64).step_by(20) {
+                let elapsed = Duration::from_millis(ms);
+                let (mut a, b) = (frame(&mut on, ms, STAGE), frame(&mut off, ms, STAGE));
+                let count = |f: &[u32]| f.iter().filter(|p| near_white(**p)).count();
+                // The display: what the lit scene paints differently from the dark one. Only it may be brighter than before.
+                let glass = (0..a.len()).filter(|&i| a[i] != b[i]).count();
+                let painted = count(&a);
+                assert!(painted <= count(&b) + glass * 11 / 10 + 50, "{system} {ms} ms: {painted} near-white pixels against {} without the lit display, which is {glass} of {}", count(&b), a.len());
+                // And the fade over it only darkens: no light spread over the screen (a console's own pale plastic stays).
+                on.veil(&mut Canvas::new(&mut a, 720, 1600), on.fade_at(elapsed));
+                assert!(count(&a) <= painted, "{system} {ms} ms: the fade made {} near-white pixels out of {painted}", count(&a));
+            }
+        }
+    }
+
+    /// When the case first visibly opens on the screen, ms after A: the cover's front has lost a share of its width (a
+    /// jewel or UMD case), the case has left its place, or the game shows beside it (a cartridge or card sliding out).
+    fn visible_open_ms(system: &str, playful: bool) -> Option<u64> {
+        // Playful follows Cozy (this thread's), so Cozy off with the scene still Cozy is the plain animation.
+        crate::cozy_extras::set(crate::cozy_extras::Extras::default());
+        crate::motion::set_cozy(playful);
+        let mut s = scene(system, true);
+        s.load_rig(2);
+        s.game = Some(Rc::new(Pic::new(90, 90, 0xffc0_c0c0)));
+        // The case's front is the only bluish thing on the page (dimming keeps its hue); the game is the only light grey.
+        let measure = |buf: &[u32]| {
+            let (mut front, mut game) = (0usize, 0usize);
+            for y in 0..600usize {
+                for x in 0..720usize {
+                    let p = buf[y * 720 + x];
+                    let (r, g, b) = ((p >> 16 & 0xff) as i32, (p >> 8 & 0xff) as i32, (p & 0xff) as i32);
+                    if x >= 40 && x < 160 && y >= 40 && y < 220 && b > r + 8 {
+                        front += 1;
+                    }
+                    if (r - 0xc0).abs() < 12 && (g - 0xc0).abs() < 12 && (b - 0xc0).abs() < 12 {
+                        game += 1;
+                    }
+                }
+            }
+            (front, game)
+        };
+        let first = measure(&frame(&mut s, 0, STAGE));
+        (0..1400u64).step_by(2).find(|ms| {
+            let now = measure(&frame(&mut s, *ms, STAGE));
+            (now.0 as f32) < first.0 as f32 * 0.995 || now.1 > first.1 + 4
+        })
+    }
+
+    /// The case's opening sounds when the case opens on the screen: its cover has begun to swing, or its cartridge or card to
+    /// slide out. At A it came 0.17 to 0.27 s early (13.11., the PSP's was the one noticed: the console comes up and turns
+    /// first). Measured on the painted frames, every 2 ms, against the moment the cue hits.
+    #[test]
+    fn the_case_sound_comes_when_the_case_visibly_opens_on_every_console() {
+        let hit = |system: &str, disc_rig: bool, playful: bool| {
+            let c = &cues(true, Medium::of(system), disc_rig, playful)[0];
+            (c.after + ui_sound::hit_at(c.sound) + SOUND_LEAD).as_millis() as i64
+        };
+        let mut failures = Vec::new();
+        for system in [
+            "psx", "ps2", "saturn", "dreamcast", "gamecube", "psp", "nes", "snes", "n64", "gba", "gb", "gbc", "nds", "3ds", "megadrive", "gamegear",
+            "mastersystem", "pcengine", "xbox", "wii",
+        ] {
+            let disc_rig = crate::insert_rig::takes_disc(system, Game::of(system, "x.rom"));
+            let seen = visible_open_ms(system, true).expect(system) as i64;
+            if (hit(system, disc_rig, true) - seen).abs() > 60 {
+                failures.push(format!("{system}: sound at {} ms, the case opens at {seen} ms", hit(system, disc_rig, true)));
+            }
+        }
+        // Without Playful the plain animation's case (consoles with a cartridge or card, drawn the same way).
+        for system in ["nes", "snes", "n64", "gba", "gb", "gbc", "nds", "3ds", "megadrive", "gamegear", "mastersystem", "pcengine"] {
+            let seen = visible_open_ms(system, false).expect(system) as i64;
+            if (hit(system, false, false) - seen).abs() > 60 {
+                failures.push(format!("{system} (plain): sound at {} ms, the case opens at {seen} ms", hit(system, false, false)));
+            }
+        }
+        assert!(failures.is_empty(), "the case sound is not on the case opening:\n{}", failures.join("\n"));
     }
 }

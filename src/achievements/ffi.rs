@@ -3,6 +3,41 @@
 
 use std::ffi::{c_char, c_int, c_uint, c_void, CStr};
 
+/// FNV-1a at compile time, as build.rs hashes the shims.
+const fn fnv(mut h: u64, bytes: &[u8]) -> u64 {
+    let mut i = 0;
+    while i < bytes.len() {
+        h = (h ^ bytes[i] as u64).wrapping_mul(0x100000001b3);
+        i += 1;
+    }
+    h
+}
+
+/// A 16-digit hex number at compile time (0 for anything else, which no hash of the shims is).
+const fn hex(s: &str) -> u64 {
+    let b = s.as_bytes();
+    let mut v = 0u64;
+    let mut i = 0;
+    while i < b.len() {
+        let d = match b[i] {
+            c @ b'0'..=b'9' => c - b'0',
+            c @ b'a'..=b'f' => c - b'a' + 10,
+            _ => return 0,
+        };
+        v = v << 4 | d as u64;
+        i += 1;
+    }
+    v
+}
+
+/// The shims this Rust is written against: build.rs hashes the ones it compiled (`POCKETUI_C_SHIMS`). Different means
+/// the archive in the target folder is another source tree's (a shared target, see build.rs): the build stops here
+/// instead of linking it and crashing at the first call whose arguments changed.
+const _: () = assert!(
+    fnv(fnv(0xcbf29ce484222325, include_bytes!("../log_shim.c")), include_bytes!("../rc_shim.c")) == hex(env!("POCKETUI_C_SHIMS")),
+    "src/rc_shim.c or src/log_shim.c differ from the C objects in the target folder: `touch build.rs` and build again"
+);
+
 /// rc_client_t, opaque.
 #[repr(C)]
 pub struct RcClient {
@@ -57,6 +92,8 @@ pub const LOAD_DONE: u32 = 1002;
 /// RC_CLIENT_EVENT_* that pocket-core reacts to.
 pub const EVENT_ACHIEVEMENT_TRIGGERED: u32 = 1;
 pub const EVENT_PROGRESS_SHOW: u32 = 7;
+/// Hardcore was switched on with the game loaded: the game must start again (`rc_client_set_hardcore_enabled`).
+pub const EVENT_RESET: u32 = 14;
 pub const EVENT_PROGRESS_UPDATE: u32 = 9;
 pub const EVENT_GAME_COMPLETED: u32 = 15;
 pub const EVENT_SERVER_ERROR: u32 = 16;
@@ -97,7 +134,7 @@ pub type ProgressSink = unsafe extern "C" fn(userdata: *mut c_void, game_id: u32
 pub type AchievementSink = unsafe extern "C" fn(userdata: *mut c_void, achievement: *const RawAchievement);
 
 extern "C" {
-    pub fn pocket_rc_create(hooks: *const Hooks, verbose: c_int) -> *mut RcClient;
+    pub fn pocket_rc_create(hooks: *const Hooks, verbose: c_int, hardcore: c_int) -> *mut RcClient;
     pub fn pocket_rc_destroy(client: *mut RcClient);
     pub fn pocket_rc_respond(callback: ServerCallback, callback_data: *mut c_void, body: *const c_char, len: usize, status: c_int);
     pub fn pocket_rc_init_memory(
@@ -127,6 +164,7 @@ extern "C" {
         achievement_id: u32,
         hash: *const c_char,
         seconds_since_unlock: u32,
+        hardcore: c_int,
         sink: RequestSink,
         userdata: *mut c_void,
     ) -> c_int;
@@ -153,6 +191,9 @@ extern "C" {
     pub fn rc_client_do_frame(client: *mut RcClient);
     pub fn rc_client_idle(client: *mut RcClient);
     pub fn rc_client_reset(client: *mut RcClient);
+    pub fn rc_client_set_hardcore_enabled(client: *mut RcClient, enabled: c_int);
+    pub fn rc_client_get_hardcore_enabled(client: *const RcClient) -> c_int;
+    pub fn rc_client_can_pause(client: *mut RcClient, frames_remaining: *mut u32) -> c_int;
     pub fn rc_client_is_game_loaded(client: *const RcClient) -> c_int;
     pub fn pocket_rc_error_str(result: c_int) -> *const c_char;
 }

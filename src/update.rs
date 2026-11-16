@@ -65,6 +65,13 @@ pub fn app_version() -> &'static str {
     option_env!("POCKETUI_VERSION").unwrap_or(env!("CARGO_PKG_VERSION"))
 }
 
+/// The version the player reads on About and Settings' About row. On Android's handheld view that is the APK's
+/// (`android_version_name`, "0.4.0-android.3"), not this library's Cargo version: the handheld view has no app
+/// updates of its own (`ANDROID_HIDES` "updates"), so `app_version` and `release_build` stay as they are there.
+pub fn shown_version() -> &'static str {
+    if crate::device::android_profile() { crate::update_channel::android_version_name() } else { app_version() }
+}
+
 /// The Brick's earlier numbered builds are `<release>-brick.<n>` from update 6 on (0.1.14-brick.6): the release they are built on, then the
 /// build's number. Older ones (0.1.11-brick.202611032041, a date) and anything else: None, shown as they are. `newer` still
 /// compares the raw strings: 0.1.14-brick.6 is newer than 0.1.11-brick.202611032041 (14 > 11 comes first).
@@ -165,7 +172,20 @@ fn clock_reason(code: Option<i32>, clock_wrong: bool) -> Option<&'static str> {
 
 /// What a failed connection says: the clock (`clock_reason`), else `generic` (or the network's sign-in page).
 fn unreachable_because(code: Option<i32>, generic: &str) -> String {
-    clock_reason(code, clock_wrong()).map_or_else(|| crate::net_check::refine(generic), String::from)
+    clock_reason(code, clock_wrong()).map_or_else(|| no_wifi_here(generic).map_or_else(|| crate::net_check::refine(generic), String::from), String::from)
+}
+
+/// A handheld without a Wi-Fi chip (the R36S, the RG28XX: `device::Device::has_wifi`) and no network up (no USB Wi-Fi
+/// stick or cable connected): "Check Wi-Fi" would send the player looking for something the device doesn't have. It says
+/// what works instead: the update file on the card (`card`).
+pub const NO_WIFI_HERE: &str = "No Wi-Fi on this handheld: put the update file from pocketui.xyz/install on the card, then choose Look on the card.";
+
+fn no_wifi_here(generic: &str) -> Option<&'static str> {
+    no_wifi_for(generic, crate::device::current().has_wifi(), crate::wifi::ip().is_some())
+}
+
+fn no_wifi_for(generic: &str, has_wifi: bool, online: bool) -> Option<&'static str> {
+    (generic.contains("Check Wi-Fi") && !has_wifi && !online).then_some(NO_WIFI_HERE)
 }
 
 /// The clock is before this build or 2026 (`clock_check`).
@@ -197,7 +217,8 @@ pub fn card_full(needed: u64) -> String {
 mod runtime;
 pub mod payload;
 pub mod observation;
-pub use runtime::{BytesScope, Cancel, CancelBoundary, WorkerPhase, WorkerSnapshot};
+pub mod card;
+pub use runtime::{BytesScope, Cancel, CancelBoundary, Step, WorkerPhase, WorkerSnapshot};
 
 /// A channel inside a tailnet (a `*.ts.net` name: the Brick card's private channel, docs/TRIMUI-BRICK-REMOTE.md) is reached
 /// through Tailscale's local proxy (`proxy`, from POCKETUI_TS_PROXY): with userspace networking nothing else on the device
@@ -271,7 +292,20 @@ pub fn fetch_manifest(url: &str) -> Result<Manifest, String> {
 fn fetch_manifest_with(tools: &Tools, url: &str, key: &[u8; 32]) -> Result<Manifest, String> {
     let json = fetch(tools, url)?;
     let sig = fetch(tools, &format!("{url}.sig"))?;
-    parse_manifest(&json, &String::from_utf8_lossy(&sig), key)
+    let manifest = parse_manifest(&json, &String::from_utf8_lossy(&sig), key)?;
+    #[cfg(feature = "brick")]
+    if crate::darkos::host() { return darkos_manifest(&json, manifest); }
+    Ok(manifest)
+}
+
+/// A separate signed channel may update only the port; never interpret a firmware offer here.
+#[cfg(feature = "brick")]
+fn darkos_manifest(json: &[u8], manifest: Manifest) -> Result<Manifest, String> {
+    let value: serde_json::Value = serde_json::from_slice(json).map_err(|e| e.to_string())?;
+    if value.get("target").and_then(|v| v.as_str()) != Some("darkos-port") || manifest.format != 1 || manifest.os.is_some() {
+        return Err("This update list is not for the dArkOS port. Nothing was changed.".into());
+    }
+    Ok(manifest)
 }
 
 /// One bounded attempt. Retries belong to the signed source list, so a blocked host cannot
@@ -345,7 +379,7 @@ fn download(tools: &Tools, url: &str, dest: &Path, max_size: u64, cancel: &Cance
                 Some(CURL_WRITE_ERROR) => Err(CARD_WRITE.into()),
                 #[cfg(feature = "brick")]
                 _ if !proxy_args(url, Some("x")).is_empty() => Err("Couldn't reach the update server over Tailscale. Is Tailscale on and connected?".into()),
-                code => Err(clock_reason(code, clock_wrong()).unwrap_or("Download failed. Check Wi-Fi.").into()),
+                code => Err(clock_reason(code, clock_wrong()).or_else(|| no_wifi_here("Download failed. Check Wi-Fi.")).unwrap_or("Download failed. Check Wi-Fi.").into()),
             };
         }
         let len = std::fs::metadata(dest).map_or(0, |m| m.len());
@@ -385,6 +419,10 @@ fn download_checked(tools: &Tools, rel: &Release, manifest_url: &str, dest: &Pat
     cancel.begin_file(rel.size);
     let report = |n| { cancel.bytes(n); progress(n); };
     let progress: &dyn Fn(u64) = &report;
+    // An install from the update file on the card takes the file from there, checked the same way (`card`).
+    if let Some(result) = card::from_bundle(rel, dest, cancel, progress) {
+        return result;
+    }
     // Validate every signed address before starting anything; never downgrade transport on fallback.
     let urls = rel.download_urls(manifest_url);
     if urls.len() > 4 {
@@ -547,7 +585,10 @@ pub fn install_app(rel: &Release, manifest_url: &str, root: &Path, cancel: &Canc
     // Only plain files and folders, no setuid bits (B4); see untar.rs.
     let staging = releases.join(format!(".staging-{}", rel.version));
     let _ = std::fs::remove_dir_all(&staging);
-    let unpacked = std::fs::read(&tarball).map_err(|e| e.to_string()).and_then(|data| crate::untar::unpack(&data, &staging));
+    // Step 2 on the page: the bytes handed to tar.
+    let unpacked = std::fs::read(&tarball).map_err(|e| e.to_string()).and_then(|data| crate::untar::unpack_reporting(&data, &staging, &|done, total| {
+        if done == 0 { cancel.work_begin(total); } else { cancel.work_at(done); }
+    }));
     crash_point("unpacked");
     let _ = std::fs::remove_file(&tarball);
     let names = unpacked?;
@@ -569,8 +610,10 @@ pub fn install_app(rel: &Release, manifest_url: &str, root: &Path, cancel: &Canc
     }
 
     cancel.set_phase(WorkerPhase::Flushing);
+    // Step 3 on the page: the files made durable.
+    cancel.work_begin(crate::fsutil::count_files(&staging));
     // The programs on the card before anything points at them: a power cut right after the switch must find them whole.
-    if let Err(e) = crate::fsutil::sync_tree(&staging) {
+    if let Err(e) = crate::fsutil::sync_tree_with(&staging, &mut || cancel.work_add(1)) {
         let _ = std::fs::remove_dir_all(&staging);
         return Err(format!("Couldn't write the update to the SD card ({e}). Nothing was changed."));
     }
@@ -629,7 +672,20 @@ pub const BRICK_DEFAULT_URL: &str = "https://pocketui.xyz/updates/brick/update.j
 /// everywhere else. settings.json `update_url` still wins over all of them.
 #[cfg(feature = "brick")]
 pub fn default_url() -> String {
+    if crate::darkos::host() {
+        return darkos_url_from(std::env::var("POCKETUI_DARKOS_UPDATE_URL").ok());
+    }
     default_url_from(std::env::var("POCKETUI_UPDATE_URL").ok(), brick_card().is_some())
+}
+
+/// The dArkOS port's channel: the releases' list (`updates/darkos/`), or what the port folder's `update-url` names (start.sh passes it as
+/// POCKETUI_DARKOS_UPDATE_URL): a beta zip carries the beta channel there (`updates/darkos-test/`, docs/DARKOS.md "Channels").
+#[cfg(feature = "brick")]
+pub const DARKOS_DEFAULT_URL: &str = "https://pocketui.xyz/updates/darkos/update.json";
+
+#[cfg(feature = "brick")]
+fn darkos_url_from(given: Option<String>) -> String {
+    given.map(|u| u.trim().to_string()).filter(|u| !u.is_empty()).unwrap_or_else(|| DARKOS_DEFAULT_URL.to_string())
 }
 
 #[cfg(feature = "brick")]
@@ -652,6 +708,7 @@ pub fn brick_card() -> Option<PathBuf> {
 #[cfg(feature = "brick")]
 pub fn install(rel: &Release, manifest_url: &str, cancel: &Cancel, progress: &dyn Fn(u64)) -> Result<(), String> {
     match brick_card() {
+        Some(card) if crate::darkos::host() => brick::install_darkos(rel, manifest_url, &card, cancel, progress),
         Some(card) => install_brick(rel, manifest_url, &card, cancel, progress),
         None => install_app(rel, manifest_url, Path::new(APP_ROOT), cancel, progress),
     }
@@ -661,6 +718,8 @@ pub fn install(rel: &Release, manifest_url: &str, cancel: &Cancel, progress: &dy
 mod brick;
 #[cfg(feature = "brick")]
 mod brick_assets;
+#[cfg(feature = "brick")]
+mod brick_delta;
 #[cfg(feature = "brick")]
 pub(crate) mod brick_io;
 #[cfg(feature = "brick")]
@@ -1102,6 +1161,23 @@ pub fn read_small(path: &Path, limit: u64) -> Option<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// R36S snapshots 2026-11-15: Updates said "Couldn't reach the update server. Check Wi-Fi." on a handheld without
+    /// Wi-Fi. There it says so instead; with a chip, or online over a stick or cable, the usual words stay.
+    #[test]
+    fn a_handheld_without_wifi_is_not_told_to_check_wifi() {
+        let generic = "Couldn't reach the update server. Check Wi-Fi.";
+        assert_eq!(no_wifi_for(generic, false, false), Some(NO_WIFI_HERE));
+        assert_eq!(no_wifi_for("Download failed. Check Wi-Fi.", false, false), Some(NO_WIFI_HERE));
+        assert!(NO_WIFI_HERE.contains("update file") && NO_WIFI_HERE.contains("Look on the card"), "says what works instead");
+        assert_eq!(no_wifi_for(generic, true, false), None, "a chip: check it");
+        assert_eq!(no_wifi_for(generic, false, true), None, "online over a USB stick: the server is the problem");
+        assert_eq!(no_wifi_for("Couldn't reach the update server over Tailscale. Is Tailscale on and connected?", false, false), None);
+        for tsv in [include_str!("../assets/i18n/de.tsv"), include_str!("../assets/i18n/es.tsv"), include_str!("../assets/i18n/pt.tsv"),
+                    include_str!("../assets/i18n/fr.tsv"), include_str!("../assets/i18n/it.tsv")] {
+            assert!(tsv.lines().any(|l| l.split('\t').next() == Some(NO_WIFI_HERE)), "already translated");
+        }
+    }
     use crate::testutil::TestDir;
     use base64::Engine;
     use ed25519_dalek::{Signer, SigningKey};
@@ -1142,6 +1218,27 @@ mod tests {
         assert_eq!(default_url_from(Some("https://beta.example/brick-updates/beta/update.json\n".into()), true), "https://beta.example/brick-updates/beta/update.json");
         assert_eq!(default_url_from(None, false), DEFAULT_URL);
         assert!(BRICK_DEFAULT_URL.starts_with("https://pocketui.xyz/updates/") && BRICK_DEFAULT_URL != DEFAULT_URL);
+    }
+
+    /// A port zip of a release has no `update-url`: it follows the releases' channel. A beta zip names the beta channel there.
+    #[cfg(feature = "brick")]
+    #[test]
+    fn the_darkos_port_follows_the_releases_unless_its_folder_names_the_beta_channel() {
+        assert_eq!(darkos_url_from(None), "https://pocketui.xyz/updates/darkos/update.json");
+        assert_eq!(darkos_url_from(Some(" \n".into())), DARKOS_DEFAULT_URL, "an empty update-url is no channel");
+        assert_eq!(darkos_url_from(Some("https://pocketui.xyz/updates/darkos-test/update.json\n".into())), "https://pocketui.xyz/updates/darkos-test/update.json");
+        assert_ne!(DARKOS_DEFAULT_URL, BRICK_DEFAULT_URL);
+    }
+
+    /// The dArkOS versions (docs/DARKOS.md "Versions"): a release is plain X.Y.Z, a beta the last public release + `-darkos-test-N`.
+    /// `newer` counts only numbers, so a beta named after the NEXT release (0.5.0-darkos-test-7) would stay "newer" than 0.5.0 and
+    /// never be offered it.
+    #[test]
+    fn darkos_betas_sort_below_the_next_release() {
+        assert!(newer("0.4.2-darkos-test-7", "0.4.0-darkos-test-6"), "test-7 is offered to test-6");
+        assert!(newer("0.5.0", "0.4.2-darkos-test-7"), "the release is offered to the beta");
+        assert!(newer("0.5.0-darkos-test-1", "0.5.0"), "a beta after the release is newer than it");
+        assert!(!newer("0.5.0", "0.5.0-darkos-test-7"), "the trap: a beta named after the coming release outranks it");
     }
 
     #[test]
@@ -1290,6 +1387,23 @@ mod tests {
         assert!(cancel.is_cancelled());
         assert_eq!(link_target(&root.join("current")).as_deref(), Some("releases/9.8.7"));
         assert_eq!(std::fs::read_to_string(root.join("update-pending")).unwrap(), "9.8.7");
+    }
+
+    /// The page's bar moves while the app is unpacked and written to the card, not only while it downloads (Alex, 15.11.:
+    /// "ewig zeigen preparing update ohne progressbar").
+    #[test]
+    fn an_app_install_reports_real_progress_while_it_unpacks_and_writes_to_the_card() {
+        let dir = TestDir::new("update-progress");
+        let root = dir.join("root");
+        let (rel, url) = fake_release(&dir, "9.1.0", true);
+        let cancel = Cancel::new();
+        let seen = Arc::new(std::sync::Mutex::new(Vec::new()));
+        let records = Arc::clone(&seen);
+        cancel.observe(move |s| records.lock().unwrap().push(s));
+        install_app(&rel, &url, &root, &cancel, &|_| {}).unwrap();
+        let seen = seen.lock().unwrap();
+        runtime::assert_step_progress(&seen, Step::Unpacking, WorkerPhase::Unpacking);
+        runtime::assert_step_progress(&seen, Step::Installing, WorkerPhase::Flushing);
     }
 
     #[test]
@@ -2655,7 +2769,7 @@ mod brick_card_tests {
 
     fn install(rel: &Release, channel: &Path, p: &Path) -> Result<(), String> {
         let url = format!("file://{}/update.json", channel.display());
-        install_brick_with(&TOOLS, rel, &url, p, &Cancel::new(), &|_| {}, &plenty, &crate::untar::unpack_file)
+        install_brick_with(&TOOLS, rel, &url, p, &Cancel::new(), &|_| {}, &plenty, &crate::untar::unpack_file_skipping)
     }
 
     #[test]
@@ -2675,6 +2789,24 @@ mod brick_card_tests {
         assert!(!p.join("app.previous/cores/cht.pack").exists());
     }
 
+    /// 0.4.0 on a card that came with the bundled cheat pack wrote 102 MB (0.3.2: 68): the update copied the 31 MB pack into
+    /// `storage/`. Through a whole install the pack must stay the very same file, moved, never written again.
+    #[test]
+    fn an_app_update_moves_the_bundled_cheat_pack_instead_of_writing_it_again() {
+        use std::os::unix::fs::MetadataExt;
+        let dir = TestDir::new("brick-update-cheats-moved");
+        let p = card(&dir);
+        let bytes = crate::cheat_pack::build(&[("Nintendo - Game Boy", vec![("Tetris.cht".into(), b"cheat0_code = \"01\"\n".to_vec())])]);
+        std::fs::create_dir_all(p.join("app/cores")).unwrap();
+        std::fs::write(p.join("app/cores/cht.pack"), &bytes).unwrap();
+        let inode = std::fs::metadata(p.join("app/cores/cht.pack")).unwrap().ino();
+        let (rel, _) = app_tarball(&dir, "2", Some("2"), START);
+        install(&rel, &dir, &p).unwrap();
+        let saved = p.join("storage/pocket-ui/cheats/cht.pack");
+        assert_eq!(std::fs::metadata(&saved).unwrap().ino(), inode);
+        assert_eq!(std::fs::read(&saved).unwrap(), bytes);
+    }
+
     #[test]
     fn downloading_the_app_does_not_write_or_clean_up_the_card() {
         let dir = TestDir::new("brick-network-card-separation");
@@ -2689,9 +2821,9 @@ mod brick_card_tests {
             assert_eq!(std::fs::read(p.join("app.new/prior-attempt")).unwrap(), b"keep until downloads finish");
             assert!(!p.join(".update").exists());
         };
-        let unpack = |archive: &Path, into: &Path, limit| {
+        let unpack = |archive: &Path, into: &Path, limit, skip: &dyn Fn(&str) -> bool, read: &dyn Fn(u64)| {
             assert!(archive.starts_with("/tmp") && !archive.starts_with(&p), "network output stays off the card");
-            crate::untar::unpack_file(archive, into, limit)
+            crate::untar::unpack_file_skipping(archive, into, limit, skip, read)
         };
         let url = format!("file://{}/update.json", dir.display());
         install_brick_with(&TOOLS, &rel, &url, &p, &Cancel::new(), &progress, &plenty, &unpack).unwrap();
@@ -2816,8 +2948,8 @@ mod brick_card_tests {
         let rel = Release { url: format!("{base}/brick-2.tar.gz"), ..rel };
         // The test server speaks plain http; no curl retries, so the first try fails as it would with Wi-Fi gone.
         let tools = Tools { protocols: "=http,file", redirects: "=http", ..TOOLS };
-        let dead = install_brick_with(&tools, &rel, "https://unused/update.json", &p, &Cancel::new(), &|_| {}, &plenty, &|a, b, l| {
-            crate::untar::unpack_file(a, b, l)
+        let dead = install_brick_with(&tools, &rel, "https://unused/update.json", &p, &Cancel::new(), &|_| {}, &plenty, &|a, b, l, skip, read| {
+            crate::untar::unpack_file_skipping(a, b, l, skip, read)
         });
         // curl itself retries (--retry 3) and resumes on the same server; a dead line for good is what the first answer
         // stands for. Either the install failed and the card is untouched, or curl's own retry already resumed.
@@ -2828,7 +2960,7 @@ mod brick_card_tests {
                 assert!(!p.join("app.new").exists() && !p.join("app.previous").exists());
                 let part = std::fs::metadata(super::brick_io::download_path(&p, "2")).map_or(0, |m| m.len());
                 assert!(part > 0 && part < data_len(&tar), "the part is kept for the next try ({part} bytes)");
-                install_brick_with(&tools, &rel, "https://unused/update.json", &p, &Cancel::new(), &|_| {}, &plenty, &crate::untar::unpack_file).unwrap();
+                install_brick_with(&tools, &rel, "https://unused/update.json", &p, &Cancel::new(), &|_| {}, &plenty, &crate::untar::unpack_file_skipping).unwrap();
             }
             Ok(()) => {}
         }
@@ -2850,12 +2982,12 @@ mod brick_card_tests {
         let url = format!("file://{}/update.json", dir.display());
         // Before: the space check, nothing downloaded.
         let tiny = |_: &Path| Some(1_000_000u64);
-        let err = install_brick_with(&TOOLS, &rel, &url, &p, &Cancel::new(), &|_| {}, &tiny, &crate::untar::unpack_file).unwrap_err();
+        let err = install_brick_with(&TOOLS, &rel, &url, &p, &Cancel::new(), &|_| {}, &tiny, &crate::untar::unpack_file_skipping).unwrap_err();
         assert!(err.contains("too full") && err.contains("MB more") && err.contains("Nothing was changed"), "{err}");
         assert!(!p.join(".update/download-2.tar.gz").exists());
         // While unpacking (the card filled up meanwhile): half a folder is removed, the download stays for the next try.
-        let full = |a: &Path, into: &Path, l: u64| {
-            crate::untar::unpack_file(a, into, l)?;
+        let full = |a: &Path, into: &Path, l: u64, skip: &dyn Fn(&str) -> bool, read: &dyn Fn(u64)| {
+            crate::untar::unpack_file_skipping(a, into, l, skip, read)?;
             Err(crate::untar::Refused::Full)
         };
         let err = install_brick_with(&TOOLS, &rel, &url, &p, &Cancel::new(), &|_| {}, &plenty, &full).unwrap_err();
@@ -2944,8 +3076,8 @@ mod brick_card_tests {
         assert_eq!(std::fs::read(p.join("app/cores/gpsp_libretro.so")).unwrap(), data);
         assert!(!p.join("app/.asset-moves").exists() && !p.join("storage/pocket-ui/update-pending").exists());
         // A write failure after the assets have moved must restore them before removing app.new.
-        let fail_ready = |a: &Path, into: &Path, l: u64| {
-            let entries = crate::untar::unpack_file(a, into, l)?;
+        let fail_ready = |a: &Path, into: &Path, l: u64, skip: &dyn Fn(&str) -> bool, read: &dyn Fn(u64)| {
+            let entries = crate::untar::unpack_file_skipping(a, into, l, skip, read)?;
             std::fs::create_dir(into.join(".ready"))?;
             Ok(entries)
         };
@@ -2956,6 +3088,8 @@ mod brick_card_tests {
         assert!(!p.join("app.new").exists() && !p.join("app/.asset-moves").exists());
     }
 
+    mod delta_tests;
+    mod darkos_tests;
 }
 
 #[cfg(test)]

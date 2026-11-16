@@ -24,7 +24,7 @@ Start at [user/index.md](user/index.md).
 | [user/copy-games.md](user/copy-games.md) | Copying games without Wi-Fi: the second card |
 | [user/how-to.md](user/how-to.md) | Short steps: update over Wi-Fi, a game that won't start, pair a controller, back up saves, sync with a second device |
 | [user/game-check.md](user/game-check.md) | Settings → Games → Game check: will your games start? |
-| [user/coming-from.md](user/coming-from.md) | Coming from ROCKNIX or Android: what happens to saves, states, favourites and settings, what needs a copy, what does not come over |
+| [user/coming-from.md](user/coming-from.md) | Coming from ROCKNIX, ArkOS or Android: what happens to saves, states, favourites and settings, what needs a copy, what does not come over |
 | [user/playing.md](user/playing.md) | Home, finding a game, the looks, console pages, starting a game, the game switcher, continuing, menu sounds |
 | [user/pause-menu.md](user/pause-menu.md) | The pause menu of each emulator, Quit and Settings → Playing → Continue where I quit, Pixel Path |
 | [user/pause-menu-saves.md](user/pause-menu-saves.md) | Save slots, Where I quit and Before load, Earlier, where the state files are, when a save fails |
@@ -32,18 +32,17 @@ Start at [user/index.md](user/index.md).
 | [user/options-cheats.md](user/options-cheats.md) | Options → Cheats: the cheat list, the one-time download on TrimUI, offline use, cheat files pocket-core cannot apply |
 | [user/options-big.md](user/options-big.md) | The Options of PS2, GameCube, Wii and 3DS games |
 | [user/controls.md](user/controls.md) | Every button, screen by screen |
-| [user/controls-card.md](user/controls-card.md) | The console button drawing, remaps and HOME shortcuts; first start, game card and pause menu |
 | [user/big-text.md](user/big-text.md) | Big text (larger text and calmer menus in one switch), the pause menu's Zoom and Controls → Hold to toggle |
 | [user/controls-settings.md](user/controls-settings.md) | The buttons in Settings, during setup, on the touch screen, and the power and volume keys |
-| [user/settings.md](user/settings.md) | How Settings opens, and the entries of Look, Sound & feel, Playing and Games |
-| [user/settings-sound.md](user/settings-sound.md) | The entries of Sound & feel: animations, Cozy touches, motion, sounds, haptics and LEDs |
+| [user/settings.md](user/settings.md) | How Settings opens, and the entries of Look, Playing and Games |
+| [user/settings-sound.md](user/settings-sound.md) | The entries of Controls & sound: buttons, controller setup, test buttons, sounds, haptics and LEDs |
 | [user/settings-system.md](user/settings-system.md) | The entries of Connections and System: Wi-Fi, Tailscale, remote access, time, sleep, backup, the manual |
 | [user/storage.md](user/storage.md) | Settings → System → Storage: what takes the room on the card, the clean-ups, the low-space notice, hidden games |
 | [user/bluetooth.md](user/bluetooth.md) | Settings → Connections → Bluetooth: pairing controllers, headphones and speakers, reconnecting, forgetting |
 | [user/continue.md](user/continue.md) | Continue: an open case means your moment is waiting and A goes straight back; how long each system takes, what can't continue |
 | [user/quick-settings.md](user/quick-settings.md) | Quick settings (HOME), the power menu, sleep, power off and low battery |
-| [user/language.md](user/language.md) | Settings → System → Language: English, German, Spanish or Brazilian Portuguese, what stays English |
-| [user/night-light.md](user/night-light.md) | Settings → Look → Night light: warmer, less blue colours in the evening, the schedule, the strength, how it fades and where it reaches |
+| [user/language.md](user/language.md) | Settings → System → Language: English, German, Spanish, Brazilian Portuguese, French or Italian, what stays English |
+| [user/night-light.md](user/night-light.md) | Settings → Screen & sound → Night light: warmer, less blue colours in the evening, the schedule, the strength, how it fades and where it reaches |
 | [user/theme.md](user/theme.md) | Settings → Look → Colours and Font: the five colour sets and the three fonts |
 | [user/performance.md](user/performance.md) | Settings → Playing → Performance & fan: game defaults, the fan in the menus, Smooth fan, the readout |
 | [user/tour.md](user/tour.md) | The Tour (the basics in 6 cards), the feature cards: what the first start's profiles set, "New in this version" |
@@ -92,18 +91,20 @@ Start at [DEVELOPING.md](DEVELOPING.md).
 | [dev/consoles.md](dev/consoles.md) | Reference | Consoles and game data: read when you edit console fact sheets, credits, gamedb or Curator data |
 | [dev/conventions-details.md](dev/conventions-details.md) | Reference | Conventions, details and regressions: read when you touch Wi-Fi activation, text fit / long titles or small-panel layout measuring |
 | [dev/device-loop.md](dev/device-loop.md) | Reference | Real device and virtual device: read when you deploy to or test on a handheld, or use the virtual device (vdev) |
+| [dev/hardcore-guide.md](dev/hardcore-guide.md) | Reference | RetroAchievements Hardcore: the user guide's section kept until Hardcore is offered (`achievements::hardcore::OFFERED`), and what to switch on with it |
 | [dev/environment.md](dev/environment.md) | Reference | Environment variables: read when you add or read a POCKET* variable (doc_checks holds this list) |
 | [dev/layout.md](dev/layout.md) | Reference | Repository layout: read when you add or move a module or file in src/ (doc_checks holds this list), or look for where code lives |
+| [dev/native-paint.md](dev/native-paint.md) | Reference | Painting small panels natively: read when you touch `gfx.rs`, `scaled_layout.rs`, text drawing or code that reads or writes a canvas's pixels |
 | [dev/merge-gate.md](dev/merge-gate.md) | Reference | Merge gate: read when you queue a change, read a gate log or change gate.sh / the train |
 | [dev/portmaster.md](dev/portmaster.md) | Reference | PortMaster ports: read when you work on PortMaster ports |
 | [dev/release.md](dev/release.md) | Reference | Releasing: read when you cut a release or build release assets |
 | [dev/start-time.md](dev/start-time.md) | Reference | Start time: read when you touch start-up, instant start or anything that could slow the first frame |
 | [dev/tests.md](dev/tests.md) | Reference | Tests and documentation checks: read when you write or run tests, or change docs/user (the "Documentation checks" table is here) |
 | [dev/tour.md](dev/tour.md) | Reference | Feature tour: read when you add a feature that needs a tour card |
-| [dev/translations.md](dev/translations.md) | Reference | Translations: read when you add or change UI text, German/Spanish/Portuguese lines or the i18n snapshots |
+| [dev/translations.md](dev/translations.md) | Reference | Translations: read when you add or change UI text, German/Spanish/Portuguese/French/Italian lines or the i18n snapshots |
 | [BINARY-SIZE.md](BINARY-SIZE.md) | Internal | Release binary size by crate/function and embedded data, full-LTO savings, storage reserve and before/after runtime measurements |
 | [ARCHITECTURE.md](ARCHITECTURE.md) | Reference | How pocket-ui fits into ROCKNIX, the processes, the launch flow, switching games, the pause menu, and where each feature lives |
-| [i18n-glossary.md](i18n-glossary.md) | Reference | The German, Spanish and Brazilian Portuguese interfaces: tone, the terms every page uses, what stays English and why |
+| [i18n-glossary.md](i18n-glossary.md) | Reference | The German, Spanish, Brazilian Portuguese, French and Italian interfaces: tone, the terms every page uses, what stays English and why |
 | [HOST.md](HOST.md) | Reference | pocket-core, our libretro host: how it works, systems, measurements |
 | [AUDIO-PATH.md](AUDIO-PATH.md) | Reference | Prepared sinc and NEON, H700 buffering, RetroArch comparisons and measurement limits |
 | [XBOX.md](XBOX.md) | Reference | Xbox through the hakuX core in RetroArch: start, appendconfig, pause menu, licence, device test (experimental) |
@@ -115,6 +116,7 @@ Start at [DEVELOPING.md](DEVELOPING.md).
 | [SLEEP.md](SLEEP.md) | Reference and design notes | Sleep and power: research, what is built, a device test plan |
 | [DEVICES.md](DEVICES.md) | Design and reference | The Mini V2 and its experimental SM8250 siblings (Pocket 5, Flip 2, Mini V1): how pocket-ui tells them apart, what each gets, layouts at 1920x1080 and 1280x960, safety on untested hardware, installing |
 | [TRIMUI-BRICK.md](TRIMUI-BRICK.md) | Design and reference | The TrimUI Brick behind the `brick` feature: the first version under NextUI, the framebuffer bridge, the test kit |
+| [DARKOS.md](DARKOS.md) | Design and reference | Prototype (branch only): pocket-ui as a port on dArkOS (RK3566/RK3326), the screen hand-over, sound at 44.1 kHz, the keys ogage keeps |
 | [TRIMUI-BRICK-CORES.md](TRIMUI-BRICK-CORES.md) | Design and reference | Additional standalone software cores: pinned builds, licences, routing, real-library checks and limits |
 | [TRIMUI-BRICK-04.md](TRIMUI-BRICK-04.md) | Testing | Power-button sleep integration, saved F-key actions, standby lights and measured volume steps |
 | [TRIMUI-BRICK-SLEEP.md](TRIMUI-BRICK-SLEEP.md) | Testing and design | Power-button sleep, save and audio ordering, suspend recovery and wake evidence |
@@ -159,9 +161,10 @@ Start at [DEVELOPING.md](DEVELOPING.md).
 | [HISTORY.md](HISTORY.md) | Reference | Play history: the session log and its file, what counts, Curator → History and the Year in review, the read API for the web companion |
 | [SYNC-CURATION.md](SYNC-CURATION.md) | Reference | Settings → Sync → Library data: one folder per device, values with times, the field-by-field merge with tombstones, the play history union, what is left out |
 | [SYNC-OWNERSHIP.md](SYNC-OWNERSHIP.md) | Reference and design notes | Save-sync pause ownership, failed-resume retry tests, the remaining interruption ambiguity and the manual-recovery follow-up |
+| [CASE-KNOWS.md](CASE-KNOWS.md) | Reference | The case knows where you are: the line read from a game's own battery save, the games and releases, the checks, the cache and thread, adding a game |
 | [CURATOR-DATA.md](CURATOR-DATA.md) | Reference | Curator's data: Wikidata facts and versions by work, the feel-tag vocabulary and labelling, ROM file-name facts, the reader APIs |
 | [STATUS.md](STATUS.md) | Reference | The feature status ledger: one row per feature with how it was verified (device-measured, device smoke-checked, virtual device only, host tests only, not built), the evidence and what is still open |
-| [LEDS.md](LEDS.md) | Reference | The lights around the sticks: ROCKNIX's scripts, what Settings → Sound & feel → LEDs writes, a device checklist |
+| [LEDS.md](LEDS.md) | Reference | The lights around the sticks: ROCKNIX's scripts, what Settings → Controls → LEDs writes, a device checklist |
 
 ## Design notes and history
 

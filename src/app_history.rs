@@ -12,7 +12,7 @@
 //!
 //! main.rs carries three one-line hooks (a game's start and end, `play_log::settle` at exit) and the Item variants.
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
@@ -170,6 +170,13 @@ impl App {
         let seen = play_log::view().is_some();
         if seen && !self.curator.history.seen_log {
             self.curator.history.seen_log = true;
+            if let Some(log) = play_log::view() {
+                for session in &log.sessions {
+                    if let Some(game) = log.games.get(session.game) { self.played_files.insert(PathBuf::from(&game.path)); }
+                }
+                self.cases_look_changed();
+                self.curator.touch();
+            }
             let rows_here = (self.screen == super::Screen::Home && !self.curator.prefs.lens) || self.screen == super::Screen::Curator;
             if rows_here && self.running.is_none() && self.history_shown() {
                 let item = self.items.get(self.sel).copied();

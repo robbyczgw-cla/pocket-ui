@@ -1165,7 +1165,7 @@ pub fn ignore_file(dir: &Dir) -> Option<String> {
     if dir.ignore.is_empty() {
         return None;
     }
-    let mut s = String::from("// Written by pocket-ui (Settings › Help & tools › For tinkerers › Sync). The first line that matches counts: ! shares, the rest keeps out.\n");
+    let mut s = String::from("// Written by pocket-ui (Settings › Connections › Sync). The first line that matches counts: ! shares, the rest keeps out.\n");
     for line in dir.ignore {
         s.push_str(line);
         s.push('\n');

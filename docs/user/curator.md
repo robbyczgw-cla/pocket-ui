@@ -7,7 +7,7 @@ where the facts come from are on [the first page](library.md).
 
 Curator helps you find your way around a larger collection, with facts that come with pocket-ui and work without a
 network. It has seven parts; each can be switched off in Settings → Games → [Curator](settings.md#curator), and none takes
-up space until it has something to show. [Rediscover](#rediscover) has its own switch under Settings → Look → [Cozy extras](settings-sound.md#cozy-extras) and is only there when it has a game.
+up space until it has something to show. [Rediscover](#rediscover) has its own switch under Settings → Look → [Cozy extras](settings.md#cozy-extras) and is only there when it has a game.
 
 When pocket-ui starts, Curator reads your library in the background, after the shelf is up and never while a game
 runs. Until it is done (with a large library, a second or two), the Curator rows on Home and in its list stay quiet, without words, and a page you open says **Getting ready…**; nothing waits for it.
@@ -175,7 +175,7 @@ it has a game in it, and Settings → Look → Cozy extras → **Rediscover** sw
 pocket-ui keeps a small diary of what you play: when a game started and ended, on which system and emulator, for how
 long. PortMaster ports and the big emulators (PS2, GameCube, Wii, 3DS) count like any other game; PC streaming and
 the tools don't. It stays on this Pocket, in `/storage/.config/pocket-ui/play-log.bin`, and nothing sends it anywhere
-unless you switch on [Library data](sync.md#library-data) in Settings → Help & tools → For tinkerers → Sync, which shares it with your own other
+unless you switch on [Library data](sync.md#library-data) in Settings → Connections → Sync, which shares it with your own other
 devices; it is not part of a backup either.
 
 Once you have played something, the Curator list has a **History** row (with the Lens off, History is its own row

@@ -30,6 +30,10 @@ pu_dt=${PU_DT:-/sys/firmware/devicetree/base}
 # The Anbernic models of ROCKNIX's H700 image pocket-ui has a profile for (as deploy/package/install.sh MODELS_H700; a test
 # keeps them in step). Any other H700 handheld is refused: without a profile pocket-ui's screen and buttons would be wrong.
 pu_h700_models="|Anbernic RG28XX|Anbernic RG35XX 2024|Anbernic RG35XX Plus|Anbernic RG35XX H|Anbernic RG35XX Pro|Anbernic RG35XX SP|Anbernic RG40XX H|Anbernic RG40XX V|Anbernic RG34XX|Anbernic RG34XX-SP|Anbernic RG-SP|Anbernic RG CubeXX|"
+# The same for ROCKNIX's RK3566 image (deploy/package/install.sh MODELS_RK3566; the same test).
+pu_rk3566_models="|Anbernic RG DS Plus|Anbernic RG353M|Anbernic RG353P|Anbernic RG353PS|Anbernic RG353V|Anbernic RG353VS|Anbernic RG503|Powkiddy RGB30|Powkiddy RGB20SX|Powkiddy RK2023|"
+# The same for ROCKNIX's RK3326 image (deploy/package/install.sh MODELS_RK3326; the same test).
+pu_rk3326_models="|Game Console R36S|"
 pu_log=
 
 pu_say() { pu_log="$pu_log$*
@@ -75,6 +79,24 @@ pu_install() {
     case "$pu_h700_models" in
       *"|$model|"*) pu_say "device: $model (Anbernic H700, experimental)." ;;
       *) pu_fail "this H700 handheld is '${model:-unknown}'; pocket-ui has no profile for it (it knows the Anbernic RG28XX, RG34XX, RG34XX-SP, RG35XX 2024/Plus/H/Pro/SP, RG40XX H/V, RG-SP and RG CubeXX). Nothing was installed; remove mount-storage.sh and pocket-ui-seed.tar.gz from this partition."; return 1 ;;
+    esac
+  fi
+
+  # An RK3566 handheld likewise (the RG DS Plus's RK3568 is on that image too).
+  if tr '\000' '\n' <"$pu_dt/compatible" 2>/dev/null | grep -Eq '^rockchip,rk356[68]$'; then
+    model=$(tr -d '\000' <"$pu_dt/model" 2>/dev/null)
+    case "$pu_rk3566_models" in
+      *"|$model|"*) pu_say "device: $model (RK3566 image, experimental)." ;;
+      *) pu_fail "this RK3566 handheld is '${model:-unknown}'; pocket-ui has no profile for it (it knows the Anbernic RG353 M/P/PS/V/VS, RG503 and RG DS Plus and the Powkiddy RGB30, RGB20SX and RK2023). Nothing was installed; remove mount-storage.sh and pocket-ui-seed.tar.gz from this partition."; return 1 ;;
+    esac
+  fi
+
+  # And an RK3326 one (the R36S on its own tree).
+  if tr '\000' '\n' <"$pu_dt/compatible" 2>/dev/null | grep -q '^rockchip,rk3326$'; then
+    model=$(tr -d '\000' <"$pu_dt/model" 2>/dev/null)
+    case "$pu_rk3326_models" in
+      *"|$model|"*) pu_say "device: $model (RK3326 image, experimental)." ;;
+      *) pu_fail "this RK3326 handheld is '${model:-unknown}'; pocket-ui has no profile for it (it knows the R36S on ROCKNIX's 'Game Console R36S' device tree). Nothing was installed; remove mount-storage.sh and pocket-ui-seed.tar.gz from this partition."; return 1 ;;
     esac
   fi
 

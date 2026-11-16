@@ -120,8 +120,7 @@ mod tests {
     use super::*;
     #[test]
     fn original_name_seek_reopen_and_cleanup_without_a_rom_copy() {
-        let root = std::env::temp_dir().join(format!("no-copy-{}", std::process::id()));
-        fs::create_dir_all(&root).unwrap();
+        let root = crate::testutil::TestDir::new("no-copy");
         let source = root.join("card.gba");
         fs::write(&source, b"0123456789").unwrap();
         let game = DirectGame::new(File::open(&source).unwrap(), &root.join("direct"), "Original game.gba").unwrap();
@@ -137,18 +136,16 @@ mod tests {
         drop(game);
         assert!(!alias.exists());
         assert_eq!(fs::read(&source).unwrap(), b"0123456789");
-        fs::remove_file(source).unwrap(); fs::remove_dir(root.join("direct")).unwrap(); fs::remove_dir(root).unwrap();
     }
     #[test]
     fn a_non_seekable_provider_is_refused_without_payload_or_descriptor_leaks() {
         use std::os::fd::FromRawFd;
         use std::os::unix::net::UnixStream;
         use std::os::fd::IntoRawFd;
-        let root = std::env::temp_dir().join(format!("no-copy-pipe-{}", std::process::id()));
+        let root = crate::testutil::TestDir::new("no-copy-pipe");
         let (source, _writer) = UnixStream::pair().unwrap();
         let file = unsafe { File::from_raw_fd(source.into_raw_fd()) };
         assert!(DirectGame::new(file, &root, "Game.gba").is_err());
         assert_eq!(fs::read_dir(&root).unwrap().count(), 0);
-        fs::remove_dir(root).unwrap();
     }
 }

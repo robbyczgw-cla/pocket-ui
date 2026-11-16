@@ -236,7 +236,7 @@ fn retro_play_question_keeps_its_heading_off_the_line_under_it() {
     for picture in ["1024x768", "640x480"] {
         let mut jobs = Vec::new();
         for (i, size) in ["normal", "large"].into_iter().enumerate() {
-            for lang in ["en", "de", "es", "pt"] {
+            for lang in ["en", "de", "es", "pt", "fr", "it"] {
                 jobs.push((format!("retro-play-{picture}-{lang}-{i}"), size, lang, false, "setup:play".to_string()));
             }
         }
@@ -272,7 +272,7 @@ fn retro_pause_menu_in_large_german_and_spanish_text_stays_inside_its_windows() 
         let game = [("POCKETUI_RETRO", "cocoa"), ("POCKETUI_RETRO_LETTERS", letters), ("POCKETUI_SNAPSHOT_GAME", "snes|Donkey Kong Country 3: Dixie Kong's Double Trouble!|dkc3.sfc")];
         for picture in [None, Some("640x480"), Some("1024x768")] {
             let mut jobs = Vec::new();
-            for lang in ["de", "es", "pt"] {
+            for lang in ["de", "es", "pt", "fr", "it"] {
                 for (i, state) in states.iter().enumerate() {
                     jobs.push((format!("retro-pause-{letters}-{}-{lang}-{i}", picture.unwrap_or("native")), "large", lang, false, state.to_string()));
                 }
@@ -336,7 +336,7 @@ fn retro_test_buttons_page_keeps_its_hints_inside_the_panel() {
     let mut found = Vec::new();
     for picture in [None, Some("640x480"), Some("1024x768")] {
         let mut jobs = Vec::new();
-        for lang in ["en", "de", "es", "pt"] {
+        for lang in ["en", "de", "es", "pt", "fr", "it"] {
             for (i, state) in states.iter().enumerate() {
                 jobs.push((format!("retro-tb-{}-{lang}-{i}", picture.unwrap_or("native")), "large", lang, false, state.to_string()));
             }
@@ -520,7 +520,7 @@ fn pages_found_overlapping_at_1024x768_keep_their_lines_apart() {
         "achievements:offline", "sys:time-wrong-wifi", "search:none:qqqq", "curator:history", "curator:history:year",
         "battery:3:samples", "port-perf:own", "port-perf:busy", "pc-streaming:pin", "slot-undo",
     ];
-    for lang in ["en", "de", "es", "pt"] {
+    for lang in ["en", "de", "es", "pt", "fr", "it"] {
         for state in states {
             let boxes = tmp.path().join("pages.box");
             let png = tmp.path().join("pages.png");
@@ -619,8 +619,8 @@ fn the_text_size_in_settings_json_is_used_and_shown_on_its_row() {
         std::fs::write(data.join("settings.json"), settings).unwrap();
         let record = tmp.join(format!("{name}.tsv"));
         let mut cmd = Command::new(env!("CARGO_BIN_EXE_pocket-ui"));
-        // Look's seventh row, Text size, selected: its value shows as "‹ Groß ›" or "‹ Normal ›".
-        cmd.args(["--snapshot", "settings:0:6", tmp.join(format!("{name}.png")).to_str().unwrap()])
+        // Look's fifth row, Text size, selected: its value shows as "‹ Groß ›" or "‹ Normal ›".
+        cmd.args(["--snapshot", "settings:1:4", tmp.join(format!("{name}.png")).to_str().unwrap()])
             .env("POCKETUI_MOCK", "1").env("POCKETUI_MOCK_NOW", FIXTURE_NOW)
             .env("POCKETUI_LANG", "de")
             .env_remove("POCKETUI_TEXT_SIZE")
@@ -644,10 +644,11 @@ fn the_text_size_in_settings_json_is_used_and_shown_on_its_row() {
 }
 
 /// New-user test 2026-10-30: in German with Large text only three of the Settings categories fit and nothing said
-/// there were more. Since the categories are bare one-line rows (NextUI's idea) all seven fit at every text size: no
-/// scroll bar at Large or Normal (`kit::scrollbar` would draw one the moment they did not).
+/// there were more. Since START opens Connections' rows at once (SETTINGS-IA package 2) its seven rows fit at every
+/// text size under the symbols at the top: no scroll bar at Large or Normal (`kit::scrollbar` would draw one the
+/// moment they did not).
 #[test]
-fn settings_categories_all_fit_without_a_scroll_bar() {
+fn what_start_opens_fits_without_a_scroll_bar() {
     let _tmp_guard = tempfile::tempdir().unwrap();
     let tmp = _tmp_guard.path().to_path_buf();
     let stub = wayland(&tmp);
@@ -673,7 +674,7 @@ fn settings_categories_all_fit_without_a_scroll_bar() {
         let (x0, rows) = (img.w as usize - 12, 120..(img.h as usize / 2));
         rows.map(|y| (x0..x0 + 4).filter(|&x| img.px[y * img.w as usize + x] & 0xffffff != 0).count()).sum()
     };
-    assert_eq!(edge_ink("large"), 0, "Large text in German: all seven fit, no bar");
+    assert_eq!(edge_ink("large"), 0, "Large text in German: Connections' seven rows fit, no bar");
     assert_eq!(edge_ink("normal"), 0, "Normal text: all seven fit, no bar");
     drop(stub);
 }
@@ -823,7 +824,7 @@ fn check_textfit_jobs(states: &[&str], faults: &str, looks: &[(&str, &str)], saf
         for picture in ["640x480", "1024x768", "1240x1080", "1280x720"] {
             let mut jobs = Vec::new();
             for size in ["normal", "large"] {
-                for lang in ["en", "de", "es", "pt"] {
+                for lang in ["en", "de", "es", "pt", "fr", "it"] {
                     for (i, state) in states.iter().enumerate() {
                         jobs.push((format!("textfit-031-{style}-{font}-{picture}-{size}-{lang}-{i}"), size, lang, safe, state.to_string()));
                     }
@@ -884,11 +885,6 @@ fn textfit_031_empty_search_hints_stay_inside_the_page() {
 }
 
 #[test]
-fn textfit_031_n64_controls_note_stays_inside_the_page() {
-    check_settings_setup_textfit(&["controls-card:n64"]);
-}
-
-#[test]
 fn textfit_031_console_launch_price_label_stays_inside_the_page() {
     check_settings_setup_textfit(&["console:psx:6"]);
 }
@@ -914,7 +910,7 @@ fn check_system_names(states: &[(&str, &str, &str)], themes: &[&str]) {
         for dimensions in ["1280x720", "1024x768", "640x480", "1240x1080"] {
             for style in ["off", "cocoa"] {
                 for size in ["normal", "large"] {
-                    for lang in ["en", "de", "es", "pt"] {
+                    for lang in ["en", "de", "es", "pt", "fr", "it"] {
                         for (state, full, short) in states {
                             let visible = tmp.path().join("name.txt");
                             let misses = tmp.path().join("name.tsv");
@@ -996,7 +992,7 @@ fn textfit_rest_031_every_safe_mode_row_can_be_selected_in_full_view() {
     for (style, font) in ALL_LOOKS {
         for picture in ["640x480", "1024x768", "1280x720"] {
             for size in ["normal", "large"] {
-                for lang in ["en", "de", "es", "pt"] {
+                for lang in ["en", "de", "es", "pt", "fr", "it"] {
                     for row in 0..5 {
                         let state = format!("rescue:{row}");
                         let probe = tmp.path().join("rescue.probe");
@@ -1096,9 +1092,12 @@ fn textfit_brick_031_system_facts_keep_the_ended_line() {
 
 #[cfg(feature = "brick")]
 #[test]
-fn textfit_brick_031_home_keeps_the_recent_games_hint() {
-    check_brick_031_visible(&["home"],
-        &[("en", &["Recent"]), ("de", &["Zuletzt"]), ("es", &["Recientes"])]);
+fn textfit_brick_031_home_keeps_its_whole_hints() {
+    // The one hint bar (a pill, 32 px type on the Brick) has room for three hints beside 1024 px at Normal
+    // (`brick_settings_walk::the_bricks_larger_type_keeps_homes_whole_hint_bar`); with Large letters, Retro's wide ones or
+    // German it lets whole hints go, the least needed first (`kit::top_hints`). Here: whichever stay are whole, and
+    // nothing runs into the bar or off the picture.
+    check_brick_031_visible(&["home"], &[("en", &[]), ("de", &[]), ("es", &[])]);
 }
 
 #[cfg(feature = "brick")]
@@ -1194,7 +1193,7 @@ fn extras_explanations_whole(device: &str, standalone: bool, sizes: &[&str], row
             for (retro, letters) in [("off", "departure"), ("cocoa", "departure"), ("cocoa", "pixelify")] {
                 for &picture in sizes {
                     let (snapshot, text_size) = picture.split_once('/').unwrap();
-                    for lang in ["en", "de", "es", "pt"] {
+                    for lang in ["en", "de", "es", "pt", "fr", "it"] {
                         let seen = tmp.path().join("extras-visible.txt");
                         let mut cmd = Command::new(&bin);
                         cmd.args(["--snapshot", &state, tmp.path().join("extras.png").to_str().unwrap()])
@@ -1240,16 +1239,36 @@ fn textfit_extras_explanations_stay_whole_on_the_trimui_card() {
     assert!(found.is_empty(), "{}", found.join("\n"));
 }
 
-/// Brazilian Portuguese (pt-BR) runs longer than English: every state of tests/i18n-states.txt in Normal and Large text at
+/// Brazilian Portuguese (pt-BR) and French run longer than English: every state of tests/i18n-states.txt in Normal and Large text at
 /// the 640x480 handhelds, the Brick's 1024x768 and the CubeXX's square 720x720 (its 1440x1440 page), in Barlow, and in Large
 /// Retro (Departure Mono, the widest) at the first two. Nothing may run into another string or a hint bar (`O`), be cut by
 /// the top or bottom (`V`) or the side edge (`E`), or be drawn past the right edge (`X`) that English, rendered the same
 /// way, does not run into as well: Large text at 1024x768 has pages the English already fills to the hint bar (the
-/// size sweep's, scripts/size-sweep.sh), and Portuguese may not add one. A release check, like the 720x720 explorer: about
-/// 14,000 snapshots (`cargo test --release --test text_size portuguese -- --ignored`).
+/// size sweep's, scripts/size-sweep.sh), and the language may not add one. A release check, like the 720x720 explorer: about
+/// 14,000 snapshots per language (`cargo test --release --test text_size portuguese -- --ignored`, `... french ...`).
 #[test]
 #[ignore = "release check: the Portuguese text-fit matrix, 640x480, 1024x768 and 720x720, Normal and Large"]
 fn portuguese_in_normal_and_large_text_nothing_overlaps_or_runs_off_the_picture() {
+    language_matrix("pt", "Portuguese");
+}
+
+/// The same for French, whose `?` `!` `:` `;` `%` follow their word after a no-break space: "W" (a word broken) also catches a
+/// line cut between a word and its mark or inside « ».
+#[test]
+#[ignore = "release check: the French text-fit matrix, 640x480, 1024x768 and 720x720, Normal and Large"]
+fn french_in_normal_and_large_text_nothing_overlaps_or_runs_off_the_picture() {
+    language_matrix("fr", "French");
+}
+
+/// Italian runs about a fifth longer than English: the same matrix and rules as Portuguese's
+/// (`cargo test --release --test text_size italian -- --ignored`).
+#[test]
+#[ignore = "release check: the Italian text-fit matrix, 640x480, 1024x768 and 720x720, Normal and Large"]
+fn italian_in_normal_and_large_text_nothing_overlaps_or_runs_off_the_picture() {
+    language_matrix("it", "Italian");
+}
+
+fn language_matrix(language: &'static str, name: &str) {
     let tmp = tempfile::tempdir().unwrap();
     fake_library(tmp.path());
     let bin = PathBuf::from(env!("CARGO_BIN_EXE_pocket-ui"));
@@ -1258,12 +1277,12 @@ fn portuguese_in_normal_and_large_text_nothing_overlaps_or_runs_off_the_picture(
     let retro = [("POCKETUI_RETRO", "cocoa")];
     // (label, picture, text size, environment, which findings count)
     let runs: [(&str, &str, &str, &[(&str, &str)], &str); 8] = [
-        ("640x480", "640x480", "normal", &[], "OVEX"),
-        ("640x480", "640x480", "large", &[], "OVEX"),
-        ("1024x768", "1024x768", "normal", &[], "OVEX"),
-        ("1024x768", "1024x768", "large", &[], "OVEX"),
-        ("720x720", "1440x1440", "normal", &cubexx, "OVEX"),
-        ("720x720", "1440x1440", "large", &cubexx, "OVEX"),
+        ("640x480", "640x480", "normal", &[], "OVEXW"),
+        ("640x480", "640x480", "large", &[], "OVEXW"),
+        ("1024x768", "1024x768", "normal", &[], "OVEXW"),
+        ("1024x768", "1024x768", "large", &[], "OVEXW"),
+        ("720x720", "1440x1440", "normal", &cubexx, "OVEXW"),
+        ("720x720", "1440x1440", "large", &cubexx, "OVEXW"),
         ("Retro 640x480", "640x480", "large", &retro, ""),
         ("Retro 1024x768", "1024x768", "large", &retro, ""),
     ];
@@ -1273,12 +1292,48 @@ fn portuguese_in_normal_and_large_text_nothing_overlaps_or_runs_off_the_picture(
             let jobs: Vec<_> = states().into_iter().enumerate().map(|(i, (safe, state))| (format!("{lang}-{label}-{size}-{i}"), size, lang, safe, state)).collect();
             render_all_in(tmp.path(), &bin, stub.as_ref(), jobs, Some(picture), only, env, false)
         };
-        // A finding is the state; where English has a fault of its own on the same page, Portuguese's is not new.
+        // A finding is the state; where English has a fault of its own on the same page, the language's is not new.
         let fault = |line: &str| line.split_once(" (").map(|(state, _)| state.to_string());
         let english: std::collections::HashSet<String> = render("en").iter().filter_map(|l| fault(l)).collect();
-        found.extend(render("pt").into_iter().filter(|l| !fault(l).is_some_and(|f| english.contains(&f))).map(|f| format!("{label}: {f}")));
+        found.extend(render(language).into_iter().filter(|l| !fault(l).is_some_and(|f| english.contains(&f))).map(|f| format!("{label}: {f}")));
     }
     drop(stub);
     found.sort();
-    assert!(found.is_empty(), "{} problems in Portuguese that English hasn't (O overlap, T touch, E side edge, V top/bottom edge, X past the right edge, W a word broken):\n{}", found.len(), found.join("\n"));
+    assert!(found.is_empty(), "{} problems in {name} that English hasn't (O overlap, T touch, E side edge, V top/bottom edge, X past the right edge, W a word broken):\n{}", found.len(), found.join("\n"));
+}
+
+/// German and Spanish run longer than English too: every state of tests/i18n-states.txt in Large text at every panel size
+/// pocket-ui paints (640x480 handhelds, the Brick's 1024x768, the CubeXX's square 720x720 as its 1440x1440 page, 1280x720),
+/// and Portuguese and French at 1280x720 (their other sizes are the matrices above). Same findings. English is rendered
+/// too and reported as `en` (a state where English itself breaks is no baseline that hides the other languages' faults).
+/// 0.4.2 found a 720-line page cut at Large text only in the
+/// release's full gate; this is part of the pre-release step (scripts/pre-release.sh), before any export.
+#[test]
+#[ignore = "release check: Large text in German, Spanish, Portuguese and French on every panel size"]
+fn every_language_in_large_text_on_every_panel_size_nothing_overlaps_or_runs_off_the_picture() {
+    let tmp = tempfile::tempdir().unwrap();
+    fake_library(tmp.path());
+    let bin = PathBuf::from(env!("CARGO_BIN_EXE_pocket-ui"));
+    let stub = wayland(tmp.path());
+    let cubexx = [("POCKETUI_DEVICE", "rgcubexx"), ("POCKETUI_SNAPSHOT_NATIVE", "1")];
+    // (label, picture, environment, languages)
+    let runs: [(&str, &str, &[(&str, &str)], &[&'static str]); 4] = [
+        ("640x480", "640x480", &[], &["de", "es"]),
+        ("1024x768", "1024x768", &[], &["de", "es"]),
+        ("720x720", "1440x1440", &cubexx, &["de", "es"]),
+        ("1280x720", "1280x720", &[], &["de", "es", "pt", "fr", "it"]),
+    ];
+    let mut found = Vec::new();
+    for (label, picture, env, langs) in runs {
+        let render = |lang: &'static str| {
+            let jobs: Vec<_> = states().into_iter().enumerate().map(|(i, (safe, state))| (format!("every-{lang}-{label}-{i}"), "large", lang, safe, state)).collect();
+            render_all_in(tmp.path(), &bin, stub.as_ref(), jobs, Some(picture), "OVEXW", env, false)
+        };
+        for &lang in std::iter::once(&"en").chain(langs) {
+            found.extend(render(lang).into_iter().map(|f| format!("{lang} {label}: {f}")));
+        }
+    }
+    drop(stub);
+    found.sort();
+    assert!(found.is_empty(), "{} problems at Large text, English's own included (O overlap, T touch, E side edge, V top/bottom edge, X past the right edge, W a word broken):\n{}", found.len(), found.join("\n"));
 }

@@ -174,14 +174,13 @@ mod tests {
     #[test]
     #[ignore = "timing tier: scripts/test-timing.sh (serial)"]
     fn timing_a_device_file_going_is_noticed_without_polling() {
-        let dir = std::env::temp_dir().join(format!("pocket-games-card-{}", std::process::id()));
-        std::fs::create_dir_all(&dir).unwrap();
+        let dir = crate::testutil::TestDir::new("games-card");
         let dev = dir.join("mmcblk1p1");
         std::fs::write(&dev, b"").unwrap();
         let mounts = format!("{} {MOUNT} exfat rw 0 0\n", dev.display());
         let (tx, rx) = std::sync::mpsc::channel();
         IN_USE.store(false, Ordering::Relaxed);
-        let (d, m) = (dir.clone(), mounts);
+        let (d, m) = (dir.to_path_buf(), mounts);
         let (ready_tx, ready_rx) = std::sync::mpsc::channel();
         std::thread::spawn(move || {
             let tx = std::sync::Mutex::new(tx);
@@ -199,7 +198,6 @@ mod tests {
         crate::testutil::clock::wait_for(|| IN_USE.load(Ordering::Relaxed), std::time::Duration::from_secs(6), "card observer initial snapshot");
         std::fs::remove_file(&dev).unwrap();
         assert_eq!(rx.recv_timeout(crate::testutil::timeout(std::time::Duration::from_secs(6))), Ok(Change::Gone));
-        let _ = std::fs::remove_dir_all(&dir);
     }
 
     /// Really mounts: run by hand as root in a container,
@@ -208,13 +206,12 @@ mod tests {
     #[test]
     #[ignore]
     fn a_mount_wakes_it() {
-        let dir = std::env::temp_dir().join(format!("pocket-games-card-m{}", std::process::id()));
-        std::fs::create_dir_all(&dir).unwrap();
+        let dir = crate::testutil::TestDir::new("games-card-mount");
         let point = dir.join("mnt");
         std::fs::create_dir_all(&point).unwrap();
         let (tx, rx) = std::sync::mpsc::channel();
         IN_USE.store(true, Ordering::Relaxed);
-        let (d, p) = (dir.clone(), point.clone());
+        let (d, p) = (dir.to_path_buf(), point.clone());
         std::thread::spawn(move || {
             let tx = std::sync::Mutex::new(tx);
             let read = move || {

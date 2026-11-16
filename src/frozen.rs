@@ -206,10 +206,14 @@ pub struct Game {
 
 /// The files the next start of this game would resume from, the first that exists; empty for an emulator without a
 /// moment to go back to (ports, ScummVM's, a game on an emulator without states). On a phone: `frozen_phone::files`.
-#[cfg(not(target_os = "android"))]
+#[cfg(not(all(target_os = "android", not(feature = "handheld"))))]
 pub fn resume_files(g: &Game) -> Vec<PathBuf> {
     let stem = g.path.file_stem().and_then(|s| s.to_str()).unwrap_or_default();
     if g.emulator == "pocket-core" {
+        // Hardcore: the start begins at the in-game save, the moment stays for later (`achievements::hardcore`).
+        if crate::achievements::hardcore::skips_moments(&g.system, &g.path) {
+            return Vec::new();
+        }
         // Not the state a start already gave up on (`slots::retry_auto_path`): no start loads it by itself.
         let auto = crate::slots::auto_path(&crate::slots::base(&g.system, stem));
         return crate::slots::auto_candidates(&auto, false);
@@ -234,7 +238,7 @@ pub fn is_frozen(g: &Game, files: &[PathBuf]) -> bool {
 
 /// The paths of the newest [`MOST`] games that stand open, of the recent games given newest first. On a thread: it looks
 /// at the card, and for GameCube and 3DS reads the game file's header.
-#[cfg(not(target_os = "android"))]
+#[cfg(not(all(target_os = "android", not(feature = "handheld"))))]
 pub fn scan(games: &[Game]) -> Vec<PathBuf> {
     scan_timed(games).into_iter().map(|m| m.0).collect()
 }
@@ -294,19 +298,19 @@ impl MomentReads {
 }
 
 /// [`scan`] with each moment's time: what the card's "Continue" line takes from the shelf's own read, so it adds no file access.
-#[cfg(not(target_os = "android"))]
+#[cfg(not(all(target_os = "android", not(feature = "handheld"))))]
 pub fn scan_timed(games: &[Game]) -> Vec<Moment> {
     games.iter().filter_map(|g| open_moment(g, &resume_files(g))).take(MOST).collect()
 }
 
 /// [`moments`] with each moment's time (Easy's and the big shelf's read).
-#[cfg(not(target_os = "android"))]
+#[cfg(not(all(target_os = "android", not(feature = "handheld"))))]
 pub fn moments_timed(games: &[Game]) -> Vec<Moment> {
     games.iter().filter_map(|g| open_moment(g, &resume_files(g))).collect()
 }
 
 /// Every game of `games` the next start would resume, without [`MOST`]'s limit: what Easy's word and open case say.
-#[cfg(not(target_os = "android"))]
+#[cfg(not(all(target_os = "android", not(feature = "handheld"))))]
 pub fn moments(games: &[Game]) -> Vec<PathBuf> {
     moments_timed(games).into_iter().map(|m| m.0).collect()
 }
@@ -322,7 +326,7 @@ pub enum AtLaunch {
 }
 
 /// `shown`: the shelf showed the game as frozen. RetroArch's own start loads what it finds, so it stays as it is.
-#[cfg(not(target_os = "android"))]
+#[cfg(not(all(target_os = "android", not(feature = "handheld"))))]
 pub fn at_launch(g: &Game, shown: bool) -> AtLaunch {
     if g.emulator == "retroarch" {
         return AtLaunch::Normal;
@@ -376,7 +380,7 @@ pub fn twins<'a>(path: &Path, shown: impl Iterator<Item = &'a Path>, hidden: imp
 }
 
 /// Frozen games are available on every supported Linux handheld.
-#[cfg(not(target_os = "android"))]
+#[cfg(not(all(target_os = "android", not(feature = "handheld"))))]
 pub fn available() -> bool {
     true
 }
@@ -483,7 +487,7 @@ mod tests {
 
     /// Continue where I quit is off: a Quit leaves the older moment at `slots::retry_auto_path` (`Core::keep_resume_point`),
     /// where Load finds it and no start takes it. So the shelf must not stand the game open for it, nor say Continue.
-    #[cfg(not(target_os = "android"))]
+    #[cfg(not(all(target_os = "android", not(feature = "handheld"))))]
     #[test]
     fn a_moment_left_for_load_is_not_a_waiting_moment() {
         let g = game("pocket-core", "mgba", PathBuf::from("/storage/roms/gba/Game.gba"), None);

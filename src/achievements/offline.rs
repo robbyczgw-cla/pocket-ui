@@ -32,6 +32,9 @@ pub struct Unlock {
     pub hash: String,
     /// Unix seconds when it happened.
     pub when: u64,
+    /// Earned in Hardcore: it is sent as a hardcore unlock (an older file has none, softcore).
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub hardcore: bool,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq, Default)]
@@ -77,12 +80,16 @@ impl Pending {
         }
     }
 
-    pub fn add(&mut self, id: u32, hash: &str, when: u64) {
-        if !self.unlocks.iter().any(|u| u.id == id && u.hash == hash) {
+    pub fn add(&mut self, id: u32, hash: &str, when: u64, hardcore: bool) {
+        if let Some(u) = self.unlocks.iter_mut().find(|u| u.id == id && u.hash == hash) {
+            // The same unlock again, now in Hardcore (it was softcore before): it goes as the better one.
+            u.hardcore |= hardcore;
+        } else {
             self.unlocks.push(Unlock {
                 id,
                 hash: hash.to_string(),
                 when,
+                hardcore,
             });
         }
     }
@@ -95,6 +102,11 @@ impl Pending {
 
     pub fn ids_for(&self, hash: &str) -> Vec<u32> {
         self.unlocks.iter().filter(|u| u.hash.eq_ignore_ascii_case(hash)).map(|u| u.id).collect()
+    }
+
+    /// Those of [`Pending::ids_for`] earned in Hardcore.
+    pub fn hardcore_ids_for(&self, hash: &str) -> Vec<u32> {
+        self.unlocks.iter().filter(|u| u.hardcore && u.hash.eq_ignore_ascii_case(hash)).map(|u| u.id).collect()
     }
 }
 
@@ -136,14 +148,20 @@ fn success(resp: &Response) -> Option<Value> {
     (v.get("Success") == Some(&Value::Bool(true))).then_some(v)
 }
 
-/// Adds `ids` to a startsession answer's softcore unlocks.
-fn with_unlocks(mut session: Value, ids: &[u32], now: u64) -> Value {
+/// Adds `ids` to a startsession answer's softcore unlocks, and `hardcore` (a part of them) to its hardcore ones too: a
+/// hardcore unlock counts in both, as the server answers it. rc_client in Hardcore goes by the hardcore list only.
+fn with_unlocks(mut session: Value, ids: &[u32], hardcore: &[u32], now: u64) -> Value {
     if let Some(obj) = session.as_object_mut() {
-        let list = obj.entry("Unlocks").or_insert_with(|| json!([]));
-        if let Some(arr) = list.as_array_mut() {
-            for id in ids {
-                if !arr.iter().any(|u| u.get("ID").and_then(Value::as_u64) == Some(*id as u64)) {
-                    arr.push(json!({"ID": id, "When": now}));
+        for (key, ids) in [("Unlocks", ids), ("HardcoreUnlocks", hardcore)] {
+            if ids.is_empty() {
+                continue;
+            }
+            let list = obj.entry(key).or_insert_with(|| json!([]));
+            if let Some(arr) = list.as_array_mut() {
+                for id in ids {
+                    if !arr.iter().any(|u| u.get("ID").and_then(Value::as_u64) == Some(*id as u64)) {
+                        arr.push(json!({"ID": id, "When": now}));
+                    }
                 }
             }
         }
@@ -193,16 +211,16 @@ pub fn exchange(transport: &dyn Transport, data_dir: &Path, account: &Account, p
             }
         }
         "startsession" if !hash.is_empty() => {
-            let waiting = pending.ids_for(hash);
+            let (waiting, hard) = (pending.ids_for(hash), pending.hardcore_ids_for(hash));
             if let Some(v) = success(&resp) {
                 let mut kept = load_kept(data_dir, hash);
                 kept.session = Some(v.clone());
                 save_kept(data_dir, hash, &kept);
                 // Unlocks still on their way count as unlocked already.
-                Response::ok(with_unlocks(v, &waiting, now()).to_string())
+                Response::ok(with_unlocks(v, &waiting, &hard, now()).to_string())
             } else if resp.failed() {
                 match load_kept(data_dir, hash).session {
-                    Some(v) => Response::ok(with_unlocks(v, &waiting, now()).to_string()),
+                    Some(v) => Response::ok(with_unlocks(v, &waiting, &hard, now()).to_string()),
                     None => resp,
                 }
             } else {
@@ -214,7 +232,8 @@ pub fn exchange(transport: &dyn Transport, data_dir: &Path, account: &Account, p
             if let (Some(_), Some(id)) = (success(&resp), param(post, "a").and_then(|a| a.parse::<u32>().ok())) {
                 let mut kept = load_kept(data_dir, hash);
                 if let Some(s) = kept.session.take() {
-                    kept.session = Some(with_unlocks(s, &[id], now()));
+                    let hard: &[u32] = if param(post, "h") == Some("1") { &[id] } else { &[] };
+                    kept.session = Some(with_unlocks(s, &[id], hard, now()));
                     save_kept(data_dir, hash, &kept);
                 }
             }
@@ -239,6 +258,7 @@ mod tests {
             username: "Alex".into(),
             token: "Tk".into(),
             display_name: String::new(),
+            hardcore: false,
         }
     }
 
@@ -291,10 +311,41 @@ mod tests {
             username: "Alex".into(),
             unlocks: Vec::new(),
         };
-        waiting.add(5503, "0123ABCD", 1);
-        waiting.add(9999, "ffff", 1);
+        waiting.add(5503, "0123ABCD", 1, false);
+        waiting.add(9999, "ffff", 1, false);
         assert_eq!(ids(&exchange(&offline, &dir, &account(), &waiting, &session)), vec![5502, 5501, 5503]);
         assert_eq!(ids(&exchange(&online, &dir, &account(), &waiting, &session)), vec![5502, 5503]);
+    }
+
+    /// Hardcore offline: rc_client in Hardcore only counts the session's hardcore unlocks, so an unlock earned in
+    /// Hardcore (waiting, or confirmed with h=1) must show there too, else it would pop up and be sent a second time.
+    #[test]
+    fn a_hardcore_unlock_counts_as_hardcore_offline_too() {
+        let dir = scratch("hardcore");
+        let hard = |resp: &Response| -> Vec<u64> {
+            let v: Value = serde_json::from_slice(&resp.body).unwrap();
+            v["HardcoreUnlocks"].as_array().unwrap().iter().map(|u| u["ID"].as_u64().unwrap()).collect()
+        };
+        let online = Mock::new(vec![("startsession", Response::ok(SESSION)), ("awardachievement", Response::ok(r#"{"Success":true}"#))]);
+        let offline = Mock::new(vec![]);
+        let none = Pending::default();
+        let session = req("r=startsession&u=Alex&t=Tk&g=1234&h=1&m=0123abcd&l=12.5");
+        assert!(hard(&exchange(&online, &dir, &account(), &none, &session)).is_empty());
+        exchange(&online, &dir, &account(), &none, &req("r=awardachievement&u=Alex&t=Tk&a=5501&h=1&m=0123abcd&v=x"));
+        exchange(&online, &dir, &account(), &none, &req("r=awardachievement&u=Alex&t=Tk&a=5504&h=0&m=0123abcd&v=x"));
+        let kept = exchange(&offline, &dir, &account(), &none, &session);
+        assert_eq!(hard(&kept), vec![5501], "the hardcore one, not the softcore one");
+        assert_eq!(ids(&kept), vec![5502, 5501, 5504], "both count in softcore");
+        let mut waiting = Pending { username: "Alex".into(), unlocks: Vec::new() };
+        waiting.add(5505, "0123abcd", 1, true);
+        waiting.add(5506, "0123abcd", 1, false);
+        assert_eq!(hard(&exchange(&offline, &dir, &account(), &waiting, &session)), vec![5501, 5505]);
+        // The same unlock earned again in Hardcore goes as hardcore.
+        waiting.add(5506, "0123abcd", 2, true);
+        assert!(waiting.unlocks.iter().find(|u| u.id == 5506).unwrap().hardcore);
+        // A file from before Hardcore reads as softcore.
+        let old: Pending = serde_json::from_str(r#"{"username":"Alex","unlocks":[{"id":1,"hash":"ab","when":3}]}"#).unwrap();
+        assert!(!old.unlocks[0].hardcore);
     }
 
     #[test]
@@ -326,9 +377,9 @@ mod tests {
         let dir = scratch("pending");
         let mut p = Pending::load(&dir, "Alex");
         assert!(p.unlocks.is_empty());
-        p.add(5501, "abc", 10);
-        p.add(5501, "abc", 11);
-        p.add(5502, "abc", 12);
+        p.add(5501, "abc", 10, false);
+        p.add(5501, "abc", 11, false);
+        p.add(5502, "abc", 12, false);
         assert_eq!(p.unlocks.len(), 2, "the same unlock once");
         p.save(&dir);
         assert_eq!(Pending::load(&dir, "Alex"), p);

@@ -116,7 +116,7 @@ fn the_dpad_reaches_the_gba_choice_and_every_console_view_uses_the_saved_sp() {
         sp_views.push(sp);
     }
     // Right returns to the default; the same views return to their original hardware picture.
-    shot_in(tmp.path(), &lib, &data, &stub, "cozy:8::r", "en", "shelf");
+    shot_in(tmp.path(), &lib, &data, &stub, "cozy:12::r", "en", "shelf");
     for ((state, original), sp) in views.iter().zip(before).zip(sp_views) {
         let restored = pixels(shot_in(tmp.path(), &lib, &data, &stub, state, "en", "shelf"));
         if state.ends_with(":insert") {
@@ -142,7 +142,7 @@ fn the_dpad_reaches_the_gba_choice_and_every_console_view_uses_the_saved_sp() {
         let warm = pixels(shot_in(tmp.path(), &lib, &data, &stub, &format!("cozy:0::ua:{look}"), "en", "shelf"));
         let cold = pixels(shot_in(tmp.path(), &lib, &data, &stub, &format!("shelf:gba:{look}"), "en", "shelf"));
         assert!(warm == cold, "{look}: choosing SP immediately replaces already-painted hardware, without a restart");
-        shot_in(tmp.path(), &lib, &data, &stub, "cozy:8::r", "en", "shelf");
+        shot_in(tmp.path(), &lib, &data, &stub, "cozy:12::r", "en", "shelf");
     }
 }
 
@@ -174,12 +174,19 @@ fn switching_an_extra_on_the_page_is_saved_and_takes_the_tv_off_the_cabinet() {
     shot(&tmp, &lib, &data, &stub, "cozy:0", "en");
     assert!(extras(&data).is_null(), "the start writes no extras: {}", extras(&data));
     assert!(red_on_tv(&shot(&tmp, &lib, &data, &stub, "shelf:snes:cabinet:games:0", "en")) > 1500, "the TV as it starts");
-    // A on TV on the cabinet, the first row; Down to Stickers on cases, A (in German: the keys are the same).
-    shot(&tmp, &lib, &data, &stub, "cozy:0::ada", "de");
+    // A on TV on the cabinet, the first row; Down twice to Stickers on cases (the row between is TV plays the game), A
+    // (in German: the keys are the same).
+    shot(&tmp, &lib, &data, &stub, "cozy:0::adda", "de");
     assert_eq!(extras(&data), serde_json::json!({"cabinet_tv": false, "case_stickers": false}));
     assert_eq!(red_on_tv(&shot(&tmp, &lib, &data, &stub, "shelf:snes:cabinet:games:0", "en")), 0, "no TV with it off");
     // Up to the TV again, Right switches it back; B leaves the page and changes nothing.
     shot(&tmp, &lib, &data, &stub, "cozy:1::urb", "en");
     assert_eq!(extras(&data), serde_json::json!({"case_stickers": false}));
     assert!(red_on_tv(&shot(&tmp, &lib, &data, &stub, "shelf:snes:cabinet:games:0", "en")) > 1500, "the TV is back");
+    // TV plays the game (the second row) starts off; A switches it on and it is kept, A again puts it back (Settings
+    // → Look → Cozy extras; German keys are the same).
+    shot(&tmp, &lib, &data, &stub, "cozy:1::a", "de");
+    assert_eq!(extras(&data), serde_json::json!({"case_stickers": false, "tv_plays_game": true}));
+    shot(&tmp, &lib, &data, &stub, "cozy:1::a", "en");
+    assert_eq!(extras(&data), serde_json::json!({"case_stickers": false}));
 }

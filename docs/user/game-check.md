@@ -8,6 +8,7 @@ leaves the shelf alone, and shows either **All good** with how many games are re
 | Row | Example | What to do |
 |---|---|---|
 | **Folders that can't be read** | A system entry in `es_systems.cfg` is damaged or has no name or ROM folder | Check the entry at the file and line shown, then scan your games again. Other systems stay on the shelf |
+| **System list** | "The system list is missing / can't be read / has no system in it / every entry is damaged, so pocket-ui uses its built-in list." | Games in their standard folders (`roms/gba`, `roms/nes`, …) show anyway. To use your own list, fix `es_systems.cfg` (it is named) or put a good one back, then scan your games again |
 | **BIOS files** | "Sega CD: BIOS missing." with the exact file names; "The BIOS file is in the wrong folder"; "Wrong BIOS: its checksum differs"; "This BIOS file is empty" | Put your own console's file into `roms/bios`, or move or rename it as the line says |
 | **Discs missing a file** | "Disc: Game.cue is there, its Game.bin is missing." Also an `.m3u` playlist none of whose discs can start | Put the file next to it, with exactly this name |
 | **Empty files** | "This file is empty." | Copy the game again |
@@ -30,4 +31,4 @@ When files were copied that the shelf can't read (a disc without its file, a fol
 turned up with them, the same note says "Some game files can't be read. Settings › Games › Game check says why." On an
 empty Home, "No games yet" says it too.
 
-A literal `&` in a system name (such as Game & Watch) is accepted. A damaged system entry is left out individually; the other games remain. A short note points to Game check. The system list and your games are never changed.
+A literal `&` in a system name (such as Game & Watch) is accepted. A damaged system entry is left out individually; the other games remain. A short note points to Game check. If the whole system list can't be read, pocket-ui uses its built-in list (the standard folders), says so in a note and, on an empty shelf, in place of "No games yet". The system list and your games are never changed.

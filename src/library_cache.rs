@@ -187,6 +187,11 @@ pub enum Rescan {
 /// `cached_key` was current). Writes the cache only when something changed.
 pub fn rescan(data_dir: &Path, es_systems: &Path, shown: &[System], cached_key: Option<&Key>) -> Rescan {
     let key = Key::now(es_systems);
+    // The list went missing or unreadable while games are on screen (a card hiccup, a file mid-copy): the list on screen
+    // stays rather than being swapped for the built-in one, which would empty the shelf. The next start says it.
+    if !shown.is_empty() && library::system_list_status(es_systems).fallback.is_some() {
+        return Rescan::Failed("the system list can't be read".into());
+    }
     let fresh = match library::load_shown(es_systems, data_dir) {
         Ok(s) => s,
         Err(e) => return Rescan::Failed(e),
@@ -417,6 +422,11 @@ mod tests {
         // es_systems.cfg gone: the rescan fails and the list on screen stays.
         std::fs::remove_file(f.es()).unwrap();
         assert!(matches!(rescan(&f.data(), &f.es(), &fresh, Some(&key)), Rescan::Failed(_)));
+        // Damaged instead of gone: the same, never the built-in list swapped in over games that are on screen.
+        std::fs::write(f.es(), "<systemList><system><name>gba").unwrap();
+        assert!(matches!(rescan(&f.data(), &f.es(), &fresh, Some(&key)), Rescan::Failed(_)));
+        // With nothing on screen, the built-in list is what the shelf gets.
+        assert!(!matches!(rescan(&f.data(), &f.es(), &[], None), Rescan::Failed(_)));
     }
 
     /// A gamelist.xml that appears next to the games: the rescan finds the new names (a changed list, which the cache

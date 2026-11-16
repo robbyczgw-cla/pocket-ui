@@ -22,7 +22,7 @@ TrimUI's firmware notes); About says "experimental", and the project asks owners
 | Sticks | none | left ABS_X/Y, right ABS_RX/RY, about ±32767, centre 0, up negative; not clickable |
 | 317 / 318 | F1 / F2 | not keys of its own (the pad's Xbox look announces them); pocket-ui makes them L3 / R3 |
 | Mute slider (gpio243) | followed by `brick-hw slider-watch` | none: no follower, `BRICK_NO_SLIDER=1` for `volume restore` (gpio243 is something else there; a function switch arrives as EV_SW on the pad) |
-| Lights (`/sys/class/led_anim`) | zones `lr m f1 f2`, Settings › Sound & feel › Lights & buttons | rings `l r m`, one `max_scale`: written 0 at start, no lights page until someone with a Smart Pro has mapped them |
+| Lights (`/sys/class/led_anim`) | zones `lr m f1 f2`, Settings › Controls › Lights & buttons | rings `l r m`, one `max_scale`: written 0 at start, no lights page until someone with a Smart Pro has mapped them |
 | Stick power (gpio110, gpio114) | — | set high at start (every other project does) |
 | Motor | gpio227 | gpio227, and a voltage first (`POCKETUI_MOTOR_VOLTAGE=500000,2200000`, µV) |
 | What the display shows | fb0's page (`pocket-fb` reads it back) | the GPU's layer, not fb0, by other projects' findings: still pictures go through the GPU too (`pocket-fb --picture/--message --gl`) and the bridge trusts the GPU without the read-back (`--gl-trust`) |

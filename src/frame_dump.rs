@@ -566,8 +566,7 @@ mod tests {
 
     #[test]
     fn a_dump_gives_back_every_frame_exactly_with_its_tick() {
-        let dir = std::env::temp_dir().join(format!("pocketui-frame-dump-{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&dir);
+        let dir = crate::testutil::TestDir::new("frame-dump-plain");
         let mut w = Writer::create(&dir, false).unwrap();
         let frames: Vec<(u64, u32, u32, Vec<u32>)> = (0..5u32)
             .map(|k| (k as u64 * 2, 4, 3, (0..12).map(|i| i * 0x010203 + k * 7).collect()))
@@ -583,7 +582,6 @@ mod tests {
             assert_eq!((b.tick, b.t_ns, b.real_ns, b.w, b.h), (*tick, tick_ns(*tick), 7 + tick, *fw, *fh));
             assert_eq!(&b.pixels, px, "the picture of tick {tick}");
         }
-        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]
@@ -610,8 +608,7 @@ mod tests {
     #[test]
     fn a_games_picture_is_turned_upright_and_its_sound_kept() {
         // pocket-core reads the screen as GL does (RGBA, bottom row first): the dump has it as pocket-ui's frames are.
-        let dir = std::env::temp_dir().join(format!("pocketui-frame-dump-game-{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&dir);
+        let dir = crate::testutil::TestDir::new("frame-dump-game");
         let w = Writer::create(&dir, true).unwrap();
         let (tx, rx) = sync_channel(4);
         let t = std::thread::spawn(move || w.run(rx));
@@ -628,7 +625,6 @@ mod tests {
         let back = read(&dir.join("frames.pfd")).unwrap();
         assert_eq!(back[0].pixels, vec![0x0000ff, 0xff0000], "top row first, 0x00RRGGBB");
         assert_eq!(std::fs::read(dir.join("audio.s16")).unwrap(), vec![1, 0, 0xff, 0xff, 2, 0, 0xfe, 0xff]);
-        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]
@@ -637,8 +633,7 @@ mod tests {
         // hold) with its sound in audio.s16 but no picture, so scripts/frame-dump-decode.py put the game's sound
         // 0.6-1.5 s after its pictures; and the pause menu's sound on HOME, logged while the game was on screen, was
         // left out. A UI part (ticks 0-19), the game (its 40 pictures from the real moment of UI tick 20), the UI again.
-        let dir = std::env::temp_dir().join(format!("pocketui-frame-dump-decode-{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&dir);
+        let dir = crate::testutil::TestDir::new("frame-dump-decode");
         let start = 1_000_000_000u64;
         let mut ui = Writer::create(&dir, false).unwrap();
         for k in (0..20).chain(60..100) {
@@ -660,7 +655,7 @@ mod tests {
         std::fs::write(core.join("audio.s16"), audio.iter().flat_map(|v| v.to_le_bytes()).collect::<Vec<u8>>()).unwrap();
         std::fs::write(core.join("events.log"), format!("start {}\n0 audio 600 Hz s16le stereo\nend 40 late 0 real {} frames 40\n", start + tick_ns(20), start + tick_ns(60))).unwrap();
         let base = dir.join("take.mp4");
-        let out = std::process::Command::new("python3").arg("-I").arg(concat!(env!("CARGO_MANIFEST_DIR"), "/scripts/frame-dump-decode.py")).arg(&dir).arg("--sound").arg(&base).output().unwrap();
+        let out = std::process::Command::new("python3").arg("-I").arg(concat!(env!("CARGO_MANIFEST_DIR"), "/scripts/frame-dump-decode.py")).arg(&*dir).arg("--sound").arg(&base).output().unwrap();
         assert!(out.status.success(), "decode: {}", String::from_utf8_lossy(&out.stderr));
         let events = std::fs::read_to_string(dir.join("take.mp4.events.txt")).unwrap();
         assert!(events.lines().any(|l| l == "0.0833 5 sound Confirm 0 0"), "the shelf's sound at its frame: {events}");
@@ -672,7 +667,6 @@ mod tests {
         let samples: Vec<i16> = wav[44..].chunks_exact(2).map(|b| i16::from_le_bytes([b[0], b[1]])).collect();
         assert_eq!(samples.len(), 40 * 10 * 2, "a tick's share for each of the game's pictures");
         assert_eq!((samples[0], samples[20 * 20], samples[39 * 20 + 19]), (100, 120, 139), "each picture with its own sound, none of the hold's");
-        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]

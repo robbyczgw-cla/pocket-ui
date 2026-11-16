@@ -297,7 +297,7 @@ pub fn calm(rgb: (u8, u8, u8)) -> (u8, u8, u8) {
 // ---- the F keys ---------------------------------------------------------------------------------------
 
 /// Shown in game Controls and when Controller setup receives a reserved F-key press.
-pub const FKEYS_REMAP_NOTE: &str = "F1/F2 are shortcuts, not game buttons.\nSet them in Settings › Sound & feel › Lights & buttons.";
+pub const FKEYS_REMAP_NOTE: &str = "F1/F2 are shortcuts, not game buttons.\nSet them in Settings › Controls › Lights & buttons.";
 
 /// What F1 and F2 do (Settings > Buttons; the choice is `<data>/brick-keys.json`).
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Default, serde::Serialize, serde::Deserialize)]

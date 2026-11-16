@@ -14,14 +14,27 @@
         <intent><action android:name="android.intent.action.MAIN" /><category android:name="android.intent.category.LAUNCHER" /></intent>
     </queries>
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
-    <application android:label="pocket-ui" android:icon="@mipmap/ic_launcher" android:roundIcon="@mipmap/ic_launcher_round" android:theme="@style/PocketTheme" android:debuggable="false" android:extractNativeLibs="true" android:allowNativeHeapPointerTagging="false" android:allowBackup="false" android:usesCleartextTraffic="false">
-        <activity android:name=".PocketActivity" android:launchMode="singleTask" android:screenOrientation="fullSensor" android:configChanges="orientation|keyboardHidden|screenSize|screenLayout|smallestScreenSize|density|uiMode|fontScale" android:exported="true" android:enableOnBackInvokedCallback="true">
+    <!-- Only the handheld view asks for these, explained at its start: it reads the games where they are (ROMs/<system>).
+         The Mobile view keeps the folder picker. -->
+    <uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE" />
+    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="29" />
+    <application android:label="pocket-ui" android:icon="@mipmap/ic_launcher" android:roundIcon="@mipmap/ic_launcher_round" android:theme="@style/PocketTheme" android:debuggable="false" android:extractNativeLibs="true" android:allowNativeHeapPointerTagging="false" android:allowBackup="false" android:hasFragileUserData="true" android:usesCleartextTraffic="false">
+        <!-- The two NativeActivity views follow every configuration themselves (a pad paired, the language): Android can't take
+             them down and make them again in their process (their native loop never ends; review of 12.11.2026, #2). -->
+        <activity android:name=".PocketActivity" android:launchMode="singleTask" android:screenOrientation="fullSensor" android:configChanges="orientation|keyboard|keyboardHidden|navigation|screenSize|screenLayout|smallestScreenSize|density|uiMode|fontScale|locale|layoutDirection" android:exported="true" android:enableOnBackInvokedCallback="true">
             <meta-data android:name="android.app.lib_name" android:value="pocket_android" />
             <intent-filter><action android:name="android.intent.action.MAIN" /><category android:name="android.intent.category.LAUNCHER" /></intent-filter>
             <!-- Offered as the home screen: Android asks the player at the Home button; nothing is set by the app. -->
             <intent-filter><action android:name="android.intent.action.MAIN" /><category android:name="android.intent.category.HOME" /><category android:name="android.intent.category.DEFAULT" /></intent-filter>
         </activity>
+        <!-- The handheld view (android/handheld): the Linux app's pages for the built-in pad, in a process of its own. Opened by
+             PocketActivity (the launcher entry) when it is the chosen view (Views.java), and by Settings → View. -->
+        <activity android:name=".HandheldActivity" android:process=":handheld" android:launchMode="singleTask" android:taskAffinity="xyz.pocketui.handheld" android:screenOrientation="sensorLandscape" android:configChanges="orientation|keyboard|keyboardHidden|navigation|screenSize|screenLayout|smallestScreenSize|density|uiMode|fontScale|locale|layoutDirection" android:exported="true" android:enableOnBackInvokedCallback="true">
+            <meta-data android:name="android.app.lib_name" android:value="pocket_handheld" />
+        </activity>
         <activity android:name=".PlayerActivity" android:process=":player" android:theme="@style/PlayerTheme" android:screenOrientation="fullSensor" android:configChanges="orientation|keyboardHidden|screenSize|screenLayout|smallestScreenSize|density|uiMode|fontScale" android:exported="false" android:enableOnBackInvokedCallback="true" />
+        <!-- The handheld view hands a game's file to another emulator app through this (RomProvider.authority: <package>.roms). -->
+        <provider android:name=".RomProvider" android:authorities="xyz.pocketui.app.roms" android:exported="false" android:grantUriPermissions="true" />
         <service android:name=".PlayerWarm" android:process=":player" android:exported="false" />
         <receiver android:name=".UpdateInstaller$ResultReceiver" android:exported="false" />
     </application>

@@ -69,6 +69,10 @@ final class EmulatorIntents {
         for (String[] app : candidates) if (!app[0].equals(preferred)) ordered.add(app);
         return ordered.toArray(new String[0][]);
     }
+    /** Azahar: a game of it starts in a clean task, so closing the game returns to pocket-ui (11.11.2026). Both starts use it. */
+    private static void cleanTaskFor(String profile, Intent intent) {
+        if (profile.equals("3ds")) intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TASK);
+    }
     static Intent create(Context context, Uri document, String relative, String profile, String preferred) throws Exception {
         if (!"content".equals(document.getScheme()) || !DocumentsContract.isDocumentUri(context, document))
             throw new IOException("A SAF document is required");
@@ -109,9 +113,47 @@ final class EmulatorIntents {
         // Azahar: its own screens (the first-start setup, its game list) stay in the task it was opened in, and the game is
         // pushed on top of them: Close Game then lands on Azahar's list, not here. A clean task ends with the game, and the
         // phone goes back to pocket-ui. Checked on the Odin 2 Mini on 11.11.2026 (Azahar 2126.2, twice, play time counted).
-        if (profile.equals("3ds")) intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TASK);
+        cleanTaskFor(profile, intent);
         intent.setClipData(ClipData.newRawUri("ROM access", grant));
         intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_GRANT_PREFIX_URI_PERMISSION | Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_NEW_TASK);
+        return intent;
+    }
+    /**
+     * The handheld view's start (android/handheld): the app `preferred` (else the first on the phone) on a game by its real path.
+     * RetroArch is given the path itself; the others a read-only content URI of `RomProvider` (nothing is copied), granted with
+     * the intent. Same apps, extras and task rules as `create`, which starts a SAF document.
+     */
+    static Intent createForPath(Context context, java.io.File file, String profile, String preferred) throws Exception {
+        Intent intent = new Intent(Intent.ACTION_MAIN);
+        Uri uri = RomProvider.uriOf(context, file);
+        String pkg;
+        if (profile.startsWith("retroarch:")) {
+            String[] parts = profile.split(":", -1);
+            if (parts.length != 2 || !parts[1].matches("[a-z0-9_]+")) throw new IOException("Invalid RetroArch core");
+            pkg = installed(context, prefer(apps(profile), preferred), intent);
+            intent.putExtra("ROM", file.getAbsolutePath());
+            android.content.pm.ApplicationInfo app = context.getPackageManager().getApplicationInfo(pkg, 0);
+            String external = android.os.Environment.getExternalStorageDirectory().getAbsolutePath() + "/Android/data/" + pkg + "/files";
+            intent.putExtra("LIBRETRO", app.dataDir + "/cores/" + parts[1] + "_libretro_android.so");
+            intent.putExtra("CONFIGFILE", external + "/retroarch.cfg");
+            intent.putExtra("DATADIR", app.dataDir);
+            intent.putExtra("APK", app.sourceDir);
+            intent.putExtra("SDCARD", android.os.Environment.getExternalStorageDirectory().getAbsolutePath());
+            intent.putExtra("EXTERNAL", external);
+            intent.putExtra("IME", android.provider.Settings.Secure.getString(context.getContentResolver(), android.provider.Settings.Secure.DEFAULT_INPUT_METHOD));
+        } else {
+            String[] app = chosen(context, prefer(apps(profile), preferred), intent);
+            if (app == null) throw new IOException("No emulator profile for " + profile);
+            pkg = app[0];
+            intent.setAction(app[2]);
+            if (app[3] == null) intent.setDataAndType(uri, "application/octet-stream");
+            else intent.putExtra(app[3], uri.toString());
+        }
+        if (context.getPackageManager().resolveActivity(intent, 0) == null)
+            throw new IOException("Install and configure the emulator first: " + pkg);
+        cleanTaskFor(profile, intent);
+        intent.setClipData(ClipData.newRawUri("ROM access", uri));
+        intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_NEW_TASK);
         return intent;
     }
     private static String installed(Context context, String[][] candidates, Intent intent) throws IOException {

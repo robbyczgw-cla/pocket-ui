@@ -116,12 +116,14 @@ fn the_tailnet_ranges() {
     }
 }
 
+/// 0.5: on Tailscale's interface and on the Wi-Fi's home-network IPv4 address (never IPv6 there, never a public
+/// address, never another interface). Red before: the Wi-Fi was never in the plan.
 #[test]
-fn it_listens_only_on_the_tailscale_interface() {
+fn it_listens_on_the_tailscale_interface_and_the_wifi() {
     let ifaces = vec![
         iface("lo", "127.0.0.1"),
         iface("lo", "::1"),
-        iface("wlan0", "192.0.2.164"),
+        iface("wlan0", "192.168.1.42"),
         // A phone hotspot handing out a carrier-grade NAT address: the same range as Tailscale, not Tailscale.
         iface("wlan0", "100.88.1.2"),
         iface("wlan0", "fe80::1234"),
@@ -132,12 +134,59 @@ fn it_listens_only_on_the_tailscale_interface() {
         iface("tailscale0", "192.168.7.7"),
         iface("eth0", "0.0.0.0"),
     ];
-    let plan = net::plan(&ifaces, 80);
-    let addrs: Vec<String> = plan.iter().map(|l| l.addr.to_string()).collect();
-    assert_eq!(addrs, ["100.70.1.10:80", "[fd7a:115c:a1e0::4f01:2a3b]:80"]);
-    assert!(plan.iter().all(|l| l.iface == "tailscale0"));
-    assert!(net::plan(&[iface("wlan0", "192.0.2.164"), iface("eth0", "192.0.2.5")], 80).is_empty(), "Tailscale off: nothing at all");
-    assert!(net::plan(&[iface("tailscale0", "0.0.0.0"), iface("tailscale0", "::")], 80).is_empty(), "never every address");
+    let plan = net::plan_on(&ifaces, 80, "wlan0");
+    let addrs: Vec<(String, &str, bool)> = plan.iter().map(|l| (l.addr.to_string(), l.iface.as_str(), l.lan)).collect();
+    assert_eq!(
+        addrs,
+        [
+            ("192.168.1.42:80".to_string(), "wlan0", true),
+            // The hotspot's address is the Wi-Fi's: its browsers pair with the code like every other on the Wi-Fi.
+            ("100.88.1.2:80".to_string(), "wlan0", true),
+            ("100.70.1.10:80".to_string(), "tailscale0", false),
+            ("[fd7a:115c:a1e0::4f01:2a3b]:80".to_string(), "tailscale0", false),
+        ]
+    );
+    let wifi_only = net::plan_on(&[iface("wlan0", "192.168.1.42"), iface("eth0", "192.0.2.5")], 80, "wlan0");
+    assert_eq!(wifi_only.len(), 1, "Tailscale off: the Wi-Fi alone, never another interface");
+    assert!(wifi_only[0].lan);
+    assert!(net::plan_on(&[iface("wlan0", "203.0.113.7"), iface("wlan0", "2a02:810::7")], 80, "wlan0").is_empty(), "a public address: off the internet");
+    assert!(net::plan_on(&[iface("tailscale0", "0.0.0.0"), iface("tailscale0", "::"), iface("wlan0", "0.0.0.0")], 80, "wlan0").is_empty(), "never every address");
+    assert!(net::plan_on(&[], 80, "wlan0").is_empty(), "no network: nothing");
+}
+
+/// "Binding when Wi-Fi changes", in the plan: another network's address is another socket, no address none.
+#[test]
+fn a_new_wifi_address_is_a_new_plan() {
+    let home = net::plan_on(&[iface("wlan0", "192.168.1.42")], 80, "wlan0");
+    let other = net::plan_on(&[iface("wlan0", "10.1.2.57")], 80, "wlan0");
+    assert_ne!(home, other);
+    assert_eq!(other[0].addr, "10.1.2.57:80".parse::<SocketAddr>().unwrap());
+    assert!(net::plan_on(&[iface("lo", "127.0.0.1")], 80, "wlan0").is_empty(), "the Wi-Fi dropped: its socket goes");
+}
+
+/// The Wi-Fi's socket serves only the home network: a browser from the internet (a router forwarding port 80) is
+/// refused, and a Tailscale socket still takes only the tailnet.
+#[test]
+fn a_wifi_socket_takes_only_home_network_peers() {
+    let wifi = Listen { addr: "192.168.1.42:80".parse().unwrap(), iface: "wlan0".into(), index: 3, lan: true };
+    for yes in ["192.168.1.43", "10.1.2.3", "172.20.0.9", "169.254.3.4", "100.88.1.2", "::ffff:192.168.1.43"] {
+        assert!(net::peer_allowed_on(&wifi, ip(yes)), "{yes}");
+    }
+    for no in ["8.8.8.8", "203.0.113.5", "2a02:810::1", "fe80::1"] {
+        assert!(!net::peer_allowed_on(&wifi, ip(no)), "{no}");
+    }
+    let ts = Listen { addr: "100.77.1.2:80".parse().unwrap(), iface: "tailscale0".into(), index: 9, lan: false };
+    assert!(net::peer_allowed_on(&ts, ip("100.100.5.6")));
+    assert!(!net::peer_allowed_on(&ts, ip("192.168.1.43")), "a LAN device on the tailnet socket (weak host model)");
+}
+
+#[test]
+fn the_mdns_name_comes_from_avahis_title() {
+    assert_eq!(net::mdns_from_title("avahi-daemon: running [SM8250.local]\0").as_deref(), Some("sm8250.local"));
+    assert_eq!(net::mdns_from_title("avahi-daemon: running [pocket-2.local]").as_deref(), Some("pocket-2.local"));
+    assert_eq!(net::mdns_from_title("avahi-daemon: registering [SM8250.local]"), None, "not yet");
+    assert_eq!(net::mdns_from_title("avahi-daemon: running [evil.example]"), None);
+    assert_eq!(net::mdns_from_title("/usr/sbin/avahi-daemon -D"), None);
 }
 
 #[test]
@@ -185,20 +234,21 @@ fn tailscaled_status_and_whois_are_read() {
 
 /// docs/TRIMUI-BRICK-MORE.md: the Brick's card runs Tailscale in userspace when the firmware has no tunnel: no `tailscale0`, so the
 /// companion listens on 127.0.0.1 (where tailscaled hands tailnet connections), pairs every browser by code, and a browser may name the
-/// Pocket by its tailnet address. With a tunnel the plan is the usual one; a Wi-Fi address is never listened on.
+/// Pocket by its tailnet address. With a tunnel the plan is the usual one; the Wi-Fi is listened on either way (0.5).
 #[test]
 #[cfg(feature = "brick")]
 fn the_brick_card_listens_on_loopback_when_tailscale_runs_in_userspace() {
     let wifi = Iface { name: "wlan0".into(), addr: "192.168.7.7".parse().unwrap(), index: 3 };
     let lo = Iface { name: "lo".into(), addr: "127.0.0.1".parse().unwrap(), index: 1 };
     let plan = net::plan_userspace(&[lo.clone(), wifi.clone()], 80);
-    assert_eq!(plan.len(), 1);
+    assert_eq!(plan.len(), 2, "loopback for Tailscale and the Wi-Fi (0.5)");
     assert_eq!(plan[0].addr, "127.0.0.1:80".parse::<SocketAddr>().unwrap());
-    assert!(net::is_userspace(&plan[0]));
+    assert!(net::is_userspace(&plan[0]) && !plan[0].lan);
+    assert!(plan[1].lan && plan[1].iface == "wlan0" && !net::is_userspace(&plan[1]));
     let ts = Iface { name: "tailscale0".into(), addr: "100.77.1.2".parse().unwrap(), index: 9 };
-    let tunnel = net::plan_userspace(&[lo, wifi, ts.clone()], 80);
-    assert_eq!(tunnel, net::plan(&[ts], 80), "a tunnel: bound to tailscale0 as everywhere");
-    assert!(!net::is_userspace(&tunnel[0]));
+    let tunnel = net::plan_userspace(&[lo, wifi.clone(), ts.clone()], 80);
+    assert_eq!(tunnel, net::plan(&[wifi, ts], 80), "a tunnel: bound to tailscale0 and the Wi-Fi as everywhere");
+    assert!(tunnel.iter().all(|l| !net::is_userspace(l)));
     // Without the card (every other device) the plan has no loopback listener at all.
     assert!(net::plan(&[], 80).is_empty());
     let me = SelfNode::parse(r#"{"Self":{"UserID":1,"HostName":"brick","DNSName":"brick.tail1234.ts.net.","TailscaleIPs":["100.70.1.10","fd7a:115c:a1e0::1","192.168.7.7"]}}"#).unwrap();
@@ -566,6 +616,11 @@ fn rig_with(name: &str, owner: bool, history: Option<super::HistorySource>) -> R
 
 /// A rig whose server's `Ctx` is changed by `tune` first (deadlines, history).
 fn rig_ctx(name: &str, owner: bool, tune: impl FnOnce(&mut Ctx)) -> Rig {
+    rig_full(name, owner, false, tune)
+}
+
+/// A rig whose one socket is `lan`, the Wi-Fi's (browsers on the home network), or the Tailscale socket.
+fn rig_full(name: &str, owner: bool, lan: bool, tune: impl FnOnce(&mut Ctx)) -> Rig {
     let root = tmp(name);
     let roms = root.join("roms");
     std::fs::create_dir_all(roms.join("gba")).unwrap();
@@ -604,7 +659,7 @@ fn rig_ctx(name: &str, owner: bool, tune: impl FnOnce(&mut Ctx)) -> Rig {
         Some(crate::image::Image { w: 4, h: 4, px: vec![0x00ff_0000; 16] })
     });
     tune(&mut ctx);
-    let listen = Listen { addr: "127.0.0.1:0".parse().unwrap(), iface: "lo".into(), index: 0 };
+    let listen = Listen { addr: "127.0.0.1:0".parse().unwrap(), iface: "lo".into(), index: 0, lan };
     let server = super::server::Server::start(ctx, Some(vec![listen])).unwrap();
     let deadline = Instant::now() + crate::testutil::timeout(Duration::from_secs(5));
     let addr = loop {
@@ -805,6 +860,86 @@ fn a_stranger_on_the_tailnet_needs_a_code() {
     assert_eq!(r.req("GET", "/api/library", &[], b"").status, 401);
 }
 
+/// 0.5, Alex: a browser on the home Wi-Fi gets in with the code shown on the Pocket and stays paired; without the code
+/// it gets nothing, even from an address that Tailscale would call the owner's (the Wi-Fi socket never asks Tailscale).
+/// Red before: `Conn` had no Wi-Fi side and the owner's `whois` answer let such a browser in without a code.
+#[test]
+fn a_browser_on_the_wifi_gets_in_with_the_code_and_not_without() {
+    let r = rig_full("api-lan", true, true, |_| {});
+    for path in ["/api/library", "/api/games?system=gba", "/api/stats", "/api/uploads", "/api/screenshot", "/api/battery"] {
+        assert_eq!(r.req("GET", path, &[], b"").status, 401, "{path} without a code");
+    }
+    assert_eq!(r.req("GET", "/api/session", &[], b"").json()["signedIn"], false, "Tailscale's owner answer does not count on the Wi-Fi");
+    // A wrong code gets nothing either.
+    *r.shared.pairing.lock().unwrap() = Some(Pairing { code: "246810".into(), until: Instant::now() + Duration::from_secs(60), tries_left: 5 });
+    let wrong = r.req("POST", "/api/pair", &[("Content-Type", "application/json")], br#"{"code":"111111"}"#);
+    assert_eq!(wrong.status, 403);
+    assert_eq!(wrong.json()["error"], api::NOT_PAIRED);
+    // The code on the Pocket: paired, and it stays so (cookie for a year, as over Tailscale).
+    let (cookie, csrf) = r.pair();
+    assert!(r.shared.sessions.lock().unwrap().browsers.iter().all(|b| !b.name.contains("laptop")), "no Tailscale device name on the Wi-Fi");
+    let s = r.req("GET", "/api/session", &[("Cookie", &cookie)], b"").json();
+    assert_eq!(s["via"], "paired");
+    assert_eq!(r.req("GET", "/api/library", &[("Cookie", &cookie)], b"").status, 200);
+    let lib = r.req("GET", "/api/games?system=gba", &[("Cookie", &cookie)], b"").json();
+    let id = lib["games"][0]["id"].as_str().unwrap().to_string();
+    let star = r.req("POST", "/api/game/favorite", &[("Cookie", &cookie), ("X-CSRF-Token", &csrf)], format!(r#"{{"id":"{id}","on":true}}"#).as_bytes());
+    assert_eq!(star.status, 200, "writes work with the token");
+    // Revoked on the Pocket: out again.
+    let bid = r.shared.sessions.lock().unwrap().browsers[0].id.clone();
+    r.shared.sessions.lock().unwrap().revoke(&bid);
+    assert_eq!(r.req("GET", "/api/library", &[("Cookie", &cookie)], b"").status, 401);
+}
+
+/// The Pocket's mDNS name ("sm8250.local") is one of its own names on the Wi-Fi; another `.local` name is not.
+#[test]
+fn the_mdns_name_is_served_on_the_wifi() {
+    let r = rig_full("api-lan-name", false, true, |_| {});
+    assert_eq!(r.raw(b"GET / HTTP/1.1\r\nHost: sm8250.local\r\n\r\n").status, 421, "unknown before avahi said it");
+    *r.shared.lan_name.lock().unwrap() = Some("sm8250.local".into());
+    assert_eq!(r.raw(b"GET / HTTP/1.1\r\nHost: SM8250.local\r\n\r\n").status, 200);
+    assert_eq!(r.raw(b"GET / HTTP/1.1\r\nHost: other.local\r\n\r\n").status, 421, "DNS rebinding stays refused");
+}
+
+/// "Binding when Wi-Fi changes": the supervisor follows the Wi-Fi's address (a new network, then none) within its
+/// recheck; the old socket closes, the page's Wi-Fi list follows.
+#[test]
+fn the_server_follows_the_wifi_address() {
+    let root = tmp("api-lan-follow");
+    let data = root.join("data");
+    std::fs::create_dir_all(&data).unwrap();
+    let shared = Shared::new(data, root.join("es_systems.cfg"), Prefs { enabled: true, ..Prefs::default() });
+    let ctx = Ctx::new(shared.clone(), Roots::under(&root.join("roms")), Box::new(FakeTailnet { peers: Arc::new(Mutex::new(HashMap::new())) }));
+    let wifi: Arc<Mutex<Vec<Listen>>> = Arc::new(Mutex::new(vec![Listen { addr: "127.0.0.1:0".parse().unwrap(), iface: "lo".into(), index: 0, lan: true }]));
+    let source = wifi.clone();
+    let server = super::server::Server::start_with(ctx, Some(Arc::new(move || source.lock().unwrap().clone())), Duration::from_millis(50)).unwrap();
+    let wait = |what: &str, ok: &dyn Fn(&[SocketAddr]) -> bool| {
+        let deadline = Instant::now() + crate::testutil::timeout(Duration::from_secs(5));
+        loop {
+            let lan = shared.lan.lock().unwrap().clone();
+            if ok(&lan) {
+                return lan;
+            }
+            assert!(Instant::now() < deadline, "{what}: {lan:?}");
+            std::thread::sleep(Duration::from_millis(10));
+        }
+    };
+    let first = wait("the first Wi-Fi address", &|l| l.len() == 1)[0];
+    assert!(TcpStream::connect(first).is_ok());
+    // Another network: another address (127.0.0.2 stands in for it).
+    *wifi.lock().unwrap() = vec![Listen { addr: "127.0.0.2:0".parse().unwrap(), iface: "lo".into(), index: 0, lan: true }];
+    let second = wait("the new Wi-Fi address", &|l| l.len() == 1 && l[0].ip() != first.ip())[0];
+    assert_eq!(second.ip(), ip("127.0.0.2"));
+    assert!(TcpStream::connect(second).is_ok());
+    assert!(TcpStream::connect(first).is_err(), "the old network's socket is closed");
+    // The Wi-Fi dropped: nothing listens on it any more.
+    wifi.lock().unwrap().clear();
+    wait("no Wi-Fi", &|l| l.is_empty());
+    assert!(shared.listening.lock().unwrap().is_empty());
+    assert!(TcpStream::connect(second).is_err());
+    server.stop();
+}
+
 #[test]
 fn while_a_game_runs_only_small_requests_are_answered() {
     let r = rig("api-playing", false);
@@ -923,12 +1058,12 @@ fn library_lists_search_and_stats() {
 #[test]
 #[ignore = "timing tier: scripts/test-timing.sh (serial)"]
 fn timing_a_socket_tied_to_an_interface_takes_nothing_from_another() {
-    let lo = Listen { addr: "127.0.0.1:0".parse().unwrap(), iface: "lo".into(), index: 0 };
+    let lo = Listen { addr: "127.0.0.1:0".parse().unwrap(), iface: "lo".into(), index: 0, lan: false };
     let s = net::bind(&lo).expect("bind to lo");
     let addr = s.local_addr().unwrap();
     assert!(TcpStream::connect_timeout(&addr, crate::testutil::timeout(Duration::from_secs(2))).is_ok(), "the right interface answers");
     let Some(other) = net::interfaces().into_iter().map(|i| i.name).find(|n| n != "lo") else { return };
-    let tied = Listen { addr: "127.0.0.1:0".parse().unwrap(), iface: other, index: 0 };
+    let tied = Listen { addr: "127.0.0.1:0".parse().unwrap(), iface: other, index: 0, lan: false };
     let s = match net::bind(&tied) {
         Ok(s) => s,
         // Without CAP_NET_RAW on an old kernel the option can't be set: nothing to check here.
@@ -1070,7 +1205,7 @@ fn a_taken_port_is_reported_not_waited_for() {
     let busy = tmp("busy");
     let shared = Shared::new(busy.to_path_buf(), PathBuf::from("/nonexistent/es_systems.cfg"), Prefs { enabled: true, ..Prefs::default() });
     let ctx = Ctx::new(shared.clone(), Roots::under(Path::new("/nonexistent")), Box::new(FakeTailnet { peers: Arc::new(Mutex::new(HashMap::new())) }));
-    let _server = super::server::Server::start(ctx, Some(vec![Listen { addr, iface: "lo".into(), index: 0 }])).unwrap();
+    let _server = super::server::Server::start(ctx, Some(vec![Listen { addr, iface: "lo".into(), index: 0, lan: false }])).unwrap();
     let deadline = Instant::now() + crate::testutil::timeout(Duration::from_secs(5));
     while shared.problem.lock().unwrap().is_none() {
         assert!(Instant::now() < deadline, "no reason given");
@@ -1116,7 +1251,7 @@ fn timing_a_connection_that_waited_in_the_queue_has_had_its_time() {
     let shared = Shared::new(queued.to_path_buf(), PathBuf::from("/nonexistent/es_systems.cfg"), Prefs::default());
     let mut ctx = Ctx::new(shared.clone(), Roots::under(Path::new("/nonexistent")), Box::new(FakeTailnet { peers: Arc::new(Mutex::new(HashMap::new())) }));
     ctx.deadline = Duration::from_millis(400);
-    let conn = api::Conn { peer, local: stream.local_addr().unwrap(), accepted: Instant::now() - Duration::from_secs(2) };
+    let conn = api::Conn { peer, local: stream.local_addr().unwrap(), accepted: Instant::now() - Duration::from_secs(2), lan: false };
     let t = Instant::now();
     api::handle(&ctx, &conn, stream);
     assert!(t.elapsed() < crate::testutil::timeout(Duration::from_millis(200)), "it waited {:?} for a head whose time was up", t.elapsed());
@@ -1287,6 +1422,33 @@ fn a_games_screenshots_are_listed_and_served_read_only() {
     assert_eq!(get(&format!("/api/shot?id={id}&at=2026-10-27%2010-00-00")).status, 404);
     // Nothing writes: a POST is no way in.
     assert_ne!(r.req("POST", "/api/shot", &[("Cookie", &cookie)], b"{}").status, 200);
+}
+
+/// The pictures of the player's shelf are listed on the library page by time and served read only by `/api/shot?shelf=1`;
+/// a game's page and the other folders stay out of it.
+#[test]
+fn the_pictures_of_the_shelf_are_listed_and_served_read_only() {
+    let r = rig("api-shelf-pictures", false);
+    let (cookie, _) = r.pair();
+    let get = |p: &str| r.req("GET", p, &[("Cookie", &cookie)], b"");
+    assert_eq!(get("/api/library").json()["shelfPictures"], serde_json::json!([]), "none made yet: an empty list, not a missing field");
+    let dir = r.root.join("roms/screenshots/shelf");
+    std::fs::create_dir_all(&dir).unwrap();
+    let png = crate::screenshot::encode_rgb(2, 2, &[5; 12]).unwrap();
+    std::fs::write(dir.join("pocket-ui shelf 2026-11-12 20-00-00.png"), &png).unwrap();
+    std::fs::write(dir.join("pocket-ui shelf 2026-11-13 08-30-00.png"), &png).unwrap();
+    std::fs::write(dir.join("notes 2026-11-13 08-30-00.png"), &png).unwrap();
+    let lib = get("/api/library").json();
+    assert_eq!(lib["shelfPictures"], serde_json::json!(["2026-11-13 08-30-00", "2026-11-12 20-00-00"]), "newest first, only the shelf's own");
+    assert!(!lib.to_string().contains("screenshots"), "no path in the page's data: {lib}");
+    let one = get("/api/shot?shelf=1&at=2026-11-12%2020-00-00");
+    assert_eq!((one.status, one.header("content-type").as_deref(), one.body.as_slice()), (200, Some("image/png"), png.as_slice()));
+    for evil in ["../../secret", "..%2Fgba%2Fx", "2026-11-12%2020-00-00.png", "", "2026-01-01%2000-00-00"] {
+        assert_eq!(get(&format!("/api/shot?shelf=1&at={evil}")).status, 404, "{evil}");
+    }
+    assert_eq!(get("/api/shot?shelf=1").status, 404);
+    std::fs::write(dir.join("pocket-ui shelf 2026-11-14 09-00-00.png"), b"<html>").unwrap();
+    assert_eq!(get("/api/shot?shelf=1&at=2026-11-14%2009-00-00").status, 404, "a file that is no PNG is not passed on");
 }
 
 /// F9: the reserve holds against uploads at the same time, and a card whose free space can't be read takes nothing.

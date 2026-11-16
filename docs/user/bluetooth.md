@@ -34,10 +34,10 @@ don't use any more, or after switching an 8BitDo pad to another mode (D, S, X): 
 own, so forget the one you no longer use.
 
 **Your controller's buttons.** Each controller can have its own layout, kept for that controller (two of the same
-model are told apart) and used again whenever it reconnects: Settings → Playing → Buttons →
+model are told apart) and used again whenever it reconnects: Settings → Controls →
 [Controller setup](controls-settings.md#controller-setup). Xbox, PlayStation, Switch Pro and 8BitDo controllers are
-recognised with their triggers and sticks. To see what a controller really sends, Settings → Help & tools →
-[Test buttons](settings-system.md#test-buttons) lights up every button, trigger and stick as you press it.
+recognised with their triggers and sticks. To see what a controller really sends, Settings → Controls →
+[Test buttons](settings-sound.md#test-buttons) lights up every button, trigger and stick as you press it.
 
 **Headphones and speakers** pair the same way: put them in pairing mode, search, select them and press A. Their row
 says Audio. Once they are connected, the sound of the menus and games plays on them. A short delay is normal with

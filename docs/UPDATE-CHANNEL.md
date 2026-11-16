@@ -119,6 +119,11 @@ Public Brick releases may also use `X.Y.Z.W` for a Brick-only hotfix. If it beco
 its notes must direct other handhelds to their unchanged ROCKNIX release; the stable channel stays unchanged.
 `scripts/test-brick-hotfix-version.py` checks the real publishers' channel and version validation without signing.
 
+## The dArkOS port
+
+`updates/darkos/` (releases) and `updates/darkos-test/` (betas): the Brick card's component format with `target: darkos-port`,
+no `os` entry and an app carrying `DARKOS-PORT`. Channels, versions and how a release fills both lists: [DARKOS.md](DARKOS.md#channels-and-versions-from-05).
+
 ## Android APK channel
 
 Android reads its own signed list at `https://pocketui.xyz/updates/android/update.json`, plus
@@ -405,6 +410,41 @@ machine), a device fetching from the public channel.
   replayed old list is refused instead of only hiding a newer version.
 - A download page on the website that reads `sd_image` and `install_zip` from the list.
 
+## The update file (no Wi-Fi)
+
+For handhelds without Wi-Fi (RG28XX, R36S) or with Wi-Fi off, every release also has one file per kind of card,
+`pocket-ui-update-<version>-rocknix.zip`, `…-trimui.zip` and `…-darkos.zip`, uploaded to the GitHub release next to the
+other assets. The player copies it onto the card as it is ([updates.md](user/updates.md#no-wi-fi-update-from-the-card));
+the device's side is `update::card`.
+
+What is in it, all stored (not compressed), made by `scripts/make-card-update.py --channel <channel folder> [--assets
+<folder> …] --out <dir>` (same input, same bytes; `SOURCE_DATE_EPOCH` sets the entries' time):
+
+| Entry | What |
+|---|---|
+| `update.json`, `update.json.sig` | the channel's signed list, byte for byte (stable, brick or darkos) |
+| the app's tarball | the file the list's `app` names, found by its signed size and SHA-256 |
+| `assets/<name>` | Brick and dArkOS: every component package the tarball's `asset-packages.json` names that the given folders hold (`--all-assets` fails on a missing one) |
+| `README.txt` | where to copy it, for a person who opens the zip |
+
+No new key and no new format: the device checks the list's signature with `store::PUBLIC_KEY`, takes only its `app`
+(never `os`), requires the card's channel (`target: darkos-port` for dArkOS, the `pocket-ui-brick-` tarball for the Brick,
+the `-aarch64` tarball for ROCKNIX), a newer version and a release build, and finds the tarball by its hash. The install is
+`install_app` / `update::install` unchanged; only `download_checked` takes each file from the update file
+(`card::from_bundle`, checked by size and SHA-256 like a download) and never asks a server during it. After a good install
+the file is deleted (`/flash` is remounted writable for that moment); a file that isn't newer is passed over in silence.
+
+Where the device looks (`card::places_for`): ROCKNIX `/flash`, `/storage/games-external` (the RG28XX's GAMES drive or a
+games card in the second slot) and `/storage/roms`; Brick the card's root and `pocket-ui/`; dArkOS the games part over
+`ports/pocket-ui` and the port folder. `POCKETUI_CARD_PLACES` (paths, `:`-separated) replaces them for tests and device
+checks; `POCKETUI_CARD_UPDATE=<version>` under `POCKETUI_MOCK` stands for a good file in journeys. A real file is checked
+against the real key with `POCKETUI_CARD_UPDATE_FILE=<zip> POCKETUI_CARD_UPDATE_FROM=<older version>
+POCKETUI_CARD_UPDATE_TARGET=<rocknix|trimui|darkos> cargo test --lib a_real_update_file -- --ignored`.
+
+Releasing: after step 4 (the list is signed), `scripts/make-card-update.py --channel site-updates/updates/stable --out
+site-updates/github` adds the ROCKNIX file to the release's assets; the Brick's and dArkOS' with their channel folder and
+`--assets` of their release folder. Sizes 15–25 MB (dArkOS with all its packages: 16 MB).
+
 ## Small standalone-card updates (public Brick channel)
 
 All public Brick clients support `mirrors`. New Brick app and component packages use GitHub as `url`
@@ -429,7 +469,8 @@ one-file package with signed primary/fallback URLs. From 0.3.2 the cheat databas
 `assets/` and the release folder; release preflight checks this optional URL too. Only opening Options → Cheats downloads
 it, via RAM first, then paced card writes after curl exits. The verified pack stays in
 `storage/pocket-ui/cheats/cht.pack` across app updates. Existing legacy packs are read from `app/` or `app.previous/`
-and copied into persistent storage before a later app swap. The app tar's verified hash authenticates
+and moved (renamed, not rewritten: the 31 MB pack cost 31 MB of card writes when it was copied) into persistent storage
+before a later app swap; a link is copied. The app tar's verified hash authenticates
 this inventory. Neither the publisher nor the device accepts packages over 80,000,000 bytes.
 
 A matching installed immutable asset is hashed and moved into `app.new` with a durable recovery
@@ -441,6 +482,15 @@ executables or player data: allowed paths are cores, BIOS data and the exact six
 Free space includes inherited data, one temporary component and reserve; cancellation and all
 failures leave `app` active. Only after every asset passes does the existing ready/pending/rename
 sequence run. There is no binary patching and no dependency on one specific previous version.
+
+The app archive itself is also unpacked only where it differs from the running `app/` (no change to the package format):
+`update/brick_delta.rs` compares every file of the verified tarball with the installed one by size and SHA-256 and, after the
+build has been checked, renames unchanged whole folders and unchanged files of 64 KiB and more from `app/` into `app.new/` with
+`move:` lines in the same recovery manifest (docs/TRIMUI-BRICK-REMOTE.md, "Unchanged parts of the app itself"). On a
+`sync`-mounted FAT32 image (32 KiB clusters, `scripts/brick-update-bench.sh`) 0.3.2 to 0.4.0 wrote 68.2 MB unpacking everything and
+33.2 MB this way (51,700 write I/Os against 17,400); the two programs are most of what remains. Only an updater that has this code does it, so the saving begins with the
+update after the one that brings it. The release check measures nothing here: a release whose files are all new simply unpacks
+all of them.
 
 `release-channel.sh --check` checks every embedded asset source after verifying the app tar,
 including the fallback URL. It publishes nothing. The cores' sources remain provided alongside the full

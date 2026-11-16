@@ -71,6 +71,7 @@ impl App {
             runs_on: self.system_runs_on(s),
             bios: consoles::bios_status(&sys.name, &pocket_ui::hostsys::bios_dir()),
             achievements: self.console_achievements(s),
+            colour: (!pocket_ui::system_art::colours_of(&sys.name).is_empty()).then(|| pocket_ui::system_art::colour_name(&sys.name)),
         };
         Some(Page::new(data))
     }
@@ -290,6 +291,19 @@ impl App {
             }
             Out::Credits => self.open_credits(),
             Out::Open(link) => self.follow_link(link),
+            // The console in its next colour, everywhere at once: the shelf card, this page, the start and the way out.
+            Out::Colour(step) => {
+                let s = open.system;
+                if let Some(name) = self.systems.get(s).map(|sys| sys.name.clone()) {
+                    if pocket_ui::system_art::step_colour(&name, step) {
+                        if let Some(open) = self.console.as_mut() {
+                            open.page.data.colour = Some(pocket_ui::system_art::colour_name(&name));
+                        }
+                        self.console_look_changed();
+                        self.save_settings();
+                    }
+                }
+            }
         }
     }
 
@@ -338,8 +352,8 @@ impl App {
         true
     }
 
-    /// `--snapshot console:<system>[:sources|:credits][:<n>]`: the system's console page, its sources with `sources`,
-    /// Credits & links with `credits`.
+    /// `--snapshot console:<system>[:sources|:credits][:keys=<l|r>...][:<n>]`: the system's console page, its sources with `sources`,
+    /// Credits & links with `credits`, `keys=rr` Left/Right pressed on it (the colour).
     pub(crate) fn console_snapshot(&mut self, rest: &str) {
         ASSUME_POCKET_CORE.store(true, Ordering::Relaxed);
         let id = rest.split(':').next().unwrap_or_default();
@@ -354,6 +368,10 @@ impl App {
             if let Some(open) = self.console.as_mut() {
                 open.page.press(Button::West);
             }
+        }
+        // `keys=lr`: Left (l) and Right (r) pressed on the page, through the same handler as a pad's.
+        for key in rest.split(':').find_map(|p| p.strip_prefix("keys=")).unwrap_or_default().chars() {
+            self.console_input(if key == 'l' { Button::Left } else { Button::Right });
         }
         if rest.split(':').any(|p| p == "credits") {
             // As on the device a moment after the start: Curator's catalog is there.
@@ -400,6 +418,11 @@ impl App {
                 self.prev_sel = self.sel;
             }
         }
+        // `:menu` keeps the translated menu cases in view, also in Cabinet (the default may select Favourites' games).
+        if rest.split(':').nth(2) == Some("menu") {
+            self.sel = self.items.iter().position(|i| *i == Item::Search).unwrap_or(0);
+            self.prev_sel = self.sel;
+        }
         self.moved_at = Instant::now() - Duration::from_secs(2);
     }
 
@@ -411,12 +434,18 @@ impl App {
     /// the measured frame includes the reduction to the panel (`scaled_layout::ScaledFrame::render`).
     /// An optional `:<system>` after the look uses that system's games, capped at 120 moves each way;
     /// Cabinet then moves between books with Right/Left rather than between shelves with Down/Up.
+    /// A final `:settled` paints 100 ms after each press, including Easy’s newly visible neighbour fronts.
     pub(crate) fn bench_shelf(&mut self, look: &str, w: u32, h: u32) -> ShelfBench {
         let mut parts = look.split(':');
         let look = parts.next().unwrap_or("split");
         let system = parts.next();
+        let moment = if parts.next() == Some("settled") { Duration::from_millis(100) } else { pocket_ui::frame_clock::frames(1) };
         self.shelf_snapshot(&format!(":{look}"));
-        if let Some(s) = system.and_then(|id| self.systems.iter().position(|s| s.name == id)) {
+        if look == "big" {
+            self.theme = Theme::Big;
+            self.rebuild();
+        }
+        if let Some(s) = system.filter(|_| look != "big").and_then(|id| self.systems.iter().position(|s| s.name == id)) {
             self.screen = Screen::Games(s);
             self.rebuild();
         }
@@ -427,62 +456,88 @@ impl App {
         self.rebuild();
         self.sel = Item::first_row(&self.items);
         self.prev_sel = self.sel;
-        let mut buf = vec![0u32; (w * h) as usize];
         pocket_ui::status_corner::start(|| {});
         self.text.prewarm();
         self.text.finish_prewarm();
         let cpu = || pocket_ui::run_ahead::thread_cpu_ms() * 1000.0;
-        let frame = |app: &mut App, buf: &mut [u32]| {
-            app.motion_frame_begin(Instant::now());
-            app.paint_in_appearance(buf, w, h, &mut |app, c| {
-                app.paint(c);
-                app.motion_after_paint(c);
-                app.sys.paint(c, &mut app.text, app.menu.is_none());
-                app.paint_leave(c);
-            });
-        };
+        // A small panel's frame as on the device: the design canvas and the live reduction, or painted natively
+        // (`POCKETUI_PAINT`, `scaled_layout::ScaledFrame::render`). A panel of the canvas's own size is painted as is.
+        // `POCKETUI_SNAPSHOT_NATIVE`'s probe (the page laid out at the panel's own size) is painted as it is.
+        let panel = crate::snapshot_panel_dims();
+        let direct = pocket_ui::scaled_layout::logical_size(panel) != (w, h);
+        let mut scaler = pocket_ui::scaled_layout::ScaledFrame::default();
+        let mut screen = vec![0u32; if direct { (w * h) as usize } else { panel.0 as usize * panel.1 as usize }];
+        let mut frame = |app: &mut App| app.device_frame(&mut scaler, &mut screen, panel, direct.then_some((w, h)));
         // Once over the whole list first: every picture is in the cache, as after the first few moves on the device
         // (snapshots decode on the spot; on the device the loader's thread has long been done).
         let last = self.items.len().saturating_sub(1).min(if system.is_some() { 120 } else { usize::MAX });
-        let (next, previous) = if system.is_some() && look == "cabinet" { (Button::Right, Button::Left) } else { (Button::Down, Button::Up) };
+        let (next, previous) = if look == "big" || (system.is_some() && look == "cabinet") { (Button::Right, Button::Left) } else { (Button::Down, Button::Up) };
         let moves: Vec<Button> = std::iter::repeat_n(next, last).chain(std::iter::repeat_n(previous, last)).collect();
+        // Every machine sees the same first refresh, not a smaller turn just because the last frame was faster.
+        // Browse continuously, one move per refresh (or per settled sample).
+        pocket_ui::frame_clock::hold();
+        let step = |app: &mut App, b| {
+            app.step(b);
+            app.moved_at = pocket_ui::frame_clock::now();
+            pocket_ui::frame_clock::step(moment);
+        };
         for _ in 0..2 {
             for b in &moves {
-                self.step(*b);
-                frame(self, &mut buf);
+                step(self, *b);
+                frame(self);
             }
         }
         let mut us = Vec::new();
-        let (glyphs, patterns) = (self.text.drawn_on_the_spot(), self.text.pattern_runs());
+        let mut changes = 0;
+        let (glyphs, patterns, passes) = (self.text.drawn_on_the_spot(), self.text.pattern_runs(), pocket_ui::gfx::design_passes());
         let mut worst = (0.0, String::new());
-        // A small panel's frame is the logical canvas plus the live reduction (`scaled_layout`), as on the device.
-        let panel = crate::snapshot_panel_dims();
-        let mut scaler = pocket_ui::scaled_layout::ScaledFrame::default();
-        let mut screen = vec![0u32; panel.0 as usize * panel.1 as usize];
         for b in &moves {
-            self.step(*b);
+            let previous = self.sel;
+            step(self, *b);
+            changes += usize::from(self.sel != previous);
             let t = cpu();
-            if panel == (w, h) {
-                frame(self, &mut buf);
-            } else {
-                scaler.render(&mut screen, panel, &mut |p, _, _| frame(self, p));
-            }
+            frame(self);
             let took = cpu() - t;
             if took > worst.0 {
                 worst = (took, format!("{:?}", self.items.get(self.sel)));
             }
             us.push(took);
         }
+        pocket_ui::frame_clock::thaw();
         us.sort_by(f64::total_cmp);
         let at = |q: f64| us.get(((us.len() as f64 - 1.0) * q).round() as usize).copied().unwrap_or(0.0);
         ShelfBench {
             moves: us.len(),
+            changes,
+            moment_ms: moment.as_secs_f64() * 1000.0,
             p50_us: at(0.5),
             p95_us: at(0.95),
             max_us: at(1.0),
             glyphs: self.text.drawn_on_the_spot() - glyphs,
             patterns: self.text.pattern_runs() - patterns,
             worst: worst.1,
+            design_passes: (pocket_ui::gfx::design_passes() - passes) as f64 / us.len().max(1) as f64,
+        }
+    }
+}
+
+impl App {
+    /// One frame as `draw` paints it on the device, for the benches: the page, what goes over it and the reduction
+    /// to `panel` (`ScaledFrame::render`, native or scaled as POCKETUI_PAINT says) into `screen`; with `design` the
+    /// design canvas of that size as it is (`POCKETUI_SNAPSHOT_NATIVE`'s probe, a panel of the canvas's own size).
+    pub(crate) fn device_frame(&mut self, scaler: &mut pocket_ui::scaled_layout::ScaledFrame, screen: &mut [u32], panel: (u32, u32), design: Option<(u32, u32)>) {
+        self.motion_frame_begin(pocket_ui::frame_clock::now());
+        let mut paint = |c: &mut Canvas| {
+            self.paint_in_appearance(c, &mut |app, c| {
+                app.paint(c);
+                app.motion_after_paint(c);
+                app.sys.paint(c, &mut app.text, app.menu.is_none());
+                app.paint_leave(c);
+            })
+        };
+        match design {
+            Some((w, h)) => paint(&mut Canvas::new(screen, w, h)),
+            None => scaler.render(screen, panel, &mut paint),
         }
     }
 }
@@ -490,10 +545,14 @@ impl App {
 /// What `App::bench_shelf` measured: the first frame after a move on Home, over all moves.
 pub(crate) struct ShelfBench {
     pub moves: usize,
+    pub changes: usize,
+    pub moment_ms: f64,
     pub p50_us: f64,
     pub p95_us: f64,
     pub max_us: f64,
     pub glyphs: usize,
     pub patterns: usize,
     pub worst: String,
+    /// Painted natively: how often a frame still went through `Canvas::design` (code not native yet), per move.
+    pub design_passes: f64,
 }

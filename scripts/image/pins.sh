@@ -92,16 +92,27 @@ sm8250_pins() {
   [ "$SM8250_MODEL" != rp-mini-v2 ] || SM8250_DTB_FILE=miniv2-noufs.dtb
 }
 
-# Partition table of the ROCKNIX image, kept as it is (sectors of 512 bytes).
+# Partition table of the ROCKNIX image (sectors of 512 bytes): p1 and the start of p2 are kept as they are.
 P1_START=32768
 P1_SIZE=4194304
 P2_START=4227072
-P2_SIZE=65536
-# ROCKNIX's STORAGE as it comes on every base image we use (SM8250, SM8550, H700 DDR4 and DDR3; read with dumpe2fs on 2026-11-08):
-# ext4, 8192 blocks of 4 KiB with a 4 MiB journal (the smallest ext4 allows at this block size), 7027 of them free. build.sh checks
-# it before it writes; scripts/image/storage-budget.sh adds up what goes in. The room we keep free on top of the programs is
-# P2_MIN_HEADROOM_BLOCKS: about two releases of growth (0.3.0 to 0.3.1 took 67 blocks).
-P2_FREE_BLOCKS=7027
+# ROCKNIX's STORAGE is a 32 MiB ext4 (8192 blocks of 4 KiB with a 4 MiB journal, the smallest ext4 allows at this block size) on
+# every base image we use (SM8250, SM8550, H700 DDR4 and DDR3; read with dumpe2fs on 2026-11-08), 7027 blocks of it free. The
+# base image's size and the tail after p2 (1 MiB: room for the second GPT) are what build.sh starts from.
+P2_ROCKNIX_SIZE=65536
+P2_ROCKNIX_FREE_BLOCKS=7027
+IMG_ROCKNIX_BYTES=2198863872
+# Ours: STORAGE is 128 MiB (the most one ext4 block group holds at this block size), so the programs can grow by many releases
+# and the budget is never a fight over a few KB (0.4.2 had 307 blocks spare; the ROCKNIX 32 MiB took pocket-ui to its limit).
+# build.sh grows the partition and the file system before it writes anything; the first boot still grows STORAGE over the whole
+# card (ROCKNIX's fs-resize), which scripts/image/grow-check.sh proves for 8 GB to 2 TB. The new space is zeros: the .img.xz
+# does not grow with it. The image is 96 MiB longer than ROCKNIX's.
+P2_SIZE=262144
+IMG_BYTES=$((IMG_ROCKNIX_BYTES + (P2_SIZE - P2_ROCKNIX_SIZE) * 512))
+# Free blocks of a finished STORAGE before anything is written (dumpe2fs after the resize; build.sh checks it before it writes);
+# scripts/image/storage-budget.sh adds up what goes in against it. The room we keep free on top of the programs is
+# P2_MIN_HEADROOM_BLOCKS (images; the 0.3.1 receipts pin 128) and storage-budget.sh's 512 for the release programs.
+P2_FREE_BLOCKS=31603
 P2_MIN_HEADROOM_BLOCKS=128
 
 # ---------------------------------------------------------------------------------------------------------------
@@ -134,12 +145,15 @@ H700_DDR3_LOADER_MD5=ca112618836167777a47d2fde901e258
 H700_DDR3_EXTLINUX_MD5=56f3b5ff7f6fd26d8a3a915fa68a0570
 # Models: "<image name> <dtb in device_trees/ without .dtb> <md5 of that dtb> <model string in the tree>".
 # The panel variants (rg35xx-plus-r6, rg35xx-sp-v2: image names, the trees are ...-rev6-panel and ...-v2-panel) are newer screen revisions with their own tree, and
-# their model string is the plain model's. The other models are untested expectations (same image, same U-Boot, their own
-# tree); the md5s are those of ROCKNIX 20261001's device_trees/. The remaining panel trees (rg35xx-2024-rev6-panel,
-# rg35xx-h-rev6-panel, rg40xx-h-v2-panel, rg40xx-v-v2-panel, rg34xx-sp-v2-panel) are not built yet. DDR4 for all: ROCKNIX's
-# config.xml lists every tree under both DDR4 and DDR3 and names no model; its only DDR3 file is an overlay named for the
-# RG35XX 2024. A line with "ddr3" as its fifth field is the same model on the DDR3 image (rg40xx-h-ddr3: the 0.2.0 download for
-# RG40XX H units that stay black on the plain card); the other models are DDR4 only so far.
+# their model string is the plain model's (rg34xx-sp-v2: the RG34XX-SP's v2 panel tree, same "Anbernic RG34XX-SP"). The other
+# models are untested expectations (same image, same U-Boot, their own tree); the md5s are those of ROCKNIX 20261001's
+# device_trees/. The remaining panel trees (rg35xx-2024-rev6-panel, rg35xx-h-rev6-panel, rg40xx-h-v2-panel, rg40xx-v-v2-panel)
+# are not built yet. ROCKNIX's config.xml lists every tree under both DDR4 and DDR3 and names no model; its only DDR3 file is an
+# overlay named for the RG35XX 2024 (it only sets reg_dcdc3, the RAM rail, to 1.2 V, so it fits every H700 tree). A line with
+# "ddr3" as its fifth field is the same model on the DDR3 image: rg40xx-h-ddr3 (the 0.2.0 download for RG40XX H units that stay
+# black on the plain card); rg34xx-sp-v2-ddr3 for the 2026 RG34XX-SP batch (Metallic Blue: LPDDR3 and the v2 screen, a player's
+# report of 2026-11-14); rg-sp-ddr3, because a measured RG-SP is LPDDR3 (vdd-dram 1.2 V, stock boot0 dram_type 7). See
+# docs/SD-IMAGE.md "RAM type".
 H700_MODELS="
 rg35xx-plus sun50i-h700-anbernic-rg35xx-plus 7772960532233e284871ede57ba50426 Anbernic_RG35XX_Plus
 rg35xx-sp sun50i-h700-anbernic-rg35xx-sp 954098e16c57c69095a5db14822e4720 Anbernic_RG35XX_SP
@@ -156,6 +170,9 @@ rgcubexx sun50i-h700-anbernic-rgcubexx 7487cada10ee1c8516d9391386d25522 Anbernic
 rg35xx-plus-r6 sun50i-h700-anbernic-rg35xx-plus-rev6-panel c2d994a36a7482f59068d83e64c80bfb Anbernic_RG35XX_Plus
 rg35xx-sp-v2 sun50i-h700-anbernic-rg35xx-sp-v2-panel aa22183a17906b56545d0f0127118198 Anbernic_RG35XX_SP
 rg40xx-h-ddr3 sun50i-h700-anbernic-rg40xx-h 7a4be234d2fa4e041844c18d94381296 Anbernic_RG40XX_H ddr3
+rg34xx-sp-v2 sun50i-h700-anbernic-rg34xx-sp-v2-panel 08ef914a4c716121b98b3bb9991323f8 Anbernic_RG34XX-SP
+rg34xx-sp-v2-ddr3 sun50i-h700-anbernic-rg34xx-sp-v2-panel 08ef914a4c716121b98b3bb9991323f8 Anbernic_RG34XX-SP ddr3
+rg-sp-ddr3 sun50i-h700-anbernic-rg-sp e7e56ee3dc6675ab5d967ce6766d4756 Anbernic_RG-SP ddr3
 "
 # SYSTEM on an H700 card: ROCKNIX's, repacked without the files below (same reasons as the SM8250 list above; the
 # AYN/Mangmi firmware and rocknix_abl do not exist in the H700 SYSTEM). Everything else is unchanged.
@@ -278,10 +295,14 @@ SM4450_POCKET_SYSTEM_MD5=7ad75d773235362171161a45bac4640a
 SM4450_FW_SHARED="LICENCE.rtlwifi_firmware.txt LICENSE.QualcommAtheros_ath10k LICENSE.qcom qca-NOTICE.txt qcom-NOTICE.txt wireless-regdb-LICENSE"
 SM4450_GAMES_DRIVE_MODELS=""
 
-# The RK3566 family (Anbernic RG DS Plus) has its pins in scripts/image/pins-rk3566.sh, a file the public export leaves
-# out (scripts/public-exclude.txt): the RG DS Plus image is a private test image. Looked for under $ROOT, /repo (the
-# build container) and the current folder; without it family_pins RK3566 gives empty values.
+# The Experimental RK3566 family has its public pins in scripts/image/pins-rk3566.sh. Looked for under $ROOT, /repo
+# (the build container) and the current folder; without it family_pins RK3566 gives empty values.
 for pu_rk in "${ROOT:-/nonexistent}/scripts/image/pins-rk3566.sh" /repo/scripts/image/pins-rk3566.sh scripts/image/pins-rk3566.sh; do
+  if [ -f "$pu_rk" ]; then . "$pu_rk"; break; fi
+done
+unset pu_rk
+# The RK3326 family (Game Console R36S, a private test card) likewise in scripts/image/pins-rk3326.sh, also left out of the export.
+for pu_rk in "${ROOT:-/nonexistent}/scripts/image/pins-rk3326.sh" /repo/scripts/image/pins-rk3326.sh scripts/image/pins-rk3326.sh; do
   if [ -f "$pu_rk" ]; then . "$pu_rk"; break; fi
 done
 unset pu_rk
@@ -300,6 +321,18 @@ SM8550_GAMES_DRIVE_MODELS=""
 is_ddr3() {
   eval "pu_models=\${${1}_MODELS:-}"
   echo "$pu_models" | awk -v m="$2" '$1 == m && $5 == "ddr3" { f = 1 } END { exit !f }'
+}
+# is_generic FAMILY MODEL: the model's line in <FAMILY>_MODELS has "generic" as its fifth field (RK3566 only): the card boots
+# with ROCKNIX's Generic image's U-Boot and extlinux.conf (FDTDIR, the U-Boot picks the tree), so no single tree is named.
+is_generic() {
+  eval "pu_models=\${${1}_MODELS:-}"
+  echo "$pu_models" | awk -v m="$2" '$1 == m && $5 == "generic" { f = 1 } END { exit !f }'
+}
+# is_devtest FAMILY MODEL: the model's line in <FAMILY>_MODELS has "devtest" as its fifth field (RK3326 only): the card also carries
+# the USB network preset, SSH on and the build machine's public key, for agents' device tests (make-image-family.sh --authorized-keys).
+is_devtest() {
+  eval "pu_models=\${${1}_MODELS:-}"
+  echo "$pu_models" | awk -v m="$2" '$1 == m && $5 == "devtest" { f = 1 } END { exit !f }'
 }
 # has_games_drive FAMILY MODEL
 has_games_drive() {

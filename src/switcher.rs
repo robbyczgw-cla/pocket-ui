@@ -271,6 +271,8 @@ struct BackdropKey {
     w: i32,
     h: i32,
     page: u32,
+    /// Design pixels per screen pixel: the glow is kept as the screen shows it (at n = 2 reduced once, when made).
+    n: i32,
 }
 
 /// A picture to read: the game's sources, best first; the first that opens wins.
@@ -570,7 +572,7 @@ pub struct Switcher {
     pub switching: bool,
     /// Where each card was painted last, (x, y, w, h, entry), for taps.
     pub card_areas: Vec<(i32, i32, i32, i32, usize)>,
-    /// There are recent games, but only of systems taken off the shelf (Settings > Look > Systems on the shelf).
+    /// There are recent games, but only of systems taken off the shelf (Settings > Games > Systems on the shelf).
     pub only_hidden: bool,
     loader: Loader,
 }
@@ -724,7 +726,7 @@ impl Switcher {
 
         if self.entries.is_empty() {
             let (t, s) = if self.only_hidden {
-                ("No recent games on the shelf", "Games from systems taken off the shelf stay out of this list (Settings › Look › Systems on the shelf).")
+                ("No recent games on the shelf", "Games from systems taken off the shelf stay out of this list (Settings › Games › Systems on the shelf).")
             } else {
                 ("Nothing played yet", "The games you play show up here, ready to pick up where you left off.")
             };
@@ -790,10 +792,11 @@ impl Switcher {
             w,
             h,
             page,
+            n: c.n(),
         };
         let px = BACKDROPS.with(|b| b.borrow().iter().find(|(k, _, _)| *k == key).map(|(_, _, px)| px.clone()));
         let px = px.unwrap_or_else(|| {
-            let px = Rc::new(match (e, &pic) {
+            let px = match (e, &pic) {
                 (Some(_), Some(p)) => glow(&glow_source(p), w, h, page),
                 (Some(e), None) => glow(
                     &Image {
@@ -806,6 +809,16 @@ impl Switcher {
                     page,
                 ),
                 (None, _) => vec![page; (w * h) as usize],
+            };
+            // Painted natively (docs/dev/native-paint.md): the glow as the screen shows it, the 2:1 mean made once
+            // here (`copy_design`, the old filter's picture bit for bit) instead of every frame.
+            let px = Rc::new(if c.n() == 1 {
+                px
+            } else {
+                let (sw, sh) = (c.stride() as u32, (c.pixels().len() / c.stride().max(1)) as u32);
+                let mut screen = vec![page; (sw * sh) as usize];
+                Canvas::screen(&mut screen, (sw, sh), c.n() as u32).copy_design(0, 0, w as usize, &px, None);
+                screen
             });
             BACKDROPS.with(|b| {
                 let mut b = b.borrow_mut();
@@ -817,8 +830,8 @@ impl Switcher {
             });
             px
         });
-        if px.len() == c.buf.len() {
-            c.buf.copy_from_slice(&px);
+        if px.len() == c.pixels().len() {
+            c.pixels_mut().copy_from_slice(&px);
         }
     }
 

@@ -8,7 +8,7 @@ virtual device in Docker. That shapes what helps most.
 Most of the code was tested in the virtual device or in unit tests only; [docs/STATUS.md](docs/STATUS.md) says which.
 If you run pocket-ui on a Mini V2, an issue that says "I tried X on ROCKNIX <version>, and this happened" is worth
 more than a feature idea. Use the bug form; it asks for the details that matter (device, ROCKNIX version, pocket-ui
-version, how you installed it).
+version, how you installed it). No GitHub account? Write to robby@robbyczesany.com.
 
 ## Before you open a pull request
 

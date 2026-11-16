@@ -59,8 +59,16 @@ pub fn check(now: i64, built: i64, ntp: NtpState, wifi: Option<bool>, by_hand: b
 
 /// The line on the Time page; None when the clock is fine. `wifi`: Wi-Fi is on (a time server may answer soon).
 pub fn page_line(clock: Clock, wifi: Option<bool>) -> Option<&'static str> {
+    page_line_in(clock, wifi, crate::device::no_wifi_chip())
+}
+
+/// [`page_line`] with the handheld's lack of Wi-Fi given (`device::no_wifi_chip`): there the clock is set by hand only,
+/// and "turn Wi-Fi on" would send the player looking for something it doesn't have.
+pub fn page_line_in(clock: Clock, wifi: Option<bool>, no_chip: bool) -> Option<&'static str> {
     match (clock, wifi) {
         (Clock::Fine, _) => None,
+        (Clock::Wrong, _) if no_chip => Some("The clock looks wrong. Play history, the night light and the dates on saves follow it. Set it under Date and time."),
+        (Clock::Unsynced, _) if no_chip => Some("No Wi-Fi here, so the clock doesn't set itself."),
         (Clock::Wrong, Some(true)) => Some("The clock looks wrong. Play history, the night light and the dates on saves follow it. Set it under Date and time, or wait for network time to set it over Wi-Fi."),
         (Clock::Wrong, _) => Some("The clock looks wrong. Play history, the night light and the dates on saves follow it. Set it under Date and time, or turn Wi-Fi on."),
         (Clock::Unsynced, _) => Some("Wi-Fi is off, and no time server has set the clock since it started, so it may be a little off. Set it under Date and time, or turn Wi-Fi on."),
@@ -69,6 +77,13 @@ pub fn page_line(clock: Clock, wifi: Option<bool>) -> Option<&'static str> {
 
 /// The notice on the shelf, once, when the clock is wrong.
 pub const SHELF_NOTICE: &str = "The clock looks wrong. Play history and the dates on saves will be off until it is set. Set it in Settings › System › Time, or turn Wi-Fi on.";
+/// [`SHELF_NOTICE`] on a handheld without Wi-Fi (`device::no_wifi_chip`).
+pub const SHELF_NOTICE_NO_WIFI: &str = "The clock looks wrong. Play history and the dates on saves will be off until it is set. Set it in Settings › System › Time.";
+
+/// The shelf's notice on this handheld.
+pub fn shelf_notice() -> &'static str {
+    crate::device::wifi_or(SHELF_NOTICE, SHELF_NOTICE_NO_WIFI)
+}
 
 #[cfg(test)]
 mod tests {

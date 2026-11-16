@@ -32,6 +32,8 @@ struct Ctx {
     tmp: PathBuf,
     stub: Option<Stub>,
     n: std::cell::Cell<u32>,
+    /// Last, so the stub is gone before the folder is; removes the folder with the Ctx, also on a panic.
+    _dir: tempfile::TempDir,
 }
 
 impl Ctx {
@@ -68,16 +70,15 @@ fn has(v: &[String], s: &str) -> bool {
 
 #[test]
 fn frozen_games_show_in_every_look_and_not_when_switched_off_or_when_there_are_none() {
-    let tmp = std::env::temp_dir().join(format!("pocketui-frozen-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&tmp);
-    std::fs::create_dir_all(&tmp).unwrap();
+    let dir = tempfile::Builder::new().prefix("pocketui-frozen-").tempdir().unwrap();
+    let tmp = dir.path().to_path_buf();
     let ok = Command::new("python3").env("POCKETUI_MOCK_NOW", FIXTURE_NOW)
         .args(["-I", &format!("{ROOT}/scripts/curator-fake-library.py"), tmp.join("lib").to_str().unwrap(), "dark"])
         .stdout(std::process::Stdio::null())
         .status()
         .expect("python3");
     assert!(ok.success());
-    let c = Ctx { stub: wayland(&tmp), tmp: tmp.clone(), n: Default::default() };
+    let c = Ctx { stub: wayland(&tmp), tmp: tmp.clone(), n: Default::default(), _dir: dir };
     // The row of the first recent game, after Curator, Search and Just Play on top of Home in every look but the Cabinet,
     // where Just Play is the first case of the Continue shelf.
     for look in ["shelf", "split", "cabinet"] {

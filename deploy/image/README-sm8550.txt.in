@@ -17,9 +17,13 @@ Which card: a Pocket 6 with the left stick above the D-pad takes the -rp6 card, 
 -rp6-top-dpad card, a Nova the -nova card. With the wrong Pocket 6 card the sticks work the wrong way round.
 
 Nothing needs flashing. Newer Retroid firmware has its own way to start a card: hold Volume Down while you switch on, and
-Retroid's menu offers "UEFI" next to Android. This card is made for that (step 2 of Install). It is new: it has been
-reported working with another system on a Pocket 6, and nobody has started this card that way yet. If your menu has no
-"UEFI", update Android first (Settings, System update). If it shows a Secure Boot setting, it has to be off.
+Retroid's menu offers "UEFI" next to Android. This card is made for that (step 2 of Install). Retroid's own UEFI start has
+worked for one tester with another Linux card; nobody has started this card that way yet. If your menu has no "UEFI",
+update Android first (Settings, System update). If it shows a Secure Boot setting, it has to be off.
+
+If your handheld falls back to the boot menu instead, set up OpenABL once as ROCKNIX's guide for your model says
+(https://rocknix.org/devices/retroid/): back up first with backup_abl.sh, then flash_abl.sh, both as root in Android.
+Android and its data stay. Then start this card from OpenABL's menu (hold Volume Down while you switch on).
 
 Already set up for ROCKNIX? The card starts the ways you know too. With ROCKNIX's boot helper (its "ABL", flashed once from
 Android with root rights) it starts as ROCKNIX does: pick your handheld under "Set device model" in its menu. With OpenABL it

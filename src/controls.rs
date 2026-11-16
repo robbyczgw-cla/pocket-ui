@@ -7,7 +7,7 @@
 //! "A", "B", "Select", "D-Pad Up", …); pocket-core hands them to the pause menu in the snapshot file.
 //!
 //! Settings keys in the per-console / per-game files: `ctl.<button>` = `<button>` or `none`,
-//! `ctl.stick_dpad` = `on` or `off`, and `ctl.hold_toggle` = a console button or `none` (see `HoldToggle`).
+//! `ctl.stick_dpad` = `on` or `off`, `ctl.dpad_stick` = `on` or `off` (the D-pad moves the left stick), and `ctl.hold_toggle` = a console button or `none` (see `HoldToggle`).
 
 use std::collections::BTreeMap;
 use std::sync::atomic::{AtomicI16, Ordering};
@@ -20,6 +20,8 @@ use crate::pad::{Axis, Button};
 /// Prefix of control keys inside the per-console / per-game settings files.
 pub const KEY_PREFIX: &str = "ctl.";
 pub const STICK_KEY: &str = "stick_dpad";
+/// D-pad as left stick: on a handheld without sticks the D-pad moves the left stick of an N64, PSP or Dreamcast game.
+pub const DPAD_STICK_KEY: &str = "dpad_stick";
 /// Hold to toggle (Controls page): the console button a press switches on and a second press off.
 pub const HOLD_KEY: &str = "hold_toggle";
 
@@ -35,10 +37,40 @@ pub const MENU_ORDER: [u8; 16] = [8, 0, 9, 1, 10, 11, 12, 13, 14, 15, 2, 3, 4, 5
 /// Systems whose games need an analog stick. Everything else has no use for it, so the stick is a D-pad there.
 /// PS1 is in the list because pocket-core plugs a DualShock into it (`hostsys`): the sticks go to the core.
 /// ScummVM moves its cursor with the left stick; DOSBox Pure maps it to the game's joystick, mouse or keys.
-const ANALOG_SYSTEMS: &[&str] = &["psx", "n64", "dreamcast", "psp", "gamecube", "wii", "3ds", "ps2", "naomi", "atomiswave", "scummvm", "pc"];
+/// Phone games (FreeJ2ME-Plus on RetroArch) take the left stick as the number keys 2 4 6 8, the D-pad being the arrows.
+const ANALOG_SYSTEMS: &[&str] = &["psx", "n64", "dreamcast", "psp", "gamecube", "wii", "3ds", "ps2", "naomi", "atomiswave", "scummvm", "pc", "j2me"];
 
 pub fn stick_dpad_default(system: &str) -> bool {
     !ANALOG_SYSTEMS.contains(&system)
+}
+
+/// Systems whose games can't be played without a stick (Mario 64 walks only with it). PS1 games play on the D-pad,
+/// so it is not here.
+const STICK_ONLY_SYSTEMS: &[&str] = &["n64", "psp", "dreamcast"];
+
+/// D-pad as left stick: on for N64, PSP and Dreamcast games on a handheld that has no sticks (Brick, RG35XX Plus, …).
+pub fn dpad_stick_default(system: &str, has_sticks: bool) -> bool {
+    !has_sticks && STICK_ONLY_SYSTEMS.contains(&system)
+}
+
+/// The Controls page offers D-pad as left stick for every system whose games use a stick.
+pub fn offers_dpad_stick(system: &str) -> bool {
+    ANALOG_SYSTEMS.contains(&system)
+}
+
+/// D-pad as left stick: a held D-pad direction is let go as a button and pushes the left stick all the way instead
+/// (diagonals at the stick's round edge). A real left stick that is moved wins. `buttons` are the pad's own (bit i =
+/// RetroPad id i), `sticks` the core's (left x, left y, right x, right y), y down.
+pub fn dpad_to_stick(buttons: u16, sticks: [i16; 4]) -> (u16, [i16; 4]) {
+    let held = |id: u8| buttons & (1 << id) != 0;
+    let x = held(joypad::RIGHT as u8) as i32 - held(joypad::LEFT as u8) as i32;
+    let y = held(joypad::DOWN as u8) as i32 - held(joypad::UP as u8) as i32;
+    let buttons = buttons & !(0b1111 << 4);
+    if (x, y) == (0, 0) || sticks[0] != 0 || sticks[1] != 0 {
+        return (buttons, sticks);
+    }
+    let full = if x != 0 && y != 0 { 23170 } else { 32767 };
+    (buttons, [(x * full) as i16, (y * full) as i16, sticks[2], sticks[3]])
 }
 
 pub fn physical_label(id: u8) -> &'static str {
@@ -81,6 +113,9 @@ pub struct ControlsFile {
     pub mapping: BTreeMap<String, String>,
     #[serde(default)]
     pub stick_dpad: bool,
+    /// D-pad as left stick (`dpad_to_stick`).
+    #[serde(default)]
+    pub dpad_stick: bool,
     /// The console button (RetroPad id) that Hold to toggle works on; None: off.
     #[serde(default)]
     pub hold_toggle: Option<u8>,
@@ -127,13 +162,26 @@ pub fn targets_for(system: &str, described: &[Described]) -> Vec<Target> {
 pub struct Mapping {
     pub target: [Option<u8>; 16],
     pub stick_dpad: bool,
+    /// D-pad as left stick (`dpad_to_stick`).
+    pub dpad_stick: bool,
     /// Hold to toggle: the console button that stays down after a press and lets go at the next one (`HoldToggle`).
     pub hold_toggle: Option<u8>,
 }
 
 impl Mapping {
     pub fn defaults(system: &str) -> Mapping {
-        Mapping { target: std::array::from_fn(|i| Some(i as u8)), stick_dpad: stick_dpad_default(system), hold_toggle: None }
+        // The Android edition has no device table (`device_model` only): its handhelds bring their own pads, and the
+        // D-pad stays a D-pad until the player turns it on.
+        #[cfg(all(target_os = "android", not(feature = "handheld")))]
+        let has_sticks = true;
+        #[cfg(not(all(target_os = "android", not(feature = "handheld"))))]
+        let has_sticks = crate::device::current().has_sticks();
+        Mapping::defaults_on(system, has_sticks)
+    }
+
+    /// `defaults` on a handheld with or without sticks.
+    pub fn defaults_on(system: &str, has_sticks: bool) -> Mapping {
+        Mapping { target: std::array::from_fn(|i| Some(i as u8)), stick_dpad: stick_dpad_default(system), dpad_stick: dpad_stick_default(system, has_sticks), hold_toggle: None }
     }
 
     /// The default layout with the `ctl.*` entries of a settings map applied.
@@ -151,6 +199,10 @@ impl Mapping {
     pub fn set(&mut self, key: &str, value: &str) -> bool {
         if key == STICK_KEY {
             self.stick_dpad = matches!(value, "on" | "true" | "1");
+            return matches!(value, "on" | "off" | "true" | "false" | "1" | "0");
+        }
+        if key == DPAD_STICK_KEY {
+            self.dpad_stick = matches!(value, "on" | "true" | "1");
             return matches!(value, "on" | "off" | "true" | "false" | "1" | "0");
         }
         if key == HOLD_KEY {
@@ -215,6 +267,7 @@ impl Mapping {
             targets,
             mapping: (0..16u8).map(|i| (KEYS[i as usize].to_string(), self.value_of(i).to_string())).collect(),
             stick_dpad: self.stick_dpad,
+            dpad_stick: self.dpad_stick,
             hold_toggle: self.hold_toggle,
         }
     }
@@ -225,6 +278,7 @@ impl Mapping {
             m.set(k, v);
         }
         m.stick_dpad = f.stick_dpad;
+        m.dpad_stick = f.dpad_stick;
         m.hold_toggle = f.hold_toggle.filter(|id| (*id as usize) < KEYS.len() && !(2..=7).contains(id));
         m
     }
@@ -510,6 +564,37 @@ mod tests {
         let from_values = Mapping::from_values("gba", &values);
         assert_eq!(from_values.hold_toggle, Some(joypad::R as u8));
         assert_eq!(Mapping::from_file(&from_values.to_file(Vec::new())), from_values, "the snapshot file carries it");
+    }
+
+    #[test]
+    fn without_sticks_the_d_pad_walks_in_n64_psp_and_dreamcast_games() {
+        // Fable 5.2 gaps #8: Brick, RG35XX Plus/SP, RG28XX have no stick; Mario 64 only walks with one.
+        for system in ["n64", "psp", "dreamcast"] {
+            assert!(Mapping::defaults_on(system, false).dpad_stick, "{system} without sticks");
+            assert!(!Mapping::defaults_on(system, true).dpad_stick, "{system}: a handheld with sticks keeps its D-pad");
+        }
+        for system in ["psx", "snes", "gba", "scummvm"] {
+            assert!(!Mapping::defaults_on(system, false).dpad_stick, "{system} plays on the D-pad");
+        }
+        assert!(offers_dpad_stick("n64") && offers_dpad_stick("psx") && !offers_dpad_stick("gb"));
+        let mut m = Mapping::defaults_on("n64", false);
+        assert!(m.set(DPAD_STICK_KEY, "off") && !m.dpad_stick);
+        assert!(m.set(DPAD_STICK_KEY, "on") && m.dpad_stick);
+        assert_eq!(Mapping::from_file(&m.to_file(Vec::new())).dpad_stick, true, "the snapshot file carries it");
+        let values: BTreeMap<String, String> = [("ctl.dpad_stick".to_string(), "on".to_string())].into();
+        assert!(Mapping::from_values("psx", &values).dpad_stick);
+    }
+
+    #[test]
+    fn the_d_pad_pushes_the_left_stick_all_the_way_and_is_no_button_then() {
+        use joypad::{A, DOWN, LEFT, RIGHT, UP};
+        let bits = |l: &[u16]| l.iter().fold(0u16, |m, b| m | 1 << b);
+        assert_eq!(dpad_to_stick(bits(&[RIGHT, A]), [0; 4]), (bits(&[A]), [32767, 0, 0, 0]));
+        assert_eq!(dpad_to_stick(bits(&[UP]), [0, 0, 5, 6]), (0, [0, -32767, 5, 6]), "up is negative y; the right stick stays");
+        assert_eq!(dpad_to_stick(bits(&[DOWN, LEFT]), [0; 4]), (0, [-23170, 23170, 0, 0]), "a diagonal stays on the stick's round edge");
+        assert_eq!(dpad_to_stick(bits(&[LEFT, RIGHT]), [0; 4]), (0, [0; 4]), "opposite directions cancel");
+        assert_eq!(dpad_to_stick(bits(&[A]), [0; 4]), (bits(&[A]), [0; 4]));
+        assert_eq!(dpad_to_stick(bits(&[UP]), [100, 0, 0, 0]), (0, [100, 0, 0, 0]), "a stick that is moved wins");
     }
 
     #[test]

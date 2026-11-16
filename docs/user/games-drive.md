@@ -26,6 +26,8 @@ Good to know:
   Take it out to go back to GAMES.
 - Flashing the card again usually keeps what's on GAMES, because the new card gets the same layout. Still, keep your own
   copy of anything you'd miss: flashing tools can erase the whole card.
+- **Updates** come the same way: copy the update file from pocketui.xyz/install onto GAMES, next to `roms`, and switch on
+  ([No Wi-Fi? Update from the card](updates.md#no-wi-fi-update-from-the-card)).
 - A few PortMaster games use links between files, which GAMES can't hold (it's the same on any exFAT games card).
 
 On all other cards, and on a smaller RG28XX card, the `roms` folder is on the card's STORAGE part, which uses the Linux file

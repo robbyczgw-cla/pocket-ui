@@ -115,7 +115,7 @@ impl Board {
     }
 }
 
-/// Settings › Sound & feel › Lights & buttons (the lights, F1 and F2, the mute slider): only where one of them is ours to drive.
+/// Settings › Controls › Lights & buttons (the lights, F1 and F2, the mute slider): only where one of them is ours to drive.
 pub fn lights_page() -> bool {
     board().is_some_and(|b| b.leds() || b.fkeys() || b.slider())
 }

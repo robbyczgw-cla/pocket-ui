@@ -15,7 +15,7 @@ use super::App;
 impl App {
     /// At the launch of `path`, after the moment's check (`fresh`: it is left out, the game starts anew): the card this
     /// start shows once its picture is there, or none.
-    pub(crate) fn where_was_i_at_launch(&mut self, path: &Path, fresh: bool, resumable: bool) {
+    pub(crate) fn where_was_i_at_launch(&mut self, system: &str, path: &Path, fresh: bool, resumable: bool) {
         self.where_was_i = None;
         if fresh || !self.remind_where {
             return;
@@ -28,6 +28,19 @@ impl App {
         self.where_was_i = where_was_i::card(&facts, pocket_ui::recents::now_secs());
         // The worker validated the moment before preparing this exact launch; a stale preview adds no reminder.
         if !resumable { self.where_was_i = None; }
+        // Where the player is, from the game's own save (`app_case_knows`): known from the shelf's look at it, or put on
+        // the card when the thread answers while it is up.
+        self.case_knows.card_waits = None;
+        if self.where_was_i.is_some() && pocket_ui::cozy_extras::on(pocket_ui::cozy_extras::Extra::ProgressFromSaves) {
+            let art = self.case_art(path);
+            match (self.case_line(system, path), self.where_was_i.as_mut()) {
+                (Some(line), Some(card)) => {
+                    card.progress = Some(line);
+                    card.art = art;
+                }
+                _ => self.case_knows.card_waits = Some(path.to_path_buf()),
+            }
+        }
         if let Some(card) = &self.where_was_i {
             println!("where was i: {} (note: {})", card.ago, if card.note.is_some() { "yes" } else { "no" });
         }
@@ -56,7 +69,7 @@ impl App {
             return;
         }
         let Some(card) = self.where_was_i.as_ref() else { return };
-        let bottom = if self.frozen_wait.is_some() || self.loading.since.is_some() { c.h - 112 } else { c.h - pocket_ui::kit::PAD };
+        let bottom = if self.frozen_wait.is_some() || self.loading.since.is_some() { pocket_ui::kit::hint_bar_top(c.h) - 60 } else { c.h - pocket_ui::kit::PAD };
         where_was_i::paint(c, &mut self.text, card, bottom, (p * 255.0) as u8);
     }
 
@@ -108,6 +121,11 @@ impl App {
         };
         let facts = Facts { on: self.remind_where, kids: false, easy: what == "easy", last_played: Some(1_800_000_000 - 23 * 86_400), play_secs: 12 * 3600 + 5 * 60, note };
         self.where_was_i = where_was_i::card(&facts, 1_800_000_000);
+        // POCKETUI_SNAPSHOT_PROGRESS: the line from the game's save on the card too (`app_case_knows`).
+        if let (Some(card), Some(p)) = (self.where_was_i.as_mut(), self.case_knows.made_up.as_ref().filter(|_| pocket_ui::cozy_extras::on(pocket_ui::cozy_extras::Extra::ProgressFromSaves))) {
+            card.progress = Some(pocket_ui::case_knows_read::line(p));
+            card.art = self.case_knows.made_up_art.clone();
+        }
         self.launch_at = Some(Instant::now() - Duration::from_secs(5));
         if what == "early-press" {
             self.launch_button();

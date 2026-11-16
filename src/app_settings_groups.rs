@@ -1,7 +1,9 @@
-//! Part of the pocket-ui binary: Settings in categories (`SETTINGS_GROUPS` in main.rs). START opens the short list
-//! of categories, one bare line each (icon and name, as NextUI's), the selected one's line naming what is in it at the
-//! bottom as in every list; A opens a category's list, which is the old Settings list with only that category's rows
-//! (same values, same behaviour); B goes back to the categories with the cursor on the category it came from.
+//! Part of the pocket-ui binary: Settings in categories (`SETTINGS_GROUPS` in main.rs). START opens the first category's
+//! list straight away (`first_row`), with the categories' symbols in a row at the top, the selected one named, L1 and R1
+//! drawn at its ends (`App::paint_settings_header`): L1/R1 go to the previous and next category and round at the ends, a tap on
+//! a symbol goes to it. Up on a category's first row puts the focus on the symbols (`SettingsPage::Tabs`): Left/Right
+//! switch the category there, Down or A go back into its rows (the tab pattern of console settings). Each list is the old Settings list with only that category's rows (same values, same
+//! behaviour); B closes Settings (SETTINGS-IA-DECISION package 2: no page of categories between the shelf and the rows).
 //!
 //! A category's list is `SettingsPage::List(row)` with `row` an index into the flat `SETTINGS`, as before: every page
 //! that comes back with `List(settings_row(NAME))` (its B, a deep link's B) lands in its own category's list, and B
@@ -19,7 +21,7 @@
 use std::ops::Range;
 use std::time::Instant;
 
-use pocket_ui::gfx::{mix, Canvas};
+use pocket_ui::gfx::Canvas;
 use pocket_ui::pad::Button;
 use pocket_ui::palette::*;
 use pocket_ui::text::Face;
@@ -29,8 +31,7 @@ use pocket_ui::settings_values::{self as values, page};
 use pocket_ui::setup::Only;
 use pocket_ui::update;
 
-use super::app_motion;
-use super::{settings_row, window_start, App, Opens, SettingsPage, SettingsRow, UserEvent, CANCEL, CONFIRM, NU_BTN_PAD, NU_PAD, NU_PILL, NU_SMALL, SETTINGS, SETTINGS_GROUPS};
+use super::{App, Opens, SettingsPage, SettingsRow, UserEvent, CANCEL, CONFIRM, NU_BTN_PAD, NU_PAD, NU_PILL, NU_SMALL, SETTINGS, SETTINGS_GROUPS};
 
 /// The most lines the selected row's line takes over the hints when it doesn't fit beside them; every row's and
 /// category's line fits in two at Large text in English and German (`every_line_fits_at_the_bottom`).
@@ -51,16 +52,15 @@ fn needs_facts(opens: Opens) -> bool {
     matches!(opens, Opens::Setup(Only::Wifi | Only::Remote) | Opens::Time | Opens::PcStreaming)
 }
 
-/// The last entry of `SETTINGS_GROUPS` is not a category: it is the page behind Help & tools → For tinkerers.
-pub(crate) const TINKERERS: usize = SETTINGS_GROUPS.len() - 1;
-/// The categories the first page lists.
-pub(crate) const SHOWN: usize = TINKERERS;
+/// The categories the first page lists: every entry of `SETTINGS_GROUPS` (no page only gathers more settings since the
+/// tree of 2026-11-13; For tinkerers' Sync and PC streaming are rows of Connections).
+pub(crate) const SHOWN: usize = SETTINGS_GROUPS.len();
 
 /// How many rows the categories hold together: the length of `SETTINGS`.
 pub(crate) const fn count() -> usize {
     let (mut g, mut n) = (0, 0);
     while g < SETTINGS_GROUPS.len() {
-        n += SETTINGS_GROUPS[g].2.len();
+        n += SETTINGS_GROUPS[g].1.len();
         g += 1;
     }
     n
@@ -68,10 +68,10 @@ pub(crate) const fn count() -> usize {
 
 /// The rows of every category, one category after the other: `SETTINGS`.
 pub(crate) const fn flat<const N: usize>() -> [SettingsRow; N] {
-    let mut out = [SETTINGS_GROUPS[0].2[0]; N];
+    let mut out = [SETTINGS_GROUPS[0].1[0]; N];
     let (mut g, mut k) = (0, 0);
     while g < SETTINGS_GROUPS.len() {
-        let rows = SETTINGS_GROUPS[g].2;
+        let rows = SETTINGS_GROUPS[g].1;
         let mut r = 0;
         while r < rows.len() {
             out[k] = rows[r];
@@ -85,8 +85,8 @@ pub(crate) const fn flat<const N: usize>() -> [SettingsRow; N] {
 
 /// Where category `g`'s rows are in `SETTINGS`, shown or not.
 pub(crate) fn span(g: usize) -> Range<usize> {
-    let start: usize = SETTINGS_GROUPS[..g].iter().map(|c| c.2.len()).sum();
-    start..start + SETTINGS_GROUPS[g].2.len()
+    let start: usize = SETTINGS_GROUPS[..g].iter().map(|c| c.1.len()).sum();
+    start..start + SETTINGS_GROUPS[g].1.len()
 }
 
 /// Whether Settings has a row for `opens`. The LEDs row (the lights around the
@@ -101,23 +101,19 @@ fn shown(opens: Opens) -> bool {
     shown_on(opens, pocket_ui::device::current().has_sticks(), { #[cfg(feature = "brick")] { pocket_ui::device::brick() } #[cfg(not(feature = "brick"))] { false } })
 }
 
-#[cfg(not(feature = "brick"))]
 fn shown_on(opens: Opens, sticks: bool, nextui_owned: bool) -> bool {
-    // For tinkerers is a row only where the page has a row to show (a NextUI card has neither Sync nor PC streaming).
-    if matches!(opens, Opens::Tinkerers) {
-        return span(TINKERERS).any(|i| shown_on(SETTINGS[i].1, sticks, nextui_owned));
-    }
-    !device_key(opens).is_some_and(|k| pocket_ui::device::hides(k, sticks, nextui_owned))
+    shown_in(opens, sticks, nextui_owned, pocket_ui::device::android_profile())
+}
+
+#[cfg(not(feature = "brick"))]
+fn shown_in(opens: Opens, sticks: bool, nextui_owned: bool, android: bool) -> bool {
+    !device_key(opens).is_some_and(|k| pocket_ui::device::hides_in(k, sticks, nextui_owned, android))
 }
 
 #[cfg(feature = "brick")]
-fn shown_on(opens: Opens, sticks: bool, nextui_owned: bool) -> bool {
-    // For tinkerers is a row only where the page has a row to show (a NextUI card has neither Sync nor PC streaming).
-    if matches!(opens, Opens::Tinkerers) {
-        return span(TINKERERS).any(|i| shown_on(SETTINGS[i].1, sticks, nextui_owned));
-    }
+fn shown_in(opens: Opens, sticks: bool, nextui_owned: bool, android: bool) -> bool {
     let kept = { #[cfg(feature = "brick")] { brick_keeps(opens) } #[cfg(not(feature = "brick"))] { false } };
-    (kept || brick_has(opens) || !device_key(opens).is_some_and(|k| pocket_ui::device::hides(k, sticks, nextui_owned)))
+    (kept || brick_has(opens) || !device_key(opens).is_some_and(|k| pocket_ui::device::hides_in(k, sticks, nextui_owned, android)))
         && { #[cfg(feature = "brick")] { !brick_hides(opens) } #[cfg(not(feature = "brick"))] { true } }
 }
 
@@ -150,6 +146,25 @@ fn device_key(opens: Opens) -> Option<&'static str> {
         Opens::Time => "time",
         Opens::Kids => "kids",
         Opens::Updates => "updates",
+        // What only a Linux handheld has (`device::ANDROID_HIDES`).
+        Opens::SleepPower => "sleep",
+        Opens::Storage => "storage",
+        Opens::Web => "web",
+        Opens::PcStreaming => "pc_streaming",
+        Opens::NightLight => "night_light",
+        Opens::ScreenColour => "screen_colour",
+        Opens::Battery => "battery",
+        Opens::View => "android_view",
+        Opens::BackToEs => "darkos_es",
+        Opens::Gamelist => "gamelist",
+        Opens::Backup => "backup",
+        Opens::TestButtons => "test_buttons",
+        Opens::Report => "report",
+        Opens::ZoomInPause => "zoom_pause",
+        Opens::BootScreen => "boot_screen",
+        Opens::OverGame => "over_game",
+        Opens::RememberQuit => "quit_without_saving",
+        Opens::Screenshots => "screenshots",
         _ => return None,
     })
 }
@@ -161,8 +176,8 @@ pub(crate) fn rows(g: usize) -> Vec<usize> {
 }
 
 #[cfg(test)]
-fn rows_on(g: usize, sticks: bool, nextui_owned: bool) -> Vec<usize> {
-    span(g).filter(|i| shown_on(SETTINGS[*i].1, sticks, nextui_owned)).collect()
+fn rows_in(g: usize, sticks: bool, nextui_owned: bool, android: bool) -> Vec<usize> {
+    span(g).filter(|i| shown_in(SETTINGS[*i].1, sticks, nextui_owned, android)).collect()
 }
 
 /// The name of row `i` of `SETTINGS` as this device paints it: its own, except the Brick's lights row, which carries its page's title
@@ -189,6 +204,34 @@ pub(crate) fn leds_row() -> usize {
 
 /// no PortMaster).
 pub(crate) fn row_line(i: usize) -> &'static str {
+    row_line_in(i, pocket_ui::device::android_profile())
+}
+
+/// [`row_line`] with Android's profile given. Android's setup has no Wi-Fi step, its About has no network, its Add games has no file
+/// sharing and PortMaster is a Linux program, so those lines say what is there.
+pub(crate) fn row_line_in(i: usize, android: bool) -> &'static str {
+    if android {
+        match SETTINGS[i].1 {
+            Opens::FirstStart => return "Language, your games and the look again, step by step. Your games and saves stay.",
+            Opens::About => return "Version, games, free space and battery.",
+            Opens::Setup(Only::Games) => return "Where each system's games and BIOS files go.",
+            Opens::Setup(Only::Extras) => return "Box art and starter pack.",
+            _ => {}
+        }
+    }
+    // Controller setup names where controllers are paired, only where that row is (Android pairs in its own settings, NextUI's
+    // Brick card has no Bluetooth row).
+    if matches!(SETTINGS[i].1, Opens::Controllers) && (android || !shown(Opens::Bluetooth)) {
+        return CONTROLLERS_LINE_UNPAIRED;
+    }
+    // A handheld without Wi-Fi (`device::no_wifi_chip`): its first start has no Wi-Fi step, its Add games no file sharing.
+    if pocket_ui::device::no_wifi_chip() {
+        match SETTINGS[i].1 {
+            Opens::FirstStart => return "Language, your games and the look again, step by step. Your games and saves stay.",
+            Opens::Setup(Only::Games) => return "Where each system's games and BIOS files go.",
+            _ => {}
+        }
+    }
     #[cfg(feature = "brick")]
     if pocket_ui::device::brick() {
         match SETTINGS[i].1 {
@@ -205,49 +248,33 @@ pub(crate) fn row_line(i: usize) -> &'static str {
     SETTINGS[i].2
 }
 
-/// The line naming what is in category `g` on this device, in the interface's language through `tr`: the parts of
-/// out, as the list leaves them out.
-#[cfg(not(feature = "brick"))]
-pub(crate) fn blurb(g: usize, tr: impl FnMut(&str) -> String) -> String {
-    let device = pocket_ui::device::current();
-    blurb_with(g, device.has_sticks(), false, tr)
+/// The categories with at least one row on this device, in their order: a category whose rows are all hidden (Connections
+/// in Android's handheld view, `device::ANDROID_HIDES`) is not there.
+pub(crate) fn shown_groups() -> Vec<usize> {
+    (0..SHOWN).filter(|g| !rows(*g).is_empty()).collect()
 }
 
-#[cfg(feature = "brick")]
-pub(crate) fn blurb(g: usize, tr: impl FnMut(&str) -> String) -> String {
-    let device = pocket_ui::device::current();
-    blurb_with(g, device.has_sticks(), { #[cfg(feature = "brick")] { pocket_ui::device::brick() } #[cfg(not(feature = "brick"))] { false } }, tr)
+/// The category START opens on: the first with a row on this device (Connections; Look in Android's handheld view, which
+/// has no Connections).
+pub(crate) fn first_group() -> usize {
+    shown_groups().first().copied().unwrap_or(0)
 }
 
-/// Category `g`'s line in English: `SETTINGS_GROUPS`', except Sound & feel on the Brick, whose last part is the row's name there
-/// ("lights & buttons", not "LEDs"). Same parts in the same order, so `blurb_with` can still leave parts out by row.
-fn group_line(g: usize) -> &'static str {
-    #[cfg(feature = "brick")]
-    if pocket_ui::device::brick() && span(g).any(|i| matches!(SETTINGS[i].1, Opens::Leds)) {
-        return BRICK_SOUND_LINE;
-    }
-    SETTINGS_GROUPS[g].1
+/// What START opens: the first category's first row.
+pub(crate) fn first_row() -> usize {
+    rows(first_group()).first().copied().unwrap_or(0)
 }
 
-/// Sound & feel's line on the Brick (`group_line`); translated in `assets/i18n/brick-*.tsv`.
-#[cfg(feature = "brick")]
-const BRICK_SOUND_LINE: &str = "Animations, playful cases, old-TV switch-on, motion, zoom, sounds, case sounds, haptics, lights & buttons.";
+/// The category `steps` along the shown ones from `g` (negative: back), round at the ends: L1/R1 and a tap on a symbol.
+fn group_after(shown: &[usize], g: usize, steps: i32) -> usize {
+    let n = shown.len().max(1) as i32;
+    let at = shown.iter().position(|s| *s == g).unwrap_or(0) as i32;
+    shown.get((at + steps).rem_euclid(n) as usize).copied().unwrap_or(g)
+}
 
-/// `blurb` for a device with or without sticks and with or without NextUI. A line has one part per row,
-/// in the rows' order, also in German (`every_category_line_names_its_rows_in_order`), so the parts can be left out
-/// by the row they stand for.
-pub(crate) fn blurb_with(g: usize, sticks: bool, nextui_owned: bool, mut tr: impl FnMut(&str) -> String) -> String {
-    let line = tr(group_line(g));
-    let shown: Vec<bool> = span(g).map(|i| shown_on(SETTINGS[i].1, sticks, nextui_owned)).collect();
-    let parts: Vec<&str> = line.trim_end_matches('.').split(", ").collect();
-    if shown.iter().all(|s| *s) || parts.len() != shown.len() {
-        return line;
-    }
-    let kept: Vec<&str> = parts.iter().zip(&shown).filter(|(_, s)| **s).map(|(p, _)| *p).collect();
-    let joined = kept.join(", ");
-    // A first part left out: the line still starts with a capital.
-    let mut chars = joined.chars();
-    chars.next().map_or_else(String::new, |c| format!("{}{}.", c.to_uppercase(), chars.as_str()))
+#[cfg(test)]
+fn first_group_in(android: bool) -> usize {
+    (0..SHOWN).find(|g| !rows_in(*g, true, false, android).is_empty()).unwrap_or(0)
 }
 
 /// The category row `row` of `SETTINGS` is in.
@@ -255,31 +282,40 @@ pub(crate) fn group_of(row: usize) -> usize {
     (0..SETTINGS_GROUPS.len()).find(|g| span(*g).contains(&row)).unwrap_or(0)
 }
 
-/// Up, Down, A and B on the categories, and Up, Down and B in a category's list (A there is the row's own business,
-/// `App::settings_input`). `None` closes Settings.
+/// Up, Down, L1, R1 and B in a category's list (A there is the row's own business, `App::settings_input`). `None` closes
+/// Settings: B goes back to the shelf at once, there is no page of categories in between.
 pub(crate) fn groups_input(page: SettingsPage, b: Button) -> Option<SettingsPage> {
-    let n = SHOWN;
     match (page, b) {
-        (SettingsPage::Groups(g), Button::Up) => Some(SettingsPage::Groups((g + n - 1) % n)),
-        (SettingsPage::Groups(g), Button::Down) => Some(SettingsPage::Groups((g + 1) % n)),
-        (SettingsPage::Groups(g), b) if b == CONFIRM => Some(SettingsPage::List(rows(g)[0])),
-        (SettingsPage::Groups(_), b) if b == CANCEL => None,
-        // Moving stays in the category and goes round at its ends, as the long list did.
+        // Up on the first row: the focus goes to the categories at the top (the tab pattern of console settings).
+        (SettingsPage::List(row), Button::Up) if rows(group_of(row)).first() == Some(&row) => Some(SettingsPage::Tabs(row)),
+        // Moving stays in the category; Down on the last row goes round to the first, as the long list did.
         (SettingsPage::List(row), Button::Up | Button::Down) => {
             let r = rows(group_of(row));
             let (at, len) = (r.iter().position(|i| *i == row).unwrap_or(0), r.len());
             let at = if b == Button::Up { (at + len - 1) % len } else { (at + 1) % len };
             Some(SettingsPage::List(r[at]))
         }
-        // For tinkerers is a page of Help & tools: B goes back to its row there.
-        (SettingsPage::List(row), b) if b == CANCEL && group_of(row) == TINKERERS => Some(SettingsPage::List(settings_row("For tinkerers"))),
-        (SettingsPage::List(row), b) if b == CANCEL => Some(SettingsPage::Groups(group_of(row))),
+        // On the categories: Left/Right and L1/R1 go to the previous/next one at once, round at the ends; Down or A into
+        // its rows, on the first; B out of Settings; nothing else moves.
+        (SettingsPage::Tabs(row), Button::Left | Button::Right | Button::L1 | Button::R1) => {
+            let g = group_after(&shown_groups(), group_of(row), if matches!(b, Button::Right | Button::R1) { 1 } else { -1 });
+            Some(rows(g).first().map_or(page, |r| SettingsPage::Tabs(*r)))
+        }
+        (SettingsPage::Tabs(row), Button::Down) => Some(SettingsPage::List(row)),
+        (SettingsPage::Tabs(row), b) if b == CONFIRM => Some(SettingsPage::List(row)),
+        (SettingsPage::Tabs(_), b) if b == CANCEL => None,
+        // The previous or next category with a row here, at its first row; round at the ends.
+        (SettingsPage::List(row), Button::L1 | Button::R1) => {
+            let g = group_after(&shown_groups(), group_of(row), if b == Button::R1 { 1 } else { -1 });
+            Some(rows(g).first().map_or(page, |r| SettingsPage::List(*r)))
+        }
+        (SettingsPage::List(_), b) if b == CANCEL => None,
         (page, _) => Some(page),
     }
 }
 
-/// Where Settings' switches without a page of their own stand (Look → Appearance, Colours, Font; Sound & feel →
-/// Motion; Playing → Buttons' two): part of `App::feedback_view`, so that switching one clicks as any other change does.
+/// Where Settings' switches without a page of their own stand (Look → Appearance, Colours, Font, Motion; Controls &
+/// sound → Buttons' two): part of `App::feedback_view`, so that switching one clicks as any other change does.
 /// Each process-wide choice is read where it lives; the App's own two are handed in.
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
 pub(crate) struct Switches {
@@ -306,7 +342,6 @@ impl Switches {
     }
 }
 
-/// The icon of each category of `SETTINGS_GROUPS`, in its order (the length keeps one each).
 /// The Colours row's value: Retro's palette while it is on (`retro`), else the colours'.
 fn colours_label() -> &'static str {
     if pocket_ui::retro::on() {
@@ -316,15 +351,17 @@ fn colours_label() -> &'static str {
     }
 }
 
-/// The same in the Retro style (`retro`): colour pictures.
+/// The icon of each category of `SETTINGS_GROUPS` in the Retro style (`retro`), in its order: colour pictures.
+/// Controls has the controller, Screen & sound the loudspeaker, Playing the play button (Settings v2).
 const RETRO_ICONS: [pocket_ui::retro::Icon; SETTINGS_GROUPS.len()] = {
     use pocket_ui::retro::Icon;
-    [Icon::Look, Icon::Sound, Icon::Playing, Icon::Games, Icon::Connections, Icon::System, Icon::Help, Icon::Help]
+    [Icon::Connections, Icon::Look, Icon::Sound, Icon::Playing, Icon::Continue, Icon::Games, Icon::System, Icon::Help]
 };
 
+/// The same in the other styles (the length keeps one each).
 const ICONS: [pocket_ui::ui_art::Icon; SETTINGS_GROUPS.len()] = {
     use pocket_ui::ui_art::Icon;
-    [Icon::Look, Icon::Sound, Icon::Playing, Icon::Games, Icon::Connections, Icon::System, Icon::Help, Icon::Help]
+    [Icon::Connections, Icon::Look, Icon::Sound, Icon::Playing, Icon::Play, Icon::Games, Icon::System, Icon::Help]
 };
 
 /// Whether the value of row `i` is a network's own name, painted as typed: a Wi-Fi named "Off" or "Unknown" must not be
@@ -337,8 +374,14 @@ fn typed_value(opens: Opens, wifi: &Option<values::Wifi>) -> bool {
     matches!(opens, Opens::Setup(Only::Wifi)) && matches!(wifi, Some(values::Wifi::Connected(Some(_))))
 }
 
+/// Controller setup's line where Settings has no Bluetooth row to pair in.
+const CONTROLLERS_LINE_UNPAIRED: &str = "A separate layout for each controller, in menus and games.";
+
 /// The line under Remind me where I was while it is Off.
 const REMIND_OFF_LINE: &str = "No reminder after a long break.";
+
+/// The line under Console boot screen while it is On: which starts, which consoles, and what it needs.
+const BOOT_ON_LINE: &str = "Game Boy, Game Boy Advance and PlayStation games start with their boot screen when nothing is continued. Needs your BIOS file in roms/bios.";
 
 /// The line under Continue where I quit while it is Off.
 const REMEMBER_OFF_LINE: &str = "Quit keeps no moment: the next start is fresh, and the older moment stays under Load.";
@@ -359,6 +402,7 @@ impl App {
             Opens::RememberQuit => values::on_off(self.remember_quit).to_string(),
             Opens::RemindWhere => values::on_off(self.remind_where).to_string(),
             Opens::ZoomInPause => values::on_off(self.zoom_in_pause).to_string(),
+            Opens::BootScreen => values::on_off(self.boot_screen).to_string(),
             Opens::Animations if i == sel => format!("‹ {} ›", self.animations_in_use().name()),
             Opens::Animations => self.animations_in_use().name().to_string(),
             Opens::Buttons => page(&self.buttons_list_value()),
@@ -371,9 +415,18 @@ impl App {
             Opens::Language => pocket_ui::i18n::current().name().to_string(),
             Opens::TextSize if i == sel => format!("‹ {} ›", pocket_ui::type_scale::get().label()),
             Opens::TextSize => pocket_ui::type_scale::get().label().to_string(),
+            // The quick settings' levels, from memory (`Sys::level_label`); a look in the background keeps them fresh.
+            Opens::Brightness | Opens::Volume => {
+                let now = Instant::now();
+                self.sys.watch_levels(now);
+                let row = if matches!(SETTINGS[i].1, Opens::Brightness) { pocket_ui::quick::Row::Brightness } else { pocket_ui::quick::Row::Volume };
+                let level = self.sys.level_label(row, now);
+                if i == sel { format!("‹ {level} ›") } else { level }
+            }
             Opens::ScreenColour if i == sel => format!("‹ {} ›", self.sys.look().warmth_label()),
             Opens::ScreenColour => self.sys.look().warmth_label(),
             Opens::Tour => self.tour_list_value(),
+            Opens::View => page("Handheld"),
             Opens::Sounds if i == sel && self.sound.on => format!("‹ {} ›", self.sound.label()),
             Opens::Sounds => self.sound.label(),
             Opens::Sync => page(values::on_off(self.sync.prefs.enabled)),
@@ -423,7 +476,7 @@ impl App {
                 page(&shown)
             }
             #[cfg(not(feature = "brick"))]
-            Opens::About => page(update::app_version()),
+            Opens::About => page(update::shown_version()),
             #[cfg(feature = "brick")]
             Opens::About => page(&update::brick_short(update::app_version())),
             _ => ">".to_string(),
@@ -442,6 +495,7 @@ impl App {
             // Off says what Off does (it kept saying "Quit keeps the moment", walk 2026-11-02).
             Opens::RememberQuit if !self.remember_quit => REMEMBER_OFF_LINE,
             Opens::RemindWhere if !self.remind_where => REMIND_OFF_LINE,
+            Opens::BootScreen if self.boot_screen => BOOT_ON_LINE,
             _ => row_line(i),
         }
     }
@@ -488,67 +542,149 @@ impl App {
         });
     }
 
-    /// The categories: one bare line each, an icon, the name and the angle of a row that opens a page, and the selected one's
-    /// line naming what is in it at the bottom, as in every list. All seven fit on one page at Large text on 640x480.
-    pub(crate) fn paint_settings_groups(&mut self, c: &mut Canvas, sel: usize) {
-        c.clear(pal().void);
+    /// The top of a category's list, instead of a title: the status pill at the right; at the left L1 drawn as its key,
+    /// the symbol of every category this device has (`shown_groups`), the selected one in the text's colour with its name
+    /// after it (its short name, `tab_label`, where the whole one doesn't fit), the others dimmed, and R1 drawn as its key.
+    /// Where some category's short name doesn't fit beside the widest pill (German with Large text, the Brick) every
+    /// category's name stands alone as the title and the symbols with L1 and R1 take a slim line under it: one layout for
+    /// all categories, so L1/R1 never move the row or the rows (tests/settings_tabbar_stable.rs).
+    /// L1 and R1 are hints (the navigation explorer reads them, `nav_probe::hint`), each symbol a tap that goes there. With
+    /// the focus up here (`tabs`, `SettingsPage::Tabs`) the selected symbol and its name stand on the selection's paper, the
+    /// focus mark. Returns where the rows start.
+    pub(crate) fn paint_settings_header(&mut self, c: &mut Canvas, g: usize, tabs: bool) -> i32 {
+        let pill_left = self.status_pill(c);
+        let shown = shown_groups();
+        let n = shown.len() as i32;
+        let at = shown.iter().position(|s| *s == g).unwrap_or(0) as i32;
+        let name = SETTINGS_GROUPS[g].0;
+        let left = NU_PAD + NU_BTN_PAD;
+        let cap_w = (self.text.width(Face::Body, CAP_PX, "L1") + 28).max(CAP_W);
+        let symbols_w = n * SYM + (n - 1).max(0) * SYM_GAP;
+        // The room beside the widest pill (a two-digit hour, Wi-Fi, "100%, charging"), not beside today's, which changes
+        // with the battery: the RG28XX's "15:48 24%, charging" squeezed the line that the plain clock left room for.
+        let room = self.widest_pill_left(c) - 24 - left;
+        // One layout for every category of this screen, language, style and text size, so that L1/R1 don't move the row
+        // or the rows under it (the RG28XX's "Controls & sound" took a title line of its own and Look didn't, hand test of
+        // 0.5.0): one line when every category's short name fits beside its symbol, else the title line on all of them.
+        let widest = shown.iter().map(|&k| self.text.width(Face::Title, 50, tab_label(k))).max().unwrap_or(0);
+        let one_line = header_fits(cap_w, symbols_w, widest, room);
+        // On the line the whole name where it fits, else the short one; the hints (L1, R1) say the whole names.
+        let full_w = self.text.width(Face::Title, 50, name);
+        let tab = if header_fits(cap_w, symbols_w, full_w, room) { name } else { tab_label(g) };
+        let name_w = if tab == name { full_w } else { self.text.width(Face::Title, 50, tab) };
+        // The middle of the line the symbols are on, and where the rows start.
+        let (mid, top) = if one_line {
+            (NU_PAD + (NU_PILL - 20) / 2, NU_PAD + NU_PILL + 12)
+        } else {
+            let fitted = self.text.fit(Face::Title, 50, name, pill_left - 24 - left);
+            self.text.draw(c, Face::Title, 50, left, NU_PAD + 58, pal().chalk, &fitted);
+            let line_top = NU_PAD + NU_PILL + 2;
+            (line_top + CAP_H / 2, line_top + CAP_H + 14)
+        };
+        let names = |k: i32| SETTINGS_GROUPS[group_after(&shown, g, k)].0.trim_end_matches('\u{200b}');
+        let (prev, next) = (names(-1).to_string(), names(1).to_string());
         let retro = pocket_ui::retro::on();
-        // Retro: taller rows for its 64 px icons.
-        let row = if retro { pocket_ui::type_scale::row(66, 36).max(80) } else { pocket_ui::type_scale::row(66, 36) };
-        let (pad, font) = (NU_PAD, 36u32);
-        let (top, right) = (pad + NU_PILL + 12, c.w - pad);
-        let n = SHOWN;
-        self.sheet_header(c, "Settings");
-        let hints_at = self.nu_hints(c, &[("B", "Back"), ("A", "Open")]);
-        // In the interface's language already (`blurb`): measured and painted as they are, not looked up again.
-        let lines: Vec<String> = (0..n).map(|g| blurb(g, |s| self.text.translated(s).to_string())).collect();
-        let was = self.text.translating();
-        self.text.set_translate(false);
-        let reserved = self.desc_room(&lines.iter().map(String::as_str).collect::<Vec<_>>(), hints_at);
-        self.text.set_translate(was);
-        // Seven fit at every text size; a window that follows the selection only if a screen ever has less room. Under 768
-        // lines (the Smart Pro's 720) the rows share the room down to 50 px, so all of them still stand on the page.
-        let room = c.h - pad - NU_PILL - 16 - reserved - top;
-        let row = if c.h < 768 { row.min((room / n.max(1) as i32).max(50)) } else { row };
-        let visible = ((room / row) as usize).max(1);
-        let first = window_start(sel, visible, n);
-        let now = Instant::now();
-        let (first_f, hl) = self.motion.list_at(app_motion::List::Settings, first, sel, now);
-        // Each category's icon (`ui_art`, one colour, painted in the name's) before its name, which moves right for it.
-        // Half-size icons where a row is lower than they are (Retro's 64 px under 768 lines).
-        let icon_k = if row < if retro { pocket_ui::retro::ICON * 2 + 8 } else { 40 } { 1 } else { 2 };
-        let indent = if retro { pocket_ui::retro::ICON * icon_k + 18 } else { 16 * icon_k + 18 };
-        let mut band = c.rows(top, top + visible as i32 * row);
-        let hy = ((hl - first_f) * row as f32).round() as i32;
-        pocket_ui::kit::selection(&mut band, pad, hy, right - pad, row);
-        for (g, k) in app_motion::rows_in_view(first_f, visible, n) {
-            let name = SETTINGS_GROUPS[g].0;
-            let y = (k * row as f32).round() as i32;
-            if (0.0..visible as f32 - 0.5).contains(&k) {
-                self.hits.row(Area::new(pad, top + y, right - pad, row), g);
-                self.motion.row(pad, top + y, right - pad, row);
+        let mut x = left;
+        for (key, button, label) in [("L1", Button::L1, prev.as_str()), ("R1", Button::R1, next.as_str())] {
+            if key == "R1" {
+                x += 16;
             }
-            let base = y + row / 2 + pocket_ui::type_scale::mid(font);
-            let ink = mix(pal().text, pal().ink, (app_motion::under(g, hl) * 255.0) as u32);
-            if retro {
-                pocket_ui::retro::icon(&mut band, RETRO_ICONS[g], pad + NU_BTN_PAD, y + row / 2 - pocket_ui::retro::ICON * icon_k / 2, icon_k);
-            } else {
-                pocket_ui::ui_art::paint_tinted(&mut band, pocket_ui::ui_art::Art::Icon(ICONS[g]), pad + NU_BTN_PAD, y + row / 2 - 8 * icon_k, icon_k, ink);
+            let (y, base) = (mid - CAP_H / 2, mid + pocket_ui::type_scale::mid(CAP_PX));
+            pocket_ui::kit::key_cap(c, &mut self.text, (x, y, cap_w, CAP_H), key, CAP_PX, base, (pal().chip, pal().pill));
+            self.hits.button(Area::new(x - 8, y - 10, cap_w + 16, CAP_H + 20), button);
+            pocket_ui::nav_probe::hint(c, (x, y, cap_w, CAP_H), key, label);
+            x += cap_w;
+            if key == "L1" {
+                x += 16;
+                for (i, &k) in shown.iter().enumerate() {
+                    let on = i as i32 == at;
+                    let ink = if on && tabs { pal().ink } else if on { pal().chalk } else { pal().dust };
+                    let y = mid - SYM / 2;
+                    if on && (tabs || !one_line) {
+                        // The paper round the symbol, and its name beside it on one line: where the focus is, or (the slim
+                        // line under the title) which of the symbols the title names.
+                        let paper = if one_line { (x - 14, NU_PAD + 4, SYM + 12 + name_w + 28, NU_PILL - 8) } else { (x - 8, y - 8, SYM + 16, SYM + 16) };
+                        // Orange is the focus, as on a selected row; the slim line's marker of the category named above
+                        // is the quiet chip while the focus is in the rows.
+                        c.round_rect(paper.0, paper.1, paper.2, paper.3, 12, if tabs { pal().select } else { pal().chip });
+                        if tabs {
+                            pocket_ui::nav_probe::focus(c, paper);
+                        }
+                    }
+                    if retro {
+                        pocket_ui::retro::icon(c, RETRO_ICONS[k], x, y, SYM / pocket_ui::retro::ICON);
+                        if !on {
+                            c.shade_rect(x, y, SYM, SYM, pal().void, 130);
+                        }
+                    } else {
+                        pocket_ui::ui_art::paint_tinted(c, pocket_ui::ui_art::Art::Icon(ICONS[k]), x, y, SYM / 16, ink);
+                    }
+                    if SETTINGS_GROUPS[k].0 == "System" && self.update_dot() {
+                        Self::paint_update_dot(c, x + SYM, y + 4, 24);
+                    }
+                    // A tap goes there: as many presses of L1 or R1 as the shorter way round takes.
+                    let steps = (i as i32 - at).rem_euclid(n.max(1));
+                    let area = Area::new(x - SYM_GAP / 2, mid - CAP_H / 2 - 10, SYM + SYM_GAP, CAP_H + 20);
+                    if steps != 0 && steps <= n / 2 {
+                        self.hits.presses(area, Button::R1, steps as u8);
+                    } else if steps != 0 {
+                        self.hits.presses(area, Button::L1, (n - steps) as u8);
+                    }
+                    x += SYM;
+                    if on && one_line {
+                        x += 12;
+                        self.text.draw(c, Face::Title, 50, x, NU_PAD + 58, if tabs { pal().ink } else { pal().chalk }, tab);
+                        x += name_w;
+                    }
+                    if i + 1 < shown.len() {
+                        x += SYM_GAP;
+                    }
+                }
             }
-            let name_w = self.text.draw(&mut band, Face::Body, font, pad + NU_BTN_PAD + indent, base, ink, name);
-            if name == "System" && self.update_dot() {
-                Self::paint_update_dot(&mut band, pad + NU_BTN_PAD + indent + name_w, base - pocket_ui::type_scale::mid(font), font);
-            }
-            pocket_ui::kit::row_value_in(&mut band, &mut self.text, font, right - NU_BTN_PAD, base, ">", (ink, mix(pal().dust, pal().ink, (app_motion::under(g, hl) * 255.0) as u32)));
         }
-        pocket_ui::kit::scrollbar(c, top, visible as i32 * row, first, visible, n);
-        self.hits.list(sel, n, 0.0, row as f32);
-        self.text.set_translate(false);
-        self.paint_desc(c, &lines[sel], hints_at);
-        self.text.set_translate(was);
+        top
     }
 }
 
+impl App {
+    /// The status pill's left edge (`App::status_pill`) with the widest it shows: the clock with two-digit numbers,
+    /// Wi-Fi, and the battery full and charging.
+    fn widest_pill_left(&mut self, c: &Canvas) -> i32 {
+        use pocket_ui::status_corner::{Battery, Corner, Pill};
+        let clock = pocket_ui::status_corner::clock().map_or_else(|| "88:88".to_string(), |t| widest_clock(&t));
+        let widest = Corner { clock: Some(clock), wifi: true, battery: Some(Battery { percent: 100, charging: true }.label()) };
+        let pill = Pill { right: c.w - NU_PAD, top: NU_PAD, h: NU_PILL - 20, px: NU_SMALL, pad: NU_BTN_PAD };
+        let text = &mut self.text;
+        pill.layout(&widest, |s| text.width(Face::Body, NU_SMALL, s)).map_or(pill.right, |(_, left)| left)
+    }
+}
+
+/// The clock `t` ("9:05 AM", "13:28") with the widest figures and a two-digit hour ("88:88 AM", "88:88").
+fn widest_clock(t: &str) -> String {
+    let t: String = t.chars().map(|c| if c.is_ascii_digit() { '8' } else { c }).collect();
+    if t.find(':') == Some(1) { format!("8{t}") } else { t }
+}
+
+/// The symbols' size on screen, the room between them, and L1's and R1's keys.
+const SYM: i32 = 32;
+const SYM_GAP: i32 = 18;
+const CAP_W: i32 = 64;
+const CAP_H: i32 = 44;
+const CAP_PX: u32 = 28;
+
+/// Category `k`'s name on the row of symbols where its whole name is too long there: the part before " & "
+/// ("Screen & sound" → "Screen"), any name alike, so a new or renamed category needs no code here, only that part's
+/// line in the language tables (`short_tab_names_are_translated`). The whole name stays the title of the two-line layout
+/// and the L1/R1 hints' word.
+fn tab_label(k: usize) -> &'static str {
+    let name = SETTINGS_GROUPS[k].0;
+    name.split(" & ").next().unwrap_or(name)
+}
+
+/// Whether L1, the symbols (`symbols_w` together), the selected one's name (`name_w`) and R1 fit on one line of `room`.
+fn header_fits(cap_w: i32, symbols_w: i32, name_w: i32, room: i32) -> bool {
+    2 * cap_w + 2 * 16 + symbols_w + 12 + name_w <= room
+}
 
 // ---- the host benchmark (`--snapshot bench-settings`, tests/settings_open.rs) ---------------------------------------
 
@@ -590,7 +726,7 @@ impl App {
         let frame = |app: &mut App, buf: &mut [u32]| {
             let now = Instant::now();
             app.motion_frame_begin(now);
-            app.paint_in_appearance(buf, w, h, &mut |app, c| {
+            app.paint_in_appearance(&mut Canvas::new(buf, w, h), &mut |app, c| {
                 app.paint(c);
                 app.motion_after_paint(c);
                 app.sys.paint(c, &mut app.text, app.menu.is_none());
@@ -602,7 +738,7 @@ impl App {
         };
         // The shelf's own frame has set the page; START opens the categories.
         frame(self, &mut buf);
-        self.settings_page = Some(SettingsPage::Groups(0));
+        self.settings_page = Some(SettingsPage::List(first_row()));
         let (glyphs, patterns) = (self.text.drawn_on_the_spot(), self.text.pattern_runs());
         let t = cpu();
         frame(self, &mut buf);
@@ -616,7 +752,7 @@ impl App {
             // Back to the shelf and to the categories again: a new page, a new transition each time.
             self.settings_page = None;
             frame(self, &mut buf);
-            self.settings_page = Some(SettingsPage::Groups(0));
+            self.settings_page = Some(SettingsPage::List(first_row()));
             let t = cpu();
             frame(self, &mut buf);
             steady.push(us(t));
@@ -626,7 +762,7 @@ impl App {
             // The transition alone, on a finished picture.
             self.settings_page = None;
             frame(self, &mut buf);
-            self.settings_page = Some(SettingsPage::Groups(0));
+            self.settings_page = Some(SettingsPage::List(first_row()));
             self.motion_frame_begin(Instant::now());
             self.paint(&mut Canvas::new(&mut buf, w, h));
             let t = cpu();
@@ -639,9 +775,32 @@ impl App {
 
 #[cfg(test)]
 mod tests {
-    use super::super::{app_achievements, app_backup, app_cozy_extras, app_curator, app_gamelist, app_moonlight, app_night_light, app_perf_fan, app_storage, app_tools, app_web, settings_row, Opens, SETTINGS};
+    use super::super::{app_moonlight, app_web, settings_row, Opens, SETTINGS};
     use super::*;
     use pocket_ui::cozy_extras::Needs;
+
+    /// The pill the tab row leaves room for: the widest figures of today's clock, a one-digit hour made two.
+    #[test]
+    fn the_widest_clock_has_two_digit_hours_and_eights() {
+        assert_eq!(widest_clock("13:28"), "88:88");
+        assert_eq!(widest_clock("9:05 AM"), "88:88 AM");
+        assert_eq!(widest_clock("12:00 PM"), "88:88 PM");
+    }
+
+    /// The short names on the tab row are words every language table has (a new "X & Y" category needs a line for X).
+    #[test]
+    fn short_tab_names_are_translated() {
+        for k in 0..SETTINGS_GROUPS.len() {
+            let (full, short) = (SETTINGS_GROUPS[k].0.trim_end_matches('\u{200b}'), tab_label(k).trim_end_matches('\u{200b}'));
+            assert!(full.starts_with(short), "{full} / {short}");
+            if short == full {
+                continue;
+            }
+            for lang in [pocket_ui::i18n::Lang::De, pocket_ui::i18n::Lang::Fr, pocket_ui::i18n::Lang::Es, pocket_ui::i18n::Lang::It, pocket_ui::i18n::Lang::Pt] {
+                assert_ne!(pocket_ui::i18n::tr_in(lang, tab_label(k)), tab_label(k), "{short} has no {lang:?} line");
+            }
+        }
+    }
 
     fn category(name: &str) -> usize {
         SETTINGS_GROUPS
@@ -650,13 +809,10 @@ mod tests {
             .unwrap_or_else(|| panic!("no category {name:?}"))
     }
 
-    /// The categories are bare rows (2026-10-30, NextUI's idea): all seven on one page at every text size on the
-    /// handhelds' 960 logical lines (640x480 is painted at that height, `scaled_layout`), with room
-    /// over the hints kept for the selected one's line; and every line, of a category or of a row, English or German,
-    /// fits whole in the two lines it may take at the bottom at Large text (never cut with "…"). The first-day run
-    /// (2026-10-26) found Playing and System cut short; with the lines under the names 640x480 Large showed 3 of 7.
+    /// Every row's line, English or German, fits whole in the two lines it may take at the bottom at Large text (never
+    /// cut with "…"). The first-day run (2026-10-26) found Playing and System cut short.
     #[test]
-    fn every_line_fits_at_the_bottom_and_all_categories_on_one_page() {
+    fn every_line_fits_at_the_bottom() {
         use pocket_ui::type_scale::{self, TextSize};
         let mut text = pocket_ui::text::Text::new();
         text.set_translate(false);
@@ -667,11 +823,6 @@ mod tests {
                 Some(t) => t.translate(s).unwrap_or_else(|| panic!("no {lang:?} line for {s:?}")).to_string(),
                 None => s.to_string(),
             };
-            for g in 0..SETTINGS_GROUPS.len() {
-                for (sticks, nextui_owned) in [(true, false), (false, false)] {
-                    lines.push(blurb_with(g, sticks, nextui_owned, tr));
-                }
-            }
             for row in SETTINGS.iter() {
                 lines.push(tr(row.2));
             }
@@ -689,10 +840,6 @@ mod tests {
                     assert_eq!(shown.join(" "), *s, "{size:?} {w}: {s:?} is shown whole");
                 }
             }
-            // The page at 960 lines: pill and title above, the hints below, two lines' room for the selected line.
-            let reserved = DESC_LINES as i32 * type_scale::line(NU_SMALL, 10) + 14;
-            let visible = (960 - NU_PAD - NU_PILL - 16 - reserved - (NU_PAD + NU_PILL + 12)) / type_scale::row(66, 36);
-            assert!(visible >= SHOWN as i32, "{size:?}: {visible} of {} categories on a page", SHOWN);
         }
         type_scale::set(TextSize::Normal);
     }
@@ -734,7 +881,7 @@ mod tests {
 
     #[test]
     fn the_flat_list_is_the_categories_one_after_another() {
-        let names: Vec<&str> = SETTINGS_GROUPS.iter().flat_map(|c| c.2.iter().map(|r| r.0)).collect();
+        let names: Vec<&str> = SETTINGS_GROUPS.iter().flat_map(|c| c.1.iter().map(|r| r.0)).collect();
         assert_eq!(SETTINGS.iter().map(|r| r.0).collect::<Vec<_>>(), names);
         for g in 0..SETTINGS_GROUPS.len() {
             for row in span(g) {
@@ -743,50 +890,107 @@ mod tests {
         }
         // Short lists: the point of the categories. Seven categories, nine rows at most
         // (2026-10-30, nine since Screen colour): a list is never longer than one page, also with Large text.
-        assert!(SHOWN <= 7, "at most seven categories (the last entry is the page For tinkerers)");
-        assert!(SETTINGS_GROUPS[..SHOWN].iter().all(|c| (3..=9).contains(&c.2.len())), "every category holds 3 to 9 rows");
-        assert_eq!(SETTINGS_GROUPS[TINKERERS].2.len(), 2, "For tinkerers holds Sync and PC streaming");
+        assert!(SHOWN <= 8, "at most eight categories (Settings v2)");
+        // Rows that are one platform's alone (View: Android, Back to EmulationStation: dArkOS) are never shown together: a
+        // category counts its rows as one platform sees them.
+        let alone = ["android_view", "darkos_es"];
+        for own in alone {
+            let seen = |c: &(&str, &[SettingsRow])| c.1.iter().filter(|r| device_key(r.1).is_none_or(|k| k == own || !alone.contains(&k))).count();
+            assert!(SETTINGS_GROUPS.iter().all(|c| (3..=9).contains(&seen(c))), "every category holds 3 to 9 rows ({own})");
+        }
         let large_row = pocket_ui::type_scale::grown_in(pocket_ui::type_scale::TextSize::Large, 36) as i32 - 36;
         assert!(9 * (66 + large_row * 6 / 5) <= 1080 - 268, "nine Large rows fit on the page");
         let mut seen = std::collections::BTreeSet::new();
         assert!(SETTINGS.iter().all(|r| seen.insert(r.0)), "no row twice: settings_row finds rows by name");
     }
 
-    /// For tinkerers is a page of Help & tools: its rows come back to their own row (a page's B), B on that list goes to the row
-    /// in Help & tools, and B there to the categories. Every other category's B goes to the categories.
+    /// The tree of 2026-11-13 (Alex: "For tinkerers" hid Tailscale and SSH): every network service is a row of
+    /// Connections, the first category, and B on any of them closes Settings; no row opens a list of rows.
     #[test]
-    fn for_tinkerers_is_a_page_of_help_and_tools_and_b_goes_back_through_it() {
-        let help = category("Help & tools");
-        let row = settings_row("For tinkerers");
-        assert_eq!(group_of(row), help, "the row is in Help & tools");
-        for name in ["Sync", app_moonlight::SETTINGS_NAME] {
+    fn every_network_service_is_a_row_of_connections_and_b_closes_settings() {
+        let connections = category("Connections");
+        assert_eq!(connections, 0, "Connections is the first category: START lands on it");
+        assert_eq!(SETTINGS_GROUPS[connections].1.iter().map(|r| r.0).collect::<Vec<_>>(),
+            ["Wi-Fi", "Bluetooth", "Tailscale", "Remote access (SSH)", "Sync", app_web::SETTINGS_NAME, app_moonlight::SETTINGS_NAME]);
+        for name in ["Tailscale", "Remote access (SSH)", "Sync", app_moonlight::SETTINGS_NAME] {
             let at = settings_row(name);
             assert_eq!(SETTINGS[at].0, name, "{name} is a row of Settings");
-            assert_eq!(group_of(at), TINKERERS, "{name} is on the page For tinkerers");
-            assert_eq!(groups_input(SettingsPage::List(at), CANCEL), Some(SettingsPage::List(row)), "{name}: B goes back to For tinkerers' row");
+            assert_eq!(group_of(at), connections, "{name} is in Connections");
+            assert_eq!(groups_input(SettingsPage::List(at), CANCEL), None, "{name}: B closes Settings");
+            assert!(!rows_in(connections, true, false, true).contains(&at), "Android hides {name}");
         }
-        assert_eq!(groups_input(SettingsPage::List(row), CANCEL), Some(SettingsPage::Groups(help)), "B in Help & tools: the categories");
-        // A on the row opens the page at its first row; neither is a category of the first page.
-        assert!(rows(TINKERERS).len() <= SETTINGS_GROUPS[TINKERERS].2.len());
-        assert!(!(0..SHOWN).any(|g| g == TINKERERS));
-        // Network tools return to Connections and then to its category, on every device that offers them.
-        let connections = category("Connections");
-        assert_eq!(SETTINGS_GROUPS[connections].2.iter().map(|r| r.0).collect::<Vec<_>>(),
-            ["Wi-Fi", "Bluetooth", "Tailscale", "Remote access (SSH)", app_web::SETTINGS_NAME]);
-        for name in ["Tailscale", "Remote access (SSH)"] {
-            let at = settings_row(name);
-            assert_eq!(group_of(at), connections);
-            assert_eq!(groups_input(SettingsPage::List(at), CANCEL), Some(SettingsPage::Groups(connections)));
-            assert!(!shown_on(SETTINGS[at].1, false, true), "host-owned networking hides {name}");
+        for name in ["Tailscale", "Remote access (SSH)", "Sync"] {
+            assert!(!rows_in(connections, false, true, false).contains(&settings_row(name)), "host-owned networking hides {name}");
         }
+        assert!(rows_in(connections, true, false, true).is_empty(), "Android's handheld view has no Connections");
+        assert!(!SETTINGS.iter().any(|r| r.0 == "For tinkerers"), "no page of rows behind a row");
     }
 
+    /// START lands on Connections, the first category; Android's handheld view has none, so it lands on Look, and A there
+    /// opens Look's list (with a fixed first category, A did nothing while Look was painted selected).
+    #[test]
+    fn start_opens_the_first_category_this_device_has() {
+        assert_eq!(first_group_in(false), category("Connections"));
+        let android = first_group_in(true);
+        assert_eq!(android, category("Look"));
+        assert!(!rows_in(android, true, false, true).is_empty());
+        assert_eq!(first_group(), category("Connections"), "the test machine is a Linux handheld");
+    }
+
+    /// Settings v2 (2026-11-16, SETTINGS-IA-REVIEW and -FABLE): every row in its category, in its order. Controls & sound
+    /// mixed buttons, menu clicks and a reading aid under a loudspeaker, and Volume and Brightness were nowhere in Settings.
+    #[test]
+    fn every_row_is_in_its_category_of_settings_v2() {
+        let tree: Vec<(&str, Vec<&str>)> = SETTINGS_GROUPS.iter().map(|c| (c.0.trim_end_matches('\u{200b}'), c.1.iter().map(|r| r.0).collect())).collect();
+        let want: [(&str, &[&str]); 8] = [
+            ("Connections", &["Wi-Fi", "Bluetooth", "Tailscale", "Remote access (SSH)", "Sync", "Web companion", "PC streaming"]),
+            ("Look", &["Layout", "Appearance", "Colours", "Style", "Text size", "Zoom in the pause menu", "Motion", "Game start animation", "Cozy extras"]),
+            ("Screen & sound", &["Brightness", "Volume", "Screen colour", "Night light", "Menu sounds", "Case sounds"]),
+            ("Controls", &["Buttons", "Controller setup", "Test buttons", "Haptics", "LEDs"]),
+            ("Playing", &["On start", "Continue where I quit", "Console boot screen", "Remind me where I was", "Screen frames", "Over the game", "Performance & fan", "RetroAchievements"]),
+            ("Games", &["Add games", "Box art & downloads", "Game check", "Systems on the shelf", "Curator", "Screenshots", "From EmulationStation"]),
+            ("System", &["Back to EmulationStation", "Updates", "Language", "View", "Sleep & power", "Battery", "Time", "Storage", "Backup & reset", "Kids mode"]),
+            ("Help & tools", &["Manual", "Tour", "How you like to play", "First-start setup", "Tools", "Report a problem", "About"]),
+        ];
+        let want: Vec<(&str, Vec<&str>)> = want.iter().map(|(c, r)| (*c, r.to_vec())).collect();
+        assert_eq!(tree, want);
+        // The switches keep their pages and values: only the place and the name moved.
+        assert!(matches!(SETTINGS[settings_row("Game start animation")].1, Opens::Animations));
+        assert!(matches!(SETTINGS[settings_row("Menu sounds")].1, Opens::Sounds));
+        assert!(matches!(SETTINGS[settings_row("Controller setup")].1, Opens::Controllers));
+        // Android: Controls keeps Buttons and Controller setup, Screen & sound the levels and the sounds.
+        let android = |g: usize| rows_in(g, true, false, true).iter().map(|i| SETTINGS[*i].0).collect::<Vec<_>>();
+        assert_eq!(android(category("Controls")), ["Buttons", "Controller setup"]);
+        assert_eq!(android(category("Screen & sound")), ["Brightness", "Volume", "Menu sounds", "Case sounds"]);
+        // Controller setup's line names where pairing is, only where that row is.
+        let ctl = settings_row("Controller setup");
+        assert!(row_line_in(ctl, false).contains("Connections › Bluetooth"), "{}", row_line_in(ctl, false));
+        assert!(!row_line_in(ctl, true).contains("Bluetooth"), "Android pairs in its own settings");
+    }
+
+    /// Each category its own symbol (Settings v2): the controller is Controls', the loudspeaker Screen & sound's, and
+    /// Playing has the play button, so no symbol means two things in the row.
+    #[test]
+    fn every_category_has_a_symbol_of_its_own() {
+        use pocket_ui::ui_art::Icon;
+        assert_eq!(ICONS[category("Controls")], Icon::Playing, "the gamepad");
+        assert_eq!(ICONS[category("Screen & sound")], Icon::Sound);
+        assert_eq!(ICONS[category("Playing")], Icon::Play);
+        assert_eq!(RETRO_ICONS[category("Controls")], pocket_ui::retro::Icon::Playing, "Retro's controller");
+        assert_eq!(RETRO_ICONS[category("Playing")], pocket_ui::retro::Icon::Continue, "Retro's play button");
+        for (k, i) in ICONS.iter().enumerate() {
+            assert!(ICONS.iter().skip(k + 1).all(|j| j != i), "{i:?} twice");
+        }
+        for (k, i) in RETRO_ICONS.iter().enumerate() {
+            assert!(RETRO_ICONS.iter().skip(k + 1).all(|j| j != i), "Retro {i:?} twice");
+        }
+    }
 
     /// Settings in seven categories (2026-10-30): every choice has a row, none only on a button (Y, R1, L1, X, R2 on the look
     /// page were the only way to some), and each is in one place.
     #[test]
     fn every_choice_has_one_row_of_its_own() {
-        for name in ["Layout", "Appearance", "Colours", "Style", "Text size", "Screen colour", "Systems on the shelf", "Animations", "Motion", "Buttons", "Language"] {
+        for name in ["Layout", "Appearance", "Colours", "Style", "Text size", "Screen colour", "Systems on the shelf", "Game start animation", "Motion", "Buttons", "Language"] {
             assert_eq!(SETTINGS.iter().filter(|r| r.0 == name).count(), 1, "{name}: one row");
         }
         let opens: Vec<String> = SETTINGS.iter().map(|r| match r.1 {
@@ -798,41 +1002,192 @@ mod tests {
         assert!(opens.iter().all(|o| seen.insert(o)), "no page or switch twice: {opens:?}");
     }
 
-    /// The line under each category names its rows, one part each, in their order, in every language: every part
-    /// ("quit", "frames", "Bilder & Extras") is in its row's name or the other way round. A row added, moved or
-    /// renamed without its line fails here; so does a translated line naming a word its rows don't use.
+    /// What takes up each row Android's handheld view shows (HANDHELD-LEFTOVERS, 2026-11-13). A row there is a switch that does
+    /// something on Android: the Linux interface itself reads it (the shelf, its pages and sounds), the player is handed it
+    /// (`android_handheld::launch_settings`, `picture_choice`), or it is Android's own page. A new row has no entry until somebody
+    /// has looked at who reads it on Android; then this test fails and says so.
+    const ANDROID_ROWS: &[(&str, &str)] = &[
+        ("Layout", "the shelf"),
+        ("Systems on the shelf", "the shelf"),
+        ("Cozy extras", "the shelf; the player is handed extras"),
+        ("Appearance", "every page"),
+        ("Colours", "every page; handed to the player"),
+        ("Style", "every page; the font is handed to the player"),
+        ("Text size", "every page; handed to the player"),
+        ("Game start animation", "the shelf; handed to the player as cozy"),
+        ("Motion", "every page; handed to the player"),
+        ("Brightness", "this app's window (`android_controls`), as the quick settings' row"),
+        ("Volume", "the media volume (`android_controls`), as the quick settings' row"),
+        ("Menu sounds", "the UI sounds (AAudio)"),
+        ("Case sounds", "the shelf"),
+        ("On start", "the start of the app (`on_start::decide`)"),
+        ("Remind me where I was", "the shelf's Where was I"),
+        ("Buttons", "the hints; the prompts are handed to the player"),
+        ("Controller setup", "the menus' buttons per controller (`pad::bindings`), as from the pause menu's Controls"),
+        ("Screen frames", "the frame every game starts with (`options` globals, `picture_choice`)"),
+        ("RetroAchievements", "the player scores into the shared tallies"),
+        ("Add games", "Android's ROMs folders"),
+        ("Game check", "the library"),
+        ("Box art & downloads", "box art and the starter pack"),
+        ("Curator", "the shelf"),
+        ("Language", "every page; handed to the player"),
+        ("View", "Android's own row"),
+        ("Kids mode", "the shelf"),
+        ("First-start setup", "the setup"),
+        ("How you like to play", "the setup"),
+        ("Tour", "the cards"),
+        ("Manual", "the manual"),
+        ("About", "the page"),
+    ];
+
+    /// The class behind "First-start setup names Wi-Fi" and "Screen frame offers Glow": every row of Settings that Android's handheld
+    /// view shows is one something there reads (`ANDROID_ROWS` names who), and every row that nothing reads is out. Zoom in the pause
+    /// menu, Over the game, Continue where I quit and Screenshots were switches that did nothing on Android.
     #[test]
-    #[ignore = "release check: sh scripts/release-check.sh"]
-    fn every_category_line_names_its_rows_in_order() {
-        let parts = |line: &str| -> Vec<String> { line.trim_end_matches('.').split(", ").map(|p| p.trim().to_lowercase()).collect() };
-        for (sticks, nextui_owned) in [(true, false), (false, false)] {
-            for (g, (name, _, _)) in SETTINGS_GROUPS.iter().enumerate() {
-                let rows: Vec<&str> = rows_on(g, sticks, nextui_owned).iter().map(|i| SETTINGS[*i].0).collect();
-                for lang in pocket_ui::i18n::Lang::ALL {
-                    let tr = |s: &str| pocket_ui::i18n::tr_in(lang, s);
-                    let line = blurb_with(g, sticks, nextui_owned, tr);
-                    let rows: Vec<String> = rows.iter().map(|r| tr(r).to_lowercase()).collect();
-                    let got = parts(&line);
-                    assert_eq!(got.len(), rows.len(), "{lang:?} {name} (sticks {sticks}, NextUI {nextui_owned}): {line:?} has a part per row: {rows:?}");
-                    for (part, row) in got.iter().zip(&rows) {
-                        assert!(row.contains(part.as_str()) || part.contains(row.as_str()), "{lang:?} {name}: {part:?} is not the row {row:?} ({line:?})");
+    fn every_settings_row_android_shows_has_an_effect_there() {
+        let mut shown: Vec<&str> = Vec::new();
+        for g in 0..SETTINGS_GROUPS.len() {
+            shown.extend(rows_in(g, true, false, true).iter().map(|i| SETTINGS[*i].0));
+        }
+        for row in &shown {
+            assert!(ANDROID_ROWS.iter().any(|(n, _)| n == row), "Android shows the row {row:?}, and nothing says who reads it there: hide it (device::ANDROID_HIDES) or name its reader in ANDROID_ROWS");
+        }
+        for (name, _) in ANDROID_ROWS {
+            assert!(shown.contains(name), "ANDROID_ROWS lists {name:?}, which Android does not show");
+        }
+        for gone in ["Zoom in the pause menu", "Over the game", "Continue where I quit", "Screenshots"] {
+            assert!(!shown.contains(&gone), "{gone} on Android");
+        }
+        let linux: Vec<&str> = (0..SETTINGS_GROUPS.len()).flat_map(|g| rows_in(g, true, false, false)).map(|i| SETTINGS[i].0).collect();
+        for kept in ["Zoom in the pause menu", "Over the game", "Continue where I quit", "Screenshots"] {
+            assert!(linux.contains(&kept), "{kept} stays on Linux");
+        }
+    }
+
+    /// Words of the Linux handheld, in the three languages, that no page of Android's handheld view may say: it runs no ROCKNIX or
+    /// pocket-core, has no SD-card folders, Wi-Fi, Bluetooth, fan or power rows of ours, no file sharing, no rewind, no Zoom in the
+    /// pause menu, START + Vol keys or "Pocket" (ANDROID-READINESS 13.11.: the Odin 2 Mini's Tour, Manual, quick settings,
+    /// RetroAchievements and Runs on pages said them). A phrase is found anywhere, a single word as a word ("fan", not "fans").
+    const LINUX_ONLY_WORDS: &[&str] = &[
+        "ROCKNIX", "pocket-core", "EmulationStation", "SD card", "SD-Karte", "tarjeta SD", "Wi-Fi", "WLAN", "Bluetooth", "fan", "Lüfter",
+        "ventilador", "rewind", "Zurückspulen", "retroceso", "Pocket", "Vol+", "Vol-", "file sharing", "Dateifreigabe", "share them",
+        "freigeben", "compartirlos", "Zoom in the pause menu", "Lupe", "lupa", "Power off", "Sleep & power", "START in the pause menu",
+        "An emulator app on this device can play", "Linux handheld", "Linux-Handheld", "consola con Linux", "Screen colour",
+        "Bildschirmfarbe", "Color de pantalla",
+    ];
+
+    fn names_word(text: &str, word: &str) -> bool {
+        if word.chars().all(char::is_alphanumeric) {
+            text.split(|c: char| !(c.is_alphanumeric() || c == '-' || c == '+')).any(|w| w == word)
+        } else {
+            text.contains(word)
+        }
+    }
+
+    /// Every text Android's handheld view shows where the Linux handheld's words once stood, by page: `(page, translated, texts)`.
+    /// The manual is English on every device (`paint_manual`), the rest goes through the language tables. A new Android page with
+    /// its own words belongs here.
+    fn android_texts() -> Vec<(&'static str, bool, Vec<String>)> {
+        use pocket_ui::features::{available_in, basic_in, line_in, BASICS};
+        let own = |v: Vec<&str>| v.into_iter().map(String::from).collect::<Vec<_>>();
+        vec![
+            ("Tour: the basics", true, own(BASICS.iter().map(|b| basic_in(b, true)).flat_map(|b| [b.title, b.text, b.place]).collect())),
+            ("Tour and first start: the feature cards", true, own(available_in(true, false, true).flat_map(|(_, f)| [f.title, line_in(f, true), f.place]).collect())),
+            ("Quick settings", true, own([pocket_ui::quick::Row::Brightness, pocket_ui::quick::Row::Volume].map(|r| pocket_ui::quick_paint::level_line(r, true)).to_vec())),
+            ("Runs on without a download channel", true, vec![
+                pocket_ui::emu_choice_page::closed_line(&[]),
+                pocket_ui::emu_choice_page::closed_line(&[("org.ppsspp.ppsspp".into(), "PPSSPP".into())]),
+            ]),
+            ("RetroAchievements", true, own(pocket_ui::achievements_page::about_in(true).into_iter().chain([pocket_ui::achievements_page::password_note_in(true)]).collect())),
+            ("Manual", false, own(pocket_ui::manual::ANDROID_PAGES.iter().map(|(_, md)| *md).collect())),
+            ("First start: the welcome", true, vec![pocket_ui::setup::welcome_title(true).to_string()]),
+            ("Tour: Big text's picture", true, pocket_ui::feature_previews::easy_to_read_rows(true).into_iter().map(|(name, _)| name.to_string()).collect()),
+            // The files dialog is Java with its own three languages: all of them are in the text.
+            ("The files dialog", false, vec![{
+                let java = include_str!("../android/java/xyz/pocketui/app/HandheldActivity.java");
+                let at = java.find("private void askForFiles()").expect("the dialog");
+                java[at..at + java[at..].find("onRequestPermissionsResult").unwrap()].to_string()
+            }]),
+        ]
+    }
+
+    /// The class behind "the Tour promises Wi-Fi, Bluetooth, fan and power", "Manual is the ROCKNIX guide", "Vol+ on Android" and
+    /// "an emulator app can play it" with no app (Odin 2 Mini, 13.11.): no Android page names what only Linux has, in any language.
+    /// Linux keeps its words (the same table on Linux finds them), so the test can see them.
+    #[test]
+    fn android_pages_name_nothing_only_linux_has() {
+        let mut found = Vec::new();
+        for (page, translated, texts) in android_texts() {
+            let langs: Vec<pocket_ui::i18n::Lang> = if translated { pocket_ui::i18n::Lang::ALL.to_vec() } else { vec![pocket_ui::i18n::Lang::En] };
+            for text in &texts {
+                for lang in &langs {
+                    let shown = if translated { pocket_ui::i18n::tr_in(*lang, text) } else { text.clone() };
+                    // A console's own name is no Linux word.
+                    let shown = shown.replace("Neo Geo Pocket", "Neo Geo");
+                    for word in LINUX_ONLY_WORDS.iter().filter(|w| names_word(&shown, w)) {
+                        found.push(format!("{page} ({lang:?}) says {word:?}: {shown:?}"));
                     }
                 }
             }
         }
+        assert!(found.is_empty(), "Android's handheld view names what only Linux has:\n{}", found.join("\n"));
+        // The same pages on Linux keep their words.
+        let tour: Vec<&str> = pocket_ui::features::BASICS.iter().map(|b| pocket_ui::features::basic_in(b, false).text).collect();
+        assert!(tour.iter().any(|t| t.contains("Wi-Fi")) && tour.iter().any(|t| t.contains("SD card")), "{tour:?}");
+        assert!(pocket_ui::quick_paint::level_line(pocket_ui::quick::Row::Brightness, false).contains("Vol+"));
+        assert!(pocket_ui::achievements_page::about_in(false)[0].contains("pocket-core"));
+        assert!(pocket_ui::manual::PAGES[0].1.contains("ROCKNIX"));
+        assert_eq!(pocket_ui::setup::welcome_title(false), "Welcome to your Pocket");
+        assert!(pocket_ui::feature_previews::easy_to_read_rows(false).iter().any(|(n, _)| *n == "Zoom in the pause menu"));
     }
 
-    /// A device without sticks (the H700 handhelds) has no LEDs row, and Sound & feel's line doesn't promise one, in
-    /// any language (review 2026-10-30).
+    /// The emulator app the line names is one the phone has; without one the line says so, and never names an app.
     #[test]
-    fn without_sticks_the_sound_line_names_no_leds() {
-        let g = category("Sound & feel");
+    fn a_closed_channel_names_an_app_only_where_the_phone_has_one() {
+        use pocket_ui::emu_choice_page::closed_line;
+        let with = closed_line(&[("org.ppsspp.ppsspp".into(), "PPSSPP".into())]);
+        assert!(with.contains("PPSSPP") && with.contains("Runs on"), "{with}");
+        let without = closed_line(&[]);
+        assert!(without.contains("no emulator app") && !without.contains("can play it"), "{without}");
         for lang in pocket_ui::i18n::Lang::ALL {
-            let tr = |s: &str| pocket_ui::i18n::tr_in(lang, s);
-            assert!(blurb_with(g, true, false, tr).contains("LEDs"), "with sticks");
-            let line = blurb_with(g, false, false, tr);
-            assert!(!line.contains("LED"), "{line:?}");
-            assert!(line.ends_with('.') && line.chars().next().is_some_and(char::is_uppercase), "{line:?}");
+            for line in [&with, &without] {
+                let shown = pocket_ui::i18n::tr_in(lang, line);
+                assert!(lang == pocket_ui::i18n::Lang::En || shown != *line, "{lang:?} has no translation of {line:?}");
+            }
+        }
+    }
+
+    /// Under each row Settings says what it does. On Android no line names what the row does not have there: the setup has no Wi-Fi
+    /// step, About no network, Add games no file sharing, Extras no PortMaster. Linux keeps its lines.
+    #[test]
+    fn android_s_row_lines_name_nothing_it_does_not_have() {
+        let banned = ["Wi-Fi", "WLAN", "PortMaster", "network", "Netzwerk", "file sharing", "Dateifreigabe", "SD card", "SD-Karte", "EmulationStation", "fan", "Lüfter"];
+        for g in 0..SETTINGS_GROUPS.len() {
+            for i in rows_in(g, true, false, true) {
+                let line = row_line_in(i, true);
+                for lang in pocket_ui::i18n::Lang::ALL {
+                    let text = pocket_ui::i18n::tr_in(lang, line);
+                    for word in banned {
+                        assert!(!text.contains(word), "{lang:?} {}: {text:?} names {word}, which Android does not have", SETTINGS[i].0);
+                    }
+                }
+            }
+        }
+        let first = SETTINGS.iter().position(|s| matches!(s.1, Opens::FirstStart)).unwrap();
+        assert!(row_line_in(first, false).contains("Wi-Fi"), "Linux's setup has the Wi-Fi step");
+    }
+
+    /// The Tour's and the first start's cards follow the same list: no card for what Android has no switch for.
+    #[test]
+    fn android_s_cards_are_the_features_it_has() {
+        use pocket_ui::features::available_in;
+        let ids: Vec<&str> = available_in(true, false, true).map(|(_, f)| f.id).collect();
+        for gone in ["quit_without_saving", "pixel_path", "pixel_path_live", "run_ahead", "haptics", "leds", "sync", "tailscale", "tools", "perf_fan"] {
+            assert!(!ids.contains(&gone), "the card {gone} on Android");
+        }
+        let linux: Vec<&str> = available_in(true, false, false).map(|(_, f)| f.id).collect();
+        for kept in ["quit_without_saving", "pixel_path", "run_ahead"] {
+            assert!(linux.contains(&kept), "the card {kept} stays on Linux");
         }
     }
 
@@ -864,35 +1219,91 @@ mod tests {
     }
 
     #[test]
-    fn a_opens_a_category_at_its_first_row_and_b_returns_to_it() {
-        {
-            for g in 0..SHOWN {
-                let rows = rows(g);
-                let opened = groups_input(SettingsPage::Groups(g), CONFIRM);
-                assert_eq!(opened, Some(SettingsPage::List(rows[0])));
-                // Down to the last row, then B: the cursor is on the category it came from.
-                let mut page = opened.unwrap();
-                for _ in 1..rows.len() {
-                    page = groups_input(page, Button::Down).unwrap();
-                }
-                assert_eq!(page, SettingsPage::List(*rows.last().unwrap()));
-                assert_eq!(groups_input(page, CANCEL), Some(SettingsPage::Groups(g)));
-            }
-        }
-    }
-
-    #[test]
     fn moving_stays_in_the_category_and_goes_round_at_its_ends() {
         let r = rows(category("Connections"));
         let first = SettingsPage::List(r[0]);
         let last = SettingsPage::List(*r.last().unwrap());
-        assert_eq!(groups_input(first, Button::Up), Some(last), "Up on the first row: the category's last");
+        assert_eq!(groups_input(SettingsPage::List(r[1]), Button::Up), Some(first), "Up moves a row up");
         assert_eq!(groups_input(last, Button::Down), Some(first), "Down on the last row: the category's first");
-        // The categories go round too, and Left/Right do nothing there.
-        let n = SHOWN;
-        assert_eq!(groups_input(SettingsPage::Groups(0), Button::Up), Some(SettingsPage::Groups(n - 1)));
-        assert_eq!(groups_input(SettingsPage::Groups(n - 1), Button::Down), Some(SettingsPage::Groups(0)));
-        assert_eq!(groups_input(SettingsPage::Groups(2), Button::Right), Some(SettingsPage::Groups(2)));
+        // Left/Right are the row's own (a switch changes); here they move nothing.
+        assert_eq!(groups_input(first, Button::Right), Some(first));
+    }
+
+    /// Package 2 of the tree (SETTINGS-IA-DECISION): START shows rows at once, L1/R1 go through the categories and round at
+    /// the ends, each arriving on its category's first row, and B leaves Settings for the shelf in one press (it took two).
+    /// On every profile: a Linux handheld, one without sticks, NextUI's Brick card, Android's handheld view (no Connections).
+    #[test]
+    fn l1_and_r1_reach_every_category_and_b_closes_settings() {
+        let next = |shown: &[usize], g: usize| group_after(shown, g, 1);
+        for (sticks, nextui_owned, android) in [(true, false, false), (false, false, false), (true, true, false), (true, false, true)] {
+            let shown: Vec<usize> = (0..SHOWN).filter(|g| !rows_in(*g, sticks, nextui_owned, android).is_empty()).collect();
+            let mut g = shown[0];
+            let mut seen = vec![g];
+            for _ in 1..shown.len() {
+                g = next(&shown, g);
+                seen.push(g);
+            }
+            assert_eq!(seen, shown, "R1 visits every category once, in order ({sticks} {nextui_owned} {android})");
+            assert_eq!(next(&shown, g), shown[0], "R1 on the last: the first again");
+            assert_eq!(group_after(&shown, shown[0], -1), *shown.last().unwrap(), "L1 on the first: the last");
+        }
+        assert_eq!(first_group_in(true), category("Look"), "Android starts on Look");
+        // On this machine, through the input itself: R1 from the start, all the way round, B out.
+        let start = SettingsPage::List(first_row());
+        assert_eq!(group_of(first_row()), first_group());
+        let mut page = start;
+        let mut visited = Vec::new();
+        for _ in 0..shown_groups().len() {
+            let SettingsPage::List(row) = page else { panic!("{page:?}") };
+            assert_eq!(rows(group_of(row)).first(), Some(&row), "a category opens on its first row");
+            visited.push(group_of(row));
+            page = groups_input(page, Button::R1).unwrap();
+        }
+        assert_eq!(visited, shown_groups());
+        assert_eq!(page, start, "round again to the start");
+        assert_eq!(groups_input(groups_input(start, Button::L1).unwrap(), Button::R1), Some(start));
+        assert_eq!(groups_input(SettingsPage::List(first_row() + 1), CANCEL), None, "B in a list: out of Settings");
+    }
+
+    /// A hand test of 0.5 (15.11.): L1/R1 as the only way between the categories is "meh" on a simple handheld. The
+    /// tab pattern of console and TV settings: Up on a category's first row puts the focus on the row of symbols at the top;
+    /// there Left/Right (and L1/R1) go to the previous/next category at once, round at the ends, the rows under it showing
+    /// that category; Down or A goes back into the rows, on the first; Up stays; B leaves Settings as from the rows.
+    #[test]
+    fn up_on_the_first_row_reaches_the_categories_and_left_right_switch_them() {
+        let start = SettingsPage::List(first_row());
+        let bar = groups_input(start, Button::Up).unwrap();
+        assert_eq!(bar, SettingsPage::Tabs(first_row()), "Up on the first row: the categories at the top");
+        assert_eq!(groups_input(bar, Button::Up), Some(bar), "Up on the categories: stays");
+        assert_eq!(groups_input(bar, Button::Down), Some(start), "Down: back to the first row");
+        assert_eq!(groups_input(bar, CONFIRM), Some(start), "A: into the rows, on the first");
+        assert_eq!(groups_input(bar, CANCEL), None, "B on the categories: out of Settings");
+        let shown = shown_groups();
+        let mut page = bar;
+        let mut visited = Vec::new();
+        for _ in 0..shown.len() {
+            let SettingsPage::Tabs(row) = page else { panic!("Right left the categories: {page:?}") };
+            assert_eq!(rows(group_of(row)).first(), Some(&row), "the rows under it are the category's, from its first");
+            visited.push(group_of(row));
+            page = groups_input(page, Button::Right).unwrap();
+        }
+        assert_eq!(visited, shown, "Right visits every category once, in order");
+        assert_eq!(page, bar, "and comes round to the first");
+        assert_eq!(groups_input(groups_input(bar, Button::Left).unwrap(), Button::Right), Some(bar), "Left is Right's way back");
+        assert_eq!(groups_input(bar, Button::R1), groups_input(bar, Button::Right), "R1 there is Right");
+        assert_eq!(groups_input(bar, Button::L1), groups_input(bar, Button::Left), "L1 there is Left");
+        let look = SettingsPage::Tabs(rows(category("Look"))[0]);
+        let SettingsPage::List(row) = groups_input(look, Button::Down).unwrap() else { panic!() };
+        assert_eq!(group_of(row), category("Look"), "Down goes into the category chosen up there");
+    }
+
+    /// The header fits on one line exactly when its parts and the gaps do; otherwise the slim line under the title takes it.
+    #[test]
+    fn the_header_takes_a_line_of_its_own_only_when_it_does_not_fit() {
+        let (cap, symbols) = (CAP_W, 7 * SYM + 6 * SYM_GAP);
+        let need = 2 * cap + 2 * 16 + symbols + 12 + 300;
+        assert!(header_fits(cap, symbols, 300, need));
+        assert!(!header_fits(cap, symbols, 300, need - 1));
     }
 
 
@@ -901,8 +1312,14 @@ mod tests {
     #[test]
     fn beginners_find_volume_brightness_and_bios_from_settings() {
         let line = |name: &str| SETTINGS.iter().find(|r| r.0 == name).unwrap().2;
-        let sounds = line("Sounds");
-        assert!(sounds.contains("Game volume") && sounds.contains("brightness") && sounds.contains("HOME"), "{sounds}");
+        // Settings v2: Volume and Brightness are rows of their own, in Screen & sound, and the menus' clicks say what they are.
+        let screen = category(super::super::SCREEN_SOUND_CATEGORY);
+        for name in ["Brightness", "Volume"] {
+            assert_eq!(group_of(settings_row(name)), screen, "{name} is a row of Screen & sound");
+            assert!(line(name).contains("quick settings"), "{}", line(name));
+        }
+        assert!(!SETTINGS.iter().any(|r| r.0 == "Sounds"), "no row \"Sounds\" that reads like the volume");
+        assert!(line("Menu sounds").contains("menus"), "{}", line("Menu sounds"));
         assert!(line("Add games").contains("BIOS"), "{}", line("Add games"));
         // Pixel Path is the enthusiasts' (0.4): the row everyone reads names what everyone gets.
         assert!(line("Over the game").contains("frame rate") && !line("Over the game").contains("Pixel Path"), "{}", line("Over the game"));
@@ -957,19 +1374,8 @@ fn brick_hides_with(opens: Opens, standalone: bool) -> bool {
 mod brick_standalone_tests {
     use super::*;
 
-    /// Sound & feel's line on the Brick names the same parts as the handhelds' line, the last one by the row's Brick name.
-    #[test]
-    fn the_bricks_sound_line_names_the_lights_row_by_its_page() {
-        let g = SETTINGS_GROUPS.iter().position(|c| c.0 == "Sound & feel").unwrap();
-        let (brick, other): (Vec<&str>, Vec<&str>) = (BRICK_SOUND_LINE.trim_end_matches('.').split(", ").collect(), SETTINGS_GROUPS[g].1.trim_end_matches('.').split(", ").collect());
-        assert_eq!(brick.len(), other.len());
-        assert_eq!(brick[..brick.len() - 1], other[..other.len() - 1]);
-        assert_eq!(brick.last().copied(), Some(super::super::app_brick_lights::TITLE.to_lowercase().as_str()));
-        assert_eq!(*other.last().unwrap(), "LEDs");
-    }
 
-
-    /// Alex's standalone boot (2026-11-03): no covers appeared. The pictures row (Settings > Games > Extras) is the one place the
+    /// Alex's standalone boot (2026-11-03): no covers appeared. The pictures row (Settings > Games > Box art & downloads) is the one place the
     /// automatic fetch is switched off, so on the card without NextUI it stays reachable and the fetch is on until chosen off.
     #[test]
     fn the_standalone_card_keeps_the_pictures_row_and_fetches_by_default() {

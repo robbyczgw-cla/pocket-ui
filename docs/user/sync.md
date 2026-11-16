@@ -1,6 +1,6 @@
 # Sync saves with Syncthing
 
-Settings → Help & tools → For tinkerers → **Sync** keeps your saves and save states (and, if you switch it on, your [library data](#library-data)) the same on your Pocket, your computer, your phone or a second
+Settings → Connections → **Sync** keeps your saves and save states (and, if you switch it on, your [library data](#library-data)) the same on your Pocket, your computer, your phone or a second
 handheld. It uses [Syncthing](https://syncthing.net), which ROCKNIX already contains. Nothing goes through a
 company's server, and nothing leaves the Pocket until you pair another device.
 
@@ -12,7 +12,7 @@ company's server, and nothing leaves the Pocket until you pair another device.
 
 ## What is shared
 
-Each row of Settings → Help & tools → For tinkerers → **Sync** is a folder:
+Each row of Settings → Connections → **Sync** is a folder:
 
 | Row | Folder | What is in it |
 |---|---|---|
@@ -58,7 +58,7 @@ newer core may not load on an older one.
 ## Turn it on
 
 1. Connect to Wi-Fi (Settings → Connections → Wi-Fi).
-2. Settings → Help & tools → For tinkerers → **Sync**, select **Syncthing**, press **A**. It takes a few seconds. The setting survives a restart:
+2. Settings → Connections → **Sync**, select **Syncthing**, press **A**. It takes a few seconds. The setting survives a restart:
    Syncthing starts with the Pocket until you switch it off here.
 3. The page now shows:
    - **Status**: *Not connected* until a device is paired, then *Up to date* or *Syncing 3 files*.
@@ -105,18 +105,18 @@ this row off, Syncthing still finds new saves on its own (within about ten secon
 
 If you play the same game on two devices before they have synced, both have a newer save. Syncthing keeps both: the
 save stays with one version, and the other is put next to it as a copy named `….sync-conflict-…`. pocket-ui looks for
-these copies a little after it starts, after every game, when you open Settings → Help & tools → For tinkerers → **Sync**, and every
+these copies a little after it starts, after every game, when you open Settings → Connections → **Sync**, and every
 few minutes while you are on the shelf. It never looks while a game runs, and shows nothing then.
 
 When it finds one:
 
 - The shelf says it once, for a few seconds, and where to choose: **A save has two versions: Pokémon Emerald – open the
   game's card to choose** for one game's save. For a memory card, a save no game of your shelf owns, or several at
-  once it says **… – choose in Settings → Help & tools → For tinkerers → Sync** (**A memory card has two versions: Mcd001.ps2 – …**,
+  once it says **… – choose in Settings → Connections → Sync** (**A memory card has two versions: Mcd001.ps2 – …**,
   **… and 2 more – …**).
 - The game's [card](library.md#what-the-card-shows) has a row under "Your game": **Two versions of this game's save.
   Choose one…** Press **A** on it.
-- Settings → Help & tools → For tinkerers → **Sync** has the row **Two versions** with how many wait ("2 to choose"). **A** lists them;
+- Settings → Connections → **Sync** has the row **Two versions** with how many wait ("2 to choose"). **A** lists them;
   A on one opens its versions. With nothing to choose the row says **Nothing waiting** and A does nothing.
 
 The page shows each version with the time it was last changed and its size: **In use now** is the one the game loads
@@ -141,7 +141,7 @@ with more and copy the other game's save across from the backup folder in the em
 computer. Let the devices sync before you switch, and this does not happen.
 
 Wii, 3DS and GameCube `.gci` saves have no game name pocket-ui can match. They appear only in the list under
-Settings → Help & tools → For tinkerers → Sync, with their file name.
+Settings → Connections → Sync, with their file name.
 
 With Syncthing off, or when nothing has two versions, there is no row on the card, no line on the shelf, and the
 Sync page says **Nothing waiting**.
