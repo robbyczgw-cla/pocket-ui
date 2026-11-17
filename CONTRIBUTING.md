@@ -10,6 +10,9 @@ If you run pocket-ui on a Mini V2, an issue that says "I tried X on ROCKNIX <ver
 more than a feature idea. Use the bug form; it asks for the details that matter (device, ROCKNIX version, pocket-ui
 version, how you installed it). No GitHub account? Write to robby@robbyczesany.com.
 
+Questions, ideas, or a handheld you would like to test on? Join the Discord: https://discord.gg/sDqUV4M49g (#help, #ideas, and
+#testers for device testers).
+
 ## Before you open a pull request
 
 - For anything larger than a fix, open an issue first, so we can agree on the approach before you spend the time.

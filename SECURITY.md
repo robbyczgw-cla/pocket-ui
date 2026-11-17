@@ -13,7 +13,7 @@ maintainers see the report. No GitHub account? Write to robby@robbyczesany.com i
 - the steps to reproduce, and the pocket-ui and ROCKNIX versions,
 - what you think the impact is.
 
-Do not open a public issue for a security problem. We will answer within a week, keep you posted on the fix,
+Do not open a public issue or post on Discord about a security problem. We will answer within a week, keep you posted on the fix,
 and credit you in the release notes if you want.
 
 ## What is in scope

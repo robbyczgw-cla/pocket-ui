@@ -115,6 +115,7 @@ More in the [FAQ](https://pocketui.xyz/faq).
 - [Manual](docs/user/index.md): everything, page by page; also on the handheld under Settings → Help & tools
 - [What's new](CHANGELOG.md): every version
 - [Status](docs/STATUS.md): every feature and where it has been played
+- Discord: https://discord.gg/sDqUV4M49g (help, ideas, device testers)
 
 Something off? **Settings → Help & tools → About → Report a problem** makes a file for a report, or
 [open an issue](../../issues) or write to robby@robbyczesany.com. Reports from your handheld help a lot.

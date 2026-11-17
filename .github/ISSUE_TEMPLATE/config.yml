@@ -1,5 +1,8 @@
 blank_issues_enabled: true
 contact_links:
+  - name: Questions & help
+    url: https://discord.gg/sDqUV4M49g
+    about: "Ask in #help on the pocket-ui Discord (ideas and device testers are there too)."
   - name: Security problem
     url: https://docs.github.com/en/code-security/security-advisories/guidance-on-reporting-and-writing-information-about-vulnerabilities/privately-reporting-a-security-vulnerability
     about: Please report security problems privately (Security tab → Report a vulnerability), not as an issue.
