@@ -130,7 +130,6 @@ settings:1:4
 settings:1:5
 settings:1:6
 settings:1:7
-settings:1:8
 settings:2:0
 settings:2:1
 settings:2:2
@@ -150,6 +149,7 @@ settings:4:4
 settings:4:5
 settings:4:6
 settings:4:7
+settings:4:8
 settings:5:0
 settings:5:1
 settings:5:2

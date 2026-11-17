@@ -824,6 +824,8 @@ pub struct Cache {
     /// How many strings ran the table's patterns (their first sight): the benchmark of Settings' first frame counts
     /// the ones that frame made.
     patterned: usize,
+    /// The first few of them, for a test to name (`pattern_log`).
+    pattern_log: Vec<Box<str>>,
     /// `NAMES_SEEN` when `seen` was filled.
     names_seen: u32,
     /// The language `seen` and `translated` are in: a switch from one table to another empties them.
@@ -892,6 +894,9 @@ impl Cache {
         // A "translation" that changes nothing is translated already (a line `Text::fit` gave back, a wrapped line):
         // painted as it is, and its parts are not English left over.
         self.patterned += 1;
+        if self.pattern_log.len() < 16 {
+            self.pattern_log.push(s.into());
+        }
         let t: Option<Arc<str>> = table.translate_with_parts(s).filter(|(t, _)| t.as_ref() != s).map(|(t, left)| {
             // A part left in English inside the translation: the snapshot test checks it as a string of its own.
             for part in &left {
@@ -933,6 +938,24 @@ impl Cache {
         self.name_lines.insert(s.into(), ());
     }
 
+    /// `s` was put together in `current()`'s own words by the caller ("Auto · Leise"): painted as it is, whenever it is
+    /// painted, and its first sight runs no pattern. Unlike `is_translated` this is no one-shot: it stays until the cache
+    /// is emptied, and the caller says it again each time it makes the line.
+    pub fn keep_as_is(&mut self, s: &str) {
+        let lang = current();
+        if lang == Lang::En {
+            return;
+        }
+        self.follow(lang);
+        if self.seen.contains_key(s) {
+            return;
+        }
+        if self.seen.len() >= CACHE_LIMIT {
+            self.seen.clear();
+        }
+        self.seen.insert(s.into(), None);
+    }
+
     pub fn is_translated(&mut self, s: &str) {
         let lang = current();
         if lang == Lang::En {
@@ -951,6 +974,11 @@ impl Cache {
     /// How many strings have run the table's patterns so far.
     pub fn patterns_run(&self) -> usize {
         self.patterned
+    }
+
+    /// The first strings that ran them (at most 16).
+    pub fn pattern_log(&self) -> &[Box<str>] {
+        &self.pattern_log
     }
 
     pub fn len(&self) -> usize {
@@ -1233,6 +1261,48 @@ mod tests {
         assert_eq!(t.translate("Pokémon Red, Blue, and Yellow"), None, "a game's name");
         assert_eq!(t.translate("English, French").as_deref(), Some("Englisch, Französisch"), "every part in the table");
         assert_eq!(t.translate("Game Boy Color · after").as_deref(), Some("Game Boy Color · danach"), "a line of parts");
+    }
+
+    #[test]
+    fn system_card_counts_translate_and_the_last_game_keeps_its_name() {
+        for (lang, one, many, last) in [
+            (Lang::En, "1 game", "2 games", "last:"),
+            (Lang::De, "1 Spiel", "2 Spiele", "zuletzt:"),
+            (Lang::Es, "1 juego", "2 juegos", "último:"),
+            (Lang::Pt, "1 jogo", "2 jogos", "último:"),
+            (Lang::Fr, "1 jeu", "2 jeux", "dernier\u{a0}:"),
+            (Lang::It, "1 gioco", "2 giochi", "ultimo:"),
+        ] {
+            for (english, expected) in [("1 game", one), ("2 games", many)] {
+                assert_eq!(tr_in(lang, english), expected, "{lang:?}: without history");
+                // Dark is both a possible game name and a translated UI word. The last game's name is data.
+                for name in ["Dark", "KleleAtoms MD"] {
+                    assert_eq!(tr_in(lang, &format!("{english} · last: {name}")),
+                        format!("{expected} · {last} {name}"), "{lang:?}: with history");
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn android_start_error_and_screen_reader_controls_follow_the_player_language() {
+        for (lang, title, previous, next, previous_value, next_value) in [
+            (Lang::En, "Game couldn't start", "Previous slot", "Next slot", "previous value", "next value"),
+            (Lang::De, "Das Spiel konnte nicht starten", "Vorheriger Slot", "Nächster Slot", "vorheriger Wert", "nächster Wert"),
+            (Lang::Es, "No se pudo iniciar el juego", "Ranura anterior", "Ranura siguiente", "valor anterior", "valor siguiente"),
+            (Lang::Pt, "O jogo não pôde iniciar", "Slot anterior", "Próximo slot", "valor anterior", "próximo valor"),
+            (Lang::Fr, "Le jeu n'a pas pu démarrer", "Emplacement précédent", "Emplacement suivant", "valeur précédente", "valeur suivante"),
+            (Lang::It, "Il gioco non è partito", "Slot precedente", "Slot successivo", "valore precedente", "valore successivo"),
+        ] {
+            let _language = for_this_thread(lang);
+            // The native AlertDialog and accessibility labels bypass Text's automatic translation.
+            assert_eq!(tr("Game couldn't start"), title, "{lang:?}");
+            assert_eq!(tr("Previous slot"), previous, "{lang:?}");
+            assert_eq!(tr("Next slot"), next, "{lang:?}");
+            let setting = tr("Scaling");
+            assert_eq!(tr("Scaling · previous value"), format!("{setting} · {previous_value}"), "{lang:?}");
+            assert_eq!(tr("Scaling · next value"), format!("{setting} · {next_value}"), "{lang:?}");
+        }
     }
 
     #[test]

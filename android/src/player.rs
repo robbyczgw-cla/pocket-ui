@@ -1774,10 +1774,10 @@ impl Player {
     fn semantic_nodes(&self) -> String {
         let areas: Vec<_> = if self.paused {
             let mut nodes: Vec<_> = self.hits.iter().map(|(a, i, label)| (*a, label.clone(), !self.touch_visible && *i == self.row)).collect();
-            nodes.extend(self.slot_controls().into_iter().map(|(a, _, label)| (a, label.to_string(), false)));
+            nodes.extend(self.slot_controls().into_iter().map(|(a, _, label)| (a, pocket_ui::i18n::tr(label), false)));
             if self.menu == Menu::Zoom {nodes.push((Area::new(0,0,self.logical.0 as i32,80),format!("{} · {:.1}x",pocket_ui::i18n::tr("Zoom"),self.zoom.scale),false));}
             if self.menu == Menu::Options {
-                nodes.extend(self.option_arrows.iter().map(|(a, _, _, label)| (*a, label.clone(), false)));
+                nodes.extend(self.option_arrows.iter().map(|(a, _, _, label)| (*a, pocket_ui::i18n::tr(label), false)));
             }
             if self.menu == Menu::Achievements {
                 nodes.push((Area::new(36, 150, self.logical.0 as i32 - 72, self.logical.1 as i32 - 300), self.ra_lines.iter().filter(|l| !l.is_empty()).cloned().collect::<Vec<_>>().join(". "), false));
@@ -2434,6 +2434,13 @@ fn said(error: String, instead: &'static str) -> String {
 
 fn string(env: &mut JNIEnv, value: JString) -> String {
     env.get_string(&value).map(|s| s.to_string_lossy().into_owned()).unwrap_or_default()
+}
+/// Native Android dialogs use the same tables and language as the player, initialized by nativeCreate before its
+/// error callback. The Java UI thread follows the process language, as the renderer's GL thread does.
+#[no_mangle]
+pub extern "system" fn Java_xyz_pocketui_app_PlayerActivity_nativeTranslate(mut env: JNIEnv, _: JObject, value: JString) -> jstring {
+    let text = pocket_ui::i18n::tr(&string(&mut env, value));
+    env.new_string(text).map(|s| s.into_raw()).unwrap_or(std::ptr::null_mut())
 }
 #[no_mangle]
 pub extern "system" fn Java_xyz_pocketui_app_PlayerActivity_nativeCreate(

@@ -824,7 +824,7 @@ Timeline	Chronologie
 Discontinued	Arrêtée
 Sold	Vendues
 On this Pocket	Sur ce Pocket
-{s} · last: {t}	{s} · dernier : {t}
+{t} · last: {s}	{t} · dernier : {s}
 Your games	Tes jeux
 {s}, last {t}	{s}, dernier {t}
 Played	Joué
@@ -5224,3 +5224,10 @@ Game start animation	Animation de lancement
 How bright the screen is. The same as in the quick settings.	La luminosité de l'écran. La même que dans les paramètres rapides.
 How loud games and menus are. The same as in the quick settings.	Le volume des jeux et des menus. Le même que dans les paramètres rapides.
 A separate layout for each controller, in menus and games. Pairing: Connections › Bluetooth.	Une disposition par manette, dans les menus et les jeux. Appairage : Connexions › Bluetooth.
+
+# Android player: native start dialog and screen-reader controls
+Game couldn't start	Le jeu n'a pas pu démarrer
+Previous slot	Emplacement précédent
+Next slot	Emplacement suivant
+{t} · previous value	{t} · valeur précédente
+{t} · next value	{t} · valeur suivante

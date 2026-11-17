@@ -155,3 +155,92 @@ fn software_core_formats_padded_rows_and_null_frames_keep_the_visible_scene() {
     assert!(read().chunks_exact(4).all(|p|p[..3]==[0,0,255]),"Continue must show the newer scene rather than the bootstrap picture");
     drop(core);drop(gfx);drop(context);
 }
+
+// A Continue must be checked across processes: a same-process save/load leaves caches
+// (ClownMDEmu's converted CRAM palette, for example) populated and can hide a black picture.
+fn cold_continue(library: &std::path::Path, rom: &std::path::Path, dir: &std::path::Path, frames: usize, buttons: u16, colour: Option<u32>) {
+    std::fs::create_dir_all(dir).unwrap();
+    let request = serde_json::json!({"core": library, "rom": rom, "frames": frames, "buttons": buttons, "colour": colour});
+    std::fs::write(dir.join("request.json"), request.to_string()).unwrap();
+    for phase in ["save", "resume"] {
+        let output = std::process::Command::new(std::env::current_exe().unwrap())
+            .args(["--exact", "android_video_tests::continue_in_a_fresh_player_process", "--ignored", "--nocapture"])
+            .env("POCKETUI_TEST_CONTINUE_DIR", dir).env("POCKETUI_TEST_CONTINUE_PHASE", phase).output().unwrap();
+        assert!(output.status.success(), "{phase}: {}\n{}", String::from_utf8_lossy(&output.stdout), String::from_utf8_lossy(&output.stderr));
+    }
+}
+
+#[test]
+#[ignore = "child process of the cold Continue tests; needs their request file"]
+fn continue_in_a_fresh_player_process() {
+    use std::path::Path;
+    let Some(dir) = std::env::var_os("POCKETUI_TEST_CONTINUE_DIR") else { return };
+    let dir = std::path::PathBuf::from(dir);
+    let request: serde_json::Value = serde_json::from_slice(&std::fs::read(dir.join("request.json")).unwrap()).unwrap();
+    let library = Path::new(request["core"].as_str().unwrap());
+    let rom = Path::new(request["rom"].as_str().unwrap());
+    let core_id = crate::core_options::core_id(library);
+    let mut core = crate::libretro::Core::load(library, rom, &dir, &dir, &[]).unwrap();
+    let (initial, ..) = core.run(0); // Android's timing/geometry bootstrap.
+    core.apply_state_policy(&core_id);
+    let base = dir.join("game.pstate");
+    if std::env::var("POCKETUI_TEST_CONTINUE_PHASE").unwrap() == "save" {
+        let mut last = initial;
+        for _ in 0..request["frames"].as_u64().unwrap() {
+            let (frame, ..) = core.run(request["buttons"].as_u64().unwrap() as u16);
+            if frame.is_some() { last = frame; }
+        }
+        assert!(last.unwrap().to_rgb().iter().any(|b| *b != 0), "the test must save a visible scene");
+        crate::state_file::write(&crate::slots::auto_path(&base), &core.save_state().unwrap()).unwrap();
+        return;
+    }
+    assert_eq!(core.resume(&crate::slots::auto_path(&base)), crate::libretro::Resume::Resumed);
+    let (after, ..) = core.run(0);
+    assert!(after.as_ref().expect("the next run must redraw the restored scene").to_rgb().iter().any(|b| *b != 0),
+        "the first frame after unserialize must not be black for this visible saved scene");
+    let image = video::startup(initial, after).unwrap();
+    if let Some(expected) = request["colour"].as_u64() {
+        assert!(image.px.iter().all(|p| *p == expected as u32), "Continue must show the loaded scene, not the bootstrap image");
+    }
+    let Some((mut gfx, context, _fbo)) = compositor() else { panic!("Continue regression requires the headless GLES compositor") };
+    gfx.present(&vec![0;32*32], (32,32), (0,0,32,32), Some((&image,Area::new(0,0,32,32))), true, &[], None, ((32,32),(0,0,32,32)));
+    let pixels = read();
+    assert!(pixels.chunks_exact(4).any(|p| p[..3] != [0,0,0]), "the next presented frame must be visible");
+    if let Some(expected) = request["colour"].as_u64() {
+        let rgb = [(expected >> 16) as u8, (expected >> 8) as u8, expected as u8];
+        assert!(pixels.chunks_exact(4).all(|p| p[..3] == rgb));
+    }
+    let earlier = base.with_extension("earlier0");
+    video::moment(&earlier, &core.save_state().unwrap(), Some(&image)).unwrap();
+    assert_eq!(crate::image::load_png(&crate::slots::preview_path(&earlier)).unwrap().px, image.px,
+        "Earlier must keep the same restored picture that was presented");
+    drop(gfx); drop(context);
+}
+
+#[test]
+fn continue_redraws_the_loaded_scene_in_every_software_format_and_earlier() {
+    let Some((gfx, context, _fbo)) = compositor() else { return };
+    drop(gfx); drop(context);
+    let dir = crate::testutil::TestDir::new("android-cold-continue");
+    let library = dir.join("video_contract_libretro.so");
+    let output = std::process::Command::new("cc").args(["-shared", "-fPIC", "-std=c11", "-O1", "-Wall", "-Wextra", "-Werror"])
+        .arg(concat!(env!("CARGO_MANIFEST_DIR"), "/tests/fixtures/video_contract.c")).arg("-o").arg(&library).output().unwrap();
+    assert!(output.status.success(), "{}", String::from_utf8_lossy(&output.stderr));
+    let rom = dir.join("Continue.gb"); std::fs::write(&rom, b"fixture").unwrap();
+    for (format, buttons, colour) in [("rgb565", 1 << 7, 0x00ff00), ("rgb1555", 1 << 5, 0xff0000), ("xrgb8888", 1 << 4, 0x0000ff)] {
+        cold_continue(&library, &rom, &dir.join(format), 3, buttons, Some(colour));
+    }
+}
+
+#[test]
+#[ignore = "real-core Continue regression: POCKETUI_TEST_CORE and POCKETUI_TEST_ROM name a software core and a visible game"]
+fn a_real_core_continue_presents_a_visible_frame_and_earlier() {
+    let (Some(library), Some(rom)) = (std::env::var_os("POCKETUI_TEST_CORE"), std::env::var_os("POCKETUI_TEST_ROM")) else {
+        eprintln!("real-core Continue test needs POCKETUI_TEST_CORE and POCKETUI_TEST_ROM");
+        return;
+    };
+    let library = std::path::PathBuf::from(library);
+    let rom = std::path::PathBuf::from(rom);
+    let dir = crate::testutil::TestDir::new("real-core-cold-continue");
+    cold_continue(&library, &rom, &dir, 180, 0, None);
+}

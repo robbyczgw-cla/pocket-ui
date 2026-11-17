@@ -826,7 +826,7 @@ Timeline	Zeitleiste
 Discontinued	Eingestellt
 Sold	Verkauft
 On this Pocket	Auf diesem Pocket
-{s} · last: {t}	{s} · zuletzt: {t}
+{t} · last: {s}	{t} · zuletzt: {s}
 Your games	Deine Spiele
 {s}, last {t}	{s}, zuletzt {t}
 Played	Gespielt
@@ -5280,3 +5280,10 @@ Game start animation	Spielstart-Animation
 How bright the screen is. The same as in the quick settings.	Wie hell der Bildschirm ist. Dasselbe wie im Schnellmenü.
 How loud games and menus are. The same as in the quick settings.	Wie laut Spiele und Menüs sind. Dasselbe wie im Schnellmenü.
 A separate layout for each controller, in menus and games. Pairing: Connections › Bluetooth.	Eine eigene Belegung für jeden Controller, in Menüs und Spielen. Koppeln: Verbindungen › Bluetooth.
+
+# Android player: native start dialog and screen-reader controls
+Game couldn't start	Das Spiel konnte nicht starten
+Previous slot	Vorheriger Slot
+Next slot	Nächster Slot
+{t} · previous value	{t} · vorheriger Wert
+{t} · next value	{t} · nächster Wert

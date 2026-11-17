@@ -94,6 +94,48 @@ fn check(tmp: &Path, wayland: &Option<Stub>, look: &str, on: bool) -> (String, S
     (line("prefetch-ahead "), line("prefetch-keep "))
 }
 
+/// `search-start-check`'s line for a look: a game started from the search, `warm` on or off.
+fn search_start(tmp: &Path, wayland: &Option<Stub>, look: &str, warm: bool) -> String {
+    let data = tmp.join(format!("data-start-{look}-{warm}"));
+    let _ = std::fs::remove_dir_all(&data);
+    copy_dir(&tmp.join("data"), &data);
+    let mut cmd = Command::new(env!("CARGO_BIN_EXE_pocket-ui"));
+    cmd.args(["--snapshot", &format!("search-start-check:{look}:gbc"), tmp.join("check.png").to_str().unwrap()])
+        .env("POCKETUI_MOCK", "1")
+        .env("POCKETUI_MOCK_NOW", FIXTURE_NOW)
+        .env("POCKETUI_SEALED", "0")
+        .env("POCKETUI_SNAPSHOT_SIZE", "640x480")
+        .env("POCKETUI_LANG", "en")
+        .env("POCKETUI_LAUNCH_COVER", if warm { "1" } else { "0" })
+        .env("POCKETUI_ES_SYSTEMS", tmp.join("es_systems.cfg"))
+        .env("POCKETUI_DATA", &data);
+    if let Some(w) = wayland {
+        cmd.env("WAYLAND_DISPLAY", &w.path);
+    }
+    let out = cmd.output().expect("run pocket-ui");
+    assert!(out.status.success(), "{look}: {}", String::from_utf8_lossy(&out.stderr));
+    let stdout = String::from_utf8_lossy(&out.stdout).to_string();
+    let _ = std::fs::remove_dir_all(&data);
+    stdout.lines().find(|l| l.starts_with("search-start ")).unwrap_or_else(|| panic!("no search-start line in:\n{stdout}")).to_string()
+}
+
+#[test]
+fn a_game_started_from_the_search_opens_its_scene_on_the_real_cover() {
+    let (tmp, wayland) = library();
+    // Easy ("big") shows the games of a system as a plain list (`paint_minimal`): no case front to start on, and Split has no insert scene.
+    for look in ["shelf", "cabinet"] {
+        let line = search_start(tmp.path(), &wayland, look, true);
+        println!("{look}: {line}");
+        assert!(line.contains("selected=true"), "{look}: the shelf is not on the started game: {line}");
+        assert!(line.contains("asked_cover=true"), "{look}: the search had no cover to share: {line}");
+        assert!(line.contains("first_frame_cover=true"), "{look}: the first frame of the start showed a stand-in front: {line}");
+        // Red without it: the cover is only asked for on the thread, as before.
+        let off = search_start(tmp.path(), &wayland, look, false);
+        println!("{look} without: {off}");
+        assert!(off.contains("first_frame_cover=false"), "{look}: the check can't tell the fix from none: {off}");
+    }
+}
+
 const LOOKS: [&str; 4] = ["shelf", "cabinet", "big", "split"];
 
 #[test]

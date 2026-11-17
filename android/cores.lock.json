@@ -141,6 +141,12 @@
       "binary": "clownmdemu_libretro.so",
       "options": [
         "BUILD_SHARED_LIBS=ON"
+      ],
+      "patches": [
+        {
+          "path": "android/patches/clownmdemu-restore-palette.patch",
+          "sha256": "2100fdc49a8907a252d9db23d1f28cf21545e921a48744ba3ebbd97350689725"
+        }
       ]
     },
     {

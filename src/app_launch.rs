@@ -82,6 +82,7 @@ impl App {
         // A sealed game is unwrapped for good now, in every look (the Cozy launch tore its film off already).
         self.unseal(&path);
         self.launch_at = Some(Instant::now());
+        self.warm_launch_cover(&system, &path);
         self.launch_picture = None;
         self.loading_start();
         self.held = None;

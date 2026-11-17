@@ -402,6 +402,8 @@ impl App {
             let device = page.device(*r);
             let indent = if device.is_some() { mark_w } else { 0 };
             let value = page.value(*r);
+            // The selected switch between its ‹ ›: Left/Right switch it (0.5.1).
+            let value = if i == page.sel && *r == pocket_ui::bluetooth_page::Row::Switch && !value.is_empty() { format!("‹ {value} ›") } else { value };
             let value_w = if value.is_empty() {
                 0
             } else {
@@ -420,15 +422,8 @@ impl App {
             self.text.draw(c, Face::Body, font, pad + NU_BTN_PAD + indent, base, color, &name);
             let quiet = device.is_some_and(|d| !d.paired) && !matches!(&page.busy, Some(b) if b.address() == device.map(|d| d.address.as_str()));
             // Found devices say their kind quietly; on the selected row everything is ink.
-            self.text.draw_right(
-                c,
-                Face::Body,
-                font,
-                right - NU_BTN_PAD,
-                base,
-                if selected { pal().ink } else if quiet { pal().dust } else { pal().text },
-                &value,
-            );
+            let fg = if selected { pal().ink } else if quiet { pal().dust } else { pal().text };
+            pocket_ui::kit::row_value_in(c, &mut self.text, font, right - NU_BTN_PAD, base, &value, (fg, fg));
         }
         self.hits.list(page.sel, rows.len(), 0.0, row as f32);
 

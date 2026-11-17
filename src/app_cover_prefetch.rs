@@ -248,6 +248,53 @@ impl App {
         println!("prefetch-keep selected={} cached={cached}", self.selected_cover_ready() == Some(true));
     }
 
+    /// `--snapshot search-start-check:<look>:<system>`: a game started from the search (tests/cover_prefetch.rs). The
+    /// search has read the game's cover for its row; the shelf, on another game, has never shown this one. As the start
+    /// would, the cover is asked for (`warm_launch_cover`) and the search closes onto the game's shelf; the first frame
+    /// of that scene, covers on their threads as on a device, is checked. Prints
+    /// `search-start first_frame_cover=<bool> asked_cover=<bool>`: the first frame shows the real cover (not a plain
+    /// stand-in front), for a game that has box art.
+    pub(crate) fn search_start_check(&mut self, rest: &str, w: u32, h: u32) {
+        let mut parts = rest.split(':');
+        let look = parts.next().filter(|l| !l.is_empty()).unwrap_or("shelf");
+        let system = parts.next().unwrap_or("gbc");
+        self.shelf_snapshot(&format!(":{look}"));
+        if look == "big" {
+            self.theme = Theme::Big;
+            self.rebuild();
+        }
+        let Some(s) = self.systems.iter().position(|sys| sys.name == system) else { return println!("search-start no system {system}") };
+        self.screen = Screen::Games(s);
+        self.rebuild();
+        self.cabinet.inline = false;
+        self.sel = Item::first_row(&self.items);
+        self.prev_sel = self.sel;
+        let panel = crate::snapshot_panel_dims();
+        let direct = pocket_ui::scaled_layout::logical_size(panel) != (w, h);
+        let mut scaler = pocket_ui::scaled_layout::ScaledFrame::default();
+        let mut screen = vec![0u32; if direct { (w * h) as usize } else { panel.0 as usize * panel.1 as usize }];
+        // The shelf has been showing the first game, as before the search was opened.
+        self.device_frame(&mut scaler, &mut screen, panel, direct.then_some((w, h)));
+        // A game far from the selection (nothing read ahead for it) that has box art.
+        let far = (self.sel + 2 * NEAR..self.items.len()).find_map(|i| {
+            let item = self.items.get(i).copied()?;
+            let (sys, rom) = self.item_rom(item)?;
+            self.cover_file(&sys, &rom).map(|_| (item, sys, rom))
+        });
+        let Some((item, sys, rom)) = far else { return println!("search-start no game with box art") };
+        self.find.inline = true;
+        self.open_search();
+        let row = self.search_thumb(&sys, &rom, 64).is_some();
+        // The start: asked for, then the search closes onto the shelf with the game selected.
+        self.warm_launch_cover(&sys, &rom);
+        self.launch_at = Some(std::time::Instant::now());
+        self.search_launching(&rom);
+        let on_it = self.items.get(self.sel).copied() == Some(item);
+        self.device_frame(&mut scaler, &mut screen, panel, direct.then_some((w, h)));
+        let first = self.selected_cover_ready();
+        println!("search-start first_frame_cover={} asked_cover={} selected={on_it}", first == Some(true), row);
+    }
+
     /// `--snapshot bench-prefetch:<look>[:<system>]`: a fast scroll through a library with cold caches, in real time, the covers
     /// read on their threads as on the device: bursts of 40 held moves (one every `REPEAT_EVERY`) with 0.6 s rests
     /// between, a frame every 16.7 ms. Thread CPU of every frame, and how often the selected game showed without its

@@ -481,6 +481,9 @@ pub(crate) struct CabinetUi {
     pub(crate) pending: usize,
     /// Read covers right away instead of on the thread (snapshots, the look step's previews).
     pub(crate) inline: bool,
+    /// The cover file of the game being started: its colours and cuts are read right away by the first frame that wants
+    /// them (once, `App::warm_launch_cover`), so the insert scene never opens on a plain stand-in front.
+    warm: Option<PathBuf>,
     /// Where each case was painted, for taps: (rectangle, shelf, case); the pulled-out one last.
     drawn: Vec<(i32, i32, i32, i32, usize, usize)>,
     pub(crate) insert: Option<Inserting>,
@@ -557,6 +560,7 @@ impl Default for CabinetUi {
             reader: None,
             pending: 0,
             inline: false,
+            warm: None,
             drawn: Vec::new(),
             insert: None,
             eject: None,
@@ -680,7 +684,7 @@ impl CabinetUi {
     /// The launch animation is still moving (the game is loading behind it).
     pub(crate) fn insert_playing(&self, now: Instant) -> bool {
         // `at` is in the future while a sealed game's film tears (`lead`): the scene is waiting, so still playing.
-        self.insert.as_ref().is_some_and(|i| now.saturating_duration_since(i.at) < cabinet::insert_len(i.scene.cozy) || i.tear.as_ref().is_some_and(|t| t.moving(now)))
+        self.insert.as_ref().is_some_and(|i| now.saturating_duration_since(i.at) < i.scene.len() || i.tear.as_ref().is_some_and(|t| t.moving(now)))
     }
 
     /// A rig's lid or tray shuts after the medium is in: the launch fade keeps its end and runs after the clunk.
@@ -699,7 +703,7 @@ impl CabinetUi {
     /// The pause before the launch fade: the cartridge or disc going into the console.
     pub(crate) fn launch_delay(&self) -> Duration {
         match self.insert.as_ref() {
-            Some(i) => cabinet::fade_delay(i.scene.cozy) + i.lead,
+            Some(i) => cabinet::fade_delay(i.scene.cozy) + i.scene.turn_back() + i.lead,
             None => Duration::ZERO,
         }
     }
@@ -1101,7 +1105,9 @@ impl App {
         }
         ui_sound::played();
         ui_sound::close_when_done(!hosted);
-        pocket_ui::insert_scene::hold(cozy, power_on).map(|h| h + lead).filter(|_| hosted)
+        // A PSP turns back to its front to light its display: its scene's hold is that much longer (`Scene::hold`).
+        let hold = self.cabinet.insert.as_ref().map_or_else(|| pocket_ui::insert_scene::hold(cozy, power_on), |i| i.scene.hold());
+        hold.map(|h| h + lead).filter(|_| hosted)
     }
 
     /// A handheld's start ends in its display's light instead of the fade (a pocket-core game: its window follows the light,
@@ -1286,7 +1292,7 @@ impl App {
     /// Reads now or asks the thread, for a cover file.
     fn want(&mut self, file: &Path, kind: Kind) {
         let sample = self.sample_cover.as_ref().filter(|(p, _)| p == file).map(|(_, img)| img.clone());
-        if self.cabinet.inline || sample.is_some() {
+        if self.cabinet.inline || sample.is_some() || self.cabinet.warm.as_deref() == Some(file) {
             let got = read(file, kind, sample.as_deref());
             self.cabinet_got(file.to_path_buf(), kind, got);
             return;
@@ -1316,7 +1322,23 @@ impl App {
         }
     }
 
+    /// A game is about to start: if it has box art, the first frame that shows its case reads the cover (colours and
+    /// cut, at whatever size that scene asks for) right away rather than on the thread. Started from the search or at
+    /// boot its cover is in no cabinet cache yet, and the insert scene showed the plain stand-in front for a few frames
+    /// before the cover came (search-start-check). `POCKETUI_LAUNCH_COVER=0` turns it off (the check's "before").
+    pub(crate) fn warm_launch_cover(&mut self, system: &str, rom: &Path) {
+        if std::env::var("POCKETUI_LAUNCH_COVER").is_ok_and(|v| v == "0") {
+            return;
+        }
+        self.cabinet.warm = self.cover_file(system, rom);
+    }
+
     pub(crate) fn cabinet_poll(&mut self) {
+        // Over with the start: the game runs (or the start was dropped). Not when the first cut is in: the scene reads
+        // its own sizes, and the shelf's small cut may be there from before.
+        if self.cabinet.warm.is_some() && (self.running.is_some() || self.launch_at.is_none()) {
+            self.cabinet.warm = None;
+        }
         self.cabinet.prune_fronts();
         // Here, where every look takes its covers in: Easy never paints the Shelf or the Cabinet, and its cuts were
         // never trimmed (one per game passed, 15.11.).
@@ -2881,7 +2903,7 @@ impl App {
                     self.launch_animation_snapshot(Duration::ZERO);
                     // A bench: what painting costs, on the real clock.
                     pocket_ui::frame_clock::thaw();
-                    let len = self.cabinet.insert.as_ref().map_or(cabinet::INSERT_COZY, |i| cabinet::insert_len(i.scene.cozy));
+                    let len = self.cabinet.insert.as_ref().map_or(cabinet::INSERT_COZY, |i| i.scene.len());
                     let start = Instant::now();
                     for k in 0..=(len.as_millis() / 16) as u32 {
                         let at = start.checked_sub(frame_ms * k).unwrap_or(start);
@@ -2938,7 +2960,8 @@ impl App {
         let cozy = self.cabinet.insert.as_ref().is_some_and(|i| i.scene.cozy);
         // As a hosted game's start: a handheld ends in its display's light (`POCKETUI_SNAPSHOT_NO_POWER_ON=1`: the old fade).
         let power_on = std::env::var_os("POCKETUI_SNAPSHOT_NO_POWER_ON").is_none() && self.apply_power_on(cozy, true);
-        let len = pocket_ui::insert_scene::hold(cozy, power_on).unwrap_or(cabinet::insert_len(cozy) + pocket_ui::insert_scene::FADE);
+        let hold = self.cabinet.insert.as_ref().map_or_else(|| pocket_ui::insert_scene::hold(cozy, power_on), |i| i.scene.hold());
+        let len = hold.unwrap_or(cabinet::insert_len(cozy) + pocket_ui::insert_scene::FADE);
         // A at `t0`; the clock steps by exactly one 60 Hz frame (`frame_clock`).
         let t0 = pocket_ui::frame_clock::hold_settled();
         if let Some(ins) = self.cabinet.insert.as_mut() {

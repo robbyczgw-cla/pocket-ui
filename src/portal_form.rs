@@ -694,7 +694,7 @@ pub fn demo(what: &str) -> Option<Outcome> {
     };
     Some(match what {
         "hotel" => form(include_str!("../testdata/portal/hotel-room.html"), "http://login.hotel-seeblick.example/portal/login"),
-        "clickthrough" => form(include_str!("../testdata/portal/clickthrough.html"), "http://192.168.4.1:2050/splash"),
+        "clickthrough" => form(include_str!("../testdata/portal/clickthrough.html"), "http://192.0.2.1:2050/splash"),
         "voucher" => form(include_str!("../testdata/portal/voucher.html"), "https://portal.example.net:8443/guest/"),
         "email" => form(include_str!("../testdata/portal/email.html"), "http://wifi.mall-center.example/"),
         "js" => Outcome::NeedsBrowser { why: NoForm::NeedsScripts, page: Some(crate::html_form::parse(include_str!("../testdata/portal/js-only.html"))) },

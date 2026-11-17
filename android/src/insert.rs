@@ -169,7 +169,7 @@ impl Launch {
     /// the battery saver is off (the player makes the same decision, `crt_done`), and the hold with it.
     pub fn set_power_on(&mut self, extra_on: bool, cozy: bool) {
         self.scene.power_on = insert_scene::power_on_light(&self.scene.system, cozy, true, extra_on);
-        self.hand_over = HandOver::new(cozy, self.scene.power_on.is_some());
+        self.hand_over = HandOver::of(&self.scene);
     }
 
     /// The colour the start lights the console's display in (0xRRGGBB), None: no power-on (`set_power_on`).

@@ -34,6 +34,10 @@ pub const TURN_MS: (f32, f32) = (180.0, 460.0);
 /// A handheld's display comes up between these moments (ms after the medium is in), a moment after its power light
 /// (which takes 90 to 240).
 pub const LIT_AFTER: (f32, f32) = (110.0, 270.0);
+/// A console that turned round to its back for its game (the PSP) turns back to its front once its door has shut, as long as
+/// the turn there (`TURN_MS`) and in the same motion, before its display lights: its power light and display come this much
+/// later, and so do the fade and the game's window (16.11., Alex: the PSP's display lights too, a little longer start).
+pub const TURN_BACK: Duration = Duration::from_millis(SHUT_AFTER.as_millis() as u64 + (TURN_MS.1 - TURN_MS.0) as u64);
 /// A front-loader's cartridge, slid in, is pressed down over this long, ending with the click at `IN_AT_COZY`.
 const PRESS_MS: f32 = 110.0;
 
@@ -81,6 +85,9 @@ pub struct Lid {
     /// cover shuts with it. Drawn over the medium all the time.
     #[serde(default)]
     pub medium_behind: bool,
+    /// A display on its underside (the GBA SP's glass is in its lid), in `under.png`'s pixels: lit as the lid stands open.
+    #[serde(default)]
+    pub display: Option<Display>,
 }
 
 /// Where a lid's picture lands: its pixel (s, t) goes to `o + s·u + t·v` (art pixels).
@@ -173,6 +180,13 @@ pub struct Seat {
 pub struct Led {
     pub at: V,
     pub color: u32,
+}
+
+impl Rig {
+    /// Its display: on the console's picture, or on its clamshell's lid (the GBA SP).
+    pub fn any_display(&self) -> Option<Display> {
+        self.display.or_else(|| self.clamshell.and_then(|l| l.display)).or(self.front_display)
+    }
 }
 
 /// A handheld's display (or its two): the part of the console's picture its light comes up in, found by filling out from
@@ -306,6 +320,10 @@ pub struct Rig {
     /// A clamshell's cartridge travels in from the lower edge, connector first.
     #[serde(default)]
     pub bottom_slot: bool,
+    /// The display on the front of a console that turns round to its back for its game (`front.png`, the PSP): its glass,
+    /// dark while it is off, lit once it has turned back (`pose_of`).
+    #[serde(default)]
+    pub front_display: Option<Display>,
     /// SP: the screen opens before insertion and stays open; independent of a disc mechanism.
     #[serde(default)]
     pub clamshell: Option<Lid>,
@@ -542,13 +560,20 @@ fn swing(ms: f32, hz: f32, decay: f32) -> f32 {
 
 /// The shared timeline: where everything is `t` after A. In at `IN_AT_COZY`; a lid or tray shut [`SHUT_AFTER`] later.
 pub fn pose(kind: Kind, t: Duration) -> Pose {
+    pose_of(kind, t, false)
+}
+
+/// [`pose`]; `back`: a console that turned round to its back turns back to its front after its door has shut, and its
+/// lights come after that (`TURN_BACK`).
+pub fn pose_of(kind: Kind, t: Duration, back: bool) -> Pose {
     let ms = t.as_secs_f32() * 1000.0;
     let in_at = IN_AT_COZY.as_secs_f32() * 1000.0;
     let out = ease_in_out(phase(ms, 120.0, 420.0));
     let fly = ease_in_out(phase(ms, 420.0, 900.0));
     let after = ms - in_at;
-    let led = phase(ms, in_at + 90.0, in_at + 240.0);
-    let lit = ease_in_out(phase(ms, in_at + LIT_AFTER.0, in_at + LIT_AFTER.1));
+    let lights = if back { in_at + TURN_BACK.as_secs_f32() * 1000.0 } else { in_at };
+    let led = phase(ms, lights + 90.0, lights + 240.0);
+    let lit = ease_in_out(phase(ms, lights + LIT_AFTER.0, lights + LIT_AFTER.1));
     let landed = if ms >= in_at { 1.0 } else { 0.0 };
     if kind == Kind::Cart {
         // Pushed: slowly at first, then home.
@@ -579,7 +604,10 @@ pub fn pose(kind: Kind, t: Duration) -> Pose {
         _ => (ease_in_out(phase(ms, begins, shut)), 0.0, 0.5 * swing(ms - shut, 8.0, 55.0).abs()),
     };
     let open = opening * (1.0 - closing) + open_over * (1.0 - closing) + rebound;
-    let face = ease_in_out(phase(ms, TURN_MS.0, TURN_MS.1));
+    let mut face = ease_in_out(phase(ms, TURN_MS.0, TURN_MS.1));
+    if back {
+        face *= 1.0 - ease_in_out(phase(ms, shut, shut + TURN_MS.1 - TURN_MS.0));
+    }
     Pose { out, fly, drop, press, landed, settle, squash: 0.0, open, dip, led, lit, shut_in: ms >= shut, face }
 }
 
@@ -629,6 +657,11 @@ const RIGS: &[Row] = &[
     (&["nes"], bytes!("nes", "rig.json"), bytes!("nes", "base.png"), Some(bytes!("nes", "over.png")), Some(bytes!("nes", "top.png")), Some(bytes!("nes", "under.png"))),
 ];
 
+/// Every compiled-in rig, by its first name.
+pub fn rig_ids() -> impl Iterator<Item = &'static str> {
+    RIGS.iter().map(|r| r.0[0])
+}
+
 /// The consoles that turn round from their front to their back first ([`Files::front`]).
 const FRONTS: &[(&str, &[u8])] = &[("psp", bytes!("psp", "front.png"))];
 
@@ -655,7 +688,18 @@ fn rig_id(system: &str, game: Game) -> &str {
 /// The light a handheld's display ends in (0xRRGGBB), from its console's picture, as the launch scene lights it and the
 /// game's picture comes up out of it (`crt_on`); None for a system without a lit display of its own in a rig.
 pub fn light_of(system: &str, game: Game) -> Option<u32> {
-    files(system, game)?.rig.display.map(|d| d.lit)
+    files(system, game)?.rig.any_display().map(|d| d.lit)
+}
+
+/// A front's glass while the console is off (`Rig::front_display`; the PSP's picture has it light, as if on): a dark tint,
+/// the picture's own pixel kept a little (40 of 255).
+pub fn glass_off(p: u32) -> u32 {
+    0xff00_0000 | crate::gfx::mix(0x16181c, p & 0xff_ffff, 40)
+}
+
+/// A game's console turns round to its back for it and back to its front to light its display (`pose_of`, the PSP).
+pub fn turns_back(system: &str, game: Game) -> bool {
+    files(system, game).is_some_and(|f| f.front.is_some() && f.rig.front_display.is_some())
 }
 
 /// A game's rig has a lid, tray or door to shut after the medium is in (the launch splits its sound for that, and the way
@@ -670,10 +714,15 @@ pub fn files(system: &str, game: Game) -> Option<Files> {
     if let Some(f) = from_disk(id) {
         return Some(f);
     }
-    let r = RIGS.iter().find(|r| r.0.contains(&id))?;
-    let front = FRONTS.iter().find(|f| f.0 == r.0[0]).map(|f| Cow::Borrowed(f.1));
     // The console in the colour the player chose (Console page, Left/Right): the same rig, its own base picture.
     let coloured = crate::system_art::colour_rig(system).filter(|_| id == crate::system_art::picture_id(system));
+    files_of(id, coloured)
+}
+
+/// The compiled-in rig `id` (a name of `RIGS`), in the colour `coloured` (its base and layers) or the original.
+pub fn files_of(id: &str, coloured: Option<(&'static [u8], crate::system_art::RigLayers)>) -> Option<Files> {
+    let r = RIGS.iter().find(|r| r.0.contains(&id))?;
+    let front = FRONTS.iter().find(|f| f.0 == r.0[0]).map(|f| Cow::Borrowed(f.1));
     let (base, layers) = coloured.unwrap_or((r.2, Default::default()));
     Some(Files {
         rig: serde_json::from_slice(r.1).ok()?,
@@ -1104,7 +1153,7 @@ mod tests {
 
     #[test]
     fn a_shut_lid_is_exactly_where_its_picture_is() {
-        let lid = Lid { at: (10.0, 20.0), hinge: ((40.0, 20.0), (90.0, 50.0)), front: (-30.0, 40.0), up: (0.0, -55.0), open_deg: 80.0, tuck: 0.0, medium_behind: false };
+        let lid = Lid { at: (10.0, 20.0), hinge: ((40.0, 20.0), (90.0, 50.0)), front: (-30.0, 40.0), up: (0.0, -55.0), open_deg: 80.0, tuck: 0.0, medium_behind: false, display: None };
         let m = lid.map(0.0);
         for (a, b) in [(m.o, (10.0, 20.0)), (m.u, (1.0, 0.0)), (m.v, (0.0, 1.0))] {
             assert!((a.0 - b.0).abs() < 0.001 && (a.1 - b.1).abs() < 0.001, "{m:?}");
@@ -1227,6 +1276,35 @@ mod tests {
             let light = display_light(&s.px, &mask);
             if light != d.lit {
                 wrong.push(format!("{system}: rig.json lit {:#08x}, the picture gives {light:#08x}", d.lit));
+            }
+        }
+        // A console that turns round has its display on its front (the PSP, 16.11.), dark while off (`glass_off`).
+        for system in rig_ids() {
+            let f = files_of(system, None).unwrap();
+            let Some(d) = f.rig.front_display else { continue };
+            let s = crate::system_art::decode(f.front.as_deref().unwrap_or_else(|| panic!("{system}: a front display needs front.png"))).unwrap();
+            let solid = s.px.iter().filter(|p| **p >> 24 == 255).count();
+            let mask = display_mask(&s.px, s.w as usize, s.h as usize, d.seeds_of(), d.fuzz);
+            let n = mask.iter().filter(|m| **m).count();
+            assert!(n > 400 && n * 2 < solid, "{system}: the front's glass is a part of it ({n} of {solid})");
+            let off: Vec<u32> = s.px.iter().zip(&mask).map(|(&p, &m)| if m { glass_off(p) } else { p }).collect();
+            let light = display_light(&off, &mask);
+            if light != d.lit {
+                wrong.push(format!("{system}: front display lit {:#08x}, the picture gives {light:#08x}", d.lit));
+            }
+        }
+        // A clamshell's display is on its lid's underside (the GBA SP, 16.11.: it had none and stayed dark).
+        for system in rig_ids() {
+            let f = files_of(system, None).unwrap();
+            let Some(d) = f.rig.clamshell.and_then(|l| l.display) else { continue };
+            let s = crate::system_art::decode(f.under.as_deref().unwrap_or_else(|| panic!("{system}: a lid display needs under.png"))).unwrap();
+            let solid = s.px.iter().filter(|p| **p >> 24 == 255).count();
+            let mask = display_mask(&s.px, s.w as usize, s.h as usize, d.seeds_of(), d.fuzz);
+            let n = mask.iter().filter(|m| **m).count();
+            assert!(n > 400 && n * 2 < solid, "{system}: the lid's glass is a part of the lid ({n} of {solid})");
+            let light = display_light(&s.px, &mask);
+            if light != d.lit {
+                wrong.push(format!("{system}: lid display lit {:#08x}, the picture gives {light:#08x}", d.lit));
             }
         }
         assert!(wrong.is_empty(), "{wrong:#?}");

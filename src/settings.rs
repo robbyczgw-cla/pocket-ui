@@ -101,6 +101,15 @@ impl Frames {
             Frames::Every => Frames::Off,
         }
     }
+
+    /// The previous choice: Left on the row goes back what Right (and A) went on (0.5.1: both went on).
+    pub fn back(self) -> Frames {
+        match self {
+            Frames::Off => Frames::Every,
+            Frames::Handhelds => Frames::Off,
+            Frames::Every => Frames::Handhelds,
+        }
+    }
 }
 
 #[derive(serde::Serialize, serde::Deserialize, Default, Debug, PartialEq)]
@@ -139,7 +148,7 @@ pub struct Settings {
     /// written, so a new device and every settings.json from before are Off. The old `no_where_was_i` is ignored.
     #[serde(default, deserialize_with = "lenient", skip_serializing_if = "std::ops::Not::not")]
     pub where_was_i: bool,
-    /// Settings > Look > Zoom in the pause menu: the Zoom row sits in the pause menu's main page. Off unless switched on
+    /// Settings > Playing > Zoom in the pause menu: the Zoom row sits in the pause menu's main page. Off unless switched on
     /// (Big text shows it too, `features::reading_on`); Zoom is always in Options.
     #[serde(default, deserialize_with = "lenient", skip_serializing_if = "std::ops::Not::not")]
     pub zoom_in_pause: bool,
@@ -765,6 +774,9 @@ mod tests {
         std::fs::write(d.join(FILE), br#"{"onboarded": true, "frames": "handhelds"}"#).unwrap();
         assert_eq!(frames(&d), Frames::Handhelds, "a saved choice stays");
         assert_eq!((Frames::Off.toggled(), Frames::Handhelds.toggled(), Frames::Every.toggled()), (Frames::Handhelds, Frames::Every, Frames::Off));
+        for f in [Frames::Off, Frames::Handhelds, Frames::Every] {
+            assert_eq!(f.toggled().back(), f, "Left takes Right back");
+        }
         assert_eq!(Frames::ALL.map(Frames::label), ["Off", "Handhelds", "Every console"]);
     }
 

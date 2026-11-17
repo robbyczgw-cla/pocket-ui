@@ -24,7 +24,7 @@ borders or the screen frame around it, and on a handheld's games it opens at the
 - **B** goes back to where you came from: the menu (the game stays paused), or, after HOME + X, into the game.
 
 **Where to find it.** Pause menu → Options → **Zoom**, next to Picture and Controls, always. It also stands on the menu's first page, right before
-Quit, while Big text is on or Settings → Look → [**Zoom in the pause menu**](settings.md#zoom-in-the-pause-menu) is **On**
+Quit, while Big text is on or Settings → Playing → [**Zoom in the pause menu**](settings.md#zoom-in-the-pause-menu) is **On**
 (**Off** is the default). And for a quick look in the middle of a game, Options → [Shortcuts](options.md#shortcuts) → **Zoom**
 switches on **HOME + X**: the picture is enlarged at once, over the frozen game, with no menu in between. The shortcut is **Off**
 by default, and not in Kids Mode or Easy.

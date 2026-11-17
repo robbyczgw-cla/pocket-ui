@@ -32,9 +32,12 @@ done
 case "$VERSION" in [0-9]*.[0-9]*.[0-9]*) ;; *) echo "release-apk: --version X.Y.Z is required" >&2; exit 2 ;; esac
 [ -n "$OUT" ] || { echo "release-apk: --out DIR is required" >&2; exit 2; }
 if [ -e "$OUT" ] && [ -n "$(ls -A "$OUT" 2>/dev/null)" ]; then echo "release-apk: $OUT is not empty" >&2; exit 2; fi
+if [ -f scripts/check-leaks.sh ]; then
+  echo "release-apk: refusing the private tree; build from the exported public tree (scripts/export-public.sh)" >&2
+  exit 1
+fi
 PRIVATE=${ANDROID_SIGNING_DIR:-$HOME/.local/share/pocket-ui/android-signing}
 [ -f "$PRIVATE/release.jks" ] && [ -f "$PRIVATE/store-password" ] || { echo "release-apk: the release key is not in $PRIVATE (a new one would be another app); stopping" >&2; exit 1; }
-[ -f scripts/check-leaks.sh ] && echo "release-apk: note: this is the private tree; a release is built from the exported public tree" >&2
 mkdir -p "$OUT"
 unset ANDROID_QA_VERSION
 export ANDROID_VERSION="$VERSION" ANDROID_RELEASE_SOURCES=1
