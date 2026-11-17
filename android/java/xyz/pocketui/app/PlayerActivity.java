@@ -70,6 +70,7 @@ public final class PlayerActivity extends Activity {
     private native void nativeZoom(float factor);
     private volatile int safeLeft,safeTop,safeRight,safeBottom;
     private native String nativeCreate(String core,String rom,String system,String key,String title);
+    private native String nativeTranslate(String text);
     private native int nativeFrame(int width,int height,float density,float fontScale,int left,int top,int right,int bottom);
     private native boolean nativeKey(int key,boolean down,boolean controller,int device);
     private native boolean nativeAnalog(float x,float y,float rx,float ry,float hatX,float hatY,float lt,float rt,int device);
@@ -149,7 +150,7 @@ public final class PlayerActivity extends Activity {
                 if(ready)nativeRoster(rosterText);
                 if (!ready) runOnUiThread(() -> {
                     if(isFinishing()||isDestroyed())return;
-                    startError=new AlertDialog.Builder(PlayerActivity.this).setTitle("Game couldn't start").setMessage(error).setPositiveButton("OK",(d,w)->finish()).setOnCancelListener(d->finish()).create();
+                    startError=new AlertDialog.Builder(PlayerActivity.this).setTitle(nativeTranslate("Game couldn't start")).setMessage(error).setPositiveButton("OK",(d,w)->finish()).setOnCancelListener(d->finish()).create();
                     startError.setOnKeyListener((dialog,key,event)->closeStartError(key,event));
                     startError.show();
                 });

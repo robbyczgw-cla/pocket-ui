@@ -1,0 +1,49 @@
+--- a/source/libretro-interface.c
++++ b/source/libretro-interface.c
+@@ -46,6 +46,7 @@
+ 	uint16_t u16[16 * 4 * 3]; /* 16 colours, 4 palette lines, 3 brightnesses. */
+ 	uint32_t u32[16 * 4 * 3];
+ } colours;
++static cc_bool colours_need_refresh;
+ 
+ static void *current_framebuffer;
+ static size_t current_framebuffer_pitch;
+@@ -238,6 +239,7 @@
+ 	if (scanline == 0)
+ 	{
+ 		struct retro_framebuffer frontend_framebuffer;
++		void (*const previous_colour_updated)(void*, cc_u16f, cc_u16f) = clownmdemu_callbacks.colour_updated;
+ 
+ 		frontend_framebuffer.width = screen_width;
+ 		frontend_framebuffer.height = screen_height;
+@@ -291,6 +293,22 @@
+ 
+ 			clownmdemu_callbacks.colour_updated = fallback_colour_updated_callback;
+ 			scanline_rendered_callback = fallback_scanline_rendered_callback;
++		}
++
++		/* CRAM belongs to the state, but the output-format palette is a separate
++		 * cache. Rebuild after a load or a framebuffer format change, once the
++		 * new format is known and before blitting even the first scanline. */
++		if (colours_need_refresh || previous_colour_updated != clownmdemu_callbacks.colour_updated)
++		{
++			cc_u16f i;
++			for (i = 0; i < CC_COUNT_OF(clownmdemu.vdp.state.cram); ++i)
++			{
++				const cc_u16f colour = clownmdemu.vdp.state.cram[i] & 0xEEE;
++				clownmdemu_callbacks.colour_updated((void*)clownmdemu_callbacks.user_data, i, colour | ((colour & 0x888) >> 3));
++				clownmdemu_callbacks.colour_updated((void*)clownmdemu_callbacks.user_data, 64 + i, colour >> 1);
++				clownmdemu_callbacks.colour_updated((void*)clownmdemu_callbacks.user_data, 128 + i, 0x888 + (colour >> 1));
++			}
++			colours_need_refresh = cc_false;
+ 		}
+ 
+ 		Geometry_SetScreenSize(screen_width, screen_height);
+@@ -1175,6 +1193,7 @@
+ 	(void)size;
+ 
+ 	ClownMDEmu_LoadState(&clownmdemu, &serialised_state->clownmdemu);
++	colours_need_refresh = cc_true; /* No state layout change: old Continue points remain valid. */
+ 	CDReader_LoadState(&cd_reader, &serialised_state->cd_reader);
+ 	return true;
+ }

@@ -1943,7 +1943,12 @@ fn android_main(android: AndroidApp) {
         setup_over,
     };
     app.ui.achievements_remember(pocket_ui::achievements::account::Account::load(&pocket_ui::platform::data_dir()).as_ref());
+    // A core the APK carries is never offered, and a copy downloaded before it came into the APK goes (both views do this).
     app.ui.core_offers = pocket_ui::android_cores::packages(bridge("coreOffers", &[]).as_bytes()).unwrap_or_default();
+    app.ui.core_offers.retain(|p| bridge("coreBundled", &[&p.core]) != "true");
+    let retired = pocket_ui::android_cores::retire_bundled(&pocket_ui::platform::data_dir(), |core| bridge("coreBundled", &[core]) == "true", !app.ui.core_offers.is_empty());
+    if !retired.is_empty() { log::info!("downloaded cores now in the APK, download removed: {retired:?}"); }
+    app.ui.skip_empty_steps();
     // The licences of every core, the optional downloads too (a list the build wrote from the same manifest as the source archives).
     app.ui.licences.load(&bridge("licenceList", &[]));
     app.ui.core_channel_open = !core_channel_url(&app.ui.prefs).is_empty();

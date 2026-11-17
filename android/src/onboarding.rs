@@ -8,6 +8,21 @@ const APPEARANCE: u16 = 91;
 const CANCEL_DOWNLOAD: u16 = 92;
 
 impl Ui {
+    /// "More systems?" is a step only while the APK offers a system to download; since every core is in the APK
+    /// (0.5.x) there is none, and the first start has seven steps.
+    fn systems_step_shown(&self) -> bool {
+        !self.core_offers.is_empty()
+    }
+    /// Where `step` stands as the player counts the steps, and how many there are (0-based place, count).
+    fn setup_place(&self, step: usize) -> (usize, usize) {
+        if self.systems_step_shown() { (step, 8) } else { (if step > 5 { step - 1 } else { step }, 7) }
+    }
+    /// A first start left on "More systems?" by an older version goes on with the next step when nothing is offered.
+    pub fn skip_empty_steps(&mut self) {
+        if !self.prefs.onboarding_done && self.prefs.onboarding_step == 5 && !self.systems_step_shown() {
+            self.prefs.onboarding_step = 6;
+        }
+    }
     /// The line under a system's name: its size where the channel is public, else "Not available here".
     fn core_size_or_soon(&self, p: &pocket_ui::android_cores::CorePackage) -> String {
         if self.core_channel_open { super::core_size(p.package.size) } else { tr("Not available here") }
@@ -76,12 +91,12 @@ impl Ui {
                     self.prefs.onboarding_done = true;
                     self.navigate(Screen::Library);
                 } else {
-                    self.prefs.onboarding_step = step + 1;
+                    self.prefs.onboarding_step = if step + 1 == 5 && !self.systems_step_shown() { 6 } else { step + 1 };
                 }
                 self.setup_row = 0;
             }
             BACK => {
-                self.prefs.onboarding_step = step.saturating_sub(1);
+                self.prefs.onboarding_step = if step == 6 && !self.systems_step_shown() { 4 } else { step.saturating_sub(1) };
                 self.setup_row = 0;
             }
             _ => match step {
@@ -203,7 +218,8 @@ impl Ui {
         let (title, description) = (tr(title_key), tr(description_key));
         let items = self.setup_items();
         let mut l = SetupLayout::new(plan, items.clone());
-        // The step indicator: eight segments, the ones done in Chalk, and "Step n of 8" beside the Skip button when both fit,
+        // The step indicator: a segment a step (eight, or seven without "More systems?"), the ones done in Chalk, and
+        // "Step n of 8" beside the Skip button when both fit,
         // else under it (a narrow column, large type). In a column too narrow for segments beside Skip, the segments take
         // the column's whole width and Skip and the words go under them.
         let seg_gap = self.d(6.0);
@@ -211,11 +227,13 @@ impl Ui {
         let bar_y = self.d(20.0);
         let small = self.sp(14.0);
         let target = self.d(48.0);
-        let progress = tr(&format!("Step {} of 8", step + 1));
-        let stacked = wide && (body_w - skip_w - self.d(16.0) - 7 * seg_gap) / 8 < self.d(3.0);
+        let (place, total) = self.setup_place(step);
+        let progress = tr(&format!("Step {} of {total}", place + 1));
+        let total = total as i32;
+        let stacked = wide && (body_w - skip_w - self.d(16.0) - (total - 1) * seg_gap) / total < self.d(3.0);
         let bar_w = if stacked { body_w } else { body_w - skip_w - self.d(16.0) };
-        let seg = (bar_w - 7 * seg_gap) / 8;
-        l.bar = (margin, bar_y, seg, seg_gap, self.d(4.0), step as i32);
+        let seg = (bar_w - (total - 1) * seg_gap) / total;
+        l.bar = (margin, bar_y, seg, seg_gap, self.d(4.0), place as i32);
         let beside = margin + text.width(Face::Body, small, &progress) + self.d(8.0) <= margin + body_w - skip_w;
         let skip_y = if stacked { bar_y + self.d(10.0) } else { bar_y - self.d(12.0) };
         let progress_y = match (stacked, beside) {
@@ -467,7 +485,7 @@ impl Ui {
         let step = self.prefs.onboarding_step.min(7);
         let hints = self.controller_hints();
         let (bx, by, seg, seg_gap, bar_h, done) = l.bar;
-        for i in 0..8 {
+        for i in 0..self.setup_place(step).1 as i32 {
             let color = if i <= done { pal().chalk } else { pal().pill };
             c.round_rect(bx + i * (seg + seg_gap), by, seg, bar_h, bar_h / 2, color);
         }

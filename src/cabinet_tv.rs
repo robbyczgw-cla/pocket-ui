@@ -15,6 +15,7 @@ use std::path::{Path, PathBuf};
 use std::sync::mpsc::{channel, Receiver, Sender};
 
 use crate::cabinet_art::Pic;
+use crate::system_art::Sprite;
 #[cfg(test)]
 use crate::image::Image;
 
@@ -38,12 +39,26 @@ pub fn source(data_dir: &Path, system: &str, rom: &Path, cover: Option<&Path>) -
     cover.filter(|c| c.is_file()).map(Path::to_path_buf)
 }
 
-/// What the screen shows for `w`: its picture through the CRT look, else its console. Reads the disk.
+/// What the screen shows for `w`: its picture through the CRT look (a handheld's display: the LCD look), else on the
+/// TV its console (a handheld's display stays lit without a picture). Reads the disk.
 fn make(dir: &Path, w: &Want) -> Option<Pic> {
-    source(dir, &w.system, &w.rom, w.cover.as_deref())
-        .and_then(|p| crate::image::load_image(&p))
-        .map(|img| crt(&img, w.w, w.h))
-        .or_else(|| console_screen(&w.system, w.w, w.h))
+    let img = source(dir, &w.system, &w.rom, w.cover.as_deref()).and_then(|p| crate::image::load_image(&p));
+    if w.lcd {
+        return img.map(|img| lcd(&img, w.w, w.h));
+    }
+    img.map(|img| crt(&img, w.w, w.h)).or_else(|| console_screen(&w.system, w.w, w.h))
+}
+
+/// The handheld a game is shown on instead of the TV (hand test idea, 16.11.2026: a Game Boy game on a Game Boy, a PSP
+/// game on a PSP, the game on its little display): the plain picture and display of the handheld its start shows
+/// (`insert_scene::scene_system`, `plain_display`: the Game Boy for the Mega Duck, the GBA SP when that is the chosen
+/// GBA). None for a game played on a TV, and for what is not a game.
+pub fn handheld(system: &str) -> Option<(&'static Sprite, &'static crate::insert_scene::PlainDisplay)> {
+    if system.is_empty() {
+        return None;
+    }
+    let shown = crate::insert_scene::scene_system(system);
+    Some((crate::system_art::get(shown)?, crate::insert_scene::plain_display(shown)?))
 }
 
 /// What the UI asks the thread for: a game's screen at a size.
@@ -54,6 +69,8 @@ pub struct Want {
     pub cover: Option<PathBuf>,
     pub w: i32,
     pub h: i32,
+    /// For a handheld's display (`handheld`): the LCD look instead of the CRT's.
+    pub lcd: bool,
 }
 
 /// The `cabinet-tv` thread and the screens it made. `get` never waits: it asks once and answers None until the
@@ -169,7 +186,7 @@ mod tests {
     #[test]
     fn invalidation_reuses_the_worker_and_ignores_old_replies_for_the_same_picture() {
         let dir = crate::testutil::TestDir::new("tv-generation");
-        let want = Want { system: "snes".into(), rom: PathBuf::from("Game.sfc"), cover: None, w: 4, h: 4 };
+        let want = Want { system: "snes".into(), rom: PathBuf::from("Game.sfc"), cover: None, w: 4, h: 4, lcd: false };
         let mut loader = Loader::new(&dir);
         // Use the worker's real channels, controlling when it answers instead of racing the filesystem decoder.
         let (tx, jobs) = channel();
@@ -262,5 +279,37 @@ mod tests {
         std::fs::create_dir_all(snap.parent().unwrap()).unwrap();
         std::fs::write(&snap, b"x").unwrap();
         assert_eq!(source(&d, "snes", rom, Some(&cover)), Some(snap));
+    }
+
+    /// The hand test's idea (16.11.2026): a handheld system's game shows on its handheld in the TV's place, a console's on the TV.
+    /// Every handheld gets its own picture with a display big enough to see the game, inside the TV's size.
+    #[test]
+    fn handheld_games_show_on_their_handheld_with_the_game_on_its_display() {
+        for system in ["gb", "gbc", "gba", "gamegear", "ngp", "ngpc", "atarilynx", "wonderswan", "wonderswancolor", "nds", "3ds", "psp", "megaduck", "gbav", "j2me"] {
+            let (sprite, d) = handheld(system).unwrap_or_else(|| panic!("{system}: a handheld"));
+            // The TV's size on the Mini V2 (3 screen pixels a template pixel).
+            let t = template();
+            let (w, h) = ((t.body.w * 3) as i32, (t.body.h * 3) as i32);
+            let body = handheld_body(sprite, d.at, d.fuzz, d.lit, w, h).unwrap_or_else(|| panic!("{system}: its display is found"));
+            assert!(body.pic.w <= w && body.pic.h <= h, "{system}: inside the TV's place");
+            assert!(body.pic.w >= w * 3 / 5 || body.pic.h >= h * 3 / 5, "{system}: as big as the place allows");
+            let (gx, gy, gw, gh) = body.glass;
+            assert!(gx >= 0 && gy >= 0 && gx + gw <= body.pic.w && gy + gh <= body.pic.h, "{system}: the display on the handheld");
+            let lit = body.mask.iter().filter(|m| **m).count();
+            assert!(gw >= 30 && gh >= 24 && lit * 3 >= body.mask.len(), "{system}: a display to see the game on ({gw} x {gh}, {lit} lit)");
+            assert!(lit * 2 <= (body.pic.w * body.pic.h) as usize, "{system}: the display, not the whole handheld");
+        }
+        for system in ["snes", "nes", "psx", "ps2", "n64", "megadrive", "arcade", ""] {
+            assert!(handheld(system).is_none(), "{system}: on the TV");
+        }
+    }
+
+    #[test]
+    fn a_handhelds_display_shows_the_game_sharp_and_flat() {
+        let img = Image { w: 4, h: 4, px: vec![0xff0000; 16] };
+        let p = lcd(&img, 10, 8);
+        assert_eq!((p.w, p.h), (10, 8));
+        // No scanlines, no darker rim: every pixel is the picture's own (a touch dimmer).
+        assert!(p.px.iter().all(|&c| c == p.px[0]) && p.px[0] & 0xff0000 > 0xe00000, "{:x}", p.px[0]);
     }
 }

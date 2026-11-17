@@ -32,11 +32,9 @@ through the app and the game waits in its pause menu.
 ## Which systems play where
 
 - **In pocket-ui's own player:** Game Boy, Game Boy Color, Game Boy Advance, NES, SNES, Master System, Game Gear, Mega Drive,
-  PC Engine, WonderSwan, Atari 2600, Atari Lynx, Neo Geo Pocket, PlayStation and Saturn. Saturn needs a BIOS from your own
-  console in `ROMs/bios`.
-- **PSP, Nintendo DS, Nintendo 64 and Dreamcast** are downloads for pocket-ui's player. **A** on one of their games opens
-  its **Runs on** page, which says whether this version can download the system. An emulator app you have installed that
-  plays the system can be chosen there instead.
+  PC Engine, WonderSwan, Atari 2600, Atari Lynx, Neo Geo Pocket, PlayStation, Nintendo DS, Nintendo 64, PSP, Saturn and
+  Dreamcast, all in the app, nothing to download. Saturn needs a BIOS from your own console in `ROMs/bios`. An emulator app
+  you have installed that plays a system can be chosen on the game's **Runs on** page instead.
 - **Still being tested:** Nintendo 64, PSP, Saturn and Dreamcast in pocket-ui's own player. Not every game runs at full
   speed yet, and the sound can stutter in places; keep an extra save in the game itself for these four.
 - **PlayStation 2, GameCube, Wii, 3DS and Xbox** play in an emulator app you have installed. pocket-ui starts the game in it

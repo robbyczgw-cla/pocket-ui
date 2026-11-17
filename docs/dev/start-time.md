@@ -159,9 +159,12 @@ keyed by it). The constants (`VOID`, `CHALK` …) and `DARK` stay Warm's: overla
 
 `core_prewarm` runs only after the shelf's first frame. On H700 it reads the chosen libretro core, the exact
 `POCKETUI_HOST_BIN` executable (default `/storage/pocket-ui/pocket-core`), and the installed EGL/Mesa libraries,
-including the versioned Gallium driver, into the page cache. It creates no context or surface and calls no library
-code. The existing idle I/O and nice 19 worker has one 35 MiB budget for the whole set; canonical paths avoid
-reading symlinks twice, and missing or oversized files are skipped. A launch or sleep cancels the next 256 KiB
+including the versioned Gallium driver, into the page cache. Then it follows the `DT_NEEDED` lists of these files
+(read from their ELF headers, at most 64 libraries, names resolved in `/usr/lib`), so libstdc++, the X11/xcb
+libraries, zlib and zstd that Mesa's EGL loads come along, and it reads glvnd's vendor list and Mesa's drirc files.
+It creates no context or surface and calls no library code. The core may be up to 35 MiB; the idle I/O and nice 19
+worker has one 64 MiB budget for the whole set, the core and player first, Gallium before the small libraries;
+canonical paths avoid reading symlinks twice, and missing or oversized files are skipped. A launch or sleep cancels the next 256 KiB
 piece. Other devices keep the single-core warm-up; Android keeps none. `POCKETUI_NO_CORE_PREWARM=1` disables
 both the core and H700 runtime reads for measurement. No player preference or persistent cache is changed.
 
@@ -178,3 +181,13 @@ Renderer setup fell from 167.9 to 41.9 ms, GL entry-point setup from 34.8 to 8.8
 medians were 1377 and 1374 ms; those small differences are within the observed spread. The warm-up read about
 30.6 MiB in about 1.3–1.7 seconds after the shelf appeared. This does not measure an immediate A before the worker can
 finish, nor power-on time, and the older 2.6-second game-start result was not reproduced in this setup.
+
+With only Mesa's own libraries warm, EGL display setup and config choice still took about 287 ms of such a cold
+start: glvnd loading the vendor library pulled libstdc++, X11/xcb, zstd and the drirc files from the card. A
+standalone probe on the Plus (17 November 2026, `drop_caches`, then the old set read) took 296 ms for those EGL
+steps, 45 ms when the `DT_NEEDED` closure was read as well, and 46 ms fully warm. In the same game-start
+setup as above (10 alternating starts per version, Advance Wars on gpSP) the display/EGL step fell from 310 to 88 ms
+(median; p90 328 to 118 ms) and A to the first game frame from 657 to 505 ms (p90 667 to 525 ms). The worker now
+reads about 38 MiB in 34 files; the shelf's first frame comes before it starts and stayed within the spread
+(1321 and 1348 ms). Faster graphics can leave the start waiting for audio to open: a test guard that flipped the
+sink's mute made that wait 0.4–0.5 s in two runs, so device measurements keep the volume at 0 without mute flips.

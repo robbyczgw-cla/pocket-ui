@@ -41,6 +41,9 @@ pub struct Settings {
     pub scaling: usize,
     pub frame: usize,
     pub effect: usize,
+    /// Over the game: FPS in the top left corner (Options → Over the game, Linux's Speed, rumble, fan row), kept with the
+    /// picture's choices for this console or this game.
+    pub over_game: bool,
     game: bool,
     system_path: PathBuf,
     game_path: PathBuf,
@@ -54,7 +57,7 @@ impl Settings {
         let game = per_game.is_some();
         let value = per_game.or_else(|| read(&system_path)).unwrap_or_default();
         let get = |key: &str, max: usize| value[key].as_u64().unwrap_or(0).min(max as u64) as usize;
-        Self { scaling: get("scaling", 2), frame: get("frame", 2), effect: get("effect", 3), game, system_path, game_path }
+        Self { scaling: get("scaling", 2), frame: get("frame", 2), effect: get("effect", 3), over_game: get("over_game", 1) == 1, game, system_path, game_path }
     }
     /// The handheld view's choice for this game (`launchPath`'s settings, `picture`: Options → Picture there): what the page
     /// there shows is what is drawn. Not saved here; a change in the pause menu is saved as it always is.
@@ -63,6 +66,16 @@ impl Settings {
         self.scaling = get("scaling", 2).unwrap_or(self.scaling);
         self.frame = get("frame", 2).unwrap_or(self.frame);
         self.effect = get("effect", 3).unwrap_or(self.effect);
+        self.over_game = get("over_game", 1).map_or(self.over_game, |v| v == 1);
+    }
+    /// Keep for: this game (true) or every game of the console.
+    pub fn for_game(&self) -> bool {
+        self.game
+    }
+    /// Over the game on or off, kept as the picture's choices are.
+    pub fn set_over_game(&mut self, on: bool) -> Result<(), String> {
+        self.over_game = on;
+        self.save()
     }
     pub fn options(&self) -> Vec<FileOption> {
         [("Scaling", &["Fit / aspect", "Integer", "Stretch / fullscreen"][..], self.scaling),
@@ -87,7 +100,7 @@ impl Settings {
     }
     fn save(&self) -> Result<(), String> {
         let path = if self.game { &self.game_path } else { &self.system_path };
-        let bytes = serde_json::to_vec(&serde_json::json!({"scaling":self.scaling,"frame":self.frame,"effect":self.effect})).map_err(|e| e.to_string())?;
+        let bytes = serde_json::to_vec(&serde_json::json!({"scaling":self.scaling,"frame":self.frame,"effect":self.effect,"over_game":u8::from(self.over_game)})).map_err(|e| e.to_string())?;
         pocket_ui::fsutil::write_atomic(path, &bytes).map_err(|e| e.to_string())?;
         // Selecting the system scope explicitly returns this game to the system policy.
         if !self.game && self.game_path.exists() {

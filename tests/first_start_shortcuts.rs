@@ -100,7 +100,7 @@ fn the_kids_page_with_no_games_offers_the_starter_pack() {
 #[test]
 fn the_play_style_page_from_settings_has_four_answers_and_no_child_mode() {
     let card = Card::new();
-    for (lang, names) in [("en", ["The shelf", "Easy", "Enthusiast", "Choose for yourself"]), ("de", ["Das Regal", "Easy", "Enthusiast", "Selbst wählen"]), ("es", ["El estante", "Easy", "Entusiasta", "Elige tú"])] {
+    for (lang, names) in [("en", ["The shelf", "Easy", "Enthusiast", "Choose for yourself"]), ("de", ["Das Regal", "Einfach", "Enthusiast", "Selbst wählen"]), ("es", ["El estante", "Easy", "Entusiasta", "Elige tú"])] {
         let page = card.screen("setup:play-later", lang, "640x480");
         for name in names {
             assert!(sees(&page, name), "{lang} {name}: {page}");

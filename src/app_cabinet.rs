@@ -481,6 +481,9 @@ pub(crate) struct CabinetUi {
     pub(crate) pending: usize,
     /// Read covers right away instead of on the thread (snapshots, the look step's previews).
     pub(crate) inline: bool,
+    /// The cover file of the game being started: its colours and cuts are read right away by the first frame that wants
+    /// them (once, `App::warm_launch_cover`), so the insert scene never opens on a plain stand-in front.
+    warm: Option<PathBuf>,
     /// Where each case was painted, for taps: (rectangle, shelf, case); the pulled-out one last.
     drawn: Vec<(i32, i32, i32, i32, usize, usize)>,
     pub(crate) insert: Option<Inserting>,
@@ -503,6 +506,9 @@ pub(crate) struct CabinetUi {
     pub(crate) tv: super::app_cabinet_tv::TvState,
     /// The front of the selected case as last painted: where an insert starts from.
     last_out: Option<(Item, (i32, i32, i32, i32))>,
+    /// Where the selected case's game stood out of it this frame (an open case, `paint_ajar_game`): with the case, what
+    /// must keep clear of the TV (`cabinet_snapshot_outcome`).
+    last_ajar: Option<(i32, i32, i32, i32)>,
     consoles: HashMap<String, Option<Rc<pocket_ui::system_art::Sprite>>>,
     /// The consoles of the start scene (`scene_sprite`), by system and the shelf's scale in percent.
     scene_consoles: HashMap<(String, i32), Option<Rc<pocket_ui::system_art::Sprite>>>,
@@ -557,6 +563,7 @@ impl Default for CabinetUi {
             reader: None,
             pending: 0,
             inline: false,
+            warm: None,
             drawn: Vec::new(),
             insert: None,
             eject: None,
@@ -568,6 +575,7 @@ impl Default for CabinetUi {
             stickers_opened: Default::default(),
             tv: Default::default(),
             last_out: None,
+            last_ajar: None,
             consoles: HashMap::new(),
             scene_consoles: HashMap::new(),
             frame: 0,
@@ -680,7 +688,7 @@ impl CabinetUi {
     /// The launch animation is still moving (the game is loading behind it).
     pub(crate) fn insert_playing(&self, now: Instant) -> bool {
         // `at` is in the future while a sealed game's film tears (`lead`): the scene is waiting, so still playing.
-        self.insert.as_ref().is_some_and(|i| now.saturating_duration_since(i.at) < cabinet::insert_len(i.scene.cozy) || i.tear.as_ref().is_some_and(|t| t.moving(now)))
+        self.insert.as_ref().is_some_and(|i| now.saturating_duration_since(i.at) < i.scene.len() || i.tear.as_ref().is_some_and(|t| t.moving(now)))
     }
 
     /// A rig's lid or tray shuts after the medium is in: the launch fade keeps its end and runs after the clunk.
@@ -699,7 +707,7 @@ impl CabinetUi {
     /// The pause before the launch fade: the cartridge or disc going into the console.
     pub(crate) fn launch_delay(&self) -> Duration {
         match self.insert.as_ref() {
-            Some(i) => cabinet::fade_delay(i.scene.cozy) + i.lead,
+            Some(i) => cabinet::fade_delay(i.scene.cozy) + i.scene.turn_back() + i.lead,
             None => Duration::ZERO,
         }
     }
@@ -1101,7 +1109,9 @@ impl App {
         }
         ui_sound::played();
         ui_sound::close_when_done(!hosted);
-        pocket_ui::insert_scene::hold(cozy, power_on).map(|h| h + lead).filter(|_| hosted)
+        // A PSP turns back to its front to light its display: its scene's hold is that much longer (`Scene::hold`).
+        let hold = self.cabinet.insert.as_ref().map_or_else(|| pocket_ui::insert_scene::hold(cozy, power_on), |i| i.scene.hold());
+        hold.map(|h| h + lead).filter(|_| hosted)
     }
 
     /// A handheld's start ends in its display's light instead of the fade (a pocket-core game: its window follows the light,
@@ -1125,22 +1135,47 @@ impl App {
 
     /// A frozen game's front, shown large: the game inside (the open box's own picture, `box_game`) a little out at its
     /// side, painted before the front. Slides out with the case's turn; with Motion off it is simply there.
-    pub(crate) fn paint_ajar_game(&mut self, c: &mut Canvas, item: Item, m: Medium, front: &Rc<Pic>, (x, y): (i32, i32), clip: (i32, i32)) {
-        // Easy: every usable moment, whatever the Frozen games extra says (`big_has_moment`).
-        if !(if self.big_on() { self.big_has_moment(item) } else { self.is_frozen_item(item) }) {
-            return;
-        }
-        let Some(game) = self.box_game(item, front) else { return };
-        let (gw, gh, out) = pocket_ui::game_box::game_beside(m, (front.w, front.h), Some(&game));
+    /// Returns where the game was painted (None: the case is shut).
+    pub(crate) fn paint_ajar_game(&mut self, c: &mut Canvas, item: Item, m: Medium, front: &Rc<Pic>, (x, y): (i32, i32), clip: (i32, i32)) -> Option<(i32, i32, i32, i32)> {
+        let (game, reach) = self.ajar_game(item, m, front)?;
+        let gw = game.w;
+        let gh = game.h;
         let from = self.cabinet.ajar_at.map_or(self.moved_at, |t| t.max(self.moved_at));
         let at = pocket_ui::motion::progress(pocket_ui::motion::Kind::Move, from, pocket_ui::frame_clock::now(), AJAR_IN);
-        // Easy's one big case: well out, so an open case shows at a glance, the same for a cartridge, a card and a disc.
-        let reach = if self.big_on() { (front.w as f32 * AJAR_BIG).min(gw as f32 * 0.8) } else { (out as f32 * AJAR).min(front.w as f32 * AJAR_FRONT) };
         // From the middle of its case, where the way back leaves it (`insert_scene`: a game rests there before it comes
         // out), to beside it: no step when the shelf takes over (a clear case shows the game through it).
         let (inside, out_x) = ((front.w - gw) as f32 / 2.0, (front.w - gw) as f32 + reach);
         let gx = x + (inside + (out_x - inside) * at).round() as i32;
-        art::blit(c, &game, gx, y + (front.h - gh) / 2, 256, clip);
+        let gy = y + (front.h - gh) / 2;
+        art::blit(c, &game, gx, gy, 256, clip);
+        Some((gx, gy, gw, gh))
+    }
+
+    /// A frozen game's game out of its case `front` (`paint_ajar_game`) and how far it stands out of the case's right
+    /// side once it is all the way out; None for a shut case.
+    fn ajar_game(&mut self, item: Item, m: Medium, front: &Rc<Pic>) -> Option<(Rc<Pic>, f32)> {
+        if !self.stands_open(item) {
+            return None;
+        }
+        let game = self.box_game(item, front)?;
+        let reach = ajar_reach_of(self.big_on(), m, (front.w, front.h), Some(&game));
+        Some((game, reach))
+    }
+
+    /// Whether `item`'s case stands a little open. Easy: every usable moment, whatever the Frozen games extra says
+    /// (`big_has_moment`).
+    fn stands_open(&self, item: Item) -> bool {
+        if self.big_on() { self.big_has_moment(item) } else { self.is_frozen_item(item) }
+    }
+
+    /// How far past its case's right side an open case's game stands once it is out (0: a shut case), from the medium's
+    /// sizes (no picture is made): the room the Cabinet keeps beside the case, so the game never reaches the TV (a Brick
+    /// hand test, 17.11.).
+    pub(crate) fn ajar_reach(&self, item: Item, m: Medium, front: &Rc<Pic>) -> i32 {
+        if !self.stands_open(item) {
+            return 0;
+        }
+        ajar_reach_of(self.big_on(), m, (front.w, front.h), None).ceil() as i32 + 1
     }
 
     /// The game box's look and its case's front `h` pixels tall, made as the Shelf look makes its fronts.
@@ -1286,7 +1321,7 @@ impl App {
     /// Reads now or asks the thread, for a cover file.
     fn want(&mut self, file: &Path, kind: Kind) {
         let sample = self.sample_cover.as_ref().filter(|(p, _)| p == file).map(|(_, img)| img.clone());
-        if self.cabinet.inline || sample.is_some() {
+        if self.cabinet.inline || sample.is_some() || self.cabinet.warm.as_deref() == Some(file) {
             let got = read(file, kind, sample.as_deref());
             self.cabinet_got(file.to_path_buf(), kind, got);
             return;
@@ -1316,7 +1351,23 @@ impl App {
         }
     }
 
+    /// A game is about to start: if it has box art, the first frame that shows its case reads the cover (colours and
+    /// cut, at whatever size that scene asks for) right away rather than on the thread. Started from the search or at
+    /// boot its cover is in no cabinet cache yet, and the insert scene showed the plain stand-in front for a few frames
+    /// before the cover came (search-start-check). `POCKETUI_LAUNCH_COVER=0` turns it off (the check's "before").
+    pub(crate) fn warm_launch_cover(&mut self, system: &str, rom: &Path) {
+        if std::env::var("POCKETUI_LAUNCH_COVER").is_ok_and(|v| v == "0") {
+            return;
+        }
+        self.cabinet.warm = self.cover_file(system, rom);
+    }
+
     pub(crate) fn cabinet_poll(&mut self) {
+        // Over with the start: the game runs (or the start was dropped). Not when the first cut is in: the scene reads
+        // its own sizes, and the shelf's small cut may be there from before.
+        if self.cabinet.warm.is_some() && (self.running.is_some() || self.launch_at.is_none()) {
+            self.cabinet.warm = None;
+        }
         self.cabinet.prune_fronts();
         // Here, where every look takes its covers in: Easy never paints the Shelf or the Cabinet, and its cuts were
         // never trimmed (one per game passed, 15.11.).
@@ -1568,42 +1619,58 @@ impl App {
 
     // ---- painting ----------------------------------------------------------------------------------------
 
-    /// Where the showcase ends for the selected shelf `cs`, as the screen's room allows (the Mini V2 photo, 2026-11-03: a
-    /// 170-line strip of nothing under a shelf whose next one did not fit whole): (room for the case, top of the
-    /// selected shelf, how far it sinks behind the top board, whether the next shelf's top looks in at the bottom). The
-    /// rows under the showcase fit whole down to `scene_bottom` less the plinth; what is left over first makes the case and the TV bigger (up to what
-    /// `show_scale` allows), then the next shelf looks in from below, or, on the last one, the cabinet moves down.
-    fn cabinet_plan(&self, h: i32, cs: usize, m: Medium) -> (i32, i32, i32, bool) {
+    /// The cabinet's frame on a screen `h` lines high: (room for the case, bottom of the top board, how far its tallest
+    /// shelf sinks behind that board). One frame for the whole cabinet, whatever shelf or case is selected: laid out for
+    /// its tallest shelf and its tallest kind of case, so every shelf stands whole under the top board and every case has
+    /// its room above it (the hand test 16.11.2026: laid out for each shelf by itself, the top board and the TV on it
+    /// jumped from system to system). Only the shelves move under it. A cabinet short enough to stand whole stands on the
+    /// hints' line, its showcase taking the room above (the Mini V2 photo, 2026-11-03: no strip of nothing under it).
+    fn cabinet_plan(&self, w: i32, h: i32) -> (i32, i32, i32) {
         let cab = &self.cabinet.cab;
-        let bottom = scene_bottom(h);
-        // The last shelf that fits whole under `top`, and whether another one is below it.
-        let stack = |top: i32| {
-            let (mut lowest, mut more) = (0, false);
-            for s in cs..cab.shelves.len() {
-                let end = cab.y(s) - cab.y(cs) + top + cab.pitch(s);
-                if end > bottom {
-                    more = true;
-                    break;
-                }
-                lowest = end;
-            }
-            (lowest, more)
+        let tall = cab.tallest_pitch();
+        let media: &[Medium] = if cab.media.is_empty() { &[Medium::Gb] } else { &cab.media };
+        // The tallest case's showcase over the tallest shelf, `hide` lines of that shelf's empty headroom behind the board:
+        // the room is the same for every case, how high it needs to be is not.
+        let plan = |hide: i32, extra: i32| {
+            let (room, top, sink) = media.iter().map(|&m| showcase(h, m, tall - hide, extra)).max_by_key(|f| f.1).unwrap_or((0, 0, 0));
+            (room, top, sink + hide)
         };
-        // `top`: where the top board ends; the selected shelf starts `sink` above it.
-        let (room, top, sink) = showcase(h, m, cab.pitch(cs), 0);
-        let (lowest, _) = stack(top - sink);
-        if lowest <= top - sink {
-            // The selected shelf alone is taller than the room (a tiny screen).
-            return (room, top, sink, false);
+        // A TV left out for want of a few lines (1280 x 720 with a PS2 shelf): the space over that shelf's tallest case
+        // goes behind the board instead, never a spine.
+        let tv = |room: i32| super::app_cabinet_tv::tv_scale(w, h, room).is_some();
+        let hide = if tv(plan(0, 0).0) { 0 } else { (2..=cabinet::HEADROOM - 6).step_by(2).find(|&s| tv(plan(s, 0).0)).unwrap_or(0) };
+        let (room, top, sink) = plan(hide, 0);
+        let rest = scene_bottom(h) - (top - sink) - (cab.height() + PLINTH_H);
+        if rest <= 0 {
+            return (room, top, sink);
         }
-        let (room, top1, sink1) = showcase(h, m, cab.pitch(cs), (bottom - PLINTH_H - lowest).max(0));
-        let (lowest, more) = stack(top1 - sink1);
-        let rest = bottom - lowest;
-        if more && rest >= PEEK_MIN {
-            (room, top1, sink1, true)
-        } else {
-            (room, top1 + (rest - PLINTH_H).max(0), sink1, false)
+        let (room, top, sink) = plan(hide, rest);
+        let rest = scene_bottom(h) - (top - sink) - (cab.height() + PLINTH_H);
+        (room, top + rest.max(0), sink)
+    }
+
+    /// The scroll that shows shelf `cs` right under the top board ending at `top` (sunk by its part of `sink`, the tallest
+    /// shelf's); near the cabinet's end the plinth stays on the hints' line and the selection goes on down instead, as a
+    /// list stops at its end.
+    fn cabinet_scroll_for(&self, h: i32, cs: usize, top: i32, sink: i32) -> i32 {
+        let cab = &self.cabinet.cab;
+        let own_sink = (sink - (cab.tallest_pitch() - cab.pitch(cs))).max(0);
+        let end = cab.height() + PLINTH_H - scene_bottom(h);
+        (cab.y(cs) - top + own_sink).min(end).max(-top)
+    }
+
+    /// The last shelf standing whole over the hints at scroll `sy` (its board's bottom; 0: none) and whether more follow.
+    fn cabinet_stack(&self, h: i32, sy: i32) -> (i32, bool) {
+        let cab = &self.cabinet.cab;
+        let mut lowest = 0;
+        for s in 0..cab.shelves.len() {
+            let bottom = cab.y(s) - sy + cab.pitch(s);
+            if bottom > scene_bottom(h) {
+                return (lowest, true);
+            }
+            lowest = bottom;
         }
+        (lowest, false)
     }
 
     pub(crate) fn paint_cabinet(&mut self, c: &mut Canvas) {
@@ -1616,6 +1683,7 @@ impl App {
         let (light, earned) = self.room_sync();
         c.clear(pal().void);
         self.cabinet.drawn.clear();
+        self.cabinet.last_ajar = None;
         // The app's selection becomes a case (after the look was changed on a system card, say); the look step's
         // previews paint a sample and leave the selection alone.
         let at = if self.sample_cover.is_none() {
@@ -1635,8 +1703,8 @@ impl App {
         let cab_w = c.w - 2 * CAB_X;
         let view = cab_w - 2 * art::WALL;
         let inner_x = CAB_X + art::WALL;
-        let medium = self.cabinet.cab.shelves[cs].cases[ci].medium;
-        let (room, top, sink, peek) = self.cabinet_plan(c.h, cs, medium);
+        // The frame (top board, showcase, TV) is the cabinet's, the same on every shelf; the shelves scroll under it.
+        let (room, top, sink) = self.cabinet_plan(c.w, c.h);
         self.cabinet.show_room = room;
         if !self.cabinet.placed || !pocket_ui::motion::allowed(pocket_ui::motion::Kind::Move) {
             self.cabinet.show_top.jump(top as f32);
@@ -1644,7 +1712,8 @@ impl App {
             self.cabinet.show_top.set(top as f32, now);
         }
         let show_bottom = self.cabinet.show_top.value(now).round() as i32;
-        let want_y = (self.cabinet.cab.y(cs) - top + sink) as f32;
+        let want_sy = self.cabinet_scroll_for(c.h, cs, top, sink);
+        let want_y = want_sy as f32;
         let key = self.cabinet.cab.shelves[cs].key;
         let current_x = self.cabinet.scroll_x.get(&key).map_or(0.0, |t| t.target());
         let want_x = self.cabinet.cab.shelves[cs].scroll_to_show(ci, view, current_x);
@@ -1666,23 +1735,20 @@ impl App {
         let sy = self.cabinet.scroll_y.value(now).round() as i32;
         // The shelves under the showcase, down to the last one that fits whole: none is cut by the hints (the photo:
         // the bottom row's spines under the hint bar).
-        let mut lowest = 0;
-        for s in cs..self.cabinet.cab.shelves.len() {
-            let bottom = self.cabinet.cab.y(s) - sy + self.cabinet.cab.pitch(s);
-            if bottom > scene_bottom(c.h) {
-                break;
-            }
-            lowest = bottom;
-        }
+        let (mut lowest, _) = self.cabinet_stack(c.h, sy);
         // The selected shelf alone is taller than the room (a tiny screen): as much of it as fits.
         let cut = lowest <= show_bottom;
         if cut {
             lowest = scene_bottom(c.h);
         }
-        // Room left under the last whole shelf: the next one's top looks in (it fades out at the hints), no plinth.
-        let peek = peek && !cut;
+        // Room left under the last whole shelf where the scroll goes: the next one's top looks in (it fades out at the
+        // hints), no plinth; a sliver of it would read as a fault, the plinth closes the cabinet there instead.
+        let peek = !cut && {
+            let (end, more) = self.cabinet_stack(c.h, want_sy);
+            more && scene_bottom(c.h) - end >= PEEK_MIN
+        };
         let clip = (show_bottom, if peek { scene_bottom(c.h) } else { lowest });
-        let floor_y = show_bottom - sink + self.cabinet.cab.shelves[cs].height + 3;
+        let floor_y = self.cabinet.cab.y(cs) - sy + self.cabinet.cab.shelves[cs].height + 3;
 
         // The cabinet's top board and plinth, at its ends.
         if self.cabinet.boards.as_ref().is_none_or(|(page, b, _)| b.w != cab_w || *page != pal().void) {
@@ -1987,7 +2053,11 @@ impl App {
         let (fw, fh) = (size.front as f32 * k, size.front_h as f32 * k);
         let margin = 40.0;
         let right = self.cabinet.tv.left.map_or(c.w as f32, |x| x as f32 + 12.0);
-        let show_cx = show_centre(slot_cx, fw, right, margin, self.cabinet.cab.shelves[s].width, c.w - 2 * CAB_X - 2 * art::WALL);
+        let (spine, front) = self.shown_pics(case.item, case.medium);
+        // An open case's game stands out at its right side: that keeps clear of the TV too (it reached over the TV's
+        // console when the game stood at the shelf's right end, a Brick hand test 17.11.).
+        let reach = self.ajar_reach(case.item, case.medium, &front) as f32;
+        let show_cx = show_centre(slot_cx, fw, reach, right, margin, self.cabinet.cab.shelves[s].width, c.w - 2 * CAB_X - 2 * art::WALL);
         // Up in the showcase over its shelf, standing on the cabinet's top board: nothing of the shelves under it.
         let show_cy = (show_bottom - TOP_H - 12) as f32 - fh / 2.0;
         let smooth = |t: f32| t * t * (3.0 - 2.0 * t);
@@ -2010,7 +2080,6 @@ impl App {
         let scale = 1.0 + (k - 1.0) * mv;
         let cx = slot_cx + (show_cx - slot_cx) * mv;
         let cy = (floor - size.h as f32 / 2.0) + (show_cy - (floor - size.h as f32 / 2.0)) * mv;
-        let (spine, front) = self.shown_pics(case.item, case.medium);
         // Its shadow on what is behind and under it.
         let h_case = size.h as f32 + (size.front_h - size.h) as f32 * turned;
         let (w_now, h_now) = ((size.spine as f32 + (size.front - size.spine) as f32 * turned) * scale, h_case * scale);
@@ -2049,7 +2118,10 @@ impl App {
         // All the way out it faces you square: the picture as it is, sharp.
         let r = if turned >= 1.0 && (scale - k).abs() < 0.001 {
             let (x, y) = ((cx - front.w as f32 / 2.0).round() as i32, (cy - front.h as f32 / 2.0).round() as i32);
-            self.paint_ajar_game(c, case.item, case.medium, &front, (x, y), (0, scene_bottom(c.h)));
+            let ajar = self.paint_ajar_game(c, case.item, case.medium, &front, (x, y), (0, scene_bottom(c.h)));
+            if (s, i) == self.cabinet_cursor().unwrap_or((usize::MAX, 0)) {
+                self.cabinet.last_ajar = ajar;
+            }
             art::blit_sheared(c, &front, x, y, rock * front.h as f32, 256, (0, scene_bottom(c.h)));
             (x, y, front.w, front.h)
         } else {
@@ -2747,6 +2819,12 @@ impl App {
             app.cabinet.age(ago);
         };
         let rest = Duration::from_secs(2);
+        // `POCKETUI_SNAPSHOT_OUTCOME_EACH=1`: the outcome line after every key, not only at the end (a walk along a shelf
+        // in one run, `tests/cabinet_case_clear_of_tv.rs`); the open cases (`POCKETUI_SNAPSHOT_FROZEN`) from the start.
+        let each = std::env::var_os("POCKETUI_SNAPSHOT_OUTCOME_EACH").is_some();
+        if each {
+            self.frozen_snapshot();
+        }
         settle(self, rest);
         let n = keys.len();
         for (k, b) in keys.into_iter().enumerate() {
@@ -2767,6 +2845,9 @@ impl App {
                 if self.pending_launch.is_some() { std::thread::sleep(Duration::from_millis(1)); }
             }
             settle(self, ago);
+            if each {
+                self.cabinet_snapshot_outcome(h as i32, (w * h) as u64);
+            }
         }
         if let Some(ms) = insert_ms {
             settle(self, rest);
@@ -2776,13 +2857,19 @@ impl App {
 
     /// Report the final painted case and shelf for host snapshot outcome checks. Uses the same
     /// rectangles as touch/launch, so a case clipped out of the picture cannot pass as visible.
-    pub(crate) fn cabinet_snapshot_outcome(&self, h: i32) {
+    pub(crate) fn cabinet_snapshot_outcome(&self, h: i32, page_px: u64) {
         let Some((s, _)) = self.cabinet_cursor() else { return };
         let Some((_, (x, y, w, case_h))) = self.cabinet.last_out else { return };
         let top = self.cabinet.cab.y(s) - self.cabinet.scroll_y.value(Instant::now()).round() as i32;
-        println!("cabinet-outcome case={x},{y},{w},{case_h} shelf={top},{} showcase={} tv={} hints={}",
+        let place = self.cabinet.tv.place.map_or("none".to_string(), |(x, y, w, h)| format!("{x},{y},{w},{h}"));
+        // The open case's game, where it stood out of the case (none: a shut case).
+        let ajar = self.cabinet.last_ajar.map_or("none".to_string(), |(x, y, w, h)| format!("{x},{y},{w},{h}"));
+        // The pixels the frame cleared, against the page's own (`page_px`, screen pixels; `gfx::take_cleared`): the whole
+        // page once, not twice.
+        let cleared = pocket_ui::gfx::take_cleared();
+        println!("cabinet-outcome case={x},{y},{w},{case_h} shelf={top},{} showcase={} tv={} hints={} board={} place={place} ajar={ajar} handheld={} cleared={cleared}/{}",
             top + self.cabinet.cab.shelves[s].height, self.cabinet.show_room,
-            self.cabinet.tv.left.is_some(), h - 98);
+            self.cabinet.tv.left.is_some(), h - 98, self.cabinet.show_top.target().round() as i32, self.cabinet.tv.handheld, page_px);
     }
 
     /// Playful animations in a Shelf snapshot: `POCKETUI_SNAPSHOT_HELD=<steps>:<ms>` paints Right held for `steps`
@@ -2881,7 +2968,7 @@ impl App {
                     self.launch_animation_snapshot(Duration::ZERO);
                     // A bench: what painting costs, on the real clock.
                     pocket_ui::frame_clock::thaw();
-                    let len = self.cabinet.insert.as_ref().map_or(cabinet::INSERT_COZY, |i| cabinet::insert_len(i.scene.cozy));
+                    let len = self.cabinet.insert.as_ref().map_or(cabinet::INSERT_COZY, |i| i.scene.len());
                     let start = Instant::now();
                     for k in 0..=(len.as_millis() / 16) as u32 {
                         let at = start.checked_sub(frame_ms * k).unwrap_or(start);
@@ -2938,7 +3025,8 @@ impl App {
         let cozy = self.cabinet.insert.as_ref().is_some_and(|i| i.scene.cozy);
         // As a hosted game's start: a handheld ends in its display's light (`POCKETUI_SNAPSHOT_NO_POWER_ON=1`: the old fade).
         let power_on = std::env::var_os("POCKETUI_SNAPSHOT_NO_POWER_ON").is_none() && self.apply_power_on(cozy, true);
-        let len = pocket_ui::insert_scene::hold(cozy, power_on).unwrap_or(cabinet::insert_len(cozy) + pocket_ui::insert_scene::FADE);
+        let hold = self.cabinet.insert.as_ref().map_or_else(|| pocket_ui::insert_scene::hold(cozy, power_on), |i| i.scene.hold());
+        let len = hold.unwrap_or(cabinet::insert_len(cozy) + pocket_ui::insert_scene::FADE);
         // A at `t0`; the clock steps by exactly one 60 Hz frame (`frame_clock`).
         let t0 = pocket_ui::frame_clock::hold_settled();
         if let Some(ins) = self.cabinet.insert.as_mut() {
@@ -3081,12 +3169,25 @@ fn shelf_lead(len: i32, view: i32) -> i32 {
     }
 }
 
+/// How far an open case's game (`game`: its picture; None: the size its medium gives it) stands out of the right side
+/// of its case `case` (w, h) once it is out. Easy's one big case: well out, so an open case shows at a glance, the same for a
+/// cartridge, a card and a disc.
+fn ajar_reach_of(big: bool, m: Medium, case: (i32, i32), game: Option<&Pic>) -> f32 {
+    let (gw, _, out) = pocket_ui::game_box::game_beside(m, case, game);
+    if big {
+        (case.0 as f32 * AJAR_BIG).min(gw as f32 * 0.8)
+    } else {
+        (out as f32 * AJAR).min(case.0 as f32 * AJAR_FRONT)
+    }
+}
+
 /// Where the centre of a case shown out of its shelf stands: over its slot, unless the shelf holds only a few cases
 /// (their row under a third of the cabinet's width): then in the middle of the cabinet, so a lone game is not tucked in
-/// its corner above an empty shelf. Kept `margin` clear of the screen's edges (`screen_w`: the room up to the TV, when one stands there).
-fn show_centre(slot_cx: f32, fw: f32, screen_w: f32, margin: f32, shelf_w: i32, view: i32) -> f32 {
-    let cx = if shelf_w * 3 < view { screen_w / 2.0 } else { slot_cx };
-    cx.clamp(margin + fw / 2.0, (screen_w - margin - fw / 2.0).max(margin + fw / 2.0))
+/// its corner above an empty shelf. Kept `margin` clear of the screen's edges (`screen_w`: the room up to the TV, when one stands there),
+/// with `reach` more on the right: an open case's game stands out there (`App::ajar_reach`).
+fn show_centre(slot_cx: f32, fw: f32, reach: f32, screen_w: f32, margin: f32, shelf_w: i32, view: i32) -> f32 {
+    let cx = if shelf_w * 3 < view { (screen_w - reach) / 2.0 } else { slot_cx };
+    cx.clamp(margin + fw / 2.0, (screen_w - margin - fw / 2.0 - reach).max(margin + fw / 2.0))
 }
 
 /// Which group of Home an entry belongs to: the shelf leaves a wider gap where one ends (Curator and Search, the recent
@@ -4085,10 +4186,23 @@ mod shelf_tests {
     #[test]
     fn a_lone_case_is_shown_in_the_middle_of_the_cabinet_not_in_its_corner() {
         // A slot at the far left of a 608 px cabinet on a 640 px screen: a one-game shelf (60 px) shows it centred...
-        assert_eq!(show_centre(70.0, 100.0, 640.0, 40.0, 60, 608), 320.0);
+        assert_eq!(show_centre(70.0, 100.0, 0.0, 640.0, 40.0, 60, 608), 320.0);
         // ...a full shelf keeps the case over its own slot, clamped to the screen.
-        assert_eq!(show_centre(70.0, 100.0, 640.0, 40.0, 900, 608), 90.0);
-        assert_eq!(show_centre(300.0, 100.0, 640.0, 40.0, 900, 608), 300.0);
+        assert_eq!(show_centre(70.0, 100.0, 0.0, 640.0, 40.0, 900, 608), 90.0);
+        assert_eq!(show_centre(300.0, 100.0, 0.0, 640.0, 40.0, 900, 608), 300.0);
+    }
+
+    #[test]
+    fn an_open_case_s_game_keeps_clear_of_the_tv_from_every_slot() {
+        // The room up to the TV ends at 760; the case is 200 wide and its game stands 60 out at its right side.
+        let (fw, reach, right, margin) = (200.0, 60.0, 760.0, 40.0);
+        for slot in (0..=1024).step_by(8) {
+            let cx = show_centre(slot as f32, fw, reach, right, margin, 900, 960);
+            assert!(cx + fw / 2.0 + reach <= right - margin, "slot {slot}: the game reaches {} past {}", cx + fw / 2.0 + reach, right - margin);
+            assert!(cx - fw / 2.0 >= margin, "slot {slot}: the case left the screen");
+        }
+        // A lone case in the middle: the case and its game together.
+        assert_eq!(show_centre(70.0, 100.0, 60.0, 640.0, 40.0, 60, 608), 290.0);
     }
 
     #[test]

@@ -285,7 +285,14 @@ pub fn get(system: &str) -> Option<&'static Sprite> {
 /// The insert scene's base picture of a system's chosen colour, if it has one other than the original, and the layers of
 /// its own plastic that go with it.
 pub fn colour_rig(system: &str) -> Option<(&'static [u8], RigLayers)> {
-    colour(system).map(|c| (c.rig_base, RigLayers { over: c.rig_over, top: c.rig_top, under: c.rig_under }))
+    colour(system).map(Colour::rig)
+}
+
+impl Colour {
+    /// Its insert scene's base picture and the layers of its own plastic.
+    pub fn rig(&self) -> (&'static [u8], RigLayers) {
+        (self.rig_base, RigLayers { over: self.rig_over, top: self.rig_top, under: self.rig_under })
+    }
 }
 
 /// PNG (palette with tRNS, RGB or RGBA) to a sprite; partial alpha counts as solid from half on.

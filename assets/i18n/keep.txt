@@ -690,6 +690,28 @@ Eliwood
 Hector
 Eirika
 Ephraim
+# GoldenEye 007's difficulties and missions, as its folder select and mission films name them
+Agent
+Secret Agent
+00 Agent
+Dam
+Facility
+Runway
+Surface
+Bunker
+Silo
+Frigate
+Statue
+Archives
+Streets
+Depot
+Train
+Jungle
+Control
+Caverns
+Cradle
+Aztec
+Egyptian
 
 # dArkOS's handhelds (src/darkos.rs): makers' model names, and the name of a board dArkOS has but the table not.
 Anbernic RG353M

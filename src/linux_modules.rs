@@ -111,6 +111,7 @@ pub mod manual_time;
 pub mod libretro;
 #[cfg_attr(any(target_os = "emscripten", target_os = "android"), path = "platform/android_hw_render.rs")] pub mod hw_render;
 pub mod options;
+pub mod render_scale;
 pub mod look;
 pub mod j2me_java;
 pub mod j2me_keys;
@@ -260,6 +261,8 @@ pub mod title_block;
 pub mod pause_head;
 /// The handhelds' pause menu for Android's player when the game came from the Handheld view (`pause_list`).
 pub mod pause_list;
+/// The Options page of that menu, laid out as Linux's (`pause_options`).
+pub mod pause_options;
 pub mod quit;
 pub mod exit_guard;
 pub mod fast_switch;

@@ -111,6 +111,7 @@ shows.
 | Golden Sun, Golden Sun: The Lost Age | USA and Europe in English |
 | Final Fantasy III (VI), EarthBound, Chrono Trigger, Fire Emblem, The Sacred Stones, Kirby & the Amazing Mirror | USA |
 | Role-playing games: Super Mario RPG, Lufia II, Pokémon Mystery Dungeon: Red Rescue Team, Final Fantasy VI Advance, Tactics Ogre: The Knight of Lodis, Breath of Fire II, Mario & Luigi: Superstar Saga | USA |
+| Banjo-Kazooie, Metroid Fusion, GoldenEye 007 | USA |
 | Mother 3 | the English fan translation 1.3a (HQ Sound) |
 
 Each of these was checked against saves the game wrote, so the line says what the game's own screens say.

@@ -45,6 +45,22 @@ impl Card {
     }
 
     fn show_at(&self, state: &str, size: &str, text: &str, lang: &str) -> Shown {
+        self.show_with(state, size, text, lang, &[])
+    }
+
+    /// Every string painted with its place (`nav_probe`): (x0, y0, x1, y1, the string).
+    fn show_placed(&self, state: &str, size: &str, text: &str, lang: &str) -> (Shown, Vec<(i32, i32, i32, i32, String)>) {
+        let probe = self.path().join("placed.tsv");
+        let _ = std::fs::remove_file(&probe);
+        let shown = self.show_with(state, size, text, lang, &[("POCKETUI_NAV_PROBE", &probe)]);
+        let placed = std::fs::read_to_string(&probe).unwrap_or_default().lines().filter_map(|l| {
+            let mut p = l.splitn(5, '\t');
+            Some((p.next()?.parse().ok()?, p.next()?.parse().ok()?, p.next()?.parse().ok()?, p.next()?.parse().ok()?, p.next()?.to_string()))
+        }).collect();
+        (shown, placed)
+    }
+
+    fn show_with(&self, state: &str, size: &str, text: &str, lang: &str, env: &[(&str, &Path)]) -> Shown {
         let tmp = self.path();
         let (png, words) = (tmp.join("shot.png"), tmp.join("words.tsv"));
         let _ = std::fs::remove_file(&words);
@@ -63,6 +79,7 @@ impl Card {
             .env("POCKETUI_TEXT_SIZE", text)
             .env("POCKETUI_DATA", tmp.join("data"))
             .env("POCKETUI_ES_SYSTEMS", tmp.join("es_systems.cfg"))
+            .envs(env.iter().copied())
             .output()
             .unwrap();
         assert!(out.status.success() && png.exists(), "{state}: {}", String::from_utf8_lossy(&out.stderr));
@@ -331,7 +348,7 @@ fn a_page_transition_fades_from_the_background_not_from_a_neighbour() {
 #[test]
 fn the_first_start_offers_the_shelf_then_just_play_and_all_five_rows_fit() {
     let card = Card::new();
-    for (lang, shelf, just, enth, choose, child) in [("en", "The shelf", "Easy", "Enthusiast", "Choose for yourself", "For a child"), ("de", "Das Regal", "Easy", "Enthusiast", "Selbst wählen", "Für ein Kind"), ("es", "El estante", "Easy", "Entusiasta", "Elige tú", "Para un niño")] {
+    for (lang, shelf, just, enth, choose, child) in [("en", "The shelf", "Easy", "Enthusiast", "Choose for yourself", "For a child"), ("de", "Das Regal", "Einfach", "Enthusiast", "Selbst wählen", "Für ein Kind"), ("es", "El estante", "Easy", "Entusiasta", "Elige tú", "Para un niño")] {
         for text in ["normal", "large"] {
             for state in ["setup:play", "setup:play:d"] {
                 let w = card.show_at(state, "640x480", text, lang).words;
@@ -432,4 +449,36 @@ fn eight_hundred_games_dont_break_it() {
     let far = card.show("big-shelf:700");
     assert_eq!(games_shown(&far.stdout), 800);
     assert!(far.words.contains("701 of 800"), "{}", far.words);
+}
+
+/// Found rendering the homepage's pictures (0.5.1): on the Brick's 1024x768 the big case began at 7 % of the screen, 53
+/// pixels, above the top line's baseline at 72, and the place ("53 of 81 · PlayStation 2" in Large) ran into the cover.
+/// Every panel under 1000 lines had the case in the top line's band; a short place only missed it to the side. Each
+/// panel size, Normal and Large, English and German, with a place long enough to reach the clock: the case starts below
+/// everything the top line paints.
+#[test]
+fn the_big_case_stays_below_the_top_line_on_every_panel() {
+    let card = Card::new();
+    // Long places: every system's name runs on, so the top line reaches across the screen to the clock.
+    let cfg = card.path().join("es_systems.cfg");
+    let long = std::fs::read_to_string(&cfg).unwrap().replace("</fullname>", ", every game of it in one long name</fullname>");
+    std::fs::write(&cfg, long).unwrap();
+    for size in ["640x480", "720x720", "960x544", "1024x768", "1280x720", "1280x960", "1240x1080", "1920x1080"] {
+        for (text, lang) in [("normal", "en"), ("large", "en"), ("large", "de")] {
+            let (shown, placed) = card.show_placed("big-shelf", size, text, lang);
+            let case = shown.stdout.lines().find_map(|l| l.strip_prefix("big-case ")).unwrap_or_else(|| panic!("{size}: no case: {}", shown.stdout));
+            let num = |key: &str| case.split_whitespace().find_map(|kv| kv.strip_prefix(key)?.parse::<i32>().ok()).unwrap();
+            let (x, y, w, h) = (num("x="), num("y="), num("w="), num("h="));
+            assert!(w > 0 && h > 0, "{size}: {case}");
+            // The top line: what is painted across its baseline (72), the place at the left and the corner at the right.
+            let line: Vec<_> = placed.iter().filter(|p| p.1 < 72 && p.3 > 60).collect();
+            assert!(line.iter().any(|p| p.4.contains("PlayStation") || p.4.contains('…')), "{size} {text} {lang}: the place is on the top line: {placed:?}");
+            let bottom = line.iter().map(|p| p.3).max().unwrap();
+            assert!(y > bottom, "{size} {text} {lang}: the case ({x},{y} {w}x{h}) starts at {y}, the top line ends at {bottom}: {line:?}");
+            // And nothing painted over it from above: no string of the top line inside the case.
+            for p in &line {
+                assert!(p.3 <= y || p.2 <= x || p.0 >= x + w, "{size} {text} {lang}: {:?} over the case", p.4);
+            }
+        }
+    }
 }

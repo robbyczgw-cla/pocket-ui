@@ -140,6 +140,8 @@ fn snapshot_game(p: &Progress, path: &Path) -> bool {
         Progress::Chapter { .. } => name.contains("fire emblem"),
         Progress::Complete { .. } => name.contains("donkey kong country"),
         Progress::Shards { .. } => name.contains("amazing mirror"),
+        Progress::Jiggies { .. } => name.contains("banjo"),
+        Progress::Mission { .. } => name.contains("goldeneye"),
     }
 }
 
@@ -181,6 +183,8 @@ pub(crate) fn snapshot_progress(case: &str) -> Option<Progress> {
         "chrono" => Progress::Hero { lead: Some(("Crono".into(), 24)), hours: 11, minutes: 38 },
         "golden-sun" => Progress::Hero { lead: Some(("Isaac".into(), 23)), hours: 12, minutes: 5 },
         "kirby" => Progress::Shards { done: 5 },
+        "goldeneye" => Progress::Mission { mission: Some("Mission 6.iii: Streets".into()), difficulty: "Secret Agent" },
+        "banjo" => Progress::Jiggies { done: 42, of: 100, notes: 512, hours: 7, minutes: 18 },
         "golden-sun-2" => Progress::Hero { lead: Some(("Felix".into(), 31)), hours: 21, minutes: 47 },
         "dkc3" => Progress::Complete { percent: 41, of: 105, clock: Some((6, 3)) },
         "mario-rpg" => Progress::Party { lead: ("Mario".into(), 17), friends: 0 },

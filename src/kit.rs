@@ -83,12 +83,25 @@ pub fn content_bottom(h: i32) -> i32 {
 /// first start): the same pill as every other page's (`pill_hints`), at the bottom right. Never a key without its word;
 /// at most four hints, and when they don't fit whole hints go, the least needed first. Returns where each key can be tapped.
 pub fn page_hints(c: &mut Canvas, text: &mut Text, hints: &[(&str, &str)]) -> Vec<(Area, Button)> {
+    let hints = concise(c.h, hints);
+    paint_bar(c, text, &hints).1
+}
+
+/// Where `page_hints`' pill starts on a canvas `w` by `h`: nothing of it is left of this (a fade between two bars mixes
+/// only the part from the leftmost of them, `App::paint_hint_row`).
+pub fn page_hints_left(text: &mut Text, w: i32, h: i32, hints: &[(&str, &str)]) -> i32 {
+    w - PAD - pill_layout(text, w, &concise(h, hints)).0
+}
+
+/// The page's hints as the bar shows them: on the Brick's short screen "Recent games" is "Recent".
+fn concise<'a>(h: i32, hints: &[(&'a str, &'a str)]) -> Vec<(&'a str, &'a str)> {
     #[cfg(feature = "brick")]
-    let concise: Vec<_> = hints.iter().map(|&(key, label)|
-        (key, if crate::device::brick() && short_screen(c.h) && label == "Recent games" { "Recent" } else { label })).collect();
-    #[cfg(feature = "brick")]
-    let hints = concise.as_slice();
-    paint_bar(c, text, hints).1
+    return hints.iter().map(|&(key, label)| (key, if crate::device::brick() && short_screen(h) && label == "Recent games" { "Recent" } else { label })).collect();
+    #[cfg(not(feature = "brick"))]
+    {
+        let _ = h;
+        hints.to_vec()
+    }
 }
 
 /// The one hint bar of every page (docs/DESIGN.md "Hint bar"): the keys in a pill at the bottom right, a chip per key,
@@ -323,13 +336,12 @@ pub fn row_label(c: &mut Canvas, text: &mut Text, (x, y, w, h): (i32, i32, i32, 
 /// A drawn angle in the icons' manner (one colour, round ends): pointing right (`>`) or left (`<`), `h` tall, its
 /// point at `tip` on the line `mid`. Rows and values use it instead of the letters ">" and "‹ ›".
 pub fn chevron(c: &mut Canvas, tip: i32, mid: i32, h: i32, right: bool, color: u32) {
-    angle(c, tip, mid, h, right, color, if right { ">" } else { "<" });
+    angle(c, (tip, mid), h, right, color, if right { ">" } else { "<" }, (h / 12).max(1));
 }
 
 /// `chevron`, recorded for the snapshot checks as `name`: the angle is a mark like the letter it replaces ("›" of a
 /// switch, ">" of a page), and nothing may run into it.
-fn angle(c: &mut Canvas, tip: i32, mid: i32, h: i32, right: bool, color: u32, name: &str) {
-    let r = (h / 12).max(1);
+fn angle(c: &mut Canvas, (tip, mid): (i32, i32), h: i32, right: bool, color: u32, name: &str, r: i32) {
     let half = (h / 2 - r).max(1);
     let reach = half * 2 / 3;
     // A disc per step down each stroke, all of them one shape: each disc as its rows (as `Canvas::disc` paints them),
@@ -364,8 +376,8 @@ fn value_parts(value: &str) -> (&str, bool, bool) {
 /// A row's value at the right of a list, its right edge at `right`, on the baseline `base`: "Home net >" (a row that
 /// opens a page) with a drawn angle after the words, "‹ On ›" (the selected row's switch, Left/Right change it)
 /// between two. The angles stand where the letters were, so a finger's areas measured on the string still fit. On the
-/// selected row all of it is ink on the paper; elsewhere the words are `pal().text` and the angle `pal().dust`, so
-/// every row says whether it opens a page before the cursor gets there. Returns the width it took.
+/// selected row all of it is ink on the paper; elsewhere the words and a page's angle are `pal().text` (a switch's
+/// angles are only on the selected row), so every row says whether it opens a page before the cursor gets there. Returns the width it took.
 pub fn row_value(c: &mut Canvas, text: &mut Text, font: u32, right: i32, base: i32, value: &str, selected: bool) -> i32 {
     let colours = if selected { (pal().ink, pal().ink) } else { (pal().text, pal().dust) };
     row_value_in(c, text, font, right, base, value, colours)
@@ -381,17 +393,21 @@ pub fn row_value_in(c: &mut Canvas, text: &mut Text, font: u32, right: i32, base
     if switch {
         let (lw, rw) = (text.width(Face::Body, font, "‹ "), text.width(Face::Body, font, " ›"));
         let x = right - rw - ww - lw;
-        let h = px * 9 / 20;
-        angle(c, x + 2, mid, h, false, mark, "‹");
+        // A little larger than the letters' ‹ › (0.5.1): the selected row's value reads as one to step with Left/Right.
+        let h = px * 11 / 20;
+        angle(c, (x + 2, mid), h, false, mark, "‹", (h / 10).max(1));
         text.draw(c, Face::Body, font, x + lw, base, fg, words);
-        angle(c, right - 2, mid, h, true, mark, "›");
+        angle(c, (right - 2, mid), h, true, mark, "›", (h / 10).max(1));
         return lw + ww + rw;
     }
     if opens {
         let aw = text.width(Face::Body, font, " >");
         let tail = if words.is_empty() { aw - text.width(Face::Body, font, " ") } else { aw };
         text.draw(c, Face::Body, font, right - tail - ww, base, fg, words);
-        chevron(c, right - 2, mid, px * 11 / 20, true, mark);
+        // A page's angle (0.5.1, a hand walk: which rows open a page was not clear enough): as tall as the letters, a
+        // little bolder than the switch's, in the words' colour on every row, not the quiet one.
+        let h = px * 7 / 10;
+        angle(c, (right - 2, mid), h, true, fg, ">", (h / 9).max(1));
         return ww + tail;
     }
     text.draw_right(c, Face::Body, font, right, base, fg, words);
@@ -531,7 +547,7 @@ mod tests {
                 assert_eq!(pair.0, pair.1, "arrow {w} wide at {x},{mid}");
             }
             for (h, right) in [(15, true), (24, false), (33, true)] {
-                close(&format!("angle {h} at {x},{mid}"), 0, old_and_new(60, 40, |c| angle(c, x + 30, mid, h, right, 0xf0e0d0, ">")));
+                close(&format!("angle {h} at {x},{mid}"), 0, old_and_new(60, 40, |c| angle(c, (x + 30, mid), h, right, 0xf0e0d0, ">", (h / 12).max(1))));
             }
         }
     }

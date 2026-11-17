@@ -85,6 +85,80 @@ pub fn body(f: f32) -> Body {
     Body { pic, glass, mask }
 }
 
+/// A handheld standing in the TV's place, `w` x `h` at most (the TV's own size: the frame stays the same): its plain
+/// picture (`sprite`, `system_art`) scaled to fit (nearest, bottom and middle), with its display as the glass: found by
+/// filling out from `seeds` (parts of the picture's width and height, `insert_scene::plain_display`) within `fuzz`, as
+/// the handheld power-on finds it, and lit in `light` (0xRRGGBB) where no picture is yet. The picture goes onto the
+/// glass as onto the TV's (`show`). None when the picture has no display there or no room.
+pub fn handheld_body(sprite: &Sprite, seeds: &[(f32, f32)], fuzz: u32, light: u32, w: i32, h: i32) -> Option<Body> {
+    let (sw, sh) = (sprite.w as i32, sprite.h as i32);
+    if sw == 0 || sh == 0 || w <= 0 || h <= 0 {
+        return None;
+    }
+    let at = seeds.iter().map(|&(x, y)| (x * sw as f32, y * sh as f32));
+    let own = crate::insert_rig::display_mask(&sprite.px, sw as usize, sh as usize, at, fuzz);
+    // One pixel more all round, as the power-on lights it (`insert_rig::lit_pixels`): the glass's soft edge too.
+    let on = |x: i32, y: i32| x >= 0 && y >= 0 && x < sw && y < sh && own[(y * sw + x) as usize];
+    let glass_at = |x: i32, y: i32| {
+        let solid = sprite.px[(y * sw + x) as usize] >> 24 == 255;
+        solid && (on(x, y) || on(x - 1, y) || on(x + 1, y) || on(x, y - 1) || on(x, y + 1))
+    };
+    let f = (w as f32 / sw as f32).min(h as f32 / sh as f32);
+    let (pw, ph) = (((sw as f32 * f).floor() as i32).max(1), ((sh as f32 * f).floor() as i32).max(1));
+    let mut pic = Pic::new(pw, ph, 0);
+    let mut glass_px = vec![false; (pw * ph) as usize];
+    let (mut x0, mut y0, mut x1, mut y1) = (i32::MAX, i32::MAX, -1, -1);
+    for y in 0..ph {
+        let sy = ((y as f32 / f) as i32).min(sh - 1);
+        for x in 0..pw {
+            let sx = ((x as f32 / f) as i32).min(sw - 1);
+            let p = sprite.px[(sy * sw + sx) as usize];
+            let i = (y * pw + x) as usize;
+            if glass_at(sx, sy) {
+                glass_px[i] = true;
+                pic.px[i] = 0xff00_0000 | crate::gfx::mix(light & 0xff_ffff, p & 0xff_ffff, 40);
+                (x0, y0, x1, y1) = (x0.min(x), y0.min(y), x1.max(x), y1.max(y));
+            } else {
+                pic.px[i] = p;
+            }
+        }
+    }
+    if x1 < 0 {
+        return None;
+    }
+    let glass = (x0, y0, x1 - x0 + 1, y1 - y0 + 1);
+    let mut mask = vec![false; (glass.2 * glass.3) as usize];
+    for y in 0..glass.3 {
+        for x in 0..glass.2 {
+            mask[(y * glass.2 + x) as usize] = glass_px[((glass.1 + y) * pw + glass.0 + x) as usize];
+        }
+    }
+    Some(Body { pic, glass, mask })
+}
+
+/// A handheld's display look over `img`, `w` x `h`: the picture cut to fill the glass (its middle kept), sharp and
+/// flat, a touch dimmer than a lit tube (an LCD, not a CRT: no curve, no scanlines).
+pub fn lcd(img: &Image, w: i32, h: i32) -> Pic {
+    let (w, h) = (w.max(1), h.max(1));
+    let mut out = Pic::new(w, h, 0xff00_0000 | TUBE);
+    if img.w == 0 || img.h == 0 {
+        return out;
+    }
+    let (iw, ih) = (img.w as f32, img.h as f32);
+    let k = (w as f32 / iw).max(h as f32 / ih);
+    let (cw, ch) = (w as f32 / k, h as f32 / k);
+    let (ox, oy) = ((iw - cw) / 2.0, (ih - ch) / 2.0);
+    for y in 0..h {
+        let sy = ((oy + (y as f32 + 0.5) / k) as u32).min(img.h - 1);
+        for x in 0..w {
+            let sx = ((ox + (x as f32 + 0.5) / k) as u32).min(img.w - 1);
+            let p = img.px[(sy * img.w + sx) as usize] & 0xff_ffff;
+            out.px[(y * w + x) as usize] = 0xff00_0000 | crate::gfx::mix(p, 0x101010, 20);
+        }
+    }
+    out
+}
+
 /// The CRT look over `img`, `w` x `h`: the picture cut to fill the glass (its middle kept), on a slightly curved tube
 /// (the corners pulled in), scanlines every second row, darker towards the rim, a warm tint and a soft glow.
 pub fn crt(img: &Image, w: i32, h: i32) -> Pic {

@@ -1020,6 +1020,14 @@ impl Audio {
         self.set_input_rate(sample_rate);
     }
 
+    /// [`Audio::set_source_timing`] for a player that runs the core once per display refresh near the display's rate
+    /// (`core_pacing`): the samples come at the display's pace, so the input rate is the core's times the skew, as
+    /// pocket-core's `sync_audio_rate` does on Linux. Off the display's rate the core's own rate stays.
+    pub fn set_paced_timing(&mut self, sample_rate: f64, core_fps: f64, display_hz: f64) {
+        self.set_frame_timing(core_fps, display_hz);
+        self.set_input_rate(sample_rate * crate::core_pacing::audio_skew(core_fps, display_hz));
+    }
+
     /// Match the reserve to the producer's cadence, also when a core changes video mode. Near the
     /// display rate it supplies every tick; otherwise use the longer queue and at least two source
     /// frames. This is a queue minimum, like the backend's minimum, not a resampler ratio change.
@@ -1750,6 +1758,20 @@ mod tests {
         assert_eq!(audio.input_rate(), 44100.0, "queue reserve does not change pitch");
         audio.set_source_timing(44100.0, 60.0, 60.0);
         assert_eq!(audio.target_ms(), original, "a 60-Hz source keeps its existing reserve");
+    }
+
+    /// A core run once per refresh (Android's player since 17.11.2026, `core_pacing`) plays its samples at the display's
+    /// pace: a SNES's 60.10 frames a second become the screen's 60, so its sound is fed 0.16 % slower and keeps its pitch.
+    /// A 50 Hz game on a 60 Hz screen goes by time and keeps the core's rate.
+    #[test]
+    fn a_core_paced_by_the_display_feeds_its_sound_at_the_display_rate() {
+        let mut audio = Audio::start(paced_sink(), 32040.0, false, None, |_| None);
+        audio.set_paced_timing(32040.0, 60.0988, 60.0);
+        assert!((audio.input_rate() - 32040.0 * 60.0 / 60.0988).abs() < 1e-6, "{}", audio.input_rate());
+        audio.set_paced_timing(44100.0, 50.007, 60.0);
+        assert_eq!(audio.input_rate(), 44100.0);
+        audio.set_paced_timing(32768.0, 59.7275, 59.94);
+        assert!((audio.input_rate() - 32768.0 * 59.94 / 59.7275).abs() < 1e-6);
     }
 
     /// Review 0.3: every game sampled PipeWire with helper programs every 2 s (about 7 processes a second, `vdev`

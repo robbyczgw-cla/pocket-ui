@@ -491,7 +491,8 @@ page colour (taken from the frame's right edge), row by row for a list (the pain
 fade is branch-free and works on two channels at once, so the compiler vectorises it; a stretch of a line that is
 nothing but the page colour is only read, never written (it would come out the same), which is most of a page; a full
 frame is a fraction of the paint time. Toasts and the hint bar use `motion::layer` (keep the area, paint, mix), whose cost is their
-area.
+area: the hint bar's fade mixes only from the left end of the longer of its two pills, with two channels per multiply
+(`motion::blend`, within a step of `gfx::mix`).
 
 **Measuring.** `POCKETUI_FRAME_LOG=1` logs "press to frame" for every button press (the time from the event
 to the frame that shows it) and, when an animation ends, the paint time of its frames by kind (page
@@ -1012,7 +1013,7 @@ public-domain photo of a 90s portable; `assets/media/tv/SOURCES.md`), its glass 
   pulled in a little (a curved tube), every second line darker (scanlines at the picture's scale), darker towards the
   rim, a little warmer, and a soft glow from each pixel's neighbours. Never animated: no flicker, no noise.
 - **Changing**: the next game's picture crossfades in over 220 ms once it is made (Motion Off: at once); until then
-  the last one stays. The case out of the shelf keeps left of the TV.
+  the last one stays. The case out of the shelf keeps left of the TV, and so does the game an open case shows at its side (Continue): the case moves left by as much as the game stands out (`tests/cabinet_case_clear_of_tv.rs`).
 - **Freshness**: picture downloads/library changes and returning from a game discard the TV loader's cache,
   including its pending replies. Jobs and replies carry a generation; invalidation keeps the same single decoder
   thread, and an old reply cannot clear a new request for the same picture. The current picture stays until its

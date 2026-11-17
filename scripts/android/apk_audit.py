@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Checks of a finished Android APK that need no Android SDK (scripts/android/release-check.sh calls this beside apksigner/aapt).
 
-    apk_audit.py APK [--sources DIR] [--max-bytes N]
+    apk_audit.py APK [--sources DIR] [--max-bytes N] [--lock FILE]
 
 Prints `ok: ...` / `FAIL: ...` lines; exit 0 when every check passed, 1 otherwise.
   - every packaged native library is an ARM64 ELF whose LOAD segments are aligned to 16 KB (Android 15+ may use 16 KB pages)
@@ -13,6 +13,8 @@ Prints `ok: ...` / `FAIL: ...` lines; exit 0 when every check passed, 1 otherwis
   - the licence files are packed, with the written source offer and the list of cores the app's Licences page shows: it names
     every core of cores.json and of core-downloads.json, and each bundled core's licence texts are in the APK
   - no game, BIOS or disc image is inside
+  - with --lock (release-check.sh passes android/cores.lock.json): every core of the lock is in the APK and none is a
+    download (assets/core-downloads.json offers nothing). Since 0.5.x every core is bundled.
 """
 import hashlib
 import json
@@ -95,6 +97,11 @@ def main(argv):
     args = list(argv)
     sources = None
     max_bytes = None
+    lock = None
+    if "--lock" in args:
+        i = args.index("--lock")
+        lock = Path(args[i + 1])
+        del args[i:i + 2]
     if "--sources" in args:
         i = args.index("--sources")
         sources = Path(args[i + 1])
@@ -173,6 +180,13 @@ def main(argv):
         unlisted = sorted(({c["id"] for c in cores} | offered) - listed)
         (ok if not unlisted and listed else fail)("the licence list names all %d cores" % len(listed) if not unlisted and listed
                                                  else "assets/licences/CORES.tsv lacks %s" % (unlisted or "every core"))
+        if lock is not None:
+            wanted = {c["id"] for c in json.loads(lock.read_text())["cores"]}
+            missing = sorted(wanted - {c["id"] for c in cores})
+            (ok if not missing else fail)("every core of %s is in the APK (%d)" % (lock.name, len(wanted)) if not missing
+                                          else "cores of %s missing from the APK: %s" % (lock.name, missing))
+            (ok if not offered else fail)("no core is a download (core-downloads.json offers nothing)" if not offered
+                                          else "cores offered as downloads instead of bundled: %s" % sorted(offered))
         no_text = sorted(c["id"] for c in cores if not c.get("notices") or any("assets/licences/" + n.get("asset", "?") not in names for n in c["notices"]))
         (ok if not no_text else fail)("every bundled core's licence texts are packed" if not no_text else "licence texts missing from the APK for %s" % no_text)
         no_source = [c["id"] for c in cores if not c.get("corresponding_source") or not c.get("source_sha256")]

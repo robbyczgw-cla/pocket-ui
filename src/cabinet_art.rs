@@ -476,14 +476,30 @@ pub fn blit_cols(c: &mut Canvas, p: &Pic, x: i32, y: i32, shade: u32, clip: (i32
     for row in y0..y1 {
         let src = &p.px[((row - y) * p.w + (x0 - x)) as usize..((row - y) * p.w + (x1 - x)) as usize];
         let dst = &mut c.pixels_mut()[(row * c_w + x0) as usize..(row * c_w + x1) as usize];
-        for (d, &s) in dst.iter_mut().zip(src) {
-            let a = s >> 24;
-            if a == 255 {
+        blit_row(dst, src, shade);
+    }
+}
+
+/// One row of `blit`: eight pixels at a time where all eight are solid (the wood of the walls and boards, a case's
+/// printed face), with no test per pixel, which the compiler does four at a time; the rest pixel by pixel. The same
+/// pixels either way. The Cabinet's walls, boards and spines are most of its frame: on the Brick's A53 the test per
+/// pixel kept the walls at 2-2.5 ms of a moving frame (docs/TRIMUI-BRICK.md).
+fn blit_row(dst: &mut [u32], src: &[u32], shade: u32) {
+    let mut d8 = dst.chunks_exact_mut(8);
+    let mut s8 = src.chunks_exact(8);
+    for (d, s) in (&mut d8).zip(&mut s8) {
+        if s.iter().fold(0xff, |m, &p| m & (p >> 24)) == 0xff {
+            for (d, &s) in d.iter_mut().zip(s) {
                 *d = shaded(s, shade);
-            } else if a != 0 {
-                *d = mix(*d, shaded(s, shade), a);
+            }
+        } else {
+            for (d, &s) in d.iter_mut().zip(s) {
+                put(d, s, shade);
             }
         }
+    }
+    for (d, &s) in d8.into_remainder().iter_mut().zip(s8.remainder()) {
+        put(d, s, shade);
     }
 }
 
@@ -1854,6 +1870,34 @@ mod tests {
     }
 
     use super::*;
+
+    /// `blit`'s rows of eight solid pixels at a time paint what pixel by pixel painted: solid, see-through, half and
+    /// mixed runs, rows not a multiple of eight long, cut at both ends, at full light and shaded.
+    #[test]
+    fn a_blit_paints_solid_runs_as_pixel_by_pixel_did() {
+        let (w, h) = (53, 7);
+        let px: Vec<u32> = (0..w * h)
+            .map(|i| {
+                let a = match (i / 5) % 7 { 0 | 1 | 2 => 255, 3 => 0, 4 => 128, 5 => 255, _ => (i * 37 % 256) as u32 };
+                a << 24 | (i as u32).wrapping_mul(0x9e37_79b9) & 0xffffff
+            })
+            .collect();
+        let pic = Pic::of(w, h, px);
+        for shade in [256, 255, 200, 90] {
+            for (x, cols) in [(3, (0, w)), (-4, (0, w)), (60 - w, (0, w)), (5, (7, 31))] {
+                let mut got: Vec<u32> = (0..64 * 12).map(|i| 0x0010_2030 + i).collect();
+                let mut want = got.clone();
+                blit_cols(&mut Canvas::new(&mut got, 64, 12), &pic, x, 2, shade, (0, 12), cols);
+                let (x0, x1) = ((x + cols.0).max(0), (x + cols.1).min(64));
+                for row in 2..2 + h {
+                    for col in x0..x1 {
+                        put(&mut want[(row * 64 + col) as usize], pic.px[((row - 2) * w + col - x) as usize], shade);
+                    }
+                }
+                assert_eq!(got, want, "shade {shade}, x {x}, cols {cols:?}");
+            }
+        }
+    }
 
     /// 15.11.: the code-drawn UMD (a game without a picture of the real shell) is as a real one with its label upright: straight at
     /// the top, rounded at the bottom. It was round on top, a UMD upside down.

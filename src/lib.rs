@@ -8,6 +8,8 @@ pub mod trace;
 macro_rules! contact_address { () => { "robby@robbyczesany.com" }; }
 pub const CONTACT: &str = contact_address!();
 
+pub mod core_pacing;
+pub mod fps_line;
 pub mod frame_clock;
 pub mod frame_dump;
 pub mod frame_pace;
@@ -36,12 +38,17 @@ include!("android_modules.rs");
 extern crate self as pocket_ui;
 #[cfg(all(test, target_os = "linux"))]
 mod android_02_tests;
+#[cfg(all(test, target_os = "linux"))]
+mod android_network_rule_tests;
 
 #[cfg(all(test, target_os = "linux"))]
 mod case_knows_fuzz_tests;
 
 #[cfg(test)]
 mod case_knows_rpg_tests;
+
+#[cfg(test)]
+mod case_knows_more_tests;
 
 #[cfg(all(test, target_os = "linux"))]
 mod android_eject_tests;

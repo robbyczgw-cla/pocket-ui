@@ -21,8 +21,8 @@ Next to the APK, on @RELEASE_URL@ :
 pocket-ui's own source is the public repository, at the commit of this release.
 
 The licence texts are in the app as well: Settings -> Licences lists every core with its licence, upstream commit and
-patches. The files are in the APK under assets/licences/ (also for the cores that are optional downloads), and each
-downloaded core keeps its own licences/ folder next to its library.
+patches. The files are in the APK under assets/licences/, for every core (all of them are part of the APK; a core that
+is ever an optional download keeps its own licences/ folder next to its library too).
 
 
 The cores

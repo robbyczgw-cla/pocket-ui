@@ -209,6 +209,10 @@ impl TailscalePage {
             return Action::Close;
         } else if b == confirm {
             return self.activate();
+        } else if matches!(b, Button::Left | Button::Right) && self.row() == Row::Switch && (b == Button::Right) != self.on() {
+            // The switch takes Left (off) and Right (on) as every switch does (0.5.1); a held key repeats, so only
+            // the way it isn't yet.
+            return self.activate();
         }
         Action::Nothing
     }
@@ -481,6 +485,21 @@ mod tests {
 
     fn press(p: &mut TailscalePage, b: Button) -> Action {
         p.press(b, CONFIRM, CANCEL)
+    }
+
+    /// 0.5.1: the switch took only A. Right switches it on, Left off, each only when it is the other way (a held key
+    /// repeats); the other rows are pages and actions and take neither.
+    #[test]
+    fn the_switch_takes_left_for_off_and_right_for_on() {
+        let mut p = page_with(snap(false, None));
+        assert_eq!(press(&mut p, Button::Left), Action::Nothing, "already off");
+        assert_eq!(press(&mut p, Button::Right), Action::SetEnabled(true));
+        let mut p = page_with(snap(true, Some(RUNNING)));
+        assert_eq!(press(&mut p, Button::Right), Action::Nothing, "already on");
+        assert_eq!(press(&mut p, Button::Left), Action::SetEnabled(false));
+        let mut p = page_with(snap(true, Some(RUNNING)));
+        press(&mut p, Button::Down);
+        assert_eq!((press(&mut p, Button::Left), press(&mut p, Button::Right)), (Action::Nothing, Action::Nothing), "not on the account row");
     }
 
     #[test]

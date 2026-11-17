@@ -114,11 +114,12 @@ fi
 test -f "$PASSWORD" || { echo 'Missing signing password file' >&2; exit 1; }
 "$BT/apksigner" sign --ks "$KEY" --ks-pass "file:$PASSWORD" --out "$OUT/pocket-android-mvp.apk" "$OUT/aligned.apk"
 "$BT/apksigner" verify --verbose "$OUT/pocket-android-mvp.apk"
-# 45 MB, not IzzyOnDroid's 30 MB line: the handheld view's library (the Linux app, +11 MB compressed) is in every APK.
+# 90 MB, a limit of our own (release-check.sh has the same): every core is in the APK since 0.5.x (PSP with its system files,
+# DS, N64, Dreamcast), and the handheld view's library (the Linux app, +11 MB compressed); about 60 MB in all.
 python3 - "$OUT/pocket-android-mvp.apk" <<'PY'
 import hashlib,sys
 from pathlib import Path
-p=Path(sys.argv[1]); assert p.stat().st_size<45_000_000,'APK exceeds the 45 MB budget'; digest=hashlib.sha256(p.read_bytes()).hexdigest()
+p=Path(sys.argv[1]); assert p.stat().st_size<90_000_000,'APK exceeds the 90 MB budget'; digest=hashlib.sha256(p.read_bytes()).hexdigest()
 p.with_suffix('.apk.sha256').write_text(digest+'  '+p.name+'\n')
 print(str(p)+'  SHA256 '+digest)
 PY

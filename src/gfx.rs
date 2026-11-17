@@ -52,6 +52,17 @@ fn edge(v: i32, n: i32) -> i32 {
     if n == 1 { v } else { (v + n / 2).div_euclid(n) }
 }
 
+thread_local! {
+    static CLEARED: std::cell::Cell<u64> = const { std::cell::Cell::new(0) };
+}
+
+/// The pixels [`Canvas::clear`] filled on this thread since the last call (and starts counting again): what a frame
+/// clears. A frame that cleared its whole page twice cost the Brick a millisecond for nothing
+/// (docs/TRIMUI-BRICK.md); the Cabinet's snapshot line says it (`cleared=`).
+pub fn take_cleared() -> u64 {
+    CLEARED.with(|n| n.replace(0))
+}
+
 pub struct Canvas<'a> {
     /// Screen pixels: the whole rows of `stride` pixels this canvas reaches. Private: code outside `gfx` asks
     /// `pixels`/`design` (docs/dev/native-paint.md "Direct access").
@@ -211,6 +222,7 @@ impl<'a> Canvas<'a> {
 
     pub fn clear(&mut self, color: u32) {
         self.buf.fill(color);
+        CLEARED.with(|n| n.set(n.get() + self.buf.len() as u64));
     }
 
     /// Rows `y0..y1` as a canvas of their own (its y 0 is `y0`): what is painted into it is cut at those edges.

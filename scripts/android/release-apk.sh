@@ -32,9 +32,12 @@ done
 case "$VERSION" in [0-9]*.[0-9]*.[0-9]*) ;; *) echo "release-apk: --version X.Y.Z is required" >&2; exit 2 ;; esac
 [ -n "$OUT" ] || { echo "release-apk: --out DIR is required" >&2; exit 2; }
 if [ -e "$OUT" ] && [ -n "$(ls -A "$OUT" 2>/dev/null)" ]; then echo "release-apk: $OUT is not empty" >&2; exit 2; fi
+if [ -f scripts/check-leaks.sh ]; then
+  echo "release-apk: refusing the private tree; build from the exported public tree (scripts/export-public.sh)" >&2
+  exit 1
+fi
 PRIVATE=${ANDROID_SIGNING_DIR:-$HOME/.local/share/pocket-ui/android-signing}
 [ -f "$PRIVATE/release.jks" ] && [ -f "$PRIVATE/store-password" ] || { echo "release-apk: the release key is not in $PRIVATE (a new one would be another app); stopping" >&2; exit 1; }
-[ -f scripts/check-leaks.sh ] && echo "release-apk: note: this is the private tree; a release is built from the exported public tree" >&2
 mkdir -p "$OUT"
 unset ANDROID_QA_VERSION
 export ANDROID_VERSION="$VERSION" ANDROID_RELEASE_SOURCES=1
@@ -44,8 +47,11 @@ B=android/build
 APK=$B/pocket-android-mvp.apk
 [ -f "$APK" ] || { echo "release-apk: the build produced no APK" >&2; exit 1; }
 cp "$APK" "$OUT/pocket-ui-android.apk"
-# Local output only; the catalog must be signed separately with the existing store key before use.
-cp -R "$B/core-downloads" "$OUT/core-downloads"
+# Local output only; the catalog must be signed separately with the existing store key before use. Since 0.5.x every core
+# is in the APK and the catalog offers nothing: it is not copied, so nobody replaces the one older versions still read.
+if python3 -c 'import json,sys; sys.exit(0 if json.load(open(sys.argv[1]))["packages"] else 1)' "$B/core-downloads/catalog.json"; then
+  cp -R "$B/core-downloads" "$OUT/core-downloads"
+fi
 ( cd "$OUT" && python3 - <<'PY'
 import hashlib
 from pathlib import Path

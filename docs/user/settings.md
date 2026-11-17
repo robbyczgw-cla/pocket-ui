@@ -13,20 +13,20 @@ shortened there ("Screen" for Screen & sound, "Help" for Help & tools), and wher
 clock (large text in German, the TrimUI Brick), every category's name stands on its own line with the symbols in a slim
 line under it.
 The values ("Home" on Wi-Fi, "Shelf · Dark" on Look, "Auto · Quiet" on Performance & fan: what games run with)
-are short; one that is looked up comes a moment later. An entry that opens a page ends in a small arrow **>**; one
-without it is a switch: Appearance, Colours, Style, Text size, Motion, Screen frames and the like change with A or
-Left/Right, right in the list, and the selected one shows **‹ ›** round its value. The hint at the bottom says
-**A Open** or **A Change**.
+are short; one that is looked up comes a moment later. An entry that opens a page ends in an arrow **›** on every row;
+one without it changes right in the list: Appearance, Colours, Style, Text size, Motion, Screen frames, every On/Off
+and the like change with Left/Right (or A), and the selected one shows **‹ ›** round its value. The hint at the
+bottom says **A Open** or **‹ › Change**.
 
 ![Settings: Connections' entries, the categories' symbols at the top with L1 and R1](pictures/settings.webp)
 
 | Category | What is in it |
 |---|---|
 | **Connections** | Wi-Fi, Bluetooth, Tailscale, Remote access (SSH), Sync, Web companion, PC streaming. See [Connections](settings-system.md#connections) |
-| **Look** | Layout, Appearance, Colours, Style, Text size, Zoom in the pause menu, Motion, Game start animation, Cozy extras. See [Look](#look) |
+| **Look** | Layout, Appearance, Colours, Style, Text size, Motion, Game start animation, Cozy extras. See [Look](#look) |
 | **Screen & sound** | Brightness, Volume, Screen colour, Night light, Menu sounds, Case sounds. See [Screen & sound](settings-sound.md#screen--sound) |
 | **Controls** | Buttons, Controller setup, Test buttons, Haptics, LEDs. See [Controls](settings-sound.md#controls) |
-| **Playing** | On start, Continue where I quit, Console boot screen, Remind me where I was, Screen frames, Over the game, Performance & fan, RetroAchievements. See [Playing](#playing) |
+| **Playing** | On start, Continue where I quit, Console boot screen, Remind me where I was, Screen frames, Over the game, Zoom in the pause menu, Performance & fan, RetroAchievements. See [Playing](#playing) |
 | **Games** | Add games, Box art & downloads, Game check, Systems on the shelf, Curator, Screenshots, From EmulationStation. See [Games](#games) |
 | **System** | Back to EmulationStation (dArkOS only), Updates, Language, View (Android only), Sleep & power, Battery, Time, Storage, Backup & reset, Kids mode. See [System](settings-system.md#system) |
 | **Help & tools** | Manual, Tour, How you like to play, First-start setup, Tools, Report a problem, About. See [Help & tools](settings-system.md#help--tools) |
@@ -60,7 +60,6 @@ Big text, Large text and Reduced motion together, is a card of the [Tour](tour.m
 | **Colours** | The colours of every page: Warm, Indigo Cube, Grey Brick, Green X or Blue Station; with the Retro style, Cocoa or Pea. A or Left/Right switches it. See [Colours and style](theme.md) |
 | **Style** | Barlow type, or **Retro**: pixel letters, frames and icons everywhere, with its own colours and menu sounds; **Retro Pixelify** is Retro with Pixelify's rounder letters. A or Left/Right switches it. See [Colours and style](theme.md#style) |
 | **Text size** | **Normal** (the default), **Medium** or **Large**: larger text on every screen, fewer rows on a page. A or Left/Right switches it. See [Text size](#text-size) |
-| **Zoom in the pause menu** | Whether the pause menu's first page lists Zoom: **Off** (the default) or **On**. Zoom is always under Options, and listed here too while Big text is on. A switches it. See [Zoom in the pause menu](#zoom-in-the-pause-menu) |
 | **Motion** | **Full** (the default), **Reduced** or **Off**: how much the menus move. A or Left/Right switches it. See [Motion](#motion) |
 | **Game start animation** | **Cozy**: watch your game slide into the console, and after Quit come back out of it into its case, and the pages, the box and the menus move a little slower and softer. **Quick**: straight into the game, the animations as short as they get. A or Left/Right switches it. Cozy in the Shelf and Cabinet looks until you choose, Quick in the others. See [Game start animation](#game-start-animation) |
 | **Cozy extras** | The little touches you see, each on or off on its own: the TV on the cabinet (and whether it plays a game you haven't played), stickers, printed discs, playful cases, the old-TV switch-on, light by time of day, decorations, progress from your saves, game connections, Rediscover. See [Cozy extras](#cozy-extras) |
@@ -123,14 +122,6 @@ pocket-core (the in-game messages and Pixel Path's line over the game).
 The first start has **Big text** on every page (**L2**, and a row on its first page), so larger text is there from
 the start.
 Safe mode uses the size chosen here too.
-
-### Zoom in the pause menu
-
-Settings → Look → **Zoom in the pause menu**: the [pause menu](pause-menu.md) on pocket-ui's own host lists **Zoom** before
-Quit. **Off** is the default, because the magnifier is a help for small text and most players never need it: then Zoom is a
-row of Options, next to Picture and Controls, and can be a [shortcut](options.md#shortcuts) (HOME + X). While
-[Big text](big-text.md#big-text) is on, the row is on the first page whatever this switch says. A switches it.
-See [Zoom](big-text.md#zoom).
 
 ### Motion
 
@@ -227,11 +218,12 @@ Settings → **Playing**. What happens when you start and quit, how a game goes 
 | Entry | What it holds |
 |---|---|
 | **On start** | What you see when the Pocket starts: **Home** (the default) or **Last game**, straight back into the game you played last. A or Left/Right switches it. See [On start](#on-start) |
-| **Continue where I quit** | Whether the pause menu's Quit keeps the moment you are at for the next start: **On** (the default) or **Off**, only the game's own saves. A switches it. See [Continue where I quit](#continue-where-i-quit) |
-| **Console boot screen** | Whether a fresh start of a Game Boy, Game Boy Color, Game Boy Advance or PlayStation game runs through the console's own boot screen (needs your own BIOS file): **Off** (the default) or **On**. A switches it. See [Console boot screen](#console-boot-screen) |
-| **Remind me where I was** | Back to a game after more than two weeks: when you played it last and your note, while its moment loads. **Off** (the default) or **On**. A switches it. See [Remind me where I was](#remind-me-where-i-was) |
+| **Continue where I quit** | Whether the pause menu's Quit keeps the moment you are at for the next start: **On** (the default) or **Off**, only the game's own saves. A or Left/Right switches it. See [Continue where I quit](#continue-where-i-quit) |
+| **Console boot screen** | Whether a fresh start of a Game Boy, Game Boy Color, Game Boy Advance or PlayStation game runs through the console's own boot screen (needs your own BIOS file): **Off** (the default) or **On**. A or Left/Right switches it. See [Console boot screen](#console-boot-screen) |
+| **Remind me where I was** | Back to a game after more than two weeks: when you played it last and your note, while its moment loads. **Off** (the default) or **On**. A or Left/Right switches it. See [Remind me where I was](#remind-me-where-i-was) |
 | **Screen frames** | Where a game gets a frame when you haven't chosen one: **Off** (the default), **Handhelds** or **Every console**. A or Left/Right switches it. See [Screen frames](#screen-frames) |
 | **Over the game** | The frame rate, the sensors or (with Pixel Path in the pause menu) Pixel Path's line over every game, or nothing (the default). See [Over the game](#over-the-game) |
+| **Zoom in the pause menu** | Whether the pause menu's first page lists Zoom: **Off** (the default) or **On**. Zoom is always under Options, and listed here too while Big text is on. A or Left/Right switches it. See [Zoom in the pause menu](#zoom-in-the-pause-menu) |
 | **Performance & fan** | How fast the processor runs and how early the fan starts in games, the fan in the menus, and the temperatures right now. See [Performance and fan](performance.md) |
 | **RetroAchievements** | Sign in to retroachievements.org to earn achievements in pocket-core games. See [RetroAchievements](#retroachievements) |
 
@@ -308,6 +300,14 @@ Settings → Playing → **Over the game**: what is drawn over every game while 
 Enthusiast profile turns it on); what each shows is in [Over the game](pause-menu.md#over-the-game). Right
 or A goes on, Left goes back. A console or game with its own choice under Options → Speed, rumble, fan keeps it, and **HOME + Y**
 switches to the next level while you play. The [Easy](easy.md) look never draws any of it, whatever this says, and leaves the setting alone.
+
+### Zoom in the pause menu
+
+Settings → Playing → **Zoom in the pause menu**: the [pause menu](pause-menu.md) on pocket-ui's own host lists **Zoom** before
+Quit. **Off** is the default, because the magnifier is a help for small text and most players never need it: then Zoom is a
+row of Options, next to Picture and Controls, and can be a [shortcut](options.md#shortcuts) (HOME + X). While
+[Big text](big-text.md#big-text) is on, the row is on the first page whatever this switch says. A or Left/Right switches it.
+See [Zoom](big-text.md#zoom).
 
 ### Screen frames
 

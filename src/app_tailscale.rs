@@ -300,8 +300,9 @@ impl App {
             } else {
                 self.text.draw(c, Face::Body, font, pad + NU_BTN_PAD, base, pal().text, name);
             }
-            let value = page.value(*r);
-            let value = self.text.fit(Face::Body, font, &value, right - pad - 2 * NU_BTN_PAD - 420);
+            let value = self.text.fit(Face::Body, font, &page.value(*r), right - pad - 2 * NU_BTN_PAD - 420);
+            // The selected switch between its ‹ ›: Left/Right switch it (0.5.1).
+            let value = if i == page.sel && *r == pocket_ui::tailscale_page::Row::Switch { format!("‹ {value} ›") } else { value };
             pocket_ui::kit::row_value(c, &mut self.text, font, right - NU_BTN_PAD, base, &value, i == page.sel);
         }
         self.hits.list(page.sel, ROWS.len(), 0.0, row as f32);

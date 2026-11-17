@@ -80,7 +80,14 @@ impl Rows {
 pub struct RowHashes {
     size: (u32, u32),
     hashes: Vec<u64>,
+    /// Per row of the last call: whether it changed (kept to save an allocation a frame).
+    new: Vec<bool>,
 }
+
+/// The threads that hash a frame's rows (the painting one and two more). Reading the 3 MB of a 1024x768 frame is at
+/// the A53's memory floor on one core (2.0 ms); three cores read it in 1.2 ms (bench on the Brick, docs/TRIMUI-BRICK.md).
+/// The Brick has four: pocket-fb's picture goes up on the fourth meanwhile.
+pub const HASH_THREADS: usize = 3;
 
 impl RowHashes {
     /// The next frame is compared with nothing: it is all new (a failed frame, a new surface).
@@ -90,7 +97,13 @@ impl RowHashes {
     }
 
     /// The rows of `pixels` (`w` by `h`, row by row) that differ from the frame given last; that frame is then this one.
+    /// The rows are hashed in [`HASH_THREADS`] bands at once.
     pub fn changed(&mut self, pixels: &[u32], w: u32, h: u32) -> Rows {
+        self.changed_in(pixels, w, h, HASH_THREADS)
+    }
+
+    /// `changed` with the rows hashed in `bands` bands, each on its own thread (one: on this thread only).
+    pub fn changed_in(&mut self, pixels: &[u32], w: u32, h: u32, bands: usize) -> Rows {
         let (wu, hu) = (w as usize, h as usize);
         if w == 0 || pixels.len() < wu * hu {
             self.forget();
@@ -98,16 +111,40 @@ impl RowHashes {
         }
         let known = self.size == (w, h) && self.hashes.len() == hu;
         self.hashes.resize(hu, 0);
+        self.new.resize(hu, false);
         self.size = (w, h);
+        let hash_band = |rows: &[u32], kept: &mut [u64], new: &mut [bool]| {
+            for ((row, kept), new) in rows.chunks_exact(wu).zip(kept.iter_mut()).zip(new.iter_mut()) {
+                let hash = row_hash(row);
+                *new = !known || *kept != hash;
+                *kept = hash;
+            }
+        };
+        let per = hu.div_ceil(bands.clamp(1, hu.max(1)));
+        let pixels = &pixels[..wu * hu];
+        if per >= hu {
+            hash_band(pixels, &mut self.hashes, &mut self.new);
+        } else {
+            std::thread::scope(|s| {
+                let mut parts = pixels.chunks(per * wu).zip(self.hashes.chunks_mut(per)).zip(self.new.chunks_mut(per));
+                let mine = parts.next();
+                for ((rows, kept), new) in parts {
+                    s.spawn(move || hash_band(rows, kept, new));
+                }
+                if let Some(((rows, kept), new)) = mine {
+                    hash_band(rows, kept, new);
+                }
+            });
+        }
+        if !known {
+            return Rows::All;
+        }
         let mut rows = Rows::none();
         let mut run: Option<u32> = None;
-        for (y, (row, kept)) in pixels.chunks_exact(wu).take(hu).zip(self.hashes.iter_mut()).enumerate() {
-            let hash = row_hash(row);
-            let same = known && *kept == hash;
-            *kept = hash;
-            match (same, run) {
-                (false, None) => run = Some(y as u32),
-                (true, Some(s)) => {
+        for (y, &new) in self.new.iter().enumerate() {
+            match (new, run) {
+                (true, None) => run = Some(y as u32),
+                (false, Some(s)) => {
                     rows.add(s, y as u32);
                     run = None;
                 }
@@ -117,11 +154,7 @@ impl RowHashes {
         if let Some(s) = run {
             rows.add(s, h);
         }
-        if known {
-            rows
-        } else {
-            Rows::All
-        }
+        rows
     }
 }
 
@@ -171,6 +204,36 @@ mod tests {
         assert_eq!(r.spans(768), vec![(0, 768)]);
         assert_eq!(Rows::Spans(vec![(700, 900)]).spans(768), vec![(700, 768)]);
         assert_eq!(Rows::Spans(vec![(800, 900)]).count(768), 0);
+    }
+
+    /// The rows are hashed in bands on threads: a change on a band's first or last row, a frame whose rows don't
+    /// divide by the bands, a frame of fewer rows than bands, all find the same rows as one thread does.
+    #[test]
+    fn rows_hashed_on_threads_find_the_same_rows_as_one_thread() {
+        for (w, h) in [(1024u32, 768u32), (640, 481), (7, 2), (33, 1), (1240, 1080)] {
+            let mut frame: Vec<u32> = (0..w * h).map(|i| i.wrapping_mul(2_654_435_761)).collect();
+            let (mut one, mut three, mut five) = (RowHashes::default(), RowHashes::default(), RowHashes::default());
+            assert_eq!(three.changed_in(&frame, w, h, 3), Rows::All);
+            assert_eq!(five.changed_in(&frame, w, h, 5), Rows::All);
+            one.changed_in(&frame, w, h, 1);
+            // Every band's edges at 3 and 5 bands, the first and last row, one in the middle.
+            let mut edges = vec![0, h - 1, h / 2];
+            for bands in [3, 5] {
+                let per = h.div_ceil(bands);
+                for b in 1..bands {
+                    edges.extend([(b * per).saturating_sub(1), b * per].into_iter().filter(|&y| y < h));
+                }
+            }
+            for (k, &y) in edges.iter().enumerate() {
+                frame[(y * w + (k as u32 % w)) as usize] ^= 0x0001_0101;
+                let want = one.changed_in(&frame, w, h, 1);
+                assert_eq!(want.count(h), 1, "{w}x{h}: row {y} changed alone");
+                assert_eq!(three.changed_in(&frame, w, h, 3), want, "{w}x{h}, 3 bands: row {y}");
+                assert_eq!(five.changed_in(&frame, w, h, 5), want, "{w}x{h}, 5 bands: row {y}");
+            }
+            // Nothing changed: no rows, on threads too.
+            assert_eq!(three.changed_in(&frame, w, h, 3), Rows::none());
+        }
     }
 
     #[test]

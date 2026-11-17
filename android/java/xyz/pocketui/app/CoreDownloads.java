@@ -15,10 +15,9 @@ final class CoreDownloads {
     String cancel(){cancelled=true;return "";}
     String progress(){return Long.toString(bytes);}
     private Network wifi() throws IOException {
-        ConnectivityManager cm=(ConnectivityManager)app.getSystemService(Context.CONNECTIVITY_SERVICE);
-        Network n=cm.getActiveNetwork();NetworkCapabilities c=cm.getNetworkCapabilities(n);
-        if(c==null||!c.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)||!c.hasCapability(NetworkCapabilities.NET_CAPABILITY_NOT_METERED))
-            throw new IOException("Downloads wait for unmetered Wi-Fi.");
+        // The same rule as app updates (NetworkRule): the app's own unmetered Wi-Fi or Ethernet, a VPN on it included.
+        Network n=NetworkRule.network(app);
+        if(n==null)throw new IOException("Downloads wait for unmetered Wi-Fi.");
         return n;
     }
     private File local(String address) throws Exception {
