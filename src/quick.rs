@@ -1770,6 +1770,15 @@ impl Sys {
             }
             Row::Performance => self.step_profile(Which::Performance, dir, false, now),
             Row::Fan => self.step_profile(Which::Fan, dir, false, now),
+            // Wi-Fi and Bluetooth: Right switches on, Left off (0.5.1: every switch takes Left/Right). A held key repeats
+            // here, so each only acts when the radio is the other way; unknown or busy, nothing.
+            Row::Wifi | Row::Bluetooth => {
+                let wifi = row == Row::Wifi;
+                let known = if wifi { self.view.wifi } else { self.view.bluetooth };
+                if known == Some(dir < 0) {
+                    self.toggle_radio(wifi);
+                }
+            }
             _ => {}
         }
     }

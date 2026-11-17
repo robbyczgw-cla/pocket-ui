@@ -147,19 +147,20 @@ def fresh():
     # The system's own "Viewing full screen" hint, once on a new phone.
     if find('Got it') is not None:
         tap('Got it')
-    wait_text('Step 1 of 8')
+    # Seven steps: every system is in the APK, so there is no "More systems?" step.
+    wait_text('Step 1 of 7')
     tap('Continue')
-    wait_text('Step 2 of 8')
+    wait_text('Step 2 of 7')
     tap('Continue')
-    wait_text('Step 3 of 8')
+    wait_text('Step 3 of 7')
     tap('Choose your ROM folder')
     time.sleep(1)
     pick_folder()
-    wait_text('Step 3 of 8')
-    for step in (3, 4, 5, 6, 7):
-        wait_text(f'Step {step} of 8')
-        tap('Skip' if step == 5 else 'Continue')
-    wait_text('Step 8 of 8')
+    wait_text('Step 3 of 7')
+    for step in (3, 4, 5, 6):
+        wait_text(f'Step {step} of 7')
+        tap('Continue')
+    wait_text('Step 7 of 7')
     tap('Continue')
     wait_text('Games')
     time.sleep(2)

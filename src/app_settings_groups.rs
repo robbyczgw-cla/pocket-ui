@@ -11,8 +11,8 @@
 //! category's list works out the values of its own rows only.
 //!
 //! A row's value (`settings_row_value`): switches show their state, pages a short value ("Home", "Shelf · Dark",
-//! "332 games"); a page's row ends in a drawn angle on every row, dimmed on the others, and the selected switch adds
-//! its ‹ › (`settings_values::quiet`, `kit::row_value`),
+//! "332 games"); a page's row ends in a drawn angle on every row, and the selected row that changes in place adds its
+//! ‹ › (`changes_in_place`, `marked`, `kit::row_value`),
 //! cut with "…" to the room the name leaves. Look, Add games, Battery, Updates and About come from memory; Wi-Fi's
 //! network, Remote access, Time's zone and the paired PCs need a process or a file and come from `settings_values`'
 //! thread (`settings_values_refresh`, when a list with one of them is painted, at most every 5 s); until then the row
@@ -364,14 +364,45 @@ const ICONS: [pocket_ui::ui_art::Icon; SETTINGS_GROUPS.len()] = {
     [Icon::Connections, Icon::Look, Icon::Sound, Icon::Playing, Icon::Play, Icon::Games, Icon::System, Icon::Help]
 };
 
-/// Whether the value of row `i` is a network's own name, painted as typed: a Wi-Fi named "Off" or "Unknown" must not be
-/// translated (the Wi-Fi page shows it as it is).
+/// Whether a row changes its value in place rather than opening a page: Left/Right step it (A changes it too, as it
+/// always did), the selected one shows its value in ‹ ›, and it never ends in a page's angle (Settings 0.5.1: which rows
+/// open a page and which change in place was not clear enough, and Zoom in the pause menu took only A; a hand walk).
+/// One list for the hints, the marks and the keys, so a new row can't take A alone (tests/user_journeys.rs walks them).
+pub(crate) fn changes_in_place(opens: Opens) -> bool {
+    matches!(
+        opens,
+        Opens::Appearance | Opens::Colours | Opens::Font | Opens::TextSize | Opens::Motion | Opens::Animations
+            | Opens::Brightness | Opens::Volume | Opens::ScreenColour | Opens::Sounds | Opens::Extra(_)
+            | Opens::Haptics | Opens::OnStart | Opens::RememberQuit | Opens::BootScreen | Opens::RemindWhere
+            | Opens::Frames | Opens::OverGame | Opens::ZoomInPause | Opens::Language
+    )
+}
+
+/// Row `opens`'s value `value` with its marks as painted (`kit::row_value`): a page's row ends in its angle on every row
+/// (">" alone without a value), a row that changes in place shows ‹ › on the selected row only and no angle.
+fn marked(opens: Opens, value: String, selected: bool) -> String {
+    let bare = value.strip_prefix("‹ ").and_then(|v| v.strip_suffix(" ›")).map_or(value.clone(), str::to_string);
+    if changes_in_place(opens) {
+        let bare = bare.strip_suffix(" >").unwrap_or(&bare).to_string();
+        if selected { format!("‹ {bare} ›") } else { bare }
+    } else if bare == ">" || bare.ends_with(" >") {
+        bare
+    } else {
+        values::page(&bare)
+    }
+}
+
+/// Whether the value of row `i` is a name, painted as it is: a Wi-Fi named "Off" or "Unknown" must not be translated (the
+/// Wi-Fi page shows it as it is), nor a font, a layout, a language or a city.
 pub(crate) fn value_is_typed(i: usize) -> bool {
     typed_value(SETTINGS[i].1, &values::get().wifi)
 }
 
 fn typed_value(opens: Opens, wifi: &Option<values::Wifi>) -> bool {
-    matches!(opens, Opens::Setup(Only::Wifi)) && matches!(wifi, Some(values::Wifi::Connected(Some(_))))
+    // Rows whose value is a name in every language: the style's font ("Barlow"), the buttons' layouts ("Nintendo"), the
+    // language in its own name ("Deutsch") and the time zone's city (already in the language, `timezone::city_here`).
+    matches!(opens, Opens::Font | Opens::Buttons | Opens::Language | Opens::Time)
+        || matches!(opens, Opens::Setup(Only::Wifi)) && matches!(wifi, Some(values::Wifi::Connected(Some(_))))
 }
 
 /// Controller setup's line where Settings has no Bluetooth row to pair in.
@@ -482,9 +513,23 @@ impl App {
             _ => ">".to_string(),
         };
         let max_w = room.min(values::MAX_W);
-        let shown = values::quiet(&value, i == sel);
+        let shown = marked(SETTINGS[i].1, value, i == sel);
         let lang = pocket_ui::i18n::current();
-        values::fit_translated(&shown, max_w, |v| pocket_ui::i18n::tr_in(lang, v), |s| self.text.width(Face::Body, 36, s))
+        // The words only are looked up and drawn (`kit::row_value`): "Shelf >" and "‹ Home ›" are no lines of the table, and asking
+        // for them ran every pattern of it. A value the code can say in the language ("Auto · Quiet") is said and kept as it is.
+        let shown = match values::translated_in_code(lang, values::split_decoration(&shown).1) {
+            Some(words) => {
+                self.text.keep_as_is(&words);
+                let (pre, _, post) = values::split_decoration(&shown);
+                format!("{pre}{words}{post}")
+            }
+            None => shown,
+        };
+        let text = &mut self.text;
+        values::fit_translated(&shown, max_w, |v| pocket_ui::i18n::tr_in(lang, v), |s| {
+            let (pre, words, post) = values::split_decoration(s);
+            text.width(Face::Body, 36, pre) + text.width(Face::Body, 36, words) + text.width(Face::Body, 36, post)
+        })
     }
 
     /// The line under row `i` of `SETTINGS` as it is now: a cozy extra's note while another switch keeps it from
@@ -704,6 +749,59 @@ pub(crate) struct Bench {
 }
 
 impl App {
+    /// One whole frame as the window paints it (the shelf's or Settings' page, the status corner, the page transition).
+    fn settings_frame(&mut self, buf: &mut [u32], w: u32, h: u32) {
+        let now = Instant::now();
+        self.motion_frame_begin(now);
+        self.paint_in_appearance(&mut Canvas::new(buf, w, h), &mut |app, c| {
+            app.paint(c);
+            app.motion_after_paint(c);
+            app.sys.paint(c, &mut app.text, app.menu.is_none());
+            if app.sys.is_open() {
+                app.status_corner();
+            }
+            app.paint_leave(c);
+        });
+    }
+
+    /// The first page of every category this device has, with the focus in the list and on the tab bar, each painted the
+    /// way START or L1/R1 brings it (from the shelf's frame): how many pages, and the strings that ran the language table's
+    /// patterns on the way (`--snapshot bench-settings-pages`, tests/settings_open.rs). Every row's value and name must be
+    /// a line of the table, a name or a figure by now, never a string that needs the patterns tried (the first start of
+    /// Settings on the Mini V2 paid a frame's worth for each).
+    pub(crate) fn settings_pages_patterns(&mut self, w: u32, h: u32) -> (usize, usize, Vec<String>) {
+        let mut buf = vec![0u32; (w * h) as usize];
+        pocket_ui::status_corner::start(|| {});
+        self.text.prewarm();
+        self.text.finish_prewarm();
+        // The shelf, as the player sees it before START.
+        self.settings_page = None;
+        for _ in 0..2 {
+            self.hits.clear();
+            self.paint(&mut Canvas::new(&mut buf, w, h));
+        }
+        self.settings_frame(&mut buf, w, h);
+        let mut pages = 0;
+        let before = self.text.pattern_runs();
+        let mut seen = self.text.pattern_log().len();
+        let mut found = Vec::new();
+        for g in shown_groups() {
+            let first = rows(g).first().copied().unwrap_or(0);
+            for page in [SettingsPage::List(first), SettingsPage::Tabs(first)] {
+                self.settings_page = None;
+                self.settings_frame(&mut buf, w, h);
+                self.settings_page = Some(page);
+                self.settings_frame(&mut buf, w, h);
+                pages += 1;
+                let log = self.text.pattern_log();
+                found.extend(log[seen.min(log.len())..].iter().map(|s| format!("{} / {}: {s}", SETTINGS_GROUPS[g].0, if matches!(page, SettingsPage::List(_)) { "list" } else { "tabs" })));
+                seen = log.len();
+            }
+        }
+        self.settings_page = None;
+        (pages, self.text.pattern_runs() - before, found)
+    }
+
     /// Paints the categories page the way the first frame after START does (the shelf was painted before, so its
     /// glyphs are in the cache), then again and again for the median, and the status pill and the page transition
     /// alone. The numbers are the host's; the test (`tests/settings_open.rs`) guards their order of magnitude.
@@ -723,19 +821,7 @@ impl App {
             self.hits.clear();
             self.paint(&mut Canvas::new(&mut buf, w, h));
         }
-        let frame = |app: &mut App, buf: &mut [u32]| {
-            let now = Instant::now();
-            app.motion_frame_begin(now);
-            app.paint_in_appearance(&mut Canvas::new(buf, w, h), &mut |app, c| {
-                app.paint(c);
-                app.motion_after_paint(c);
-                app.sys.paint(c, &mut app.text, app.menu.is_none());
-                if app.sys.is_open() {
-                    app.status_corner();
-                }
-                app.paint_leave(c);
-            });
-        };
+        let frame = |app: &mut App, buf: &mut [u32]| app.settings_frame(buf, w, h);
         // The shelf's own frame has set the page; START opens the categories.
         frame(self, &mut buf);
         self.settings_page = Some(SettingsPage::List(first_row()));
@@ -778,6 +864,25 @@ mod tests {
     use super::super::{app_moonlight, app_web, settings_row, Opens, SETTINGS};
     use super::*;
     use pocket_ui::cozy_extras::Needs;
+
+    /// A page's row ends in its angle on every row, whatever its value said; a row that changes in place never does,
+    /// and only the selected one has its ‹ › (0.5.1: "How you like to play" opened a page with no angle, the on/off
+    /// rows had no ‹ › and took no Left/Right).
+    #[test]
+    fn page_rows_keep_their_angle_and_only_the_selected_value_row_its_arrows() {
+        assert_eq!(marked(Opens::Setup(Only::Play), "Enthusiast".into(), false), "Enthusiast >");
+        assert_eq!(marked(Opens::Manual, ">".into(), true), ">");
+        assert_eq!(marked(Opens::Sync, "Off >".into(), false), "Off >");
+        assert_eq!(marked(Opens::ZoomInPause, "Off".into(), true), "‹ Off ›");
+        assert_eq!(marked(Opens::ZoomInPause, "Off".into(), false), "Off");
+        assert_eq!(marked(Opens::TextSize, "‹ Large ›".into(), false), "Large");
+        assert_eq!(marked(Opens::BootScreen, "On".into(), true), "‹ On ›");
+        // Every row of the tree is one or the other, never both: the hint and the keys follow the same list.
+        for (name, opens, _) in SETTINGS.iter() {
+            let (on, off) = (marked(*opens, "x".into(), true), marked(*opens, "x".into(), false));
+            assert!(on.ends_with(" >") == !changes_in_place(*opens) && off.ends_with(" >") == !changes_in_place(*opens), "{name}: {on:?} {off:?}");
+        }
+    }
 
     /// The pill the tab row leaves room for: the widest figures of today's clock, a one-digit hour made two.
     #[test]
@@ -944,10 +1049,11 @@ mod tests {
         let tree: Vec<(&str, Vec<&str>)> = SETTINGS_GROUPS.iter().map(|c| (c.0.trim_end_matches('\u{200b}'), c.1.iter().map(|r| r.0).collect())).collect();
         let want: [(&str, &[&str]); 8] = [
             ("Connections", &["Wi-Fi", "Bluetooth", "Tailscale", "Remote access (SSH)", "Sync", "Web companion", "PC streaming"]),
-            ("Look", &["Layout", "Appearance", "Colours", "Style", "Text size", "Zoom in the pause menu", "Motion", "Game start animation", "Cozy extras"]),
+            ("Look", &["Layout", "Appearance", "Colours", "Style", "Text size", "Motion", "Game start animation", "Cozy extras"]),
             ("Screen & sound", &["Brightness", "Volume", "Screen colour", "Night light", "Menu sounds", "Case sounds"]),
             ("Controls", &["Buttons", "Controller setup", "Test buttons", "Haptics", "LEDs"]),
-            ("Playing", &["On start", "Continue where I quit", "Console boot screen", "Remind me where I was", "Screen frames", "Over the game", "Performance & fan", "RetroAchievements"]),
+            // Zoom in the pause menu since 0.5.1 (too prominent in Look, under Text size; a hand walk).
+            ("Playing", &["On start", "Continue where I quit", "Console boot screen", "Remind me where I was", "Screen frames", "Over the game", "Zoom in the pause menu", "Performance & fan", "RetroAchievements"]),
             ("Games", &["Add games", "Box art & downloads", "Game check", "Systems on the shelf", "Curator", "Screenshots", "From EmulationStation"]),
             ("System", &["Back to EmulationStation", "Updates", "Language", "View", "Sleep & power", "Battery", "Time", "Storage", "Backup & reset", "Kids mode"]),
             ("Help & tools", &["Manual", "Tour", "How you like to play", "First-start setup", "Tools", "Report a problem", "About"]),
@@ -1101,7 +1207,7 @@ mod tests {
             ("RetroAchievements", true, own(pocket_ui::achievements_page::about_in(true).into_iter().chain([pocket_ui::achievements_page::password_note_in(true)]).collect())),
             ("Manual", false, own(pocket_ui::manual::ANDROID_PAGES.iter().map(|(_, md)| *md).collect())),
             ("First start: the welcome", true, vec![pocket_ui::setup::welcome_title(true).to_string()]),
-            ("Tour: Big text's picture", true, pocket_ui::feature_previews::easy_to_read_rows(true).into_iter().map(|(name, _)| name.to_string()).collect()),
+            ("Tour: Big text's picture", true, pocket_ui::feature_previews::easy_to_read_rows().into_iter().map(|(name, _)| name.to_string()).collect()),
             // The files dialog is Java with its own three languages: all of them are in the text.
             ("The files dialog", false, vec![{
                 let java = include_str!("../android/java/xyz/pocketui/app/HandheldActivity.java");
@@ -1138,7 +1244,6 @@ mod tests {
         assert!(pocket_ui::achievements_page::about_in(false)[0].contains("pocket-core"));
         assert!(pocket_ui::manual::PAGES[0].1.contains("ROCKNIX"));
         assert_eq!(pocket_ui::setup::welcome_title(false), "Welcome to your Pocket");
-        assert!(pocket_ui::feature_previews::easy_to_read_rows(false).iter().any(|(n, _)| *n == "Zoom in the pause menu"));
     }
 
     /// The emulator app the line names is one the phone has; without one the line says so, and never names an app.

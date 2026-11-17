@@ -359,13 +359,18 @@ impl Sys {
                 }
                 Row::Wifi => RowView::new(Row::Wifi.label(), self.switch_value(self.view.busy_wifi, self.view.wifi)),
                 Row::Bluetooth => RowView::new(Row::Bluetooth.label(), self.switch_value(self.view.busy_bt, self.view.bluetooth)),
+                // A page over the panel: its angle, as every row that opens a page (0.5.1).
+                Row::Power => RowView::new(Row::Power.label(), ">"),
                 Row::Performance => profile(Which::Performance),
                 Row::Fan => profile(Which::Fan),
-                Row::Power => RowView::new(Row::Power.label(), ""),
                 Row::BackToEs => RowView::new(Row::BackToEs.label(), ""),
             };
             if i > 0 && matches!(row, Row::Wifi | Row::Performance | Row::Power | Row::BackToEs) {
                 v.gap = 18;
+            }
+            // The levels and the switches change with Left/Right: ‹ › round the selected one's value, as in Settings.
+            if matches!(row, Row::Brightness | Row::Volume | Row::Wifi | Row::Bluetooth) {
+                v.arrows = true;
             }
             views.push(v);
         }

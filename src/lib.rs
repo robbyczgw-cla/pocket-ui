@@ -8,6 +8,7 @@ pub mod trace;
 macro_rules! contact_address { () => { "robby@robbyczesany.com" }; }
 pub const CONTACT: &str = contact_address!();
 
+pub mod core_pacing;
 pub mod frame_clock;
 pub mod frame_dump;
 pub mod frame_pace;

@@ -68,7 +68,7 @@ echo "release check: Brick and Retroid volume profiles TODO (capture their own m
 if [ -n "$TEXT_ONLY" ]; then
     echo "release check: TEXT-ONLY: full gate not run again (green on $(printf %.12s "$FULL_COMMIT")); the text checks below run"
 elif [ "${RELEASE_CHECK_FULL_GATE:-1}" != 0 ]; then
-    GATE_FULL=1 sh scripts/gate.sh "$(pwd)" || { echo "RELEASE CHECK: FAILED (full gate, GATE_FULL=1)"; exit 1; }
+    sh scripts/full-suite.sh "$(pwd)" || { echo "RELEASE CHECK: FAILED (full gate, GATE_FULL=1)"; exit 1; }
 fi
 python3 scripts/doc-missing.py || echo "release check: documentation is missing entries (above)"
 # The same list as scripts/pre-release.sh (scripts/release-text-tests.txt), so a pre-release step that was green finds it all.

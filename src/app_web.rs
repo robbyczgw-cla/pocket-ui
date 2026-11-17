@@ -499,8 +499,8 @@ impl App {
         }
         if on && !matches!(mode, "waiting" | "busy") {
             page.addresses = page_addresses(
-                &["192.168.1.42:80".parse().unwrap(), "100.77.12.34:80".parse().unwrap(), "[fd7a:115c:a1e0::4f01:2a3b]:80".parse().unwrap()],
-                &["192.168.1.42:80".parse().unwrap()],
+                &["192.0.2.42:80".parse().unwrap(), "198.51.100.34:80".parse().unwrap(), "[2001:db8::4f01:2a3b]:80".parse().unwrap()],
+                &["192.0.2.42:80".parse().unwrap()],
                 Some("sm8250.local"),
                 Some("pocket"),
                 false,
@@ -712,7 +712,7 @@ impl App {
 }
 
 /// Where to open the companion, the first one large on the page and in the QR code: the Wi-Fi's address
-/// (`http://192.168.1.42`, which every browser at home can open) and its mDNS name, then the Pocket's tailnet name and
+/// (`http://192.0.2.42`, which every browser at home can open) and its mDNS name, then the Pocket's tailnet name and
 /// addresses. `userspace`: the Brick's userspace Tailscale, whose 127.0.0.1 socket is no address to open (its name is).
 fn page_addresses(listening: &[std::net::SocketAddr], lan: &[std::net::SocketAddr], lan_name: Option<&str>, tailnet_name: Option<&str>, userspace: bool) -> Vec<String> {
     let mut out: Vec<String> = lan.iter().map(|a| address(*a)).collect();
@@ -768,10 +768,10 @@ mod tests {
     #[test]
     fn the_wifi_address_comes_first_then_mdns_and_tailscale() {
         let sa = |s: &str| s.parse::<std::net::SocketAddr>().unwrap();
-        let both = page_addresses(&[sa("192.168.1.42:80"), sa("100.77.12.34:80")], &[sa("192.168.1.42:80")], Some("sm8250.local"), Some("pocket"), false);
-        assert_eq!(both, ["http://192.168.1.42", "http://sm8250.local", "http://pocket", "http://100.77.12.34"]);
-        let no_avahi = page_addresses(&[sa("192.168.1.42:80")], &[sa("192.168.1.42:80")], None, Some("pocket"), false);
-        assert_eq!(no_avahi, ["http://192.168.1.42"], "no .local without avahi, no tailnet name without Tailscale");
+        let both = page_addresses(&[sa("192.0.2.42:80"), sa("100.77.12.34:80")], &[sa("192.0.2.42:80")], Some("sm8250.local"), Some("pocket"), false);
+        assert_eq!(both, ["http://192.0.2.42", "http://sm8250.local", "http://pocket", "http://100.77.12.34"]);
+        let no_avahi = page_addresses(&[sa("192.0.2.42:80")], &[sa("192.0.2.42:80")], None, Some("pocket"), false);
+        assert_eq!(no_avahi, ["http://192.0.2.42"], "no .local without avahi, no tailnet name without Tailscale");
         let tailnet = page_addresses(&[sa("100.77.12.34:80")], &[], Some("sm8250.local"), Some("pocket"), false);
         assert_eq!(tailnet, ["http://pocket", "http://100.77.12.34"], "Tailscale alone: as before 0.5");
         // The Brick's userspace Tailscale: the loopback socket is no address; its name is.

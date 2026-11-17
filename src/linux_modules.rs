@@ -111,6 +111,7 @@ pub mod manual_time;
 pub mod libretro;
 #[cfg_attr(any(target_os = "emscripten", target_os = "android"), path = "platform/android_hw_render.rs")] pub mod hw_render;
 pub mod options;
+pub mod render_scale;
 pub mod look;
 pub mod j2me_java;
 pub mod j2me_keys;

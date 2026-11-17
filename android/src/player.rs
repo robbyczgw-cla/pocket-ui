@@ -228,8 +228,11 @@ struct Player {
     top: i32,
     view: (i32, i32, i32, i32),
     logical: (u32, u32),
-    next: Instant,
-    period: Duration,
+    /// Core frames per display refresh, Linux's rule (`core_pacing`): one per refresh near the display's rate.
+    pacer: pocket_ui::core_pacing::Pacer,
+    /// The `player pacing:` line's numbers (every 10 s with the audio line).
+    pacing: pocket_ui::core_pacing::Stats,
+    display_hz: f64,
     frames: u64,
     /// Fresh pictures delivered by the core, separate from emulation ticks and display presentations.
     video_frames: u64,
@@ -342,10 +345,11 @@ impl Player {
             }
             log::info!("content: direct core={} path={} copied_bytes=0", core_id, rom);
         }
-        let period = Duration::from_secs_f64(1.0 / core.av.timing.fps.clamp(10.0, 240.0));
+        let display_hz = display_refresh_hz();
+        let pacer = pocket_ui::core_pacing::Pacer::new(core.av.timing.fps, display_hz);
         let mut audio = pocket_ui::audio::Audio::open(core.av.timing.sample_rate, pocket_ui::audio::needs_jitter_reserve(&system));
         if let Some(audio) = &mut audio {
-            audio.set_source_timing(core.av.timing.sample_rate, core.av.timing.fps, display_refresh_hz());
+            audio.set_paced_timing(core.av.timing.sample_rate, core.av.timing.fps, display_hz);
             if matches!(resume, pocket_ui::libretro::Resume::NoState) { audio.reserve_startup(&system); }
         }
         if audio.is_none() {
@@ -474,8 +478,9 @@ impl Player {
             top: 0,
             view: (0, 0, 1, 1),
             logical: (1, 1),
-            next: now,
-            period,
+            pacer,
+            pacing: Default::default(),
+            display_hz,
             frames: 0,
             video_frames: 0,
             diagnostic_buttons_seen: 0,
@@ -616,7 +621,7 @@ impl Player {
         }
         if !on {
             if let Some(audio) = &mut self.audio {
-                audio.set_source_timing(self.core.av.timing.sample_rate, self.core.av.timing.fps, display_refresh_hz());
+                audio.set_paced_timing(self.core.av.timing.sample_rate, self.core.av.timing.fps, self.display_hz);
             }
         }
         if on {
@@ -647,7 +652,8 @@ impl Player {
         self.stylus_finger = None;
         self.menu_drag = None;
         self.fingers.clear();
-        self.next = Instant::now();
+        self.pacer.restart();
+        self.pacing.pause();
         if let Some(audio) = &self.audio {
             audio.pause(on);
         }
@@ -745,7 +751,8 @@ impl Player {
         }
         if down && self.reminder.is_some() {
             self.reminder = None;
-            self.next = Instant::now();
+            self.pacer.restart();
+            self.pacing.pause();
             self.overlay_size = None;
             return true;
         }
@@ -1379,7 +1386,8 @@ impl Player {
     }
     fn touch(&mut self, id: i32, x: f32, y: f32, phase: i32) -> bool {
         if phase == 0 && self.reminder.take().is_some() {
-            self.next = Instant::now();
+            self.pacer.restart();
+            self.pacing.pause();
             self.swallow = Some(id);
             self.overlay_size = None;
             return true;
@@ -1605,8 +1613,13 @@ impl Player {
         // The compositor can run below the core rate (notably SwiftShader on high-DPI phones).
         // Catch up bounded emulation ticks before painting once; audio must not lose samples when
         // a presentation misses vsync. Core calls remain on the EGL thread for hardware cores.
+        // One core frame per display refresh near the display's rate, as pocket-core on Linux (`core_pacing`): the
+        // wall clock against the core's own rate repeated and doubled pictures for seconds every ten (SNES, 17.11.).
+        let call = Instant::now();
+        let due = if !self.paused && self.reminder.is_none() { self.pacer.due(call) } else { 0 };
         let mut ticks = 0;
-        while !self.paused && self.reminder.is_none() && Instant::now() >= self.next && ticks < 4 {
+        let mut core_time = Duration::ZERO;
+        while ticks < due {
             ticks += 1;
             let touch = self.fingers.values().fold(self.pulses, |v, b| v | b);
             let mut buttons = self.buttons | touch | self.stick_buttons;
@@ -1632,13 +1645,15 @@ impl Player {
                 log::info!("player input: p1={:04x} p2={:04x} p3={:04x} p4={:04x}", given[0], given[1], given[2], given[3]);
                 self.last_given = given;
             }
+            let run_started = Instant::now();
             let (frame, samples, av, geometry) = self.core.run(buttons);
+            core_time += run_started.elapsed();
             pocket_ui::mark!("android-core-run", "phase=end frame={} samples={}", self.frames, samples.len() / 2);
             if let Some(av) = av {
                 self.core.av = av;
-                self.period = Duration::from_secs_f64(1.0 / av.timing.fps.clamp(10.0, 240.0));
+                self.pacer.set_rates(av.timing.fps, self.display_hz);
                 if let Some(audio) = &mut self.audio {
-                    audio.set_source_timing(av.timing.sample_rate, av.timing.fps, display_refresh_hz());
+                    audio.set_paced_timing(av.timing.sample_rate, av.timing.fps, self.display_hz);
                 }
             }
             if let Some(geometry) = geometry {
@@ -1657,10 +1672,20 @@ impl Player {
             self.frames += 1;
             // RetroAchievements reads the game's memory after each emulated frame (well under a millisecond).
             if let Some(ra) = &mut self.ra { ra.frame(); }
-            self.next += self.period;
             if self.last_flush.elapsed() > Duration::from_secs(10) {
                 self.core.write_sram_in_background();
                 self.last_flush = Instant::now();
+                // The pacing of the last ten seconds, and the display's rate again (a phone may switch its mode).
+                let cpu = pocket_ui::core_pacing::current_cpu();
+                log::info!("player pacing: {}", self.pacing.line(self.pacer.locked(), self.core.av.timing.fps, self.display_hz, cpu));
+                let hz = display_refresh_hz();
+                if (hz - self.display_hz).abs() > 0.01 {
+                    self.display_hz = hz;
+                    self.pacer.set_rates(self.core.av.timing.fps, hz);
+                    if let Some(audio) = &mut self.audio {
+                        audio.set_paced_timing(self.core.av.timing.sample_rate, self.core.av.timing.fps, hz);
+                    }
+                }
                 if let Some(audio) = &self.audio {
                     let underruns = *audio.underruns.lock().unwrap_or_else(|e| e.into_inner());
                     let queue_ms = audio.buffered_ms();
@@ -1708,6 +1733,9 @@ impl Player {
                 }
                 self.last_earlier = Instant::now();
             }
+        }
+        if !self.paused && self.reminder.is_none() {
+            self.pacing.call(call, ticks, core_time);
         }
         // Achievements: while paused rc_client's timers go on and the Achievements page keeps its list current; in the
         // game the unlock cards and notes come up (a card is only taken from the line while it can be seen).
@@ -1774,10 +1802,10 @@ impl Player {
     fn semantic_nodes(&self) -> String {
         let areas: Vec<_> = if self.paused {
             let mut nodes: Vec<_> = self.hits.iter().map(|(a, i, label)| (*a, label.clone(), !self.touch_visible && *i == self.row)).collect();
-            nodes.extend(self.slot_controls().into_iter().map(|(a, _, label)| (a, label.to_string(), false)));
+            nodes.extend(self.slot_controls().into_iter().map(|(a, _, label)| (a, pocket_ui::i18n::tr(label), false)));
             if self.menu == Menu::Zoom {nodes.push((Area::new(0,0,self.logical.0 as i32,80),format!("{} · {:.1}x",pocket_ui::i18n::tr("Zoom"),self.zoom.scale),false));}
             if self.menu == Menu::Options {
-                nodes.extend(self.option_arrows.iter().map(|(a, _, _, label)| (*a, label.clone(), false)));
+                nodes.extend(self.option_arrows.iter().map(|(a, _, _, label)| (*a, pocket_ui::i18n::tr(label), false)));
             }
             if self.menu == Menu::Achievements {
                 nodes.push((Area::new(36, 150, self.logical.0 as i32 - 72, self.logical.1 as i32 - 300), self.ra_lines.iter().filter(|l| !l.is_empty()).cloned().collect::<Vec<_>>().join(". "), false));
@@ -2434,6 +2462,13 @@ fn said(error: String, instead: &'static str) -> String {
 
 fn string(env: &mut JNIEnv, value: JString) -> String {
     env.get_string(&value).map(|s| s.to_string_lossy().into_owned()).unwrap_or_default()
+}
+/// Native Android dialogs use the same tables and language as the player, initialized by nativeCreate before its
+/// error callback. The Java UI thread follows the process language, as the renderer's GL thread does.
+#[no_mangle]
+pub extern "system" fn Java_xyz_pocketui_app_PlayerActivity_nativeTranslate(mut env: JNIEnv, _: JObject, value: JString) -> jstring {
+    let text = pocket_ui::i18n::tr(&string(&mut env, value));
+    env.new_string(text).map(|s| s.into_raw()).unwrap_or(std::ptr::null_mut())
 }
 #[no_mangle]
 pub extern "system" fn Java_xyz_pocketui_app_PlayerActivity_nativeCreate(

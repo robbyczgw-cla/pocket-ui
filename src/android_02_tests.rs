@@ -1657,6 +1657,47 @@ fn without_a_public_download_channel_the_extra_systems_read_not_available_here_a
     assert!(sheet_rows(&mut u).iter().any(|r| r.contains("Download now")));
 }
 
+/// 0.5.x: every core is in the APK, so nothing is offered. The first start has no empty "More systems?" step: it counts
+/// seven steps, Continue on covers and pictures goes on to the controls and Back from there comes back, a first start an
+/// older version left on that step goes on with the next, and Extras lists no system.
+#[test]
+fn with_every_system_in_the_app_the_first_start_has_seven_steps_and_no_empty_systems_step() {
+    use pocket_ui::pad::Button;
+    let mut u = page();
+    assert!(u.core_offers.is_empty(), "the APK offers no download");
+    u.prefs.onboarding_done = false;
+    u.prefs.onboarding_step = 0;
+    let mut walked = Vec::new();
+    while !u.prefs.onboarding_done && walked.len() < 10 {
+        paint(&mut u, 720, 1600);
+        let said = page_words_of(&u);
+        let counted = said.split(" | ").find(|w| w.starts_with("Step ")).unwrap_or_default().to_string();
+        assert!(!said.contains("More systems?"), "step {}: {said}", u.prefs.onboarding_step);
+        assert!(u.cut.is_empty(), "step {}: {:?}", u.prefs.onboarding_step, u.cut);
+        walked.push((u.prefs.onboarding_step, counted));
+        let next = u.regions.iter().find(|r| r.label == ui::tr("Continue")).unwrap().area;
+        u.tap((next.x + next.w / 2) as f32, (next.y + next.h / 2) as f32);
+    }
+    let expected: Vec<(usize, String)> = [0, 1, 2, 3, 4, 6, 7].iter().enumerate().map(|(i, s)| (*s, format!("Step {} of 7", i + 1))).collect();
+    assert_eq!(walked, expected);
+    // Back from the controls returns to covers and pictures.
+    u.prefs.onboarding_done = false;
+    u.prefs.onboarding_step = 6;
+    paint(&mut u, 720, 1600);
+    u.press(Button::South);
+    assert_eq!(u.prefs.onboarding_step, 4);
+    // A first start left on "More systems?" by 0.5.0-android.5 goes on with the controls.
+    u.prefs.onboarding_step = 5;
+    u.skip_empty_steps();
+    assert_eq!(u.prefs.onboarding_step, 6);
+    // Extras: its own rows and Back, no system to download.
+    u.prefs.onboarding_done = true;
+    u.navigate(ui::Screen::Extras);
+    let rows = sheet_rows(&mut u);
+    assert!(!rows.iter().any(|r| ["PSP", "DS", "N64", "Dreamcast"].iter().any(|n| r.starts_with(&format!("{n} ·")))), "{rows:?}");
+    assert!(rows.iter().any(|r| r == "Back"), "{rows:?}");
+}
+
 fn page_words_of(u: &ui::Ui) -> String {
     u.regions.iter().filter(|r| matches!(r.action, ui::Action::Label)).map(|r| r.label.clone()).collect::<Vec<_>>().join(" | ")
 }
@@ -1741,11 +1782,13 @@ fn android_help_is_in_german_and_spanish_and_points_at_rows_that_exist() {
         }
         seen
     };
-    for named in ["Choose your ROM folder", "Cozy extras", "Plays with", "Save backup", "Report a problem", "Game check"] {
+    for named in ["Choose your ROM folder", "Plays with", "Save backup", "Report a problem", "Game check"] {
         assert!(settings.iter().any(|r| r == named || r.starts_with(&format!("{named} ·"))), "Help names the row {named} of Android's Settings, which is not there: {settings:?}");
     }
     let all: String = ui::help_page::TOPICS.iter().map(|(_, a)| *a).collect::<Vec<_>>().join(" ");
-    for named in ["Choose your ROM folder", "Cozy extras", "Download now", "Plays with", "Save backup", "Report a problem",
+    // Every system of our player is in the app (0.5.x): no answer sends anyone to a download.
+    assert!(!all.contains("Download now") && !all.contains("optional"), "{all}");
+    for named in ["Choose your ROM folder", "Plays with", "Save backup", "Report a problem",
                   "ARMSX2", "Dolphin", "Azahar", "hakuX", "Close Game", "Exit Emulation", "Save & quit"] {
         assert!(all.contains(named), "an answer should name {named}");
     }

@@ -96,3 +96,15 @@ analog triggers of a Bluetooth/USB pad, any name/vendor/product, driven line by 
 `zig cc -target aarch64-linux-musl -O2 -static vpad.c -o vpad`, push to `/data/local/tmp`, remove afterwards.
 `StickKeysTest.java` (with `StickKeys.java`) runs on the JVM: `javac -d out android/java/xyz/pocketui/app/StickKeys.java
 scripts/android/test/StickKeysTest.java && java -cp out xyz.pocketui.app.StickKeysTest`.
+
+## Cold Continue pictures
+
+`examples/android_core_probe.rs` runs the shared frontend headlessly on Linux or the Android emulator.
+Run `android_core_probe CORE ROM SCRATCH 180 save`, then the same command with `resume` in a second process.
+Use an owned scratch folder and a diagnostic/homebrew game with a non-black scene at the chosen frame count;
+repeat for each software core and Game Boy core preference. This checks the first post-load picture rather than
+only a successful state-load log. The same ClownMDEmu state must be black before the palette patch and visible
+after it, including a state written by the old core. Linux's normal Mega Drive core is Genesis Plus GX.
+For GLES presentation and the matching Earlier preview, use the host regression documented in
+[Android development](../../../docs/dev/android.md). Hardware cores additionally need the player's EGL context;
+this headless software probe does not create one.

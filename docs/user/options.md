@@ -171,6 +171,30 @@ sides. Hold the Pocket turned a quarter, and the picture can be much bigger.
 
 Arcade games run on RetroArch, which has its own way: see [Arcade games](arcade.md#vertical-games).
 
+### Resolution
+
+Nintendo 64, PSP, Dreamcast and PlayStation games only, on the handhelds whose graphics chip was measured for it (the Retroid Pocket Mini V2
+and its Snapdragon 865 siblings, and the Snapdragon 8 Gen 2 handhelds): how sharp the 3D picture is drawn. **Original** is the
+console's own resolution (the N64's 320 × 240, the PSP's 480 × 272, the Dreamcast's 640 × 480, the PlayStation's 320 × 240 or so);
+**2x**, **3x** and **4x** draw it that many times larger, so edges and far-away things look clean on this screen instead of in steps. It costs the graphics chip
+more, not the game's speed: the list offers only what ran at full speed on this handheld.
+
+- It is the same row as the **Resolution** of PlayStation 2, GameCube, Wii and Xbox games ([their Options](options-big.md)), and
+  like theirs it **takes effect the next time the game starts**: quit and start the game again to see it.
+- It is kept for the console, like the other Picture settings, or for one game with [Keep for](#keep-for) → This game.
+- Unless you choose one, each console starts with the sharpest resolution that keeps a margin on this handheld:
+
+| Handheld | Nintendo 64 | PSP | Dreamcast | PlayStation |
+|---|---|---|---|---|
+| Retroid Pocket Mini V2, Mini, Pocket 5, Flip 2 (Snapdragon 865) | 2x (3x offered) | 2x (3x offered) | 2x | Original (2x offered) |
+| Retroid Pocket 6, Nova, AYN Odin 2 family (Snapdragon 8 Gen 2) | 2x (3x offered) | 2x (3x offered) | 2x | Original (2x offered) |
+
+  The H700, RK3566 and RK3326 handhelds have no Resolution row: their N64, PSP and Dreamcast games run on ROCKNIX's own
+  emulators, which keep their settings, and the PlayStation keeps its Enhanced Resolution under [Emulator](#emulator).
+- PlayStation 2x is the emulator's "Enhanced Resolution": the 3D is sharper, but some games lose a picture with it (Crash
+  Bandicoot 2's pause screen shows black where the game was), so it is not where a PlayStation game starts.
+- The emulator's own resolution option (Emulator page) is left out where this row is there, so there is one place for it.
+
 ### Starting values per console
 
 Every console starts with the look that suits it on this screen:
@@ -379,7 +403,7 @@ presses into a running game.
 
 | Row | What it holds |
 |---|---|
-| **Screen scaling**, **Look** (with Sharpness and Effect under Custom), **Screen frame** (with its colour or finish), **Screen orientation** | The [Picture](#picture) settings. A frame's sub-choices show up under it, as in the pause menu. |
+| **Screen scaling**, **Look** (with Sharpness and Effect under Custom), **Screen frame** (with its colour or finish), **Screen orientation**, **Resolution** (N64, PSP, Dreamcast, PlayStation) | The [Picture](#picture) settings. A frame's sub-choices show up under it, as in the pause menu. |
 | **Fast-forward speed**, **Rewind**, **Earlier states**, **Over the game**, **Rumble**, **Performance**, **Fan**, **Run-ahead** | The same rows as [Speed, rumble, fan](#speed-rumble-fan). |
 | **Save state**, **Load state**, **Change slot**, **Fast-forward**, **Rewind**, **Screenshot**, **Over the game**, **Zoom** | The [Shortcuts](#shortcuts): which HOME + button does what. |
 | **Controls** | Which button does what, and the left stick ([Controls](#controls)). The page names the buttons the standard way; the pause menu shows the console's own names. |

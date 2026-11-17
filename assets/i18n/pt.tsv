@@ -825,7 +825,7 @@ Timeline	Linha do tempo
 Discontinued	Descontinuado
 Sold	Vendidos
 On this Pocket	Neste Pocket
-{s} · last: {t}	{s} · último: {t}
+{t} · last: {s}	{t} · último: {s}
 Your games	Seus jogos
 {s}, last {t}	{s}, último {t}
 Played	Jogado
@@ -1088,6 +1088,7 @@ Saved. This takes effect the next time the game starts.	Salvo. Vale na próxima 
 Original (480p)	Original (480p)
 2x (960p)	2x (960p)
 The resolution the Xbox's picture is drawn at. Original is the Xbox's own 480p; 2x (960p) is sharper and costs the GPU more. Takes effect the next time the game starts.	A resolução em que a imagem do Xbox é desenhada. Original é o 480p do próprio Xbox; 2x (960p) é mais nítido e exige mais da GPU. Vale na próxima vez que o jogo iniciar.
+The resolution the 3D picture is drawn at. Original is the console's own; 2x and up are sharper and cost the GPU more. Takes effect the next time the game starts.	A resolução em que a imagem 3D é desenhada. Original é a do próprio console; de 2x para cima é mais nítida e exige mais da GPU. Vale na próxima vez que o jogo iniciar.
 Aspect is as large as fits, in the picture's own shape (4:3), with black bars.	Proporção é o maior tamanho que cabe, no formato da própria imagem (4:3), com barras pretas.
 Fullscreen fills the screen and stretches the picture.	Tela cheia preenche a tela e estica a imagem.
 Integer scales by whole numbers. Takes effect the next time the game starts.	Inteira escala por números inteiros. Vale na próxima vez que o jogo iniciar.
@@ -5082,8 +5083,6 @@ Help	Ajuda
 Short answers to the usual questions. Choose a topic.	Respostas curtas para as dúvidas comuns. Escolha um tema.
 Choose your games folder	Escolha sua pasta de jogos
 Settings › Choose your ROM folder: pick the folder with one folder per system (gba, snes, psx). Games stay where they are; nothing is copied.	Configurações › Escolha sua pasta de ROMs: escolha a pasta com uma pasta por sistema (gba, snes, psx). Os jogos ficam onde estão; nada é copiado.
-Load more systems	Baixar mais sistemas
-PSP, DS, Nintendo 64 and Dreamcast are optional. Settings › Cozy extras › Download now loads one over Wi-Fi; B cancels. All other systems are already in the app.	PSP, DS, Nintendo 64 e Dreamcast são opcionais. Configurações › Extras aconchegantes › Baixar agora baixa um por Wi-Fi; B cancela. Todos os outros sistemas já estão no app.
 In a game press Back or your handheld's Menu button. Continue, Save, Load, Options, Controls and Save & quit are in it. With a controller, A chooses and B continues.	Em um jogo, aperte Voltar ou o botão Menu do seu portátil. Nele estão Continuar, Salvar, Carregar, Opções, Controles e Salvar e sair. Com controle, A escolhe e B continua.
 Save and keep playing	Salvar e continuar jogando
 Save & quit keeps your place and the game's own saves. Next time the game is under Continue and starts where you stopped. Save and Load have eight slots.	Salvar e sair guarda seu ponto e os saves do próprio jogo. Da próxima vez o jogo fica em Continuar e começa de onde você parou. Salvar e Carregar têm oito slots.
@@ -5274,3 +5273,10 @@ Game start animation	Animação de início
 How bright the screen is. The same as in the quick settings.	O brilho da tela. O mesmo das configurações rápidas.
 How loud games and menus are. The same as in the quick settings.	O volume de jogos e menus. O mesmo das configurações rápidas.
 A separate layout for each controller, in menus and games. Pairing: Connections › Bluetooth.	Um layout para cada controle, em menus e jogos. Parear: Conexões › Bluetooth.
+
+# Android player: native start dialog and screen-reader controls
+Game couldn't start	O jogo não pôde iniciar
+Previous slot	Slot anterior
+Next slot	Próximo slot
+{t} · previous value	{t} · valor anterior
+{t} · next value	{t} · próximo valor

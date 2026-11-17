@@ -3,6 +3,8 @@
 //! it (`paint_out` reads [`TvState::left`]). Its size follows the screen, not the case, so it doesn't change as the
 //! selection moves: about a fifth of the screen's height, a whole number of screen pixels a template pixel where it is
 //! two or more, left out where its glass would be under 60 px high or the showcase has no room for it.
+//! Its place is the cabinet's (`App::cabinet_plan`), the same on every shelf; a handheld game's handheld stands in it
+//! instead (`cabinet_tv::handheld`), the game on its display.
 
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
@@ -22,8 +24,9 @@ const GAP: i32 = 30;
 #[derive(Default)]
 pub(crate) struct TvState {
     loader: Option<Loader>,
-    /// The TV's body at a scale (hundredths) and the screen's position on it.
-    body: Option<(i32, Rc<Body>)>,
+    /// The TV's body at a scale (hundredths) and the screen's position on it; or the handheld's (`cabinet_tv::handheld`,
+    /// the key's second part its picture) in the TV's place.
+    body: Option<((i32, usize), Rc<Body>)>,
     /// What the glass shows, the picture before it while the crossfade runs, and when it began.
     shown: Option<(Want, Option<Rc<Pic>>)>,
     /// Files changed at the same paths: ask the worker again, keeping the old picture until its replacement arrives.
@@ -34,6 +37,10 @@ pub(crate) struct TvState {
     frame: Option<(usize, usize, u32, Rc<Pic>)>,
     /// The TV's left edge this frame (None: no TV): the case out of the shelf stays left of it.
     pub(crate) left: Option<i32>,
+    /// The TV's place this frame (x, y, w, h): the same on every shelf; a handheld stands in it instead of the TV.
+    pub(crate) place: Option<(i32, i32, i32, i32)>,
+    /// What stands there: true for a handheld.
+    pub(crate) handheld: bool,
     /// The showcase (prototype, `pocket_ui::showcase`): the game on the glass and since when it is chosen.
     rest: Option<(Want, Instant)>,
     /// Whether the game resting on the glass may play (checked once per game: a few file lookups).
@@ -162,10 +169,12 @@ impl TvState {
             Some((k1, k2, k3, p)) if (*k1, *k2, *k3) == key => p.clone(),
             _ => {
                 let mut p = body.pic.clone();
-                if let Some(old) = &prev {
+                // A picture made for another glass (the TV's, as a handheld game's handheld comes) is not shown on this one.
+                let fits = |s: &Pic| (s.w, s.h) == (body.glass.2, body.glass.3);
+                if let Some(old) = prev.as_ref().filter(|p| fits(p)) {
                     cabinet_tv::show(&mut p, body.glass, &body.mask, old, 255);
                 }
-                if let Some(new) = &cur {
+                if let Some(new) = cur.as_ref().filter(|p| fits(p)) {
                     cabinet_tv::show(&mut p, body.glass, &body.mask, new, a);
                 }
                 let p = Rc::new(p);
@@ -265,6 +274,7 @@ impl App {
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn paint_cabinet_tv(&mut self, c: &mut Canvas, system: &str, rom: &Path, cover: Option<PathBuf>, board_y: i32, room: i32, now: Instant) {
         self.cabinet.tv.left = None;
+        self.cabinet.tv.place = None;
         self.cabinet.tv.at = None;
         // The look step's sample cabinet has no TV: it shows how the cases look. Nor with its Cozy extra off.
         if self.sample_cover.is_some() || !pocket_ui::cozy_extras::on(pocket_ui::cozy_extras::Extra::CabinetTv) {
@@ -272,13 +282,22 @@ impl App {
         }
         let Some(f) = tv_scale(c.w, c.h, room) else { return };
         let fkey = (f * 100.0).round() as i32;
-        if self.cabinet.tv.body.as_ref().is_none_or(|(k, _)| *k != fkey) {
-            self.cabinet.tv.body = Some((fkey, Rc::new(cabinet_tv::body(f))));
+        // The TV's place: its size at this scale, at the board's right end. A handheld game's handheld stands in it.
+        let t = cabinet_tv::template();
+        let (pw, ph) = (((t.body.w as f32 * f).round() as i32).max(1), ((t.body.h as f32 * f).round() as i32).max(1));
+        let hand = cabinet_tv::handheld(system);
+        let key = (fkey, hand.map_or(0, |(sp, _)| sp as *const _ as usize));
+        if self.cabinet.tv.body.as_ref().is_none_or(|(k, _)| *k != key) {
+            let made = hand.and_then(|(sp, d)| cabinet_tv::handheld_body(sp, d.at, d.fuzz, d.lit, pw, ph));
+            let lcd = made.is_some();
+            self.cabinet.tv.body = Some((key, Rc::new(made.unwrap_or_else(|| cabinet_tv::body(f)))));
+            self.cabinet.tv.handheld = lcd;
             self.cabinet.tv.frame = None;
         }
         let body = self.cabinet.tv.body.as_ref().map(|(_, b)| b.clone()).unwrap();
         let (_, _, gw, gh) = body.glass;
-        let want = Want { system: system.to_string(), rom: rom.to_path_buf(), cover, w: gw, h: gh };
+        let lcd = self.cabinet.tv.handheld;
+        let want = Want { system: system.to_string(), rom: rom.to_path_buf(), cover, w: gw, h: gh, lcd };
         let inline = self.cabinet.inline;
         let data_dir = self.data_dir.clone();
         let unplayed = !self.play_evidence(rom).ever_played();
@@ -291,9 +310,10 @@ impl App {
             showcase_step_with(tv, &want, &data_dir, now, pocket_ui::showcase::enabled() && unplayed);
         }
         let pic = tv.compose(&body, now);
-        let x = c.w - super::app_cabinet::CAB_X - art::WALL - GAP - pic.w;
-        let y = board_y - pic.h;
-        tv.left = Some(x);
+        let px = c.w - super::app_cabinet::CAB_X - art::WALL - GAP - pw;
+        let (x, y) = (px + (pw - pic.w) / 2, board_y - pic.h);
+        tv.left = Some(px);
+        tv.place = Some((px, board_y - ph, pw, ph));
         tv.at = Some((x, y));
         art::soft_shadow(c, x + 10, y + 12, pic.w - 4, pic.h - 12, 18, 0.45, (0, c.h));
         art::blit(c, &pic, x, y, 256, (0, c.h));
@@ -973,7 +993,7 @@ mod tests {
         std::fs::create_dir_all(&cores).unwrap();
         std::fs::write(cores.join("gambatte_libretro.so"), b"x").unwrap();
         std::env::set_var("POCKETUI_CORES", &cores);
-        let want = Want { system: "gb".into(), rom: dir.path().join("Never Played.gb"), cover: None, w: 90, h: 70 };
+        let want = Want { system: "gb".into(), rom: dir.path().join("Never Played.gb"), cover: None, w: 90, h: 70, lcd: false };
         assert!(pocket_ui::showcase::core_for("gb", &want.rom).is_some(), "the test has a core to start");
         let rested = Instant::now();
         let later = rested + pocket_ui::showcase::DWELL + std::time::Duration::from_millis(100);
@@ -998,7 +1018,7 @@ mod tests {
     #[ignore = "timing tier: scripts/test-timing.sh (serial)"]
     fn timing_replacing_a_picture_at_the_same_path_refreshes_the_selected_tv() {
         let dir = tempfile::tempdir().unwrap();
-        let want = Want { system: "snes".into(), rom: PathBuf::from("Game.sfc"), cover: None, w: 90, h: 70 };
+        let want = Want { system: "snes".into(), rom: PathBuf::from("Game.sfc"), cover: None, w: 90, h: 70, lcd: false };
         write_snap(dir.path(), &want, [230, 10, 10]);
         let mut tv = TvState::default();
         tv.select(want.clone(), dir.path(), true, Instant::now());
@@ -1026,7 +1046,7 @@ mod tests {
     #[ignore = "timing tier: scripts/test-timing.sh (serial)"]
     fn timing_a_hidden_tv_finishes_waiting_and_has_its_picture_when_the_cabinet_returns() {
         let dir = tempfile::tempdir().unwrap();
-        let want = Want { system: "snes".into(), rom: PathBuf::from("Game.sfc"), cover: None, w: 90, h: 70 };
+        let want = Want { system: "snes".into(), rom: PathBuf::from("Game.sfc"), cover: None, w: 90, h: 70, lcd: false };
         write_snap(dir.path(), &want, [20, 210, 20]);
         let mut tv = TvState::default();
         tv.select(want.clone(), dir.path(), false, Instant::now());
@@ -1056,7 +1076,7 @@ mod tests {
         // 13.11.2026 on the H700: the cover arrived 18 s into the run, the game's Want changed with it, and the TV
         // started the game over after another rest.
         let dir = tempfile::tempdir().unwrap();
-        let want = Want { system: "snes".into(), rom: PathBuf::from("Game.sfc"), cover: None, w: 90, h: 70 };
+        let want = Want { system: "snes".into(), rom: PathBuf::from("Game.sfc"), cover: None, w: 90, h: 70, lcd: false };
         let mut tv = TvState::default();
         let t0 = Instant::now();
         tv.select(want.clone(), dir.path(), true, t0);

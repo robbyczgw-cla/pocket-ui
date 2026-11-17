@@ -150,7 +150,7 @@ pub(crate) struct FindUi {
     keys: Vec<(Area, usize, usize)>,
     rows: Vec<(Area, usize)>,
     /// Snapshots read covers at once rather than on the thread.
-    inline: bool,
+    pub(crate) inline: bool,
 }
 
 impl FindUi {
@@ -418,7 +418,7 @@ impl App {
     }
 
     /// The cover of a game for a result row, read on the thread; None while it is coming or when there is none.
-    fn search_thumb(&mut self, system: &str, rom: &Path, size: i32) -> Option<Rc<Image>> {
+    pub(crate) fn search_thumb(&mut self, system: &str, rom: &Path, size: i32) -> Option<Rc<Image>> {
         let key = (rom.to_path_buf(), size);
         if let Some(slot) = self.find.thumbs.get(&key) {
             return match slot {

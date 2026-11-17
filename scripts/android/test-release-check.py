@@ -121,6 +121,35 @@ def rebuild_old_make_cache(d):
             and hashlib.sha256(archive.read_bytes()).hexdigest() == manifest["source_sha256"])
 
 
+def release_builder_requires_public_tree(tmp):
+    builder = Path(__file__).with_name("release-apk.sh")
+    signing = tmp / "signing"
+    signing.mkdir()
+    # Empty fixture files satisfy only the presence check; no key is read or generated.
+    (signing / "release.jks").touch()
+    (signing / "store-password").touch()
+    for private in (True, False):
+        tree = tmp / ("private-tree" if private else "public-export")
+        scripts = tree / "scripts/android"
+        scripts.mkdir(parents=True)
+        shutil.copyfile(builder, scripts / builder.name)
+        probe = tree / "build-started"
+        (scripts / "build-apk.sh").write_text("#!/bin/sh\ntouch build-started\nexit 37\n")
+        (scripts / "build-apk.sh").chmod(0o755)
+        if private:
+            (tree / "scripts/check-leaks.sh").touch()
+        out = tree / "release-out"
+        env = dict(os.environ, ANDROID_SIGNING_DIR=str(signing))
+        result = subprocess.run(["bash", str(scripts / builder.name), "--version", "0.5.0", "--out", str(out)],
+                                env=env, text=True, capture_output=True)
+        if private:
+            if result.returncode != 1 or "private tree" not in result.stderr or probe.exists() or out.exists():
+                return False
+        elif result.returncode != 37 or not probe.exists():
+            return False
+    return True
+
+
 def main():
     failures = []
 
@@ -142,6 +171,7 @@ def main():
             run = subprocess.run([sys.executable, "-I", str(AUDIT.with_name("native-heap-policy.py"))], input=tree, text=True, capture_output=True)
             expect(label, (run.returncode == 0) == accepted)
         expect("an old Make cache is relinked for 16 KB devices with matching source evidence", rebuild_old_make_cache(d))
+        expect("a release APK can only be built from the public export, before creating any output", release_builder_requires_public_tree(d))
         make_apk(d / "good.apk")
         rc, out = audit(d / "good.apk", "--max-bytes", "30000000")
         expect("a 16 KB aligned APK with sources named passes", rc == 0 and "FAIL" not in out)
@@ -189,6 +219,23 @@ def main():
         expect("an APK without the written source offer is refused", rc == 1 and "SOURCE-OFFER.txt is missing" in out)
         rc, out = audit(d / "good.apk", "--max-bytes", "100")
         expect("an APK over the size limit is refused", rc == 1 and "size" in out)
+        # Since 0.5.x every core of the lock is in the APK (release-check.sh passes --lock): one left out, or one
+        # offered as a download again, is refused.
+        (d / "lock-mgba.json").write_text(json.dumps({"cores": [{"id": "mgba"}]}))
+        (d / "lock-more.json").write_text(json.dumps({"cores": [{"id": "mgba"}, {"id": "mupen64plus_next"}]}))
+        rc, out = audit(d / "good.apk", "--lock", str(d / "lock-mgba.json"))
+        expect("an APK with every core of the lock and no download passes", rc == 0 and "every core of lock-mgba.json is in the APK" in out)
+        rc, out = audit(d / "good.apk", "--lock", str(d / "lock-more.json"))
+        expect("a core of the lock left out of the APK is refused", rc == 1 and "missing from the APK: ['mupen64plus_next']" in out)
+        make_apk(d / "offers.apk", extra={"assets/core-downloads.json": json.dumps({"packages": [{"core": "mupen64plus_next"}]})})
+        rc, out = audit(d / "offers.apk", "--lock", str(d / "lock-mgba.json"))
+        expect("a core offered as a download is refused", rc == 1 and "offered as downloads instead of bundled: ['mupen64plus_next']" in out)
+        make_apk(d / "empty-offer.apk", extra={"assets/core-downloads.json": json.dumps({"packages": []})})
+        rc, out = audit(d / "empty-offer.apk", "--lock", str(d / "lock-mgba.json"))
+        expect("an empty download list is fine", rc == 0)
+        packing = subprocess.run([sys.executable, str(AUDIT.with_name("test-package-cores.py"))], capture_output=True, text=True)
+        expect("the packager puts every core of the lock into the APK and offers none as a download" + ("" if packing.returncode == 0 else ":\n" + packing.stderr[-1500:]),
+               packing.returncode == 0)
         (d / "src").mkdir()
         rc, out = audit(d / "good.apk", "--sources", str(d / "src"))
         expect("a missing source archive is refused", rc == 1 and "source archive missing" in out)

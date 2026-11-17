@@ -6,12 +6,14 @@ packages, verifies their checksums and tracks the installed files so removal aff
 
 ## Android core packages
 
-The 17-core lock keeps thirteen libraries in the APK, including the small cores through PS1 and Saturn.
-PSP (with its system files), DS, N64 and Dreamcast are optional signed packages. The measured compressed libraries
-are approximately PSP 7.33 MB (plus its system assets), DS 1.84 MB, N64 1.53 MB and Dreamcast 4.75 MB.
-The threshold is 1.5 MB for a candidate system library; PSP also brings system assets. Saturn's corrected YabaSanshiro
-library is about 0.69 MB compressed and stays bundled. Sizes painted in first start and Extras come from the actual
-generated tar.gz, including notices and PSP assets, rather than these library-only measurements.
+Since 0.5.x the APK carries all 17 cores of the lock: PSP with its system files (`assets/system/PPSSPP`, copied to
+`files/bios/PPSSPP` by the player), DS, N64 and Dreamcast as well. `package-cores.py` has an empty `DOWNLOADS` set, so
+`assets/core-downloads.json` and `android/build/core-downloads/catalog.json` list no package and `release-apk.sh` copies no
+catalog into the release folder; `release-check.sh` refuses an APK that leaves a core of the lock out or offers one as a
+download (`apk_audit.py --lock`). The machinery below stays for a core that may need to be a download later.
+A phone that downloaded one of the four with 0.5.0-android.5 or older uses the APK's copy (`corePath` asks for it first);
+`android_cores::retire_bundled` removes the downloaded files, folder and store record, and unfinished downloads, at the
+next start of either view. Saves, states, core options and `files/bios` stay.
 
 `build-apk.sh` builds corresponding sources and calls `package-cores.py`. The APK's `cores.json` contains only its
 bundled libraries; `assets/core-downloads.json` provides the trusted APK's size/hash/system offers. Optional archives

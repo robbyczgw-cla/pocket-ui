@@ -1,7 +1,10 @@
 #!/usr/bin/env python3
-"""Split the measured heavy cores from the APK into normal pocket-store tar packages.
+"""Puts the cores into the APK, and any core listed in DOWNLOADS into a normal pocket-store tar package instead.
 
-Writes core-downloads/catalog.json; sign its exact bytes with store-tool sign before serving.
+Since 0.5.x every core is in the APK (bundled is cleaner than a download): PSP with its pinned system files in
+assets/system/PPSSPP, DS, N64 and Dreamcast as plain libraries. DOWNLOADS is empty, so core-downloads/catalog.json and the
+APK's assets/core-downloads.json list no package. The download path stays for a core that may need it later; the
+catalog that 0.5.0-android.5 and older read stays on the site for them (docs/ANDROID-MVP.md, "Optional core downloads").
 No publishing or key access happens here. Corresponding sources stay beside the packages.
 """
 import gzip
@@ -16,10 +19,9 @@ import tarfile
 from pathlib import Path
 from apk_audit import check_elf, problems
 
-# Measured deflated libraries: PSP 7.33 MB (+ assets), DS 1.84 MB, N64 1.53 MB,
-# Flycast 4.75 MB. Saturn is only 0.69 MB and remains bundled, like PS1.
-CANDIDATES = {'ppsspp', 'melondsds', 'mupen64plus_next', 'flycast', 'yabasanshiro'}
-MIN_DOWNLOAD_BYTES = 1_500_000
+# The cores that are a download instead of a part of the APK: none. Deflated in the APK (measured for 0.5.0-android.5):
+# PSP 7.33 MB plus its system files, Dreamcast 4.75 MB, DS 1.84 MB, N64 1.53 MB.
+DOWNLOADS = set()
 NAMES = {'ppsspp': 'PSP', 'melondsds': 'DS', 'mupen64plus_next': 'N64',
          'flycast': 'Dreamcast', 'yabasanshiro': 'Saturn'}
 
@@ -48,15 +50,26 @@ def package(out):
         assert [e['path'] for e in actual['evidence']] == recorded['evidence'], 'Core licence evidence differs from lock'
     target = out / 'core-downloads'
     target.mkdir(exist_ok=True)
+    # Packages of an earlier build (a core that was a download then) never stay beside the new catalog.
+    for old in target.glob('*.tar.gz'):
+        old.unlink()
     packages, bundled = [], []
     for core in manifest['cores']:
         cid = core['id']
         source = cores / 'lib' / ('lib' + cid + '_libretro.so')
         assert hashlib.sha256(source.read_bytes()).hexdigest() == core['sha256'], cid
         assert check_elf(source.name, source.read_bytes()) and not problems, cid
-        large = len(gzip.compress(source.read_bytes(), compresslevel=6, mtime=0)) >= MIN_DOWNLOAD_BYTES
-        if cid not in CANDIDATES or (not large and not core.get('system_assets')):
+        if cid not in DOWNLOADS:
             shutil.copyfile(source, out / 'apk/lib/arm64-v8a' / source.name)
+            # PSP's pinned system files go beside it; the player copies them to files/bios/PPSSPP (`preparePspAssets`).
+            for asset in core.get('system_assets', []):
+                rel = Path(asset['path'])
+                assert not rel.is_absolute() and '..' not in rel.parts
+                data = (cores / 'source/ppsspp/assets' / rel).read_bytes()
+                assert hashlib.sha256(data).hexdigest() == asset['sha256'], 'Changed PSP system file ' + asset['path']
+                dest = out / 'apk/assets/system/PPSSPP' / rel
+                dest.parent.mkdir(parents=True, exist_ok=True)
+                dest.write_bytes(data)
             bundled.append(core)
             continue
         assert core.get('corresponding_source') and core.get('source_sha256'), 'Build with ANDROID_RELEASE_SOURCES=1'

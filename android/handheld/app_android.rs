@@ -59,6 +59,11 @@ fn android_main(app: AndroidApp) {
     let cache = app.internal_data_path().unwrap_or_else(|| files.clone()).join("handheld-tmp");
     let _ = std::fs::create_dir_all(&cache);
     let es = data.join("es_systems.cfg");
+    // A core downloaded before it came into the APK: the APK's copy is used, the download goes (as in the Mobile view).
+    let retired = pocket_ui::android_cores::retire_bundled(&files, |core| bridge("coreBundled", &[core]) == "true", !offers().is_empty());
+    if !retired.is_empty() {
+        eprintln!("downloaded cores now in the APK, download removed: {retired:?}");
+    }
     // The phone's apps and cores and the choices in launcher.json, before the library: which systems are listed depends on them.
     refresh_phone();
     // The ROMs folders of internal storage and of every card, with their real names (`android_handheld`).
@@ -148,7 +153,12 @@ fn bundled_core(system: &str) -> Option<&'static str> {
 /// The core packages the download channel offers, from the APK's asset (`coreOffers`): what the Download row fetches.
 fn offers() -> &'static [pocket_ui::android_cores::CorePackage] {
     static OFFERS: std::sync::OnceLock<Vec<pocket_ui::android_cores::CorePackage>> = std::sync::OnceLock::new();
-    OFFERS.get_or_init(|| pocket_ui::android_cores::packages(bridge("coreOffers", &[]).as_bytes()).unwrap_or_default())
+    OFFERS.get_or_init(|| {
+        let mut offers = pocket_ui::android_cores::packages(bridge("coreOffers", &[]).as_bytes()).unwrap_or_default();
+        // A core the APK carries is never a download.
+        offers.retain(|p| bridge("coreBundled", &[&p.core]) != "true");
+        offers
+    })
 }
 
 /// launcher.json, the Mobile view's file: its choices, the Game Boy core and the channel's address come from it.

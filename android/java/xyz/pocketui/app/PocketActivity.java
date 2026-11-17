@@ -180,9 +180,14 @@ abstract class PocketBase extends NativeActivity {
     public String coreCancel(){return coreDownloads().cancel();}
     public String corePath(String core){
         if(!core.matches("[a-z][a-z0-9_]{0,39}"))return "";
+        // The APK's core first: a copy downloaded before the core came into the APK is never used (and is retired at start).
         File installed=new File(getFilesDir(),"android-cores/"+core+"/lib"+core+"_libretro.so");
         File bundled=new File(getApplicationInfo().nativeLibraryDir,"lib"+core+"_libretro.so");
-        return installed.isFile()?installed.getAbsolutePath():bundled.isFile()?bundled.getAbsolutePath():"";
+        return bundled.isFile()?bundled.getAbsolutePath():installed.isFile()?installed.getAbsolutePath():"";
+    }
+    /** "true" when the APK carries this core's library (`android_cores::retire_bundled`). */
+    public String coreBundled(String core){
+        return Boolean.toString(core.matches("[a-z][a-z0-9_]{0,39}")&&new File(getApplicationInfo().nativeLibraryDir,"lib"+core+"_libretro.so").isFile());
     }
     public String dataPath() { return getFilesDir().getAbsolutePath(); }
     /** Ordered roots; upgrade the original single-root preference without touching its grant. */

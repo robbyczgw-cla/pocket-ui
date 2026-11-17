@@ -424,6 +424,7 @@ done
 # Time budgets never run in the merge gate, not even when their own file changes; the layout matrices run as their sample there
 # (POCKETUI_TEST_QUICK), whole under GATE_FULL=1. The single nightly-only tests are skipped in the merge gate only.
 : >"$T/tree/tests/shelf_moves.rs"; : >"$T/tree/tests/launch_frames.rs"; : >"$T/tree/tests/user_journeys.rs"
+: >"$T/tree/tests/settings_open.rs"
 for changed_path in tests/shelf_moves.rs tests/launch_frames.rs src/sleep.rs scripts/gate.sh Cargo.toml; do
     printf '%s\n' "$changed_path" >"$T/tree/.gate-changed"
     : >"$T/cargo"; : >"$T/cargo.quick"
@@ -432,6 +433,8 @@ for changed_path in tests/shelf_moves.rs tests/launch_frames.rs src/sleep.rs scr
         if grep -q -- "--test $budget\b" "$T/cargo"; then echo "FAIL $changed_path: the merge gate ran the time budget $budget"; cat "$T/cargo"; exit 1; fi
     done
     grep -q -- '--test user_journeys' "$T/cargo" || { echo "FAIL $changed_path: journeys skipped"; cat "$T/cargo"; exit 1; }
+    grep -q -- '--test settings_open' "$T/cargo" || { echo "FAIL $changed_path: deterministic Settings check skipped"; cat "$T/cargo"; exit 1; }
+    grep -q -- '--skip settings_first_frame_is_not_much_slower_than_the_next' "$T/cargo" || { echo "FAIL $changed_path: Settings time budget ran in merge gate"; cat "$T/cargo"; exit 1; }
     if grep -q timing_ "$T/cargo"; then echo "FAIL $changed_path: the merge gate ran the timing tier"; exit 1; fi
     grep -q -- '--lib --bins' "$T/cargo.quick" || { echo "FAIL $changed_path: the merge gate ran the matrices whole (no POCKETUI_TEST_QUICK)"; exit 1; }
     grep -q -- '--skip android_eject_tests::the_way_back_hands_over_to_the_still_shelf_without_a_jump' "$T/cargo" || { echo "FAIL $changed_path: a nightly-only test ran"; cat "$T/cargo"; exit 1; }
@@ -443,8 +446,9 @@ GATE_FULL=1 GATE_RUNNER=cargo sh "$T/tree/scripts/gate.sh" "$T/tree" >"$T/out" 2
 [ ! -s "$T/cargo.quick" ] || { echo 'FAIL GATE_FULL=1 ran a matrix as its sample'; cat "$T/cargo.quick"; exit 1; }
 grep -q 'timing_ -- --ignored --test-threads=1' "$T/cargo" || { echo 'FAIL GATE_FULL=1 lost the timing tier'; exit 1; }
 if grep -q -- '--skip android_eject_tests::the_way_back' "$T/cargo"; then echo 'FAIL GATE_FULL=1 skipped a nightly-only test'; exit 1; fi
+if grep -q -- '--skip settings_first_frame_is_not_much_slower_than_the_next' "$T/cargo"; then echo 'FAIL GATE_FULL=1 skipped Settings time budget'; exit 1; fi
 grep -q -- '^test --profile gate -q$' "$T/cargo" || { echo 'FAIL GATE_FULL=1 picked suites instead of running all'; cat "$T/cargo"; exit 1; }
-rm "$T/tree/tests/shelf_moves.rs" "$T/tree/tests/launch_frames.rs" "$T/tree/tests/user_journeys.rs"
+rm "$T/tree/tests/shelf_moves.rs" "$T/tree/tests/launch_frames.rs" "$T/tree/tests/user_journeys.rs" "$T/tree/tests/settings_open.rs"
 pass=$((pass + 1))
 echo 'ok GATE_FULL=1 runs the budgets, the timing tier, the whole matrices and the nightly-only tests'
 # The Android page tests (android_02_tests, android_eject_tests) run when the change can reach them: Android sources, text,

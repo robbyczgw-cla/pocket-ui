@@ -652,6 +652,9 @@ pub struct OptionSet {
     changed: bool,
     /// The snapshot file is out of date.
     dirty: bool,
+    /// Options a pocket-ui row decides instead (`render_scale::CORE_KEYS` where Options → Picture → Resolution is there):
+    /// left out of the Emulator page like `curation`'s hidden ones, so there is one place for them.
+    pub row_decides: &'static [&'static str],
 }
 
 impl OptionSet {
@@ -676,7 +679,7 @@ impl OptionSet {
             if let Some(c) = self.curated.get(&def.key).filter(|c| def.has_value(c)) {
                 def.default = c.clone();
             }
-            def.hidden = !self.curation.shows(&def.key);
+            def.hidden = !self.curation.shows(&def.key) || self.row_decides.contains(&def.key.as_str());
             def.visible = old_visible.get(&def.key).copied().unwrap_or(true);
             let value = self
                 .current

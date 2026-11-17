@@ -62,7 +62,7 @@ They are names, not descriptions, and the manual (still English) uses them:
 | History, Play history, Year in review, Month in review | Verlauf, Spielverlauf, Jahresrückblick, Monatsrückblick | |
 | Session, streak | Sitzung, Serie | |
 | Look (Settings → Look → Layout), look | Ansicht | "Choose a look" → "Wähl eine Ansicht" |
-| Shelf, Split, Cabinet (the looks; Minimal and Cards went with 0.4) | Regal, Geteilt, Vitrine | |
+| Shelf, Easy, Split, Cabinet (the looks; Minimal and Cards went with 0.4) | Regal, Einfach, Geteilt, Schrank | the same name in every string, descriptions too (decided 16.11.2026: "Schrank", not "Vitrine"; "Einfach", no "Easy" left); "the cabinet" of the look: "der Schrank"; checked by `i18n_look_names` |
 | Appearance: Dark, Light, Automatic | Darstellung: Dunkel, Hell, Automatisch | |
 | Motion: Full, Reduced, Off | Bewegung: Voll, Reduziert, Aus | |
 | Language | Sprache | |
@@ -191,7 +191,7 @@ Extras, Sticker(s), Home, FPS, CPU, "Pocket" ("el Pocket", masculine); Little, B
 | Settings | Ajustes | a path: "Ajustes › Sistema › Batería" |
 | Settings' categories: Connections, Look, Screen & sound, Controls, Playing, Games, System, Help & tools | Conexiones, Aspecto, Pantalla y sonido, Controles, Jugando, Juegos, Sistema, Ayuda y herramientas | |
 | Look (Settings → Look → Layout), look | Vista | "Choose a look" → "Elige una vista" |
-| Shelf, Split, Cabinet (the looks; Minimal and Cards went with 0.4) | Estante, Dividida, Vitrina | |
+| Shelf, Easy, Split, Cabinet (the looks; Minimal and Cards went with 0.4) | Estante, Easy, Dividida, Vitrina | the same name in every string (`i18n_look_names`) |
 | Appearance: Dark, Light, Automatic | Apariencia: Oscuro, Claro, Automático | |
 | Motion: Full, Reduced, Off | Movimiento: Completo, Reducido, Desactivado | |
 | Language | Idioma | |
@@ -288,7 +288,7 @@ Game Boy Advance, Neo Geo Pocket Color. Game names are never translated.
 | Settings | Configurações | a path: "Configurações › Sistema › Bateria" |
 | Settings' categories: Connections, Look, Screen & sound, Controls, Playing, Games, System, Help & tools | Conexões, Visual, Tela e som, Controles, Jogando, Jogos, Sistema, Ajuda e ferramentas | |
 | Look (Settings → Look → Layout), look | Visual | "Choose a look" → "Escolha um visual" |
-| Shelf, Split, Cabinet (the looks) | Estante, Dividido, Vitrine | |
+| Shelf, Easy, Split, Cabinet (the looks) | Estante, Easy, Dividido, Vitrine | the same name in every string (`i18n_look_names`) |
 | Appearance: Dark, Light, Automatic | Aparência: Escuro, Claro, Automático | |
 | Motion: Full, Reduced, Off | Movimento: Completo, Reduzido, Desligado | |
 | Language | Idioma | |
@@ -398,7 +398,7 @@ title belongs to the library's data, not to this table).
 | Layout, Style (Settings → Look) | Disposition, Style | |
 | Appearance: Dark, Light, Automatic | Apparence : Sombre, Clair, Automatique | |
 | Motion: Full, Reduced, Off | Mouvement : Complet, Réduit, Désactivé | |
-| Shelf, Split, Cabinet (the looks) | Étagère, Divisé, Vitrine | |
+| Shelf, Easy, Split, Cards, Cabinet (the looks) | Étagère, Easy, Divisé, Fiches, Vitrine | the same name in every string (`i18n_look_names`) |
 | Cocoa, Pea (Retro's colours) | Cacao, Pois | |
 | Language | Langue | |
 | Playing (the category, the game status) | En jeu | one word for both |
@@ -504,7 +504,7 @@ already lists one). Names kept in `keep.txt` come out unchanged.
 | Look & feel | Aspetto e stile | |
 | Style (Retro, Barlow…), Colours, Cocoa, Pea | Stile, Colori, Cacao, Pisello | |
 | Layout | Disposizione | |
-| Shelf, Split, Cards, Cabinet (the looks) | Scaffale, Diviso, Schede, Vetrina | |
+| Shelf, Easy, Split, Cards, Cabinet (the looks) | Scaffale, Easy, Diviso, Schede, Vetrina | the same name in every string (`i18n_look_names`) |
 | Motion: Full, Reduced, Off | Movimento: Completo, Ridotto, Spento | masculine, agreeing with "Movimento" (the battery's "Full in {t}" stays "Piena tra") |
 | Medium (Text size, Haptics strength: Bassa, Intermedia, Alta) | Intermedia | feminine like "Dimensione" and "Intensità"; "Media" is the table's word for storage media |
 | Language | Lingua | |

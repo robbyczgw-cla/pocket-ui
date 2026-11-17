@@ -619,7 +619,7 @@ fn the_text_size_in_settings_json_is_used_and_shown_on_its_row() {
         std::fs::write(data.join("settings.json"), settings).unwrap();
         let record = tmp.join(format!("{name}.tsv"));
         let mut cmd = Command::new(env!("CARGO_BIN_EXE_pocket-ui"));
-        // Look's fifth row, Text size, selected: its value shows as "‹ Groß ›" or "‹ Normal ›".
+        // Look's fifth row, Text size, selected: its value shows as "Groß" or "Normal" between its ‹ ›.
         cmd.args(["--snapshot", "settings:1:4", tmp.join(format!("{name}.png")).to_str().unwrap()])
             .env("POCKETUI_MOCK", "1").env("POCKETUI_MOCK_NOW", FIXTURE_NOW)
             .env("POCKETUI_LANG", "de")
@@ -634,12 +634,14 @@ fn the_text_size_in_settings_json_is_used_and_shown_on_its_row() {
         assert!(out.status.success(), "{}", String::from_utf8_lossy(&out.stderr));
         std::fs::read_to_string(record).unwrap_or_default()
     };
+    // The row's value is painted as its words ("Groß"); the ‹ › around it and the page's angle are drawn, not letters.
+    let shows = |record: &str, word: &str| record.lines().any(|l| l == format!("O\t{word}"));
     let large = shot(r#"{"onboarded": true, "text_size": "large"}"#, "large");
-    assert!(large.contains("O\tSchriftgröße") && large.contains("Groß ›"), "Large chosen:\n{large}");
+    assert!(large.contains("O\tSchriftgröße") && shows(&large, "Groß"), "Large chosen:\n{large}");
     let medium = shot(r#"{"onboarded": true, "text_size": "medium"}"#, "medium");
-    assert!(medium.contains("O\tSchriftgröße") && medium.contains("Mittel ›") && !medium.contains("Groß ›"), "Medium chosen:\n{medium}");
+    assert!(medium.contains("O\tSchriftgröße") && shows(&medium, "Mittel") && !shows(&medium, "Groß"), "Medium chosen:\n{medium}");
     let normal = shot(r#"{"onboarded": true}"#, "normal");
-    assert!(normal.contains("O\tSchriftgröße") && !normal.contains("Groß ›"), "nothing chosen: Normal\n{normal}");
+    assert!(normal.contains("O\tSchriftgröße") && !shows(&normal, "Groß"), "nothing chosen: Normal\n{normal}");
     drop(stub);
 }
 

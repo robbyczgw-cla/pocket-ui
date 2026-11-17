@@ -525,6 +525,9 @@ classic mini
 nintendo switch online
 gamecube edition
 
+# src/render_scale.rs
+mupen64plus-EnableNativeResFactor
+
 # src/rumble.rs
 {"menu": {s}
 
@@ -868,6 +871,7 @@ EGL configs: {s}
 no EGL config
 Advance Wars.gba
 Super Metroid.sfc
+Super Mario 64 (USA).z64
 gpu picture: {s} ms mean, median {s}, p99 {s} ({s} passes)
 video: no timer queries on this GL ({s}), GPU timing is off
 
@@ -1906,3 +1910,4 @@ no game in front
 {s} plays it
 {s} is never read ahead
 {s} is {s} MB
+calls={s} repeated={s} doubled={s} core_ms_p50={s} core_ms_p99={s} core_ms_max={s} gap_ms_p50={s} gap_ms_p99={s} gap_ms_max={s} mode={s} core_fps={s} display_hz={s} cpu={s}

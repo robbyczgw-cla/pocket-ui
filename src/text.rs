@@ -527,6 +527,11 @@ impl Text {
         self.tr.patterns_run()
     }
 
+    /// The first strings that ran them (`i18n::Cache::pattern_log`).
+    pub fn pattern_log(&self) -> Vec<String> {
+        self.tr.pattern_log().iter().map(|s| s.to_string()).collect()
+    }
+
     /// Waits (at most 5 s) for the thread of `prewarm` and takes in what it drew: for the benchmark and the tests,
     /// which want the state of a pocket-ui that has been running for a moment.
     pub fn finish_prewarm(&mut self) {
@@ -645,6 +650,12 @@ impl Text {
     /// lines of `wrap` are for a name (`i18n::Cache::name_line`).
     pub fn keep_as_name(&mut self, line: &str) {
         self.tr.name_line(line);
+    }
+
+    /// `line` is made of translations by the caller (`settings_values::translated_in_code`): painted as it is, no pattern
+    /// of the table is tried on it (`i18n::Cache::keep_as_is`).
+    pub fn keep_as_is(&mut self, line: &str) {
+        self.tr.keep_as_is(line);
     }
 
     /// Measure and paint a game/system name literally, restoring the caller's language mode.

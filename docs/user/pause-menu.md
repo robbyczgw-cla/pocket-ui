@@ -9,12 +9,12 @@ later. What the menu offers depends on the emulator the system uses (see
 
 | Emulator | Menu, top to bottom |
 |---|---|
-| pocket-ui's own host | Continue, Save, Load, Earlier, Options, Quit |
-| pocket-ui's own host, signed in to RetroAchievements | Continue, Save, Load, Earlier, Options, Achievements, Quit |
+| pocket-ui's own host | Continue, Save, Load, Earlier, Options, Save & quit |
+| pocket-ui's own host, signed in to RetroAchievements | Continue, Save, Load, Earlier, Options, Achievements, Save & quit |
 | pocket-ui's own host, for ScummVM, PICO-8 and TIC-80 (no save states) | Continue, Options, Quit |
-| PlayStation 2 (ARMSX2), GameCube and Wii (Dolphin), 3DS (Azahar) | Continue, Save, Load, Options, Quit |
+| PlayStation 2 (ARMSX2), GameCube and Wii (Dolphin), 3DS (Azahar) | Continue, Save, Load, Options, Save & quit |
 | Xbox (hakuX in RetroArch, experimental) | Continue, Options, Quit |
-| RetroArch | Continue, Save, Load, Options, Quit |
+| RetroArch | Continue, Save, Load, Options, Save & quit |
 | PortMaster ports | Continue, Options, Quit |
 | Other emulators | Continue, Options, Quit |
 
