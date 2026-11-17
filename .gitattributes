@@ -1,0 +1,2 @@
+# This upstream patch retains CRLF and the unified diff context prefix, including blank context lines.
+android/patches/clownmdemu-restore-palette.patch whitespace=cr-at-eol,-space-before-tab,-blank-at-eol

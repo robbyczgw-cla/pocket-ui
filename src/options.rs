@@ -185,6 +185,17 @@ pub const GROUPS: &[Group] = &[
                 default: 0,
                 shown_when: None,
             },
+            // N64, PSP, Dreamcast and PlayStation on the handhelds whose GPU was measured for it (`render_scale`): the same row as the
+            // Resolution of PS2, GameCube, Wii and Xbox. Its default and the choices offered are the handheld's
+            // (`console_default`, `offered_in`); the core reads it when the game loads.
+            Setting {
+                key: crate::render_scale::KEY,
+                name: "Resolution",
+                desc: "The resolution the 3D picture is drawn at. Original is the console's own; 2x and up are sharper and cost the GPU more. Takes effect the next time the game starts.",
+                choices: &[c("1", "Original"), c("2", "2x"), c("3", "3x"), c("4", "4x")],
+                default: 0,
+                shown_when: None,
+            },
         ],
     },
     Group {
@@ -357,6 +368,8 @@ pub fn console_default(system: &str, key: &str) -> Option<&'static str> {
         "sharpness" if DUAL_SCREEN.contains(&system) => Some("crisp"),
         "scaling" if DISC.contains(&system) || ADVENTURE.contains(&system) => Some("aspect"),
         "sharpness" if DISC.contains(&system) || ADVENTURE.contains(&system) => Some("crisp"),
+        // The handheld's measured default (`render_scale`), only where the row is there.
+        crate::render_scale::KEY => crate::render_scale::default_value(crate::render_scale::here(system)),
         // Earlier: their states are several to tens of MB (docs/HOST.md "Earlier").
         crate::timeline::KEY if !crate::timeline::default_on(system) => Some("off"),
         _ => None,
@@ -369,6 +382,7 @@ impl Group {
     pub fn visible(&self, values: Option<&GameSettings>) -> Vec<&Setting> {
         self.settings
             .iter()
+            .filter(|s| without_console(s, values))
             .filter(|s| values.is_none_or(|v| applies(s.key, &v.system) && !(v.hardcore && HARDCORE_OUT.contains(&s.key))))
             .filter(|s| match s.shown_when {
                 None => true,
@@ -386,7 +400,7 @@ impl Group {
     /// the largest set shows at a time: the frame's colour, or Sharpness and Effect (and on the GBA the LCD grid's colours)
     /// under Custom. The preview stays where it is while the Look or the frame changes.
     pub fn max_rows(&self, values: Option<&GameSettings>) -> usize {
-        let applying: Vec<&Setting> = self.settings.iter().filter(|s| values.is_none_or(|v| applies(s.key, &v.system))).collect();
+        let applying: Vec<&Setting> = self.settings.iter().filter(|s| without_console(s, values) && values.is_none_or(|v| applies(s.key, &v.system))).collect();
         let always = applying.iter().filter(|s| s.shown_when.is_none()).count();
         let mut under: BTreeMap<(&str, &str), usize> = BTreeMap::new();
         for s in &applying {
@@ -410,6 +424,12 @@ impl Group {
     pub fn descs(&self) -> Vec<&'static str> {
         self.settings.iter().flat_map(|s| std::iter::once(s.desc).chain(android_desc(s.key)).chain(value_descs(s.key).iter().map(|(_, d)| *d)).chain(extra_descs(s.key))).collect()
     }
+}
+
+/// Rows that belong to a console's own values: Resolution is there only for some consoles on some handhelds (`render_scale`),
+/// so with no values (no console known) it is not counted or shown.
+fn without_console(s: &Setting, values: Option<&GameSettings>) -> bool {
+    values.is_some() || s.key != crate::render_scale::KEY
 }
 
 /// LCD colours also show under Look = Custom while Effect is the LCD grid (the GBA's), not only under the LCD grid Look.
@@ -548,6 +568,8 @@ pub fn offered_in(setting: &Setting, value: &str, system: &str, android: bool) -
         "frame" => frame_systems(value).is_none_or(|systems| systems.contains(&system)),
         // LCD grid for the handhelds, Scanlines and Old TV for the rest (`look::kind`).
         LOOK => look::Look::from_value(value).is_none_or(|l| look::offered(l, Some(system))),
+        // Only the factors that run at full speed on this handheld.
+        crate::render_scale::KEY => crate::render_scale::offers(crate::render_scale::here(system), value),
         _ => true,
     }
 }
@@ -579,6 +601,8 @@ pub fn applies_in(key: &str, system: &str, android: bool) -> bool {
         crate::timeline::KEY => crate::hostsys::find(system).is_none_or(|h| h.no_states.is_none()),
         // No fan (the H700 handhelds, the Brick): the row set a fan that isn't there (settings walk 06.11.).
         "fan" => crate::device::current().has_fan(),
+        // N64, PSP, Dreamcast and PlayStation on a handheld measured for it (`render_scale`); nowhere else, Android included (above).
+        crate::render_scale::KEY => crate::render_scale::here(system).is_some(),
         _ => true,
     }
 }
@@ -1165,6 +1189,30 @@ mod tests {
             assert_ne!(v["scaling"], "integer-smaller", "{sys}");
             assert_eq!((v["frame_colour"].as_str(), v["frame_tv"].as_str()), ("grey", "plastic"));
         }
+    }
+
+    #[test]
+    fn resolution_is_the_render_scale_row_and_stays_out_where_the_handheld_was_not_measured() {
+        let row = setting(crate::render_scale::KEY).expect("Picture has Resolution");
+        assert_eq!(row.name, "Resolution", "the same row name as PS2, GameCube, Wii and Xbox");
+        assert_eq!(row.choices.iter().map(|c| c.value).collect::<Vec<_>>(), crate::render_scale::VALUES);
+        assert!(row.desc.ends_with("Takes effect the next time the game starts."));
+        assert!(GROUPS.iter().find(|g| g.name == "Picture").unwrap().settings.iter().any(|s| s.key == row.key));
+        // This test machine is no handheld (`device::current` has no model): no row, no starting value, no value offered,
+        // so a console's Picture page and what pocket-core is given stay as they were. The handhelds' numbers are
+        // `render_scale`'s tests; these are the places the page asks.
+        if crate::device::current().model.is_none() {
+            for sys in ["n64", "psp", "dreamcast", "gba", "psx"] {
+                assert!(!applies_in(row.key, sys, false), "{sys}");
+                assert_eq!(console_default(sys, row.key), None, "{sys}");
+                assert!(!offered_in(row, "2", sys, false), "{sys}");
+            }
+        }
+        // The Handheld view's This game page lists only the rows it hands the player (`ANDROID_PLAYER_SETTINGS`); the player's
+        // own Options page has Resolution (`pause_options::picture_rows`).
+        assert!(!applies_in(row.key, "n64", true), "not on the Handheld view's This game page");
+        let picture = GROUPS.iter().find(|g| g.name == "Picture").unwrap();
+        assert!(picture.visible(None).iter().all(|s| s.key != row.key), "no console known: no Resolution row");
     }
 
     #[test]

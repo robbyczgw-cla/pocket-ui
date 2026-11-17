@@ -587,15 +587,14 @@ const SETTINGS_GROUPS: [(&str, &[SettingsRow]); 8] = [
     ]),
     // "Look" with a zero-width mark: the same word as its first row in English, a different one in German (Aussehen,
     // the row Ansicht); the German table looks strings up whole (`i18n`), and the mark is painted as nothing.
-    // How pocket-ui looks: the layout first, then the style rows, the reading aids (Text size, Zoom in the pause menu),
-    // what moves (Motion, Game start animation) and the extras you see (Settings v2, 2026-11-16).
+    // How pocket-ui looks: the layout first, then the style rows, Text size, what moves (Motion, Game start animation)
+    // and the extras you see (Settings v2, 2026-11-16; Zoom in the pause menu went to Playing in 0.5.1).
     (LOOK_CATEGORY, &[
         ("Layout", Opens::Setup(Only::Look), "How your games stand: Shelf, Easy, Split or Cabinet, with a live preview."),
         ("Appearance", Opens::Appearance, "Dark, Light, or Automatic by the time of day."),
         ("Colours", Opens::Colours, "The colours of every page. Left/right: the next set."),
         ("Style", Opens::Font, "Barlow or Pixel type, or Retro: pixel letters, frames and icons everywhere."),
         ("Text size", Opens::TextSize, "Larger text on every screen, fewer rows on a page."),
-        ("Zoom in the pause menu", Opens::ZoomInPause, "Zoom on the pause menu's first page. It is always under Options."),
         ("Motion", Opens::Motion, "Full: selections glide. Reduced: only fades. Off: nothing moves."),
         (GAME_START_ROW, Opens::Animations, "Cozy: watch your game slide into the console. Quick: straight into the game."),
         (app_cozy_extras::SETTINGS_NAME, Opens::CozyExtras, "The cabinet's TV, stickers, playful cases, old-TV switch-on and more: each on or off."),
@@ -625,6 +624,8 @@ const SETTINGS_GROUPS: [(&str, &[SettingsRow]); 8] = [
         ("Remind me where I was", Opens::RemindWhere, "Back after two weeks or more: when you played last, and your note, while the game loads."),
         ("Screen frames", Opens::Frames, "Auto frames on the handhelds, or on every console."),
         ("Over the game", Opens::OverGame, "The frame rate, or the sensors too, over every game."),
+        // In Playing since 0.5.1: it acts over a game, and it stood too high in Look, under Text size (a hand walk).
+        ("Zoom in the pause menu", Opens::ZoomInPause, "Zoom on the pause menu's first page. It is always under Options."),
         (app_perf_fan::SETTINGS_NAME, Opens::PerfFan, "Processor speed and fan, in games and in menus."),
         (app_achievements::SETTINGS_NAME, Opens::Achievements, "Earn achievements in your games."),
     ]),
@@ -1124,7 +1125,7 @@ struct QuickMenu {
     players: Option<pocket_ui::players_page::PlayersPage>,
     /// The Zoom page while it is open (`app_zoom`).
     zoom: Option<pocket_ui::zoom::Zoom>,
-    /// Zoom has a row on the main page: Big text is on or Settings → Look → Zoom in the pause menu is (`app_zoom`).
+    /// Zoom has a row on the main page: Big text is on or Settings → Playing → Zoom in the pause menu is (`app_zoom`).
     zoom_row: bool,
     /// Where B on the Zoom page goes (`app_zoom`).
     zoom_back: app_zoom::Back,
@@ -1212,9 +1213,9 @@ fn opt_entries(emu: Option<&EmuMenu>, cheats: bool) -> Vec<OptEntry> {
         let at = v.iter().position(|e| *e == OptEntry::Controls).or_else(|| (!v.is_empty()).then_some(0)).map_or(0, |i| i + 1);
         v.insert(at, OptEntry::Cheats);
     }
-    // Zoom next to Picture and Controls, before Cheats (`app_zoom`).
-    let at = v.iter().position(|e| *e == OptEntry::Controls).or_else(|| (!v.is_empty()).then_some(0)).map_or(0, |i| i + 1);
-    v.insert(at, OptEntry::Zoom);
+    // Zoom after what changes the game (`app_zoom`): it stood second, under Picture, and a niche help read as one of the
+    // main things (0.5.1, the hand test: the Zoom row in Settings was too prominent too; it went down to Playing).
+    v.push(OptEntry::Zoom);
     v.push(OptEntry::RunsOn);
     v.push(OptEntry::Keep);
     v.push(OptEntry::Restore);
@@ -1244,9 +1245,9 @@ fn opt_entries(emu: Option<&EmuMenu>, cheats: bool) -> Vec<OptEntry> {
         let at = v.iter().position(|e| *e == OptEntry::Controls).or_else(|| (!v.is_empty()).then_some(0)).map_or(0, |i| i + 1);
         v.insert(at, OptEntry::Cheats);
     }
-    // Zoom next to Picture and Controls, before Cheats (`app_zoom`).
-    let at = v.iter().position(|e| *e == OptEntry::Controls).or_else(|| (!v.is_empty()).then_some(0)).map_or(0, |i| i + 1);
-    v.insert(at, OptEntry::Zoom);
+    // Zoom after what changes the game (`app_zoom`): it stood second, under Picture, and a niche help read as one of the
+    // main things (0.5.1, the hand test: the Zoom row in Settings was too prominent too; it went down to Playing).
+    v.push(OptEntry::Zoom);
     v.push(OptEntry::RunsOn);
     v.push(OptEntry::Keep);
     v.push(OptEntry::Restore);
@@ -1388,6 +1389,11 @@ enum MainItem {
 }
 
 impl MainItem {
+    /// What the row says on screen: Quit reads "Save & quit" where it keeps the moment (`quit_saves`).
+    fn shown(self, quit_saves: bool) -> &'static str {
+        if self == MainItem::Quit && quit_saves { "Save & quit" } else { self.label() }
+    }
+
     fn label(self) -> &'static str {
         match self {
             MainItem::Continue => "Continue",
@@ -1402,6 +1408,13 @@ impl MainItem {
             MainItem::Zoom => "Zoom",
             MainItem::Quit => "Quit",
         }
+    }
+
+    /// Whether A opens a page of its own (Options, Achievements, Pixel Path, Players, Zoom): the row ends in the drawn
+    /// angle on every row and A's hint says Open, as Settings' page rows (0.5.1, the hand test: which rows open a page
+    /// was not clear in the pause menu either). Continue, Save, Load, Earlier, Disc and Quit act right there.
+    fn opens_page(self) -> bool {
+        matches!(self, MainItem::Options | MainItem::Achievements | MainItem::PixelPath | MainItem::Players | MainItem::Zoom)
     }
 }
 
@@ -1731,7 +1744,7 @@ struct App {
     remember_quit: bool,
     /// Settings → Playing → Remind me where I was (settings.json's `where_was_i`; Off unless switched on).
     remind_where: bool,
-    /// Settings → Look → Zoom in the pause menu (settings.json's `zoom_in_pause`): Zoom on the pause menu's main page
+    /// Settings → Playing → Zoom in the pause menu (settings.json's `zoom_in_pause`): Zoom on the pause menu's main page
     /// (Big text shows it too; Zoom is under Options either way, `app_zoom::zoom_row_on`).
     zoom_in_pause: bool,
     /// Settings → Playing → Console boot screen (settings.json's `boot_screen`): pocket-core reads it itself at a game's start;
@@ -2885,14 +2898,14 @@ impl App {
             (Page::Options { sel }, b) if b == CONFIRM && entries[sel] == OptEntry::Restore => {
                 if !was_armed {
                     menu.restore_armed = true;
-                    menu.note = Some("Press A again to restore the defaults. B keeps your settings.");
+                    menu.note = Some(pocket_ui::pause_options::RESTORE_ASK);
                 } else if let Some(s) = menu.settings.as_mut() {
                     s.restore_defaults();
                     if let Some(emu) = menu.emu.as_mut() {
                         emu.restored();
                     }
                     control::pocket_core("reload");
-                    menu.note = Some("Back to defaults.");
+                    menu.note = Some(pocket_ui::pause_options::RESTORE_DONE);
                 }
                 Page::Options { sel }
             }
@@ -3364,7 +3377,7 @@ impl App {
             let load_chips: Vec<String> = menu_loads.iter().map(|t| states::chip(*t)).collect();
             let mut need = 0;
             for &row in &items {
-                let label = if row == MainItem::Quit && quit_saves { "Save & quit" } else { row.label() };
+                let label = row.shown(quit_saves);
                 let rest = match row {
                     MainItem::Save if slotted => Some(states::chip(save_target)),
                     MainItem::Load if slotted => load_chips.iter().max_by_key(|t| t.chars().count()).cloned(),
@@ -3373,7 +3386,8 @@ impl App {
                     _ => None,
                 };
                 let chip_w = rest.map_or(0, |t| NU_SMALL as i32 / 2 + self.text.width(Face::Body, NU_FONT, &t));
-                need = need.max(self.text.width(Face::Body, NU_FONT, label) + chip_w);
+                let angle_w = if row.opens_page() { NU_SMALL as i32 / 2 + self.text.width(Face::Body, NU_FONT, ">") } else { 0 };
+                need = need.max(self.text.width(Face::Body, NU_FONT, label) + chip_w + angle_w);
             }
             retro_list_w(c.w, text_x + need + RETRO_ROW_END - pad)
         } else {
@@ -3386,7 +3400,7 @@ impl App {
         }
         for (i, &row) in items.iter().enumerate() {
             // Quit says what it does: it saves the moment unless Continue where I quit is off (or there is nothing to save).
-            let label = if row == MainItem::Quit && quit_saves { "Save & quit" } else { row.label() };
+            let label = row.shown(quit_saves);
             let y = top + i as i32 * step;
             let enabled = match row {
                 // With Earlier chosen, the preview is Earlier's: Load is there when anything can be loaded.
@@ -3429,20 +3443,28 @@ impl App {
                     }
                 });
             let chip_w = chip.as_ref().map_or(0, |t| NU_SMALL as i32 / 2 + self.text.width(Face::Body, NU_FONT, t));
+            // A row that opens a page ends in the drawn angle on every row (`MainItem::opens_page`): Retro's at the
+            // window's right edge, as a Settings list's; the plain look's after the name, inside the selected pill.
+            let angle_w = if row.opens_page() { NU_SMALL as i32 / 2 + self.text.width(Face::Body, NU_FONT, ">") } else { 0 };
+            let fg = if i == sel { pal().ink } else if !enabled { if retro { pal().off } else { 0x7f7f7f } } else if retro { pal().text } else { 0xffffff };
             if retro {
                 if i == sel {
                     pocket_ui::retro::bar(c, pad + 3 * u, y + 2, list_w - 6 * u, step - 4);
                 }
                 let icon_y = y + (step - pocket_ui::retro::ICON * icon_k) / 2;
                 pocket_ui::retro::icon(c, retro_icon(row), icon_x, icon_y, icon_k);
-                let fg = if i == sel { pal().ink } else if enabled { pal().text } else { pal().off };
-                let label = self.text.fit(Face::Body, NU_FONT, label, pad + list_w - RETRO_ROW_END - text_x);
+                let label = self.text.fit(Face::Body, NU_FONT, label, pad + list_w - RETRO_ROW_END - text_x - angle_w);
                 self.text.draw(c, Face::Body, NU_FONT, text_x, baseline, fg, &label);
             } else if i == sel {
-                c.round_rect(pad, y, label_w + chip_w + 2 * NU_BTN_PAD, step, step / 2, pal().select);
+                pocket_ui::nav_probe::focus(c, (pad, y, label_w + chip_w + angle_w + 2 * NU_BTN_PAD, step));
+                c.round_rect(pad, y, label_w + chip_w + angle_w + 2 * NU_BTN_PAD, step, step / 2, pal().select);
                 self.text.draw(c, Face::Body, NU_FONT, pad + NU_BTN_PAD, baseline, pal().ink, label);
             } else {
-                self.text.draw(c, Face::Body, NU_FONT, pad + NU_BTN_PAD, baseline, if enabled { 0xffffff } else { 0x7f7f7f }, label);
+                self.text.draw(c, Face::Body, NU_FONT, pad + NU_BTN_PAD, baseline, fg, label);
+            }
+            if row.opens_page() {
+                let right = if retro { pad + list_w - RETRO_ROW_END } else { text_x + label_w + angle_w };
+                pocket_ui::kit::row_value_in(c, &mut self.text, NU_FONT, right, baseline, ">", (fg, fg));
             }
             if let Some(chip) = chip {
                 // Its arrows drawn, as every list's (`kit::row_value`).
@@ -3576,7 +3598,8 @@ impl App {
             vec![("< >", if item == MainItem::Save { "Slot" } else { "State" }), ("SELECT", "Recent games"), ("B", "Back"), ("A", "OK")]
         } else {
             // Where the four don't fit whole, SELECT's goes first and START's stays: it is the way to the quick settings.
-            vec![("START", "Quick settings"), ("SELECT", "Recent games"), ("B", "Back"), ("A", "OK")]
+            // A row that opens a page says so, as Settings' and Options' do.
+            vec![("START", "Quick settings"), ("SELECT", "Recent games"), ("B", "Back"), ("A", if item.opens_page() { "Open" } else { "OK" })]
         };
         // Easy has no game switcher: nothing here names SELECT.
         if self.big_on() {
@@ -3616,7 +3639,8 @@ impl App {
                         OptEntry::Zoom => ("Zoom".into(), ">".into(), "The picture larger, to read small text. Move with the D-pad.".into()),
                         OptEntry::Cheats => {
                             let on = menu.cheats.as_ref().map_or(0, |c| c.enabled());
-                            ("Cheats".into(), if on > 0 { format!("{on} on") } else { ">".into() }, "Infinite lives and the like, from the libretro cheat database.".into())
+                            // A page's row ends in its angle with a value too ("2 on ›"), as Settings' "Off ›".
+                            ("Cheats".into(), if on > 0 { format!("{on} on >") } else { ">".into() }, "Infinite lives and the like, from the libretro cheat database.".into())
                         }
                         OptEntry::RunsOn => ("Runs on".into(), ">".into(), "Which emulator plays this game or this console: pocket-core, RetroArch or another.".into()),
                         OptEntry::Keep => {
@@ -3626,7 +3650,7 @@ impl App {
                             };
                             ("Keep for".into(), value.into(), desc.into())
                         }
-                        OptEntry::Restore => ("Restore defaults".into(), String::new(), "Removes the saved settings for this console and this game.".into()),
+                        OptEntry::Restore => ("Restore defaults".into(), String::new(), pocket_ui::pause_options::RESTORE_DESC.into()),
                     })
                     .collect();
                 (rows, sel, menu.note.map(str::to_string), Some("Options".to_string()))
@@ -3776,7 +3800,7 @@ impl App {
         let explanation = self.menu.as_ref().is_some_and(|m| matches!(m.page, Page::Cheats { .. }) && m.cheats.as_ref().is_some_and(|c| !c.actionable(sel)));
         let hints: &[(&str, &str)] = match rows.get(sel).map(|r| r.1.as_str()) {
             _ if explanation => &[("B", "Back")],
-            Some(">") => &[("B", "Back"), ("A", "Open")],
+            Some(v) if v.ends_with('>') => &[("B", "Back"), ("A", "Open")],
             Some("") | None => &[("B", "Back"), ("A", "Choose")],
             Some(_) => PICTURE_HINTS,
         };
@@ -4009,18 +4033,14 @@ impl App {
                 Opens::About => self.open_about(),
                 // One press: the file is written and the sheet says where it went (Settings → System → About has the row too).
                 Opens::Report => self.open_report(),
-                Opens::Haptics => {
-                    #[cfg(feature = "brick")]
-                    let on_brick = pocket_ui::device::brick();
-                    #[cfg(feature = "brick")]
-                    if on_brick {
-                        #[cfg(feature = "brick")]
-                        self.brick_haptics_step(1);
-                    } else {
-                        pocket_ui::rumble::set_menu_haptics(&self.data_dir, !pocket_ui::rumble::menu_haptics());
-                    }
-                    #[cfg(not(feature = "brick"))]
-                    pocket_ui::rumble::set_menu_haptics(&self.data_dir, !pocket_ui::rumble::menu_haptics());
+                #[cfg(feature = "brick")]
+                Opens::Haptics if pocket_ui::device::brick() => {
+                    self.brick_haptics_step(1);
+                    Some(SettingsPage::List(sel))
+                }
+                // On or off: A, Left and Right switch it the same way (`flip_settings_switch`).
+                Opens::Haptics | Opens::RememberQuit | Opens::RemindWhere | Opens::ZoomInPause | Opens::BootScreen => {
+                    self.flip_settings_switch(SETTINGS[sel].1);
                     Some(SettingsPage::List(sel))
                 }
                 Opens::Extra(e) => {
@@ -4034,26 +4054,6 @@ impl App {
                 }
                 Opens::Kids => {
                     self.kids_open_flow(false);
-                    Some(SettingsPage::List(sel))
-                }
-                Opens::RememberQuit => {
-                    self.remember_quit = !self.remember_quit;
-                    self.save_settings();
-                    Some(SettingsPage::List(sel))
-                }
-                Opens::RemindWhere => {
-                    self.remind_where = !self.remind_where;
-                    self.save_settings();
-                    Some(SettingsPage::List(sel))
-                }
-                Opens::ZoomInPause => {
-                    self.zoom_in_pause = !self.zoom_in_pause;
-                    self.save_settings();
-                    Some(SettingsPage::List(sel))
-                }
-                Opens::BootScreen => {
-                    self.boot_screen = !self.boot_screen;
-                    self.save_settings();
                     Some(SettingsPage::List(sel))
                 }
                 Opens::Animations => {
@@ -4156,7 +4156,7 @@ impl App {
                 Some(SettingsPage::List(sel))
             }
             (Some(SettingsPage::List(sel)), Button::Left | Button::Right) if matches!(SETTINGS[sel].1, Opens::Frames) => {
-                self.frames = self.frames.toggled();
+                self.frames = if b == Button::Left { self.frames.back() } else { self.frames.toggled() };
                 self.save_settings();
                 Some(SettingsPage::List(sel))
             }
@@ -4186,6 +4186,13 @@ impl App {
             (Some(SettingsPage::List(sel)), Button::Left | Button::Right) if matches!(SETTINGS[sel].1, Opens::ScreenColour) => {
                 let now = self.sys.look().warmth;
                 self.set_screen_colour(now + if b == Button::Left { -1 } else { 1 });
+                Some(SettingsPage::List(sel))
+            }
+            // The on/off rows: Left and Right switch them as A does (0.5.1: Zoom in the pause menu took only A, a hand
+            // walk). Every row that changes in place takes Left/Right (`app_settings_groups::changes_in_place`,
+            // tests/user_journeys.rs walks them all).
+            (Some(SettingsPage::List(sel)), Button::Left | Button::Right) if matches!(SETTINGS[sel].1, Opens::Haptics | Opens::RememberQuit | Opens::RemindWhere | Opens::ZoomInPause | Opens::BootScreen) => {
+                self.flip_settings_switch(SETTINGS[sel].1);
                 Some(SettingsPage::List(sel))
             }
             (Some(SettingsPage::Starter), b) => self.starter_input(b),
@@ -4367,7 +4374,12 @@ impl App {
                 } else if screen_colour {
                     self.nu_hints(c, &[("B", "Back"), ("< >", "Change"), ("A", "Neutral")])
                 } else {
-                    self.nu_hints(c, &[("B", "Back"), ("A", if matches!(SETTINGS[sel].1, Opens::Haptics | Opens::Extra(_) | Opens::Sounds | Opens::OnStart | Opens::RememberQuit | Opens::RemindWhere | Opens::ZoomInPause | Opens::BootScreen | Opens::Animations | Opens::Appearance | Opens::Colours | Opens::Font | Opens::Motion | Opens::Frames | Opens::OverGame | Opens::Language | Opens::TextSize) { "Change" } else { "Open" })])
+                    // A row that changes in place says Left/Right (A still changes it too); a page's row says A opens it.
+                    if app_settings_groups::changes_in_place(SETTINGS[sel].1) {
+                        self.nu_hints(c, &[("B", "Back"), ("< >", "Change")])
+                    } else {
+                        self.nu_hints(c, &[("B", "Back"), ("A", "Open")])
+                    }
                 };
                 // The selected row's line at the bottom; the category keeps room over the hints when one of its rows needs
                 // it (`app_settings_groups::desc_room`).
@@ -4683,6 +4695,21 @@ impl App {
                 self.manual.set_velocity(v, now);
             }
             _ => {}
+        }
+    }
+
+    /// One of Settings' on/off rows switched (A, Left or Right on it) and kept.
+    fn flip_settings_switch(&mut self, opens: Opens) {
+        match opens {
+            Opens::Haptics => pocket_ui::rumble::set_menu_haptics(&self.data_dir, !pocket_ui::rumble::menu_haptics()),
+            Opens::RememberQuit => self.remember_quit = !self.remember_quit,
+            Opens::RemindWhere => self.remind_where = !self.remind_where,
+            Opens::ZoomInPause => self.zoom_in_pause = !self.zoom_in_pause,
+            Opens::BootScreen => self.boot_screen = !self.boot_screen,
+            _ => return,
+        }
+        if !matches!(opens, Opens::Haptics) {
+            self.save_settings();
         }
     }
 
@@ -5625,9 +5652,12 @@ impl App {
     /// Home's page up to what goes over it (the way back, the launch): false when it was a page of its own (no games,
     /// the starter) and nothing goes over it.
     fn paint_home_page(&mut self, c: &mut Canvas, with_hints: bool, big: bool) -> bool {
+        // The Cabinet clears the page itself and paints its own top line with the shelf's name (`paint_cabinet`): a
+        // second clear of the whole page here cost the Brick a millisecond a frame for nothing (docs/TRIMUI-BRICK.md).
+        let own_page = !big && self.theme == Theme::Cabinet && !self.items.is_empty() && !self.starter_home();
         if big {
             app_big_shelf::paint_background(c);
-        } else {
+        } else if !own_page {
             c.clear(pal().void);
         }
         // Set again by the Shelf look's label: the game card rises out of it (`app_motion`).
@@ -6008,17 +6038,23 @@ impl App {
         self.paint_hint_row(c, &hints);
     }
 
-    /// Button hints along the bottom edge; the ones for a single button can be tapped. When they change, the old
-    /// ones fade out as the new ones fade in (`app_motion`).
+    /// Button hints along the bottom edge; the ones for a single button can be tapped. When they change at rest, the
+    /// old ones fade out as the new ones fade in; during a move the new ones come at once (`app_motion`).
     fn paint_hint_row(&mut self, c: &mut Canvas, hints: &[(&str, &str)]) {
-        if let Some((old, p)) = self.motion.hints_fade(hints, Instant::now()) {
+        let now = Instant::now();
+        let moving = self.moving_now(now);
+        if let Some((old, p)) = self.motion.hints_fade(hints, now, moving) {
             let old: Vec<(&str, &str)> = old.iter().map(|(k, l)| (k.as_str(), l.as_str())).collect();
             let (y, h) = (pocket_ui::kit::hint_bar_top(c.h) - 8, pocket_ui::kit::PILL + 16);
+            // Only from the left end of the longer of the two pills: mixing the whole width cost the Brick 4 ms a frame
+            // all through the fade, which starts with nearly every move in the Cabinet (docs/TRIMUI-BRICK.md).
+            let left = |app: &mut Self, hints: &[(&str, &str)]| pocket_ui::kit::page_hints_left(&mut app.text, c.w, c.h, hints);
+            let x = (left(self, &old).min(left(self, hints)) - 8).max(0);
             // The old ones go faster than the new ones come, so the two rows hardly overlap where the hints moved.
-            pocket_ui::motion::layer(c, 0, y, c.w, h, ((1.0 - p).powi(3) * 255.0) as u8, |c| self.paint_hint_keys(c, &old, false));
+            pocket_ui::motion::layer(c, x, y, c.w - x, h, ((1.0 - p).powi(3) * 255.0) as u8, |c| self.paint_hint_keys(c, &old, false));
             // For the snapshot checks of Settings → Text size: the old hints are on their way out, not read.
             pocket_ui::text::boxes::painted_over(c, (0, y, c.w, h));
-            pocket_ui::motion::layer(c, 0, y, c.w, h, (p * 255.0) as u8, |c| self.paint_hint_keys(c, hints, true));
+            pocket_ui::motion::layer(c, x, y, c.w - x, h, (p * 255.0) as u8, |c| self.paint_hint_keys(c, hints, true));
             return;
         }
         self.paint_hint_keys(c, hints, true);
@@ -6173,6 +6209,10 @@ fn snapshot(app: &mut App, args: &[String]) {
                 app.moved_at = Instant::now() - Duration::from_secs(5);
             }
             app.paint(&mut c);
+            // Where the big case stands, for the tests that keep it clear of the top line (tests/big_shelf.rs).
+            if let Some((front, x, y)) = app.cabinet.shelf_lit.as_ref() {
+                println!("big-case x={x} y={y} w={} h={}", front.w, front.h);
+            }
             if eject_shot(app, &mut buf, w, h, out) { return; }
             write_png(&buf, w, h, out);
         }
@@ -6291,6 +6331,11 @@ fn snapshot(app: &mut App, args: &[String]) {
         app.prefetch_check(rest, w, h);
         return;
     }
+    // "search-start-check:<look>:<system>": a game started from the search shows its cover in the first frame.
+    if let Some(rest) = state.strip_prefix("search-start-check:") {
+        app.search_start_check(rest, w, h);
+        return;
+    }
     // "bench-prefetch:<look>": a fast scroll with cold covers, read on their threads (`App::bench_prefetch`).
     if let Some(look) = state.strip_prefix("bench-prefetch").map(|r| r.trim_start_matches(':')) {
         let b = app.bench_prefetch(look, w, h);
@@ -6332,6 +6377,12 @@ fn snapshot(app: &mut App, args: &[String]) {
         app.running = None;
         assert!(!app.wait_for_full_size(800, 600));
         assert!(!app.wait_for_full_size(640, 480));
+    }
+    // "bench-settings-pages": every category's first page, in list and tab-bar focus, and the strings that ran patterns.
+    if state == "bench-settings-pages" {
+        let (pages, patterns, found) = app.settings_pages_patterns(w, h);
+        println!("bench-settings-pages pages={pages} patterns={patterns} strings={}", found.join(" | "));
+        return;
     }
     // "bench-settings": the first frame of Settings in numbers, on stdout (`App::bench_settings`, tests/settings_open.rs).
     if state == "bench-settings" {
@@ -6731,8 +6782,10 @@ fn snapshot(app: &mut App, args: &[String]) {
         app.frozen_snapshot();
         let mut buf = vec![0u32; (w * h) as usize];
         let mut c = snap_canvas(&mut buf, w, h);
+        let page_px = c.pixels().len() as u64;
+        pocket_ui::gfx::take_cleared();
         app.paint(&mut c);
-        app.cabinet_snapshot_outcome(h as i32);
+        app.cabinet_snapshot_outcome(h as i32, page_px);
         // POCKETUI_SNAPSHOT_EJECT_MS and the rest: the way back from the game the cabinet stands on (`eject_snapshot`).
         if eject_shot(app, &mut buf, w, h, out) {
             return;
@@ -6790,13 +6843,16 @@ fn snapshot(app: &mut App, args: &[String]) {
         GameSettings::load(&tmp, "snes", std::path::Path::new("Super Metroid.sfc"))
     } else if state.starts_with("picture-psx") || state.starts_with("picture-custom") {
         GameSettings::load(&tmp, "psx", std::path::Path::new("Some Game (USA).chd"))
+    } else if state.starts_with("picture-n64") {
+        // With `:device=miniv2` its Resolution row is there (`render_scale`), last.
+        GameSettings::load(&tmp, "n64", std::path::Path::new("Super Mario 64 (USA).z64"))
     } else {
         GameSettings::load(&tmp, "gbc", std::path::Path::new("uCity.gbc"))
     };
     if state.starts_with("picture-custom") {
         settings.step(options::setting(options::LOOK).unwrap(), -1);
         settings.values.insert("effect".into(), "scanlines".into());
-    } else if !state.starts_with("picture-psx") {
+    } else if !state.starts_with("picture-psx") && !state.starts_with("picture-n64") {
         settings.step(options::setting("effect").unwrap(), 1);
     }
     // "picture:<row>:left|right": Screen orientation turned that way (its row is the last one).
@@ -6941,7 +6997,7 @@ fn snapshot(app: &mut App, args: &[String]) {
     let n = |i: usize| nums.get(i).copied().unwrap_or(0);
     let page = match name {
         "options" => Page::Options { sel: n(0) },
-        "picture" | "picture-gba" | "picture-snes" | "picture-psx" | "picture-custom" => Page::Group { group: group("Picture"), sel: if nums.is_empty() { 1 } else { n(0) } },
+        "picture" | "picture-gba" | "picture-snes" | "picture-psx" | "picture-custom" | "picture-n64" => Page::Group { group: group("Picture"), sel: if nums.is_empty() { 1 } else { n(0) } },
         // "shortcuts[:<row>]": Fast-forward unless a row is given (6: Over the game).
         "shortcuts" => Page::Group { group: group("Shortcuts"), sel: nums.first().copied().unwrap_or(3) },
         // "extras:<row>": Rumble unless a row is given (2: Earlier states, 5: Performance, 6: Fan).

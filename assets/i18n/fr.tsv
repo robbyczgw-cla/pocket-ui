@@ -824,7 +824,7 @@ Timeline	Chronologie
 Discontinued	Arrêtée
 Sold	Vendues
 On this Pocket	Sur ce Pocket
-{s} · last: {t}	{s} · dernier : {t}
+{t} · last: {s}	{t} · dernier : {s}
 Your games	Tes jeux
 {s}, last {t}	{s}, dernier {t}
 Played	Joué
@@ -1087,6 +1087,7 @@ Saved. This takes effect the next time the game starts.	Enregistré. Pris en com
 Original (480p)	Original (480p)
 2x (960p)	2x (960p)
 The resolution the Xbox's picture is drawn at. Original is the Xbox's own 480p; 2x (960p) is sharper and costs the GPU more. Takes effect the next time the game starts.	La résolution de dessin de l'image de la Xbox. Original, c'est le 480p de la Xbox ; 2x (960p) est plus net et pèse plus sur le GPU. Pris en compte au prochain lancement du jeu.
+The resolution the 3D picture is drawn at. Original is the console's own; 2x and up are sharper and cost the GPU more. Takes effect the next time the game starts.	La résolution de dessin de l'image 3D. Original, c'est celle de la console ; à partir de 2x, c'est plus net et ça pèse plus sur le GPU. Pris en compte au prochain lancement du jeu.
 Aspect is as large as fits, in the picture's own shape (4:3), with black bars.	Format prend la plus grande taille possible, dans la forme de l'image (4:3), avec des barres noires.
 Fullscreen fills the screen and stretches the picture.	Plein écran remplit l'écran et étire l'image.
 Integer scales by whole numbers. Takes effect the next time the game starts.	Entier agrandit par nombres entiers. Pris en compte au prochain lancement du jeu.
@@ -4092,7 +4093,7 @@ From your save	De ta sauvegarde
 Font	Police
 Look​	Visuel
 Help & tools	Aide et outils
-Shelf, Cabinet, Minimal, Cards or Split, with a live preview.	Étagère, Vitrine, Minimal, Cartes ou Divisé, avec aperçu en direct.
+Shelf, Cabinet, Minimal, Cards or Split, with a live preview.	Étagère, Vitrine, Minimal, Fiches ou Divisé, avec aperçu en direct.
 Dark, Light, or Automatic by the time of day.	Sombre, Clair ou Automatique selon l'heure.
 The colours of every page. Left/right: the next set.	Les couleurs de chaque page. Gauche/Droite : l'ensemble suivant.
 Which systems are on Home. Their games stay either way.	Quels systèmes sont sur Home. Leurs jeux restent dans tous les cas.
@@ -4589,6 +4590,11 @@ Hard mode	Mode difficile
 Difficult mode	Mode difficile
 {n}% complete	{n} % terminé
 {n} of {m} mirror shards	{n} sur {m} éclats de miroir
+{n} Jiggies	{n} Jiggies
+1 Jiggy	1 Jiggy
+{n} notes	{n} notes
+1 note	1 note
+Mission {s}: {s2}	Mission {s} : {s2}
 This console's button names show here after your first game on it.	Les noms des boutons de cette console s'affichent ici après ta première partie dessus.
 D-pad (changed)	Croix (modifiée)
 Menu	Menu
@@ -5030,8 +5036,6 @@ Help	Aide
 Short answers to the usual questions. Choose a topic.	Réponses courtes aux questions habituelles. Choisis un sujet.
 Choose your games folder	Choisis ton dossier de jeux
 Settings › Choose your ROM folder: pick the folder with one folder per system (gba, snes, psx). Games stay where they are; nothing is copied.	Paramètres › Choisis ton dossier de ROM : prends le dossier qui contient un dossier par système (gba, snes, psx). Les jeux restent où ils sont ; rien n'est copié.
-Load more systems	Télécharger plus de systèmes
-PSP, DS, Nintendo 64 and Dreamcast are optional. Settings › Cozy extras › Download now loads one over Wi-Fi; B cancels. All other systems are already in the app.	PSP, DS, Nintendo 64 et Dreamcast sont facultatifs. Paramètres › Extras cosy › Télécharger maintenant en télécharge un en Wi-Fi ; B annule. Tous les autres systèmes sont déjà dans l'app.
 In a game press Back or your handheld's Menu button. Continue, Save, Load, Options, Controls and Save & quit are in it. With a controller, A chooses and B continues.	Dans un jeu, appuie sur Retour ou sur le bouton Menu de ta console. Tu y trouves Reprendre, Sauver, Charger, Options, Commandes et Sauver et quitter. Avec une manette, A choisit et B reprend.
 Save and keep playing	Sauver et continuer à jouer
 Save & quit keeps your place and the game's own saves. Next time the game is under Continue and starts where you stopped. Save and Load have eight slots.	Sauver et quitter garde ta place et les sauvegardes du jeu. La prochaine fois, le jeu est sous Reprendre et repart d'où tu t'es arrêté. Sauver et Charger ont huit slots.
@@ -5224,3 +5228,11 @@ Game start animation	Animation de lancement
 How bright the screen is. The same as in the quick settings.	La luminosité de l'écran. La même que dans les paramètres rapides.
 How loud games and menus are. The same as in the quick settings.	Le volume des jeux et des menus. Le même que dans les paramètres rapides.
 A separate layout for each controller, in menus and games. Pairing: Connections › Bluetooth.	Une disposition par manette, dans les menus et les jeux. Appairage : Connexions › Bluetooth.
+
+# Android player: native start dialog and screen-reader controls
+Game couldn't start	Le jeu n'a pas pu démarrer
+Previous slot	Emplacement précédent
+Next slot	Emplacement suivant
+{t} · previous value	{t} · valeur précédente
+{t} · next value	{t} · valeur suivante
+Size, look and frame.	Taille, aspect et cadre.

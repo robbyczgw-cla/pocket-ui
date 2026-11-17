@@ -62,6 +62,11 @@ impl HandOver {
         HandOver { hold: hold(cozy, power_on), released: false, skipped: false }
     }
 
+    /// For `scene`'s start: its hold (`Scene::hold`), longer for a console that turns back to its front.
+    pub fn of(scene: &Scene) -> HandOver {
+        HandOver { hold: scene.hold(), released: false, skipped: false }
+    }
+
     /// A tap or any button: the picture ends and the game comes now. True the first time.
     pub fn skip(&mut self) -> bool {
         let first = !self.skipped;
@@ -249,6 +254,11 @@ pub struct Rigged {
     pub scale: f32,
     /// The handheld's display lit: its pixels taken to its light, nothing elsewhere, at the base's size (`Display`).
     pub lit: Option<Pic>,
+    /// A clamshell's display lit on its lid's underside (`ir::Lid::display`), at the art's own size as `under` (drawn through
+    /// the lid's map).
+    pub lid_lit: Option<Pic>,
+    /// The front's display lit (`ir::Rig::front_display`), at the art's size as `front`; `front` has its glass dark then.
+    pub front_lit: Option<Pic>,
     /// A cartridge's edge, one column of its own plastic (`edge_of`), made the first time it turns and kept.
     pub edge: std::cell::OnceCell<Pic>,
 }
@@ -261,7 +271,11 @@ impl Rigged {
 
     /// `load` at any number of screen pixels per pixel of the art (not whole on a short screen).
     pub fn load_scaled(system: &str, game: Game, blocks: f32) -> Option<Rigged> {
-        let f = ir::files(system, game)?;
+        Self::of_files(ir::files(system, game)?, blocks)
+    }
+
+    /// The rig of `f` at `blocks` screen pixels per pixel of its art.
+    pub fn of_files(f: ir::Files, blocks: f32) -> Option<Rigged> {
         let pic = |data: &[u8]| {
             let s = crate::system_art::decode(data)?;
             Some(Pic::of(s.w as i32, s.h as i32, s.px))
@@ -270,6 +284,28 @@ impl Rigged {
         let lit = f.rig.display.map(|d| {
             let mask = ir::display_mask(&art.px, art.w as usize, art.h as usize, d.seeds_of(), d.fuzz);
             enlarged_to(Pic::of(art.w, art.h, ir::lit_pixels(&art.px, &mask, art.w as usize, d.lit)), blocks)
+        });
+        let mut front = f.front.as_ref().and_then(|d| pic(d));
+        let front_lit = f.rig.front_display.zip(front.as_mut()).map(|(d, fp)| {
+            let mask = ir::display_mask(&fp.px, fp.w as usize, fp.h as usize, d.seeds_of(), d.fuzz);
+            // Off, the glass is dark (the picture's is light, as if on): its own pixels kept a little, under a dark tint.
+            // With the glass's anti-aliased edge (the ring `lit_pixels` lights with it), else a light outline stays round it.
+            let w = fp.w as usize;
+            let grow = |m: &[bool]| -> Vec<bool> {
+                (0..m.len()).map(|i| m[i] || (i % w > 0 && m[i - 1]) || (i % w + 1 < w && m[i + 1]) || (i >= w && m[i - w]) || m.get(i + w).copied().unwrap_or(false)).collect()
+            };
+            // Two pixels out: the photo's edge is soft over two.
+            let near = grow(&grow(&mask));
+            for (i, p) in fp.px.iter_mut().enumerate() {
+                if near[i] && *p >> 24 == 255 {
+                    *p = ir::glass_off(*p);
+                }
+            }
+            Pic::of(fp.w, fp.h, ir::lit_pixels(&fp.px, &mask, fp.w as usize, d.lit))
+        });
+        let lid_lit = f.rig.clamshell.and_then(|l| l.display).zip(f.under.as_ref().and_then(|d| pic(d))).map(|(d, u)| {
+            let mask = ir::display_mask(&u.px, u.w as usize, u.h as usize, d.seeds_of(), d.fuzz);
+            Pic::of(u.w, u.h, ir::lit_pixels(&u.px, &mask, u.w as usize, d.lit))
         });
         let (mut base, over) = (enlarged_to(art, blocks), f.over.and_then(|d| pic(&d)).map(|p| enlarged_to(p, blocks)));
         // What `over` covers whole is never seen on the base: each frame only copies a console's pixels once.
@@ -280,7 +316,7 @@ impl Rigged {
                 }
             }
         }
-        Some(Rigged { rig: f.rig, front: f.front.and_then(|d| pic(&d)), base, over, top: f.top.and_then(|d| pic(&d)), under: f.under.and_then(|d| pic(&d)), scale: blocks, lit, edge: Default::default() })
+        Some(Rigged { rig: f.rig, front, front_lit, base, over, top: f.top.and_then(|d| pic(&d)), under: f.under.and_then(|d| pic(&d)), scale: blocks, lit, lid_lit, edge: Default::default() })
     }
 }
 
@@ -606,8 +642,25 @@ impl Scene {
     /// How far the launch fade is, `elapsed` after A, 0-1: it waits for the medium to go in, and a rig's lid or tray shuts
     /// first, so its fade keeps its end and runs after the clunk.
     pub fn fade_at(&self, elapsed: Duration) -> f32 {
-        let p = (elapsed.saturating_sub(cabinet::fade_delay(self.cozy)).as_secs_f32() / FADE.as_secs_f32()).min(1.0);
+        let p = (elapsed.saturating_sub(cabinet::fade_delay(self.cozy) + self.turn_back()).as_secs_f32() / FADE.as_secs_f32()).min(1.0);
         self.rig_fade(p)
+    }
+
+    /// How much later this start's lights, fade and game window come: a console that turned round to its back for its game
+    /// turns back to its front to light its display (`ir::TURN_BACK`, a power-on with the rig's scene only).
+    pub fn turn_back(&self) -> Duration {
+        let rig = self.cozy && crate::playful::on();
+        if self.power_on.is_some() && rig && ir::turns_back(&self.system, self.kind) { ir::TURN_BACK } else { Duration::ZERO }
+    }
+
+    /// When the game's window may come (`hold`), with this scene's `turn_back`.
+    pub fn hold(&self) -> Option<Duration> {
+        hold(self.cozy, self.power_on.is_some()).map(|h| h + self.turn_back())
+    }
+
+    /// The launch animation's length (`cabinet::insert_len`), with this scene's `turn_back`.
+    pub fn len(&self) -> Duration {
+        cabinet::insert_len(self.cozy) + self.turn_back()
     }
 
     /// How much of the case still shows, `elapsed` after A: what it casts on the page goes with it.
@@ -969,7 +1022,9 @@ impl Scene {
         let scale = pics.scale;
         let st = cabinet::insert_at(elapsed, self.cozy);
         let mechanism_time = if self.cozy { elapsed } else { elapsed.mul_f32(cabinet::IN_AT_COZY.as_secs_f32() / cabinet::IN_AT.as_secs_f32()) };
-        let pose = ir::pose(rig.kind(), mechanism_time);
+        // A power-on of a console that turned round to its back: it turns back to its front and lights there (`ir::pose_of`).
+        let back = self.power_on.is_some() && pics.front_lit.is_some();
+        let pose = ir::pose_of(rig.kind(), mechanism_time, back);
         art::dim(c, 0, c.h, 256 - (st.dim * 256.0) as u32);
         let (bw, bh) = (pics.base.w, pics.base.h);
         let px = |n: i32| (n as f32 * k) as i32;
@@ -1036,6 +1091,10 @@ impl Scene {
             if k > 0.0 {
                 let (fw, fh) = (face_pic.w as f32 * scale, face_pic.h as f32 * scale);
                 art::blit_affine(c, face_pic, (cx - fw * k / 2.0, bottom - fh), (scale * k, 0.0), (0.0, scale), turn_shade, all);
+                // Turned back to its front with its game in: its display lights (`back`).
+                if let (Some(lit), true) = (&pics.front_lit, back && pose.lit > 0.0) {
+                    lit_affine(c, lit, (cx - fw * k / 2.0, bottom - fh), (scale * k, 0.0), (0.0, scale), pose.lit);
+                }
             } else {
                 let k = -k;
                 art::blit_affine(c, &pics.base, (cx + (ox - cx) * k, oy), (k, 0.0), (0.0, 1.0), turn_shade, all);
@@ -1065,7 +1124,8 @@ impl Scene {
                     art::blit(c, &front, from.0, from.1, case_fade, all);
                 }
             }
-            if flying {
+            // Turning back to its front (`back`), its game is inside behind the shut door.
+            if flying && !pose.shut_in {
                 draw_medium(c);
             }
             return;
@@ -1160,6 +1220,10 @@ impl Scene {
         if let Some(lid) = rig.clamshell {
             let opening = if self.cozy && crate::playful::on() { ((mechanism_time.as_secs_f32() * 1000.0 - 160.0) / 500.0).clamp(0.0, 1.0) } else { 1.0 };
             draw_lid(c, lid, &pics, (ox, oy), crate::cabinet::ease_out(opening), shade);
+            // Its display is in the lid: lit where the lid stands, through the lid's own map.
+            if let (Some(lit), true, true) = (&pics.lid_lit, self.power_on.is_some(), pose.lit > 0.0) {
+                lid_lit_over(c, lid, lit, &pics, (ox, oy), crate::cabinet::ease_out(opening), pose.lit);
+            }
         }
         if flying && !rig.behind && coming_down {
             draw_medium(c);
@@ -1245,6 +1309,27 @@ impl Scene {
 
 fn draw_lid(c: &mut Canvas, l: ir::Lid, pics: &Rigged, o: (f32, f32), open: f32, shade: u32) {
     draw_lid_as(c, l, pics, o, open, shade, true);
+}
+
+/// A clamshell's lit display (`Rigged::lid_lit`) over its lid drawn open `open` (`draw_lid`), `amount` (0-1) of the way to its
+/// light; nothing while the lid shows its top side (the glass is inside).
+fn lid_lit_over(c: &mut Canvas, l: ir::Lid, lit: &Pic, pics: &Rigged, o: (f32, f32), open: f32, amount: f32) {
+    let m = l.map(open);
+    if !m.under {
+        return;
+    }
+    let s = pics.scale;
+    lit_affine(c, lit, (o.0 + m.o.0 * s, o.1 + m.o.1 * s), (m.u.0 * s, m.u.1 * s), (m.v.0 * s, m.v.1 * s), amount);
+}
+
+/// Lit pixels at the art's size (`Rigged::lid_lit`, `front_lit`) laid through a map (`blit_affine`), `amount` (0-1) of the way.
+fn lit_affine(c: &mut Canvas, lit: &Pic, o: (f32, f32), u: (f32, f32), v: (f32, f32), amount: f32) {
+    let a = (amount.clamp(0.0, 1.0) * 255.0).round() as u32;
+    if a == 0 {
+        return;
+    }
+    let faded = Pic::of(lit.w, lit.h, lit.px.iter().map(|&p| if p >> 24 == 255 { a << 24 | (p & 0xff_ffff) } else { 0 }).collect());
+    art::blit_affine(c, &faded, o, u, v, 256, (0, c.h));
 }
 
 /// [`draw_lid`]; `slab`: with its thickness (a front-loader's door keeps its own look).
@@ -2074,6 +2159,132 @@ mod tests {
             }
             assert!(last.is_some());
             assert!(light_of(system) != 0, "{system}: it ends in some light");
+        }
+    }
+
+    /// Every handheld's rig in every colour it comes in: (shown as, rig id, its files).
+    fn every_handheld_rig() -> Vec<(String, &'static str, ir::Files)> {
+        let mut all = Vec::new();
+        for id in ir::rig_ids() {
+            let hardware = if id == "gba-sp" { "gba" } else { id };
+            if crate::eject::Screen::of(FormFactor::of(hardware)) != crate::eject::Screen::Lcd {
+                continue;
+            }
+            all.push((id.to_string(), id, ir::files_of(id, None).unwrap()));
+            for c in crate::system_art::colours_of(id) {
+                all.push((format!("{id} {}", c.id), id, ir::files_of(id, Some(c.rig())).unwrap()));
+            }
+        }
+        all
+    }
+
+    /// The scene of a handheld's rig `f` at its power-on, its display's light on, or off: the same moves (a PSP turns back to its
+    /// front either way), only its lit pixels left out.
+    fn rig_scene(id: &str, f: ir::Files, on: bool) -> Scene {
+        let mut s = scene(id, true);
+        s.power_on = Some(light_of(id));
+        let mut r = Rigged::of_files(f, 2.0).unwrap();
+        if !on {
+            let none = |p: &mut Option<Pic>| p.iter_mut().for_each(|p| p.px.iter_mut().for_each(|x| *x = 0));
+            (none(&mut r.lit), none(&mut r.lid_lit), none(&mut r.front_lit));
+        }
+        s.rig = Some(Rc::new(r));
+        s.rig_asked = true;
+        s
+    }
+
+    /// 16.11. (Alex's hand test, pocket, 0.4.2-test050.4): with the GBA SP the display stayed dark after the cartridge went in;
+    /// the power light came on, the game came up out of a dark screen. The SP's glass is on its lid's underside (`under.png`),
+    /// which turns open, and its rig had no display at all. Missed before: the display tests listed the rigs by hand
+    /// (`RIG_DISPLAYS`) and the SP was not on it, nor any colour. The PSP, on its back for its UMD, showed no glass at all; since
+    /// 16.11. (Alex) it turns back to its front. Now every handheld rig in every colour: just before the game's window comes
+    /// (`Scene::hold`), the console's glass is brighter than without its light, in one block of it.
+    #[test]
+    fn every_handheld_rig_in_every_colour_lights_its_display_before_the_game_comes() {
+        crate::cozy_extras::set(crate::cozy_extras::Extras::default());
+        crate::motion::set_cozy(true);
+        let bright = |p: u32| (p >> 16 & 0xff) + (p >> 8 & 0xff) + (p & 0xff);
+        let mut dark = Vec::new();
+        let all = every_handheld_rig();
+        for name in ["gba-sp", "psp", "gba milky", "gbc dandelion"] {
+            let id = name.split(' ').next().unwrap();
+            assert!(all.iter().any(|a| a.0 == name || (a.0 == id && !name.contains(' '))), "{name}: in the list");
+        }
+        for (name, id, _) in &all {
+            let files = || every_handheld_rig().into_iter().find(|a| &a.0 == name).unwrap().2;
+            let (mut on, mut off) = (rig_scene(id, files(), true), rig_scene(id, files(), false));
+            let at = on.hold().unwrap().as_millis() as u64 - 60;
+            let (a, b) = (frame(&mut on, at, STAGE), frame(&mut off, at, STAGE));
+            let lit: Vec<usize> = (0..a.len()).filter(|&i| bright(a[i]) > bright(b[i]) + 30).collect();
+            if lit.len() < 1500 {
+                dark.push(format!("{name}: {} px lit", lit.len()));
+                continue;
+            }
+            let span = |f: &dyn Fn(usize) -> usize| lit.iter().map(|&i| f(i)).fold((usize::MAX, 0), |(lo, hi), v| (lo.min(v), hi.max(v)));
+            let ((y0, y1), (x0, x1)) = (span(&|i| i / 720), span(&|i| i % 720));
+            if (y1 - y0) * (x1 - x0) >= 720 * 600 {
+                dark.push(format!("{name}: lit {x0}-{x1} x {y0}-{y1}, more than the glass"));
+            }
+        }
+        assert!(dark.is_empty(), "displays that stay dark at the power-on:\n{}", dark.join("\n"));
+    }
+
+    /// 16.11. (Alex: PSP = B): the PSP turns back to its front after its UMD door has shut, as smoothly as it turned to its
+    /// back, its display lights there; its start is longer by that turn only (about half a second, never past a second), the
+    /// others' as before. While it turns back its UMD is inside, never drawn over the door.
+    #[test]
+    fn the_psp_turns_back_to_its_front_smoothly_and_its_start_is_at_most_a_second_longer() {
+        crate::cozy_extras::set(crate::cozy_extras::Extras::default());
+        crate::motion::set_cozy(true);
+        let psp = rig_scene("psp", ir::files_of("psp", None).unwrap(), true);
+        let gba = rig_scene("gba", ir::files_of("gba", None).unwrap(), true);
+        let longer = psp.hold().unwrap() - gba.hold().unwrap();
+        assert!(longer >= Duration::from_millis(300) && longer <= Duration::from_secs(1), "{longer:?}");
+        assert_eq!(gba.turn_back(), Duration::ZERO, "the others keep their start");
+        let mut off = scene("psp", true);
+        off.power_on = None;
+        assert_eq!(off.turn_back(), Duration::ZERO, "without the power-on it stays on its back, as before");
+        let kind = ir::Kind::Lid;
+        let face = |ms: u64| ir::pose_of(kind, Duration::from_millis(ms), true).face;
+        let shut = (cabinet::IN_AT_COZY + ir::SHUT_AFTER).as_millis() as u64;
+        assert_eq!(face(shut), 1.0, "on its back until its door has shut");
+        let lit_from = (0..3000).find(|&ms| ir::pose_of(kind, Duration::from_millis(ms), true).led > 0.0).unwrap();
+        assert_eq!(face(lit_from), 0.0, "on its front before its light comes ({lit_from} ms)");
+        // As smooth as the turn to the back: no step at 60 Hz larger than that turn's largest.
+        let steps = |a: u64, b: u64, f: &dyn Fn(u64) -> f32| (a..b).step_by(16).map(|ms| (f(ms + 16) - f(ms)).abs()).fold(0.0f32, f32::max);
+        let there = steps(0, 800, &|ms| ir::pose(kind, Duration::from_millis(ms)).face);
+        let back = steps(shut - 100, lit_from + 100, &face);
+        assert!(back <= there + 1e-3 && back > 0.0, "turn back {back} vs turn there {there}");
+        // The UMD is not painted while it turns back: the frames with and without a game picture are the same.
+        let mut with = rig_scene("psp", ir::files_of("psp", None).unwrap(), true);
+        let mut without = rig_scene("psp", ir::files_of("psp", None).unwrap(), true);
+        without.game = Some(Rc::new(Pic::new(90, 90, 0xffff_0000)));
+        for ms in [shut + 40, shut + 140, shut + 240] {
+            assert!(frame(&mut with, ms, STAGE) == frame(&mut without, ms, STAGE), "{ms} ms: the UMD shows while it turns back");
+        }
+    }
+
+    /// Frames of every handheld rig's power-on for a look (`POCKETUI_HANDHELD_ON_DUMP=<dir>`): PPMs at 900, 1200, 1350, 1500 ms.
+    #[test]
+    fn dump_handheld_power_on_frames() {
+        let Some(dir) = std::env::var_os("POCKETUI_HANDHELD_ON_DUMP") else { return };
+        crate::cozy_extras::set(crate::cozy_extras::Extras::default());
+        crate::motion::set_cozy(true);
+        for (name, id, f) in every_handheld_rig() {
+            let mut s = rig_scene(id, f, true);
+            let end = s.hold().unwrap().as_millis() as u64 - 60;
+            for ms in [900u64, 1200, 1350, 1500, 1600, 1700, 1800, 1900, end] {
+                let px = frame(&mut s, ms, STAGE);
+                let (x0, y0, w, h) = (0usize, 500usize, 720usize, 520usize);
+                let mut out = format!("P6\n{w} {h}\n255\n").into_bytes();
+                for y in y0..y0 + h {
+                    for x in x0..x0 + w {
+                        let p = px[y * 720 + x];
+                        out.extend([(p >> 16) as u8, (p >> 8) as u8, p as u8]);
+                    }
+                }
+                std::fs::write(std::path::Path::new(&dir).join(format!("{}-{ms}.ppm", name.replace(' ', "-"))), out).unwrap();
+            }
         }
     }
 

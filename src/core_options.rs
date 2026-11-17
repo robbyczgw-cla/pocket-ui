@@ -538,6 +538,11 @@ pub fn android_curation(core: &str) -> Curation {
             ],
             ..curation(core)
         },
+        // N64 as on Linux: ROCKNIX's RetroArch options (every device's, SM8250's too) run GLideN64's threaded renderer, so the
+        // N64 itself runs on the core's own thread and retro_run only replays its GL calls. Android had the core's default
+        // (off): emulation and every GL call on the player's one thread, 9 ms a picture at the clock the governor gives it,
+        // peaks over 20 ms, a repeated or doubled picture in 15 of 60 a second on the Retroid Pocket Mini V2 (17.11.2026).
+        "mupen64plus_next" => Curation { defaults: &[("mupen64plus-ThreadedRenderer", "True")], ..curation(core) },
         // SNES on Android. bsnes declares 26 knobs in its own words ("PPU Deinterlace", "Coprocessor Prefer HLE"); a player
         // gets the six that change what they see or feel, in plain words (`plain_name`). The rest keep bsnes's defaults.
         "bsnes" => Curation {
@@ -652,6 +657,9 @@ pub struct OptionSet {
     changed: bool,
     /// The snapshot file is out of date.
     dirty: bool,
+    /// Options a pocket-ui row decides instead (`render_scale::CORE_KEYS` where Options → Picture → Resolution is there):
+    /// left out of the Emulator page like `curation`'s hidden ones, so there is one place for them.
+    pub row_decides: &'static [&'static str],
 }
 
 impl OptionSet {
@@ -676,7 +684,7 @@ impl OptionSet {
             if let Some(c) = self.curated.get(&def.key).filter(|c| def.has_value(c)) {
                 def.default = c.clone();
             }
-            def.hidden = !self.curation.shows(&def.key);
+            def.hidden = !self.curation.shows(&def.key) || self.row_decides.contains(&def.key.as_str());
             def.visible = old_visible.get(&def.key).copied().unwrap_or(true);
             let value = self
                 .current
@@ -1223,6 +1231,20 @@ mod tests {
         let mut chosen = OptionSet::new(android_curation("flycast"), &[("reicast_detect_vsync_swap_interval".into(), "disabled".into())]);
         chosen.declare(vec![], vec![def("reicast_detect_vsync_swap_interval", &["disabled", "enabled"])]);
         assert_eq!(chosen.get("reicast_detect_vsync_swap_interval"), Some("disabled"), "an unlocked game's explicit choice still wins");
+    }
+
+    #[test]
+    fn android_n64_runs_the_threaded_renderer_as_linux_does() {
+        // Real name and values from Mupen64Plus-Next's option table; the core's own default is "False".
+        let declare = |o: &mut OptionSet| o.declare(vec![], vec![finish("mupen64plus-ThreadedRenderer".into(), Some("Threaded Renderer".into()), None, None,
+            vec![("True".into(), "Enabled".into()), ("False".into(), "Disabled".into())], Some("False".into()))]);
+        let id = core_id(Path::new("/data/app/x/lib/arm64/libmupen64plus_next_libretro.so"));
+        let mut android = OptionSet::new(android_curation(&id), &[]);
+        declare(&mut android);
+        assert_eq!(android.get("mupen64plus-ThreadedRenderer"), Some("True"), "Android's N64 must not emulate and render on the player's one thread");
+        let mut chosen = OptionSet::new(android_curation(&id), &[("mupen64plus-ThreadedRenderer".into(), "False".into())]);
+        declare(&mut chosen);
+        assert_eq!(chosen.get("mupen64plus-ThreadedRenderer"), Some("False"), "a player's own choice still wins");
     }
 
     #[test]

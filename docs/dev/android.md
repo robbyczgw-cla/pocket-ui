@@ -11,6 +11,12 @@ Build, emulator setup, scope and controls: [android/README.md](../../android/REA
 [user guide](../user/android-spike.md).
 This is a feasibility experiment, not a supported release target.
 
+## Public native preview text
+
+The feature-preview help is linked into the handheld Android library too. The public export rewrites its sample
+Tailscale address and DNS name to documentation values; source-only demo allowances do not apply to native libraries.
+`scripts/test-export-public.sh` scrubs the actual preview and scans its NUL-separated native text without allowances.
+
 ## Platform adapters
 
 `src/platform/mod.rs` selects OS adapters at I/O boundaries. `platform/linux_http.rs` owns the existing curl
@@ -53,6 +59,30 @@ Curator user history before the shared choice policy and launches through `Comma
 cannot collide with those controls. See [ANDROID-MVP.md](../ANDROID-MVP.md#android-refresh-for-0114-branch-build)
 for supported behavior and the remaining picture/player differences.
 
+`scripts/android/release-apk.sh` refuses a private tree (the `scripts/check-leaks.sh` marker) before building,
+creating output or accessing signing material. Build public APKs from the exported public tree, then run
+`scripts/android/release-check.sh` from the private tools tree so its strict APK-member scan and reviewed
+licence/contact rules are available. Embedded demo data must be scrubbed by the export too.
+
+ClownMDEmu's pinned adapter restores CRAM on `retro_unserialize` but originally left its separate output-format
+palette at the fresh process's black colours. `android/patches/clownmdemu-restore-palette.patch` rebuilds all 64 normal,
+shadow and highlight colours through the selected pixel-format callback; the existing state layout stays compatible.
+This is a software-core cache issue, before presentation. The Linux Mega Drive default is Genesis Plus GX; the same
+ClownMDEmu library can be checked with the shared host frontend.
+
+The Continue regression in `src/android_video_tests.rs` saves and resumes in separate processes, runs the same
+bootstrap, state policy and `Core::resume` as Android, and checks the first restored frame, the GLES presentation and
+Earlier's preview. The ordinary fixture covers RGB565, 0RGB1555 and XRGB8888; a same-process save/load would miss
+this cache bug. To run the real-core version with a visible diagnostic or homebrew scene:
+
+```sh
+POCKETUI_TEST_CORE=/path/to/clownmdemu_libretro.so POCKETUI_TEST_ROM=/path/to/Game.bin \
+  cargo test --profile gate --lib android_video_tests::a_real_core_continue_presents_a_visible_frame_and_earlier -- --ignored --exact
+```
+
+Use the same check for other software cores; a naturally black saved scene is unsuitable for this probe. The
+headless GLES tests need EGL/Mesa; `POCKET_REQUIRE_GL=1` makes a missing renderer fail explicitly.
+
 The pause-menu shot reader (`preview.rs`) accepts older one-image shots and an optional 4×1 game rectangle before the picture (the initial picture-first layout is also accepted), ignores invalid crop bounds, retries incomplete files, and bounds decoding to eight nonempty images, 4096² pixels each and 128 MiB per file. Both preview and shot reads use one open file handle so an atomic rename cannot mix requests.
 
 A console's first start goes straight to the game (0.5: the controls card at a first start went, and a `controls-card-seen` file of older versions is ignored). `user_journeys::a_consoles_first_start_goes_straight_to_the_game_without_a_card` guards it with a stand-in game.
@@ -74,6 +104,8 @@ which defers expensive captures to a quiet pause.
 
 ## Optional systems
 
+Since 0.5.x every core is in the APK and nothing is offered (docs/STORE.md#android-core-packages); a core downloaded with an
+older APK is retired at start (`android_cores::retire_bundled`). The download path below stays for a core that may need it.
 `android/src/core_downloads.rs` connects first-start selections and Extras to the shared store installer.
 `CoreDownloads.java` selects an unmetered Wi-Fi network and retains partial archives; `ResumableDownload.java`
 provides size-bounded HTTPS with Range continuation. Host coverage is `ResumableDownloadTest.java`,

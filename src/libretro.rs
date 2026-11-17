@@ -925,6 +925,10 @@ impl Core {
             let id = core_options::core_id(core_path);
             let profile = if cfg!(target_os = "android") { core_options::android_curation(&id) } else { core_options::curation(&id) };
             s.opts = OptionSet::new(profile, &saved);
+            // Linux and Android alike (Android's player has the same Resolution row, `pause_options`).
+            if crate::render_scale::row_for_core(&id) {
+                s.opts.row_decides = crate::render_scale::CORE_KEYS;
+            }
             s.trace = std::env::var_os("POCKET_CORE_TRACE").is_some();
             crate::vfs::TRACE.store(s.trace, std::sync::atomic::Ordering::Relaxed);
             s.system_dir = CString::new(system_dir.as_os_str().as_encoded_bytes()).unwrap_or_default();

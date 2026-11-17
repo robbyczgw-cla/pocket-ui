@@ -540,6 +540,7 @@ impl App {
         // Calmer than a child's shelf: the case, the name and the lines a little smaller, with more air between them.
         // On a screen under 1000 lines (1024x768, the small panels at 1280x960) the hint bar is as large as on 1080 while the type shrinks with the screen: the case row gives the lines under it more room.
         let (top, room) = if c.h < 1000 { (SHELF_TOP - 0.02, (SHELF_ROOM.0, SHELF_ROOM.1 - 0.05)) } else { (SHELF_TOP, SHELF_ROOM) };
+        let (top, room) = below_top_line(c.h, top, room);
         let below = self.kids_case_row(c, colours, top, room);
         if self.launch_at.is_some() {
             return;
@@ -756,6 +757,22 @@ impl App {
     }
 }
 
+/// The case row starts under the top line, on every screen and in every text size: 7 % of 960 or 768 lines (640x480
+/// and the Brick's 1024x768) was above the top line's baseline, and a long place ran into the cover. Its bottom stays,
+/// so the name and the lines under it keep their place; the case is that much smaller.
+fn below_top_line(h: i32, top: f32, room: (f32, f32)) -> (f32, (f32, f32)) {
+    let least = (super::app_status_corner::top_line_bottom() + TOP_LINE_GAP) as f32 + 0.5;
+    let at = h as f32 * top;
+    if at >= least {
+        return (top, room);
+    }
+    let h = h as f32;
+    (least / h, (room.0, room.1 - (least - at) / h))
+}
+
+/// Air between the top line's type and the case.
+const TOP_LINE_GAP: i32 = 12;
+
 /// Only a game that saves nothing but in the game asks before it quits.
 fn asks_before_quit(saves: pocket_ui::pause_saves::Saves) -> bool {
     matches!(saves, pocket_ui::pause_saves::Saves::InGame(_))
@@ -774,6 +791,19 @@ mod tests {
         assert!(PAUSE_ROW > 120.0 && PAUSE_GAP >= 20.0, "rows a thumb can hit, with air between");
         // Smaller than a child's two buttons (210 high, 40 apart), as the shelf's case is smaller than the child's.
         assert!(PAUSE_ROW < 210.0 && SHELF_ROOM.0 < 0.64 && SHELF_ROOM.1 < 0.61 && NAME_SCALE < 1.0);
+    }
+
+    #[test]
+    fn the_case_row_starts_under_the_top_line_and_keeps_its_bottom() {
+        let least = super::super::app_status_corner::top_line_bottom() + TOP_LINE_GAP;
+        for h in [480, 544, 720, 768, 960, 1080, 1440] {
+            let (top, room) = if h < 1000 { (SHELF_TOP - 0.02, (SHELF_ROOM.0, SHELF_ROOM.1 - 0.05)) } else { (SHELF_TOP, SHELF_ROOM) };
+            let (t, r) = below_top_line(h, top, room);
+            // As `kids_case_row` places it.
+            assert!((h as f32 * t) as i32 >= least, "{h}: {t}");
+            assert!(((t + r.1) - (top + room.1)).abs() < 1e-4 && r.0 == room.0, "{h}: the bottom stays");
+            assert!(r.1 > 0.2, "{h}: a case still big: {r:?}");
+        }
     }
 
     #[test]

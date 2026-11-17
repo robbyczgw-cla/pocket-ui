@@ -215,7 +215,9 @@ mod tests {
                 // The Ok sentences of the pause menu; its Err arm is checked below.
                 || rhs.starts_with("message = match (result, self.row)")
                 // A pad's note (`android_pads::Pads::roster`): our sentence with the pad's name.
-                || rhs.contains("note.clone()");
+                || rhs.contains("note.clone()")
+                // Restore defaults' question: our sentence, Linux's too (`pause_options`), no error.
+                || rhs.contains("pause_options::RESTORE_ASK");
             if !ours { raw.push(format!("{}: {}", n + 1, line.trim())); }
         }
         assert!(raw.is_empty(), "an error reaches the player's screen as it is:\n{}", raw.join("\n"));

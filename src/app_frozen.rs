@@ -197,9 +197,12 @@ impl App {
     }
 
     /// `--snapshot` with POCKETUI_SNAPSHOT_FROZEN=<n>: the first n recent games stand open, whatever is on the card here.
+    /// `all`: every recent game, past the shelf's limit of [`frozen::MOST`] (a test's walk along a shelf of open cases).
     pub(crate) fn frozen_snapshot(&mut self) {
-        if let Some(n) = std::env::var("POCKETUI_SNAPSHOT_FROZEN").ok().and_then(|n| n.parse::<usize>().ok()) {
-            let list = if wanted() { self.recents.list.iter().take(n.min(frozen::MOST)).map(|r| r.path.clone()).collect() } else { Vec::new() };
+        let var = std::env::var("POCKETUI_SNAPSHOT_FROZEN").ok();
+        let n = if var.as_deref() == Some("all") { Some(usize::MAX) } else { var.and_then(|n| n.parse::<usize>().ok()).map(|n| n.min(frozen::MOST)) };
+        if let Some(n) = n {
+            let list = if wanted() { self.recents.list.iter().take(n).map(|r| r.path.clone()).collect() } else { Vec::new() };
             self.frozen_got(list);
             self.moved_at = Instant::now() - Duration::from_secs(5);
         }

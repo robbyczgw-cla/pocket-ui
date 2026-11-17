@@ -198,8 +198,14 @@ system's shelf.
 In the Cabinet look a small old TV stands on the cabinet's top board, at the right, and shows the selected game: its
 screenshot when pocket-ui has downloaded one (Settings → Games → Box art & downloads → Box art), else the latest picture of your
 own play (the one Continue starts from), else its cover; a game with none of these shows its console. The picture
-changes with a short crossfade as you move (at once with Motion off). On a small screen the TV is smaller; where it
-would be too small to see it is left out.
+changes with a short crossfade as you move (at once with Motion off). A handheld game (Game Boy, Game Boy Advance, Game
+Gear, Neo Geo Pocket, Lynx, WonderSwan, DS, PSP …) shows on its handheld instead, the game on its little display, in the
+TV's place. Beside the TV, on its left, stands the console the selected game is played on (a SNES, an N64, a
+PlayStation …), in the colour you chose on its [console page](#console-pages); it changes as you move to the next shelf, like
+a real living-room shelf. A handheld game adds nothing (its handheld already stands there), nor does a computer or
+arcade game. The TV (or handheld), the console's place and the top board stay where they are from shelf to shelf; only
+the shelves move. On a small screen the TV is smaller; where it would be too small to see it is left out, and where the
+cases out of the shelf need the room, the console is.
 With Settings → Look → [Cozy extras](settings.md#cozy-extras) → **TV plays the game** on (it starts **off**), a game you
 have never played plays on the TV after a two-second rest (its own demo, silent, up to 25 seconds); press A and its
 picture grows to the whole screen and you play on from there (a game still in its plastic wrap, [Sealed new games](settings.md#cozy-extras), starts the usual way instead: the wrap tears off first). It runs the game in a second, hidden player, which

@@ -124,7 +124,7 @@ marks are drawn (dot, bars, tick, dash); keys are their printed names in chips (
 **Motion** (details under [Motion](#motion-srcmotionrs-srcapp_motionrs)): only in answer to input, ease-out, no
 bounce. A row's selection glides ~150 ms, a page comes in 28 px in 150 ms, the shelf lifts 120 ms and turns 220 ms,
 the game box flips in 280 ms, the launch puts the cartridge in at 180 ms and is done at 300 ms, toasts and OSD come
-down 20 px in 150 ms, hints crossfade in 120 ms. Motion Off: everything at once.
+down 20 px in 150 ms, hints crossfade in 120 ms (at rest only). Motion Off: everything at once.
 
 **Sound** (`src/ui_sound.rs`, the sample set in `assets/ui-sounds`): one sound per kind of feedback, the same on
 both surfaces. Selection or value moved: Nav. Chosen, switched, the box turned: Confirm. Up a level or closed: Back.
@@ -382,10 +382,16 @@ keep using `c.w`/`c.h` and canvas calls, never the buffer itself.
   fifths of the room between the top line and the hints, in half steps so the pixel art stays even: three screen
   pixels a template pixel at 1080 lines (a DVD case 360 px, a SNES cartridge 66 px thick), 2.5 at 960, 1.5 at 720, one
   at 480. The same on every list of a screen, nearest pixel, never smoothed.
-- **The shown case** (`show_k`): its front as large as the room above the row's tallest case lets it, at most 45 % of
-  the screen's width and six template pixels a pixel, in half steps; a shelf of cartridges leaves it more room than a
-  shelf of DVD cases. It is never cut: `shelf_tests` checks every medium at 1240x1080, 1920x1080, 1280x960, 1280x720,
-  1024x768 and 640x480. The cover is in the front's label (`media::front`); a game without one, a system (its console
+- **The shown case** (`show_k`): 1.4 times the size it had up to 0.5 (a player on a TrimUI Brick asked for larger
+  covers, 17.11.2026), as far as the room above the row lets the largest case of that row: its height, half the room's
+  width, and a quarter of the width left for the words when the case stands open with its game out beside it. One scale
+  for the cases of a row, so they keep their real sizes to each other; a system's page of cartridge boxes gets the
+  whole 1.4 on the 4:3 panels, Home with its DVD-size cases little or nothing. Never smaller than before, and no step
+  under 8 % (a name a size smaller is not worth it). The old size was as large as the room lets the largest case of
+  any kind, at most 45 % of the screen's width and six template pixels a pixel, in half steps. It is never cut:
+  `shelf_tests` checks every medium and Home's mix at 1240x1080, 1920x1080, 1920x1152, 1280x960, 1440x960, 1440x1440,
+  1280x800, 1280x720 and 1024x768 against the top line, the lifted spine, the hints and the words. A meta line that
+  needs more lines than the room has ends with "…" on the last one shown. The cover is in the front's label (`media::front`); a game without one, a system (its console
   above its name) and the rest get a printed title card in the cover's place, never an empty hole. While a cover is
   still being read the label stays plain for a moment.
 - **Spine titles** (`media::spine_with`, `spine_px`): the cover's main colour on the label (`media::cover_colors`, the
@@ -475,7 +481,7 @@ full beginning once, then stays there until reselected. Its still pauses use tim
 | Pages | a deeper page (a system's shelf, Settings and its pages, the console page) comes in from 28 px to the right and fades up from the page colour, its list rows one after another (16 ms apart, at most four steps); going back comes in from the left, all at once; the game card rises out of the selected case (the Shelf look) or label; the switcher fades in | 150 ms (+ up to 64 ms) |
 | Curator, Search | Curator's list, the Lens, Echoes, Versions and the search are pages like the others (pushed in, popped back; sheets over the card or the list are not pages); their lists scroll smoothly under their edges (the Lens's values start at rest when another facet is picked), the selected row turns to paper at once | 150 ms |
 | Letter jump (L2/R2) | the big letter shows, then fades out as one layer (box and letter together) over 220 ms; one frame is drawn after it has gone, so nothing faint stays behind | 700 ms in all |
-| Hint bar | when the hints change, the old ones fade out quickly while the new ones fade in | 120 ms |
+| Hint bar | when the hints change at rest, the old ones fade out quickly while the new ones fade in; during a move (a step of the selection, a held key, a gliding list, another Cabinet shelf) the new ones come at once | 120 ms |
 | Toasts, OSD | come down 20 px into place and fade in, fade out at the end; an OSD that is up stays put while its level changes | 150 ms |
 | Switcher | the row of screens slides (retargeted mid-slide) | ~200 ms |
 | Cabinet | case pull/push and shelf scroll as before (`cabinet.rs`), and they follow the Motion setting | 160-240 ms |
@@ -491,7 +497,8 @@ page colour (taken from the frame's right edge), row by row for a list (the pain
 fade is branch-free and works on two channels at once, so the compiler vectorises it; a stretch of a line that is
 nothing but the page colour is only read, never written (it would come out the same), which is most of a page; a full
 frame is a fraction of the paint time. Toasts and the hint bar use `motion::layer` (keep the area, paint, mix), whose cost is their
-area.
+area: the hint bar's fade mixes only from the left end of the longer of its two pills, with two channels per multiply
+(`motion::blend`, within a step of `gfx::mix`).
 
 **Measuring.** `POCKETUI_FRAME_LOG=1` logs "press to frame" for every button press (the time from the event
 to the frame that shows it) and, when an animation ends, the paint time of its frames by kind (page
@@ -1012,7 +1019,7 @@ public-domain photo of a 90s portable; `assets/media/tv/SOURCES.md`), its glass 
   pulled in a little (a curved tube), every second line darker (scanlines at the picture's scale), darker towards the
   rim, a little warmer, and a soft glow from each pixel's neighbours. Never animated: no flicker, no noise.
 - **Changing**: the next game's picture crossfades in over 220 ms once it is made (Motion Off: at once); until then
-  the last one stays. The case out of the shelf keeps left of the TV.
+  the last one stays. The case out of the shelf keeps left of the TV, and so does the game an open case shows at its side (Continue): the case moves left by as much as the game stands out (`tests/cabinet_case_clear_of_tv.rs`).
 - **Freshness**: picture downloads/library changes and returning from a game discard the TV loader's cache,
   including its pending replies. Jobs and replies carry a generation; invalidation keeps the same single decoder
   thread, and an old reply cannot clear a new request for the same picture. The current picture stays until its

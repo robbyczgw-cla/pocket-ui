@@ -76,8 +76,8 @@ them into the box's picture carousel and exporting them to the phone gallery rem
 
 With a connected controller, the player starts without touch controls. Using a controller hides them; touch the game once to reveal them again. Back or controller Menu still opens the pause menu.
 
-Optional downloads add Nintendo DS (melonDS DS) and, as **experimental** systems, PSP (PPSSPP), Nintendo 64
-(Mupen64Plus-Next) and Dreamcast (Flycast) in our player. The system line before Play or Continue and the Controls page identify PSP,
+Nintendo DS (melonDS DS) and, as **experimental** systems, PSP (PPSSPP), Nintendo 64 (Mupen64Plus-Next) and Dreamcast
+(Flycast) are in the app too, in our player. The system line before Play or Continue and the Controls page identify PSP,
 N64 and Dreamcast (like the bundled Saturn) as experimental. Compatibility, full game speed, sound and saving/Continue are still being tested for them; do not rely on them
 for your only copy of progress. DS is not marked experimental. PSP has four face buttons and L/R. On DS, both screens share the display;
 the lower screen accepts the stylus. N64 has Z and C buttons; the touch arrows move its analog stick. A fresh N64 start temporarily buffers extra sound to bridge intro loading; it returns to the normal sound delay during silence or gradually during continuous music. Later loading stalls can still interrupt sound while N64 remains experimental.
@@ -115,10 +115,10 @@ Cozy extras have their switches in Settings. Printed discs print the cover on an
 light by time of day and decorations apply to Shelf and Cabinet. The pause menu uses a slim row of save blocks.
 
 
-First start has eight short setup steps: welcome, language, game folders, look,
-covers and pictures, more systems, controls, and ready. Continue advances, Back returns, and Skip leaves a step
+First start has seven short setup steps: welcome, language, game folders, look,
+covers and pictures, controls, and ready. Continue advances, Back returns, and Skip leaves a step
 for later. If you close the app or return from the folder picker, setup resumes where you left it.
-Settings → First start opens the eight-step guide again. You can finish without games or a network connection.
+Settings → First start opens the seven-step guide again. You can finish without games or a network connection.
 
 Choose English, German, Spanish, Brazilian Portuguese, French or Italian, one of the four looks (Shelf, Easy, Split, Cabinet; Minimal or Cards from an
 earlier build open as Split), Cozy or Quick animations, and dark or light pages.
@@ -425,16 +425,10 @@ The in-app player requests Android’s low-latency callback audio path and adjus
 
 ## More systems
 
-The APK includes the small systems through PlayStation and Saturn. **More systems?** in first start offers PSP, DS,
-N64 and Dreamcast with each download's size. Nothing starts selected. Choose the systems you want and
-Continue; downloads wait for unmetered Wi-Fi. Skip leaves every system undownloaded.
-Settings → **Cozy extras** offers the same systems later. Download now shows the size; B cancels a running download.
-Choosing it again resumes the saved bytes when the server supports it. A lost Wi-Fi connection preserves them too.
-After a download is checked and installed, its row says Installed and the game can start normally.
-Starting a game for a missing system opens Extras with that system selected and an explanation.
-PPSSPP's system files come with its download. No games or console BIOS are included.
-Until the download channel is public, these systems are listed as **Not available here**: first start and Extras show them
-without a size or a choice, and starting a game for one says that the system can't be downloaded in this version of the app, with no download and no error.
+Every system of the built-in player is in the APK: the small systems through PlayStation and Saturn, and since 0.5.x
+also PSP (with PPSSPP's system files), DS, N64 and Dreamcast. There is nothing to download and no **More systems?** step.
+A system you downloaded with an older version keeps working: the app uses its own copy and removes the downloaded one at
+its next start; your saves, save states and the system's options stay. No games or console BIOS are included.
 
 ## Licences
 

@@ -216,6 +216,8 @@ impl Shelf {
 pub struct Cabinet {
     pub shelves: Vec<Shelf>,
     ys: Vec<i32>,
+    /// Every kind of case standing in it, each once: the showcase is laid out for the tallest of them (`app_cabinet`).
+    pub media: Vec<Medium>,
 }
 
 impl Cabinet {
@@ -235,11 +237,17 @@ impl Cabinet {
             .collect();
         let mut ys = Vec::with_capacity(shelves.len());
         let mut y = 0;
+        let mut media: Vec<Medium> = Vec::new();
         for s in &shelves {
             ys.push(y);
             y += s.height + BOARD;
+            for c in &s.cases {
+                if !media.contains(&c.medium) {
+                    media.push(c.medium);
+                }
+            }
         }
-        Cabinet { shelves, ys }
+        Cabinet { shelves, ys, media }
     }
 
     /// Top of shelf `i`'s compartment, from the cabinet's top.
@@ -250,6 +258,11 @@ impl Cabinet {
     /// Compartment and board of shelf `i`.
     pub fn pitch(&self, i: usize) -> i32 {
         self.shelves.get(i).map_or(0, |s| s.height + BOARD)
+    }
+
+    /// The tallest shelf's compartment and board: the one the cabinet's frame is laid out for.
+    pub fn tallest_pitch(&self) -> i32 {
+        (0..self.shelves.len()).map(|i| self.pitch(i)).max().unwrap_or(0)
     }
 
     /// All the shelves, boards included.

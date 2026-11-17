@@ -2540,6 +2540,17 @@ fn main() {
     } else {
         Vec::new()
     };
+    // Options → Picture → Resolution (N64, PSP, Dreamcast on a handheld measured for it, `render_scale`): the player's choice
+    // over every other source of the core's option, the handheld's default only where nothing else chose it. Above RetroArch's.
+    let scale = pocket_ui::render_scale::for_start(
+        pocket_ui::render_scale::here(&system),
+        &core_options::core_id(core_so),
+        settings.values.get(pocket_ui::render_scale::KEY).map(String::as_str),
+    );
+    if let Some(s) = &scale {
+        s.place(&mut options);
+        println!("resolution: {} = {}{}", s.key, s.value, if s.first { " (chosen)" } else { " (this handheld's default)" });
+    }
     let ra = retroarch_beneath(&ra_options, &options);
     options.extend(ra.iter().map(|(k, v)| (k.as_str(), v.as_str())));
     // Fill missing keys only, below saved game/console and imported RetroArch choices.

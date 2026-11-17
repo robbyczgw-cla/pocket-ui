@@ -750,10 +750,10 @@ mod tests {
     fn a_connected_node_reads_as_connected_with_its_names_and_addresses() {
         let s = Status::parse(RUNNING).unwrap();
         assert_eq!(s.backend, Backend::Running);
-        assert_eq!(s.ips, ["100.101.102.103", "fd7a:115c:a1e0::5601:6667"]);
-        assert_eq!(s.ipv4(), Some("100.101.102.103"));
+        assert_eq!(s.ips, ["192.0.2.103", "2001:db8::5601:6667"]);
+        assert_eq!(s.ipv4(), Some("192.0.2.103"));
         assert_eq!(s.hostname, "pocket-mini");
-        assert_eq!(s.dns_name, "pocket-mini.tail1a2b3.ts.net", "no trailing dot");
+        assert_eq!(s.dns_name, "pocket-mini.tailnet.example.invalid", "no trailing dot");
         assert_eq!(s.tailnet, "alex@example.com");
         assert_eq!(s.login, "alex@example.com");
         assert_eq!((s.peers_online, s.peers_total), (2, 3));
@@ -797,7 +797,7 @@ mod tests {
 
     #[test]
     fn tailscale_ip_output_is_one_address_per_line() {
-        assert_eq!(parse_ips(IP_OUTPUT), ["100.101.102.103", "fd7a:115c:a1e0::5601:6667"]);
+        assert_eq!(parse_ips(IP_OUTPUT), ["192.0.2.103", "2001:db8::5601:6667"]);
         assert_eq!(parse_ips("100.1.2.3\n\n  \nnot an address\n"), ["100.1.2.3"]);
         assert!(parse_ips("failed to connect to local tailscaled").is_empty());
     }

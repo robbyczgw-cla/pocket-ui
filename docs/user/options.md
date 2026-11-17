@@ -14,11 +14,13 @@ The same settings for one game are on its card without starting it: [This game](
 | **Cheats** | Cheats from the libretro cheat database. On TrimUI, opening it downloads the database once over Wi-Fi, with progress; afterwards it works offline. Other hosts show it only for matching games. See [Cheats](options-cheats.md) |
 | **Shortcuts** | HOME + button combinations while you play. |
 | **Speed, rumble, fan** | Fast-forward speed, rewind, what is shown over the game, rumble, performance, fan and run-ahead. |
+| **Zoom** | The paused picture larger, to read small text ([Zoom](big-text.md#zoom)). |
 | **Runs on** | Which emulator plays this game or this console (see [Runs on](#runs-on)). It has its own Save changes. |
 | **Keep for** | Where your changes stay: **This game** or **This console**. **Restore defaults** below it undoes them. |
 
 Move with Up/Down (the list wraps around at the ends), change a value with Left/Right (A also steps
-to the next value), and go back with B. The line at the bottom explains the selected setting.
+to the next value), and go back with B. A row that opens a page ends in **›** on every row; a row that changes right
+there shows its value, the selected one as **‹ value ›**. The line at the bottom explains the selected setting.
 **A change applies to the running game at once** and stays: it is kept the moment you make it, as in Settings. Where
 it stays is the **Keep for** row ([below](#keep-for)).
 
@@ -170,6 +172,32 @@ sides. Hold the Pocket turned a quarter, and the picture can be much bigger.
 - Keep the choice for one game with [Keep for](#keep-for) → This game.
 
 Arcade games run on RetroArch, which has its own way: see [Arcade games](arcade.md#vertical-games).
+
+### Resolution
+
+Nintendo 64, PSP, Dreamcast and PlayStation games only, on the handhelds whose graphics chip was measured for it (the Retroid Pocket Mini V2
+and its Snapdragon 865 siblings, and the Snapdragon 8 Gen 2 handhelds), with pocket-ui OS and with pocket-ui for Android on the same
+handhelds (Options → Picture in the game's menu): how sharp the 3D picture is drawn. **Original** is the
+console's own resolution (the N64's 320 × 240, the PSP's 480 × 272, the Dreamcast's 640 × 480, the PlayStation's 320 × 240 or so);
+**2x**, **3x** and **4x** draw it that many times larger, so edges and far-away things look clean on this screen instead of in steps. It costs the graphics chip
+more, not the game's speed: the list offers only what ran at full speed on this handheld.
+
+- It is the same row as the **Resolution** of PlayStation 2, GameCube, Wii and Xbox games ([their Options](options-big.md)), and
+  like theirs it **takes effect the next time the game starts**: quit and start the game again to see it.
+- It is kept for the console, like the other Picture settings, or for one game with [Keep for](#keep-for) → This game.
+- Unless you choose one, each console starts with the sharpest resolution that keeps a margin on this handheld:
+
+| Handheld | Nintendo 64 | PSP | Dreamcast | PlayStation |
+|---|---|---|---|---|
+| Retroid Pocket Mini V2, Mini, Pocket 5, Flip 2 (Snapdragon 865) | 2x (3x offered) | 2x (3x offered) | 2x | Original (2x offered) |
+| Retroid Pocket 6, Nova, AYN Odin 2 family (Snapdragon 8 Gen 2) | 2x (3x offered) | 2x (3x offered) | 2x | Original (2x offered) |
+
+  On Android, a handheld or phone with another chip has no Resolution row; the emulator keeps its own setting on the Emulator page.
+  The H700, RK3566 and RK3326 handhelds have no Resolution row: their N64, PSP and Dreamcast games run on ROCKNIX's own
+  emulators, which keep their settings, and the PlayStation keeps its Enhanced Resolution under [Emulator](#emulator).
+- PlayStation 2x is the emulator's "Enhanced Resolution": the 3D is sharper, but some games lose a picture with it (Crash
+  Bandicoot 2's pause screen shows black where the game was), so it is not where a PlayStation game starts.
+- The emulator's own resolution option (Emulator page) is left out where this row is there, so there is one place for it.
 
 ### Starting values per console
 
@@ -379,7 +407,7 @@ presses into a running game.
 
 | Row | What it holds |
 |---|---|
-| **Screen scaling**, **Look** (with Sharpness and Effect under Custom), **Screen frame** (with its colour or finish), **Screen orientation** | The [Picture](#picture) settings. A frame's sub-choices show up under it, as in the pause menu. |
+| **Screen scaling**, **Look** (with Sharpness and Effect under Custom), **Screen frame** (with its colour or finish), **Screen orientation**, **Resolution** (N64, PSP, Dreamcast, PlayStation) | The [Picture](#picture) settings. A frame's sub-choices show up under it, as in the pause menu. |
 | **Fast-forward speed**, **Rewind**, **Earlier states**, **Over the game**, **Rumble**, **Performance**, **Fan**, **Run-ahead** | The same rows as [Speed, rumble, fan](#speed-rumble-fan). |
 | **Save state**, **Load state**, **Change slot**, **Fast-forward**, **Rewind**, **Screenshot**, **Over the game**, **Zoom** | The [Shortcuts](#shortcuts): which HOME + button does what. |
 | **Controls** | Which button does what, and the left stick ([Controls](#controls)). The page names the buttons the standard way; the pause menu shows the console's own names. |

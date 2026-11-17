@@ -22,6 +22,8 @@
 # the change since that receipt's full run must be text only (scripts/text-only-diff.py), else the check stops. Then the full
 # gate is not run again (it passed on that commit; a text change does not reach it, the text checks below do) and the
 # volume evidence must match the binary that check verified (only text changed since). Both are printed, never silent.
+# RELEASE_CHECK_PRE_RECEIPT=<file>: the pre-release receipt of this tree; the nav explorer's release-only cases are carried
+# from it when scripts/nav-evidence.py proves an exact match (see below), else they run here.
 cd "$(dirname "$0")/.." || exit 2
 # Its own TMPDIR for the whole check (the full gate below joins it), removed at the end: scripts/run-tmp.sh
 # (the fixture trees of scripts/test-release-fast.sh have no copy of it)
@@ -68,20 +70,34 @@ echo "release check: Brick and Retroid volume profiles TODO (capture their own m
 if [ -n "$TEXT_ONLY" ]; then
     echo "release check: TEXT-ONLY: full gate not run again (green on $(printf %.12s "$FULL_COMMIT")); the text checks below run"
 elif [ "${RELEASE_CHECK_FULL_GATE:-1}" != 0 ]; then
-    GATE_FULL=1 sh scripts/gate.sh "$(pwd)" || { echo "RELEASE CHECK: FAILED (full gate, GATE_FULL=1)"; exit 1; }
+    sh scripts/full-suite.sh "$(pwd)" || { echo "RELEASE CHECK: FAILED (full gate, GATE_FULL=1)"; exit 1; }
 fi
 python3 scripts/doc-missing.py || echo "release check: documentation is missing entries (above)"
 # The same list as scripts/pre-release.sh (scripts/release-text-tests.txt), so a pre-release step that was green finds it all.
 # shellcheck disable=SC2046
 cargo test --profile "${GATE_PROFILE:-gate}" --lib --bins --test i18n_snapshots -q -- --include-ignored \
     $(grep -v '^#' scripts/release-text-tests.txt) \
-    && cargo test --profile "${GATE_PROFILE:-gate}" --test nav_explorer -q -- --ignored \
     || { echo "RELEASE CHECK: FAILED"; exit 1; }
+# The D-pad explorer's release-only cases (~27 min). RELEASE_CHECK_PRE_RECEIPT=<the pre-release receipt of this
+# exact tree>: carried when scripts/nav-evidence.py proves the same commit, tree, profile, toolchain, host, threads, font, case
+# list and a clean green log; anything else runs them here. Either way one line says which (8-publish.sh check reads it).
+NAV=ran why=
+if [ -z "$TEXT_ONLY" ] && [ -n "${RELEASE_CHECK_PRE_RECEIPT:-}" ]; then
+    navlist=$(mktemp "${TMPDIR:-/tmp}/rc-nav-list.XXXXXX")
+    if cargo test --profile "${GATE_PROFILE:-gate}" --test nav_explorer -q -- --ignored --list >"$navlist" 2>/dev/null; then
+        why=$(python3 scripts/nav-evidence.py check --receipt "$RELEASE_CHECK_PRE_RECEIPT" --list "$navlist") && NAV=carried
+    else why="nav explorer (--ignored) runs here: the case list did not build"; fi
+    rm -f "$navlist"
+    echo "release check: $why"
+fi
+if [ "$NAV" = ran ]; then
+    cargo test --profile "${GATE_PROFILE:-gate}" --test nav_explorer -q -- --ignored || { echo "RELEASE CHECK: FAILED"; exit 1; }
+fi
 sh scripts/bookkeeping.sh || { echo "RELEASE CHECK: FAILED (bookkeeping did not build)"; exit 1; }
 if [ -n "${RELEASE_CHECK_RECEIPT:-}" ]; then
     { echo "kind=release-check"; echo "result=ok"; echo "mode=$([ -n "$TEXT_ONLY" ] && echo text-only || echo full)"
       echo "commit=$(git rev-parse HEAD)"; echo "tree=$(git rev-parse 'HEAD^{tree}')"; echo "full=$FULL_COMMIT"
-      echo "volume_sha256=$VOLUME_SHA"; echo "date=$(date -u +%Y-%m-%dT%H:%M:%SZ)"; } >"$RELEASE_CHECK_RECEIPT" \
+      echo "volume_sha256=$VOLUME_SHA"; echo "nav=$NAV${RELEASE_CHECK_PRE_RECEIPT:+ $RELEASE_CHECK_PRE_RECEIPT}"; echo "date=$(date -u +%Y-%m-%dT%H:%M:%SZ)"; } >"$RELEASE_CHECK_RECEIPT" \
         || { echo "RELEASE CHECK: FAILED (cannot write $RELEASE_CHECK_RECEIPT)"; exit 1; }
     echo "release check: receipt $RELEASE_CHECK_RECEIPT"
 fi

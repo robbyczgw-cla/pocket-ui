@@ -502,7 +502,7 @@ release) can follow it. Nothing here publishes anything: the release itself need
    needs `--build N+1`. The manifest in the private tree is bumped to what was released in the commit after the release.
 3. `scripts/android/release-check.sh DIR/pocket-ui-android.apk --sources <tree>/android/build/cores/corresponding-source --previous-code <last published versionCode>`
    from the private tree on the same host. It checks the signature (the signer's certificate must be the release key, fingerprint in
-   `android/release-cert.sha256`), package and version, minSdk 26 and arm64-v8a only, the size (45 MB: IzzyOnDroid's 30 MB line plus the handheld view's library, which needs their size exception), the 16 KB
+   `android/release-cert.sha256`), package and version, minSdk 26 and arm64-v8a only, the size (90 MB, a limit of our own: every core is in the APK since 0.5.x, about 60 MB in all; IzzyOnDroid's 30 MB line needs their size exception), that every core of `android/cores.lock.json` is packed and none offered as a download (`--lock`), the 16 KB
    page alignment of every library, that `assets/cores.json` matches the packed libraries and names a source archive for each core,
    the store listing, and the export's leak scan over the APK's contents. Its parts that need no Android SDK are tested by
    `scripts/android/test-release-check.py` (part of the shell lane of the gate).
@@ -636,6 +636,30 @@ after player/core checks; it removes the emulator app's private states and prefe
 
 The older launcher/player smoke scripts assume setup has been completed (or skipped) first. The dedicated onboarding smoke clears data and must therefore run afterwards.
 
+
+### Android player pacing (17.11.2026)
+`GLSurfaceView` calls the player once per display refresh. The core runs as pocket-core runs it on Linux (`src/core_pacing.rs`):
+once per refresh while its rate is within 5 % of the display's (SNES 60.10, Game Boy 59.73, Mega Drive 59.92, PlayStation, N64 and
+PSP on a 60 Hz panel), its sound fed at the display's pace (`Audio::set_paced_timing`, the input rate times display/core, as
+`sync_audio_rate`); further off (PAL 50 Hz games, WonderSwan 75 Hz) by time, a repeated picture every sixth refresh for 50 Hz. Refreshes
+are counted on a grid that follows the calls, so a call's jitter of less than half a refresh never turns into a repeated or a
+doubled picture; a missed refresh runs two frames (the game keeps its speed), at most four. Until 0.5.0-android.5 the player ran the
+core by the wall clock against the core's own rate: measured on the Retroid Pocket Mini V2 (Aladdin, 15 s, 878 pictures), 263
+pictures without a core frame, 244 with two or more and 38 late ones (p99 53 ms): "SNES lags" in the hand test. Every 10 s the
+player logs `player pacing:` (repeated and doubled pictures, the core's ms per frame p50/p99, gaps between calls, the thread's CPU);
+`android-test-kit/pacing.py` reads it and an atrace of the player thread on a device. Tests: `core_pacing::tests` (every console
+rate on 60, 59.94 and 60.10 Hz with a millisecond of jitter, the old loop beside it, PAL's even 5:6 pattern),
+`audio::tests::a_core_paced_by_the_display_feeds_its_sound_at_the_display_rate`.
+
+N64 runs GLideN64's threaded renderer on Android as on Linux (`core_options::android_curation`, `mupen64plus-ThreadedRenderer`
+True; ROCKNIX's RetroArch options set it for every device). With the core's own default (off) the N64 emulation and every GL call
+ran on the player's one thread: on the Retroid Pocket Mini V2 the governor keeps the A77 cores near 1.3 GHz for that load, the core
+took 3–5 ms a frame with peaks of 18–23 ms (p99), and Super Mario 64 / Mario Kart 64 repeated or doubled 15 of 60 pictures a second
+(1× resolution the same, copying colour/depth to RDRAM off no better). Threaded: the core's part 0.3 ms (p99 7 ms), 2–4 repeated
+pictures in 10 s, PSP's level. A higher priority, the prime core (affinity) and a uclamp floor measured no better; ADPF hint
+sessions are unsupported there (`dumpsys performance_hint`: HAL Support false). The `player pacing:` line also gives the
+read-back of a hardware core's picture (`readback_ms`, 2–3 ms p50) and the paint (`paint_ms`; its first draw waits for a free
+screen buffer, so it fills the refresh). Test: `core_options::tests::android_n64_runs_the_threaded_renderer_as_linux_does`.
 
 ### Android player picture policy
 `android/src/player_video.rs` retains the picture delivered by the initial timing/geometry run.
@@ -1011,8 +1035,25 @@ which defers expensive captures to a quiet pause.
 
 ## Optional core downloads
 
-The APK bundles the small cores through PS1; Saturn is also bundled; PSP, DS, N64 and Dreamcast are optional store packages.
-First start has eight steps: **More systems?** follows artwork consent, starts with no selected systems and shows
+**Since 0.5.x every core is in the APK** (17.11.2026: bundled is cleaner than a download): PSP with its system files, DS, N64
+and Dreamcast too; the APK's `core-downloads.json` offers nothing. A phone that downloaded one of them with
+0.5.0-android.5 or older keeps one copy, the APK's: `corePath` asks for the bundled library first, and at the start of
+either view `android_cores::retire_bundled` removes the downloaded files, folder and store record and unfinished downloads
+(`store/partials`); saves, states, core options and `files/bios` stay (test
+`a_core_the_apk_now_carries_replaces_its_download_and_keeps_saves_and_options`). With nothing offered, first start has seven
+steps (no **More systems?**, `Ui::systems_step_shown`; a first start left on that step goes on with the next) and Extras
+lists no system. `release-check.sh` refuses an APK that leaves a core of the lock out or offers one as a download.
+**The signed catalog on the site** (`updates/android/cores/catalog.json`, its `.sig` and the four packages) is what
+0.5.0-android.5 and older read when a player chooses Download now; it stays online until those versions are gone. It can go
+once a release with every core bundled has been out for a while and the update offer has reached the old installs
+(the in-app update check offers the new APK to every 0.5.0-android.N); a 404 then only says "can't be downloaded yet" on an
+old install. It has no expiry, and it must stay byte-identical (an old APK only fetches a package whose size and hash
+match the offer built into it, "The system list has changed" otherwise). No new catalog is built or published
+(`release-apk.sh` copies none).
+
+What follows is the download path as it was built; it stays in the code for a core that may need it later.
+The APK bundled the small cores through PS1; Saturn was also bundled; PSP, DS, N64 and Dreamcast were optional store packages.
+First start had eight steps: **More systems?** follows artwork consent, starts with no selected systems and shows
 archive sizes. Downloads start after Continue, on unmetered Wi-Fi; Extras offers them afterwards and a missing
 core routes Play there before any start animation, game copy, recents or player process is started.
 `android/src/core_downloads.rs` runs one worker; Android's `CoreDownloads`/`ResumableDownload` transport supports
@@ -1044,7 +1085,10 @@ Check again, Install pocket-ui / Install now / Later, automatic checks and downl
 `android/src/updates.rs` reads the signed channel on a worker and polls the Java install worker.
 `update-hint.json` keeps the automatic-check choice; its idle/backoff schedule reuses `update_hint`.
 
-`UpdateInstaller.java` binds network connections to Wi-Fi, bounds every transfer, checks signed
+`UpdateInstaller.java` opens its connections on the app's own network when `NetworkRule` allows it (unmetered Wi-Fi or
+Ethernet, a VPN on it included, never mobile data; the same rule for core downloads and `unmeteredWifi()`: until
+0.5.0-android.6 it picked the raw Wi-Fi under a VPN, which a VPN without a bypass forbids, and with Tailscale on the Mini V2
+every update check failed; tests `android_network_rule_tests`, `scripts/android/test/NetworkRuleTest.java`), bounds every transfer, checks signed
 size/SHA-256 and APK identity/version/current signers, and writes a PackageInstaller session. It
 requests unknown-app permission only when missing. An explicit non-exported receiver handles the
 system confirmation and result. Android closes the app when replacing it; the confirmation tells the
@@ -1196,7 +1240,7 @@ that is gone from the phone is no choice (the system's way applies, and the choi
 | Way | When | In the handheld view |
 |---|---|---|
 | Our player | the system has a core of ours (`android/cores.lock.json`) and it is on the phone (bundled, or downloaded) | starts as pocket-core's games do on Linux (hosted): the start's scene in full, the game held until it ends or a button skips it |
-| Core to download | the core is a download (PSP, DS, N64, Saturn, Dreamcast) and not on the phone | A on the game doesn't start it: its "Runs on" page opens on the **Download** row ("PSP · 18.6 MB", the same job and consent as Mobile, unmetered Wi-Fi) with "This system is not installed yet. Choose Download now to add it on Wi-Fi."; without a public channel the row says "Coming soon" |
+| Core to download | the core is a download and not on the phone (since 0.5.x none is: every core is in the APK) | A on the game doesn't start it: its "Runs on" page opens on the **Download** row ("PSP · 18.6 MB", the same job and consent as Mobile, unmetered Wi-Fi) with "This system is not installed yet. Choose Download now to add it on Wi-Fi."; without a public channel the row says "Coming soon" |
 | Another app | an installed app is chosen for the system or the game, or the system has no player of ours (PS2, GameCube/Wii, 3DS, Xbox: the first app that takes it) | `EmulatorIntents.createForPath`: RetroArch gets the path, the others a read-only content URI of `RomProvider` (no copy); the app starts at once (no hold); play time and the way back are as for our player |
 | Nobody | no player of ours and no app | the Game check's sentence for the profile ("PlayStation 2 games play in ARMSX2, which isn't installed …") |
 
@@ -1248,6 +1292,31 @@ gives it its rows and keys:
   picture, the slots under it and "Slot 2 · saved 5 min ago".
 - Earlier shows how long ago its moment is ("12 min ago"); Left/Right go through the kept moments (`earlier0`…`earlier5`,
   newest first) and the line under the picture says what A does and how moments come about.
-- Options is a list: Zoom and Screenshot first (Linux has Zoom under Options too), then the sections. B goes back onto
-  the row it came from; Zoom's B back to Options.
+- Options is Linux's page (`src/pause_options.rs`, 17.11.2026; before, Zoom and Screenshot stood first and the focus landed on
+  Zoom, the Retroid Pocket Mini V2 hand test: "completely different from Linux"): Picture ›, Emulator ›, Controls ›, Zoom ›,
+  Cheats ›, Earlier states (Off / On), Over the game (Off / FPS), Keep for (This game / This console), Restore defaults,
+  Screenshot, in Linux's order (`opt_entries`), with Linux's names and lines; a page opens on Picture. What the player has no
+  counterpart for is left out, each row with its reason in `pause_options::tests::NOT_ON_ANDROID` ("feature missing on Android":
+  Custom look, LCD grid, frame variants, Screen orientation, fast-forward, rewind, rumble, run-ahead, Controls' button rows;
+  "Linux only": Shortcuts, Performance, Fan, Runs on); `android_s_page_has_linux_s_rows_on_the_same_handheld` fails for any
+  other Linux row the page lacks. Picture has the Handheld view's rows in its words and order (Screen scaling Integer / Aspect /
+  Fullscreen, Look Clean / Smooth / Scanlines / Old TV, Screen frame None / Console / CRT; `PictureRow` translates to
+  `picture::Settings`' indices) and, for N64, PSP, Dreamcast and PlayStation, Linux's **Resolution** (`render_scale`, its
+  numbers per chip class; 17.11.2026). Android's app sandbox can't read the device tree Linux identifies the handheld by, so
+  the class comes from `ro.soc.model` / `ro.board.platform` (`render_scale::android_class`: SM8250 / kona, SM8550 / kalama);
+  any other chip gets no row and the core keeps its own option, as an unmeasured handheld on Linux. The choice is kept in
+  `picture/systems|games/*.json` (`resolution`, a factor) and given to the core before it loads (`Settings::start_resolution`,
+  Linux's `for_start` / `place`; logcat `resolution: class=… ppsspp_internal_resolution = 960x544 (this handheld's default)`);
+  the core's own resolution option leaves the Emulator page where the row is there (`row_decides`). Earlier states is Linux's
+  row (`timeline_policy`: Off for N64, PSP, DS, Dreamcast, Saturn); Off writes no new moments. Restore defaults asks for a
+  second A, then removes the picture file of the console and the game, puts every emulator option back on its default and
+  empties its saved file, and switches Hold to toggle off. Emulator the core's options by section with "Advanced (this emulator)" last, Controls Hold to
+  toggle and the Disc. B goes back from a page onto its row, from the top page to the pause menu; Zoom's B back to Options.
+- The line under the selected row is never cut (17.11.2026; it ended in "…" after two lines, the Mini V2 hand test of
+  Resolution): `pause_list::paint_list` wraps it as Linux's `kit::footer_lines` with no limit, keeps `DESC_ROOM` (five)
+  lines free as Linux's Options page and lets the list scroll above it;
+  `pause_options::tests::every_row_s_line_reads_whole_on_every_screen_language_and_text_size` paints every row's line in
+  every language, text size, on the Mini V2 and a small phone.
+- Over the game → FPS draws Linux's line ("60 FPS   CPU 23%", `fps_line`, the same text as pocket-core's) in the top left corner
+  while the game runs, twice a second; it is kept with the picture's choices (`picture/systems|games/*.json`, `over_game`).
 - Touch stays an extra: a tap on a row does it, on a hint key does that key.

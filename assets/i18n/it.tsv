@@ -815,7 +815,7 @@ Timeline	Cronistoria
 Discontinued	Dismesso
 Sold	Venduto
 On this Pocket	Su questo Pocket
-{s} · last: {t}	{s} · ultimo: {t}
+{t} · last: {s}	{t} · ultimo: {s}
 Your games	I tuoi giochi
 {s}, last {t}	{s}, ultimo {t}
 Played	Giocato
@@ -1078,6 +1078,7 @@ Saved. This takes effect the next time the game starts.	Salvato. Ha effetto al p
 Original (480p)	Originale (480p)
 2x (960p)	2x (960p)
 The resolution the Xbox's picture is drawn at. Original is the Xbox's own 480p; 2x (960p) is sharper and costs the GPU more. Takes effect the next time the game starts.	La risoluzione a cui è disegnata l'immagine dell'Xbox. Originale è il 480p dell'Xbox; 2x (960p) è più nitido e costa più alla GPU. Ha effetto al prossimo avvio del gioco.
+The resolution the 3D picture is drawn at. Original is the console's own; 2x and up are sharper and cost the GPU more. Takes effect the next time the game starts.	La risoluzione a cui è disegnata l'immagine 3D. Original è quella della console; da 2x in su è più nitida e costa di più alla GPU. Ha effetto al prossimo avvio del gioco.
 Aspect is as large as fits, in the picture's own shape (4:3), with black bars.	Proporzioni: il più grande possibile, nella forma dell'immagine (4:3), con barre nere.
 Fullscreen fills the screen and stretches the picture.	Schermo intero riempie lo schermo e allunga l'immagine.
 Integer scales by whole numbers. Takes effect the next time the game starts.	Scala intera usa numeri interi. Ha effetto al prossimo avvio del gioco.
@@ -4580,6 +4581,11 @@ Hard mode	Modalità difficile
 Difficult mode	Modalità difficile
 {n}% complete	{n}% completato
 {n} of {m} mirror shards	{n} di {m} frammenti di specchio
+{n} Jiggies	{n} Jiggies
+1 Jiggy	1 Jiggy
+{n} notes	{n} note
+1 note	1 nota
+Mission {s}: {s2}	Missione {s}: {s2}
 This console's button names show here after your first game on it.	I nomi dei tasti di questa console compaiono qui dopo il primo gioco.
 D-pad (changed)	Croce direzionale (modificata)
 Menu	Menu
@@ -5021,8 +5027,6 @@ Help	Aiuto
 Short answers to the usual questions. Choose a topic.	Risposte brevi alle domande più comuni. Scegli un argomento.
 Choose your games folder	Scegli la cartella dei giochi
 Settings › Choose your ROM folder: pick the folder with one folder per system (gba, snes, psx). Games stay where they are; nothing is copied.	Impostazioni › Scegli la cartella delle ROM: scegli la cartella con una cartella per sistema (gba, snes, psx). I giochi restano dove sono; non viene copiato niente.
-Load more systems	Carica altri sistemi
-PSP, DS, Nintendo 64 and Dreamcast are optional. Settings › Cozy extras › Download now loads one over Wi-Fi; B cancels. All other systems are already in the app.	PSP, DS, Nintendo 64 e Dreamcast sono facoltativi. Impostazioni › Extras accoglienti › Scarica ora ne carica uno via Wi-Fi; B annulla. Tutti gli altri sistemi sono già nell'app.
 In a game press Back or your handheld's Menu button. Continue, Save, Load, Options, Controls and Save & quit are in it. With a controller, A chooses and B continues.	In un gioco premi Indietro o il tasto Menu della tua console portatile. Dentro ci sono Continua, Salva, Carica, Opzioni, Controlli e Salva ed esci. Con un controller, A sceglie e B continua.
 Save and keep playing	Salva e continua a giocare
 Save & quit keeps your place and the game's own saves. Next time the game is under Continue and starts where you stopped. Save and Load have eight slots.	Salva ed esci conserva il tuo punto e i save del gioco. La prossima volta il gioco è sotto Continua e riparte da dove ti sei fermato. Salva e Carica hanno otto slot.
@@ -5225,3 +5229,11 @@ Game start animation	Animazione di avvio
 How bright the screen is. The same as in the quick settings.	Quanto è luminoso lo schermo. Come nelle impostazioni rapide.
 How loud games and menus are. The same as in the quick settings.	Il volume di giochi e menu. Come nelle impostazioni rapide.
 A separate layout for each controller, in menus and games. Pairing: Connections › Bluetooth.	Una disposizione separata per ogni controller, nei menu e nei giochi. Abbinamento: Connessioni › Bluetooth.
+
+# Android player: native start dialog and screen-reader controls
+Game couldn't start	Il gioco non è partito
+Previous slot	Slot precedente
+Next slot	Slot successivo
+{t} · previous value	{t} · valore precedente
+{t} · next value	{t} · valore successivo
+Size, look and frame.	Dimensione, aspetto e cornice.

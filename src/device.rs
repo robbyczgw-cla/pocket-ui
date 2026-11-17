@@ -495,14 +495,15 @@ pub const ANDROID_HIDES: &[&str] = &["leds", "haptics", "sync", "tailscale", "to
     "storage", "web", "pc_streaming", "night_light", "screen_colour", "battery", "gamelist", "backup", "test_buttons",
     // The report is written to the card's reports folder; Android's way is the Mobile view's Report a problem (Settings → View).
     "report",
-    // What only pocket-core's pause menu and overlay have: the Android player's menu has Zoom always, one Save & quit, no frame-rate
-    // or Pixel Path line and no run-ahead, no console boot screen (it has no BIOS folder to read), and its Screenshot button saves into the player's folder, not the one this view reads.
+    // What only pocket-core's pause menu and overlay have: the Android player's menu has Zoom always, one Save & quit, its own
+    // Over the game (Off/FPS, Options in the game, kept with its picture choices: no default here), no Pixel Path line and no run-ahead,
+    // no console boot screen (it has no BIOS folder to read), and its Screenshot button saves into the player's folder, not the one this view reads.
     "zoom_pause", "boot_screen", "over_game", "remember_quit", "quit_without_saving", "pixel_path", "pixel_path_live", "run_ahead", "screenshots"];
 
 /// What a game's "This game" page offers on Android's handheld view: the settings of the picture the Android player draws
 /// (scaling, the Look, the frame; its four effects are the Look's four values, so Custom with Sharpness and Effect is not there). Everything else of Linux's list is pocket-core's: the
-/// player has no rewind or Earlier setting, no fast-forward, rumble, fan or run-ahead, no screen turn, no Over the game and no
-/// HOME shortcuts, so a row for them would be a switch that does nothing.
+/// player has no rewind or Earlier setting, no fast-forward, rumble, fan or run-ahead, no screen turn and no HOME shortcuts, so a
+/// row for them would be a switch that does nothing. Over the game (FPS) is in the player's own Options, kept by the player.
 pub const ANDROID_PLAYER_SETTINGS: &[&str] = &["scaling", "look", "frame"];
 
 /// Whether a game setting is out of the page, given Android's profile.

@@ -826,7 +826,7 @@ Timeline	Zeitleiste
 Discontinued	Eingestellt
 Sold	Verkauft
 On this Pocket	Auf diesem Pocket
-{s} · last: {t}	{s} · zuletzt: {t}
+{t} · last: {s}	{t} · zuletzt: {s}
 Your games	Deine Spiele
 {s}, last {t}	{s}, zuletzt {t}
 Played	Gespielt
@@ -1082,6 +1082,7 @@ Saved. This takes effect the next time the game starts.	Gespeichert. Gilt, wenn 
 Original (480p)	Original (480p)
 2x (960p)	2× (960p)
 The resolution the Xbox's picture is drawn at. Original is the Xbox's own 480p; 2x (960p) is sharper and costs the GPU more. Takes effect the next time the game starts.	Die Auflösung, in der das Bild der Xbox gezeichnet wird. Original ist die 480p der Xbox; 2× (960p) ist schärfer und kostet die GPU mehr. Gilt, wenn das Spiel das nächste Mal startet.
+The resolution the 3D picture is drawn at. Original is the console's own; 2x and up are sharper and cost the GPU more. Takes effect the next time the game starts.	Die Auflösung, in der das 3D-Bild gezeichnet wird. Original ist die Auflösung der Konsole; ab 2x ist es schärfer und kostet die GPU mehr. Gilt, wenn das Spiel das nächste Mal startet.
 Aspect is as large as fits, in the picture's own shape (4:3), with black bars.	Seitenverhältnis ist so groß wie möglich in der eigenen Form des Bildes (4:3), mit schwarzen Balken.
 Fullscreen fills the screen and stretches the picture.	Vollbild füllt den Bildschirm und dehnt das Bild.
 Integer scales by whole numbers. Takes effect the next time the game starts.	Ganzzahlig skaliert in ganzen Vielfachen. Gilt, wenn das Spiel das nächste Mal startet.
@@ -2156,7 +2157,7 @@ Handhelds	Handhelds
 Every console	Jede Konsole
 Split	Geteilt
 Cards	Karten
-Cabinet	Vitrine
+Cabinet	Schrank
 Your games standing on a shelf. The one you pick shows its cover.	Deine Spiele stehen im Regal. Das gewählte zeigt sein Cover.
 List on the left, details on the right.	Links die Liste, rechts die Details.
 Your games in their cases on a wooden shelf. Pull one out to see its cover.	Deine Spiele in ihren Hüllen auf einem Holzregal. Zieh eines heraus, um sein Cover zu sehen.
@@ -4057,10 +4058,10 @@ after a restart	nach einem Neustart
 A Choose · ‹ › Change · B Back	A Wählen · ‹ › Ändern · B Zurück
 Advanced (this emulator)	Erweitert (dieser Emulator)
 Cozy extras	Gemütliche Extras
-The cabinet's TV, stickers, playful cases, old-TV switch-on and more: each on or off.	Fernseher der Vitrine, Sticker, verspielte Hüllen, Alter-Fernseher-Effekt und mehr: jedes einzeln an oder aus.
+The cabinet's TV, stickers, playful cases, old-TV switch-on and more: each on or off.	Fernseher des Schranks, Sticker, verspielte Hüllen, Alter-Fernseher-Effekt und mehr: jedes einzeln an oder aus.
 Case sounds	Hüllen-Geräusche
 Old-TV switch-on	Alter-Fernseher-Effekt
-TV on the cabinet	Fernseher auf der Vitrine
+TV on the cabinet	Fernseher auf dem Schrank
 TV plays the game	Fernseher spielt das Spiel
 Stickers on cases	Sticker auf den Hüllen
 Sealed new games	Neue Spiele eingeschweißt
@@ -4073,7 +4074,7 @@ Slideshow before screen off	Diashow vor dem Abschalten
 Playful cases	Verspielte Hüllen
 Cases click open, cartridges and discs go in with a sound. Menu sounds stay as they are.	Hüllen klicken auf, Module und Discs rasten hörbar ein. Die Menü-Töne bleiben, wie sie sind.
 The game's picture comes on like an old TV when it starts.	Das Bild des Spiels geht beim Start an wie bei einem alten Fernseher.
-A small old TV on top of the cabinet shows the selected game.	Ein kleiner alter Fernseher oben auf der Vitrine zeigt das gewählte Spiel.
+A small old TV on top of the cabinet shows the selected game.	Ein kleiner alter Fernseher oben auf dem Schrank zeigt das gewählte Spiel.
 The TV shows a game you haven't played running live, without sound. Uses more power while it plays; off, nothing extra runs.	Der Fernseher zeigt ein Spiel, das du noch nie gespielt hast, live und ohne Ton. Braucht dabei mehr Strom; aus läuft nichts extra.
 Show your stickers on the cases. Off hides them; they stay on the game's card.	Zeigt deine Sticker auf den Hüllen. Aus blendet sie aus; auf der Spielkarte bleiben sie.
 The game's memory card or cartridge with its blocks under Save and Load, instead of the slim row.	Die Speicherkarte oder das Modul des Spiels mit seinen Blöcken unter Speichern und Laden statt der schmalen Reihe.
@@ -4088,8 +4089,8 @@ Games you have never played stand in plastic wrap. It tears off the first time y
 Progress from saves	Fortschritt aus Spielständen
 Badges, stars and hearts from your own saves on the case; off keeps it spoiler-free.	Deine Orden, Sterne und Herzen aus dem eigenen Spielstand auf der Hülle; aus bleibt alles spoilerfrei.
 Cases spring and wiggle. Follows Animations: on with Cozy, off with Quick, until you switch it.	Hüllen federn und wackeln. Folgt den Animationen: an bei Gemütlich, aus bei Schnell, bis du umschaltest.
-Shelf and Cabinet looks only.	Nur in den Ansichten Regal und Vitrine.
-Cabinet look only.	Nur in der Ansicht Vitrine.
+Shelf and Cabinet looks only.	Nur in den Ansichten Regal und Schrank.
+Cabinet look only.	Nur in der Ansicht Schrank.
 Silent now: Menu sounds is off (Screen & sound › Menu sounds).	Gerade stumm: Menütöne sind aus (Bildschirm & Ton › Menütöne).
 Not shown now: it needs Animations on Cozy (Playing) and Motion on Full (Look).	Gerade nicht zu sehen: Dafür müssen Animationen auf Gemütlich (Spielen) und Bewegung auf Voll (Aussehen) stehen.
 Not shown now: needs Motion on Full (Look).	Gerade nicht zu sehen: braucht Bewegung auf Voll (Aussehen).
@@ -4473,7 +4474,7 @@ This one takes a while. Still saving, don't switch off.	Das dauert etwas. Es spe
 Closing the game…	Spiel wird beendet…
 The second card holds a system image, so only its small space is used. Take it out, or format it for games.	Die zweite Karte enthält ein System-Image, deshalb wird nur ihr kleiner Platz genutzt. Nimm sie heraus oder formatiere sie für Spiele.
 UP/DOWN	HOCH/RUNTER
-Easy	Easy
+Easy	Einfach
 Next time, A brings you back to this moment.	Beim nächsten Mal bringt dich A genau hierher zurück.
 This game keeps only what you save in it.	Dieses Spiel behält nur, was du darin speicherst.
 More: saves, brightness, options	Mehr: Spielstände, Helligkeit, Optionen
@@ -4484,7 +4485,7 @@ The game file may be damaged, or a file it needs isn't on the card.	Die Spieldat
 It may need files that aren't on the card.	Vielleicht fehlen Dateien auf der Karte.
 1 player or more	1 Spieler oder mehr
 2 players or more	2 Spieler oder mehr
-Shelf, Easy, Minimal, Split, Cards or Cabinet, with a live preview.	Regal, Easy, Minimal, Geteilt, Karten oder Schrank, mit Live-Vorschau.
+Shelf, Easy, Minimal, Split, Cards or Cabinet, with a live preview.	Regal, Einfach, Minimal, Geteilt, Karten oder Schrank, mit Live-Vorschau.
 One big game at a time, simple menus.	Ein großes Spiel auf einmal, einfache Menüs.
 HOME opens the menu: save, load, quit.	HOME: Menü, Speichern, Beenden.
 No Wi-Fi here, so the clock doesn't set itself.	Kein WLAN hier, die Uhr stellt sich also nicht selbst.
@@ -4496,7 +4497,7 @@ Open link	Link öffnen
 Next link	Nächster Link
 Free games come over Wi-Fi. The starter pack waits here.	Kostenlose Spiele kommen übers WLAN. Das Startpaket wartet hier.
 How you like to play	Wie du am liebsten spielst
-The shelf, Easy, Enthusiast or your own choice of the extras.	Das Regal, Easy, Enthusiast oder deine eigene Auswahl der Extras.
+The shelf, Easy, Enthusiast or your own choice of the extras.	Das Regal, Einfach, Enthusiast oder deine eigene Auswahl der Extras.
 The shelf, Enthusiast or your own choice of the extras.	Das Regal, Enthusiast oder deine eigene Auswahl der Extras.
 Added 1 game. B goes back to pick games.	1 Spiel hinzugefügt. B geht zurück zur Auswahl.
 Added {n} games. B goes back to pick games.	{n} Spiele hinzugefügt. B geht zurück zur Auswahl.
@@ -4635,6 +4636,11 @@ Hard mode	Modus Schwer
 Difficult mode	Modus Schwer
 {n}% complete	{n} % geschafft
 {n} of {m} mirror shards	{n} von {m} Spiegelscherben
+{n} Jiggies	{n} Jiggies
+1 Jiggy	1 Jiggy
+{n} notes	{n} Noten
+1 note	1 Note
+Mission {s}: {s2}	Mission {s}: {s2}
 # Controls card 2026-11-04
 This console's button names show here after your first game on it.	Die Tastennamen dieser Konsole stehen hier, sobald du ein erstes Spiel auf ihr gespielt hast.
 D-pad (changed)	Steuerkreuz (geändert)
@@ -5106,8 +5112,6 @@ Help	Hilfe
 Short answers to the usual questions. Choose a topic.	Kurze Antworten auf die üblichen Fragen. Wähle ein Thema.
 Choose your games folder	Spieleordner wählen
 Settings › Choose your ROM folder: pick the folder with one folder per system (gba, snes, psx). Games stay where they are; nothing is copied.	Einstellungen → ROM-Ordner auswählen: Wähle den Ordner mit je einem Ordner pro System (gba, snes, psx). Spiele bleiben, wo sie sind; nichts wird kopiert.
-Load more systems	Mehr Systeme laden
-PSP, DS, Nintendo 64 and Dreamcast are optional. Settings › Cozy extras › Download now loads one over Wi-Fi; B cancels. All other systems are already in the app.	PSP, DS, Nintendo 64 und Dreamcast sind optional. Einstellungen → Gemütliche Extras → Jetzt laden holt eines per WLAN; B bricht ab. Alle anderen Systeme sind schon in der App.
 In a game press Back or your handheld's Menu button. Continue, Save, Load, Options, Controls and Save & quit are in it. With a controller, A chooses and B continues.	Drück im Spiel Zurück oder die Menütaste deines Handhelds. Darin: Fortsetzen, Speichern, Laden, Optionen, Steuerung und Sichern & Ende. Mit Controller wählt A, B setzt fort.
 Save and keep playing	Speichern und weiterspielen
 Save & quit keeps your place and the game's own saves. Next time the game is under Continue and starts where you stopped. Save and Load have eight slots.	Sichern & Ende behält deine Stelle und die Spielstände des Spiels. Beim nächsten Mal liegt es unter „Fortsetzen“ und startet, wo du aufgehört hast. Speichern und Laden haben acht Plätze.
@@ -5280,3 +5284,11 @@ Game start animation	Spielstart-Animation
 How bright the screen is. The same as in the quick settings.	Wie hell der Bildschirm ist. Dasselbe wie im Schnellmenü.
 How loud games and menus are. The same as in the quick settings.	Wie laut Spiele und Menüs sind. Dasselbe wie im Schnellmenü.
 A separate layout for each controller, in menus and games. Pairing: Connections › Bluetooth.	Eine eigene Belegung für jeden Controller, in Menüs und Spielen. Koppeln: Verbindungen › Bluetooth.
+
+# Android player: native start dialog and screen-reader controls
+Game couldn't start	Das Spiel konnte nicht starten
+Previous slot	Vorheriger Slot
+Next slot	Nächster Slot
+{t} · previous value	{t} · vorheriger Wert
+{t} · next value	{t} · nächster Wert
+Size, look and frame.	Größe, Ansicht und Rahmen.

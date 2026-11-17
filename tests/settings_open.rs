@@ -84,7 +84,18 @@ fn run(tmp: &Path, wayland: &Option<Stub>, lang: &str) -> Bench {
 }
 
 #[test]
-fn settings_first_frame_draws_no_glyph_runs_no_pattern_and_is_not_much_slower_than_the_next() {
+fn settings_first_frame_draws_no_glyph_and_runs_no_pattern() {
+    let tmp = tempfile::tempdir().unwrap();
+    let wayland = wayland_for_snapshots(tmp.path());
+    for lang in ["en", "de", "es", "pt", "fr", "it"] {
+        let r = run(tmp.path(), &wayland, lang);
+        assert_eq!(r.first_glyphs, 0, "{lang}: the categories page found every letter in the cache ({r:?})");
+        assert_eq!(r.first_patterns, 0, "{lang}: no string of the page ran the table's patterns ({r:?})");
+    }
+}
+
+#[test]
+fn settings_first_frame_is_not_much_slower_than_the_next() {
     let _tmp_guard = tempfile::tempdir().unwrap();
     let tmp = _tmp_guard.path().to_path_buf();
     let wayland = wayland_for_snapshots(&tmp);

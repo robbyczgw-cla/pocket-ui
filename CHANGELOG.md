@@ -5,7 +5,12 @@ and versions follow [Semantic Versioning](https://semver.org/) (before 1.0, a mi
 
 ## [Unreleased]
 
-## [0.5.0] - 2026-11-17
+### Fixed
+
+- Android: the explanation under a row of a game's Options is always shown whole (it ended in "…" after two lines, so "Takes effect the next time the game starts." was cut off). It wraps as on the handhelds, and the list scrolls above it.
+
+- Android: updates and downloads work with a VPN on (Tailscale, WireGuard, ad blockers). The update check looked for the Wi-Fi under the VPN, which such a VPN doesn't allow, and said "Couldn't reach the update server". It's still Wi-Fi or Ethernet only, never mobile data.
+- Public Android builds: the linked Tailscale feature-preview help uses a documentation address after export; the strict native scan keeps rejecting tailnet samples.
 
 ### Removed
 
@@ -17,6 +22,8 @@ and versions follow [Semantic Versioning](https://semver.org/) (before 1.0, a mi
 
 ### Added
 
+- Android: Options → Picture → Resolution for Nintendo 64, PSP, Dreamcast and PlayStation games on the Snapdragon handhelds (Retroid Pocket Mini V2, Mini, 5, Flip 2, 6, AYN Odin 2), the same row and starting values as pocket-ui OS: 2x for N64, PSP and Dreamcast, Original for PlayStation. The game's Options also have Earlier states (Off for N64, PSP, DS and Dreamcast, whose states are big, as on the handhelds) and Restore defaults now.
+- **Sharper 3D on the Snapdragon handhelds**: Options → Picture has a **Resolution** row for Nintendo 64, PSP, Dreamcast and PlayStation games, the same row PS2, GameCube, Wii and Xbox games have, kept for the console or one game and used the next time the game starts. On the Retroid Pocket Mini V2 and its Snapdragon 865 and 8 Gen 2 siblings, N64, PSP and Dreamcast now start at 2x (N64 drew at its own 320 × 240 before), with 3x to choose for N64 and PSP and 2x for the PlayStation; only what ran at full speed on the Mini V2 is offered. The H700 and Rockchip handhelds are unchanged.
 - **Console boot screen** (Settings → Playing, off by default): a fresh start of a Game Boy, Game Boy Color, Game Boy Advance or PlayStation game runs through the console's own boot screen (the Nintendo logo, the PlayStation start-up) when your own BIOS file is in `roms/bios` (`gb_bios.bin`, `gbc_bios.bin`, `gba_bios.bin`, a `scph….bin`). Never when a moment is continued; with Continue where I quit Off and On start → Last game, the Pocket boots straight into the last game through its logo. Without the file the game starts as before and a note names the file. No BIOS files are shipped.
 - **Your own cheat files on the handhelds**: a `.cht` file with the game's name, next to the game, in a `cheats` folder there or in RetroArch's `cheats/<system>/` folder, is listed first on Options → Cheats (marked [Your file]), then the database's cheats. A file that is too big, unreadable or empty is explained on the page.
 - **Web companion on your home Wi-Fi**: switched on, it now works on the Pocket's Wi-Fi too, not only over Tailscale. Open the address the page shows (`http://192.168…`, or its `.local` name) on a phone or computer on the same Wi-Fi and pair it once with the six-digit code or the QR code; it stays paired. Your own Tailscale devices still get in without a code. Off by default, as before.
@@ -124,10 +131,10 @@ and versions follow [Semantic Versioning](https://semver.org/) (before 1.0, a mi
 - Android preview: PlayStation 2, GameCube and Wii, 3DS and Xbox games start straight into the game in their emulator app (ARMSX2 or NetherSX2, Dolphin, Azahar, hakuX), and closing the game there comes back to pocket-ui. Xbox discs (`.iso` in an `xbox` folder) and 3DS homebrew (`.3dsx`) are on the shelf. Without the app, Play says which app it is and where to get it, and nothing counts as played.
 - Android preview: Settings → Save backup. Export saves writes every game's saves and save states into one file where you choose; Import saves brings them back, also after the app was installed again, and asks before a game that already has saves here would get the backup's.
 - Android: the pause menu's heading shows a long game name and its status line whole (wrapped, a step smaller only when the buttons need the room) instead of cutting them with "…"; the name stays as it is in every language.
-- Settings → Connections → Sync shows a paused folder on its row ("Paused") and says whether pocket-ui paused it for a game or not. X resumes it when you choose to (GameCube & Wii saves: both folders); nothing is resumed by itself, not while a game runs, and not while Syncthing isn't answering.
+- Settings → Help & tools → For tinkerers → Sync shows a paused folder on its row ("Paused") and says whether pocket-ui paused it for a game or not. X resumes it when you choose to (GameCube & Wii saves: both folders); nothing is resumed by itself, not while a game runs, and not while Syncthing isn't answering.
 - The UI status file also reports update job phases, current-file progress, cancellation boundaries, notice suppression and existing recovery/known-good evidence. Update jobs and notice scheduling now use typed in-memory states; installed marker formats and power-cut ordering stay compatible.
 - Android preview: Retro with saved Cocoa/Pea colours, complete selected names, read-only box art and folder aliases from other cards, same-game cheat sidecars on supported bundled cores, and protected recovery after a failed Load rollback. Android updates remain signed APK installations.
-- Settings → Games → Box art & downloads brings box art, Pictures, PortMaster games, optional TrimUI Cheats and Starter pack together. The last first-start page points there. Cheats in the pause menu offers the same explicit Get row; installed codes work offline and can be removed or updated without losing each game's saved switches. Optional downloads stop with B and keep checked resumable checkpoints; cards and regular updates omit the cheat pack.
+- Settings → Games → Extras brings box art, Pictures, PortMaster games, optional TrimUI Cheats and Starter pack together. The last first-start page points there. Cheats in the pause menu offers the same explicit Get row; installed codes work offline and can be removed or updated without losing each game's saved switches. Optional downloads stop with B and keep checked resumable checkpoints; cards and regular updates omit the cheat pack.
 
 
 - **Cards from other systems work as they are.** Next to the usual folders, pocket-ui reads a folder with the name another system gives ("Game Boy Advance (GBA)", "GBA", "Sega Genesis", "Nintendo Game Boy Advance"), in place and without a rename. Box art already on the card (`images`, `Imgs`, `.media`, `covers`, a gamelist's pictures, ES-DE's `downloaded_media`) is used before anything is downloaded, boxes before mixes before screenshots; nothing on the card is written.
@@ -136,6 +143,14 @@ and versions follow [Semantic Versioning](https://semver.org/) (before 1.0, a mi
   seconds later. Switch back to screen-off in Settings → System → Sleep & power.
 
 ### Changed
+
+- Shelf look: the selected game's box is shown 1.4 times as large where the room over the shelf allows it (a system's page of cartridge boxes on the TrimUI Brick, 640x480 and the other 4:3 screens). Home with its DVD-size cases keeps nearly the old size, so the boxes stay true to each other. A line under the name that doesn't fit now ends with "…" instead of losing its end without a mark.
+- **Settings: which rows open a page and which change in place.** A row that opens a page ends in a clear **›** on every row; a row that changes right in the list never does, and the selected one shows **‹ value ›** with the hint **‹ › Change**. Every such row now changes with Left/Right (A still works as before): Continue where I quit, Console boot screen, Remind me where I was, Zoom in the pause menu, Haptics, the Wi-Fi and Bluetooth rows of the quick settings, and the switches on the Tailscale, Bluetooth and Sync pages. Left on Screen frames goes back now instead of on.
+- **Zoom in the pause menu** moved from Look to **Playing**, after Over the game.
+- **The pause menu marks its pages too.** On its first page, Options, Achievements, Players, Pixel Path and Zoom end in a clear **›** and A's hint says **Open**; Continue, Save, Load and Quit don't, as they act right there. Under Options, Cheats keeps its **›** when it shows how many are on ("2 on ›"). The same on Android's pause menu for a game from the Handheld view.
+- **Zoom in Options** moved from second place, right under Picture, to after Speed, rumble, fan, as a help you reach when you need it.
+- **Cabinet: the frame stays put.** The top board and the TV on it stand at the same place on every shelf; moving from system to system only the shelves move (they jumped with each shelf's height before). A handheld game (Game Boy, GBA, Game Gear, Neo Geo Pocket, DS, PSP …) shows on its handheld in the TV's place, the game on its little display.
+- **German: one name per look.** The Cabinet look is "Schrank" and the Easy look "Einfach" everywhere in German (the row said "Vitrine" and "Easy", the descriptions "Schrank" and "Einfach"); a Spanish and a French description now use the looks' own names too.
 
 - **Settings in eight categories.** Controls & sound is split in two. **Screen & sound** has **Brightness** and **Volume** as rows of their own (the same values as the quick settings on HOME), Screen colour and Night light (from Look), **Menu sounds** (it was called Sounds) and Case sounds. **Controls** has Buttons, Controller setup, Test buttons, Haptics and LEDs (on the Brick: Lights & buttons). Look gains Zoom in the pause menu (under Text size) and **Game start animation** (it was Animations, in Playing). In German, Playing is now „Im Spiel“. Each category has its own symbol: the controller for Controls, the speaker for Screen & sound, a play button for Playing. No setting changes value.
 - **"Where was I?" is off until you switch it on.** The card after a long break no longer shows by itself: Settings →
@@ -165,7 +180,9 @@ and versions follow [Semantic Versioning](https://semver.org/) (before 1.0, a mi
   Surprise me in the Curator list is gone (on Android, its first row of the Curator tab, too; there X on the Just Play row of
   Quick settings shows the card). Just Play has its own switch, Settings → Games → Curator → Just Play on Home. It no longer
   follows the Lens switch; if you had the Lens off, Just Play stays off until you switch it on.
-- **Connections brings the ways to connect together.** Wi-Fi, Bluetooth, Tailscale, Remote access (SSH), Sync, Web companion and PC streaming are in Settings → Connections. The old "For tinkerers" page is gone.
+- **A page "For tinkerers" under Settings → Help & tools.** Sync and PC streaming live there.
+  Connections holds Wi-Fi, Bluetooth, Tailscale, Remote access (SSH) and the Web companion. Nothing changed in the pages themselves; on a device
+  that has neither Sync nor PC streaming, the row is not shown. In the manual, the paths read Settings → Help & tools → For tinkerers → Sync.
 - **Curator's depth is for the Enthusiast profile.** A new Pocket starts without the Lens and smart shelves, Echoes and Merge
   versions; Just Play on Home is the one way to "pick me something". Settings → Games → Curator and the profile Enthusiast
   switch them on. A Pocket that was set up before keeps them as they were (on, unless you had switched them off).
@@ -183,6 +200,9 @@ and versions follow [Semantic Versioning](https://semver.org/) (before 1.0, a mi
   tab bar has four tabs; Curator comes back as a fifth with Settings → Curator tab.
 
 ### Fixed
+
+- Android: Mega Drive Continue restores the colours of the saved scene instead of showing a black picture. Existing moments stay compatible.
+- Console cards translate their game count together with the last-played label and preserve the game's name. Android's start-error title and player screen-reader arrows follow the selected language.
 
 - **Settings: the row of category symbols stays put.** On small screens (the RG28XX, while charging) a long category name moved onto a line of its own, and the symbols and every entry slid down when you paged with Left/Right or L1/R1. Now each screen uses one layout for every category: a long name is shortened beside its symbol ("Screen", "Help"), or, where even that doesn't fit, every category shows its name on the line above.
 - **Android: the pages fit a Retroid Pocket Mini V2 (1240x1080) at 2 and 2.5 dp, at Android's larger font size and in German.** A console's name on the shelf page read "Game…" (the shelf buttons now move along behind a title that is too long for them), the Settings tab read "Einstellung…" (a near-square screen puts its icons over the words, as a phone upright does), "PlayStation Portable · Experimental" was cut in the list and the game card (a step or two smaller; a list row that still cannot hold it drops "Experimental", which the selected game's panel beside the list keeps saying), and the words of Plays with, Licences and the first page without games ran out of room (a step or two smaller, and Plays with takes the room Licences and Save backup already had). Screens that fit render as before.

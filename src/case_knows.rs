@@ -72,6 +72,15 @@
 //! * Mother 3 (Japan, played with the English fan translation): Data Crystal's SRAM map and the Kurausukun/mother3
 //!   decomp (`sub_08052184`: the banks, `sub_08001DC8`: the sum); the Load screen's summaries in the game's own bank,
 //!   the translation's letters and the file saved last found with saves the game wrote.
+//! * Banjo-Kazooie: banjo.decomp/banjo-kazooie (`savedata_init`, `gameFile_8033CE40`, `jiggyscore.c`, the notes' and
+//!   clock's fields in `code_BEF20.c`, `gameSelect.c`), bryc/rare-n64-chksm for the sum; checked against saves the game
+//!   wrote (USA Rev 1) and its game select.
+//! * Metroid Fusion: metroidret/mf (`sSaveDataSramPointers`, `struct Equipment`, `struct InGameTimer`, the ending's
+//!   `completionPercentage`); the file's checks, places and the file chosen last from saves the game wrote (its own save
+//!   routine, `Sram_QuickSave`, called from the pause screen's debug page), as in Zero Mission.
+//! * GoldenEye 007: n64decomp/007 (`file2.c`: `save_data`, the slots at `joyGamePakLongWrite`, `fileValidateSaves`,
+//!   `fileGetSaveStageDifficultyTime`, `fileGetHighestStageDifficultyCompletedForFolder`, `fileIs007ModeUnlocked`;
+//!   `front.c`: the folder select's text and `mission_folder_setup_entries`); checked against saves the game wrote.
 //! * A Link to the Past: snesrev/zelda3, `select_file.c` (`Intro_CheckCksum`, the `0x55AA` mark), `variables.h`.
 
 /// The games this reads, by the layout of their save.
@@ -146,6 +155,12 @@ pub enum Kind {
     SuperstarSaga,
     /// Mother 3 (GBA), with the fan translation into English.
     Mother3,
+    /// Banjo-Kazooie (N64, its EEPROM).
+    BanjoKazooie,
+    /// Metroid Fusion (GBA).
+    MetroidFusion,
+    /// GoldenEye 007 (N64, its EEPROM).
+    GoldenEye,
     /// Pokémon Diamond and Pearl (DS).
     DiamondPearl,
     Platinum,
@@ -234,6 +249,9 @@ impl Release {
                 | HeartGoldSoulSilver
                 | BlackWhite
                 | BlackWhite2
+                | BanjoKazooie
+                | MetroidFusion
+                | GoldenEye
         );
         // Mother 3 never came out in the USA: the fan translation's ROM that was checked is its release here. Diddy Kong
         // Racing's European cartridge (Rev 1) was checked too, against a save it wrote: the same EEPROM layout.
@@ -401,6 +419,16 @@ pub const RELEASES: &[Release] = &[
     r(0xF05D414F, DiddyKongRacing, En, "Diddy Kong Racing (Europe) (En,Fr,De) (Rev 1) (byte-swapped)"),
     r(0xB566FB94, DiddyKongRacing, En, "Diddy Kong Racing (Japan)"),
     r(0x95931356, DiddyKongRacing, En, "Diddy Kong Racing (Japan) (byte-swapped)"),
+    r(0xB6330846, GoldenEye, En, "GoldenEye 007 (USA)"),
+    r(0x8B70CB5B, GoldenEye, En, "GoldenEye 007 (USA) (byte-swapped)"),
+    r(0x9EC14AEB, GoldenEye, En, "GoldenEye 007 (Europe)"),
+    r(0x7425AE2D, GoldenEye, En, "GoldenEye 007 (Europe) (byte-swapped)"),
+    r(0xAD429961, BanjoKazooie, En, "Banjo-Kazooie (USA)"),
+    r(0x4FD43199, BanjoKazooie, En, "Banjo-Kazooie (USA) (byte-swapped)"),
+    r(0xFB7FFB10, BanjoKazooie, En, "Banjo-Kazooie (USA) (Rev 1)"),
+    r(0x90B38651, BanjoKazooie, En, "Banjo-Kazooie (USA) (Rev 1) (byte-swapped)"),
+    r(0x525899C9, BanjoKazooie, En, "Banjo-Kazooie (Europe) (En,Fr,De)"),
+    r(0x4AF7C16B, BanjoKazooie, En, "Banjo-Kazooie (Europe) (En,Fr,De) (byte-swapped)"),
     r(0xA7F5CD7E, PaperMario, En, "Paper Mario (USA)"),
     r(0xD56D1C89, PaperMario, En, "Paper Mario (USA) (byte-swapped)"),
     r(0x9FC00CE3, PaperMario, En, "Paper Mario (Europe) (En,Fr,De,Es)"),
@@ -446,6 +474,8 @@ pub const RELEASES: &[Release] = &[
     // The fan translation's v1.3a with the HQ sound patch (the save code is the Japanese game's, byte for byte); the
     // Japanese ROM itself writes its names in its own letters, so it isn't listed.
     r(0x789605CD, Mother3, En, "Mother 3 (Japan) [T-En v1.3a, HQ Sound]"),
+    r(0x6C75479C, MetroidFusion, En, "Metroid Fusion (USA)"),
+    r(0x974E46AB, MetroidFusion, En, "Metroid Fusion (Europe) (En,Fr,De,Es,It)"),
     r(0x2A524221, FireEmblem7, En, "Fire Emblem (USA, Australia)"),
     r(0xA47246AE, FireEmblem8, En, "Fire Emblem - The Sacred Stones (USA, Australia)"),
     r(0x777AAC2F, LinkToThePast, En, "Legend of Zelda, The - A Link to the Past (USA)"),
@@ -515,7 +545,7 @@ pub fn worth_checking(system: &str, len: u64, zip: bool) -> bool {
         "gb" | "gbc" | "gbh" | "gbch" => zip || len == MB || len == 2 * MB,
         "gba" | "gbah" => zip || len == 8 * MB || len == 16 * MB || len == 32 * MB,
         "snes" | "sfc" | "snesh" => zip || len == MB / 2 || len == MB || len == 5 * MB / 2 || len == 3 * MB || len == 4 * MB,
-        "n64" => zip || len == 8 * MB || len == 12 * MB || len == 32 * MB || len == 40 * MB || len == 48 * MB,
+        "n64" => zip || len == 8 * MB || len == 12 * MB || len == 16 * MB || len == 32 * MB || len == 40 * MB || len == 48 * MB,
         _ => false,
     }
 }
@@ -567,6 +597,11 @@ pub enum Progress {
     Complete { percent: u8, of: u8, clock: Option<(u16, u8)> },
     /// Kirby & the Amazing Mirror: the pieces of the mirror found (of 8).
     Shards { done: u8 },
+    /// Banjo-Kazooie: the Jiggies (of `of`), the notes and the game's clock, as its game select shows them.
+    Jiggies { done: u8, of: u8, notes: u16, hours: u16, minutes: u8 },
+    /// GoldenEye 007: the furthest mission done at the hardest difficulty done ("Mission 2.i: Surface", "Secret Agent"),
+    /// as its folder select shows them; only "007" once that mode is open (the folder names no mission then).
+    Mission { mission: Option<String>, difficulty: &'static str },
 }
 
 fn clock_part(h: u16, m: u8) -> String {
@@ -638,6 +673,12 @@ impl Progress {
                 out
             }
             Progress::Shards { done } => vec![format!("{done} of {} mirror shards", 8)],
+            Progress::Mission { mission, difficulty } => mission.iter().cloned().chain([difficulty.to_string()]).collect(),
+            Progress::Jiggies { done, notes, hours, minutes, .. } => vec![
+                if *done == 1 { "1 Jiggy".to_string() } else { format!("{done} Jiggies") },
+                if *notes == 1 { "1 note".to_string() } else { format!("{notes} notes") },
+                clock(*hours, *minutes),
+            ],
             Progress::Quest { pendants, crystals, hearts, dark_world } => vec![
                 if *dark_world { format!("{crystals} of {} crystals", 7) } else { format!("{pendants} of {} pendants", 3) },
                 format!("{hearts} hearts"),
@@ -658,7 +699,7 @@ impl Progress {
     /// The measure under the line, or None (Pokémon: its pictures, `case_knows_art`).
     pub fn meter(&self) -> Option<Meter> {
         match self {
-            Progress::Pokemon { .. } | Progress::Medals { .. } | Progress::Hero { .. } | Progress::Party { .. } | Progress::Chapter { .. } => None,
+            Progress::Pokemon { .. } | Progress::Medals { .. } | Progress::Hero { .. } | Progress::Party { .. } | Progress::Chapter { .. } | Progress::Mission { .. } => None,
             Progress::Items { percent, .. } => Some(Meter::Share { done: *percent as u16, of: 100 }),
             Progress::Complete { percent, of, .. } => Some(Meter::Share { done: *percent as u16, of: *of as u16 }),
             Progress::Exits { done, of } | Progress::Stars { done, of } | Progress::GoldCups { done, of } | Progress::Balloons { done, of } => Some(Meter::Share { done: *done as u16, of: *of as u16 }),
@@ -668,6 +709,7 @@ impl Progress {
             Progress::Elements { done, .. } => Some(Meter::Marks { done: *done, of: 4 }),
             Progress::Essences { done, .. } => Some(Meter::Marks { done: *done, of: 8 }),
             Progress::Shards { done } => Some(Meter::Marks { done: *done, of: 8 }),
+            Progress::Jiggies { done, of, .. } => Some(Meter::Share { done: *done as u16, of: *of as u16 }),
             Progress::Remains { done, .. } => Some(Meter::Marks { done: *done, of: 4 }),
             Progress::Quest { pendants, crystals, dark_world, .. } => Some(if *dark_world { Meter::Marks { done: *crystals, of: 7 } } else { Meter::Marks { done: *pendants, of: 3 } }),
         }
@@ -734,6 +776,9 @@ pub fn read(release: &Release, save: &[u8], before: Option<&Memory>) -> (Option<
         BreathOfFire2 => breath_of_fire_2(save, before),
         SuperstarSaga => superstar_saga(save, before),
         Mother3 => mother_3(save, before),
+        BanjoKazooie => banjo_kazooie(save, before),
+        MetroidFusion => metroid_fusion(save, before),
+        GoldenEye => goldeneye(save, before),
         DiamondPearl | Platinum | HeartGoldSoulSilver => (gen4(save, release.kind), Memory::default()),
         BlackWhite | BlackWhite2 => (gen5(save, release.kind), Memory::default()),
     }
@@ -1402,6 +1447,117 @@ fn zero_mission(s: &[u8], before: Option<&Memory>) -> (Option<Progress>, Memory)
     (Some(Progress::Items { percent: percent as u8, hours, minutes }), memory)
 }
 
+/// Metroid Fusion (metroidret/mf `sSaveDataSramPointers`, `struct Equipment`, the ending's count; the rest from saves the
+/// game wrote, 17.11.): three files of 0x1200 bytes from 0x200 on, each followed by its copy (A at 0x200 and 0x1400, B
+/// at 0x2600 and 0x3800, C at 0x4A00 and 0x5C00), each "MetroidEpisode4A" and its 32-bit words adding up to the sum at
+/// 16, with the sum's complement at 20, as in Zero Mission; the file chosen last in the same kind of record at 0x7000
+/// ("SELECTSAVENUMBER", the file at 22). Samus's equipment (`struct Equipment`) at 0xC4, the clock at 0xE4. The share is
+/// the ending's: tanks only, energy over 99 by 100, missiles over 10 by 5, power bombs over 10 by 2, at most 100. A file
+/// the game made at a new start and never saved holds no equipment and says nothing.
+fn metroid_fusion(s: &[u8], before: Option<&Memory>) -> (Option<Progress>, Memory) {
+    const SIZE: usize = 0x1200;
+    const AT: usize = 0x200;
+    const LAST: usize = 0x7000;
+    if s.len() < LAST + 64 {
+        return (None, Memory::default());
+    }
+    let file = |i: usize| -> Option<&[u8]> {
+        [AT + 2 * i * SIZE, AT + (2 * i + 1) * SIZE].into_iter().map(|at| &s[at..at + SIZE]).find(|f| {
+            let sum = (0..SIZE / 4).fold(0u32, |a, w| a.wrapping_add(u32le(f, w * 4)));
+            &f[..16] == b"MetroidEpisode4A" && sum == u32le(f, 16) && !sum == u32le(f, 20)
+        })
+    };
+    let valid: Vec<(usize, u32)> = (0..3).filter_map(|i| file(i).map(|f| (i, print(f)))).collect();
+    let mut memory = pick(&valid, 3, before);
+    let rec = &s[LAST..LAST + 64];
+    let rec_sum = (0..32).fold(0u16, |a, w| a.wrapping_add(u16le(rec, w * 2)));
+    let last = rec[22] as usize;
+    if rec[0] == 0x1E && rec_sum == u16le(rec, 2) && !rec_sum == u16le(rec, 4) && &rec[6..22] == b"SELECTSAVENUMBER" && last < 3 && memory.prints[last] != 0 {
+        memory.current = Some(last);
+    }
+    let Some(f) = memory.current.and_then(file) else { return (None, memory) };
+    let e = &f[0xC4..0xD0];
+    let (max_energy, max_missiles, max_power_bombs) = (u16le(e, 2), u16le(e, 6), e[9] as u16);
+    let (hours, minutes) = (f[0xE4] as u16, f[0xE5]);
+    if max_energy < 99 || minutes > 59 {
+        return (None, memory);
+    }
+    let percent = ((max_energy - 99) / 100 + max_missiles.saturating_sub(10) / 5 + max_power_bombs.saturating_sub(10) / 2).min(100);
+    (Some(Progress::Items { percent: percent as u8, hours, minutes }), memory)
+}
+
+/// GoldenEye 007's missions in the order the save counts them (`LEVEL_SOLO_SEQUENCE`): the chapter, the part, a name.
+const GOLDENEYE_MISSIONS: [(u8, &str, &str); 20] = [
+    (1, "i", "Dam"),
+    (1, "ii", "Facility"),
+    (1, "iii", "Runway"),
+    (2, "i", "Surface"),
+    (2, "ii", "Bunker"),
+    (3, "i", "Silo"),
+    (4, "i", "Frigate"),
+    (5, "i", "Surface"),
+    (5, "ii", "Bunker"),
+    (6, "i", "Statue"),
+    (6, "ii", "Archives"),
+    (6, "iii", "Streets"),
+    (6, "iv", "Depot"),
+    (6, "v", "Train"),
+    (7, "i", "Jungle"),
+    (7, "ii", "Control"),
+    (7, "iii", "Caverns"),
+    (7, "iv", "Cradle"),
+    (8, "i", "Aztec"),
+    (9, "i", "Egyptian"),
+];
+
+/// GoldenEye 007 (n64decomp/007 `file2.c`, `front.c`): a 32-byte block at the EEPROM's start, then five saves of 0x60
+/// bytes from 0x20, each Rare's two sums (big-endian, type A) over its bytes from 8 to its end; byte 8 holds the folder
+/// (bits 0-2), the save's turn (3-4) and "free" (7); a folder whose two saves are both good uses the one whose turn
+/// follows the other's. Byte 9 bit 0 opens 007; from 0x12 the best times, 10 bits each, high bit first, at bit
+/// (difficulty × 20 + mission) × 10 for Agent, Secret Agent and 00 Agent, 0 for not done. The folder select names the
+/// hardest difficulty done and the furthest mission done at it ("Mission 2.i"), or "007" alone once that is open (by
+/// the bit or every mission done at 00 Agent). Which folder was played last isn't kept: the one that changed.
+fn goldeneye(s: &[u8], before: Option<&Memory>) -> (Option<Progress>, Memory) {
+    const AT: usize = 0x20;
+    const SIZE: usize = 0x60;
+    if s.len() < AT + 5 * SIZE {
+        return (None, Memory::default());
+    }
+    let good = |i: usize| -> Option<&[u8]> {
+        let f = &s[AT + i * SIZE..AT + (i + 1) * SIZE];
+        let (a, b) = rare_sums(&f[8..]);
+        (u32::from_be_bytes([f[0], f[1], f[2], f[3]]) == a && u32::from_be_bytes([f[4], f[5], f[6], f[7]]) == b && f[8] & 0x80 == 0).then_some(f)
+    };
+    let mut folders: [Option<&[u8]>; 4] = [None; 4];
+    for i in 0..5 {
+        let Some(f) = good(i) else { continue };
+        let folder = (f[8] & 7) as usize;
+        if folder >= 4 {
+            continue;
+        }
+        match folders[folder] {
+            None => folders[folder] = Some(f),
+            Some(old) if (f[8] >> 3 & 3) == ((old[8] >> 3 & 3) + 1) % 4 => folders[folder] = Some(f),
+            Some(_) => {}
+        }
+    }
+    let time = |f: &[u8], difficulty: usize, mission: usize| -> u16 {
+        let at = (difficulty * 20 + mission) * 10;
+        (0..10).fold(0u16, |v, k| v << 1 | (f[0x12 + (at + k) / 8] >> (7 - (at + k) % 8) & 1) as u16)
+    };
+    let done = |f: &[u8]| -> Option<(usize, usize)> { (0..3).rev().find_map(|d| (0..20).rev().find(|&m| time(f, d, m) != 0).map(|m| (d, m))) };
+    let valid: Vec<(usize, u32)> = (0..4).filter_map(|i| folders[i].filter(|f| done(f).is_some() || f[9] & 1 != 0).map(|f| (i, print(f)))).collect();
+    let memory = pick(&valid, 4, before);
+    let Some(f) = memory.current.and_then(|i| folders[i]) else { return (None, memory) };
+    if f[9] & 1 != 0 || (0..20).all(|m| time(f, 2, m) != 0) {
+        return (Some(Progress::Mission { mission: None, difficulty: "007" }), memory);
+    }
+    let Some((difficulty, mission)) = done(f) else { return (None, memory) };
+    let (chapter, part, name) = GOLDENEYE_MISSIONS[mission];
+    let difficulty = ["Agent", "Secret Agent", "00 Agent"][difficulty];
+    (Some(Progress::Mission { mission: Some(format!("Mission {}: {name}", format_args!("{chapter}.{part}"))), difficulty }), memory)
+}
+
 /// Super Mario World: three files of 143 bytes at 0, 0x8F, 0x11E and a copy of each 0x1AD further on, used when the
 /// first fails its sum (bytes plus the stored word make 0x5A5A, `VerifySaveFile`). The exits at byte 0x8C. In Super
 /// Mario All-Stars + Super Mario World the cartridge keeps four files (A to D) from 0x1000 with the copies 0x23C on, and
@@ -1594,6 +1750,64 @@ fn diddy_kong_racing(s: &[u8], before: Option<&Memory>) -> (Option<Progress>, Me
         return (None, memory);
     }
     (Some(Progress::Balloons { done: total as u8, of: 47 }), memory)
+}
+
+/// Rare's save checksum (bryc/rare-n64-chksm, the games' `glcrc_calcChecksum`): a 33-bit state stirred by every byte,
+/// forwards then backwards, the two passes' results kept apart. Banjo-Kazooie stores them XORed, Banjo-Tooie side by side.
+pub(crate) fn rare_sums(data: &[u8]) -> (u32, u32) {
+    fn stir(state: &mut u64, b: u8, shift: u32) -> u32 {
+        let s = state.wrapping_add((b as u64) << (shift & 15));
+        let mixed = ((s >> 1 | s << 32) ^ ((s << 44) >> 32)) & 0x1_FFFF_FFFF;
+        *state = mixed ^ ((mixed >> 20) & 0xFFF);
+        *state as u32
+    }
+    let (mut state, mut shift) = (0x1_3108_B3C1u64, 0u32);
+    let (mut forwards, mut backwards) = (0u32, 0u32);
+    for &b in data {
+        forwards ^= stir(&mut state, b, shift);
+        shift += 7;
+    }
+    for &b in data.iter().rev() {
+        backwards ^= stir(&mut state, b, shift);
+        shift += 3;
+    }
+    (forwards, backwards)
+}
+
+/// Banjo-Kazooie (banjo.decomp/banjo-kazooie: `savedata_init`, `gameFile_8033CE40`, `gamenum`'s text in `gameSelect.c`;
+/// the sum is Rare's): the EEPROM's first 480 bytes are four files of 0x78, each 0x11, the game it holds (1 to 3), then
+/// the Jiggies' bits from 2 (Jiggy n in byte (n - 1) / 8, bit n & 7; 100 in the ten worlds), the honeycombs and Mumbo
+/// tokens, the best notes of the nine note worlds as 7-bit fields of the big-endian u64 at 0x22 (Mumbo's Mountain in the
+/// highest), the seconds spent in the eleven places as big-endian u16 from 0x2A, and the sum at 0x74. Saving a game
+/// writes it to the spare file and wipes the old one, so the files move about; the game select counts the first good
+/// file of each game, and so does this. Which game was played last isn't kept: the one whose file changed.
+fn banjo_kazooie(s: &[u8], before: Option<&Memory>) -> (Option<Progress>, Memory) {
+    const SIZE: usize = 0x78;
+    if s.len() < 512 {
+        return (None, Memory::default());
+    }
+    let mut games: [Option<&[u8]>; 3] = [None; 3];
+    for i in 0..4 {
+        let f = &s[i * SIZE..(i + 1) * SIZE];
+        let (a, b) = rare_sums(&f[..0x74]);
+        let game = f[1] as usize;
+        if f[0] == 0x11 && (1..=3).contains(&game) && a ^ b == u32::from_be_bytes([f[0x74], f[0x75], f[0x76], f[0x77]]) && games[game - 1].is_none() {
+            games[game - 1] = Some(f);
+        }
+    }
+    let valid: Vec<(usize, u32)> = (0..3).filter_map(|g| games[g].map(|f| (g, print(f)))).collect();
+    let memory = pick(&valid, 3, before);
+    let Some(f) = memory.current.and_then(|g| games[g]) else { return (None, memory) };
+    let jiggies = (1..=100usize).filter(|n| f[2 + (n - 1) / 8] >> (n & 7) & 1 != 0).count() as u8;
+    let notes_field = u64::from_be_bytes(f[0x22..0x2A].try_into().unwrap());
+    let notes: Vec<u16> = (0..9).map(|w| (notes_field >> (7 * w) & 0x7F) as u16).collect();
+    let seconds: u32 = (0..11).map(|p| u16::from_be_bytes([f[0x2A + 2 * p], f[0x2B + 2 * p]]) as u32).sum();
+    // A world has 100 notes; the top bit of the field is never set.
+    if notes.iter().any(|n| *n > 100) || notes_field >> 63 != 0 {
+        return (None, memory);
+    }
+    let progress = Progress::Jiggies { done: jiggies, of: 100, notes: notes.iter().sum(), hours: (seconds / 3600) as u16, minutes: (seconds / 60 % 60) as u8 };
+    (Some(progress), memory)
 }
 
 /// Final Fantasy III (USA), the sixth (everything8215/ff6 `save.asm`, Data Crystal's RAM map): three slots of 0xA00

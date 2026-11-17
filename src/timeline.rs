@@ -33,8 +33,7 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use crate::libretro::Frame;
 
-/// The game setting (Options → Extras → Earlier states): "on" or "off".
-pub const KEY: &str = "timeline";
+pub use crate::timeline_policy::KEY;
 /// Play between two states of the ring.
 pub const EVERY: Duration = Duration::from_secs(5 * 60);
 /// States in the ring: half an hour back.
@@ -52,14 +51,7 @@ pub const SMALL_STATE: usize = 2_000_000;
 /// How long the pause menu is open before a quiet capture: it has listed the states by then (`QuickMenu::earlier`).
 pub const QUIET_AFTER: Duration = Duration::from_secs(1);
 
-/// Systems whose states are several MB to tens of MB (docs/HOST.md "Earlier"): Earlier is Off for them until it is
-/// switched on for the console or the game. Their states would fill the 100 MB of a game with a handful.
-pub const BIG_STATES: &[&str] = &["n64", "psp", "dreamcast", "naomi", "atomiswave", "saturn", "nds"];
-
-/// Whether Earlier starts On for `system`.
-pub fn default_on(system: &str) -> bool {
-    !BIG_STATES.contains(&system)
-}
+pub use crate::timeline_policy::{default_on, BIG_STATES};
 
 /// Which kind of earlier state.
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Hash)]

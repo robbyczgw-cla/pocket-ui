@@ -30,13 +30,15 @@ HEAVY = ["connections", "home_panel_labels", "info_page", "long_titles", "names_
 # Absolute CPU/frame-time budgets: each runs alone (threads-required) and goes red on an overloaded host (4 red trains in 3 days,
 # 12.-14.11., none a real slowdown). They are measurements like the timing tier: nightly and before a release, never in the merge
 # gate, not even when their own file changes (preflight-air.sh runs a changed one on the Air).
-BUDGET = ["launch_frames", "settings_open", "shelf_moves"]
+BUDGET = ["launch_frames", "shelf_moves"]
 # Single tests the merge gate leaves to the nightly run and the release check: the Android twin of a check the Linux suite makes
 # in every merge gate (eject::the_way_back_hands_over_…, 31 of 59 flake entries 12.-14.11.), and the case's gap on the way back,
 # both 130+ s frame-by-frame walks.
 # Also the library's pure time budgets (5,000 games indexed and searched within a time): they run alone (nextest.toml), so in
 # the merge gate they also held up every other test while they measured.
+# Settings keeps its timing case here, while the deterministic glyph/pattern check runs in every merge gate.
 NIGHTLY_TESTS = ["android_eject_tests::the_way_back_hands_over_to_the_still_shelf_without_a_jump",
+                 "settings_first_frame_is_not_much_slower_than_the_next",
                  "android_eject_tests::the_case_s_place_stays_an_empty_gap_until_the_case_comes_home",
                  "connections::tests::speed_of_the_index_for_5000_games",
                  "curator::tests::speed_index_build_lens_keypress_and_echoes_for_5000_games",

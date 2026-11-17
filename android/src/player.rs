@@ -12,6 +12,7 @@ use pocket_ui::{
     palette::{self, pal},
     pause_head::{self, EDGE, GAP, TARGET_MIN},
     pause_list,
+    pause_options,
     text::{Face, Text},
     type_scale,
     touch::Area,
@@ -228,8 +229,11 @@ struct Player {
     top: i32,
     view: (i32, i32, i32, i32),
     logical: (u32, u32),
-    next: Instant,
-    period: Duration,
+    /// Core frames per display refresh, Linux's rule (`core_pacing`): one per refresh near the display's rate.
+    pacer: pocket_ui::core_pacing::Pacer,
+    /// The `player pacing:` line's numbers (every 10 s with the audio line).
+    pacing: pocket_ui::core_pacing::Stats,
+    display_hz: f64,
     frames: u64,
     /// Fresh pictures delivered by the core, separate from emulation ticks and display presentations.
     video_frames: u64,
@@ -256,6 +260,28 @@ struct Player {
     list_hint_hits: Vec<(Area, pocket_ui::pad::Button)>,
     /// Zoom was opened from Options (the list menu): B goes back there.
     from_options: bool,
+    /// The list menu's Options page (`pause_options`, Linux's layout): None the top page, else the group it opened.
+    opt_page: Option<pause_options::Entry>,
+    /// The selected row of the page, an index of `list_option_rows` (never a heading), and the top page's row a group
+    /// came from (B goes back onto it).
+    opt_sel: usize,
+    opt_top_sel: usize,
+    /// Restore defaults was pressed once: the next A on it does it, any other key takes it back (Linux's).
+    restore_armed: bool,
+    /// Over the game → FPS (`fps_line`), counted while the game runs.
+    fps: pocket_ui::fps_line::Counter,
+}
+/// What a row of the list menu's Options page does (`Player::list_option_rows`).
+#[derive(Clone, Copy, Debug, PartialEq)]
+enum OptTarget {
+    /// A row of the top page.
+    Top(pause_options::Entry),
+    /// One of the Picture page's rows (the player's picture lists in the Handheld view's words).
+    Picture(pause_options::PictureRow),
+    /// Row `n` of `display_options` (an emulator option, a control row, a cheat).
+    Option(usize),
+    /// "Advanced (this emulator)": opens or closes its group on the Emulator page.
+    Advanced,
 }
 impl Player {
     fn new(core_path: &str, rom: &str, system: String, key: String, title: String, light: bool, frozen: bool) -> Result<Self, String> {
@@ -299,7 +325,17 @@ impl Player {
         };
         let options_path = data.join("core-options").join(options_name);
         let saved_options: std::collections::BTreeMap<String, String> = pocket_ui::fsutil::read_json_or_backup(&options_path).unwrap_or_default();
-        let selected: Vec<_> = saved_options.iter().map(|(k, v)| (k.as_str(), v.as_str())).collect();
+        let mut selected: Vec<_> = saved_options.iter().map(|(k, v)| (k.as_str(), v.as_str())).collect();
+        // Options → Picture → Resolution (N64, PSP, Dreamcast, PlayStation on a handheld measured for it): the row's choice
+        // over a saved Emulator value, this handheld's default where nothing chose one; the very rule pocket-core follows on
+        // Linux (`render_scale::for_start`, `StartOption::place`).
+        let picture = picture::Settings::load(&data, &system, &key);
+        let scale = picture.start_resolution(pocket_ui::render_scale::here(&system), Path::new(core_path));
+        log::info!("resolution: class={:?} system={system} {}", pocket_ui::render_scale::here_class(),
+            scale.as_ref().map_or("untouched".to_string(), |s| format!("{} = {}{}", s.key, s.value, if s.first { " (chosen)" } else { " (this handheld's default)" })));
+        if let Some(s) = &scale {
+            s.place(&mut selected);
+        }
         let mut core = CoreSession::new(Core::load(Path::new(core_path), Path::new(rom), &bios, &saves, &selected)?)?;
         core.input_probe(pocket_ui::platform::android::string("diagnosticAudio") == "true");
         let (initial_frame, _, av, geometry) = core.run(0);
@@ -342,10 +378,11 @@ impl Player {
             }
             log::info!("content: direct core={} path={} copied_bytes=0", core_id, rom);
         }
-        let period = Duration::from_secs_f64(1.0 / core.av.timing.fps.clamp(10.0, 240.0));
+        let display_hz = display_refresh_hz();
+        let pacer = pocket_ui::core_pacing::Pacer::new(core.av.timing.fps, display_hz);
         let mut audio = pocket_ui::audio::Audio::open(core.av.timing.sample_rate, pocket_ui::audio::needs_jitter_reserve(&system));
         if let Some(audio) = &mut audio {
-            audio.set_source_timing(core.av.timing.sample_rate, core.av.timing.fps, display_refresh_hz());
+            audio.set_paced_timing(core.av.timing.sample_rate, core.av.timing.fps, display_hz);
             if matches!(resume, pocket_ui::libretro::Resume::NoState) { audio.reserve_startup(&system); }
         }
         if audio.is_none() {
@@ -368,16 +405,15 @@ impl Player {
         } else {None};
         let frame = player_video::startup(initial_frame, resumed_frame);
         // Capture after the post-resume frame, so the held state and its preview name the same moment.
-        let initial = core.save_state().filter(|b| !b.is_empty() && b.len() <= pocket_ui::state_file::MAX_STATE)
+        let initial = if !picture.earlier_on(&system) { 0 } else { core.save_state().filter(|b| !b.is_empty() && b.len() <= pocket_ui::state_file::MAX_STATE)
             .and_then(|bytes| match player_video::moment(&base.with_extension("earlier0"), &bytes, frame.as_deref()) {
                 Ok(()) => Some(1),
                 Err(error) => { log::warn!("Initial Earlier moment could not be kept: {error}"); None }
-            }).unwrap_or(0);
+            }).unwrap_or(0) };
         let filled_slots = std::array::from_fn(|i| pocket_ui::slots::state_path(&base, i).is_file());
         let kept = pocket_ui::frozen_phone::kept(&base);
         let slot_icon = pocket_ui::system_art::get(&system).map(|sprite| sprite.fitted(26, 26));
         let sounds = pocket_ui::ui_sound::Config::load(&data);
-        let picture = picture::Settings::load(&data, &system, &key);
         let control_names: Vec<_> = core.described_inputs().into_iter().map(|t| pocket_ui::controls::Target{id:t.id,label:t.label}).collect();
         if let Err(e)=play_cards::remember_names(&data,&key,&control_names) {log::warn!("Could not remember core button names: {e}");}
         let zoom = play_cards::Zoom::new(&system);
@@ -474,8 +510,9 @@ impl Player {
             top: 0,
             view: (0, 0, 1, 1),
             logical: (1, 1),
-            next: now,
-            period,
+            pacer,
+            pacing: Default::default(),
+            display_hz,
             frames: 0,
             video_frames: 0,
             diagnostic_buttons_seen: 0,
@@ -495,6 +532,11 @@ impl Player {
             list_hits: Vec::new(),
             list_hint_hits: Vec::new(),
             from_options: false,
+            opt_page: None,
+            opt_sel: 0,
+            opt_top_sel: 0,
+            restore_armed: false,
+            fps: Default::default(),
             recovery_required: false,
         })
     }
@@ -610,13 +652,13 @@ impl Player {
     }
     fn pause(&mut self, on: bool) {
         if !on && self.recovery_required { return; }
-        if !on {self.suspended=false;}
+        if !on {self.suspended=false;self.fps.restart();}
         if !on && self.audio.is_none() {
             self.audio = pocket_ui::audio::Audio::open(self.core.av.timing.sample_rate, pocket_ui::audio::needs_jitter_reserve(&self.system));
         }
         if !on {
             if let Some(audio) = &mut self.audio {
-                audio.set_source_timing(self.core.av.timing.sample_rate, self.core.av.timing.fps, display_refresh_hz());
+                audio.set_paced_timing(self.core.av.timing.sample_rate, self.core.av.timing.fps, self.display_hz);
             }
         }
         if on {
@@ -647,7 +689,8 @@ impl Player {
         self.stylus_finger = None;
         self.menu_drag = None;
         self.fingers.clear();
-        self.next = Instant::now();
+        self.pacer.restart();
+        self.pacing.pause();
         if let Some(audio) = &self.audio {
             audio.pause(on);
         }
@@ -745,7 +788,8 @@ impl Player {
         }
         if down && self.reminder.is_some() {
             self.reminder = None;
-            self.next = Instant::now();
+            self.pacer.restart();
+            self.pacing.pause();
             self.overlay_size = None;
             return true;
         }
@@ -753,10 +797,13 @@ impl Player {
             if down {
                 if self.paused && self.from_options && self.menu == Menu::Zoom {
                     // Zoom opened from Options (the list menu) goes back there, onto its row.
-                    self.row = self.display_options().len() + 2;
                     self.menu = Menu::Options;
+                    self.opt_page = None;
+                    self.opt_sel = self.list_option_rows().1.iter().position(|t| *t == Some(OptTarget::Top(pause_options::Entry::Zoom))).unwrap_or(0);
                     self.from_options = false;
                     self.zoom_fingers.clear();
+                } else if self.paused && self.list_menu && self.menu == Menu::Options && self.opt_back() {
+                    // A group of Options (the list menu) goes back to the top page, onto its row.
                 } else if self.paused && self.menu != Menu::Pause {
                     // Back from the achievements list lands on its own row, so the next press doesn't start at the top.
                     self.row = if self.menu == Menu::Achievements { self.rows().len().saturating_sub(1) } else { 0 };
@@ -805,18 +852,16 @@ impl Player {
                 self.key_list(key);
                 return false;
             }
+            if self.list_menu && self.menu == Menu::Options && !matches!(key, 97 | 111) {
+                self.key_list_options(key);
+                return false;
+            }
             match key {
                 19 | 20 if self.menu == Menu::Options => {
                     // Up/Down follow the page's order (by section), then Back.
                     let options = self.display_options();
-                    let order = if self.list_menu {
-                        // The list has no Back row (B goes back) and Zoom and Screenshot first.
-                        self.list_option_order()
-                    } else {
-                        let mut order = option_page(&options, self.advanced_open);
-                        order.push(options.len());
-                        order
-                    };
+                    let mut order = option_page(&options, self.advanced_open);
+                    order.push(options.len());
                     let at = order.iter().position(|r| *r == self.row).unwrap_or(0);
                     let next = if key == 19 { at.saturating_sub(1) } else { (at + 1).min(order.len() - 1) };
                     self.row = order[next];
@@ -874,15 +919,10 @@ impl Player {
     /// What the list menu paints this frame, gathered before the canvas holds the pixels.
     fn list_paint(&mut self) -> ListPaint {
         if self.menu == Menu::Options {
-            let (rows, index) = self.list_option_rows();
-            let sel = index.iter().position(|i| *i == Some(self.row)).or_else(|| index.iter().position(Option::is_some)).unwrap_or(0);
-            let desc = match self.row.checked_sub(self.display_options().len() + 2) {
-                Some(0) => "The picture larger, to read small text. Move with the D-pad.".to_string(),
-                Some(_) if !self.message.is_empty() => self.message.clone(),
-                Some(_) => "A picture of the game as it is now.".to_string(),
-                None => String::new(),
-            };
-            return ListPaint::Options { rows, sel, desc };
+            let desc = self.opt_desc();
+            let (rows, _) = self.list_option_rows();
+            let title = self.opt_page.map_or_else(|| "Options".to_string(), |e| e.heading());
+            return ListPaint::Options { rows, sel: self.opt_sel, desc, title };
         }
         let rows = self.list_rows();
         let sel = self.list_sel.min(rows.len().saturating_sub(1));
@@ -935,7 +975,7 @@ impl Player {
             Some(pause_list::Item::Quit) if !self.recovery_required => (None, Some("Next time, A continues from this moment.".to_string())),
             _ => (None, None),
         };
-        hints.extend([("B", "Back"), ("A", "OK")]);
+        hints.extend([("B", "Back"), ("A", if item.is_some_and(pause_list::Item::opens_page) { "Open" } else { "OK" })]);
         ListPaint::Main { rows, sel, preview, note, hints }
     }
     /// The list menu's rows (`pause_list`), in Linux's order: Continue, Save, Load, Earlier, Options, Achievements while
@@ -1025,9 +1065,10 @@ impl Player {
         };
         self.row = legacy;
         self.activate();
-        // Options opens on its first row (Zoom), not on the sheet's first option further down.
+        // Options opens on its top page's first row (Picture), as Linux's.
         if self.menu == Menu::Options {
-            self.row = self.list_option_order().first().copied().unwrap_or(0);
+            self.opt_page = None;
+            self.opt_sel = 0;
         }
         // A save made a new picture: read again.
         self.previews.clear();
@@ -1057,51 +1098,257 @@ impl Player {
             _ => (),
         }
     }
-    /// The list menu's Options page: Zoom and Screenshot first (Linux has Zoom under Options too), then the options by
-    /// section, then "Advanced (this emulator)" and its options when open. The numbers are the sheet's rows
-    /// (`display_options`); Zoom and Screenshot come after Back and Advanced.
-    fn list_option_order(&self) -> Vec<usize> {
+    /// What the game has for the Options page's groups: emulator options (the core's, outside Controls and Cheats),
+    /// control rows, cheats.
+    fn opt_has(&self) -> pause_options::Has {
         let options = self.display_options();
-        let extra = options.len() + 2;
-        let mut order = vec![extra, extra + 1];
-        order.extend(option_page(&options, self.advanced_open));
-        order
+        let sections: Vec<usize> = options.iter().enumerate().filter(|(i, _)| *i >= picture::ROWS).map(|(i, o)| option_section(o, i)).collect();
+        pause_options::Has {
+            emulator: sections.iter().any(|s| !matches!(*s, CONTROLS | CHEATS)),
+            controls: sections.contains(&CONTROLS),
+            cheats: sections.contains(&CHEATS),
+        }
     }
-    /// The Options page as the list paints it (a heading where a section starts, each row with its value), and which
-    /// row of `display_options` each list row is.
-    fn list_option_rows(&self) -> (Vec<pause_list::ListRow>, Vec<Option<usize>>) {
+    /// The page the list menu shows under Options, Linux's layout (`pause_options`): the top page (Picture ›, Emulator ›,
+    /// Controls ›, Cheats ›, Over the game, Zoom ›, Keep for, Screenshot) or the group it opened. Each row with what it
+    /// does; a heading has None.
+    fn list_option_rows(&self) -> (Vec<pause_list::ListRow>, Vec<Option<OptTarget>>) {
         use pause_list::ListRow;
-        let options = self.display_options();
-        let extra = options.len() + 2;
         let mut rows = Vec::new();
-        let mut index = Vec::new();
-        let mut section: Option<&str> = None;
-        for i in self.list_option_order() {
-            let (head, row) = if i >= extra {
-                let label = if i == extra { "Zoom" } else { "Screenshot" };
-                ("This game", ListRow::Row { label: label.into(), value: String::new(), opens: i == extra, enabled: true })
-            } else if i == options.len() + 1 {
+        let mut targets = Vec::new();
+        let Some(page) = self.opt_page else {
+            for entry in pause_options::top(self.opt_has()) {
+                let value = match entry {
+                    pause_options::Entry::Earlier => pause_options::earlier_label(self.picture.earlier_on(&self.system)).to_string(),
+                    pause_options::Entry::OverGame => pause_options::over_game_label(self.picture.over_game).to_string(),
+                    pause_options::Entry::Keep => pause_options::keep_label(self.picture.for_game()).to_string(),
+                    _ => String::new(),
+                };
+                rows.push(ListRow::Row { label: entry.label().into(), value, opens: entry.opens(), enabled: true });
+                targets.push(Some(OptTarget::Top(entry)));
+            }
+            return (rows, targets);
+        };
+        if page == pause_options::Entry::Picture {
+            for row in pause_options::picture_rows(pocket_ui::render_scale::here(&self.system)) {
+                rows.push(ListRow::Row { label: row.name().into(), value: row.label(self.picture_index(row)).into(), opens: false, enabled: true });
+                targets.push(Some(OptTarget::Picture(row)));
+            }
+            return (rows, targets);
+        }
+        let options = self.display_options();
+        let in_page = |i: usize| -> bool {
+            if i < picture::ROWS {
+                return false;
+            }
+            let section = option_section(&options[i], i);
+            match page {
+                pause_options::Entry::Controls => section == CONTROLS,
+                pause_options::Entry::Cheats => section == CHEATS,
+                _ => !matches!(section, CONTROLS | CHEATS),
+            }
+        };
+        let mut section: Option<usize> = None;
+        for i in option_page(&options, self.advanced_open) {
+            let (head, row) = if i == options.len() + 1 {
+                if page != pause_options::Entry::Emulator {
+                    continue;
+                }
                 let count = options.iter().enumerate().filter(|(r, o)| option_section(o, *r) == ADVANCED).count();
-                (SECTIONS[ADVANCED], ListRow::Row { label: "Advanced (this emulator)".into(), value: count.to_string(), opens: !self.advanced_open, enabled: true })
+                (ADVANCED, ListRow::Row { label: "Advanced (this emulator)".into(), value: count.to_string(), opens: !self.advanced_open, enabled: true })
             } else {
+                if i >= options.len() || !in_page(i) {
+                    continue;
+                }
                 let option = &options[i];
                 let (name, restart) = option_name(&option.label);
                 let label = if restart { format!("{name} · {}", pocket_ui::i18n::tr("after a restart")) } else { name };
                 let value = option_value(option.label_of(&option.current));
-                (SECTIONS[option_section(option, i)], ListRow::Row { label, value, opens: false, enabled: option.values.len() > 1 })
+                (option_section(option, i), ListRow::Row { label, value, opens: false, enabled: option.values.len() > 1 })
             };
+            // The Emulator page keeps its sections as quiet headings (the core's Picture, Sound, Speed); the Advanced group
+            // has its own row instead of a heading; the Controls and Cheats pages are one section each.
             if section != Some(head) {
-                // The Advanced group has its own row instead of a heading.
-                if head != SECTIONS[ADVANCED] {
-                    rows.push(ListRow::Heading(head.into()));
-                    index.push(None);
+                if page == pause_options::Entry::Emulator && head != ADVANCED {
+                    rows.push(ListRow::Heading(SECTIONS[head].into()));
+                    targets.push(None);
                 }
                 section = Some(head);
             }
             rows.push(row);
-            index.push(Some(i));
+            targets.push(Some(if i == options.len() + 1 { OptTarget::Advanced } else { OptTarget::Option(i) }));
         }
-        (rows, index)
+        (rows, targets)
+    }
+    /// The player's index of a Picture row (`picture::Settings`).
+    fn picture_index(&self, row: pause_options::PictureRow) -> usize {
+        match row {
+            pause_options::PictureRow::Scaling => self.picture.scaling,
+            pause_options::PictureRow::Look => self.picture.effect,
+            pause_options::PictureRow::Frame => self.picture.frame,
+            pause_options::PictureRow::Resolution => pause_options::resolution_index(pocket_ui::render_scale::here(&self.system), self.picture.resolution),
+        }
+    }
+    /// The selected row's target, the selection kept on a row (never on a heading, never past the end).
+    fn opt_target(&mut self) -> Option<OptTarget> {
+        let (_, targets) = self.list_option_rows();
+        if targets.get(self.opt_sel).copied().flatten().is_none() {
+            self.opt_sel = targets.iter().position(Option::is_some).unwrap_or(0);
+        }
+        targets.get(self.opt_sel).copied().flatten()
+    }
+    /// The Options page's keys: Up/Down go through the rows (round, past the headings), Left/Right change a value, A opens
+    /// a group or does the row, B goes back (a group to the top page onto its row, the top page to the pause menu).
+    fn key_list_options(&mut self, key: i32) {
+        let (_, targets) = self.list_option_rows();
+        let rows: Vec<usize> = targets.iter().enumerate().filter(|(_, t)| t.is_some()).map(|(i, _)| i).collect();
+        if rows.is_empty() {
+            return;
+        }
+        let at = rows.iter().position(|r| *r == self.opt_sel).unwrap_or(0);
+        // Restore defaults asks twice: only an A on it right after the first one does it.
+        let armed = std::mem::take(&mut self.restore_armed);
+        if armed && !matches!(key, 23 | 66 | 96) {
+            self.message.clear();
+        }
+        match key {
+            19 => self.opt_sel = rows[(at + rows.len() - 1) % rows.len()],
+            20 => self.opt_sel = rows[(at + 1) % rows.len()],
+            21 | 22 | 102 | 103 => {
+                self.opt_sel = rows[at];
+                self.opt_change(if matches!(key, 21 | 102) { -1 } else { 1 });
+            }
+            23 | 66 | 96 => {
+                self.opt_sel = rows[at];
+                self.restore_armed = armed;
+                self.opt_activate();
+            }
+            _ => (),
+        }
+    }
+    /// Left/Right on the selected row: a value steps; a group, Zoom and Screenshot have none.
+    fn opt_change(&mut self, delta: i32) {
+        match self.opt_target() {
+            Some(OptTarget::Picture(pause_options::PictureRow::Resolution)) => {
+                let range = pocket_ui::render_scale::here(&self.system);
+                let index = pause_options::resolution_step(range, pause_options::resolution_index(range, self.picture.resolution), delta);
+                if let Err(error) = self.picture.set_resolution(index as u8 + 1) { self.message = said(error, pocket_ui::save_trouble::SETTING_FAILED); }
+            }
+            Some(OptTarget::Picture(row)) => {
+                let (index, player_row) = match row {
+                    pause_options::PictureRow::Scaling => (self.picture.scaling, 0),
+                    pause_options::PictureRow::Frame => (self.picture.frame, 1),
+                    pause_options::PictureRow::Look => (self.picture.effect, 2),
+                    // Its own arm above.
+                    pause_options::PictureRow::Resolution => return,
+                };
+                let next = row.step(index, delta);
+                if let Err(error) = self.picture.change(player_row, next as i32 - index as i32) { self.message = said(error, pocket_ui::save_trouble::SETTING_FAILED); }
+                self.overlay_size = None;
+            }
+            Some(OptTarget::Top(pause_options::Entry::Earlier)) => {
+                let on = !self.picture.earlier_on(&self.system);
+                if let Err(error) = self.picture.set_earlier(on) { self.message = said(error, pocket_ui::save_trouble::SETTING_FAILED); }
+                // On again: the first moment comes 5 minutes of play from now.
+                self.last_earlier = Instant::now();
+            }
+            Some(OptTarget::Top(pause_options::Entry::OverGame)) => {
+                let on = !self.picture.over_game;
+                if let Err(error) = self.picture.set_over_game(on) { self.message = said(error, pocket_ui::save_trouble::SETTING_FAILED); }
+                self.fps.restart();
+            }
+            // Keep for: the picture's "Save settings for" (this console, this game).
+            Some(OptTarget::Top(pause_options::Entry::Keep)) => {
+                if let Err(error) = self.picture.change(3, delta) { self.message = said(error, pocket_ui::save_trouble::SETTING_FAILED); }
+            }
+            Some(OptTarget::Option(i)) => {
+                self.row = i;
+                self.change_option(delta);
+            }
+            _ => return,
+        }
+        self.sound(pocket_ui::ui_sound::Sound::Nav);
+    }
+    /// A on the selected row.
+    fn opt_activate(&mut self) {
+        match self.opt_target() {
+            Some(OptTarget::Top(entry @ (pause_options::Entry::Picture | pause_options::Entry::Emulator | pause_options::Entry::Controls | pause_options::Entry::Cheats))) => {
+                self.opt_top_sel = self.opt_sel;
+                self.opt_page = Some(entry);
+                self.opt_sel = 0;
+                self.opt_target();
+                self.sound(pocket_ui::ui_sound::Sound::Confirm);
+            }
+            Some(OptTarget::Top(pause_options::Entry::Zoom)) => {
+                self.menu = Menu::Zoom;
+                self.zoom = play_cards::Zoom::new(&self.system);
+                self.from_options = true;
+            }
+            Some(OptTarget::Top(pause_options::Entry::Restore)) => {
+                if !self.restore_armed {
+                    self.restore_armed = true;
+                    self.message = pause_options::RESTORE_ASK.into();
+                } else {
+                    self.restore_armed = false;
+                    self.restore_defaults();
+                }
+                self.sound(pocket_ui::ui_sound::Sound::Confirm);
+            }
+            Some(OptTarget::Top(pause_options::Entry::Screenshot)) => {
+                // The sheet's Screenshot (its sound and line), then back on this row.
+                self.menu = Menu::Pause;
+                self.row = 5;
+                self.activate();
+                self.menu = Menu::Options;
+            }
+            Some(OptTarget::Top(_) | OptTarget::Picture(_) | OptTarget::Option(_)) => {
+                self.opt_change(1);
+            }
+            Some(OptTarget::Advanced) => {
+                self.advanced_open = !self.advanced_open;
+                self.sound(pocket_ui::ui_sound::Sound::Confirm);
+            }
+            None => (),
+        }
+    }
+    /// Restore defaults (Linux's): the picture's, Earlier's and Over the game's choices for the console and the game go,
+    /// every emulator option is back on its default (at once, as a change on the Emulator page is) and its saved file is
+    /// emptied, Hold to toggle is off. Resolution's default comes with the next start.
+    fn restore_defaults(&mut self) {
+        let mut failed = self.picture.restore_defaults().err();
+        for option in &mut self.options {
+            if option.current != option.default && self.core.set_option(&option.key, &option.default) {
+                option.current = option.default.clone();
+            }
+        }
+        self.saved_options.clear();
+        pocket_ui::fsutil::write_json_soon(&self.options_path, &self.saved_options);
+        self.hold_button = None;
+        self.held = Default::default();
+        let hold = self.data.join("android-controls").join(format!("{}.json", self.key));
+        if let Err(error) = std::fs::remove_file(&hold) { if error.kind() != std::io::ErrorKind::NotFound { failed = Some(error.to_string()); } }
+        self.overlay_size = None;
+        self.fps.restart();
+        self.message = failed.map_or_else(|| pause_options::RESTORE_DONE.into(), |error| said(error, pocket_ui::save_trouble::SETTING_FAILED));
+        log::info!("player options: restored defaults");
+    }
+    /// B on the Options page: a group goes back to the top page onto its row; the top page is the caller's (the pause menu).
+    fn opt_back(&mut self) -> bool {
+        if self.opt_page.take().is_some() {
+            self.opt_sel = self.opt_top_sel;
+            return true;
+        }
+        false
+    }
+    /// The line at the bottom left for the selected row.
+    fn opt_desc(&mut self) -> String {
+        match self.opt_target() {
+            Some(OptTarget::Top(pause_options::Entry::Screenshot | pause_options::Entry::Restore)) if !self.message.is_empty() => self.message.clone(),
+            Some(OptTarget::Top(entry)) => entry.desc(self.picture.for_game()).to_string(),
+            Some(OptTarget::Picture(row)) => row.desc(self.picture_index(row)).to_string(),
+            Some(OptTarget::Option(i)) => self.display_options().get(i).map_or(String::new(), |o| o.info.clone()),
+            _ => String::new(),
+        }
     }
     fn display_options(&self) -> Vec<FileOption> {
         let mut options = self.picture.options();
@@ -1225,23 +1472,6 @@ impl Player {
         }
     }
     fn activate(&mut self) {
-        if self.menu == Menu::Options && self.row >= self.display_options().len() + 2 {
-            // The list menu's Zoom and Screenshot (Linux has Zoom under Options, not on the main page).
-            if self.row == self.display_options().len() + 2 {
-                self.menu = Menu::Zoom;
-                self.zoom = play_cards::Zoom::new(&self.system);
-                self.from_options = true;
-            } else {
-                // The sheet's Screenshot (its sound and line), then back on this row.
-                let row = self.row;
-                self.menu = Menu::Pause;
-                self.row = 5;
-                self.activate();
-                self.menu = Menu::Options;
-                self.row = row;
-            }
-            return;
-        }
         if self.menu == Menu::Options {
             if self.row == self.display_options().len() + 1 {
                 // "Advanced (this emulator)": opens or closes its group.
@@ -1379,7 +1609,8 @@ impl Player {
     }
     fn touch(&mut self, id: i32, x: f32, y: f32, phase: i32) -> bool {
         if phase == 0 && self.reminder.take().is_some() {
-            self.next = Instant::now();
+            self.pacer.restart();
+            self.pacing.pause();
             self.swallow = Some(id);
             self.overlay_size = None;
             return true;
@@ -1437,9 +1668,9 @@ impl Player {
                     if self.menu == Menu::Pause {
                         self.list_sel = i;
                         self.activate_list();
-                    } else if let Some(Some(row)) = self.list_option_rows().1.get(i).copied() {
-                        self.row = row;
-                        if row < self.display_options().len() { self.change_option(1); } else { self.activate(); }
+                    } else if self.list_option_rows().1.get(i).copied().flatten().is_some() {
+                        self.opt_sel = i;
+                        self.opt_activate();
                     }
                 }
             }
@@ -1605,8 +1836,14 @@ impl Player {
         // The compositor can run below the core rate (notably SwiftShader on high-DPI phones).
         // Catch up bounded emulation ticks before painting once; audio must not lose samples when
         // a presentation misses vsync. Core calls remain on the EGL thread for hardware cores.
+        // One core frame per display refresh near the display's rate, as pocket-core on Linux (`core_pacing`): the
+        // wall clock against the core's own rate repeated and doubled pictures for seconds every ten (SNES, 17.11.).
+        let call = Instant::now();
+        let mut readback_time = Duration::ZERO;
+        let due = if !self.paused && self.reminder.is_none() { self.pacer.due(call) } else { 0 };
         let mut ticks = 0;
-        while !self.paused && self.reminder.is_none() && Instant::now() >= self.next && ticks < 4 {
+        let mut core_time = Duration::ZERO;
+        while ticks < due {
             ticks += 1;
             let touch = self.fingers.values().fold(self.pulses, |v, b| v | b);
             let mut buttons = self.buttons | touch | self.stick_buttons;
@@ -1632,20 +1869,24 @@ impl Player {
                 log::info!("player input: p1={:04x} p2={:04x} p3={:04x} p4={:04x}", given[0], given[1], given[2], given[3]);
                 self.last_given = given;
             }
+            let run_started = Instant::now();
             let (frame, samples, av, geometry) = self.core.run(buttons);
+            core_time += run_started.elapsed();
             pocket_ui::mark!("android-core-run", "phase=end frame={} samples={}", self.frames, samples.len() / 2);
             if let Some(av) = av {
                 self.core.av = av;
-                self.period = Duration::from_secs_f64(1.0 / av.timing.fps.clamp(10.0, 240.0));
+                self.pacer.set_rates(av.timing.fps, self.display_hz);
                 if let Some(audio) = &mut self.audio {
-                    audio.set_source_timing(av.timing.sample_rate, av.timing.fps, display_refresh_hz());
+                    audio.set_paced_timing(av.timing.sample_rate, av.timing.fps, self.display_hz);
                 }
             }
             if let Some(geometry) = geometry {
                 self.core.av.geometry = geometry;
             }
             pocket_ui::mark!("android-readback", "phase=begin frame={}", self.frames);
+            let readback_started = Instant::now();
             let frame = core_hw_frame(&self.core).or(frame);
+            readback_time += readback_started.elapsed();
             pocket_ui::mark!("android-readback", "phase=end frame={}", self.frames);
             if let Some(frame) = frame {
                 self.video_frames += 1;
@@ -1657,10 +1898,20 @@ impl Player {
             self.frames += 1;
             // RetroAchievements reads the game's memory after each emulated frame (well under a millisecond).
             if let Some(ra) = &mut self.ra { ra.frame(); }
-            self.next += self.period;
             if self.last_flush.elapsed() > Duration::from_secs(10) {
                 self.core.write_sram_in_background();
                 self.last_flush = Instant::now();
+                // The pacing of the last ten seconds, and the display's rate again (a phone may switch its mode).
+                let cpu = pocket_ui::core_pacing::current_cpu();
+                log::info!("player pacing: {}", self.pacing.line(self.pacer.locked(), self.core.av.timing.fps, self.display_hz, cpu));
+                let hz = display_refresh_hz();
+                if (hz - self.display_hz).abs() > 0.01 {
+                    self.display_hz = hz;
+                    self.pacer.set_rates(self.core.av.timing.fps, hz);
+                    if let Some(audio) = &mut self.audio {
+                        audio.set_paced_timing(self.core.av.timing.sample_rate, self.core.av.timing.fps, hz);
+                    }
+                }
                 if let Some(audio) = &self.audio {
                     let underruns = *audio.underruns.lock().unwrap_or_else(|e| e.into_inner());
                     let queue_ms = audio.buffered_ms();
@@ -1684,7 +1935,8 @@ impl Player {
                 }
             }
             if self.last_earlier.elapsed() > Duration::from_secs(300) {
-                if let Some(writer) = &self.earlier_writer {
+                // Earlier states Off (the console's starting value for N64, PSP, DS, Dreamcast: big states): no new moments.
+                if let Some(writer) = self.earlier_writer.as_ref().filter(|_| self.picture.earlier_on(&self.system)) {
                     let started = Instant::now();
                     if let Some((bytes, serialize_time)) = self.core.save_state_with_serialize_time().filter(|(b, _)| !b.is_empty() && b.len() <= pocket_ui::state_file::MAX_STATE) {
                         let capture_ms = started.elapsed().as_secs_f64() * 1000.0;
@@ -1708,6 +1960,13 @@ impl Player {
                 }
                 self.last_earlier = Instant::now();
             }
+        }
+        if !self.paused && self.reminder.is_none() {
+            self.pacing.call(call, ticks, core_time);
+        }
+        // Over the game → FPS: the line changes twice a second, and then the overlay is painted again.
+        if !self.paused && self.reminder.is_none() && self.picture.over_game && self.fps.frame(Instant::now(), ticks) {
+            self.overlay_size = None;
         }
         // Achievements: while paused rc_client's timers go on and the Achievements page keeps its list current; in the
         // game the unlock cards and notes come up (a card is only taken from the line while it can be seen).
@@ -1739,8 +1998,12 @@ impl Player {
             }
         }
         pocket_ui::mark!("android-present", "phase=begin frame={}", self.frames);
+        let paint_started = Instant::now();
         self.paint();
         pocket_ui::mark!("android-present", "phase=end frame={}", self.frames);
+        if !self.paused && self.reminder.is_none() {
+            self.pacing.phases(readback_time, paint_started.elapsed());
+        }
         if self.frames > 0 && !self.first_frame {
             // The tests' end of "A or tap to the game's first frame" (the launcher logs the start).
             self.first_frame = true;
@@ -1774,10 +2037,10 @@ impl Player {
     fn semantic_nodes(&self) -> String {
         let areas: Vec<_> = if self.paused {
             let mut nodes: Vec<_> = self.hits.iter().map(|(a, i, label)| (*a, label.clone(), !self.touch_visible && *i == self.row)).collect();
-            nodes.extend(self.slot_controls().into_iter().map(|(a, _, label)| (a, label.to_string(), false)));
+            nodes.extend(self.slot_controls().into_iter().map(|(a, _, label)| (a, pocket_ui::i18n::tr(label), false)));
             if self.menu == Menu::Zoom {nodes.push((Area::new(0,0,self.logical.0 as i32,80),format!("{} · {:.1}x",pocket_ui::i18n::tr("Zoom"),self.zoom.scale),false));}
             if self.menu == Menu::Options {
-                nodes.extend(self.option_arrows.iter().map(|(a, _, _, label)| (*a, label.clone(), false)));
+                nodes.extend(self.option_arrows.iter().map(|(a, _, _, label)| (*a, pocket_ui::i18n::tr(label), false)));
             }
             if self.menu == Menu::Achievements {
                 nodes.push((Area::new(36, 150, self.logical.0 as i32 - 72, self.logical.1 as i32 - 300), self.ra_lines.iter().filter(|l| !l.is_empty()).cloned().collect::<Vec<_>>().join(". "), false));
@@ -1942,13 +2205,13 @@ impl Player {
                     self.list_hits = out.rows.into_iter().enumerate().map(|(i, a)| (a, i)).collect();
                     self.list_hint_hits = out.hints;
                 }
-                ListPaint::Options { rows, sel, desc } => {
+                ListPaint::Options { rows, sel, desc, title } => {
                     let hints: &[(&str, &str)] = match rows.get(sel) {
                         Some(pause_list::ListRow::Row { opens: true, .. }) => &[("B", "Back"), ("A", "Open")],
                         Some(pause_list::ListRow::Row { value, .. }) if !value.is_empty() => &[("B", "Back"), ("< >", "Change")],
                         _ => &[("B", "Back"), ("A", "OK")],
                     };
-                    let out = pause_list::paint_list(&mut c, &mut self.text, &pause_list::List { title: "Options", rows: &rows, sel, desc: &desc, hints });
+                    let out = pause_list::paint_list(&mut c, &mut self.text, &pause_list::List { title: &title, rows: &rows, sel, desc: &desc, hints });
                     self.list_hits = out.rows.into_iter().enumerate().filter_map(|(i, a)| a.map(|a| (a, i))).collect();
                     self.list_hint_hits = out.hints;
                 }
@@ -2005,6 +2268,11 @@ impl Player {
                 self.slot_arrows = [a, b];
             }
         }
+        if !self.paused && self.reminder.is_none() && self.picture.over_game && !self.fps.line().is_empty() {
+            // Over the game → FPS, in the top left corner as on Linux.
+            let line = self.fps.line().to_string();
+            play_cards::paint_badge(&mut c, &mut self.text, &line);
+        }
         if let Some(card)=&self.reminder {pocket_ui::where_was_i::paint(&mut c,&mut self.text,card,h-40,255);}
         if let Some(held)=held_label {
             let label = self.text.translated("{s} held").replace("{s}", &held);
@@ -2019,7 +2287,7 @@ impl Player {
 /// The list menu's page as gathered for one paint (`Player::list_paint`).
 enum ListPaint {
     Main { rows: Vec<pause_list::Row>, sel: usize, preview: Option<ListPreview>, note: Option<String>, hints: Vec<(&'static str, &'static str)> },
-    Options { rows: Vec<pause_list::ListRow>, sel: usize, desc: String },
+    Options { rows: Vec<pause_list::ListRow>, sel: usize, desc: String, title: String },
 }
 struct ListPreview {
     picture: Option<std::sync::Arc<Image>>,
@@ -2122,6 +2390,9 @@ const DISC_ROW: &str = "disc";
 const SECTIONS: [&str; 6] = ["Picture", "Sound", "Controls", "Speed", "Cheats", "Advanced (this emulator)"];
 /// The section that starts closed: what is particular to one emulator (its model, BIOS, presets, restarts).
 const ADVANCED: usize = 5;
+/// The Controls and Cheats sections: the list menu's Options has a page for each (`pause_options`).
+const CONTROLS: usize = 2;
+const CHEATS: usize = 4;
 /// Which section of `SECTIONS` option `row` of `display_options` goes in, by its key and name.
 fn option_section(option: &FileOption, row: usize) -> usize {
     if row < picture::ROWS {
@@ -2434,6 +2705,13 @@ fn said(error: String, instead: &'static str) -> String {
 
 fn string(env: &mut JNIEnv, value: JString) -> String {
     env.get_string(&value).map(|s| s.to_string_lossy().into_owned()).unwrap_or_default()
+}
+/// Native Android dialogs use the same tables and language as the player, initialized by nativeCreate before its
+/// error callback. The Java UI thread follows the process language, as the renderer's GL thread does.
+#[no_mangle]
+pub extern "system" fn Java_xyz_pocketui_app_PlayerActivity_nativeTranslate(mut env: JNIEnv, _: JObject, value: JString) -> jstring {
+    let text = pocket_ui::i18n::tr(&string(&mut env, value));
+    env.new_string(text).map(|s| s.into_raw()).unwrap_or(std::ptr::null_mut())
 }
 #[no_mangle]
 pub extern "system" fn Java_xyz_pocketui_app_PlayerActivity_nativeCreate(

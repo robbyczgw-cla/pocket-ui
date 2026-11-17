@@ -158,18 +158,10 @@ impl Default for Hud {
     }
 }
 
-/// utime + stime of this process in clock ticks, from /proc/self/stat.
-fn process_ticks() -> u64 {
-    let Ok(stat) = std::fs::read_to_string("/proc/self/stat") else { return 0 };
-    parse_ticks(&stat).unwrap_or(0)
-}
-
-/// Fields 14 and 15 of a /proc/<pid>/stat line (the name in field 2 may contain spaces and parentheses).
-fn parse_ticks(stat: &str) -> Option<u64> {
-    let rest = &stat[stat.rfind(')')? + 1..];
-    let f: Vec<&str> = rest.split_whitespace().collect();
-    Some(f.get(11)?.parse::<u64>().ok()? + f.get(12)?.parse::<u64>().ok()?)
-}
+// utime + stime of this process in clock ticks, from /proc/self/stat (shared with Android's player).
+use crate::fps_line::process_ticks;
+#[cfg(test)]
+use crate::fps_line::parse_ticks;
 
 impl Hud {
     pub fn toast(&mut self, msg: impl Into<String>) {
@@ -242,11 +234,8 @@ impl Hud {
         if self.show_fps {
             let cpu = tick.cpu_secs / secs * 100.0;
             let (fps, emulated) = (self.frames as f64 / secs, self.emulated as f64 / secs);
-            self.fps_text = if (emulated - fps).abs() > fps * 0.1 {
-                format!("{fps:.0} FPS   EMU {emulated:.0}   CPU {cpu:.0}%")
-            } else {
-                format!("{fps:.0} FPS   CPU {cpu:.0}%")
-            };
+            // The same words as Android's player (`fps_line`).
+            self.fps_text = crate::fps_line::text(fps, emulated, cpu);
             // FPS + sensors: the last readings of the reader thread; what the device lacks isn't there.
             if let Some(w) = self.sensors.as_ref() {
                 let more = w.text();

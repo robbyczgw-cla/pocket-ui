@@ -361,7 +361,9 @@ impl App {
             let base = y + row / 2 + pocket_ui::type_scale::mid(font);
             // The label leaves the value its room: a long name next to a long value ("GameCube- & Wii-Spielspeicher" and
             // "Wird fortgesetzt", German at 1024x768 in Large text) is cut with "…" before it runs into it.
+            // The selected switch between its ‹ › (Left/Right switch it, 0.5.1), Versions' angle drawn (`kit::row_value`).
             let value = page.value(*r);
+            let value = if i == page.sel && page.switch_is(*r).is_some() { format!("‹ {value} ›") } else { value };
             let value_w = self.text.width(Face::Body, font, &value);
             let name = &self.text.fit(Face::Body, font, r.label(), right - pad - 2 * NU_BTN_PAD - value_w - 24);
             if i == page.sel {
@@ -375,7 +377,7 @@ impl App {
                 self.text.draw(c, Face::Body, font, pad + NU_BTN_PAD, base, pal().text, name);
             }
             // The switch row is the status of the service; the recommended shares are marked.
-            self.text.draw_right(c, Face::Body, font, right - NU_BTN_PAD, base, pal().text, &value);
+            pocket_ui::kit::row_value_in(c, &mut self.text, font, right - NU_BTN_PAD, base, &value, (pal().text, pal().text));
         }
         self.hits.list(page.sel, rows().len(), 0.0, row as f32);
 

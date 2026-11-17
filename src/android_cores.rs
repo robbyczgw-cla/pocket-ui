@@ -90,6 +90,36 @@ pub fn verified_catalog(json: &[u8], sig: &str, url: &str, data: &Path) -> Resul
 
 static INSTALL: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
+/// A core the APK carries now that was a download before (PSP, DS, N64 and Dreamcast until 0.5.0-android.5): the APK's
+/// library wins (`corePath` asks for it first), and the downloaded copy goes, its files, its folder and its store record,
+/// so nothing is there twice. Saves, states, core options and the PSP system folder live elsewhere (`saves/`, `states/`,
+/// `core-options/`, `bios/`) and stay. With no download offered at all (`offers_left` false), unfinished downloads
+/// (`store/partials`) go too. At every start of either view; nothing is written when there is nothing to retire.
+/// Returns the cores retired.
+pub fn retire_bundled(data: &Path, bundled: impl Fn(&str) -> bool, offers_left: bool) -> Vec<String> {
+    let _install = INSTALL.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+    let mut retired = Vec::new();
+    let downloaded: Vec<String> = std::fs::read_dir(data.join("android-cores")).into_iter().flatten().flatten()
+        .filter_map(|e| e.file_name().to_str().map(str::to_string))
+        .filter(|core| !core.is_empty() && core.len() <= 40 && core.bytes().all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == b'_'))
+        .collect();
+    for core in downloaded {
+        if !bundled(&core) { continue; }
+        // The store removes exactly the files it installed; a damaged inventory refuses, and the folder goes anyway.
+        if let Err(e) = crate::store::Store::open(data).uninstall(&format!("android-core-{core}")) {
+            eprintln!("retire downloaded {core}: store: {e}");
+        }
+        match std::fs::remove_dir_all(destination(data, &core)) {
+            Ok(()) => retired.push(core),
+            Err(e) => eprintln!("retire downloaded {core}: {e}"),
+        }
+    }
+    if !offers_left {
+        let _ = std::fs::remove_dir_all(data.join("store/partials"));
+    }
+    retired
+}
+
 pub fn install(data: &Path, p: &CorePackage, archive: &[u8]) -> Result<(), Error> {
     let _install = INSTALL.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
     // Never trust a catalog's desktop destination on Android. Each core owns one private folder.
@@ -190,5 +220,60 @@ mod tests {
         assert_eq!(std::fs::read(library(&data, "test")).unwrap(), b"working core");
         assert!(verified_catalog(json.as_bytes(), "not signed", "file:///test/catalog.json", &data).is_err());
         assert!(crate::store::Store::open(&data).installed.contains_key("android-core-test"));
+    }
+
+    /// 0.5.x: the four download cores are in the APK. A phone that downloaded N64 and Dreamcast before keeps one copy of each, the
+    /// APK's: the download's files, folder and store record go, an unfinished download too; saves, states, core options
+    /// and the PSP system files stay where they are.
+    #[test]
+    fn a_core_the_apk_now_carries_replaces_its_download_and_keeps_saves_and_options() {
+        let root = tempfile::tempdir().unwrap();
+        let data = root.path().join("data");
+        let mut kept = Vec::new();
+        for core in ["mupen64plus_next", "flycast", "future"] {
+            let source = root.path().join(core);
+            std::fs::create_dir_all(source.join("licences")).unwrap();
+            std::fs::write(source.join(format!("lib{core}_libretro.so")), core.as_bytes()).unwrap();
+            std::fs::write(source.join("licences/LICENSE"), b"licence").unwrap();
+            std::fs::write(source.join("core.json"), format!(r#"{{"id":"{core}","corresponding_source":"s.tar.gz","source_sha256":"{}"}}"#, "a".repeat(64))).unwrap();
+            let archive = root.path().join(format!("{core}.tar.gz"));
+            assert!(std::process::Command::new("tar").arg("-czf").arg(&archive).arg("-C").arg(&source).arg(".").status().unwrap().success());
+            let bytes = std::fs::read(archive).unwrap();
+            let json = serde_json::json!({"packages":[{
+                "id":format!("android-core-{core}"), "name":core, "category":"android-cores", "version":"1", "description":"", "size":bytes.len(),
+                "url":"c.tar.gz", "sha256":crate::store::sha256_hex(&bytes), "kind":"tar", "dest":"/x",
+                "core":core, "systems":[core], "library_sha256":crate::store::sha256_hex(core.as_bytes()),
+                "corresponding_source":"s.tar.gz", "source_sha256":"a".repeat(64)
+            }]}).to_string();
+            install(&data, &packages(json.as_bytes()).unwrap().remove(0), &bytes).unwrap();
+        }
+        for (path, body) in [("saves/0123456789abcdef/game.srm", "save"), ("states/0123456789abcdef/game.state1", "state"),
+                             ("core-options/n64.json", "{}"), ("bios/PPSSPP/compat.ini", "assets"), ("store/partials/ab.part", "half")] {
+            std::fs::create_dir_all(data.join(path).parent().unwrap()).unwrap();
+            std::fs::write(data.join(path), body).unwrap();
+            kept.push((path, body));
+        }
+        // PSP's download also brought its system files, and the core may have written beside them: the whole folder goes.
+        std::fs::create_dir_all(data.join("android-cores/ppsspp/system/PPSSPP/flash0")).unwrap();
+        std::fs::write(data.join("android-cores/ppsspp/libppsspp_libretro.so"), b"psp").unwrap();
+        std::fs::write(data.join("android-cores/ppsspp/system/PPSSPP/flash0/written-by-the-core"), b"cache").unwrap();
+        let bundled = |core: &str| ["mupen64plus_next", "ppsspp", "melondsds", "flycast"].contains(&core);
+        let mut retired = retire_bundled(&data, bundled, false);
+        retired.sort();
+        assert_eq!(retired, ["flycast", "mupen64plus_next", "ppsspp"]);
+        assert!(!data.join("android-cores/ppsspp").exists());
+        assert!(!data.join("android-cores/mupen64plus_next").exists() && !data.join("android-cores/flycast").exists(), "no second copy");
+        assert!(library(&data, "future").is_file(), "a core the APK doesn't carry stays downloaded");
+        let store = crate::store::Store::open(&data);
+        assert!(!store.installed.contains_key("android-core-mupen64plus_next") && !store.installed.contains_key("android-core-flycast"));
+        assert!(store.installed.contains_key("android-core-future"));
+        assert!(!data.join("store/partials").exists(), "an unfinished download of a core nobody offers goes");
+        for (path, body) in kept.iter().filter(|(p, _)| !p.starts_with("store/")) {
+            assert_eq!(std::fs::read_to_string(data.join(path)).unwrap(), *body, "{path} stays");
+        }
+        // The next start finds nothing to do and writes nothing.
+        let before = std::fs::metadata(data.join("store/installed.json")).unwrap().modified().unwrap();
+        assert!(retire_bundled(&data, bundled, false).is_empty());
+        assert_eq!(std::fs::metadata(data.join("store/installed.json")).unwrap().modified().unwrap(), before);
     }
 }

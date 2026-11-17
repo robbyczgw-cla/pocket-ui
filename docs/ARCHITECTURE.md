@@ -123,7 +123,7 @@ The steps and their times are logged as `first frame after … (logs …, event 
 | `pactl` (the volume), the stick lights, the function keys (`input_sense`), the Wi-Fi watchdog (`nmcli`), Samba's shares, remote access, Store tools, the wait for Wi-Fi | `startup::after_first_frame`: each a thread |
 | The quick settings' levels and radios (backlight, `pactl`, rfkill, `systemctl is-active bluetooth`) | their worker, 1.5 s after the start (`Sys::tick`, `WARM_AFTER`), so the panel opens from memory |
 | The search index, Curator's index | as before (`find_tick`, `curator_tick`) |
-| The libretro core of the game in front (Home's first recent game, the one Continue starts) | `core_prewarm`: only when a shelf frame was drawn, never on Android; one thread at the lowest CPU and I/O priority resolves the core as the launch does (`app_emu_choice::inputs_for`, `store::core_path`) and reads the file into the page cache in 256 KB pieces (no `dlopen`, no `mlock`); one core, never FBNeo or ScummVM; on H700 also reads the selected player executable and existing EGL/Mesa libraries (including the versioned Gallium driver), all under one 35 MiB cap; aliases are read once, missing or oversized files skipped; stops at the next piece when a game starts or the device sleeps. `POCKETUI_NO_CORE_PREWARM=1` turns it off (the measurement without it) |
+| The libretro core of the game in front (Home's first recent game, the one Continue starts) | `core_prewarm`: only when a shelf frame was drawn, never on Android; one thread at the lowest CPU and I/O priority resolves the core as the launch does (`app_emu_choice::inputs_for`, `store::core_path`) and reads the file into the page cache in 256 KB pieces (no `dlopen`, no `mlock`); one core, never FBNeo or ScummVM; on H700 also reads the selected player executable, the existing EGL/Mesa libraries (including the versioned Gallium driver), every library these and the player load in turn (their `DT_NEEDED` lists: libstdc++, X11/xcb, zstd …) and the files EGL reads at its start (glvnd's vendor list, Mesa's drirc), the core at most 35 MiB and the whole set under one 64 MiB cap; aliases are read once, missing or oversized files skipped; stops at the next piece when a game starts or the device sleeps. `POCKETUI_NO_CORE_PREWARM=1` turns it off (the measurement without it) |
 
 The logind inhibitor for the power key (`systemd-inhibit`) is started on a thread at once (`sleep::InhibitorSlot`);
 until it is held the power key stays logind's, as when it can't be had.
@@ -865,10 +865,10 @@ fallback in play. The Linux player already uses `timeline::Writer` and the seria
 which defers expensive captures to a quiet pause.
 
 Android PPSSPP resources are pinned alongside the core: `build-cores.py` records tracked `assets/` files by
-relative path, size and hash. `package-cores.py` includes them in the optional archive under `system/PPSSPP`.
-`android_cores.rs` checks every asset before the store installs the package into `files/android-cores/ppsspp`;
-the player selects that verified system directory before `Core::load`. Older APK-bundled assets retain the
-Activity's `SystemAssets` fallback into `files/bios/PPSSPP`. Corresponding sources retain the original assets.
+relative path, size and hash. Since 0.5.x PSP is in the APK again: `package-cores.py` packs them as
+`assets/system/PPSSPP`, `apk_audit.py` checks each against its hash, and the player's `SystemAssets` copies them to
+`files/bios/PPSSPP` before `Core::load`. A PSP downloaded with an older APK (`files/android-cores/ppsspp`) is removed at
+start (`android_cores::retire_bundled`). Corresponding sources retain the original assets.
 The package contains no games or console BIOS. Signature, archive and individual asset checks precede startup.
 
 The experimental SM4450 Classic Rev Q profile uses 1240 × 1080 with touch and no sticks.

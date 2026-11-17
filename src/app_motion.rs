@@ -16,6 +16,15 @@ use super::{App, Screen, SettingsPage};
 /// The hint bar crossfades this fast when its hints change.
 const HINTS: Duration = Duration::from_millis(120);
 
+/// After a step of the selection, the hints that change with it are part of the move this long.
+const MOVING: Duration = Duration::from_millis(250);
+
+/// Whether a move is under way at `now`: the selection stepped at `moved_at` (less than [`MOVING`] ago), a key is
+/// `held`, or a list still `gliding`.
+pub(crate) fn moving(moved_at: Instant, now: Instant, held: bool, gliding: bool) -> bool {
+    now.saturating_duration_since(moved_at) < MOVING || held || gliding
+}
+
 /// What is on screen, to tell a push from a pop. Matches with a fallback, so screens and Settings pages that
 /// other parts add later count as pages of their own without a change here. Pages opened over others (the card,
 /// the console page, Curator's pages, the search) are one level deeper than what they opened over.
@@ -186,15 +195,28 @@ impl MotionUi {
         }
     }
 
+    /// A list is still gliding (its rows or its highlight).
+    fn lists_gliding(&self, now: Instant) -> bool {
+        let g = |l: &ListGlides| l.scroll.moving(now) || l.hilite.moving(now);
+        g(&self.home) || g(&self.settings) || self.pages.iter().any(|(_, _, l)| g(l))
+    }
+
     /// The hint bar's crossfade: the hints shown before and how far the new ones are in (0-1), while it lasts.
-    pub(crate) fn hints_fade(&mut self, hints: &[(&str, &str)], now: Instant) -> Option<(Vec<(String, String)>, f32)> {
+    /// `moving`: the selection is on its way ([`App::moving_now`]); new hints then come at once.
+    pub(crate) fn hints_fade(&mut self, hints: &[(&str, &str)], now: Instant, moving: bool) -> Option<(Vec<(String, String)>, f32)> {
         let same = self.hints.len() == hints.len() && self.hints.iter().zip(hints).all(|(a, b)| a.0 == b.0 && a.1 == b.1);
         if !same {
             let new: Vec<(String, String)> = hints.iter().map(|(k, l)| (k.to_string(), l.to_string())).collect();
             let old = std::mem::replace(&mut self.hints, new);
+            // While the selection moves (a step, a held key, to another shelf) the hints change with it, often from game to
+            // game (Play/Continue, Star/Unstar): a fade would land on the heaviest frames of the move (4 ms on the Brick),
+            // and a running one ends (docs/TRIMUI-BRICK.md).
+            if moving {
+                self.hints_at = None;
+            }
             // The first hints of a page come with the page.
             // A snapshot is a picture at rest: its frames come milliseconds apart, so a fade would show both hint sets.
-            if !old.is_empty() && motion::allowed(Kind::Fade) && !std::env::args().any(|a| a == "--snapshot") {
+            else if !old.is_empty() && motion::allowed(Kind::Fade) && !std::env::args().any(|a| a == "--snapshot") {
                 self.old_hints = old;
                 self.hints_at = Some(now);
                 motion::keep_alive(motion::end_of(now, HINTS));
@@ -227,6 +249,12 @@ pub(crate) fn rows_in_view(first_f: f32, visible: usize, len: usize) -> impl Ite
 }
 
 impl App {
+    /// A move is under way: the selection has just stepped (in the Cabinet too, to another shelf), a key is held, a
+    /// list glides. The hint bar then changes without a fade.
+    pub(crate) fn moving_now(&self, now: Instant) -> bool {
+        moving(self.moved_at, now, self.held.is_some(), self.motion.lists_gliding(now))
+    }
+
     /// The page on screen; None while a game has the screen (and the pause menu over it, which has its own).
     pub(crate) fn page(&self) -> Option<Page> {
         if self.sleep.overlay().is_some() || self.menu.is_some() {
@@ -459,18 +487,45 @@ mod tests {
     }
 
     #[test]
+    fn the_hint_bar_does_not_crossfade_while_the_selection_moves() {
+        motion::set_level(motion::Motion::Full);
+        let mut m = MotionUi::default();
+        let t0 = Instant::now();
+        assert!(m.hints_fade(&[("A", "Play")], t0, false).is_none());
+        // A step to a game with other hints (Play/Continue, Star/Unstar): the new bar at once, nothing fades.
+        assert!(m.hints_fade(&[("A", "Continue")], t0, true).is_none(), "moving: the new hints come at once");
+        assert!(m.hints_fade(&[("A", "Continue")], t0, false).is_none(), "and stay, with no fade left over");
+        // At rest (Star on the same game) it still fades.
+        assert!(m.hints_fade(&[("A", "Continue"), ("Y", "Unstar")], t0, false).is_some(), "at rest: the fade");
+        // A move while a fade runs ends it: the new bar at once.
+        assert!(m.hints_fade(&[("A", "Play")], t0, true).is_none(), "a move cuts a running fade short");
+    }
+
+    #[test]
+    fn a_step_a_held_key_or_a_gliding_list_is_a_move() {
+        let t0 = Instant::now();
+        let later = t0 + MOVING;
+        assert!(moving(t0, t0, false, false), "the frame of the step");
+        assert!(moving(t0, later - Duration::from_millis(1), false, false));
+        assert!(!moving(t0, later, false, false), "at rest");
+        assert!(moving(t0, later, true, false), "a key held at the end of a list");
+        assert!(moving(t0, later, false, true), "a list still gliding");
+        assert!(moving(later, t0, false, false), "a step stamped by the frame clock a little ahead");
+    }
+
+    #[test]
     fn the_hint_bar_crossfades_only_when_its_hints_change() {
         motion::set_level(motion::Motion::Full);
         let mut m = MotionUi::default();
         let t0 = Instant::now();
-        assert!(m.hints_fade(&[("A", "Play")], t0).is_none(), "the first hints come with the page");
-        assert!(m.hints_fade(&[("A", "Play")], t0).is_none());
-        let (old, p) = m.hints_fade(&[("A", "Open")], t0).unwrap();
+        assert!(m.hints_fade(&[("A", "Play")], t0, false).is_none(), "the first hints come with the page");
+        assert!(m.hints_fade(&[("A", "Play")], t0, false).is_none());
+        let (old, p) = m.hints_fade(&[("A", "Open")], t0, false).unwrap();
         assert_eq!(old, vec![("A".to_string(), "Play".to_string())]);
         assert!(p > 0.0 && p < 1.0);
-        assert!(m.hints_fade(&[("A", "Open")], t0 + HINTS).is_none(), "over");
+        assert!(m.hints_fade(&[("A", "Open")], t0 + HINTS, false).is_none(), "over");
         motion::set_level(motion::Motion::Off);
-        assert!(m.hints_fade(&[("B", "Back")], t0 + HINTS).is_none(), "Off: at once");
+        assert!(m.hints_fade(&[("B", "Back")], t0 + HINTS, false).is_none(), "Off: at once");
         motion::set_level(motion::Motion::Full);
     }
 }

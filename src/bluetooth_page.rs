@@ -255,6 +255,10 @@ impl BluetoothPage {
             return Action::Close;
         } else if b == confirm {
             return self.activate();
+        } else if matches!(b, Button::Left | Button::Right) && self.row() == Row::Switch && (b == Button::Right) != self.on() {
+            // The switch takes Left (off) and Right (on) as every switch does (0.5.1); a held key repeats, so only
+            // the way it isn't yet.
+            return self.activate();
         } else if b == Button::North {
             // X on a paired device asks whether to forget it.
             if let Some(d) = self.device(self.row()).filter(|d| d.paired && self.busy.is_none()) {
@@ -555,6 +559,21 @@ mod tests {
         nameless.name = None;
         let q = page_with(snap(true, vec![nameless]));
         assert_eq!(names(&q), ["E4:17:D8:0B:1D:0E"]);
+    }
+
+    /// 0.5.1: the switch took only A. Right switches it on, Left off, each only when it is the other way (a held key
+    /// repeats); Search and the devices are actions and take neither.
+    #[test]
+    fn the_switch_takes_left_for_off_and_right_for_on() {
+        let mut p = page_with(snap(false, room()));
+        assert_eq!(press(&mut p, Button::Left), Action::Nothing, "already off");
+        assert_eq!(press(&mut p, Button::Right), Action::SetEnabled(true));
+        let mut p = page_with(snap(true, room()));
+        assert_eq!(press(&mut p, Button::Right), Action::Nothing, "already on");
+        assert_eq!(press(&mut p, Button::Left), Action::SetEnabled(false));
+        let mut p = page_with(snap(true, room()));
+        press(&mut p, Button::Down);
+        assert_eq!((press(&mut p, Button::Left), press(&mut p, Button::Right)), (Action::Nothing, Action::Nothing), "not on Search");
     }
 
     #[test]

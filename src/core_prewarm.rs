@@ -7,15 +7,24 @@
 //! at the shelf moves that read out of the start. Only the file's pages are read: no `dlopen`, no `mlock`, so the
 //! kernel can drop them again whenever it wants the memory.
 //!
-//! One core, plus the player and Mesa on H700, at most [`MAX_BYTES`] altogether; never FBNeo or ScummVM. On a thread of the
+//! One core of at most [`MAX_BYTES`], plus on H700 the player and every library Mesa's EGL loads, at most
+//! [`RUNTIME_BYTES`] altogether; never FBNeo or ScummVM. On a thread of the
 //! lowest CPU and I/O priority, in pieces, stopped by [`set_quiet`] (a game runs, the device sleeps). Never on
 //! Android, where the cores are the APK's and the system's own business.
 
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 
-/// The largest core, and the total H700 runtime read ahead: gpSP, mGBA, PCSX ReARMed and Genesis Plus GX are well below it, FBNeo far above.
+/// The largest core read ahead: gpSP, mGBA, PCSX ReARMed and Genesis Plus GX are well below it, FBNeo far above.
 pub const MAX_BYTES: u64 = 35 * 1024 * 1024;
+
+/// H700: the core, the player and its graphics libraries together. gpSP's set is about 37 MiB (the player 7, Gallium
+/// 21, the libraries Mesa needs besides it 6); a large core leaves the last libraries out. Page cache only: the kernel
+/// takes it back whenever it wants the memory (1 GB devices included).
+pub const RUNTIME_BYTES: u64 = 64 * 1024 * 1024;
+
+/// At most this many libraries are followed through their `DT_NEEDED` lists (Mesa's EGL on ROCKNIX: about 30).
+const MAX_LIBRARIES: usize = 64;
 
 /// One read: small enough that a game's start or sleep is noticed within a few milliseconds of card time.
 const PIECE: usize = 256 * 1024;
@@ -134,10 +143,15 @@ pub fn start(shelf_frame: bool, resolve: impl FnOnce() -> Option<Front> + Send +
 /// The selected core first, then the H700 player's executable and Mesa runtime. Only existing files are read;
 /// these are page-cache reads, never dlopen or a second GPU context. Mesa's versioned Gallium name is discovered
 /// without a shell or ldd. Canonical paths avoid reading aliases twice (panfrost_dri is a libdril symlink).
+///
+/// Then every library these load in turn (their `DT_NEEDED` lists, read from the files: libstdc++, X11/xcb, zstd …)
+/// and the files EGL reads while it starts (glvnd's vendor list, Mesa's drirc). With only Mesa's own libraries warm,
+/// the RG35XX Plus still spent ~300 ms of a cold game start in EGL display setup reading these from the card; with
+/// them ~45 ms (PLUS-EGL-START.md in the review workspace).
 fn runtime_paths(core: PathBuf, host: PathBuf, libs: &Path) -> Vec<PathBuf> {
-    let mut paths = vec![core, host];
+    let mut paths = vec![core, host.clone()];
     for name in ["libEGL.so.1", "libEGL_mesa.so.0", "libGLESv2.so.2", "libGLdispatch.so.0",
-        "libgbm.so.1", "libdrm.so.2", "libexpat.so.1", "libglapi.so.0", "dri/panfrost_dri.so"] {
+        "libgbm.so.1", "libdrm.so.2", "libexpat.so.1", "libglapi.so.0", "dri/panfrost_dri.so", "libwayland-egl.so.1"] {
         paths.push(libs.join(name));
     }
     let mut gallium: Vec<_> = std::fs::read_dir(libs).into_iter().flatten().flatten()
@@ -148,15 +162,85 @@ fn runtime_paths(core: PathBuf, host: PathBuf, libs: &Path) -> Vec<PathBuf> {
         }).collect();
     gallium.sort();
     paths.extend(gallium);
+    // What these need, breadth first, the core's and the player's own libraries included (libasound, libxkbcommon …).
+    let mut queue: std::collections::VecDeque<PathBuf> = paths.iter().cloned().collect();
+    let mut seen: std::collections::HashSet<String> = std::collections::HashSet::new();
+    let mut followed = 0;
+    while let Some(lib) = queue.pop_front() {
+        if followed == MAX_LIBRARIES { break; }
+        followed += 1;
+        for name in needed(&lib) {
+            let path = libs.join(&name);
+            if !name.contains('/') && seen.insert(name) && path.is_file() {
+                paths.push(path.clone());
+                queue.push_back(path);
+            }
+        }
+    }
+    if let Some(usr) = libs.parent() {
+        for (dir, ext) in [("share/glvnd/egl_vendor.d", "json"), ("share/drirc.d", "conf")] {
+            let mut found: Vec<_> = std::fs::read_dir(usr.join(dir)).into_iter().flatten().flatten().map(|e| e.path())
+                .filter(|p| p.extension().is_some_and(|e| e == ext)).collect();
+            found.sort();
+            paths.extend(found);
+        }
+    }
     let mut unique = std::collections::HashSet::new();
     paths.into_iter().filter_map(|p| std::fs::canonicalize(p).ok())
         .filter(|p| unique.insert(p.clone())).collect()
 }
 
+/// The `DT_NEEDED` names of a 64-bit little-endian ELF file (what the dynamic loader opens with it), read from its
+/// program headers and dynamic section; empty for anything else or anything that doesn't add up. Reads a few KB.
+fn needed(path: &Path) -> Vec<String> {
+    use std::io::{Read, Seek, SeekFrom};
+    fn at<const N: usize>(b: &[u8], off: usize) -> Option<[u8; N]> { b.get(off..off + N)?.try_into().ok() }
+    fn u64_at(b: &[u8], off: usize) -> Option<u64> { at::<8>(b, off).map(u64::from_le_bytes) }
+    fn u16_at(b: &[u8], off: usize) -> Option<u16> { at::<2>(b, off).map(u16::from_le_bytes) }
+    let read = |file: &mut std::fs::File, off: u64, len: u64| -> Option<Vec<u8>> {
+        if len > 1 << 20 { return None; }
+        file.seek(SeekFrom::Start(off)).ok()?;
+        let mut buf = vec![0u8; len as usize];
+        file.read_exact(&mut buf).ok()?;
+        Some(buf)
+    };
+    let parse = || -> Option<Vec<String>> {
+        let mut file = std::fs::File::open(path).ok()?;
+        let head = read(&mut file, 0, 64)?;
+        if head[..4] != *b"\x7fELF" || head[4] != 2 || head[5] != 1 { return None; }
+        let (phoff, phsize, phnum) = (u64_at(&head, 0x20)?, u16_at(&head, 0x36)? as u64, u16_at(&head, 0x38)? as u64);
+        if phsize < 56 || phnum > 64 { return None; }
+        let ph = read(&mut file, phoff, phsize * phnum)?;
+        let (mut loads, mut dynamic) = (Vec::new(), None);
+        for i in 0..phnum as usize {
+            let e = i * phsize as usize;
+            let kind = u32::from_le_bytes(at::<4>(&ph, e)?);
+            let (offset, vaddr, filesz) = (u64_at(&ph, e + 8)?, u64_at(&ph, e + 16)?, u64_at(&ph, e + 32)?);
+            match kind { 1 => loads.push((offset, vaddr, filesz)), 2 => dynamic = Some((offset, filesz)), _ => {} }
+        }
+        let (dyn_off, dyn_len) = dynamic?;
+        let dynamic = read(&mut file, dyn_off, dyn_len)?;
+        let (mut names, mut strtab, mut strsz) = (Vec::new(), None, None);
+        for e in dynamic.chunks_exact(16) {
+            let (tag, value) = (u64_at(e, 0)?, u64_at(e, 8)?);
+            match tag { 0 => break, 1 => names.push(value), 5 => strtab = Some(value), 10 => strsz = Some(value), _ => {} }
+        }
+        let (strtab, strsz) = (strtab?, strsz?);
+        let (offset, vaddr, _) = loads.into_iter().find(|&(_, v, len)| strtab >= v && strtab < v + len)?;
+        let strings = read(&mut file, strtab - vaddr + offset, strsz)?;
+        Some(names.into_iter().filter_map(|n| {
+            let rest = strings.get(n as usize..)?;
+            let end = rest.iter().position(|&b| b == 0)?;
+            std::str::from_utf8(&rest[..end]).ok().filter(|s| !s.is_empty()).map(str::to_owned)
+        }).collect())
+    };
+    parse().unwrap_or_default()
+}
+
 /// A common cap, including the executable and graphics libraries; missing/empty files and oversized drivers
 /// are skipped. Once started, each file is still interruptible every 256 KB by read_ahead.
 fn bounded_paths(paths: Vec<PathBuf>, size: impl Fn(&Path) -> Option<u64>) -> Vec<PathBuf> {
-    let mut left = MAX_BYTES;
+    let mut left = RUNTIME_BYTES;
     paths.into_iter().filter(|p| match size(p) {
         Some(n) if n > 0 && n <= left => { left -= n; true }
         _ => false,
@@ -265,22 +349,120 @@ mod tests {
     #[test]
     fn h700_runtime_warms_the_actual_player_and_driver_once_with_a_shared_budget() {
         let d = crate::testutil::TestDir::new("runtime-prewarm");
+        let lib = d.join("usr/lib");
+        std::fs::create_dir_all(lib.join("dri")).unwrap();
         let core = d.join("gpsp.so");
         let host = d.join("custom-pocket-core");
-        for p in [&core, &host, &d.join("libEGL.so.1"), &d.join("libgallium-26.so")] {
+        for p in [&core, &host, &lib.join("libEGL.so.1"), &lib.join("libgallium-26.so")] {
             std::fs::write(p, [7u8; 16]).unwrap();
         }
-        #[cfg(unix)] {
-            std::fs::create_dir(d.join("dri")).unwrap();
-            std::os::unix::fs::symlink("../libgallium-26.so", d.join("dri/panfrost_dri.so")).unwrap();
-        }
-        let paths = runtime_paths(core.clone(), host.clone(), &d.join(""));
+        #[cfg(unix)]
+        std::os::unix::fs::symlink("../libgallium-26.so", lib.join("dri/panfrost_dri.so")).unwrap();
+        let paths = runtime_paths(core.clone(), host.clone(), &lib);
         assert_eq!(&paths[..2], &[core.canonicalize().unwrap(), host.canonicalize().unwrap()]);
         assert_eq!(paths.len(), 4, "the driver alias is read only once; absent libraries are optional");
-        let selected = bounded_paths(paths.clone(), |p| Some(if p == core { MAX_BYTES - 16 } else { 16 }));
+        let selected = bounded_paths(paths.clone(), |p| Some(if p == core { RUNTIME_BYTES - 16 } else { 16 }));
         assert_eq!(selected, paths[..2], "a large core cannot pull a second runtime's worth of card reads in");
         assert!(bounded_paths(paths.clone(), |_| None).is_empty());
         assert!(bounded_paths(paths, |_| Some(0)).is_empty());
+    }
+
+    /// A minimal 64-bit little-endian ELF file whose dynamic section names `needs` (what `needed` reads).
+    fn elf(needs: &[&str]) -> Vec<u8> {
+        let mut strings = vec![0u8];
+        let offsets: Vec<u64> = needs.iter().map(|n| {
+            let at = strings.len() as u64;
+            strings.extend_from_slice(n.as_bytes());
+            strings.push(0);
+            at
+        }).collect();
+        let (str_off, dyn_off) = (64 + 2 * 56, 64 + 2 * 56 + strings.len() as u64);
+        let mut dynamic: Vec<(u64, u64)> = offsets.iter().map(|&o| (1, o)).collect();
+        dynamic.extend([(5, str_off), (10, strings.len() as u64), (0, 0)]);
+        let total = dyn_off + 16 * dynamic.len() as u64;
+        let mut f = b"\x7fELF\x02\x01\x01".to_vec();
+        f.resize(16, 0);
+        f.extend(3u16.to_le_bytes()); // shared object
+        f.extend(183u16.to_le_bytes()); // aarch64
+        f.extend(1u32.to_le_bytes());
+        f.extend([0u64, 64, 0].iter().flat_map(|v| v.to_le_bytes())); // entry, phoff, shoff
+        f.extend(0u32.to_le_bytes());
+        f.extend([64u16, 56, 2, 64, 0, 0].iter().flat_map(|v| v.to_le_bytes()));
+        for (kind, offset, len) in [(1u32, 0u64, total), (2, dyn_off, total - dyn_off)] {
+            f.extend(kind.to_le_bytes());
+            f.extend(4u32.to_le_bytes());
+            f.extend([offset, offset, offset, len, len, 8].iter().flat_map(|v| v.to_le_bytes()));
+        }
+        f.extend(strings);
+        f.extend(dynamic.iter().flat_map(|(t, v)| t.to_le_bytes().into_iter().chain(v.to_le_bytes())));
+        assert_eq!(f.len() as u64, total);
+        f
+    }
+
+    /// RG35XX Plus, 17.11.2026: with only Mesa's own libraries warm, a cold game start still spent ~300 ms in EGL
+    /// display setup reading what they load in turn (libstdc++, X11/xcb, zstd …) and drirc from the card. The list
+    /// was a fixed set of names; now it follows the libraries' own `DT_NEEDED` lists.
+    #[test]
+    fn h700_runtime_warms_every_library_mesa_and_the_player_load_and_the_files_egl_reads() {
+        let d = crate::testutil::TestDir::new("runtime-closure");
+        let lib = d.join("usr/lib");
+        for dir in ["usr/lib/dri", "usr/share/glvnd/egl_vendor.d", "usr/share/drirc.d"] {
+            std::fs::create_dir_all(d.join(dir)).unwrap();
+        }
+        let core = d.join("gpsp.so");
+        let host = d.join("pocket-core");
+        std::fs::write(&core, elf(&["libc.so.6"])).unwrap();
+        std::fs::write(&host, elf(&["libasound.so.2", "libc.so.6"])).unwrap();
+        let files: &[(&str, &[&str])] = &[
+            ("libEGL.so.1", &["libGLdispatch.so.0", "libc.so.6"]),
+            ("libGLdispatch.so.0", &[]),
+            ("libEGL_mesa.so.0", &["libgallium-26.2.2.so", "libX11.so.6", "libwayland-client.so.0", "libc.so.6"]),
+            ("libgallium-26.2.2.so", &["libstdc++.so.6", "libzstd.so.1", "libmissing.so.9"]),
+            ("libstdc++.so.6", &["libgcc_s.so.1", "libm.so.6"]),
+            ("libX11.so.6", &["libxcb.so.1"]),
+            ("libxcb.so.1", &["libXau.so.6"]),
+            ("libzstd.so.1", &[]), ("libgcc_s.so.1", &[]), ("libm.so.6", &[]), ("libXau.so.6", &[]),
+            ("libwayland-client.so.0", &[]), ("libasound.so.2", &[]), ("libc.so.6", &[]),
+            ("libunrelated.so.1", &[]),
+        ];
+        for (name, needs) in files {
+            std::fs::write(lib.join(name), elf(needs)).unwrap();
+        }
+        std::fs::write(d.join("usr/share/glvnd/egl_vendor.d/50_mesa.json"), "{}").unwrap();
+        std::fs::write(d.join("usr/share/drirc.d/00-mesa-defaults.conf"), "<driconf/>").unwrap();
+        std::fs::write(d.join("usr/share/drirc.d/README"), "not read").unwrap();
+        let paths = runtime_paths(core.clone(), host.clone(), &lib);
+        let names: Vec<String> = paths.iter().map(|p| p.file_name().unwrap().to_string_lossy().into_owned()).collect();
+        for want in ["libstdc++.so.6", "libgcc_s.so.1", "libX11.so.6", "libxcb.so.1", "libXau.so.6", "libzstd.so.1",
+            "libwayland-client.so.0", "libasound.so.2", "libc.so.6", "libm.so.6", "50_mesa.json", "00-mesa-defaults.conf"] {
+            assert!(names.iter().any(|n| n == want), "{want} is read ahead: {names:?}");
+        }
+        for not in ["libunrelated.so.1", "libmissing.so.9", "README"] {
+            assert!(!names.iter().any(|n| n == not), "{not} is not: {names:?}");
+        }
+        assert_eq!(&paths[..2], &[core.canonicalize().unwrap(), host.canonicalize().unwrap()], "the core and player first");
+        let gallium = names.iter().position(|n| n == "libgallium-26.2.2.so").unwrap();
+        let stdcpp = names.iter().position(|n| n == "libstdc++.so.6").unwrap();
+        assert!(gallium < stdcpp, "Mesa's driver comes before what it needs: a large core cuts the small ones");
+        let unique: std::collections::HashSet<_> = paths.iter().collect();
+        assert_eq!(unique.len(), paths.len(), "each file once");
+    }
+
+    #[test]
+    fn needed_reads_a_real_executable_and_nothing_from_other_files() {
+        #[cfg(all(target_os = "linux", target_env = "gnu"))]
+        assert!(needed(&std::env::current_exe().unwrap()).iter().any(|n| n.starts_with("libc.so")),
+            "this test binary links glibc dynamically");
+        let d = crate::testutil::TestDir::new("needed");
+        assert_eq!(needed(&d.join("absent")), Vec::<String>::new());
+        std::fs::write(d.join("text"), "#!/bin/sh\n").unwrap();
+        assert_eq!(needed(&d.join("text")), Vec::<String>::new());
+        let mut cut = elf(&["libz.so.1"]);
+        cut.truncate(100);
+        std::fs::write(d.join("cut"), cut).unwrap();
+        assert_eq!(needed(&d.join("cut")), Vec::<String>::new(), "a cut-off file reads as nothing, no panic");
+        std::fs::write(d.join("ok"), elf(&["libz.so.1", "libm.so.6"])).unwrap();
+        assert_eq!(needed(&d.join("ok")), ["libz.so.1", "libm.so.6"]);
     }
 
     #[test]

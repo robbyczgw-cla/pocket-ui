@@ -132,8 +132,8 @@ doesn't start on the own host goes to RetroArch's FAKE-08.
 The empty "Splore" entry that ROCKNIX puts into `roms/pico-8` at every boot is PICO-8's game browser, not a game: it shows
 on the shelf (and counts) only when the official PICO-8 is there. The file stays where it is.
 
-Pause menu: Continue, Save, Load, Options, Quick settings and Quit, with Achievements when you are signed in to
-RetroAchievements. ScummVM, PICO-8 and TIC-80 have no save states, so their Quit has no moment to keep. See
+Pause menu: Continue, Save, Load, Options and Save & quit, with Achievements when you are signed in to
+RetroAchievements; START opens the quick settings. ScummVM, PICO-8 and TIC-80 have no save states, so their menu says Quit: it has no moment to keep. See
 [The pause menu](pause-menu.md).
 
 <!-- TODO: Master System, Game Gear, SG-1000, WonderSwan and Atari 2600 were checked only with
@@ -265,7 +265,7 @@ only for touch screens don't react to the buttons.
 <!-- TODO: confirm each system's default emulator against es_systems.cfg on the device; the
      examples above come from the developer notes (docs/PER-CONSOLE.md, docs/HOST.md). -->
 
-Pause menu: Continue, Save, Load, Options, Quick settings, Quit. Options opens [Runs on](options.md#runs-on): the
+Pause menu: Continue, Save, Load, Options, Save & quit; START opens the quick settings. Options opens [Runs on](options.md#runs-on): the
 emulator, and RetroArch's aspect ratio, integer scaling, smoothing, shader, rewind, run-ahead and auto save, which
 RetroArch reads the next time the game starts.
 
@@ -274,8 +274,8 @@ RetroArch reads the next time the game starts.
 PlayStation 2 runs on ARMSX2, GameCube and Wii on Dolphin, 3DS on Azahar, all ROCKNIX's standalone
 emulators.
 
-Pause menu: Continue, Save, Load, Options, Quick settings, Quit (it follows Settings → Playing →
-[Continue where I quit](settings.md#continue-where-i-quit)).
+Pause menu: Continue, Save, Load, Options, Save & quit (plain Quit with Settings → Playing →
+[Continue where I quit](settings.md#continue-where-i-quit) off); START opens the quick settings.
 
 - **Save** and **Load** use the emulator's own slots 1 to 8, plus Where I quit and Before load (on 3DS: Azahar's one quick
   slot, the one ROCKNIX's HOME + R1 and HOME + L1 use). See

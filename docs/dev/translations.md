@@ -14,6 +14,13 @@ over the game: its numbers change twice a second, so `osd_sensors` looks up each
 on its reading thread. The manual (`docs/user/`) stays English: the painter is
 switched off while its pages are drawn (`Text::set_translate`).
 
+Android's player start-error dialog uses `PlayerActivity.nativeTranslate` to read the same tables after `nativeCreate`
+has selected the player's language. Its accessibility labels for slot and option arrows call `i18n::tr` too, because
+native dialogs and screen-reader labels do not pass through the text painter. Audit Android sources explicitly with
+`scripts/i18n-extract.py android/src/*.rs`: the default scan only covers `src/`, and its Android results also contain
+JNI method names, diagnostic errors and test assertions that never reach the player. The system card's
+`{t} · last: {s}` translates its game count while preserving the last game's name.
+
 On the Brick, the snapshot translation check applies the renderer's device wording to recorded translations before
 matching wrapped lines (Pocket → Brick, HOME → MENU), retaining raw wording for states that select another device.
 It recognizes rejoined pieces of known translations and wrapped tails of fact sentences already kept in English.

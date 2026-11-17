@@ -44,6 +44,8 @@ pub mod title_block;
 pub mod pause_head;
 /// The handhelds' pause menu for Android's player when the game came from the Handheld view (`pause_list`).
 pub mod pause_list;
+/// The Options page of that menu, laid out as Linux's (`pause_options`).
+pub mod pause_options;
 pub mod motion;
 pub mod keyboard;
 mod library_names;

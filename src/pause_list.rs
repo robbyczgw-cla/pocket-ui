@@ -32,6 +32,14 @@ pub enum Item {
     Quit,
 }
 
+impl Item {
+    /// Whether A opens a page (Options, Achievements): the row ends in the drawn angle on every row and A's hint says
+    /// Open, as Linux's (`main.rs` `MainItem::opens_page`, 0.5.1).
+    pub fn opens_page(self) -> bool {
+        matches!(self, Item::Options | Item::Achievements)
+    }
+}
+
 /// A row of the main page: its words, its value (the slot, Earlier's time) and whether Left/Right step that value.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Row {
@@ -143,7 +151,8 @@ pub fn paint_main(c: &mut Canvas, text: &mut Text, v: &Main) -> Out {
     let list_w = if retro {
         let need = v.rows.iter().map(|r| {
             let chip_w = r.chip.as_ref().map_or(0, |t| SMALL as i32 / 2 + text.width(Face::Body, FONT, t));
-            text.width(Face::Body, FONT, &r.label) + chip_w
+            let angle_w = if r.item.opens_page() { SMALL as i32 / 2 + text.width(Face::Body, FONT, ">") } else { 0 };
+            text.width(Face::Body, FONT, &r.label) + chip_w + angle_w
         }).max().unwrap_or(0);
         retro_list_w(c.w, text_x + need + RETRO_ROW_END - PAD)
     } else {
@@ -174,26 +183,31 @@ pub fn paint_main(c: &mut Canvas, text: &mut Text, v: &Main) -> Out {
             if text.width(Face::Body, FONT, &full) <= room { full } else { text.fit(Face::Body, FONT, name, room.max(0)) }
         });
         let chip_w = chip.as_ref().map_or(0, |t| SMALL as i32 / 2 + text.width(Face::Body, FONT, t));
+        // A row that opens a page ends in the drawn angle on every row: Retro's at the window's right edge, the plain
+        // look's after the name, inside the selected pill (Linux's `paint_menu_page`).
+        let angle_w = if row.item.opens_page() { SMALL as i32 / 2 + text.width(Face::Body, FONT, ">") } else { 0 };
+        let fg = if on { pal().ink } else if !row.enabled { if retro { pal().off } else { 0x7f7f7f } } else if retro { pal().text } else { 0xffffff };
         if retro {
             if on {
                 crate::retro::bar(c, PAD + 3 * U, y + 2, list_w - 6 * U, step - 4);
             }
             let icon_y = y + (step - crate::retro::ICON * icon_k) / 2;
             crate::retro::icon(c, retro_icon(row.item), icon_x, icon_y, icon_k);
-            let fg = if on { pal().ink } else if row.enabled { pal().text } else { pal().off };
-            let label = text.fit(Face::Body, FONT, &row.label, PAD + list_w - RETRO_ROW_END - text_x);
+            let label = text.fit(Face::Body, FONT, &row.label, PAD + list_w - RETRO_ROW_END - text_x - angle_w);
             text.draw(c, Face::Body, FONT, text_x, baseline, fg, &label);
             out.rows.push(Area::new(PAD, y, list_w, step));
         } else {
-            let w = label_w + chip_w + 2 * BTN_PAD;
+            let w = label_w + chip_w + angle_w + 2 * BTN_PAD;
             if on {
                 crate::nav_probe::focus(c, (PAD, y, w, step));
                 c.round_rect(PAD, y, w, step, step / 2, pal().select);
-                text.draw(c, Face::Body, FONT, PAD + BTN_PAD, baseline, pal().ink, &row.label);
-            } else {
-                text.draw(c, Face::Body, FONT, PAD + BTN_PAD, baseline, if row.enabled { 0xffffff } else { 0x7f7f7f }, &row.label);
             }
+            text.draw(c, Face::Body, FONT, PAD + BTN_PAD, baseline, fg, &row.label);
             out.rows.push(Area::new(PAD, y, w.max(c.w / 3), step));
+        }
+        if row.item.opens_page() {
+            let right = if retro { PAD + list_w - RETRO_ROW_END } else { text_x + label_w + angle_w };
+            kit::row_value_in(c, text, FONT, right, baseline, ">", (fg, fg));
         }
         if let Some(chip) = chip {
             let x = text_x + label_w + SMALL as i32 / 2;
@@ -288,7 +302,14 @@ pub struct List<'a> {
 pub struct ListOut {
     pub rows: Vec<Option<Area>>,
     pub hints: Vec<(Area, Button)>,
+    /// The selected row's explanation as painted, line by line, and the top of its first line.
+    pub desc: Vec<String>,
+    pub desc_top: i32,
 }
+
+/// The lines the list keeps free for the selected row's explanation over the hint pill, as Linux's Options page
+/// (`main.rs` `paint_options`: "room for up to five lines"); a longer one takes more and the list scrolls above it.
+pub const DESC_ROOM: usize = 5;
 
 /// A list page in Linux's Options style: full-width rows, the selected one on the paper, scrolled so it is in view.
 pub fn paint_list(c: &mut Canvas, text: &mut Text, v: &List) -> ListOut {
@@ -297,7 +318,20 @@ pub fn paint_list(c: &mut Canvas, text: &mut Text, v: &List) -> ListOut {
     let row_h = kit::row();
     let head_h = type_scale::line(SMALL, 20);
     let top = PAD + PILL;
-    let bottom = kit::content_bottom(c.h);
+    // The explanation is never cut ("Takes effect the next time the game starts." went under "…" on the Mini V2,
+    // 17.11.): it is wrapped as Linux's footer wraps it (`kit::footer_lines`: its two lowest lines beside the hint pill,
+    // the rest across the page) with no limit, and the list ends above the room it needs, at least DESC_ROOM lines.
+    // Where the painted hint pill starts (`page_hints`, the same concise hints).
+    let pill_x = kit::page_hints_left(text, c.w, c.h, v.hints);
+    let px = kit::footer_px(text, v.desc, pill_x);
+    let step = type_scale::line(px, 10);
+    let desc = if v.desc.trim().is_empty() { Vec::new() } else { kit::footer_lines(text, v.desc, c.w, pill_x, usize::MAX) };
+    let last = kit::footer_baseline(c.h);
+    let desc_top = last - (desc.len() as i32 - 1).max(0) * step - type_scale::px(px) as i32;
+    let room_top = last - (desc.len().max(DESC_ROOM) as i32 - 1) * step - type_scale::px(px) as i32;
+    // The selected row always shows: on a screen too short for the list and the room, the room gives way first.
+    let bottom = kit::content_bottom(c.h).min(room_top - 12).max(top + row_h);
+    out.desc_top = desc_top;
     let height = |r: &ListRow| if matches!(r, ListRow::Heading(_)) { head_h } else { row_h };
     // The first row shown: as few scrolled away as keep the selected row (and its heading) in view.
     let mut first = 0;
@@ -340,14 +374,10 @@ pub fn paint_list(c: &mut Canvas, text: &mut Text, v: &List) -> ListOut {
         }
         y += h;
     }
-    if !v.desc.is_empty() {
-        let pill_x = c.w - PAD - kit::pill_width(text, c.w, v.hints);
-        let lines = kit::footer_lines(text, v.desc, c.w, pill_x, 2);
-        let base = kit::footer_baseline(c.h) - (lines.len() as i32 - 1) * type_scale::line(SMALL, 8) / 2;
-        for (k, line) in lines.iter().enumerate() {
-            text.draw(c, Face::Body, SMALL, PAD + BTN_PAD, base + k as i32 * type_scale::line(SMALL, 8), pal().dust, line);
-        }
+    for (k, line) in desc.iter().enumerate() {
+        text.draw(c, Face::Body, px, PAD + BTN_PAD, last - (desc.len() - 1 - k) as i32 * step, pal().dust, line);
     }
+    out.desc = desc;
     out.hints = kit::page_hints(c, text, v.hints);
     out
 }

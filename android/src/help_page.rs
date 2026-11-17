@@ -7,14 +7,11 @@ use super::*;
 pub const ABOUT: &str = "Short answers to the usual questions. Choose a topic.";
 
 /// The topics, in the order the page lists them: the row (also the answer's heading) and the answer.
-pub const TOPICS: [(&str, &str); 8] = [
+/// (Every system of pocket-ui's player is in the app since 0.5.x: "Load more systems" went with the downloads.)
+pub const TOPICS: [(&str, &str); 7] = [
     (
         "Choose your games folder",
         "Settings › Choose your ROM folder: pick the folder with one folder per system (gba, snes, psx). Games stay where they are; nothing is copied.",
-    ),
-    (
-        "Load more systems",
-        "PSP, DS, Nintendo 64 and Dreamcast are optional. Settings › Cozy extras › Download now loads one over Wi-Fi; B cancels. All other systems are already in the app.",
     ),
     (
         "Pause menu",

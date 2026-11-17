@@ -139,6 +139,19 @@ says `N rows a picture into the texture`. The bigger part of the moving frames w
 Shelf's large front, the Cabinet's case coming out) was painted column by column at 1:1, a cache miss per pixel on the A53 (12.7 ms of
 a 22 ms Shelf frame); now row by row (2.7 ms). Keep pixel loops row by row on the Brick (`timing_a_turning_case_costs_the_same_on_a_wide_screen`).
 
+**The Cabinet's moving frames (2026-11-17, BRICK-60FPS.md part 3).** After the frame rework (one frame per cabinet) a moving Cabinet
+frame took 12.8 ms of paint (p50; p90 17.9) and 2.5 of row hashing, and 14 % of all frames went over a refresh. Four changes:
+Home cleared the page and the Cabinet cleared it again (1.1 ms; the snapshot line's `cleared=` and `tests/cabinet_frame.rs` keep it at
+once); the row hash runs on three threads (`damage::HASH_THREADS`, 2.5 to 1.7 ms); `art::blit` paints solid runs of eight pixels
+without a test per pixel (the walls 1.9 to 1.3 ms); and the hint bar's 120 ms fade, which starts with nearly every move because the
+hints change from game to game (Play/Continue, Star/Unstar, Up for the search on the top shelf), mixes only from the left end of the
+longer pill, with `motion::blend` and a kept buffer. Each of its two layers is still about 2 ms: saving, painting and mixing the
+pill's ~78k pixels is memory-bound on the A53 (about 1 GB/s). Paint of all frames p50/p90/p99 9.1/15.1/24.2 to 7.9/12.9/18.6 ms,
+frames over a refresh 202 to 88 of ~1470; dropped refreshes a second, Cabinet taps 2.45 to 1.9, shelf to shelf 3.0 to 2.5. Left in a
+slow frame: the case coming out (`paint_out`, 4 ms with its two soft shadows), the
+hint fade (4 ms), the TV (1.6), the walls and spines (2.6), the clear (1.1). Since part 4 the hint bar does not fade during a move
+(`App::moving_now`: a step less than 250 ms ago, a held key, a gliding list); only a change at rest (Star on the same game) fades.
+
 **The launch animation (2026-11-03).** On the standalone card the cartridge's insert froze and the game came before the cartridge was
 in. pocket-fb gave the screen to pocket-core's window at its configure, before it had a picture; pocket-core draws only after the
 launch's hold, so pocket-ui lost its frame callbacks and its animation stopped. Now a window takes the screen with its first picture, as
