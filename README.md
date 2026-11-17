@@ -49,15 +49,20 @@ PC Engine, PlayStation, Nintendo 64, PSP, Dreamcast, Nintendo DS, Saturn, arcade
 handhelds, such as the AYN Odin 2, also PlayStation 2, GameCube, Wii and 3DS.
 [What plays on which handheld](https://pocketui.xyz/systems)
 
-### New in 0.4
+### New in 0.5
 
-- **Games leave the way they came in.** Quit, the TV picture closes to a dot, and the cartridge or disc goes back into its case.
-- **More consoles open up:** the NES lifts its flap; Game Boy Color, Master System, Game Gear, PC Engine, PSP and 3DS
-  got their own scenes.
-- **Smoother everywhere:** cases turn over in perspective, the TV switches on out of a growing line.
-- **Arcade games** stand on the shelf as an upright cabinet.
-- **TrimUI Brick, finished:** no more Beta label, and a short press on Power puts it to sleep with the game saved.
-- **0.4.1:** an SD card for the Anbernic RG CubeXX, and sound at middle volume is back on Anbernic handhelds.
+- **The case knows where you are.** Turn a box over and it says how far you are, read from your own save: badges and
+  your Pokémon team, stars in Super Mario 64, medallions in Ocarina of Time. No account, no Wi-Fi.
+- **New games come shrink-wrapped.** A game you've never played stands in clear film, and the film tears off with a
+  crackle the first time you start it.
+- **Consoles in colours:** Game Boy Advance in Milky Blue and Pink, Nintendo 64 in Ice Blue and Jungle Green, and more.
+  Press Left or Right on the console page.
+- **Handhelds switch on like handhelds:** the power light comes on, the little display lights up, and the game comes up
+  out of it.
+- **Settings in one press:** START opens the rows straight away, L1 and R1 switch categories, B leaves.
+- **Your own cheats:** a game's own .cht file shows up first in Options → Cheats.
+- **New: pocket-ui for Android**, as an app next to your others. A pre-release to try:
+  [get it here](https://pocketui.xyz/install#android).
 
 [Every version](CHANGELOG.md)
 
