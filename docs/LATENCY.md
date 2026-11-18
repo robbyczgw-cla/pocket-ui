@@ -797,6 +797,29 @@ Main's skip left the game's window waiting whenever pocket-core hadn't opened it
 
 `latency.py` puts back what a real start writes outside its fixture, `system.cfg` and `savestates/<system>/` (`Preserve`, also on a failure, Ctrl-C and SIGTERM; `python3 scripts/latency.py selftest`), and starts the pocket-core of the build it measures.
 
+### Lived-in shelf (0.5.2, 2026-11-17)
+
+Settings → Look → Lived-in shelf turns some spines of a row (`lived_in::turned`, bilinear) and lays a few on a stack
+(`lived_in::lying`). Turning one spine on the TrimUI Brick (A53 at 2.0 GHz, thread CPU, 40 runs each, an uncommitted
+example binary with the lib's own functions):
+
+| Spine | Turned 5-9° | Lying |
+|---|---|---|
+| 20 x 150 | 0.39-0.41 ms | 0.01 ms |
+| 28 x 180 (PS1 at the Brick's 1024x768) | 0.54-0.59 ms | 0.02 ms |
+| 36 x 210 | 0.87-0.94 ms | 0.03 ms |
+| 44 x 260 | 1.29-1.46 ms | 0.05 ms |
+| 56 x 340 | 2.0-2.3 ms | 0.08 ms |
+
+In the prototype a tile with several posed spines turned them in the first frame that showed it (5-6 ms on a desktop
+core, estimated 40-55 ms with the upright spines on the Brick, a stutter of 2-3 frames). Now the visible ones are made
+with the row's first frame and the rest ahead (`App::lived_warm_tick`): from 90 ms after the last button, nearest to the
+selection first, at most 3 ms of the UI thread at a time (one spine more past the budget at worst, about 4.5 ms on the
+Brick). A row of 100 games has about 25 posed spines: some 15-35 ms of turning in all, done within a few hundred ms
+of idle. `--snapshot bench-playful:<system>:walk` and `:walk-warm` count the spines turned during a calm walk to the
+row's end (tests/lived_in_shelf.rs: none after the warming). With the switch Off nothing is planned, turned or painted
+differently (the same test: the same bytes).
+
 ### Playful animations (feat/playful, 2026-10-30)
 
 What a frame of each playful animation costs on the RG35XX Plus (H700, 640x480, laid out at 1280x960), the extra on and

@@ -133,7 +133,7 @@ impl StateKeys {
 /// What the player is handed for a game the handheld view starts (`launchPath`'s `settings`): the Mobile view's file
 /// (`launcher.json`, which also holds what only the Mobile view has) with the handheld view's own choices over it. What
 /// the handheld view's Settings say is what the game shows; a look the handheld view never changed is the start look.
-pub fn launch_settings(launcher: &str, view: &serde_json::Value, picture: Option<serde_json::Value>, cheat_text: &str, moment: bool) -> String {
+pub fn launch_settings(launcher: &str, view: &serde_json::Value, picture: Option<GamePicture>, cheat_text: &str, moment: bool) -> String {
     let mut prefs = serde_json::from_str::<serde_json::Value>(launcher).ok().filter(|v| v.is_object()).unwrap_or_else(|| serde_json::json!({}));
     for key in VIEW_KEYS {
         match view.get(key) {
@@ -154,11 +154,15 @@ pub fn launch_settings(launcher: &str, view: &serde_json::Value, picture: Option
             prefs.as_object_mut().map(|o| o.remove("cozy"));
         }
     }
-    match picture {
-        Some(p) => prefs["picture"] = p,
-        None => {
-            prefs.as_object_mut().map(|o| o.remove("picture"));
-        }
+    // The game's settings as this view keeps them (`options::GameSettings`): their effective values for what no file has,
+    // and where its files are, so the player's pause menu reads and writes them as pocket-core's does on Linux.
+    for key in ["picture", "settings_dir", "settings_rom"] {
+        prefs.as_object_mut().map(|o| o.remove(key));
+    }
+    if let Some(p) = picture {
+        prefs["picture"] = serde_json::to_value(&p.values).unwrap_or_default();
+        prefs["settings_dir"] = p.dir.to_string_lossy().into_owned().into();
+        prefs["settings_rom"] = p.rom.to_string_lossy().into_owned().into();
     }
     // The player shows the handhelds' pause menu for a game from this view (`pause_list`), not the Mobile view's sheet.
     prefs["pause_menu"] = "handheld".into();
@@ -171,29 +175,18 @@ pub fn launch_settings(launcher: &str, view: &serde_json::Value, picture: Option
 /// same names and shapes as the Mobile view's file (`Preferences`), so a value copies as it is.
 const VIEW_KEYS: [&str; 9] = ["language", "text_size", "colours", "font", "retro_colours", "prompts", "motion", "extras", "gba_model"];
 
-/// Options → Picture of a game (`options::GameSettings::effective`) as the player's rows: scaling, frame and effect, each
-/// the index of the player's list (`picture::Settings`).
-pub fn picture_choice(values: &std::collections::BTreeMap<String, String>) -> serde_json::Value {
-    let get = |k: &str, default: &'static str| values.get(k).map_or(default, String::as_str);
-    let scaling = match get("scaling", "native") {
-        "aspect" => 0,
-        "fullscreen" => 2,
-        _ => 1,
-    };
-    // Console: the console's own frame (a handheld's shell, the monitor or TV for the others); the player draws these two
-    // frames. Ambient and Glow are Linux's fills around the picture, which it doesn't have: none, never a different frame.
-    let frame = match get("frame", "none") {
-        "crt" => 2,
-        "ambient" | "glow" | "none" => 0,
-        _ => 1,
-    };
-    let effect = match (get("effect", "none"), get("sharpness", "sharp")) {
-        ("scanlines", _) => 3,
-        ("crt", _) => 2,
-        ("smooth", _) | (_, "soft") => 1,
-        _ => 0,
-    };
-    serde_json::json!({"scaling": scaling, "frame": frame, "effect": effect})
+/// A game's settings for the player (`launch_settings`): their effective values (`options::GameSettings::effective`) and
+/// the folder and ROM whose `game_settings` files hold them.
+pub struct GamePicture {
+    pub values: std::collections::BTreeMap<String, String>,
+    pub dir: PathBuf,
+    pub rom: PathBuf,
+}
+
+impl GamePicture {
+    pub fn load(data: &Path, system: &str, rom: &Path) -> Self {
+        GamePicture { values: crate::options::GameSettings::load(data, system, rom).effective(), dir: data.to_path_buf(), rom: rom.to_path_buf() }
+    }
 }
 
 /// A same-name `.cht` beside the game (Mobile's sidecar, up to 256 KiB): its text, or "".
@@ -231,56 +224,6 @@ pub fn share_account(view_data: &Path, player_data: &Path) -> std::io::Result<()
         Err(_) => std::fs::create_dir_all(view_data)?,
     }
     std::os::unix::fs::symlink(&shared, &own)
-}
-
-/// What the player's pause menu saved for a game while it ran (`android/src/picture.rs`: `picture/games/<key>.json` for this
-/// game, else `picture/systems/<system>.json`), written since `since`: its rows and whether they are this game's. None when
-/// nothing changed there.
-pub fn player_picture_saved(player_data: &Path, system: &str, key: &str, since: std::time::SystemTime) -> Option<(serde_json::Value, bool)> {
-    let fresh = |p: &Path| std::fs::metadata(p).and_then(|m| m.modified()).is_ok_and(|t| t >= since);
-    let game = player_data.join("picture/games").join(format!("{key}.json"));
-    let system = player_data.join("picture/systems").join(format!("{system}.json"));
-    let (path, for_game) = if fresh(&game) { (game, true) } else if fresh(&system) { (system, false) } else { return None };
-    crate::fsutil::read_json_or_backup::<serde_json::Value>(&path).filter(|v| v.is_object()).map(|v| (v, for_game))
-}
-
-/// Back from a game: the rows the player's pause menu changed (`saved` against `handed`, what this view handed over,
-/// `picture_choice`) go into the game's Options → Picture here, for this game or its console as the player kept them, as
-/// pocket-core's pause menu keeps them on Linux. What the menu didn't change stays as it was (a GBA frame stays the GBA frame,
-/// though the player calls every console frame "Console"). True when something was written.
-pub fn keep_pause_menu_picture(view_data: &Path, system: &str, rom: &Path, handed: &serde_json::Value, saved: &serde_json::Value, for_game: bool) -> bool {
-    let mut settings = crate::options::GameSettings::load(view_data, system, rom);
-    if !picture_back(handed, saved, &mut settings.values) {
-        return false;
-    }
-    if for_game || settings.level == crate::options::Level::Game {
-        settings.save_for_game()
-    } else {
-        settings.save_for_console()
-    }
-}
-
-/// `picture_choice` the other way, for the rows where `saved` differs from `handed`: Options → Picture's values in `values`.
-fn picture_back(handed: &serde_json::Value, saved: &serde_json::Value, values: &mut std::collections::BTreeMap<String, String>) -> bool {
-    let row = |k: &str| saved[k].as_u64().filter(|v| Some(*v) != handed[k].as_u64());
-    let mut changed = false;
-    if let Some(s) = row("scaling") {
-        values.insert("scaling".into(), match s { 0 => "aspect", 2 => "fullscreen", _ => "native" }.into());
-        changed = true;
-    }
-    if let Some(f) = row("frame") {
-        values.insert("frame".into(), match f { 0 => "none", 2 => "crt", _ => "auto" }.into());
-        changed = true;
-    }
-    if let Some(e) = row("effect") {
-        values.insert("effect".into(), match e { 1 => "smooth", 2 => "crt", 3 => "scanlines", _ => "none" }.into());
-        // Soft letters read as Smooth in the player: Sharp, so None stays None.
-        if e == 0 && values.get("sharpness").map(String::as_str) == Some("soft") {
-            values.insert("sharpness".into(), "sharp".into());
-        }
-        changed = true;
-    }
-    changed
 }
 
 /// The Mobile view's play history (`launcher.json`'s `played`, when each game was last started, and `play_secs`, by the
@@ -360,48 +303,6 @@ mod tests {
         dirs(&s, &["emulated/0/ROMs/gba", "1234-ABCD/roms/snes", "5678-EF01/Music", "self/primary", "416aa52f-5e6c-43bf-a961-0131731c1bef/roms/gba"]);
         let roots = roms_roots(&s);
         assert_eq!(roots, vec![s.join("emulated/0/ROMs"), s.join("1234-ABCD/roms")], "a Linux partition's roms (a long UUID) is another system's");
-    }
-
-    /// What a player changes in the player's pause menu stays, as on Linux (Lead, 13.11.2026: the next start from the handheld
-    /// view took the card's values again): the changed rows are this view's settings now, the others stay as they were.
-    #[test]
-    fn a_pause_menu_change_in_the_player_is_the_handheld_view_s_setting_at_the_next_start() {
-        let view = TestDir::new("picture-back-view");
-        let player = TestDir::new("picture-back-player");
-        let rom = Path::new("/storage/emulated/0/ROMs/gba/Golden Sun.gba");
-        std::fs::create_dir_all(view.join("game-settings")).unwrap();
-        std::fs::write(view.join("game-settings/gba.json"), r#"{"frame":"wide","scaling":"native"}"#).unwrap();
-        let effective = |d: &Path| crate::options::GameSettings::load(d, "gba", rom).effective();
-        let handed = picture_choice(&effective(&view));
-        // The pause menu: Fit / aspect and Old TV, kept for the system (the player's own file).
-        let since = std::time::SystemTime::now() - std::time::Duration::from_secs(1);
-        let mut saved = handed.clone();
-        saved["scaling"] = 0.into();
-        saved["effect"] = 2.into();
-        std::fs::create_dir_all(player.join("picture/systems")).unwrap();
-        std::fs::write(player.join("picture/systems/gba.json"), saved.to_string()).unwrap();
-        let (back, for_game) = player_picture_saved(&player, "gba", "0123456789abcdef", since).expect("the menu's change");
-        assert!(!for_game);
-        assert!(keep_pause_menu_picture(&view, "gba", rom, &handed, &back, for_game));
-        assert_eq!(picture_choice(&effective(&view)), saved, "the next start hands the menu's choice");
-        let values = effective(&view);
-        assert_eq!(values.get("frame").map(String::as_str), Some("wide"), "the GBA frame stays the GBA frame");
-        assert!(!view.join("game-settings/gba/Golden Sun.json").exists(), "kept for the console, as the menu said");
-        // Nothing written since: nothing to keep.
-        assert!(player_picture_saved(&player, "gba", "0123456789abcdef", std::time::SystemTime::now() + std::time::Duration::from_secs(60)).is_none());
-    }
-
-    /// Kept for this game in the menu: this game's own settings, the console's stay.
-    #[test]
-    fn a_pause_menu_change_kept_for_the_game_is_this_game_s_own() {
-        let view = TestDir::new("picture-back-game");
-        let rom = Path::new("/storage/emulated/0/ROMs/snes/ActRaiser.sfc");
-        let handed = picture_choice(&crate::options::GameSettings::load(&view, "snes", rom).effective());
-        let mut saved = handed.clone();
-        saved["frame"] = 2.into();
-        assert!(keep_pause_menu_picture(&view, "snes", rom, &handed, &saved, true));
-        assert_eq!(crate::options::GameSettings::load(&view, "snes", rom).effective().get("frame").map(String::as_str), Some("crt"));
-        assert!(view.join("game-settings/snes/ActRaiser.json").exists() && !view.join("game-settings/snes.json").exists());
     }
 
     const MANIFEST: &str = include_str!("../android/AndroidManifest.xml");
@@ -547,7 +448,7 @@ mod tests {
         let out: serde_json::Value = serde_json::from_str(&launch_settings(
             launcher,
             &view(r#"{"language":"es","font":"Pixel","animations":"Cozy"}"#),
-            Some(serde_json::json!({"scaling": 1, "frame": 2, "effect": 3})),
+            Some(GamePicture { values: [("scaling".to_string(), "native".to_string()), ("effect".to_string(), "crt".to_string())].into_iter().collect(), dir: "/data/files/handheld".into(), rom: "/storage/emulated/0/ROMs/gba/Golden Sun.gba".into() }),
             "cheat0_desc = \"x\"",
             true,
         ))
@@ -559,25 +460,15 @@ mod tests {
         assert_eq!(out["cozy"], true, "Animations: Cozy");
         assert_eq!(out["gameboy_gambatte"], true, "the Mobile view's own rows stay");
         assert_eq!(out["muted"], true);
-        assert_eq!(out["picture"], serde_json::json!({"scaling": 1, "frame": 2, "effect": 3}));
+        // Linux's values and where the view keeps them: the player reads and writes those very files (`game_settings`).
+        assert_eq!(out["picture"], serde_json::json!({"scaling": "native", "effect": "crt"}));
+        assert_eq!((out["settings_dir"].as_str(), out["settings_rom"].as_str()), (Some("/data/files/handheld"), Some("/storage/emulated/0/ROMs/gba/Golden Sun.gba")));
         assert_eq!(out["cheat_text"], "cheat0_desc = \"x\"");
         assert_eq!(out["frozen_shown"], true, "the shelf showed the case open: no old-TV switch-on in the player");
         // A launcher file nobody wrote yet (a first start in this view) is still a start of the game.
         let bare: serde_json::Value = serde_json::from_str(&launch_settings("", &view("{}"), None, "", false)).unwrap();
         assert_eq!(bare["frozen_shown"], false);
-        assert!(bare.get("picture").is_none());
-    }
-
-    /// Options → Picture of a game in the player's three rows (Fit / Integer / Stretch; None / Console / CRT TV; Sharp /
-    /// Smooth / CRT / Scanlines): what the handheld view's page shows is what the player draws.
-    #[test]
-    fn the_picture_rows_of_a_game_are_the_player_s() {
-        let pick = |pairs: &[(&str, &str)]| picture_choice(&pairs.iter().map(|(k, v)| (k.to_string(), v.to_string())).collect());
-        assert_eq!(pick(&[("scaling", "native"), ("frame", "none"), ("effect", "none"), ("sharpness", "sharp")]), serde_json::json!({"scaling": 1, "frame": 0, "effect": 0}));
-        assert_eq!(pick(&[("scaling", "aspect"), ("frame", "auto"), ("effect", "scanlines"), ("sharpness", "sharp")]), serde_json::json!({"scaling": 0, "frame": 1, "effect": 3}));
-        assert_eq!(pick(&[("scaling", "fullscreen"), ("frame", "crt"), ("effect", "crt"), ("sharpness", "sharp")]), serde_json::json!({"scaling": 2, "frame": 2, "effect": 2}));
-        assert_eq!(pick(&[("scaling", "integer-smaller"), ("frame", "shell"), ("effect", "none"), ("sharpness", "soft")]), serde_json::json!({"scaling": 1, "frame": 1, "effect": 1}), "soft is Smooth");
-        assert_eq!(pick(&[("scaling", "native"), ("frame", "ambient"), ("effect", "grid"), ("sharpness", "crisp")])["frame"], 0, "a frame the player doesn't draw is none, never another one");
+        assert!(bare.get("picture").is_none() && bare.get("settings_dir").is_none());
     }
 
     /// Cheats: Mobile reads a same-name `.cht` beside the game; so does this view (the card on Linux has no database here).

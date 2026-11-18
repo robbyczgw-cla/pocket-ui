@@ -242,9 +242,17 @@ impl Reading {
     /// Where the player is in `rom`, from its battery save; None when it isn't a game read, has no save, or the save
     /// says nothing for sure.
     pub fn progress(&mut self, system: &str, rom: &Path) -> Option<Progress> {
+        let (save, _) = save_of(system, rom)?;
+        self.progress_from_save(system, rom, &save)
+    }
+
+    /// A host with document-backed ROMs can name the battery save directly. ROM verification and the
+    /// parser are the same as for the shelf's ordinary filesystem reader.
+    pub fn progress_from_save(&mut self, system: &str, rom: &Path, save: &Path) -> Option<Progress> {
         // Only what was checked against the games themselves (`Release::verified`).
         let release = self.release(system, rom).filter(|r| r.verified())?;
-        let (save, at) = save_of(system, rom)?;
+        let at = stamp(save)?;
+        let save = save.to_path_buf();
         if let Some((seen, answer)) = self.read.get(rom) {
             if *seen == (save.clone(), at) {
                 return answer.clone();
@@ -375,6 +383,20 @@ mod tests {
         let mut text = std::fs::read_to_string(&path).unwrap_or_default();
         text.push_str(&line);
         std::fs::write(path, text).unwrap();
+    }
+
+    #[test]
+    fn a_document_host_names_its_private_save_and_uses_the_same_verified_reader() {
+        let d = dir("case-knows-private-save");
+        let data = d.join("data");
+        let rom = d.join("direct-content/key/Pokemon Emerald.gba");
+        rom_known_as(&data, &rom, "gba", 0x1F1C08FB);
+        let save = d.join("private.srm");
+        std::fs::write(&save, saves::gen3_save(Kind::Emerald, &[("TORCHIC", 12, false)], 1, (2, 5), 4)).unwrap();
+        let mut r = Reading::new(&data);
+        assert_eq!(r.progress("gba", &rom), None);
+        assert_eq!(r.progress_from_save("gba", &rom, &save).unwrap().parts().join(" · "), "1 badge · Torchic Lv. 12 · game clock 2:05");
+        assert_eq!(r.progress_from_save("gba", &rom, &d.join("missing.srm")), None, "a missing private save cannot invent progress");
     }
 
     #[test]

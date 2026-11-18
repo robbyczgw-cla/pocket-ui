@@ -58,7 +58,7 @@ On a handheld without Wi-Fi (the RG28XX, the RG35XX 2024, the R36S) the Box art 
 scraper on your computer (Skraper, for example) make the covers, then copy them into a folder called `covers` beside
 the games of each system, each picture named like its game file: `roms/gba/covers/Golden Sun (USA).png` for
 `roms/gba/Golden Sun (USA).gba`. The folders `boxart`, `box2d` and an EmulationStation `images` folder are read too
-([Your EmulationStation gamelists](library.md#your-emulationstation-gamelists)). The PortMaster games and Starter pack
+([Your EmulationStation gamelists](library-files.md#your-emulationstation-gamelists)). The PortMaster games and Starter pack
 rows say **No Wi-Fi** there.
 
 ### By hand
@@ -86,7 +86,7 @@ Good to know:
   too different, no cover is chosen rather than a wrong one.
 - A **PlayStation 1 or 2** disc is recognised by the **serial on the disc** instead: pocket-ui reads the disc's
   little boot file ("SLES_556.73"), looks it up in the console's list of releases, and the cover, the pictures and
-  the facts follow that release's name ([the game card](library.md#playstation-1-and-2-discs)). The discs of a
+  the facts follow that release's name ([the game card](library-files.md#playstation-1-and-2-discs)). The discs of a
   multi-disc game show "(Disc 2)".
 - A game for which nothing was found is remembered and skipped on later runs, so running it again
   only looks up new games. A game recognised by its checksum later (once the console's list is on the SD card) is

@@ -422,13 +422,13 @@ The Picture page has one row, **Look**, where it had *Screen sharpness* and *Scr
 - **Which file**: unchanged. A game's file replaces the console's whole (`GameSettings::load`), the Look follows the file in use, and nothing falls back key by key. Save for this console still drops the game's file. Console starts (`console_default`: Aspect + Crisp for 3D, disc, DS, ScummVM; Integer + Sharp otherwise) both show Clean; Restore defaults removes both files and keeps those starts.
 - **Custom** is page state (`GameSettings::custom_open`), not a value: turning the Look to Custom writes nothing and sends nothing; it stays open while the page is open even when Sharpness and Effect come to match a Look, so no row folds away under the cursor; `close_custom` (the page is entered again, Use the console's settings, Restore defaults) works the Look out anew. `GameSettings::step` returns the (key, value) pairs that changed: the pause menu sends each as `set <key> <value>` before the one preview request (pocket-core drains the commands before it renders), the This game page saves once and writes no file for Custom. The rows are indented under the Look (`options::indented`).
 - **Explanation per value** (`options::describe`): the Look's line follows the Look (the GBA's LCD grid says "in the GBA screen's colours" only while LCD colours are on), Sharpness and Effect describe their current value; the room under the list is that of the longest (`Group::descs`). Preview rows are `Group::max_rows` (always shown, the frame's colour, Custom's rows and on the GBA LCD colours).
-- **Where it stops**: Android has its own picture settings (`android/src/picture.rs`: numeric indexes, its own inline shader whose *Smooth* is bilinear, i.e. this page's Soft) and is not changed. The Brick's picture bridge (`brick_picture::keys` on `feat/trimui-brick*`) lists `GROUPS` keys: when that branch merges, `look` must stay out of its transport list (the real parameters `sharpness`/`effect` go over as before), and the Look row belongs next to the other Picture rows that the GPU-less path hides; Old TV and Scanlines carry the effects' existing "heavy" mark. On a CPU-only path (no GL renderer) the old plain picture is all that is promised: hide the row there rather than offer a Look that does nothing. RetroArch and standalone emulators have their own shader and filter settings and are not affected.
+- **Where it stops**: Android has its own picture settings (`android/src/picture.rs`: numeric indexes) but draws them with this page's shader (`video_program`, Clean/Smooth/Old TV/Scanlines as their Looks' canonical pairs). The Brick's picture bridge (`brick_picture::keys` on `feat/trimui-brick*`) lists `GROUPS` keys: when that branch merges, `look` must stay out of its transport list (the real parameters `sharpness`/`effect` go over as before), and the Look row belongs next to the other Picture rows that the GPU-less path hides; Old TV and Scanlines carry the effects' existing "heavy" mark. On a CPU-only path (no GL renderer) the old plain picture is all that is promised: hide the row there rather than offer a Look that does nothing. RetroArch and standalone emulators have their own shader and filter settings and are not affected.
 
 ## Screen orientation (2026-10-25)
 
 Options → Picture → **Screen orientation** (`orientation`: `normal`, `left`, `right`; per console or game through Save
 changes like every Picture setting) says how the player holds the Pocket, for games made for an upright screen
-(vertical shooters, WonderSwan, DS books). User guide: [options.md](user/options.md#screen-orientation).
+(vertical shooters, WonderSwan, DS books). User guide: [options.md](user/options-screen.md#screen-orientation).
 
 - **Picture** (`video::Orientation`, `Renderer::turns`): Turned right draws the picture a quarter counter-clockwise on
   the panel (the shader's `rot` 1), Turned left a quarter clockwise (`rot` 3), on top of the core's `SET_ROTATION`; the
@@ -1309,6 +1309,70 @@ shelf. Battery saves: Harvest Moon 64's RetroArch `.srm` is read by Mupen in poc
 - NDS: the real touch panel on the device itself (see "Touch screen"), and melonDS DS's OpenGL renderer (sharper 3D at higher resolution) are not
   tried; no DSi games.
 - Dreamcast on Vulkan (Flycast asks for it first) would cut more CPU; pocket-core offers OpenGL only.
+
+## Resolution of the 3D systems (2026-11-16, Mini V2, `src/render_scale.rs`)
+Options → Picture → **Resolution** for N64, PSP, Dreamcast and PlayStation: the factor over the console's own resolution, given to the
+core as its own option when the game starts (`mupen64plus-EnableNativeResFactor`, `ppsspp_internal_resolution`,
+`flycast_internal_resolution`, PCSX-ReARMed's `pcsx_rearmed_neon_enhancement_enable` for PS1 2x). Until then N64 drew at **320×240**: ROCKNIX's RetroArch options, which 3D cores inherit
+(above), set `EnableNativeResFactor = "1"`, and with a factor GLideN64 ignores `43screensize` (640×480 is only the output
+size). PSP and Dreamcast drew at 1x too (480×272, 640×480).
+
+**How**: pocket-core of main 468d35648 on the device, `--bench`, a private data/states/temp folder each run
+(`POCKETUI_DATA`, `POCKETUI_STATES`, `TMPDIR` + `POCKET_CORE_TEST`: own command FIFO), the ROM linked into that folder (saves
+land there), the factor as a saved `opt.*` value; a state loaded at 6–9 s, input by test commands (kart accelerating,
+Mario walking, PSP player moving, Sonic running), the window 10–22 s. ondemand governor, owner UI stopped, muted, screen
+dark, USB connected. fps and p99 are pocket-core's own frame statistics over the whole run (start and state load
+included: those give the 3–7 frames over 25 ms every run has); CPU (100 % = one core) and GPU busy (DRM fdinfo) over the
+window; GPU clock from devfreq. Scenes: Mario Kart 64 race start (Luigi Raceway), Super Mario 64 outside the castle,
+Zelda: Ocarina of Time's title over Hyrule Field (3D, the logo on top), Bomberman stage 1-1, Sonic Adventure 2 City Escape, Crash Bandicoot 2 Turtle Woods.
+
+| System, game | Factor | fps | frame p99 | frames > 25 ms | GPU busy, clock | CPU |
+|---|---|---|---|---|---|---|
+| N64, Mario Kart 64 | 1x | 59.15 | 16.92 ms | 6 | 8.5 %, 305 MHz | 48 % |
+| | **2x** | 59.49 | 16.83 ms | 3 | 13.6 %, 305 | 51 % |
+| | 3x | 59.44 | 16.95 ms | 4 | 19.8 %, 305 | 52 % |
+| | 4x | 59.23 | 18.36 ms | 5 | 28.1 %, 305 | 44 % |
+| N64, Super Mario 64 | 1x | 59.28 | 16.92 ms | 3 | 10.6 %, 305 | 39 % |
+| | **2x** | 59.35 | 16.89 ms | 4 | 17.3 %, 305 | 53 % |
+| | 3x | 59.49 | 16.88 ms | 4 | 25.0 %, 305 | 46 % |
+| | 4x | 59.18 | 17.41 ms | 4 | 35.7 %, 305–587 | 43 % |
+| N64, Zelda: Ocarina of Time (two runs) | 1x | 59.09 / 59.08 | 16.95 / 16.86 ms | 3 / 4 | 12.0 / 12.3 %, 305 | 38 / 41 % |
+| | **2x** | 59.17 / 59.21 | 16.98 / 16.93 ms | 4 / 5 | 18.2 / 16.6 %, 305 | 42 / 47 % |
+| | 3x | 59.09 / 59.06 | 20.18 / 19.43 ms | 4 / 4 | 25.8 / 25.1 %, 305 | 41 / 51 % |
+| | 4x | 59.17 / 59.06 | 23.73 / 22.36 ms | 10 / 6 | 30.2 / 31.2 %, 305–587 | 47 / 43 % |
+| PSP, Bomberman | 1x | 59.41 | 17.31 ms | 7 | 6.2 %, 305 | 23 % |
+| | **2x** | 59.56 | 17.46 ms | 4 | 8.1 %, 305 | 24 % |
+| | 3x | 59.53 | 16.73 ms | 4 | 12.5 %, 305 | 28 % |
+| | 4x | 59.49 | 17.17 ms | 5 | 19.3 %, 305 | 23 % |
+| Dreamcast, Sonic Adventure 2 | 1x | 59.41 | 16.73 ms | 6 | 15.6 %, 305 | 74 % |
+| | **2x** | 59.39 | 17.18 ms | 6 | 29.9 %, 305 | 68 % |
+| | 3x | 59.25 | 18.50 ms | 5 | 41.3 %, 400–587 | 69 % |
+| PS1, Crash Bandicoot 2 (PAL, 50 Hz), Turtle Woods running | **1x** | 49.4 emulated | 16.92 ms | 4 | 5.4 %, 305 | 20 % |
+| | 2x (Enhanced Resolution) | 49.3 emulated | 16.93 ms | 4 | 6.4 %, 305 | 40 % |
+
+Bold: the default on the SM8250 and SM8550 handhelds (`render_scale::range`). Temperatures stayed at 46–54 °C; the fan
+ran once (PWM 51, Dreamcast 2x, the session's 6th game start in a row), otherwise off. Every factor kept the game at full
+speed (the emulated frames per second are the same at every factor). What changes is how evenly frames come: the
+handover times (`frametime.c` around `eglSwapBuffers`, window only) of Zelda had a p99 of 26.2 / 29.1 / 32.8 / 32.1 ms and
+22 / 47 / 192 / 197 of 715 frames over 25 ms at 1x / 2x / 3x / 4x; pocket-core's own p99 (above) moves from 3x on. The GPU
+stays at its lowest clock (305 MHz) up to 3x, so the unevenness is waiting on that slow clock, not a full GPU.
+
+So: **N64 2x** (paces as 1x in all three games), 3x the most offered (full speed, Zelda less even), 4x not offered.
+**PSP 2x**, 3x the most: Bomberman is clean up to 4x, but it is a light game and none of the heavy ones (Valkyria
+Chronicles II, Jeanne d'Arc) had a scene to load, so the default keeps a margin for them; 2x (960×544) is about the
+screen's width, 3x (1440×816) more than it. **Dreamcast 2x only**: 1280×960 is about the screen, and 3x made the GPU
+clock up beside a CPU already at 70 %. The SM8550 handhelds get the same numbers until measured (a far faster GPU). The
+H700, RK3566 and RK3326 handhelds and the SM4450 Classic have no row: unchanged.
+
+**PS1 Original**, 2x offered: PCSX-ReARMed's Enhanced Resolution (its NEON software renderer at twice the size; the
+only factor it has) doubles the CPU and holds full speed, and the 3D is visibly sharper, but in Crash Bandicoot 2's pause
+screen the game picture behind the menu was black (the paused frame is a copy the enhanced renderer doesn't keep). A
+renderer trick with such holes stays a choice. The row replaces the switch on the Emulator page there; on the other
+handhelds the switch stays where it was. SwanStation, which can upscale on the GPU, is installed but not the PS1 core
+pocket-core runs.
+
+Open: one 4x start (the first of the evening, Mario Kart) stopped before its first picture ("stall guard: game stopped
+responding") and the next two starts did the same; the 30 starts after it, 4x included, were fine. Not reproduced.
 
 ## Touch screen (2026-10-22)
 The Mini V2's panel is `generic ft5x06 (8d)`, `/dev/input/event4`: multitouch protocol B (5 slots), direct input,
@@ -2277,7 +2341,8 @@ User guide: [docs/user/achievements.md](user/achievements.md).
 | `session.rs` | rc_client for the running game (see below) |
 | `offline.rs` | The last online answers per game hash (`achievements/offline/<hash>.json`: the set and the unlocks) stand in when the server can't be reached; a token login without an answer is answered from the account. Unlocks are written to `achievements/pending.json` before they are sent and removed when the server answers 200 |
 | `snapshot.rs` | `/tmp/pocket-core.achievements.json` for the pause menu; `achievements/games/<system>/<stem>.json`, the tally for the card and the console page |
-| `lookup.rs` | The card's background lookup: `r=gameid` once per game, `r=allprogress` once an hour per console (kept in `achievements/progress/`) |
+| `lookup.rs` | The background lookup for the card and the case line: `r=gameid` once per game, `r=allprogress` once an hour per console (kept in `achievements/progress/`; a kept list older than the game's own tally is never used, and a game that just ended asks the server fresh). Only on Wi-Fi (Android: unmetered), on one worker thread (`app_achievements`) |
+| `case_line.rs` | "34 of 60 achievements · 56%" for the case of a game whose save says nothing (`App::case_or_achievements`: the save's line first, once its answer is in): signed in, a set, at least one unlock; softcore, a Hardcore unlock counted in |
 | `chime.rs` | The unlock sound, synthesised at the core's rate and mixed into the game's samples |
 | `game.rs` | pocket-core's three calls: `start`, and `show` for the HUD |
 | `hardcore.rs` | Hardcore: the switch (`Account::hardcore`), whether a start is in Hardcore (`at_start`: chosen, a console with achievements, not known to have no set), the shelf's question (`skips_moments`) and the words the host, the menu and the Android player show |

@@ -234,7 +234,7 @@ fn the_pause_menu_has_one_way_to_the_quick_settings_and_its_options_pages_have_t
 }
 
 /// Taste pass 2026-11-04: Zoom is a niche help and sat right above Save & quit in every pocket-core game. The pause menu's main
-/// page lists it only for a player who asked (Big text, or Settings → Look → Zoom in the pause menu); everyone can
+/// page lists it only for a player who asked (Big text, or Settings → Playing → Zoom in the pause menu); everyone can
 /// reach it under Options.
 #[test]
 fn zoom_is_under_options_and_on_the_main_page_only_for_whoever_asked() {
@@ -822,6 +822,40 @@ sleep 30
         assert!(!shelf.contains("is ready") && !shelf.contains("Check again"), "{shelf}");
     }
 
+    /// 17.11.2026 (Retroid Pocket Mini V2, android.6): the notice counted as said the moment it was put up, also behind
+    /// Home, and Android's Recents ended the process before anyone saw it; that version was never offered again. Now a
+    /// notice nobody closed comes back at the next start; once closed (B: later) it stays away, and a newer version than
+    /// the one closed is a new notice.
+    #[test]
+    fn an_unclosed_notice_comes_back_and_a_newer_version_after_later_is_said_again() {
+        let carry = |from: &Driver| std::fs::read_to_string(from.card.tmp.join("data").join("update-hint.json")).ok();
+        let start = |name: &str, version: &'static str, memory: Option<String>| Driver::start(name, true, move |tmp, cmd| {
+            if let Some(memory) = memory {
+                std::fs::write(tmp.join("data").join("update-hint.json"), memory).unwrap();
+            }
+            cmd.env("POCKETUI_UPDATE_HINT", version);
+        });
+        // Put up, then the process ends (Recents, Android's own end) with the notice still up.
+        let mut first = start("update-hint-unclosed", "99.0.0", None);
+        first.sees("pocket-ui 99.0.0 is ready");
+        first.frame();
+        let memory = carry(&first);
+        drop(first);
+        assert!(!memory.as_deref().unwrap_or_default().contains("99.0.0"), "not said while nobody closed it: {memory:?}");
+        // The next start says it again; B closes it, and that is remembered.
+        let mut second = start("update-hint-again", "99.0.0", memory);
+        second.sees("pocket-ui 99.0.0 is ready");
+        second.send("b");
+        let file = second.card.tmp.join("data").join("update-hint.json");
+        second.wait(|_| std::fs::read_to_string(&file).is_ok_and(|t| t.contains("99.0.0")));
+        let memory = carry(&second);
+        drop(second);
+        // A newer version than the one put off: a new notice.
+        let mut third = start("update-hint-newer", "99.1.0", memory);
+        let text = third.sees("pocket-ui 99.1.0 is ready");
+        assert!(!text.contains("99.0.0 is ready"), "{text}");
+    }
+
     #[test]
     fn update_status_explains_the_confirmation_and_consumed_notice() {
         let mut d = update_ready("update-status");
@@ -1403,8 +1437,8 @@ raise SystemExit(1)
         d.sees("Game Boy");
         d.send("start");
         d.sees("Bluetooth");
-        // Two levels down: a plain page of a category's list (Look's Cozy extras, its ninth row).
-        d.send("r1\ndown\ndown\ndown\ndown\ndown\ndown\ndown\ndown\na");
+        // Two levels down: a plain page of a category's list (Look's Cozy extras, its eighth row since 0.5.1).
+        d.send("r1\ndown\ndown\ndown\ndown\ndown\ndown\ndown\na");
         d.sees("TV on the cabinet");
         d.send("home");
         let shelf = d.sees("Game Boy");
@@ -2359,10 +2393,11 @@ sleep 30
                 ui.frame();
             }
         }
-        // Then Cozy extras, the ninth (Settings v2): the first tap selects it, the second opens it.
-        ui.send(&format!("tap 0.5 {:.4}", row(8)));
+        // Then Cozy extras, the eighth (Zoom in the pause menu went to Playing in 0.5.1): the first tap selects it, the
+        // second opens it.
+        ui.send(&format!("tap 0.5 {:.4}", row(7)));
         ui.frame();
-        ui.send(&format!("tap 0.5 {:.4}", row(8)));
+        ui.send(&format!("tap 0.5 {:.4}", row(7)));
         let text = ui.sees("TV on the cabinet");
         assert!(!text.contains("Easy"), "the Layout page (the row that was selected) did not open: {text}");
     }
@@ -2386,10 +2421,10 @@ sleep 30
             let s: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(&settings).unwrap_or_default()).unwrap_or_default();
             s["extras"][key].clone()
         };
-        // Look (R1 from where START opens): its ninth row Cozy extras (Settings v2): the page (since the tree of 2026-11-13 with
+        // Look (R1 from where START opens): its eighth row Cozy extras (since 0.5.1): the page (since the tree of 2026-11-13 with
         // Playful cases on it, its fifth row since TV plays the game); Stickers on cases, its third row: select, switch.
-        tap_at(&mut ui, 213.0, 8);
-        tap_at(&mut ui, 213.0, 8);
+        tap_at(&mut ui, 213.0, 7);
+        tap_at(&mut ui, 213.0, 7);
         ui.sees("TV on the cabinet");
         tap(&mut ui, 4);
         tap(&mut ui, 4);
@@ -2432,8 +2467,9 @@ sleep 30
     #[test]
     fn quick_wifi_off_and_on_agrees_with_the_wifi_page() {
         let mut ui = Driver::new("wifi", true);
+        // The selected switch stands between its ‹ › (Left/Right switch it too, 0.5.1).
         ui.send("home\ndown\ndown\na");
-        ui.sees("Wi-Fi\nOff");
+        ui.sees("Wi-Fi\n‹\nOff\n›");
         ui.send("b\nstart\na");
         let off = ui.sees("Wi-Fi is off");
         assert!(
@@ -2442,7 +2478,7 @@ sleep 30
         );
         // Back from Wi-Fi and Settings, switch the same radio on again, then reopen the Wi-Fi page.
         ui.send("b\nb\nb\nhome\ndown\ndown\na");
-        ui.sees("Wi-Fi\nOn");
+        ui.sees("Wi-Fi\n‹\nOn\n›");
         ui.send("b\nstart\na");
         let mut text = String::new();
         ui.wait(|d| {
@@ -3650,6 +3686,320 @@ true
         d.wait(|d| !nav_record(d).contains("@busy\treport"));
         writer.join().unwrap();
     }
+
+    /// A navigation record taken apart: where the UI is, its list's selected row and length, each row's area (`@hit`), and
+    /// every string and mark with its place.
+    struct Record {
+        at: String,
+        list: Option<(usize, usize)>,
+        hits: Vec<[i32; 4]>,
+        placed: Vec<([i32; 4], String)>,
+    }
+
+    impl Record {
+        fn of(record: &str) -> Record {
+            let mut r = Record { at: String::new(), list: None, hits: Vec::new(), placed: Vec::new() };
+            for l in record.lines() {
+                let v: Vec<&str> = l.split('\t').collect();
+                let n = |i: usize| v.get(i).and_then(|s| s.parse::<i32>().ok());
+                match v[0] {
+                    "@where" => r.at = v.get(1).unwrap_or(&"").to_string(),
+                    "@list" => r.list = Some((n(1).unwrap_or(0) as usize, n(2).unwrap_or(0) as usize)),
+                    "@hit" => r.hits.push([n(1).unwrap(), n(2).unwrap(), n(3).unwrap(), n(4).unwrap()]),
+                    _ => {
+                        if let (Some(x0), Some(y0), Some(x1), Some(y1)) = (n(0), n(1), n(2), n(3)) {
+                            r.placed.push(([x0, y0, x1, y1], l.splitn(5, '\t').nth(4).unwrap_or_default().to_string()));
+                        }
+                    }
+                }
+            }
+            r
+        }
+        /// The strings and marks inside `area` (the probe's own marks left out), left to right.
+        fn inside(&self, a: [i32; 4]) -> Vec<String> {
+            let mut v: Vec<&([i32; 4], String)> = self.placed.iter()
+                .filter(|(b, s)| !s.starts_with("‹nav:") && b[0] >= a[0] - 2 && b[2] <= a[2] + 2 && (b[1] + b[3]) / 2 >= a[1] && (b[1] + b[3]) / 2 <= a[3])
+                .collect();
+            v.sort_by_key(|(b, _)| b[0]);
+            v.into_iter().map(|(_, s)| s.clone()).collect()
+        }
+        /// Each row's strings and marks (its name first).
+        fn rows(&self) -> Vec<Vec<String>> {
+            self.hits.iter().map(|h| self.inside(*h)).collect()
+        }
+        /// The selected row's: the row the focus mark is on.
+        fn selected(&self) -> Vec<String> {
+            let f = self.placed.iter().find(|(_, s)| s == "‹nav:focus›").map(|(b, _)| *b).expect("a focus mark");
+            let mid = (f[1] + f[3]) / 2;
+            // A panel over the page (the quick settings) keeps its own touch map: its rows are the focus mark's own.
+            self.hits.iter().find(|h| h[1] <= mid && mid <= h[3]).map_or_else(|| self.inside(f), |h| self.inside(*h))
+        }
+        /// Every string and mark of the frame but the clock's figures.
+        fn text(&self) -> Vec<String> {
+            self.placed.iter().map(|(_, s)| s.clone())
+                .filter(|s| !s.starts_with("‹nav:") && !(s.contains(':') && s.chars().all(|c| c.is_ascii_digit() || c == ':')))
+                .collect()
+        }
+        fn says(&self, word: &str) -> bool {
+            self.placed.iter().any(|(_, s)| s == word)
+        }
+    }
+
+    /// Records until one satisfies `ok`, for at most 10 seconds (a level or a language takes a moment to show).
+    fn record_until(d: &mut Driver, ok: impl Fn(&Record) -> bool) -> Option<Record> {
+        let until = Instant::now() + test_clock::timeout(Duration::from_secs(10));
+        loop {
+            let r = Record::of(&nav_record(d));
+            if ok(&r) {
+                return Some(r);
+            }
+            if Instant::now() > until {
+                return None;
+            }
+            std::thread::sleep(Duration::from_millis(30));
+        }
+    }
+
+    /// A hand walk for 0.5.1: Zoom in the pause menu changed only with A (or X), and which rows open a page and which
+    /// change in place wasn't clear. The whole class, as a player walks it: every row of every Settings category either
+    /// opens a page (the hint "A Open", its value ends in the drawn angle ">" on every row) or changes in place (the
+    /// hint "< > Change", no angle; the selected one between ‹ ›), and every row that changes in place takes Left and
+    /// Right: one changes it, the other takes it back. A still changes it (or does nothing, on a level) and never
+    /// leaves the list. Then the same for the quick settings' rows with ‹ ›. Missed before: tests asserted the rows' names
+    /// and places, never what Left/Right do on each of them.
+    #[test]
+    fn every_row_that_changes_in_place_takes_left_and_right_and_every_page_row_shows_its_angle() {
+        let mut d = Driver::start("settings-rows", true, |tmp, cmd| {
+            // POCKETUI_LANG would pin the language, and the Language row could not change it: English from the locale.
+            cmd.env("POCKETUI_NAV_PROBE", tmp.join("nav.txt")).env_remove("POCKETUI_LANG").env("LANG", "en_US.UTF-8").env("LC_ALL", "en_US.UTF-8");
+        });
+        d.sees("Game Boy");
+        d.send("start");
+        d.sees("Bluetooth");
+        let (mut values, mut pages, mut seen) = (Vec::new(), Vec::new(), std::collections::HashSet::new());
+        for _ in 0..8 {
+            let first = Record::of(&nav_record(&mut d));
+            let (_, len) = first.list.expect("a category's list");
+            for _ in 0..len {
+                let r = Record::of(&nav_record(&mut d));
+                assert!(r.at.starts_with("settings:List"), "{}", r.at);
+                let row = r.selected();
+                let name = row.first().cloned().unwrap_or_default();
+                if !seen.insert(name.clone()) {
+                    break;
+                }
+                // Page rows end in their angle on every row, the selected one and the others alike.
+                for other in r.rows() {
+                    let page = other.last().is_some_and(|m| m == ">");
+                    let arrows = other.iter().any(|m| m == "‹" || m == "›");
+                    assert!(!(page && arrows), "{name}: a row has both a page's angle and a switch's arrows: {other:?}");
+                }
+                if r.says("Change") {
+                    assert!(!row.iter().any(|m| m == ">"), "{name} changes in place, so it has no page's angle: {row:?}");
+                    assert!(row.iter().any(|m| m == "‹") && row.last().is_some_and(|m| m == "›"), "{name}: the selected value between ‹ ›: {row:?}");
+                    let before = r.rows();
+                    // One way changes it, the other takes it back (a level at its end: the other way first).
+                    d.send("right");
+                    let (one, back) = match record_until(&mut d, |q| q.rows() != before) {
+                        Some(_) => ("right", "left"),
+                        None => {
+                            d.send("left");
+                            assert!(record_until(&mut d, |q| q.rows() != before).is_some(), "{name}: neither Right nor Left changes it");
+                            ("left", "right")
+                        }
+                    };
+                    d.send(back);
+                    assert!(record_until(&mut d, |q| q.rows() == before).is_some(), "{name}: {back} takes {one} back");
+                    // A: changes it in place (or nothing on a level), never opens a page.
+                    d.send("a");
+                    let after = record_until(&mut d, |q| q.at.starts_with("settings:List") && q.rows() != before)
+                        .or_else(|| record_until(&mut d, |q| q.at.starts_with("settings:List")));
+                    let after = after.unwrap_or_else(|| panic!("{name}: A left the list"));
+                    if after.rows() != before {
+                        for key in ["left", "right"] {
+                            if Record::of(&nav_record(&mut d)).rows() != before {
+                                d.send(key);
+                                let _ = record_until(&mut d, |q| q.rows() == before);
+                            }
+                        }
+                        assert!(Record::of(&nav_record(&mut d)).rows() == before, "{name}: A then Left/Right comes back");
+                    }
+                    values.push(name);
+                } else {
+                    assert!(r.says("Open"), "{name}: a row that doesn't change in place opens a page: {:?}", r.placed);
+                    assert!(row.last().is_some_and(|m| m == ">"), "{name} opens a page and ends in its angle: {row:?}");
+                    pages.push(name);
+                }
+                d.send("down");
+            }
+            d.send("r1");
+        }
+        // The rows of the hand walk, and the four switches that took only A.
+        for name in ["Zoom in the pause menu", "Continue where I quit", "Console boot screen", "Remind me where I was", "Text size", "Language", "Lived-in shelf"] {
+            assert!(values.iter().any(|v| v == name), "{name} was walked as a row that changes in place: {values:?}");
+        }
+        assert!(pages.iter().any(|p| p == "Layout") && pages.iter().any(|p| p == "Cozy extras"), "{pages:?}");
+        // The quick settings: every row with a value but Power… changes with Left/Right, the selected one between ‹ ›.
+        d.send("b");
+        d.sees("Game Boy");
+        d.send("home");
+        d.sees("Brightness");
+        // A radio says "Switching…" until it has: the other way only counts once it is done.
+        let settled = |q: &Record| !q.text().iter().any(|t| t.starts_with("Switching"));
+        let mut walked = Vec::new();
+        for _ in 0..12 {
+            let r = Record::of(&nav_record(&mut d));
+            let row = r.selected();
+            let name = row.first().cloned().unwrap_or_default();
+            if walked.contains(&name) {
+                break;
+            }
+            walked.push(name.clone());
+            if row.iter().any(|m| m == "‹") {
+                let before = r.text();
+                d.send("left");
+                let (one, back) = if record_until(&mut d, |q| q.text() != before && settled(q)).is_some() {
+                    ("left", "right")
+                } else {
+                    d.send("right");
+                    assert!(record_until(&mut d, |q| q.text() != before && settled(q)).is_some(), "quick settings, {name}: neither Left nor Right changes it");
+                    ("right", "left")
+                };
+                d.send(back);
+                assert!(record_until(&mut d, |q| q.text() == before).is_some(), "quick settings, {name}: {back} takes {one} back");
+            }
+            d.send("down");
+        }
+        for name in ["Brightness", "Volume", "Wi-Fi"] {
+            assert!(walked.iter().any(|w| w == name), "{name} in the quick settings: {walked:?}");
+        }
+    }
+
+    /// The hand test of 0.5 (17.11.2026), in the game: which pause menu rows open a page wasn't clear, and a value
+    /// changed only with A. The whole class, as a player walks it with the stand-in game: on the main page every row
+    /// but the ones that act right there (Continue, Save, Load, Earlier, Disc, Quit) opens a page, ends in the drawn
+    /// angle ">" and A's hint says Open; on Options and every list it opens, a row either opens a page (hint Open, its
+    /// angle, A leaves for that page) or changes in place (the selected value between ‹ ›, the hint "< > Change", Left or
+    /// Right changes it and the other way takes it back) or does a thing (neither). Missed before: the pause menu's
+    /// tests read its rows' names and titles, never their marks or what Left/Right do; Settings had its walk (the test
+    /// above), the pause menu not.
+    #[test]
+    fn every_pause_menu_row_that_changes_in_place_takes_left_and_right_and_every_page_row_shows_its_angle() {
+        // A pocket-core game (the stand-in host), as most games of the handhelds: Save, Load and Options' pages.
+        let mut d = Driver::start("pause-rows", true, |tmp, cmd| {
+            std::fs::write(tmp.join("data/curator.json"), r#"{"lens":false}"#).unwrap();
+            let host = tmp.join("pocket-core-stand-in");
+            std::fs::write(&host, "").unwrap();
+            cmd.env("POCKETUI_HOST_BIN", host).env("POCKETUI_STATES", tmp.join("states")).env("POCKETUI_NAV_PROBE", tmp.join("nav.txt"));
+        });
+        d.sees("Game Boy");
+        d.send("a");
+        d.sees("Tobu Tobu Girl");
+        d.send("a");
+        d.wait(|d| matches!(std::fs::read_to_string(d.card.tmp.join("run-game.started")).as_deref(), Ok("started\n")));
+        d.send("home");
+        d.sees("Continue");
+        let acts = ["Continue", "Save", "Load", "Earlier", "Disc", "Save & quit", "Quit"];
+        // The page with its focus painted (a frame taken while it opens may have neither yet).
+        let on_main = |q: &Record| q.at == "pause:Main" && q.placed.iter().any(|(_, s)| s == "‹nav:focus›");
+        // The main page from its selected row down, until a name comes again (the list wraps).
+        let mut main: Vec<String> = Vec::new();
+        for _ in 0..12 {
+            let r = record_until(&mut d, on_main).unwrap_or_else(|| panic!("the pause menu's main page: {main:?}\n{}", nav_record(&mut d)));
+            let row = r.selected();
+            let name = row.first().cloned().unwrap_or_default();
+            if main.contains(&name) {
+                break;
+            }
+            main.push(name.clone());
+            if acts.contains(&name.as_str()) {
+                assert!(!row.iter().any(|m| m == ">"), "main page, {name} acts right there, so no page's angle: {row:?}");
+                if row.iter().any(|m| m == "‹") {
+                    let before = r.selected();
+                    d.send("right");
+                    assert!(record_until(&mut d, |q| on_main(q) && q.selected() != before).is_some(), "main page, {name}: Right steps its value");
+                    d.send("left");
+                    assert!(record_until(&mut d, |q| on_main(q) && q.selected() == before).is_some(), "main page, {name}: Left takes it back");
+                }
+            } else {
+                assert!(row.last().is_some_and(|m| m == ">"), "main page, {name} opens a page and ends in its angle: {row:?}");
+                assert!(r.says("Open"), "main page, {name}: A's hint says Open: {:?}", r.text());
+            }
+            d.send("down");
+        }
+        // The walk ended on its first row again: down to Options, A.
+        let to = main.iter().position(|n| n == "Options").unwrap_or_else(|| panic!("Options on the main page: {main:?}"));
+        for _ in 0..to {
+            d.send("down");
+        }
+        d.send("a");
+        assert!(record_until(&mut d, |q| q.at == "pause:Options").is_some(), "A on Options opens it: {main:?}\n{}", nav_record(&mut d));
+        let mut opened = Vec::new();
+        let rows = walk_pause_page(&mut d, "pause:Options", &mut opened);
+        // Zoom no longer second, under Picture: after the groups (0.5.1, as Settings' Zoom in the pause menu went down to
+        // Playing).
+        let pos = |n: &str| rows.iter().position(|r| r == n);
+        assert!(pos("Speed, rumble, fan").is_some() && pos("Zoom") > pos("Speed, rumble, fan"), "Options: {rows:?}");
+        for name in ["Picture", "Shortcuts", "Speed, rumble, fan", "Runs on"] {
+            assert!(opened.iter().any(|o| o == name), "Options › {name} was opened: {opened:?}");
+        }
+    }
+
+    /// Walks the pause menu page whose `@where` is `at` from its selected row down until a name comes again: each row
+    /// opens a page (hint Open, its angle; A leaves for it, a list there is walked the same way, B comes back; the
+    /// row's name goes to `opened`), changes in place (‹ ›, "< > Change", Left/Right) or does a thing (neither).
+    /// Returns the rows' names in order.
+    fn walk_pause_page(d: &mut Driver, at: &str, opened: &mut Vec<String>) -> Vec<String> {
+        let here = |q: &Record| q.at == at && q.placed.iter().any(|(_, s)| s == "‹nav:focus›");
+        let mut names: Vec<String> = Vec::new();
+        for _ in 0..40 {
+            let r = record_until(d, here).unwrap_or_else(|| panic!("back on {at}"));
+            let row = r.selected();
+            let name = row.first().cloned().unwrap_or_default();
+            if names.contains(&name) {
+                break;
+            }
+            names.push(name.clone());
+            let page_row = row.last().is_some_and(|m| m == ">");
+            assert_eq!(page_row, r.says("Open"), "{at}, {name}: a page's angle and A's hint Open go together: {row:?} {:?}", r.text());
+            if page_row {
+                assert!(!row.iter().any(|m| m == "‹"), "{at}, {name}: a page's angle and a value's arrows: {row:?}");
+                // Zoom shows the paused game's picture larger: the stand-in has none, and Zoom refuses then (`app_zoom`).
+                if name == "Zoom" {
+                    d.send("down");
+                    continue;
+                }
+                d.send("a");
+                let next = record_until(d, |q| q.at != at && !q.at.is_empty()).unwrap_or_else(|| panic!("{at}, {name}: A opens its page"));
+                opened.push(name.clone());
+                let list = ["pause:Group", "pause:Controls", "pause:Cheats", "pause:Emulator"].iter().any(|p| next.at.starts_with(p));
+                if list && next.placed.iter().any(|(_, s)| s == "‹nav:focus›") {
+                    walk_pause_page(d, &next.at.clone(), opened);
+                }
+                d.send("b");
+                assert!(record_until(d, here).is_some(), "{at}, {name}: B comes back from {}", next.at);
+            } else if row.iter().any(|m| m == "‹") {
+                assert!(r.says("Change"), "{at}, {name} changes in place: the hint says < > Change: {:?}", r.text());
+                let before = r.selected();
+                d.send("right");
+                let (one, back) = match record_until(d, |q| here(q) && q.selected() != before) {
+                    Some(_) => ("right", "left"),
+                    None => {
+                        d.send("left");
+                        assert!(record_until(d, |q| here(q) && q.selected() != before).is_some(), "{at}, {name}: neither Right nor Left changes it");
+                        ("left", "right")
+                    }
+                };
+                d.send(back);
+                assert!(record_until(d, |q| here(q) && q.selected() == before).is_some(), "{at}, {name}: {back} takes {one} back");
+            } else {
+                assert!(!r.says("Change"), "{at}, {name}: the hint says Change, so its value stands between ‹ ›: {row:?}");
+            }
+            d.send("down");
+        }
+        names
+    }
+
 
     /// The navigation record after `key` (`POCKETUI_NAV_PROBE`): where the UI is and what the key asked for (`@feedback`:
     /// "tick" for the haptic tick, "sound:Nav"…), whether or not menu haptics and sounds are on.

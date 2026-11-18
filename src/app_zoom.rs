@@ -6,15 +6,14 @@
 //! refuses, as a Load without a state does.
 //!
 //! Where it is reached: Pause → Options → Zoom always; a row on the pause menu's main page only while Big text is on
-//! or Settings → Look → Zoom in the pause menu is (`zoom_row_on`); and, off by default, HOME + X in the game
+//! or Settings → Playing → Zoom in the pause menu is (`zoom_row_on`); and, off by default, HOME + X in the game
 //! (Options → Shortcuts → Zoom, `zoom_key`), which opens the menu straight on this page. B goes back to where it came from.
 
 use pocket_ui::gfx::Canvas;
 use pocket_ui::pad::Button;
-use pocket_ui::text::Face;
 use pocket_ui::zoom::{Action, Zoom};
 
-use super::{App, MainItem, Page, CANCEL, CONFIRM, DARK, INK, NU_BTN_PAD, NU_PAD, NU_SMALL};
+use super::{App, MainItem, Page, CANCEL, CONFIRM};
 
 /// The level the page opens at: the one used last in this run.
 pub(crate) const FIRST_LEVEL: u32 = 2;
@@ -30,7 +29,7 @@ pub(crate) enum Back {
 
 impl App {
     /// Whether the pause menu lists Zoom on its main page: Big text is on (`features::reading_on`) or the player
-    /// switched on Settings → Look → Zoom in the pause menu.
+    /// switched on Settings → Playing → Zoom in the pause menu.
     pub(crate) fn zoom_row_on(&self) -> bool {
         self.zoom_in_pause || pocket_ui::features::reading_on(pocket_ui::type_scale::get(), pocket_ui::motion::level())
     }
@@ -129,17 +128,9 @@ impl App {
             c.clear(0x000000);
             return;
         };
-        // The game's part, `level` times as large as the screen shows it; a game smaller than that is shown whole, centred.
-        let part = zoom.part(frame.w, frame.h, menu.game_rect);
-        let (dw, dh) = ((part.2 as u64 * c.w as u64 * zoom.level() as u64 / frame.w as u64) as i32, (part.3 as u64 * c.h as u64 * zoom.level() as u64 / frame.h as u64) as i32);
-        c.clear(0x000000);
-        c.blit_region(frame, part, (c.w - dw) / 2, (c.h - dh) / 2, dw, dh);
-        let label = zoom.label();
-        let (pad, pill) = (NU_PAD, pocket_ui::kit::PILL);
-        let w = self.text.width(Face::Body, NU_SMALL, &label) + 2 * NU_BTN_PAD;
-        pocket_ui::retro::pill(c, pad, pad, w, pill, pill / 2, DARK.select);
-        self.text.draw(c, Face::Body, NU_SMALL, pad + NU_BTN_PAD, pad + (pill - 20) / 2 + pocket_ui::type_scale::mid(NU_SMALL), INK, &label);
-        self.nu_hints(c, &[("D-pad", "Move"), ("A", "2x / 3x"), ("B", "Back")]);
+        // Painted by `pause_page::paint_zoom`, the painter Android's player uses too.
+        let game = menu.game_rect;
+        pocket_ui::pause_page::paint_zoom(c, &mut self.text, &mut self.hits, frame, &zoom, game);
     }
 
     /// `--snapshot zoom[:<2|3>][:low][:<left|right|top|bottom|step>...]`: the page over the background picture given.

@@ -6,7 +6,7 @@ where the facts come from are on [the first page](library.md).
 ## Curator
 
 Curator helps you find your way around a larger collection, with facts that come with pocket-ui and work without a
-network. It has seven parts; each can be switched off in Settings → Games → [Curator](settings.md#curator), and none takes
+network. It has seven parts; each can be switched off in Settings → Games → [Curator](settings-playing.md#curator), and none takes
 up space until it has something to show. [Rediscover](#rediscover) has its own switch under Settings → Look → [Cozy extras](settings.md#cozy-extras) and is only there when it has a game.
 
 When pocket-ui starts, Curator reads your library in the background, after the shelf is up and never while a game

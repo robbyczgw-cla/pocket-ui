@@ -322,7 +322,7 @@ pub fn pad_look(system: &str, native: (u32, u32), aspect: f64, (w, h): (u32, u32
     let (lw, lh) = pocket_ui::scaled_layout::mobile_size((vw, vh), density);
     let dp = lw as f32 / (vw as f32 / density.max(0.5));
     let dir = tempfile::tempdir().unwrap();
-    let settings = picture::Settings::load(dir.path(), system, "k");
+    let settings = picture::Settings::load(dir.path(), system, std::path::Path::new("k"), picture::mobile_start());
     let rect = settings.rect((lw as i32, lh as i32), (vw as i32, vh as i32), native, aspect, true);
     let mut pad = vec![0u32; (lw * lh) as usize];
     let mut text = Text::builtin();
@@ -601,10 +601,10 @@ pub fn frame_case(system: &str, native: (u32, u32), aspect: f64, (w, h): (u32, u
     let logical = (lw as i32, lh as i32);
     let dp = lw as f32 / (vw as f32 / density.max(0.5));
     let dir = tempfile::tempdir().unwrap();
-    let mut settings = picture::Settings::load(dir.path(), system, "k");
+    let mut settings = picture::Settings::load(dir.path(), system, std::path::Path::new("k"), picture::mobile_start());
     let window = (w as i32, h as i32);
     let frameless = settings.place(window, view, logical, native, aspect, touch).game;
-    settings.frame = frame;
+    settings.set_values(&[("frame", ["none", "auto", "crt"][frame as usize].to_string())]).unwrap();
     // As `player.rs` `paint`: the picture's own space (the overlay's with the touch pad, the whole screen without).
     let space = settings.place(window, view, logical, native, aspect, touch);
     let game = space.game;
@@ -681,19 +681,19 @@ pub fn frame_faults(c: &FrameCase, density: f32) -> Vec<String> {
 #[test]
 fn the_consoles_frame_is_the_one_linux_picks_for_that_console() {
     let dir = tempfile::tempdir().unwrap();
-    let mut settings = picture::Settings::load(dir.path(), "gba", "k");
+    let mut settings = picture::Settings::load(dir.path(), "gba", std::path::Path::new("k"), picture::mobile_start());
     assert_eq!(settings.frame_style("gba"), None, "a phone starts with the clean picture, as Linux does");
     let mut systems: Vec<&str> = pocket_ui::hostsys::SYSTEMS.iter().flat_map(|s| s.names.iter().copied()).collect();
     systems.extend(PAD_SYSTEMS.iter().map(|s| s.0));
     systems.extend(["gamegear", "atari2600", "wonderswan", "virtualboy", "unknown-console"]);
-    settings.frame = 1;
+    settings.set_values(&[("frame", ["none", "auto", "crt"][1 as usize].to_string())]).unwrap();
     for system in systems {
         assert_eq!(settings.frame_style(system), Some(bezel::style_for(system)), "Console on {system}");
     }
     assert_eq!(settings.frame_style("gba"), Some(bezel::Style::Wide));
     assert_eq!(settings.frame_style("gb"), Some(bezel::Style::Brick(bezel::BrickColour::Grey)));
     assert_eq!(settings.frame_style("snes"), Some(bezel::Style::Monitor));
-    settings.frame = 2;
+    settings.set_values(&[("frame", ["none", "auto", "crt"][2 as usize].to_string())]).unwrap();
     assert_eq!(settings.frame_style("snes"), Some(bezel::Style::Crt(bezel::Cabinet::Plastic)));
 }
 
@@ -780,13 +780,14 @@ fn with_a_controller_the_picture_is_where_linux_puts_it_on_the_same_screen() {
             };
             // The start: Linux's Options → Picture of a game nobody changed, as the handheld view hands it to the player.
             let effective = pocket_ui::options::GameSettings::load(data.path(), system, std::path::Path::new("/roms/game.bin")).effective();
-            let mut settings = picture::Settings::load(data.path(), system, "k");
-            settings.follow_view(&pocket_ui::android_handheld::picture_choice(&effective));
+            let settings = picture::Settings::load(data.path(), system, std::path::Path::new("k"), effective.clone());
             let mut cases = vec![("start".to_string(), settings.clone(), linux_at(VideoSettings::from_values(&effective).scaling))];
             for (row, scaling) in [(0usize, Scaling::Aspect), (1, Scaling::Native), (2, Scaling::Fullscreen)] {
                 for frame in [0usize, 1, 2] {
-                    let mut s = settings.clone();
-                    (s.scaling, s.frame) = (row, frame);
+                    let mut handed = effective.clone();
+                    handed.insert("scaling".into(), ["aspect", "native", "fullscreen"][row].into());
+                    handed.insert("frame".into(), ["none", "auto", "crt"][frame].into());
+                    let s = picture::Settings::load(data.path(), system, std::path::Path::new("k"), handed);
                     // Linux never makes the picture smaller for a frame: the frame fills what the picture leaves.
                     cases.push((format!("scaling {row} frame {frame}"), s, linux_at(scaling)));
                 }
@@ -1009,8 +1010,8 @@ fn android_controller_picture_shots() {
     let (nw, nh) = (240u32, 160u32);
     let image = game_pattern((nw, nh));
     let data = tempfile::tempdir().unwrap();
-    let mut settings = picture::Settings::load(data.path(), "gba", "k");
-    settings.scaling = 1;
+    let mut settings = picture::Settings::load(data.path(), "gba", std::path::Path::new("k"), picture::mobile_start());
+    settings.set_values(&[("scaling", ["aspect", "native", "fullscreen"][1 as usize].to_string())]).unwrap();
     let view = (left, bottom, w - left - right, h - top - bottom);
     let logical = pocket_ui::scaled_layout::mobile_size((view.2 as u32, view.3 as u32), density);
     let logical = (logical.0 as i32, logical.1 as i32);

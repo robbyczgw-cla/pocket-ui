@@ -16,24 +16,40 @@ bookkeeping warnings); one agent fills them in one commit before the release che
 (the release checks the merge gate skips, see [Documentation checks](tests.md#documentation-checks)): it fails on a
 missing Spanish or Portuguese line and prints the bookkeeping as warnings only.
 
-### Order: text checks first, export once
+### Order: full tests before the cut and export
 
 The public export (`scripts/export-public.sh`) runs every test of the tree and takes about an hour; a text find after it
-costs another hour. So the text checks come first, on the release branch, before any export:
+costs another hour. Tests therefore run before the cut and again on the release branch before any export:
 
-1. `sh scripts/pre-release.sh --receipt pre.txt`: the translation audit, `--lib --bins` complete (a test red only side by
-   side gets one run alone), the release check's text tests (`scripts/release-text-tests.txt`), the text-fit suites with
-   their release matrices (Large text in every language on every panel size), the Brick's Settings walk and text cases,
-   the D-pad explorer at every size, and the bookkeeping as warnings. Each step prints `ok`, `RED` or `WARN` and its log;
+1. Before a version bump, require a green full-suite receipt for the **exact main commit** being cut:
+   `python3 scripts/pre-cut-check.py --repo . --main <commit> --receipt <receipt.json>`.
+   A nightly receipt or a fresh clean-checkout run of `sh scripts/full-suite.sh --receipt /path/to/full-suite.json`
+   supplies it. Commit and tree must both match; partial/text-only, stale, red and fixture results are refused.
+   The release driver's `bump` stage enforces this before creating a release worktree or changing the version.
+2. `bash scripts/pre-release.sh --receipt pre.txt`: the translation audit, the same `scripts/full-suite.sh` as RC/nightly
+   (`GATE_FULL=1`: every ordinary test, doctests, serial timing, Brick corpus/search/Settings, platform checks and shell tests),
+   the release check's text tests (`scripts/release-text-tests.txt`), the additional ignored text-fit and navigation matrices
+   (Large text in every language on every panel size), extra Brick text cases, and bookkeeping as warnings.
+   The gate schedules independent shell lanes alongside Rust when its exclusive CPU allocation permits it; all lanes join
+   before feature builds and timing assertions. Ordinary layout/navigation tests run once; release ignores run afterward.
+   Each step prints `ok`, `RED` or `WARN`, elapsed seconds and its log;
    a red step does not stop the others, so one run lists everything. Fix on the branch and run it again until it is green.
-2. Export with `--receipt export.txt`, then the release programs, then `RELEASE_CHECK_RECEIPT=rc.txt sh scripts/release-check.sh`.
+3. Export with `--receipt export.txt`, then the release programs, then `RELEASE_CHECK_RECEIPT=rc.txt sh scripts/release-check.sh`.
+   With `RELEASE_CHECK_PRE_RECEIPT=pre.txt` (the pre-release receipt of the **same** tree) the release check carries the
+   explorer's release-only cases (`nav_explorer -- --ignored`, about 27 minutes) instead of running them twice:
+   `scripts/nav-evidence.py` accepts only an exact match of commit, tree, profile, `rustc -V`, host, test threads, CJK test
+   font, the listed cases and a clean green log without retries. Anything else runs them, and the log and the release-check
+   receipt (`nav=carried …` or `nav=ran`) say which. The full gate in the release check still runs.
+
+This matches test selections, not build artifacts: export still compiles/tests the scrubbed public tree in the production
+profile. STORAGE and volume evidence require the newly built release programs and remain later artifact checks.
 
 ### Text-only fixes
 
 A fix after a green export that changes only text (translation tables `assets/i18n/*`, `docs/**`, the top-level Markdown
 files; `python3 scripts/text-only-diff.py BASE [TARGET]` decides and prints every file) does not need the whole test run again:
 
-1. `sh scripts/pre-release.sh --since export.txt --receipt pre2.txt`: refuses when anything else changed since the full
+1. `bash scripts/pre-release.sh --since export.txt --receipt pre2.txt`: refuses when anything else changed since the full
    run; runs the text checks again (text fit, Brick and explorer only when a translation table or manual page changed, and
    prints why a step is skipped).
 2. `scripts/export-public.sh … --text-only-since export.txt --pre-release pre2.txt --receipt export2.txt`: the private-data

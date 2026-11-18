@@ -19,6 +19,8 @@ pub const FOCUS: &str = "‹nav:focus›";
 pub const ROW: &str = "‹nav:row›";
 /// A hint the bar shows: this, then the key, a tab and its word.
 pub const HINT: &str = "‹nav:hint›";
+/// The window of a list that scrolls (`kit::scrollbar`): where its rows are shown (tests/list_space.rs).
+pub const LIST: &str = "‹nav:list›";
 
 /// The record is on (`POCKETUI_NAV_PROBE` is set).
 pub fn on() -> bool {
@@ -44,6 +46,13 @@ pub fn row(c: &Canvas, rect: (i32, i32, i32, i32)) {
 pub fn hint(c: &Canvas, rect: (i32, i32, i32, i32), key: &str, label: &str) {
     if on() {
         crate::text::boxes::area(c, rect, &format!("{HINT}{key}\t{label}"));
+    }
+}
+
+/// A list that scrolls shows its rows at `(x, y, w, h)` of `c`.
+pub fn list(c: &Canvas, rect: (i32, i32, i32, i32)) {
+    if on() {
+        crate::text::boxes::area(c, rect, LIST);
     }
 }
 

@@ -65,9 +65,9 @@ pub fn app_version() -> &'static str {
     option_env!("POCKETUI_VERSION").unwrap_or(env!("CARGO_PKG_VERSION"))
 }
 
-/// The version the player reads on About and Settings' About row. On Android's handheld view that is the APK's
-/// (`android_version_name`, "0.4.0-android.3"), not this library's Cargo version: the handheld view has no app
-/// updates of its own (`ANDROID_HIDES` "updates"), so `app_version` and `release_build` stay as they are there.
+/// The version the player reads on About, Settings' About row and Updates. On Android's handheld view that is the APK's
+/// (`android_version_name`, "0.4.0-android.3"), not this library's Cargo version: Android's list and installer compare and
+/// replace the APK, so the Updates page there offers by this version (`app_update_hint`).
 pub fn shown_version() -> &'static str {
     if crate::device::android_profile() { crate::update_channel::android_version_name() } else { app_version() }
 }

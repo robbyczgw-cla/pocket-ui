@@ -25,7 +25,9 @@
 //!   and at once after a kernel line of level warning or worse, which is what comes before a freeze. An idle device
 //!   syncs one file every 15 s: 5 760 syncs a day, an estimate of a few tens of MB of physical writes (a sample is
 //!   150 bytes, but a card writes a page and a journal block for it). Not measured on the device.
-//! * **Clean exit.** A logger that is asked to stop (SIGTERM: shutdown, restart) writes `clean-exit`. A boot
+//! * **Clean exit.** A logger that is asked to stop (SIGTERM: shutdown, restart) writes `clean-exit`, and so does
+//!   pocket-ui right before its own power off or restart command and when it leaves dArkOS for EmulationStation
+//!   (`mark_clean`: only ROCKNIX's launcher starts the logger). A boot
 //!   whose files have no such marker ended in a freeze, a watchdog reset, a power cut or a hard power-off:
 //!   the next start writes a line with the last kernel lines to `crash.log` and leaves the usual crash notice.
 
@@ -292,6 +294,43 @@ pub fn begin_boot(data_dir: &Path, boot_id: &str, now: u64) -> Option<Unclean> {
         crate::crash::record_unclean(data_dir, now, u.last_alive, &u.kernel_tail, u.sensors_last.as_deref());
     }
     unclean
+}
+
+/// pocket-ui ends this boot on purpose: right before its power off or restart command (`auto_off::disarm_before_power_off`,
+/// which every such path calls, the switch-off after sleeping and the low battery's too), and when it leaves a host whose
+/// launcher runs no logger (dArkOS: Back to EmulationStation, `main`). The logger leaves the same marker when it is asked to
+/// stop (`Daemon::finish`), but only ROCKNIX's launcher starts one: on dArkOS (and the Brick's own card) every start after a
+/// power off said "The device shut down unexpectedly last time." (RG353M, 0.5.0, switched off after sleeping). Fsynced with
+/// its folder: the command may end the power before the page cache is written. True when it is on the card.
+pub fn mark_clean(data_dir: &Path, wall: u64) -> bool {
+    let logs = data_dir.join(DIR_NAME);
+    let file = logs.join(CLEAN_FILE);
+    let ok = fs::create_dir_all(&logs).is_ok()
+        && File::create(&file).and_then(|mut f| {
+            f.write_all(crate::crash::timestamp(wall).as_bytes())?;
+            f.sync_all()
+        }).is_ok();
+    crate::fsutil::sync_dir(&logs);
+    ok
+}
+
+/// The power off or restart didn't happen (its command failed): the boot goes on, and a power cut from now on is
+/// unexpected again.
+pub fn unmark_clean(data_dir: &Path) {
+    let logs = data_dir.join(DIR_NAME);
+    if fs::remove_file(logs.join(CLEAN_FILE)).is_ok() {
+        crate::fsutil::sync_dir(&logs);
+    }
+}
+
+/// A port's end that is no failure (dArkOS's start.sh says the same): a plain end, or Back to EmulationStation.
+pub fn port_exit_is_clean(code: i32) -> bool {
+    code == 0 || code == crate::rescue::OPEN_ES_CODE
+}
+
+/// Whether this boot is marked as ending on purpose (`mark_clean`, the logger's stop).
+pub fn boot_marked_clean(data_dir: &Path) -> bool {
+    data_dir.join(DIR_NAME).join(CLEAN_FILE).exists()
 }
 
 /// Moves the finished boot's files into their own folder.
@@ -1000,6 +1039,31 @@ mod tests {
         assert_eq!(begin_boot(&data, "boot-b", 1_791_990_000), None);
         assert!(!data.join(crate::crash::LOG_FILE).exists());
         assert!(crate::crash::take_marker(&data).is_none());
+    }
+
+    #[test]
+    fn a_power_off_pocket_ui_asked_for_is_clean_without_a_logger() {
+        // dArkOS and the Brick run no logger: pocket-ui's own mark before the command is all the next start has.
+        let data = tmp("asked");
+        begin_boot(&data, "boot-a", 1_791_900_000);
+        assert!(mark_clean(&data, 1_791_900_100));
+        assert!(boot_marked_clean(&data));
+        assert_eq!(begin_boot(&data, "boot-b", 1_791_990_000), None);
+        assert!(crate::crash::take_marker(&data).is_none(), "no notice after a power off on purpose");
+        // A command that failed: the boot goes on, and its end is unexpected again.
+        assert!(mark_clean(&data, 1_791_990_100));
+        unmark_clean(&data);
+        assert!(!boot_marked_clean(&data));
+        assert!(begin_boot(&data, "boot-c", 1_792_000_000).is_some());
+        assert_eq!(crate::crash::take_marker(&data).as_deref(), Some("The device shut down unexpectedly last time."));
+    }
+
+    #[test]
+    fn leaving_a_port_on_purpose_is_a_clean_end_and_a_failure_is_not() {
+        assert!(port_exit_is_clean(0) && port_exit_is_clean(crate::rescue::OPEN_ES_CODE));
+        for code in [1, 3, crate::update::RESTART_CODE, crate::update::WATCHDOG_EXIT] {
+            assert!(!port_exit_is_clean(code), "{code}");
+        }
     }
 
     #[test]

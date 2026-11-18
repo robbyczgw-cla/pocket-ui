@@ -24,13 +24,8 @@ pub struct Row {
     pub desc: String,
 }
 
-#[derive(Clone, Copy, PartialEq, Debug)]
-pub enum Entry {
-    /// Index into the file's categories.
-    Category(usize),
-    /// Index into the file's options.
-    Option(usize),
-}
+/// A line of the Emulator page: a category or an option (`core_options::PageEntry`, shared with Android's player).
+pub use crate::core_options::PageEntry as Entry;
 
 pub struct EmuMenu {
     file: CoreOptionsFile,
@@ -39,13 +34,6 @@ pub struct EmuMenu {
     system: String,
 }
 
-/// Footer note for options the core only reads when it starts.
-const RESTART_NOTE: &str = "Takes effect the next time the game starts. Save it, then start the game again.";
-
-fn needs_restart(label: &str) -> bool {
-    let l = label.to_ascii_lowercase();
-    l.contains("(restart") || l.contains("(reload core") || l.contains("(requires restart") || l.contains("restart required")
-}
 
 impl EmuMenu {
     /// Reads pocket-core's snapshot for this very game. None when there is none (yet).
@@ -112,36 +100,14 @@ impl EmuMenu {
     /// Lines of the Emulator page: at the top level the categories, then the options that have none;
     /// inside a category its options.
     pub fn entries(&self, cat: Option<usize>) -> Vec<Entry> {
-        let in_cat = |o: &core_options::FileOption| match cat {
-            Some(c) => self.file.categories.get(c).is_some_and(|c| o.category.as_deref() == Some(c.key.as_str())),
-            None => o.category.is_none() || !self.file.categories.iter().any(|c| o.category.as_deref() == Some(c.key.as_str())),
-        };
-        let mut out: Vec<Entry> = if cat.is_none() { (0..self.file.categories.len()).map(Entry::Category).collect() } else { Vec::new() };
-        out.extend(self.file.options.iter().enumerate().filter(|(_, o)| in_cat(o)).map(|(i, _)| Entry::Option(i)));
-        out
+        core_options::page_entries(&self.file.categories, &self.file.options, cat)
     }
 
+    /// The page's rows (`core_options::page_rows`, the same as Android's player shows).
     pub fn rows(&self, cat: Option<usize>) -> Vec<Row> {
-        self.entries(cat)
+        core_options::page_rows(&self.file.categories, &self.file.options, cat, |o| self.values.get(&o.key).map_or(o.default.clone(), String::clone))
             .into_iter()
-            .map(|e| match e {
-                Entry::Category(i) => {
-                    let c = &self.file.categories[i];
-                    Row { name: c.label.clone(), value: ">".into(), desc: c.info.clone() }
-                }
-                Entry::Option(i) => {
-                    let o = &self.file.options[i];
-                    let current = self.values.get(&o.key).map_or(o.default.as_str(), String::as_str);
-                    let mut desc = o.info.clone();
-                    if needs_restart(&o.label) {
-                        desc = format!("{desc}\n{RESTART_NOTE}").trim().to_string();
-                    }
-                    if o.values.len() > 12 {
-                        desc = format!("{desc}\nL1 and R1 skip five choices at a time.").trim().to_string();
-                    }
-                    Row { name: o.label.clone(), value: o.label_of(current).to_string(), desc }
-                }
-            })
+            .map(|(name, value, desc)| Row { name, value, desc })
             .collect()
     }
 
@@ -175,146 +141,48 @@ impl EmuMenu {
 
     // ---- Controls ----
 
-    /// The console buttons a Mini V2 button can be given: nothing, or any button the core describes.
-    fn choices(&self) -> Vec<Option<u8>> {
-        let mut c = vec![None];
-        c.extend(self.file.controls.targets.iter().map(|t| Some(t.id)));
-        c
+    /// The Controls page as Android's player shows it too (`controls::ControlsPage`).
+    fn controls_page(&self) -> controls::ControlsPage {
+        controls::ControlsPage { mapping: self.mapping, targets: self.file.controls.targets.clone(), system: self.system.clone() }
     }
 
-    fn target_name(&self, id: Option<u8>) -> String {
-        match id {
-            Some(id) => match self.file.controls.targets.iter().find(|t| t.id == id) {
-                Some(t) => t.label.clone(),
-                // Not a button this console has, so pressing it does nothing.
-                None if !self.file.controls.targets.is_empty() => "None".into(),
-                None => controls::standard_name(id).into(),
-            },
-            None => "None".into(),
-        }
-    }
-
-    /// The console buttons Hold to toggle can work on: the face buttons, shoulders, triggers and stick clicks the core
-    /// describes (the standard set when it describes none), in `MENU_ORDER`. Off comes first.
-    fn hold_choices(&self) -> Vec<Option<u8>> {
-        let held = |id: u8| !(2..=7).contains(&id);
-        let mut c = vec![None];
-        if self.file.controls.targets.is_empty() {
-            c.extend(MENU_ORDER.iter().copied().filter(|id| held(*id) && *id < 14).map(Some));
-        } else {
-            c.extend(self.file.controls.targets.iter().map(|t| t.id).filter(|id| held(*id)).map(Some));
-        }
-        c
-    }
-
-    /// Rows before the buttons: "Left stick as D-pad", and "D-pad as left stick" for a system whose games use a stick.
-    fn stick_rows(&self) -> usize {
-        1 + controls::offers_dpad_stick(&self.system) as usize
-    }
-
-    /// Row 0 is the stick, then D-pad as left stick (`stick_rows`), the Mini V2's buttons in `MENU_ORDER`, then "Hold to
-    /// toggle" and "Reset controls".
+    /// Row 0 is the stick, then D-pad as left stick, the Mini V2's buttons in `MENU_ORDER`, then "Hold to toggle" and
+    /// "Reset controls" (`controls::ControlsPage::rows`).
     pub fn control_rows(&self) -> Vec<Row> {
-        let mut rows = vec![Row {
-            name: "Left stick as D-pad".into(),
-            value: if self.mapping.stick_dpad { "On" } else { "Off" }.into(),
-            desc: "The left stick works as the D-pad.\nTurn it off for games that use an analogue stick.".into(),
-        }];
-        if self.stick_rows() == 2 {
-            rows.push(Row {
-                name: "D-pad as left stick".into(),
-                value: if self.mapping.dpad_stick { "On" } else { "Off" }.into(),
-                desc: "The D-pad moves the left stick, for games that need one.\nOn by itself on a handheld without sticks.".into(),
-            });
-        }
-        for &id in &MENU_ORDER {
-            let target = self.mapping.target[id as usize];
-            let name = self.target_name(target);
-            let phys = controls::physical_label(id);
-            let desc = if name == "None" { format!("{phys} does nothing in this game.") } else { format!("{phys} presses {name}.") };
-            let extra = match id {
-                14 => "\nL3 means pressing the left stick in.",
-                15 => "\nR3 means pressing the right stick in.",
-                _ => "",
-            };
-            let mut desc = format!("{desc}{extra}");
-            desc.push('\n');
-            desc.push_str("An occupied action swaps with this button's previous action.");
-            rows.push(Row { name: phys.into(), value: name, desc });
-        }
-        rows.push(Row {
-            name: "Hold to toggle".into(),
-            value: self.mapping.hold_toggle.map_or("Off".into(), |id| self.target_name(Some(id))),
-            desc: "Pick a button: one press holds it down, the next lets go.\nFor buttons you would hold, like run.".into(),
-        });
-        rows.push(Row { name: "Reset controls".into(), value: String::new(), desc: "Every button does what it says, as it did before any change.".into() });
-        rows
+        self.controls_page().rows().into_iter().map(|(name, value, desc)| Row { name, value, desc }).collect()
     }
 
     pub fn control_count(&self) -> usize {
-        MENU_ORDER.len() + 2 + self.stick_rows()
+        self.controls_page().count()
     }
 
+    /// A step on the Controls page (`ControlsPage::step`): kept in the game's settings where it differs from the
+    /// default, and sent to pocket-core at once.
     pub fn control_step(&mut self, sel: usize, delta: i32, settings: &mut GameSettings) {
-        let defaults = Mapping::defaults(&self.system);
         let prefix = controls::KEY_PREFIX;
-        if sel == 0 {
-            self.mapping.stick_dpad = !self.mapping.stick_dpad;
-            let (key, value) = (controls::STICK_KEY, on_off(self.mapping.stick_dpad));
-            if self.mapping.stick_dpad == defaults.stick_dpad {
-                settings.values.remove(&format!("{prefix}{key}"));
-            } else {
-                settings.values.insert(format!("{prefix}{key}"), value.into());
-            }
-            control::pocket_core(&format!("ctl {key} {value}"));
-            return;
-        }
-        let sel = sel + 2 - self.stick_rows();
-        if sel == 1 {
-            self.mapping.dpad_stick = !self.mapping.dpad_stick;
-            let (key, value) = (controls::DPAD_STICK_KEY, on_off(self.mapping.dpad_stick));
-            if self.mapping.dpad_stick == defaults.dpad_stick {
-                settings.values.remove(&format!("{prefix}{key}"));
-            } else {
-                settings.values.insert(format!("{prefix}{key}"), value.into());
-            }
-            control::pocket_core(&format!("ctl {key} {value}"));
-        } else if sel <= MENU_ORDER.len() + 1 {
-            let id = MENU_ORDER[sel - 2];
-            let choices = self.choices();
-            let current = self.mapping.target[id as usize];
-            let now = choices.iter().position(|c| *c == current).unwrap_or(0) as i32;
-            let next = choices[(now + delta).rem_euclid(choices.len() as i32) as usize];
-            for changed in self.mapping.assign(id, next) {
-                let key = controls::KEYS[changed as usize];
-                let value = self.mapping.value_of(changed);
-                if self.mapping.target[changed as usize] == defaults.target[changed as usize] {
-                    settings.values.remove(&format!("{prefix}{key}"));
-                } else {
-                    settings.values.insert(format!("{prefix}{key}"), value.to_string());
+        let mut page = self.controls_page();
+        let change = page.step(sel, delta);
+        self.mapping = page.mapping;
+        match change {
+            controls::ControlsChange::Set(entries) => {
+                for (key, value, default) in entries {
+                    if default {
+                        settings.values.remove(&format!("{prefix}{key}"));
+                    } else {
+                        settings.values.insert(format!("{prefix}{key}"), value.clone());
+                    }
+                    control::pocket_core(&format!("ctl {key} {value}"));
                 }
-                control::pocket_core(&format!("ctl {key} {value}"));
             }
-        } else if sel == MENU_ORDER.len() + 2 {
-            let choices = self.hold_choices();
-            let now = choices.iter().position(|c| *c == self.mapping.hold_toggle).unwrap_or(0) as i32;
-            self.mapping.hold_toggle = choices[(now + delta).rem_euclid(choices.len() as i32) as usize];
-            let (key, value) = (controls::HOLD_KEY, self.mapping.hold_value());
-            if self.mapping.hold_toggle == defaults.hold_toggle {
-                settings.values.remove(&format!("{prefix}{key}"));
-            } else {
-                settings.values.insert(format!("{prefix}{key}"), value.to_string());
+            controls::ControlsChange::Reset => {
+                settings.values.retain(|k, _| !k.starts_with(prefix));
+                for id in 0..16usize {
+                    control::pocket_core(&format!("ctl {} {}", controls::KEYS[id], self.mapping.value_of(id as u8)));
+                }
+                control::pocket_core(&format!("ctl {} {}", controls::STICK_KEY, on_off(self.mapping.stick_dpad)));
+                control::pocket_core(&format!("ctl {} {}", controls::DPAD_STICK_KEY, on_off(self.mapping.dpad_stick)));
+                control::pocket_core(&format!("ctl {} {}", controls::HOLD_KEY, self.mapping.hold_value()));
             }
-            control::pocket_core(&format!("ctl {key} {value}"));
-        } else {
-            self.mapping = defaults;
-            settings.values.retain(|k, _| !k.starts_with(prefix));
-            for id in 0..16usize {
-                control::pocket_core(&format!("ctl {} {}", controls::KEYS[id], self.mapping.value_of(id as u8)));
-            }
-            control::pocket_core(&format!("ctl {} {}", controls::STICK_KEY, on_off(self.mapping.stick_dpad)));
-            control::pocket_core(&format!("ctl {} {}", controls::DPAD_STICK_KEY, on_off(self.mapping.dpad_stick)));
-            control::pocket_core(&format!("ctl {} {}", controls::HOLD_KEY, self.mapping.hold_value()));
         }
     }
 

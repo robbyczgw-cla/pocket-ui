@@ -426,6 +426,7 @@ impl Card {
                     None => Out::Play,
                 },
                 Button::South => Out::Back,
+                Button::Start if self.data.app_game => Out::None,
                 Button::Start => Out::Emulator,
                 // SELECT: back to the info page in the looks that open it, the game's box again in the others.
                 Button::Select if self.info_look => {
@@ -649,6 +650,9 @@ impl Card {
                 let start = if self.data.port.is_some() { "Performance & fan" } else { "This game" };
                 let a = if self.info.as_ref().is_some_and(|i| i.link.is_some()) { "Open" } else { "Play" };
                 let mut h = vec![("A", a), ("B", "Back"), ("Y", "Status"), ("START", start), ("SELECT", "Details")];
+                if self.data.app_game {
+                    h.retain(|(k, _)| *k != "START");
+                }
                 if self.data.surprise.is_some() {
                     h.retain(|(k, _)| *k != "START");
                     h.insert(2, ("RIGHT", "Another"));
@@ -663,6 +667,9 @@ impl Card {
                 // START: "This game" (picture, performance, controls, "Runs on"); a port has one emulator, so its performance and fan instead.
                 let start = if self.data.port.is_some() { "Performance & fan" } else { "This game" };
                 let mut h = vec![("A", a), ("B", "Back"), ("Y", "Status"), ("X", "Note"), ("START", start)];
+                if self.data.app_game {
+                    h.retain(|(k, _)| *k != "START");
+                }
                 if self.data.surprise.is_some() {
                     // A card of Just Play: another pick is the first thing after Play and Back; the emulator waits.
                     h.retain(|(k, _)| *k != "START");
@@ -1074,7 +1081,7 @@ impl Card {
             }
             ry += row() + (lines.len().min(2) as i32 - 1).max(0) * tight();
         }
-        if let Some(a) = &d.achievements {
+        if let Some(a) = d.achievements.as_ref().filter(|_| !d.progress_achievements) {
             text.draw(c, Face::Body, 28, rx, ry, pal().dust, "Unlocked");
             let a = text.fit(Face::Body, 28, &format!("{a} achievements"), rw - rkey);
             text.draw(c, Face::Body, 28, rx + rkey, ry, pal().chalk, &a);
@@ -1519,6 +1526,18 @@ mod tests {
 
     /// The card's "Other games in Burnout, in your library" was half English in German and Spanish: the outer line's
     /// placeholder kept what it held as it was ({s}), so the inner "Other games in …" was never looked up.
+    /// An Android game's card (Android's handheld view): its app starts it, so START opens no "This game" page and no hint
+    /// names it; A still plays.
+    #[test]
+    fn an_android_game_s_card_has_no_this_game() {
+        let mut d = data();
+        d.app_game = true;
+        let mut card = Card::new(d);
+        assert_eq!(card.press(Button::Start), Out::None);
+        assert!(!card.hints().iter().any(|(k, _)| *k == "START"), "{:?}", card.hints());
+        assert_eq!(card.press(Button::East), Out::Play);
+    }
+
     #[test]
     fn library_headings_are_translated_whole() {
         use crate::i18n::Lang;
@@ -1559,6 +1578,7 @@ mod tests {
             battery: None,
             port: None,
             port_update: false,
+            app_game: false,
             keys: None,
             surprise: None,
             look_up: false,
@@ -1570,6 +1590,7 @@ mod tests {
             continue_at: None,
             hardcore: false,
             progress: None,
+            progress_achievements: false,
             case_art: None,
             case_meter: None,
             links: Vec::new(),

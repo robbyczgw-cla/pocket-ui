@@ -3,7 +3,7 @@
 The native ARM64 APK uses the shared pocket-ui library. The launcher and the private `:player` Activity have
 separate native libraries; the player does not link winit, and its licence graph is checked independently. It has six launcher looks, search, favourites, Curator
 facets, game boxes and an EGL/GLES 3 player using shared `libretro::Core` and the shared audio pipeline with AAudio.
-mGBA (GB/GBC/GBA), Nestopia (NES), bsnes (SNES), Gearsystem (SMS/GG), ClownMDEmu (Mega Drive cartridges), Beetle WonderSwan, Stella (2600), optional Gambatte (GB/GBC), Beetle PCE Fast (PC Engine), Beetle NGP (NGP/Color), Handy (Lynx), PCSX ReARMed (PlayStation) and YabaSanshiro (Saturn) are built and bundled. PPSSPP (PSP), melonDS DS, Mupen64Plus-Next (N64) and Flycast (Dreamcast) are optional downloads. Saturn and Dreamcast use the in-app GLES player. The production touch-pad painter shares the controls-card table: Saturn gets A/B/C/X/Y/Z and L/R, Dreamcast gets A/B/X/Y and its trigger bits; neither offers Select. N64, PSP, DS, Saturn and Dreamcast are **experimental**: their system line and Controls page say so; real-game frame rate, sound, save/resume and DS touch are not release-qualified. Other large systems use version-sensitive external intents.
+mGBA (GB/GBC/GBA), Nestopia (NES), bsnes (SNES), Gearsystem (SMS/GG), ClownMDEmu (Mega Drive cartridges), Beetle WonderSwan, Stella (2600), optional Gambatte (GB/GBC), Beetle PCE Fast (PC Engine), Beetle NGP (NGP/Color), Handy (Lynx), PCSX ReARMed (PlayStation), YabaSanshiro (Saturn), PPSSPP (PSP, with its system files), melonDS DS, Mupen64Plus-Next (N64) and Flycast (Dreamcast) are built and bundled; since 0.5.x no core is a download. Saturn and Dreamcast use the in-app GLES player. The production touch-pad painter shares the controls-card table: Saturn gets A/B/C/X/Y/Z and L/R, Dreamcast gets A/B/X/Y and its trigger bits; neither offers Select. N64, PSP, DS, Saturn and Dreamcast are **experimental**: their system line and Controls page say so; real-game frame rate, sound, save/resume and DS touch are not release-qualified. Other large systems use version-sensitive external intents.
 This is an incremental milestone, not feature parity with the complete Linux App or the full requested core set.
 
 Game-start QA must distinguish attract movies, titles and actual menus. Sega Rally Championship and Virtua Tennis 2
@@ -51,7 +51,7 @@ Architecture and honest limits: [ANDROID-MVP.md](../docs/ANDROID-MVP.md). Contro
 The small bundle is pinned in `cores.lock.json`: mGBA, Nestopia, bsnes, Gearsystem, ClownMDEmu, Beetle WonderSwan, Stella, Gambatte, Beetle PCE Fast, Beetle NGP and Handy. `build-cores.sh` delegates to
 `build-cores.py`, uses the NDK compilers for C/C++ cores and emits stripped ARM64 libraries, source archives and licence
 file/header notices. It rejects host binaries and unbundled shared C++ runtimes. The APK copies only cores listed in
-the generated manifest, verifies hashes, and enforces the 30 MB size budget. `classic-smoke.py` checks pinned starter
+the generated manifest, verifies hashes, and enforces the 90 MB size budget. `classic-smoke.py` checks pinned starter
 homebrew plus original SMS/GG/WonderSwan/2600 fixtures, manual slots, Earlier and warm resume on an emulator only.
 
 `launcher-smoke.py` captures the five looks and shared launcher/player menus in both appearances and EN/DE, using
@@ -64,7 +64,7 @@ The player keeps the initial timing/geometry run's picture. A newer picture afte
 
 The player initially hides touch controls when Android reports a gamepad. Gamepad key/stick input keeps them hidden and uses the full safe viewport; a touch reveals them again. Pause/back remains available in either input mode.
 
-The APK keeps the small cores through PS1, plus Saturn, under a 30 MB budget. PSP, DS, N64 and Dreamcast are optional store packages; their exact sizes are generated from the built archives. A like-for-like size comparison uses the unchanged 15-core APK and the full 17-core test bundle with identical signing settings. GLES cores get an
+The APK keeps every core of the lock, PSP, DS, N64 and Dreamcast too (bundled is cleaner than a download), under a 90 MB budget of our own; 0.5.0-android.5 with four of them as downloads was 33.2 MB. GLES cores get an
 isolated EGL context and framebuffer; a native-size readback feeds the existing screenshots/pause path.
 PSP has four face buttons and shoulders. N64 adds Z/C controls and maps touch arrows to its analog stick;
 DS playfield touches reach the core pointer interface. Pause/resume restores the Activity EGL context.
@@ -87,8 +87,8 @@ returns to the paused game.
 The 0.1.5 refresh uses the current shared real-media/box/info/sticker/TV painters and save-medium pause row; see [ANDROID-MVP.md](../docs/ANDROID-MVP.md#main-refresh-2026-10-30) for the Android parity boundary. Internal builds skip release proof bundles.
 
 
-First start offers a resumable eight-step guide in English/German: welcome,
-language, ROM folders, look/animation/appearance, download consent, extra systems, controls and ready. Each choice
+First start offers a resumable seven-step guide in English/German: welcome,
+language, ROM folders, look/animation/appearance, download consent, controls and ready (the "More systems?" step only shows while the APK offers a system to download; none does). Each choice
 persists immediately; Back/Continue/Skip work with touch and a controller, and Settings → First
 start reopens it. Multiple SAF roots keep their persisted read grants; scans run on a worker and
 combine readable roots without changing provider document identities. No full Linux renderer or

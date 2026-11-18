@@ -180,9 +180,14 @@ abstract class PocketBase extends NativeActivity {
     public String coreCancel(){return coreDownloads().cancel();}
     public String corePath(String core){
         if(!core.matches("[a-z][a-z0-9_]{0,39}"))return "";
+        // The APK's core first: a copy downloaded before the core came into the APK is never used (and is retired at start).
         File installed=new File(getFilesDir(),"android-cores/"+core+"/lib"+core+"_libretro.so");
         File bundled=new File(getApplicationInfo().nativeLibraryDir,"lib"+core+"_libretro.so");
-        return installed.isFile()?installed.getAbsolutePath():bundled.isFile()?bundled.getAbsolutePath():"";
+        return bundled.isFile()?bundled.getAbsolutePath():installed.isFile()?installed.getAbsolutePath():"";
+    }
+    /** "true" when the APK carries this core's library (`android_cores::retire_bundled`). */
+    public String coreBundled(String core){
+        return Boolean.toString(core.matches("[a-z][a-z0-9_]{0,39}")&&new File(getApplicationInfo().nativeLibraryDir,"lib"+core+"_libretro.so").isFile());
     }
     public String dataPath() { return getFilesDir().getAbsolutePath(); }
     /** Ordered roots; upgrade the original single-root preference without touching its grant. */
@@ -225,12 +230,8 @@ abstract class PocketBase extends NativeActivity {
         runOnUiThread(() -> setRequestedOrientation(wanted));
     }
     public String unmeteredWifi() {
-        android.net.ConnectivityManager manager = (android.net.ConnectivityManager)getSystemService(Context.CONNECTIVITY_SERVICE);
-        if (manager == null) return "false";
-        android.net.NetworkCapabilities caps = manager.getNetworkCapabilities(manager.getActiveNetwork());
-        return Boolean.toString(caps != null && caps.hasTransport(android.net.NetworkCapabilities.TRANSPORT_WIFI)
-                && caps.hasCapability(android.net.NetworkCapabilities.NET_CAPABILITY_NOT_METERED)
-                && caps.hasCapability(android.net.NetworkCapabilities.NET_CAPABILITY_INTERNET));
+        // The download rule shared with app updates and cores (NetworkRule).
+        return Boolean.toString(NetworkRule.network(this) != null);
     }
     public String librarySelection() {
         return getPreferences(0).getString("tree", "") + "\n" + getPreferences(0).getInt("revision", 0);
@@ -480,6 +481,8 @@ abstract class PocketBase extends NativeActivity {
     /** The drawer under the shelf (`AppDrawer`): the apps with a start icon, and starting one. */
     public String launcherApps() { return AppDrawer.list(this); }
     public String launchApp(String pkg) { return AppDrawer.launch(this, pkg); }
+    /** An Android game's cover for the handheld view's shelf (`AppDrawer.cover`). */
+    public String appCover(String pkg, String path) { return AppDrawer.cover(this, pkg, path); }
     public String toast(String text) { runOnUiThread(() -> android.widget.Toast.makeText(this, text, android.widget.Toast.LENGTH_LONG).show()); return ""; }
     private static final class LibraryTooBig extends IOException { LibraryTooBig(String message) { super(message); } }
     /** A sheet's names as they were written: many cue sheets are Latin-1, not UTF-8. */

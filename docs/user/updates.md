@@ -71,7 +71,7 @@ The shelf says each file once. A Mac that unpacked the zip by itself leaves a fo
 
 When a newer pocket-ui is out, the shelf says so once, a little after the start and only with Wi-Fi: "pocket-ui 0.3.0
 is ready. Your games and settings stay." **A** opens Settings → System → Updates, **B** only closes it. Each version is
-said once, whatever you pressed; the next version says it again. It never comes over a game, over a page or the first
+said once you closed it, whatever you pressed; the next version says it again. It never comes over a game, over a page or the first
 start, not in Kids Mode, and only on a released pocket-ui (a test build from the developers stays quiet). Until you
 update, a small amber dot sits on System in Settings and on its Updates row.
 

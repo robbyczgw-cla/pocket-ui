@@ -125,6 +125,7 @@ fn settings_name(page: SettingsPage) -> String {
         Storage => "Storage",
         Gamelist => "Gamelist",
         Screenshots => "Screenshots",
+        AndroidGames => "Android games",
         SleepPower => "SleepPower",
     }
     .into()
@@ -570,6 +571,7 @@ impl App {
                 // Each Settings page's own rows (one tuple hashes at most twelve fields).
                 (self.updates.sel, self.sleep_page.sel, self.about_mark(), self.sync_row(), self.tailscale_row(), self.bluetooth_row(), self.perf_fan_row(), self.achievements_row(), self.starter.mark()).hash(h);
                 (self.tools_row(), self.pc_streaming_row(), self.backup_row(), self.web_row(), self.night_light_row(), self.storage_row(), self.gamelist_row(), self.gallery_row(), self.game_check_mark(), self.conflicts_mark(), self.curator_mark()).hash(h);
+                self.android_games_row().hash(h);
             }
             Place::Tour => self.tour_mark().hash(h),
             Place::Setup { .. } => self.setup.as_ref().map(|s| s.ui_mark()).hash(h),

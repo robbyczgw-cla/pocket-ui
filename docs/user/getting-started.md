@@ -316,7 +316,7 @@ The whole move, saves included, is on [Coming from ROCKNIX, ArkOS or Android](co
 
 If your games were on ROCKNIX's EmulationStation, KNULLI, Batocera or ES-DE, copy each system's `gamelist.xml` with the games:
 pocket-ui reads the names, descriptions and pictures in it, and never changes it. More:
-[Your EmulationStation gamelists](library.md#your-emulationstation-gamelists).
+[Your EmulationStation gamelists](library-files.md#your-emulationstation-gamelists).
 
 ### When new games appear
 

@@ -15,7 +15,17 @@ pub(super) struct Graphics {
     game_size: (i32, i32),
     // 0xRRGGBB behind the picture and in the system-bar insets: the touch pause sheet's page colour, else black.
     pub(super) backdrop: u32,
-    pub(super) effect: usize,
+    /// The Look as Linux's shader variant (`pause_options::look_variant`): the picture pass is pocket-core's
+    /// (`video_program`, `shaders/video.frag`), not a shader of the player's own.
+    pub(super) variant: pocket_ui::video_program::Variant,
+    /// The console (its native lines for a 3D core's scanlines, `picture_fx::crt_lines`) and whether the picture comes
+    /// from a 3D core rendering above them.
+    pub(super) system: String,
+    pub(super) upscaled_3d: bool,
+    picture_programs: pocket_ui::video_program::Programs,
+    /// The game texture's filters as last set, and that it changed since its mipmaps were made (`prepare_texture`).
+    game_filters: Option<(u32, u32)>,
+    game_mips_dirty: bool,
     // Linux's screen frames (`bezel::Layer`): the same frame code and the same GL layer behind the picture.
     frame: pocket_ui::bezel::Layer,
     // What the frame layer last reported (drawn or not yet), so a change is logged once: a frame that never shows must be findable.
@@ -31,7 +41,7 @@ impl Graphics {
     pub(super) fn from_context(gl: glow::Context) -> Result<Self, String> {
         unsafe {
             let program = gl.create_program()?;
-            for(kind,source)in[(glow::VERTEX_SHADER,"#version 300 es\nout vec2 uv;void main(){vec2 p=vec2(float((gl_VertexID<<1)&2),float(gl_VertexID&2));uv=vec2(p.x,1.0-p.y);gl_Position=vec4(p*2.0-1.0,0.0,1.0);}"),(glow::FRAGMENT_SHADER,"#version 300 es\nprecision mediump float;in vec2 uv;uniform sampler2D image;uniform bool overlay;uniform int effect;uniform float sourceHeight;out vec4 color;void main(){vec4 t=texture(image,uv);vec3 c=t.bgr;if(!overlay){if(effect==2||effect==3){float line=sin(uv.y*sourceHeight*3.14159265*2.0);c*=0.86+0.14*line;}if(effect==2){vec2 q=uv*2.0-1.0;c*=1.0-0.16*dot(q,q);c=pow(c,vec3(0.94));}}float a=overlay?(t.a>0.0?t.a:float(any(notEqual(c,vec3(0.0))))):1.0;color=vec4(c,a);}")] {
+            for(kind,source)in[(glow::VERTEX_SHADER,"#version 300 es\nout vec2 uv;void main(){vec2 p=vec2(float((gl_VertexID<<1)&2),float(gl_VertexID&2));uv=vec2(p.x,1.0-p.y);gl_Position=vec4(p*2.0-1.0,0.0,1.0);}"),(glow::FRAGMENT_SHADER,"#version 300 es\nprecision mediump float;in vec2 uv;uniform sampler2D image;uniform bool overlay;out vec4 color;void main(){vec4 t=texture(image,uv);vec3 c=t.bgr;float a=overlay?(t.a>0.0?t.a:float(any(notEqual(c,vec3(0.0))))):1.0;color=vec4(c,a);}")] {
             let shader=gl.create_shader(kind)?;gl.shader_source(shader,source);gl.compile_shader(shader);
             if !gl.get_shader_compile_status(shader){return Err(gl.get_shader_info_log(shader));}
             gl.attach_shader(program,shader);gl.link_program(program);gl.delete_shader(shader);
@@ -75,6 +85,7 @@ impl Graphics {
             gl.tex_parameter_i32(glow::TEXTURE_2D, glow::TEXTURE_MAG_FILTER, glow::NEAREST as i32);
             gl.tex_parameter_i32(glow::TEXTURE_2D, glow::TEXTURE_WRAP_S, glow::CLAMP_TO_EDGE as i32);
             gl.tex_parameter_i32(glow::TEXTURE_2D, glow::TEXTURE_WRAP_T, glow::CLAMP_TO_EDGE as i32);
+            let picture_programs = pocket_ui::video_program::Programs::new(&gl)?;
             let vao = gl.create_vertex_array()?;
             #[cfg(target_os = "android")]
             log::info!(
@@ -92,7 +103,12 @@ impl Graphics {
                 game_texture,
                 game_size: (0, 0),
                 backdrop: 0,
-                effect: 0,
+                variant: pocket_ui::video_program::PLAIN,
+                system: String::new(),
+                upscaled_3d: false,
+                picture_programs,
+                game_filters: None,
+                game_mips_dirty: true,
                 frame_state: None,
                 frame: {
                     // A frame that is not ready is drawn on a thread: the picture never waits for it (`Layer::set_async`).
@@ -159,10 +175,36 @@ impl Graphics {
         // `size` on `view`.
         picture: ((i32, i32), (i32, i32, i32, i32)),
     ) {
-        let (pic_size, pic_view) = picture;
+        let backdrop = self.backdrop;
+        self.draw_picture(backdrop, game, crt, frame, picture);
         unsafe {
             let gl = &self.gl;
-            let channel = |shift: u32| ((self.backdrop >> shift) & 0xff) as f32 / 255.0;
+            let overlay = gl.get_uniform_location(self.program, "overlay");
+            gl.bind_texture(glow::TEXTURE_2D, Some(self.texture));
+            if dirty || self.size != size {
+                Self::upload(gl, pixels, size, &mut self.size);
+            }
+            gl.uniform_1_i32(overlay.as_ref(), i32::from(game.is_some()));
+            gl.viewport(view.0, view.1, view.2, view.3);
+            gl.draw_arrays(glow::TRIANGLES, 0, 3);
+        }
+    }
+    /// The picture as the game shows it: the cleared screen in `backdrop`, the frame around it, the game with its look
+    /// (`variant`), the frame's inlay, the switch-on. Returns whether a frame asked for was drawn (one still being made on its
+    /// thread is not).
+    fn draw_picture(
+        &mut self,
+        backdrop: u32,
+        game: Option<(&Image, Area)>,
+        crt: &[pocket_ui::crt_on::Quad],
+        frame: Option<&pocket_ui::bezel::Placed>,
+        picture: ((i32, i32), (i32, i32, i32, i32)),
+    ) -> bool {
+        let (pic_size, pic_view) = picture;
+        let mut frame_drawn = true;
+        unsafe {
+            let gl = &self.gl;
+            let channel = |shift: u32| ((backdrop >> shift) & 0xff) as f32 / 255.0;
             gl.clear_color(channel(16), channel(8), channel(0), 1.0);
             gl.clear(glow::COLOR_BUFFER_BIT);
             gl.enable(glow::BLEND);
@@ -177,6 +219,7 @@ impl Graphics {
                 gl.viewport(pic_view.0 + x, pic_view.1 + y, w as i32, h as i32);
                 self.frame.set_origin(pic_view.0 + x, pic_view.1 + y);
                 let drawn = self.frame.draw(gl, w, h, f.hole, f.px, Some(f.style));
+                frame_drawn = drawn;
                 if self.frame_state != Some(drawn) {
                     self.frame_state = Some(drawn);
                     #[cfg(target_os = "android")]
@@ -185,26 +228,28 @@ impl Graphics {
                 gl.use_program(Some(self.program));
                 gl.active_texture(glow::TEXTURE0);
             }
-            let overlay = gl.get_uniform_location(self.program, "overlay");
             if let Some((image, rect)) = game {
                 // Upload the core's native framebuffer, not a CPU enlargement of it. The phone's
                 // physical resolution therefore does not multiply the per-frame copy or CPU blit cost.
                 gl.bind_texture(glow::TEXTURE_2D, Some(self.game_texture));
                 Self::upload(gl, &image.px, (image.w as i32, image.h as i32), &mut self.game_size);
-                let filter = if matches!(self.effect, 1 | 2) { glow::LINEAR } else { glow::NEAREST };
-                gl.tex_parameter_i32(glow::TEXTURE_2D, glow::TEXTURE_MIN_FILTER, filter as i32);
-                gl.tex_parameter_i32(glow::TEXTURE_2D, glow::TEXTURE_MAG_FILTER, filter as i32);
-                gl.uniform_1_i32(gl.get_uniform_location(self.program, "effect").as_ref(), self.effect as i32);
-                gl.uniform_1_f32(gl.get_uniform_location(self.program, "sourceHeight").as_ref(), image.h as f32);
-                gl.uniform_1_i32(overlay.as_ref(), 0);
+                self.game_mips_dirty = true;
+                pocket_ui::video_program::prepare_texture(gl, self.variant, &mut self.game_filters, &mut self.game_mips_dirty);
                 // The same arithmetic as `picture::Space::on_window`.
-                gl.viewport(
+                let (x, y, w, h) = (
                     pic_view.0 + rect.x * pic_view.2 / pic_size.0,
                     pic_view.1 + pic_view.3 - (rect.y + rect.h) * pic_view.3 / pic_size.1,
                     rect.w * pic_view.2 / pic_size.0,
                     rect.h * pic_view.3 / pic_size.1,
                 );
-                gl.draw_arrays(glow::TRIANGLES, 0, 3);
+                gl.viewport(x, y, w, h);
+                // pocket-core's picture pass over the whole viewport: the texture holds the player's 0xRRGGBB words as
+                // RGBA bytes, so B, G, R (Linux's XRGB8888 upload).
+                let (iw, ih) = (image.w.max(1) as f32, image.h.max(1) as f32);
+                let lines = pocket_ui::picture_fx::crt_lines(image.h, self.upscaled_3d, pocket_ui::picture_fx::native_lines(&self.system));
+                let pass = pocket_ui::video_program::Pass { rect: [-1.0, -1.0, 1.0, 1.0], src: (iw, ih), scale: (w as f32 / iw, h as f32 / ih), turns: 0, bgr: true, lines };
+                self.picture_programs.get(gl, self.variant).draw(gl, &pass);
+                gl.use_program(Some(self.program));
             }
             // A frame's inlay (the DS frame's hinge in the gap between its screens) goes over the picture, as on Linux.
             if let Some(f) = frame {
@@ -231,15 +276,55 @@ impl Graphics {
                 }
                 gl.use_program(Some(self.program));
             }
-            // Picture effects never filter the pause sheet or touch controls.
-            gl.uniform_1_i32(gl.get_uniform_location(self.program, "effect").as_ref(), 0);
-            gl.bind_texture(glow::TEXTURE_2D, Some(self.texture));
-            if dirty || self.size != size {
-                Self::upload(gl, pixels, size, &mut self.size);
+        }
+        frame_drawn
+    }
+    /// The Picture page's live preview (Linux: pocket-core's `preview`, `preview::from_screen`): the game drawn as it is
+    /// played with the Picture choices as they are now (`variant`, `frame`, the place in `picture`), offscreen at the
+    /// window's size, read back as RGBA rows top to bottom of the `view` (the window less the system bars). None when
+    /// GLES can't make the offscreen picture; the bool says whether a frame asked for was drawn (one still being made on
+    /// its thread is not yet: ask again).
+    #[cfg_attr(test, allow(dead_code))]
+    pub(super) fn render_preview(
+        &mut self,
+        window: (i32, i32),
+        view: (i32, i32, i32, i32),
+        game: (&Image, Area),
+        frame: Option<&pocket_ui::bezel::Placed>,
+        picture: ((i32, i32), (i32, i32, i32, i32)),
+    ) -> Option<(Vec<u8>, bool)> {
+        let (ww, wh) = (window.0.max(1), window.1.max(1));
+        let (vx, vy, vw, vh) = view;
+        if vw <= 0 || vh <= 0 {
+            return None;
+        }
+        unsafe {
+            let fbo = self.gl.create_framebuffer().ok()?;
+            let Ok(target) = self.gl.create_texture() else {
+                self.gl.delete_framebuffer(fbo);
+                return None;
+            };
+            self.gl.bind_texture(glow::TEXTURE_2D, Some(target));
+            self.gl.tex_image_2d(glow::TEXTURE_2D, 0, glow::RGBA8 as i32, ww, wh, 0, glow::RGBA, glow::UNSIGNED_BYTE, None);
+            self.gl.tex_parameter_i32(glow::TEXTURE_2D, glow::TEXTURE_MIN_FILTER, glow::NEAREST as i32);
+            self.gl.tex_parameter_i32(glow::TEXTURE_2D, glow::TEXTURE_MAG_FILTER, glow::NEAREST as i32);
+            self.gl.bind_framebuffer(glow::FRAMEBUFFER, Some(fbo));
+            self.gl.framebuffer_texture_2d(glow::FRAMEBUFFER, glow::COLOR_ATTACHMENT0, glow::TEXTURE_2D, Some(target), 0);
+            let complete = self.gl.check_framebuffer_status(glow::FRAMEBUFFER) == glow::FRAMEBUFFER_COMPLETE;
+            let mut out = None;
+            if complete {
+                let drawn = self.draw_picture(0, Some(game), &[], frame, picture);
+                let mut rgba = vec![0u8; (vw * vh * 4) as usize];
+                self.gl.read_pixels(vx, vy, vw, vh, glow::RGBA, glow::UNSIGNED_BYTE, glow::PixelPackData::Slice(&mut rgba));
+                // GL's rows go bottom to top; the preview's top to bottom.
+                let row = (vw * 4) as usize;
+                let flipped: Vec<u8> = rgba.chunks_exact(row).rev().flatten().copied().collect();
+                out = Some((flipped, drawn));
             }
-            gl.uniform_1_i32(overlay.as_ref(), i32::from(game.is_some()));
-            gl.viewport(view.0, view.1, view.2, view.3);
-            gl.draw_arrays(glow::TRIANGLES, 0, 3);
+            self.gl.bind_framebuffer(glow::FRAMEBUFFER, None);
+            self.gl.delete_framebuffer(fbo);
+            self.gl.delete_texture(target);
+            out
         }
     }
 }

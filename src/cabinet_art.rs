@@ -476,14 +476,30 @@ pub fn blit_cols(c: &mut Canvas, p: &Pic, x: i32, y: i32, shade: u32, clip: (i32
     for row in y0..y1 {
         let src = &p.px[((row - y) * p.w + (x0 - x)) as usize..((row - y) * p.w + (x1 - x)) as usize];
         let dst = &mut c.pixels_mut()[(row * c_w + x0) as usize..(row * c_w + x1) as usize];
-        for (d, &s) in dst.iter_mut().zip(src) {
-            let a = s >> 24;
-            if a == 255 {
+        blit_row(dst, src, shade);
+    }
+}
+
+/// One row of `blit`: eight pixels at a time where all eight are solid (the wood of the walls and boards, a case's
+/// printed face), with no test per pixel, which the compiler does four at a time; the rest pixel by pixel. The same
+/// pixels either way. The Cabinet's walls, boards and spines are most of its frame: on the Brick's A53 the test per
+/// pixel kept the walls at 2-2.5 ms of a moving frame (docs/TRIMUI-BRICK.md).
+fn blit_row(dst: &mut [u32], src: &[u32], shade: u32) {
+    let mut d8 = dst.chunks_exact_mut(8);
+    let mut s8 = src.chunks_exact(8);
+    for (d, s) in (&mut d8).zip(&mut s8) {
+        if s.iter().fold(0xff, |m, &p| m & (p >> 24)) == 0xff {
+            for (d, &s) in d.iter_mut().zip(s) {
                 *d = shaded(s, shade);
-            } else if a != 0 {
-                *d = mix(*d, shaded(s, shade), a);
+            }
+        } else {
+            for (d, &s) in d.iter_mut().zip(s) {
+                put(d, s, shade);
             }
         }
+    }
+    for (d, &s) in d8.into_remainder().iter_mut().zip(s8.remainder()) {
+        put(d, s, shade);
     }
 }
 
@@ -1826,6 +1842,52 @@ pub fn plate_ink(bg: u32) -> u32 {
 
 #[cfg(test)]
 mod tests {
+    /// A console with its pad beside it is no box (17.11.2026, Alex on the first previews: "weirde Schatten"): the
+    /// TV's box shadow round it was a grey block with corners where the picture has none. Its shadow keeps to its shape.
+    #[test]
+    fn a_shape_shadow_keeps_to_the_shape_and_is_soft() {
+        // A low block on the left (a console) and a small one on the right (its pad), nothing over the pad.
+        let (w, h) = (80, 40);
+        let px = (0..w * h).map(|i| {
+            let (x, y) = (i % w, i / w);
+            if (x < 40 && y >= 10) || (x >= 60 && y >= 30) { 0xff40_4040 } else { 0 }
+        }).collect();
+        let p = super::Pic::of(w, h, px);
+        let s = super::ShapeShadow::of(&p, 10, 12, 18);
+        let at = |x: i32, y: i32| s.a[((y + s.pad) * s.w + x + s.pad) as usize];
+        assert!(at(30, 30) > 240, "full under the block, moved right and down: {}", at(30, 30));
+        // Over the pad (no picture there, and the block's shadow ends 10 px right of it plus the fall-off).
+        assert_eq!(at(75, 5), 0, "nothing where the box would have its corner");
+        // Soft: from full to nothing over the fall-off, no step bigger than a fifth of it.
+        let row: Vec<i32> = (40..80).map(|x| at(x, 25) as i32).collect();
+        assert!(row.windows(2).all(|p| (p[0] - p[1]).abs() < 52), "a hard edge in {row:?}");
+    }
+
+    /// A black console on the dark page (Mega Drive, GameCube Jet Black) gets the room's light on its top edge and loses
+    /// its picture's light seam (a frame round it in the dark); a light console stays as it is.
+    #[test]
+    fn dark_plastic_is_lit_from_above_and_loses_its_seam() {
+        let (w, h) = (20, 10);
+        let seam = 0xffc0_c0c0;
+        let black = 0xff10_1014;
+        let px: Vec<u32> = (0..w * h).map(|i| {
+            let (x, y) = (i % w, i / w);
+            if x == 0 || x == w - 1 || y == h - 1 { seam } else if y >= 2 { black } else { 0 }
+        }).collect();
+        let mut p = super::Pic::of(w, h, px.clone());
+        assert!(super::light_from_above(&mut p, 0xffe9cc));
+        let luma = |c: u32| super::luma(c & 0xff_ffff);
+        assert_eq!(p.px[(5 * w) as usize], 0, "the seam at its left edge went");
+        assert_eq!(p.px[((h - 1) * w + 5) as usize], 0, "the seam at its bottom went");
+        let (top, below) = (p.px[(2 * w + 5) as usize], p.px[(6 * w + 5) as usize]);
+        assert!(luma(top) > luma(black) + 40, "its top edge catches the light: {top:x}");
+        assert!(luma(below) < luma(top) && luma(below) >= luma(black), "less light down its front: {below:x}");
+        let light: Vec<u32> = px.iter().map(|&c| if c == black { 0xffa0_a0a8 } else { c }).collect();
+        let mut q = super::Pic::of(w, h, light.clone());
+        assert!(!super::light_from_above(&mut q, 0xffe9cc));
+        assert_eq!(q.px, light, "a light console is not touched");
+    }
+
     #[test]
     fn dim_at_n2_is_rows_over_bit_for_bit_whatever_its_edges() {
         // Whole screen rows take one multiply (`dim`); the band's edges at odd rows still mix by their share.
@@ -1854,6 +1916,34 @@ mod tests {
     }
 
     use super::*;
+
+    /// `blit`'s rows of eight solid pixels at a time paint what pixel by pixel painted: solid, see-through, half and
+    /// mixed runs, rows not a multiple of eight long, cut at both ends, at full light and shaded.
+    #[test]
+    fn a_blit_paints_solid_runs_as_pixel_by_pixel_did() {
+        let (w, h) = (53, 7);
+        let px: Vec<u32> = (0..w * h)
+            .map(|i| {
+                let a = match (i / 5) % 7 { 0 | 1 | 2 => 255, 3 => 0, 4 => 128, 5 => 255, _ => (i * 37 % 256) as u32 };
+                a << 24 | (i as u32).wrapping_mul(0x9e37_79b9) & 0xffffff
+            })
+            .collect();
+        let pic = Pic::of(w, h, px);
+        for shade in [256, 255, 200, 90] {
+            for (x, cols) in [(3, (0, w)), (-4, (0, w)), (60 - w, (0, w)), (5, (7, 31))] {
+                let mut got: Vec<u32> = (0..64 * 12).map(|i| 0x0010_2030 + i).collect();
+                let mut want = got.clone();
+                blit_cols(&mut Canvas::new(&mut got, 64, 12), &pic, x, 2, shade, (0, 12), cols);
+                let (x0, x1) = ((x + cols.0).max(0), (x + cols.1).min(64));
+                for row in 2..2 + h {
+                    for col in x0..x1 {
+                        put(&mut want[(row * 64 + col) as usize], pic.px[((row - 2) * w + col - x) as usize], shade);
+                    }
+                }
+                assert_eq!(got, want, "shade {shade}, x {x}, cols {cols:?}");
+            }
+        }
+    }
 
     /// 15.11.: the code-drawn UMD (a game without a picture of the real shell) is as a real one with its label upright: straight at
     /// the top, rounded at the bottom. It was round on top, a UMD upside down.
@@ -2256,3 +2346,146 @@ pub fn blit_affine_rows(c: &mut Canvas, p: &Pic, o: (f32, f32), u: (f32, f32), v
         }
     }
 }
+
+// ---- shadows and light of things that are not boxes ---------------------------------------------------
+
+/// The soft shadow of a picture that is not a box (a console with its controller beside it, a handheld), in its own
+/// shape: `soft_shadow`'s look for the TV (moved `dx` right and `dy` down, cut at the picture's own bottom, the line it
+/// stands on, and fading out over `blur` pixels) without a box's grey corners where the picture has none. Made once per
+/// picture; painting it is one blend per pixel of its area.
+pub struct ShapeShadow {
+    /// From the picture's top left to the shadow's (the fall-off reaches beyond the picture).
+    pad: i32,
+    w: i32,
+    h: i32,
+    /// Darkness 0-255 at full strength.
+    a: Vec<u8>,
+}
+
+impl ShapeShadow {
+    pub fn of(p: &Pic, dx: i32, dy: i32, blur: i32) -> ShapeShadow {
+        let blur = blur.max(2);
+        let pad = blur + 1;
+        let (w, h) = (p.w + dx.max(0) + 2 * pad, p.h + 2 * pad);
+        // The picture's solid pixels moved by (dx, dy), above the line it stands on.
+        let mut m = vec![0f32; (w * h) as usize];
+        for y in 0..p.h {
+            for x in 0..p.w {
+                let (sx, sy) = (x - dx, y - dy);
+                if sx >= 0 && sy >= 0 && sx < p.w && sy < p.h && p.px[(sy * p.w + sx) as usize] >> 24 != 0 {
+                    m[((y + pad) * w + x + pad) as usize] = 1.0;
+                }
+            }
+        }
+        // Full strength up to a quarter of the fall-off out, then two box blurs over the rest: `soft_shadow`'s soft edge.
+        let grow = blur / 4;
+        let r = ((blur - grow) / 2).max(1);
+        // One pass along rows (or columns): the most within `r` (to grow it) or the mean (a running sum: a pixel costs
+        // the same whatever the fall-off).
+        let pass = |m: &[f32], r: i32, across: bool, max: bool| -> Vec<f32> {
+            let mut out = vec![0f32; m.len()];
+            let (lines, len) = if across { (h, w) } else { (w, h) };
+            let at = |line: i32, i: i32| if across { (line * w + i) as usize } else { (i * w + line) as usize };
+            for line in 0..lines {
+                if max {
+                    for i in 0..len {
+                        let v = (i - r).max(0)..=(i + r).min(len - 1);
+                        out[at(line, i)] = v.map(|j| m[at(line, j)]).fold(0.0, f32::max);
+                    }
+                    continue;
+                }
+                let mut sum: f32 = (0..=r.min(len - 1)).map(|j| m[at(line, j)]).sum();
+                for i in 0..len {
+                    out[at(line, i)] = sum / (2 * r + 1) as f32;
+                    if i + r + 1 < len {
+                        sum += m[at(line, i + r + 1)];
+                    }
+                    if i - r >= 0 {
+                        sum -= m[at(line, i - r)];
+                    }
+                }
+            }
+            out
+        };
+        let mut m = m;
+        if grow > 0 {
+            m = pass(&pass(&m, grow, true, true), grow, false, true);
+        }
+        for _ in 0..2 {
+            m = pass(&pass(&m, r, true, false), r, false, false);
+        }
+        ShapeShadow { pad, w, h, a: m.iter().map(|v| (v * 255.0).round().clamp(0.0, 255.0) as u8).collect() }
+    }
+
+    /// Its shadow for the picture standing at (x, y), `strength` (0-1) as `soft_shadow`'s, only rows `clip.0..clip.1`.
+    pub fn paint(&self, c: &mut Canvas, x: i32, y: i32, strength: f32, clip: (i32, i32)) {
+        let (x0, y0) = (x - self.pad, y - self.pad);
+        let k = (strength.clamp(0.0, 1.0) * 256.0) as u32;
+        c.blend_with((x0, y0.max(clip.0), self.w, (y0 + self.h).min(clip.1) - y0.max(clip.0)), 0, |put| {
+            for yy in 0..self.h {
+                for xx in 0..self.w {
+                    let a = self.a[(yy * self.w + xx) as usize] as u32 * k >> 8;
+                    if a > 0 {
+                        put(x0 + xx, y0 + yy, a as u8);
+                    }
+                }
+            }
+        });
+    }
+}
+
+/// A picture of dark plastic (a black Mega Drive, a Jet Black GameCube) lit from above on the dark page, where it would
+/// sink into the dark: its top edge catches the room's warm light, a little of it falling down its front. Pictures that
+/// are not dark stay as they are. True if it was lit.
+pub fn light_from_above(p: &mut Pic, light: u32) -> bool {
+    let solid: Vec<usize> = (0..p.px.len()).filter(|&i| p.px[i] >> 24 != 0).collect();
+    if solid.is_empty() {
+        return false;
+    }
+    let luma = |c: u32| (299 * (c >> 16 & 0xff) + 587 * (c >> 8 & 0xff) + 114 * (c & 0xff)) / 1000;
+    let mean = solid.iter().map(|&i| luma(p.px[i])).sum::<u32>() / solid.len() as u32;
+    if mean >= DARK_PLASTIC {
+        return false;
+    }
+    let (w, h) = (p.w, p.h);
+    let at = |px: &[u32], x: i32, y: i32| x >= 0 && y >= 0 && x < w && y < h && px[(y * w + x) as usize] >> 24 != 0;
+    // The light seam round the picture (the photo's background at its edge, unseen on a light card) would frame it on
+    // the dark page: edge pixels much lighter than the plastic go.
+    // Up to two pixels deep, where it is dithered.
+    for _ in 0..2 {
+        let seam = p.px.clone();
+        for y in 0..h {
+            for x in 0..w {
+                let i = (y * w + x) as usize;
+                let edge = [(-1, 0), (1, 0), (0, -1), (0, 1)].iter().any(|&(dx, dy)| !at(&seam, x + dx, y + dy));
+                if at(&seam, x, y) && edge && luma(seam[i]) > mean + SEAM {
+                    p.px[i] = 0;
+                }
+            }
+        }
+    }
+    let old = p.px.clone();
+    for y in 0..h {
+        for x in 0..w {
+            if !at(&old, x, y) {
+                continue;
+            }
+            // Down the front, less and less; the top edge (nothing above it) and the next row the most.
+            let mut t = 34 - 26 * y / h.max(1);
+            if !at(&old, x, y - 1) {
+                t = 120;
+            } else if !at(&old, x, y - 2) {
+                t = 70;
+            }
+            let i = (y * w + x) as usize;
+            p.px[i] = (old[i] & 0xff00_0000) | crate::gfx::mix(old[i] & 0xff_ffff, light, t as u32);
+        }
+    }
+    p.changed();
+    true
+}
+
+/// The mean brightness (0-255) under which a picture counts as dark plastic for `light_from_above`.
+const DARK_PLASTIC: u32 = 64;
+/// How much lighter than the dark plastic's mean an edge pixel is when it is the photo's seam, not the console.
+const SEAM: u32 = 40;

@@ -161,7 +161,7 @@ pocket-ui waits up to 35 seconds for them.
 Continuing works for pocket-ui's own host and for RetroArch. PlayStation 2, GameCube, Wii and 3DS
 continue only when you quit through the pause menu's Quit. Other standalone emulators (for example
 Wii U) start fresh; use the game's own save. A game on the own host continues from the moment you last
-quit it, not from a crash. With Settings → Playing → **Continue where I quit** off, Quit keeps no new moment, on purpose: the game starts fresh and the older moment stays under Load (see [Continue where I quit](settings.md#continue-where-i-quit)).
+quit it, not from a crash. With Settings → Playing → **Continue where I quit** off, Quit keeps no new moment, on purpose: the game starts fresh and the older moment stays under Load (see [Continue where I quit](settings-playing.md#continue-where-i-quit)).
 
 **A game now starts with RetroArch instead of pocket-ui's own host.**
 After a confirmed failure before the first game picture, pocket-ui may try RetroArch once, as long as there are
@@ -308,7 +308,8 @@ The last time the Pocket ran, it did not shut down the normal way: it froze and 
 out, the power was cut, or the power button was held until it switched off. pocket-ui notices because the logs of that
 run have no mark that it ended properly. `crash.log` then has a line with the time of the last sign of life and the
 last messages of the system; the logs have the rest (see below). Nothing in your games or settings is lost by this
-message.
+message. Power off, Restart and switching off after sleeping are the normal way and never bring it up, and on dArkOS
+neither does switching off from EmulationStation after Back to EmulationStation.
 
 ## Will my games start?
 

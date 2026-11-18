@@ -157,6 +157,160 @@ pub fn targets_for(system: &str, described: &[Described]) -> Vec<Target> {
         .collect()
 }
 
+/// What a game gets from the handheld's pad in one frame, Options › Controls applied (Android's player; pocket-core does
+/// the same with its own input): the pad's held buttons and its presses shorter than a frame (`pulses`), the stick's
+/// D-pad presses, all through `Mapping::translate`; the touch pad's buttons as they are (they are the console's own);
+/// D-pad as left stick moving `sticks`. Returns the buttons and the sticks to give the core when they changed.
+pub fn pad_input(mapping: &Mapping, held: u16, pulses: u16, stick: u16, touch: u16, sticks: [i16; 4]) -> (u16, Option<[i16; 4]>) {
+    let buttons = mapping.translate(held | pulses | stick) | touch;
+    if mapping.dpad_stick {
+        let (b, s) = dpad_to_stick(buttons, sticks);
+        return (b, Some(s));
+    }
+    (buttons, None)
+}
+
+/// The pause menu's Controls page (Options › Controls): the sticks' rows, what each of the handheld's buttons presses,
+/// Hold to toggle, Reset controls. Linux's menu (`emu_menu`, which then tells pocket-core) and Android's player (which
+/// applies it itself) show and step the same page.
+#[derive(Clone, Debug, PartialEq)]
+pub struct ControlsPage {
+    pub mapping: Mapping,
+    /// The console's buttons the core describes (`targets_for`); empty: the standard set.
+    pub targets: Vec<Target>,
+    pub system: String,
+}
+
+/// What a step on the Controls page changed: entries (key without `KEY_PREFIX`, value, back to the default), or every
+/// entry back to its default (Reset controls).
+#[derive(Clone, Debug, PartialEq)]
+pub enum ControlsChange {
+    Set(Vec<(&'static str, String, bool)>),
+    Reset,
+}
+
+impl ControlsPage {
+    /// The console buttons a handheld button can be given: nothing, or any button the core describes.
+    fn choices(&self) -> Vec<Option<u8>> {
+        let mut c = vec![None];
+        c.extend(self.targets.iter().map(|t| Some(t.id)));
+        c
+    }
+
+    /// A console button's name: the core's, or the standard one when the core named none.
+    pub fn target_name(&self, id: Option<u8>) -> String {
+        match id {
+            Some(id) => match self.targets.iter().find(|t| t.id == id) {
+                Some(t) => t.label.clone(),
+                // Not a button this console has, so pressing it does nothing.
+                None if !self.targets.is_empty() => "None".into(),
+                None => standard_name(id).into(),
+            },
+            None => "None".into(),
+        }
+    }
+
+    /// The buttons Hold to toggle can hold: not the D-pad, not Select and Start.
+    fn hold_choices(&self) -> Vec<Option<u8>> {
+        let held = |id: u8| !(2..=7).contains(&id);
+        let mut c = vec![None];
+        if self.targets.is_empty() {
+            c.extend(MENU_ORDER.iter().copied().filter(|id| held(*id) && *id < 14).map(Some));
+        } else {
+            c.extend(self.targets.iter().map(|t| t.id).filter(|id| held(*id)).map(Some));
+        }
+        c
+    }
+
+    /// Rows before the buttons: "Left stick as D-pad", and "D-pad as left stick" for a system whose games use a stick.
+    pub fn stick_rows(&self) -> usize {
+        1 + offers_dpad_stick(&self.system) as usize
+    }
+
+    /// How many rows the page has.
+    pub fn count(&self) -> usize {
+        MENU_ORDER.len() + 2 + self.stick_rows()
+    }
+
+    /// Row 0 is the stick, then D-pad as left stick (`stick_rows`), the handheld's buttons in `MENU_ORDER`, then "Hold to
+    /// toggle" and "Reset controls": (name, value, explanation).
+    pub fn rows(&self) -> Vec<(String, String, String)> {
+        let mut rows = vec![(
+            "Left stick as D-pad".to_string(),
+            if self.mapping.stick_dpad { "On" } else { "Off" }.to_string(),
+            "The left stick works as the D-pad.\nTurn it off for games that use an analogue stick.".to_string(),
+        )];
+        if self.stick_rows() == 2 {
+            rows.push((
+                "D-pad as left stick".into(),
+                if self.mapping.dpad_stick { "On" } else { "Off" }.into(),
+                "The D-pad moves the left stick, for games that need one.\nOn by itself on a handheld without sticks.".into(),
+            ));
+        }
+        for &id in &MENU_ORDER {
+            let target = self.mapping.target[id as usize];
+            let name = self.target_name(target);
+            let phys = physical_label(id);
+            let desc = if name == "None" { format!("{phys} does nothing in this game.") } else { format!("{phys} presses {name}.") };
+            let extra = match id {
+                14 => "\nL3 means pressing the left stick in.",
+                15 => "\nR3 means pressing the right stick in.",
+                _ => "",
+            };
+            let mut desc = format!("{desc}{extra}");
+            desc.push('\n');
+            desc.push_str("An occupied action swaps with this button's previous action.");
+            rows.push((phys.into(), name, desc));
+        }
+        rows.push((
+            "Hold to toggle".into(),
+            self.mapping.hold_toggle.map_or("Off".into(), |id| self.target_name(Some(id))),
+            "Pick a button: one press holds it down, the next lets go.\nFor buttons you would hold, like run.".into(),
+        ));
+        rows.push(("Reset controls".into(), String::new(), "Every button does what it says, as it did before any change.".into()));
+        rows
+    }
+
+    /// Left/Right (`delta`) or A on row `sel`: the stick rows switch, a button gets the next console button (an occupied
+    /// one swaps), Hold to toggle the next button it can hold, Reset controls puts everything back.
+    pub fn step(&mut self, sel: usize, delta: i32) -> ControlsChange {
+        let defaults = Mapping::defaults(&self.system);
+        if sel == 0 {
+            self.mapping.stick_dpad = !self.mapping.stick_dpad;
+            return ControlsChange::Set(vec![(STICK_KEY, on_off(self.mapping.stick_dpad).into(), self.mapping.stick_dpad == defaults.stick_dpad)]);
+        }
+        let sel = sel + 2 - self.stick_rows();
+        if sel == 1 {
+            self.mapping.dpad_stick = !self.mapping.dpad_stick;
+            ControlsChange::Set(vec![(DPAD_STICK_KEY, on_off(self.mapping.dpad_stick).into(), self.mapping.dpad_stick == defaults.dpad_stick)])
+        } else if sel <= MENU_ORDER.len() + 1 {
+            let id = MENU_ORDER[sel - 2];
+            let choices = self.choices();
+            let current = self.mapping.target[id as usize];
+            let now = choices.iter().position(|c| *c == current).unwrap_or(0) as i32;
+            let next = choices[(now + delta).rem_euclid(choices.len() as i32) as usize];
+            let changed = self.mapping.assign(id, next);
+            ControlsChange::Set(changed.into_iter().map(|c| (KEYS[c as usize], self.mapping.value_of(c).to_string(), self.mapping.target[c as usize] == defaults.target[c as usize])).collect())
+        } else if sel == MENU_ORDER.len() + 2 {
+            let choices = self.hold_choices();
+            let now = choices.iter().position(|c| *c == self.mapping.hold_toggle).unwrap_or(0) as i32;
+            self.mapping.hold_toggle = choices[(now + delta).rem_euclid(choices.len() as i32) as usize];
+            ControlsChange::Set(vec![(HOLD_KEY, self.mapping.hold_value().into(), self.mapping.hold_toggle == defaults.hold_toggle)])
+        } else {
+            self.mapping = defaults;
+            ControlsChange::Reset
+        }
+    }
+}
+
+fn on_off(on: bool) -> &'static str {
+    if on {
+        "on"
+    } else {
+        "off"
+    }
+}
+
 /// Which console button each Mini V2 button presses.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Mapping {
@@ -770,5 +924,64 @@ mod tests {
         assert_eq!(a[2], 0, "inside the dead zone");
         assert!((a[3] as f32 / 32767.0 + 0.41).abs() < 0.02, "{}", a[3]);
         assert_eq!(s.analog(false)[0], 0);
+    }
+}
+
+#[cfg(test)]
+mod controls_page_tests {
+    use super::*;
+
+    /// The Controls page both menus show: a button steps through the console's buttons and an occupied one swaps, Hold
+    /// to toggle skips the D-pad, Select and Start, Reset puts the console's own layout back, each change named with its key
+    /// and whether it is back to the default.
+    #[test]
+    fn the_controls_page_steps_swaps_and_resets_as_linux_s() {
+        let mut page = ControlsPage { mapping: Mapping::defaults("snes"), targets: targets_from(&[]), system: "snes".into() };
+        let rows = page.rows();
+        assert_eq!(rows.len(), page.count());
+        assert_eq!(rows[0].0, "Left stick as D-pad");
+        assert_eq!(rows.last().unwrap().0, "Reset controls");
+        // The first button row (MENU_ORDER[0], the A button) to the next console button: it swaps with that button's owner.
+        let first = page.stick_rows();
+        match page.step(first, 1) {
+            ControlsChange::Set(changes) => {
+                assert_eq!(changes.len(), 2, "{changes:?}");
+                assert!(changes.iter().all(|(_, _, default)| !default));
+            }
+            ControlsChange::Reset => panic!("a button row is no reset"),
+        }
+        let hold = page.count() - 2;
+        page.step(hold, 1);
+        assert!(page.mapping.hold_toggle.is_some_and(|id| !(2..=7).contains(&id)));
+        assert_eq!(page.step(page.count() - 1, 1), ControlsChange::Reset);
+        assert_eq!(page.mapping, Mapping::defaults("snes"));
+    }
+
+    /// The choices reach the game: with A and B swapped the pad's A gives the core B and its B gives A, a press shorter
+    /// than a frame too (it went in untranslated, 17.11.2026: the core saw A and B together); the touch pad's A stays A;
+    /// D-pad as left stick turns the D-pad's presses into the stick; Reset gives the console's own buttons back.
+    #[test]
+    fn the_choices_reach_the_game() {
+        let (a, b) = (1u16 << 8, 1u16 << 0);
+        let mut page = ControlsPage { mapping: Mapping::defaults("snes"), targets: targets_from(&[]), system: "snes".into() };
+        let row_of = |id: u8, page: &ControlsPage| page.stick_rows() + MENU_ORDER.iter().position(|i| *i == id).unwrap();
+        // A (MENU_ORDER's first) one step on: B, which swaps.
+        page.step(row_of(8, &page), 1);
+        assert_eq!(pad_input(&page.mapping, a, 0, 0, 0, [0; 4]).0, b, "the pad's A presses B");
+        assert_eq!(pad_input(&page.mapping, b, 0, 0, 0, [0; 4]).0, a, "and its B presses A");
+        assert_eq!(pad_input(&page.mapping, 0, a, 0, 0, [0; 4]).0, b, "a short press too");
+        assert_eq!(pad_input(&page.mapping, 0, 0, 0, a, [0; 4]).0, a, "the touch pad's A is the console's A");
+        page.step(page.count() - 1, 1);
+        assert_eq!(pad_input(&page.mapping, a, 0, 0, 0, [0; 4]).0, a, "Reset: A is A again");
+        // D-pad as left stick (a console whose games use a stick).
+        let mut n64 = ControlsPage { mapping: Mapping::defaults("n64"), targets: targets_from(&[]), system: "n64".into() };
+        assert_eq!(n64.stick_rows(), 2);
+        if !n64.mapping.dpad_stick {
+            n64.step(1, 1);
+        }
+        let right = 1u16 << 7;
+        let (buttons, sticks) = pad_input(&n64.mapping, right, 0, 0, 0, [0; 4]);
+        assert_eq!(buttons & right, 0, "the D-pad's Right moves the stick instead");
+        assert!(sticks.is_some_and(|s| s[0] > 0), "{sticks:?}");
     }
 }

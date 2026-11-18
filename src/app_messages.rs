@@ -72,6 +72,10 @@ impl App {
     }
 
     fn drop_notice(&mut self) {
+        // The "is ready" card closed by the player is the one that counts as said (`app_update_hint`).
+        if self.notice.as_ref().is_some_and(|n| n.opens_updates() && !n.installs_from_card()) {
+            self.update_hint_closed();
+        }
         self.notice = (!self.notice_later.is_empty()).then(|| Notice::new(self.notice_later.remove(0)));
         self.notice_painted = false;
         self.request_redraw();

@@ -134,7 +134,7 @@ information file calls FinalBurn Neo the first choice for most people who play a
 ## Vertical games
 
 Many arcade games were made for a screen that stands upright (vertical shooters, Pac-Man, Galaga). On RetroArch they
-show upright and small, with black on both sides. pocket-ui's [Screen orientation](options.md#screen-orientation) is
+show upright and small, with black on both sides. pocket-ui's [Screen orientation](options-screen.md#screen-orientation) is
 for games on its own host; on RetroArch, the emulator's own settings turn the picture. Open RetroArch's menu during the
 game with **SELECT + X** (ROCKNIX's RetroArch shortcut), then:
 

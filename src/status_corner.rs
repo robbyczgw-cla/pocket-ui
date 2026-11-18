@@ -287,6 +287,19 @@ pub fn parse_operstate(s: &str) -> bool {
     s.trim() == "up"
 }
 
+/// The local time now as the corner shows it ("13:28", `format_clock`); None while the clock was never set. Android's
+/// player reads its corner with this and `parse_battery` (its process has no Activity corner).
+pub fn clock_from_libc() -> Option<String> {
+    let now = SystemTime::now().duration_since(UNIX_EPOCH).map_or(0, |d| d.as_secs() as i64);
+    let t = now as libc::time_t;
+    // SAFETY: an all-zero `tm` is valid, and localtime_r only writes into the struct handed in.
+    let mut tm: libc::tm = unsafe { std::mem::zeroed() };
+    if unsafe { libc::localtime_r(&t, &mut tm) }.is_null() {
+        return None;
+    }
+    format_clock(now, tm.tm_hour, tm.tm_min)
+}
+
 /// The battery from its sysfs `capacity` and `status`; None without a readable capacity.
 pub fn parse_battery(capacity: Option<&str>, status: Option<&str>) -> Option<Battery> {
     let percent = capacity?.trim().parse::<u8>().ok()?.min(100);

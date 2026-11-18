@@ -313,7 +313,8 @@ impl App {
             None => String::new(),
         };
         let at = self.nu_hints(c, &[("B", "Back"), ("A", "Open")]);
-        self.paint_desc(c, &line, at);
+        // Three lines at most: two beside the hints and one over them, in the room `game_check_rows` keeps.
+        pocket_ui::kit::footer_text(c, &mut self.text, &line, at, 3, pal().text);
     }
 
     fn paint_game_check_detail(&mut self, c: &mut Canvas, page: &GameCheckPage) {

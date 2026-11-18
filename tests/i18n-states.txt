@@ -130,7 +130,6 @@ settings:1:4
 settings:1:5
 settings:1:6
 settings:1:7
-settings:1:8
 settings:2:0
 settings:2:1
 settings:2:2
@@ -150,6 +149,7 @@ settings:4:4
 settings:4:5
 settings:4:6
 settings:4:7
+settings:4:8
 settings:5:0
 settings:5:1
 settings:5:2
@@ -547,6 +547,8 @@ picture:3:right
 picture-gba:4:left
 picture-snes:3
 picture-psx
+# An N64 game on the Mini V2: Resolution (render_scale), the last row, selected.
+picture-n64:4:device=miniv2
 picture-custom:3
 shortcuts
 shortcuts:6
@@ -791,6 +793,11 @@ gamelist:none
 gamelist:all
 gamelist:done
 gamelist:1:done
+# Settings > Games > Android games (Android's handheld view): no apps, the list with a suggestion and a marked game
+android-games
+android-games:demo
+android-games:demo:1
+android-games:demo:2
 
 # Settings > Games > Screenshots (the gallery) and the game card's row, with made-up screenshots (App::gallery_snapshot)
 gallery

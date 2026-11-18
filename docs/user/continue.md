@@ -53,7 +53,7 @@ until then. A game that can't continue stands as a normal case:
   "The game didn't close normally: back at your last saved moment", as after a crash or an empty battery.
 
 There is no switch for the open case. A game whose file, patch or emulator changed doesn't load the old moment. With
-[Continue where I quit](settings.md#continue-where-i-quit) off, a Quit keeps no new moment and the switch's line says so; on
+[Continue where I quit](settings-playing.md#continue-where-i-quit) off, a Quit keeps no new moment and the switch's line says so; on
 pocket-ui's own host the older moment no longer stands open (it stays under Load), and moments from sleep still do. Motion off: the game is simply out, and the spinner's dots
 stand still.
 
@@ -68,7 +68,7 @@ moment until you press any button, without sound, so you can read it and miss no
 is there. A press while the picture is still loading also skips the card. If the picture or moment cannot be loaded,
 the game starts without waiting for the reminder. A game played within the last two weeks, a game that starts fresh and
 Kids Mode show no card. Easy shows only when you played last and your note. It is **off** until you switch it on:
-Settings → Playing → [Remind me where I was](settings.md#remind-me-where-i-was). The lines about where you are in the
+Settings → Playing → [Remind me where I was](settings-playing.md#remind-me-where-i-was). The lines about where you are in the
 game on the shelf and the box's back don't depend on it.
 
 ![Where was I?: last played 3 weeks ago, where you are in the game ("Crono Lv. 24 · game clock 11:38") and your note, over the game](pictures/where-was-i.webp)

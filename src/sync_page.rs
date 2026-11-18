@@ -217,8 +217,22 @@ impl SyncPage {
             return Action::Close;
         } else if b == confirm {
             return self.activate();
+        } else if matches!(b, Button::Left | Button::Right) && self.switch_is(self.row()) == Some(b == Button::Left) {
+            // The switches take Left (off) and Right (on) as every switch does (0.5.1); a held key repeats, so only
+            // the way it isn't yet. Versions opens a page and takes neither.
+            return self.activate();
         }
         Action::Nothing
+    }
+
+    /// Whether a switch row is on now (`None`: not a switch).
+    pub fn switch_is(&self, row: Row) -> Option<bool> {
+        match row {
+            Row::Switch => Some(self.on()),
+            Row::AfterPlay => Some(self.prefs.after_play),
+            Row::Share(s) => Some(self.prefs.shared(s)),
+            Row::Versions => None,
+        }
     }
 
     fn activate(&mut self) -> Action {
@@ -357,6 +371,23 @@ mod tests {
         while p.row() != row {
             p.press(Button::Down, CONFIRM, CANCEL);
         }
+    }
+
+    /// 0.5.1: the switches took only A. Right switches one on, Left off, each only when it is the other way (a held
+    /// key repeats); Versions opens a page and takes neither.
+    #[test]
+    fn the_switches_take_left_for_off_and_right_for_on() {
+        let mut p = page();
+        assert_eq!(p.press(Button::Left, CONFIRM, CANCEL), Action::Nothing, "already off");
+        assert_eq!(p.press(Button::Right, CONFIRM, CANCEL), Action::SetEnabled(true));
+        go_to(&mut p, Row::AfterPlay);
+        assert_eq!(p.press(Button::Right, CONFIRM, CANCEL), Action::Nothing, "already on");
+        assert_eq!(p.press(Button::Left, CONFIRM, CANCEL), Action::SetAfterPlay(false));
+        go_to(&mut p, Row::Share(Share::States));
+        let on = p.prefs.shared(Share::States);
+        assert_eq!(p.press(if on { Button::Left } else { Button::Right }, CONFIRM, CANCEL), Action::SetShare(Share::States, !on));
+        go_to(&mut p, Row::Versions);
+        assert_eq!((p.press(Button::Left, CONFIRM, CANCEL), p.press(Button::Right, CONFIRM, CANCEL)), (Action::Nothing, Action::Nothing));
     }
 
     #[test]

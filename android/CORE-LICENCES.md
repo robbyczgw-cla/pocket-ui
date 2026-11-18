@@ -1,6 +1,6 @@
 # Android core package evidence
 
-The internal test APK bundles PPSSPP, melonDS DS and Mupen64Plus-Next alongside mGBA, Nestopia, bsnes, Gearsystem, Beetle WonderSwan, Stella, ClownMDEmu, Gambatte, Beetle PCE Fast, Beetle NGP, Handy, PCSX ReARMed, Flycast and YabaSanshiro. Build success and runtime smoke evidence are recorded separately; the wider requested set is still open.
+The APK bundles every core of the lock (since 0.5.x PPSSPP with its system files, melonDS DS, Mupen64Plus-Next and Flycast too; none is a download): PPSSPP, melonDS DS and Mupen64Plus-Next alongside mGBA, Nestopia, bsnes, Gearsystem, Beetle WonderSwan, Stella, ClownMDEmu, Gambatte, Beetle PCE Fast, Beetle NGP, Handy, PCSX ReARMed, Flycast and YabaSanshiro. Build success and runtime smoke evidence are recorded separately; the wider requested set is still open.
 No Snes9x, Genesis Plus GX, PicoDrive, FBNeo or old MAME binary is bundled.
 
 | Core | Source revision | Licence evidence | Package |
@@ -57,7 +57,8 @@ successful write as a disconnection. The source is the pinned `ndk` 0.9.0 crate'
 
 The lock also pins PPSSPP `fa50bb1976065c4f8b1b47af227d367fe9771555`, melonDS DS
 `bc4e4b67d2d470d7c682810a1e892cafd6f9082b` and Mupen64Plus-Next
-`f275caf4b2bfa1e6d1c51636746ea793f3d80320`. They are optional downloads for the built-in player. The APK has a 30 MB limit.
+`f275caf4b2bfa1e6d1c51636746ea793f3d80320`. Since 0.5.x they are in the APK like the other cores (they were optional
+downloads until 0.5.0-android.5). The APK has a 90 MB limit of our own.
 
 The recorded patches remove xBRZ from PPSSPP and Mupen64Plus-Next's linked sources and advertised
 filter choices. PPSSPP's old stored xBRZ setting has an original nearest-neighbour fallback.

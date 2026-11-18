@@ -203,6 +203,7 @@ impl App {
             battery: pocket_ui::battery_history::game_card(&pocket_ui::battery_games::Key::new(system, path, ""), &system_short(&self.systems, system)),
             // A port: its performance and fan, and the busy-core hint (`app_port_perf`).
             port: self.port_card_line(system, path),
+            app_game: system == pocket_ui::android_games::SYSTEM_ID && pocket_ui::device::android_profile(),
             port_update: system == pocket_ui::port_perf::SYSTEM && path.file_name().and_then(|n| n.to_str()).is_some_and(pocket_ui::ports::update_waiting),
             // Just Play's card sets the reason after the card is made (`app_curator`).
             surprise: None,
@@ -224,6 +225,7 @@ impl App {
             continue_at: None,
             hardcore: false,
             progress: None,
+            progress_achievements: false,
             case_art: None,
             case_meter: None,
             // The facts that lead to the player's other games (`show_card`, `app_connections`).
@@ -557,7 +559,10 @@ impl App {
         // "Continue" follows the shelf's reads while the card is open (`MomentReads`): nothing while a new read is out.
         let at = self.card.as_ref().and_then(|o| self.frozen_moment_time(&o.path));
         // Where the player is, from the game's own save, once the thread has read it (`app_case_knows`).
-        let progress = self.card.as_ref().and_then(|o| self.case_line(&o.system, &o.path));
+        // A save that says nothing: the RetroAchievements tally in its place (`case_or_achievements`).
+        let line = self.card.as_ref().and_then(|o| self.case_or_achievements(&o.system, &o.path));
+        let from_achievements = line.as_ref().is_some_and(|(_, ra)| *ra);
+        let progress = line.map(|(l, _)| l);
         let meter = self.card.as_ref().and_then(|o| self.case_progress(&o.system, &o.path)).and_then(|p| p.meter());
         let art = self.card.as_ref().and_then(|o| self.case_art(&o.path));
         if let Some(open) = self.card.as_mut() {
@@ -566,6 +571,7 @@ impl App {
             open.card.data.case_meter = progress.as_ref().and(meter).filter(|_| art.is_none());
             open.card.data.case_art = progress.as_ref().and(art);
             open.card.data.progress = progress;
+            open.card.data.progress_achievements = from_achievements;
         }
         let known_save = self.card.as_ref().filter(|o| o.card.data.play_evidence().files).map(|o| o.path.clone());
         if let Some(path) = known_save { self.remember_played_files(&path); }

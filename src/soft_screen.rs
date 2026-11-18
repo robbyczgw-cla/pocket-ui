@@ -1,6 +1,8 @@
 //! pocket-core without a GPU: the core's picture, copied by the CPU into a wl_shm window (`pocket-fb` shows it on the
 //! framebuffer). The Brick's first test and the fallback if its GL blob won't share the screen (docs/TRIMUI-BRICK.md).
-//! No shaders, screen frames or overlay: square pixels, whole-number scale. Only behind the `brick` feature.
+//! No shaders or screen frames: square pixels, whole-number scale. Only behind the `brick` feature. What the GL overlay
+//! draws over a game (FPS, badge, messages, the volume/brightness bar) is blended into the copy by `soft_hud` when the
+//! caller passes it (dArkOS, a Brick without the GPU path; with the bridge's GPU path the bridge draws it).
 //!
 //! The Soft colour look (temperature and the night light, `display.rs`) is folded into the copy: where the GL path
 //! draws a multiply layer over the game (`overlay.rs`), this path passes each converted pixel through the look's
@@ -26,6 +28,8 @@ pub struct SoftScreen {
     look: Look,
     /// The look's tables while it tints (`Look::tables`); None for a neutral or compositor-applied look.
     tables: Option<[[u8; 256]; 3]>,
+    /// FPS, messages and the level bar in the copy (`show`'s `over`).
+    hud: crate::soft_hud::SoftHud,
 }
 
 impl SoftScreen {
@@ -34,7 +38,7 @@ impl SoftScreen {
         let window = Rc::new(el.create_window(attrs).map_err(|e| format!("window: {e}"))?);
         let context = softbuffer::Context::new(window.clone()).map_err(|e| format!("context: {e}"))?;
         let surface = softbuffer::Surface::new(&context, window.clone()).map_err(|e| format!("surface: {e}"))?;
-        Ok(SoftScreen { window, surface, size: (0, 0), native: false, scratch: Vec::new(), look: Look::default(), tables: None })
+        Ok(SoftScreen { window, surface, size: (0, 0), native: false, scratch: Vec::new(), look: Look::default(), tables: None, hud: crate::soft_hud::SoftHud::new() })
     }
 
     /// On: the next pictures go to the bridge at their own size (it draws them with shaders and frames). Off: scaled here.
@@ -52,8 +56,9 @@ impl SoftScreen {
         self.tables = tinted(look).then(|| look.tables());
     }
 
-    /// Draws the picture and hands it over. The window's size, for the previews.
-    pub fn show(&mut self, frame: &Frame) -> (u32, u32) {
+    /// Draws the picture and hands it over, with `over` (`Hud::texts`) blended in when given. The window's size, for
+    /// the previews. At the core's own size (`set_native`) the bridge draws those itself.
+    pub fn show(&mut self, frame: &Frame, over: Option<&[String; 4]>) -> (u32, u32) {
         if self.native {
             return self.show_native(frame);
         }
@@ -69,6 +74,9 @@ impl SoftScreen {
             match &self.tables {
                 Some(t) => blit_tinted(frame, &mut buffer, size.width as usize, size.height as usize, t),
                 None => blit(frame, &mut buffer, size.width as usize, size.height as usize),
+            }
+            if let Some(texts) = over {
+                self.hud.paint(texts, &mut buffer, size.width as usize, size.height as usize);
             }
             let _ = buffer.present();
         }

@@ -30,11 +30,20 @@ pub(crate) struct CaseKnows {
     pub(crate) made_up_art: Option<Arc<Art>>,
     /// `POCKETUI_SNAPSHOT_PROGRESS`: every game says this (snapshots only; the reading has its own tests).
     pub(crate) made_up: Option<Progress>,
-    /// The game whose "Where was I?" card is up without its line yet: an answer for it goes onto the card.
-    pub(crate) card_waits: Option<PathBuf>,
+    /// The game (system, ROM) whose "Where was I?" card is up without its line yet: an answer for it goes onto the card.
+    pub(crate) card_waits: Option<(String, PathBuf)>,
 }
 
 impl CaseKnows {
+    /// The thread has answered for `path` and has no line (its save says nothing pocket-ui reads): the place is free for
+    /// the RetroAchievements line. Not before the answer, so a line from the save never replaces one shown first.
+    fn says_nothing(&self, path: &Path) -> bool {
+        match &self.made_up {
+            Some(p) => !snapshot_game(p, path),
+            None => matches!(self.known.get(path), Some(None)),
+        }
+    }
+
     pub(crate) fn has_progress(&self, path: &Path) -> bool {
         self.known.get(path).is_some_and(Option::is_some) || self.made_up.as_ref().is_some_and(|p| snapshot_game(p, path))
     }
@@ -73,6 +82,23 @@ impl App {
         self.case_progress(system, path).map(case_knows_read::line)
     }
 
+    /// The line for the case: from the game's own save first; when that has answered and says nothing, the player's
+    /// RetroAchievements tally ("34 of 60 achievements · 56%", `app_achievements::achievements_line`). The second of the
+    /// pair says which: true for the achievements line.
+    pub(crate) fn case_or_achievements(&self, system: &str, path: &Path) -> Option<(String, bool)> {
+        if let Some(line) = self.case_line(system, path) {
+            return Some((line, false));
+        }
+        // A snapshot with only made-up achievements has no thread answer to wait for.
+        let free = self.case_knows.says_nothing(path) || (self.case_knows.made_up.is_none() && self.achievements.made_up.is_some());
+        free.then(|| self.achievements_line(system, path)).flatten().map(|l| (l, true))
+    }
+
+    /// [`App::case_or_achievements`]'s line alone.
+    pub(crate) fn case_or_achievements_line(&self, system: &str, path: &Path) -> Option<String> {
+        self.case_or_achievements(system, path).map(|(l, _)| l)
+    }
+
     /// The pictures for `path` from the player's own ROM, once read (`case_knows_art`).
     pub(crate) fn case_art(&self, path: &Path) -> Option<Arc<Art>> {
         if !cozy_extras::on(Extra::ProgressFromSaves) {
@@ -92,10 +118,19 @@ impl App {
             None => self.case_knows.art.remove(&rom),
         };
         // "Where was I?" came up before the answer was in: it takes the line now, while it is up.
-        if self.case_knows.card_waits.as_ref() == Some(&rom) && cozy_extras::on(Extra::ProgressFromSaves) {
+        let waits = self.case_knows.card_waits.clone().filter(|(_, r)| r == &rom);
+        if let (Some((system, _)), true) = (waits, cozy_extras::on(Extra::ProgressFromSaves)) {
             if let (Some(card), Some(p)) = (self.where_was_i.as_mut(), progress.as_ref()) {
                 card.progress = Some(case_knows_read::line(p));
                 card.art = self.case_knows.art.get(&rom).cloned();
+                self.case_knows.card_waits = None;
+            } else if progress.is_none() {
+                // Nothing from the save: the RetroAchievements tally, when there is one (`case_or_achievements`).
+                let line = self.achievements_line(&system, &rom);
+                if let (Some(card), Some(line)) = (self.where_was_i.as_mut(), line) {
+                    card.progress = Some(line);
+                    card.art = None;
+                }
                 self.case_knows.card_waits = None;
             }
         }
@@ -113,6 +148,8 @@ impl App {
     /// A game ended: its save may have changed. The old line stays on the screen until the new answer replaces it.
     pub(crate) fn case_forget(&mut self, rom: &Path) {
         self.case_knows.asked.borrow_mut().remove(rom);
+        // So may its achievements: read again, and asked fresh on Wi-Fi.
+        self.achievements_forget(rom);
     }
 }
 
@@ -140,6 +177,8 @@ fn snapshot_game(p: &Progress, path: &Path) -> bool {
         Progress::Chapter { .. } => name.contains("fire emblem"),
         Progress::Complete { .. } => name.contains("donkey kong country"),
         Progress::Shards { .. } => name.contains("amazing mirror"),
+        Progress::Jiggies { .. } => name.contains("banjo"),
+        Progress::Mission { .. } => name.contains("goldeneye"),
     }
 }
 
@@ -181,6 +220,8 @@ pub(crate) fn snapshot_progress(case: &str) -> Option<Progress> {
         "chrono" => Progress::Hero { lead: Some(("Crono".into(), 24)), hours: 11, minutes: 38 },
         "golden-sun" => Progress::Hero { lead: Some(("Isaac".into(), 23)), hours: 12, minutes: 5 },
         "kirby" => Progress::Shards { done: 5 },
+        "goldeneye" => Progress::Mission { mission: Some("Mission 6.iii: Streets".into()), difficulty: "Secret Agent" },
+        "banjo" => Progress::Jiggies { done: 42, of: 100, notes: 512, hours: 7, minutes: 18 },
         "golden-sun-2" => Progress::Hero { lead: Some(("Felix".into(), 31)), hours: 21, minutes: 47 },
         "dkc3" => Progress::Complete { percent: 41, of: 105, clock: Some((6, 3)) },
         "mario-rpg" => Progress::Party { lead: ("Mario".into(), 17), friends: 0 },

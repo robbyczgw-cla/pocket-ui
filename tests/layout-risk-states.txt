@@ -32,6 +32,7 @@ settings:2:1
 settings:3:1
 settings:4:5
 settings:4:6
+settings:4:7
 settings:5:5
 settings:6:2
 settings:6:5

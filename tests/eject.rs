@@ -296,8 +296,9 @@ fn the_way_back_hands_over_to_the_still_shelf_without_a_jump() {
     let tmp = tempfile::tempdir().unwrap();
     let stub = wayland(tmp.path());
     // A step at the hand-over measured on the device was 7.7 to 14 (mean per channel); the game sliding a little out
-    // of its case afterwards is well under 1 a frame.
-    const STILL: f64 = 0.5;
+    // of its case afterwards is well under 1 a frame. Its first frame is the hand-over's: since the Shelf look shows
+    // its case 1.4 times as large (17.11.2026) a disc's slide covers about twice the pixels, 0.61 at 640x480.
+    const STILL: f64 = 0.8;
     const AFTER: f64 = 1.5;
     let mut failures = Vec::new();
     for (system, rom) in [

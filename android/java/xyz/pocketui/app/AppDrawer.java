@@ -21,6 +21,8 @@ import java.util.*;
 final class AppDrawer {
     /** Icon side in pixels; the launcher paints it at about 30 dp, muted. */
     private static final int ICON = 96;
+    /** An icon cover's side in pixels: the digital case's front on a 1080-line screen. */
+    private static final int COVER = 256;
 
     private AppDrawer() {}
 
@@ -74,6 +76,41 @@ final class AppDrawer {
             for (int p : px) out.writeInt(p);
         }
         if (!part.renameTo(file)) { part.delete(); }
+    }
+
+    /** The cover of an Android game on the handheld view's shelf (`android_games::cover_path`): the app's banner (TV apps
+     *  have one, 16:9) or else its icon at {@value #COVER} px, as a PNG. Written again only after the app was updated; "" when
+     *  the file is there, else why not. */
+    static String cover(Activity activity, String pkg, String path) {
+        try {
+            PackageManager pm = activity.getPackageManager();
+            File file = new File(path);
+            if (file.isFile() && file.lastModified() >= pm.getPackageInfo(pkg, 0).lastUpdateTime) return "";
+            Drawable art = pm.getApplicationBanner(pkg);
+            int w = COVER, h = COVER;
+            if (art != null && art.getIntrinsicWidth() > 0 && art.getIntrinsicHeight() > 0) {
+                w = Math.min(640, art.getIntrinsicWidth() * 2);
+                h = w * art.getIntrinsicHeight() / art.getIntrinsicWidth();
+            } else {
+                art = pm.getApplicationIcon(pkg);
+            }
+            Bitmap bitmap = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888);
+            art.setBounds(0, 0, w, h);
+            art.draw(new Canvas(bitmap));
+            File dir = file.getParentFile();
+            if (dir != null && !dir.isDirectory() && !dir.mkdirs()) return "no folder";
+            File part = new File(path + ".part");
+            try (OutputStream out = new BufferedOutputStream(new FileOutputStream(part))) {
+                bitmap.compress(Bitmap.CompressFormat.PNG, 100, out);
+            } finally {
+                bitmap.recycle();
+            }
+            if (!part.renameTo(file)) { part.delete(); return "not written"; }
+            return "";
+        } catch (Exception e) {
+            android.util.Log.w("PocketMvp", "app cover " + pkg + ": " + e);
+            return "failed";
+        }
     }
 
     /** Starts the app the way any home screen does; "" when Android took it, else why not. */

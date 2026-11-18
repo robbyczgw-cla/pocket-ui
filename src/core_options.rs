@@ -538,6 +538,11 @@ pub fn android_curation(core: &str) -> Curation {
             ],
             ..curation(core)
         },
+        // N64 as on Linux: ROCKNIX's RetroArch options (every device's, SM8250's too) run GLideN64's threaded renderer, so the
+        // N64 itself runs on the core's own thread and retro_run only replays its GL calls. Android had the core's default
+        // (off): emulation and every GL call on the player's one thread, 9 ms a picture at the clock the governor gives it,
+        // peaks over 20 ms, a repeated or doubled picture in 15 of 60 a second on the Retroid Pocket Mini V2 (17.11.2026).
+        "mupen64plus_next" => Curation { defaults: &[("mupen64plus-ThreadedRenderer", "True")], ..curation(core) },
         // SNES on Android. bsnes declares 26 knobs in its own words ("PPU Deinterlace", "Coprocessor Prefer HLE"); a player
         // gets the six that change what they see or feel, in plain words (`plain_name`). The rest keep bsnes's defaults.
         "bsnes" => Curation {
@@ -652,6 +657,9 @@ pub struct OptionSet {
     changed: bool,
     /// The snapshot file is out of date.
     dirty: bool,
+    /// Options a pocket-ui row decides instead (`render_scale::CORE_KEYS` where Options → Picture → Resolution is there):
+    /// left out of the Emulator page like `curation`'s hidden ones, so there is one place for them.
+    pub row_decides: &'static [&'static str],
 }
 
 impl OptionSet {
@@ -676,7 +684,7 @@ impl OptionSet {
             if let Some(c) = self.curated.get(&def.key).filter(|c| def.has_value(c)) {
                 def.default = c.clone();
             }
-            def.hidden = !self.curation.shows(&def.key);
+            def.hidden = !self.curation.shows(&def.key) || self.row_decides.contains(&def.key.as_str());
             def.visible = old_visible.get(&def.key).copied().unwrap_or(true);
             let value = self
                 .current
@@ -843,6 +851,72 @@ pub struct CoreOptionsFile {
     #[serde(default)]
     pub controls: ControlsFile,
 }
+
+/// A line of the pause menu's Emulator page: one of the core's categories (a page of its own) or an option. The page
+/// is the same on Linux (`emu_menu::EmuMenu`, from pocket-core's snapshot) and in Android's player (from the core it
+/// runs): `page_entries` and `page_rows` build it for both.
+#[derive(Clone, Copy, PartialEq, Debug)]
+pub enum PageEntry {
+    /// Index into the categories.
+    Category(usize),
+    /// Index into the options.
+    Option(usize),
+}
+
+/// Footer note for options the core only reads when it starts.
+pub const RESTART_NOTE: &str = "Takes effect the next time the game starts. Save it, then start the game again.";
+
+/// The core says the option is read at its start only ("(Restart)", "(Requires restart)").
+pub fn needs_restart(label: &str) -> bool {
+    let l = label.to_ascii_lowercase();
+    l.contains("(restart") || l.contains("(reload core") || l.contains("(requires restart") || l.contains("restart required")
+}
+
+/// Lines of the Emulator page: at the top level (`cat` None) the categories, then the options that have none; inside a
+/// category its options.
+pub fn page_entries(categories: &[FileCategory], options: &[FileOption], cat: Option<usize>) -> Vec<PageEntry> {
+    let in_cat = |o: &FileOption| match cat {
+        Some(c) => categories.get(c).is_some_and(|c| o.category.as_deref() == Some(c.key.as_str())),
+        None => o.category.is_none() || !categories.iter().any(|c| o.category.as_deref() == Some(c.key.as_str())),
+    };
+    let mut out: Vec<PageEntry> = if cat.is_none() { (0..categories.len()).map(PageEntry::Category).collect() } else { Vec::new() };
+    out.extend(options.iter().enumerate().filter(|(_, o)| in_cat(o)).map(|(i, _)| PageEntry::Option(i)));
+    out
+}
+
+/// The Emulator page's rows as (name, value, explanation): a category ends in ">", an option shows its value's label
+/// (`current`: its value now) in a player's words (`make_plain`), and says when it needs a restart and that L1 and R1
+/// skip through a long list.
+pub fn page_rows(categories: &[FileCategory], options: &[FileOption], cat: Option<usize>, current: impl Fn(&FileOption) -> String) -> Vec<(String, String, String)> {
+    page_entries(categories, options, cat)
+        .into_iter()
+        .map(|e| match e {
+            PageEntry::Category(i) => {
+                let c = &categories[i];
+                (c.label.clone(), ">".into(), c.info.clone())
+            }
+            PageEntry::Option(i) => {
+                let o = &options[i];
+                let now = current(o);
+                let mut plain = o.clone();
+                make_plain(&mut plain);
+                let mut desc = o.info.clone();
+                if needs_restart(&o.label) {
+                    desc = format!("{desc}\n{RESTART_NOTE}").trim().to_string();
+                }
+                if o.values.len() > LONG_LIST {
+                    desc = format!("{desc}\nL1 and R1 skip five choices at a time.").trim().to_string();
+                }
+                let value = plain.label_of(&now).to_string();
+                (plain.label, value, desc)
+            }
+        })
+        .collect()
+}
+
+/// An option with more values than this: L1 and R1 skip `LONG_STEP` at a time.
+pub const LONG_LIST: usize = 12;
+pub const LONG_STEP: i32 = 5;
 
 pub fn file_path(data_dir: &Path, system: &str) -> PathBuf {
     data_dir.join("core-options").join(format!("{system}.json"))
@@ -1223,6 +1297,20 @@ mod tests {
         let mut chosen = OptionSet::new(android_curation("flycast"), &[("reicast_detect_vsync_swap_interval".into(), "disabled".into())]);
         chosen.declare(vec![], vec![def("reicast_detect_vsync_swap_interval", &["disabled", "enabled"])]);
         assert_eq!(chosen.get("reicast_detect_vsync_swap_interval"), Some("disabled"), "an unlocked game's explicit choice still wins");
+    }
+
+    #[test]
+    fn android_n64_runs_the_threaded_renderer_as_linux_does() {
+        // Real name and values from Mupen64Plus-Next's option table; the core's own default is "False".
+        let declare = |o: &mut OptionSet| o.declare(vec![], vec![finish("mupen64plus-ThreadedRenderer".into(), Some("Threaded Renderer".into()), None, None,
+            vec![("True".into(), "Enabled".into()), ("False".into(), "Disabled".into())], Some("False".into()))]);
+        let id = core_id(Path::new("/data/app/x/lib/arm64/libmupen64plus_next_libretro.so"));
+        let mut android = OptionSet::new(android_curation(&id), &[]);
+        declare(&mut android);
+        assert_eq!(android.get("mupen64plus-ThreadedRenderer"), Some("True"), "Android's N64 must not emulate and render on the player's one thread");
+        let mut chosen = OptionSet::new(android_curation(&id), &[("mupen64plus-ThreadedRenderer".into(), "False".into())]);
+        declare(&mut chosen);
+        assert_eq!(chosen.get("mupen64plus-ThreadedRenderer"), Some("False"), "a player's own choice still wins");
     }
 
     #[test]

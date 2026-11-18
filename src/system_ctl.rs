@@ -806,6 +806,7 @@ fn power_via(action: PowerAction, rtc: &crate::auto_off::Rtc, data: &Path, runne
     let terminal = action != PowerAction::Sleep;
     let who = format!("quick settings {action:?}");
     if terminal {
+        crate::fsutil::settle();
         crate::auto_off::disarm_before_power_off(rtc, data, &who);
         crate::shutdown_log::event(data, &format!("{who}: running `systemctl {}`", action.argv().join(" ")));
     }
@@ -825,6 +826,7 @@ fn power_via(action: PowerAction, rtc: &crate::auto_off::Rtc, data: &Path, runne
         if terminal {
             crate::shutdown_log::event(data, &format!("{who}: systemctl failed"));
             rtc.reopen();
+            crate::logs::unmark_clean(data);
         }
         Err(format!("systemctl {} failed.", action.argv().join(" ")))
     }
@@ -1780,9 +1782,11 @@ mod tests {
         assert_eq!(std::fs::read_to_string(&file).unwrap(), "1793051031", "untouched");
         assert!(!rtc.shut() && rtc.set(Some(30)), "a later deep sleep can still arm its alarm");
         assert!(!dir.join("logs/shutdown.log").exists(), "no shutdown entry for a suspend");
-        // Power off: disarmed first, the gate shut, the command run, logged.
+        // Power off: disarmed first, the gate shut, the command run, logged, and the boot marked clean for the next start.
         std::fs::write(&file, "1793051031").unwrap();
+        assert_eq!(crate::logs::begin_boot(&dir, "boot-a", 1_791_900_000), None);
         assert_eq!(power_via(PowerAction::PowerOff, &rtc, &dir, &ok), Ok(()));
+        assert!(crate::logs::boot_marked_clean(&dir), "a power off pocket-ui asked for is a clean end");
         assert_eq!(std::fs::read_to_string(&file).unwrap(), "0");
         assert!(rtc.shut());
         assert_eq!(*ran.lock().unwrap(), ["systemctl suspend --check-inhibitors=yes", "systemctl poweroff"]);
@@ -1793,6 +1797,7 @@ mod tests {
         let fails = |_: &str, _: &[&str]| false;
         assert!(power_via(PowerAction::Reboot, &rtc, &dir, &fails).is_err());
         assert!(!rtc.shut());
+        assert!(!crate::logs::boot_marked_clean(&dir), "still on: a power cut now would be unexpected");
     }
 
     #[test]

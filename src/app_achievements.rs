@@ -2,15 +2,22 @@
 //! Settings > RetroAchievements (sign in with the gamepad keyboard, log out), "12 of 40" on the game card and the
 //! console page, and the pause menu's Achievements list. The login and the card's lookup run on threads; the UI thread
 //! only reads small files and paints.
+//!
+//! The case line (`achievements::case_line`): "34 of 60 achievements · 56%" on the box's back, the card, beside Continue
+//! and on "Where was I?" for a game whose own save says nothing (`app_case_knows` answered and has no line). The tally is
+//! the kept file, read once per game and then kept here; a lookup on one worker thread renews it, on Wi-Fi only.
 
-use std::collections::HashSet;
+use std::cell::{Cell, OnceCell, RefCell};
+use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
+use std::sync::mpsc;
+use std::time::{Duration, Instant};
 
 use pocket_ui::achievements::account::Account;
 use pocket_ui::cheats::CheatMenu;
 use pocket_ui::control;
 use pocket_ui::achievements::snapshot::{self, Snapshot, Summary, SNAPSHOT_FILE};
-use pocket_ui::achievements::{api, http, lookup};
+use pocket_ui::achievements::{api, case_line, http, lookup};
 use pocket_ui::achievements_page::{self as page, AchievementsPage, Action, Event, Tone, Typing, View};
 use pocket_ui::gfx::Canvas;
 use pocket_ui::keyboard::Keyboard;
@@ -27,11 +34,27 @@ use pocket_ui::pause_saves::Saves;
 /// The name in the Settings list, to come back to.
 pub(crate) const SETTINGS_NAME: &str = "RetroAchievements";
 
-/// What the App keeps: the open page, the account's name for the Settings list, the card lookups under way.
+/// A game to look up on the worker: (system, ROM, fresh: it just ended).
+type Job = (String, PathBuf, bool);
+
+/// How long an answer to "on Wi-Fi?" is kept: the shelf asks for each game it paints.
+const WIFI_KEPT: Duration = Duration::from_secs(10);
+
+/// What the App keeps: the open page, the account's name for the Settings list, the lookups under way, the tallies the
+/// case lines read.
 pub(crate) struct AchievementsUi {
     page: Option<AchievementsPage>,
     signed_in: Option<String>,
-    looking_up: HashSet<PathBuf>,
+    /// Games asked about whose answer hasn't come back (one question at a time per game).
+    looking_up: RefCell<HashSet<PathBuf>>,
+    /// The kept tallies, by game: read at the first look, replaced by each answer (None: no file).
+    tallies: RefCell<HashMap<PathBuf, Option<Summary>>>,
+    /// Games that ended since their numbers were asked: asked fresh at the next look on Wi-Fi.
+    ended: RefCell<HashSet<PathBuf>>,
+    worker: OnceCell<mpsc::Sender<Job>>,
+    wifi: Cell<Option<(Instant, bool)>>,
+    /// `POCKETUI_SNAPSHOT_RA=<unlocked>/<total>`: every game's tally (snapshots only; signed in, nothing asked).
+    pub(crate) made_up: Option<Summary>,
 }
 
 impl AchievementsUi {
@@ -39,9 +62,81 @@ impl AchievementsUi {
         AchievementsUi {
             page: None,
             signed_in: Account::load(data_dir).map(|a| a.shown_name().to_string()),
-            looking_up: HashSet::new(),
+            looking_up: RefCell::default(),
+            tallies: RefCell::default(),
+            ended: RefCell::default(),
+            worker: OnceCell::new(),
+            wifi: Cell::new(None),
+            made_up: None,
         }
     }
+
+    /// `POCKETUI_SNAPSHOT_RA=34/60`: every game has that tally and the player is signed in (`--snapshot`).
+    pub fn make_up(&mut self, spec: &str) {
+        let Some((unlocked, total)) = spec.split_once('/').and_then(|(u, t)| Some((u.trim().parse().ok()?, t.trim().parse().ok()?))) else { return };
+        self.made_up = Some(Summary { game_id: 1, total, unlocked, updated: u64::MAX, ..Default::default() });
+        self.signed_in.get_or_insert_with(|| "RetroFan".into());
+    }
+
+    /// The game's kept tally: its file at the first look (offline too), then what the answers brought.
+    pub fn tally(&self, data_dir: &Path, system: &str, rom: &Path) -> Option<Summary> {
+        self.tallies.borrow_mut().entry(rom.to_path_buf()).or_insert_with(|| Summary::load(data_dir, system, rom)).clone()
+    }
+
+    /// Whether the game is to be looked up now, and then whether fresh (it just ended): signed in, on Wi-Fi, its
+    /// numbers old (`lookup::wanted`) or the game ended, and not asked already (`case_line::ask`). `wifi` is asked only
+    /// when all else says yes, and kept a moment (the shelf looks at every game it paints). Marks the game asked.
+    pub fn due(&self, rom: &Path, known: Option<&Summary>, now: u64, wifi: impl FnOnce() -> bool) -> Option<bool> {
+        if self.made_up.is_some() || self.signed_in.is_none() || self.looking_up.borrow().contains(rom) {
+            return None;
+        }
+        let (wanted, ended) = (lookup::wanted(known, now), self.ended.borrow().contains(rom));
+        if !(wanted || ended) {
+            return None;
+        }
+        let up = match self.wifi.get() {
+            Some((at, up)) if at.elapsed() < WIFI_KEPT => up,
+            _ => {
+                let up = wifi();
+                self.wifi.set(Some((Instant::now(), up)));
+                up
+            }
+        };
+        if !case_line::ask(self.signed_in.is_some(), up, wanted, ended) {
+            return None;
+        }
+        self.looking_up.borrow_mut().insert(rom.to_path_buf());
+        self.ended.borrow_mut().remove(rom);
+        Some(ended)
+    }
+
+    /// A game ended: its tally is read again from its file (pocket-core keeps it after playing) and asked fresh.
+    pub fn forget(&self, rom: &Path) {
+        self.tallies.borrow_mut().remove(rom);
+        self.ended.borrow_mut().insert(rom.to_path_buf());
+    }
+}
+
+/// Wi-Fi for the lookups: Android's handheld view asks Android (unmetered Wi-Fi); Linux its status corner (memory).
+fn wifi_up() -> bool {
+    #[cfg(all(target_os = "android", feature = "handheld"))]
+    return super::app_android::unmetered_wifi();
+    #[cfg(not(all(target_os = "android", feature = "handheld")))]
+    pocket_ui::status_corner::status().wifi
+}
+
+/// The one thread that looks games up, one after the other (a shelf of games is one request per console, `lookup`).
+fn start_worker(proxy: winit::event_loop::EventLoopProxy<UserEvent>, data: PathBuf) -> mpsc::Sender<Job> {
+    let (tx, rx) = mpsc::channel::<Job>();
+    let _ = std::thread::Builder::new().name("ra-lookup".into()).spawn(move || {
+        let curl = http::system(http::user_agent(None));
+        for (system, rom, fresh) in rx {
+            // Signed out since it was asked: nothing goes out, and the game is free to be asked again.
+            let summary = Account::load(&data).and_then(|account| lookup::lookup(&*curl, &data, &account, &system, &rom, now_secs(), fresh));
+            let _ = proxy.send_event(UserEvent::Achievements(Event::Tally { system, rom, summary }));
+        }
+    });
+    tx
 }
 
 fn view_kind(v: &View) -> u8 {
@@ -143,11 +238,14 @@ impl App {
                 }
             }
             Event::Tally { system, rom, summary } => {
-                self.achievements.looking_up.remove(&rom);
+                self.achievements.looking_up.borrow_mut().remove(&rom);
+                let Some(summary) = summary else { return };
                 if let Some(open) = self.card.as_mut().filter(|o| o.path == rom && o.system == system) {
-                    if let Some(summary) = summary {
-                        open.card.data.achievements = summary.text();
-                    }
+                    open.card.data.achievements = summary.text();
+                }
+                let before = self.achievements.tallies.borrow_mut().insert(rom, Some(summary.clone()));
+                if before.flatten().and_then(|b| case_line::line(&b)) != case_line::line(&summary) {
+                    self.request_redraw();
                 }
             }
         }
@@ -159,21 +257,48 @@ impl App {
     }
 
     /// "12 of 40" for a game's card: what is known now, and a lookup in the background when that is old or missing
-    /// (signed in only; `lookup::wanted` keeps it to once an hour per game).
+    /// (signed in, on Wi-Fi; `lookup::wanted` keeps it to once an hour per game).
     pub(crate) fn card_achievements(&mut self, system: &str, path: &Path) -> Option<String> {
         pocket_ui::achievements::consoles::console_id(system)?;
-        let known = Summary::load(&self.data_dir, system, path);
-        if self.achievements.signed_in.is_some() && lookup::wanted(known.as_ref(), now_secs()) && self.achievements.looking_up.insert(path.to_path_buf()) {
-            if let Some(account) = Account::load(&self.data_dir) {
-                let (proxy, data, system, rom) = (self.proxy.clone(), self.data_dir.clone(), system.to_string(), path.to_path_buf());
-                let _ = std::thread::Builder::new().name("ra-lookup".into()).spawn(move || {
-                    let curl = http::system(http::user_agent(None));
-                    let summary = lookup::lookup(&*curl, &data, &account, &system, &rom, now_secs());
-                    let _ = proxy.send_event(UserEvent::Achievements(Event::Tally { system, rom, summary }));
-                });
-            }
-        }
+        let known = match &self.achievements.made_up {
+            Some(m) => Some(m.clone()),
+            None => Summary::load(&self.data_dir, system, path),
+        };
+        self.achievements.tallies.borrow_mut().insert(path.to_path_buf(), known.clone());
+        self.achievements_refresh(system, path, known.as_ref());
         known.and_then(|s| s.text())
+    }
+
+    /// Asks the worker about the game when `AchievementsUi::due` says so. Never in a snapshot.
+    fn achievements_refresh(&self, system: &str, path: &Path, known: Option<&Summary>) {
+        if super::snapshot_run() {
+            return;
+        }
+        let Some(fresh) = self.achievements.due(path, known, now_secs(), wifi_up) else { return };
+        let tx = self.achievements.worker.get_or_init(|| start_worker(self.proxy.clone(), self.data_dir.clone()));
+        let _ = tx.send((system.to_string(), path.to_path_buf(), fresh));
+    }
+
+    /// "34 of 60 achievements · 56%" for a game with a set and at least one unlock, when signed in (`case_line`). Its kept
+    /// tally, read once; renewed in the background (`achievements_refresh`). Progress from saves off (Cozy extras):
+    /// nothing, as for the line from the save.
+    pub(crate) fn achievements_line(&self, system: &str, path: &Path) -> Option<String> {
+        if !pocket_ui::cozy_extras::on(pocket_ui::cozy_extras::Extra::ProgressFromSaves) {
+            return None;
+        }
+        self.achievements.signed_in.as_ref()?;
+        pocket_ui::achievements::consoles::console_id(system)?;
+        if let Some(m) = &self.achievements.made_up {
+            return case_line::line(m);
+        }
+        let known = self.achievements.tally(&self.data_dir, system, path);
+        self.achievements_refresh(system, path, known.as_ref());
+        known.as_ref().and_then(case_line::line)
+    }
+
+    /// A game ended: its tally is read again and asked fresh (`AchievementsUi::forget`).
+    pub(crate) fn achievements_forget(&self, rom: &Path) {
+        self.achievements.forget(rom);
     }
 
     /// "35 of 120 achievements in 3 games" for a console page, from the games' tallies.
@@ -472,5 +597,78 @@ pub(crate) fn demo_snapshot() -> Snapshot {
         waiting: 0,
         hardcore: false,
         achievements,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::cell::Cell;
+
+    fn signed_in(dir: &Path) -> AchievementsUi {
+        AchievementsUi { signed_in: Some("RetroFan".into()), ..AchievementsUi::load(dir) }
+    }
+
+    fn tally(unlocked: u32, updated: u64) -> Summary {
+        Summary { game_id: 7, hash: "ab".into(), total: 60, unlocked, updated, ..Default::default() }
+    }
+
+    /// Without Wi-Fi nothing is asked, whatever else; signed out, Wi-Fi isn't even looked at. On Wi-Fi a game is asked
+    /// once (until its answer), fresh numbers are not asked again, and a game that just ended is asked fresh.
+    #[test]
+    fn games_are_asked_on_wifi_only_once_and_fresh_after_playing() {
+        let dir = tempfile::tempdir().unwrap();
+        let rom = Path::new("/roms/gba/Fusion.gba");
+        let looks = Cell::new(0);
+        let wifi = |up: bool| {
+            let looks = &looks;
+            move || {
+                looks.set(looks.get() + 1);
+                up
+            }
+        };
+        let out = AchievementsUi::load(dir.path());
+        assert_eq!(out.due(rom, None, 1000, wifi(true)), None, "signed out");
+        assert_eq!(looks.get(), 0, "signed out: Wi-Fi not even asked");
+
+        let ui = signed_in(dir.path());
+        assert_eq!(ui.due(rom, None, 1000, wifi(false)), None, "no Wi-Fi: nothing goes out");
+        ui.ended.borrow_mut().insert(rom.to_path_buf());
+        assert_eq!(ui.due(rom, Some(&tally(3, 0)), 1000, wifi(false)), None, "no Wi-Fi after a game either");
+        assert!(ui.ended.borrow().contains(rom), "the game waits to be asked fresh");
+        assert!(ui.looking_up.borrow().is_empty());
+
+        let ui = signed_in(dir.path());
+        assert_eq!(ui.due(rom, None, 1000, wifi(true)), Some(false));
+        assert_eq!(ui.due(rom, None, 1000, wifi(true)), None, "asked already");
+        ui.looking_up.borrow_mut().clear();
+        assert_eq!(ui.due(rom, Some(&tally(3, 900)), 1000, wifi(true)), None, "fresh numbers stay");
+        ui.forget(rom);
+        assert_eq!(ui.due(rom, Some(&tally(3, 900)), 1000, wifi(true)), Some(true), "just ended: asked fresh");
+        assert!(!ui.ended.borrow().contains(rom));
+
+        // A snapshot's made-up numbers never ask.
+        let mut snap = AchievementsUi::load(dir.path());
+        snap.make_up("34/60");
+        assert_eq!(snap.signed_in.as_deref(), Some("RetroFan"));
+        assert_eq!(snap.due(rom, None, 1000, wifi(true)), None);
+    }
+
+    /// Offline, the kept tally is the line: read from its file once, kept, and read again after a game.
+    #[test]
+    fn the_kept_tally_answers_offline_and_after_a_game_is_read_again() {
+        let dir = tempfile::tempdir().unwrap();
+        let rom = Path::new("/roms/gba/Fusion.gba");
+        let ui = signed_in(dir.path());
+        assert_eq!(ui.tally(dir.path(), "gba", rom), None);
+        tally(34, 1).save(dir.path(), "gba", rom);
+        assert_eq!(ui.tally(dir.path(), "gba", rom), None, "kept: the file is read once");
+        ui.forget(rom);
+        let t = ui.tally(dir.path(), "gba", rom).unwrap();
+        assert_eq!(case_line::line(&t).as_deref(), Some("34 of 60 achievements · 56%"));
+        // pocket-core keeps 35 after the next game; the line follows once the game is over.
+        tally(35, 2).save(dir.path(), "gba", rom);
+        ui.forget(rom);
+        assert_eq!(ui.tally(dir.path(), "gba", rom).unwrap().unlocked, 35);
     }
 }

@@ -126,6 +126,8 @@ pub struct CardData {
     pub port: Option<(String, bool)>,
     /// PortMaster has a newer version of this port: a quiet note under the Speed line (A updates it in Extras).
     pub port_update: bool,
+    /// An Android game (Android's handheld view): its app starts it, so the card has no "This game" (START does nothing).
+    pub app_game: bool,
     /// Opened by X on Just Play: why this game ("Not played for 3 months · you like platformers"); Right picks again.
     pub surprise: Option<String>,
     /// The game's pictures come from the libretro collection: the status picker offers "Wrong pictures? Look up
@@ -156,6 +158,9 @@ pub struct CardData {
     /// `case_knows`), in the interface's language: the first line under "Your game". Set when painted (`paint_card`);
     /// None for a game not read or a save that says nothing for sure.
     pub progress: Option<String>,
+    /// `progress` is the RetroAchievements line ("34 of 60 achievements · 56%", `achievements::case_line`) standing in
+    /// for a save that says nothing: the "Unlocked" row under it is left out then (it would say the same).
+    pub progress_achievements: bool,
     /// Under it, pictures from the player's own ROM (the team, the badges: `case_knows_art`) or a small measure
     /// (`case_knows::Meter`); set with `progress`.
     pub case_art: Option<std::sync::Arc<crate::case_knows_art::Art>>,

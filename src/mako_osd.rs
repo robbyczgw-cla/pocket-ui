@@ -31,8 +31,18 @@ use std::sync::atomic::{AtomicBool, Ordering};
 
 /// Measurement override only: set POCKETUI_H700_VOLUME_OSD=1 before start to retain the old display path.
 pub fn quiet_h700_games() -> bool {
-    crate::device::current().model.is_some_and(|m| m.is_h700())
-        && std::env::var("POCKETUI_H700_VOLUME_OSD").as_deref() != Ok("1")
+    quiet_for(
+        crate::device::current().model.is_some_and(|m| m.is_h700()),
+        crate::device::darkos_port(),
+        std::env::var("POCKETUI_H700_VOLUME_OSD").as_deref() == Ok("1"),
+    )
+}
+
+/// The quiet game display is for the Allwinner H700 under ROCKNIX, where it was measured (docs/H700-VOLUME.md). The dArkOS port
+/// borrows the H700 profile's rows for its RK3566/RK3326 boards (`darkos::BOARDS`), but it is not that chip or that audio path:
+/// it keeps the volume bar over a game, as every other device does.
+fn quiet_for(h700_profile: bool, darkos: bool, old_display: bool) -> bool {
+    h700_profile && !darkos && !old_display
 }
 
 pub const CONFIG: &str = "/storage/.config/mako/config";
@@ -158,6 +168,14 @@ pub fn set_hidden(hidden: bool) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn darkos_keeps_the_volume_bar_over_a_game_and_h700_rocknix_stays_quiet() {
+        assert!(quiet_for(true, false, false), "an H700 under ROCKNIX: no volume display behind a game");
+        assert!(!quiet_for(true, true, false), "dArkOS (H700 profile rows, RK3566/RK3326 chips): the bar shows");
+        assert!(!quiet_for(true, false, true), "the measurement override brings the old display back");
+        assert!(!quiet_for(false, false, false));
+    }
     use crate::testutil::TestDir;
     use std::os::unix::fs::PermissionsExt;
 

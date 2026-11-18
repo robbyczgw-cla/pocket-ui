@@ -468,6 +468,27 @@ fn lock_queue() -> std::sync::MutexGuard<'static, Queue> {
     QUEUE.lock().unwrap_or_else(|e| e.into_inner())
 }
 
+/// Tests: the card writer takes this much longer over a write of the path (a slow card), once, so a test can see who
+/// waits for it.
+#[cfg(test)]
+static SLOW_WRITES: std::sync::Mutex<Vec<(PathBuf, std::time::Duration)>> = std::sync::Mutex::new(Vec::new());
+
+#[cfg(test)]
+pub fn slow_write_of(path: &Path, extra: std::time::Duration) {
+    SLOW_WRITES.lock().unwrap_or_else(|e| e.into_inner()).push((path.to_path_buf(), extra));
+}
+
+#[cfg(test)]
+fn slow_card(path: &Path) {
+    let extra = {
+        let mut slow = SLOW_WRITES.lock().unwrap_or_else(|e| e.into_inner());
+        slow.iter().position(|(p, _)| p == path).map(|i| slow.remove(i).1)
+    };
+    if let Some(extra) = extra {
+        std::thread::sleep(extra);
+    }
+}
+
 fn card_writer() {
     let mut q = lock_queue();
     loop {
@@ -477,6 +498,8 @@ fn card_writer() {
                 drop(q);
                 // Latency trace: what the card took for it (the shelf no longer waits for this).
                 let path = crate::trace::on().then(|| write.path.clone());
+                #[cfg(test)]
+                slow_card(&write.path);
                 finish_write(write);
                 if let Some(path) = path {
                     crate::trace::step(&format!("card writer: {} on the SD card", path.file_name().unwrap_or_default().to_string_lossy()));

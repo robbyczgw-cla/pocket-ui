@@ -333,6 +333,7 @@ fn card(c: &mut Canvas, text: &mut Text, focus: usize) {
         battery: None,
         port: None,
         port_update: false,
+        app_game: false,
         keys: None,
         surprise: None,
         look_up: true,
@@ -344,6 +345,7 @@ fn card(c: &mut Canvas, text: &mut Text, focus: usize) {
         continue_at: None,
         hardcore: false,
         progress: None,
+        progress_achievements: false,
         case_art: None,
         case_meter: None,
         links: Vec::new(),
@@ -524,14 +526,10 @@ pub fn motion(c: &mut Canvas, text: &mut Text) {
     hints(c, text, &[("B", "Back"), ("A", "Open")]);
 }
 
-/// The Look rows the Big text card's picture shows: Android's Look has no Zoom in the pause menu (`device::ANDROID_HIDES`
-/// "zoom_pause"), so its card doesn't show one (the Odin 2 Mini's Tour showed Screen colour, then in Look, 13.11.).
-pub fn easy_to_read_rows(android: bool) -> Vec<(&'static str, String)> {
-    let mut rows: Vec<(&str, String)> = vec![("Appearance", "Dark".into()), ("Colours", "Warm".into()), ("Font", "Barlow".into()), ("Text size", "Large".into())];
-    if !android {
-        rows.push(("Zoom in the pause menu", "Off".into()));
-    }
-    rows
+/// The Look rows the Big text card's picture shows: the card switches Text size and Motion together. Zoom in the pause
+/// menu went to Playing in 0.5.1, so the picture no longer differs on Android (it has no such row, `device::ANDROID_HIDES`).
+pub fn easy_to_read_rows() -> Vec<(&'static str, String)> {
+    vec![("Appearance", "Dark".into()), ("Colours", "Warm".into()), ("Font", "Barlow".into()), ("Text size", "Large".into()), ("Motion", "Reduced".into())]
 }
 
 /// Settings as START opens it since the tree of 2026-11-13: the rows of Connections at once, the categories' symbols in a
@@ -568,7 +566,7 @@ pub fn easy_to_read(c: &mut Canvas, text: &mut Text) {
     let before = crate::type_scale::get();
     crate::type_scale::set(crate::settings::TextSize::Large);
     c.clear(pal().void);
-    let rows = easy_to_read_rows(crate::device::android_profile());
+    let rows = easy_to_read_rows();
     list_page(c, text, "Look", &rows, 3, 132);
     hints(c, text, &[("B", "Back"), ("A", "Switch")]);
     crate::type_scale::set(before);
@@ -774,13 +772,13 @@ pub fn tailscale(c: &mut Canvas, text: &mut Text) {
     c.clear(pal().void);
     let rows = vec![
         ("Tailscale", "On".to_string()),
-        ("Log out", "sample.ts.net".to_string()),
+        ("Log out", "tailnet.example.invalid".to_string()),
         ("Sign in with a key", String::new()),
         ("Name", "pocket".to_string()),
     ];
     list_page(c, text, "Tailscale", &rows, 0, 132);
     let mut y = 132 + 4 * 66 + 60;
-    for line in ["Connected as sample.ts.net", "This Pocket: 100.64.0.7, pocket"] {
+    for line in ["Connected as tailnet.example.invalid", "This Pocket: 198.51.100.7, pocket"] {
         text.draw(c, Face::Body, 30, 66, y, pal().text, line);
         y += 44;
     }

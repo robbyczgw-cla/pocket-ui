@@ -179,6 +179,8 @@ struct App {
     scan: Option<mpsc::Receiver<Result<ui::Library, String>>>,
     /// The read of which games stand open (`frozen_refresh`); a newer one replaces it, so a late answer is dropped.
     frozen: Option<mpsc::Receiver<Vec<String>>>,
+    case_read: Option<mpsc::Receiver<(String, Option<pocket_ui::case_knows::Progress>, Option<pocket_ui::case_knows_art::Art>)>>,
+    case_asked: std::collections::HashSet<String>,
     check_at: Instant,
     /// When the status corner's facts are asked for again (`phone_corner::Reading::next_look`).
     corner_at: Instant,
@@ -496,7 +498,7 @@ impl App {
                     let game = g.clone();
                     // Rediscover's input: when this game was last started.
                     let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_secs());
-                    let reminder = if self.ui.is_frozen(&game.key) {
+                    let mut reminder = if self.ui.is_frozen(&game.key) {
                         pocket_ui::where_was_i::card(&pocket_ui::where_was_i::Facts {
                             on: self.ui.prefs.remind_where.unwrap_or(false), kids: false,
                             easy: self.ui.prefs.theme == pocket_ui::settings::Theme::Big,
@@ -505,6 +507,14 @@ impl App {
                             note: "",
                         }, now)
                     } else { None };
+                    if self.ui.prefs.extras.get(pocket_ui::cozy_extras::Extra::ProgressFromSaves) {
+                        if let Some(card) = &mut reminder {
+                            if let Some(facts) = self.ui.library.as_ref().and_then(|l| l.games.iter().position(|g| g.key == game.key).map(|i| &l.cards[i])) {
+                                card.progress = facts.progress.clone();
+                                card.art = facts.case_art.clone();
+                            }
+                        }
+                    }
                     self.ui.prefs.played.insert(game.key.clone(), now);
                     // Decorations' input: the time away counts as played when the launcher is back (`game_returned`).
                     self.ui.prefs.playing = Some((game.key.clone(), now));
@@ -531,7 +541,7 @@ impl App {
                         settings["frozen_shown"] = frozen.into();
                         settings["cheat_text"] = game.cheats.clone().into();
                         if let Some(card) = reminder {
-                            settings["reminder"] = serde_json::json!({"ago":card.ago,"played":card.played,"note":card.note});
+                            settings["reminder"] = serde_json::json!({"ago":card.ago,"played":card.played,"note":card.note,"progress":card.progress});
                         }
                         let settings = settings.to_string();
                         let listed = |parts: &[document_library::Part]| serde_json::Value::from(parts.iter().map(|p| serde_json::json!({"uri": p.uri, "name": p.name})).collect::<Vec<_>>()).to_string();
@@ -1241,6 +1251,58 @@ impl App {
             let _ = tx.send(scan(&tree));
         });
     }
+    /// The selected case asks on a worker: opening a SAF document or hashing a ROM never blocks paint.
+    fn case_progress(&mut self) {
+        if !self.ui.prefs.extras.get(pocket_ui::cozy_extras::Extra::ProgressFromSaves) {
+            self.case_read = None;
+            self.case_asked.clear();
+            if let Some(library) = self.ui.library.as_mut() {
+                for card in &mut library.cards { card.progress = None; card.case_art = None; card.case_meter = None; }
+            }
+            return;
+        }
+        if let Some((key, progress, art)) = self.case_read.as_ref().and_then(|rx| rx.try_recv().ok()) {
+            self.case_read = None;
+            if let Some(library) = self.ui.library.as_mut() {
+                if let Some(index) = library.games.iter().position(|g| g.key == key) {
+                    let card = &mut library.cards[index];
+                    card.progress = progress.as_ref().map(pocket_ui::case_knows_read::line);
+                    card.case_meter = progress.as_ref().and_then(|p| p.meter());
+                    card.case_art = art.map(std::sync::Arc::new);
+                }
+            }
+            self.redraw();
+        }
+        if self.case_read.is_some() { return; }
+        let Some(game) = self.ui.game().cloned() else { return };
+        if !self.case_asked.insert(game.key.clone()) { return; }
+        let key = ui::game_key(&game, self.ui.prefs.gameboy_gambatte);
+        let data = pocket_ui::platform::data_dir();
+        let (tx, rx) = mpsc::channel();
+        self.case_read = Some(rx);
+        std::thread::spawn(move || {
+            let name = game.relative.rsplit('/').next().unwrap_or_default();
+            let mut reading = pocket_ui::case_knows_read::Reading::new(&data);
+            let answer = (|| {
+                // The shared reader ignores unsupported releases before any ROM read. In particular, do not
+                // ask the core's large-disc alias to compute a PSP identity for a case it cannot read.
+                if let Ok(size) = u64::try_from(game.document_size) {
+                    let zip = name.to_ascii_lowercase().ends_with(".zip");
+                    if game.system_id != "nds" && !pocket_ui::case_knows::worth_checking(game.system_id, size, zip) { return None; }
+                }
+                let file = open_document(&game.uri)?;
+                let document = pocket_ui::platform::android_content::DirectGame::for_reading(file, &data.join("case-content").join(&key), name).ok()?;
+                let stem = std::path::Path::new(name).file_stem()?;
+                let save = data.join("saves").join(&key).join(format!("{}.srm", stem.to_string_lossy()));
+                let progress = reading.progress_from_save(game.system_id, document.path(), &save)?;
+                let art = reading.art(document.path(), &progress);
+                Some((progress, art))
+            })();
+            reading.keep();
+            let (progress, art) = answer.map_or((None, None), |(p, a)| (Some(p), a));
+            let _ = tx.send((game.key, progress, art));
+        });
+    }
     fn paint(&mut self) -> Result<(), String> {
         if self.insert.is_some() {
             return self.paint_insert();
@@ -1367,13 +1429,21 @@ impl ApplicationHandler<BridgeEvent> for App {
             self.back_at = Some(Instant::now());
             log::info!("back: resumed at {:.1}", pocket_ui::platform::android::monotonic_ms());
         }
+        self.case_asked.clear();
+        self.case_read = None;
         self.ui.game_returned();
+        self.case_asked.clear();
+        self.case_read = None;
         // An emulator app may have come or gone while we were away (Settings → Plays with offers what is on the phone).
         self.read_apps();
         self.persist();
         self.refresh();
         self.read_launcher_apps();
         self.begin_eject(played);
+        if let Some(line) = pocket_ui::save_trouble::take_moment(&pocket_ui::platform::data_dir().join("player-save-error")) {
+            self.ui.message = ui::tr(&line);
+            bridge("notice", &[&ui::tr("Couldn't save"), &ui::tr(&line)]);
+        }
         self.redraw();
         let installed = bridge("updateNotice", &[]);
         if !installed.is_empty() {
@@ -1567,6 +1637,8 @@ impl ApplicationHandler<BridgeEvent> for App {
         }
     }
     fn about_to_wait(&mut self, event_loop: &ActiveEventLoop) {
+        self.case_progress();
+        self.case_progress();
         if self.window.is_none() {
             event_loop.set_control_flow(ControlFlow::Wait);
             return;
@@ -1901,6 +1973,8 @@ fn android_main(android: AndroidApp) {
         selection: String::new(),
         scan: None,
         frozen: None,
+        case_read: None,
+        case_asked: Default::default(),
         check_at: Instant::now(),
         corner_at: Instant::now(),
         media,
@@ -1943,7 +2017,12 @@ fn android_main(android: AndroidApp) {
         setup_over,
     };
     app.ui.achievements_remember(pocket_ui::achievements::account::Account::load(&pocket_ui::platform::data_dir()).as_ref());
+    // A core the APK carries is never offered, and a copy downloaded before it came into the APK goes (both views do this).
     app.ui.core_offers = pocket_ui::android_cores::packages(bridge("coreOffers", &[]).as_bytes()).unwrap_or_default();
+    app.ui.core_offers.retain(|p| bridge("coreBundled", &[&p.core]) != "true");
+    let retired = pocket_ui::android_cores::retire_bundled(&pocket_ui::platform::data_dir(), |core| bridge("coreBundled", &[core]) == "true", !app.ui.core_offers.is_empty());
+    if !retired.is_empty() { log::info!("downloaded cores now in the APK, download removed: {retired:?}"); }
+    app.ui.skip_empty_steps();
     // The licences of every core, the optional downloads too (a list the build wrote from the same manifest as the source archives).
     app.ui.licences.load(&bridge("licenceList", &[]));
     app.ui.core_channel_open = !core_channel_url(&app.ui.prefs).is_empty();

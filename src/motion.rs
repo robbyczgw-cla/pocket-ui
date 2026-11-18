@@ -17,7 +17,7 @@ use std::cell::Cell;
 use std::sync::OnceLock;
 use std::time::{Duration, Instant};
 
-use crate::gfx::{mix, Canvas};
+use crate::gfx::Canvas;
 pub use crate::settings::Motion;
 
 /// Animations are evaluated for when their frame is on screen: painted now, shown about one 60 Hz refresh later.
@@ -529,8 +529,15 @@ pub fn layer(c: &mut Canvas, x: i32, y: i32, w: i32, h: i32, alpha: u8, paint: i
         paint(c);
         return;
     }
+    // What is there, kept in a buffer this thread keeps from frame to frame: a fresh one of the hint bar's size (430 KB
+    // at 1024 wide) was grown from nothing and paged in every frame of a fade, on the Brick's A53 a part of the 4 ms
+    // a hint fade added to the frames it fell on (docs/TRIMUI-BRICK.md). A layer in a layer takes its own.
+    let mut saved = KEPT.take();
+    saved.clear();
     let px = c.pixels();
-    let saved: Vec<u32> = (sy0..sy1).flat_map(|row| px[row * stride + sx0..row * stride + sx1].iter().copied()).collect();
+    for row in sy0..sy1 {
+        saved.extend_from_slice(&px[row * stride + sx0..row * stride + sx1]);
+    }
     paint(c);
     let a = alpha as u32;
     let span = sx1 - sx0;
@@ -538,10 +545,27 @@ pub fn layer(c: &mut Canvas, x: i32, y: i32, w: i32, h: i32, alpha: u8, paint: i
         let line = &mut c.pixels_mut()[row * stride + sx0..row * stride + sx1];
         for (px, old) in line.iter_mut().zip(&saved[k * span..(k + 1) * span]) {
             if *px != *old {
-                *px = mix(*old, *px, a);
+                *px = blend(*old, *px, a);
             }
         }
     }
+    KEPT.set(saved);
+}
+
+/// `b` over `a` at `t` (0-255) for `layer`: two channels in one multiply, no division (`gfx::mix` divides each by 255:
+/// on the Brick's A53 the hint bar's fade, two layers of the pill's pixels, took 2.2 ms each that way). Within one step
+/// of `mix` in every channel; 0 is `a`, 255 is `b`.
+#[inline]
+pub fn blend(a: u32, b: u32, t: u32) -> u32 {
+    let t = t + (t >> 7);
+    let rb = ((a & 0xff00ff) * (256 - t) + (b & 0xff00ff) * t) >> 8 & 0xff00ff;
+    let g = ((a & 0x00ff00) * (256 - t) + (b & 0x00ff00) * t) >> 8 & 0x00ff00;
+    rb | g
+}
+
+thread_local! {
+    /// `layer`'s copy of what is under it, kept for the next one.
+    static KEPT: std::cell::Cell<Vec<u32>> = const { std::cell::Cell::new(Vec::new()) };
 }
 
 /// How far a toast or OSD that appeared at `at` has come in: (offset in pixels from its resting place, alpha).
@@ -604,6 +628,7 @@ pub fn frame_log() -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::gfx::mix;
 
     fn ms(n: u64) -> Duration {
         Duration::from_millis(n)
@@ -902,6 +927,50 @@ mod tests {
         // Inside: half way; outside the rectangle the paint shows unmixed (layers are for things inside their box).
         assert_eq!(c.pixels()[5] & 0xff, 0x7f);
         assert_eq!(c.pixels()[0], 0xfefefe);
+    }
+
+    /// The kept copy is shared from layer to layer: one in another (the old hint bar fading out while the new comes),
+    /// and one after a larger one, mix with what was under each of them.
+    #[test]
+    fn layers_in_layers_and_after_each_other_mix_with_what_was_under_them() {
+        let (w, h) = (40u32, 30u32);
+        let mut buf: Vec<u32> = (0..w * h).map(|i| i * 0x010203).collect();
+        let under = buf.clone();
+        let mut c = Canvas::new(&mut buf, w, h);
+        layer(&mut c, 0, 0, 40, 30, 255 - 64, |c| {
+            c.rect(0, 0, 40, 30, 0x204060);
+            layer(c, 5, 5, 10, 10, 128, |c| c.rect(5, 5, 10, 10, 0xffffff));
+        });
+        let at = |c: &Canvas, x: u32, y: u32| c.pixels()[(y * w + x) as usize];
+        // Outside the inner one: the outer's colour over what was there.
+        assert_eq!(at(&c, 30, 20), blend(under[(20 * w + 30) as usize], 0x204060, 255 - 64));
+        // Inside it: white half over the outer's colour, that over what was there.
+        assert_eq!(at(&c, 7, 7), blend(under[(7 * w + 7) as usize], blend(0x204060, 0xffffff, 128), 255 - 64));
+        // A small one after: over what is there now, not over the big one's copy.
+        let now = at(&c, 2, 25);
+        layer(&mut c, 1, 24, 3, 3, 100, |c| c.rect(1, 24, 3, 3, 0x000000));
+        assert_eq!(at(&c, 2, 25), blend(now, 0x000000, 100));
+    }
+
+    /// A layer's mix is `gfx::mix` within a step in every channel, both ends exact, and never spills into the next
+    /// channel (every pair of channel values at every alpha).
+    #[test]
+    fn a_layers_mix_is_within_a_step_of_the_exact_one() {
+        for t in 0..=255u32 {
+            for x in (0..=255u32).step_by(3).chain([255]) {
+                for y in (0..=255u32).step_by(5).chain([255]) {
+                    let (a, b) = (x << 16 | y << 8 | (255 - x), y << 16 | x << 8 | (255 - y));
+                    let (got, want) = (blend(a, b, t), mix(a, b, t));
+                    for sh in [0, 8, 16] {
+                        let (g, w) = ((got >> sh & 0xff) as i32, (want >> sh & 0xff) as i32);
+                        assert!((g - w).abs() <= 1, "t {t}, {a:06x} -> {b:06x}: {got:06x} against {want:06x}");
+                    }
+                    assert_eq!(got >> 24, 0);
+                }
+            }
+            assert_eq!(blend(0x123456, 0xabcdef, 0), 0x123456);
+            assert_eq!(blend(0x123456, 0xabcdef, 255), 0xabcdef);
+        }
     }
 
     #[test]

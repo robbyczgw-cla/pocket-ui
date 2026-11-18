@@ -111,6 +111,13 @@ are untouched. The firmware's sleep hook can restart ogage after wake without br
 | HOME + Power | no power event while the UI owns the key | same short/held power behavior |
 | HOME + L3 / R3 | speaker / Bluetooth toggle | nothing |
 
+**Over the game.** pocket-fb runs here without `--gl`, so pocket-core's picture is the CPU copy (`soft_screen`) and no GPU draws
+the overlay. The copy blends the same pieces in itself (`soft_hud`). The H700's quiet game display (docs/H700-VOLUME.md) does
+not apply here, although the boards use the H700 profile's rows (`mako_osd::quiet_for`). Shown: the volume or brightness bar when ogage changes a level
+(at the top centre, at the size pocket-ui's shelf shows it on 640x480), "Battery low", the save warnings, the first game's note
+and Over the game's FPS line, with the same pills as everywhere else. Nothing is drawn or paid while none is up; a piece is
+rasterised again only when its text changes. Pixel Path's strip and the achievement card are not drawn on the CPU copy.
+
 pocket-ui's own sleep after a while without input saves the game and then suspends through the real `systemctl suspend`
 (the hwroot stand-in lets `suspend`, `poweroff` and `reboot` through); dArkOS's sleep hook (`sleep.rk3566`) stores and puts
 back the backlight and ALSA's state and restarts ogage after the wake. `killer_daemon` and `autosuspend` ship disabled.
@@ -166,6 +173,14 @@ game or the console. PSP minis and GameCube stay on dArkOS's emulators.
   The memory stick (`PSP/SAVEDATA`) is dArkOS's standalone PPSSPP's `<card>/psp/ppsspp`, bound over `storage/saves/psp`,
   so a game saved in either continues in the other; when it is missing start.sh makes it the way `ppsspp.sh` does on its
   first start (a copy of `/opt/ppsspp/backupforromsfolder/ppsspp`).
+  pocket-core passes the memory-stick root with a final `/.` to PPSSPP. This avoids its case-insensitive `PSP`
+  basename shortcut: the image's 1.18.1 core creates `SAVEDATA` but tries opening `PSP/SAVEDATA` when that shortcut
+  is active. Before this fix the `storage/saves/psp` mount accidentally selected it, so in-game saves could fail
+  with ENOENT even though Save & quit and slots worked. The files now go to `<card>/psp/ppsspp/PSP/SAVEDATA`.
+  Existing files are never deleted. If an older session produced saves in `<card>/psp/ppsspp/SAVEDATA`, back up
+  that folder and copy the game's folder into `PSP/SAVEDATA` while the emulator is stopped; keep both copies if
+  a destination already exists. A failed save created no progress to recover, but an existing pocket-ui moment
+  can still be resumed and then saved from inside the game with the fixed player.
 
 The second card (`/roms2`, "Switch to SD2 for Roms") is mounted by dArkOS with `umask=0000,iocharset=utf8,noatime,uid=1000,gid=1000`
 (exFAT, FAT) or `defaults` (ext4): no `noexec`, and every file is executable on exFAT and FAT.
@@ -183,13 +198,19 @@ exFAT driver). The cards are mounted the way dArkOS mounts them (`umask=0000,ioc
 | `/roms2` | exFAT, `/roms` also exFAT, both mounted at once (the tester's RG353M) | the same |
 
 `container-test.sh pad` (a virtual `retrogame_joypad` from `vpad.py`, evdev codes pressed on the welcome screen) checks the face buttons with the standard layout (no system file is read); `container-test.sh ui` checks Back to EmulationStation from Settings and from the quick settings (clean end, no
-failure screen) and that Power off reaches `systemctl poweroff`. `container-test.sh power` uses a virtual `rk805 pwrkey`
+failure screen) and that Power off reaches `systemctl poweroff`; both leave `clean-exit` in pocket-ui's logs (no logger runs on
+dArkOS), so the next boot's start shows no "The device shut down unexpectedly last time.", while a pocket-ui killed like a
+power cut still does (the container keeps the host's boot id: the test gives the state file an earlier one). `container-test.sh power` uses a virtual `rk805 pwrkey`
 to check short/held presses, a new auto state before the suspend request, no delivery to an existing/restarted host reader,
 and restoration after Back to ES and a UI SIGKILL. It requires `vpad.py` and `power-observer.py` next to the test script.
 **Run power tests under a `systemd-inhibit --what=handle-power-key --mode=block` in the VM outside the container**, with
 `POWER_TEST_VM_INHIBITED=1` passed to the container test. uinput devices belong to the shared VM kernel: the checks that
 intentionally deliver power to the fake host reader can otherwise shut down the VM through its own logind (dArkOS's
 logind ignores power, but the VM's does not). The VM inhibitor ends with the test; no host configuration is changed.
+
+`container-test.sh osd` starts the GBA game, presses Vol+ through the status FIFO and compares the screen file before, during and
+2.5 s after: the level bar's rectangle at the top centre must change, and be back to the game's picture afterwards
+(`osd-before/during/after.raw` in `/out`).
 
 `container-test.sh systems` (test-6) plays PSP (`Psp2048.pbp`) and Dreamcast (`240pSuite.cdi`), both free homebrew, with
 the image's own cores: first frames through the GLES context, 8 s running, the game's picture on the screen, slot 2 saved

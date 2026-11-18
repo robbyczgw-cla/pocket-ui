@@ -146,6 +146,21 @@ fn about_says_the_apk_s_version() {
     assert!(!sees(&linux, apk), "Linux's About says the APK's version: {linux}");
 }
 
+/// Settings › System › Updates (android.9) and its row say the APK's version too, the one Android's list offers by: the row
+/// said "0.2.0", the library's Cargo version, in the emulator (17.11.2026).
+#[test]
+fn updates_and_its_row_say_the_apk_s_version() {
+    let manifest = std::fs::read_to_string(format!("{ROOT}/android/AndroidManifest.xml")).unwrap();
+    let apk = manifest.split("android:versionName=\"").nth(1).and_then(|r| r.split('"').next()).unwrap();
+    let card = Card::new();
+    let page = card.screen("updates", true);
+    assert!(sees(&page, apk), "Updates on Android doesn't say {apk}: {page}");
+    let system = card.screen("settings:6", true);
+    assert!(sees(&system, "Updates") && sees(&system, apk), "the Updates row in System doesn't say {apk}: {system}");
+    let linux = card.screen("settings:6", false);
+    assert!(!sees(&linux, apk), "Linux's Updates row says the APK's version: {linux}");
+}
+
 /// The Linux handheld's words that the pages below must not show on Android (the class test over every text is
 /// `android_pages_name_nothing_only_linux_has` in app_settings_groups; this one sees the real program paint them).
 const LINUX_WORDS: &[&str] = &["ROCKNIX", "pocket-core", "SD card", "SD-Karte", "tarjeta SD", "Wi-Fi", "WLAN", "Bluetooth", "Lüfter", "ventilador", "Vol+", "Pocket ", "rewind", "Zoom in the pause menu"];

@@ -469,6 +469,9 @@ fn output_on_first(dpms: bool, dark_game: bool, from_light: bool) -> bool {
 // Fake power backends never flush every filesystem of the shared build host (`fsutil::flush_all`). The real backend
 // still flushes immediately before suspend/shutdown.
 fn sync_filesystems() {
+    // The card writer's queue first (library and options changes, recent games, play time): sync(2) writes only what has
+    // reached the page cache, and a write still waiting there would be lost with the power.
+    crate::fsutil::settle();
     crate::fsutil::flush_all();
 }
 
@@ -2632,8 +2635,9 @@ impl Sleep {
             crate::shutdown_log::event(&data_dir, &format!("{action:?}: `{cmd}` ended: {how}"));
             if !ok {
                 eprintln!("sleep: {action:?} (`{cmd}`) failed: {how}");
-                // Still up: alarms may be set again by the next sleep.
+                // Still up: alarms may be set again by the next sleep, and a power cut is unexpected again.
                 rtc.reopen();
+                crate::logs::unmark_clean(&data_dir);
                 if note.is_some() {
                     crate::auto_off::clear_note(&data_dir);
                     let _ = tx.send(Msg::SwitchOffFailed);
@@ -2762,8 +2766,9 @@ impl Sleep {
             crate::shutdown_log::event(&data_dir, &format!("{action:?}: `{cmd}` ended: {how}"));
             if !ok {
                 eprintln!("sleep: {action:?} (`{cmd}`) failed: {how}");
-                // Still up: alarms may be set again by the next sleep.
+                // Still up: alarms may be set again by the next sleep, and a power cut is unexpected again.
                 rtc.reopen();
+                crate::logs::unmark_clean(&data_dir);
                 if note.is_some() {
                     crate::auto_off::clear_note(&data_dir);
                     let _ = tx.send(Msg::SwitchOffFailed);
@@ -3719,6 +3724,7 @@ mod tests {
     #[test]
     fn switching_off_after_sleeping_keeps_the_screen_dark_and_leaves_a_note() {
         let (dir, mut s, file) = test_sleep("switch-off");
+        this_boot_started(&dir);
         s.light(Ctx::default());
         s.state = State::Deep;
         s.deep_seq = 4;
@@ -3733,6 +3739,9 @@ mod tests {
         assert!(shutdown_log_with(&dir, "ended: exit 0").contains("RTC alarm disarm"), "the auto-off switch-off disarms like the others");
         assert_eq!(level(&file), "0", "the screen never came on");
         assert!(s.screen_job.is_none() && s.overlay().is_none());
+        // RG353M on dArkOS 0.5.0 (reukiodo): switched off by this rule, every next start said the device had shut down
+        // unexpectedly. No logger runs there to mark the boot's end; the switch-off itself must.
+        assert_eq!(next_start_notice(&dir), None, "a switch-off after sleeping is a clean shutdown");
         // The next start: the screen at its level again, and the line to say once.
         let note = crate::auto_off::take_note(&dir).unwrap();
         assert_eq!(note, crate::auto_off::Note { hours: 3, brightness: Some(120) });
@@ -3742,6 +3751,7 @@ mod tests {
     #[test]
     fn switching_off_after_sleeping_keeps_the_screen_dark_and_leaves_a_note() {
         let (dir, mut s, file) = test_sleep("switch-off");
+        this_boot_started(&dir);
         s.light(Ctx::default());
         s.state = State::Deep;
         s.deep_seq = 4;
@@ -3756,6 +3766,9 @@ mod tests {
         assert!(shutdown_log_with(&dir, "ended: exit 0").contains("RTC alarm disarm"), "the auto-off switch-off disarms like the others");
         assert_eq!(level(&file), "0", "the screen never came on");
         assert!(s.screen_job.is_none() && s.overlay().is_none());
+        // RG353M on dArkOS 0.5.0 (reukiodo): switched off by this rule, every next start said the device had shut down
+        // unexpectedly. No logger runs there to mark the boot's end; the switch-off itself must.
+        assert_eq!(next_start_notice(&dir), None, "a switch-off after sleeping is a clean shutdown");
         // The next start: the screen at its level again, and the line to say once.
         let note = crate::auto_off::take_note(&dir).unwrap();
         assert_eq!(note, crate::auto_off::Note { minutes: 180, hours: 0, brightness: Some(120) });
@@ -3773,6 +3786,18 @@ mod tests {
         }
     }
 
+    /// The boot a test's power off ends, as `logs::begin_boot` records it at a start. No logger runs in a test, as none
+    /// runs on dArkOS or the Brick: only pocket-ui's own mark can say the boot ended on purpose.
+    fn this_boot_started(dir: &Path) {
+        assert_eq!(crate::logs::begin_boot(dir, "boot-before", 1_791_900_000), None);
+    }
+
+    /// What the next boot's start says about this one: the crash notice, if any (`main`: `begin_boot_now`, `take_marker`).
+    fn next_start_notice(dir: &Path) -> Option<String> {
+        crate::logs::begin_boot(dir, "boot-after", 1_791_990_000);
+        crate::crash::take_marker(dir)
+    }
+
     #[test]
     fn power_off_and_restart_disarm_an_armed_alarm_before_their_command() {
         for (action, name) in [(PowerAction::PowerOff, "off"), (PowerAction::Reboot, "reboot"), (PowerAction::RebootBootloader, "bootloader")] {
@@ -3784,6 +3809,7 @@ mod tests {
             s.sys.poweroff_cmd = record.clone();
             s.sys.reboot_cmd = record.clone();
             s.sys.bootloader_cmd = record;
+            this_boot_started(&dir);
             s.shut_down(action);
             assert!(powered_off(&dir), "{name}");
             assert_eq!(std::fs::read_to_string(dir.join("seen")).unwrap(), "0", "{name}: the alarm was disarmed before the command");
@@ -3792,7 +3818,24 @@ mod tests {
                 assert!(log.contains(&want), "{name}: {want} in\n{log}");
             }
             assert!(s.rtc.shut(), "{name}: nothing arms it again");
+            assert_eq!(next_start_notice(&dir), None, "{name}: the power menu's power off and restart are clean");
         }
+    }
+
+    #[test]
+    fn a_power_off_from_the_shelf_waits_for_what_the_card_writer_still_has() {
+        // RG353M on dArkOS (reukiodo): switched off from the shelf while box art and descriptions came in. A list handed
+        // to the card writer just before must be on the card when the command runs, not lost with the power.
+        let (dir, mut s, _file) = test_sleep("settle");
+        let list = dir.join("recent.json");
+        crate::fsutil::slow_write_of(&list, Duration::from_millis(1500));
+        crate::fsutil::write_json_soon(&list, &["Tetris"]);
+        s.sys.poweroff_cmd = format!("if test -s {}; then echo there; else echo missing; fi >> {}", list.display(), dir.join("powered-off").display());
+        this_boot_started(&dir);
+        s.shut_down(PowerAction::PowerOff);
+        assert!(powered_off(&dir));
+        assert_eq!(std::fs::read_to_string(dir.join("powered-off")).unwrap().trim(), "there", "the write waiting for the card landed first");
+        assert_eq!(next_start_notice(&dir), None);
     }
 
     #[test]
@@ -3877,6 +3920,7 @@ mod tests {
     #[ignore = "timing tier: scripts/test-timing.sh (serial)"]
     fn timing_a_switch_off_that_fails_stays_dark_in_light_sleep() {
         let (dir, mut s, file) = test_sleep("switch-off-fails");
+        this_boot_started(&dir);
         s.sys.poweroff_cmd = "false".into();
         s.light(Ctx::default());
         s.auto_off = Some(crate::auto_off::Plan::new(0.0, 3, HOUR));
@@ -3892,12 +3936,14 @@ mod tests {
         assert_eq!((s.state(), level(&file).as_str()), (State::Light, "0"));
         assert_eq!(s.auto_off, None, "no second try in this dark spell");
         assert_eq!(crate::auto_off::take_note(&dir), None, "no note for a start that didn't follow a switch-off");
+        assert!(next_start_notice(&dir).is_some(), "still on after a failed switch-off: a power cut later is unexpected again");
     }
 
     #[cfg(feature = "brick")]
     #[test]
     fn a_switch_off_that_fails_stays_dark_in_light_sleep() {
         let (dir, mut s, file) = test_sleep("switch-off-fails");
+        this_boot_started(&dir);
         s.sys.poweroff_cmd = "false".into();
         s.light(Ctx::default());
         s.auto_off = Some(crate::auto_off::Plan::new(0.0, 180, MIN));
@@ -3913,6 +3959,7 @@ mod tests {
         assert_eq!((s.state(), level(&file).as_str()), (State::Light, "0"));
         assert_eq!(s.auto_off, None, "no second try in this dark spell");
         assert_eq!(crate::auto_off::take_note(&dir), None, "no note for a start that didn't follow a switch-off");
+        assert!(next_start_notice(&dir).is_some(), "still on after a failed switch-off: a power cut later is unexpected again");
     }
 
     #[cfg(not(feature = "brick"))]

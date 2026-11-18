@@ -255,7 +255,7 @@ fn names(text: &str, word: &str) -> bool {
 fn the_settings_table_lists_every_settings_row_in_order() {
     // Settings is three pages (the manual's 30 000 px limit): how it opens, Look, Playing and Games; Screen & sound and Controls; then
     // Connections, System and Help & tools.
-    let md = format!("{}\n{}\n{}", read("docs/user/settings.md"), read("docs/user/settings-sound.md"), read("docs/user/settings-system.md"));
+    let md = format!("{}\n{}\n{}\n{}", read("docs/user/settings.md"), read("docs/user/settings-playing.md"), read("docs/user/settings-sound.md"), read("docs/user/settings-system.md"));
     // The categories, in their order, each naming its entries.
     let open = first_table(&section(&md, "Open Settings"));
     let doc: Vec<String> = open.iter().map(|r| bold(&r[0])).collect();
@@ -300,7 +300,7 @@ fn every_cozy_extra_is_described_with_its_start() {
 
 #[test]
 fn settings_curator_rows_and_their_start_settings_are_described() {
-    let md = read("docs/user/settings.md");
+    let md = read("docs/user/settings-playing.md");
     let rows = first_table(&section(&md, "Curator"));
     let doc: Vec<(String, String)> = rows.iter().map(|r| (bold(&r[0]), r[1].clone())).collect();
     let mut prefs = pocket_ui::curator::prefs::Prefs::default();
@@ -420,7 +420,7 @@ fn look_appearance_motion_on_start_and_screen_frames_choices_are_described() {
         looks, themes,
         "docs/user/playing.md, \"Looks\": one row per look, in the order of Settings → Look"
     );
-    let settings = format!("{}\n{}", read("docs/user/settings.md"), read("docs/user/settings-sound.md"));
+    let settings = format!("{}\n{}\n{}", read("docs/user/settings.md"), read("docs/user/settings-playing.md"), read("docs/user/settings-sound.md"));
     for (title, names) in [
         ("Appearance", Appearance::ALL.iter().map(|a| a.name()).collect::<Vec<_>>()),
         ("Motion", Motion::ALL.iter().map(|m| m.name()).collect()),
@@ -479,42 +479,45 @@ fn the_pause_menu_table_matches_the_menu_of_each_emulator() {
         );
     }
     // The emulators' states known (a PS2 game before ARMSX2 named it has no Save or Load either: described in prose).
-    let page = |saver: Saver, _options: bool, achievements: bool| -> Vec<MainItem> {
-        let hosted = matches!(saver, Saver::PocketCore { .. });
-        super::main_items(hosted, pocket_ui::pause_saves::Saves::of(saver, true, None), achievements)
+    // Each row as the menu shows it with Settings' defaults (Continue where I quit on): Quit reads "Save & quit" where
+    // it keeps the moment (`quit_saves`). The table said "Quit" for all of them while the menu said "Save & quit".
+    let page = |saver: Saver, achievements: bool| {
+        let saves = pocket_ui::pause_saves::Saves::of(saver, true, None);
+        (super::main_items(matches!(saver, Saver::PocketCore { .. }), saves, achievements), saves)
     };
     let mut seen = BTreeSet::new();
     for row in first_table(&md) {
         let kind = row[0].as_str();
         // RetroAchievements' Hardcore has its row once it is offered (`achievements::hardcore::OFFERED`,
         // docs/dev/hardcore-guide.md); until then the guide has none.
-        let (key, want) = if kind.contains("Hardcore") {
+        let (key, (want, saves)) = if kind.contains("Hardcore") {
             assert!(pocket_ui::achievements::hardcore::OFFERED, "docs/user/pause-menu.md has a Hardcore row, but Hardcore is not offered");
             let saves = super::app_achievements::hardcore_saves(pocket_ui::pause_saves::Saves::of(Saver::PocketCore { states: true }, true, None), true);
-            ("pocket-core hardcore", super::main_items(true, saves, true))
+            ("pocket-core hardcore", (super::main_items(true, saves, true), saves))
         } else if kind.contains("signed in") {
-            ("pocket-core signed in", page(Saver::PocketCore { states: true }, false, true))
+            ("pocket-core signed in", page(Saver::PocketCore { states: true }, true))
         } else if kind.contains("no save states") {
-            ("pocket-core without states", page(Saver::PocketCore { states: false }, false, false))
+            ("pocket-core without states", page(Saver::PocketCore { states: false }, false))
         } else if kind.starts_with("pocket-ui's own host") {
-            ("pocket-core", page(Saver::PocketCore { states: true }, false, false))
+            ("pocket-core", page(Saver::PocketCore { states: true }, false))
         } else if kind.contains("PlayStation 2") {
-            ("standalone", page(Saver::Standalone, true, false))
+            ("standalone", page(Saver::Standalone, false))
         } else if kind.starts_with("Xbox") {
             // hakuX while its core has no save states: the line in place of Save and Load.
             let saves = pocket_ui::pause_saves::Saves::of(Saver::Standalone, false, Some(pocket_ui::hakux::NO_STATES));
-            ("hakuX", super::main_items(false, saves, false))
+            ("hakuX", (super::main_items(false, saves, false), saves))
         } else if kind.starts_with("RetroArch") {
-            ("retroarch", page(Saver::RetroArch, false, false))
+            ("retroarch", page(Saver::RetroArch, false))
         } else if kind.starts_with("PortMaster") {
-            ("port", page(Saver::Port, false, false))
+            ("port", page(Saver::Port, false))
         } else if kind.starts_with("Other emulators") {
-            ("other", page(Saver::Other, false, false))
+            ("other", page(Saver::Other, false))
         } else {
             panic!("docs/user/pause-menu.md: a row for an unknown kind of emulator: {kind:?}")
         };
         let doc: Vec<&str> = row[1].split(", ").collect();
-        let code: Vec<&str> = want.iter().map(|i| i.label()).collect();
+        let quit_saves = super::quit_saves(false, saves);
+        let code: Vec<&str> = want.iter().map(|i| i.shown(quit_saves)).collect();
         assert_eq!(doc, code, "docs/user/pause-menu.md, the row {kind:?}");
         seen.insert(key);
     }
@@ -528,7 +531,8 @@ fn the_pause_menu_table_matches_the_menu_of_each_emulator() {
 
 #[test]
 fn every_option_group_setting_and_choice_is_described() {
-    let md = read("docs/user/options.md");
+    // The Screen frame and Screen orientation sections have a page of their own (options-screen.md).
+    let md = format!("{}\n{}", read("docs/user/options.md"), read("docs/user/options-screen.md"));
     let flat = squeezed(&md);
     let titles: Vec<String> = headings(&md).into_iter().map(|(_, h)| h).collect();
     // A setting is named in bold or is the heading of its own part.
@@ -1406,4 +1410,84 @@ fn code_shape_leaves_test_items_and_comments_out() {
         string_results("fn a() -> Result<(), String> {}\nfn b() -> io::Result<Vec<u8>> {}\nfn c() -> Result<HashMap<String, u8>, String>;\nfn d() -> Result<String, Error>;"),
         2
     );
+}
+
+// ---- the looks' names in every language -----------------------------------------------------------------------------
+
+/// Every look has one name per language, in its row and in every text that names it (the hand test 16.11.2026: the
+/// German row said "Vitrine", the descriptions "Schrank", and "Easy" stood beside "Einfach"). A text that names a look
+/// (its English with the look's capitalised name, or two looks' names, or "the cabinet" of the Cabinet look) has the
+/// look's own translation in it; and German has no "Vitrine" and no "Easy" left.
+#[test]
+fn i18n_look_names() {
+    // The looks' names in the UI (`look_settings::Theme::name`, `features::Profile::name`), Minimal and Cards still in old texts.
+    const LOOKS: [&str; 6] = ["Shelf", "Easy", "Split", "Cabinet", "Minimal", "Cards"];
+    let word = |text: &str, w: &str| {
+        text.match_indices(w).any(|(i, _)| {
+            let before = text[..i].chars().next_back().is_none_or(|c| !c.is_alphanumeric());
+            let after = text[i + w.len()..].chars().next().is_none_or(|c| !c.is_alphanumeric());
+            before && after
+        })
+    };
+    let mut bad = Vec::new();
+    for file in ["de.tsv", "es.tsv", "pt.tsv", "fr.tsv", "it.tsv"] {
+        let tsv = read(&format!("assets/i18n/{file}"));
+        let rows: Vec<(usize, &str, &str)> = tsv
+            .lines()
+            .enumerate()
+            .filter(|(_, l)| !l.starts_with('#'))
+            .filter_map(|(n, l)| l.split_once('\t').map(|(en, tr)| (n + 1, en, tr)))
+            .collect();
+        let name = |look: &str| rows.iter().find(|(_, en, _)| *en == look).map(|(_, _, tr)| tr.to_string());
+        for (n, en, tr) in &rows {
+            // A game's difficulty, not the look.
+            let en = en.replace("Easy mode", "");
+            let named: Vec<&str> = LOOKS.iter().copied().filter(|l| word(&en, l)).collect();
+            let mut wants: Vec<&str> = if named.len() >= 2 { named.clone() } else { named.iter().copied().filter(|l| ["Easy", "Cabinet"].contains(l)).collect() };
+            // "the cabinet" is the look's (its TV, its top); "the cabinet of the CRT frame" is a TV's own.
+            if en.to_lowercase().contains("the cabinet") && !en.contains("CRT frame") && !wants.contains(&"Cabinet") {
+                wants.push("Cabinet");
+            }
+            for look in wants {
+                let Some(own) = name(look) else { continue };
+                if *look == *en.as_str() {
+                    continue;
+                }
+                if !tr.to_lowercase().contains(&own.to_lowercase()) {
+                    bad.push(format!("assets/i18n/{file}:{n}: names {look} but not \"{own}\": {tr}"));
+                }
+            }
+        }
+        if file == "de.tsv" {
+            for (n, _, tr) in &rows {
+                if word(tr, "Vitrine") || word(tr, "Easy") {
+                    bad.push(format!("assets/i18n/{file}:{n}: German says Schrank and Einfach: {tr}"));
+                }
+            }
+        }
+    }
+    // The tests' German expectations too (16.11.: two first-start tests still expected "Easy" on the German pages): a line
+    // that names German ("de") expects no old name as a string.
+    let quoted = |w: &str| format!("\"{w}\"");
+    let mut tests: Vec<PathBuf> = std::fs::read_dir(root().join("tests")).unwrap().filter_map(|e| e.ok().map(|e| e.path())).collect();
+    tests.sort();
+    for f in tests.into_iter().filter(|p| p.extension().is_some_and(|x| x == "rs")) {
+        let src = std::fs::read_to_string(&f).unwrap();
+        for (n, line) in src.lines().enumerate() {
+            // From each German tuple to the next one: `("en", [.., "Easy", ..]), ("de", [..])` is fine.
+            let german = line.match_indices("(\"de\"").map(|(i, _)| {
+                let rest = &line[i + 1..];
+                &rest[..rest.find("(\"").unwrap_or(rest.len())]
+            });
+            if german.into_iter().any(|g| g.contains(&quoted("Easy")) || g.contains(&quoted("Vitrine"))) {
+                bad.push(format!("{}:{}: a German expectation with an old look name: {}", f.strip_prefix(root()).unwrap_or(&f).display(), n + 1, line.trim()));
+            }
+        }
+    }
+    for f in ["fastlane/metadata/android/de-DE/full_description.txt"] {
+        if word(&read(f), "Vitrine") {
+            bad.push(format!("{f}: the Cabinet look is \"Schrank\" in German"));
+        }
+    }
+    assert!(bad.is_empty(), "one name per look and language:\n{}", bad.join("\n"));
 }

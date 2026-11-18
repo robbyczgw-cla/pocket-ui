@@ -16,6 +16,7 @@ Couldn't read the game to identify it	No se pudo leer el juego para identificarl
 Looking up this game on RetroAchievements…	Buscando este juego en RetroAchievements…
 This game has no achievements yet.	Este juego aún no tiene logros.
 {n} of {m} unlocked	{n} de {m} desbloqueados
+{n} of {m} achievements · {k}%	{n} de {m} logros · {k} %
 RetroAchievements has no achievements for this version of the game.	RetroAchievements no tiene logros para esta versión del juego.
 Couldn't reach RetroAchievements. Unlocks count once the Pocket is online at the start of a game.	No se pudo conectar con RetroAchievements. Los logros cuentan si el Pocket tiene conexión al iniciar un juego.
 RetroAchievements isn't available for this game.	RetroAchievements no está disponible para este juego.
@@ -826,7 +827,7 @@ Timeline	Cronología
 Discontinued	Retirada
 Sold	Vendidas
 On this Pocket	En este Pocket
-{s} · last: {t}	{s} · último: {t}
+{t} · last: {s}	{t} · último: {s}
 Your games	Tus juegos
 {s}, last {t}	{s}, último {t}
 Played	Jugado
@@ -1089,6 +1090,7 @@ Saved. This takes effect the next time the game starts.	Guardado. Se aplica la p
 Original (480p)	Original (480p)
 2x (960p)	2x (960p)
 The resolution the Xbox's picture is drawn at. Original is the Xbox's own 480p; 2x (960p) is sharper and costs the GPU more. Takes effect the next time the game starts.	La resolución a la que se dibuja la imagen de la Xbox. Original es el 480p de la Xbox; 2x (960p) es más nítido y exige más a la GPU. Se aplica la próxima vez que se inicie el juego.
+The resolution the 3D picture is drawn at. Original is the console's own; 2x and up are sharper and cost the GPU more. Takes effect the next time the game starts.	La resolución a la que se dibuja la imagen 3D. Original es la de la consola; desde 2x es más nítida y exige más a la GPU. Se aplica la próxima vez que se inicie el juego.
 Aspect is as large as fits, in the picture's own shape (4:3), with black bars.	Proporción es lo más grande que cabe, con la forma de la imagen (4:3) y barras negras.
 Fullscreen fills the screen and stretches the picture.	Pantalla completa llena la pantalla y estira la imagen.
 Integer scales by whole numbers. Takes effect the next time the game starts.	Entero escala por números enteros. Se aplica la próxima vez que se inicie el juego.
@@ -1591,6 +1593,7 @@ The system update was removed.	Se quitó la actualización del sistema.
 Everything is up to date.	Todo está al día.
 Installed. Restarting…	Instalado. Reiniciando…
 {t}, {s} available	{t}, {s} disponible
+{s} available	{s} disponible
 {s}, update waiting for restart	{s}, actualización a la espera de reinicio
 Check again	Comprobar de nuevo
 Install now	Instalar ahora
@@ -4065,6 +4068,8 @@ A Choose · ‹ › Change · B Back	A Elegir · ‹ › Cambiar · B Atrás
 Advanced (this emulator)	Avanzado (este emulador)
 Cozy extras	Extras acogedores
 The cabinet's TV, stickers, playful cases, old-TV switch-on and more: each on or off.	La tele de la vitrina, stickers, cajas juguetonas, encendido de tele antigua y más: cada uno activado o no.
+Lived-in shelf	Estante con vida
+Shelf layout: some cases lean, a few lie on a small stack, like a shelf at home.	Disposición Estante: algunas cajas se inclinan y unas pocas se apilan, como en el estante de casa.
 Case sounds	Sonidos de caja
 Old-TV switch-on	Encendido de tele antigua
 TV on the cabinet	Tele en la vitrina
@@ -4632,6 +4637,11 @@ Hard mode	Modo difícil
 Difficult mode	Modo difícil
 {n}% complete	{n} % completado
 {n} of {m} mirror shards	{n} de {m} fragmentos del espejo
+{n} Jiggies	{n} Jiggies
+1 Jiggy	1 Jiggy
+{n} notes	{n} notas
+1 note	1 nota
+Mission {s}: {s2}	Misión {s}: {s2}
 # Controls card 2026-11-04
 This console's button names show here after your first game on it.	Los nombres de los botones de esta consola aparecen aquí después de tu primera partida.
 D-pad (changed)	Cruceta (cambiada)
@@ -4706,7 +4716,7 @@ The clock looks wrong, so the update server can't be checked. Set it in Settings
 Checking installed cores and data…	Comprobando núcleos y datos instalados…
 The update's asset list is invalid. Nothing was changed.	La lista de componentes no es válida. No se cambió nada.
 The update's core or data file is damaged. Nothing was changed.	Un núcleo o archivo de datos está dañado. No se cambió nada.
-How your games stand: Shelf, Easy, Split or Cabinet, with a live preview.	Cómo se colocan tus juegos: Estantería, Fácil, Dividida o Mueble, con vista previa.
+How your games stand: Shelf, Easy, Split or Cabinet, with a live preview.	Cómo se colocan tus juegos: Estante, Easy, Dividida o Vitrina, con vista previa.
 First-start setup	Configuración inicial
 Language, Wi-Fi, your games and the look again, step by step. Your games and saves stay.	Idioma, Wi-Fi, tus juegos y el aspecto otra vez, paso a paso. Tus juegos y partidas se quedan.
 Copy them over Wi-Fi from a computer or phone, or use a second SD card. If Windows offers to format a card, press Cancel.	Cópialos por Wi-Fi desde un ordenador o un móvil, o usa una segunda tarjeta SD. Si Windows ofrece formatear una tarjeta, pulsa Cancelar.
@@ -5103,8 +5113,6 @@ Help	Ayuda
 Short answers to the usual questions. Choose a topic.	Respuestas cortas a las preguntas habituales. Elige un tema.
 Choose your games folder	Elige tu carpeta de juegos
 Settings › Choose your ROM folder: pick the folder with one folder per system (gba, snes, psx). Games stay where they are; nothing is copied.	Ajustes › Elige tu carpeta de ROM: elige la carpeta con una carpeta por sistema (gba, snes, psx). Los juegos se quedan donde están; no se copia nada.
-Load more systems	Descargar más sistemas
-PSP, DS, Nintendo 64 and Dreamcast are optional. Settings › Cozy extras › Download now loads one over Wi-Fi; B cancels. All other systems are already in the app.	PSP, DS, Nintendo 64 y Dreamcast son opcionales. Ajustes › Extras acogedores › Descargar ahora baja uno por Wi-Fi; B cancela. Los demás sistemas ya vienen en la app.
 In a game press Back or your handheld's Menu button. Continue, Save, Load, Options, Controls and Save & quit are in it. With a controller, A chooses and B continues.	En un juego pulsa Atrás o el botón de menú de tu portátil. Dentro: Continuar, Guardar, Cargar, Opciones, Controles y Guardar y salir. Con mando, A elige y B continúa.
 Save and keep playing	Guardar y seguir jugando
 Save & quit keeps your place and the game's own saves. Next time the game is under Continue and starts where you stopped. Save and Load have eight slots.	Guardar y salir conserva tu punto y las partidas del juego. La próxima vez está en Continuar y empieza donde lo dejaste. Guardar y Cargar tienen ocho ranuras.
@@ -5277,3 +5285,20 @@ Game start animation	Animación de inicio
 How bright the screen is. The same as in the quick settings.	El brillo de la pantalla. El mismo que en los ajustes rápidos.
 How loud games and menus are. The same as in the quick settings.	El volumen de juegos y menús. El mismo que en los ajustes rápidos.
 A separate layout for each controller, in menus and games. Pairing: Connections › Bluetooth.	Una asignación por mando, en menús y juegos. Emparejar: Conexiones › Bluetooth.
+
+# Android player: native start dialog and screen-reader controls
+Game couldn't start	No se pudo iniciar el juego
+Previous slot	Ranura anterior
+Next slot	Ranura siguiente
+{t} · previous value	{t} · valor anterior
+{t} · next value	{t} · valor siguiente
+Size, look and frame.	Tamaño, aspecto y marco.
+
+# --- Android games in the handheld view (Settings > Games > Android games; android_games.rs, app_android_games.rs)
+Android games	Juegos de Android
+Put the Android games you have on a shelf of their own, beside your consoles.	Pon tus juegos de Android en un estante propio, junto a tus consolas.
+Reading your apps…	Leyendo tus apps…
+Android lists no other apps with a start icon. Install a game from your app store, then open this page again.	Android no muestra otras apps con icono de inicio. Instala un juego desde tu tienda de apps y vuelve a abrir esta página.
+No Android games on the shelf yet. Press A on a game to put it on the Android shelf.	Aún no hay juegos de Android en el estante. Pulsa A sobre un juego para ponerlo en el estante Android.
+A puts a game on the Android shelf or takes it off. They stand there beside your consoles.	A pone un juego en el estante Android o lo quita. Ahí está junto a tus consolas.
+{s} didn't start. Android couldn't open the app. It may have been removed.	{s} no se inició. Android no pudo abrir la app. Puede que se haya eliminado.

@@ -64,7 +64,13 @@ this game online, the page says so instead.
 
 - The game card (X on a game) shows **Unlocked: 12 of 40 achievements** under "Your game" when the game has
   achievements and you are signed in. For a game you haven't played yet, the card asks the site in the background
-  (at most once an hour per game) and fills the line in when the answer comes.
+  (on Wi-Fi, at most once an hour per game) and fills the line in when the answer comes.
+- A game whose save pocket-ui can't read for [where you are](library.md#where-you-are-in-the-game) shows
+  **34 of 60 achievements · 56%** in that place instead: right under the name on the box's back, beside **Continue**
+  and on Where was I?. Only when you are signed in, the game has achievements and you unlocked at least one; the
+  "Unlocked" row isn't repeated under it. The numbers are kept, so they show offline; pocket-ui renews them only on
+  Wi-Fi, in the background, after a game and at most once an hour. Softcore counts (an unlock in Hardcore is one in
+  softcore too).
 - A console's page (X on a system) shows the total over its games under "On this Pocket", for example
   **Unlocked: 35 of 120 achievements in 3 games**. It counts the games pocket-ui has seen: played, or looked up
   on their card.

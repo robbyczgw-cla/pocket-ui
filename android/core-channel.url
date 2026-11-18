@@ -1,4 +1,6 @@
-# The public download channel for the extra systems (PSP, DS, N64, Dreamcast).
+# The public download channel for systems that are a download. Since 0.5.x none is: every core is in the APK
+# (scripts/android/package-cores.py, DOWNLOADS), so this stays empty and a release build needs no address.
+# Until 0.5.0-android.5 PSP, DS, N64 and Dreamcast came this way; their catalog stays on the site for those versions.
 # Empty (no line below): the app lists them as "Coming soon" and offers no download, so nothing ends in an error.
 # To open the channel: put the address of the signed catalog.json on one line below (https, next to its catalog.json.sig),
 # then build the APK again (scripts/android/build-apk.sh). ANDROID_CORE_CHANNEL_URL=<address> does the same for one build.

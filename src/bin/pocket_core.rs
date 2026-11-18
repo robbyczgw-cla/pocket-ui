@@ -64,7 +64,7 @@ use glutin_winit::{DisplayBuilder, GlWindow};
 use pocket_ui::audio::Audio;
 use pocket_ui::controls::{self, Mapping, StickPad};
 use pocket_ui::core_options::{self, CoreOptionsFile};
-use pocket_ui::extras::{Extras, FastForward, MAX_FF_BUDGET_MS, MAX_FF_RUNS};
+use pocket_ui::extras::Extras;
 use pocket_ui::hostsys;
 use pocket_ui::hotkeys::Action;
 use pocket_ui::hw_render::{self, HwContext};
@@ -457,7 +457,7 @@ impl App {
         hostsys::display_aspect(system, g.base_width, g.base_height, g.aspect_ratio)
     }
 
-    fn draw(&mut self) { #[cfg(feature = "brick")] if self.soft.is_some() && self.last_frame.is_some() { self.sync_brick_picture(); } #[cfg(feature = "brick")] if let (Some(soft), Some(frame)) = (self.soft.as_mut(), self.last_frame.as_ref()) { soft.set_look(&self.hud.look); self.view = soft.show(frame); pocket_ui::fast_switch::first_frame(); self.sync_brick_hud(); return; }
+    fn draw(&mut self) { #[cfg(feature = "brick")] if self.soft.is_some() && self.last_frame.is_some() { self.sync_brick_picture(); } #[cfg(feature = "brick")] if let (Some(soft), Some(frame)) = (self.soft.as_mut(), self.last_frame.as_ref()) { soft.set_look(&self.hud.look); let over = (!self.brick_picture.on).then(|| self.hud.texts()); self.view = soft.show(frame, over.as_ref()); pocket_ui::fast_switch::first_frame(); self.sync_brick_hud(); return; }
         let (Some(window), Some(gfx)) = (&self.window, &mut self.gfx) else { return };
         let size = window.inner_size();
         let (w, h) = (size.width.max(1), size.height.max(1));
@@ -694,21 +694,18 @@ impl App {
         // Hardcore: no rewind (one look at the session, only while the shortcut is held). Fast-forward stays, as in
         // RetroArch.
         let hardcore = rewind_held && self.hardcore();
-        if rewind_held && !self.ex.rewind_was_held && hardcore {
-            self.hud.toast(pocket_ui::achievements::hardcore::NO_REWIND);
-        } else if rewind_held && !self.ex.rewind_was_held && !self.ex.cfg.rewind {
-            self.hud.toast("Rewind is off. Switch it on under Speed, rumble, fan.");
+        let turn = self.ex.rewind_hold.turn(rewind_held, self.ex.cfg.rewind, hardcore);
+        if let Some(line) = turn.notice {
+            self.hud.toast(line);
         }
-        if self.ex.rewind_was_held && !rewind_held && self.ex.rewound > 0 {
-            println!("rewound {} frames, {} left in the history", self.ex.rewound, self.ex.rewind.len());
-            self.ex.rewound = 0;
+        if let Some(rewound) = turn.ended {
+            println!("rewound {rewound} frames, {} left in the history", self.ex.rewind.len());
             // Achievements: the moment rewound to can't unlock anything by itself.
             if let Some(a) = self.cheevos.as_mut() {
                 a.reset();
             }
         }
-        self.ex.rewind_was_held = rewind_held;
-        let back = rewind_held && self.ex.cfg.rewind && !hardcore;
+        let back = turn.back;
         let ff = if back || self.dark { None } else { self.ex.fast_forward() };
 
         let (mut frame, mut samples, mut av, mut geometry) = (None, Vec::new(), None, None);
@@ -726,7 +723,7 @@ impl App {
                 }
                 self.stats.emulated += 1;
                 self.hud.emulated += 1;
-                self.ex.rewound += 1;
+                self.ex.rewind_hold.rewound += 1;
                 if let (Some(v), Some(f)) = (self.ex.verify.as_mut(), frame.as_ref()) {
                     match v.hashes.pop_back() {
                         Some(h) if h == pocket_ui::extras::frame_hash(&f.data) => v.same += 1,
@@ -738,11 +735,7 @@ impl App {
         } else if pocket_ui::startup::stands_still(self.hold, self.hold_still || self.hold_pause, self.resume_in.is_some()) {
             // "Where was I?": the game stands at its moment while its card is read; nothing runs, nothing is missed.
         } else {
-            let runs = match ff {
-                None => self.frames_due(),
-                Some(FastForward::Times(n)) => n,
-                Some(FastForward::Max) => MAX_FF_RUNS,
-            };
+            let runs = pocket_ui::play_speed::runs(ff, self.frames_due());
             // Run-ahead (src/run_ahead.rs): the due frames, then 1-2 frames ahead shown, then back. Not while
             // fast-forwarding. When it runs nothing (off, switched itself off), the loop below runs as always.
             if ff.is_none() && self.run_ahead_ready() {
@@ -783,7 +776,7 @@ impl App {
             for i in (0..runs).take_while(|_| !ran_ahead) {
                 // "As fast as possible" stops at its time budget: the frame expected to be the last one is shown.
                 let spent = t0.elapsed().as_secs_f32() * 1000.0;
-                let last = i + 1 == runs || (ff == Some(FastForward::Max) && i >= 1 && spent + spent / i as f32 > MAX_FF_BUDGET_MS);
+                let last = pocket_ui::play_speed::last_run(ff, i, runs, spent);
                 let enable = match (skip, last) {
                     (false, _) => AV_ALL,
                     (true, true) => AV_VIDEO,
@@ -879,11 +872,7 @@ impl App {
         // time. FPS + sensors starts or ends the reader thread when the level changes; nothing else per frame.
         self.hud.show_fps = self.ex.over_game.counter();
         self.hud.set_sensors(self.ex.over_game.sensors());
-        self.hud.badge = match (back, ff) {
-            (true, _) => "REWIND".into(),
-            (_, Some(speed)) => format!("FF {}", speed.label()),
-            _ => String::new(),
-        };
+        self.hud.badge = pocket_ui::play_speed::badge(back, ff);
         // Hold to toggle: a button latched down says so in the same quiet corner, until it is let go.
         if let Some(id) = self.toggled[0].held().filter(|_| !self.dark) {
             let held = format!("{} held", controls::physical_label(id));
@@ -1379,11 +1368,8 @@ impl App {
         let outcome = AutoSaveOutcome { moment, battery: battery.err().or(self.core.save_trouble()) };
         if !outcome.complete() {
             self.hud.note(pocket_ui::save_trouble::MOMENT_FAILED);
-            let text = self.hud.save_trouble.map_or(pocket_ui::save_trouble::MOMENT_FAILED, |t| t.after_quit());
-            let _ = std::fs::write(save_runtime_file(ERROR_FILE), text);
-        } else if std::fs::read_to_string(save_runtime_file(ERROR_FILE)).is_ok_and(|s| s == pocket_ui::save_trouble::MOMENT_FAILED || [pocket_ui::save_trouble::Trouble::Full, pocket_ui::save_trouble::Trouble::Unwritable, pocket_ui::save_trouble::Trouble::Unreadable].iter().any(|t| s == t.after_quit())) {
-            let _ = std::fs::remove_file(save_runtime_file(ERROR_FILE));
         }
+        pocket_ui::save_trouble::report_moment(&save_runtime_file(ERROR_FILE), outcome.complete(), self.hud.save_trouble);
         outcome
     }
 
@@ -2540,6 +2526,17 @@ fn main() {
     } else {
         Vec::new()
     };
+    // Options → Picture → Resolution (N64, PSP, Dreamcast on a handheld measured for it, `render_scale`): the player's choice
+    // over every other source of the core's option, the handheld's default only where nothing else chose it. Above RetroArch's.
+    let scale = pocket_ui::render_scale::for_start(
+        pocket_ui::render_scale::here(&system),
+        &core_options::core_id(core_so),
+        settings.values.get(pocket_ui::render_scale::KEY).map(String::as_str),
+    );
+    if let Some(s) = &scale {
+        s.place(&mut options);
+        println!("resolution: {} = {}{}", s.key, s.value, if s.first { " (chosen)" } else { " (this handheld's default)" });
+    }
     let ra = retroarch_beneath(&ra_options, &options);
     options.extend(ra.iter().map(|(k, v)| (k.as_str(), v.as_str())));
     // Fill missing keys only, below saved game/console and imported RetroArch choices.
@@ -3008,14 +3005,14 @@ impl BrickPicture {
 #[cfg(feature = "brick")]
 impl App {
     /// Over the game on the Brick: the overlay's texts (the FPS line, toasts, the volume bar) to the bridge when they changed. Only with the
-    /// GPU path; the CPU copy shows the picture alone.
+    /// GPU path; without it `draw` hands the same texts to the CPU copy, which blends them in itself (`soft_hud`).
     fn sync_brick_hud(&mut self) {
-        if !self.brick_picture.on {
-            return;
-        }
-        // Only where it can be seen: `tell_once` marks it told.
+        // Only where it can be seen: `tell_once` marks it told. The bridge draws it with the GPU path, the CPU copy without it.
         if !std::mem::replace(&mut self.brick_picture.first_shown, true) && pocket_ui::first_game::tell_once(&data_dir()) {
             self.hud.note(pocket_ui::first_game::NOTE);
+        }
+        if !self.brick_picture.on {
+            return;
         }
         let texts = self.hud.texts();
         let bp = &mut self.brick_picture;

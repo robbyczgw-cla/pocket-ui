@@ -33,12 +33,13 @@ impl App {
         self.case_knows.card_waits = None;
         if self.where_was_i.is_some() && pocket_ui::cozy_extras::on(pocket_ui::cozy_extras::Extra::ProgressFromSaves) {
             let art = self.case_art(path);
-            match (self.case_line(system, path), self.where_was_i.as_mut()) {
-                (Some(line), Some(card)) => {
+            // The save's line, else (once its answer says nothing) the RetroAchievements tally (`case_or_achievements`).
+            match (self.case_or_achievements(system, path), self.where_was_i.as_mut()) {
+                (Some((line, ra)), Some(card)) => {
                     card.progress = Some(line);
-                    card.art = art;
+                    card.art = if ra { None } else { art };
                 }
-                _ => self.case_knows.card_waits = Some(path.to_path_buf()),
+                _ => self.case_knows.card_waits = Some((system.to_string(), path.to_path_buf())),
             }
         }
         if let Some(card) = &self.where_was_i {
@@ -125,6 +126,10 @@ impl App {
         if let (Some(card), Some(p)) = (self.where_was_i.as_mut(), self.case_knows.made_up.as_ref().filter(|_| pocket_ui::cozy_extras::on(pocket_ui::cozy_extras::Extra::ProgressFromSaves))) {
             card.progress = Some(pocket_ui::case_knows_read::line(p));
             card.art = self.case_knows.made_up_art.clone();
+        }
+        // POCKETUI_SNAPSHOT_RA without a made-up save: the achievements line instead.
+        if let (Some(card), None, Some(line)) = (self.where_was_i.as_mut(), self.case_knows.made_up.as_ref(), self.achievements.made_up.as_ref().and_then(|m| pocket_ui::achievements::case_line::line(m)).filter(|_| pocket_ui::cozy_extras::on(pocket_ui::cozy_extras::Extra::ProgressFromSaves))) {
+            card.progress = Some(line);
         }
         self.launch_at = Some(Instant::now() - Duration::from_secs(5));
         if what == "early-press" {

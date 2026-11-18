@@ -10,357 +10,21 @@
 //! setting's default here.
 
 use std::collections::BTreeMap;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 use crate::look;
 
-pub struct Choice {
-    pub value: &'static str,
-    pub label: &'static str,
+pub use crate::option_table::*;
+
+/// Whether a setting means anything for `system`: run-ahead only for the light systems, Earlier only with save states.
+pub fn applies(key: &str, system: &str) -> bool {
+    applies_in(key, system, crate::device::android_profile())
 }
 
-pub struct Setting {
-    pub key: &'static str,
-    pub name: &'static str,
-    pub desc: &'static str,
-    pub choices: &'static [Choice],
-    /// Index into `choices`.
-    pub default: usize,
-    /// Shown only while another setting has this value, (key, value): a sub-choice such as the
-    /// shell colour, which means nothing for the other frames.
-    pub shown_when: Option<(&'static str, &'static str)>,
-}
-
-pub struct Group {
-    pub name: &'static str,
-    pub desc: &'static str,
-    pub settings: &'static [Setting],
-}
-
-/// The Picture group's Look row: derived, never saved (`look`).
-pub const LOOK: &str = "look";
-
-const fn c(value: &'static str, label: &'static str) -> Choice {
-    Choice { value, label }
-}
-
-pub const GROUPS: &[Group] = &[
-    Group {
-        name: "Picture",
-        desc: "Size, look, frame and orientation.",
-        settings: &[
-            Setting {
-                key: "scaling",
-                name: "Screen scaling",
-                desc: "Integer scales by whole numbers (integer scaling): every pixel the same size, the sharpest.\nInteger, smaller is one whole step down, leaving room for a frame.\nAspect is as large as fits, in the console's shape.\nFullscreen fills the screen and stretches pixels.",
-                choices: &[c("native", "Integer"), c("integer-smaller", "Integer, smaller"), c("aspect", "Aspect"), c("fullscreen", "Fullscreen")],
-                default: 0,
-                shown_when: None,
-            },
-            // Not a saved value: the Look worked out from `sharpness` + `effect` (`look::derive`), whose choosing writes both
-            // (`GameSettings::step`). Left out of `effective()` and never sent to pocket-core as "set look".
-            Setting {
-                key: LOOK,
-                name: "Look",
-                desc: "How the picture looks. Pick one; Custom opens Sharpness and Effect.",
-                choices: &[
-                    c("clean", "Clean"),
-                    c("smooth", "Smooth"),
-                    c("soft", "Soft"),
-                    c("bloom", "Bloom"),
-                    c("lcd", "LCD grid"),
-                    c("scanlines", "Scanlines"),
-                    c("oldtv", "Old TV"),
-                    c("custom", "Custom"),
-                ],
-                default: 0,
-                shown_when: None,
-            },
-            // Under Look = Custom only. The frame is another row (Screen frame); this is the picture itself.
-            Setting {
-                key: "sharpness",
-                name: "Sharpness",
-                desc: "How the edges of the blown-up pixels look.",
-                choices: &[c("sharp", "Sharp"), c("crisp", "Crisp"), c("soft", "Soft")],
-                default: 0,
-                shown_when: Some((LOOK, "custom")),
-            },
-            Setting {
-                key: "effect",
-                name: "Effect",
-                desc: "What is laid over the picture.",
-                choices: &[c("none", "None"), c("grid", "LCD grid"), c("scanlines", "Scanlines"), c("crt", "Old TV"), c("softglow", "Bloom"), c("smooth", "Smooth")],
-                default: 0,
-                shown_when: Some((LOOK, "custom")),
-            },
-            // Only for the Game Boy Advance (`applies`): its screen's colours, with the LCD grid (the Look, or Custom's Effect).
-            Setting {
-                key: "lcd_colour",
-                name: "LCD colours",
-                desc: "The colours of the Game Boy Advance's own screen:\nsofter and darker, as the games were made for.\nLeft out while the emulator's own colour correction is on.",
-                choices: &[c("off", "Off"), c("on", "On")],
-                default: 0,
-                shown_when: Some((LOOK, "lcd")),
-            },
-            Setting {
-                key: "frame",
-                name: "Screen frame",
-                desc: "Fills the space around the picture. Auto suits the console.\nAmbient glows with the game's colours; Glow is a thin light in its colour.\nDMG to PSP: handhelds, each for its console. CRT to Woodgrain: TVs. Arcade: a cabinet.",
-                choices: &[
-                    c("none", "None"),
-                    c("auto", "Auto"),
-                    c("ambient", "Ambient"),
-                    c("brick", "DMG"),
-                    c("pocket", "GB Pocket"),
-                    c("shell", "GBC"),
-                    c("wide", "GBA"),
-                    c("clamshell", "GBA SP"),
-                    c("twin", "DS"),
-                    c("gloss", "PSP"),
-                    c("crt", "CRT"),
-                    c("studio", "Studio monitor"),
-                    c("portable-tv", "Portable TV"),
-                    c("woodgrain", "Woodgrain"),
-                    c("arcade", "Arcade"),
-                    c("glow", "Glow"),
-                ],
-                default: 0,
-                shown_when: None,
-            },
-            Setting {
-                key: "frame_colour",
-                name: "GBC colour",
-                desc: "The colour of the Game Boy Color shell around the screen.\nClear purple, atomic purple and glacier blue are see-through.",
-                choices: &[
-                    c("grey", "Classic grey"),
-                    c("indigo", "Indigo"),
-                    c("clear-purple", "Clear purple"),
-                    c("atomic-purple", "Atomic purple"),
-                    c("black", "Black"),
-                    c("white", "White"),
-                    c("glacier", "Glacier blue"),
-                ],
-                default: 0,
-                shown_when: Some(("frame", "shell")),
-            },
-            Setting {
-                key: "frame_tv",
-                name: "TV cabinet",
-                desc: "The cabinet of the CRT frame: dark plastic or wood veneer.",
-                choices: &[c("plastic", "Dark plastic"), c("wood", "Wood")],
-                default: 0,
-                shown_when: Some(("frame", "crt")),
-            },
-            Setting {
-                key: "frame_brick",
-                name: "DMG colour",
-                desc: "The colour of the original Game Boy. Clear is see-through.\nIts power light shows the battery: red at 20%, blinking at 5%.",
-                choices: &[c("grey", "Grey"), c("clear", "Clear"), c("red", "Red"), c("yellow", "Yellow"), c("green", "Green"), c("black", "Black")],
-                default: 0,
-                shown_when: Some(("frame", "brick")),
-            },
-            Setting {
-                key: "frame_pocket",
-                name: "GB Pocket finish",
-                desc: "The Game Boy Pocket: brushed silver metal or clear plastic.\nIts power light shows the battery: red at 20%, blinking at 5%.",
-                choices: &[c("silver", "Brushed silver"), c("clear", "Clear")],
-                default: 0,
-                shown_when: Some(("frame", "pocket")),
-            },
-            Setting {
-                key: "frame_clamshell",
-                name: "GBA SP finish",
-                desc: "The paint of the opened Game Boy Advance SP.\nIts power light, in the hinge, shows the battery.",
-                choices: &[c("platinum", "Platinum"), c("cobalt", "Cobalt"), c("flame", "Flame red"), c("graphite", "Graphite")],
-                default: 0,
-                shown_when: Some(("frame", "clamshell")),
-            },
-            // How the Pocket is held (`video::Orientation`): the picture turns on the panel, the Pocket's D-pad and
-            // sticks with it.
-            Setting {
-                key: "orientation",
-                name: "Screen orientation",
-                desc: "For games made for an upright screen, such as vertical shooters.\nTurned left: D-pad at the bottom. Turned right: D-pad on top.\nThe D-pad turns too, menus don't. Frames: only Ambient and Glow.",
-                choices: &[c("normal", "Normal"), c("left", "Turned left"), c("right", "Turned right")],
-                default: 0,
-                shown_when: None,
-            },
-        ],
-    },
-    Group {
-        name: "Shortcuts",
-        desc: "Hold HOME and press another button while you play.",
-        settings: &[
-            Setting {
-                key: "hk_save",
-                name: "Save state",
-                desc: "HOME + R1 saves to the slot chosen in the menu.",
-                choices: &[c("on", "HOME + R1"), c("off", "Off")],
-                default: 0,
-                shown_when: None,
-            },
-            Setting {
-                key: "hk_load",
-                name: "Load state",
-                desc: "HOME + L1 loads the slot chosen in the menu.",
-                choices: &[c("on", "HOME + L1"), c("off", "Off")],
-                default: 0,
-                shown_when: None,
-            },
-            Setting {
-                key: "hk_slot",
-                name: "Change slot",
-                desc: "HOME + Left and HOME + Right pick the save slot, 1 to 8.",
-                choices: &[c("on", "HOME + Left/Right"), c("off", "Off")],
-                default: 0,
-                shown_when: None,
-            },
-            Setting {
-                key: "hk_ff",
-                name: "Fast-forward",
-                desc: "HOME + R2 turns fast-forward on and off.\nThe speed is set under Speed, rumble, fan.",
-                choices: &[c("on", "HOME + R2"), c("off", "Off")],
-                default: 0,
-                shown_when: None,
-            },
-            Setting {
-                key: "hk_rewind",
-                name: "Rewind",
-                desc: "Hold HOME + L2 to play backwards.\nRewind itself is switched on under Speed, rumble, fan.",
-                choices: &[c("on", "HOME + L2"), c("off", "Off")],
-                default: 0,
-                shown_when: None,
-            },
-            Setting {
-                key: "hk_shot",
-                name: "Screenshot",
-                desc: "HOME + A saves a picture of the game to the SD card.\nThe pause menu does not open.",
-                choices: &[c("on", "HOME + A"), c("off", "Off")],
-                default: 0,
-                shown_when: None,
-            },
-            // Was "Pixel Path" (key "hk_pixel") until 2026-10-25 (`over_game::migrate`).
-            Setting {
-                key: crate::over_game::SHORTCUT_KEY,
-                name: "Over the game",
-                desc: "HOME + Y cycles through Off, FPS, FPS + sensors\nand Pixel Path, until you quit or change Over the game.",
-                choices: &[c("on", "HOME + Y"), c("off", "Off")],
-                default: 0,
-                shown_when: None,
-            },
-            // pocket-ui's own (`app_zoom`): off unless chosen, as Zoom is a niche help.
-            Setting {
-                key: "hk_zoom",
-                name: "Zoom",
-                desc: "HOME + X shows the paused game's picture larger.\nB goes back to the game.",
-                choices: &[c("on", "HOME + X"), c("off", "Off")],
-                default: 1,
-                shown_when: None,
-            },
-        ],
-    },
-    Group {
-        name: "Speed, rumble, fan",
-        desc: "Settings you rarely need.",
-        settings: &[
-            Setting {
-                key: "ff_speed",
-                name: "Fast-forward speed",
-                desc: "How fast the game runs while fast-forward is on.\nSound is muted meanwhile.",
-                choices: &[c("2", "2x"), c("3", "3x"), c("4", "4x"), c("8", "8x"), c("max", "As fast as possible")],
-                default: 2,
-                shown_when: None,
-            },
-            Setting {
-                key: "rewind",
-                name: "Rewind",
-                desc: "Remembers the last minute so you can play it backwards.\nHold HOME + L2. Uses some extra power.",
-                choices: &[c("off", "Off"), c("on", "On")],
-                default: 0,
-                shown_when: None,
-            },
-            // Earlier (`timeline`): On, but Off for the consoles with big states (`timeline::BIG_STATES`, `console_default`).
-            Setting {
-                key: crate::timeline::KEY,
-                name: "Earlier states",
-                desc: "Keeps a state every 5 minutes of play, half an hour back,\nand where each session began: Earlier in this menu.\nOff by default for N64, PSP, DS, Dreamcast and Saturn (big states).",
-                choices: &[c("off", "Off"), c("on", "On")],
-                default: 1,
-                shown_when: None,
-            },
-            // Was Show FPS (key "show_fps", On for FPS) until 2026-10-25 (`over_game::migrate`); the choices are
-            // `over_game::Level`'s. What a game starts with: Settings > Playing > Over the game (`load`).
-            Setting {
-                key: crate::over_game::KEY,
-                name: "Over the game",
-                desc: "FPS shows frames per second and CPU load in the top left corner.\nFPS + sensors adds the temperature, the fan and the battery draw.\nPixel Path shows a line beside the picture: emulator, scale,\nframe rate, latency and sound; orange when something slips.",
-                choices: &[c("off", "Off"), c("fps", "FPS"), c("sensors", "FPS + sensors"), c("pixel", "Pixel Path")],
-                default: 0,
-                shown_when: None,
-            },
-            Setting {
-                key: "rumble",
-                name: "Rumble",
-                desc: "How strongly games shake the console, for games that rumble.\nOff keeps it still.",
-                choices: &[c("off", "Off"), c("low", "Low"), c("medium", "Medium"), c("high", "High")],
-                default: 2,
-                shown_when: None,
-            },
-            Setting {
-                key: "performance",
-                name: "Performance",
-                desc: "Auto: the system decides how fast the CPU runs.\nBattery limits the CPU to half speed: enough for Game Boy and NES.\nMax keeps the CPU at full speed for demanding games.\nWhat games use unless you save one here: Quick settings, or Settings › Playing › Performance & fan.",
-                // "auto" was "balanced" until 2026-10-23: `GameSettings::load` reads the old value as "auto".
-                choices: &[c("battery", "Battery"), c("auto", "Auto"), c("performance", "Max")],
-                default: 1,
-                shown_when: None,
-            },
-            Setting {
-                key: "fan",
-                name: "Fan",
-                desc: "Auto keeps the system's cooling profile.\nVery quiet: fan only when it gets warm. Quiet starts it later, Cool earlier.\nThe system's setting comes back when you quit.\nWhat games use unless you save one here: Quick settings, or Settings › Playing › Performance & fan.",
-                choices: &[c("veryquiet", "Very quiet"), c("quiet", "Quiet"), c("auto", "Auto"), c("cool", "Cool")],
-                // Quiet, as Games: fan starts (`perf_fan::games_fan_default`).
-                default: 1,
-                shown_when: None,
-            },
-            // Only for the light systems (`run_ahead::SYSTEMS`, see `applies`).
-            Setting {
-                key: "run_ahead",
-                name: "Run-ahead",
-                desc: "The game responds to your buttons 1 or 2 frames sooner.\nIt runs ahead and goes back every frame, so it uses more power.\nIt switches itself off where a game can't keep up.\n1 frame suits most games; 2 only the lighter ones.",
-                choices: &[c("off", "Off"), c("1", "1 frame"), c("2", "2 frames")],
-                default: 0,
-                shown_when: None,
-            },
-        ],
-    },
-];
-
-/// The handheld consoles: Settings → Screen frames on Handhelds gives them frame Auto.
-pub const HANDHELDS: &[&str] = &[
-    "gb", "gbc", "gba", "gbh", "gbch", "gbah", "gbav", "gamegear", "ggh", "ngp", "ngpc", "wonderswan", "wonderswancolor", "atarilynx", "pokemini",
-];
-
-/// Starting values per console where the global default isn't the best look on this screen.
-/// No console starts with a screen effect or a frame (a clean picture; Settings → Screen frames adds frames);
-/// disc systems with changing resolutions are scaled to fit and kept crisp, the DS's two screens likewise. Names are ROCKNIX system names.
-pub fn console_default(system: &str, key: &str) -> Option<&'static str> {
-    // 3D systems render at changing, often non-integer resolutions too (and higher than native).
-    const DISC: &[&str] = &["psx", "segacd", "megacd", "pcenginecd", "tg16cd", "saturn", "n64", "psp", "dreamcast", "naomi", "atomiswave"];
-    // 320x200 adventures: whole-number scaling stops at 3x, 960 of the 1240 px, with black all around.
-    const ADVENTURE: &[&str] = &["scummvm"];
-    // Two screens stacked (256x384): as large as fits (720x1080, 2.8x), crisp, no scanlines or frame.
-    const DUAL_SCREEN: &[&str] = &["nds"];
-    match key {
-        "scaling" if DUAL_SCREEN.contains(&system) => Some("aspect"),
-        "sharpness" if DUAL_SCREEN.contains(&system) => Some("crisp"),
-        "scaling" if DISC.contains(&system) || ADVENTURE.contains(&system) => Some("aspect"),
-        "sharpness" if DISC.contains(&system) || ADVENTURE.contains(&system) => Some("crisp"),
-        // Earlier: their states are several to tens of MB (docs/HOST.md "Earlier").
-        crate::timeline::KEY if !crate::timeline::default_on(system) => Some("off"),
-        _ => None,
-    }
+/// Whether `value` of `setting` is offered for `system`: a console's own frame only for that console.
+/// A saved value is kept either way.
+pub fn offered(setting: &Setting, value: &str, system: &str) -> bool {
+    offered_in(setting, value, system, crate::device::android_profile())
 }
 
 impl Group {
@@ -369,6 +33,7 @@ impl Group {
     pub fn visible(&self, values: Option<&GameSettings>) -> Vec<&Setting> {
         self.settings
             .iter()
+            .filter(|s| without_console(s, values))
             .filter(|s| values.is_none_or(|v| applies(s.key, &v.system) && !(v.hardcore && HARDCORE_OUT.contains(&s.key))))
             .filter(|s| match s.shown_when {
                 None => true,
@@ -386,7 +51,7 @@ impl Group {
     /// the largest set shows at a time: the frame's colour, or Sharpness and Effect (and on the GBA the LCD grid's colours)
     /// under Custom. The preview stays where it is while the Look or the frame changes.
     pub fn max_rows(&self, values: Option<&GameSettings>) -> usize {
-        let applying: Vec<&Setting> = self.settings.iter().filter(|s| values.is_none_or(|v| applies(s.key, &v.system))).collect();
+        let applying: Vec<&Setting> = self.settings.iter().filter(|s| without_console(s, values) && values.is_none_or(|v| applies(s.key, &v.system))).collect();
         let always = applying.iter().filter(|s| s.shown_when.is_none()).count();
         let mut under: BTreeMap<(&str, &str), usize> = BTreeMap::new();
         for s in &applying {
@@ -412,39 +77,15 @@ impl Group {
     }
 }
 
+/// Rows that belong to a console's own values: Resolution is there only for some consoles on some handhelds (`render_scale`),
+/// so with no values (no console known) it is not counted or shown.
+fn without_console(s: &Setting, values: Option<&GameSettings>) -> bool {
+    values.is_some() || s.key != crate::render_scale::KEY
+}
+
 /// LCD colours also show under Look = Custom while Effect is the LCD grid (the GBA's), not only under the LCD grid Look.
 fn lcd_colours_under_custom(s: &Setting, v: &GameSettings) -> bool {
     s.key == "lcd_colour" && v.look() == look::Look::Custom && v.value_of("effect") == "grid"
-}
-
-/// The explanation for each value of a setting that has one of its own (`describe`); the others have the row's `desc`.
-fn value_descs(key: &str) -> &'static [(&'static str, &'static str)] {
-    match key {
-        "sharpness" => &[
-            ("sharp", "Hard pixel squares, exactly as the console drew them."),
-            ("crisp", "All pixels the same size at any scaling; at Integer it looks like Sharp."),
-            ("soft", "Blurs every pixel edge a little."),
-        ],
-        "effect" => &[
-            ("none", "The plain picture, nothing laid over it."),
-            ("grid", "Thin dark gaps between the pixels, like a handheld's screen."),
-            ("scanlines", "Rows like a TV's beam: dark gaps in dark parts, rows that close up where it's bright."),
-            ("crt", "Scanlines plus a faint glow, like an old tube TV. The TV around it is a Screen frame."),
-            ("softglow", "A soft halo around bright parts; the rest stays clear."),
-            ("smooth", "Rounds the stair-steps on slanted edges. Flat pixels and straight edges stay sharp."),
-        ],
-        _ => &[],
-    }
-}
-
-/// Explanations a row shows besides `value_descs` and its `desc`: the Look's (`look::explain`).
-fn extra_descs(key: &str) -> Vec<&'static str> {
-    if key != LOOK {
-        return Vec::new();
-    }
-    let mut all: Vec<&'static str> = look::ALL.iter().map(|l| look::explain(*l, false)).collect();
-    all.push(look::explain(look::Look::LcdGrid, true));
-    all
 }
 
 /// What the row says about its current value: the Look's and the Custom rows' value explanation, else the row's own `desc`.
@@ -467,138 +108,12 @@ pub fn describe_in(setting: &Setting, values: Option<&GameSettings>, android: bo
     table.iter().find(|(value, _)| *value == current).map_or(setting.desc, |(_, d)| d).to_string()
 }
 
-/// Whether the row is drawn a step in: Sharpness and Effect, which open under Custom (LCD colours, like a frame's colour,
-/// stand at the row's own level).
-pub fn indented(setting: &Setting) -> bool {
-    setting.shown_when == Some((LOOK, "custom"))
-}
-
-/// The console family each console-shaped frame draws: the Game Boy family (DMG, GB Pocket, GBC), the
-/// Game Boy Advance (GBA, GBA SP), the Nintendo DS (DS; its two stacked screens) and the PSP.
-fn frame_systems(value: &str) -> Option<&'static [&'static str]> {
-    match value {
-        "brick" | "pocket" | "shell" => Some(&["gb", "gbh", "gbc", "gbch"]),
-        "wide" | "clamshell" => Some(&["gba", "gbah", "gbav"]),
-        "twin" => Some(&["nds"]),
-        "gloss" => Some(&["psp"]),
-        _ => None,
-    }
-}
-
-/// What the Android player draws of the picture rows, row by row: the values its pause menu has (`android/src/picture.rs`:
-/// Scaling Fit / Integer / Stretch, Screen frame None / Console / CRT TV, Picture effect Sharp / Smooth / CRT / Scanlines, which
-/// the Look row stands for). Android's handheld view offers these and no others: every other Linux value is a row value that
-/// draws the same as one of these (`android_reading`) or nothing.
-pub const ANDROID_VALUES: &[(&str, &[&str])] =
-    &[("scaling", &["native", "aspect", "fullscreen"]), (LOOK, &["clean", "smooth", "scanlines", "oldtv"]), ("frame", &["none", "auto", "crt"])];
-
-/// A saved value as Android's player draws it, in the values it offers (`ANDROID_VALUES`): what a Linux card or an older
-/// version saved reads as the value that looks the same there.
-pub fn android_reading<'a>(key: &str, value: &'a str) -> &'a str {
-    match (key, value) {
-        // The player has one Integer.
-        ("scaling", "integer-smaller") => "native",
-        // Ambient and Glow are Linux's fills around the picture: the player draws none. Every console's own frame is its Console.
-        ("frame", "ambient" | "glow") => "none",
-        ("frame", "none" | "crt") => value,
-        ("frame", _) => "auto",
-        _ => value,
-    }
-}
-
-/// The Look Android's player draws for these values.
-pub fn android_look(sharpness: &str, effect: &str) -> look::Look {
-    match (effect, sharpness) {
-        ("scanlines", _) => look::Look::Scanlines,
-        ("crt", _) => look::Look::OldTv,
-        ("smooth", _) | (_, "soft") => look::Look::Smooth,
-        _ => look::Look::Clean,
-    }
-}
-
-/// The explanation of a picture row on Android: only the player's values (`android_handheld::picture_choice` is the other side).
-fn android_desc(key: &str) -> Option<&'static str> {
-    match key {
-        "scaling" => Some("Integer scales by whole numbers (integer scaling): every pixel the same size, the sharpest.\nAspect is as large as fits, in the console's shape.\nFullscreen fills the screen and stretches pixels."),
-        "frame" => Some("Fills the space around the picture. Console draws the console's own frame.\nCRT TV puts an old tube TV around it.\nNone leaves just the picture."),
-        _ => None,
-    }
-}
-
-/// The choice's name on this device: Linux's "Auto" frame is the Android player's "Console".
-pub fn label_in(setting: &Setting, value: &str, android: bool) -> &'static str {
-    if android && setting.key == "frame" && value == "auto" {
-        return "Console";
-    }
-    setting.choices.iter().find(|c| c.value == value).map_or("", |c| c.label)
-}
-
-/// Whether `value` of `setting` is offered for `system`: a console's own frame only for that console.
-/// A saved value is kept either way.
-pub fn offered(setting: &Setting, value: &str, system: &str) -> bool {
-    offered_in(setting, value, system, crate::device::android_profile())
-}
-
-/// [`offered`] with Android's profile given.
-pub fn offered_in(setting: &Setting, value: &str, system: &str, android: bool) -> bool {
-    if android && ANDROID_VALUES.iter().any(|(k, vs)| *k == setting.key && !vs.contains(&value)) {
-        return false;
-    }
-    match setting.key {
-        "frame" => frame_systems(value).is_none_or(|systems| systems.contains(&system)),
-        // LCD grid for the handhelds, Scanlines and Old TV for the rest (`look::kind`).
-        LOOK => look::Look::from_value(value).is_none_or(|l| look::offered(l, Some(system))),
-        _ => true,
-    }
-}
-
-/// Values that were once choices and are read as another: the Swan, Watch and Goggles frames left the list
-/// (Auto still draws them for WonderSwan, Game & Watch and Virtual Boy), so a file that has one means Auto.
-fn current_value<'a>(key: &str, value: &'a str) -> &'a str {
-    match (key, value) {
-        ("frame", "swan" | "watch" | "goggles") => "auto",
-        _ => value,
-    }
-}
-
-/// Whether a setting means anything for `system`: run-ahead only for the light systems, Earlier only with save states.
-pub fn applies(key: &str, system: &str) -> bool {
-    applies_in(key, system, crate::device::android_profile())
-}
-
-/// [`applies`] with Android's profile given: its handheld view lists only what its player draws (`device::ANDROID_PLAYER_SETTINGS`).
-pub fn applies_in(key: &str, system: &str, android: bool) -> bool {
-    if crate::device::game_setting_out_in(key, android) {
-        return false;
-    }
-    match key {
-        "run_ahead" => crate::run_ahead::available_for(system),
-        // Game Boy Color colours are the emulator's (gambatte corrects them out of the box).
-        "lcd_colour" => system == "gba",
-        // Earlier keeps save states: not for the systems that have none (ScummVM, PICO-8, TIC-80).
-        crate::timeline::KEY => crate::hostsys::find(system).is_none_or(|h| h.no_states.is_none()),
-        // No fan (the H700 handhelds, the Brick): the row set a fan that isn't there (settings walk 06.11.).
-        "fan" => crate::device::current().has_fan(),
-        _ => true,
-    }
-}
-
-pub fn setting(key: &str) -> Option<&'static Setting> {
-    GROUPS.iter().flat_map(|g| g.settings.iter()).find(|s| s.key == key)
-}
-
-/// Where the values in use came from.
-#[derive(Clone, Copy, PartialEq, Debug)]
-pub enum Level {
-    Defaults,
-    Console,
-    Game,
-}
+pub use crate::game_settings::Level;
 
 pub struct GameSettings {
-    dir: PathBuf,
+    /// The console's and the game's files (`game_settings`, shared with Android's player).
+    files: crate::game_settings::Files,
     system: String,
-    game: String,
     pub values: BTreeMap<String, String>,
     pub level: Level,
     /// Settings > Playing > Performance & fan and Settings > Screen frames: what games start with when neither file has a
@@ -621,14 +136,8 @@ pub const HARDCORE_OUT: &[&str] = &["hk_save", "hk_load", "hk_slot", "hk_rewind"
 
 impl GameSettings {
     pub fn load(data_dir: &Path, system: &str, rom: &Path) -> Self {
-        let dir = data_dir.join("game-settings");
-        let game = rom.file_stem().and_then(|s| s.to_str()).unwrap_or("game").to_string();
-        let read = |p: PathBuf| crate::fsutil::read_json_or_backup::<BTreeMap<String, String>>(&p);
-        let (values, level) = match (read(dir.join(system).join(format!("{game}.json"))), read(dir.join(format!("{system}.json")))) {
-            (Some(v), _) => (v, Level::Game),
-            (None, Some(v)) => (v, Level::Console),
-            (None, None) => (BTreeMap::new(), Level::Defaults),
-        };
+        let files = crate::game_settings::Files::new(data_dir, system, rom);
+        let (values, level) = files.read();
         let mut values = values;
         // Auto was called Balanced until 2026-10-23: an old file's choice stays the choice it was.
         if let Some(v) = values.get_mut("performance").filter(|v| v.as_str() == "balanced") {
@@ -636,10 +145,6 @@ impl GameSettings {
         }
         // Show FPS and the Pixel Path shortcut became Over the game on 2026-10-25: an old choice is the closest level.
         crate::over_game::migrate(&mut values);
-        // "Aspect screen" was dropped on 2026-10-24 (it always matched Fullscreen): an old choice shows as Fullscreen.
-        if values.get("scaling").map(String::as_str) == Some("aspect-screen") {
-            values.insert("scaling".into(), "fullscreen".into());
-        }
         let mut globals = crate::perf_fan::game_defaults(data_dir);
         // Settings → Screen frames: Auto below the console's and the game's own choice, on every console or only on
         // the handhelds; Off (the start setting) leaves every console without a frame, and no console starts with
@@ -664,7 +169,7 @@ impl GameSettings {
         for v in [values.get_mut(crate::over_game::KEY), globals.get_mut(crate::over_game::KEY)].into_iter().flatten() {
             *v = crate::over_game::Level::parse(v).offered(pixel_path).value().to_string();
         }
-        GameSettings { dir, system: system.to_string(), game, values, level, globals, custom_open: false, pixel_path, hardcore: false }
+        GameSettings { files, system: system.to_string(), values, level, globals, custom_open: false, pixel_path, hardcore: false }
     }
 
     /// Index of the current choice for `setting`: saved value (this game's, else this console's), else the default
@@ -757,18 +262,9 @@ impl GameSettings {
         vec![(setting.key, value.to_string())]
     }
 
-    fn write(path: &Path, values: &BTreeMap<String, String>) -> bool {
-        crate::fsutil::write_json(path, values).is_ok()
-    }
-
-    fn game_file(&self) -> PathBuf {
-        self.dir.join(&self.system).join(format!("{}.json", self.game))
-    }
-
     /// Makes the current values the console's settings; drops this game's own file.
     pub fn save_for_console(&mut self) -> bool {
-        crate::fsutil::remove_json(&self.game_file());
-        let ok = Self::write(&self.dir.join(format!("{}.json", self.system)), &self.values);
+        let ok = self.files.save_for_console(&self.values);
         if ok {
             self.level = Level::Console;
         }
@@ -779,12 +275,7 @@ impl GameSettings {
     /// the pause menu: every change stays at once, as in Settings. The write goes to the card writer, so the menu does
     /// not wait for the card.
     pub fn keep(&mut self) {
-        if self.level == Level::Console {
-            crate::fsutil::write_json_soon(&self.dir.join(format!("{}.json", self.system)), &self.values);
-        } else {
-            crate::fsutil::write_json_soon(&self.game_file(), &self.values);
-            self.level = Level::Game;
-        }
+        self.level = self.files.keep(self.level, &self.values);
     }
 
     /// "Keep for" moved to the other side: from this game to the whole console or back. The values in use are written
@@ -795,7 +286,7 @@ impl GameSettings {
     }
 
     pub fn save_for_game(&mut self) -> bool {
-        let ok = Self::write(&self.game_file(), &self.values);
+        let ok = self.files.save_for_game(&self.values);
         if ok {
             self.level = Level::Game;
         }
@@ -817,7 +308,7 @@ impl GameSettings {
     /// Takes this game off its own settings: its file goes and the console's (or the defaults) are read again. For the
     /// "This game" page's "Use the console's settings".
     pub fn forget_game(&mut self, data_dir: &Path, rom: &Path) {
-        crate::fsutil::remove_json(&self.game_file());
+        self.files.forget_game();
         let fresh = GameSettings::load(data_dir, &self.system, rom);
         self.values = fresh.values;
         self.level = fresh.level;
@@ -826,8 +317,7 @@ impl GameSettings {
 
     /// Back to the built-in defaults: removes both files for this game's console and the game.
     pub fn restore_defaults(&mut self) {
-        crate::fsutil::remove_json(&self.game_file());
-        crate::fsutil::remove_json(&self.dir.join(format!("{}.json", self.system)));
+        self.files.restore_defaults();
         self.values.clear();
         self.level = Level::Defaults;
         self.custom_open = false;
@@ -867,36 +357,49 @@ mod tests {
     use super::*;
     use crate::testutil::TestDir;
 
+    /// What Android's player draws for these values (`android/src/picture.rs`): the scaling it knows, Linux's shader variant,
+    /// Linux's frame (Auto the console's own, Ambient none).
+    fn android_draws(values: &BTreeMap<String, String>, system: &str) -> (crate::video::Scaling, crate::video_program::Variant, Option<crate::bezel::Style>) {
+        let mut read = values.clone();
+        if let Some(v) = read.get_mut("scaling") {
+            *v = android_reading("scaling", v).to_string();
+        }
+        let v = crate::video::VideoSettings::from_values(&read);
+        let lcd = v.lcd_colour && v.effect == crate::video::Effect::Grid && system == "gba";
+        let frame = match v.frame {
+            crate::video::FrameMode::None | crate::video::FrameMode::Ambient => None,
+            crate::video::FrameMode::Auto => Some(crate::bezel::style_for(system)),
+            _ => v.fixed_style(system),
+        };
+        (v.scaling, (v.sharpness, v.effect, lcd), frame)
+    }
+
     /// Android's handheld view lists only the picture settings its player draws; Rewind, Earlier states, the shortcuts and the rest
     /// of Linux's list are not there (a row for them is a switch that does nothing). Linux keeps every row.
     #[test]
     fn android_lists_only_the_picture_rows_its_player_draws() {
         let keys: Vec<&str> = GROUPS.iter().flat_map(|g| g.settings.iter().map(|s| s.key)).collect();
-        for key in ["rewind", "timeline", "hk_save", "hk_load", "hk_rewind", "ff_speed", "rumble", "performance", "run_ahead", "orientation", "over_game", "hk_over", "frame_colour"] {
+        for key in ["rewind", "timeline", "hk_save", "hk_load", "hk_rewind", "ff_speed", "rumble", "performance", "run_ahead", "orientation", "over_game", "hk_over", "sharpness", "effect"] {
             assert!(keys.contains(&key), "{key} is a setting");
             assert!(!applies_in(key, "gba", true), "{key} on Android");
-            assert!(applies_in(key, "gba", false) || key == "frame_colour", "{key} on Linux");
-        }
-        for key in ["scaling", LOOK, "frame"] {
-            assert!(applies_in(key, "gba", true), "{key} on Android");
         }
         // Whatever Linux adds later is out until the player draws it.
         let shown: Vec<&str> = keys.iter().copied().filter(|k| applies_in(k, "gba", true)).collect();
-        assert_eq!(shown, ["scaling", "look", "frame"]);
+        assert_eq!(shown, ["scaling", "look", "lcd_colour", "frame", "frame_colour", "frame_tv", "frame_brick", "frame_pocket", "frame_clamshell"]);
     }
 
-    /// Every value Android's handheld view offers for a picture row changes what its player draws, and no two values draw the same
-    /// (Bloom, LCD grid, Integer smaller, Ambient ... drew a plain picture there). Walked with the pad's Left/Right.
+    /// Every value Android's handheld view offers for a picture row changes what its player draws, and no two values draw the same.
+    /// Walked with the pad's Left/Right.
     #[test]
     fn every_picture_value_android_offers_changes_what_its_player_draws() {
         let dir = TestDir::new("android-values");
-        for system in ["gba", "gb", "nds", "psp", "nes", "snes", "megadrive", "psx", "n64", "arcade"] {
+        for system in ["gba", "gb", "gbc", "nds", "psp", "nes", "snes", "megadrive", "psx", "n64", "arcade"] {
             for key in ["scaling", LOOK, "frame"] {
                 let row = setting(key).unwrap();
                 let mut s = GameSettings::load(&dir, system, Path::new("x.rom"));
-                let mut seen: Vec<(String, serde_json::Value)> = Vec::new();
+                let mut seen: Vec<(String, _)> = Vec::new();
                 for _ in 0..=row.choices.len() {
-                    let (value, drawn) = (row.choices[s.index(row)].value.to_string(), crate::android_handheld::picture_choice(&s.effective()));
+                    let (value, drawn) = (row.choices[s.index(row)].value.to_string(), android_draws(&s.effective(), system));
                     if !seen.iter().any(|(v, _)| *v == value) {
                         seen.push((value, drawn));
                     }
@@ -905,6 +408,10 @@ mod tests {
                 for (i, (a, da)) in seen.iter().enumerate() {
                     assert!(ANDROID_VALUES.iter().any(|(k, vs)| *k == key && vs.contains(&a.as_str())), "{system} {key}: {a} is offered on Android, the player has no such value");
                     for (b, db) in &seen[i + 1..] {
+                        // Auto is the console's own frame, which is also its named one (GBA: Auto draws GBA), as on Linux.
+                        if key == "frame" && (a == "auto" || b == "auto") {
+                            continue;
+                        }
                         assert_ne!(da, db, "{system} {key}: {a} and {b} draw the same picture on Android");
                     }
                 }
@@ -918,10 +425,10 @@ mod tests {
     }
 
     /// A value saved on Linux (or before) that the player has no choice for shows as the choice that draws the same, so the row
-    /// says what the player does.
+    /// says what the player does; a Custom pair shows as its effect's Look and is drawn as saved.
     #[test]
     fn a_saved_value_android_cannot_offer_reads_as_the_one_that_looks_the_same() {
-        let drawn = |pairs: &[(&str, &str)]| crate::android_handheld::picture_choice(&pairs.iter().map(|(k, v)| (k.to_string(), v.to_string())).collect());
+        let drawn = |pairs: &[(&str, &str)]| android_draws(&pairs.iter().map(|(k, v)| (k.to_string(), v.to_string())).collect(), "snes");
         for key in ["scaling", "frame"] {
             let row = setting(key).unwrap();
             let offers = ANDROID_VALUES.iter().find(|(k, _)| *k == key).unwrap().1;
@@ -936,29 +443,27 @@ mod tests {
             for effect in ["none", "grid", "scanlines", "crt", "softglow", "smooth"] {
                 let look = android_look(sharpness, effect);
                 assert!(offers.contains(&look.value()), "{sharpness}/{effect} reads as the Look {}, which Android does not offer", look.value());
-                let (sh, ef) = look.canonical().unwrap();
-                assert_eq!(drawn(&[("sharpness", sharpness), ("effect", effect)]), drawn(&[("sharpness", sh), ("effect", ef)]), "{sharpness}/{effect} reads as {}", look.value());
+                // A pair that is a Look reads as that Look (Sharp and Crisp count the same, as on Linux: `look::derive`).
+                let linux = crate::look::derive(sharpness, effect, None);
+                if linux != crate::look::Look::Custom {
+                    assert_eq!(look, linux, "{sharpness}/{effect}");
+                }
             }
         }
     }
 
-    /// The words of Android's picture rows name only what the player has: the frame row's Auto is "Console", and the explanations of
-    /// Screen scaling and Screen frame don't list Linux's Integer smaller, Ambient, Glow, DMG to PSP, Woodgrain.
+    /// The words of Android's picture rows are Linux's (since the player draws Linux's frames, 18.11.2026): Auto is "Auto";
+    /// Screen scaling's line leaves out Integer smaller, which the player has not.
     #[test]
     fn android_s_picture_rows_say_only_what_the_player_has() {
         let dir = TestDir::new("android-words");
         let s = GameSettings::load(&dir, "gba", Path::new("x.rom"));
-        assert_eq!(label_in(setting("frame").unwrap(), "auto", true), "Console");
-        assert_eq!(label_in(setting("frame").unwrap(), "auto", false), "Auto");
-        for key in ["scaling", "frame"] {
-            let text = describe_in(setting(key).unwrap(), Some(&s), true);
-            for gone in ["smaller", "Ambient", "Glow", "DMG", "PSP", "Woodgrain", "Arcade", "Auto", "cabinet"] {
-                assert!(!text.contains(gone), "{key}: {gone} in Android's text: {text}");
-            }
-        }
-        // The room the longest text needs counts them (the page is laid out for it).
-        let picture = &GROUPS[0];
-        assert!(picture.descs().contains(&describe_in(setting("frame").unwrap(), Some(&s), true).as_str()), "Android's frame text is in the room count");
+        assert_eq!(label_in(setting("frame").unwrap(), "auto", true), "Auto");
+        let text = describe_in(setting("scaling").unwrap(), Some(&s), true);
+        assert!(!text.contains("smaller"), "{text}");
+        // The frame's line is Linux's lines but Ambient's (the player doesn't draw Ambient).
+        let (android, linux) = (describe_in(setting("frame").unwrap(), Some(&s), true), describe_in(setting("frame").unwrap(), Some(&s), false));
+        assert!(android.lines().all(|l| linux.lines().any(|m| m == l)) && !android.contains("Ambient"), "{android}");
     }
 
     #[test]
@@ -1165,6 +670,30 @@ mod tests {
             assert_ne!(v["scaling"], "integer-smaller", "{sys}");
             assert_eq!((v["frame_colour"].as_str(), v["frame_tv"].as_str()), ("grey", "plastic"));
         }
+    }
+
+    #[test]
+    fn resolution_is_the_render_scale_row_and_stays_out_where_the_handheld_was_not_measured() {
+        let row = setting(crate::render_scale::KEY).expect("Picture has Resolution");
+        assert_eq!(row.name, "Resolution", "the same row name as PS2, GameCube, Wii and Xbox");
+        assert_eq!(row.choices.iter().map(|c| c.value).collect::<Vec<_>>(), crate::render_scale::VALUES);
+        assert!(row.desc.ends_with("Takes effect the next time the game starts."));
+        assert!(GROUPS.iter().find(|g| g.name == "Picture").unwrap().settings.iter().any(|s| s.key == row.key));
+        // This test machine is no handheld (`device::current` has no model): no row, no starting value, no value offered,
+        // so a console's Picture page and what pocket-core is given stay as they were. The handhelds' numbers are
+        // `render_scale`'s tests; these are the places the page asks.
+        if crate::device::current().model.is_none() {
+            for sys in ["n64", "psp", "dreamcast", "gba", "psx"] {
+                assert!(!applies_in(row.key, sys, false), "{sys}");
+                assert_eq!(console_default(sys, row.key), None, "{sys}");
+                assert!(!offered_in(row, "2", sys, false), "{sys}");
+            }
+        }
+        // The Handheld view's This game page lists only the rows it hands the player (`ANDROID_PLAYER_SETTINGS`); the player's
+        // own Options page has Resolution (`pause_options::picture_rows`).
+        assert!(!applies_in(row.key, "n64", true), "not on the Handheld view's This game page");
+        let picture = GROUPS.iter().find(|g| g.name == "Picture").unwrap();
+        assert!(picture.visible(None).iter().all(|s| s.key != row.key), "no console known: no Resolution row");
     }
 
     #[test]

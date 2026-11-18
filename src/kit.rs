@@ -83,12 +83,25 @@ pub fn content_bottom(h: i32) -> i32 {
 /// first start): the same pill as every other page's (`pill_hints`), at the bottom right. Never a key without its word;
 /// at most four hints, and when they don't fit whole hints go, the least needed first. Returns where each key can be tapped.
 pub fn page_hints(c: &mut Canvas, text: &mut Text, hints: &[(&str, &str)]) -> Vec<(Area, Button)> {
+    let hints = concise(c.h, hints);
+    paint_bar(c, text, &hints).1
+}
+
+/// Where `page_hints`' pill starts on a canvas `w` by `h`: nothing of it is left of this (a fade between two bars mixes
+/// only the part from the leftmost of them, `App::paint_hint_row`).
+pub fn page_hints_left(text: &mut Text, w: i32, h: i32, hints: &[(&str, &str)]) -> i32 {
+    w - PAD - pill_layout(text, w, &concise(h, hints)).0
+}
+
+/// The page's hints as the bar shows them: on the Brick's short screen "Recent games" is "Recent".
+fn concise<'a>(h: i32, hints: &[(&'a str, &'a str)]) -> Vec<(&'a str, &'a str)> {
     #[cfg(feature = "brick")]
-    let concise: Vec<_> = hints.iter().map(|&(key, label)|
-        (key, if crate::device::brick() && short_screen(c.h) && label == "Recent games" { "Recent" } else { label })).collect();
-    #[cfg(feature = "brick")]
-    let hints = concise.as_slice();
-    paint_bar(c, text, hints).1
+    return hints.iter().map(|&(key, label)| (key, if crate::device::brick() && short_screen(h) && label == "Recent games" { "Recent" } else { label })).collect();
+    #[cfg(not(feature = "brick"))]
+    {
+        let _ = h;
+        hints.to_vec()
+    }
 }
 
 /// The one hint bar of every page (docs/DESIGN.md "Hint bar"): the keys in a pill at the bottom right, a chip per key,
@@ -135,7 +148,7 @@ fn paint_bar(c: &mut Canvas, text: &mut Text, hints: &[(&str, &str)]) -> (i32, V
 /// `base`, as the Button symbols in use show it (`button_prompts`): A, B, X and Y on Xbox's colours or as the
 /// PlayStation shapes, every other key as it is. Every hint key goes through here (both hint bars, the manual's chips).
 pub fn key_cap(c: &mut Canvas, text: &mut Text, (x, y, w, h): (i32, i32, i32, i32), key: &str, px: u32, base: i32, (bg, fg): (u32, u32)) {
-    let (bg, fg) = button_prompts::colours(key).unwrap_or((bg, fg));
+    let (bg, fg) = button_prompts::colours(key).unwrap_or_else(|| cap_colours(bg, fg));
     if crate::retro::on() {
         crate::retro::cap(c, x, y, w, h, bg);
     } else {
@@ -144,6 +157,32 @@ pub fn key_cap(c: &mut Canvas, text: &mut Text, (x, y, w, h): (i32, i32, i32, i3
     let shown = button_prompts::shown(key);
     let tw = text.width(Face::Body, px, shown);
     text.draw(c, Face::Body, px, x + (w - tw) / 2, base, fg, shown);
+}
+
+/// The least contrast between a key's letters and its cap (WCAG AA for text).
+pub const CAP_CONTRAST: f64 = 4.5;
+
+/// The colours a key cap is painted in for the cap `bg` and letters `fg` a page asks for (`pal().chip`, `pal().pill`):
+/// always light letters on a darker cap, at least `CAP_CONTRAST` apart. In the dark appearance the pages ask for a light
+/// cap with dark letters (Retro Cocoa's cream, Warm's grey); on the Brick's bright panel the thin dark strokes of a
+/// pixel face vanished in the cap's glow: L1, R1 and "< >" read as blank white keys, MENU and START as pale grey ones
+/// (photos of the hand test, 17.11.2026), while the white letters on the red B and green A stayed. Here such a cap turns
+/// round: the page's text colour (or the cap's own, if lighter) on the lightest mix of the two that still holds
+/// `CAP_CONTRAST`. A cap already darker than its letters (the light appearance) stays as it is.
+pub fn cap_colours(bg: u32, fg: u32) -> (u32, u32) {
+    use crate::palette::{contrast, luminance};
+    if luminance(bg) <= luminance(fg) {
+        return (bg, fg);
+    }
+    let text = pal().text;
+    let light = if luminance(text) > luminance(bg) { text } else { bg };
+    for k in (0..=255u32).rev().step_by(5) {
+        let cap = crate::gfx::mix(fg, bg, k);
+        if luminance(cap) < luminance(light) && contrast(light, cap) >= CAP_CONTRAST {
+            return (cap, light);
+        }
+    }
+    (fg, light)
 }
 
 /// How wide the hint pill of `hints` is on a screen `screen_w` wide (`pill_hints`).
@@ -179,14 +218,39 @@ fn pill_layout<'a>(text: &mut Text, screen_w: i32, hints: &[(&'a str, &'a str)])
 #[allow(clippy::too_many_arguments)]
 pub fn footer(c: &mut Canvas, text: &mut Text, hits: &mut HitMap, hints: &[(&str, &str)], desc: &str, lines: usize, color: u32) -> i32 {
     let pill_x = if hints.is_empty() { c.w - PAD } else { pill_hints(c, text, hits, hints) };
+    footer_text(c, text, desc, pill_x, lines, color)
+}
+
+/// `footer`'s explanation alone, beside a hint pill already painted that starts at `pill_x` (Settings' categories paint
+/// their hints first). Returns the y of the explanation's top.
+pub fn footer_text(c: &mut Canvas, text: &mut Text, desc: &str, pill_x: i32, lines: usize, color: u32) -> i32 {
     let pill_top = c.h - PAD - PILL;
     let wrapped = footer_lines(text, desc, c.w, pill_x, lines);
     let px = footer_px(text, desc, pill_x);
     let (left, step, last) = (PAD + BTN_PAD, type_scale::line(px, 10), footer_baseline(c.h));
+    // The lines are in the interface's language already (`footer_lines`): painted as they are, never looked up again.
+    let translating = text.translating();
+    text.set_translate(false);
     for (n, line) in wrapped.iter().enumerate() {
         text.draw(c, Face::Body, px, left, last - (wrapped.len() - 1 - n) as i32 * step, color, line);
     }
+    text.set_translate(translating);
     (last - wrapped.len() as i32 * step).min(pill_top)
+}
+
+/// The top of the capitals of `desc`'s first line as `footer` paints it in at most `lines` lines on a `w`×`h` screen
+/// beside a hint pill starting at `pill_x` (`type_scale::mid` is half their height), and how many lines it takes: where
+/// a list over it may end (a gap above this).
+pub fn footer_top(text: &mut Text, desc: &str, w: i32, h: i32, pill_x: i32, lines: usize) -> (i32, usize) {
+    let n = footer_lines(text, desc, w, pill_x, lines).len();
+    let px = footer_px(text, desc, pill_x);
+    (footer_baseline(h) - (n as i32 - 1).max(0) * type_scale::line(px, 10) - 2 * type_scale::mid(px), n)
+}
+
+/// The words of a line as it may break: at plain spaces only. A no-break space (French "Complet\u{a0}:") holds its two
+/// sides together; `split_whitespace` broke there and joined them again with a plain space, so ":" could start a line.
+fn words_of(line: &str) -> impl Iterator<Item = &str> {
+    line.split(' ').filter(|w| !w.is_empty())
 }
 
 /// The lines `footer` paints `desc` in on a screen `screen_w` wide with the hint pill starting at `pill_x`: wrapped
@@ -213,15 +277,18 @@ pub fn footer_lines(text: &mut Text, desc: &str, screen_w: i32, pill_x: i32, lin
         let too_wide = |w: &str, text: &mut Text| text.width_plain(Face::Body, px, w) > column;
         // The words as painted: the paragraph in the interface's language (`wrap_prose` translates it as well).
         let shown = text.translated(p).to_string();
-        let unbroken = !shown.split_whitespace().any(|w| too_wide(w, text));
+        let unbroken = !words_of(&shown).any(|w| too_wide(w, text));
         if k == narrow.len() && unbroken {
             parts.push(narrow);
             continue;
         }
         // The lines beside the pill are filled from the paragraph's end, the rest stands above across the page: a
         // lone word stays off the pill's line ("a TV."). The lines are the interface's language already, so they are
-        // measured as they are.
-        let mut words: Vec<&str> = if unbroken { narrow.iter().flat_map(|l| l.split_whitespace()).collect() } else { shown.split_whitespace().collect() };
+        // measured and wrapped as they are: never looked up again (a piece like "Shelf, Easy," would run the language
+        // table's patterns, which Settings' first frame must not, tests/settings_pages.rs).
+        let translating = text.translating();
+        text.set_translate(false);
+        let mut words: Vec<&str> = if unbroken { narrow.iter().flat_map(|l| words_of(l)).collect() } else { words_of(&shown).collect() };
         let mut beside: Vec<String> = Vec::new();
         for _ in 0..k {
             let mut line: Vec<&str> = Vec::new();
@@ -249,6 +316,7 @@ pub fn footer_lines(text: &mut Text, desc: &str, screen_w: i32, pill_x: i32, lin
                 *first = rest.to_string();
             }
         }
+        text.set_translate(translating);
         part.extend(beside);
         parts.push(part);
     }
@@ -273,7 +341,7 @@ pub fn footer_lines(text: &mut Text, desc: &str, screen_w: i32, pill_x: i32, lin
 pub fn footer_px(text: &mut Text, desc: &str, pill_x: i32) -> u32 {
     let column = pill_x - 24 - (PAD + BTN_PAD);
     let shown = text.translated(desc).to_string();
-    if shown.split_whitespace().any(|w| text.width_plain(Face::Body, SMALL, w) > column) {
+    if words_of(&shown).any(|w| text.width_plain(Face::Body, SMALL, w) > column) {
         crate::title_block::smaller(SMALL)
     } else {
         SMALL
@@ -323,13 +391,12 @@ pub fn row_label(c: &mut Canvas, text: &mut Text, (x, y, w, h): (i32, i32, i32, 
 /// A drawn angle in the icons' manner (one colour, round ends): pointing right (`>`) or left (`<`), `h` tall, its
 /// point at `tip` on the line `mid`. Rows and values use it instead of the letters ">" and "‹ ›".
 pub fn chevron(c: &mut Canvas, tip: i32, mid: i32, h: i32, right: bool, color: u32) {
-    angle(c, tip, mid, h, right, color, if right { ">" } else { "<" });
+    angle(c, (tip, mid), h, right, color, if right { ">" } else { "<" }, (h / 12).max(1));
 }
 
 /// `chevron`, recorded for the snapshot checks as `name`: the angle is a mark like the letter it replaces ("›" of a
 /// switch, ">" of a page), and nothing may run into it.
-fn angle(c: &mut Canvas, tip: i32, mid: i32, h: i32, right: bool, color: u32, name: &str) {
-    let r = (h / 12).max(1);
+fn angle(c: &mut Canvas, (tip, mid): (i32, i32), h: i32, right: bool, color: u32, name: &str, r: i32) {
     let half = (h / 2 - r).max(1);
     let reach = half * 2 / 3;
     // A disc per step down each stroke, all of them one shape: each disc as its rows (as `Canvas::disc` paints them),
@@ -364,8 +431,8 @@ fn value_parts(value: &str) -> (&str, bool, bool) {
 /// A row's value at the right of a list, its right edge at `right`, on the baseline `base`: "Home net >" (a row that
 /// opens a page) with a drawn angle after the words, "‹ On ›" (the selected row's switch, Left/Right change it)
 /// between two. The angles stand where the letters were, so a finger's areas measured on the string still fit. On the
-/// selected row all of it is ink on the paper; elsewhere the words are `pal().text` and the angle `pal().dust`, so
-/// every row says whether it opens a page before the cursor gets there. Returns the width it took.
+/// selected row all of it is ink on the paper; elsewhere the words and a page's angle are `pal().text` (a switch's
+/// angles are only on the selected row), so every row says whether it opens a page before the cursor gets there. Returns the width it took.
 pub fn row_value(c: &mut Canvas, text: &mut Text, font: u32, right: i32, base: i32, value: &str, selected: bool) -> i32 {
     let colours = if selected { (pal().ink, pal().ink) } else { (pal().text, pal().dust) };
     row_value_in(c, text, font, right, base, value, colours)
@@ -381,17 +448,21 @@ pub fn row_value_in(c: &mut Canvas, text: &mut Text, font: u32, right: i32, base
     if switch {
         let (lw, rw) = (text.width(Face::Body, font, "‹ "), text.width(Face::Body, font, " ›"));
         let x = right - rw - ww - lw;
-        let h = px * 9 / 20;
-        angle(c, x + 2, mid, h, false, mark, "‹");
+        // A little larger than the letters' ‹ › (0.5.1): the selected row's value reads as one to step with Left/Right.
+        let h = px * 11 / 20;
+        angle(c, (x + 2, mid), h, false, mark, "‹", (h / 10).max(1));
         text.draw(c, Face::Body, font, x + lw, base, fg, words);
-        angle(c, right - 2, mid, h, true, mark, "›");
+        angle(c, (right - 2, mid), h, true, mark, "›", (h / 10).max(1));
         return lw + ww + rw;
     }
     if opens {
         let aw = text.width(Face::Body, font, " >");
         let tail = if words.is_empty() { aw - text.width(Face::Body, font, " ") } else { aw };
         text.draw(c, Face::Body, font, right - tail - ww, base, fg, words);
-        chevron(c, right - 2, mid, px * 11 / 20, true, mark);
+        // A page's angle (0.5.1, a hand walk: which rows open a page was not clear enough): as tall as the letters, a
+        // little bolder than the switch's, in the words' colour on every row, not the quiet one.
+        let h = px * 7 / 10;
+        angle(c, (right - 2, mid), h, true, fg, ">", (h / 9).max(1));
         return ww + tail;
     }
     text.draw_right(c, Face::Body, font, right, base, fg, words);
@@ -427,6 +498,7 @@ pub fn scrollbar(c: &mut Canvas, top: i32, track: i32, first: usize, visible: us
         return;
     }
     let (bar_h, bar_y) = (track * visible as i32 / len as i32, track * first as i32 / len as i32);
+    crate::nav_probe::list(c, (0, top, c.w, track));
     c.rect(c.w - 12, top, 4, track, pal().pill);
     c.rect(c.w - 12, top + bar_y, 4, bar_h.max(12), pal().chip);
 }
@@ -531,7 +603,7 @@ mod tests {
                 assert_eq!(pair.0, pair.1, "arrow {w} wide at {x},{mid}");
             }
             for (h, right) in [(15, true), (24, false), (33, true)] {
-                close(&format!("angle {h} at {x},{mid}"), 0, old_and_new(60, 40, |c| angle(c, x + 30, mid, h, right, 0xf0e0d0, ">")));
+                close(&format!("angle {h} at {x},{mid}"), 0, old_and_new(60, 40, |c| angle(c, (x + 30, mid), h, right, 0xf0e0d0, ">", (h / 12).max(1))));
             }
         }
     }
@@ -601,6 +673,80 @@ mod tests {
         assert!(!lit.is_empty());
         assert!(lit.iter().all(|(x, y)| (18..=30).contains(x) && (11..=29).contains(y)), "{lit:?}");
         assert!(lit.iter().any(|(x, y)| *x >= 28 && *y == 20), "the point at the right, on the middle line");
+    }
+
+    /// The TrimUI Brick's hand test (17.11.2026, Retro Cocoa, dark): L1, R1 and "< >" were blank white keys, MENU and START pale ones,
+    /// dark pixel letters lost in the light cap's glow. Every key cap the pages ask for (`pal().chip`, `pal().pill`, as
+    /// both hint bars, Settings' category row and the manual do), in every set of colours, Retro's too, dark and light,
+    /// Barlow and Retro letters, is painted with letters lighter than the cap and at least `CAP_CONTRAST` from it.
+    #[test]
+    fn every_key_cap_has_light_letters_that_stand_out_from_it() {
+        use crate::font_style::{for_this_thread, FontStyle, RetroLetters};
+        use crate::palette::{contrast, luminance};
+        let mut text = Text::new();
+        text.set_translate(false);
+        let mut faults = Vec::new();
+        let (w, h) = (200, 80);
+        let (x, y, cw, ch) = (20, 12, 150, 56);
+        for style in [FontStyle::Barlow, FontStyle::Retro] {
+            for letters in [RetroLetters::default(), RetroLetters::Pixelify] {
+                if style == FontStyle::Barlow && letters != RetroLetters::default() {
+                    continue;
+                }
+                let _style = for_this_thread(style, letters);
+                let sets: Vec<(String, Box<dyn Fn()>)> = if style == FontStyle::Retro {
+                    crate::retro::Colours::ALL.iter().map(|&k| (format!("{k:?}"), Box::new(move || crate::retro::set_colours(k)) as Box<dyn Fn()>)).collect()
+                } else {
+                    crate::palette::Colours::ALL.iter().map(|&k| (format!("{k:?}"), Box::new(move || crate::palette::set_colours(k)) as Box<dyn Fn()>)).collect()
+                };
+                for (name, set) in sets {
+                    set();
+                    for t in [0u8, 255] {
+                        for key in ["L1", "R1", "< >", "MENU", "START", "SELECT", "HOME", "A", "B"] {
+                            crate::palette::scoped(t, || {
+                                let mut buf = vec![0u32; (w * h) as usize];
+                                let mut c = Canvas::new(&mut buf, w as u32, h as u32);
+                                let base = y + ch / 2 + type_scale::mid(SMALL);
+                                key_cap(&mut c, &mut text, (x, y, cw, ch), key, SMALL, base, (pal().chip, pal().pill));
+                                // The cap is the middle band's commonest colour; its letters the pixel furthest from it.
+                                let band: Vec<u32> = (y + ch / 4..y + ch * 3 / 4).flat_map(|py| (x + 8..x + cw - 8).map(move |px| (px, py))).map(|(px, py)| c.get(px, py)).collect();
+                                let mut counts = std::collections::HashMap::new();
+                                for p in &band {
+                                    *counts.entry(*p).or_insert(0) += 1;
+                                }
+                                let cap = *counts.iter().max_by_key(|(_, n)| **n).unwrap().0;
+                                let ink = *band.iter().max_by(|a, b| contrast(**a, cap).total_cmp(&contrast(**b, cap))).unwrap();
+                                let what = format!("{style:?}/{letters:?} {name} {} \"{key}\": cap {cap:06x}, letters {ink:06x}, {:.2}:1", if t == 0 { "dark" } else { "light" }, contrast(ink, cap));
+                                if luminance(ink) <= luminance(cap) {
+                                    faults.push(format!("{what}: dark letters on a light cap"));
+                                } else if contrast(ink, cap) < CAP_CONTRAST {
+                                    faults.push(format!("{what}: too little contrast"));
+                                }
+                            });
+                        }
+                    }
+                }
+            }
+        }
+        crate::palette::set_colours(crate::palette::Colours::Warm);
+        crate::retro::set_colours(crate::retro::Colours::Cocoa);
+        assert!(faults.is_empty(), "{} key caps don't read:\n{}", faults.len(), faults.join("\n"));
+    }
+
+    /// French typography holds "Complet\u{a0}:" together with a no-break space (Settings' Motion line, 18.11.2026):
+    /// `footer_lines` split it like a plain space and joined it with one, so the line read with a plain space and ":"
+    /// could start a line. At every column, the lines put back together are the line itself, and none starts with
+    /// French punctuation.
+    #[test]
+    fn a_footer_keeps_no_break_spaces() {
+        let mut text = Text::new();
+        text.set_translate(false);
+        let desc = "Complet\u{a0}: les sélections glissent. Réduit\u{a0}: fondus seulement. Désactivé\u{a0}: rien ne bouge.";
+        for column in (200..1100).step_by(9) {
+            let out = footer_lines(&mut text, desc, column + 600, column + 24 + PAD + BTN_PAD, 8);
+            assert_eq!(out.join(" "), desc, "column {column}: {out:?}");
+            assert!(!out.iter().any(|l| l.starts_with([':', ';', '?', '!'])), "column {column}: {out:?}");
+        }
     }
 
     /// The size sweep (1240x1080, German) found "ist." alone on the pill's line under a two-line explanation.

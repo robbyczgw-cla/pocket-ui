@@ -242,6 +242,19 @@ pub fn gba_colour(c: [f32; 3]) -> [f32; 3] {
     [0, 1, 2].map(|row| (m[0][row] * l[0] + m[1][row] * l[1] + m[2][row] * l[2]).clamp(0.0, 1.0).powf(GAMMA / GBA_GAMMA))
 }
 
+/// Lines a console draws natively, for 3D cores whose internal resolution can be raised.
+pub fn native_lines(system: &str) -> Option<u32> {
+    Some(match system {
+        "n64" => 240,
+        "psp" => 272,
+        "dreamcast" | "naomi" | "atomiswave" => 480,
+        "psx" => 240,
+        "saturn" => 224,
+        "nds" => 192,
+        _ => return None,
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

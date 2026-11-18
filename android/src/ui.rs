@@ -153,9 +153,9 @@ impl Preferences {
 /// The rows of the Cozy extras sheet, in the Linux page's order (`Extra::PAGE_ROWS`) without the two that move: every one
 /// has its feature on a phone. Case sounds, the old-TV switch-on and the playful cases are rows of this Settings itself,
 /// beside Animations, Motion and UI sounds (Linux keeps the two on its Cozy extras page since 2026-11-13).
-pub const PHONE_EXTRAS: [pocket_ui::cozy_extras::Extra; 7] = {
+pub const PHONE_EXTRAS: [pocket_ui::cozy_extras::Extra; 8] = {
     use pocket_ui::cozy_extras::Extra;
-    [Extra::CabinetTv, Extra::Stickers, Extra::PrintedDiscs, Extra::TimeOfDayLight, Extra::Decorations, Extra::Connections, Extra::Rediscover]
+    [Extra::ProgressFromSaves, Extra::CabinetTv, Extra::Stickers, Extra::PrintedDiscs, Extra::TimeOfDayLight, Extra::Decorations, Extra::Connections, Extra::Rediscover]
 };
 /// The rows of Settings in page order; only what exists on a phone (no LEDs, fan, sleep or Tailscale rows).
 #[derive(Clone, Copy, PartialEq, Eq)]

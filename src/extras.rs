@@ -41,28 +41,8 @@ fn level_for(value: &str, allowed: bool) -> Level {
     if allowed { Level::parse(value) } else { Level::Off }
 }
 
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
-pub enum FastForward {
-    Times(u32),
-    /// As many frames as fit into the time of one screen refresh.
-    Max,
-}
-
-impl FastForward {
-    pub fn parse(s: &str) -> Self {
-        match s {
-            "max" => Self::Max,
-            s => s.parse::<u32>().ok().filter(|n| (2..=16).contains(n)).map_or(Self::Times(4), Self::Times),
-        }
-    }
-
-    pub fn label(self) -> String {
-        match self {
-            Self::Times(n) => format!("{n}x"),
-            Self::Max => "max".into(),
-        }
-    }
-}
+pub use crate::play_speed::{FastForward, MAX_FF_BUDGET_MS, MAX_FF_RUNS};
+use crate::play_speed::{REWIND_BYTES, REWIND_FRAMES};
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub struct Settings {
@@ -111,8 +91,8 @@ impl Settings {
     pub fn set(&mut self, key: &str, value: &str) -> bool {
         let on = value == "on";
         match key {
-            "ff_speed" => self.fast_forward = FastForward::parse(value),
-            "rewind" => self.rewind = on,
+            crate::play_speed::FF_KEY => self.fast_forward = FastForward::parse(value),
+            crate::play_speed::REWIND_KEY => self.rewind = on,
             crate::over_game::KEY => self.over_game = level_for(value, over_game_allowed()),
             "rumble" => self.rumble = Strength::parse(value),
             "performance" => self.performance = Performance::parse(value),
@@ -133,14 +113,6 @@ impl Settings {
         true
     }
 }
-
-/// Rewind keeps at most this much memory and this many frames (a minute at 60 fps).
-const REWIND_BYTES: usize = 48 << 20;
-const REWIND_FRAMES: usize = 3600;
-
-/// Fast-forward "max" stops starting emulated frames after this long per screen refresh.
-pub const MAX_FF_BUDGET_MS: f32 = 12.0;
-pub const MAX_FF_RUNS: u32 = 24;
 
 /// Running totals of the rewind captures.
 #[derive(Default)]
@@ -179,10 +151,8 @@ pub struct Extras {
     pub rewind: Rewind,
     /// Fast-forward was switched on with its shortcut.
     pub ff_on: bool,
-    /// The rewind shortcut was down on the previous frame.
-    pub rewind_was_held: bool,
-    /// Frames stepped back during the current rewind.
-    pub rewound: u32,
+    /// The rewind shortcut over the refreshes (`play_speed::RewindHold`): held before, frames stepped back.
+    pub rewind_hold: crate::play_speed::RewindHold,
     /// Scratch buffer for `retro_serialize`.
     pub scratch: Vec<u8>,
     /// Time spent capturing rewind states, for the exit report.
@@ -210,8 +180,7 @@ impl Extras {
             power,
             rewind: Rewind::new(REWIND_BYTES, REWIND_FRAMES),
             ff_on: false,
-            rewind_was_held: false,
-            rewound: 0,
+            rewind_hold: Default::default(),
             scratch: Vec::new(),
             capture: Capture::default(),
             verify: std::env::var_os("POCKET_CORE_REWIND_CHECK").map(|_| Verify::default()),

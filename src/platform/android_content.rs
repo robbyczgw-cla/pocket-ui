@@ -14,6 +14,13 @@ pub struct DirectGame {
 }
 impl DirectGame {
     pub fn new(source: File, root: &Path, name: &str) -> io::Result<Self> {
+        Self::alias(source, root, name, true)
+    }
+    /// A short-lived reader only needs a seekable alias, not the core's full large-ROM identity.
+    pub fn for_reading(source: File, root: &Path, name: &str) -> io::Result<Self> {
+        Self::alias(source, root, name, false)
+    }
+    fn alias(source: File, root: &Path, name: &str, identity: bool) -> io::Result<Self> {
         if name.is_empty() || name == "." || name == ".." || name.contains(['/', '\\']) {
             return Err(io::Error::new(io::ErrorKind::InvalidInput, crate::i18n::tr("Invalid ROM name")));
         }
@@ -40,7 +47,7 @@ impl DirectGame {
             reopened.read_exact(&mut [0])?;
             reopened.seek(SeekFrom::Start(0))?;
             reopened.read_exact(&mut [0])?;
-            if size > 64 << 20 {
+            if identity && size > 64 << 20 {
                 let stamp = source_stamp(&mut reopened, root)?;
                 // Keep GameCopy's CRC identity: an old large-game moment resumes without rewriting its mark.
                 fs::write(game.folder.join(".stage"), format!("{} {} {}\n", stamp.file.size, stamp.file.mtime_ns / 1_000_000, stamp.crc))?;
@@ -118,6 +125,18 @@ fn source_stamp(file: &mut File, root: &Path) -> io::Result<Stamp> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn a_large_document_reader_alias_does_not_hash_or_stage_the_rom() {
+        let root = crate::testutil::TestDir::new("case-document-alias");
+        let source = root.join("large.nds");
+        File::create(&source).unwrap().set_len((64 << 20) + 1).unwrap();
+        let aliases = root.join("aliases");
+        let game = DirectGame::for_reading(File::open(&source).unwrap(), &aliases, "Large.nds").unwrap();
+        assert_eq!(fs::metadata(game.path()).unwrap().len(), (64 << 20) + 1);
+        assert!(!game.folder.join(".stage").exists());
+        assert_eq!(fs::read_dir(&aliases).unwrap().count(), 1, "only the alias folder, no checksum cache");
+    }
+
     #[test]
     fn original_name_seek_reopen_and_cleanup_without_a_rom_copy() {
         let root = crate::testutil::TestDir::new("no-copy");

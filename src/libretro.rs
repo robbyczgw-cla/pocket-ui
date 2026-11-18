@@ -913,6 +913,15 @@ fn rastate_sections_fit(data: &[u8]) -> bool {
     false
 }
 
+// PPSSPP treats a root named PSP (case insensitive) as the contents of /PSP.
+// The dArkOS 1.18.1 core strips PSP for mkdir but not file opens: ENOENT on
+// in-game saves. A literal /. keeps the same root and its PSP/SAVEDATA layout,
+// without activating that shortcut. Do not canonicalize away the final dot.
+fn core_save_directory(core: &Path, dir: &Path) -> CString {
+    let root = if core_options::core_id(core) == "ppsspp" { dir.join(".") } else { dir.to_path_buf() };
+    CString::new(root.as_os_str().as_encoded_bytes()).unwrap_or_default()
+}
+
 impl Core {
     /// Loads `core_path`, initialises it and starts `rom`. SRAM is read from `save_dir/<rom stem>.srm`.
     /// `options` are the user's saved core option values; they win over our curated defaults
@@ -925,10 +934,14 @@ impl Core {
             let id = core_options::core_id(core_path);
             let profile = if cfg!(target_os = "android") { core_options::android_curation(&id) } else { core_options::curation(&id) };
             s.opts = OptionSet::new(profile, &saved);
+            // Linux and Android alike (Android's player has the same Resolution row, `pause_options`).
+            if crate::render_scale::row_for_core(&id) {
+                s.opts.row_decides = crate::render_scale::CORE_KEYS;
+            }
             s.trace = std::env::var_os("POCKET_CORE_TRACE").is_some();
             crate::vfs::TRACE.store(s.trace, std::sync::atomic::Ordering::Relaxed);
             s.system_dir = CString::new(system_dir.as_os_str().as_encoded_bytes()).unwrap_or_default();
-            s.save_dir = CString::new(save_dir.as_os_str().as_encoded_bytes()).unwrap_or_default();
+            s.save_dir = core_save_directory(core_path, save_dir);
             s.content_dir = CString::new(rom.parent().unwrap_or(Path::new("/")).as_os_str().as_encoded_bytes()).unwrap_or_default();
         });
         let lib = unsafe { Library::new(core_path) }.map_err(|e| format!("load {}: {e}", core_path.display()))?;
@@ -1903,6 +1916,27 @@ impl Frame {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn psp_memstick_keeps_psp_subdirectory_even_when_mount_is_named_psp() {
+        for core in ["ppsspp_libretro.so", "libppsspp_libretro.so"] {
+            for root in ["/storage/saves/psp", "/storage/roms/psp", "/media/EASYROMS/My Games/psp", "/sdcard/data/saves/0123456789abcdef"] {
+                let dir = super::core_save_directory(std::path::Path::new(core), std::path::Path::new(root));
+                // PPSSPP selects its shortcut from the literal final component.
+                let filename = dir.to_str().unwrap().rsplit('/').next().unwrap();
+                assert!(!filename.eq_ignore_ascii_case("psp"), "{root}: PPSSPP would strip PSP from mkdir but not file opens");
+                assert_eq!(std::path::Path::new(dir.to_str().unwrap()).join("PSP/SAVEDATA"), std::path::Path::new(root).join("PSP/SAVEDATA"));
+            }
+        }
+    }
+
+    #[test]
+    fn other_cores_keep_their_shared_memory_card_paths() {
+        for core in ["flycast_libretro.so", "melondsds_libretro.so", "dolphin_libretro.so", "pcsx_rearmed_libretro.so"] {
+            let dir = super::core_save_directory(std::path::Path::new(core), std::path::Path::new("/media/EASYROMS/My Games/saves"));
+            assert_eq!(dir.to_bytes(), b"/media/EASYROMS/My Games/saves");
+        }
+    }
+
     #[test]
     fn a_core_stuck_in_an_error_loop_writes_at_most_its_limit() {
         let written = AtomicUsize::new(0);

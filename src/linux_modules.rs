@@ -64,6 +64,7 @@ pub mod cozy_extras;
 pub mod insert_rig;
 pub mod insert_scene;
 pub mod playful;
+pub mod lived_in;
 pub mod sticker_press;
 pub mod text_fallback;
 pub mod latinise;
@@ -125,6 +126,14 @@ pub mod update_hint;
 pub mod os_compat;
 pub mod untar;
 pub mod video;
+/// The picture's shader, shared with Android's player (`video_program`).
+pub mod video_program;
+/// Picture settings as values, shared with Android's player (`video_settings`).
+pub mod video_settings;
+/// A game's settings files, shared with Android's player (`game_settings`).
+pub mod game_settings;
+/// The game settings' table, shared with Android's player (`option_table`).
+pub mod option_table;
 pub mod picture_fx;
 #[cfg(target_os = "linux")]
 pub mod headless_gl;
@@ -158,6 +167,7 @@ pub mod states;
 pub mod save_trouble;
 pub mod save_writer;
 pub mod rewind;
+pub mod play_speed;
 pub mod hotkeys;
 pub mod power;
 pub mod extras;
@@ -171,6 +181,8 @@ pub mod pixel_live;
 /// Over the game: Off, FPS, FPS + sensors or Pixel Path, one setting for what pocket-core draws over a game.
 pub mod over_game;
 pub mod overlay;
+/// The same over-the-game pieces put into the picture by the CPU, where no GPU draws them (dArkOS, a Brick without GL).
+pub mod soft_hud;
 /// The achievement unlock card, painted alike by pocket-core's HUD and the Android player.
 pub mod unlock_card;
 pub mod standalone;
@@ -258,8 +270,12 @@ pub mod media;
 pub mod tape_label;
 pub mod title_block;
 pub mod pause_head;
+/// The pause menu's pages as painted on Linux and in Android's player: one painter for both (`pause_page`).
+pub mod pause_page;
 /// The handhelds' pause menu for Android's player when the game came from the Handheld view (`pause_list`).
 pub mod pause_list;
+/// The Options page of that menu, laid out as Linux's (`pause_options`).
+pub mod pause_options;
 pub mod quit;
 pub mod exit_guard;
 pub mod fast_switch;
@@ -334,6 +350,8 @@ pub mod on_start;
 pub mod launch_picture;
 /// Android's handheld view: where the games are and the Mobile view's key of each (android/handheld/app_android.rs).
 pub mod android_handheld;
+/// The Android games: apps the player calls games, one list for both views (`launcher.json` `android_games`).
+pub mod android_games;
 // "Where was I?": the card over a moment continued after a long break.
 pub mod where_was_i;
 /// RetroAchievements: rcheevos (vendor/rcheevos) for pocket-core games, the account, the files pocket-ui reads.

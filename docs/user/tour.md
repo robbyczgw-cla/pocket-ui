@@ -37,21 +37,21 @@ this device, Pixel Path, frames and "Continue your last game" are off by default
 
 | Card | The shelf | Enthusiast | Changed in |
 |---|---|---|---|
-| **Continue where I quit** | As it is | As it is | Settings → Playing → [Continue where I quit](settings.md#continue-where-i-quit) |
-| **Continue your last game** | Off | On | Settings → Playing → [On start](settings.md#on-start) (Last game) |
+| **Continue where I quit** | As it is | As it is | Settings → Playing → [Continue where I quit](settings-playing.md#continue-where-i-quit) |
+| **Continue your last game** | Off | On | Settings → Playing → [On start](settings-playing.md#on-start) (Last game) |
 | **Motion** | On | On | Settings → Look → [Motion](settings.md#motion) (Off on the card is Motion Off) |
 | **Big text** | As it is | As it is | Settings → Look → [Text size](settings.md#text-size) and Settings → Look → [Motion](settings.md#motion) ([Big text](big-text.md#big-text)): On is Large text and Reduced motion, Off is Normal text and Full motion; while it is on, the pause menu lists [Zoom](big-text.md#zoom) |
 | **Retro** | As it is | As it is | Settings → Look → [Style](theme.md#style) → Retro; Off goes back to Barlow. After the update to 0.3.0 its card starts on On: A tries it, B leaves everything as it is |
 | **Menu sounds** | As it is | As it is | Settings → Screen & sound → Menu sounds |
 | **Haptics** | As it is | As it is | Settings → Controls → Haptics |
 | **Stick lights** | As it is | As it is | Settings → Controls → [LEDs](settings-sound.md#leds) (On is Colour, unless Battery was chosen) |
-| **Screen frames on every console** | Off | On | Settings → Playing → [Screen frames](settings.md#screen-frames) |
+| **Screen frames on every console** | Off | On | Settings → Playing → [Screen frames](settings-playing.md#screen-frames) |
 | **Echoes** | Off | On | Settings → Games → Curator |
 | **Versions** | Off | On | Settings → Games → Curator ("Merge versions in mixed lists") |
 | **Play history** | As it is | On | Settings → Games → Curator ([Play history](curator.md#play-history)); on by default |
 | **Echoes beyond this device** | Off | On | Settings → Games → Curator ("Games not on this device in Echoes") |
 | **Pixel Path** | Off | On | Settings → Games → Curator ("Pixel Path in the pause menu") |
-| **Pixel Path over every game** | As it is | As it is | Settings → Playing → [Over the game](settings.md#over-the-game) on Pixel Path ([Pixel Path over the game](pause-menu.md#pixel-path-over-the-game)), with Pixel Path in the pause menu, which the level needs; Off takes only that level away |
+| **Pixel Path over every game** | As it is | As it is | Settings → Playing → [Over the game](settings-playing.md#over-the-game) on Pixel Path ([Pixel Path over the game](pause-menu.md#pixel-path-over-the-game)), with Pixel Path in the pause menu, which the level needs; Off takes only that level away |
 | **Lens & smart shelves** | Off | On | Settings → Games → Curator |
 
 Cards without a switch, after those: **Search and the letter jump**, **Console credits**, **Players**, **Run-ahead**, **Runs on**,

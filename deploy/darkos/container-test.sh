@@ -7,7 +7,7 @@
 #   /img   roms-exfat.img and roms2-exfat.img (mkfs.exfat images, 128 MB or more)
 # GLENV: extra environment for the port in a container without the Mali GPU (test-6: EGL_PLATFORM=surfaceless for Mesa's
 # llvmpipe standing in for the blob, with the real image's cores; docs/DARKOS.md "PSP and Dreamcast").
-# container-test.sh <layout>     layout: roms | roms2 | both | pad (the face buttons, standard layout, with a virtual pad: /ship/vpad.py, or VPAD_PY) | ui (Back to EmulationStation, Power off) | power (virtual PMIC key, host isolation, crash recovery)
+# container-test.sh <layout>     layout: roms | roms2 | both | pad (the face buttons, standard layout, with a virtual pad: /ship/vpad.py, or VPAD_PY) | ui (Back to EmulationStation, Power off) | osd (the level bar over a game on the CPU copy) | power (virtual PMIC key, host isolation, crash recovery)
 # The card is mounted the way dArkOS mounts it (exFAT, umask=0000, uid/gid of ark: fmask=0000,dmask=0000), the port is started
 # as EmulationStation starts it (user ark, through ports/pocket-ui.sh and sudo), the screen is a plain file, the console a
 # file. It checks the welcome screen, a game start from that card, Save & quit back to the shelf, a clean end (no mounts,
@@ -38,7 +38,7 @@ install_port() { # card
 es_start() { # card: as EmulationStation: user ark, the port's entry, sudo
   EP=$1/ports; : >/tmp/tty.out; head -c $((640 * 480 * 4)) /dev/zero >/tmp/fb.raw; chmod 666 /tmp/fb.raw /tmp/tty.out
   rm -rf "$EP/pocket-ui/logs" /tmp/pocket-ui.status /tmp/es-rc
-  echo 'Defaults env_keep += "DARKOS_* EGL_PLATFORM"' >/etc/sudoers.d/zz-container-test; chmod 440 /etc/sudoers.d/zz-container-test
+  echo 'Defaults env_keep += "DARKOS_* EGL_PLATFORM POCKET_CORE_TEST"' >/etc/sudoers.d/zz-container-test; chmod 440 /etc/sudoers.d/zz-container-test
   su ark -c "DARKOS_FB=/tmp/fb.raw DARKOS_TTY=/tmp/tty.out DARKOS_HOLD=${HOLD:-1} $PADENV setsid '$EP/pocket-ui.sh' >/tmp/es-stdout.txt 2>&1 </dev/null; echo \$? >/tmp/es-rc" &
 }
 wait_end() { n=0; while [ $n -lt 80 ] && [ ! -e /tmp/es-rc ]; do sleep 0.5; n=$((n + 1)); done; }
@@ -145,6 +145,9 @@ run_ui() {
   open_category System; check "$C: Settings > System is open" test "$(status place)" = "settings:List System"
   key a 4; wait_end
   gone "$C" "$C: Settings > System > Back to EmulationStation"
+  # No logger runs on dArkOS: pocket-ui itself marks the boot's end (src/logs.rs mark_clean), else a power off from
+  # EmulationStation made the next start say "The device shut down unexpectedly last time." (RG353M, 0.5.0).
+  check "$C: Back to EmulationStation marks the boot clean" test -s "$P/storage/.config/pocket-ui/logs/clean-exit"
   install_port "$C"; es_start "$C"; to_shelf "$C (quick settings)"
   key home 1.5; key down 0.4; key down 0.4; key down 0.4; key down 0.4; key down 0.4; key a 4; wait_end
   gone "$C" "$C: quick settings > Back to EmulationStation"
@@ -153,6 +156,18 @@ run_ui() {
   n=0; while [ $n -lt 60 ] && ! grep -q poweroff /tmp/systemctl.calls 2>/dev/null; do sleep 0.5; n=$((n + 1)); done
   check "$C: Power off reaches systemctl poweroff" grep -qx poweroff /tmp/systemctl.calls
   check "$C: the log says who asked" grep -q "power: systemctl poweroff" "$P/logs/start.log"
+  L=$P/storage/.config/pocket-ui/logs
+  check "$C: Power off marks the boot clean before its command" test -s "$L/clean-exit"
+  stop_port "$C"
+  # The next boot. The container keeps the host's boot id, so the state file is given an earlier boot's.
+  next_boot() { sed -i 's/^id=.*/id=container-earlier-boot-'"$1"'/' "$L/boot"; es_start "$C"; again_shelf "$C ($2)"; }
+  unexpected() { grep -q "without a clean shutdown" "$P/storage/.config/pocket-ui/crash.log" 2>/dev/null; }
+  next_boot 1 "start after Power off"
+  unexpected && bad "$C: 'shut down unexpectedly' after Power off" || ok "$C: no 'shut down unexpectedly' after Power off"
+  # A power cut (pocket-ui killed, nothing cleans up) is what the notice is for.
+  victim=$(pgrep -f "^$P/app/bin/pocket-ui$"); [ -n "$victim" ] && kill -KILL $victim; wait_end; stop_port "$C"
+  next_boot 2 "start after a power cut"
+  unexpected && ok "$C: a power cut still says the device shut down unexpectedly" || bad "$C: no notice after a power cut"
   stop_port "$C"
 }
 
@@ -265,7 +280,7 @@ for n in r.getroot().findall('system'):
   n.find('command').text='/bin/sh /tmp/darkos-native-fixture.sh %EMULATOR% %CORE% %ROM%'
 r.write(sys.argv[1])
 PYCFG
-  PADENV="DARKOS_ES_SYSTEMS=/tmp/darkos-test6-es.cfg ${GLENV:-}"
+  PADENV="DARKOS_ES_SYSTEMS=/tmp/darkos-test6-es.cfg POCKET_CORE_TEST=1 ${GLENV:-}"
   es_start "$C"; to_shelf "$C (extra systems)"
   check "NGP/NGPC, PSP, Dreamcast and GameCube enter the shelf inventory" python3 -I -c 'import json;d=json.load(open("/tmp/pocket-ui-darkos/systems.json"));assert all(s in d for s in ["ngp","ngpc","psp","dreamcast","gamecube"])'
   for sys in ngp ngpc; do
@@ -333,6 +348,15 @@ play_3d() { # card, system, folder, file, core
   check "$sys still running after 8 s" sh -c "grep -q 'play=playing' /tmp/pocket-core.status && pgrep -f '[a]pp/bin/pocket-core' >/dev/null"
   cp /tmp/fb.raw "/out/test6-$sys.raw" 2>/dev/null
   check "$sys shows the game's picture (a third of the screen differs from the shelf, not one colour)" python3 -I -c 'a=open("/tmp/fb.raw","rb").read();b=open("/tmp/fb.shelf","rb").read();n=len(a)//4;d=sum(a[i*4:i*4+3]!=b[i*4:i*4+3] for i in range(0,n,5));assert d*5>n/3 and len({a[i*4:i*4+3] for i in range(0,n,7)})>4'
+  if [ "$sys" = psp ]; then
+    # Psp2048 saves its board after a move. Slots alone never exercise the
+    # core's own memory-stick I/O (not RETRO_MEMORY_SAVE_RAM).
+    for button in DOWN LEFT UP RIGHT DOWN LEFT UP RIGHT; do
+      core_cmd "press $button 100"; sleep 0.4
+    done
+    sleep 1
+    check "PSP in-game save reaches the standalone memory stick" test -s "$C/$folder/ppsspp/PSP/SAVEDATA/PSP2048/savedata.bin"
+  fi
   core_cmd "save 2"; n=0
   while [ $n -lt 30 ] && [ -z "$(find "$P/storage" -name '*.pstate1' 2>/dev/null | grep -i "${file%.*}")" ]; do sleep 0.5; n=$((n + 1)); done
   check "$sys saved slot 2" test -n "$(find "$P/storage" -name '*.pstate1' -size +1k 2>/dev/null | grep -i "${file%.*}")"
@@ -469,12 +493,42 @@ run_update56() {
   check "no view mounts left after the update" test "$(grep -c pocket-view /proc/mounts)" = 0
 }
 
+# Over the game on the CPU copy (pocket-fb without --gl, as on dArkOS): Vol+ during a game shows the level bar at the top
+# centre of the screen file and it is gone again after its 1.4 s; the first game's note stands at the bottom. Screen files
+# go to /out (osd-before/during/after.raw, 640x480 XRGB) for the renders.
+fbdiff() { # a, b, x0, y0, x1, y1: pixels that differ inside the rectangle
+  python3 -I -c 'import sys
+a,b=(open(f,"rb").read() for f in sys.argv[1:3]); x0,y0,x1,y1=map(int,sys.argv[3:7])
+print(sum(1 for y in range(y0,y1) for x in range(x0,x1) if a[(y*640+x)*4:(y*640+x)*4+3]!=b[(y*640+x)*4:(y*640+x)*4+3]))' "$@"
+}
+run_osd() {
+  C=$1; P=$C/ports/pocket-ui; echo "=== level bar over a game on the CPU copy, $C"
+  install_port "$C"; PADENV="${GLENV:-}"
+  es_start "$C"; to_shelf "$C"
+  key a; key a 3
+  if ! waitfor game playing 20; then bad "$C: game did not start (place=$(status place))"; stop_port "$C"; return; fi
+  check "$C: the game is drawn by the CPU copy" grep -q "shaders and frames off, the CPU copy" "$P/logs/pocket-ui.log"
+  sleep 7  # the first game's note (6 s) is gone
+  mkdir -p /out; cp /tmp/fb.raw /out/osd-before.raw
+  key volup 0.5; cp /tmp/fb.raw /out/osd-during.raw
+  sleep 2.5; cp /tmp/fb.raw /out/osd-after.raw
+  bar=$(fbdiff /out/osd-before.raw /out/osd-during.raw 150 14 490 52); gone=$(fbdiff /out/osd-before.raw /out/osd-after.raw 150 14 490 52)
+  below=$(fbdiff /out/osd-before.raw /out/osd-during.raw 0 120 640 480)
+  echo "  bar area: $bar pixels changed with Vol+, $gone after 2.5 s; $below changed below it"
+  check "$C: Vol+ shows the level bar at the top centre" test "$bar" -gt 3000
+  check "$C: the bar is gone again" test "$gone" -lt $((bar / 4))
+  key home; key up; key a 3
+  waitfor place shelf 10 && ok "$C: Save & quit is back on the shelf" || bad "$C: not back on the shelf (place=$(status place))"
+  stop_port "$C"
+}
+
 case "$LAYOUT" in systems) card_mount /roms2 /img/roms2-exfat.img || bad "mount /roms2"; run_systems /roms2; echo "=== $FAILS failed"; [ "$FAILS" = 0 ]; exit ;; esac
 case "$LAYOUT" in update56) [ "$(df -k /dev/shm | awk 'NR==2{print $2}')" -ge 262144 ] || mount -o remount,size=512m /dev/shm; card_mount /roms /img/roms-exfat.img || bad "mount /roms"; run_update56 /roms; echo "=== $FAILS failed"; [ "$FAILS" = 0 ]; exit ;; esac
 case "$LAYOUT" in updates) card_mount /roms /img/roms-exfat.img || bad "mount /roms"; run_updates /roms; echo "=== $FAILS failed"; [ "$FAILS" = 0 ]; exit ;; esac
 case "$LAYOUT" in power) card_mount /roms /img/roms-exfat.img || bad "mount /roms"; run_power /roms; echo "=== $FAILS failed"; [ "$FAILS" = 0 ]; exit ;; esac
 
 case "$LAYOUT" in ui) card_mount /roms /img/roms-exfat.img || bad "mount /roms"; run_ui /roms; echo "=== $FAILS failed"; [ "$FAILS" = 0 ]; exit ;; esac
+case "$LAYOUT" in osd) card_mount /roms /img/roms-exfat.img || bad "mount /roms"; run_osd /roms; echo "=== $FAILS failed"; [ "$FAILS" = 0 ]; exit ;; esac
 case "$LAYOUT" in pad) card_mount /roms /img/roms-exfat.img || bad "mount /roms"; run_pad /roms; echo "=== $FAILS failed"; [ "$FAILS" = 0 ]; exit ;; esac
 case "$LAYOUT" in roms|both) card_mount /roms /img/roms-exfat.img || bad "mount /roms" ;; esac
 case "$LAYOUT" in roms2|both) card_mount /roms2 /img/roms2-exfat.img || bad "mount /roms2" ;; esac

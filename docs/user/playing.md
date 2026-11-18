@@ -21,13 +21,13 @@ bottom):
 4. **Favourites**, the games you starred with Y, by name. The row appears once you star a game and
    goes away when you unstar the last one.
 5. The **smart shelves you pinned to Home**, each as a row of its own. Each part of Curator can be
-   switched off in [Settings → Games → Curator](settings.md#curator); without the Lens there is no Curator row on
+   switched off in [Settings → Games → Curator](settings-playing.md#curator); without the Lens there is no Curator row on
    top. In the Cabinet look they are shelves (see below).
 6. **PC streaming**, only when Moonlight is installed (it is on ROCKNIX) and you ticked it in Settings → Games →
    Systems on the shelf. It starts Moonlight, an app that has no pause menu and does not count as a game. See
    [PC streaming](pc-streaming.md).
 7. **Your systems**, in alphabetical order. Only systems with at least one game are shown, and not the ones you
-   hid in [Systems on the shelf](settings.md#systems-on-the-shelf). A system opens its own list of games.
+   hid in [Systems on the shelf](settings-playing.md#systems-on-the-shelf). A system opens its own list of games.
 
 **What the rows show when you pick them.** Where a game shows its box art (the case shown above the shelf in the
 Shelf look, the panel in Split), the other rows show games too:
@@ -56,7 +56,7 @@ Each entry shows a short line of details:
   system (two versions of the same game) shows the same name as in the system list, for example "Tobu Tobu Girl (Europe)"
 - a game in a system list: "Last played …, … in total", or "Not played yet"
 - a system: how many games it has, and in most looks a few facts about the console (see
-  [Console pages](#console-pages))
+  [Console pages](console-pages.md))
 
 The top right shows the time, a Wi-Fi symbol while the Pocket is connected to a network, and the battery level,
 with ", charging" while it charges. The same corner is on a game's card, a console page, the search and Curator's
@@ -198,8 +198,14 @@ system's shelf.
 In the Cabinet look a small old TV stands on the cabinet's top board, at the right, and shows the selected game: its
 screenshot when pocket-ui has downloaded one (Settings → Games → Box art & downloads → Box art), else the latest picture of your
 own play (the one Continue starts from), else its cover; a game with none of these shows its console. The picture
-changes with a short crossfade as you move (at once with Motion off). On a small screen the TV is smaller; where it
-would be too small to see it is left out.
+changes with a short crossfade as you move (at once with Motion off). A handheld game (Game Boy, Game Boy Advance, Game
+Gear, Neo Geo Pocket, Lynx, WonderSwan, DS, PSP …) shows on its handheld instead, the game on its little display, in the
+TV's place. Beside the TV, on its left, stands the console the selected game is played on (a SNES, an N64, a
+PlayStation …), in the colour you chose on its [console page](console-pages.md); it changes as you move to the next shelf, like
+a real living-room shelf. A handheld game adds nothing (its handheld already stands there), nor does a computer or
+arcade game. The TV (or handheld), the console's place and the top board stay where they are from shelf to shelf; only
+the shelves move. On a small screen the TV is smaller; where it would be too small to see it is left out, and where the
+cases out of the shelf need the room, the console is.
 With Settings → Look → [Cozy extras](settings.md#cozy-extras) → **TV plays the game** on (it starts **off**), a game you
 have never played plays on the TV after a two-second rest (its own demo, silent, up to 25 seconds); press A and its
 picture grows to the whole screen and you play on from there (a game still in its plastic wrap, [Sealed new games](settings.md#cozy-extras), starts the usual way instead: the wrap tears off first). It runs the game in a second, hidden player, which
@@ -212,82 +218,7 @@ One big game at a time, simple menus: see [Easy](easy.md).
 
 ## Console pages
 
-Most systems have a page about the console itself. With such a system selected on Home, the hint bar
-shows **X Details**: press **X** to open it. (On a game, X opens the game's [card](library.md) as before.)
-
-What the shelf already shows of it while the system is selected depends on the look:
-
-| Look | With a system selected |
-|---|---|
-| **Split** | Under the console's name: maker, year and generation, then **Released**, **Ended**, **Sold**, **Inside**, **Your games** (how many, and the one you played last) and **Runs on** (the emulator that plays it here). A fact that isn't known is left out; a console without facts here (PC Engine CD, for one) still shows Your games and Runs on. If the rows don't all fit, the ones that matter least go first. |
-| **Shelf** | Maker, year and generation after the game count on the pulled-out label. |
-| **Cabinet** | Systems are shelves there, not entries you select, so X on a game opens its card. |
-
-The page itself shows, from top to bottom:
-
-- the console's name, maker, year and generation, a short summary, and its picture ([other colours](settings.md#console-colours))
-- **Timeline**: the release date in each region, when it was discontinued, and how many were sold
-- **Hardware**: processor, graphics, memory, media, and the screen for handhelds
-- **Launch price** in the regions it is known for
-- **On this Pocket**: how many games you have for it and the one you played last, the time you played
-  on it, the emulator that plays it, and the BIOS file for a system that needs one (found or missing)
-- further down: the consoles that came before and after it, and what the sales figure counts
-
-| Button | On the console page |
-|---|---|
-| A | Open the system's list of games. |
-| B | Back to Home (or to the console you came from, see [Credits & links](#credits--links)). |
-| X | [Credits & links](#credits--links): who made the console, its chips, its family. |
-| Y | The sources of the facts, every page in full. B or Y goes back to the facts. |
-| START | Choose the emulator that plays the console's games: [Runs on](options.md#runs-on). |
-| Up / Down, L1 / R1 | Scroll, when the page is longer than the screen. |
-
-Touch: tap a hint key at the bottom; swipe up or down to scroll.
-
-The facts come from Wikidata, Wikipedia and the makers' own figures, were checked, and are stored on
-the device, so the page works without internet. Anything the sources don't say is left out, never
-guessed. Consoles with a page: 3DO, 32X, Atari 2600, Atari 7800, Atari Jaguar, Atari Lynx, ColecoVision,
-Dreamcast, Famicom Disk System, Game Boy, Game Boy Advance, Game Boy Color, Game Gear, GameCube, Intellivision,
-Master System, Mega Drive (also as Genesis), Neo Geo AES, Neo Geo CD, Neo Geo Pocket Color, Nintendo 3DS,
-Nintendo 64, Nintendo DS, NES (also as Famicom), PC Engine (also as TurboGrafx-16), PlayStation, PlayStation 2,
-PlayStation Portable, Sega CD (also as Mega-CD), Sega Saturn, SG-1000, Super Nintendo (also as Super Famicom),
-Vectrex, Virtual Boy, Wii and WonderSwan. Other systems (Ports, PICO-8, the SuperGrafx, add-ons such as the PC
-Engine CD) have no page and no X hint.
-
-### Credits & links
-
-Press **X** on a console page for its credits, and for links from there into your own games. From top to
-bottom:
-
-- a two-sentence note on who made the console and what is inside it
-- **People**: the designers and the people who led its development, where the sources name them (for example
-  Gunpei Yokoi and Satoru Okada for the Game Boy, Masayuki Uemura for the NES and the Super Nintendo)
-- **Made by**: the developer and the manufacturers
-- **Chips**: the processors, graphics and sound chips, with the company that made or designed each where it is
-  known. Under them, the other consoles **on this Pocket** with one of the same chips (the Game Boy Color and the
-  Game Boy Advance share the Game Boy's Sharp SM83; the Master System, Game Gear and Mega Drive share a Zilog Z80)
-- **Family**: the consoles before and after it, its other models (Game Boy Pocket, PS one) and related hardware
-  (add-ons, arcade boards). Those you have games for come first, as links
-- **Best-selling game**, with the figure the source gives
-- **By the makers, in your library**: up to eight of your games by the console's developer or maker (for the Game
-  Boy, games by Nintendo R&D1), oldest first, with how many more there are. Right after pocket-ui starts this says
-  "Getting ready…" for a moment, until the game facts are read.
-
-| Button | In Credits & links |
-|---|---|
-| Up / Down | Move between the links on screen; past the last one, scroll on. |
-| L1 / R1 | Scroll a whole page. |
-| A | Open the selected link: a console's page, the games of a system without a page (such as the PC Engine CD), or a game's [card](library.md). |
-| B or X | Back to the console page. |
-
-A console page opened from a link has its own Credits & links; B goes back to the console you came from, up to
-eight steps, then to Home. B on a game's card comes back to the credits.
-
-Touch: tap a link to select it, tap it again to open it; swipe to scroll.
-
-Every fact here was checked against Wikidata or the console's English Wikipedia article (the facts only, never its
-text) when the data was built; anything that couldn't be checked was left out. The notes and the short role texts
-("Led the design team") are written for pocket-ui. A link appears only for a system that has games on this Pocket.
+Most systems have a page about the console itself, with its facts and its Credits & links (X on the system): see [Console pages](console-pages.md).
 
 ## Starting a game
 
@@ -297,7 +228,7 @@ so you see your place while the emulator starts; then the screen frame around it
 two weeks a quiet card on that picture says when you played last and shows your note, for a few seconds or until a button ([Where was I?](continue.md#where-was-i)). When you
 quit, you come back to where you were; on Home the selection goes back to the top, so your last game
 is ready to continue. Settings → Playing → **On start** can open that game right when the Pocket starts
-([Settings](settings.md#on-start)).
+([Settings](settings-playing.md#on-start)).
 
 pocket-ui counts the time from starting a game to quitting it and adds it to that game's play time.
 
@@ -417,7 +348,7 @@ hub without it shows nothing.
 ## Continuing where you left off
 
 - **pocket-ui's own host** saves the moment you quit, every time, however you quit, except a pause-menu Quit with
-  Settings → Playing → [Continue where I quit](settings.md#continue-where-i-quit) off. With it off, the next start is as if no
+  Settings → Playing → [Continue where I quit](settings-playing.md#continue-where-i-quit) off. With it off, the next start is as if no
   moment had been kept, and the older moment stays under Load.
 - **RetroArch** does the same, using ROCKNIX's standard setting, even with Continue where I quit off.
 - **PlayStation 2, GameCube, Wii and 3DS** save the moment when you choose Quit in the pause menu (not with

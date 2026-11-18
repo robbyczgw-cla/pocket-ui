@@ -14,11 +14,13 @@ The same settings for one game are on its card without starting it: [This game](
 | **Cheats** | Cheats from the libretro cheat database. On TrimUI, opening it downloads the database once over Wi-Fi, with progress; afterwards it works offline. Other hosts show it only for matching games. See [Cheats](options-cheats.md) |
 | **Shortcuts** | HOME + button combinations while you play. |
 | **Speed, rumble, fan** | Fast-forward speed, rewind, what is shown over the game, rumble, performance, fan and run-ahead. |
+| **Zoom** | The paused picture larger, to read small text ([Zoom](big-text.md#zoom)). |
 | **Runs on** | Which emulator plays this game or this console (see [Runs on](#runs-on)). It has its own Save changes. |
 | **Keep for** | Where your changes stay: **This game** or **This console**. **Restore defaults** below it undoes them. |
 
 Move with Up/Down (the list wraps around at the ends), change a value with Left/Right (A also steps
-to the next value), and go back with B. The line at the bottom explains the selected setting.
+to the next value), and go back with B. A row that opens a page ends in **›** on every row; a row that changes right
+there shows its value, the selected one as **‹ value ›**. The line at the bottom explains the selected setting.
 **A change applies to the running game at once** and stays: it is kept the moment you make it, as in Settings. Where
 it stays is the **Keep for** row ([below](#keep-for)).
 
@@ -58,7 +60,7 @@ How the picture looks, in one row. Handhelds get **LCD grid**; TV consoles, arca
 | **Bloom** | A clear picture where bright parts glow softly around the edges. |
 | **LCD grid** | Handhelds. Thin dark gaps between the pixels, like a handheld's screen. |
 | **Scanlines** | TV consoles, arcade, computers. Rows like a TV's beam, closing up in bright parts. |
-| **Old TV** | As Scanlines, plus a fine colour mask and a soft glow. Only the picture: the TV around it is a [Screen frame](#screen-frame). |
+| **Old TV** | As Scanlines, plus a fine colour mask and a soft glow. Only the picture: the TV around it is a [Screen frame](options-screen.md#screen-frame). |
 
 Choosing a Look sets Sharpness and Effect together; nothing else changes. What you saved keeps working: a combination
 that matches a Look shows as that Look, any other (Soft with an effect, an LCD grid on a PlayStation) shows as
@@ -78,98 +80,35 @@ Under **Custom** two rows open, a step in. **Sharpness**: **Sharp** hard pixel s
 little. **Effect**: **None**, **LCD grid**, **Scanlines**, **Old TV**, **Bloom** or **Smooth**, every console offered
 all of them.
 
-### Screen frame
+### Screen frame and Screen orientation
 
-| Choice | What it looks like |
-|---|---|
-| **None** | Black around the picture. |
-| **Auto** | A frame around the picture that suits the console (see below). |
-| **Ambient** | The space around the picture glows softly in the game's own colours, like a TV with ambient light. It follows the game smoothly as the scene changes. |
-| **DMG** | The first Game Boy: darker glass around the screen with one large rounded corner, two thin coloured lines above the picture and a power light beside it. **DMG colour**: grey, clear, red, yellow, green or black. Offered for Game Boy and Game Boy Color games. |
-| **GB Pocket** | The slimmer Game Boy Pocket, with tighter glass. **GB Pocket finish**: brushed silver or clear. Offered for Game Boy and Game Boy Color games. |
-| **GBC** | The Game Boy Color's shell around the screen. Pick its colour under **GBC colour** (shown while GBC is chosen): classic grey, indigo, clear purple, atomic purple, black, white or glacier blue. The clear ones are see-through. Offered for Game Boy and Game Boy Color games. |
-| **GBA** | The Game Boy Advance: a landscape handheld with rounded sides, shoulder buttons peeking over its top corners and a small speaker grille. Offered for Game Boy Advance games. |
-| **GBA SP** | The Game Boy Advance SP, opened: the lid with the hinge along the bottom. **GBA SP finish**: platinum, cobalt, flame red or graphite. Offered for Game Boy Advance games. |
-| **DS** | The Nintendo DS: two screens with a hinge between them and speaker slits beside the top screen. Offered for the Nintendo DS only; see below. |
-| **PSP** | The PSP: a piano-black wide body with oval ends and a soft diagonal sheen. Offered for PSP games only. |
-| **CRT** | An old TV: the picture behind curved dark glass, in a cabinet of dark plastic or wood (**TV cabinet**, shown while CRT is chosen). |
-| **Studio monitor** | A grey professional monitor with flat glass and a row of small knobs and buttons below. |
-| **Portable TV** | A small portable TV with a telescopic antenna and a tuning dial. |
-| **Woodgrain** | A wood-look front with a ribbed black band on top. |
-| **Arcade** | A glossy black arcade bezel with two soft light strips. |
-| **Glow** | A thin rounded line around the picture, glowing in the console's colour from the shelf. |
+The frame around the picture and the turned screen for upright games: see [Screen frame and Screen orientation](options-screen.md).
 
-The colour or finish of a frame is a row of its own under **Screen frame**, shown while that frame
-is chosen. A frame shaped like one console is offered for that console's games only, so the list stays short; a
-frame saved for another console keeps working.
+### Resolution
 
-Swan, Watch and Goggles are no longer in the list; **Auto** still draws them for WonderSwan, Game & Watch and Virtual Boy.
+Nintendo 64, PSP, Dreamcast and PlayStation games only, on the handhelds whose graphics chip was measured for it (the Retroid Pocket Mini V2
+and its Snapdragon 865 siblings, and the Snapdragon 8 Gen 2 handhelds), with pocket-ui OS and with pocket-ui for Android on the same
+handhelds (Options → Picture in the game's menu): how sharp the 3D picture is drawn. **Original** is the
+console's own resolution (the N64's 320 × 240, the PSP's 480 × 272, the Dreamcast's 640 × 480, the PlayStation's 320 × 240 or so);
+**2x**, **3x** and **4x** draw it that many times larger, so edges and far-away things look clean on this screen instead of in steps. It costs the graphics chip
+more, not the game's speed: the list offers only what ran at full speed on this handheld.
 
-A frame needs space around the picture, so it appears only with Integer, Integer smaller and Aspect
-scaling. Fullscreen fills the screen and leaves no space for one. The frame sits
-behind the picture and never covers any of it; when the picture changes size, the frame follows.
-At Integer the space is narrow on some consoles (Game Boy Advance: 20 pixels left and right);
-**Integer, smaller** gives every frame space, and details such as speaker grilles, knobs and the
-antenna only appear where there is space for them.
+- It is the same row as the **Resolution** of PlayStation 2, GameCube, Wii and Xbox games ([their Options](options-big.md)), and
+  like theirs it **takes effect the next time the game starts**: quit and start the game again to see it.
+- It is kept for the console, like the other Picture settings, or for one game with [Keep for](#keep-for) → This game.
+- Unless you choose one, each console starts with the sharpest resolution that keeps a margin on this handheld:
 
-**The power light.** DMG, GB Pocket, GBA SP, GBA, PSP and Auto's WonderSwan frame have a small power light
-that shows the battery: green above 20%, red at 20% and below, blinking slowly at 5% and below.
-It flashes briefly when you save a state (to a slot, or the automatic one).
+| Handheld | Nintendo 64 | PSP | Dreamcast | PlayStation |
+|---|---|---|---|---|
+| Retroid Pocket Mini V2, Mini, Pocket 5, Flip 2 (Snapdragon 865) | 2x (3x offered) | 2x (3x offered) | 2x | Original (2x offered) |
+| Retroid Pocket 6, Nova, AYN Odin 2 family (Snapdragon 8 Gen 2) | 2x (3x offered) | 2x (3x offered) | 2x | Original (2x offered) |
 
-**DS and the Nintendo DS.** DS fits the DS with its two screens stacked, as games start. The
-hinge sits beside the screens where they touch, and exactly in the gap between them when the
-emulator leaves one (its screen gap option). With the screens side by side or one screen alone,
-DS shows the plain screen lens instead.
-
-For Auto, pocket-ui picks one of its own frames for the console:
-
-| Console | Auto |
-|---|---|
-| Game Boy | DMG, grey |
-| Game Boy Color | GB Pocket, clear |
-| Game Boy Advance | GBA |
-| Nintendo DS | DS |
-| PSP | PSP |
-| WonderSwan | A minimal handheld, pastel |
-| WonderSwan Color | A minimal handheld, see-through skeleton |
-| Game & Watch | A brushed gold faceplate |
-| Virtual Boy | A black visor with red trim |
-| Atari 2600, Atari 7800 | Woodgrain |
-| Game Gear, Neo Geo Pocket (Color), Lynx, Pokemon mini | **Handheld**: a dark screen lens around a recessed screen, with a small power light where there is room for it |
-| Every other console | **Monitor**: a graphite surround with rounded corners |
-
-A frame you picked yourself stays as it is; only Auto follows this table.
-
-<!-- TODO: frame packs (/storage/.config/pocket-ui/frames/, docs/FRAMES.md) are meant for the
-     store. Describe them for players once there is a way to install them. -->
-
-### Screen orientation
-
-Some games were made for a screen that stands upright: vertical shooters, many WonderSwan games, a few Game Boy and
-DS games that you hold like a book. On the Pocket's nearly square screen their picture is small, with black on both
-sides. Hold the Pocket turned a quarter, and the picture can be much bigger.
-
-| Choice | How you hold the Pocket |
-|---|---|
-| **Normal** | As usual. |
-| **Turned left** | Turned a quarter to the left: the D-pad at the bottom, the face buttons at the top. |
-| **Turned right** | Turned a quarter to the right: the D-pad at the top, the face buttons at the bottom. |
-
-- The picture is drawn turned so that it stands upright for you, and scaled again for its turned shape. A vertical
-  game of 224 × 288 pixels grows from 648 × 864 to 1195 × 896 at Integer.
-- The **D-pad and the sticks turn with it**: up on the D-pad is up in the game. The other buttons stay where they
-  are; change them under [Controls](#controls) if a game needs it. A Bluetooth controller is not turned, because it
-  does not turn with the Pocket.
-- The pause menu, Quick settings and messages stay as usual: turn the Pocket back to use them.
-- Touch follows the turned picture.
-- Of the frames, only **Ambient** and **Glow** show around a turned picture: the others are drawn for a Pocket held
-  as usual and would stand on their side. Your frame comes back with Normal.
-- Screenshots (HOME + A) keep the game's picture as the emulator makes it, not turned.
-- Some emulators turn the picture themselves: the WonderSwan emulator turns a vertical game upright when you press
-  SELECT. pocket-ui shows the picture as the emulator asks, and Screen orientation turns it once more on top.
-- Keep the choice for one game with [Keep for](#keep-for) → This game.
-
-Arcade games run on RetroArch, which has its own way: see [Arcade games](arcade.md#vertical-games).
+  On Android, a handheld or phone with another chip has no Resolution row; the emulator keeps its own setting on the Emulator page.
+  The H700, RK3566 and RK3326 handhelds have no Resolution row: their N64, PSP and Dreamcast games run on ROCKNIX's own
+  emulators, which keep their settings, and the PlayStation keeps its Enhanced Resolution under [Emulator](#emulator).
+- PlayStation 2x is the emulator's "Enhanced Resolution": the 3D is sharper, but some games lose a picture with it (Crash
+  Bandicoot 2's pause screen shows black where the game was), so it is not where a PlayStation game starts.
+- The emulator's own resolution option (Emulator page) is left out where this row is there, so there is one place for it.
 
 ### Starting values per console
 
@@ -185,7 +124,7 @@ Every console starts with the look that suits it on this screen:
 Out of the box no console has a screen effect or a frame: a clean picture. Pick an effect or a frame in the pause menu
 (Options → Picture, with Keep for set to this game or this console) for one game or a whole console.
 
-With **Handhelds** or **Every console** in [Settings → Playing → Screen frames](settings.md#screen-frames), the handhelds or every
+With **Handhelds** or **Every console** in [Settings → Playing → Screen frames](settings-playing.md#screen-frames), the handhelds or every
 console start with frame **Auto** instead of None. A frame saved for a console or a game stays.
 
 Only the systems listed under [On pocket-ui's own host](systems.md#on-pocket-uis-own-host) have the
@@ -268,7 +207,7 @@ Pause menu → Options → **Speed, rumble, fan** ("Settings you rarely need.").
 | **Fast-forward speed** | 2x, 3x, **4x**, 8x, As fast as possible | How fast the game runs while fast-forward is on (HOME + R2). Sound is muted meanwhile, and "FF 4x" (or the speed you chose) shows over the picture. |
 | **Rewind** | **Off**, On | Remembers the last minute so you can play it backwards: hold HOME + L2. "REWIND" shows over the picture and sound is muted; at the oldest moment the picture stops. Uses some extra power. |
 | **Earlier states** | Off, **On** | Keeps a state every 5 minutes of play, the last half hour, and where each session began; the pause menu's **Earlier** loads them ([Earlier](pause-menu-saves.md#earlier)). The game never waits for it. **Off by default for N64, PSP, DS, Dreamcast and Saturn**: their states are 8 to 40 MB. At most 100 MB a game and 1 GB on the SD card. |
-| **Over the game** | **Off**, FPS, FPS + sensors, Pixel Path (with Pixel Path in the pause menu) | What is drawn over the game while you play. **FPS** shows frames per second and CPU load in the top left corner, for example "60 FPS   CPU 23%", updated twice a second. **FPS + sensors** adds temperature, fan and battery draw: see [the FPS line and sensors](pause-menu.md#the-fps-line-and-sensors). **Pixel Path** shows one line beside the picture instead, which turns orange when something slips: see [Pixel Path over the game](pause-menu.md#pixel-path-over-the-game). The start value is the one under Settings → Playing → [Over the game](settings.md#over-the-game). |
+| **Over the game** | **Off**, FPS, FPS + sensors, Pixel Path (with Pixel Path in the pause menu) | What is drawn over the game while you play. **FPS** shows frames per second and CPU load in the top left corner, for example "60 FPS   CPU 23%", updated twice a second. **FPS + sensors** adds temperature, fan and battery draw: see [the FPS line and sensors](pause-menu.md#the-fps-line-and-sensors). **Pixel Path** shows one line beside the picture instead, which turns orange when something slips: see [Pixel Path over the game](pause-menu.md#pixel-path-over-the-game). The start value is the one under Settings → Playing → [Over the game](settings-playing.md#over-the-game). |
 | **Rumble** | Off, Low, **Medium**, High | How strongly games that rumble shake the console. |
 | **Performance** | Battery, **Auto**, Max | **Auto**: the system decides how fast the CPU runs (until October 2026 this was called Balanced). Battery limits the CPU to half speed: enough for Game Boy and NES. Max keeps the CPU at full speed for demanding games. |
 | **Fan** | Very quiet, **Quiet**, Auto, Cool | Very quiet keeps the fan off until the Pocket gets warm (60 °C); the Pocket feels a bit warmer. Quiet starts the fan later and keeps it slow. Auto keeps the system's cooling profile. Cool starts it earlier. With [Smooth fan](performance.md#smooth-fan) on, each is a smooth curve. Not shown on a handheld without a fan (the Anbernic H700 ones, the TrimUI Brick). |
@@ -379,7 +318,7 @@ presses into a running game.
 
 | Row | What it holds |
 |---|---|
-| **Screen scaling**, **Look** (with Sharpness and Effect under Custom), **Screen frame** (with its colour or finish), **Screen orientation** | The [Picture](#picture) settings. A frame's sub-choices show up under it, as in the pause menu. |
+| **Screen scaling**, **Look** (with Sharpness and Effect under Custom), **Screen frame** (with its colour or finish), **Screen orientation**, **Resolution** (N64, PSP, Dreamcast, PlayStation) | The [Picture](#picture) settings. A frame's sub-choices show up under it, as in the pause menu. |
 | **Fast-forward speed**, **Rewind**, **Earlier states**, **Over the game**, **Rumble**, **Performance**, **Fan**, **Run-ahead** | The same rows as [Speed, rumble, fan](#speed-rumble-fan). |
 | **Save state**, **Load state**, **Change slot**, **Fast-forward**, **Rewind**, **Screenshot**, **Over the game**, **Zoom** | The [Shortcuts](#shortcuts): which HOME + button does what. |
 | **Controls** | Which button does what, and the left stick ([Controls](#controls)). The page names the buttons the standard way; the pause menu shows the console's own names. |

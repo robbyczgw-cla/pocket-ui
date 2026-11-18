@@ -8,7 +8,8 @@
 #
 # Steps (each prints "pre-release: <step> ok|RED|WARN|skipped (N s)"; a red step does not stop the others):
 #   docs          scripts/i18n-extract.py --check (every string has its German line) and scripts/doc-missing.py (note)
-#   unit          cargo test --lib --bins, all of it; a test red in the parallel run gets one run alone, in a process of its own
+#   full-suite    GATE_FULL=1 scripts/gate.sh: every export/RC test, doctests, serial timing, Brick and shell checks
+#   unit          --lib --bins only on the text-only path (the full suite already includes them)
 #   release-text  the release check's text tests (scripts/release-text-tests.txt): Settings paths, category lines, every
 #                 language complete, the German/Spanish snapshot words
 #   text-fit      the text-fit suites with their release matrices (--include-ignored): Large text on every panel size in
@@ -24,7 +25,7 @@
 # run always; text-fit and brick only when a translation table or a manual page (docs/user) changed; nav only when a
 # translation table changed. Every skipped step is printed with its reason.
 #
-# --receipt FILE writes, when every step is green, "kind=pre-release result=ok commit=… tree=… mode=full|text-only full=…".
+# --receipt FILE writes, when every step is green, "kind=pre-release result=ok commit=… tree=… mode=full|text-only full=…"; a full run adds nav_* evidence for the release check (scripts/nav-evidence.py).
 # scripts/export-public.sh --pre-release FILE checks that its tree is the exported one. Needs a clean git checkout.
 # Exit 0 green (warnings allowed), 1 a step red, 2 usage, not a clean checkout, or --since refused.
 set -u
@@ -55,9 +56,15 @@ else
     COMMIT=no-git TREEH=no-git
 fi
 export PATH=$HOME/.cargo/bin:$PATH CARGO_BUILD_JOBS=${CARGO_BUILD_JOBS:-2}
-P="--profile ${GATE_PROFILE:-gate}"
+# A caller's merge-gate sample/cache must not shorten the release-only matrices after the full-gate child exits.
+unset POCKETUI_TEST_QUICK POCKETUI_TEST_STATES POCKETUI_SNAPSHOT_CACHE_DIR
+# Keep the diagnostic logs outside the temporary test sandbox so red runs remain inspectable.
 LOGS=${LOGS:-${TMPDIR:-/tmp}/pre-release-$(printf %.12s "$COMMIT")}
+# Inherit one temporary run directory across the gate and all extra release checks.
+[ ! -f scripts/run-tmp.sh ] || { . scripts/run-tmp.sh; run_tmp_begin pre; }
+P="--profile ${GATE_PROFILE:-gate}"
 mkdir -p "$LOGS" || exit 2
+rm -f "$LOGS/nav-evidence.txt"   # only this run's nav step may write it
 rv() { sed -n "s/^$2=//p" "$1" | head -1; }   # a value of a receipt
 
 MODE=full FULL=$COMMIT tr=1 manual=1
@@ -78,7 +85,7 @@ if [ -n "$SINCE" ]; then
 fi
 echo "pre-release: $MODE on $(printf %.12s "$COMMIT") (tree $(printf %.12s "$TREEH"))$([ "$MODE" = full ] || echo ", text only since the full run $(printf %.12s "$FULL")"); logs $LOGS"
 
-RED="" WARN="" DONE=""
+RED="" WARN="" DONE="" START=$(date +%s)
 step_end() { # name rc start [warn]
     s=$(( $(date +%s) - $3 ))
     if [ "$2" -eq 0 ]; then echo "pre-release: $1 ok ($s s)"; DONE="$DONE $1:ok"
@@ -122,7 +129,15 @@ python3 scripts/doc-missing.py >>"$LOGS/docs.log" 2>&1 || echo "    doc-missing.
 step_end docs $rc "$t0"
 fi
 
-if want unit; then
+if [ "$MODE" = full ] && want full-suite; then
+t0=$(date +%s); rc=0
+# The same entry point as nightly and RC. GATE_FULL disables every path, quick-matrix and flaky exclusion.
+# Do not overlap feature builds or deadline tests with other cargo processes; gate.sh parallelises its safe shell lanes.
+sh scripts/full-suite.sh "$(pwd)" >"$LOGS/full-suite.log" 2>&1 || rc=1
+step_end full-suite $rc "$t0"
+fi
+
+if { [ "$MODE" = text-only ] || [ -n "$ONLY" ]; } && want unit; then
 t0=$(date +%s); : >"$LOGS/unit.log"; rc=0
 ct "$LOGS/unit.log" --lib --bins -- || rc=1
 step_end unit $rc "$t0"
@@ -141,7 +156,10 @@ elif [ $tr = 0 ] && [ $manual = 0 ]; then skip text-fit "no translation table or
 else
     t0=$(date +%s); : >"$LOGS/text-fit.log"; rc=0; args=()
     for s in $TEXT_SUITES; do [ -f "tests/$s.rs" ] && args+=(--test "$s"); done
-    ct "$LOGS/text-fit.log" "${args[@]}" -- --include-ignored || rc=1
+    # Full gate ran every ordinary case. Only release ignores remain; text-only/--only still need both.
+    ignored=--include-ignored
+    [ "$MODE" != full ] || [ -n "$ONLY" ] || ignored=--ignored
+    ct "$LOGS/text-fit.log" "${args[@]}" -- "$ignored" || rc=1
     step_end text-fit $rc "$t0"
 fi
 
@@ -150,18 +168,33 @@ elif ! grep -Eq '^[[:space:]]*brick[[:space:]]*=' Cargo.toml; then skip brick "n
 elif [ $tr = 0 ] && [ $manual = 0 ]; then skip brick "no translation table or manual page changed since the full run"
 else
     t0=$(date +%s); : >"$LOGS/brick.log"; rc=0
-    ct "$LOGS/brick.log" --features brick --test brick_settings_walk -- || rc=1
-    ct "$LOGS/brick.log" --features brick --test text_size -- textfit_brick_031_ textfit_extras || rc=1
-    ct "$LOGS/brick.log" --features brick --test long_titles -- info_titles_031_ || rc=1
-    ct "$LOGS/brick.log" --features brick --test nav_explorer -- brick on_the_smart_pro || rc=1
+    if [ "$MODE" = full ] && [ -z "$ONLY" ]; then
+        # Additional Brick Large-text cases, beyond the full gate's brick_031_ selection.
+        ct "$LOGS/brick.log" --features brick --test text_size -- textfit_extras || rc=1
+    else
+        ct "$LOGS/brick.log" --features brick --test brick_settings_walk -- || rc=1
+        ct "$LOGS/brick.log" --features brick --test text_size -- textfit_brick_031_ textfit_extras || rc=1
+        ct "$LOGS/brick.log" --features brick --test long_titles -- info_titles_031_ || rc=1
+        ct "$LOGS/brick.log" --features brick --test nav_explorer -- brick on_the_smart_pro || rc=1
+    fi
     step_end brick $rc "$t0"
 fi
 
 if ! want nav; then :
 elif [ $tr = 0 ]; then skip nav "no translation table changed since the full run"
 else
-    t0=$(date +%s); : >"$LOGS/nav.log"; rc=0
-    ct "$LOGS/nav.log" --test nav_explorer -- --include-ignored || rc=1
+    t0=$(date +%s); : >"$LOGS/nav.log"; rm -f "$LOGS/nav.log.retry"; rc=0
+    ignored=--include-ignored
+    [ "$MODE" != full ] || [ -n "$ONLY" ] || ignored=--ignored
+    ct "$LOGS/nav.log" --test nav_explorer -- "$ignored" || rc=1
+    # Evidence for the release check of this same tree (scripts/nav-evidence.py): it carries these cases instead of a second
+    # ~27-min run only when the list, the clean log and the environment match exactly. Full mode with a receipt only.
+    if [ $rc = 0 ] && [ "$ignored" = --ignored ] && [ -n "$RECEIPT" ]; then
+        { nice -n 10 cargo test $P --test nav_explorer -q -- --ignored --list >"$LOGS/nav-list.txt" 2>/dev/null \
+            && python3 scripts/nav-evidence.py record --log "$LOGS/nav.log" --list "$LOGS/nav-list.txt"; } >"$LOGS/nav-evidence.txt" \
+            || echo 'nav_carry=no (the case list did not build)' >"$LOGS/nav-evidence.txt"
+        sed -n 's/^nav_carry=no /    nav evidence: the release check runs these cases again /p' "$LOGS/nav-evidence.txt"
+    fi
     step_end nav $rc "$t0"
 fi
 
@@ -180,7 +213,8 @@ if [ -n "$RED" ]; then
 fi
 if [ -n "$RECEIPT" ]; then
     { echo "kind=pre-release"; echo "result=ok"; echo "mode=$MODE"; echo "commit=$COMMIT"; echo "tree=$TREEH"; echo "full=$FULL"
-      echo "date=$(date -u +%Y-%m-%dT%H:%M:%SZ)"; echo "steps=${DONE# }"; } >"$RECEIPT"
+      echo "date=$(date -u +%Y-%m-%dT%H:%M:%SZ)"; echo "steps=${DONE# }"
+      [ ! -s "$LOGS/nav-evidence.txt" ] || cat "$LOGS/nav-evidence.txt"; } >"$RECEIPT"
     echo "pre-release: receipt $RECEIPT"
 fi
-echo "PRE-RELEASE: ok ($MODE${ONLY:+, only$(echo "$ONLY" | tr , ' ')}${WARN:+, warnings:$WARN})"
+echo "PRE-RELEASE: ok ($MODE${ONLY:+, only$(echo "$ONLY" | tr , ' ')}${WARN:+, warnings:$WARN}; wall $(( $(date +%s) - START )) s)"

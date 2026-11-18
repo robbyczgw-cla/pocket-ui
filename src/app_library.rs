@@ -103,6 +103,7 @@ pub(crate) fn settings_page_holds_games(page: &SettingsPage) -> bool {
         | SettingsPage::Storage
         | SettingsPage::Gamelist
         | SettingsPage::Screenshots
+        | SettingsPage::AndroidGames
         | SettingsPage::SleepPower => false,
     }
 }
@@ -177,6 +178,8 @@ impl App {
         self.library_system_list_check();
         // The player's EmulationStation gamelists, on a thread of their own (`app_gamelist`).
         self.gamelist_refresh("after the start");
+        // Android's handheld view: the Android games' shelf from the marks and Android's list (`app_android_games`).
+        self.android_games_refresh("after the start");
         // And the screenshots folder, for the card's row and Settings (`app_gallery`).
         self.gallery_refresh("after the start");
         match std::mem::take(&mut self.library_ui.after_start) {

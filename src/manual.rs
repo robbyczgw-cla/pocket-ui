@@ -46,12 +46,14 @@ pub const PAGES: &[(&str, &str)] = &[
     #[cfg(not(feature = "brick"))]
     ("coming-from", include_str!("../docs/user/coming-from.md")),
     ("playing", include_str!("../docs/user/playing.md")),
+    ("console-pages", include_str!("../docs/user/console-pages.md")),
     ("easy", include_str!("../docs/user/easy.md")),
     ("big-text", include_str!("../docs/user/big-text.md")),
     ("continue", include_str!("../docs/user/continue.md")),
     ("pause-menu", include_str!("../docs/user/pause-menu.md")),
     ("pause-menu-saves", include_str!("../docs/user/pause-menu-saves.md")),
     ("options", include_str!("../docs/user/options.md")),
+    ("options-screen", include_str!("../docs/user/options-screen.md")),
     ("options-cheats", include_str!("../docs/user/options-cheats.md")),
     ("options-big", include_str!("../docs/user/options-big.md")),
     #[cfg(not(feature = "brick"))]
@@ -60,6 +62,7 @@ pub const PAGES: &[(&str, &str)] = &[
     ("controls", include_str!("../docs/user/brick-controls.md.inc")),
     ("controls-settings", include_str!("../docs/user/controls-settings.md")),
     ("settings", include_str!("../docs/user/settings.md")),
+    ("settings-playing", include_str!("../docs/user/settings-playing.md")),
     ("settings-sound", include_str!("../docs/user/settings-sound.md")),
     ("settings-system", include_str!("../docs/user/settings-system.md")),
     #[cfg(not(feature = "brick"))]
@@ -77,6 +80,7 @@ pub const PAGES: &[(&str, &str)] = &[
     ("performance", include_str!("../docs/user/brick-performance.md.inc")),
     ("tour", include_str!("../docs/user/tour.md")),
     ("library", include_str!("../docs/user/library.md")),
+    ("library-files", include_str!("../docs/user/library-files.md")),
     ("curator", include_str!("../docs/user/curator.md")),
     ("achievements", include_str!("../docs/user/achievements.md")),
     #[cfg(not(feature = "brick"))]
@@ -2235,11 +2239,15 @@ mod tests {
     #[ignore = "release check: bookkeeping (scripts/bookkeeping.sh)"]
     fn manual_pages_are_not_too_long_for_the_screen() {
         let mut text = Text::new();
+        let mut too_long = Vec::new();
         for (name, md) in PAGES {
             let l = layout(&parse(md), &mut text, 1108);
             assert!(l.height > 600, "{name}: {}", l.height);
-            assert!(l.height < 30_000, "{name}: {}", l.height);
+            if l.height >= 30_000 {
+                too_long.push(format!("{name}: {}", l.height));
+            }
         }
+        assert!(too_long.is_empty(), "pages of 30 000 px or more, split them: {too_long:?}");
     }
 
     #[test]

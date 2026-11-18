@@ -1077,7 +1077,7 @@ fn paint_back_body(c: &mut Canvas, text: &mut Text, d: &CardData, pictures: &[Ca
         text.draw(c, Face::Body, 28, rx + rkey, ry, soft, &fitted);
     }
     ry += row;
-    if let Some(a) = &d.achievements {
+    if let Some(a) = d.achievements.as_ref().filter(|_| !d.progress_achievements) {
         text.draw(c, Face::Body, 28, rx, ry, soft, "Unlocked");
         let fitted = text.fit(Face::Body, 28, &format!("{a} achievements"), rw);
         text.draw(c, Face::Body, 28, rx + rkey, ry, ink, &fitted);

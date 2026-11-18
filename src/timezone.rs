@@ -1108,3 +1108,15 @@ XX\t+0000+00000\tAtlantic/Elsewhere\n";
         assert_eq!(clock_at(0, -3600), "23:00");
     }
 }
+
+/// Seconds east of UTC in the device's zone right now, as libc sees it (after `timezone::tzset`).
+pub fn utc_offset_now(unix: i64) -> i32 {
+    let t = unix as libc::time_t;
+    let mut tm: libc::tm = unsafe { std::mem::zeroed() };
+    tzset();
+    // SAFETY: localtime_r only writes into the provided struct.
+    if unsafe { libc::localtime_r(&t, &mut tm) }.is_null() {
+        return 0;
+    }
+    tm.tm_gmtoff as i32
+}

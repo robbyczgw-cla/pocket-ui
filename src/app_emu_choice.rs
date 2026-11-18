@@ -154,6 +154,10 @@ impl App {
     /// The emulator and core `sys`'s game at `path` (None: the system as a whole) starts with, and why: the game's
     /// choice, the console's, or the default (`emu_choice::resolve`). `host_bin`: pocket-core is installed.
     pub(crate) fn resolve_runner(&self, sys: &System, path: Option<&Path>, host_bin: bool) -> Resolved {
+        // An Android game (Android's handheld view) is its app: Android starts it, nothing to choose (`app_android_games`).
+        if sys.name == pocket_ui::android_games::SYSTEM_ID && pocket_ui::device::android_profile() {
+            return Resolved { runner: Runner::new(pocket_ui::android_games::EMULATOR, ""), from: emu_choice::From::Default };
+        }
         // Android's handheld view: `play_route`'s one decision, the Mobile view's too (`app_runs_on_android`).
         if let Some(resolved) = self.phone_resolve(sys, path) {
             return resolved;

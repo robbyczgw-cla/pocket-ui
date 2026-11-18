@@ -130,7 +130,7 @@ card the files are already there.
   Favourites stays, and a rating you gave here is kept.
 - Play counts, "last played" dates and hidden flags in a gamelist are not read.
 
-More: [Your EmulationStation gamelists](library.md#your-emulationstation-gamelists).
+More: [Your EmulationStation gamelists](library-files.md#your-emulationstation-gamelists).
 
 ## Coming from ArkOS, dArkOS or an R36S stock card
 

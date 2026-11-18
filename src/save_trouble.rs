@@ -144,6 +144,28 @@ pub fn publish_to(file: &Path, trouble: Option<Trouble>) {
     }
 }
 
+/// Keep the autosave result for the shelf. A successful retry clears only our own notice,
+/// leaving crash/start errors alone. Both players use this after a quit or sleep save.
+pub fn report_moment(file: &Path, complete: bool, trouble: Option<Trouble>) {
+    if !complete {
+        let _ = std::fs::write(file, trouble.map_or(MOMENT_FAILED, Trouble::after_quit));
+    } else if std::fs::read_to_string(file).is_ok_and(|s| is_moment_notice(&s)) {
+        let _ = std::fs::remove_file(file);
+    }
+}
+
+fn is_moment_notice(s: &str) -> bool {
+    s == MOMENT_FAILED || [Trouble::Full, Trouble::Unwritable, Trouble::Unreadable].iter().any(|t| s == t.after_quit())
+}
+
+/// The Android shell consumes its player's notice from private app storage once on return.
+pub fn take_moment(file: &Path) -> Option<String> {
+    let line = std::fs::read_to_string(file).ok()?;
+    if !is_moment_notice(&line) { return None; }
+    let _ = std::fs::remove_file(file);
+    Some(line)
+}
+
 /// pocket-ui: what pocket-core left in `file`; None when its saves are fine (or it said nothing).
 pub fn read_from(file: &Path) -> Option<Trouble> {
     Trouble::from_word(&std::fs::read_to_string(file).ok()?)
@@ -215,7 +237,9 @@ mod tests {
                 // The Ok sentences of the pause menu; its Err arm is checked below.
                 || rhs.starts_with("message = match (result, self.row)")
                 // A pad's note (`android_pads::Pads::roster`): our sentence with the pad's name.
-                || rhs.contains("note.clone()");
+                || rhs.contains("note.clone()")
+                // Restore defaults' question: our sentence, Linux's too (`pause_options`), no error.
+                || rhs.contains("pause_options::RESTORE_ASK");
             if !ours { raw.push(format!("{}: {}", n + 1, line.trim())); }
         }
         assert!(raw.is_empty(), "an error reaches the player's screen as it is:\n{}", raw.join("\n"));
@@ -254,6 +278,24 @@ mod tests {
         assert!(!file.exists(), "a save that got through clears it");
         std::fs::write(&file, "garbled").unwrap();
         assert_eq!(read_from(&file), None, "a note it can't read is no reason to stop a Quit");
+    }
+
+    #[test]
+    fn a_failed_moment_is_said_once_and_a_success_only_clears_save_errors() {
+        let dir = TestDir::new("moment-trouble");
+        let file = dir.join("error");
+        for trouble in [None, Some(Trouble::Full), Some(Trouble::Unwritable), Some(Trouble::Unreadable)] {
+            report_moment(&file, false, trouble);
+            assert_eq!(take_moment(&file).as_deref(), Some(trouble.map_or(MOMENT_FAILED, |t| t.after_quit())));
+            assert_eq!(take_moment(&file), None);
+            report_moment(&file, false, trouble);
+            report_moment(&file, true, None);
+            assert!(!file.exists());
+        }
+        std::fs::write(&file, "another error").unwrap();
+        report_moment(&file, true, None);
+        assert_eq!(std::fs::read_to_string(&file).unwrap(), "another error");
+        assert_eq!(take_moment(&file), None);
     }
 
     #[test]

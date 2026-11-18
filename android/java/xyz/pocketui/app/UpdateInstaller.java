@@ -10,9 +10,7 @@ import android.content.pm.PackageInfo;
 import android.content.pm.PackageInstaller;
 import android.content.pm.PackageManager;
 import android.content.pm.Signature;
-import android.net.ConnectivityManager;
 import android.net.Network;
-import android.net.NetworkCapabilities;
 import android.net.Uri;
 import android.os.Build;
 import android.os.SystemClock;
@@ -75,14 +73,14 @@ public final class UpdateInstaller {
     }
     private Network wifi() throws IOException { return wifi(false); }
     private Network wifi(boolean offlineFixture) throws IOException {
-        ConnectivityManager cm = (ConnectivityManager)context.getSystemService(Context.CONNECTIVITY_SERVICE);
-        if (!offlineFixture) for (Network n : cm.getAllNetworks()) if (onWifi(n)) return n;
+        // The app's own network when it is unmetered Wi-Fi or Ethernet, a VPN on it included (NetworkRule): not the raw
+        // Wi-Fi under a VPN, which a VPN without a bypass doesn't let the app use (17.11.2026, Tailscale).
+        Network n = offlineFixture ? null : NetworkRule.network(context);
+        if (n != null) return n;
         throw new IOException(WIFI);
     }
     private boolean onWifi(Network n) {
-        ConnectivityManager cm = (ConnectivityManager)context.getSystemService(Context.CONNECTIVITY_SERVICE);
-        NetworkCapabilities c = cm.getNetworkCapabilities(n);
-        return c != null && c.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) && !c.hasTransport(NetworkCapabilities.TRANSPORT_VPN);
+        return NetworkRule.still(context, n);
     }
     private void check(Network n, boolean cancellable) throws IOException {
         if (cancellable && cancelled) throw new IOException(CANCELLED);

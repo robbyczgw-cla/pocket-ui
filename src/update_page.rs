@@ -39,6 +39,8 @@ pub fn actions_with_card(available: bool, confirming: bool) -> Vec<Action> {
 
 pub const CONFIRM: &str = "Update pocket-ui now? Your games and settings stay.";
 pub const UP_TO_DATE: &str = "Everything is up to date.";
+/// Android's question before the install (the Mobile view's and the handheld view's page): its installer ends the app.
+pub const ANDROID_CONFIRM: &str = "After updating, pocket-ui closes. Open it again; your games and settings stay.";
 
 #[cfg(test)]
 mod tests {

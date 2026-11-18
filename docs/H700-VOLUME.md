@@ -133,6 +133,8 @@ on exit. Other device profiles retain their Battery cap. UI descriptions and tra
 With a game running, H700 volume feedback is suppressed: no pocket-core volume texture, no mako volume window,
 no hidden-shelf redraw for consumed level-key events or held-key polling. Repeat work still has timer deadlines;
 opening/closing Quick settings, the pause menu and notices still draws. Shelf volume feedback is unchanged.
+The dArkOS port borrows the H700 profile's rows for its RK3566/RK3326 boards but is not this chip or audio path: it keeps
+the bar over a game (`mako_osd::quiet_for`).
 For a silent lab run, `POCKETUI_H700_SPEAKER_MAX_RAW=1` lowers the compiled ceiling for that process only.
 It accepts only 1..SPEAKER_MAX_RAW and can never raise the production maximum. Nonzero wishes retain raw 1 at
 this lab ceiling. This is not a mute: a separately verified digital-zero source and advancing PCM clock are

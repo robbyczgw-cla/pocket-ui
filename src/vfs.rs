@@ -331,6 +331,35 @@ mod tests {
         }
     }
 
+    #[test]
+    fn core_owned_save_folders_support_cards_and_save_data_with_spaces() {
+        let dir = TestDir::new("core-owned-saves");
+        for relative in ["PSP/SAVEDATA/TEST00001/DATA.BIN", "dc/vmu_save_A1.bin", "melonDS/firmware.bin", "dolphin-emu/GC/MemoryCardA.USA.raw", "pcsx/card2.mcd"] {
+            let path = dir.join("EASYROMS with spaces").join(relative);
+            for parent in path.parent().unwrap().ancestors().collect::<Vec<_>>().into_iter().rev() {
+                let name = CString::new(parent.as_os_str().as_encoded_bytes()).unwrap();
+                unsafe {
+                    assert!(matches!(mkdir(name.as_ptr()), 0 | -2));
+                    assert_ne!(stat(name.as_ptr(), std::ptr::null_mut()) & STAT_DIR, 0);
+                }
+            }
+            let name = CString::new(path.as_os_str().as_encoded_bytes()).unwrap();
+            unsafe {
+                let f = open(name.as_ptr(), READ | WRITE, 0);
+                assert!(!f.is_null(), "{relative}");
+                assert_eq!(write(f, b"progress".as_ptr().cast(), 8), 8);
+                assert_eq!(flush(f), 0);
+                assert_eq!(close(f), 0);
+                let f = open(name.as_ptr(), READ | WRITE | UPDATE_EXISTING, 0);
+                assert!(!f.is_null());
+                let mut data = [0; 8];
+                assert_eq!(read(f, data.as_mut_ptr().cast(), 8), 8);
+                assert_eq!(&data, b"progress");
+                assert_eq!(close(f), 0);
+            }
+        }
+    }
+
     // PCSX formats a missing second memory card one byte at a time. On the Brick's
     // sync-mounted FAT card every unbuffered write waits for the card; the game
     // never reaches its first frame before the stall guard kills it.

@@ -49,20 +49,17 @@ PC Engine, PlayStation, Nintendo 64, PSP, Dreamcast, Nintendo DS, Saturn, arcade
 handhelds, such as the AYN Odin 2, also PlayStation 2, GameCube, Wii and 3DS.
 [What plays on which handheld](https://pocketui.xyz/systems)
 
-### New in 0.5
+### New in 0.5.1
 
-- **The case knows where you are.** Turn a box over and it says how far you are, read from your own save: badges and
-  your Pokémon team, stars in Super Mario 64, medallions in Ocarina of Time. No account, no Wi-Fi.
-- **New games come shrink-wrapped.** A game you've never played stands in clear film, and the film tears off with a
-  crackle the first time you start it.
-- **Consoles in colours:** Game Boy Advance in Milky Blue and Pink, Nintendo 64 in Ice Blue and Jungle Green, and more.
-  Press Left or Right on the console page.
-- **Handhelds switch on like handhelds:** the power light comes on, the little display lights up, and the game comes up
-  out of it.
-- **Settings in one press:** START opens the rows straight away, L1 and R1 switch categories, B leaves.
-- **Your own cheats:** a game's own .cht file shows up first in Options → Cheats.
-- **New: pocket-ui for Android**, as an app next to your others. A pre-release to try:
-  [get it here](https://pocketui.xyz/install#android).
+- **Bigger box art:** in the Shelf look the game you pick shows its box up to 1.4 times as large.
+- **A console beside the TV:** in the Cabinet, the selected game's console stands next to the TV, in the colour you
+  chose. The TV stays put while you switch shelves, and handheld games play on their own handheld.
+- **The case knows Banjo-Kazooie, Metroid Fusion and GoldenEye 007:** Jiggies and notes, items, your furthest mission.
+- **Sharper 3D** on the Retroid Pocket 5, 6, Mini and Flip 2 and the AYN Odin 2 family: N64, PSP and Dreamcast start at
+  2x. Change it in Options → Picture → Resolution.
+- **Clearer menus:** in Settings and the pause menu, a › means the row opens a page; ‹ › rows change with Left and Right.
+- **Quicker and smoother:** games start faster on H700 handhelds, and the Cabinet moves more smoothly on the TrimUI
+  Brick.
 
 [Every version](CHANGELOG.md)
 
@@ -92,6 +89,9 @@ games from your phone or computer over Wi-Fi (Settings → Games → Add games).
 "UEFI", set up OpenABL once with ROCKNIX's guide. The Pocket 6 and Nova start from Retroid's UEFI entry; if yours falls
 back to the boot menu, set up OpenABL once. Not the 12 GB models with the Visionox screen. These cards haven't started
 on a real one yet, so testers are very welcome.
+
+**pocket-ui for Android** (preview): the same shelf as an app for Android handhelds, right next to your other apps.
+[Get the APK](https://pocketui.xyz/install#android).
 
 [All downloads](../../releases/latest)
 

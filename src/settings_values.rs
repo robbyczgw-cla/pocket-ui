@@ -68,19 +68,6 @@ pub fn page(value: &str) -> String {
     }
 }
 
-/// A row's value as painted: whole on the selected row; on the others without a switch's ‹ ›, which only the selected
-/// row has (Left/Right change it there). A page's ">" stays on every row, painted dimmed (`kit::row_value`): whether
-/// a row opens a page or changes in place is seen before the cursor gets there, as on the Switch.
-pub fn quiet(value: &str, selected: bool) -> String {
-    if selected {
-        return value.to_string();
-    }
-    match value.strip_prefix("‹ ").and_then(|v| v.strip_suffix(" ›")) {
-        Some(v) => v.to_string(),
-        None => value.to_string(),
-    }
-}
-
 /// "On" or "Off".
 pub fn on_off(on: bool) -> &'static str {
     if on {
@@ -297,6 +284,46 @@ pub fn fit(value: &str, max_w: i32, mut width: impl FnMut(&str) -> i32) -> Strin
     format!("…{tail}")
 }
 
+/// A value split into its decoration and its words: ("‹ ", "On", " ›") for a switch, ("", "Home net", " >") for a page,
+/// ("", "", ">") for a page with no value yet. The painter draws the words alone (`kit::row_value`), so the words are
+/// what is looked up in the translation table: "Shelf >" is no line of it, and asking for it ran every pattern.
+pub fn split_decoration(value: &str) -> (&str, &str, &str) {
+    if let Some(v) = value.strip_prefix("‹ ").and_then(|v| v.strip_suffix(" ›")) {
+        return ("‹ ", v, " ›");
+    }
+    match value.strip_suffix('>') {
+        Some(v) if v.trim_end().is_empty() => ("", "", ">"),
+        Some(v) => ("", v.trim_end(), " >"),
+        None => ("", value, ""),
+    }
+}
+
+/// `words` in `lang` where the code can say it without the table's patterns: "Auto · Quiet" is two lines of the table
+/// with a dot between, "2 min" a figure with a unit that no language writes differently. `None`: a line of the table
+/// itself (its exact lookup is no pattern), English, or something only the patterns know ("332 games").
+pub fn translated_in_code(lang: crate::i18n::Lang, words: &str) -> Option<String> {
+    let table = lang.table()?;
+    if table.exact(words).is_some() {
+        return None;
+    }
+    let mut out = Vec::new();
+    for part in words.split(" · ") {
+        match table.exact(part) {
+            Some(t) => out.push(t.to_string()),
+            None if is_measure(part) => out.push(part.to_string()),
+            None => return None,
+        }
+    }
+    let joined = out.join(" · ");
+    // The result is painted as it is: a line of the table would be translated a second time.
+    table.exact(&joined).is_none().then_some(joined)
+}
+
+/// "2 min", "30 s", "8 h": a number and a unit.
+fn is_measure(s: &str) -> bool {
+    s.split_once(' ').is_some_and(|(n, unit)| !n.is_empty() && n.bytes().all(|b| b.is_ascii_digit()) && matches!(unit, "min" | "s" | "h"))
+}
+
 /// [`fit`] for a value the painter translates when it paints it. The cut must be made in the words the player reads:
 /// cutting the English and painting the piece left "No PC paire…" in German, a string the table can't know. So the
 /// value is measured as painted (`width` translates); if it fits it stays as it is (the painter translates it), else
@@ -315,13 +342,29 @@ mod tests {
     use crate::testutil::TestDir;
 
     #[test]
-    fn a_page_keeps_its_angle_and_only_the_selected_switch_its_arrows() {
-        assert_eq!(quiet("Home net >", true), "Home net >");
-        assert_eq!(quiet("Home net >", false), "Home net >");
-        assert_eq!(quiet(">", false), ">", "a page with no value yet: its angle");
-        assert_eq!(quiet(">", true), ">");
-        assert_eq!(quiet("‹ On ›", false), "On");
-        assert_eq!(quiet("Off", false), "Off");
+    fn a_value_is_split_into_its_decoration_and_its_words() {
+        assert_eq!(split_decoration("Shelf >"), ("", "Shelf", " >"));
+        assert_eq!(split_decoration(">"), ("", "", ">"));
+        assert_eq!(split_decoration("‹ Home ›"), ("‹ ", "Home", " ›"));
+        assert_eq!(split_decoration("Off"), ("", "Off", ""));
+    }
+
+    /// What the code says in the language without the patterns: parts of the table joined, a figure and its unit.
+    #[test]
+    fn a_value_of_table_lines_and_figures_is_said_in_code() {
+        use crate::i18n::Lang;
+        for lang in [Lang::De, Lang::Es, Lang::Pt, Lang::Fr, Lang::It] {
+            let t = lang.table().unwrap();
+            let quiet = t.exact("Quiet").unwrap();
+            assert_eq!(translated_in_code(lang, "Auto · Quiet"), Some(format!("{} · {quiet}", t.exact("Auto").unwrap())), "{lang:?}");
+            assert_eq!(translated_in_code(lang, "2 min").as_deref(), Some("2 min"), "{lang:?}");
+            assert_eq!(translated_in_code(lang, "30 s").as_deref(), Some("30 s"), "{lang:?}");
+            // A line of the table is the painter's (an exact look-up), what only a pattern knows stays with it.
+            assert_eq!(translated_in_code(lang, "Quiet"), None, "{lang:?}");
+            assert_eq!(translated_in_code(lang, "332 games"), None, "{lang:?}");
+            assert_eq!(translated_in_code(lang, "Auto · Zzz"), None, "{lang:?}");
+        }
+        assert_eq!(translated_in_code(Lang::En, "Auto · Quiet"), None);
     }
 
     #[test]
@@ -341,6 +384,11 @@ mod tests {
         assert_eq!(zone("Etc/UTC"), "UTC");
         assert_eq!(updates("0.42.0", None), "0.42.0");
         assert_eq!(updates("0.42.0", Some("0.43.0")), "0.43.0 available");
+        // 17.11.2026 (Android, German): the Updates row said "0.5.0-android.10 available" in English in every language.
+        use crate::i18n::{tr_in, Lang};
+        for (lang, word) in [(Lang::De, "verfügbar"), (Lang::Es, "disponible"), (Lang::Fr, "disponible"), (Lang::It, "disponibile"), (Lang::Pt, "disponível")] {
+            assert_eq!(tr_in(lang, &updates("0.5.0", Some("0.5.0-android.10"))), format!("0.5.0-android.10 {word}"), "{lang:?}");
+        }
         assert_eq!(page("On"), "On >");
         assert_eq!(page(""), ">", "nothing known yet: the plain arrow");
         let wifi = [Wifi::Off, Wifi::NotConnected, Wifi::Connected(Some("Home net".into())), Wifi::Connected(None)];

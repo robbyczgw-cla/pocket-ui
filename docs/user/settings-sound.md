@@ -3,7 +3,7 @@
 The **Screen & sound** and **Controls** categories of [Settings](settings.md), on a page of their own. Until this version
 they were one category, Controls & sound (Sound & feel before that); Brightness and Volume were only in the
 [quick settings](quick-settings.md), Screen colour and Night light were in Look, and Zoom in the pause menu was here (it
-is in [Look](settings.md#zoom-in-the-pause-menu) now).
+is in [Playing](settings-playing.md#zoom-in-the-pause-menu) now).
 
 ## Screen & sound
 

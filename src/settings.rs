@@ -101,6 +101,15 @@ impl Frames {
             Frames::Every => Frames::Off,
         }
     }
+
+    /// The previous choice: Left on the row goes back what Right (and A) went on (0.5.1: both went on).
+    pub fn back(self) -> Frames {
+        match self {
+            Frames::Off => Frames::Every,
+            Frames::Handhelds => Frames::Off,
+            Frames::Every => Frames::Handhelds,
+        }
+    }
 }
 
 #[derive(serde::Serialize, serde::Deserialize, Default, Debug, PartialEq)]
@@ -139,10 +148,14 @@ pub struct Settings {
     /// written, so a new device and every settings.json from before are Off. The old `no_where_was_i` is ignored.
     #[serde(default, deserialize_with = "lenient", skip_serializing_if = "std::ops::Not::not")]
     pub where_was_i: bool,
-    /// Settings > Look > Zoom in the pause menu: the Zoom row sits in the pause menu's main page. Off unless switched on
+    /// Settings > Playing > Zoom in the pause menu: the Zoom row sits in the pause menu's main page. Off unless switched on
     /// (Big text shows it too, `features::reading_on`); Zoom is always in Options.
     #[serde(default, deserialize_with = "lenient", skip_serializing_if = "std::ops::Not::not")]
     pub zoom_in_pause: bool,
+    /// Settings > Look > Lived-in shelf (`lived_in`): on the Shelf look some cases of a system's row lean, a few lie on a
+    /// small stack, the spaces differ a little (`crate::lived_in`). Off unless switched on; only On is written.
+    #[serde(default, deserialize_with = "lenient", skip_serializing_if = "std::ops::Not::not")]
+    pub lived_in: bool,
     /// Settings > Playing > Console boot screen (`boot_screen`): a fresh start of a Game Boy, Game Boy Advance or PlayStation game runs
     /// through the console's own boot screen when the player's BIOS file is there. Off unless switched on; only On is written.
     #[serde(default, deserialize_with = "lenient", skip_serializing_if = "std::ops::Not::not")]
@@ -476,6 +489,7 @@ mod tests {
             forget_where_quit: true,
             where_was_i: true,
             zoom_in_pause: true,
+            lived_in: true,
             boot_screen: true,
             big_shelf: false,
             button_layout: crate::button_layout::ButtonLayout::Xbox,
@@ -765,6 +779,9 @@ mod tests {
         std::fs::write(d.join(FILE), br#"{"onboarded": true, "frames": "handhelds"}"#).unwrap();
         assert_eq!(frames(&d), Frames::Handhelds, "a saved choice stays");
         assert_eq!((Frames::Off.toggled(), Frames::Handhelds.toggled(), Frames::Every.toggled()), (Frames::Handhelds, Frames::Every, Frames::Off));
+        for f in [Frames::Off, Frames::Handhelds, Frames::Every] {
+            assert_eq!(f.toggled().back(), f, "Left takes Right back");
+        }
         assert_eq!(Frames::ALL.map(Frames::label), ["Off", "Handhelds", "Every console"]);
     }
 
@@ -1003,6 +1020,19 @@ mod tests {
         assert!(Settings::load(&d).zoom_in_pause);
         Settings { zoom_in_pause: false, ..chosen() }.save(&d);
         assert!(!std::fs::read_to_string(d.join(FILE)).unwrap().contains("zoom_in_pause"), "Off is not written");
+    }
+
+    /// Look > Lived-in shelf (0.5.2): Off on a new device and in every settings.json from before; only On is written.
+    #[test]
+    fn the_lived_in_shelf_is_off_until_switched_on() {
+        let d = dir("lived-in");
+        assert!(!Settings::load(&d).lived_in, "a new device: Off");
+        std::fs::write(d.join(FILE), br#"{"theme": "shelf", "onboarded": true, "lived_in": "yes"}"#).unwrap();
+        assert!(!Settings::load(&d).lived_in, "a value this version doesn't read");
+        Settings { lived_in: true, ..chosen() }.save(&d);
+        assert!(Settings::load(&d).lived_in);
+        Settings { lived_in: false, ..chosen() }.save(&d);
+        assert!(!std::fs::read_to_string(d.join(FILE)).unwrap().contains("lived_in"), "Off is not written");
     }
 
     #[test]

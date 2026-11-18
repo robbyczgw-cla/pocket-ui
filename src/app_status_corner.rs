@@ -24,6 +24,12 @@ use crate::{App, UserEvent};
 /// The top line's baseline on Home and the pages over it.
 pub(crate) const TOP_LINE: i32 = 72;
 
+/// The lowest pixel the top line's type reaches: its baseline and the descent of the size it is painted at now (Large,
+/// the Brick's floors). What stands under the top line starts below this (`app_big_shelf`'s case).
+pub(crate) fn top_line_bottom() -> i32 {
+    TOP_LINE + pocket_ui::type_scale::px(status_corner::PX) as i32 * 3 / 10
+}
+
 impl App {
     /// The corner now (no file read: memory and the clock), and this frame counts as one with the corner.
     pub(crate) fn status_corner(&mut self) -> Corner {

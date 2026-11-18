@@ -41,7 +41,7 @@ fn game_ref(system: &str, path: &Path) -> Option<GameRef> {
 
 impl App {
     /// Where the choices are: the Mobile view's launcher.json (the app's files folder on Android).
-    fn phone_prefs_path(&self) -> PathBuf {
+    pub(crate) fn phone_prefs_path(&self) -> PathBuf {
         #[cfg(all(target_os = "android", feature = "handheld"))]
         return pocket_ui::platform::android::data_dir().join("launcher.json");
         #[cfg(not(all(target_os = "android", feature = "handheld")))]
@@ -115,6 +115,10 @@ impl App {
     /// * our player's core isn't on the phone: the game's "Runs on" page opens on its Download row;
     /// * no app takes the system: which app it needs and where it comes from.
     pub(crate) fn phone_prelaunch(&mut self, system: &str, name: &str, path: &Path) -> bool {
+        // An Android game is its app, which is there while it is on the shelf (`app_android_games`).
+        if system == pocket_ui::android_games::SYSTEM_ID {
+            return false;
+        }
         let Some(sys) = self.systems.iter().find(|s| s.name == system) else { return false };
         let Some((way, _)) = self.phone_way(sys, Some(path)) else { return false };
         match way {

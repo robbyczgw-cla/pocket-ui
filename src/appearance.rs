@@ -49,17 +49,7 @@ pub fn may_switch(idle: Duration, on_view: bool) -> bool {
     !on_view || idle >= QUIET
 }
 
-/// Seconds east of UTC in the device's zone right now, as libc sees it (after `timezone::tzset`).
-pub fn utc_offset_now(unix: i64) -> i32 {
-    let t = unix as libc::time_t;
-    let mut tm: libc::tm = unsafe { std::mem::zeroed() };
-    crate::timezone::tzset();
-    // SAFETY: localtime_r only writes into the provided struct.
-    if unsafe { libc::localtime_r(&t, &mut tm) }.is_null() {
-        return 0;
-    }
-    tm.tm_gmtoff as i32
-}
+pub use crate::timezone::utc_offset_now;
 
 /// Seconds since 1970 as this device's clock says them, moved by `POCKETUI_CLOCK_SHIFT` (seconds, may be
 /// negative) to try Automatic appearance and the night light on the virtual device without waiting for the evening.

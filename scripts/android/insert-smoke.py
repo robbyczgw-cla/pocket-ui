@@ -100,9 +100,9 @@ def fresh(apk, roms):
         run('push', str(path), folder + '/', timeout=120)
     start()
     # The first start, as a new player goes through it: only the folder is chosen, every other step keeps its default.
-    for step in range(1, 8):
+    for step in range(1, 7):
         for _ in range(16):
-            if find('Step %d of 8' % step) is not None:
+            if find('Step %d of 7' % step) is not None:
                 break
             got_it = find('Got it')
             if got_it is not None:

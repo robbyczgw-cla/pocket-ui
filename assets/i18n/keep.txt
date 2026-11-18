@@ -643,8 +643,7 @@ FBNEO
 ARCADE
 NEOGEO
 
-# 0.3.1 release check: the mock list of the updates snapshots (version 99.0.0, made-up notes), not product text
-99.0.0 available >
+# 0.3.1 release check: the mock list of the updates snapshots (made-up notes), not product text ("{s} available" is translated since 17.11.)
 Update notice: pocket-ui tells you once when a new version is out. Switch it off in Updates. Fixes long game names on the shelf.
 Updates. Fixes long game names on the shelf.
 
@@ -690,6 +689,28 @@ Eliwood
 Hector
 Eirika
 Ephraim
+# GoldenEye 007's difficulties and missions, as its folder select and mission films name them
+Agent
+Secret Agent
+00 Agent
+Dam
+Facility
+Runway
+Surface
+Bunker
+Silo
+Frigate
+Statue
+Archives
+Streets
+Depot
+Train
+Jungle
+Control
+Caverns
+Cradle
+Aztec
+Egyptian
 
 # dArkOS's handhelds (src/darkos.rs): makers' model names, and the name of a board dArkOS has but the table not.
 Anbernic RG353M
@@ -711,3 +732,6 @@ re:^\d points$
 re:^\d\d points$
 re:^\d\d\d points$
 re:^\d\d\d\d points$
+Tower Quest
+MailBox
+Pixel Racer

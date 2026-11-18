@@ -11,6 +11,8 @@ use std::time::SystemTime;
 
 use crate::image::{self, Image};
 
+pub mod transaction;
+
 pub const SLOTS: usize = 8;
 pub const STATES_DIR: &str = "/storage/roms/savestates";
 
@@ -148,16 +150,15 @@ pub fn load_keeping_undo(
     if !undo_written {
         return Loaded::UndoUnavailable;
     }
-    match load(&data) {
+    let mut load = Some(load);
+    let mut back = Some(back);
+    let Ok(before) = crate::state_file::read(&undo) else { return Loaded::UndoUnavailable };
+    match transaction::apply(&data, &before, |bytes| {
+        if let Some(load) = load.take() { load(bytes) }
+        else { back.take().unwrap()(bytes); Ok(()) }
+    }) {
         Ok(()) => Loaded::Loaded,
-        Err((reached, why)) => {
-            if reached && undo_written {
-                if let Ok(before) = crate::state_file::read(&undo) {
-                    back(&before);
-                }
-            }
-            Loaded::Refused(why)
-        }
+        Err(error) => Loaded::Refused(error.message),
     }
 }
 

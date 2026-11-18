@@ -16,25 +16,27 @@ use crate::display::Look;
 use crate::gfx::Canvas;
 use crate::image::Image;
 use crate::osd;
-use crate::text::{Face, Text};
+use crate::text::Text;
 
-const FONT: u32 = 34;
-const PAD_X: i32 = 20;
-const PAD_Y: i32 = 12;
+// The message pill's sizes (`paint_pill_on`): `pause_page`'s, which paints it for Android's player too.
+#[cfg(test)]
+const FONT: u32 = crate::pause_page::NOTE_FONT;
+#[cfg(test)]
+const PAD_X: i32 = crate::pause_page::NOTE_PAD_X;
+#[cfg(test)]
+const PAD_Y: i32 = crate::pause_page::NOTE_PAD_Y;
 /// The FPS line and the badge keep this far from the screen's corner.
 pub const MARGIN: i32 = 24;
-const KEY: u32 = crate::pixel_live::KEY; // transparent
-const PILL: u32 = 0x1a1a1a;
+pub(crate) const KEY: u32 = crate::pixel_live::KEY; // transparent
+pub(crate) const PILL: u32 = crate::pause_page::NOTE_PILL;
 /// The opacity of the messages and the FPS line.
 pub const ALPHA: f32 = 0.82;
 const TOAST_FOR: Duration = Duration::from_millis(1600);
 /// A sentence of pocket-ui's (`note`, "Switched off after 3 h asleep to save the battery."): long enough to be read.
 const NOTE_FOR: Duration = Duration::from_secs(6);
 /// The widest a message gets before it goes on to a second line (the save warning, a long German note).
-const WRAP_AT: i32 = 1000;
-/// A panel narrower than this has the messages in `SMALL_FONT`.
-const SMALL_VIEW: u32 = 800;
-const SMALL_FONT: u32 = 22;
+#[cfg(test)]
+const WRAP_AT: i32 = crate::pause_page::NOTE_WRAP_AT;
 const FPS_EVERY: Duration = Duration::from_millis(500);
 /// How long the frame around the game takes to fade in at the start (`Overlay::draw_veil`); pocket-ui's launch fade
 /// is as long.
@@ -158,18 +160,10 @@ impl Default for Hud {
     }
 }
 
-/// utime + stime of this process in clock ticks, from /proc/self/stat.
-fn process_ticks() -> u64 {
-    let Ok(stat) = std::fs::read_to_string("/proc/self/stat") else { return 0 };
-    parse_ticks(&stat).unwrap_or(0)
-}
-
-/// Fields 14 and 15 of a /proc/<pid>/stat line (the name in field 2 may contain spaces and parentheses).
-fn parse_ticks(stat: &str) -> Option<u64> {
-    let rest = &stat[stat.rfind(')')? + 1..];
-    let f: Vec<&str> = rest.split_whitespace().collect();
-    Some(f.get(11)?.parse::<u64>().ok()? + f.get(12)?.parse::<u64>().ok()?)
-}
+// utime + stime of this process in clock ticks, from /proc/self/stat (shared with Android's player).
+use crate::fps_line::process_ticks;
+#[cfg(test)]
+use crate::fps_line::parse_ticks;
 
 impl Hud {
     pub fn toast(&mut self, msg: impl Into<String>) {
@@ -242,11 +236,8 @@ impl Hud {
         if self.show_fps {
             let cpu = tick.cpu_secs / secs * 100.0;
             let (fps, emulated) = (self.frames as f64 / secs, self.emulated as f64 / secs);
-            self.fps_text = if (emulated - fps).abs() > fps * 0.1 {
-                format!("{fps:.0} FPS   EMU {emulated:.0}   CPU {cpu:.0}%")
-            } else {
-                format!("{fps:.0} FPS   CPU {cpu:.0}%")
-            };
+            // The same words as Android's player (`fps_line`).
+            self.fps_text = crate::fps_line::text(fps, emulated, cpu);
             // FPS + sensors: the last readings of the reader thread; what the device lacks isn't there.
             if let Some(w) = self.sensors.as_ref() {
                 let more = w.text();
@@ -336,11 +327,28 @@ impl Hud {
 }
 
 #[derive(Clone, Copy)]
-enum Anchor {
+pub(crate) enum Anchor {
     TopLeft,
     TopRight,
     BottomCenter,
     TopCenter,
+}
+
+impl Anchor {
+    /// The anchors of `Hud::texts`' four pieces, in that order (FPS, badge, toast, level bar).
+    pub(crate) const ALL: [Anchor; 4] = [Anchor::TopLeft, Anchor::TopRight, Anchor::BottomCenter, Anchor::TopCenter];
+}
+
+/// Where a piece `size` big goes on a `view` screen; `top` is the level bar's distance from the top (TopCenter).
+/// The GL overlay and the CPU one (`soft_hud`) both place their pieces here.
+pub(crate) fn anchor_at(anchor: Anchor, (w, h): (i32, i32), view: (u32, u32), top: i32) -> (i32, i32) {
+    let (vw, vh) = (view.0 as i32, view.1 as i32);
+    match anchor {
+        Anchor::TopLeft => (MARGIN, MARGIN),
+        Anchor::TopRight => (vw - MARGIN - w, MARGIN),
+        Anchor::BottomCenter => ((vw - w) / 2, vh - MARGIN - h),
+        Anchor::TopCenter => ((vw - w) / 2, top),
+    }
 }
 
 struct Piece {
@@ -491,12 +499,7 @@ impl Overlay {
             self.render(gl, i, text);
             let piece = &self.pieces[i];
             let (w, h) = piece.size;
-            let (x, y) = match piece.anchor {
-                Anchor::TopLeft => (MARGIN, MARGIN),
-                Anchor::TopRight => (view_w as i32 - MARGIN - w, MARGIN),
-                Anchor::BottomCenter => ((view_w as i32 - w) / 2, view_h as i32 - MARGIN - h),
-                Anchor::TopCenter => ((view_w as i32 - w) / 2, osd::TOP),
-            };
+            let (x, y) = piece_at(i, (w, h), (view_w, view_h));
             let (vw, vh) = (view_w as f32, view_h as f32);
             let ndc = |px: i32, total: f32| px as f32 / total * 2.0 - 1.0;
             unsafe {
@@ -508,15 +511,13 @@ impl Overlay {
         if let Some(key) = unlock_key {
             if self.unlock.text != key {
                 if let Some(u) = hud.current_unlock() {
-                    let (w, h, buf) = paint_unlock(&mut self.text, u);
+                    let (w, h, buf) = unlock_raster(&mut self.text, u, view_w);
                     upload(gl, &mut self.unlock, w, h, &buf);
                 }
                 self.unlock.text = key;
             }
-            // Under the volume or brightness bar when that is up too.
-            let below_osd = !texts[3].is_empty();
             let (w, h) = self.unlock.size;
-            let (x, y) = ((view_w as i32 - w) / 2, if below_osd { osd::TOP + osd::H + 12 } else { MARGIN });
+            let (x, y) = unlock_at((w, h), view_w, !texts[3].is_empty());
             let (vw, vh) = (view_w as f32, view_h as f32);
             let ndc = |px: i32, total: f32| px as f32 / total * 2.0 - 1.0;
             unsafe {
@@ -537,7 +538,7 @@ impl Overlay {
             let text = &mut self.text;
             let at = live::place(s, |style| live::measure(text, s, style));
             let (w, h, buf) = live::paint(text, s, at.style);
-            upload(gl, &mut self.strip, w, h, &buf);
+            upload(gl, &mut self.strip, w, h, &with_coverage(&buf));
             self.strip_at = (at.x, at.y, at.style.alpha());
             self.strip_drawn = seq;
         }
@@ -661,29 +662,24 @@ impl Overlay {
         }
     }
 
-    /// Rasterises `text` in a pill and uploads it as the texture of piece `i` (piece 3: the level bar of an OSD).
+    /// Rasterises `text` (`piece_raster`) and uploads it as the texture of piece `i`, again only when the text or the
+    /// screen's width changed.
     fn render(&mut self, gl: &glow::Context, i: usize, text: &str) {
         let piece = &mut self.pieces[i];
-        let (w, h, buf) = if i == 3 {
-            if piece.text == text {
-                return;
-            }
-            let Some(data) = osd::Data::from_wire(text) else { return };
-            let mut buf = vec![KEY; (osd::W * osd::H) as usize];
-            let mut c = Canvas::new(&mut buf, osd::W as u32, osd::H as u32);
-            osd::paint(&mut c, &mut self.text, 0, 0, &data, PILL);
-            piece.text = text.to_string();
-            (osd::W, osd::H, buf)
-        } else {
-            let Some(pill) = changed_pill(&mut self.text, &mut piece.text, &mut piece.wrap_width, text, self.view_w) else { return };
-            pill
-        };
+        if piece.text == text && piece.wrap_width == self.view_w {
+            return;
+        }
+        let Some((w, h, buf)) = piece_raster(&mut self.text, i, text, self.view_w) else { return };
+        piece.text = text.to_string();
+        piece.wrap_width = self.view_w;
         upload(gl, piece, w, h, &buf);
     }
 }
 
-/// Reuse the raster only while its words and layout width still match. The first fullscreen configure can shrink
-/// the initial window after the startup note was painted. Height only changes the anchor, not the raster's wrapping.
+/// The cache rule of `Overlay::render`: reuse the raster only while its words and layout width still match. The first
+/// fullscreen configure can shrink the initial window after the startup note was painted. Height only changes the
+/// anchor, not the raster's wrapping.
+#[cfg(test)]
 fn changed_pill(text: &mut Text, cached: &mut String, width: &mut u32, msg: &str, view_w: u32) -> Option<(i32, i32, Vec<u32>)> {
     if *cached == msg && *width == view_w {
         return None;
@@ -703,34 +699,12 @@ pub fn paint_pill(text: &mut Text, msg: &str) -> (i32, i32, Vec<u32>) {
 /// [`paint_pill`] for a screen `view_w` wide: pocket-core draws in the panel's own pixels, so a small panel gets a smaller
 /// type and lines that stay on it.
 pub fn paint_pill_on(text: &mut Text, msg: &str, view_w: u32) -> (i32, i32, Vec<u32>) {
-    let font = if view_w < SMALL_VIEW { SMALL_FONT } else { FONT };
-    // Retro: the text keeps its padding from the window's inner line, not from its outer edge (it sat on the line,
-    // Retro clip 06.11.2026); frame pixels of half `U` on a small panel, as pocket-ui's look there.
-    let u = if view_w < SMALL_VIEW { crate::retro::U / 2 } else { crate::retro::U };
-    let inset = if crate::retro::on() { crate::retro::frame_inset(u) } else { 0 };
-    let (pad_x, pad_y) = (PAD_X + inset, PAD_Y + inset);
-    let wrap_at = WRAP_AT.min(view_w as i32 - 2 * MARGIN - 2 * pad_x);
-    let lines = if text.width(Face::Body, font, msg) > wrap_at { text.wrap_prose(Face::Body, font, msg, wrap_at) } else { vec![msg.to_string()] };
-    let line_h = font as i32 * 13 / 10;
-    let w = lines.iter().map(|l| text.width(Face::Body, font, l)).max().unwrap_or(0) + 2 * pad_x;
-    let h = font as i32 + (lines.len() as i32 - 1) * line_h + 2 * pad_y;
-    let mut buf = vec![KEY; (w * h) as usize];
-    let mut c = Canvas::new(&mut buf, w as u32, h as u32);
-    let radius = if lines.len() > 1 { 26 } else { h / 2 };
-    if crate::retro::on() {
-        crate::retro::frame_at(&mut c, 0, 0, w, h, PILL, u);
-    } else {
-        c.round_rect(0, 0, w, h, radius, PILL);
-    }
-    for (i, l) in lines.iter().enumerate() {
-        text.draw(&mut c, Face::Body, font, pad_x, pad_y + font as i32 * 4 / 5 + i as i32 * line_h, 0xffffff, l);
-    }
-    (w, h, buf)
+    crate::pause_page::note_pill(text, msg, view_w)
 }
 
-/// Puts a CPU-drawn picture (`KEY` is transparent) into a piece's texture.
+/// Puts a CPU-drawn picture (coverage in the top byte, `with_coverage`) into a piece's texture.
 fn upload(gl: &glow::Context, piece: &mut Piece, w: i32, h: i32, buf: &[u32]) {
-    let rgba: Vec<u8> = buf.iter().flat_map(|p| [(p >> 16) as u8, (p >> 8) as u8, *p as u8, if *p == KEY { 0 } else { 255 }]).collect();
+    let rgba: Vec<u8> = buf.iter().flat_map(|p| [(p >> 16) as u8, (p >> 8) as u8, *p as u8, (p >> 24) as u8]).collect();
     unsafe {
         gl.bind_texture(glow::TEXTURE_2D, Some(piece.texture));
         // The video renderer leaves its own row length and alignment set.
@@ -741,14 +715,81 @@ fn upload(gl: &glow::Context, piece: &mut Piece, w: i32, h: i32, buf: &[u32]) {
     piece.size = (w, h);
 }
 
-/// The unlock card: the badge on the left (a drawn ring in amber when there is none), "Achievement unlocked · 5 points"
-/// in grey over the title in white. Dark like every message over a game. Returns width, height and pixels.
-pub fn paint_unlock(text: &mut Text, u: &Unlock) -> (i32, i32, Vec<u32>) {
-    let (w, h) = crate::unlock_card::size(text, &u.title, u.points, CARD_TEXT_MAX);
+
+/// Whether the level bar is drawn at half size on a screen `view_w` wide: narrower than the bar and its margins (640x480,
+/// 720x480, 720x720). Half is the size pocket-ui's shelf shows it there (`scaled_layout`'s 2:1 canvas).
+pub fn halves_bar(view_w: u32) -> bool {
+    (view_w as i32) < osd::W + 2 * MARGIN
+}
+
+/// What piece `i` of `Hud::texts` (FPS, badge, toast or note, level bar) looks like on a screen `view_w` wide: width,
+/// height and pixels with their coverage in the top byte (`with_coverage`). The GL overlay uploads it, the CPU copy
+/// (`soft_hud`) blends it. On a small panel the level bar is halved (`halves_bar`): drawn at its full 680 pixels the GL
+/// path cut both its ends off a 640x480 panel (RK3566 and RK3326 under ROCKNIX, until 0.5.1).
+pub(crate) fn piece_raster(text: &mut Text, i: usize, msg: &str, view_w: u32) -> Option<(i32, i32, Vec<u32>)> {
+    if i == 3 {
+        let data = osd::Data::from_wire(msg)?;
+        let mut buf = vec![KEY; (osd::W * osd::H) as usize];
+        let mut c = Canvas::new(&mut buf, osd::W as u32, osd::H as u32);
+        osd::paint(&mut c, text, 0, 0, &data, PILL);
+        let full = with_coverage(&buf);
+        Some(if halves_bar(view_w) { reduce2(&full, osd::W, osd::H) } else { (osd::W, osd::H, full) })
+    } else {
+        let (w, h, buf) = paint_pill_on(text, msg, view_w);
+        Some((w, h, with_coverage(&buf)))
+    }
+}
+
+/// Where piece `i` of `size` goes on a `view` screen (the level bar's top halved with the bar).
+pub(crate) fn piece_at(i: usize, size: (i32, i32), view: (u32, u32)) -> (i32, i32) {
+    let top = if halves_bar(view.0) { osd::TOP / 2 } else { osd::TOP };
+    anchor_at(Anchor::ALL[i], size, view, top)
+}
+
+/// The unlock card for a screen `view_w` wide, in coverage pixels: its text column narrows to the screen
+/// (`unlock_card::text_max`; with `CARD_TEXT_MAX` a long title made it 893 pixels wide on a 640 or 720 panel).
+pub(crate) fn unlock_raster(text: &mut Text, u: &Unlock, view_w: u32) -> (i32, i32, Vec<u32>) {
+    let max = crate::unlock_card::text_max(view_w as i32).min(CARD_TEXT_MAX);
+    let (w, h) = crate::unlock_card::size(text, &u.title, u.points, max);
     let mut buf = vec![KEY; (w * h) as usize];
     let mut c = Canvas::new(&mut buf, w as u32, h as u32);
-    crate::unlock_card::paint(&mut c, text, (0, 0), &u.title, u.points, u.badge.as_ref(), CARD_TEXT_MAX);
-    (w, h, buf)
+    crate::unlock_card::paint(&mut c, text, (0, 0), &u.title, u.points, u.badge.as_ref(), max);
+    (w, h, with_coverage(&buf))
+}
+
+/// Where the unlock card goes: centred at the top, under the level bar when that is up too.
+pub(crate) fn unlock_at((w, _): (i32, i32), view_w: u32, bar_up: bool) -> (i32, i32) {
+    let bar_bottom = if halves_bar(view_w) { (osd::TOP + osd::H) / 2 + 6 } else { osd::TOP + osd::H + 12 };
+    ((view_w as i32 - w) / 2, if bar_up { bar_bottom } else { MARGIN })
+}
+
+/// `KEY` (transparent) to coverage 0, every other pixel fully covered: 0xAARRGGBB with A the coverage.
+pub(crate) fn with_coverage(buf: &[u32]) -> Vec<u32> {
+    buf.iter().map(|&p| if p == KEY { 0 } else { 0xff00_0000 | (p & 0x00ff_ffff) }).collect()
+}
+
+/// Half size: each 2x2 block averaged over its covered pixels, its coverage the share covered (round edges stay soft).
+pub(crate) fn reduce2(src: &[u32], w: i32, h: i32) -> (i32, i32, Vec<u32>) {
+    let (hw, hh) = (w / 2, h / 2);
+    let mut out = vec![0u32; (hw * hh) as usize];
+    for y in 0..hh {
+        for x in 0..hw {
+            let (mut r, mut g, mut b, mut n) = (0u32, 0u32, 0u32, 0u32);
+            for (dx, dy) in [(0, 0), (1, 0), (0, 1), (1, 1)] {
+                let p = src[((2 * y + dy) * w + 2 * x + dx) as usize];
+                if p >> 24 != 0 {
+                    r += p >> 16 & 0xff;
+                    g += p >> 8 & 0xff;
+                    b += p & 0xff;
+                    n += 1;
+                }
+            }
+            if n > 0 {
+                out[(y * hw + x) as usize] = (255 * n / 4) << 24 | (r / n) << 16 | (g / n) << 8 | b / n;
+            }
+        }
+    }
+    (hw, hh, out)
 }
 
 #[cfg(test)]
@@ -897,16 +938,88 @@ mod tests {
         assert_eq!(hud.current_unlock().map(|u| u.id), Some(5503));
     }
 
+    /// Every panel pocket-core draws on, landscape: ROCKNIX's H700, RK3566 and RK3326 rows (640x480, 720x480, 720x720,
+    /// 960x544; the dArkOS port runs the 640x480 ones), the RG DS Plus and Brick's 1024x768, the Smart Pro's 1280x720, the
+    /// Mini V1's 1280x960, the Mini V2's 1240x1080 and the 1080p Snapdragons.
+    fn shipped_panels() -> Vec<(u32, u32)> {
+        use crate::device_model::{H700_BOARDS, RK3326_BOARDS, RK3566_BOARDS};
+        let mut v: Vec<(u32, u32)> = H700_BOARDS.iter().chain(RK3566_BOARDS).chain(RK3326_BOARDS).map(|b| b.screen).collect();
+        v.extend([(1024, 768), (1280, 720), (1280, 960), crate::device::MINI_V2_SCREEN, (1920, 1080)]);
+        v.sort();
+        v.dedup();
+        v
+    }
+
+    /// The class of the RK3566 bug (0.5.1): the GL overlay drew the 680-pixel level bar unchanged on a 640x480 panel, both
+    /// ends cut off. Every piece over a game, at its longest, on every panel we ship, on the GL path and on the CPU copy
+    /// (`soft_hud`), stays whole on the screen.
+    #[test]
+    fn every_overlay_piece_fits_every_shipped_panel_on_both_paths() {
+        let mut text = Text::new();
+        let fps = "120 FPS   EMU 240   CPU 100%   62 °C   Fan 45%   4.8 W";
+        let badge = "Fast-forward 4x · Rewind";
+        let toasts = [
+            crate::first_game::NOTE,
+            "Die Spielstände kommen nicht auf die Karte. Spiel speichern und beenden, dann die Karte prüfen.",
+            "Zurück in den Moment ging nicht: neu gestartet. Der Moment liegt in Slot 2",
+        ];
+        let bars = [
+            osd::Data::percent("Volume", 100).to_wire(),
+            osd::Data::new("Helligkeit", "Extra dunkel 3", 0.0, false).to_wire(),
+            osd::Data::new("Farbtemperatur", "Wärmer 10", 1.0, true).to_wire(),
+            osd::Data::new("Battery low", "5%", 0.05, false).to_wire(),
+        ];
+        let mut hud = Hud::default();
+        hud.achievement(1, "A very long achievement title that goes on and on and on and would never fit on one line of the card", 100, "");
+        let mut misses = Vec::new();
+        for (vw, vh) in shipped_panels() {
+            // One set of functions for both: `Overlay::render`/`draw` (GL) and `SoftHud::piece`/`paint` (CPU copy, which
+            // leaves the unlock card out) take raster and place from them; soft_hud's own test checks it draws them unclipped.
+            {
+                let path = "GL and CPU copy";
+                let mut check = |what: &str, (x, y): (i32, i32), (w, h): (i32, i32)| {
+                    if x < 0 || y < 0 || x + w > vw as i32 || y + h > vh as i32 {
+                        misses.push(format!("{vw}x{vh} {path}: {what} at {x},{y} {w}x{h}"));
+                    }
+                };
+                let mut pieces: Vec<(usize, &str)> = vec![(0, fps), (1, badge)];
+                pieces.extend(toasts.iter().map(|t| (2, *t)));
+                pieces.extend(bars.iter().map(|b| (3, b.as_str())));
+                for (i, msg) in pieces {
+                    let (w, h, _) = piece_raster(&mut text, i, msg, vw).unwrap();
+                    check(&format!("piece {i} {msg:?}"), piece_at(i, (w, h), (vw, vh)), (w, h));
+                }
+                {
+                    let u = hud.current_unlock().unwrap();
+                    let (w, h, _) = unlock_raster(&mut text, u, vw);
+                    for bar_up in [false, true] {
+                        check(&format!("unlock card (bar up {bar_up})"), unlock_at((w, h), vw, bar_up), (w, h));
+                    }
+                }
+            }
+        }
+        assert!(misses.is_empty(), "pieces cut off by the screen's edge:\n{}", misses.join("\n"));
+    }
+
+    #[test]
+    fn a_halved_bar_keeps_the_unlock_card_below_it() {
+        let mut text = Text::new();
+        let (bw, bh, _) = piece_raster(&mut text, 3, &osd::Data::percent("Volume", 40).to_wire(), 640).unwrap();
+        let (_, by) = piece_at(3, (bw, bh), (640, 480));
+        let (_, cy) = unlock_at((300, 108), 640, true);
+        assert!(cy >= by + bh, "card at {cy}, bar ends at {}", by + bh);
+    }
+
     #[test]
     fn the_unlock_card_fits_long_titles_and_has_its_badge() {
         let mut text = Text::new();
         let mut hud = Hud::default();
         hud.achievement(1, "A very long achievement title that goes on and on and on and would never fit on one line of the card", 25, "");
         let u = hud.current_unlock().unwrap();
-        let (w, h, buf) = paint_unlock(&mut text, u);
+        let (w, h, buf) = unlock_raster(&mut text, u, 1240);
         assert!(w <= crate::unlock_card::PAD + crate::unlock_card::BADGE + 20 + CARD_TEXT_MAX + crate::unlock_card::PAD + 8 && h == crate::unlock_card::BADGE + 2 * crate::unlock_card::PAD, "{w}x{h}");
-        assert_eq!(buf[0], KEY, "rounded corner is see-through");
-        assert!(buf.contains(&0xd39a2c), "the drawn mark stands in for a missing badge");
+        assert_eq!(buf[0] >> 24, 0, "rounded corner is see-through");
+        assert!(buf.contains(&0xffd3_9a2c), "the drawn mark stands in for a missing badge");
     }
 
     #[test]

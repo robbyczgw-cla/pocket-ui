@@ -78,10 +78,13 @@ impl App {
         // A on the Cabinet's playing TV: the game goes on from there, its picture growing out of the TV, no insertion
         // (`App::showcase_hand_over`); pocket-core holds it still until the picture has grown.
         let grow = hosted && !port && self.showcase_hand_over(&path, &run.core);
-        let animation = if port { None } else if grow { Some(super::app_cabinet_tv::HAND_HOLD) } else { self.launch_animation(&path, hosted) };
+        // An Android game is an app Android starts: no case goes into a console (as in the Mobile view).
+        let app_game = system == pocket_ui::android_games::SYSTEM_ID && pocket_ui::device::android_profile();
+        let animation = if port || app_game { None } else if grow { Some(super::app_cabinet_tv::HAND_HOLD) } else { self.launch_animation(&path, hosted) };
         // A sealed game is unwrapped for good now, in every look (the Cozy launch tore its film off already).
         self.unseal(&path);
         self.launch_at = Some(Instant::now());
+        self.warm_launch_cover(&system, &path);
         self.launch_picture = None;
         self.loading_start();
         self.held = None;

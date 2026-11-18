@@ -396,8 +396,12 @@ impl Rtc {
 }
 
 /// What every power-off and restart path calls right before its command: disarms the alarm (`Rtc::disarm_for_shutdown`),
-/// and writes the readback to the log and to `shutdown.log`. `who` names the path. Never fails: the power off goes on.
+/// writes the readback to the log and to `shutdown.log`, and marks the boot as ending on purpose (`logs::mark_clean`; a
+/// failed command takes that back, `logs::unmark_clean`). `who` names the path. Never fails: the power off goes on.
 pub fn disarm_before_power_off(rtc: &Rtc, data_dir: &Path, who: &str) -> Disarm {
+    if !crate::logs::mark_clean(data_dir, crate::recents::now_secs()) {
+        eprintln!("shutdown: {who}: the clean-shutdown mark could not be written");
+    }
     let result = rtc.disarm_for_shutdown();
     if result.verified {
         println!("shutdown: {who}: {result}");

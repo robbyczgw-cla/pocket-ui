@@ -92,10 +92,14 @@ The fast tier checks every program (the compile-first stage, `cargo check --all-
 programs, so a broken suite still fails), builds and runs only the programs it runs (`cargo test --no-run` with the same
 list; the skipped suites are built by the nightly run), runs all unit tests (with the documentation checks), the doctests and every integration suite except the slow
 layout matrices listed in `scripts/gate-parts.py` (`text_size`, `long_titles`, `nav_explorer`, `small_screen`, …)
-and the absolute CPU budgets (`BUDGET`: `launch_frames`, `settings_open`, `shelf_moves`; they run alone and went red on an
+and the absolute CPU budgets (`BUDGET`: `launch_frames`, `shelf_moves`; they run alone and went red on an
 overloaded host in 4 trains of 3 days, none a real slowdown). The budgets never run in the merge gate, not even when their own
 file changes; the timing tier neither. The compile-first stage checks Brick and Android. `scripts/gate-parts.py` adds what the
 change touches:
+
+`settings_open::settings_first_frame_draws_no_glyph_and_runs_no_pattern` runs in every ordinary merge gate.
+It checks cache hits and pattern lookups once in every supported language, with no clock assertion.
+Only `settings_first_frame_is_not_much_slower_than_the_next` stays in the per-test nightly list.
 
 | Change | Also runs |
 |---|---|
@@ -168,7 +172,7 @@ During development run `scripts/gate.sh --quick` from your worktree. It runs all
 (including documentation checks), then selects integration suites from committed branch changes, local edits and
 untracked tests against `main` (`GATE_BASE=<ref>` changes the base). Source, assets and build changes select all integration suites; script or deploy changes also run the five shell
 suites. Render suites use a small representative matrix plus every newly added snapshot state in this tier.
-The absolute CPU benchmarks (`launch_frames`, `settings_open`, `shelf_moves`) run only with `GATE_FULL=1` (nightly, release
+The absolute CPU benchmarks (`launch_frames`, `shelf_moves`, plus the Settings timing test) run only with `GATE_FULL=1` (nightly, release
 check), alone: timing an opt-level 1 build against a production frame-time limit gives a false result. Their thresholds are unchanged.
 The target is under three minutes
 on an idle machine with a warm build; a clean build or a heavily loaded shared builder can take longer.
@@ -316,7 +320,9 @@ never printed: open the line). Fix it where it stands: documentation values in t
 build machine", "the device", `/home/you/...`), and a login in a URL built at test time (`format!("http://user{}pw@...", ':')`).
 Only a made-up value that has to look private, because the test is about the private-range logic (`192.168.x`, `10.x`,
 `100.64/10` told apart from public addresses), gets a rule in `scripts/public-allow.txt` with a reason; never a key, token,
-password or name. `--fast` finds the lines worth a look with one regular-expression pass per pattern over each file and scans only
+password or source name. APKs are unpacked before scanning, and reviewed public contacts/credits in required upstream licence and NOTICE texts use explicit `*.apk!assets/licences/FILE` rules (known native contacts use the exact library member); names require an exact member, while rules without `!` retain their outer-file meaning.
+Unknown values and other members remain findings, keys/tokens/passwords/serials cannot be allowed, and required upstream notices stay intact.
+`--fast` finds the lines worth a look with one regular-expression pass per pattern over each file and scans only
 those; the export itself scans every line and gives the same findings (`scripts/test-export-public.sh` compares the two).
 
 What makes it fast, and why none of it tests less:

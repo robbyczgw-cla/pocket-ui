@@ -24,9 +24,6 @@ static ANDROID: Mutex<Option<AndroidApp>> = Mutex::new(None);
 static PROXY: Mutex<Option<EventLoopProxy<UserEvent>>> = Mutex::new(None);
 /// The game the player has: when it started, its file and system. Taken when the Activity comes back.
 static PLAYING: Mutex<Option<(Instant, PathBuf, String)>> = Mutex::new(None);
-/// The picture rows handed to the player for the game it has (`picture_choice`), its key and when: what the pause menu changed
-/// is kept here when the game ends (`android_handheld::keep_pause_menu_picture`).
-static HANDED: Mutex<Option<(serde_json::Value, String, std::time::SystemTime)>> = Mutex::new(None);
 /// The player was let go (`releaseLaunch`): the start's scene is over. Before that, leaving the view cancels the start.
 static RELEASED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(true);
 /// Which start the scene's thread lets go: a cancelled one's thread lets nothing go.
@@ -59,6 +56,11 @@ fn android_main(app: AndroidApp) {
     let cache = app.internal_data_path().unwrap_or_else(|| files.clone()).join("handheld-tmp");
     let _ = std::fs::create_dir_all(&cache);
     let es = data.join("es_systems.cfg");
+    // A core downloaded before it came into the APK: the APK's copy is used, the download goes (as in the Mobile view).
+    let retired = pocket_ui::android_cores::retire_bundled(&files, |core| bridge("coreBundled", &[core]) == "true", !offers().is_empty());
+    if !retired.is_empty() {
+        eprintln!("downloaded cores now in the APK, download removed: {retired:?}");
+    }
     // The phone's apps and cores and the choices in launcher.json, before the library: which systems are listed depends on them.
     refresh_phone();
     // The ROMs folders of internal storage and of every card, with their real names (`android_handheld`).
@@ -67,7 +69,8 @@ fn android_main(app: AndroidApp) {
     if roots.is_empty() {
         roots.push(PathBuf::from("/storage/emulated/0/ROMs"));
     }
-    let systems = pocket_ui::play_route_cfg::es_systems(&roots);
+    // The Android games the player marked are a system of their own, in this view's folder (`app_android_games`).
+    let systems = pocket_ui::android_games::with_es_entry(&pocket_ui::play_route_cfg::es_systems(&roots), &data.join(pocket_ui::android_games::FOLDER));
     // Written only when it changes: the library's cache is kept while es_systems.cfg is the same (`library_cache`).
     if std::fs::read_to_string(&es).ok().as_deref() != Some(systems.as_str()) {
         if let Err(e) = std::fs::write(&es, &systems) {
@@ -148,7 +151,12 @@ fn bundled_core(system: &str) -> Option<&'static str> {
 /// The core packages the download channel offers, from the APK's asset (`coreOffers`): what the Download row fetches.
 fn offers() -> &'static [pocket_ui::android_cores::CorePackage] {
     static OFFERS: std::sync::OnceLock<Vec<pocket_ui::android_cores::CorePackage>> = std::sync::OnceLock::new();
-    OFFERS.get_or_init(|| pocket_ui::android_cores::packages(bridge("coreOffers", &[]).as_bytes()).unwrap_or_default())
+    OFFERS.get_or_init(|| {
+        let mut offers = pocket_ui::android_cores::packages(bridge("coreOffers", &[]).as_bytes()).unwrap_or_default();
+        // A core the APK carries is never a download.
+        offers.retain(|p| bridge("coreBundled", &[&p.core]) != "true");
+        offers
+    })
 }
 
 /// launcher.json, the Mobile view's file: its choices, the Game Boy core and the channel's address come from it.
@@ -320,6 +328,10 @@ pub(crate) fn spawn_game(proxy: EventLoopProxy<UserEvent>, run: &Run, env: &[(&s
         let _ = proxy.send_event(UserEvent::GameExited { secs: 0, ok: false, pgid: None, start: Default::default(), moments: false });
         None
     };
+    // An Android game: its app, started as a home screen starts it (`app_android_games`).
+    if run.system == pocket_ui::android_games::SYSTEM_ID {
+        return spawn_android_game(proxy, run);
+    }
     // Another app (`play_route::Way::App`): the route's emulator is its package. Our own player is pocket-core's route (hosted).
     if let super::Player::Other(package) = &run.player {
         return spawn_app_game(proxy, run, package, env);
@@ -338,10 +350,10 @@ pub(crate) fn spawn_game(proxy: EventLoopProxy<UserEvent>, run: &Run, env: &[(&s
     let launcher = std::fs::read_to_string(files.join("launcher.json")).unwrap_or_default();
     let mut view = serde_json::to_value(pocket_ui::settings::Settings::load(&data)).unwrap_or_default();
     view["animations"] = pocket_ui::settings::Settings::load(&data).animations_or_default().name().into();
-    let picture = pocket_ui::android_handheld::picture_choice(&pocket_ui::options::GameSettings::load(&data, &run.system, &run.path).effective());
+    // The game's settings: the player's pause menu reads and writes this view's files (`game_settings`), as pocket-core's does.
+    let picture = pocket_ui::android_handheld::GamePicture::load(&data, &run.system, &run.path);
     let fresh = env.iter().any(|(k, _)| *k == pocket_ui::frozen::SKIP_RESUME_ENV);
     let moment = !fresh && pocket_ui::slots::auto_candidates(&pocket_ui::slots::auto_path(&files.join("states").join(&key).join(stem)), false).iter().any(|f| f.exists());
-    *HANDED.lock().unwrap_or_else(|p| p.into_inner()) = Some((picture.clone(), key.clone(), std::time::SystemTime::now()));
     let settings = pocket_ui::android_handheld::launch_settings(&launcher, &view, Some(picture), &pocket_ui::android_handheld::sidecar_cheats(&run.path), moment);
     let hold = env.iter().find(|(k, _)| *k == pocket_ui::startup::HOLD_UNTIL).and_then(|(_, v)| v.parse::<f64>().ok());
     if hold.is_some() {
@@ -408,6 +420,38 @@ fn spawn_app_game(proxy: EventLoopProxy<UserEvent>, run: &Run, package: &str, en
         });
     }
     None
+}
+
+/// An Android game of the shelf (`android_games`): Android starts its app at once (no scene, as in the Mobile view); the way
+/// back is this Activity coming to the front again (`android_resumed`), the play time counted from here. An app that went
+/// ends the start at once (the shelf says so and loses it).
+fn spawn_android_game(proxy: EventLoopProxy<UserEvent>, run: &Run) -> Option<i32> {
+    *PROXY.lock().unwrap_or_else(|p| p.into_inner()) = Some(proxy.clone());
+    let package = pocket_ui::android_games::package_of(&run.path).unwrap_or_default();
+    let refused = if package.is_empty() { "no package".to_string() } else { bridge("launchApp", &[&package]) };
+    if !refused.is_empty() {
+        log::warn!("launch: android app {package}: {refused}");
+        let _ = proxy.send_event(UserEvent::GameExited { secs: 0, ok: false, pgid: None, start: Default::default(), moments: false });
+        return None;
+    }
+    log::info!("launch: android app {package}");
+    *PLAYING.lock().unwrap_or_else(|p| p.into_inner()) = Some((Instant::now(), run.path.clone(), run.system.clone()));
+    let unix = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_secs());
+    let _ = pocket_ui::fsutil::write_atomic(&playing_note(), serde_json::json!({"path": run.path, "system": run.system, "name": run.name, "at": unix}).to_string().as_bytes());
+    None
+}
+
+/// Android's apps with a start icon (`AppDrawer.list`, a JSON list), for the Android games (`app_android_games`).
+pub(crate) fn launcher_apps() -> String {
+    bridge("launcherApps", &[])
+}
+
+/// An Android game's cover at `path` (`AppDrawer.cover`: its banner or icon), drawn again only after the app was updated.
+pub(crate) fn app_cover(package: &str, path: &Path) {
+    let said = bridge("appCover", &[package, &path.to_string_lossy()]);
+    if !said.is_empty() {
+        log::info!("android games: no cover for {package}: {said}");
+    }
 }
 
 /// Apps (PC streaming, tools) are Linux's; here they end at once.
@@ -630,7 +674,15 @@ impl App {
     /// Back in front. After a game: its end, as pocket-core's on Linux, and the way back from the picture the player
     /// left (`eject::LastPicture`). Called after the window is made.
     pub(crate) fn android_resumed(&mut self) {
+        let save_error = pocket_ui::save_trouble::take_moment(&pocket_ui::platform::android::data_dir().join("player-save-error"));
+        if let Some(line) = &save_error {
+            self.notice = Some(pocket_ui::notice::Notice::new(line.clone()));
+            self.request_redraw();
+        }
         *PROXY.lock().unwrap_or_else(|p| p.into_inner()) = Some(self.proxy.clone());
+        // Back from Home or a dark screen: a look soon when the last is an hour old, and a version found meanwhile is said
+        // now that it can be seen (`app_update_hint`).
+        self.update_hint_front(std::time::Instant::now());
         // Opened again after an update from the shelf's card (or the Mobile view's page): once, which version it is now.
         let installed = pocket_ui::platform::android::strings("updateNotice", &[]).unwrap_or_else(|e| {
             log::warn!("update notice: {e}");
@@ -642,6 +694,8 @@ impl App {
         }
         // An app may have been installed or a core downloaded while this view was behind another one.
         refresh_phone();
+        // And an Android game installed, renamed or removed, or marked in the Mobile view (`app_android_games`).
+        self.android_games_refresh("back in front");
         // The player may have written moments and slots: they are read from the player's folders next.
         forget_keys();
         let note = std::fs::read_to_string(playing_note()).ok().and_then(|s| serde_json::from_str::<serde_json::Value>(&s).ok());
@@ -652,7 +706,7 @@ impl App {
                 let (path, system) = (PathBuf::from(n["path"].as_str().unwrap_or_default()), n["system"].as_str().unwrap_or_default().to_string());
                 let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_secs());
                 let secs = now.saturating_sub(n["at"].as_u64().unwrap_or(now));
-                let name = pocket_ui::library::display_name(path.file_stem().and_then(|s| s.to_str()).unwrap_or_default());
+                let name = n["name"].as_str().map(str::to_string).unwrap_or_else(|| pocket_ui::library::display_name(path.file_stem().and_then(|s| s.to_str()).unwrap_or_default()));
                 log::info!("resumed after this process ended in a game: {} ({secs} s)", path.display());
                 self.recents.note(&system, &name, &path, secs);
                 pocket_ui::play_log::ended(&system, &name, &path, secs);
@@ -674,18 +728,9 @@ impl App {
         let now_ms = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_millis() as u64);
         let note = pocket_ui::eject::LastPicture::take(&pocket_ui::platform::android::data_dir(), now_ms);
         log::info!("back from {} after {:?}: last picture {:?}", path.display(), started.elapsed(), note.as_ref().map(|n| (n.saved, n.picture.is_some())));
-        // What the player's pause menu changed in the picture is this view's setting now, as pocket-core's pause menu keeps
-        // it on Linux.
-        if let Some((handed, key, since)) = HANDED.lock().unwrap_or_else(|p| p.into_inner()).take() {
-            let player = pocket_ui::platform::android::data_dir();
-            if let Some((saved, for_game)) = pocket_ui::android_handheld::player_picture_saved(&player, &system, &key, since) {
-                let data = PathBuf::from(std::env::var_os("POCKETUI_DATA").unwrap_or_default());
-                let kept = pocket_ui::android_handheld::keep_pause_menu_picture(&data, &system, &path, &handed, &saved, for_game);
-                log::info!("picture: the pause menu's {saved} kept={kept} for {}", if for_game { "the game" } else { "the console" });
-            }
-        }
         // The end before the way back: the shelf after Quit first (`game_exited`), then its scene (`begin_eject`).
         self.game_exited(started.elapsed().as_secs(), true, Default::default(), false);
+        if let Some(line) = save_error { self.notice = Some(pocket_ui::notice::Notice::new(line)); }
         let size = self.window.as_ref().map(|w| (w.inner_size().width, w.inner_size().height));
         let frame = note.filter(|n| n.saved).and_then(|n| {
             let picture = pocket_ui::image::load_png(n.picture.as_deref()?)?;
@@ -710,7 +755,10 @@ impl App {
             Some((std::sync::Arc::new(screen), Some((x.max(0) as u32, y.max(0) as u32, w as u32, h as u32))))
         });
         // The whole screen as the player left it is the way back's first picture (`begin_eject`, as the pause menu's grab).
-        self.begin_eject(&path, &system, frame.map(|(screen, _)| screen));
+        // An Android game went into no console: the shelf is there at once, on its case.
+        if system != pocket_ui::android_games::SYSTEM_ID {
+            self.begin_eject(&path, &system, frame.map(|(screen, _)| screen));
+        }
         self.request_redraw();
     }
 }

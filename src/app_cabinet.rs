@@ -23,7 +23,7 @@ use pocket_ui::image::{self, Image};
 use pocket_ui::insert_scene::Scene;
 use pocket_ui::notice::Notice;
 use pocket_ui::palette::*;
-use pocket_ui::text::Face;
+use pocket_ui::text::{Face, Text};
 use pocket_ui::title_block;
 use pocket_ui::touch::Area;
 
@@ -274,6 +274,13 @@ struct CaseKey {
 /// A case's big spine and front, whether the front has its cover yet, and its last-use stamp.
 type Shown = (Rc<Pic>, Rc<Pic>, bool, u64);
 
+/// Lived-in shelf: how long after the last button the row's posed spines are made ahead (`App::lived_warm_tick`):
+/// between the presses of a calm walk along the row, not under a held button's repeats.
+const LIVED_WARM_AFTER: Duration = Duration::from_millis(90);
+
+/// Lived-in shelf: the most of the UI thread one turn of making them ahead takes (a turn makes at least one).
+const LIVED_WARM_BUDGET: Duration = Duration::from_millis(3);
+
 /// Large fronts shared by Shelf, the game box and its idle warmer. Bound entries independently of rendered frames:
 /// Cabinet uses these for box warming too, and never paints the Shelf that used to be their only cleanup path.
 const FRONT_KEEP: usize = 12;
@@ -302,6 +309,12 @@ pub(crate) struct Inserting {
 thread_local! {
     /// Home's page painted (not copied) during a launch: the launch bench's count (`bench_playful`, tests/launch_frames.rs).
     pub(crate) static LAUNCH_PAGES: std::cell::Cell<u32> = const { std::cell::Cell::new(0) };
+    /// Lived-in shelf: thread CPU of `paint_lived_feet` and of building the row (`shelf_row`) for the
+    /// bench (`bench_playful` prints them): total time and calls.
+    pub(crate) static LIVED_FEET: std::cell::Cell<(Duration, u32)> = const { std::cell::Cell::new((Duration::ZERO, 0)) };
+    pub(crate) static LIVED_ROW: std::cell::Cell<(Duration, u32)> = const { std::cell::Cell::new((Duration::ZERO, 0)) };
+    /// Lived-in shelf: how many leaning or lying spines were made (`posed_pic`), for the bench's walk.
+    pub(crate) static LIVED_POSED: std::cell::Cell<u32> = const { std::cell::Cell::new(0) };
 }
 
 /// The Shelf look's page under a launch: what the frame shows before the scene goes over it, and what it was painted
@@ -481,6 +494,9 @@ pub(crate) struct CabinetUi {
     pub(crate) pending: usize,
     /// Read covers right away instead of on the thread (snapshots, the look step's previews).
     pub(crate) inline: bool,
+    /// The cover file of the game being started: its colours and cuts are read right away by the first frame that wants
+    /// them (once, `App::warm_launch_cover`), so the insert scene never opens on a plain stand-in front.
+    warm: Option<PathBuf>,
     /// Where each case was painted, for taps: (rectangle, shelf, case); the pulled-out one last.
     drawn: Vec<(i32, i32, i32, i32, usize, usize)>,
     pub(crate) insert: Option<Inserting>,
@@ -503,6 +519,9 @@ pub(crate) struct CabinetUi {
     pub(crate) tv: super::app_cabinet_tv::TvState,
     /// The front of the selected case as last painted: where an insert starts from.
     last_out: Option<(Item, (i32, i32, i32, i32))>,
+    /// Where the selected case's game stood out of it this frame (an open case, `paint_ajar_game`): with the case, what
+    /// must keep clear of the TV (`cabinet_snapshot_outcome`).
+    last_ajar: Option<(i32, i32, i32, i32)>,
     consoles: HashMap<String, Option<Rc<pocket_ui::system_art::Sprite>>>,
     /// The consoles of the start scene (`scene_sprite`), by system and the shelf's scale in percent.
     scene_consoles: HashMap<(String, i32), Option<Rc<pocket_ui::system_art::Sprite>>>,
@@ -557,6 +576,7 @@ impl Default for CabinetUi {
             reader: None,
             pending: 0,
             inline: false,
+            warm: None,
             drawn: Vec::new(),
             insert: None,
             eject: None,
@@ -568,6 +588,7 @@ impl Default for CabinetUi {
             stickers_opened: Default::default(),
             tv: Default::default(),
             last_out: None,
+            last_ajar: None,
             consoles: HashMap::new(),
             scene_consoles: HashMap::new(),
             frame: 0,
@@ -680,7 +701,7 @@ impl CabinetUi {
     /// The launch animation is still moving (the game is loading behind it).
     pub(crate) fn insert_playing(&self, now: Instant) -> bool {
         // `at` is in the future while a sealed game's film tears (`lead`): the scene is waiting, so still playing.
-        self.insert.as_ref().is_some_and(|i| now.saturating_duration_since(i.at) < cabinet::insert_len(i.scene.cozy) || i.tear.as_ref().is_some_and(|t| t.moving(now)))
+        self.insert.as_ref().is_some_and(|i| now.saturating_duration_since(i.at) < i.scene.len() || i.tear.as_ref().is_some_and(|t| t.moving(now)))
     }
 
     /// A rig's lid or tray shuts after the medium is in: the launch fade keeps its end and runs after the clunk.
@@ -699,7 +720,7 @@ impl CabinetUi {
     /// The pause before the launch fade: the cartridge or disc going into the console.
     pub(crate) fn launch_delay(&self) -> Duration {
         match self.insert.as_ref() {
-            Some(i) => cabinet::fade_delay(i.scene.cozy) + i.lead,
+            Some(i) => cabinet::fade_delay(i.scene.cozy) + i.scene.turn_back() + i.lead,
             None => Duration::ZERO,
         }
     }
@@ -1101,7 +1122,9 @@ impl App {
         }
         ui_sound::played();
         ui_sound::close_when_done(!hosted);
-        pocket_ui::insert_scene::hold(cozy, power_on).map(|h| h + lead).filter(|_| hosted)
+        // A PSP turns back to its front to light its display: its scene's hold is that much longer (`Scene::hold`).
+        let hold = self.cabinet.insert.as_ref().map_or_else(|| pocket_ui::insert_scene::hold(cozy, power_on), |i| i.scene.hold());
+        hold.map(|h| h + lead).filter(|_| hosted)
     }
 
     /// A handheld's start ends in its display's light instead of the fade (a pocket-core game: its window follows the light,
@@ -1125,22 +1148,61 @@ impl App {
 
     /// A frozen game's front, shown large: the game inside (the open box's own picture, `box_game`) a little out at its
     /// side, painted before the front. Slides out with the case's turn; with Motion off it is simply there.
-    pub(crate) fn paint_ajar_game(&mut self, c: &mut Canvas, item: Item, m: Medium, front: &Rc<Pic>, (x, y): (i32, i32), clip: (i32, i32)) {
-        // Easy: every usable moment, whatever the Frozen games extra says (`big_has_moment`).
-        if !(if self.big_on() { self.big_has_moment(item) } else { self.is_frozen_item(item) }) {
-            return;
-        }
-        let Some(game) = self.box_game(item, front) else { return };
-        let (gw, gh, out) = pocket_ui::game_box::game_beside(m, (front.w, front.h), Some(&game));
+    /// Returns where the game was painted (None: the case is shut).
+    pub(crate) fn paint_ajar_game(&mut self, c: &mut Canvas, item: Item, m: Medium, front: &Rc<Pic>, (x, y): (i32, i32), clip: (i32, i32)) -> Option<(i32, i32, i32, i32)> {
+        let (game, reach) = self.ajar_game(item, m, front)?;
+        let gw = game.w;
+        let gh = game.h;
         let from = self.cabinet.ajar_at.map_or(self.moved_at, |t| t.max(self.moved_at));
         let at = pocket_ui::motion::progress(pocket_ui::motion::Kind::Move, from, pocket_ui::frame_clock::now(), AJAR_IN);
-        // Easy's one big case: well out, so an open case shows at a glance, the same for a cartridge, a card and a disc.
-        let reach = if self.big_on() { (front.w as f32 * AJAR_BIG).min(gw as f32 * 0.8) } else { (out as f32 * AJAR).min(front.w as f32 * AJAR_FRONT) };
         // From the middle of its case, where the way back leaves it (`insert_scene`: a game rests there before it comes
         // out), to beside it: no step when the shelf takes over (a clear case shows the game through it).
         let (inside, out_x) = ((front.w - gw) as f32 / 2.0, (front.w - gw) as f32 + reach);
         let gx = x + (inside + (out_x - inside) * at).round() as i32;
-        art::blit(c, &game, gx, y + (front.h - gh) / 2, 256, clip);
+        let gy = y + (front.h - gh) / 2;
+        art::blit(c, &game, gx, gy, 256, clip);
+        Some((gx, gy, gw, gh))
+    }
+
+    /// A frozen game's game out of its case `front` (`paint_ajar_game`) and how far it stands out of the case's right
+    /// side once it is all the way out; None for a shut case.
+    fn ajar_game(&mut self, item: Item, m: Medium, front: &Rc<Pic>) -> Option<(Rc<Pic>, f32)> {
+        if !self.stands_open(item) {
+            return None;
+        }
+        let game = self.box_game(item, front)?;
+        let reach = ajar_reach_of(self.big_on(), m, (front.w, front.h), Some(&game));
+        Some((game, reach))
+    }
+
+    /// Whether `item`'s case stands a little open. Easy: every usable moment, whatever the Frozen games extra says
+    /// (`big_has_moment`).
+    fn stands_open(&self, item: Item) -> bool {
+        if self.big_on() { self.big_has_moment(item) } else { self.is_frozen_item(item) }
+    }
+
+    /// How far past its case's right side an open case's game stands once it is out (0: a shut case), from the medium's
+    /// sizes (no picture is made): the room the Cabinet keeps beside the case, so the game never reaches the TV (a Brick
+    /// hand test, 17.11.).
+    pub(crate) fn ajar_reach(&self, item: Item, m: Medium, front: &Rc<Pic>) -> i32 {
+        if !self.stands_open(item) {
+            return 0;
+        }
+        ajar_reach_of(self.big_on(), m, (front.w, front.h), None).ceil() as i32 + 1
+    }
+
+    /// How far right the showcase must reach for the cabinet's widest case out of its shelf, its game standing out of it
+    /// (`paint_out`, `show_centre`): the TV's left edge (or the console's beside it) may not stand left of this.
+    pub(crate) fn case_room(&self, room: i32) -> i32 {
+        let cab = &self.cabinet.cab;
+        let media: &[Medium] = if cab.media.is_empty() { &[Medium::Gb] } else { &cab.media };
+        let widest = media.iter().map(|&m| {
+            let k = show_scale(m, room);
+            let (fw, fh) = (m.size().front as f32 * k, m.size().front_h as f32 * k);
+            fw + ajar_reach_of(self.big_on(), m, (fw.round() as i32, fh.round() as i32), None).ceil() + 1.0
+        }).fold(0.0, f32::max);
+        // `paint_out`'s margin each side; the showcase reaches 12 px under the TV's left edge.
+        (2.0 * 40.0 + widest).ceil() as i32 - 12
     }
 
     /// The game box's look and its case's front `h` pixels tall, made as the Shelf look makes its fronts.
@@ -1286,7 +1348,7 @@ impl App {
     /// Reads now or asks the thread, for a cover file.
     fn want(&mut self, file: &Path, kind: Kind) {
         let sample = self.sample_cover.as_ref().filter(|(p, _)| p == file).map(|(_, img)| img.clone());
-        if self.cabinet.inline || sample.is_some() {
+        if self.cabinet.inline || sample.is_some() || self.cabinet.warm.as_deref() == Some(file) {
             let got = read(file, kind, sample.as_deref());
             self.cabinet_got(file.to_path_buf(), kind, got);
             return;
@@ -1316,7 +1378,23 @@ impl App {
         }
     }
 
+    /// A game is about to start: if it has box art, the first frame that shows its case reads the cover (colours and
+    /// cut, at whatever size that scene asks for) right away rather than on the thread. Started from the search or at
+    /// boot its cover is in no cabinet cache yet, and the insert scene showed the plain stand-in front for a few frames
+    /// before the cover came (search-start-check). `POCKETUI_LAUNCH_COVER=0` turns it off (the check's "before").
+    pub(crate) fn warm_launch_cover(&mut self, system: &str, rom: &Path) {
+        if std::env::var("POCKETUI_LAUNCH_COVER").is_ok_and(|v| v == "0") {
+            return;
+        }
+        self.cabinet.warm = self.cover_file(system, rom);
+    }
+
     pub(crate) fn cabinet_poll(&mut self) {
+        // Over with the start: the game runs (or the start was dropped). Not when the first cut is in: the scene reads
+        // its own sizes, and the shelf's small cut may be there from before.
+        if self.cabinet.warm.is_some() && (self.running.is_some() || self.launch_at.is_none()) {
+            self.cabinet.warm = None;
+        }
         self.cabinet.prune_fronts();
         // Here, where every look takes its covers in: Easy never paints the Shelf or the Cabinet, and its cuts were
         // never trimmed (one per game passed, 15.11.).
@@ -1568,42 +1646,58 @@ impl App {
 
     // ---- painting ----------------------------------------------------------------------------------------
 
-    /// Where the showcase ends for the selected shelf `cs`, as the screen's room allows (the Mini V2 photo, 2026-11-03: a
-    /// 170-line strip of nothing under a shelf whose next one did not fit whole): (room for the case, top of the
-    /// selected shelf, how far it sinks behind the top board, whether the next shelf's top looks in at the bottom). The
-    /// rows under the showcase fit whole down to `scene_bottom` less the plinth; what is left over first makes the case and the TV bigger (up to what
-    /// `show_scale` allows), then the next shelf looks in from below, or, on the last one, the cabinet moves down.
-    fn cabinet_plan(&self, h: i32, cs: usize, m: Medium) -> (i32, i32, i32, bool) {
+    /// The cabinet's frame on a screen `h` lines high: (room for the case, bottom of the top board, how far its tallest
+    /// shelf sinks behind that board). One frame for the whole cabinet, whatever shelf or case is selected: laid out for
+    /// its tallest shelf and its tallest kind of case, so every shelf stands whole under the top board and every case has
+    /// its room above it (the hand test 16.11.2026: laid out for each shelf by itself, the top board and the TV on it
+    /// jumped from system to system). Only the shelves move under it. A cabinet short enough to stand whole stands on the
+    /// hints' line, its showcase taking the room above (the Mini V2 photo, 2026-11-03: no strip of nothing under it).
+    fn cabinet_plan(&self, w: i32, h: i32) -> (i32, i32, i32) {
         let cab = &self.cabinet.cab;
-        let bottom = scene_bottom(h);
-        // The last shelf that fits whole under `top`, and whether another one is below it.
-        let stack = |top: i32| {
-            let (mut lowest, mut more) = (0, false);
-            for s in cs..cab.shelves.len() {
-                let end = cab.y(s) - cab.y(cs) + top + cab.pitch(s);
-                if end > bottom {
-                    more = true;
-                    break;
-                }
-                lowest = end;
-            }
-            (lowest, more)
+        let tall = cab.tallest_pitch();
+        let media: &[Medium] = if cab.media.is_empty() { &[Medium::Gb] } else { &cab.media };
+        // The tallest case's showcase over the tallest shelf, `hide` lines of that shelf's empty headroom behind the board:
+        // the room is the same for every case, how high it needs to be is not.
+        let plan = |hide: i32, extra: i32| {
+            let (room, top, sink) = media.iter().map(|&m| showcase(h, m, tall - hide, extra)).max_by_key(|f| f.1).unwrap_or((0, 0, 0));
+            (room, top, sink + hide)
         };
-        // `top`: where the top board ends; the selected shelf starts `sink` above it.
-        let (room, top, sink) = showcase(h, m, cab.pitch(cs), 0);
-        let (lowest, _) = stack(top - sink);
-        if lowest <= top - sink {
-            // The selected shelf alone is taller than the room (a tiny screen).
-            return (room, top, sink, false);
+        // A TV left out for want of a few lines (1280 x 720 with a PS2 shelf): the space over that shelf's tallest case
+        // goes behind the board instead, never a spine.
+        let tv = |room: i32| super::app_cabinet_tv::tv_scale(w, h, room).is_some();
+        let hide = if tv(plan(0, 0).0) { 0 } else { (2..=cabinet::HEADROOM - 6).step_by(2).find(|&s| tv(plan(s, 0).0)).unwrap_or(0) };
+        let (room, top, sink) = plan(hide, 0);
+        let rest = scene_bottom(h) - (top - sink) - (cab.height() + PLINTH_H);
+        if rest <= 0 {
+            return (room, top, sink);
         }
-        let (room, top1, sink1) = showcase(h, m, cab.pitch(cs), (bottom - PLINTH_H - lowest).max(0));
-        let (lowest, more) = stack(top1 - sink1);
-        let rest = bottom - lowest;
-        if more && rest >= PEEK_MIN {
-            (room, top1, sink1, true)
-        } else {
-            (room, top1 + (rest - PLINTH_H).max(0), sink1, false)
+        let (room, top, sink) = plan(hide, rest);
+        let rest = scene_bottom(h) - (top - sink) - (cab.height() + PLINTH_H);
+        (room, top + rest.max(0), sink)
+    }
+
+    /// The scroll that shows shelf `cs` right under the top board ending at `top` (sunk by its part of `sink`, the tallest
+    /// shelf's); near the cabinet's end the plinth stays on the hints' line and the selection goes on down instead, as a
+    /// list stops at its end.
+    fn cabinet_scroll_for(&self, h: i32, cs: usize, top: i32, sink: i32) -> i32 {
+        let cab = &self.cabinet.cab;
+        let own_sink = (sink - (cab.tallest_pitch() - cab.pitch(cs))).max(0);
+        let end = cab.height() + PLINTH_H - scene_bottom(h);
+        (cab.y(cs) - top + own_sink).min(end).max(-top)
+    }
+
+    /// The last shelf standing whole over the hints at scroll `sy` (its board's bottom; 0: none) and whether more follow.
+    fn cabinet_stack(&self, h: i32, sy: i32) -> (i32, bool) {
+        let cab = &self.cabinet.cab;
+        let mut lowest = 0;
+        for s in 0..cab.shelves.len() {
+            let bottom = cab.y(s) - sy + cab.pitch(s);
+            if bottom > scene_bottom(h) {
+                return (lowest, true);
+            }
+            lowest = bottom;
         }
+        (lowest, false)
     }
 
     pub(crate) fn paint_cabinet(&mut self, c: &mut Canvas) {
@@ -1616,6 +1710,7 @@ impl App {
         let (light, earned) = self.room_sync();
         c.clear(pal().void);
         self.cabinet.drawn.clear();
+        self.cabinet.last_ajar = None;
         // The app's selection becomes a case (after the look was changed on a system card, say); the look step's
         // previews paint a sample and leave the selection alone.
         let at = if self.sample_cover.is_none() {
@@ -1635,8 +1730,8 @@ impl App {
         let cab_w = c.w - 2 * CAB_X;
         let view = cab_w - 2 * art::WALL;
         let inner_x = CAB_X + art::WALL;
-        let medium = self.cabinet.cab.shelves[cs].cases[ci].medium;
-        let (room, top, sink, peek) = self.cabinet_plan(c.h, cs, medium);
+        // The frame (top board, showcase, TV) is the cabinet's, the same on every shelf; the shelves scroll under it.
+        let (room, top, sink) = self.cabinet_plan(c.w, c.h);
         self.cabinet.show_room = room;
         if !self.cabinet.placed || !pocket_ui::motion::allowed(pocket_ui::motion::Kind::Move) {
             self.cabinet.show_top.jump(top as f32);
@@ -1644,7 +1739,8 @@ impl App {
             self.cabinet.show_top.set(top as f32, now);
         }
         let show_bottom = self.cabinet.show_top.value(now).round() as i32;
-        let want_y = (self.cabinet.cab.y(cs) - top + sink) as f32;
+        let want_sy = self.cabinet_scroll_for(c.h, cs, top, sink);
+        let want_y = want_sy as f32;
         let key = self.cabinet.cab.shelves[cs].key;
         let current_x = self.cabinet.scroll_x.get(&key).map_or(0.0, |t| t.target());
         let want_x = self.cabinet.cab.shelves[cs].scroll_to_show(ci, view, current_x);
@@ -1666,23 +1762,20 @@ impl App {
         let sy = self.cabinet.scroll_y.value(now).round() as i32;
         // The shelves under the showcase, down to the last one that fits whole: none is cut by the hints (the photo:
         // the bottom row's spines under the hint bar).
-        let mut lowest = 0;
-        for s in cs..self.cabinet.cab.shelves.len() {
-            let bottom = self.cabinet.cab.y(s) - sy + self.cabinet.cab.pitch(s);
-            if bottom > scene_bottom(c.h) {
-                break;
-            }
-            lowest = bottom;
-        }
+        let (mut lowest, _) = self.cabinet_stack(c.h, sy);
         // The selected shelf alone is taller than the room (a tiny screen): as much of it as fits.
         let cut = lowest <= show_bottom;
         if cut {
             lowest = scene_bottom(c.h);
         }
-        // Room left under the last whole shelf: the next one's top looks in (it fades out at the hints), no plinth.
-        let peek = peek && !cut;
+        // Room left under the last whole shelf where the scroll goes: the next one's top looks in (it fades out at the
+        // hints), no plinth; a sliver of it would read as a fault, the plinth closes the cabinet there instead.
+        let peek = !cut && {
+            let (end, more) = self.cabinet_stack(c.h, want_sy);
+            more && scene_bottom(c.h) - end >= PEEK_MIN
+        };
         let clip = (show_bottom, if peek { scene_bottom(c.h) } else { lowest });
-        let floor_y = show_bottom - sink + self.cabinet.cab.shelves[cs].height + 3;
+        let floor_y = self.cabinet.cab.y(cs) - sy + self.cabinet.cab.shelves[cs].height + 3;
 
         // The cabinet's top board and plinth, at its ends.
         if self.cabinet.boards.as_ref().is_none_or(|(page, b, _)| b.w != cab_w || *page != pal().void) {
@@ -1987,7 +2080,11 @@ impl App {
         let (fw, fh) = (size.front as f32 * k, size.front_h as f32 * k);
         let margin = 40.0;
         let right = self.cabinet.tv.left.map_or(c.w as f32, |x| x as f32 + 12.0);
-        let show_cx = show_centre(slot_cx, fw, right, margin, self.cabinet.cab.shelves[s].width, c.w - 2 * CAB_X - 2 * art::WALL);
+        let (spine, front) = self.shown_pics(case.item, case.medium);
+        // An open case's game stands out at its right side: that keeps clear of the TV too (it reached over the TV's
+        // console when the game stood at the shelf's right end, a Brick hand test 17.11.).
+        let reach = self.ajar_reach(case.item, case.medium, &front) as f32;
+        let show_cx = show_centre(slot_cx, fw, reach, right, margin, self.cabinet.cab.shelves[s].width, c.w - 2 * CAB_X - 2 * art::WALL);
         // Up in the showcase over its shelf, standing on the cabinet's top board: nothing of the shelves under it.
         let show_cy = (show_bottom - TOP_H - 12) as f32 - fh / 2.0;
         let smooth = |t: f32| t * t * (3.0 - 2.0 * t);
@@ -2010,7 +2107,6 @@ impl App {
         let scale = 1.0 + (k - 1.0) * mv;
         let cx = slot_cx + (show_cx - slot_cx) * mv;
         let cy = (floor - size.h as f32 / 2.0) + (show_cy - (floor - size.h as f32 / 2.0)) * mv;
-        let (spine, front) = self.shown_pics(case.item, case.medium);
         // Its shadow on what is behind and under it.
         let h_case = size.h as f32 + (size.front_h - size.h) as f32 * turned;
         let (w_now, h_now) = ((size.spine as f32 + (size.front - size.spine) as f32 * turned) * scale, h_case * scale);
@@ -2049,7 +2145,10 @@ impl App {
         // All the way out it faces you square: the picture as it is, sharp.
         let r = if turned >= 1.0 && (scale - k).abs() < 0.001 {
             let (x, y) = ((cx - front.w as f32 / 2.0).round() as i32, (cy - front.h as f32 / 2.0).round() as i32);
-            self.paint_ajar_game(c, case.item, case.medium, &front, (x, y), (0, scene_bottom(c.h)));
+            let ajar = self.paint_ajar_game(c, case.item, case.medium, &front, (x, y), (0, scene_bottom(c.h)));
+            if (s, i) == self.cabinet_cursor().unwrap_or((usize::MAX, 0)) {
+                self.cabinet.last_ajar = ajar;
+            }
             art::blit_sheared(c, &front, x, y, rock * front.h as f32, 256, (0, scene_bottom(c.h)));
             (x, y, front.w, front.h)
         } else {
@@ -2747,6 +2846,12 @@ impl App {
             app.cabinet.age(ago);
         };
         let rest = Duration::from_secs(2);
+        // `POCKETUI_SNAPSHOT_OUTCOME_EACH=1`: the outcome line after every key, not only at the end (a walk along a shelf
+        // in one run, `tests/cabinet_case_clear_of_tv.rs`); the open cases (`POCKETUI_SNAPSHOT_FROZEN`) from the start.
+        let each = std::env::var_os("POCKETUI_SNAPSHOT_OUTCOME_EACH").is_some();
+        if each {
+            self.frozen_snapshot();
+        }
         settle(self, rest);
         let n = keys.len();
         for (k, b) in keys.into_iter().enumerate() {
@@ -2767,6 +2872,9 @@ impl App {
                 if self.pending_launch.is_some() { std::thread::sleep(Duration::from_millis(1)); }
             }
             settle(self, ago);
+            if each {
+                self.cabinet_snapshot_outcome(h as i32, (w * h) as u64);
+            }
         }
         if let Some(ms) = insert_ms {
             settle(self, rest);
@@ -2776,13 +2884,21 @@ impl App {
 
     /// Report the final painted case and shelf for host snapshot outcome checks. Uses the same
     /// rectangles as touch/launch, so a case clipped out of the picture cannot pass as visible.
-    pub(crate) fn cabinet_snapshot_outcome(&self, h: i32) {
+    pub(crate) fn cabinet_snapshot_outcome(&self, h: i32, page_px: u64) {
         let Some((s, _)) = self.cabinet_cursor() else { return };
         let Some((_, (x, y, w, case_h))) = self.cabinet.last_out else { return };
         let top = self.cabinet.cab.y(s) - self.cabinet.scroll_y.value(Instant::now()).round() as i32;
-        println!("cabinet-outcome case={x},{y},{w},{case_h} shelf={top},{} showcase={} tv={} hints={}",
+        let rect = |r: Option<(i32, i32, i32, i32)>| r.map_or("none".to_string(), |(x, y, w, h)| format!("{x},{y},{w},{h}"));
+        let place = rect(self.cabinet.tv.place);
+        // The open case's game, where it stood out of the case (none: a shut case).
+        let ajar = self.cabinet.last_ajar.map_or("none".to_string(), |(x, y, w, h)| format!("{x},{y},{w},{h}"));
+        // The pixels the frame cleared, against the page's own (`page_px`, screen pixels; `gfx::take_cleared`): the whole
+        // page once, not twice.
+        let cleared = pocket_ui::gfx::take_cleared();
+        println!("cabinet-outcome case={x},{y},{w},{case_h} shelf={top},{} showcase={} tv={} hints={} board={} place={place} ajar={ajar} handheld={} cleared={cleared}/{} console={} console_place={}",
             top + self.cabinet.cab.shelves[s].height, self.cabinet.show_room,
-            self.cabinet.tv.left.is_some(), h - 98);
+            self.cabinet.tv.left.is_some(), h - 98, self.cabinet.show_top.target().round() as i32, self.cabinet.tv.handheld, page_px,
+            rect(self.cabinet.tv.console_at), rect(self.cabinet.tv.console_place));
     }
 
     /// Playful animations in a Shelf snapshot: `POCKETUI_SNAPSHOT_HELD=<steps>:<ms>` paints Right held for `steps`
@@ -2819,7 +2935,7 @@ impl App {
         self.paint(c);
     }
 
-    /// `--snapshot bench-playful:<system>:<launch|pull|lean>` (docs/LATENCY.md "Playful animations"): every frame of
+    /// `--snapshot bench-playful:<system>:<launch|pull|lean|walk|walk-warm>` (docs/LATENCY.md "Playful animations"): every frame of
     /// one animation in the Shelf look painted as the device would, 16 ms apart, on the system's list of games; prints
     /// the frames' thread CPU time (`bench_line`). Run with the extra on and off (POCKETUI_DATA's settings.json) to
     /// compare.
@@ -2859,6 +2975,33 @@ impl App {
                     }
                 }
             }
+            "walk" | "walk-warm" => {
+                // Lived-in shelf: a calm walk along the row, Right every 200 ms to its end, a frame every 16 ms; with
+                // "walk-warm" the row's posed spines were made ahead first, as the idle moments after opening the row do
+                // (`lived_warm_tick`). Prints how many were made during the walk and its worst frame.
+                if what == "walk-warm" {
+                    let t0 = thread_cpu();
+                    let made = LIVED_POSED.get();
+                    self.lived_warm(Duration::MAX);
+                    println!("lived warm posed={} warm_us={:.0}", LIVED_POSED.get() - made, thread_cpu().saturating_sub(t0).as_secs_f64() * 1e6);
+                }
+                let made = LIVED_POSED.get();
+                let n = self.items.len().saturating_sub(1);
+                let base = Instant::now() - Duration::from_secs(60);
+                for k in 0..(n as u32 * 200 + 600) / 16 {
+                    let t = base + frame_ms * k;
+                    let want = ((k * 16 / 200) as usize).min(n);
+                    if want != self.sel {
+                        self.sel = want;
+                        self.moved_at = t;
+                    }
+                    self.cabinet.shelf_clock = Some(t);
+                    paint(self, &mut times);
+                }
+                self.cabinet.shelf_clock = None;
+                let worst = times.iter().max().copied().unwrap_or_default();
+                println!("lived walk posed_in_walk={} worst_us={:.0}", LIVED_POSED.get() - made, worst.as_secs_f64() * 1e6);
+            }
             "lean" => {
                 // Right held for 20 steps 70 ms apart, then the swing back: a frame every 16 ms of it.
                 let base = Instant::now() - Duration::from_millis(3000);
@@ -2881,7 +3024,7 @@ impl App {
                     self.launch_animation_snapshot(Duration::ZERO);
                     // A bench: what painting costs, on the real clock.
                     pocket_ui::frame_clock::thaw();
-                    let len = self.cabinet.insert.as_ref().map_or(cabinet::INSERT_COZY, |i| cabinet::insert_len(i.scene.cozy));
+                    let len = self.cabinet.insert.as_ref().map_or(cabinet::INSERT_COZY, |i| i.scene.len());
                     let start = Instant::now();
                     for k in 0..=(len.as_millis() / 16) as u32 {
                         let at = start.checked_sub(frame_ms * k).unwrap_or(start);
@@ -2899,6 +3042,15 @@ impl App {
         let mut sorted = still.clone();
         sorted.sort();
         let shelf_us = sorted.get(sorted.len() / 2).map_or(0.0, |d| d.as_secs_f64() * 1e6);
+        let (feet, feet_n) = LIVED_FEET.get();
+        let (rowt, row_n) = LIVED_ROW.get();
+        println!(
+            "lived first_frame_us={:.0} still_p50_us={shelf_us:.0} row_builds={row_n} row_build_us={:.0} feet_frames={feet_n} feet_us_per_frame={:.2} feet_max_total_us={:.0}",
+            still.first().map_or(0.0, |d| d.as_secs_f64() * 1e6),
+            rowt.as_secs_f64() * 1e6,
+            if feet_n > 0 { feet.as_secs_f64() * 1e6 / feet_n as f64 } else { 0.0 },
+            feet.as_secs_f64() * 1e6
+        );
         println!("{} shelf_p50_us={shelf_us:.0} pages={}", bench_line(&format!("bench-playful {system}:{what} playful={}", pocket_ui::playful::on()), &times), LAUNCH_PAGES.get() - pages);
     }
 
@@ -2938,7 +3090,8 @@ impl App {
         let cozy = self.cabinet.insert.as_ref().is_some_and(|i| i.scene.cozy);
         // As a hosted game's start: a handheld ends in its display's light (`POCKETUI_SNAPSHOT_NO_POWER_ON=1`: the old fade).
         let power_on = std::env::var_os("POCKETUI_SNAPSHOT_NO_POWER_ON").is_none() && self.apply_power_on(cozy, true);
-        let len = pocket_ui::insert_scene::hold(cozy, power_on).unwrap_or(cabinet::insert_len(cozy) + pocket_ui::insert_scene::FADE);
+        let hold = self.cabinet.insert.as_ref().map_or_else(|| pocket_ui::insert_scene::hold(cozy, power_on), |i| i.scene.hold());
+        let len = hold.unwrap_or(cabinet::insert_len(cozy) + pocket_ui::insert_scene::FADE);
         // A at `t0`; the clock steps by exactly one 60 Hz frame (`frame_clock`).
         let t0 = pocket_ui::frame_clock::hold_settled();
         if let Some(ins) = self.cabinet.insert.as_mut() {
@@ -3047,10 +3200,49 @@ fn emblem(item: Item) -> Option<&'static pocket_ui::system_art::Sprite> {
     })
 }
 
-/// The `k` (`media::front`) of a case of `m` shown above the shelf: as large as the room lets the largest case (at most
-/// 45 % of the room's width and `SHOW_MAX` template pixels a pixel), in half steps, the same for every case; below one
-/// (a tiny screen) as large as fits.
-pub(crate) fn show_k(lay: &ShelfLayout, m: Medium) -> f32 {
+/// How much larger than up to 0.5 the Shelf look shows the selected case, where the room over the shelf lets it (a
+/// player on a TrimUI Brick asked for larger covers, r/SBCGaming 17.11.2026; the owner chose 1.4 of the old size).
+const SHOW_BIGGER: f32 = 1.4;
+/// The most of the room's width the grown front may take: the words beside it keep the other half.
+const SHOW_WIDE: f32 = 0.5;
+/// The least a front grows by at all (`show_k`); under that it keeps its old size.
+const SHOW_GROW_LEAST: f32 = 1.08;
+/// The least of the room's width the words beside a grown front keep when its case stands open, its game out at its
+/// side (`AJAR_FRONT`, Continue).
+const WORDS_LEAST: f32 = 0.25;
+
+/// The `k` (`media::front`) of a case of `m` shown above the shelf whose row holds the cases `row`: `SHOW_BIGGER` times
+/// the size it had up to 0.5 (`show_k_before`), as far as the room lets the largest case of the row (its height, and
+/// `SHOW_WIDE` of its width, less where an open case's game beside it would leave the words under `WORDS_LEAST`), never
+/// smaller than that old size, and not at all where that is under `SHOW_GROW_LEAST`. One scale for the cases of a row, so the ones you see
+/// side by side keep their real sizes to each other; a row of cartridge boxes (a system's page) grows more than one
+/// with DVD cases in it (Home).
+pub(crate) fn show_k(lay: &ShelfLayout, m: Medium, row: &[Medium]) -> f32 {
+    let before = show_k_before(lay, m) * media::shelf_scale();
+    let fit = row
+        .iter()
+        .chain(std::iter::once(&m))
+        .map(|m| {
+            let t = m.template_size();
+            (lay.show.3 as f32 / t.front_h as f32).min(lay.show.2 as f32 * SHOW_WIDE / t.front as f32)
+        })
+        .fold(f32::MAX, f32::min);
+    // The case, the 48 px gap and the game out at its side leave the words their share.
+    let words = |m: Medium| (lay.show.2 as f32 * (1.0 - WORDS_LEAST) - 48.0) / (1.0 + AJAR_FRONT) / m.template_size().front as f32;
+    let fit = row.iter().chain(std::iter::once(&m)).map(|m| words(*m)).fold(fit, f32::min);
+    // In tenths (a hair over, so 3.0 * 1.4 stays 4.2 and doesn't fall to 4.1): the same size for every case of the row.
+    let grown = ((before * SHOW_BIGGER).min(fit) * 10.0 + 0.001).floor() / 10.0;
+    // A few per cent larger is not worth the words' room: on 720x720 Continue 2 % made the name a size smaller.
+    if grown < before * SHOW_GROW_LEAST {
+        return before / media::shelf_scale();
+    }
+    grown / media::shelf_scale()
+}
+
+/// The `k` of a case of `m` shown above the shelf as it was up to 0.5: as large as the room lets the largest case of
+/// any kind (at most 45 % of the room's width and `SHOW_MAX` template pixels a pixel), in half steps, the same for every
+/// case; below one (a tiny screen) as large as fits. `show_k` grows it.
+fn show_k_before(lay: &ShelfLayout, m: Medium) -> f32 {
     // One scale for every case, the one the largest needs to fit the room, so they keep their real sizes to each other;
     // never under `SHOW_LEAST` of a case's own. A taller spine (a SNES box standing on its short side) is laid down to
     // the front's height as it turns (`cabinet_art::draw_turning`).
@@ -3062,6 +3254,32 @@ pub(crate) fn show_k(lay: &ShelfLayout, m: Medium) -> f32 {
     let s = common.max(own(m) * SHOW_LEAST);
     let s = if s >= 1.0 { ((s * 2.0).floor() / 2.0).min(SHOW_MAX) } else { s.max(0.2) };
     s / media::shelf_scale()
+}
+
+/// The Shelf look's meta line ("Game Boy Advance, played a year ago today") in at most `fit` lines `width` wide, and
+/// whether they are translated already. Where it takes two lines and both of its parts fit, it breaks at its first
+/// comma: the system on the first line, why the game is there whole on the second. Wrapped at the width it left a
+/// word alone ("Game Boy Advance, heute vor einem Jahr" over "gespielt", 640x480, Large German, once the shown box
+/// grew 1.4 times, 17.11.2026). Else wrapped as before, the last line shown ending with "…" when it must.
+fn meta_wrap(text: &mut Text, meta: &str, width: i32, fit: usize) -> (Vec<String>, bool) {
+    let lines = text.wrap_at_most(Face::Body, 28, meta, width, fit);
+    if lines.len() < 2 || fit < 2 {
+        return (lines, false);
+    }
+    let shown = text.translated(meta).to_string();
+    if let Some((system, why)) = shown.split_once(", ") {
+        let first = format!("{system},");
+        if text.width_plain(Face::Body, 28, &first) <= width && text.width_plain(Face::Body, 28, why) <= width {
+            return (vec![first, why.to_string()], true);
+        }
+    }
+    (lines, false)
+}
+
+/// How many of the Shelf look's meta line's two lines fit between `y` (the last line above it) and `bottom`, `step`
+/// apart (`App::paint_shelf_words`).
+fn meta_lines(y: i32, bottom: i32, step: i32) -> usize {
+    ((bottom - y) / step.max(1)).clamp(0, 2) as usize
 }
 
 /// The spines' title size at scale `f` for the text size (`media::spine_px` picks the size that fits the label): 30 px
@@ -3081,12 +3299,30 @@ fn shelf_lead(len: i32, view: i32) -> i32 {
     }
 }
 
+/// How far an open case's game (`game`: its picture; None: the size its medium gives it) stands out of the right side
+/// of its case `case` (w, h) once it is out. Easy's one big case: well out, so an open case shows at a glance, the same for a
+/// cartridge, a card and a disc.
+fn ajar_reach_of(big: bool, m: Medium, case: (i32, i32), game: Option<&Pic>) -> f32 {
+    let (gw, _, out) = pocket_ui::game_box::game_beside(m, case, game);
+    if big {
+        (case.0 as f32 * AJAR_BIG).min(gw as f32 * 0.8)
+    } else {
+        (out as f32 * AJAR).min(case.0 as f32 * AJAR_FRONT)
+    }
+}
+
 /// Where the centre of a case shown out of its shelf stands: over its slot, unless the shelf holds only a few cases
 /// (their row under a third of the cabinet's width): then in the middle of the cabinet, so a lone game is not tucked in
-/// its corner above an empty shelf. Kept `margin` clear of the screen's edges (`screen_w`: the room up to the TV, when one stands there).
-fn show_centre(slot_cx: f32, fw: f32, screen_w: f32, margin: f32, shelf_w: i32, view: i32) -> f32 {
-    let cx = if shelf_w * 3 < view { screen_w / 2.0 } else { slot_cx };
-    cx.clamp(margin + fw / 2.0, (screen_w - margin - fw / 2.0).max(margin + fw / 2.0))
+/// its corner above an empty shelf. Kept `margin` clear of the screen's edges (`screen_w`: the room up to the TV, when one stands there),
+/// with `reach` more on the right: an open case's game stands out there (`App::ajar_reach`).
+fn show_centre(slot_cx: f32, fw: f32, reach: f32, screen_w: f32, margin: f32, shelf_w: i32, view: i32) -> f32 {
+    let cx = if shelf_w * 3 < view { (screen_w - reach) / 2.0 } else { slot_cx };
+    cx.clamp(margin + fw / 2.0, (screen_w - margin - fw / 2.0 - reach).max(margin + fw / 2.0))
+}
+
+/// Lived-in shelf: how much lower a case standing a little forward stands, at the shelf's scale.
+fn forward_drop(f: f32) -> i32 {
+    (5.0 * f).round() as i32
 }
 
 /// Which group of Home an entry belongs to: the shelf leaves a wider gap where one ends (Curator and Search, the recent
@@ -3123,6 +3359,13 @@ pub(crate) struct ShelfRow {
     len: i32,
     /// The tallest case on it, in template pixels.
     tallest: f32,
+    /// Each kind of case on it once: the shown front's scale fits the largest of them (`show_k`).
+    kinds: Vec<Medium>,
+    /// Lived-in shelf (`pocket_ui::lived_in`): each entry's pose, how high above the board its outline
+    /// starts (a case lying on the stack) and how high the outline is; empty when the row stands straight.
+    lived: Vec<(pocket_ui::lived_in::Plan, i32, i32)>,
+    /// The leaning and lying spines as painted last, with the colours' generation they were made in.
+    posed: Vec<Option<(u64, Rc<Pic>)>>,
 }
 
 impl App {
@@ -3310,7 +3553,6 @@ impl App {
         let up4 = |v: i32| (v + 3) / 4 * 4;
         let gap = (2.0 * f).round() as i32;
         let group_gap = up4((12.0 * f).round() as i32);
-        let mut spines = Vec::with_capacity(self.items.len());
         // A few games: the row stands a little in from the shelf's end, not squeezed against it.
         let natural: i32 = {
             let mut end = 0;
@@ -3326,18 +3568,31 @@ impl App {
         // Only a lone game: a few are read from the shelf's end (Curator's seven in tests/shelf_end.rs, two games in
         // tests/user_journeys.rs' sticker journey), one alone on a wide shelf is not a spine pressed against the wall.
         let lead = up4(if self.items.len() == 1 { shelf_lead(natural, view) } else { 0 });
-        let (mut x, mut tallest) = (lead, 0.0f32);
-        for (i, &item) in self.items.iter().enumerate() {
-            if i > 0 && shelf_group(item) != shelf_group(self.items[i - 1]) {
-                x += group_gap;
+        // Settings → Look → Lived-in shelf: the row's poses (`pocket_ui::lived_in`). A row that fits the shelf standing
+        // straight (its props after its end) never grows past it: no stack then, and if it still would, no wider spaces,
+        // and last no leaning either (0.5.2, mixed rows at 1280x720 had to scroll only for their stacks).
+        let mut plans = self.lived_in_plans(true);
+        let (mut spines, mut lived, mut tallest) = self.lay_row(f, lead, &plans);
+        let fits_straight = lead + natural <= view;
+        let past = |spines: &[(i32, i32, Medium)]| spines.iter().map(|&(x, w, _)| x + w).max().unwrap_or(0) > view;
+        if !plans.is_empty() && fits_straight && past(&spines) {
+            plans = self.lived_in_plans(false);
+            (spines, lived, tallest) = self.lay_row(f, lead, &plans);
+            if past(&spines) {
+                plans.iter_mut().for_each(|p| p.extra = 0);
+                (spines, lived, tallest) = self.lay_row(f, lead, &plans);
             }
-            let m = self.shelf_medium(item);
-            let w = (m.template_size().spine as f32 * f).round() as i32;
-            tallest = tallest.max(m.template_size().h as f32);
-            spines.push((x, w, m));
-            x += up4(w + gap);
+            if past(&spines) {
+                (spines, lived, tallest) = self.lay_row(f, lead, &[]);
+            }
         }
-        let spines_end = spines.last().map_or(0, |&(x, w, _)| x + w);
+        let spines_end = spines.iter().map(|&(x, w, _)| x + w).max().unwrap_or(0);
+        let mut kinds: Vec<Medium> = Vec::new();
+        for &(_, _, m) in &spines {
+            if !kinds.contains(&m) {
+                kinds.push(m);
+            }
+        }
         self.cabinet.shelf_row = Some(ShelfRow {
             items: self.items.clone(),
             f,
@@ -3347,11 +3602,290 @@ impl App {
             pics: vec![None; spines.len()],
             tiles: HashMap::new(),
             halves: HashMap::new(),
+            posed: vec![None; spines.len()],
             spines,
             len: spines_end,
             tallest,
+            kinds,
+            lived,
         });
         true
+    }
+
+    /// The row's spines laid out from `lead` on at scale `f` (`shelf_row`): each entry's left end, width across and case,
+    /// with its plan's pose where `plans` has one (Lived-in shelf; empty: every case standing straight), and the tallest
+    /// case in template pixels.
+    #[allow(clippy::type_complexity)]
+    fn lay_row(&self, f: f32, lead: i32, plans: &[pocket_ui::lived_in::Plan]) -> (Vec<(i32, i32, Medium)>, Vec<(pocket_ui::lived_in::Plan, i32, i32)>, f32) {
+        let up4 = |v: i32| (v + 3) / 4 * 4;
+        let gap = (2.0 * f).round() as i32;
+        let group_gap = up4((12.0 * f).round() as i32);
+        let mut spines = Vec::with_capacity(self.items.len());
+        let mut lived = Vec::with_capacity(if plans.is_empty() { 0 } else { self.items.len() });
+        // The stack being laid: where it starts, its right end so far and how high it is.
+        let mut stack: Option<(i32, i32, i32, i32)> = None;
+        // The case before, when it leans left: its left end, width, angle and outline's width (`Lean` dominoes).
+        let mut prev_lean: Option<(i32, i32, f32, i32)> = None;
+        let (mut x, mut tallest) = (lead, 0.0f32);
+        for (i, &item) in self.items.iter().enumerate() {
+            if i > 0 && shelf_group(item) != shelf_group(self.items[i - 1]) {
+                x += group_gap;
+            }
+            let m = self.shelf_medium(item);
+            let w = (m.template_size().spine as f32 * f).round() as i32;
+            let h = (m.template_size().h as f32 * f).round() as i32;
+            tallest = tallest.max(m.template_size().h as f32);
+            let Some(plan) = plans.get(i).copied() else {
+                spines.push((x, w, m));
+                x += up4(w + gap);
+                continue;
+            };
+            use pocket_ui::lived_in::{footprint, lean_height, Pose};
+            x += up4((plan.extra as f32 * f).round() as i32);
+            let was_lean = prev_lean.take();
+            match plan.pose {
+                Pose::Up => {
+                    spines.push((x, w, m));
+                    lived.push((plan, 0, h));
+                    x += up4(w + gap);
+                }
+                Pose::Lean(deg) => {
+                    let bw = footprint(plan.pose, w as f32, h as f32).ceil() as i32;
+                    // A domino: its top on the top corner of the one before (that one's left end and its width across),
+                    // its foot clear of that one's foot.
+                    if let Some((px, pw, pdeg, pbw)) = was_lean.filter(|_| deg < 0.0) {
+                        let top_corner = px + (pw as f32 * pdeg.to_radians().cos()).ceil() as i32 + 1;
+                        let foot_clear = px + pbw + gap - (h as f32 * deg.abs().to_radians().sin()).floor() as i32;
+                        x = top_corner.max(foot_clear);
+                    }
+                    spines.push((x, bw, m));
+                    lived.push((plan, 0, lean_height(deg, w as f32, h as f32).ceil() as i32));
+                    if deg < 0.0 {
+                        prev_lean = Some((x, w, deg.abs(), bw));
+                    }
+                    x += up4(bw + gap);
+                }
+                Pose::Flat { level, nudge } => {
+                    // Lying one on another, each a few pixels off the one under it; a new stack at level 0.
+                    // In a mixed row a shorter case lies centred on the longer one under it (`plan_sized`).
+                    if level == 0 {
+                        stack = Some((x + up4(2 * gap), 0, 0, h));
+                    }
+                    let (sx, end, below, base) = stack.unwrap_or((x, 0, 0, h));
+                    let at = sx + (base - h).max(0) / 2 + ((6 + nudge as i32) as f32 * f).round() as i32;
+                    spines.push((at, h, m));
+                    lived.push((plan, below, w));
+                    let end = end.max(at + h);
+                    stack = Some((sx, end, below + w, base));
+                    x = up4(end + 2 * gap);
+                }
+            }
+        }
+        (spines, lived, tallest)
+    }
+
+    /// Lived-in shelf: case `taken` is out of the stack at the row's end; the stack is painted again
+    /// without it, the ones that lay on it a case lower.
+    fn paint_stack_without(&mut self, c: &mut Canvas, row: &mut ShelfRow, taken: usize, lay: &ShelfLayout, scroll: i32) -> i32 {
+        use pocket_ui::lived_in::Pose;
+        let level = |j: usize| match row.lived.get(j).map(|l| l.0.pose) {
+            Some(Pose::Flat { level, .. }) => Some(level),
+            _ => None,
+        };
+        // Its stack: back to the case at level 0, on while the levels go up.
+        let mut first = taken;
+        while level(first).is_some_and(|l| l > 0) && first > 0 {
+            first -= 1;
+        }
+        let mut end = first + 1;
+        while level(end).is_some_and(|l| l > 0) {
+            end += 1;
+        }
+        let members: Vec<usize> = (first..end).collect();
+        // Each one cleared where it lies (they are upright rectangles), and the little shadow on its right (3 wide, 5 of
+        // blur: up to 8 past its edge, and a little above it), but never into the case after the stack.
+        let next = row.spines.get(end).map_or(lay.right, |s| lay.left + s.0 - scroll);
+        for &j in &members {
+            let (x, w, _) = row.spines[j];
+            let (bottom, outline) = (row.lived[j].1, row.lived[j].2);
+            let (l, r) = ((lay.left + x - scroll - 1).max(lay.left), (lay.left + x - scroll + w + 9).min(next).min(lay.right));
+            if r > l {
+                c.rect(l, lay.floor - bottom - outline - 4, r - l, outline + 5, pal().void);
+            }
+        }
+        let shade = self.cabinet.room.lit.case_shade();
+        let mut below = 0;
+        for j in members {
+            if j == taken {
+                continue;
+            }
+            let Some(pic) = self.posed_pic(row, j) else { continue };
+            let (x, w, _) = row.spines[j];
+            let outline = row.lived[j].2;
+            let (cx, cy) = (lay.left + x - scroll + w / 2, lay.floor - below - outline / 2);
+            self.blit_between(c, &pic, cx - pic.w / 2, cy - pic.h / 2, shade, (0, lay.floor), lay.left, lay.right);
+            below += outline;
+        }
+        below
+    }
+
+    /// Lived-in shelf: the feet of the cases standing a little forward, over the board's front edge,
+    /// with a little shadow on the board (the rest of them is in the row's tiles). The selected one is out of the row.
+    fn paint_lived_feet(&mut self, c: &mut Canvas, row: &mut ShelfRow, lay: &ShelfLayout, scroll: i32, sel: usize) {
+        let drop = forward_drop(row.f);
+        let shade = self.cabinet.room.lit.case_shade();
+        for i in 0..row.lived.len() {
+            if !row.lived[i].0.forward || i == sel {
+                continue;
+            }
+            let (x0, w, _) = row.spines[i];
+            let x = lay.left + x0 - scroll;
+            // Where the row fades into the page at an end that goes on (`fade_cols`, 48 wide) the foot is left out too.
+            let (fade_l, fade_r) = (scroll > 0, scroll < row.len - (lay.right - lay.left));
+            if x + w <= lay.left || x >= lay.right || (fade_l && x < lay.left + 48) || (fade_r && x + w > lay.right - 48) {
+                continue;
+            }
+            let pic = self.row_pic(row, i, row.f);
+            if pal().void != 0 {
+                art::soft_shadow(c, x + 1, lay.floor + drop - 1, pic.w, 3, 4, 0.45, (lay.floor, c.h));
+            }
+            self.blit_between(c, &pic, x, lay.floor - pic.h + drop, shade, (lay.floor, lay.floor + drop), lay.left, lay.right);
+        }
+    }
+
+    /// Lived-in shelf: leaning case `i` taken out of the row: cleared along its own outline, row by row
+    /// (a domino partner keeps its corner), and a leaning neighbour painted again over the edge where they touched.
+    fn erase_leaning(&mut self, c: &mut Canvas, row: &mut ShelfRow, i: usize, lay: &ShelfLayout, scroll: i32) {
+        let at = |row: &ShelfRow, j: usize, pic: &Pic| {
+            let (x, w, _) = row.spines[j];
+            let (bottom, outline) = (row.lived[j].1, row.lived[j].2);
+            (lay.left + x - scroll + w / 2 - pic.w / 2, lay.floor - bottom - outline / 2 - pic.h / 2)
+        };
+        let Some(pic) = self.posed_pic(row, i) else { return };
+        let (px, py) = at(row, i, &pic);
+        for yy in 0..pic.h {
+            let line = &pic.px[(yy * pic.w) as usize..((yy + 1) * pic.w) as usize];
+            let (Some(a), Some(b)) = (line.iter().position(|p| p >> 24 != 0), line.iter().rposition(|p| p >> 24 != 0)) else { continue };
+            let (l, r) = ((px + a as i32).max(lay.left), (px + b as i32 + 1).min(lay.right));
+            if r > l && py + yy < lay.floor {
+                c.rect(l, py + yy, r - l, 1, pal().void);
+            }
+        }
+        let shade = self.cabinet.room.lit.case_shade();
+        for j in [i.wrapping_sub(1), i + 1] {
+            if !row.lived.get(j).is_some_and(|l| matches!(l.0.pose, pocket_ui::lived_in::Pose::Lean(_))) {
+                continue;
+            }
+            if let Some(p) = self.posed_pic(row, j) {
+                let (x, y) = at(row, j, &p);
+                self.blit_between(c, &p, x, y, shade, (0, lay.floor), lay.left, lay.right);
+            }
+        }
+    }
+
+    /// Settings → Look → Lived-in shelf: the row's leaning and lying spines made ahead (`posed_pic`), in idle moments
+    /// after the row opened, so scrolling along it never turns a spine in a frame (the prototype's first frame on a tile of
+    /// them: 5-6 ms on a desktop core, estimated 40-55 ms on the Brick, a stutter of 2-3 frames). From
+    /// `LIVED_WARM_AFTER` after the last button, the nearest to the selection first, for at most `LIVED_WARM_BUDGET` of
+    /// the UI thread at a time; when to come back while some are left.
+    pub(crate) fn lived_warm_tick(&mut self, now: Instant) -> Option<Instant> {
+        let idle = self.lived_in
+            && self.theme == pocket_ui::settings::Theme::Shelf
+            && self.window.is_some()
+            && self.card.is_none()
+            && self.running.is_none()
+            && self.menu.is_none()
+            && self.switcher.is_none()
+            && self.settings_page.is_none();
+        if !idle || self.lived_left() == 0 {
+            return None;
+        }
+        let due = self.last_input + LIVED_WARM_AFTER;
+        if now < due {
+            return Some(due);
+        }
+        (self.lived_warm(LIVED_WARM_BUDGET) > 0).then(|| now + Duration::from_millis(16))
+    }
+
+    /// The Shelf look's row laid out again at the next frame (Lived-in shelf switched: with or without its poses).
+    pub(crate) fn forget_shelf_row(&mut self) {
+        self.cabinet.shelf_row = None;
+    }
+
+    /// How many of the shelf row's posed spines are still to make (0 without a row, or one of other entries).
+    pub(crate) fn lived_left(&self) -> usize {
+        let gen = self.cabinet.colors_gen;
+        let Some(row) = self.cabinet.shelf_row.as_ref().filter(|r| r.items == self.items) else { return 0 };
+        (0..row.lived.len()).filter(|&i| row.lived[i].0.pose != pocket_ui::lived_in::Pose::Up && !matches!(&row.posed[i], Some((g, _)) if *g == gen)).count()
+    }
+
+    /// Makes the row's posed spines not made yet, nearest to the selection first, until `budget` of wall time is
+    /// used (at least one); how many are left.
+    pub(crate) fn lived_warm(&mut self, budget: Duration) -> usize {
+        let gen = self.cabinet.colors_gen;
+        let Some(mut row) = self.cabinet.shelf_row.take() else { return 0 };
+        if row.items != self.items {
+            self.cabinet.shelf_row = Some(row);
+            return 0;
+        }
+        let mut todo: Vec<usize> = (0..row.lived.len())
+            .filter(|&i| row.lived[i].0.pose != pocket_ui::lived_in::Pose::Up && !matches!(&row.posed[i], Some((g, _)) if *g == gen))
+            .collect();
+        todo.sort_by_key(|&i| i.abs_diff(self.sel));
+        let t0 = Instant::now();
+        let total = todo.len();
+        let mut left = total;
+        for i in todo {
+            if left < total && t0.elapsed() >= budget {
+                break;
+            }
+            self.posed_pic(&mut row, i);
+            left -= 1;
+        }
+        self.cabinet.shelf_row = Some(row);
+        left
+    }
+
+    /// Settings → Look → Lived-in shelf: the row's plan (`pocket_ui::lived_in::plan_sized`) from its games' ROM names,
+    /// with or without stacks; none (the row stands straight) when it is off or the row is not only games (Home).
+    fn lived_in_plans(&self, stacks: bool) -> Vec<pocket_ui::lived_in::Plan> {
+        if !self.lived_in || !self.items.iter().all(|i| matches!(i, Item::Game(..))) {
+            return Vec::new();
+        }
+        let seeds: Vec<u64> = self
+            .items
+            .iter()
+            .map(|&i| pocket_ui::lived_in::seed(&self.case_info(i).rom.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default()))
+            .collect();
+        let fixed: Vec<bool> = self.items.iter().map(|&i| self.is_frozen_item(i)).collect();
+        // A mixed row (Favourites, a smart shelf): the cases' lengths, so a stack has the small ones on top.
+        let sizes: Vec<f32> = self.items.iter().map(|&i| self.shelf_medium(i).template_size().h as f32).collect();
+        pocket_ui::lived_in::plan_sized(&seeds, &fixed, &sizes, stacks)
+    }
+
+    /// Lived-in shelf: entry `i`'s spine leaning or lying as its plan says (made once and kept); None standing up.
+    fn posed_pic(&mut self, row: &mut ShelfRow, i: usize) -> Option<Rc<Pic>> {
+        use pocket_ui::lived_in::{lying, turned, Pose};
+        let pose = row.lived.get(i)?.0.pose;
+        if pose == Pose::Up {
+            return None;
+        }
+        let gen = self.cabinet.colors_gen;
+        if let Some((g, pic)) = &row.posed[i] {
+            if *g == gen {
+                return Some(pic.clone());
+            }
+        }
+        let t0 = Instant::now();
+        let up = self.row_pic(row, i, row.f);
+        let pic = Rc::new(match pose {
+            Pose::Lean(deg) => turned(&up, deg),
+            _ => lying(&up, true),
+        });
+        self.cabinet.made("posed spine", t0);
+        LIVED_POSED.set(LIVED_POSED.get() + 1);
+        row.posed[i] = Some((gen, pic.clone()));
+        Some(pic)
     }
 
     /// The shelf board, as wide as the shelf (walnut on the dark page, oak on the light one).
@@ -3393,7 +3927,12 @@ impl App {
         // The spines' scale is the screen's; the room above them follows the row's tallest case.
         let f = shelf_layout(c.w, c.h, TALLEST).f;
         let now = self.cabinet.shelf_clock.unwrap_or_else(pocket_ui::frame_clock::now);
+        let t0 = thread_cpu();
         let new_row = self.shelf_row(f, c.w - 2 * MARGIN);
+        if new_row {
+            let (d, n) = LIVED_ROW.get();
+            LIVED_ROW.set((d + thread_cpu().saturating_sub(t0), n + 1));
+        }
         let Some(mut row) = self.cabinet.shelf_row.take() else { return };
         let lay = shelf_layout(c.w, c.h, row.tallest);
         let sel = self.sel.min(n - 1);
@@ -3513,6 +4052,12 @@ impl App {
             }
             self.cabinet.strip_px = px;
         }
+        if !row.lived.is_empty() {
+            let t0 = thread_cpu();
+            self.paint_lived_feet(c, &mut row, &lay, scroll, sel);
+            let (d, n) = LIVED_FEET.get();
+            LIVED_FEET.set((d + thread_cpu().saturating_sub(t0), n + 1));
+        }
         for i in 0..n {
             let (x0, w, m) = row.spines[i];
             let x = lay.left + x0 - scroll;
@@ -3522,7 +4067,9 @@ impl App {
             if x >= lay.right {
                 break;
             }
-            let h = (m.template_size().h as f32 * lay.f).round() as i32;
+            let mut h = (m.template_size().h as f32 * lay.f).round() as i32;
+            // Lived-in shelf: a leaning or lying case (its outline), and whether it lies on the stack.
+            let posed = row.lived.get(i).filter(|l| l.0.pose != pocket_ui::lived_in::Pose::Up).map(|&(p, bottom, outline)| (p.pose, bottom, outline));
             let mut open = self.openness(i);
             if playful && i == sel {
                 // Playful animations: it springs up, a touch past and back.
@@ -3533,7 +4080,34 @@ impl App {
                 // Out of its place in the tile, up out of the row (leaning with it: the hole is where its picture was).
                 let pic = self.row_pic(&mut row, i, lay.f);
                 let (hx, hw) = (x.max(lay.left), (x + w).min(lay.right) - x.max(lay.left));
-                if lean_px == 0.0 {
+                let mut from_stack = false;
+                if let Some((pose, bottom, outline)) = posed {
+                    // It comes out standing straight, as any other; where it leaned or lay is cleared, and a case taken
+                    // from the stack lets the ones on it down.
+                    // Taken from the stack it stays lying (its title still reads across) and rises over the rest of it.
+                    let flat = if matches!(pose, pocket_ui::lived_in::Pose::Flat { .. }) {
+                        let rest = self.paint_stack_without(c, &mut row, i, &lay, scroll);
+                        self.posed_pic(&mut row, i).map(|p| (p, rest))
+                    } else {
+                        None
+                    };
+                    match flat {
+                        Some((p, rest)) => {
+                            self.blit_between(c, &p, x + (w - p.w) / 2, lay.floor - rest - p.h - rise, 256, (0, lay.floor), lay.left, lay.right);
+                            // Its little shadow falls on what is left of the stack, as wide as it lies (not on the
+                            // board in an upright spine's width: that put a dark smudge on the bottom case).
+                            if shadows {
+                                art::soft_shadow(c, x + (w - p.w) / 2 + 2, lay.floor - rest - 1, p.w - 4, 3, 3, 0.3 * rise as f32 / lay.lift as f32, (lay.floor - rest - 2, lay.floor));
+                            }
+                            from_stack = true;
+                        }
+                        None => {
+                            let _ = (bottom, outline);
+                            self.erase_leaning(c, &mut row, i, &lay, scroll);
+                            self.blit_between(c, &pic, x + (w - pic.w) / 2, lay.floor - pic.h - rise, 256, (0, lay.floor), lay.left, lay.right);
+                        }
+                    }
+                } else if lean_px == 0.0 {
                     c.rect(hx, lay.floor - pic.h, hw, pic.h, pal().void);
                 } else {
                     for y in (lay.floor - pic.h).max(strip)..lay.floor {
@@ -3542,8 +4116,10 @@ impl App {
                         c.rect(l, y, r - l, 1, pal().void);
                     }
                 }
-                self.blit_between(c, &pic, x, lay.floor - pic.h - rise, 256, (0, lay.floor), lay.left, lay.right);
-                if shadows {
+                if posed.is_none() {
+                    self.blit_between(c, &pic, x, lay.floor - pic.h - rise, 256, (0, lay.floor), lay.left, lay.right);
+                }
+                if shadows && !from_stack {
                     art::soft_shadow(c, x, lay.floor - 4, pic.w, 6, 6, 0.4 * rise as f32 / lay.lift as f32, (0, c.h));
                 }
                 // A strip of light on the board where it stood, in the label's paper: the selection reads even
@@ -3556,7 +4132,11 @@ impl App {
                 }
             }
             let (hx, hw) = (x.max(lay.left), (x + w).min(lay.right) - x.max(lay.left));
-            self.hits.row(Area::new(hx, lay.floor - h - rise, hw, h + rise), i);
+            let mut foot = 0;
+            if let Some((_, bottom, outline)) = posed {
+                (h, foot) = (outline, bottom);
+            }
+            self.hits.row(Area::new(hx, lay.floor - foot - h - rise, hw, h + rise), i);
         }
         // Where the row goes on past an end, it fades into the page.
         if scroll > 0 {
@@ -3566,11 +4146,10 @@ impl App {
             fade_cols(c, lay.right - 48, lay.right, lay.floor - (TALLEST * lay.f) as i32 - lay.lift, lay.floor);
         }
         let pitch = (row.len - row.lead) as f32 / n as f32;
-        self.cabinet.shelf_row = Some(row);
-
         // The selected case, large, turned to its front.
+        let k = show_k(&lay, sm, &row.kinds);
+        self.cabinet.shelf_row = Some(row);
         let item = self.items[sel];
-        let k = show_k(&lay, sm);
         let turned = pocket_ui::motion::progress(pocket_ui::motion::Kind::Move, self.moved_at, now, SHELF_TURN);
         // The first frame after a move, while the case turns: its spine is what there is to see, its front can wait a
         // frame (with Motion off, and on a screen's first frame, it is there at once).
@@ -3715,15 +4294,23 @@ impl App {
             // Playing, paused, completed or dropped: its mark in front of the line.
             let status = self.item_status(item);
             let indent = if status != pocket_ui::library_meta::Status::NotStarted { 40 } else { 0 };
-            for (k, l) in self.text.wrap_at_most(Face::Body, 28, &meta, w - indent, 2).iter().enumerate() {
+            // As many of its two lines as the room has: the last one shown ends with "…" (a second line used to be left
+            // off without a mark, Large text in German on Continue, 17.11.2026).
+            let fit = meta_lines(y, bottom, line(28, 10));
+            if fit == 0 {
+                return;
+            }
+            let (lines, translated) = meta_wrap(&mut self.text, &meta, w - indent, fit);
+            for (k, l) in lines.iter().enumerate() {
                 y += line(28, 10);
-                if y > bottom {
-                    return;
-                }
                 if k == 0 && indent > 0 {
                     pocket_ui::game_card::paint_mark(c, x + 12, y - px(28) as i32 * 7 / 20, status, pal().dust);
                 }
+                // Lines split at the comma are in the interface's language already: painted as they are.
+                let translating = self.text.translating();
+                self.text.set_translate(translating && !translated);
                 self.text.draw(c, Face::Body, 28, x + indent, y, pal().dust, l);
+                self.text.set_translate(translating);
             }
         }
         if let Some(panel) = panel.as_mut() {
@@ -3775,9 +4362,32 @@ impl App {
                 if x + w + 8 <= x0 || x >= x0 + TILE_W {
                     continue;
                 }
+                let mut shade = self.cabinet.room.lit.case_shade();
+                let mut drop = 0;
+                // Lived-in shelf: leaning or lying (`posed_pic`), or a little further back or forward in the
+                // shelf (forward: lower, its foot over the board's edge, painted each frame by `paint_lived_feet`).
+                if let Some(&(plan, bottom, outline)) = row.lived.get(i) {
+                    if plan.forward {
+                        drop = forward_drop(row.f);
+                    }
+                    if plan.back {
+                        shade = shade * 7 / 8;
+                    }
+                    if let Some(pic) = self.posed_pic(row, i) {
+                        // Centred on its outline (`lived_in::turned`), the outline's foot on the board or on the case under it.
+                        let (cx, cy) = (x - x0 + w / 2, room - bottom - outline / 2);
+                        let (px, py) = (cx - pic.w / 2, cy - pic.h / 2);
+                        art::blit(&mut c, &pic, px, py, shade, (0, room));
+                        // Lying, the little shadow on its right; leaning, none (its right edge is not upright).
+                        if page != 0 && matches!(plan.pose, pocket_ui::lived_in::Pose::Flat { .. }) {
+                            art::soft_shadow(&mut c, x - x0 + w, room - bottom - outline + 2, 3, outline - 2, 5, 0.3, (0, room));
+                        }
+                        continue;
+                    }
+                }
                 let pic = self.row_pic(row, i, row.f);
-                let (x, y) = (x - x0, room - pic.h);
-                art::blit(&mut c, &pic, x, y, self.cabinet.room.lit.case_shade(), (0, room));
+                let (x, y) = (x - x0, room - pic.h + drop);
+                art::blit(&mut c, &pic, x, y, shade, (0, room));
                 // A little shadow on the right of each case; on the black page there is nothing for it to darken.
                 if page != 0 {
                     art::soft_shadow(&mut c, x + pic.w, y + 4, 3, pic.h - 4, 5, 0.3, (0, room));
@@ -3922,6 +4532,28 @@ fn fade_cols(c: &mut Canvas, x0: i32, x1: i32, y0: i32, y1: i32) {
 mod shelf_tests {
     use super::*;
 
+    /// The meta line that takes two lines breaks at its comma where both parts fit: the system, then why the game is there
+    /// whole, never one word of it alone on the second line (640x480 German Large, Rediscover, 18.11.2026). At every
+    /// width: the words in order, nothing cut, and the second line no lone word while the reason fits a line of its own.
+    #[test]
+    fn a_shelf_meta_line_breaks_at_its_comma_not_before_a_lone_word() {
+        let mut text = Text::new();
+        text.set_translate(false);
+        let meta = "Game Boy Advance, heute vor einem Jahr gespielt";
+        let why = "heute vor einem Jahr gespielt";
+        for width in (150..1200).step_by(7) {
+            let (lines, _) = meta_wrap(&mut text, meta, width, 2);
+            if lines.len() == 2 && !lines.iter().any(|l| l.ends_with('…')) {
+                assert_eq!(lines.join(" "), meta, "width {width}: {lines:?}");
+                if text.width_plain(Face::Body, 28, why) <= width && text.width_plain(Face::Body, 28, "Game Boy Advance,") <= width {
+                    assert_eq!(lines[1], why, "width {width}: the reason whole on its own line: {lines:?}");
+                }
+            }
+            let (one, _) = meta_wrap(&mut text, meta, width, 1);
+            assert!(one.len() <= 1, "width {width}: one line asked, {one:?}");
+        }
+    }
+
     /// On every supported size the showcase has its room without the selected shelf sinking behind the top board (its
     /// spines cut at the top lose the start of their titles), for the tallest shelf of every kind of case, and the room is
     /// at least what the TV and the case need (`SHOW_MIN_SHARE`).
@@ -4031,7 +4663,7 @@ mod shelf_tests {
             );
             assert!(lay.show.1 >= 62 && lay.show.3 > 0, "{w}x{h}: under the top line");
             for m in Medium::ALL {
-                let k = show_k(&lay, m);
+                let k = show_k(&lay, m, &Medium::ALL);
                 let (fw, fh) = media::front_size(m, k);
                 assert!(fh <= lay.show.3 && fw <= lay.show.2 / 2, "{w}x{h} {m:?}: front {fw}x{fh} in {:?}", lay.show);
                 assert!(
@@ -4049,14 +4681,74 @@ mod shelf_tests {
         assert_eq!(big.f, 3.0, "the Mini V2: three screen pixels a template pixel");
         // The SNES box (0.1.4) lies wide when shown (on the shelf it stands on its short side): its real size, wider
         // than a GBA box's.
-        let (snes_w, _) = media::front_size(Medium::Snes, show_k(&big, Medium::Snes));
-        let (gba_w, gba_h) = media::front_size(Medium::Gba, show_k(&big, Medium::Gba));
+        let (snes_w, _) = media::front_size(Medium::Snes, show_k(&big, Medium::Snes, &Medium::ALL));
+        let (gba_w, gba_h) = media::front_size(Medium::Gba, show_k(&big, Medium::Gba, &Medium::ALL));
         assert!(snes_w as f32 >= big.show.2 as f32 * 0.3, "a SNES box is shown large on the Mini V2: {snes_w} of {}", big.show.2);
         // One scale for all (the owner, 2026-10-29): a SNES box half as wide again as a GBA box (184 to 118 mm), a PS2
         // case taller than both.
         assert!(snes_w as f32 >= gba_w as f32 * 1.4, "SNES {snes_w}, GBA {gba_w}");
-        let (_, ps2_h) = media::front_size(Medium::Ps2, show_k(&big, Medium::Ps2));
+        let (_, ps2_h) = media::front_size(Medium::Ps2, show_k(&big, Medium::Ps2, &Medium::ALL));
         assert!(ps2_h as f32 >= gba_h as f32 * 1.5, "PS2 {ps2_h}, GBA {gba_h}");
+    }
+
+    /// The shown case 1.4 times its old size (a player's wish, r/SBCGaming 17.11.2026), at every panel pocket-ui runs on
+    /// (the H700 panels at their layout size, `scaled_layout`) and on every kind of row: a system's page of one kind of
+    /// case and Home's mix. Where it stands (`paint_shelf`: at the room's left, two thirds down its free height) it never
+    /// reaches the top line (status bar, system name), the lifted spine, the shelf or the hints, its words beside it
+    /// keep a quarter of the room even with an open case's game out at its side, it is never smaller than before, and
+    /// on the 4:3 panels a row of cartridge boxes gets the whole 1.4.
+    #[test]
+    fn the_shown_case_grows_by_two_fifths_where_the_room_lets_it_and_never_runs_into_anything() {
+        let home = [Medium::Keep, Medium::Gba, Medium::Snes, Medium::Ps1, Medium::Ps2, Medium::Ds];
+        let mut rows: Vec<Vec<Medium>> = Medium::ALL.iter().map(|&m| vec![m]).collect();
+        rows.push(home.to_vec());
+        rows.push(Medium::ALL.to_vec());
+        // 640x480 and 720x480, 720x720, Brick, Mini V1, Mini V2, a 720-line TV, 1280x800, Pocket 5 / Flip 2.
+        for (w, h) in [(1280, 960), (1440, 960), (1440, 1440), (1024, 768), (1240, 1080), (1280, 720), (1280, 800), (1920, 1080), (1920, 1152)] {
+            for row in &rows {
+                let tallest = row.iter().map(|m| m.template_size().h as f32).fold(0.0, f32::max);
+                let lay = shelf_layout(w, h, tallest);
+                let (sx, sy, sw, sh) = lay.show;
+                for &m in row {
+                    let k = show_k(&lay, m, row);
+                    let (fw, fh) = media::front_size(m, k);
+                    let (bw, bh) = media::front_size(m, show_k_before(&lay, m));
+                    let at = format!("{w}x{h} {m:?} in {row:?}: front {fw}x{fh} (was {bw}x{bh}) in {:?}", lay.show);
+                    assert!(fw >= bw && fh >= bh, "{at}: smaller than before");
+                    assert!(fw as f32 <= bw as f32 * SHOW_BIGGER + 1.0, "{at}: more than 1.4 times");
+                    assert!(fw == bw || fw as f32 >= bw as f32 * 1.07, "{at}: a step too small to be worth the words' room");
+                    let fy = sy + (sh - fh) * 2 / 3;
+                    assert!(fy >= sy && sy >= 62, "{at}: into the top line");
+                    let spine_top = lay.floor - (tallest * lay.f).round() as i32 - lay.lift;
+                    assert!(fy + fh <= spine_top, "{at}: into the lifted spine");
+                    assert!(lay.floor + lay.board_h <= pocket_ui::kit::hint_bar_top(h), "{at}: shelf into the hints");
+                    let words = sx + sw - (sx + fw + 48 + (fw as f32 * AJAR_FRONT) as i32);
+                    assert!(words * 4 >= sw, "{at}: the words beside an open case keep {words} px");
+                }
+                let same: Vec<f32> = row.iter().map(|&m| show_k(&lay, m, row)).collect();
+                if row.iter().all(|m| show_k_before(&lay, *m) == show_k_before(&lay, row[0])) {
+                    assert!(same.iter().all(|k| *k == same[0]), "{w}x{h} {row:?}: one scale for the row, {same:?}");
+                }
+            }
+        }
+        // The 4:3 panels (Brick, 640x480 and the Mini V1): a system's page of cartridge boxes, the full 1.4.
+        for (w, h) in [(1024, 768), (1280, 960)] {
+            for m in [Medium::Snes, Medium::N64, Medium::Gba, Medium::Gb, Medium::Ps1] {
+                let tallest = m.template_size().h as f32;
+                let lay = shelf_layout(w, h, tallest);
+                let (fw, _) = media::front_size(m, show_k(&lay, m, &[m]));
+                let (bw, _) = media::front_size(m, show_k_before(&lay, m));
+                assert!(fw as f32 >= bw as f32 * 1.36, "{w}x{h} {m:?}: {fw} against {bw} before");
+            }
+        }
+    }
+
+    #[test]
+    fn the_meta_line_shows_only_the_lines_that_fit_so_its_last_ends_with_an_ellipsis() {
+        assert_eq!(meta_lines(100, 200, 40), 2);
+        assert_eq!(meta_lines(100, 179, 40), 1, "room for one: one line, with its \"…\", not a second one left off");
+        assert_eq!(meta_lines(100, 139, 40), 0);
+        assert_eq!(meta_lines(300, 200, 40), 0);
     }
 
     #[test]
@@ -4085,10 +4777,23 @@ mod shelf_tests {
     #[test]
     fn a_lone_case_is_shown_in_the_middle_of_the_cabinet_not_in_its_corner() {
         // A slot at the far left of a 608 px cabinet on a 640 px screen: a one-game shelf (60 px) shows it centred...
-        assert_eq!(show_centre(70.0, 100.0, 640.0, 40.0, 60, 608), 320.0);
+        assert_eq!(show_centre(70.0, 100.0, 0.0, 640.0, 40.0, 60, 608), 320.0);
         // ...a full shelf keeps the case over its own slot, clamped to the screen.
-        assert_eq!(show_centre(70.0, 100.0, 640.0, 40.0, 900, 608), 90.0);
-        assert_eq!(show_centre(300.0, 100.0, 640.0, 40.0, 900, 608), 300.0);
+        assert_eq!(show_centre(70.0, 100.0, 0.0, 640.0, 40.0, 900, 608), 90.0);
+        assert_eq!(show_centre(300.0, 100.0, 0.0, 640.0, 40.0, 900, 608), 300.0);
+    }
+
+    #[test]
+    fn an_open_case_s_game_keeps_clear_of_the_tv_from_every_slot() {
+        // The room up to the TV ends at 760; the case is 200 wide and its game stands 60 out at its right side.
+        let (fw, reach, right, margin) = (200.0, 60.0, 760.0, 40.0);
+        for slot in (0..=1024).step_by(8) {
+            let cx = show_centre(slot as f32, fw, reach, right, margin, 900, 960);
+            assert!(cx + fw / 2.0 + reach <= right - margin, "slot {slot}: the game reaches {} past {}", cx + fw / 2.0 + reach, right - margin);
+            assert!(cx - fw / 2.0 >= margin, "slot {slot}: the case left the screen");
+        }
+        // A lone case in the middle: the case and its game together.
+        assert_eq!(show_centre(70.0, 100.0, 60.0, 640.0, 40.0, 60, 608), 290.0);
     }
 
     #[test]

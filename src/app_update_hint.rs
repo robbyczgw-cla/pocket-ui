@@ -6,7 +6,7 @@
 //! asks again. During a game nothing happens either, and the notice waits until the shelf is free, so it is never over
 
 use std::path::{Path, PathBuf};
-use std::time::{Duration, Instant};
+use std::time::{Duration, Instant, SystemTime};
 
 use pocket_ui::gfx::Canvas;
 use pocket_ui::notice::Notice;
@@ -54,8 +54,8 @@ impl HintPhase {
 }
 
 /// Android's handheld view (android/handheld): the APK looks at Android's own signed list through the app's Wi-Fi-only
-/// reader and hands the offered APK to Android's installer; there is no Settings › System › Updates there (14.11.).
-const ANDROID_APK: bool = cfg!(all(target_os = "android", feature = "handheld"));
+/// reader and hands the offered APK to Android's installer, from the notice (A) and from Settings › System › Updates.
+pub(crate) const ANDROID_APK: bool = cfg!(all(target_os = "android", feature = "handheld"));
 /// How often the card reads Android's installer while it works.
 const INSTALL_POLL: Duration = Duration::from_millis(400);
 
@@ -72,6 +72,10 @@ pub(crate) struct UpdateHintUi {
     failures: u32,
     /// Android's installer was started from the card (A): its progress is read and shown until it ends.
     installing: bool,
+    /// The version of the notice that is up: written down as said only when the player closes it (`update_hint_closed`).
+    shown: Option<String>,
+    /// When the last look came back, by the wall clock (it counts the time a handheld sleeps; `Instant` does not).
+    looked_at: Option<SystemTime>,
 }
 
 fn ineligible(state: &State) -> StopReason {
@@ -89,11 +93,11 @@ impl UpdateHintUi {
         let found = std::env::var_os("POCKETUI_MOCK").and_then(|_| std::env::var("POCKETUI_UPDATE_HINT").ok()).filter(|v| !v.is_empty());
         if let Some(version) = found.filter(|_| !state.off) {
             let pending = update::newer(&version, update::shown_version()).then_some(version).filter(|v| state.said.as_deref() != Some(v));
-            return UpdateHintUi { phase: HintPhase::Waiting { at: now, pending }, state, failures: 0, installing: false };
+            return UpdateHintUi { phase: HintPhase::Waiting { at: now, pending }, state, failures: 0, installing: false, shown: None, looked_at: None };
         }
         let phase = if silent { HintPhase::Stopped { reason: ineligible(&state), pending: None } }
-            else { HintPhase::Waiting { at: now + update_hint::FIRST_LOOK, pending: None } };
-        UpdateHintUi { phase, state, failures: 0, installing: false }
+            else { HintPhase::Waiting { at: now + update_hint::first_look(ANDROID_APK), pending: None } };
+        UpdateHintUi { phase, state, failures: 0, installing: false, shown: None, looked_at: None }
     }
 }
 
@@ -174,9 +178,13 @@ impl App {
             kids: self.kids_live(),
             busy: self.update_hint.phase.checking() || self.updates.is_busy(),
             wifi: hint_wifi(),
-            idle: now.duration_since(self.last_input) >= update_hint::IDLE_FOR,
+            // Android's look is a read on a thread of Android's: buttons pressed meanwhile don't put it off (17.11.2026).
+            idle: ANDROID_APK || now.duration_since(self.last_input) >= update_hint::IDLE_FOR,
             shelf_free: self.shelf_notice_free(),
             pending: self.update_hint.phase.pending().is_some(),
+            // Android's view behind Home or a dark screen has no window (`android_suspended`); on Linux the shelf is always in
+            // front (the journeys' driver paints without a window).
+            on_screen: !ANDROID_APK || self.window.is_some(),
         };
         match update_hint::step(facts) {
             update_hint::Step::Stop => {
@@ -211,6 +219,7 @@ impl App {
 
     /// The list came back: remember it for the Updates page, and find out whether a version is new to the player.
     pub(crate) fn update_hint_looked(&mut self, result: Result<Manifest, String>, now: Instant) {
+        self.update_hint.looked_at = Some(SystemTime::now());
         // Switched Off while the request was out: its answer is not used, and nothing more is asked.
         if self.update_hint.state.off {
             let pending = self.update_hint.phase.pending().map(String::from);
@@ -238,13 +247,39 @@ impl App {
         }
     }
 
-    /// The notice itself, and the memory that it was said (so a restart, or B, does not bring it back).
+    /// The notice itself. It counts as said once the player closes it (`update_hint_closed`): one Android ended with the
+    /// process before anyone saw it is said again at the next start (17.11.2026).
     fn say_update_ready(&mut self, version: &str, now: Instant) {
         self.notice = Some(Notice::update_ready(version));
-        self.update_hint.state.said = Some(version.to_string());
-        self.update_hint.state.save(&state_dir(&self.data_dir));
+        self.update_hint.shown = Some(version.to_string());
         self.update_hint.phase = HintPhase::Waiting { at: now + update_hint::EVERY, pending: None };
         self.request_redraw();
+    }
+
+    /// The player closed the "is ready" notice (A, B or a tap): the memory that it was said, so a restart does not bring it
+    /// back. The next version is a new notice.
+    pub(crate) fn update_hint_closed(&mut self) {
+        if let Some(version) = self.update_hint.shown.take() {
+            self.update_hint.state.said = Some(version);
+            self.update_hint.state.save(&state_dir(&self.data_dir));
+        }
+    }
+
+    /// Android's handheld view back in front (`android_resumed`): a look soon when the last one is an hour old by the wall
+    /// clock or there was none yet; a version found while the view was away is said now (the tick runs next).
+    #[cfg_attr(not(all(target_os = "android", feature = "handheld")), allow(dead_code))]
+    pub(crate) fn update_hint_front(&mut self, now: Instant) {
+        let since = self.update_hint.looked_at.and_then(|t| SystemTime::now().duration_since(t).ok());
+        if !update_hint::look_on_front(self.update_hint.looked_at.is_some(), since) {
+            return;
+        }
+        let soon = now + update_hint::ANDROID_FIRST_LOOK;
+        if let HintPhase::Waiting { at, .. } = &mut self.update_hint.phase {
+            if *at > soon {
+                *at = soon;
+                self.update_hint.failures = 0;
+            }
+        }
     }
 
     /// A read-only explanation of the existing schedule; never schedules, saves or consumes a notice.
@@ -314,7 +349,7 @@ impl App {
     }
 
     /// The signed list this build reads: Android's own (the Mobile view's) in the handheld view, else the Updates page's.
-    fn hint_url(&self) -> String {
+    pub(crate) fn hint_url(&self) -> String {
         #[cfg(all(target_os = "android", feature = "handheld"))]
         return super::app_android::update_channel();
         #[cfg(not(all(target_os = "android", feature = "handheld")))]
@@ -323,7 +358,7 @@ impl App {
 
     /// Android: the APK the list offers goes to `UpdateInstaller.start` (it downloads over Wi-Fi only, checks size, SHA-256,
     /// version and signing key, and Android asks before it installs). The card then shows its progress.
-    fn android_install(&mut self, now: Instant) {
+    pub(crate) fn android_install(&mut self, now: Instant) {
         let url = self.hint_url();
         let Some(app) = self.updates.manifest.as_ref().and_then(|m| m.app.as_ref()) else {
             self.notice = Some(Notice::new("Couldn't reach the update server. Check Wi-Fi."));
@@ -382,8 +417,8 @@ fn hint_wifi() -> bool {
     pocket_ui::status_corner::status().wifi
 }
 
-/// The signed list, on the look's thread.
-fn fetch(url: &str) -> Result<Manifest, String> {
+/// The signed list, on the look's thread (and the Updates page's "Check again").
+pub(crate) fn fetch(url: &str) -> Result<Manifest, String> {
     #[cfg(all(target_os = "android", feature = "handheld"))]
     return pocket_ui::update_channel::android_fetch(url);
     #[cfg(not(all(target_os = "android", feature = "handheld")))]

@@ -25,16 +25,19 @@ Start at [user/index.md](user/index.md).
 | [user/how-to.md](user/how-to.md) | Short steps: update over Wi-Fi, a game that won't start, pair a controller, back up saves, sync with a second device |
 | [user/game-check.md](user/game-check.md) | Settings → Games → Game check: will your games start? |
 | [user/coming-from.md](user/coming-from.md) | Coming from ROCKNIX, ArkOS or Android: what happens to saves, states, favourites and settings, what needs a copy, what does not come over |
-| [user/playing.md](user/playing.md) | Home, finding a game, the looks, console pages, starting a game, the game switcher, continuing, menu sounds |
+| [user/playing.md](user/playing.md) | Home, finding a game, the looks, starting a game, the game switcher, continuing, menu sounds |
+| [user/console-pages.md](user/console-pages.md) | The page about a console (X on a system) and its Credits & links |
 | [user/pause-menu.md](user/pause-menu.md) | The pause menu of each emulator, Quit and Settings → Playing → Continue where I quit, Pixel Path |
 | [user/pause-menu-saves.md](user/pause-menu-saves.md) | Save slots, Where I quit and Before load, Earlier, where the state files are, when a save fails |
 | [user/options.md](user/options.md) | Options in a game: picture, screen frames, emulator, controls, cheats, shortcuts, extras, run-ahead, saving them |
+| [user/options-screen.md](user/options-screen.md) | Options → Picture: the screen frame and the screen orientation |
 | [user/options-cheats.md](user/options-cheats.md) | Options → Cheats: the cheat list, the one-time download on TrimUI, offline use, cheat files pocket-core cannot apply |
 | [user/options-big.md](user/options-big.md) | The Options of PS2, GameCube, Wii and 3DS games |
 | [user/controls.md](user/controls.md) | Every button, screen by screen |
 | [user/big-text.md](user/big-text.md) | Big text (larger text and calmer menus in one switch), the pause menu's Zoom and Controls → Hold to toggle |
 | [user/controls-settings.md](user/controls-settings.md) | The buttons in Settings, during setup, on the touch screen, and the power and volume keys |
 | [user/settings.md](user/settings.md) | How Settings opens, and the entries of Look, Playing and Games |
+| [user/settings-playing.md](user/settings-playing.md) | The entries of Playing and Games: start and quit, what is drawn over the game, achievements, systems on the shelf, the Curator |
 | [user/settings-sound.md](user/settings-sound.md) | The entries of Controls & sound: buttons, controller setup, test buttons, sounds, haptics and LEDs |
 | [user/settings-system.md](user/settings-system.md) | The entries of Connections and System: Wi-Fi, Tailscale, remote access, time, sleep, backup, the manual |
 | [user/storage.md](user/storage.md) | Settings → System → Storage: what takes the room on the card, the clean-ups, the low-space notice, hidden games |
@@ -46,7 +49,8 @@ Start at [user/index.md](user/index.md).
 | [user/theme.md](user/theme.md) | Settings → Look → Colours and Font: the five colour sets and the three fonts |
 | [user/performance.md](user/performance.md) | Settings → Playing → Performance & fan: game defaults, the fan in the menus, Smooth fan, the readout |
 | [user/tour.md](user/tour.md) | The Tour (the basics in 6 cards), the feature cards: what the first start's profiles set, "New in this version" |
-| [user/library.md](user/library.md) | The game card, play status, ratings, notes, hiding games and matching your files |
+| [user/library.md](user/library.md) | The game card, play status, ratings, notes and hiding games |
+| [user/library-files.md](user/library-files.md) | EmulationStation gamelists, PlayStation discs, matching your files, a card from another handheld |
 | [user/curator.md](user/curator.md) | Curator: Lens, smart shelves, stickers, Echoes, Versions, play history and the Year in review |
 | [user/achievements.md](user/achievements.md) | RetroAchievements: signing in, unlocks, the pause menu's list, offline play |
 | [user/systems.md](user/systems.md) | Which systems run on which emulator |

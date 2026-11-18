@@ -5,11 +5,9 @@ use super::phone::{type_mid, ClipY, Room};
 use super::*;
 use pocket_ui::type_scale;
 
-/// The system the Android shelf's games stand under (`media::is_digital`: a case without a cartridge).
-pub const SYSTEM_ID: &str = "android";
-pub const SYSTEM: &str = "Android";
-/// A game key of the Android shelf: never a document identity (those are `authority:documentId`).
-const KEY_PREFIX: &str = "android-app:";
+/// The system the Android shelf's games stand under, and their keys: the handheld view's too (`pocket_ui::android_games`).
+pub use pocket_ui::android_games::{SYSTEM, SYSTEM_ID};
+use pocket_ui::android_games::KEY_PREFIX;
 /// The Android shelf's stripe: a muted green, quieter than Android's own.
 const STRIPE: u32 = 0x5f8f6a;
 
@@ -40,21 +38,13 @@ pub struct AppsUi {
     cols: usize,
 }
 
-/// The apps of `AppDrawer.list`'s answer, by name as a home screen orders them. `icon` reads an icon file.
+/// The apps of `AppDrawer.list`'s answer, by name as a home screen orders them (`android_games::parse`, the handheld
+/// view's list too). `icon` reads an icon file.
 pub fn parse(json: &str, icon: impl Fn(&str) -> Option<AppIcon>) -> Vec<AndroidApp> {
-    let Ok(serde_json::Value::Array(items)) = serde_json::from_str::<serde_json::Value>(json) else { return Vec::new() };
-    let mut apps: Vec<AndroidApp> = items
-        .iter()
-        .filter_map(|v| {
-            let package = v["package"].as_str().filter(|p| !p.is_empty())?.to_string();
-            let label = v["label"].as_str().map(str::trim).filter(|l| !l.is_empty()).unwrap_or(&package).to_string();
-            let path = v["icon"].as_str().unwrap_or_default();
-            Some(AndroidApp { package, label, game: v["game"].as_bool().unwrap_or(false), icon: (!path.is_empty()).then(|| icon(path)).flatten() })
-        })
-        .collect();
-    apps.sort_by_cached_key(|a| (a.label.to_lowercase(), a.package.clone()));
-    apps.dedup_by(|a, b| a.package == b.package);
-    apps
+    pocket_ui::android_games::parse(json)
+        .into_iter()
+        .map(|a| AndroidApp { icon: (!a.icon.is_empty()).then(|| icon(&a.icon)).flatten(), package: a.package, label: a.label, game: a.game })
+        .collect()
 }
 
 /// An icon file of `AppDrawer.writeIcon` (two big-endian ints, width and height, then ARGB pixels), muted. A file
@@ -130,12 +120,10 @@ impl Ui {
     /// The games of the Android shelf: the marked apps Android still lists (before its first answer, as they were
     /// marked), by name.
     fn android_shelf(&self) -> Vec<Game> {
-        let mut marked: Vec<(&str, &str)> = match &self.apps.list {
-            Some(list) => list.iter().filter(|a| self.prefs.android_games.contains_key(&a.package)).map(|a| (a.package.as_str(), a.label.as_str())).collect(),
-            None => self.prefs.android_games.iter().map(|(p, l)| (p.as_str(), l.as_str())).collect(),
-        };
-        marked.sort_by_cached_key(|(p, l)| (l.to_lowercase(), p.to_string()));
-        marked.into_iter().map(|(p, l)| game_of(p, l)).collect()
+        let listed: Option<Vec<pocket_ui::android_games::App>> = self.apps.list.as_ref().map(|l| {
+            l.iter().map(|a| pocket_ui::android_games::App { package: a.package.clone(), label: a.label.clone(), game: a.game, icon: String::new() }).collect()
+        });
+        pocket_ui::android_games::shelf(&self.prefs.android_games, listed.as_deref()).iter().map(|(p, l)| game_of(p, l)).collect()
     }
     /// A new library from the chosen folders takes the Android shelf along (`install`).
     pub(super) fn with_android_shelf(&self, lib: &mut Library) {

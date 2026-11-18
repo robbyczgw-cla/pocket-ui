@@ -11,6 +11,7 @@ use std::panic::{catch_unwind, AssertUnwindSafe};
 use crate::case_knows::tests::*;
 use crate::case_knows::{self, Kind::*, Lang, Memory, Progress, TeamArt, RELEASES};
 use crate::case_knows_art;
+use crate::case_knows_more_tests::*;
 use crate::case_knows_rpg_tests::*;
 
 /// xorshift64*: the same numbers on every machine.
@@ -123,6 +124,12 @@ fn valid_saves() -> Vec<(case_knows::Kind, Vec<u8>)> {
         seed(SuperstarSaga, || superstar_saga_save(&[(1, true, 255, 255, u32::MAX)], false)),
         seed(Mother3, || mother_3_save(&[(0, "Lucas", 1, 29_720), (1, "Lucas", 1, 49_522)], 1, &[(0, 0)])),
         seed(Mother3, || mother_3_save(&[(1, "Claus", 255, u32::MAX)], u32::MAX, &[])),
+        seed(BanjoKazooie, || banjo_save(&[(3, 1, &[1, 2, 3, 11, 12], [50, 73, 0, 0, 0, 0, 0, 0, 0], [3723, 0, 0, 0, 0, 0, 0, 0, 0, 0, 12])])),
+        seed(BanjoKazooie, || banjo_save(&[(0, 3, &[100], [127; 9], [u16::MAX; 11]), (1, 2, &[], [0; 9], [0; 11])])),
+        seed(MetroidFusion, || fusion_save(&[(0, 399, 25, 14, (2, 7)), (1, 1299, 100, 20, (12, 34))], Some(1))),
+        seed(MetroidFusion, || fusion_save(&[(2, u16::MAX, u16::MAX, 255, (255, 255))], Some(255))),
+        seed(GoldenEye, || goldeneye_save(&[(0, 0, 0, &[((0, 0), 125), ((1, 3), 300)], false), (4, 1, 1, &[((0, 0), 125), ((1, 3), 300)], false)])),
+        seed(GoldenEye, || goldeneye_save(&[(1, 3, 3, &[((2, 19), 1023)], true)])),
     ];
     let made: Vec<(case_knows::Kind, Vec<u8>)> = seeds.into_iter().flatten().collect();
     assert!(made.len() >= 45, "only {} of the seed saves could be made", made.len());

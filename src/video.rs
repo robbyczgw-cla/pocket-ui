@@ -5,7 +5,6 @@
 //! variant (see `src/shaders/video.frag`, its numbers in `picture_fx.rs`) so a plain game pays for nothing it does
 //! not use. Variants are compiled on first use, which is when the menu applies a change, not per frame.
 
-use std::collections::{BTreeMap, HashMap};
 use std::path::Path;
 
 use glow::HasContext;
@@ -14,63 +13,8 @@ use crate::libretro::{Frame, PIXEL_0RGB1555, PIXEL_XRGB8888};
 use crate::options::GameSettings;
 
 
-#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, Default)]
-pub enum Sharpness {
-    /// Nearest neighbour.
-    #[default]
-    Sharp,
-    /// Sharp bilinear: flat texels, one output pixel of blending at their edges, in linear light.
-    Crisp,
-    /// Plain bilinear.
-    Soft,
-}
-
-#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, Default)]
-pub enum Effect {
-    #[default]
-    None,
-    Grid,
-    Scanlines,
-    Crt,
-    /// A halo around bright parts, the picture otherwise clear (`SoftGlow` in the shader: EFFECT 4).
-    SoftGlow,
-    /// Rounded stair-steps on diagonal edges, flat pixel art left sharp (EFFECT 5).
-    Smooth,
-}
-
-/// Options → Picture → Screen orientation: how the player holds the Pocket, for games made for an upright screen
-/// (vertical shooters, WonderSwan games played upright, DS books). The picture is drawn turned the other way on the
-/// panel so it stands upright for the player, on top of any turn the core asks for (SET_ROTATION); the D-pad and sticks
-/// of the Pocket's own controls turn with it (`controls::turn_buttons`).
-#[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
-pub enum Orientation {
-    #[default]
-    Normal,
-    /// The Pocket turned a quarter to the left (counter-clockwise): the D-pad at the bottom.
-    Left,
-    /// The Pocket turned a quarter to the right (clockwise): the D-pad on top.
-    Right,
-}
-
-impl Orientation {
-    pub fn parse(s: &str) -> Self {
-        match s {
-            "left" => Self::Left,
-            "right" => Self::Right,
-            _ => Self::Normal,
-        }
-    }
-
-    /// Quarter turns counter-clockwise the picture gets on the panel (the shader's `rot`): a Pocket turned right
-    /// turns everything on it clockwise, so the picture is drawn turned counter-clockwise by as much.
-    pub fn turns(self) -> u32 {
-        match self {
-            Self::Normal => 0,
-            Self::Right => 1,
-            Self::Left => 3,
-        }
-    }
-}
+pub use crate::video_program::{Effect, Sharpness};
+use crate::video_program::{Pass, Programs};
 
 /// The shape a turned frame takes on the panel: (width, height, aspect) to scale (`dest_rect`), for a `fw`×`fh` frame
 /// the core shows at `aspect`, turned `core` quarter turns by the core's request and `user` more by Screen
@@ -112,178 +56,15 @@ pub fn turn_pixels<T: Copy>(w: u32, h: u32, px: &[T], turns: u32) -> (u32, u32, 
 }
 
 
-impl Sharpness {
-    pub fn parse(s: &str) -> Self {
-        match s {
-            "crisp" => Self::Crisp,
-            "soft" => Self::Soft,
-            _ => Self::Sharp,
-        }
-    }
-}
+pub use crate::video_basics::{dest_rect, Rect, Scaling};
+pub use crate::video_settings::{FrameMode, Orientation, VideoSettings};
 
-impl Effect {
-    pub fn parse(s: &str) -> Self {
-        match s {
-            "grid" => Self::Grid,
-            "scanlines" => Self::Scanlines,
-            "crt" => Self::Crt,
-            "softglow" => Self::SoftGlow,
-            "smooth" => Self::Smooth,
-            _ => Self::None,
-        }
-    }
-}
-
-/// Frame around a picture that doesn't fill the screen (see `bezel.rs` and `ambient.rs`).
-#[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
-pub enum FrameMode {
-    #[default]
-    None,
-    /// The installed pack's frame for the console, else the built-in one.
-    Auto,
-    /// The game's own colours, blurred and dimmed, like a TV's ambient light.
-    Ambient,
-    /// A handheld body around the screen lens, in the colourway of `frame_colour`.
-    Shell,
-    /// A curved-screen TV, in the cabinet of `frame_tv`.
-    Crt,
-    /// An arcade cabinet's glossy bezel with light strips.
-    Arcade,
-    /// A thin outline glowing in the console's colour.
-    Glow,
-    /// The handheld and TV frames of `frames_more.rs` and `frames_tv.rs`; those with finishes take
-    /// them from their own setting (`frame_brick`, `frame_pocket`, `frame_clamshell`). Swan, Watch and
-    /// Goggles are drawn by Auto only (a saved choice of them reads as Auto).
-    Brick,
-    PocketSlim,
-    Clamshell,
-    Wide,
-    Twin,
-    Gloss,
-    Studio,
-    PortableTv,
-    Woodgrain,
-}
-
-impl FrameMode {
-    pub fn parse(s: &str) -> Self {
-        match s {
-            // Swan, Watch and Goggles left the menu: files that name them mean Auto, which draws them for their consoles.
-            "auto" | "swan" | "watch" | "goggles" => Self::Auto,
-            "ambient" => Self::Ambient,
-            "shell" => Self::Shell,
-            "crt" => Self::Crt,
-            "arcade" => Self::Arcade,
-            "glow" => Self::Glow,
-            "brick" => Self::Brick,
-            "pocket" => Self::PocketSlim,
-            "clamshell" => Self::Clamshell,
-            "wide" => Self::Wide,
-            "twin" => Self::Twin,
-            "gloss" => Self::Gloss,
-            "studio" => Self::Studio,
-            "portable-tv" => Self::PortableTv,
-            "woodgrain" => Self::Woodgrain,
-            _ => Self::None,
-        }
-    }
-}
-
-/// The Picture settings of `options.rs`. Unknown or missing values mean the defaults.
-#[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
-pub struct VideoSettings {
-    pub scaling: Scaling,
-    pub sharpness: Sharpness,
-    pub effect: Effect,
-    pub frame: FrameMode,
-    pub frame_colour: crate::bezel::Colourway,
-    pub frame_tv: crate::bezel::Cabinet,
-    pub frame_brick: crate::bezel::BrickColour,
-    pub frame_pocket: crate::bezel::SlimFinish,
-    pub frame_clamshell: crate::bezel::ClamFinish,
-    /// LCD grid with the Game Boy Advance screen's colours (`lcd_colour`; offered for the GBA only, see
-    /// `options::applies`).
-    pub lcd_colour: bool,
-    /// Not a setting: the emulator corrects the colours itself (its colour correction option is on), so the LCD
-    /// grid leaves its own out rather than doing it twice. pocket-core sets it from the core's options.
-    pub core_colour: bool,
-    /// Screen orientation (`orientation`).
-    pub orientation: Orientation,
-}
-
+/// What only pocket-core's side reads: the files (`options::GameSettings`), Kids Mode, the GBA colours' rule.
 impl VideoSettings {
-    pub fn from_values(values: &BTreeMap<String, String>) -> Self {
-        let get = |k: &str| values.get(k).map(String::as_str).unwrap_or("");
-        VideoSettings {
-            scaling: Scaling::parse(get("scaling")),
-            sharpness: Sharpness::parse(get("sharpness")),
-            effect: Effect::parse(get("effect")),
-            frame: FrameMode::parse(get("frame")),
-            frame_colour: crate::bezel::Colourway::parse(get("frame_colour")),
-            frame_tv: crate::bezel::Cabinet::parse(get("frame_tv")),
-            frame_brick: crate::bezel::BrickColour::parse(get("frame_brick")),
-            frame_pocket: crate::bezel::SlimFinish::parse(get("frame_pocket")),
-            frame_clamshell: crate::bezel::ClamFinish::parse(get("frame_clamshell")),
-            lcd_colour: get("lcd_colour") == "on",
-            core_colour: false,
-            orientation: Orientation::parse(get("orientation")),
-        }
-    }
-
     /// Whether the picture gets the GBA screen's colours: LCD grid with LCD colours on, on the GBA, and the
     /// emulator not correcting them already.
     pub fn lcd_colours(&self, system: &str) -> bool {
         self.effect == Effect::Grid && self.lcd_colour && !self.core_colour && crate::options::applies("lcd_colour", system)
-    }
-
-    /// Applies one `set <key> <value>` of the pause menu; false for keys that are not Picture's.
-    pub fn set(&mut self, key: &str, value: &str) -> bool {
-        match key {
-            "scaling" => self.scaling = Scaling::parse(value),
-            "sharpness" => self.sharpness = Sharpness::parse(value),
-            "effect" => self.effect = Effect::parse(value),
-            "frame" => self.frame = FrameMode::parse(value),
-            "frame_colour" => self.frame_colour = crate::bezel::Colourway::parse(value),
-            "frame_tv" => self.frame_tv = crate::bezel::Cabinet::parse(value),
-            "frame_brick" => self.frame_brick = crate::bezel::BrickColour::parse(value),
-            "frame_pocket" => self.frame_pocket = crate::bezel::SlimFinish::parse(value),
-            "frame_clamshell" => self.frame_clamshell = crate::bezel::ClamFinish::parse(value),
-            "lcd_colour" => self.lcd_colour = value == "on",
-            "orientation" => self.orientation = Orientation::parse(value),
-            _ => return false,
-        }
-        true
-    }
-
-    /// The frame shows only when the picture leaves room around it: Fullscreen fills the screen, so it never
-    /// gets one. A picture turned by Screen orientation keeps only the frames that have no up and down (Ambient,
-    /// Glow): the others are drawn for a Pocket held as usual and would stand on their side.
-    pub fn shows_frame(&self) -> bool {
-        let upright = self.orientation == Orientation::Normal || matches!(self.frame, FrameMode::Ambient | FrameMode::Glow);
-        self.frame != FrameMode::None && upright && matches!(self.scaling, Scaling::Native | Scaling::IntegerSmaller | Scaling::Aspect)
-    }
-
-    /// The built-in frame these settings ask for; None for Auto (a pack or the console's own
-    /// style), Ambient (drawn live, see `ambient.rs`) and no frame.
-    pub fn fixed_style(&self, system: &str) -> Option<crate::bezel::Style> {
-        use crate::bezel::Style;
-        match self.frame {
-            FrameMode::Shell => Some(Style::Shell(self.frame_colour)),
-            FrameMode::Crt => Some(Style::Crt(self.frame_tv)),
-            FrameMode::Arcade => Some(Style::Arcade),
-            FrameMode::Glow => Some(Style::Glow(crate::bezel::system_colour(system))),
-            FrameMode::Brick => Some(Style::Brick(self.frame_brick)),
-            FrameMode::PocketSlim => Some(Style::PocketSlim(self.frame_pocket)),
-            FrameMode::Clamshell => Some(Style::Clamshell(self.frame_clamshell)),
-            FrameMode::Wide => Some(Style::Wide),
-            FrameMode::Twin => Some(Style::Twin),
-            FrameMode::Gloss => Some(Style::Gloss),
-            FrameMode::Studio => Some(Style::Studio),
-            FrameMode::PortableTv => Some(Style::PortableTv),
-            FrameMode::Woodgrain => Some(Style::Woodgrain),
-            FrameMode::None | FrameMode::Auto | FrameMode::Ambient => None,
-        }
     }
 
     /// Reads the console's settings, or the game's own file when it has one (see `options.rs`).
@@ -298,66 +79,19 @@ impl VideoSettings {
         if kids { v.for_kids() } else { v }
     }
 
-    /// Kids Mode: as large as fits in the game's shape, whatever is saved for the console or the game, and no frame
-    /// (a frame would take room from the picture).
-    pub fn for_kids(mut self) -> Self {
-        self.scaling = Scaling::Aspect;
-        self.frame = FrameMode::None;
-        self
-    }
 }
 
-pub use crate::video_basics::{dest_rect, Rect, Scaling};
 
 
-const VS: &str = include_str!("shaders/video.vert");
-const FS: &str = include_str!("shaders/video.frag");
 
 pub use crate::video_basics::glsl_for;
 #[cfg(test)]
 use crate::video_basics::desktop_glsl;
 
-/// Inserts `defines` after the `#version` line, which must stay first.
-fn with_defines(src: &str, defines: &str) -> String {
-    let (version, rest) = src.split_once('\n').unwrap_or((src, ""));
-    format!("{version}\n{defines}{rest}")
-}
-
-/// A compiled variant and its uniform locations.
-struct Program {
-    program: glow::Program,
-    rect: Option<glow::UniformLocation>,
-    src: Option<glow::UniformLocation>,
-    scale: Option<glow::UniformLocation>,
-    swizzle: Option<glow::UniformLocation>,
-    tex: Option<glow::UniformLocation>,
-    rot: Option<glow::UniformLocation>,
-    lines: Option<glow::UniformLocation>,
-}
-
-/// Variant key: (sharpness, effect, the GBA screen's colours).
-type Variant = (Sharpness, Effect, bool);
-const PLAIN: Variant = (Sharpness::Sharp, Effect::None, false);
-
-/// Texture filters a variant needs: (magnification, minification).
-fn filters((sharpness, effect, _): Variant) -> (u32, u32) {
-    // Scanlines and CRT steer the texture unit across a line (crisp) and sample between rows for a 3D core's
-    // groups of rows; the CRT's glow reads the mipmaps.
-    let mag = if sharpness != Sharpness::Sharp || matches!(effect, Effect::Scanlines | Effect::Crt) { glow::LINEAR } else { glow::NEAREST };
-    let min = if effect == Effect::Crt {
-        glow::LINEAR_MIPMAP_NEAREST
-    } else if effect == Effect::SoftGlow {
-        glow::LINEAR_MIPMAP_LINEAR // a fractional level blends two mip levels: a smooth halo from one fetch
-    } else {
-        mag
-    };
-    (mag, min)
-}
-
 pub struct Renderer {
     gl: glow::Context,
     texture: glow::Texture,
-    programs: HashMap<Variant, Option<Program>>,
+    programs: Programs,
     /// (width, height, pixel format) of the texture's current storage; width 0 until a frame came.
     tex_size: (u32, u32, u32),
     swizzle: i32,
@@ -465,9 +199,7 @@ impl Renderer {
                 gl.bind_vertex_array(Some(vao));
             }
         }
-        let base = Self::compile(&gl, PLAIN)?;
-        let mut programs = HashMap::new();
-        programs.insert(PLAIN, Some(base));
+        let programs = Programs::new(&gl)?;
         Ok(Renderer {
             gl,
             texture,
@@ -515,64 +247,10 @@ impl Renderer {
         t.report()
     }
 
-    fn compile(gl: &glow::Context, variant: Variant) -> Result<Program, String> {
-        let defines = variant_defines(variant);
-        unsafe {
-            let program = gl.create_program()?;
-            let mut shaders = Vec::new();
-            for (kind, src) in [(glow::VERTEX_SHADER, VS.to_string()), (glow::FRAGMENT_SHADER, with_defines(FS, &defines))] {
-                let src = glsl_for(gl, &src);
-                let sh = gl.create_shader(kind)?;
-                gl.shader_source(sh, &src);
-                gl.compile_shader(sh);
-                if !gl.get_shader_compile_status(sh) {
-                    let log = gl.get_shader_info_log(sh);
-                    gl.delete_shader(sh);
-                    gl.delete_program(program);
-                    return Err(log);
-                }
-                gl.attach_shader(program, sh);
-                shaders.push(sh);
-            }
-            gl.link_program(program);
-            let linked = gl.get_program_link_status(program);
-            for sh in shaders {
-                gl.detach_shader(program, sh);
-                gl.delete_shader(sh);
-            }
-            if !linked {
-                let log = gl.get_program_info_log(program);
-                gl.delete_program(program);
-                return Err(log);
-            }
-            let loc = |name: &str| gl.get_uniform_location(program, name);
-            Ok(Program { program, rect: loc("rect"), src: loc("src"), scale: loc("scale"), swizzle: loc("swizzle"), tex: loc("tex"), rot: loc("rot"), lines: loc("lines") })
-        }
-    }
-
     /// Compiles every variant (sharpness × effect, and the LCD grid with the GBA's colours) that isn't yet, for
     /// tests: the number compiled, or the first one the driver rejects with its log.
     pub fn check_variants(&mut self) -> Result<usize, String> {
-        let mut n = 0;
-        for sharpness in [Sharpness::Sharp, Sharpness::Crisp, Sharpness::Soft] {
-            for effect in [Effect::None, Effect::Grid, Effect::Scanlines, Effect::Crt, Effect::SoftGlow, Effect::Smooth] {
-                for lcd in [false, true] {
-                    if lcd && effect != Effect::Grid {
-                        continue;
-                    }
-                    let v = (sharpness, effect, lcd);
-                    match self.programs.get(&v) {
-                        Some(Some(_)) => {}
-                        _ => {
-                            let p = Self::compile(&self.gl, v).map_err(|log| format!("{v:?}: {log}"))?;
-                            self.programs.insert(v, Some(p));
-                        }
-                    }
-                    n += 1;
-                }
-            }
-        }
-        Ok(n)
+        self.programs.check_all(&self.gl)
     }
 
     /// Compiles the variant `settings` will draw with, if it isn't yet, so the first picture doesn't wait for the driver (the Brick's
@@ -580,13 +258,7 @@ impl Renderer {
     #[cfg(feature = "brick")]
     pub fn warm(&mut self, settings: &VideoSettings) {
         let variant = (settings.sharpness, settings.effect, settings.lcd_colours(self.bezel.system()));
-        if !self.programs.contains_key(&variant) {
-            let compiled = Self::compile(&self.gl, variant);
-            if let Err(log) = &compiled {
-                eprintln!("video: shader variant {variant:?} failed, using the plain one: {log}");
-            }
-            self.programs.insert(variant, compiled.ok());
-        }
+        self.programs.warm(&self.gl, variant);
     }
 
     /// Turns the picture by `quarter_turns` x 90 degrees counter-clockwise, as the core asked (SET_ROTATION: vertical
@@ -834,20 +506,9 @@ impl Renderer {
         // Sharp samples texels as they are; Soft and the scanline effects need the hardware's bilinear (they
         // steer where they sample); Crisp fetches texels itself; the CRT's and Soft glow's halo read the mipmaps, made here
         // from each new picture (a few µs for a 2D console's picture).
-        let filters = filters(variant);
         if placement.is_some() {
-            unsafe {
-                self.gl.bind_texture(glow::TEXTURE_2D, Some(self.texture));
-                if matches!(filters.1, glow::LINEAR_MIPMAP_NEAREST | glow::LINEAR_MIPMAP_LINEAR) && self.mips_dirty {
-                    self.gl.generate_mipmap(glow::TEXTURE_2D);
-                    self.mips_dirty = false;
-                }
-                if self.filters != Some(filters) {
-                    self.gl.tex_parameter_i32(glow::TEXTURE_2D, glow::TEXTURE_MAG_FILTER, filters.0 as i32);
-                    self.gl.tex_parameter_i32(glow::TEXTURE_2D, glow::TEXTURE_MIN_FILTER, filters.1 as i32);
-                    self.filters = Some(filters);
-                }
-            }
+            unsafe { self.gl.bind_texture(glow::TEXTURE_2D, Some(self.texture)) };
+            crate::video_program::prepare_texture(&self.gl, variant, &mut self.filters, &mut self.mips_dirty);
         }
         // Ambient samples the picture into its own small images first, then comes back here.
         let ambient = settings.shows_frame() && settings.frame == FrameMode::Ambient;
@@ -870,19 +531,6 @@ impl Renderer {
             self.frame_pending = !self.bezel.draw(&self.gl, view_w, view_h, r, r.h as f32 / dh as f32, fixed);
         }
 
-        if !self.programs.contains_key(&variant) {
-            let compiled = Self::compile(&self.gl, variant);
-            if let Err(log) = &compiled {
-                eprintln!("video: shader variant {variant:?} failed, using the plain one: {log}");
-            }
-            self.programs.insert(variant, compiled.ok());
-        }
-        // A variant the driver rejects falls back to the plain one (Crisp then shows as Soft).
-        let prog = match self.programs.get(&variant) {
-            Some(Some(p)) => p,
-            _ => self.programs[&PLAIN].as_ref().expect("the plain variant"),
-        };
-
         // The old-TV power-on: the picture squeezed into what is lit, the frame around it as placed.
         let r = match self.squeeze {
             Some((top, height)) => Rect { y: top.round().max(0.0) as u32, h: (height.round() as u32).max(1), ..r },
@@ -895,25 +543,18 @@ impl Renderer {
             unsafe { gl.begin_query(TIME_ELAPSED, q) };
         }
         unsafe {
-            gl.use_program(Some(prog.program));
             gl.active_texture(glow::TEXTURE0);
             gl.bind_texture(glow::TEXTURE_2D, Some(self.texture));
-            // Pixel rectangle (top-left origin) to NDC (bottom-left, -1..1).
-            let (vw, vh) = (view_w as f32, view_h as f32);
-            let ndc = |px: u32, total: f32| px as f32 / total * 2.0 - 1.0;
-            gl.uniform_4_f32(prog.rect.as_ref(), ndc(r.x, vw), -ndc(r.y + r.h, vh), ndc(r.x + r.w, vw), -ndc(r.y, vh));
-            gl.uniform_1_i32(prog.tex.as_ref(), 0);
-            gl.uniform_2_f32(prog.src.as_ref(), fw as f32, fh as f32);
-            // Output pixels per source texel along the source's own x and y.
-            let (sx, sy) = if turned { (r.h as f32 / fw as f32, r.w as f32 / fh as f32) } else { (r.w as f32 / fw as f32, r.h as f32 / fh as f32) };
-            gl.uniform_2_f32(prog.scale.as_ref(), sx, sy);
-            gl.uniform_1_i32(prog.rot.as_ref(), turns as i32);
-            gl.uniform_1_i32(prog.swizzle.as_ref(), self.swizzle);
-            let upscaled_3d = self.tex_size.2 == FORMAT_HW;
-            let lines = crate::picture_fx::crt_lines(fh, upscaled_3d, crate::pixel_path::native_lines(self.bezel.system()));
-            gl.uniform_1_f32(prog.lines.as_ref(), lines);
-            gl.draw_arrays(glow::TRIANGLE_STRIP, 0, 4);
         }
+        // Pixel rectangle (top-left origin) to NDC (bottom-left, -1..1).
+        let (vw, vh) = (view_w as f32, view_h as f32);
+        let ndc = |px: u32, total: f32| px as f32 / total * 2.0 - 1.0;
+        // Output pixels per source texel along the source's own x and y.
+        let (sx, sy) = if turned { (r.h as f32 / fw as f32, r.w as f32 / fh as f32) } else { (r.w as f32 / fw as f32, r.h as f32 / fh as f32) };
+        let upscaled_3d = self.tex_size.2 == FORMAT_HW;
+        let lines = crate::picture_fx::crt_lines(fh, upscaled_3d, crate::picture_fx::native_lines(self.bezel.system()));
+        let pass = Pass { rect: [ndc(r.x, vw), -ndc(r.y + r.h, vh), ndc(r.x + r.w, vw), -ndc(r.y, vh)], src: (fw as f32, fh as f32), scale: (sx, sy), turns, bgr: self.swizzle == 1, lines };
+        self.programs.get(&self.gl, variant).draw(&self.gl, &pass);
         if let (Some(q), Some(t)) = (timed, self.timer.as_mut()) {
             unsafe { gl.end_query(TIME_ELAPSED) };
             t.pending.push_back(q);
@@ -938,20 +579,6 @@ impl Renderer {
     }
 }
 
-/// The `#define`s of a variant, then the effects' constants (`picture_fx::defines`).
-fn variant_defines((sharpness, effect, lcd_colour): Variant) -> String {
-    let sharpness = match sharpness {
-        Sharpness::Sharp => 0,
-        Sharpness::Crisp => 1,
-        Sharpness::Soft => 2,
-    };
-    let mut d = format!("#define SHARPNESS {sharpness}\n#define EFFECT {}\n", effect as u8);
-    if lcd_colour {
-        d.push_str("#define LCD_COLOUR\n");
-    }
-    d + &crate::picture_fx::defines()
-}
-
 /// 0RGB1555 has no GL upload format; widen the 5-bit green to 6 bits and use RGB565.
 pub fn rgb1555_to_565(frame: &Frame) -> Vec<u8> {
     let mut out = Vec::with_capacity((frame.width * frame.height * 2) as usize);
@@ -968,6 +595,7 @@ pub fn rgb1555_to_565(frame: &Frame) -> Vec<u8> {
 
 #[cfg(test)]
 mod tests {
+    use std::collections::BTreeMap;
     #[test]
     fn kids_mode_picks_aspect_over_any_saved_scaling_and_frame() {
         for sc in ["native", "integer-smaller", "fullscreen", "aspect"] {
@@ -1326,6 +954,8 @@ mod tests {
         assert_eq!(VideoSettings::load(&dir, "gb", rom), VideoSettings { sharpness: Sharpness::Soft, ..Default::default() });
         assert_eq!(VideoSettings::load(&dir, "snes", rom), VideoSettings::default(), "no files: a clean picture");
     }
+
+    use crate::video_program::{with_defines, FS, VS};
 
     #[test]
     fn defines_go_after_the_version_line() {

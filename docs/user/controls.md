@@ -24,7 +24,7 @@ puts A at the bottom and B on the right in every menu of pocket-ui; games keep t
 | A | Play the selected game, or open the selected system, Favourites, Search, Curator, a smart shelf or a label. |
 | B | From a system's game list, Favourites or a Curator list, back to where you opened it. |
 | Y | Star the selected game, or unstar it. Starred games are listed under Favourites on Home. On a smart shelf or label: pin it to Home, or take it off. |
-| X | Open the selected game's [card](library.md): facts, play status, your note, related games you own. On a system: its [console page](playing.md#console-pages); on a console page: its [Credits & links](playing.md#credits--links). On a smart shelf or label: its options (rename, delete …). |
+| X | Open the selected game's [card](library.md): facts, play status, your note, related games you own. On a system: its [console page](console-pages.md); on a console page: its [Credits & links](console-pages.md#credits--links). On a smart shelf or label: its options (rename, delete …). |
 | SELECT (press and release) | Open [Recent games](playing.md#recent-games). |
 | START (press and release) | Open [Settings](controls-settings.md#in-settings), from Home and from a system's game list or Favourites alike. Settings is a button, not an entry of the list. It opens on the rows of its first category, L1/R1 (or Up to the symbols at the top, then Left/Right) go to the others; B comes back to the list you came from. START held together with SELECT or a volume key is a combo, not this. |
 | SELECT + START, held for 1 second | Asks what to do: **Cancel**, **Restart pocket-ui** or **Open EmulationStation** (ROCKNIX's own menu, with a warning first; see [Safe mode and EmulationStation](safe-mode.md#opening-emulationstation)). Escape on a keyboard does the same. |
@@ -158,7 +158,7 @@ use Options → Controls for that game.
 | HOME + SELECT | Pause the game and open [Recent games](playing.md#recent-games). |
 | HOME + A | Take a [screenshot](playing.md#screenshots) of the game. Not a tap: the pause menu does not open. |
 | HOME + another button | Not a tap. On pocket-ui's own host these are the shortcuts below; in RetroArch games they stay RetroArch shortcuts. |
-| SELECT + START, held for 1 second | Quit a game on pocket-ui's own host. It saves the moment first, whatever Settings → Playing → [Continue where I quit](settings.md#continue-where-i-quit) says. |
+| SELECT + START, held for 1 second | Quit a game on pocket-ui's own host. It saves the moment first, whatever Settings → Playing → [Continue where I quit](settings-playing.md#continue-where-i-quit) says. |
 | All other buttons | Go to the game. On pocket-ui's own host you can change what each one presses (Options → Controls). |
 
 Shortcuts on pocket-ui's own host (each can be switched off in Options → Shortcuts):
@@ -191,7 +191,7 @@ Options → Controls lists what each button presses in this game, and lets you c
 |---|---|
 | D-pad Up / Down | Move. The menu wraps: Up from Continue is Quit. |
 | D-pad Left / Right | On Save or Load: choose the save slot (not with RetroArch, which has one save). |
-| A | Choose. On **Quit**: end the game, keeping the moment or not as Settings → Playing → [Continue where I quit](settings.md#continue-where-i-quit) says. |
+| A | Choose. On **Quit**: end the game, keeping the moment or not as Settings → Playing → [Continue where I quit](settings-playing.md#continue-where-i-quit) says. |
 | B or HOME | Back to the game. In the quick settings opened from this menu: back to this menu. |
 | START | Open the [quick settings](quick-settings.md) (brightness, volume, fan); B there comes back to this menu. |
 | SELECT | Open Recent games; B there comes back to this menu. |

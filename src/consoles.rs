@@ -432,6 +432,10 @@ pub fn emulator_name(emulator: &str) -> String {
 
 /// "Flycast on pocket-core", "Stella in RetroArch", "ARMSX2 (standalone)"; None when es_systems.cfg names nothing.
 pub fn runner_text(emulator: &str, core: &str) -> Option<String> {
+    // An Android game: Android starts its app (`android_games`).
+    if emulator == crate::android_games::EMULATOR {
+        return Some(crate::android_games::SYSTEM.to_string());
+    }
     // Android's handheld view: our own player, or the app the phone gave a name (`play_route`).
     if let Some(phone) = crate::play_route::phone() {
         return match (emulator, core) {

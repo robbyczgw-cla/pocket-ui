@@ -15,10 +15,10 @@ include!("common/root.rs");
 /// row opens a list of more rows (For tinkerers is gone: Sync and PC streaming are rows of Connections).
 const TREE: [(&str, &[&str]); 8] = [
     ("Connections", &["Wi-Fi", "Bluetooth", "Tailscale", "Remote access (SSH)", "Sync", "Web companion", "PC streaming"]),
-    ("Look", &["Layout", "Appearance", "Colours", "Style", "Text size", "Zoom in the pause menu", "Motion", "Game start animation", "Cozy extras"]),
+    ("Look", &["Layout", "Appearance", "Colours", "Style", "Text size", "Motion", "Game start animation", "Cozy extras", "Lived-in shelf"]),
     ("Screen & sound", &["Brightness", "Volume", "Screen colour", "Night light", "Menu sounds", "Case sounds"]),
     ("Controls", &["Buttons", "Controller setup", "Test buttons", "Haptics", "LEDs"]),
-    ("Playing", &["On start", "Continue where I quit", "Console boot screen", "Remind me where I was", "Screen frames", "Over the game", "Performance & fan", "RetroAchievements"]),
+    ("Playing", &["On start", "Continue where I quit", "Console boot screen", "Remind me where I was", "Screen frames", "Over the game", "Zoom in the pause menu", "Performance & fan", "RetroAchievements"]),
     ("Games", &["Add games", "Box art & downloads", "Game check", "Systems on the shelf", "Curator", "Screenshots", "From EmulationStation"]),
     ("System", &["Updates", "Language", "Sleep & power", "Battery", "Time", "Storage", "Backup & reset", "Kids mode"]),
     ("Help & tools", &["Manual", "Tour", "How you like to play", "First-start setup", "Tools", "Report a problem", "About"]),

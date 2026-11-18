@@ -11,6 +11,7 @@
 //!   without network still counts; unlocks the server hasn't confirmed are kept in `pending.json` and sent later.
 //! - [`snapshot`]: the files pocket-ui reads: the running game's list for the pause menu, and a tally per game for the
 //!   game card and the console page ([`lookup`] fills it in for a game not played yet).
+//! - [`case_line`]: "34 of 60 achievements · 56%" on the case of a game whose save pocket-ui can't read, from its tally.
 //! - [`mastery`]: a game with every achievement unlocked, handed to the Android launcher for the golden sticker.
 //! - [`cards`]: the unlock cards and notes a game shows (the Android player paints them; Linux's HUD has its own line).
 //! - [`chime`]: the unlock sound, mixed into the game's own sound when UI sounds are on.
@@ -20,6 +21,7 @@
 
 pub mod account;
 pub mod api;
+pub mod case_line;
 pub mod cards;
 pub mod chime;
 pub mod consoles;

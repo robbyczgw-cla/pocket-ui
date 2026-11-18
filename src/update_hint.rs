@@ -6,6 +6,8 @@
 //!   the system image (`os`) is never announced from here, and neither are ports or the Store.
 //! - **Once**: `update-hint.json` in the data folder remembers the version that was said ([`State::said`]). A version
 //!   that was said is not said again, whether the player opened Updates or pressed B; the next version is a new hint.
+//!   "Said" means the player closed the notice (A, B or a tap): one put up and never closed (Android ended the process
+//!   behind the player's back, 17.11.2026) is said again at the next start.
 //! - **Off**: Settings → System → Updates → "Check automatically" (`{"off": true}` in the same file) stops the look
 //!   altogether: no request is made, nothing is announced, whatever was found before is forgotten ([`State::set_auto`]).
 //! - **Calm**: a look is at most once a day ([`EVERY`], plus the one after the start), only when the shelf has been
@@ -26,6 +28,14 @@ pub const FILE: &str = "update-hint.json";
 
 /// After the start: Wi-Fi and the time server have had their go (the clock check waits 45 s for the same reason).
 pub const FIRST_LOOK: Duration = Duration::from_secs(60);
+/// After the start in Android's handheld view: Android brings Wi-Fi up itself, and the app is opened to be used now. A
+/// minute was too long (17.11.2026, Retroid Pocket Mini V2: opened, waited "about a minute", closed from Recents, twice; the
+/// process lived 70 s and 56 s, and no hint came).
+pub const ANDROID_FIRST_LOOK: Duration = Duration::from_secs(5);
+/// Android's handheld view back in front (Home, the screen on again) when its last look is older than this, by the wall
+/// clock: a look then. The process lives for days on a handheld that sleeps, and the timer of [`EVERY`] does not count
+/// the time asleep (Rust's `Instant` stops with the device), so it would never come round.
+pub const FRONT_AGAIN: Duration = Duration::from_secs(3600);
 /// Between two looks while the Pocket keeps running, after one that found nothing new or that said its hint.
 pub const EVERY: Duration = Duration::from_secs(24 * 3600);
 /// How long to wait for the shelf to be free (a page or a notice is up) before asking again.
@@ -70,6 +80,9 @@ pub struct Facts {
     pub shelf_free: bool,
     /// A newer version was found and not said yet.
     pub pending: bool,
+    /// The player can see the shelf: in Android's handheld view the view is in front (not behind Home, another app or a
+    /// dark screen). A notice put up unseen was lost when Android ended the process (17.11.2026).
+    pub on_screen: bool,
 }
 
 /// What to do now.
@@ -87,6 +100,17 @@ pub enum Step {
     Look,
 }
 
+/// The wait after the start before the first look.
+pub fn first_look(android: bool) -> Duration {
+    if android { ANDROID_FIRST_LOOK } else { FIRST_LOOK }
+}
+
+/// Whether the view coming to the front looks again: never looked in this process, or the last look is [`FRONT_AGAIN`]
+/// old (`since` is the wall-clock time since it; None when the clock went back, which counts as old).
+pub fn look_on_front(looked: bool, since: Option<Duration>) -> bool {
+    !looked || since.is_none_or(|s| s >= FRONT_AGAIN)
+}
+
 /// The one decision, for a look or notice that is due.
 pub fn step(f: Facts) -> Step {
     if !f.auto || f.kids {
@@ -96,6 +120,10 @@ pub fn step(f: Facts) -> Step {
         return Step::Pause;
     }
     if f.pending {
+        // Unseen: no timer; the view coming back to the front wakes the loop, and this asks again.
+        if !f.on_screen {
+            return Step::Pause;
+        }
         return if f.shelf_free { Step::Say } else { Step::Retry };
     }
     if !f.wifi {
@@ -154,9 +182,10 @@ pub fn text(version: &str) -> String {
 /// The notice's last line: how it goes away, and the one press to the page.
 pub const ACTIONS: &str = "Press A for Settings › System › Updates, B to close.";
 
-/// [`ACTIONS`] in Android's handheld view. It has no Settings › System › Updates (`device::ANDROID_HIDES` "updates"): A
-/// hands the APK of Android's own list (`updates/android/update.json`, the Mobile view's) to Android's installer, which
-/// asks before it installs and closes pocket-ui afterwards (`UpdateInstaller.java`).
+/// [`ACTIONS`] in Android's handheld view: A installs at once, the one press the notice is for. It hands the APK of
+/// Android's own list (`updates/android/update.json`, the Mobile view's) to Android's installer, which asks before it
+/// installs and closes pocket-ui afterwards (`UpdateInstaller.java`). Settings › System › Updates has the same offer, a
+/// look by hand and the switch (since 0.5.0-android.9).
 pub const ANDROID_ACTIONS: &str = "Press A to install it, B to close. pocket-ui closes after the update; open it again.";
 
 /// The notice's last line in this profile.
@@ -244,7 +273,7 @@ mod tests {
     }
 
     fn facts() -> Facts {
-        Facts { auto: true, wifi: true, idle: true, shelf_free: true, ..Facts::default() }
+        Facts { auto: true, wifi: true, idle: true, shelf_free: true, on_screen: true, ..Facts::default() }
     }
 
     #[test]
@@ -345,13 +374,44 @@ mod tests {
         assert_eq!(due(&list(Some("0.4.0-android.3")), "0.4.0-android.3", &fresh), None);
     }
 
-    /// The hint on Android must not send the player to a page Android's view doesn't have.
+    /// On Android the notice's A installs (one press); Settings › System › Updates is there as well (android.9).
     #[test]
-    fn the_android_notice_installs_instead_of_naming_a_hidden_page() {
-        assert!(crate::device::ANDROID_HIDES.contains(&"updates"));
-        assert!(!actions(true).contains("Settings"), "{}", actions(true));
+    fn the_android_notice_installs_with_a() {
+        assert!(!crate::device::ANDROID_HIDES.contains(&"updates"), "the handheld view has Settings › System › Updates");
+        assert!(actions(true).contains("install"), "{}", actions(true));
         assert!(actions(true).contains("A ") && actions(true).contains("B "));
         assert_eq!(actions(false), ACTIONS);
+    }
+
+    /// 17.11.2026, Retroid Pocket Mini V2 with android.6: opened twice for 70 s and 56 s, no hint. The first look was a
+    /// minute after the start (and only with no button pressed for 10 s); Android's view looks within seconds.
+    #[test]
+    fn android_looks_within_seconds_of_the_start() {
+        assert!(first_look(true) <= Duration::from_secs(10), "{:?}", first_look(true));
+        assert_eq!(first_look(false), FIRST_LOOK, "the Linux handhelds keep their minute (Wi-Fi and the time server)");
+        let process_lived = Duration::from_secs(56);
+        assert!(first_look(true) + Duration::from_secs(5) < process_lived, "the shorter of Alex's two opens had time for a look");
+    }
+
+    /// The view back in front looks again when its last look is an hour old by the wall clock (a sleeping handheld's
+    /// `Instant` stands still, so the day's timer alone never comes round), and not at every Home and back.
+    #[test]
+    fn coming_back_to_the_front_looks_again_after_an_hour() {
+        assert!(look_on_front(false, None), "never looked in this process");
+        assert!(look_on_front(true, Some(FRONT_AGAIN)), "an hour ago");
+        assert!(look_on_front(true, Some(Duration::from_secs(9 * 3600))), "the night asleep");
+        assert!(!look_on_front(true, Some(Duration::from_secs(120))), "two minutes ago: not again");
+        assert!(look_on_front(true, None), "the clock went back: counts as old");
+    }
+
+    /// 17.11.2026 (emulator, android.6): the notice was put up while the view was behind Home and counted as said; the
+    /// Retroid's Recents ended the process, and the version was never offered again. A found version waits for the screen.
+    #[test]
+    fn a_found_version_is_said_only_on_screen() {
+        let found = Facts { pending: true, ..facts() };
+        assert_eq!(step(Facts { on_screen: false, ..found }), Step::Pause, "behind Home or a dark screen: wait, no timer");
+        assert_eq!(step(found), Step::Say);
+        assert_eq!(step(Facts { on_screen: false, ..facts() }), Step::Look, "the look itself may run unseen");
     }
 
     #[test]

@@ -540,18 +540,7 @@ fn core_stage(r: &Report, known: &Known) -> Stage {
     stage(Kind::Core, Grade::Pristine, name, line, about_core)
 }
 
-/// Lines a console draws natively, for 3D cores whose internal resolution can be raised.
-pub fn native_lines(system: &str) -> Option<u32> {
-    Some(match system {
-        "n64" => 240,
-        "psp" => 272,
-        "dreamcast" | "naomi" | "atomiswave" => 480,
-        "psx" => 240,
-        "saturn" => 224,
-        "nds" => 192,
-        _ => return None,
-    })
-}
+pub use crate::picture_fx::native_lines;
 
 /// "8:7" for a pixel 8/7 as wide as tall, from small whole numbers where one is close enough.
 fn pixel_ratio(par: f32) -> String {

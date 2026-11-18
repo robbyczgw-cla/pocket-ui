@@ -23,6 +23,8 @@ pub mod case_knows;
 pub mod case_knows_read;
 pub mod case_knows_art;
 pub mod disc_serial;
+/// A game of several discs: the pause menu's Disc row (`disc`), Linux's.
+pub mod disc;
 pub mod archive;
 pub mod fsutil;
 
@@ -42,8 +44,18 @@ pub mod media;
 pub mod tape_label;
 pub mod title_block;
 pub mod pause_head;
+/// The pause menu's pages as painted on Linux and in Android's player: one painter for both (`pause_page`).
+pub mod pause_page;
+/// The Picture page's live preview (`preview`): its layout and painting, as Linux's.
+pub mod preview;
 /// The handhelds' pause menu for Android's player when the game came from the Handheld view (`pause_list`).
 pub mod pause_list;
+/// The Options page of that menu, laid out as Linux's (`pause_options`).
+pub mod pause_options;
+/// Fast-forward and rewind as pocket-core runs them (`play_speed`), its history (`rewind`) and HOME + R2 / L2 (`hotkeys`).
+pub mod play_speed;
+pub mod rewind;
+pub mod hotkeys;
 pub mod motion;
 pub mod keyboard;
 mod library_names;
@@ -126,7 +138,10 @@ pub mod button_prompts;
 pub mod cozy_extras;
 pub mod insert_rig;
 pub mod insert_scene;
+/// Save's picture flying into its slot (`save_fill`), as Linux's pause menu shows it.
+pub mod save_fill;
 pub mod playful;
+pub mod lived_in;
 pub mod sticker_press;
 
 pub mod where_was_i;
@@ -151,6 +166,8 @@ pub mod untar;
 pub mod android_cores;
 /// Which way a game starts on Android (our player, a core to download, another app), for the Mobile and the handheld view.
 pub mod play_route;
+/// The Android games: apps the player calls games, one list for both views (`launcher.json` `android_games`).
+pub mod android_games;
 #[cfg(target_os = "android")]
 pub mod android_core_run;
 pub mod status_corner;
@@ -169,10 +186,24 @@ pub mod frames_more;
 pub mod frames_tv;
 pub mod frame_cache;
 pub mod frame_led;
-pub mod video { pub use crate::video_basics::*; }
+pub mod video { pub use crate::video_basics::*; pub use crate::video_program::{Effect, Sharpness}; pub use crate::video_settings::{FrameMode, Orientation, VideoSettings}; }
+pub mod video_settings;
+/// The games' settings files as Linux keeps them (`game_settings`): the player reads and writes them.
+pub mod game_settings;
+/// Linux's game settings' table and Looks (`option_table`, `look`): the player's Picture page has Linux's rows.
+pub mod option_table;
+pub mod look;
+/// Linux's picture shader (`shaders/video.frag`) and its effects' constants: the player draws every Look as pocket-core does.
+pub mod video_program;
+pub mod picture_fx;
 pub mod battery {
     /// As Linux's `battery::dir`.
     pub fn dir() -> std::path::PathBuf {
         std::path::PathBuf::from(std::env::var("POCKETUI_BATTERY").unwrap_or_else(|_| "/sys/class/power_supply/battery".into()))
     }
 }
+
+pub mod timeline;
+pub mod timezone;
+pub mod run_ahead;
+pub mod storage { pub use crate::storage_space::*; }

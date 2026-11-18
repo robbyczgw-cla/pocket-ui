@@ -23,6 +23,16 @@ const ROW_GAP: i32 = 12;
 /// The snapshots' "slot-…:<system>:card": the full medium in the pause menu whatever the setting says.
 static SNAPSHOT_CARD: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 
+/// How much height the slots of a `kind` medium take under the pause menu's picture in a window `w` wide: the slim row as
+/// much as the old dots did (28), the full medium its own.
+pub(crate) fn strip_h(kind: Kind, w: i32) -> i32 {
+    if pause_memory_card() {
+        Layout::new(kind, LAID_OUT_FOR, w).h
+    } else {
+        28
+    }
+}
+
 /// "Memory card in the pause menu" (off by default): the full medium beside its blocks instead of the slim row.
 /// Only "slot-…:<system>:card" snapshots request the full medium here; players use the slim row.
 pub(crate) fn pause_memory_card() -> bool {
@@ -124,16 +134,6 @@ impl App {
             }
         };
         pocket_ui::save_fill::paint(c, picture, preview, block, m);
-    }
-
-    /// How much height the slots take under the picture: the slim row as much as the old dots did (28), the full
-    /// medium its own.
-    pub(crate) fn save_strip_h(&self, w: i32) -> i32 {
-        if pause_memory_card() {
-            self.save_strip(w).1.h
-        } else {
-            28
-        }
     }
 
     /// The slim row centred on (cx, cy): `filled` one per slot, `ring` the slot the row is on.

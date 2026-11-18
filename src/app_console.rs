@@ -405,6 +405,13 @@ impl App {
         self.rebuild();
         // Box art is read at once, not on the thread (the games' cases, `app_cabinet`).
         self.cabinet.inline = true;
+        // `favorites[:shelf:games:<row>]`: the Favourites row (a mixed one), that row selected.
+        if id == "favorites" {
+            self.screen = Screen::Favorites;
+            self.rebuild();
+            self.sel = rest.split(':').nth(3).and_then(|r| r.parse().ok()).unwrap_or(0).min(self.items.len().saturating_sub(1));
+            self.prev_sel = self.sel;
+        }
         if let Some(s) = self.systems.iter().position(|sys| sys.name == id) {
             if let Some(i) = self.items.iter().position(|it| *it == Item::System(s)) {
                 self.sel = i;

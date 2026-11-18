@@ -488,27 +488,20 @@ pub fn android_profile() -> bool {
 pub const ANDROID_PROFILE_ENV: &str = "POCKETUI_ANDROID_PROFILE";
 
 /// What Android's handheld view (android/handheld) leaves to Android or doesn't have: the radios (Wi-Fi, Bluetooth, remote
-/// access), sleep and power, the fan, the LEDs and the motor, the clock, the card and its backup, ROCKNIX's updates, and
+/// access), sleep and power, the fan, the LEDs and the motor, the clock, the card and its backup, and
 /// the services of a Linux handheld (Syncthing, Tailscale, the web share, PC streaming, tools), the screen's own colour,
 /// EmulationStation's gamelists, the backup to the card and the button test (it reads Linux's input devices).
-pub const ANDROID_HIDES: &[&str] = &["leds", "haptics", "sync", "tailscale", "tools", "perf_fan", "radios", "time", "updates", "sleep",
+pub const ANDROID_HIDES: &[&str] = &["leds", "haptics", "sync", "tailscale", "tools", "perf_fan", "radios", "time", "sleep",
+    // Updates stays (since 0.5.0-android.9): its look and install are Android's own list and installer (`app_update_hint`).
     "storage", "web", "pc_streaming", "night_light", "screen_colour", "battery", "gamelist", "backup", "test_buttons",
     // The report is written to the card's reports folder; Android's way is the Mobile view's Report a problem (Settings → View).
     "report",
-    // What only pocket-core's pause menu and overlay have: the Android player's menu has Zoom always, one Save & quit, no frame-rate
-    // or Pixel Path line and no run-ahead, no console boot screen (it has no BIOS folder to read), and its Screenshot button saves into the player's folder, not the one this view reads.
+    // What only pocket-core's pause menu and overlay have: the Android player's menu has Zoom always, one Save & quit, its own
+    // Over the game (Off/FPS, Options in the game, kept with its picture choices: no default here), no Pixel Path line and no run-ahead,
+    // no console boot screen (it has no BIOS folder to read), and its Screenshot button saves into the player's folder, not the one this view reads.
     "zoom_pause", "boot_screen", "over_game", "remember_quit", "quit_without_saving", "pixel_path", "pixel_path_live", "run_ahead", "screenshots"];
 
-/// What a game's "This game" page offers on Android's handheld view: the settings of the picture the Android player draws
-/// (scaling, the Look, the frame; its four effects are the Look's four values, so Custom with Sharpness and Effect is not there). Everything else of Linux's list is pocket-core's: the
-/// player has no rewind or Earlier setting, no fast-forward, rumble, fan or run-ahead, no screen turn, no Over the game and no
-/// HOME shortcuts, so a row for them would be a switch that does nothing.
-pub const ANDROID_PLAYER_SETTINGS: &[&str] = &["scaling", "look", "frame"];
-
-/// Whether a game setting is out of the page, given Android's profile.
-pub fn game_setting_out_in(key: &str, android: bool) -> bool {
-    android && !ANDROID_PLAYER_SETTINGS.contains(&key)
-}
+pub use crate::option_table::{game_setting_out_in, ANDROID_PLAYER_SETTINGS};
 
 /// Settings pages and feature cards a device lacks, by key: the one list behind the Settings rows (`app_settings_groups`)
 /// and the Tour / first-start cards (`features::available`). `leds` is the lights around the sticks; the rest are what
@@ -521,8 +514,8 @@ pub fn hides_in(key: &str, sticks: bool, nextui_owned: bool, android: bool) -> b
     if android && ANDROID_HIDES.contains(&key) {
         return true;
     }
-    // Settings → View (handheld or Mobile) is Android's alone.
-    if key == "android_view" {
+    // Settings → View (handheld or Mobile) and Games → Android games are Android's alone.
+    if key == "android_view" || key == "android_games" {
         return !android;
     }
     // Settings → System → Back to EmulationStation is dArkOS's alone (src/darkos.rs).
@@ -614,6 +607,7 @@ mod tests {
         }
         assert!(super::hides_in("android_view", true, false, false), "no View row on Linux");
         assert!(!super::hides_in("android_view", true, false, true), "the View row on Android");
+        assert!(!super::hides_in("updates", true, false, true), "Updates on Android: a look by hand (17.11.2026)");
     }
 
     /// docs/TRIMUI-BRICK-MORE.md: the Tour leaves out the cards whose page the Brick has no row for, and every card it keeps names a real id.

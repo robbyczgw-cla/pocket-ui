@@ -1922,6 +1922,48 @@ fn every_category_and_row_by_the_pad_in_android_s_handheld_view() {
     every_category_by_r1_l1_and_every_row_by_the_dpad(ANDROID_ODIN);
 }
 
+/// 17.11.2026 (Retroid Pocket Mini V2): Android's handheld view had no way to look for an update by hand; the notice was
+/// the only way, and it did not come. Settings › System › Updates is there now, in every language, by the pad: its row in
+/// System, the offer with a newer version (`POCKETUI_UPDATE_HINT` stands in for Android's list), every row with Down and
+/// round again, A on the offer asks first and says that pocket-ui closes, B back to the page and to the Updates row.
+#[test]
+fn the_updates_page_in_android_s_handheld_view_by_the_pad_in_every_language() {
+    let languages = [
+        ("en", "Updates", "Install pocket-ui 99.0.0", "Install now", "Open"),
+        ("de", "Updates", "pocket-ui 99.0.0 installieren", "Jetzt installieren", "Öffne"),
+        ("es", "Actualizaciones", "Instalar pocket-ui 99.0.0", "Instalar ahora", "Ábrelo"),
+        ("fr", "Mises à jour", "Installer pocket-ui 99.0.0", "Installer maintenant", "Rouvre-le"),
+        ("it", "Aggiornamenti", "Installa pocket-ui 99.0.0", "Installa ora", "Riaprilo"),
+        ("pt", "Atualizações", "Instalar pocket-ui 99.0.0", "Instalar agora", "Abra"),
+    ];
+    for (lang, row, install, now, closes) in languages {
+        let card = Card::new(&ANDROID_ODIN);
+        let mut ui = Ui::start(&card, &ANDROID_ODIN, true, 1, &[("POCKETUI_LANG", lang), ("POCKETUI_UPDATE_HINT", "99.0.0")]);
+        // The notice of the newer version is on the shelf: B closes it (its A installs at once on Android).
+        let shelf = ui.settled(&[]).unwrap();
+        if shelf.at.ends_with(" / notice") {
+            ui.settled(&["b"]).unwrap();
+        }
+        ui.settled(&["start"]).unwrap();
+        open_category(&mut ui, "System");
+        let system = select_named(&mut ui, row);
+        let page = ui.settled(&["a"]).unwrap();
+        assert_eq!(page.at, "settings:Updates", "{lang}: A on {row} opens the page");
+        assert_eq!(page.focused().as_deref(), Some(install), "{lang}: the offer first:\n{}", page.text());
+        let rows = walk_rows(&mut ui, &page);
+        assert_eq!(rows.len(), 3, "{lang}: the offer, Check again and the switch, no card row on Android: {rows:?}");
+        let ask = ui.settled(&["a"]).unwrap();
+        assert_eq!(ask.focused().as_deref(), Some(now), "{lang}: A asks first:\n{}", ask.text());
+        assert!(ask.text().contains(closes), "{lang}: the question says pocket-ui closes and how to come back:\n{}", ask.text());
+        assert!(ask.names_hint("b"), "{lang}: B is hinted on the question: {:?}", ask.hints);
+        let back = ui.settled(&["b"]).unwrap();
+        assert_eq!((back.at.as_str(), back.focused().as_deref()), ("settings:Updates", Some(install)), "{lang}: B on the question is Later");
+        let list = ui.settled(&["b"]).unwrap();
+        assert_eq!(list.at, system.at, "{lang}: B leaves the page for System");
+        assert!(list.same_row(&system), "{lang}: on the Updates row again");
+    }
+}
+
 #[cfg(feature = "brick")]
 #[test]
 fn every_category_and_row_by_the_pad_at_1280x720() {
@@ -2620,5 +2662,138 @@ fn launch_response_preserves_the_requested_frames_sound() {
         let frame = ui.press(&["a"]).unwrap();
         assert!(frame.feedback.as_ref().is_some_and(|s| s.contains("sound:")),
             "the requested launch frame retains its button sound despite an automatic response paint: {frame:?}");
+    }
+}
+
+// ---- Android games in Android's handheld view ----------------------------------------------------------------------
+
+/// Android's list as `AppDrawer.list` writes it (`POCKETUI_ANDROID_APPS` stands in for it): a mail app, a game Android files
+/// under games, a game it doesn't.
+const ANDROID_APPS: &str = r#"[{"package":"com.example.mail","label":"Mail"},{"package":"com.example.racer","label":"Pixel Racer","game":true},{"package":"com.example.tower","label":"Tower Quest"}]"#;
+
+/// The card of Android's handheld view with the Android games' system in es_systems.cfg (as `app_android.rs` writes it) for the
+/// first run's data folder, and a Mobile view's launcher.json with other choices in it.
+fn android_games_card() -> Card {
+    let card = Card::new(&ANDROID_ODIN);
+    let es = card.path().join("es_systems.cfg");
+    let data = card.path().join("run-1/data");
+    std::fs::create_dir_all(&data).unwrap();
+    let cfg = pocket_ui::android_games::with_es_entry(&std::fs::read_to_string(&es).unwrap(), &data.join(pocket_ui::android_games::FOLDER));
+    std::fs::write(&es, cfg).unwrap();
+    std::fs::write(data.join("launcher.json"), r#"{"light":true,"plays_with":{"psp":"org.ppsspp.ppsspp"}}"#).unwrap();
+    card
+}
+
+/// Right on Home until the system card named `name` is in front (its name is the card's first line).
+fn home_system(ui: &mut Ui, name: &str) -> Option<Frame> {
+    let mut f = ui.settled(&[]).unwrap();
+    for _ in 0..12 {
+        let g = ui.settled(&["left"]).unwrap();
+        if g.same(&f) {
+            break;
+        }
+        f = g;
+    }
+    let mut seen = Vec::new();
+    for _ in 0..12 {
+        if f.text().lines().next() == Some(name) {
+            return Some(f);
+        }
+        seen.push(f.text().lines().take(3).collect::<Vec<_>>().join(" / "));
+        f = ui.settled(&["right"]).unwrap();
+    }
+    eprintln!("no {name} on Home: {seen:#?}");
+    None
+}
+
+/// 17.11.2026: "can we add Android games?" The handheld view had no Android shelf; the Mobile view's drawer did. The
+/// journey on the pad: Settings › Games › Android games lists Android's apps by name with the suggestion as a hint, A puts a game
+/// on the shelf (into the Mobile view's launcher.json, the rest of it kept), Home has the system Android with it, A starts the
+/// game as Android's app (no console, the emulator is Android's), and when it ends the shelf is where it was.
+#[test]
+fn an_android_game_marked_on_the_pad_stands_on_the_shelf_and_starts_its_app() {
+    let card = android_games_card();
+    let data = card.path().join("run-1/data");
+    let mut ui = Ui::start(&card, &ANDROID_ODIN, true, 1, &[(pocket_ui::android_games::APPS_ENV, ANDROID_APPS)]);
+    // A game that ends by itself at once: Android's app closed and the view is back.
+    executable(&card.path().join("run-1/run-game"), "#!/bin/sh\nprintf '%s\\n' \"$1\" > \"$0.started\"\nsleep 0.3\n");
+    assert!(home_system(&mut ui, "Android").is_none(), "nothing marked: no Android shelf");
+    ui.settled(&["start"]).unwrap();
+    open_category(&mut ui, "Games");
+    let row = select_named(&mut ui, "Android games");
+    assert!(row.text().contains("None"), "the row says none is on the shelf:\n{}", row.text());
+    let page = ui.settled(&["a"]).unwrap();
+    assert_eq!(page.at, "settings:Android games");
+    assert!(page.text().contains("No Android games on the shelf yet."), "the empty shelf says how games get there:\n{}", page.text());
+    assert_eq!(walk_rows(&mut ui, &page), ["Mail", "Pixel Racer", "Tower Quest"], "Android's apps by name");
+    assert!(page.text().contains("Looks like a game"), "Android's category is a hint on its row:\n{}", page.text());
+    let racer = select_named(&mut ui, "Pixel Racer");
+    assert!(racer.names_hint("a") && racer.names_hint("b"), "A and B hinted: {:?}", racer.hints);
+    let marked = ui.settled(&["a"]).unwrap();
+    assert!(marked.text().contains("On the shelf") && !marked.text().contains("Looks like a game"), "A put it on the shelf:\n{}", marked.text());
+    let json: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(data.join("launcher.json")).unwrap()).unwrap();
+    assert_eq!(json["android_games"]["com.example.racer"], "Pixel Racer", "the Mobile view's list: {json}");
+    assert_eq!((&json["light"], &json["plays_with"]["psp"]), (&serde_json::json!(true), &serde_json::json!("org.ppsspp.ppsspp")), "the rest of launcher.json stays");
+    let list = ui.settled(&["b"]).unwrap();
+    assert_eq!(list.focused().as_deref(), Some("Android games"), "B back to its row");
+    assert!(list.text().contains("1 game"), "the row counts it:\n{}", list.text());
+    ui.settled(&["b"]).unwrap();
+    let shelf = home_system(&mut ui, "Android").unwrap_or_else(|| panic!("the Android shelf on Home:\n{}", ui.log()));
+    assert!(shelf.text().contains("1 game"), "{}", shelf.text());
+    assert!(!shelf.text().contains("android-app"), "Runs on names Android, not an id (Mini V2 18.11.):\n{}", shelf.text());
+    let games = ui.settled(&["a"]).unwrap();
+    assert!(games.text().contains("Pixel Racer"), "the game on its shelf, by its app's name:\n{}", games.text());
+    let started = card.path().join("run-1/run-game.started");
+    ui.press(&["a"]).unwrap();
+    ui.wait(|| started.exists(), "A starts the game").unwrap();
+    assert!(std::fs::read_to_string(&started).unwrap().trim_end().ends_with("com.example.racer.app"), "its file: {}", std::fs::read_to_string(&started).unwrap());
+    let log = std::fs::read_to_string(ui.run.join("ui.log")).unwrap();
+    let launch = log.lines().find(|l| l.starts_with("launch android ")).unwrap_or_else(|| panic!("a launch line:\n{}", ui.log()));
+    assert!(launch.contains("(emulator android-app, core )"), "Android starts it, no emulator of ours: {launch}");
+    let mut back = ui.settled(&[]).unwrap();
+    for _ in 0..40 {
+        if back.at == games.at { break; }
+        std::thread::sleep(Duration::from_millis(100));
+        back = ui.settled(&[]).unwrap();
+    }
+    assert_eq!(back.at, games.at, "back where it was: {}", ui.log());
+    assert!(back.text().contains("Pixel Racer") && back.focused() == games.focused(), "on the same game:\n{}", back.text());
+}
+
+/// The page in every language on the pad: its row in Games, the line that says how games get on the shelf while none is there,
+/// every app reached with Down and round again, A on one says it is on the shelf, B back to the row. Without any app Android
+/// lists, the page says so and A offers nothing.
+#[test]
+fn the_android_games_page_by_the_pad_in_every_language_and_its_empty_states() {
+    let languages = [
+        ("en", "Android games", "No Android games on the shelf yet.", "On the shelf", "Android lists no other apps"),
+        ("de", "Android-Spiele", "Noch keine Android-Spiele im Regal.", "Im Regal", "Android zeigt keine anderen Apps"),
+        ("es", "Juegos de Android", "Aún no hay juegos de Android en el estante.", "En el estante", "Android no muestra otras apps"),
+        ("fr", "Jeux Android", "Aucun jeu Android sur l'étagère pour l'instant.", "Sur l'étagère", "Android ne montre aucune autre app"),
+        ("it", "Giochi Android", "Ancora nessun gioco Android sullo scaffale.", "Sullo scaffale", "Android non mostra altre app"),
+        ("pt", "Jogos Android", "Ainda não há jogos Android na estante.", "Na estante", "O Android não mostra outros apps"),
+    ];
+    for (lang, row, empty, on, no_apps) in languages {
+        for apps in [ANDROID_APPS, "[]"] {
+            let card = android_games_card();
+            let mut ui = Ui::start(&card, &ANDROID_ODIN, true, 1, &[("POCKETUI_LANG", lang), (pocket_ui::android_games::APPS_ENV, apps)]);
+            ui.settled(&["start"]).unwrap();
+            open_category(&mut ui, "Games");
+            let list = select_named(&mut ui, row);
+            let page = ui.settled(&["a"]).unwrap();
+            assert_eq!(page.at, "settings:Android games", "{lang}: A on {row} opens the page");
+            if apps == "[]" {
+                assert!(page.text().contains(no_apps), "{lang}: no apps, and what to do:\n{}", page.text());
+                assert!(!page.names_hint("a") && page.names_hint("b"), "{lang}: only B: {:?}", page.hints);
+            } else {
+                assert!(page.text().contains(empty), "{lang}: nothing on the shelf yet, and how:\n{}", page.text());
+                assert_eq!(walk_rows(&mut ui, &page).len(), 3, "{lang}: every app by the pad");
+                let marked = ui.settled(&["a"]).unwrap();
+                assert!(marked.text().contains(on), "{lang}: A put it on the shelf:\n{}", marked.text());
+                assert!(!marked.text().contains(empty), "{lang}: the empty line is gone:\n{}", marked.text());
+            }
+            let back = ui.settled(&["b"]).unwrap();
+            assert!(back.at == list.at && back.same_row(&list), "{lang}: B back to the {row} row");
+        }
     }
 }

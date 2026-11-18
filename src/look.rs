@@ -8,7 +8,7 @@
 //! computer gets Scanlines and Old TV, and neither gets the other's (historically wrong, and a shorter row). A saved
 //! combination the kind doesn't offer shows as Custom with its rows open, as does every Soft + effect pair.
 
-use crate::options::HANDHELDS;
+use crate::option_table::HANDHELDS;
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Look {

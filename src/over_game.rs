@@ -20,9 +20,9 @@
 use std::collections::BTreeMap;
 
 /// The Options key (`<data>/game-settings/…`): "off", "fps", "sensors", "pixel".
-pub const KEY: &str = "over_game";
+pub const KEY: &str = crate::option_table::OVER_GAME_KEY;
 /// The Options key of the HOME + Y shortcut: "on" or "off".
-pub const SHORTCUT_KEY: &str = "hk_over";
+pub const SHORTCUT_KEY: &str = crate::option_table::OVER_GAME_SHORTCUT_KEY;
 /// The keys these had before 2026-10-25; [`migrate`] turns them into the new ones.
 const OLD_KEY: &str = "show_fps";
 const OLD_SHORTCUT_KEY: &str = "hk_pixel";

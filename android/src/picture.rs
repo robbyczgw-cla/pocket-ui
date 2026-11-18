@@ -1,9 +1,13 @@
 //! Android player picture policy. Geometry is independent of the density-scaled menu canvas; with a controller it is
 //! Linux's (`Settings::place`).
-use pocket_ui::{bezel::{self, Cabinet, Placed, Style}, core_options::{FileOption, FileValue}, touch::Area, video::{dest_rect, Rect, Scaling}};
-use std::path::{Path, PathBuf};
+use pocket_ui::{bezel::{self, Placed, Style}, core_options::{FileOption, FileValue}, touch::Area, video::{dest_rect, Rect, Scaling}};
+use std::collections::BTreeMap;
+use std::path::Path;
+use pocket_ui::pause_options;
 
-pub const ROWS: usize = 4;
+/// The Mobile sheet's Picture rows (Linux's settings), then Keep for: `ROWS` in all.
+pub const SHEET: [&str; 3] = ["scaling", "frame", "look"];
+pub const ROWS: usize = SHEET.len() + 1;
 
 /// The pixels the game's picture is placed in: `game` is in `size` units, laid onto `view` (physical: left, bottom, width,
 /// height, as GL's viewport). The crt switch-on, the frame and the picture itself are all drawn in this space
@@ -36,73 +40,273 @@ impl Space {
         Area::new(x0, y0, x1 - x0, y1 - y0)
     }
 }
+/// The player's Picture choices and the other per-game rows it keeps (Over the game, Resolution, Earlier states), as Linux
+/// keeps them: Linux's keys and values in the game's or the console's file of `game_settings` (the Handheld view's files for
+/// a game it started, so its This game page and Linux's pause menu read the same; the player's own for the Mobile view).
+/// What neither file has comes from what the view handed over (`handed`: its effective values, Settings' globals included),
+/// else Linux's defaults. The indexes the player's rows and geometry use (`scaling`, `frame`, `effect`) are worked out from
+/// the values (`derive`), never saved.
 #[derive(Clone)]
 pub struct Settings {
+    /// How the touch layout places the picture: Aspect 0, Integer 1, Fullscreen 2 (from `video.scaling`).
     pub scaling: usize,
+    /// Whether a frame is drawn, for the room around the picture: none 0, the CRT TV 2, any other 1 (from `video.frame`;
+    /// the frame drawn is `frame_style`'s).
     pub frame: usize,
-    pub effect: usize,
-    game: bool,
-    system_path: PathBuf,
-    game_path: PathBuf,
+    /// Over the game: FPS in the top left corner (Options → Over the game, Linux's Speed, rumble, fan row).
+    pub over_game: bool,
+    /// Options → Picture → Resolution (`render_scale`): the factor chosen (1 = Original … 4), None while nobody chose one
+    /// (the handheld's default). Read when the game starts, as pocket-core reads Linux's.
+    pub resolution: Option<u8>,
+    /// Options → Earlier states: None while nobody chose (`timeline_policy::default_on`).
+    pub earlier: Option<bool>,
+    /// Speed, rumble, fan › Fast-forward speed and Rewind (`play_speed`): Linux's 4x and Off to begin with.
+    pub ff_speed: pocket_ui::play_speed::FastForward,
+    pub rewind: bool,
+    /// The Picture values as Linux reads them (`video_settings`): the frame and its finish, the shader variant.
+    pub video: pocket_ui::video::VideoSettings,
+    files: pocket_ui::game_settings::Files,
+    level: pocket_ui::game_settings::Level,
+    /// This game's or its console's own values (`level` says whose), Linux's keys.
+    own: BTreeMap<String, String>,
+    handed: BTreeMap<String, String>,
 }
+
+/// The player's Picture files from before 18.11.2026 (`picture/games/<key>.json`, `picture/systems/<system>.json`: indexes
+/// scaling Fit/Integer/Stretch, frame None/Console/CRT TV, effect Sharp/Smooth/CRT/Scanlines, over_game, resolution,
+/// earlier) taken over once into the player's `game-settings` as Linux's values; the old file goes once its values are
+/// written. A file `game-settings` already has is left as it is (and the old one goes).
+pub fn migrate_old(data: &Path, system: &str, key: &str) {
+    let files = pocket_ui::game_settings::Files::new(data, system, Path::new(key));
+    for (old, new) in [(data.join("picture/games").join(format!("{key}.json")), files.game_file()), (data.join("picture/systems").join(format!("{system}.json")), files.console_file())] {
+        let Some(v) = pocket_ui::fsutil::read_json_or_backup::<serde_json::Value>(&old) else { continue };
+        if !new.exists() {
+            let values = old_values(&v);
+            if pocket_ui::fsutil::write_json(&new, &values).is_err() {
+                continue;
+            }
+        }
+        let _ = std::fs::remove_file(&old);
+        let _ = std::fs::remove_file(old.with_extension("json.bak"));
+    }
+}
+
+/// An old file's indexes as Linux's values.
+pub fn old_values(v: &serde_json::Value) -> BTreeMap<String, String> {
+    let index = |k: &str, n: u64| v[k].as_u64().map(|i| i.min(n - 1) as usize);
+    let mut out = BTreeMap::new();
+    if let Some(i) = index("scaling", 3) {
+        out.insert("scaling".into(), ["aspect", "native", "fullscreen"][i].to_string());
+    }
+    if let Some(i) = index("frame", 3) {
+        out.insert("frame".into(), ["none", "auto", "crt"][i].to_string());
+    }
+    if let Some(i) = index("effect", 4) {
+        // Sharp, Smooth, CRT, Scanlines: Linux's Looks Clean, Smooth, Old TV, Scanlines (`look::Look::canonical`).
+        let effect = ["none", "smooth", "crt", "scanlines"][i];
+        out.insert("sharpness".into(), "crisp".into());
+        out.insert("effect".into(), effect.into());
+    }
+    if let Some(on) = v["over_game"].as_u64() {
+        out.insert(pause_options::OVER_GAME_KEY.into(), pause_options::OVER_GAME_VALUES[usize::from(on == 1)].into());
+    }
+    if let Some(f) = v["resolution"].as_u64().filter(|f| (1..=4).contains(f)) {
+        out.insert(pocket_ui::render_scale::KEY.into(), f.to_string());
+    }
+    if let Some(on) = v["earlier"].as_u64() {
+        out.insert(pocket_ui::timeline_policy::KEY.into(), if on == 1 { "on" } else { "off" }.into());
+    }
+    out
+}
+
+/// Where a game from the Mobile view starts when nothing is saved: as large as fits (the touch pad needs the room).
+pub const MOBILE_START: [(&str, &str); 1] = [("scaling", "aspect")];
+
+/// `MOBILE_START` as the values a Mobile game is handed.
+pub fn mobile_start() -> BTreeMap<String, String> {
+    MOBILE_START.iter().map(|(k, v)| (k.to_string(), v.to_string())).collect()
+}
+
 impl Settings {
-    pub fn load(data: &Path, system: &str, key: &str) -> Self {
-        let system_path = data.join("picture/systems").join(format!("{system}.json"));
-        let game_path = data.join("picture/games").join(format!("{key}.json"));
-        let read = |p: &Path| pocket_ui::fsutil::read_json_or_backup::<serde_json::Value>(p);
-        let per_game = read(&game_path);
-        let game = per_game.is_some();
-        let value = per_game.or_else(|| read(&system_path)).unwrap_or_default();
-        let get = |key: &str, max: usize| value[key].as_u64().unwrap_or(0).min(max as u64) as usize;
-        Self { scaling: get("scaling", 2), frame: get("frame", 2), effect: get("effect", 3), game, system_path, game_path }
+    /// The game's settings in `data` (the folder holding `game-settings`): `game` names its file (the Handheld view's ROM,
+    /// whose stem Linux uses; the player's stable key for a Mobile game). `handed`: what the starting view says the game
+    /// uses where no file of these has a value.
+    pub fn load(data: &Path, system: &str, game: &Path, handed: BTreeMap<String, String>) -> Self {
+        let files = pocket_ui::game_settings::Files::new(data, system, game);
+        let (own, level) = files.read();
+        let mut s = Self { scaling: 0, frame: 0, over_game: false, resolution: None, earlier: None, ff_speed: Default::default(), rewind: false, video: Default::default(), files, level, own, handed };
+        s.derive();
+        s
     }
-    /// The handheld view's choice for this game (`launchPath`'s settings, `picture`: Options → Picture there): what the page
-    /// there shows is what is drawn. Not saved here; a change in the pause menu is saved as it always is.
-    pub fn follow_view(&mut self, view: &serde_json::Value) {
-        let get = |key: &str, max: usize| view[key].as_u64().map(|v| v.min(max as u64) as usize);
-        self.scaling = get("scaling", 2).unwrap_or(self.scaling);
-        self.frame = get("frame", 2).unwrap_or(self.frame);
-        self.effect = get("effect", 3).unwrap_or(self.effect);
+    /// The value in use for `key`: the file's, else the view's, else None (Linux's default).
+    pub fn value(&self, key: &str) -> Option<&str> {
+        self.own.get(key).or_else(|| self.handed.get(key)).map(String::as_str)
     }
-    pub fn options(&self) -> Vec<FileOption> {
-        [("Scaling", &["Fit / aspect", "Integer", "Stretch / fullscreen"][..], self.scaling),
-         ("Screen frame", &["None", "Console", "CRT TV"][..], self.frame),
-         ("Picture effect", &["Sharp", "Smooth", "CRT", "Scanlines"][..], self.effect),
-         ("Save settings for", &["This system", "This game"][..], usize::from(self.game))]
-        .into_iter().map(|(label, values, current)| FileOption {
-            key: format!("picture.{label}"), label: label.into(),
-            current: values[current].into(), default: values[0].into(),
-            values: values.iter().map(|s| FileValue { value: (*s).into(), label: (*s).into() }).collect(),
-            ..FileOption::default()
-        }).collect()
+    /// Linux's values in use (`effective`), for the Picture page's rows (`pause_options::picture_settings`).
+    pub fn values(&self) -> BTreeMap<String, String> {
+        self.effective()
     }
-    pub fn change(&mut self, row: usize, delta: i32) -> Result<(), String> {
-        let (at, count) = match row {
-            0 => (&mut self.scaling, 3), 1 => (&mut self.frame, 3),
-            2 => (&mut self.effect, 4), 3 => { self.game = !self.game; return self.save(); },
-            _ => return Ok(()),
+    /// Linux's `pairs` from a row of the Picture page, kept as Keep for says.
+    pub fn set_values(&mut self, pairs: &[(&'static str, String)]) -> Result<(), String> {
+        self.set(pairs)
+    }
+    fn effective(&self) -> BTreeMap<String, String> {
+        let mut v = self.handed.clone();
+        v.extend(self.own.iter().map(|(k, v)| (k.clone(), v.clone())));
+        v
+    }
+    /// The indexes and the drawing values from the values in use.
+    fn derive(&mut self) {
+        self.video = pocket_ui::video::VideoSettings::from_values(&self.effective());
+        use pocket_ui::video::{FrameMode, Scaling};
+        self.scaling = match self.video.scaling {
+            Scaling::Aspect => 0,
+            Scaling::Fullscreen => 2,
+            Scaling::Native | Scaling::IntegerSmaller => 1,
         };
-        *at = (*at as i32 + delta).rem_euclid(count) as usize;
-        self.save()
+        self.frame = match self.video.frame {
+            FrameMode::None | FrameMode::Ambient => 0,
+            FrameMode::Crt => 2,
+            _ => 1,
+        };
+        self.over_game = self.value(pause_options::OVER_GAME_KEY).is_some_and(|v| v != "off");
+        self.resolution = self.value(pocket_ui::render_scale::KEY).and_then(|v| v.parse::<u8>().ok()).filter(|f| (1..=4).contains(f));
+        self.earlier = self.value(pocket_ui::timeline_policy::KEY).map(|v| v == "on");
+        self.ff_speed = self.value(pocket_ui::play_speed::FF_KEY).map(pocket_ui::play_speed::FastForward::parse).unwrap_or_default();
+        self.rewind = self.value(pocket_ui::play_speed::REWIND_KEY) == Some("on");
     }
-    fn save(&self) -> Result<(), String> {
-        let path = if self.game { &self.game_path } else { &self.system_path };
-        let bytes = serde_json::to_vec(&serde_json::json!({"scaling":self.scaling,"frame":self.frame,"effect":self.effect})).map_err(|e| e.to_string())?;
-        pocket_ui::fsutil::write_atomic(path, &bytes).map_err(|e| e.to_string())?;
-        // Selecting the system scope explicitly returns this game to the system policy.
-        if !self.game && self.game_path.exists() {
-            std::fs::remove_file(&self.game_path).map_err(|e| e.to_string())?;
+    /// Options › Controls' choices (`ctl.*`, `controls::ControlsChange`), in the same file as the picture's, kept as Keep
+    /// for says, as Linux's pause menu keeps them (`emu_menu::control_step`): `set` entries where they differ from the
+    /// console's own, `remove` the ones back to it; `reset` takes every `ctl.*` out (Reset controls).
+    pub fn set_controls(&mut self, set: &[(String, String)], remove: &[String], reset: bool) -> Result<(), String> {
+        if reset {
+            self.own.retain(|k, _| !k.starts_with(pocket_ui::controls::KEY_PREFIX));
+        }
+        for k in remove {
+            self.own.remove(k);
+        }
+        for (k, v) in set {
+            self.own.insert(k.clone(), v.clone());
+        }
+        self.keep_own()
+    }
+    /// Sets Linux's `pairs` and keeps them where Keep for says, as pocket-core's pause menu does (`GameSettings::keep`).
+    fn set(&mut self, pairs: &[(&'static str, String)]) -> Result<(), String> {
+        for (k, v) in pairs {
+            self.own.insert(k.to_string(), v.clone());
+        }
+        self.keep_own()
+    }
+    /// The values of this game or its console kept where Keep for says.
+    fn keep_own(&mut self) -> Result<(), String> {
+        // Written now, not by the card writer (`Files::keep`): the player is a process of its own that may end with the
+        // menu, and a refused write says so in the menu (`SETTING_FAILED`).
+        let console = self.level == pocket_ui::game_settings::Level::Console;
+        let ok = if console { self.files.save_for_console(&self.own) } else { self.files.save_for_game(&self.own) };
+        if !console {
+            self.level = pocket_ui::game_settings::Level::Game;
+        }
+        self.derive();
+        if ok { Ok(()) } else { Err(pocket_ui::save_trouble::SETTING_FAILED.into()) }
+    }
+    /// Keep for: this game (true; also while nothing is saved, as Linux's) or every game of the console.
+    pub fn for_game(&self) -> bool {
+        self.level != pocket_ui::game_settings::Level::Console
+    }
+    /// The shader variant the picture is drawn with: the Look's, the GBA screen's colours with the LCD grid.
+    pub fn variant(&self, system: &str) -> pocket_ui::video_program::Variant {
+        let v = &self.video;
+        let lcd = v.lcd_colour && v.effect == pocket_ui::video::Effect::Grid && system == "gba";
+        (v.sharpness, v.effect, lcd)
+    }
+    /// Over the game on or off, kept as the picture's choices are.
+    pub fn set_over_game(&mut self, on: bool) -> Result<(), String> {
+        self.set(&[(pause_options::OVER_GAME_KEY, pause_options::OVER_GAME_VALUES[usize::from(on)].to_string())])
+    }
+    /// Options → Picture → Resolution as the core gets it at this start (`render_scale::for_start`, what pocket-core gives
+    /// it on Linux): `range` is this handheld's for the console (`render_scale::here`), `core` the core's library.
+    pub fn start_resolution(&self, range: Option<pocket_ui::render_scale::Range>, core: &Path) -> Option<pocket_ui::render_scale::StartOption> {
+        let chosen = self.resolution.map(|f| f.to_string());
+        pocket_ui::render_scale::for_start(range, &pocket_ui::core_options::core_id(core), chosen.as_deref())
+    }
+    /// Resolution chosen (a factor, 1 = Original); the core gets it at the next start.
+    pub fn set_resolution(&mut self, factor: u8) -> Result<(), String> {
+        self.set(&[(pocket_ui::render_scale::KEY, factor.clamp(1, 4).to_string())])
+    }
+    /// Earlier states on or off.
+    pub fn set_earlier(&mut self, on: bool) -> Result<(), String> {
+        self.set(&[(pocket_ui::timeline_policy::KEY, if on { "on" } else { "off" }.to_string())])
+    }
+    /// Fast-forward speed chosen, kept as the other rows are.
+    pub fn set_ff_speed(&mut self, speed: pocket_ui::play_speed::FastForward) -> Result<(), String> {
+        self.set(&[(pocket_ui::play_speed::FF_KEY, speed.value())])
+    }
+    /// Rewind on or off.
+    pub fn set_rewind(&mut self, on: bool) -> Result<(), String> {
+        self.set(&[(pocket_ui::play_speed::REWIND_KEY, if on { "on" } else { "off" }.to_string())])
+    }
+    /// Whether Earlier keeps its moments for `system`: the choice, else Linux's starting value for the console.
+    pub fn earlier_on(&self, system: &str) -> bool {
+        self.earlier.unwrap_or_else(|| pocket_ui::timeline_policy::default_on(system))
+    }
+    /// Restore defaults: the console's and the game's files go, every row is back to where it starts (Linux's
+    /// `GameSettings::restore_defaults`).
+    pub fn restore_defaults(&mut self) -> Result<(), String> {
+        self.files.restore_defaults();
+        self.own.clear();
+        self.level = pocket_ui::game_settings::Level::Defaults;
+        self.derive();
+        Ok(())
+    }
+    /// The Mobile view's sheet rows (`ROWS`): Linux's Screen scaling, Screen frame and Look with Linux's values and words for
+    /// the console (`pause_options::setting_choices`), Keep for last.
+    pub fn options(&self) -> Vec<FileOption> {
+        let system = self.files.system();
+        let values = self.effective();
+        let mut out: Vec<FileOption> = SHEET.iter().map(|key| {
+            let setting = pocket_ui::option_table::setting(key).expect("a Picture setting");
+            let choices = pause_options::setting_choices(key, system, None);
+            let current = pause_options::setting_value_of(key, system, None, &values);
+            let label = |v: &str| pocket_ui::option_table::label_in(setting, v, true).to_string();
+            FileOption {
+                key: format!("picture.{key}"), label: setting.name.into(),
+                current: label(current), default: choices.first().map_or(String::new(), |c| label(c.value)),
+                values: choices.iter().map(|c| FileValue { value: label(c.value), label: label(c.value) }).collect(),
+                ..FileOption::default()
+            }
+        }).collect();
+        let keep = [pause_options::keep_label(false), pause_options::keep_label(true)];
+        out.push(FileOption {
+            key: "picture.keep".into(), label: "Keep for".into(), current: keep[usize::from(self.for_game())].into(), default: keep[0].into(),
+            values: keep.iter().map(|s| FileValue { value: (*s).into(), label: (*s).into() }).collect(), ..FileOption::default()
+        });
+        out
+    }
+    /// A row of the Mobile sheet one step on (`SHEET`'s rows, then 3 Keep for): Linux's next value of the row.
+    pub fn change(&mut self, row: usize, delta: i32) -> Result<(), String> {
+        if let Some(key) = SHEET.get(row) {
+            let pairs = pause_options::setting_step(key, self.files.system(), None, &self.effective(), delta);
+            return self.set(&pairs);
+        }
+        if row == SHEET.len() {
+            // Keep for: the values in use move to the other side (`GameSettings::keep_elsewhere`).
+            let ok = if self.for_game() { self.files.save_for_console(&self.own) } else { self.files.save_for_game(&self.own) };
+            if !ok {
+                return Err(pocket_ui::save_trouble::SETTING_FAILED.into());
+            }
+            self.level = if self.for_game() { pocket_ui::game_settings::Level::Console } else { pocket_ui::game_settings::Level::Game };
         }
         Ok(())
     }
-    /// The frame these settings ask for: None draws none; Console is the console's own, as Linux's Auto picks it
-    /// (`bezel::style_for`: the handheld's shell, the monitor surround for the others); CRT TV is Linux's CRT frame in its
-    /// start cabinet. The same pictures Linux draws, by the same code.
+    /// The frame these settings ask for, as pocket-core picks it (`VideoSettings::fixed_style`, Auto the console's own by
+    /// `bezel::style_for`): with its finish (`frame_pocket`, `frame_clamshell`, `frame_brick`) and the TV's cabinet
+    /// (`frame_tv`). Ambient (drawn live from the picture on Linux) is none here. The same pictures Linux draws, by the same code.
     pub fn frame_style(&self, system: &str) -> Option<Style> {
-        match self.frame {
-            1 => Some(bezel::style_for(system)),
-            2 => Some(Style::Crt(Cabinet::default())),
-            _ => None,
+        use pocket_ui::video::FrameMode;
+        match self.video.frame {
+            FrameMode::None | FrameMode::Ambient => None,
+            FrameMode::Auto => Some(bezel::style_for(system)),
+            _ => self.video.fixed_style(system),
         }
     }
     /// How much of the player's height an upright phone keeps for the touch pad: the picture and its frame stand above it.

@@ -33,8 +33,7 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use crate::libretro::Frame;
 
-/// The game setting (Options → Extras → Earlier states): "on" or "off".
-pub const KEY: &str = "timeline";
+pub use crate::timeline_policy::KEY;
 /// Play between two states of the ring.
 pub const EVERY: Duration = Duration::from_secs(5 * 60);
 /// States in the ring: half an hour back.
@@ -52,14 +51,7 @@ pub const SMALL_STATE: usize = 2_000_000;
 /// How long the pause menu is open before a quiet capture: it has listed the states by then (`QuickMenu::earlier`).
 pub const QUIET_AFTER: Duration = Duration::from_secs(1);
 
-/// Systems whose states are several MB to tens of MB (docs/HOST.md "Earlier"): Earlier is Off for them until it is
-/// switched on for the console or the game. Their states would fill the 100 MB of a game with a handful.
-pub const BIG_STATES: &[&str] = &["n64", "psp", "dreamcast", "naomi", "atomiswave", "saturn", "nds"];
-
-/// Whether Earlier starts On for `system`.
-pub fn default_on(system: &str) -> bool {
-    !BIG_STATES.contains(&system)
-}
+pub use crate::timeline_policy::{default_on, BIG_STATES};
 
 /// Which kind of earlier state.
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Hash)]
@@ -190,11 +182,36 @@ fn next_name(base: &Path, kind: Kind) -> Name {
     oldest.map_or(Name { kind, n: 1 }, |(_, n)| n)
 }
 
+/// Import the original Android ring without replacing any existing moment. Renames retain the file times
+/// and bytes, including raw states. A collision stays in the old namespace and is retried later.
+pub fn migrate_android(base: &Path) -> std::io::Result<()> {
+    for n in 0..KEEP {
+        let old = base.with_extension(format!("earlier{n}"));
+        if !old.is_file() { continue; }
+        let target = path(base, Name { kind: Kind::Every, n: n + 1 });
+        let preview = crate::slots::preview_path(&old);
+        let new_preview = crate::slots::preview_path(&target);
+        if target.exists() || new_preview.exists() { continue; }
+        // Hard links are exclusive: interruption or a retry cannot overwrite an existing moment.
+        std::fs::hard_link(&old, &target)?;
+        if preview.is_file() {
+            if let Err(error) = std::fs::hard_link(&preview, &new_preview) {
+                let _ = std::fs::remove_file(&target);
+                return Err(error);
+            }
+        }
+        std::fs::File::open(target.parent().unwrap())?.sync_all()?;
+        std::fs::remove_file(&old)?;
+        let _ = std::fs::remove_file(preview);
+    }
+    Ok(())
+}
+
 // --- what the menu says ------------------------------------------------------------------------------------------
 
 /// "today 14:02", "yesterday 21:10", "3 days ago": when a session began, in the zone `tz` seconds east of UTC.
 fn started_when(secs: u64, now: u64, tz: i32) -> (u64, String) {
-    let days = crate::play_history::local_day(now, tz) - crate::play_history::local_day(secs, tz);
+    let days = crate::civil_date::local_day(now, tz) - crate::civil_date::local_day(secs, tz);
     let clock = crate::timezone::clock_at(secs as i64, tz);
     (days.max(0) as u64, clock)
 }
@@ -767,6 +784,37 @@ pub fn enforce(root: &Path, base: &Path, caps: Caps, keep: &Path) -> u32 {
 mod tests {
     use super::*;
     use crate::testutil::TestDir;
+
+    #[test]
+    fn real_legacy_android_files_keep_bytes_time_and_previews_after_migration() {
+        let dir = TestDir::new("android-earlier-import");
+        let base = dir.join("Old.Game");
+        for n in 0..KEEP {
+            let old = base.with_extension(format!("earlier{n}"));
+            let bytes = vec![n + 1; 8192 + n as usize];
+            std::fs::write(&old, &bytes).unwrap();
+            let time = UNIX_EPOCH + Duration::from_secs(100 + n as u64);
+            std::fs::File::options().write(true).open(&old).unwrap().set_times(std::fs::FileTimes::new().set_modified(time)).unwrap();
+            std::fs::write(crate::slots::preview_path(&old), [n, 1, 2]).unwrap();
+        }
+        migrate_android(&base).unwrap();
+        let imported = entries(&base);
+        assert_eq!(imported.len(), KEEP as usize);
+        for e in &imported {
+            let n = e.name.n - 1;
+            assert_eq!(crate::state_file::read(&e.path).unwrap(), vec![n + 1; 8192 + n as usize]);
+            assert_eq!(e.secs(), 100 + n as u64);
+            assert_eq!(std::fs::read(crate::slots::preview_path(&e.path)).unwrap(), [n, 1, 2]);
+            assert!(!base.with_extension(format!("earlier{n}")).exists());
+        }
+        migrate_android(&base).unwrap();
+        assert_eq!(entries(&base), imported);
+        let old = base.with_extension("earlier0");
+        std::fs::write(&old, b"a legacy collision").unwrap();
+        migrate_android(&base).unwrap();
+        assert_eq!(std::fs::read(old).unwrap(), b"a legacy collision");
+        assert_eq!(entries(&base), imported, "no replacement on collision");
+    }
 
     struct Dir(crate::testutil::TestDir);
 

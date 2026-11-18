@@ -577,6 +577,7 @@ impl Rescue {
                 pocket_ui::shutdown_log::event(&self.data_dir, &format!("rescue PowerOff: running `{cmd}`"));
                 if let Err(e) = std::process::Command::new("sh").args(["-c", &cmd]).spawn() {
                     rtc.reopen();
+                    pocket_ui::logs::unmark_clean(&self.data_dir);
                     eprintln!("rescue: couldn't power off: {e}");
                     self.switching_off = false;
                     self.page.message = Some(format!("Couldn't switch off: {e}"));

@@ -9,12 +9,12 @@ later. What the menu offers depends on the emulator the system uses (see
 
 | Emulator | Menu, top to bottom |
 |---|---|
-| pocket-ui's own host | Continue, Save, Load, Earlier, Options, Quit |
-| pocket-ui's own host, signed in to RetroAchievements | Continue, Save, Load, Earlier, Options, Achievements, Quit |
+| pocket-ui's own host | Continue, Save, Load, Earlier, Options, Save & quit |
+| pocket-ui's own host, signed in to RetroAchievements | Continue, Save, Load, Earlier, Options, Achievements, Save & quit |
 | pocket-ui's own host, for ScummVM, PICO-8 and TIC-80 (no save states) | Continue, Options, Quit |
-| PlayStation 2 (ARMSX2), GameCube and Wii (Dolphin), 3DS (Azahar) | Continue, Save, Load, Options, Quit |
+| PlayStation 2 (ARMSX2), GameCube and Wii (Dolphin), 3DS (Azahar) | Continue, Save, Load, Options, Save & quit |
 | Xbox (hakuX in RetroArch, experimental) | Continue, Options, Quit |
-| RetroArch | Continue, Save, Load, Options, Quit |
+| RetroArch | Continue, Save, Load, Options, Save & quit |
 | PortMaster ports | Continue, Options, Quit |
 | Other emulators | Continue, Options, Quit |
 
@@ -36,7 +36,7 @@ Save slots, Where I quit, Before load, Earlier and what happens when a save can'
 At the right of the title the menu says how long the battery lasts **in this game**, for example "About 3 h 20 min
 left in this game". See [Battery in this game](#battery-in-this-game).
 
-With **Pixel Path in the pause menu** switched on in [Settings → Games → Curator](settings.md#curator), the menu of
+With **Pixel Path in the pause menu** switched on in [Settings → Games → Curator](settings-playing.md#curator), the menu of
 pocket-ui's own host also has **Pixel Path**, right before Quit, as do PS2, GameCube, Wii and 3DS games
 whose emulator settings can be read ([below](#pixel-path-for-ps2-gamecube-wii-and-3ds)). With two or more controllers connected (the Pocket counts as one), it also has **Players**, after Options and
 Achievements. A game with more than one disc also has **Disc**, right before Options ([below](#changing-discs)). **Earlier** is left out where
@@ -68,6 +68,9 @@ and Quit, where saving is: for example "This emulator keeps its own saves. Save 
   and RetroArch's own picture and rewind settings. On the own host, Runs on is an entry of Options.
   Its pages say what the selected row does at the bottom left and which buttons work at the bottom right: B goes
   back, A opens a page or chooses, Left and Right change a value.
+  On the menu's first page and on every page under it, a row that opens a page (Options, Achievements, Players, Pixel
+  Path, Zoom) ends in **›**, and A's hint says **Open**; a row whose value Left and Right change shows it as **‹ value ›**
+  while selected.
 - **Achievements** (own host, signed in to RetroAchievements) lists the game's achievements, locked and
   unlocked, with your progress. See [Achievements](achievements.md#the-pause-menu).
 - **Zoom** (own host, under **Options**) shows the frozen picture larger: [Zoom](big-text.md#zoom).
@@ -81,7 +84,7 @@ and Quit, where saving is: for example "This emulator keeps its own saves. Save 
   then the row says "this game: …" and only the default changes. B or HOME goes back to the pause menu.
 - **Quit** (it reads **Save & quit** while it keeps the moment, with "Next time, A continues from this moment." beside it) ends the game and takes you back to the shelf. Your in-game saves (the game's own save feature, memory
   cards) are written on every Quit. Whether Quit also keeps the moment you are at is set in
-  [Settings → Playing → **Continue where I quit**](settings.md#continue-where-i-quit):
+  [Settings → Playing → **Continue where I quit**](settings-playing.md#continue-where-i-quit):
   - **On**, the default: Quit saves the moment first ("Saving and quitting…"), and the next start continues
     from there.
   - **Off**: Quit doesn't save the moment ("Quitting…"; the row says "Doesn't save where you are. In-game saves are
@@ -245,7 +248,7 @@ turns on. Without it, a Pixel Path chosen before 0.4 shows the FPS line.
 **Where to set it.**
 
 - Settings → Playing → **Over the game**: what every game starts with (Left/Right or A). See
-  [Settings](settings.md#over-the-game).
+  [Settings](settings-playing.md#over-the-game).
 - Options → Speed, rumble, fan → **Over the game**: for the running game, until you quit.
   [Keep for](options.md#keep-for) says whether it stays for this game or this console, like every option, and then it
   wins over Settings.

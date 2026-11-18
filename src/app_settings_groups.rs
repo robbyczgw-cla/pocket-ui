@@ -11,8 +11,8 @@
 //! category's list works out the values of its own rows only.
 //!
 //! A row's value (`settings_row_value`): switches show their state, pages a short value ("Home", "Shelf · Dark",
-//! "332 games"); a page's row ends in a drawn angle on every row, dimmed on the others, and the selected switch adds
-//! its ‹ › (`settings_values::quiet`, `kit::row_value`),
+//! "332 games"); a page's row ends in a drawn angle on every row, and the selected row that changes in place adds its
+//! ‹ › (`changes_in_place`, `marked`, `kit::row_value`),
 //! cut with "…" to the room the name leaves. Look, Add games, Battery, Updates and About come from memory; Wi-Fi's
 //! network, Remote access, Time's zone and the paired PCs need a process or a file and come from `settings_values`'
 //! thread (`settings_values_refresh`, when a list with one of them is painted, at most every 5 s); until then the row
@@ -33,18 +33,15 @@ use pocket_ui::update;
 
 use super::{App, Opens, SettingsPage, SettingsRow, UserEvent, CANCEL, CONFIRM, NU_BTN_PAD, NU_PAD, NU_PILL, NU_SMALL, SETTINGS, SETTINGS_GROUPS};
 
-/// The most lines the selected row's line takes over the hints when it doesn't fit beside them; every row's and
-/// category's line fits in two at Large text in English and German (`every_line_fits_at_the_bottom`).
-const DESC_LINES: usize = 2;
+/// The most lines the selected row's line takes (`kit::footer_text`: the two lowest beside the hints, the rest across the
+/// page over them); every row's and category's line fits whole in fewer at Large text in every language
+/// (`every_line_fits_at_the_bottom`).
+const DESC_LINES: usize = 4;
 
-/// The room a description `s` has: beside the hints that start at `hints_at`, or the screen's width over them.
-fn desc_beside(hints_at: i32) -> i32 {
-    hints_at - 24 - (NU_PAD + NU_BTN_PAD)
-}
-
-/// `s` in the lines it takes over the hints on a screen `w` pixels wide (`App::paint_desc`).
-fn desc_lines(text: &mut pocket_ui::text::Text, s: &str, w: i32) -> Vec<String> {
-    text.wrap_prose_at_most(Face::Body, NU_SMALL, s, w - 2 * (NU_PAD + NU_BTN_PAD), DESC_LINES)
+/// `s` in the lines it takes at the bottom on a screen `w` pixels wide beside hints that start at `hints_at`
+/// (`App::paint_desc`, `kit::footer_lines`).
+fn desc_lines(text: &mut pocket_ui::text::Text, s: &str, w: i32, hints_at: i32) -> Vec<String> {
+    pocket_ui::kit::footer_lines(text, s, w, hints_at, DESC_LINES)
 }
 
 /// Whether a row's value needs `settings_values`' thread.
@@ -165,6 +162,8 @@ fn device_key(opens: Opens) -> Option<&'static str> {
         Opens::OverGame => "over_game",
         Opens::RememberQuit => "quit_without_saving",
         Opens::Screenshots => "screenshots",
+        // Android's alone: its apps on a shelf (`device::hides_in`).
+        Opens::AndroidGames => "android_games",
         _ => return None,
     })
 }
@@ -364,14 +363,45 @@ const ICONS: [pocket_ui::ui_art::Icon; SETTINGS_GROUPS.len()] = {
     [Icon::Connections, Icon::Look, Icon::Sound, Icon::Playing, Icon::Play, Icon::Games, Icon::System, Icon::Help]
 };
 
-/// Whether the value of row `i` is a network's own name, painted as typed: a Wi-Fi named "Off" or "Unknown" must not be
-/// translated (the Wi-Fi page shows it as it is).
+/// Whether a row changes its value in place rather than opening a page: Left/Right step it (A changes it too, as it
+/// always did), the selected one shows its value in ‹ ›, and it never ends in a page's angle (Settings 0.5.1: which rows
+/// open a page and which change in place was not clear enough, and Zoom in the pause menu took only A; a hand walk).
+/// One list for the hints, the marks and the keys, so a new row can't take A alone (tests/user_journeys.rs walks them).
+pub(crate) fn changes_in_place(opens: Opens) -> bool {
+    matches!(
+        opens,
+        Opens::Appearance | Opens::Colours | Opens::Font | Opens::TextSize | Opens::Motion | Opens::Animations
+            | Opens::Brightness | Opens::Volume | Opens::ScreenColour | Opens::Sounds | Opens::Extra(_)
+            | Opens::Haptics | Opens::OnStart | Opens::RememberQuit | Opens::BootScreen | Opens::RemindWhere
+            | Opens::Frames | Opens::OverGame | Opens::ZoomInPause | Opens::LivedIn | Opens::Language
+    )
+}
+
+/// Row `opens`'s value `value` with its marks as painted (`kit::row_value`): a page's row ends in its angle on every row
+/// (">" alone without a value), a row that changes in place shows ‹ › on the selected row only and no angle.
+fn marked(opens: Opens, value: String, selected: bool) -> String {
+    let bare = value.strip_prefix("‹ ").and_then(|v| v.strip_suffix(" ›")).map_or(value.clone(), str::to_string);
+    if changes_in_place(opens) {
+        let bare = bare.strip_suffix(" >").unwrap_or(&bare).to_string();
+        if selected { format!("‹ {bare} ›") } else { bare }
+    } else if bare == ">" || bare.ends_with(" >") {
+        bare
+    } else {
+        values::page(&bare)
+    }
+}
+
+/// Whether the value of row `i` is a name, painted as it is: a Wi-Fi named "Off" or "Unknown" must not be translated (the
+/// Wi-Fi page shows it as it is), nor a font, a layout, a language or a city.
 pub(crate) fn value_is_typed(i: usize) -> bool {
     typed_value(SETTINGS[i].1, &values::get().wifi)
 }
 
 fn typed_value(opens: Opens, wifi: &Option<values::Wifi>) -> bool {
-    matches!(opens, Opens::Setup(Only::Wifi)) && matches!(wifi, Some(values::Wifi::Connected(Some(_))))
+    // Rows whose value is a name in every language: the style's font ("Barlow"), the buttons' layouts ("Nintendo"), the
+    // language in its own name ("Deutsch") and the time zone's city (already in the language, `timezone::city_here`).
+    matches!(opens, Opens::Font | Opens::Buttons | Opens::Language | Opens::Time)
+        || matches!(opens, Opens::Setup(Only::Wifi)) && matches!(wifi, Some(values::Wifi::Connected(Some(_))))
 }
 
 /// Controller setup's line where Settings has no Bluetooth row to pair in.
@@ -402,6 +432,7 @@ impl App {
             Opens::RememberQuit => values::on_off(self.remember_quit).to_string(),
             Opens::RemindWhere => values::on_off(self.remind_where).to_string(),
             Opens::ZoomInPause => values::on_off(self.zoom_in_pause).to_string(),
+            Opens::LivedIn => values::on_off(self.lived_in).to_string(),
             Opens::BootScreen => values::on_off(self.boot_screen).to_string(),
             Opens::Animations if i == sel => format!("‹ {} ›", self.animations_in_use().name()),
             Opens::Animations => self.animations_in_use().name().to_string(),
@@ -436,6 +467,8 @@ impl App {
             Opens::Gamelist => self.gamelist_list_value(),
             // How many screenshots there are: memory only (`app_gallery`).
             Opens::Screenshots => self.gallery_list_value(),
+            // How many Android games are on the shelf: memory only (`app_android_games`).
+            Opens::AndroidGames => self.android_games_list_value(),
             #[cfg(feature = "brick")]
             Opens::Leds if pocket_ui::device::brick() => page(super::app_brick_lights::list_value(&self.leds)),
             Opens::Leds => page(self.leds.summary()),
@@ -470,7 +503,7 @@ impl App {
             Opens::Updates => {
                 let newer = self.updates.app_available().map(|a| a.version.as_str());
                 #[cfg(not(feature = "brick"))]
-                let shown = values::updates(update::app_version(), newer);
+                let shown = values::updates(update::shown_version(), newer);
                 #[cfg(feature = "brick")]
                 let shown = values::updates(&update::brick_short(update::app_version()), newer.map(update::brick_short).as_deref());
                 page(&shown)
@@ -482,9 +515,23 @@ impl App {
             _ => ">".to_string(),
         };
         let max_w = room.min(values::MAX_W);
-        let shown = values::quiet(&value, i == sel);
+        let shown = marked(SETTINGS[i].1, value, i == sel);
         let lang = pocket_ui::i18n::current();
-        values::fit_translated(&shown, max_w, |v| pocket_ui::i18n::tr_in(lang, v), |s| self.text.width(Face::Body, 36, s))
+        // The words only are looked up and drawn (`kit::row_value`): "Shelf >" and "‹ Home ›" are no lines of the table, and asking
+        // for them ran every pattern of it. A value the code can say in the language ("Auto · Quiet") is said and kept as it is.
+        let shown = match values::translated_in_code(lang, values::split_decoration(&shown).1) {
+            Some(words) => {
+                self.text.keep_as_is(&words);
+                let (pre, _, post) = values::split_decoration(&shown);
+                format!("{pre}{words}{post}")
+            }
+            None => shown,
+        };
+        let text = &mut self.text;
+        values::fit_translated(&shown, max_w, |v| pocket_ui::i18n::tr_in(lang, v), |s| {
+            let (pre, words, post) = values::split_decoration(s);
+            text.width(Face::Body, 36, pre) + text.width(Face::Body, 36, words) + text.width(Face::Body, 36, post)
+        })
     }
 
     /// The line under row `i` of `SETTINGS` as it is now: a cozy extra's note while another switch keeps it from
@@ -500,31 +547,49 @@ impl App {
         }
     }
 
-    /// The room a list keeps over its hints (that start at `hints_at`) for the selected row's line: none when every
-    /// one of `lines` fits beside them, else two lines' worth, so the list doesn't shift as the selection moves.
-    pub(crate) fn desc_room(&mut self, lines: &[&str], hints_at: i32) -> i32 {
-        let beside = desc_beside(hints_at);
-        if lines.iter().all(|l| self.text.width(Face::Body, NU_SMALL, l) <= beside) {
-            0
+    /// The lowest a category's rows may reach on a screen `w`×`h`: over the hint
+    /// bar, and over the top of the tallest of `lines` as `paint_desc` paints it (a gap above its capitals), the same
+    /// for every row, so the list doesn't shift as the selection moves. It kept two lines and a gap as soon as one line
+    /// didn't fit beside the hints, a row's height of empty screen on the Brick (hand test, 17.11.); the lines now take
+    /// the column beside the hints first, as on every page of the Settings family (`kit::footer`).
+    pub(crate) fn rows_bottom(&mut self, rows: &[usize], w: i32, h: i32) -> i32 {
+        let mut bottom = h - NU_PAD - NU_PILL - 16;
+        for &i in rows {
+            let line = self.settings_row_desc(i);
+            if line.trim().is_empty() {
+                continue;
+            }
+            // Beside the hints its row shows; with the focus on the symbols the rows keep the same room.
+            let hints = self.settings_row_hints(i);
+            let hints_at = w - NU_PAD - pocket_ui::kit::pill_width(&mut self.text, w, hints);
+            let (top, _) = pocket_ui::kit::footer_top(&mut self.text, line, w, h, hints_at, DESC_LINES);
+            bottom = bottom.min(top - 10);
+        }
+        bottom
+    }
+
+    /// The hints of a category's row `i` while it is selected: Brightness and Volume (and Screen colour at Neutral)
+    /// change with Left/Right; Screen colour off Neutral offers A for Neutral (A would do nothing at Neutral; the
+    /// navigation explorer, 2026-11-07); a row that changes in place says Left/Right (A still changes it too); a page's
+    /// row says A opens it.
+    pub(crate) fn settings_row_hints(&self, i: usize) -> &'static [(&'static str, &'static str)] {
+        let screen_colour = matches!(SETTINGS[i].1, Opens::ScreenColour);
+        if matches!(SETTINGS[i].1, Opens::Brightness | Opens::Volume) || screen_colour && self.sys.look().warmth == 0 {
+            &[("B", "Back"), ("< >", "Change")]
+        } else if screen_colour {
+            &[("B", "Back"), ("< >", "Change"), ("A", "Neutral")]
+        } else if changes_in_place(SETTINGS[i].1) {
+            &[("B", "Back"), ("< >", "Change")]
         } else {
-            DESC_LINES as i32 * pocket_ui::type_scale::line(NU_SMALL, 10) + 14
+            &[("B", "Back"), ("A", "Open")]
         }
     }
 
-    /// The selected row's line `line` at the bottom: left of the hints (that start at `hints_at`), on their line, when it
-    /// fits there; else over them in the room `desc_room` kept, wrapped, cut with "…" only past two lines.
+    /// The selected row's line `line` at the bottom beside the hints (that start at `hints_at`), as every page of the
+    /// Settings family has it (`kit::footer_text`): its last line on the hints' line, the two lowest in the column beside
+    /// them, the rest across the page in the room `rows_bottom` left.
     pub(crate) fn paint_desc(&mut self, c: &mut Canvas, line: &str, hints_at: i32) {
-        let (x, beside) = (NU_PAD + NU_BTN_PAD, desc_beside(hints_at));
-        if self.text.width(Face::Body, NU_SMALL, line) <= beside {
-            let base = c.h - NU_PAD - NU_PILL / 2 + pocket_ui::type_scale::mid(NU_SMALL);
-            self.text.draw(c, Face::Body, NU_SMALL, x, base, pal().text, line);
-        } else {
-            let lines = desc_lines(&mut self.text, line, c.w);
-            let (last, step) = (c.h - NU_PAD - NU_PILL - 24, pocket_ui::type_scale::line(NU_SMALL, 10));
-            for (n, l) in lines.iter().enumerate() {
-                self.text.draw(c, Face::Body, NU_SMALL, x, last - (lines.len() - 1 - n) as i32 * step, pal().text, l);
-            }
-        }
+        pocket_ui::kit::footer_text(c, &mut self.text, line, hints_at, DESC_LINES, pal().text);
     }
 
     /// While a category's list with a value from `settings_values`' thread is painted: a read when one is due.
@@ -704,6 +769,59 @@ pub(crate) struct Bench {
 }
 
 impl App {
+    /// One whole frame as the window paints it (the shelf's or Settings' page, the status corner, the page transition).
+    fn settings_frame(&mut self, buf: &mut [u32], w: u32, h: u32) {
+        let now = Instant::now();
+        self.motion_frame_begin(now);
+        self.paint_in_appearance(&mut Canvas::new(buf, w, h), &mut |app, c| {
+            app.paint(c);
+            app.motion_after_paint(c);
+            app.sys.paint(c, &mut app.text, app.menu.is_none());
+            if app.sys.is_open() {
+                app.status_corner();
+            }
+            app.paint_leave(c);
+        });
+    }
+
+    /// The first page of every category this device has, with the focus in the list and on the tab bar, each painted the
+    /// way START or L1/R1 brings it (from the shelf's frame): how many pages, and the strings that ran the language table's
+    /// patterns on the way (`--snapshot bench-settings-pages`, tests/settings_open.rs). Every row's value and name must be
+    /// a line of the table, a name or a figure by now, never a string that needs the patterns tried (the first start of
+    /// Settings on the Mini V2 paid a frame's worth for each).
+    pub(crate) fn settings_pages_patterns(&mut self, w: u32, h: u32) -> (usize, usize, Vec<String>) {
+        let mut buf = vec![0u32; (w * h) as usize];
+        pocket_ui::status_corner::start(|| {});
+        self.text.prewarm();
+        self.text.finish_prewarm();
+        // The shelf, as the player sees it before START.
+        self.settings_page = None;
+        for _ in 0..2 {
+            self.hits.clear();
+            self.paint(&mut Canvas::new(&mut buf, w, h));
+        }
+        self.settings_frame(&mut buf, w, h);
+        let mut pages = 0;
+        let before = self.text.pattern_runs();
+        let mut seen = self.text.pattern_log().len();
+        let mut found = Vec::new();
+        for g in shown_groups() {
+            let first = rows(g).first().copied().unwrap_or(0);
+            for page in [SettingsPage::List(first), SettingsPage::Tabs(first)] {
+                self.settings_page = None;
+                self.settings_frame(&mut buf, w, h);
+                self.settings_page = Some(page);
+                self.settings_frame(&mut buf, w, h);
+                pages += 1;
+                let log = self.text.pattern_log();
+                found.extend(log[seen.min(log.len())..].iter().map(|s| format!("{} / {}: {s}", SETTINGS_GROUPS[g].0, if matches!(page, SettingsPage::List(_)) { "list" } else { "tabs" })));
+                seen = log.len();
+            }
+        }
+        self.settings_page = None;
+        (pages, self.text.pattern_runs() - before, found)
+    }
+
     /// Paints the categories page the way the first frame after START does (the shelf was painted before, so its
     /// glyphs are in the cache), then again and again for the median, and the status pill and the page transition
     /// alone. The numbers are the host's; the test (`tests/settings_open.rs`) guards their order of magnitude.
@@ -723,19 +841,7 @@ impl App {
             self.hits.clear();
             self.paint(&mut Canvas::new(&mut buf, w, h));
         }
-        let frame = |app: &mut App, buf: &mut [u32]| {
-            let now = Instant::now();
-            app.motion_frame_begin(now);
-            app.paint_in_appearance(&mut Canvas::new(buf, w, h), &mut |app, c| {
-                app.paint(c);
-                app.motion_after_paint(c);
-                app.sys.paint(c, &mut app.text, app.menu.is_none());
-                if app.sys.is_open() {
-                    app.status_corner();
-                }
-                app.paint_leave(c);
-            });
-        };
+        let frame = |app: &mut App, buf: &mut [u32]| app.settings_frame(buf, w, h);
         // The shelf's own frame has set the page; START opens the categories.
         frame(self, &mut buf);
         self.settings_page = Some(SettingsPage::List(first_row()));
@@ -779,6 +885,25 @@ mod tests {
     use super::*;
     use pocket_ui::cozy_extras::Needs;
 
+    /// A page's row ends in its angle on every row, whatever its value said; a row that changes in place never does,
+    /// and only the selected one has its ‹ › (0.5.1: "How you like to play" opened a page with no angle, the on/off
+    /// rows had no ‹ › and took no Left/Right).
+    #[test]
+    fn page_rows_keep_their_angle_and_only_the_selected_value_row_its_arrows() {
+        assert_eq!(marked(Opens::Setup(Only::Play), "Enthusiast".into(), false), "Enthusiast >");
+        assert_eq!(marked(Opens::Manual, ">".into(), true), ">");
+        assert_eq!(marked(Opens::Sync, "Off >".into(), false), "Off >");
+        assert_eq!(marked(Opens::ZoomInPause, "Off".into(), true), "‹ Off ›");
+        assert_eq!(marked(Opens::ZoomInPause, "Off".into(), false), "Off");
+        assert_eq!(marked(Opens::TextSize, "‹ Large ›".into(), false), "Large");
+        assert_eq!(marked(Opens::BootScreen, "On".into(), true), "‹ On ›");
+        // Every row of the tree is one or the other, never both: the hint and the keys follow the same list.
+        for (name, opens, _) in SETTINGS.iter() {
+            let (on, off) = (marked(*opens, "x".into(), true), marked(*opens, "x".into(), false));
+            assert!(on.ends_with(" >") == !changes_in_place(*opens) && off.ends_with(" >") == !changes_in_place(*opens), "{name}: {on:?} {off:?}");
+        }
+    }
+
     /// The pill the tab row leaves room for: the widest figures of today's clock, a one-digit hour made two.
     #[test]
     fn the_widest_clock_has_two_digit_hours_and_eights() {
@@ -809,8 +934,9 @@ mod tests {
             .unwrap_or_else(|| panic!("no category {name:?}"))
     }
 
-    /// Every row's line, English or German, fits whole in the two lines it may take at the bottom at Large text (never
-    /// cut with "…"). The first-day run (2026-10-26) found Playing and System cut short.
+    /// Every row's line, in every language, fits whole in the lines it may take at the bottom at Large text, beside the
+    /// widest hints a category shows (never cut with "…"). The first-day run (2026-10-26) found Playing and System cut
+    /// short.
     #[test]
     fn every_line_fits_at_the_bottom() {
         use pocket_ui::type_scale::{self, TextSize};
@@ -834,8 +960,9 @@ mod tests {
         for size in [TextSize::Normal, TextSize::Medium, TextSize::Large] {
             type_scale::set(size);
             for w in [1280, 1240, 1536] {
+                let hints_at = w - NU_PAD - pocket_ui::kit::pill_width(&mut text, w, &[("B", "Back"), ("< >", "Change"), ("A", "Neutral")]);
                 for s in &lines {
-                    let shown = desc_lines(&mut text, s, w);
+                    let shown = desc_lines(&mut text, s, w, hints_at);
                     assert!(!shown.iter().any(|l| l.ends_with('…')), "{size:?} {w}: {s:?} is cut: {shown:?}");
                     assert_eq!(shown.join(" "), *s, "{size:?} {w}: {s:?} is shown whole");
                 }
@@ -944,11 +1071,12 @@ mod tests {
         let tree: Vec<(&str, Vec<&str>)> = SETTINGS_GROUPS.iter().map(|c| (c.0.trim_end_matches('\u{200b}'), c.1.iter().map(|r| r.0).collect())).collect();
         let want: [(&str, &[&str]); 8] = [
             ("Connections", &["Wi-Fi", "Bluetooth", "Tailscale", "Remote access (SSH)", "Sync", "Web companion", "PC streaming"]),
-            ("Look", &["Layout", "Appearance", "Colours", "Style", "Text size", "Zoom in the pause menu", "Motion", "Game start animation", "Cozy extras"]),
+            ("Look", &["Layout", "Appearance", "Colours", "Style", "Text size", "Motion", "Game start animation", "Cozy extras", "Lived-in shelf"]),
             ("Screen & sound", &["Brightness", "Volume", "Screen colour", "Night light", "Menu sounds", "Case sounds"]),
             ("Controls", &["Buttons", "Controller setup", "Test buttons", "Haptics", "LEDs"]),
-            ("Playing", &["On start", "Continue where I quit", "Console boot screen", "Remind me where I was", "Screen frames", "Over the game", "Performance & fan", "RetroAchievements"]),
-            ("Games", &["Add games", "Box art & downloads", "Game check", "Systems on the shelf", "Curator", "Screenshots", "From EmulationStation"]),
+            // Zoom in the pause menu since 0.5.1 (too prominent in Look, under Text size; a hand walk).
+            ("Playing", &["On start", "Continue where I quit", "Console boot screen", "Remind me where I was", "Screen frames", "Over the game", "Zoom in the pause menu", "Performance & fan", "RetroAchievements"]),
+            ("Games", &["Add games", "Box art & downloads", "Game check", "Systems on the shelf", "Curator", "Screenshots", "From EmulationStation", "Android games"]),
             ("System", &["Back to EmulationStation", "Updates", "Language", "View", "Sleep & power", "Battery", "Time", "Storage", "Backup & reset", "Kids mode"]),
             ("Help & tools", &["Manual", "Tour", "How you like to play", "First-start setup", "Tools", "Report a problem", "About"]),
         ];
@@ -1004,12 +1132,13 @@ mod tests {
 
     /// What takes up each row Android's handheld view shows (HANDHELD-LEFTOVERS, 2026-11-13). A row there is a switch that does
     /// something on Android: the Linux interface itself reads it (the shelf, its pages and sounds), the player is handed it
-    /// (`android_handheld::launch_settings`, `picture_choice`), or it is Android's own page. A new row has no entry until somebody
+    /// (`android_handheld::launch_settings`, `GamePicture`), or it is Android's own page. A new row has no entry until somebody
     /// has looked at who reads it on Android; then this test fails and says so.
     const ANDROID_ROWS: &[(&str, &str)] = &[
         ("Layout", "the shelf"),
         ("Systems on the shelf", "the shelf"),
         ("Cozy extras", "the shelf; the player is handed extras"),
+        ("Lived-in shelf", "the shelf (`app_cabinet::shelf_row`)"),
         ("Appearance", "every page"),
         ("Colours", "every page; handed to the player"),
         ("Style", "every page; the font is handed to the player"),
@@ -1024,14 +1153,16 @@ mod tests {
         ("Remind me where I was", "the shelf's Where was I"),
         ("Buttons", "the hints; the prompts are handed to the player"),
         ("Controller setup", "the menus' buttons per controller (`pad::bindings`), as from the pause menu's Controls"),
-        ("Screen frames", "the frame every game starts with (`options` globals, `picture_choice`)"),
+        ("Screen frames", "the frame every game starts with (`options` globals, `GamePicture`)"),
         ("RetroAchievements", "the player scores into the shared tallies"),
         ("Add games", "Android's ROMs folders"),
         ("Game check", "the library"),
         ("Box art & downloads", "box art and the starter pack"),
         ("Curator", "the shelf"),
+        ("Android games", "the Android shelf (app_android_games, launcher.json's marks)"),
         ("Language", "every page; handed to the player"),
         ("View", "Android's own row"),
+        ("Updates", "Android's signed list and installer (app_update_hint)"),
         ("Kids mode", "the shelf"),
         ("First-start setup", "the setup"),
         ("How you like to play", "the setup"),
@@ -1101,7 +1232,7 @@ mod tests {
             ("RetroAchievements", true, own(pocket_ui::achievements_page::about_in(true).into_iter().chain([pocket_ui::achievements_page::password_note_in(true)]).collect())),
             ("Manual", false, own(pocket_ui::manual::ANDROID_PAGES.iter().map(|(_, md)| *md).collect())),
             ("First start: the welcome", true, vec![pocket_ui::setup::welcome_title(true).to_string()]),
-            ("Tour: Big text's picture", true, pocket_ui::feature_previews::easy_to_read_rows(true).into_iter().map(|(name, _)| name.to_string()).collect()),
+            ("Tour: Big text's picture", true, pocket_ui::feature_previews::easy_to_read_rows().into_iter().map(|(name, _)| name.to_string()).collect()),
             // The files dialog is Java with its own three languages: all of them are in the text.
             ("The files dialog", false, vec![{
                 let java = include_str!("../android/java/xyz/pocketui/app/HandheldActivity.java");
@@ -1138,7 +1269,6 @@ mod tests {
         assert!(pocket_ui::achievements_page::about_in(false)[0].contains("pocket-core"));
         assert!(pocket_ui::manual::PAGES[0].1.contains("ROCKNIX"));
         assert_eq!(pocket_ui::setup::welcome_title(false), "Welcome to your Pocket");
-        assert!(pocket_ui::feature_previews::easy_to_read_rows(false).iter().any(|(n, _)| *n == "Zoom in the pause menu"));
     }
 
     /// The emulator app the line names is one the phone has; without one the line says so, and never names an app.

@@ -2,7 +2,7 @@
 use super::phone::{MenuRow, Room};
 use super::*;
 use pocket_ui::{update_channel::Manifest, update_page::{self, Action as UpdateAction}};
-pub const CONFIRM: &str = "After updating, pocket-ui closes. Open it again; your games and settings stay.";
+pub const CONFIRM: &str = pocket_ui::update_page::ANDROID_CONFIRM;
 
 #[derive(Default)]
 pub struct UpdatesUi {
