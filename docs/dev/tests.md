@@ -144,6 +144,20 @@ Per release, also play GB/GBC, GBA, SNES, MD and PS1 for at least 60 seconds on 
 the default core and settings. Keep measured fps, late frames, audio underruns, governor/frequency and temperature.
 An empty measurement window is missing evidence. A core-routing host test cannot replace this hardware smoke.
 
+### Nothing floats
+
+`tests/scene_rests.rs` (fast tier, about 6 s): every object a look puts on a shelf rests on the board, a floor or another
+object, or is held by a hand or a slot, and no two are inside each other (`pocket_ui::scene_check`, 18.11.: "wir
+sind skeuomorph, da kann nichts schweben im Regal"). The painters record their objects as rectangles with baselines (a
+picture's visible pixels, cut where the page cuts it) only while `--snapshot bench-playful:<row>:rests` (Shelf look: every
+selection of the row, Lived-in shelf on and off) or `:rests-cabinet` (every case of every shelf) runs, each selection at
+eight moments of its animation, and the check reads that model, not pixels. Recorded: the Shelf look's cases standing,
+leaning, lying and forward, the bookend, decorations and prop after a short row; the Cabinet's cases, props, the TV (or
+the handheld in its place), the console beside it and the case out in the showcase. Exceptions are named where they are
+recorded (`Rests::Raised`: the selected standing case lifted out of the row; `Rests::Held`: a case on its way to the
+showcase). The way into the console (`rests-launch`) is recorded for the plain console only and its test is ignored:
+a console stands `px(10)` over the stage's floor by design, and the real mechanisms' layers are not recorded yet.
+
 ### The navigation explorer
 
 `tests/nav_explorer.rs` operates pocket-ui as a player does: buttons only, through the real binary (`--test-driver`), and
@@ -219,7 +233,7 @@ of the manual, the `.buf[` list and `shade_rows`, translation placeholders, a Ge
 (`scripts/i18n-extract.py --check`). Those are the real guards; never weaken them. Release checks
 (`#[ignore = "release check: ..."]`, run by `sh scripts/release-check.sh`, which fails on them): the German and Spanish
 snapshot matrix, the Settings paths in prose, each category's line naming its rows in order, every Spanish and Portuguese
-line there (`i18n`'s `every_language_has_every_line`). Bookkeeping (friction audit, 14.11.): the code-shape caps, every
+line there (`i18n`'s `every_language_has_every_line`). Since 18.11. the nightly full suite runs them all too (`scripts/release-extras.sh`: the list `scripts/release-text-tests.txt`, the text-fit suites' ignored matrices, the extra Brick text cases, the explorer's release-only cases), so a green night means `scripts/pre-release.sh` finds nothing new at the cut; `every_release_only_test_runs_in_pre_release_and_in_the_nightly` (doc_checks) keeps the list, both scripts and the nightly in step and fails on a dead name or a release-only test nobody runs. Bookkeeping (friction audit, 14.11.): the code-shape caps, every
 environment variable and source module documented, the documentation index, manual pages under 30 000 px (default and
 the Brick's) are `#[ignore = "release check: bookkeeping ..."]`; `sh scripts/bookkeeping.sh` prints each red one as
 `bookkeeping: WARNING <test>` in the nightly run and the release check, and one commit fixes them in bulk.
@@ -238,6 +252,7 @@ the Brick's) are `#[ignore = "release check: bookkeeping ..."]`; `sh scripts/boo
 | Lens | `curator.md` ("Lens") names every `curator::Facet` |
 | Feature registry | Every entry of `features::FEATURES` (also the TODO ones) points at a page of `docs/user/` and a heading there (`guide`); the table in `tour.md` lists every switch card in order with what Simple and Enthusiast do with it, and the page names every card without a switch in bold |
 | Manual pages | Every file of `docs/user/` is in `manual::PAGES` or `manual::DESKTOP_ONLY`, and the "Pages" list of `index.md` links the manual's pages in their order |
+| README | `README.md` names both editions, "pocket-ui OS" and "pocket-ui for Android", with their download links (`pocketui.xyz/install`, `pocketui.xyz/install#android`), links the Releases page and `CHANGELOG.md`, has no "New in …" section (what is new goes to the release notes and the changelog) and never says "home screen" (`the_readme_shows_both_editions_and_points_at_the_changelog`, merge gate) |
 | Documentation index | `docs/README.md` links every document of `docs/`, `docs/user/` and `docs/dev/` |
 | Status ledger | Every feature row of [STATUS.md](../STATUS.md) has one of its five statuses (device-measured, device smoke-checked, virtual device only, host tests only, not built) and says what is open; the file holds no IP or MAC address, mail address or tailnet name |
 | Module list | "Repository layout" ([layout.md](layout.md)) names every file and folder of `src/` (`foo.rs` as itself, not as part of `app_foo.rs`), and the binaries table every `src/bin/*.rs` |

@@ -1314,7 +1314,9 @@ pub fn paint(laid: &Laid, text: &mut Text, c: &mut Canvas, x: i32, top: i32, scr
     let below = at(top + view_h)..at(top + view_h + margin);
     let saved: Vec<Vec<u32>> = [above.clone(), below.clone()].iter().map(|r| c.pixels()[r.start * w..r.end.max(r.start) * w].to_vec()).collect();
     let mark = crate::text::boxes::mark();
-    let (lo, hi) = (scroll - 60, scroll + view_h + 60);
+    // Items that start below the band are never seen (the rows under it are put back): not drawn, so none runs off the
+    // picture's bottom edge (the band ends 88 px over it since the flat hint bar, 18.11.2026; it was 136).
+    let (lo, hi) = (scroll - 60, scroll + view_h);
     for item in &laid.items {
         let (a, b) = item.span();
         if b < lo || a > hi {

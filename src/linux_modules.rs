@@ -65,6 +65,7 @@ pub mod insert_rig;
 pub mod insert_scene;
 pub mod playful;
 pub mod lived_in;
+pub mod scene_check;
 pub mod sticker_press;
 pub mod text_fallback;
 pub mod latinise;

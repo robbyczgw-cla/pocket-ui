@@ -112,7 +112,8 @@ pub mod save_trouble;
 pub mod save_writer;
 #[path="platform/android_hw_render.rs"]
 pub mod hw_render;
-#[path="platform/android_rumble.rs"]
+/// Game rumble as pocket-core runs it (`rumble`: Options › Speed, rumble, fan › Rumble, the lease, the players' targets),
+/// through the Activity's vibrators.
 pub mod rumble;
 
 pub mod frozen;
@@ -142,6 +143,7 @@ pub mod insert_scene;
 pub mod save_fill;
 pub mod playful;
 pub mod lived_in;
+pub mod scene_check;
 pub mod sticker_press;
 
 pub mod where_was_i;

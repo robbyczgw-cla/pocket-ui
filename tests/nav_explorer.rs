@@ -2248,6 +2248,23 @@ fn rc03_snapshot(card: &Card, profile: Profile, state: &str, env: &[(&str, &str)
 }
 
 #[test]
+fn ds_controls_actions_are_readable_on_the_focused_rows() {
+    let mut profiles = vec![RG35XX_PLUS, ANDROID_ODIN];
+    #[cfg(feature = "brick")] profiles.push(BRICK);
+    for profile in profiles {
+        let card = Card::new(&profile);
+        for (lang, stylus, layout) in [("en", "Stylus mode", "Screen layout"), ("de", "Stiftmodus", "Bildschirmlayout")] {
+            for (state, value) in [("controls:nds:7:stylus", stylus), ("controls:nds:8:layout", layout)] {
+                let (f, _) = rc03_snapshot(&card, profile, state, &[("POCKETUI_LANG", lang)]);
+                assert!(f.text().contains(value), "{} {lang} {state}: action must be readable:\n{}", profile.name, f.text());
+                assert!(f.strings.iter().any(|(_, s)| s.contains(value) && !s.contains('…')), "whole action name, not an ellipsis");
+                assert!(f.focused().is_some(), "{state}: focused button row");
+            }
+        }
+    }
+}
+
+#[test]
 fn rc03_retro_style_description_is_complete_on_the_first_start() {
     for profile in rc03_profiles() {
         let card = Card::new(&profile);

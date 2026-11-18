@@ -274,6 +274,15 @@ struct CaseKey {
 /// A case's big spine and front, whether the front has its cover yet, and its last-use stamp.
 type Shown = (Rc<Pic>, Rc<Pic>, bool, u64);
 
+/// Lived-in shelf: how far a lying case selected slides out of its stack, a share of its length (and the room a stack
+/// keeps on its left for it, `lay_row`).
+const LIVED_SLIDE: f32 = 0.2;
+
+/// Lived-in shelf: how far lying case `len` long is out of its stack at `open` (0 in its place, 1 selected).
+fn lived_slide(len: i32, open: f32) -> i32 {
+    (LIVED_SLIDE * len as f32 * open.clamp(0.0, 1.0)).round() as i32
+}
+
 /// Lived-in shelf: how long after the last button the row's posed spines are made ahead (`App::lived_warm_tick`):
 /// between the presses of a calm walk along the row, not under a held button's repeats.
 const LIVED_WARM_AFTER: Duration = Duration::from_millis(90);
@@ -1791,6 +1800,12 @@ impl App {
         // The top board closes the cabinet under the showcase, the plinth under the last whole shelf in view: the
         // cabinet always stands whole.
         art::blit(c, &top_board, CAB_X, show_bottom - TOP_H, 256, (0, c.h));
+        if pocket_ui::scene_check::recording() {
+            // What stands on the top board (the TV, its console, a case out in the showcase) stands on its top, 12
+            // lines into it as it is seen a little from above (`paint_cabinet_tv`'s `board_y`).
+            pocket_ui::scene_check::set_origin(0, 0);
+            pocket_ui::scene_check::surface("the cabinet's top board", show_bottom - TOP_H - 12, 12, CAB_X, CAB_X + cab_w);
+        }
         if !cut && !peek {
             art::blit(c, &plinth, CAB_X, lowest, 230, (0, scene_bottom(c.h)));
         }
@@ -1807,6 +1822,13 @@ impl App {
                 continue;
             }
             let floor = top + inner + 3;
+            if pocket_ui::scene_check::recording() {
+                // The shelf's board goes on past the walls where the shelf scrolls.
+                let sc = self.cabinet.scroll_x.get(&self.cabinet.cab.shelves[s].key).map_or(0.0, |t| t.value(now)).round() as i32;
+                let (from, to) = (inner_x - sc, inner_x - sc + self.cabinet.cab.shelves[s].width.max(view));
+                pocket_ui::scene_check::set_origin(0, 0);
+                pocket_ui::scene_check::surface("a shelf of the cabinet", floor, 0, from.min(inner_x), to.max(inner_x + view));
+            }
             // The shelves away from the selected one are a little darker.
             let away = (floor - floor_y).abs() as f32;
             let shade = 256 - (away * 0.22).min(70.0) as u32;
@@ -1835,6 +1857,7 @@ impl App {
                 let y = floor - pic.h;
                 // Inside the walls only; in the room's light (half its dimming, no tint: `Light::case_shade`).
                 self.blit_between(c, &pic, x, y, light.shaded(shade), clip, inner_x, inner_x + view);
+                pocket_ui::scene_check::put_pic_in(format!("shelf {s} case {i}"), &pic, x, y, pocket_ui::scene_check::Rests::Settled, true, clip);
                 // A little shadow on the back panel at the right of each case.
                 art::soft_shadow(
                     c,
@@ -1961,9 +1984,10 @@ impl App {
 
     /// The props of a `prop_plan` standing on `floor`, in `shade`, each with its shadow on the back panel. How many.
     fn paint_props(&self, c: &mut Canvas, plan: &[(Rc<Pic>, i32, bool)], floor: i32, shade: u32, clip: (i32, i32)) -> u32 {
-        for (pic, x, _) in plan {
+        for (k, (pic, x, _)) in plan.iter().enumerate() {
             let y = floor - pic.h;
             art::blit(c, pic, *x, y, shade, clip);
+            pocket_ui::scene_check::put_pic_in(format!("prop {k} on the shelf at {floor}"), pic, *x, y, pocket_ui::scene_check::Rests::Settled, true, clip);
             art::soft_shadow(c, x + pic.w, y + pic.h / 3, 3, pic.h * 2 / 3, 6, 0.3 * shade as f32 / 256.0, (clip.0.max(y), clip.1.min(floor)));
         }
         plan.len() as u32
@@ -2167,6 +2191,15 @@ impl App {
                 (0, scene_bottom(c.h)),
             )
         };
+        if pocket_ui::scene_check::recording() && r.2 > 0 {
+            // Out, it stands in the showcase on the top board; on its way it is in the player's hand.
+            let rests = if mv >= 1.0 && turned >= 1.0 {
+                pocket_ui::scene_check::Rests::Settled
+            } else {
+                pocket_ui::scene_check::Rests::Held("on its way between its shelf and the showcase")
+            };
+            pocket_ui::scene_check::put(format!("shelf {s} case {i}, out"), r.0, r.1, r.2, r.3, rests, true);
+        }
         if r.2 > 0 {
             self.cabinet.drawn.push((r.0, r.1, r.2, r.3, s, i));
             if (s, i) == self.cabinet_cursor().unwrap_or((usize::MAX, 0)) {
@@ -2897,7 +2930,7 @@ impl App {
         let cleared = pocket_ui::gfx::take_cleared();
         println!("cabinet-outcome case={x},{y},{w},{case_h} shelf={top},{} showcase={} tv={} hints={} board={} place={place} ajar={ajar} handheld={} cleared={cleared}/{} console={} console_place={}",
             top + self.cabinet.cab.shelves[s].height, self.cabinet.show_room,
-            self.cabinet.tv.left.is_some(), h - 98, self.cabinet.show_top.target().round() as i32, self.cabinet.tv.handheld, page_px,
+            self.cabinet.tv.left.is_some(), pocket_ui::kit::hint_bar_top(h), self.cabinet.show_top.target().round() as i32, self.cabinet.tv.handheld, page_px,
             rect(self.cabinet.tv.console_at), rect(self.cabinet.tv.console_place));
     }
 
@@ -2973,6 +3006,97 @@ impl App {
                         self.moved_at = at.checked_sub(frame_ms * k).unwrap_or(at);
                         paint(self, &mut times);
                     }
+                }
+            }
+            "rests" | "rests-cabinet" => {
+                // Nothing floats (`pocket_ui::scene_check`): every selection of the row (Cabinet: every case of every
+                // shelf), each at moments of its animation (the case before going back, this one coming out), every
+                // object checked in the model the painters recorded. Prints how many frames and every fault
+                // (`rests frames=… faults=…`).
+                let cabinet = what == "rests-cabinet";
+                let stops: Vec<(usize, usize)> = if cabinet {
+                    self.shelf_snapshot(&format!("{system}:cabinet"));
+                    self.cabinet_shelves();
+                    let shelves = &self.cabinet.cab.shelves;
+                    (0..shelves.len()).flat_map(|s| (0..shelves[s].cases.len()).map(move |i| (s, i))).collect()
+                } else {
+                    (0..self.items.len()).map(|k| (0, k)).collect()
+                };
+                pocket_ui::scene_check::record(true);
+                let (mut frames, mut faults) = (0, Vec::new());
+                let mut kinds = std::collections::BTreeSet::new();
+                let base = Instant::now() - Duration::from_secs(36_000);
+                for (k, &(s, i)) in stops.iter().enumerate() {
+                    let at = base + Duration::from_secs(k as u64);
+                    pocket_ui::frame_clock::freeze(at);
+                    if cabinet {
+                        self.cabinet_go((s, i));
+                    } else {
+                        self.prev_sel = self.sel;
+                        self.sel = i;
+                    }
+                    self.moved_at = at;
+                    for ms in [0u64, 30, 60, 100, 160, 250, 400, 800] {
+                        let t = at + Duration::from_millis(ms);
+                        self.cabinet.shelf_clock = Some(t);
+                        pocket_ui::frame_clock::freeze(t);
+                        pocket_ui::scene_check::take();
+                        paint(self, &mut times);
+                        frames += 1;
+                        let (objs, surfaces) = pocket_ui::scene_check::take();
+                        // What was seen, without the numbers ("shelf # case #, out").
+                        kinds.extend(objs.iter().map(|o| o.what.replace(|c: char| c.is_ascii_digit(), "#").replace("##", "#").replace("##", "#")));
+                        kinds.extend(surfaces.iter().map(|s| format!("surface: {}", s.what)));
+                        for f in pocket_ui::scene_check::check(&objs, &surfaces) {
+                            faults.push(format!("shelf {s}, case {i} selected, {ms} ms: {f}"));
+                        }
+                    }
+                }
+                self.cabinet.shelf_clock = None;
+                pocket_ui::scene_check::record(false);
+                println!("rests frames={frames} faults={}", faults.len());
+                println!("rests seen: {}", kinds.into_iter().collect::<Vec<_>>().join(" | "));
+                for f in faults.iter().take(40) {
+                    println!("rests fault: {f}");
+                }
+            }
+            "rests-launch" => {
+                // Nothing floats while a game goes in (`scene_check`): every game of the row started, ten moments of the
+                // way into its console each.
+                pocket_ui::scene_check::record(true);
+                let (mut frames, mut faults) = (0, Vec::new());
+                let mut kinds = std::collections::BTreeSet::new();
+                for k in 0..self.items.len() {
+                    self.sel = k;
+                    self.prev_sel = k;
+                    self.moved_at = Instant::now() - Duration::from_secs(5);
+                    self.launch_animation_snapshot(Duration::ZERO);
+                    pocket_ui::frame_clock::thaw();
+                    let len = self.cabinet.insert.as_ref().map_or(cabinet::INSERT_COZY, |i| i.scene.len());
+                    let start = Instant::now();
+                    for step in 0..=10u32 {
+                        let at = start.checked_sub(len.mul_f32(step as f32 / 10.0)).unwrap_or(start);
+                        if let Some(ins) = self.cabinet.insert.as_mut() {
+                            ins.at = at;
+                        }
+                        self.launch_at = Some(at);
+                        pocket_ui::scene_check::take();
+                        paint(self, &mut times);
+                        frames += 1;
+                        let (objs, surfaces) = pocket_ui::scene_check::take();
+                        kinds.extend(objs.iter().map(|o| o.what.replace(|c: char| c.is_ascii_digit(), "#").replace("##", "#").replace("##", "#")));
+                        for f in pocket_ui::scene_check::check(&objs, &surfaces) {
+                            faults.push(format!("game {k} going in, {}0 %: {f}", step));
+                        }
+                    }
+                    self.cabinet.insert = None;
+                    self.launch_at = None;
+                }
+                pocket_ui::scene_check::record(false);
+                println!("rests frames={frames} faults={}", faults.len());
+                println!("rests seen: {}", kinds.into_iter().collect::<Vec<_>>().join(" | "));
+                for f in faults.iter().take(40) {
+                    println!("rests fault: {f}");
                 }
             }
             "walk" | "walk-warm" => {
@@ -3160,7 +3284,7 @@ pub(crate) struct ShelfLayout {
 /// size from 640x480 up (tests below).
 pub(crate) fn shelf_layout(w: i32, h: i32, tallest: f32) -> ShelfLayout {
     let top = if h < 600 { 80 } else { 104 };
-    // The hint bar starts 120 px above the bottom edge (`kit::hint_bar_top`): the board stands over it. The size of the
+    // The hint bar starts `kit::hint_bar_top` (72 px over the bottom edge at Normal text): the board stands over it. The size of the
     // spines is still the one the room before the bar gave (112 px), so the Mini V2 keeps its three pixels a template pixel.
     let bottom = pocket_ui::kit::content_bottom(h);
     let content = (h - 112 - top).max(200);
@@ -3318,6 +3442,22 @@ fn ajar_reach_of(big: bool, m: Medium, case: (i32, i32), game: Option<&Pic>) -> 
 fn show_centre(slot_cx: f32, fw: f32, reach: f32, screen_w: f32, margin: f32, shelf_w: i32, view: i32) -> f32 {
     let cx = if shelf_w * 3 < view { (screen_w - reach) / 2.0 } else { slot_cx };
     cx.clamp(margin + fw / 2.0, (screen_w - margin - fw / 2.0 - reach).max(margin + fw / 2.0))
+}
+
+/// Case `i` of the Shelf look's row painted again in this frame, out of its tile (`scene_check`): its place in the
+/// tile is taken back and this one recorded instead.
+#[allow(clippy::too_many_arguments)]
+fn scene_replace(i: usize, x: i32, y: i32, w: i32, h: i32, rests: pocket_ui::scene_check::Rests, solid: bool) {
+    if pocket_ui::scene_check::recording() {
+        let what = format!("case {i}");
+        pocket_ui::scene_check::remove(&what);
+        pocket_ui::scene_check::put(what, x, y, w, h, rests, solid);
+    }
+}
+
+thread_local! {
+    /// Where the row's (0, 0) and the tiles' top are on the screen this frame, while `scene_check` records.
+    static SHELF_ORIGIN: std::cell::Cell<(i32, i32)> = const { std::cell::Cell::new((0, 0)) };
 }
 
 /// Lived-in shelf: how much lower a case standing a little forward stands, at the shelf's scale.
@@ -3668,8 +3808,10 @@ impl App {
                 Pose::Flat { level, nudge } => {
                     // Lying one on another, each a few pixels off the one under it; a new stack at level 0.
                     // In a mixed row a shorter case lies centred on the longer one under it (`plan_sized`).
+                    // A stack keeps room on its left for a case pulled out of it (`lived_slide`): it slides out sideways
+                    // and stays on what it lay on (18.11.: a lying case lifted like a standing one hung in the air).
                     if level == 0 {
-                        stack = Some((x + up4(2 * gap), 0, 0, h));
+                        stack = Some((x + up4(2 * gap) + up4((LIVED_SLIDE * h as f32).ceil() as i32), 0, 0, h));
                     }
                     let (sx, end, below, base) = stack.unwrap_or((x, 0, 0, h));
                     let at = sx + (base - h).max(0) / 2 + ((6 + nudge as i32) as f32 * f).round() as i32;
@@ -3684,49 +3826,36 @@ impl App {
         (spines, lived, tallest)
     }
 
-    /// Lived-in shelf: case `taken` is out of the stack at the row's end; the stack is painted again
-    /// without it, the ones that lay on it a case lower.
-    fn paint_stack_without(&mut self, c: &mut Canvas, row: &mut ShelfRow, taken: usize, lay: &ShelfLayout, scroll: i32) -> i32 {
+    /// Lived-in shelf: lying case `i`, selected, `slide` pixels out of its stack to the left (the stack keeps that room,
+    /// `lay_row`), on the case or the board it lay on. Its place is cleared (its own layer of the stack only: the ones
+    /// over and under it stay), with the little shadow on its right but never into the case after the stack.
+    #[allow(clippy::too_many_arguments)]
+    fn pull_from_stack(&mut self, c: &mut Canvas, row: &mut ShelfRow, i: usize, lay: &ShelfLayout, scroll: i32, slide: i32, shadows: bool) {
         use pocket_ui::lived_in::Pose;
         let level = |j: usize| match row.lived.get(j).map(|l| l.0.pose) {
             Some(Pose::Flat { level, .. }) => Some(level),
             _ => None,
         };
-        // Its stack: back to the case at level 0, on while the levels go up.
-        let mut first = taken;
-        while level(first).is_some_and(|l| l > 0) && first > 0 {
-            first -= 1;
-        }
-        let mut end = first + 1;
+        let mut end = i + 1;
         while level(end).is_some_and(|l| l > 0) {
             end += 1;
         }
-        let members: Vec<usize> = (first..end).collect();
-        // Each one cleared where it lies (they are upright rectangles), and the little shadow on its right (3 wide, 5 of
-        // blur: up to 8 past its edge, and a little above it), but never into the case after the stack.
         let next = row.spines.get(end).map_or(lay.right, |s| lay.left + s.0 - scroll);
-        for &j in &members {
-            let (x, w, _) = row.spines[j];
-            let (bottom, outline) = (row.lived[j].1, row.lived[j].2);
-            let (l, r) = ((lay.left + x - scroll - 1).max(lay.left), (lay.left + x - scroll + w + 9).min(next).min(lay.right));
-            if r > l {
-                c.rect(l, lay.floor - bottom - outline - 4, r - l, outline + 5, pal().void);
-            }
+        let (x0, len, _) = row.spines[i];
+        let (bottom, outline) = (row.lived[i].1, row.lived[i].2);
+        let (x, top) = (lay.left + x0 - scroll, lay.floor - bottom - outline);
+        let (l, r) = ((x - 1).max(lay.left), (x + len + 9).min(next).min(lay.right));
+        if r > l {
+            c.rect(l, top, r - l, outline, pal().void);
         }
-        let shade = self.cabinet.room.lit.case_shade();
-        let mut below = 0;
-        for j in members {
-            if j == taken {
-                continue;
-            }
-            let Some(pic) = self.posed_pic(row, j) else { continue };
-            let (x, w, _) = row.spines[j];
-            let outline = row.lived[j].2;
-            let (cx, cy) = (lay.left + x - scroll + w / 2, lay.floor - below - outline / 2);
-            self.blit_between(c, &pic, cx - pic.w / 2, cy - pic.h / 2, shade, (0, lay.floor), lay.left, lay.right);
-            below += outline;
+        let Some(pic) = self.posed_pic(row, i) else { return };
+        let at = x - slide + (len - pic.w) / 2;
+        self.blit_between(c, &pic, at, top, 256, (0, lay.floor), lay.left, lay.right);
+        if shadows {
+            art::soft_shadow(c, at + pic.w, top + 2, 3, outline - 2, 5, 0.3, (top, lay.floor - bottom));
         }
-        below
+        pocket_ui::scene_check::set_origin(0, 0);
+        scene_replace(i, at, top, pic.w, outline, pocket_ui::scene_check::Rests::Settled, true);
     }
 
     /// Lived-in shelf: the feet of the cases standing a little forward, over the board's front edge,
@@ -3982,6 +4111,16 @@ impl App {
         let shift = |yy: i32| (lean_px * (1.0 - yy as f32 / room.max(1) as f32)).round() as i32;
         let reach = lean_px.abs().ceil() as i32;
         let first = (scroll - reach).max(0) / TILE_W;
+        if pocket_ui::scene_check::recording() {
+            // Every tile painted again, so its cases and props are recorded where this frame shows them; the board is
+            // what they stand on, a case standing a little forward on its front (`forward_drop`).
+            row.tiles.clear();
+            row.halves.clear();
+            SHELF_ORIGIN.set((lay.left - scroll, strip));
+            // The board goes on under the row past the view's ends.
+            let ends = (lay.left - scroll - 16, lay.left - scroll + row.len.max(view) + 16);
+            pocket_ui::scene_check::surface("the shelf's board", lay.floor, forward_drop(row.f), ends.0.min(lay.left - 16), ends.1.max(lay.right + 16));
+        }
         let tiles: Vec<Rc<Vec<u32>>> = (first..=(scroll + view + reach - 1) / TILE_W).map(|t| self.shelf_tile(&mut row, t, room, view, seed)).collect();
         if c.n() == 1 {
             let c_w = c.w;
@@ -4082,30 +4221,19 @@ impl App {
                 let (hx, hw) = (x.max(lay.left), (x + w).min(lay.right) - x.max(lay.left));
                 let mut from_stack = false;
                 if let Some((pose, bottom, outline)) = posed {
-                    // It comes out standing straight, as any other; where it leaned or lay is cleared, and a case taken
-                    // from the stack lets the ones on it down.
-                    // Taken from the stack it stays lying (its title still reads across) and rises over the rest of it.
-                    let flat = if matches!(pose, pocket_ui::lived_in::Pose::Flat { .. }) {
-                        let rest = self.paint_stack_without(c, &mut row, i, &lay, scroll);
-                        self.posed_pic(&mut row, i).map(|p| (p, rest))
+                    if matches!(pose, pocket_ui::lived_in::Pose::Flat { .. }) {
+                        // A lying case is pulled out of its stack sideways, like a book, and stays on what it lies on;
+                        // the rest of the stack stays as it is.
+                        self.pull_from_stack(c, &mut row, i, &lay, scroll, lived_slide(w, open), shadows);
+                        from_stack = true;
                     } else {
-                        None
-                    };
-                    match flat {
-                        Some((p, rest)) => {
-                            self.blit_between(c, &p, x + (w - p.w) / 2, lay.floor - rest - p.h - rise, 256, (0, lay.floor), lay.left, lay.right);
-                            // Its little shadow falls on what is left of the stack, as wide as it lies (not on the
-                            // board in an upright spine's width: that put a dark smudge on the bottom case).
-                            if shadows {
-                                art::soft_shadow(c, x + (w - p.w) / 2 + 2, lay.floor - rest - 1, p.w - 4, 3, 3, 0.3 * rise as f32 / lay.lift as f32, (lay.floor - rest - 2, lay.floor));
-                            }
-                            from_stack = true;
-                        }
-                        None => {
-                            let _ = (bottom, outline);
-                            self.erase_leaning(c, &mut row, i, &lay, scroll);
-                            self.blit_between(c, &pic, x + (w - pic.w) / 2, lay.floor - pic.h - rise, 256, (0, lay.floor), lay.left, lay.right);
-                        }
+                        // A leaning case comes out standing straight, as any other; where it leaned is cleared.
+                        let _ = (bottom, outline);
+                        self.erase_leaning(c, &mut row, i, &lay, scroll);
+                        let (px, py) = (x + (w - pic.w) / 2, lay.floor - pic.h - rise);
+                        self.blit_between(c, &pic, px, py, 256, (0, lay.floor), lay.left, lay.right);
+                        pocket_ui::scene_check::set_origin(0, 0);
+                        scene_replace(i, px, py, pic.w, pic.h, pocket_ui::scene_check::Rests::Raised("the selected case, out of the row"), true);
                     }
                 } else if lean_px == 0.0 {
                     c.rect(hx, lay.floor - pic.h, hw, pic.h, pal().void);
@@ -4118,6 +4246,8 @@ impl App {
                 }
                 if posed.is_none() {
                     self.blit_between(c, &pic, x, lay.floor - pic.h - rise, 256, (0, lay.floor), lay.left, lay.right);
+                    pocket_ui::scene_check::set_origin(0, 0);
+                    scene_replace(i, x, lay.floor - pic.h - rise, pic.w, pic.h, pocket_ui::scene_check::Rests::Raised("the selected case, out of the row"), true);
                 }
                 if shadows && !from_stack {
                     art::soft_shadow(c, x, lay.floor - 4, pic.w, 6, 6, 0.4 * rise as f32 / lay.lift as f32, (0, c.h));
@@ -4131,7 +4261,12 @@ impl App {
                     }
                 }
             }
-            let (hx, hw) = (x.max(lay.left), (x + w).min(lay.right) - x.max(lay.left));
+            // A lying case selected is out of its stack to the left (`pull_from_stack`).
+            let slid = match posed {
+                Some((pocket_ui::lived_in::Pose::Flat { .. }, _, _)) => lived_slide(w, open),
+                _ => 0,
+            };
+            let (hx, hw) = ((x - slid).max(lay.left), (x - slid + w).min(lay.right) - (x - slid).max(lay.left));
             let mut foot = 0;
             if let Some((_, bottom, outline)) = posed {
                 (h, foot) = (outline, bottom);
@@ -4357,6 +4492,11 @@ impl App {
         {
             let mut c = Canvas::new(&mut buf, TILE_W as u32, room as u32);
             let x0 = t * TILE_W;
+            let checking = pocket_ui::scene_check::recording();
+            if checking {
+                let (ox, oy) = SHELF_ORIGIN.get();
+                pocket_ui::scene_check::set_origin(ox + x0, oy);
+            }
             for i in 0..row.spines.len() {
                 let (x, w, _) = row.spines[i];
                 if x + w + 8 <= x0 || x >= x0 + TILE_W {
@@ -4378,6 +4518,11 @@ impl App {
                         let (cx, cy) = (x - x0 + w / 2, room - bottom - outline / 2);
                         let (px, py) = (cx - pic.w / 2, cy - pic.h / 2);
                         art::blit(&mut c, &pic, px, py, shade, (0, room));
+                        if checking {
+                            // Its outline: lying, the picture; leaning, the footprint, its foot on the board.
+                            let flat = matches!(plan.pose, pocket_ui::lived_in::Pose::Flat { .. });
+                            pocket_ui::scene_check::put(format!("case {i}"), x - x0, room - bottom - outline, w, outline, pocket_ui::scene_check::Rests::Settled, flat);
+                        }
                         // Lying, the little shadow on its right; leaning, none (its right edge is not upright).
                         if page != 0 && matches!(plan.pose, pocket_ui::lived_in::Pose::Flat { .. }) {
                             art::soft_shadow(&mut c, x - x0 + w, room - bottom - outline + 2, 3, outline - 2, 5, 0.3, (0, room));
@@ -4388,6 +4533,9 @@ impl App {
                 let pic = self.row_pic(row, i, row.f);
                 let (x, y) = (x - x0, room - pic.h + drop);
                 art::blit(&mut c, &pic, x, y, shade, (0, room));
+                if checking {
+                    pocket_ui::scene_check::put_pic(format!("case {i}"), &pic, x, y, pocket_ui::scene_check::Rests::Settled, true);
+                }
                 // A little shadow on the right of each case; on the black page there is nothing for it to darken.
                 if page != 0 {
                     art::soft_shadow(&mut c, x + pic.w, y + 4, 3, pic.h - 4, 5, 0.3, (0, room));
@@ -4417,6 +4565,7 @@ impl App {
             return;
         }
         art::blit(c, &bookend, x, room - bookend.h, shade, (0, room));
+        pocket_ui::scene_check::put_pic("the bookend after the row", &bookend, x, room - bookend.h, pocket_ui::scene_check::Rests::Settled, true);
         x += bookend.w;
         let system = match self.items.first() {
             Some(Item::Game(s, _)) => self.systems.get(*s).map(|sys| sys.name.clone()),
@@ -4428,6 +4577,7 @@ impl App {
         let gap = (f * 6.0) as i32;
         for (i, at) in pocket_ui::room_deco::place(x, right, gap, &widths) {
             art::blit(c, &deco[i], at, room - deco[i].h, shade, (0, room));
+            pocket_ui::scene_check::put_pic(format!("decoration {i} after the row"), &deco[i], at, room - deco[i].h, pocket_ui::scene_check::Rests::Settled, true);
             x = at + deco[i].w;
         }
         if let Some(prop) = Prop::beside(seed, room * 2 / 3) {
@@ -4440,6 +4590,7 @@ impl App {
                 super::app_room_extras::lamp_glow(c, &pic, at, room - pic.h, light.lamp, (0, 0, c.w, room));
             }
             art::blit(c, &pic, at, room - pic.h, shade, (0, room));
+            pocket_ui::scene_check::put_pic("the prop after the row", &pic, at, room - pic.h, pocket_ui::scene_check::Rests::Settled, true);
         }
     }
 
@@ -4655,7 +4806,7 @@ mod shelf_tests {
     fn the_shelf_and_the_shown_front_fit_every_screen() {
         for (w, h) in [(1240, 1080), (1920, 1080), (1280, 960), (1280, 720), (640, 480), (1024, 768)] {
             let lay = shelf_layout(w, h, TALLEST);
-            assert!(lay.floor + lay.board_h <= h - 98, "{w}x{h}: the board over the hints");
+            assert!(lay.floor + lay.board_h <= pocket_ui::kit::content_bottom(h), "{w}x{h}: the board over the hints");
             let tallest = (TALLEST * lay.f).round() as i32;
             assert!(
                 lay.floor - tallest - lay.lift >= lay.show.1 + lay.show.3,

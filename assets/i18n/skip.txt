@@ -1918,10 +1918,35 @@ no game in front
 {s} plays it
 {s} is never read ahead
 {s} is {s} MB
-calls={s} repeated={s} doubled={s} core_ms_p50={s} core_ms_p99={s} core_ms_max={s} gap_ms_p50={s} gap_ms_p99={s} gap_ms_max={s} readback_ms_p50={s} readback_ms_p99={s} paint_ms_p50={s} paint_ms_p99={s} mode={s} core_fps={s} display_hz={s} cpu={s} mhz={s} slow_cpu_calls={s} fast_cpus={s}
+calls={s} repeated={s} doubled={s} missed={s} core_ms_p50={s} core_ms_p99={s} core_ms_max={s} gap_ms_p50={s} gap_ms_p99={s} gap_ms_max={s} readback_ms_p50={s} readback_ms_p99={s} paint_ms_p50={s} paint_ms_p99={s} mode={s} core_fps={s} display_hz={s} cpu={s} mhz={s} slow_cpu_calls={s} fast_cpus={s}
 NetworkRule.network(
 mupen64plus-ThreadedRenderer
 sourceHeight
 uniform int effect
 self.speed.key(key, down)
 an app didn't start
+Android vibrator
+the selected case, out of the row
+the bookend after the row
+decoration {s} after the row
+the prop after the row
+the console beside the TV
+the handheld in the TV's place
+the TV
+the stage's floor
+a handheld, in the hands
+coming up from below the screen
+the console (plain)
+{s} at y {s}
+{s} floats: its foot at y {s} (x {s}..{s}) rests on nothing ({s})
+{s} and {s} are inside each other ({s} x {s} px)
+a shelf of the cabinet
+case {s}
+game {s} going in, {s}0 %: {s}
+on its way between its shelf and the showcase
+prop {s} on the shelf at {s}
+shelf {s} case {s}
+shelf {s} case {s}, out
+shelf {s}, case {s} selected, {s} ms: {s}
+the cabinet's top board
+the shelf's board

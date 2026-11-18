@@ -178,7 +178,7 @@ impl Sys {
         }
         if let Some((msg, _)) = &self.message {
             let w = text.width(Face::Body, SMALL, msg) + 2 * BTN_PAD;
-            let y = c.h - PAD - PILL - 100;
+            let y = crate::kit::hint_bar_top(c.h) - 100;
             crate::retro::pill(c, (c.w - w) / 2, y, w, 64, 32, 0x262626);
             text.draw(c, Face::Body, SMALL, (c.w - w) / 2 + BTN_PAD, y + 32 + crate::type_scale::mid(SMALL), 0xffffff, msg);
         }
@@ -375,7 +375,7 @@ impl Sys {
             views.push(v);
         }
         let top = PAD + PILL + 12;
-        self.paint_rows(c, text, top, &views, sel, c.h - PAD - PILL - 140);
+        self.paint_rows(c, text, top, &views, sel, crate::kit::hint_bar_top(c.h) - 140);
         let (desc, color) = match rows[sel] {
             Row::Brightness | Row::Volume => (level_line(rows[sel], crate::device::android_profile()).to_string(), pal().text),
             // A switch that did not work says so here, in the alert colour, until the next try or the panel closes.
@@ -613,7 +613,7 @@ impl Sys {
                 let mut rows = vec![RowView::new("Search…", ">")];
                 rows.extend(timezone::regions(self.zone_list()).into_iter().map(|r| RowView::new(r, ">")));
                 self.header(c, text, "Time zone");
-                self.paint_rows(c, text, top, &rows, sel, c.h - PAD - PILL - 30);
+                self.paint_rows(c, text, top, &rows, sel, crate::kit::hint_bar_top(c.h) - 30);
                 // While the list is still being read: Search… works, the regions follow.
                 let desc = if self.view.zones.is_none() { "Looking at time zones…" } else { "" };
                 self.footer(c, text, &[("L1 R1", "Page"), ("B", "Back"), ("A", "Open")], desc, pal().dust);
@@ -644,7 +644,7 @@ impl Sys {
                         "Try part of a city name, such as vie or york.",
                     );
                 } else {
-                    self.paint_rows(c, text, top, &rows, sel, c.h - PAD - PILL - 30);
+                    self.paint_rows(c, text, top, &rows, sel, crate::kit::hint_bar_top(c.h) - 30);
                 }
                 self.hints(c, text, &[("L1 R1", "Page"), ("B", "Back"), ("A", "Set")]);
             }

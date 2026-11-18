@@ -3599,6 +3599,41 @@ void stub_frame(unsigned w, unsigned h, size_t pitch, unsigned bpp) {
         }
     }
 
+    #[test]
+    fn remapped_ds_actions_reach_the_core_as_stylus_touch_and_layout() {
+        let _l = globals();
+        let stub = Stub::new("ds-actions");
+        let core = stub.load();
+        let mut mapping = crate::controls::Mapping::defaults_on("nds", false);
+        mapping.assign(2, Some(crate::ds_pad::STYLUS));
+        mapping.assign(9, Some(crate::ds_pad::LAYOUT));
+        let mut ds = crate::ds_pad::Pad::default();
+        ds.apply("nds", &mapping, 1 << 2, [0; 4]);
+        ds.apply("nds", &mapping, 0, [0; 4]);
+        let f = ds.apply("nds", &mapping, (1 << 7) | (1 << 8), [0; 4]);
+        core.set_analog(f.axes);
+        core.run(mapping.translate(f.raw) | f.buttons);
+        unsafe {
+            let read: unsafe extern "C" fn(c_uint,c_uint,c_uint,c_uint)->i16 = hook(&core,"stub_read");
+            assert_eq!(read(0, DEVICE_ANALOG, 1, 0), 32767, "DS pointer right, both players' shared input contract");
+            assert_eq!(read(0, DEVICE_JOYPAD, 0, joypad::R2 as c_uint), 1, "touch held");
+            assert_eq!(read(0, DEVICE_JOYPAD, 0, joypad::A as c_uint), 0, "touch does not also press DS A");
+            assert_eq!(read(0, DEVICE_JOYPAD, 0, joypad::RIGHT as c_uint), 0, "pointer does not move the player");
+            // A 120 Hz display tick can have no due DS frame. The next core
+            // frame must still see the held layout button; melonDS detects its edge.
+            ds.apply("nds", &mapping, 1 << 9, [0; 4]);
+            let f = ds.apply("nds", &mapping, 1 << 9, [0; 4]);
+            core.set_analog(f.axes); core.run(mapping.translate(f.raw) | f.buttons);
+            assert_eq!(read(0, DEVICE_JOYPAD, 0, joypad::R3 as c_uint), 1, "layout reaches the next emulated frame");
+            let f = ds.apply("nds", &mapping, 1 << 9, [0; 4]);
+            core.run(mapping.translate(f.raw) | f.buttons);
+            assert_eq!(read(0, DEVICE_JOYPAD, 0, joypad::R3 as c_uint), 1, "native held-button contract");
+            let f = ds.apply("nds", &mapping, 0, [0; 4]);
+            core.run(mapping.translate(f.raw) | f.buttons);
+            assert_eq!(read(0, DEVICE_JOYPAD, 0, joypad::R3 as c_uint), 0, "release reaches the core");
+        }
+    }
+
     /// Couch co-op: players 2 to 4 read their own pad and sticks from ports 1 to 3; the ports the core lists get a pad
     /// plugged in (the analog one where player 1 has one), the others are left alone.
     #[test]

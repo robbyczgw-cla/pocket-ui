@@ -202,6 +202,23 @@ impl Pads {
     pub fn seats(&self) -> &Seats {
         &self.seats
     }
+
+    /// Where each player's rumble goes (`rumble::set_targets`), as `players` does on Linux: the device of the player's
+    /// seat (its `InputDevice` id; the Activity uses the handheld's motor for a built-in pad without a vibrator of its own),
+    /// player 1 the handheld's motor while no pad is seated (touch), nobody for the others.
+    pub fn rumble_targets(&self) -> [crate::rumble::Target; crate::rumble::PORTS] {
+        std::array::from_fn(|p| {
+            let seated = if self.multi || p == 0 { self.seats.get(p) } else { None };
+            match seated.and_then(|c| self.slots.iter().find(|s| s.controller.key == c.key)) {
+                // The handheld's own pad has no vibrator: its motor is the handheld's (on the Mini V2 the request for the
+                // pad's device found none, 18.11.2026).
+                Some(slot) if crate::pad::android::is_handheld_pad(slot.device.vendor, slot.device.product) => crate::rumble::Target::Motor,
+                Some(slot) => crate::rumble::Target::Node(slot.device.id.to_string()),
+                None if p == 0 => crate::rumble::Target::Motor,
+                None => crate::rumble::Target::None,
+            }
+        })
+    }
 }
 
 #[cfg(test)]
@@ -472,5 +489,36 @@ mod tests {
         let d = Device::parse("8\tabc123\tXbox Wireless Controller\t8224\t274").unwrap();
         assert_eq!((d.id, d.vendor, d.product, d.name.as_str()), (8, 0x2020, 0x0112, "Xbox Wireless Controller"));
         assert!(Device::parse("8\tabc").is_none());
+    }
+
+    /// Each player's rumble goes to their own pad, as Linux's `players` seats it: player 1 to the seated pad (the
+    /// handheld's motor while no pad is there: touch), the others to theirs in a game for several, nobody without one.
+    #[test]
+    fn every_player_rumbles_their_own_pad() {
+        use crate::rumble::Target;
+        let mut pads = Pads::default();
+        assert_eq!(pads.rumble_targets(), [Target::Motor, Target::None, Target::None, Target::None], "touch: the handheld's motor");
+        pads.set_multiplayer(true);
+        pads.roster(vec![odin(8), dev(21, "bt", "Pro Controller", 0x057e, 0x2009)]);
+        assert_eq!(pads.rumble_targets(), [Target::Motor, Target::Node("21".into()), Target::None, Target::None], "the Odin's pad: the handheld's motor");
+        // The Mini V2's own pad (2022:3002, an "external" USB device to Android) has no vibrator: the handheld's motor.
+        let mut mini = Pads::default();
+        mini.roster(vec![dev(8, "mini", "Xbox Wireless Controller", 0x2022, 0x3002)]);
+        assert_eq!(mini.rumble_targets()[0], Target::Motor, "the Mini V2's pad");
+        pads.set_multiplayer(false);
+        assert_eq!(pads.rumble_targets()[1], Target::None, "one port: only player 1 rumbles");
+    }
+
+    /// The player sends the rumble the Linux way (`rumble::environment` for the cores, the strength from Rumble's row, the
+    /// players' targets), and the Activity has a vibrator to send it to.
+    #[test]
+    fn the_player_rumbles_through_linux_s_rumble() {
+        let player = include_str!("../android/src/player.rs");
+        for wired in ["pocket_ui::rumble::set_strength(", "pocket_ui::rumble::set_targets(p.pads.rumble_targets())", "pocket_ui::rumble::stop()"] {
+            assert!(player.contains(wired), "player.rs lacks {wired}");
+        }
+        assert!(include_str!("../android/java/xyz/pocketui/app/PlayerActivity.java").contains("public String rumble(String target,String magnitude,String ms)"));
+        assert!(include_str!("../android/AndroidManifest.xml").contains("android.permission.VIBRATE"));
+        assert!(include_str!("android_modules.rs").contains("pub mod rumble;"), "Linux's rumble, not a stub");
     }
 }

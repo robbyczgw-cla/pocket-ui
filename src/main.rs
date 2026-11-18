@@ -4255,7 +4255,7 @@ impl App {
                 // Under 768 lines (the Smart Pro's 720) room for two lines of help: one cut "Report a problem"'s explanation short.
                 let help_lines = if c.h < 768 { 2 } else { 1 };
                 let below = 2 * row + 20 + pocket_ui::type_scale::px(NU_SMALL) as i32 / 2 + help_lines * pocket_ui::type_scale::line(NU_SMALL, 12);
-                let fit_for = |n: usize| (c.h - NU_PAD - NU_PILL - 8 - top - below) / (n as i32 + 1);
+                let fit_for = |n: usize| (pocket_ui::kit::hint_bar_top(c.h) - 8 - top - below) / (n as i32 + 1);
                 // Where the licence texts are (put there by the install zip and the image: pocket-ui's licence, the
                 // credits, the crates' and the fonts' texts). Its row comes only where the facts keep three quarters
                 // of the row's height with it; on the shortest page (the Device row, large German text) the help under
@@ -4329,7 +4329,7 @@ impl App {
         // (100 on a short screen, 768 lines, where a pointer of two lines would otherwise lie on the hints.)
         let min_graph: i32 = if pocket_ui::kit::short_screen(c.h) { 100 } else { 140 };
         let under_for = |n: usize| 80 + 12 + n as i32 * draw_step + 60 + (pointer.len() as i32 - 1).max(0) * desc_step + desc_step / 2;
-        let hints_top = c.h - pad - NU_PILL - 8;
+        let hints_top = pocket_ui::kit::hint_bar_top(c.h) - 8;
         // Where even the shortest graph would leave the lines under it no room (Large German on 1024x768), the games'
         // cost lines go before the pointer to the Sleep settings and the graph, which lie on the hint bar otherwise.
         let top_of_graph = top + 130;
@@ -4380,7 +4380,7 @@ impl App {
         use pocket_ui::manual;
         let (pad, left) = (NU_PAD, NU_PAD + NU_BTN_PAD);
         let top = pad + NU_PILL + 12;
-        let view_h = c.h - pad - NU_PILL - 16 - top;
+        let view_h = pocket_ui::kit::hint_bar_top(c.h) - 16 - top;
         // The guide's pages stay English for now (docs/i18n-glossary.md); the title and hints around them don't.
         self.text.set_translate(false);
         self.manual.paint(c, &mut self.text, left, top, c.w - 2 * left, view_h);
@@ -4703,7 +4703,7 @@ impl App {
         let busy = self.updates.is_busy();
         // Bottom: progress while busy, else the last result, else the notes of the selected action.
         let bar = |c: &mut Canvas, frac: f32| {
-            let (w, y) = (c.w - 2 * pad - 2 * NU_BTN_PAD, c.h - pad - NU_PILL - 90);
+            let (w, y) = (c.w - 2 * pad - 2 * NU_BTN_PAD, pocket_ui::kit::hint_bar_top(c.h) - 90);
             pocket_ui::retro::pill(c, pad + NU_BTN_PAD, y, w, 12, 6, pal().keycap);
             pocket_ui::retro::pill(c, pad + NU_BTN_PAD, y, ((w as f32 * frac) as i32).max(12), 12, 6, pal().band);
         };
@@ -4774,7 +4774,7 @@ impl App {
             }
             let actions_end = top + (actions.len() as i32 + 1) * r + r / 3 + if tight { 0 } else { r } + 8;
             let step = (if tight { 36 } else { 40 }) * px as i32 / NU_SMALL as i32;
-            let fit = (((c.h - pad - NU_PILL - 30) - actions_end - 30) / step + 1).max(1) as usize;
+            let fit = (((pocket_ui::kit::hint_bar_top(c.h) - 30) - actions_end - 30) / step + 1).max(1) as usize;
             if lines.len() <= fit || i + 1 == layouts.len() {
                 if lines.len() > fit {
                     lines.truncate(fit);
@@ -4817,7 +4817,7 @@ impl App {
                 self.text.draw(c, Face::Body, font, pad + NU_BTN_PAD, base, ink, &label);
             }
         }
-        let mut y = c.h - pad - NU_PILL - 30 - step * (lines.len() as i32 - 1).max(0);
+        let mut y = pocket_ui::kit::hint_bar_top(c.h) - 30 - step * (lines.len() as i32 - 1).max(0);
         for line in &lines {
             let w = self.text.width(Face::Body, note_px, line);
             self.text.draw(c, Face::Body, note_px, (c.w - w) / 2, y, pal().text, line);
@@ -5813,7 +5813,7 @@ impl App {
         let moving = self.moving_now(now);
         if let Some((old, p)) = self.motion.hints_fade(hints, now, moving) {
             let old: Vec<(&str, &str)> = old.iter().map(|(k, l)| (k.as_str(), l.as_str())).collect();
-            let (y, h) = (pocket_ui::kit::hint_bar_top(c.h) - 8, pocket_ui::kit::PILL + 16);
+            let (y, h) = (pocket_ui::kit::hint_bar_top(c.h) - 8, pocket_ui::kit::hint_h() + 16);
             // Only from the left end of the longer of the two pills: mixing the whole width cost the Brick 4 ms a frame
             // all through the fade, which starts with nearly every move in the Cabinet (docs/TRIMUI-BRICK.md).
             let left = |app: &mut Self, hints: &[(&str, &str)]| pocket_ui::kit::page_hints_left(&mut app.text, c.w, c.h, hints);
@@ -6759,9 +6759,18 @@ fn snapshot(app: &mut App, args: &[String]) {
         app.bluetooth_row_now();
     }
     let group = |name: &str| options::GROUPS.iter().position(|g| g.name == name).unwrap_or(0);
-    let emu = EmuMenu::load(&app.data_dir, "gbc", std::path::Path::new("/storage/roms/gbc/uCity.gbc"), &mut settings)
-        // The Controls page needs a layout to draw: without a core snapshot in the data folder, the standard one.
-        .or_else(|| state.starts_with("controls").then(|| EmuMenu::offline("gbc", &settings)));
+    let controls_system = if state.starts_with("controls:nds") { "nds" } else { "gbc" };
+    // Reproducible DS assignments for the live Controls page painters.
+    if controls_system == "nds" {
+        if state.ends_with(":stylus") { settings.values.insert("ctl.l2".into(), "ds_stylus".into()); }
+        if state.ends_with(":layout") { settings.values.insert("ctl.r2".into(), "ds_layout".into()); }
+    }
+    let emu = if controls_system == "nds" {
+        Some(EmuMenu::offline(controls_system, &settings))
+    } else {
+        EmuMenu::load(&app.data_dir, controls_system, std::path::Path::new("/storage/roms/gbc/uCity.gbc"), &mut settings)
+            .or_else(|| state.starts_with("controls").then(|| EmuMenu::offline(controls_system, &settings)))
+    };
     // "name:a:b" selects rows: controls:<row>, emulator:<row>, category:<category>:<row>.
     let mut parts = state.split(':');
     let name = parts.next().unwrap_or_default();

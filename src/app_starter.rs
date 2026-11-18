@@ -607,7 +607,7 @@ impl App {
         let top = NU_PAD + NU_PILL + 12;
         let rows = self.starter.rows();
         let sel = self.starter.sel.min(rows.len().saturating_sub(1));
-        let visible = ((c.h - top - NU_PILL - 190) / row_h()).max(1) as usize;
+        let visible = ((pocket_ui::kit::hint_bar_top(c.h) - top - 160) / row_h()).max(1) as usize;
         let first = crate::window_start(sel, visible, rows.len());
         let missing = self.starter.missing();
         let (busy_id, busy_pct) = match &self.starter.busy {
@@ -640,7 +640,7 @@ impl App {
 
         // Under the list: progress, what the last job said, or what the selected game is.
         let lines: Vec<(String, u32)> = if let Some(text) = self.starter.busy_text() {
-            let (w, by) = (c.w - 2 * NU_PAD - 2 * NU_BTN_PAD, c.h - NU_PAD - NU_PILL - 110);
+            let (w, by) = (c.w - 2 * NU_PAD - 2 * NU_BTN_PAD, pocket_ui::kit::hint_bar_top(c.h) - 110);
             let b = self.starter.busy.as_ref();
             let frac = b.map_or(0.0, |b| if b.total > 0 { (b.done as f32 / b.total as f32).clamp(0.0, 1.0) } else { 0.0 });
             pocket_ui::retro::pill(c, NU_PAD + NU_BTN_PAD, by, w, 12, 6, pal().keycap);
@@ -682,7 +682,7 @@ impl App {
                 all.push((l, *colour));
             }
         }
-        let mut y = c.h - NU_PAD - NU_PILL - 30 - 40 * (all.len() as i32 - 1).max(0);
+        let mut y = pocket_ui::kit::hint_bar_top(c.h) - 30 - 40 * (all.len() as i32 - 1).max(0);
         for (line, colour) in &all {
             self.text.draw(c, Face::Body, NU_SMALL, NU_PAD + NU_BTN_PAD, y, *colour, line);
             y += 40;

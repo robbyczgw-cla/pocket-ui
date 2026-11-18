@@ -311,7 +311,7 @@ impl App {
         let (pad, row, font) = (NU_PAD, pocket_ui::type_scale::row(58, 34), 34u32);
         self.sheet_header(c, SETTINGS_NAME);
         let (top, right) = (pad + NU_PILL + 12, c.w - pad);
-        let list_bottom = c.h - pad - NU_PILL - 16 - DETAILS_H;
+        let list_bottom = pocket_ui::kit::hint_bar_top(c.h) - 16 - DETAILS_H;
         for (i, r) in page_mod::ROWS.iter().enumerate() {
             let y = top + i as i32 * row;
             self.hits.row(Area::new(pad, y, right - pad, row), i);

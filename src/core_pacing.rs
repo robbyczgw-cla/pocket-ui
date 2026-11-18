@@ -13,6 +13,10 @@
 //! [`Placement`] keeps the player's thread off a big.LITTLE chip's little cores while a game plays: a light frame placed
 //! there by the scheduler missed the refresh (SNES Original Mode 7 on the Mini V2, 17.11.2026).
 //!
+//! Since 18.11.2026 pocket-core on Linux runs on this module too (its own clock was a second one): the pacing exists once.
+//! Its loop waits for [`Pacer::next_refresh`] after the swap, and a light core catches up a missed refresh (it fits in
+//! the next one), a heavy one doesn't ([`Pacer::took`]).
+//!
 //! [`Stats`] is the player's `player pacing:` log line: repeated and doubled pictures, the core's time per frame and the
 //! gaps between calls, for a measurement on the device without a debug build.
 
@@ -211,7 +215,15 @@ fn set_thread_cpus(cpus: &[usize]) -> bool {
     }
 }
 
+/// The share of a refresh that catching up may take: after a missed refresh the core runs the refreshes it owes only
+/// when their frames fit in this much of the next one (see [`Pacer::took`]).
+pub const CATCH_UP_SHARE: f64 = 0.75;
+
 /// The refresh grid and, for cores off the display's rate, the core time owed.
+///
+/// Both players use it: Android's is called once per refresh by `GLSurfaceView`; pocket-core on Linux calls it once per
+/// turn of its own loop and waits for [`Pacer::next_refresh`] after the swap (vsync alone lets a frame through early on
+/// some compositors, and with the screen off nothing is swapped at all).
 #[derive(Debug, Clone)]
 pub struct Pacer {
     core: f64,
@@ -219,13 +231,49 @@ pub struct Pacer {
     /// Where the last counted refresh was, in the call's time; follows the calls slowly.
     grid: Option<Instant>,
     owed: f64,
+    /// The core's time per frame (seconds, smoothed; 0 until [`Pacer::took`] is told). A core that can't run the
+    /// refreshes it owes inside one refresh doesn't try: it would miss the next refresh too, and the next call would
+    /// owe even more (a light core catches up, a heavy one slows down for a moment, as before 18.11.2026 on Linux).
+    per_frame: f64,
+    /// Refreshes the last call came late by: the screen showed the previous picture again that often.
+    missed: u32,
 }
 
 impl Pacer {
     pub fn new(core_fps: f64, display_hz: f64) -> Self {
-        let mut p = Pacer { core: 60.0, refresh: 60.0, grid: None, owed: 0.0 };
+        let mut p = Pacer { core: 60.0, refresh: 60.0, grid: None, owed: 0.0, per_frame: 0.0, missed: 0 };
         p.set_rates(core_fps, display_hz);
         p
+    }
+
+    /// The core's time for one frame, measured by the player (plain play only: no fast-forward, rewind or run-ahead).
+    pub fn took(&mut self, per_frame: Duration) {
+        let t = per_frame.as_secs_f64();
+        // One slow frame (a stall, the very frame that missed the refresh) counts as twice the usual at most: it is no
+        // reason to stop catching up. A core that really got slower gets there within a few dozen frames.
+        self.per_frame = if self.per_frame == 0.0 { t } else { self.per_frame * 0.8 + t.min(self.per_frame * 2.0) * 0.2 };
+    }
+
+    /// Refreshes the last [`Pacer::due`] came late by (0: on time). A player's `player pacing:` line counts them
+    /// (`Stats::missed`): each one is a picture the screen showed twice, whether the core then caught up or not.
+    pub fn missed(&self) -> u32 {
+        self.missed
+    }
+
+    /// When the next refresh is due on the grid: a player that drives its own loop waits until then after the swap.
+    /// None before the first call (and after [`Pacer::restart`]): the next call runs at once.
+    pub fn next_refresh(&self) -> Option<Instant> {
+        self.grid.map(|g| g + Duration::from_secs_f64(1.0 / self.refresh))
+    }
+
+    /// Of `refreshes` passed, the ones whose frames fit in [`CATCH_UP_SHARE`] of a refresh (at least one).
+    fn affordable(&self, refreshes: u32) -> u32 {
+        if refreshes <= 1 || self.per_frame <= 0.0 {
+            return refreshes;
+        }
+        let frames_per_refresh = if self.locked() { 1.0 } else { self.core / self.refresh };
+        let fit = (CATCH_UP_SHARE / self.refresh / (self.per_frame * frames_per_refresh)).floor();
+        refreshes.min(fit.max(1.0) as u32)
     }
 
     /// A core that changes its rate, or a display that does.
@@ -242,6 +290,7 @@ impl Pacer {
     pub fn restart(&mut self) {
         self.grid = None;
         self.owed = 0.0;
+        self.missed = 0;
     }
 
     /// The core frames due at this call. One per refresh that passed since the last counted one (normally one; two after
@@ -252,25 +301,33 @@ impl Pacer {
         let Some(grid) = self.grid else {
             self.grid = Some(now);
             self.owed = 0.0;
+            self.missed = 0;
             return 1;
         };
         let since = now.saturating_duration_since(grid).as_secs_f64();
         let refreshes = (since / period + 0.5).floor();
         if refreshes < 1.0 {
+            self.missed = 0;
             return 0;
         }
         // After a long stall (a second without calls) start again instead of running a burst.
         if refreshes > 60.0 {
             self.grid = Some(now);
             self.owed = 0.0;
+            self.missed = 0;
             return 1;
         }
         let counted = grid + Duration::from_secs_f64(refreshes * period);
-        // Follow the calls a little each time: the display's real rate is a little off the reported one.
+        // Follow the calls a little each time: the display's real rate is a little off the reported one. Not within an
+        // eighth of a refresh: that is a call's own jitter (Android's ±1 ms, pocket-core waking after its wait), and a
+        // loop that waits for `next_refresh` and followed its own wake-up would slow down by a tenth of it every refresh.
         let drift = now.saturating_duration_since(counted).as_secs_f64() - counted.saturating_duration_since(now).as_secs_f64();
-        let follow = drift * 0.1;
+        let band = period / 8.0;
+        let follow = if drift.abs() > band { (drift - band.copysign(drift)) * 0.1 } else { 0.0 };
         self.grid = Some(if follow >= 0.0 { counted + Duration::from_secs_f64(follow) } else { counted - Duration::from_secs_f64(-follow) });
-        let refreshes = refreshes as u32;
+        self.missed = refreshes as u32 - 1;
+        // The refreshes it owes beyond this one run only when they fit; the others are time the game loses.
+        let refreshes = self.affordable(refreshes as u32);
         if self.locked() {
             return refreshes.min(MAX_PER_REFRESH);
         }
@@ -292,6 +349,8 @@ pub struct Stats {
     calls: u32,
     none: u32,
     doubled: u32,
+    /// Refreshes the calls came late by ([`Pacer::missed`]): pictures the screen showed twice.
+    missed: u32,
     core_us: Vec<u32>,
     gap_us: Vec<u32>,
     /// Per call: reading a hardware core's picture back to memory, and painting (Android: the first draw also waits for a free
@@ -328,6 +387,11 @@ impl Stats {
         self.paint_us.push(us(paint));
     }
 
+    /// The call came `refreshes` late ([`Pacer::missed`]).
+    pub fn missed(&mut self, refreshes: u32) {
+        self.missed += refreshes;
+    }
+
     /// The call's core frames ran on a CPU of the slowest cluster.
     pub fn on_slow_cpu(&mut self) {
         self.slow_cpu += 1;
@@ -348,6 +412,11 @@ impl Stats {
         (self.none, self.doubled)
     }
 
+    /// Refreshes missed since the last line.
+    pub fn missed_refreshes(&self) -> u32 {
+        self.missed
+    }
+
     /// The log line's numbers, and a fresh count after it. `cpu` is the CPU the thread is on now and `mhz` its clock,
     /// `fast_cpus` the CPUs it is kept to ([`Placement::label`]).
     pub fn line(&mut self, locked: bool, core_fps: f64, display_hz: f64, cpu: i32, mhz: u32, fast_cpus: &str) -> String {
@@ -356,10 +425,11 @@ impl Stats {
         let readback = percentiles(&mut self.readback_us);
         let paint = percentiles(&mut self.paint_us);
         let line = format!(
-            "calls={} repeated={} doubled={} core_ms_p50={:.2} core_ms_p99={:.2} core_ms_max={:.2} gap_ms_p50={:.2} gap_ms_p99={:.2} gap_ms_max={:.2} readback_ms_p50={:.2} readback_ms_p99={:.2} paint_ms_p50={:.2} paint_ms_p99={:.2} mode={} core_fps={core_fps:.4} display_hz={display_hz:.2} cpu={cpu} mhz={mhz} slow_cpu_calls={} fast_cpus={fast_cpus}",
+            "calls={} repeated={} doubled={} missed={} core_ms_p50={:.2} core_ms_p99={:.2} core_ms_max={:.2} gap_ms_p50={:.2} gap_ms_p99={:.2} gap_ms_max={:.2} readback_ms_p50={:.2} readback_ms_p99={:.2} paint_ms_p50={:.2} paint_ms_p99={:.2} mode={} core_fps={core_fps:.4} display_hz={display_hz:.2} cpu={cpu} mhz={mhz} slow_cpu_calls={} fast_cpus={fast_cpus}",
             self.calls,
             self.none,
             self.doubled,
+            self.missed,
             core.0,
             core.1,
             core.2,
@@ -633,7 +703,7 @@ mod tests {
         stats.on_slow_cpu();
         assert_eq!(stats.repeated_and_doubled(), (1, 1));
         let line = stats.line(true, 60.0988, 60.0, 4, 1286, "4-7");
-        assert!(line.starts_with("calls=3 repeated=1 doubled=1 core_ms_p50=6.00"), "{line}");
+        assert!(line.starts_with("calls=3 repeated=1 doubled=1 missed=0 core_ms_p50=6.00"), "{line}");
         assert!(line.contains("gap_ms_max=17.00") && line.contains("mode=per-refresh") && line.contains("cpu=4"), "{line}");
         // Where the core ran: the CPU's clock, the calls on a little core, the CPUs it is kept to.
         assert!(line.ends_with("cpu=4 mhz=1286 slow_cpu_calls=1 fast_cpus=4-7"), "{line}");
@@ -655,5 +725,216 @@ mod tests {
         assert!(line.contains("readback_ms_p50=3.00 readback_ms_p99=40.00 paint_ms_p50=7.00 paint_ms_p99=9.00"), "{line}");
         let empty = stats.line(true, 60.0, 60.0, 5, 0, "all");
         assert!(empty.contains("readback_ms_p50=0.00") && empty.contains("paint_ms_p99=0.00"), "a fresh count after each line: {empty}");
+    }
+
+
+    /// pocket-core's loop on Linux, on a simulated clock: each turn asks the pacer, runs its frames (`core_ms` each,
+    /// plus `hiccup_ms` on the turns `hiccup` picks), draws for 1 ms, swaps, then waits for `Pacer::next_refresh` as
+    /// `limit` does, and wakes up to 0.4 ms late. `vsync`: the swap blocks until the panel's next refresh (sway with
+    /// a GPU); false: nothing blocks and the panel shows the newest picture at its refresh (the Brick's software copy,
+    /// or the screen off).
+    struct Loop {
+        core_fps: f64,
+        /// The panel's real rate and the one it reports (the pacer's).
+        panel_hz: f64,
+        reported_hz: f64,
+        core_ms: f64,
+        vsync: bool,
+        hiccup: fn(u64) -> bool,
+        hiccup_ms: f64,
+    }
+
+    /// What a minute of that loop showed: refreshes that repeated the picture, pictures that jumped two or more game
+    /// frames, the game frames run, and the pacer's own line (`Stats`) over the same minute.
+    #[derive(Debug, Default)]
+    struct Shown {
+        repeated: u32,
+        jumped: u32,
+        frames: u64,
+        repeat_gaps: Vec<u64>,
+        stats_repeated: u32,
+        stats_doubled: u32,
+        stats_missed: u32,
+    }
+
+    impl Loop {
+        fn at(core_fps: f64, panel_hz: f64) -> Self {
+            Loop { core_fps, panel_hz, reported_hz: panel_hz, core_ms: 3.0, vsync: true, hiccup: |_| false, hiccup_ms: 0.0 }
+        }
+
+        fn minute(&self) -> Shown {
+            let start = Instant::now();
+            let at = |t: f64| start + Duration::from_secs_f64(t);
+            let refresh = 1.0 / self.panel_hz;
+            // The panel's refreshes start a little after the loop.
+            let vsync_after = |t: f64| ((t - 0.0003) / refresh).floor() * refresh + refresh + 0.0003;
+            let mut pacer = Pacer::new(self.core_fps, self.reported_hz);
+            let mut stats = Stats::default();
+            let mut out = Shown::default();
+            // Per panel refresh: the game frames shown new on it (vsync: the swap's refresh; else the newest ready).
+            let mut on_refresh: std::collections::BTreeMap<u64, u32> = Default::default();
+            let mut t = 0.0f64;
+            let mut turn = 0u64;
+            while t < 61.0 {
+                let wake = (jitter(turn, 200) + 200) as f64 / 1e6;
+                let call = t + wake;
+                let n = pacer.due(at(call));
+                let core = n as f64 * self.core_ms / 1000.0 + if (self.hiccup)(turn) { self.hiccup_ms / 1000.0 } else { 0.0 };
+                if n > 0 {
+                    pacer.took(Duration::from_secs_f64(core / n as f64));
+                }
+                stats.call(at(call), n, Duration::from_secs_f64(core));
+                stats.missed(pacer.missed());
+                out.frames += n as u64;
+                let ready = call + core + 0.001;
+                let shown_at = if self.vsync { vsync_after(ready) } else { vsync_after(ready) };
+                if n > 0 {
+                    *on_refresh.entry((shown_at / refresh).round() as u64).or_default() += n;
+                }
+                t = if self.vsync { shown_at } else { ready };
+                if let Some(next) = pacer.next_refresh() {
+                    t = t.max(next.saturating_duration_since(start).as_secs_f64());
+                }
+                turn += 1;
+            }
+            // Judge the minute after the first second (the start), from the panel's view.
+            let first = (1.0 / refresh) as u64;
+            let last = (60.0 / refresh) as u64;
+            let mut last_repeat = None;
+            for r in first..last {
+                match on_refresh.get(&r).copied().unwrap_or(0) {
+                    0 => {
+                        out.repeated += 1;
+                        if let Some(before) = last_repeat {
+                            out.repeat_gaps.push(r - before);
+                        }
+                        last_repeat = Some(r);
+                    }
+                    1 => {}
+                    _ => out.jumped += 1,
+                }
+            }
+            out.stats_repeated = stats.none;
+            out.stats_doubled = stats.doubled;
+            out.stats_missed = stats.missed;
+            out
+        }
+    }
+
+    /// The rates that match the panel: a 60 Hz core, a Game Boy (59.73) and a SNES (60.10) on 60 Hz, each picture
+    /// exactly once in a minute, with the swap blocking (sway) and without (the Brick's copy, the screen off) and on a
+    /// panel a little slower than it says (59.94 for 60). The pacer's line agrees: nothing repeated, doubled or missed.
+    #[test]
+    fn pocket_core_s_loop_shows_every_picture_once_at_matching_rates() {
+        for core_fps in [60.0, 59.7275, 60.0988] {
+            for (panel, reported, vsync) in [(60.0, 60.0, true), (60.0, 60.0, false), (59.94, 60.0, true), (120.0, 120.0, true)] {
+                let core = if panel > 100.0 { core_fps * 2.0 } else { core_fps };
+                let run = Loop { vsync, reported_hz: reported, ..Loop::at(core, panel) }.minute();
+                let case = format!("core {core} on a {panel} Hz panel (says {reported}, vsync {vsync})");
+                assert_eq!((run.repeated, run.jumped), (0, 0), "{case}: {run:?}");
+                assert_eq!((run.stats_repeated, run.stats_doubled, run.stats_missed), (0, 0, 0), "{case}: {run:?}");
+                let want = panel * 61.0;
+                assert!((run.frames as f64 - want).abs() <= 2.0, "{case}: {} frames, want {want}", run.frames);
+            }
+        }
+    }
+
+    /// A PAL game (50 Hz) on a 60 Hz panel repeats every sixth picture, evenly, and never jumps; a 60 Hz game on a
+    /// 120 Hz panel shows every picture for exactly two refreshes. The game keeps its own speed in both.
+    #[test]
+    fn pocket_core_s_loop_keeps_even_patterns_off_the_display_rate() {
+        for vsync in [true, false] {
+            let pal = Loop { vsync, ..Loop::at(50.0, 60.0) }.minute();
+            assert_eq!(pal.jumped, 0, "PAL on 60 Hz, vsync {vsync}: {pal:?}");
+            assert!(pal.repeat_gaps.iter().all(|&g| g == 6), "PAL on 60 Hz, vsync {vsync}: repeats {:?}", pal.repeat_gaps);
+            assert!((pal.repeated as i64 - 590).abs() <= 1, "PAL: {} repeats in 59 s", pal.repeated);
+            assert!((pal.frames as f64 - 50.0 * 61.0).abs() <= 2.0, "PAL frames {}", pal.frames);
+            let doubled = Loop { vsync, ..Loop::at(60.0, 120.0) }.minute();
+            assert_eq!(doubled.jumped, 0, "60 on 120 Hz, vsync {vsync}: {doubled:?}");
+            assert!(doubled.repeat_gaps.iter().all(|&g| g == 2), "60 on 120 Hz, vsync {vsync}: repeats {:?}", doubled.repeat_gaps);
+            assert!((doubled.frames as f64 - 60.0 * 61.0).abs() <= 2.0, "60 on 120 Hz frames {}", doubled.frames);
+        }
+    }
+
+    /// A light core that stalls now and then (a 25 ms battery save every ten seconds): the refresh it missed is counted,
+    /// and the next refresh runs the frame it owes, so the game keeps its speed (pocket-core lost it until 18.11.2026).
+    #[test]
+    fn a_light_core_catches_up_after_a_stall_and_the_line_counts_it() {
+        let run = Loop { hiccup: |turn| turn % 600 == 300, hiccup_ms: 25.0, ..Loop::at(60.0988, 60.0) }.minute();
+        assert_eq!(run.stats_missed, 6, "{run:?}");
+        assert_eq!(run.stats_doubled, 6, "{run:?}");
+        assert!((run.frames as f64 - 60.0 * 61.0).abs() <= 2.0, "game speed kept: {} frames", run.frames);
+    }
+
+    /// A core too heavy for the refresh (20 ms a frame on 60 Hz) never runs two frames in one: that would miss the next
+    /// refresh as well and snowball into a slide show. It runs one per swap as pocket-core always did, the misses are
+    /// counted, and the game is as fast as before (30 frames a second).
+    #[test]
+    fn a_heavy_core_never_snowballs_into_catching_up() {
+        let run = Loop { core_ms: 20.0, ..Loop::at(60.0, 60.0) }.minute();
+        assert_eq!(run.stats_doubled, 0, "{run:?}");
+        assert!(run.stats_missed > 1700, "every other refresh missed and counted: {run:?}");
+        assert!(run.frames as f64 >= 30.0 * 60.0, "{} frames", run.frames);
+        // 9 ms: two frames don't fit in three quarters of a refresh, one does.
+        let mut pacer = Pacer::new(60.0, 60.0);
+        let start = Instant::now();
+        let ms = |m: f64| start + Duration::from_secs_f64(m / 1000.0);
+        pacer.took(Duration::from_millis(9));
+        assert_eq!(pacer.due(ms(0.0)), 1);
+        assert_eq!(pacer.due(ms(33.3)), 1);
+        assert_eq!(pacer.missed(), 1);
+        // 5 ms: two fit.
+        pacer.took(Duration::from_millis(5));
+        for _ in 0..20 {
+            pacer.took(Duration::from_millis(5));
+        }
+        assert_eq!(pacer.due(ms(66.7)), 2);
+        assert_eq!(pacer.due(ms(83.3)), 1);
+        assert_eq!(pacer.missed(), 0);
+    }
+
+    /// Back from a pause the first picture may be swapped at once; the next frame still waits a whole refresh, so no
+    /// resume adds a frame of sound (pocket-core's `FrameClock` until 18.11.2026: the queue overflowed after a few).
+    #[test]
+    fn after_a_pause_the_next_frame_waits_a_whole_refresh() {
+        let mut pacer = Pacer::new(60.0, 60.0);
+        let period = Duration::from_secs_f64(1.0 / 60.0);
+        let mut now = Instant::now();
+        let mut buffered = 800usize;
+        for _ in 0..5 {
+            pacer.restart();
+            assert_eq!(pacer.next_refresh(), None, "a restarted grid doesn't make the first frame wait");
+            assert_eq!(pacer.due(now), 1);
+            buffered += 800;
+            let next = pacer.next_refresh().unwrap();
+            assert_eq!(next, now + period);
+            let played = (next.saturating_duration_since(now).as_secs_f64() * 48_000.0).round() as usize;
+            buffered = buffered.saturating_sub(played);
+            assert_eq!(buffered, 800, "a resume added a burst");
+            now = next + Duration::from_secs(1);
+        }
+    }
+
+    /// The frame pacing exists once: both players run on this module and neither keeps a clock of its own (Android ran
+    /// the core by the wall clock until 17.11.2026, pocket-core had its own until 18.11.2026; two clocks drifted apart).
+    #[test]
+    fn both_players_pace_with_this_module_and_no_clock_of_their_own() {
+        let players = [("src/bin/pocket_core.rs", include_str!("bin/pocket_core.rs")), ("android/src/player.rs", include_str!("../android/src/player.rs"))];
+        for (name, src) in players {
+            // Tests at the end of a file may name the old ways.
+            let code = src.split("\n#[cfg(test)]").next().unwrap();
+            assert!(code.contains("core_pacing::Pacer::new("), "{name} has no core_pacing::Pacer");
+            assert!(code.contains(".due("), "{name} doesn't ask the pacer for the frames due");
+            assert!(code.contains("set_paced_timing("), "{name} doesn't set the sound's rate through the pacing rule");
+            // The marks of a second clock: a lock band, a debt of core time, a frame period from the core's rate, the
+            // sound's rate set by hand, a deadline of its own.
+            for mark in ["0.95", "1.05", "owed +=", "self.owed", "frames_due", "self.time_driven", "FrameClock", "set_input_rate(", "timing.fps.max(", "1.0 / self.core.av.timing.fps", "* self.core.av.timing.fps)", "Duration::from_secs_f64(1.0 / core"] {
+                assert!(!code.contains(mark), "{name} paces by itself again ({mark:?}): use core_pacing");
+            }
+        }
+        // pocket-core waits for the pacer's next refresh and writes the same line as Android.
+        let linux = players[0].1;
+        assert!(linux.contains("pacer.next_refresh()") && linux.contains("\"player pacing: {}\""));
+        assert!(players[1].1.contains("player pacing: {}"));
     }
 }

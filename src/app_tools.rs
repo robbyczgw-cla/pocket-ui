@@ -219,7 +219,7 @@ impl App {
         let (pad, row, font) = (NU_PAD, pocket_ui::type_scale::row(58, 34), 34u32);
         self.sheet_header(c, SETTINGS_NAME);
         let (top, right) = (pad + NU_PILL + 12, c.w - pad);
-        let list_bottom = c.h - pad - NU_PILL - 16 - DETAILS_H;
+        let list_bottom = pocket_ui::kit::hint_bar_top(c.h) - 16 - DETAILS_H;
         let dots = ".".repeat(1 + (self.started.elapsed().as_millis() / 400 % 3) as usize);
         let tools: &[Tool] = page.tools.as_deref().unwrap_or(&[]);
         if tools.is_empty() {
@@ -233,7 +233,7 @@ impl App {
             // has been looked at.
             let (left, base) = (pad + NU_BTN_PAD, top + 60 + pocket_ui::type_scale::grow(37));
             let art = page.tools.is_some().then_some(pocket_ui::ui_art::Art::Search);
-            pocket_ui::kit::empty_state(c, &mut self.text, art, (left, c.w - 2 * left), top + 8, base, c.h - pad - NU_PILL - 16, &head, &line);
+            pocket_ui::kit::empty_state(c, &mut self.text, art, (left, c.w - 2 * left), top + 8, base, pocket_ui::kit::hint_bar_top(c.h) - 16, &head, &line);
             self.nu_hints(c, &[("B", "Back"), ("X", "Look again")]);
             return;
         }

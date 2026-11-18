@@ -174,7 +174,8 @@ It is the same at every start: each game's place and pose come from the game its
 and a game you add only changes the row around it. It is in every row of games, Favourites included; Home's row of
 systems and short rows (fewer than six games) stay straight, and a game whose case stands open (Continue waits) always
 stands up. A row that fits on the shelf standing straight never has to scroll for a stack: it gets no stack then. Select
-a leaning or lying case and it comes out of the row as any other. The leaning and lying cases are drawn ahead in the
+a leaning case and it comes out of the row as any other; select a lying one and it slides out of its stack sideways,
+like a book, and stays on what it lay on. The leaning and lying cases are drawn ahead in the
 moments after you open a row, so scrolling along it stays smooth.
 
 ### Cozy extras

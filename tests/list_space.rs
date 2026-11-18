@@ -174,8 +174,93 @@ fn check(card: &Card, screen: Option<&str>, lang: &str, (retro, font): (&str, &s
     failures
 }
 
+/// The hint bar of every page sits `kit::HINT_GAP` over the screen's bottom edge, as tall as `kit::hint_h` at the text size
+/// at least, flatter than the old bar (since 18.11.2026: 62 px, keys of 44, 10 over the edge, where it was 90, 60 and 30), and nothing runs into it: no
+/// row, no focus mark, no string but its own keys and words. `screen` None: Android's handheld view (no canvas size to
+/// check the gap against there, only the overlaps).
+fn check_hint_bar(card: &Card, screen: Option<&str>, lang: &str, (retro, font): (&str, &str), size: &str) -> Vec<String> {
+    let mut env = vec![("POCKETUI_LANG", lang), ("POCKETUI_RETRO", retro), ("POCKETUI_FONT", font), ("POCKETUI_TEXT_SIZE", size), ("POCKETUI_MOCK_NOW", FIXTURE_NOW)];
+    let suffix = match screen {
+        Some(s) => {
+            env.push(("POCKETUI_SNAPSHOT_SIZE", s));
+            ""
+        }
+        None => {
+            env.push(("POCKETUI_ANDROID_PROFILE", "1"));
+            ":device=odin2mini"
+        }
+    };
+    // The canvas the page is laid out on (640x480 and 720x720 at their double, `scaled_layout`).
+    let canvas_h = screen.map(|s| {
+        let (w, h) = s.split_once('x').map(|(w, h)| (w.parse().unwrap(), h.parse().unwrap())).unwrap();
+        pocket_ui::scaled_layout::logical_size((w, h)).1 as i32
+    });
+    let text_size = match size {
+        "large" => pocket_ui::type_scale::TextSize::Large,
+        "medium" => pocket_ui::type_scale::TextSize::Medium,
+        _ => pocket_ui::type_scale::TextSize::Normal,
+    };
+    pocket_ui::type_scale::set(text_size);
+    let bar_h = pocket_ui::kit::hint_h();
+    pocket_ui::type_scale::set(pocket_ui::type_scale::TextSize::Normal);
+    let what = format!("{} {lang} {font} {size}", screen.unwrap_or("android"));
+    let wl = card.wl();
+    let dir = tempfile::Builder::new().prefix("bar-").tempdir_in(card.dir.path()).unwrap();
+    for name in ["data", "es_systems.cfg"] {
+        std::os::unix::fs::symlink(card.dir.path().join(name), dir.path().join(name)).unwrap();
+    }
+    let mut states: Vec<String> = ["home", "shelf:snes:shelf:games:0", "shelf:snes:cabinet:games:0", "info:split:gb:link", "options:0", "extras:2", "emulator"].iter().map(|s| s.to_string()).collect();
+    states.extend((0..groups()).map(|g| format!("settings:{g}:0")));
+    let mut failures = Vec::new();
+    for state in states {
+        let placed = paint(dir.path(), wl.as_deref(), &format!("{state}{suffix}"), &env);
+        let Some(bar) = placed.iter().find(|(_, s)| s.starts_with("‹hints")).map(|(r, _)| *r) else {
+            failures.push(format!("{what} {state}: no hint bar"));
+            continue;
+        };
+        if let Some(ch) = canvas_h {
+            if ch - bar.3 != pocket_ui::kit::HINT_GAP {
+                failures.push(format!("{what} {state}: the hint bar ends {} px over the bottom edge, not {}", ch - bar.3, pocket_ui::kit::HINT_GAP));
+            }
+        }
+        // At least `hint_h` at the text size, and flatter than the old bar (`kit::PILL`) on every panel; wide panels scale
+        // the page and its bar with it (`type_scale::wide_page`), so no exact height.
+        if bar.3 - bar.1 < bar_h || bar.3 - bar.1 >= pocket_ui::kit::PILL {
+            failures.push(format!("{what} {state}: the hint bar is {} px high: under {bar_h} or not flatter than {}", bar.3 - bar.1, pocket_ui::kit::PILL));
+        }
+        let inside = |r: &(i32, i32, i32, i32)| r.0 >= bar.0 && r.2 <= bar.2 && r.1 >= bar.1 && r.3 <= bar.3;
+        let meets = |r: &(i32, i32, i32, i32)| r.0 < bar.2 && r.2 > bar.0 && r.1 < bar.3 && r.3 > bar.1;
+        for (r, s) in &placed {
+            let mark = s.starts_with('‹');
+            let counts = s == "‹nav:row›" || s == "‹nav:focus›" || (!mark && !s.trim().is_empty() && r.3 > r.1);
+            if counts && meets(r) && !inside(r) {
+                failures.push(format!("{what} {state}: \"{s}\" at {r:?} runs into the hint bar at {bar:?}"));
+            }
+        }
+    }
+    failures
+}
+
+/// The merge gate's sample (`POCKETUI_TEST_QUICK`, scripts/gate-parts.py): the tightest combination, German in Retro at
+/// Large text, on 640x480, 1024x768 and Android's handheld view; the nightly run and a change to the pages' painters run the
+/// whole matrix (221 to 346 s in a merge gate, the test audit of 18.11.2026).
+fn sampled(combos: &mut Vec<(Option<&'static str>, &'static str, (&'static str, &'static str), &'static str)>) {
+    if std::env::var_os("POCKETUI_TEST_QUICK").is_some() {
+        combos.retain(|(screen, lang, style, size)| matches!(screen, None | Some("640x480") | Some("1024x768")) && *lang == "de" && *style == STYLES[1] && *size == "large");
+        assert!(!combos.is_empty(), "the sample keeps a combination");
+    }
+}
+
 /// `check` for every combination, four at a time.
 fn check_all(card: &Card, combos: Vec<(Option<&'static str>, &'static str, (&'static str, &'static str), &'static str)>) {
+    check_all_with(card, combos, check)
+}
+
+type Check = fn(&Card, Option<&str>, &str, (&str, &str), &str) -> Vec<String>;
+
+/// `check` (or another check of one combination) for every combination, four at a time.
+fn check_all_with(card: &Card, mut combos: Vec<(Option<&'static str>, &'static str, (&'static str, &'static str), &'static str)>, check: Check) {
+    sampled(&mut combos);
     let next = std::sync::atomic::AtomicUsize::new(0);
     let failures = std::sync::Mutex::new(Vec::new());
     std::thread::scope(|s| {
@@ -220,4 +305,22 @@ fn a_list_that_scrolls_reaches_down_to_its_explanation_in_androids_handheld_view
         }
     }
     check_all(&card, combos);
+}
+
+#[test]
+fn the_hint_bar_sits_at_the_bottom_edge_and_nothing_runs_into_it() {
+    let card = Card::new();
+    let mut combos = Vec::new();
+    for screen in SCREENS {
+        for style in STYLES {
+            for size in SIZES {
+                combos.push((Some(screen), "en", style, size));
+            }
+        }
+        combos.push((Some(screen), "de", STYLES[1], "large"));
+    }
+    for style in STYLES {
+        combos.push((None, "de", style, "large"));
+    }
+    check_all_with(&card, combos, check_hint_bar);
 }

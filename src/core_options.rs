@@ -485,13 +485,15 @@ pub fn curation(core: &str) -> Curation {
         },
         // Nintendo DS. The 1240x1080 screen is nearly square, so the two screens stacked fill it best
         // (720x1080, each screen 2.8x); R3 cycles to side by side (the standalone melonDS layout) and to
-        // the top screen alone. Touch: right stick moves the pointer, R2 touches (or the touch screen).
+        // each screen alone. Touch: right stick moves the pointer, R2 touches (or the touch screen).
+        // Controls adds remappable DS actions; on a pad without sticks L2 toggles stylus and R2 cycles layouts.
         "melondsds" => Curation {
             defaults: &[
-                ("melonds_number_of_screen_layouts", "3"),
+                ("melonds_number_of_screen_layouts", "4"),
                 ("melonds_screen_layout1", "top-bottom"),
                 ("melonds_screen_layout2", "left-right"),
                 ("melonds_screen_layout3", "top"),
+                ("melonds_screen_layout4", "bottom"),
                 ("melonds_touch_mode", "auto"),
                 ("melonds_show_cursor", "timeout"),
             ],

@@ -130,6 +130,9 @@ public final class PlayerActivity extends Activity {
     public String diagnosticAudioSeconds(){return Integer.toString(Math.max(1,Math.min(240,getIntent().getIntExtra("diagnosticAudioSeconds",30))));}
     @SuppressWarnings("deprecation") public String speakerState(){return Boolean.toString(!((AudioManager)getSystemService(AUDIO_SERVICE)).isBluetoothA2dpOn());}
     public String localAudioOutput(String device){return AudioRoute.localOutput(this,device);}
+    /** Game rumble (`rumble.rs`, Android's backend): `target` is a controller's InputDevice id or "motor" (the handheld's own);
+     *  `magnitude` 0..65535 (0 stops), `ms` the one-shot's length the worker renews. "" when it went to a vibrator. */
+    public String rumble(String target,String magnitude,String ms){return Rumble.play(this,target,Integer.parseInt(magnitude),Long.parseLong(ms));}
     public String volumeState(){AudioManager a=(AudioManager)getSystemService(AUDIO_SERVICE);int max=a.getStreamMaxVolume(AudioManager.STREAM_MUSIC);return (max==0?0:a.getStreamVolume(AudioManager.STREAM_MUSIC)*100/max)+","+a.isStreamMute(AudioManager.STREAM_MUSIC);}
     @Override protected void onCreate(Bundle saved) {
         super.onCreate(saved); setVolumeControlStream(AudioManager.STREAM_MUSIC);

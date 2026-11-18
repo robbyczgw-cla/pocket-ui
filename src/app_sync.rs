@@ -349,7 +349,10 @@ impl App {
         let need = DETAILS_H + 6 * pocket_ui::type_scale::grow(28);
         // Three rows at the least; two on 1024x768 with the largest text, where the details under them must stay over the hint bar.
         let least = if pocket_ui::kit::short_screen(c.h) { 2 } else { 3 };
-        let visible = (((c.h - pad - NU_PILL - 10 - need - 14 - top) / row).max(least) as usize).min(rows().len());
+        // Over the hints and over the foot's explanation in two lines, which stands higher than the flat hint bar's top
+        // (18.11.2026: the login line ran into it in Large text).
+        let two_lines_top = pocket_ui::kit::footer_baseline(c.h) - pocket_ui::type_scale::line(pocket_ui::kit::SMALL, 10) - pocket_ui::type_scale::px(pocket_ui::kit::SMALL) as i32 * 4 / 5;
+        let visible = ((((pocket_ui::kit::hint_bar_top(c.h)).min(two_lines_top) - 10 - need - 14 - top) / row).max(least) as usize).min(rows().len());
         let first = super::window_start(page.sel, visible, rows().len());
         if rows().len() > visible {
             let track = visible as i32 * row;
@@ -397,7 +400,6 @@ impl App {
         // Large text, whatever the language): the login is what the page is for, the explanation is cut with "…".
         let g = |px: u32| pocket_ui::type_scale::grow(px) * 7 / 10;
         let d6 = g(44) + g(24) + g(37) + pocket_ui::type_scale::grow(37) + g(24) + g(37) + g(28);
-        let two_lines_top = pocket_ui::kit::footer_baseline(c.h) - pocket_ui::type_scale::line(pocket_ui::kit::SMALL, 10) - pocket_ui::type_scale::px(pocket_ui::kit::SMALL) as i32 * 4 / 5;
         // (Its login line is 47 px higher on such a screen, `paint_sync_details`.)
         let lines = if page.on() && c.h < 768 && y0 + 314 + d6 - 47 + 6 > two_lines_top { 1 } else { 2 };
         let foot = pocket_ui::kit::footer(c, &mut self.text, &mut self.hits, hints, page.describe(page.row()), lines, pal().text);
@@ -457,7 +459,7 @@ impl App {
             let tight = c.h < 768;
             let step = pocket_ui::type_scale::line(26, if tight { 4 } else { 8 });
             let gap = if tight { 0 } else { 10 };
-            let bottom = (c.h - NU_PAD - NU_PILL).min(foot) - 10 - if page.ip.is_none() { step + 10 + step / 2 } else { 0 };
+            let bottom = (pocket_ui::kit::hint_bar_top(c.h)).min(foot) - 10 - if page.ip.is_none() { step + 10 + step / 2 } else { 0 };
             for l in lines {
                 let room = if y > bottom { 0 } else { ((bottom - y) / step + 1) as usize };
                 for line in self.text.wrap_prose_at_most(Face::Body, 26, l, right - left, room) {
@@ -517,7 +519,7 @@ impl App {
         // login's line, and the note about the certificate is left out.
         let (login_y, note_y) = (y0 + 314 + d6 - up_login, y0 + 352 + d6 + g(24) - up_login);
         // The foot's explanation counts too: two lines of it stand higher than the hints.
-        let last = if note_y > (c.h - NU_PAD - NU_PILL).min(foot) - 10 { login_y } else { note_y };
+        let last = if note_y > (pocket_ui::kit::hint_bar_top(c.h)).min(foot) - 10 { login_y } else { note_y };
         if last == note_y || problems.is_empty() {
             // Where it stands in the hint bar's band (1280x720 in Large text), it ends left of the bar, smaller as far as
             // 24 px, whole where it can be (the password is what it is for); else it is cut with "…" where it is wider than
@@ -542,15 +544,11 @@ impl App {
             let (px, msg) = self.text.fit_sizes(Face::Body, &[24, 22, 20], msg, room);
             self.text.draw(c, Face::Body, px, left, last, pal().alert, &msg);
         } else if last == note_y {
-            self.text.draw(
-                c,
-                Face::Body,
-                24,
-                left,
-                note_y,
-                pal().dust,
-                "Your browser will warn about the certificate: that is Syncthing's own, accept it once.",
-            );
+            // Within the page, a step smaller before it is cut at a word (the flat hint bar left it room more often and the
+            // German line in Retro Pixelify ran off the right edge, 18.11.2026).
+            let note = "Your browser will warn about the certificate: that is Syncthing's own, accept it once.";
+            let (px, note) = self.text.fit_sizes(Face::Body, &[24, 22, 20], note, right - left);
+            self.text.draw(c, Face::Body, px, left, note_y, pal().dust, &note);
         }
     }
 }

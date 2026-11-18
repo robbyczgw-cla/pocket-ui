@@ -347,6 +347,7 @@ const WORD_NAMES: &[&str] = &["Left soft key", "Right soft key"];
 /// The name of console button `id`, or None when the console has no such button. The table first, then the core's
 /// plain names; a raw core string never.
 fn console_name(system: &str, core_names: &[Target], id: u8) -> Option<String> {
+    if system == "nds" { if let Some(name) = crate::ds_pad::name(id) { return Some(crate::i18n::tr(name)); } }
     if (4..=7).contains(&id) {
         return Some(controls::standard_name(id).to_string());
     }
@@ -368,6 +369,13 @@ fn console_name(system: &str, core_names: &[Target], id: u8) -> Option<String> {
 /// Every console button of `system` with a name, for the remap menus: the core's own list when it ran, else the
 /// table's, extras included. Empty when neither is known.
 pub fn console_targets(system: &str, core_names: &[Target]) -> Vec<Target> {
+    if system == "nds" && !core_names.is_empty() {
+        let mut targets: Vec<Target> = core_names.iter().filter(|t| !(4..=7).contains(&t.id)).cloned().collect();
+        for (id, _, label) in crate::ds_pad::ACTIONS {
+            if !targets.iter().any(|t| t.id == id) { targets.push(Target { id, label: label.into() }); }
+        }
+        return targets;
+    }
     if !core_names.is_empty() {
         return core_names.iter().filter(|t| !(4..=7).contains(&t.id)).cloned().collect();
     }

@@ -256,7 +256,10 @@ fn the_bricks_pages_offer_only_what_the_brick_has() {
         let (about, _) = card.shot("about", lang, "normal");
         assert!(about.contains("TrimUI Brick") && !about.contains("experiment") && !about.contains("expériment") && !about.contains("sperimental"), "{lang}: {about}");
         let (perf, _) = card.shot("perf", lang, "normal");
-        assert!(!["fan", "Lüfter", "ventilador", "Fan"].iter().any(|w| perf.contains(w)), "{lang}: {perf}");
+        // No fan row ("Fan", "Fan outside games" and their translations start their line); the note that names the pause
+        // menu's group "Options › Speed, rumble, fan" is that menu's real name (it shows since the flat hint bar left it room).
+        let fan_row = |l: &str| ["Fan", "Lüfter", "Ventilador", "Ventoinha", "Ventola", "Ventilateur"].iter().any(|w| l.trim_start().starts_with(w));
+        assert!(!perf.lines().any(fan_row), "{lang}: {perf}");
         let (sync, _) = card.shot("sync:off:6", lang, "normal");
         assert!(!["PS2", "GameCube", "3DS"].iter().any(|w| sync.contains(w)), "{lang}: {sync}");
         let (backup, _) = card.shot("backup", lang, "normal");

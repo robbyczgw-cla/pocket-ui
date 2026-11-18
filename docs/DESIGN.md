@@ -71,8 +71,11 @@ its marks. A 4 px scroll bar at the right edge when the list is longer than its 
 start): spine-coloured rows, the selected one paper with ink, the label's lift shadow in Light. The sheet's lists
 wrap at their ends; the shelf stops at its ends (it is a physical shelf with bookends).
 
-**Hint bar.** One form on every page: a dark pill at the bottom right, 30 px from the page's right and bottom edges, 90 high,
-a round chip per key and its label in Soft, A last, next to the face buttons (`kit::pill_hints`; the shelf's pages, the game
+**Hint bar.** One form on every page: a dark pill at the bottom right, 30 px from the page's right edge and 10 from its bottom
+edge, 62 high with 44 px keys at Normal text, both growing with the letters (`kit::hint_bar_top`, `hint_h`, `hint_key`; since
+2026-11-18, the owner: "flachere Tipps": it was 90 high with 60 px keys, 30 over the edge, and floated under the shelf); every
+page that ends over it asks `kit::hint_bar_top`, so the room it gave back goes to the shelf and the lists
+(`tests/list_space.rs` checks the gap to the edge on every panel and that nothing runs into it). A round chip per key and its label in Soft, A last, next to the face buttons (`kit::pill_hints`; the shelf's pages, the game
 card, the console pages, search, Curator and the first start paint the same pill through `kit::page_hints`). Until
 2026-11-13 the shelf's pages had loose small keys at the bottom left (polish review 12.11., point 10); the pill is the
 one that reads at arm's length on a 640x480 panel (its labels are 15 px there, the loose keys' were 10) and on any picture

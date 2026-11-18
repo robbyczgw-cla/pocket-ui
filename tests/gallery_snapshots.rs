@@ -146,7 +146,9 @@ fn the_gallery_says_something_in_every_state_in_both_appearances() {
         let made = render_noting(&bin, &tmp, library, "gallery:made", stub.as_ref(), Some(&notes));
         let cut = std::fs::read_to_string(&notes).unwrap_or_default();
         assert!(!cut.lines().any(|l| l.starts_with("C\tSaved.")), "{library}: the answer is cut:\n{cut}");
-        assert!(ink(&made, (40, 960, 700, 80)) > 1_000, "{library}: the answer beside the hint bar");
+        // The hint bar's band (`kit::hint_bar_top`, flat since 18.11.2026) on the 1080-line page.
+        let bar = pocket_ui::kit::hint_bar_top(1080) as usize;
+        assert!(ink(&made, (40, bar, 700, pocket_ui::kit::hint_h() as usize)) > 1_000, "{library}: the answer beside the hint bar");
         // What Y came to is read whole, in the list and over the picture, though four hints leave little room beside
         // them (VDEV-ROUND-2026-10-25: "This is no…").
         for state in ["gallery:shelf", "gallery:full-shelf"] {
@@ -154,7 +156,7 @@ fn the_gallery_says_something_in_every_state_in_both_appearances() {
             let shot = render_noting(&bin, &tmp, library, state, stub.as_ref(), Some(&notes));
             let cut = std::fs::read_to_string(&notes).unwrap_or_default();
             assert!(!cut.lines().any(|l| l.starts_with("C\tThis is now")), "{library} {state}: the message is cut:\n{cut}");
-            assert!(ink(&shot, (60, 870, 1120, 60)) > 1_000, "{library} {state}: the message above the hint bar");
+            assert!(ink(&shot, (60, bar - 90, 1120, 60)) > 1_000, "{library} {state}: the message above the hint bar");
         }
     }
 }

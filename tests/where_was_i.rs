@@ -185,8 +185,9 @@ fn a_slow_start_on_the_brick_says_it_is_loading() {
             let (mut light, mut dark) = (0, 0);
             // The line the player reads: enough bright letter ink against a dark backing. Before the fix,
             // Light painted dark letters into the game's black border; recording the words alone missed it.
-            // (Over the hint bar's top edge, 144 lines from the bottom: `app_loading::paint_loading`.)
-            for y in h - 172..h - 114 {
+            // (24 lines over the hint bar's top edge, `app_loading::paint_loading`; the bar is flat since 18.11.2026.)
+            let line = (pocket_ui::kit::hint_bar_top(h as i32) - 24) as usize;
+            for y in line - 28..line + 30 {
                 for x in w / 4..w * 3 / 4 {
                     let rgb = &pixels[(y * w + x) * channels..][..3];
                     light += usize::from(rgb.iter().all(|v| *v >= 192));

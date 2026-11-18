@@ -158,6 +158,11 @@ Pause menu → Options → **Controls**: what each button presses in the game yo
   and the four D-pad directions. The value is the console button it presses, by the name the
   emulator uses ("A presses A."). Left/Right choose another console button, or **None** ("X does
   nothing in this game."). L3 and R3 mean pressing the left and right stick in.
+- **Nintendo DS actions:** any button can be assigned **Stylus mode** or **Screen layout**. On handhelds without
+  sticks, L2 switches between the game D-pad and the stylus; R2 cycles the screen layouts. In stylus mode the D-pad
+  moves the pointer, and the button mapped to DS A touches (hold it to drag). Other buttons keep working normally.
+  Release a direction or touch button held while switching before using it in the new mode. These assignments use
+  the same per-game and per-system Controls settings on Linux and Android. Pads with sticks keep their existing defaults.
 - **Hold to toggle** ([how](big-text.md#hold-to-toggle)) and **Reset controls**, which puts everything back.
 - **Controller setup**, the last line: a separate layout for each controller, in menus and games
   ([Controller setup](controls-settings.md#controller-setup)).

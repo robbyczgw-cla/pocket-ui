@@ -317,7 +317,7 @@ pub fn paint_main(c: &mut Canvas, text: &mut Text, v: &MainPage) -> MainOut {
         // The strip borrows its height from the picture. Together they still need room for two note lines
         // before the hint pill (native 1024x768 with German/Large otherwise hides the save's age).
         let note_tail = 48 + 34 + type_scale::line(SMALL, 8) + type_scale::px(SMALL) as i32 / 3 + 12;
-        let (top, bottom) = (pad + PILL + 16, c.h - pad - PILL);
+        let (top, bottom) = (pad + PILL + 16, crate::kit::hint_bar_top(c.h));
         let hh = hh.min((bottom - top - 2 * r - note_tail).max(1));
         // Under the picture the slots (`app_save_media`): the slim row in the dots' 28 px, or with "Memory card in
         // the pause menu" the medium, for which the picture gives up its height but those 28 px; the note and

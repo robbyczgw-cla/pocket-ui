@@ -127,7 +127,7 @@ impl App {
         let font = 34u32;
         let row = pocket_ui::type_scale::row(54, font);
         // Under the rows: the selected row's explanation (up to three lines), then up to two notes. The rest is rows.
-        let hints_top = c.h - pad - NU_PILL - 16;
+        let hints_top = pocket_ui::kit::hint_bar_top(c.h) - 16;
         let below = 4 * pocket_ui::type_scale::line(NU_SMALL, 12) + 3 * pocket_ui::type_scale::line(24, 8) + 28;
         let visible = (((hints_top - top - below) / row).max(3) as usize).min(lines.len().max(1));
         let first = super::window_start(sel, visible, lines.len());

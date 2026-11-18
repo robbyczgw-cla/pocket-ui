@@ -472,7 +472,7 @@ impl App {
             self.text.draw(c, Face::Body, NU_SMALL, pad + NU_BTN_PAD + title_w + 24, pad + 58, pal().quiet, "Updating…");
         }
         let (top, right) = (pad + NU_PILL + 12, c.w - pad);
-        let list_bottom = c.h - pad - NU_PILL - 16 - DETAILS_H;
+        let list_bottom = pocket_ui::kit::hint_bar_top(c.h) - 16 - DETAILS_H;
         let visible = (((list_bottom - top) / row) as usize).max(3);
         // (name, value, value in the alert colour)
         let rows: Vec<(String, String, bool)> = match page.view {

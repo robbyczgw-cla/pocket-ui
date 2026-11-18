@@ -25,8 +25,41 @@ import shlex
 import sys
 
 # The slow layout/matrix suites (about 70 % of the test seconds in a full run, 2026-11-09 junit).
-HEAVY = ["connections", "home_panel_labels", "info_page", "long_titles", "names_never_translated",
+HEAVY = ["connections", "home_panel_labels", "info_page", "list_space", "long_titles", "names_never_translated",
          "nav_explorer", "small_screen", "spine_names", "spine_titles", "stickers_tv", "text_size"]
+# Each slow suite's own layout inputs: the painters of the pages it renders (18.11.: 21b457727 grew the Shelf look's box in
+# app_cabinet.rs, left the words beside it less width, and only the nightly run's connections saw "gespielt" alone on a line).
+# A change to one of these runs the suite in the merge gate (as its sample). text_size and small_screen sweep every page: their
+# inputs are the text sources (TEXT_SOURCE, below) and the state lists; every other page is theirs in the nightly run.
+_SHELF = r"app_cabinet|app_cabinet_tv|cabinet|cabinet_art|cabinet_tv|cabinet_tv_art|media|shelf|app_big_shelf|big_shelf|title_block|tape_label|showcase|app_frozen|frozen|app_case_knows|case_knows_art|app_share_shelf|share_shelf"
+_INFO = r"game_info|game_box|game_card|game_card_model|app_card|app_games_card|games_card|app_connections|connections|app_case_stickers|case_stickers|sticker_press"
+_CURATOR = r"app_curator|curator_page|curatordb|app_home_panel|home_panel"
+_LOOKS = r"look|look_sample|app_look"
+_SPINES = r"media|shelf|app_cabinet|cabinet|cabinet_art|big_shelf|app_big_shelf|tape_label"
+_STICKERS_TV = r"app_cabinet|app_cabinet_tv|cabinet|cabinet_art|cabinet_tv|cabinet_tv_art|case_stickers|app_case_stickers|sticker_press|game_box|media"
+_NAMES = r"title_block|media|tape_label|game_card|game_box"
+# The lists' room under them and the hint bar on every page (tests/list_space.rs): the pause menu's and Settings' list pages,
+# the hint bar and the footer beside it (kit, also a text source), the explanations' wrap.
+_LISTS = r"pause_page|app_settings_groups|settings_values|kit|options|emu_menu|cheats|nav_probe"
+_NAV = r"app_settings_groups|settings_values|quick|quick_paint|power_menu|nav_probe|app_nav_probe"
+
+
+def _src(alternatives, dirs=""):
+    return re.compile(rf"^src/(?:(?:{alternatives})\.rs$" + (rf"|(?:{dirs})/)" if dirs else ")"))
+
+
+LAYOUT_INPUTS = {
+    "connections": _src(f"{_SHELF}|{_INFO}|{_CURATOR}", "curator"),
+    "info_page": _src(f"{_SHELF}|{_INFO}|{_LOOKS}"),
+    "home_panel_labels": _src(_CURATOR, "curator"),
+    "long_titles": _src(f"{_SHELF}|{_INFO}|{_LOOKS}"),
+    "spine_names": _src(_SPINES),
+    "spine_titles": _src(_SPINES),
+    "stickers_tv": _src(_STICKERS_TV),
+    "names_never_translated": _src(_NAMES),
+    "nav_explorer": _src(_NAV),
+    "list_space": _src(_LISTS),
+}
 # Absolute CPU/frame-time budgets: each runs alone (threads-required) and goes red on an overloaded host (4 red trains in 3 days,
 # 12.-14.11., none a real slowdown). They are measurements like the timing tier: nightly and before a release, never in the merge
 # gate, not even when their own file changes (preflight-air.sh runs a changed one on the Air).
@@ -165,8 +198,9 @@ def parts(root, names):
         if re.match(r"src/(system_names|app_home_panel|home_panel|consoles|document_library|library|app_cabinet)\.rs$", name) \
                 or name == "assets/data/consoles.json":
             heavy.update({"home_panel_labels", "spine_names"})
-        if name in ("src/nav_probe.rs", "src/app_nav_probe.rs"):
-            heavy.add("nav_explorer")
+        for suite, inputs in LAYOUT_INPUTS.items():
+            if inputs.match(name):
+                heavy.add(suite)
         if BRICK.search(name):
             brick = 1
     # The Brick stage follows Brick paths only (14.11., both test audits: 30 % of all merge-gate seconds, in 74 % of the gates). A

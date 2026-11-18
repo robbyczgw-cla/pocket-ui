@@ -431,7 +431,7 @@ impl App {
             let k = pocket_ui::ui_art::empty_scale(c.h);
             let (_, ah) = pocket_ui::ui_art::size(pocket_ui::ui_art::Art::Offline, k);
             let y = y + 24;
-            if y + ah <= c.h - NU_PAD - NU_PILL - 24 {
+            if y + ah <= pocket_ui::kit::hint_bar_top(c.h) - 24 {
                 pocket_ui::ui_art::paint(c, pocket_ui::ui_art::Art::Offline, left, y, k);
             }
         }

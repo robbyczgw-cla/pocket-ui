@@ -131,26 +131,6 @@ const CORE_STATE_LIMIT: Duration = Duration::from_secs(20);
 /// The exit save's calls into the core, timed (`pocket_ui::exit_guard`).
 static CORE_CALLS: std::sync::LazyLock<Arc<pocket_ui::exit_guard::CoreCalls>> = std::sync::LazyLock::new(pocket_ui::exit_guard::CoreCalls::new);
 
-/// Software pacing still matters when a swap returns immediately (notably the first one after
-/// pause). Keep its clock separate from rendering so resume cannot add an extra audio burst.
-#[derive(Default)]
-struct FrameClock {
-    previous: Option<Instant>,
-}
-
-impl FrameClock {
-    fn after_pause(&mut self, now: Instant) {
-        self.previous = Some(now);
-    }
-
-    fn finish_frame(&mut self, now: Instant, period: Duration) -> Instant {
-        let next = self.previous.map_or(now, |n| n + period);
-        let next = if now > next + period * 2 { now } else { next };
-        self.previous = Some(next);
-        next
-    }
-}
-
 /// During the exit save: ends the process if the core doesn't answer within `limit`, instead of leaving the game
 /// unquittable. The battery save is on the card by then. The newest moment already written (a slot, an Earlier state, the
 /// state the session started from) becomes the one the next start resumes from (`slots::resume_from_written`).
@@ -293,9 +273,15 @@ struct App {
     stats: Stats,
     frames: u64,
     bench: Option<Duration>,
-    /// Display refresh period; vsync alone lets some frames through early on this sway.
+    /// Display refresh period, as the display reports it.
     period: Duration,
-    frame_clock: FrameClock,
+    /// The frame pacing, Android's too (`core_pacing`): core frames per refresh, the audio skew, and when the next
+    /// refresh is due (vsync alone lets some frames through early on this sway, and with the screen off nothing is
+    /// swapped).
+    pacer: pocket_ui::core_pacing::Pacer,
+    /// The `player pacing:` line every ten seconds: repeated, doubled and missed pictures, the core's time per frame.
+    pacing: pocket_ui::core_pacing::Stats,
+    pacing_at: Instant,
     /// Last frame the core produced, for save previews.
     last_frame: Option<Frame>,
     /// `/storage/roms/savestates/<system>/<game>`, the start of every state file (see `slots`).
@@ -337,6 +323,7 @@ struct App {
     /// Buttons held when the game resumed (the one that closed the menu); hidden from the core until
     /// released. Per player.
     held_mask: [u16; players::MAX],
+    ds_pad: [pocket_ui::ds_pad::Pad; players::MAX],
     /// Controls → Hold to toggle: the chosen button stays down between two presses, per player.
     toggled: [controls::HoldToggle; players::MAX],
     /// Size of the last frame drawn in play, the size previews are rendered at.
@@ -350,10 +337,6 @@ struct App {
     slot: usize,
     /// Samples of one frame, to keep the audio queue fed while sound is muted.
     nominal_samples: usize,
-    /// The core's rate is not close to the display's (PAL 50 Hz, WonderSwan 75 Hz): core frames are
-    /// scheduled by time, not one per refresh. `owed` is the time not yet spent on core frames.
-    time_driven: bool,
-    owed: f64,
     /// Loudest sample the core produced, to tell silence from sound in test runs.
     audio_peak: u16,
     /// `--rotate N`: turn the picture N quarter turns as if the core had asked for them (SET_ROTATION), whatever it
@@ -575,20 +558,6 @@ impl App {
         pocket_ui::touch::pointer_for(&self.video_src.0, at, (w, h), picture, &layouts)
     }
 
-    /// How many core frames are due on this display refresh: one, or by time for cores whose rate
-    /// differs from the display's (50 Hz games get a repeated picture every sixth refresh, 75 Hz
-    /// ones two frames every fourth).
-    fn frames_due(&mut self) -> u32 {
-        if !self.time_driven {
-            return 1;
-        }
-        let period = 1.0 / self.core.av.timing.fps.max(1.0);
-        self.owed += self.period.as_secs_f64();
-        let n = (self.owed / period) as u32;
-        self.owed -= n as f64 * period;
-        n.min(4)
-    }
-
     /// Each player's buttons as the console's (the Controls mapping, the left stick as D-pad, buttons still held from
     /// the pause menu hidden until let go) and their sticks, player 1 first (`players::Inputs`). The mapping is the
     /// same for every player.
@@ -602,6 +571,7 @@ impl App {
         for p in 0..players::MAX {
             if changed & (1 << p) != 0 {
                 self.toggled[p] = Default::default();
+                self.ds_pad[p] = Default::default();
             }
             let s = self.input.sticks(p);
             let turn = if self.input.is_pocket(p) { turn } else { 0 };
@@ -610,7 +580,18 @@ impl App {
             // Buttons still held from the pause menu reach the game only after they were let go. With the screen off
             // nothing reaches it: what is held then stays held back until it is let go.
             self.held_mask[p] = if self.dark { raw } else { self.held_mask[p] & raw };
-            let pressed = self.mapping.translate(raw & !self.held_mask[p]);
+            let axes = if self.dark { [0; 4] } else { controls::turn_sticks(s.analog(!self.mapping.stick_dpad), turn) };
+            let ds = if home || self.dark {
+                self.ds_pad[p].suppress(raw);
+                pocket_ui::ds_pad::Frame { raw: raw & !self.held_mask[p], buttons: 0, axes, changed: None }
+            } else {
+                self.ds_pad[p].apply(&self.video_src.0, &self.mapping, raw & !self.held_mask[p], axes)
+            };
+            if let Some(stylus) = ds.changed {
+                self.toggled[p].clear();
+                if p == 0 { self.hud.toast(if stylus { "Stylus mode" } else { "D-pad mode" }); }
+            }
+            let pressed = self.mapping.translate(ds.raw);
             // With the screen off nothing is held for the game either.
             if self.dark {
                 self.toggled[p].clear();
@@ -619,9 +600,9 @@ impl App {
                 self.toggled[p].shortcut(pressed, self.mapping.hold_toggle);
                 0
             } else {
-                self.toggled[p].apply(pressed, self.mapping.hold_toggle)
+                self.toggled[p].apply(pressed, self.mapping.hold_toggle) | ds.buttons
             };
-            sticks[p] = if self.dark { [0; 4] } else { controls::turn_sticks(s.analog(!self.mapping.stick_dpad), turn) };
+            sticks[p] = ds.axes;
             // D-pad as left stick (N64/PSP/Dreamcast on a handheld without sticks): the console's D-pad, after the
             // Controls mapping, becomes the left stick.
             if self.mapping.dpad_stick {
@@ -633,6 +614,10 @@ impl App {
 
     fn step(&mut self) {
         let now = Instant::now();
+        // The core frames due this refresh (`core_pacing`): one near the display's rate, by time off it (a 50 Hz
+        // game repeats every sixth picture), more after a missed refresh when they fit.
+        let due = self.pacer.due(now);
+        let missed = self.pacer.missed();
         if !self.inject_release.is_empty() {
             for (bit, _) in self.inject_release.iter().filter(|(_, t)| *t <= now) {
                 self.input.inject(*bit, false);
@@ -705,8 +690,11 @@ impl App {
                 a.reset();
             }
         }
-        let back = turn.back;
-        let ff = if back || self.dark { None } else { self.ex.fast_forward() };
+        // A call before its refresh (none is due): nothing runs, the picture stays.
+        let back = turn.back && due > 0;
+        let ff = if back || self.dark || due == 0 { None } else { self.ex.fast_forward() };
+        // The pacing line: what ran, the core's time, whether the game stood still (then it isn't judged).
+        let (mut ran, mut core_time, mut judged) = (0u32, Duration::ZERO, true);
 
         let (mut frame, mut samples, mut av, mut geometry) = (None, Vec::new(), None, None);
         // Set when run-ahead ran this refresh (`run_ahead`): its state of the real game is what rewind keeps.
@@ -732,10 +720,12 @@ impl App {
                     }
                 }
             }
+            ran = 1;
         } else if pocket_ui::startup::stands_still(self.hold, self.hold_still || self.hold_pause, self.resume_in.is_some()) {
             // "Where was I?": the game stands at its moment while its card is read; nothing runs, nothing is missed.
+            judged = false;
         } else {
-            let runs = pocket_ui::play_speed::runs(ff, self.frames_due());
+            let runs = if due == 0 { 0 } else { pocket_ui::play_speed::runs(ff, due) };
             // Run-ahead (src/run_ahead.rs): the due frames, then 1-2 frames ahead shown, then back. Not while
             // fast-forwarding. When it runs nothing (off, switched itself off), the loop below runs as always.
             if ff.is_none() && self.run_ahead_ready() {
@@ -773,6 +763,7 @@ impl App {
             let skip = ff.is_some() && self.gfx.as_ref().is_some_and(|g| g.hw.is_none());
             // The CPU time of an ordinary refresh, for the exit report's baseline (`RunAhead::note_plain`).
             let plain_c0 = (ff.is_none() && !ran_ahead && runs > 0).then(pocket_ui::run_ahead::thread_cpu_ms);
+            let run_t0 = Instant::now();
             for i in (0..runs).take_while(|_| !ran_ahead) {
                 // "As fast as possible" stops at its time budget: the frame expected to be the last one is shown.
                 let spent = t0.elapsed().as_secs_f32() * 1000.0;
@@ -796,9 +787,18 @@ impl App {
                 (frame, av, geometry) = (f.or(frame), a.or(av), g.or(geometry));
                 self.stats.emulated += 1;
                 self.hud.emulated += 1;
+                ran += 1;
                 if last {
                     break;
                 }
+            }
+            core_time = run_t0.elapsed();
+            // The core's own time per frame tells the pacer whether catching up fits in a refresh (plain play only).
+            if ff.is_none() && !ran_ahead && ran > 0 {
+                self.pacer.took(core_time / ran);
+            }
+            if ran_ahead {
+                (ran, core_time) = (runs, t0.elapsed());
             }
             if let Some(c0) = plain_c0 {
                 self.ex.ahead.note_plain((pocket_ui::run_ahead::thread_cpu_ms() - c0) as f32);
@@ -821,6 +821,18 @@ impl App {
             }
         }
         self.stats.run_ms.push(t0.elapsed().as_secs_f32() * 1000.0);
+        if judged {
+            // While fast-forward or rewind runs: what the pacer asked for (as on Android).
+            self.pacing.call(now, if back || ff.is_some() { due } else { ran }, core_time);
+            self.pacing.missed(missed);
+        }
+        if now.saturating_duration_since(self.pacing_at) >= Duration::from_secs(10) {
+            self.pacing_at = now;
+            let cpu = pocket_ui::core_pacing::current_cpu();
+            let mhz = pocket_ui::core_pacing::cpu_mhz(Path::new("/"), cpu);
+            // Linux leaves the core's thread to the scheduler: it may run on all CPUs.
+            println!("player pacing: {}", self.pacing.line(self.pacer.locked(), self.core.av.timing.fps, 1.0 / self.period.as_secs_f64(), cpu, mhz, "all"));
+        }
         if self.core.take_snapshot_dirty() {
             self.write_snapshot();
         }
@@ -961,11 +973,11 @@ impl App {
         frame
     }
 
-    /// Waits until one display period has passed since the previous frame. The deadline advances by
-    /// whole periods, so short hiccups are absorbed; after a long stall it resyncs.
+    /// Waits for the next refresh on the pacer's grid (`Pacer::next_refresh`): a swap that returned early, or none
+    /// with the screen off, doesn't let the next frame run early.
     fn limit(&mut self) {
         let now = Instant::now();
-        let next = self.frame_clock.finish_frame(now, self.period);
+        let Some(next) = self.pacer.next_refresh() else { return };
         if next > now {
             // Sleep most of the way, spin the last stretch for accuracy.
             let until = next - Duration::from_micros(150);
@@ -978,17 +990,14 @@ impl App {
         }
     }
 
-    /// The core runs once per display refresh, slightly off its own rate (59.73 Hz for a Game Boy).
-    /// Feeding its samples at the display rate keeps pitch right and audio in step.
+    /// The core's and the display's rates to the pacer and the sound (`core_pacing`): near the display's rate the core
+    /// runs once per refresh, slightly off its own rate (59.73 Hz for a Game Boy), and its samples are fed at the
+    /// display's pace so the pitch stays right; further off, frames go by time and the sound keeps its own rate.
     fn sync_audio_rate(&mut self) {
-        let skew = 1.0 / (self.period.as_secs_f64() * self.core.av.timing.fps);
-        // Within 5 % the core simply runs once per refresh; further off, frames are scheduled by time
-        // and the audio keeps its own rate.
-        self.time_driven = !(0.95..1.05).contains(&skew);
-        let skew = if self.time_driven { 1.0 } else { skew };
+        let display_hz = 1.0 / self.period.as_secs_f64();
+        self.pacer.set_rates(self.core.av.timing.fps, display_hz);
         if let Some(audio) = self.audio.as_mut() {
-            audio.set_frame_timing(self.core.av.timing.fps, 1.0 / self.period.as_secs_f64());
-            audio.set_input_rate(self.core.av.timing.sample_rate * skew);
+            audio.set_paced_timing(self.core.av.timing.sample_rate, self.core.av.timing.fps, display_hz);
         }
     }
 
@@ -1119,7 +1128,7 @@ impl App {
                 colour: if colour { pp::colour_options(&self.core.options_snapshot().1) } else { Vec::new() },
                 lcd_colour: self.video.lcd_colours(&self.video_src.0),
             },
-            display: pp::Display { refresh_hz: 1.0 / self.period.as_secs_f64(), time_driven: self.time_driven },
+            display: pp::Display { refresh_hz: 1.0 / self.period.as_secs_f64(), time_driven: !self.pacer.locked() },
             run_ahead: pp::RunAhead {
                 offered: pocket_ui::run_ahead::available_for(&self.video_src.0),
                 wanted: ahead.wanted(),
@@ -2073,10 +2082,11 @@ impl App {
         self.touch.after_pause();
         // The pause is no late frame: restart pacing and the frame-time statistics. Nor is it play (Earlier).
         self.timeline.stop();
-        // The first picture may present immediately after a pause. Anchor its deadline now so
-        // the next frame cannot run straight after it: that extra burst accumulated each resume
-        // until the audio overflow cap discarded valid samples (also with a 60 Hz source).
-        self.frame_clock.after_pause(Instant::now());
+        // The first picture may present immediately after a pause. The pacer starts its grid again at the first frame,
+        // so the next one waits a whole refresh: an extra burst accumulated each resume until the audio overflow cap
+        // discarded valid samples (also with a 60 Hz source).
+        self.pacer.restart();
+        self.pacing.pause();
         self.stats.last_swap = None;
         self.hud.restart();
     }
@@ -2715,7 +2725,9 @@ fn main() {
         stats: Stats { emulated: 0, started: Instant::now(), last_swap: None, intervals: Vec::new(), run_ms: Vec::new(), draw_ms: Vec::new(), strip_us: Vec::new() },
         bench,
         period: Duration::from_micros(16_667),
-        frame_clock: FrameClock::default(),
+        pacer: pocket_ui::core_pacing::Pacer::new(60.0, 60.0),
+        pacing: Default::default(),
+        pacing_at: Instant::now(),
         last_frame: None,
         states,
         commands,
@@ -2735,14 +2747,13 @@ fn main() {
         crt_screen: pocket_ui::crt_on::screen(),
         woke_frame: false,
         held_mask: [0; players::MAX],
+        ds_pad: [pocket_ui::ds_pad::Pad::default(); players::MAX],
         toggled: Default::default(),
         view: (0, 0),
         early: None,
         ex,
         hud: Hud::default(),
         nominal_samples: 1600,
-        time_driven: false,
-        owed: 0.0,
         audio_peak: 0,
         rotate_override: arg("--rotate").and_then(|r| r.parse().ok()),
         inject_release: Vec::new(),
@@ -2840,7 +2851,7 @@ fn main() {
         pocket_ui::fast_switch::announce_saved();
     }
     app.stats.report(app.audio.as_ref());
-    println!("core rate {:.3} fps  audio peak {}  {}", app.core.av.timing.fps, app.audio_peak, if app.time_driven { "scheduled by time" } else { "one per refresh" });
+    println!("core rate {:.3} fps  audio peak {}  {}", app.core.av.timing.fps, app.audio_peak, if app.pacer.locked() { "one per refresh" } else { "scheduled by time" });
     app.ex.report();
     if let Some(line) = app.timeline.report() {
         println!("{line}");
@@ -2876,26 +2887,6 @@ fn main() {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    /// A resumed swap can return immediately. Replay five pauses with a 48 kHz consumer: each
-    /// first 60 Hz frame must get a full period before the next one can add another 800 samples.
-    /// An empty clock used to add 800 extra samples on every resume until the queue dropped audio.
-    #[test]
-    fn repeated_resumes_do_not_accumulate_extra_audio_when_the_first_swap_is_immediate() {
-        let mut clock = FrameClock::default();
-        let period = Duration::from_secs_f64(1.0 / 60.0);
-        let mut now = Instant::now();
-        let mut buffered = 800usize;
-        for _ in 0..5 {
-            clock.after_pause(now);
-            buffered += 800;
-            let next_frame = clock.finish_frame(now, period);
-            let played = (next_frame.saturating_duration_since(now).as_secs_f64() * 48_000.0).round() as usize;
-            buffered = buffered.saturating_sub(played);
-            assert_eq!(buffered, 800, "resume added a burst until the overflow cap would discard sound");
-            now = next_frame + Duration::from_secs(1);
-        }
-    }
 
     #[test]
     fn quit_commands() {

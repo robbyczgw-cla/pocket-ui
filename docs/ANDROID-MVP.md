@@ -1336,8 +1336,7 @@ lifecycle); the menu's state stays in the player, its pixels are Linux's.
   Cheats › ("2 on ›"), Speed, rumble, fan ›, Zoom ›, Keep for, Restore defaults, and the player's Screenshot; headings,
   status pill (time, battery), rows, lines and hints are Linux's. Left out, each with its reason in the tests: Shortcuts and
   Runs on (`TOP_NOT_ON_ANDROID`), the Picture and Speed, rumble, fan rows the player has no counterpart for
-  (`NOT_ON_ANDROID`: Custom look, LCD grid, frame variants, Screen orientation, fast-forward, rewind, rumble, run-ahead,
-  Performance, Fan) and Controls' Controller setup (it opens Linux's Settings → Controllers; Android's controllers are
+  (`NOT_ON_ANDROID`: Custom look, Screen orientation, run-ahead, Performance, Fan) and Controls' Controller setup (it opens Linux's Settings → Controllers; Android's controllers are
   set in Android). Picture has the Handheld view's rows in its words and order and, for N64, PSP,
   Dreamcast and PlayStation, Linux's **Resolution** (`render_scale`, the class from `ro.soc.model` / `ro.board.platform`).
 - **Picture's preview** (17.11.2026): "Whole screen" and "Actual size" under the rows, as on Linux. Linux's pocket-core draws
@@ -1353,7 +1352,12 @@ lifecycle); the menu's state stays in the player, its pixels are Linux's.
   (`game-settings/<system>/<game>.json`, or `<system>.json` after Keep for → This console; `picture::Settings::set_controls`),
   the same file Linux's `options::GameSettings` reads; the older `android-controls/<key>.ctl.json` and Hold to toggle's
   `<key>.json` are taken over once (18.11.2026).
-  Speed, rumble, fan has Earlier states (Off / On) and Over the game (Off / FPS). Zoom is Linux's page (`paint_zoom`) over the
+  Speed, rumble, fan has Fast-forward speed and Rewind (HOME + R2, HOME + L2 held: `play_speed`, Linux's), Earlier states,
+  Over the game (Off / FPS) and **Rumble** (Off / Low / Medium / High, 18.11.2026): Linux's `rumble` with an Android back end
+  (`PlayerActivity.rumble`, `Rumble.java`): a controller's own vibrator, the handheld's motor for its built-in pad (the Odin's,
+  the Mini V2's 2022:3002, which Android calls external: `pad::android::is_handheld_pad`); the lease and the strength as on
+  Linux; `player rumble …` lines in logcat (the interface handed to the core, the device found, the first request). Checked
+  on the Mini V2 with Drill Dozer: requests reach the system vibrator at Low's amplitude; Off sends none. Zoom is Linux's page (`paint_zoom`) over the
   screen as the game shows it. Restore defaults asks for a second A. B goes back from a page onto its row.
 - The line under the selected row is Linux's footer (`kit::footer`, up to eight lines);
   `pause_options::tests::every_row_s_line_reads_whole_on_every_screen_language_and_text_size` paints every row's line in

@@ -9,6 +9,7 @@ macro_rules! contact_address { () => { "robby@robbyczesany.com" }; }
 pub const CONTACT: &str = contact_address!();
 
 pub mod core_pacing;
+pub mod ds_pad;
 pub mod fps_line;
 /// Options → Picture → Resolution, the same on Linux and in Android's player (`render_scale`).
 pub mod render_scale;

@@ -553,7 +553,7 @@ impl App {
     /// didn't fit beside the hints, a row's height of empty screen on the Brick (hand test, 17.11.); the lines now take
     /// the column beside the hints first, as on every page of the Settings family (`kit::footer`).
     pub(crate) fn rows_bottom(&mut self, rows: &[usize], w: i32, h: i32) -> i32 {
-        let mut bottom = h - NU_PAD - NU_PILL - 16;
+        let mut bottom = pocket_ui::kit::hint_bar_top(h) - 16;
         for &i in rows {
             let line = self.settings_row_desc(i);
             if line.trim().is_empty() {

@@ -387,6 +387,7 @@ impl App {
             let (x, y) = (cx + bw - cp.w, board_y - cp.h);
             shadow.paint(c, x, y, dark, (0, c.h));
             art::blit(c, &cp, x, y, 256, (0, c.h));
+            pocket_ui::scene_check::put_pic("the console beside the TV", &cp, x, y, pocket_ui::scene_check::Rests::Settled, true);
             tv.console_at = Some((x, y, cp.w, cp.h));
         }
         if lcd {
@@ -400,6 +401,7 @@ impl App {
             art::soft_shadow(c, x + sdx, y + sdy, pic.w - 4, pic.h - sdy, blur, dark, (0, c.h));
         }
         art::blit(c, &pic, x, y, 256, (0, c.h));
+        pocket_ui::scene_check::put_pic(if lcd { "the handheld in the TV's place" } else { "the TV" }, &pic, x, y, pocket_ui::scene_check::Rests::Settled, true);
     }
 }
 

@@ -589,7 +589,7 @@ impl App {
             ],
         };
         // Everything under the list stays above the hints; with larger text a paragraph that reaches them ends with "…".
-        let hints_top = c.h - pad - NU_PILL - 16;
+        let hints_top = pocket_ui::kit::hint_bar_top(c.h) - 16;
         for (text, color) in [(what.as_str(), pal().dust), (choice.as_str(), pal().text)] {
             y = self.text.paragraph(c, Face::Body, NU_SMALL, (left, y), width, pocket_ui::type_scale::line(NU_SMALL, 12), hints_top, color, text);
             y += 6;

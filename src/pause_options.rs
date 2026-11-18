@@ -39,6 +39,8 @@ pub enum Entry {
     Earlier,
     /// Off / FPS: the frame rate and the CPU in the top left corner (Linux: Speed, rumble, fan › Over the game).
     OverGame,
+    /// Off / Low / Medium / High: Linux's Speed, rumble, fan › Rumble, how strongly games shake the handheld or the pad.
+    Rumble,
     /// Where the Picture and Over the game choices are kept: this game, or every game of the console.
     Keep,
     /// Back to the defaults for the console and the game; asks for a second A (Linux's Restore defaults).
@@ -114,7 +116,7 @@ pub fn linux_entries(groups: usize, emulator: Option<bool>, cheats: bool) -> Vec
 }
 
 /// The rows of Speed, rumble, fan the player has, in Linux's order (`options::GROUPS`).
-pub const EXTRAS_ROWS: [Entry; 4] = [Entry::FastForward, Entry::Rewind, Entry::Earlier, Entry::OverGame];
+pub const EXTRAS_ROWS: [Entry; 5] = [Entry::FastForward, Entry::Rewind, Entry::Earlier, Entry::OverGame, Entry::Rumble];
 
 /// Speed, rumble, fan's line, Linux's (`options::GROUPS`).
 pub const EXTRAS_DESC: &str = "Settings you rarely need.";
@@ -133,6 +135,7 @@ impl Entry {
             Entry::Rewind => "Rewind",
             Entry::Earlier => "Earlier states",
             Entry::OverGame => "Over the game",
+            Entry::Rumble => "Rumble",
             Entry::Keep => "Keep for",
             Entry::Restore => "Restore defaults",
             Entry::Screenshot => "Screenshot",
@@ -147,6 +150,7 @@ impl Entry {
             Entry::Rewind => Some(crate::play_speed::REWIND_KEY),
             Entry::Earlier => Some(crate::timeline_policy::KEY),
             Entry::OverGame => Some("over_game"),
+            Entry::Rumble => Some(RUMBLE_KEY),
             _ => None,
         }
     }
@@ -169,6 +173,7 @@ impl Entry {
             Entry::Rewind => REWIND_DESC,
             Entry::Earlier => EARLIER_DESC,
             Entry::OverGame => OVER_GAME_DESC,
+            Entry::Rumble => RUMBLE_DESC,
             Entry::Keep if keep_game => "Changes show at once and stay for this game. Left or right: every game on this console.",
             Entry::Keep => "Changes show at once and stay for every game on this console. Left or right: this game only.",
             Entry::Restore => RESTORE_DESC,
@@ -320,6 +325,20 @@ pub fn resolution_index(range: Option<crate::render_scale::Range>, chosen: Optio
     let Some(r) = range else { return 0 };
     let f = chosen.filter(|f| (1..=r.max).contains(f)).unwrap_or(r.default);
     usize::from(f.clamp(1, 4)) - 1
+}
+
+/// Rumble's key, values and labels, and its line: Linux's (`option_table`).
+pub const RUMBLE_KEY: &str = "rumble";
+pub const RUMBLE_VALUES: [(&str, &str); 4] = [("off", "Off"), ("low", "Low"), ("medium", "Medium"), ("high", "High")];
+pub const RUMBLE_DESC: &str = "How strongly games shake the console, for games that rumble.\nOff keeps it still.";
+/// The label of a saved rumble value (Medium where none or an unknown one is saved, Linux's default).
+pub fn rumble_label(value: Option<&str>) -> &'static str {
+    RUMBLE_VALUES.iter().find(|(v, _)| Some(*v) == value).map_or("Medium", |(_, l)| *l)
+}
+/// The rumble value `delta` steps from `value`, round.
+pub fn rumble_step(value: Option<&str>, delta: i32) -> &'static str {
+    let at = RUMBLE_VALUES.iter().position(|(v, _)| Some(*v) == value).unwrap_or(2) as i32;
+    RUMBLE_VALUES[(at + delta).rem_euclid(4) as usize].0
 }
 
 /// Over the game's setting key (Linux's `over_game::KEY`).
@@ -524,6 +543,19 @@ mod tests {
         assert_eq!(setting_desc(crate::option_table::LOOK, "snes", None, &values), crate::look::explain(crate::look::Look::OldTv, false));
     }
 
+    /// Rumble: Linux's row (name, values, labels, line, default Medium), under Speed, rumble, fan in Linux's order.
+    #[test]
+    fn rumble_reads_as_linux_s() {
+        let linux = options::setting(RUMBLE_KEY).unwrap();
+        assert_eq!((Entry::Rumble.label(), Entry::Rumble.desc(false)), (linux.name, linux.desc));
+        assert_eq!(RUMBLE_VALUES.iter().map(|(v, l)| (v.to_string(), l.to_string())).collect::<Vec<_>>(), linux.choices.iter().map(|c| (c.value.to_string(), c.label.to_string())).collect::<Vec<_>>());
+        assert_eq!(rumble_label(None), linux.choices[usize::from(linux.default)].label);
+        assert_eq!((rumble_step(None, 1), rumble_step(Some("high"), 1), rumble_step(Some("off"), -1)), ("high", "off", "high"));
+        for (v, _) in RUMBLE_VALUES {
+            assert_eq!(crate::rumble::Strength::parse(v), crate::rumble::Strength::parse(linux.choices.iter().find(|c| c.value == v).unwrap().value));
+        }
+    }
+
     #[test]
     fn over_the_game_and_keep_for_read_as_linux_s() {
         let over = options::setting(crate::over_game::KEY).unwrap();
@@ -620,7 +652,6 @@ mod tests {
         ("hk_over", "Linux only: no HOME layer, Android owns Home"),
         ("hk_zoom", "Linux only: no HOME layer, Android owns Home"),
         // Speed, rumble, fan.
-        ("rumble", "feature missing on Android: the player sends no rumble"),
         ("run_ahead", "feature missing on Android: the player's loop has no run-ahead"),
         ("performance", "Linux only: Android owns the CPU's governor"),
         ("fan", "Linux only: Android owns the fan"),
@@ -715,7 +746,7 @@ mod tests {
         let mut descs: Vec<(String, &str)> = Vec::new(); // (line, the row's value)
         for e in top(Has { emulator: true, controls: true, cheats: true }).into_iter().chain(EXTRAS_ROWS) {
             for keep in [true, false] {
-                descs.push((e.desc(keep).to_string(), if e.opens() { ">" } else if matches!(e, Entry::FastForward | Entry::Rewind | Entry::Earlier | Entry::OverGame | Entry::Keep) { "On" } else { "" }));
+                descs.push((e.desc(keep).to_string(), if e.opens() { ">" } else if matches!(e, Entry::FastForward | Entry::Rewind | Entry::Earlier | Entry::OverGame | Entry::Rumble | Entry::Keep) { "On" } else { "" }));
             }
         }
         for system in ["gba", "gb", "snes", "n64"] {

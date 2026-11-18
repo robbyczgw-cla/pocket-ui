@@ -472,7 +472,7 @@ impl App {
         let folder = conflicts::day_folder(&Layout::device(), pocket_ui::recents::now_secs());
         let explain = page::keep_text(&folder.display().to_string());
         // Above the hints; with larger text it may end with "…" (a failed keep below still shows).
-        let bottom = c.h - NU_PAD - NU_PILL - 16 - if matches!(&p.message, Some((_, true))) || p.busy { pocket_ui::type_scale::line(28, 8) + 22 } else { 0 };
+        let bottom = pocket_ui::kit::hint_bar_top(c.h) - 16 - if matches!(&p.message, Some((_, true))) || p.busy { pocket_ui::type_scale::line(28, 8) + 22 } else { 0 };
         y = self.text.paragraph(c, Face::Body, 26, (left, y), right - left, pocket_ui::type_scale::line(26, 8), bottom, pal().dust, &explain);
         y += 12;
         if p.busy {

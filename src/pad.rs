@@ -824,6 +824,12 @@ pub mod android {
     pub fn is_odin_pad(vendor: u16, product: u16) -> bool {
         vendor == 0x2020 && matches!(product, 0x0111 | 0x0112)
     }
+    /// The handheld's own pad, which has no vibrator of its own (its motor is the handheld's): the Odin's, and the Retroid
+    /// Pocket Mini V2's (2022:3002 "Xbox Wireless Controller", a USB device Android calls external, `dumpsys input`
+    /// 18.11.2026). Rumble for it goes to the handheld's motor, as Linux's `rumble::Target::Motor` for the built-in controls.
+    pub fn is_handheld_pad(vendor: u16, product: u16) -> bool {
+        is_odin_pad(vendor, product) || (vendor == 0x2022 && product == 0x3002)
+    }
     /// Which arrangement a controller's letters follow when its identity says so: the Odin by its style (Xbox style:
     /// Xbox places; Odin style: A on the right, as on a Nintendo pad), Nintendo's own pads (Switch Pro, Joy-Con, NES/SNES
     /// Online, 8BitDo pads in Switch mode: vendor 057e) as Nintendo, every other as Xbox. A press's scan code does not tell

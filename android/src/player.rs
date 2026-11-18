@@ -161,6 +161,7 @@ struct Player {
     control_names: Vec<pocket_ui::controls::Target>,
     hold_button: Option<u8>,
     held: pocket_ui::controls::HoldToggle,
+    ds_pad: pocket_ui::ds_pad::Pad,
     haptics: bool,
     text_size: pocket_ui::text_size::TextSize,
     last_font_scale: f32,
@@ -525,6 +526,7 @@ impl Player {
             control_names,
             hold_button: None,
             held: Default::default(),
+            ds_pad: Default::default(),
             haptics: false,
             text_size: Default::default(),
             last_font_scale: 0.0,
@@ -773,6 +775,8 @@ impl Player {
     }
     fn pause(&mut self, on: bool) {
         if !on && self.recovery_required { return; }
+        // The menu stops every motor, as pocket-core's (a rumble left on is a lease that runs out anyway).
+        if on { pocket_ui::rumble::stop(); }
         if !on {self.suspended=false;self.fps.restart();}
         if !on && self.audio.is_none() {
             self.audio = pocket_ui::audio::Audio::open(self.core.av.timing.sample_rate, pocket_ui::audio::needs_jitter_reserve(&self.system));
@@ -1535,6 +1539,7 @@ impl Player {
                         pause_options::Entry::FastForward => pause_options::ff_label(self.picture.ff_speed),
                         pause_options::Entry::Rewind => pause_options::earlier_label(self.picture.rewind),
                         pause_options::Entry::Earlier => pause_options::earlier_label(self.picture.earlier_on(&self.system)),
+                        pause_options::Entry::Rumble => pause_options::rumble_label(self.picture.value(pause_options::RUMBLE_KEY)),
                         _ => pause_options::over_game_label(self.picture.over_game),
                     };
                     rows.push(OptRow::new(entry.label(), value, entry.desc(keep_game)));
@@ -1641,6 +1646,11 @@ impl Player {
                 if let Err(error) = self.picture.set_rewind(on) { self.message = said(error, pocket_ui::save_trouble::SETTING_FAILED); }
                 // Off: the history goes (as pocket-core's `apply_settings`); on: it starts from this moment.
                 self.speed.forget();
+            }
+            Some(OptTarget::Top(pause_options::Entry::Rumble)) => {
+                let next = pause_options::rumble_step(self.picture.value(pause_options::RUMBLE_KEY), delta);
+                if let Err(error) = self.picture.set_values(&[(pause_options::RUMBLE_KEY, next.to_string())]) { self.message = said(error, pocket_ui::save_trouble::SETTING_FAILED); }
+                pocket_ui::rumble::set_strength(pocket_ui::rumble::Strength::parse(next));
             }
             Some(OptTarget::Top(pause_options::Entry::OverGame)) => {
                 let on = !self.picture.over_game;
@@ -1779,6 +1789,7 @@ impl Player {
     /// emptied, Hold to toggle is off. Resolution's default comes with the next start.
     fn restore_defaults(&mut self) {
         let mut failed = self.picture.restore_defaults().err();
+        pocket_ui::rumble::set_strength(pocket_ui::rumble::Strength::Medium);
         for option in &mut self.options {
             if option.current != option.default && self.core.set_option(&option.key, &option.default) {
                 option.current = option.default.clone();
@@ -1806,7 +1817,7 @@ impl Player {
         let mut options = self.picture.options();
         let choices = play_cards::targets(&self.system, &self.control_names);
         let mut values = vec![pocket_ui::core_options::FileValue {value:"none".into(), label:"Off".into()}];
-        values.extend(choices.iter().filter(|t| !(2..8).contains(&t.id)).map(|t| pocket_ui::core_options::FileValue {value:t.id.to_string(),label:t.label.clone()}));
+        values.extend(choices.iter().filter(|t| pocket_ui::controls::can_hold(t.id)).map(|t| pocket_ui::core_options::FileValue {value:t.id.to_string(),label:t.label.clone()}));
         options.push(FileOption {key:"hold_toggle".into(), label:"Hold to toggle".into(), current:self.hold_button.map_or("none".into(),|b|b.to_string()), values, category:Some("Controls".into()), ..Default::default()});
         // The emulator's options in a player's words where we have them ("Less sprite flicker", not "PPU No sprite limit").
         options.extend(self.options.iter().cloned().map(|mut o| { pocket_ui::core_options::make_plain(&mut o); o }));
@@ -1894,7 +1905,7 @@ impl Player {
         }
         if self.row == picture::ROWS {
             let choices = play_cards::targets(&self.system, &self.control_names);
-            let ids: Vec<_> = std::iter::once(None).chain(choices.iter().filter(|t| !(2..8).contains(&t.id)).map(|t| Some(t.id))).collect();
+            let ids: Vec<_> = std::iter::once(None).chain(choices.iter().filter(|t| pocket_ui::controls::can_hold(t.id)).map(|t| Some(t.id))).collect();
             let at = ids.iter().position(|id| *id == self.hold_button).unwrap_or(0);
             let before=self.hold_button;
             self.hold_button = ids[(at as i32 + delta).rem_euclid(ids.len() as i32) as usize];
@@ -2406,9 +2417,16 @@ impl Player {
             // D-pad as left stick: the D-pad's presses move the stick instead (`controls::pad_input`). While HOME is down the
             // pad's buttons belong to the shortcuts, not the game (pocket-core's rule).
             let (held, pulses, stick) = if self.speed.home_held() { (0, 0, 0) } else { (self.buttons, self.pulses, self.stick_buttons) };
-            let (mut buttons, sticks) = pocket_ui::controls::pad_input(&self.pad_page.mapping, held, pulses, stick, touch, self.axes);
-            if let Some(sticks) = sticks {
-                self.core.set_analog(sticks);
+            let ds = if self.speed.home_held() {
+                self.ds_pad.suppress(self.buttons | self.pulses | self.stick_buttons);
+                pocket_ui::ds_pad::Frame { raw: 0, buttons: 0, axes: self.axes, changed: None }
+            } else { self.ds_pad.apply(&self.system, &self.pad_page.mapping, held | pulses | stick, self.axes) };
+            let (mut buttons, sticks) = pocket_ui::controls::pad_input(&self.pad_page.mapping, ds.raw, 0, 0, touch, ds.axes);
+            self.core.set_analog(sticks.unwrap_or(ds.axes));
+            if let Some(stylus) = ds.changed {
+                self.held.clear(); self.overlay_size = None;
+                self.note = vec![pocket_ui::i18n::tr(if stylus { "Stylus mode" } else { "D-pad mode" })];
+                self.note_until = None;
             }
             self.pulses = 0;
             self.touch_pulses = 0;
@@ -2419,7 +2437,7 @@ impl Player {
                 }
             }
             let was_held = self.held.held();
-            buttons = self.held.apply(buttons,self.hold_button);
+            buttons = self.held.apply(buttons,self.hold_button) | ds.buttons;
             self.diagnostic_buttons_seen |= buttons;
             if was_held != self.held.held() {self.overlay_size = None;}
             self.core.set_pointer(self.stylus.sample());
@@ -2541,6 +2559,7 @@ impl Player {
         if !self.paused && self.reminder.is_none() {
             // The pacing line judges the pacer (repeats, doubles): while fast-forward or rewind runs, what it asked for.
             self.pacing.call(call, if back || ff.is_some() { due } else { ticks }, core_time);
+            self.pacing.missed(self.pacer.missed());
             if ticks > 0 && self.placement.is_slow(pocket_ui::core_pacing::current_cpu()) {
                 self.pacing.on_slow_cpu();
             }
@@ -3476,6 +3495,8 @@ pub extern "system" fn Java_xyz_pocketui_app_PlayerActivity_nativeCreate(
                 }
                 // A game from the Handheld view: its pause menu is the handhelds' (`pause_list`).
                 player.list_menu = prefs["pause_menu"].as_str() == Some("handheld");
+                // Rumble as Speed, rumble, fan › Rumble says for this game (Linux's `Extras::apply_settings`).
+                pocket_ui::rumble::set_strength(pocket_ui::rumble::Strength::parse(player.picture.value(pause_options::RUMBLE_KEY).unwrap_or("medium")));
                 player.sounds_muted = prefs["muted"].as_bool().unwrap_or(false);
                 player.haptics = prefs["haptics"].as_bool().unwrap_or(false);
                 player.text_size = serde_json::from_value(prefs["text_size"].clone()).unwrap_or_default();
@@ -3618,6 +3639,8 @@ pub extern "system" fn Java_xyz_pocketui_app_PlayerActivity_nativeRoster(mut env
     PLAYER.with(|slot| {
         if let Some(p) = slot.borrow_mut().as_mut() {
             let notes = p.pads.roster(devices);
+            // Each player's rumble on their own controller, as Linux's `players` seats it.
+            pocket_ui::rumble::set_targets(p.pads.rumble_targets());
             for note in &notes { log::info!("player pads: {note}"); }
             if let Some(note) = notes.last() { p.message = note.clone(); }
         }

@@ -330,7 +330,7 @@ impl App {
         let row = full - ((1080 - c.h).max(0) + 6) / 7;
         // At native 768 lines reserve the selected explanation and the live line above the hint pill too.
         let row = if pocket_ui::kit::short_screen(c.h) {
-            let bottom = c.h - pad - NU_PILL - 8;
+            let bottom = pocket_ui::kit::hint_bar_top(c.h) - 8;
             row.min((bottom - top - 26 - pocket_ui::type_scale::grow(28) - 40 - 12 - pocket_ui::type_scale::px(28) as i32 / 3) / 7)
         } else { row };
         // The dot, the value and its line move up by half of what a row gave up, and the line closer to the value;
@@ -423,7 +423,7 @@ impl App {
         };
         let hints_at = self.nu_hints(c, hints);
         // The legend, left of the hints on their line.
-        let base = c.h - pad - NU_PILL / 2 + pocket_ui::type_scale::mid(24);
+        let base = pocket_ui::kit::hint_bar_mid(c.h) + pocket_ui::type_scale::mid(24);
         let mut lx = pad + NU_BTN_PAD;
         for g in Grade::SCALE {
             let w = self.text.width(Face::Body, 24, g.name());

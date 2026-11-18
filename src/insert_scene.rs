@@ -857,6 +857,20 @@ impl Scene {
         // It stands on something: a soft contact shadow under it, as under the case on the shelf (art::soft_shadow), a
         // console that floated over the floor looked pasted on (polish review 12.11.).
         art::soft_shadow(c, sx + sw / 12, sy + sh - px(5), sw - sw / 6, px(9), px(12), 0.6 * st.rise, (0, c.h));
+        if crate::scene_check::recording() {
+            // The stage's floor, and the console on it once it is up (on its way up from below the screen it is held).
+            crate::scene_check::set_origin(0, 0);
+            crate::scene_check::surface("the stage's floor", floor, 0, 0, c.w);
+            let handheld = matches!(ff, cabinet::FormFactor::HandheldCart | cabinet::FormFactor::UmdCase | cabinet::FormFactor::CardBox);
+            let rests = if handheld {
+                crate::scene_check::Rests::Held("a handheld, in the hands")
+            } else if st.rise >= 1.0 {
+                crate::scene_check::Rests::Settled
+            } else {
+                crate::scene_check::Rests::Held("coming up from below the screen")
+            };
+            crate::scene_check::put("the console (plain)", sx, sy, sw, sh, rests, true);
+        }
         if let Some(sp) = &sprite {
             c.blit_sprite(sp, sx, sy, ((1.0 - st.rise) * 200.0) as u8);
         } else {

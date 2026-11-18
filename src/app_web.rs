@@ -675,7 +675,7 @@ impl App {
         let (pad, row, font) = (NU_PAD, pocket_ui::type_scale::row(76, 34), 34u32);
         self.sheet_header(c, "Paired browsers");
         let (top, right) = (pad + NU_PILL + 12, c.w - pad);
-        let visible = ((c.h - top - pad - NU_PILL - 30) / row).max(1) as usize;
+        let visible = ((pocket_ui::kit::hint_bar_top(c.h) - top - 30) / row).max(1) as usize;
         let first = super::window_start(sel, visible, page.browsers.len());
         for (i, b) in page.browsers.iter().enumerate().skip(first).take(visible) {
             let y = top + (i - first) as i32 * row;

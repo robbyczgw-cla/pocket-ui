@@ -55,7 +55,7 @@ pub(crate) fn paint_dialog(c: &mut Canvas, text: &mut Text, hits: &mut HitMap, d
     paint_dialog_planned(c, text, hits, d, &plan);
     pocket_ui::type_scale::set(size);
     // The page's own hints go, as under Curator's sheets: only the dialog's are left to read and to touch.
-    c.rect(0, c.h - NU_PAD - NU_PILL - 12, c.w, NU_PAD + NU_PILL + 12, pal().void);
+    c.rect(0, pocket_ui::kit::hint_bar_top(c.h) - 12, c.w, c.h - pocket_ui::kit::hint_bar_top(c.h) + 12, pal().void);
     paint_hints(c, text, hits, &[("A", "Choose"), ("B", "Cancel")]);
 }
 
@@ -194,7 +194,7 @@ fn paint_page(c: &mut Canvas, text: &mut Text, hits: &mut HitMap, page: &RescueP
     let head = 46;
     let step = pocket_ui::type_scale::line(NU_SMALL, 12);
     let rows = page.rows();
-    let rows_bottom = c.h - pad - NU_PILL - 16;
+    let rows_bottom = pocket_ui::kit::hint_bar_top(c.h) - 16;
     let panel_y = pad + 58 + 48 + 30 + sub_extra;
     let head_h: i32 = lines.iter().map(|(_, px, _)| pocket_ui::type_scale::line(*px, 12)).sum();
     let line24 = pocket_ui::type_scale::line(24, 12);
@@ -244,7 +244,7 @@ fn paint_page(c: &mut Canvas, text: &mut Text, hits: &mut HitMap, page: &RescueP
     pocket_ui::kit::scrollbar(c, top, visible as i32 * row, first, visible, n);
     hits.list(page.sel, n, 0.0, row as f32);
     // Above the hints; with larger text a paragraph that reaches them ends with "…".
-    let bottom = c.h - pad - NU_PILL - 16;
+    let bottom = pocket_ui::kit::hint_bar_top(c.h) - 16;
     let mut y = top + visible as i32 * row + 44;
     // What was just done (the message) keeps its lines; the row's explanation gives way first.
     let message_h = page.message.as_ref().map_or(0, |m| text.wrap_prose(Face::Body, NU_SMALL, m, width).len() as i32 * step + 12);

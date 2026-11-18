@@ -16,6 +16,13 @@ bookkeeping warnings); one agent fills them in one commit before the release che
 (the release checks the merge gate skips, see [Documentation checks](tests.md#documentation-checks)): it fails on a
 missing Spanish or Portuguese line and prints the bookkeeping as warnings only.
 
+**README and what's new.** `README.md` describes the product and stays the same from release to release: both editions
+(pocket-ui OS, the card, and pocket-ui for Android, the app) with their download links, the devices, how to install.
+What a release brings goes only into `CHANGELOG.md` (`[Unreleased]`, which the version bump turns into the release) and
+the release notes; the README links both and has no "New in …" section. A doc check holds this in the merge gate
+([Documentation checks](tests.md#documentation-checks), "README"), and the release scripts check it again before the build
+and before publishing.
+
 ### Order: full tests before the cut and export
 
 The public export (`scripts/export-public.sh`) runs every test of the tree and takes about an hour; a text find after it
@@ -30,6 +37,8 @@ costs another hour. Tests therefore run before the cut and again on the release 
    (`GATE_FULL=1`: every ordinary test, doctests, serial timing, Brick corpus/search/Settings, platform checks and shell tests),
    the release check's text tests (`scripts/release-text-tests.txt`), the additional ignored text-fit and navigation matrices
    (Large text in every language on every panel size), extra Brick text cases, and bookkeeping as warnings.
+   The nightly full suite runs the same release-only steps after `scripts/full-suite.sh` (`scripts/release-extras.sh`, 18.11.), so a green
+   night on the cut's commit means this step finds nothing new; `scripts/release-extras.sh --only <step>` runs one of them.
    The gate schedules independent shell lanes alongside Rust when its exclusive CPU allocation permits it; all lanes join
    before feature builds and timing assertions. Ordinary layout/navigation tests run once; release ignores run afterward.
    Each step prints `ok`, `RED` or `WARN`, elapsed seconds and its log;

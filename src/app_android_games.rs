@@ -171,7 +171,7 @@ impl App {
             y += pocket_ui::type_scale::line(NU_SMALL, 12);
         }
         let top = y + 4;
-        let bottom = c.h - pad - NU_PILL - 16;
+        let bottom = pocket_ui::kit::hint_bar_top(c.h) - 16;
         let visible = ((bottom - top) / row).max(1) as usize;
         let first = super::window_start(page.sel, visible, page.len());
         let apps = page.apps.as_deref().unwrap_or_default();

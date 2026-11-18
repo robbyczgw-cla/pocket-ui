@@ -22,6 +22,13 @@ pub const PILL: i32 = 90;
 pub const BUTTON: i32 = 60;
 /// From a pill's or a band's end to its text.
 pub const BTN_PAD: i32 = 36;
+/// The hint bar at the bottom: its height, its keys' height and its gap to the screen's bottom edge at Normal text (the
+/// owner's choice, 18.11.2026: "flachere Tipps"). It was a pill as tall as the status pill (`PILL`, 90) with 60 px keys,
+/// `PAD` (30) over the edge, which took much of a small screen and floated under the shelf. With larger text the bar and
+/// its keys grow with the letters (`hint_h`, `hint_key`).
+pub const HINT_H: i32 = 62;
+pub const HINT_KEY: i32 = 44;
+pub const HINT_GAP: i32 = 10;
 /// The pause menu's items and title.
 pub const FONT: u32 = 46;
 /// Headings in a pill's row, explanations, the hint pill's labels.
@@ -71,7 +78,24 @@ fn hints_shown<'a>(hints: &[(&'a str, &'a str)], widths: &[i32], room: i32) -> V
 
 /// The top edge of the hint bar on a screen `h` px high: what a page paints above it stays above this.
 pub fn hint_bar_top(h: i32) -> i32 {
-    h - PAD - PILL
+    h - HINT_GAP - hint_h()
+}
+
+/// The hint bar's height: `HINT_H`, taller by as much as its letters grow (Medium, Large, the Brick's larger Normal).
+pub fn hint_h() -> i32 {
+    let _one = type_scale::panel(1.0);
+    HINT_H + type_scale::grow(SMALL)
+}
+
+/// A hint key's height: `HINT_KEY`, taller by as much as its letters grow.
+pub fn hint_key() -> i32 {
+    let _one = type_scale::panel(1.0);
+    HINT_KEY + type_scale::grow(SMALL)
+}
+
+/// The middle line of the hint bar on a screen `h` px high: a line of text beside it stands on it.
+pub fn hint_bar_mid(h: i32) -> i32 {
+    hint_bar_top(h) + hint_h() / 2
 }
 
 /// The lowest a page's content may reach: a little over the hint bar's top edge.
@@ -117,28 +141,31 @@ pub fn pill_hints(c: &mut Canvas, text: &mut Text, hits: &mut HitMap, hints: &[(
 }
 
 fn paint_bar(c: &mut Canvas, text: &mut Text, hints: &[(&str, &str)]) -> (i32, Vec<(Area, Button)>) {
+    // One bar on every page: a wide page's factor (`type_scale::wide_page`, Settings at 1920x1080) doesn't grow it or its
+    // letters, so it stands the same over the shelf and over Settings (it was 71 there and 62 on the shelf, 18.11.2026).
+    let _one = type_scale::panel(1.0);
     let (w, px, gap, shown) = pill_layout(text, c.w, hints);
     let (x0, y0) = (c.w - PAD - w, hint_bar_top(c.h));
     if crate::retro::on() {
-        crate::retro::frame(c, x0, y0, w, PILL, pal().pill);
+        crate::retro::frame(c, x0, y0, w, hint_h(), pal().pill);
     } else {
-        c.round_rect(x0, y0, w, PILL, PILL / 2, pal().pill);
+        c.round_rect(x0, y0, w, hint_h(), hint_h() / 2, pal().pill);
     }
     // For the snapshot checks of Settings → Text size: nothing else may run under the pill.
-    crate::text::boxes::area(c, (x0, y0, w, PILL), "‹hints›");
+    crate::text::boxes::area(c, (x0, y0, w, hint_h()), "‹hints›");
     let mut areas = Vec::new();
     let mut x = x0 + gap;
     for ((key, label), (kw, lw)) in shown {
-        let bw = (kw + 16).max(BUTTON);
+        let bw = (kw + 16).max(hint_key());
         let start = x;
-        let base = y0 + PILL / 2 + type_scale::mid(px);
-        key_cap(c, text, (x, y0 + (PILL - BUTTON) / 2, bw, BUTTON), key, px, base, (pal().chip, pal().pill));
+        let base = y0 + hint_h() / 2 + type_scale::mid(px);
+        key_cap(c, text, (x, y0 + (hint_h() - hint_key()) / 2, bw, hint_key()), key, px, base, (pal().chip, pal().pill));
         x += bw + gap;
         text.draw(c, Face::Body, px, x, base, pal().soft, label);
         x += lw + gap * 2;
-        crate::nav_probe::hint(c, (start, y0, x - start - gap, PILL), key, label);
+        crate::nav_probe::hint(c, (start, y0, x - start - gap, hint_h()), key, label);
         if let Some(b) = hint_button(key) {
-            areas.push((Area::new(start - gap, y0 - 8, x - start - gap, PILL + 16), b));
+            areas.push((Area::new(start - gap, y0 - 8, x - start - gap, hint_h() + 16), b));
         }
     }
     (x0, areas)
@@ -193,18 +220,20 @@ pub fn pill_width(text: &mut Text, screen_w: i32, hints: &[(&str, &str)]) -> i32
 /// The pill's width and the hints it shows with each key's and label's width (`pill_hints`).
 #[allow(clippy::type_complexity)]
 fn pill_layout<'a>(text: &mut Text, screen_w: i32, hints: &[(&'a str, &'a str)]) -> (i32, u32, i32, Vec<((&'a str, &'a str), (i32, i32))>) {
+    // Measured as `paint_bar` paints it: without a wide page's factor.
+    let _one = type_scale::panel(1.0);
     let hints = top_hints(hints, MAX_HINTS);
     // A fitting bar keeps its exact old spacing and type. Before losing a whole hint (French/Italian Details on the
     // Mini), close the gaps, then try slightly smaller letters. Only the last layout may drop a hint by priority.
     let layouts = [(SMALL, 15), (SMALL, 10), (SMALL, 6), (27, 6), (24, 6), (22, 6)];
     for (index, &(px, gap)) in layouts.iter().enumerate() {
-        let widths: Vec<(i32, i32)> = hints.iter().map(|(k, l)| (text.width(Face::Body, px, button_prompts::shown(k)).max(BUTTON - 16), text.width(Face::Body, px, l))).collect();
-        let whole: Vec<i32> = widths.iter().map(|(kw, lw)| (kw + 16).max(BUTTON) + gap + lw + gap * 2).collect();
+        let widths: Vec<(i32, i32)> = hints.iter().map(|(k, l)| (text.width(Face::Body, px, button_prompts::shown(k)).max(hint_key() - 16), text.width(Face::Body, px, l))).collect();
+        let whole: Vec<i32> = widths.iter().map(|(kw, lw)| (kw + 16).max(hint_key()) + gap + lw + gap * 2).collect();
         if whole.iter().sum::<i32>() + gap > screen_w - 2 * PAD && index + 1 < layouts.len() { continue; }
         let mut shown: Vec<_> = hints_shown(&hints, &whole, screen_w - 2 * PAD - gap).into_iter().map(|(i, h)| (h, widths[i])).collect();
         // A stands last, next to the face buttons, whichever order the page lists them in.
         shown.sort_by_key(|((key, _), _)| *key == "A");
-        let inner: i32 = shown.iter().map(|(_, (kw, lw))| (kw + 16).max(BUTTON) + gap + lw + gap * 2).sum();
+        let inner: i32 = shown.iter().map(|(_, (kw, lw))| (kw + 16).max(hint_key()) + gap + lw + gap * 2).sum();
         return (inner + gap, px, gap, shown);
     }
     unreachable!("last layout always taken")
@@ -224,7 +253,7 @@ pub fn footer(c: &mut Canvas, text: &mut Text, hits: &mut HitMap, hints: &[(&str
 /// `footer`'s explanation alone, beside a hint pill already painted that starts at `pill_x` (Settings' categories paint
 /// their hints first). Returns the y of the explanation's top.
 pub fn footer_text(c: &mut Canvas, text: &mut Text, desc: &str, pill_x: i32, lines: usize, color: u32) -> i32 {
-    let pill_top = c.h - PAD - PILL;
+    let pill_top = hint_bar_top(c.h);
     let wrapped = footer_lines(text, desc, c.w, pill_x, lines);
     let px = footer_px(text, desc, pill_x);
     let (left, step, last) = (PAD + BTN_PAD, type_scale::line(px, 10), footer_baseline(c.h));
@@ -249,8 +278,40 @@ pub fn footer_top(text: &mut Text, desc: &str, w: i32, h: i32, pill_x: i32, line
 
 /// The words of a line as it may break: at plain spaces only. A no-break space (French "Complet\u{a0}:") holds its two
 /// sides together; `split_whitespace` broke there and joined them again with a plain space, so ":" could start a line.
-fn words_of(line: &str) -> impl Iterator<Item = &str> {
-    line.split(' ').filter(|w| !w.is_empty())
+/// A lone "&" holds the words on both sides of it ("Lights & buttons", a page's name): it never starts or ends a line
+/// (18.11.2026: "& buttons." stood alone under "Settings › Controls › Lights" beside the flatter hint bar).
+fn words_of(line: &str) -> Vec<&str> {
+    // Each word's byte range in `line`.
+    let mut spans: Vec<(usize, usize)> = Vec::new();
+    let mut at = 0;
+    for w in line.split(' ') {
+        if !w.is_empty() {
+            spans.push((at, at + w.len()));
+        }
+        at += w.len() + 1;
+    }
+    let mut out: Vec<(usize, usize)> = Vec::new();
+    let mut i = 0;
+    while i < spans.len() {
+        let (mut a, mut b) = spans[i];
+        // This word, and an "&" after it with the word after that.
+        while i + 2 < spans.len() && &line[spans[i + 1].0..spans[i + 1].1] == "&" {
+            b = spans[i + 2].1;
+            i += 2;
+        }
+        if &line[a..b] == "&" {
+            // A leading "&" (or one at the end) joins what follows (or what precedes).
+            if let Some(next) = spans.get(i + 1) {
+                b = next.1;
+                i += 1;
+            } else if let Some(prev) = out.pop() {
+                a = prev.0;
+            }
+        }
+        out.push((a, b));
+        i += 1;
+    }
+    out.into_iter().map(|(a, b)| &line[a..b]).collect()
 }
 
 /// The lines `footer` paints `desc` in on a screen `screen_w` wide with the hint pill starting at `pill_x`: wrapped
@@ -277,8 +338,10 @@ pub fn footer_lines(text: &mut Text, desc: &str, screen_w: i32, pill_x: i32, lin
         let too_wide = |w: &str, text: &mut Text| text.width_plain(Face::Body, px, w) > column;
         // The words as painted: the paragraph in the interface's language (`wrap_prose` translates it as well).
         let shown = text.translated(p).to_string();
-        let unbroken = !words_of(&shown).any(|w| too_wide(w, text));
-        if k == narrow.len() && unbroken {
+        let unbroken = !words_of(&shown).into_iter().any(|w| too_wide(w, text));
+        // A line of the plain wrap that starts or ends at a lone "&" takes the way below, which keeps it with its words.
+        let at_ampersand = narrow.iter().any(|l| l.starts_with("& ") || l.ends_with(" &") || l == "&");
+        if k == narrow.len() && unbroken && !at_ampersand {
             parts.push(narrow);
             continue;
         }
@@ -288,7 +351,7 @@ pub fn footer_lines(text: &mut Text, desc: &str, screen_w: i32, pill_x: i32, lin
         // table's patterns, which Settings' first frame must not, tests/settings_pages.rs).
         let translating = text.translating();
         text.set_translate(false);
-        let mut words: Vec<&str> = if unbroken { narrow.iter().flat_map(|l| words_of(l)).collect() } else { words_of(&shown).collect() };
+        let mut words: Vec<&str> = if unbroken { narrow.iter().flat_map(|l| words_of(l)).collect() } else { words_of(&shown) };
         let mut beside: Vec<String> = Vec::new();
         for _ in 0..k {
             let mut line: Vec<&str> = Vec::new();
@@ -341,7 +404,7 @@ pub fn footer_lines(text: &mut Text, desc: &str, screen_w: i32, pill_x: i32, lin
 pub fn footer_px(text: &mut Text, desc: &str, pill_x: i32) -> u32 {
     let column = pill_x - 24 - (PAD + BTN_PAD);
     let shown = text.translated(desc).to_string();
-    if words_of(&shown).any(|w| text.width_plain(Face::Body, SMALL, w) > column) {
+    if words_of(&shown).into_iter().any(|w| text.width_plain(Face::Body, SMALL, w) > column) {
         crate::title_block::smaller(SMALL)
     } else {
         SMALL
@@ -350,7 +413,7 @@ pub fn footer_px(text: &mut Text, desc: &str, pill_x: i32) -> u32 {
 
 /// Where `footer` puts its last line when the explanation stands beside the pill: the baseline on the pill's line.
 pub fn footer_baseline(screen_h: i32) -> i32 {
-    screen_h - PAD - PILL / 2 + type_scale::mid(SMALL)
+    hint_bar_mid(screen_h) + type_scale::mid(SMALL)
 }
 
 /// The selection of a list row at (x, y), `w` x `h` (docs/DESIGN.md "Lists"): one sheet of the pulled-out label's
@@ -731,6 +794,21 @@ mod tests {
         crate::palette::set_colours(crate::palette::Colours::Warm);
         crate::retro::set_colours(crate::retro::Colours::Cocoa);
         assert!(faults.is_empty(), "{} key caps don't read:\n{}", faults.len(), faults.join("\n"));
+    }
+
+    /// "&" binds the words beside it: never at a line's start or end (a page's name, "Lights & buttons").
+    #[test]
+    fn a_footer_never_breaks_at_an_ampersand() {
+        assert_eq!(words_of("in Lights & buttons."), vec!["in", "Lights & buttons."]);
+        assert_eq!(words_of("A & B & C d"), vec!["A & B & C", "d"]);
+        assert_eq!(words_of("& x"), vec!["& x"]);
+        let mut text = Text::new();
+        text.set_translate(false);
+        let desc = "F1/F2 are shortcuts, not game buttons. Set them in Settings › Controls › Lights & buttons.";
+        for column in (200..1100).step_by(9) {
+            let out = footer_lines(&mut text, desc, column + 600, column + 24 + PAD + BTN_PAD, 8);
+            assert!(!out.iter().any(|l| l.starts_with('&') || l.ends_with('&')), "column {column}: {out:?}");
+        }
     }
 
     /// French typography holds "Complet\u{a0}:" together with a no-break space (Settings' Motion line, 18.11.2026):

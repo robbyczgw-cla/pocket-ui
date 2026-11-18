@@ -48,7 +48,7 @@ pub const HELP: &str = "Not encrypted, so use it on your own Wi-Fi at home. Noth
 /// QR code's size, which gives way to the warning rather than the other way round.
 pub fn layout(text: &mut Text, help: &str, w: i32, h: i32) -> (Vec<String>, i32, i32) {
     let width = w - 2 * MARGIN;
-    let bottom = h - crate::kit::PAD - crate::kit::PILL - 20;
+    let bottom = crate::kit::hint_bar_top(h) - 20;
     let lines = text.wrap_prose(Face::Body, 24, help, width);
     let help_top = bottom - lines.len() as i32 * (px(24) + 8);
     let q = (help_top - QR_TOP - 24).min(w * 42 / 100).min(620);
@@ -190,7 +190,7 @@ impl PhonePage {
     pub fn paint(&self, c: &mut Canvas, text: &mut Text) {
         let width = c.w - 2 * MARGIN;
         text.draw(c, Face::Title, 67, MARGIN, 140, pal().chalk, "Send from your phone");
-        let bottom = c.h - crate::kit::PAD - crate::kit::PILL - 20;
+        let bottom = crate::kit::hint_bar_top(c.h) - 20;
         if self.no_wifi {
             crate::kit::empty_state(
                 c,
@@ -339,7 +339,7 @@ mod tests {
                 assert!(lines.len() <= 4, "{w}x{h}: {} lines", lines.len());
                 assert!(q >= 300, "{w}x{h}: the code is only {q} px");
                 assert!(QR_TOP + q < help_top, "{w}x{h}: the code runs into the warning");
-                let bottom = h - crate::kit::PAD - crate::kit::PILL - 20;
+                let bottom = crate::kit::hint_bar_top(h) - 20;
                 assert!(help_top + lines.len() as i32 * (px(24) + 8) <= bottom, "{w}x{h}: the warning runs into the hints");
             }
         }

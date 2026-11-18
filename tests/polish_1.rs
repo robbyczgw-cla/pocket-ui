@@ -177,9 +177,11 @@ fn k(h: i32) -> f32 {
     if h <= 720 { h as f32 / 960.0 } else { 1.0 }
 }
 
-/// The first row of the bar of hints on a panel `h` lines high: 120 layout pixels over the bottom edge (`kit::hint_bar_top`).
+/// The first row of the bar of hints on a panel `h` lines high (`kit::hint_bar_top` on its layout, Normal text: 72 layout
+/// pixels over the bottom edge since the flat bar of 18.11.2026; it was 120).
 fn bar_top(h: i32) -> i32 {
-    (h as f32 - 120.0 * k(h)).ceil() as i32 + 1
+    let layout_h = if h <= 720 { 960 } else { h };
+    (h as f32 - (layout_h - pocket_ui::kit::hint_bar_top(layout_h)) as f32 * k(h)).ceil() as i32 + 1
 }
 
 fn dims(size: &str) -> (i32, i32) {
@@ -215,7 +217,8 @@ fn a_download_in_the_background_shows_a_dot_and_no_count() {
 /// (a home-made one's masking tape, `tape_label`) leaving it read as a header gone dark.
 fn areas(w: i32, h: i32) -> [(&'static str, (i32, i32, i32, i32)); 5] {
     [
-        ("header", (w * 7 / 20, 0, w, h / 5)),
+        // Right of the shown case: with the flat hint bar's room it reaches 880 of 1920 (18.11.2026), past 7/20 of the width.
+        ("header", (w / 2, 0, w, h / 5)),
         ("screen title", (0, 0, w * 7 / 20, h / 12)),
         ("hint bar", (0, bar_top(h), w, h)),
         ("shelf, left", (0, h * 11 / 20, w / 4, h * 17 / 20)),
@@ -276,7 +279,8 @@ fn the_console_stands_on_a_soft_shadow() {
         let shine = scene.kept(&rest, (0, 0, w, h / 5), true).expect("a lit header");
         // Just under the console's foot, in the middle: darker than the room's own dimming says.
         let layout_h = if h <= 720 { 960 } else { h };
-        let foot = ((layout_h - 138) as f32 * k(h)).round() as i32;
+        // The board the console stands on ends over the hints (`kit::content_bottom`); its foot 10 layout pixels higher.
+        let foot = ((pocket_ui::kit::content_bottom(layout_h) - 10) as f32 * k(h)).round() as i32;
         let under = (w * 2 / 5, foot + (2.0 * k(h)).ceil() as i32, w * 3 / 5, foot + (9.0 * k(h)).ceil() as i32);
         let kept = scene.kept(&rest, under, false).expect("a floor under the console");
         assert!(kept < shine * 0.8, "{size}: no shadow under the console: the floor keeps {kept:.2} where the room keeps {shine:.2}");

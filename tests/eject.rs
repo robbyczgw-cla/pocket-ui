@@ -297,9 +297,11 @@ fn the_way_back_hands_over_to_the_still_shelf_without_a_jump() {
     let stub = wayland(tmp.path());
     // A step at the hand-over measured on the device was 7.7 to 14 (mean per channel); the game sliding a little out
     // of its case afterwards is well under 1 a frame. Its first frame is the hand-over's: since the Shelf look shows
-    // its case 1.4 times as large (17.11.2026) a disc's slide covers about twice the pixels, 0.61 at 640x480.
+    // its case 1.4 times as large (17.11.2026) a disc's slide covers about twice the pixels, 0.61 at 640x480. The flat
+    // hint bar (18.11.2026) gave the room over the shelf 48 more lines at 640x480 and the shown case grows with it: a
+    // Saturn or Dreamcast disc sliding out measured 1.59 a frame, a steady slide, not a jump (the hand-over stays 0.80).
     const STILL: f64 = 0.8;
-    const AFTER: f64 = 1.5;
+    const AFTER: f64 = 1.75;
     let mut failures = Vec::new();
     for (system, rom) in [
         ("snes", "Chrono Trigger (USA).sfc"), ("n64", "Super Mario 64 (USA).z64"),

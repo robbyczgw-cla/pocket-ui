@@ -386,7 +386,7 @@ impl App {
         self.sheet_header(c, "Bluetooth");
         let (top, right) = (pad + NU_PILL + 12, c.w - pad);
         let rows = page.rows();
-        let list_bottom = c.h - pad - NU_PILL - 16 - DETAILS_H;
+        let list_bottom = pocket_ui::kit::hint_bar_top(c.h) - 16 - DETAILS_H;
         let visible = (((list_bottom - top) / row) as usize).max(3);
         let first = super::window_start(page.sel, visible, rows.len());
         if rows.len() > visible {

@@ -291,7 +291,11 @@ fn the_first_start_tears_the_film_off_frame_by_frame_and_it_stays_off() {
     let label_changed = bare_before.mask(&bare_after);
     let film_on_shelf: Vec<_> = shelf.mask(&shelf_after).into_iter().zip(label_changed).map(|(film, label)| film && !label).collect();
     let moved = film_at_a.iter().zip(&film_on_shelf).filter(|(a, b)| a != b).count();
-    assert!(moved < 150, "the first frame shows the shelf's film where it was ({moved} pixels elsewhere)");
+    // Relative to the film's own pixels (it was under 150 pixels): the shown case is larger with more room over the shelf
+    // (the flat hint bar, 18.11.2026), and its edge rounds a pixel differently: 54 of 15,604 film pixels before, 151 to
+    // 174 of 16,796 to 18,359 after (under 1 %). A film that jumped would be most of it; 2 % is the bound.
+    let film = film_on_shelf.iter().filter(|f| **f).count();
+    assert!(moved * 50 < film, "the first frame shows the shelf's film where it was ({moved} of its {film} pixels elsewhere)");
     // Every frame of the tear moves on from the one before by a part of the picture, never all at once.
     let area = (torn[0].w * torn[0].h) as usize;
     for k in 1..21 {

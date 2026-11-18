@@ -5,7 +5,7 @@
   </picture>
 </h1>
 
-<p align="center"><b>pocket-ui OS puts every game in its real box on your retro handheld:</b><br>
+<p align="center"><b>pocket-ui puts every game in its real box on your handheld:</b><br>
 take it off the shelf, click it in, and continue right where you stopped.</p>
 
 <p align="center">
@@ -13,7 +13,8 @@ take it off the shelf, click it in, and continue right where you stopped.</p>
 </p>
 
 <p align="center">
-  <a href="https://pocketui.xyz/install"><b>Get it</b></a> ·
+  <a href="https://pocketui.xyz/install"><b>SD card image for retro handhelds</b></a> ·
+  <a href="https://pocketui.xyz/install#android"><b>App for Android</b></a> ·
   <a href="https://pocketui.xyz/try">Try it in your browser</a> ·
   <a href="https://pocketui.xyz/#trailer">Watch the trailer</a>
 </p>
@@ -29,6 +30,25 @@ take it off the shelf, click it in, and continue right where you stopped.</p>
   </tr>
 </table>
 
+## Image or app?
+
+<table>
+  <tr>
+    <th width="50%">pocket-ui OS · SD card image</th>
+    <th width="50%">pocket-ui for Android · app</th>
+  </tr>
+  <tr>
+    <td valign="top">For retro handhelds from Anbernic, Retroid and AYN: flash the image to a microSD card, put it in,
+    switch on, and your handheld starts straight into the shelf, like a console. Your own system stays untouched; take
+    the card out and it's back. For the TrimUI Brick and Smart Pro there is a package you unzip onto a card.<br><br>
+    <b><a href="https://pocketui.xyz/install">Get the image</a></b> · <a href="../../releases/latest">Releases</a></td>
+    <td valign="top">Got an Android handheld with a built-in controller, like a Retroid Pocket or an AYN Odin 2? pocket-ui
+    runs there as an app: the same shelf, the same Continue, every emulator built in. Nothing to flash. A preview,
+    for Android 8 or newer.<br><br>
+    <b><a href="https://pocketui.xyz/install#android">Get the app (APK)</a></b></td>
+  </tr>
+</table>
+
 ## Why you'll like it
 
 - **Real cases.** Cartridges, jewel cases and big cardboard boxes, made from photos of the real things. Press X and
@@ -36,6 +56,8 @@ take it off the shelf, click it in, and continue right where you stopped.</p>
 - **In it goes.** The cartridge clicks into its console, the old TV flickers on, and you're playing. Quit, and it
   pops back out and goes home to the shelf.
 - **Continue.** Your last games wait half open on the shelf. One press and you're back in the very moment you left.
+- **The case knows your game.** For many favourites the box shows how far you got, read from your own save: items,
+  notes, the furthest mission, the game clock.
 - **One pause menu for every console.** Save slots with pictures, Earlier to jump back a few minutes, screen frames
   and CRT looks, from Game Boy to GameCube.
 
@@ -49,25 +71,16 @@ PC Engine, PlayStation, Nintendo 64, PSP, Dreamcast, Nintendo DS, Saturn, arcade
 handhelds, such as the AYN Odin 2, also PlayStation 2, GameCube, Wii and 3DS.
 [What plays on which handheld](https://pocketui.xyz/systems)
 
-### New in 0.5.1
+## What's new
 
-- **Bigger box art:** in the Shelf look the game you pick shows its box up to 1.4 times as large.
-- **A console beside the TV:** in the Cabinet, the selected game's console stands next to the TV, in the colour you
-  chose. The TV stays put while you switch shelves, and handheld games play on their own handheld.
-- **The case knows Banjo-Kazooie, Metroid Fusion and GoldenEye 007:** Jiggies and notes, items, your furthest mission.
-- **Sharper 3D** on the Retroid Pocket 5, 6, Mini and Flip 2 and the AYN Odin 2 family: N64, PSP and Dreamcast start at
-  2x. Change it in Options → Picture → Resolution.
-- **Clearer menus:** in Settings and the pause menu, a › means the row opens a page; ‹ › rows change with Left and Right.
-- **Quicker and smoother:** games start faster on H700 handhelds, and the Cabinet moves more smoothly on the TrimUI
-  Brick.
+Every release has its own notes on the [Releases page](../../releases), and [CHANGELOG.md](CHANGELOG.md) lists every
+version in one place. Updates come over Wi-Fi: pocket-ui OS and the app tell you when a new one is out.
 
-[Every version](CHANGELOG.md)
+## Get the image
 
-## Get it
+Three steps:
 
-Three steps, one card:
-
-1. **Download the card for your handheld** from [pocketui.xyz/install](https://pocketui.xyz/install) (about 1.2 GB).
+1. **Download the image for your handheld** from [pocketui.xyz/install](https://pocketui.xyz/install) (about 1.2 GB).
 2. **Flash it to a spare microSD card** with [balenaEtcher](https://etcher.balena.io) or Raspberry Pi Imager. No
    unzipping needed. 8 GB is enough (16 GB for the RG28XX and RG35XX 2024).
 3. **Card in the first slot, switch on.** It sets itself up, restarts once, and says hello: pick your language, your
@@ -78,26 +91,23 @@ games from your phone or computer over Wi-Fi (Settings → Games → Add games).
 
 | Brand | Models | |
 |---|---|---|
-| **Anbernic** | RG35XX Plus, RG35XX SP, RG35XX H, RG35XX Pro, RG35XX 2024, RG28XX, RG34XX, RG34XX-SP, RG40XX H, RG40XX V, RG CubeXX, RG-SP | [Card per model](https://pocketui.xyz/install#anbernic). Newer-screen Plus/SP and RG40XX H DDR3 have their own. Not the original RG35XX (2023). |
-| **Retroid** | Pocket Mini V2 | [Card](https://pocketui.xyz/install#retroid), plus one step: Boot mode → Loader. Android stays. |
-| **AYN** | Odin 2, Odin 2 Mini, Odin 2 Portal | [Card](https://pocketui.xyz/install#odin), after ROCKNIX's boot helper once. Android stays. |
-| **TrimUI** | Brick (incl. Brick Hammer), Smart Pro; Brick Pro experimental | [Unzip the card download onto an empty card](https://pocketui.xyz/install#brick), nothing is flashed. |
-| **Retroid, beta** | Pocket 5, Flip 2, Pocket 6, Pocket Nova | [Beta cards](https://pocketui.xyz/install#retroid-cards), see below. Android stays. |
+| **Anbernic** | RG35XX Plus, RG35XX SP, RG35XX H, RG35XX Pro, RG35XX 2024, RG28XX, RG34XX, RG34XX-SP, RG40XX H, RG40XX V, RG CubeXX, RG-SP | [Image per model](https://pocketui.xyz/install#anbernic). Newer-screen Plus/SP and RG40XX H DDR3 have their own. Not the original RG35XX (2023). |
+| **Retroid** | Pocket Mini V2 | [Image](https://pocketui.xyz/install#retroid), plus one step: Boot mode → Loader. Android stays. |
+| **AYN** | Odin 2, Odin 2 Mini, Odin 2 Portal | [Image](https://pocketui.xyz/install#odin), after ROCKNIX's boot helper once. Android stays. |
+| **TrimUI** | Brick (incl. Brick Hammer), Smart Pro; Brick Pro experimental | [Unzip the TrimUI package onto an empty card](https://pocketui.xyz/install#brick), nothing is flashed. |
+| **Retroid, beta** | Pocket 5, Flip 2, Pocket 6, Pocket Nova | [Beta images](https://pocketui.xyz/install#retroid-cards), see below. Android stays. |
 | **Already on ROCKNIX** | any of the above | [Add pocket-ui in five minutes, undo it any time](https://pocketui.xyz/install#way-1) |
 
-**Retroid beta cards:** on the Pocket 5 and Flip 2, start the card from Retroid's "Loader"; if the boot menu says
+**Retroid beta images:** on the Pocket 5 and Flip 2, start the card from Retroid's "Loader"; if the boot menu says
 "UEFI", set up OpenABL once with ROCKNIX's guide. The Pocket 6 and Nova start from Retroid's UEFI entry; if yours falls
-back to the boot menu, set up OpenABL once. Not the 12 GB models with the Visionox screen. These cards haven't started
+back to the boot menu, set up OpenABL once. Not the 12 GB models with the Visionox screen. These images haven't started
 on a real one yet, so testers are very welcome.
-
-**pocket-ui for Android** (preview): the same shelf as an app for Android handhelds, right next to your other apps.
-[Get the APK](https://pocketui.xyz/install#android).
 
 [All downloads](../../releases/latest)
 
 ## Quick answers
 
-- **Do I lose my stock system?** No. pocket-ui OS lives on its own card; swap cards to switch back. On Retroid and
+- **Do I lose my stock system?** No. pocket-ui OS runs from its own SD card; swap cards to switch back. On Retroid and
   AYN, Android stays where it is.
 - **My ROM folders and saves?** Bring them as they are: it reads the folder names other systems use and renames nothing.
   In-game saves (`.srm`, `.sav`) next to their game keep working; save states don't move between emulators.
@@ -111,6 +121,7 @@ More in the [FAQ](https://pocketui.xyz/faq).
 
 ## Learn more
 
+- [Try it in your browser](https://pocketui.xyz/try): the real pocket-ui, no install
 - [Guide](https://pocketui.xyz/guide): your first evening, with pictures
 - [Manual](docs/user/index.md): everything, page by page; also on the handheld under Settings → Help & tools
 - [What's new](CHANGELOG.md): every version

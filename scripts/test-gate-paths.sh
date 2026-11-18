@@ -554,10 +554,48 @@ mkdir -p "$T/names/tests"
 for suite in home_panel_labels spine_names text_size; do : >"$T/names/tests/$suite.rs"; done
 for changed_path in src/system_names.rs src/app_home_panel.rs assets/data/consoles.json src/library.rs; do
     picked=$(printf '%s\n' "$changed_path" | python3 "$ROOT/scripts/gate-parts.py" "$T/names" | sed -n "s/^heavy='\(.*\)'$/\1/p")
-    [ "$picked" = "home_panel_labels spine_names" ] || { echo "FAIL $changed_path picked '$picked'"; exit 1; }
+    for suite in home_panel_labels spine_names; do
+        case " $picked " in *" $suite "*) ;; *) echo "FAIL $changed_path picked '$picked'"; exit 1 ;; esac
+    done
     pass=$((pass + 1))
     echo "ok $changed_path runs the console-name suites"
 done
+# Each slow suite runs when its own layout inputs change (LAYOUT_INPUTS). 21b457727 (the Shelf look's box 1.4 times as large)
+# changed only these paths; the nightly run's connections found "gespielt" alone on a line (18.11.): its gate must run the
+# shelf suites.
+picked=$(printf 'CHANGELOG.md\ndocs/DESIGN.md\nsrc/app_cabinet.rs\n' | python3 "$ROOT/scripts/gate-parts.py" "$T/names" | sed -n "s/^heavy='\(.*\)'$/\1/p")
+for suite in connections home_panel_labels info_page; do
+    case " $picked " in *" $suite "*) ;; *) echo "FAIL 21b457727's paths picked '$picked', not $suite"; exit 1 ;; esac
+done
+pass=$((pass + 1))
+echo 'ok a change to the Shelf look (21b457727) runs the shelf suites'
+# The list pages' painters run list_space (a slow suite since 18.11.2026, sample in the merge gate); another page doesn't.
+: >"$T/names/tests/list_space.rs"
+picked=$(printf 'src/pause_page.rs\n' | python3 "$ROOT/scripts/gate-parts.py" "$T/names" | sed -n 's/^heavy=//p' | tr -d "'")
+case " $picked " in *" list_space "*) ;; *) echo "FAIL src/pause_page.rs picked '$picked', not list_space"; exit 1 ;; esac
+skipped=$(printf 'src/app_sync.rs\n' | python3 "$ROOT/scripts/gate-parts.py" "$T/names" | sed -n 's/^skip=//p' | tr -d "'")
+case " $skipped " in *" list_space "*) ;; *) echo "FAIL src/app_sync.rs did not leave list_space to the nightly run: skip='$skipped'"; exit 1 ;; esac
+pass=$((pass + 1))
+echo 'ok the list pages run list_space, other pages leave it to the nightly run'
+# Every source the input lists name is a real file (a misspelt or renamed one would quietly pick nothing), and every suite
+# they name is a HEAVY one.
+python3 - "$ROOT" <<'PY' || exit 1
+import importlib.util, re, sys
+from pathlib import Path
+root = Path(sys.argv[1])
+spec = importlib.util.spec_from_file_location("gate_parts", root / "scripts/gate-parts.py")
+gp = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(gp)
+text = (root / "scripts/gate-parts.py").read_text()
+names = {n for v in re.findall(r'^_[A-Z_]+ = r"([^"]+)"', text, re.M) for n in v.split("|")}
+missing = sorted(n for n in names if not (root / "src" / f"{n}.rs").exists())
+unknown = sorted(set(gp.LAYOUT_INPUTS) - set(gp.HEAVY))
+if missing or unknown:
+    print(f"FAIL layout inputs: no src/<name>.rs for {missing}; not HEAVY: {unknown}")
+    sys.exit(1)
+PY
+pass=$((pass + 1))
+echo 'ok every layout input names a real source and a slow suite'
 # The proof behind GATE_SOURCES_STAMPED: a copy by rsync --checksum --no-times is rebuilt by cargo wherever a source changed.
 sh "$ROOT/scripts/test-gate-stamp.sh" >"$T/stamp.out" 2>&1 || { echo 'FAIL source stamping'; cat "$T/stamp.out"; exit 1; }
 pass=$((pass + 1))
