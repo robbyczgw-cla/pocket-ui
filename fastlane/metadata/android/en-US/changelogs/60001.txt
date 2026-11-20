@@ -1,0 +1,7 @@
+• A first start made for Android: finds your games folders, offers your emulator apps for PS2, GameCube and more, shows missing BIOS
+• Games go in like the real thing: old-TV switch-on and off, real cartridge, disc and CRT sounds
+• Mode 7 HD for Super Nintendo
+• RomM: pair your server once, its games stand on the shelf
+• Pocket Sync with your other Pockets
+• New installs open in the Handheld view
+• Fixes: Before load, saves, time zones
