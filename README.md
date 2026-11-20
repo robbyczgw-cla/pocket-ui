@@ -40,7 +40,8 @@ take it off the shelf, click it in, and continue right where you stopped.</p>
   <tr>
     <td valign="top">For retro handhelds from Anbernic, Retroid and AYN: flash the image to a microSD card, put it in,
     switch on, and your handheld starts straight into the shelf, like a console. Your own system stays untouched; take
-    the card out and it's back. For the TrimUI Brick and Smart Pro there is a package you unzip onto a card.<br><br>
+    the card out and it's back. For the TrimUI Brick and Smart Pro there is a package you unzip onto a card.
+    Already playing on dArkOS? The pocket-ui beta for dArkOS starts right from its Ports menu.<br><br>
     <b><a href="https://pocketui.xyz/install">Get the image</a></b> · <a href="../../releases/latest">Releases</a></td>
     <td valign="top">Got an Android handheld with a built-in controller, like a Retroid Pocket or an AYN Odin 2? pocket-ui
     runs there as an app: the same shelf, the same Continue, its own player for the classic consoles built in, and the
@@ -62,15 +63,47 @@ take it off the shelf, click it in, and continue right where you stopped.</p>
 - **One pause menu for every console.** Save slots with pictures, Earlier to jump back a few minutes, screen frames
   and CRT looks, from Game Boy to GameCube.
 
-Plus a Retro look in one switch, games sent from your phone, Game check, Kids Mode and updates over Wi-Fi.
+Plus a Retro look in one switch, games sent from your phone, the games of your own RomM server right on the shelf,
+Game check, Kids Mode and updates over Wi-Fi.
 [See everything it does](https://pocketui.xyz/features).
 
 No account, no tracking, free and open source. Menus in English, German, Spanish, Brazilian Portuguese, French and Italian.
 
 **What it plays:** Game Boy, Game Boy Color and Advance, NES, Super Nintendo, Mega Drive, Master System, Game Gear,
 PC Engine, PlayStation, Nintendo 64, PSP, Dreamcast, Nintendo DS, Saturn, arcade and PortMaster ports. On the stronger
-handhelds, such as the AYN Odin 2, also PlayStation 2, GameCube, Wii and 3DS.
+handhelds, such as the AYN Odin 2, also PlayStation 2, GameCube, Wii and 3DS. Nintendo DS games feel at home without a
+touchscreen too: the stylus moves with the D-pad and one button flips the screen layout, and on the TrimUI and the
+smaller Anbernic handhelds DSperate, a faster DS player, runs them.
 [What plays on which handheld](https://pocketui.xyz/systems)
+
+## Your Pockets, in step
+
+Play in the evening on one handheld, carry on the next morning on another, with the very same save. **Pocket Sync**
+keeps your saves the same on all your Pockets, straight from Pocket to Pocket over your home Wi-Fi or your Tailscale.
+No computer, no account, no cloud.
+
+- **Pair once** with a six-digit code. After every game the new saves go to the others, and a Pocket that wakes up
+  fetches what they saved meanwhile.
+- **As many Pockets as you like**, none of them a server. A Pocket at work finds the one at home over Tailscale.
+- **Nothing is ever overwritten.** Played the same game on two Pockets? You pick the version to keep, and you're asked
+  once.
+- **You see what came in**: "New save from TrimUI Brick · Golden Sun" on the shelf, and each paired Pocket with its last
+  sync.
+- **Where it runs:** pocket-ui OS, the TrimUI package and pocket-ui for Android (in the Handheld view, while the app
+  is open). Switch it on under Settings → Connections → Pocket Sync.
+
+## Your shelf in any browser
+
+Switch on the **web companion** (Settings → Connections → Web companion) and open your Pocket on your phone or computer,
+on your home Wi-Fi or over Tailscale:
+
+- **Your library**: every system and game with its box art, a search over all your games, your play time, status, rating
+  and notes. Change something there and the Pocket follows at once.
+- **Upload a game** and it lands in the right system's folder and stands on your shelf, its cover coming along by
+  itself when the Pocket is online. BIOS files and PortMaster files upload just as easily.
+- **Your play history**, the battery, and a look at what's on the Pocket's screen right now.
+
+A browser on your Wi-Fi pairs once with a code or a QR code, and the companion stays off until you switch it on.
 
 ## What's new
 
@@ -97,6 +130,7 @@ games from your phone or computer over Wi-Fi (Settings → Games → Add games).
 | **AYN** | Odin 2, Odin 2 Mini, Odin 2 Portal | [Image](https://pocketui.xyz/install#odin), after ROCKNIX's boot helper once. Android stays. |
 | **TrimUI** | Brick (incl. Brick Hammer), Smart Pro; Brick Pro experimental | [Unzip the TrimUI package onto an empty card](https://pocketui.xyz/install#brick), nothing is flashed. |
 | **Retroid, beta** | Pocket 5, Flip 2, Pocket 6, Pocket Nova | [Beta images](https://pocketui.xyz/install#retroid-cards), see below. Android stays. |
+| **Already on dArkOS** | dArkOS handhelds with 640×480 screens, including the R36S | [pocket-ui beta for dArkOS](https://pocketui.xyz/install#darkos): unzip it into the Ports folder, nothing is flashed. |
 | **Already on ROCKNIX** | any of the above | [Add pocket-ui in five minutes, undo it any time](https://pocketui.xyz/install#way-1) |
 
 **Retroid beta images:** on the Pocket 5 and Flip 2, start the card from Retroid's "Loader"; if the boot menu says
