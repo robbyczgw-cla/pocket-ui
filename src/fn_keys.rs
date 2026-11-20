@@ -62,7 +62,12 @@ pub fn kids_keys(on: bool, data_dir: &Path) -> Result<bool, String> {
     if !rocknix_handles_volume(Path::new("/")) {
         return Ok(false);
     }
-    let cfg_path = Path::new(crate::standalone::SYSTEM_CFG);
+    kids_keys_at(on, data_dir, Path::new(crate::standalone::SYSTEM_CFG), || {
+        let _ = Command::new("systemctl").args(["restart", "input.service"]).stdin(Stdio::null()).stdout(Stdio::null()).stderr(Stdio::null()).status();
+    })
+}
+
+fn kids_keys_at(on: bool, data_dir: &Path, cfg_path: &Path, restart: impl FnOnce()) -> Result<bool, String> {
     let keep = data_dir.join(KIDS_KEEP);
     let mut changed = false;
     crate::system_cfg::SystemCfg::at(cfg_path)
@@ -83,9 +88,7 @@ pub fn kids_keys(on: bool, data_dir: &Path) -> Result<bool, String> {
             }
         })
         .map_err(|e| e.to_string())?;
-    if changed {
-        let _ = Command::new("systemctl").args(["restart", "input.service"]).stdin(Stdio::null()).stdout(Stdio::null()).stderr(Stdio::null()).status();
-    }
+    if changed { restart(); }
     Ok(changed)
 }
 
@@ -222,4 +225,23 @@ mod tests {
         assert!(rocknix_handles_volume(&root));
         assert!(!rocknix_handles_volume(&root.join("nothing")));
     }
+    #[test]
+    fn file_source_rule_kids_key_restore() {
+        let d=TestDir::new("kids-keys-file-rule");
+        let cfg=d.join("system.cfg"); let keep=d.join(KIDS_KEEP);
+        let original="a=1\nkey.hotkey.a=BTN_MODE\nkey.volume.up=custom-up\n";
+        let (closed,kept)=kids_closed(original);
+        for (label,bytes) in crate::file_faults::faults(kept.as_bytes()) {
+            std::fs::write(&cfg,&closed).unwrap(); let _=std::fs::remove_file(&keep);
+            if let Some(bytes)=bytes { std::fs::write(&keep,bytes).unwrap(); }
+            let restarted=std::cell::Cell::new(false);
+            assert!(kids_keys_at(false,&d,&cfg,||restarted.set(true)).unwrap(),"{label}");
+            assert!(restarted.get()); assert!(!keep.exists());
+            let reopened=std::fs::read_to_string(&cfg).unwrap();
+            assert!(reopened.contains("a=1\n"),"{label}: {reopened}");
+            assert!(!reopened.contains("kids-mode-closed"),"{label}: {reopened}");
+            if label=="valid" { assert_eq!(reopened,original); }
+        }
+    }
+
 }

@@ -215,6 +215,9 @@ pub enum DialogKind {
     OpenEs,
     /// The rescue page's reset: Cancel, Reset.
     Reset,
+    /// Settings → Games → Shelf space switched on with this many places: Cancel, the games played last, the favourites
+    /// (`shelf_space::Fill`, `app_crate`).
+    ShelfSpace(u32),
 }
 
 /// A choice in a dialog.
@@ -227,6 +230,10 @@ pub enum Choice {
     Reset,
     /// "Report a problem": the dialog is where a player looks when something is wrong (`app_report`).
     Report,
+    /// Shelf space: the games played last go on the shelf first.
+    FillRecent,
+    /// Shelf space: the favourites go on the shelf first.
+    FillFavourites,
 }
 
 impl Choice {
@@ -239,6 +246,8 @@ impl Choice {
             Choice::OpenEs => "Open EmulationStation",
             Choice::Reset => "Reset settings",
             Choice::Report => crate::report::ROW,
+            Choice::FillRecent => "The games I played last",
+            Choice::FillFavourites => "My favourites",
         }
     }
 
@@ -251,6 +260,8 @@ impl Choice {
             Choice::OpenEs if crate::darkos::host() => "Back to EmulationStation", Choice::OpenEs => "Open EmulationStation",
             Choice::Reset => "Reset settings",
             Choice::Report => crate::report::ROW,
+            Choice::FillRecent => "The games I played last",
+            Choice::FillFavourites => "My favourites",
         }
     }
 }
@@ -299,6 +310,7 @@ impl Dialog {
             DialogKind::Leave => "Leave pocket-ui?",
             DialogKind::OpenEs => "Open EmulationStation?",
             DialogKind::Reset => "Reset pocket-ui settings?",
+            DialogKind::ShelfSpace(_) => "Which games go on the shelf?",
         }
     }
 
@@ -316,6 +328,9 @@ impl Dialog {
                 "Games, saves and the passwords for file sharing and remote access stay. pocket-ui then starts like new, with the first-start setup."
                     .to_string(),
             ],
+            DialogKind::ShelfSpace(n) => vec![format!(
+                "The shelf has room for {n} games. The others go into the crate under it: open Crate on Home to swap one out and one in."
+            )],
         }
     }
 
@@ -325,6 +340,7 @@ impl Dialog {
             DialogKind::Leave => &[Choice::Cancel, Choice::RestartUi, Choice::Report, Choice::OpenEs],
             DialogKind::OpenEs => &[Choice::Cancel, Choice::OpenEs],
             DialogKind::Reset => &[Choice::Cancel, Choice::Reset],
+            DialogKind::ShelfSpace(_) => &[Choice::Cancel, Choice::FillRecent, Choice::FillFavourites],
         }
     }
 
@@ -361,7 +377,7 @@ pub fn exit_code(c: Choice) -> Option<i32> {
     match c {
         Choice::RestartUi | Choice::BackToNextui => Some(RESTART_CODE),
         Choice::OpenEs => Some(OPEN_ES_CODE),
-        Choice::Cancel | Choice::Reset | Choice::Report => None,
+        Choice::Cancel | Choice::Reset | Choice::Report | Choice::FillRecent | Choice::FillFavourites => None,
     }
 }
 

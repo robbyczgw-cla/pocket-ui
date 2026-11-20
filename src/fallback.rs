@@ -63,6 +63,13 @@ pub fn should_retry(exit_ok: bool, start: StartOutcome, quit_requested: bool, re
     !exit_ok && start == StartOutcome::NoFrame && !quit_requested && !missing_bios && !refused
 }
 
+/// Whether a failed pocket-core start may retry with `next`, the route's next choice: only a real other emulator. pocket-core
+/// again would fail again for ever; an empty name (the TrimUI Brick has no RetroArch) started nothing, exited at once, and
+/// its "damaged file" notice hid why the game didn't start (a PSP game on the Brick, 20.11.2026).
+pub fn retry_with(next: &str) -> bool {
+    !next.is_empty() && next != "pocket-core"
+}
+
 /// A run that ends with an error this soon never got the game on the screen: a damaged file, a missing BIOS.
 pub const NEVER_STARTED_SECS: u64 = 5;
 
@@ -143,6 +150,15 @@ pub fn notice(emulator: &str) -> String {
 mod tests {
     use super::*;
     use crate::testutil::TestDir;
+
+    /// 20.11.2026, Brick: PPSSPP crashed, the retry went to "" ("emulator , core "), which exited at once with a
+    /// "damaged file" notice. Only a real other emulator is a retry.
+    #[test]
+    fn no_retry_without_another_emulator() {
+        assert!(!retry_with(""), "an empty next choice starts nothing");
+        assert!(!retry_with("pocket-core"), "pocket-core again fails again");
+        assert!(retry_with("retroarch"));
+    }
 
     #[test]
     fn a_system_without_a_bios_never_sends_the_player_looking_for_one() {

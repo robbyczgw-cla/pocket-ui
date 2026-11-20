@@ -285,6 +285,26 @@ mod tests {
     use super::*;
     use crate::testutil::TestDir;
 
+    #[test]
+    fn file_source_rule_cheat_download_status() {
+        let dir=TestDir::new("cheat-status-file-rule");
+        let source=fixture(&dir);
+        for target in [&source.descriptor,&source.destination] {
+            let descriptor=std::fs::read(&source.descriptor).unwrap();
+            let pack=std::fs::read(&source.destination).unwrap();
+            let seed=std::fs::read(target).unwrap();
+            for (label,bytes) in crate::file_faults::faults(&seed) {
+                std::fs::write(&source.descriptor,&descriptor).unwrap();std::fs::write(&source.destination,&pack).unwrap();
+                let _=std::fs::remove_file(target);if let Some(bytes)=bytes {std::fs::write(target,bytes).unwrap();}
+                let facts=source.inspect(&Cancel::new());
+                if label=="valid" {assert!(facts.available && facts.installed.is_some());assert!(!facts.update);}
+                let mut page=Page::new(source.clone());page.facts=facts;
+                for online in [true,false] {let row=page.row(online);assert!(!row.name.trim().is_empty() && !row.value.trim().is_empty() && !row.desc.trim().is_empty(),"{label}");}
+            }
+            std::fs::write(&source.descriptor,&descriptor).unwrap();std::fs::write(&source.destination,&pack).unwrap();
+        }
+    }
+
     fn fixture(dir: &Path) -> Source {
         let source = Source::for_card(dir);
         std::fs::create_dir_all(source.descriptor.parent().unwrap()).unwrap();

@@ -92,6 +92,23 @@ pub fn own_core(system: &str, gambatte: bool) -> Option<&'static str> {
     }
 }
 
+/// Named built-in DS choices share the same preference map as installed apps.
+pub fn own_choice(value:&str)->bool {
+    value==OWN || matches!(value,"own:dsperate"|"own:melondsds")
+}
+
+pub fn selected_own_core(system:&str,gambatte:bool,game:Option<&str>,console:Option<&str>)->Option<&'static str> {
+    if system=="nds" {
+        let chosen=game.filter(|c|own_choice(c)).or(console);
+        match chosen {
+            Some("own:dsperate")=>return Some("dsperate"),
+            Some("own:melondsds")=>return Some("melondsds"),
+            _=>{},
+        }
+    }
+    own_core(system,gambatte)
+}
+
 /// The emulator profile of a system, as `installedApps` asks for it ("psp", "dolphin", "retroarch:mupen64plus_next").
 /// `system` is the library's id (the Mobile view's) or ROCKNIX's name ("wii" is GameCube / Wii here).
 pub fn profile_of(system: &str) -> Option<&'static str> {
@@ -120,7 +137,7 @@ pub fn profiles_asked<'a>(systems: impl IntoIterator<Item = &'a str>) -> String 
 /// comes back (it is never removed from the file).
 pub fn chosen_app<'a>(own: bool, game: Option<&str>, system: Option<&str>, apps: &'a [PhoneApp]) -> Option<&'a PhoneApp> {
     if let Some(chosen) = game {
-        if chosen == OWN {
+        if own_choice(chosen) {
             if own {
                 return None;
             }
@@ -145,7 +162,7 @@ impl Phone {
     /// What a game of `system` starts in, given its own choice and its system's (`plays_with_game`, `plays_with`).
     pub fn way(&self, system: &str, game: Option<&str>, system_choice: Option<&str>) -> Way {
         let apps = self.apps_for(system);
-        let own = own_core(system, self.gambatte);
+        let own = selected_own_core(system, self.gambatte, game, system_choice);
         if let Some(app) = chosen_app(own.is_some(), game, system_choice, apps) {
             return Way::App(app.clone());
         }
@@ -293,6 +310,17 @@ pub fn json_with_prefs(old: &str, prefs: &Prefs) -> String {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn ds_choices_are_shared_by_both_android_views_and_keep_melonds_as_default() {
+        use super::*;
+        let phone=Phone {cores:["dsperate".into(),"melondsds".into()].into(),..Default::default()};
+        assert_eq!(phone.way("nds",None,None),Way::Own {core:"melondsds".into()});
+        assert_eq!(phone.way("nds",None,Some("own:dsperate")),Way::Own {core:"dsperate".into()});
+        assert_eq!(phone.way("nds",Some("own:melondsds"),Some("own:dsperate")),Way::Own {core:"melondsds".into()});
+        assert_eq!(phone.way("nds",Some(OWN),Some("own:dsperate")),Way::Own {core:"melondsds".into()});
+        let apps=vec![PhoneApp {package:"test.ds.app".into(),label:"Installed DS app".into()}];
+        assert!(chosen_app(true,Some("own:dsperate"),Some("test.ds.app"),&apps).is_none());
+    }
     use super::*;
 
     fn app(package: &str, label: &str) -> PhoneApp {

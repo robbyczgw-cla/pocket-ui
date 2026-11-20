@@ -21,7 +21,8 @@ virtual device shows a working panel although it has no backlight, radios, batte
 | HOME tap | shelf (not in games: there it is the pause menu) | quick settings | pocket-ui |
 | pause menu → Quick settings | any game with a pause menu | quick settings over the paused game; B/HOME back to the menu | pocket-ui |
 
-The OSD is a dark pill at the top centre (`src/osd.rs`): name, level bar, value. On the shelf pocket-ui draws it;
+The OSD is a dark pill at the top centre (`src/osd.rs`): name, level bar, value. On the Brick's 1024x768 it takes the
+Plus's share of the width and sits just under the header's band, clear of the clock and a page's title (`osd::frame`). On the shelf pocket-ui draws it;
 over a pocket-core game it sends `osd Name|value|fraction|centred` into pocket-core's command FIFO and the overlay
 (`src/overlay.rs`) draws the same pill as a texture. RetroArch and the standalone emulators get no OSD (the
 changes still apply). With no game of its own running, pocket-ui still offers the line to pocket-core's FIFO: a
@@ -459,7 +460,7 @@ software copy. `dim` is saved in `display.json` (on the worker), so pocket-core 
 The multiply keeps the contrast ratio, so text reads as at the floor, only darker (`display::tests::extra_dim_keeps_text_readable`).
 Snapshots: `sys:quick-dim:<1-3>`, `sys:osd-dim:<1-3>`.
 
-Desktop check of the layouts without any device: `pocket-ui --snapshot sys:<quick[:row]|quick-muted|power-off|restart|time|regions|zones|search|osd-volume|osd-brightness|osd-warmth|quick-dim:<1-3>|osd-dim:<1-3>> out.png`
+Desktop check of the layouts without any device: `pocket-ui --snapshot sys:<quick[:row]|quick-muted|power-off|restart|time|regions|zones|search|osd-volume|quick-osd|osd-brightness|osd-warmth|quick-dim:<1-3>|osd-dim:<1-3>> out.png`
 (`POCKETUI_MOCK=1`, `POCKETUI_DATA=<scratch dir>`).
 
 ## Files

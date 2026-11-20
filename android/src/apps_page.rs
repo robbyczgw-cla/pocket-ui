@@ -21,13 +21,7 @@ pub struct AndroidApp {
     pub icon: Option<AppIcon>,
 }
 
-/// An app's icon, already muted (`mute`): 0xAARRGGBB.
-#[derive(Clone, Debug, PartialEq)]
-pub struct AppIcon {
-    pub w: u32,
-    pub h: u32,
-    pub px: Vec<u32>,
-}
+pub use pocket_ui::android_games::{AppIcon, read_icon, mute};
 
 #[derive(Default)]
 pub struct AppsUi {
@@ -44,32 +38,6 @@ pub fn parse(json: &str, icon: impl Fn(&str) -> Option<AppIcon>) -> Vec<AndroidA
     pocket_ui::android_games::parse(json)
         .into_iter()
         .map(|a| AndroidApp { icon: (!a.icon.is_empty()).then(|| icon(&a.icon)).flatten(), package: a.package, label: a.label, game: a.game })
-        .collect()
-}
-
-/// An icon file of `AppDrawer.writeIcon` (two big-endian ints, width and height, then ARGB pixels), muted. A file
-/// that says something else is no icon.
-pub fn read_icon(path: &str) -> Option<AppIcon> {
-    let bytes = std::fs::read(path).ok()?;
-    let int = |at: usize| Some(u32::from_be_bytes(bytes.get(at..at + 4)?.try_into().ok()?));
-    let (w, h) = (int(0)?, int(4)?);
-    if w == 0 || h == 0 || w > 512 || h > 512 || bytes.len() != 8 + 4 * (w * h) as usize {
-        return None;
-    }
-    let px = (0..(w * h) as usize).map(|i| int(8 + 4 * i).unwrap_or(0)).collect();
-    Some(AppIcon { w, h, px: mute(px) })
-}
-
-/// Bright app colours, quietened for the shelf: four fifths grey (by brightness), a little less opaque.
-pub fn mute(px: Vec<u32>) -> Vec<u32> {
-    px.into_iter()
-        .map(|p| {
-            let a = p >> 24;
-            let (r, g, b) = ((p >> 16) & 0xff, (p >> 8) & 0xff, p & 0xff);
-            let y = (r * 299 + g * 587 + b * 114) / 1000;
-            let grey = (y << 16) | (y << 8) | y;
-            (a * 85 / 100) << 24 | pocket_ui::gfx::mix(p & 0xff_ffff, grey, 200)
-        })
         .collect()
 }
 
@@ -324,9 +292,7 @@ impl Ui {
                 kit::shelf_row(&mut clip, x, cy, card_w, card_h, selected);
                 let (fg, quiet) = if selected { (pal().ink, pal().ink) } else { (pal().chalk, pal().dust) };
                 let ix = x + self.d(12.0);
-                if let Some(icon) = &app.icon {
-                    paint_icon(&mut clip, icon, ix, cy + (card_h - icon_s) / 2, icon_s);
-                }
+                pocket_ui::android_games::paint_app_icon(&mut clip, text, app.icon.as_ref(), ix, cy + (card_h - icon_s) / 2, icon_s, fg);
                 let tx = ix + icon_s + self.d(12.0);
                 let tw = x + card_w - self.d(10.0) - tx;
                 let note = self.app_note(app);
@@ -352,19 +318,5 @@ impl Ui {
             }
         }
         self.scrollbar(c, top, view, rows * pitch - gap);
-    }
-}
-
-/// An icon `s` square at (x, y), over what is there (its own transparency kept).
-fn paint_icon(c: &mut Canvas, icon: &AppIcon, x: i32, y: i32, s: i32) {
-    for dy in 0..s {
-        let sy = (dy as u32 * icon.h / s as u32) as usize;
-        for dx in 0..s {
-            let p = icon.px[sy * icon.w as usize + (dx as u32 * icon.w / s as u32) as usize];
-            let a = (p >> 24) as u8;
-            if a > 0 {
-                c.blend(x + dx, y + dy, p & 0xff_ffff, a);
-            }
-        }
     }
 }

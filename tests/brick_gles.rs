@@ -9,21 +9,28 @@
 use std::process::{Command, Stdio};
 use std::time::{Duration, Instant};
 
-const CORE: &str = r#"
-#include <stdbool.h>
-#include <stdint.h>
-#include <stddef.h>
-#include <string.h>
-struct info { const char *name, *version, *exts; bool need_fullpath, block_extract; };
-struct av { unsigned bw, bh, mw, mh; float aspect; double fps, rate; };
-struct game { const char *path; const void *data; size_t size; const char *meta; };
+const CORE: &str = concat!(r#"#define WIDTH 64
+#define HEIGHT 48
+#define FPS 60.0
+#define RATE 48000.0
+#define NO_SRAM
+#define retro_load_game stub_default_load
+#define retro_run stub_default_run
+#define retro_serialize_size stub_default_size
+#define retro_serialize stub_default_serialize
+#define retro_unserialize stub_default_unserialize
+
+"#, include_str!("../scripts/crash-sweep/stub-core.c"), r#"
+#undef retro_load_game
+#undef retro_run
+#undef retro_serialize_size
+#undef retro_serialize
+#undef retro_unserialize
 typedef void (*reset_fn)(void);
 typedef uintptr_t (*fb_fn)(void);
 typedef void *(*proc_fn)(const char *);
 struct hw { unsigned type; reset_fn reset; fb_fn fb; proc_fn proc; bool depth, stencil, bottom_left; unsigned major, minor; bool cache; reset_fn destroy; bool debug; };
-typedef bool (*env_fn)(unsigned, void *);
-typedef void (*video_fn)(const void *, unsigned, unsigned, size_t);
-static env_fn env; static video_fn video; static struct hw hw; static int resets, frames;
+static struct hw hw; static int resets, frames;
 static void (*BindFramebuffer)(unsigned, unsigned); static void (*Viewport)(int, int, int, int); static void (*ClearColor)(float, float, float, float);
 static void (*Clear)(unsigned); static void (*Enable)(unsigned); static void (*Disable)(unsigned); static void (*Scissor)(int, int, int, int);
 static void context_reset(void) {
@@ -32,26 +39,13 @@ static void context_reset(void) {
     Clear = hw.proc("glClear"); Enable = hw.proc("glEnable"); Disable = hw.proc("glDisable"); Scissor = hw.proc("glScissor");
 }
 static void context_destroy(void) {}
-void retro_set_environment(env_fn f) { env = f; }
-void retro_set_video_refresh(video_fn f) { video = f; }
-void retro_set_audio_sample(void *f) {}
-void retro_set_audio_sample_batch(void *f) {}
-void retro_set_input_poll(void *f) {}
-void retro_set_input_state(void *f) {}
-void retro_set_controller_port_device(unsigned port, unsigned device) {}
-unsigned retro_api_version(void) { return 1; }
-void retro_init(void) {}
-void retro_deinit(void) {}
-void retro_get_system_info(struct info *i) { memset(i, 0, sizeof *i); i->name = "glstub"; i->exts = "n64"; i->need_fullpath = true; }
-void retro_get_system_av_info(struct av *a) { memset(a, 0, sizeof *a); a->bw = a->mw = 64; a->bh = a->mh = 48; a->fps = 60; a->rate = 48000; }
 bool retro_load_game(const struct game *g) {
     unsigned xrgb = 1; env(10, &xrgb);
     memset(&hw, 0, sizeof hw); hw.type = 4; hw.reset = context_reset; hw.destroy = context_destroy; hw.bottom_left = true; hw.major = 3;
     return env(14, &hw);
 }
-void retro_unload_game(void) {}
-void retro_reset(void) {}
 void retro_run(void) {
+    stub_sound();
     if (!BindFramebuffer) { video(NULL, 64, 48, 0); return; }
     BindFramebuffer(0x8D40, (unsigned)hw.fb());
     Viewport(0, 0, 64, 48);
@@ -63,13 +57,11 @@ void retro_run(void) {
     frames++;
     video((const void *)(uintptr_t)-1, 64, 48, 0);
 }
-size_t retro_serialize_size(void) { return 0; }
-bool retro_serialize(void *d, size_t s) { return false; }
-bool retro_unserialize(const void *d, size_t s) { return false; }
-void *retro_get_memory_data(unsigned id) { return NULL; }
-size_t retro_get_memory_size(unsigned id) { return 0; }
-"#;
 
+size_t retro_serialize_size(void) { return 0; }
+bool retro_serialize(void *d, size_t s) { (void)d; (void)s; return false; }
+bool retro_unserialize(const void *d, size_t s) { (void)d; (void)s; return false; }
+"#);
 fn wait_for(what: &str, mut ok: impl FnMut() -> bool) -> bool {
     let start = Instant::now();
     while !ok() {
@@ -87,7 +79,7 @@ fn a_gles_core_reaches_the_screen_upright_through_the_read_back() {
     let dir = tempfile::tempdir().unwrap();
     let d = dir.path();
     std::fs::write(d.join("core.c"), CORE).unwrap();
-    let built = Command::new("cc").args(["-shared", "-fPIC", "-o"]).arg(d.join("glstub_libretro.so")).arg(d.join("core.c")).status().unwrap();
+    let built = Command::new("cc").args(["-shared", "-fPIC", "-o"]).arg(d.join("glstub_libretro.so")).arg(d.join("core.c")).arg("-lm").status().unwrap();
     assert!(built.success(), "the stub core doesn't build");
     std::fs::write(d.join("game.n64"), b"stub").unwrap();
     let (w, h) = (64u32, 48u32);

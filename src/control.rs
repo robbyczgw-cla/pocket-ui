@@ -32,7 +32,7 @@ pub fn pocket_core(cmd: &str) -> bool {
     std::fs::OpenOptions::new()
         .write(true)
         .custom_flags(libc::O_NONBLOCK)
-        .open("/tmp/pocket-core.cmd")
+        .open(if std::env::var_os("POCKET_CORE_TEST").is_some() { std::env::temp_dir().join("pocket-core.cmd") } else { std::path::PathBuf::from("/tmp/pocket-core.cmd") })
         .and_then(|mut f| writeln!(f, "{cmd}"))
         .is_ok()
 }

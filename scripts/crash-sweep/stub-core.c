@@ -4,8 +4,8 @@
  * the fade-in after the Cabinet's hand-over, the queue, the writer), reads the pad, keeps a battery save that changes
  * as it plays, and saves and loads its state (the frame count and the save, so a kept moment goes on where it was).
  *
- * The test cores in tests/ leave the sound out; this one doesn't, on purpose (Fable's test audit, 14.11.2026: the
- * Cabinet hand-over's divide by zero lived in the audio path no test reached).
+ * Tests include this same core and override only the behavior their contract exercises.
+ * Audio stays enabled in those variants: the Cabinet hand-over's divide by zero once lived in the audio path no test reached.
  *
  * Build: cc -shared -fPIC -O1 [-DRATE=32040 -DFPS=60.0988 -DWIDTH=256 -DHEIGHT=224] [-DNO_SRAM] -o stub_libretro.so stub-core.c -lm
  * The defines give other cores' timings (a PAL one at 50 fps, a GBA's 32768 Hz). Original code, no game in it. */
@@ -14,6 +14,13 @@
 #include <stddef.h>
 #include <stdint.h>
 #include <string.h>
+
+#ifndef STUB_FULLPATH
+#define STUB_FULLPATH true
+#endif
+#ifndef SRAM_SIZE
+#define SRAM_SIZE 8192
+#endif
 
 #ifndef RATE
 #define RATE 32040.0
@@ -48,8 +55,9 @@ static poll_t poll;
 static state_t input;
 static uint32_t frame;
 static double phase;
+static double sound_owed;
 static uint32_t fb[WIDTH * HEIGHT];
-static uint8_t sram[8192];
+static uint8_t sram[SRAM_SIZE];
 static int16_t sound[2 * 2048];
 
 void retro_set_environment(env_t f) { env = f; }
@@ -67,7 +75,7 @@ void retro_get_system_info(struct info *i) {
     i->name = "crash-sweep stub";
     i->version = "1";
     i->exts = "gb|gbc|gba|nes|fds|sfc|smc|md|gen|bin|sms|gg|sg|pce|ngp|ngc|ws|wsc|lnk|a26|a78|vb|min|n64|z64|v64|nds|cue|chd|iso|pbp|m3u|zip|7z|p8|tic|exe|dsk";
-    i->need_fullpath = true;
+    i->need_fullpath = STUB_FULLPATH;
 }
 void retro_get_system_av_info(struct av *a) {
     memset(a, 0, sizeof *a);
@@ -86,6 +94,22 @@ bool retro_load_game_special(unsigned t, const struct game *g, size_t n) { (void
 void retro_unload_game(void) {}
 unsigned retro_get_region(void) { return FPS < 55 ? 1 : 0; }
 void retro_reset(void) { frame = 0; }
+/* Shared by software, GL and special-video variants, including their duplicate frames. */
+static void stub_sound(void) {
+    /* Carry the fractional sample count: an integral rate must not add half a sample every frame. */
+    sound_owed += RATE / FPS;
+    size_t n = (size_t)sound_owed;
+    sound_owed -= (double)n;
+    if (n > 2048) n = 2048;
+    for (size_t i = 0; i < n; i++) {
+        int16_t s = (int16_t)(3000.0 * sin(phase));
+        phase += 2.0 * 3.14159265358979 * 440.0 / RATE;
+        if (phase > 2.0 * 3.14159265358979) phase -= 2.0 * 3.14159265358979;
+        sound[2 * i] = sound[2 * i + 1] = s;
+    }
+    if (batch && n) batch(sound, n);
+}
+
 void retro_run(void) {
     if (poll) poll();
     int16_t pressed = 0;
@@ -98,16 +122,7 @@ void retro_run(void) {
         for (unsigned x = 0; x < WIDTH; x++)
             fb[y * WIDTH + x] = x == bar || x == (bar + 1) % WIDTH ? 0xFFFFFF : pressed ? 0x2060C0 : (x * 255 / WIDTH) << 16 | (y * 255 / HEIGHT) << 8;
     if (video) video(fb, WIDTH, HEIGHT, WIDTH * 4);
-    /* A frame's sound in one batch, as most cores send it; the count wobbles by one like theirs. */
-    size_t n = (size_t)(RATE / FPS) + (frame & 1);
-    if (n > 2048) n = 2048;
-    for (size_t i = 0; i < n; i++) {
-        int16_t s = (int16_t)(3000.0 * sin(phase));
-        phase += 2.0 * 3.14159265358979 * 440.0 / RATE;
-        if (phase > 2.0 * 3.14159265358979) phase -= 2.0 * 3.14159265358979;
-        sound[2 * i] = sound[2 * i + 1] = s;
-    }
-    if (batch && n) batch(sound, n);
+    stub_sound();
 }
 size_t retro_serialize_size(void) { return 64 + sizeof sram; }
 bool retro_serialize(void *d, size_t s) {

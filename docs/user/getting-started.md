@@ -115,11 +115,21 @@ switches **Big text** on every stage (larger text and calmer menus, at once, als
    switch looks; Easy says what it does ("One big game at a time, simple menus."). Under them three rows, as in
    every list: Down reaches **Style** (Barlow or [Retro](theme.md#style)), **Colours** (Retro's
    Cocoa and Pea while it is on) and **Appearance** (Dark, Light or Automatic), a bar beside the row you are on;
-   Left/Right change it and the pictures above show it at once, Up goes back to the looks. **A** ("Finish") goes
-   straight to your shelf, with the look shown, from any row; B goes back to your games, so pressing B a few times
+   Left/Right change it and the pictures above show it at once, Up goes back to the looks. **A** ("Continue") keeps
+   the look shown, from any row, and goes on to the last page; B goes back to your games, so pressing B a few times
    never ends the setup by surprise. Under the rows: in a game, HOME opens the menu (save, load, quit), and the look
    changes any time in Settings → Look (as far as the screen has room). See [Playing](playing.md#looks) for the six
    looks. The last line points to optional downloads any time: Settings → Games → Box art & downloads.
+
+5. **How cozy should it be?** One choice for all the little touches, instead of finding each in Settings:
+   **Plain** (quick starts, no sounds of the cases, no decorations: just your games), **Cozy** (as it
+   comes: cases open, games go in with a sound, the room's light following the day,
+   a warm TV glow after dark, the old TV switching on and off,
+   stickers, printed discs, sealed new games) or **Everything** (Cozy's touches, plus the
+   cabinet's TV playing games you haven't tried, which uses more power). Up/Down choose, **A** ("Finish") takes it and
+   your shelf comes; B goes back to the look; START finishes and changes nothing. Every touch stays switchable on its
+   own in Settings › Look › [Cozy extras](settings.md#cozy-extras) and Game start animation; the Lived-in shelf is
+   no level's, it is switched on there only.
 
 For a child (the third row of the first page): after your games, Kids Mode's own steps (a PIN, the games a child may play, its
 colour, time and volume) take the look's place, and the setup ends with them ([Kids mode](kids-mode.md)). B on their

@@ -1,6 +1,7 @@
 //! One hint bar on every page (docs/DESIGN.md "Hint bar", polish review 12.11. item 10): the shelf's pages, the game card,
 //! the console pages, search, Curator, the first start, Settings, the quick settings and the pause menus all show their
-//! keys in the same dark pill at the bottom right, the same height, the same distance from the screen's edges, in every
+//! keys in the same dark pill at the bottom right, the same height, the same distance from the screen's edges (flat since
+//! 18.11.2026: `kit::HINT_GAP` over the bottom edge, `kit::HINT_H` high at Normal text), in every
 //! look, in the plain and the Retro style, in English, German and Spanish, from 640x480 to 1920x1080.
 //!
 //! What a player sees is read from the frame's record (`POCKETUI_NAV_PROBE`: the bar's box `‹hints›` and one mark per
@@ -164,9 +165,11 @@ fn run(jobs: Vec<Job>, bar_everywhere: bool) {
     let bin = PathBuf::from(env!("CARGO_BIN_EXE_pocket-ui"));
     let work: Arc<Mutex<Vec<(usize, Job)>>> = Arc::new(Mutex::new(jobs.into_iter().enumerate().collect()));
     let failed = Arc::new(Mutex::new(Vec::<String>::new()));
+    // The bar's heights seen on each text size and panel: one, whatever the page, look, style or language.
+    let heights = Arc::new(Mutex::new(std::collections::BTreeMap::<String, std::collections::BTreeSet<i32>>::new()));
     let threads: Vec<_> = (0..std::thread::available_parallelism().map_or(4, |n| n.get().min(6)))
         .map(|_| {
-            let (work, failed, tmp, bin, socket) = (work.clone(), failed.clone(), tmp.clone(), bin.clone(), socket.clone());
+            let (work, failed, tmp, bin, socket, heights) = (work.clone(), failed.clone(), tmp.clone(), bin.clone(), socket.clone(), heights.clone());
             std::thread::spawn(move || loop {
                 let Some((i, job)) = work.lock().unwrap().pop() else { break };
                 let name = format!("{} / {} / {} / {} / {} / {}x{}", job.state, job.text, job.look, if job.retro { "retro" } else { "plain" }, job.lang, job.size.0, job.size.1);
@@ -196,7 +199,10 @@ fn run(jobs: Vec<Job>, bar_everywhere: bool) {
                 }
                 let seen = read_record(&nav, &boxes);
                 let (rights, lh) = page_edges(job.size);
-                let (pad, pill) = (pocket_ui::kit::PAD, pocket_ui::kit::PILL);
+                // Flat since 18.11.2026 (the owner: "flachere Tipps"): `HINT_GAP` over the bottom edge, at least `HINT_H` high
+                // and flatter than the old bar (`PILL`); the one height of a panel and text size is checked after the run.
+                // Under 960 lines (1024x768) gap and height keep 960's share of the page (`kit::chrome`, 0.6.1).
+                let (pad, gap, least, old) = (pocket_ui::kit::PAD, pocket_ui::kit::chrome(pocket_ui::kit::HINT_GAP, lh), pocket_ui::kit::chrome(pocket_ui::kit::HINT_H, lh), pocket_ui::kit::PILL);
                 let (x0, y0, x1, y1) = seen.bar;
                 let mut bad = Vec::new();
                 if seen.hints.is_empty() {
@@ -206,9 +212,10 @@ fn run(jobs: Vec<Job>, bar_everywhere: bool) {
                 } else if seen.bar == (0, 0, 0, 0) {
                     // A snapshot taken in the middle of the hints' cross-fade (`cabinet:ddrra`) has painted-over marks: not a page.
                 } else {
-                    if !rights.iter().any(|r| x1 == r - pad) || y1 != lh - pad || y1 - y0 != pill {
-                        bad.push(format!("the bar is at {x0},{y0}..{x1},{y1}; the one form ends {pad} from the right edge of its page ({rights:?}) and the bottom edge ({lh}) and is {pill} high"));
+                    if !rights.iter().any(|r| x1 == r - pad) || y1 != lh - gap || y1 - y0 < least || y1 - y0 >= old {
+                        bad.push(format!("the bar is at {x0},{y0}..{x1},{y1}; the one form ends {pad} from the right edge of its page ({rights:?}), {gap} over the bottom edge ({lh}), and is {least} high or a little more with larger letters, under {old}"));
                     }
+                    heights.lock().unwrap().entry(format!("{} {}x{}", job.text, job.size.0, job.size.1)).or_default().insert(y1 - y0);
                     // (A chip elsewhere on the page, like the first start's "L2 Aa" at the top, is not a key of the bar.)
                     for ((hx0, hy0, hx1, hy1), key, label) in seen.hints.iter().filter(|((_, hy0, _, hy1), ..)| *hy1 > y0 && *hy0 < y1) {
                         if label.trim().is_empty() || key.trim().is_empty() {
@@ -241,6 +248,9 @@ fn run(jobs: Vec<Job>, bar_everywhere: bool) {
         t.join().unwrap();
     }
     let mut failed = failed.lock().unwrap().clone();
+    for (key, seen) in heights.lock().unwrap().iter().filter(|(_, h)| h.len() > 1) {
+        failed.push(format!("{key}: the bar has more than one height: {seen:?}"));
+    }
     failed.sort();
     assert!(failed.is_empty(), "{} page(s) with a different or a broken hint bar:\n{}", failed.len(), failed.join("\n"));
 }

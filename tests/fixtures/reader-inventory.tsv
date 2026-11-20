@@ -1,0 +1,1435 @@
+android/handheld/app_android.rs	1	let Ok(entries) = std::fs::read_dir(&dir) else { continue };
+android/java/xyz/pocketui/app/AppDrawer.java	1	File[] old = dir == null ? null : dir.listFiles();
+android/java/xyz/pocketui/app/BiosFiles.java	1	while((n=in.read(bytes))!=-1){total+=n;if(total>expected)throw new IOException("BIOS is too large");out.write(bytes,0,n);}
+android/java/xyz/pocketui/app/CoreDownloads.java	1	String read(String address) throws Exception {
+android/java/xyz/pocketui/app/CoreDownloads.java	1	if(address.startsWith("file:"))input=new FileInputStream(local(address));
+android/java/xyz/pocketui/app/CoreDownloads.java	1	try(RandomAccessFile in=new RandomAccessFile(source,"r");FileOutputStream out=new FileOutputStream(dest,true)){
+android/java/xyz/pocketui/app/CoreDownloads.java	1	while((count=in.read(b))!=-1){hooks.check();out.write(b,0,count);bytes+=count;}out.getFD().sync();
+android/java/xyz/pocketui/app/CoreDownloads.java	1	while((count=in.read(b))!=-1){if(cancelled)throw new IOException("Download cancelled. Choose it again to continue.");if(System.nanoTime()>deadline)throw new IOException("The download took too long. Check Wi-Fi and try again.");if((total+=count)>1024*1024)throw new IOException("Catalog too large");out.write(b,0,count);}
+android/java/xyz/pocketui/app/GameCopy.java	3	File[] files=folder.listFiles();
+android/java/xyz/pocketui/app/GameCopy.java	1	File[] folders=content.listFiles();
+android/java/xyz/pocketui/app/GameCopy.java	2	copy.readFully(b,0,n);
+android/java/xyz/pocketui/app/GameCopy.java	1	for(Part p:all){ParcelFileDescriptor file=context.getContentResolver().openFileDescriptor(p.document,"r");if(file==null)throw new FileNotFoundException("no descriptor");open.add(file);}
+android/java/xyz/pocketui/app/GameCopy.java	2	int n=in.read(a);
+android/java/xyz/pocketui/app/GameCopy.java	1	try(BufferedReader in=new BufferedReader(new FileReader(stage))){String line=in.readLine();return line==null?new String[0]:line.trim().split(" ");}
+android/java/xyz/pocketui/app/GameCopy.java	1	try(BufferedReader in=new BufferedReader(new FileReader(stage))){lines=new ArrayList<>();String line;while((line=in.readLine())!=null)lines.add(line);}
+android/java/xyz/pocketui/app/GameCopy.java	2	try(FileInputStream in=new FileInputStream(file.getFileDescriptor());RandomAccessFile copy=new RandomAccessFile(rom,"r")) {
+android/java/xyz/pocketui/app/GameCopy.java	1	try(InputStream in=context.getContentResolver().openInputStream(all.get(i).document);FileOutputStream out=new FileOutputStream(partFiles[i])) {
+android/java/xyz/pocketui/app/GameCopy.java	1	try(InputStream in=context.getContentResolver().openInputStream(document);FileOutputStream out=new FileOutputStream(part)) {
+android/java/xyz/pocketui/app/GameCopy.java	1	try(ParcelFileDescriptor file=context.getContentResolver().openFileDescriptor(document,"r")) {
+android/java/xyz/pocketui/app/GameCopy.java	2	while((n=in.read(bytes))!=-1){
+android/java/xyz/pocketui/app/GameDirect.java	1	if(in.read()<0)return "provider cannot rewind";
+android/java/xyz/pocketui/app/GameDirect.java	1	if(in.read()<0)return "provider cannot seek to the last byte";
+android/java/xyz/pocketui/app/GameDirect.java	1	try(FileInputStream in=new FileInputStream("/proc/self/fd/"+fd.getFd())){
+android/java/xyz/pocketui/app/GameDirect.java	1	try(ParcelFileDescriptor fd=context.getContentResolver().openFileDescriptor(document,"r")){
+android/java/xyz/pocketui/app/GameDirect.java	1	while(length<header.length&&(n=in.read(header,length,header.length-length))>0)length+=n;
+android/java/xyz/pocketui/app/PlayerActivity.java	1	gameDocument=getContentResolver().openFileDescriptor(android.net.Uri.parse(getIntent().getStringExtra("document")),"r");
+android/java/xyz/pocketui/app/PlayerActivity.java	1	int[] safe=SafeInsets.read(this,insets);safeLeft=safe[0];safeTop=safe[1];safeRight=safe[2];safeBottom=safe[3];
+android/java/xyz/pocketui/app/PlayerActivity.java	1	public java.io.InputStream open(String path)throws java.io.IOException{return assets.open(path);}
+android/java/xyz/pocketui/app/PocketActivity.java	1	int[] safe=SafeInsets.read(this,insets,false);
+android/java/xyz/pocketui/app/PocketActivity.java	1	public String coreOffers() throws Exception {try(InputStream in=getAssets().open("core-downloads.json");ByteArrayOutputStream out=new ByteArrayOutputStream()){byte[] b=new byte[16384];int n;while((n=in.read(b))!=-1)out.write(b,0,n);return out.toString("UTF-8");}}
+android/java/xyz/pocketui/app/PocketActivity.java	1	public String coreRead(String url){try{return "OK\n"+coreDownloads().read(url);}catch(Exception e){return "ERR\n"+e.getMessage();}}
+android/java/xyz/pocketui/app/PocketActivity.java	1	public String licenceList(){try(InputStream in=getAssets().open("licences/CORES.tsv");ByteArrayOutputStream out=new ByteArrayOutputStream()){byte[] b=new byte[16384];int n;while((n=in.read(b))!=-1)out.write(b,0,n);return out.toString("UTF-8");}catch(Exception e){return "";}}
+android/java/xyz/pocketui/app/PocketActivity.java	1	public String updateRead(String url, String limit) { return UpdateInstaller.get(this).read(url, limit); }
+android/java/xyz/pocketui/app/PocketActivity.java	1	try (InputStream in = getContentResolver().openInputStream(document)) {
+android/java/xyz/pocketui/app/PocketActivity.java	1	try (InputStream in = getContentResolver().openInputStream(uri)) {
+android/java/xyz/pocketui/app/PocketActivity.java	1	try (android.os.ParcelFileDescriptor file = getContentResolver().openFileDescriptor(Uri.parse(document), "r")) {
+android/java/xyz/pocketui/app/PocketActivity.java	1	try(InputStream in=getAssets().open("core-channel.url");ByteArrayOutputStream out=new ByteArrayOutputStream()){byte[] b=new byte[1024];int n;while((n=in.read(b))!=-1)out.write(b,0,n);
+android/java/xyz/pocketui/app/PocketActivity.java	1	try(InputStream in=getContentResolver().openInputStream(Uri.parse(bios.getJSONObject(i).getString("uri")))){
+android/java/xyz/pocketui/app/PocketActivity.java	1	try(android.os.ParcelFileDescriptor fd=getContentResolver().openFileDescriptor(Uri.parse(document),"r")){
+android/java/xyz/pocketui/app/PocketActivity.java	1	while ((n = in.read(block)) != -1) {
+android/java/xyz/pocketui/app/PocketActivity.java	1	while ((n = in.read(buffer)) != -1) {
+android/java/xyz/pocketui/app/PocketActivity.java	1	while (out.size() <= 262144 && (n = in.read(bytes)) != -1) out.write(bytes, 0, n);
+android/java/xyz/pocketui/app/RaHttp.java	1	while ((n = in.read(buffer)) != -1) {
+android/java/xyz/pocketui/app/RaHttp.java	1	while ((n = stream.read(buffer)) != -1) {
+android/java/xyz/pocketui/app/ResumableDownload.java	1	HttpURLConnection c=open.open(url);
+android/java/xyz/pocketui/app/ResumableDownload.java	1	interface Open { HttpURLConnection open(URL url) throws IOException; }
+android/java/xyz/pocketui/app/ResumableDownload.java	1	n=in.read(buffer);if(n<0)break;
+android/java/xyz/pocketui/app/RomProvider.java	1	return ParcelFileDescriptor.open(fileOf(uri), ParcelFileDescriptor.MODE_READ_ONLY);
+android/java/xyz/pocketui/app/RommHttp.java	1	HttpURLConnection c = open(url, "GET", token, userAgent, first);
+android/java/xyz/pocketui/app/RommHttp.java	1	HttpURLConnection c = open(url, hop == 0 ? method : "GET", token, userAgent, first);
+android/java/xyz/pocketui/app/RommHttp.java	1	private static HttpURLConnection open(URL url, String method, String token, String userAgent, URL first) throws IOException {
+android/java/xyz/pocketui/app/RommHttp.java	1	while ((n = in.read(buffer)) != -1) {
+android/java/xyz/pocketui/app/RommHttp.java	1	while ((n = stream.read(buffer)) != -1) {
+android/java/xyz/pocketui/app/SafeInsets.java	1	@SuppressWarnings("deprecation") static int[] read(Context context,WindowInsets insets,boolean gestureSides){
+android/java/xyz/pocketui/app/SafeInsets.java	1	static int[] read(Context context,WindowInsets insets){return read(context,insets,true);}
+android/java/xyz/pocketui/app/SaveBackup.java	1	File[] inside = file.listFiles();
+android/java/xyz/pocketui/app/SaveBackup.java	2	ZipInputStream zip = new ZipInputStream(new BufferedInputStream(raw, 1 << 16));
+android/java/xyz/pocketui/app/SaveBackup.java	2	for (int n; (n = in.read(buffer)) > 0; ) {
+android/java/xyz/pocketui/app/SaveBackup.java	1	for (int n; (n = zip.read(buffer)) > 0; ) {
+android/java/xyz/pocketui/app/SaveBackup.java	1	private static OutputStream open(ContentResolver resolver, Uri target) throws IOException {
+android/java/xyz/pocketui/app/SaveBackup.java	1	try (InputStream in = new FileInputStream(source)) {
+android/java/xyz/pocketui/app/SaveBackup.java	2	try (InputStream raw = resolver.openInputStream(source)) {
+android/java/xyz/pocketui/app/SaveBackup.java	1	try (OutputStream raw = open(resolver, target); ZipOutputStream zip = new ZipOutputStream(new BufferedOutputStream(raw, 1 << 16))) {
+android/java/xyz/pocketui/app/SaveCopy.java	2	for (int n; (n = in.read(block)) > 0; ) out.write(block, 0, n);
+android/java/xyz/pocketui/app/SaveCopy.java	1	for (int n; (n = in.read(block)) > 0; ) {
+android/java/xyz/pocketui/app/SaveCopy.java	1	private OutputStream open(String folderId, String name) throws IOException {
+android/java/xyz/pocketui/app/SaveCopy.java	1	try (InputStream in = new FileInputStream(local); OutputStream out = open(folder, parts[parts.length - 1])) {
+android/java/xyz/pocketui/app/SaveCopy.java	2	try (InputStream in = resolver.openInputStream(doc(found[0]))) {
+android/java/xyz/pocketui/app/SaveCopy.java	1	try (OutputStream out = open(folderId, name)) { out.write(bytes); }
+android/java/xyz/pocketui/app/SystemAssets.java	1	InputStream open(String path) throws IOException;
+android/java/xyz/pocketui/app/SystemAssets.java	1	try(InputStream input=source.open(path); FileOutputStream output=new FileOutputStream(part)){
+android/java/xyz/pocketui/app/SystemAssets.java	1	while((n=input.read(buffer))!=-1)output.write(buffer,0,n);
+android/java/xyz/pocketui/app/UpdateInstaller.java	1	HttpURLConnection c = open(n, url, size, true);
+android/java/xyz/pocketui/app/UpdateInstaller.java	1	Network n = wifi(); c = open(n, url, limit, false);
+android/java/xyz/pocketui/app/UpdateInstaller.java	1	String read(String url, String maximum) {
+android/java/xyz/pocketui/app/UpdateInstaller.java	1	in.readFully(value);
+android/java/xyz/pocketui/app/UpdateInstaller.java	1	private HttpURLConnection open(Network n, String value, long limit, boolean cancellable) throws IOException {
+android/java/xyz/pocketui/app/UpdateInstaller.java	1	try (DataInputStream in = new DataInputStream(new FileInputStream(installedNotice))) {
+android/java/xyz/pocketui/app/UpdateInstaller.java	1	try (InputStream in = new FileInputStream(ready); OutputStream out = session.openWrite("base.apk", 0, total)) {
+android/java/xyz/pocketui/app/UpdateInstaller.java	2	while ((count = in.read(buf)) != -1) {
+android/java/xyz/pocketui/app/UpdateInstaller.java	1	while ((count = in.read(buf)) != -1) { if (cancelled) throw new IOException(CANCELLED); out.write(buf, 0, count); }
+android/java/xyz/pocketui/app/Views.java	1	from.startActivity(open(from, view));
+android/java/xyz/pocketui/app/Views.java	1	int n = in.read(b);
+android/java/xyz/pocketui/app/Views.java	1	static Intent open(Context context, String view) {
+android/java/xyz/pocketui/app/Views.java	1	try (java.io.FileInputStream in = new java.io.FileInputStream(f)) {
+android/src/lib.rs	1	if let Some(image) = pocket_ui::image::load_png(std::path::Path::new(&path)) { return Some(image); }
+android/src/lib.rs	1	let stamp = noted.iter().filter_map(|k| std::fs::metadata(data.join(pocket_ui::save_copy::PENDING).join(k)).and_then(|m| m.modified()).ok()).max();
+android/src/lib.rs	1	let stamp = pocket_ui::save_copy::pending(&data).iter().filter_map(|k| std::fs::metadata(data.join(pocket_ui::save_copy::PENDING).join(k)).and_then(|m| m.modified()).ok()).max();
+android/src/lib.rs	1	pocket_ui::image::load_png(&dest)
+android/src/play_cards.rs	1	pocket_ui::fsutil::read_json_or_backup(&data.join("android-buttons").join(format!("{key}.json"))).unwrap_or_default()
+android/src/player.rs	1	(Some(s), Some(p)) if p + Duration::from_secs(2) >= s => pocket_ui::image::load_png(&png).map(std::sync::Arc::new),
+android/src/player.rs	1	let bytes = pocket_ui::state_file::read(path).map_err(|e| e.to_string())?;
+android/src/player.rs	1	let file = |name: &str| std::fs::read_to_string(format!("/sys/class/power_supply/battery/{name}")).ok();
+android/src/player.rs	1	let loaded_picture = pocket_ui::image::load_png(&pocket_ui::slots::preview_path(path));
+android/src/player.rs	1	let mut audio = pocket_ui::audio::Audio::open(core.av.timing.sample_rate, pocket_ui::audio::needs_jitter_reserve(&system));
+android/src/player.rs	1	let saved_options: std::collections::BTreeMap<String, String> = pocket_ui::fsutil::read_json_or_backup(&options_path).unwrap_or_default();
+android/src/player.rs	1	let secs = std::fs::metadata(p).and_then(|m| m.modified()).ok()?.duration_since(UNIX_EPOCH).ok()?.as_secs();
+android/src/player.rs	1	let time = |p: &Path| std::fs::metadata(p).and_then(|m| m.modified()).ok();
+android/src/player.rs	1	self.audio = pocket_ui::audio::Audio::open(self.core.av.timing.sample_rate, pocket_ui::audio::needs_jitter_reserve(&self.system));
+android/src/player.rs	1	self.nav.open(entry);
+android/src/player_achievements.rs	1	Snapshot::read(&self.snapshot, &self.rom).unwrap_or(Snapshot { state: State::Loading, ..Default::default() })
+android/src/ra_replay.rs	1	if let Ok(mut f) = std::fs::OpenOptions::new().create(true).append(true).open(self.dir.join("ra-replay.log")) {
+android/src/ra_replay.rs	1	std::fs::read_to_string(self.dir.join("ra-replay.mode")).is_ok_and(|m| m.trim() == "offline")
+android/src/ra_replay.rs	1	std::fs::read_to_string(self.dir.join("ra-replay.unlocked"))
+src/achievements/account.rs	1	if let Ok(d) = fs::File::open(data_dir) {
+src/achievements/account.rs	1	let before = fs::read(Self::path(data_dir)).ok().and_then(|b| serde_json::from_slice::<Account>(&b).ok());
+src/achievements/account.rs	1	let bytes = fs::read(Self::path(data_dir)).ok()?;
+src/achievements/account.rs	1	let mut f = opts.open(&tmp)?;
+src/achievements/lookup.rs	1	let kept: Option<ConsoleProgress> = std::fs::read(&path).ok().and_then(|b| serde_json::from_slice(&b).ok());
+src/achievements/mastery.rs	1	let Ok(entries) = std::fs::read_dir(marks(data_dir)) else { return Vec::new() };
+src/achievements/mastery.rs	1	valid_key(&key).then(|| (key, std::fs::read_to_string(e.path()).unwrap_or_default()))
+src/achievements/offline.rs	1	let p: Pending = std::fs::read(Self::path(data_dir))
+src/achievements/offline.rs	1	std::fs::read(kept_path(data_dir, hash))
+src/achievements/session.rs	1	let img = crate::image::load_png(&path)?;
+src/achievements/snapshot.rs	1	for e in std::fs::read_dir(&dir).ok()?.flatten() {
+src/achievements/snapshot.rs	1	if let (Some(stem), Ok(bytes)) = (path.file_stem().and_then(|s| s.to_str()).map(str::to_string), std::fs::read(&path)) {
+src/achievements/snapshot.rs	1	let s: Snapshot = serde_json::from_slice(&std::fs::read(path).ok()?).ok()?;
+src/achievements/snapshot.rs	1	serde_json::from_slice(&std::fs::read(Self::path(data_dir, system, rom)).ok()?).ok()
+src/album.rs	1	let (now, mem) = crate::case_knows::read(release, &bytes, memory.as_ref());
+src/album.rs	1	let size = |p: &Photo| std::fs::metadata(&p.file).map_or(0, |m| m.len());
+src/album.rs	1	let text = std::fs::read_to_string(dir.join(INDEX)).unwrap_or_default();
+src/album.rs	1	let v = std::fs::read(data_dir.join("settings.json")).ok().and_then(|b| serde_json::from_slice::<serde_json::Value>(&b).ok());
+src/album.rs	1	std::fs::read(data_dir.join("settings.json"))
+src/album.rs	1	std::fs::read_to_string(dir.join(SEEN)).ok().and_then(|s| s.trim().parse().ok()).unwrap_or(0)
+src/android_core_run.rs	1	let archive = std::fs::read(path).map_err(|e| Failure(e.to_string()))?;
+src/android_core_run.rs	1	let json = read(&catalog_url)?;
+src/android_core_run.rs	1	let signature = read(&format!("{catalog_url}.sig"))?;
+src/android_cores.rs	1	crate::store::Store::open(data).install_bytes(&package, archive).map_err(Error::Store)
+src/android_cores.rs	1	if let Err(e) = crate::store::Store::open(data).uninstall(&format!("android-core-{core}")) {
+src/android_cores.rs	1	let downloaded: Vec<String> = std::fs::read_dir(data.join("android-cores")).into_iter().flatten().flatten()
+src/android_cores.rs	1	let manifest: serde_json::Value = serde_json::from_slice(&std::fs::read(check.join("core.json"))?)?;
+src/android_first_start.rs	1	let entries = std::fs::read_dir(dir).ok()?;
+src/android_first_start.rs	1	let mut all: Vec<PathBuf> = std::fs::read_to_string(data.join(KEPT)).unwrap_or_default().lines().filter(|l| !l.trim().is_empty()).map(PathBuf::from).collect();
+src/android_first_start.rs	1	std::fs::read_to_string(data.join(KEPT)).unwrap_or_default().lines().filter(|l| !l.trim().is_empty()).map(PathBuf::from).filter(|p| p.is_dir()).collect()
+src/android_games.rs	1	crate::fsutil::read_json_or_backup(&data.join("launcher.json")).unwrap_or_default()
+src/android_games.rs	1	for entry in std::fs::read_dir(dir)?.flatten() {
+src/android_games.rs	1	if std::fs::read(&file).ok().as_deref() != Some(package.as_bytes()) {
+src/android_games.rs	1	if std::fs::read_to_string(&gamelist).ok().as_deref() != Some(list.as_str()) {
+src/android_games.rs	1	let bytes = std::fs::read(path).ok()?;
+src/android_handheld/files.rs	1	if std::fs::read_to_string(path).ok().as_deref() == Some(systems) {
+src/android_handheld/files.rs	1	let note = std::fs::read_to_string(path).ok().and_then(|s| serde_json::from_str(&s).ok());
+src/android_handheld/files.rs	1	let picture = crate::image::load_png(note.picture.as_deref()?)?;
+src/android_handheld/files.rs	1	std::fs::read_to_string(data.join("launcher.json")).unwrap_or_default()
+src/android_handheld/files.rs	1	std::fs::read_to_string(path).unwrap_or_default()
+src/android_handheld.rs	1	.and_then(|p| std::fs::read_to_string(p).ok())
+src/android_handheld.rs	1	.filter(|p| std::fs::metadata(p).is_ok_and(|m| m.len() <= 262_144))
+src/android_handheld.rs	1	for e in std::fs::read_dir(&own)?.filter_map(|e| e.ok()) {
+src/android_handheld.rs	1	let mut cards: Vec<PathBuf> = std::fs::read_dir(storage)
+src/android_handheld.rs	1	let mut taken: std::collections::BTreeMap<String, (u64, u64)> = crate::fsutil::read_json_or_backup(&note).unwrap_or_default();
+src/android_handheld.rs	1	let taken: std::collections::BTreeMap<String, (u64, u64)> = crate::fsutil::read_json_or_backup(&view_data.join("mobile-history.json")).unwrap_or_default();
+src/android_handheld.rs	1	match std::fs::symlink_metadata(&own) {
+src/android_handheld.rs	2	std::fs::read_dir(dir)
+src/app_achievements.rs	1	Snapshot::read(Path::new(SNAPSHOT_FILE), rom)
+src/app_album.rs	1	AlbumData::read(&self.data_dir, system, path, reads, self.moment_photos, saves)
+src/app_album.rs	1	let img = pocket_ui::image::load_jpeg(&f).map(std::rc::Rc::new);
+src/app_album.rs	1	let img = pocket_ui::image::load_jpeg(&f);
+src/app_album.rs	1	photos.iter().rev().take(3).rev().filter_map(|p| pocket_ui::image::load_jpeg(&p.file)).collect()
+src/app_android_games.rs	1	let mut marked = ag::marked(&std::fs::read_to_string(self.phone_prefs_path()).unwrap_or_default());
+src/app_android_games.rs	1	let old = std::fs::read_to_string(&path).unwrap_or_default();
+src/app_android_games.rs	2	self.android_games.marked = ag::marked(&std::fs::read_to_string(self.phone_prefs_path()).unwrap_or_default());
+src/app_bluetooth.rs	1	std::fs::read_to_string(file).is_ok_and(|cfg| enabled_in(&cfg))
+src/app_brick_hw.rs	1	let sample = pocket_ui::battery::read(&pocket_ui::battery::dir(), 0);
+src/app_cabinet.rs	1	let frame = var("POCKETUI_SNAPSHOT_EJECT_FRAME").and_then(|p| image::load_image(Path::new(&p))).map(|raw| {
+src/app_cabinet.rs	1	let frame = var("POCKETUI_SNAPSHOT_EJECT_SCREEN").and_then(|p| image::load_image(Path::new(&p))).map(Arc::new).or(frame);
+src/app_cabinet.rs	1	let got = read(&job.0, job.1, None);
+src/app_cabinet.rs	1	let got = read(file, kind, sample.as_deref());
+src/app_cabinet.rs	1	owned = image::load_image(path);
+src/app_cabinet_tv.rs	1	let core_line = std::fs::read_to_string(std::env::temp_dir().join("pocket-showcase.log"))
+src/app_cabinet_tv.rs	1	let log = std::fs::OpenOptions::new().create(true).append(true).open(std::env::temp_dir().join("pocket-showcase.log"));
+src/app_cabinet_tv.rs	1	let stat = std::fs::read_to_string(format!("/proc/{pid}/stat")).ok()?;
+src/app_cabinet_tv.rs	1	std::fs::metadata(&state).map_or(0, |m| m.len())
+src/app_card.rs	1	let cold = open(self);
+src/app_card.rs	1	let renamed = open(self);
+src/app_card.rs	1	let warmed = open(self);
+src/app_card_update.rs	1	std::fs::read_to_string(data.join(SEEN_FILE)).ok().map(|s| s.trim().to_string())
+src/app_case_knows.rs	1	let bytes = std::fs::read(rom).ok()?;
+src/app_case_knows.rs	1	let numbers = std::fs::read(std::env::var("POCKETUI_SNAPSHOT_DS_PALETTES").ok()?).ok()?;
+src/app_disc.rs	1	Discs::read(&run.path).and_then(DiscRow::new)
+src/app_earlier.rs	1	row.selected().map(|e| (image::load_png(&slots::preview_path(&e.path)), e.at))
+src/app_emu_choice.rs	1	_ => (Cfg::read(Path::new(emu_choice::SYSTEM_CFG)), Cfg::read(Path::new(emu_choice::SHIPPED_CFG)), false),
+src/app_frame_dump.rs	1	let text = std::fs::read_to_string(&p).unwrap_or_else(|e| panic!("frame-dump: script {}: {e}", p.to_string_lossy()));
+src/app_frozen.rs	1	let written = frozen::resume_files(&game).iter().any(|f| std::fs::metadata(f).and_then(|m| m.modified()).is_ok_and(|t| t >= started));
+src/app_history.rs	1	play_log::open();
+src/app_leds.rs	1	let img = pocket_ui::image::load_image(path)?;
+src/app_library.rs	1	std::fs::read_to_string(data_dir.join(UNREAD_KNOWN)).ok()?.trim().parse().ok()
+src/app_library_sync.rs	1	.and_then(|k| pocket_ui::library_cache::read(data_dir, &k).ok())
+src/app_library_sync.rs	1	let mut dirs: Vec<PathBuf> = std::fs::read_dir(root)
+src/app_library_sync.rs	1	sync::Config::read().ok().and_then(|c| ls::device_folder(&c.device_id))
+src/app_look.rs	1	Cover::File(path) => image::load_image(path).unwrap_or_else(|| self.sample_box(&sample)),
+src/app_nav_probe.rs	1	let mut out = std::fs::read_to_string(&path).unwrap_or_default();
+src/app_perf_fan.rs	1	let mut r = Readout::read(&root, &battery);
+src/app_pixel_path.rs	1	if let Some(r) = Report::read(file, &rom, seq) {
+src/app_pixel_path.rs	1	pixel_standalone::read(standalone::Emu::Armsx2, "ps2", Path::new("game.chd"), None, &files)
+src/app_players.rs	1	if let Some(view) = SeatsView::read(Path::new(players::SEATS_FILE)) {
+src/app_players.rs	1	let view = SeatsView::read(Path::new(players::SEATS_FILE)).unwrap_or_else(|| self.seats_guess());
+src/app_players.rs	1	std::fs::metadata(path).and_then(|m| m.modified()).ok()
+src/app_ports.rs	1	let cached = std::fs::read(data_dir.join("ports.json")).map(|b| ports::parse_catalog(&b)).unwrap_or_default();
+src/app_rescue.rs	1	if let Some((_, dev)) = pocket_ui::touch::linux::open() {
+src/app_rescue.rs	1	let what = WhatHappened::read(reason, data_dir, &log);
+src/app_romm.rs	1	let server = std::fs::read_to_string(romm::dir(data_dir).join(SERVER_FILE)).ok().and_then(|s| romm::normalize_server(&s).ok());
+src/app_runs_on_android.rs	1	let json = std::fs::read_to_string(&file).unwrap_or_default();
+src/app_runs_on_android.rs	2	let old = std::fs::read_to_string(&path).unwrap_or_default();
+src/app_runs_on_android.rs	1	play_route::set_prefs(play_route::prefs_from_json(&std::fs::read_to_string(data_dir.join("launcher.json")).unwrap_or_default()));
+src/app_search.rs	1	let img = image::load_image(path)?;
+src/app_storage.rs	1	let health = card_health::read(&roms);
+src/app_sync.rs	1	let cfg = Config::read().ok();
+src/app_sync.rs	1	match Config::read() {
+src/app_sync_conflicts.rs	1	let seen: Seen = pocket_ui::fsutil::read_json_or_backup(&data_dir.join(SEEN_FILE)).unwrap_or_default();
+src/app_tailscale.rs	1	std::fs::read_to_string(file).is_ok_and(|cfg| tailscale::boot_enabled(&cfg))
+src/app_zoom.rs	1	if run.options.open(&self.data_dir, &run.system, &run.path).value_of("hk_zoom") != "on" {
+src/archive.rs	1	directory_in(&mut std::fs::File::open(zip_path).map_err(|e| e.to_string())?)
+src/archive.rs	1	f.read_exact(&mut cd).map_err(bad)?;
+src/archive.rs	1	f.read_exact(&mut tail).map_err(bad)?;
+src/archive.rs	1	if f.seek(SeekFrom::Start(e.local as u64)).is_err() || f.read_exact(&mut head).is_err() || !head.starts_with(b"PK\x03\x04") {
+src/archive.rs	1	let len = f.metadata().map_err(|e| e.to_string())?.len();
+src/archive.rs	1	let len = std::fs::metadata(path).map_err(|e| format!("{}: {e}", path.display()))?.len();
+src/archive.rs	1	let mut f = std::fs::File::open(zip_path).map_err(|e| e.to_string())?;
+src/archive.rs	1	let mut file = std::fs::OpenOptions::new().write(true).create_new(true).open(&path).map_err(|e| e.to_string())?;
+src/archive.rs	1	match std::fs::read_dir(if parent.as_os_str().is_empty() { Path::new(".") } else { parent }) {
+src/archive.rs	1	match std::fs::symlink_metadata(&checked) {
+src/archive.rs	1	refusal_in(&mut std::fs::File::open(zip_path).ok()?, zip_name, wanted, only_cut_off)
+src/archive.rs	1	std::fs::read(path).map_err(|e| format!("{}: {e}", path.display()))
+src/audio.rs	1	"active_dropped_frames": read(&self.active_dropped_frames),
+src/audio.rs	1	"dropped_frames": read(&self.dropped_frames),
+src/audio.rs	1	"input_frames": read(&self.input_frames), "resampled_frames": read(&self.resampled_frames),
+src/audio.rs	1	"min_playing_fill_frames": read(&self.min_playing_fill).checked_sub(1)
+src/audio.rs	1	"output_stalls": read(&self.output_stalls),
+src/audio.rs	1	"paused_silence_chunks": read(&self.paused_silence_chunks),
+src/audio.rs	1	"playing_missing_frames": read(&self.playing_missing_frames),
+src/audio.rs	1	"playing_silence_frames": read(&self.playing_missing_frames),
+src/audio.rs	1	"playing_underruns": read(&self.playing_underruns),
+src/audio.rs	1	"prefill_missing_max_frames": read(&self.prefill_missing_max),
+src/audio.rs	1	"prefill_silence_chunks": read(&self.prefill_silence_chunks),
+src/audio.rs	1	"prefill_wait_polls": read(&self.prefill_waits),
+src/audio.rs	1	"preplay_dropped_frames": read(&self.preplay_dropped_frames),
+src/audio.rs	1	"refill_silence_chunks": read(&self.refill_silence_chunks),
+src/audio.rs	1	"route_wait_polls": read(&self.route_wait_polls),
+src/audio.rs	1	"startup_backpressure_us": read(&self.startup_backpressure_us),
+src/audio.rs	1	"state": match read(&self.state) { 0 => "prefill", 1 => "playing", 2 => "paused", 3 => "refill", _ => "stopped" },
+src/audio.rs	1	let mut sink = Sink::open(ring)?;
+src/audio_pw_stats.rs	1	.any(|dir| std::fs::metadata(dir.join(name)).is_ok_and(|m| m.is_file() && m.permissions().mode() & 0o111 != 0))
+src/audio_route.rs	1	let dir = std::fs::read_dir("/sys/class/bluetooth").ok()?;
+src/audio_route.rs	1	let text = std::fs::read_to_string(run.join("bt-audio")).ok()?;
+src/auto_off.rs	1	let bytes = std::fs::read(&path).ok()?;
+src/auto_off.rs	1	let t = std::fs::read_to_string(self.path.with_file_name("since_epoch")).ok()?;
+src/auto_off.rs	1	let text = std::fs::read_to_string(self.proc_path.as_ref()?).ok()?;
+src/auto_off.rs	1	match std::fs::read_to_string(&self.path) {
+src/backup.rs	1	.filter(|e| !e.file_name().to_string_lossy().starts_with('.') && e.path().symlink_metadata().is_ok_and(|m| m.is_dir()))
+src/backup.rs	1	.filter(|f| std::fs::symlink_metadata(data_dir.join(f)).is_ok_and(|m| m.is_file()))
+src/backup.rs	1	data.push(std::fs::read(&from).map_err(|e| format!("{rel}: {e}. Nothing was changed."))?);
+src/backup.rs	1	if !from.symlink_metadata().is_ok_and(|m| m.is_file()) {
+src/backup.rs	1	let Ok(m) = e.path().symlink_metadata() else { continue };
+src/backup.rs	1	let Ok(rd) = std::fs::read_dir(data_dir.join(&rel)) else { continue };
+src/backup.rs	1	let Ok(rd) = std::fs::read_dir(root) else { return Vec::new() };
+src/backup.rs	1	let bytes = manifest.files.iter().filter(|f| allowed(f)).filter_map(|f| std::fs::metadata(e.path().join(f)).ok()).map(|m| m.len()).sum();
+src/backup.rs	1	let data = std::fs::read(data_dir.join(rel)).map_err(|e| format!("{rel}: {e}"))?;
+src/backup.rs	1	let manifest: Manifest = serde_json::from_slice(&std::fs::read(backup.join(MANIFEST)).map_err(|e| format!("{MANIFEST}: {e}"))?)
+src/backup.rs	1	let manifest: Manifest = serde_json::from_slice(&std::fs::read(e.path().join(MANIFEST)).ok()?).ok()?;
+src/backup_saves.rs	1	.filter_map(|e| Some(SavesBackup { manifest: serde_json::from_slice(&std::fs::read(e.path().join(MANIFEST)).ok()?).ok()?, dir: e.path() }))
+src/backup_saves.rs	1	for e in std::fs::read_dir(root).into_iter().flatten().flatten() {
+src/backup_saves.rs	1	if !wanted(&item.path) || !stored_ok || !held.symlink_metadata().is_ok_and(|m| m.is_file() && m.len() == item.bytes) {
+src/backup_saves.rs	1	if b.read_exact(&mut y[..n]).is_err() || x[..n] != y[..n] {
+src/backup_saves.rs	1	if is_new && to.symlink_metadata().is_ok() {
+src/backup_saves.rs	1	if let Ok(f) = std::fs::File::open(path) {
+src/backup_saves.rs	1	let (Ok(mut a), Ok(mut b)) = (std::fs::File::open(a), std::fs::File::open(b)) else { return false };
+src/backup_saves.rs	1	let (Ok(n), true) = (a.read(&mut x), true) else { return false };
+src/backup_saves.rs	1	let Ok(m) = here.symlink_metadata() else {
+src/backup_saves.rs	1	let Ok(rd) = std::fs::read_dir(root) else { return Vec::new() };
+src/backup_saves.rs	1	let manifest: Manifest = serde_json::from_slice(&std::fs::read(backup.join(MANIFEST)).map_err(|e| format!("{MANIFEST}: {e}"))?)
+src/backup_saves.rs	1	let meta = src.metadata().map_err(CopyError::Source)?;
+src/backup_saves.rs	1	let mounts = std::fs::read_to_string("/proc/mounts").unwrap_or_default();
+src/backup_saves.rs	1	let mut src = std::fs::File::open(from).map_err(CopyError::Source)?;
+src/backup_saves.rs	1	let n = match src.read(&mut buf) {
+src/backup_saves.rs	1	let rd = match std::fs::read_dir(storage.join(&rel)) {
+src/backup_saves.rs	1	match e.metadata() {
+src/backup_saves.rs	1	return b.read(&mut y).is_ok_and(|m| m == 0);
+src/backup_saves.rs	1	to.symlink_metadata().is_ok_and(|m| !m.is_file() || seconds(&m) + SAME_TIME >= item.modified)
+src/battery.rs	1	let get = |name: &str| std::fs::read_to_string(dir.join(name)).ok().map(|s| s.trim().to_string());
+src/battery_games.rs	1	crate::fsutil::read_json_or_backup(&data_dir.join(FILE)).unwrap_or_default()
+src/battery_history.rs	1	Some(_) => std::fs::read(&bak).map_err(|e| e.to_string()).and_then(|b| History::parse(&b)).is_err(),
+src/battery_history.rs	1	history: History::open(data_dir),
+src/battery_history.rs	1	if let Ok(bytes) = std::fs::read(&ring) {
+src/battery_history.rs	1	if let Some(r) = battery::read(dir, t) {
+src/battery_history.rs	1	let age = std::fs::metadata(&bak)
+src/battery_history.rs	1	let bytes = match std::fs::read(path) {
+src/battery_history.rs	1	let mut first = battery::read(dir, t)?;
+src/battery_history.rs	1	let rec = Recorder::open(data_dir);
+src/battery_history.rs	1	match std::fs::read(&bak).map_err(|e| e.to_string()).and_then(|b| History::parse(&b)) {
+src/bezel.rs	1	let mut packs: Vec<PathBuf> = std::fs::read_dir(frames_dir).ok()?.filter_map(|e| e.ok()).map(|e| e.path()).filter(|p| p.is_dir()).collect();
+src/bezel.rs	1	let mut reader = crate::image::png_reader(std::io::BufReader::new(std::fs::File::open(path).ok()?))?;
+src/bezel.rs	1	let pack: Pack = serde_json::from_slice(&std::fs::read(dir.join("pack.json")).ok()?).ok()?;
+src/bin/brick_egl.rs	1	let Ok(file) = std::fs::OpenOptions::new().read(true).write(true).open(path) else { return FoundPan(None) };
+src/bin/brick_egl.rs	1	let egl = Egl::open(window, (w, h), &mut say).unwrap_or_else(|f| fail(&f.step, f.code, &f.detail));
+src/bin/brick_egl.rs	1	let egl = Egl::open(window, screen, &mut say).unwrap_or_else(|f| fail(&f.step, f.code, &f.detail));
+src/bin/brick_egl.rs	1	let fb0 = fb.and_then(|f| Fb0::open(f, w as usize));
+src/bin/brick_egl.rs	1	let file = std::fs::File::open(path).map_err(|e| println!("brick-egl: {path}: {e}")).ok()?;
+src/bin/brick_egl.rs	1	let found = FoundPan::read("/dev/fb0");
+src/bin/brick_egl.rs	1	let stride = std::fs::read_to_string("/sys/class/graphics/fb0/stride").ok().and_then(|s| s.trim().parse().ok()).unwrap_or(width * 4);
+src/bin/brick_egl.rs	1	let text = std::fs::read_to_string("/sys/class/disp/disp/attr/sys").ok()?;
+src/bin/hello_pad.rs	1	let devices = pocket_ui::pad::linux::open();
+src/bin/pocket_core/core_contract.rs	1	assert!(read().contains("\tplay=asleep\t") && read().contains("\tmenu=paused\t"));
+src/bin/pocket_core/core_contract.rs	1	assert!(read().contains("\tplay=dark-playing\t"));
+src/bin/pocket_core/core_contract.rs	1	assert!(read().contains("\tplay=playing\t"));
+src/bin/pocket_core/core_contract.rs	1	assert_eq!(read(), paused, "repeated pause does not rewrite the status");
+src/bin/pocket_core/core_contract.rs	1	let asleep = read();
+src/bin/pocket_core/core_contract.rs	1	let current = pocket_ui::state_file::read(&slots::state_path(&app.states, 2)).unwrap();
+src/bin/pocket_core/core_contract.rs	1	let exiting = read();
+src/bin/pocket_core/core_contract.rs	1	let paused = read();
+src/bin/pocket_core/core_contract.rs	1	let read = || std::fs::read_to_string(&path).expect("an agent must be able to read the core state");
+src/bin/pocket_core/core_contract.rs	1	let second = pocket_ui::state_file::read(&slots::state_path(&app.states, 1)).unwrap();
+src/bin/pocket_core/quit_regression.rs	1	assert_eq!(pocket_ui::state_file::read(&slots::retry_auto_path(&auto)).unwrap(), previous);
+src/bin/pocket_core/quit_regression.rs	1	assert_eq!(pocket_ui::state_file::read(&slots::retry_auto_path(&auto)).unwrap(), previous, "Load still has it");
+src/bin/pocket_core/save_safety.rs	1	assert_eq!(pocket_ui::state_file::read(&auto).unwrap(), previous);
+src/bin/pocket_core/save_safety.rs	1	assert_eq!(std::fs::read(&legacy).unwrap(), previous, "failed quit keeps the earlier Auto");
+src/bin/pocket_core/save_safety.rs	1	let notice = std::fs::read_to_string(root.join("pocket-core.error")).unwrap();
+src/bin/pocket_core.rs	1	if let Some((_, dev)) = pocket_ui::touch::linux::open() {
+src/bin/pocket_core.rs	1	let Ok(f) = std::fs::OpenOptions::new().read(true).write(true).open(fifo) else { return };
+src/bin/pocket_core.rs	2	let Some(pic) = pocket_ui::image::load_png(Path::new(&args[3])) else {
+src/bin/pocket_core.rs	1	let text = std::fs::read_to_string("/proc/self/io").unwrap_or_default();
+src/bin/pocket_core.rs	1	match pocket_ui::state_file::read(path) {
+src/bin/pocket_core.rs	1	pid != me && pid.bytes().all(|b| b.is_ascii_digit()) && std::fs::read_to_string(e.path().join("comm")).is_ok_and(|c| c.trim() == "pocket-core")
+src/bin/pocket_core.rs	1	std::fs::read_dir("/proc").into_iter().flatten().flatten().any(|e| {
+src/bin/pocket_core.rs	1	std::fs::read_to_string("/proc/self/stat").ok().and_then(|t| t.rsplit_once(')').and_then(|(_, rest)| rest.trim().chars().next())).unwrap_or('?')
+src/bin/pocket_core.rs	1	std::thread::spawn(move || Audio::open(rate, heavy))
+src/bin/pocket_fb.rs	1	("pocket_transition", None) => match pocket_ui::brick_gpu::read(action.trim_start_matches("pocket_transition")) {
+src/bin/pocket_fb.rs	1	let Some(request) = brick_picture::Request::read(words) else { return false };
+src/bin/pocket_fb.rs	1	let alive = match stream.read(&mut buf) {
+src/bin/pocket_fb.rs	1	let file = std::fs::File::open(path).map_err(|e| format!("{path}: {e}"))?;
+src/bin/pocket_fb.rs	1	let file = std::fs::OpenOptions::new().read(true).write(true).open(path).map_err(|e| format!("{path}: {e}"))?;
+src/bin/pocket_fb.rs	1	let mut fb = Fb::open(&args.fb, args.mode, args.vsync, args.bgr)?;
+src/bin/pocket_fb.rs	1	let stat = std::fs::read_to_string(format!("/proc/{pid}/stat")).ok()?;
+src/bin/pocket_fb.rs	1	s.read_exact(&mut body).map_err(|e| e.to_string())?;
+src/bin/pocket_fb.rs	1	s.read_exact(&mut head).map_err(|e| e.to_string())?;
+src/bin/pocket_splash.rs	1	let file = OpenOptions::new().read(true).write(true).custom_flags(libc::O_CLOEXEC).open(FB).map_err(|e| format!("{FB}: {e}"))?;
+src/bin/pocket_splash.rs	1	let file = OpenOptions::new().read(true).write(true).custom_flags(libc::O_NOCTTY | libc::O_CLOEXEC).open(TTY).ok();
+src/bin/pocket_splash.rs	1	let turn = Turn::from_fbcon(&std::fs::read_to_string(FBCON_ROTATE).unwrap_or_default());
+src/bin/store_tool.rs	1	.and_then(|mut f| std::io::Read::read_exact(&mut f, &mut seed))
+src/bin/store_tool.rs	2	let data = std::fs::read(&args[2]).expect("read file");
+src/bin/store_tool.rs	1	let data = std::fs::read(file).expect("read file to sign");
+src/bin/store_tool.rs	1	let manifest: pocket_ui::update::Manifest = serde_json::from_slice(&std::fs::read(&args[2]).expect("read update.json")).expect("parse update.json");
+src/bin/store_tool.rs	1	let mut manifest: pocket_ui::update::Manifest = serde_json::from_slice(&std::fs::read(path).expect("read manifest")).expect("parse manifest");
+src/bin/store_tool.rs	1	let mut manifest: pocket_ui::update::Manifest = std::fs::read(manifest_path)
+src/bin/store_tool.rs	1	let sig = std::fs::read_to_string(format!("{}.sig", args[2])).unwrap_or_default();
+src/bin/store_tool.rs	1	size: std::fs::metadata(file).expect("release file").len(),
+src/bin/store_tool.rs	1	std::fs::File::open("/dev/urandom")
+src/bin/store_tool.rs	1	std::fs::read(key_file).expect("read private key").try_into().expect("32-byte key file")
+src/boot_fade.rs	1	std::fs::OpenOptions::new().write(true).create_new(true).open(mark).is_ok()
+src/boot_screen.rs	1	f.read_exact(&mut b).ok()?;
+src/boot_screen.rs	1	let flag = std::fs::File::open(rom).ok().and_then(|mut f| {
+src/boot_screen.rs	1	std::fs::metadata(dir.join(file)).is_ok_and(|m| m.is_file() && m.len() == bytes)
+src/brick_gl.rs	1	let egl = Egl::open(window, screen, say)?;
+src/brick_gles.rs	1	let egl = Egl::open("pbuffer", (16, 16), &mut |line| eprintln!("[hw] {line}")).map_err(|f| format!("[hw] GL context: {f}"))?;
+src/brick_hw.rs	1	Self::open(&system_root(), motor_voltage_range())
+src/brick_hw.rs	1	crate::fsutil::read_json_or_backup(&data_dir.join(FKEYS_FILE)).unwrap_or_default()
+src/brick_hw.rs	1	crate::fsutil::read_json_or_backup(&data_dir.join(LIGHTS_FILE)).unwrap_or_default()
+src/brick_hw.rs	1	match std::fs::read_to_string(data_dir.join(SLIDER_FILE)) {
+src/brick_profile.rs	1	let boot = card.and_then(|d| std::fs::read_to_string(d.join("logs/boot.log")).ok());
+src/brick_profile.rs	1	let bytes = std::fs::read(root.join("usr/trimui/bin/MainUI")).unwrap_or_default();
+src/brick_profile.rs	1	let bytes = std::fs::read(root.join(file)).unwrap_or_default();
+src/brick_profile.rs	1	let devices = std::fs::read_to_string(input_devices).unwrap_or_else(|_| "(missing)\n".into());
+src/brick_profile.rs	1	let fb = std::fs::read_to_string(root.join("sys/class/graphics/fb0/virtual_size")).unwrap_or_default();
+src/brick_profile.rs	1	let text = std::fs::read_to_string(&path).unwrap_or_default();
+src/cabinet_tv.rs	1	let img = source(dir, &w.system, &w.rom, w.cover.as_deref()).and_then(|p| crate::image::load_image(&p));
+src/card_health.rs	1	*ON_IT.get_or_init(|| std::fs::read_to_string("/proc/mounts").is_ok_and(|m| roms_on_games_drive(&m)))
+src/card_health.rs	1	.and_then(|d| std::fs::read_to_string(root.join("sys/fs/ext4").join(d).join("errors_count")).ok())
+src/card_health.rs	1	let mounts = std::fs::read_to_string(root.join("proc/mounts")).ok();
+src/card_health.rs	1	read_at(Path::new("/"), path, log.as_deref())
+src/card_health.rs	1	std::fs::read_dir("/dev/disk/by-label").ok()?.flatten().find_map(|e| {
+src/card_health.rs	1	std::fs::read_to_string("/proc/mounts").is_ok_and(|m| roms_on_system_image(&m, label_of))
+src/case_knows.rs	1	if let Some(h) = read(0x20, 0x70, 0x10) {
+src/case_knows.rs	1	let file = |i: usize| read(0x30 + 0x10 * i, 0x80 + 0x500 * i, 0x500).filter(|f| f[0] == 0 && f[1] == 1);
+src/case_knows_art.rs	1	all.extend(read(bank as usize * 0x4000 + a as usize - 0x4000, 128)?);
+src/case_knows_art.rs	1	f.read_exact(&mut b).ok()?;
+src/case_knows_art.rs	3	let Ok(mut f) = std::fs::File::open(rom) else { return Art::default() };
+src/case_knows_art.rs	1	let len = f.metadata().map_or(0, |m| m.len()) as usize;
+src/case_knows_art.rs	1	let len = f.metadata().ok()?.len();
+src/case_knows_art.rs	3	let mut f = std::fs::File::open(rom).ok()?;
+src/case_knows_read.rs	1	let (answer, memory) = case_knows::read(release, &bytes, before.as_ref());
+src/case_knows_read.rs	1	let bytes = if at.0 <= MAX_SAVE { std::fs::read(&save).ok()? } else { Vec::new() };
+src/case_knows_read.rs	1	let bytes = std::fs::read(rom).ok()?;
+src/case_knows_read.rs	1	let m = std::fs::metadata(path).ok().filter(|m| m.is_file())?;
+src/case_knows_read.rs	1	let read = std::fs::File::open(rom).and_then(|mut f| std::io::Read::read_exact(&mut f, &mut header));
+src/case_knows_read.rs	1	let text = std::fs::read_to_string(art_path(data_dir)).unwrap_or_default();
+src/case_knows_read.rs	1	let text = std::fs::read_to_string(cache_path(data_dir)).unwrap_or_default();
+src/cheat_data.rs	1	if let Ok(entries) = std::fs::read_dir(parent) {
+src/cheat_data.rs	1	let installed_bytes = installed.and_then(|p| std::fs::metadata(p).ok()).map(|m| m.len());
+src/cheat_data.rs	1	let mut file = std::fs::File::open(path).ok()?;
+src/cheat_data.rs	1	let n = file.read(&mut buffer).ok()?;
+src/cheat_download.rs	1	crate::cheat_pack::list(root, folder).is_some_and(|entries| entries.iter().any(|e| crate::cheat_pack::read(e).is_some()))
+src/cheat_download.rs	1	if std::fs::metadata(&source).map_err(|e| e.to_string())?.len() != std::fs::metadata(&temp).map_err(|e| e.to_string())?.len()
+src/cheat_download.rs	1	if std::fs::symlink_metadata(&source).is_ok_and(|m| m.is_file()) && std::fs::rename(&source, &dest).is_ok() {
+src/cheat_download.rs	1	let mut from = std::fs::File::open(source).map_err(|e| e.to_string())?;
+src/cheat_download.rs	1	std::fs::File::open(&temp).and_then(|f| f.sync_all()).map_err(|e| e.to_string())?;
+src/cheat_download.rs	1	std::fs::File::open(dest).and_then(|f| f.sync_all()).map_err(|e| e.to_string())
+src/cheat_download.rs	1	std::fs::copy(source, dest).map_err(|e| e.to_string())?;
+src/cheat_download.rs	1	std::fs::read_dir(root.join(folder)).is_ok_and(|mut entries| entries.any(|e| e.is_ok_and(|e| e.path().extension().is_some_and(|ext| ext == "cht"))))
+src/cheat_pack.rs	1	f.read_exact(&mut head).ok()?;
+src/cheat_pack.rs	1	f.read_exact(&mut index).ok()?;
+src/cheat_pack.rs	1	f.read_exact(&mut n).ok()?;
+src/cheat_pack.rs	1	f.read_exact(&mut packed).ok()?;
+src/cheat_pack.rs	1	f.read_exact(&mut rest).ok()?;
+src/cheat_pack.rs	1	let mut f = std::fs::File::open(&e.pack).ok()?;
+src/cheat_pack.rs	1	let mut f = std::fs::File::open(pack).ok()?;
+src/cheats.rs	1	Ok(_) => match std::fs::read(&path) {
+src/cheats.rs	1	Some(match std::fs::metadata(&path) {
+src/cheats.rs	1	Source::File(p) => std::fs::read(p).ok(),
+src/cheats.rs	1	Source::Packed(e) => crate::cheat_pack::read(e),
+src/cheats.rs	1	if let Ok(entries) = std::fs::read_dir(&shared) {
+src/cheats.rs	1	let Ok(dir) = std::fs::read_dir(root.join(folder)) else { return Vec::new() };
+src/cheats.rs	1	let mut found: Vec<PathBuf> = std::fs::read_dir(dir)
+src/cheats.rs	1	std::fs::read_dir(dir).ok()?.flatten().find(|e| e.file_name().to_str().is_some_and(|n| n.eq_ignore_ascii_case(name)) && e.path().is_dir()).map(|e| e.path())
+src/control.rs	1	.open(if std::env::var_os("POCKET_CORE_TEST").is_some() { std::env::temp_dir().join("pocket-core.cmd") } else { std::path::PathBuf::from("/tmp/pocket-core.cmd") })
+src/control.rs	1	let Ok(dir) = std::fs::read_dir("/proc") else { return Vec::new() };
+src/control.rs	1	let spare = std::fs::read_to_string(format!("/proc/{pgid}/comm")).is_ok_and(|c| c.trim_end() == "runemu.sh");
+src/control.rs	1	let stat = std::fs::read_to_string(e.path().join("stat")).ok()?;
+src/control.rs	1	match s.read(&mut buf[at..]) {
+src/control.rs	1	read_exact(&mut body)?;
+src/control.rs	1	read_exact(&mut head)?;
+src/core_options.rs	1	let file: CoreOptionsFile = serde_json::from_slice(&std::fs::read(path).ok()?).ok()?;
+src/core_pacing.rs	1	if let Some(c) = read(cpu, "cpu_capacity") {
+src/core_pacing.rs	1	if let Some(khz) = read(cpu, "cpufreq/cpuinfo_max_freq") {
+src/core_pacing.rs	1	std::fs::read_to_string(root.join(format!("sys/devices/system/cpu/cpu{cpu}/cpufreq/scaling_cur_freq")))
+src/core_pacing.rs	1	std::fs::read_to_string(root.join(format!("sys/devices/system/cpu/cpu{cpu}/{file}"))).ok()?.trim().parse().ok()
+src/core_prewarm.rs	1	file.read_exact(&mut buf).ok()?;
+src/core_prewarm.rs	1	let dynamic = read(&mut file, dyn_off, dyn_len)?;
+src/core_prewarm.rs	1	let head = read(&mut file, 0, 64)?;
+src/core_prewarm.rs	1	let mut file = std::fs::File::open(path).ok()?;
+src/core_prewarm.rs	1	let mut file = std::fs::File::open(path)?;
+src/core_prewarm.rs	1	let mut found: Vec<_> = std::fs::read_dir(usr.join(dir)).into_iter().flatten().flatten().map(|e| e.path())
+src/core_prewarm.rs	1	let mut gallium: Vec<_> = std::fs::read_dir(libs).into_iter().flatten().flatten()
+src/core_prewarm.rs	1	let n = file.read(&mut buf)?;
+src/core_prewarm.rs	1	let ph = read(&mut file, phoff, phsize * phnum)?;
+src/core_prewarm.rs	1	let strings = read(&mut file, strtab - vaddr + offset, strsz)?;
+src/core_prewarm.rs	1	std::fs::metadata(path).ok().filter(|m| m.is_file()).map(|m| m.len())
+src/covers.rs	1	let missing = std::fs::read_to_string(&missing_file).unwrap_or_default();
+src/covers.rs	1	std::fs::File::open(file).ok()?.take(513).read_to_end(&mut bytes).ok()?;
+src/covers.rs	1	std::fs::read_to_string(file).unwrap_or_default().lines().map(str::to_string).collect()
+src/crash.rs	1	if let Ok(mut f) = std::fs::OpenOptions::new().create(true).append(true).open(&log) {
+src/crash.rs	1	if std::fs::metadata(&log).is_ok_and(|m| m.len() as usize > LOG_LIMIT) {
+src/crash.rs	1	let Ok(text) = std::fs::read_to_string(log) else { return };
+src/crash.rs	1	let text = std::fs::read_to_string(&file).ok()?;
+src/curator/prefs.rs	1	let mut p: Prefs = crate::fsutil::read_json_or_backup(&data_dir.join(FILE)).unwrap_or_else(|| Prefs::when_nothing_is_saved(data_dir));
+src/curator/prefs.rs	1	std::fs::read_to_string(data_dir.join(FILE))
+src/device.rs	1	_ => read(Path::new("/")),
+src/device.rs	1	let compatible = std::fs::read(base.join("compatible")).unwrap_or_default();
+src/device.rs	1	let model = std::fs::read_to_string(base.join("model")).unwrap_or_default();
+src/device.rs	2	|| std::fs::read(root.join("sys/firmware/devicetree/base/compatible")).is_ok_and(|b| b.split(|v| *v == 0).any(|c| c == b"qcom,sm8550" || c == b"qcom,sm4450"))
+src/device.rs	1	|| std::fs::read(root.join("sys/firmware/devicetree/base/compatible")).is_ok_and(|b| b.split(|v| *v == 0).any(|c| c == b"qcom,sm8550"))
+src/device.rs	2	|| std::fs::read_to_string(root.join("etc/os-release")).is_ok_and(|s| s.lines().any(|l| l.starts_with("HW_DEVICE=") && (l.contains("SM8550") || l.contains("SM4450"))))
+src/device.rs	1	|| std::fs::read_to_string(root.join("etc/os-release")).is_ok_and(|s| s.lines().any(|l| l.starts_with("HW_DEVICE=") && l.contains("SM8550")))
+src/disc.rs	1	Discs::parse(&std::fs::read_to_string(file).ok()?, rom)
+src/disc.rs	1	let text = std::fs::read_to_string(file).unwrap_or_default();
+src/disc_serial.rs	1	Some((extent, size)) => String::from_utf8_lossy(&l.read(f, extent, size.min(CNF_MAX))?).into_owned(),
+src/disc_serial.rs	1	if read_at(f, lba * self.sector, &mut raw)? < raw.len() {
+src/disc_serial.rs	1	let dir = l.read(f, extent, size.min(DIR_MAX))?;
+src/disc_serial.rs	1	let m = std::fs::metadata(rom)?;
+src/disc_serial.rs	1	let meta = std::fs::metadata(rom).ok()?;
+src/disc_serial.rs	1	let mut f = match std::fs::File::open(&image) {
+src/disc_serial.rs	1	let n = read_at(f, 0, &mut buf)?;
+src/disc_serial.rs	1	let pvd = l.read(f, 16, SECTOR_DATA)?;
+src/disc_serial.rs	1	let text = String::from_utf8_lossy(&std::fs::read(rom).ok()?).into_owned();
+src/disc_serial.rs	1	let text = std::fs::read_to_string(dir(data_dir).join("discs.tsv")).unwrap_or_default();
+src/disc_serial.rs	1	let text = std::fs::read_to_string(table_path(data_dir, dat)).ok()?;
+src/disc_serial.rs	1	match f.read(&mut buf[n..])? {
+src/disc_serial.rs	1	std::fs::metadata(table_path(data_dir, dat))
+src/display.rs	1	crate::fsutil::read_json_or_backup(&data_dir.join(Self::FILE))
+src/display_out.rs	1	let transform = std::fs::read_to_string("/sys/class/graphics/fbcon/rotate").ok().map(|r| panel_transform(&r));
+src/display_out.rs	1	s.read_exact(&mut body)?;
+src/display_out.rs	1	s.read_exact(&mut head)?;
+src/doc_checks.rs	1	.map(|f| without_tests(&std::fs::read_to_string(f).unwrap()))
+src/doc_checks.rs	1	all.push_str(&std::fs::read_to_string(e.path()).unwrap());
+src/doc_checks.rs	1	assert!(anchors(&read(&rel)).contains(anchor), "feature `{}`: {rel} has no heading for #{anchor}", f.id);
+src/doc_checks.rs	1	assert!(anchors(&read(&rel)).contains(anchor), "tour card `{}`: {rel} has no heading for #{anchor}", b.id);
+src/doc_checks.rs	1	assert!(section(&read("docs/user/controls-settings.md"), "Power and volume").contains("quick-settings.md#sleep--power-settings"));
+src/doc_checks.rs	1	assert!(section(&read("docs/user/settings-system.md"), "Sleep & power").contains("quick-settings.md#sleep--power-settings"));
+src/doc_checks.rs	1	assert_eq!(*md, read(&format!("docs/user/{n}.md")), "manual::PAGES {n:?} bundles docs/user/{n}.md");
+src/doc_checks.rs	1	assert_eq!(*md, read(&source), "manual::PAGES {n:?} bundles {source}");
+src/doc_checks.rs	1	for (n, line) in prose(&read(&file)) {
+src/doc_checks.rs	1	for (n, line) in read(&file).lines().enumerate().filter(|(_, l)| !l.starts_with('#')) {
+src/doc_checks.rs	1	for (n, line) in read(&format!("assets/i18n/{file}")).lines().enumerate() {
+src/doc_checks.rs	1	for (n, r) in fns_with_ignore_reason(&read("tests/i18n_snapshots.rs")) {
+src/doc_checks.rs	1	for (n, r) in fns_with_ignore_reason(&std::fs::read_to_string(&f).unwrap()) {
+src/doc_checks.rs	1	for (name, reason) in fns_with_ignore_reason(&std::fs::read_to_string(&f).unwrap()) {
+src/doc_checks.rs	1	for b in std::fs::read_dir(e.path()).unwrap().flatten() {
+src/doc_checks.rs	1	for e in std::fs::read_dir(dir).unwrap().flatten() {
+src/doc_checks.rs	1	for e in std::fs::read_dir(root().join("android/src")).unwrap().flatten() {
+src/doc_checks.rs	1	for e in std::fs::read_dir(root().join("src")).unwrap().flatten() {
+src/doc_checks.rs	1	for e in std::fs::read_dir(root().join("src/web/page")).unwrap().flatten() {
+src/doc_checks.rs	1	for e in std::fs::read_dir(root().join(dir)).unwrap().flatten() {
+src/doc_checks.rs	1	for f in std::fs::read_dir(root()).unwrap().flatten() {
+src/doc_checks.rs	1	if !fns_with_ignore_reason(&read("tests/text_size.rs")).iter().any(|(n, _)| n.starts_with("textfit_extras")) {
+src/doc_checks.rs	1	if let Ok(nightly) = std::fs::read_to_string(root().join("maintainer/release-prevention/nightly-gate.sh")) {
+src/doc_checks.rs	1	if word(&read(f), "Vitrine") {
+src/doc_checks.rs	1	let Ok(entries) = std::fs::read_dir(dir) else { return };
+src/doc_checks.rs	1	let binaries = section(&read("docs/dev/building.md"), "Building");
+src/doc_checks.rs	1	let caps = read("tests/code-shape.txt");
+src/doc_checks.rs	1	let code = without_tests(&std::fs::read_to_string(f).unwrap());
+src/doc_checks.rs	1	let env = section(&read("docs/dev/environment.md"), "Environment variables");
+src/doc_checks.rs	1	let extras = std::fs::read_to_string(root().join("scripts/release-extras.sh")).ok();
+src/doc_checks.rs	1	let index = read("docs/README.md");
+src/doc_checks.rs	1	let layout = section(&read("docs/dev/layout.md"), "Repository layout");
+src/doc_checks.rs	1	let lens = section(&read("docs/user/curator.md"), "Lens");
+src/doc_checks.rs	1	let list = read("tests/code-shape.txt");
+src/doc_checks.rs	1	let listed: Vec<String> = read("scripts/release-text-tests.txt").lines().map(str::trim).filter(|l| !l.is_empty() && !l.starts_with('#')).map(str::to_string).collect();
+src/doc_checks.rs	1	let md = format!("{}\n{}", read("docs/user/options.md"), read("docs/user/options-screen.md"));
+src/doc_checks.rs	1	let md = format!("{}\n{}\n{}\n{}", read("docs/user/settings.md"), read("docs/user/settings-playing.md"), read("docs/user/settings-sound.md"), read("docs/user/settings-system.md"));
+src/doc_checks.rs	1	let md = read("docs/STATUS.md");
+src/doc_checks.rs	1	let md = read("docs/user/pause-menu.md");
+src/doc_checks.rs	1	let md = read("docs/user/performance.md");
+src/doc_checks.rs	1	let md = read("docs/user/quick-settings.md");
+src/doc_checks.rs	1	let md = read("docs/user/settings-playing.md");
+src/doc_checks.rs	1	let md = read(page);
+src/doc_checks.rs	2	let md = std::fs::read_to_string(&file).unwrap();
+src/doc_checks.rs	1	let md = without_comments(&read("README.md"));
+src/doc_checks.rs	1	let mut files: Vec<PathBuf> = std::fs::read_dir(root().join("tests")).unwrap().filter_map(|e| e.ok().map(|e| e.path())).collect();
+src/doc_checks.rs	1	let mut out: Vec<String> = std::fs::read_dir(root().join("docs/user"))
+src/doc_checks.rs	1	let mut tests: Vec<PathBuf> = std::fs::read_dir(root().join("tests")).unwrap().filter_map(|e| e.ok().map(|e| e.path())).collect();
+src/doc_checks.rs	1	let pages = section(&read(first), "Pages");
+src/doc_checks.rs	1	let playing = read("docs/user/playing.md");
+src/doc_checks.rs	1	let pre = std::fs::read_to_string(root().join("scripts/pre-release.sh")).ok();
+src/doc_checks.rs	1	let rows = first_table(&section(&read("docs/user/settings.md"), "Cozy extras"));
+src/doc_checks.rs	1	let settings = format!("{}\n{}\n{}", read("docs/user/settings.md"), read("docs/user/settings-playing.md"), read("docs/user/settings-sound.md"));
+src/doc_checks.rs	2	let src = std::fs::read_to_string(&f).unwrap();
+src/doc_checks.rs	1	let text = std::fs::read_to_string(&file).unwrap();
+src/doc_checks.rs	1	let text = std::fs::read_to_string(f).unwrap();
+src/doc_checks.rs	1	let there = std::fs::read_to_string(&dest).unwrap();
+src/doc_checks.rs	2	let tour = read("docs/user/tour.md");
+src/doc_checks.rs	2	let tsv = read(&format!("assets/i18n/{file}"));
+src/doc_checks.rs	1	let ui = read("android/src/ui.rs");
+src/doc_checks.rs	1	scan(rel(&f), &std::fs::read_to_string(&f).unwrap(), "Settings", &en, false);
+src/doc_checks.rs	1	scan(rel(&f), &std::fs::read_to_string(&f).unwrap(), "Settings", &en, true);
+src/doc_checks.rs	1	scan(rel(&p), &std::fs::read_to_string(&p).unwrap(), "Settings", &en, false);
+src/doc_checks.rs	1	std::fs::read_to_string(root().join(rel)).unwrap_or_else(|e| panic!("{rel}: {e}"))
+src/document_check.rs	1	let mut open = self.host.open(self.files.get(zip)?.0)?;
+src/document_check.rs	1	self.host.open(self.files.get(path)?.0)
+src/document_library.rs	1	"dreamcast" => kept.join("dc/dc_boot.bin").metadata().is_ok_and(|m| m.is_file() && m.len() == 2 << 20),
+src/document_library.rs	1	"saturn" => ["saturn_bios.bin", "sega_101.bin", "mpr-17933.bin"].iter().any(|n| kept.join(n).metadata().is_ok_and(|m| m.is_file() && m.len() == PS1_BIOS_BYTES as u64)),
+src/document_library.rs	1	entries.flatten().any(|e| is_ps1_bios_name(&e.file_name().to_string_lossy()) && e.metadata().is_ok_and(|m| m.is_file() && m.len() == PS1_BIOS_BYTES as u64))
+src/document_library.rs	1	std::fs::read_dir(folder).is_ok_and(|entries| {
+src/dpad_stick_rocknix.rs	1	let Ok(text) = std::fs::read_to_string(path) else { return };
+src/dpad_stick_rocknix.rs	1	let cfg = crate::emu_choice::Cfg::read(cfg_path);
+src/dpad_stick_rocknix.rs	1	let current = std::fs::read_to_string(&file).ok();
+src/dsv.rs	1	let bytes = match std::fs::read(&dsv) {
+src/eject.rs	1	let text = std::fs::read_to_string(&path).ok()?;
+src/emu_choice.rs	1	Cfg::parse(&std::fs::read_to_string(path).unwrap_or_default())
+src/emu_choice.rs	1	let Ok(entries) = std::fs::read_dir(&dir) else { continue };
+src/emu_choice.rs	3	let cfg = Arc::new(Cfg::choices_only(&std::fs::read_to_string(SYSTEM_CFG).unwrap_or_default()));
+src/emu_choice.rs	1	let profile = std::fs::read_to_string(UI_SHADER_PROFILE).unwrap_or_default();
+src/emu_menu.rs	1	let file = CoreOptionsFile::read(&core_options::file_path(data_dir, system), rom)?;
+src/emu_settings.rs	1	&read(Path::new(SYSTEM_CFG)),
+src/emu_settings.rs	1	Target::Es { armsx2_ini: Some(p), .. } | Target::DolphinIni(p, _) => read(&files.at(p)),
+src/emu_settings.rs	1	b"CISO" => game_id_at(&read(0x8000, 6)?, 0),
+src/emu_settings.rs	1	b"WBFS" => game_id_at(&read(0x200, 6)?, 0),
+src/emu_settings.rs	1	f => ini_get(&read(&files.base(f)), s.ini.1, s.ini.2).unwrap_or_default(),
+src/emu_settings.rs	1	if !game_env(N3DS.platform, &cfg, file).is_empty() && read(Path::new(MANGOHUD_FPS_CONF)) != mangohud_fps_config() {
+src/emu_settings.rs	1	if let Ok(cfg) = std::fs::read_to_string(SYSTEM_CFG) {
+src/emu_settings.rs	1	if let Ok(old) = std::fs::read_to_string(AZAHAR_QT) {
+src/emu_settings.rs	1	let block = read(data + offset, end.checked_sub(offset)?.min(1 << 20) as usize)?;
+src/emu_settings.rs	1	let cfg = read(&files.system_cfg);
+src/emu_settings.rs	2	let cfg = read(Path::new(SYSTEM_CFG));
+src/emu_settings.rs	1	let dir = |d: &str, f: &str| read(&files.at(&format!("{DOLPHIN_DIR}/{d}/{f}")));
+src/emu_settings.rs	1	let first = u64_at(&read(0x20, 8)?, 0)?;
+src/emu_settings.rs	1	let head = read(0, 0x60)?;
+src/emu_settings.rs	1	let header = std::fs::File::open(&rom).ok().and_then(|mut f| dolphin_game_id_in(&mut f));
+src/emu_settings.rs	1	let mut ini_old = armsx2_ini.as_deref().map(|p| read(&files.at(p)));
+src/emu_settings.rs	1	let old = read(&files.at(p));
+src/emu_settings.rs	1	let profile = read(&Path::new(DOLPHIN_DIR).join("GamecubeControllerProfiles").join(format!("GCPadNew.ini.{name}")));
+src/emu_settings.rs	1	r.by_ref().take(len as u64).read_to_end(&mut buf).ok()?;
+src/emu_settings.rs	1	std::fs::read_to_string(p).unwrap_or_default()
+src/emu_settings.rs	1	u64_at(&read(0x28, 8)?, 0)? & !(1 << 63)
+src/fan_curve.rs	1	Beat::read(path, secs)
+src/fan_curve.rs	1	let Some(text) = std::fs::read_to_string(note_file).ok() else { return false };
+src/fan_curve.rs	1	let meta = std::fs::metadata(&self.paths.system_cfg).ok();
+src/fan_curve.rs	1	let text = std::fs::read_to_string(&self.paths.system_cfg).unwrap_or_default();
+src/fast_switch.rs	1	if std::fs::read_to_string(file).is_ok_and(|mark| mark.split_whitespace().next() == Some(me.as_str())) {
+src/fast_switch.rs	1	std::fs::read_to_string(file).is_ok_and(|mark| mark_holds(&mark, pgid, proc_stat))
+src/fast_switch.rs	1	std::fs::read_to_string(format!("/proc/{pid}/stat")).ok()
+src/favorites.rs	1	let list = crate::fsutil::read_json_or_backup(&file).unwrap_or_default();
+src/fn_keys.rs	1	&& std::fs::read_to_string(e.path().join("comm")).is_ok_and(|c| c.trim() == comm)
+src/fn_keys.rs	1	let kept = std::fs::read_to_string(&keep).unwrap_or_default();
+src/fn_keys.rs	1	std::fs::read_dir(root.join("proc")).into_iter().flatten().flatten().any(|e| {
+src/fps_line.rs	1	std::fs::read_to_string("/proc/self/stat").ok().and_then(|s| parse_ticks(&s)).unwrap_or(0)
+src/frame_cache.rs	1	file.read_to_end(&mut bytes).ok()?;
+src/frame_cache.rs	1	fs::symlink_metadata(dir).is_ok_and(|m| m.is_dir() && m.uid() == unsafe { libc::geteuid() })
+src/frame_cache.rs	1	let (path, Ok(meta)) = (e.path(), e.metadata()) else { continue };
+src/frame_cache.rs	1	let Ok(entries) = fs::read_dir(dir) else { return };
+src/frame_cache.rs	1	let m = fs::metadata(path).ok()?;
+src/frame_cache.rs	1	let mut file = fs::File::open(&path).ok()?;
+src/frame_dump.rs	1	let data = std::fs::read(path)?;
+src/frame_led.rs	1	std::fs::read_to_string(dir.join("capacity")).ok().and_then(|s| s.trim().parse::<i64>().ok()).map(|c| c.clamp(0, 100) as u8)
+src/frozen.rs	1	file.read_to_end(&mut text).ok()?;
+src/frozen.rs	1	if let Some(line) = std::fs::read_to_string(path.with_file_name(".stage")).ok().as_deref().and_then(|s| s.trim().lines().next()?.split(' ').nth(2).map(str::to_owned)) {
+src/frozen.rs	1	let at = files.iter().find(|f| f.exists()).and_then(|f| std::fs::metadata(f).and_then(|m| m.modified()).ok()).and_then(|t| t.duration_since(UNIX_EPOCH).ok()).map(|d| d.as_secs());
+src/frozen.rs	1	let len = file.metadata().ok()?.len();
+src/frozen.rs	1	let m = std::fs::metadata(rom).ok()?;
+src/frozen.rs	1	let mut file = std::fs::File::open(path).ok()?;
+src/frozen.rs	2	let n = file.read(&mut buf).ok()?;
+src/frozen_phone.rs	1	let bytes = std::fs::read(crate::state_file::resolve(&mark_path(base))).ok()?;
+src/frozen_phone.rs	1	let moment = moment.filter(|p| crate::state_file::read(p).is_ok())?;
+src/frozen_phone.rs	1	let mut found: Vec<(u32, PathBuf)> = std::fs::read_dir(dir)
+src/fsutil.rs	1	.any(|fd| fs::read_link(fd.path()).is_ok_and(|l| l == target))
+src/fsutil.rs	1	.metadata()
+src/fsutil.rs	1	.open(&tmp)
+src/fsutil.rs	1	File::open(dir)?.sync_all()
+src/fsutil.rs	1	File::open(e.path())?.sync_all()?;
+src/fsutil.rs	1	Ok(m) if m.is_dir() => fs::read_dir(path).map_or(0, |entries| entries.flatten().map(|e| count_files(&e.path())).sum()),
+src/fsutil.rs	1	for e in fs::read_dir(dir)? {
+src/fsutil.rs	1	fs::read_dir(format!("/proc/{pid}/fd"))
+src/fsutil.rs	1	if fs::read(&bak).ok().as_deref() != Some(bytes) {
+src/fsutil.rs	1	if fs::symlink_metadata(to).is_ok() {
+src/fsutil.rs	1	if let Ok(d) = File::open(dir) {
+src/fsutil.rs	1	if std::fs::symlink_metadata(to).is_ok_and(|m| !m.is_file()) {
+src/fsutil.rs	1	io::copy(&mut File::open(from)?, &mut out)?;
+src/fsutil.rs	1	let Ok(entries) = fs::read_dir(dir) else { return gone };
+src/fsutil.rs	1	let bytes = fs::read(path).map_err(|e| e.to_string())?;
+src/fsutil.rs	1	let m = fs::metadata(path).ok()?;
+src/fsutil.rs	1	match fs::symlink_metadata(path) {
+src/fsutil.rs	1	std::fs::copy(from, to)?;
+src/fsutil.rs	1	std::fs::metadata(path).is_ok_and(|m| m.is_file() && m.len() == 0)
+src/gallery.rs	1	let Ok(files) = std::fs::read_dir(sys.path()) else { continue };
+src/gallery.rs	1	let Ok(systems) = std::fs::read_dir(dir) else { return found };
+src/gallery.rs	1	let read = std::fs::File::open(shot).and_then(|f| f.take(SHELF_MAX_BYTES + 1).read_to_end(&mut bytes));
+src/gallery.rs	1	match file.symlink_metadata() {
+src/game_check.rs	1	dirs.extend(std::fs::read_dir(&bios).into_iter().flatten().flatten().map(|e| e.path()).filter(|p| p.is_dir() && !is_litter(p)));
+src/game_check.rs	1	file.seek(SeekFrom::Start(at)).is_ok() && file.read_exact(chunk).is_ok() && chunk.iter().all(|b| *b == 0)
+src/game_check.rs	1	for path in std::fs::read_dir(&bios).into_iter().flatten().flatten().map(|e| e.path()) {
+src/game_check.rs	1	for path in std::fs::read_dir(&roms).into_iter().flatten().flatten().map(|e| e.path()).filter(|p| p.is_file()) {
+src/game_check.rs	1	for path in std::fs::read_dir(dir).into_iter().flatten().flatten().map(|e| e.path()) {
+src/game_check.rs	2	let Ok(meta) = std::fs::metadata(&path) else { continue };
+src/game_check.rs	1	let Ok(mut f) = std::fs::File::open(path) else { return Some(None) };
+src/game_check.rs	1	let Some(mut file) = files.open(path) else { return false };
+src/game_check.rs	1	let mut it = std::fs::read_dir(dir).into_iter().flatten().flatten();
+src/game_check.rs	1	match f.read(&mut buf) {
+src/game_check.rs	1	std::fs::File::open(path).ok().map(|f| Box::new(f) as Box<dyn crate::document_check::ReadSeek>)
+src/game_check.rs	1	std::fs::metadata(path).ok().filter(|m| m.is_file()).map(|m| m.len())
+src/game_files.rs	1	Item { path: p.to_path_buf(), bytes: fs::symlink_metadata(p).map_or(0, |m| m.len()) }
+src/game_files.rs	1	for e in fs::read_dir(&d).into_iter().flatten().flatten() {
+src/game_files.rs	1	for e in fs::read_dir(&dirs[i])?.flatten() {
+src/game_files.rs	1	if !matches!(kind.as_str(), "cue" | "m3u" | "gdi") || fs::metadata(path).map_or(true, |m| m.len() > 1 << 20) {
+src/game_files.rs	1	let (p, m) = (e.path(), e.metadata()?);
+src/game_files.rs	1	let Ok(bytes) = fs::read(path) else { return Vec::new() };
+src/game_files.rs	1	let Ok(m) = e.metadata() else { continue };
+src/game_files.rs	1	let bytes = fs::symlink_metadata(&f).map_or(0, |m| m.len());
+src/game_files.rs	1	let here: Vec<PathBuf> = fs::read_dir(dir).map(|r| r.flatten().map(|e| e.path()).filter(|p| p.is_file()).collect()).unwrap_or_default();
+src/game_files.rs	1	let meta = fs::symlink_metadata(path).map_err(|_| "The game's file is no longer on the SD card.".to_string())?;
+src/game_files.rs	1	let mut out: Vec<PathBuf> = fs::read_dir(&dir)
+src/game_files.rs	1	let mut out: Vec<PathBuf> = fs::read_dir(dir)
+src/game_pictures.rs	1	let now = std::fs::read_to_string(&file).unwrap_or_default();
+src/game_pictures.rs	1	std::fs::File::open(file).and_then(|mut f| f.read_exact(&mut head)).is_ok() && head == *b"\x89PNG\r\n\x1a\n"
+src/game_pictures.rs	1	std::fs::read_to_string(missing_file(data_dir, kind, system)).unwrap_or_default().lines().map(str::to_string).collect()
+src/game_settings.rs	1	let (mut values, level) = match (read(self.game_file()), read(self.console_file())) {
+src/gamelist.rs	1	candidates.into_iter().find(|p| std::fs::metadata(p).is_ok_and(|m| m.is_file() && m.len() <= COVER_MAX_BYTES))
+src/gamelist.rs	1	let Ok(bytes) = std::fs::read(data_dir.join(FILE)) else { return };
+src/gamelist.rs	1	let bytes = match std::fs::read(file) {
+src/gamelist.rs	1	let m = std::fs::metadata(file).ok().filter(|m| m.is_file())?;
+src/games_card.rs	1	let Ok(mounts) = std::fs::File::open("/proc/self/mounts") else { return };
+src/games_card.rs	1	watch_paths(Path::new("/dev"), &|| std::fs::read_to_string("/proc/self/mounts").unwrap_or_default(), &tell);
+src/games_card.rs	1	while unsafe { libc::read(inotify.as_raw_fd(), buf.as_mut_ptr().cast(), buf.len()) } > 0 {}
+src/h700_gba.rs	1	e.metadata().and_then(|m| m.modified()).ok(),
+src/h700_gba.rs	1	file.take(20).read_exact(&mut header).ok()?;
+src/h700_gba.rs	1	let file = std::fs::File::open(path).ok()?;
+src/h700_gba.rs	1	let len = file.metadata().ok()?.len();
+src/h700_gba.rs	1	let mut files: Vec<_> = std::fs::read_dir(root.join(system)).into_iter().flatten().flatten().collect();
+src/h700_gba.rs	1	let state = crate::state_file::read(path).ok()?;
+src/h700_volume.rs	1	if let Some(io) = Real::open() {
+src/h700_volume.rs	1	if open(&mut ctl, c"hw:Codec".as_ptr(), 0) < 0 || ctl.is_null() {
+src/h700_volume.rs	1	native: native::Controls::open()?,
+src/h700_volume.rs	1	std::fs::read_to_string(path).ok().is_some_and(|s| affected_ucm(&s))
+src/hakux.rs	1	let text = std::fs::read_to_string(cfg).unwrap_or_default();
+src/hakux.rs	1	std::fs::read_to_string(info).is_ok_and(|i| states_supported(&i))
+src/heat.rs	1	let k = std::fs::read_to_string(zone.join(format!("trip_point_{i}_type"))).ok()?;
+src/heat.rs	1	let kind = |p: &Path| std::fs::read_to_string(p.join("type")).unwrap_or_default().to_ascii_lowercase();
+src/heat.rs	1	let m: i64 = std::fs::read_to_string(zone.join("temp")).ok()?.trim().parse().ok()?;
+src/heat.rs	1	let mut zones: Vec<PathBuf> = std::fs::read_dir(&dir).ok()?.flatten().map(|e| e.path()).filter(|p| p.file_name().is_some_and(|n| n.to_string_lossy().starts_with("thermal_zone"))).collect();
+src/heat.rs	1	std::fs::read_to_string(zone.join(format!("trip_point_{i}_temp"))).ok()?.trim().parse::<u32>().ok().map(|m| m / 1000)
+src/hostsys.rs	2	if let Ok(m) = std::fs::symlink_metadata(&target) {
+src/hostsys.rs	1	if let Some(dir) = std::fs::read_to_string(rom).ok().as_deref().and_then(scummvm_path) {
+src/hostsys.rs	1	let Ok(entries) = std::fs::read_dir(from) else { return };
+src/hostsys.rs	1	let Ok(source) = std::fs::metadata(e.path()) else { continue };
+src/hostsys.rs	1	let mut dirs: Vec<std::path::PathBuf> = std::fs::read_dir(&root)
+src/hostsys.rs	1	let mut seeded: std::collections::BTreeMap<String, SeededAsset> = std::fs::read(&record).ok()
+src/hostsys.rs	1	let text = std::fs::read_to_string(&ini).unwrap_or_default();
+src/hw_render.rs	1	let Some(name) = std::fs::read_to_string(&info).ok().and_then(|s| {
+src/hw_render.rs	1	let text = std::fs::read_to_string(&per_core).or_else(|_| std::fs::read_to_string(root.join("retroarch-core-options.cfg"))).unwrap_or_default();
+src/i18n.rs	1	if let Ok(mut f) = std::fs::OpenOptions::new().create(true).append(true).open(&rec.path) {
+src/image.rs	1	Some("jpg" | "jpeg") => load_jpeg(path),
+src/image.rs	1	Some("png") => load_png(path),
+src/image.rs	1	let meta = std::fs::symlink_metadata(&file).ok()?;
+src/image.rs	1	let mut decoder = jpeg_decoder::Decoder::new(std::io::BufReader::new(std::fs::File::open(path).ok()?));
+src/image.rs	1	let source = std::fs::File::open(&file).ok()?.take(MAX_CAPTURE_BYTES);
+src/image.rs	1	read_png(std::io::BufReader::new(std::fs::File::open(path).ok()?))
+src/image.rs	1	self.source.read(bytes)
+src/image.rs	1	std::fs::File::open(path).ok()?.read_exact(&mut head).ok()?;
+src/insert_rig.rs	1	Some(Files { rig: serde_json::from_slice(&json).ok()?, front: read("front.png"), base: read("base.png")?, over: read("over.png"), top: read("top.png").or_else(|| read("tray.png")), under: read("under.png") })
+src/insert_rig.rs	1	let json = read("rig.json")?;
+src/insert_rig.rs	1	let read = |f: &str| std::fs::read(dir.join(f)).ok().map(Cow::Owned);
+src/j2me_java.rs	1	if let Ok(zips) = std::fs::read_dir(inner.join("lib")) {
+src/j2me_java.rs	1	let bytes = std::fs::read(&file).map_err(|e| Failure::Unpack(e.to_string()))?;
+src/j2me_java.rs	1	let got = std::fs::metadata(&file).map(|m| m.len()).unwrap_or(0);
+src/j2me_java.rs	1	let got = std::fs::metadata(dest).map_or(0, |m| m.len());
+src/j2me_java.rs	1	let got = std::fs::metadata(file).map(|m| m.len()).unwrap_or(0);
+src/j2me_keys.rs	1	let cfg = crate::emu_choice::Cfg::read(Path::new(crate::emu_choice::SYSTEM_CFG));
+src/j2me_keys.rs	1	let current = std::fs::read_to_string(&file).ok();
+src/j2me_keys.rs	1	match std::fs::read_to_string(&file) {
+src/j2me_size.rs	1	let Ok(now) = std::fs::read_to_string(file) else { return Ok(()) };
+src/j2me_size.rs	1	let cfg = ec::Cfg::read(Path::new(ec::SYSTEM_CFG));
+src/j2me_size.rs	1	let now = std::fs::read_to_string(&file).ok();
+src/j2me_size.rs	1	let now = std::fs::read_to_string(&file).unwrap_or_default();
+src/j2me_size.rs	1	let screen = screen(&std::fs::read_to_string(RETROARCH_CFG).unwrap_or_default());
+src/j2me_size.rs	1	ok.then(|| std::fs::read(&p).ok().map(|b| String::from_utf8_lossy(&b).into_owned())).flatten()
+src/j2me_size.rs	1	std::fs::read_dir(dir).ok()?.flatten().find_map(|e| {
+src/kept.rs	1	let value = read();
+src/kids.rs	1	let t = std::fs::metadata(p).ok()?.modified().ok()?.duration_since(std::time::UNIX_EPOCH).ok()?.as_secs();
+src/kids.rs	2	std::fs::read(Self::file(data_dir)).ok().and_then(|b| serde_json::from_slice(&b).ok()).unwrap_or_default()
+src/lastframe.rs	1	let meta = std::fs::metadata(path).ok().filter(|m| m.is_file())?;
+src/latinise.rs	1	base_covers(ch) || crate::text_fallback::path().and_then(|p| crate::text_fallback::open(&p)).is_some_and(|f| f.has(ch))
+src/launch_picture.rs	1	let mut img = image::load_png(file)?;
+src/layouts.rs	1	for entry in std::fs::read_dir(&wrapper).into_iter().flatten().flatten() {
+src/layouts.rs	1	for entry in std::fs::read_dir(catalogue).into_iter().flatten().flatten() {
+src/layouts.rs	1	for entry in std::fs::read_dir(dir).into_iter().flatten().flatten() {
+src/layouts.rs	1	for entry in std::fs::read_dir(rom_dir).into_iter().flatten().flatten() {
+src/layouts.rs	1	let listed = ArtDir::read(&dir, folder);
+src/layouts.rs	1	let listed = ArtDir::read(dir, folder);
+src/leds.rs	1	fsutil::read_json_or_backup(&data_dir.join(FILE))
+src/leds.rs	1	let sample = crate::battery::read(&dir, 0);
+src/library.rs	1	.or_else(|| fs::read_to_string(GAMES_CARD_MARKER).ok().and_then(|t| t.lines().next().map(str::to_string)))?;
+src/library.rs	1	for e in fs::read_dir(dir).into_iter().flatten().flatten() {
+src/library.rs	1	if !matches!(kind.as_str(), "cue" | "m3u" | "gdi") || fs::metadata(&g.path).map_or(true, |m| m.len() > SHEET_MAX_BYTES) {
+src/library.rs	1	if let Ok(entries) = fs::read_dir(dir) {
+src/library.rs	2	let (xml, _) = system_list::read(es_systems);
+src/library.rs	1	let Ok(bytes) = fs::read(&g.path) else { continue };
+src/library.rs	1	let Ok(entries) = fs::read_dir(dir) else { return false };
+src/library.rs	2	let Ok(entries) = fs::read_dir(roms) else { return Vec::new() };
+src/library.rs	1	let Ok(metadata) = fs::metadata(entry.path()) else { continue };
+src/library.rs	1	let same = |p: &Path| fs::metadata(p).map(|m| (m.dev(), m.ino())).ok();
+src/library.rs	1	subs.iter().any(|s| fs::read_dir(s).is_ok_and(|e| e.flatten().any(|e| e.path().is_file() && takes(&e.path()))))
+src/library_cache.rs	1	let file = std::fs::File::open(path(data_dir)).map_err(|e| if e.kind() == io::ErrorKind::NotFound { "none yet".to_string() } else { e.to_string() })?;
+src/library_cache.rs	1	let m = std::fs::metadata(es_systems).ok()?;
+src/library_cache.rs	1	let systems: Vec<System> = serde_json::from_reader(r).map_err(|e| format!("damaged ({e})"))?;
+src/library_cache.rs	1	match read(data_dir, k) {
+src/library_cache.rs	1	r.read_line(&mut first).map_err(|e| e.to_string())?;
+src/library_sync.rs	1	.map(|_| crate::fsutil::read_json_or_backup(&own_dir.join(HISTORY_FILE)).unwrap_or_default());
+src/library_sync.rs	1	let meta = match std::fs::metadata(path) {
+src/library_sync.rs	1	let mut out: Vec<String> = std::fs::read_dir(root)
+src/library_sync.rs	1	let own: State = crate::fsutil::read_json_or_backup(&own_dir.join(STATE_FILE)).unwrap_or_default();
+src/library_sync.rs	1	match std::fs::read(path)
+src/library_sync.rs	1	std::fs::metadata(data_dir.join(name))
+src/library_systems.rs	1	let xml = match std::fs::read(path) {
+src/library_systems.rs	1	read(path).1
+src/libretro.rs	1	if let (Some(mem), Ok(saved)) = (memory_of(&mut self.lib, MEMORY_RTC), std::fs::read(&self.rtc_path)) {
+src/libretro.rs	1	let state_time = std::fs::metadata(&state).and_then(|m| m.modified()).ok();
+src/libretro.rs	1	match crate::state_file::read(&p) {
+src/libretro.rs	1	match std::fs::read(&self.sram_path) {
+src/libretro.rs	1	self.sram_time = std::fs::metadata(&self.sram_path).and_then(|m| m.modified()).ok();
+src/logs.rs	1	.filter_map(|n| fs::metadata(logs.join(n)).ok()?.modified().ok()?.duration_since(std::time::UNIX_EPOCH).ok())
+src/logs.rs	1	if f.seek(SeekFrom::Start(from)).is_ok() && f.read_to_end(&mut text).is_ok() {
+src/logs.rs	1	if f.seek(SeekFrom::Start(self.offset)).is_err() || f.take((len - self.offset).min(READ_MAX)).read_to_end(&mut buf).is_err() {
+src/logs.rs	1	let Ok(meta) = fs::metadata(&self.path) else { return (Vec::new(), false) };
+src/logs.rs	1	let Ok(mut f) = File::open(&self.path) else { return (Vec::new(), restarted) };
+src/logs.rs	1	let Ok(mut f) = File::open(logs.join(file)) else { continue };
+src/logs.rs	1	let file = OpenOptions::new().create(true).truncate(false).write(true).open(path).ok()?;
+src/logs.rs	1	let id = fs::read_to_string("/proc/sys/kernel/random/boot_id").ok()?;
+src/logs.rs	1	let kmsg = OpenOptions::new().read(true).custom_flags(libc::O_NONBLOCK).open(&src.kmsg);
+src/logs.rs	1	let len = f.metadata().map_or(0, |m| m.len());
+src/logs.rs	1	let mut daemon = Daemon::open(&logs, Sources::system(), FILE_CAP, Instant::now());
+src/logs.rs	1	let mut dirs: Vec<String> = fs::read_dir(logs)
+src/logs.rs	1	let mut v: Vec<String> = fs::read_dir(dir)
+src/logs.rs	1	let s = fs::read_to_string(path).ok()?;
+src/logs.rs	1	let size = fs::metadata(&path).map_or(0, |m| m.len());
+src/logs.rs	1	let text = fs::read_to_string(logs.join(STATE_FILE)).ok()?;
+src/logs.rs	1	match f.read(&mut buf) {
+src/logs.rs	1	self.file = OpenOptions::new().create(true).append(true).open(&self.path).ok();
+src/low_battery.rs	1	let get = |p: &Path| std::fs::read_to_string(p).ok().map(|s| s.trim().to_string());
+src/low_battery.rs	1	std::fs::read_dir(supplies).into_iter().flatten().flatten().any(|e| {
+src/main.rs	1	(image::load_png(std::path::Path::new(&preview)), t)
+src/main.rs	1	app.earlier_snapshot(state, args.get(2).and_then(|p| image::load_image(std::path::Path::new(p))));
+src/main.rs	1	if let (Some(pic), Some(layout)) = (args.get(3).and_then(|p| image::load_image(std::path::Path::new(p))), app.preview_layout(w as i32, h as i32)) {
+src/main.rs	1	if let Some(cheats) = &mut menu.cheats { cheats.open(); }
+src/main.rs	1	if let Some(img) = std::env::var("POCKETUI_SNAPSHOT_LAUNCH_PICTURE").ok().and_then(|p| image::load_png(std::path::Path::new(&p))) {
+src/main.rs	1	let Ok(file) = std::fs::OpenOptions::new().read(true).write(true).open(&fifo) else { return };
+src/main.rs	3	let background = args.get(2).and_then(|p| image::load_image(std::path::Path::new(p)));
+src/main.rs	1	let current = battery::read(&battery::dir(), now);
+src/main.rs	1	let frame = args.get(2).and_then(|p| image::load_image(std::path::Path::new(p)));
+src/main.rs	1	let mut settings = hosted.then(|| run.options.open(&self.data_dir, &run.system, &run.path));
+src/main.rs	1	let picture = args.get(2).and_then(|p| image::load_image(std::path::Path::new(p)));
+src/main.rs	1	let preview = shows_state.then(|| args.get(2).and_then(|p| image::load_image(std::path::Path::new(p)))).flatten();
+src/main.rs	1	let saved = ra_state.as_ref().and_then(|state| std::fs::metadata(state).and_then(|m| m.modified()).ok()).map(|t| {
+src/main.rs	1	pocket_ui::play_log::open();
+src/main.rs	1	pocket_ui::settings_values::set(pocket_ui::settings_values::read(&*app.sys.shared_hw(), &app.sys.net(), &app.data_dir, connected));
+src/mako_osd.rs	1	let text = match std::fs::read_to_string(config) {
+src/manual_time.rs	1	let file = std::fs::OpenOptions::new().read(true).open(dev).map_err(|e| format!("{}: {e}", dev.display()))?;
+src/media.rs	1	if let Ok(mut f) = std::fs::OpenOptions::new().create(true).append(true).open(path) {
+src/moonlight.rs	1	for e in std::fs::read_dir(dir)?.flatten() {
+src/moonlight.rs	1	host_setting(&std::fs::read_to_string(SYSTEM_CFG).unwrap_or_default())
+src/moonlight.rs	1	let list: Vec<String> = crate::fsutil::read_json_or_backup(&data_dir.join(PCS_FILE)).unwrap_or_default();
+src/moonlight.rs	1	let xml = std::fs::read_to_string(dir.join("gamelist.xml")).unwrap_or_default();
+src/moonlight.rs	1	std::fs::metadata(bin).is_ok_and(|m| m.is_file() && m.permissions().mode() & 0o111 != 0)
+src/net_log.rs	1	fs::read_dir(dir)
+src/net_log.rs	1	match pipe.read(&mut buf) {
+src/night_light.rs	1	crate::fsutil::read_json_or_backup(&data_dir.join(FILE)).map(Prefs::clamped).unwrap_or_default()
+src/night_light.rs	1	unsafe { libc::read(self.0, buf.as_mut_ptr().cast(), buf.len()) };
+src/night_light.rs	1	while matches!(rx.read(&mut buf), Ok(n) if n > 0) {}
+src/notice.rs	1	let text = std::fs::read_to_string(file).ok()?;
+src/on_start.rs	1	let before = std::fs::read_to_string(&file).unwrap_or_default();
+src/on_start.rs	1	serde_json::from_slice(&std::fs::read(data_dir.join(LAST_GAME_FILE)).ok()?).ok()
+src/os_compat.rs	1	Entry::Link(std::fs::read_link(&p).ok()?.to_string_lossy().into_owned())
+src/os_compat.rs	1	let (ui, pc) = (read(&exe), read(&core));
+src/os_compat.rs	1	let Some(data) = sys.read(path) else { continue };
+src/os_compat.rs	2	let compatible = resolve(sys, "sys/firmware/devicetree/base/compatible").and_then(|p| sys.read(&p)).unwrap_or_default();
+src/os_compat.rs	1	let defined = match sys.read(&path).as_deref().map(parse_elf) {
+src/os_compat.rs	1	let meta = std::fs::symlink_metadata(&p).ok()?;
+src/os_compat.rs	2	let model = resolve(sys, "sys/firmware/devicetree/base/model").and_then(|p| sys.read(&p)).unwrap_or_default();
+src/os_compat.rs	1	let read = |p: &Option<PathBuf>| p.as_ref().and_then(|p| std::fs::read(p).ok()).unwrap_or_default();
+src/os_compat.rs	1	let text = resolve(sys, "etc/os-release").and_then(|p| sys.read(&p)).map(|b| String::from_utf8_lossy(&b).into_owned());
+src/os_compat.rs	1	std::fs::read(self.0.join(path)).ok()
+src/osd_sensors.rs	1	let reading = Sensors::read(&root, &battery_dir);
+src/osd_sensors.rs	1	percent: if shows_charge() { battery::read(battery_dir, 0).map(|b| b.capacity) } else { None },
+src/osd_sensors.rs	1	power: battery::read(battery_dir, 0).and_then(|b| {
+src/pad.rs	1	let Ok(entries) = std::fs::read_dir(dir) else { return Vec::new() };
+src/pad.rs	1	let m = e.metadata().ok()?;
+src/pad.rs	1	let node = std::fs::read_link(format!("/proc/self/fd/{}", dev.as_raw_fd())).unwrap_or_default();
+src/pad.rs	1	match Device::open(node) {
+src/pad.rs	1	match bus.open(&node) {
+src/pad.rs	1	while unsafe { libc::read(fd, buf.as_mut_ptr().cast(), buf.len()) } > 0 {}
+src/pad_bindings.rs	1	let mut p: Self = std::fs::read(dir.join(FILE)).ok().and_then(|b| serde_json::from_slice(&b).ok()).unwrap_or_default();
+src/pad_bindings.rs	2	let stamp = std::fs::metadata(dir.join(FILE)).and_then(|m| m.modified()).ok();
+src/pad_bridge.rs	1	let file = std::fs::OpenOptions::new().read(true).write(true).create(true).truncate(false).mode(0o600).open(format!("/tmp/pocket-controller-id-{base}.lock"))?;
+src/perf_fan.rs	1	crate::fsutil::read_json_or_backup(&data_dir.join(FILE)).unwrap_or_default()
+src/perf_fan.rs	1	let battery = crate::battery::read(battery_dir, 0);
+src/phone_upload.rs	1	Ok(p) => Response::json(200, &json!({ "ok": true, "path": shown(&inner.cfg.roots, &p.path()), "system": p.system(), "exists": std::fs::symlink_metadata(p.path()).is_ok() })),
+src/phone_upload.rs	1	if (&mut *body).take(len).read_to_end(&mut data).is_err() || data.len() as u64 != len {
+src/phone_upload.rs	1	if std::fs::symlink_metadata(p.path()).is_ok() {
+src/phone_upload.rs	1	if std::fs::symlink_metadata(sys.path.join(&seg)).is_ok_and(|m| m.file_type().is_symlink() || !m.is_dir()) {
+src/phone_upload.rs	1	let bad = refs.iter().find(|r| !plain_name(r) || (if ext == "m3u" { ["m3u", "exe"].iter().any(|m| r.to_lowercase().contains(&format!(".{m}"))) } else { marker_in(r).is_some() }) || std::fs::symlink_metadata(dir.join(r)).is_ok_and(|m| m.file_type().is_symlink()));
+src/phone_upload.rs	1	let n = self.r.read(buf)?;
+src/phone_upload.rs	1	match std::fs::symlink_metadata(&parent) {
+src/phone_upload.rs	1	read(libc::CLOCK_BOOTTIME).saturating_sub(read(libc::CLOCK_MONOTONIC))
+src/phone_upload.rs	1	self.stream.read(buf)
+src/phone_upload.rs	1	std::fs::File::open("/dev/urandom")?.read_exact(&mut bytes)?;
+src/phone_upload.rs	1	std::fs::File::open(path).and_then(|mut f| f.read_exact(&mut head)).is_ok() && head == [0x89, b'P', b'N', b'G', 0x0d, 0x0a, 0x1a, 0x0a]
+src/phone_upload.rs	1	std::fs::read_dir(&s.path).into_iter().flatten().flatten().any(|e| {
+src/picture_loader.rs	1	let img = image::load_image(&key.0)?;
+src/pixel_path.rs	1	let r: Report = serde_json::from_slice(&std::fs::read(path).ok()?).ok()?;
+src/pixel_standalone.rs	1	let header = std::fs::File::open(rom).ok().and_then(|mut f| emu_settings::dolphin_game_id_in(&mut f));
+src/pixel_standalone.rs	1	let result = read(run.emu, &run.system, &run.rom, run.disc.as_deref(), files);
+src/pixel_standalone.rs	1	match std::fs::read(path) {
+src/pixel_standalone.rs	1	read(emu, system, &rom, disc, &files).ok().map(|s| (s, console))
+src/platform/android_audio.rs	1	let stream = open(AudioSharingMode::Exclusive).or_else(|| open(AudioSharingMode::Shared))?;
+src/platform/android_content.rs	1	file.read_exact(&mut buffer[..n])?;
+src/platform/android_content.rs	1	if let Some(stamp) = fs::read(&cache).ok().and_then(|bytes| serde_json::from_slice::<Stamp>(&bytes).ok()) {
+src/platform/android_content.rs	1	let meta = file.metadata()?;
+src/platform/android_content.rs	1	let mut reopened = File::open(&game.path)?;
+src/platform/android_content.rs	1	let n = file.read(&mut buffer)?;
+src/platform/android_content.rs	2	reopened.read_exact(&mut [0])?;
+src/platform/linux_audio.rs	1	if open(&mut out) < 0 || out.is_null() {
+src/platform/linux_audio.rs	1	if unsafe { open(&mut pcm, device.as_ptr(), 0, 0) } < 0 || pcm.is_null() {
+src/play_evidence.rs	1	for entry in std::fs::read_dir(dir).into_iter().flatten().flatten() {
+src/play_log.rs	1	*self = Writer::open(self.path.parent().unwrap_or(Path::new(".")), self.tz);
+src/play_log.rs	1	File::open(data_dir.join(FILE)).ok()?.read_to_end(&mut v).ok()?;
+src/play_log.rs	1	Ok(file_id(&f.metadata()?))
+src/play_log.rs	2	Some(Arc::new(read(data_dir)))
+src/play_log.rs	1	if let Err(e) = OpenOptions::new().write(true).open(&w.path).and_then(|f| f.set_len(p.good_end as u64)) {
+src/play_log.rs	1	let bytes = std::fs::read(&w.path).unwrap_or_default();
+src/play_log.rs	1	let mut before = file_id(&f.metadata()?);
+src/play_log.rs	1	let mut f = OpenOptions::new().create(true).append(true).open(&self.path)?;
+src/play_log.rs	1	match std::fs::read(data_dir.join(FILE)) {
+src/play_log.rs	1	serve(Writer::open(&dir, local_offset), rx, |log| publish(Some(log), None));
+src/play_log.rs	1	std::fs::metadata(path).ok().map(|m| file_id(&m))
+src/players.rs	1	let mut v: SeatsView = serde_json::from_slice(&std::fs::read(path).ok()?).ok()?;
+src/players.rs	1	std::fs::read(data_dir.join(FILE)).ok().and_then(|b| serde_json::from_slice(&b).ok()).unwrap_or_default()
+src/pocket_sync/log.rs	1	let v: Value = std::fs::read(dir.join(FILE)).ok().and_then(|b| serde_json::from_slice(&b).ok()).unwrap_or_default();
+src/pocket_sync/net.rs	1	(2..).map(|n| p.with_file_name(format!("{stem} ({n}){ext}"))).find(|q| std::fs::symlink_metadata(q).is_err()).unwrap_or(p)
+src/pocket_sync/net.rs	1	.filter_map(|p| std::fs::read(&p).ok().map(|b| (p, sha256_hex(&b))))
+src/pocket_sync/net.rs	1	if let Ok(f) = std::fs::OpenOptions::new().write(true).open(p) {
+src/pocket_sync/net.rs	1	if let Ok(old) = std::fs::read(&dest) {
+src/pocket_sync/net.rs	1	if std::fs::rename(&p, &b).is_err() && std::fs::copy(&p, &b).is_ok() {
+src/pocket_sync/net.rs	1	if std::fs::symlink_metadata(&p).is_err() {
+src/pocket_sync/net.rs	1	let Some(bytes) = store.path(&l.rel).and_then(|p| std::fs::read(p).ok()).filter(|b| sha256_hex(b) == l.sha) else {
+src/pocket_sync/net.rs	1	let bytes = p.as_ref().and_then(|p| std::fs::read(p).ok()).filter(|b| b.len() as u64 <= super::MAX_SAVE);
+src/pocket_sync/net.rs	2	let bytes = std::fs::read(store.path(&l.rel).ok_or(SyncError::Bad)?).map_err(|_| SyncError::Bad)?;
+src/pocket_sync/net.rs	1	let mt = std::fs::metadata(&p)
+src/pocket_sync/net.rs	1	let mtime = p.as_ref().and_then(|p| std::fs::metadata(p).ok()).and_then(|m| m.modified().ok())
+src/pocket_sync/net.rs	1	let mut out: Vec<(PathBuf, String)> = std::fs::read_dir(dir)
+src/pocket_sync/net.rs	1	let mut v = Versions::open(&path, &self.me.id, &salt).ok()?;
+src/pocket_sync/net.rs	1	let n = r.read_line(&mut l)?;
+src/pocket_sync/net.rs	1	let old: Option<Me> = std::fs::read(&path).ok().and_then(|b| serde_json::from_slice::<Value>(&b).ok()).and_then(|v| {
+src/pocket_sync/net.rs	1	let v: Value = std::fs::read(dir.join("peers.json")).ok().and_then(|b| serde_json::from_slice(&b).ok()).unwrap_or_default();
+src/pocket_sync/net.rs	1	match std::fs::read(&p) {
+src/pocket_sync/net.rs	1	r.read_exact(&mut body)?;
+src/pocket_sync/net.rs	1	r.read_line(&mut first)?;
+src/pocket_sync/net.rs	1	std::fs::File::open("/dev/urandom")?.read_exact(&mut b)?;
+src/pocket_sync/net.rs	1	std::fs::read(self.path(rel)?).ok().map(|b| sha256_hex(&b))
+src/pocket_sync.rs	1	None => match Self::read(&crate::fsutil::backup_path(path)) {
+src/pocket_sync.rs	2	let Ok(bytes) = std::fs::read(&path) else { continue };
+src/pocket_sync.rs	2	let Ok(meta) = std::fs::metadata(&path) else { continue };
+src/pocket_sync.rs	4	let Ok(rd) = std::fs::read_dir(&dir) else { continue };
+src/pocket_sync.rs	1	let Ok(systems) = std::fs::read_dir(layout.save_root()) else { return out };
+src/pocket_sync.rs	1	let Ok(systems) = std::fs::read_dir(root) else { continue };
+src/pocket_sync.rs	1	let bytes = match std::fs::read(path) {
+src/pocket_sync.rs	1	let c = crc32fast::hash(&std::fs::read(p).ok()?);
+src/pocket_sync.rs	1	let found = std::fs::read_dir(layout.roms.as_path()).ok().and_then(|rd| {
+src/pocket_sync.rs	1	let m = std::fs::metadata(p).ok()?;
+src/pocket_sync.rs	1	let m = std::fs::read(path)
+src/pocket_sync.rs	1	let mut hits: Vec<PathBuf> = std::fs::read_dir(dir)
+src/pocket_sync.rs	1	match Self::read(path)? {
+src/pocket_sync.rs	1	std::fs::metadata(path).is_ok_and(|m| {
+src/pocket_sync.rs	1	std::fs::read_dir(dir).into_iter().flatten().flatten().any(|e| {
+src/pocket_sync_page.rs	1	std::fs::read(dir.join("prefs.json")).ok().and_then(|b| serde_json::from_slice(&b).ok()).unwrap_or_default();
+src/port_files.rs	2	for entry in std::fs::read_dir(&d).ok()?.flatten() {
+src/port_files.rs	2	let Ok(meta) = std::fs::symlink_metadata(entry.path()) else { continue };
+src/port_files.rs	1	let found = std::fs::read_dir(&at)
+src/port_files.rs	1	return match std::fs::symlink_metadata(&dir) {
+src/port_perf.rs	1	Some((name, read(&p)?))
+src/port_perf.rs	1	console: read(&dir.join(format!("{SYSTEM}.json"))).unwrap_or_default(),
+src/port_perf.rs	1	for t in std::fs::read_dir(&tasks).into_iter().flatten().flatten() {
+src/port_perf.rs	1	if let Some(n) = std::fs::read_to_string(t.path().join("stat")).ok().as_deref().and_then(ticks) {
+src/port_perf.rs	1	let (busy, all, cpus) = std::fs::read_to_string(proc.join("stat"))
+src/port_perf.rs	1	let cmdline = std::fs::read(proc.join(pid.to_string()).join("cmdline")).unwrap_or_default();
+src/port_perf.rs	1	let games = std::fs::read_dir(dir.join(SYSTEM))
+src/port_perf.rs	1	let mut last = Snapshot::read(proc, pgid);
+src/port_perf.rs	1	let now = Snapshot::read(proc, pgid);
+src/port_perf.rs	1	let pgid = std::fs::read_to_string(&paths.pgid).ok().and_then(|s| s.trim().parse::<i32>().ok());
+src/port_perf.rs	1	let stat = std::fs::read_to_string(e.path().join("stat")).ok()?;
+src/port_perf.rs	1	let stat = std::fs::read_to_string(proc.join(pid.to_string()).join("stat")).unwrap_or_default();
+src/port_perf.rs	1	notes: crate::fsutil::read_json_or_backup(&data_dir.join(NOTES_FILE)).unwrap_or_default(),
+src/port_perf.rs	1	std::fs::read_dir(proc)
+src/portal.rs	1	while let Ok(n) = pipe.read(&mut chunk) {
+src/ports.rs	1	LAST_INDEX.with(|last| cache.read(&mut last.borrow_mut()))
+src/ports.rs	1	Ok(std::process::Output { status, stdout: std::fs::read(stdout)?, stderr: std::fs::read(stderr)? })
+src/ports.rs	2	for entry in std::fs::read_dir(ports_dir).into_iter().flatten().flatten() {
+src/ports.rs	1	for entry in std::fs::read_dir(ports_dir).ok()?.flatten() {
+src/ports.rs	1	if let Ok(bytes) = std::fs::read(cache) {
+src/ports.rs	1	if let Some(progress) = std::fs::read_to_string(&path).ok().and_then(|s| parse_progress(&s)) {
+src/ports.rs	2	let Ok(bytes) = std::fs::read(&json) else { continue };
+src/ports.rs	1	let Ok(bytes) = std::fs::read(dir.join("port.json")) else { continue };
+src/ports.rs	1	let bytes = std::fs::read(&cache).map_err(|_| crate::net_check::refine("Couldn't load the PortMaster catalogue. Check Wi-Fi."))?;
+src/ports.rs	1	let fresh = std::fs::metadata(&cache)
+src/ports.rs	1	let runnable = |name: &str| std::fs::metadata(pm_dir.join(name)).is_ok_and(|m| m.permissions().mode() & 0o111 != 0);
+src/ports.rs	2	written: std::fs::metadata(&json).and_then(|m| m.modified()).ok(),
+src/ports.rs	1	|| std::fs::metadata(PORTS_DIR).and_then(|m| m.modified()).ok(),
+src/power.rs	1	.filter(|p| read(&p.join("scaling_governor")).as_deref() == Some("ondemand"))
+src/power.rs	1	.open(path)
+src/power.rs	1	.or_else(|| read(&p.join("cpuinfo_min_freq")).and_then(|v| v.parse().ok()));
+src/power.rs	1	for e in std::fs::read_dir(zone).into_iter().flatten().flatten() {
+src/power.rs	1	if let (Some(gov), Some(max)) = (read(&p.join("scaling_governor")), read(&p.join("scaling_max_freq"))) {
+src/power.rs	1	if let Some(gov) = read(&g.join("governor")) {
+src/power.rs	1	if let Some(t) = read(&zone.join(&temp_file)) {
+src/power.rs	1	if let Some(top) = read(&p.join("cpuinfo_max_freq")) {
+src/power.rs	1	if read(&e.path()).as_deref() != Some("active") {
+src/power.rs	1	if wrote != original && read(&file).as_deref() == Some(wrote.as_str()) {
+src/power.rs	1	let freqs: Vec<u64> = read(&policy.join("scaling_available_frequencies")).map(|s| s.split_whitespace().filter_map(|f| f.parse().ok()).collect()).unwrap_or_default();
+src/power.rs	1	let low = read(&p.join("scaling_available_frequencies"))
+src/power.rs	1	let mut v: Vec<PathBuf> = std::fs::read_dir(dir)
+src/power.rs	1	let mut v: Vec<PathBuf> = std::fs::read_dir(self.root.join("sys/class/devfreq"))
+src/power.rs	1	let mut zones: Vec<PathBuf> = std::fs::read_dir(dir).ok()?.flatten().map(|e| e.path()).filter(|p| p.file_name().is_some_and(|n| n.to_string_lossy().starts_with("thermal_zone"))).collect();
+src/power.rs	1	let num = |f: &str| read(&dir.join(f)).and_then(|v| v.parse::<u64>().ok());
+src/power.rs	1	let ondemand: Vec<PathBuf> = std::fs::read_dir(&cpufreq)
+src/power.rs	1	let text = match std::fs::read_to_string(&self.restore_file) {
+src/power.rs	1	let top: u64 = read(&policy.join("cpuinfo_max_freq")).and_then(|s| s.parse().ok()).or_else(|| current_max.parse().ok()).unwrap_or(0);
+src/power.rs	1	name.starts_with("cdev") && !name.contains('_') && read(&e.path().join("type")).as_deref() == Some("pwm-fan")
+src/power.rs	1	std::fs::read_dir(z).into_iter().flatten().flatten().any(|e| {
+src/power.rs	1	std::fs::read_to_string(p).ok().map(|s| s.trim().to_string())
+src/preview.rs	1	f.read_exact(&mut head).ok()?;
+src/preview.rs	1	f.take((MAX_FILE_BYTES - head.len() + 1) as u64).read_to_end(&mut data).ok()?;
+src/preview.rs	1	let mut f = std::fs::File::open(file).ok()?;
+src/proc.rs	1	while let Ok(n) = from.read(&mut chunk) {
+src/quick.rs	1	if let Some(v) = std::fs::read_to_string(&file).ok().and_then(|s| s.trim().parse().ok()) {
+src/quick_profiles.rs	1	let cpufreq = std::fs::read_dir(root.join("sys/devices/system/cpu/cpufreq"))
+src/recents.rs	1	let mut list: Vec<Recent> = crate::fsutil::read_json_or_backup(&file).unwrap_or_default();
+src/report.rs	1	f.take(cap).read_to_end(&mut buf).ok()?;
+src/report.rs	1	for adapter in std::fs::read_dir(src.storage.join(".cache/bluetooth")).into_iter().flatten().flatten() {
+src/report.rs	1	for device in std::fs::read_dir(adapter.path()).into_iter().flatten().flatten() {
+src/report.rs	1	for line in std::fs::read_to_string(device.path().join("info")).unwrap_or_default().lines() {
+src/report.rs	1	for line in std::fs::read_to_string(e.path()).unwrap_or_default().lines() {
+src/report.rs	1	for line in std::fs::read_to_string(src.system_cfg()).unwrap_or_default().lines() {
+src/report.rs	1	if let Ok(rd) = std::fs::read_dir(src.nm_profiles()) {
+src/report.rs	1	if let Ok(t) = std::fs::read_to_string(logs.join(crate::logs::PORTAL_LAST)) {
+src/report.rs	1	if let Ok(t) = std::fs::read_to_string(prev.join(crate::logs::PORTAL_LAST)) {
+src/report.rs	1	if let Ok(text) = std::fs::read_to_string(src.data_dir.join("store/installed.json")) {
+src/report.rs	1	if let Ok(text) = std::fs::read_to_string(src.data_dir.join(name)) {
+src/report.rs	1	let Ok(dir) = std::fs::read_dir(logs) else { return Vec::new() };
+src/report.rs	1	let Ok(rd) = std::fs::read_dir(&dir) else { continue };
+src/report.rs	1	let compatible = std::fs::read(src.sys("proc/device-tree/compatible")).unwrap_or_default();
+src/report.rs	1	let info = std::fs::read_to_string(src.sys("proc/meminfo")).unwrap_or_default();
+src/report.rs	1	let last_crash = std::fs::read_to_string(src.data_dir.join(crate::crash::LOG_FILE)).ok().and_then(|t| t.lines().rev().find(|l| !l.trim().is_empty()).map(str::to_string));
+src/report.rs	1	let len = f.metadata().ok()?.len();
+src/report.rs	1	let meta = std::fs::metadata(dir.join(&name)).ok();
+src/report.rs	1	let mounts = std::fs::read_to_string(src.sys("proc/mounts")).unwrap_or_default();
+src/report.rs	1	let mut f = std::fs::File::open(path).ok()?;
+src/report.rs	1	let mut standalone: Vec<String> = std::fs::read_dir(src.sys("usr/bin"))
+src/report.rs	2	let os = std::fs::read_to_string(src.sys("etc/os-release")).unwrap_or_default();
+src/report.rs	1	let s = std::fs::read_to_string(path).ok()?;
+src/report.rs	1	let version = src.core_dirs().iter().find_map(|(d, _)| info_version(&std::fs::read_to_string(d.join(&info_name)).ok()?));
+src/rescue.rs	1	let Ok(mut f) = std::fs::File::open(path) else { return String::new() };
+src/rescue.rs	1	let _ = f.take(TAIL_BYTES).read_to_end(&mut bytes);
+src/rescue.rs	1	let len = f.metadata().map_or(0, |m| m.len());
+src/rescue.rs	1	let mut entries: Vec<_> = std::fs::read_dir(data_dir)?.flatten().collect();
+src/rescue.rs	1	let text = std::fs::read_to_string(&file).ok()?;
+src/rescue.rs	1	std::fs::metadata(path).is_ok_and(|m| m.is_file() && m.permissions().mode() & 0o111 != 0)
+src/rescue.rs	1	std::fs::read_link(root.join(name)).ok().map(|p| p.to_string_lossy().into_owned())
+src/rom_id.rs	1	let Ok(now) = std::fs::read_to_string(&file) else { continue };
+src/rom_id.rs	1	let len = f.metadata()?.len();
+src/rom_id.rs	1	let m = std::fs::metadata(rom)?;
+src/rom_id.rs	1	let mut f = std::fs::File::open(rom)?;
+src/rom_id.rs	1	let text = std::fs::read_to_string(dir(data_dir).join("checksums.tsv")).unwrap_or_default();
+src/rom_id.rs	1	let text = std::fs::read_to_string(table_path(data_dir, dat)).ok()?;
+src/rom_id.rs	1	match f.read(&mut buf[n..])? {
+src/rom_id.rs	1	std::fs::metadata(table_path(data_dir, dat))
+src/romm.rs	1	if let Ok(mut f) = std::fs::File::open("/dev/urandom") {
+src/romm.rs	1	if let Some(id) = std::fs::read_to_string(&path).ok().map(|s| s.trim().to_string()).filter(|s| s.len() >= 16 && s.chars().all(|c| c.is_ascii_hexdigit())) {
+src/romm.rs	1	if to.symlink_metadata().is_ok() {
+src/romm.rs	1	let _ = std::io::Read::read_exact(&mut f, &mut bytes);
+src/romm.rs	1	let body = std::fs::read(&tmp).unwrap_or_default();
+src/romm.rs	1	let have = |name: &str| std::fs::metadata(parts_dir.join(format!("{name}.part"))).map_or(0, |m| m.len());
+src/romm.rs	1	let stamp = std::fs::metadata(&file).and_then(|m| m.modified()).ok();
+src/romm.rs	1	let text = std::fs::read(dir(data_dir).join(CATALOG_FILE)).ok()?;
+src/romm.rs	1	let text = std::fs::read_to_string(dir(data_dir).join(ACCOUNT_FILE)).ok()?;
+src/romm_net.rs	1	let _ = r.take(1024).read_line(&mut rest);
+src/romm_net.rs	1	let _ = s.read_to_end(&mut out);
+src/romm_net.rs	1	let file = std::fs::OpenOptions::new().create(true).write(true).append(append).truncate(!append).open(part);
+src/romm_net.rs	1	let have = std::fs::metadata(part).map_or(0, |m| m.len());
+src/romm_net.rs	1	let len = |p: &Path| std::fs::metadata(p).map_or(0, |m| m.len());
+src/romm_net.rs	1	let n = r.read(&mut buf[..want])?;
+src/romm_net.rs	1	let n = r.take(8192).read_line(line)?;
+src/romm_net.rs	2	progress(std::fs::metadata(part).map_or(0, |m| m.len()));
+src/romm_net.rs	1	r.read_exact(&mut crlf)?;
+src/romm_net.rs	1	r.take(1024).read_line(&mut size_line)?;
+src/rumble.rs	1	Self::open()
+src/rumble.rs	2	_ => std::fs::read_dir("/dev/input")
+src/rumble.rs	1	let fd = unsafe { libc::open(c.as_ptr(), libc::O_RDWR | libc::O_NONBLOCK | libc::O_CLOEXEC) };
+src/rumble.rs	1	let found = Haptics::open();
+src/rumble.rs	1	let found = if crate::device::brick() { Haptics::open_brick() } else { Haptics::open() };
+src/rumble.rs	1	let on = std::fs::read(haptics_file(data_dir))
+src/rumble.rs	1	let v = std::fs::read(haptics_file(data_dir)).ok().and_then(|b| serde_json::from_slice::<serde_json::Value>(&b).ok());
+src/run_ahead.rs	1	let khz = |f: &str| std::fs::read_to_string(dir.join(f)).ok()?.trim().parse::<u64>().ok();
+src/run_ahead.rs	1	let text = std::fs::read_to_string(core.with_extension("info")).ok()?;
+src/run_ahead.rs	1	self.clock = Clock::read(&self.clock_root);
+src/save_copy.rs	1	if let Ok(file) = std::fs::File::options().write(true).open(&to) {
+src/save_copy.rs	1	if written_ms(path) != info.ms || std::fs::metadata(path).map_or(0, |m| m.len()) != info.size {
+src/save_copy.rs	1	let Ok(read) = std::fs::read_dir(data.join(PENDING)) else { return Vec::new() };
+src/save_copy.rs	1	let Ok(read) = std::fs::read_dir(data.join(folder)) else { continue };
+src/save_copy.rs	1	let mut file = std::fs::File::open(path)?;
+src/save_copy.rs	1	let n = file.read(&mut buffer)?;
+src/save_copy.rs	1	let size = std::fs::metadata(&path).map_or(0, |m| m.len());
+src/save_copy.rs	1	let size = std::fs::metadata(&to).map_or(u64::MAX, |m| m.len());
+src/save_copy.rs	1	std::fs::read(data.join(INDEX)).ok().and_then(|b| serde_json::from_slice(&b).ok()).unwrap_or_default()
+src/save_transfer.rs	1	let Ok(read) = std::fs::read_dir(data.join(folder)) else { continue };
+src/save_transfer.rs	1	let Ok(read) = std::fs::read_dir(dir) else { return };
+src/save_transfer.rs	1	plan.bytes += std::fs::metadata(&path).map_or(0, |m| m.len());
+src/save_transfer.rs	1	std::fs::metadata(path).and_then(|m| m.modified()).ok().and_then(|t| t.duration_since(UNIX_EPOCH).ok()).map_or(0, |d| d.as_millis() as u64)
+src/save_trouble.rs	1	Trouble::from_word(&std::fs::read_to_string(file).ok()?)
+src/save_trouble.rs	1	let line = std::fs::read_to_string(file).ok()?;
+src/save_trouble.rs	1	} else if std::fs::read_to_string(file).is_ok_and(|s| is_moment_notice(&s)) {
+src/screenshot.rs	1	let Ok(entries) = std::fs::read_dir(dir.join(clean(system))) else { return Vec::new() };
+src/screenshot.rs	1	path.symlink_metadata().is_ok_and(|m| m.is_file()).then_some(path)
+src/screenshot.rs	1	while path.symlink_metadata().is_ok() && n < 999 {
+src/search.rs	1	crate::fsutil::read_json_or_backup(&Self::file(data_dir)).unwrap_or_default()
+src/secret.rs	1	if let Err(e) = urandom.read_exact(&mut b) {
+src/secret.rs	2	let mut f = std::fs::OpenOptions::new().write(true).create_new(true).mode(0o600).open(&tmp)?;
+src/secret.rs	1	let mut urandom = std::fs::File::open("/dev/urandom")?;
+src/secret.rs	1	let pw = std::fs::read_to_string(path).ok()?.trim().to_string();
+src/settings.rs	1	!std::fs::read(data_dir.join(FILE)).ok().and_then(|b| serde_json::from_slice::<Only>(&b).ok()).unwrap_or_default().box_art_only
+src/settings.rs	1	fsutil::read_json_or_backup(&path).map(|mut s: Settings| {
+src/settings.rs	1	let only = std::fs::read(data_dir.join(FILE)).ok().and_then(|b| serde_json::from_slice::<Only>(&b).ok()).unwrap_or_default();
+src/settings.rs	1	std::fs::read(data_dir.join(FILE))
+src/settings.rs	1	std::fs::read(data_dir.join(FILE)).ok().and_then(|b| serde_json::from_slice::<Only>(&b).ok()).unwrap_or_default().boot_screen
+src/settings.rs	1	std::fs::read(data_dir.join(FILE)).ok().and_then(|b| serde_json::from_slice::<Only>(&b).ok()).unwrap_or_default().frames
+src/settings.rs	1	std::fs::read(data_dir.join(FILE)).ok().and_then(|b| serde_json::from_slice::<Only>(&b).ok()).unwrap_or_default().over_game
+src/settings.rs	1	std::fs::read(data_dir.join(FILE)).ok().and_then(|b| serde_json::from_slice::<Only>(&b).ok()).unwrap_or_default().text_size
+src/settings.rs	1	std::fs::read(p).ok().and_then(|b| serde_json::from_slice::<Only>(&b).ok()).map(|o| o.theme.as_ref().and_then(|t| t.as_str()).is_some_and(|t| RETIRED_LOOKS.contains(&t)))
+src/settings_values.rs	1	let facts = read(&*hw, &net, &data_dir, crate::status_corner::wifi_now());
+src/setup.rs	1	if std::fs::read_to_string(&file).ok().as_deref() != Some(line.as_str()) {
+src/setup.rs	1	let Ok(line) = std::fs::read_to_string(self.data_dir.join(RESUME_FILE)) else { return self };
+src/setup.rs	1	let outcome = session.open(&start);
+src/setup.rs	1	let page = crate::phone_upload_page::PhonePage::open(self.ip.clone(), self.catalog.clone(), Arc::new(move || notify(SetupEvent::Phone)));
+src/setup.rs	1	ports::preview(&port).and_then(|p| image::load_image(&p)).map(|img| {
+src/shelf_space.rs	1	let Ok(text) = std::fs::read_to_string(data_dir.join(FILE)) else { return ShelfSpace::default() };
+src/showcase.rs	1	let b = std::fs::read(path).ok()?;
+src/showcase.rs	1	let bytes = std::fs::read(path).map_err(|e| format!("{}: {e}", path.display()))?;
+src/showcase.rs	1	let file = std::fs::OpenOptions::new().read(true).write(true).create(true).truncate(true).open(path)?;
+src/showcase.rs	1	let ro = std::fs::OpenOptions::new().read(true).custom_flags(libc::O_CLOEXEC).open(format!("/proc/self/fd/{fd}")).ok()?;
+src/showcase.rs	1	self.file = File::open(&self.path).ok();
+src/showcase.rs	1	std::io::copy(&mut File::open(bin).ok()?, &mut file).ok()?;
+src/shutdown_log.rs	1	let Ok(mut f) = OpenOptions::new().read(true).custom_flags(libc::O_NONBLOCK).open(kmsg) else { return Vec::new() };
+src/shutdown_log.rs	1	match f.read(&mut buf) {
+src/signed_data.rs	1	let mut file = std::fs::File::open(path)?;
+src/signed_data.rs	1	let n = file.read(&mut buf)?;
+src/sleep.rs	1	&& std::fs::read_to_string(e.path().join("comm")).is_ok_and(|c| c.trim() == name)
+src/sleep.rs	1	.and_then(|d| std::fs::read_to_string(d.join("brightness")).ok())
+src/sleep.rs	1	.or_else(|| std::fs::read_to_string(&self.dark_file).ok()?.trim().parse::<u32>().ok().filter(|v| *v > 0))
+src/sleep.rs	1	crate::low_battery::read(&crate::battery::dir())
+src/sleep.rs	2	if plan.due(now) && crate::auto_off::decide(false, crate::low_battery::read(&self.battery_dir)) == crate::auto_off::Verdict::SwitchOff {
+src/sleep.rs	1	let mut level = crate::low_battery::read(&dir);
+src/sleep.rs	1	let r: Resume = serde_json::from_slice(&std::fs::read(&path).ok()?).ok()?;
+src/sleep.rs	1	let saved = std::fs::read_to_string(&file).ok()?.trim().parse::<u32>().ok()?;
+src/sleep.rs	1	let saved: Option<Config> = crate::fsutil::read_json_or_backup(&data_dir.join(CONFIG_FILE));
+src/sleep.rs	1	level = crate::low_battery::read(&dir);
+src/sleep.rs	1	read(libc::CLOCK_BOOTTIME) - read(libc::CLOCK_MONOTONIC)
+src/sleep.rs	1	stats: read("success").zip(read("fail")),
+src/sleep.rs	1	std::fs::read_dir("/proc").into_iter().flatten().flatten().any(|e| {
+src/sleep.rs	1	std::fs::read_dir("/sys/class/backlight")
+src/sleep.rs	1	std::fs::read_to_string(Path::new("/sys/power/suspend_stats").join(name))
+src/sleep.rs	1	std::fs::read_to_string(dir.join("brightness")).ok()?.trim().parse::<u32>().ok().filter(|v| *v > 0)
+src/sleep.rs	1	std::fs::read_to_string(dir.join("max_brightness")).ok()?.trim().parse::<u32>().ok().filter(|v| *v > 0)
+src/slots.rs	1	Some((image::load_png(&preview_path(&state_path(base, slot))), when))
+src/slots.rs	1	if let Ok(dir) = std::fs::File::open(dir) { let _ = dir.sync_all(); }
+src/slots.rs	1	if let Ok(png) = std::fs::read(preview_path(&from)) {
+src/slots.rs	1	let Ok(before) = crate::state_file::read(&undo) else { return Loaded::UndoUnavailable };
+src/slots.rs	1	let Ok(data) = crate::state_file::read(state) else { return Loaded::Unreadable };
+src/slots.rs	1	let m = std::fs::metadata(&p).ok().filter(|m| m.is_file() && m.len() > 0)?;
+src/slots.rs	1	let modified = source.metadata().ok()?.modified().ok()?;
+src/slots.rs	1	let mut source = std::fs::File::open(&from).ok()?;
+src/slots.rs	1	let stamp = std::fs::File::options().write(true).custom_flags(libc::O_NOFOLLOW).open(&auto)
+src/slots.rs	1	paths.sort_by_key(|p| std::cmp::Reverse(std::fs::metadata(p).and_then(|m| m.modified()).ok()));
+src/slots.rs	1	source.read_to_end(&mut data).ok()?;
+src/slots.rs	1	std::fs::metadata(state_path(base, slot)).and_then(|m| m.modified()).ok()
+src/slots.rs	1	std::fs::read_to_string(current_file(data_dir, system, stem)).ok().and_then(|s| s.trim().parse::<usize>().ok()).filter(|n| *n < SLOTS).unwrap_or(0)
+src/sockets.rs	1	["/proc/net/tcp", "/proc/net/tcp6"].iter().flat_map(|p| parse(&std::fs::read_to_string(p).unwrap_or_default())).collect()
+src/softpatch.rs	1	Ok((rom.to_path_buf(), std::fs::read(rom).map_err(|e| format!("{}: {e}", rom.display()))?))
+src/softpatch.rs	1	let Ok(list) = std::fs::read_dir(base) else { return };
+src/softpatch.rs	1	let patch = std::fs::read(p).map_err(|_| damaged())?;
+src/softpatch.rs	1	let size = std::fs::metadata(p).map_err(|_| damaged())?.len();
+src/softpatch.rs	1	let size = std::fs::metadata(rom).map_err(|e| format!("{}: {e}", rom.display()))?.len();
+src/splash.rs	1	&& std::fs::read_to_string(e.path().join("comm")).is_ok_and(|c| is_sway_comm(&c))
+src/splash.rs	1	let Ok(entries) = std::fs::read_dir(proc) else { return false };
+src/splash.rs	1	std::fs::read(data_dir.join("settings.json")).ok().and_then(|b| serde_json::from_slice::<Only>(&b).ok()).unwrap_or_default().motion
+src/standalone.rs	2	.filter(|f| std::fs::read_to_string(f).is_ok_and(|g| g.trim() == "performance"))
+src/standalone.rs	1	b"NCSD" => read_at(u32::from_le_bytes(head[0x120..0x124].try_into().ok()?) as u64 * 0x200)?,
+src/standalone.rs	1	f.read_exact(&mut head).ok()?;
+src/standalone.rs	1	for entry in std::fs::read_dir(dir).into_iter().flatten().flatten() {
+src/standalone.rs	1	for entry in std::fs::read_dir(stock).into_iter().flatten().flatten() {
+src/standalone.rs	1	if backup.symlink_metadata().is_ok() {
+src/standalone.rs	1	if let Ok(text) = std::fs::read_to_string(&path) {
+src/standalone.rs	2	let Ok(dir) = std::fs::read_dir("/proc") else { return Vec::new() };
+src/standalone.rs	2	let Ok(dir) = std::fs::read_dir(root.join("sys/devices/system/cpu/cpufreq")) else { return 0 };
+src/standalone.rs	1	let Ok(kept) = std::fs::read_to_string(&keep) else { return };
+src/standalone.rs	1	let Ok(old) = std::fs::read_to_string(&ini) else { return };
+src/standalone.rs	1	let Ok(old) = std::fs::read_to_string(ini) else { return };
+src/standalone.rs	1	let Ok(old) = std::fs::read_to_string(path) else { return false };
+src/standalone.rs	1	let _ = std::fs::copy(entry.path(), to);
+src/standalone.rs	2	let cfg = std::fs::read_to_string(path).unwrap_or_default();
+src/standalone.rs	1	let cfg = std::fs::read_to_string(root.join(SYSTEM_CFG.trim_start_matches('/'))).unwrap_or_default();
+src/standalone.rs	1	let head = read_at(0)?;
+src/standalone.rs	1	let linked = std::fs::hard_link(from, quick).or_else(|_| std::fs::copy(from, quick).map(|_| ())).is_ok();
+src/standalone.rs	1	let linked = std::fs::hard_link(from, transit).or_else(|_| std::fs::copy(from, transit).map(|_| ())).is_ok();
+src/standalone.rs	1	let list = std::fs::read_to_string(rom).ok()?;
+src/standalone.rs	1	let mut f = std::fs::File::open(rom).ok()?;
+src/standalone.rs	1	let n = unsafe { libc::read(self.0, buf.as_mut_ptr().cast(), buf.len()) };
+src/standalone.rs	1	let stat = std::fs::read_to_string(e.path().join("stat")).ok()?;
+src/standalone.rs	1	let stat = std::fs::read_to_string(format!("/proc/{pid}/stat")).ok()?;
+src/standalone.rs	1	matches!((std::fs::metadata(a), std::fs::metadata(b)), (Ok(x), Ok(y)) if x.dev() == y.dev() && x.ino() == y.ino())
+src/standalone.rs	1	s.read_exact(&mut body).ok()?;
+src/standalone.rs	1	s.read_exact(&mut head).ok()?;
+src/standalone.rs	1	std::fs::read_to_string(marker).ok().and_then(|v|v.trim().parse::<u32>().ok()) != Some(VERSION)
+src/starter.rs	1	None => std::fs::read(&work.0).map_err(|e| Failure::Disk(e.to_string()))?,
+src/starter.rs	1	let got = std::fs::metadata(&work.0).map_err(|e| Failure::Disk(e.to_string()))?.len();
+src/starter.rs	1	std::fs::read_dir(dir).ok()?.flatten().find(|e| e.file_name().to_string_lossy().eq_ignore_ascii_case(name)).map(|e| e.path())
+src/state_file.rs	1	file.by_ref().take(MAX_FILE as u64 + 1).read_to_end(&mut bytes)?;
+src/state_file.rs	1	if file.metadata()?.len() > MAX_FILE as u64 {
+src/state_file.rs	1	let modified = std::fs::metadata(&from)?.modified()?;
+src/state_file.rs	1	let mut file = std::fs::File::open(&actual)?;
+src/state_file.rs	1	let out = std::fs::File::options().write(true).custom_flags(libc::O_NOFOLLOW).open(to)?;
+src/state_file.rs	1	std::fs::File::open(path).and_then(|mut f| f.read_exact(&mut head)).is_ok() && &head == MAGIC
+src/state_file.rs	1	write(to, &read(&from)?)?;
+src/states.rs	1	Some((image::load_png(&crate::slots::preview_path(&picture_owned)), self.saved_at(target)?))
+src/states.rs	1	std::fs::metadata(self.path(target)?).and_then(|m| m.modified()).ok()
+src/status_corner.rs	1	let file = |p: PathBuf| std::fs::read_to_string(p).ok();
+src/status_corner.rs	1	let now = read(&net, &battery);
+src/status_corner.rs	1	read(&Path::new("/sys/class/net").join(iface), &crate::battery::dir())
+src/status_corner.rs	1	std::fs::read_to_string(Path::new("/sys/class/net").join(iface).join("operstate")).is_ok_and(|s| parse_operstate(&s))
+src/storage.rs	1	crate::fsutil::read_json_or_backup(&data.join(STATE_FILE)).unwrap_or_default()
+src/storage.rs	1	if let Ok(rd) = fs::read_dir(&logs) {
+src/storage.rs	1	let Ok(m) = e.metadata() else { continue };
+src/storage.rs	1	let Ok(m) = fs::symlink_metadata(&p) else { continue };
+src/storage.rs	1	let mut top: Vec<PathBuf> = match fs::read_dir(&roots.roms) {
+src/storage.rs	1	let rd = match fs::read_dir(&d) {
+src/storage.rs	1	n = e.metadata().map_or(0, |m| m.len());
+src/store.rs	1	if let Ok(old) = std::fs::read(&path) {
+src/store.rs	1	if let Some(t) = targets.iter().find(|t| std::fs::symlink_metadata(t).is_ok_and(|m| m.is_dir())) {
+src/store.rs	1	if std::fs::symlink_metadata(dir).is_err() {
+src/store.rs	1	if std::fs::symlink_metadata(dir).is_ok_and(|m| m.is_file()) {
+src/store.rs	1	if std::fs::symlink_metadata(f).is_ok_and(|m| m.is_file()) {
+src/store.rs	1	let data = download_to(&resolve(catalog_url, &p.url), &tmp, Some(p.size), progress).and_then(|_| std::fs::read(&tmp).map_err(|e| e.to_string()));
+src/store.rs	1	let mut seen: BTreeMap<String, u64> = std::fs::read(&path).ok().and_then(|b| serde_json::from_slice(&b).ok()).unwrap_or_default();
+src/store.rs	1	let read = match std::fs::read(&path) {
+src/store.rs	1	match Store::open(data_dir).migrate_tools() {
+src/store.rs	1	match std::fs::symlink_metadata(dir) {
+src/store.rs	1	progress(std::fs::metadata(dest).map_or(0, |m| m.len()));
+src/store.rs	1	} else if std::fs::symlink_metadata(&target).is_ok_and(|m| m.is_file()) {
+src/switcher.rs	1	auto.iter().filter_map(|p| std::fs::metadata(p).and_then(|m| m.modified()).ok()).max()
+src/switcher.rs	1	let img = image::load_image(p)?;
+src/switcher.rs	2	let img = image::load_png(p)?;
+src/switcher.rs	1	let t = std::fs::metadata(&p).and_then(|m| m.modified()).ok()?;
+src/switcher.rs	1	self.cands.frame = std::fs::metadata(file).and_then(|m| m.modified()).ok().map(|t| (file.to_path_buf(), t));
+src/sync.rs	1	crate::fsutil::read_json_or_backup(&data_dir.join(PREFS_FILE)).unwrap_or_default()
+src/sync.rs	1	if let Ok(cfg) = Config::read() {
+src/sync.rs	1	if let Ok(mut cfg) = Config::read() {
+src/sync.rs	1	let Ok(cfg) = Config::read() else { return Snapshot::default() };
+src/sync.rs	1	let Ok(mut cfg) = Config::read() else { return };
+src/sync.rs	1	let cert = std::fs::read_to_string(on_card(CERT_PEM)).unwrap_or_default();
+src/sync.rs	1	let cfg = Config::read()?;
+src/sync.rs	1	let mut cfg = Config::read()?;
+src/sync.rs	1	let xml = std::fs::read_to_string(on_card(CONFIG_XML)).map_err(|e| format!("{CONFIG_XML}: {e}"))?;
+src/sync.rs	1	match std::fs::read_to_string(&path) {
+src/sync.rs	1	std::fs::read_to_string(path)
+src/sync_conflicts.rs	1	crate::update::brick_io::Pacer::new().copy(&mut std::fs::File::open(from)?, &mut std::fs::File::create(to)?)?
+src/sync_conflicts.rs	1	if n != std::fs::metadata(from)?.len() {
+src/sync_conflicts.rs	1	let Ok(entries) = std::fs::read_dir(dir) else { return };
+src/sync_conflicts.rs	1	let m = std::fs::metadata(path).ok().filter(|m| m.is_file())?;
+src/sync_conflicts.rs	1	let n = std::fs::copy(from, to)?;
+src/sync_conflicts.rs	1	std::fs::File::open(to)?.sync_all()?;
+src/system_cfg.rs	1	Err(e) if e.kind() == io::ErrorKind::NotFound => self.seed.as_deref().and_then(|s| std::fs::read_to_string(s).ok()).unwrap_or_default(),
+src/system_cfg.rs	1	if std::fs::read_to_string(path).is_ok_and(|t| t.trim() == dead) {
+src/system_cfg.rs	1	if std::fs::read_to_string(self.path).is_ok_and(|t| t.trim() == self.id) {
+src/system_cfg.rs	1	let current = match std::fs::read_to_string(&self.path) {
+src/system_cfg.rs	1	let file = std::fs::OpenOptions::new().append(true).create(true).open(path)?;
+src/system_cfg.rs	1	let text = crate::update::read_small(Path::new(FUNCTIONS), 1 << 20).unwrap_or_default();
+src/system_cfg.rs	1	let text = std::fs::read_to_string(lock).ok()?;
+src/system_cfg.rs	1	let who = std::fs::read_to_string(path).unwrap_or_default();
+src/system_cfg.rs	1	match std::fs::OpenOptions::new().write(true).create_new(true).open(path) {
+src/system_cfg.rs	1	std::fs::read_to_string(&self.path).unwrap_or_default()
+src/system_ctl.rs	1	.any(|d| read(&d.path().join("reboot_modes")).is_some_and(|t| reboot_modes_have_bootloader(&t)))
+src/system_ctl.rs	1	.find_map(|file| std::fs::read_to_string(state.join(file)).ok().and_then(|s| s.trim().parse::<u32>().ok()).filter(|v| *v <= 100))?;
+src/system_ctl.rs	1	charge: parse_charge(&read(&d.join("status")).unwrap_or_default()),
+src/system_ctl.rs	1	entries.into_iter().find(|p| read(&p.join("type")).as_deref() == Some(kind)).map(|p| {
+src/system_ctl.rs	1	let Ok(dir) = std::fs::read_dir(self.root.join("sys/class/reboot-mode")) else {
+src/system_ctl.rs	1	let blocked = |f: &str| read(&p.join(f)).as_deref() == Some("1");
+src/system_ctl.rs	1	let cfg = std::fs::read_to_string(root.join("storage/.config/system/configs/system.cfg")).unwrap_or_default();
+src/system_ctl.rs	1	let max: u32 = read(&d.join("max_brightness"))?.parse().ok()?;
+src/system_ctl.rs	1	let mut dirs: Vec<PathBuf> = std::fs::read_dir(dir).ok()?.flatten().map(|e| e.path()).collect();
+src/system_ctl.rs	1	let mut dirs: Vec<PathBuf> = std::fs::read_dir(self.root.join("sys/class/backlight"))
+src/system_ctl.rs	1	let mut entries: Vec<PathBuf> = std::fs::read_dir(dir).ok()?.flatten().map(|e| e.path()).collect();
+src/system_ctl.rs	1	let percent: u8 = read(&d.join("capacity"))?.parse().ok()?;
+src/system_ctl.rs	1	let raw: u32 = read(&dir.join("brightness"))?.parse().ok()?;
+src/system_ctl.rs	1	read(&self.root.join("proc/cmdline")).is_some_and(|c| c.split_whitespace().any(|a| a == "nodtbo"))
+src/system_ctl.rs	1	return read(&self.root.join("storage/.config/pocket-ui/timezone")).is_some_and(|v| !v.trim().is_empty());
+src/system_ctl.rs	1	std::fs::read_to_string(p).ok().map(|s| s.trim().to_string())
+src/system_ctl.rs	1	std::fs::read_to_string(self.root.join("usr/share/zoneinfo").join(name)).ok()
+src/system_ctl.rs	1	std::fs::read_to_string(self.zoneinfo.join(name)).ok()
+src/systems_grid.rs	1	let found = std::fs::read_dir(bios_dir).into_iter().flatten().flatten().any(|e| {
+src/tailscale.rs	1	&& std::fs::read_to_string(e.path().join("operstate")).is_ok_and(|s| s.trim() == "up")
+src/tailscale.rs	1	if std::fs::copy(&tools.defaults_src, &tools.defaults).is_err() {
+src/tailscale.rs	1	let Ok(dir) = std::fs::read_dir(net_dir) else { return false };
+src/tailscale.rs	1	let boot = std::fs::read_to_string(&tools.system_cfg).is_ok_and(|cfg| boot_enabled(&cfg));
+src/tailscale.rs	1	let mut prefs: Prefs = crate::fsutil::read_json_or_backup(&data_dir.join(PREFS_FILE)).unwrap_or_default();
+src/tailscale.rs	1	while matches!(reader.read_until(b'\n', &mut buf), Ok(n) if n > 0) {
+src/text.rs	1	let Some(font) = crate::text_fallback::open(&path) else { return };
+src/text.rs	1	let bytes = std::fs::read(fonts_dir().join(name)).ok()?;
+src/text_fallback.rs	1	let file = std::fs::File::open(path).map_err(|e| e.to_string())?;
+src/text_fallback.rs	1	let map = unsafe { memmap2::Mmap::map(&file) }.map_err(|e| e.to_string())?;
+src/timeline.rs	1	Picture::File(p) => std::fs::read(crate::state_file::resolve(p)).ok(),
+src/timeline.rs	1	copied = crate::state_file::read(from).map_err(|e| Skip::Skipped(format!("{}: {e}", from.display())))?;
+src/timeline.rs	1	for f in std::fs::read_dir(system.path()).into_iter().flatten().flatten() {
+src/timeline.rs	1	for system in std::fs::read_dir(root).into_iter().flatten().flatten() {
+src/timeline.rs	1	let m = std::fs::symlink_metadata(&path).ok().filter(|m| m.is_file())?;
+src/timeline.rs	1	let m = std::fs::symlink_metadata(&state).ok().filter(|m| m.is_file())?;
+src/timeline.rs	1	let picture = std::fs::symlink_metadata(crate::slots::preview_path(&state)).map_or(0, |m| m.len());
+src/timeline.rs	1	std::fs::File::open(target.parent().unwrap())?.sync_all()?;
+src/timezone.rs	1	Tz::parse(&std::fs::read(zoneinfo.join(zone)).ok()?)
+src/timezone.rs	1	for e in std::fs::read_dir(dir).into_iter().flatten().flatten() {
+src/timezone.rs	1	let mut zones: Vec<String> = std::fs::read_to_string(rocknix_list)
+src/tools.rs	1	let Ok(rd) = std::fs::read_dir(dir) else { continue };
+src/tools.rs	1	let _ = std::fs::File::open(path).and_then(|f| f.take(READ_AT_MOST).read_to_end(&mut text));
+src/tools.rs	1	let gamelist = parse_gamelist(&std::fs::read_to_string(dir.join("gamelist.xml")).unwrap_or_default());
+src/tools.rs	1	let store = crate::store::Store::open(data_dir);
+src/touch.rs	1	let fbcon = std::fs::read_to_string("/sys/class/graphics/fbcon/rotate")
+src/touch.rs	1	let found = open();
+src/touch.rs	1	let read = bus.read(dev, send);
+src/touch.rs	1	let wait = match bus.open() {
+src/trace.rs	1	std::fs::OpenOptions::new().create(true).append(true).open(path).ok().map(Mutex::new)
+src/ui_sound.rs	1	crate::fsutil::read_json_or_backup(&data_dir.join(CONFIG_FILE)).unwrap_or_default()
+src/ui_sound.rs	1	if let Some(new) = open(want) {
+src/ui_sound.rs	2	out = open(ring_now());
+src/untar/brick.rs	1	let mut f = std::fs::OpenOptions::new().write(true).create_new(true).mode(mode).open(&path)?;
+src/untar/brick.rs	1	let mut gz = Gz::new(Counted { inner: std::fs::File::open(archive)?, read: 0, progress }, limit)?;
+src/untar/brick.rs	1	let n = self.inner.read(buf)?;
+src/untar/brick.rs	1	match r.read(&mut buf[got..]) {
+src/untar/brick.rs	1	r.read_exact(&mut data).map_err(|_| Refused::Unsafe)?;
+src/untar/brick.rs	1	return self.inner.read(buf);
+src/untar/brick.rs	1	self.inner.read_exact(&mut [0u8; 2])?;
+src/untar/brick.rs	1	self.inner.read_exact(&mut [0u8; 8]).map_err(|_| Self::damaged())?;
+src/untar/brick.rs	1	self.inner.read_exact(&mut h).map_err(|_| Self::damaged())?;
+src/untar/brick.rs	1	self.inner.read_exact(&mut xlen)?;
+src/untar/brick.rs	1	self.inner.read_until(0, &mut skipped)?;
+src/untar.rs	1	for e in std::fs::read_dir(dir).map_err(|e| e.to_string())? {
+src/untar.rs	1	let meta = std::fs::symlink_metadata(&path).map_err(|e| e.to_string())?;
+src/untar.rs	1	let meta = std::fs::symlink_metadata(dir).map_err(|e| e.to_string())?;
+src/update/brick.rs	1	.iter().any(|p| std::fs::symlink_metadata(card.join(p)).is_ok())
+src/update/brick.rs	1	if darkos && std::fs::read_to_string(staging.join("DARKOS-PORT")).ok().as_deref() != Some("1\n") {
+src/update/brick.rs	1	if let Ok(entries) = std::fs::read_dir(&ram.dir) {
+src/update/brick.rs	1	if let Ok(entries) = std::fs::read_dir(&work) {
+src/update/brick.rs	1	if std::fs::read_to_string(staging.join("RELEASE")).map(|v| v.trim().to_string()).ok().as_deref() != Some(rel.version.as_str()) {
+src/update/brick.rs	1	let have = std::fs::metadata(&tarball).map_or(0, |m| m.len()).min(rel.size);
+src/update/brick.rs	1	let tarball_size = std::fs::metadata(&tarball).map_or(0, |m| m.len());
+src/update/brick_assets.rs	1	cancel.work_add(std::fs::metadata(archive).map_or(0, |m| m.len()));
+src/update/brick_assets.rs	1	data.take((1 << 20) + 1).read_to_end(&mut bytes)?;
+src/update/brick_assets.rs	1	if !std::fs::symlink_metadata(p).is_ok_and(|m| m.is_dir()) { return false; }
+src/update/brick_assets.rs	1	if std::fs::symlink_metadata(&dest).is_ok() { return Err(INVALID.into()); }
+src/update/brick_assets.rs	1	if std::fs::symlink_metadata(app.join(path)).is_err() {
+src/update/brick_assets.rs	1	let mode = std::fs::metadata(&to).map_err(|e| e.to_string())?.permissions().mode();
+src/update/brick_assets.rs	1	let mut gz = crate::untar::Gz::new(std::fs::File::open(archive).map_err(|e| e.to_string())?, UNPACKED_LIMIT).map_err(|e| e.to_string())?;
+src/update/brick_assets.rs	1	self.entries.iter().filter_map(|(_, archive)| archive.as_ref()).map(|a| std::fs::metadata(a).map_or(0, |m| m.len())).sum()
+src/update/brick_assets.rs	1	std::fs::symlink_metadata(from).is_ok_and(|m| m.is_file() || m.is_dir()) && std::fs::symlink_metadata(to).is_err()
+src/update/brick_assets.rs	1	std::fs::symlink_metadata(path).is_ok_and(|m| m.is_file() && m.len() == asset.size)
+src/update/brick_delta.rs	1	for e in std::fs::read_dir(dir).ok()? {
+src/update/brick_delta.rs	1	if let Some(m) = std::fs::symlink_metadata(&old).ok().filter(|m| m.is_file()) {
+src/update/brick_delta.rs	1	let k = data.read(&mut buf)?;
+src/update/brick_delta.rs	1	let meta = std::fs::symlink_metadata(e.path()).ok()?;
+src/update/brick_delta.rs	1	let mut gz = crate::untar::Gz::new(std::fs::File::open(archive).ok()?, 2 << 30).ok()?;
+src/update/brick_io.rs	1	.filter_map(|e| e.metadata().ok()).map(|m| m.len()).sum();
+src/update/brick_io.rs	1	if !std::fs::symlink_metadata(&dir).is_ok_and(|m| m.is_dir() && m.uid() == unsafe { libc::geteuid() } && m.permissions().mode() & 0o777 == 0o700) {
+src/update/brick_io.rs	1	if let Ok(entries) = std::fs::read_dir(&self.dir) {
+src/update/brick_io.rs	1	let available = std::fs::read_to_string("/proc/meminfo").ok().and_then(|s| {
+src/update/brick_io.rs	1	let n = match from.read(&mut buf) {
+src/update/brick_io.rs	1	let occupied: u64 = std::fs::read_dir(&self.dir).into_iter().flatten().flatten()
+src/update/brick_seed.rs	1	Ok(source.read(&mut a[..1])? == 0 && dest.read(&mut b[..1])? == 0)
+src/update/brick_seed.rs	1	Read::by_ref(&mut marker).take(130).read_to_end(&mut bytes)?;
+src/update/brick_seed.rs	1	Some(f) if f.metadata()?.is_dir() => Some(Dir(f)),
+src/update/brick_seed.rs	1	Some(mut f) if f.metadata()?.is_file() => same(&mut from, &mut f)?,
+src/update/brick_seed.rs	1	dest.read_exact(&mut b[..n])?;
+src/update/brick_seed.rs	1	if !from.metadata()?.is_file() {
+src/update/brick_seed.rs	1	if !marker.metadata()?.is_file() {
+src/update/brick_seed.rs	1	if destination.node(OsStr::new(MARKER))?.is_some_and(|f| !f.metadata().is_ok_and(|m| m.is_file())) {
+src/update/brick_seed.rs	1	if from.metadata()?.is_dir() {
+src/update/brick_seed.rs	1	if marker.metadata()?.len() > 129 {
+src/update/brick_seed.rs	1	if size != dest.metadata()?.len() {
+src/update/brick_seed.rs	1	if target_dir.node(file_name)?.is_some_and(|f| !f.metadata().is_ok_and(|m| m.is_file())) {
+src/update/brick_seed.rs	1	let meta = file.metadata()?;
+src/update/brick_seed.rs	1	let mut dir = Self(File::open(if path.is_absolute() { "/" } else { "." })?);
+src/update/brick_seed.rs	1	let mut names = std::fs::read_dir(format!("/proc/self/fd/{}", source.0.as_raw_fd()))?
+src/update/brick_seed.rs	1	let size = source.metadata()?.len();
+src/update/brick_seed.rs	1	return if file.metadata()?.is_dir() { Ok(Some(Self(file))) } else { Err(invalid()) };
+src/update/brick_seed.rs	1	source.read_exact(&mut a[..n])?;
+src/update/card.rs	1	Self::reader(e).ok()?.read_to_end(&mut out).ok()?;
+src/update/card.rs	1	if !std::fs::metadata(&file).is_ok_and(|m| seen.insert((m.dev(), m.ino()))) { continue; }
+src/update/card.rs	1	if e.metadata().is_ok_and(|m| m.is_file()) { std::fs::remove_file(e.path())?; }
+src/update/card.rs	1	if let Ok(list) = std::fs::read_dir(&dir) {
+src/update/card.rs	1	let Ok(list) = std::fs::read_dir(&dir) else { continue };
+src/update/card.rs	1	let Ok(list) = std::fs::read_dir(dir) else { return Vec::new() };
+src/update/card.rs	1	let Ok(meta) = e.metadata() else { continue };
+src/update/card.rs	1	let bundle = Bundle::open(file).map_err(Refusal::Not)?;
+src/update/card.rs	1	let bundle = Bundle::open(file)?;
+src/update/card.rs	1	let dir = e.metadata().is_ok_and(|m| m.is_dir());
+src/update/card.rs	1	let json = bundle.read_small("update.json", 1 << 20).ok_or_else(|| Refusal::Not(INCOMPLETE.into()))?;
+src/update/card.rs	1	let meta = std::fs::metadata(file).ok();
+src/update/card.rs	1	let mut f = std::fs::File::open(&e.path)?;
+src/update/card.rs	1	let n = r.read(&mut buf).map_err(|_| INCOMPLETE.to_string())?;
+src/update/card.rs	1	let n = r.read(&mut buf)?;
+src/update/card.rs	1	let sig = bundle.read_small("update.json.sig", 4096).ok_or_else(|| Refusal::Not(INCOMPLETE.into()))?;
+src/update/card.rs	1	let size = std::fs::metadata(dest).map_or(0, |m| m.len());
+src/update/channel.rs	1	let json = read(url, "1048576")?;
+src/update/channel.rs	1	let signature = read(&format!("{url}.sig"), "1024")?;
+src/update/cheats.rs	1	if part.exists() { std::fs::copy(part, &temp).map_err(|_| CARD_WRITE)?; }
+src/update/cheats.rs	1	if std::fs::metadata(part).map_or(0, |m| m.len()) != rel.size || store::sha256_file(part).map_err(|_| CARD_WRITE)? != rel.sha256.to_lowercase() {
+src/update/cheats.rs	1	let json = std::fs::read(descriptor).map_err(|_| UNAVAILABLE)?;
+src/update/cheats.rs	1	let mut files: Vec<PathBuf> = places.iter().filter_map(|d| std::fs::read_dir(d).ok()).flatten().flatten()
+src/update/cheats.rs	1	let the_pack = |f: &Path| std::fs::metadata(f).is_ok_and(|m| m.len() == rel.size) && store::sha256_file(f).is_ok_and(|h| h == want);
+src/update/cheats.rs	2	std::fs::File::open(&part).and_then(|f| f.sync_all()).map_err(|_| WRITE)?;
+src/update/cheats.rs	1	std::fs::copy(&file, &part).map_err(|_| WRITE)?;
+src/update/observation.rs	1	Layout::Rocknix => std::fs::read_link(root.join("known-good")).ok().and_then(|p| root.join(p).canonicalize().ok()).zip(release.canonicalize().ok()).is_some_and(|(good, running)| good == running),
+src/update/observation.rs	1	file.take(257).read_to_string(&mut text)?;
+src/update/observation.rs	1	fn present(path: &Path) -> bool { std::fs::symlink_metadata(path).is_ok() }
+src/update/observation.rs	1	let file = std::fs::OpenOptions::new().read(true).custom_flags(libc::O_NOFOLLOW | libc::O_NONBLOCK).open(path)?;
+src/update/observation.rs	1	let metadata = file.metadata()?;
+src/update/observation.rs	1	let mut recovery = match std::fs::metadata(root) {
+src/update/observation.rs	1	let next = Inspection::read(layout, &root, super::app_version(), &release, health());
+src/update/observation.rs	1	let staging = std::fs::read_dir(root.join("releases")).ok().is_some_and(|entries| entries.flatten().any(|e| e.file_name().to_string_lossy().starts_with(".staging-")));
+src/update/payload.rs	1	else if saved > memory { std::fs::copy(destination, &temp).map_err(|e| e.to_string())?; }
+src/update/payload.rs	1	if std::fs::metadata(destination).is_ok_and(|m| m.len() == rel.size)
+src/update/payload.rs	1	if std::fs::metadata(destination).map_or(0, |m| m.len()) != rel.size
+src/update/payload.rs	1	let memory = std::fs::metadata(&temp).map_or(0, |m| m.len());
+src/update/payload.rs	1	let mut source = std::fs::File::open(&temp).map_err(|e| e.to_string())?;
+src/update/payload.rs	1	let saved = std::fs::metadata(destination).map_or(0, |m| m.len());
+src/update.rs	1	if dest.exists() && std::fs::metadata(dest).map_or(0, |m| m.len()) > rel.size {
+src/update.rs	1	inspect_system(&os_compat::Squashfs::open(tools.unsquashfs, &image)?, current, needs)
+src/update.rs	1	let Ok(entries) = std::fs::read_dir(releases) else { return };
+src/update.rs	1	let Ok(entries) = std::fs::read_dir(root.join("releases")) else { return };
+src/update.rs	1	let current = std::fs::read_to_string("/etc/os-release").ok().filter(|t| os_release_field(t, "HW_DEVICE").is_some());
+src/update.rs	1	let current = std::fs::read_to_string("/etc/os-release").unwrap_or_default();
+src/update.rs	1	let have = std::fs::metadata(&tarball).map_or(0, |m| m.len()).min(rel.size);
+src/update.rs	1	let len = std::fs::metadata(dest).map_or(0, |m| m.len());
+src/update.rs	1	let len = || std::fs::metadata(dest).map_or(0, |m| m.len());
+src/update.rs	1	let mut high_water = std::fs::metadata(dest).map_or(0, |m| m.len());
+src/update.rs	1	let note = std::fs::read_to_string(&path).ok()?;
+src/update.rs	1	let os_release = std::fs::read_to_string("/etc/os-release").unwrap_or_default();
+src/update.rs	1	let resumed = std::fs::metadata(dest).is_ok_and(|m| m.len() > 0);
+src/update.rs	1	let size = std::fs::metadata(dest).map_or(0, |m| m.len());
+src/update.rs	1	let unpacked = std::fs::read(&tarball).map_err(|e| e.to_string()).and_then(|data| crate::untar::unpack_reporting(&data, &staging, &|done, total| {
+src/update.rs	1	os_brand_line(&os_release, read_small(Path::new(OS_BRAND_FILE), 4096).as_deref())
+src/update.rs	1	os_compat::Squashfs::open(TOOLS.unsquashfs, path).and_then(|sys| inspect_system(&sys, current.as_deref(), &needs))
+src/update.rs	1	os_release_field(&std::fs::read_to_string("/etc/os-release").ok()?, "OS_VERSION")
+src/update.rs	1	progress(std::fs::metadata(dest).map_or(0, |m| m.len()));
+src/update.rs	1	std::fs::File::open(path).ok()?.take(limit).read_to_string(&mut s).ok()?;
+src/update.rs	1	std::fs::copy(&flat, root.join(&dir).join(f)).map_err(|e| e.to_string())?;
+src/update.rs	1	std::fs::read_dir(dir).ok()?.flatten().map(|e| e.path()).find(|p| p.extension().is_some_and(|e| e == "tar"))
+src/update.rs	1	std::fs::read_link(at).ok().map(|p| p.to_string_lossy().into_owned())
+src/update.rs	1	std::fs::read_to_string("/proc/cmdline").is_ok_and(|c| cmdline_has_nodtbo(&c))
+src/update.rs	1	std::fs::read_to_string(root.join("update-pending")).is_ok_and(|v| v.trim() == app_version())
+src/update.rs	1	sys.read(&resolved).map(|b| String::from_utf8_lossy(&b).into_owned())
+src/update.rs	1	while std::fs::symlink_metadata(root.join(&dir)).is_ok() {
+src/update_hint.rs	1	crate::fsutil::read_json_or_backup(&data.join(FILE)).unwrap_or_default()
+src/vfs.rs	1	if path.symlink_metadata().is_ok_and(|m| m.file_type().is_symlink()) {
+src/vfs.rs	1	let fd = libc::open(path, flags | libc::O_CLOEXEC, 0o644 as c_uint);
+src/web/api.rs	1	"exists": std::fs::symlink_metadata(&t).is_ok(),
+src/web/api.rs	1	if !small || std::fs::File::open(&path).and_then(|f| f.take(COVER_MAX).read_to_end(&mut bytes)).is_err() {
+src/web/api.rs	1	if !small || std::fs::File::open(&path).and_then(|f| f.take(SHOT_MAX).read_to_end(&mut bytes)).is_err() || !bytes.starts_with(b"\x89PNG") {
+src/web/api.rs	1	let small = std::fs::metadata(&path).is_ok_and(|m| m.is_file() && m.len() <= COVER_MAX);
+src/web/api.rs	1	let small = std::fs::metadata(&path).is_ok_and(|m| m.is_file() && m.len() <= SHOT_MAX);
+src/web/api.rs	1	self.stream.read(buf)
+src/web/auth.rs	1	let f: File = crate::fsutil::read_json_or_backup(&file).unwrap_or_default();
+src/web/files.rs	1	.open(&tmp)
+src/web/files.rs	1	for e in std::fs::read_dir(dir).into_iter().flatten().flatten() {
+src/web/files.rs	1	if !std::fs::symlink_metadata(dir).is_ok_and(|m| m.is_dir()) {
+src/web/files.rs	1	if let Ok(d) = std::fs::File::open(dir) {
+src/web/files.rs	1	if std::fs::symlink_metadata(&dir).is_ok_and(|m| m.file_type().is_symlink()) {
+src/web/files.rs	1	if std::fs::symlink_metadata(target).is_ok_and(|m| !m.is_file()) {
+src/web/files.rs	1	let exists = std::fs::symlink_metadata(target).is_ok();
+src/web/files.rs	1	let n = match r.read(&mut buf[..want]) {
+src/web/files.rs	1	match std::fs::symlink_metadata(&at) {
+src/web/files.rs	1	match std::fs::symlink_metadata(tmp_dir) {
+src/web/http.rs	1	let n = (&mut *r).take((MAX_HEAD - used.min(MAX_HEAD)) as u64 + 1).read_until(b'\n', line).map_err(|_| BadRequest::Closed)?;
+src/web/http.rs	1	r.take(len).read_to_end(&mut body).map_err(|_| 400u16)?;
+src/web/mod.rs	1	crate::fsutil::read_json_or_backup(&data_dir.join(PREFS_FILE)).unwrap_or_default()
+src/web/mod.rs	1	std::fs::File::open("/dev/urandom")?.read_exact(&mut b)?;
+src/web/net.rs	1	for e in std::fs::read_dir("/proc").ok()?.flatten() {
+src/web/net.rs	1	let Ok(cmd) = std::fs::read(e.path().join("cmdline")) else { continue };
+src/web/net.rs	1	let Ok(comm) = std::fs::read_to_string(e.path().join("comm")) else { continue };
+src/web/net.rs	1	s.take(LOCALAPI_MAX).read_to_end(&mut raw).map_err(|e| format!("tailscaled: {e}"))?;
+src/wifi.rs	1	if std::fs::read_to_string(dir.join("users.map")).ok().as_deref() != Some(map.as_str()) {
+src/wifi.rs	1	ip_now().and_then(|ip| ip.parse().ok()).is_some_and(|ip| crate::sockets::listening(&crate::sockets::read(), ip, 445))
+src/wifi.rs	1	let current = std::fs::read_to_string(&passdb).unwrap_or_default();
+src/wifi.rs	1	let current = std::fs::read_to_string(path).unwrap_or_default();
+src/wifi.rs	1	let text=std::fs::read_to_string(path).unwrap_or_default();
+src/wifi.rs	1	parse_mac(&std::fs::read_to_string(format!("/sys/class/net/{iface}/address")).ok()?)
+src/wiki_text.rs	1	std::fs::read_to_string(cache_path(data_dir, title)).ok().filter(|t| !t.trim().is_empty())

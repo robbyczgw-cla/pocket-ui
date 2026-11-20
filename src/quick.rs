@@ -1166,7 +1166,7 @@ impl Sys {
     /// `power-noboot[:row]`, `time[:row]`, `time-wrong` (the clock at 3 March 2000, offline), `time-wrong-wifi` (the same with Wi-Fi on),
     /// `time-unsynced` (Wi-Fi off, no server yet), `time-set[:field]` (Date and time's picker, offline, on that field),
     /// `time-set-wrong` (the picker opened from the clock of 2000), `time-hand[:row]` (after a set by hand, offline),
-    /// `regions`, `zones`, `search`, `osd-volume`, `osd-brightness`, `osd-warmth`, `quick-dim:<step>`, `osd-dim:<step>`.
+    /// `regions`, `zones`, `search`, `osd-volume`, `quick-osd` (the bar over the quick settings), `osd-brightness`, `osd-warmth`, `quick-dim:<step>`, `osd-dim:<step>`.
     pub fn demo(&mut self, what: &str, now: Instant) {
         let (name, arg) = what.split_once(':').map_or((what, 0usize), |(n, a)| (n, a.parse().unwrap_or(0)));
         // A snapshot: the look runs here, so the picture has the values (never so in the running app).
@@ -1322,6 +1322,12 @@ impl Sys {
                 });
             }
             "osd-volume" => self.osd = Some(Shown::new(Data::percent("Volume", 65))),
+            // The bar over the quick settings (a Vol key while they are open), on the Volume row.
+            "quick-osd" => {
+                self.profiles.game = None;
+                self.screen = Screen::Quick { sel: 1 };
+                self.osd = Some(Shown::new(Data::percent("Volume", 65)));
+            }
             "osd-brightness" => self.osd = Some(Shown::new(Data::percent("Brightness", 40))),
             // The bar on an extra dim step over the shelf (`osd-dim:<step>`), the shelf darker with it.
             "osd-dim" => {

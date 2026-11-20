@@ -127,6 +127,9 @@ impl Launch {
             home: None,
             power_on: None,
             plain_lit: None,
+            plain_foot: None,
+            tucked: Vec::new(),
+            tuck_p: None,
         };
         scene.load_rig(blocks);
         let seated = scene.rig.as_ref().map_or(0, |r| r.rig.seated_h(r.scale));

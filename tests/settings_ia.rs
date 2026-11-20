@@ -14,12 +14,12 @@ include!("common/root.rs");
 /// The tree as the player sees it without a store catalog: category, then its rows. Every row is one of a category; no
 /// row opens a list of more rows (For tinkerers is gone: Sync and PC streaming are rows of Connections).
 const TREE: [(&str, &[&str]); 8] = [
-    ("Connections", &["Wi-Fi", "Bluetooth", "Tailscale", "Remote access (SSH)", "Sync", "Web companion", "PC streaming"]),
+    ("Connections", &["Wi-Fi", "Bluetooth", "Tailscale", "Remote access (SSH)", "Sync", "Pocket Sync", "Web companion", "PC streaming"]),
     ("Look", &["Layout", "Appearance", "Colours", "Style", "Text size", "Motion", "Game start animation", "Cozy extras", "Lived-in shelf"]),
-    ("Screen & sound", &["Brightness", "Volume", "Screen colour", "Night light", "Menu sounds", "Case sounds"]),
+    ("Screen & sound", &["Brightness", "Volume", "Screen colour", "Night light", "Menu sounds", "Case sounds", "Photos of big moments"]),
     ("Controls", &["Buttons", "Controller setup", "Test buttons", "Haptics", "LEDs"]),
     ("Playing", &["On start", "Continue where I quit", "Console boot screen", "Remind me where I was", "Screen frames", "Over the game", "Zoom in the pause menu", "Performance & fan", "RetroAchievements"]),
-    ("Games", &["Add games", "Box art & downloads", "Game check", "Systems on the shelf", "Curator", "Screenshots", "From EmulationStation"]),
+    ("Games", &["Add games", "Box art & downloads", "Game check", "Systems on the shelf", "Shelf space", "Curator", "Screenshots", "From EmulationStation"]),
     ("System", &["Updates", "Language", "Sleep & power", "Battery", "Time", "Storage", "Backup & reset", "Kids mode"]),
     ("Help & tools", &["Manual", "Tour", "How you like to play", "First-start setup", "Tools", "Report a problem", "About"]),
 ];
@@ -63,7 +63,7 @@ fn spanish(en: &str) -> String {
 }
 
 /// The rows of Settings → Look → Cozy extras and System → Sleep & power, in their order.
-const COZY: [&str; 13] = ["TV on the cabinet", "TV plays the game", "Stickers on cases", "Printed discs", "Playful cases", "Sealed new games", "Old-TV switch-on", "Light by time of day", "Decorations", "Progress from saves", "Game connections", "Rediscover", "GBA console"];
+const COZY: [&str; 17] = ["TV on the cabinet", "TV plays the game", "Stickers on cases", "Printed discs", "Playful cases", "Sealed new games", "Old-TV switch-on", "Old-TV switch-off", "Handheld switch-on", "Power lights", "Light by time of day", "Evening TV glow", "Decorations", "Progress from saves", "Game connections", "Rediscover", "GBA console"];
 const SLEEP: [&str; 5] = ["Screen off after", "Sleep after", "Switch off after sleeping", "Short press", "Hold"];
 
 /// The symbols, the name and L1/R1 at the top of category `g`'s list (`settings:<g>`, its first row): the name painted whole
@@ -340,5 +340,76 @@ fn the_line_under_continue_where_i_quit_says_what_off_does() {
         let flat = v.replace('\n', " ");
         assert!(flat.contains("Continue where I quit"), "the Playing page: {v}");
         assert!(flat.contains(want) && !flat.contains(not), "forget={forget}: {v}");
+    }
+}
+
+/// The line of `en` in assets/i18n/`lang`.tsv (English: itself).
+fn in_lang(lang: &str, en: &str) -> String {
+    if lang == "en" {
+        return en.to_string();
+    }
+    let table = std::fs::read_to_string(format!("{ROOT}/assets/i18n/{lang}.tsv")).unwrap();
+    table.lines().filter_map(|l| l.split_once('\t')).find(|(k, _)| *k == en).map(|(_, v)| v.to_string()).unwrap_or_else(|| en.to_string())
+}
+
+/// The Window is taken off for 0.6 (19.11.2026: `Extra::built`): in every language, walking down past where its row was
+/// (between Evening TV glow and Decorations), the page shows no Window row, and A there switches Decorations, not it.
+#[test]
+fn the_window_row_is_off_the_page_in_every_language() {
+    let _guard = tempfile::tempdir().unwrap();
+    let tmp = _guard.path().to_path_buf();
+    std::fs::write(tmp.join("none.cfg"), "<systemList></systemList>").unwrap();
+    let stub = wayland(&tmp);
+    let glow = COZY.iter().position(|r| *r == "Evening TV glow").unwrap();
+    assert!(!COZY.contains(&"Window") && COZY[glow + 1] == "Decorations", "{COZY:?}");
+    let mut failed = Vec::new();
+    for lang in ["en", "de", "fr", "it", "es", "pt"] {
+        let name = in_lang(lang, "Window");
+        for downs in [glow, glow + 1] {
+            let s = shot(&tmp, &stub, &format!("cozy:0::{}", "d".repeat(downs)), lang, "1280x720", "normal", false);
+            if s.visible.iter().any(|v| *v == name) {
+                failed.push(format!("{lang}: the Window row {name:?} is on the page: {:?}", s.visible));
+            }
+            failed.extend(s.faults.iter().map(|f| format!("{lang} {downs} Downs: {f}")));
+        }
+        let state = format!("cozy:0::{}a", "d".repeat(glow + 1));
+        shot(&tmp, &stub, &state, lang, "1280x720", "normal", false);
+        let data = tmp.join(format!("{}-{lang}-1280x720-normal", state.replace(':', "_")));
+        let kept: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(data.join("settings.json")).unwrap()).unwrap();
+        if kept["extras"] != serde_json::json!({ "decorations": false }) {
+            failed.push(format!("{lang}: A after Evening TV glow switched {} (want Decorations)", kept["extras"]));
+        }
+    }
+    drop(stub);
+    assert!(failed.is_empty(), "{}", failed.join("\n"));
+}
+
+/// Ritual 0.6: Handheld switch-on and Power lights are reached with the D-pad on Cozy extras in all six languages, shown
+/// whole with their line uncut, translated, and A switches each off and saves it (on is the start, written as nothing).
+#[test]
+fn the_handheld_switch_on_and_power_lights_rows_are_reached_and_switched_in_every_language() {
+    let dir = tempfile::Builder::new().prefix("pocketui-settings-ritual-hh-").tempdir().unwrap();
+    let tmp = dir.path().to_path_buf();
+    std::fs::write(tmp.join("none.cfg"), "<systemList></systemList>").unwrap();
+    let stub = wayland(&tmp);
+    for (row, key, line) in [
+        ("Handheld switch-on", "handheld_switch_on", "A handheld's screen comes on and goes off like the real one: a Game Boy's green glow, a PSP's soft fade."),
+        ("Power lights", "power_lights", "A handheld's power light shows your battery like the real one and blinks when you save."),
+    ] {
+        let r = COZY.iter().position(|c| *c == row).unwrap();
+        for lang in ["en", "de", "es", "pt", "fr", "it"] {
+            let (name, said) = (in_lang(lang, row), in_lang(lang, line));
+            assert!(lang == "en" || name != row, "{lang}: {row:?} is translated");
+            let s = shot(&tmp, &stub, &format!("cozy:{r}"), lang, "640x480", "normal", false);
+            assert!(s.visible.iter().any(|v| *v == name), "{lang}: the row {name:?} shown whole: {:?}", s.visible);
+            let words: Vec<&str> = said.split_whitespace().take(3).collect();
+            assert!(s.visible.iter().any(|v| v.contains(&words.join(" "))), "{lang}: its line {said:?}: {:?}", s.visible);
+            assert!(!s.visible.iter().any(|v| v.ends_with('…')), "{lang} {row}: nothing cut: {:?}", s.visible);
+            assert!(s.faults.is_empty(), "{lang} {row}: {:?}", s.faults);
+        }
+        let name = format!("cozy_{r}__a-en-640x480-normal");
+        shot(&tmp, &stub, &format!("cozy:{r}::a"), "en", "640x480", "normal", false);
+        let saved: serde_json::Value = serde_json::from_slice(&std::fs::read(tmp.join(&name).join("settings.json")).unwrap()).unwrap();
+        assert_eq!(saved["extras"], serde_json::json!({ key: false }), "{row}: A switches it off and it is kept");
     }
 }

@@ -824,6 +824,34 @@ fn the_slugs_are_githubs() {
     assert!(!names("`src/app_motion.rs`", "motion.rs"));
 }
 
+/// The README presents the product, not a release (18.11.2026): both editions stay on it for good, what is new lives in
+/// the release notes and CHANGELOG.md. A "### New in X" section went stale twice: 0.5.0 still said "New in 0.4", and
+/// 0.5.1's replaced 0.5's, which held the only Android line, so the Android app vanished from GitHub.
+#[test]
+fn the_readme_shows_both_editions_and_points_at_the_changelog() {
+    let md = without_comments(&read("README.md"));
+    let mut missing = Vec::new();
+    for want in [
+        "pocket-ui OS",
+        "pocket-ui for Android",
+        "https://pocketui.xyz/install\"",
+        "https://pocketui.xyz/install#android",
+        "(CHANGELOG.md)",
+        "../../releases",
+    ] {
+        if !md.contains(want) {
+            missing.push(want);
+        }
+    }
+    assert!(missing.is_empty(), "README.md must name both editions with their download links and link the changelog; missing: {missing:?}");
+    let stale: Vec<_> = headings(&md).into_iter().filter(|(_, h)| h.starts_with("New in")).collect();
+    assert!(
+        stale.is_empty(),
+        "README.md has no \"New in\" section (what is new goes to CHANGELOG.md and the release notes): {stale:?}"
+    );
+    assert!(!md.to_lowercase().contains("home screen"), "README.md: pocket-ui is a frontend, never a \"home screen\"");
+}
+
 // ---- the status ledger ---------------------------------------------------------------------------------------------
 
 /// The five statuses of docs/STATUS.md, strongest first.
@@ -1490,4 +1518,221 @@ fn i18n_look_names() {
         }
     }
     assert!(bad.is_empty(), "one name per look and language:\n{}", bad.join("\n"));
+}
+
+// ---- the release checks and the nightly run -------------------------------------------------------------------------
+
+/// Every `fn` of `text` with the reason of the `#[ignore = "…"]` above it (None: not ignored, or ignored without a reason).
+fn fns_with_ignore_reason(text: &str) -> Vec<(String, Option<String>)> {
+    let mut out = Vec::new();
+    let mut reason: Option<String> = None;
+    for line in text.lines() {
+        let t = line.trim_start();
+        if let Some(r) = t.strip_prefix("#[ignore = \"") {
+            reason = r.rfind('"').map(|end| r[..end].to_string());
+        } else if let Some(rest) = ["pub(crate) ", "pub ", "async "].iter().fold(t, |t, p| t.strip_prefix(p).unwrap_or(t)).strip_prefix("fn ") {
+            let name: String = rest.chars().take_while(|c| c.is_alphanumeric() || *c == '_').collect();
+            if !name.is_empty() {
+                out.push((name, reason.take()));
+            }
+        }
+    }
+    out
+}
+
+/// The value of `NAME="…"` on a line of a shell script.
+fn shell_value(script: &str, name: &str) -> Option<String> {
+    script.lines().find_map(|l| l.strip_prefix(&format!("{name}=\"")).and_then(|r| r.split('"').next()).map(str::to_string))
+}
+
+/// The release-only tests (`#[ignore = "release check: …"]`) run in three places that must agree: scripts/pre-release.sh at the
+/// cut, scripts/release-check.sh, and scripts/release-extras.sh in the nightly full suite (tools/nightly-gate.sh). 0.5.1 (18.11.):
+/// two wrong Settings paths sat on main for a day because no night ran these tests; and two suites (where_states,
+/// no_wifi_walk) were run by nobody at all. So: (1) a name in scripts/release-text-tests.txt is a real test (a dead
+/// name matches nothing in libtest and stays green); (2) each release-only test of `src/` is in that list, or says it is a
+/// bookkeeping check or needs a fixture; (3) each `tests/` file with one is in the text-fit suites or is the nav explorer;
+/// (4) pre-release.sh and release-extras.sh name the same suites and the same commands; (5) the nightly runs the extras.
+#[test]
+fn every_release_only_test_runs_in_pre_release_and_in_the_nightly() {
+    let mut bad = Vec::new();
+    let listed: Vec<String> = read("scripts/release-text-tests.txt").lines().map(str::trim).filter(|l| !l.is_empty() && !l.starts_with('#')).map(str::to_string).collect();
+    let is_release = |r: &Option<String>| r.as_deref().is_some_and(|r| r.starts_with("release check:"));
+    // The tests of the list's own binaries: the library and the binaries (`src/`) and tests/i18n_snapshots.rs.
+    let mut known: Vec<(String, Option<String>, String)> = Vec::new();
+    for f in rust_sources() {
+        let rel = f.strip_prefix(root()).unwrap_or(&f).display().to_string();
+        for (n, r) in fns_with_ignore_reason(&std::fs::read_to_string(&f).unwrap()) {
+            known.push((n, r, rel.clone()));
+        }
+    }
+    for (n, r) in fns_with_ignore_reason(&read("tests/i18n_snapshots.rs")) {
+        known.push((n, r, "tests/i18n_snapshots.rs".into()));
+    }
+    // (1) no dead name (an ordinary test in the list is fine: it just runs with the others).
+    for name in &listed {
+        if !known.iter().any(|k| &k.0 == name) {
+            bad.push(format!("scripts/release-text-tests.txt: {name} is no test any more (a dead name matches nothing and passes)"));
+        }
+    }
+    // (2) the release-only tests of src/ (tests/i18n_snapshots.rs's are run by its suite below).
+    for (name, reason, file) in known.iter().filter(|k| k.2.starts_with("src/")) {
+        let r = reason.as_deref().unwrap_or("");
+        let elsewhere = r.contains("bookkeeping") || r.contains("needs the real database");
+        if is_release(reason) && !elsewhere && !listed.contains(name) {
+            bad.push(format!("{file}: {name} is release-only but not in scripts/release-text-tests.txt (no night and no cut runs it)"));
+        }
+    }
+    // (3) each tests/ file with release-only cases is a suite pre-release.sh runs with --ignored, or the explorer.
+    let pre = std::fs::read_to_string(root().join("scripts/pre-release.sh")).ok();
+    let extras = std::fs::read_to_string(root().join("scripts/release-extras.sh")).ok();
+    if let (Some(pre), Some(extras)) = (&pre, &extras) {
+        let suites_of = |s: &str| shell_value(s, "TEXT_SUITES").unwrap_or_default();
+        if suites_of(pre) != suites_of(extras) || suites_of(pre).is_empty() {
+            bad.push(format!("scripts/pre-release.sh and scripts/release-extras.sh name different TEXT_SUITES:\n  {}\n  {}", suites_of(pre), suites_of(extras)));
+        }
+        let suites: Vec<String> = suites_of(extras).split_whitespace().map(str::to_string).collect();
+        for s in &suites {
+            if !root().join(format!("tests/{s}.rs")).exists() {
+                bad.push(format!("TEXT_SUITES names tests/{s}.rs, which does not exist"));
+            }
+        }
+        let mut files: Vec<PathBuf> = std::fs::read_dir(root().join("tests")).unwrap().filter_map(|e| e.ok().map(|e| e.path())).collect();
+        files.sort();
+        for f in files.into_iter().filter(|p| p.extension().is_some_and(|x| x == "rs")) {
+            let stem = f.file_stem().unwrap().to_string_lossy().to_string();
+            for (name, reason) in fns_with_ignore_reason(&std::fs::read_to_string(&f).unwrap()) {
+                let r = reason.clone().unwrap_or_default();
+                // Fixtures nobody has on a build host, and numbers that are printed, not asserted.
+                let by_hand = r.contains("needs POCKETUI_BIG_FIXTURE") || r.contains("prints the numbers");
+                if is_release(&reason) && !by_hand && stem != "nav_explorer" && !suites.contains(&stem) {
+                    bad.push(format!("tests/{stem}.rs: {name} is release-only, but {stem} is not in TEXT_SUITES (no night and no cut runs it)"));
+                }
+            }
+        }
+        // (4) the same commands in both, and the Brick filter finds a test.
+        for needle in ["scripts/release-text-tests.txt", "--test i18n_snapshots", "--test nav_explorer", "textfit_extras", "--features brick --test text_size"] {
+            for (file, text) in [("scripts/pre-release.sh", pre), ("scripts/release-extras.sh", extras)] {
+                if !text.contains(needle) {
+                    bad.push(format!("{file} does not run `{needle}` (the other script does)"));
+                }
+            }
+        }
+        if !fns_with_ignore_reason(&read("tests/text_size.rs")).iter().any(|(n, _)| n.starts_with("textfit_extras")) {
+            bad.push("scripts/pre-release.sh and release-extras.sh filter text_size by `textfit_extras`: no such test".into());
+        }
+    }
+    // (5) the nightly (private tooling, not in the export) runs the extras after the full suite.
+    if let Ok(nightly) = std::fs::read_to_string(root().join("maintainer/release-prevention/nightly-gate.sh")) {
+        if !nightly.contains("scripts/release-extras.sh") {
+            bad.push("maintainer/release-prevention/nightly-gate.sh does not run scripts/release-extras.sh".into());
+        }
+    }
+    assert!(bad.is_empty(), "the release-only checks and the nightly run disagree:\n{}", bad.join("\n"));
+}
+
+/// The check itself: it reads a name's ignore reason and skips nothing by accident.
+#[test]
+fn the_release_only_scan_reads_ignore_reasons() {
+    let src = "#[test]\n#[ignore = \"release check: a thing\"]\nfn one() {}\n\n#[test]\nfn two() {}\n    #[ignore = \"timing tier\"]\n    pub fn three() {}\n";
+    let got = fns_with_ignore_reason(src);
+    assert_eq!(got, vec![("one".into(), Some("release check: a thing".into())), ("two".into(), None), ("three".into(), Some("timing tier".into()))]);
+    assert_eq!(shell_value("A=\"x\"\nTEXT_SUITES=\"a b\"\n", "TEXT_SUITES").as_deref(), Some("a b"));
+}
+
+// ---- one name per value, and du everywhere -------------------------------------------------------------------------
+
+/// Two values of one row, or two entries of one list, never read the same in any language (review 19.11. #3: Italian
+/// had Picture › Look's Smooth and Soft both "Morbido", and the pause menu's Earlier beside Load's "Before load", both
+/// "Prima"). The class: every setting's values and every group's rows of the Options (`options::GROUPS`), each Settings
+/// category's rows (`SETTINGS_GROUPS`), the layouts, and what the pause menu shows at once (its rows, Load's chips).
+#[test]
+fn i18n_no_two_entries_of_a_list_share_a_name() {
+    use pocket_ui::i18n::{tr_in, Lang};
+    use pocket_ui::pause_list::Item;
+    use pocket_ui::states::{chip, Target};
+    let mut lists: Vec<(String, Vec<String>)> = Vec::new();
+    for g in pocket_ui::options::GROUPS.iter() {
+        lists.push((format!("Options › {}", g.name), g.settings.iter().map(|s| s.name.to_string()).collect()));
+        for s in g.settings {
+            lists.push((format!("{} › {}", g.name, s.name), s.choices.iter().map(|c| c.label.to_string()).collect()));
+        }
+    }
+    for (category, rows) in super::SETTINGS_GROUPS.iter() {
+        lists.push((format!("Settings › {category}"), rows.iter().map(|r| r.0.to_string()).collect()));
+    }
+    lists.push(("Settings › Look › Layout".into(), ["Shelf", "Easy", "Split", "Cabinet"].map(String::from).to_vec()));
+    let mut pause: Vec<String> = [Item::Continue, Item::Save, Item::Load, Item::Earlier, Item::Disc, Item::Options, Item::Achievements, Item::Quit]
+        .iter().map(|i| i.label().to_string()).collect();
+    pause.extend(["Save & quit".to_string(), chip(Target::Auto), chip(Target::Undo)]);
+    lists.push(("the pause menu with Load's chips".into(), pause));
+    let mut bad = Vec::new();
+    for lang in Lang::ALL {
+        for (list, entries) in &lists {
+            let mut seen: std::collections::BTreeMap<String, &str> = std::collections::BTreeMap::new();
+            for en in entries {
+                let said = tr_in(lang, en).to_lowercase();
+                if let Some(other) = seen.insert(said.clone(), en) {
+                    if other != en {
+                        bad.push(format!("{lang:?}: {list}: {other:?} and {en:?} are both {said:?}"));
+                    }
+                }
+            }
+        }
+    }
+    assert!(bad.is_empty(), "{} entries share a name:\n{}", bad.len(), bad.join("\n"));
+}
+
+/// The interface says du/tu/tú/tu/você in every language (review 19.11. #3: one French line said "Choisissez"): no formal
+/// address in any table, the Brick's included.
+#[test]
+fn i18n_no_formal_address() {
+    // (language, the words of formal address). German's are checked apart: only where a sentence doesn't start, as at
+    // its start "Sie"/"Ihre" can be "they"/"their" ("Ihre Spiele bleiben so oder so").
+    let formal: [(&str, &[&str]); 5] = [
+        ("de", &[]),
+        ("fr", &["vous", "votre", "vos", "Choisissez", "Appuyez", "Sélectionnez", "Utilisez", "Activez", "Ouvrez", "Copiez", "Mettez", "Réessayez", "Vérifiez", "Branchez", "Insérez", "Patientez", "Allumez", "Gardez"]),
+        ("es", &["usted", "ustedes", "Pulse", "Elija", "Seleccione", "Presione", "Inténtelo", "Asegúrese", "Utilice", "Introduzca", "Vuelva"]),
+        ("pt", &["senhor", "senhora", "Vossa"]),
+        ("it", &["Prema", "Scelga", "Selezioni", "Utilizzi", "Riprovi", "Attenda", "Lei"]),
+    ];
+    let mut bad = Vec::new();
+    for (lang, words) in formal {
+        for file in [format!("assets/i18n/{lang}.tsv"), format!("assets/i18n/brick-{lang}.tsv")] {
+            for (n, line) in read(&file).lines().enumerate().filter(|(_, l)| !l.starts_with('#')) {
+                let Some((_, tr)) = line.split_once('\t') else { continue };
+                let tokens: Vec<&str> = tr.split(|c: char| !c.is_alphanumeric()).collect();
+                let mut hits: Vec<&str> = words.iter().copied().filter(|w| tokens.contains(w)).collect();
+                if lang == "de" {
+                    // "Sie", "Ihnen", "Ihre" … after a word that isn't a sentence's end: the formal you.
+                    for word in ["Sie", "Ihnen", "Ihr", "Ihre", "Ihren", "Ihrem", "Ihrer", "Ihres"] {
+                        for (i, _) in tr.match_indices(&format!(" {word}")) {
+                            let ends = tr[i + 1 + word.len()..].chars().next().is_none_or(|c| !c.is_alphanumeric());
+                            if ends && !tr[..i].trim_end().ends_with(['.', ':', '!', '?', '–', '—']) { hits.push(word); }
+                        }
+                    }
+                }
+                if !hits.is_empty() { bad.push(format!("{file}:{}: {hits:?}: {tr}", n + 1)); }
+            }
+        }
+    }
+    assert!(bad.is_empty(), "formal address:\n{}", bad.join("\n"));
+}
+
+/// A renamed row is not named by its old name in the manual (review 19.11. #15: five pages still said **Animations: Cozy**
+/// after the row became Game start animation). One line per rename: (old, new).
+#[test]
+fn the_manual_names_no_renamed_row_by_its_old_name() {
+    const RENAMED: [(&str, &str); 1] = [("Animations", "Game start animation")];
+    let mut bad = Vec::new();
+    for file in markdown_files().into_iter().filter(|f| f.starts_with(root().join("docs/user"))) {
+        let md = std::fs::read_to_string(&file).unwrap();
+        for (n, line) in md.lines().enumerate() {
+            for (old, new) in RENAMED {
+                if line.contains(&format!("**{old}**")) || line.contains(&format!("**{old}:")) {
+                    bad.push(format!("{}:{}: **{old}** is **{new}** now", file.display(), n + 1));
+                }
+            }
+        }
+    }
+    assert!(bad.is_empty(), "{}", bad.join("\n"));
 }

@@ -7,37 +7,24 @@ use std::time::Duration;
 use pocket_ui::exit_guard::CoreCalls;
 use pocket_ui::libretro::Core;
 
-const STUB: &str = r#"
-#include <stdbool.h>
-#include <stddef.h>
-#include <string.h>
+const STUB: &str = concat!(r#"#define WIDTH 160
+#define HEIGHT 144
+#define FPS 60.0
+#define RATE 48000.0
+#define NO_SRAM
+#define retro_serialize_size stub_default_size
+#define retro_serialize stub_default_serialize
+#define retro_unserialize stub_default_unserialize
+
+"#, include_str!("../scripts/crash-sweep/stub-core.c"), r#"
+#undef retro_serialize_size
+#undef retro_serialize
+#undef retro_unserialize
 #include <unistd.h>
-struct info { const char *name, *version, *exts; bool need_fullpath, block_extract; };
-struct av { unsigned bw, bh, mw, mh; float aspect; double fps, rate; };
-struct game { const char *path; const void *data; size_t size; const char *meta; };
-void retro_set_environment(void *f) {}
-void retro_set_video_refresh(void *f) {}
-void retro_set_audio_sample(void *f) {}
-void retro_set_audio_sample_batch(void *f) {}
-void retro_set_input_poll(void *f) {}
-void retro_set_input_state(void *f) {}
-void retro_set_controller_port_device(unsigned port, unsigned device) {}
-unsigned retro_api_version(void) { return 1; }
-void retro_init(void) {}
-void retro_deinit(void) {}
-void retro_get_system_info(struct info *i) { memset(i, 0, sizeof *i); i->name = "stub"; i->exts = "gb"; }
-void retro_get_system_av_info(struct av *a) { memset(a, 0, sizeof *a); a->bw = a->mw = 160; a->bh = a->mh = 144; a->fps = 60; a->rate = 48000; }
-bool retro_load_game(const struct game *g) { return true; }
-void retro_unload_game(void) {}
-void retro_reset(void) {}
-void retro_run(void) {}
-void *retro_get_memory_data(unsigned id) { return NULL; }
-size_t retro_get_memory_size(unsigned id) { return 0; }
 size_t retro_serialize_size(void) { if (HANG) for (;;) usleep(1000); return 16; }
 bool retro_serialize(void *d, size_t s) { memset(d, 7, s); return true; }
-bool retro_unserialize(const void *d, size_t s) { return true; }
-"#;
-
+bool retro_unserialize(const void *d, size_t s) { (void)d; (void)s; return true; }
+"#);
 /// Builds the stub, loads it on a thread of its own (the host state is per thread) and takes one state through `calls`.
 /// The thread of a hanging stub never ends; the test process does.
 fn save_state_on_thread(name: &str, hang: bool, calls: std::sync::Arc<CoreCalls>) -> std::sync::mpsc::Receiver<Option<Vec<u8>>> {
@@ -50,7 +37,7 @@ fn save_state_on_thread(name: &str, hang: bool, calls: std::sync::Arc<CoreCalls>
     let out = std::process::Command::new("cc")
         .args(["-shared", "-fPIC", &format!("-DHANG={}", hang as u8), "-o"])
         .arg(&core)
-        .arg(dir.join("stub.c"))
+        .arg(dir.join("stub.c")).arg("-lm")
         .output()
         .expect("the exit guard test builds a stub core and needs a C compiler (cc)");
     assert!(out.status.success(), "cc: {}", String::from_utf8_lossy(&out.stderr));

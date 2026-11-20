@@ -250,8 +250,10 @@ impl App {
     }
 
     /// The names changed: the card's facts and Curator's catalog follow them.
-    fn names_changed(&mut self) {
+    pub(crate) fn names_changed(&mut self) {
         self.game_infos.clear();
+        // Looked up ahead again (`infos_warm_tick`): the first card would otherwise look the whole library up itself.
+        self.infos_warm = (0, 0);
         self.curator.library_changed();
     }
 

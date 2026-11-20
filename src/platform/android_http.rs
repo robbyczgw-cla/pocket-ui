@@ -13,3 +13,11 @@ pub(crate) fn curl_with(url: &str, out: Option<&Path>, extra: &[&str]) -> Option
     let result = super::android::strings("httpGet", &[url, path, &limit.to_string()]).ok()?;
     result.strip_prefix("OK\n").map(|s| s.as_bytes().to_vec())
 }
+
+/// A whole file of a known `size` (the starter pack's games, `update::download`): continued when part of it is at
+/// `dest`, HTTPS only, never more than `size`; `stop` appearing ends it (B). Java's `ResumableDownload`.
+pub(crate) fn download_file(url: &str, dest: &Path, size: u64, stop: &Path) -> Result<(), String> {
+    let (Some(dest), Some(stop)) = (dest.to_str(), stop.to_str()) else { return Err("path is not UTF-8".into()) };
+    let result = super::android::strings("httpDownload", &[url, dest, &size.to_string(), stop])?;
+    if result == "OK" { Ok(()) } else { Err(result) }
+}

@@ -22,12 +22,12 @@ bottom says **A Open** or **‹ › Change**.
 
 | Category | What is in it |
 |---|---|
-| **Connections** | Wi-Fi, Bluetooth, Tailscale, Remote access (SSH), Sync, Web companion, PC streaming. See [Connections](settings-system.md#connections) |
+| **Connections** | Wi-Fi, Bluetooth, Tailscale, Remote access (SSH), Sync, Pocket Sync, Web companion, PC streaming. See [Connections](settings-system.md#connections) |
 | **Look** | Layout, Appearance, Colours, Style, Text size, Motion, Game start animation, Cozy extras, Lived-in shelf. See [Look](#look) |
-| **Screen & sound** | Brightness, Volume, Screen colour, Night light, Menu sounds, Case sounds. See [Screen & sound](settings-sound.md#screen--sound) |
+| **Screen & sound** | Brightness, Volume, Screen colour, Night light, Menu sounds, Case sounds, Photos of big moments. See [Screen & sound](settings-sound.md#screen--sound) |
 | **Controls** | Buttons, Controller setup, Test buttons, Haptics, LEDs. See [Controls](settings-sound.md#controls) |
 | **Playing** | On start, Continue where I quit, Console boot screen, Remind me where I was, Screen frames, Over the game, Zoom in the pause menu, Performance & fan, RetroAchievements. See [Playing](settings-playing.md#playing) |
-| **Games** | Add games, Box art & downloads, Game check, Systems on the shelf, Curator, Screenshots, From EmulationStation, Android games (Android only). See [Games](settings-playing.md#games) |
+| **Games** | Add games, Box art & downloads, Game check, Systems on the shelf, Shelf space, Curator, Screenshots, From EmulationStation, Android games (Android only), RomM. See [Games](settings-playing.md#games) |
 | **System** | Back to EmulationStation (dArkOS only), Updates, Language, View (Android only), Sleep & power, Battery, Time, Storage, Backup & reset, Kids mode. See [System](settings-system.md#system) |
 | **Help & tools** | Manual, Tour, How you like to play, First-start setup, Tools, Report a problem, About. See [Help & tools](settings-system.md#help--tools) |
 
@@ -62,7 +62,7 @@ Big text, Large text and Reduced motion together, is a card of the [Tour](tour.m
 | **Text size** | **Normal** (the default), **Medium** or **Large**: larger text on every screen, fewer rows on a page. A or Left/Right switches it. See [Text size](#text-size) |
 | **Motion** | **Full** (the default), **Reduced** or **Off**: how much the menus move. A or Left/Right switches it. See [Motion](#motion) |
 | **Game start animation** | **Cozy**: watch your game slide into the console, and after Quit come back out of it into its case, and the pages, the box and the menus move a little slower and softer. **Quick**: straight into the game, the animations as short as they get. A or Left/Right switches it. Cozy in the Shelf and Cabinet looks until you choose, Quick in the others. See [Game start animation](#game-start-animation) |
-| **Cozy extras** | The little touches you see, each on or off on its own: the TV on the cabinet (and whether it plays a game you haven't played), stickers, printed discs, playful cases, the old-TV switch-on, light by time of day, decorations, progress from your saves, game connections, Rediscover. See [Cozy extras](#cozy-extras) |
+| **Cozy extras** | The little touches you see, each on or off on its own: the TV on the cabinet (and whether it plays a game you haven't played), stickers, printed discs, playful cases, the old-TV switch-on, the handheld switch-on, power lights, light by time of day, decorations, progress from your saves, game connections, Rediscover. See [Cozy extras](#cozy-extras) |
 | **Lived-in shelf** | **Off** (the default) or **On**: in the Shelf layout some cases of a row of games lean on their neighbour, a few lie on a small stack, and the spaces between them differ a little, like a shelf at home. A or Left/Right switches it. See [Lived-in shelf](#lived-in-shelf) |
 
 ### Choose a look
@@ -174,7 +174,8 @@ It is the same at every start: each game's place and pose come from the game its
 and a game you add only changes the row around it. It is in every row of games, Favourites included; Home's row of
 systems and short rows (fewer than six games) stay straight, and a game whose case stands open (Continue waits) always
 stands up. A row that fits on the shelf standing straight never has to scroll for a stack: it gets no stack then. Select
-a leaning or lying case and it comes out of the row as any other. The leaning and lying cases are drawn ahead in the
+a leaning case and it comes out of the row as any other; select a lying one and it slides out of its stack sideways,
+like a book, and stays on what it lay on. The leaning and lying cases are drawn ahead in the
 moments after you open a row, so scrolling along it stays smooth.
 
 ### Cozy extras
@@ -182,7 +183,7 @@ moments after you open a row, so scrolling along it stays smooth.
 Settings → Look → **Cozy extras** switches the little touches you see, one by one, for when you like some of them and
 not others. Up/Down move, A (or Left/Right) switches the selected one **On** or **Off**; it takes effect at once and is
 kept across restarts. The line under the list says what the selected one does and in which looks you see it. Reset
-settings (System → Backup & reset) puts them back as they start. Playful cases and Old-TV switch-on need the
+settings (System → Backup & reset) puts them back as they start. Playful cases and the old-TV switch-on and switch-off need the
 [animations](#game-start-animation) or the [motion](#motion) to be seen; while one of those keeps them from showing, the line at
 the bottom says which. Case sounds, the one you hear, is an entry of [Screen & sound](settings-sound.md#screen--sound), beside Menu sounds.
 
@@ -196,8 +197,12 @@ the bottom says which. Case sounds, the one you hear, is an entry of [Screen & s
 | **Printed discs** | Discs printed with their cover's art and title. Off: a plain disc in its console's colour. Shelf and Cabinet looks only | On |
 | **Playful cases** | Cases spring out and wiggle, each game goes into its console its own way, the open box's disc turns, spines lean as you scroll, stickers you put on are pressed onto the case in the game box ([Playing](playing.md#starting-a-game)). Shelf and Cabinet looks only, with Motion on Full | On with Cozy, Off with Quick |
 | **Sealed new games** | A game you have never played stands in the shop's clear plastic wrap: on the shelf, in the cabinet, in Easy, on Split's box art and on its card, and the box's front and back. The first time you start it the wrap tears off with a rip (with Animations on Cozy and Motion on Full; otherwise it is simply gone), for good. A game counts as played when it has playing time, a status you chose, a save or state, a clock file, a memory card or known progress, or is in your recent games | On |
-| **Old-TV switch-on** | The game's picture comes on like an old TV when it starts, and goes off like one (to a line and a dot) after Quit. A handheld (Game Boy, GBA, DS, PSP …) switches on like a handheld instead: its power light and display come on in the console, then the picture comes up; after Quit its game just goes dark. In looks with the insertion animation, with Animations on Cozy and Motion on Full | On |
+| **Old-TV switch-on** | The game's picture comes on like an old TV when it starts: a bright dot in the dark, a line, the empty blue channel with a moment of snow, then the game's picture comes through (under half a second; the game already runs). A handheld (Game Boy, GBA, DS, PSP …) switches on like a handheld instead: its power light and display come on in the console, then the picture comes up. In looks with the insertion animation, with Animations on Cozy and Motion on Full | On |
+| **Old-TV switch-off** | After Quit a TV picture closes to a line and a dot that glows on a moment, like an old TV; a handheld's game just goes dark. Off: the way back starts from black. Shelf and Cabinet looks, with Animations on Cozy and Motion on Full | On |
+| **Handheld switch-on** | A handheld's display switches on and off like the real one, over the game's first half second: the Game Boy's olive glass goes dark green and its picture rises out of it, the Game Boy Color's and the GBA's glass comes up from grey, the SP's front light glows on before its picture, the PSP's picture fades in softly, the Game Gear's and the Lynx's backlight flickers on, the DS's two screens light up. After Quit the Game Boy's picture sinks back into its green, the SP's front light drops at once, the Game Gear's backlight cuts out, the PSP fades to black. Off: the picture just comes up out of the dark and goes dark. Shelf and Cabinet looks, with Animations on Cozy and Motion on Full | On |
+| **Power lights** | The power light of a handheld's screen frame in the game (Game Boy, Game Boy Color, GBA, SP, PSP, Game Gear, Lynx and the other handheld frames) does what the real one did: it shows your battery, and when the battery reaches the "Battery low" level (5 %) the Game Boy's red light dims, the GBA's and the SP's green light turns red, the PSP's blinks orange and the Game Gear's flashes red. When a moment is saved it blinks twice, briefly. Off: the light stays steadily on. Without a frame (Screen frames off or full screen) there is no light | On |
 | **Light by time of day** | The room's light follows your Pocket's clock: cool and bright in the morning, warm in the evening with the lamp glowing, dim at night. Very gentle: covers and text keep their colours. Shelf and Cabinet looks only | On |
+| **Evening TV glow** | After dark by your Pocket's clock, while the TV on the cabinet is on, the room dims a little and the TV's warm light falls on the boards and the cases near it. Gentle: covers and text stay readable. Cabinet look only | On |
 | **Decorations** | Things on your shelves that grow with your play: the plant grows with your hours, a trophy after your first completed game, a framed "100 %" after your first 100 % sticker, a small figurine for each system you played for 10 hours. Only where a shelf has room. This works with Light by time of day on or off. Off: the shelves as they were. Shelf and Cabinet looks only | On |
 | **Progress from saves** | Where you are, from your own save: on the box's back, beside Continue and on Where was I? ([details](library.md#where-you-are-in-the-game)). Off: no line anywhere and no save is read, so nothing is given away | On |
 | **Game connections** | The developer, publisher, series and genre on the info page and the box's back lead to your other games with the same one ([Connections](library.md#connections)). Off: they are only shown | On |

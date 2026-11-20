@@ -15,7 +15,7 @@ use pocket_ui::palette::*;
 use pocket_ui::text::Face;
 use pocket_ui::touch::Area;
 
-use super::{settings_row, App, SettingsPage, CANCEL, CONFIRM, NU_BTN_PAD, NU_PAD, NU_PILL};
+use super::{settings_row, App, SettingsPage, CANCEL, CONFIRM, NU_BTN_PAD, NU_PAD};
 
 /// The name in the Settings list, to come back to.
 pub(crate) const SETTINGS_NAME: &str = "Buttons";
@@ -113,7 +113,7 @@ impl App {
         c.clear(pal().void);
         let (pad, row, font) = (NU_PAD, pocket_ui::type_scale::row(66, 36), 36u32);
         self.sheet_header(c, SETTINGS_NAME);
-        let (top, right) = (pad + NU_PILL + 12, c.w - pad);
+        let (top, right) = (pocket_ui::kit::header_bottom(c.h) + 12, c.w - pad);
         let sel = sel.min(rows().len() - 1);
         let foot = pocket_ui::kit::footer(c, &mut self.text, &mut self.hits, &[("B", "Back"), ("A", "Change")], &desc(rows()[sel], self.button_layout), 4, pal().text);
         for (i, r) in rows().iter().enumerate() {

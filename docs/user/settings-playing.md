@@ -10,7 +10,7 @@ Settings → **Playing**. What happens when you start and quit, how a game goes 
 |---|---|
 | **On start** | What you see when the Pocket starts: **Home** (the default) or **Last game**, straight back into the game you played last. A or Left/Right switches it. See [On start](#on-start) |
 | **Continue where I quit** | Whether the pause menu's Quit keeps the moment you are at for the next start: **On** (the default) or **Off**, only the game's own saves. A or Left/Right switches it. See [Continue where I quit](#continue-where-i-quit) |
-| **Console boot screen** | Whether a fresh start of a Game Boy, Game Boy Color, Game Boy Advance or PlayStation game runs through the console's own boot screen (needs your own BIOS file): **Off** (the default) or **On**. A or Left/Right switches it. See [Console boot screen](#console-boot-screen) |
+| **Console boot screen** | Whether a fresh start of a Game Boy, Game Boy Color, Game Boy Advance, PlayStation, Dreamcast, Saturn, Mega-CD or PC Engine CD game runs through the console's own boot screen (needs your own BIOS file): **Off** (the default) or **On**. A or Left/Right switches it. See [Console boot screen](#console-boot-screen) |
 | **Remind me where I was** | Back to a game after more than two weeks: when you played it last and your note, while its moment loads. **Off** (the default) or **On**. A or Left/Right switches it. See [Remind me where I was](#remind-me-where-i-was) |
 | **Screen frames** | Where a game gets a frame when you haven't chosen one: **Off** (the default), **Handhelds** or **Every console**. A or Left/Right switches it. See [Screen frames](#screen-frames) |
 | **Over the game** | The frame rate, the sensors or (with Pixel Path in the pause menu) Pixel Path's line over every game, or nothing (the default). See [Over the game](#over-the-game) |
@@ -53,8 +53,9 @@ moment to resume only when the device sleeps or switches off. With the switch of
 ### Console boot screen
 
 Settings → Playing → **Console boot screen**: with **On**, a game that starts from the beginning runs through its console's own boot
-screen first: the Nintendo logo of the Game Boy, Game Boy Color and Game Boy Advance, the start-up of the PlayStation. **Off** is the
-default and starts the game at once. A switches it.
+screen first: the Nintendo logo of the Game Boy, Game Boy Color and Game Boy Advance, the start-up of the PlayStation, the
+Dreamcast's swirl, the Saturn's and the Mega-CD's logo, the PC Engine CD's System Card. **Off** is the default and starts the
+game at once. A switches it. The game's display or TV switches on as always, and the boot screen comes up on it.
 
 It needs your own BIOS file in the BIOS folder (`roms/bios`; pocket-ui ships none). The file must be the original, of exactly this size:
 
@@ -64,9 +65,18 @@ It needs your own BIOS file in the BIOS folder (`roms/bios`; pocket-ui ships non
 | Game Boy Color (a game with Color support runs through this one) | `gbc_bios.bin` | 2304 bytes |
 | Game Boy Advance | `gba_bios.bin` | 16384 bytes |
 | PlayStation | `scph5501.bin` or another usual PlayStation BIOS name (`scph1001.bin`, `scph5500.bin`, …) | 512 KB |
+| Dreamcast (Flycast) | `dc/dc_boot.bin` (in a folder `dc` inside the BIOS folder) | 2 MB |
+| Saturn | `saturn_bios.bin`, `sega_101.bin` or `mpr-17933.bin` (Beetle Saturn reads only the last two) | 512 KB |
+| Mega-CD | `bios_CD_E.bin`, `bios_CD_U.bin` or `bios_CD_J.bin`: the one of the disc's region, as its name says it (`(Europe)`, `(USA)`, `(Japan)`) | 128 KB |
+| PC Engine CD | `syscard3.pce` | 256 KB |
 
 Without the file the game starts as before and a short note on the game's first picture names the file it needs. The other
-consoles (SNES, Mega Drive, N64 and the rest) have no boot screen to run and start as before.
+consoles (SNES, Mega Drive, N64 and the rest) have no boot screen to run and start as before. The Dreamcast, Saturn, Mega-CD and
+PC Engine CD use your BIOS file for every start once it is there (the last two can't start a disc without it); with **On** no
+built-in replacement skips its boot screen. The DS is not among them: its emulators either start the game directly or stop in
+the DS's own menu, which waits for a touch.
+
+On Android the handheld view's switch is the same, and the BIOS files come from the folders you chose (Game check copies them).
 
 Only a fresh start runs it, never one that continues a moment: with [Continue where I quit](#continue-where-i-quit) **On** (the
 default) the next start picks up the moment Quit kept, so there is no boot screen. For a game that always starts fresh, with the
@@ -141,10 +151,12 @@ Settings → **Games**. Getting games and what runs them onto the Pocket, which 
 | **Box art & downloads** | Box art, the Pictures choice and Starter pack; PortMaster games on ROCKNIX and TrimUI, and optional Cheats on TrimUI. The row was called Extras. See [Box art & downloads](extras.md) |
 | **Game check** | "Will my games start?": goes through your card and says, in plain words, what is missing and what to do. Only looks; it can hide a duplicate from the shelf when you press A. See [Getting started](game-check.md) |
 | **Systems on the shelf** | Which systems are on Home, a tick each. The row says "1 hidden" (or 2, 3...) while a system with games is off the shelf: this is the way back. See [Systems on the shelf](#systems-on-the-shelf) |
+| **Shelf space** | **Off** (the default), **10**, **20** or **50**: only so many games stand on the shelf, the rest wait in a crate under it. A or Left/Right changes it. See [Shelf space](#shelf-space) |
 | **Curator** | The Lens and smart shelves, Echoes, versions and play history, each on or off. See [Curator](#curator) |
 | **Screenshots** | The pictures you took with HOME + A, newest first, in groups by day, with a small picture each. A opens one full screen, X deletes it. The first row, **My shelf as a picture**, makes one square picture (1440 × 1440, in the colours of your page, whichever look the shelf is in) of your shelf to post: up to 20 of your games, the favourites, stickered and box-art ones first, with the trophy, the plant and a small pocket-ui mark. A shelf with no game says so. The value at the right is how many there are; with none the page says how to take one. See [Looking at your screenshots](playing.md#looking-at-your-screenshots) |
 | **From EmulationStation** | The favourites and ratings in your EmulationStation `gamelist.xml` files: A adds the favourites to Favourites or uses the ratings as My rating, without changing a thing in EmulationStation. Says "No gamelist" when there is none. See [Your EmulationStation gamelists](library-files.md#your-emulationstation-gamelists) |
 | **Android games** | Only in pocket-ui for Android: the apps on your device, A puts a game on its own Android shelf beside your consoles or takes it off. The same list as the Mobile view's. |
+| **RomM** | The games on your own RomM server, on the shelf: type its address, pair with a QR code (or a code on RomM 4.8 and 4.9), and each game downloads the first time you start it. The value says how many games it found, or "Not paired". Refresh the games, Unpair. See [Games from your RomM server](romm.md) |
 
 ### Systems on the shelf
 
@@ -165,6 +177,29 @@ The first start does not have this list; every system is on the shelf until you 
 
 When no system has games yet, the page says so and shows how they come: once games are on the SD card, their systems
 show up here.
+
+### Shelf space
+
+Settings → Games → **Shelf space** is for a smaller pile of games to choose from: only 10, 20 or 50 games stand on the
+shelf, and the rest wait in the **crate**, cardboard boxes on the floor under it, one per console. **Off** (the default):
+every game stands on the shelf, as before.
+
+- **Switching it on** asks which games go on the shelf: **The games I played last** or **My favourites** (then the others
+  by name, until the shelf is full). Cancel leaves it off.
+- **Home** gets a **Crate** row before your systems ("12 games in the crate, the shelf is full"). The systems' rows show
+  only the games on the shelf; a system with none of its games on the shelf is not on Home. Search still finds every game.
+- **In the crate** (A on Crate): Left/Right goes through the boxes; the selected case comes up out of its box with its
+  cover above it. **A** takes it out. With a free place it goes straight onto the shelf. With the shelf full the shelf
+  shows over the boxes and the game you played longest ago is picked to make room; Left/Right picks another, **A**
+  swaps them: the old one goes into its box, then the new one takes its place on the shelf. **B** cancels.
+- **On a game's card**, above Hide or delete at its end: **Into the crate** puts the game into the crate and leaves its place free.
+- Switching between 10, 20 and 50 keeps what is on the shelf (as far as it fits; more places fill up with the games you
+  played last). **Off** puts every game back on the shelf; switched on again, the shelf is as you left it.
+- Games you copy onto the card later go into the crate. A game deleted from the card frees its place.
+- The crate with nothing in it shows its empty box and says that every game is on the shelf.
+
+It works in the Shelf, Split and Cabinet layouts (the crate looks the same in each); the Easy layout keeps every game in
+its one row. Where the shelf is kept: `shelf_space.json` in the data folder.
 
 ### Curator
 

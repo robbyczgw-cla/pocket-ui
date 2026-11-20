@@ -20,13 +20,18 @@ pub fn cfg_from_prefs(prefs: &Prefs, systems: &[&str], games: &[GameRef]) -> Cfg
     let mut text = String::new();
     for system in systems {
         if let Some(package) = prefs.plays_with.get(system_key(system)) {
-            text.push_str(&format!("{system}.emulator={package}\n"));
+            if let Some(core)=package.strip_prefix("own:").filter(|c| crate::ds::CORES.contains(c)) {
+                text.push_str(&format!("{system}.emulator={POCKET_CORE}\n{system}.core={core}\n"));
+            } else {text.push_str(&format!("{system}.emulator={package}\n"));}
         }
     }
     for g in games {
         if let Some(chosen) = prefs.plays_with_game.get(&g.key) {
-            let emulator = if chosen == OWN { POCKET_CORE } else { chosen };
-            text.push_str(&format!("{}.emulator={emulator}\n", crate::emu_choice::game_config_name(&g.system, &g.file)));
+            let core=chosen.strip_prefix("own:").filter(|c| crate::ds::CORES.contains(c));
+            let emulator = if chosen == OWN || core.is_some() { POCKET_CORE } else { chosen };
+            let subject=crate::emu_choice::game_config_name(&g.system, &g.file);
+            text.push_str(&format!("{subject}.emulator={emulator}\n"));
+            if let Some(core)=core {text.push_str(&format!("{subject}.core={core}\n"));}
         }
     }
     Cfg::parse(&text)
@@ -41,11 +46,14 @@ pub fn apply_edits(prefs: &mut Prefs, edits: &[(String, Option<String>)], games:
             continue;
         }
         let value = value.as_deref().filter(|v| !v.is_empty());
+        let core_key=format!("{subject}.core");
+        let own_value=edits.iter().find(|(k,_)|k==&core_key).and_then(|(_,v)|v.as_deref())
+            .filter(|c|crate::ds::CORES.contains(c)).map(|c|format!("own:{c}"));
         if subject.contains("[\"") {
             let Some(game) = games.iter().find(|g| crate::emu_choice::game_config_name(&g.system, &g.file) == subject) else { continue };
             match value {
                 None => prefs.plays_with_game.remove(&game.key),
-                Some(POCKET_CORE) => prefs.plays_with_game.insert(game.key.clone(), OWN.to_string()),
+                Some(POCKET_CORE) => prefs.plays_with_game.insert(game.key.clone(), own_value.clone().unwrap_or_else(||OWN.to_string())),
                 Some(package) => prefs.plays_with_game.insert(game.key.clone(), package.to_string()),
             };
         } else {
@@ -54,7 +62,8 @@ pub fn apply_edits(prefs: &mut Prefs, edits: &[(String, Option<String>)], games:
                 continue;
             }
             match value {
-                None | Some(POCKET_CORE) => prefs.plays_with.remove(id),
+                None => prefs.plays_with.remove(id),
+                Some(POCKET_CORE)=>if let Some(own)=own_value {prefs.plays_with.insert(id.to_string(),own)} else {prefs.plays_with.remove(id)},
                 Some(package) => prefs.plays_with.insert(id.to_string(), package.to_string()),
             };
         }
@@ -122,6 +131,18 @@ const EXTRA_SYSTEMS: &[(&str, &str, &str, &[&str])] = &[
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn ds_runs_on_keeps_the_system_choice_and_a_different_game_choice() {
+        use super::*;
+        let games=vec![GameRef {system:"nds".into(),file:"Game.nds".into(),key:"identity".into()}];
+        let edits=vec![("nds.emulator".into(),Some(POCKET_CORE.into())),("nds.core".into(),Some("dsperate".into())),
+            ("nds[\"Game.nds\"].emulator".into(),Some(POCKET_CORE.into())),("nds[\"Game.nds\"].core".into(),Some("melondsds".into()))];
+        let mut prefs=Prefs::default();apply_edits(&mut prefs,&edits,&games);
+        assert_eq!(prefs.plays_with.get("nds").map(String::as_str),Some("own:dsperate"));
+        assert_eq!(prefs.plays_with_game.get("identity").map(String::as_str),Some("own:melondsds"));
+        let cfg=cfg_from_prefs(&prefs,&["nds"],&games);
+        for (key,value) in &edits {assert_eq!(cfg.get(key),value.as_deref(),"{key}");}
+    }
     use super::*;
     use crate::play_route::Prefs;
 

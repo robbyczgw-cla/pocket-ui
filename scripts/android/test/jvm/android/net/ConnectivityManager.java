@@ -1,0 +1,1 @@
+package android.net;public class ConnectivityManager{public Network fixture;public Network getActiveNetwork(){return fixture;}public NetworkCapabilities getNetworkCapabilities(Network n){return n==null?null:new NetworkCapabilities();}}

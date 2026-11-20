@@ -85,6 +85,21 @@ pub struct Case {
 
 #[cfg(test)]
 pub fn cases() -> Vec<Case> {
+    /// What a Retroid with games of another app shows the first start: two folders, Dolphin installed, PS2 and 3DS without
+    /// an app, Saturn, PlayStation and Dreamcast games without a BIOS.
+    fn found(u: &mut ui::Ui) {
+        use pocket_ui::android_first_start::{Facts, FoundFolder};
+        u.found = Some(Facts {
+            folders: Some(vec![
+                FoundFolder { path: "/storage/1234-ABCD/ROMs".into(), card: true, usual: true, games: Some(2341),
+                    systems: vec![("ps2", Some(40)), ("gamecube", Some(12)), ("3ds", Some(9)), ("saturn", Some(6)), ("psx", Some(2271)), ("dreamcast", Some(3))] },
+                FoundFolder { path: "/storage/emulated/0/Emulation/roms".into(), card: false, usual: false, games: Some(12), systems: vec![("gba", Some(12))] },
+            ]),
+            can_read: true,
+            bios: vec![],
+        });
+        u.found_phone = Some(pocket_ui::play_route::Phone::from_json(r#"{"apps": {"dolphin": [{"p": "org.dolphinemu.dolphinemu", "l": "Dolphin"}]}}"#));
+    }
     fn onboarding(u: &mut ui::Ui, step: usize) {
         u.prefs.onboarding_done = false;
         u.prefs.onboarding_step = step;
@@ -100,6 +115,12 @@ pub fn cases() -> Vec<Case> {
         c("onb5", false, false, |u| onboarding(u, 5)),
         c("onb6", false, false, |u| onboarding(u, 6)),
         c("onb7", false, false, |u| onboarding(u, 7)),
+        // The first start with what it found on the device (18.11.2026): folders, apps, links, BIOS; with the pad's four steps.
+        c("onb2-found", false, false, |u| { onboarding(u, 2); found(u); }),
+        c("onb7-found", false, false, |u| { onboarding(u, 7); found(u); }),
+        p("onb1-pad", |u| { onboarding(u, 1); found(u); }),
+        p("onb2-pad", |u| { onboarding(u, 2); found(u); }),
+        p("onb7-pad", |u| { onboarding(u, 7); found(u); }),
         c("nofolder", false, false, |_| {}),
         c("emptyfolder", false, false, |u| u.install(ui::library(vec![]))),
         c("library", true, true, |_| {}),

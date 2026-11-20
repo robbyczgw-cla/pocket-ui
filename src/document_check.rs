@@ -790,10 +790,13 @@ mod tests {
         // No bundled system of the phone asks for one.
         let o = run(&Phone::default(), vec![root(vec![file("gba/A.gba", 3000, ""), file("nes/B.nes", 3000, ""), file("psp/C.iso", 3000, ""), file("nds/D.nds", 3000, ""), file("n64/E.z64", 3000, "")])]);
         assert_eq!(o.report.findings, Vec::new());
-        // A file in the bios folder is no game, and it is said which BIOS files the own player reads.
-        let o = run(&Phone::default(), vec![root(vec![file("gba/A.gba", 3000, ""), file("bios/syscard3.pce", 262144, ""), file("bios/gba_bios.bin", 16384, "")])]);
+        // A file in the bios folder is no game, and it is said which BIOS files the own player reads (the Console boot screen's
+        // own files, gba_bios.bin or syscard3.pce, are read too since 19.11.: they need no tip).
+        let o = run(&Phone::default(), vec![root(vec![file("gba/A.gba", 3000, ""), file("bios/neogeo.zip", 262144, ""), file("bios/kick34005.A500", 262144, "")])]);
         assert_eq!(o.report.total, 1);
         assert!(of(&o, Group::Tips)[0].what.contains("bios folder"));
+        let o = run(&Phone::default(), vec![root(vec![file("gba/A.gba", 3000, ""), file("bios/syscard3.pce", 262144, ""), file("bios/gba_bios.bin", 16384, "")])]);
+        assert_eq!(o.report.findings, Vec::new(), "the boot screen's files are the player's");
         // A PlayStation BIOS there is what the player takes: nothing to say.
         let o = run(&Phone::default(), vec![root(vec![file("gba/A.gba", 3000, ""), file("bios/scph5501.bin", 524288, "")])]);
         assert_eq!(o.report.findings, Vec::new());

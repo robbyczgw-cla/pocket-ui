@@ -260,7 +260,7 @@ impl PortalPage {
         // Keep a fitting page exactly as it was. Otherwise close the spare gaps first, then make the prose a little
         // smaller, before giving up any words. Long French/Large prose used to push Other ways into the hint bar.
         let row = crate::type_scale::row(70, 37);
-        let hint_left = c.w - crate::kit::PAD - crate::kit::pill_width(text, c.w, &[("A", "Open"), ("B", "Back")]);
+        let hint_left = c.w - crate::kit::PAD - crate::kit::pill_width(text, (c.w, c.h), &[("A", "Open"), ("B", "Back")]);
         let last_name = text.width(Face::Title, 37, "Other ways").min(w - text.width(Face::Body, 24, "Hotspot, front desk") - 100);
         let mut layout = None;
         for (px, spacing, gap, start) in [(28, 12, 8, 200), (28, 4, 4, 188), (25, 4, 4, 188), (22, 4, 4, 188)] {

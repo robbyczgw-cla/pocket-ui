@@ -5,7 +5,7 @@ use std::time::Instant;
 use pocket_ui::palette::*;
 use pocket_ui::text::Face;
 use pocket_ui::touch::Area;
-use super::{App, SettingsPage, UserEvent, CANCEL, CONFIRM, NU_PAD, NU_PILL};
+use super::{App, SettingsPage, UserEvent, CANCEL, CONFIRM, NU_PAD};
 
 #[derive(Default)]
 pub(crate) struct Setup {
@@ -228,7 +228,7 @@ impl App {
         let one = pads.iter().filter(|c| c.gamepad).count() < 2;
         let hints: &[(&str, &str)] = if sel == 0 && one { &[("B", "Back")] } else { &[("B", "Back"), ("A", "Change")] };
         let bottom = pocket_ui::kit::footer(c, &mut self.text, &mut self.hits, hints, &note, 4, pal().text);
-        let (pad, top, row, font) = (NU_PAD, NU_PAD + NU_PILL + 12, pocket_ui::type_scale::row(66, 36), 36);
+        let (pad, top, row, font) = (NU_PAD, pocket_ui::kit::header_bottom(c.h) + 12, pocket_ui::type_scale::row(66, 36), 36);
         let n = BUTTONS.len() + 2;
         let visible = ((bottom - top) / row).max(1) as usize;
         let first = super::window_start(sel, visible, n);

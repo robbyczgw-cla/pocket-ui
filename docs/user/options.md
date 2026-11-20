@@ -110,6 +110,26 @@ more, not the game's speed: the list offers only what ran at full speed on this 
   Bandicoot 2's pause screen shows black where the game was), so it is not where a PlayStation game starts.
 - The emulator's own resolution option (Emulator page) is left out where this row is there, so there is one place for it.
 
+### Mode 7
+
+Super Nintendo games only, on the same handhelds as [Resolution](#resolution) (Snapdragon 865 and Snapdragon 8 Gen 2), with
+pocket-ui OS and with pocket-ui for Android (Options → Picture in the game's menu). Mode 7 is the SNES's turning, tilting floor:
+the track of Super Mario Kart and F-Zero, the ground in Pilotwings.
+
+- **Original** is the console's own picture, as always.
+- **HD** draws those floors sharper (twice the console's resolution on the Snapdragon 865 handhelds, three times on the
+  Snapdragon 8 Gen 2 ones): the far end of the track is clean instead of a blur of steps. Everything else stays as it was.
+- **HD widescreen** also draws the Mode 7 scenes wider, out to 16:9, so a wide screen is filled at the sides. Other scenes
+  (menus, maps) stay 4:3 with black at the sides. Only on handhelds with a wide screen (Retroid Pocket 5, Flip 2, Pocket 6,
+  the AYN Odin 2 family); on the Mini V2 a 16:9 picture would only be smaller. Things the game draws near the edges (karts,
+  enemies) can pop in late at the sides: the game never meant them to be seen there.
+- pocket-ui for Android offers Original and HD: its SNES emulator (bsnes) has HD but no widescreen.
+- On pocket-ui OS, HD and HD widescreen play the game with bsnes-hd instead of Snes9x (both are on the card). The game's
+  in-game saves carry over; a Continue moment made with the other one is put aside, and the game starts fresh once.
+  bsnes-hd needs more of the processor, so the handheld runs a little warmer.
+- Like Resolution it **takes effect the next time the game starts**, and is kept for the console or for one game with
+  [Keep for](#keep-for) → This game.
+
 ### Starting values per console
 
 Every console starts with the look that suits it on this screen:
@@ -158,6 +178,11 @@ Pause menu → Options → **Controls**: what each button presses in the game yo
   and the four D-pad directions. The value is the console button it presses, by the name the
   emulator uses ("A presses A."). Left/Right choose another console button, or **None** ("X does
   nothing in this game."). L3 and R3 mean pressing the left and right stick in.
+- **Nintendo DS actions:** any button can be assigned **Stylus mode** or **Screen layout**. On handhelds without
+  sticks, L2 switches between the game D-pad and the stylus; R2 cycles the screen layouts. In stylus mode the D-pad
+  moves the pointer, and the button mapped to DS A touches (hold it to drag). Other buttons keep working normally.
+  Release a direction or touch button held while switching before using it in the new mode. These assignments use
+  the same per-game and per-system Controls settings on Linux and Android. Pads with sticks keep their existing defaults.
 - **Hold to toggle** ([how](big-text.md#hold-to-toggle)) and **Reset controls**, which puts everything back.
 - **Controller setup**, the last line: a separate layout for each controller, in menus and games
   ([Controller setup](controls-settings.md#controller-setup)).
@@ -318,7 +343,7 @@ presses into a running game.
 
 | Row | What it holds |
 |---|---|
-| **Screen scaling**, **Look** (with Sharpness and Effect under Custom), **Screen frame** (with its colour or finish), **Screen orientation**, **Resolution** (N64, PSP, Dreamcast, PlayStation) | The [Picture](#picture) settings. A frame's sub-choices show up under it, as in the pause menu. |
+| **Screen scaling**, **Look** (with Sharpness and Effect under Custom), **Screen frame** (with its colour or finish), **Screen orientation**, **Resolution** (N64, PSP, Dreamcast, PlayStation), **Mode 7** (Super Nintendo) | The [Picture](#picture) settings. A frame's sub-choices show up under it, as in the pause menu. |
 | **Fast-forward speed**, **Rewind**, **Earlier states**, **Over the game**, **Rumble**, **Performance**, **Fan**, **Run-ahead** | The same rows as [Speed, rumble, fan](#speed-rumble-fan). |
 | **Save state**, **Load state**, **Change slot**, **Fast-forward**, **Rewind**, **Screenshot**, **Over the game**, **Zoom** | The [Shortcuts](#shortcuts): which HOME + button does what. |
 | **Controls** | Which button does what, and the left stick ([Controls](#controls)). The page names the buttons the standard way; the pause menu shows the console's own names. |

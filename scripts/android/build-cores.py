@@ -5,6 +5,10 @@ from pathlib import Path
 ROOT=Path(__file__).resolve().parents[2]
 os.chdir(ROOT)
 lock=json.loads((ROOT/'android/cores.lock.json').read_text())
+selected=set(os.environ.get('ANDROID_CORES','').split())
+if selected:
+    assert selected<={c['id']for c in lock['cores']},'Unknown requested core'
+    lock={**lock,'cores':[c for c in lock['cores']if c['id']in selected]}
 sdk=Path(os.environ.get('ANDROID_HOME',str(Path.home()/'Library/Android/sdk')))
 ndk=Path(os.environ.get('ANDROID_NDK_HOME',str(sdk/'ndk'/lock['ndk'])))
 host='darwin-x86_64'if platform.system()=='Darwin'else'linux-x86_64'
@@ -12,7 +16,7 @@ tools=ndk/'toolchains/llvm/prebuilt'/host/'bin'
 assert tools.is_dir(),f'Missing NDK toolchain: {tools}'
 assert re.search(r'^Pkg.Revision\s*=\s*'+re.escape(lock['ndk'])+r'\s*$',(ndk/'source.properties').read_text(),re.M),'The core lock requires the recorded NDK revision'
 # Resolve a shared cache symlink before passing source paths to CMake: its source directory must stay stable across exports.
-out=(ROOT/'android/build/cores').resolve()
+out=Path(os.environ.get('ANDROID_CORE_CACHE',str(ROOT/'android/build/cores'))).resolve()
 for name in ['source','build','lib','licences','corresponding-source']:(out/name).mkdir(parents=True,exist_ok=True)
 # Android 15+ devices may use 16 KB memory pages: every LOAD segment of every packaged library must be aligned to 16 KB
 # (NDK 27 still links with 4 KB unless told otherwise). Checked below for each finished core; scripts/android/release-check.sh

@@ -231,4 +231,18 @@ mod tests {
         assert!(makoctl(&bin, &["fail"]).is_err());
         assert!(set_mode(&dir.join("nothing"), true).is_err(), "no makoctl: an error, no panic");
     }
+    #[test]
+    fn file_source_rule_notification_config() {
+        let d = crate::testutil::TestDir::new("mako-file-rule");
+        let file = d.join("config");
+        for (label, bytes) in crate::file_faults::faults(MAKO_DEFAULT.as_bytes()) {
+            let _ = std::fs::remove_file(&file);
+            if let Some(bytes) = bytes { std::fs::write(&file, bytes).unwrap(); }
+            match ensure_in(&file) {
+                Ok(_) => { assert!(!std::fs::read_to_string(&file).unwrap().trim().is_empty(), "{label}: blank config"); }
+                Err(reason) => assert!(reason.contains("couldn't read"), "{label}: {reason}"),
+            }
+        }
+    }
+
 }

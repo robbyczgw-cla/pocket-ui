@@ -901,6 +901,8 @@ pub enum Game {
     GameGear,
     /// The PC Engine's HuCard.
     HuCard,
+    /// The Neo Geo AES's big black cartridge.
+    NeoGeo,
     NeoGeoPocket,
     WonderSwan,
     Lynx,
@@ -929,7 +931,7 @@ struct GameTemplate {
 // BEGIN GAME TABLE (assets/media/game/tools/table.py)
 /// The games' pictures, in the order of `Game::DRAWN`.
 #[rustfmt::skip]
-const GAME_TEMPLATES: [GameTemplate; 14] = [
+const GAME_TEMPLATES: [GameTemplate; 15] = [
     // snes
     GameTemplate { size: (150, 98), label: (10, 2, 130, 46), tint: false },
     // snes-us
@@ -954,13 +956,15 @@ const GAME_TEMPLATES: [GameTemplate; 14] = [
     GameTemplate { size: (132, 128), label: (11, 21, 111, 76), tint: false },
     // hucard
     GameTemplate { size: (82, 126), label: (3, 11, 76, 112), tint: false },
+    // neogeo
+    GameTemplate { size: (137, 101), label: (35, 0, 69, 48), tint: false },
     // ds
     GameTemplate { size: (151, 142), label: (3, 13, 138, 98), tint: false },
     // memory
     GameTemplate { size: (24, 32), label: (3, 8, 18, 21), tint: true },
 ];
 
-const GAME_PNGS: [&[u8]; 14] = [
+const GAME_PNGS: [&[u8]; 15] = [
     include_bytes!("../assets/media/game/snes.png"),
     include_bytes!("../assets/media/game/snes-us.png"),
     include_bytes!("../assets/media/game/n64.png"),
@@ -973,13 +977,14 @@ const GAME_PNGS: [&[u8]; 14] = [
     include_bytes!("../assets/media/game/sms.png"),
     include_bytes!("../assets/media/game/gg.png"),
     include_bytes!("../assets/media/game/hucard.png"),
+    include_bytes!("../assets/media/game/neogeo.png"),
     include_bytes!("../assets/media/game/ds.png"),
     include_bytes!("../assets/media/game/memory.png"),
 ];
 
 impl Game {
     /// The ones with a picture of their own (the rest stand in for each other, `drawn`, or are painted round).
-    const DRAWN: [Game; 14] = [Game::Snes, Game::SnesUs, Game::N64, Game::Nes, Game::Gb, Game::Gbc, Game::Gba, Game::Cart, Game::MegaDrive, Game::MasterSystem, Game::GameGear, Game::HuCard, Game::Card, Game::Memory];
+    const DRAWN: [Game; 15] = [Game::Snes, Game::SnesUs, Game::N64, Game::Nes, Game::Gb, Game::Gbc, Game::Gba, Game::Cart, Game::MegaDrive, Game::MasterSystem, Game::GameGear, Game::HuCard, Game::NeoGeo, Game::Card, Game::Memory];
 }
 // END GAME TABLE
 
@@ -1006,6 +1011,7 @@ impl Game {
             "mastersystem" | "sg-1000" | "sg1000" => Game::MasterSystem,
             "gamegear" | "ggh" => Game::GameGear,
             "pcengine" | "tg16" | "supergrafx" => Game::HuCard,
+            "neogeo" | "neogeoaes" => Game::NeoGeo,
             "ngp" | "ngpc" => Game::NeoGeoPocket,
             "wonderswan" | "wonderswancolor" => Game::WonderSwan,
             "atarilynx" | "lynx" => Game::Lynx,
@@ -1032,6 +1038,7 @@ impl Game {
             Game::MasterSystem => (108.0, 69.0),
             Game::GameGear => (68.0, 68.0),
             Game::HuCard => (54.0, 85.0),
+            Game::NeoGeo => (185.0, 136.0),
             Game::NeoGeoPocket => (40.0, 46.0),
             Game::WonderSwan => (56.0, 46.0),
             Game::Lynx => (80.0, 56.0),
@@ -1148,6 +1155,34 @@ pub fn game_pic(text: &mut Text, g: Game, h: i32, look: Look, title: &str, cover
     }
     for (i, c) in shell {
         p.px[i] = c;
+    }
+    Some(p)
+}
+
+/// The rear a cartridge turns to the player on its way into a slot at the back (`insert_rig::label_away`): its photographed
+/// rear shell (`game_back`), or for the Lynx's and the WonderSwan's stand-in cartridge (no free photo of either exists) the
+/// stand-in's own shell in the system's plastic with its label recess filled with that plastic: no label on its back, and
+/// no change of colour as it turns.
+pub fn game_rear(g: Game, plastic: u32) -> Option<Pic> {
+    if let Some(p) = game_back(g) {
+        return Some(p.clone());
+    }
+    if !matches!(g, Game::Lynx | Game::WonderSwan) {
+        return None;
+    }
+    let i = g.drawn()?;
+    let mut p = scaled(g.pic()?, 1.0, GAME_TEMPLATES[i].tint.then_some(plastic));
+    let (lx, ly, lw, lh) = GAME_TEMPLATES[i].label;
+    let (lw, lh) = (lw.min(p.w - lx), lh.min(p.h - ly));
+    let flat = p.px[((ly + lh / 2) * p.w + lx + lw / 2) as usize];
+    let shell = p.px[((ly + lh + 2).min(p.h - 1) * p.w + lx + lw / 2) as usize];
+    for y in ly..ly + lh {
+        for x in lx..lx + lw {
+            let k = (y * p.w + x) as usize;
+            if p.px[k] == flat {
+                p.px[k] = shell;
+            }
+        }
     }
     Some(p)
 }

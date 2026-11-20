@@ -195,6 +195,15 @@ esac
 mkdir -p "$VIEW/storage"
 mount --bind "$DATA/storage" "$VIEW/storage" || die "Could not set up the games folder view." "Details are in logs/start.log."
 # Read the installed ES inventory (including a user's override), retaining its host launch commands.
+if [ -f "$ROOT/bin/cores/dsperate_libretro.so" ]; then
+  # A private, temporary view: the installed system cores remain untouched.
+  mkdir -p "$RUN/cores"
+  for f in "$CORES"/*_libretro.so; do
+    [ -f "$f" ] && ln -sf "$f" "$RUN/cores/$(basename "$f")"
+  done
+  ln -sf "$ROOT/bin/cores/dsperate_libretro.so" "$RUN/cores/dsperate_libretro.so"
+  CORES=$RUN/cores
+fi
 c=$DATA/storage/.config
 mkdir -p "$c/emulationstation" "$c/system/configs"
 ES=${DARKOS_ES_SYSTEMS:-$ARK_HOME/.emulationstation/es_systems.cfg}

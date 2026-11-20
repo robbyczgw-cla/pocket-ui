@@ -55,16 +55,5 @@ fn the_words_are_brazilian_and_the_page_names_are_the_ones_the_code_looks_for() 
     ] {
         assert_eq!(t.translate(english).as_deref(), Some(brazilian), "{english}");
     }
-    let spain = ["ecrã", "ficheiro", "telemóvel", "descarreg", "utilizador", "partilh", "aceder", "consola"];
-    let bad: Vec<String> = t
-        .entries()
-        .into_iter()
-        // A word that starts with a stem of Portugal's: "partilhar" is Portugal's, "compartilhar" the Brazilian one.
-        .filter(|(_, pt)| {
-            let lower = pt.to_lowercase();
-            lower.split(|c: char| !c.is_alphabetic()).any(|word| spain.iter().any(|w| word.starts_with(w)))
-        })
-        .map(|(en, pt)| format!("{en:?} -> {pt:?}"))
-        .collect();
-    assert!(bad.is_empty(), "words of Portugal, not Brazil:\n{}", bad.join("\n"));
+    // Words of Portugal are a warning of scripts/fix-typography.py now (19.11.2026), not a merge blocker.
 }

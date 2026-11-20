@@ -178,7 +178,7 @@ impl Sys {
         }
         if let Some((msg, _)) = &self.message {
             let w = text.width(Face::Body, SMALL, msg) + 2 * BTN_PAD;
-            let y = c.h - PAD - PILL - 100;
+            let y = crate::kit::hint_bar_top(c.h) - 100;
             crate::retro::pill(c, (c.w - w) / 2, y, w, 64, 32, 0x262626);
             text.draw(c, Face::Body, SMALL, (c.w - w) / 2 + BTN_PAD, y + 32 + crate::type_scale::mid(SMALL), 0xffffff, msg);
         }
@@ -229,10 +229,10 @@ impl Sys {
         crate::text::boxes::covered();
         // The status corner in a pill, as on Settings: time, Wi-Fi while connected, battery, from memory (the App marks
         // the frame as one with the corner, `app_status_corner`). The title gives way to it.
-        let pill = crate::status_corner::Pill { right: c.w - PAD, top: PAD, h: PILL - 20, px: SMALL, pad: BTN_PAD };
+        let pill = crate::status_corner::Pill { right: c.w - PAD, top: crate::kit::header_top(c.h), h: crate::kit::header_pill(c.h), px: SMALL, pad: BTN_PAD };
         let left = pill.paint(c, text, &crate::status_corner::Corner::now(), pal().pill, pal().soft);
         let title = text.fit(Face::Title, 50, title, left - 24 - (PAD + BTN_PAD));
-        text.draw(c, Face::Title, 50, PAD + BTN_PAD, PAD + 58, pal().chalk, &title);
+        text.draw(c, Face::Title, 50, PAD + BTN_PAD, crate::kit::header_title(c.h), pal().chalk, &title);
     }
 
     /// The rows, and where a finger can tap them (`hits`: a row selects it, the selected one is A, its arrows are
@@ -243,12 +243,18 @@ impl Sys {
         let mut visible = rows.len();
         // Long lists scroll in a window that keeps the selection near the middle.
         let room = bottom - top;
-        let first = if total > room {
+        let mut first = 0;
+        if total > room {
             visible = ((room / row()).max(3) as usize).min(rows.len());
-            window_start(sel, visible, rows.len())
-        } else {
-            0
-        };
+            first = window_start(sel, visible, rows.len());
+            // The gaps between the groups count too: a window of whole rows that ran past `bottom` loses rows until it
+            // fits (at least three).
+            let height = |first: usize, visible: usize| rows[first..first + visible].iter().enumerate().map(|(k, r)| row() + if k > 0 { r.gap } else { 0 }).sum::<i32>();
+            while visible > 3 && height(first, visible) > room {
+                visible -= 1;
+                first = window_start(sel, visible, rows.len());
+            }
+        }
         let mut y = top;
         for (i, r) in rows.iter().enumerate().skip(first).take(visible) {
             if i != first {
@@ -374,8 +380,7 @@ impl Sys {
             }
             views.push(v);
         }
-        let top = PAD + PILL + 12;
-        self.paint_rows(c, text, top, &views, sel, c.h - PAD - PILL - 140);
+        let top = crate::kit::header_bottom(c.h) + 12;
         let (desc, color) = match rows[sel] {
             Row::Brightness | Row::Volume => (level_line(rows[sel], crate::device::android_profile()).to_string(), pal().text),
             // A switch that did not work says so here, in the alert colour, until the next try or the panel closes.
@@ -399,6 +404,12 @@ impl Sys {
             Row::Performance | Row::Fan => &[("< >", "Change"), ("B", "Close"), ("A", "Next")],
             _ => &[("B", "Close"), ("A", "Choose")],
         };
+        // The rows stop over the explanation as it stands (up to four lines beside the hints): a fixed 140 lines over the
+        // hint bar let the list run into a long one (Portuguese "Até que velocidade o …" under "Energia…" at 1024x768,
+        // where the shorter header gave the rows their full height, 0.6 pre-release).
+        let pill_x = if hints.is_empty() { c.w - PAD } else { c.w - PAD - crate::kit::pill_width(text, (c.w, c.h), hints) };
+        let (desc_top, _) = crate::kit::footer_top(text, &desc, c.w, c.h, pill_x, 4);
+        self.paint_rows(c, text, top, &views, sel, (crate::kit::hint_bar_top(c.h) - 140).min(desc_top - 12));
         // The explanation beside the hints or over them, left aligned, as on every Settings page (`kit::footer`).
         crate::kit::footer(c, text, &mut self.hits, hints, &desc, 4, color);
     }
@@ -539,7 +550,7 @@ impl Sys {
         let Screen::Time(page) = &self.screen else { return };
         // For the snapshot checks of Settings → Text size: a page of its own over whatever was behind.
         crate::text::boxes::covered();
-        let top = PAD + PILL + 12;
+        let top = crate::kit::header_bottom(c.h) + 12;
         match page {
             TimePage::Summary { sel } => {
                 let sel = *sel;
@@ -596,7 +607,7 @@ impl Sys {
                 // last first (Offset, then Date), where the footer's lines (a clock warning has three or four) would
                 // stand over them.
                 let step = if short { row().min(crate::type_scale::px(FONT) as i32 + 8) } else { row() };
-                let pill_x = c.w - PAD - crate::kit::pill_width(text, c.w, hints);
+                let pill_x = c.w - PAD - crate::kit::pill_width(text, (c.w, c.h), hints);
                 let footer_lines = crate::kit::footer_lines(text, &desc, c.w, pill_x, 4).len() as i32;
                 let footer_top = crate::kit::footer_baseline(c.h) - (footer_lines - 1).max(0) * crate::type_scale::line(crate::kit::footer_px(text, &desc, pill_x), 10) - crate::type_scale::px(SMALL) as i32;
                 let facts_end = |n: i32| top + 3 * row() + free + (n - 1) * step + row() / 2 + crate::type_scale::mid(FONT) + 8;
@@ -613,7 +624,7 @@ impl Sys {
                 let mut rows = vec![RowView::new("Search…", ">")];
                 rows.extend(timezone::regions(self.zone_list()).into_iter().map(|r| RowView::new(r, ">")));
                 self.header(c, text, "Time zone");
-                self.paint_rows(c, text, top, &rows, sel, c.h - PAD - PILL - 30);
+                self.paint_rows(c, text, top, &rows, sel, crate::kit::hint_bar_top(c.h) - 30);
                 // While the list is still being read: Search… works, the regions follow.
                 let desc = if self.view.zones.is_none() { "Looking at time zones…" } else { "" };
                 self.footer(c, text, &[("L1 R1", "Page"), ("B", "Back"), ("A", "Open")], desc, pal().dust);
@@ -644,7 +655,7 @@ impl Sys {
                         "Try part of a city name, such as vie or york.",
                     );
                 } else {
-                    self.paint_rows(c, text, top, &rows, sel, c.h - PAD - PILL - 30);
+                    self.paint_rows(c, text, top, &rows, sel, crate::kit::hint_bar_top(c.h) - 30);
                 }
                 self.hints(c, text, &[("L1 R1", "Page"), ("B", "Back"), ("A", "Set")]);
             }

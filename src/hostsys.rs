@@ -367,12 +367,13 @@ pub fn route(system: &str, bios_dir: &Path) -> Option<&'static str> {
 }
 
 /// Systems whose pocket-core cores are far heavier than an H700's four Cortex-A53 allow (docs/DEVICES.md): on those
-/// handhelds they stay on ROCKNIX's own emulators (DraStic for NDS and so on), as an unverified system does. The RG DS
-/// Plus too (`Model::small_chip`): its A55 is unmeasured, and DraStic puts a DS game on both its screens.
-pub const H700_STAYS_ON_ROCKNIX: &[&str] = &["n64", "psp", "dreamcast", "nds"];
+/// handhelds they retain the system's own emulators, as an unverified system does.
+/// DS uses the bundled lighter core on these devices.
+pub const H700_STAYS_ON_ROCKNIX: &[&str] = &["n64", "psp", "dreamcast"];
 
 /// `route` for an H700 handheld or the RG DS Plus (`h700`, `Model::small_chip`) or any other device.
 pub fn route_on(system: &str, bios_dir: &Path, h700: bool) -> Option<&'static str> {
+    if system=="nds"&&h700 {return Some("dsperate");}
     if h700 && H700_STAYS_ON_ROCKNIX.contains(&system) {
         return None;
     }

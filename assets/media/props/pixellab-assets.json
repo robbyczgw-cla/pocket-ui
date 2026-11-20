@@ -300,6 +300,191 @@
     "negative_description": "text, letters, logo, words, background, floor, table, shadow, people"
    },
    "generated": "2026-10-30T11:01:50"
+  },
+  "window_day": {
+   "endpoint": "create-image-pixflux",
+   "seed": 11,
+   "request": {
+    "description": "a small square wooden window with a warm white painted frame, a cross dividing four glass panes, a wooden windowsill below, clear blue daytime sky with one soft white cloud seen through the glass, cozy, calm, muted warm colours, soft light, single object, centered, front view, pixel art",
+    "image_size": {
+     "width": 64,
+     "height": 64
+    },
+    "no_background": true,
+    "negative_description": "text, letters, logo, words, background, floor, table, shadow, people, wall",
+    "outline": "single color outline",
+    "shading": "medium shading",
+    "detail": "highly detailed",
+    "view": "side",
+    "text_guidance_scale": 8.0,
+    "seed": 11
+   },
+   "generated": "2026-11-18T21:34:39",
+   "note": "the frame for every time of day; post-processing as the others"
+  },
+  "window_morning": {
+   "endpoint": "create-image-pixflux",
+   "seed": 15,
+   "request": {
+    "description": "sunrise sky, soft pink and peach clouds over a pale yellow glow, light blue at the top, pixel art background, wide open sky filling the whole image, soft, calm, no ground, no buildings",
+    "image_size": {
+     "width": 48,
+     "height": 48
+    },
+    "no_background": false,
+    "negative_description": "text, buildings, trees, ground, window, frame, people, objects",
+    "outline": "lineless",
+    "shading": "medium shading",
+    "detail": "medium detail",
+    "view": "side",
+    "text_guidance_scale": 8.0,
+    "seed": 15
+   },
+   "generated": "2026-11-18T21:39:01",
+   "note": "sky painted behind the frame's glass (pixels of the day window's four panes replaced by the sky, scaled to the panes)"
+  },
+  "window_evening": {
+   "endpoint": "create-image-pixflux",
+   "seed": 14,
+   "request": {
+    "description": "warm sunset sky, orange and pink at the bottom fading to dusky purple at the top, a low golden sun at the bottom, pixel art background, wide open sky filling the whole image, soft, calm, muted colours, no ground, no buildings",
+    "image_size": {
+     "width": 48,
+     "height": 48
+    },
+    "no_background": false,
+    "negative_description": "text, buildings, trees, ground, window, frame, people, objects",
+    "outline": "lineless",
+    "shading": "medium shading",
+    "detail": "medium detail",
+    "view": "side",
+    "text_guidance_scale": 8.0,
+    "seed": 14
+   },
+   "generated": "2026-11-18T21:38:42",
+   "note": "sky painted behind the frame's glass (pixels of the day window's four panes replaced by the sky, scaled to the panes)"
+  },
+  "window_night": {
+   "endpoint": "create-image-pixflux",
+   "seed": 15,
+   "request": {
+    "description": "starry night sky, deep navy blue, many small twinkling white and pale yellow stars, a bright pale crescent moon in the upper right, pixel art background, wide open sky filling the whole image, soft, calm, no ground, no buildings",
+    "image_size": {
+     "width": 48,
+     "height": 48
+    },
+    "no_background": false,
+    "negative_description": "text, buildings, trees, ground, window, frame, people, objects",
+    "outline": "lineless",
+    "shading": "medium shading",
+    "detail": "medium detail",
+    "view": "side",
+    "text_guidance_scale": 8.0,
+    "seed": 15
+   },
+   "generated": "2026-11-18T21:39:02",
+   "note": "sky painted behind the frame's glass (pixels of the day window's four panes replaced by the sky, scaled to the panes)"
+  },
+  "sill_spring": {
+   "endpoint": "create-image-pixflux",
+   "seed": 91,
+   "request": {
+    "description": "a small clear glass vase with three red and yellow tulips, spring, cozy, calm, muted warm colours, soft light, single object, centered, front view, pixel art",
+    "image_size": {
+     "width": 32,
+     "height": 48
+    },
+    "no_background": true,
+    "negative_description": "text, letters, logo, words, background, floor, table, shadow, people, wall",
+    "outline": "single color outline",
+    "shading": "medium shading",
+    "detail": "highly detailed",
+    "view": "side",
+    "text_guidance_scale": 8.0,
+    "seed": 91
+   },
+   "generated": "2026-11-18T21:36:09"
+  },
+  "sill_summer": {
+   "endpoint": "create-image-pixflux",
+   "seed": 112,
+   "request": {
+    "description": "a small sunflower in a little terracotta pot, summer, cozy, calm, muted warm colours, soft light, single object, centered, front view, pixel art",
+    "image_size": {
+     "width": 32,
+     "height": 48
+    },
+    "no_background": true,
+    "negative_description": "text, letters, logo, words, background, floor, table, shadow, people, wall",
+    "outline": "single color outline",
+    "shading": "medium shading",
+    "detail": "highly detailed",
+    "view": "side",
+    "text_guidance_scale": 8.0,
+    "seed": 112
+   },
+   "generated": "2026-11-18T21:36:40"
+  },
+  "sill_autumn": {
+   "endpoint": "create-image-pixflux",
+   "seed": 101,
+   "request": {
+    "description": "a small orange pumpkin with a short green stem next to a short lit candle, autumn, cozy, calm, muted warm colours, soft light, single object, centered, front view, pixel art",
+    "image_size": {
+     "width": 32,
+     "height": 32
+    },
+    "no_background": true,
+    "negative_description": "text, letters, logo, words, background, floor, table, shadow, people, wall",
+    "outline": "single color outline",
+    "shading": "medium shading",
+    "detail": "highly detailed",
+    "view": "side",
+    "text_guidance_scale": 8.0,
+    "seed": 101
+   },
+   "generated": "2026-11-18T21:36:22"
+  },
+  "sill_winter": {
+   "endpoint": "create-image-pixflux",
+   "seed": 82,
+   "request": {
+    "description": "a small snow globe with a tiny snowy pine tree inside on a dark wooden base, cozy, calm, muted warm colours, soft light, single object, centered, front view, pixel art",
+    "image_size": {
+     "width": 32,
+     "height": 32
+    },
+    "no_background": true,
+    "negative_description": "text, letters, logo, words, background, floor, table, shadow, people, wall",
+    "outline": "single color outline",
+    "shading": "medium shading",
+    "detail": "highly detailed",
+    "view": "side",
+    "text_guidance_scale": 8.0,
+    "seed": 82
+   },
+   "generated": "2026-11-18T21:36:08"
+  },
+  "crate": {
+   "endpoint": "create-image-pixflux",
+   "seed": 701,
+   "request": {
+    "description": "an empty open cardboard moving box seen straight from the front, wide and low, brown corrugated cardboard, top flaps folded open outwards, a strip of beige packing tape down the middle of the front, cozy, calm, muted warm colours, single object, centered, front view, pixel art, no text",
+    "image_size": {
+     "width": 128,
+     "height": 80
+    },
+    "no_background": true,
+    "outline": "single color outline",
+    "shading": "medium shading",
+    "detail": "highly detailed",
+    "view": "side",
+    "direction": "south",
+    "text_guidance_scale": 8.0,
+    "seed": 701
+   },
+   "generated": "2026-11-18T21:21:38",
+   "post": "cropped to its pixels (90x60); rows 0-13 are the box's back and inside, 14-59 its front, columns 40-49 the tape"
   }
  }
 }

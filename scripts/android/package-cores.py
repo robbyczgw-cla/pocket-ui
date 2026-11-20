@@ -22,7 +22,7 @@ from apk_audit import check_elf, problems
 # The cores that are a download instead of a part of the APK: none. Deflated in the APK (measured for 0.5.0-android.5):
 # PSP 7.33 MB plus its system files, Dreamcast 4.75 MB, DS 1.84 MB, N64 1.53 MB.
 DOWNLOADS = set()
-NAMES = {'ppsspp': 'PSP', 'melondsds': 'DS', 'mupen64plus_next': 'N64',
+NAMES = {'dsperate': 'DS', 'ppsspp': 'PSP', 'melondsds': 'DS', 'mupen64plus_next': 'N64',
          'flycast': 'Dreamcast', 'yabasanshiro': 'Saturn'}
 
 

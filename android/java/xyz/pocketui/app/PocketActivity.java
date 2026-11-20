@@ -56,6 +56,16 @@ public class PocketActivity extends PocketBase {
  *  and the handheld view (HandheldActivity); each loads its own native library and names its own native methods, so
  *  this class loads none (JNI binds a native method by its class's name). */
 abstract class PocketBase extends NativeActivity {
+    /** An emulator app's official page (src/android_first_start.rs APP_DOWNLOADS, checked there) in the browser: the first
+     *  start names where an app comes from, pocket-ui downloads and installs nothing itself. Only https pages. */
+    public String openPage(String url) {
+        if (url == null || !url.startsWith("https://")) return "Not a page";
+        runOnUiThread(() -> {
+            try { startActivity(new android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(url)).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)); }
+            catch (RuntimeException e) { android.util.Log.w("PocketMvp", "no browser for " + url, e); }
+        });
+        return "";
+    }
     private static final int PICK_TREE = 41, SAVES_OUT = 42, SAVES_IN = 43;
     private static final String TAG = "PocketMvp";
     /** A big game's copy bar comes once the start's picture is over (`insert_scene`: the medium is in by 1.2 s, the fade ends at 1.6 s): a window over it hides the console and the case going in. A copy done sooner shows none. */
@@ -218,13 +228,26 @@ abstract class PocketBase extends NativeActivity {
         return controls;
     }
     private volatile int orientation = android.content.pm.ActivityInfo.SCREEN_ORIENTATION_FULL_SENSOR;
+    private volatile boolean setupUpright, lastController;
+    /** The first start is on ("true") or done: a phone stands upright while it is on (`orientFor`). */
+    public String setupUpright(String on) {
+        setupUpright = "true".equals(on);
+        orientFor(lastController);
+        return "";
+    }
     /**
      * With a controller the picture stays the long way round, either way up. A handheld's own pad counts (Android calls
      * it external too): its panel is an upright one, and following the sensor turned the app upright on an Odin 2 Mini
      * whenever it stood on its side, with Android's auto-rotate off. A phone without a pad still turns freely.
      */
     private void orientFor(boolean controller) {
-        int wanted = controller ? android.content.pm.ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE : android.content.pm.ActivityInfo.SCREEN_ORIENTATION_FULL_SENSOR;
+        lastController = controller;
+        // A phone without a pad during the first start: upright, its pages are made for it (the r/EmulationOnAndroid video
+        // showed them on their side, 18.11.2026). A tablet still turns freely.
+        boolean phone = getResources().getConfiguration().smallestScreenWidthDp < 600;
+        int wanted = controller ? android.content.pm.ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
+            : setupUpright && phone ? android.content.pm.ActivityInfo.SCREEN_ORIENTATION_SENSOR_PORTRAIT
+            : android.content.pm.ActivityInfo.SCREEN_ORIENTATION_FULL_SENSOR;
         if (wanted == orientation) return;
         orientation = wanted;
         runOnUiThread(() -> setRequestedOrientation(wanted));
@@ -237,12 +260,16 @@ abstract class PocketBase extends NativeActivity {
         return getPreferences(0).getString("tree", "") + "\n" + getPreferences(0).getInt("revision", 0);
     }
     public String chooseFolder() {
+        return chooseFolderAt(getPreferences(0).getString("tree", ""));
+    }
+    /** The folder picker, opened at `at` (a games folder the first start found, src/android_first_start.rs; "" Android's
+     *  own start): "Use this folder" takes it. */
+    public String chooseFolderAt(String at) {
         runOnUiThread(() -> {
             Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT_TREE);
             // Write as well: the saves' copies go into a folder of their own in this one (src/save_copy.rs). Reading is what matters most.
             intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_GRANT_WRITE_URI_PERMISSION | Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION);
-            String selected = getPreferences(0).getString("tree", "");
-            if (!selected.isEmpty()) intent.putExtra(DocumentsContract.EXTRA_INITIAL_URI, Uri.parse(selected));
+            if (at != null && !at.isEmpty()) intent.putExtra(DocumentsContract.EXTRA_INITIAL_URI, Uri.parse(at));
             startActivityForResult(intent, PICK_TREE);
         });
         return "";
@@ -608,6 +635,9 @@ abstract class PocketBase extends NativeActivity {
     /** RetroAchievements (`achievements::http::AndroidHttp`): one HTTPS request, one answer; worker threads only. */
     public String raRequest(String address, String post, String contentType, String userAgent) { return RaHttp.request(address, post, contentType, userAgent); }
     public String raDownload(String address, String destination, String userAgent) { return RaHttp.download(address, destination, userAgent); }
+    /** RomM over HTTPS (`romm_net::AndroidNet`): one request, one answer; one file appended from its length. Worker threads only. */
+    public String rommRequest(String method, String address, String token, String json, String userAgent) { return RommHttp.request(method, address, token, json, userAgent); }
+    public String rommFetch(String address, String token, String destination, String stopFile, String size, String userAgent) { return RommHttp.fetch(address, token, destination, stopFile, size, userAgent); }
     /** Android's TLS trust store; redirects remain HTTPS; bounded responses and worker-only disk writes. */
     public String httpGet(String address, String destination, String maximum) throws Exception {
         long limit = Long.parseLong(maximum);
@@ -640,6 +670,20 @@ abstract class PocketBase extends NativeActivity {
             } finally { connection.disconnect(); }
         }
         throw new IOException("Too many redirects");
+    }
+    /** The handheld view's file downloads (`update::download` → `platform::http::download_file`, the starter pack): Android has no
+     *  curl. Continues a partial file, HTTPS only, exactly `size` bytes; the file `stop` appearing cancels it. Worker threads only. */
+    public String httpDownload(String address, String destination, String size, String stop) throws Exception {
+        File halt = new File(stop);
+        ResumableDownload.fetch(address, new File(destination), Long.parseLong(size), url -> {
+            HttpURLConnection connection = (HttpURLConnection)url.openConnection();
+            connection.setRequestProperty("User-Agent", "pocket-ui-android/0.1");
+            return connection;
+        }, new ResumableDownload.Hooks() {
+            public void check() throws IOException { if (halt.exists()) throw new IOException("Download cancelled"); }
+            public void progress(long bytes) {}
+        });
+        return "OK";
     }
     /** The launcher's start animation (`insert.rs`): the game is made ready at once and comes when the animation lets it. */
     private final Object handOver=new Object();

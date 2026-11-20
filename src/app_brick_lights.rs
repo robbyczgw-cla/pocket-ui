@@ -11,7 +11,7 @@ use pocket_ui::palette::*;
 use pocket_ui::text::Face;
 use pocket_ui::touch::Area;
 
-use super::{App, SettingsPage, CANCEL, CONFIRM, NU_BTN_PAD, NU_PAD, NU_PILL, NU_SMALL};
+use super::{App, SettingsPage, CANCEL, CONFIRM, NU_BTN_PAD, NU_PAD, NU_SMALL};
 
 /// The page's title, and the name of its row in Settings > Controls on the Brick (`app_settings_groups::row_name`): row and page
 /// carry the same words (Alex, 06.11.: the row said "LEDs" and opened "Lights & buttons").
@@ -197,7 +197,7 @@ impl App {
         let (pad, row, font) = (NU_PAD, pocket_ui::type_scale::row(66, 36), 36u32);
         let detail = self.brick.detail && self.leds.mode == Mode::Colour;
         self.sheet_header(c, if detail { "Each light" } else { TITLE });
-        let (top, right) = (pad + NU_PILL + 12, c.w - pad);
+        let (top, right) = (pocket_ui::kit::header_bottom(c.h) + 12, c.w - pad);
         let rows = rows(self.leds.mode, detail, &self.brick.lights.zones[self.brick.light]);
         let sel = sel.min(rows.len() - 1);
         for (i, r) in rows.iter().enumerate() {

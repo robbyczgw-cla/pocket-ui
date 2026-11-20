@@ -209,17 +209,32 @@ pub fn migrate_android(base: &Path) -> std::io::Result<()> {
 
 // --- what the menu says ------------------------------------------------------------------------------------------
 
-/// "today 14:02", "yesterday 21:10", "3 days ago": when a session began, in the zone `tz` seconds east of UTC.
-fn started_when(secs: u64, now: u64, tz: i32) -> (u64, String) {
-    let days = crate::civil_date::local_day(now, tz) - crate::civil_date::local_day(secs, tz);
-    let clock = crate::timezone::clock_at(secs as i64, tz);
+/// Display in the device's time zone, or with a fixed offset for deterministic snapshots.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum Zone {
+    #[default]
+    Local,
+    Fixed(i32),
+}
+
+/// "today 14:02", "yesterday 21:10", "3 days ago": when a session began in the chosen zone.
+fn started_when(secs: u64, now: u64, zone: Zone) -> (u64, String) {
+    let (at_offset, now_offset) = match zone {
+        Zone::Local => {
+            let _zone = crate::timezone::zone_lock();
+            (crate::timezone::utc_offset_now(secs as i64), crate::timezone::utc_offset_now(now as i64))
+        }
+        Zone::Fixed(offset) => (offset, offset),
+    };
+    let days = crate::civil_date::local_day(now, now_offset) - crate::civil_date::local_day(secs, at_offset);
+    let clock = crate::timezone::clock_at(secs as i64, at_offset);
     (days.max(0) as u64, clock)
 }
 
 /// The chip beside Earlier: when, short enough to fit beside the row in Large text and in German too. The ring: "12 min"
 /// (earlier), "2 h", "just now", "yesterday", "3 days"; a session start: its clock time today ("14:02"), else
 /// "yesterday", "3 days". The line under the picture says which kind it is (`note`).
-pub fn chip(e: &Entry, now: u64, tz: i32) -> String {
+pub fn chip(e: &Entry, now: u64, zone: Zone) -> String {
     match e.name.kind {
         Kind::Every => match now.saturating_sub(e.secs()) {
             0..=59 => "just now".into(),
@@ -228,7 +243,7 @@ pub fn chip(e: &Entry, now: u64, tz: i32) -> String {
             d if d < 2 * 86_400 => "yesterday".into(),
             d => format!("{} days", d / 86_400),
         },
-        Kind::Started => match started_when(e.secs(), now, tz) {
+        Kind::Started => match started_when(e.secs(), now, zone) {
             (0, clock) => clock,
             (1, _) => "yesterday".into(),
             (days, _) => format!("{days} days"),
@@ -237,18 +252,18 @@ pub fn chip(e: &Entry, now: u64, tz: i32) -> String {
 }
 
 /// The line under the picture; `None`: the game has none yet.
-pub fn note(e: Option<&Entry>, now: u64, tz: i32) -> String {
+pub fn note(e: Option<&Entry>, now: u64, zone: Zone) -> String {
     let Some(e) = e else { return "Earlier · none yet · keeps a moment every 5 min of play".into() };
     if e.damaged() {
         let when = match e.name.kind {
             Kind::Every => crate::recents::ago_from(e.secs(), now),
-            Kind::Started => chip(e, now, tz),
+            Kind::Started => chip(e, now, zone),
         };
         return format!("Earlier · {when} · damaged, can't be loaded");
     }
     match e.name.kind {
         Kind::Every => format!("Earlier · {}", crate::recents::ago_from(e.secs(), now)),
-        Kind::Started => match started_when(e.secs(), now, tz) {
+        Kind::Started => match started_when(e.secs(), now, zone) {
             (0, clock) => format!("Earlier · session start · today {clock}"),
             (1, clock) => format!("Earlier · session start · yesterday {clock}"),
             (days, _) => format!("Earlier · session start · {days} days ago"),
@@ -269,14 +284,13 @@ pub fn load_label(e: &Entry, now: u64) -> String {
 pub struct Row {
     pub entries: Vec<Entry>,
     pub at: usize,
-    /// The zone's offset east of UTC as the menu opened, for a session start's "14:02" (not looked up every frame).
-    pub tz: i32,
+    pub zone: Zone,
 }
 
 impl Row {
     /// On the newest.
-    pub fn new(entries: Vec<Entry>, tz: i32) -> Row {
-        Row { entries, at: 0, tz }
+    pub fn new(entries: Vec<Entry>, zone: Zone) -> Row {
+        Row { entries, at: 0, zone }
     }
 
     pub fn selected(&self) -> Option<&Entry> {
@@ -1072,7 +1086,7 @@ mod tests {
         let d = Dir::new("calm");
         let base = d.base("gba", "Game");
         assert!(entries(&base).is_empty());
-        assert_eq!(note(None, 1000, 0), "Earlier · none yet · keeps a moment every 5 min of play");
+        assert_eq!(note(None, 1000, Zone::Fixed(0)), "Earlier · none yet · keeps a moment every 5 min of play");
         // An empty file (the card filled up while it was written): listed, said so, not loadable.
         let p = path(&base, Name { kind: Kind::Every, n: 2 });
         std::fs::write(&p, b"").unwrap();
@@ -1080,8 +1094,8 @@ mod tests {
         let e = entries(&base);
         assert!(e[0].damaged());
         let now = crate::recents::now_secs();
-        assert_eq!(note(Some(&e[0]), now, 0), "Earlier · 12 min ago · damaged, can't be loaded");
-        assert_eq!(chip(&e[0], now, 0), "12 min");
+        assert_eq!(note(Some(&e[0]), now, Zone::Fixed(0)), "Earlier · 12 min ago · damaged, can't be loaded");
+        assert_eq!(chip(&e[0], now, Zone::Fixed(0)), "12 min");
         // A folder where a file should be, or a link, is not an entry.
         std::fs::create_dir_all(path(&base, Name { kind: Kind::Every, n: 3 })).unwrap();
         std::os::unix::fs::symlink("/etc/passwd", path(&base, Name { kind: Kind::Every, n: 4 })).unwrap();
@@ -1091,7 +1105,7 @@ mod tests {
     #[test]
     fn the_menu_row_steps_around_and_never_loads_a_damaged_one() {
         let at = |n: u8, secs: u64, bytes: u64| Entry { name: Name { kind: Kind::Every, n }, path: PathBuf::new(), at: UNIX_EPOCH + Duration::from_secs(secs), bytes };
-        let mut row = Row::new(vec![at(3, 3000, 10), at(2, 2000, 0), at(1, 1000, 10)], 0);
+        let mut row = Row::new(vec![at(3, 3000, 10), at(2, 2000, 0), at(1, 1000, 10)], Zone::Fixed(0));
         assert_eq!(row.command().as_deref(), Some("load earlier3 3000"), "the file's time goes with it");
         row.step(1);
         assert!(!row.loadable() && row.command().is_none(), "the damaged one");
@@ -1101,7 +1115,7 @@ mod tests {
         row.step(-1);
         assert_eq!(row.selected().unwrap().name.n, 1);
         // Nothing yet: nothing selected, nothing loaded, no panic.
-        let mut none = Row::new(Vec::new(), 0);
+        let mut none = Row::new(Vec::new(), Zone::Fixed(0));
         none.step(1);
         assert!(none.selected().is_none() && !none.loadable() && none.command().is_none());
     }
@@ -1126,7 +1140,7 @@ mod tests {
 
     #[test]
     fn chips_and_notes_say_when() {
-        let tz = 3600; // UTC+1
+        let tz = Zone::Fixed(3600); // UTC+1
         // 2026-10-25 14:30 local is 13:30 UTC.
         let now = 1_792_935_000u64;
         let at = |kind, secs_ago: u64| Entry { name: Name { kind, n: 1 }, path: PathBuf::new(), at: UNIX_EPOCH + Duration::from_secs(now - secs_ago), bytes: 1 };
@@ -1147,6 +1161,29 @@ mod tests {
         let older = at(Kind::Started, 3 * 86_400);
         assert_eq!(chip(&older, now, tz), "3 days");
         assert_eq!(note(Some(&older), now, tz), "Earlier · session start · 3 days ago");
+    }
+
+    #[test]
+    fn a_session_start_uses_the_offset_at_its_own_time() {
+        const CHILD: &str = "POCKET_TEST_EARLIER_TIMEZONE";
+        if std::env::var_os(CHILD).is_none() {
+            let output = std::process::Command::new(std::env::current_exe().unwrap())
+                .args(["--exact", "timeline::tests::a_session_start_uses_the_offset_at_its_own_time"])
+                .env(CHILD, "1")
+                .env("TZ", "CET-1CEST,M3.5.0,M10.5.0/3")
+                .output().unwrap();
+            assert!(output.status.success(), "{}", String::from_utf8_lossy(&output.stdout));
+            return;
+        }
+
+        // Vienna, 2026-10-25, 00:30 CEST and 10:00 CET.
+        let now = 1_792_918_800;
+        let start = 1_792_881_000;
+        let entry = Entry { name: Name { kind: Kind::Started, n: 1 }, path: PathBuf::new(),
+            at: UNIX_EPOCH + Duration::from_secs(start), bytes: 1 };
+        let tz = Zone::Local;
+        assert_eq!(chip(&entry, now, tz), "00:30");
+        assert_eq!(note(Some(&entry), now, tz), "Earlier · session start · today 00:30");
     }
 
     #[test]

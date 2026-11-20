@@ -39,6 +39,8 @@ pub enum Entry {
     Earlier,
     /// Off / FPS: the frame rate and the CPU in the top left corner (Linux: Speed, rumble, fan › Over the game).
     OverGame,
+    /// Off / Low / Medium / High: Linux's Speed, rumble, fan › Rumble, how strongly games shake the handheld or the pad.
+    Rumble,
     /// Where the Picture and Over the game choices are kept: this game, or every game of the console.
     Keep,
     /// Back to the defaults for the console and the game; asks for a second A (Linux's Restore defaults).
@@ -114,10 +116,10 @@ pub fn linux_entries(groups: usize, emulator: Option<bool>, cheats: bool) -> Vec
 }
 
 /// The rows of Speed, rumble, fan the player has, in Linux's order (`options::GROUPS`).
-pub const EXTRAS_ROWS: [Entry; 4] = [Entry::FastForward, Entry::Rewind, Entry::Earlier, Entry::OverGame];
+pub const EXTRAS_ROWS: [Entry; 5] = [Entry::FastForward, Entry::Rewind, Entry::Earlier, Entry::OverGame, Entry::Rumble];
 
-/// Speed, rumble, fan's line, Linux's (`options::GROUPS`).
-pub const EXTRAS_DESC: &str = "Settings you rarely need.";
+/// Speed, rumble, fan's line: what the player's group holds (no performance, no fan: Android's own; review 19.11. #2).
+pub const EXTRAS_DESC: &str = "Fast-forward, rewind, earlier states, the frame rate and rumble.";
 
 impl Entry {
     /// The row's name, Linux's words.
@@ -128,11 +130,13 @@ impl Entry {
             Entry::Controls => "Controls",
             Entry::Zoom => "Zoom",
             Entry::Cheats => "Cheats",
-            Entry::Extras => "Speed, rumble, fan",
+            // Android sets no fan: the group by its name without one (`i18n::FANLESS_NAMES`, review 19.11. #2).
+            Entry::Extras => "Speed & rumble",
             Entry::FastForward => "Fast-forward speed",
             Entry::Rewind => "Rewind",
             Entry::Earlier => "Earlier states",
             Entry::OverGame => "Over the game",
+            Entry::Rumble => "Rumble",
             Entry::Keep => "Keep for",
             Entry::Restore => "Restore defaults",
             Entry::Screenshot => "Screenshot",
@@ -147,6 +151,7 @@ impl Entry {
             Entry::Rewind => Some(crate::play_speed::REWIND_KEY),
             Entry::Earlier => Some(crate::timeline_policy::KEY),
             Entry::OverGame => Some("over_game"),
+            Entry::Rumble => Some(RUMBLE_KEY),
             _ => None,
         }
     }
@@ -169,6 +174,7 @@ impl Entry {
             Entry::Rewind => REWIND_DESC,
             Entry::Earlier => EARLIER_DESC,
             Entry::OverGame => OVER_GAME_DESC,
+            Entry::Rumble => RUMBLE_DESC,
             Entry::Keep if keep_game => "Changes show at once and stay for this game. Left or right: every game on this console.",
             Entry::Keep => "Changes show at once and stay for every game on this console. Left or right: this game only.",
             Entry::Restore => RESTORE_DESC,
@@ -322,6 +328,32 @@ pub fn resolution_index(range: Option<crate::render_scale::Range>, chosen: Optio
     usize::from(f.clamp(1, 4)) - 1
 }
 
+/// Whether the Picture page of Android's player shows a row for `system`: Resolution where `range` says, Mode 7 where this
+/// handheld offers it for the console (`mode7_hd::here_for`), every other row as Linux's (`applies_in`, Android's profile).
+fn picture_row_shown(key: &str, system: &str, range: Option<crate::render_scale::Range>) -> bool {
+    if key == crate::render_scale::KEY {
+        range.is_some()
+    } else if key == crate::mode7_hd::KEY {
+        crate::mode7_hd::here_for(system).is_some()
+    } else {
+        crate::option_table::applies_in(key, system, true)
+    }
+}
+
+/// Rumble's key, values and labels, and its line: Linux's (`option_table`).
+pub const RUMBLE_KEY: &str = "rumble";
+pub const RUMBLE_VALUES: [(&str, &str); 4] = [("off", "Off"), ("low", "Low"), ("medium", "Medium"), ("high", "High")];
+pub const RUMBLE_DESC: &str = "How strongly games shake the console, for games that rumble.\nOff keeps it still.";
+/// The label of a saved rumble value (Medium where none or an unknown one is saved, Linux's default).
+pub fn rumble_label(value: Option<&str>) -> &'static str {
+    RUMBLE_VALUES.iter().find(|(v, _)| Some(*v) == value).map_or("Medium", |(_, l)| *l)
+}
+/// The rumble value `delta` steps from `value`, round.
+pub fn rumble_step(value: Option<&str>, delta: i32) -> &'static str {
+    let at = RUMBLE_VALUES.iter().position(|(v, _)| Some(*v) == value).unwrap_or(2) as i32;
+    RUMBLE_VALUES[(at + delta).rem_euclid(4) as usize].0
+}
+
 /// Over the game's setting key (Linux's `over_game::KEY`).
 pub const OVER_GAME_KEY: &str = crate::option_table::OVER_GAME_KEY;
 
@@ -331,12 +363,12 @@ pub const OVER_GAME_KEY: &str = crate::option_table::OVER_GAME_KEY;
 /// and Resolution last where this handheld has it for the console (`range`: `render_scale::here`). Sharpness and Effect stay
 /// out: Custom is not a Look there.
 pub fn picture_settings(system: &str, range: Option<crate::render_scale::Range>, values: &BTreeMap<String, String>) -> Vec<&'static crate::option_table::Setting> {
-    use crate::option_table::{applies_in, GROUPS};
+    use crate::option_table::GROUPS;
     let Some(group) = GROUPS.iter().find(|g| g.name == "Picture") else { return Vec::new() };
     group
         .settings
         .iter()
-        .filter(|s| if s.key == crate::render_scale::KEY { range.is_some() } else { applies_in(s.key, system, true) })
+        .filter(|s| picture_row_shown(s.key, system, range))
         .filter(|s| s.shown_when.is_none_or(|(key, value)| setting_value_of(key, system, range, values) == value))
         .collect()
 }
@@ -345,9 +377,9 @@ pub fn picture_settings(system: &str, range: Option<crate::render_scale::Range>,
 /// has and the largest set that shows under one value (a frame's finish, the TV's cabinet, LCD colours). The page is laid
 /// out for it, so the preview keeps its place and size while a row comes and goes.
 pub fn picture_max_rows(system: &str, range: Option<crate::render_scale::Range>) -> usize {
-    use crate::option_table::{applies_in, GROUPS};
+    use crate::option_table::GROUPS;
     let Some(group) = GROUPS.iter().find(|g| g.name == "Picture") else { return 0 };
-    let shown: Vec<_> = group.settings.iter().filter(|s| if s.key == crate::render_scale::KEY { range.is_some() } else { applies_in(s.key, system, true) }).collect();
+    let shown: Vec<_> = group.settings.iter().filter(|s| picture_row_shown(s.key, system, range)).collect();
     let mut under: BTreeMap<(&str, &str), usize> = BTreeMap::new();
     for s in shown.iter().filter_map(|s| s.shown_when) {
         *under.entry(s).or_default() += 1;
@@ -372,6 +404,10 @@ pub fn setting_value_of(key: &str, system: &str, range: Option<crate::render_sca
         let chosen = values.get(key).and_then(|v| v.parse::<u8>().ok());
         return crate::render_scale::VALUES[resolution_index(range, chosen)];
     }
+    if key == crate::mode7_hd::KEY {
+        // What the start uses: the choice where offered, else the nearest (`mode7_hd::mode`).
+        return crate::mode7_hd::mode(crate::mode7_hd::here_for(system), values.get(key).map(String::as_str));
+    }
     if key == LOOK {
         let get = |k: &str| values.get(k).map(String::as_str).or_else(|| console_default(system, k)).unwrap_or_else(|| setting(k).map_or("", |s| s.choices[s.default].value));
         let look = android_look(get("sharpness"), get("effect"));
@@ -387,6 +423,9 @@ pub fn setting_choices(key: &str, system: &str, range: Option<crate::render_scal
     let Some(s) = setting(key) else { return Vec::new() };
     if key == crate::render_scale::KEY {
         return s.choices.iter().filter(|c| crate::render_scale::offers(range, c.value)).collect();
+    }
+    if key == crate::mode7_hd::KEY {
+        return s.choices.iter().filter(|c| crate::mode7_hd::offers(crate::mode7_hd::here_for(system), c.value)).collect();
     }
     s.choices.iter().filter(|c| offered_in(s, c.value, system, true) && !(key == LOOK && c.value == "custom")).collect()
 }
@@ -428,7 +467,7 @@ pub fn picture_descs(system: &str, range: Option<crate::render_scale::Range>) ->
     use crate::option_table::{GROUPS, LOOK};
     let Some(group) = GROUPS.iter().find(|g| g.name == "Picture") else { return Vec::new() };
     let mut out = Vec::new();
-    for s in group.settings.iter().filter(|s| if s.key == crate::render_scale::KEY { range.is_some() } else { crate::option_table::applies_in(s.key, system, true) }) {
+    for s in group.settings.iter().filter(|s| picture_row_shown(s.key, system, range)) {
         for c in setting_choices(s.key, system, range) {
             let mut values = BTreeMap::new();
             if s.key == LOOK {
@@ -458,14 +497,14 @@ mod tests {
     fn the_page_is_linux_s_order_with_linux_s_names() {
         let all = top(Has { emulator: true, controls: true, cheats: true });
         let names: Vec<&str> = all.iter().map(|e| e.label()).collect();
-        assert_eq!(names, ["Picture", "Emulator", "Controls", "Cheats", "Speed, rumble, fan", "Zoom", "Keep for", "Restore defaults", "Screenshot"]);
+        assert_eq!(names, ["Picture", "Emulator", "Controls", "Cheats", "Speed & rumble", "Zoom", "Keep for", "Restore defaults", "Screenshot"]);
         assert_eq!(Entry::Picture.label(), options::GROUPS[0].name);
-        // Speed, rumble, fan is Linux's group, its line Linux's, its rows the ones the player has in Linux's order.
-        let extras = options::GROUPS.iter().find(|g| g.name == Entry::Extras.label()).unwrap();
-        assert_eq!(Entry::Extras.desc(false), extras.desc);
+        // Speed & rumble is Linux's group as a handheld without a fan names it, its rows the ones the player has in Linux's order.
+        let extras = options::GROUPS.iter().find(|g| crate::i18n::fanless_text(g.name) == Entry::Extras.label()).unwrap();
+        assert!(!Entry::Extras.desc(false).contains("fan") && !Entry::Extras.desc(false).contains("performance"), "Android sets neither");
         let order: Vec<&str> = extras.settings.iter().map(|s| s.key).filter(|k| EXTRAS_ROWS.iter().any(|e| e.setting_key() == Some(*k))).collect();
         assert_eq!(order, EXTRAS_ROWS.iter().map(|e| e.setting_key().unwrap()).collect::<Vec<_>>());
-        assert_eq!(Entry::Extras.heading(), "Options \u{203a} Speed, rumble, fan");
+        assert_eq!(Entry::Extras.heading(), "Options \u{203a} Speed & rumble");
         assert_eq!((Entry::Emulator.heading(), Entry::Controls.heading(), Entry::Cheats.heading()), ("Emulator".into(), "Controls".into(), "Cheats".into()));
         assert_eq!(Entry::OverGame.label(), options::setting(crate::over_game::KEY).unwrap().name);
         // Zoom is never first and never the row the page opens on.
@@ -522,6 +561,19 @@ mod tests {
         }
         assert_eq!((values["sharpness"].as_str(), values["effect"].as_str()), ("crisp", "crt"), "Old TV writes Linux's pair");
         assert_eq!(setting_desc(crate::option_table::LOOK, "snes", None, &values), crate::look::explain(crate::look::Look::OldTv, false));
+    }
+
+    /// Rumble: Linux's row (name, values, labels, line, default Medium), under Speed, rumble, fan in Linux's order.
+    #[test]
+    fn rumble_reads_as_linux_s() {
+        let linux = options::setting(RUMBLE_KEY).unwrap();
+        assert_eq!((Entry::Rumble.label(), Entry::Rumble.desc(false)), (linux.name, linux.desc));
+        assert_eq!(RUMBLE_VALUES.iter().map(|(v, l)| (v.to_string(), l.to_string())).collect::<Vec<_>>(), linux.choices.iter().map(|c| (c.value.to_string(), c.label.to_string())).collect::<Vec<_>>());
+        assert_eq!(rumble_label(None), linux.choices[usize::from(linux.default)].label);
+        assert_eq!((rumble_step(None, 1), rumble_step(Some("high"), 1), rumble_step(Some("off"), -1)), ("high", "off", "high"));
+        for (v, _) in RUMBLE_VALUES {
+            assert_eq!(crate::rumble::Strength::parse(v), crate::rumble::Strength::parse(linux.choices.iter().find(|c| c.value == v).unwrap().value));
+        }
     }
 
     #[test]
@@ -603,6 +655,41 @@ mod tests {
         assert_eq!(setting_choices(key, "dreamcast", dc).len(), 2, "Dreamcast: Original and 2x");
     }
 
+    /// Mode 7 on Android's Picture page (`mode7_hd`): the row for the Super Nintendo on a handheld that offers it, Linux's
+    /// name, values and labels, the app's own line (no emulator switch), Original and HD only (the app's bsnes has no
+    /// widescreen); Left/Right step between them; nothing on other consoles or on a handheld without it.
+    #[test]
+    fn mode7_is_on_the_picture_page_for_the_snes_where_offered() {
+        use crate::mode7_hd::{with_offer, Offer, KEY};
+        let values = BTreeMap::new();
+        let android = Some(Offer { scale: 2, wide: false });
+        with_offer(android, || {
+            let keys: Vec<_> = picture_settings("snes", None, &values).iter().map(|s| s.key).collect();
+            assert_eq!(keys.last(), Some(&KEY), "{keys:?}");
+            assert!(!picture_settings("gba", None, &values).iter().any(|s| s.key == KEY), "only the Super Nintendo");
+            assert_eq!(setting_value_of(KEY, "snes", None, &values), "original", "nothing chosen: the console's own");
+            let choices: Vec<_> = setting_choices(KEY, "snes", None).iter().map(|c| (c.value, c.label)).collect();
+            assert_eq!(choices, [("original", "Original"), ("hd", "HD")], "no widescreen in the app");
+            assert_eq!(setting_step(KEY, "snes", None, &values, 1), vec![(KEY, "hd".to_string())]);
+            let hd: BTreeMap<String, String> = [(KEY.to_string(), "hd".to_string())].into();
+            assert_eq!(setting_step(KEY, "snes", None, &hd, 1), vec![(KEY, "original".to_string())], "round");
+            let wide: BTreeMap<String, String> = [(KEY.to_string(), "wide".to_string())].into();
+            assert_eq!(setting_value_of(KEY, "snes", None, &wide), "hd", "widescreen chosen on a card: HD here");
+            assert_eq!(setting_desc(KEY, "snes", None, &values), crate::mode7_hd::ANDROID_DESC);
+            assert!(!crate::mode7_hd::ANDROID_DESC.contains("bsnes-hd") && crate::mode7_hd::DESC.contains("bsnes-hd"));
+        });
+        with_offer(None, || {
+            assert!(!picture_settings("snes", None, &values).iter().any(|s| s.key == KEY), "a handheld without it: no row");
+        });
+        let card = Some(Offer { scale: 2, wide: true });
+        with_offer(card, || {
+            let s = crate::option_table::setting(KEY).unwrap();
+            let offered: Vec<_> = s.choices.iter().filter(|c| crate::option_table::offered_in(s, c.value, "snes", false)).map(|c| c.value).collect();
+            assert_eq!(offered, ["original", "hd", "wide"], "a wide card: all three");
+            assert!(crate::option_table::applies_in(KEY, "snes", false) && !crate::option_table::applies_in(KEY, "n64", false));
+        });
+    }
+
     /// Linux's rows the player has no counterpart for, each with why. Every other row of Linux's Options page on the same
     /// handheld is on Android's page too (`android_s_page_has_linux_s_rows_on_the_same_handheld`).
     const NOT_ON_ANDROID: &[(&str, &str)] = &[
@@ -620,7 +707,6 @@ mod tests {
         ("hk_over", "Linux only: no HOME layer, Android owns Home"),
         ("hk_zoom", "Linux only: no HOME layer, Android owns Home"),
         // Speed, rumble, fan.
-        ("rumble", "feature missing on Android: the player sends no rumble"),
         ("run_ahead", "feature missing on Android: the player's loop has no run-ahead"),
         ("performance", "Linux only: Android owns the CPU's governor"),
         ("fan", "Linux only: Android owns the fan"),
@@ -637,6 +723,7 @@ mod tests {
             let shown = match setting.key {
                 crate::render_scale::KEY => class.and_then(|c| crate::render_scale::range(c, system)).is_some(),
                 "fan" => class.is_some(),
+                crate::mode7_hd::KEY => crate::mode7_hd::is_snes(system) && class.is_some(),
                 key => options::applies_in(key, system, false),
             };
             if shown {
@@ -657,7 +744,11 @@ mod tests {
                     // Every row the page can show for the console, whatever the values (a finish under its frame, LCD colours under the grid).
                     let range = class.and_then(|c| crate::render_scale::range(c, system));
                     let group = options::GROUPS.iter().find(|g| g.name == "Picture").unwrap();
-                    rows.extend(group.settings.iter().map(|s| s.key).filter(|k| if *k == crate::render_scale::KEY { range.is_some() } else { options::applies_in(k, system, true) }));
+                    rows.extend(group.settings.iter().map(|s| s.key).filter(|k| match *k {
+                        crate::render_scale::KEY => range.is_some(),
+                        crate::mode7_hd::KEY => crate::mode7_hd::is_snes(system) && class.is_some(),
+                        k => options::applies_in(k, system, true),
+                    }));
                 }
                 Entry::Screenshot => (), // the player's own (Linux: HOME + A)
                 Entry::Extras => rows.extend(EXTRAS_ROWS.iter().filter_map(|e| e.setting_key())),
@@ -715,11 +806,13 @@ mod tests {
         let mut descs: Vec<(String, &str)> = Vec::new(); // (line, the row's value)
         for e in top(Has { emulator: true, controls: true, cheats: true }).into_iter().chain(EXTRAS_ROWS) {
             for keep in [true, false] {
-                descs.push((e.desc(keep).to_string(), if e.opens() { ">" } else if matches!(e, Entry::FastForward | Entry::Rewind | Entry::Earlier | Entry::OverGame | Entry::Keep) { "On" } else { "" }));
+                descs.push((e.desc(keep).to_string(), if e.opens() { ">" } else if matches!(e, Entry::FastForward | Entry::Rewind | Entry::Earlier | Entry::OverGame | Entry::Rumble | Entry::Keep) { "On" } else { "" }));
             }
         }
+        // On a handheld with Mode 7 HD (`mode7_hd`), so its line is among them.
+        let mode7 = Some(crate::mode7_hd::Offer { scale: 2, wide: false });
         for system in ["gba", "gb", "snes", "n64"] {
-            for d in picture_descs(system, crate::render_scale::range(crate::render_scale::Class::Sm8250, system)) {
+            for d in crate::mode7_hd::with_offer(mode7, || picture_descs(system, crate::render_scale::range(crate::render_scale::Class::Sm8250, system))) {
                 if !descs.iter().any(|(x, _)| x == d) {
                     descs.push((d.to_string(), "On"));
                 }
@@ -904,7 +997,8 @@ mod tests {
     #[test]
     fn the_options_page_is_linux_s_for_every_game() {
         let name = |e: LinuxEntry| match e {
-            LinuxEntry::Group(g) => options::GROUPS[g].name,
+            // As a handheld without a fan names it: Android sets none (`i18n::FANLESS_NAMES`).
+            LinuxEntry::Group(g) => match crate::i18n::FANLESS_NAMES.iter().find(|(long, _)| *long == options::GROUPS[g].name) { Some((_, short)) => short, None => options::GROUPS[g].name },
             LinuxEntry::Emulator => "Emulator",
             LinuxEntry::Controls => "Controls",
             LinuxEntry::Zoom => "Zoom",
@@ -925,8 +1019,9 @@ mod tests {
                 for (a, l) in android.iter().zip(&linux) {
                     assert_eq!(a.opens(), opens(*l), "{at}: {} opens a page on one side only", a.label());
                     if let LinuxEntry::Group(g) = l {
-                        // A group's line is Linux's, but for Picture: the player has no Screen orientation (`NOT_ON_ANDROID`).
-                        if options::GROUPS[*g].name != "Picture" {
+                        // A group's line is Linux's, but for Picture: the player has no Screen orientation (`NOT_ON_ANDROID`);
+                        // and Speed & rumble's names only the rows the player has (no performance, no fan).
+                        if !["Picture", "Speed, rumble, fan"].contains(&options::GROUPS[*g].name) {
                             assert_eq!(a.desc(false), options::GROUPS[*g].desc, "{at}: {}", a.label());
                         }
                     }
@@ -945,8 +1040,8 @@ mod tests {
         }
         // The pages' headings are Linux's: a group's "Options › …", the emulator's pages their own name.
         for e in [Entry::Picture, Entry::Extras] {
-            let g = options::GROUPS.iter().find(|g| g.name == e.label()).unwrap();
-            assert_eq!(e.heading(), format!("Options \u{203a} {}", g.name));
+            let g = options::GROUPS.iter().find(|g| crate::i18n::fanless_text(g.name) == e.label()).unwrap();
+            assert_eq!(e.heading(), format!("Options \u{203a} {}", crate::i18n::fanless_text(g.name)));
         }
         // Controls is Linux's page (`controls::ControlsPage`, which `emu_menu` shows): only Controller setup is Linux's.
         let dir0 = crate::testutil::TestDir::new("controls-page");

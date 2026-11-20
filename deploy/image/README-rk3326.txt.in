@@ -1,0 +1,199 @@
+@OS_NAME@ @VERSION@ for the @MODEL_NAME@: SD card image
+================================================================
+
+pocket-ui is a game launcher with its own libretro frontend. This card (pocket-ui @VERSION@) starts it when the
+handheld boots from it. The handheld's own system stays as it is: it lives on the card the handheld came with, and
+nothing is flashed to the handheld (the R36S has no internal memory).
+
+This card is a beta: the @MODEL_NAME@ is new to pocket-ui, and so far it has been started on few of them. Please report
+what works and what doesn't (@ISSUES_URL@). It is for the genuine R36S (ROCKNIX's "a" image); clones that ROCKNIX starts with its "b" image are not covered.
+#if DEVTEST
+
+DEVICE TEST CARD: this card also turns on ROCKNIX's USB network (USB_MODE=cdc) and SSH, and lets in the SSH key of the
+computer it was built on. Connect the R36S's USB-C port to that computer: the handheld is 169.254.170.2 and gives the
+computer 169.254.170.1, then `ssh root@169.254.170.2` works with that key (and ROCKNIX's root password "rocknix").
+While the port is a network, a USB Wi-Fi adapter on it does not work. Only for our own device tests: never hand this card
+out; use the normal card (without -devtest) for anyone else.
+#endif
+
+@OS_NAME@ is built on ROCKNIX @ROCKNIX_TAG@ (https://rocknix.org): its kernel, system and emulators are
+ROCKNIX's. pocket-ui is not made or endorsed by the ROCKNIX team; please report problems with this card to
+pocket-ui (@ISSUES_URL@), not to ROCKNIX.
+
+
+Install
+-------
+
+1. Write @IMAGE_NAME@.img.xz to a microSD card with balenaEtcher or Raspberry Pi
+   Imager. Both read the .xz file directly. Everything on the card is erased. 8 GB or more.
+   Use a spare card, not the one the handheld came with: that card is the handheld's own system.
+2. Take the original card out, put this one into the first card slot (TF1) of the switched-off handheld and switch it on.
+3. The first start shows some text on a dark screen and restarts once by itself while the card is set up: don't switch
+   off. If it does lose power, just switch it on again: it carries on from where it stopped.
+   Then pocket-ui's first-start setup opens. The pause menu (HOME) is the FN key.
+4. To go back to the handheld's own system, switch off, take this card out and put the original card back. Keep it safe.
+
+
+Black screen?
+-------------
+
+R36S made from 2024 on often have a newer screen that needs one extra file. The handheld is fine; only the picture is missing.
+No computer needed if you still have the original card: put it into the second slot (TF2) and switch on again. The card reads
+the screen from the original card (only reads it, changes nothing there), starts again once, and the picture is there.
+Otherwise switch off (hold Power for 10 seconds) and put the card into a computer. On its ROCKNIX drive:
+  - Easiest, if you still have the original card: copy the .dtb file from the original card's first drive into the
+    folder stock/ on this card and start the R36S. The card reads the screen from it, writes overlays/mipi-panel.dtbo,
+    starts again once and notes what it did in stock/panel-log.txt.
+  - Or copy one file from r36s-panels/ into overlays/ and rename it to mipi-panel.dtbo (r36s-panels/README.txt says which
+    to try first). Still black? Try the next one.
+To go back to the original screen, delete overlays/mipi-panel.dtbo.
+
+
+Add your games
+--------------
+
+The R36S has no Wi-Fi chip, so the Wi-Fi ways in (file sharing, updates over the air) need a USB Wi-Fi adapter on its
+USB-C port. Without one: put your games on a second microSD card in the second slot (TF2; ROCKNIX uses it for games and
+makes a "roms" folder on it), or switch off and copy them onto this card's STORAGE from a Linux computer.
+Settings, Games, Add games shows the folder of each system.
+
+Your computer can't write to the card's large STORAGE part without extra software, and Windows may ask to format it:
+never say yes, press Cancel. Formatting would erase pocket-ui from the card.
+
+This card starts the R36S's own device tree: ROCKNIX's boot script has no R36S entry, so extlinux/extlinux.conf names
+@DTB_NAME@.dtb (what ROCKNIX's own extlinux/extlinux.conf.r36s says). Nothing to change. If it stays black with every screen
+file, switch off (hold Power for 10 seconds) and report it.
+
+This card contains no games and no console maker's BIOS files (the one BIOS in it is DraStic's open replacement). Add only games and BIOS files you own.
+#if DEVTEST
+On this device test card SSH is on from the start (see above); file sharing and Syncthing are off.
+#else
+Remote access (SSH), file sharing and Syncthing are off. When you turn on Remote access or file
+sharing in pocket-ui's Settings, it makes a password for this device and shows it on the screen.
+(EmulationStation, ROCKNIX's menu, can also turn SSH on; it then uses ROCKNIX's standard root password
+"rocknix" until you change it there.)
+#endif
+Updates come from pocket-ui (Settings, Updates). Without Wi-Fi, update from a card: download the update file
+pocket-ui-update-<version>-rocknix.zip from pocketui.xyz/install, copy it (don't unzip it) onto the second card in TF2 or
+onto this card's ROCKNIX drive, and switch on: pocket-ui offers the update, press A. Your games, saves and settings stay.
+Settings, System, Updates, Look on the card does the same at any time. ROCKNIX's own updates would replace the system and the
+U-Boot on this card behind pocket-ui's back, so this card does not install them: the boot hook moves
+any update pocket-ui did not check (from EmulationStation's menu, the network share "update" or copied
+by hand) to /storage/.update-refused and starts as usual. Nothing there is deleted.
+
+
+What is on the card
+-------------------
+
+Before the first partition (the card's first 16 MiB): ROCKNIX's legacy U-Boot from its "a" image
+(ROCKNIX-RK3326.aarch64-@ROCKNIX_TAG@-a.img.gz), unchanged.
+
+FAT partition "ROCKNIX" (readable on any computer):
+  KERNEL, KERNEL.md5         ROCKNIX @ROCKNIX_TAG@, unchanged
+  SYSTEM, SYSTEM.md5         ROCKNIX @ROCKNIX_TAG@'s system, repacked without the files listed under
+                             "Changes" below; everything else in it is unchanged
+  *.dtb, boot.scr, overlays/, stock/   ROCKNIX's, unchanged (overlays/ holds no screen file)
+  extlinux/extlinux.conf     ROCKNIX's, with one line changed: FDT /@DTB_NAME@.dtb (ROCKNIX's image has
+                             that line commented out; its boot script would pick the R33S's tree)
+  r36s-panels/               screen files for the newer R36S screens, and a README (see "Black screen?")
+  post-flash.sh              boot hook: starts without the ROCKNIX logo
+  mount-storage.sh           boot hook: puts pocket-ui's start entry in place once the storage has
+                             grown; at every start, sets aside system updates pocket-ui did not check
+  pocket-ui-info/            this file; SOURCE-OFFER.txt; pocket-ui-os.txt (name and version, shown
+                             in Settings, About); pocket-ui's LICENSE and NOTICE.md;
+                             licences/ (the Rust crates' licence texts and the fonts' OFL; /storage/pocket-ui/licences
+                             links here); rocknix-licenses/ (ROCKNIX's
+                             LICENSE.md and licenses folder at tag @ROCKNIX_TAG@); firmware-licences/
+                             (the terms of the firmware files inside SYSTEM)
+
+Partition "STORAGE" (grows to fill the card at the first start):
+  pocket-ui/                 pocket-ui, pocket-core and pocket-splash (the boot screen) @VERSION@, the launcher
+  .pocket-seed/              the start entry for pocket-ui and the boot screen's unit (moved to
+                             .config/system.d at the second start), a script ROCKNIX runs once
+                             at the first start (device name "@HOSTNAME@", ROCKNIX's update check off), and the
+                             screen script that reads a tree in stock/ (ROCKNIX's importpanel.py, screen only)
+#if DEVTEST
+                             and, on this device test card only: ROCKNIX's USB network setting, the build computer's
+                             public SSH key (.ssh/authorized_keys), pocket-ui's dev-ssh marker and a script that keeps
+                             SSH and the USB network on
+#endif
+
+Changes from the ROCKNIX image: the files above were added (the hooks, r36s-panels/, pocket-ui-info/, pocket-ui/) and the
+one line in extlinux.conf changed.
+Removed from SYSTEM:
+  - the Kickstart relocation tables (kick*.RTB) of Amiberry's WHDLoad booter, loose and inside its
+    boot-data.zip (the rest of that archive is unchanged). They come from SKick
+    (aminet.net, util/boot/skick346.lha), whose licence allows passing them on only inside that unchanged
+    archive. Amiga games run with the standard emulator as before; for WHDLoad games in Amiberry,
+    copy the .RTB files from that archive to /storage/.config/amiberry/whdboot/save-data/Kickstarts.
+  - the DOOM shareware game data (usr/share/idtech/doom.tar.gz), so the card holds no games; its
+    shareware terms also ask for the complete, unchanged shareware package.
+The partition table (but for the STORAGE partition's size), KERNEL and the U-Boot are unchanged. ROCKNIX's own interface,
+EmulationStation, stays on the card and takes over if pocket-ui cannot start.
+
+
+Licences
+--------
+
+This image may be shared free of charge, for non-commercial use only. Do not sell it, and do not
+bundle it with hardware you sell. Reasons: ROCKNIX includes components licensed for non-commercial use
+only (for example the libretro cores snes9x, genesis_plus_gx, picodrive and fbneo), and its artwork is
+licensed CC BY-NC-SA 4.0.
+
+ROCKNIX (KERNEL, SYSTEM)
+  Copyright ROCKNIX (https://github.com/ROCKNIX). ROCKNIX is a fork of JELOS
+  (https://github.com/JustEnoughLinuxOS/distribution); credit to the JELOS team.
+  The ROCKNIX team's own software and scripts: GNU GPL version 2. Every bundled component keeps its own
+  licence: see pocket-ui-info/rocknix-licenses/ (ROCKNIX's LICENSE.md and licenses folder) and each
+  package's PKG_LICENSE in ROCKNIX's source.
+  ROCKNIX branding and images (logos, splash artwork, EmulationStation themes inside SYSTEM):
+  CC BY-NC-SA 4.0, https://creativecommons.org/licenses/by-nc-sa/4.0/ . They are included unchanged
+  inside SYSTEM; this image does not use them as its own branding.
+
+Firmware inside SYSTEM (usr/lib/kernel-overlays/base/lib/firmware): 295 files, unchanged; nearly all are byte for byte
+  linux-firmware 20260309's and the wireless regulatory database. pocket-ui-info/firmware-licences/README.txt lists
+  every file with its terms. Still open: 10 files are not traced to a source with stated terms
+  (Realtek Bluetooth files and the ESP8089 Wi-Fi files for some clones), and the terms of the Mali GPU driver in SYSTEM
+  (libmali) have not been read yet.
+
+Screen overlays (r36s-panels/ on the FAT partition): ROCKNIX's prebuilt files for the newer R36S screens, unchanged, from
+  https://github.com/stolen/rnix/releases/tag/panel_overlays (a fork of ROCKNIX's repository; no licence of their own is
+  stated for these files). They hold a screen's start-up commands and timings.
+
+Linux kernel (KERNEL): GNU GPL version 2. The device trees (*.dtb in the FAT root) are ROCKNIX's, unchanged.
+
+U-Boot (on the card before the first partition, and usr/share/bootloader in SYSTEM): ROCKNIX's legacy U-Boot
+  (Hardkernel's, ROCKNIX/hardkernel-uboot), GNU GPL version 2 or later, with Rockchip's loader parts (rkbin); built by
+  ROCKNIX, source and recipes in ROCKNIX's repository at the tag below. boot.scr is ROCKNIX's, unchanged.
+
+DraStic (usr/config/drastic in SYSTEM): the Nintendo DS emulator DraStic by Exophase (https://www.drastic-ds.com/) is
+  closed-source software. It is passed on unchanged, as ROCKNIX does, on the basis of the author's 2017 forum
+  statement that there is "no real harm" in distributing it (usr/config/drastic/LICENSE.pdf, and ROCKNIX's
+  pocket-ui-info/rocknix-licenses/licenses/DRASTIC.pdf). That is a tolerance, not a formal licence, and no source
+  code for it exists. Credit: Exophase. We remove it from the image on request of the author.
+  Its BIOS replacement (drastic_bios_arm7.bin, drastic_bios_arm9.bin) is open: Gilead Kutnick, BSD licence, text in
+  usr/config/drastic/system/drastic_bios_readme.txt.
+
+pocket-ui and pocket-core
+  GNU GPL version 2 or later (pocket-ui-info/LICENSE).
+  Source: @POCKET_UI_SOURCE@.
+  Third-party credits (fonts, Rust crates and other parts, each under its own licence) are in
+  NOTICE.md: pocket-ui-info/NOTICE.md on this card, and in the repository. The licence texts of the Rust crates
+  and of the fonts (SIL Open Font License) are in pocket-ui-info/licences/.
+
+
+Source code
+-----------
+
+pocket-ui's source and the scripts that build this image are next to the image on @RELEASE_URL@
+(pocket-ui-@VERSION@-source.tar.gz); the rest of the source is public at the links below. For at least three
+years from the release of this image, anyone can ask for the complete corresponding source code of the GNU GPL
+and LGPL software on this card, for no charge beyond the cost of providing it: open an issue at the project's
+GitHub page. See pocket-ui-info/SOURCE-OFFER.txt.
+
+ROCKNIX @ROCKNIX_TAG@, including the kernel and its patches:
+  https://github.com/ROCKNIX/distribution/tree/@ROCKNIX_TAG@
+  tag @ROCKNIX_TAG@, commit @ROCKNIX_COMMIT@
+pocket-ui, pocket-core and the scripts that make this image: @POCKET_UI_SOURCE@
+  (scripts/make-image-family.sh --family RK3326 rebuilds this image from the ROCKNIX release above;
+  scripts/check-image-family.sh checks it).

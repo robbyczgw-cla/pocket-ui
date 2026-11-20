@@ -427,6 +427,7 @@ Moonlight didn't start ({s}).	Moonlight ist nicht gestartet ({s}).
 
 # --- Performance & fan
 Performance & fan	Leistung & Lüfter
+A choice saved in the pause menu (Options › Speed, rumble, fan) wins over this one.	Eine im Pausenmenü gespeicherte Wahl (Optionen › Tempo, Vibration, Lüfter) geht dieser vor.
 Now	Jetzt
 now	jetzt
 
@@ -1263,7 +1264,7 @@ Screen frames on every console	Bildschirmrahmen auf jeder Konsole
 Auto frames the picture on the home consoles too, not only on the handhelds.	Auto rahmt das Bild auch auf den Heimkonsolen ein, nicht nur auf den Handhelds.
 Continue your last game	Letztes Spiel fortsetzen
 When the Pocket starts, the game you played last continues where you left off.	Beim Start des Pocket geht das zuletzt gespielte Spiel dort weiter, wo du es verlassen hast.
-Continue where I quit	Dort fortsetzen, wo ich aufgehört habe
+Continue where I quit	Weiter, wo ich aufgehört habe
 On: Quit keeps the moment and the next start continues there. Off: only the game's own saves stay.	An: Beenden behält den Moment und der nächste Start macht dort weiter. Aus: Nur die eigenen Spielspeicher bleiben.
 Motion	Bewegung
 Selections glide and pages slide in. Off shows every press at once, without animation.	Auswahlen gleiten, Seiten schieben sich herein. Aus zeigt jeden Druck sofort, ohne Animation.
@@ -1565,6 +1566,7 @@ A on the right (Nintendo) or bottom (Xbox).	A rechts (Nintendo) oder unten (Xbox
 Screen frames	Bildschirmrahmen
 Auto frames on the handhelds, or on every console.	Auto-Rahmen für Handhelds oder jede Konsole.
 Processor speed and fan, in games and in menus.	Prozessortempo und Lüfter, in Spielen und in Menüs.
+Processor speed, in games and in menus.	Prozessortempo, in Spielen und in Menüs.
 Lens, smart shelves, labels, Echoes and versions.	Lens, smarte Regale, Etiketten, Echoes und Versionen.
 Time	Uhrzeit
 Time zone, date and network time.	Zeitzone, Datum und Netzwerkzeit.
@@ -2052,7 +2054,7 @@ Power off?	Ausschalten?
 The next time you switch it on, Android starts, not ROCKNIX. To get ROCKNIX back, start it from the computer again.	Beim nächsten Einschalten startet Android, nicht ROCKNIX. Für ROCKNIX starte es erneut vom Computer.
 The device shuts down.	Das Gerät schaltet sich aus.
 Asking a time server…	Frage einen Zeitserver …
-Synced	Synchronisiert
+Synced	Abgeglichen
 Waiting for a server	Warte auf einen Server
 Time zone	Zeitzone
 Network time	Netzwerkzeit
@@ -4077,7 +4079,11 @@ Decorations	Dekoration
 Slideshow before screen off	Diashow vor dem Abschalten
 Playful cases	Verspielte Hüllen
 Cases click open, cartridges and discs go in with a sound. Menu sounds stay as they are.	Hüllen klicken auf, Module und Discs rasten hörbar ein. Die Menü-Töne bleiben, wie sie sind.
-The game's picture comes on like an old TV when it starts.	Das Bild des Spiels geht beim Start an wie bei einem alten Fernseher.
+The game's picture comes on like an old TV: a dot, a line, the blue channel, then the game.	Das Spielbild geht an wie bei einem alten Fernseher: Punkt, Strich, blauer Kanal, dann das Spiel.
+Old-TV switch-off	Alter Fernseher aus
+Evening TV glow	Fernsehschein am Abend
+After Quit the picture shrinks to a line and a glowing dot, like an old TV.	Nach dem Beenden schrumpft das Bild zu Strich und leuchtendem Punkt, wie bei einem alten Fernseher.
+After dark the room dims a little and the TV's warm light falls on the shelf.	Abends wird der Raum etwas dunkler und das warme Licht des Fernsehers fällt aufs Regal.
 A small old TV on top of the cabinet shows the selected game.	Ein kleiner alter Fernseher oben auf dem Schrank zeigt das gewählte Spiel.
 The TV shows a game you haven't played running live, without sound. Uses more power while it plays; off, nothing extra runs.	Der Fernseher zeigt ein Spiel, das du noch nie gespielt hast, live und ohne Ton. Braucht dabei mehr Strom; aus läuft nichts extra.
 Show your stickers on the cases. Off hides them; they stay on the game's card.	Zeigt deine Sticker auf den Hüllen. Aus blendet sie aus; auf der Spielkarte bleiben sie.
@@ -4087,6 +4093,8 @@ Same developer, series or genre on the info page and the box's back lead to your
 Games you haven't played for a long time, as a row in Curator.	Spiele, die du lange nicht gespielt hast, als Zeile im Curator.
 The room's light follows the time of day: morning sun, evening lamp.	Das Licht im Raum folgt der Tageszeit: Morgensonne, Abendlampe.
 Little things appear on your shelf the more you play.	Je mehr du spielst, desto mehr kleine Dinge tauchen in deinem Regal auf.
+Window	Fenster
+A window on the wall shows the sky as it is now, with something for the season on its sill.	Ein Fenster an der Wand zeigt den Himmel wie gerade draußen, mit etwas zur Jahreszeit auf der Fensterbank.
 When you put the Pocket down for a while, your games show one after another.	Legst du den Pocket eine Weile weg, erscheinen deine Spiele nacheinander.
 Cases spring and wiggle, discs drop into trays, cartridges click in, spines lean as you scroll.	Hüllen federn und wackeln, Discs fallen in die Lade, Module rasten ein, Rücken neigen sich beim Blättern.
 Games you have never played stand in plastic wrap. It tears off the first time you start one.	Spiele, die du noch nie gespielt hast, stehen eingeschweißt in Folie. Beim ersten Start reißt sie ab.
@@ -4527,6 +4535,10 @@ Where I quit	Wo ich aufhörte
 Save & quit	Sichern & Ende
 Next time, A continues from this moment.	Beim nächsten Mal setzt A hier fort.
 Speed, rumble, fan	Tempo, Vibration, Lüfter
+Speed & rumble	Tempo & Vibration
+Fast-forward, rewind, earlier states, the frame rate, rumble, performance and the fan.	Vorspulen, Zurückspulen, frühere Spielstände, Bildrate, Vibration, Leistung und Lüfter.
+Fast-forward, rewind, earlier states, the frame rate, rumble and performance.	Vorspulen, Zurückspulen, frühere Spielstände, Bildrate, Vibration und Leistung.
+Fast-forward, rewind, earlier states, the frame rate and rumble.	Vorspulen, Zurückspulen, frühere Spielstände, Bildrate und Vibration.
 Stickers & labels	Sticker & Etiketten
 # Pause menu → Options: where you are
 Options › Picture	Optionen › Bild
@@ -4589,7 +4601,7 @@ Settings › Look › Text size, Settings › Look › Motion	Einstellungen › 
 # --- Where was I? (the card over a moment continued after a long break)
 Console boot screen	Startbildschirm der Konsole
 A fresh start shows the console's own boot screen. Needs your BIOS file.	Ein neuer Start zeigt den Startbildschirm der Konsole. Braucht deine BIOS-Datei.
-Game Boy, Game Boy Advance and PlayStation games start with their boot screen when nothing is continued. Needs your BIOS file in roms/bios.	Game Boy, Game Boy Advance und PlayStation starten mit ihrem Startbildschirm, wenn nichts fortgesetzt wird. Braucht deine BIOS-Datei in roms/bios.
+Game Boy, Game Boy Advance, PlayStation, Dreamcast, Saturn, Mega-CD and PC Engine CD games start with their boot screen when nothing is continued. Needs your BIOS file in roms/bios.	Game Boy, Game Boy Advance, PlayStation, Dreamcast, Saturn, Mega-CD und PC Engine CD starten mit ihrem Startbildschirm, wenn nichts fortgesetzt wird. Braucht deine BIOS-Datei in roms/bios.
 No boot screen: needs the original {s} in roms/bios	Kein Startbildschirm: braucht die Original-Datei {s} in roms/bios
 Remind me where I was	Erinnere mich, wo ich war
 Zoom in the pause menu	Lupe im Pausenmenü
@@ -5142,7 +5154,7 @@ The download server isn't answering right now. Try again later.	Der Download-Ser
 {s} can't start: this system's emulator is missing. The game itself is fine. Look for an update in Settings › System › Updates.	{s} kann nicht starten: Der Emulator dieses Systems fehlt. Das Spiel selbst ist in Ordnung. Such unter Einstellungen › System › Updates nach einem Update.
 {s} can't start. The game file may be damaged. Copy it to the card again.	{s} kann nicht starten. Die Spieldatei ist vielleicht beschädigt. Kopiere sie noch einmal auf die Karte.
 {s} can't start. The game file may be damaged, or the system needs a file from your own console. Copy the game to the card again, or add the file in Settings › Games › Add games.	{s} kann nicht starten. Die Spieldatei ist vielleicht beschädigt, oder das System braucht eine Datei von deiner eigenen Konsole. Kopiere das Spiel noch einmal auf die Karte oder leg die Datei über Einstellungen › Spiele › Spiele hinzufügen ab.
-{s} can't start. It may need files that aren't on the card. Reinstall it in Ports.	{s} kann nicht starten. Vielleicht fehlen Dateien auf der Karte. Installier es in Ports neu.
+{s} can't start. It may need files that aren't on the card: its card (X) says which. Or reinstall it in Settings › Games › Box art & downloads › PortMaster games.	{s} kann nicht starten. Vielleicht fehlen Dateien auf der Karte: Seine Karte (X) sagt, welche. Oder installier es neu unter Einstellungen › Spiele › Cover & Downloads › PortMaster-Spiele.
 pocket-ui player	pocket-ui-Player
 Which way plays this game: pocket-ui's own player or another emulator app on this device.	Womit dieses Spiel läuft: der eigene Player von pocket-ui oder eine andere Emulator-App auf diesem Gerät.
 Which way plays this console's games: pocket-ui's own player or another emulator app on this device.	Womit die Spiele dieser Konsole laufen: der eigene Player von pocket-ui oder eine andere Emulator-App auf diesem Gerät.
@@ -5257,6 +5269,7 @@ Other browsers need a code; your own Tailscale devices get in without one. Pause
 Every browser needs a code, yours too. Pauses while a game runs.	Jeder Browser braucht einen Code, auch deiner. Pausiert, während ein Spiel läuft.
 RetroAchievements needs the internet, and this handheld has no Wi-Fi.	RetroAchievements braucht Internet, und dieser Handheld hat kein WLAN.
 Or copy your own: Settings › Games › Add games shows how.	Oder kopiere eigene: Einstellungen › Spiele › Spiele hinzufügen zeigt, wie.
+Or copy your own into the ROMs folder, one folder per system (over USB or with a file manager). Settings › Games › Add games lists the folders.	Oder kopiere eigene in den Ordner ROMs, einen Ordner pro System (über USB oder mit einem Dateimanager). Einstellungen › Spiele › Spiele hinzufügen zeigt die Ordner.
 No Wi-Fi	Kein WLAN
 No Wi-Fi here: put box art from a scraper on your computer in a covers folder beside the games, named like each game (roms/gba/covers/Game.png).	Kein WLAN hier: Leg Cover von einem Scraper auf deinem Computer in einen Ordner covers neben den Spielen, benannt wie das jeweilige Spiel (roms/gba/covers/Game.png).
 This handheld has no Wi-Fi, so file sharing can't copy them. Copy them to the folder above the way you add games (Settings › Games › Add games).	Dieser Handheld hat kein WLAN, die Dateifreigabe kann sie also nicht kopieren. Kopiere sie in den Ordner oben, so wie du Spiele hinzufügst (Einstellungen › Spiele › Spiele hinzufügen).
@@ -5305,3 +5318,253 @@ Android lists no other apps with a start icon. Install a game from your app stor
 No Android games on the shelf yet. Press A on a game to put it on the Android shelf.	Noch keine Android-Spiele im Regal. Drück A bei einem Spiel, um es ins Regal Android zu stellen.
 A puts a game on the Android shelf or takes it off. They stand there beside your consoles.	A stellt ein Spiel ins Regal Android oder nimmt es heraus. Dort steht es neben deinen Konsolen.
 {s} didn't start. Android couldn't open the app. It may have been removed.	{s} wurde nicht gestartet. Android konnte die App nicht öffnen. Vielleicht wurde sie entfernt.
+Stylus mode	Stiftmodus
+D-pad mode	Steuerkreuzmodus
+Screen layout	Bildschirmlayout
+Restore the DS buttons and actions.	DS-Tasten und Aktionen zurücksetzen.
+Show the next Nintendo DS screen layout.	Zum nächsten Nintendo-DS-Bildschirmlayout wechseln.
+Switch the D-pad between the game and the DS stylus. In stylus mode, the button mapped to A touches and holds.	Schaltet das Steuerkreuz zwischen Spiel und DS-Stift um. Im Stiftmodus berührt die mit A belegte Taste den Bildschirm; halten zum Ziehen.
+
+# App drawer: a missing or damaged icon still identifies its cell.
+App	App
+Your earlier saved moments use melonDS. Choose melonDS in Runs on to load them. Your in-game save is shared.	Deine früheren gespeicherten Momente verwenden melonDS. Wähle unter „Läuft mit“ melonDS, um sie zu laden. Dein Spielstand im Spiel wird gemeinsam genutzt.
+Saved moments stay with the emulator that made them. Choose melonDS to load existing melonDS moments. In-game saves are shared.	Gespeicherte Momente bleiben bei ihrem Emulator. Wähle melonDS, um bisherige melonDS-Momente zu laden. Spielstände im Spiel werden gemeinsam genutzt.
+This is not a DSperate moment. Existing melonDS moments need melonDS in Runs on.	Dies ist kein DSperate-Moment. Wähle unter „Läuft mit“ melonDS für bisherige melonDS-Momente.
+This moment needs DSperate in Runs on.	Wähle unter „Läuft mit“ DSperate für diesen Moment.
+pocket-ui · {s}	pocket-ui · {s}
+DSperate and melonDS use pocket-ui's pause menu. Saved moments stay with their core; in-game saves are shared.	DSperate und melonDS nutzen das Pausenmenü von pocket-ui. Gespeicherte Momente bleiben bei ihrem Core; Spielstände im Spiel werden gemeinsam genutzt.
+Playing now, {t}	Wird gespielt, {t}
+{s}, playing now, {t}	{s}, wird gespielt, {t}
+Paused, {t}	Pausiert, {t}
+{s}, paused, {t}	{s}, pausiert, {t}
+Completed, {t}	Durchgespielt, {t}
+{s}, completed, {t}	{s}, durchgespielt, {t}
+Dropped, {t}	Abgebrochen, {t}
+{s}, dropped, {t}	{s}, abgebrochen, {t}
+Mode 7	Mode 7
+HD	HD
+HD widescreen	HD Breitbild
+The turning, tilting floors of Super Mario Kart, F-Zero and Pilotwings. HD draws them sharper and plays the game with bsnes-hd instead of Snes9x; HD widescreen also fills a wide screen's sides. Takes effect the next time the game starts.	Die drehenden, kippenden Böden von Super Mario Kart, F-Zero und Pilotwings. HD zeichnet sie schärfer und spielt das Spiel mit bsnes-hd statt Snes9x; HD Breitbild füllt auch die Seiten eines breiten Bildschirms. Gilt, wenn das Spiel das nächste Mal startet.
+The turning, tilting floors of Super Mario Kart, F-Zero and Pilotwings. HD draws them sharper. Takes effect the next time the game starts.	Die drehenden, kippenden Böden von Super Mario Kart, F-Zero und Pilotwings. HD zeichnet sie schärfer. Gilt, wenn das Spiel das nächste Mal startet.
+{n} games in {s} · internal storage	{n} Spiele in {s} · interner Speicher
+{n} games in {s} · SD card	{n} Spiele in {s} · SD-Karte
+1 game in {s} · internal storage	1 Spiel in {s} · interner Speicher
+1 game in {s} · SD card	1 Spiel in {s} · SD-Karte
+{n} systems in {s} · internal storage	{n} Systeme in {s} · interner Speicher
+{n} systems in {s} · SD card	{n} Systeme in {s} · SD-Karte
+1 system in {s} · internal storage	1 System in {s} · interner Speicher
+1 system in {s} · SD card	1 System in {s} · SD-Karte
+{n} games on the SD card	{n} Spiele auf der SD-Karte
+1 game on the SD card	1 Spiel auf der SD-Karte
+{n} systems on the SD card	{n} Systeme auf der SD-Karte
+1 system on the SD card	1 System auf der SD-Karte
+Found on this device: {s}. They play what pocket-ui doesn't; you can change it per system later.	Auf diesem Gerät gefunden: {s}. Sie spielen, was pocket-ui nicht selbst spielt; du kannst das später je System ändern.
+Saturn needs a BIOS: put saturn_bios.bin, sega_101.bin or mpr-17933.bin in ROMs/bios.	Saturn braucht ein BIOS: Lege saturn_bios.bin, sega_101.bin oder mpr-17933.bin in ROMs/bios.
+Saturn needs a BIOS: put saturn_bios.bin, sega_101.bin or mpr-17933.bin in a folder named bios beside your games.	Saturn braucht ein BIOS: Lege saturn_bios.bin, sega_101.bin oder mpr-17933.bin in einen Ordner namens bios bei deinen Spielen.
+Dreamcast plays without a BIOS. For better compatibility, put dc_boot.bin and dc_flash.bin in ROMs/bios.	Dreamcast läuft auch ohne BIOS. Für bessere Kompatibilität lege dc_boot.bin und dc_flash.bin in ROMs/bios.
+Dreamcast plays without a BIOS. For better compatibility, put dc_boot.bin and dc_flash.bin in a folder named bios beside your games.	Dreamcast läuft auch ohne BIOS. Für bessere Kompatibilität lege dc_boot.bin und dc_flash.bin in einen Ordner namens bios bei deinen Spielen.
+PlayStation plays without a BIOS. If a game hangs, put scph5501.bin in ROMs/bios.	PlayStation läuft auch ohne BIOS. Hängt ein Spiel, lege scph5501.bin in ROMs/bios.
+PlayStation plays without a BIOS. If a game hangs, put scph5501.bin in a folder named bios beside your games.	PlayStation läuft auch ohne BIOS. Hängt ein Spiel, lege scph5501.bin in einen Ordner namens bios bei deinen Spielen.
+Emulator apps	Emulator-Apps
+Another app keeps games here. A adds the folder to your shelf; the files stay where they are.	Eine andere App hat hier Spiele. A nimmt den Ordner ins Regal; die Dateien bleiben, wo sie sind.
+Games found on this device. Choose them below, or another folder.	Spiele auf diesem Gerät gefunden. Wähle sie unten oder einen anderen Ordner.
+No games found on this device yet. Choose the folder you put them in, or add games later.	Noch keine Spiele auf diesem Gerät gefunden. Wähle den Ordner, in den du sie gelegt hast, oder füge später Spiele hinzu.
+Everything is ready. Covers and pictures download on unmetered Wi-Fi as you browse; Settings can turn that off.	Alles ist bereit. Beim Stöbern werden Cover und Bilder über WLAN ohne Datenlimit geladen; in den Einstellungen kannst du das ausschalten.
+Add	Hinzufügen
+Get {s}	{s} holen
+Opens the app's official page in your browser. pocket-ui downloads and installs nothing itself.	Öffnet die offizielle Seite der App im Browser. pocket-ui lädt und installiert selbst nichts.
+{n} games in {s}	{n} Spiele in {s}
+{n} games in {s} on the SD card	{n} Spiele in {s} auf der SD-Karte
+1 game in {s}	1 Spiel in {s}
+1 game in {s} on the SD card	1 Spiel in {s} auf der SD-Karte
+{n} systems in {s}	{n} Systeme in {s}
+{n} systems in {s} on the SD card	{n} Systeme in {s} auf der SD-Karte
+1 system in {s}	1 System in {s}
+1 system in {s} on the SD card	1 System in {s} auf der SD-Karte
+RomM server	RomM-Server
+Server	Server
+Not set	Nicht gesetzt
+Pair with QR code	Mit QR-Code koppeln
+Pair with a code	Mit einem Code koppeln
+Refresh the games	Spiele neu laden
+Press A again to unpair	Nochmal A zum Aufheben
+Pair with RomM	Mit RomM koppeln
+Pairing code	Kopplungscode
+Not paired	Nicht gekoppelt
+Paired as {s}	Gekoppelt als {s}
+Something went wrong	Etwas ist schiefgegangen
+Reading the list of games	Spieleliste wird gelesen
+Reading the list of games{s}	Spieleliste wird gelesen{s}
+Asking RomM for a code{s}	RomM wird nach einem Code gefragt{s}
+Asking RomM	RomM wird gefragt
+Getting the game from RomM, once	Spiel wird einmalig von RomM geladen
+3.  Sign in to RomM and approve this Pocket.	3.  Melde dich bei RomM an und bestätige diesen Pocket.
+{n} games in {n2} systems	{n} Spiele in {n2} Systemen
+{n} games in 1 system	{n} Spiele in 1 System
+1 game in 1 system	1 Spiel in 1 System
+Read just now	Gerade gelesen
+Read {n} min ago	Vor {n} Min. gelesen
+Read {n} h ago	Vor {n} Std. gelesen
+Read {n} days ago	Vor {n} Tagen gelesen
+{n} more are for systems this Pocket doesn't play.	{n} weitere sind für Systeme, die dieser Pocket nicht spielt.
+Only the first {n} are on the shelf.	Nur die ersten {n} stehen im Regal.
+Each game downloads the first time you start it, then it stays on the card.	Jedes Spiel wird beim ersten Start geladen und bleibt dann auf der Karte.
+The list of games hasn't been read yet.	Die Spieleliste wurde noch nicht gelesen.
+RomM has no games for the systems this Pocket plays.	RomM hat keine Spiele für die Systeme, die dieser Pocket spielt.
+RomM is a game server you run yourself. Pair this Pocket once, and its games stand on your shelf beside the ones on the card.	RomM ist ein Spiele-Server, den du selbst betreibst. Kopple diesen Pocket einmal, dann stehen seine Spiele in deinem Regal neben denen auf der Karte.
+Your RomM server's address, as you open it in a browser, e.g. 192.0.2.10:8080.	Die Adresse deines RomM-Servers, wie du sie im Browser öffnest, z. B. 192.0.2.10:8080.
+A code appears. Scan it with your phone, sign in to RomM and approve this Pocket. Needs RomM 5.0 or newer.	Ein Code erscheint. Scanne ihn mit dem Handy, melde dich bei RomM an und bestätige diesen Pocket. Braucht RomM 5.0 oder neuer.
+In RomM: your profile › Client API Tokens › Pair. Type the 8-digit code it shows.	In RomM: dein Profil › Client API Tokens › Pair. Tippe den 8-stelligen Code ein, der dort steht.
+In RomM: your profile › Client API Tokens › Pair. The code works once, for 5 minutes.	In RomM: dein Profil › Client API Tokens › Pair. Der Code gilt einmal, für 5 Minuten.
+The address you open RomM at in a browser, e.g. 192.0.2.10:8080 or romm.example.com.	Die Adresse, unter der du RomM im Browser öffnest, z. B. 192.0.2.10:8080 oder romm.example.com.
+Read the list of games on the server again.	Die Spieleliste vom Server neu lesen.
+This Pocket forgets the server. Games you downloaded stay on the card.	Dieser Pocket vergisst den Server. Geladene Spiele bleiben auf der Karte.
+The games on your own RomM server, on the shelf. Each downloads the first time you start it.	Die Spiele deines eigenen RomM-Servers im Regal. Jedes wird beim ersten Start geladen.
+Can't reach your RomM server. Check Wi-Fi and that the server is on.	Dein RomM-Server ist nicht erreichbar. Prüf das WLAN und ob der Server läuft.
+That address answers, but not as a RomM server. Check the address.	Diese Adresse antwortet, aber nicht als RomM-Server. Prüf die Adresse.
+RomM doesn't accept this Pocket any more. Pair it again in Settings › Games › RomM.	RomM nimmt diesen Pocket nicht mehr an. Kopple ihn neu unter Einstellungen › Spiele › RomM.
+Your RomM account may not do this. Ask the server's owner for access.	Dein RomM-Konto darf das nicht. Frag den Besitzer des Servers nach Zugriff.
+RomM doesn't have this game any more. Refresh the list in Settings › Games › RomM.	RomM hat dieses Spiel nicht mehr. Lade die Liste neu unter Einstellungen › Spiele › RomM.
+This RomM is older than 5.0 and can't pair by QR code. Choose Pair with a code.	Dieses RomM ist älter als 5.0 und kann nicht per QR-Code koppeln. Wähl Mit einem Code koppeln.
+RomM didn't accept that code. Codes work once and for 5 minutes: make a new one.	RomM hat den Code nicht angenommen. Ein Code gilt einmal und 5 Minuten lang: Mach einen neuen.
+The pairing was declined in RomM.	Die Kopplung wurde in RomM abgelehnt.
+The code ran out before it was approved. Try again.	Der Code ist abgelaufen, bevor er bestätigt wurde. Versuch es noch einmal.
+Not enough free space: this game needs {s} more.	Nicht genug Platz frei: Dieses Spiel braucht noch {s}.
+The download stopped. Start the game again to go on from where it stopped.	Der Download ist abgebrochen. Starte das Spiel noch einmal, dann geht es dort weiter.
+Download stopped. Start the game again to go on from where it stopped.	Download gestoppt. Starte das Spiel noch einmal, dann geht es dort weiter.
+The download came out the wrong size. Start the game again to fetch it anew.	Der Download hat die falsche Größe. Starte das Spiel noch einmal, dann wird es neu geladen.
+The game can't be written to the card. Check that the card isn't full or locked.	Das Spiel lässt sich nicht auf die Karte schreiben. Prüf, ob die Karte voll oder gesperrt ist.
+RomM answered with an error ({n}). Try again later.	RomM hat mit einem Fehler geantwortet ({n}). Versuch es später noch einmal.
+Type your RomM server's address.	Tippe die Adresse deines RomM-Servers ein.
+An address has no spaces.	Eine Adresse hat keine Leerzeichen.
+The address starts with http:// or https://.	Die Adresse beginnt mit http:// oder https://.
+Type the server's name or address, e.g. 192.0.2.10:8080.	Tippe den Namen oder die Adresse des Servers ein, z. B. 192.0.2.10:8080.
+Or open this page and type the code:	Oder öffne diese Seite und tippe den Code ein:
+From your RomM server	Von deinem RomM-Server
+Talking to RomM	Verbindung mit RomM
+Talking to RomM{s}	Verbindung mit RomM{s}
+How cozy should it be?	Wie gemütlich darf's sein?
+One choice for all the little touches. Each one stays in Settings › Look.	Eine Wahl für alle kleinen Details. Jedes bleibt einzeln unter Einstellungen › Aussehen.
+Plain	Schlicht
+Everything	Alles
+Quick starts, no sounds or decorations: just your games.	Schneller Start, keine Geräusche, keine Deko: nur deine Spiele.
+Cases open, games go in with a sound, the room follows the day.	Hüllen gehen auf, Spiele rasten hörbar ein, der Raum folgt dem Tag.
+All of it, plus a TV in the Cabinet that plays new games.	Alles, dazu ein Fernseher im Schrank, der neue Spiele zeigt.
+Nothing extra. Game connections and progress from your saves stay on.	Nichts extra. Spielverbindungen und Fortschritt aus deinen Spielständen bleiben an.
+Light by time of day, a warm TV glow after dark, case sounds, stickers, printed discs, sealed new games, an old TV switching on and off.	Licht nach Tageszeit, warmes Fernsehlicht am Abend, Hüllen-Geräusche, Sticker, bedruckte Discs, Spiele in Folie, alter Fernseher an und aus.
+RomM	RomM
+Cozy's touches, plus the Cabinet's TV playing games you haven't tried (uses more power).	Alles von Gemütlich, dazu der Fernseher im Schrank, der Spiele zeigt, die du noch nicht probiert hast (braucht mehr Strom).
+Crate	Kiste
+Swap	Tauschen
+Onto the shelf	Ins Regal
+{s} is on the shelf now	{s} steht jetzt im Regal
+{s} goes into the crate for {s2}	{s} kommt für {s2} in die Kiste
+{s} goes onto the shelf	{s} kommt ins Regal
+The crate is empty	Die Kiste ist leer
+Every game is on the shelf.	Alle Spiele stehen im Regal.
+1 game in the crate, the shelf is full	1 Spiel in der Kiste, das Regal ist voll
+{n} games in the crate, the shelf is full	{n} Spiele in der Kiste, das Regal ist voll
+1 game in the crate, 1 place free on the shelf	1 Spiel in der Kiste, 1 Platz im Regal frei
+{n} games in the crate, 1 place free on the shelf	{n} Spiele in der Kiste, 1 Platz im Regal frei
+1 game in the crate, {n} places free on the shelf	1 Spiel in der Kiste, {n} Plätze im Regal frei
+{n} games in the crate, {m} places free on the shelf	{n} Spiele in der Kiste, {m} Plätze im Regal frei
+Shelf space	Regalplatz
+Only so many games on the shelf, the rest in a crate under it. Against the backlog.	Nur so viele Spiele im Regal, der Rest in einer Kiste darunter. Gegen den Spielestau.
+Which games go on the shelf?	Welche Spiele kommen ins Regal?
+The shelf has room for {n} games. The others go into the crate under it: open Crate on Home to swap one out and one in.	Im Regal ist Platz für {n} Spiele. Die anderen kommen in die Kiste darunter: Öffne die Kiste auf Home, um eins raus und eins rein zu tauschen.
+The games I played last	Die zuletzt gespielten
+My favourites	Meine Favoriten
+Into the crate	In die Kiste
+Off the shelf, its place free for another game	Aus dem Regal, sein Platz wird frei für ein anderes Spiel
+{s} is in the crate now	{s} ist jetzt in der Kiste
+Port {s} is taken ({s2}).	Port {s} ist belegt ({s2}).
+Two saves: choose	Zwei Spielstände: wählen
+Did not answer right	Hat falsch geantwortet
+Paired with {s}.	Gekoppelt mit {s}.
+Pocket Sync	Pocket Sync
+Wrong code, or it no longer shows one.	Falscher Code, oder er zeigt keinen mehr.
+That Pocket did not answer.	Der Pocket hat nicht geantwortet.
+Not paired.	Nicht gekoppelt.
+Not listening. {s}	Lauscht nicht. {s}
+Off. Switch it on on every Pocket that should share saves.	Aus. Schalte es auf jedem Pocket ein, der Spielstände teilen soll.
+No Pocket paired yet. Choose Pair a Pocket on this one and on the other.	Noch kein Pocket gekoppelt. Wähle „Pocket koppeln“ auf diesem und auf dem anderen.
+Only your Pockets on the same Wi-Fi or in your Tailscale. No cloud.	Nur deine Pockets im selben WLAN oder in deinem Tailscale. Keine Cloud.
+Pair a Pocket	Pocket koppeln
+This Pocket's code	Code dieses Pockets
+Valid for {s} more, for one Pocket.	Noch {s} gültig, für einen Pocket.
+Pockets nearby showing a code	Pockets in der Nähe mit Code
+Looking… Open Pair a Pocket on the other Pocket too, on the same Wi-Fi.	Suche … Öffne „Pocket koppeln“ auch auf dem anderen Pocket, im selben WLAN.
+Pick the other Pocket and type its code.	Anderen Pocket wählen, Code eingeben.
+The code {s} shows	Der Code, den {s} zeigt
+Up and Down change the digit, Left and Right move. A pairs. Five wrong tries and the code is gone.	Hoch und Runter ändern die Ziffer, Links und Rechts wechseln die Stelle. A koppelt. Nach fünf falschen Versuchen ist der Code weg.
+Keep saves the same on your other Pockets, without a computer.	Spielstände auf deinen anderen Pockets gleich halten, ohne Computer.
+Sync with my Pockets	Mit meinen Pockets abgleichen
+X again: forget	X noch mal: vergessen
+Saves go to your other Pockets after a game. No account.	Spielstände gehen nach dem Spiel an deine Pockets.
+Open it on both, then type one's code on the other.	Auf beiden öffnen, dann den Code des einen am anderen eingeben.
+Switch it on first.	Schalte es zuerst ein.
+A syncs now. X forgets this Pocket: it needs pairing again.	A: jetzt abgleichen. X: vergessen, dann neu koppeln.
+Sync now	Jetzt abgleichen
+Type its code	Code eingeben
+Digit	Ziffer
+Place	Stelle
+In step	Gleich
+Not synced yet	Noch nicht abgeglichen
+Not reachable	Nicht erreichbar
+Playing a game	Spielt gerade
+Pair again	Neu koppeln
+Syncing…	Gleicht ab …
+New save from {s}.	Neuer Spielstand von {s}.
+{s} new saves from {s2}.	{s} neue Spielstände von {s2}.
+Save given to {s}.	Spielstand an {s} gegeben.
+1 save did not sync	1 Spielstand nicht abgeglichen
+{n} saves did not sync	{n} Spielstände nicht abgeglichen
+Not reachable since {s}	Nicht erreichbar seit {s}
+Not reachable since yesterday	Nicht erreichbar seit gestern
+Not reachable for {n} days	Seit {n} Tagen nicht erreichbar
+To {s}	An {s}
+With {s} at {s2}	Mit {s} um {s2}
+With {s}, {t}	Mit {s}, {t}
+New save from {s}	Neuer Spielstand von {s}
+Save given to {s}	Spielstand an {s} gegeben
+Not synced with {s}: pair again	Nicht abgeglichen mit {s}: neu koppeln
+Not synced with {s}: it did not answer right	Nicht abgeglichen mit {s}: falsche Antwort
+1 save not synced with {s}	1 Spielstand nicht mit {s} abgeglichen
+{n} saves not synced with {s}	{n} Spielstände nicht mit {s} abgeglichen
+A: how it stands, its last saves. X: forget it.	A: Stand und letzte Spielstände. X: vergessen.
+Last saves	Letzte Spielstände
+None yet. A syncs now.	Noch keine. A gleicht jetzt ab.
+None yet. Switch Pocket Sync on first.	Noch keine. Schalte Pocket Sync zuerst ein.
+From {s}	Von {s}
+What Pocket Sync syncs	Was Pocket Sync abgleicht
+What goes over, and what not yet.	Was mitkommt und was noch nicht.
+Which Pockets	Welche Pockets
+Each Pocket	Jeder Pocket
+The saves inside your games: battery saves, the cartridge clock and PS1 memory cards beside your games. The same game under another file name is found by its contents.	Die Spielstände in deinen Spielen: Batterie-Spielstände, die Spieluhr und PS1-Memory-Cards neben deinen Spielen. Dasselbe Spiel unter anderem Dateinamen wird an seinem Inhalt erkannt.
+Continue moments and save states, play time, favourites, stickers and notes, saves of PS2, GameCube, Wii and 3DS, BIOS files.	Fortsetzen-Momente und Save States, Spielzeit, Favoriten, Sticker und Notizen, Spielstände von PS2, GameCube, Wii und 3DS, BIOS-Dateien.
+Pockets with pocket-ui OS, pocket-ui on the TrimUI Brick and on dArkOS, and pocket-ui for Android, on the same Wi-Fi or in your Tailscale.	Pockets mit pocket-ui OS, pocket-ui auf dem TrimUI Brick und auf dArkOS sowie pocket-ui für Android, im selben WLAN oder in deinem Tailscale.
+Pockets with pocket-ui OS, pocket-ui on the TrimUI Brick and on dArkOS, and pocket-ui for Android.	Pockets mit pocket-ui OS, pocket-ui auf dem TrimUI Brick und auf dArkOS sowie pocket-ui für Android.
+A paired Pocket is listed by its model. Nothing is overwritten when you played on both: you choose.	Ein gekoppelter Pocket steht mit seinem Modell in der Liste. Hast du auf beiden weitergespielt, wird nichts überschrieben: Du wählst.
+Power lights	Betriebslämpchen
+Handheld switch-on	Handheld einschalten
+A handheld's power light shows your battery like the real one and blinks when you save.	Das Betriebslämpchen eines Handhelds zeigt deinen Akku wie beim echten und blinkt beim Speichern.
+A handheld's screen comes on and goes off like the real one: a Game Boy's green glow, a PSP's soft fade.	Der Bildschirm eines Handhelds geht an und aus wie beim echten: das grüne Leuchten des Game Boy, das weiche Einblenden der PSP.
+# --- Photos of big moments: the album in a game's case (album.rs, album_paint.rs)
+Photos	Fotos
+Look closer	Ansehen
+Delete this photo?	Dieses Foto löschen?
+Photo deleted	Foto gelöscht
+Couldn't delete the photo: is the SD card read-only?	Foto nicht gelöscht: Ist die SD-Karte schreibgeschützt?
+Photos of big moments	Fotos großer Momente
+Badge {n}	{n}. Orden
+{s} reached Lv. {n}	{s} erreicht Lv. {n}
+Agahnim beaten	Agahnim besiegt
+No photos yet. When your save shows a new badge, a boss beaten or a new level, a photo of that moment lands here.	Noch keine Fotos. Zeigt dein Spielstand einen neuen Orden, einen besiegten Boss oder ein neues Level, landet hier ein Foto von diesem Moment.
+No photos yet. pocket-ui takes them for games whose save it can read, and this one isn't among them yet.	Noch keine Fotos. pocket-ui macht sie bei Spielen, deren Spielstand es lesen kann, und dieses gehört noch nicht dazu.
+No photos yet. Photos of big moments are off: Settings › Screen & sound.	Noch keine Fotos. Fotos großer Momente sind aus: Einstellungen › Bildschirm & Ton.
+No photos yet. They come from your saves, and Progress from saves is off: Settings › Look › Cozy extras.	Noch keine Fotos. Sie kommen aus deinen Spielständen, und Fortschritt aus Spielständen ist aus: Einstellungen › Aussehen › Gemütliche Extras.
+New	Neu
+Also in play	Auch im Spiel
+On: photos are taken quietly. When you quit, they slide into the game's case: Down on its box opens it.	An: Fotos werden still gemacht. Beim Beenden rutschen sie in die Hülle des Spiels: Unten auf seiner Box öffnet sie.
+Off. On, a photo when your save shows a new badge, a boss beaten or a new level, kept in the game's case.	Aus. An: ein Foto, wenn dein Spielstand einen neuen Orden, einen besiegten Boss oder ein neues Level zeigt, in der Hülle des Spiels.
+Also in play: a soft flash and the photo out of the screen's edge while you play. It goes into the game's case too.	Auch im Spiel: ein sanfter Blitz und das Foto aus dem Bildschirmrand, während du spielst. Es kommt auch in die Hülle des Spiels.

@@ -326,7 +326,7 @@ fn chosen(ctx: &Ctx, cfg: &Cfg, emu_key: &str, core_key: &str, base: &Runner) ->
     let core = cfg.get(core_key);
     match emu {
         // pocket-core with one of its cores that es_systems.cfg lists for it (the TrimUI Brick card: mGBA beside gpSP); else its own.
-        Some(POCKET_CORE) => match core.filter(|c| emulator(ctx.emulators, POCKET_CORE).is_some_and(|e| e.cores.iter().any(|x| x == c))) {
+        Some(POCKET_CORE) => match core.filter(|c| ctx.pocket_cores.contains(c) || emulator(ctx.emulators, POCKET_CORE).is_some_and(|e| e.cores.iter().any(|x| x == c))) {
             Some(c) if ctx.pocket_core.is_some() => Some(Runner::new(POCKET_CORE, c)),
             _ => ctx.pocket(),
         },
@@ -454,6 +454,12 @@ pub fn choices(ctx: &Ctx) -> Vec<Runner> {
     if let (Some(p), true) = (ctx.pocket(), ctx.file_ok) {
         v.push(p);
     }
+    if ctx.pocket_core.is_some() && ctx.file_ok {
+        for core in ctx.pocket_cores {
+            let r=Runner::new(POCKET_CORE,core);
+            if !v.contains(&r) {v.push(r);}
+        }
+    }
     // es_systems.cfg may list pocket-core's own cores too (the TrimUI Brick card: gpSP and mGBA for GBA); each runner once.
     for r in es_pairs(ctx.emulators) {
         if !v.contains(&r) {
@@ -572,6 +578,7 @@ pub fn core_label(core: &str) -> String {
         "ppsspp" => "PPSSPP",
         "flycast" => "Flycast",
         "flycast2021" => "Flycast 2021",
+        "dsperate" => "DSperate",
         "melondsds" => "melonDS DS",
         "melonds" => "melonDS",
         "desmume" => "DeSmuME",
@@ -668,6 +675,9 @@ pub fn label(r: &Runner, emulators: &[EsEmulator]) -> String {
 
 /// What the choice means in pocket-ui, one or two short sentences for the page.
 pub fn note(r: &Runner, system: &str) -> String {
+    if system=="nds"&&r.kind()==Kind::PocketCore {
+        return "Saved moments stay with the emulator that made them. Choose melonDS to load existing melonDS moments. In-game saves are shared.".into();
+    }
     match r.kind() {
         // ScummVM, PICO-8, TIC-80: pocket-core runs them without save states, so no slots and no continuing
         // (`hostsys::HostSystem::no_states`, the pause menu's line: `pause_saves`).
@@ -1206,6 +1216,17 @@ pub fn write_in_background(edits: Vec<(String, Option<String>)>) {
 mod tests {
     use super::*;
     use crate::testutil::TestDir;
+
+    #[test]
+    fn ds_choices_and_per_game_override_do_not_depend_on_the_cards_old_list() {
+        let ctx=Ctx {system:"nds",emulators:&[],pocket_core:Some("dsperate"),pocket_cores:crate::ds::CORES,file_ok:true,fell_back:false,default_override:None};
+        let choices=choices(&ctx);
+        assert!(choices.contains(&Runner::new(POCKET_CORE,"dsperate")));
+        assert!(choices.contains(&Runner::new(POCKET_CORE,"melondsds")));
+        let cfg=Cfg::parse("nds.emulator=pocket-core\nnds.core=dsperate\nnds[\"Game.nds\"].emulator=pocket-core\nnds[\"Game.nds\"].core=melondsds");
+        assert_eq!(resolve(&ctx,&cfg,Some("Game.nds")).runner,Runner::new(POCKET_CORE,"melondsds"));
+        assert_eq!(resolve(&ctx,&cfg,Some("Other.nds")).runner,Runner::new(POCKET_CORE,"dsperate"));
+    }
 
     #[test]
     fn jeanne_boots_with_standalone_by_default_but_keeps_explicit_runner_choices() {

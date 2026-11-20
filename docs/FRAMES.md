@@ -83,12 +83,16 @@ Details that need room (lines, grilles, slits, knobs, dial, antenna, hinge, notc
 where their band is too narrow, so Integer at GBA 5x (16 px at the sides) still gets a clean frame.
 
 ### The live power light (`src/frame_led.rs`)
-Brick, Pocket slim, Clamshell, Wide, Gloss and Swan put a power light where they have room
-(`Bezel::led`): green above 20 % battery, red at or below 20 %, a slow blink (1 s on, 1 s off) at or
-below 5 %, and a flash (450 ms, brighter and with a wider halo, in three steps) after a slot save or an
-auto save (`pocket_core.rs`: `save_slot`, `save_auto` → `Renderer::flash_frame_light`). A save from the
-pause menu happens while nothing is drawn, so the flash starts with the next frame drawn, as the game
-comes back. Without a battery (desktop, virtual device without its mock) it is steady green.
+Brick, Pocket slim, Clamshell, Wide, Gloss, Swan and the Handheld lens put a power light where they have room
+(`Bezel::led`), each as the handheld it is shaped after (`frame_led::Model::of`): Brick and Pocket slim red, dimming
+when low (the Game Boy's); Wide, Clamshell and Swan green, red when low (GBA, SP); Gloss green, blinking orange when
+low (PSP); the lens red, flashing when low (Game Gear, Lynx). Low is the "Battery low" warning's level
+(`frame_led::LOW` = `low_battery::WARN_AT`, 5 %); a blink is 0.5 s on, 0.5 s off. A slot save or an auto save
+blinks it twice (`frame_led::save_blink_level`, 360 ms, brighter and with a wider halo; `pocket_core.rs`:
+`save_slot`, `save_auto` → `Renderer::flash_frame_light`). A save from the pause menu happens while nothing is drawn,
+so the blink starts with the next frame drawn, as the game comes back. Without a battery (desktop, virtual device
+without its mock) it is steady. Power lights off (Cozy extras; pocket-ui sets `POCKET_POWER_LIGHTS=0`): the light
+stays as the frame is drawn, steadily on.
 - The frame is still drawn once per size and cached. With it the generator keeps a copy of the light's
   square (about 6 light radii each way, ≤ 66 × 66 px) without the light (`frame_led::capture`).
 - `bezel::Layer::draw` asks `frame_led::Clock` what the light shows (time arithmetic per frame; the

@@ -55,7 +55,9 @@ pub fn window_start(sel: usize, visible: usize, len: usize) -> usize {
 /// The status corner (time, Wi-Fi while connected, battery) in a pill at the top right of a page; returns the pill's
 /// left edge.
 pub fn status_pill(c: &mut Canvas, text: &mut Text, corner: &Corner) -> i32 {
-    let pill = crate::status_corner::Pill { right: c.w - PAD, top: PAD, h: PILL - 20, px: SMALL, pad: BTN_PAD };
+    let pill = crate::status_corner::Pill { right: c.w - PAD, top: kit::header_top(c.h), h: kit::header_pill(c.h), px: SMALL, pad: BTN_PAD };
+    // For tests/brick_proportions.rs: the header's band, from the top edge to where the rows may start.
+    crate::shares::mark("header", 0, 0, c.w, kit::header_bottom(c.h));
     pill.paint(c, text, corner, pal().pill, pal().soft)
 }
 
@@ -68,7 +70,7 @@ pub fn trouble_line(c: &mut Canvas, text: &mut Text, line: &str) -> i32 {
     let px = type_scale::px(SMALL) as i32;
     let line_h = px * 4 / 3;
     // Close under the title (it has no pill since 0.2), so the rows keep nearly their normal pitch below.
-    let first = PAD + PILL + px * 2 / 3;
+    let first = kit::header_bottom(c.h) + px * 2 / 3;
     c.disc(x + 8, first - px * 3 / 10, 8, crate::palette::ALERT);
     for (i, l) in lines.iter().enumerate() {
         text.draw(c, Face::Body, SMALL, x + 28, first + i as i32 * line_h, 0xffffff, l);
@@ -175,7 +177,9 @@ pub fn paint_main(c: &mut Canvas, text: &mut Text, v: &MainPage) -> MainOut {
     // The game's name across the top as the page's plain title, as on Options (`sheet_header`): no paper under it,
     // so only the selected row looks selected (taste pass 0.2: a paper band read as a second selection). The menu
     // is dark in both appearances.
+    // The title's band: `PAD` over it and `PILL` high, in 960's share of a shorter screen (`kit::chrome`).
     let (pad, pill) = (PAD, PILL);
+    let (band_top, band) = (kit::header_top(c.h), kit::chrome(PILL, c.h));
     let title_w = c.w - 2 * pad;
     // Retro (`retro`): the title in a window across the top, the rows in a window at the left with an icon each.
     let retro = retro::on();
@@ -191,7 +195,7 @@ pub fn paint_main(c: &mut Canvas, text: &mut Text, v: &MainPage) -> MainOut {
             let beside = (room - title_need - 40).clamp(room * 2 / 5, room * 3 / 5);
             let lines = text.wrap_prose_at_most(Face::Body, SMALL, line, beside, 2);
             let line_h = type_scale::line(SMALL, 4);
-            let mid = pad + pill / 2 + type_scale::mid(SMALL) - (lines.len() as i32 - 1) * line_h / 2;
+            let mid = band_top + band / 2 + type_scale::mid(SMALL) - (lines.len() as i32 - 1) * line_h / 2;
             let mut widest = 0;
             for (k, l) in lines.iter().enumerate() {
                 widest = widest.max(text.width(Face::Body, SMALL, l));
@@ -201,19 +205,20 @@ pub fn paint_main(c: &mut Canvas, text: &mut Text, v: &MainPage) -> MainOut {
         } else {
             let line = text.fit(Face::Body, SMALL, line, room * 3 / 5);
             room -= text.width(Face::Body, SMALL, &line) + 40;
-            text.draw_right(c, Face::Body, SMALL, pad + title_w - BTN_PAD, pad + pill / 2 + type_scale::mid(SMALL), pal().dust, &line);
+            text.draw_right(c, Face::Body, SMALL, pad + title_w - BTN_PAD, band_top + band / 2 + type_scale::mid(SMALL), pal().dust, &line);
         }
     }
     // Title 50, as every page's. A game's name is its own: never translated.
     text.literal(|text| {
         let fitted = text.fit(Face::Title, 50, title, room);
-        text.draw(c, Face::Title, 50, pad + BTN_PAD, pad + pill / 2 + type_scale::mid(50), pal().chalk, &fitted);
+        text.draw(c, Face::Title, 50, pad + BTN_PAD, band_top + band / 2 + type_scale::mid(50), pal().chalk, &fitted);
     });
     // Saves that don't reach the card: said under the title on every row (`app_save_trouble`); the rows start below.
     let below_title = match v.trouble {
         Some(line) => trouble_line(c, text, line),
-        None => pad + pill,
+        None => band_top + band,
     };
+    crate::shares::mark("header", 0, 0, c.w, band_top + band);
 
     // Items from 24 px under the title, on the sheet's grid as every Settings and Options list (no longer centred
     // on the screen with a gap of its own); the selected one sits in a paper pill as wide as its text. A long menu
@@ -221,7 +226,7 @@ pub fn paint_main(c: &mut Canvas, text: &mut Text, v: &MainPage) -> MainOut {
     // Retro: its window's frame (four frame pixels above and below the rows) and a gap stay clear of the hints too;
     // six rows in Spanish Large ran into the hint bar on 1024x768.
     let frame_room = if retro { 6 * retro::U } else { 0 };
-    let step = pill.min((c.h - pad - pill - below_title - 24 - frame_room) / v.rows.len().max(1) as i32);
+    let step = pill.min((c.h - band_top - band - below_title - 24 - frame_room) / v.rows.len().max(1) as i32);
     let top = below_title + 24;
     // Retro: the rows' window and the room its icons take before each name. The window is as wide as its longest
     // name with its value at rest needs (Load: the longest of its stops, so it doesn't jump while stepping), at
@@ -317,7 +322,7 @@ pub fn paint_main(c: &mut Canvas, text: &mut Text, v: &MainPage) -> MainOut {
         // The strip borrows its height from the picture. Together they still need room for two note lines
         // before the hint pill (native 1024x768 with German/Large otherwise hides the save's age).
         let note_tail = 48 + 34 + type_scale::line(SMALL, 8) + type_scale::px(SMALL) as i32 / 3 + 12;
-        let (top, bottom) = (pad + PILL + 16, c.h - pad - PILL);
+        let (top, bottom) = (kit::header_bottom(c.h) + 16, crate::kit::hint_bar_top(c.h));
         let hh = hh.min((bottom - top - 2 * r - note_tail).max(1));
         // Under the picture the slots (`app_save_media`): the slim row in the dots' 28 px, or with "Memory card in
         // the pause menu" the medium, for which the picture gives up its height but those 28 px; the note and
@@ -338,6 +343,7 @@ pub fn paint_main(c: &mut Canvas, text: &mut Text, v: &MainPage) -> MainOut {
             c.round_rect(ox, oy, hw + 2 * r, hh + 2 * r, r * 2, 0x262626);
         }
         c.rect(ox + r, oy + r, hw, hh, 0x000000);
+        crate::shares::mark("pause-preview", ox + r, oy + r, hw, hh);
         match win.picture {
             Some(img) => {
                 // The picture keeps its shape inside the window.
@@ -461,11 +467,11 @@ pub struct OptionsOut {
 pub fn picture_page(text: &mut Text, w: i32, h: i32, max_rows: usize, descs: &[&str]) -> (usize, preview::Layout) {
     // The explanation stands beside the hint pill, in the column left of it, its last line on the pill's
     // (`kit::footer`); the longest of the group sets the room.
-    let pill_x = w - PAD - kit::pill_width(text, w, VALUE_HINTS);
+    let pill_x = w - PAD - kit::pill_width(text, (w, h), VALUE_HINTS);
     let most = if preview::small_screen(h) { preview::SMALL_SCREEN_LINES } else { 5 };
     let lines = descs.iter().map(|d| kit::footer_lines(text, d, w, pill_x, most).len()).max().unwrap_or(1);
     let foot = h - kit::footer_baseline(h) + SMALL as i32 - type_scale::line(SMALL, 10);
-    preview::picture_page_over((w, h), PAD, foot, PAD + PILL + 12, max_rows, lines, SMALL)
+    preview::picture_page_over((w, h), PAD, foot, kit::header_bottom(h) + 12, max_rows, lines, SMALL)
 }
 
 /// Options screens in NextUI's layout: a list of rows with the value at the right; the selected row is one sheet of
@@ -482,9 +488,9 @@ pub fn paint_options(c: &mut Canvas, text: &mut Text, hits: &mut HitMap, v: &Opt
     // the title, not a small line over it.
     if let Some(h) = v.heading {
         let h = text.fit(Face::Title, 50, h, pill_left - 24 - (pad + BTN_PAD));
-        text.draw(c, Face::Title, 50, pad + BTN_PAD, pad + 58, pal().chalk, &h);
+        text.draw(c, Face::Title, 50, pad + BTN_PAD, kit::header_title(c.h), pal().chalk, &h);
     }
-    let mut top = pad + PILL + 12;
+    let mut top = kit::header_bottom(c.h) + 12;
     let right = c.w - pad;
     // Counts are information, not part of the title: Retro's wider title face must not hide the points.
     if let Some(counts) = v.counts {
@@ -499,7 +505,7 @@ pub fn paint_options(c: &mut Canvas, text: &mut Text, hits: &mut HitMap, v: &Opt
     // of Settings (`kit::footer`); the hints say what B, A and Left/Right do here.
     let desc = v.footer.map(str::to_string).unwrap_or_else(|| rows.get(sel).map(|r| r.desc.clone()).unwrap_or_default());
     let hints = hints_for(rows.get(sel), v.explanation);
-    let pill_x = c.w - PAD - kit::pill_width(text, c.w, hints);
+    let pill_x = c.w - PAD - kit::pill_width(text, (c.w, c.h), hints);
     // Long lists (a core's options) scroll; the explanation below keeps the room the page's tallest explanation takes
     // (`list_bottom`), up to eight lines: the list shows fewer rows rather than cut one (a long emulator line with its
     // restart note in Large text, 17.11.2026), and no more room than that: five lines kept under every list left a
@@ -575,7 +581,7 @@ pub fn paint_options(c: &mut Canvas, text: &mut Text, hits: &mut HitMap, v: &Opt
 fn list_bottom(text: &mut Text, w: i32, h: i32, rows: &[OptRow], shown: (&str, &[(&str, &str)])) -> (i32, usize) {
     // The top of `d`'s capitals painted in at most `most` lines beside `hints`, and how many lines it takes.
     let mut top_of = |d: &str, hints: &[(&str, &str)], most: usize| {
-        let pill_x = w - PAD - kit::pill_width(text, w, hints);
+        let pill_x = w - PAD - kit::pill_width(text, (w, h), hints);
         let lines = kit::footer_lines(text, d, w, pill_x, most).len();
         let px = kit::footer_px(text, d, pill_x);
         (kit::footer_baseline(h) - (lines as i32 - 1) * type_scale::line(px, 10) - 2 * type_scale::mid(px), lines)

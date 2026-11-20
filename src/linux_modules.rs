@@ -57,6 +57,7 @@ pub mod boot_fade;
 /// Settings → Playing → Console boot screen: a fresh start runs the console's own boot screen (the player's BIOS file).
 pub mod boot_screen;
 pub mod crt_on;
+pub mod lcd_on;
 pub mod eject;
 /// A start that failed: the medium comes back out, the case goes back on the shelf, one friendly sentence (`start_failed`).
 pub mod start_failed;
@@ -65,6 +66,9 @@ pub mod insert_rig;
 pub mod insert_scene;
 pub mod playful;
 pub mod lived_in;
+pub mod shelf_space;
+pub mod crate_scene;
+pub mod scene_check;
 pub mod sticker_press;
 pub mod text_fallback;
 pub mod latinise;
@@ -85,6 +89,8 @@ pub mod report_phone;
 pub mod report;
 pub mod palette;
 pub mod kit;
+/// Where a page's main pictures stand, for tests/brick_proportions.rs (off unless POCKETUI_SHARES is set).
+pub mod shares;
 /// What a frame offers the D-pad, for tests/nav_explorer.rs (off unless POCKETUI_NAV_PROBE is set).
 pub mod nav_probe;
 /// Where the UI is, one line in /tmp/pocket-ui.status for agents and test helpers (docs/DEVICE-TESTS.md).
@@ -95,6 +101,10 @@ pub mod setup;
 pub mod features;
 pub mod feature_previews;
 pub mod covers;
+/// RomM as a source of games: pairing, the server's list on the shelf, a game's download at its first start (docs/ROMM.md).
+pub mod romm;
+pub mod romm_net;
+pub mod romm_page;
 pub mod auto_covers;
 pub mod game_pictures;
 pub mod picture_cycle;
@@ -244,8 +254,11 @@ pub mod device;
 pub mod gamma;
 pub mod night_light;
 pub mod room_light;
+pub mod tv_glow;
 pub mod room_deco;
 pub mod room_props;
+/// The window on the room's wall: the sky now and the season on its sill (Cozy extras → Window).
+pub mod room_window;
 pub mod osd;
 pub mod fn_keys;
 pub mod mako_osd;
@@ -296,6 +309,12 @@ pub mod rom_id;
 /// (`case_knows`), and the files, cache and thread behind it (`case_knows_read`).
 pub mod case_knows;
 pub mod case_knows_read;
+/// Photos of big moments in the game's case, taken when its save shows a step (`album`).
+pub mod album;
+/// Painting it in the open case (`album_paint`).
+pub mod album_paint;
+/// The moment a photo is taken, over the running game: flash, the photo out of the screen's edge (`album_eject`).
+pub mod album_eject;
 /// Pictures for it from the player's own ROM (`case_knows_art`): the team's icons and the badges.
 pub mod case_knows_art;
 /// PlayStation discs recognised by the serial on the disc: the Redump name for covers, pictures and the game facts
@@ -318,6 +337,8 @@ pub mod wiki_text;
 pub mod sync;
 pub mod moonlight;
 pub mod sync_page;
+/// Settings > Connections > Pockets: the page of Pocket-to-Pocket sync (docs/SYNC-OWN.md).
+pub mod pocket_sync_page;
 /// Save conflicts from Syncthing: found, tied to their games, one version kept and the others moved aside.
 pub mod sync_conflicts;
 pub mod sync_conflict_page;
@@ -465,6 +486,10 @@ pub mod document_art;
 pub mod android_cores;
 /// Which way a game starts on Android (our player, a core to download, another app), for the Mobile and the handheld view.
 pub mod play_route;
+/// Android's first start, shared by both views: games folders of other apps, emulator apps, missing BIOS.
+pub mod android_first_start;
+/// "How cozy should it be?": the first start's cozy levels (Plain, Cozy, Everything) and their page.
+pub mod cozy_level;
 #[cfg(target_os = "android")]
 pub mod android_core_run;
 pub mod play_route_cfg;

@@ -278,6 +278,8 @@ enum Step {
     /// "Send from your phone" (Y on Add games): its upload server runs while this step is shown (`phone_upload`).
     Phone(Box<crate::phone_upload_page::PhonePage>),
     Remote,
+    /// The first start's last page, after the look: "How cozy should it be?" (`cozy_level`), the cozy switches together.
+    Cozy { sel: usize },
     Done,
 }
 
@@ -629,6 +631,20 @@ pub struct Setup {
     switches: Switches,
     later: Vec<String>,
     tour_changed: bool,
+    /// Android's first start (`android_first_start`): the emulator apps found are taken when "Your games" is left, unless
+    /// their row was switched off.
+    android_apps: bool,
+    /// The apps to take, once (`take_android_apps`).
+    android_apps_taken: Option<Vec<crate::android_first_start::AppOffer>>,
+    /// A found games folder A took, once (`take_android_folder`), and every one taken (they leave the rows).
+    android_folder: Option<PathBuf>,
+    android_folders_taken: Vec<PathBuf>,
+    /// An app's official page A asked for (`take_android_page`).
+    android_page: Option<&'static str>,
+    /// The level "How cozy should it be?" was left with, once (`take_cozy`).
+    cozy_chosen: Option<crate::cozy_level::CozyLevel>,
+    /// Settings › Look › Lived-in shelf as the app has it (`with_lived_in`): the cozy page opens on the level it stands at.
+    lived_in: bool,
 }
 
 #[derive(Clone, Debug)]
@@ -709,6 +725,11 @@ impl Setup {
     }
 
     /// Every system pocket-ui can start, for the grid of the games step.
+    pub fn with_lived_in(mut self, on: bool) -> Self {
+        self.lived_in = on;
+        self
+    }
+
     pub fn with_catalog(mut self, all: Vec<SysInfo>) -> Self {
         self.catalog = all;
         self
@@ -865,18 +886,53 @@ impl Setup {
     }
 }
 
-/// Size of a look's preview in the look step: the 1240x1080 shelf at 50 %.
-pub const LOOK_PREVIEW: (i32, i32) = (620, 470);
-
-/// The preview's size in use on a `screen` (w, h): `LOOK_PREVIEW` on the Mini V2's 1240x1080, or 46 % of the shelf
-/// with larger text (Settings → Text size), which needs the room under it for the look's name and the two rows of
-/// choices. Another screen keeps its own shape: as tall on 1080 lines (1920x1080: 960x540), and on fewer lines that
-/// much shorter, so the rows under it still fit (1280x960: 560x420; docs/DEVICES.md).
+/// The preview's size in use on a `screen` (w, h), as the app renders it: the one Settings › Look paints
+/// (`look_preview_rect`), the larger of the two; the first start scales it down further.
 pub fn look_preview(screen: (i32, i32)) -> (i32, i32) {
-    let tall = if crate::type_scale::grow(28) > 0 { 420 } else { LOOK_PREVIEW.1 };
+    let (_, _, w, h) = look_preview_rect(screen, false);
+    (w, h)
+}
+
+/// Where the look step paints the shown look's preview on a `screen`: (x, y, w, h). As large as the room between the
+/// subtitle and what stands under it (the look's name and its line; on the first start also the Style, Colours and
+/// Appearance rows and a line under them) above the hint bar, in the screen's own shape, and at most 70 % of the
+/// width, so the neighbours still show at the sides. Under 960 lines the title, the subtitle and the gaps around the
+/// picture are as much closer as the screen is shorter (`look_down`), so the Brick's 1024x768 has the proportions of
+/// the RG35XX Plus's 1280x960 page. Before (2026-11-20, a photo of the Brick: "so much waste of space") it was a
+/// 470-line picture made shorter by every line the screen lacks to 1080: 138x104 on the Brick (58x44 on the first
+/// start) with a third of the page empty under it.
+pub fn look_preview_rect(screen: (i32, i32), first: bool) -> (i32, i32, i32, i32) {
+    use crate::type_scale::{grow, line, mid};
     let (w, h) = (screen.0.max(1), screen.1.max(1));
-    let ph = (tall - (1080 - h).max(0)).max(140);
-    (ph * w / h, ph)
+    let top = look_down(h, 226);
+    // From the picture's foot to the name's baseline (its capitals, then the gap), to the line's, and its descenders.
+    let words = 37 + look_down(h, 25) + grow(50) + 40 + grow(28) + 12;
+    let (below, gap) = if first {
+        // The name, the rows (`paint_look`), and the lines of `paint_look_end`: three on 960 lines and more, one on fewer
+        // (the pointer to more gives way first, `paint_look_end`).
+        let lines = if h >= 960 { 3 } else { 1 };
+        (37 + look_down(h, 25) + grow(50) + 63 + grow(28) + 3 * look_row_step(h) + 10 + mid(24) + (lines - 1) * line(24, 8) + 8, 16)
+    } else {
+        (words, look_down(h, 16))
+    };
+    let room = crate::kit::hint_bar_top(h) - gap - below - top;
+    let ph = room.min(w * 7 / 10 * h / w).max(44);
+    let pw = ph * w / h;
+    ((w - pw) / 2, top, pw, ph)
+}
+
+/// The foot of the first start's dots and Big text key at the top right (`paint_step_count`: from 56, a key up to
+/// about 40 high around the dots' middle).
+const STEP_COUNT_BOTTOM: i32 = 63 + 24;
+
+/// A height of the look step's 960-line design on a screen of `h` lines: as it is on 960 and more, shorter on fewer.
+fn look_down(h: i32, v: i32) -> i32 {
+    v * h.clamp(480, 960) / 960
+}
+
+/// From one row of pills under the look's name to the next.
+fn look_row_step(h: i32) -> i32 {
+    pill_h() + look_down(h, 15)
 }
 
 /// Tiles per row in the games step's grid.
@@ -1248,6 +1304,12 @@ enum FoundRow {
     More,
     Later,
     BoxArt,
+    /// Android: a games folder found where another app keeps them, not read yet (`Setup::android_new_folders`).
+    Folder(u8),
+    /// Android: the emulator apps found for the systems pocket-ui doesn't play itself, a switch.
+    Apps,
+    /// Android: a system with games and no app for it: A opens the app's official page (`android_first_start::APP_DOWNLOADS`).
+    Get(u8),
 }
 
 /// What a touch on Add games does.
@@ -1301,6 +1363,9 @@ fn no_games_way(image_card: bool, games_card: bool, games_drive: bool, card_in_c
         offline_way(false, second_slot, false).1
     }
 }
+
+/// Android: the line over a found games folder's row on "Your games".
+const FOLDER_NOTE: &str = "Another app keeps games here. A adds the folder to your shelf; the files stay where they are.";
 
 /// The Box art row's line on "Your games".
 const BOX_ART_NOTE: &str = "Finds the real box for each game, in the background while you're online. Only a game's name is sent.";
@@ -1368,7 +1433,7 @@ fn stage(step: &Step) -> Option<Only> {
         // Settings > Time is the way to this one on its own.
         // The profiles and the cards are first-start steps; Settings → Tour shows the cards on its own.
         Step::Play { .. } | Step::Cards(_) => Some(Only::Play),
-        Step::Welcome | Step::Zone(_) | Step::Done => None,
+        Step::Welcome | Step::Zone(_) | Step::Cozy { .. } | Step::Done => None,
     }
 }
 
@@ -1378,19 +1443,22 @@ const RECOUNT_AFTER: Duration = Duration::from_secs(3);
 /// How many stages the first start has, for its dots: the welcome with the language, Wi-Fi (the time zone in its place
 /// without a Wi-Fi chip; with Wi-Fi the zone is guessed and only asked inside this stage when the guess is unsure), your
 fn stage_count() -> usize {
-    4
+    // Android's handheld view has no Wi-Fi stage (`after_welcome`): the welcome, your games, the look.
+    // And the last one, "How cozy should it be?" (`Step::Cozy`).
+    if crate::device::android_profile() { 4 } else { 5 }
 }
 
 /// Which dot a first-start page lights (from 0); `None` for the pages inside a stage (keyboards, lists, the time zone's
 /// picker, Add more…), which keep the screen for their own title.
 fn stage_of(step: &Step) -> Option<usize> {
-    let games = { 2 };
+    let games = if crate::device::android_profile() { 1 } else { 2 };
     match step {
         Step::Welcome => Some(0),
         Step::Wifi => Some(1),
         Step::Zone(z) if matches!(z.view, ZoneView::Card | ZoneView::List { from: ListFrom::Country, .. }) => Some(1),
         Step::Found { .. } => Some(games),
         Step::Look => Some(games + 1),
+        Step::Cozy { .. } => Some(games + 2),
         _ => None,
     }
 }
@@ -1404,7 +1472,8 @@ const RESUME_FILE: &str = "setup-step";
 /// such (`resume`). The welcome's wish for Kids Mode is kept after the name (`games child`).
 fn resume_name(step: &Step) -> Option<&'static str> {
     match step {
-        Step::Look => Some("shelf-look"),
+        // The cozy page comes back as the look: one press on from there.
+        Step::Look | Step::Cozy { .. } => Some("shelf-look"),
         Step::Wifi | Step::Portal(_) | Step::Password { .. } | Step::Connecting { .. } | Step::HiddenName { .. } | Step::Country { .. } => Some("wifi"),
         Step::Zone(_) => Some("zone"),
         Step::Found { .. } | Step::Games | Step::Phone(_) => Some("games"),
@@ -1648,6 +1717,13 @@ impl Setup {
             again: false,
             backed_out: false,
             language_chosen: None,
+            android_apps: true,
+            android_apps_taken: None,
+            android_folder: None,
+            android_folders_taken: Vec::new(),
+            android_page: None,
+            cozy_chosen: None,
+            lived_in: false,
             text_size_chosen: None,
             animations: None,
             animations_changed: false,
@@ -1776,6 +1852,7 @@ impl Setup {
             }
             "games" => self.enter_found(),
             "look" => self.enter_look(),
+            "cozy" => self.enter_cozy(),
             _ => {}
         }
         self
@@ -2853,9 +2930,8 @@ impl Setup {
             crate::web::lower_priority();
             let report = |done, total, found| notify(SetupEvent::Covers { done, total, found });
             // Box art, then (unless Box art only) the games' screenshots and title screens.
-            let wanted = pictures.then(|| game_pictures::missing(&data_dir, &games, &Default::default()));
             // A game started from the shelf while this first start's run goes on stops it (`covers::game_on`).
-            let run = game_pictures::run_until(&game_pictures::Libretro, &data_dir, &games, wanted.as_deref(), report,
+            let run = game_pictures::run_manual(&game_pictures::Libretro, &data_dir, &games, pictures, report,
                 || cancel.is_cancelled() || covers::game_on());
             // Nothing to do still has to end the run.
             if games.is_empty() || run.found == 0 || run.unreachable {
@@ -3366,6 +3442,7 @@ impl Setup {
             Step::Welcome => (0u8, crate::i18n::current(), self.welcome_row, self.kids_wanted, crate::type_scale::get()).hash(&mut h),
             Step::Look => (1u8, self.appearance, self.motion, self.look_row, self.animations_shown(), self.theme).hash(&mut h),
             Step::Play { sel } => (15u8, sel).hash(&mut h),
+            Step::Cozy { sel } => (16u8, sel).hash(&mut h),
             Step::Cards(c) => (16u8, c.mark()).hash(&mut h),
             Step::Wifi => (2u8, &self.forget, &self.net_menu).hash(&mut h),
             Step::Password { ssid, kb, .. } => (3u8, ssid, &kb.text, kb.row, kb.col, kb.shift, kb.symbols).hash(&mut h),
@@ -3403,6 +3480,7 @@ impl Setup {
             Step::Welcome => "welcome",
             Step::Look => "look",
             Step::Play { .. } => "how you like to play",
+            Step::Cozy { .. } => "how cozy",
             Step::Cards(_) => "feature cards",
             Step::Wifi => "wifi",
             Step::Password { .. } => "password",
@@ -3566,6 +3644,10 @@ impl Setup {
     /// Your games is left with Continue (or skipped): Kids Mode's steps where a child was named and there are games,
     /// otherwise the look.
     fn leave_games(&mut self) {
+        let offers = self.android_offers();
+        if self.android_apps && !offers.is_empty() {
+            self.android_apps_taken = Some(offers);
+        }
         match (self.kids_wanted, self.games_known() > 0) {
             (true, true) => self.kids_asked = true,
             (true, false) => {
@@ -3580,6 +3662,20 @@ impl Setup {
     /// The look step.
     fn enter_look(&mut self) {
         self.step = Step::Look;
+    }
+
+    /// "How cozy should it be?", on the level the switches stand at now (Cozy on a new device, `CozyLevel::start`).
+    fn enter_cozy(&mut self) {
+        use crate::cozy_level::{Cozy, CozyLevel};
+        let now = Cozy { animations: self.animations_shown(), lived_in: self.lived_in, extras: crate::cozy_extras::get() };
+        let sel = CozyLevel::ALL.iter().position(|l| *l == CozyLevel::start(&now)).unwrap_or(1);
+        self.step = Step::Cozy { sel };
+    }
+
+    /// The level the first start was finished with on "How cozy should it be?", once: the app sets its switches and keeps
+    /// them (`App::adopt_cozy`). None: left with START or never reached.
+    pub fn take_cozy(&mut self) -> Option<crate::cozy_level::CozyLevel> {
+        self.cozy_chosen.take()
     }
 
     /// The time zone after Wi-Fi: looked at on a thread like `enter_zone`, and a guess that can be trusted is taken
@@ -4014,6 +4110,10 @@ impl Setup {
                 self.enter_found();
                 true
             }
+            Step::Cozy { .. } => {
+                self.step = Step::Look;
+                true
+            }
             _ => false,
         }
     }
@@ -4026,7 +4126,7 @@ impl Setup {
         }
         match &self.step {
             Step::Zone(z) => matches!(z.view, ZoneView::Card),
-            Step::Wifi | Step::Found { .. } | Step::Look => true,
+            Step::Wifi | Step::Found { .. } | Step::Look | Step::Cozy { .. } => true,
             _ => false,
         }
     }
@@ -4137,7 +4237,8 @@ impl Setup {
                 Button::Down => self.look_row = (self.look_row + 1).min(self.look_rows().len() - 1),
                 Button::Left | Button::Right => self.change_look_row(b == Button::Right),
                 // The first start's last stage: Finish, the shelf is next (B went back a stage, `press_first_start`).
-                Button::East if self.only.is_none() => return true,
+                // The first start: "How cozy should it be?" comes next, on the level the switches stand at.
+                Button::East if self.only.is_none() => self.enter_cozy(),
                 Button::East | Button::Start => self.step = Step::Done,
                 _ => {}
             },
@@ -4151,11 +4252,30 @@ impl Setup {
                         self.art = if self.art == Art::Off { Art::default() } else { Art::Off };
                         self.art_changed = true;
                     }
+                    (Button::East | Button::Left | Button::Right, Some(FoundRow::Apps)) => self.android_apps = !self.android_apps,
+                    (Button::East, Some(FoundRow::Get(i))) => self.android_page = self.android_to_get().get(i as usize).map(|g| g.url),
+                    (Button::East, Some(FoundRow::Folder(i))) => {
+                        if let Some(f) = self.android_new_folders().get(i as usize) {
+                            self.android_folders_taken.push(f.path.clone());
+                            self.android_folder = Some(f.path.clone());
+                        }
+                    }
                     (Button::East, Some(FoundRow::More)) => self.step = Step::Games,
                     (Button::East, Some(FoundRow::Continue | FoundRow::Later)) => self.leave_games(),
                     _ => {}
                 }
             }
+            // "How cozy should it be?": Up/Down pick a level, A takes it and ends the first start (B, L1: the look again;
+            // START: ends it with the switches as they are, `press_first_start`).
+            Step::Cozy { sel } => match b {
+                Button::Up => *sel = sel.saturating_sub(1),
+                Button::Down => *sel = (*sel + 1).min(crate::cozy_level::CozyLevel::ALL.len() - 1),
+                Button::East => {
+                    self.cozy_chosen = Some(crate::cozy_level::CozyLevel::ALL[*sel]);
+                    return true;
+                }
+                _ => {}
+            },
             Step::Play { sel } => match b {
                 Button::Up => *sel = (*sel + profiles.len() - 1) % profiles.len(),
                 Button::Down => *sel = (*sel + 1) % profiles.len(),
@@ -4545,6 +4665,10 @@ impl Setup {
             }
             // The app paints this step itself, with the previews (`paint_look`); without them, the names.
             Step::Look => self.paint_look(c, text, &[], false),
+            Step::Cozy { sel } => {
+                crate::cozy_level::paint(c, text, *sel);
+                hints(c, text, &[("A", "Finish"), ("B", "Back"), ("START", "Skip")]);
+            }
             Step::Play { sel } => {
                 features::paint_profiles(c, text, *sel, &self.profiles(), self.only == Some(Only::Play), &self.play_previews);
             }
@@ -4713,6 +4837,18 @@ impl Setup {
 
     /// First start only: "Step 3 of 7" at the top right, so a new player knows how long the setup is. The Look step is
     /// painted by the app (`paint_look`, which calls this too); the cards have their own "n of m".
+    /// Where the first start's dots and Big text key begin from the left (`paint_step_count`); None outside of it.
+    fn step_count_left(&self, c: &Canvas, text: &mut Text) -> Option<i32> {
+        self.only.is_none().then(|| stage_of(&self.step)).flatten()?;
+        let n = stage_count() as i32;
+        let (d, gap) = (14, 12);
+        let label = if self.easy_to_read() { "Aa  On" } else { "Aa" };
+        let lw = text.width(Face::Body, 24, label);
+        let kh = crate::type_scale::row(36, 21);
+        let kw = (text.width(Face::Body, 21, crate::button_prompts::shown("L2")) + 24).max(kh);
+        Some(c.w - MARGIN - n * (d + gap) - 28 - lw - 10 - kw)
+    }
+
     fn paint_step_count(&self, c: &mut Canvas, text: &mut Text) {
         let Some(at) = self.only.is_none().then(|| stage_of(&self.step)).flatten() else { return };
         // One dot per stage, the ones done and this one filled: pages turned, not a queue (no "Step 2 of 4").
@@ -4749,11 +4885,133 @@ impl Setup {
     /// The rows of "Your games": Continue and Add more… with games, Add games… and I'll add games later without; the Box
     /// art switch where pictures can be downloaded (not on a handheld without Wi-Fi).
     fn found_rows(&self) -> Vec<FoundRow> {
-        let mut rows = if self.games_known() > 0 { vec![FoundRow::Continue, FoundRow::More] } else { vec![FoundRow::More, FoundRow::Later] };
+        let folders = (0..self.android_new_folders().len() as u8).map(FoundRow::Folder);
+        let mut rows = if self.games_known() > 0 {
+            let mut r = vec![FoundRow::Continue];
+            r.extend(folders);
+            r.push(FoundRow::More);
+            r
+        } else {
+            // No games yet but a folder of them found: taking it is the first row.
+            let mut r: Vec<FoundRow> = folders.collect();
+            r.extend([FoundRow::More, FoundRow::Later]);
+            r
+        };
+        if !self.android_offers().is_empty() {
+            rows.push(FoundRow::Apps);
+        }
+        rows.extend((0..self.android_to_get().len().min(2) as u8).map(FoundRow::Get));
         if !self.no_wifi {
             rows.push(FoundRow::BoxArt);
         }
         rows
+    }
+
+    /// Android: the games folders found that this view doesn't read yet (another app's, `Emulation/roms`), two at most,
+    /// the fullest first; none on Linux.
+    fn android_new_folders(&self) -> Vec<crate::android_first_start::FoundFolder> {
+        if !crate::device::android_profile() {
+            return Vec::new();
+        }
+        let Some(facts) = crate::android_first_start::facts() else { return Vec::new() };
+        let mut new: Vec<_> = facts.folders.unwrap_or_default().into_iter().filter(|f| !f.usual && !self.android_folders_taken.contains(&f.path)).collect();
+        new.sort_by_key(|f| std::cmp::Reverse(f.games.unwrap_or(0)));
+        new.truncate(2);
+        new
+    }
+
+    /// The systems with games here, as the Mobile view names them ("psx"): the shelf's counts and the folders found.
+    fn android_systems(&self) -> Vec<&'static str> {
+        let mut out: Vec<&'static str> = Vec::new();
+        if let Some(g) = &self.grid {
+            for s in &g.all {
+                let id = crate::play_route::system_key(&s.id);
+                if !id.is_empty() && g.games(&s.id) > 0 && !out.contains(&id) {
+                    out.push(id);
+                }
+            }
+        }
+        if let Some(folders) = crate::android_first_start::facts().and_then(|f| f.folders) {
+            for id in crate::android_first_start::systems_found(&folders) {
+                if !out.contains(&id) {
+                    out.push(id);
+                }
+            }
+        }
+        out
+    }
+
+    /// Android: the installed apps for the systems pocket-ui doesn't play (`android_first_start::app_offers`).
+    fn android_offers(&self) -> Vec<crate::android_first_start::AppOffer> {
+        if !crate::device::android_profile() {
+            return Vec::new();
+        }
+        let Some(phone) = crate::play_route::phone() else { return Vec::new() };
+        crate::android_first_start::app_offers(&phone, &crate::play_route::prefs().plays_with, &self.android_systems())
+    }
+
+    /// Android: the systems with games that no installed app plays, and their app's official page.
+    fn android_to_get(&self) -> Vec<crate::android_first_start::AppToGet> {
+        if !crate::device::android_profile() {
+            return Vec::new();
+        }
+        let phone = crate::play_route::phone().map(|p| (*p).clone()).unwrap_or_default();
+        crate::android_first_start::apps_to_get(&phone, &self.android_systems())
+    }
+
+    /// The official page A asked for on "Your games", once: the app opens it in the browser (Android).
+    pub fn take_android_page(&mut self) -> Option<&'static str> {
+        self.android_page.take()
+    }
+
+    /// Android: the BIOS the systems found still want, as lines naming the ROMs folders' `bios`.
+    fn android_bios_lines(&self) -> Vec<(bool, String)> {
+        if !crate::device::android_profile() {
+            return Vec::new();
+        }
+        let names = crate::android_first_start::facts().map(|f| f.bios).unwrap_or_default();
+        crate::android_first_start::missing_bios(&self.android_systems(), |s| crate::android_first_start::bios_among(s, names.iter().map(String::as_str)))
+            .into_iter()
+            .map(|n| (n.required, n.line(false).to_string()))
+            .collect()
+    }
+
+    /// Android: the BIOS lines of "Your games" from `y` down at most, one sentence each (two lines when it must wrap), a
+    /// needed one in the alert colour and first. Returns where the next thing goes.
+    /// `bottom`: (for a needed BIOS, the rows' top: it goes before the focused row's note; for the others, the note's top).
+    fn paint_android_bios(&self, c: &mut Canvas, text: &mut Text, mut y: i32, width: i32, bottom: (i32, i32)) -> i32 {
+        let line_h = crate::type_scale::line(24, 8);
+        for (required, line) in self.android_bios_lines() {
+            let lines = text.wrap_prose_at_most(Face::Body, 24, &line, width, 2);
+            if y + lines.len() as i32 * line_h > if required { bottom.0 } else { bottom.1 } {
+                break;
+            }
+            for l in lines {
+                text.draw(c, Face::Body, 24, MARGIN, y + 8, if required { pal().alert } else { pal().dust }, &l);
+                y += line_h;
+            }
+        }
+        y
+    }
+
+    /// The games folder A took on "Your games", once: the app adds it to the folders it reads (Android).
+    pub fn take_android_folder(&mut self) -> Option<PathBuf> {
+        self.android_folder.take()
+    }
+
+    /// The emulator apps "Your games" was left with, once: the app keeps them as Plays with's choices (Android).
+    pub fn take_android_apps(&mut self) -> Option<Vec<crate::android_first_start::AppOffer>> {
+        self.android_apps_taken.take()
+    }
+
+    /// The folders were read again with a folder added: the counts and the systems grid follow it.
+    pub fn set_catalog(&mut self, all: Vec<SysInfo>) {
+        self.catalog = all;
+        if let Some(g) = &self.grid {
+            let counts = g.counts.clone();
+            self.grid = Some(Grid::new(self.catalog.clone(), counts, GRID_COLS));
+        }
+        self.count_games();
     }
 
     /// "Your games" without games: the way that works here, in a sentence (Add games… has the details).
@@ -4769,6 +5027,8 @@ impl Setup {
     /// The first start's "Your games": what was found (or the way to add some), then its rows.
     fn paint_found(&self, c: &mut Canvas, text: &mut Text, sel: usize, dots: &str) {
         let width = c.w - 2 * MARGIN;
+        let new_folders = self.android_new_folders();
+        let to_get = self.android_to_get();
         let games = self.games_known();
         let looking = self.counting && self.games_counted.is_none() && games == 0;
         let (title, sub) = if games > 0 || looking {
@@ -4789,13 +5049,18 @@ impl Setup {
         let rows = self.found_rows();
         let row = found_row(c.h);
         let top = found_rows_top(c.h, rows.len());
+        let apps_note = crate::android_first_start::apps_note(&self.android_offers());
         let note = match rows.get(sel) {
             Some(FoundRow::BoxArt) => Some(BOX_ART_NOTE),
+            Some(FoundRow::Apps) => Some(apps_note.as_str()),
+            Some(FoundRow::Folder(_)) => Some(FOLDER_NOTE),
+            Some(FoundRow::Get(_)) => Some(crate::android_first_start::GET_NOTE),
             _ if self.kids_wanted && games > 0 => Some("Kids Mode comes next: a PIN, then the games a child may play."),
             _ if self.kids_wanted => Some("Kids Mode needs a few games first. Set it up later in Settings › System › Kids mode."),
             _ => None,
         };
-        let note_lines = note.map(|n| text.wrap_prose_at_most(Face::Body, 24, n, width, 2)).unwrap_or_default();
+        // Three lines at most: the apps found can be a long list (the Mini V2 has five, 18.11.).
+        let note_lines = note.map(|n| text.wrap_prose_at_most(Face::Body, 24, n, width, 3)).unwrap_or_default();
         let note_top = top - 18 - note_lines.len() as i32 * crate::type_scale::line(24, 8);
         if looking {
             text.draw(c, Face::Title, 50, MARGIN, y + 30, pal().chalk, &format!("Looking for your games{dots}"));
@@ -4804,6 +5069,9 @@ impl Setup {
             let found = if games == 1 { "Found 1 game".to_string() } else { format!("Found {games} games") };
             text.draw(c, Face::Title, 50, MARGIN, y + 30, pal().chalk, &found);
             y += 30 + step + 4;
+            // Android: a BIOS a found system still wants, under the count and before the consoles (they give up their room
+            // first: a needed BIOS is never left off for pictures).
+            y = self.paint_android_bios(c, text, y, width, (top - 18, note_top - 18));
             // Which systems, the fullest first: their consoles in a row with the count under each, "+ 4 more" after.
             if let Some(grid) = &self.grid {
                 let mut with: Vec<(&SysInfo, usize)> = grid.all.iter().map(|s| (s, grid.games(&s.id))).filter(|(_, n)| *n > 0).collect();
@@ -4849,6 +5117,7 @@ impl Setup {
                 text.draw(c, Face::Body, 28, MARGIN, y, pal().chalk, &l);
                 y += step;
             }
+            y = self.paint_android_bios(c, text, y, width, (top - 18, note_top - 18));
         }
         let mut room = top - 18;
         // The note only where it stands clear of what is above it.
@@ -4875,23 +5144,35 @@ impl Setup {
             let selected = i == sel;
             crate::kit::shelf_row(c, MARGIN, ry, width, row - 8, selected);
             let fg = if selected { pal().ink } else { pal().chalk };
+            let folder_row = match r {
+                FoundRow::Folder(i) => new_folders.get(*i as usize).map(|f| f.row()).unwrap_or_default(),
+                FoundRow::Get(i) => to_get.get(*i as usize).map(|g| g.row()).unwrap_or_default(),
+                _ => String::new(),
+            };
             let name = match r {
                 FoundRow::Continue => "Continue",
                 FoundRow::More if games > 0 => "Add more…",
                 FoundRow::More => "Add games…",
                 FoundRow::Later => "I'll add games later",
                 FoundRow::BoxArt => "Box art",
+                FoundRow::Apps => "Emulator apps",
+                FoundRow::Folder(_) | FoundRow::Get(_) => folder_row.as_str(),
             };
             let base = ry + (row - 8) / 2 + crate::type_scale::base(13, 37);
-            text.draw(c, Face::Title, 37, MARGIN + 28, base, fg, name);
-            if *r == FoundRow::BoxArt {
-                let on = if self.art == Art::Off { "Off" } else { "On" };
+            // A found folder's words are long ("2341 games in Emulation/roms · internal storage"): smaller before cut.
+            let (npx, name) = text.fit_sizes(Face::Title, &[37, 30, 26], name, width - 56);
+            text.draw(c, Face::Title, npx, MARGIN + 28, base, fg, &name);
+            if matches!(r, FoundRow::BoxArt | FoundRow::Apps) {
+                let off = if *r == FoundRow::Apps { !self.android_apps } else { self.art == Art::Off };
+                let on = if off { "Off" } else { "On" };
                 let value = if selected { format!("‹ {on} ›") } else { on.to_string() };
                 crate::kit::row_value(c, text, 24, MARGIN + width - 28, ry + (row - 8) / 2 + crate::type_scale::base(10, 24), &value, selected);
             }
         }
         let action = match rows.get(sel) {
-            Some(FoundRow::BoxArt) => "Switch",
+            Some(FoundRow::BoxArt | FoundRow::Apps) => "Switch",
+            Some(FoundRow::Folder(_)) => "Add",
+            Some(FoundRow::Get(_)) => "Open",
             Some(FoundRow::More) => "Open",
             _ => "Continue",
         };
@@ -5358,16 +5639,22 @@ impl Setup {
         }
     }
 
-    /// The look step: each look's real shelf, scaled down (`previews`, one per theme, `LOOK_PREVIEW` in size,
+    /// The look step: each look's real shelf, scaled down (`previews`, one per theme, `look_preview` in size,
     /// made by the app), the one shown in the middle and its neighbours at the sides; then its name, one line
     /// about it, and how to switch. `sample`: the previews use the built-in sample games.
     pub fn paint_look(&mut self, c: &mut Canvas, text: &mut Text, previews: &[Image], sample: bool) {
         c.clear(pal().void);
         let first = self.only.is_none();
         let title = if first { "How your games stand" } else { "Choose a look" };
-        // Cut to the page: Spanish in the Retro style ran off a 1024 px screen.
-        let title = text.fit(Face::Title, 67, title, c.w - 2 * MARGIN);
-        text.draw(c, Face::Title, 67, MARGIN, 140, pal().chalk, &title);
+        // Cut to the page: Spanish in the Retro style ran off a 1024 px screen. Under 960 lines the title moves up beside
+        // the first start's dots and Big text key (`paint_step_count`): there it ends before them, in smaller type first.
+        let title_y = look_down(c.h, 140);
+        let room = match self.step_count_left(c, text) {
+            Some(left) if title_y - 52 < STEP_COUNT_BOTTOM => left - 24 - MARGIN,
+            _ => c.w - 2 * MARGIN,
+        };
+        let (title_px, title) = text.fit_sizes(Face::Title, &[67, 58, 50], title, room);
+        text.draw(c, Face::Title, title_px, MARGIN, title_y, pal().chalk, &title);
         let sub = match (first, sample) {
             (true, true) => "Pick how your games line up. Shown with sample games until yours are here.",
             (true, false) => "Pick how your games line up. These are your own games: try each one.",
@@ -5376,14 +5663,11 @@ impl Setup {
         };
         // Smaller type before "…": German and Spanish at large text ended in "Probier j…" (first-start walk 2026-11-06).
         let (sub_px, sub) = text.fit_sizes(Face::Body, &[28, 25, 22], sub, c.w - 2 * MARGIN);
-        text.draw(c, Face::Body, sub_px, MARGIN, 192, pal().dust, &sub);
+        text.draw(c, Face::Body, sub_px, MARGIN, look_down(c.h, 192), pal().dust, &sub);
         self.paint_step_count(c, text);
-        // The first start has a line under its rows (what HOME does in a game): the pictures give up its height.
-        let (pw, ph) = look_preview((c.w, c.h));
-        // The hint bar is as large as on a 1080-line screen on every one: the pictures give up its extra height.
-        let (pw, ph) = (pw * (ph - 36) / ph, ph - 36);
-        let (pw, ph) = if first { let short = (ph - 3 * crate::type_scale::line(24, 8)).max(44); (pw * short / ph, short) } else { (pw, ph) };
-        let (x, y) = ((c.w - pw) / 2, 226);
+        // As large as the room under the title allows (`look_preview_rect`): Settings › Look, and the first start
+        // with its rows under it.
+        let (x, y, pw, ph) = look_preview_rect((c.w, c.h), first);
         let n = self.themes.len();
         if previews.len() == n {
             // The neighbours, dimmed and cut off by the screen's edges: there is more to either side.
@@ -5396,7 +5680,7 @@ impl Setup {
             c.blit_scaled(&previews[self.theme], x, y, pw, ph);
         }
         let (name, blurb) = self.themes[self.theme];
-        let base = y + ph + 62 + crate::type_scale::grow(50);
+        let base = y + ph + 37 + look_down(c.h, 25) + crate::type_scale::grow(50);
         text.draw(c, Face::Title, 50, MARGIN, base, pal().chalk, name);
         // The layouts focused: the bar beside their name, as beside a row of pills. For the navigation explorer the
         // layouts are one row from the pictures to the name.
@@ -5419,38 +5703,43 @@ impl Setup {
         // The rows under the layouts, slimmer rows of pills one under the other as `look_rows` has them; the focused
         // one has the bar beside it. Settings > Look > Layout: none. The first start: Style, Colours, Appearance, the
         // previews above changing with them.
-        let top = base + 63 + crate::type_scale::grow(28);
-        let step = pill_h() + 15;
+        // A note on two lines beside its pills (1024x768: "Clean and narrow, the look pocket-ui started / with.") reaches
+        // lower than its row: the next row, or the lines under the rows, start the rows' gap under it, not on it (Brick
+        // audit 2026-11-20: German at Large text touched four times down to the line under the rows).
+        let mut top = base + 63 + crate::type_scale::grow(28);
+        let step = look_row_step(c.h);
+        let gap = step - pill_h();
         let label_w = self.label_w(text);
         let rows = &self.look_rows()[1..];
         for (i, row) in rows.iter().enumerate() {
-            self.paint_look_row(c, text, *row, top + i as i32 * step, label_w);
-        }
-        if self.look_row > 0 {
-            focus_bar(c, top + (self.look_row as i32 - 1) * step, pill_h());
+            let foot = self.paint_look_row(c, text, *row, top, label_w);
+            if self.look_row as usize == i + 1 {
+                focus_bar(c, top, pill_h());
+            }
+            top = (top + step).max(foot + gap);
         }
         if first {
-            self.paint_look_end(c, text, top + rows.len() as i32 * step + 10 + crate::type_scale::mid(24));
+            self.paint_look_end(c, text, top + 10 + crate::type_scale::mid(24));
             return;
         }
         hints(c, text, &look_hints(true, self.look_row > 0));
     }
 
-    /// One row of pills under the layouts, from `top`.
-    fn paint_look_row(&self, c: &mut Canvas, text: &mut Text, row: LookRow, top: i32, label_w: i32) {
+    /// One row of pills under the layouts, from `top`; returns the foot of what it painted (`pill_row`).
+    fn paint_look_row(&self, c: &mut Canvas, text: &mut Text, row: LookRow, top: i32, label_w: i32) -> i32 {
         match row {
-            LookRow::Layout => {}
+            LookRow::Layout => top + pill_h(),
             LookRow::Appearance => {
                 let names: Vec<&str> = Appearance::ALL.iter().map(|a| a.name()).collect();
                 let on = Appearance::ALL.iter().position(|a| *a == self.appearance).unwrap_or(0);
-                pill_row(c, text, top, "Appearance", &names, on, self.appearance.blurb(), label_w);
+                pill_row(c, text, top, "Appearance", &names, on, self.appearance.blurb(), label_w)
             }
             // Barlow, Retro: as Settings › Look › Style, and every page in it from the next frame on.
             LookRow::Font => {
                 let now = crate::font_style::get();
                 let names: Vec<&str> = crate::font_style::FontStyle::ALL.iter().map(|f| f.label()).collect();
                 let on = crate::font_style::FontStyle::ALL.iter().position(|f| *f == now).unwrap_or(0);
-                pill_row(c, text, top, "Style", &names, on, now.blurb(), label_w);
+                pill_row(c, text, top, "Style", &names, on, now.blurb(), label_w)
             }
             // Five sets (Retro: its own two) are too many pills for a small screen: the one in use, Left/Right step on.
             LookRow::Colours => {
@@ -5460,7 +5749,7 @@ impl Setup {
                     (crate::palette::colours().label(), crate::palette::colours().blurb())
                 };
                 let shown = format!("‹ {name} ›");
-                pill_row(c, text, top, "Colours", &[shown.as_str()], 0, blurb, label_w);
+                pill_row(c, text, top, "Colours", &[shown.as_str()], 0, blurb, label_w)
             }
         }
     }
@@ -5471,7 +5760,9 @@ impl Setup {
         let width = c.w - 2 * MARGIN;
         let step = crate::type_scale::line(24, 8);
         let more = text.wrap_prose_at_most(Face::Body, 24, "More to get any time: Settings › Games › Box art & downloads.", width, 2);
-        let last = crate::kit::hint_bar_top(c.h) - 16 - more.len() as i32 * step;
+        // The lowest baseline above the hint bar. The lines below come first; the pointer to more only where room is
+        // left under them (on fewer than 960 lines the picture above takes the room of one line, `look_preview_rect`).
+        let last = crate::kit::hint_bar_top(c.h) - 16;
         let mut lines: Vec<&str> = Vec::new();
         if self.kids_skipped {
             lines.push("Kids Mode is there whenever you want it: Settings › System › Kids mode.");
@@ -5501,7 +5792,7 @@ impl Setup {
         }
         // The pointer to more too only where it stands above the hint bar (the rows took the room at Large text on the
         // Smart Pro's 720 lines).
-        if y <= last + step {
+        if y + (more.len() as i32 - 1) * step <= last {
             for line in more {
                 text.draw(c, Face::Body, 24, MARGIN, y, pal().dust, &line);
                 y += step;
@@ -5795,8 +6086,9 @@ fn look_hints(settings: bool, below: bool) -> Vec<(&'static str, &'static str)> 
     match (settings, below) {
         (true, false) => vec![("Left/Right", "Layout"), ("A", "Keep"), ("B", "Cancel")],
         (true, true) => vec![("Left/Right", "Change"), ("A", "Keep"), ("B", "Cancel")],
-        (false, false) => vec![("Left/Right", "Layout"), ("A", "Finish"), ("B", "Back")],
-        (false, true) => vec![("Left/Right", "Change"), ("A", "Finish"), ("B", "Back")],
+        // The first start: "How cozy should it be?" comes next.
+        (false, false) => vec![("Left/Right", "Layout"), ("A", "Continue"), ("B", "Back")],
+        (false, true) => vec![("Left/Right", "Change"), ("A", "Continue"), ("B", "Back")],
     }
 }
 
@@ -5928,7 +6220,8 @@ fn paint_login(c: &mut Canvas, text: &mut Text, y: i32, user: &str, password: Op
 /// A row of the look step: `label` in Dust, the choices on a keycap track with the one in use on a paper pill,
 /// and what it means after them. `label_w`: room for the label (0: as wide as it is).
 #[allow(clippy::too_many_arguments)]
-fn pill_row(c: &mut Canvas, text: &mut Text, top: i32, label: &str, names: &[&str], on: usize, blurb: &str, label_w: i32) {
+/// Returns the foot of what it painted: the row's, or that of a note on two lines beside the pills, which reaches lower.
+fn pill_row(c: &mut Canvas, text: &mut Text, top: i32, label: &str, names: &[&str], on: usize, blurb: &str, label_w: i32) -> i32 {
     // Two rows (the look step) are a little slimmer than the welcome step's one.
     let (h, px) = (if label_w > 0 { pill_h() } else { crate::type_scale::row(44, 24) }, 24u32);
     let base = top + h / 2 + crate::type_scale::mid(px);
@@ -5972,7 +6265,7 @@ fn pill_row(c: &mut Canvas, text: &mut Text, top: i32, label: &str, names: &[&st
             for (i, line) in lines.iter().enumerate() {
                 text.draw(c, Face::Body, px, MARGIN, first + i as i32 * step, pal().dust, line);
             }
-            return;
+            return top + h;
         }
     }
     // Smaller type before "…": "Black pages. Uses the least batte…" at 1024 px.
@@ -5985,17 +6278,19 @@ fn pill_row(c: &mut Canvas, text: &mut Text, top: i32, label: &str, names: &[&st
             for (i, line) in lines.iter().enumerate() {
                 text.draw(c, Face::Body, 20, x + 28, base - step / 2 + 4 + i as i32 * step, pal().dust, line);
             }
-            return;
+            // The second line's descenders (a quarter of the type) under its baseline.
+            return (top + h).max(base - step / 2 + 4 + step + crate::type_scale::px(20) as i32 / 4);
         }
     }
     // Room for less than the whole note at the smallest type (1024x768 in Large text, or the classic's 1240x1080 in medium text,
     // five languages): no note at all rather than "Yo…" or "Tu pourras le…". The setting itself is in Settings.
     let whole = text.translated(blurb).to_string();
     if room < text.width_plain(Face::Body, 20, &whole) {
-        return;
+        return top + h;
     }
     let (npx, note) = text.fit_sizes(Face::Body, &[px, 22, 20], blurb, room);
     text.draw(c, Face::Body, npx, x + 28, base, pal().dust, &note);
+    top + h
 }
 
 /// The Extras page's line about the picture downloads: where from, what is sent, and what Off does (the sizes
@@ -6252,7 +6547,7 @@ mod tests {
     }
 
     /// The first start on a handheld with Wi-Fi: language, Wi-Fi (the time zone set from the Wi-Fi region and shown on its
-    /// row), your games, the look; four dots; the way on is a row (Continue) or A, A on the look finishes.
+    /// row), your games, the look, how cozy; five dots; the way on is a row (Continue) or A, A on the cozy page finishes.
     #[test]
     fn the_first_start_is_language_wifi_games_look() {
         fresh("flow4");
@@ -6267,9 +6562,11 @@ mod tests {
         seen.push(where_(&s));
         found_on(&mut s);
         seen.push(where_(&s));
-        let want = [("welcome", 1), ("wifi", 2), ("your games", 3), ("look", 4)];
-        assert_eq!(seen, want.map(|(a, n)| (a.to_string(), Some((n, 4)))));
-        assert!(s.press(Button::East), "Finish ends the setup: the shelf is next, no extra page");
+        assert!(!s.press(Button::East), "A on the look: the cozy page comes");
+        seen.push(where_(&s));
+        let want = [("welcome", 1), ("wifi", 2), ("your games", 3), ("look", 4), ("how cozy", 5)];
+        assert_eq!(seen, want.map(|(a, n)| (a.to_string(), Some((n, stage_count())))));
+        assert!(s.press(Button::East), "A there ends the setup: the shelf is next, no extra page");
         // Settings pages count nothing.
         assert_eq!(shelf_setup("flow4-settings").only(Only::Wifi).step_of(), None);
     }
@@ -6283,7 +6580,7 @@ mod tests {
         at_wifi(&mut s);
         assert_eq!(s.zone_value(), "Choose");
         wifi_continue(&mut s);
-        assert_eq!(where_(&s), ("zone".to_string(), Some((2, 4))), "the second dot still: part of the Wi-Fi stage");
+        assert_eq!(where_(&s), ("zone".to_string(), Some((2, stage_count()))), "the second dot still: part of the Wi-Fi stage");
         press(&mut s, &[Button::East]);
         assert_eq!(s.at(), "your games");
         assert_eq!(hw.timezone().as_deref(), Some("UTC"), "skipped: nothing set");
@@ -6386,9 +6683,9 @@ mod tests {
         let (mut s, _hw) = setup("flow-nowifi", "UTC", None);
         s.no_wifi = true;
         press(&mut s, &[Button::East]);
-        assert_eq!(where_(&s), ("zone".to_string(), Some((2, 4))));
+        assert_eq!(where_(&s), ("zone".to_string(), Some((2, stage_count()))));
         press(&mut s, &[Button::East]);
-        assert_eq!(where_(&s), ("your games".to_string(), Some((3, 4))));
+        assert_eq!(where_(&s), ("your games".to_string(), Some((3, stage_count()))));
         assert!(!s.found_rows().contains(&FoundRow::BoxArt), "no downloads without Wi-Fi: no Box art switch");
         // Painted at the H700's size, the pages are there.
         for (w, h) in [(1240, 1080), (640, 480)] {
@@ -6397,7 +6694,7 @@ mod tests {
             assert!(px.iter().any(|p| *p != px[0]), "{w}x{h} is not blank");
         }
         found_on(&mut s);
-        assert_eq!(where_(&s), ("look".to_string(), Some((4, 4))));
+        assert_eq!(where_(&s), ("look".to_string(), Some((4, stage_count()))));
     }
 
     /// START on any stage skips the rest of the setup (BananaOS's way); inside a keyboard START is the keyboard's.
@@ -6426,10 +6723,10 @@ mod tests {
         s.games = vec![("snes".into(), PathBuf::from("/storage/roms/snes/a.sfc"))];
         assert!(!s.press(Button::South));
         assert!(!s.press(Button::L1));
-        assert_eq!(where_(&s).1, Some((1, 4)), "the welcome has nothing before it: B and L1 stay");
+        assert_eq!(where_(&s).1, Some((1, stage_count())), "the welcome has nothing before it: B and L1 stay");
         at_wifi(&mut s);
         press(&mut s, &[Button::South]);
-        assert_eq!(where_(&s).1, Some((1, 4)), "B: Wi-Fi back to the welcome");
+        assert_eq!(where_(&s).1, Some((1, stage_count())), "B: Wi-Fi back to the welcome");
         at_wifi(&mut s);
         wifi_continue(&mut s);
         assert_eq!(s.at(), "your games", "Continue offline, a row, goes on");
@@ -6598,6 +6895,136 @@ mod tests {
         assert_eq!(s.at(), "welcome");
     }
 
+    /// Android's "Your games" (18.11.2026): a games folder of another app is a row A adds, the emulator apps found are one
+    /// switch taken on leaving, a system with games and no app gets its app's official page, and a missing Saturn BIOS is
+    /// said. Walked with the D-pad in the Handheld view's profile (a child process: the profile is read once).
+    #[test]
+    fn android_your_games_offers_the_folder_the_apps_the_links_and_the_bios() {
+        use crate::android_first_start::{self as afs, Facts, FoundFolder};
+        if !crate::device::android_profile() {
+            let out = std::process::Command::new(std::env::current_exe().unwrap())
+                .args(["--exact", "setup::tests::android_your_games_offers_the_folder_the_apps_the_links_and_the_bios", "--nocapture"])
+                .env(crate::device::ANDROID_PROFILE_ENV, "1")
+                .output()
+                .unwrap();
+            let said = format!("{}{}", String::from_utf8_lossy(&out.stdout), String::from_utf8_lossy(&out.stderr));
+            assert!(out.status.success() && said.contains("1 passed"), "{said}");
+            return;
+        }
+        let folders = vec![
+            FoundFolder { path: "/storage/emulated/0/ROMs".into(), card: false, usual: true, games: Some(9), systems: vec![("gba", Some(4)), ("saturn", Some(2)), ("ps2", Some(3))] },
+            FoundFolder { path: "/storage/emulated/0/Emulation/roms".into(), card: false, usual: false, games: Some(6), systems: vec![("snes", Some(4)), ("gamecube", Some(2))] },
+        ];
+        let check = |s: &mut Setup| {
+            let mut c_px = vec![0u32; 1240 * 1080];
+            let mut c = Canvas::new(&mut c_px, 1240, 1080);
+            s.paint(&mut c, &mut Text::builtin());
+        };
+        for apps_on in [true, false] {
+            afs::set_facts(Some(Facts { folders: Some(folders.clone()), can_read: true, bios: vec!["scph5501.bin".into()] }));
+            crate::play_route::set_phone(crate::play_route::Phone::from_json(r#"{"apps": {"ps2": [{"p": "com.armsx2", "l": "ARMSX2"}]}}"#));
+            crate::play_route::set_prefs(Default::default());
+            fresh("android-found");
+            let (mut s, _hw) = setup("android-found", "UTC", None);
+            // The journey: the welcome, A, and Android's view goes straight to "Your games" (Android owns Wi-Fi and the clock).
+            assert_eq!(s.at(), "welcome");
+            press(&mut s, &[Button::East]);
+            assert_eq!(s.at(), "your games");
+            let rows = s.found_rows();
+            assert_eq!(rows[0], FoundRow::Folder(0), "no games read yet: the folder found is the first row: {rows:?}");
+            assert!(rows.contains(&FoundRow::Apps) && rows.contains(&FoundRow::Get(0)), "{rows:?}");
+            assert_eq!(s.android_new_folders()[0].row(), "6 games in Emulation/roms");
+            assert_eq!(afs::apps_note(&s.android_offers()), "Found on this device: ARMSX2 (PlayStation 2). They play what pocket-ui doesn't; you can change it per system later.");
+            assert_eq!(s.android_to_get().iter().map(|g| g.row()).collect::<Vec<_>>(), ["Get Dolphin (GameCube / Wii)"]);
+            // Saturn's BIOS is needed and missing; PlayStation's is there, Dreamcast has no games.
+            assert_eq!(s.android_bios_lines(), [(true, "Saturn needs a BIOS: put saturn_bios.bin, sega_101.bin or mpr-17933.bin in ROMs/bios.".to_string())]);
+            check(&mut s);
+            // The D-pad reaches each row; A on the folder adds it, A on the link asks for the page.
+            let down_to = |s: &mut Setup, row: FoundRow| {
+                press(s, &[Button::Up, Button::Up, Button::Up, Button::Up, Button::Up, Button::Up]);
+                for _ in 0..8 {
+                    if matches!(s.step, Step::Found { sel } if s.found_rows().get(sel) == Some(&row)) {
+                        return;
+                    }
+                    press(s, &[Button::Down]);
+                }
+                panic!("the D-pad never reaches {row:?}: {:?}", s.found_rows());
+            };
+            down_to(&mut s, FoundRow::Get(0));
+            press(&mut s, &[Button::East]);
+            assert_eq!(s.take_android_page(), Some("https://dolphin-emu.org/download/"));
+            down_to(&mut s, FoundRow::Folder(0));
+            press(&mut s, &[Button::East]);
+            assert_eq!(s.take_android_folder(), Some(PathBuf::from("/storage/emulated/0/Emulation/roms")));
+            assert!(!s.found_rows().contains(&FoundRow::Folder(0)), "added: no row any more: {:?}", s.found_rows());
+            check(&mut s);
+            if !apps_on {
+                down_to(&mut s, FoundRow::Apps);
+                press(&mut s, &[Button::East]);
+            }
+            // Leaving "Your games" (its way on, "I'll add games later" without games) takes the apps when the switch is on,
+            // nothing when off; the look is next and A there finishes the first start.
+            down_to(&mut s, FoundRow::Later);
+            press(&mut s, &[Button::East]);
+            let taken = s.take_android_apps();
+            assert_eq!(taken.map(|t| t.iter().map(|o| o.app.package.clone()).collect::<Vec<_>>()), apps_on.then(|| vec!["com.armsx2".to_string()]), "apps on: {apps_on}");
+            assert_eq!(s.at(), "look");
+        }
+        // No folders, no apps, no permission: the usual rows, nothing empty on the page.
+        afs::set_facts(Some(Facts { folders: Some(vec![]), can_read: false, bios: vec![] }));
+        crate::play_route::set_phone(crate::play_route::Phone::default());
+        fresh("android-found-empty");
+        let (mut s, _hw) = setup("android-found-empty", "UTC", None);
+        s.enter_found();
+        s.settle();
+        assert!(s.found_rows().iter().all(|r| !matches!(r, FoundRow::Folder(_) | FoundRow::Apps | FoundRow::Get(_))), "{:?}", s.found_rows());
+        assert!(s.android_bios_lines().is_empty());
+        check(&mut s);
+    }
+
+    /// "How cozy should it be?" (19.11.2026): A on the look goes there, not to the shelf; it opens on Cozy (a new device),
+    /// the D-pad reaches all three levels, A takes one and ends the first start, B and L1 go back to the look, START ends it
+    /// with the switches as they are. Its dot is the last one, lit.
+    #[test]
+    fn the_cozy_page_follows_the_look_and_takes_one_level_for_all_the_cozy_switches() {
+        use crate::cozy_level::CozyLevel;
+        fresh("cozy");
+        let (mut s, _hw) = setup("cozy", "UTC", Some(IW_AT));
+        s.enter_look();
+        assert_eq!(s.at(), "look");
+        assert!(!s.press(Button::East), "A on the look doesn't end the first start any more");
+        assert_eq!(s.at(), "how cozy");
+        assert!(matches!(s.step, Step::Cozy { sel: 1 }), "a new device stands at Cozy");
+        assert_eq!(s.step_of(), Some((stage_count(), stage_count())), "the last dot");
+        let mut c_px = vec![0u32; 1920 * 1080];
+        s.paint(&mut Canvas::new(&mut c_px, 1920, 1080), &mut Text::builtin());
+        for (keys, want) in [(&[Button::Up][..], CozyLevel::Plain), (&[Button::Down, Button::Down, Button::Down][..], CozyLevel::Everything), (&[Button::Up][..], CozyLevel::Cozy)] {
+            press(&mut s, keys);
+            assert!(matches!(s.step, Step::Cozy { sel } if CozyLevel::ALL[sel] == want), "{want:?}");
+        }
+        press(&mut s, &[Button::South]);
+        assert_eq!(s.at(), "look", "B: the look again");
+        press(&mut s, &[Button::East]);
+        press(&mut s, &[Button::L1]);
+        assert_eq!(s.at(), "look", "L1 too");
+        press(&mut s, &[Button::East, Button::Up]);
+        assert!(s.press(Button::East), "A on a level ends the first start");
+        assert_eq!(s.take_cozy(), Some(CozyLevel::Plain));
+        assert_eq!(s.take_cozy(), None, "taken once");
+        // START: ends it, no level taken (every switch as it is).
+        let (mut s, _hw) = setup("cozy", "UTC", Some(IW_AT));
+        s.enter_look();
+        press(&mut s, &[Button::East]);
+        assert_eq!(s.press_first_start(Button::Start), Some(true));
+        assert_eq!(s.take_cozy(), None);
+        // The lived-in shelf on: no level has it, the page opens on the player's own mix (Cozy row).
+        let (s, _hw) = setup("cozy", "UTC", Some(IW_AT));
+        let mut s = s.with_lived_in(true);
+        s.enter_look();
+        press(&mut s, &[Button::East]);
+        assert!(matches!(s.step, Step::Cozy { sel: 1 }));
+    }
+
     /// Your games: Continue with games, Add more… opens the grid and B there comes back; without games the ways and
     /// "I'll add games later".
     #[test]
@@ -6754,7 +7181,8 @@ mod tests {
         // the shelf); back on the look, A finishes with the look picked.
         assert!(!s.press(Button::South), "B on the last stage doesn't end the setup");
         found_on(&mut s);
-        assert!(s.press(Button::East), "A finishes");
+        assert!(!s.press(Button::East), "A goes on to the cozy page");
+        assert!(s.press(Button::East), "A there finishes");
         assert_eq!(s.theme, 1, "with the look picked");
     }
 
@@ -8001,7 +8429,9 @@ mod tests {
         press(&mut s, &[Button::Down, Button::Right]);
         assert_eq!(s.previewing(), Some(1), "Down and Left/Right on the row leave the layout alone");
         assert_eq!(s.take_font_step(), Some(true), "and change the style instead");
-        assert!(s.press(Button::East), "Finish keeps it and ends the setup, from any row");
+        assert!(!s.press(Button::East), "A keeps it and goes on to the cozy page, from any row");
+        assert_eq!(s.at(), "how cozy");
+        assert!(s.press(Button::East), "A there ends the setup");
         assert_eq!(s.theme, 1);
     }
 
@@ -8087,6 +8517,70 @@ mod tests {
         press(&mut s, &[Button::Down, Button::Down, Button::Down, Button::East]);
         assert_eq!(s.take_streaming(), None, "no row without Moonlight: Down stops at Super Nintendo");
         assert_eq!(s.take_hidden(), Some(vec!["snes".to_string()]), "the tick went to Super Nintendo");
+    }
+
+    /// A photo of the Brick, 2026-11-20 ("so much waste of space"): Settings › Look showed 138x104 pictures with a
+    /// third of the page empty under them, the first start 58x44. On every screen and text size, in Settings › Look and
+    /// the first start: the shown look's picture takes a fair share of the room between the subtitle and the hint bar,
+    /// on the Brick's 1024x768 as tall a part of the screen as on the RG35XX Plus's 1280x960 (5 points either way),
+    /// nothing is painted over it, and nothing under it reaches the hint bar.
+    #[test]
+    fn the_look_pictures_use_the_room_of_the_page() {
+        let screens = [(1280, 960), (1024, 768), (1280, 720), (1240, 1080), (1920, 1080)];
+        const PICTURE: u32 = 0x00ff_00ff;
+        let mut failed = Vec::new();
+        let mut table = Vec::new();
+        for size in [crate::text_size::TextSize::Normal, crate::text_size::TextSize::Large] {
+            crate::type_scale::set(size);
+            for first in [false, true] {
+                let mut tall = std::collections::HashMap::new();
+                for (w, h) in screens {
+                    let mut s = if first { shelf_setup("look-room").at_stage("look") } else { shelf_setup("look-room").only(Only::Look) };
+                    let (pw, ph) = look_preview((w, h));
+                    let previews: Vec<Image> = (0..s.themes.len()).map(|_| Image { w: pw as u32, h: ph as u32, px: vec![PICTURE; (pw * ph) as usize] }).collect();
+                    let mut px = vec![0u32; (w * h) as usize];
+                    s.paint_look(&mut Canvas::new(&mut px, w as u32, h as u32), &mut Text::builtin(), &previews, false);
+                    // Where the shown look's picture is: its own colour (the neighbours are dimmed).
+                    let mut found = (w, h, 0, 0);
+                    for (i, _) in px.iter().enumerate().filter(|(_, p)| **p == PICTURE) {
+                        let (qx, qy) = (i as i32 % w, i as i32 / w);
+                        found = (found.0.min(qx), found.1.min(qy), found.2.max(qx + 1), found.3.max(qy + 1));
+                    }
+                    let (x, y, rw, rh) = (found.0, found.1, (found.2 - found.0).max(0), (found.3 - found.1).max(0));
+                    let at = format!("{size:?} {w}x{h} {}", if first { "first start" } else { "Settings › Look" });
+                    let hint_top = crate::kit::hint_bar_top(h);
+                    // The room: the page's width inside its margins, from under the subtitle to the hint bar.
+                    let room = (w - 2 * MARGIN) * (hint_top - h.min(960) * 226 / 960);
+                    let share = (rw * rh) as f32 / room as f32;
+                    table.push(format!("{at}: {rw}x{rh}, {:.0} % of the room, {:.1} % of the height", share * 100.0, rh as f32 * 100.0 / h as f32));
+                    tall.insert((w, h), rh as f32 / h as f32);
+                    let want = if first { 0.04 } else { 0.30 };
+                    if share < want {
+                        failed.push(format!("{at}: picture {rw}x{rh} is {:.0} % of the room, wants {:.0} %", share * 100.0, want * 100.0));
+                    }
+                    if rw > pw || rh > ph {
+                        failed.push(format!("{at}: painted {rw}x{rh} larger than rendered {pw}x{ph} (blurred)"));
+                    }
+                    let covered = (y..y + rh).flat_map(|py| (x..x + rw).map(move |qx| (qx, py))).filter(|&(qx, py)| px[(py * w + qx) as usize] != PICTURE).count();
+                    if covered > 0 {
+                        failed.push(format!("{at}: {covered} pixels painted over the picture"));
+                    }
+                    // Just above the hint bar the page is empty: nothing under the picture ran into it.
+                    let void = pal().void;
+                    let ran = (hint_top - 4..hint_top).flat_map(|py| (MARGIN..w - MARGIN).map(move |qx| (qx, py))).filter(|&(qx, py)| px[(py * w + qx) as usize] != void).count();
+                    if ran > 0 {
+                        failed.push(format!("{at}: {ran} pixels just above the hint bar"));
+                    }
+                }
+                let (brick, plus) = (tall[&(1024, 768)], tall[&(1280, 960)]);
+                if (brick - plus).abs() > 0.05 {
+                    failed.push(format!("{size:?} {}: the Brick's picture is {:.1} % of its height, the Plus's {:.1} %", if first { "first start" } else { "Settings › Look" }, brick * 100.0, plus * 100.0));
+                }
+            }
+        }
+        crate::type_scale::set(crate::text_size::TextSize::Normal);
+        eprintln!("{}", table.join("\n"));
+        assert!(failed.is_empty(), "{failed:#?}");
     }
 
     /// A canvas to paint on, and a text.
@@ -8606,8 +9100,8 @@ mod hint_bars {
 
     #[test]
     fn the_look_steps_hints_name_the_keys_of_the_focused_row() {
-        assert_eq!(look_hints(false, false), [("Left/Right", "Layout"), ("A", "Finish"), ("B", "Back")]);
-        assert_eq!(look_hints(false, true), [("Left/Right", "Change"), ("A", "Finish"), ("B", "Back")], "Style, Colours, Appearance");
+        assert_eq!(look_hints(false, false), [("Left/Right", "Layout"), ("A", "Continue"), ("B", "Back")]);
+        assert_eq!(look_hints(false, true), [("Left/Right", "Change"), ("A", "Continue"), ("B", "Back")], "Style, Colours, Appearance");
         for below in [false, true] {
             assert!(look_hints(true, below).iter().all(|(_, label)| !label.is_empty()), "every key on Settings → Look has its word");
         }

@@ -125,8 +125,8 @@ impl Model {
     }
 
     /// Systems whose pocket-core cores are too heavy for the chip stay on ROCKNIX's own emulators
-    /// (`hostsys::H700_STAYS_ON_ROCKNIX`): the H700's Cortex-A53, and the RG DS Plus's Cortex-A55 until it is measured
-    /// (its DS games need DraStic anyway, which puts them on both screens).
+    /// (`hostsys::H700_STAYS_ON_ROCKNIX`): the H700's Cortex-A53, the small Rockchip
+    /// handhelds and the RG DS Plus's Cortex-A55. DS has its lighter bundled core.
     pub fn small_chip(self) -> bool {
         self.is_h700() || self.is_rk3566() || self.is_rk3326() || self == Model::RgDsPlus
     }
@@ -484,6 +484,12 @@ pub fn android_profile() -> bool {
     cfg!(all(target_os = "android", feature = "handheld")) || *ON.get_or_init(|| std::env::var_os(ANDROID_PROFILE_ENV).is_some_and(|v| v == "1"))
 }
 
+/// No fan of ours to set: the small chips (H700, Rockchip, R36S, RG DS), the Brick, and Android, whose own system cools it.
+/// Settings and the pause menu then name no fan (`i18n::FANLESS_NAMES`, `perf_fan_page::rows`).
+pub fn no_fan() -> bool {
+    !current().has_fan() || android_profile() || cfg!(target_os = "android")
+}
+
 /// The variable that puts the Linux build in Android's profile ([`android_profile`]).
 pub const ANDROID_PROFILE_ENV: &str = "POCKETUI_ANDROID_PROFILE";
 
@@ -498,8 +504,11 @@ pub const ANDROID_HIDES: &[&str] = &["leds", "haptics", "sync", "tailscale", "to
     "report",
     // What only pocket-core's pause menu and overlay have: the Android player's menu has Zoom always, one Save & quit, its own
     // Over the game (Off/FPS, Options in the game, kept with its picture choices: no default here), no Pixel Path line and no run-ahead,
-    // no console boot screen (it has no BIOS folder to read), and its Screenshot button saves into the player's folder, not the one this view reads.
-    "zoom_pause", "boot_screen", "over_game", "remember_quit", "quit_without_saving", "pixel_path", "pixel_path_live", "run_ahead", "screenshots"];
+    // and its Screenshot button saves into the player's folder, not the one this view reads. Console boot screen stays: the player
+    // reads it from this view's settings and the BIOS from its private folder (`boot_screen`, `document_library::player_bios`).
+    "zoom_pause", "over_game", "remember_quit", "quit_without_saving", "pixel_path", "pixel_path_live", "run_ahead", "screenshots",
+    // The photo moment over the game is pocket-core's GL overlay (`album_eject`): Photos of big moments has no Also in play there.
+    "moment_in_play"];
 
 pub use crate::option_table::{game_setting_out_in, ANDROID_PLAYER_SETTINGS};
 
@@ -532,6 +541,8 @@ pub fn hides_in(key: &str, sticks: bool, nextui_owned: bool, android: bool) -> b
     }
     match key {
         "leds" => !sticks,
+        // The TrimUI build draws games in software (`brick_picture`): no photo moment over them; its photos go into the case.
+        "moment_in_play" => cfg!(feature = "brick"),
         "haptics" | "sync" | "tailscale" | "tools" | "perf_fan" | "radios" | "time" | "updates" | "kids" => nextui_owned,
         _ => false,
     }
@@ -608,6 +619,7 @@ mod tests {
         assert!(super::hides_in("android_view", true, false, false), "no View row on Linux");
         assert!(!super::hides_in("android_view", true, false, true), "the View row on Android");
         assert!(!super::hides_in("updates", true, false, true), "Updates on Android: a look by hand (17.11.2026)");
+        assert!(!super::hides_in("boot_screen", true, false, true), "Console boot screen on Android: the player reads the private BIOS folder");
     }
 
     /// docs/TRIMUI-BRICK-MORE.md: the Tour leaves out the cards whose page the Brick has no row for, and every card it keeps names a real id.
@@ -1042,4 +1054,16 @@ pub fn darkos_port() -> bool {
     { crate::darkos::host() }
     #[cfg(not(feature = "brick"))]
     { false }
+}
+
+#[cfg(test)]
+mod pocket_sync_row_tests {
+    /// Pocket-to-Pocket sync finds the saves where each system keeps them: beside the games on ROCKNIX, in pocket-core's
+    /// own folder on the Brick and dArkOS (`app_pocket_sync::card_layout`), where the player keeps them in Android's
+    /// handheld view (`pocket_sync::Layout::android`). Its row is there on every one (0.6.0), off until switched on.
+    #[test]
+    fn the_pockets_row_is_on_every_system() {
+        assert!(!super::hides_in("pocket_sync", true, false, false));
+        assert!(!super::hides_in("pocket_sync", true, false, true), "Android's handheld view has it");
+    }
 }

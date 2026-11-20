@@ -11,7 +11,7 @@ sound, Playing, Games, System, Help & tools), each a short list ([Open Settings]
 symbols stand in a row at the top, the one you are in named. Up on the first row moves to that row of symbols, where
 Left/Right change the category and Down goes back into its rows.
 
-Connections holds Wi-Fi, Bluetooth, Tailscale, Remote access (SSH), Sync, Web companion and PC streaming, where the
+Connections holds Wi-Fi, Bluetooth, Tailscale, Remote access (SSH), Sync, Pocket Sync, Web companion and PC streaming, where the
 device supports them. Use Up/Down to select one, A to open it, and B to return to its row in Connections.
 
 | Button | What it does |
@@ -20,7 +20,7 @@ device supports them. Use Up/Down to select one, A to open it, and B to return t
 | On the symbols at the top | Left / Right (or L1 / R1): the previous or the next category, round at the ends; its rows show under it. Down or A: into its rows, on the first. B: back to where you came from. |
 | L1 / R1 | The previous or the next category, at its first row; round at the ends. A tap on a category's symbol at the top goes there. |
 | HOME | Back to Home from wherever you are in Settings (a list, About, Battery, Lights, Night light, Cozy extras, Sleep & power, Curator). Pages with something under way (an update or a download, a sign-in, a pairing, a clean-up, a button being remapped) keep it: B goes back there. On Home and the shelf HOME still opens the quick settings. |
-| A | On an entry that ends in **›**: open its page. On Screen colour: back to Neutral. On Brightness and Volume: nothing. On every other entry that changes in place (Appearance, Colours, Style, Text size, Motion, Game start animation, Lived-in shelf, Menu sounds, Case sounds, Haptics, On start, Continue where I quit, Console boot screen, Remind me where I was, Screen frames, Over the game, Zoom in the pause menu, Language): switch it, or the next value. |
+| A | On an entry that ends in **›**: open its page. On Screen colour: back to Neutral. On Brightness and Volume: nothing. On every other entry that changes in place (Appearance, Colours, Style, Text size, Motion, Game start animation, Lived-in shelf, Menu sounds, Case sounds, Haptics, On start, Continue where I quit, Console boot screen, Remind me where I was, Screen frames, Over the game, Zoom in the pause menu, Shelf space, Language): switch it, or the next value. |
 | D-pad Left / Right | On every entry that changes in place (no **›** at its end): switch it, or the previous / next value; the selected one shows **‹ ›** round its value. On Menu sounds: how loud. On Brightness and Volume: the level, as in the quick settings. On Screen colour: cooler or warmer. On an entry that opens a page: nothing. On the Buttons page: A or Left / Right switch the selected row, Button layout or Button symbols. Controller setup opens the separate layout for each connected controller. |
 | B | In a category's list: back to where you came from (the shelf, or a system's game list), in one press. |
 
@@ -172,7 +172,7 @@ If the touch screen does not answer: pocket-ui looks for it until it is there, a
 (after a restart of the touch driver, say), so it comes back by itself. Touches are also dropped on purpose while a game
 or app runs, while the screen is off or the Pocket sleeps (only a button wakes it), on the pause menu and the first-start
 setup, and while the picture is on a TV. Which one it was is in the log (`/var/log/pocket-ui.log`, lines starting
-`touch:`); Settings → Help & tools → About → Report a problem includes it.
+`touch:`); Settings → Help & tools → Report a problem includes it.
 
 ## Power and volume
 

@@ -11,7 +11,7 @@ use pocket_ui::display::Backend;
 use pocket_ui::text::Face;
 use pocket_ui::touch::Area;
 
-use super::{App, SettingsPage, UserEvent, CANCEL, CONFIRM, NU_BTN_PAD, NU_PAD, NU_PILL, NU_SMALL};
+use super::{App, SettingsPage, UserEvent, CANCEL, CONFIRM, NU_BTN_PAD, NU_PAD, NU_SMALL};
 
 /// The name in the Settings list, to come back to.
 pub(crate) const SETTINGS_NAME: &str = "Night light";
@@ -152,7 +152,7 @@ impl App {
         c.clear(pal().void);
         let (pad, row, font) = (NU_PAD, pocket_ui::type_scale::row(66, 36), 36u32);
         self.sheet_header(c, SETTINGS_NAME);
-        let (top, right) = (pad + NU_PILL + 12, c.w - pad);
+        let (top, right) = (pocket_ui::kit::header_bottom(c.h) + 12, c.w - pad);
         let prefs = self.night;
         let list = rows(&prefs);
         let sel = sel.min(list.len() - 1);

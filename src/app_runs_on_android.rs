@@ -29,6 +29,11 @@ use super::{App, Notice};
 /// A test or a snapshot's phone, from `POCKETUI_PHONE` (a file) and the choices in `data_dir`'s launcher.json. Nothing
 /// without the variable, and never in a normal run: only the test driver and `--snapshot` call it.
 pub(crate) fn init_for_tests(data_dir: &Path) {
+    // A test's or a snapshot's device storage for the first start's look (`android_first_start::look`): a folder laid out
+    // like /storage (emulated/0/..., XXXX-XXXX/...).
+    if let Some(storage) = std::env::var_os("POCKETUI_FIRST_START_STORAGE") {
+        pocket_ui::android_first_start::look(Path::new(&storage), true);
+    }
     let Some(file) = std::env::var_os("POCKETUI_PHONE") else { return };
     let json = std::fs::read_to_string(&file).unwrap_or_default();
     play_route::set_phone(Phone::from_json(&json));
@@ -50,7 +55,7 @@ impl App {
 
     /// What `sys` runs with where there is a phone: pocket-ui's own core (when the player has one), nothing from ES's list.
     pub(crate) fn phone_inputs(&self, sys: &System, phone: &Phone) -> Inputs<'static> {
-        Inputs { pocket_core: play_route::own_core(&sys.name, phone.gambatte), pocket_cores: &[], file_ok: true, fell_back: false, default_override: None }
+        Inputs { pocket_core: play_route::own_core(&sys.name, phone.gambatte), pocket_cores: if sys.name=="nds" {pocket_ui::ds::CORES} else {&[]}, file_ok: true, fell_back: false, default_override: None }
     }
 
     /// The apps that take the system, as the page's emulator list: no cores, the first one is the default where our own
@@ -162,6 +167,47 @@ impl App {
                 eprintln!("plays with: {}: {e}", path.display());
             }
         });
+    }
+
+    /// The first start's emulator apps (`android_first_start::take_offers`): kept as Plays with's choices, in launcher.json.
+    pub(crate) fn phone_take_offers(&mut self, offers: &[pocket_ui::android_first_start::AppOffer]) {
+        let mut prefs = (*play_route::prefs()).clone();
+        if !pocket_ui::android_first_start::take_offers(&mut prefs.plays_with, offers) {
+            return;
+        }
+        play_route::set_prefs(prefs.clone());
+        let path = self.phone_prefs_path();
+        let old = std::fs::read_to_string(&path).unwrap_or_default();
+        match pocket_ui::fsutil::write_atomic(&path, play_route::json_with_prefs(&old, &prefs).as_bytes()) {
+            Ok(()) => println!("first start: plays with {:?}", offers.iter().map(|o| (o.system, &o.app.package)).collect::<Vec<_>>()),
+            Err(e) => eprintln!("plays with: {}: {e}", path.display()),
+        }
+    }
+
+    /// An emulator app's official page (`android_first_start::APP_DOWNLOADS`), in the browser: nothing is downloaded here.
+    pub(crate) fn phone_open_page(&mut self, url: &str) {
+        if !pocket_ui::android_first_start::official_page(url) {
+            return;
+        }
+        #[cfg(all(target_os = "android", feature = "handheld"))]
+        if let Err(e) = pocket_ui::platform::android::strings("openPage", &[url]) {
+            eprintln!("open page: {e}");
+        }
+        println!("first start: official page {url}");
+    }
+
+    /// A games folder another app keeps, taken on the first start's "Your games": read from now on (Android: the host
+    /// writes its system list again), the shelf and the page's counts follow.
+    pub(crate) fn android_folder_added(&mut self, folder: &std::path::Path) {
+        #[cfg(all(target_os = "android", feature = "handheld"))]
+        super::app_android::add_games_folder(folder);
+        #[cfg(not(all(target_os = "android", feature = "handheld")))]
+        pocket_ui::android_first_start::keep_folder(&self.data_dir, folder);
+        let catalog = pocket_ui::library::all_systems(&self.es_systems).unwrap_or_default();
+        if let Some(s) = self.setup.as_mut() {
+            s.set_catalog(catalog);
+        }
+        self.library_rescan("games folder added");
     }
 
     /// The phone's apps and cores again, from the host (an app was installed, a core came): Android only.

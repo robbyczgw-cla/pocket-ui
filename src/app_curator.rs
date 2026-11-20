@@ -32,7 +32,7 @@ use pocket_ui::palette::*;
 use pocket_ui::text::Face;
 use pocket_ui::touch::Area;
 
-use super::{stripe, system_label, system_short, App, Item, Screen, SettingsPage, UserEvent, CANCEL, CONFIRM, NU_BTN_PAD, NU_PAD, NU_PILL, NU_SMALL};
+use super::{stripe, system_label, system_short, App, Item, Screen, SettingsPage, UserEvent, CANCEL, CONFIRM, NU_BTN_PAD, NU_PAD, NU_SMALL};
 
 /// The name in the Settings list, to come back to.
 pub(crate) const SETTINGS_NAME: &str = "Curator";
@@ -1303,6 +1303,8 @@ impl App {
             RowKind::SaveVersions => self.open_conflicts_for_card(),
             // Not Curator's: Hide or delete (`app_storage`).
             RowKind::Manage => self.open_card_manage(),
+            // Shelf space: off the shelf into the crate (`app_crate`).
+            RowKind::Crate => self.card_into_crate(),
             // The game's screenshots (`app_gallery`).
             RowKind::Screenshots => self.open_gallery_for_card(),
         }
@@ -1627,9 +1629,13 @@ impl App {
             // What the values mean, where that needs saying (Length is a rough guide …), under them when there's room.
             if let Some(note) = f.note().filter(|_| fv.values.len() < visible) {
                 let mut ny = top + fv.values.len() as i32 * pitch + 32;
-                for line in self.text.wrap_prose(Face::Body, 28, note, rw - 24).iter().take(3) {
+                // As many of its three lines as stand over the hints, the last one shown ending with "…" (with the flat
+                // hint bar the list has room for the note more often, and its third line ran into the bar, 18.11.2026).
+                let step = pocket_ui::type_scale::line(28, 12);
+                let room = ((bottom - ny) / step + 1).clamp(0, 3) as usize;
+                for line in self.text.wrap_prose_at_most(Face::Body, 28, note, rw - 24, room.max(1)).iter().take(room) {
                     self.text.draw(c, Face::Body, 28, rx + 12, ny, pal().dust, line);
-                    ny += pocket_ui::type_scale::line(28, 12);
+                    ny += step;
                 }
             }
             match col {
@@ -1885,14 +1891,14 @@ impl App {
         c.clear(pal().void);
         let (pad, row, font) = (NU_PAD, pocket_ui::type_scale::row(66, 36), 36u32);
         self.sheet_header(c, SETTINGS_NAME);
-        let (top, right) = (pad + NU_PILL + 12, c.w - pad);
+        let (top, right) = (pocket_ui::kit::header_bottom(c.h) + 12, c.w - pad);
         // On a short screen (768 lines) the rows share what is left above the explanation (as many lines as it has: a third ran
         // into the hints on the Brick) and the hints.
         let step = pocket_ui::type_scale::line(NU_SMALL, 12);
         let sel = self.curator.settings_sel;
         let width = c.w - 2 * (pad + NU_BTN_PAD);
         let help = self.text.wrap_prose(Face::Body, NU_SMALL, SETTINGS_ROWS[sel.min(SETTINGS_ROWS.len() - 1)].1, width);
-        let row = row.min((c.h - pad - NU_PILL - 16 - top - 44 - help.len().max(2) as i32 * step) / SETTINGS_ROWS.len() as i32).max(row * 3 / 4);
+        let row = row.min((pocket_ui::kit::hint_bar_top(c.h) - 16 - top - 44 - help.len().max(2) as i32 * step) / SETTINGS_ROWS.len() as i32).max(row * 3 / 4);
         for (i, (name, _)) in SETTINGS_ROWS.iter().enumerate() {
             let y = top + i as i32 * row;
             self.hits.row(Area::new(pad, y, right - pad, row), i);
@@ -1913,7 +1919,7 @@ impl App {
         let (left, width) = (pad + NU_BTN_PAD, c.w - 2 * (pad + NU_BTN_PAD));
         let mut y = top + SETTINGS_ROWS.len() as i32 * row + 44;
         // Never under the hints: what doesn't fit ends with "…" (at the smallest rows).
-        let last = c.h - pad - NU_PILL - 8 - pocket_ui::type_scale::px(NU_SMALL) as i32 / 4;
+        let last = pocket_ui::kit::hint_bar_top(c.h) - 8 - pocket_ui::type_scale::px(NU_SMALL) as i32 / 4;
         let room = if y > last { 0 } else { ((last - y) / step + 1) as usize };
         for line in self.text.wrap_prose_at_most(Face::Body, NU_SMALL, SETTINGS_ROWS[sel].1, width, room.max(1)).into_iter().take(room) {
             self.text.draw(c, Face::Body, NU_SMALL, left, y, pal().text, &line);
@@ -1922,7 +1928,7 @@ impl App {
         y += 18;
         let note = "Everything Curator knows comes with pocket-ui and stays on the Pocket: it works without a network.";
         // Above the hints (with larger text it may be shortened with "…").
-        let bottom = c.h - pad - NU_PILL - 16;
+        let bottom = pocket_ui::kit::hint_bar_top(c.h) - 16;
         self.text.paragraph(c, Face::Body, 24, (left, y), width, pocket_ui::type_scale::line(24, 8), bottom, pal().quiet, note);
         self.nu_hints(c, &[("B", "Back"), ("A", "Change")]);
     }
@@ -2254,8 +2260,9 @@ fn name_page(title: &str, name: &str, purpose: Purpose, back: Option<Page>) -> P
 fn save_states(system: &str, path: &Path) -> usize {
     let stem = path.file_stem().and_then(|s| s.to_str()).unwrap_or_default();
     let base = pocket_ui::slots::base(system, stem);
-    let slots = pocket_ui::slots::filled(&base).iter().filter(|f| **f).count();
-    let auto = pocket_ui::state_file::exists(&pocket_ui::slots::auto_path(&base)) as usize;
+    let bases = if system == "nds" { vec![base.clone(), pocket_ui::ds::state_base(&base, "dsperate")] } else { vec![base] };
+    let slots: usize = bases.iter().map(|base| pocket_ui::slots::filled(base).iter().filter(|f| **f).count()).sum();
+    let auto = bases.iter().filter(|base| pocket_ui::state_file::exists(&pocket_ui::slots::auto_path(base))).count();
     let retroarch = pocket_ui::slots::states_dir().join(system).join(format!("{stem}.state")).exists() as usize;
     slots + auto + retroarch
 }

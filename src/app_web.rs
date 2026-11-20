@@ -18,7 +18,7 @@ use pocket_ui::touch::Area;
 use pocket_ui::web::{self, Edit, NowPlaying, Prefs, Shared};
 use pocket_ui::web_page::{self, Action, Paired, View, WebPage, ROWS};
 
-use super::{App, SettingsPage, UserEvent, CANCEL, CONFIRM, NU_BTN_PAD, NU_PAD, NU_PILL};
+use super::{App, SettingsPage, UserEvent, CANCEL, CONFIRM, NU_BTN_PAD, NU_PAD};
 
 /// The name in the Settings list, to come back to.
 pub(crate) const SETTINGS_NAME: &str = "Web companion";
@@ -548,7 +548,7 @@ impl App {
         // On a short screen (768 lines) the address, its explanation and the note keep their place above the footer.
         let row = if pocket_ui::kit::short_screen(c.h) { row * 4 / 5 } else { row };
         self.sheet_header(c, SETTINGS_NAME);
-        let (top, right) = (pad + NU_PILL + 12, c.w - pad);
+        let (top, right) = (pocket_ui::kit::header_bottom(c.h) + 12, c.w - pad);
         for (i, r) in ROWS.iter().enumerate() {
             let y = top + i as i32 * row;
             self.hits.row(Area::new(pad, y, right - pad, row), i);
@@ -635,21 +635,31 @@ impl App {
     fn paint_web_pairing(&mut self, c: &mut Canvas, page: &WebPage) {
         let pad = NU_PAD;
         self.sheet_header(c, "Pair a browser");
-        let (left, top) = (pad + NU_BTN_PAD, pad + NU_PILL + 30);
+        let (left, top) = (pad + NU_BTN_PAD, pocket_ui::kit::header_bottom(c.h) + 30);
         let address = page.address.clone().unwrap_or_else(|| "http://pocket".into());
         let Some(code) = page.code.clone() else {
             self.text.draw(c, Face::Title, 44, left, top + 80, pal().dust, "No code: the Pocket gave no random numbers.");
             self.nu_hints(c, &[("B", "Back")]);
             return;
         };
-        let qr = 460;
+        // 460 px on 960 lines and more; under them (the Brick's 1024x768, painted natively with the same text sizes) the
+        // Plus's share of the height: a fixed 460 cut three lines beside it with "…", how long the code holds among them.
+        let qr = if c.h < 960 { 460 * c.h / 960 } else { 460 };
         super::app_sync::paint_qr(c, left, top, qr, &format!("{address}/#pair={code}"));
+        pocket_ui::shares::mark("web-qr", left, top, qr, qr);
         let tx = left + qr + 50;
         let width = c.w - pad - NU_BTN_PAD - tx;
         let mut y = top + 36;
         for s in ["1.  Scan this with your phone's camera,", "     or open this address in a browser:"] {
-            let s = self.text.fit(Face::Body, 28, s, width);
-            self.text.draw(c, Face::Body, 28, tx, y, pal().text, &s);
+            // As it is where it fits (the Plus), else on two lines.
+            if self.text.width(Face::Body, 28, s) <= width {
+                self.text.draw(c, Face::Body, 28, tx, y, pal().text, s);
+            } else {
+                for (i, l) in self.text.wrap_prose_at_most(Face::Body, 28, s, width, 2).iter().enumerate() {
+                    y += if i > 0 { pocket_ui::type_scale::line(28, 8) } else { 0 };
+                    self.text.draw(c, Face::Body, 28, tx, y, pal().text, l);
+                }
+            }
             y += 44;
         }
         let shown = self.text.fit(Face::Title, 37, &address, width);
@@ -661,8 +671,10 @@ impl App {
         self.text.draw(c, Face::Title, 120, tx, y, pal().chalk, &spaced);
         y += 64;
         let left_txt = format!("Valid for {}:{:02} more, for one browser.", page.code_left / 60, page.code_left % 60);
-        let left_txt = self.text.fit(Face::Body, 24, &left_txt, width);
-        self.text.draw(c, Face::Body, 24, tx, y, pal().dust, &left_txt);
+        for (i, l) in self.text.wrap_prose_at_most(Face::Body, 24, &left_txt, width, 2).iter().enumerate() {
+            y += if i > 0 { pocket_ui::type_scale::line(24, 8) } else { 0 };
+            self.text.draw(c, Face::Body, 24, tx, y, pal().dust, l);
+        }
         y += 34;
         for l in self.text.wrap_prose(Face::Body, 24, "Five wrong tries and the code is gone.", width) {
             self.text.draw(c, Face::Body, 24, tx, y, pal().dust, &l);
@@ -674,8 +686,8 @@ impl App {
     fn paint_web_browsers(&mut self, c: &mut Canvas, page: &WebPage, sel: usize, confirm: bool) {
         let (pad, row, font) = (NU_PAD, pocket_ui::type_scale::row(76, 34), 34u32);
         self.sheet_header(c, "Paired browsers");
-        let (top, right) = (pad + NU_PILL + 12, c.w - pad);
-        let visible = ((c.h - top - pad - NU_PILL - 30) / row).max(1) as usize;
+        let (top, right) = (pocket_ui::kit::header_bottom(c.h) + 12, c.w - pad);
+        let visible = ((pocket_ui::kit::hint_bar_top(c.h) - top - 30) / row).max(1) as usize;
         let first = super::window_start(sel, visible, page.browsers.len());
         for (i, b) in page.browsers.iter().enumerate().skip(first).take(visible) {
             let y = top + (i - first) as i32 * row;

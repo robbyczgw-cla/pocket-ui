@@ -270,8 +270,8 @@ impl Graphics {
                     let y0 = (y * sy).floor() as i32;
                     let y1 = ((y + h) * sy).ceil() as i32;
                     gl.viewport(pic_view.0 + x0, pic_view.1 + pic_view.3 - y1, x1 - x0, y1 - y0);
-                    let value = if quad.white { 1.0 } else { 0.0 };
-                    gl.uniform_4_f32(tint.as_ref(), value, value, value, quad.alpha);
+                    let [r, g, b] = quad.rgb_f32();
+                    gl.uniform_4_f32(tint.as_ref(), r, g, b, quad.alpha);
                     gl.draw_arrays(glow::TRIANGLES, 0, 3);
                 }
                 gl.use_program(Some(self.program));

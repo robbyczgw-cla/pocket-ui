@@ -86,6 +86,10 @@ pub fn acceptable(file: &Path) -> bool {
 /// The games (system id, ROM path) that still lack a picture of some kind the collection may have: a known
 /// system, no file, not in that system's `.missing` list, and not looked up already (`tried`, this session).
 pub fn missing(data_dir: &Path, games: &[(String, PathBuf)], tried: &HashSet<PathBuf>) -> Vec<(String, PathBuf)> {
+    missing_with_policy(data_dir, games, tried, false)
+}
+
+fn missing_with_policy(data_dir: &Path, games: &[(String, PathBuf)], tried: &HashSet<PathBuf>, retry_missing: bool) -> Vec<(String, PathBuf)> {
     let mut listed: HashMap<(Kind, &str), HashSet<String>> = HashMap::new();
     games
         .iter()
@@ -95,7 +99,8 @@ pub fn missing(data_dir: &Path, games: &[(String, PathBuf)], tried: &HashSet<Pat
             }
             let stem = rom.file_stem().and_then(|s| s.to_str()).unwrap_or_default();
             Kind::ALL.iter().any(|&kind| {
-                !path(data_dir, kind, sys, rom).exists() && !listed.entry((kind, sys.as_str())).or_insert_with(|| listed_missing(data_dir, kind, sys)).contains(stem)
+                !path(data_dir, kind, sys, rom).exists()
+                    && (retry_missing || !listed.entry((kind, sys.as_str())).or_insert_with(|| listed_missing(data_dir, kind, sys)).contains(stem))
             })
         })
         .cloned()
@@ -117,14 +122,67 @@ pub trait Remote {
     /// The names listed for a playlist's directory; empty when it could not be read.
     fn index(&self, playlist: &str, kind: Kind) -> Vec<String>;
     fn download(&self, playlist: &str, kind: Kind, name: &str, dest: &Path) -> Fetched;
+    /// A listed picture answers (`scratch` holds it meanwhile).
+    fn available(&self, playlist: &str, kind: Kind, name: &str, scratch: &Path) -> bool;
 }
 
-/// thumbnails.libretro.com through the system's curl.
+pub(crate) enum Lookup {
+    Got,
+    Unusable,
+    Failed,
+    Missing,
+}
+
+/// A listing and whether a file from it has answered in this run. A stale listing surviving a
+/// server outage cannot rule out an unlisted game on its own.
+pub(crate) struct Catalog {
+    playlist: String,
+    kind: Kind,
+    names: Vec<String>,
+    available: Option<bool>,
+}
+
+impl Catalog {
+    pub(crate) fn for_playlist<'a>(
+        current: &'a mut Option<Self>, remote: &dyn Remote, playlist: &str, kind: Kind,
+    ) -> &'a mut Self {
+        if current.as_ref().is_none_or(|c| c.playlist != playlist) {
+            *current = Some(Self { playlist: playlist.into(), kind, names: remote.index(playlist, kind), available: None });
+        }
+        current.as_mut().unwrap()
+    }
+
+    pub(crate) fn lookup(&mut self, remote: &dyn Remote, stem: &str, identified: Option<&str>, dest: &Path) -> Lookup {
+        if let Some(name) = covers::pick(stem, identified, &self.names) {
+            return match remote.download(&self.playlist, self.kind, name, dest) {
+                Fetched::Got => {
+                    self.available = Some(true);
+                    Lookup::Got
+                }
+                Fetched::Unusable => Lookup::Unusable,
+                Fetched::Failed => {
+                    self.available = Some(false);
+                    Lookup::Failed
+                }
+            };
+        }
+        let available = self.available.get_or_insert_with(|| {
+            self.names.first().is_some_and(|name| remote.available(&self.playlist, self.kind, name, &dest.with_extension("probe")))
+        });
+        if *available { Lookup::Missing } else { Lookup::Failed }
+    }
+}
+
+/// The Libretro thumbnail collection and its GitHub mirror.
 pub struct Libretro;
 
 impl Remote for Libretro {
     fn index(&self, playlist: &str, kind: Kind) -> Vec<String> {
         covers::fetch_index_in(playlist, kind.remote())
+    }
+
+    fn available(&self, playlist: &str, kind: Kind, name: &str, scratch: &Path) -> bool {
+        covers::picture_available(playlist, kind.remote(), name, &["--max-filesize", &MAX_BYTES.to_string()], scratch)
     }
 
     fn download(&self, playlist: &str, kind: Kind, name: &str, dest: &Path) -> Fetched {
@@ -173,41 +231,44 @@ pub fn scrape_until(
     progress: impl Fn(usize, usize, usize),
     stop: impl Fn() -> bool,
 ) -> Scraped {
+    scrape_with_policy(remote, data_dir, games, false, progress, stop)
+}
+
+fn scrape_with_policy(
+    remote: &dyn Remote,
+    data_dir: &Path,
+    games: &[(String, PathBuf)],
+    retry_missing: bool,
+    progress: impl Fn(usize, usize, usize),
+    stop: impl Fn() -> bool,
+) -> Scraped {
     let total = games.len();
     let (mut done, mut found, mut failures) = (0, 0, 0);
     let mut unreachable = false;
     let mut looked_up = Vec::new();
     // The listing of the playlist being worked through, per kind: games come system by system.
-    let mut index: HashMap<Kind, (String, Vec<String>)> = HashMap::new();
+    let mut indexes: [Option<Catalog>; Kind::ALL.len()] = [None, None];
     // The proper names the games' checksums gave (`rom_id`).
     let names = crate::rom_id::known(data_dir, games);
     'games: for (sys, rom) in games {
         let Some(list) = covers::playlist(sys) else { continue };
         let stem = rom.file_stem().and_then(|s| s.to_str()).unwrap_or_default();
-        for kind in Kind::ALL {
+        for (kind, index) in Kind::ALL.into_iter().zip(&mut indexes) {
             let dest = path(data_dir, kind, sys, rom);
-            if dest.exists() || listed_missing(data_dir, kind, sys).contains(stem) {
+            if dest.exists() || (!retry_missing && listed_missing(data_dir, kind, sys).contains(stem)) {
                 continue;
             }
             if stop() {
                 break 'games;
             }
-            if index.get(&kind).is_none_or(|(p, _)| p != list) {
-                index.insert(kind, (list.to_string(), remote.index(list, kind)));
-            }
-            let list_names = &index[&kind].1;
-            match covers::pick(stem, names.get(rom).map(String::as_str), list_names) {
-                Some(name) => match remote.download(list, kind, name, &dest) {
-                    Fetched::Got => {
-                        found += 1;
-                        failures = 0;
-                    }
-                    Fetched::Unusable => note_missing(data_dir, kind, sys, stem),
-                    Fetched::Failed => failures += 1,
-                },
-                // An empty listing means it didn't load; don't mark the game as missing then.
-                None if !list_names.is_empty() => note_missing(data_dir, kind, sys, stem),
-                None => failures += 1,
+            let catalog = Catalog::for_playlist(index, remote, list, kind);
+            match catalog.lookup(remote, stem, names.get(rom).map(String::as_str), &dest) {
+                Lookup::Got => {
+                    found += 1;
+                    failures = 0;
+                }
+                Lookup::Unusable | Lookup::Missing => note_missing(data_dir, kind, sys, stem),
+                Lookup::Failed => failures += 1,
             }
             if failures >= covers::GIVE_UP_AFTER {
                 unreachable = true;
@@ -252,16 +313,41 @@ pub fn run_until(
     progress: impl Fn(usize, usize, usize),
     stop: impl Fn() -> bool,
 ) -> Outcome {
+    run_with_policy(remote, data_dir, covers_for, pictures, false, progress, stop)
+}
+
+/// An explicit download checks old negative entries again, leaving existing picture files alone.
+pub fn run_manual(
+    remote: &dyn Remote,
+    data_dir: &Path,
+    games: &[(String, PathBuf)],
+    pictures: bool,
+    progress: impl Fn(usize, usize, usize),
+    stop: impl Fn() -> bool,
+) -> Outcome {
+    let wanted = pictures.then(|| missing_with_policy(data_dir, games, &HashSet::new(), true));
+    run_with_policy(remote, data_dir, games, wanted.as_deref(), true, progress, stop)
+}
+
+fn run_with_policy(
+    remote: &dyn Remote,
+    data_dir: &Path,
+    covers_for: &[(String, PathBuf)],
+    pictures: Option<&[(String, PathBuf)]>,
+    retry_missing: bool,
+    progress: impl Fn(usize, usize, usize),
+    stop: impl Fn() -> bool,
+) -> Outcome {
     let covers_total = covers::todo(data_dir, covers_for).len();
     let pictures = pictures.unwrap_or_default();
     let pictures_total = pictures.len();
     let total = covers_total + pictures_total;
-    let first = covers::scrape_until(data_dir, covers_for, |done, _, found| progress(done, total, found), &stop);
+    let first = covers::scrape_from(remote, data_dir, covers_for, retry_missing, |done, _, found| progress(done, total, found), &stop);
     let mut out = Outcome { found: first.found, covers_looked_up: first.looked_up, pictures_looked_up: Vec::new(), covers_total, pictures_total, unreachable: first.unreachable };
     if out.unreachable || out.covers_looked_up.len() < covers_total {
         return out;
     }
-    let second = scrape_until(remote, data_dir, pictures, |done, _, found| progress(covers_total + done, total, first.found + found), stop);
+    let second = scrape_with_policy(remote, data_dir, pictures, retry_missing, |done, _, found| progress(covers_total + done, total, first.found + found), stop);
     out.found += second.found;
     out.pictures_looked_up = second.looked_up;
     out.unreachable = second.unreachable;
@@ -312,6 +398,10 @@ mod tests {
             } else {
                 Vec::new()
             }
+        }
+
+        fn available(&self, _playlist: &str, _kind: Kind, _name: &str, _scratch: &Path) -> bool {
+            self.online
         }
 
         fn download(&self, _playlist: &str, kind: Kind, name: &str, dest: &Path) -> Fetched {
@@ -421,6 +511,32 @@ mod tests {
         let again = Fake::new(&[]);
         scrape_until(&again, &d, &games, |_, _, _| {}, || false);
         assert!(again.asked.borrow().is_empty(), "no request for a game that is remembered or has its pictures");
+    }
+
+    #[test]
+    fn manual_download_retries_old_missing_entries_for_disc_games() {
+        for (system, extension) in [
+            ("psp", "chd"), ("psp", "cso"), ("dreamcast", "gdi"), ("saturn", "cue"),
+            ("psx", "pbp"), ("ps2", "iso"), ("segacd", "m3u"), ("gamecube", "rvz"), ("xbox", "xiso.iso"),
+        ] {
+            let d = dir("manual");
+            let stem = "Known Game (Europe) (En,Fr,De,Es,It)";
+            let game = (system.to_string(), d.join(format!("{stem}.{extension}")));
+            std::fs::write(&game.1, b"disc").unwrap();
+            let games = [game];
+            let fake = Fake::new(&[stem]);
+            let marker_stem = games[0].1.file_stem().unwrap().to_str().unwrap();
+            for kind in [Kind::Box, Kind::Snap, Kind::Title] {
+                note_missing(&d, kind, system, marker_stem);
+            }
+            assert!(crate::auto_covers::AutoCovers::default().missing(&d, &games).is_empty());
+            assert!(missing(&d, &games, &HashSet::new()).is_empty());
+            assert_eq!(run_manual(&fake, &d, &games, true, |_, _, _| {}, || false).found, 3, "{system} .{extension}");
+            for kind in [Kind::Box, Kind::Snap, Kind::Title] {
+                assert!(path(&d, kind, system, &games[0].1).is_file());
+            }
+            assert_eq!(run_manual(&fake, &d, &games, true, |_, _, _| {}, || false).found, 0);
+        }
     }
 
     #[test]

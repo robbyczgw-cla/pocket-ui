@@ -41,7 +41,7 @@ impl App {
         }
         let age = now.saturating_duration_since(at);
         // Java for a phone game's first start is said at once and for as long as it loads (`j2me_java`).
-        let java = preparing && self.java_fetch.is_some();
+        let java = preparing && (self.java_fetch.is_some() || self.romm_downloading());
         let on = java || (preparing && age >= Duration::from_secs(3) || pocket_ui::startup::loading_path().exists()) && age < LOAD_MAX;
         match (on, self.loading.since) {
             (true, None) => {
@@ -79,6 +79,9 @@ impl App {
         let Some(since) = self.loading.since else { return };
         if let Some(fetch) = self.java_fetch.clone() {
             return self.paint_java(c, &fetch);
+        }
+        if let Some(fetch) = self.romm.loaded().and_then(|r| r.fetch.clone()).filter(|_| self.romm_downloading()) {
+            return self.paint_romm_fetch(c, &fetch);
         }
         let turn = if pocket_ui::motion::level() == pocket_ui::motion::Motion::Off { 0 } else { (since.elapsed().as_millis() / SPIN_STEP.as_millis()) as i32 };
         let word = "Loading the game…";

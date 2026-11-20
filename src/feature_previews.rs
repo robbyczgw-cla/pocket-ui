@@ -331,6 +331,7 @@ fn card(c: &mut Canvas, text: &mut Text, focus: usize) {
         series: None,
         achievements: None,
         battery: None,
+        synced: None,
         port: None,
         port_update: false,
         app_game: false,
@@ -350,6 +351,7 @@ fn card(c: &mut Canvas, text: &mut Text, focus: usize) {
         case_meter: None,
         links: Vec::new(),
         plain: false,
+        album: None,
         rows: vec![
             CuratorRow {
                 kind: RowKind::Echoes,

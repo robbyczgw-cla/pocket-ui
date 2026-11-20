@@ -6,6 +6,11 @@ const BACK: u16 = 102;
 const ANIMATIONS: u16 = 90;
 const APPEARANCE: u16 = 91;
 const CANCEL_DOWNLOAD: u16 = 92;
+/// "Where your games are": a games folder found on the device (10, 11), an emulator app found (40...).
+const FOUND_FOLDER: u16 = 10;
+const FOUND_APP: u16 = 40;
+/// ... and an app to get for a system with games and none to play it (60, 61).
+const FOUND_GET: u16 = 60;
 
 impl Ui {
     /// "More systems?" is a step only while the APK offers a system to download; since every core is in the APK
@@ -13,15 +18,101 @@ impl Ui {
     fn systems_step_shown(&self) -> bool {
         !self.core_offers.is_empty()
     }
-    /// Where `step` stands as the player counts the steps, and how many there are (0-based place, count).
-    fn setup_place(&self, step: usize) -> (usize, usize) {
-        if self.systems_step_shown() { (step, 8) } else { (if step > 5 { step - 1 } else { step }, 7) }
+    /// The steps of the first start, in order. With a pad in the hands (a handheld, 18.11.2026) four: the welcome is the
+    /// language's page, the controls need no page (the pad's hint bar says them) and the covers come on their own on
+    /// unmetered Wi-Fi (Settings has the switch). With touch all of them.
+    pub(super) fn setup_steps(&self) -> Vec<usize> {
+        if self.controller_connected {
+            return vec![1, 2, 3, 7];
+        }
+        let mut steps = vec![0, 1, 2, 3, 4];
+        if self.systems_step_shown() {
+            steps.push(5);
+        }
+        steps.extend([6, 7]);
+        steps
     }
-    /// A first start left on "More systems?" by an older version goes on with the next step when nothing is offered.
+    /// Where `step` stands as the player counts the steps, and how many there are (0-based place, count). A step the
+    /// list hasn't (a pad came in on the covers step) counts as the next one's place.
+    fn setup_place(&self, step: usize) -> (usize, usize) {
+        let steps = self.setup_steps();
+        (steps.iter().filter(|s| **s < step).count().min(steps.len() - 1), steps.len())
+    }
+    fn next_step(&self, step: usize) -> Option<usize> {
+        self.setup_steps().into_iter().find(|s| *s > step)
+    }
+    fn previous_step(&self, step: usize) -> Option<usize> {
+        self.setup_steps().into_iter().rev().find(|s| *s < step)
+    }
+    /// A first start left on "More systems?" by an older version goes on with the next step when nothing is offered; one
+    /// on a step the pad's way hasn't (the welcome, the covers, the controls) goes on with the next one it has.
     pub fn skip_empty_steps(&mut self) {
-        if !self.prefs.onboarding_done && self.prefs.onboarding_step == 5 && !self.systems_step_shown() {
+        if self.prefs.onboarding_done {
+            return;
+        }
+        if self.prefs.onboarding_step == 5 && !self.systems_step_shown() {
             self.prefs.onboarding_step = 6;
         }
+        let step = self.prefs.onboarding_step.min(7);
+        if !self.setup_steps().contains(&step) {
+            self.prefs.onboarding_step = self.next_step(step).unwrap_or(7);
+            self.setup_row = 0;
+        }
+    }
+    /// The games folders found on the device that aren't chosen yet: two at most, the fullest first.
+    pub(super) fn found_folders(&self) -> Vec<pocket_ui::android_first_start::FoundFolder> {
+        let Some(folders) = self.found.as_ref().and_then(|f| f.folders.clone()) else { return Vec::new() };
+        let mut new: Vec<_> = folders
+            .into_iter()
+            .filter(|f| {
+                let id = f.document_uri().and_then(|u| u.rsplit('/').next().map(str::to_string)).unwrap_or_default();
+                !self.granted.iter().any(|g| g.eq_ignore_ascii_case(&id))
+            })
+            .collect();
+        new.sort_by_key(|f| std::cmp::Reverse(f.games.unwrap_or(0)));
+        new.truncate(2);
+        new
+    }
+    /// The systems with games: the library's and those of the folders found.
+    fn found_systems(&self) -> Vec<&'static str> {
+        let mut out: Vec<&'static str> = Vec::new();
+        for g in self.library.iter().flat_map(|l| l.games.iter()) {
+            if let Some((id, ..)) = pocket_ui::document_library::system(g.system_id) {
+                if !out.contains(&id) {
+                    out.push(id);
+                }
+            }
+        }
+        if let Some(folders) = self.found.as_ref().and_then(|f| f.folders.as_ref()) {
+            for id in pocket_ui::android_first_start::systems_found(folders) {
+                if !out.contains(&id) {
+                    out.push(id);
+                }
+            }
+        }
+        out
+    }
+    /// The emulator apps on the device for the systems pocket-ui's player doesn't have, unless already chosen.
+    pub(super) fn found_offers(&self) -> Vec<pocket_ui::android_first_start::AppOffer> {
+        let Some(phone) = &self.found_phone else { return Vec::new() };
+        let chosen: std::collections::BTreeMap<String, String> = self.prefs.plays_with.iter().map(|(k, v)| (k.clone(), v.clone())).collect();
+        pocket_ui::android_first_start::app_offers(phone, &chosen, &self.found_systems())
+    }
+    /// The systems with games that no app on the device plays: their app's official page.
+    pub(super) fn found_to_get(&self) -> Vec<pocket_ui::android_first_start::AppToGet> {
+        let Some(phone) = &self.found_phone else { return Vec::new() };
+        pocket_ui::android_first_start::apps_to_get(phone, &self.found_systems())
+    }
+    /// The BIOS the systems found still want, with the folder said as this view has it (a folder beside the games).
+    pub(super) fn found_bios(&self) -> Vec<pocket_ui::android_first_start::BiosNeed> {
+        let mut names: Vec<String> = self.found.as_ref().map(|f| f.bios.clone()).unwrap_or_default();
+        if let Some(lib) = &self.library {
+            names.extend(lib.bios.iter().map(|p| p.name.clone()));
+        }
+        let kept = super::super::data_dir().join("bios");
+        pocket_ui::android_first_start::missing_bios(&self.found_systems(), |s| {
+            pocket_ui::android_first_start::bios_among(s, names.iter().map(String::as_str)) || pocket_ui::document_library::bios_hint(s, &[], &kept).is_none()
+        })
     }
     /// The line under a system's name: its size where the channel is public, else "Not available here".
     fn core_size_or_soon(&self, p: &pocket_ui::android_cores::CorePackage) -> String {
@@ -30,14 +121,29 @@ impl Ui {
     fn setup_items(&self) -> Vec<(String, u16)> {
         let mut items = match self.prefs.onboarding_step.min(7) {
             1 => pocket_ui::i18n::Lang::ALL.iter().enumerate().map(|(i, l)| (l.name().to_string(), i as u16)).collect(),
-            2 => vec![(
-                tr(if self.library.is_some() {
-                    "Choose another folder"
-                } else {
-                    "Choose your ROM folder"
-                }),
-                0,
-            )],
+            2 => {
+                // Folders found first (the likely answer), then the picker, then the apps found as switches.
+                let few = if self.setup_compact >= 3 { 1 } else { 2 };
+                let mut rows: Vec<(String, u16)> = self.found_folders().iter().take(few).enumerate().map(|(i, f)| (tr(&f.row()), FOUND_FOLDER + i as u16)).collect();
+                rows.push((
+                    tr(if self.library.is_some() || !rows.is_empty() {
+                        "Choose another folder"
+                    } else {
+                        "Choose your ROM folder"
+                    }),
+                    0,
+                ));
+                // The apps found: one switch for them all (the panel names them), as on the Handheld view.
+                let offers = self.found_offers();
+                if !offers.is_empty() {
+                    let names = pocket_ui::android_first_start::offer_names(&offers);
+                    rows.push((format!("{}{} · {}", if self.offers_off { "" } else { "• " }, tr("Emulator apps"), names.join(", ")), FOUND_APP));
+                }
+                for (i, g) in self.found_to_get().iter().take(few).enumerate() {
+                    rows.push((tr(&g.row()), FOUND_GET + i as u16));
+                }
+                rows
+            }
             3 => {
                 let mut rows: Vec<_> = Theme::PHONE
                     .iter()
@@ -68,7 +174,7 @@ impl Ui {
         if self.prefs.onboarding_step < 7 {
             items.push((tr("Skip"), SKIP));
         }
-        if self.prefs.onboarding_step > 0 {
+        if self.previous_step(self.prefs.onboarding_step).is_some() {
             items.push((tr("Back"), BACK));
         }
         if self.core_busy.is_some() && self.prefs.onboarding_step >= 6 { items.push((tr("Cancel download"), CANCEL_DOWNLOAD)); }
@@ -87,16 +193,27 @@ impl Ui {
                     self.prefs.download_media = Some(false);
                 }
                 if step == 5 { self.prefs.core_download_consent = self.core_channel_open && action == NEXT; if action == SKIP { self.prefs.selected_cores.clear(); } }
-                if step == 7 {
-                    self.prefs.onboarding_done = true;
-                    self.navigate(Screen::Library);
-                } else {
-                    self.prefs.onboarding_step = if step + 1 == 5 && !self.systems_step_shown() { 6 } else { step + 1 };
+                // Continue on the games: the apps found play their systems, as Settings → Plays with would set them.
+                if step == 2 && action == NEXT {
+                    for o in self.found_offers().into_iter().filter(|_| !self.offers_off) {
+                        self.prefs.plays_with.insert(o.system.to_string(), o.app.package.clone());
+                    }
+                }
+                match self.next_step(step) {
+                    Some(next) => self.prefs.onboarding_step = next,
+                    None => {
+                        // With a pad the covers had no page: they come on unmetered Wi-Fi, as the step would have offered.
+                        if self.prefs.download_media.is_none() {
+                            self.prefs.download_media = Some(self.controller_connected);
+                        }
+                        self.prefs.onboarding_done = true;
+                        self.navigate(Screen::Library);
+                    }
                 }
                 self.setup_row = 0;
             }
             BACK => {
-                self.prefs.onboarding_step = if step == 6 && !self.systems_step_shown() { 4 } else { step.saturating_sub(1) };
+                self.prefs.onboarding_step = self.previous_step(step).unwrap_or(step);
                 self.setup_row = 0;
             }
             _ => match step {
@@ -104,6 +221,22 @@ impl Ui {
                     if let Some(lang) = pocket_ui::i18n::Lang::ALL.get(action as usize) {
                         self.prefs.choose_language(*lang);
                     }
+                }
+                2 if action >= FOUND_GET => {
+                    if let Some(g) = self.found_to_get().get((action - FOUND_GET) as usize) {
+                        return Command::OpenPage(g.url);
+                    }
+                    return Command::None;
+                }
+                2 if action >= FOUND_APP => {
+                    self.offers_off = !self.offers_off;
+                    return Command::None;
+                }
+                2 if action >= FOUND_FOLDER => {
+                    if let Some(uri) = self.found_folders().get((action - FOUND_FOLDER) as usize).and_then(|f| f.document_uri()) {
+                        return Command::FolderAt(uri);
+                    }
+                    return Command::Folder;
                 }
                 2 => return Command::Folder,
                 3 => {
@@ -124,6 +257,7 @@ impl Ui {
         Command::PersistSetup
     }
     pub(super) fn setup_press(&mut self, button: Button) -> Command {
+        self.skip_empty_steps();
         let items = self.setup_items();
         if button == Button::South && self.core_busy.is_some() { return Command::CoreCancel; }
         match button {
@@ -145,6 +279,7 @@ impl Ui {
         Command::None
     }
     pub(super) fn setup_tap(&mut self, x: f32, y: f32) -> Command {
+        self.skip_empty_steps();
         let index = self.regions.iter().rev().find_map(|r| {
             if r.area.contains(x, y) {
                 if let Action::Setup(i) = r.action {
@@ -164,6 +299,8 @@ impl Ui {
             1 => Some(pocket_ui::i18n::Lang::ALL.get(action as usize) == Some(&pocket_ui::i18n::current())),
             3 if (action as usize) < Theme::PHONE.len() => Some(Theme::PHONE.get(action as usize) == Some(&self.prefs.theme)),
             4 => Some(self.prefs.download_media == Some(action == 0)),
+            2 if action >= FOUND_GET => None,
+            2 if action >= FOUND_APP => Some(!self.offers_off),
             5 if !self.core_channel_open => None,
             5 => self.core_offers.get(action as usize).map(|p| self.prefs.selected_cores.contains(&p.core)),
             _ => None,
@@ -173,12 +310,16 @@ impl Ui {
     fn setup_words(&self, step: usize) -> (&'static str, &'static str) {
         match step {
             0 => ("Welcome to pocket-ui", "Your games, a shelf of your own, and a player built in. Let's make it yours."),
+            // With a pad the language's page is the welcome (`setup_steps`).
+            1 if self.controller_connected => ("Welcome to pocket-ui", "Choose the language for menus and help. You can change it in Settings."),
             1 => ("Language", "Choose the language for menus and help. You can change it in Settings."),
             2 => ("Where your games are", "Choose your ROM folders. Android remembers access; your game files stay where they are."),
             3 => ("Your look", "Pick a look. Cozy takes time to open the case; Quick gets straight into the game."),
             4 => ("Covers and pictures", "Covers and pictures download on unmetered Wi-Fi as you browse. Your choice stays in Settings."),
             5 => ("More systems?", if self.core_channel_open { "Choose extra systems to download on Wi-Fi. All are optional. You can add them later in Extras." } else { COMING_SOON_STEP }),
             6 => ("Your controls", "Tap a game to select it, tap again to play. Swipe along the shelf. Back goes one step back."),
+            // With a pad the covers had no page: the last one says they come on their own.
+            _ if self.controller_connected && self.prefs.download_media.is_none() => ("Ready to play", "Everything is ready. Covers and pictures download on unmetered Wi-Fi as you browse; Settings can turn that off."),
             _ => ("Ready to play", "Everything is ready. You can change these choices in Settings and add more game folders later."),
         }
     }
@@ -186,22 +327,41 @@ impl Ui {
     /// The plan the page is laid out in on a `size` screen: the usual one while it fits, else the first of the ladder
     /// (`SetupPlan::ladder`) that does, else the one with the fewest faults. Measured, not painted.
     fn pick_setup_plan(&mut self, text: &mut Text, size: (i32, i32), base_dp: f32) -> SetupPlan {
+        self.setup_compact = 0;
         if size.0 <= size.1 {
-            return SetupPlan::USUAL;
-        }
-        let mut best = (usize::MAX, SetupPlan::USUAL);
-        for plan in SetupPlan::ladder() {
-            self.dp = base_dp * plan.shrink;
-            let faults = if self.prefs.onboarding_step == 5 { self.system_layout(text, size, plan).faults.len() } else { self.setup_layout(text, size, plan).faults.len() };
-            if faults == 0 {
-                self.dp = base_dp;
-                return plan;
+            // Upright, "Where your games are" with what the device has can be more than a small phone holds at a large font
+            // (720x1600 with its bars, font 1.3): it leaves out, step by step, what the rows say anyway.
+            if self.prefs.onboarding_step != 2 {
+                return SetupPlan::USUAL;
             }
-            if faults < best.0 {
-                best = (faults, plan);
+            for level in 0..=3 {
+                self.setup_compact = level;
+                if self.setup_layout(text, size, SetupPlan::USUAL).faults.is_empty() {
+                    return SetupPlan::USUAL;
+                }
+            }
+            // Still too much: the smaller type of the ladder below.
+        }
+        // "Where your games are" with what the device has may need to leave things out on a small window too (a square one
+        // is wider than tall once Android's bars are off it): each plan of the ladder at each compact level, the first that fits.
+        let levels = if self.prefs.onboarding_step == 2 { 0..=3 } else { 0..=0 };
+        let mut best = (usize::MAX, SetupPlan::USUAL, 0);
+        for level in levels {
+            self.setup_compact = level;
+            for plan in SetupPlan::ladder() {
+                self.dp = base_dp * plan.shrink;
+                let faults = if self.prefs.onboarding_step == 5 { self.system_layout(text, size, plan).faults.len() } else { self.setup_layout(text, size, plan).faults.len() };
+                if faults == 0 {
+                    self.dp = base_dp;
+                    return plan;
+                }
+                if faults < best.0 {
+                    best = (faults, plan, level);
+                }
             }
         }
         self.dp = base_dp;
+        self.setup_compact = best.2;
         best.1
     }
 
@@ -273,14 +433,16 @@ impl Ui {
         if !text.words_fit(Face::Body, bs, description_key, body_w) {
             l.faults.push("a word of the sentence does not fit its column".into());
         }
-        for line in text.wrap(Face::Body, bs, &description, body_w) {
+        let sentence = !(step == 2 && self.setup_compact >= 1);
+        for line in text.wrap(Face::Body, bs, &description, body_w).into_iter().filter(|_| sentence) {
             l.put(Face::Body, bs, margin, y, pal().dust, &line);
             y += line_h;
         }
         y += self.d(8.0);
         // Back and Continue: at the bottom of the text column (across both columns in the bar plan), Continue the primary
         // one and the wider.
-        let bh = self.d(if wide { 48.0 } else { 52.0 });
+        // Upright (a phone, its first start made for it): large buttons for a thumb.
+        let bh = self.d(if wide { 48.0 } else { 60.0 });
         let buttons_y = h - bh - self.d(16.0);
         let back = items.iter().enumerate().find(|(_, (_, a))| *a == BACK).map(|(i, (lb, _))| (i, lb.clone()));
         let next = items.iter().enumerate().find(|(_, (_, a))| *a == NEXT).map(|(i, (lb, _))| (i, lb.clone()));
@@ -324,19 +486,30 @@ impl Ui {
                 } else {
                     found
                 }
+            } else if !self.found_folders().is_empty() {
+                tr("Games found on this device. Choose them below, or another folder.")
+            } else if self.found.as_ref().is_some_and(|f| f.can_read) {
+                // Only where the files could be read: without that right "none found" would be a guess.
+                tr("No games found on this device yet. Choose the folder you put them in, or add games later.")
             } else {
                 tr("No folder chosen yet. You can add games later.")
             };
-            let panel_lines = text.wrap(Face::Body, bs, &status, rw - self.d(32.0));
-            let ph = panel_lines.len() as i32 * line_h + self.d(24.0);
-            l.ops.push(Op::Panel(Area::new(rx, ry, rw, ph)));
+            // Compact (a small phone, large font): the found folders' rows say it, the line above them goes.
+            let quiet = self.setup_compact >= 2 && self.library.is_none() && !self.found_folders().is_empty();
+            let panel_lines = if quiet { Vec::new() } else { text.wrap(Face::Body, bs, &status, rw - self.d(32.0)) };
+            let ph = if quiet { 0 } else { panel_lines.len() as i32 * line_h + self.d(24.0) };
+            if !quiet {
+                l.ops.push(Op::Panel(Area::new(rx, ry, rw, ph)));
+            }
             let mut ly = ry + self.d(12.0) + bs as i32;
             for line in &panel_lines {
                 l.put(Face::Body, bs, rx + self.d(16.0), ly, pal().chalk, line);
                 ly += line_h;
             }
-            l.label(Area::new(rx, ry, rw, ph), status);
-            ry += ph + self.d(12.0);
+            if !quiet {
+                l.label(Area::new(rx, ry, rw, ph), status);
+                ry += ph + self.d(12.0);
+            }
             if !self.message.is_empty() && !self.scan_running {
                 let message = text.fit(Face::Body, small, &self.message, rw);
                 l.put(Face::Body, small, rx, ry + small as i32, pal().alert, &message);
@@ -362,6 +535,21 @@ impl Ui {
                 ry += small as i32 + self.d(8.0);
             }
             ry += self.d(8.0);
+        }
+        // The last page: a BIOS a system found still wants, one sentence each with its folder (Saturn's first, it is
+        // needed), before the first game asks for it. The step with the games has no room for them upright.
+        if step == 7 {
+            for b in self.found_bios() {
+                let line = tr(b.line(true));
+                let lines = text.wrap(Face::Body, small, &line, rw);
+                let top = ry;
+                for l2 in &lines {
+                    l.put(Face::Body, small, rx, ry + small as i32, if b.required { pal().alert } else { pal().dust }, l2);
+                    ry += small as i32 + self.d(8.0);
+                }
+                l.label(Area::new(rx, top, rw, ry - top), line);
+                ry += self.d(8.0);
+            }
         }
         if step >= 6 && !self.core_note.is_empty() {
             for line in text.wrap(Face::Body, small, &self.core_note, rw) {
@@ -416,7 +604,7 @@ impl Ui {
             _ => vec![cells_of(false, false)],
         };
         let rows = |cells: &[(i32, i32, i32)]| cells.iter().map(|(_, r, _)| r + 1).max().unwrap_or(0);
-        let base_pitch = self.d(if wide { 52.0 } else { 60.0 });
+        let base_pitch = self.d(if wide { 52.0 } else { 64.0 });
         let line_px = pocket_ui::type_scale::px(label_px) as i32 * 6 / 5;
         let room = r_bottom - ry;
         // The most compact arrangement with every word whole in the usual size, else a little smaller; else one to a row
@@ -468,6 +656,7 @@ impl Ui {
     }
 
     pub(super) fn paint_setup(&mut self, c: &mut Canvas, text: &mut Text) {
+        self.skip_empty_steps();
         let base_dp = self.dp;
         let plan = self.pick_setup_plan(text, (c.w, c.h), base_dp);
         self.dp = base_dp * plan.shrink;
@@ -476,6 +665,7 @@ impl Ui {
             self.paint_system_setup(c, text, layout);
         } else {
             let layout = self.setup_layout(text, (c.w, c.h), plan);
+            self.setup_faults = layout.faults.clone();
             self.paint_setup_layout(c, text, layout);
         }
         self.dp = base_dp;

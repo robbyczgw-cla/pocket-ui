@@ -6,8 +6,8 @@ Mobile view (`PocketActivity`, `libpocket_android.so`) and the player (`PlayerAc
 as they are.
 
 - **Which view opens** (`Views.java`): `PocketActivity` stays the launcher and Home entry. Opened from there while Handheld
-  is the chosen view, it starts `HandheldActivity` and ends; the Mobile library returns at once (`routedAway`). At the first
-  start a pad decides (built in or attached: Handheld; none: Mobile). Settings → View in either view switches. An explicit
+  is the chosen view, it starts `HandheldActivity` and ends; the Mobile library returns at once (`routedAway`). The first
+  start opens Handheld, pad or not (19.11.2026; a view chosen before stays). Settings → View in either view switches. An explicit
   start (`am start -n …/.PocketActivity`, the smoke tests) is always the Mobile view.
 - **Games**: the handheld view reads them where they are, `/storage/emulated/0/ROMs/<system>` (an `es_systems.cfg` made at
   its start). It asks for All files access (before Android 11: storage read) at its start, explained, with the Mobile view
@@ -31,6 +31,9 @@ as they are.
 - Linux-only settings pages and quick settings rows are hidden (`device::ANDROID_HIDES`); a category left empty is not
   listed. On Linux, `POCKETUI_ANDROID_PROFILE=1` shows the same profile (tests/nav_explorer.rs walks it).
 - Android owns sleep: the Linux idle timers are off (`sleep::Sleep::build`).
+- Pocket Sync (Settings → Connections → Pocket Sync, Pocket-to-Pocket sync): the saves are the player's `saves/<key>/`
+  (`pocket_sync_layout`, `pocket_sync::Layout::android`); its service listens only while this view is in front
+  (`pocket_sync_background` in `android_suspended`). docs/SYNC-OWN.md "Where the saves are".
 
 Build: `scripts/android/build-apk.sh` builds it with the others. By hand (NDK 27, from the repository root):
 

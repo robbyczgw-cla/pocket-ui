@@ -30,20 +30,28 @@ pub const SILENT_ENV: &str = "POCKET_LAUNCH_CRT_SILENT";
 /// `crt-on` on stdout of pocket-core the moment the effect begins. The sound agent plays its sample at that point.
 pub const HOOK: &str = "crt-on";
 
-/// How long the effect lasts.
-pub const DURATION: Duration = Duration::from_millis(300);
+/// How long the effect lasts on a TV.
+pub const DURATION: Duration = Duration::from_millis(460);
 
-/// Up to this moment the screen is dark with only the line growing out of the middle (fraction of [`DURATION`]).
-const LINE_END: f32 = 0.2;
-/// The picture is fully open at this moment; the glow settles until the end.
-const OPEN_END: f32 = 0.85;
+/// The tube's moments, as fractions of [`DURATION`]: a bright dot in the dark until [`DOT_END`], it stretches to a line
+/// until [`LINE_END`], the line opens to the AV channel's blue until [`OPEN_END`], the blue (with a little snow at its
+/// start) until [`SIGNAL_AT`], then the game's picture comes through it.
+/// In ms: the dot 0-35, the line 35-90, opening 90-270 (no faster: no frame opens more than a tenth of the picture),
+/// snow on the blue 270-320, the blue alone to 330, the picture coming through it 330-460.
+const DOT_END: f32 = 35.0 / 460.0;
+const LINE_END: f32 = 90.0 / 460.0;
+const OPEN_END: f32 = 270.0 / 460.0;
+const SIGNAL_AT: f32 = 330.0 / 460.0;
+/// The snow on the blue lasts this long after it opened (fraction of [`DURATION`]).
+const SNOW_LEN: f32 = 50.0 / 460.0;
 /// The line is this many pixels thick at 720 px of screen height (scaled with the screen).
 const LINE_PX: f32 = 3.0;
+/// An old TV's empty AV channel: the blue it shows before the console's signal comes in.
+pub const AV_BLUE: u32 = 0x1c34c8;
 /// A handheld's picture comes up out of the dark this long: dark for [`LCD_HOLD`] of it, then clearing. Shorter than the
 /// tube's [`DURATION`]: the launch scene already did the switching on (its power light and display).
 pub const LCD_LEN: Duration = Duration::from_millis(200);
 const LCD_HOLD: f32 = 0.1;
-
 /// What the game is shown on, for its switch-on.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Screen {
@@ -96,12 +104,58 @@ pub fn start() {
     println!("{HOOK}");
 }
 
-/// A solid rectangle over the game: x, y, w, h in pixels from the top left, `white` or black, opacity 0..=1.
+/// The switch-on's sound at `rate` (mono, full UI volume): the tube's relay click and degauss (`Sound::CrtOn`) from the
+/// start, and the empty channel's hiss (`Sound::TvStatic`) from the moment the blue opens, fading as the console's signal
+/// comes through it (its picture, [`SIGNAL_AT`]) and gone when the picture is whole. One buffer, so the game's sound
+/// mixes it in as one chime (pocket-core).
+pub fn sound(rate: u32) -> Vec<i16> {
+    use crate::ui_sound::{synth_at, Sound};
+    let mut out = synth_at(Sound::CrtOn, rate);
+    let hiss = synth_at(Sound::TvStatic, rate);
+    let at = |f: f32| (f * DURATION.as_secs_f32() * rate as f32) as usize;
+    let (from, fade, end) = (at(OPEN_END), at(SIGNAL_AT), at(1.0));
+    if out.len() < end {
+        out.resize(end, 0);
+    }
+    for (k, h) in hiss.iter().enumerate().take(end.saturating_sub(from)) {
+        let i = from + k;
+        let g = if i < fade { 1.0 } else { 1.0 - (i - fade) as f32 / (end - fade).max(1) as f32 };
+        out[i] = (out[i] as i32 + (*h as f32 * g) as i32).clamp(i16::MIN as i32, i16::MAX as i32) as i16;
+    }
+    out
+}
+
+/// A solid rectangle over the game: x, y, w, h in pixels from the top left, `white` or black (or `color`, 0xRRGGBB,
+/// when set: the AV channel's blue), opacity 0..=1.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Quad {
     pub rect: (f32, f32, f32, f32),
     pub white: bool,
     pub alpha: f32,
+    pub color: Option<u32>,
+}
+
+impl Quad {
+    /// White or black.
+    pub const fn new(rect: (f32, f32, f32, f32), white: bool, alpha: f32) -> Quad {
+        Quad { rect, white, alpha, color: None }
+    }
+
+    /// In the colour `rgb` (0xRRGGBB).
+    pub const fn colored(rect: (f32, f32, f32, f32), rgb: u32, alpha: f32) -> Quad {
+        Quad { rect, white: false, alpha, color: Some(rgb) }
+    }
+
+    /// Its colour as 0xRRGGBB.
+    pub fn rgb(&self) -> u32 {
+        self.color.unwrap_or(if self.white { 0xffffff } else { 0 })
+    }
+
+    /// Its colour as red, green, blue 0..=1.
+    pub fn rgb_f32(&self) -> [f32; 3] {
+        let c = self.rgb();
+        [(c >> 16 & 0xff) as f32 / 255.0, (c >> 8 & 0xff) as f32 / 255.0, (c & 0xff) as f32 / 255.0]
+    }
 }
 
 /// Soft at both ends, steepest (1.5) in the middle.
@@ -155,50 +209,111 @@ pub fn plan_for(screen: Screen, since: Duration, area: (f32, f32, f32, f32)) -> 
     if screen == Screen::Lcd {
         // Dark a moment (the scene's fade left it so), then the picture comes up softly over the whole picture: no line, no glow.
         let dark = 1.0 - smooth((t - LCD_HOLD) / (1.0 - LCD_HOLD));
-        return if dark > 0.0 { vec![Quad { rect: at((0.0, 0.0, view_w, view_h)), white: false, alpha: dark }] } else { Vec::new() };
+        return if dark > 0.0 { vec![Quad::new(at((0.0, 0.0, view_w, view_h)), false, dark)] } else { Vec::new() };
     }
     let mid = view_h / 2.0;
+    let line = line_px(view_h);
+    let mut quads = Vec::with_capacity(12);
+    let black = |r| Quad::new(at(r), false, 1.0);
+    if t < LINE_END {
+        // A bright dot in the dark, a little bigger than the line and with a halo, that stretches into a line from the
+        // middle to both sides, fast at first, getting as thin as the line as it goes.
+        let dot = line * 3.0;
+        let (lw, lh, glow, halo) = if t < DOT_END {
+            let p = smooth(t / DOT_END);
+            (dot * (0.6 + 0.4 * p), dot * (0.6 + 0.4 * p), line * (2.0 + 3.0 * p), 0.3)
+        } else {
+            let grown = 1.0 - (1.0 - (t - DOT_END) / (LINE_END - DOT_END)).powi(2);
+            ((dot + (view_w - dot) * grown).min(view_w), dot + (line - dot) * grown, line * (5.0 - 2.0 * grown), 0.3 - 0.18 * grown)
+        };
+        let (lx, ly) = (view_w / 2.0 - lw / 2.0, mid - lh / 2.0);
+        quads.push(black((0.0, 0.0, view_w, ly)));
+        quads.push(black((0.0, ly + lh, view_w, view_h - ly - lh)));
+        quads.push(black((0.0, ly, lx, lh)));
+        quads.push(black((lx + lw, ly, view_w - lx - lw, lh)));
+        quads.push(Quad::new(at((lx - glow, ly - glow, lw + 2.0 * glow, lh + 2.0 * glow).clip((0.0, 0.0, view_w, view_h))), true, halo));
+        quads.push(Quad::new(at((lx, ly, lw, lh)), true, 1.0));
+        return quads;
+    }
     let half = half_lit(t, view_h);
-    let mut quads = Vec::with_capacity(9);
     // Dark above and below the lit part.
     for (y, h) in [(0.0, mid - half), (mid + half, mid - half)] {
         if h > 0.0 {
-            quads.push(Quad { rect: at((0.0, y, view_w, h)), white: false, alpha: 1.0 });
+            quads.push(black((0.0, y, view_w, h)));
         }
     }
-    if t < LINE_END {
-        // The line grows out of the middle to both sides, fast at first; dark beside it.
-        let grown = 1.0 - (1.0 - t / LINE_END).powi(2);
-        let lw = (view_w * (0.04 + 0.96 * grown)).min(view_w);
-        let side = (view_w - lw) / 2.0;
-        quads.push(Quad { rect: at((0.0, mid - half, side, 2.0 * half)), white: false, alpha: 1.0 });
-        quads.push(Quad { rect: at((side + lw, mid - half, side, 2.0 * half)), white: false, alpha: 1.0 });
-        quads.push(Quad { rect: at((side, mid - half, lw, 2.0 * half)), white: true, alpha: 1.0 });
-    } else {
-        // The lit part: white at first (the line), the squeezed picture showing through more and more as it opens.
-        let open = ((t - LINE_END) / (OPEN_END - LINE_END)).clamp(0.0, 1.0);
+    let lit = (0.0, mid - half, view_w, 2.0 * half);
+    // The empty AV channel's blue, until the console's signal comes through it.
+    let blue = 1.0 - smooth((t - SIGNAL_AT) / (1.0 - SIGNAL_AT));
+    if blue > 0.0 {
+        quads.push(Quad::colored(at(lit), AV_BLUE, blue));
+    }
+    if t < OPEN_END {
+        // White at first (the line), the blue showing through more and more as it opens.
+        let open = (t - LINE_END) / (OPEN_END - LINE_END);
         let flash = (1.0 - open).powi(2) * 0.9;
         if flash > 0.0 {
-            quads.push(Quad { rect: at((0.0, mid - half, view_w, 2.0 * half)), white: true, alpha: flash });
+            quads.push(Quad::new(at(lit), true, flash));
+        }
+    } else if t < OPEN_END + SNOW_LEN {
+        // A moment of snow on the blue: a few thin streaks where the tuner finds no picture yet, a new place every
+        // frame, fading as the channel settles.
+        let p = (t - OPEN_END) / SNOW_LEN;
+        let frame = (t * DURATION.as_secs_f32() * 60.0) as u32;
+        for i in 0..3u32 {
+            let r = hash(frame * 7 + i);
+            let h = line * (1.0 + (r >> 16 & 3) as f32);
+            let y = (r & 0xffff) as f32 / 65535.0 * (view_h - h).max(0.0);
+            quads.push(Quad::new(at((0.0, y, view_w, h)), true, 0.3 * (1.0 - p)));
         }
     }
-    // Glow: three soft bands inside the picture at each edge of the lit part, brightest at the line, fading out and
-    // settling over the last stretch.
-    let settle = 1.0 - smooth((t - OPEN_END) / (1.0 - OPEN_END));
-    let band = (view_h * 0.035).max(6.0);
-    if t >= LINE_END {
-        for i in 0..3 {
-            let a = 0.34 * settle / (1.0 + i as f32 * 1.6);
-            let reach = band * (i as f32 + 1.0);
-            let inner = reach.min(half);
-            if inner <= 0.0 || a <= 0.0 {
-                continue;
-            }
-            quads.push(Quad { rect: at((0.0, mid - half, view_w, inner)), white: true, alpha: a });
-            quads.push(Quad { rect: at((0.0, mid + half - inner, view_w, inner)), white: true, alpha: a });
+    // A brighter band rolls down once over the blue and the picture coming in: the sweep finding its sync.
+    if t >= OPEN_END {
+        let p = (t - OPEN_END) / (1.0 - OPEN_END);
+        let bh = view_h * 0.14;
+        let y = -bh + (view_h + bh) * p;
+        let (y0, y1) = (y.max(0.0), (y + bh).min(view_h));
+        let a = 0.08 * (1.0 - smooth((p - 0.6) / 0.4));
+        if y1 > y0 && a > 0.0 {
+            quads.push(Quad::new(at((0.0, y0, view_w, y1 - y0)), true, a));
         }
+    }
+    // Glow: three soft bands inside the picture at each edge of the lit part, brightest at the line, settling once
+    // it is open.
+    let settle = 1.0 - smooth((t - OPEN_END) / (SIGNAL_AT - OPEN_END));
+    let band = (view_h * 0.035).max(6.0);
+    for i in 0..3 {
+        let a = 0.34 * settle / (1.0 + i as f32 * 1.6);
+        let inner = (band * (i as f32 + 1.0)).min(half);
+        if inner <= 0.0 || a <= 0.0 {
+            continue;
+        }
+        quads.push(Quad::new(at((0.0, mid - half, view_w, inner)), true, a));
+        quads.push(Quad::new(at((0.0, mid + half - inner, view_w, inner)), true, a));
     }
     quads
+}
+
+/// A cheap integer hash: the snow's places.
+fn hash(mut x: u32) -> u32 {
+    x ^= x >> 16;
+    x = x.wrapping_mul(0x7feb_352d);
+    x ^= x >> 15;
+    x = x.wrapping_mul(0x846c_a68b);
+    x ^ x >> 16
+}
+
+trait Clip {
+    fn clip(self, area: (f32, f32, f32, f32)) -> Self;
+}
+
+impl Clip for (f32, f32, f32, f32) {
+    /// The part of the rectangle inside `area`.
+    fn clip(self, (ax, ay, aw, ah): (f32, f32, f32, f32)) -> Self {
+        let (x0, y0) = (self.0.max(ax), self.1.max(ay));
+        let (x1, y1) = ((self.0 + self.2).min(ax + aw), (self.1 + self.3).min(ay + ah));
+        (x0, y0, (x1 - x0).max(0.0), (y1 - y0).max(0.0))
+    }
 }
 
 #[cfg(test)]
@@ -209,11 +324,17 @@ mod tests {
         Duration::from_millis(n)
     }
 
+    /// A quad's brightness 0..=1.
+    fn luma(q: &Quad) -> f32 {
+        let [r, g, b] = q.rgb_f32();
+        0.3 * r + 0.59 * g + 0.11 * b
+    }
+
     /// The plan composited over a test picture (every pixel 0x808080) on a w x h screen, as grey levels per row.
     pub(crate) fn rows(since: Duration, w: f32, h: f32) -> Vec<f32> {
         let mut y = vec![0.5f32; h as usize];
         for q in plan(since, (0.0, 0.0, w, h)) {
-            let v = if q.white { 1.0 } else { 0.0 };
+            let v = luma(&q);
             for (row, px) in y.iter_mut().enumerate() {
                 let r = row as f32 + 0.5;
                 if r >= q.rect.1 && r < q.rect.1 + q.rect.3 {
@@ -240,7 +361,7 @@ mod tests {
             px[y * w..(y + 1) * w].iter_mut().for_each(|p| *p = v);
         }
         for q in plan_for(screen, since, area) {
-            let v = if q.white { 1.0 } else { 0.0 };
+            let v = luma(&q);
             let (x0, y0) = (q.rect.0.round().max(0.0) as usize, q.rect.1.round().max(0.0) as usize);
             let (x1, y1) = (((q.rect.0 + q.rect.2).round() as usize).min(w), ((q.rect.1 + q.rect.3).round() as usize).min(h));
             for y in y0..y1 {
@@ -258,7 +379,7 @@ mod tests {
         let tick = |k: u32| Duration::from_nanos(k as u64 * 16_666_667);
         let area = (0.0, 0.0, w as f32, h as f32);
         let mut last: Option<Vec<f32>> = None;
-        (0..=19)
+        (0..=29)
             .map(|k| {
                 let f = frame(screen, tick(k), w, h);
                 let light = f.iter().sum::<f32>() / f.len() as f32;
@@ -288,7 +409,7 @@ mod tests {
                 }
                 // Until it is over, every frame changes something: nothing stands still.
                 // The display's light covers the picture for its first 20 ms (two frames) and is over after 12 frames.
-                let (live, first) = if screen == Screen::Tv { (17, 1) } else { (11, 3) };
+                let (live, first) = if screen == Screen::Tv { (27, 1) } else { (11, 3) };
                 let still = s.iter().take(live).skip(first).position(|f| !f.2);
                 assert!(still.is_none(), "{screen:?} {w}x{h}: frame {} is the same as the one before: {s:.3?}", still.unwrap_or(0) + first);
             }
@@ -307,7 +428,7 @@ mod tests {
             last = h;
         }
         assert!(picture(Screen::Tv, ms(20), area).3 < 8.0, "a line at first");
-        assert_eq!(picture(Screen::Tv, ms(260), area), area, "whole once open");
+        assert_eq!(picture(Screen::Tv, ms(280), area), area, "whole once open");
         assert_eq!(picture(Screen::Lcd, ms(20), area), area, "a handheld's display is never squeezed");
     }
 
@@ -332,10 +453,47 @@ mod tests {
         let lit_width = |t| {
             plan(ms(t), (0.0, 0.0, 1280.0, 720.0)).iter().filter(|q| q.white && q.alpha >= 1.0).map(|q| q.rect.2).fold(0.0, f32::max)
         };
-        let (a, b, c) = (lit_width(0), lit_width(20), lit_width(45));
-        assert!(a > 0.0 && a < b && b < c && c <= 1280.0, "{a} {b} {c}");
-        let q = plan(ms(20), (0.0, 0.0, 1280.0, 720.0)).into_iter().find(|q| q.white).unwrap();
+        // A dot first (growing a little, its halo with it), then the line grows out of it.
+        let (dot, a, b, c) = (lit_width(0), lit_width(45), lit_width(60), lit_width(80));
+        assert!(dot > 0.0 && dot <= lit_width(20) && lit_width(20) < a && a < b && b < c && c <= 1280.0, "{dot} {a} {b} {c}");
+        let halo = |t| plan(ms(t), (0.0, 0.0, 1280.0, 720.0)).iter().filter(|q| q.white && q.alpha < 1.0).map(|q| q.rect.2).fold(0.0, f32::max);
+        assert!(halo(0) < halo(20), "the dot's halo grows: {} {}", halo(0), halo(20));
+        let q = plan(ms(50), (0.0, 0.0, 1280.0, 720.0)).into_iter().find(|q| q.white).unwrap();
         assert!((q.rect.0 + q.rect.2 / 2.0 - 640.0).abs() < 0.5, "from the middle");
+    }
+
+    /// 19.11. (Ritual TV): a dot, a line, the empty AV channel's blue with a moment of snow, then the console's signal:
+    /// the game's picture comes through the blue.
+    #[test]
+    fn a_dot_a_line_the_av_blue_then_the_signal() {
+        let area = (0.0, 0.0, 1280.0, 720.0);
+        let lit = |t| plan(ms(t), area).into_iter().filter(|q| q.white && q.alpha >= 1.0).map(|q| q.rect).next();
+        let dot = lit(10).unwrap();
+        assert!(dot.2 <= dot.3 * 1.5, "a dot first: {dot:?}");
+        let line = lit(85).unwrap();
+        assert!(line.2 > 400.0 && line.3 < 6.0, "then a thin line: {line:?}");
+        let blue = |t| plan(ms(t), area).iter().find(|q| q.color == Some(AV_BLUE)).map_or(0.0, |q| q.alpha * q.rect.3 / 720.0);
+        assert!(blue(300) > 0.99, "the whole picture blue once open: {}", blue(300));
+        let streaks = |t| plan(ms(t), area).iter().filter(|q| q.white && q.rect.3 < 20.0 && q.rect.2 == 1280.0).count();
+        assert!(streaks(280) >= 3, "snow on the blue at first");
+        assert_eq!(streaks(325), 0, "then the blue alone");
+        assert!(blue(400) > 0.1 && blue(400) < 0.9, "the signal coming through: {}", blue(400));
+        assert!(blue(458) < 0.01 && plan(DURATION, area).is_empty());
+    }
+
+    /// The relay click and degauss from the start, the hiss only while the channel is empty: it begins as the blue opens
+    /// and is gone once the picture is whole.
+    #[test]
+    fn the_hiss_belongs_to_the_empty_channel() {
+        use crate::ui_sound::{synth_at, Sound};
+        let rate = 48_000;
+        let (with, without) = (sound(rate), synth_at(Sound::CrtOn, rate));
+        let at = |ms: u64| (ms as usize) * rate as usize / 1000;
+        assert_eq!(&with[..at(260)], &without[..at(260)], "the click and degauss alone before the blue");
+        assert!(with[at(280)..at(320)].iter().zip(&without[at(280)..at(320)]).any(|(a, b)| a != b), "the hiss on the blue");
+        let after = with.get(at(470)..).unwrap_or(&[]);
+        let plain = without.get(at(470)..).unwrap_or(&[]);
+        assert!(after.iter().zip(plain).all(|(a, b)| a == b), "no hiss once the picture is whole");
     }
 
     #[test]
@@ -349,7 +507,7 @@ mod tests {
         let r = rows(ms(10), 1280.0, 720.0);
         assert!(r[0] < 0.01 && r[719] < 0.01, "dark above and below");
         assert!(r[360] > 0.95 && r[359] > 0.95, "the line is bright");
-        assert!(r.iter().filter(|v| **v > 0.5).count() <= 6, "and thin");
+        assert!(r.iter().filter(|v| **v > 0.5).count() <= 10, "a small dot");
     }
 
     #[test]
@@ -358,8 +516,8 @@ mod tests {
         let lit = mid.iter().filter(|v| **v > 0.3).count();
         assert!(lit > 30 && lit < 700, "partly open halfway ({lit} rows)");
         assert!(mid[0] < 0.01, "the edge is still dark");
-        let late = rows(ms(285), 1280.0, 720.0);
-        assert!(late.iter().all(|v| (v - 0.5).abs() < 0.08), "the picture, the glow almost gone: {:?}", &late[..3]);
+        let late = rows(ms(455), 1280.0, 720.0);
+        assert!(late.iter().all(|v| (v - 0.5).abs() < 0.08), "the picture, the blue and the glow almost gone: {:?}", &late[..3]);
         assert!(plan(DURATION, (0.0, 0.0, 1280.0, 720.0)).is_empty());
         assert!(plan(ms(900), (0.0, 0.0, 1280.0, 720.0)).is_empty());
     }
@@ -367,9 +525,11 @@ mod tests {
     #[test]
     fn the_opening_only_grows_and_stays_inside_the_screen() {
         let mut last = 0;
-        for t in (0..300).step_by(10) {
+        // From the line on (the dot before it is a little thicker than the line it stretches into).
+        for t in (90..480).step_by(10) {
             let r = rows(ms(t), 640.0, 480.0);
-            let lit = r.iter().filter(|v| **v > 0.05).count();
+            // Lit: the line, the opening blue, the picture; not the faint halo round the dot.
+            let lit = r.iter().filter(|v| **v > 0.15).count();
             assert!(lit + 1 >= last, "never closes again ({t} ms: {lit} < {last})");
             last = lit;
             for q in plan(ms(t), (0.0, 0.0, 640.0, 480.0)) {
@@ -381,7 +541,7 @@ mod tests {
     #[test]
     fn stays_inside_the_picture_not_the_frame_around_it() {
         let area = (160.0, 20.0, 960.0, 680.0);
-        for t in (0..300).step_by(10) {
+        for t in (0..480).step_by(5) {
             for q in plan(ms(t), area) {
                 let (x, y, w, h) = q.rect;
                 assert!(x >= area.0 && x + w <= area.0 + area.2 + 0.01 && y >= area.1 - 0.01 && y + h <= area.1 + area.3 + 0.01, "{t} ms: {q:?}");
@@ -391,8 +551,8 @@ mod tests {
 
     #[test]
     fn cheap_a_handful_of_quads() {
-        for t in (0..300).step_by(5) {
-            assert!(plan(ms(t), (0.0, 0.0, 1280.0, 720.0)).len() <= 10);
+        for t in (0..480).step_by(5) {
+            assert!(plan(ms(t), (0.0, 0.0, 1280.0, 720.0)).len() <= 12);
         }
     }
 

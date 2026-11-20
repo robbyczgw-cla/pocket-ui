@@ -33,6 +33,8 @@ pub struct Eject {
     /// is on screen (`attach`): the picture switching off needs none of it, and the way back is not slower to come.
     scene: Option<Launch>,
     medium: media::Medium,
+    /// How a handheld's display switches off (Handheld switch-on, `lcd_on`); `Plain` simply goes dark.
+    panel: pocket_ui::lcd_on::Panel,
     /// The canvas and the window it was made for: turned meanwhile, it ends.
     size: (u32, u32),
     window: (u32, u32),
@@ -59,9 +61,10 @@ pub fn why_not(cozy: bool, motion: Motion, on_shelf: bool, on_the_game: bool) ->
 pub fn way(game: &Game, has_picture: bool) -> Way {
     let system = insert::rig_system(game);
     let screen = Screen::of(FormFactor::of(system));
-    let crt = pocket_ui::cozy_extras::on(pocket_ui::cozy_extras::Extra::CrtOn);
+    // The Mobile view has the one old-TV row (switch-on); the handheld view's switch-off row is read as well.
+    let crt = pocket_ui::cozy_extras::on(pocket_ui::cozy_extras::Extra::CrtOn) && pocket_ui::cozy_extras::on(pocket_ui::cozy_extras::Extra::CrtOff);
     let kind = media::Game::of(system, &game.relative);
-    Way { screen, off: has_picture && (screen == Screen::Lcd || crt), lid: pocket_ui::playful::on() && pocket_ui::insert_rig::takes_disc(system, kind) }
+    Way::new(screen, has_picture && (screen == Screen::Lcd || crt), pocket_ui::playful::on() && pocket_ui::insert_rig::takes_disc(system, kind))
 }
 
 /// The page the way back plays over, as the launcher painted it (`Ui::back_from`, then a paint with `Ui::launching` and
@@ -108,7 +111,8 @@ impl Eject {
     pub fn new(game: &Game, frame: Option<Image>, area: Option<(i32, i32, i32, i32)>, size: (u32, u32), window: (u32, u32), at: Instant) -> Eject {
         let way = way(game, frame.is_some());
         let area = area.unwrap_or((0, 0, size.0 as i32, size.1 as i32));
-        Eject { at, way, frame, area, scene: None, medium: media::Medium::of(insert::rig_system(game)), size, window, key: game.key.clone() }
+        let panel = if pocket_ui::cozy_extras::on(pocket_ui::cozy_extras::Extra::HandheldOn) { pocket_ui::lcd_on::Panel::of(insert::rig_system(game)) } else { pocket_ui::lcd_on::Panel::Plain };
+        Eject { at, way, frame, area, scene: None, medium: media::Medium::of(insert::rig_system(game)), panel, size, window, key: game.key.clone() }
     }
 
     /// Its scene, made from the page (`scene`).
@@ -136,10 +140,13 @@ impl Eject {
         self.moment(now) == Moment::Done
     }
 
-    /// The case's sound as the medium is back in it, queued now (as the start's, a frame's way to the glass later).
+    /// The way back's sounds (`eject::Way::sounds`, as on Linux: the TV or the handheld's switch going off, a lid, the game
+    /// coming out, the case), queued now, each a frame's way to the glass later (as the start's).
     pub fn play_cues(&self) {
         let ctx = ui_sound::Ctx { config: Default::default(), in_game: false, pause_menu: false, asleep: false };
-        ui_sound::play_after(ui_sound::opening(self.medium), &ctx, self.way.case_shut_at() + insert::PICTURE_LATE, 0.0);
+        for (sound, at) in self.way.sounds(self.medium) {
+            ui_sound::play_after(sound, &ctx, at.saturating_sub(ui_sound::hit_at(sound)) + insert::PICTURE_LATE, 0.0);
+        }
     }
 
     /// One frame on the canvas's pixels. Without its scene yet, the page's part is black.
@@ -150,7 +157,7 @@ impl Eject {
                 let mut c = Canvas::new(buf, w, h);
                 match self.way.screen {
                     Screen::Tv => eject::paint_tv_off(&mut c, self.frame.as_ref(), None, self.area, p),
-                    Screen::Lcd => eject::paint_lcd_off(&mut c, self.frame.as_ref(), None, self.area, p),
+                    Screen::Lcd => eject::paint_lcd_off_as(&mut c, self.frame.as_ref(), None, self.area, p, self.panel),
                 }
             }
             (Moment::Shelf { black, scene }, Some(s)) => {

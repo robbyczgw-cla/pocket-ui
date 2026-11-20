@@ -43,6 +43,8 @@ pub(crate) struct TvState {
     pub(crate) place: Option<(i32, i32, i32, i32)>,
     /// What stands there: true for a handheld.
     pub(crate) handheld: bool,
+    /// The evening TV glow for where the TV stands now (`tv_glow`), kept until it moves or the darkness steps.
+    glow: Option<pocket_ui::tv_glow::Glow>,
     /// The showcase (prototype, `pocket_ui::showcase`): the game on the glass and since when it is chosen.
     rest: Option<(Want, Instant)>,
     /// Whether the game resting on the glass may play (checked once per game: a few file lookups).
@@ -74,6 +76,8 @@ pub(crate) struct TvState {
     pub(crate) console_at: Option<(i32, i32, i32, i32)>,
     /// The shadow of the handheld standing in the TV's place, in its shape (key: the body's).
     hand_shadow: Option<((i32, usize), Rc<art::ShapeShadow>)>,
+    /// The power light of the handheld in the TV's place: the battery it shows (`frame_led`, read every 10 s).
+    hand_light: Option<pocket_ui::frame_led::Clock>,
 }
 
 /// A run started off the frame: the process, its core, and whether A may go on from it (`showcase::may_continue`).
@@ -276,7 +280,20 @@ pub(crate) fn tv_scale(w: i32, h: i32, room: i32) -> Option<f32> {
     // Whole template pixels from 2 up. A screen laid out at twice its size (640 x 480) rounds up: its TV stood a third
     // smaller than the case beside it, the game on its glass hard to make out; one step more is the case's height, and
     // 1.5 screen pixels a template pixel look even after the halving (step 2 showcase, the H700).
-    let f = if f < 2.0 { f } else if pocket_ui::scaled_layout::step() >= 2 { f.ceil() } else { f.floor() };
+    // A 4:3 screen under 900 lines painted natively (the Brick's 1024x768, step 1) rounds up to the next half step: its
+    // TV is 0.231 of the height, the Plus's 0.222, and the console beside it (`CONSOLE_H` of it) as large (photos of the
+    // Brick, 0.6: rounded down to whole steps the TV was 0.185 and the console 60 lines, with empty room over both).
+    // Other natively painted screens (the Smart Pro's 1280x720, 1280x800, 1080 lines) still round down.
+    let brick_like = pocket_ui::scaled_layout::step() < 2 && h < pocket_ui::media::SHORT_SCREEN_H && w * 3 == h * 4;
+    let f = if f < 2.0 {
+        f
+    } else if pocket_ui::scaled_layout::step() >= 2 {
+        f.ceil()
+    } else if brick_like {
+        (f * 2.0).ceil() / 2.0
+    } else {
+        f.floor()
+    };
     // Never more than a quarter of the width: the case out of the shelf needs the rest.
     cabinet_tv::scale_for(w / 4, room, f)
 }
@@ -337,6 +354,10 @@ impl App {
         let inline = self.cabinet.inline;
         let data_dir = self.data_dir.clone();
         let unplayed = !self.play_evidence(rom).ever_played();
+        // After dark: the TV's warm light on the board, the shelves and their cases round it (`tv_glow`), under the TV.
+        let glow = self.cabinet.room.tv_dark * if pocket_ui::palette::pal().is_light() { 0.5 } else { 1.0 };
+        // The console beside the TV, or the handheld in its place, while the Cozy scene has it in front: dark and out.
+        let shows = self.console_beside_shows(now);
         let tv = &mut self.cabinet.tv;
         // The new game's picture once it is made; until then the last one stays on the glass.
         tv.select(want.clone(), &data_dir, inline, now);
@@ -351,6 +372,16 @@ impl App {
         tv.left = Some(px);
         tv.place = Some((px, board_y - ph, pw, ph));
         tv.at = Some((x, y));
+        if glow > 0.0 && !lcd {
+            let (gx, gy, _, _) = body.glass;
+            let centre = (x + gx + gw / 2, y + gy + gh / 2);
+            if tv.glow.as_ref().is_none_or(|g| !g.is_for(centre, pw, (c.w, c.h), 0, glow)) {
+                tv.glow = Some(pocket_ui::tv_glow::Glow::new(centre, pw, (c.w, c.h), 0, glow));
+            }
+            if let Some(g) = tv.glow.as_ref() {
+                g.paint(c);
+            }
+        }
         // The console's place beside the TV: the same on every shelf, so the cases out of the shelf keep clear of it
         // there too (a handheld's shelf leaves it empty); left out where the widest case would no longer have its room.
         let (bh, bw) = ((ph as f32 * CONSOLE_H).round() as i32, (ph as f32 * CONSOLE_H * CONSOLE_WIDE).round() as i32);
@@ -360,7 +391,7 @@ impl App {
             tv.left = Some(cx);
         }
         let (sdx, sdy, blur, dark) = SHADOW;
-        if let (Some(sprite), Some((cx, _, bw, bh))) = (console_beside(system).filter(|_| !lcd), tv.console_place) {
+        if let (Some(sprite), Some((cx, _, bw, bh))) = (console_beside(system).filter(|_| !lcd && shows > 0.0), tv.console_place) {
             let lit = !pocket_ui::palette::pal().is_light();
             let key = (sprite as *const _ as usize, bw, bh, lit);
             let (_, cp, shadow) = match tv.console.iter().position(|(k, _, _)| *k == key) {
@@ -385,9 +416,17 @@ impl App {
             };
             // At the right end of its place, by the TV, standing on the board.
             let (x, y) = (cx + bw - cp.w, board_y - cp.h);
-            shadow.paint(c, x, y, dark, (0, c.h));
-            art::blit(c, &cp, x, y, 256, (0, c.h));
+            shadow.paint(c, x, y, dark * shows, (0, c.h));
+            art::blit(c, &cp, x, y, (256.0 * shows) as u32, (0, c.h));
+            // Recorded while it stands there fully; going dark it is on its way into the scene.
+            if shows >= 1.0 {
+                pocket_ui::scene_check::put_pic("the console beside the TV", &cp, x, y, pocket_ui::scene_check::Rests::Settled, true);
+            }
             tv.console_at = Some((x, y, cp.w, cp.h));
+        }
+        if lcd && shows <= 0.0 {
+            // The handheld is in the scene, in front: its place by the board stays empty meanwhile.
+            return;
         }
         if lcd {
             // A handheld is no box: its shadow in its shape.
@@ -395,12 +434,38 @@ impl App {
                 tv.hand_shadow = Some((key, Rc::new(art::ShapeShadow::of(&body.pic, sdx, sdy, blur))));
             }
             let shadow = tv.hand_shadow.as_ref().map(|(_, s)| s.clone()).unwrap();
-            shadow.paint(c, x, y, dark, (0, c.h));
+            shadow.paint(c, x, y, dark * shows, (0, c.h));
         } else {
             art::soft_shadow(c, x + sdx, y + sdy, pic.w - 4, pic.h - sdy, blur, dark, (0, c.h));
         }
-        art::blit(c, &pic, x, y, 256, (0, c.h));
+        art::blit(c, &pic, x, y, if lcd { (256.0 * shows) as u32 } else { 256 }, (0, c.h));
+        // Its power light once it stands there whole (`frame_led`).
+        if lcd && shows >= 1.0 {
+            paint_hand_light(c, tv, system, &pic, x, y, now);
+        }
+        if !lcd || shows >= 1.0 {
+            pocket_ui::scene_check::put_pic(if lcd { "the handheld in the TV's place" } else { "the TV" }, &pic, x, y, pocket_ui::scene_check::Rests::Settled, true);
+        }
     }
+}
+
+/// The power light of the handheld standing in the TV's place, where its picture has one (`insert_scene::PlainDisplay::led`):
+/// lit as the original's for the battery now (Power lights, `frame_led`), steadily, as the Cabinet is painted only when
+/// something changes (a low PSP's light glows orange here, it blinks on the game's frame); Power lights off: steadily on.
+fn paint_hand_light(c: &mut Canvas, tv: &mut TvState, system: &str, pic: &art::Pic, x: i32, y: i32, now: Instant) {
+    use pocket_ui::frame_led;
+    let shown = pocket_ui::insert_scene::scene_system(system);
+    let Some((fx, fy)) = pocket_ui::insert_scene::plain_display(shown).and_then(|d| d.led) else { return };
+    let model = frame_led::Model::of_system(pocket_ui::system_art::picture_id(shown));
+    let look = if frame_led::live() {
+        let clock = tv.hand_light.get_or_insert_with(|| frame_led::Clock::new(pocket_ui::battery::dir(), model));
+        clock.set_model(model);
+        clock.still(now)
+    } else {
+        model.steady()
+    };
+    let r = (pic.w as f32 / 55.0).clamp(2.0, 6.0);
+    frame_led::paint_dot(c, x as f32 + fx * pic.w as f32, y as f32 + fy * pic.h as f32, r, look);
 }
 
 /// The same game on the same glass, whatever its box art: box art found while the TV plays must not restart it.
@@ -507,6 +572,9 @@ impl App {
         showcase_step_with(tv, &want, &data_dir, now, pocket_ui::showcase::enabled() && unplayed);
         let pic = tv.compose(&body, now);
         art::blit(c, &pic, x, y, 256, (0, c.h));
+        if tv.handheld {
+            paint_hand_light(c, tv, &want.system, &pic, x, y, now);
+        }
     }
 
     /// When the event loop must look at the showcase again (`about_to_wait`): the end of a rest on a game, or the

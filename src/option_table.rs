@@ -233,6 +233,16 @@ pub const GROUPS: &[Group] = &[
                 default: 0,
                 shown_when: None,
             },
+            // Super Nintendo on the handhelds measured for it (`mode7_hd`): Super Mario Kart's track, F-Zero's, Pilotwings'
+            // ground drawn finer, and wider on a wide screen. On a card HD starts the game with bsnes-hd instead of Snes9x.
+            Setting {
+                key: crate::mode7_hd::KEY,
+                name: "Mode 7",
+                desc: crate::mode7_hd::DESC,
+                choices: &[c("original", "Original"), c("hd", "HD"), c("wide", "HD widescreen")],
+                default: 0,
+                shown_when: None,
+            },
         ],
     },
     Group {
@@ -309,7 +319,8 @@ pub const GROUPS: &[Group] = &[
     },
     Group {
         name: "Speed, rumble, fan",
-        desc: "Settings you rarely need.",
+        // What is in it, not "Settings you rarely need." (review 19.11. #2); without a fan `EXTRAS_DESC_NO_FAN` (`group_desc`).
+        desc: EXTRAS_DESC_FAN,
         settings: &[
             Setting {
                 key: "ff_speed",
@@ -508,6 +519,8 @@ pub(crate) fn android_desc(key: &str) -> Option<&'static str> {
         "scaling" => Some("Integer scales by whole numbers (integer scaling): every pixel the same size, the sharpest.\nAspect is as large as fits, in the console's shape.\nFullscreen fills the screen and stretches pixels."),
         // Linux's lines without Ambient's, which the player doesn't draw (each line is Linux's, translated as it is).
         "frame" => Some("Fills the space around the picture. Auto suits the console.\nDMG to PSP: handhelds, each for its console. CRT to Woodgrain: TVs. Arcade: a cabinet."),
+        // The app's bsnes has HD built in: no other emulator, no widescreen.
+        crate::mode7_hd::KEY => Some(crate::mode7_hd::ANDROID_DESC),
         _ => None,
     }
 }
@@ -530,6 +543,8 @@ pub fn offered_in(setting: &Setting, value: &str, system: &str, android: bool) -
         LOOK => look::Look::from_value(value).is_none_or(|l| look::offered(l, Some(system))),
         // Only the factors that run at full speed on this handheld.
         crate::render_scale::KEY => crate::render_scale::offers(crate::render_scale::here(system), value),
+        // HD widescreen only on a wide screen (`mode7_hd::offer`).
+        crate::mode7_hd::KEY => crate::mode7_hd::offers(crate::mode7_hd::here_for(system), value),
         _ => true,
     }
 }
@@ -559,6 +574,9 @@ pub fn applies_in(key: &str, system: &str, android: bool) -> bool {
         "fan" => has_fan(),
         // N64, PSP, Dreamcast and PlayStation on a handheld measured for it (`render_scale`); nowhere else, Android included (above).
         crate::render_scale::KEY => crate::render_scale::here(system).is_some(),
+        // Super Nintendo on a handheld measured for it, with a core that has HD Mode 7 (`mode7_hd`); Android's page asks
+        // `pause_options` (above).
+        crate::mode7_hd::KEY => crate::mode7_hd::here_for(system).is_some(),
         _ => true,
     }
 }
@@ -567,3 +585,7 @@ pub fn setting(key: &str) -> Option<&'static Setting> {
     GROUPS.iter().flat_map(|g| g.settings.iter()).find(|s| s.key == key)
 }
 
+/// Speed, rumble, fan's line with a fan to set: what the group holds.
+pub const EXTRAS_DESC_FAN: &str = "Fast-forward, rewind, earlier states, the frame rate, rumble, performance and the fan.";
+/// The same without one (`device::no_fan`); its name drops the fan too (`i18n::FANLESS_NAMES`).
+pub const EXTRAS_DESC_NO_FAN: &str = "Fast-forward, rewind, earlier states, the frame rate, rumble and performance.";

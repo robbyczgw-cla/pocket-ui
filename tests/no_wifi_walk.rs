@@ -28,6 +28,9 @@ const GATED: &[&str] = &[
     "web",
     "web:off",
     "web:waiting",
+    "pockets:on",
+    "pockets:nobody",
+    "pockets:what",
     "achievements",
     "achievements:offline",
     "starter-home:wifi-off",
@@ -48,6 +51,8 @@ const GATED: &[&str] = &[
     "report:saved",
     "setup:remote",
     "sync:off",
+    // RomM (Settings › Games › RomM): a server out of reach says what this handheld lacks, never "Check Wi-Fi".
+    "romm:error",
 ];
 
 /// States a handheld without Wi-Fi never shows: the snapshot makes up a radio and networks for them (the Wi-Fi page's

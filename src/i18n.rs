@@ -740,9 +740,12 @@ pub fn tr_in(lang: Lang, s: &str) -> String {
 pub fn device_text(text: Tr<'_>) -> Tr<'_> {
     #[cfg(feature = "brick")]
     if matches!(crate::device::current().model, Some(crate::device::Model::Brick(_)))
-        && (text.contains("HOME") || text.contains("Pocket") || BRICK_PAGE_NAMES.iter().any(|(long, _)| text.contains(long)))
+        && (text.contains("HOME") || text.contains("Pocket") || FANLESS_NAMES.iter().any(|(long, _)| text.contains(long)))
     {
         return Tr::Shared(Arc::from(brick_text(&text)));
+    }
+    if crate::device::no_fan() && FANLESS_NAMES.iter().any(|(long, _)| text.contains(long)) {
+        return Tr::Shared(Arc::from(fanless_text(&text)));
     }
     text
 }
@@ -750,23 +753,35 @@ pub fn device_text(text: Tr<'_>) -> Tr<'_> {
 /// What a line says on the Brick: MENU for HOME, Brick for the handheld's "Pocket" (`brick_words`), its page names.
 #[cfg(feature = "brick")]
 pub fn brick_text(s: &str) -> String {
-    let mut s = brick_words(&s.replace("HOME", "MENU"));
-    for (long, short) in BRICK_PAGE_NAMES {
+    fanless_text(&brick_words(&s.replace("HOME", "MENU")))
+}
+
+/// A line on a handheld without a fan of ours (`device::no_fan`): the page and the pause menu's group by their names there.
+pub fn fanless_text(s: &str) -> String {
+    let mut s = s.to_string();
+    for (long, short) in FANLESS_NAMES {
         s = s.replace(long, short);
     }
     s
 }
 
-/// Page names the Brick shortens (it has no fan: Settings › Playing › Performance, `perf_fan_page::title`), in every
-/// language as the tables have them: the pause menu's notes and the Tour pointed at "Performance & fan".
-#[cfg(feature = "brick")]
-const BRICK_PAGE_NAMES: [(&str, &str); 6] = [
+/// Names that drop the fan where there is none to set (`device::no_fan`: the H700, Rockchip and R36S handhelds, the RG DS,
+/// the Brick, Android): Settings › Playing › Performance (`perf_fan_page::title`) and the pause menu's Options › Speed &
+/// rumble, in every language as the tables have them, so every note and Tour card that names them says the name on
+/// screen (review 19.11. #2: "Performance & fan" opened three dead "No fan" rows on the H700 handhelds).
+pub const FANLESS_NAMES: [(&str, &str); 12] = [
     ("Performance & fan", "Performance"),
     ("Leistung & Lüfter", "Leistung"),
     ("Rendimiento y ventilador", "Rendimiento"),
     ("Desempenho e ventoinha", "Desempenho"),
     ("Performances et ventilateur", "Performances"),
     ("Prestazioni e ventola", "Prestazioni"),
+    ("Speed, rumble, fan", "Speed & rumble"),
+    ("Tempo, Vibration, Lüfter", "Tempo & Vibration"),
+    ("Velocidad, vibración, ventilador", "Velocidad y vibración"),
+    ("Velocidade, vibração, ventoinha", "Velocidade e vibração"),
+    ("Vitesse, vibration, ventilateur", "Vitesse et vibration"),
+    ("Velocità, vibrazione, ventola", "Velocità e vibrazione"),
 ];
 
 /// The Brick's own name where a line calls the handheld "the Pocket" (the Mini V2's word, in every language: "this Pocket",
@@ -787,6 +802,8 @@ pub fn brick_words(s: &str) -> String {
             Some(c) => !(c.is_alphanumeric() || c == '-' || c == '_'),
             None => true,
         };
+        // "Pocket Sync" is a feature's name, the same on every handheld (Settings → Connections → Pocket Sync).
+        let named = named || after.starts_with(" Sync");
         out.push_str(if !named && word_starts && word_ends { crate::brick_profile::board().unwrap_or(crate::brick_profile::Board::Brick).word() } else { "Pocket" });
         rest = after;
     }
@@ -1457,6 +1474,11 @@ mod brick_tests {
             ("die Einstellungen dieses Pockets", "die Einstellungen dieses Bricks"),
             ("Retroid Pocket 5, Neo Geo Pocket Color, Game Boy Pocket, GB Pocket", "Retroid Pocket 5, Neo Geo Pocket Color, Game Boy Pocket, GB Pocket"),
             ("PocketCore, Pocket5, PocketSlim, pocket-ui", "PocketCore, Pocket5, PocketSlim, pocket-ui"),
+            // A feature's name keeps its word; the handhelds it pairs are Bricks there.
+            ("Pocket Sync", "Pocket Sync"),
+            ("Was Pocket Sync abgleicht", "Was Pocket Sync abgleicht"),
+            ("Pocket Sync · With TrimUI Brick at 14:05", "Pocket Sync · With TrimUI Brick at 14:05"),
+            ("Pair a Pocket", "Pair a Brick"),
         ] {
             assert_eq!(brick_words(line), shown);
         }

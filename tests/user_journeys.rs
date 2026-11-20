@@ -323,6 +323,31 @@ fn large_text_keeps_search_readable() {
     assert!(boxes.is_empty(), "Large text overlaps or leaves its room: {boxes}");
 }
 
+/// Settings → Games → RomM says something plain in every state, never an empty panel: not paired, paired without a list
+/// yet, a server with no game for this Pocket, each failure, and the pairing screen with its code.
+#[test]
+fn romm_says_what_is_going_on_in_every_state() {
+    let card = Card::new("romm-states");
+    for (state, wanted) in [
+        ("romm", &["Not paired", "RomM is a game server you run yourself", "Not set"][..]),
+        ("romm:paired", &["Paired as sam", "214 games in 9 systems", "Read 5 min ago", "12 more are for systems", "downloads the first time"]),
+        ("romm:nolist", &["The list of games hasn't been read yet."]),
+        ("romm:empty", &["RomM has no games for the systems this Pocket plays.", "7 more are for systems"]),
+        ("romm:error", &["Something went wrong", "Can't reach your RomM server. Check Wi-Fi and that the server is on."]),
+        ("romm:signedout", &["RomM doesn't accept this Pocket any more"]),
+        ("romm:old", &["older than 5.0", "Pair with a code"]),
+        ("romm:code", &["M9JXERPY", "Waiting for approval", "Open the camera on your phone."]),
+        ("romm:pairing", &["Asking RomM for a code"]),
+        ("romm:unpair", &["Press A again to unpair", "This Pocket forgets the server."]),
+    ] {
+        let text = card.shot(state, "normal");
+        for w in wanted {
+            assert!(text.contains(w), "{state}: {w:?} missing in\n{text}");
+        }
+        assert!(!text.contains("rmm_") && !text.contains("token:"), "{state}: no token on screen: {text}");
+    }
+}
+
 #[test]
 fn offline_tailscale_stays_calm_before_asking_for_credentials() {
     let card = Card::new("tailscale-offline");
@@ -1193,6 +1218,166 @@ sleep 30
         assert_ne!(s["font"], "retro", "B leaves the style as it was");
     }
 
+    /// One rule across every look, through the real launch, output writer and exit save.
+    #[test]
+    fn game_start_rule_every_look_reaches_audio_pause_save_and_continue() { game_start_rule(false); }
+
+    #[test]
+    fn dsperate_rule_reaches_our_pause_menu_save_quit_and_continue() { game_start_rule(true); }
+
+    fn game_start_rule(ds: bool) {
+        let started = Instant::now();
+        let (system, title, file, core) = if ds { ("nds", "Nintendo DS", "DS Demo", "dsperate") }
+            else { ("gb", "Game Boy", "Tobu Tobu Girl (World)", "gambatte") };
+        let game_title = if ds { "DS Demo" } else { "Tobu Tobu Girl" };
+        let runtime = tempfile::Builder::new().prefix("pui-player-").tempdir().unwrap();
+        let r = runtime.path();
+        std::fs::set_permissions(r, std::os::unix::fs::PermissionsExt::from_mode(0o700)).unwrap();
+        let display_log = r.join("compositor.log");
+        let log = std::fs::File::create(&display_log).unwrap();
+        let mut compositor = Stub { path: r.join("wayland-test"), child: Command::new("python3")
+            .args(["-I", &format!("{ROOT}/scripts/wayland-player.py")]).arg(r.join("wayland-test"))
+            .stdout(log.try_clone().unwrap()).stderr(log).spawn().expect("python3 for real player journeys") };
+        test_clock::wait_for(|| compositor.path.exists() || compositor.child.try_wait().unwrap().is_some(), Duration::from_secs(5), "software EGL compositor");
+        assert!(compositor.path.exists() && compositor.child.try_wait().unwrap().is_none(), "{}", std::fs::read_to_string(&display_log).unwrap());
+        let build = |source: &Path, output: &Path| {
+            let out = Command::new("cc").args(["-shared", "-fPIC", "-O1", "-DFPS=60", "-DRATE=48000", "-o"]).arg(output).arg(source).arg("-lm").output().unwrap();
+            assert!(out.status.success(), "{}", String::from_utf8_lossy(&out.stderr));
+        };
+        let source=if ds { "tests/fixtures/dsperate_stub.c" } else { "scripts/crash-sweep/stub-core.c" };
+        build(&PathBuf::from(format!("{ROOT}/{source}")), &r.join(format!("{core}_libretro.so")));
+        build(&PathBuf::from(format!("{ROOT}/tests/fixtures/audio_sink.c")), &r.join("libpulse-simple.so.0"));
+        for look in pocket_ui::settings::Theme::ALL {
+            if ds && !matches!(look,pocket_ui::settings::Theme::Shelf|pocket_ui::settings::Theme::Big) { continue; }
+            let look = serde_json::to_value(look).unwrap().as_str().unwrap().to_string();
+            let mut d = Driver::start(&format!("real-{look}"), true, |tmp, cmd| {
+                std::fs::write(tmp.join("data/settings.json"), format!(r#"{{"onboarded":true,"seen_version":"9.9.9","theme":"{look}","motion":"full","art":"off"}}"#)).unwrap();
+                std::fs::write(tmp.join("data/curator.json"), r#"{"lens":false}"#).unwrap();
+                if ds {
+                    let folder=tmp.join("nds");std::fs::create_dir(&folder).unwrap();
+                    std::fs::write(folder.join("DS Demo.nds"),b"rule-test ROM").unwrap();
+                    std::fs::write(tmp.join("es_systems.cfg"),format!("<systemList><system><name>nds</name><fullname>Nintendo DS</fullname><path>{}</path><extension>.nds</extension><command>true</command></system></systemList>",folder.display())).unwrap();
+                    std::fs::write(tmp.join("data/controls-card-seen"),"nds\n").unwrap();
+                    cmd.env("POCKETUI_DEVICE","rg35xx-plus");
+                    cmd.env("POCKET_TEST_DS_RESUMED",tmp.join("ds-resumed"));
+                }
+                cmd.env("POCKETUI_TEST_REAL_CORE", "1").env("POCKET_CORE_TEST", "1").env("TMPDIR", tmp).env("POCKETUI_HOST_BIN", env!("CARGO_BIN_EXE_pocket-core"))
+                    .env("POCKETUI_CORES", r).env("POCKETUI_STATES", tmp.join("states"))
+                    .env("POCKETUI_NAV_PROBE", tmp.join("nav.txt"))
+                    .env("POCKETUI_TRACE", tmp.join("trace.txt"))
+                    .env("WAYLAND_DISPLAY", &compositor.path).env("XDG_RUNTIME_DIR", r)
+                    .env("LIBGL_ALWAYS_SOFTWARE", "1").env("vblank_mode", "0").env("LD_LIBRARY_PATH", r)
+                    .env("POCKET_CORE_AUDIO", "pulse").env("POCKET_TEST_AUDIO_OUT", tmp.join("audio.out"));
+            });
+            if look != "big" { d.sees(title); d.send("a"); }
+            d.sees(game_title);
+            let launch = Instant::now();
+            d.send("a");
+            d.wait(|d| std::fs::read_to_string(d.card.tmp.join("audio.out")).unwrap_or_default().lines().any(|l| l.split_whitespace().last().unwrap().parse::<u32>().unwrap() > 0));
+            assert!(launch.elapsed() < test_clock::timeout(Duration::from_secs(5)), "{look}: sound arrived late");
+            d.wait(|d| std::fs::read_to_string(d.card.tmp.join("trace.txt")).unwrap_or_default().lines().any(|l| l.contains(" core-present frame=")));
+            // core_pacing's own panel rule judges after one second of startup.
+            // Fix the two-second window before waiting, from both initialized outputs.
+            let first_sound = std::fs::read_to_string(d.card.tmp.join("audio.out")).unwrap().lines()
+                .map(|l| l.split_whitespace().map(|v| v.parse::<f64>().unwrap()).collect::<Vec<_>>()).find(|v| v[2]>0.0).unwrap()[0];
+            let first_present = std::fs::read_to_string(d.card.tmp.join("trace.txt")).unwrap().lines().find(|l| l.contains(" core-present frame="))
+                .unwrap().split_whitespace().next().unwrap().parse::<f64>().unwrap()/1e6;
+            let measuring_from = first_sound.max(first_present)+1.0;
+            let measuring_to = measuring_from+2.0;
+            let remaining = measuring_to - pocket_ui::trace::now_us() as f64 / 1e6;
+            if remaining>0.0 { std::thread::sleep(Duration::from_secs_f64(remaining)); }
+            // The compositor receives real, changing GL-rendered shared-memory buffers.
+            // A trace of attempted draws alone cannot establish a working display path.
+            let pixels = std::fs::read_to_string(&display_log).unwrap();
+            let pictures: std::collections::HashSet<_> = pixels.lines().filter_map(|line| {
+                let fields: Vec<_> = line.split_whitespace().collect();
+                if fields.first() != Some(&"buffer") { return None; }
+                let t: f64 = fields[1].parse().unwrap();
+                (t >= measuring_from && t < measuring_to).then_some(fields[3])
+            }).collect();
+            assert!(pictures.len() >= 100, "{look}: real compositor received only {} distinct rendered pictures: {pixels}", pictures.len());
+            d.send("home"); d.sees("Continue");
+            d.wait(|d| d.log().contains("play paused"));
+            let audio = std::fs::read_to_string(d.card.tmp.join("audio.out")).unwrap();
+            let sounding: Vec<Vec<f64>> = audio.lines().map(|l| l.split_whitespace().map(|v| v.parse().unwrap()).collect()).filter(|v: &Vec<f64>| v[2] > 0.0).collect();
+            assert!(sounding.len() > 20, "{look}: audio never flowed: {audio}");
+            let trace = std::fs::read_to_string(d.card.tmp.join("trace.txt")).unwrap();
+            let all_presented: Vec<(f64,u64)> = trace.lines().filter(|l| l.contains(" core-present frame="))
+                .filter_map(|l| Some((l.split_whitespace().next()?.parse::<f64>().ok()? / 1e6, l.split("frame=").nth(1)?.trim().parse().ok()?))).filter(|&(_,n)| n > 0).collect();
+            let in_play: Vec<_> = all_presented.iter().filter(|(t,_)| (measuring_from..=measuring_to).contains(t)).copied().collect();
+            let presented: Vec<u64> = in_play.iter().map(|(_,n)| *n).collect();
+            let expected = (measuring_to - measuring_from) * 60.0;
+            assert!((presented.len() as f64 - expected).abs() <= 2.5, "{look}: steady play delivered {} frames, expected {expected:.1}", presented.len());
+            let playing_sound: Vec<_> = sounding.iter().filter(|v| (measuring_from..=measuring_to).contains(&v[0])).collect();
+            assert!(playing_sound.len() > 20 && playing_sound.last().unwrap()[0] > measuring_to - 0.3, "{look}: tone did not flow during steady play");
+            let audio_frames: u64 = playing_sound.iter().map(|v| v[1] as u64).sum();
+            let expected_audio = ((measuring_to - measuring_from) * 48_000.0).round() as u64;
+            // At most two 256-frame output blocks straddle the fixed window.
+            assert!(audio_frames.abs_diff(expected_audio) <= 512,
+                "{look}: steady audio delivered {audio_frames} sample frames, expected {expected_audio} at 48 kHz");
+            let mut gaps: Vec<f64> = in_play.windows(2).map(|w| w[1].0 - w[0].0).collect();
+            gaps.sort_by(f64::total_cmp);
+            let median = gaps[gaps.len() / 2];
+            assert!((0.9 / 60.0..1.1 / 60.0).contains(&median), "{look}: output did not follow 60Hz: median {median:.4}s");
+            assert!(presented.windows(2).all(|w| w[1] == w[0] + 1), "{look}: repeated or skipped output frames: {presented:?}");
+            let offset = sounding[0][0] - first_present;
+            assert!((-0.3..0.3).contains(&offset), "{look}: sound vs first picture: {offset:.3}s");
+            std::thread::sleep(Duration::from_millis(200));
+            let paused_at = pocket_ui::trace::now_us() as f64 / 1e6;
+            std::thread::sleep(Duration::from_millis(100));
+            let paused = std::fs::read_to_string(d.card.tmp.join("audio.out")).unwrap();
+            assert!(paused.lines().all(|l| { let v: Vec<f64> = l.split_whitespace().map(|v| v.parse().unwrap()).collect(); v[0] < paused_at || v[2] == 0.0 }), "{look}: sound while paused");
+            assert!(sounding.windows(2).all(|w| w[1][0]-w[0][0] < 0.3), "{look}: audio delivery stalled: {audio}");
+            if look == "big" {
+                d.sees("Save & quit");
+                d.send("down");
+            } else {
+                let ready = |q: &Record| q.at == "pause:Main" && q.placed.iter().any(|(_, s)| s == "‹nav:focus›");
+                for _ in 0..12 {
+                    if record_until(&mut d, ready).unwrap().selected().iter().any(|s| s == "Save & quit") { break; }
+                    d.send("down");
+                }
+                assert!(record_until(&mut d, ready).unwrap().selected().iter().any(|s| s == "Save & quit"), "Save & quit reachable");
+            }
+            d.send("a");
+            d.wait(|d| d.log().contains("player pacing:"));
+            let log = d.log();
+            let pacing = log.lines().find(|l| l.starts_with("player pacing:")).unwrap();
+            let startup: Vec<_> = all_presented.iter().filter(|(t,_)| *t < measuring_from).take(8).map(|(_,n)| *n).collect();
+            eprintln!("{look}: steady {} frames, median {:.2}ms, repeats/skips 0; audio {audio_frames}/{expected_audio} samples, offset {offset:.3}s; startup {startup:?}; entire session: {pacing}",presented.len(),median*1000.0);
+            let legacy = d.card.tmp.join("states").join(system).join(file);
+            let base = if ds { pocket_ui::ds::state_base(&legacy,core) } else { legacy };
+            let state = pocket_ui::slots::auto_path(&base);
+            d.wait(|_| pocket_ui::state_file::exists(&state));
+            let saved = pocket_ui::state_file::read(&state).unwrap();
+            if ds { assert!(pocket_ui::ds::state_is_dsperate(&saved)); }
+            let saved=if ds { &saved[8..] } else { &saved[..] };
+            assert!(saved.starts_with(b"STUBSTATE"), "exit save belongs to the running game");
+            assert!(u32::from_le_bytes(saved[16..20].try_into().unwrap()) >= 60, "save contains played frames");
+            d.wait(|d| !status_of(d).contains("game=playing") && !status_of(d).contains("game=paused"));
+            d.wait(|d| !pocket_ui::recents::Recents::load(&d.card.tmp.join("data")).list.is_empty());
+            let recent = pocket_ui::recents::Recents::load(&d.card.tmp.join("data"));
+            assert_eq!(recent.list[0].path, d.card.tmp.join(system).join(format!("{file}.{}",if ds {"nds"} else {"gb"})));
+            let frame = d.frame();
+            assert!(frame.contains(game_title), "{look}: shelf returns to the game: {frame}");
+            if look == "big" {
+                assert!(frame.contains("Continue"), "Easy names the saved moment: {frame}");
+            } else {
+                d.send("b\nup");
+                let home = d.sees("Continue");
+                assert!(home.contains(game_title), "{look}: Continue names the game: {home}");
+            }
+            if ds {
+                assert!(!d.card.tmp.join("ds-resumed").exists(), "first start was fresh");
+                d.send("a");
+                d.wait(|d| d.card.tmp.join("ds-resumed").is_file());
+                let restored=std::fs::read_to_string(d.card.tmp.join("ds-resumed")).unwrap().trim().parse::<u32>().unwrap();
+                assert!(restored>=60,"Continue restores the played moment inside DSperate, frame {restored}");
+            }
+        }
+        eprintln!("game start rule: {:?}", started.elapsed());
+    }
+
     fn first_start_game(name: &str) -> Driver {
         Driver::start(name, true, |tmp, cmd| {
             std::fs::write(tmp.join("data/curator.json"), r#"{"lens":false}"#).unwrap();
@@ -1240,6 +1425,73 @@ sleep 30
         d.wait(|d| d.card.tmp.join("run-game.started").exists());
         let log = d.log();
         assert!(!log.contains("controls card"), "no controls card before the game: {log}");
+    }
+
+    /// A RomM game on the shelf (paired, its list read) whose file isn't on the card: `curl` is a stand-in that serves it, or
+    /// that finds no server (`reachable`).
+    fn romm_card(name: &str, reachable: bool) -> Driver {
+        Driver::start(name, true, move |tmp, cmd| {
+            std::fs::write(tmp.join("data/curator.json"), r#"{"lens":false}"#).unwrap();
+            let romm = tmp.join("data/romm");
+            std::fs::create_dir_all(&romm).unwrap();
+            std::fs::write(romm.join("account.json"), r#"{"server":"http://romm.test:8080","user":"sam"}"#).unwrap();
+            std::fs::write(romm.join("token"), "example_token_0123456789abcdef").unwrap();
+            std::fs::write(
+                romm.join("catalog.json"),
+                r#"{"server":"http://romm.test:8080","fetched":1,"games":[{"id":7,"system":"gb","file":"Homebrew Racer.gb","name":"Homebrew Racer","size":9}]}"#,
+            )
+            .unwrap();
+            let bin = tmp.join("bin");
+            std::fs::create_dir_all(&bin).unwrap();
+            // The download: the file to -o and the status curl's -w prints; the request (with the token) comes on stdin.
+            let body = if reachable {
+                "#!/bin/sh\nout=; prev=\nfor a in \"$@\"; do [ \"$prev\" = -o ] && out=$a; prev=$a; done\ncat > \"$0.request\"\nif [ -n \"$out\" ]; then printf 'RACER-ROM' >> \"$out\"; printf 200; exit 0; fi\nprintf '{}\\n404'\n"
+            } else {
+                "#!/bin/sh\ncat > /dev/null\nexit 7\n"
+            };
+            executable(&bin.join("curl"), body);
+            let host = tmp.join("pocket-core-stand-in");
+            std::fs::write(&host, "").unwrap();
+            cmd.env("PATH", format!("{}:{}", bin.display(), std::env::var("PATH").unwrap_or_default()))
+                .env("POCKETUI_HOST_BIN", host)
+                .env("POCKETUI_STATES", tmp.join("states"));
+        })
+    }
+
+    /// RomM: a game of the server is on the shelf beside the card's; A downloads it once (into its system's folder, the
+    /// token never on curl's command line) and starts it.
+    #[test]
+    fn a_romm_game_downloads_at_its_first_start_and_plays() {
+        let mut d = romm_card("romm-start", true);
+        d.sees("Game Boy");
+        d.send("a");
+        d.sees("Homebrew Racer");
+        d.send("a");
+        d.wait(|d| d.card.tmp.join("run-game.started").exists());
+        assert_eq!(std::fs::read(d.card.tmp.join("gb/Homebrew Racer.gb")).unwrap(), b"RACER-ROM", "the game is on the card");
+        assert!(!d.card.tmp.join("gb/.pocket-ui-romm").exists(), "nothing left of the download");
+        let request = std::fs::read_to_string(d.card.tmp.join("bin/curl.request")).unwrap();
+        assert!(request.contains("/api/roms/7/content/Homebrew%20Racer.gb") && request.contains("Authorization: Bearer example_token"), "{request}");
+        let log = d.log();
+        assert!(log.contains("romm: downloading Homebrew Racer.gb") && log.contains("romm: Homebrew Racer.gb downloaded"), "{log}");
+        assert!(!log.contains("example_token"), "the token is never in the log");
+    }
+
+    /// RomM: the server is gone at the start. The start ends with plain words, no half game lands on the card, and the game
+    /// stays on the shelf for a later try.
+    #[test]
+    fn a_romm_game_without_its_server_says_so_and_stays() {
+        let mut d = romm_card("romm-gone", false);
+        d.sees("Game Boy");
+        d.send("a");
+        d.sees("Homebrew Racer");
+        d.send("a");
+        let text = d.sees("Can't reach your RomM server");
+        assert!(text.contains("Check Wi-Fi"), "{text}");
+        assert!(!d.card.tmp.join("gb/Homebrew Racer.gb").exists());
+        assert!(!d.card.tmp.join("run-game.started").exists(), "nothing started");
+        d.send("b");
+        d.sees("Homebrew Racer");
     }
 
     /// 15.11.2026 (0.5 candidate on the RG35XX Plus): the first SNES start showed the controls card instead of the Cozy
@@ -1513,6 +1765,9 @@ raise SystemExit(1)
         d.send("down\na");
         d.sees("Kids Mode needs games it can start");
         d.send("a");
+        // The last page, how cozy: A finishes.
+        d.sees("How cozy should it be?");
+        d.send("a");
         // The normal empty Home with its ways to games, not the child's "No games here yet".
         let shelf = d.sees("No games yet");
         assert!(!shelf.contains("No games here yet"), "the normal shelf: {shelf}");
@@ -1541,9 +1796,11 @@ raise SystemExit(1)
         d.send("b");
         d.sees("Found 2 games");
         assert!(d.card.tmp.join("data/setup-step").exists(), "still in the first start");
-        // On again: the look (Kids Mode was skipped), and A there finishes.
+        // On again: the look (Kids Mode was skipped), how cozy, and A there finishes.
         d.send("a");
         d.sees("How your games stand");
+        d.send("a");
+        d.sees("How cozy should it be?");
         d.send("a");
         d.sees("Game Boy");
         // Again, all the way: the PIN twice, a game, the colour, the time, the volume, done.
@@ -1696,8 +1953,8 @@ raise SystemExit(1)
         ui.sticker_sheet();
         ui.send("a\nb\nb");
         let text = ui.sees("Could not save: is the SD card full?");
-        // The shelf is back: its bar says START Settings (Details gives way first when the one bar has no room for four hints).
-        assert!(text.contains("Settings"), "the error must remain visible after returning to the shelf: {text}");
+        // The shelf is back: below Home a game's bar says Y Star (START Settings gives way there, review 19.11. #4).
+        assert!(text.contains("Star"), "the error must remain visible after returning to the shelf: {text}");
     }
 
     /// First-start walk 2026-11-06, on a clock nobody set (UTC, no Wi-Fi region): the time zone came up every time the
@@ -1813,6 +2070,8 @@ raise SystemExit(1)
         ui.send("a");
         ui.sees("How your games stand");
         ui.send("a");
+        ui.sees("How cozy should it be?");
+        ui.send("a");
         ui.sees("Game Boy");
         for _ in 0..10 {
             let shelf = ui.frame();
@@ -1826,7 +2085,8 @@ raise SystemExit(1)
         let mut ui = Driver::new("first-start", false);
         let first = ui.frame();
         assert!(first.contains("Welcome to your Pocket"), "first start should explain setup: {first}");
-        // The language, Wi-Fi left by its Continue row (and the time zone when it is asked), Your games: Continue, the look: Finish.
+        // The language, Wi-Fi left by its Continue row (and the time zone when it is asked), Your games: Continue, the look:
+        // Continue, how cozy: Finish.
         ui.first_start_to_games("Your games");
         // Each console with its name, not only a picture (first-start walk 2026-11-06: Game Gear, Master System).
         let found = ui.sees("Found 2 games");
@@ -1835,6 +2095,10 @@ raise SystemExit(1)
         // The style is a row of the look, with Retro among its choices (2026-11-07: shown, not behind a key).
         let look = ui.sees("How your games stand");
         assert!(look.lines().any(|l| l == "Style") && look.lines().any(|l| l == "Retro"), "{look}");
+        ui.send("a");
+        // The last page names its three levels; A takes Cozy, as pocket-ui ships.
+        let cozy = ui.sees("How cozy should it be?");
+        assert!(["Plain", "Cozy", "Everything"].iter().all(|l| cozy.lines().any(|x| x == *l)), "{cozy}");
         ui.send("a");
         ui.sees("Game Boy");
         ui.send("a");
@@ -2116,7 +2380,8 @@ sleep 30
         ui.sees("Game Boy");
         // Into the system's list, X for the card, START for the page: two presses from the list.
         ui.send("a\nx");
-        ui.sees("START");
+        // The card or the 3D case; START opens This game from both (the case's bar shows SELECT first, review 19.11. #4).
+        ui.wait_frame(|f| f.contains("START") || f.contains("Turn over"));
         ui.send("start");
         let page = ui.sees("This game · Game Boy");
         for row in ["Screen scaling", "Look", "Screen frame"] {
@@ -2145,7 +2410,7 @@ sleep 30
         ui.wait(|d| matches!(std::fs::read_to_string(d.card.tmp.join("run-game.quit")).as_deref(), Ok("quit\n")));
         ui.sees("Game Boy");
         ui.send("x");
-        ui.sees("START");
+        ui.wait_frame(|f| f.contains("START") || f.contains("Turn over"));
         ui.send("start\ndown\ndown");
         let again = ui.sees("\u{2039}\nAuto\n\u{203a}");
         assert!(again.contains("This game has its own settings."), "{again}");
@@ -2158,7 +2423,8 @@ sleep 30
         let mut ui = Driver::new("frame-names", true);
         ui.sees("Game Boy");
         ui.send("a\nx");
-        ui.sees("START");
+        // The card or the 3D case; START opens This game from both (the case's bar shows SELECT first, review 19.11. #4).
+        ui.wait_frame(|f| f.contains("START") || f.contains("Turn over"));
         ui.send("start\ndown\ndown");
         // Game Boy: none, then Auto, Ambient, the three Game Boys, then the TVs; no GBA, DS or PSP between.
         for (name, row) in [("Auto", None), ("Ambient", None), ("DMG", Some("DMG colour")), ("GB Pocket", Some("GB Pocket finish")), ("GBC", Some("GBC colour")), ("CRT", Some("TV cabinet"))] {
@@ -3797,6 +4063,13 @@ true
                 if r.says("Change") {
                     assert!(!row.iter().any(|m| m == ">"), "{name} changes in place, so it has no page's angle: {row:?}");
                     assert!(row.iter().any(|m| m == "‹") && row.last().is_some_and(|m| m == "›"), "{name}: the selected value between ‹ ›: {row:?}");
+                    // Shelf space switched on asks which games go on the shelf first (a dialog over the list): its own
+                    // journey, `shelf_space_on_a_swap_and_off_again_puts_every_game_back`.
+                    if name == "Shelf space" {
+                        values.push(name);
+                        d.send("down");
+                        continue;
+                    }
                     let before = r.rows();
                     // One way changes it, the other takes it back (a level at its end: the other way first).
                     d.send("right");
@@ -3835,7 +4108,7 @@ true
             d.send("r1");
         }
         // The rows of the hand walk, and the four switches that took only A.
-        for name in ["Zoom in the pause menu", "Continue where I quit", "Console boot screen", "Remind me where I was", "Text size", "Language", "Lived-in shelf"] {
+        for name in ["Zoom in the pause menu", "Continue where I quit", "Console boot screen", "Remind me where I was", "Text size", "Language", "Lived-in shelf", "Shelf space"] {
             assert!(values.iter().any(|v| v == name), "{name} was walked as a row that changes in place: {values:?}");
         }
         assert!(pages.iter().any(|p| p == "Layout") && pages.iter().any(|p| p == "Cozy extras"), "{pages:?}");
@@ -3942,6 +4215,101 @@ true
         assert!(pos("Speed, rumble, fan").is_some() && pos("Zoom") > pos("Speed, rumble, fan"), "Options: {rows:?}");
         for name in ["Picture", "Shortcuts", "Speed, rumble, fan", "Runs on"] {
             assert!(opened.iter().any(|o| o == name), "Options › {name} was opened: {opened:?}");
+        }
+    }
+
+    /// Options → Picture → Mode 7 (`mode7_hd`), as a player reaches it in every language: a Super Nintendo game on a
+    /// handheld that offers it (the Mini V2's chip, bsnes-hd's file on the card), the pause menu, Options, Picture, down
+    /// to Mode 7; its value changes in place (‹ Original ›, "< > Change", Right → HD) and is kept, so the next start plays
+    /// HD (`mode7_hd::start_core`'s test takes it from the file to the core). Other consoles have no such row.
+    #[test]
+    fn mode7_is_reached_in_the_pause_menu_in_every_language_and_its_change_is_kept() {
+        let tr = |lang: &str, en: &str| -> String {
+            if lang == "en" {
+                return en.to_string();
+            }
+            let tsv = std::fs::read_to_string(format!("{}/assets/i18n/{lang}.tsv", env!("CARGO_MANIFEST_DIR"))).unwrap();
+            tsv.lines().find_map(|l| l.split_once('\t').filter(|(k, _)| *k == en).map(|(_, v)| v.to_string())).unwrap_or_else(|| en.to_string())
+        };
+        for lang in ["en", "de", "fr", "es", "it", "pt"] {
+            let mut d = Driver::start(&format!("mode7-{lang}"), true, |tmp, cmd| {
+                // A Super Nintendo shelf only, a real-looking game, bsnes-hd's file where the card has it.
+                let snes = tmp.join("snes");
+                std::fs::create_dir_all(&snes).unwrap();
+                std::fs::write(snes.join("F-Zero (USA).sfc"), "x").unwrap();
+                std::fs::write(tmp.join("es_systems.cfg"), format!("<?xml version=\"1.0\"?>\n<systemList>\n  <system><name>snes</name><fullname>Super Nintendo</fullname><path>{}</path><extension>.sfc</extension><command>true</command></system>\n</systemList>\n", snes.display())).unwrap();
+                std::fs::write(tmp.join("data/curator.json"), r#"{"lens":false}"#).unwrap();
+                let cores = tmp.join("cores");
+                std::fs::create_dir_all(&cores).unwrap();
+                std::fs::write(cores.join("bsnes_hd_beta_libretro.so"), "x").unwrap();
+                let host = tmp.join("pocket-core-stand-in");
+                std::fs::write(&host, "").unwrap();
+                cmd.env("POCKETUI_HOST_BIN", host).env("POCKETUI_STATES", tmp.join("states")).env("POCKETUI_NAV_PROBE", tmp.join("nav.txt"))
+                    .env("POCKETUI_DEVICE", "miniv2").env("POCKETUI_CORES", &cores).env("POCKETUI_LANG", lang);
+            });
+            d.sees("Super Nintendo");
+            d.send("a");
+            d.sees("F-Zero");
+            d.send("a");
+            d.wait(|d| matches!(std::fs::read_to_string(d.card.tmp.join("run-game.started")).as_deref(), Ok("started\n")));
+            d.send("home");
+            let on = |at: &str| { let at = at.to_string(); move |q: &Record| q.at == at && q.placed.iter().any(|(_, s)| s == "‹nav:focus›") };
+            // Main page: down to Options.
+            let options = tr(lang, "Options");
+            let mut seen = Vec::new();
+            loop {
+                let r = record_until(&mut d, on("pause:Main")).unwrap_or_else(|| panic!("{lang}: the pause menu\n{}", nav_record(&mut d)));
+                let name = r.selected().first().cloned().unwrap_or_default();
+                if name == options {
+                    break;
+                }
+                assert!(!seen.contains(&name) && seen.len() < 12, "{lang}: no {options} on the main page: {seen:?}");
+                seen.push(name);
+                d.send("down");
+            }
+            d.send("a");
+            // Options: Picture.
+            let picture = tr(lang, "Picture");
+            let mut seen = Vec::new();
+            loop {
+                let r = record_until(&mut d, on("pause:Options")).unwrap_or_else(|| panic!("{lang}: Options\n{}", nav_record(&mut d)));
+                let name = r.selected().first().cloned().unwrap_or_default();
+                if name == picture {
+                    break;
+                }
+                assert!(!seen.contains(&name) && seen.len() < 20, "{lang}: no {picture} on Options: {seen:?}");
+                seen.push(name);
+                d.send("down");
+            }
+            d.send("a");
+            let group = record_until(&mut d, |q| q.at.starts_with("pause:Group") && q.placed.iter().any(|(_, s)| s == "‹nav:focus›"))
+                .unwrap_or_else(|| panic!("{lang}: Picture opens\n{}", nav_record(&mut d)));
+            let at = group.at.clone();
+            // Picture: down to Mode 7, the last row.
+            let mut seen = Vec::new();
+            let row = loop {
+                let r = record_until(&mut d, on(&at)).unwrap_or_else(|| panic!("{lang}: back on {at}"));
+                let row = r.selected();
+                let name = row.first().cloned().unwrap_or_default();
+                if name == "Mode 7" {
+                    assert!(r.says(&tr(lang, "Change")), "{lang}: Mode 7 changes in place: {:?}", r.text());
+                    break row;
+                }
+                assert!(!seen.contains(&name) && seen.len() < 20, "{lang}: no Mode 7 on Picture: {seen:?}");
+                seen.push(name);
+                d.send("down");
+            };
+            assert!(row.iter().any(|m| *m == tr(lang, "Original")), "{lang}: Mode 7 starts on Original: {row:?}");
+            assert!(row.iter().any(|m| m == "‹"), "{lang}: its value between ‹ ›: {row:?}");
+            d.send("right");
+            let hd = record_until(&mut d, |q| on(&at)(q) && q.selected().iter().any(|m| m == "HD")).unwrap_or_else(|| panic!("{lang}: Right → HD\n{}", nav_record(&mut d)));
+            assert!(hd.selected().first().is_some_and(|n| n == "Mode 7"));
+            // Kept: the next start reads HD from the game's or the console's file.
+            d.send("b");
+            d.wait(|d| {
+                let dir = d.card.tmp.join("data/game-settings");
+                [dir.join("snes.json"), dir.join("snes/F-Zero (USA).json")].iter().any(|f| std::fs::read_to_string(f).is_ok_and(|t| t.contains("\"mode7\": \"hd\"") || t.contains("\"mode7\":\"hd\"")))
+            });
         }
     }
 
@@ -4160,6 +4528,85 @@ true
         ui.wait(|d| d.log().contains("sleep: awake"));
         assert_eq!(clockless(ui.frame()), shelf, "the entire wake pull is swallowed: {}", ui.log());
         assert!(!ui.card.tmp.join("run-game.started").exists());
+    }
+
+    /// Settings → Games → Shelf space (`app_crate`), as a player does it: switched on (10 places, the games played last),
+    /// a game taken out of the crate for one on the shelf, switched off again; then every game is back on the shelf
+    /// and Home has no crate. Fourteen Game Boy games and the Sega CD one: five in the crate.
+    #[test]
+    fn shelf_space_on_a_swap_and_off_again_puts_every_game_back() {
+        let mut d = Driver::start("shelf-space", true, |tmp, cmd| {
+            for i in 0..13 {
+                std::fs::write(tmp.join(format!("gb/Made-up Puzzle {i:02} (World).gb")), "x").unwrap();
+            }
+            std::fs::write(tmp.join("data/settings.json"), r#"{"onboarded":true,"seen_version":"9.9.9","motion":"off","art":"off","theme":"shelf"}"#).unwrap();
+            cmd.env("POCKETUI_NAV_PROBE", tmp.join("nav.txt"));
+        });
+        let data = d.card.tmp.join("data");
+        let space = |d: &Driver| std::fs::read_to_string(d.card.tmp.join("data/shelf_space.json")).unwrap_or_default();
+        // Settings → Games (the sixth category), down to Shelf space (the end of its line: the line wraps).
+        let to_the_row = |d: &mut Driver| {
+            d.send("start");
+            d.sees("Bluetooth");
+            d.send("r1\nr1\nr1\nr1\nr1");
+            d.sees("Systems on the shelf");
+            for _ in 0..12 {
+                if d.frame().contains("Against the backlog.") {
+                    return;
+                }
+                d.send("down");
+            }
+            panic!("Shelf space is not in Games: {}", d.frame());
+        };
+        // Home's entries one by one from the first: the one whose words contain `want`, or None.
+        let find_on_home = |d: &mut Driver, want: &str| -> Option<String> {
+            let len = Record::of(&nav_record(d)).list.map_or(30, |l| l.1);
+            d.send(&"left\n".repeat(len + 2));
+            for _ in 0..len {
+                let f = d.frame();
+                if f.contains(want) {
+                    return Some(f);
+                }
+                d.send("right");
+            }
+            None
+        };
+        d.sees("Game Boy");
+        to_the_row(&mut d);
+        // Right: Off → 10, and the question; the games played last is chosen already.
+        d.send("right");
+        let ask = d.sees("Which games go on the shelf?");
+        assert!(ask.contains("The games I played last") && ask.contains("My favourites") && ask.contains("Cancel"), "{ask}");
+        d.send("a");
+        d.wait(|d| space(d).contains(r#""limit":10"#));
+        // Home: the crate, saying what is in it.
+        d.send("b");
+        d.sees("Game Boy");
+        assert!(find_on_home(&mut d, "5 games in the crate, the shelf is full").is_some(), "Home's Crate row: {}", d.frame());
+        // Into the crate; A on its first game: the shelf is full, so the shelf's game played longest ago makes room.
+        d.send("a");
+        d.sees("Swap");
+        d.send("a");
+        d.sees("goes into the crate for");
+        let before = space(&d);
+        d.send("a");
+        d.sees("is on the shelf now");
+        let after = space(&d);
+        assert_ne!(before, after, "the swap is saved");
+        assert_eq!(after.matches(".gb\"").count() + after.matches(".cue\"").count(), 10, "still ten on the shelf: {after}");
+        // Off again: every game back on the shelf, Home without the crate, Game Boy's list all fourteen. B from the crate
+        // lands on its row.
+        d.send("b");
+        d.sees("games in the crate");
+        to_the_row(&mut d);
+        d.send("left");
+        d.wait(|d| space(d).contains(r#""limit":null"#));
+        d.send("b");
+        d.wait_frame(|f| f.contains("Quick settings"));
+        assert!(find_on_home(&mut d, "in the crate").is_none(), "Off: no crate on Home");
+        find_on_home(&mut d, "Your games").expect("Game Boy on Home");
+        d.send("a");
+        d.wait(|d| Record::of(&nav_record(d)).list.is_some_and(|l| l.1 == 14));
     }
 
 

@@ -5,6 +5,56 @@ and versions follow [Semantic Versioning](https://semver.org/) (before 1.0, a mi
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-11-20
+
+### Added
+
+- **Photos of big moments** (Settings → Screen & sound, off unless you switch it on): when a game's own save shows a big step (a new badge, a boss's remains, a Star Spirit, a gold cup), pocket-ui keeps a small photo of the game's picture at that moment with the date and a short note, and opening the game's case shows them like instant photos.
+- **Handhelds switch on like the real ones** (Cozy extras → Handheld switch-on and Power lights): a handheld's display lights up and goes dark as the original's did, and the power light of its screen frame shows your battery (the Game Boy's red light dims at "Battery low", the GBA's and SP's green one turns red) and blinks when a state is saved.
+- **"How cozy should it be?"** at the first start: one page after the look sets the cozy touches together, Plain, Cozy or Everything; each one stays in Settings.
+- **The old TV switches on and off.** A game on a TV console comes on with a bright dot, a line, the empty blue AV channel and a moment of snow with its hiss, then the picture pulls together; after Quit it closes to a line and a dot that glows a moment (Settings → Look → Cozy extras → Old-TV switch-on / Old-TV switch-off). On the TrimUI Brick's software picture too.
+- **Evening TV glow** (Cozy extras, on): after dark, while the cabinet's TV is on, the room dims a little and the TV's warm light falls on the boards and nearby cases.
+- **Ritual sounds from real hardware**: the cartridge, card, disc lid and CRT switch-on are recordings of real consoles (Freesound, CC0; sources in assets/ui-sounds/SOURCES.md). Handheld cartridges slide and seat with their own sound; the way back is heard (TV off, lid, cartridge or UMD door, case).
+- **Neo Geo, Lynx and WonderSwan** take their games into the real slot; the Neo Geo AES has its own big cartridge.
+- **Console boot screen** also for Dreamcast, Saturn, Mega-CD and PC Engine CD (your own BIOS files in `roms/bios`; the Mega-CD picks its region's by the disc's name), and on Android's Handheld view. With the switch-on, the screen stays dark until the logo lights.
+- **Games from your RomM server** (Settings → Games → RomM): pair with a QR code (RomM 5.0+) or a code (4.8/4.9); RomM's games stand on the shelf with their names, covers and descriptions and download at their first start. The Pocket never asks for your RomM password.
+- **Mode 7 for the Super Nintendo** (Options → Picture → Mode 7): Original, HD (2x on SM8250, 3x on SM8550) or HD widescreen; HD uses bsnes-hd on the card, Original keeps Snes9x. Android: Original and HD.
+- Android: **a first start made for Android**: games folders of other apps found, emulator apps for systems pocket-ui doesn't play offered, missing BIOS shown with its folder, 4 steps with a pad; a new install opens in the Handheld view, with or without a pad.
+- **Pocket Sync** (Settings → Connections → Pocket Sync, off until you switch it on): your Pockets keep their saves the same, Pocket to Pocket, over the home Wi-Fi or your Tailscale (a Pocket at work finds the one at home there), with no computer, account or cloud. Pair two Pockets once with a six-digit code; after every game the new saves go to the others, and a Pocket that wakes fetches what they saved. Any number of Pockets, none of them a server. Played the same game on two Pockets? Nothing is overwritten: you choose on the page of two versions, and it is asked once. Each paired Pocket shows how it stands (synced 3 min ago, not reachable since 14:05) and its last saves; the shelf says what came ("New save from TrimUI Brick · Golden Sun") and the game's card when it was last synced. On ROCKNIX, the TrimUI Brick and dArkOS.
+- **Pocket Sync in pocket-ui for Android** (Handheld view, Settings → Connections → Pocket Sync, off until you switch it on): your Android handheld keeps its saves the same as your other Pockets, Pocket to Pocket, over the home Wi-Fi or your Tailscale (a Pocket at work finds the one at home there). It syncs while the app is open: when it starts or comes back, and after every game. Two versions of a save show on the game's page, as on the card.
+
+
+- **DSperate for Nintendo DS:** faster software emulation on Brick, Smart Pro, H700 and Rockchip handhelds, with pocket-ui's pause menu and the same remappable stylus and layout actions. Runs on lets you choose the core for a game or console. In-game saves are shared with melonDS; each core keeps its own moments, so existing melonDS moments stay available by choosing melonDS. Android and the Snapdragon handhelds keep melonDS as their default.
+
+- **Nintendo DS without a touchscreen:** Controls offers remappable Stylus mode and Screen layout actions, saved for one game or the console on Linux and Android. On handhelds without sticks, L2 switches the D-pad to the pointer and A touches; R2 changes the layout. The layout cycle also includes the bottom screen alone.
+
+- **Shelf space** (Settings → Games, Off unless you switch it on): only 10, 20 or 50 games on the shelf, the rest in a crate under it, cardboard boxes on the floor, one per console. Switching it on asks whether the games you played last or your favourites go on the shelf. Crate on Home opens the boxes; A takes a game out, and with the shelf full you pick the one that goes into the crate for it: the old case goes into its box, the new one takes its place. Into the crate on a game's card frees its place. Off puts every game back.
+
+### Changed
+
+- **Faster shelf on the Anbernic H700:** a held D-pad in the Shelf look 48 → 54.5 fps (RG35XX Plus, 1200 games); the first game box after a start 274–311 → 40–43 ms.
+- **A flatter hint bar at the bottom edge.** The bar with the button hints is lower and flatter (keys a bit smaller, the letters as large as before) and sits right at the bottom of the screen; the shelf and every list get the room it gave back.
+
+### Fixed
+
+- **Translations.** Italian: Picture › Look's Smooth is "Smussato" (it was "Morbido" like Soft), the pause menu's Earlier is "Precedenti" (it read "Prima" like Load's Before load), and Add games and the save-state lines are Italian now. The Easy look has its name in Spanish and Portuguese (Fácil), French (Simple) and Italian (Facile). French says "Ventilateur" for the fan and "tu" in the DS emulator note too. Hold to toggle reads right in Italian and short in Spanish; Manual says it is in English in Portuguese and Italian; German says "Weiter, wo ich aufgehört habe".
+- **Split on the TrimUI Brick and Smart Pro:** the panel on the right shows the console over a system's game count again and a game's cover a quarter of the screen high, as on the 640x480 handhelds (it was a thin strip with a tiny cover and no console). Easy's big case on the Brick is its full size again.
+- **The TrimUI Brick in the proportions of the 640x480 handhelds:** the game switcher's pictures are as large on its screen as there, Split's list leaves the panel beside it more room, and a game card's facts reach down to the hints.
+- **Smaller text fixes.** A PortMaster game that can't start no longer sends you to "Ports" to reinstall it (there is no way there): it names its card (X) for missing files and Settings › Games › Box art & downloads › PortMaster games. An empty sticker shelf names the card's row as it is called, Stickers. The manual says Game start animation (not Animations), and its first page names all six menu languages.
+- **History on the TrimUI Brick and Smart Pro:** the week's, month's and year's chart is as tall on the screen as on the 640x480 handhelds (it was a flat strip), its day names no longer touch the words under them, and a list of facts beside the games breaks between its items instead of leaving a lone dot.
+- Saves are kept when a load and its rollback both fail (pocket-ui OS).
+- Earlier: each moment keeps its own time zone offset.
+- A console's settings are written before a game's own override is removed.
+- Android: "Before load" stays when a load is refused; saves are kept when a copy fails or an export is incomplete.
+- **The line under a game's name: no dot at a line's end.** Where it took three lines, a line broken between its parts ended with " ·" ("Super Nintendo ·"), while a line broken in two did not. Now neither does.
+- **No fan, no fan rows.** On the handhelds without a fan (the H700, Rockchip and R36S handhelds, RG DS Plus) Settings › Playing › Performance & fan opened three rows that only said "No fan". The page is now **Performance** with only the processor's row there, as on the Brick, and the pause menu's group is **Speed & rumble** there and on Android. Its line under Options now says what is in it ("Fast-forward, rewind, earlier states, the frame rate, rumble and performance.") instead of "Settings you rarely need.".
+- **Android: the starter pack downloads.** In the Handheld view, Get the starter pack failed at once with "No such file or directory": it asked for a program Android doesn't have. It now downloads through Android's own HTTPS, like the box art, continues an interrupted game and stops on B. The empty shelf no longer points to a phone page and file sharing there; it says to copy games into the ROMs folder (over USB or with a file manager).
+- **The hint bar shows what the view needs most.** On a console's shelf and in Favourites a game's bar now shows Y Star / Unstar (START Settings made way there; Home's bar still has it). On the 3D case in Shelf and Cabinet the bar shows SELECT Page, the way to stickers, versions and hide or delete, instead of START This game, which the card's page shows.
+- **Shelf look: the line under a game's name is whole again.** Since the larger box it ended with "…" for played games ("Super Nintendo, last played 3 days ago, 6 h …" in Favourites on the TrimUI Brick, "Last played just now, under a …" in Android's Handheld view). It now takes a second line where the name above leaves room, and where even two lines are too narrow it says the same in short: "Super Nintendo · Completed · 3 days ago · 6 h".
+- **The game's status in its own language.** The line under a game's name said "completed", "playing now", "paused" or "dropped" in English in every other language ("Nintendo 64, completed, zuletzt gespielt …"); it is translated now.
+- **The console stands on the shelf as a game goes in.** In the Shelf layout the console comes up onto the shelf's board, as the cases stand on it; on some screens (640x480) it hung a little over the board. Starting a game whose case lies on a stack (Lived-in shelf), the case no longer shows a second time standing over the row.
+- **Lived-in shelf: a lying case you select no longer floats.** It slides out of its stack sideways, like a book, and stays on the case or the board it lay on; the rest of the stack stays as it is. Before, it rose like a standing case and hung over the stack.
+
 ## [0.5.1] - 2026-11-18
 
 ### Added

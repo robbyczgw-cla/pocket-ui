@@ -54,7 +54,11 @@ pub fn states_supported(info: &str) -> bool {
 
 /// The shipped core says it has save states.
 pub fn core_has_states() -> bool {
-    std::fs::read_to_string(Path::new(DIR).join(INFO_FILE)).is_ok_and(|i| states_supported(&i))
+    core_has_states_in(&Path::new(DIR).join(INFO_FILE))
+}
+
+fn core_has_states_in(info: &Path) -> bool {
+    std::fs::read_to_string(info).is_ok_and(|i| states_supported(&i))
 }
 
 /// system.cfg keys of the Options page (`emu_settings::XBOX`): per game (`xbox["<file>"].<key>`) or for all Xbox games (`xbox.<key>`).
@@ -277,8 +281,7 @@ pub fn prepare(data_dir: &Path, rom: &Path) -> Option<Prepared> {
     for sub in ["save", "system", "cache", "screenshots"] {
         std::fs::create_dir_all(data.join(sub)).ok()?;
     }
-    let cfg = std::fs::read_to_string(crate::emu_settings::SYSTEM_CFG).unwrap_or_default();
-    let picture = picture_of(&cfg, rom.file_name().and_then(|f| f.to_str()).unwrap_or_default());
+    let picture = picture_at(Path::new(crate::emu_settings::SYSTEM_CFG), rom);
     crate::fsutil::write_atomic(&data.join("core-options.cfg"), core_options(&picture).as_bytes()).ok()?;
     let states_dir = crate::slots::states_dir().join("xbox");
     let port = free_port();
@@ -287,6 +290,11 @@ pub fn prepare(data_dir: &Path, rom: &Path) -> Option<Prepared> {
     let p = Prepared { port, config };
     *PREPARED.lock().ok()? = Some(p.clone());
     Some(p)
+}
+
+fn picture_at(cfg: &Path, rom: &Path) -> Picture {
+    let text = std::fs::read_to_string(cfg).unwrap_or_default();
+    picture_of(&text, rom.file_name().and_then(|f| f.to_str()).unwrap_or_default())
 }
 
 /// The command that starts the game: ROCKNIX's RetroArch on our core with our appendconfig (`prepare` has run).
@@ -355,6 +363,27 @@ pub fn state_file(dir: &Path, base: &str, slot: i32) -> PathBuf {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn file_source_rule_hakux_settings() {
+        let d = crate::testutil::TestDir::new("hakux-file-rule");
+        let info = d.join(INFO_FILE);
+        for (label, bytes) in crate::file_faults::faults(b"savestate = \"true\"\n") {
+            let _ = std::fs::remove_file(&info);
+            if let Some(bytes) = bytes { std::fs::write(&info, bytes).unwrap(); }
+            let yes = core_has_states_in(&info);
+            if label == "valid" { assert!(yes); }
+            if !yes { assert!(!NO_STATES.trim().is_empty()); }
+        }
+        let cfg = d.join("system.cfg");
+        for (label, bytes) in crate::file_faults::faults(b"xbox.pocket_resolution=3\nxbox.pocket_scaling=integer\n") {
+            let _ = std::fs::remove_file(&cfg);
+            if let Some(bytes) = bytes { std::fs::write(&cfg, bytes).unwrap(); }
+            let picture = picture_at(&cfg, Path::new("Rule.iso"));
+            assert!(!picture.render_scale.is_empty());
+            if label == "valid" { assert_eq!(picture.render_scale, "3"); assert_eq!(picture.scaling, Scaling::Integer); }
+        }
+    }
 
     const INFO_NO: &str = "display_name = \"Microsoft - Xbox (hakuX)\"\nsavestate = \"false\"\nsavestate_features = \"null\"\n";
 

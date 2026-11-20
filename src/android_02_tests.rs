@@ -29,6 +29,27 @@ fn paint(u: &mut ui::Ui, w: u32, h: u32) -> Vec<u32> {
     u.paint(&mut Canvas::new(&mut p, w, h), &mut Text::builtin(), None);
     p
 }
+
+#[test]
+fn file_source_rule_mobile_preferences_and_buttons() {
+    let d=tempfile::tempdir().unwrap();let file=d.path().join("launcher.json");
+    let seed=serde_json::to_vec(&ui::Preferences {selected_uri:"reader://game".into(),selected_key:"reader-game".into(),onboarding_done:true,haptics:true,..Default::default()}).unwrap();
+    for (label,bytes) in crate::file_faults::faults(&seed) {
+        let _=std::fs::remove_file(&file);if let Some(bytes)=bytes {std::fs::write(&file,bytes).unwrap();}
+        let prefs:ui::Preferences=ui::load_preferences(d.path());let player:serde_json::Value=ui::load_preferences(d.path());
+        if label=="valid" {assert_eq!(prefs.selected_uri,"reader://game");assert!(prefs.haptics);assert_eq!(player["selected_key"],"reader-game");}
+        let mut view=ui::Ui::new(prefs);view.navigate(ui::Screen::Settings);paint(&mut view,960,1600);
+        assert!(view.regions.iter().any(|r|!r.label.trim().is_empty()),"{label}: mobile settings have no named action");
+    }
+    let key="reader-game";let names=vec![Target {id:0,label:"Reader jump".into()}];
+    let seed=serde_json::to_vec(&names).unwrap();let file=d.path().join("android-buttons/reader-game.json");std::fs::create_dir_all(file.parent().unwrap()).unwrap();
+    for (label,bytes) in crate::file_faults::faults(&seed) {
+        let _=std::fs::remove_file(&file);if let Some(bytes)=bytes {std::fs::write(&file,bytes).unwrap();}
+        let got=play_cards::remembered_names(d.path(),key);if label=="valid" {assert_eq!(got[0].label,"Reader jump");}
+        let lines=play_cards::control_lines("gba","Reader Rule Game",&got,false);
+        assert!(!lines.is_empty() && lines.iter().all(|l|!l.trim().is_empty()),"{label}: unnamed mobile controls");
+    }
+}
 /// The languages the fit tests walk: English, German and Spanish; in the merge gate's sample (`POCKETUI_TEST_QUICK`,
 /// scripts/gate.sh) German only, the longest of them. The nightly run and the release check walk all three.
 pub(crate) fn sample_languages() -> &'static [&'static str] {
@@ -2073,14 +2094,19 @@ fn plays_page(apps: &[&str]) -> ui::Ui {
 
 #[cfg(test)]
 #[test]
-fn plays_with_offers_only_what_is_installed_and_is_reached_with_the_d_pad() {
+fn plays_with_offers_ds_cores_and_installed_apps_and_is_reached_with_the_d_pad() {
     use pocket_ui::pad::Button;
-    // A normal phone: no emulator app at all. The row is there, the page says why there is nothing to choose.
+    // Even without an installed app, DS offers the two bundled cores.
     let mut u = plays_page(&[]);
     assert!(matches!(choose(&mut u, "Plays with"), ui::Command::None));
     assert!(u.screen == ui::Screen::PlaysWith);
-    assert_eq!(sheet_rows(&mut u), ["Back"]);
-    assert!(page_words(&mut u).contains("Nothing to choose yet"), "{}", page_words(&mut u));
+    assert_eq!(sheet_rows(&mut u), ["Nintendo DS · melonDS", "Back"]);
+    assert!(!page_words(&mut u).contains("Nothing to choose yet"), "{}", page_words(&mut u));
+    assert!(matches!(u.press(Button::East), ui::Command::Persist));
+    assert_eq!(u.prefs.plays_with.get("nds").map(String::as_str),Some("own:dsperate"));
+    assert_eq!(sheet_rows(&mut u), ["Nintendo DS · DSperate", "Back"]);
+    assert!(matches!(u.press(Button::East), ui::Command::Persist));
+    assert!(!u.prefs.plays_with.contains_key("nds"));
     u.press(Button::South);
     assert!(u.screen == ui::Screen::Settings);
     paint(&mut u, 960, 1600);
@@ -2089,13 +2115,13 @@ fn plays_with_offers_only_what_is_installed_and_is_reached_with_the_d_pad() {
     // Only PPSSPP is there: PSP is offered; the systems without an app, and PS2 (no player of ours), are not.
     let mut u = plays_page(&["psp", "ps2"]);
     choose(&mut u, "Plays with");
-    assert_eq!(sheet_rows(&mut u), ["PlayStation Portable · pocket-ui", "Back"]);
+    assert_eq!(sheet_rows(&mut u), ["Nintendo DS · melonDS", "PlayStation Portable · pocket-ui", "Back"]);
     assert!(page_words(&mut u).contains("Continue and the pause menu are then that app's own"), "{}", page_words(&mut u));
     assert!(page_words(&mut u).contains("Experimental in pocket-ui's player: PlayStation Portable"), "our player's word stays visible on the page: {}", page_words(&mut u));
     // RetroArch as well: its systems join, each row reachable with the D-pad, the Back row last.
     let mut u = plays_page(&["psp", "retroarch:mupen64plus_next", "retroarch:mgba", "retroarch:melonds"]);
     choose(&mut u, "Plays with");
-    assert_eq!(sheet_rows(&mut u), ["Game Boy Advance · pocket-ui", "Nintendo 64 · pocket-ui", "Nintendo DS · pocket-ui", "PlayStation Portable · pocket-ui", "Back"]);
+    assert_eq!(sheet_rows(&mut u), ["Game Boy Advance · pocket-ui", "Nintendo 64 · pocket-ui", "Nintendo DS · melonDS", "PlayStation Portable · pocket-ui", "Back"]);
     for row in ["Game Boy Advance", "Nintendo 64", "Nintendo DS", "PlayStation Portable", "Back"] {
         dpad_to(&mut u, row);
     }
@@ -2105,7 +2131,7 @@ fn plays_with_offers_only_what_is_installed_and_is_reached_with_the_d_pad() {
     // The phone's apps changed while the page was open (installed from the store and back): the rows follow.
     choose(&mut u, "Plays with");
     u.set_installed_apps(&phone_apps(&[]));
-    assert_eq!(sheet_rows(&mut u), ["Back"]);
+    assert_eq!(sheet_rows(&mut u), ["Nintendo DS · melonDS", "Back"]);
 }
 
 #[cfg(test)]
@@ -2452,3 +2478,281 @@ fn a_mastered_game_gets_the_golden_sticker_and_it_counts_for_the_trophy() {
 mod drawer;
 #[path = "android_phones_tests.rs"]
 mod phones;
+
+// ---- Android's first start, made for Android (18.11.2026) ------------------------------------------------------------
+
+/// What a Retroid with games of another app looks like to the first start: ES-DE's ROMs with PS2, GameCube, 3DS, Saturn and
+/// PlayStation games, an Emulation/roms folder, Dolphin installed (ARMSX2 and Azahar not), no BIOS anywhere.
+fn retroid_found(can_read: bool) -> (pocket_ui::android_first_start::Facts, pocket_ui::play_route::Phone) {
+    use pocket_ui::android_first_start::{Facts, FoundFolder};
+    let n = |k| can_read.then_some(k);
+    let facts = Facts {
+        folders: Some(vec![
+            FoundFolder { path: "/storage/1234-ABCD/ROMs".into(), card: true, usual: true, games: n(2341),
+                systems: vec![("ps2", n(40)), ("gamecube", n(12)), ("3ds", n(9)), ("saturn", n(6)), ("psx", n(2274))] },
+            FoundFolder { path: "/storage/emulated/0/Emulation/roms".into(), card: false, usual: false, games: n(12), systems: vec![("gba", n(12))] },
+        ]),
+        can_read,
+        bios: vec![],
+    };
+    let phone = pocket_ui::play_route::Phone::from_json(r#"{"apps": {"dolphin": [{"p": "org.dolphinemu.dolphinemu", "l": "Dolphin"}]}}"#);
+    (facts, phone)
+}
+
+/// The step's choices, in order (not Skip, Back and Continue).
+fn setup_labels(u: &ui::Ui) -> Vec<String> {
+    let buttons = [ui::tr("Skip"), ui::tr("Back"), ui::tr("Continue"), ui::tr("Cancel download")];
+    let mut rows: Vec<(usize, String)> = u.regions.iter().filter_map(|r| match r.action {
+        ui::Action::Setup(i) if !buttons.contains(&r.label) => Some((i, r.label.clone())),
+        _ => None,
+    }).collect();
+    rows.sort();
+    rows.into_iter().map(|(_, l)| l).collect()
+}
+
+/// Presses Down from the top of the step until the pad's focus is on `label`, then A: the D-pad reaches every row.
+fn setup_choose(u: &mut ui::Ui, w: u32, h: u32, label: &str) -> ui::Command {
+    use pocket_ui::pad::Button;
+    for _ in 0..12 {
+        u.press(Button::Up);
+    }
+    for _ in 0..16 {
+        paint(u, w, h);
+        if u.regions.iter().any(|r| matches!(r.action, ui::Action::Setup(_)) && u.selected_region(r) && r.label == label) {
+            return u.press(Button::East);
+        }
+        u.press(Button::Down);
+    }
+    panic!("the D-pad never reaches {label:?}: {:?}", setup_labels(u));
+}
+
+/// With a pad the first start has four steps (language as the welcome, your games, your look, ready): no controls page,
+/// the covers come on their own on unmetered Wi-Fi, and the apps found play their systems. Walked with the D-pad alone, as a
+/// fresh install on a Retroid starts (step 0 saved, pad in the hands).
+#[test]
+fn with_a_pad_the_first_start_has_four_steps_finds_the_games_and_takes_the_apps() {
+    use pocket_ui::pad::Button;
+    let (facts, phone) = retroid_found(true);
+    let mut u = page();
+    u.prefs.onboarding_done = false;
+    u.prefs.onboarding_step = 0;
+    u.controller_connected = true;
+    u.touch_mode = false;
+    u.found = Some(facts);
+    u.found_phone = Some(phone);
+    let mut walked = Vec::new();
+    while !u.prefs.onboarding_done && walked.len() < 8 {
+        paint(&mut u, 1240, 1080);
+        let said = page_words_of(&u);
+        let counted = said.split(" | ").find(|w| w.starts_with("Step ")).unwrap_or_default().to_string();
+        assert!(u.cut.is_empty() && u.setup_faults.is_empty(), "step {}: {:?} {:?}", u.prefs.onboarding_step, u.cut, u.setup_faults);
+        walked.push((u.prefs.onboarding_step, counted));
+        // The last page says which BIOS the games found still want, before a game asks.
+        if u.prefs.onboarding_step == 7 {
+            assert!(said.contains("Saturn needs a BIOS") && said.contains("PlayStation plays without a BIOS"), "{said}");
+            assert!(!said.contains("Dreamcast"), "no Dreamcast games, nothing said of its BIOS: {said}");
+        }
+        if u.prefs.onboarding_step == 2 {
+            let rows = setup_labels(&u);
+            assert_eq!(&rows[..4], ["2341 games in ROMs on the SD card", "12 games in Emulation/roms", "Choose another folder", "• Emulator apps · Dolphin"], "{rows:?}");
+            assert!(rows.contains(&"Get ARMSX2 (PlayStation 2)".to_string()) && rows.contains(&"Get Azahar (Nintendo 3DS)".to_string()), "{rows:?}");
+            assert!(!rows.iter().any(|r| r.contains("Xbox")), "no Xbox games, no Xbox app to get: {rows:?}");
+
+            // A found folder opens the picker right there; an app's page opens in the browser, nothing is fetched.
+            assert!(matches!(setup_choose(&mut u, 1240, 1080, "2341 games in ROMs on the SD card"), ui::Command::FolderAt(uri) if uri == "content://com.android.externalstorage.documents/document/1234-ABCD%3AROMs"));
+            assert!(matches!(setup_choose(&mut u, 1240, 1080, "Get ARMSX2 (PlayStation 2)"), ui::Command::OpenPage("https://github.com/ARMSX2/ARMSX2/releases")));
+            assert_eq!(u.prefs.onboarding_step, 2, "neither leaves the step");
+        }
+        setup_choose(&mut u, 1240, 1080, &ui::tr("Continue"));
+    }
+    let expected: Vec<(usize, String)> = [1, 2, 3, 7].iter().enumerate().map(|(i, s)| (*s, format!("Step {} of 4", i + 1))).collect();
+    assert_eq!(walked, expected);
+    assert_eq!(u.prefs.download_media, Some(true), "the covers come on unmetered Wi-Fi without a page of their own");
+    assert_eq!(u.prefs.plays_with.get("gamecube").map(String::as_str), Some("org.dolphinemu.dolphinemu"));
+    // B goes back one step of the four, never to a page the pad's way hasn't.
+    u.prefs.onboarding_done = false;
+    u.prefs.onboarding_step = 7;
+    paint(&mut u, 1240, 1080);
+    u.press(Button::South);
+    assert_eq!(u.prefs.onboarding_step, 3);
+    u.prefs.onboarding_step = 1;
+    paint(&mut u, 1240, 1080);
+    assert!(!setup_labels(&u).contains(&ui::tr("Back")), "the first of the four has no Back");
+}
+
+/// The apps found can be refused: switched off, Continue leaves Plays with as it was. And Skip takes nothing.
+#[test]
+fn the_apps_found_are_a_switch_and_skip_takes_nothing() {
+    for skip in [false, true] {
+        let (facts, phone) = retroid_found(true);
+        let mut u = page();
+        u.prefs.onboarding_done = false;
+        u.prefs.onboarding_step = 2;
+        u.controller_connected = true;
+        u.found = Some(facts);
+        u.found_phone = Some(phone);
+        if !skip {
+            setup_choose(&mut u, 1240, 1080, "• Emulator apps · Dolphin");
+            paint(&mut u, 1240, 1080);
+            assert!(setup_labels(&u).contains(&"Emulator apps · Dolphin".to_string()), "switched off: {:?}", setup_labels(&u));
+            setup_choose(&mut u, 1240, 1080, &ui::tr("Continue"));
+        } else {
+            u.press(pocket_ui::pad::Button::Start);
+        }
+        assert_eq!(u.prefs.onboarding_step, 3);
+        assert!(u.prefs.plays_with.is_empty(), "skip={skip}: {:?}", u.prefs.plays_with);
+    }
+}
+
+/// With touch the steps stay seven, and every new row is a finger's too: a tap on a found folder opens the picker there.
+#[test]
+fn by_touch_the_found_rows_answer_a_tap_and_the_first_start_keeps_its_seven_steps() {
+    let (facts, phone) = retroid_found(true);
+    let mut u = page();
+    u.prefs.onboarding_done = false;
+    u.prefs.onboarding_step = 2;
+    u.found = Some(facts);
+    u.found_phone = Some(phone);
+    paint(&mut u, 720, 1600);
+    assert!(page_words_of(&u).contains("Step 3 of 7"), "{}", page_words_of(&u));
+    assert!(u.setup_faults.is_empty() && u.cut.is_empty(), "{:?} {:?}", u.setup_faults, u.cut);
+    let tap = |u: &mut ui::Ui, label: &str| {
+        let a = u.regions.iter().find(|r| r.label == label).unwrap_or_else(|| panic!("{label}: {:?}", setup_labels(u))).area;
+        u.tap((a.x + a.w / 2) as f32, (a.y + a.h / 2) as f32)
+    };
+    assert!(matches!(tap(&mut u, "12 games in Emulation/roms"), ui::Command::FolderAt(uri) if uri.ends_with("primary%3AEmulation%2Froms")));
+    assert!(matches!(tap(&mut u, "Get Azahar (Nintendo 3DS)"), ui::Command::OpenPage("https://github.com/azahar-emu/azahar/releases")));
+    tap(&mut u, "• Emulator apps · Dolphin");
+    paint(&mut u, 720, 1600);
+    assert!(setup_labels(&u).contains(&"Emulator apps · Dolphin".to_string()));
+    // A folder chosen in the picker is no offer any more.
+    u.granted = vec!["primary%3AEmulation%2Froms".into()];
+    paint(&mut u, 720, 1600);
+    assert!(!setup_labels(&u).iter().any(|r| r.contains("Emulation/roms")), "{:?}", setup_labels(&u));
+}
+
+/// The empty states say something, never a blank: nothing looked up yet, nothing on the device, no right to read the files
+/// (the systems are named, their games not), no app on the device (no app row, the links to get them).
+#[test]
+fn the_games_step_says_what_is_there_with_no_games_no_apps_and_no_permission() {
+    let step2 = |facts: Option<pocket_ui::android_first_start::Facts>, phone: Option<pocket_ui::play_route::Phone>| {
+        let mut u = page();
+        u.prefs.onboarding_done = false;
+        u.prefs.onboarding_step = 2;
+        u.controller_connected = true;
+        u.found = facts;
+        u.found_phone = phone;
+        paint(&mut u, 1240, 1080);
+        assert!(u.setup_faults.is_empty() && u.cut.is_empty(), "{:?} {:?}", u.setup_faults, u.cut);
+        (page_words_of(&u), setup_labels(&u))
+    };
+    let (said, rows) = step2(None, None);
+    assert!(said.contains("No folder chosen yet. You can add games later."), "{said}");
+    assert_eq!(rows[0], "Choose your ROM folder");
+    let empty = pocket_ui::android_first_start::Facts { folders: Some(vec![]), can_read: true, bios: vec![] };
+    let (said, rows) = step2(Some(empty), Some(Default::default()));
+    assert!(said.contains("No games found on this device yet."), "{said}");
+    assert_eq!(rows[0], "Choose your ROM folder");
+    assert!(!rows.iter().any(|r| r.contains("Emulator apps") || r.starts_with("Get ")), "{rows:?}");
+    // Nothing seen without the right to read: no claim that there are no games.
+    let unseen = pocket_ui::android_first_start::Facts { folders: Some(vec![]), can_read: false, bios: vec![] };
+    let (said, _) = step2(Some(unseen), Some(Default::default()));
+    assert!(said.contains("No folder chosen yet.") && !said.contains("No games found"), "{said}");
+    let (facts, _) = retroid_found(false);
+    let (said, rows) = step2(Some(facts), Some(Default::default()));
+    assert!(rows.contains(&"5 systems in ROMs on the SD card".to_string()) && rows.contains(&"1 system in Emulation/roms".to_string()), "{rows:?}");
+    assert!(said.contains("Games found on this device."), "{said}");
+    assert!(!rows.iter().any(|r| r.contains("Emulator apps")), "no app installed: {rows:?}");
+    assert!(rows.contains(&"Get Dolphin (GameCube / Wii)".to_string()), "{rows:?}");
+}
+
+/// The step with the most to say (two folders, the apps, two links, three BIOS lines) fits whole in every language, in
+/// Normal and Large type, upright on a phone and on a Retroid's screens: every word whole, nothing over anything else.
+#[test]
+fn the_games_step_fits_in_every_language_and_size_on_phones_and_handhelds() {
+    use pocket_ui::i18n::Lang;
+    // The language is process-wide: one child process a language, all six at once (as `fit_children`).
+    const MARKER: &str = "ANDROID_FIRST_START_FIT_LANG";
+    let Ok(code) = std::env::var(MARKER) else {
+        let children: Vec<_> = Lang::ALL
+            .iter()
+            .map(|l| {
+                std::process::Command::new(std::env::current_exe().unwrap())
+                    .args(["--exact", "android_02_tests::the_games_step_fits_in_every_language_and_size_on_phones_and_handhelds", "--nocapture"])
+                    .env(MARKER, format!("{l:?}"))
+                    .stdout(std::process::Stdio::piped())
+                    .stderr(std::process::Stdio::piped())
+                    .spawn()
+                    .unwrap()
+            })
+            .collect();
+        for child in children {
+            let out = child.wait_with_output().unwrap();
+            let said = format!("{}{}", String::from_utf8_lossy(&out.stdout), String::from_utf8_lossy(&out.stderr));
+            assert!(out.status.success() && said.contains("1 passed"), "{said}");
+        }
+        return;
+    };
+    let lang = *Lang::ALL.iter().find(|l| format!("{l:?}") == code).unwrap();
+    let (mut facts, phone) = retroid_found(true);
+    facts.folders.as_mut().unwrap()[0].systems.push(("dreamcast", Some(3)));
+    let mut faults = Vec::new();
+    {
+        for (w, h, dp, pad) in [(720, 1600, 2.0, false), (1080, 2400, 3.0, false), (1240, 1080, 2.0, true), (1920, 1080, 2.5, true), (1280, 960, 2.0, true)] {
+            for scale in [1.0f32, 1.3] {
+                for step in [1usize, 2, 7] {
+                    let mut u = page();
+                    u.prefs.choose_language(lang);
+                    u.prefs.onboarding_done = false;
+                    u.prefs.onboarding_step = step;
+                    u.controller_connected = pad;
+                    u.dp = dp;
+                    u.system_font_scale = scale;
+                    u.found = Some(facts.clone());
+                    u.found_phone = Some(phone.clone());
+                    paint(&mut u, w, h);
+                    let context = format!("{lang:?} {w}x{h} dp={dp} font={scale} step {step}");
+                    if !u.setup_faults.is_empty() || !u.cut.is_empty() {
+                        faults.push(format!("{context}: {:?} {:?}", u.setup_faults, u.cut));
+                    }
+                    if step == 2 {
+                        let rows = setup_labels(&u);
+                        let want = pocket_ui::i18n::tr_in(lang, "Get ARMSX2 (PlayStation 2)");
+                        if !rows.contains(&want) {
+                            faults.push(format!("{context}: no {want:?} in {rows:?}"));
+                        }
+                    }
+                }
+            }
+        }
+    }
+    assert!(faults.is_empty(), "{}", faults.join("\n"));
+}
+
+/// `FIRST_START_SHOTS=<dir> cargo test --lib first_start_shots -- --ignored`: the Mobile view's first start as pictures
+/// (PPM; the page at android-onboarding/ makes them JPEG): with a pad on a Retroid, and upright on a phone.
+#[test]
+#[ignore = "writes pictures: FIRST_START_SHOTS=<dir>"]
+fn first_start_shots() {
+    let Some(dir) = std::env::var_os("FIRST_START_SHOTS").map(std::path::PathBuf::from) else { return };
+    std::fs::create_dir_all(&dir).unwrap();
+    let (facts, phone) = retroid_found(true);
+    for (name, w, h, dp, pad, steps) in [("pad", 1240u32, 1080u32, 2.0f32, true, vec![0usize, 1, 2, 3, 4, 6, 7]), ("phone", 720, 1600, 2.0, false, vec![2])] {
+        for step in steps {
+            let mut u = page();
+            u.prefs.onboarding_done = false;
+            u.prefs.onboarding_step = step;
+            u.controller_connected = pad;
+            u.touch_mode = !pad;
+            u.dp = dp;
+            u.found = Some(facts.clone());
+            u.found_phone = Some(phone.clone());
+            let px = paint(&mut u, w, h);
+            let mut out = format!("P6\n{w} {h}\n255\n").into_bytes();
+            for p in px {
+                out.extend([(p >> 16) as u8, (p >> 8) as u8, p as u8]);
+            }
+            std::fs::write(dir.join(format!("{name}-step{}.ppm", u.prefs.onboarding_step)), out).unwrap();
+        }
+    }
+}

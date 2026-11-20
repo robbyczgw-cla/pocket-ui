@@ -121,7 +121,20 @@ struct Tools<'a> {
     redirects: &'a str,
     no_progress: Duration,
     source_timeout: Duration,
+    /// Android: a file comes through the Activity's HTTPS (`platform::http::download_file`), never curl, which Android
+    /// doesn't have (review 19.11. #1: the starter pack failed with "No such file or directory"). None: curl.
+    bridge: Option<Bridge>,
 }
+
+/// One file download outside curl: url, destination (continued when part of it is there), its exact size, and a file
+/// whose appearance stops it.
+type Bridge = fn(&str, &Path, u64, &Path) -> Result<(), String>;
+
+/// The bridge this build downloads through: Android's HTTPS on Android, curl elsewhere.
+#[cfg(target_os = "android")]
+const BRIDGE: Option<Bridge> = Some(crate::platform::http::download_file);
+#[cfg(not(target_os = "android"))]
+const BRIDGE: Option<Bridge> = None;
 
 /// https only, and `file://` for a channel on the card (tests, the device test). Never plain http, not even after a
 /// redirect: the list is signed and every file hashed, but a network that can rewrite http could still stall or
@@ -133,6 +146,7 @@ const TOOLS: Tools<'static> = Tools {
     redirects: "=https",
     no_progress: Duration::from_secs(30),
     source_timeout: Duration::from_secs(5 * 60),
+    bridge: BRIDGE,
 };
 
 /// Whether `url`'s scheme is one of `protocols` (curl's `--proto` syntax, `=https,file`).
@@ -343,6 +357,9 @@ fn download(tools: &Tools, url: &str, dest: &Path, max_size: u64, cancel: &Cance
     if let Some(dir) = dest.parent() {
         std::fs::create_dir_all(dir).map_err(|e| e.to_string())?;
     }
+    if let Some(bridge) = tools.bridge {
+        return bridged(bridge, url, dest, max_size, cancel, progress);
+    }
     // A program file that is still open for writing somewhere (a forked process that hasn't exec'd yet) makes exec
     // fail with ETXTBSY for a moment. Only a safeguard: the tests write their fake curl so that this can't happen
     // (`testutil::write_executable`).
@@ -412,6 +429,50 @@ fn download(tools: &Tools, url: &str, dest: &Path, max_size: u64, cancel: &Cance
         }
         std::thread::sleep(Duration::from_millis(100));
     }
+}
+
+/// [`download`] through a [`Bridge`] (Android): it runs on its own thread while this one reports the bytes so far and,
+/// on B, puts down the stop file the bridge looks for. The same messages as curl's way.
+fn bridged(bridge: Bridge, url: &str, dest: &Path, size: u64, cancel: &Cancel, progress: &dyn Fn(u64)) -> Result<(), String> {
+    const FAILED: &str = "Download failed. Check Wi-Fi.";
+    if size == 0 {
+        return Err(FAILED.into());
+    }
+    let mut name = dest.file_name().unwrap_or_default().to_os_string();
+    name.push(".stop");
+    let stop = dest.with_file_name(name);
+    let _ = std::fs::remove_file(&stop);
+    let len = || std::fs::metadata(dest).map_or(0, |m| m.len());
+    let result = std::thread::scope(|s| {
+        let job = s.spawn(|| bridge(url, dest, size, &stop));
+        let mut high_water = len();
+        while !job.is_finished() {
+            let now = len();
+            progress(now);
+            if now > high_water {
+                high_water = now;
+                cancel.set_phase(WorkerPhase::Downloading);
+            }
+            if cancel.is_cancelled() && !stop.exists() {
+                let _ = std::fs::File::create(&stop);
+            }
+            std::thread::sleep(Duration::from_millis(50));
+        }
+        job.join().unwrap_or_else(|_| Err(FAILED.into()))
+    });
+    let _ = std::fs::remove_file(&stop);
+    progress(len());
+    if cancel.is_cancelled() {
+        return Err("Download cancelled.".into());
+    }
+    if len() > size {
+        let _ = std::fs::remove_file(dest);
+        return Err("The download is larger than announced. Nothing was installed.".into());
+    }
+    result.map_err(|e| {
+        eprintln!("download: {url}: {e}");
+        FAILED.to_string()
+    })
 }
 
 /// Downloads `rel` to `dest` and checks size and SHA-256 against the signed list.
@@ -1970,6 +2031,53 @@ mod tests {
         let err = download_checked(&strict, &rel, &url, &dest, &Cancel::new(), &|_| {}).unwrap_err();
         assert!(err.contains("isn't https"), "{err}");
         assert!(!dest.exists() || std::fs::metadata(&dest).unwrap().len() == 0, "nothing of the file was fetched");
+    }
+
+    /// Android's way: no curl on the device (review 19.11. #1, the starter pack died with "No such file or directory").
+    /// A stand-in for the Activity's HTTPS: `file://` copies in two halves; "slow" waits for the stop file.
+    fn fake_bridge(url: &str, dest: &Path, size: u64, stop: &Path) -> Result<(), String> {
+        if url.ends_with("/slow") {
+            for _ in 0..100 {
+                if stop.exists() { return Err("Download cancelled".into()); }
+                std::thread::sleep(Duration::from_millis(20));
+            }
+            return Err("never stopped".into());
+        }
+        let bytes = std::fs::read(url.strip_prefix("file://").ok_or("https only")?).map_err(|e| e.to_string())?;
+        assert_eq!(bytes.len() as u64, size, "the bridge is told the exact size");
+        let have = std::fs::metadata(dest).map_or(0, |m| m.len()) as usize;
+        let mut f = std::fs::OpenOptions::new().create(true).append(true).open(dest).map_err(|e| e.to_string())?;
+        std::io::Write::write_all(&mut f, &bytes[have..]).map_err(|e| e.to_string())
+    }
+
+    #[test]
+    fn the_android_build_downloads_through_the_bridge_without_curl() {
+        assert_eq!(TOOLS.bridge.is_some(), cfg!(target_os = "android"), "Android's build downloads through the Activity");
+        let tmp = TempDir::new("bridge");
+        let data: Vec<u8> = (0..5000u32).map(|i| i as u8).collect();
+        std::fs::write(tmp.path().join("game.zip"), &data).unwrap();
+        let rel = Release { version: "1".into(), url: format!("file://{}/game.zip", tmp.path().display()), mirrors: vec![],
+            preferred_sources: vec![], sha256: store::sha256_hex(&data), size: data.len() as u64, notes: String::new() };
+        let tools = Tools { curl: "/no/curl/on/android", bridge: Some(fake_bridge), ..TOOLS };
+        let dest = tmp.path().join("work/game.download");
+        std::fs::create_dir_all(dest.parent().unwrap()).unwrap();
+        std::fs::write(&dest, &data[..1200]).unwrap();
+        let seen = std::sync::atomic::AtomicU64::new(0);
+        download_checked(&tools, &rel, "file:///", &dest, &Cancel::new(), &|n| seen.store(n, Ordering::SeqCst)).unwrap();
+        assert_eq!(std::fs::read(&dest).unwrap(), data, "a partial file is continued, then checked");
+        assert_eq!(seen.load(Ordering::SeqCst), data.len() as u64);
+        assert!(!tmp.path().join("work/game.download.stop").exists());
+        // B: the stop file is put down, the bridge ends, the player reads the usual words, no stop file is left.
+        let cancel = Cancel::new();
+        let slow = tmp.path().join("slow.download");
+        let stopper = { let c = cancel.clone(); std::thread::spawn(move || { std::thread::sleep(Duration::from_millis(100)); c.cancel(); }) };
+        let err = download(&tools, "https://h/slow", &slow, 10, &cancel, &|_| ()).unwrap_err();
+        stopper.join().unwrap();
+        assert_eq!(err, "Download cancelled.");
+        assert!(!tmp.path().join("slow.download.stop").exists());
+        // A failure is said in the player's words, never the bridge's own text.
+        let err = download(&tools, "https://h/missing", &tmp.path().join("m"), 10, &Cancel::new(), &|_| ()).unwrap_err();
+        assert_eq!(err, "Download failed. Check Wi-Fi.");
     }
 
     #[test]

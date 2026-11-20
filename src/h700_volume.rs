@@ -647,6 +647,9 @@ fn parse_wish(name: &str, json: &str) -> Option<Wish> {
         muted: sink["mute"].as_bool()?,
     })
 }
+fn affected_ucm_file(path: &std::path::Path) -> bool {
+    std::fs::read_to_string(path).ok().is_some_and(|s| affected_ucm(&s))
+}
 fn affected_ucm(text: &str) -> bool {
     let speaker = text.split("SectionDevice.\"Speaker\"").nth(1).and_then(|s| s.split("SectionDevice.").next());
     speaker
@@ -689,7 +692,7 @@ impl Keeper {
                     }
                 }
                 let path = "/usr/share/alsa/ucm2/Allwinner/sun4i-h616/HiFi.conf";
-                if !std::fs::read_to_string(path).ok().is_some_and(|s| affected_ucm(&s)) {
+                if !affected_ucm_file(std::path::Path::new(path)) {
                     return;
                 }
                 let mut warned = false;
@@ -1520,4 +1523,17 @@ mod tests {
         assert!(affected_ucm(broken));
         assert!(!affected_ucm(&broken.replace("PlaybackMixerElem \"Line Out\"", "PlaybackMixerElem \"DAC\"")));
     }
+    #[test]
+    fn file_source_rule_h700_ucm() {
+        let d = tempfile::tempdir().unwrap(); let file = d.path().join("HiFi.conf");
+        let seed = b"SectionDevice.\"Speaker\" { PlaybackMixerElem \"Line Out\" cset \"name='DAC Playback Volume' 63\" cset \"name='Speaker Switch' on\" }";
+        for (label, bytes) in crate::file_faults::faults(seed) {
+            let _ = std::fs::remove_file(&file);
+            if let Some(bytes) = bytes { std::fs::write(&file, bytes).unwrap(); }
+            let affected = affected_ucm_file(&file);
+            if label == "valid" { assert!(affected); }
+            if label == "missing" { assert!(!affected); }
+        }
+    }
+
 }

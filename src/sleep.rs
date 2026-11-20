@@ -215,11 +215,15 @@ pub enum GameKind {
 
 impl Game {
     pub fn new(system: &str, name: &str, path: &Path, emulator: &str, pgid: Option<i32>) -> Game {
+        Self::with_core(system,name,path,emulator,"",pgid)
+    }
+
+    pub fn with_core(system: &str, name: &str, path: &Path, emulator: &str, core: &str, pgid: Option<i32>) -> Game {
         let kind = match emulator {
             "pocket-core" => {
                 let stem = path.file_stem().and_then(|s| s.to_str()).unwrap_or("game");
                 GameKind::PocketCore {
-                    auto_state: crate::slots::auto_path(&crate::slots::base(system, stem)),
+                    auto_state: crate::slots::auto_path(&crate::slots::base_for_core(system, stem, core)),
                 }
             }
             "retroarch" => GameKind::RetroArch,

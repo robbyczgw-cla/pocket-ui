@@ -186,7 +186,7 @@ pub fn when_at(then: u64, now: u64, tz: i32) -> String {
     }
 }
 
-pub use crate::play_time::duration;
+pub use crate::play_time::{duration, duration_short};
 
 /// The shelf's line under a game of a system's list: "Not played yet", or when it was last played and how long in all.
 pub fn played_line(r: Option<&Recent>) -> String {

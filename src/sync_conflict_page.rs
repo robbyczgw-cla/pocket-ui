@@ -178,8 +178,9 @@ impl ConflictPage {
     }
 }
 
-/// The rows of a group's versions, the one in use first.
-pub fn version_rows(g: &Group) -> Vec<VersionRow> {
+/// The rows of a group's versions, the one in use first. `from`: the name of the paired Pocket a copy came from, if
+/// any ("From TrimUI Brick" instead of "Other version").
+pub fn version_rows(g: &Group, from: &dyn Fn(&std::path::Path) -> Option<String>) -> Vec<VersionRow> {
     let versions = g.versions();
     let newest = versions.iter().map(|v| v.mtime).max().unwrap_or(0);
     let differ = versions.iter().any(|v| v.mtime != newest);
@@ -191,6 +192,8 @@ pub fn version_rows(g: &Group) -> Vec<VersionRow> {
             let in_use = g.current.as_ref().is_some_and(|c| c.path == v.path);
             let label = if in_use {
                 "In use now".to_string()
+            } else if let Some(name) = from(&v.path) {
+                format!("From {name}")
             } else {
                 other += 1;
                 if several {
@@ -344,17 +347,20 @@ mod tests {
     #[test]
     fn the_rows_name_each_version_with_its_time_and_size_and_mark_the_newest() {
         let e = entry("Game", Kind::Save, 1);
-        let rows = version_rows(&e.group);
+        let rows = version_rows(&e.group, &|_| None);
         assert_eq!(rows.iter().map(|r| r.label.as_str()).collect::<Vec<_>>(), ["In use now", "Other version"]);
         assert_eq!(rows[0].size, "32 KB");
         assert!(rows[0].newest && !rows[1].newest);
         assert!(rows[1].when.contains("2030") || rows[1].when.contains("2029"), "{}", rows[1].when);
-        let three = version_rows(&entry("Game", Kind::Save, 2).group);
+        let three = version_rows(&entry("Game", Kind::Save, 2).group, &|_| None);
         assert_eq!(three.iter().map(|r| r.label.as_str()).collect::<Vec<_>>(), ["In use now", "Other version 1", "Other version 2"]);
         // The same time everywhere: none is marked.
         let mut same = entry("Game", Kind::Save, 1);
         same.group.others[0].mtime = 2_000_000_000;
-        assert!(version_rows(&same.group).iter().all(|r| !r.newest));
+        assert!(version_rows(&same.group, &|_| None).iter().all(|r| !r.newest));
+        // A copy put there by Pocket-to-Pocket sync says which Pocket the version came from.
+        let named = version_rows(&e.group, &|_| Some("TrimUI Brick".to_string()));
+        assert_eq!(named.iter().map(|r| r.label.as_str()).collect::<Vec<_>>(), ["In use now", "From TrimUI Brick"]);
     }
 
     #[test]

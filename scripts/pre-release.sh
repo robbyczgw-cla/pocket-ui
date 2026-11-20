@@ -150,7 +150,7 @@ ct "$LOGS/release-text.log" --lib --bins --test i18n_snapshots -- --include-igno
 step_end release-text $rc "$t0"
 fi
 
-TEXT_SUITES="text_size long_titles spine_titles spine_names small_screen home_panel_labels info_page portuguese french italian spanish names_never_translated settings_value_text i18n_snapshots"
+TEXT_SUITES="text_size long_titles spine_titles spine_names small_screen home_panel_labels info_page portuguese french italian spanish names_never_translated settings_value_text i18n_snapshots where_states no_wifi_walk"
 if ! want text-fit; then :
 elif [ $tr = 0 ] && [ $manual = 0 ]; then skip text-fit "no translation table or manual page changed since the full run"
 else

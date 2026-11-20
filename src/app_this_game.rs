@@ -16,7 +16,7 @@ use pocket_ui::this_game_page::{Action, Mode, Row, Subject, ThisGamePage};
 use pocket_ui::touch::Area;
 
 use super::app_emu_choice::Opener;
-use super::{App, CANCEL, CONFIRM, NU_BTN_PAD, NU_PAD, NU_PILL, NU_SMALL};
+use super::{App, CANCEL, CONFIRM, NU_BTN_PAD, NU_PAD, NU_SMALL};
 
 impl App {
     /// What plays the game at `path` now, as the page's subject: the console, the resolved emulator, whether pocket-core
@@ -99,14 +99,14 @@ impl App {
         self.status_pill(c);
         let right = c.w - pad;
         let title = self.text.fit(Face::Title, 50, &page.subject.name, c.w - 2 * pad - 2 * NU_BTN_PAD - 330);
-        self.text.draw(c, Face::Title, 50, pad + NU_BTN_PAD, pad + 58, pal().chalk, &title);
+        self.text.draw(c, Face::Title, 50, pad + NU_BTN_PAD, pocket_ui::kit::header_title(c.h), pal().chalk, &title);
         let sub = match page.mode {
             Mode::List => format!("This game · {}", page.subject.system_name),
             Mode::Controls(_) => format!("Controls · {}", page.subject.system_name),
         };
         let sub = self.text.fit(Face::Body, 28, &sub, c.w - 2 * pad - 2 * NU_BTN_PAD);
         self.text.draw(c, Face::Body, 28, pad + NU_BTN_PAD, pad + 104, pal().dust, &sub);
-        let top = pad + NU_PILL + 46;
+        let top = pocket_ui::kit::header_bottom(c.h) + 46;
 
         // (name, value or ">" for a page, explanation) of every line, and the selected one.
         // `arrows`: Left and Right change the value (not on a row that opens a page).
@@ -127,7 +127,7 @@ impl App {
         let font = 34u32;
         let row = pocket_ui::type_scale::row(54, font);
         // Under the rows: the selected row's explanation (up to three lines), then up to two notes. The rest is rows.
-        let hints_top = c.h - pad - NU_PILL - 16;
+        let hints_top = pocket_ui::kit::hint_bar_top(c.h) - 16;
         let below = 4 * pocket_ui::type_scale::line(NU_SMALL, 12) + 3 * pocket_ui::type_scale::line(24, 8) + 28;
         let visible = (((hints_top - top - below) / row).max(3) as usize).min(lines.len().max(1));
         let first = super::window_start(sel, visible, lines.len());

@@ -31,6 +31,11 @@ pub fn base(data: &Path, key: &str, name: &str) -> PathBuf {
     data.join("states").join(key).join(Path::new(name).file_stem().unwrap_or_default())
 }
 
+/// The chosen DS core keeps its own moments, beside the legacy namespace.
+pub fn base_for_core(data:&Path,key:&str,name:&str,core:&str)->PathBuf {
+    crate::ds::state_base(&base(data,key,name),core)
+}
+
 /// The fallback copy of the document; direct sessions have only short-lived descriptor aliases.
 pub fn staged_rom(data: &Path, key: &str, name: &str) -> PathBuf {
     data.join("content").join(key).join(name)

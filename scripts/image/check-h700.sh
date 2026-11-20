@@ -6,6 +6,7 @@
 set -u
 . /repo/scripts/image/pins.sh
 . /repo/scripts/image/grub-checks.sh
+. /repo/scripts/image/bios-checks.sh
 . /repo/scripts/image/p2-table.sh
 . /repo/scripts/image/tools.sh
 IMG=$1
@@ -430,7 +431,8 @@ check "warns about charging (ROCKNIX PR #3539): weak 5 V chargers, charge fully 
 check "says the firmware not traced and the Mali driver's terms are open" 'grep -q "not traced" "$R" && grep -q "Mali" "$R"'
 elif [ "$FAMILY" = RK3326 ]; then
 check "names the model: $DT_MODEL, and that extlinux.conf names its tree $DTB_NAME.dtb" 'grep -q "for the $DT_MODEL: SD card image" "$R" && grep -q "$DTB_NAME.dtb" "$R"'
-check "says it is a test card, not a release, never published" 'grep -q "private test card" "$R"'
+check "says it is a beta and where to report" 'grep -q "This card is a beta" "$R" && grep -q "report" "$R"'
+check "no Wi-Fi: says how to update from a card (the update file onto TF2 or the ROCKNIX drive, Look on the card)" 'grep -q "pocket-ui-update-<version>-rocknix.zip" "$R" && grep -q "Look on the card" "$R"'
 check "black screen: points to r36s-panels/ and overlays/mipi-panel.dtbo, and to stock/ for the original card's .dtb" 'grep -q "r36s-panels" "$R" && grep -q "overlays/mipi-panel.dtbo" "$R" && grep -q "stock/" "$R"'
 check "says there is no Wi-Fi: games by a second card or the computer, no updates over the air" 'grep -q "no Wi-Fi" "$R"'
 check "says the firmware not traced and the Mali driver's terms are open" 'grep -q "not traced" "$R" && grep -q "Mali" "$R"'
@@ -573,7 +575,7 @@ GAMESFILES
 fi
 if [ "$FAMILY" = RK3326 ]; then
   echo "755 0:0 f ./.pocket-seed/.config/autostart/pocket-ui-r36s-panel" >>"$W/lists/storage.expected"
-  sort -o "$W/lists/storage.expected" "$W/lists/storage.expected"
+  sort -u -o "$W/lists/storage.expected" "$W/lists/storage.expected"
 fi
 if [ $DEVTEST = 1 ]; then
   sort -o "$W/lists/storage.expected" - "$W/lists/storage.expected" <<DEVFILES
@@ -587,11 +589,17 @@ if [ $DEVTEST = 1 ]; then
 644 0:0 f ./.pocket-seed/.config/pocket-ui/dev-ssh
 DEVFILES
 fi
-if [ -d "$S/pocket-ui/releases/$V/cores" ]; then
+if [ -f "$S/pocket-ui/releases/$V/cores/gpsp_libretro.so" ]; then
   check "bundled gpSP is the pinned ARM64 core with intact licence, source and recipe" \
     'sh /repo/scripts/image/gba-checks.sh --validate "$S/pocket-ui/releases/$V/cores"'
   sh /repo/scripts/image/gba-checks.sh --files "$V" >>"$W/lists/storage.expected"
-  sort -o "$W/lists/storage.expected" "$W/lists/storage.expected"
+  sort -u -o "$W/lists/storage.expected" "$W/lists/storage.expected"
+fi
+if LC_ALL=C grep -a -q dsperate "$S/pocket-ui/releases/$V/pocket-ui"; then
+  check "DSperate core, matching source and notices are intact" \
+    'python3 -I /repo/scripts/dsperate-files.py --check "$S/pocket-ui/releases/$V/cores"'
+  python3 -I /repo/scripts/image/ds-checks.py "$S/pocket-ui/releases/$V/cores" "$V" >>"$W/lists/storage.expected"
+  sort -u -o "$W/lists/storage.expected" "$W/lists/storage.expected"
 fi
 check "exactly the expected files, owners and modes" 'same "$W/lists/storage" "$W/lists/storage.expected"' ||
   diff "$W/lists/storage.expected" "$W/lists/storage" | sed 's/^/     /'
@@ -641,7 +649,7 @@ check "no Wi-Fi credentials (iwd, NetworkManager, wpa_supplicant)" \
   '[ -z "$(find "$S" -name "*.psk" -o -name "*.8021x" -o -name "*.nmconnection" -o -name "wpa_supplicant*" -o -path "*/iwd*")" ]'
 check "the card has no GAMES drive yet (the first start makes it), and no state of a first start" '[ ! -e "$S/.pocket-games-state" ] && [ ! -e "$S/.pocket-games-tries" ]'
 check "no recents, saves or games" '[ -z "$(find "$S" -name "recents*" -o -name roms -o -name "*.srm" -o -name "*.state*")" ]'
-check "no BIOS files" '[ -z "$(find "$S" -iname "*bios*")" ] && ! grep -qi bios "$W/lists/fat"'
+check "no BIOS files" 'no_bios_files "$S" "$W/lists/fat" "$V"'
 check "no update left pending (update-pending, previous, dev.env)" \
   '[ ! -e "$S/pocket-ui/update-pending" ] && [ ! -L "$S/pocket-ui/previous" ] && [ ! -e "$S/pocket-ui/dev.env" ]'
 # The programs grow with every release and STORAGE stays $((P2_SIZE / 2048)) MiB until the first boot grows it (debugfs fails when full: 0.3.1).

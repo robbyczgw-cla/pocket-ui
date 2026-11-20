@@ -21,7 +21,7 @@ use pocket_ui::palette::*;
 use pocket_ui::text::Face;
 use pocket_ui::touch::Area;
 
-use super::{App, MainItem, Page, CANCEL, CONFIRM, host_bin, HOST_CORES, NU_BTN_PAD, NU_PAD, NU_PILL, NU_SMALL};
+use super::{App, MainItem, Page, CANCEL, CONFIRM, host_bin, HOST_CORES, NU_BTN_PAD, NU_PAD, NU_SMALL};
 
 /// Where the page was opened from, so B goes back there.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -49,6 +49,14 @@ pub(crate) struct Inputs<'a> {
 /// What `resolve_runner` needs besides system.cfg, without the app: also on a thread (`App::core_prewarm_start`).
 #[cfg(not(feature = "brick"))]
 pub(crate) fn inputs_for<'a>(sys: &'a System, path: Option<&Path>, host_bin: bool, fell_back: bool) -> Inputs<'a> {
+    if sys.name=="nds" {
+        return Inputs {
+            pocket_core:host_bin.then(pocket_ui::ds::default_core),
+            pocket_cores:pocket_ui::ds::CORES,
+            file_ok:path.is_none_or(|p| !p.extension().is_some_and(|e| e.eq_ignore_ascii_case("7z"))),
+            fell_back,default_override:None,
+        };
+    }
     if pocket_ui::device::darkos_port() {
         return Inputs {
             pocket_core: host_bin.then(|| sys.emulators.iter().find(|e| e.name == "pocket-core")
@@ -76,6 +84,8 @@ pub(crate) fn inputs_for<'a>(sys: &'a System, path: Option<&Path>, host_bin: boo
         .filter(|_| host_bin);
     let gba = pocket_ui::h700_gba::is_gba(system) && pocket_ui::h700_gba::enabled() && pocket_core.is_some();
     let pocket_core = if gba { Some(pocket_ui::h700_gba::default_core(system, path)) } else { pocket_core };
+    // Options → Picture → Mode 7: HD and HD widescreen start a Super Nintendo game with bsnes-hd (`mode7_hd`).
+    let pocket_core = pocket_core.map(|c| mode7_core(system, path, c));
     Inputs {
         pocket_core,
         pocket_cores: if gba { pocket_ui::h700_gba::CORES } else { &[] },
@@ -126,6 +136,20 @@ pub(crate) fn inputs_for<'a>(sys: &'a System, path: Option<&Path>, host_bin: boo
     }
 }
 
+/// The core pocket-core starts a game with after Options → Picture → Mode 7 (`mode7_hd::linux_core`): the game's (else
+/// its console's) choice, only where this handheld offers the row. Reads the game's settings file, as the start does.
+#[cfg(not(feature = "brick"))]
+fn mode7_core<'a>(system: &str, path: Option<&Path>, usual: &'a str) -> &'a str {
+    use pocket_ui::mode7_hd;
+    // Only a card swaps the core: the Android app's player plays SNES with its own bsnes (HD built in, `mode7_hd`).
+    if cfg!(target_os = "android") {
+        return usual;
+    }
+    let (Some(path), Some(offer)) = (path, mode7_hd::here_for(system)) else { return usual };
+    let data = PathBuf::from(std::env::var("POCKETUI_DATA").unwrap_or_else(|_| "/storage/.config/pocket-ui".into()));
+    mode7_hd::start_core(&data, system, path, usual, Some(offer), mode7_hd::available())
+}
+
 /// The launch's choice from `inputs` and system.cfg's cached choices (`emu_choice::cached`).
 pub(crate) fn resolve_with(sys: &System, path: Option<&Path>, i: Inputs<'_>) -> Resolved {
     let ctx = emu_choice::Ctx {
@@ -142,6 +166,10 @@ pub(crate) fn resolve_with(sys: &System, path: Option<&Path>, i: Inputs<'_>) -> 
 }
 
 impl App {
+    pub(crate) fn core_for_path(&self, system: &str, path: &Path) -> String {
+        self.systems.iter().find(|s| s.name == system)
+            .map(|s| self.route(s, Some(path), Path::new(host_bin()).exists()).1).unwrap_or_default()
+    }
     /// `inputs_for` with the phone's own ways first (Android's handheld view, `app_runs_on_android`) and this game's
     /// failed start (`fallback.json`).
     fn runner_inputs<'a>(&self, sys: &'a System, path: Option<&Path>, host_bin: bool) -> Inputs<'a> {
@@ -512,14 +540,14 @@ impl App {
         let right = c.w - pad;
         let title = page.subject.game.as_ref().map_or(page.subject.system_name.as_str(), |(n, _)| n.as_str());
         let title = self.text.fit(Face::Title, 50, title, c.w - 2 * pad - 2 * NU_BTN_PAD - 330);
-        self.text.draw(c, Face::Title, 50, pad + NU_BTN_PAD, pad + 58, pal().chalk, &title);
+        self.text.draw(c, Face::Title, 50, pad + NU_BTN_PAD, pocket_ui::kit::header_title(c.h), pal().chalk, &title);
         let sub = match (&page.subject.game, page.mode) {
             (_, Mode::Save { .. }) => format!("Save changes · {}", page.subject.system_name),
             (Some(_), _) => page.subject.system_name.clone(),
             (None, _) => format!("{}: every game", page.subject.system_name),
         };
         self.text.draw(c, Face::Body, 28, pad + NU_BTN_PAD, pad + 104, pal().dust, &sub);
-        let top = pad + NU_PILL + 46;
+        let top = pocket_ui::kit::header_bottom(c.h) + 46;
 
         // The rows: the page's own, or the three ways to save.
         let lines: Vec<(String, Option<String>)> = match page.mode {
@@ -589,7 +617,7 @@ impl App {
             ],
         };
         // Everything under the list stays above the hints; with larger text a paragraph that reaches them ends with "…".
-        let hints_top = c.h - pad - NU_PILL - 16;
+        let hints_top = pocket_ui::kit::hint_bar_top(c.h) - 16;
         for (text, color) in [(what.as_str(), pal().dust), (choice.as_str(), pal().text)] {
             y = self.text.paragraph(c, Face::Body, NU_SMALL, (left, y), width, pocket_ui::type_scale::line(NU_SMALL, 12), hints_top, color, text);
             y += 6;

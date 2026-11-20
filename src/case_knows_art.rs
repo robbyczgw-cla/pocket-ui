@@ -919,6 +919,81 @@ pub fn bounds(pic: &Pic) -> (i32, i32, i32, i32) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    /// Synthetic bytes, never game assets: solve only the four-byte CRC suffix
+    /// so the actual format guards and file readers are reached by the rule.
+    fn crc_suffix(mut bytes: Vec<u8>, crc: u32) -> Vec<u8> {
+        let at = bytes.len() - 4; bytes[at..].fill(0);
+        let base = crc32fast::hash(&bytes);
+        let mut basis = [(0u32, 0u32); 32];
+        for bit in 0..32 {
+            bytes[at + bit / 8] ^= 1 << (bit % 8);
+            let (mut value, mut mask) = (crc32fast::hash(&bytes) ^ base, 1u32 << bit);
+            bytes[at + bit / 8] ^= 1 << (bit % 8);
+            for pivot in (0..32).rev() {
+                if value & (1 << pivot) == 0 { continue; }
+                if basis[pivot].0 == 0 { basis[pivot] = (value, mask); break; }
+                value ^= basis[pivot].0; mask ^= basis[pivot].1;
+            }
+        }
+        let (mut value, mut mask) = (crc ^ base, 0u32);
+        for pivot in (0..32).rev() {
+            if value & (1 << pivot) != 0 { value ^= basis[pivot].0; mask ^= basis[pivot].1; }
+        }
+        assert_eq!(value, 0); bytes[at..].copy_from_slice(&mask.to_le_bytes());
+        assert_eq!(crc32fast::hash(&bytes), crc); bytes
+    }
+
+    #[test]
+    fn file_source_rule_case_rom_art() {
+        let d = crate::testutil::TestDir::new("case-art-file-rule");
+        let (ds, mark, _) = ds_rom(&d, true);
+        let ds_seed = std::fs::read(&ds).unwrap();
+        let ds_places = find_nds_by(&ds, Kind::HeartGoldSoulSilver, &mark).unwrap();
+        let team = TeamArt { team: vec![4], badges: 3 };
+        for (label, bytes) in crate::file_faults::faults(&ds_seed) {
+            let _ = std::fs::remove_file(&ds);
+            if let Some(bytes) = bytes { std::fs::write(&ds, bytes).unwrap(); }
+            let _ = find_nds_by(&ds, Kind::HeartGoldSoulSilver, &mark);
+            let art = nds_art(&ds, &ds_places, &team);
+            if label == "valid" { assert_eq!(art.team.len(), 1); assert_ne!(art.team[0].px[0], 0); }
+        }
+        let gb = d.join("synthetic.gb"); let mut seed = vec![0x55; 0x6000];
+        for (at, code) in [(0x100, GB_READ_ICON), (0x200, GB_LOAD_ICON)] {
+            let code: Vec<u8> = code.iter().map(|b| b.unwrap_or(0)).collect();
+            seed[at..at + code.len()].copy_from_slice(&code);
+        }
+        seed[0x106..0x108].copy_from_slice(&0x400u16.to_le_bytes());
+        seed[0x205..0x207].copy_from_slice(&0x600u16.to_le_bytes()); seed[0x20c] = 1;
+        seed[0x400..0x400 + 251].copy_from_slice(&crc_suffix(vec![1; 251], GB_ICON_NUMBERS));
+        for i in 0..39 { seed[0x600 + i * 2..0x602 + i * 2].copy_from_slice(&(0x4000u16 + i as u16 * 128).to_le_bytes()); }
+        seed[0x4000..0x4000 + 39 * 128].copy_from_slice(&crc_suffix(vec![0x55; 39 * 128], GB_ICONS));
+        let mut palette = vec![0; 8]; palette[..4].copy_from_slice(&GB_PARTY_PALETTE.probe.1.to_le_bytes());
+        seed[0x800..0x808].copy_from_slice(&crc_suffix(palette, GB_PARTY_PALETTE.crc));
+        let places = find_gb(&seed).expect("synthetic GB passes real discovery guards");
+        for (label, bytes) in crate::file_faults::faults(&seed) {
+            let _ = std::fs::remove_file(&gb);
+            if let Some(bytes) = bytes { let _ = find_gb(&bytes); std::fs::write(&gb, bytes).unwrap(); }
+            let art = gb_art(&gb, &places, &team);
+            if label == "valid" { assert_eq!(art.team.len(), 1); assert!(art.team[0].px.iter().any(|p| *p != 0)); }
+        }
+        let zelda = d.join("synthetic.sfc");
+        let mut sheet = vec![0x55; ZELDA_SHEET.len]; sheet[..3].fill(0xff); sheet[3] = 0xc0;
+        let sheet = crc_suffix(sheet, ZELDA_SHEET.crc);
+        // The actual discovery probe is the compressed stream's first word.
+        let mut packed = vec![0x22, 0xff, 0x0c]; packed.extend(&sheet[3..16]);
+        for chunk in sheet[16..].chunks(32) { packed.push((chunk.len()-1) as u8); packed.extend(chunk); }
+        packed.push(0xff); packed.resize(0x1000, 0);
+        let mut palette = vec![0x55; 128]; palette[..4].copy_from_slice(&ZELDA_PALETTE.probe.1.to_le_bytes());
+        packed.extend(crc_suffix(palette, ZELDA_PALETTE.crc));
+        let places = find_zelda(&packed).expect("synthetic Zelda passes real discovery guards");
+        let quest = crate::case_knows::Progress::Quest { pendants: 2, crystals: 5, hearts: 8, dark_world: false };
+        for (label, bytes) in crate::file_faults::faults(&packed) {
+            let _ = std::fs::remove_file(&zelda);
+            if let Some(bytes) = bytes { let _ = find_zelda(&bytes); std::fs::write(&zelda, bytes).unwrap(); }
+            let art = zelda_art(&zelda, places, 0, &quest);
+            if label == "valid" { let art = art.unwrap(); assert_eq!(art.badges.len(), 3); assert!(art.badges[0].0.px.iter().any(|p| *p != 0)); }
+        }
+    }
 
     /// A made-up ROM laid out as the games are (no picture of any game in it): icon pointers, the palette numbers with
     /// the games' checksum replaced by the test's own, palettes, a packed badge sheet.

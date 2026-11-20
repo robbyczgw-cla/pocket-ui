@@ -46,6 +46,8 @@ pub enum Item {
     JustPlay,
     /// "Search", the first row of Home in the list looks (`with_search`): opens the game search (`search_page`).
     Search,
+    /// "Crate" on Home while Shelf space is on (`shelf_space`, `with_crate`): the games not on the shelf (`app_crate`).
+    Crate,
 }
 
 impl Item {
@@ -102,6 +104,15 @@ impl Item {
         if on && !items.contains(&Item::JustPlay) {
             let at = items.iter().take_while(|i| matches!(i, Item::Curator | Item::Search)).count();
             items.insert(at, Item::JustPlay);
+        }
+        items
+    }
+
+    /// Puts "Crate" before the systems (after the apps and Curator's rows), while Shelf space is on.
+    pub fn with_crate(mut items: Vec<Item>, on: bool) -> Vec<Item> {
+        if on && !items.contains(&Item::Crate) {
+            let at = items.iter().position(|i| matches!(i, Item::System(_))).unwrap_or(items.len());
+            items.insert(at, Item::Crate);
         }
         items
     }
@@ -163,7 +174,7 @@ pub fn toggle_hidden(hidden: &mut Vec<String>, id: &str, with_games: &[&str]) ->
 /// For a smart shelf or sticker, `starred` says whether it is pinned to Home.
 pub fn hints(selected: Option<Item>, home: bool, starred: bool, system_page: bool) -> Vec<(&'static str, &'static str)> {
     let action = match selected {
-        Some(Item::System(_) | Item::Favorites | Item::Search | Item::Curator | Item::Lens | Item::SmartShelf(_) | Item::Sticker(_) | Item::History | Item::Review(_) | Item::Rediscover) => "Open",
+        Some(Item::System(_) | Item::Favorites | Item::Crate | Item::Search | Item::Curator | Item::Lens | Item::SmartShelf(_) | Item::Sticker(_) | Item::History | Item::Review(_) | Item::Rediscover) => "Open",
         Some(Item::Streaming) => "Start",
         _ => "Play",
     };
@@ -196,6 +207,12 @@ pub fn hints(selected: Option<Item>, home: bool, starred: bool, system_page: boo
         hints.push(("X", "Details"));
     }
     hints
+}
+
+/// Whether START gives way in the bar (`kit::start_yields`): on a game below Home (a console's shelf, Favourites), where
+/// Y Star / Unstar matters more than Settings, which Home's bar always has (review 19.11. #4).
+pub fn start_yields(selected: Option<Item>, home: bool) -> bool {
+    !home && matches!(selected, Some(Item::Recent(_) | Item::Game(..)))
 }
 
 /// START pressed and let go on its own opens Settings. SELECT + START is the exit combo and START + Vol
@@ -385,6 +402,46 @@ mod tests {
         let mut hidden = vec!["psx".to_string()];
         assert_eq!(toggle_hidden(&mut hidden, "gba", &with_games), Toggle::Hidden);
         assert_eq!(toggle_hidden(&mut hidden, "snes", &with_games), Toggle::LastOne);
+    }
+
+    /// Review 19.11. #4: on a console's shelf and in Favourites START Settings pushed Y Star / Unstar out of the bar, so
+    /// nothing said how to unstar a game. Every key a shelf answers is in its bar of four, or listed with why not.
+    #[test]
+    fn every_shelf_key_is_in_the_bar_or_listed() {
+        // (home, key, label, why it may stay out)
+        const OUT: &[(bool, &str, &str, &str)] = &[
+            (false, "START", "Settings", "on Home's bar always; below Home the game's own keys come first"),
+            (false, "SELECT", "Recent games", "Home's bar names it where nothing else needs the room"),
+            (true, "SELECT", "Recent games", "on a game Details and Star come first; on Home's other rows it shows"),
+            (true, "Y", "Star", "Home has Settings first; a console's shelf and Favourites show it"),
+            (true, "Y", "Unstar", "as Star"),
+            (true, "X", "Details", "a console's fact sheet: last, as in the approved mockup (a game's Details always shows, below)"),
+            (false, "X", "Details", "as on Home"),
+            (true, "X", "Options", "a smart shelf's or sticker's options: Pin comes first (open point of the review 19.11.)"),
+            (false, "X", "Options", "as on Home"),
+        ];
+        let mut missing = Vec::new();
+        for selected in [None, Some(Item::Recent(0)), Some(Item::Game(0, 0)), Some(Item::System(0)), Some(Item::Favorites), Some(Item::SmartShelf(0)), Some(Item::JustPlay)] {
+            for home in [true, false] {
+                for starred in [false, true] {
+                    let all = hints(selected, home, starred, true);
+                    let _order = crate::kit::start_yields(start_yields(selected, home));
+                    let shown = crate::kit::top_hints(&all, crate::kit::MAX_HINTS);
+                    for (key, label) in &all {
+                        if !(shown.iter().any(|h| h.0 == *key) || OUT.iter().any(|(h, k, l, _)| *h == home && k == key && l == label)) {
+                            missing.push(format!("{selected:?}, home {home}: {key} {label} is in no bar: {shown:?}"));
+                        }
+                    }
+                    if matches!(selected, Some(Item::Game(..) | Item::Recent(_))) {
+                        assert!(shown.contains(&("X", "Details")), "a game's card: {shown:?}");
+                    }
+                    if !home && matches!(selected, Some(Item::Game(..) | Item::Recent(_))) {
+                        assert!(shown.contains(&("Y", if starred { "Unstar" } else { "Star" })), "below Home a game says Star / Unstar: {shown:?}");
+                    }
+                }
+            }
+        }
+        assert!(missing.is_empty(), "{}", missing.join("\n"));
     }
 
     #[test]

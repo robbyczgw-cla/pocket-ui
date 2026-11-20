@@ -112,6 +112,8 @@ pub struct Hud {
     /// the overlay paints it again only then.
     strip: Option<crate::pixel_live::Strip>,
     strip_seq: u64,
+    /// The album's camera kept a photo (`album_eject`): its stages and when the moment began.
+    eject: Option<(Instant, std::sync::Arc<crate::album_eject::Stages>)>,
 }
 
 #[cfg(feature = "brick")]
@@ -156,6 +158,7 @@ impl Default for Hud {
             look: Look::default(),
             strip: None,
             strip_seq: 0,
+            eject: None,
         }
     }
 }
@@ -166,6 +169,28 @@ use crate::fps_line::process_ticks;
 use crate::fps_line::parse_ticks;
 
 impl Hud {
+    /// A repeated software picture needs no presentation while nothing is drawn over it.
+    pub fn quiet(&mut self) -> bool {
+        !self.show_fps && self.badge.is_empty() && self.strip.is_none() && self.unlocks.is_empty() && self.eject.is_none()
+            && self.toast_text().is_empty() && self.osd_text().is_empty()
+    }
+
+    /// A photo of the moment was kept (`album`): the flash and the photo out of the screen's edge begin now.
+    pub fn eject(&mut self, stages: std::sync::Arc<crate::album_eject::Stages>) {
+        self.eject = Some((Instant::now(), stages));
+    }
+
+    /// The moment, while it lasts: how far in (seconds) and its stages.
+    pub fn ejecting(&mut self) -> Option<(f32, std::sync::Arc<crate::album_eject::Stages>)> {
+        let (at, stages) = self.eject.as_ref()?;
+        let t = at.elapsed().as_secs_f32();
+        if t > crate::album_eject::LENGTH.as_secs_f32() {
+            self.eject = None;
+            return None;
+        }
+        Some((t, stages.clone()))
+    }
+
     pub fn toast(&mut self, msg: impl Into<String>) {
         self.toast = Some((msg.into(), Instant::now()));
         self.toast_for = TOAST_FOR;
@@ -381,6 +406,9 @@ pub struct Overlay {
     veil_tex: Option<glow::Texture>,
     /// 1x1 white, for the power-on effect's line and glow (`draw_solid`); made with the first one.
     white_tex: Option<glow::Texture>,
+    /// The photo's three stages (`album_eject::Stages`) and which photo they hold.
+    eject_tex: Option<[glow::Texture; 3]>,
+    eject_of: usize,
 }
 
 pub(crate) const VS: &str = "#version 300 es
@@ -460,6 +488,8 @@ impl Overlay {
                 tint_set: [0.0; 3],
                 veil_tex: None,
                 white_tex: None,
+                eject_tex: None,
+                eject_of: 0,
             })
         }
     }
@@ -474,7 +504,8 @@ impl Overlay {
         let tinted = hud.tint != [1.0; 3];
         // The unlock card: which one, and whether its badge is in (a badge arriving later redraws it).
         let unlock_key = hud.current_unlock().map(|u| format!("{}:{}", u.id, u.badge.is_some()));
-        if texts.iter().all(String::is_empty) && !tinted && unlock_key.is_none() && hud.strip.is_none() {
+        let eject = hud.ejecting();
+        if texts.iter().all(String::is_empty) && !tinted && unlock_key.is_none() && hud.strip.is_none() && eject.is_none() {
             return;
         }
         unsafe {
@@ -487,6 +518,10 @@ impl Overlay {
         }
         if tinted {
             self.draw_tint(gl, hud.tint);
+        }
+        // The album's moment: under the messages, over the game.
+        if let Some((t, stages)) = eject {
+            self.draw_eject(gl, t, &stages, view_w, view_h);
         }
         // Under the messages: a toast or the volume bar that lands on it stays readable.
         if let Some(s) = hud.strip.as_ref() {
@@ -528,6 +563,89 @@ impl Overlay {
             }
         }
         unsafe { gl.disable(glow::BLEND) };
+    }
+
+    /// The album's moment (`album_eject`) `t` seconds in: the flash, then the photo out of the bottom edge, its stages
+    /// blended on the GPU as it develops (uploaded once per photo), a soft dark copy under it for its shadow.
+    fn draw_eject(&mut self, gl: &glow::Context, t: f32, st: &crate::album_eject::Stages, view_w: u32, view_h: u32) {
+        let (vw, vh) = (view_w.max(1) as f32, view_h.max(1) as f32);
+        let ndc = |px: i32, total: f32| px as f32 / total * 2.0 - 1.0;
+        let quad = |gl: &glow::Context, rect: Option<&glow::UniformLocation>, (x, y, w, h): (i32, i32, i32, i32)| unsafe {
+            gl.uniform_4_f32(rect, ndc(x, vw), -ndc(y + h, vh), ndc(x + w, vw), -ndc(y, vh));
+            gl.draw_arrays(glow::TRIANGLE_STRIP, 0, 4);
+        };
+        unsafe {
+            let solid = |gl: &glow::Context, rgba: [u8; 4]| -> Option<glow::Texture> {
+                let t = gl.create_texture().ok()?;
+                gl.bind_texture(glow::TEXTURE_2D, Some(t));
+                for p in [glow::TEXTURE_MIN_FILTER, glow::TEXTURE_MAG_FILTER] {
+                    gl.tex_parameter_i32(glow::TEXTURE_2D, p, glow::NEAREST as i32);
+                }
+                gl.pixel_store_i32(glow::UNPACK_ROW_LENGTH, 0);
+                gl.pixel_store_i32(glow::UNPACK_ALIGNMENT, 4);
+                gl.tex_image_2d(glow::TEXTURE_2D, 0, glow::RGBA8 as i32, 1, 1, 0, glow::RGBA, glow::UNSIGNED_BYTE, Some(&rgba));
+                Some(t)
+            };
+            if self.white_tex.is_none() {
+                self.white_tex = solid(gl, [255, 255, 255, 255]);
+            }
+            if self.veil_tex.is_none() {
+                self.veil_tex = solid(gl, [0, 0, 0, 255]);
+            }
+            let flash = crate::album_eject::flash(t);
+            if flash > 0.0 {
+                gl.uniform_1_f32(self.alpha.as_ref(), flash);
+                gl.bind_texture(glow::TEXTURE_2D, self.white_tex);
+                quad(gl, self.rect.as_ref(), (0, 0, view_w as i32, view_h as i32));
+            }
+            let Some((x, y)) = crate::album_eject::place(t, (0, 0, view_w as i32, view_h as i32), (st.w, st.h)) else {
+                gl.uniform_1_f32(self.alpha.as_ref(), ALPHA);
+                return;
+            };
+            let of = st as *const _ as usize;
+            if self.eject_tex.is_none() || self.eject_of != of {
+                if self.eject_tex.is_none() {
+                    let mut tex = Vec::new();
+                    for _ in 0..3 {
+                        let Ok(t) = gl.create_texture() else { return };
+                        gl.bind_texture(glow::TEXTURE_2D, Some(t));
+                        for (p, v) in [(glow::TEXTURE_MIN_FILTER, glow::NEAREST), (glow::TEXTURE_MAG_FILTER, glow::NEAREST), (glow::TEXTURE_WRAP_S, glow::CLAMP_TO_EDGE), (glow::TEXTURE_WRAP_T, glow::CLAMP_TO_EDGE)] {
+                            gl.tex_parameter_i32(glow::TEXTURE_2D, p, v as i32);
+                        }
+                        tex.push(t);
+                    }
+                    self.eject_tex = Some([tex[0], tex[1], tex[2]]);
+                }
+                if let Some(tex) = self.eject_tex {
+                    for (t, px) in tex.iter().zip([&st.milky, &st.shapes, &st.colour]) {
+                        let rgba: Vec<u8> = px.iter().flat_map(|p| [(p >> 16) as u8, (p >> 8) as u8, *p as u8, (p >> 24) as u8]).collect();
+                        gl.bind_texture(glow::TEXTURE_2D, Some(*t));
+                        gl.pixel_store_i32(glow::UNPACK_ROW_LENGTH, 0);
+                        gl.pixel_store_i32(glow::UNPACK_ALIGNMENT, 4);
+                        gl.tex_image_2d(glow::TEXTURE_2D, 0, glow::RGBA8 as i32, st.w, st.h, 0, glow::RGBA, glow::UNSIGNED_BYTE, Some(&rgba));
+                    }
+                }
+                self.eject_of = of;
+            }
+            let Some(tex) = self.eject_tex else { return };
+            let s = crate::album_eject::scale(view_h as i32);
+            // Its shadow on the game: a soft dark copy, down and right (two passes, the outer one fainter).
+            gl.bind_texture(glow::TEXTURE_2D, self.veil_tex);
+            for (grow, a) in [(s * 3, 0.12), (s, 0.22)] {
+                gl.uniform_1_f32(self.alpha.as_ref(), a);
+                quad(gl, self.rect.as_ref(), (x + s * 3 - grow, y + s * 4 - grow, st.w + 2 * grow, st.h + 2 * grow));
+            }
+            let (shapes, colour) = crate::album_eject::stage_alphas(t);
+            for (i, a) in [(0usize, 1.0f32), (1, shapes), (2, colour)] {
+                if a <= 0.0 {
+                    continue;
+                }
+                gl.uniform_1_f32(self.alpha.as_ref(), a);
+                gl.bind_texture(glow::TEXTURE_2D, Some(tex[i]));
+                quad(gl, self.rect.as_ref(), (x, y, st.w, st.h));
+            }
+            gl.uniform_1_f32(self.alpha.as_ref(), ALPHA);
+        }
     }
 
     /// Pixel Path's strip where `pixel_live::place` puts it; painted again only when the strip changed (twice a second
@@ -631,7 +749,19 @@ impl Overlay {
             gl.uniform_1_i32(self.tex.as_ref(), 0);
             let ndc = |px: f32, total: f32| px / total * 2.0 - 1.0;
             for q in quads {
-                gl.bind_texture(glow::TEXTURE_2D, if q.white { self.white_tex } else { self.veil_tex });
+                if let Some(rgb) = q.color {
+                    // A coloured quad (the AV channel's blue): its colour into the tint texture, once per colour.
+                    let px = [(rgb >> 16) as u8, (rgb >> 8) as u8, rgb as u8, 255];
+                    gl.bind_texture(glow::TEXTURE_2D, Some(self.tint_tex));
+                    if self.tint_set != q.rgb_f32() {
+                        gl.pixel_store_i32(glow::UNPACK_ROW_LENGTH, 0);
+                        gl.pixel_store_i32(glow::UNPACK_ALIGNMENT, 4);
+                        gl.tex_image_2d(glow::TEXTURE_2D, 0, glow::RGBA8 as i32, 1, 1, 0, glow::RGBA, glow::UNSIGNED_BYTE, Some(&px));
+                        self.tint_set = q.rgb_f32();
+                    }
+                } else {
+                    gl.bind_texture(glow::TEXTURE_2D, if q.white { self.white_tex } else { self.veil_tex });
+                }
                 gl.uniform_1_f32(self.alpha.as_ref(), q.alpha.clamp(0.0, 1.0));
                 let (x, y, w, h) = q.rect;
                 gl.uniform_4_f32(self.rect.as_ref(), ndc(x, vw), -ndc(y + h, vh), ndc(x + w, vw), -ndc(y, vh));
@@ -829,6 +959,24 @@ mod tests {
                 std::fs::write(out.join(format!("start-note-{w}x{h}.png")), png).unwrap();
             }
         }
+    }
+
+    #[test]
+    fn repeated_picture_is_quiet_only_after_every_overlay_has_gone() {
+        let mut hud = Hud::default();
+        assert!(hud.quiet());
+        hud.toast("Stylus mode");
+        assert!(!hud.quiet());
+        hud.toast.as_mut().unwrap().1 = Instant::now() - TOAST_FOR - Duration::from_millis(1);
+        assert!(hud.quiet(), "an expired toast must still get one clearing presentation from its host");
+        hud.badge = "A held".into();
+        assert!(!hud.quiet());
+        hud.badge.clear();
+        hud.show_fps = true;
+        assert!(!hud.quiet());
+        hud.show_fps = false;
+        hud.achievement(1, "A first step", 5, "");
+        assert!(!hud.quiet(), "a card waiting for its badge also needs presentation");
     }
 
     #[test]

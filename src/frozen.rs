@@ -215,7 +215,7 @@ pub fn resume_files(g: &Game) -> Vec<PathBuf> {
             return Vec::new();
         }
         // Not the state a start already gave up on (`slots::retry_auto_path`): no start loads it by itself.
-        let auto = crate::slots::auto_path(&crate::slots::base(&g.system, stem));
+        let auto = crate::slots::auto_path(&crate::slots::base_for_core(&g.system, stem, &g.core));
         return crate::slots::auto_candidates(&auto, false);
     }
     if g.emulator == "retroarch" {
@@ -232,8 +232,23 @@ pub fn resume_files(g: &Game) -> Vec<PathBuf> {
 
 /// Whether the game stands open: there is a moment, and it was made by what would start the game and for this file. A
 /// game from before the marks has only its state to go by, as its normal start has.
+fn current_mark(g: &Game) -> Option<Mark> {
+    #[cfg(not(all(target_os="android",not(feature="handheld"))))]
+    if g.system=="nds"&&g.emulator=="pocket-core" {
+        let stem=g.path.file_stem().and_then(|s|s.to_str()).unwrap_or_default();
+        let base=crate::slots::base_for_core(&g.system,stem,&g.core);
+        if let Some(mut mark)=crate::frozen_phone::read_mark(&base) {
+            if mark.emulator==crate::frozen_phone::EMULATOR {mark.emulator=g.emulator.clone();}
+            return Some(mark);
+        }
+        // Pre-metadata melonDS moments remain in their legacy namespace.
+        if g.core=="melondsds" && g.mark.as_ref().is_some_and(|m|m.core=="dsperate") {return None;}
+    }
+    g.mark.clone()
+}
+
 pub fn is_frozen(g: &Game, files: &[PathBuf]) -> bool {
-    files.iter().any(|f| f.exists()) && g.mark.as_ref().is_none_or(|m| m.same_runner(&g.emulator, &g.core) && m.same_file(&g.path))
+    files.iter().any(|f| f.exists()) && current_mark(g).as_ref().is_none_or(|m| m.same_runner(&g.emulator, &g.core) && m.same_file(&g.path))
 }
 
 /// The paths of the newest [`MOST`] games that stand open, of the recent games given newest first. On a thread: it looks
@@ -336,7 +351,7 @@ pub fn at_launch(g: &Game, shown: bool) -> AtLaunch {
 
 /// [`at_launch`] for a game whose state is there or not (`has_state`).
 pub fn at_launch_with(g: &Game, shown: bool, has_state: bool) -> AtLaunch {
-    match (&g.mark, has_state) {
+    match (&current_mark(g), has_state) {
         // The state is another emulator's or core's, or of another file: the normal start would load it, so it is skipped
         // (and stays). A mark outlives sessions that wrote no state (`next_mark`), so this holds after a detour too.
         (Some(m), true) if !m.same_runner(&g.emulator, &g.core) => AtLaunch::Fresh(OTHER_EMULATOR),
@@ -581,6 +596,23 @@ mod tests {
         std::fs::write(&rom, b"a longer rom").unwrap();
         assert_eq!(at_launch(&g(mark, "armsx2"), true), AtLaunch::Fresh(CHANGED), "a state of another file isn't loaded, and stays");
         assert!(state.exists());
+    }
+
+    /// Options → Picture → Mode 7 on a card (`mode7_hd`): HD plays the game with bsnes-hd, Original with Snes9x. A Continue
+    /// moment Snes9x made is not handed to bsnes-hd (its states are another format) and stays for Original; one bsnes-hd
+    /// made loads in HD and in HD widescreen alike (the same core: the mode is not in the state, docs/HOST.md "Mode 7 HD").
+    #[test]
+    fn a_mode_7_switch_on_a_card_never_feeds_one_core_the_others_moment() {
+        let (_d, rom, state) = setup("mode7");
+        std::fs::write(&state, b"s").unwrap();
+        let at = |core: &str, mark: Option<Mark>| at_launch_with(&Game { system: "snes".into(), ..game("pocket-core", core, rom.clone(), mark) }, true, state.exists());
+        let by_snes9x = Mark::new("pocket-core", "snes9x", &rom, None);
+        assert_eq!(at(crate::mode7_hd::LINUX_CORE, by_snes9x.clone()), AtLaunch::Fresh(OTHER_EMULATOR), "Original → HD: set aside");
+        assert_eq!(at("snes9x", by_snes9x), AtLaunch::Normal, "back on Original: it continues");
+        let by_hd = Mark::new("pocket-core", crate::mode7_hd::LINUX_CORE, &rom, None);
+        assert_eq!(at(crate::mode7_hd::LINUX_CORE, by_hd.clone()), AtLaunch::Normal, "HD ↔ HD widescreen: the same core");
+        assert_eq!(at("snes9x", by_hd), AtLaunch::Fresh(OTHER_EMULATOR), "HD → Original: set aside");
+        assert!(state.exists(), "never deleted");
     }
 
     #[test]

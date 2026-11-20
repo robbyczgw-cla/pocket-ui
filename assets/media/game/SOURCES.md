@@ -22,6 +22,7 @@ original files were used.
 | `nes.png` | https://commons.wikimedia.org/wiki/File:NES-Cartridge.jpg | Evan Amos | Public domain | 2026-10-29 | the label recess (no lettering on the plastic) |
 | `gb.png` | https://commons.wikimedia.org/wiki/File:Nintendo-Game-Boy-Cartridge.jpg | Evan Amos | Public domain | 2026-10-29 | the embossed Nintendo GAME BOY TM lettering; the blank label |
 | `gbc.png` (the clear Game Boy Color-only cartridge) | https://commons.wikimedia.org/wiki/File:Nintendo-Game-Boy-Color-Cartridge.jpg | Evan Amos | Public domain | 2026-10-29 | the embossed GAME BOY COLOR lettering; the part number printed on the circuit board; the blank label |
+| `neogeo.png` (Neo Geo AES) | https://commons.wikimedia.org/wiki/File:Neo-Geo-AES-Cartridge-Front.jpg | Evan Amos | Public domain | 2026-11-19 | nothing: the photo shows a blank label and no lettering; the 3/4 view straightened by perspective before the conversion (budget line `ritual`, 1 credit) |
 | `ds.png` | https://commons.wikimedia.org/wiki/File:Acekard2guts.jpg | NESJohnny | Public domain | 2026-10-29 | the whole Acekard sticker (lettering, logo, web address); the cut top right corner of an official DS card painted in, the dark blue plastic made dark grey |
 
 Commons has no public-domain front photo of a Super Famicom / PAL SNES cartridge by Evan Amos (his

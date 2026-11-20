@@ -15,7 +15,7 @@ use pocket_ui::settings::Animations;
 use pocket_ui::text::Face;
 use pocket_ui::touch::Area;
 
-use super::{settings_row, window_start, App, SettingsPage, CANCEL, CONFIRM, NU_BTN_PAD, NU_PAD, NU_PILL};
+use super::{settings_row, window_start, App, SettingsPage, CANCEL, CONFIRM, NU_BTN_PAD, NU_PAD};
 
 /// The name in the Settings list, to come back to.
 pub(crate) const SETTINGS_NAME: &str = "Cozy extras";
@@ -28,6 +28,24 @@ fn rows() -> Vec<Extra> {
 impl App {
     pub(crate) fn open_cozy_extras(&mut self) -> Option<SettingsPage> {
         Some(SettingsPage::CozyExtras(0))
+    }
+
+    /// The first start's "How cozy should it be?" (`cozy_level`): Game start animation (the Lived-in shelf off) and the cozy
+    /// extras as the level sets them, used at once and kept; each stays switchable on its own in Settings › Look.
+    pub(crate) fn adopt_cozy(&mut self, level: pocket_ui::cozy_level::CozyLevel) {
+        let c = level.apply(cozy_extras::get());
+        self.animations = Some(c.animations);
+        pocket_ui::motion::set_cozy(self.cozy());
+        if self.lived_in != c.lived_in {
+            self.lived_in = c.lived_in;
+            self.forget_shelf_row();
+        }
+        cozy_extras::set(c.extras);
+        for e in Extra::ALL {
+            self.cozy_extras_changed(e);
+        }
+        self.save_settings();
+        println!("first start: {} ({:?}, lived-in {})", level.name(), c.animations, c.lived_in);
     }
 
     /// Whether what extra `e` needs elsewhere is on.
@@ -102,7 +120,7 @@ impl App {
         c.clear(pal().void);
         let (pad, row, font) = (NU_PAD, pocket_ui::type_scale::row(66, 36), 36u32);
         self.sheet_header(c, SETTINGS_NAME);
-        let (top, right) = (pad + NU_PILL + 12, c.w - pad);
+        let (top, right) = (pocket_ui::kit::header_bottom(c.h) + 12, c.w - pad);
         let list = rows();
         let len = list.len() + 1;
         let sel = sel.min(len - 1);
@@ -198,10 +216,13 @@ mod tests {
     #[test]
     fn the_page_has_the_extras_you_see_and_nothing_else() {
         let r = rows();
-        assert_eq!(r, Extra::PAGE_ROWS);
-        assert!(r.contains(&Extra::Playful) && r.contains(&Extra::CrtOn) && !r.contains(&Extra::CaseSounds));
-        // Twelve switches since Sealed new games, Progress from saves and the TV playing the game (14.11.2026); the page scrolls.
-        assert!(r.len() < 13);
+        // The page's rows in their order, less what is taken off for now (the Window, 19.11.2026: `Extra::built`).
+        assert_eq!(r, Extra::PAGE_ROWS.into_iter().filter(|e| *e != Extra::Window).collect::<Vec<_>>());
+        assert!(r.contains(&Extra::Playful) && r.contains(&Extra::CrtOn) && !r.contains(&Extra::CaseSounds) && !r.contains(&Extra::Window));
+        // Twelve switches since Sealed new games, Progress from saves and the TV playing the game (14.11.2026), fourteen
+        // with the TV's switch-off and evening glow (19.11.2026; the Window and the power switch taken off again), sixteen
+        // with Handheld switch-on and Power lights; the page scrolls.
+        assert!(r.len() < 17);
         assert!(r.iter().all(|e| e.home() == pocket_ui::cozy_extras::Home::Page));
     }
 }

@@ -42,7 +42,9 @@ pub fn save_places(system: &str, rom: &Path) -> Vec<PathBuf> {
     let mut out = Vec::new();
     #[cfg(feature = "brick")]
     if let Some(dir) = std::env::var_os("POCKET_CORE_SAVE_DIR") {
-        out.push(PathBuf::from(dir).join(system).join(format!("{stem}.srm")));
+        let directory=PathBuf::from(dir).join(system);
+        if system=="nds" {out.push(directory.join(format!("{stem}.sav")));}
+        out.push(directory.join(format!("{stem}.srm")));
     }
     // Android's handheld view: `<player>/states/<key>/<stem>` has its battery save in `<player>/saves/<key>/`.
     let base = crate::slots::base(system, stem);
@@ -94,6 +96,8 @@ pub struct Reading {
     /// None: looked, none there.
     places: HashMap<PathBuf, ((u64, u64), Option<String>)>,
     places_dirty: bool,
+    /// Never read a ROM through for its checksum (the album's camera while a game runs: only what the caches know).
+    pub no_hashing: bool,
 }
 
 impl Reading {
@@ -177,7 +181,7 @@ impl Reading {
         let identify = self.identify.get_or_insert_with(|| crate::rom_id::Cache::load(&self.data_dir));
         let sums = match identify.sums_of(rom, at) {
             Some(sums) => sums,
-            None if case_knows::worth_checking(system, at.0, zip) => crate::rom_id::checksums(system, rom).ok()?,
+            None if !self.no_hashing && case_knows::worth_checking(system, at.0, zip) => crate::rom_id::checksums(system, rom).ok()?,
             None => None,
         };
         let release = sums.and_then(|s| case_knows::release(s.crc, s.alt));
@@ -237,6 +241,16 @@ impl Reading {
             _ => None,
         };
         art.filter(|a| !a.team.is_empty() || !a.badges.is_empty())
+    }
+
+    /// The release `rom` is, only when it is one whose reading was checked against the game (`Release::verified`).
+    pub fn verified_release(&mut self, system: &str, rom: &Path) -> Option<&'static Release> {
+        self.release(system, rom).filter(|r| r.verified())
+    }
+
+    /// What the reads of `rom`'s save remember (several files: which was played), for a read of other bytes of it.
+    pub fn memory(&self, rom: &Path) -> Option<Memory> {
+        self.known.get(rom).map(|k| k.memory.clone())
     }
 
     /// Where the player is in `rom`, from its battery save; None when it isn't a game read, has no save, or the save
@@ -440,6 +454,10 @@ mod tests {
         save.extend_from_slice(b"|<--Snip above here to create a raw sav by excluding this DeSmuME savedata footer:");
         std::fs::write(rom.with_extension("dsv"), &save).unwrap();
         let mut r = Reading::new(&data);
+        assert_eq!(r.progress("nds", &rom).map(|p| p.parts().join(" · ")).as_deref(), Some("3 badges · Piplup Lv. 16 · game clock 12:34"));
+        // DSperate and melonDS share the raw battery chip, without a DSV footer.
+        std::fs::write(rom.with_extension("sav"), &save[..512 * 1024]).unwrap();
+        std::fs::remove_file(rom.with_extension("dsv")).unwrap();
         assert_eq!(r.progress("nds", &rom).map(|p| p.parts().join(" · ")).as_deref(), Some("3 badges · Piplup Lv. 16 · game clock 12:34"));
         // A Japanese Platinum (and a hack made from one): another code, nothing.
         let jp = d.join("roms/nds/Pokemon Platinum (J).nds");

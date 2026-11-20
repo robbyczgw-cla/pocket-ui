@@ -28,6 +28,11 @@ pub fn offered(setting: &Setting, value: &str, system: &str) -> bool {
 }
 
 impl Group {
+    /// The line under the group's row in Options: Speed, rumble, fan's without the fan where there is none (`device::no_fan`).
+    pub fn desc_here(&self) -> &'static str {
+        if self.desc == EXTRAS_DESC_FAN && crate::device::no_fan() { EXTRAS_DESC_NO_FAN } else { self.desc }
+    }
+
     /// The settings shown while the values are `values`: a sub-choice only while the setting it
     /// belongs to has its value (the shell colour while the frame is Shell, Sharpness and Effect while the Look is Custom).
     pub fn visible(&self, values: Option<&GameSettings>) -> Vec<&Setting> {
@@ -77,10 +82,10 @@ impl Group {
     }
 }
 
-/// Rows that belong to a console's own values: Resolution is there only for some consoles on some handhelds (`render_scale`),
+/// Rows that belong to a console's own values: Resolution and Mode 7 are there only for some consoles on some handhelds (`render_scale`, `mode7_hd`),
 /// so with no values (no console known) it is not counted or shown.
 fn without_console(s: &Setting, values: Option<&GameSettings>) -> bool {
-    values.is_some() || s.key != crate::render_scale::KEY
+    values.is_some() || (s.key != crate::render_scale::KEY && s.key != crate::mode7_hd::KEY)
 }
 
 /// LCD colours also show under Look = Custom while Effect is the LCD grid (the GBA's), not only under the LCD grid Look.

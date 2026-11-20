@@ -147,7 +147,7 @@ missing=
 for f in bin/pocket-ui bin/pocket-core bin/pocket-fb bin/brick-hw lib/libwayland-client.so.0 lib/libffi.so.8 msg/starting.png es_systems.cfg asoundrc; do
   [ -e "$P/$f" ] || missing="$missing $f"
 done
-for c in gambatte mgba nestopia snes9x pcsx_rearmed gpsp fceumm picodrive beetle_ngp beetle_wswan beetle_pce_fast handy stella prosystem fbneo mupen64plus_next ppsspp flycast gearsystem beetle_supergrafx pokemini beetle_vb fake08 tic80 melondsds dosbox_pure scummvm yabause; do [ -e "$P/cores/${c}_libretro.so" ] || missing="$missing cores/${c}_libretro.so"; done
+for c in gambatte mgba nestopia snes9x pcsx_rearmed gpsp fceumm picodrive beetle_ngp beetle_wswan beetle_pce_fast handy stella prosystem fbneo mupen64plus_next ppsspp flycast gearsystem beetle_supergrafx pokemini beetle_vb fake08 tic80 melondsds dsperate dosbox_pure scummvm yabause; do [ -e "$P/cores/${c}_libretro.so" ] || missing="$missing cores/${c}_libretro.so"; done
 if [ -n "$missing" ]; then
   say "missing:$missing"
   kill "$STARTING" 2>/dev/null; wait "$STARTING" 2>/dev/null

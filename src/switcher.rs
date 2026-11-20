@@ -38,13 +38,48 @@ const BOX_W: i32 = 760;
 const BOX_H: i32 = 570;
 const TOP: i32 = 140;
 
-/// Shorter screens give up picture height so title, metadata and hints retain separate rows.
-fn card_height(screen_h: i32) -> i32 {
-    (BOX_H - (1080 - screen_h).max(0)).max(200)
+/// Shorter screens give up picture height so title, metadata and hints retain separate rows: down to 960 lines the
+/// lines they lack (450 at 1280x960, every H700 panel). Under 960 lines (the Brick's 1024x768, the Smart Pro's 1280x720,
+/// painted natively) the card keeps 960's share of the height as far as the title, the line and the dots under it stay
+/// above the hints, whose type does not shrink with the screen: giving up all 312 lines it lacked left the Brick a
+/// 258-line card (tests/brick_look_proportions.rs).
+pub fn card_height(screen_h: i32) -> i32 {
+    if screen_h >= 960 {
+        return (BOX_H - (1080 - screen_h).max(0)).max(200);
+    }
+    // The dots' bottom (`paint`: the title 108 under the card, the dots 94 under the title, 10 high) 12 over the hints.
+    let room = crate::kit::hint_bar_top(screen_h) - 12 - 10 - 94 - 108 - top(screen_h);
+    (450 * screen_h / 960).min(room).max(200)
 }
+
+/// The card's top: 140 down to 960 lines. Under them its bezel (`BEZEL` over the picture) stays under the heading pill,
+/// whose type does not shrink with the screen, by 960's share of the gap it has there (22 lines): 960's share of 140
+/// put the Brick's bezel 6 lines into the pill (audit 0.6 #8).
+fn top(screen_h: i32) -> i32 {
+    if screen_h >= 960 {
+        return TOP;
+    }
+    let pill_bottom = PAD + PILL;
+    let gap = TOP - BEZEL - pill_bottom;
+    (TOP * screen_h / 960).max(pill_bottom + BEZEL + gap * screen_h / 960)
+}
+
+/// The heading pill's bottom edge ("Recent games 1 / 3" at the top left): the cards' bezels stay under it.
+pub fn heading_bottom() -> i32 {
+    PAD + PILL
+}
+
+/// How far the selected card's bezel reaches over its picture (`paint_card`: `pad` 16 and the light edge's 2).
+const BEZEL: i32 = 18;
 
 /// Distance between card centres; the neighbours peek in at the screen edges.
 pub const STEP: f32 = 700.0;
+
+/// [`STEP`] on a canvas `w` wide: 1280 and wider keep it, a narrower one (the Brick's 1024) its share, so the
+/// neighbours peek in as far as on the Plus.
+pub fn step(w: i32) -> f32 {
+    if w >= 1280 { STEP } else { STEP * w as f32 / 1280.0 }
+}
 /// Neighbours are this much smaller.
 const SHRINK: f32 = 0.34;
 /// Cards this far from the selected one (and nearer) have their pictures read ahead.
@@ -139,6 +174,16 @@ impl Entry {
             },
             load: Load::Idle,
         }
+    }
+
+    /// Select only moments the chosen core can load.
+    pub fn with_core(mut self, core: &str) -> Self {
+        let base = slots::base_for_core(&self.system, self.path.file_stem().and_then(|s| s.to_str()).unwrap_or_default(), core);
+        let (auto, slots) = previews(&base);
+        self.shots = auto.iter().cloned().chain(slots.iter().map(|(p, _)| p.clone())).collect();
+        self.cands.auto = auto;
+        self.cands.slots = slots;
+        self
     }
 
     /// The frame pocket-ui kept when the game was last quit (`lastframe::frame_path`), if it is there.
@@ -461,13 +506,20 @@ impl Drop for Loader {
 /// Save-state pictures of a game, best first: the auto-resume ones, then slot previews, newest first.
 pub fn screenshots(system: &str, rom: &Path) -> Vec<PathBuf> {
     let stem = rom.file_stem().and_then(|s| s.to_str()).unwrap_or_default();
-    screenshots_at(&slots::base(system, stem))
+    let base = slots::base(system, stem);
+    let mut pictures = screenshots_at(&base);
+    if system == "nds" { pictures.extend(screenshots_at(&crate::ds::state_base(&base, "dsperate"))); }
+    pictures
 }
 
 /// When the emulator last wrote the preview of the auto-resume state of this game, if it has one.
 pub fn resume_preview_written(system: &str, rom: &Path) -> Option<SystemTime> {
+    resume_preview_written_for_core(system, rom, "")
+}
+
+pub fn resume_preview_written_for_core(system: &str, rom: &Path, core: &str) -> Option<SystemTime> {
     let stem = rom.file_stem().and_then(|s| s.to_str()).unwrap_or_default();
-    let (auto, _) = previews(&slots::base(system, stem));
+    let (auto, _) = previews(&slots::base_for_core(system, stem, core));
     auto.iter().filter_map(|p| std::fs::metadata(p).and_then(|m| m.modified()).ok()).max()
 }
 
@@ -750,7 +802,7 @@ impl Switcher {
         // Title (scrolling when it is too long) and what it is.
         let e = &self.entries[self.sel];
         let (name, meta) = (e.name.clone(), e.meta.clone());
-        let y = TOP + card_height(c.h) + 108;
+        let y = top(c.h) + card_height(c.h) + 108;
         marquee.draw_centered(text, c, Face::Title, 67, MARGIN, y, c.w - 2 * MARGIN, pal().pick(0xf4f2ec, 0x2b2925), &name);
         let meta = text.fit(Face::Body, 28, &meta, c.w - 2 * MARGIN);
         let mw = text.width(Face::Body, 28, &meta);
@@ -849,8 +901,8 @@ impl Switcher {
         let (bw, bh) = (box_w as f32 * s, box_h as f32 * s);
         let (w, h) = if aspect > bw / bh { (bw, bw / aspect) } else { (bh * aspect, bh) };
         let (w, h) = (w as i32, h as i32);
-        let cx = c.w / 2 + (d * STEP) as i32;
-        let cy = TOP + box_h / 2;
+        let cx = c.w / 2 + (d * step(c.w)) as i32;
+        let cy = top(c.h) + box_h / 2;
         let (x, y) = (cx - w / 2, cy - h / 2);
         let hit = (x - 18, y - 18, w + 36, h + 36, i);
         self.card_areas.push(hit);

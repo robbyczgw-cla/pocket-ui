@@ -8,7 +8,7 @@ use pocket_ui::sleep_settings::{rows, Action, Hold, Page, Row, ShortPress};
 use pocket_ui::text::Face;
 use pocket_ui::touch::Area;
 
-use super::{App, SettingsPage, CANCEL, CONFIRM, NU_BTN_PAD, NU_PAD, NU_PILL, NU_SMALL};
+use super::{App, SettingsPage, CANCEL, CONFIRM, NU_BTN_PAD, NU_PAD, NU_SMALL};
 
 /// The name in the Settings list, to come back to.
 pub(crate) const SETTINGS_NAME: &str = "Sleep & power";
@@ -91,7 +91,7 @@ impl App {
         c.clear(pal().void);
         let (pad, row, font) = (NU_PAD, pocket_ui::type_scale::row(66, 36), 36u32);
         self.sheet_header(c, SETTINGS_NAME);
-        let (top, right) = (pad + NU_PILL + 12, c.w - pad);
+        let (top, right) = (pocket_ui::kit::header_bottom(c.h) + 12, c.w - pad);
         let heading_h = pocket_ui::type_scale::line(NU_SMALL, 30);
         // The same footer and scrolling window as Controllers and Cozy extras: help gives way before rows do.
         let fixed = !pocket_ui::sleep_settings::Config::adjustable(page.row()) && page.row() == Row::ShortPress;

@@ -4,7 +4,7 @@
 //! plays backwards (`insert_scene`): the cartridge, card or disc comes out of the console and goes back into its case,
 //! which shuts and stands in its place, a little open while Continue waits (`paint_ajar_game`).
 //!
-//! Only with Animations on Cozy and Motion on Full; the old-TV part only with the old-TV switch-on (`Extra::CrtOn`).
+//! Only with Animations on Cozy and Motion on Full; the old-TV part only with the old-TV switch-off (`Extra::CrtOff`).
 //! Nothing waits for it: the shelf is live from its first frame, the effect is painted over it, and any button ends it
 //! at once and does what it does on the shelf. Quit itself is not touched: pocket-core ends as before.
 //!
@@ -19,9 +19,11 @@ use std::time::Duration;
 use crate::cabinet::{self, FormFactor};
 use crate::gfx::Canvas;
 use crate::image::Image;
+use crate::ui_sound::{self, Sound};
 
-/// The old TV switching off: the picture to a line, the line to a dot, the dot gone.
-pub const TV_OFF: Duration = Duration::from_millis(380);
+/// The old TV switching off: the picture to a line, the line to a dot, the dot glowing on a moment as a tube's
+/// phosphor does, then gone.
+pub const TV_OFF: Duration = Duration::from_millis(480);
 /// A handheld's display going dark.
 pub const LCD_OFF: Duration = Duration::from_millis(240);
 /// From black to the shelf, the console still up: the launch fade backwards.
@@ -33,9 +35,10 @@ pub const BACK_SPEED: f32 = 1.3;
 /// shelf's turn: restarting that right after the way back was a jump, 11.11.).
 pub const AJAR_IN: Duration = Duration::from_millis(240);
 
-/// Parts of [`TV_OFF`]: the picture is a line here, a dot here.
-const LINE_AT: f32 = 0.42;
-const DOT_AT: f32 = 0.72;
+/// Parts of [`TV_OFF`]: the picture is a line here (at 175 ms, as fast as before), a dot here (280 ms); the dot's
+/// afterglow is the last 200 ms.
+const LINE_AT: f32 = 175.0 / 480.0;
+const DOT_AT: f32 = 280.0 / 480.0;
 /// The line's thickness at 720 px of screen height, as `crt_on`'s.
 const LINE_PX: f32 = 3.0;
 
@@ -78,7 +81,7 @@ pub enum Moment {
 }
 
 /// One way back: what the game was shown on, whether its last picture switches off first (there is one, and on a TV the
-/// old-TV switch-on is on; else it starts from black), and whether its console shuts a lid or tray over a disc.
+/// old-TV switch-off is on; else it starts from black), and whether its console shuts a lid or tray over a disc.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Way {
     pub screen: Screen,
@@ -87,6 +90,11 @@ pub struct Way {
 }
 
 impl Way {
+    /// A way back.
+    pub const fn new(screen: Screen, off: bool, lid: bool) -> Way {
+        Way { screen, off, lid }
+    }
+
     /// The launch animation's moment it starts from: the medium in and, with a lid or tray, that shut.
     pub fn start(self) -> Duration {
         if self.lid {
@@ -140,9 +148,81 @@ impl Way {
     /// The earlier carry threshold (0.3) still leaves the cartridge sticking out of its case.
     pub fn case_shut_at(self) -> Duration {
         let shut = cabinet::INSERT_COZY.mul_f32(0.06);
-        self.off_len() + FADE + self.start().saturating_sub(shut).div_f32(BACK_SPEED)
+        self.back_at(shut)
     }
 
+    /// When the launch animation's moment `scene` shows again on the way back, from the end of the game.
+    pub fn back_at(self, scene: Duration) -> Duration {
+        self.off_len() + FADE + self.start().saturating_sub(scene).div_f32(BACK_SPEED)
+    }
+
+    /// The way back's sounds for a game in the case `medium`, each with the moment its hit belongs to, from the end of
+    /// the game: the old TV switching off as its picture pulls together, a top-loader's lid springing open as it starts
+    /// to lift, the game coming out of its console as it leaves its seat, the case shutting round it. The launch's
+    /// sounds played backwards in kind: the way back is no longer silent (ritual review 14.11., finding 9).
+    pub fn sounds(self, medium: crate::media::Medium) -> Vec<(Sound, Duration)> {
+        let mut out = Vec::new();
+        if self.off && self.screen == Screen::Tv {
+            out.push((Sound::TvOff, ui_sound::hit_at(Sound::TvOff)));
+        }
+        // A handheld's power switch slid off as its display goes dark.
+        if self.off && self.screen == Screen::Lcd {
+            out.push((Sound::SwitchOff, ui_sound::hit_at(Sound::SwitchOff)));
+        }
+        if self.lid {
+            out.push((Sound::LidOpen, self.back_at(cabinet::IN_AT_COZY + crate::insert_rig::SHUT_AFTER)));
+        }
+        if let Some(sound) = ui_sound::coming_out(medium) {
+            out.push((sound, self.back_at(cabinet::IN_AT_COZY)));
+        }
+        out.push((ui_sound::opening(medium), self.case_shut_at()));
+        out
+    }
+}
+
+/// With photos the album's camera kept this session (`album`), the way back holds this long where the game is back in its
+/// open case, in its place: the photos slide down into it (`insert_scene::Scene::tucked`), then the case shuts.
+pub const PHOTO_HOLD: Duration = Duration::from_millis(950);
+
+/// The scene's moment the way back holds at for the photos: the game in, the case open in its place (not yet turning home).
+pub fn photo_hold_scene() -> Duration {
+    cabinet::INSERT_COZY.mul_f32(0.06) + Duration::from_millis(260)
+}
+
+impl Way {
+    /// When (since the game ended) the way back reaches the scene's moment `scene`.
+    pub fn since_at(self, scene: Duration) -> Duration {
+        self.off_len() + FADE + self.start().saturating_sub(scene).div_f32(BACK_SPEED)
+    }
+}
+
+/// A way back that holds for the session's photos: from `from` (since the game ended) for [`PHOTO_HOLD`].
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct PhotoHold {
+    pub from: Duration,
+}
+
+impl PhotoHold {
+    pub fn of(way: Way) -> PhotoHold {
+        PhotoHold { from: way.since_at(photo_hold_scene()) }
+    }
+
+    /// The way back's own clock for `since`: standing still through the hold, then on.
+    pub fn clock(self, since: Duration) -> Duration {
+        if since <= self.from {
+            since
+        } else if since < self.from + PHOTO_HOLD {
+            self.from
+        } else {
+            since - PHOTO_HOLD
+        }
+    }
+
+    /// How far the photos are in their case at `since`: 0 sticking out, 1 wholly in (eased), by the hold's end.
+    pub fn tuck(self, since: Duration) -> f32 {
+        let k = (since.saturating_sub(self.from).as_secs_f32() / PHOTO_HOLD.as_secs_f32()).clamp(0.0, 1.0);
+        k * k * (3.0 - 2.0 * k)
+    }
 }
 
 /// The way back of a start that failed (`Way::failed`): the launch animation backwards from where it had got to.
@@ -266,10 +346,12 @@ pub fn tv_off(p: f32, w: f32, h: f32) -> Off {
         return Off { picture: None, light: Some(((cx - lw / 2.0, cy - lh / 2.0, lw, lh), 1.0)) };
     }
     if p < 1.0 {
-        // The dot glows on a moment and goes out.
+        // The dot glows on a moment as the phosphor cools: bright a little while, then fading out ever slower, a
+        // little smaller as it goes.
         let q = (p - DOT_AT) / (1.0 - DOT_AT);
-        let d = line * 3.2 * (1.0 - 0.4 * q);
-        return Off { picture: None, light: Some(((cx - d / 2.0, cy - d / 2.0, d, d), (1.0 - q).powi(2))) };
+        let d = line * 3.2 * (1.0 - 0.45 * q);
+        let a = if q < 0.2 { 1.0 } else { (1.0 - (q - 0.2) / 0.8).powf(2.2) };
+        return Off { picture: None, light: Some(((cx - d / 2.0, cy - d / 2.0, d, d), a)) };
     }
     Off { picture: None, light: None }
 }
@@ -294,6 +376,26 @@ fn blit(c: &mut Canvas, frame: &Image, src: Option<(u32, u32, u32, u32)>, (x, y,
 /// (its part `src`, the game without borders; the pause menu's grab is used as it is, not copied), which stood at `area`
 /// on the screen.
 pub fn paint_tv_off(c: &mut Canvas, frame: Option<&Image>, src: Option<(u32, u32, u32, u32)>, area: (i32, i32, i32, i32), p: f32) {
+    paint_tv_off_from(c, frame, src, area, p, 0);
+}
+
+/// How dark the pause menu shows the game behind it (`fade` towards black, 0-255): the way back after Quit starts
+/// from the picture as the menu showed it.
+pub const PAUSE_FADE: u8 = 225;
+
+/// How dark the picture still is at `p` of the switching off when it starts `from` dark (0-255): as dark as the pause
+/// menu showed it, lighting up only as it pulls together (its light gathered into less and less of the screen), so the
+/// first frame after the menu is never the full bright picture (14.11. review: the game stood bright for four frames
+/// before it went off, a flash), and it never comes back whole and bright before it goes.
+pub fn dark_at(p: f32, from: u8) -> u8 {
+    let q = (p / LINE_AT).clamp(0.0, 1.0);
+    // The part of the picture's height still shown (`tv_off`'s squeeze): dim while most of it is there, bright as a line.
+    let left = 1.0 - q * q;
+    (from as f32 * left.sqrt()).round() as u8
+}
+
+/// [`paint_tv_off`] from the picture darkened `from` (0-255) as the pause menu showed it ([`PAUSE_FADE`]).
+pub fn paint_tv_off_from(c: &mut Canvas, frame: Option<&Image>, src: Option<(u32, u32, u32, u32)>, area: (i32, i32, i32, i32), p: f32, from: u8) {
     c.clear(0);
     let (ax, ay, aw, ah) = area;
     let Off { picture, light } = tv_off(p, aw as f32, ah as f32);
@@ -303,6 +405,10 @@ pub fn paint_tv_off(c: &mut Canvas, frame: Option<&Image>, src: Option<(u32, u32
         match frame {
             Some(f) => blit(c, f, src, (x, y, w, h)),
             None => c.rect(x, y, w, h, 0x404040),
+        }
+        let dark = dark_at(p, from);
+        if dark > 0 {
+            c.shade_rect(x, y, w, h, 0, dark);
         }
         if white > 0.0 {
             brighten(c, (x, y, w, h), white);
@@ -387,12 +493,38 @@ pub fn lcd_dark(p: f32) -> f32 {
 
 /// Paints a handheld's display going dark at `p` over the whole of `c`, its picture (`frame`'s part `src`) at `area`.
 pub fn paint_lcd_off(c: &mut Canvas, frame: Option<&Image>, src: Option<(u32, u32, u32, u32)>, area: (i32, i32, i32, i32), p: f32) {
+    paint_lcd_off_as(c, frame, src, area, p, crate::lcd_on::Panel::Plain);
+}
+
+/// [`paint_lcd_off`] as `panel`'s display switches off (Handheld switch-on, `lcd_on::off`): the Game Boy's picture sinking
+/// into its green, the SP's front light dropping, the Game Gear's backlight cutting out; `Panel::Plain` simply goes dark.
+pub fn paint_lcd_off_as(c: &mut Canvas, frame: Option<&Image>, src: Option<(u32, u32, u32, u32)>, area: (i32, i32, i32, i32), p: f32, panel: crate::lcd_on::Panel) {
+    paint_lcd_off_from(c, frame, src, area, p, panel, 0);
+}
+
+/// [`paint_lcd_off_as`] from the picture darkened `from` (0-255) as the pause menu showed it ([`PAUSE_FADE`]): the dark
+/// eases off over the first third while the display's own switching off takes over, so its first frame is never the
+/// bright picture (no flash) and its look still shows.
+pub fn paint_lcd_off_from(c: &mut Canvas, frame: Option<&Image>, src: Option<(u32, u32, u32, u32)>, area: (i32, i32, i32, i32), p: f32, panel: crate::lcd_on::Panel, from: u8) {
     c.clear(0);
     let (x, y, w, h) = area;
     if let Some(f) = frame {
         blit(c, f, src, (x, y, w, h));
     }
-    c.darken_rect(x, y, w, h, (lcd_dark(p) * 255.0) as u8);
+    let q = (p / 0.35).clamp(0.0, 1.0);
+    let dark = (from as f32 * (1.0 - q * q * (3.0 - 2.0 * q))).round() as u8;
+    if dark > 0 {
+        c.darken_rect(x, y, w, h, dark);
+    }
+    // One pass over the screen: the washes folded into one (`lcd_on::fold`).
+    if let Some(wash) = crate::lcd_on::fold(&crate::lcd_on::off(panel, p)) {
+        let amount = (wash.alpha * 255.0 + 0.5) as u8;
+        if wash.rgb == 0 {
+            c.darken_rect(x, y, w, h, amount);
+        } else {
+            c.shade_rect(x, y, w, h, wash.rgb, amount);
+        }
+    }
 }
 
 /// Black over the shelf by `black` (1 black).
@@ -404,8 +536,56 @@ pub fn paint_black(c: &mut Canvas, black: f32) {
 mod tests {
     use super::*;
 
+    #[test]
+    fn the_way_back_sounds_like_the_way_in_backwards() {
+        use crate::media::Medium;
+        let tv = Way::new(Screen::Tv, true, false);
+        let names = |w: Way, m: Medium| w.sounds(m).iter().map(|s| s.0).collect::<Vec<_>>();
+        // A cartridge on a TV: the TV goes off, the cartridge comes out, its box shuts.
+        assert_eq!(names(tv, Medium::of("snes")), [Sound::TvOff, Sound::CartOut, ui_sound::opening(Medium::of("snes"))]);
+        // A handheld: no TV, its own cartridge's sound; a DS card pops out.
+        let lcd = Way::new(Screen::Lcd, true, false);
+        assert_eq!(names(lcd, Medium::of("gba"))[..2], [Sound::SwitchOff, Sound::HandheldCartOut], "its switch first, as its display goes dark");
+        assert_eq!(names(lcd, Medium::of("nds"))[1], Sound::CardOut);
+        assert_eq!(lcd.sounds(Medium::of("gba"))[0].1, ui_sound::hit_at(Sound::SwitchOff), "the switch from the way back's first frame");
+        // A disc in a top-loader: the lid springs open, the disc lifts quietly.
+        let disc = Way::new(Screen::Tv, true, true);
+        assert_eq!(names(disc, Medium::of("psx")), [Sound::TvOff, Sound::LidOpen, ui_sound::opening(Medium::of("psx"))]);
+        // In the order the picture shows them, all within the way back, all switched off with Case sounds.
+        for (w, m) in [(tv, "snes"), (lcd, "gba"), (lcd, "psp"), (disc, "psx"), (disc, "dreamcast"), (tv, "pcengine")] {
+            let s = w.sounds(Medium::of(m));
+            assert!(s.windows(2).all(|p| p[0].1 <= p[1].1), "{m}: {s:?}");
+            assert!(s.iter().all(|(sound, at)| *at <= w.len() && ui_sound::is_case_sound(*sound)), "{m}: {s:?}");
+        }
+        // The game leaves its seat when the launch's seated moment shows again.
+        let out = tv.sounds(Medium::of("snes"))[1].1;
+        assert!(matches!(tv.moment(out), Moment::Shelf { black, scene } if black == 0.0 && scene.abs_diff(cabinet::IN_AT_COZY) <= ms(2)));
+    }
+
     fn ms(n: u64) -> Duration {
         Duration::from_millis(n)
+    }
+
+    /// The way back with the session's photos stands still on the open case with its game in while they slide in, and goes
+    /// on from exactly there: the scene's moment never jumps, and it is the case in its place (not on its way home).
+    #[test]
+    fn the_photos_hold_the_way_back_on_the_open_case() {
+        for way in [Way::new(Screen::Lcd, true, false), Way::new(Screen::Tv, false, false), Way::new(Screen::Tv, true, false)] {
+            let hold = PhotoHold::of(way);
+            let at_hold = way.moment(hold.from);
+            let Moment::Shelf { scene, black } = at_hold else { panic!("{way:?}: not on the shelf at the hold: {at_hold:?}") };
+            assert_eq!(black, 0.0, "the shelf is lit");
+            assert!((scene.as_millis() as i64 - photo_hold_scene().as_millis() as i64).abs() <= 2, "{scene:?}");
+            for since in [hold.from + ms(1), hold.from + PHOTO_HOLD / 2, hold.from + PHOTO_HOLD - ms(1)] {
+                assert_eq!(way.moment(hold.clock(since)), at_hold, "it holds");
+            }
+            assert_eq!(hold.tuck(hold.from), 0.0);
+            assert!(hold.tuck(hold.from + PHOTO_HOLD / 2) > 0.3 && hold.tuck(hold.from + PHOTO_HOLD / 2) < 0.7);
+            assert_eq!(hold.tuck(hold.from + PHOTO_HOLD), 1.0);
+            // Then on, from where it stood, to the end.
+            assert_eq!(way.moment(hold.clock(hold.from + PHOTO_HOLD + ms(5))), way.moment(hold.from + ms(5)));
+            assert_eq!(way.moment(hold.clock(way.len() + PHOTO_HOLD)), Moment::Done);
+        }
     }
 
     #[test]
@@ -414,7 +594,7 @@ mod tests {
         let early = tv_off(0.1, w, h);
         let ((_, _, _, ph), white) = early.picture.expect("the picture still shows");
         assert!(ph > h * 0.8 && white < 0.2, "at first nearly the whole picture: {ph} {white}");
-        let line = tv_off(0.5, w, h);
+        let line = tv_off(200.0 / TV_OFF.as_millis() as f32, w, h);
         let ((_, ly, lw, lh), a) = line.light.expect("a line");
         assert!(line.picture.is_none() && lw > w * 0.3 && lh <= 8.0 && a == 1.0, "a bright thin line: {lw}x{lh}");
         assert!((ly + lh / 2.0 - h / 2.0).abs() < 1.0, "in the middle");
@@ -422,6 +602,54 @@ mod tests {
         let ((_, _, dw, dh), _) = dot.light.expect("a dot");
         assert!(dw < 12.0 && dh < 12.0, "a dot: {dw}x{dh}");
         assert_eq!(tv_off(1.0, w, h), Off { picture: None, light: None });
+    }
+
+    /// 14.11. review, Fund 2: after Save & quit the pause menu went and the game stood full bright for four frames
+    /// before the TV went off, a flash. The way back starts from the picture as dark as the menu showed it and lights
+    /// up only as it pulls together, never brighter in one 60 Hz frame than a small step.
+    #[test]
+    fn switching_off_after_the_menu_starts_as_dark_as_the_menu_and_never_flashes() {
+        let (w, h) = (64u32, 48u32);
+        let frame = Image { w, h, px: vec![0xc0c0c0; (w * h) as usize] };
+        let mean = |p: f32| {
+            let mut buf = vec![0u32; (w * h) as usize];
+            paint_tv_off_from(&mut Canvas::new(&mut buf, w, h), Some(&frame), None, (0, 0, w as i32, h as i32), p, PAUSE_FADE);
+            buf.iter().map(|px| (px >> 8 & 0xff) as f32).sum::<f32>() / buf.len() as f32 / 255.0
+        };
+        let menu = 0.75 * (1.0 - PAUSE_FADE as f32 / 255.0);
+        assert!((mean(0.0) - menu).abs() < 0.03, "the first frame is the menu's dark picture: {} against {menu}", mean(0.0));
+        let tick = 1.0 / 60.0 / TV_OFF.as_secs_f32();
+        let mut last = mean(0.0);
+        for k in 1..=(1.0 / tick) as u32 {
+            let m = mean(k as f32 * tick);
+            assert!(m - last < 0.12, "frame {k}: brighter by {} at once", m - last);
+            last = m;
+        }
+        assert_eq!(dark_at(0.0, 0), 0, "without the menu: as before");
+        // It lights up only as it pulls together: while most of the picture still shows, it stays dimmed.
+        for k in 0..20 {
+            let p = k as f32 * LINE_AT / 20.0;
+            let height = tv_off(p, 1280.0, 720.0).picture.map_or(0.0, |((_, _, _, h), _)| h / 720.0);
+            if height > 0.6 {
+                assert!(dark_at(p, PAUSE_FADE) as f32 > PAUSE_FADE as f32 * 0.2, "{p}: {height} of the picture, dark {}", dark_at(p, PAUSE_FADE));
+            }
+        }
+    }
+
+    /// 19.11. (Ritual TV): the dot doesn't just vanish, it glows on a moment, as a tube's phosphor does: bright for a
+    /// while, then fading, for about 200 ms.
+    #[test]
+    fn the_dot_glows_on_after_the_picture_is_gone() {
+        let (w, h) = (1280.0, 720.0);
+        let at = |t: u64| tv_off(t as f32 / TV_OFF.as_millis() as f32, w, h).light.map_or(0.0, |(_, a)| a);
+        assert!(at(300) >= 1.0, "bright a while: {}", at(300));
+        assert!(at(400) > 0.1 && at(400) < 0.8, "fading: {}", at(400));
+        assert!(at(470) < 0.05, "nearly out: {}", at(470));
+        let mut last = 1.0;
+        for t in 280..480 {
+            assert!(at(t) <= last + 1e-6, "{t} ms: it never brightens again");
+            last = at(t);
+        }
     }
 
     #[test]
@@ -461,7 +689,7 @@ mod tests {
     #[test]
     fn a_failed_start_comes_back_from_where_the_launch_had_got_to() {
         for lid in [false, true] {
-            let way = Way { screen: Screen::Tv, off: false, lid };
+            let way = Way::new(Screen::Tv, false, lid);
             // Inside the scene: from there, never black.
             let ran = way.start() / 2;
             let f = way.failed(ran);
@@ -493,14 +721,14 @@ mod tests {
             assert_eq!(half.lift(), FADE / 2);
         }
         // Gone before the scene had moved: over at once, the sentence comes without a wait.
-        let way = Way { screen: Screen::Tv, off: false, lid: false };
+        let way = Way::new(Screen::Tv, false, false);
         assert_eq!(way.failed(Duration::ZERO).moment(Duration::ZERO), Moment::Done);
     }
 
     #[test]
     fn the_way_back_runs_the_launch_backwards_and_ends() {
         for (screen, off, lid) in [(Screen::Tv, true, false), (Screen::Tv, false, false), (Screen::Tv, true, true), (Screen::Lcd, true, false), (Screen::Lcd, false, false)] {
-            let way = Way { screen, off, lid };
+            let way = Way::new(screen, off, lid);
             let first = way.off_len();
             assert!(matches!(way.moment(Duration::ZERO), Moment::Off(_)) == !first.is_zero());
             // Then black to the shelf with the medium in, then the scene going back to A.
@@ -522,10 +750,10 @@ mod tests {
             assert!(way.case_shut_at() < way.len() && way.case_shut_at() > first + FADE);
         }
         // A lid or tray starts shut: the way back begins after it closed in the launch.
-        let lid = Way { screen: Screen::Tv, off: true, lid: true };
+        let lid = Way::new(Screen::Tv, true, true);
         assert!(crate::insert_rig::pose(crate::insert_rig::Kind::Lid, lid.start()).open < 0.01);
         // Short enough not to stand in the way: about two seconds on a TV, less on a handheld.
-        assert!(lid.len() < ms(2100) && Way { screen: Screen::Lcd, off: true, lid: false }.len() < lid.len());
+        assert!(lid.len() < ms(2100) && Way::new(Screen::Lcd, true, false).len() < lid.len());
     }
 
     #[test]

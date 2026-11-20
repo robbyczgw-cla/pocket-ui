@@ -25,6 +25,15 @@ pub fn duration(secs: u64) -> String {
     }
 }
 
+/// `duration` in whole hours from one hour on ("6 h", "125 h"; "12 min", "under a minute" below): the Shelf look's short
+/// meta line, where "6 h 00 min in total" did not fit beside the box (`app_cabinet::meta_choice`).
+pub fn duration_short(secs: u64) -> String {
+    match secs / 3600 {
+        0 => duration(secs),
+        h => format!("{h} h"),
+    }
+}
+
 /// "just now", "5 min ago", "3 h ago", "2 days ago".
 pub fn ago(then: u64) -> String {
     ago_from(then, now_secs())

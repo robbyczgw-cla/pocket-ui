@@ -72,37 +72,65 @@ impl Data {
 /// The label to draw and the widths of the label and value columns. The columns are the usual fixed ones, wider
 /// when the text needs it (longer name, Large text size, German), so the bar never starts under its own label;
 /// the bar keeps `MIN_BAR` and the label is cut ("…") only when nothing else is left to give.
-fn layout(text: &mut Text, d: &Data) -> (String, i32, i32) {
+fn layout(text: &mut Text, d: &Data, w: i32) -> (String, i32, i32) {
     let gap = 24;
-    let value_col = VALUE_COL.max(text.width(Face::Body, FONT, &d.value) + gap);
-    let room = (W - 2 * PAD - value_col - MIN_BAR).max(LABEL_COL);
+    let value_col = part(VALUE_COL, w).max(text.width(Face::Body, FONT, &d.value) + gap);
+    let room = (w - 2 * part(PAD, w) - value_col - part(MIN_BAR, w)).max(part(LABEL_COL, w));
     let label = text.fit(Face::Body, FONT, &d.label, room - gap);
-    let label_col = LABEL_COL.max(text.width(Face::Body, FONT, &label) + gap);
+    let label_col = part(LABEL_COL, w).max(text.width(Face::Body, FONT, &label) + gap);
     (label, label_col, value_col)
+}
+
+/// A length of the design's pill (`W` wide) in a pill `w` wide: the same share of it.
+fn part(px: i32, w: i32) -> i32 {
+    if w == W { px } else { (px * w + W / 2) / W }
+}
+
+/// The pill's box on a canvas `cw` x `ch` (left, top, width, height), at the top centre. The design is made for a
+/// canvas 1280 and more wide (the RG35XX Plus's 640x480 is laid out at 1280x960) or of 900 lines and more (the Mini V2's
+/// 1240x1080): there it is `W` x `H` at `TOP`, 53 %
+/// of the Plus's width, in the header's band between a sheet's title and the clock. A narrower canvas painted natively
+/// (the Brick's 1024x768) takes the same share of its width and of the header's height (`kit::chrome`); its letters
+/// keep their size (as every page's do there), so the band has no room between the title and the clock's pill (with
+/// the battery, Large text, German): the pill comes down under the band (`kit::header_bottom`, the top line's band on
+/// Home), never over the clock or a title.
+pub fn frame(cw: i32, ch: i32) -> (i32, i32, i32, i32) {
+    if cw >= 1280 || !crate::kit::short_screen(ch) {
+        return ((cw - W) / 2, TOP, W, H);
+    }
+    let w = (W * cw + 640) / 1280;
+    ((cw - w) / 2, crate::kit::header_bottom(ch), w, crate::kit::chrome(H, ch))
 }
 
 /// Draws the pill with its top-left corner at (x, y). `bg` is the pill colour.
 pub fn paint(c: &mut Canvas, text: &mut Text, x: i32, y: i32, d: &Data, bg: u32) {
-    crate::retro::window(c, x, y, W, H, H / 2, bg);
-    let base = y + H / 2 + crate::type_scale::mid(FONT);
-    let (label, label_col, value_col) = layout(text, d);
-    text.draw(c, Face::Body, FONT, x + PAD, base, CHALK, &label);
-    text.draw_right(c, Face::Body, FONT, x + W - PAD, base, CHALK, &d.value);
-    let (bx, bw) = (x + PAD + label_col, W - 2 * PAD - label_col - value_col);
-    let by = y + (H - BAR_H) / 2;
-    crate::retro::pill(c, bx, by, bw, BAR_H, BAR_H / 2, TRACK);
+    paint_in(c, text, (x, y, W, H), d, bg);
+}
+
+/// `paint` in a pill of any size (`frame`): the pads, columns and bar are the design's shares of it.
+pub fn paint_in(c: &mut Canvas, text: &mut Text, (x, y, w, h): (i32, i32, i32, i32), d: &Data, bg: u32) {
+    crate::retro::window(c, x, y, w, h, h / 2, bg);
+    let base = y + h / 2 + crate::type_scale::mid(FONT);
+    let (label, label_col, value_col) = layout(text, d, w);
+    let pad = part(PAD, w);
+    let bar_h = if h == H { BAR_H } else { (BAR_H * h + H / 2) / H };
+    text.draw(c, Face::Body, FONT, x + pad, base, CHALK, &label);
+    text.draw_right(c, Face::Body, FONT, x + w - pad, base, CHALK, &d.value);
+    let (bx, bw) = (x + pad + label_col, w - 2 * pad - label_col - value_col);
+    let by = y + (h - bar_h) / 2;
+    crate::retro::pill(c, bx, by, bw, bar_h, bar_h / 2, TRACK);
     if d.centered {
         let mid = bx + bw / 2;
         let end = bx + (bw as f32 * d.frac) as i32;
         let (l, r) = (mid.min(end), mid.max(end));
         if r - l >= 2 {
-            c.rect(l, by, r - l, BAR_H, LABEL);
+            c.rect(l, by, r - l, bar_h, LABEL);
         }
-        c.rect(mid - 1, by - 5, 3, BAR_H + 10, CHALK);
+        c.rect(mid - 1, by - 5, 3, bar_h + 10, CHALK);
     } else {
-        let fill = ((bw as f32 * d.frac) as i32).max(if d.frac > 0.0 { BAR_H } else { 0 });
+        let fill = ((bw as f32 * d.frac) as i32).max(if d.frac > 0.0 { bar_h } else { 0 });
         if fill > 0 {
-            crate::retro::pill(c, bx, by, fill, BAR_H, BAR_H / 2, LABEL);
+            crate::retro::pill(c, bx, by, fill, bar_h, bar_h / 2, LABEL);
         }
     }
 }
@@ -161,8 +189,13 @@ impl Shown {
     /// Comes down into place and fades in as it appears, fades out as it goes (`motion::paint_toast`).
     pub fn paint(&self, c: &mut Canvas, text: &mut Text) {
         let life = self.since.saturating_duration_since(self.appeared) + SHOW_FOR;
-        crate::motion::paint_toast(c, self.appeared, Instant::now(), Some(life), ((c.w - W) / 2, TOP, W, H), 20.0, |c, dy| {
-            paint(c, text, (c.w - W) / 2, TOP + dy, &self.data, SPINE)
+        let (x, y, w, h) = frame(c.w, c.h);
+        // A moment over the page, as a notice card or a jump's letter (`text::boxes::covered_since`): what lies under it
+        // is hidden on purpose and comes back as it goes (on the Brick the "Continue" line under the header's band).
+        // Its place stays checked: never on the clock or a title (`frame`, its test).
+        crate::text::boxes::covered_since(usize::MAX, c, (x, y, w, h));
+        crate::motion::paint_toast(c, self.appeared, Instant::now(), Some(life), (x, y, w, h), 20.0, |c, dy| {
+            paint_in(c, text, (x, y + dy, w, h), &self.data, SPINE)
         });
     }
 }
@@ -193,12 +226,70 @@ mod tests {
         let mut text = Text::new();
         for (label, value) in [("Colour", "Warmer 4"), ("Farbe", "Wärmer 4"), ("Brightness", "60%"), ("A very long made-up setting name", "Cooler 10")] {
             let d = Data::new(label, value, 0.5, true);
-            let (shown, label_col, value_col) = layout(&mut text, &d);
+            let (shown, label_col, value_col) = layout(&mut text, &d, W);
             assert!(text.width(Face::Body, FONT, &shown) < label_col, "{label}: the bar would start under the label");
             assert!(W - 2 * PAD - label_col - value_col >= MIN_BAR, "{label}: the bar keeps a usable length");
             if label == "Colour" {
                 assert_eq!(shown, label, "a name that fits is never cut");
             }
+        }
+    }
+
+    /// Whether a pill at `r` stays clear of the header's title and its clock (a sheet's: the quick settings' title at
+    /// Title 50 and the status pill, the widest of the pages over Home) on a canvas `cw` x `ch`, in every text size.
+    fn clear_of_header(text: &mut Text, (x, y, w, h): (i32, i32, i32, i32), cw: i32, ch: i32) -> Result<(), String> {
+        use crate::kit::{BTN_PAD, PAD, SMALL};
+        let mut out = Ok(());
+        for size in [crate::type_scale::TextSize::Normal, crate::type_scale::TextSize::Large] {
+            crate::type_scale::set(size);
+            let (top, band) = (crate::kit::header_top(ch), crate::kit::header_bottom(ch));
+            let overlaps = |l: i32, r: i32| x < r && l < x + w && y < band && top < y + h;
+            let title_right = PAD + BTN_PAD + ["Quick settings", "Configurações rápidas"].iter().map(|t| text.width(Face::Title, 50, t)).max().unwrap();
+            let corner = crate::status_corner::Corner { clock: Some("23:59".into()), wifi: true, battery: Some("100%, charging".into()) };
+            let pill = crate::status_corner::Pill { right: cw - PAD, top, h: crate::kit::header_pill(ch), px: SMALL, pad: BTN_PAD };
+            let clock_left = pill.layout(&corner, |s| text.width(Face::Body, SMALL, s)).unwrap().1;
+            if overlaps(PAD, title_right) {
+                out = Err(format!("{cw}x{ch} {size:?}: over the title ({x}..{} vs ..{title_right})", x + w));
+            } else if overlaps(clock_left, cw - PAD) {
+                out = Err(format!("{cw}x{ch} {size:?}: over the clock ({x}..{} vs {clock_left}..)", x + w));
+            }
+        }
+        crate::type_scale::set(crate::type_scale::TextSize::Normal);
+        out
+    }
+
+    /// Neon's Brick audit (20.11.2026, #3 and anim #6): the pill was 680 px on the Brick's 1024 too (66 % of its width
+    /// against the Plus's 53 %) and sat on the clock ("65%01:00") and over the quick settings' title.
+    #[test]
+    fn on_the_brick_the_pill_keeps_the_plus_share_and_stays_off_the_clock_and_title() {
+        let mut text = Text::new();
+        let plus = frame(1280, 960);
+        let brick = frame(1024, 768);
+        let share = |w: i32, cw: i32| w as f32 * 100.0 / cw as f32;
+        assert!((share(brick.2, 1024) - share(plus.2, 1280)).abs() <= 5.0, "width {} of 1024 vs {} of 1280", brick.2, plus.2);
+        assert!((share(brick.3, 768) - share(plus.3, 960)).abs() <= 5.0, "height {} of 768 vs {} of 960", brick.3, plus.3);
+        assert_eq!(brick.0 * 2 + brick.2, 1024, "centred");
+        clear_of_header(&mut text, brick, 1024, 768).unwrap();
+        assert!(clear_of_header(&mut text, ((1024 - W) / 2, TOP, W, H), 1024, 768).is_err(), "the audit's pill: the check sees it");
+        // The label, the value and a bar still fit in the narrower pill.
+        for (label, value) in [("Volume", "Muted"), ("Brightness", "100%"), ("Helligkeit", "Extra dunkel 3"), ("Colour", "Warmer 4")] {
+            let (_, label_col, value_col) = layout(&mut text, &Data::new(label, value, 0.5, false), brick.2);
+            assert!(brick.2 - 2 * part(PAD, brick.2) - label_col - value_col >= part(MIN_BAR, brick.2), "{label} {value}");
+        }
+        // Everything painted stays in its box, under the header's band.
+        let mut buf = vec![0u32; 1024 * 768];
+        let mut c = Canvas::new(&mut buf, 1024, 768);
+        paint_in(&mut c, &mut text, brick, &Data::percent("Volume", 65), SPINE);
+        for (i, p) in buf.iter().enumerate() {
+            let (px, py) = ((i % 1024) as i32, (i / 1024) as i32);
+            if *p != 0 {
+                assert!(px >= brick.0 && px < brick.0 + brick.2 && py >= brick.1 && py < brick.1 + brick.3, "pixel {px},{py}");
+            }
+        }
+        // The other screens keep the design's pill where it was: the Plus (1280x960), 720x720 (1440x1440), the Mini V2,
+        // the Smart Pro's 1280x720, 1920x1080.
+        for (cw, ch) in [(1280, 960), (1440, 1440), (1240, 1080), (1280, 720), (1920, 1080)] {
+            assert_eq!(frame(cw, ch), ((cw - W) / 2, TOP, W, H), "{cw}x{ch}");
         }
     }
 

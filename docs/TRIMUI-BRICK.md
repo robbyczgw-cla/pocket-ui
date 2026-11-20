@@ -163,7 +163,11 @@ asks for hardware rendering (`SET_HW_RENDER`, GLES 2 or 3) gets a GLES 3 context
 surface. It renders into our framebuffer (`get_current_framebuffer`); after each `retro_run` the frame is read back (`glReadPixels`,
 turned upright when the core's origin is the bottom left) and goes on as an ordinary picture: the window to `pocket-fb`, scaling, the pause
 menu's picture and the save-state previews as for a 2D core, states as before (they are the core's own data). `get_proc_address` gives the
-GLES library's own symbols first, then `eglGetProcAddress` (an EGL 1.4 need not return core functions). A core that wants desktop OpenGL,
+GLES library's own symbols first, then `eglGetProcAddress` (an EGL 1.4 need not return core functions, and the Brick's returns NULL for
+GLES 3 ones). pocket-core also exports that resolver as `eglGetProcAddress` itself (build.rs: `--export-dynamic`, our C compiled hidden so
+rcheevos' `rc_*`/`md5_*` never stand in for a core's own): a core that asks EGL by name instead of the frontend binds to it. PPSSPP's GLES 3 loader (`gl3stubInit`) does, and before this
+every PSP game crashed at its start on `glGetStringi` (20.11.2026). `scripts/brick-make-card.sh` refuses a pocket-core without the export
+(`scripts/brick-elf-exports.py`). A core that wants desktop OpenGL,
 or GLES 3 where only GLES 2 is, doesn't start, with the reason in the log. The log has `[hw] N frames read back, X ms each`.
 Test on a computer: `cargo test --features brick --test brick_gles` (a stub GLES core from C, Mesa as the GPU, the picture upright on the
 screen file). Only the device can say whether a second process may use the vendor's EGL while `pocket-fb --gl` holds the screen (on the

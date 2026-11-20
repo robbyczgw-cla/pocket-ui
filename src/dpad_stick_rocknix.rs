@@ -14,7 +14,7 @@
 //!   on the analog nub (`An.Up = 10-4003,10-19`) instead of the PSP's D-pad, and back. Only while its mapping is ROCKNIX's
 //!   or this one: a mapping the player changed in PPSSPP stays.
 //! Standalone Mupen64Plus and Flycast (not the default anywhere) keep their own controls.
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 /// The system.cfg key (`n64["<game>"].dpadstick`, `n64.dpadstick`).
 pub const KEY: &str = "dpadstick";
@@ -131,16 +131,20 @@ pub fn ppsspp_controls(text: &str, on: bool) -> Option<String> {
 /// applied to `core`'s controls.
 pub fn before_start(system: &str, core: &str, rom: &Path) {
     if !SYSTEMS.contains(&system) || crate::proc::mock() { return; }
-    let cfg = crate::emu_choice::Cfg::read(Path::new(crate::emu_choice::SYSTEM_CFG));
+    before_start_in(system,core,rom,Path::new(crate::emu_choice::SYSTEM_CFG),Path::new(REMAPS),Path::new(PPSSPP_CONTROLS),crate::device::current().has_sticks());
+}
+
+fn before_start_in(system: &str, core: &str, rom: &Path, cfg_path: &Path, remaps: &Path, controls: &Path, has_sticks: bool) {
+    let cfg = crate::emu_choice::Cfg::read(cfg_path);
     let Some(setting) = crate::emu_choice::RA_SETTINGS.iter().find(|s| s.key == KEY) else { return };
     let file = rom.file_name().and_then(|f| f.to_str());
-    let on = wanted(&crate::emu_choice::effective_value(&cfg, system, file, setting), crate::device::current().has_sticks());
+    let on = wanted(&crate::emu_choice::effective_value(&cfg, system, file, setting), has_sticks);
     if let Some(folder) = remap_folder(core) {
-        if let Err(e) = apply_remap(&PathBuf::from(REMAPS).join(folder), rom, on) {
+        if let Err(e) = apply_remap(&remaps.join(folder), rom, on) {
             eprintln!("dpad-stick: remap for {}: {e}", rom.display());
         }
     } else if core == "ppsspp-sa" {
-        let path = Path::new(PPSSPP_CONTROLS);
+        let path = controls;
         // Before PPSSPP's first start the file is still ROCKNIX's copy in /usr/config: start_ppsspp.sh copies it.
         let Ok(text) = std::fs::read_to_string(path) else { return };
         if let Some(next) = ppsspp_controls(&text, on).filter(|n| *n != text) {
@@ -154,6 +158,23 @@ pub fn before_start(system: &str, core: &str, rom: &Path) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn file_source_rule_standalone_dpad_settings() {
+        let d=crate::testutil::TestDir::new("dpad-standalone-file-rule");let cfg=d.join("system.cfg");let remaps=d.join("remaps");let controls=d.join("controls.ini");let rom=d.join("Rule.iso");
+        for (label,bytes) in crate::file_faults::faults(b"dreamcast.dpadstick=stick\n") {
+            let _=std::fs::remove_file(&cfg);if let Some(bytes)=bytes {std::fs::write(&cfg,bytes).unwrap();}let output=remaps.join("Flycast/Rule.rmp");let _=std::fs::remove_file(&output);
+            before_start_in("dreamcast","flycast",&rom,&cfg,&remaps,&controls,true);
+            if label=="valid" {assert!(std::fs::read_to_string(output).unwrap().contains("input_player1_btn_up = \"19\""));}
+        }
+        std::fs::write(&cfg,b"psp.dpadstick=stick\n").unwrap();
+        let seed=PPSSPP_DPAD.iter().chain(PPSSPP_NUB.iter()).map(|(k,v)|format!("{k} = {v}\n")).collect::<String>();
+        for (label,bytes) in crate::file_faults::faults(seed.as_bytes()) {
+            let _=std::fs::remove_file(&controls);if let Some(bytes)=bytes {std::fs::write(&controls,bytes).unwrap();}
+            before_start_in("psp","ppsspp-sa",&rom,&cfg,&remaps,&controls,true);
+            if label=="valid" {let got=std::fs::read_to_string(&controls).unwrap();assert_eq!(ini_value(&got,"Up"),Some(""));assert_eq!(ini_value(&got,"An.Up"),Some("10-4003,10-19"));}
+        }
+    }
 
     const ROCKNIX_PPSSPP: &str = "[ControlMapping]\nUp = 10-19\nDown = 10-20\nLeft = 10-21\nRight = 10-22\nCircle = 10-189\n\
 An.Up = 10-4003\nAn.Down = 10-4002\nAn.Left = 10-4001\nAn.Right = 10-4000\nRightAn.Up = 10-4007\n";

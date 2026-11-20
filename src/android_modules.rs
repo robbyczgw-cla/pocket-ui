@@ -22,6 +22,12 @@ pub mod rom_id;
 pub mod case_knows;
 pub mod case_knows_read;
 pub mod case_knows_art;
+/// Photos of big moments in the game's case (`album`): the player takes them, the handheld view shows them.
+pub mod album;
+/// Painting it in the open case (`album_paint`).
+pub mod album_paint;
+/// The moment a photo is taken, over the running game: flash, the photo out of the screen's edge (`album_eject`).
+pub mod album_eject;
 pub mod disc_serial;
 /// A game of several discs: the pause menu's Disc row (`disc`), Linux's.
 pub mod disc;
@@ -74,6 +80,8 @@ pub mod play_time;
 pub mod game_box;
 
 pub mod kit;
+/// Where a page's main pictures stand, for tests/brick_proportions.rs (off unless POCKETUI_SHARES is set).
+pub mod shares;
 /// What a frame offers the D-pad, for tests/nav_explorer.rs (off unless POCKETUI_NAV_PROBE is set).
 pub mod nav_probe;
 pub mod ui_status;
@@ -105,6 +113,7 @@ pub mod controls_card;
 pub mod core_options;
 pub mod vfs;
 pub mod slots;
+pub mod boot_screen;
 pub mod state_file;
 pub mod dsv;
 pub mod softpatch;
@@ -112,7 +121,8 @@ pub mod save_trouble;
 pub mod save_writer;
 #[path="platform/android_hw_render.rs"]
 pub mod hw_render;
-#[path="platform/android_rumble.rs"]
+/// Game rumble as pocket-core runs it (`rumble`: Options › Speed, rumble, fan › Rumble, the lease, the players' targets),
+/// through the Activity's vibrators.
 pub mod rumble;
 
 pub mod frozen;
@@ -123,6 +133,7 @@ pub mod save_media;
 pub mod case_stickers;
 pub mod shrink_wrap;
 pub mod crt_on;
+pub mod lcd_on;
 pub mod eject;
 pub mod game_info;
 pub mod game_card { pub use crate::game_card_model::*; }
@@ -132,8 +143,11 @@ pub mod cabinet_tv;
 pub mod font_style;
 pub mod retro;
 pub mod room_light;
+pub mod tv_glow;
 pub mod room_deco;
 pub mod room_props;
+/// The window on the room's wall: the sky now and the season on its sill (Cozy extras → Window).
+pub mod room_window;
 pub mod button_prompts;
 pub mod cozy_extras;
 pub mod insert_rig;
@@ -142,6 +156,9 @@ pub mod insert_scene;
 pub mod save_fill;
 pub mod playful;
 pub mod lived_in;
+pub mod shelf_space;
+pub mod crate_scene;
+pub mod scene_check;
 pub mod sticker_press;
 
 pub mod where_was_i;
@@ -166,6 +183,8 @@ pub mod untar;
 pub mod android_cores;
 /// Which way a game starts on Android (our player, a core to download, another app), for the Mobile and the handheld view.
 pub mod play_route;
+/// Android's first start, shared by both views: games folders of other apps, emulator apps, missing BIOS.
+pub mod android_first_start;
 /// The Android games: apps the player calls games, one list for both views (`launcher.json` `android_games`).
 pub mod android_games;
 #[cfg(target_os = "android")]

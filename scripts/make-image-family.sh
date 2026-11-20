@@ -10,6 +10,7 @@
 #     --version      pocket-ui version (default: Cargo.toml); the binaries are built with POCKETUI_VERSION=V
 #     --bin-dir      take pocket-ui, pocket-core and pocket-splash from DIR instead of building them (must answer --version V)
 #     --system-file  reuse a repacked SYSTEM only when it matches the family's pinned MD5
+#     --ds-core      portable ARM64 DSperate build, including notices and corresponding source
 #     --gba-core     pinned ARM64 gpSP build folder, including licence and corresponding source
 #     --models       image names from pins.sh <FAMILY>_MODELS (default: all of them)
 #     --source, --release-url   as for scripts/make-image.sh
@@ -43,6 +44,7 @@ VERSION=
 BIN_DIR=
 SYSTEM_FILE=
 GBA_CORE_DIR=
+DS_CORE_DIR=
 SOURCE=
 RELEASE_URL=
 MODELS=
@@ -57,6 +59,7 @@ while [ $# -gt 0 ]; do
     --bin-dir) BIN_DIR=$2; shift ;;
     --system-file) SYSTEM_FILE=$2; shift ;;
     --gba-core) GBA_CORE_DIR=$2; shift ;;
+    --ds-core) DS_CORE_DIR=$2; shift ;;
     --models) MODELS=$2; shift ;;
     --source) SOURCE=$2; shift ;;
     --release-url) RELEASE_URL=$2; shift ;;
@@ -210,6 +213,10 @@ else
 fi
 sh "$ROOT/scripts/check-binary-paths.sh" "$W/bin/pocket-ui" "$W/bin/pocket-core" "$W/bin/pocket-splash" || die "the binaries carry build paths (scripts/release-rustflags.sh)"
 [ -z "$GBA_CORE_DIR" ] || sh "$ROOT/scripts/gba-core-files.sh" "$GBA_CORE_DIR" "$W/bin/cores"
+[ -z "$DS_CORE_DIR" ] || python3 -I "$ROOT/scripts/dsperate-files.py" "$DS_CORE_DIR" "$W/bin/cores"
+if LC_ALL=C grep -a -q dsperate "$W/bin/pocket-ui"; then
+  python3 -I "$ROOT/scripts/dsperate-files.py" --check "$W/bin/cores" || die "DSperate core, source and notices required: pass --ds-core BUILD_DIR"
+fi
 
 # ROCKNIX's LICENSE.md and licenses folder at the pinned tag (not inside SYSTEM), checked against the commit.
 RL=$ROCKNIX_CACHE/licenses-$ROCKNIX_COMMIT

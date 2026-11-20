@@ -1,0 +1,285 @@
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+index 208ff69..6990bcb 100644
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -1,27 +1,34 @@
+ # SPDX-License-Identifier: GPL-3.0-or-later
+-# dsperate_libretro: the libretro core. DSperate's core library is built by
+-# DSperate's own CMake (build.sh), not as a subdirectory of this project: its
+-# committed PGO profile names each object by its path in DSperate's build
+-# tree, so that tree has to be DSperate's own for the profile to apply.
+ cmake_minimum_required(VERSION 3.16)
+ project(dsperate_libretro LANGUAGES C CXX)
+ set(CMAKE_CXX_STANDARD 17)
+ set(CMAKE_CXX_STANDARD_REQUIRED ON)
+-
+-set(DSPERATE_BUILD "" CACHE PATH "DSperate build directory holding src/core/libdsperate_core.a")
+-if(NOT EXISTS "${DSPERATE_BUILD}/src/core/libdsperate_core.a")
+-  message(FATAL_ERROR "DSPERATE_BUILD=${DSPERATE_BUILD} has no src/core/libdsperate_core.a (run build.sh)")
+-endif()
+-
+-execute_process(COMMAND git -C "${CMAKE_SOURCE_DIR}/DSperate" describe --tags --always
++set(CMAKE_POSITION_INDEPENDENT_CODE ON)
++# One cross-toolchain builds the engine and wrapper, including Android.
++foreach(feature TESTS HEADLESS SDL CHEEVOS NET VULKAN GLES)
++  set(DSPERATE_${feature} OFF CACHE BOOL "" FORCE)
++endforeach()
++set(DSPERATE_PGO OFF CACHE STRING "" FORCE)
++add_compile_options(-fno-semantic-interposition)
++add_subdirectory(DSperate engine EXCLUDE_FROM_ALL)
++execute_process(COMMAND git -C "${CMAKE_CURRENT_SOURCE_DIR}/DSperate" describe --tags --always
+                 OUTPUT_VARIABLE DSPERATE_DESCRIBE OUTPUT_STRIP_TRAILING_WHITESPACE ERROR_QUIET)
+-
++if(NOT DSPERATE_DESCRIBE)
++  set(DSPERATE_DESCRIBE "99618eb")
++endif()
+ add_library(dsperate_libretro SHARED src/libretro.cpp)
+ set_target_properties(dsperate_libretro PROPERTIES PREFIX "" INTERPROCEDURAL_OPTIMIZATION ON)
+ target_include_directories(dsperate_libretro PRIVATE include DSperate/src)
+-# The core's PUBLIC definitions, as DSperate's build gave them to it.
+-target_compile_definitions(dsperate_libretro PRIVATE DSPERATE_JIT=1 DSPERATE_NEON=1
+-                           DSPERATE_LR_VERSION="${DSPERATE_DESCRIBE}")
+-target_link_libraries(dsperate_libretro PRIVATE "${DSPERATE_BUILD}/src/core/libdsperate_core.a" pthread dl)
+-# Only the libretro API leaves the library.
+-target_link_options(dsperate_libretro PRIVATE -Wl,--version-script=${CMAKE_SOURCE_DIR}/src/link.T -Wl,--no-undefined)
++target_compile_definitions(dsperate_libretro PRIVATE DSPERATE_LR_VERSION="${DSPERATE_DESCRIBE}")
++find_package(Threads REQUIRED)
++target_link_libraries(dsperate_libretro PRIVATE dsperate_core Threads::Threads ${CMAKE_DL_LIBS})
++# Only the libretro ABI leaves the library. C++ runtime stays mapped until exit.
++target_link_options(dsperate_libretro PRIVATE -Wl,-z,nodelete -Wl,-z,noexecstack
++                    -Wl,--version-script=${CMAKE_CURRENT_SOURCE_DIR}/src/link.T -Wl,--no-undefined)
++
++if(DSPERATE_TEST_DRIVER)
++  add_executable(dsperate_contract "${DSPERATE_TEST_DRIVER}")
++  target_compile_options(dsperate_contract PRIVATE -UNDEBUG)
++  target_include_directories(dsperate_contract PRIVATE include src DSperate/src)
++  target_link_libraries(dsperate_contract PRIVATE dsperate_core Threads::Threads ${CMAKE_DL_LIBS})
++endif()
+diff --git a/src/libretro.cpp b/src/libretro.cpp
+index 7f793de..4db03fc 100644
+--- a/src/libretro.cpp
++++ b/src/libretro.cpp
+@@ -49,6 +49,91 @@ std::string rom_path;
+ bool jit_on = true;
+ uint32_t frame[W * H * 2];
+ ds::s16 audio[4096 * 2];
++
++// Shared DS actions: right stick moves the stylus, R2 touches, R3 changes layout.
++// Physical touches remain libretro pointers across the currently presented frame.
++struct Screen { unsigned x, y, w, h; };
++struct Layout { unsigned w, h; Screen top, bottom; const char* name; };
++constexpr Layout layouts[] = {
++  {W,H*2,{0,0,W,H},{0,H,W,H},"top-bottom"},
++  {W,H*2,{0,H,W,H},{0,0,W,H},"bottom-top"},
++  {W*2,H,{0,0,W,H},{W,0,W,H},"left-right"},
++  {W*2,H,{W,0,W,H},{0,0,W,H},"right-left"},
++  {W,H,{0,0,W,H},{0,0,0,0},"top"},
++  {W,H,{0,0,0,0},{0,0,W,H},"bottom"},
++};
++unsigned layout_id, cursor_life;
++float cursor_x = W / 2, cursor_y = H / 2;
++bool layout_held;
++std::string layout_setting;
++
++void geometry(retro_game_geometry& g) {
++  const auto& l=layouts[layout_id];
++  g={l.w,l.h,W*2,H*2,float(l.w)/float(l.h)};
++}
++void select_layout(unsigned id) {
++  layout_id=id % (sizeof layouts/sizeof *layouts);
++  layout_setting=layouts[layout_id].name;
++  retro_variable setting{"dsperate_screen_layout",layout_setting.c_str()};
++  env_cb(RETRO_ENVIRONMENT_SET_VARIABLE,&setting);
++  retro_game_geometry g{};geometry(g);
++  env_cb(RETRO_ENVIRONMENT_SET_GEOMETRY,&g);
++}
++void read_layout() {
++  retro_variable v{"dsperate_screen_layout",nullptr};
++  if(!env_cb(RETRO_ENVIRONMENT_GET_VARIABLE,&v)||!v.value||layout_setting==v.value)return;
++  layout_setting=v.value;
++  for(unsigned i=0;i<sizeof layouts/sizeof *layouts;i++)
++    if(layout_setting==layouts[i].name){select_layout(i);break;}
++}
++void stylus(ds::input::Frame& in) {
++  const bool held=input_state_cb(0,RETRO_DEVICE_JOYPAD,0,RETRO_DEVICE_ID_JOYPAD_R3);
++  if(held&&!layout_held)select_layout(layout_id+1);
++  layout_held=held;
++  bool changed=false;
++  for(unsigned axis=0;axis<2;axis++) {
++    const int value=input_state_cb(0,RETRO_DEVICE_ANALOG,RETRO_DEVICE_INDEX_ANALOG_RIGHT,axis);
++    if(value>4096||value< -4096) {
++      float& coord=axis?cursor_y:cursor_x;
++      coord=std::clamp(coord+float(value)*4.0f/32767.0f,0.0f,float((axis?H:W)-1));
++      changed=true;
++    }
++  }
++  if(input_state_cb(0,RETRO_DEVICE_JOYPAD,0,RETRO_DEVICE_ID_JOYPAD_R2)) {
++    in.down=true;in.x=static_cast<ds::u8>(cursor_x);in.y=static_cast<ds::u8>(cursor_y);changed=true;
++  }
++  if(changed)cursor_life=120;else if(cursor_life)--cursor_life;
++  if(!input_state_cb(0,RETRO_DEVICE_POINTER,0,RETRO_DEVICE_ID_POINTER_PRESSED))return;
++  const auto& l=layouts[layout_id];const auto& r=l.bottom;
++  const int px=input_state_cb(0,RETRO_DEVICE_POINTER,0,RETRO_DEVICE_ID_POINTER_X);
++  const int py=input_state_cb(0,RETRO_DEVICE_POINTER,0,RETRO_DEVICE_ID_POINTER_Y);
++  const int x=std::clamp((px+32767)*int(l.w)/65534,0,int(l.w)-1);
++  const int y=std::clamp((py+32767)*int(l.h)/65534,0,int(l.h)-1);
++  if(r.w&&x>=int(r.x)&&y>=int(r.y)&&x<int(r.x+r.w)&&y<int(r.y+r.h)) {
++    in.down=true;in.x=x-r.x;in.y=y-r.y;
++    cursor_x=in.x;cursor_y=in.y;cursor_life=0;
++  }
++}
++void picture() {
++  const auto& l=layouts[layout_id];
++  const Screen screens[]={l.top,l.bottom};
++  for(unsigned i=0;i<2;i++) {
++    const auto& r=screens[i];if(!r.w)continue;
++    const auto* source=nds->gpu.framebuffer(i);
++    for(unsigned y=0;y<r.h;y++)std::memcpy(frame+(r.y+y)*l.w+r.x,source+y*W,W*4);
++  }
++  if(cursor_life&&l.bottom.w) {
++    const int x=static_cast<int>(cursor_x),y=static_cast<int>(cursor_y);
++    auto dot=[&](int dx,int dy,uint32_t color){
++      const int u=x+dx,v=y+dy;
++      if(u>=0&&v>=0&&u<int(W)&&v<int(H))frame[(l.bottom.y+v)*l.w+l.bottom.x+u]=color;
++    };
++    for(int i=-5;i<=5;i++)for(int d=-1;d<=1;d++){dot(i,d,0xff000000);dot(d,i,0xff000000);}
++    for(int i=-4;i<=4;i++){dot(i,0,0xffffffff);dot(0,i,0xffffffff);}
++  }
++  video_cb(frame,l.w,l.h,l.w*4);
++}
++
+ size_t state_size;   // fixed for the session: libretro states are a fixed size
+ 
+ // Slot 2 (DSperate v3.2.0): a GBA game, the Rumble Pak or the Guitar Grip,
+@@ -197,6 +282,7 @@ void declare_options() {
+   analog_decl = "Analog (CPAD) patch for the sticks (restart); off";
+   for (const std::string& n : analog_names) analog_decl += "|" + n;
+   const retro_variable vars[] = {
++    {"dsperate_screen_layout", "Screen layout; top-bottom|bottom-top|left-right|right-left|top|bottom"},
+     {"dsperate_jit", "JIT recompiler (restart); enabled|disabled"},
+     {"dsperate_frameskip", "Frameskip, when the frontend asks for it (restart); auto|slotplus|disabled"},
+     {"dsperate_slot2", "Slot 2 without a GBA game (restart); empty|rumble pak"},
+@@ -334,6 +420,7 @@ enum class Skip { Off, Frame, Period };   // dsperate_frameskip: disabled, auto,
+ Skip fs_mode = Skip::Frame;
+ bool fs_behind, fs_in_skip;
+ int fs_left, fs_blocks;
++unsigned fs_consecutive;
+ void RETRO_CALLCONV fs_status(bool active, unsigned, bool underrun) { fs_behind = active && underrun; }
+ 
+ RETRO_API void retro_init(void) { ds::set_thread_layout(false); }
+@@ -354,9 +441,7 @@ RETRO_API void retro_get_system_info(retro_system_info* info) {
+ 
+ RETRO_API void retro_get_system_av_info(retro_system_av_info* info) {
+   std::memset(info, 0, sizeof *info);
+-  info->geometry.base_width = info->geometry.max_width = W;
+-  info->geometry.base_height = info->geometry.max_height = H * 2;
+-  info->geometry.aspect_ratio = float(W) / float(H * 2);
++  geometry(info->geometry);
+   info->timing.fps = FPS;
+   info->timing.sample_rate = nds ? nds->spu.output_rate_hz() : 32728.5;
+ }
+@@ -382,6 +467,8 @@ RETRO_API void retro_run(void) {
+     {RETRO_DEVICE_ID_JOYPAD_UP, ds::io::Io::BTN_UP},         {RETRO_DEVICE_ID_JOYPAD_DOWN, ds::io::Io::BTN_DOWN},
+     {RETRO_DEVICE_ID_JOYPAD_LEFT, ds::io::Io::BTN_LEFT},     {RETRO_DEVICE_ID_JOYPAD_RIGHT, ds::io::Io::BTN_RIGHT},
+   };
++  bool options_changed=false;
++  if(env_cb(RETRO_ENVIRONMENT_GET_VARIABLE_UPDATE,&options_changed)&&options_changed)read_layout();
+   input_poll_cb();
+   ds::input::Frame in;
+   ds::u32 pressed = 0;
+@@ -399,16 +486,7 @@ RETRO_API void retro_run(void) {
+   }
+   in.buttons = static_cast<ds::u16>(pressed);
+ 
+-  // The pointer spans the whole frame, the two screens stacked: the bottom
+-  // (touch) screen is y 0..0x7fff of -0x7fff..0x7fff.
+-  const bool down = input_state_cb(0, RETRO_DEVICE_POINTER, 0, RETRO_DEVICE_ID_POINTER_PRESSED);
+-  const int px = input_state_cb(0, RETRO_DEVICE_POINTER, 0, RETRO_DEVICE_ID_POINTER_X);
+-  const int py = input_state_cb(0, RETRO_DEVICE_POINTER, 0, RETRO_DEVICE_ID_POINTER_Y);
+-  if (down && py >= 0) {
+-    in.down = true;
+-    in.x = static_cast<ds::u8>((px + 0x7fff) * int(W) / 0xffff);
+-    in.y = static_cast<ds::u8>(py * int(H) / 0x8000);
+-  }
++  stylus(in);
+ 
+   // Both sticks and the triggers, for an analog (CPAD) patch; the core only
+   // forwards them while one is on. Libretro's axes are the SDL range.
+@@ -445,7 +523,10 @@ RETRO_API void retro_run(void) {
+     --fs_left;
+     nds->gpu.set_frame_skip(fs_in_skip);
+   } else {
+-    nds->gpu.set_frame_skip(fs_mode == Skip::Frame && fs_behind);
++    // Preserve moving pictures while the queue recovers: never skip two in a row.
++    const bool skip=fs_mode==Skip::Frame && fs_behind && fs_consecutive==0;
++    fs_consecutive=skip?1:0;
++    nds->gpu.set_frame_skip(skip);
+   }
+   nds->run_frame();
+ 
+@@ -467,12 +548,10 @@ RETRO_API void retro_run(void) {
+     else if (++quiet >= 60) { flush_gba_save(); quiet = 0; }
+   }
+ 
+-  if (fs_mode == Skip::Period && nds->gpu.will_skip_frame()) {
+-    video_cb(nullptr, W, H * 2, W * 4);   // nothing new drawn: show the last frame again
++  if (fs_mode != Skip::Off && nds->gpu.will_skip_frame()) {
++    const auto& l=layouts[layout_id];video_cb(nullptr,l.w,l.h,l.w*4);   // nothing new drawn: show the last frame again
+   } else {
+-    std::memcpy(frame, nds->gpu.framebuffer(0), W * H * 4);
+-    std::memcpy(frame + W * H, nds->gpu.framebuffer(1), W * H * 4);
+-    video_cb(frame, W, H * 2, W * 4);
++    picture();
+   }
+   for (size_t n; (n = nds->spu.take(audio, 4096)) != 0;) audio_batch_cb(audio, n);
+ }
+@@ -497,10 +576,13 @@ RETRO_API bool retro_serialize(void* data, size_t size) {
+   w.data().clear();
+   if (!nds->save_state(w, err)) { log(RETRO_LOG_ERROR, "dsperate: state: %s\n", err.c_str()); return false; }
+   const ds::u32 n = static_cast<ds::u32>(w.data().size());
+-  if (4 + size_t(n) > size) { log(RETRO_LOG_ERROR, "dsperate: state of %u bytes past its %zu\n", n, size); return false; }
++  if (4 + size_t(n) + 12 > size) { log(RETRO_LOG_ERROR, "dsperate: state of %u bytes past its %zu\n", n, size); return false; }
+   std::memcpy(data, &n, 4);
+   std::memcpy(static_cast<ds::u8*>(data) + 4, w.data().data(), n);
+-  std::memset(static_cast<ds::u8*>(data) + 4 + n, 0, size - 4 - n);
++  auto* tail=static_cast<ds::u8*>(data)+4+n;
++  std::memset(tail,0,size-4-n);
++  const ds::u32 ui[]={0x31554950u,layout_id,static_cast<ds::u32>(cursor_x)|(static_cast<ds::u32>(cursor_y)<<16)};
++  std::memcpy(tail,ui,sizeof ui);
+   return true;
+ }
+ 
+@@ -511,7 +593,15 @@ RETRO_API bool retro_unserialize(const void* data, size_t size) {
+   if (4 + size_t(n) > size) return false;
+   ds::state::Reader r(static_cast<const ds::u8*>(data) + 4, n);
+   std::string err;
+-  if (nds->load_state(r, err)) return true;
++  if (nds->load_state(r, err)) {
++    if(size_t(n)+4+12<=size) {
++      ds::u32 ui[3];std::memcpy(ui,static_cast<const ds::u8*>(data)+4+n,sizeof ui);
++      if(ui[0]==0x31554950u&&ui[1]<sizeof layouts/sizeof *layouts&&(ui[2]&0xffff)<W&&(ui[2]>>16)<H) {
++        select_layout(ui[1]);cursor_x=ui[2]&0xffff;cursor_y=ui[2]>>16;
++      }
++    }
++    return true;
++  }
+   // A failed load leaves the machine unusable: start the game over.
+   log(RETRO_LOG_ERROR, "dsperate: state refused: %s\n", err.c_str());
+   retro_reset();
+@@ -558,6 +648,8 @@ RETRO_API bool retro_load_game(const retro_game_info* game) {
+   scan_analog();
+   declare_options();
+   read_options();
++  layout_setting.clear();layout_id=0;layout_held=false;cursor_life=0;cursor_x=W/2;cursor_y=H/2;
++  read_layout();
+   { const std::string f = opt("dsperate_frameskip");
+     fs_mode = f == "disabled" ? Skip::Off : f == "slotplus" ? Skip::Period : Skip::Frame; }
+   fill_slot2();   // before anything runs: a game looks for slot 2 in its first frames
+@@ -576,6 +668,7 @@ RETRO_API bool retro_load_game(const retro_game_info* game) {
+   state_size = 0;
+   fs_behind = fs_in_skip = false;
+   fs_left = fs_blocks = 0;
++  fs_consecutive = 0;
+   if (fs_mode != Skip::Off) {
+     if (fs_mode == Skip::Period) nds->gpu.set_frameskip_capture(true);
+     retro_audio_buffer_status_callback cb{fs_status};

@@ -475,4 +475,17 @@ mod tests {
         let (bytes, whole) = read_ahead(&p, || { asked.set(asked.get() + 1); asked.get() > 1 }).unwrap();
         assert_eq!((bytes, whole), (PIECE as u64, false), "a game starting mid-read stops it at the next piece");
     }
+    #[test]
+    fn file_source_rule_private_prefetch_elf() {
+        let d = crate::testutil::TestDir::new("prefetch-file-rule");
+        let file = d.join("core.so");
+        for (label, bytes) in crate::file_faults::faults(&elf(&["libz.so.1", "libm.so.6"])) {
+            let _ = std::fs::remove_file(&file);
+            if let Some(bytes) = bytes { std::fs::write(&file, bytes).unwrap(); }
+            let names = needed(&file);
+            if label == "valid" { assert_eq!(names, ["libz.so.1", "libm.so.6"]); }
+            assert!(names.iter().all(|n| !n.trim().is_empty()), "{label}: an unnamed dependency");
+        }
+    }
+
 }

@@ -282,7 +282,7 @@ make_card() { # dir
   cp "$ROOT/deploy/brick/entries/MainUI" "$ROOT/deploy/brick/entries/premainui.sh" "$ROOT/deploy/brick/entries/preload.sh" "$c/trimui/app/"
   cp "$ROOT"/deploy/brick/msg/* "$p/msg/"; cp "$ROOT/deploy/brick/es_systems.cfg" "$ROOT/deploy/brick/asoundrc" "$p/"
   cp "$ROOT"/deploy/brick/hwroot/usr/bin/* "$p/hwroot/usr/bin/"
-  for core in gambatte mgba nestopia snes9x pcsx_rearmed gpsp fceumm picodrive beetle_ngp beetle_wswan beetle_pce_fast handy stella prosystem fbneo mupen64plus_next ppsspp flycast gearsystem beetle_supergrafx pokemini beetle_vb fake08 tic80 melondsds dosbox_pure scummvm yabause; do : >"$p/cores/${core}_libretro.so"; done
+  for core in gambatte mgba nestopia snes9x pcsx_rearmed gpsp fceumm picodrive beetle_ngp beetle_wswan beetle_pce_fast handy stella prosystem fbneo mupen64plus_next ppsspp flycast gearsystem beetle_supergrafx pokemini beetle_vb fake08 tic80 melondsds dsperate dosbox_pure scummvm yabause; do : >"$p/cores/${core}_libretro.so"; done
   for l in libwayland-client.so.0 libffi.so.8; do : >"$p/lib/$l"; done; echo test >"$p/VERSION"; echo 1 >"$p/RELEASE"
   cat >"$p/bin/pocket-fb" <<'FB'
 #!/bin/sh
@@ -597,6 +597,8 @@ done
 echo "== the card's zip (built from stand-in parts): folders are folders"
 CZ=$WORK/cardzip; mkdir -p "$CZ/bins" "$CZ/libs" "$CZ/cores/cores" "$CZ/cores/licences" "$CZ/cores/sources"
 for f in pocket-ui pocket-core pocket-fb brick-hw brick-egl; do echo x >"$CZ/bins/$f"; done
+# pocket-core exports eglGetProcAddress (build.rs): a stand-in ELF that does.
+python3 -I "$ROOT/scripts/brick-elf-exports.py" --stand-in "$CZ/bins/pocket-core" eglGetProcAddress
 # Small launcher dependencies belong in the card; large Python/PortMaster assets are on demand.
 export BRICK_PORTMASTER_PARTS=$CZ/portmaster-parts
 mkdir -p "$BRICK_PORTMASTER_PARTS/bin" "$BRICK_PORTMASTER_PARTS/licences/bash" "$BRICK_PORTMASTER_PARTS/sources"
@@ -610,9 +612,13 @@ mkdir -p "$CZ/cores/assets/bios/scummvm/extra" "$CZ/cores/assets/bios/scummvm/th
 echo x >"$CZ/cores/assets/bios/scummvm/extra/sky.cpt"
 echo x >"$CZ/cores/assets/bios/scummvm/theme/scummmodern.zip"
 : >"$CZ/cores/CORES.txt"
-for c in gambatte mgba nestopia snes9x pcsx_rearmed gpsp fceumm picodrive beetle_ngp beetle_wswan beetle_pce_fast handy stella prosystem fbneo mupen64plus_next ppsspp flycast gearsystem beetle_supergrafx pokemini beetle_vb fake08 tic80 melondsds dosbox_pure scummvm yabause; do
+for c in gambatte mgba nestopia snes9x pcsx_rearmed gpsp fceumm picodrive beetle_ngp beetle_wswan beetle_pce_fast handy stella prosystem fbneo mupen64plus_next ppsspp flycast gearsystem beetle_supergrafx pokemini beetle_vb fake08 tic80 melondsds dsperate dosbox_pure scummvm yabause; do
   echo x >"$CZ/cores/cores/${c}_libretro.so"; echo "$c abc123 ${c}_libretro.so 00" >>"$CZ/cores/CORES.txt"; tar czf "$CZ/cores/sources/$c-abc123.tar.gz" -C "$CZ" libs
 done
+# PPSSPP's source archive with its assets/ (the cores folder has no assets/bios/PPSSPP: the card makes it from the archive).
+mkdir -p "$CZ/pspsrc/assets/flash0/font" "$CZ/pspsrc/assets/lang" "$CZ/pspsrc/assets/vfpu" "$CZ/pspsrc/assets/debugger"
+for f in ppge_atlas.zim compat.ini flash0/font/ltn0.pgf lang/en_US.ini vfpu/vfpu_asin_lut65536.dat debugger/index.html; do echo "$f" >"$CZ/pspsrc/assets/$f"; done
+tar czf "$CZ/cores/sources/ppsspp-abc123.tar.gz" -C "$CZ/pspsrc" assets
 # The non-commercial cores' own licence texts; FBNeo's top-level file is only a link, its text is src/license.txt in its source.
 mkdir -p "$CZ/cores/licences/snes9x" "$CZ/cores/licences/picodrive" "$CZ/cores/licences/fbneo" "$CZ/fbsrc/src"
 echo "Snes9x is freeware" >"$CZ/cores/licences/snes9x/LICENSE"; echo "may not be sold" >"$CZ/cores/licences/picodrive/COPYING"
@@ -643,6 +649,8 @@ PY
   U=$CZ/unpacked
   check "PortMaster launch helpers and identity ship, optional Python and sources do not" "[ -s $U/pocket-ui/app/bin/bash ] && [ -s $U/pocket-ui/app/bin/portmaster-exec ] && [ -s $U/pocket-ui/app/bin/portmaster-run ] && [ -s $U/pocket-ui/app/portmaster/device-env.sh ] && [ ! -d $U/pocket-ui/portmaster ] && [ ! -d $U/pocket-ui/sources/portmaster ] && [ -s $CZ/out/pocket-ui-trimui-sources-test.zip ]"
   check "ScummVM engine data and themes are in the BIOS folder" "[ -s $U/Roms/bios/scummvm/extra/sky.cpt ] && [ -s $U/Roms/bios/scummvm/theme/scummmodern.zip ]"
+  # Without them PPSSPP draws no system dialogs (20.11.2026); app/bios-data brings them with every update, Roms/bios is the system dir.
+  check "PPSSPP's system files are in Roms/bios/PPSSPP and app/bios-data, without the web debugger" "( for d in $U/Roms/bios/PPSSPP $U/pocket-ui/app/bios-data/PPSSPP; do [ -s \$d/ppge_atlas.zim ] && [ -s \$d/flash0/font/ltn0.pgf ] && [ -s \$d/lang/en_US.ini ] && [ ! -e \$d/debugger ] || exit 1; done )"
   for s in gb gbc gba nes snes psx megadrive mastersystem gamegear ngp ngpc wonderswan wonderswancolor pcengine atarilynx atari2600 atari7800 fbn neogeo cps1 cps2 cps3 n64 psp dreamcast fds sg-1000 segacd sega32x pcenginecd supergrafx pokemini virtualboy pico-8 tic-80 nds pc scummvm saturn bios; do
     check "unpacked: Roms/$s is a folder with a README.txt" "[ -d $U/Roms/$s ] && [ -s $U/Roms/$s/README.txt ]"
   done
@@ -663,9 +671,20 @@ PY
   else
     bad "brick-make-card failed for the public card: $(tail -3 "$CZ/pub.log" | tr '\n' ' ')"
   fi
+  mv "$CZ/cores/cores/dsperate_libretro.so" "$CZ/dsperate_libretro.so"
+  check "a card missing its default DS core is refused before packaging" "! BRICK_PARTS=$CZ/parts BRICK_LICENCE_FILES=$CZ/lic.sh $ROOT/scripts/brick-make-card.sh $CZ/nods $CZ/bins $CZ/libs $CZ/cores 0.2.1 >$CZ/nods.log 2>&1 && grep -q 'core dsperate is missing' $CZ/nods.log"
+  mv "$CZ/dsperate_libretro.so" "$CZ/cores/cores/dsperate_libretro.so"
   printf 'x\000/home/builder/target/out/egl_bindings.rs\000' >"$CZ/bins/pocket-core"
   check "a program with a build machine path in it is refused" "! BRICK_PARTS=$CZ/parts BRICK_LICENCE_FILES=$CZ/lic.sh $ROOT/scripts/brick-make-card.sh $CZ/paths $CZ/bins $CZ/libs $CZ/cores 0.2.1 >$CZ/paths.log 2>&1 && grep -q 'build path' $CZ/paths.log"
   echo x >"$CZ/bins/pocket-core"
+  # Built without --features brick (or the export lost): PSP games would crash at their start again (20.11.2026).
+  check "a pocket-core that doesn't export eglGetProcAddress is refused" "! BRICK_PARTS=$CZ/parts BRICK_LICENCE_FILES=$CZ/lic.sh $ROOT/scripts/brick-make-card.sh $CZ/noegl $CZ/bins $CZ/libs $CZ/cores 0.2.1 >$CZ/noegl.log 2>&1 && grep -q 'does not export eglGetProcAddress' $CZ/noegl.log"
+  python3 -I "$ROOT/scripts/brick-elf-exports.py" --stand-in "$CZ/bins/pocket-core" eglGetProcAddress rc_runtime_destroy md5_init
+  check "a pocket-core that exports its rcheevos too is refused (a core's own rc_/md5_ would bind to it)" "! BRICK_PARTS=$CZ/parts BRICK_LICENCE_FILES=$CZ/lic.sh $ROOT/scripts/brick-make-card.sh $CZ/rcleak $CZ/bins $CZ/libs $CZ/cores 0.2.1 >$CZ/rcleak.log 2>&1 && grep -q 'names a core may have too' $CZ/rcleak.log"
+  python3 -I "$ROOT/scripts/brick-elf-exports.py" --stand-in "$CZ/bins/pocket-core" eglGetProcAddress
+  mv "$CZ/cores/sources/ppsspp-abc123.tar.gz" "$CZ/ppsspp-src.tar.gz"
+  check "a card without PPSSPP's system files is refused" "! BRICK_PARTS=$CZ/parts BRICK_LICENCE_FILES=$CZ/lic.sh $ROOT/scripts/brick-make-card.sh $CZ/nopsp $CZ/bins $CZ/libs $CZ/cores 0.2.1 >$CZ/nopsp.log 2>&1 && grep -q 'PPSSPP system files are missing' $CZ/nopsp.log"
+  mv "$CZ/ppsspp-src.tar.gz" "$CZ/cores/sources/ppsspp-abc123.tar.gz"
   rm "$CZ/cores/licences/snes9x/LICENSE"
   check "a card without snes9x's licence text is refused" "! BRICK_PARTS=$CZ/parts BRICK_LICENCE_FILES=$CZ/lic.sh $ROOT/scripts/brick-make-card.sh $CZ/nolic $CZ/bins $CZ/libs $CZ/cores 0.2.1 >$CZ/nolic.log 2>&1 && grep -q 'snes9x/LICENSE is missing' $CZ/nolic.log"
   echo "Snes9x is freeware" >"$CZ/cores/licences/snes9x/LICENSE"

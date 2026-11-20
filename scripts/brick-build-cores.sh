@@ -49,6 +49,7 @@ gearsystem|https://github.com/drhelius/Gearsystem|2c725424715dd41a5d6f8e97a4d318
 yabause|https://github.com/libretro/yabause|8926b0c6c347f8c5c755911ddb0ac695420ffbf8|yabause/src/libretro|Makefile|yabause_libretro.so
 tic80|https://github.com/nesbox/TIC-80|7020500a6e88f6ee91301933bb77f082a10e10f5|.|cmake-tic|tic80_libretro.so
 melondsds|https://github.com/JesseTG/melonds-ds|bc4e4b67d2d470d7c682810a1e892cafd6f9082b|.|cmake-melon|melondsds_libretro.so
+dsperate|https://github.com/thwonp/dsperate-lr|27b9d76fb4c900d29f9629806f316527b5da90c2|.|cmake-dsperate|dsperate_libretro.so
 scummvm|https://github.com/libretro/scummvm|292e409938384ac0b3819a336c61fbb71dcbb9c3|backends/platform/libretro|Makefile|scummvm_libretro.so
 '
 ONLY=${BRICK_CORES:-}
@@ -70,7 +71,7 @@ for a; do shift; case "\$a" in -Wl,-no-undefined) ;; -I*/libmad) set -- "\$@" -i
 if [ "$t" = c++ ] && [ "\$BRICK_CXX_C" = 1 ]; then
   for a; do case "\$a" in *.c) set -- -x c++ "\$@"; break;; esac; done
 fi
-exec zig $t -target $TARGET -Wno-builtin-macro-redefined '-D__DATE__="redacted"' '-D__TIME__="redacted"' -ffile-prefix-map=$WORK=/work \$BRICK_CC_EXTRA "\$@"
+exec zig $t -target \${BRICK_TARGET_OVERRIDE:-$TARGET} -Wno-builtin-macro-redefined '-D__DATE__="redacted"' '-D__TIME__="redacted"' -ffile-prefix-map=$WORK=/work \$BRICK_CC_EXTRA "\$@"
 WRAP
 done
 printf '#!/bin/sh\nexec zig ar "$@"\n' >"$BIN/ar"
@@ -96,6 +97,9 @@ echo "$CORES" | while IFS='|' read -r id repo commit dir mk so; do
   [ -n "$id" ] || continue
   if [ -n "$ONLY" ]; then case " $ONLY " in *" $id "*) ;; *) continue;; esac; fi
   src=$WORK/$id
+  unset BRICK_TARGET_OVERRIDE
+  # One portable DS build serves every Linux device and its OTA package.
+  [ "$id" != dsperate ] || export BRICK_TARGET_OVERRIDE=aarch64-linux-gnu.2.17
   if [ ! -d "$src/.git" ] || [ "$(git -C "$src" rev-parse HEAD 2>/dev/null)" != "$commit" ]; then
     rm -rf "$src"; git init -q "$src"
     git -C "$src" fetch -q --depth 1 "$repo" "$commit"
@@ -116,6 +120,11 @@ echo "$CORES" | while IFS='|' read -r id repo commit dir mk so; do
   git -C "$src" submodule foreach -q --recursive "git reset -q --hard; git clean -fdxq" >/dev/null 2>&1 || true
   git -C "$src" reset -q --hard
   echo "== $id $commit"
+  if [ "$id" = dsperate ]; then
+    [ "$(git -C "$src/DSperate" rev-parse HEAD)" = 99618eb956c66083618395dbae9bb5cbf0241d16 ] || { echo "DSperate engine pin differs" >&2; exit 1; }
+    git -C "$src" apply "$(cd "$(dirname "$0")" && pwd)/dsperate/portability.patch"
+    git -C "$src" apply "$(cd "$(dirname "$0")" && pwd)/dsperate/libretro.patch"
+  fi
   # The 3D cores: their source is taken here, before the build (cmake edits the tree; ppsspp's ffmpeg is cut to linux/aarch64); the others'
   # after it (brick-core-source.py, with what CMake and ScummVM fetch).
   if [ "$mk" = cmake3d ]; then
@@ -167,6 +176,7 @@ echo "$CORES" | while IFS='|' read -r id repo commit dir mk so; do
   if [[ "$mk" = cmake-* ]]; then
     CARGS=(); CXX_EXTRA=
     case $id in
+      dsperate) CARGS=("-DCMAKE_C_COMPILER_AR=$BIN/ar" "-DCMAKE_CXX_COMPILER_AR=$BIN/ar" "-DCMAKE_C_COMPILER_RANLIB=$BIN/ranlib" "-DCMAKE_CXX_COMPILER_RANLIB=$BIN/ranlib"); CXX_EXTRA="-D__builtin___clear_cache=brick_clear_cache -include $(cd "$(dirname "$0")" && pwd)/brick-clear-cache.h";;
       tic80) CARGS=(-DBUILD_LIBRETRO=ON -DBUILD_SDL=OFF -DBUILD_EDITORS=OFF -DBUILD_PLAYER=OFF -DBUILD_TOOLS=OFF -DBUILD_STATIC=ON);;
       # fmt needs an explicit cstdlib include with this libc++; DS networking headers are unconditional upstream.
       melondsds) CXX_EXTRA="-include cstdlib"; CARGS=(-DENABLE_OPENGL=OFF -DENABLE_JIT=ON -DENABLE_NETWORKING=ON -DENABLE_TESTING=OFF -DENABLE_LTO=OFF -DENABLE_LTO_RELEASE=OFF);;
@@ -223,6 +233,10 @@ echo "$CORES" | while IFS='|' read -r id repo commit dir mk so; do
   if [ "$id" = scummvm ]; then
     python3 -I "$(dirname "$0")/brick-scummvm-data.py" "$src" "$OUT/assets"
   fi
+  # PPSSPP's system files for <system dir>/PPSSPP (brick-make-card.sh puts them into app/bios-data and Roms/bios).
+  if [ "$id" = ppsspp ]; then
+    python3 -I "$(dirname "$0")/brick-ppsspp-data.py" "$src" "$OUT/assets"
+  fi
   # Include sources fetched by CMake/ScummVM as well as submodules, excluding build outputs.
   [ "$mk" = cmake3d ] || python3 -I "$(dirname "$0")/brick-core-source.py" "$src" "$OUT/sources/$id-${commit%${commit#???????}}.tar.gz"
   f=$(find "$src" -name "$so" -type f | head -1)
@@ -234,6 +248,7 @@ echo "$CORES" | while IFS='|' read -r id repo commit dir mk so; do
   ( cd "$src" && for l in $(ls | grep -i -E '^(licen[sc]e|copying|copyright|notice|authors|readme-license)' ); do [ -f "$l" ] && cp "$l" "$OUT/licences/$id/"; done
     find . -type f \( -iname 'license*' -o -iname 'licence*' -o -iname 'copying*' -o -iname 'copyright*' -o -iname 'notice*' \) ! -path '*/.git/*' | while read -r p; do
       d="$OUT/licences/$id/$(dirname "${p#./}" | tr '/' '_')"; mkdir -p "$d"; cp "$p" "$d/"; done )
+  if [ "$id" = dsperate ]; then cp "$src/include/libretro.h" "$OUT/licences/$id/libretro.h"; fi
   # Handy carries its zlib notice in source headers rather than a top-level licence file.
   if [ "$id" = handy ]; then
     cp "$src/lynx/ram.h" "$OUT/licences/$id/ram.h"
@@ -241,5 +256,6 @@ echo "$CORES" | while IFS='|' read -r id repo commit dir mk so; do
   digest=$(shasum -a 256 "$OUT/cores/$so" 2>/dev/null | cut -d' ' -f1 || sha256sum "$OUT/cores/$so" | cut -d' ' -f1)
   { awk -v id="$id" '$1 != id' "$OUT/CORES.txt"; echo "$id $commit $so $digest"; } | LC_ALL=C sort >"$OUT/CORES.next"
   mv "$OUT/CORES.next" "$OUT/CORES.txt"
+  if [ "$id" = dsperate ]; then python3 -I "$(dirname "$0")/dsperate-files.py" --record "$OUT" 2.17; fi
 done
 cat "$OUT/CORES.txt"

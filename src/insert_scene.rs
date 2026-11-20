@@ -123,6 +123,16 @@ pub fn cues(cozy: bool, medium: Medium, disc_rig: bool, playful: bool) -> Vec<Cu
     }
 }
 
+/// A handheld's power switch at its start (`power_on_light`): slid on as its power light comes on, 90 ms after the game
+/// is in (`insert_rig::pose_of`'s `led`; a PSP's after it has turned back to its front). Only where the start ends in the
+/// display's light, which the caller knows (`App::apply_power_on`).
+pub fn switch_on_cue(system: &str, kind: crate::media::Game) -> Cue {
+    let turns = ir::files(system, kind).is_some_and(|f| f.front.is_some());
+    let lights = cabinet::IN_AT_COZY + if turns { ir::TURN_BACK } else { Duration::ZERO };
+    let led = lights + Duration::from_millis(ir::LED_AFTER_MS);
+    Cue { sound: Sound::SwitchOn, after: led.saturating_sub(SOUND_LEAD + ui_sound::hit_at(Sound::SwitchOn)), db: 0.0 }
+}
+
 /// Where the console stands on this screen. `k` is screen pixels per pixel of pocket-ui's handheld layout, on which the
 /// animation's measures are made: 1 on Linux.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -261,6 +271,15 @@ pub struct Rigged {
     pub front_lit: Option<Pic>,
     /// A cartridge's edge, one column of its own plastic (`edge_of`), made the first time it turns and kept.
     pub edge: std::cell::OnceCell<Pic>,
+    /// The see-through rows under the console's lowest visible one (`base` and `over` together): it stands on the floor
+    /// by what is seen of it (18.11.: up to 30 of them under some consoles, which floated over the shelf's board).
+    pub foot: i32,
+}
+
+/// The see-through rows at the bottom of a picture `w` wide (nothing seen at all: none).
+pub fn clear_rows_below(px: &[u32], w: usize) -> i32 {
+    let h = px.len() / w.max(1);
+    (0..h).rev().take_while(|&y| px[y * w..(y + 1) * w].iter().all(|p| p >> 24 <= 0x40)).count().min(h.saturating_sub(1)) as i32
 }
 
 impl Rigged {
@@ -316,7 +335,8 @@ impl Rigged {
                 }
             }
         }
-        Some(Rigged { rig: f.rig, front, front_lit, base, over, top: f.top.and_then(|d| pic(&d)), under: f.under.and_then(|d| pic(&d)), scale: blocks, lit, lid_lit, edge: Default::default() })
+        let foot = std::iter::once(&base).chain(over.as_ref()).map(|p| clear_rows_below(&p.px, p.w as usize)).min().unwrap_or(0);
+        Some(Rigged { rig: f.rig, front, front_lit, base, over, top: f.top.and_then(|d| pic(&d)), under: f.under.and_then(|d| pic(&d)), scale: blocks, lit, lid_lit, edge: Default::default(), foot })
     }
 }
 
@@ -378,25 +398,28 @@ pub struct PlainDisplay {
     pub at: &'static [(f32, f32)],
     pub fuzz: u32,
     pub lit: u32,
+    /// Its power light on the picture (parts of its width and height), where the picture shows one: lit in the Cabinet as the
+    /// original's (`frame_led::Model::of_system`).
+    pub led: Option<(f32, f32)>,
 }
 
 /// `(picture, display)`.
 const DISPLAYS: &[(&str, PlainDisplay)] = &[
-    ("gb", PlainDisplay { at: &[(0.576, 0.311)], fuzz: 24, lit: 0xabb080 }),
-    ("gbc", PlainDisplay { at: &[(0.546, 0.289)], fuzz: 24, lit: 0xa3b0b0 }),
-    ("gba", PlainDisplay { at: &[(0.506, 0.411)], fuzz: 24, lit: 0x919191 }),
-    ("gba-sp", PlainDisplay { at: &[(0.6625, 0.262)], fuzz: 24, lit: 0x9c9d9e }),
-    ("gamegear", PlainDisplay { at: &[(0.5125, 0.331)], fuzz: 24, lit: 0x8c9298 }),
-    ("atarilynx", PlainDisplay { at: &[(0.544, 0.396)], fuzz: 15, lit: 0x808a94 }),
-    ("ngpc", PlainDisplay { at: &[(0.480, 0.430)], fuzz: 24, lit: 0x9ea8af }),
-    ("wonderswan", PlainDisplay { at: &[(0.5, 0.427)], fuzz: 24, lit: 0x9aabb0 }),
-    ("pokemini", PlainDisplay { at: &[(0.574, 0.383)], fuzz: 24, lit: 0xb0b0b0 }),
-    ("nds", PlainDisplay { at: &[(0.591, 0.230), (0.467, 0.631)], fuzz: 24, lit: 0x878891 }),
-    ("3ds", PlainDisplay { at: &[(0.539, 0.255), (0.415, 0.634)], fuzz: 24, lit: 0xb0b0b0 }),
-    ("psp", PlainDisplay { at: &[(0.502, 0.376)], fuzz: 13, lit: 0x838b94 }),
+    ("gb", PlainDisplay { at: &[(0.576, 0.311)], fuzz: 24, lit: 0xabb080, led: Some((0.346, 0.218)) }),
+    ("gbc", PlainDisplay { at: &[(0.546, 0.289)], fuzz: 24, lit: 0xa3b0b0, led: Some((0.307, 0.163)) }),
+    ("gba", PlainDisplay { at: &[(0.506, 0.411)], fuzz: 24, lit: 0x919191, led: Some((0.848, 0.368)) }),
+    ("gba-sp", PlainDisplay { at: &[(0.6625, 0.262)], fuzz: 24, lit: 0x9c9d9e, led: Some((0.628, 0.692)) }),
+    ("gamegear", PlainDisplay { at: &[(0.5125, 0.331)], fuzz: 24, lit: 0x8c9298, led: Some((0.246, 0.173)) }),
+    ("atarilynx", PlainDisplay { at: &[(0.544, 0.396)], fuzz: 15, lit: 0x808a94, led: None }),
+    ("ngpc", PlainDisplay { at: &[(0.480, 0.430)], fuzz: 24, lit: 0x9ea8af, led: None }),
+    ("wonderswan", PlainDisplay { at: &[(0.5, 0.427)], fuzz: 24, lit: 0x9aabb0, led: None }),
+    ("pokemini", PlainDisplay { at: &[(0.574, 0.383)], fuzz: 24, lit: 0xb0b0b0, led: None }),
+    ("nds", PlainDisplay { at: &[(0.591, 0.230), (0.467, 0.631)], fuzz: 24, lit: 0x878891, led: None }),
+    ("3ds", PlainDisplay { at: &[(0.539, 0.255), (0.415, 0.634)], fuzz: 24, lit: 0xb0b0b0, led: None }),
+    ("psp", PlainDisplay { at: &[(0.502, 0.376)], fuzz: 13, lit: 0x838b94, led: Some((0.796, 0.902)) }),
     // The phone (`assets/systems/j2me.png`): its one display, a soft green-grey LCD.
-    ("j2me", PlainDisplay { at: &[(0.48, 0.42)], fuzz: 24, lit: 0xa0b09c }),
-    ("psvita", PlainDisplay { at: &[(0.492, 0.420)], fuzz: 13, lit: 0x83868e }),
+    ("j2me", PlainDisplay { at: &[(0.48, 0.42)], fuzz: 24, lit: 0xa0b09c, led: None }),
+    ("psvita", PlainDisplay { at: &[(0.492, 0.420)], fuzz: 13, lit: 0x83868e, led: None }),
 ];
 
 /// The display of a system's plain picture, if it has one listed.
@@ -449,6 +472,9 @@ fn edge_of(p: &Pic) -> Pic {
     Pic::of(1, p.h, px)
 }
 
+/// From how far on its way (`Pose::fly`) a medium for a slot at the console's back sinks behind the console's top.
+pub const REAR_SINK_FROM: f32 = 0.7;
+
 /// How far open a lid is (0 shut, 1 all the way) before it is drawn behind its console's rear wall instead of over it.
 const LID_BEHIND_OPEN: f32 = 0.35;
 
@@ -480,6 +506,10 @@ fn fill_alpha(c: &mut Canvas, x: i32, y: i32, w: i32, h: i32, rgb: u32, alpha: u
 fn case_shown(st: cabinet::Insert) -> f32 {
     1.0 - ((st.carry - 0.3) / 0.4).clamp(0.0, 1.0)
 }
+
+/// How far on its way home (`case_back`) a case is in its row on the shelf, behind the stage the console stands on: from
+/// here it is painted under the console (ritual 19.11.: a GBA's case went back into the row through the GBA).
+pub const CASE_IN_ROW: f32 = 0.5;
 
 /// Where a case goes back to once its game is out of it, as the host shows it at rest: its spine standing with its
 /// middle at `at` (screen pixels), `scale` screen pixels per shelf pixel (`cabinet::Size`). The case shuts, turns its
@@ -572,7 +602,7 @@ pub fn phone_loaded(elapsed: Duration, cozy: bool) -> f32 {
 /// A phone game "loading" onto the phone: a bar on its still dark display fills while the case fades, where another
 /// console's medium would go in; then the display goes on as every handheld's (`paint_plain_display`). Painted where
 /// `paint_plain` has the phone, risen or rising.
-fn phone_loading(c: &mut Canvas, elapsed: Duration, sp: &Sprite, cozy: bool, Stage { floor, k }: Stage) {
+fn phone_loading(c: &mut Canvas, elapsed: Duration, sp: &Sprite, foot: i32, cozy: bool, Stage { floor, k }: Stage) {
     let Some((fx0, fy0, fx1, fy1)) = phone_display() else { return };
     let loaded = phone_loaded(elapsed, cozy);
     let st = cabinet::insert_at(elapsed, cozy);
@@ -582,7 +612,7 @@ fn phone_loading(c: &mut Canvas, elapsed: Duration, sp: &Sprite, cozy: bool, Sta
     let (sw, sh) = (sp.w as i32, sp.h as i32);
     let px = |n: i32| (n as f32 * k) as i32;
     let sx = (c.w - sw) / 2;
-    let sy_final = floor - px(10) - sh;
+    let sy_final = floor - sh + foot;
     let sy = sy_final + ((1.0 - st.rise) * (sh + px(160)).max(c.h - sy_final) as f32) as i32;
     let (dx0, dy0) = (sx + (fx0 * sw as f32) as i32, sy + (fy0 * sh as f32) as i32);
     let (dw, dh) = (((fx1 - fx0) * sw as f32) as i32, ((fy1 - fy0) * sh as f32) as i32);
@@ -600,6 +630,19 @@ fn phone_loading(c: &mut Canvas, elapsed: Duration, sp: &Sprite, cozy: bool, Sta
     if inner > 0 {
         c.rect(bx + 2 * t, by + 2 * t, inner, bh - 4 * t, ink);
     }
+}
+
+/// The scene's own time the photos take to slide into their case (`Scene::tuck` without a hold): from the hold's moment
+/// (`eject::photo_hold_scene`) to the case's shutting.
+pub const TUCK: Duration = Duration::from_millis(260);
+
+/// Where photo `i` of `n` stands at tuck `p` over a case at `(x, y, w, h)`: in the middle of its top, the newer a little
+/// higher and to the right (a small pile), each with its lower part in the case until `p` 1 has them wholly in.
+pub fn tucked_at((x, y, w, _): (i32, i32, i32, i32), (pw, ph): (i32, i32), i: usize, n: usize, p: f32) -> (i32, i32) {
+    let off = i as f32 - (n as f32 - 1.0) / 2.0;
+    let px = x + (w - pw) / 2 + (off * pw as f32 / 9.0) as i32;
+    let out = ph as f32 * 0.55 * (1.0 - p) * (1.0 - 0.15 * (n - 1 - i) as f32);
+    (px, y - out.round() as i32)
 }
 
 /// The case going into the console while the game starts.
@@ -636,9 +679,27 @@ pub struct Scene {
     pub power_on: Option<u32>,
     /// A plain picture's display lit (made once from the picture on the stage, `plain_display`).
     pub plain_lit: Option<Rc<Pic>>,
+    /// The see-through rows under the plain picture's lowest visible one (`clear_rows_below`), found once per scene:
+    /// every frame looked for them over the whole picture (19.11.: a launch frame's p95 +25 %, tests/launch_frames.rs).
+    pub plain_foot: Option<i32>,
+    /// The way back from a game (`eject`): the photos its camera kept this session (`album`), as instant photos at the
+    /// case's size, newest last. They stick out of the case's top and slide down into it with the game ([`Scene::tuck`]).
+    pub tucked: Vec<Rc<Pic>>,
+    /// How far they are in, when the host holds the way back for them (`eject::PhotoHold::tuck`); None: by the scene's own
+    /// moment ([`Scene::tuck`]).
+    pub tuck_p: Option<f32>,
 }
 
 impl Scene {
+    /// `clear_rows_below` of the plain picture `sp`, once per scene.
+    fn plain_foot(&mut self, sp: &Sprite) -> i32 {
+        *self.plain_foot.get_or_insert_with(|| {
+            #[cfg(test)]
+            FOOT_SCANS.with(|n| n.set(n.get() + 1));
+            clear_rows_below(&sp.px, sp.w as usize)
+        })
+    }
+
     /// How far the launch fade is, `elapsed` after A, 0-1: it waits for the medium to go in, and a rig's lid or tray shuts
     /// first, so its fade keeps its end and runs after the clunk.
     pub fn fade_at(&self, elapsed: Duration) -> f32 {
@@ -682,6 +743,25 @@ impl Scene {
         ((cx - w / 2.0) as i32, (cy - h / 2.0) as i32, w as i32, h as i32)
     }
 
+    /// The case on its way back to its place in the row, for the rests check (`scene_check::case_over_console`): from half
+    /// way it is in the row, behind the stage the console stands on; `under` says whether it was painted under the console.
+    fn record_case(&self, elapsed: Duration, opens: bool, under: bool) {
+        if !crate::scene_check::recording() || !self.returning() {
+            return;
+        }
+        let back = case_back(elapsed, opens).1;
+        if back <= 0.0 {
+            return;
+        }
+        let (x, y, w, h) = self.with_case(elapsed, (self.from.0, self.from.1, self.front.w, self.front.h));
+        let what = match (back >= CASE_IN_ROW, under) {
+            (true, true) => "the case back in its row, under the console",
+            (true, false) => "the case back in its row",
+            (false, _) => "the case on its way back to its row",
+        };
+        crate::scene_check::put(what, x, y, w, h, crate::scene_check::Rests::Held("going back into its row"), true);
+    }
+
     /// The case goes back to its [`Home`] instead of fading: Cozy, with a home.
     fn returning(&self) -> bool {
         // A console that turns round for its game (the PSP, `Rigged::front`) and a front-loader's door (the NES) keep
@@ -712,9 +792,10 @@ impl Scene {
     /// then shutting and on its way to its [`Home`]; without a home, `fade` of 256 as before (`tray_now` says where what a
     /// cover uncovers shows). Returns false once there is nothing of it to draw.
     #[allow(clippy::too_many_arguments)]
-    fn draw_case(&self, c: &mut Canvas, elapsed: Duration, cover: Option<f32>, fade: u32, dim: f32, clip: (i32, i32)) -> bool {
+    fn draw_case(&self, c: &mut Canvas, elapsed: Duration, cover: Option<f32>, fade: u32, dim: f32, clip: (i32, i32), under: bool) -> bool {
         let (front, from) = (&self.front, self.from);
         let (fx, fy, fw, fh) = (from.0 as f32, from.1 as f32, front.w as f32, front.h as f32);
+        self.record_case(elapsed, cover.is_some(), under);
         let Some(home) = self.home.as_ref().filter(|_| self.returning()) else {
             if fade == 0 {
                 return false;
@@ -735,6 +816,15 @@ impl Scene {
                     art::draw_hinged(c, front, (fx, fy), (fw, fh), open * (1.0 - shut), COVER_OPEN_DEG, 256, clip);
                 }
                 _ => art::blit(c, front, from.0, from.1, 256, clip),
+            }
+            return true;
+        }
+        // A lying case (Lived-in shelf: its home is the lying picture, `Home::spine` wider than high) lies in its stack on
+        // the page under the scene already: its front fades where it is, it does not turn into a spine standing there.
+        if home.spine.w > home.spine.h {
+            let a = (256.0 * (1.0 - back)).round() as u32;
+            if a > 0 {
+                art::blit(c, front, from.0, from.1, a, clip);
             }
             return true;
         }
@@ -784,7 +874,7 @@ impl Scene {
     pub fn load_rig_scaled(&mut self, blocks: f32) {
         if !self.rig_asked {
             if ir::label_away(&self.system) {
-                self.game_back = crate::media::game_back(self.kind).map(|p| Rc::new(p.clone()));
+                self.game_back = crate::media::game_rear(self.kind, self.look.plastic).map(Rc::new);
             }
             // The SP also needs its bottom-slot geometry in Quick and without playful motion.
             let sp = crate::system_art::picture_id(&self.system) == "gba-sp";
@@ -797,17 +887,60 @@ impl Scene {
     /// for the plain animation.
     pub fn paint(&mut self, c: &mut Canvas, elapsed: Duration, sprite: Option<&Sprite>, stage: Stage) {
         if self.rig.is_some() {
-            return self.paint_rig(c, elapsed, stage);
+            self.paint_rig(c, elapsed, stage);
+        } else {
+            self.paint_plain(c, elapsed, sprite, stage);
+            self.paint_plain_display(c, elapsed, sprite, stage);
         }
-        self.paint_plain(c, elapsed, sprite, stage);
-        self.paint_plain_display(c, elapsed, sprite, stage);
+        self.paint_tucked(c, elapsed);
+    }
+
+    /// How far the photos are in their case, `elapsed` into the scene (the way back runs it backwards): 0 sticking out of
+    /// its top, 1 wholly in, by the moment the case shuts (`eject::Way::case_shut_at`). A host that holds the way back
+    /// for them says it itself (`tuck_p`).
+    pub fn tuck(&self, elapsed: Duration) -> f32 {
+        if let Some(p) = self.tuck_p {
+            return p.clamp(0.0, 1.0);
+        }
+        let shut = cabinet::INSERT_COZY.mul_f32(0.06);
+        let from = shut + TUCK;
+        if elapsed >= from {
+            0.0
+        } else {
+            let k = (from - elapsed).as_secs_f32() / TUCK.as_secs_f32();
+            let k = k.min(1.0);
+            k * k * (3.0 - 2.0 * k)
+        }
+    }
+
+    /// The photos over the case: only what is above its top edge is painted, the rest is in the case (behind its front).
+    /// They come and go with the case (its fade), and stay in once it is on its way home.
+    fn paint_tucked(&self, c: &mut Canvas, elapsed: Duration) {
+        if self.tucked.is_empty() || (self.returning() && case_back(elapsed, self.opens()).1 > 0.0) {
+            return;
+        }
+        let p = self.tuck(elapsed);
+        let shown = (self.case_shown(elapsed) * 256.0) as u32;
+        if p >= 1.0 || shown == 0 {
+            return;
+        }
+        let case = (self.from.0, self.from.1, self.front.w, self.front.h);
+        let n = self.tucked.len();
+        for (i, pic) in self.tucked.iter().enumerate() {
+            let (x, y) = tucked_at(case, (pic.w, pic.h), i, n, p);
+            if crate::scene_check::recording() {
+                crate::scene_check::put(format!("photo {i} into its case"), x, y, pic.w, pic.h, crate::scene_check::Rests::Held("in its case"), true);
+            }
+            art::blit(c, pic, x, y, shown.min(256), (0, case.1.max(0)));
+        }
     }
 
     /// A handheld's display lit on its plain picture (`plain_display`), over the console once its game is in: where the
     /// rig lights its own (`power_on`).
     fn paint_plain_display(&mut self, c: &mut Canvas, elapsed: Duration, sprite: Option<&Sprite>, Stage { floor, k }: Stage) {
         if let (Some(sp), true) = (sprite, self.system == "j2me") {
-            phone_loading(c, elapsed, sp, self.cozy, Stage { floor, k });
+            let foot = self.plain_foot(sp);
+            phone_loading(c, elapsed, sp, foot, self.cozy, Stage { floor, k });
         }
         let (Some(_), Some(sp), Some(d)) = (self.power_on, sprite, plain_display(&self.system)) else { return };
         let lit = ir::pose(ir::Kind::Cart, elapsed).lit;
@@ -825,7 +958,8 @@ impl Scene {
             })
             .clone();
         // It stands where `paint_plain` put it once risen.
-        lit_over(c, &pic, (c.w - sp.w as i32) / 2, floor - (10.0 * k) as i32 - sp.h as i32, lit);
+        let foot = self.plain_foot(sp);
+        lit_over(c, &pic, (c.w - sp.w as i32) / 2, floor - sp.h as i32 + foot, lit);
     }
 
     /// Every system without a rig, and every system in Quick: the console comes up from below and the medium goes in.
@@ -847,9 +981,11 @@ impl Scene {
             crate::playful::Keys::default()
         };
         art::dim(c, 0, c.h, 256 - (st.dim * 256.0) as u32);
+        crate::scene_check::new_layer();
         // The console, up from below the screen.
         let (sw, sh) = sprite.as_ref().map_or((px(360), px(120)), |s| (s.w as i32, s.h as i32));
-        let base = floor - px(10);
+        // It stands on the floor (18.11.: 10 pixels over it, it floated over the shelf's board).
+        let base = floor + sprite.map_or(0, |sp| self.plain_foot(sp));
         let sx = (c.w - sw) / 2;
         let sy_final = base - sh;
         // From wholly under the screen's edge, also on a tall phone held upright (its floor is high up the screen).
@@ -857,6 +993,26 @@ impl Scene {
         // It stands on something: a soft contact shadow under it, as under the case on the shelf (art::soft_shadow), a
         // console that floated over the floor looked pasted on (polish review 12.11.).
         art::soft_shadow(c, sx + sw / 12, sy + sh - px(5), sw - sw / 6, px(9), px(12), 0.6 * st.rise, (0, c.h));
+        if crate::scene_check::recording() {
+            // The stage's floor, and the console on it once it is up (on its way up from below the screen it is held).
+            crate::scene_check::set_origin(0, 0);
+            crate::scene_check::surface("the stage's floor", floor, 0, 0, c.w);
+            let handheld = matches!(ff, cabinet::FormFactor::HandheldCart | cabinet::FormFactor::UmdCase | cabinet::FormFactor::CardBox);
+            let rests = if handheld {
+                crate::scene_check::Rests::Held("a handheld, in the hands")
+            } else if st.rise >= 1.0 {
+                crate::scene_check::Rests::Settled
+            } else {
+                crate::scene_check::Rests::Held("coming up from below the screen")
+            };
+            crate::scene_check::put("the console (plain)", sx, sy, sw, sh, rests, true);
+        }
+        // From half way home the case is in its row, behind the stage the console stands on: painted before the console,
+        // so the console stands in front of it (it went back into the row through the console, ritual 19.11.).
+        let case_under = self.returning() && case_back(elapsed, self.opens()).1 >= CASE_IN_ROW;
+        if case_under {
+            self.draw_case(c, elapsed, None, 256, st.dim, (0, c.h), true);
+        }
         if let Some(sp) = &sprite {
             c.blit_sprite(sp, sx, sy, ((1.0 - st.rise) * 200.0) as u8);
         } else {
@@ -995,7 +1151,9 @@ impl Scene {
         if fly == 0.0 {
             draw_game(c);
         }
-        self.draw_case(c, elapsed, None, case_fade, st.dim, (0, c.h));
+        if !case_under {
+            self.draw_case(c, elapsed, None, case_fade, st.dim, (0, c.h), false);
+        }
         if fly > 0.0 {
             draw_game(c);
             if let (true, Some(sp)) = (behind_edge, sprite) {
@@ -1026,15 +1184,39 @@ impl Scene {
         let back = self.power_on.is_some() && pics.front_lit.is_some();
         let pose = ir::pose_of(rig.kind(), mechanism_time, back);
         art::dim(c, 0, c.h, 256 - (st.dim * 256.0) as u32);
+        crate::scene_check::new_layer();
         let (bw, bh) = (pics.base.w, pics.base.h);
         let px = |n: i32| (n as f32 * k) as i32;
         let ox = ((c.w - bw) / 2) as f32;
-        let top = floor - px(10) - bh;
+        // It stands on the floor (18.11.: 10 pixels over it, it floated over the shelf's board).
+        // A cartridge going in from below (the Advance SP's) sticks out under it: that one is held in the hands, over the
+        // floor, as it always was.
+        let top = if rig.bottom_slot { floor - px(10) - bh } else { floor - bh + pics.foot };
         // From wholly under the screen's edge, also on a tall phone held upright (its floor is high up the screen).
         let oy = top as f32 + (1.0 - st.rise) * (bh + px(160)).max(c.h - top) as f32 + pose.dip * scale;
         // The same contact shadow as under a plain console (`paint_plain`).
-        art::soft_shadow(c, ox as i32 + bw / 12, (oy + bh as f32) as i32 - px(5), bw - bw / 6, px(9), px(12), 0.6 * st.rise, (0, c.h));
+        // Under its visible foot (not the see-through rows of its art under it, `Rigged::foot`).
+        let feet = oy + (bh - if rig.bottom_slot { 0 } else { pics.foot }) as f32;
+        art::soft_shadow(c, ox as i32 + bw / 12, feet as i32 - px(5), bw - bw / 6, px(9), px(12), 0.6 * st.rise, (0, c.h));
         let shade = 256 - ((1.0 - st.rise) * 200.0) as u32;
+        if crate::scene_check::recording() {
+            // The console: its body and the layer over its slot together. A handheld is in the player's hands; a console
+            // stands on the floor once it is up, but for the moment it is pressed down as its game seats (`pose.dip`).
+            crate::scene_check::set_origin(0, 0);
+            crate::scene_check::surface("the stage's floor", floor, 0, 0, c.w);
+            let handheld = matches!(self.ff, FormFactor::HandheldCart | FormFactor::UmdCase | FormFactor::CardBox);
+            let rests = if handheld {
+                crate::scene_check::Rests::Held("a handheld, in the hands")
+            } else if st.rise < 1.0 {
+                crate::scene_check::Rests::Held("coming up from below the screen")
+            } else if pose.dip != 0.0 {
+                crate::scene_check::Rests::Held("pressed down as its game seats")
+            } else {
+                crate::scene_check::Rests::Settled
+            };
+            let layers: Vec<&Pic> = std::iter::once(&pics.base).chain(pics.over.as_ref()).collect();
+            crate::scene_check::put_pics("the console (its real mechanism)", &layers, ox.round() as i32, oy.round() as i32, rests, true);
+        }
         let screen = |p: (f32, f32)| (ox + p.0 * scale, oy + p.1 * scale);
         let all = (0, c.h);
 
@@ -1130,7 +1312,26 @@ impl Scene {
             }
             return;
         }
-        if rig.behind && flying {
+        // From half way home the case is in its row, behind the stage the console stands on: under the console (as in
+        // `paint_plain`).
+        let case_under = self.returning() && case_back(elapsed, opens).1 >= CASE_IN_ROW;
+        if case_under {
+            self.draw_case(c, elapsed, opens.then_some(pose.out), case_fade, st.dim, all, true);
+        }
+        // On its way from the case to over its slot (`fly` < 1) a medium is in front of the whole console, as a
+        // front-loader's is: it goes behind the console's parts only from over its slot (19.11.: on the Mini's screen,
+        // where the console is big beside the case, the SNES cartridge passed through the console, behind its top and
+        // the layer over its slot). A cover it slides in behind (the PSP's, `Lid::medium_behind`) stays over it.
+        let way_in_front = flying && pose.fly < 1.0 && !matches!(rig.mech(), Mech::Lid(l) if l.medium_behind);
+        // A slot at the console's back (`rig.behind`): over its slot the medium is already a little behind the console's
+        // top, so on the last stretch (`REAR_SINK_FROM`) its copy in front fades into the one behind: no jump.
+        let sink = if rig.behind && way_in_front {
+            let t = ((pose.fly - REAR_SINK_FROM) / (1.0 - REAR_SINK_FROM)).clamp(0.0, 1.0);
+            t * t * (3.0 - 2.0 * t)
+        } else {
+            0.0
+        };
+        if rig.behind && flying && (!way_in_front || sink > 0.0) {
             draw_medium(c);
         }
         // A lid hinged behind the console's rear wall (`Lid::tuck`) stands up out of it: while it is open it is drawn first,
@@ -1198,10 +1399,12 @@ impl Scene {
         // A disc's cover swings open towards you about the hinge on its left edge, in perspective (its free edge comes
         // nearer and grows), darker as it turns from the light; never squeezed flat to a hairline. Then the case shuts
         // and goes home (`Home`).
-        self.draw_case(c, elapsed, opens.then_some(pose.out), case_fade, st.dim, all);
+        if !case_under {
+            self.draw_case(c, elapsed, opens.then_some(pose.out), case_fade, st.dim, all, false);
+        }
         // A disc coming down is in front of everything; once it is down the parts in front of it hide it.
         let coming_down = rig.kind() != ir::Kind::Cart && pose.landed < 1.0;
-        if flying && !rig.behind {
+        if flying && !rig.behind && !way_in_front {
             // A shadow on the console under it: darker as it gets close.
             if coming_down && pose.fly >= 1.0 {
                 let at = screen(rig.seat.at);
@@ -1225,12 +1428,25 @@ impl Scene {
                 lid_lit_over(c, lid, lit, &pics, (ox, oy), crate::cabinet::ease_out(opening), pose.lit);
             }
         }
-        if flying && !rig.behind && coming_down {
+        if flying && !rig.behind && coming_down && !way_in_front {
             draw_medium(c);
         }
         if let Mech::Lid(l) = rig.mech() {
             if lid_later && !lid_behind {
                 draw_lid(c, l, &pics, (ox, oy), pose.open, shade);
+            }
+        }
+        // On its way: in front of the console (`way_in_front`); a rear slot's fading into the one behind (`sink`).
+        if way_in_front && sink <= 0.0 {
+            draw_medium(c);
+        } else if way_in_front && sink < 1.0 {
+            let under = c.pixels().to_vec();
+            draw_medium(c);
+            let keep = (sink * 255.0) as u32;
+            for (p, &u) in c.pixels_mut().iter_mut().zip(&under) {
+                if *p != u {
+                    *p = mix(*p, u, keep);
+                }
             }
         }
         // The console takes it: its power light comes on, a moment later its display (a handheld's start, `power_on`).
@@ -1383,9 +1599,10 @@ fn phone_extent(rig: Option<&ir::Rig>, (bw, bh): (i32, i32)) -> (f32, f32) {
 pub fn phone_floor(rig: Option<&ir::Rig>, base: (i32, i32), blocks: i32, h: i32, k: f32) -> i32 {
     let (_, tall) = phone_extent(rig, base);
     let gap = (HANDHELD_FLOOR_GAP as f32 * k) as i32;
-    // The floor is 10 handheld pixels under the console's bottom (`paint_rig`); the medium's top at least 16 down.
-    let lowest_top = 16 + (tall * blocks as f32) as i32 + (10.0 * k) as i32;
-    (h - gap).max(lowest_top).min(h)
+    // The console stands on the floor (`paint_rig`); the medium's top at least 16 down.
+    let lowest_top = 16 + (tall * blocks as f32) as i32;
+    // Never on the screen's very edge: a little room under it, as when it stood 10 pixels over the floor.
+    (h - gap).max(lowest_top).min(h - (10.0 * k) as i32)
 }
 
 /// A phone's start for a rig (None: the plain animation's console, `base` its room): screen pixels per art pixel, and the
@@ -1400,13 +1617,150 @@ pub fn phone_stage(rig: Option<&ir::Rig>, base: (i32, i32), (w, h): (i32, i32)) 
 /// screen `w` wide: as `Scene::paint_rig` places it, at rest.
 pub fn hover_at(rig: &ir::Rig, base: (i32, i32), blocks: i32, stage: Stage, w: i32) -> (f32, f32) {
     let (bw, bh) = (base.0 * blocks, base.1 * blocks);
-    let top = stage.floor - (10.0 * stage.k) as i32 - bh;
+    let top = if rig.bottom_slot { stage.floor - (10.0 * stage.k) as i32 - bh } else { stage.floor - bh };
     (((w - bw) / 2) as f32 + rig.seat.hover.0 * blocks as f32, top as f32 + rig.seat.hover.1 * blocks as f32)
 }
 
 #[cfg(test)]
+thread_local! {
+    /// How often a scene looked for its plain picture's foot (`Scene::plain_foot`).
+    static FOOT_SCANS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+}
+
+#[cfg(test)]
 mod tests {
+    /// Physics, nothing floats: each handheld's power light in the Cabinet sits on its body, the pixels round it solid, and
+    /// clear of its display (`PlainDisplay::led`).
+    #[test]
+    fn each_handhelds_power_light_sits_on_its_body_not_beside_it_or_on_its_glass() {
+        let mut lit = 0;
+        for (id, d) in DISPLAYS {
+            let Some((fx, fy)) = d.led else { continue };
+            lit += 1;
+            let s = crate::system_art::get(id).unwrap_or_else(|| panic!("{id}: its picture"));
+            let (x, y) = ((fx * s.w as f32) as i32, (fy * s.h as f32) as i32);
+            for (dx, dy) in [(0, 0), (-1, 0), (1, 0), (0, -1), (0, 1)] {
+                let (px, py) = (x + dx, y + dy);
+                assert!(px >= 0 && py >= 0 && px < s.w as i32 && py < s.h as i32, "{id}: inside the picture");
+                assert_eq!(s.px[(py as u32 * s.w + px as u32) as usize] >> 24, 255, "{id}: solid at {px},{py}, not in the air");
+            }
+            let glass = crate::insert_rig::display_mask(&s.px, s.w as usize, s.h as usize, d.at.iter().map(|&(a, b)| (a * s.w as f32, b * s.h as f32)), d.fuzz);
+            assert!(!glass[(y as u32 * s.w + x as u32) as usize], "{id}: the light is not on the display");
+        }
+        assert!(lit >= 6, "the Game Boy, Color, GBA, SP, Game Gear and PSP have their light");
+    }
+
     use super::*;
+
+    /// A plain console's foot (the see-through rows under it) is looked for once per launch, not in every frame: from
+    /// bd1269e1a (18.11.) every frame scanned the whole picture for it, and a launch frame cost about 1.25 times as much
+    /// (tests/launch_frames.rs went red in loaded gates, 19.11.). The handheld and the console, Cozy and Quick, with the
+    /// handheld's lit display (`paint_plain_display`) and the phone's loading bar, which ask for it too.
+    #[test]
+    fn a_plain_console_looks_for_its_foot_once_per_launch() {
+        for (system, cozy) in [("gbc", true), ("gbc", false), ("megadrive", true), ("j2me", true)] {
+            let mut s = scene(system, cozy);
+            s.power_on = Some(0x80ff80);
+            let before = FOOT_SCANS.with(|n| n.get());
+            let stage = Stage { floor: 1400, k: 1.0 };
+            for ms in (0..2400).step_by(48) {
+                frame(&mut s, ms, stage);
+            }
+            let scans = FOOT_SCANS.with(|n| n.get()) - before;
+            assert!(scans <= 1, "{system} (cozy {cozy}): the foot was looked for {scans} times in 50 frames");
+        }
+    }
+
+    /// 19.11. (Alex, pocket-ui mini's demo): the SNES cartridge went through the console on its way to its slot. On a
+    /// small screen (the Miyoo's 750 x 560, a phone held across) the console stands big beside the case, and the medium
+    /// was painted under the layer over a top slot (SNES, Mega Drive, Master System, PC Engine) or under the whole console
+    /// (a slot at the back: Game Boy, GBA, Game Gear) for its whole way. Missed before: on the big screen the path never
+    /// crosses the console. Now: the medium painted one colour, each frame painted with the console and without its
+    /// pictures (body and the layer over its slot); on its way nothing of it is hidden, only a game for a slot at the back
+    /// fades behind the console's top on the last stretch (`REAR_SINK_FROM`), smoothly (frames 10 ms apart).
+    #[test]
+    fn a_game_on_its_way_to_its_slot_never_goes_through_the_console() {
+        crate::cozy_extras::set(crate::cozy_extras::Extras::default());
+        crate::motion::set_cozy(true);
+        const MARK: u32 = 0xffff_00ff;
+        let (w, h) = (750usize, 560usize);
+        // How much of the medium's colour is seen, in pixels: a pixel of it mixed with the console's counts by its share.
+        let seen = |b: &[u32]| {
+            b.iter()
+                .map(|&p| {
+                    let (r, g, b) = (((p >> 16) & 255) as i32, ((p >> 8) & 255) as i32, (p & 255) as i32);
+                    if (r - b).abs() < 24 { (r.min(b) - g).max(0) } else { 0 }
+                })
+                .sum::<i32>() as usize
+                / 255
+        };
+        let mut wrong = Vec::new();
+        for system in ["snes", "megadrive", "mastersystem", "pcengine", "gb", "gbc", "gba", "gamegear", "nes", "psx"] {
+            let mut s = scene(system, true);
+            s.from = (40, 110, 160, 230);
+            s.front = Rc::new(Pic::new(160, 230, 0xff40_6080));
+            s.game = Some(Rc::new(Pic::new(90, 100, MARK)));
+            let kind = s.kind;
+            let Some(f) = ir::files(system, kind) else { continue };
+            let base = {
+                let dim = |at: usize| i32::from_be_bytes(f.base[at..at + 4].try_into().unwrap());
+                (dim(16), dim(20))
+            };
+            let (whole, stage) = phone_stage(Some(&f.rig), base, (w as i32, h as i32));
+            drop(f);
+            s.load_rig(whole);
+            let Some(rig) = s.rig.clone() else { continue };
+            let clear = |p: &Pic| Pic::new(p.w, p.h, 0);
+            let bare = Rc::new(Rigged {
+                rig: rig.rig,
+                front: rig.front.clone(),
+                base: clear(&rig.base),
+                over: rig.over.as_ref().map(clear),
+                top: rig.top.clone(),
+                under: rig.under.clone(),
+                scale: rig.scale,
+                lit: rig.lit.clone(),
+                lid_lit: rig.lid_lit.clone(),
+                front_lit: rig.front_lit.clone(),
+                edge: Default::default(),
+                foot: rig.foot,
+            });
+            let paint = |s: &mut Scene, ms: u64| {
+                let mut buf = vec![0u32; w * h];
+                s.paint(&mut Canvas::new(&mut buf, w as u32, h as u32), Duration::from_millis(ms), None, stage);
+                seen(&buf)
+            };
+            let (mut before, mut on_way, mut over_slot) = (0usize, 0, 0);
+            for ms in (0..4000u64).step_by(10) {
+                let pose = ir::pose_of(rig.rig.kind(), Duration::from_millis(ms), false);
+                if pose.fly <= 0.0 {
+                    continue;
+                }
+                if pose.fly >= 1.0 {
+                    over_slot += 1;
+                    if over_slot > 3 {
+                        break;
+                    }
+                } else {
+                    on_way += 1;
+                }
+                s.rig = Some(rig.clone());
+                let with = paint(&mut s, ms);
+                s.rig = Some(bare.clone());
+                let without = paint(&mut s, ms);
+                let hidden = without.saturating_sub(with);
+                if pose.fly < REAR_SINK_FROM && hidden > 40 {
+                    wrong.push(format!("{system} {ms} ms (fly {:.2}): {hidden} px of the game behind the console on its way", pose.fly));
+                }
+                if hidden > before + 600 {
+                    wrong.push(format!("{system} {ms} ms (fly {:.2}): {} px more of the game behind the console at once", pose.fly, hidden - before));
+                }
+                before = hidden;
+            }
+            assert!(on_way > 5, "{system}: frames on its way");
+        }
+        assert!(wrong.is_empty(), "{}", wrong.join("\n"));
+    }
 
     fn scene(system: &str, cozy: bool) -> Scene {
         let hardware = if system == "gba-sp" { "gba" } else { system };
@@ -1415,7 +1769,7 @@ mod tests {
         let look = Look { color: 0x8040c0, band: 0x8040c0, plastic: art::plastic(system), tape: false };
         let front = Rc::new(Pic::new(120, 180, 0xff40_6080));
         let game = Rc::new(Pic::new(90, 90, 0xffc0_c0c0));
-        Scene { system: system.into(), ff: FormFactor::of(hardware), medium, look, title: "T".into(), kind, has_cover: false, front, from: (40, 40, 120, 180), game: Some(game), game_back: None, cozy, at_drive: None, rig: None, rig_asked: false, home: None, power_on: None, plain_lit: None }
+        Scene { system: system.into(), ff: FormFactor::of(hardware), medium, look, title: "T".into(), kind, has_cover: false, front, from: (40, 40, 120, 180), game: Some(game), game_back: None, cozy, at_drive: None, rig: None, rig_asked: false, home: None, power_on: None, plain_lit: None, plain_foot: None, tucked: Vec::new(), tuck_p: None }
     }
 
     fn frame(s: &mut Scene, ms: u64, stage: Stage) -> Vec<u32> {
@@ -1430,6 +1784,57 @@ mod tests {
     }
 
     const STAGE: Stage = Stage { floor: 1000, k: 1.0 };
+
+    /// Nothing floats (Variant A, 19.11.: the session's photos go into the case on the way back): at every moment of the
+    /// tuck, for one to three photos, each photo's lower part is in the case (its bottom below the case's top edge, its
+    /// top above it while it sticks out), within the case's width; at 1 every one is wholly in.
+    #[test]
+    fn the_photos_slide_into_their_case_and_never_hang_over_it() {
+        let case = (300, 400, 120, 180);
+        let (pw, ph) = (100, 118);
+        for n in 1..=3 {
+            for i in 0..n {
+                let mut last = i32::MIN;
+                for k in 0..=40 {
+                    let p = k as f32 / 40.0;
+                    let (x, y) = tucked_at(case, (pw, ph), i, n, p);
+                    assert!(y + ph > case.1 + ph / 3, "{n}/{i} at {p}: not held in the case (bottom {} over the top {})", y + ph, case.1);
+                    assert!(y + ph <= case.1 + case.3, "{n}/{i} at {p}: lower than the case's bottom");
+                    assert!(x >= case.0 - pw / 6 && x + pw <= case.0 + case.2 + pw / 6, "{n}/{i} at {p}: beside the case");
+                    assert!(y >= last, "{n}/{i}: it only ever goes down into the case");
+                    last = y;
+                }
+                assert!(tucked_at(case, (pw, ph), i, n, 1.0).1 >= case.1, "{n}/{i}: wholly in at the end");
+            }
+        }
+    }
+
+    /// The way back paints the session's photos over the case's top while they stick out, and nothing of them once they are
+    /// in (by the case's shutting); without photos nothing changes.
+    #[test]
+    fn the_way_back_shows_the_photos_going_into_the_case() {
+        let mut s = scene("gba", true);
+        let photo = Rc::new(Pic::new(100, 118, 0xfff4_f0e8));
+        let at = crate::eject::photo_hold_scene().as_millis() as u64;
+        let whites = |px: &[u32]| px.iter().filter(|p| (**p & 0xff_ffff) == 0xf4f0e8).count();
+        assert_eq!(whites(&frame(&mut s, at, STAGE)), 0, "no photos: nothing of them");
+        s.tucked = vec![photo.clone(), photo];
+        s.tuck_p = Some(0.0);
+        let out = frame(&mut s, at, STAGE);
+        assert!(whites(&out) > 500, "sticking out of the case: {}", whites(&out));
+        // Only above the case's top: what is below it is in the case.
+        let below: usize = (s.from.1 as usize..1600).map(|y| (0..720).filter(|&x| (out[y * 720 + x] & 0xff_ffff) == 0xf4f0e8).count()).sum();
+        assert_eq!(below, 0, "a photo shows below the case's top edge");
+        s.tuck_p = Some(0.5);
+        let half = frame(&mut s, at, STAGE);
+        assert!(whites(&half) < whites(&out) && whites(&half) > 0, "it slides down");
+        s.tuck_p = Some(1.0);
+        assert_eq!(whites(&frame(&mut s, at, STAGE)), 0, "wholly in");
+        // Without a hold, by the scene's moment: in by the case's shutting.
+        s.tuck_p = None;
+        let shut = cabinet::INSERT_COZY.mul_f32(0.06);
+        assert!(s.tuck(shut) >= 1.0 && s.tuck(shut + TUCK + Duration::from_millis(1)) == 0.0);
+    }
 
     #[test]
     fn a_system_without_a_rig_shows_the_plain_animation_never_a_gap() {
@@ -1590,6 +1995,22 @@ mod tests {
     }
 
     #[test]
+    fn a_handhelds_switch_clicks_as_its_power_light_comes_on() {
+        let hit = |c: &Cue| c.after + ui_sound::hit_at(c.sound) + SOUND_LEAD;
+        for system in ["gb", "gba", "gamegear", "nds", "ngpc", "psp"] {
+            let kind = Game::of(system, "x.rom");
+            let cue = switch_on_cue(system, kind);
+            assert_eq!(cue.sound, Sound::SwitchOn);
+            assert!(ui_sound::is_case_sound(cue.sound), "Case sounds off silences it");
+            let back = system == "psp";
+            let rig = ir::files(system, kind).unwrap().rig.kind();
+            // The power light starts coming up at the switch's click, not before, and it is still dark a moment before.
+            let at = hit(&cue);
+            assert!(ir::pose_of(rig, at, back).led < 0.02 && ir::pose_of(rig, at + Duration::from_millis(40), back).led > 0.0, "{system}: {at:?}");
+        }
+    }
+
+    #[test]
     fn a_phone_keeps_every_rig_and_its_medium_on_screen_whatever_way_it_is_held() {
         // With the scenes of 11.11. (NES, GBC, PSP, Master System, Game Gear, PC Engine, 3DS), which Android shows too.
         for system in ["psx", "ps2", "gamecube", "snes", "snes-us", "gba", "gba-sp", "gb", "n64", "megadrive", "dreamcast", "saturn", "xbox", "nds", "wii", "nes", "gbc", "psp", "mastersystem", "gamegear", "pcengine", "3ds"] {
@@ -1604,7 +2025,7 @@ mod tests {
                 let k = n as f32 / ir::SCALE;
                 assert!(n * base.0 <= w, "{system} {n}: wider than {w}");
                 let floor = phone_floor(Some(&f.rig), base, n, h, k);
-                let top = floor - (10.0 * k) as i32 - base.1 * n;
+                let top = floor - base.1 * n;
                 let bottom = top + base.1 * n;
                 assert!(top >= 0 && bottom <= h, "{system} {n} on {w}x{h}: {top}..{bottom}");
                 let s = f.rig.seat;
@@ -2010,7 +2431,7 @@ mod tests {
         "supervision", "gamate", "gameandwatch", "arduboy", "pico-8", "tic-80", "psp", "pspockets", "nds", "3ds", "n3ds", "psvita",
     ];
     /// Handhelds with a rig and a display in it (`rig.json`): the power light, then the display on the console's picture.
-    const RIG_DISPLAYS: &[&str] = &["gb", "gbc", "gba", "gamegear", "nds", "3ds", "ngpc", "ngp"];
+    const RIG_DISPLAYS: &[&str] = &["gb", "gbc", "gba", "gamegear", "nds", "3ds", "ngpc", "ngp", "atarilynx", "wonderswan"];
 
     #[test]
     fn a_handhelds_start_ends_in_its_display_light_a_consoles_on_a_tv_in_the_fade() {

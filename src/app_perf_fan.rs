@@ -24,7 +24,7 @@ use pocket_ui::power::{Fan, Performance};
 use pocket_ui::text::Face;
 use pocket_ui::touch::Area;
 
-use super::{App, SettingsPage, UserEvent, CANCEL, CONFIRM, host_bin, NU_BTN_PAD, NU_PAD, NU_PILL, NU_SMALL};
+use super::{App, SettingsPage, UserEvent, CANCEL, CONFIRM, host_bin, NU_BTN_PAD, NU_PAD, NU_SMALL};
 
 /// How often the open page reads the sensors.
 const READ_EVERY: Duration = Duration::from_secs(1);
@@ -331,14 +331,14 @@ impl App {
         c.clear(pal().void);
         let (pad, row, font) = (NU_PAD, pocket_ui::type_scale::row(66, 36), 36u32);
         self.sheet_header(c, pocket_ui::perf_fan_page::title());
-        let (top, right) = (pad + NU_PILL + 12, c.w - pad);
+        let (top, right) = (pocket_ui::kit::header_bottom(c.h) + 12, c.w - pad);
         let rows = rows();
         // The readout's panel keeps its place above the hint bar even where the rows would leave no room for it (1280x720
         // in Large text: its last lines ran under the bar): the rows give up height, down to what their type needs; the
         // descriptions give way first (below).
         let (line_h, head) = (pocket_ui::type_scale::line(32, 16), 46 + pocket_ui::type_scale::grow(24));
         let lines = page.readout_lines();
-        let hints_top = c.h - pad - NU_PILL;
+        let hints_top = pocket_ui::kit::hint_bar_top(c.h);
         let panel_min = head + (lines.len() as i32 + 1) / 2 * line_h + 14;
         let row = row.min((hints_top - 22 - panel_min - 12 - 20 - top) / rows.len() as i32).max(pocket_ui::type_scale::px(font) as i32 + 16);
         for (i, r) in rows.iter().enumerate() {
@@ -377,8 +377,7 @@ impl App {
             .map(|(t, color)| (self.text.wrap_prose(Face::Body, NU_SMALL, t, width), color));
         // Where the descriptions would end, to place the readout.
         let y_full = y + wrapped.iter().map(|(l, _)| l.len() as i32 * desc_step + 6).sum::<i32>() + 14;
-        // The readout, in a panel above the hints; the note takes the room left above it (with larger text it may
-        // be shortened, ending with "…").
+        // The readout, in a panel above the hints; the note takes the room left above it, whole or not at all.
         // Two lines side by side when the four under each other would reach into the hints (the Mini V1's 960 lines,
         // docs/DEVICES.md); on 1080 lines they never do, at every text size.
         let tall = head + lines.len() as i32 * line_h + 14;
@@ -414,11 +413,16 @@ impl App {
         }
         y += 14 * gaps;
         let step = pocket_ui::type_scale::line(24, 8);
-        // As many lines as leave the panel (12 px under them) clear of the hints.
+        // Whole where the room clear of the hints (the panel 12 px under it) holds it, else left out: it says which settings
+        // win, and cut it reads as something else. With the flat hint bar a 1080-line screen at Medium had room for part of
+        // it, and it ended in "…" (classic_profile, 18.11.2026).
         let room = ((hints_top - 8 - panel_h - 12 - y) / step).max(0) as usize;
-        for line in self.text.wrap_prose_at_most(Face::Body, 24, pocket_ui::perf_fan_page::precedence_note(), width, room) {
-            self.text.draw(c, Face::Body, 24, left, y, pal().quiet, &line);
-            y += step;
+        let note = self.text.wrap_prose(Face::Body, 24, pocket_ui::perf_fan_page::precedence_note(), width);
+        if note.len() <= room {
+            for line in note {
+                self.text.draw(c, Face::Body, 24, left, y, pal().quiet, &line);
+                y += step;
+            }
         }
         let panel_y = (hints_top - 22 - panel_h).max(y + 12);
         pocket_ui::kit::panel(c, pad, panel_y, right - pad, panel_h);

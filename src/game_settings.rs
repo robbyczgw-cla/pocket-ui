@@ -62,8 +62,8 @@ impl Files {
 
     /// The values become the console's; the game's own file goes. False when the card refused.
     pub fn save_for_console(&self, values: &BTreeMap<String, String>) -> bool {
-        crate::fsutil::remove_json(&self.game_file());
         crate::fsutil::write_json(&self.console_file(), values).is_ok()
+            && crate::fsutil::remove_json(&self.game_file())
     }
 
     /// The values become this game's own. False when the card refused.
@@ -98,6 +98,48 @@ impl Files {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn failed_console_write_preserves_the_game_and_its_backup() {
+        let dir = crate::testutil::TestDir::new("game-settings-console-write");
+        let files = Files::new(&dir, "gba", Path::new("Game.gba"));
+        let old = BTreeMap::from([("scaling".into(), "native".into())]);
+        let new = BTreeMap::from([("scaling".into(), "fullscreen".into())]);
+        assert!(files.save_for_game(&old));
+        assert!(files.save_for_game(&new));
+        let backup = crate::fsutil::backup_path(&files.game_file());
+        let backup_content = std::fs::read(&backup).unwrap();
+
+        std::fs::create_dir(files.console_file()).unwrap();
+        assert!(!files.save_for_console(&new));
+        assert_eq!(files.read(), (new.clone(), Level::Game));
+        assert_eq!(std::fs::read(&backup).unwrap(), backup_content);
+
+        std::fs::remove_dir(files.console_file()).unwrap();
+        assert!(files.save_for_console(&new));
+        assert_eq!(files.read(), (new, Level::Console));
+        assert!(!files.game_file().exists() && !backup.exists());
+    }
+
+    #[test]
+    fn failed_game_cleanup_can_be_retried_after_the_console_write() {
+        let dir = crate::testutil::TestDir::new("game-settings-console-cleanup");
+        let files = Files::new(&dir, "gba", Path::new("Game.gba"));
+        let game = BTreeMap::from([("scaling".into(), "native".into())]);
+        let console = BTreeMap::from([("scaling".into(), "fullscreen".into())]);
+        assert!(files.save_for_game(&game));
+        let backup = crate::fsutil::backup_path(&files.game_file());
+        std::fs::remove_file(&backup).unwrap();
+        std::fs::create_dir(&backup).unwrap();
+
+        assert!(!files.save_for_console(&console));
+        assert_eq!(files.read(), (game, Level::Game));
+        assert_eq!(crate::fsutil::read_json_or_backup(&files.console_file()), Some(console.clone()));
+
+        std::fs::remove_dir(backup).unwrap();
+        assert!(files.save_for_console(&console));
+        assert_eq!(files.read(), (console, Level::Console));
+    }
 
     #[test]
     fn the_game_file_wins_and_keep_follows_the_level() {

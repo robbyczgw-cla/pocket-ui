@@ -1,0 +1,1 @@
+package android.view;public class InputDevice{public static final int SOURCE_GAMEPAD=1025,SOURCE_JOYSTICK=16777232;public static boolean fixtureGamepad;public static int[] getDeviceIds(){return fixtureGamepad?new int[]{1}:new int[0];}public static InputDevice getDevice(int id){return new InputDevice();}public int getSources(){return SOURCE_GAMEPAD;}}

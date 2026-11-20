@@ -5,6 +5,7 @@
 set -u
 . /repo/scripts/image/pins.sh
 . /repo/scripts/image/grub-checks.sh
+. /repo/scripts/image/bios-checks.sh
 sm8250_pins "${MODEL:-rp-mini-v2}"
 IMG=$1
 VERSION=$2
@@ -272,11 +273,17 @@ sort >"$W/lists/storage.expected" <<EOF
 755 0:0 f ./pocket-ui/releases/$V/pocket-splash
 755 0:0 f ./pocket-ui/releases/$V/portmaster-setup.sh
 EOF
-if [ -d "$S/pocket-ui/releases/$V/cores" ]; then
+if [ -f "$S/pocket-ui/releases/$V/cores/gpsp_libretro.so" ]; then
   check "bundled gpSP is the pinned ARM64 core with intact licence, source and recipe" \
     'sh /repo/scripts/image/gba-checks.sh --validate "$S/pocket-ui/releases/$V/cores"'
   sh /repo/scripts/image/gba-checks.sh --files "$V" >>"$W/lists/storage.expected"
-  sort -o "$W/lists/storage.expected" "$W/lists/storage.expected"
+  sort -u -o "$W/lists/storage.expected" "$W/lists/storage.expected"
+fi
+if LC_ALL=C grep -a -q dsperate "$S/pocket-ui/releases/$V/pocket-ui"; then
+  check "DSperate core, matching source and notices are intact" \
+    'python3 -I /repo/scripts/dsperate-files.py --check "$S/pocket-ui/releases/$V/cores"'
+  python3 -I /repo/scripts/image/ds-checks.py "$S/pocket-ui/releases/$V/cores" "$V" >>"$W/lists/storage.expected"
+  sort -u -o "$W/lists/storage.expected" "$W/lists/storage.expected"
 fi
 check "exactly the expected files, owners and modes" 'same "$W/lists/storage" "$W/lists/storage.expected"' ||
   diff "$W/lists/storage.expected" "$W/lists/storage" | sed 's/^/     /'
@@ -307,7 +314,7 @@ check "no dev-ssh marker, no SSH keys" '[ -z "$(find "$S" -name dev-ssh -o -name
 check "no Wi-Fi credentials (iwd, NetworkManager, wpa_supplicant)" \
   '[ -z "$(find "$S" -name "*.psk" -o -name "*.8021x" -o -name "*.nmconnection" -o -name "wpa_supplicant*" -o -path "*/iwd*")" ]'
 check "no recents, saves or games" '[ -z "$(find "$S" -name "recents*" -o -name roms -o -name "*.srm" -o -name "*.state*")" ]'
-check "no BIOS files" '[ -z "$(find "$S" -iname "*bios*")" ] && ! grep -qi bios "$W/lists/fat"'
+check "no BIOS files" 'no_bios_files "$S" "$W/lists/fat" "$V"'
 check "no update left pending (update-pending, previous, dev.env)" \
   '[ ! -e "$S/pocket-ui/update-pending" ] && [ ! -L "$S/pocket-ui/previous" ] && [ ! -e "$S/pocket-ui/dev.env" ]'
 # The programs grow with every release and STORAGE stays $((P2_SIZE / 2048)) MiB until the first boot grows it (debugfs fails when full: 0.3.1).

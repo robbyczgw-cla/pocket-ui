@@ -259,7 +259,7 @@ fn additional_core_on_card(system: &str) -> Option<&'static str> {
         "virtualboy" => Some("beetle_vb"),
         "pico-8" => Some("fake08"),
         "tic-80" => Some("tic80"),
-        "nds" => Some("melondsds"),
+        "nds" => Some("dsperate"),
         "pc" => Some("dosbox_pure"),
         "scummvm" => Some("scummvm"),
         "saturn" => Some("yabause"),
@@ -314,9 +314,12 @@ fn card_missing_bios(system: &str, directory: &Path) -> Option<String> {
 /// Use the card's bundled engine data instead of ROCKNIX's /usr/share directory.
 pub fn prepare_scummvm(bios: &Path) -> bool {
     if !crate::device::brick() || !standalone() { return false; }
+    prepare_scummvm_in(bios, Path::new("/storage/roms/scummvm/.saves"))
+}
+
+fn prepare_scummvm_in(bios: &Path, saves: &Path) -> bool {
     let path = bios.join("scummvm.ini");
     let text = std::fs::read_to_string(&path).unwrap_or_default();
-    let saves = Path::new("/storage/roms/scummvm/.saves");
     let _ = std::fs::create_dir_all(saves);
     if let Some(updated) = crate::hostsys::scummvm_ini(&text, Path::is_dir) {
         let updated = card_scummvm_ini(&updated, bios);
@@ -362,6 +365,41 @@ fn core_on_brick(core: &'static str, standalone: bool) -> &'static str {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn file_source_rule_brick_profile() {
+        let d=crate::testutil::TestDir::new("brick-profile-file-rule");
+        for (rel,seed) in [
+            ("etc/model",b"Trimui Brick Pro\n".as_slice()),
+            ("proc/device-tree/model",b"Trimui Brick Pro\0".as_slice()),
+            ("proc/device-tree/compatible",b"trimui,brick-pro\0".as_slice()),
+            ("sys/firmware/devicetree/base/model",b"Trimui Brick Pro\0".as_slice()),
+            ("sys/firmware/devicetree/base/compatible",b"trimui,brick-pro\0".as_slice()),
+            ("usr/trimui/bin/MainUI",b"Trimui Smart Pro\0".as_slice()),
+            ("sys/class/graphics/fb0/virtual_size",b"1280,2880\n".as_slice()),
+            ("logs/boot.log",b"Reader rule boot log\n".as_slice()),
+            ("input-devices",b"Reader rule input device\n".as_slice()),
+        ] {
+            let file=d.join(rel);std::fs::create_dir_all(file.parent().unwrap()).unwrap();
+            for (label,bytes) in crate::file_faults::faults(seed) {
+                let _=std::fs::remove_file(&file);if let Some(bytes)=bytes {std::fs::write(&file,bytes).unwrap();}
+                let board=board_at(&d);assert!(!board.name().is_empty());
+                let report=report_section_for(Some(Board::SmartPro),&d.join("input-devices"),Some(&d));assert!(report.contains("[boot_log]"));
+                if label=="valid" {
+                    if rel=="logs/boot.log" {assert!(report.contains("Reader rule boot log"));}
+                    else if rel=="input-devices" {assert!(report.contains("Reader rule input device"));}
+                    else {assert_eq!(board,if rel.contains("MainUI") || rel.contains("virtual_size") {Board::SmartPro}else{Board::BrickPro});}
+                }
+            }
+            let _=std::fs::remove_file(file);
+        }
+        let bios=d.join("bios");std::fs::create_dir_all(&bios).unwrap();let file=bios.join("scummvm.ini");
+        for (label,bytes) in crate::file_faults::faults(b"[scummvm]\nextrapath=/usr/share/scummvm\n[reader]\npath=/reader/game\n") {
+            let _=std::fs::remove_file(&file);if let Some(bytes)=bytes {std::fs::write(&file,bytes).unwrap();}
+            assert!(prepare_scummvm_in(&bios,&d.join("scummvm-saves")));
+            let text=std::fs::read_to_string(&file).unwrap();assert!(!text.trim().is_empty());if label=="valid" {assert!(text.contains("[reader]"));}
+        }
+    }
     use crate::device::{self, Model};
     use crate::testutil::TestDir;
 
@@ -383,7 +421,7 @@ mod tests {
     #[test]
     fn the_override_names_it_and_settings_leave_out_what_nextui_owns() {
         assert_eq!(device::from_override("brick").model, Some(Model::Brick(Board::Brick)));
-        for k in ["radios", "store", "updates", "tools", "perf_fan", "time", "tailscale"] {
+        for k in ["radios", "updates", "tools", "perf_fan", "time", "tailscale"] {
             assert!(device::hides(k, false, true), "{k}");
         }
         assert!(!device::hides("looks", false, true) && !device::hides("sound", false, true));
@@ -404,7 +442,7 @@ mod tests {
     fn additional_card_cores_are_the_card_systems_only() {
         for (system, core) in [("fds", "fceumm"), ("sg-1000", "gearsystem"), ("segacd", "picodrive"), ("sega32x", "picodrive"),
             ("pcenginecd", "beetle_pce_fast"), ("supergrafx", "beetle_supergrafx"), ("pokemini", "pokemini"), ("virtualboy", "beetle_vb"),
-            ("pico-8", "fake08"), ("tic-80", "tic80"), ("nds", "melondsds"), ("pc", "dosbox_pure"), ("scummvm", "scummvm"), ("saturn", "yabause"),
+            ("pico-8", "fake08"), ("tic-80", "tic80"), ("nds", "dsperate"), ("pc", "dosbox_pure"), ("scummvm", "scummvm"), ("saturn", "yabause"),
              ("ngp", "beetle_ngp"), ("ngpc", "beetle_ngp"), ("wonderswan", "beetle_wswan"),
             ("wonderswancolor", "beetle_wswan"), ("pcengine", "beetle_pce_fast"), ("atarilynx", "handy"),
             ("atari2600", "stella"), ("atari7800", "prosystem"), ("fbn", "fbneo"), ("neogeo", "fbneo"),

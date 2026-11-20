@@ -25,7 +25,7 @@ work, but nobody has tried pocket-ui on one yet.
   About shows the device with "(experimental)". Everything else is the same as on the Mini V2. On the Pocket 5's and
   Flip 2's wider screen, the Shelf look sits in a column in the middle, and Settings use nearly the whole width in larger type; on the Flip 2, closing the lid
   puts it to sleep.
-- **If something doesn't work**, Settings → Help & tools → About → Report a problem saves a file to attach to a report.
+- **If something doesn't work**, Settings → Help & tools → Report a problem saves a file to attach to a report.
 
 
 
@@ -59,7 +59,7 @@ and Zink on the real GPU still need a tester. Mini and Portal menus start with X
 
 pocket-ui runs on the Anbernic handhelds that ROCKNIX's **H700 image** supports. All of them are **experimental**:
 pocket-ui knows each model (screen, buttons, what it has). The **RG35XX Plus** has been played on a real handheld; the other
-models have only been tested on a computer so far. If something doesn't work, Settings → Help & tools → About → Report a problem saves a file to attach to a
+models have only been tested on a computer so far. If something doesn't work, Settings → Help & tools → Report a problem saves a file to attach to a
 report. The **RG CubeXX** (square 720×720 screen) gets the same pages, laid out for a square screen; nobody has played on
 one yet, its speed was measured on an RG35XX Plus, which has the same processor.
 

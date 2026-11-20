@@ -758,16 +758,15 @@ impl App {
 }
 
 /// The case row starts under the top line, on every screen and in every text size: 7 % of 960 or 768 lines (640x480
-/// and the Brick's 1024x768) was above the top line's baseline, and a long place ran into the cover. Its bottom stays,
-/// so the name and the lines under it keep their place; the case is that much smaller.
+/// and the Brick's 1024x768) was above the top line's baseline, and a long place ran into the cover. The case keeps its
+/// size and the row moves down, the name and the lines under it with it: there is room above the hints. (Its bottom
+/// stayed from 17.11. to 0.6, and the Brick's case lost 39 of its 276 lines.)
 fn below_top_line(h: i32, top: f32, room: (f32, f32)) -> (f32, (f32, f32)) {
-    let least = (super::app_status_corner::top_line_bottom() + TOP_LINE_GAP) as f32 + 0.5;
-    let at = h as f32 * top;
-    if at >= least {
+    let least = (super::app_status_corner::top_line_bottom(h) + TOP_LINE_GAP) as f32 + 0.5;
+    if h as f32 * top >= least {
         return (top, room);
     }
-    let h = h as f32;
-    (least / h, (room.0, room.1 - (least - at) / h))
+    (least / h as f32, room)
 }
 
 /// Air between the top line's type and the case.
@@ -794,15 +793,14 @@ mod tests {
     }
 
     #[test]
-    fn the_case_row_starts_under_the_top_line_and_keeps_its_bottom() {
-        let least = super::super::app_status_corner::top_line_bottom() + TOP_LINE_GAP;
+    fn the_case_row_starts_under_the_top_line_and_keeps_its_size() {
         for h in [480, 544, 720, 768, 960, 1080, 1440] {
+            let least = super::super::app_status_corner::top_line_bottom(h) + TOP_LINE_GAP;
             let (top, room) = if h < 1000 { (SHELF_TOP - 0.02, (SHELF_ROOM.0, SHELF_ROOM.1 - 0.05)) } else { (SHELF_TOP, SHELF_ROOM) };
             let (t, r) = below_top_line(h, top, room);
             // As `kids_case_row` places it.
             assert!((h as f32 * t) as i32 >= least, "{h}: {t}");
-            assert!(((t + r.1) - (top + room.1)).abs() < 1e-4 && r.0 == room.0, "{h}: the bottom stays");
-            assert!(r.1 > 0.2, "{h}: a case still big: {r:?}");
+            assert_eq!(r, room, "{h}: the case keeps its size");
         }
     }
 

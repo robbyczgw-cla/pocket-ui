@@ -1180,7 +1180,7 @@ pub mod boxes {
     fn record() -> Option<&'static Mutex<Vec<Painted>>> {
         static REC: OnceLock<Option<Mutex<Vec<Painted>>>> = OnceLock::new();
         REC.get_or_init(|| {
-            ["POCKETUI_TEXT_BOXES", "POCKETUI_VISIBLE_TEXT", "POCKETUI_LAYOUT_AUDIT", "POCKETUI_TITLE_BLOCKS", crate::nav_probe::ENV].iter()
+            ["POCKETUI_TEXT_BOXES", "POCKETUI_VISIBLE_TEXT", "POCKETUI_LAYOUT_AUDIT", "POCKETUI_TITLE_BLOCKS", "POCKETUI_META_LINES", crate::nav_probe::ENV].iter()
                 .any(|key| std::env::var_os(key).is_some_and(|p| !p.is_empty()))
                 .then(|| Mutex::new(Vec::new()))
         }).as_ref()
@@ -1361,6 +1361,23 @@ pub mod boxes {
         }
     }
 
+    /// The meta line under a game's name in the Shelf and Cabinet looks, for tests/meta_line.rs: `POCKETUI_META_LINES` names
+    /// the file it goes to (the whole line in the interface's language, then the lines painted, tab apart; none painted when
+    /// the room had none for it).
+    pub fn note_meta(whole: &str, lines: &[String]) {
+        if std::env::var_os("POCKETUI_META_LINES").is_none() {
+            return;
+        }
+        if let Ok(mut v) = metas().lock() {
+            v.push(std::iter::once(whole).chain(lines.iter().map(String::as_str)).collect::<Vec<_>>().join("\t"));
+        }
+    }
+
+    fn metas() -> &'static Mutex<Vec<String>> {
+        static METAS: OnceLock<Mutex<Vec<String>>> = OnceLock::new();
+        METAS.get_or_init(|| Mutex::new(Vec::new()))
+    }
+
     fn titles() -> &'static Mutex<Vec<String>> {
         static TITLES: OnceLock<Mutex<Vec<String>>> = OnceLock::new();
         TITLES.get_or_init(|| Mutex::new(Vec::new()))
@@ -1400,6 +1417,9 @@ pub mod boxes {
             v.clear();
         }
         if let Ok(mut v) = titles().lock() {
+            v.clear();
+        }
+        if let Ok(mut v) = metas().lock() {
             v.clear();
         }
         if let Some(Ok(mut rec)) = record().map(|r| r.lock()) {
@@ -1487,6 +1507,9 @@ pub mod boxes {
             let _ = std::fs::write(path, text);
         }
         if let (Some(path), Ok(v)) = (std::env::var_os("POCKETUI_TITLE_BLOCKS"), titles().lock()) {
+            let _ = std::fs::write(path, v.join("\n"));
+        }
+        if let (Some(path), Ok(v)) = (std::env::var_os("POCKETUI_META_LINES"), metas().lock()) {
             let _ = std::fs::write(path, v.join("\n"));
         }
         if let Some(path) = std::env::var_os("POCKETUI_LAYOUT_AUDIT") {

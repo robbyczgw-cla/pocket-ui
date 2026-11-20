@@ -26,7 +26,7 @@ use pocket_ui::palette::*;
 use pocket_ui::text::Face;
 use pocket_ui::touch::Area;
 
-use super::{App, QuickMenu, SettingsPage, UserEvent, CANCEL, CONFIRM, NU_BTN_PAD, NU_PAD, NU_PILL};
+use super::{App, QuickMenu, SettingsPage, UserEvent, CANCEL, CONFIRM, NU_BTN_PAD, NU_PAD};
 use pocket_ui::achievements::hardcore;
 use pocket_ui::achievements::snapshot::State;
 use pocket_ui::pause_saves::Saves;
@@ -416,7 +416,7 @@ impl App {
     fn paint_achievements_page(&mut self, c: &mut Canvas, page: &AchievementsPage) {
         let (pad, row, font) = (NU_PAD, pocket_ui::type_scale::row(66, 36), 36u32);
         self.sheet_header(c, SETTINGS_NAME);
-        let (top, right) = (pad + NU_PILL + 12, c.w - pad);
+        let (top, right) = (pocket_ui::kit::header_bottom(c.h) + 12, c.w - pad);
         // Sign in, or Log out with the account at the right and Hardcore under it (`achievements::hardcore`).
         let rows: Vec<(&str, String)> = std::iter::once((page.label(), page.value()))
             .chain((page.rows() > 1).then(|| ("Hardcore", page.hardcore_value().to_string())))

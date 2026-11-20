@@ -140,7 +140,7 @@ input:focus-visible, button:focus-visible, select:focus-visible, .button:focus-v
 .stack { display: grid; gap: 10px; margin: 8px 0; }
 .drop { border: 1.5px dashed var(--dust); border-radius: var(--r); padding: 18px; text-align: center; color: var(--dust); }
 .drop.over { border-color: var(--chalk); color: var(--chalk); }
-.file-row { display: grid; grid-template-columns: 1fr auto; gap: 4px 10px; padding: 8px 0; border-top: 1px solid var(--line); }
+.file-row { display: grid; grid-template-columns: minmax(0, 1fr); gap: 4px 10px; padding: 8px 0; border-top: 1px solid var(--line); }
 .file-row:first-child { border-top: 0; }
 .file-row .fname { overflow-wrap: anywhere; }
 progress { width: 100%; height: 6px; grid-column: 1 / -1; accent-color: var(--chalk); }

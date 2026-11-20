@@ -20,22 +20,21 @@ pub enum Row {
 
 pub const ROWS: [Row; 4] = [Row::GamesPerformance, Row::GamesFan, Row::OutsideFan, Row::SmoothFan];
 
-/// The rows this device shows: on the TrimUI Brick only the processor's (it has no fan; three rows of "No fan" were noise there).
+/// The rows this device shows: without a fan only the processor's (three rows of "No fan" were noise on the Brick, and
+/// on the H700, Rockchip and R36S handhelds until review 19.11. #2).
 pub fn rows() -> &'static [Row] {
-    #[cfg(feature = "brick")]
-    if crate::device::brick() {
-        return &ROWS[..1];
-    }
-    &ROWS
+    rows_for(crate::device::no_fan())
 }
 
-/// The page's title and its row's name in Settings: "Performance" on the Brick (`rows`).
+/// [`rows`] with or without a fan.
+pub fn rows_for(no_fan: bool) -> &'static [Row] {
+    if no_fan { &ROWS[..1] } else { &ROWS }
+}
+
+/// The page's title and its row's name in Settings: "Performance" without a fan (`i18n::FANLESS_NAMES` names it so
+/// wherever a line points to it).
 pub fn title() -> &'static str {
-    #[cfg(feature = "brick")]
-    if crate::device::brick() {
-        return "Performance";
-    }
-    "Performance & fan"
+    if crate::device::no_fan() { "Performance" } else { "Performance & fan" }
 }
 
 /// The choices of each row, in the order Left/Right walk through them.
@@ -247,10 +246,9 @@ pub fn fan_blurb(f: Fan, smooth: bool) -> String {
 }
 
 /// The note under the description: which settings win, and which games these are.
-/// `PRECEDENCE_NOTE` for this device: no fan rows on the Brick.
+/// `PRECEDENCE_NOTE` for this device: no fan rows without a fan.
 pub fn precedence_note() -> &'static str {
-    #[cfg(feature = "brick")]
-    if crate::device::brick() {
+    if crate::device::no_fan() {
         return "A choice saved in the pause menu (Options › Speed, rumble, fan) wins over this one.";
     }
     PRECEDENCE_NOTE

@@ -16,7 +16,7 @@ use pocket_ui::palette::*;
 use pocket_ui::text::Face;
 use pocket_ui::touch::Area;
 
-use super::{App, SettingsPage, UserEvent, CANCEL, CONFIRM, NU_BTN_PAD, NU_PAD, NU_PILL, NU_SMALL};
+use super::{App, SettingsPage, UserEvent, CANCEL, CONFIRM, NU_BTN_PAD, NU_PAD, NU_SMALL};
 
 /// The name in the Settings list, to come back to.
 pub(crate) const SETTINGS_NAME: &str = "PC streaming";
@@ -259,14 +259,22 @@ impl App {
         c.clear(pal().void);
         if let Some(kb) = &page.address {
             self.text.draw(c, Face::Title, 50, 72, 110, pal().chalk, "Address of your PC");
-            pocket_ui::setup::paint_keyboard_with(c, &mut self.text, kb, "Pair");
             let note = match &page.message {
                 Some((m, true)) => m.clone(),
                 _ => "Leave it empty to let Moonlight look for the PC on the network.".into(),
             };
             let color = if page.message.as_ref().is_some_and(|m| m.1) { pal().alert } else { pal().dust };
             let note = self.text.fit(Face::Body, NU_SMALL, &note, c.w - 144);
-            self.text.draw(c, Face::Body, NU_SMALL, 72, 800, color, &note);
+            // At 800 on 960 lines and more; on a shorter screen (the Brick's 768) y=800 was off the picture: there the
+            // keys give up the room for the line above the hints (`setup::paint_keyboard_noted`, its own line left empty).
+            let y = if c.h < 900 {
+                pocket_ui::setup::paint_keyboard_noted(c, &mut self.text, kb, "Pair", "");
+                pocket_ui::kit::content_bottom(c.h) - 10
+            } else {
+                pocket_ui::setup::paint_keyboard_with(c, &mut self.text, kb, "Pair");
+                800
+            };
+            self.text.draw(c, Face::Body, NU_SMALL, 72, y, color, &note);
             pocket_ui::setup::hints(c, &mut self.text, &[("A", "Type"), ("B", "Delete"), ("X", "Shift"), ("Y", "Symbols"), ("START", "Pair")]);
         } else if let Some(p) = &page.pairing {
             self.paint_pairing(c, p);
@@ -281,7 +289,7 @@ impl App {
         let left = NU_PAD + NU_BTN_PAD;
         let dots = ".".repeat(1 + (self.started.elapsed().as_millis() / 400 % 3) as usize);
         self.status_pill(c);
-        self.text.draw(c, Face::Title, 50, left, NU_PAD + 58, pal().chalk, "Pair a PC");
+        self.text.draw(c, Face::Title, 50, left, pocket_ui::kit::header_title(c.h), pal().chalk, "Pair a PC");
         let width = c.w - 2 * left;
         match &p.pin {
             Some(pin) => {
@@ -327,9 +335,9 @@ impl App {
     fn paint_pc_list(&mut self, c: &mut Canvas, page: &MoonlightPage) {
         let (pad, row, font) = (NU_PAD, pocket_ui::type_scale::row(58, 34), 34u32);
         self.sheet_header(c, SETTINGS_NAME);
-        let (top, right) = (pad + NU_PILL + 12, c.w - pad);
+        let (top, right) = (pocket_ui::kit::header_bottom(c.h) + 12, c.w - pad);
         let rows = page.rows();
-        let list_bottom = c.h - pad - NU_PILL - 16 - DETAILS_H;
+        let list_bottom = pocket_ui::kit::hint_bar_top(c.h) - 16 - DETAILS_H;
         let visible = (((list_bottom - top) / row) as usize).max(3);
         let first = super::window_start(page.sel, visible, rows.len());
         let dots = ".".repeat(1 + (self.started.elapsed().as_millis() / 400 % 3) as usize);

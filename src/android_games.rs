@@ -23,6 +23,75 @@ pub const EMULATOR: &str = "android-app";
 /// What tests (and the Linux build in Android's profile) hand in for Android's list of apps, as `AppDrawer.list` writes it.
 pub const APPS_ENV: &str = "POCKETUI_ANDROID_APPS";
 
+/// Mobile launcher and player read the same retained file, with their own exact DTO.
+pub fn load_preferences<T: serde::de::DeserializeOwned + Default>(data: &std::path::Path) -> T {
+    crate::fsutil::read_json_or_backup(&data.join("launcher.json")).unwrap_or_default()
+}
+
+/// An app's icon, already muted (`mute`): 0xAARRGGBB.
+#[derive(Clone, Debug, PartialEq)]
+pub struct AppIcon {
+    pub w: u32,
+    pub h: u32,
+    pub px: Vec<u32>,
+}
+
+/// An icon file of `AppDrawer.writeIcon` (two big-endian ints, width and height, then ARGB pixels), muted. A file
+/// that says something else is no icon.
+pub fn read_icon(path: &str) -> Option<AppIcon> {
+    let bytes = std::fs::read(path).ok()?;
+    let int = |at: usize| Some(u32::from_be_bytes(bytes.get(at..at + 4)?.try_into().ok()?));
+    let (w, h) = (int(0)?, int(4)?);
+    if w == 0 || h == 0 || w > 512 || h > 512 || bytes.len() != 8 + 4 * (w * h) as usize {
+        return None;
+    }
+    let px = (0..(w * h) as usize).map(|i| int(8 + 4 * i).unwrap_or(0)).collect();
+    Some(AppIcon { w, h, px: mute(px) })
+}
+
+/// Bright app colours, quietened for the shelf: four fifths grey (by brightness), a little less opaque.
+pub fn mute(px: Vec<u32>) -> Vec<u32> {
+    px.into_iter()
+        .map(|p| {
+            let a = p >> 24;
+            let (r, g, b) = ((p >> 16) & 0xff, (p >> 8) & 0xff, p & 0xff);
+            let y = (r * 299 + g * 587 + b * 114) / 1000;
+            let grey = (y << 16) | (y << 8) | y;
+            (a * 85 / 100) << 24 | crate::gfx::mix(p & 0xff_ffff, grey, 200)
+        })
+        .collect()
+}
+
+/// The app drawer's actual icon cell; shared with the host file-fault rule.
+pub fn paint_app_icon(c: &mut crate::gfx::Canvas, text: &mut crate::text::Text, icon: Option<&AppIcon>, x: i32, y: i32, s: i32, color: u32) {
+    if s<=0 { return; }
+    let Some(icon)=icon else {
+        // This is a fixed drawing cell, like a case spine: keep the whole word
+        // inside it even with Large text or Android's independent font scale.
+        let _fixed=crate::type_scale::fixed();
+        let word=crate::i18n::tr("App");
+        // Retro's two-pixel minimum grid makes its three letters wider than
+        // a small icon even at requested size 1. The compact scalable face is
+        // already used for narrow labels and keeps the complete word readable.
+        let face=crate::text::Face::Narrow;
+        let mut px=(s as u32/2).max(1);
+        while px>1 && text.width(face,px,&word)>s-4 { px-=1; }
+        let width=text.width(face,px,&word);
+        text.draw(c,face,px,x+(s-width)/2,y+(s+px as i32)/2,color,&word);
+        return;
+    };
+    for dy in 0..s {
+        let sy = (dy as u32 * icon.h / s as u32) as usize;
+        for dx in 0..s {
+            let p = icon.px[sy * icon.w as usize + (dx as u32 * icon.w / s as u32) as usize];
+            let a = (p >> 24) as u8;
+            if a > 0 {
+                c.blend(x + dx, y + dy, p & 0xff_ffff, a);
+            }
+        }
+    }
+}
+
 /// An app Android lists with a start icon (`AppDrawer.list`).
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct App {
@@ -371,4 +440,18 @@ mod tests {
         assert!(!Page::new(None).line(&m).is_empty());
         assert_eq!((count(0), count(1), count(3)), ("None".to_string(), "1 game".to_string(), "3 games".to_string()));
     }
+    #[test]
+    fn file_source_rule_android_app_icons() {
+        let d=crate::testutil::TestDir::new("android-icon-file-rule");
+        let path=d.join("app-icon");
+        let seed=[1u32.to_be_bytes(),1u32.to_be_bytes(),0xffffffffu32.to_be_bytes()].concat();
+        for (label,bytes) in crate::file_faults::faults(&seed) {
+            let _=std::fs::remove_file(&path);
+            if let Some(bytes)=bytes { std::fs::write(&path,bytes).unwrap(); }
+            let got=read_icon(path.to_str().unwrap());
+            if label=="valid" { assert_eq!(got,Some(AppIcon{w:1,h:1,px:vec![0xd8ffffff]})); }
+            if let Some(icon)=got { assert!((1..=512).contains(&icon.w)); assert!((1..=512).contains(&icon.h)); assert_eq!(icon.px.len(),(icon.w*icon.h)as usize); }
+        }
+    }
+
 }

@@ -14,7 +14,7 @@ use pocket_ui::tailscale_page::{Action, Event, Row, TailscalePage, View, ROWS};
 use pocket_ui::text::Face;
 use pocket_ui::touch::Area;
 
-use super::{App, SettingsPage, UserEvent, CANCEL, CONFIRM, NU_BTN_PAD, NU_PAD, NU_PILL};
+use super::{App, SettingsPage, UserEvent, CANCEL, CONFIRM, NU_BTN_PAD, NU_PAD};
 
 /// How often the open page asks Tailscale how it is.
 const POLL_EVERY: Duration = Duration::from_secs(2);
@@ -30,10 +30,14 @@ pub(crate) struct TailscaleUi {
     wired: bool,
 }
 
+fn boot_enabled_file(file: &Path) -> bool {
+    std::fs::read_to_string(file).is_ok_and(|cfg| tailscale::boot_enabled(&cfg))
+}
+
 impl TailscaleUi {
     pub fn load(data_dir: &Path) -> TailscaleUi {
         let tools = Tools::default();
-        let on = std::fs::read_to_string(&tools.system_cfg).is_ok_and(|cfg| tailscale::boot_enabled(&cfg));
+        let on = boot_enabled_file(&tools.system_cfg);
         TailscaleUi {
             prefs: Prefs::load(data_dir),
             tools,
@@ -282,7 +286,7 @@ impl App {
         // The selected row's line and the hints first: what stands above them is fitted to where they start.
         let hints = [("B", "Back"), ("A", if page.row() == Row::Switch { "Change" } else { "Open" })];
         let foot_top = pocket_ui::kit::footer(c, &mut self.text, &mut self.hits, &hints, page.describe(page.row()), 2, pal().text);
-        let (top, right) = (pad + NU_PILL + 12, c.w - pad);
+        let (top, right) = (pocket_ui::kit::header_bottom(c.h) + 12, c.w - pad);
         // Rows give way a little before the status panel runs into the footer (Large text at 1024x768 with the three
         // facts of a connection): never below what a row of this type needs.
         let n = ROWS.len() as i32;
@@ -431,7 +435,7 @@ impl App {
             let k = pocket_ui::ui_art::empty_scale(c.h);
             let (_, ah) = pocket_ui::ui_art::size(pocket_ui::ui_art::Art::Offline, k);
             let y = y + 24;
-            if y + ah <= c.h - NU_PAD - NU_PILL - 24 {
+            if y + ah <= pocket_ui::kit::hint_bar_top(c.h) - 24 {
                 pocket_ui::ui_art::paint(c, pocket_ui::ui_art::Art::Offline, left, y, k);
             }
         }
@@ -441,42 +445,69 @@ impl App {
     fn paint_tailscale_login(&mut self, c: &mut Canvas, url: Option<&str>, by_key: bool) {
         let pad = NU_PAD;
         self.sheet_header(c, "Sign in to Tailscale");
-        let (left, top) = (pad + NU_BTN_PAD, pad + NU_PILL + 30);
+        let (left, top) = (pad + NU_BTN_PAD, pocket_ui::kit::header_bottom(c.h) + 30);
         let dots = ".".repeat(1 + (self.started.elapsed().as_millis() / 400 % 3) as usize);
         match url {
             Some(url) if !by_key => {
-                let qr = 520;
-                super::app_sync::paint_qr(c, left, top, qr, url);
-                let tx = left + qr + 50;
-                let width = c.w - pad - NU_BTN_PAD - tx;
+                // 520 px on 960 lines and more; under them (the Brick's 1024x768, painted natively with the same text
+                // sizes) the Plus's share of the height: a fixed 520 left the words a third of the width, three of four
+                // steps cut with "…".
                 let steps = [
                     "1.  Open the camera on your phone.",
                     "2.  Point it at the code.",
                     "3.  Sign in and approve this Pocket.",
                 ];
-                let mut y = top + 40;
-                for s in steps {
-                    let s = self.text.fit(Face::Body, 30, s, width);
-                    self.text.draw(c, Face::Body, 30, tx, y, pal().text, &s);
-                    y += 52;
-                }
-                y += 24;
-                let or_type = self.text.fit(Face::Body, 24, "Or type this address into a browser", width);
-                self.text.draw(c, Face::Body, 24, tx, y, pal().dust, &or_type);
-                y += 52;
                 let short = url.trim_start_matches("https://").trim_start_matches("http://");
                 // Host on one line, the path on the next: the whole address is wider than the space left of the code.
                 let (host, path) = short.split_once('/').map_or((short, String::new()), |(h, p)| (h, format!("/{p}")));
-                for line in [host, path.as_str()].into_iter().filter(|l| !l.is_empty()) {
-                    let line = self.text.fit(Face::Title, 33, line, width);
-                    self.text.draw(c, Face::Title, 33, tx, y, pal().chalk, &line);
-                    y += 44;
-                }
-                y += 30;
-                // On a second line when the words don't fit beside the code (German in Retro's letters at 1024x768).
                 let waiting = format!("Waiting for approval{dots}");
-                for (i, line) in self.text.wrap_prose_at_most(Face::Body, 28, &waiting, width, 2).iter().enumerate() {
-                    self.text.draw(c, Face::Body, 28, tx, y + i as i32 * 40, pal().dust, line);
+                let limit = pocket_ui::kit::hint_bar_top(c.h) - 16;
+                // 520 px on 960 lines and more; under them (the Brick's 1024x768, painted natively with the same text
+                // sizes) the Plus's share of the height: a fixed 520 left the words a third of the width, three of four
+                // steps cut with "…". Smaller, 20 px at a time, while the words beside it run into the hint bar.
+                let mut qr = if c.h < 960 { 520 * c.h / 960 } else { 520 };
+                let (tx, out) = loop {
+                    let tx = left + qr + 50;
+                    let width = c.w - pad - NU_BTN_PAD - tx;
+                    // (face, px, colour, text, baseline)
+                    let mut out: Vec<(Face, u32, u32, String, i32)> = Vec::new();
+                    let mut y = top + 40;
+                    for s in steps {
+                        // As it is where it fits (the Plus), else on two lines.
+                        let lines = if self.text.width(Face::Body, 30, s) <= width { vec![s.to_string()] } else { self.text.wrap_prose_at_most(Face::Body, 30, s, width, 2) };
+                        for (i, l) in lines.into_iter().enumerate() {
+                            y += if i > 0 { pocket_ui::type_scale::line(30, 6) } else { 0 };
+                            out.push((Face::Body, 30, pal().text, l, y));
+                        }
+                        y += 52;
+                    }
+                    y += 24;
+                    let or_type = "Or type this address into a browser";
+                    let lines = if self.text.width(Face::Body, 24, or_type) <= width { vec![or_type.to_string()] } else { self.text.wrap_prose_at_most(Face::Body, 24, or_type, width, 2) };
+                    for (i, l) in lines.into_iter().enumerate() {
+                        y += if i > 0 { pocket_ui::type_scale::line(24, 6) } else { 0 };
+                        out.push((Face::Body, 24, pal().dust, l, y));
+                    }
+                    y += 52;
+                    for line in [host, path.as_str()].into_iter().filter(|l| !l.is_empty()) {
+                        out.push((Face::Title, 33, pal().chalk, self.text.fit(Face::Title, 33, line, width), y));
+                        y += 44;
+                    }
+                    y += 30;
+                    // On a second line when the words don't fit beside the code (German in Retro's letters at 1024x768).
+                    for (i, line) in self.text.wrap_prose_at_most(Face::Body, 28, &waiting, width, 2).into_iter().enumerate() {
+                        out.push((Face::Body, 28, pal().dust, line, y + i as i32 * 40));
+                    }
+                    let bottom = out.last().map_or(y, |l| l.4) + pocket_ui::type_scale::px(28) as i32 / 3;
+                    if bottom <= limit || qr <= 200 {
+                        break (tx, out);
+                    }
+                    qr -= 20;
+                };
+                super::app_sync::paint_qr(c, left, top, qr, url);
+                pocket_ui::shares::mark("tailscale-qr", left, top, qr, qr);
+                for (face, px, colour, line, y) in out {
+                    self.text.draw(c, face, px, tx, y, colour, &line);
                 }
             }
             _ => {
@@ -485,5 +516,21 @@ impl App {
             }
         }
         self.nu_hints(c, &[("B", "Cancel")]);
+    }
+}
+
+#[cfg(test)]
+mod file_source_tests {
+    use super::*;
+    #[test]
+    fn file_source_rule_tailscale_switch() {
+        let d = tempfile::tempdir().unwrap(); let file = d.path().join("system.cfg");
+        for (label, bytes) in crate::file_faults::faults(b"tailscale.up=1\n") {
+            let _ = std::fs::remove_file(&file);
+            if let Some(bytes) = bytes { std::fs::write(&file, bytes).unwrap(); }
+            let on = boot_enabled_file(&file);
+            if label == "valid" { assert!(on); }
+            if label == "missing" { assert!(!on); }
+        }
     }
 }

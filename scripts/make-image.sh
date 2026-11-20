@@ -7,6 +7,7 @@
 #     --system-file  reuse a repacked SYSTEM only when it matches the pinned MD5
 #     --version      pocket-ui version (default: Cargo.toml); the binaries are built with POCKETUI_VERSION=V
 #     --bin-dir      take pocket-ui, pocket-core and pocket-splash from DIR instead of building them (must answer --version V)
+#     --ds-core      portable ARM64 DSperate build, including notices and corresponding source
 #     --gba-core     pinned ARM64 gpSP build folder, including licence and corresponding source
 #     --source       where the notes say pocket-ui's source is (default: "the pocket-ui repository, commit <HEAD>");
 #                    for a public image the public repository and its tag or commit
@@ -39,6 +40,7 @@ SYSTEM_FILE=
 VERSION=
 BIN_DIR=
 GBA_CORE_DIR=
+DS_CORE_DIR=
 SOURCE=
 RELEASE_URL=
 OUT=$ROOT/build/image
@@ -51,6 +53,7 @@ while [ $# -gt 0 ]; do
     --version) VERSION=$2; shift ;;
     --bin-dir) BIN_DIR=$2; shift ;;
     --gba-core) GBA_CORE_DIR=$2; shift ;;
+    --ds-core) DS_CORE_DIR=$2; shift ;;
     --source) SOURCE=$2; shift ;;
     --release-url) RELEASE_URL=$2; shift ;;
     --out) OUT=$2; shift ;;
@@ -148,6 +151,10 @@ else
 fi
 sh "$ROOT/scripts/check-binary-paths.sh" "$W/bin/pocket-ui" "$W/bin/pocket-core" "$W/bin/pocket-splash" || die "the binaries carry build paths (scripts/release-rustflags.sh)"
 [ -z "$GBA_CORE_DIR" ] || sh "$ROOT/scripts/gba-core-files.sh" "$GBA_CORE_DIR" "$W/bin/cores"
+[ -z "$DS_CORE_DIR" ] || python3 -I "$ROOT/scripts/dsperate-files.py" "$DS_CORE_DIR" "$W/bin/cores"
+if LC_ALL=C grep -a -q dsperate "$W/bin/pocket-ui"; then
+  python3 -I "$ROOT/scripts/dsperate-files.py" --check "$W/bin/cores" || die "DSperate core, source and notices required: pass --ds-core BUILD_DIR"
+fi
 
 say "notes and licences"
 rm -rf "$W/info"

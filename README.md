@@ -43,7 +43,8 @@ take it off the shelf, click it in, and continue right where you stopped.</p>
     the card out and it's back. For the TrimUI Brick and Smart Pro there is a package you unzip onto a card.<br><br>
     <b><a href="https://pocketui.xyz/install">Get the image</a></b> · <a href="../../releases/latest">Releases</a></td>
     <td valign="top">Got an Android handheld with a built-in controller, like a Retroid Pocket or an AYN Odin 2? pocket-ui
-    runs there as an app: the same shelf, the same Continue, every emulator built in. Nothing to flash. A preview,
+    runs there as an app: the same shelf, the same Continue, its own player for the classic consoles built in, and the
+    emulator apps you already have for PS2, GameCube and more. Nothing to flash. A preview,
     for Android 8 or newer.<br><br>
     <b><a href="https://pocketui.xyz/install#android">Get the app (APK)</a></b></td>
   </tr>
@@ -128,7 +129,7 @@ More in the [FAQ](https://pocketui.xyz/faq).
 - [Status](docs/STATUS.md): every feature and where it has been played
 - Discord: https://discord.gg/sDqUV4M49g (help, ideas, device testers)
 
-Something off? **Settings → Help & tools → About → Report a problem** makes a file for a report, or
+Something off? **Settings → Help & tools → Report a problem** makes a file for a report, or
 [open an issue](../../issues) or write to robby@robbyczesany.com. Reports from your handheld help a lot.
 
 ## How it's made

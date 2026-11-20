@@ -89,6 +89,11 @@ if [ -f scripts/i18n-extract.py ]; then
         "new UI text needs a line in assets/i18n/de.tsv; es.tsv, pt.tsv, fr.tsv and it.tsv are filled before a release (docs/dev/translations.md)"
     printf '%s\n' "$out" | grep 'WARNING' || true
 fi
+# The reader inventory (19.11.2026: the most frequent red test of the day, tests/data_sources.rs runs this script); seconds.
+if [ -f scripts/reader-inventory.py ]; then
+    out=$(python3 -I scripts/reader-inventory.py 2>&1) || fail "reader inventory (scripts/reader-inventory.py)" "$out" \
+        "a new or changed file reader: add its fault case and run scripts/reader-inventory.py --write (tests/data_sources.rs)"
+fi
 total=0
 for filter in doc_checks:: document_check:: manual:: i18n::; do
     part=$(mktemp "${TMPDIR:-/tmp}/preflight-test.XXXXXX") || exit 1

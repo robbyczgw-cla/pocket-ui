@@ -112,3 +112,25 @@ fn the_button_choices_are_kept_in_linux_s_files_for_the_game_or_the_console() {
     s.restore_defaults().unwrap();
     assert_eq!(Mapping::from_values("snes", &load(rom).values()), Mapping::defaults("snes"));
 }
+
+#[test]
+fn android_ds_actions_keep_game_and_system_assignments() {
+    use crate::controls::{Mapping, KEY_PREFIX};
+    let dir = TestDir::new("android-ds-actions");
+    let rom = Path::new("/sdcard/ROMs/nds/Mario.nds");
+    let load = |rom: &Path| picture::Settings::load(&dir, "nds", rom, Default::default());
+    let mut game = load(rom);
+    game.set_controls(&[("ctl.select".into(), "ds_stylus".into()), ("ctl.x".into(), "ds_layout".into())], &[], false).unwrap();
+    let mapping = Mapping::from_values("nds", &load(rom).values());
+    assert_eq!(mapping.target[2], Some(crate::ds_pad::STYLUS));
+    assert_eq!(mapping.target[9], Some(crate::ds_pad::LAYOUT));
+    game.change(picture::ROWS - 1, 1).unwrap();
+    let other = Path::new("/sdcard/ROMs/nds/Kart.nds");
+    assert_eq!(Mapping::from_values("nds", &load(other).values()), mapping);
+    let mut other = load(other);
+    other.set_controls(&[], &[], true).unwrap();
+    assert!(!other.values().keys().any(|k| k.starts_with(KEY_PREFIX)));
+    let mut original = load(rom);
+    original.restore_defaults().unwrap();
+    assert_eq!(Mapping::from_values("nds", &load(rom).values()), Mapping::defaults("nds"));
+}

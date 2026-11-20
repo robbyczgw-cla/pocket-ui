@@ -20,7 +20,7 @@ use pocket_ui::text::Face;
 use winit::application::ApplicationHandler;
 use winit::event_loop::ActiveEventLoop;
 
-use super::{stripe, App, MainItem, Page, UserEvent, CANCEL, CONFIRM, DUST, NU_BTN_PAD, NU_PAD, NU_PILL, NU_SMALL};
+use super::{stripe, App, MainItem, Page, UserEvent, CANCEL, CONFIRM, DUST, NU_BTN_PAD, NU_PAD, NU_SMALL};
 use pocket_ui::palette::pal;
 
 /// How often the reader looks at pocket-core's seats while the page is open.
@@ -211,10 +211,10 @@ impl App {
         let accent = self.running.as_ref().map_or(DUST, |r| stripe(&r.system));
         let pad = NU_PAD;
         self.status_pill(c);
-        self.text.draw(c, Face::Title, 50, pad + NU_BTN_PAD, pad + 58, pal().chalk, "Players");
+        self.text.draw(c, Face::Title, 50, pad + NU_BTN_PAD, pocket_ui::kit::header_title(c.h), pal().chalk, "Players");
 
         let (row, font) = (pocket_ui::type_scale::row(66, 36), 36u32);
-        let top = pad + NU_PILL + 12;
+        let top = pocket_ui::kit::header_bottom(c.h) + 12;
         let right = c.w - pad;
         for (i, seat) in seats.iter().enumerate().take(MAX) {
             let y = top + i as i32 * row;

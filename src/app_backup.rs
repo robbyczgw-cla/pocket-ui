@@ -18,7 +18,7 @@ use pocket_ui::palette::*;
 use pocket_ui::text::Face;
 use pocket_ui::touch::Area;
 
-use super::{App, SettingsPage, UserEvent, CANCEL, CONFIRM, NU_BTN_PAD, NU_PAD, NU_PILL, NU_SMALL};
+use super::{App, SettingsPage, UserEvent, CANCEL, CONFIRM, NU_BTN_PAD, NU_PAD, NU_SMALL};
 
 /// The name in the Settings list, to come back to.
 pub(crate) const SETTINGS_NAME: &str = "Backup & reset";
@@ -39,10 +39,15 @@ fn now() -> u64 {
 
 impl App {
     pub(crate) fn open_backup(&mut self) -> Option<SettingsPage> {
+        self.open_backup_at(PathBuf::from(backup::ROOT), PathBuf::from(saves::ROOT))
+    }
+
+    /// The normal page and reader, with card roots supplied by the journey harness.
+    pub(crate) fn open_backup_at(&mut self, root: PathBuf, saves_root: PathBuf) -> Option<SettingsPage> {
         self.backup.page = Some(BackupPage::new());
         let proxy = self.proxy.clone();
         std::thread::spawn(move || {
-            let _ = proxy.send_event(UserEvent::Backup(Event::Listed(backup::list(Path::new(backup::ROOT)), saves::list(Path::new(saves::ROOT)))));
+            let _ = proxy.send_event(UserEvent::Backup(Event::Listed(backup::list(&root), saves::list(&saves_root))));
         });
         Some(SettingsPage::Backup)
     }
@@ -217,9 +222,9 @@ impl App {
         c.clear(pal().void);
         let (pad, row, font) = (NU_PAD, pocket_ui::type_scale::row(58, 34), 34u32);
         self.sheet_header(c, SETTINGS_NAME);
-        let (top, right) = (pad + NU_PILL + 12, c.w - pad);
+        let (top, right) = (pocket_ui::kit::header_bottom(c.h) + 12, c.w - pad);
         let rows = page.rows();
-        let list_bottom = c.h - pad - NU_PILL - 16 - DETAILS_H;
+        let list_bottom = pocket_ui::kit::hint_bar_top(c.h) - 16 - DETAILS_H;
         let visible = (((list_bottom - top) / row) as usize).max(3);
         let first = super::window_start(page.sel, visible, rows.len());
         if rows.len() > visible {

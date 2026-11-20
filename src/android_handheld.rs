@@ -9,6 +9,8 @@
 //!   saves and moments in the player, whichever view started it.
 use std::path::{Path, PathBuf};
 
+pub mod files;
+
 /// Android's external storage provider: the authority of every document id of shared storage and cards.
 pub const STORAGE_AUTHORITY: &str = "com.android.externalstorage.documents";
 
@@ -171,9 +173,10 @@ pub fn launch_settings(launcher: &str, view: &serde_json::Value, picture: Option
     prefs.to_string()
 }
 
-/// The handheld view's settings (`settings.json`) that the player shows too: its language and the look of its menus. The
+/// The handheld view's settings (`settings.json`) that the player shows too: its language, the look of its menus and Console
+/// boot screen (`boot_screen`). The
 /// same names and shapes as the Mobile view's file (`Preferences`), so a value copies as it is.
-const VIEW_KEYS: [&str; 9] = ["language", "text_size", "colours", "font", "retro_colours", "prompts", "motion", "extras", "gba_model"];
+const VIEW_KEYS: [&str; 10] = ["language", "text_size", "colours", "font", "retro_colours", "prompts", "motion", "extras", "gba_model", "boot_screen"];
 
 /// A game's settings for the player (`launch_settings`): their effective values (`options::GameSettings::effective`) and
 /// the folder and ROM whose `game_settings` files hold them.
@@ -447,7 +450,7 @@ mod tests {
         let launcher = r#"{"language":"de","colours":"Cool","text_size":"large","gameboy_gambatte":true,"muted":true,"cozy":false}"#;
         let out: serde_json::Value = serde_json::from_str(&launch_settings(
             launcher,
-            &view(r#"{"language":"es","font":"Pixel","animations":"Cozy"}"#),
+            &view(r#"{"language":"es","font":"Pixel","animations":"Cozy","boot_screen":true}"#),
             Some(GamePicture { values: [("scaling".to_string(), "native".to_string()), ("effect".to_string(), "crt".to_string())].into_iter().collect(), dir: "/data/files/handheld".into(), rom: "/storage/emulated/0/ROMs/gba/Golden Sun.gba".into() }),
             "cheat0_desc = \"x\"",
             true,
@@ -463,12 +466,14 @@ mod tests {
         // Linux's values and where the view keeps them: the player reads and writes those very files (`game_settings`).
         assert_eq!(out["picture"], serde_json::json!({"scaling": "native", "effect": "crt"}));
         assert_eq!((out["settings_dir"].as_str(), out["settings_rom"].as_str()), (Some("/data/files/handheld"), Some("/storage/emulated/0/ROMs/gba/Golden Sun.gba")));
+        assert_eq!(out["boot_screen"], true, "Console boot screen: the player runs it (`boot_screen`)");
         assert_eq!(out["cheat_text"], "cheat0_desc = \"x\"");
         assert_eq!(out["frozen_shown"], true, "the shelf showed the case open: no old-TV switch-on in the player");
         // A launcher file nobody wrote yet (a first start in this view) is still a start of the game.
         let bare: serde_json::Value = serde_json::from_str(&launch_settings("", &view("{}"), None, "", false)).unwrap();
         assert_eq!(bare["frozen_shown"], false);
         assert!(bare.get("picture").is_none() && bare.get("settings_dir").is_none());
+        assert!(bare.get("boot_screen").is_none(), "Off unless the view switched it on");
     }
 
     /// Cheats: Mobile reads a same-name `.cht` beside the game; so does this view (the card on Linux has no database here).

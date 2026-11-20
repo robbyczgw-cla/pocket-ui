@@ -403,15 +403,18 @@ impl HwContext {
 /// per-core file `config/<Core>/<Core>.opt`, else the global `retroarch-core-options.cfg`, which
 /// is what RetroArch falls back to as well. `core_so` is the core's path; its `.info` names it.
 pub fn retroarch_options(core_so: &std::path::Path) -> Vec<(String, String)> {
-    const RA: &str = "/storage/.config/retroarch";
+    retroarch_options_in(core_so, std::path::Path::new("/storage/.config/retroarch"))
+}
+
+fn retroarch_options_in(core_so: &std::path::Path, root: &std::path::Path) -> Vec<(String, String)> {
     let info = core_so.with_extension("info");
     let Some(name) = std::fs::read_to_string(&info).ok().and_then(|s| {
         s.lines().find_map(|l| l.strip_prefix("corename").map(|v| v.trim().trim_start_matches('=').trim().trim_matches('"').to_string()))
     }) else {
         return Vec::new();
     };
-    let per_core = format!("{RA}/config/{name}/{name}.opt");
-    let text = std::fs::read_to_string(&per_core).or_else(|_| std::fs::read_to_string(format!("{RA}/retroarch-core-options.cfg"))).unwrap_or_default();
+    let per_core = root.join(format!("config/{name}/{name}.opt"));
+    let text = std::fs::read_to_string(&per_core).or_else(|_| std::fs::read_to_string(root.join("retroarch-core-options.cfg"))).unwrap_or_default();
     parse_options(&text)
 }
 
@@ -438,6 +441,31 @@ pub fn is_3d_core(core_so: &std::path::Path) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn file_source_rule_retroarch_option_files() {
+        let d = crate::testutil::TestDir::new("retroarch-file-rule");
+        let core = d.join("core.so");
+        let info = core.with_extension("info");
+        let global = d.join("retroarch-core-options.cfg");
+        let own = d.join("config/Rule/Rule.opt");
+        std::fs::create_dir_all(own.parent().unwrap()).unwrap();
+        for target in [&info, &global, &own] {
+            let seed = if target == &info { b"corename = \"Rule\"\n".as_slice() } else { b"rule = \"yes\"\n".as_slice() };
+            for (label, bytes) in crate::file_faults::faults(seed) {
+                std::fs::write(&info, b"corename = \"Rule\"\n").unwrap();
+                std::fs::write(&global, b"rule = \"yes\"\n").unwrap();
+                std::fs::write(&own, b"rule = \"yes\"\n").unwrap();
+                let _ = std::fs::remove_file(target);
+                if let Some(bytes) = bytes { std::fs::write(target, bytes).unwrap(); }
+                // A global options file is reached when no per-core file is there.
+                if target == &global { std::fs::remove_file(&own).unwrap(); }
+                let rows = retroarch_options_in(&core, &d);
+                if label == "valid" { assert_eq!(rows, [("rule".to_string(), "yes".to_string())]); }
+                assert!(rows.iter().all(|(name, _)| !name.trim().is_empty()), "{label}: unnamed option");
+            }
+        }
+    }
 
     #[test]
     fn parses_retroarch_option_lines() {

@@ -11,6 +11,12 @@ home:-2
 curator:hub:shelf:6
 shelf:gba
 shelf:gba:shelf
+# Settings → Games → Shelf space (`app_crate`): Home's Crate row, the crate, making room, a swap under way, the question.
+crate:0:home
+crate:3
+crate:3:pick:2
+crate:3:swap:2:900
+crate:0:ask
 shelf:psx:split
 # Systems whose games have no covers and whose fact sheets are the newest (Xbox, Wii U, PS3).
 shelf:xbox
@@ -285,6 +291,14 @@ sync:paused-offline
 sync:conflicts
 sync:conflicts-list
 sync:conflicts-card
+pockets:off
+pockets:on
+pockets:none
+pockets:pair
+pockets:nobody
+pockets:code
+pockets:forget
+pockets:taken
 conflicts:card
 conflicts:choose
 conflicts:card:ps2
@@ -933,3 +947,21 @@ setup:ports-get-update
 setup:ports-get-offline
 setup:ports-get-download
 setup:ports-get-error
+# Settings → Games → RomM (src/app_romm.rs): not paired, paired, the pairing screen, the keyboard, each failure.
+romm
+romm:paired
+romm:pairing
+romm:code
+romm:typing
+romm:error
+romm:old
+romm:busy
+romm:unpair
+romm:signedout
+romm:nolist
+romm:empty
+pockets:what
+pockets:faults
+pockets:syncing
+pockets:pocket
+pockets:pocket-empty

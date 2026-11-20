@@ -71,8 +71,18 @@ its marks. A 4 px scroll bar at the right edge when the list is longer than its 
 start): spine-coloured rows, the selected one paper with ink, the label's lift shadow in Light. The sheet's lists
 wrap at their ends; the shelf stops at its ends (it is a physical shelf with bookends).
 
-**Hint bar.** One form on every page: a dark pill at the bottom right, 30 px from the page's right and bottom edges, 90 high,
-a round chip per key and its label in Soft, A last, next to the face buttons (`kit::pill_hints`; the shelf's pages, the game
+**The frame on a 768-line screen.** The hint bar, the sheet's header (its status pill, `PAD` and `PILL`, where the rows
+start) and Home's top line are made for 960 lines and more; between 740 and 959 lines (the Brick's 1024x768, painted
+natively) they keep 960's share of the height (`kit::chrome`: hint bar 52 + 8 over the edge, header 96, top line's
+baseline 58), the letters in them keep their sizes. Until 0.6.1 header and hints took 25 % of the Brick's height against
+the RG35XX Plus's 20 % (tests/brick_proportions.rs holds each within three points of the Plus). 960 lines and more and
+the Smart Pro's 1280x720 keep the pixels below.
+
+**Hint bar.** One form on every page: a dark pill at the bottom right, 30 px from the page's right edge and 10 from its bottom
+edge, 62 high with 44 px keys at Normal text, both growing with the letters (`kit::hint_bar_top`, `hint_h`, `hint_key`; since
+2026-11-18, the owner: "flachere Tipps": it was 90 high with 60 px keys, 30 over the edge, and floated under the shelf); every
+page that ends over it asks `kit::hint_bar_top`, so the room it gave back goes to the shelf and the lists
+(`tests/list_space.rs` checks the gap to the edge on every panel and that nothing runs into it). A round chip per key and its label in Soft, A last, next to the face buttons (`kit::pill_hints`; the shelf's pages, the game
 card, the console pages, search, Curator and the first start paint the same pill through `kit::page_hints`). Until
 2026-11-13 the shelf's pages had loose small keys at the bottom left (polish review 12.11., point 10); the pill is the
 one that reads at arm's length on a 640x480 panel (its labels are 15 px there, the loose keys' were 10) and on any picture
@@ -307,9 +317,22 @@ A short screen is 720 to 899 lines (`kit::short_screen`: the Brick's 1024x768 an
 natively). Pages tuned to 768 lines take the Smart Pro's 48 fewer only under 768 (`c.h < 768`), so the Brick's pictures
 stay as they are: Settings' first page (rows down to 50 px, so all seven categories stand there at Normal text), the
 Curator history's chart and rows, Search's empty page, the first start's ways and games, Battery, Sync, Runs on, About,
-the Updates note and Test buttons are a little tighter there; Easy's open-case line waits for a screen with room. The
+the Updates note and Test buttons are a little tighter there; the history's chart keeps the RG35XX Plus's share of the height (116 of 960 lines) as far as its five rows
+still end 14 px over the hints (Brick 81 px, 0.105 of the height; it was 54 px and its weekdays touched "Most played"); Easy's open-case line waits for a screen with room. The
 shelf keeps the Brick's scale (`media::SHORT_SHELF_SCALE`): long Game Boy Advance and DS names are cut on their spines
-there as on the Brick, and tell themselves apart (tests/spine_names.rs).
+there as on the Brick, and tell themselves apart (tests/spine_names.rs). Split's picture panel keeps the share of the
+height it has at 960 lines (`split_panel_h`, 300 of 960: 240 lines on the Brick, 225 on the Smart Pro), as on the RG35XX
+Plus: the console over a system's game count, a game's cover a quarter of the screen high. Until 0.6 it gave up all the
+lines it lacked to 1080, and the Brick had a 108-line strip with a 60-pixel cover and no console; the facts under the
+name now show the four to keep most there (Released, Sold, Your games, Ended), Inside and Runs on go first
+(tests/split_panel.rs). The other looks keep the Plus's proportions there too (tests/brick_look_proportions.rs): Split's list is
+500 of 1280 wide (400 on the Brick), the game switcher's card 450 of 960 lines as far as its title, line and dots stay
+over the hints (`switcher::card_height`, its neighbours `switcher::step` apart), and the game card's body reaches the
+hints (`game_card::body_bottom_gap`), and the Cabinet's TV rounds up to the next half step (`tv_scale`: 0.231 of the
+height against 0.222, the console beside it as large; rounded down it was 0.185, with empty room over both). The Shelf
+look's spines take 2.0 template pixels a pixel on 768 lines, the Plus's 2.5 on 960 (0.31 of the height; 1.5 until
+0.6.1, when the frame's lines made for 960 left the shown case too little room for its facts); a fact list still a row
+short closes up first (Body 24 at 7 px leading) before a fact goes.
 
 Three pages that are taller than a short screen (720 to 899 lines, 1024x768) in Large text give way in a fixed order,
 never by running under the hints: **Tailscale** paints the selected row's line and the hints first, lets its rows shrink to
@@ -396,9 +419,12 @@ keep using `c.w`/`c.h` and canvas calls, never the buffer itself.
   under 8 % (a name a size smaller is not worth it). The old size was as large as the room lets the largest case of
   any kind, at most 45 % of the screen's width and six template pixels a pixel, in half steps. It is never cut:
   `shelf_tests` checks every medium and Home's mix at 1240x1080, 1920x1080, 1920x1152, 1280x960, 1440x960, 1440x1440,
-  1280x800, 1280x720 and 1024x768 against the top line, the lifted spine, the hints and the words. A meta line that
-  needs more lines than the room has ends with "…" on the last one shown; one that takes two lines breaks at its
-  comma where both parts fit ("Game Boy Advance," over "played a year ago today", `meta_wrap`), never leaving a word alone. The cover is in the front's label (`media::front`); a game without one, a system (its console
+  1280x800, 1280x720 and 1024x768 against the top line, the lifted spine, the hints and the words. The meta line is
+  always whole (`meta_choice`, tests/meta_line.rs): one line where it fits; two where it doesn't, breaking at its first
+  comma or " · " where both parts fit ("Game Boy Advance," over "played a year ago today"), never leaving a word alone,
+  and starting a line higher where the name above it leaves that line free; else the short line with the same facts
+  ("Super Nintendo · Completed · 3 days ago · 6 h", `meta_short`) on one line or two. Only a room narrower than any panel
+  of ours would end it with "…". The cover is in the front's label (`media::front`); a game without one, a system (its console
   above its name) and the rest get a printed title card in the cover's place, never an empty hole. While a cover is
   still being read the label stays plain for a moment.
 - **Spine titles** (`media::spine_with`, `spine_px`): the cover's main colour on the label (`media::cover_colors`, the
@@ -834,7 +860,7 @@ name, so it is the same every time), at least 60 px from the games, so a shelf o
 than the shelf's room. Never over a game. The Shelf look uses the same props at its own scale.
 
 ### The room: light and decorations (`room_light`, `room_deco`, `app_room_extras.rs`)
-Two rows of Settings → Look → Cozy extras, both on from the start, Shelf look and Cabinet only.
+Three rows of Settings → Look → Cozy extras, all on from the start, Shelf look and Cabinet only.
 - **Light by time of day** (`room_light::at`): the real clock lights the room. Morning (from 07:30) a little cooler and
   brighter, afternoon (13:00–16:30) as made, evening (18:30–21:00) warmer with the lamp glowing, night (22:30–05:00)
   dimmer with the lamp as the main light; between them it eases over one to two hours. It falls on the wood (the
@@ -855,6 +881,18 @@ Two rows of Settings → Look → Cozy extras, both on from the start, Shelf loo
   than the room. The Shelf look shows the trophy and the frame on every row with room; the Cabinet on the first shelf
   from the top with room for them (`awards_shelf`). Off: the shelves as they always were (the grown plant). Art:
   PixelLab pixflux in the props' style, warm, no characters of any game, no logos (`pixellab-assets.json`).
+- **Window** (`room_window`, 19.11.2026; the rest of "the room grows with you" is parked): a window on the room's wall
+  with the sky as it is outside now (`sky_at`: morning from 05:30, day from 10:00, evening from 17:30, night from 21:30,
+  by the same clock as the light) and the season's piece on its sill (`season_of`: tulips March–May, a sunflower
+  June–August, a pumpkin September–November, a snow globe December–February). One PixelLab frame, its four skies
+  painted behind the glass (the frame stays the same pixel for pixel), the piece at 0.75 of the window. It hangs only on
+  free wall and never moves with the selection: in the Shelf look over the free part of a row's shelf, in the upper
+  third of the case's room, clear of the plant, lamp or cactus standing there (`shelf_spot`; a full row: no window); in
+  the Cabinet on the wall over the top board, centred in the showcase's height, at the right of the wall left of the
+  TV or its console (`cabinet_spot`), where the cases out of the shelf come least and pass in front of it. Painted
+  into the Shelf look's tile (kept) and once a frame in the Cabinet (one blit and its shadow); the sky and season are
+  read with the light (`room_sync`), a change makes the tiles again once. `scene_check`: it hangs (`Rests::Hung`) whole
+  on a recorded wall, its piece stands on its sill. `POCKETUI_ROOM_TIME`, `POCKETUI_ROOM_MONTH` for snapshots.
 
 - **The showcase** (`showcase`, a photo of 2026-10-28: the case held up in front of the shelf above hid the
   spines of two shelves, the bottom row was cut by the hints, the cover was cropped): the cabinet's top board sits
@@ -901,7 +939,7 @@ Two rows of Settings → Look → Cozy extras, both on from the start, Shelf loo
 
 - **A console's real mechanism** (Cozy + Playful cases, `src/insert_rig.rs`, `insert_scene::Scene::paint`): PS1, GameCube,
   Dreamcast, Saturn (lid); PS2, Xbox (tray, the disc comes from the front lying flat); SNES (US and PAL/JP rigs by the cartridge's
-  region), N64, Mega Drive, Game Boy, Game Boy Color, GBA (cartridge); Master System (cartridge, three fifths out of the top slot); Game Gear and Neo Geo Pocket / Color (the cartridge turns its back to the player and goes in behind the top edge, as on the Game Boy and the GBA; the power light and the display come on);  PC Engine (the HuCard slides in lying on the slot's ramp, contacts first, and stays half out); 3DS (the card goes in behind, at the rear of the lower half, as on the DS; the DS card stands in for the 3DS card); PSP (it comes up showing its front and turns round to its back in 280 ms, `insert_rig::TURN_MS` and `front.png`, as the game box turns on the card; the UMD cover springs open, the UMD (its shell straight at the top and rounded at the bottom, as a real one looks with its label upright) slides down into the cover rounded end first, label to the player and readable, and the cover shuts over it, `Lid::medium_behind`; the way back turns it to its front again); DS (the card goes in behind the upper screen, where its slot is); Wii (the disc goes into its slot on the front, along the console's depth); NES (front-loader, `Mech::Door`: the door lifts about its hinge at the back, the cartridge turns round on its way from the case and slides in lying flat, label up and connector first, what of it is inside is in the console's shadow and shows only through the opening, `rig.json`'s `mouth`; it is pressed down with the cartridge's click at `IN_AT_COZY` and the door drops shut with the lid's clunk `Sound::DiscShut`; the way back opens the door first; the Famicom keeps the plain animation). The console alone is shown larger than its system picture (2 screen pixels an art pixel). One timeline,
+  region), N64, Mega Drive, Game Boy, Game Boy Color, GBA (cartridge); Master System (cartridge, three fifths out of the top slot); Game Gear and Neo Geo Pocket / Color (the cartridge turns its back to the player and goes in behind the top edge, as on the Game Boy and the GBA; the power light and the display come on);  PC Engine (the HuCard slides in lying on the slot's ramp, contacts first, and stays half out); Neo Geo AES (its big black cartridge, `assets/media/game/neogeo.png`, goes straight down into the slot in its top, label to the front); Lynx and WonderSwan (the card or cartridge turns its back to the player and goes in behind the top edge, at the back, as on the Neo Geo Pocket; the display comes on; their own cartridge pictures are still the stand-in, no public-domain photo exists); 3DS (the card goes in behind, at the rear of the lower half, as on the DS; the DS card stands in for the 3DS card); PSP (it comes up showing its front and turns round to its back in 280 ms, `insert_rig::TURN_MS` and `front.png`, as the game box turns on the card; the UMD cover springs open, the UMD (its shell straight at the top and rounded at the bottom, as a real one looks with its label upright) slides down into the cover rounded end first, label to the player and readable, and the cover shuts over it, `Lid::medium_behind`; the way back turns it to its front again); DS (the card goes in behind the upper screen, where its slot is); Wii (the disc goes into its slot on the front, along the console's depth); NES (front-loader, `Mech::Door`: the door lifts about its hinge at the back, the cartridge turns round on its way from the case and slides in lying flat, label up and connector first, what of it is inside is in the console's shadow and shows only through the opening, `rig.json`'s `mouth`; it is pressed down with the cartridge's click at `IN_AT_COZY` and the door drops shut with the lid's clunk `Sound::DiscShut`; the way back opens the door first; the Famicom keeps the plain animation). The console alone is shown larger than its system picture (2 screen pixels an art pixel). One timeline,
   `insert_rig::pose`, a pure function of the time since A: in at `IN_AT_COZY` with the sound's hit (`Sound::DiscDrop`), a disc rests on its
   spindle for 110 ms, the lid or tray shut 280 ms after it is down with the clunk (`Sound::DiscShut`; the two are `disc-in.wav`
   cut in two at its quiet point, `scripts/ui-sounds/split_disc_in.py`, the other systems keep the whole sound); a cartridge clicks at

@@ -7,6 +7,8 @@ use std::path::{Path, PathBuf};
 use crate::platform::http::{curl_listing, curl_with};
 
 const BASE: &str = "https://thumbnails.libretro.com";
+const GITHUB_API: &str = "https://api.github.com/repos/libretro-thumbnails";
+const GITHUB_RAW: &str = "https://raw.githubusercontent.com/libretro-thumbnails";
 
 /// libretro playlist name for a ROCKNIX system id.
 pub fn playlist(system: &str) -> Option<&'static str> {
@@ -290,9 +292,131 @@ pub fn fetch_index_in(playlist: &str, remote_dir: &str) -> Vec<String> {
     let cancel = crate::update::Cancel::new();
     #[cfg(not(target_os = "android"))]
     let _optional = crate::optional_data::lock(&cancel);
-    if game_on() { return Vec::new(); }
+    index_from(playlist, remote_dir, |url| (!game_on()).then(|| curl_listing(url)).flatten())
+}
+
+fn repository(playlist: &str) -> String {
+    // Spaces become `_`, what a repository name can't have is left out ("Philips - Videopac+": `Philips_-_Videopac`).
+    playlist.chars().filter_map(|ch| match ch {
+        'a'..='z' | 'A'..='Z' | '0'..='9' | '-' | '_' | '.' => Some(ch),
+        ' ' => Some('_'),
+        _ => None,
+    }).collect()
+}
+
+fn index_from(playlist: &str, remote_dir: &str, fetch: impl Fn(&str) -> Option<Vec<u8>>) -> Vec<String> {
     let url = format!("{BASE}/{}/{remote_dir}/", percent_encode(playlist));
-    curl_listing(&url).map(|b| parse_index(&String::from_utf8_lossy(&b))).unwrap_or_default()
+    let cdn = fetch(&url).map(|b| parse_index(&String::from_utf8_lossy(&b))).unwrap_or_default();
+    if !cdn.is_empty() {
+        return cdn;
+    }
+    // Only the one directory: the whole repository's tree is 12-20 MB for PlayStation or NES, and GitHub answers 500
+    // for PlayStation 2's (20.11.2026); `master:Named_Boxarts` is about 450 KB gzipped for each.
+    let url = format!("{GITHUB_API}/{}/git/trees/master:{remote_dir}", repository(playlist));
+    fetch(&url).map(|b| github_index(&b)).unwrap_or_default()
+}
+
+fn github_index(bytes: &[u8]) -> Vec<String> {
+    #[derive(serde::Deserialize)]
+    struct Tree {
+        truncated: bool,
+        tree: Vec<Entry>,
+    }
+    #[derive(serde::Deserialize)]
+    struct Entry {
+        path: String,
+        #[serde(rename = "type")]
+        kind: String,
+    }
+    let Ok(tree) = serde_json::from_slice::<Tree>(bytes) else { return Vec::new() };
+    if tree.truncated {
+        return Vec::new();
+    }
+    tree.tree.into_iter().filter_map(|entry| {
+        let name = entry.path.strip_suffix(".png")?;
+        (entry.kind == "blob" && !name.contains('/')).then(|| name.to_string())
+    }).collect()
+}
+
+/// A git symlink comes from raw.githubusercontent.com as its target's relative path, not as the picture (a sixth of
+/// the SNES box art are such links): the target's address in the same repository and ref as `url`, or None for
+/// anything else (another server, a path out of the repository, a picture).
+fn symlink_target(url: &str, bytes: &[u8]) -> Option<String> {
+    let (repo, rest) = url.strip_prefix(GITHUB_RAW)?.strip_prefix('/')?.split_once('/')?;
+    let (git_ref, path) = rest.split_once('/')?;
+    if bytes.len() > 512 || bytes.starts_with(b"\x89PNG") {
+        return None;
+    }
+    let target = std::str::from_utf8(bytes).ok()?.trim();
+    if !target.ends_with(".png") || target.starts_with('/') || target.contains(['\n', '\\']) {
+        return None;
+    }
+    let mut dirs: Vec<String> = path.split('/').map(str::to_string).collect();
+    dirs.pop()?;
+    for seg in target.split('/') {
+        match seg {
+            // Never above the repository's root.
+            ".." => {
+                dirs.pop()?;
+            }
+            "." | "" => {}
+            seg => dirs.push(percent_encode(seg)),
+        }
+    }
+    Some(format!("{GITHUB_RAW}/{repo}/{git_ref}/{}", dirs.join("/")))
+}
+
+/// One request's response into `tmp`, binary (Android's transport gives text without a file).
+fn fetch_to(url: &str, tmp: &Path, extra: &[&str]) -> bool {
+    // curl has exited before the card is written: a whole batch must not dirty the Brick's card during Wi-Fi input.
+    #[cfg(feature = "brick")]
+    let ok = curl_with(url, None, extra).is_some_and(|bytes| !game_on() && crate::fsutil::write_atomic_bulk(tmp, &bytes).is_ok());
+    #[cfg(not(feature = "brick"))]
+    let ok = curl_with(url, Some(tmp), extra).is_some();
+    ok
+}
+
+/// One picture into `tmp`, following a git symlink of GitHub's once (`symlink_target`).
+fn fetch_picture_to(url: &str, tmp: &Path, extra: &[&str]) -> bool {
+    if !fetch_to(url, tmp, extra) {
+        return false;
+    }
+    match symlink_in(url, tmp) {
+        Some(target) => !game_on() && fetch_to(&target, tmp, extra),
+        None => true,
+    }
+}
+
+/// The symlink a download in `file` is (`symlink_target`): None when the file is missing, larger than a link's text
+/// (a picture), empty, cut short, not UTF-8 or not a picture's name.
+fn symlink_in(url: &str, file: &Path) -> Option<String> {
+    use std::io::Read;
+    let mut bytes = Vec::new();
+    std::fs::File::open(file).ok()?.take(513).read_to_end(&mut bytes).ok()?;
+    symlink_target(url, &bytes)
+}
+
+fn picture_from(playlist: &str, remote_dir: &str, name: &str, fetch: impl Fn(&str) -> bool) -> bool {
+    let file = format!("{remote_dir}/{}.png", percent_encode(name));
+    let url = format!("{BASE}/{}/{file}", percent_encode(playlist));
+    fetch(&url) || fetch(&format!("{GITHUB_RAW}/{}/master/{file}", repository(playlist)))
+}
+
+/// Checks a listed picture before trusting the absence of other entries in its directory. `scratch` holds the
+/// download while it is checked and is removed after.
+pub(crate) fn picture_available(playlist: &str, remote_dir: &str, name: &str, extra: &[&str], scratch: &Path) -> bool {
+    #[cfg(not(target_os = "android"))]
+    let cancel = crate::update::Cancel::new();
+    #[cfg(not(target_os = "android"))]
+    let _optional = crate::optional_data::lock(&cancel);
+    if let Some(dir) = scratch.parent() {
+        let _ = std::fs::create_dir_all(dir);
+    }
+    picture_from(playlist, remote_dir, name, |url| {
+        let ok = !game_on() && fetch_picture_to(url, scratch, extra) && crate::image::png_size(scratch).is_some();
+        let _ = std::fs::remove_file(scratch);
+        ok
+    })
 }
 
 
@@ -307,19 +431,15 @@ pub fn download_from(playlist: &str, remote_dir: &str, name: &str, dest: &Path, 
     if let Some(dir) = dest.parent() {
         let _ = std::fs::create_dir_all(dir);
     }
-    let url = format!("{BASE}/{}/{remote_dir}/{}.png", percent_encode(playlist), percent_encode(name));
     let tmp = dest.with_extension("part");
-    // A game that started meanwhile gets the CPU and the card: the picture isn't checked or kept (asked again later).
-    #[cfg(feature = "brick")]
-    let fetched = curl_with(&url, None, extra).is_some_and(|bytes| {
-        // curl has exited: a whole batch must not dirty the card during Wi-Fi input.
-        !game_on() && crate::fsutil::write_atomic_bulk(&tmp, &bytes).is_ok()
-    });
-    #[cfg(not(feature = "brick"))]
-    let fetched = curl_with(&url, Some(&tmp), extra).is_some();
-    let ok = fetched && !game_on() && accept(&tmp) && std::fs::rename(&tmp, dest).is_ok();
-    let _ = std::fs::remove_file(&tmp);
-    ok
+    picture_from(playlist, remote_dir, name, |url| {
+        if game_on() { return false; }
+        // A game that started meanwhile gets the CPU and the card: the picture is asked for again later.
+        let fetched = fetch_picture_to(url, &tmp, extra);
+        let ok = fetched && !game_on() && accept(&tmp) && std::fs::rename(&tmp, dest).is_ok();
+        let _ = std::fs::remove_file(&tmp);
+        ok
+    })
 }
 
 /// A game is starting or running (`set_game_on`, from the launch until the game's exit is handled). Every background
@@ -391,7 +511,7 @@ pub fn todo<'a>(data_dir: &Path, games: &'a [(String, PathBuf)]) -> Vec<&'a (Str
 
 /// `scrape`, checking `stop` before each game (a game was started): it ends after the cover it is on.
 pub fn scrape_until(data_dir: &Path, games: &[(String, PathBuf)], progress: impl Fn(usize, usize, usize), stop: impl Fn() -> bool) -> Scraped {
-    scrape_from(&crate::game_pictures::Libretro, data_dir, games, progress, stop)
+    scrape_from(&crate::game_pictures::Libretro, data_dir, games, false, progress, stop)
 }
 
 /// `scrape_until` against any `Remote` (replaced in the tests). Only the collection's listing lacking a game marks it
@@ -400,16 +520,17 @@ pub(crate) fn scrape_from(
     remote: &dyn crate::game_pictures::Remote,
     data_dir: &Path,
     games: &[(String, PathBuf)],
+    retry_missing: bool,
     progress: impl Fn(usize, usize, usize),
     stop: impl Fn() -> bool,
 ) -> Scraped {
-    use crate::game_pictures::{Fetched, Kind};
+    use crate::game_pictures::{Catalog, Kind, Lookup};
     let todo = todo(data_dir, games);
     let total = todo.len();
     let (mut done, mut found, mut failures) = (0, 0, 0);
     let mut looked_up = Vec::new();
     let mut unreachable = false;
-    let mut index: Option<(String, Vec<String>)> = None;
+    let mut index = None::<crate::game_pictures::Catalog>;
     // The proper names the games' checksums gave (`rom_id`), worked out before the download.
     let names = crate::rom_id::known(data_dir, games);
     for (sys, rom) in todo {
@@ -421,26 +542,19 @@ pub(crate) fn scrape_from(
         let stem = rom.file_stem().and_then(|s| s.to_str()).unwrap_or_default();
         let missing_file = data_dir.join("covers").join(sys).join(".missing");
         let missing = std::fs::read_to_string(&missing_file).unwrap_or_default();
-        if !missing.lines().any(|l| l == stem) {
-            if index.as_ref().is_none_or(|(p, _)| p != list) {
-                index = Some((list.to_string(), remote.index(list, Kind::Box)));
-            }
-            let list_names = &index.as_ref().unwrap().1;
-            match pick(stem, names.get(rom).map(String::as_str), list_names) {
-                Some(name) => match remote.download(list, Kind::Box, name, &cover_path(data_dir, sys, rom)) {
-                    Fetched::Got => {
-                        failures = 0;
-                        found += 1;
-                    }
-                    // The name came from the collection's own listing, so the file is there: a failure is the
-                    // network or a broken file, never "no cover". It is asked for again on the next run.
-                    Fetched::Unusable | Fetched::Failed => failures += 1,
-                },
-                // An empty index means the catalog didn't load; don't mark the game as missing then.
-                None if list_names.is_empty() => failures += 1,
-                None => {
+        if retry_missing || !missing.lines().any(|l| l == stem) {
+            let catalog = Catalog::for_playlist(&mut index, remote, list, Kind::Box);
+            match catalog.lookup(remote, stem, names.get(rom).map(String::as_str), &cover_path(data_dir, sys, rom)) {
+                Lookup::Got => {
                     failures = 0;
-                    let _ = crate::fsutil::write_atomic(&missing_file, format!("{missing}{stem}\n").as_bytes());
+                    found += 1;
+                }
+                Lookup::Failed | Lookup::Unusable => failures += 1,
+                Lookup::Missing => {
+                    failures = 0;
+                    if !missing.lines().any(|line| line == stem) {
+                        let _ = crate::fsutil::write_atomic(&missing_file, format!("{missing}{stem}\n").as_bytes());
+                    }
                 }
             }
         }
@@ -460,6 +574,101 @@ mod tests {
 
     fn index(names: &[&str]) -> Vec<String> {
         names.iter().map(|s| s.to_string()).collect()
+    }
+
+    #[test]
+    fn github_catalog_keeps_the_exact_psp_disc_name_when_the_cdn_directory_is_down() {
+        let playlist = playlist("psp").unwrap();
+        let name = "Grand Theft Auto - Chinatown Wars (Europe) (En,Fr,De,Es,It)";
+        let tree = serde_json::json!({
+            "truncated": false,
+            "tree": [
+                {"path": format!("{name}.png"), "type": "blob"},
+                {"path": "notes.txt", "type": "blob"},
+                {"path": "folder.png", "type": "tree"},
+            ]
+        }).to_string();
+        let listing = index_from(playlist, "Named_Boxarts", |url| {
+            if url == "https://api.github.com/repos/libretro-thumbnails/Sony_-_PlayStation_Portable/git/trees/master:Named_Boxarts" {
+                Some(tree.as_bytes().to_vec())
+            } else {
+                assert_eq!(url, "https://thumbnails.libretro.com/Sony%20-%20PlayStation%20Portable/Named_Boxarts/");
+                None
+            }
+        });
+        let chd = format!("{name}.chd");
+        let stem = Path::new(&chd).file_stem().unwrap().to_str().unwrap();
+        assert_eq!(listing, [name]);
+        assert_eq!(best_match(stem, &listing), Some(name));
+        assert!(github_index(tree.replace("false", "true").as_bytes()).is_empty());
+        assert_eq!(repository("Philips - Videopac+"), "Philips_-_Videopac");
+    }
+
+    /// 599 of the 3785 SNES box art files on GitHub are git symlinks: raw.githubusercontent.com answers with the
+    /// target's name, which must be followed, not taken for a broken picture (three in a row ended the run).
+    fn png_bytes() -> Vec<u8> {
+        let mut b = b"\x89PNG\r\n\x1a\n\0\0\0\rIHDR".to_vec();
+        b.extend(64u32.to_be_bytes());
+        b.extend(64u32.to_be_bytes());
+        b
+    }
+
+    #[test]
+    fn a_github_symlink_is_followed_to_the_picture_beside_it() {
+        // The download on the card: missing, empty, cut short, flipped, not UTF-8 or too big is no symlink.
+        let d = crate::testutil::TestDir::new("symlink-file");
+        let file = d.join("B.part");
+        let link = "https://raw.githubusercontent.com/libretro-thumbnails/R/master/Named_Boxarts/B.png";
+        assert_eq!(symlink_in(link, &file), None, "missing");
+        for (case, bytes) in [
+            ("empty", b"".to_vec()),
+            ("truncated", b"A (US".to_vec()),
+            ("flipped", b"gnp.)ASU( A".to_vec()),
+            ("encoding", b"A \xff\xfe (USA).png".to_vec()),
+            ("a picture", png_bytes()),
+            ("too big", format!("{}.png", "A".repeat(600)).into_bytes()),
+        ] {
+            std::fs::write(&file, &bytes).unwrap();
+            assert_eq!(symlink_in(link, &file), None, "{case}");
+        }
+        std::fs::write(&file, b"A (USA).png").unwrap();
+        assert_eq!(symlink_in(link, &file).unwrap(), "https://raw.githubusercontent.com/libretro-thumbnails/R/master/Named_Boxarts/A%20%28USA%29.png");
+
+        let url = "https://raw.githubusercontent.com/libretro-thumbnails/R/master/Named_Boxarts/B%20%28Europe%29.png";
+        let base = "https://raw.githubusercontent.com/libretro-thumbnails/R/master";
+        assert_eq!(symlink_target(url, b"A (USA).png\n").unwrap(), format!("{base}/Named_Boxarts/A%20%28USA%29.png"));
+        assert_eq!(symlink_target(url, b"../Named_Snaps/A.png").unwrap(), format!("{base}/Named_Snaps/A.png"));
+        assert_eq!(symlink_target(url, b"\x89PNG\r\n\x1a\n\0\0\0\rIHDR"), None);
+        assert_eq!(symlink_target(url, b"<html>login</html>"), None);
+        // Only inside the same repository and ref of GitHub's raw files: an answer can't send the download elsewhere.
+        assert_eq!(symlink_target(url, b"../../other/master/A.png"), None, "out of the repository");
+        assert_eq!(symlink_target(url, b"../../A.png"), None);
+        assert_eq!(symlink_target(url, b"//evil.example/A.png"), None);
+        assert_eq!(symlink_target(url, b"x/@evil.example:80/A.png").unwrap(), format!("{base}/Named_Boxarts/x/%40evil.example%3A80/A.png"));
+        assert_eq!(symlink_target("https://thumbnails.libretro.com/S/Named_Boxarts/B.png", b"A.png"), None, "the libretro server has no symlinks");
+        assert_eq!(symlink_target("https://raw.githubusercontent.com/libretro-thumbnailsX/R/master/N/B.png", b"A.png"), None);
+    }
+
+    #[test]
+    fn the_github_mirror_is_tried_for_every_kind_when_the_cdn_file_fails() {
+        let playlist = playlist("psp").unwrap();
+        let name = "Grand Theft Auto - Chinatown Wars (Europe) (En,Fr,De,Es,It)";
+        for kind in [crate::game_pictures::Kind::Box, crate::game_pictures::Kind::Snap, crate::game_pictures::Kind::Title] {
+            let file = format!("{}/Grand%20Theft%20Auto%20-%20Chinatown%20Wars%20%28Europe%29%20%28En%2CFr%2CDe%2CEs%2CIt%29.png", kind.remote());
+            let primary = format!("https://thumbnails.libretro.com/Sony%20-%20PlayStation%20Portable/{file}");
+            let mirror = format!("https://raw.githubusercontent.com/libretro-thumbnails/Sony_-_PlayStation_Portable/master/{file}");
+            let urls = std::cell::RefCell::new(Vec::new());
+            assert!(picture_from(playlist, kind.remote(), name, |url| {
+                urls.borrow_mut().push(url.to_string());
+                url == mirror
+            }));
+            assert_eq!(*urls.borrow(), [primary.clone(), mirror]);
+            assert!(picture_from(playlist, kind.remote(), name, |url| {
+                assert_eq!(url, primary);
+                true
+            }));
+            assert!(!picture_from(playlist, kind.remote(), name, |_| false));
+        }
     }
 
     #[test]
@@ -610,6 +819,9 @@ mod tests {
         fn index(&self, _: &str, _: crate::game_pictures::Kind) -> Vec<String> {
             self.listing.clone()
         }
+        fn available(&self, _: &str, _: crate::game_pictures::Kind, _: &str, _: &Path) -> bool {
+            self.answer == crate::game_pictures::Fetched::Got
+        }
         fn download(&self, _: &str, _: crate::game_pictures::Kind, _: &str, dest: &Path) -> crate::game_pictures::Fetched {
             self.asked.set(self.asked.get() + 1);
             if self.answer == crate::game_pictures::Fetched::Got {
@@ -624,7 +836,7 @@ mod tests {
         let d = crate::testutil::TestDir::new("cover-retry");
         let games: Vec<(String, PathBuf)> = stems.iter().map(|s| ("gba".to_string(), PathBuf::from(format!("/storage/roms/gba/{s}.gba")))).collect();
         let server = Server { listing: index(listing), answer, asked: Default::default() };
-        let out = scrape_from(&server, &d, &games, |_, _, _| {}, || false);
+        let out = scrape_from(&server, &d, &games, false, |_, _, _| {}, || false);
         (d, server, out)
     }
 
@@ -644,6 +856,17 @@ mod tests {
         assert_eq!(missing_list(&d), "", "a 500 or a timeout is not 'no cover'");
         assert!(out.unreachable && out.found == 0);
         assert_eq!(server.asked.get(), GIVE_UP_AFTER, "three tries, then it stops asking");
+    }
+
+    #[test]
+    fn a_listing_without_reachable_files_does_not_rule_out_unlisted_games() {
+        let (d, _, out) = run(
+            &["Known Game (USA)"],
+            crate::game_pictures::Fetched::Failed,
+            &["Grand Theft Auto - Chinatown Wars (Europe) (En,Fr,De,Es,It)"],
+        );
+        assert_eq!(missing_list(&d), "", "the next start must try again");
+        assert_eq!(out.found, 0);
     }
 
     #[test]

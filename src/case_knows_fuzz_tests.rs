@@ -56,6 +56,24 @@ fn valid_saves() -> Vec<(case_knows::Kind, Vec<u8>)> {
     let ds_team: &[(&str, u8, bool)] = &[("TURTWIG", 14, false)];
     let g5_team: &[(&str, u8, bool)] = &[("Tepig", 9, false)];
     let seeds = vec![
+        // These are positive controls, not just files with valid checksums but
+        // ambiguous/unsupported fields. The file-source rule proved the old
+        // extreme-value corpus had no recognised save for these nine layouts.
+        seed(AllStarsWorld, || {
+            let world = mario_save([Some(6), None, None]);
+            let mut s = vec![0u8; 0x2000];
+            s[0x1000..0x1000 + 0x8F].copy_from_slice(&world[..0x8F]);
+            s[0x123C..0x123C + 0x8F].copy_from_slice(&world[..0x8F]);
+            s
+        }),
+        seed(PaperMario, || paper_mario_save(&[(0, 0, 5, 1000, 1, 3)], Some(0))),
+        seed(OracleOfSeasons, || oracle_save(false, &[(0, 0b11, 16)])),
+        seed(DonkeyKong2, || dkc_save(DonkeyKong2, &[(0, 34, 1000)])),
+        seed(GoldenSunLostAge, || golden_sun_save(true, &[(3, 1, 2, "Felix", 37, 30 * HOUR)])),
+        seed(BreathOfFire2, || breath_of_fire_2_save(&[(0, "Rob", 1)])),
+        seed(SuperstarSaga, || superstar_saga_save(&[(0, false, 1, 1, 46_800)], true)),
+        seed(FireEmblem8, || fe_save(true, &[(1, 5, 1, 0, 3 * HOUR + 7 * 3600, true)], 1)),
+        seed(BlackWhite2, || gen5_save(BlackWhite2, g5_team, 0b1111, (10, 1))),
         seed(Gen1, || gen1_save(&[("CHARIZARD", 45), ("PIKACHU", 30)], 0b0111_1111, (31, 12))),
         seed(GoldSilver, || gen2_save(false, &[("EGG", 5, true), ("TYPHLOSION", 52, false)], (0xFF, 0b111), (40, 7))),
         seed(Crystal, || gen2_save(true, &[("TYPHLOSION", 52, false)], (0xFF, 0xFF), (999, 59))),
@@ -538,4 +556,56 @@ cheat1_desc = \"Coins\"\ncheat1_address = \"100\"\ncheat1_value = \"9\"\ncheat1_
         }
     }
     assert!(found.is_empty(), "panics: {found:?}");
+}
+
+/// The file-source rule's battery-save family: a real, recognised save of every
+/// layout first, then the same missing/empty/cut/flipped/encoding corpus as the
+/// integration runner. Use the file reader too, with its checksum cache pointing
+/// at the synthetic ROM; random bytes alone would only exercise early refusals.
+#[test]
+fn file_source_rule_starts_with_a_recognised_save_of_every_layout() {
+    let seeds = valid_saves();
+    let mut kinds = Vec::new();
+    for release in RELEASES { if !kinds.contains(&release.kind) { kinds.push(release.kind); } }
+    let mut missing = Vec::new();
+    let mut exercised = 0;
+    for kind in kinds {
+        let release = RELEASES.iter().find(|r| r.kind == kind && r.lang == Lang::En)
+            .or_else(|| RELEASES.iter().find(|r| r.kind == kind)).unwrap();
+        let Some((_, seed)) = seeds.iter().find(|(k, bytes)| *k == kind && case_knows::read(release, bytes, None).0.is_some()) else {
+            missing.push(format!("{kind:?}")); continue;
+        };
+        let d = crate::testutil::TestDir::new("file-source-case-knows");
+        let rom = d.join("rule.gb");
+        std::fs::write(&rom, b"synthetic ROM identity").unwrap();
+        let meta = std::fs::metadata(&rom).unwrap();
+        let stamp = meta.modified().unwrap().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos();
+        std::fs::create_dir_all(d.join("identify")).unwrap();
+        std::fs::write(d.join("identify/case-knows.tsv"), format!("{}\t{stamp}\t{:08X}\t-\t\t{}\n", meta.len(), release.crc, rom.display())).unwrap();
+        let save = d.join("rule.sav");
+        std::fs::write(&save, seed).unwrap();
+        let mut reader = crate::case_knows_read::Reading::new(&d);
+        // Japanese-only layouts are intentionally not displayed yet; their parser
+        // still has the positive control above and the full fault corpus below.
+        if release.verified() {
+            assert!(reader.progress_from_save("gb", &rom, &save).is_some(), "{kind:?}: file reader must reach the valid save");
+        }
+        let mut variants = vec![None, Some(Vec::new()), Some(vec![0xff, 0xfe, 0, 0xd8, 0x80])];
+        for at in [1, seed.len()/4, seed.len()/2, seed.len()-1] { variants.push(Some(seed[..at].to_vec())); }
+        for at in [0, seed.len()/2, seed.len()-1] { let mut b = seed.clone(); b[at] ^= 0xff; variants.push(Some(b)); }
+        for bytes in variants {
+            let _ = std::fs::remove_file(&save);
+            if let Some(bytes) = bytes { std::fs::write(&save, bytes).unwrap(); }
+            let bytes = std::fs::read(&save).unwrap_or_default();
+            let (answer, memory) = case_knows::read(release, &bytes, None);
+            use_answer(&answer);
+            let _ = case_knows::read(release, &bytes, Some(&memory));
+            let mut reader = crate::case_knows_read::Reading::new(&d);
+            let answer = reader.progress_from_save("gb", &rom, &save);
+            use_answer(&answer);
+        }
+        exercised += 1;
+    }
+    assert!(missing.is_empty(), "valid file-source seeds missing for {}", missing.join(", "));
+    eprintln!("file-source rule: {exercised} recognised battery-save layouts");
 }

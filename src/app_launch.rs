@@ -72,6 +72,9 @@ impl App {
         let java = (!hosted && pocket_ui::j2me_java::needed(&pocket_ui::j2me_java::Places::here(), &core))
             .then(|| std::sync::Arc::new(pocket_ui::j2me_java::Fetch::default()));
         self.java_fetch = java.clone();
+        // A RomM game not on the card yet: downloaded first, its bar over the start (`app_romm`).
+        let romm = self.romm_fetch_for(&system, &path);
+        self.romm.get_mut().fetch = romm.clone();
         let run = Run { name: name.clone(), player, system: system.clone(), core, path: path.clone() };
         pocket_ui::motion::set_cozy(self.cozy());
         pocket_ui::ui_sound::stop_for(!hosted);
@@ -102,7 +105,7 @@ impl App {
         pocket_ui::trace::step("launch preparation queued");
         let fan = self.perf_fan_prepare_launch();
         std::thread::spawn(move || {
-            let prepared = prepare(&name, &game, &data, kids, pixel, shared(), shown, drains, java.as_deref(), fan);
+            let prepared = prepare(&name, &game, &data, kids, pixel, shared(), shown, drains, java.as_deref(), romm.as_deref(), fan);
             let _ = tx.send(prepared);
             let _ = proxy.send_event(UserEvent::LaunchPrepared);
         });
@@ -131,6 +134,7 @@ impl App {
         };
         self.perf_fan_launch_ready(fan);
         self.java_fetch = None;
+        self.romm.get_mut().fetch = None;
         let Some(p) = self.pending_launch.take() else { return };
         match outcome {
             Outcome::Ready { at, wait, resumable, preview, env } => self.launch_prepared(p, at, wait, resumable, preview, env),
@@ -169,7 +173,7 @@ pub(crate) static TEST_PREPARE_RELEASED: std::sync::atomic::AtomicBool = std::sy
 pub(crate) static TEST_PREPARED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 
 fn prepare(name: &str, game: &frozen::Game, data: &std::path::Path, kids: bool, pixel: bool,
-    shared: bool, shown: bool, drains: Vec<i32>, java: Option<&pocket_ui::j2me_java::Fetch>, fan: impl FnOnce(bool) -> pocket_ui::perf_fan::FanKeeper) -> (Outcome, pocket_ui::perf_fan::FanKeeper) {
+    shared: bool, shown: bool, drains: Vec<i32>, java: Option<&pocket_ui::j2me_java::Fetch>, romm: Option<&super::app_romm::RommFetch>, fan: impl FnOnce(bool) -> pocket_ui::perf_fan::FanKeeper) -> (Outcome, pocket_ui::perf_fan::FanKeeper) {
     pocket_ui::trace::step("launch preparation begin");
     if pocket_ui::proc::mock() {
         if let Some(ms) = std::env::var("POCKETUI_TEST_PREPARE_MS").ok().and_then(|s| s.parse::<u64>().ok()) {
@@ -186,6 +190,10 @@ fn prepare(name: &str, game: &frozen::Game, data: &std::path::Path, kids: bool, 
     }
     let hosted = Player::of(&game.system, &game.emulator, &game.core) == Player::Hosted;
     let (system, path, emulator, core) = (&game.system, &game.path, &game.emulator, &game.core);
+    // A RomM game's first start: its download, unless it is on the card (`app_romm`). What went wrong is the start's note.
+    if let Some(r) = romm {
+        if let Err(f) = r.run(path) { return (Outcome::Empty(f.words()), fan(false)); }
+    }
     if let Some(msg) = pocket_ui::library_cache::missing_game(name, path) { return (Outcome::Missing(msg), fan(false)); }
     if let Some(msg) = pocket_ui::library_cache::empty_game(name, path) { return (Outcome::Empty(msg), fan(false)); }
     pocket_ui::trace::step("launch files checked");

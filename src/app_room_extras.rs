@@ -1,6 +1,7 @@
 //! Part of the pocket-ui binary: the App's side of `pocket_ui::room_light` (light by time of day) and
 //! `pocket_ui::room_deco` (decorations that grow with play) on the Shelf and the Cabinet, each switched by its row in
-//! Settings → Look → Cozy extras (`cozy_extras::Extra::TimeOfDayLight`, `Extra::Decorations`).
+//! Settings → Look → Cozy extras (`cozy_extras::Extra::TimeOfDayLight`, `Extra::Decorations`); and the window on the
+//! wall with the sky now and the season on its sill (`pocket_ui::room_window`, `Extra::Window`).
 //!
 //! No work per frame: the light is read from the clock at most every [`LOOK_AGAIN`], the milestones from the library
 //! when its case stickers changed or every [`LOOK_AGAIN`]; when either changed, the wood and the Shelf look's tiles are
@@ -18,11 +19,15 @@ use pocket_ui::media::Prop;
 use pocket_ui::palette::*;
 use pocket_ui::room_deco::Earned;
 use pocket_ui::room_light::{self, Light};
+use pocket_ui::room_window::{self, Season, Sky, Window};
 
 use super::{App, Screen, Theme};
 
 /// How long a reading of the clock or the library holds.
 const LOOK_AGAIN: Duration = Duration::from_secs(20);
+
+/// The window's picture and its shadow on the wall.
+pub(crate) type WindowPics = (Rc<Window>, Rc<pocket_ui::cabinet_art::ShapeShadow>);
 
 /// What the room's light and decorations were read as, and the framed "100 %" per scale.
 #[derive(Default)]
@@ -34,8 +39,15 @@ pub(crate) struct Room {
     /// What the wood and tiles in the caches were made for (`Room::key`), and the light they are made in.
     pub(crate) made_for: Option<u64>,
     pub(crate) lit: Light,
+    /// The evening TV glow's darkness when last looked at (`tv_glow::darkness`), and the one this frame's room is in
+    /// (0: no glow; `App::tv_dark`).
+    dark: Option<(Instant, f32)>,
+    pub(crate) tv_dark: f32,
     /// The decorations' pictures per (prop, scale × 100), the framed "100 %" with its words on.
     pics: HashMap<(Prop, i32), Rc<Pic>>,
+    /// The window's sky and season as last read (`room_window::now`), and its pictures per (sky, season, scale × 100).
+    window: Option<(Instant, (Sky, Season))>,
+    windows: HashMap<(Sky, Season, i32), WindowPics>,
 }
 
 impl Room {
@@ -50,9 +62,9 @@ impl Room {
         (true, next)
     }
 
-    /// Light and milestones together, for the caches.
-    pub(crate) fn key(light: Light, earned: &Earned) -> u64 {
-        light.key().wrapping_mul(0x9e37_79b9_7f4a_7c15) ^ earned.key()
+    /// Light, milestones and the window together, for the caches.
+    pub(crate) fn key(light: Light, earned: &Earned, window: Option<(Sky, Season)>) -> u64 {
+        light.key().wrapping_mul(0x9e37_79b9_7f4a_7c15) ^ earned.key() ^ room_window::key(window.is_some(), window.unwrap_or((Sky::Day, Season::Spring))).wrapping_mul(0xff51_afd7_ed55_8ccd)
     }
 }
 
@@ -79,6 +91,34 @@ impl App {
         }
     }
 
+    /// How dark it is for the evening TV glow (0: no glow): the Cabinet with its TV place (not the look step's sample), the
+    /// extra on, after dark by the clock (`tv_glow::darkness`), looked at every [`LOOK_AGAIN`] as the light is. The same
+    /// whether the TV or a handheld game's handheld stands there: the room's light is part of the cached wood and tiles
+    /// (`Room::key`), and changing it with every move between a handheld and a console game rebuilt them each time
+    /// (RG35XX Plus, 19.11.: a move in the evening 77 ms instead of 14). The glow itself is the TV's only (`paint_cabinet_tv`).
+    pub(crate) fn tv_dark(&mut self) -> f32 {
+        let tv_on = self.theme == Theme::Cabinet && cozy_extras::on(Extra::CabinetTv) && self.sample_cover.is_none();
+        if !tv_on || !cozy_extras::on(Extra::EveningGlow) {
+            return 0.0;
+        }
+        let now = Instant::now();
+        match self.cabinet.room.dark {
+            Some((at, d)) if now.duration_since(at) < LOOK_AGAIN => d,
+            _ => {
+                let d = pocket_ui::tv_glow::darkness(room_light::minute_now());
+                self.cabinet.room.dark = Some((now, d));
+                d
+            }
+        }
+    }
+
+    /// The room's light `light` with the TV's evening on it: a little dimmer after dark (`tv_glow::dimmed`).
+    fn tv_lit(&mut self, light: Light) -> Light {
+        let dark = self.tv_dark();
+        self.cabinet.room.tv_dark = dark;
+        if dark > 0.0 { pocket_ui::tv_glow::dimmed(light, dark) } else { light }
+    }
+
     /// What the player has earned, as the shelves show it.
     pub(crate) fn room_earned(&mut self) -> Rc<Earned> {
         if !cozy_extras::on(Extra::Decorations) {
@@ -97,11 +137,50 @@ impl App {
         }
     }
 
-    /// At the start of a Shelf or Cabinet frame: the light and the milestones, the cached wood and tiles made again
-    /// when either changed since they were made.
+    /// The window's sky and season now (None with its extra off, and while it is taken off: `Extra::built`): read from
+    /// the clock at most every [`LOOK_AGAIN`].
+    pub(crate) fn room_window(&mut self) -> Option<(Sky, Season)> {
+        if !Extra::Window.built() || !cozy_extras::on(Extra::Window) {
+            return None;
+        }
+        let now = Instant::now();
+        match self.cabinet.room.window {
+            Some((at, w)) if now.duration_since(at) < LOOK_AGAIN && self.cabinet.room.made_for.is_some() => Some(w),
+            _ => {
+                let w = room_window::now();
+                self.cabinet.room.window = Some((now, w));
+                Some(w)
+            }
+        }
+    }
+
+    /// The window as it is now at scale `k` (screen pixels a template pixel) and its soft shadow on the wall, None with
+    /// its extra off. Made once per sky, season and scale.
+    pub(crate) fn room_window_pic(&mut self, k: f32) -> Option<WindowPics> {
+        let (sky, season) = self.room_window()?;
+        let key = (sky, season, (k * 100.0).round() as i32);
+        if let Some(w) = self.cabinet.room.windows.get(&key) {
+            return Some(w.clone());
+        }
+        if self.cabinet.room.windows.len() > 6 {
+            self.cabinet.room.windows.clear();
+        }
+        let w = Window::at(sky, season, k);
+        // A little to the right and down, as the TV's and the cases' fall in the room's light.
+        let d = (k * 2.0).round() as i32;
+        let shadow = pocket_ui::cabinet_art::ShapeShadow::of(&w.pic, d, d, (k * 4.0).round() as i32);
+        let made = (Rc::new(w), Rc::new(shadow));
+        self.cabinet.room.windows.insert(key, made.clone());
+        Some(made)
+    }
+
+    /// At the start of a Shelf or Cabinet frame: the light, the milestones and the window, the cached wood and tiles
+    /// made again when any changed since they were made.
     pub(crate) fn room_sync(&mut self) -> (Light, Rc<Earned>) {
         let (light, earned) = (self.room_light(), self.room_earned());
-        let key = Room::key(light, &earned);
+        let light = self.tv_lit(light);
+        let window = self.room_window();
+        let key = Room::key(light, &earned, window);
         if self.cabinet.room.made_for != Some(key) {
             if self.cabinet.room.made_for.is_some() {
                 self.cabinet.room_changed();
@@ -120,7 +199,7 @@ impl App {
             && self.running.is_none()
             && self.settings_page.is_none()
             && self.sleep.state() == pocket_ui::sleep::State::Awake;
-        let on = cozy_extras::on(Extra::TimeOfDayLight) || cozy_extras::on(Extra::Decorations);
+        let on = cozy_extras::on(Extra::TimeOfDayLight) || cozy_extras::on(Extra::Decorations) || (Extra::Window.built() && cozy_extras::on(Extra::Window)) || cozy_extras::on(Extra::EveningGlow);
         if !shown || !on || pocket_ui::motion::level() == pocket_ui::motion::Motion::Off {
             return None;
         }
@@ -131,8 +210,11 @@ impl App {
         let before = self.cabinet.room.made_for;
         self.cabinet.room.light = None;
         self.cabinet.room.earned = None;
-        let (light, earned) = (self.room_light(), self.room_earned());
-        if before != Some(Room::key(light, &earned)) {
+        self.cabinet.room.window = None;
+        self.cabinet.room.dark = None;
+        let (light, earned, window) = (self.room_light(), self.room_earned(), self.room_window());
+        let light = self.tv_lit(light);
+        if before != Some(Room::key(light, &earned, window)) {
             self.request_redraw();
         }
         Some(next)

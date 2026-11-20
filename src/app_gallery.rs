@@ -33,7 +33,7 @@ use pocket_ui::text::Face;
 use pocket_ui::touch::Area;
 use pocket_ui::type_scale;
 
-use super::{stripe, system_short, App, SettingsPage, UserEvent, CANCEL, CONFIRM, NU_BTN_PAD, NU_PAD, NU_PILL, NU_SMALL};
+use super::{stripe, system_short, App, SettingsPage, UserEvent, CANCEL, CONFIRM, NU_BTN_PAD, NU_PAD, NU_SMALL};
 
 /// The name in the Settings list, to come back to.
 pub(crate) const SETTINGS_NAME: &str = "Screenshots";
@@ -439,10 +439,10 @@ impl App {
         let counts = page.message.is_none();
         let fits = self.text.width(Face::Body, NU_SMALL, &text) <= x0 - left - 24;
         if !text.is_empty() && fits {
-            self.text.draw(c, Face::Body, NU_SMALL, left, c.h - NU_PAD - NU_PILL / 2 + type_scale::mid(NU_SMALL), color, &text);
+            self.text.draw(c, Face::Body, NU_SMALL, left, pocket_ui::kit::hint_bar_mid(c.h) + type_scale::mid(NU_SMALL), color, &text);
         } else if !text.is_empty() && !counts {
             let line_h = type_scale::line(NU_SMALL, 8);
-            let bottom = c.h - NU_PAD - NU_PILL - 12;
+            let bottom = pocket_ui::kit::hint_bar_top(c.h) - 12;
             c.shade_rect(0, bottom - line_h - 8, c.w, line_h + 12, pal().void, 220);
             let text = self.text.fit(Face::Body, NU_SMALL, &text, c.w - 2 * left);
             self.text.draw(c, Face::Body, NU_SMALL, left, bottom - line_h / 2 - 2 + type_scale::mid(NU_SMALL), color, &text);
@@ -460,8 +460,8 @@ impl App {
             Scope::Game(t) => t.clone(),
         };
         let title = self.text.fit(Face::Title, 50, &title, pill_left - 24 - left);
-        self.text.draw(c, Face::Title, 50, left, pad + 58, pal().chalk, &title);
-        let (mut top, mut bottom) = (pad + NU_PILL + 12, c.h - pad - NU_PILL - 16);
+        self.text.draw(c, Face::Title, 50, left, pocket_ui::kit::header_title(c.h), pal().chalk, &title);
+        let (mut top, mut bottom) = (pocket_ui::kit::header_bottom(c.h) + 12, pocket_ui::kit::hint_bar_top(c.h) - 16);
         // What a delete or Y came to may need its own line above the hints (`paint_gallery`): the list ends above it,
         // so the message never covers a row's name (the square CubeXX page ended a row right under it).
         if page.message.is_some() {
@@ -618,7 +618,7 @@ impl App {
         let when = format!("{}:{:02}", shot.when.clock(), shot.when.sec);
         self.text.draw(c, Face::Body, 28, x, line2, pal().dust, &when);
 
-        let (top, bottom) = (line2 + 24, c.h - pad - NU_PILL - 16);
+        let (top, bottom) = (line2 + 24, pocket_ui::kit::hint_bar_top(c.h) - 16);
         let room = (c.w - 2 * pad, bottom - top);
         let shown = self.gallery_full(&shot.path, room);
         match &shown {

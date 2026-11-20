@@ -23,7 +23,7 @@ use pocket_ui::text::Face;
 use pocket_ui::touch::Area;
 
 use super::app_controllers::button_name;
-use super::{App, SettingsPage, CANCEL, NU_BTN_PAD, NU_PAD, NU_PILL, NU_SMALL};
+use super::{App, SettingsPage, CANCEL, NU_BTN_PAD, NU_PAD, NU_SMALL};
 
 pub(crate) const SETTINGS_NAME: &str = "Test buttons";
 
@@ -219,9 +219,9 @@ impl App {
         let note = "To leave, hold HOME for 2 seconds, or B and START together.";
         let bottom = pocket_ui::kit::footer(c, &mut self.text, &mut self.hits, &hints, note, 2, pal().text);
         // A tap on the pill leaves, for the touch screen (a tap on a hint key sends the button, which has no hold).
-        let pill = pocket_ui::kit::pill_width(&mut self.text, c.w, &hints);
-        self.hits.button(Area::new(c.w - NU_PAD - pill, c.h - NU_PAD - NU_PILL - 8, pill, NU_PILL + 16), Button::Mode);
-        let top = NU_PAD + NU_PILL + 12;
+        let pill = pocket_ui::kit::pill_width(&mut self.text, (c.w, c.h), &hints);
+        self.hits.button(Area::new(c.w - NU_PAD - pill, pocket_ui::kit::hint_bar_top(c.h) - 8, pill, pocket_ui::kit::hint_h(c.h) + 16), Button::Mode);
+        let top = pocket_ui::kit::header_bottom(c.h) + 12;
         let (left, right) = (NU_PAD, c.w - NU_PAD);
         if test.pads().is_empty() {
             let (x, base) = (left + NU_BTN_PAD, top + 60 + pocket_ui::type_scale::grow(37));

@@ -56,7 +56,20 @@ fn key(inputs: &[PathBuf]) -> String {
             h = fnv(h, std::env::var(&v).unwrap_or_default().as_bytes());
         }
     }
+    // The Brick's hidden C ([`c_flags`]); the replacement header's content is among the inputs.
+    h = fnv(h, &[std::env::var_os("CARGO_FEATURE_BRICK").is_some() as u8]);
     format!("{h:016x}")
+}
+
+/// Extra C flags, part of [`key`]. The Brick's pocket-core exports its symbols (`--export-dynamic`, for its `eglGetProcAddress`), so
+/// the C in it is hidden: rcheevos (`rc_*`, `md5_*`) must never stand in for a core's own copy (PPSSPP exports its own rc_*).
+/// `src/rc_export_brick.h` replaces rcheevos' rc_export.h, which marks its public functions visible; it is among the hashed inputs.
+fn c_flags(root: &Path) -> Vec<String> {
+    if std::env::var_os("CARGO_FEATURE_BRICK").is_none() {
+        return Vec::new();
+    }
+    let header = std::fs::canonicalize(root.join("src/rc_export_brick.h")).expect("src/rc_export_brick.h");
+    vec!["-fvisibility=hidden".into(), "-include".into(), header.to_string_lossy().into_owned()]
 }
 
 /// Whether OUT_DIR already holds `lib` built from exactly `inputs` (its key file says so): then cargo is told to link
@@ -111,6 +124,14 @@ pub fn build(root: &Path) {
     let built = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_secs());
     println!("cargo:rustc-env=POCKETUI_BUILD_UNIX={built}");
     watch_library_rust(&at("src"), &at("src/bin"));
+    // The Brick: pocket-core's own `eglGetProcAddress` (src/bin/pocket_core.rs) must be in its dynamic symbol table, so a core
+    // linked against libEGL (PPSSPP's gl3stubInit) binds to it instead of the vendor's, which returns NULL for core GLES 3
+    // functions (glGetStringi: SIGSEGV at the start of every PSP game, 20.11.2026). scripts/brick-make-card.sh checks it.
+    // zig's linker has neither --export-dynamic-symbol nor a version script for a program: --export-dynamic, and the C in
+    // the crate is compiled hidden ([`c_flags`]), so pocket-core's rcheevos never stands in for a core's own.
+    if std::env::var_os("CARGO_FEATURE_BRICK").is_some() {
+        println!("cargo:rustc-link-arg-bin=pocket-core=-Wl,--export-dynamic");
+    }
     // The compiler setup is part of [`key`]; `cc` names these itself only when it runs, so they are named here always.
     let target = std::env::var("TARGET").unwrap_or_default();
     for var in ["CC", "CFLAGS", "AR", "CRATE_CC_NO_DEFAULTS"] {
@@ -128,7 +149,9 @@ pub fn build(root: &Path) {
     println!("cargo:rerun-if-changed={}", log_shim.display());
     let log_key = key(std::slice::from_ref(&log_shim));
     if !fresh("pocket_log_shim", &log_key) {
-        cc::Build::new().file(&log_shim).warnings(true).compile("pocket_log_shim");
+        let mut b = cc::Build::new();
+        c_flags(root).iter().for_each(|f| { b.flag(f); });
+        b.file(&log_shim).warnings(true).compile("pocket_log_shim");
         remember("pocket_log_shim", &log_key);
     }
 
@@ -158,10 +181,13 @@ pub fn build(root: &Path) {
     files_under(Path::new(rc.as_ref()), &mut inputs);
     inputs.sort();
     inputs.push(rc_shim.clone());
+    inputs.push(at("src/rc_export_brick.h"));
+    println!("cargo:rerun-if-changed={}", at("src/rc_export_brick.h").display());
     let rc_key = key(&inputs);
     if !fresh("pocket_rcheevos", &rc_key) {
-        cc::Build::new()
-            .files(&files)
+        let mut b = cc::Build::new();
+        c_flags(root).iter().for_each(|f| { b.flag(f); });
+        b.files(&files)
             .file(&rc_shim)
             .include(format!("{rc}/include"))
             .include(format!("{rc}/src"))

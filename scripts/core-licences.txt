@@ -40,3 +40,5 @@ fake08|permissive|814991a|LICENSE.MD: "License: MIT"
 tic80|permissive|7020500|LICENSE: "MIT License"
 
 gpsp|or-later|5819380|COPYING and source file headers: GPL-2.0-or-later; corresponding source accompanies bundled core
+
+dsperate|v3|27b9d76+99618eb|src/libretro.cpp and DSperate/src/core/nds.cpp: SPDX-License-Identifier GPL-3.0-or-later; libretro API MIT, FreeBIOS BSD, fonts retain their notices

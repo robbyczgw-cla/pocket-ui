@@ -63,20 +63,13 @@ fn android_main(app: AndroidApp) {
     }
     // The phone's apps and cores and the choices in launcher.json, before the library: which systems are listed depends on them.
     refresh_phone();
-    // The ROMs folders of internal storage and of every card, with their real names (`android_handheld`).
-    let mut roots = pocket_ui::android_handheld::roms_roots(Path::new("/storage"));
-    // No ROMs folder yet: the systems are listed under internal storage's, read again when the view comes back.
-    if roots.is_empty() {
-        roots.push(PathBuf::from("/storage/emulated/0/ROMs"));
-    }
-    // The Android games the player marked are a system of their own, in this view's folder (`app_android_games`).
-    let systems = pocket_ui::android_games::with_es_entry(&pocket_ui::play_route_cfg::es_systems(&roots), &data.join(pocket_ui::android_games::FOLDER));
+    let (roots, systems) = system_list(&data);
     // Written only when it changes: the library's cache is kept while es_systems.cfg is the same (`library_cache`).
-    if std::fs::read_to_string(&es).ok().as_deref() != Some(systems.as_str()) {
-        if let Err(e) = std::fs::write(&es, &systems) {
-            log::error!("es_systems.cfg: {e}");
-        }
+    if let Err(e) = pocket_ui::android_handheld::files::keep_system_list(&es, &systems) {
+        log::error!("es_systems.cfg: {e}");
     }
+    // The first start's "Your games": the games folders of other apps, the BIOS there (`android_first_start`), on a thread.
+    look_for_games();
     // What was played in the Mobile view: its last start and play time on this view's shelf (Continue, the recent games,
     // "Last played …" instead of "Not played yet").
     let mut recents = pocket_ui::recents::Recents::load(&data);
@@ -110,6 +103,49 @@ fn android_main(app: AndroidApp) {
     std::env::set_var("HOME", &data);
     *ANDROID.lock().unwrap_or_else(|p| p.into_inner()) = Some(app);
     super::main();
+}
+
+/// The first start's look at the device (`android_first_start::look`), on a thread: at start, and again when the view comes
+/// back with the right to read the files it hadn't before (All files access given in Android's settings meanwhile).
+fn look_for_games() {
+    let can_read = bridge("filesAccess", &[]) == "true";
+    if pocket_ui::android_first_start::facts().is_some_and(|f| f.can_read || !can_read) {
+        return;
+    }
+    let _ = std::thread::Builder::new().name("first-start-look".into()).spawn(move || {
+        let facts = pocket_ui::android_first_start::look(Path::new("/storage"), can_read);
+        log::info!("first start: {} games folders found (files readable: {can_read})", facts.folders.map_or(0, |f| f.len()));
+    });
+}
+
+/// The folders this view reads and its system list: the ROMs folders of internal storage and of every card, with their real
+/// names (`android_handheld`), then the games folders taken on the first start (`android_first_start::kept_folders`).
+fn system_list(data: &Path) -> (Vec<PathBuf>, String) {
+    let mut roots = pocket_ui::android_handheld::roms_roots(Path::new("/storage"));
+    // No ROMs folder yet: the systems are listed under internal storage's, read again when the view comes back.
+    if roots.is_empty() {
+        roots.push(PathBuf::from("/storage/emulated/0/ROMs"));
+    }
+    for kept in pocket_ui::android_first_start::kept_folders(data) {
+        if !roots.contains(&kept) {
+            roots.push(kept);
+        }
+    }
+    // The Android games the player marked are a system of their own, in this view's folder (`app_android_games`).
+    let systems = pocket_ui::android_games::with_es_entry(&pocket_ui::play_route_cfg::es_systems(&roots), &data.join(pocket_ui::android_games::FOLDER));
+    (roots, systems)
+}
+
+/// A games folder taken on the first start: kept, and the system list written again with it (the App reads it again).
+pub(crate) fn add_games_folder(folder: &Path) {
+    let Some(data) = std::env::var_os("POCKETUI_DATA").map(PathBuf::from) else { return };
+    pocket_ui::android_first_start::keep_folder(&data, folder);
+    let (roots, systems) = system_list(&data);
+    let es = std::env::var_os("POCKETUI_ES_SYSTEMS").map(PathBuf::from).unwrap_or_else(|| data.join("es_systems.cfg"));
+    match pocket_ui::android_handheld::files::keep_system_list(&es, &systems) {
+        Ok(_) => log::info!("first start: games folder {} added, reading {roots:?}", folder.display()),
+        Err(e) => log::error!("es_systems.cfg: {e}"),
+    }
 }
 
 /// The App's event loop on this Activity (`main` builds it).
@@ -161,17 +197,13 @@ fn offers() -> &'static [pocket_ui::android_cores::CorePackage] {
 
 /// launcher.json, the Mobile view's file: its choices, the Game Boy core and the channel's address come from it.
 fn launcher_json() -> String {
-    std::fs::read_to_string(pocket_ui::platform::android::data_dir().join("launcher.json")).unwrap_or_default()
+    pocket_ui::android_handheld::files::launcher_json(&pocket_ui::platform::android::data_dir())
 }
 
 /// The download channel: the address the APK was built with, else the one saved in launcher.json (empty: not open yet).
 fn channel_url(json: &str) -> String {
     let built_in = bridge("coreCatalogUrl", &[]);
-    if built_in.is_empty() {
-        serde_json::from_str::<serde_json::Value>(json).ok().and_then(|v| v["core_catalog_url"].as_str().map(str::to_string)).unwrap_or_default()
-    } else {
-        built_in
-    }
+    pocket_ui::android_handheld::files::channel_url(json, &built_in)
 }
 
 /// Reads the phone again: its emulator apps, the cores on it and the choices in launcher.json. At start, and whenever the
@@ -266,7 +298,8 @@ fn game_key(path: &Path, system: &str, core: &str) -> Option<String> {
 /// `[{"uri", "name"}]` for the player's own BIOS folder.
 fn bios_for(system: &str) -> String {
     let mut list = Vec::new();
-    for root in pocket_ui::android_handheld::roms_roots(Path::new("/storage")) {
+    let data = std::env::var_os("POCKETUI_DATA").map(PathBuf::from).unwrap_or_default();
+    for root in pocket_ui::android_handheld::roms_roots(Path::new("/storage")).into_iter().chain(pocket_ui::android_first_start::kept_folders(&data)) {
         let Some(dir) = pocket_ui::android_handheld::child_ci(&root, "bios") else { continue };
         let Ok(entries) = std::fs::read_dir(&dir) else { continue };
         for e in entries.filter_map(|e| e.ok()) {
@@ -277,6 +310,36 @@ fn bios_for(system: &str) -> String {
         }
     }
     serde_json::Value::from(list).to_string()
+}
+
+/// Pocket-to-Pocket sync's view of this device (`pocket_sync::Layout::android`): the games in the ROMs folders this view reads,
+/// their saves where the player keeps them (`saves/<key>/<stem>.<ext>`, the key as [`game_key`] makes it), replaced saves in
+/// the app's own `sync-backups`. Settings → Game Boy core is read again at most every 5 s (it folds into Game Boy keys).
+pub(crate) fn pocket_sync_layout() -> pocket_ui::pocket_sync::Layout {
+    let files = pocket_ui::platform::android::data_dir();
+    let data = std::env::var_os("POCKETUI_DATA").map(PathBuf::from).unwrap_or_default();
+    let mut roots = pocket_ui::android_handheld::roms_roots(Path::new("/storage"));
+    for kept in pocket_ui::android_first_start::kept_folders(&data) {
+        if !roots.contains(&kept) {
+            roots.push(kept);
+        }
+    }
+    static GAMBATTE: Mutex<Option<(Instant, bool)>> = Mutex::new(None);
+    let key = std::sync::Arc::new(|path: &Path, system: &str| {
+        let gambatte = {
+            let mut g = GAMBATTE.lock().unwrap_or_else(|p| p.into_inner());
+            match *g {
+                Some((at, v)) if at.elapsed() < Duration::from_secs(5) => v,
+                _ => {
+                    let v = pocket_ui::play_route::gambatte_from_json(&launcher_json());
+                    *g = Some((Instant::now(), v));
+                    v
+                }
+            }
+        };
+        pocket_ui::android_handheld::game_key(path, system, gambatte)
+    });
+    pocket_ui::pocket_sync::Layout::android(roots, files.join("saves"), files.join("sync-backups"), key)
 }
 
 /// The player's folder of each game of the shelf, found again at most every 5 s (a game copied meanwhile, Settings → Game
@@ -347,7 +410,7 @@ pub(crate) fn spawn_game(proxy: EventLoopProxy<UserEvent>, run: &Run, env: &[(&s
     forget_keys();
     let files = pocket_ui::platform::android::data_dir();
     let data = PathBuf::from(std::env::var_os("POCKETUI_DATA").unwrap_or_default());
-    let launcher = std::fs::read_to_string(files.join("launcher.json")).unwrap_or_default();
+    let launcher = pocket_ui::android_handheld::files::launcher_json(&files);
     let mut view = serde_json::to_value(pocket_ui::settings::Settings::load(&data)).unwrap_or_default();
     view["animations"] = pocket_ui::settings::Settings::load(&data).animations_or_default().name().into();
     // The game's settings: the player's pause menu reads and writes this view's files (`game_settings`), as pocket-core's does.
@@ -655,6 +718,8 @@ impl App {
     pub(crate) fn android_suspended(&mut self) {
         use std::sync::atomic::Ordering;
         log::info!("suspended");
+        // Pocket Sync listens only while this view is in front (`app_pocket_sync`).
+        self.pocket_sync_background();
         self.surface = pocket_ui::frame::Presenter::empty();
         self.window = None;
         // A button held as the view went (a start, Home): its repeat ends, the next press is a press.
@@ -694,28 +759,28 @@ impl App {
         }
         // An app may have been installed or a core downloaded while this view was behind another one.
         refresh_phone();
+        look_for_games();
         // And an Android game installed, renamed or removed, or marked in the Mobile view (`app_android_games`).
         self.android_games_refresh("back in front");
         // The player may have written moments and slots: they are read from the player's folders next.
         forget_keys();
-        let note = std::fs::read_to_string(playing_note()).ok().and_then(|s| serde_json::from_str::<serde_json::Value>(&s).ok());
-        let _ = std::fs::remove_file(playing_note());
+        let note = pocket_ui::android_handheld::files::take_playing_note(&playing_note());
         let Some((started, path, system)) = PLAYING.lock().unwrap_or_else(|p| p.into_inner()).take() else {
             // This process was ended while the game ran: the session ends here, as Quit would have ended it.
             if let Some(n) = note {
-                let (path, system) = (PathBuf::from(n["path"].as_str().unwrap_or_default()), n["system"].as_str().unwrap_or_default().to_string());
                 let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_secs());
-                let secs = now.saturating_sub(n["at"].as_u64().unwrap_or(now));
-                let name = n["name"].as_str().map(str::to_string).unwrap_or_else(|| pocket_ui::library::display_name(path.file_stem().and_then(|s| s.to_str()).unwrap_or_default()));
+                let pocket_ui::android_handheld::files::ResumedGame { path, system, name, secs } = pocket_ui::android_handheld::files::resumed_game(&n, now);
                 log::info!("resumed after this process ended in a game: {} ({secs} s)", path.display());
                 self.recents.note(&system, &name, &path, secs);
                 pocket_ui::play_log::ended(&system, &name, &path, secs);
                 self.request_redraw();
             } else {
-                log::info!("resumed");
+                // The zone libc uses here (Android's own, `system_ctl::mock_owns_clock`): Two versions, Pocket Sync's times.
+                let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_secs() as i64);
+                log::info!("resumed (local time {:+} s from UTC)", pocket_ui::timezone::utc_offset_now(now));
             }
             // The Mobile view may have been in front meanwhile (this process kept): what it played comes in too.
-            let es = std::fs::read_to_string(std::env::var_os("POCKETUI_ES_SYSTEMS").unwrap_or_default()).unwrap_or_default();
+            let es = pocket_ui::android_handheld::files::system_list(Path::new(&std::env::var_os("POCKETUI_ES_SYSTEMS").unwrap_or_default()));
             let data = PathBuf::from(std::env::var_os("POCKETUI_DATA").unwrap_or_default());
             if pocket_ui::android_handheld::take_mobile_history(&mut self.recents, &data, &launcher_json(), &es) > 0 {
                 self.recents.save_soon();
@@ -732,32 +797,11 @@ impl App {
         self.game_exited(started.elapsed().as_secs(), true, Default::default(), false);
         if let Some(line) = save_error { self.notice = Some(pocket_ui::notice::Notice::new(line)); }
         let size = self.window.as_ref().map(|w| (w.inner_size().width, w.inner_size().height));
-        let frame = note.filter(|n| n.saved).and_then(|n| {
-            let picture = pocket_ui::image::load_png(n.picture.as_deref()?)?;
-            let (ww, wh) = size.filter(|s| *s == n.window).unwrap_or(n.window);
-            let (x, y, w, h) = n.rect.filter(|r| r.2 > 0 && r.3 > 0).unwrap_or((0, 0, ww as i32, wh as i32));
-            // The picture where it stood in the player's window: Linux's way back takes a whole screen and the game's
-            // rectangle in it, as pocket-core's pause menu has them.
-            let mut screen = pocket_ui::image::Image { w: ww, h: wh, px: vec![0; (ww * wh) as usize] };
-            let scaled = pocket_ui::launch_picture::scaled(&picture, w as u32, h as u32);
-            for row in 0..scaled.h as i32 {
-                let sy = y + row;
-                if sy < 0 || sy >= wh as i32 {
-                    continue;
-                }
-                for col in 0..scaled.w as i32 {
-                    let sx = x + col;
-                    if sx >= 0 && sx < ww as i32 {
-                        screen.px[(sy as u32 * ww + sx as u32) as usize] = scaled.px[(row as u32 * scaled.w + col as u32) as usize];
-                    }
-                }
-            }
-            Some((std::sync::Arc::new(screen), Some((x.max(0) as u32, y.max(0) as u32, w as u32, h as u32))))
-        });
+        let frame = note.as_ref().and_then(|n| pocket_ui::android_handheld::files::return_frame(n, size)).map(std::sync::Arc::new);
         // The whole screen as the player left it is the way back's first picture (`begin_eject`, as the pause menu's grab).
         // An Android game went into no console: the shelf is there at once, on its case.
         if system != pocket_ui::android_games::SYSTEM_ID {
-            self.begin_eject(&path, &system, frame.map(|(screen, _)| screen));
+            self.begin_eject(&path, &system, frame);
         }
         self.request_redraw();
     }

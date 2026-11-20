@@ -48,7 +48,7 @@ and Quit, where saving is: for example "This emulator keeps its own saves. Save 
 
 - **Continue** returns to the game. B or another tap on HOME does the same.
 - **Save** saves the game's current moment into one of your save slots (1 to 8; see
-  [Save slots](pause-menu-saves.md#save-slots-where-i-quit-and-before-load)). With **Animations: Cozy** and **Motion: Full**
+  [Save slots](pause-menu-saves.md#save-slots-where-i-quit-and-before-load)). With **Game start animation: Cozy** and **Motion: Full**
   you see it: a copy of the picture you just saved flies out of the big preview, which stays as it is, shrinks into its slot,
   and the slot lights up as it lands with a quiet card click; then the game goes on (about half a second). The save is
   written the moment you press A, the picture is only a picture, and any button or touch ends it and takes you back to the game at once. Only pocket-ui's own

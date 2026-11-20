@@ -66,3 +66,7 @@ big-shelf
 big-pause:retroarch
 big-pause:more
 sync:paused-unknown
+# Shelf space: the crate's words beside the shown case, the line over the boxes while making room, its question.
+crate:3
+crate:3:pick:2
+crate:0:ask

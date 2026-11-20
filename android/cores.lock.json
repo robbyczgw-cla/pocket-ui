@@ -467,6 +467,40 @@
           "sha256": "a19a0487c2ae8f95e09e66d9ea4da0e864328b10a049acbce92797e9a8e2b094"
         }
       ]
+    },
+    {
+      "id": "dsperate",
+      "systems": [
+        "nds"
+      ],
+      "source": "https://github.com/thwonp/dsperate-lr",
+      "revision": "27b9d76fb4c900d29f9629806f316527b5da90c2",
+      "licence": "GPL-3.0-or-later AND MIT AND BSD-2-Clause AND OFL-1.1",
+      "evidence": [
+        "LICENSE",
+        "include/libretro.h",
+        "DSperate/LICENSE",
+        "DSperate/src/core/bios/LICENSE.freebios",
+        "DSperate/src/core/io/dsi_font/LICENSE-NotoSans-OFL-1.1.txt",
+        "DSperate/src/core/io/dsi_font/LICENSE-WenQuanYi-MicroHei.txt"
+      ],
+      "builder": "cmake",
+      "target": "dsperate_libretro",
+      "binary": "dsperate_libretro.so",
+      "options": [],
+      "submodules": [
+        "DSperate"
+      ],
+      "patches": [
+        {
+          "path": "scripts/dsperate/portability.patch",
+          "sha256": "4751f72165b40b4edf07482ea3affae8b1164953cadc2d8f4219eca3933c06d6"
+        },
+        {
+          "path": "scripts/dsperate/libretro.patch",
+          "sha256": "3048c0c92d82814bb837a597f3f95136737f8a7873eb072d812f5fc9e7fc75d4"
+        }
+      ]
     }
   ]
 }

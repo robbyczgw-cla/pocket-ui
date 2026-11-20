@@ -6,10 +6,11 @@
 //!
 //! Most of them are a *body* (a material: matte, clear, brushed, satin or piano plastic) with a
 //! *glass* set into it around the picture, and the picture in a shallow well in the glass
-//! (`Handheld`). Six have a power light (`frame_led`), which is painted live over the cached frame.
+//! (`Handheld`). Six have a power light (`frame_led`), which is painted live over the cached frame, as the light of
+//! the handheld each is shaped after (`frame_led::Model`).
 
 use crate::bezel::{bands, classic, noise, sd_round_rect, smoothstep, Bezel, BrickColour, ClamFinish, SlimFinish, Style, SwanFinish, WatchFinish};
-use crate::frame_led::Spot;
+use crate::frame_led::{Model, Spot};
 use crate::frames::{add, grow, hole, lambert, mix, normal, scale, specular, vnoise, Box4, Canvas, Rgb, LIGHT};
 use crate::video::Rect;
 
@@ -320,10 +321,10 @@ fn led_if(spot: Spot, body: &dyn Fn(f32, f32) -> f32, pic: Box4) -> Option<Spot>
     (body(spot.x, spot.y) < -spot.r * 2.2 && to_pic(spot.x, spot.y, pic) > spot.r * 1.6).then_some(spot)
 }
 
-fn finish(canvas: Canvas, game: Rect, led: Option<Spot>) -> Bezel {
+fn finish(canvas: Canvas, game: Rect, led: Option<Spot>, model: Model) -> Bezel {
     let b = canvas.done(game);
     match led {
-        Some(spot) => b.with_led(spot),
+        Some(spot) => b.with_led(spot, model),
         None => b,
     }
 }
@@ -419,7 +420,7 @@ pub(crate) fn brick(colour: BrickColour, view_w: u32, view_h: u32, game: Rect, p
         }
         c
     });
-    finish(canvas, game, led)
+    finish(canvas, game, led, Model::RedDims)
 }
 
 // --- Pocket slim ------------------------------------------------------------------------------------
@@ -486,7 +487,7 @@ pub(crate) fn pocket(finish_: SlimFinish, view_w: u32, view_h: u32, game: Rect, 
         .filter(|_| gb[0] >= r * 3.2)
     });
     hh.paint(&mut canvas, game, |_, _, c, _| c);
-    finish(canvas, game, led)
+    finish(canvas, game, led, Model::RedDims)
 }
 
 // --- Swan -------------------------------------------------------------------------------------------
@@ -553,7 +554,7 @@ pub(crate) fn swan(finish_: SwanFinish, view_w: u32, view_h: u32, game: Rect, px
         .filter(|_| gb[1] >= r * 3.2)
     });
     hh.paint(&mut canvas, game, |_, _, c, _| c);
-    finish(canvas, game, led)
+    finish(canvas, game, led, Model::GreenToRed)
 }
 
 // --- Clamshell --------------------------------------------------------------------------------------
@@ -647,7 +648,7 @@ pub(crate) fn clamshell(finish_: ClamFinish, view_w: u32, view_h: u32, game: Rec
             Some((c, cover))
         });
     }
-    finish(canvas, game, led)
+    finish(canvas, game, led, Model::GreenToRed)
 }
 
 // --- Wide -------------------------------------------------------------------------------------------
@@ -790,7 +791,7 @@ pub(crate) fn wide(view_w: u32, view_h: u32, game: Rect, px: f32, b: [f32; 4]) -
             }
         }
     }
-    finish(canvas, game, led)
+    finish(canvas, game, led, Model::GreenToRed)
 }
 
 // --- Twin -------------------------------------------------------------------------------------------
@@ -1009,7 +1010,7 @@ pub(crate) fn gloss(view_w: u32, view_h: u32, game: Rect, px: f32, b: [f32; 4]) 
         let dg = sd_rr4(x, y, glass, glass_r);
         add(c, [0.07 * (-((dg + 0.6) / 0.6).powi(2)).exp(); 3])
     });
-    finish(canvas, game, led)
+    finish(canvas, game, led, Model::GreenBlinksOrange)
 }
 
 // --- Watch ------------------------------------------------------------------------------------------

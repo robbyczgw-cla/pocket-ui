@@ -121,3 +121,19 @@ impl App {
         }
     }
 }
+
+#[cfg(test)]
+mod file_source_tests {
+    use super::*;
+    #[test]
+    fn file_source_rule_card_update_seen() {
+        let d = tempfile::tempdir().unwrap(); let file = d.path().join(SEEN_FILE);
+        for (label, bytes) in crate::file_faults::faults(b"reader-update.zip|123|456") {
+            let _ = std::fs::remove_file(&file);
+            if let Some(bytes) = bytes { std::fs::write(&file, bytes).unwrap(); }
+            let id = seen(d.path());
+            if label == "valid" { assert_eq!(id.as_deref(), Some("reader-update.zip|123|456")); }
+            if label == "missing" { assert!(id.is_none()); }
+        }
+    }
+}

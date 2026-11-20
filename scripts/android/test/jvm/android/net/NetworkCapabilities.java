@@ -1,0 +1,1 @@
+package android.net;public class NetworkCapabilities{public static final int TRANSPORT_WIFI=1,TRANSPORT_ETHERNET=3,NET_CAPABILITY_NOT_METERED=11,NET_CAPABILITY_INTERNET=12;public boolean hasTransport(int t){return t==TRANSPORT_WIFI;}public boolean hasCapability(int c){return true;}}

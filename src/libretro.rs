@@ -43,6 +43,7 @@ const ENV_SET_CORE_OPTIONS_V2: c_uint = 67;
 const ENV_SET_CORE_OPTIONS_V2_INTL: c_uint = 68;
 const ENV_SET_CORE_OPTIONS_UPDATE_DISPLAY_CALLBACK: c_uint = 69;
 const ENV_SET_VARIABLE: c_uint = 70;
+const ENV_SET_AUDIO_BUFFER_STATUS_CALLBACK: c_uint = 62;
 // RetroAchievements (`achievement_environment` below): where the core's memory is, and whether it supports them.
 const ENV_SET_MEMORY_MAPS: c_uint = 36 | 0x10000;
 const ENV_SET_SUPPORT_ACHIEVEMENTS: c_uint = 42 | 0x10000;
@@ -126,6 +127,10 @@ struct Variable {
     key: *const c_char,
     value: *const c_char,
 }
+
+#[repr(C)]
+#[derive(Clone, Copy)]
+struct AudioBufferCallback { callback: Option<unsafe extern "C" fn(bool, c_uint, bool)> }
 
 /// `retro_input_descriptor`: what a core calls one of its inputs.
 #[repr(C)]
@@ -240,6 +245,7 @@ struct Shared {
     serialization_quirks: u64,
     /// SET_FRAME_TIME_CALLBACK; `Core::run` calls it before every frame.
     frame_time: Option<FrameTime>,
+    audio_buffer: Option<AudioBufferCallback>,
     /// AV_* bits the current frame does without (`Core::run_with`): 0, the default, means picture and sound.
     av_skip: u32,
     /// A run-ahead state is being saved or loaded (`Core::save_quick`): GET_AUDIO_VIDEO_ENABLE says "fast savestates".
@@ -399,6 +405,7 @@ const NEEDS_DATA: &[c_uint] = &[
     ENV_SET_CORE_OPTIONS_UPDATE_DISPLAY_CALLBACK,
     ENV_GET_VFS_INTERFACE,
     ENV_SET_FRAME_TIME_CALLBACK,
+    ENV_SET_AUDIO_BUFFER_STATUS_CALLBACK,
     ENV_SET_MEMORY_MAPS,
 ];
 
@@ -500,6 +507,10 @@ unsafe extern "C" fn environment(cmd: c_uint, data: *mut c_void) -> bool {
                 }
                 None => false,
             }
+        }
+        ENV_SET_AUDIO_BUFFER_STATUS_CALLBACK => {
+            s.audio_buffer = Some(*(data as *const AudioBufferCallback));
+            true
         }
         // A core setting one of its own options (a few do, after detecting the game).
         ENV_SET_VARIABLE => {
@@ -827,8 +838,7 @@ pub struct Core {
     /// The battery save is on the card but couldn't be read (an input/output error): nothing is written over it
     /// (`read_sram`), and `save_trouble` says so.
     sram_unreadable: bool,
-    /// Android stops every save, including Drop, after a load and its rollback both failed.
-    #[cfg(target_os = "android")]
+    /// Stops battery saves, including Drop, after a load and its rollback both failed.
     saves_blocked: bool,
     /// The cartridge clock's file (`MEMORY_RTC`), and what is on disk: like `sram_path` and `sram_written`.
     rtc_path: PathBuf,
@@ -938,6 +948,10 @@ impl Core {
             if crate::render_scale::row_for_core(&id) {
                 s.opts.row_decides = crate::render_scale::CORE_KEYS;
             }
+            // Options → Picture → Mode 7 decides bsnes's and bsnes-hd's Mode 7 options (`mode7_hd`).
+            if matches!(id.as_str(), "bsnes" | "bsnes_hd_beta") && crate::mode7_hd::here().is_some() {
+                s.opts.row_decides = crate::mode7_hd::CORE_KEYS;
+            }
             s.trace = std::env::var_os("POCKET_CORE_TRACE").is_some();
             crate::vfs::TRACE.store(s.trace, std::sync::atomic::Ordering::Relaxed);
             s.system_dir = CString::new(system_dir.as_os_str().as_encoded_bytes()).unwrap_or_default();
@@ -1035,7 +1049,6 @@ impl Core {
                 sram_written: Vec::new(),
                 sram_time: None,
                 sram_unreadable: false,
-                #[cfg(target_os = "android")]
                 saves_blocked: false,
                 rtc_path: save_dir.join(format!("{stem}.rtc")),
                 rtc_written: Vec::new(),
@@ -1131,11 +1144,14 @@ impl Core {
         took
     }
 
-    /// Blocks Android SRAM/RTC writes after an unverified load, including the final Drop flush.
-    #[cfg(target_os = "android")]
+    /// Blocks SRAM/RTC writes after an unverified load, including the final Drop flush.
     pub fn block_saves(&mut self, blocked: bool) {
         self.saver.wait();
         self.saves_blocked = blocked;
+    }
+
+    pub fn saves_blocked(&self) -> bool {
+        self.saves_blocked
     }
 
     /// Writes the game's battery save and its cartridge clock (each if the game has one and it changed, or its last
@@ -1144,7 +1160,6 @@ impl Core {
     /// still running finishes first, so it can't land after this one. One try, never a wait for the card to recover:
     /// Err says why a file (this one or an earlier flush's) didn't reach the card (`save_trouble`).
     pub fn write_sram(&mut self) -> Result<(), crate::save_trouble::Trouble> {
-        #[cfg(target_os = "android")]
         if self.saves_blocked { return Err(crate::save_trouble::Trouble::Unwritable); }
         self.saver.wait();
         for id in [MEMORY_SAVE_RAM, MEMORY_RTC] {
@@ -1165,9 +1180,10 @@ impl Core {
 
     /// The periodic flush (every 10 s): like `write_sram`, but the game thread only copies the bytes;
     /// `save_writer` writes them. A failed write is tried again at the next flush.
-    pub fn write_sram_in_background(&mut self) {
-        #[cfg(target_os = "android")]
-        if self.saves_blocked { return; }
+    /// True when the battery save itself changed and was handed over (the album's camera compares it: `sram_written`).
+    pub fn write_sram_in_background(&mut self) -> bool {
+        if self.saves_blocked { return false; }
+        let mut changed = false;
         for id in [MEMORY_SAVE_RAM, MEMORY_RTC] {
             if id == MEMORY_SAVE_RAM && self.sram_unreadable {
                 continue;
@@ -1183,7 +1199,14 @@ impl Core {
             let bytes = mem.to_vec();
             self.saver.submit(path.clone(), bytes.clone());
             *written = bytes;
+            changed |= id == MEMORY_SAVE_RAM;
         }
+        changed
+    }
+
+    /// The battery save as last handed to the card (the periodic flush or the exit's).
+    pub fn sram_written(&self) -> &[u8] {
+        &self.sram_written
     }
 
     /// Why the game's saves don't reach the card, if the newest write of one failed (the flushes so far, without
@@ -1302,6 +1325,7 @@ impl Core {
     /// `load_state`; the error also says whether the core was called (and may have changed part of the game).
     pub fn load_state_reached(&self, data: &[u8]) -> Result<(), (bool, String)> {
         let refused = |why: String| Err((false, why));
+        if let Err(why)=crate::ds::check_state(&self.name,data) {return refused(why);}
         if self.no_states {
             return refused("no save states here".into());
         }
@@ -1768,6 +1792,13 @@ impl Core {
     /// Runs one emulated frame with the given joypad bits; returns the new frame (if any) and audio.
     pub fn run(&self, buttons: u16) -> (Option<Frame>, Vec<i16>, Option<AvInfo>, Option<Geometry>) {
         self.run_with(buttons, AV_ALL)
+    }
+
+    /// Standard libretro feedback, immediately before the frame. The callback
+    /// runs outside Shared's lock because a core may query its environment.
+    pub fn audio_buffer_status(&self, active: bool, occupancy: u32, underrun_likely: bool) {
+        let callback = SHARED.with_borrow(|s| s.audio_buffer.and_then(|c| c.callback));
+        if let Some(callback) = callback { unsafe { callback(active, occupancy.min(100), underrun_likely); } }
     }
 
     /// `run`, making only what `enable` asks for (AV_VIDEO, AV_AUDIO): the rest is dropped, and a core that asks
@@ -3599,6 +3630,41 @@ void stub_frame(unsigned w, unsigned h, size_t pitch, unsigned bpp) {
         }
     }
 
+    #[test]
+    fn remapped_ds_actions_reach_the_core_as_stylus_touch_and_layout() {
+        let _l = globals();
+        let stub = Stub::new("ds-actions");
+        let core = stub.load();
+        let mut mapping = crate::controls::Mapping::defaults_on("nds", false);
+        mapping.assign(2, Some(crate::ds_pad::STYLUS));
+        mapping.assign(9, Some(crate::ds_pad::LAYOUT));
+        let mut ds = crate::ds_pad::Pad::default();
+        ds.apply("nds", &mapping, 1 << 2, [0; 4]);
+        ds.apply("nds", &mapping, 0, [0; 4]);
+        let f = ds.apply("nds", &mapping, (1 << 7) | (1 << 8), [0; 4]);
+        core.set_analog(f.axes);
+        core.run(mapping.translate(f.raw) | f.buttons);
+        unsafe {
+            let read: unsafe extern "C" fn(c_uint,c_uint,c_uint,c_uint)->i16 = hook(&core,"stub_read");
+            assert_eq!(read(0, DEVICE_ANALOG, 1, 0), 32767, "DS pointer right, both players' shared input contract");
+            assert_eq!(read(0, DEVICE_JOYPAD, 0, joypad::R2 as c_uint), 1, "touch held");
+            assert_eq!(read(0, DEVICE_JOYPAD, 0, joypad::A as c_uint), 0, "touch does not also press DS A");
+            assert_eq!(read(0, DEVICE_JOYPAD, 0, joypad::RIGHT as c_uint), 0, "pointer does not move the player");
+            // A 120 Hz display tick can have no due DS frame. The next core
+            // frame must still see the held layout button; melonDS detects its edge.
+            ds.apply("nds", &mapping, 1 << 9, [0; 4]);
+            let f = ds.apply("nds", &mapping, 1 << 9, [0; 4]);
+            core.set_analog(f.axes); core.run(mapping.translate(f.raw) | f.buttons);
+            assert_eq!(read(0, DEVICE_JOYPAD, 0, joypad::R3 as c_uint), 1, "layout reaches the next emulated frame");
+            let f = ds.apply("nds", &mapping, 1 << 9, [0; 4]);
+            core.run(mapping.translate(f.raw) | f.buttons);
+            assert_eq!(read(0, DEVICE_JOYPAD, 0, joypad::R3 as c_uint), 1, "native held-button contract");
+            let f = ds.apply("nds", &mapping, 0, [0; 4]);
+            core.run(mapping.translate(f.raw) | f.buttons);
+            assert_eq!(read(0, DEVICE_JOYPAD, 0, joypad::R3 as c_uint), 0, "release reaches the core");
+        }
+    }
+
     /// Couch co-op: players 2 to 4 read their own pad and sticks from ports 1 to 3; the ports the core lists get a pad
     /// plugged in (the analog one where player 1 has one), the others are left alone.
     #[test]
@@ -3635,6 +3701,25 @@ void stub_frame(unsigned w, unsigned h, size_t pitch, unsigned bpp) {
             core.set_player(1, 0, [0; 4]);
             core.set_player(3, 0, [0; 4]);
         }
+    }
+
+    #[test]
+    fn audio_buffer_feedback_registers_caps_occupancy_and_allows_environment_queries() {
+        let _l=globals();let stub=Stub::new("audio-feedback");let core=stub.load();
+        static LAST: std::sync::atomic::AtomicU32=std::sync::atomic::AtomicU32::new(0);
+        unsafe extern "C" fn report(active:bool,fill:c_uint,low:bool) {
+            let mut dupe=false;
+            assert!(environment(ENV_GET_CAN_DUPE,&mut dupe as *mut _ as *mut c_void));
+            LAST.store(fill | ((active as u32)<<16) | ((low as u32)<<17),std::sync::atomic::Ordering::Relaxed);
+        }
+        let mut registration=AudioBufferCallback {callback:Some(report)};
+        unsafe {assert!(environment(ENV_SET_AUDIO_BUFFER_STATUS_CALLBACK,&mut registration as *mut _ as *mut c_void));}
+        core.audio_buffer_status(true,150,true);
+        assert_eq!(LAST.load(std::sync::atomic::Ordering::Relaxed),100|(1<<16)|(1<<17));
+        registration.callback=None;
+        unsafe {assert!(environment(ENV_SET_AUDIO_BUFFER_STATUS_CALLBACK,&mut registration as *mut _ as *mut c_void));}
+        core.audio_buffer_status(false,0,false);
+        assert_ne!(LAST.load(std::sync::atomic::Ordering::Relaxed),0,"unregistered callbacks are not called");
     }
 
     /// TIC-80 refuses to load without RETRO_ENVIRONMENT_SET_FRAME_TIME_CALLBACK; it gets the frame time before every frame.

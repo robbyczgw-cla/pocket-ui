@@ -45,6 +45,7 @@
 //! /storage/.config/pocket-ui/core-options/<system>.json; this process rewrites it whenever the
 //! core's options, their visibility or the button layout change.
 //!
+//! A handheld's display switching on or off (`lcd_on`): `pocket-core --lcd-demo <panel> <screen.png> <out-dir> [on|off]`.
 //! Frame art on the desktop: `pocket-core --frame-demo <system> <game.png> <out.png> [scaling] [frame]
 //! [colour|cabinet]` draws a built-in frame around a game picture (no effects; Ambient is GPU only), `--export-frame <system> <w> <h> <dir>`
 //! writes it as a frame pack (a template for frame designers, see docs/FRAMES.md).
@@ -80,6 +81,15 @@ use winit::application::ApplicationHandler;
 use winit::event::WindowEvent;
 use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoop};
 use winit::window::{Fullscreen, Window, WindowId};
+
+/// The Brick: the cores' `eglGetProcAddress`. The vendor's EGL 1.4 returns NULL for core GLES 3 functions, and PPSSPP's GLES 3
+/// loader (`gl3stubInit`) asks it by name for all of them: its first `glGetStringi` jumped to address 0 (SIGSEGV, every PSP
+/// game, 20.11.2026). Exported from this program (build.rs), it comes before libEGL's for every core pocket-core loads.
+#[cfg(feature = "brick")]
+#[no_mangle]
+pub unsafe extern "C" fn eglGetProcAddress(name: *const std::ffi::c_char) -> *const std::ffi::c_void {
+    pocket_ui::brick_gles::get_proc_address(name)
+}
 
 /// pocket-ui's data directory: the pause menu writes the per-console/per-game settings here.
 const DATA_DIR: &str = "/storage/.config/pocket-ui";
@@ -130,26 +140,6 @@ fn spawn_progress_watchdog(limits: pocket_ui::exit_guard::Limits) {
 const CORE_STATE_LIMIT: Duration = Duration::from_secs(20);
 /// The exit save's calls into the core, timed (`pocket_ui::exit_guard`).
 static CORE_CALLS: std::sync::LazyLock<Arc<pocket_ui::exit_guard::CoreCalls>> = std::sync::LazyLock::new(pocket_ui::exit_guard::CoreCalls::new);
-
-/// Software pacing still matters when a swap returns immediately (notably the first one after
-/// pause). Keep its clock separate from rendering so resume cannot add an extra audio burst.
-#[derive(Default)]
-struct FrameClock {
-    previous: Option<Instant>,
-}
-
-impl FrameClock {
-    fn after_pause(&mut self, now: Instant) {
-        self.previous = Some(now);
-    }
-
-    fn finish_frame(&mut self, now: Instant, period: Duration) -> Instant {
-        let next = self.previous.map_or(now, |n| n + period);
-        let next = if now > next + period * 2 { now } else { next };
-        self.previous = Some(next);
-        next
-    }
-}
 
 /// During the exit save: ends the process if the core doesn't answer within `limit`, instead of leaving the game
 /// unquittable. The battery save is on the card by then. The newest moment already written (a slot, an Earlier state, the
@@ -280,6 +270,8 @@ struct App {
     /// When the frame around the picture was first on screen with the game (at the first frame, or a frame or two
     /// later when it was still being prepared, `Renderer::set_frame_async`); it fades in from then (`Overlay::draw_veil`).
     shown_at: Option<Instant>,
+    /// Whether the last presented software picture had no overlay.
+    quiet_picture: bool,
     /// Every player's buttons and sticks, numbered like the RetroPad (couch co-op: `players::Inputs`; player 1 is
     /// the Pocket unless the pause menu's Players page chose otherwise).
     input: Arc<Inputs>,
@@ -293,11 +285,25 @@ struct App {
     stats: Stats,
     frames: u64,
     bench: Option<Duration>,
-    /// Display refresh period; vsync alone lets some frames through early on this sway.
+    /// Display refresh period, as the display reports it.
     period: Duration,
-    frame_clock: FrameClock,
+    /// The frame pacing, Android's too (`core_pacing`): core frames per refresh, the audio skew, and when the next
+    /// refresh is due (vsync alone lets some frames through early on this sway, and with the screen off nothing is
+    /// swapped).
+    pacer: pocket_ui::core_pacing::Pacer,
+    /// The `player pacing:` line every ten seconds: repeated, doubled and missed pictures, the core's time per frame.
+    pacing: pocket_ui::core_pacing::Stats,
+    pacing_at: Instant,
     /// Last frame the core produced, for save previews.
     last_frame: Option<Frame>,
+    /// The album's camera (`pocket_ui::album`): compares each battery save the game writes; None with Photos of big
+    /// moments off.
+    album: Option<pocket_ui::album::Camera>,
+    /// While the camera reads this game: a copy of the picture every 2 s, the last few, so a moment's photo shows the game
+    /// from before its save menu opened.
+    album_ring: std::collections::VecDeque<(Instant, Frame)>,
+    /// Settings → Screen & sound → Photos of big moments → Also in play, read at the start (`album::moment_in_play`): Off by default.
+    album_moment: bool,
     /// `/storage/roms/savestates/<system>/<game>`, the start of every state file (see `slots`).
     states: PathBuf,
     commands: std::sync::mpsc::Receiver<String>,
@@ -331,12 +337,16 @@ struct App {
     crt_started: bool,
     /// An old TV or a handheld's display (`crt_on::screen`).
     crt_screen: pocket_ui::crt_on::Screen,
+    /// A start that runs the console's boot screen with a switch-on: the switch-on waits for the boot screen's first light
+    /// (`boot_screen::Wait`); None once it has it, and for every other start.
+    boot_wait: Option<pocket_ui::boot_screen::Wait>,
     /// Woken from sleep and running: the next frame swapped is the first after the wake (`core-frame wake` in the
     /// trace, for `latency.py measure --wake`).
     woke_frame: bool,
     /// Buttons held when the game resumed (the one that closed the menu); hidden from the core until
     /// released. Per player.
     held_mask: [u16; players::MAX],
+    ds_pad: [pocket_ui::ds_pad::Pad; players::MAX],
     /// Controls → Hold to toggle: the chosen button stays down between two presses, per player.
     toggled: [controls::HoldToggle; players::MAX],
     /// Size of the last frame drawn in play, the size previews are rendered at.
@@ -350,10 +360,6 @@ struct App {
     slot: usize,
     /// Samples of one frame, to keep the audio queue fed while sound is muted.
     nominal_samples: usize,
-    /// The core's rate is not close to the display's (PAL 50 Hz, WonderSwan 75 Hz): core frames are
-    /// scheduled by time, not one per refresh. `owed` is the time not yet spent on core frames.
-    time_driven: bool,
-    owed: f64,
     /// Loudest sample the core produced, to tell silence from sound in test runs.
     audio_peak: u16,
     /// `--rotate N`: turn the picture N quarter turns as if the core had asked for them (SET_ROTATION), whatever it
@@ -457,88 +463,28 @@ impl App {
         hostsys::display_aspect(system, g.base_width, g.base_height, g.aspect_ratio)
     }
 
-    fn draw(&mut self) { #[cfg(feature = "brick")] if self.soft.is_some() && self.last_frame.is_some() { self.sync_brick_picture(); } #[cfg(feature = "brick")] if let (Some(soft), Some(frame)) = (self.soft.as_mut(), self.last_frame.as_ref()) { soft.set_look(&self.hud.look); let over = (!self.brick_picture.on).then(|| self.hud.texts()); self.view = soft.show(frame, over.as_ref()); pocket_ui::fast_switch::first_frame(); self.sync_brick_hud(); return; }
-        let (Some(window), Some(gfx)) = (&self.window, &mut self.gfx) else { return };
-        let size = window.inner_size();
-        let (w, h) = (size.width.max(1), size.height.max(1));
-        self.view = (w, h);
-        gfx.surface.resize(&gfx.context, NonZeroU32::new(w).unwrap(), NonZeroU32::new(h).unwrap());
-        let aspect = Self::display_aspect(&self.core, &self.video_src.0);
-        gfx.video.set_rotation(self.rotate_override.unwrap_or_else(|| self.core.rotation()));
-        let t0 = Instant::now();
-        // The old-TV power-on opens the picture out of its line, squeezed into what is lit (`crt_on::picture`).
-        let squeeze = match (self.crt_on && self.bench.is_none(), self.shown_at) {
-            (true, Some(t)) => gfx.video.placement(w, h, aspect, &self.video).map(|(r, _)| {
-                let (_, y, _, ph) = pocket_ui::crt_on::picture(self.crt_screen, t.elapsed(), (r.x as f32, r.y as f32, r.w as f32, r.h as f32));
-                (y, ph)
-            }),
-            _ => None,
-        };
-        gfx.video.set_squeeze(squeeze);
-        gfx.video.draw(w, h, aspect, &self.video);
-        if let Some(overlay) = gfx.overlay.as_mut() {
-            // The first quarter second: the frame around the picture fades in from the black pocket-ui showed around
-            // the game's last picture while it started (`launch_picture`). Not in bench runs.
-            let since = self.shown_at.map_or(Duration::ZERO, |t| t.elapsed());
-            if self.bench.is_none() && since < pocket_ui::overlay::VEIL {
-                let hole = gfx.video.placement(w, h, aspect, &self.video).map(|(r, _)| (r.x as f32, r.y as f32, r.w as f32, r.h as f32));
-                overlay.draw_veil(gfx.video.gl(), w, h, hole, pocket_ui::overlay::veil_alpha(since));
-            }
-            // Cozy's power-on: dark, a line, the picture opening out of it (`crt_on`), over the game's first 300 ms.
-            if self.crt_on && self.bench.is_none() {
-                if let Some(t) = self.shown_at {
-                    if !self.crt_started {
-                        self.crt_started = true;
-                        pocket_ui::crt_on::start();
-                        // Its sound, a thunk and a faint whine, into the game's own: the chime, at the UI sounds' volume.
-                        // A handheld's display switching on has no tube to thunk.
-                        let rate = self.core.av.timing.sample_rate;
-                        if self.chime_gain > 0.0 && rate > 0.0 && !pocket_ui::crt_on::silent() && self.crt_screen == pocket_ui::crt_on::Screen::Tv {
-                            self.chime.start_samples(pocket_ui::ui_sound::synth_at(pocket_ui::ui_sound::Sound::CrtOn, rate as u32), self.chime_gain);
-                        }
+    /// After a picture went out, on either way of drawing (`DrawPath`): the moment the game's picture was first shown (the
+    /// old-TV or display switch-on and the frame's fade-in count from it; a boot screen's start waits for its first light,
+    /// `boot_screen::Wait`), the first frame's line and the very first game's note, the wake and trace marks. One place for
+    /// both: the Brick's software picture returned from `draw` before the GL path's lines, so none of it happened there and
+    /// its switch-on never began (test060.1: the console scene, then the game with no TV coming on).
+    fn picture_out(&mut self, path: DrawPath) {
+        if self.shown_at.is_none() {
+            let ready = match path {
+                DrawPath::Gl { ready } => ready,
+                DrawPath::Soft => match (self.last_frame.as_ref(), self.boot_wait.as_mut()) {
+                    (None, _) => false,
+                    (Some(frame), Some(wait)) => {
+                        wait.see(frame_lit(frame), Instant::now());
+                        true
                     }
-                    // Over the game's picture only, the frame around it keeps its own fade-in (the veil).
-                    let area = gfx.video.placement(w, h, aspect, &self.video).map_or((0.0, 0.0, w as f32, h as f32), |(r, _)| (r.x as f32, r.y as f32, r.w as f32, r.h as f32));
-                    let quads = pocket_ui::crt_on::plan_for(self.crt_screen, t.elapsed(), area);
-                    if quads.is_empty() {
-                        self.crt_on = false;
-                    } else {
-                        overlay.draw_solid(gfx.video.gl(), w, h, &quads);
-                    }
-                } else {
-                    // The game's first picture isn't there yet: it stays dark.
-                    let area = gfx.video.placement(w, h, aspect, &self.video).map_or((0.0, 0.0, w as f32, h as f32), |(r, _)| (r.x as f32, r.y as f32, r.w as f32, r.h as f32));
-                    overlay.draw_solid(gfx.video.gl(), w, h, &[pocket_ui::crt_on::Quad { rect: area, white: false, alpha: 1.0 }]);
-                }
+                    (Some(_), None) => true,
+                },
+            };
+            if ready && self.boot_wait.as_ref().is_none_or(|w| w.ready()) {
+                self.shown_at = Some(Instant::now());
+                self.boot_wait = None;
             }
-            overlay.draw(gfx.video.gl(), &mut self.hud, w, h);
-        }
-        // Bench runs measure what drawing costs (frame styles, effects); waiting for the GPU here
-        // would only add latency in play.
-        if self.bench.is_some() {
-            unsafe { glow::HasContext::finish(gfx.video.gl()) };
-            self.stats.draw_ms.push(t0.elapsed().as_secs_f32() * 1000.0);
-        }
-        // Blocks until the next vsync: this paces the whole loop. With the output off it blocks until it is on again,
-        // which is no stall of the core (`exit_guard::Progress::display`).
-        if gfx.video.has_frame() {
-            pocket_ui::fast_switch::presenting_frame();
-        }
-        // A frame dump (POCKETUI_FRAME_DUMP from pocket-ui): this picture as the screen gets it, one tick.
-        if pocket_ui::frame_dump::on() {
-            pocket_ui::frame_dump::capture_screen(gfx.video.read_screen(w, h), w, h);
-        }
-        let swapped = PROGRESS.display(|| gfx.surface.swap_buffers(&gfx.context).ok());
-        // A successful swap of a real game picture is evidence it started. Empty/failed swaps are not.
-        if swapped.is_some() && gfx.video.has_frame() {
-            pocket_ui::fast_switch::first_frame();
-        }
-        // The veil starts with the frame: until it is there the bands are black anyway, so it never pops in.
-        if self.shown_at.is_none() && gfx.video.has_frame() && !gfx.video.frame_pending() {
-            self.shown_at = Some(Instant::now());
-        }
-        if self.shown_at.is_some_and(|t| t.elapsed() >= pocket_ui::overlay::VEIL) {
-            gfx.video.set_frame_async(false);
         }
         if let Some(started) = STARTED.get().filter(|_| !FIRST_SWAP.swap(true, Ordering::Relaxed)) {
             pocket_ui::startup::mark("first frame");
@@ -562,6 +508,133 @@ impl App {
         }
     }
 
+    /// Where the switch-on stands for the picture being drawn, on either way of drawing: how long since the game's picture
+    /// was first shown and on what screen, its hook and its sound at its start. None: not wanted, cut short, or no picture
+    /// shown yet (the GL path keeps it dark then).
+    fn switch_on_at(&mut self) -> Option<(Duration, pocket_ui::crt_on::Screen)> {
+        let t = self.shown_at.filter(|_| self.crt_on && self.bench.is_none())?;
+        if !self.crt_started {
+            self.crt_started = true;
+            pocket_ui::crt_on::start();
+            // Its sound, a thunk and a faint whine, into the game's own: the chime, at the UI sounds' volume.
+            // A handheld's display switching on has no tube to thunk.
+            let rate = self.core.av.timing.sample_rate;
+            if self.chime_gain > 0.0 && rate > 0.0 && !pocket_ui::crt_on::silent() && self.crt_screen == pocket_ui::crt_on::Screen::Tv {
+                self.chime.start_samples(pocket_ui::crt_on::sound(rate as u32), self.chime_gain);
+            }
+        }
+        Some((t.elapsed(), self.crt_screen))
+    }
+
+    /// The Brick's software picture gets the old-TV switch-on too (`SoftScreen::set_crt`, the GL path's quads filled in
+    /// software), with its hook and its sound as there.
+    #[cfg(feature = "brick")]
+    fn brick_crt(&mut self) {
+        let at = self.switch_on_at();
+        let Some(soft) = self.soft.as_mut() else { return };
+        if !soft.set_crt(at) && at.is_some() {
+            self.crt_on = false;
+        }
+    }
+
+    fn draw(&mut self) {
+        self.quiet_picture = self.hud.quiet();
+        #[cfg(feature = "brick")] if self.soft.is_some() && self.last_frame.is_some() { self.sync_brick_picture(); self.picture_out(DrawPath::Soft); self.brick_crt(); } #[cfg(feature = "brick")] if let (Some(soft), Some(frame)) = (self.soft.as_mut(), self.last_frame.as_ref()) { soft.set_look(&self.hud.look); let over = (!self.brick_picture.on).then(|| self.hud.texts()); self.view = soft.show(frame, over.as_ref()); pocket_ui::fast_switch::first_frame(); self.sync_brick_hud(); return; }
+        let switch = self.switch_on_at();
+        let (Some(window), Some(gfx)) = (&self.window, &mut self.gfx) else { return };
+        let size = window.inner_size();
+        let (w, h) = (size.width.max(1), size.height.max(1));
+        self.view = (w, h);
+        gfx.surface.resize(&gfx.context, NonZeroU32::new(w).unwrap(), NonZeroU32::new(h).unwrap());
+        let aspect = Self::display_aspect(&self.core, &self.video_src.0);
+        gfx.video.set_rotation(self.rotate_override.unwrap_or_else(|| self.core.rotation()));
+        let t0 = Instant::now();
+        // The old-TV power-on opens the picture out of its line, squeezed into what is lit (`crt_on::picture`).
+        let squeeze = match (self.crt_on && self.bench.is_none(), self.shown_at) {
+            (true, Some(t)) => gfx.video.placement(w, h, aspect, &self.video).map(|(r, _)| {
+                let (_, y, _, ph) = pocket_ui::crt_on::picture(self.crt_screen, t.elapsed(), (r.x as f32, r.y as f32, r.w as f32, r.h as f32));
+                (y, ph)
+            }),
+            _ => None,
+        };
+        gfx.video.set_squeeze(squeeze);
+        gfx.video.draw(w, h, aspect, &self.video);
+        // A boot screen's start: does the picture have light yet (its middle, read before anything is painted over it)?
+        if let (Some(wait), None, true) = (self.boot_wait.as_mut(), self.shown_at, gfx.video.has_frame()) {
+            let (x, y, pw, ph) = gfx.video.placement(w, h, aspect, &self.video).map_or((0, 0, w, h), |(r, _)| (r.x as u32, r.y as u32, r.w, r.h));
+            let (rw, rh) = ((pw / 2).max(1), (ph / 2).max(1));
+            let mut px = vec![0u8; (rw * rh * 4) as usize];
+            // SAFETY: reads rw x rh RGBA pixels of the back buffer into a buffer of exactly that size, rows packed 4-aligned.
+            unsafe {
+                use glow::HasContext;
+                let gl = gfx.video.gl();
+                gl.bind_framebuffer(glow::FRAMEBUFFER, None);
+                gl.pixel_store_i32(glow::PACK_ALIGNMENT, 4);
+                gl.read_pixels((x + pw / 4) as i32, (h.saturating_sub(y + ph) + ph / 4) as i32, rw as i32, rh as i32, glow::RGBA, glow::UNSIGNED_BYTE, glow::PixelPackData::Slice(&mut px));
+            }
+            wait.see(pocket_ui::boot_screen::lit(&px), Instant::now());
+        }
+        if let Some(overlay) = gfx.overlay.as_mut() {
+            // The first quarter second: the frame around the picture fades in from the black pocket-ui showed around
+            // the game's last picture while it started (`launch_picture`). Not in bench runs.
+            let since = self.shown_at.map_or(Duration::ZERO, |t| t.elapsed());
+            if self.bench.is_none() && since < pocket_ui::overlay::VEIL {
+                let hole = gfx.video.placement(w, h, aspect, &self.video).map(|(r, _)| (r.x as f32, r.y as f32, r.w as f32, r.h as f32));
+                overlay.draw_veil(gfx.video.gl(), w, h, hole, pocket_ui::overlay::veil_alpha(since));
+            }
+            // Cozy's power-on: dark, a line, the picture opening out of it (`crt_on`), over the game's first 300 ms.
+            if self.crt_on && self.bench.is_none() {
+                // Over the game's picture only, the frame around it keeps its own fade-in (the veil).
+                let area = gfx.video.placement(w, h, aspect, &self.video).map_or((0.0, 0.0, w as f32, h as f32), |(r, _)| (r.x as f32, r.y as f32, r.w as f32, r.h as f32));
+                if let Some((since, screen)) = switch {
+                    // A handheld's display as the real one switched on (Handheld switch-on, `lcd_on`), else the tube or the plain rise.
+                    let quads = pocket_ui::lcd_on::switch_on(screen, since, area);
+                    if quads.is_empty() {
+                        self.crt_on = false;
+                    } else {
+                        overlay.draw_solid(gfx.video.gl(), w, h, &quads);
+                    }
+                } else {
+                    // The game's first picture isn't there yet: it stays dark.
+                    overlay.draw_solid(gfx.video.gl(), w, h, &[pocket_ui::crt_on::Quad::new(area, false, 1.0)]);
+                }
+            }
+            overlay.draw(gfx.video.gl(), &mut self.hud, w, h);
+        }
+        // Bench runs measure what drawing costs (frame styles, effects); waiting for the GPU here
+        // would only add latency in play.
+        if self.bench.is_some() {
+            unsafe { glow::HasContext::finish(gfx.video.gl()) };
+            self.stats.draw_ms.push(t0.elapsed().as_secs_f32() * 1000.0);
+        }
+        // Blocks until the next vsync: this paces the whole loop. With the output off it blocks until it is on again,
+        // which is no stall of the core (`exit_guard::Progress::display`).
+        if gfx.video.has_frame() {
+            pocket_ui::fast_switch::presenting_frame();
+        }
+        // A frame dump (POCKETUI_FRAME_DUMP from pocket-ui): this picture as the screen gets it, one tick.
+        if pocket_ui::frame_dump::on() {
+            pocket_ui::frame_dump::capture_screen(gfx.video.read_screen(w, h), w, h);
+        }
+        pocket_ui::mark!("core-swap-begin", "frame={}", self.stats.emulated);
+        let swapped = PROGRESS.display(|| gfx.surface.swap_buffers(&gfx.context).ok());
+        // A successful swap of a real game picture is evidence it started. Empty/failed swaps are not.
+        if swapped.is_some() && gfx.video.has_frame() {
+            pocket_ui::fast_switch::first_frame();
+            pocket_ui::mark!("core-present", "frame={}", self.stats.emulated);
+        }
+        // The veil starts with the frame: until it is there the bands are black anyway, so it never pops in.
+        // A boot screen's start keeps it dark until the boot screen has light (`boot_screen::Wait`): the display or TV switches on
+        // with the logo, not on the black before it.
+        let ready = gfx.video.has_frame() && !gfx.video.frame_pending();
+        self.picture_out(DrawPath::Gl { ready });
+        if self.shown_at.is_some_and(|t| t.elapsed() >= pocket_ui::overlay::VEIL) {
+            if let Some(gfx) = self.gfx.as_mut() {
+                gfx.video.set_frame_async(false);
+            }
+        }
+    }
+
     /// The finger as the core's pointer: on the picture as drawn (Nintendo DS: on its bottom screen).
     fn touch_pointer(&self) -> Option<(i16, i16)> {
         let at = self.touch.frame_for_game(self.dark)?;
@@ -573,20 +646,6 @@ impl App {
         let layouts: Vec<String> = (1..=count).filter_map(|i| self.core.option_value(&format!("melonds_screen_layout{i}"))).collect();
         let layouts: Vec<&str> = layouts.iter().map(String::as_str).collect();
         pocket_ui::touch::pointer_for(&self.video_src.0, at, (w, h), picture, &layouts)
-    }
-
-    /// How many core frames are due on this display refresh: one, or by time for cores whose rate
-    /// differs from the display's (50 Hz games get a repeated picture every sixth refresh, 75 Hz
-    /// ones two frames every fourth).
-    fn frames_due(&mut self) -> u32 {
-        if !self.time_driven {
-            return 1;
-        }
-        let period = 1.0 / self.core.av.timing.fps.max(1.0);
-        self.owed += self.period.as_secs_f64();
-        let n = (self.owed / period) as u32;
-        self.owed -= n as f64 * period;
-        n.min(4)
     }
 
     /// Each player's buttons as the console's (the Controls mapping, the left stick as D-pad, buttons still held from
@@ -602,6 +661,7 @@ impl App {
         for p in 0..players::MAX {
             if changed & (1 << p) != 0 {
                 self.toggled[p] = Default::default();
+                self.ds_pad[p] = Default::default();
             }
             let s = self.input.sticks(p);
             let turn = if self.input.is_pocket(p) { turn } else { 0 };
@@ -610,7 +670,18 @@ impl App {
             // Buttons still held from the pause menu reach the game only after they were let go. With the screen off
             // nothing reaches it: what is held then stays held back until it is let go.
             self.held_mask[p] = if self.dark { raw } else { self.held_mask[p] & raw };
-            let pressed = self.mapping.translate(raw & !self.held_mask[p]);
+            let axes = if self.dark { [0; 4] } else { controls::turn_sticks(s.analog(!self.mapping.stick_dpad), turn) };
+            let ds = if home || self.dark {
+                self.ds_pad[p].suppress(raw);
+                pocket_ui::ds_pad::Frame { raw: raw & !self.held_mask[p], buttons: 0, axes, changed: None }
+            } else {
+                self.ds_pad[p].apply(&self.video_src.0, &self.mapping, raw & !self.held_mask[p], axes)
+            };
+            if let Some(stylus) = ds.changed {
+                self.toggled[p].clear();
+                if p == 0 { self.hud.toast(if stylus { "Stylus mode" } else { "D-pad mode" }); }
+            }
+            let pressed = self.mapping.translate(ds.raw);
             // With the screen off nothing is held for the game either.
             if self.dark {
                 self.toggled[p].clear();
@@ -619,9 +690,9 @@ impl App {
                 self.toggled[p].shortcut(pressed, self.mapping.hold_toggle);
                 0
             } else {
-                self.toggled[p].apply(pressed, self.mapping.hold_toggle)
+                self.toggled[p].apply(pressed, self.mapping.hold_toggle) | ds.buttons
             };
-            sticks[p] = if self.dark { [0; 4] } else { controls::turn_sticks(s.analog(!self.mapping.stick_dpad), turn) };
+            sticks[p] = ds.axes;
             // D-pad as left stick (N64/PSP/Dreamcast on a handheld without sticks): the console's D-pad, after the
             // Controls mapping, becomes the left stick.
             if self.mapping.dpad_stick {
@@ -633,6 +704,10 @@ impl App {
 
     fn step(&mut self) {
         let now = Instant::now();
+        // The core frames due this refresh (`core_pacing`): one near the display's rate, by time off it (a 50 Hz
+        // game repeats every sixth picture), more after a missed refresh when they fit.
+        let due = self.pacer.due(now);
+        let missed = self.pacer.missed();
         if !self.inject_release.is_empty() {
             for (bit, _) in self.inject_release.iter().filter(|(_, t)| *t <= now) {
                 self.input.inject(*bit, false);
@@ -652,6 +727,7 @@ impl App {
         }
         for a in actions {
             PROGRESS.work(|| self.hotkey(a));
+            if self.paused { return; }
         }
         self.screenshot_results();
         // Couch co-op: every player's buttons and sticks; player 1's go with `run`, the others' to their ports below.
@@ -705,8 +781,13 @@ impl App {
                 a.reset();
             }
         }
-        let back = turn.back;
-        let ff = if back || self.dark { None } else { self.ex.fast_forward() };
+        // A call before its refresh (none is due): nothing runs, the picture stays.
+        let back = turn.back && due > 0;
+        let ff = if back || self.dark || due == 0 { None } else { self.ex.fast_forward() };
+        // The pacing line: what ran, the core's time, whether the game stood still (then it isn't judged).
+        let (mut ran, mut core_time, mut judged) = (0u32, Duration::ZERO, true);
+        // Plain play (no fast-forward, rewind or run-ahead): the frames whose turn tells the pacer what a frame costs.
+        let mut plain_frames = 0u32;
 
         let (mut frame, mut samples, mut av, mut geometry) = (None, Vec::new(), None, None);
         // Set when run-ahead ran this refresh (`run_ahead`): its state of the real game is what rewind keeps.
@@ -732,10 +813,12 @@ impl App {
                     }
                 }
             }
+            ran = 1;
         } else if pocket_ui::startup::stands_still(self.hold, self.hold_still || self.hold_pause, self.resume_in.is_some()) {
             // "Where was I?": the game stands at its moment while its card is read; nothing runs, nothing is missed.
+            judged = false;
         } else {
-            let runs = pocket_ui::play_speed::runs(ff, self.frames_due());
+            let runs = if due == 0 { 0 } else { pocket_ui::play_speed::runs(ff, due) };
             // Run-ahead (src/run_ahead.rs): the due frames, then 1-2 frames ahead shown, then back. Not while
             // fast-forwarding. When it runs nothing (off, switched itself off), the loop below runs as always.
             if ff.is_none() && self.run_ahead_ready() {
@@ -773,6 +856,7 @@ impl App {
             let skip = ff.is_some() && self.gfx.as_ref().is_some_and(|g| g.hw.is_none());
             // The CPU time of an ordinary refresh, for the exit report's baseline (`RunAhead::note_plain`).
             let plain_c0 = (ff.is_none() && !ran_ahead && runs > 0).then(pocket_ui::run_ahead::thread_cpu_ms);
+            let run_t0 = Instant::now();
             for i in (0..runs).take_while(|_| !ran_ahead) {
                 // "As fast as possible" stops at its time budget: the frame expected to be the last one is shown.
                 let spent = t0.elapsed().as_secs_f32() * 1000.0;
@@ -782,6 +866,9 @@ impl App {
                     (true, true) => AV_VIDEO,
                     (true, false) => 0,
                 };
+                let (active, fill, low) = self.audio.as_ref().map_or((false, 0, false), Audio::buffer_status);
+                let sounding = enable & pocket_ui::libretro::AV_AUDIO != 0;
+                self.core.audio_buffer_status(active && sounding, fill, low && sounding);
                 let (f, s, a, g) = self.core.run_with(buttons, enable);
                 // Achievements look at the game's memory after every emulated frame.
                 if let Some(cheevos) = self.cheevos.as_mut() {
@@ -796,9 +883,17 @@ impl App {
                 (frame, av, geometry) = (f.or(frame), a.or(av), g.or(geometry));
                 self.stats.emulated += 1;
                 self.hud.emulated += 1;
+                ran += 1;
                 if last {
                     break;
                 }
+            }
+            core_time = run_t0.elapsed();
+            if ff.is_none() && !ran_ahead {
+                plain_frames = ran;
+            }
+            if ran_ahead {
+                (ran, core_time) = (runs, t0.elapsed());
             }
             if let Some(c0) = plain_c0 {
                 self.ex.ahead.note_plain((pocket_ui::run_ahead::thread_cpu_ms() - c0) as f32);
@@ -821,6 +916,19 @@ impl App {
             }
         }
         self.stats.run_ms.push(t0.elapsed().as_secs_f32() * 1000.0);
+        pocket_ui::mark!("core-run-end", "frame={} new={}", self.stats.emulated, frame.is_some());
+        if judged {
+            // While fast-forward or rewind runs: what the pacer asked for (as on Android).
+            self.pacing.call(now, if back || ff.is_some() { due } else { ran }, core_time);
+            self.pacing.missed(missed);
+        }
+        if now.saturating_duration_since(self.pacing_at) >= Duration::from_secs(10) {
+            self.pacing_at = now;
+            let cpu = pocket_ui::core_pacing::current_cpu();
+            let mhz = pocket_ui::core_pacing::cpu_mhz(Path::new("/"), cpu);
+            // Linux leaves the core's thread to the scheduler: it may run on all CPUs.
+            println!("player pacing: {}", self.pacing.line(self.pacer.locked(), self.core.av.timing.fps, 1.0 / self.period.as_secs_f64(), cpu, mhz, "all"));
+        }
         if self.core.take_snapshot_dirty() {
             self.write_snapshot();
         }
@@ -835,10 +943,13 @@ impl App {
         if let (Some(frame), Some(gfx), false) = (frame.as_ref(), self.gfx.as_mut(), self.dark) {
             gfx.video.upload(frame);
         }
+        pocket_ui::mark!("core-upload-end", "frame={}", self.stats.emulated);
+        let new_picture = frame.is_some();
         self.hw_frame(av.is_some()); #[cfg(feature = "brick")] let frame = match self.brick_gles.as_mut().and_then(|h| h.frame((self.core.av.geometry.max_width, self.core.av.geometry.max_height))) { Some(f) => { if let Some(n) = self.resume_in.as_mut() { *n = n.saturating_sub(1); } Some(f) } None => frame };
         if frame.is_some() {
             self.last_frame = frame;
         }
+        self.album_frame();
         self.audio_peak = samples.iter().map(|s| s.unsigned_abs()).fold(self.audio_peak, u16::max);
         // Achievements: unlocks to the HUD; the unlock sound over the game's own while its card comes up.
         if let Some(a) = self.cheevos.as_ref() {
@@ -868,6 +979,7 @@ impl App {
                 audio.push(&samples);
             }
         }
+        pocket_ui::mark!("core-audio-end", "frame={}", self.stats.emulated);
         // Over the game (`over_game`): the FPS line, with the sensors, or Pixel Path's line (`update_strip`), one at a
         // time. FPS + sensors starts or ends the reader thread when the level changes; nothing else per frame.
         self.hud.show_fps = self.ex.over_game.counter();
@@ -878,9 +990,17 @@ impl App {
             let held = format!("{} held", controls::physical_label(id));
             self.hud.badge = if self.hud.badge.is_empty() { held } else { format!("{} · {held}", self.hud.badge) };
         }
-        if !self.dark && !self.hold {
+        // A NULL software callback keeps the picture already on screen. Preserve draws while overlays,
+        // the launch fade, async frame preparation or hardware rendering can change it independently.
+        let unchanged = self.core.name == "DSperate" && !new_picture && self.quiet_picture
+            && self.hud.quiet() && !self.crt_on && !self.woke_frame
+            && self.shown_at.is_some_and(|t| t.elapsed() >= pocket_ui::overlay::VEIL)
+            && self.gfx.as_ref().is_some_and(|g| g.hw.is_none() && !g.video.frame_pending())
+            && !pocket_ui::frame_dump::on();
+        if !self.dark && !self.hold && !unchanged {
             self.draw();
         }
+        pocket_ui::mark!("core-draw-end", "frame={} skipped={}", self.stats.emulated, unchanged);
         // Twice a second the FPS counter's half-second goes into Pixel Path's window, with the underruns so far.
         if let Some(tick) = self.hud.frame() {
             let underruns = self.audio.as_ref().map_or(0, |a| *a.underruns.lock().unwrap());
@@ -888,16 +1008,30 @@ impl App {
             self.update_strip();
         }
         self.hw_resume();
+        // What a frame costs, for the pacer's catch-up (`Pacer::took`): the whole turn, the core, its picture and the swap.
+        // A 3D core's own run is under a millisecond while its picture takes the GL thread 30 ms (Mario Kart 64 on the
+        // RG35XX Plus, 18.11.2026): judged by the run alone it caught up, and the extra frame cost a picture.
+        if plain_frames > 0 {
+            self.pacer.took(now.elapsed() / plain_frames);
+        }
         // Earlier: in what is left of this refresh, before the wait for the next one.
         self.timeline_play();
+        pocket_ui::mark!("core-limit-begin", "frame={} next_us={}", self.stats.emulated,
+            self.pacer.next_refresh().map_or(0, |n| n.saturating_duration_since(Instant::now()).as_micros()));
         self.limit();
+        pocket_ui::mark!("core-limit-end", "frame={}", self.stats.emulated);
         // Battery saves reach the disk every 10 s (RetroArch's autosave interval), not only on exit,
         // so a crash or power loss costs seconds, not the session.
         self.frames += 1;
         if self.frames % 600 == 0 {
             // What became of the last flushes (no waiting): a line over the game while they fail (`save_trouble`).
             self.note_save_trouble(self.core.save_trouble());
-            self.core.write_sram_in_background();
+            // The album's camera compares the save the game just wrote (`pocket_ui::album`).
+            if self.core.write_sram_in_background() {
+                if let Some(cam) = self.album.as_ref() {
+                    cam.saved(self.core.sram_written());
+                }
+            }
         }
         let now = Instant::now();
         if let Some(last) = self.stats.last_swap {
@@ -961,11 +1095,11 @@ impl App {
         frame
     }
 
-    /// Waits until one display period has passed since the previous frame. The deadline advances by
-    /// whole periods, so short hiccups are absorbed; after a long stall it resyncs.
+    /// Waits for the next refresh on the pacer's grid (`Pacer::next_refresh`): a swap that returned early, or none
+    /// with the screen off, doesn't let the next frame run early.
     fn limit(&mut self) {
         let now = Instant::now();
-        let next = self.frame_clock.finish_frame(now, self.period);
+        let Some(next) = self.pacer.next_refresh() else { return };
         if next > now {
             // Sleep most of the way, spin the last stretch for accuracy.
             let until = next - Duration::from_micros(150);
@@ -978,23 +1112,21 @@ impl App {
         }
     }
 
-    /// The core runs once per display refresh, slightly off its own rate (59.73 Hz for a Game Boy).
-    /// Feeding its samples at the display rate keeps pitch right and audio in step.
+    /// The core's and the display's rates to the pacer and the sound (`core_pacing`): near the display's rate the core
+    /// runs once per refresh, slightly off its own rate (59.73 Hz for a Game Boy), and its samples are fed at the
+    /// display's pace so the pitch stays right; further off, frames go by time and the sound keeps its own rate.
     fn sync_audio_rate(&mut self) {
-        let skew = 1.0 / (self.period.as_secs_f64() * self.core.av.timing.fps);
-        // Within 5 % the core simply runs once per refresh; further off, frames are scheduled by time
-        // and the audio keeps its own rate.
-        self.time_driven = !(0.95..1.05).contains(&skew);
-        let skew = if self.time_driven { 1.0 } else { skew };
+        let display_hz = 1.0 / self.period.as_secs_f64();
+        self.pacer.set_rates(self.core.av.timing.fps, display_hz);
         if let Some(audio) = self.audio.as_mut() {
-            audio.set_frame_timing(self.core.av.timing.fps, 1.0 / self.period.as_secs_f64());
-            audio.set_input_rate(self.core.av.timing.sample_rate * skew);
+            audio.set_paced_timing(self.core.av.timing.sample_rate, self.core.av.timing.fps, display_hz);
         }
     }
 
     /// Writes a state and its preview image; the preview first so a listed state always has one. Err(None): the core
     /// handed over no state; Err(Some): it didn't reach the card (full, read-only, failing), the file there stays as it was.
     fn save_to(&self, path: &Path) -> Result<(), Option<std::io::Error>> {
+        if self.core.saves_blocked() { return Err(None); }
         let t0 = Instant::now();
         let data = CORE_CALLS.during(|| self.core.save_state());
         let Some(data) = data else { return Err(None) };
@@ -1119,7 +1251,7 @@ impl App {
                 colour: if colour { pp::colour_options(&self.core.options_snapshot().1) } else { Vec::new() },
                 lcd_colour: self.video.lcd_colours(&self.video_src.0),
             },
-            display: pp::Display { refresh_hz: 1.0 / self.period.as_secs_f64(), time_driven: self.time_driven },
+            display: pp::Display { refresh_hz: 1.0 / self.period.as_secs_f64(), time_driven: !self.pacer.locked() },
             run_ahead: pp::RunAhead {
                 offered: pocket_ui::run_ahead::available_for(&self.video_src.0),
                 wanted: ahead.wanted(),
@@ -1184,6 +1316,12 @@ impl App {
     }
 
     fn resume_moment(&mut self) {
+        if self.video_src.0=="nds" {
+            if let Some(mark)=std::env::var(pocket_ui::ds::LEGACY_MARK_ENV).ok()
+                .and_then(|json|serde_json::from_str::<pocket_ui::frozen::Mark>(&json).ok()) {
+                pocket_ui::ds::retain_legacy_mark(&self.states,if self.core.name=="DSperate" {"dsperate"} else {"melondsds"},&mark);
+            }
+        }
         // "Before load" of a session that didn't end with a Quit (a crash) is gone with it.
         slots::clear_undo(&self.states);
         if self.hardcore() {
@@ -1200,7 +1338,8 @@ impl App {
         // A moment set aside while every slot was taken goes into the first free one (`frozen_phone::set_aside`).
         pocket_ui::frozen_phone::restore_kept(&self.states);
         // A line from the shelf about this start (`frozen::at_launch`).
-        let note = std::env::var(pocket_ui::frozen::NOTE_ENV).ok().filter(|n| !n.is_empty());
+        let note = pocket_ui::ds::note_for_current(&self.states, if self.core.name=="DSperate" {"dsperate"} else {""})
+            .map(str::to_string).or_else(|| std::env::var(pocket_ui::frozen::NOTE_ENV).ok().filter(|n| !n.is_empty()));
         if let Some(note) = &note {
             self.hud.note(note);
         }
@@ -1344,10 +1483,22 @@ impl App {
     /// A battery save that fails (a full or failing card) doesn't hold the state back: it is tried once, and the
     /// state, if it gets written, then holds the newer save (`slots::battery_unsaved`, `Core::resume`).
     fn save_auto(&mut self) -> AutoSaveOutcome {
+        if self.core.saves_blocked() {
+            let trouble = pocket_ui::save_trouble::Trouble::Unwritable;
+            pocket_ui::save_trouble::report_moment(&save_runtime_file(ERROR_FILE), false, Some(trouble));
+            return AutoSaveOutcome { moment: MomentSaved::Failed, battery: Some(trouble) };
+        }
         let battery = self.core.write_sram();
+        self.album_finish();
         self.note_save_trouble(battery.err().or(self.core.save_trouble()));
         pocket_ui::trace::step("save: battery save checked");
         let path = slots::auto_path(&self.states);
+        if self.video_src.0=="nds" {
+            let core=if self.core.name=="DSperate" {"dsperate"} else {"melondsds"};
+            if let Some(mark)=pocket_ui::frozen::Mark::new("pocket-core",core,&self.video_src.1,None) {
+                pocket_ui::frozen_phone::write_mark(&self.states,&mark);
+            }
+        }
         let moment = match self.save_to(&path) {
             Ok(()) => {
                 slots::auto_written(&path);
@@ -1413,7 +1564,7 @@ impl App {
         let limit = std::env::var("POCKET_TEST_CORE_STATE_LIMIT_S").ok().and_then(|m| m.parse().ok()).map_or(CORE_STATE_LIMIT, Duration::from_secs);
         // Other cores may legitimately serialize for longer; standalone emulators
         // do not use this path at all. Android's native player is separate too.
-        if self.core.name == "PPSSPP" {
+        if !self.core.saves_blocked() && self.core.name == "PPSSPP" {
             spawn_exit_watchdog(limit, self.states.clone());
         }
         let outcome = self.save_auto();
@@ -1430,14 +1581,21 @@ impl App {
         *RECOVERY_MOMENT.lock().unwrap() = None;
         pocket_ui::fast_switch::saving(true);
         let battery = self.core.write_sram();
+        self.album_finish();
         self.note_save_trouble(battery.err().or(self.core.save_trouble()));
-        self.core.keep_resume_point(&slots::auto_path(&self.states));
+        if !self.core.saves_blocked() {
+            self.core.keep_resume_point(&slots::auto_path(&self.states));
+        }
         slots::clear_undo(&self.states);
         pocket_ui::fast_switch::saving(false);
     }
 
     fn save_slot(&mut self, slot: usize) {
         if self.hardcore_refuses(pocket_ui::achievements::hardcore::NO_SAVE) {
+            return;
+        }
+        if self.core.saves_blocked() {
+            self.hud.toast(slots::transaction::RECOVERY_MESSAGE);
             return;
         }
         let ok = self.save_to(&slots::state_path(&self.states, slot)).is_ok();
@@ -1480,16 +1638,24 @@ impl App {
             return;
         }
         self.toggled.iter_mut().for_each(controls::HoldToggle::clear);
-        // The order of it is `slots::load_keeping_undo`'s (tested there).
-        let loaded = slots::load_keeping_undo(
-            &self.states,
-            path,
-            |undo| self.core.has_states() && self.save_to(undo).is_ok(),
-            |data| self.core.load_state_reached(data),
-            |before| {
-                let _ = self.core.load_state(before);
-            },
-        );
+        let loaded = if self.core.saves_blocked() {
+            match pocket_ui::state_file::read(path) {
+                Err(_) => slots::Loaded::Unreadable,
+                Ok(bytes) if self.core.load_state(&bytes).is_ok() => {
+                    self.core.block_saves(false);
+                    slots::Loaded::Loaded
+                }
+                Ok(_) => slots::Loaded::RecoveryRequired,
+            }
+        } else {
+            slots::load_keeping_undo(
+                &self.states,
+                path,
+                |undo| self.core.has_states() && self.save_to(undo).is_ok(),
+                |data| self.core.load_state_reached(data),
+                |before| self.core.load_state_reached(before),
+            )
+        };
         let msg = match loaded {
             slots::Loaded::Unreadable => {
                 // "Slot 3 is empty", "The auto state is empty": the label starts the sentence.
@@ -1515,6 +1681,18 @@ impl App {
                 self.ex.verify.iter_mut().for_each(|v| v.hashes.clear());
                 format!("Loaded {label}")
             }
+            slots::Loaded::RecoveryRequired => {
+                self.core.block_saves(true);
+                self.paused = true;
+                self.pause_wait = false;
+                self.timeline.stop();
+                self.ex.hotkeys.lock().unwrap().suppress(true);
+                pocket_ui::rumble::stop();
+                if let Some(a) = &self.audio { a.pause(true); }
+                let why = slots::transaction::RECOVERY_MESSAGE;
+                eprintln!("couldn't load {}: {why}", path.display());
+                why.into()
+            }
             // The core may have put part of the state in place (its battery save among it) before it gave up
             // (SOL-02): `load_keeping_undo` went back to the moment just written as "Before load".
             slots::Loaded::Refused(why) => {
@@ -1528,6 +1706,10 @@ impl App {
     /// The pause menu's Load → From the start: the game begins again, nothing else. Its own saves stay, and so does the
     /// moment on disk until the next Save & quit replaces it, as when you play on.
     fn start_over(&mut self) {
+        if self.core.saves_blocked() {
+            self.hud.toast(slots::transaction::RECOVERY_MESSAGE);
+            return;
+        }
         self.toggled.iter_mut().for_each(controls::HoldToggle::clear);
         self.core.restart();
         println!("started over");
@@ -1590,7 +1772,7 @@ impl App {
     /// not while a command waits (a Quit or a Load goes first).
     fn timeline_quiet(&mut self) {
         let menu_up = self.paused_at.is_some_and(|t| t.elapsed() >= pocket_ui::timeline::QUIET_AFTER);
-        if menu_up && self.early.is_none() && !self.sleeping && self.ex.cfg.timeline && self.bench.is_none() && self.timeline.due() {
+        if !self.core.saves_blocked() && menu_up && self.early.is_none() && !self.sleeping && self.ex.cfg.timeline && self.bench.is_none() && self.timeline.due() {
             PROGRESS.work(|| self.timeline_capture(pocket_ui::timeline::Moment::Quiet));
         }
     }
@@ -1654,6 +1836,59 @@ impl App {
                 self.hud.toast(format!("Over the game: {}", self.ex.over_game.label()));
             }
         }
+    }
+
+    /// Each frame: the album's camera gets its picture when it found a moment, and a copy every 2 s is kept for it.
+    fn album_frame(&mut self) {
+        let Some(cam) = self.album.as_ref() else { return };
+        if !cam.armed() {
+            return;
+        }
+        let now = Instant::now();
+        if cam.wants_picture() {
+            if let Some(p) = self.album_picture(now) {
+                cam.picture(p);
+            }
+        }
+        // A photo was kept: with Photos of big moments on Also in play (Off by default: the photo slides into the case on the
+        // way back instead), the flash, a soft shutter (Settings → Sounds) and the photo out of the screen's edge.
+        if self.album_moment {
+            cam.set_screen(self.view.1 as i32);
+        }
+        if let Some(stages) = cam.take_moment().filter(|_| self.album_moment) {
+            self.hud.eject(stages);
+            let rate = self.core.av.timing.sample_rate;
+            if self.chime_gain > 0.0 && rate > 0.0 {
+                self.chime.start_samples(pocket_ui::ui_sound::synth_at(pocket_ui::ui_sound::Sound::Shutter, rate as u32), self.chime_gain);
+            }
+        }
+        self.album_keep(now);
+    }
+
+    /// A copy of the picture every 2 s, the last few, for the moment's photo (`album_picture`).
+    fn album_keep(&mut self, now: Instant) {
+        if self.album_ring.back().is_none_or(|(t, _)| now.duration_since(*t) >= Duration::from_secs(2)) {
+            if let Some(f) = self.last_frame.clone() {
+                self.album_ring.push_back((now, f));
+                while self.album_ring.len() > 5 {
+                    self.album_ring.pop_front();
+                }
+            }
+        }
+    }
+
+    /// The picture for a moment: the game as it was about 4 s before (before its save menu opened), else the oldest
+    /// kept, else the picture now (a 3D core's is read back from the GPU).
+    fn album_picture(&self, now: Instant) -> Option<pocket_ui::album::Picture> {
+        let kept = self.album_ring.iter().rev().find(|(t, _)| now.duration_since(*t) >= Duration::from_secs(4)).or(self.album_ring.front());
+        kept.map(|(_, f)| f.clone()).or_else(|| self.last_frame.clone()).or_else(|| self.hw_snapshot()).map(pocket_ui::album::Picture::Frame)
+    }
+
+    /// The game ends (or sleeps): the camera compares the save written now and keeps its photo before the process goes.
+    fn album_finish(&self) {
+        let Some(cam) = self.album.as_ref() else { return };
+        let now = Instant::now();
+        cam.finish(self.core.sram_written(), || self.album_picture(now), Duration::from_millis(1500));
     }
 
     /// HOME + A: the core's last frame, at its own size, to `pocket_ui::screenshot`'s folder. This thread copies the
@@ -1790,6 +2025,7 @@ impl App {
                 }
                 // Paused already (or asleep): it draws nothing, so it says so again.
                 CoreCommand::Pause => { PROGRESS.answered(); pocket_ui::fast_switch::announce_paused(); },
+                CoreCommand::Resume if self.core.saves_blocked() => self.hud.toast(slots::transaction::RECOVERY_MESSAGE),
                 CoreCommand::Resume if self.pause_wait => self.pause_wait = false,
                 CoreCommand::Resume if self.paused => {
                     self.paused = false;
@@ -2073,10 +2309,11 @@ impl App {
         self.touch.after_pause();
         // The pause is no late frame: restart pacing and the frame-time statistics. Nor is it play (Earlier).
         self.timeline.stop();
-        // The first picture may present immediately after a pause. Anchor its deadline now so
-        // the next frame cannot run straight after it: that extra burst accumulated each resume
-        // until the audio overflow cap discarded valid samples (also with a 60 Hz source).
-        self.frame_clock.after_pause(Instant::now());
+        // The first picture may present immediately after a pause. The pacer starts its grid again at the first frame,
+        // so the next one waits a whole refresh: an extra burst accumulated each resume until the audio overflow cap
+        // discarded valid samples (also with a 60 Hz source).
+        self.pacer.restart();
+        self.pacing.pause();
         self.stats.last_swap = None;
         self.hud.restart();
     }
@@ -2254,7 +2491,8 @@ fn frame_tools(args: &[String]) -> bool {
                 let mut parts = spec.split(',');
                 let capacity = parts.next().and_then(|c| c.parse().ok());
                 let rest = parts.next().unwrap_or("");
-                let mut look = frame_led::look_at(capacity, 0, (rest == "flash").then_some(0));
+                let model = frame_led::Model::of(v.fixed_style(system).unwrap_or(bezel::style_for(system)));
+                let mut look = frame_led::look_at(model, capacity, 0, (rest == "flash").then_some(0));
                 look.lit &= rest != "off";
                 if let Some(led) = b.led.clone() {
                     let patch = frame_led::paint(&led, look, b.hole);
@@ -2268,6 +2506,76 @@ fn frame_tools(args: &[String]) -> bool {
             enc.set_depth(png::BitDepth::Eight);
             enc.write_header().and_then(|mut w| w.write_image_data(&rgb)).expect("write png");
             println!("{system}: picture {rect:?}, frame {}", if b.is_some() { "drawn" } else { "none (no room)" });
+            true
+        }
+        // `--lcd-demo <panel> <screen.png> <out-dir> [on|off]`: a handheld's display switching on (over the picture's middle,
+        // as pocket-core's quads) or off (over the whole screen, as the way back paints it), 60 frames a second, as PNGs.
+        Some("--lcd-demo") if args.len() >= 5 => {
+            let panel = pocket_ui::lcd_on::Panel::from_key(&args[2]);
+            let Some(pic) = pocket_ui::image::load_png(Path::new(&args[3])) else {
+                eprintln!("can't read {}", args[3]);
+                std::process::exit(1);
+            };
+            let out = Path::new(&args[4]);
+            let _ = std::fs::create_dir_all(out);
+            let off = args.get(5).is_some_and(|a| a == "off");
+            let (w, h) = (pic.w, pic.h);
+            let len = if off { pocket_ui::eject::LCD_OFF } else { panel.on_len() };
+            let frames = (len.as_secs_f32() * 60.0).ceil() as u32 + 1;
+            for k in 0..frames {
+                let t = Duration::from_micros(k as u64 * 16_667);
+                let mut buf = pic.px.clone();
+                if off {
+                    let mut c = pocket_ui::gfx::Canvas::new(&mut buf, w, h);
+                    pocket_ui::eject::paint_lcd_off_as(&mut c, Some(&pic), None, (0, 0, w as i32, h as i32), (t.as_secs_f32() / len.as_secs_f32()).min(1.0), panel);
+                } else {
+                    // The game's picture: what of the screen isn't black around it.
+                    let lit = |p: u32| (p >> 16 & 255) + (p >> 8 & 255) + (p & 255) > 24;
+                    let (mut x0, mut y0, mut x1, mut y1) = (w, h, 0, 0);
+                    for (i, p) in pic.px.iter().enumerate() {
+                        if lit(*p) {
+                            let (x, y) = (i as u32 % w, i as u32 / w);
+                            (x0, y0, x1, y1) = (x0.min(x), y0.min(y), x1.max(x + 1), y1.max(y + 1));
+                        }
+                    }
+                    let rect = if x1 > x0 && y1 > y0 { (x0, y0, x1 - x0, y1 - y0) } else { (0, 0, w, h) };
+                    pocket_ui::lcd_on::paint_washes(&mut buf, w as usize, rect, &pocket_ui::lcd_on::on(panel, t));
+                }
+                let rgb: Vec<u8> = buf.iter().flat_map(|p| [(p >> 16) as u8, (p >> 8) as u8, *p as u8]).collect();
+                let mut enc = png::Encoder::new(std::io::BufWriter::new(std::fs::File::create(out.join(format!("{k:04}.png"))).expect("create output")), w, h);
+                enc.set_color(png::ColorType::Rgb);
+                enc.set_depth(png::BitDepth::Eight);
+                enc.write_header().and_then(|mut wr| wr.write_image_data(&rgb)).expect("write png");
+            }
+            println!("{}: {frames} frames ({})", panel.key(), if off { "off" } else { "on" });
+            true
+        }
+        // `--lcd-bench [w h]`: what a handheld's switch-on costs on the Brick's software picture (`soft_screen::fill_quads` over a
+        // w x h picture, default 1024x768, every 60 Hz frame of the slowest panel), as milliseconds a frame.
+        Some("--lcd-bench") => {
+            let (w, h) = (args.get(2).and_then(|v| v.parse().ok()).unwrap_or(1024u32), args.get(3).and_then(|v| v.parse().ok()).unwrap_or(768u32));
+            let mut buf: Vec<u32> = (0..w * h).map(|i| i.wrapping_mul(2_654_435_761) & 0xff_ffff).collect();
+            let mut worst = 0.0f32;
+            let mut total = 0.0f32;
+            let panel = pocket_ui::lcd_on::Panel::GameGear;
+            let frames = (panel.on_len().as_secs_f32() * 60.0) as u64;
+            for k in 0..frames {
+                // The Brick's own path: the switch-on's quads filled into the picture (`soft_screen::fill_quads`); elsewhere the
+                // same washes folded into one pass (`lcd_on::paint_washes`), for an H700 or another A53 handheld.
+                let since = Duration::from_micros(k * 16_667);
+                let quads = pocket_ui::lcd_on::quads(panel, since, (0.0, 0.0, w as f32, h as f32));
+                let t0 = Instant::now();
+                #[cfg(feature = "brick")]
+                pocket_ui::soft_screen::fill_quads(&mut buf, w as usize, h as usize, &quads);
+                #[cfg(not(feature = "brick"))]
+                {
+                    let _ = &quads;
+                    pocket_ui::lcd_on::paint_washes(&mut buf, w as usize, (0, 0, w, h), &pocket_ui::lcd_on::on(panel, since));
+                }
+                let ms = t0.elapsed().as_secs_f32() * 1000.0;
+                (worst, total) = (worst.max(ms), total + ms);
+            }
+            println!("lcd-bench {w}x{h}: {frames} frames, mean {:.2} ms, worst {:.2} ms (checksum {})", total / frames as f32, worst, buf.iter().fold(0u32, |a, p| a ^ p));
             true
         }
         Some("--export-frame") if args.len() >= 6 => {
@@ -2440,7 +2748,7 @@ fn main() {
     // The ROCKNIX system name (pocket-ui passes it); otherwise the ROM's folder, which is the same for most.
     let system = arg("--system").cloned().or_else(|| rom.parent().and_then(|p| p.file_name()).and_then(|s| s.to_str()).map(str::to_string)).unwrap_or_else(|| "misc".into());
     let stem = rom.file_stem().and_then(|s| s.to_str()).unwrap_or("game").to_string();
-    let states = pocket_ui::slots::base(&system, &stem);
+    let states = pocket_ui::slots::base_for_core(&system, &stem, &core_options::core_id(Path::new(&args[1])));
 
     // Start before retro_load_game and before deferred Continue. A core can stall in any of these, not only in
     // the exit save. Long operations in other cores retain the existing two-minute save allowance.
@@ -2537,6 +2845,16 @@ fn main() {
         s.place(&mut options);
         println!("resolution: {} = {}{}", s.key, s.value, if s.first { " (chosen)" } else { " (this handheld's default)" });
     }
+    // Options → Picture → Mode 7 (Super Nintendo, `mode7_hd`): the mode's options of bsnes-hd or bsnes, over any other source.
+    let mode7_offer = pocket_ui::mode7_hd::is_snes(&system).then(pocket_ui::mode7_hd::here).flatten();
+    let mode7 = mode7_offer.map(|o| {
+        let mode = pocket_ui::mode7_hd::mode(Some(o), settings.values.get(pocket_ui::mode7_hd::KEY).map(String::as_str));
+        (mode, pocket_ui::mode7_hd::core_options(&core_options::core_id(core_so), mode, o.scale))
+    });
+    if let Some((mode, start)) = &mode7 {
+        pocket_ui::mode7_hd::place(start, &mut options);
+        println!("mode 7: {mode} ({} core options)", start.len());
+    }
     let ra = retroarch_beneath(&ra_options, &options);
     options.extend(ra.iter().map(|(k, v)| (k.as_str(), v.as_str())));
     // Fill missing keys only, below saved game/console and imported RetroArch choices.
@@ -2544,6 +2862,7 @@ fn main() {
     // Settings → Playing → Console boot screen: a start that loads no moment runs the console's own boot screen when the player's
     // BIOS file is there (the core's load-time options, so decided here); the file's name for a note when it isn't.
     let auto = pocket_ui::slots::auto_path(&states);
+    let mut boot_ran = false;
     let boot_missing = match pocket_ui::boot_screen::for_start(&pocket_ui::boot_screen::Start {
         on: pocket_ui::settings::boot_screen(&data_dir()),
         auto: &auto,
@@ -2557,6 +2876,7 @@ fn main() {
         pocket_ui::boot_screen::Boot::Screen(screen) => {
             pocket_ui::boot_screen::apply(&mut options, screen);
             println!("console boot screen: on");
+            boot_ran = true;
             None
         }
         pocket_ui::boot_screen::Boot::Missing(file) => Some(file),
@@ -2684,7 +3004,7 @@ fn main() {
     // The sound device is opened while the window and GL come up (`resumed` takes it): connecting to PipeWire took
     // 13-18 ms in the virtual device.
     let audio_opening = {
-        let (rate, heavy) = (core.av.timing.sample_rate, hw_render::is_3d_core(core_so));
+        let (rate, heavy) = (core.av.timing.sample_rate, hw_render::is_3d_core(core_so) || core.name == "DSperate");
         std::thread::spawn(move || Audio::open(rate, heavy))
     };
     // A pocket-ui recording its frames (POCKETUI_FRAME_DUMP): this game's pictures and sound go into the same dump.
@@ -2706,6 +3026,7 @@ fn main() {
         audio: None,
         audio_opening: Some(audio_opening),
         shown_at: None,
+        quiet_picture: false,
         input,
         touch,
         mapping: Mapping::from_values(&system, &settings.values),
@@ -2715,12 +3036,17 @@ fn main() {
         stats: Stats { emulated: 0, started: Instant::now(), last_swap: None, intervals: Vec::new(), run_ms: Vec::new(), draw_ms: Vec::new(), strip_us: Vec::new() },
         bench,
         period: Duration::from_micros(16_667),
-        frame_clock: FrameClock::default(),
+        pacer: pocket_ui::core_pacing::Pacer::new(60.0, 60.0),
+        pacing: Default::default(),
+        pacing_at: Instant::now(),
         last_frame: None,
         states,
         commands,
         video: VideoSettings::load(&data, &system, &rom),
         slot: slots::current(&data, &system, &stem),
+        album: pocket_ui::album::Camera::start(&data, &system, &rom, pocket_ui::album::on(&data)),
+        album_ring: std::collections::VecDeque::new(),
+        album_moment: pocket_ui::album::moment_in_play(&data),
         video_src: (system, rom),
         paused: false,
         sleeping: false,
@@ -2733,16 +3059,16 @@ fn main() {
         crt_on: pocket_ui::startup::held() && pocket_ui::crt_on::wanted(),
         crt_started: false,
         crt_screen: pocket_ui::crt_on::screen(),
+        boot_wait: (boot_ran && pocket_ui::startup::held() && pocket_ui::crt_on::wanted()).then(pocket_ui::boot_screen::Wait::default),
         woke_frame: false,
         held_mask: [0; players::MAX],
+        ds_pad: [pocket_ui::ds_pad::Pad::default(); players::MAX],
         toggled: Default::default(),
         view: (0, 0),
         early: None,
         ex,
         hud: Hud::default(),
         nominal_samples: 1600,
-        time_driven: false,
-        owed: 0.0,
         audio_peak: 0,
         rotate_override: arg("--rotate").and_then(|r| r.parse().ok()),
         inject_release: Vec::new(),
@@ -2839,8 +3165,11 @@ fn main() {
         }
         pocket_ui::fast_switch::announce_saved();
     }
+    if std::env::var_os("POCKET_CORE_TEST").is_some() {
+        println!("player pacing: {}", app.pacing.line(app.pacer.locked(), app.core.av.timing.fps, 1.0 / app.period.as_secs_f64(), -1, 0, "all"));
+    }
     app.stats.report(app.audio.as_ref());
-    println!("core rate {:.3} fps  audio peak {}  {}", app.core.av.timing.fps, app.audio_peak, if app.time_driven { "scheduled by time" } else { "one per refresh" });
+    println!("core rate {:.3} fps  audio peak {}  {}", app.core.av.timing.fps, app.audio_peak, if app.pacer.locked() { "one per refresh" } else { "scheduled by time" });
     app.ex.report();
     if let Some(line) = app.timeline.report() {
         println!("{line}");
@@ -2873,29 +3202,36 @@ fn main() {
     PROGRESS.stop();
 }
 
+/// The way a picture reached the screen (`App::picture_out`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum DrawPath {
+    /// GL (`draw`'s swap): `ready` once a real game picture was on it, not a pending one; a boot screen's light was read off
+    /// the back buffer before (`boot_screen::Wait::see`).
+    Gl { ready: bool },
+    /// The Brick's software picture (`SoftScreen::show`): the last frame, its light read off the frame itself.
+    #[cfg_attr(not(feature = "brick"), allow(dead_code))]
+    Soft,
+}
+
+/// Whether a software frame has light in it for a boot screen's start (`boot_screen::lit` over the middle quarter of the
+/// picture, as the GL path reads it off its back buffer).
+fn frame_lit(frame: &Frame) -> bool {
+    let (w, h) = (frame.width as usize, frame.height as usize);
+    let rgb = frame.to_rgb();
+    let mut rgba = Vec::with_capacity(w * h);
+    for y in h / 4..h / 4 + (h / 2).max(1) {
+        for x in w / 4..w / 4 + (w / 2).max(1) {
+            if let Some(p) = rgb.get((y * w + x) * 3..(y * w + x) * 3 + 3) {
+                rgba.extend_from_slice(&[p[0], p[1], p[2], 255]);
+            }
+        }
+    }
+    pocket_ui::boot_screen::lit(&rgba)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    /// A resumed swap can return immediately. Replay five pauses with a 48 kHz consumer: each
-    /// first 60 Hz frame must get a full period before the next one can add another 800 samples.
-    /// An empty clock used to add 800 extra samples on every resume until the queue dropped audio.
-    #[test]
-    fn repeated_resumes_do_not_accumulate_extra_audio_when_the_first_swap_is_immediate() {
-        let mut clock = FrameClock::default();
-        let period = Duration::from_secs_f64(1.0 / 60.0);
-        let mut now = Instant::now();
-        let mut buffered = 800usize;
-        for _ in 0..5 {
-            clock.after_pause(now);
-            buffered += 800;
-            let next_frame = clock.finish_frame(now, period);
-            let played = (next_frame.saturating_duration_since(now).as_secs_f64() * 48_000.0).round() as usize;
-            buffered = buffered.saturating_sub(played);
-            assert_eq!(buffered, 800, "resume added a burst until the overflow cap would discard sound");
-            now = next_frame + Duration::from_secs(1);
-        }
-    }
 
     #[test]
     fn quit_commands() {
@@ -3073,3 +3409,7 @@ mod hardcore_rules;
 #[cfg(test)]
 #[path = "pocket_core/core_contract.rs"]
 mod core_contract;
+
+#[cfg(all(test, feature = "brick"))]
+#[path = "pocket_core/ritual_render.rs"]
+mod ritual_render;

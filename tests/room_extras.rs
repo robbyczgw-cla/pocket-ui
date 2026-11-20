@@ -160,8 +160,12 @@ fn shot(tmp: &Path, lib: &Path, data: &Path, stub: &Option<Stub>, look: &str, ap
     Shot { w: info.width as i32, h: info.height as i32, px: buf }
 }
 
+/// Light and decorations on; the window, which shows the sky now and has its own test
+/// (`the_window_shows_the_sky_now_and_leaves_the_rest_alone`), off: its sky changes with the clock on purpose and its
+/// pumpkin is as orange as a trophy is gold. The evening TV glow (tests/ritual_tv.rs) off too: it lights the cabinet
+/// after dark on purpose.
 fn on() -> serde_json::Value {
-    serde_json::json!({})
+    serde_json::json!({ "window": false, "evening_tv_glow": false })
 }
 
 #[test]
@@ -186,7 +190,7 @@ fn the_clock_lights_the_wood_and_leaves_covers_and_text_alone() {
         // The title and the showcase's case (top left) stay exactly as they are.
         assert!(night.same(&noon, (0, 0, w / 4, h * 4 / 10)), "{size} {appearance}: the title or the cover changed");
         // Switched off, the night is the afternoon.
-        let off = serde_json::json!({ "time_of_day_light": false });
+        let off = serde_json::json!({ "time_of_day_light": false, "window": false, "evening_tv_glow": false });
         let night_off = shot(&tmp, &lib, &data, &stub, "cabinet", appearance, size, "02:00", off.clone());
         let noon_off = shot(&tmp, &lib, &data, &stub, "cabinet", appearance, size, "15:00", off);
         assert!(night_off.same_below_clock(&noon_off), "{size} {appearance}: light by time of day off");
@@ -224,7 +228,7 @@ fn decorations_grow_with_play_and_never_stand_over_a_case() {
         // The cases themselves are the same in both.
         assert!(a.same(&b, (0, h / 2, cases_end, h - h / 6)), "{size} {appearance}: something earned stands over the cases");
         // Decorations off: the shelf as it always was, whatever was played.
-        let off = serde_json::json!({ "decorations": false });
+        let off = serde_json::json!({ "decorations": false, "window": false });
         let c = shot(&tmp, &lib, &new, &stub, "shelf", appearance, size, "15:00", off.clone());
         let d = shot(&tmp, &lib, &long, &stub, "shelf", appearance, size, "15:00", off);
         assert!(c.same_below_clock(&d), "{size} {appearance}: decorations off");
@@ -235,5 +239,26 @@ fn decorations_grow_with_play_and_never_stand_over_a_case() {
         let b = shot(&tmp, &lib, &long, &stub, "cabinet", "dark", size, "15:00", on());
         let changed = a.px.chunks(3).zip(b.px.chunks(3)).filter(|(p, q)| p != q).count();
         assert!(changed > 300, "{size}: the Cabinet shows what was earned ({changed} pixels)");
+    }
+}
+
+/// The window is taken off for 0.6 (19.11.2026: out of place in the room; `Extra::built`): even with its switch on
+/// (as it starts, and as a settings.json from before says), the Cabinet at noon and at night (the room's light and the
+/// evening TV glow off) is the same picture, and the same as with the window off: no window on the wall anywhere.
+#[test]
+fn the_window_is_taken_off_and_the_room_is_as_before() {
+    let _guard = tempfile::tempdir().unwrap();
+    let tmp = _guard.path().to_path_buf();
+    let stub = wayland(&tmp);
+    let lib = library(&tmp);
+    let data = history(&lib, &tmp, "long");
+    let still = serde_json::json!({ "time_of_day_light": false, "evening_tv_glow": false, "window": true });
+    let without = serde_json::json!({ "time_of_day_light": false, "evening_tv_glow": false, "window": false });
+    for (size, appearance) in [("640x480", "dark"), ("1280x720", "light")] {
+        let noon = shot(&tmp, &lib, &data, &stub, "cabinet", appearance, size, "12:00", still.clone());
+        let night = shot(&tmp, &lib, &data, &stub, "cabinet", appearance, size, "23:30", still.clone());
+        let off = shot(&tmp, &lib, &data, &stub, "cabinet", appearance, size, "12:00", without.clone());
+        assert!(night.same_below_clock(&noon), "{size} {appearance}: no sky that changes with the clock");
+        assert!(noon.same_below_clock(&off), "{size} {appearance}: switched on or off, no window");
     }
 }

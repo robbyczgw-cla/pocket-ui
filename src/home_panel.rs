@@ -103,7 +103,7 @@ pub fn list(kind: List, games: Vec<Tile>, line: String, ready: bool) -> Panel {
         let line = match kind {
             List::Favorites => FAVORITES_EMPTY,
             List::SmartShelf => "No games here yet",
-            List::Sticker => "Put it on a game from its card: X, then Stickers & labels",
+            List::Sticker => "Put it on a game from its card: X, then Stickers.",
         };
         return Panel { kicker: None, line: line.into(), groups: Vec::new(), getting_ready: false };
     }
@@ -301,7 +301,7 @@ mod tests {
         let empty = |kind| list(kind, Vec::new(), "0 games".into(), true);
         assert_eq!(empty(List::Favorites).line, "Press Y on a game to star it, and it shows here");
         assert_eq!(empty(List::SmartShelf).line, "No games here yet");
-        assert_eq!(empty(List::Sticker).line, "Put it on a game from its card: X, then Stickers & labels");
+        assert_eq!(empty(List::Sticker).line, "Put it on a game from its card: X, then Stickers.");
         assert!(empty(List::Favorites).groups.is_empty());
         let waiting = list(List::SmartShelf, vec![tile("A")], "1 game".into(), false);
         assert!(waiting.getting_ready && waiting.line.is_empty());

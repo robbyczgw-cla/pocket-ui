@@ -24,7 +24,7 @@ use pocket_ui::standalone;
 use pocket_ui::palette::pal;
 use pocket_ui::text::Face;
 
-use super::{App, MainItem, Page, UserEvent, CANCEL, CONFIRM, NU_BTN_PAD, NU_PAD, NU_PILL, NU_SMALL};
+use super::{App, MainItem, Page, UserEvent, CANCEL, CONFIRM, NU_BTN_PAD, NU_PAD, NU_SMALL};
 
 /// How long the reader waits for pocket-core's answer before it asks again.
 const ANSWER_WITHIN: Duration = Duration::from_millis(400);
@@ -321,7 +321,7 @@ impl App {
             self.text.draw(c, Face::Body, NU_SMALL, gx + 26, head_base, word_colour, word);
         }
 
-        let top = pad + NU_PILL + 14;
+        let top = pocket_ui::kit::header_bottom(c.h) + 14;
         let right = c.w - pad;
         // Taller rows and a wider column of stage names with larger text (Settings → Text size); on a screen with
         // fewer than 1080 lines (the Mini V1's 960) the seven rows share what is left, so the last seconds of play
@@ -330,7 +330,7 @@ impl App {
         let row = full - ((1080 - c.h).max(0) + 6) / 7;
         // At native 768 lines reserve the selected explanation and the live line above the hint pill too.
         let row = if pocket_ui::kit::short_screen(c.h) {
-            let bottom = c.h - pad - NU_PILL - 8;
+            let bottom = pocket_ui::kit::hint_bar_top(c.h) - 8;
             row.min((bottom - top - 26 - pocket_ui::type_scale::grow(28) - 40 - 12 - pocket_ui::type_scale::px(28) as i32 / 3) / 7)
         } else { row };
         // The dot, the value and its line move up by half of what a row gave up, and the line closer to the value;
@@ -423,7 +423,7 @@ impl App {
         };
         let hints_at = self.nu_hints(c, hints);
         // The legend, left of the hints on their line.
-        let base = c.h - pad - NU_PILL / 2 + pocket_ui::type_scale::mid(24);
+        let base = pocket_ui::kit::hint_bar_mid(c.h) + pocket_ui::type_scale::mid(24);
         let mut lx = pad + NU_BTN_PAD;
         for g in Grade::SCALE {
             let w = self.text.width(Face::Body, 24, g.name());
@@ -442,13 +442,13 @@ impl App {
 
     /// A stage's paragraph, on a sheet over the darkened page.
     fn paint_pixel_about(&mut self, c: &mut Canvas, s: &pixel_path::Stage) {
-        c.darken_rect(0, NU_PAD + NU_PILL, c.w, c.h - 2 * (NU_PAD + NU_PILL), 170);
+        c.darken_rect(0, pocket_ui::kit::header_bottom(c.h), c.w, c.h - 2 * (pocket_ui::kit::header_bottom(c.h)), 170);
         // For the snapshot checks of Settings → Text size: the page under the sheet is darkened, not read.
         pocket_ui::text::boxes::covered();
         let w = c.w - 2 * (NU_PAD + 40);
         // The sheet fits between the clock pill and the hint pill: a long paragraph gets smaller type (30, 27, 24 px) and a
         // narrower margin before it is cut with "…" (1024x768 shows about ten lines of it).
-        let room = c.h - 2 * (NU_PAD + NU_PILL + 10);
+        let room = c.h - 2 * (pocket_ui::kit::header_bottom(c.h) + 10);
         let inner = if c.h < 900 { 36 } else { 48 };
         let (g1, g2) = (pocket_ui::type_scale::grow(38), pocket_ui::type_scale::grow(28));
         let fixed = |font: u32| inner + 44 + 20 + 34 + 30 + inner - 10 + g1 + g2 + pocket_ui::type_scale::grow(font);
@@ -470,7 +470,7 @@ impl App {
             }
         }
         let h = fixed(font) + lines.len() as i32 * step;
-        let (x, y) = (NU_PAD + 40, ((c.h - h) / 2).max(NU_PAD + NU_PILL + 10));
+        let (x, y) = (NU_PAD + 40, ((c.h - h) / 2).max(pocket_ui::kit::header_bottom(c.h) + 10));
         pocket_ui::retro::window(c, x, y, w, h, 28, 0x1a1a1c);
         let colour = s.grade.colour();
         let base = y + inner + 30 + g1;

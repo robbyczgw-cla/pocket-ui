@@ -30,6 +30,9 @@ pub struct SoftScreen {
     tables: Option<[[u8; 256]; 3]>,
     /// FPS, messages and the level bar in the copy (`show`'s `over`).
     hud: crate::soft_hud::SoftHud,
+    /// The old-TV switch-on over the next picture (`crt_on::plan_for`, `set_crt`): how long since the game's first
+    /// picture, and on what screen; None once it is over.
+    crt: Option<(std::time::Duration, crate::crt_on::Screen)>,
 }
 
 impl SoftScreen {
@@ -38,7 +41,13 @@ impl SoftScreen {
         let window = Rc::new(el.create_window(attrs).map_err(|e| format!("window: {e}"))?);
         let context = softbuffer::Context::new(window.clone()).map_err(|e| format!("context: {e}"))?;
         let surface = softbuffer::Surface::new(&context, window.clone()).map_err(|e| format!("surface: {e}"))?;
-        Ok(SoftScreen { window, surface, size: (0, 0), native: false, scratch: Vec::new(), look: Look::default(), tables: None, hud: crate::soft_hud::SoftHud::new() })
+        Ok(SoftScreen { window, surface, size: (0, 0), native: false, scratch: Vec::new(), look: Look::default(), tables: None, hud: crate::soft_hud::SoftHud::new(), crt: None })
+    }
+
+    /// The old-TV switch-on at `since` the game's first picture for the next `show` (None: none). True while it lasts.
+    pub fn set_crt(&mut self, at: Option<(std::time::Duration, crate::crt_on::Screen)>) -> bool {
+        self.crt = at.filter(|(since, screen)| *since < crate::lcd_on::switch_on_len(*screen));
+        self.crt.is_some()
     }
 
     /// On: the next pictures go to the bridge at their own size (it draws them with shaders and frames). Off: scaled here.
@@ -75,12 +84,36 @@ impl SoftScreen {
                 Some(t) => blit_tinted(frame, &mut buffer, size.width as usize, size.height as usize, t),
                 None => blit(frame, &mut buffer, size.width as usize, size.height as usize),
             }
+            if let Some((since, screen)) = self.crt {
+                let (x, y, pw, ph) = placement((frame.width, frame.height), (size.width, size.height));
+                let quads = crate::lcd_on::switch_on(screen, since, (x as f32, y as f32, pw as f32, ph as f32));
+                fill_quads(&mut buffer, size.width as usize, size.height as usize, &quads);
+            }
             if let Some(texts) = over {
                 self.hud.paint(texts, &mut buffer, size.width as usize, size.height as usize);
             }
             let _ = buffer.present();
         }
         self.size
+    }
+}
+
+/// The old-TV switch-on's rectangles (`crt_on::plan_for`) over a picture in software, each blended in its colour: a
+/// few fills of part of the screen, as the GL path's quads.
+pub fn fill_quads(dst: &mut [u32], w: usize, h: usize, quads: &[crate::crt_on::Quad]) {
+    for q in quads {
+        let (x, y, qw, qh) = q.rect;
+        let (x0, x1) = ((x.round().max(0.0) as usize).min(w), ((x + qw).round().max(0.0) as usize).min(w));
+        let (y0, y1) = ((y.round().max(0.0) as usize).min(h), ((y + qh).round().max(0.0) as usize).min(h));
+        let (rgb, a) = (q.rgb(), (q.alpha.clamp(0.0, 1.0) * 256.0) as u32);
+        if x0 >= x1 || a == 0 {
+            continue;
+        }
+        for row in dst.chunks_exact_mut(w).take(y1).skip(y0) {
+            for p in &mut row[x0..x1] {
+                *p = if a >= 256 { rgb } else { crate::gfx::mix(*p, rgb, a.min(255)) };
+            }
+        }
     }
 }
 
@@ -115,6 +148,10 @@ impl SoftScreen {
                     for (d, s) in buffer.iter_mut().zip(self.scratch.chunks_exact(4)) {
                         let p = u32::from_le_bytes([s[0], s[1], s[2], 0]);
                         *d = match &self.tables { Some(t) => tint(p, t), None => p };
+                    }
+                    if let Some((since, screen)) = self.crt {
+                        let quads = crate::lcd_on::switch_on(screen, since, (0.0, 0.0, w as f32, h as f32));
+                        fill_quads(&mut buffer, w as usize, h as usize, &quads);
                     }
                     let _ = buffer.present();
                 }

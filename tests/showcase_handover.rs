@@ -9,46 +9,34 @@ use std::time::{Duration, Instant};
 use pocket_ui::libretro::Core;
 use pocket_ui::showcase;
 
-const STUB: &str = r#"
-#include <stdbool.h>
-#include <stddef.h>
-#include <stdint.h>
-#include <string.h>
-struct info { const char *name, *version, *exts; bool need_fullpath, block_extract; };
-struct av { unsigned bw, bh, mw, mh; float aspect; double fps, rate; };
-struct game { const char *path; const void *data; size_t size; const char *meta; };
-typedef void (*video_t)(const void *, unsigned, unsigned, size_t);
-static video_t video;
-static uint32_t n;
-static uint16_t fb[160 * 144];
-void retro_set_environment(void *f) {}
-void retro_set_video_refresh(video_t f) { video = f; }
-void retro_set_audio_sample(void *f) {}
-void retro_set_audio_sample_batch(void *f) {}
-void retro_set_input_poll(void *f) {}
-void retro_set_input_state(void *f) {}
-void retro_set_controller_port_device(unsigned port, unsigned device) {}
-unsigned retro_api_version(void) { return 1; }
-void retro_init(void) {}
-void retro_deinit(void) {}
-void retro_get_system_info(struct info *i) { memset(i, 0, sizeof *i); i->name = "stub"; i->exts = "gb"; }
-void retro_get_system_av_info(struct av *a) { memset(a, 0, sizeof *a); a->bw = a->mw = 160; a->bh = a->mh = 144; a->fps = 60; a->rate = 48000; }
-bool retro_load_game(const struct game *g) { n = 0; return true; }
-void retro_unload_game(void) {}
-void retro_reset(void) { n = 0; }
-/* Frame n shows n (0RGB1555, every pixel): bright enough from the start not to count as a black boot. */
-void retro_run(void) {
-    n++;
-    for (int i = 0; i < 160 * 144; i++) fb[i] = (uint16_t)((n & 0x7fff) | 0x4210);
-    if (video) video(fb, 160, 144, 320);
-}
-void *retro_get_memory_data(unsigned id) { return NULL; }
-size_t retro_get_memory_size(unsigned id) { return 0; }
-size_t retro_serialize_size(void) { return 4; }
-bool retro_serialize(void *d, size_t s) { if (s < 4) return false; memcpy(d, &n, 4); return true; }
-bool retro_unserialize(const void *d, size_t s) { if (s < 4) return false; memcpy(&n, d, 4); return true; }
-"#;
+const STUB: &str = concat!(r#"#define WIDTH 160
+#define HEIGHT 144
+#define FPS 60.0
+#define RATE 48000.0
+#define NO_SRAM
+#define retro_run stub_default_run
+#define retro_serialize_size stub_default_size
+#define retro_serialize stub_default_serialize
+#define retro_unserialize stub_default_unserialize
 
+"#, include_str!("../scripts/crash-sweep/stub-core.c"), r#"
+#undef retro_run
+#undef retro_serialize_size
+#undef retro_serialize
+#undef retro_unserialize
+/* Frame n shows n in the original 0RGB1555 contract, expanded to the common XRGB8888 buffer. */
+void retro_run(void) {
+    frame++;
+    unsigned p = (frame & 0x7fff) | 0x4210;
+    unsigned rgb = ((p >> 10 & 31) * 255 / 31) << 16 | ((p >> 5 & 31) * 255 / 31) << 8 | (p & 31) * 255 / 31;
+    for (unsigned i = 0; i < WIDTH * HEIGHT; i++) fb[i] = rgb;
+    if (video) video(fb, WIDTH, HEIGHT, WIDTH * 4);
+    stub_sound();
+}
+size_t retro_serialize_size(void) { return 4; }
+bool retro_serialize(void *d, size_t s) { if (s < 4) return false; memcpy(d, &frame, 4); return true; }
+bool retro_unserialize(const void *d, size_t s) { if (s < 4) return false; memcpy(&frame, d, 4); return true; }
+"#);
 /// The count a stub frame shows, from a 0RGB pixel of it: the bits the stub keeps lit left out (two frames in a row
 /// still differ, in the lowest bit).
 fn count_of(px: u32) -> u32 {
@@ -78,7 +66,7 @@ impl Setup {
         let out = std::process::Command::new("cc")
             .args(["-shared", "-fPIC", "-o"])
             .arg(&core)
-            .arg(dir.join("stub.c"))
+            .arg(dir.join("stub.c")).arg("-lm")
             .output()
             .expect("the showcase hand-over tests build a stub core and need a C compiler (cc)");
         assert!(out.status.success(), "cc: {}", String::from_utf8_lossy(&out.stderr));
@@ -173,4 +161,20 @@ fn a_run_stopped_hands_nothing_over() {
     }
     let left: Vec<_> = std::fs::read_dir(&s.dir).unwrap().flatten().map(|e| e.file_name()).filter(|n| n.to_string_lossy().starts_with("pocket-showcase")).collect();
     assert!(left.is_empty(), "its save folder is gone too: {left:?}");
+}
+
+/// The shared fixture advertises this rate; its batches must carry exactly that much time.
+#[test]
+fn the_shared_stub_delivers_its_advertised_sound_rate() {
+    let setup = Setup::new("audio-rate");
+    let core = Core::load(&setup.core, &setup.rom, &setup.dir, &setup.dir.join("roms/gb"), &[]).unwrap();
+    let mut delivered = 0;
+    for _ in 0..60 {
+        let (picture, sound, ..) = core.run(0);
+        assert!(picture.is_some(), "each run supplies its picture");
+        assert!(sound.iter().any(|&s| s != 0), "each run supplies sound");
+        assert_eq!(sound.len() % 2, 0, "stereo pairs");
+        delivered += sound.len() / 2;
+    }
+    assert_eq!(delivered, 48000, "one second at the advertised 60 Hz / 48 kHz");
 }

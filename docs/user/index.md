@@ -10,7 +10,7 @@ handhelds. It replaces ROCKNIX's usual menu with a shelf of your games. You cont
 touch screen works on the shelf and in the lists as well.
 
 This guide is on the device as well: Settings → Help & tools → **Manual**. It is in English; the menus themselves can be
-German ([Settings → System → Language](language.md)).
+German, Spanish, Brazilian Portuguese, French or Italian ([Settings → System → Language](language.md)).
 
 pocket-ui is at an early stage and has been tested on a few devices, most of all the Retroid Pocket Mini V2. The pages below describe what works today
 and say clearly where something is still being built or has not been confirmed on a real device.
@@ -60,7 +60,7 @@ and say clearly where something is still being built or has not been confirmed o
   and [Test buttons](settings-sound.md#test-buttons) shows every button, trigger and stick light up.
 - Gives every menu an old handheld's look with one switch: the [Retro style](theme.md#style), pixel letters and frames,
   little icons and blips, in Cocoa or Pea.
-- Starts in four calm steps on a new card: language, Wi-Fi, your games, the look ([First start](getting-started.md#3-first-start)).
+- Starts in five calm steps on a new card: language, Wi-Fi, your games, the look, how cozy ([First start](getting-started.md#3-first-start)).
   Help & tools → First-start setup runs them again.
 - Puts the Pocket on your Tailscale network, with a QR code to sign in, so it can be reached from anywhere ([Tailscale](remote.md)).
 - Opens your library in a browser on your phone or computer, on your home Wi-Fi or over Tailscale: edit, upload games, BIOS and
@@ -83,7 +83,7 @@ and say clearly where something is still being built or has not been confirmed o
 
 ## Pages
 
-1. [Getting started](getting-started.md): installing, first start, Wi-Fi, adding games; [Other handhelds](other-handhelds.md): other Retroid devices, SM8550 and Anbernic H700; [The GAMES drive](games-drive.md): games from a computer; [Second card](copy-games.md): games without Wi-Fi; [Game check](game-check.md): will your games start?; [games from your phone](phone-upload.md) over the same Wi-Fi; [Kids mode](kids-mode.md): a big simple shelf for a child.
+1. [Getting started](getting-started.md): installing, first start, Wi-Fi, adding games; [Other handhelds](other-handhelds.md): other Retroid devices, SM8550 and Anbernic H700; [The GAMES drive](games-drive.md): games from a computer; [Second card](copy-games.md): games without Wi-Fi; [Game check](game-check.md): will your games start?; [games from your phone](phone-upload.md) over the same Wi-Fi; [games from your RomM server](romm.md), downloaded at their first start; [Kids mode](kids-mode.md): a big simple shelf for a child.
 2. [How to](how-to.md): update over Wi-Fi, a game that won't start, pair a controller, back up saves, sync with a second device.
 3. [Coming from ROCKNIX, ArkOS or Android](coming-from.md): what happens to your saves, states, favourites and settings.
 4. [Playing](playing.md): Home, finding a game, the looks, Recent games; [Console pages](console-pages.md): a console's facts and its Credits & links; [Easy](easy.md): the look with one big game at a time; [Big text, Zoom and Hold to toggle](big-text.md): larger text in one switch, a magnifier for the pause menu, buttons that stay down. [Continue](continue.md): an open case means your moment is waiting, and A goes straight back.

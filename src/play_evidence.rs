@@ -100,7 +100,7 @@ pub fn scan(systems: &[crate::library::System]) -> HashSet<PathBuf> {
     systems.iter().flat_map(|s| s.games.iter().map(move |g| (&s.name, &g.path)))
         .filter_map(|(system, rom)| {
             let base = crate::slots::base(system, rom.file_stem().and_then(|s| s.to_str()).unwrap_or_default());
-            files.of(system, rom, &base).then(|| rom.clone())
+            (files.of(system, rom, &base) || (system == "nds" && files.of(system, rom, &crate::ds::state_base(&base, "dsperate")))).then(|| rom.clone())
         }).collect()
 }
 

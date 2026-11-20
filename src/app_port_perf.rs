@@ -20,7 +20,7 @@ use pocket_ui::power::{Fan, Performance};
 use pocket_ui::text::Face;
 use pocket_ui::touch::Area;
 
-use super::{App, CANCEL, CONFIRM, NU_BTN_PAD, NU_PAD, NU_PILL, NU_SMALL};
+use super::{App, CANCEL, CONFIRM, NU_BTN_PAD, NU_PAD, NU_SMALL};
 
 pub(crate) struct PortPerfUi {
     page: Option<PortPerfPage>,
@@ -234,7 +234,7 @@ impl App {
         self.sheet_header(c, if page.fan_control { "Performance & fan" } else { "Performance" });
         let sub = self.text.fit(Face::Body, 28, &page.title, c.w - 2 * pad - 2 * NU_BTN_PAD - 330);
         self.text.draw(c, Face::Body, 28, pad + NU_BTN_PAD, pad + 104, pal().dust, &sub);
-        let (top, right) = (pad + NU_PILL + 46, c.w - pad);
+        let (top, right) = (pocket_ui::kit::header_bottom(c.h) + 46, c.w - pad);
         let rows = page.rows();
         for (i, r) in rows.iter().enumerate() {
             let y = top + i as i32 * row;

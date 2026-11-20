@@ -37,11 +37,11 @@ impl Bezel {
         Bezel { w, h, rgba, hole, led: None, inlay: None }
     }
 
-    /// Puts a power light at `spot`: keeps the frame under it for live updates and paints it
-    /// steady green (what the light shows with a full battery).
-    pub fn with_led(mut self, spot: crate::frame_led::Spot) -> Self {
+    /// Puts a power light of `model` at `spot`: keeps the frame under it for live updates and paints it
+    /// steady (what the light shows with a full battery, and always with Power lights off).
+    pub fn with_led(mut self, spot: crate::frame_led::Spot, model: crate::frame_led::Model) -> Self {
         let led = crate::frame_led::capture(spot, &self.rgba, self.w, self.h);
-        let patch = crate::frame_led::paint(&led, crate::frame_led::Look::default(), self.hole);
+        let patch = crate::frame_led::paint(&led, model.steady(), self.hole);
         crate::frame_led::blit(&mut self.rgba, self.w, led.rect, &patch);
         self.led = Some(led);
         self
@@ -418,22 +418,14 @@ pub(crate) fn classic(style: Style, view_w: u32, view_h: u32, game: Rect, px: f3
                 }
             }
         }
-        if let Some((lx, ly)) = led {
-            let ld = ((fx - lx).powi(2) + (fy - ly).powi(2)).sqrt();
-            // A small lit light with a soft halo in the plastic around it.
-            let core = 1.0 - smoothstep(led_r - 0.8, led_r + 0.6, ld);
-            let halo = 0.22 * (-(ld / (led_r * 2.2)).powi(2)).exp();
-            let lit = [0.86, 0.20, 0.16];
-            for i in 0..3 {
-                c[i] = c[i] * (1.0 - core) + lit[i] * core + lit[i] * halo * (1.0 - core);
-            }
-            // The light's own highlight, slightly off-centre.
-            let hl = 1.0 - smoothstep(0.0, led_r * 0.55, ((fx - lx + led_r * 0.3).powi(2) + (fy - ly + led_r * 0.3).powi(2)).sqrt());
-            add += 0.25 * hl * core;
-        }
         Some(([c[0] + add, c[1] + add, c[2] + add], cover))
     });
-    Some(canvas.done(game))
+    // The lens's light is live (`frame_led`): a Game Gear's red light, flashing on a low battery.
+    let b = canvas.done(game);
+    Some(match led {
+        Some((x, y)) => b.with_led(crate::frame_led::Spot { x, y, r: led_r }, crate::frame_led::Model::RedFlashes),
+        None => b,
+    })
 }
 
 /// One frame of a pack: the systems it is for, its image and the hole in image pixels.
@@ -872,16 +864,33 @@ impl Layer {
         }
     }
 
-    /// A state was saved: the power light flashes (frames without one ignore it).
+    /// The light of the frame now loaded (`frame_led::Model::of` its style).
+    fn light_model(&self) -> crate::frame_led::Model {
+        match &self.loaded {
+            Some(Source::Builtin { style, .. }) => crate::frame_led::Model::of(*style),
+            _ => crate::frame_led::Model::default(),
+        }
+    }
+
+    /// A state was saved: the power light blinks (frames without one ignore it; Power lights off: steady).
     pub fn flash_light(&mut self) {
-        self.clock.get_or_insert_with(|| crate::frame_led::Clock::new(crate::battery::dir())).flash();
+        let model = self.light_model();
+        self.clock.get_or_insert_with(|| crate::frame_led::Clock::new(crate::battery::dir(), model)).flash();
     }
 
     /// Repaints the power light's square when what it shows changed (battery level, blink, flash):
     /// one small `glTexSubImage2D`, the rest of the frame stays as it is.
     fn update_light(&mut self, gl: &glow::Context) {
+        let model = self.light_model();
         let (Some((led, shown)), Some(texture), Some((_, _, hole))) = (self.led.as_mut(), self.texture, self.bezel) else { return };
-        let look = self.clock.get_or_insert_with(|| crate::frame_led::Clock::new(crate::battery::dir())).look(std::time::Instant::now());
+        // Power lights off (Settings → Look → Cozy extras): the light steadily on in its colour, whatever the battery.
+        let look = if crate::frame_led::live() {
+            let clock = self.clock.get_or_insert_with(|| crate::frame_led::Clock::new(crate::battery::dir(), model));
+            clock.set_model(model);
+            clock.look(std::time::Instant::now())
+        } else {
+            model.steady()
+        };
         if *shown == Some(look) {
             return;
         }
@@ -1047,7 +1056,9 @@ mod tests {
                     assert_bands_drawn(style, game, &b);
                 }
                 if [Rect { x: 140, y: 108, w: 960, h: 864 }, GBA_4X, Rect { x: 140, y: 268, w: 960, h: 544 }].contains(&game) {
-                    let lit = matches!(style, Style::Brick(_) | Style::PocketSlim(_) | Style::Clamshell(_) | Style::Wide | Style::Gloss | Style::Swan(_));
+                    // The Twin falls back to the lens (and its light) where the screens aren't stacked.
+                    let lit = matches!(style, Style::Brick(_) | Style::PocketSlim(_) | Style::Clamshell(_) | Style::Wide | Style::Gloss | Style::Swan(_) | Style::Handheld)
+                        || (style == Style::Twin && b.inlay.is_none());
                     assert_eq!(b.led.is_some(), lit, "{style:?} {game:?}");
                 }
                 if game == GB_7X && matches!(style, Style::Brick(BrickColour::Grey) | Style::PocketSlim(SlimFinish::Clear)) {
@@ -1056,9 +1067,10 @@ mod tests {
                 if game == GB_7X && style == Style::Brick(BrickColour::Grey) {
                     let led = b.led.as_ref().unwrap();
                     let i = (((led.spot.y as u32) * b.w + led.spot.x as u32) * 4) as usize;
-                    assert!(b.rgba[i + 1] > 150 && b.rgba[i + 1] > b.rgba[i] + 40, "green: {:?}", &b.rgba[i..i + 4]);
+                    // The Game Boy's light is red (`frame_led::Model::RedDims`), drawn in for a full battery.
+                    assert!(b.rgba[i] > 200 && b.rgba[i] > b.rgba[i + 1] + 60, "red: {:?}", &b.rgba[i..i + 4]);
                     let j = (((led.spot.y as u32 - led.rect.y) * led.rect.w + (led.spot.x as u32 - led.rect.x)) * 4) as usize;
-                    assert!(led.base[j + 1] < 150, "the frame under the light is not green: {:?}", &led.base[j..j + 4]);
+                    assert!(led.base[j] < 150, "the frame under the light is not red: {:?}", &led.base[j..j + 4]);
                 }
                 if let Some(led) = &b.led {
                     // The light is in the frame, clear of the picture, and its square inside the image.
@@ -1101,7 +1113,8 @@ mod tests {
         // Side by side or one screen: the plain lens.
         let side = Rect { x: 0, y: 307, w: 1240, h: 465 };
         let b = generate(Style::Twin, 1240, 1080, side, 465.0 / 192.0).unwrap();
-        assert!(b.inlay.is_none() && b.led.is_none());
+        // The lens keeps its live power light (`frame_led`): the DS had one too.
+        assert!(b.inlay.is_none());
         assert_eq!(alpha(&b, 620, 306), 255);
         // The CPU preview puts the inlay over the picture too.
         let game = Rect { x: (1240 - w) / 2, y: 0, w, h: 1080 };

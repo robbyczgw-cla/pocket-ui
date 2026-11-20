@@ -23,7 +23,14 @@ STAGE=$(mktemp -d)
 # pocket-splash, the boot screen, goes along: its unit runs current/pocket-splash (docs/BOOT-SPLASH.md).
 cp "target/$TARGET/release/pocket-ui" "target/$TARGET/release/pocket-core" "target/$TARGET/release/pocket-splash" deploy/portmaster-setup.sh "$STAGE/"
 chmod +x "$STAGE"/*
+FILES='pocket-ui pocket-core pocket-splash portmaster-setup.sh'
+if LC_ALL=C grep -a -q dsperate "$STAGE/pocket-ui"; then
+  [ -n "${DS_CORE_DIR:-}" ] || { echo 'release-app: DS_CORE_DIR must name the portable DSperate build' >&2; exit 1; }
+  python3 -I scripts/dsperate-files.py "$DS_CORE_DIR" "$STAGE/cores"
+  python3 -I scripts/dsperate-files.py --check "$STAGE/cores"
+  FILES="$FILES cores"
+fi
 TARBALL="$OUT/pocket-ui-$VERSION-aarch64.tar.gz"
-COPYFILE_DISABLE=1 tar -czf "$TARBALL" -C "$STAGE" pocket-ui pocket-core pocket-splash portmaster-setup.sh
+COPYFILE_DISABLE=1 tar -czf "$TARBALL" -C "$STAGE" $FILES
 rm -rf "$STAGE"
 target/release/store-tool update "$KEY" "$OUT/update.json" app "$VERSION" "$TARBALL" "$(basename "$TARBALL")" "$NOTES"

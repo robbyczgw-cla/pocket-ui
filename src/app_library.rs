@@ -91,8 +91,10 @@ pub(crate) fn settings_page_holds_games(page: &SettingsPage) -> bool {
         | SettingsPage::Buttons(_)
         | SettingsPage::Controllers(_)
         | SettingsPage::Tailscale
+        | SettingsPage::Romm
         | SettingsPage::Bluetooth
         | SettingsPage::Web
+        | SettingsPage::Pockets
         | SettingsPage::PerfFan
         | SettingsPage::Achievements
         | SettingsPage::Tools
@@ -447,5 +449,21 @@ mod tests {
             assert!(!settings_page_holds_games(&page));
         }
         assert!(settings_page_holds_games(&SettingsPage::Curator));
+    }
+}
+
+#[cfg(test)]
+mod file_source_tests {
+    use super::*;
+    #[test]
+    fn file_source_rule_library_unread_count() {
+        let d = tempfile::tempdir().unwrap(); let file = d.path().join(UNREAD_KNOWN);
+        for (label, bytes) in crate::file_faults::faults(b"42\n") {
+            let _ = std::fs::remove_file(&file);
+            if let Some(bytes) = bytes { std::fs::write(&file, bytes).unwrap(); }
+            let count = known_unread(d.path());
+            if label == "valid" { assert_eq!(count, Some(42)); }
+            if label == "missing" { assert!(count.is_none()); }
+        }
     }
 }

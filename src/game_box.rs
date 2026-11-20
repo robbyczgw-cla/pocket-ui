@@ -287,6 +287,11 @@ pub struct BoxView {
     back_pixels: Vec<BackPixels>,
     /// How often the back's content was painted (laid out, its pictures scaled), not copied from `back_pixels`.
     pub content_paints: u32,
+    /// The case lying open with its photos (`album`, `album_paint`): Down on the front opens it, B shuts it.
+    pub album: Option<crate::album::AlbumView>,
+    /// The photos' pictures, decoded by the app (`app_card`): None for one that couldn't be read.
+    pub album_pics: std::collections::HashMap<std::path::PathBuf, Option<std::rc::Rc<Image>>>,
+    album_made: crate::album_paint::Made,
 }
 
 /// Where the box goes on a screen `w` x `h`: (top, bottom) of its room.
@@ -335,7 +340,10 @@ pub fn game_beside(m: Medium, (case_w, case_h): (i32, i32), game: Option<&Pic>) 
 /// off-screen canvas `buf` (`w` wide): each column where it really is (perspective-correct), as tall as its distance
 /// makes it, darkened by `dark` (of 255).
 #[allow(clippy::too_many_arguments)]
-fn face_columns(c: &mut Canvas, buf: &[u32], w: i32, (rx, ry, rw, rh): (i32, i32, i32, i32), a: (f32, f32), b: (f32, f32), cy: f32, h: f32, dark: u32) {
+/// `skip`: the picture's background colour, left out (what is under it stays): a part of the face painted again over what
+/// was drawn after the face (the game beside the case, in front of the case's side).
+#[allow(clippy::too_many_arguments)]
+fn face_columns(c: &mut Canvas, buf: &[u32], w: i32, (rx, ry, rw, rh): (i32, i32, i32, i32), a: (f32, f32), b: (f32, f32), cy: f32, h: f32, dark: u32, skip: Option<u32>) {
     let (l, r) = if a.0 <= b.0 { (a, b) } else { (b, a) };
     let flip = a.0 > b.0;
     if r.0 - l.0 < 0.5 || rw <= 0 || rh <= 0 {
@@ -363,7 +371,11 @@ fn face_columns(c: &mut Canvas, buf: &[u32], w: i32, (rx, ry, rw, rh): (i32, i32
         if sy < 0 || sy * w + sx >= buf.len() as i32 {
             return bg;
         }
-        mix(buf[(sy * w + sx) as usize], 0x000000, dark)
+        let p = buf[(sy * w + sx) as usize];
+        if skip == Some(p) {
+            return bg;
+        }
+        mix(p, 0x000000, dark)
     };
     let (lo, hi) = cols.iter().filter(|k| k.2.is_some()).fold((i32::MAX, i32::MIN), |(lo, hi), k| (lo.min(k.0), hi.max(k.1)));
     if lo >= hi {
@@ -481,6 +493,13 @@ impl BoxView {
         self.spin_at = crate::frame_clock::now().checked_sub(Duration::from_millis(spin.unwrap_or(0)));
         let open: Option<u64> = std::env::var("POCKETUI_SNAPSHOT_OPEN_MS").ok().and_then(|v| v.parse().ok());
         self.opened_at = open.and_then(|ms| crate::frame_clock::now().checked_sub(Duration::from_millis(ms)));
+        // The open case: `POCKETUI_SNAPSHOT_ALBUM_OPEN_MS` into its opening, `POCKETUI_SNAPSHOT_ALBUM_MOVE_MS` into the last
+        // photo's slide; at rest without them.
+        if let Some(view) = self.album.as_mut() {
+            let at = |var: &str| std::env::var(var).ok().and_then(|v| v.parse::<u64>().ok()).and_then(|ms| crate::frame_clock::now().checked_sub(Duration::from_millis(ms)));
+            view.opened_at = at("POCKETUI_SNAPSHOT_ALBUM_OPEN_MS");
+            view.moved = view.moved.and_then(|(_, way)| at("POCKETUI_SNAPSHOT_ALBUM_MOVE_MS").map(|t| (t, way)));
+        }
         let ms: Option<u64> = std::env::var("POCKETUI_SNAPSHOT_FLIP_MS").ok().and_then(|v| v.parse().ok());
         self.flip_at = match (self.flip_at, ms) {
             (Some(_), Some(ms)) => crate::frame_clock::now().checked_sub(Duration::from_millis(ms)),
@@ -506,7 +525,7 @@ impl BoxView {
     }
 
     pub fn animating(&self, now: Instant) -> bool {
-        self.flip_at.is_some_and(|at| now.duration_since(at) < crate::motion::span(crate::motion::Kind::Move, FLIP))
+        self.album_animating(now) || self.flip_at.is_some_and(|at| now.duration_since(at) < crate::motion::span(crate::motion::Kind::Move, FLIP))
             || self.opened_at.is_some_and(|at| now.duration_since(at) < crate::motion::span(crate::motion::Kind::Move, OPEN))
     }
 
@@ -557,9 +576,30 @@ impl BoxView {
         }
     }
 
+    /// No turn is under way (Down opens the case only from a box at rest).
+    pub fn flip_at_rest(&self) -> bool {
+        self.flip_at.is_none_or(|at| crate::frame_clock::now().duration_since(at) >= crate::motion::span(crate::motion::Kind::Move, FLIP))
+    }
+
+    /// The case lies open with its photos (`album`), animating while it opens or a photo slides.
+    pub fn album_animating(&self, now: Instant) -> bool {
+        self.album.as_ref().is_some_and(|v| v.animating(now))
+    }
+
     /// Paints the box, front or back (or turning) under the card's top line.
     pub fn paint(&mut self, c: &mut Canvas, text: &mut Text, d: &CardData, pictures: &[CardPicture], inp: &Inputs) {
         let t0 = Instant::now();
+        if let (Some(view), Some(data)) = (self.album.as_ref(), d.album.as_ref()) {
+            // The case lying open with its photos: the case's own inside, a DVD case in its system's plastic.
+            let hull = Hull::of(inp.medium);
+            let inside = if hull == Hull::CartBox { crate::album_paint::Inside::Cardboard } else { crate::album_paint::Inside::Plastic };
+            let tint = if hull == Hull::Dvd { frame_tint(hull, inp.medium, inp.look) } else { None };
+            let (top, bottom, side) = room(c.w, c.h);
+            let now = crate::frame_clock::now();
+            crate::album_paint::paint(c, text, view, data, inside, tint, &self.album_pics, &mut self.album_made, (side, top, c.w - 2 * side, bottom - top), now);
+            (self.painted, self.cost) = (Some(t0), t0.elapsed());
+            return;
+        }
         self.paint_box(c, text, d, pictures, inp);
         (self.painted, self.cost) = (Some(t0), t0.elapsed());
     }
@@ -634,15 +674,27 @@ impl BoxView {
             (project(rot(half_w, half_d)), project(rot(-half_w, half_d)))
         };
         let dark = ((1.0 - cos.abs()) * 120.0) as u32;
-        face_columns(c, &scratch, w, (rx, ry, rw, rh), a, b, cy, tall, dark);
-        // The edge between them: the box's right side faces you all through a half turn (its normal's z is -sin).
-        let (e0, e1) = (project(rot(half_w, -half_d)), project(rot(half_w, half_d)));
+        face_columns(c, &scratch, w, (rx, ry, rw, rh), a, b, cy, tall, dark, None);
+        // The edge between them: the box's right side faces you all through a half turn (its normal's z is -sin). While the
+        // front turns away, that side is the case's own, at the case's right edge, not at the far end of the game out beside
+        // it (ritual review 14.11., finding 7: the side stood apart, beyond the cartridge), and the game stands in front of
+        // it. Elsewhere it is at the face's edge: the back is the whole box, and a front coming round shows its case's
+        // left side there. Half way (cos = 0) both are the same line.
+        let front_away = !showing_back && cos >= 0.0;
+        let case_part = inp.front.map_or(1.0, |f| f.w as f32 / rw.max(1) as f32).clamp(0.0, 1.0);
+        let side_x = if front_away { -half_w + along * case_part } else { half_w };
+        let (e0, e1) = (project(rot(side_x, -half_d)), project(rot(side_x, half_d)));
         // As tall as the case (the back stands the room's height), from the face it leaves to the face it comes to.
         let case_h = inp.front.map_or(rh, |f| f.h.min(rh)) as f32;
         let (h_from, h_to) = if self.back { (case_h, rh as f32) } else { (rh as f32, case_h) };
         let edge_h = (h_from + (h_to - h_from) * t) * tall / rh.max(1) as f32;
         if e1.0 - e0.0 >= 0.5 {
             edge_columns(c, e0, e1, cy, edge_h, mix(inp.look.band, 0x000000, ((1.0 - sin) * 110.0) as u32 + 30));
+            if front_away && case_part < 1.0 {
+                // The game out beside the case is nearer than the case's side: painted again over it, its part of the face.
+                let cut = (rw as f32 * case_part).round() as i32;
+                face_columns(c, &scratch, w, (rx + cut, ry, rw - cut, rh), e0, b, cy, tall, dark, Some(pal().void));
+            }
         }
         self.scratch = scratch;
     }
@@ -1141,12 +1193,12 @@ fn paint_progress(c: &mut Canvas, text: &mut Text, progress: &str, d: &CardData,
 /// there is no description to show.
 pub(crate) fn about(d: &CardData) -> (Option<String>, Option<String>) {
     // The short card: one sentence of the player's own description.
-    if let (true, Summary::Gamelist(t)) = (d.plain, &d.summary) {
+    if let (true, Summary::Gamelist(t) | Summary::Romm(t)) = (d.plain, &d.summary) {
         let first = t.split_inclusive(['.', '!', '?']).next().unwrap_or(t).trim().to_string();
         return (Some(first).filter(|f| !f.is_empty()), None);
     }
     let about = match &d.summary {
-        Summary::Wikipedia { text: t, .. } | Summary::Gamelist(t) => Some(t.clone()),
+        Summary::Wikipedia { text: t, .. } | Summary::Gamelist(t) | Summary::Romm(t) => Some(t.clone()),
         _ => d.sentence.clone(),
     };
     // The short card has no line for a game that simply has no article.
@@ -1554,7 +1606,7 @@ mod tests {
             let bg: Vec<u32> = (0..(w * h) as u32).map(|i| i * 7 & 0xffffff).collect();
             let (mut want, mut got) = (bg.clone(), bg.clone());
             old_face(&mut Canvas::new(&mut want, w as u32, h as u32), a, b, 110.0, hh, dark);
-            face_columns(&mut Canvas::new(&mut got, w as u32, h as u32), &picture, w, (40, 20, 200, 180), a, b, 110.0, hh, dark);
+            face_columns(&mut Canvas::new(&mut got, w as u32, h as u32), &picture, w, (40, 20, 200, 180), a, b, 110.0, hh, dark, None);
             assert!(got == want, "face {a:?} {b:?}");
             let (l, r) = if a.0 <= b.0 { (a, b) } else { (b, a) };
             old_edge(&mut Canvas::new(&mut want, w as u32, h as u32), l, r, 110.0, hh, 0x123456);

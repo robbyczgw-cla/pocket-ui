@@ -57,53 +57,21 @@ fn the_words_are_french_of_france_in_tu_and_the_page_names_are_the_ones_the_code
     ] {
         assert_eq!(t.translate(english).as_deref(), Some(french), "{english}");
     }
-    let quebec = ["courriel", "magasin", "fin de semaine", "clavardage", "téléverser", "cellulaire", "fichier de journal"];
-    let bad: Vec<String> = t
-        .entries()
-        .into_iter()
-        .filter(|(_, fr)| {
-            let lower = fr.to_lowercase();
-            quebec.iter().any(|w| lower.contains(w))
-        })
-        .map(|(en, fr)| format!("{en:?} -> {fr:?}"))
-        .collect();
-    assert!(bad.is_empty(), "words of Quebec, not France:\n{}", bad.join("\n"));
+    // Words of Quebec are a warning of scripts/fix-typography.py now (19.11.2026), not a merge blocker.
 }
 
-/// French typography as the glossary has it: a no-break space (U+00A0, the one every font has; the narrow U+202F no font here has)
-/// before `? ! : ;`, never a plain space, « » with one inside, the straight apostrophe, and no "vous". `Text::wrap` keeps such a mark
-/// with its word (tests/text_size.rs finds a line cut before it).
+/// French typography (no-break space before `? ! : ;`, « », the straight apostrophe, "vous") is not a merge blocker any more
+/// (19.11.2026: an apostrophe no person sees must not stop anything): scripts/fix-typography.py lists it every night and
+/// fixes it with --write. This test only proves the fixer does what its rules say.
 #[test]
-fn the_marks_follow_their_word_after_a_no_break_space() {
-    let t = Lang::Fr.table().unwrap();
-    let mut bad = Vec::new();
-    for (en, fr) in t.entries() {
-        let hole = |s: &str| s.replace(|c: char| c.is_alphanumeric() || c == '{' || c == '}', "");
-        let _ = hole;
-        for (at, ch) in fr.char_indices() {
-            let before = fr[..at].chars().last();
-            if matches!(ch, '?' | '!' | ';') && before == Some(' ') {
-                bad.push(format!("{en:?} -> {fr:?}: a plain space before {ch:?}"));
-            }
-            if ch == ':' && before == Some(' ') {
-                bad.push(format!("{en:?} -> {fr:?}: a plain space before ':'"));
-            }
-            if ch == '«' && !fr[at + ch.len_utf8()..].starts_with('\u{a0}') {
-                bad.push(format!("{en:?} -> {fr:?}: « without its no-break space"));
-            }
-            if ch == '»' && before != Some('\u{a0}') {
-                bad.push(format!("{en:?} -> {fr:?}: » without its no-break space"));
-            }
-            if matches!(ch, '’' | '\u{202f}') {
-                bad.push(format!("{en:?} -> {fr:?}: {ch:?} (straight apostrophe and U+00A0 only)"));
-            }
-        }
-        let lower = fr.to_lowercase();
-        if lower.split(|c: char| !c.is_alphabetic()).any(|w| w == "vous" || w == "votre" || w == "vos") {
-            bad.push(format!("{en:?} -> {fr:?}: vous, not tu"));
-        }
-    }
-    assert!(bad.is_empty(), "{} lines break the French typography:\n{}", bad.len(), bad.join("\n"));
+fn the_typography_fixer_passes_its_own_cases() {
+    let out = std::process::Command::new("python3")
+        .arg("-I")
+        .arg(concat!(env!("CARGO_MANIFEST_DIR"), "/scripts/fix-typography.py"))
+        .arg("--self-test")
+        .output()
+        .unwrap();
+    assert!(out.status.success(), "{}{}", String::from_utf8_lossy(&out.stdout), String::from_utf8_lossy(&out.stderr));
 }
 
 /// A French mark at the end of a wrapped line would stand alone on the next one: `Text::wrap` never breaks at U+00A0.

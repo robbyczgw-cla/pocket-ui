@@ -67,6 +67,31 @@ if [ -f scripts/check-leaks.sh ] && [ -z "${GATE_LEAKS_DONE:-}" ]; then
     [ -z "$leaks" ] || echo "$leaks"
     echo "gate: leak scan ok ($(( $(date +%s) - leaks_start )) s)"
 fi
+# Fast checks (19.11.2026, fail-fast): the script checks that turned the most trains red, before any build - seconds, not the
+# 20 minutes until the suites reach the same verdict. The translation audit (a painted string without a German line) and the
+# reader inventory (tests/data_sources.rs runs the same script later). Each only when the tree has it; both at once.
+fast_started=$(date +%s) fast_pids= fast_names=
+for fast_check in i18n-extract.py reader-inventory.py; do
+    [ -f "scripts/$fast_check" ] || continue
+    case $fast_check in i18n-extract.py) fast_args=--check ;; *) fast_args= ;; esac
+    # shellcheck disable=SC2086
+    python3 -I "scripts/$fast_check" $fast_args >"/tmp/gate-fast-$name.$fast_check.log" 2>&1 &
+    fast_pids="$fast_pids $!" fast_names="$fast_names $fast_check"
+done
+fast_failed=
+set -- $fast_names
+for fast_pid in $fast_pids; do
+    wait "$fast_pid" || fast_failed="$fast_failed $1"
+    shift
+done
+if [ -n "$fast_failed" ]; then
+    for fast_check in $fast_failed; do
+        echo "GATE: fast checks FAILED: scripts/$fast_check ($(( $(date +%s) - fast_started )) s; /tmp/gate-fast-$name.$fast_check.log)"
+        tail -20 "/tmp/gate-fast-$name.$fast_check.log"
+    done
+    exit 1
+fi
+[ -z "$fast_names" ] || echo "gate: fast checks ok:$fast_names ($(( $(date +%s) - fast_started )) s)"
 if [ "$quick" -eq 1 ]; then profile=${GATE_PROFILE:-quick}; else profile=${GATE_PROFILE:-gate}; fi
 case $profile in release) pflag=--release ;; *) pflag="--profile $profile" ;; esac
 
@@ -390,6 +415,18 @@ runner_done=$(date +%s)
 # isolate compilation I/O and memory pressure. Timing remains alone afterward.
 if [ "$gate_parallel" -eq 1 ]; then shell_wait; fi
 [ "$shell_run_rc" -eq 0 ] || trc=1
+# Run the real Java readers too on JVM-capable hosts. The host-only API doubles
+# exercise files/ZIPs/descriptors, not Android Binder or package acceptance.
+# Existing minimal Rust-only hosts keep an explicit platform skip, not a new JDK package requirement.
+if [ "$trc" -eq 0 ] && [ "$docs_only" -eq 0 ] && [ -f scripts/android/test/file-reader-rule.sh ]; then
+    jvm_rc=0
+    (unset JAVA_READER_ONLY; run_rust bash scripts/android/test/file-reader-rule.sh --if-available) >>"$T" 2>&1 || jvm_rc=$?
+    case $jvm_rc in
+        0) echo "gate: JVM file-reader companion passed" ;;
+        77) echo "gate: JVM file-reader companion SKIPPED: no compatible JVM host; Java platform probes were not run" ;;
+        *) echo "gate: JVM file-reader companion FAILED ($T)"; trc=1 ;;
+    esac
+fi
 brick_started=$(date +%s)
 # The German and Spanish snapshot matrix (~45 s) is a release check, but any full-gate change (a new screen, a Brick state, a
 # manual page) can turn it red: run it in every full gate, so a release candidate does not find it first.
@@ -419,10 +456,10 @@ if [ "$trc" -eq 0 ] && [ "$docs_only" -eq 0 ] && [ "$has_brick" -eq 1 ] && { [ "
     # The ordinary integration tier excludes the Brick settings walk and the
     # Brick-only text regressions. Run those cases, keeping the public text matrix in its usual tier. The Smart Pro's
     # D-pad explorer (same card, 1280x720; its text fit is in brick_settings_walk) runs here too.
-    for suite in brick_settings_walk text_size long_titles search_titles nav_explorer; do
+    for suite in brick_settings_walk text_size long_titles search_titles nav_explorer data_sources; do
         [ "$trc" -eq 0 ] || break
         [ -f "tests/$suite.rs" ] || continue
-        [ "$brick_full" -eq 1 ] || case $suite in search_titles|nav_explorer) continue ;; esac
+        [ "$brick_full" -eq 1 ] || case $suite in search_titles|nav_explorer|data_sources) continue ;; esac
         case $suite in
             nav_explorer)
                 # libtest's filters are ORed: every present/future Brick case, plus the Smart Pro's walks.

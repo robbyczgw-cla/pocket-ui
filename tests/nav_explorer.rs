@@ -787,6 +787,12 @@ impl<'a> Explorer<'a> {
                 self.fail(format!("{}: {dir} ended pocket-ui", spot(&last)));
                 return (frames, Walked::Ended);
             };
+            // Up on a settings list's first row goes to its categories (`settings_tabs_with_the_dpad`): the list's end, not
+            // a way out. A category of one row (Android's Connections: Pocket Sync) meets it on the walk Up.
+            let to_tabs = dir == "up" && from.at.strip_prefix("settings:List ").is_some_and(|c| f.at == format!("settings:Tabs {c}"));
+            if to_tabs {
+                return (frames, Walked::Stopped);
+            }
             if f.at != from.at {
                 self.fail(format!("{}: {dir} left the page for {}", spot(&last), f.at));
                 return (frames, Walked::Left);
@@ -1697,9 +1703,9 @@ fn connections_network_tools(profile: Profile) {
     let names = walk_rows(&mut ui, &connections);
     // The Brick's card has no Moonlight (`brick_hides`).
     let want: &[&str] = if profile.device == "brick" {
-        &["Wi-Fi", "Bluetooth", "Tailscale", "Remote access (SSH)", "Sync", "Web companion"]
+        &["Wi-Fi", "Bluetooth", "Tailscale", "Remote access (SSH)", "Sync", "Pocket Sync", "Web companion"]
     } else {
-        &["Wi-Fi", "Bluetooth", "Tailscale", "Remote access (SSH)", "Sync", "Web companion", "PC streaming"]
+        &["Wi-Fi", "Bluetooth", "Tailscale", "Remote access (SSH)", "Sync", "Pocket Sync", "Web companion", "PC streaming"]
     };
     assert_eq!(names, want, "{}: Connections must show every network service", profile.name);
     let services: &[&str] = if profile.device == "brick" { &["Tailscale", "Remote access (SSH)", "Sync"] } else { &["Tailscale", "Remote access (SSH)", "Sync", "PC streaming"] };
@@ -1811,7 +1817,8 @@ fn settings_tabs_with_the_dpad(profile: Profile) {
         seen.push(name);
     }
     assert_eq!(f.at, bar.at, "{}: Right comes round to the first", profile.name);
-    let want = if profile.extra_env.iter().any(|(k, _)| *k == "POCKETUI_ANDROID_PROFILE") { 7 } else { 8 };
+    // Android's handheld view too since 0.6.0: Connections holds Pocket Sync.
+    let want = 8;
     assert_eq!(seen.len(), want, "{}: every category: {seen:?}", profile.name);
     // Left goes the other way: the last one, and Down into its rows on the first.
     let last = ui.settled(&["left"]).unwrap();
@@ -1871,11 +1878,13 @@ fn walk_rows(ui: &mut Ui, f: &Frame) -> Vec<String> {
 }
 
 /// Settings v2 (2026-11-16): the eight categories in their order with R1 from START, back with L1, and every row of each
-/// one reached with Down (round to the first), on the built-in pad. Android's handheld view has no Connections.
+/// one reached with Down (round to the first), on the built-in pad. Android's handheld view has Connections with Pocket Sync alone.
 fn every_category_by_r1_l1_and_every_row_by_the_dpad(profile: Profile) {
     let android = profile.extra_env.iter().any(|(k, _)| *k == "POCKETUI_ANDROID_PROFILE");
     let all = ["Connections", "Look", "Screen & sound", "Controls", "Playing", "Games", "System", "Help & tools"];
-    let want: Vec<&str> = all.iter().copied().filter(|c| !(android && *c == "Connections")).collect();
+    // Android's handheld view has every category since 0.6.0 (Connections: Pocket Sync), and START opens on Look there
+    // (`app_settings_groups::start_group`): R1 goes round from Look, Connections last.
+    let want: Vec<&str> = if android { all[1..].iter().chain(&all[..1]).copied().collect() } else { all.to_vec() };
     let card = Card::new(&profile);
     let mut ui = Ui::start(&card, &profile, true, 1, &[]);
     let mut f = ui.settled(&["start"]).unwrap();
@@ -1884,7 +1893,8 @@ fn every_category_by_r1_l1_and_every_row_by_the_dpad(profile: Profile) {
         let name = f.at.strip_prefix("settings:List ").unwrap_or_else(|| panic!("{}: R1 left the lists: {}", profile.name, f.at)).to_string();
         // Every row with Down, the first again after the last: none is skipped or a dead end.
         let rows = walk_rows(&mut ui, &f);
-        assert!(rows.len() >= 2, "{}: {name} has rows: {rows:?}", profile.name);
+        // Android's Connections has one row (Pocket Sync); every other category at least two.
+        assert!(rows.len() >= 2 || (android && name == "Connections" && rows == ["Pocket Sync"]), "{}: {name} has rows: {rows:?}", profile.name);
         match name.as_str() {
             "Screen & sound" => assert_eq!(rows[..2], ["Brightness", "Volume"], "{}: the levels first", profile.name),
             "Controls" => assert_eq!(rows[..2], ["Buttons", "Controller setup"], "{}", profile.name),
@@ -2109,7 +2119,15 @@ fn rc03_performance_fan_rows_only_offer_arrows_when_they_can_change() {
         let mut ui = Ui::start(&card, &profile, true, 1, &[]);
         ui.settled(&["start"]).unwrap();
         open_category(&mut ui, "Playing");
-        open_named(&mut ui, "Performance & fan");
+        // Without a fan the page is Performance and has no fan rows at all (review 19.11. #2: three dead "No fan" rows).
+        let fan = profile.device != RG35XX_PLUS.device;
+        let page = open_named(&mut ui, if fan { "Performance & fan" } else { "Performance" });
+        if !fan {
+            for name in ["Games: fan", "Fan outside games", "Smooth fan", "No fan"] {
+                assert!(!page.text().contains(name), "{}: {name} on a handheld without a fan:\n{}", profile.name, page.text());
+            }
+            continue;
+        }
         for name in ["Games: fan", "Fan outside games", "Smooth fan"] {
             let before = select_named(&mut ui, name);
             let changeable = before.names_hint("left");
@@ -2245,6 +2263,23 @@ fn rc03_snapshot(card: &Card, profile: Profile, state: &str, env: &[(&str, &str)
     assert!(out.status.success(), "{state}: {}", String::from_utf8_lossy(&out.stderr));
     let f = Frame::parse(&std::fs::read_to_string(record).unwrap());
     (f, png)
+}
+
+#[test]
+fn ds_controls_actions_are_readable_on_the_focused_rows() {
+    let mut profiles = vec![RG35XX_PLUS, ANDROID_ODIN];
+    #[cfg(feature = "brick")] profiles.push(BRICK);
+    for profile in profiles {
+        let card = Card::new(&profile);
+        for (lang, stylus, layout) in [("en", "Stylus mode", "Screen layout"), ("de", "Stiftmodus", "Bildschirmlayout")] {
+            for (state, value) in [("controls:nds:7:stylus", stylus), ("controls:nds:8:layout", layout)] {
+                let (f, _) = rc03_snapshot(&card, profile, state, &[("POCKETUI_LANG", lang)]);
+                assert!(f.text().contains(value), "{} {lang} {state}: action must be readable:\n{}", profile.name, f.text());
+                assert!(f.strings.iter().any(|(_, s)| s.contains(value) && !s.contains('…')), "whole action name, not an ellipsis");
+                assert!(f.focused().is_some(), "{state}: focused button row");
+            }
+        }
+    }
 }
 
 #[test]
@@ -2794,6 +2829,43 @@ fn the_android_games_page_by_the_pad_in_every_language_and_its_empty_states() {
             }
             let back = ui.settled(&["b"]).unwrap();
             assert!(back.at == list.at && back.same_row(&list), "{lang}: B back to the {row} row");
+        }
+    }
+}
+
+/// Settings → Games → RomM on the pad in every language, at 640x480 (the smallest screen) and in Android's handheld view:
+/// its row in Games, what it says while nothing is paired, its three rows by Down and round again, A on Server opens the
+/// keyboard with its heading, B leaves the keyboard, then the page, back on the RomM row.
+#[test]
+fn the_romm_page_by_the_pad_in_every_language() {
+    let languages = [
+        ("en", "Not paired", "RomM server", "Pair with QR code"),
+        ("de", "Nicht gekoppelt", "RomM-Server", "Mit QR-Code koppeln"),
+        ("es", "Sin vincular", "Servidor de RomM", "Vincular con código QR"),
+        ("fr", "Non associé", "Serveur RomM", "Associer par QR code"),
+        ("it", "Non associato", "Server RomM", "Associa con QR code"),
+        ("pt", "Não pareado", "Servidor RomM", "Parear com QR code"),
+    ];
+    for (profile, langs) in [(&RG35XX_PLUS, &languages[..]), (&ANDROID_ODIN, &languages[..1])] {
+        for (lang, unpaired, heading, qr) in langs {
+            let card = Card::new(profile);
+            let mut ui = Ui::start(&card, profile, true, 1, &[("POCKETUI_LANG", lang)]);
+            ui.settled(&["start"]).unwrap();
+            open_category(&mut ui, "Games");
+            let list = select_named(&mut ui, "RomM");
+            let page = ui.settled(&["a"]).unwrap();
+            assert_eq!(page.at, "settings:Romm", "{lang}: A on RomM opens the page");
+            assert!(page.text().contains(unpaired), "{lang}: says it is not paired:\n{}", page.text());
+            let rows = walk_rows(&mut ui, &page);
+            assert_eq!(rows.len(), 3, "{lang}: Server and both ways to pair by the pad: {rows:?}");
+            assert!(rows.iter().any(|r| r == qr), "{lang}: {qr} is a row: {rows:?}");
+            assert!(page.names_hint("a") && page.names_hint("b"), "{lang}: A and B in the bar: {:?}", page.hints);
+            let typing = ui.settled(&["a"]).unwrap();
+            assert!(typing.text().contains(heading), "{lang}: A on Server opens the keyboard:\n{}", typing.text());
+            let back = ui.settled(&["b"]).unwrap();
+            assert!(back.text().contains(unpaired), "{lang}: B on an empty field leaves the keyboard:\n{}", back.text());
+            let out = ui.settled(&["b"]).unwrap();
+            assert!(out.at == list.at && out.same_row(&list), "{lang}: B back to the RomM row: {}", out.at);
         }
     }
 }

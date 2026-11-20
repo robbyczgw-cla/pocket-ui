@@ -9,6 +9,8 @@
 #     --bin-dir  take pocket-ui, pocket-core and pocket-splash from DIR instead of building them (must be that version)
 #     --out      output directory (default build/image, gitignored)
 #     --gba-core DIR pinned ARM64 gpSP build (cores, licence and corresponding source)
+#     --ds-core  DIR pinned portable DSperate build (scripts/build-dsperate.sh: binary, licences, full source and recipe);
+#                needed when pocket-ui uses DSperate, which it then finds beside itself in cores/ (src/ds.rs)
 #     --hakux    DIR from `scripts/build-hakux-core.sh` (hakux_libretro.so, BUILD-INFO, licenses/): the package then carries the
 #                Xbox core (hakux/, docs/XBOX.md); without it Xbox games keep ROCKNIX's xemu
 #
@@ -24,6 +26,7 @@ TARGET=aarch64-unknown-linux-gnu
 VERSION=
 BIN_DIR=
 GBA_CORE_DIR=
+DS_CORE_DIR=
 HAKUX_DIR=
 OUT=$ROOT/build/image
 while [ $# -gt 0 ]; do
@@ -32,6 +35,7 @@ while [ $# -gt 0 ]; do
     --bin-dir) BIN_DIR=$2; shift ;;
     --out) OUT=$2; shift ;;
     --gba-core) GBA_CORE_DIR=$2; shift ;;
+    --ds-core) DS_CORE_DIR=$2; shift ;;
     --hakux) HAKUX_DIR=$2; shift ;;
     -h | --help) sed -n '2,16p' "$0"; exit 0 ;;
     *) echo "unknown argument: $1" >&2; exit 2 ;;
@@ -71,6 +75,11 @@ install -m 755 "$BIN_DIR/pocket-ui" "$BIN_DIR/pocket-core" "$BIN_DIR/pocket-spla
 install -m 644 "$ROOT/deploy/essway-pocket-ui.conf" "$P/files/10-pocket-ui.conf"
 install -m 644 "$ROOT/deploy/pocket-splash.service" "$P/files/pocket-splash.service"
 [ -z "$GBA_CORE_DIR" ] || sh "$ROOT/scripts/gba-core-files.sh" "$GBA_CORE_DIR" "$P/files/cores"
+[ -z "$DS_CORE_DIR" ] || python3 -I "$ROOT/scripts/dsperate-files.py" "$DS_CORE_DIR" "$P/files/cores"
+# A pocket-ui with DSperate carries its verified core, licences and source (as release-channel.sh and the images do)
+if LC_ALL=C grep -a -q dsperate "$P/files/pocket-ui"; then
+  python3 -I "$ROOT/scripts/dsperate-files.py" --check "$P/files/cores" || die "DSperate core, source and notices required: pass --ds-core BUILD_DIR"
+fi
 printf '%s\n' "$VERSION" >"$P/files/VERSION"
 (cd "$P/files" && sha256sum pocket-ui pocket-core pocket-splash portmaster-setup.sh run-pocket-ui.sh 10-pocket-ui.conf pocket-splash.service VERSION >SHA256SUMS
  [ ! -d cores ] || find cores -type f | LC_ALL=C sort | xargs sha256sum >>SHA256SUMS)

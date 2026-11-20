@@ -34,8 +34,12 @@ pub struct Notice {
 impl Notice {
     /// Takes the reason pocket-core left behind, if any (and removes it, so it shows once).
     pub fn take() -> Option<Notice> {
-        let text = std::fs::read_to_string(ERROR_FILE).ok()?;
-        let _ = std::fs::remove_file(ERROR_FILE);
+        Self::take_from(std::path::Path::new(ERROR_FILE))
+    }
+
+    fn take_from(file: &std::path::Path) -> Option<Notice> {
+        let text = std::fs::read_to_string(file).ok()?;
+        let _ = std::fs::remove_file(file);
         let text = text.trim();
         (!text.is_empty()).then(|| Notice {
             text: text.to_string(),
@@ -174,5 +178,23 @@ impl Notice {
             text.draw(c, Face::Body, 30, x + 40, y + 46 + grow * 7 / 10 + i as i32 * step, colour, l);
         }
         y + h
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn file_source_rule_notice_files() {
+        let d = crate::testutil::TestDir::new("notice-file-rule");
+        let file = d.join("core.error");
+        for (label, bytes) in crate::file_faults::faults(b"The game needs a BIOS file.") {
+            let _ = std::fs::remove_file(&file);
+            if let Some(bytes) = bytes { std::fs::write(&file, bytes).unwrap(); }
+            let notice = Notice::take_from(&file);
+            if label == "valid" { assert_eq!(notice.as_ref().unwrap().text(), "The game needs a BIOS file."); }
+            if let Some(notice) = notice { assert!(!notice.text().trim().is_empty(), "{label}: blank notice"); }
+        }
     }
 }

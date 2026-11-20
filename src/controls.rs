@@ -145,7 +145,9 @@ pub fn targets_from(described: &[Described]) -> Vec<Target> {
 pub fn targets_for(system: &str, described: &[Described]) -> Vec<Target> {
     let pad = crate::platform::console_buttons(system);
     if !described.is_empty() || pad.is_empty() {
-        return targets_from(described);
+        let mut targets = targets_from(described);
+        if system == "nds" { targets.extend(crate::ds_pad::ACTIONS.iter().map(|a| Target { id: a.0, label: a.2.into() })); }
+        return targets;
     }
     MENU_ORDER
         .iter()
@@ -156,6 +158,9 @@ pub fn targets_for(system: &str, described: &[Described]) -> Vec<Target> {
         })
         .collect()
 }
+
+/// Hold to toggle only accepts real console buttons, not navigation or frontend actions.
+pub fn can_hold(id: u8) -> bool { id < 16 && !(2..8).contains(&id) }
 
 /// What a game gets from the handheld's pad in one frame, Options › Controls applied (Android's player; pocket-core does
 /// the same with its own input): the pad's held buttons and its presses shorter than a frame (`pulses`), the stick's
@@ -194,11 +199,16 @@ impl ControlsPage {
     fn choices(&self) -> Vec<Option<u8>> {
         let mut c = vec![None];
         c.extend(self.targets.iter().map(|t| Some(t.id)));
+        if self.system == "nds" {
+            if self.targets.is_empty() { c.extend(targets_from(&[]).iter().map(|t| Some(t.id))); }
+            for (id, _, _) in crate::ds_pad::ACTIONS { if !c.contains(&Some(id)) { c.push(Some(id)); } }
+        }
         c
     }
 
     /// A console button's name: the core's, or the standard one when the core named none.
     pub fn target_name(&self, id: Option<u8>) -> String {
+        if self.system == "nds" { if let Some(name) = id.and_then(crate::ds_pad::name) { return name.into(); } }
         match id {
             Some(id) => match self.targets.iter().find(|t| t.id == id) {
                 Some(t) => t.label.clone(),
@@ -212,12 +222,11 @@ impl ControlsPage {
 
     /// The buttons Hold to toggle can hold: not the D-pad, not Select and Start.
     fn hold_choices(&self) -> Vec<Option<u8>> {
-        let held = |id: u8| !(2..=7).contains(&id);
         let mut c = vec![None];
         if self.targets.is_empty() {
-            c.extend(MENU_ORDER.iter().copied().filter(|id| held(*id) && *id < 14).map(Some));
+            c.extend(MENU_ORDER.iter().copied().filter(|id| can_hold(*id) && *id < 14).map(Some));
         } else {
-            c.extend(self.targets.iter().map(|t| t.id).filter(|id| held(*id)).map(Some));
+            c.extend(self.targets.iter().map(|t| t.id).filter(|id| can_hold(*id)).map(Some));
         }
         c
     }
@@ -251,7 +260,12 @@ impl ControlsPage {
             let target = self.mapping.target[id as usize];
             let name = self.target_name(target);
             let phys = physical_label(id);
-            let desc = if name == "None" { format!("{phys} does nothing in this game.") } else { format!("{phys} presses {name}.") };
+            let desc = match target {
+                Some(crate::ds_pad::STYLUS) => "Switch the D-pad between the game and the DS stylus. In stylus mode, the button mapped to A touches and holds.".into(),
+                Some(crate::ds_pad::LAYOUT) => "Show the next Nintendo DS screen layout.".into(),
+                _ if name == "None" => format!("{phys} does nothing in this game."),
+                _ => format!("{phys} presses {name}."),
+            };
             let extra = match id {
                 14 => "\nL3 means pressing the left stick in.",
                 15 => "\nR3 means pressing the right stick in.",
@@ -267,7 +281,7 @@ impl ControlsPage {
             self.mapping.hold_toggle.map_or("Off".into(), |id| self.target_name(Some(id))),
             "Pick a button: one press holds it down, the next lets go.\nFor buttons you would hold, like run.".into(),
         ));
-        rows.push(("Reset controls".into(), String::new(), "Every button does what it says, as it did before any change.".into()));
+        rows.push(("Reset controls".into(), String::new(), if self.system == "nds" { "Restore the DS buttons and actions." } else { "Every button does what it says, as it did before any change." }.into()));
         rows
     }
 
@@ -335,7 +349,9 @@ impl Mapping {
 
     /// `defaults` on a handheld with or without sticks.
     pub fn defaults_on(system: &str, has_sticks: bool) -> Mapping {
-        Mapping { target: std::array::from_fn(|i| Some(i as u8)), stick_dpad: stick_dpad_default(system), dpad_stick: dpad_stick_default(system, has_sticks), hold_toggle: None }
+        let mut m = Mapping { target: std::array::from_fn(|i| Some(i as u8)), stick_dpad: stick_dpad_default(system), dpad_stick: dpad_stick_default(system, has_sticks), hold_toggle: None };
+        if system == "nds" && !has_sticks { m.target[12] = Some(crate::ds_pad::STYLUS); m.target[13] = Some(crate::ds_pad::LAYOUT); }
+        m
     }
 
     /// The default layout with the `ctl.*` entries of a settings map applied.
@@ -373,7 +389,7 @@ impl Mapping {
         let Some(id) = key_id(key) else { return false };
         match value {
             "none" => self.target[id as usize] = None,
-            v => match key_id(v) {
+            v => match key_id(v).or_else(|| crate::ds_pad::ACTIONS.iter().find(|a| a.1 == v).map(|a| a.0)) {
                 Some(t) => self.target[id as usize] = Some(t),
                 None => return false,
             },
@@ -382,7 +398,7 @@ impl Mapping {
     }
 
     pub fn value_of(&self, id: u8) -> &'static str {
-        self.target[id as usize].map_or("none", |t| KEYS[t as usize])
+        self.target[id as usize].map_or("none", |t| KEYS.get(t as usize).copied().or_else(|| crate::ds_pad::ACTIONS.iter().find(|a| a.0 == t).map(|a| a.1)).unwrap_or("none"))
     }
 
     /// Interactive assignment: move the previous action to the occupied button. Legacy duplicate
@@ -410,7 +426,7 @@ impl Mapping {
         let mut out = 0;
         for (i, target) in self.target.iter().enumerate() {
             if let (true, Some(t)) = (pressed & (1 << i) != 0, target) {
-                out |= 1 << t;
+                if *t < 16 { out |= 1 << t; }
             }
         }
         out
@@ -439,7 +455,7 @@ impl Mapping {
 
     /// `hold_toggle` as a settings value: a console button's key or `none`.
     pub fn hold_value(&self) -> &'static str {
-        self.hold_toggle.map_or("none", |id| KEYS[id as usize])
+        self.hold_toggle.and_then(|id| KEYS.get(id as usize).copied()).unwrap_or("none")
     }
 }
 

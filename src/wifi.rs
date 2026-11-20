@@ -304,6 +304,11 @@ pub fn parse_rocknix_wifi(system_cfg: &str) -> RocknixWifi {
     w
 }
 
+fn read_rocknix_settings(path: &std::path::Path) -> (RocknixWifi, Option<String>) {
+    let text=std::fs::read_to_string(path).unwrap_or_default();
+    (parse_rocknix_wifi(&text),country_setting(&text))
+}
+
 /// A stored profile that lost its security section (`stale_profile`) while ROCKNIX still knows the key: it
 /// worked only as long as the first connection lasted, and any reconnect asked for the password again
 /// (Mini V2, night of 2026-10-23). Repaired from the key instead.
@@ -804,7 +809,7 @@ mod imp {
         let reg = crate::proc::run_with_timeout(Command::new("iw").args(["reg", "get"]), IW_TIMEOUT)
             .ok()
             .and_then(|o| crate::timezone::parse_reg_country(&String::from_utf8_lossy(&o.stdout)));
-        Saving { saved, country: super::country_setting(&std::fs::read_to_string(SYSTEM_CFG).unwrap_or_default()), reg, ip: ip_now(), mac: super::mac() }
+        Saving { saved, country: super::read_rocknix_settings(Path::new(SYSTEM_CFG)).1, reg, ip: ip_now(), mac: super::mac() }
     }
 
     const IW_TIMEOUT: Duration = Duration::from_secs(3);
@@ -902,7 +907,7 @@ mod imp {
             }
             eprintln!("wifi: {} was already forgotten ({err})", s.ssid);
         }
-        let w = super::parse_rocknix_wifi(&std::fs::read_to_string(SYSTEM_CFG).unwrap_or_default());
+        let w = super::read_rocknix_settings(Path::new(SYSTEM_CFG)).0;
         if w.ssid == s.ssid {
             set_rocknix_setting("wifi.ssid", "default");
             set_rocknix_setting("wifi.key", "default");
@@ -989,7 +994,7 @@ mod imp {
             .spawn(move || {
                 // The address for `ip`, so the UI has it in memory from the first moments.
                 ip_now();
-                let rocknix = || super::parse_rocknix_wifi(&std::fs::read_to_string(SYSTEM_CFG).unwrap_or_default());
+                let rocknix = || super::read_rocknix_settings(Path::new(SYSTEM_CFG)).0;
                 let w = rocknix();
                 if !w.ssid.is_empty() {
                     let key_mgmt = nmcli(&["-g", "802-11-wireless-security.key-mgmt", "connection", "show", "id", &w.ssid]);
@@ -1091,7 +1096,7 @@ mod imp {
                         if !matches!(d.state, 30 | 120) {
                             return;
                         }
-                        if !super::parse_rocknix_wifi(&std::fs::read_to_string(SYSTEM_CFG).unwrap_or_default()).enabled {
+                        if !super::read_rocknix_settings(Path::new(SYSTEM_CFG)).0.enabled {
                             return;
                         }
                         let saved = saving_until(&stop).saved;
@@ -1668,6 +1673,29 @@ pub fn demo_saved() -> Vec<Saved> {
 mod tests {
     use super::*;
     use crate::testutil::TestDir;
+
+    #[test]
+    fn file_source_rule_wifi_configuration() {
+        let d=TestDir::new("wifi-file-rule");let cfg=d.join("system.cfg");
+        for (label,bytes) in crate::file_faults::faults(b"wifi.enabled=1\nwifi.ssid=ReaderNetwork\nwifi.key=synthetic-reader-key\nwifi.country=AT\n") {
+            let _=std::fs::remove_file(&cfg);if let Some(bytes)=bytes {std::fs::write(&cfg,bytes).unwrap();}
+            let (wifi,country)=read_rocknix_settings(&cfg);
+            if label=="valid" {assert!(wifi.enabled);assert_eq!(wifi.ssid,"ReaderNetwork");assert_eq!(country.as_deref(),Some("AT"));}
+        }
+        for target in ["password","smbpasswd","users.map","smb.conf"] {
+            let share=d.join("share");std::fs::create_dir_all(&share).unwrap();
+            let pass=b"reader-synthetic-share-password";
+            let account=smbpasswd_line(SHARE_UNIX_USER,SHARE_UID,std::str::from_utf8(pass).unwrap(),1);
+            let map=format!("{SHARE_UNIX_USER} = {SHARE_LOGIN}\n");
+            let seed=match target {"password"=>pass.to_vec(),"smbpasswd"=>account.as_bytes().to_vec(),"users.map"=>map.as_bytes().to_vec(),_=>SMB_CONF.as_bytes().to_vec()};
+            for (label,bytes) in crate::file_faults::faults(&seed) {
+                std::fs::write(share.join("password"),pass).unwrap();std::fs::write(share.join("smbpasswd"),&account).unwrap();std::fs::write(share.join("users.map"),&map).unwrap();
+                let file=share.join(target);let _=std::fs::remove_file(&file);if let Some(bytes)=bytes {std::fs::write(&file,bytes).unwrap();}
+                if target=="smb.conf" {secure_share_config(&file).unwrap();assert_eq!(std::fs::read_to_string(&file).unwrap(),SMB_CONF);}
+                else {let password=ensure_share_login(&share).unwrap();assert!(!password.trim().is_empty());assert_eq!(std::fs::read_to_string(share.join("users.map")).unwrap(),map);if label=="valid" {assert_eq!(password,std::str::from_utf8(pass).unwrap());}}
+            }
+        }
+    }
 
     #[test]
     fn the_scan_dump_gives_each_access_points_name_and_age() {

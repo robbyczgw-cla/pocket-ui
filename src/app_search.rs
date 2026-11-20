@@ -294,23 +294,31 @@ impl App {
             self.find.flash = None;
             return;
         };
+        // 960's share of its size under 960 lines (`kit::chrome`): at 260 it was a third of the Brick's 768 and stood over
+        // the case's "Not played yet" (audit 0.6 #17).
+        let size = pocket_ui::kit::chrome(FLASH, c.h);
         // In the Shelf look over the spines, where the jump lands, not over the name above them (`app_cabinet`).
-        let (x, y) = ((c.w - FLASH) / 2, self.shelf_flash_top(c.w, c.h, FLASH).unwrap_or((c.h - FLASH) / 2 - 20));
+        let (x, y) = ((c.w - size) / 2, self.shelf_flash_top(c.w, c.h, size).unwrap_or((c.h - size) / 2 - 20));
         // The inverse of the page, like the selected row of the Minimal look: it reads over spines and labels alike.
         // Painted whole and then mixed over the page as one layer, so box and letter fade together into what is
         // behind them (mixing the letter's colour towards the box's left a bright letter on a faded box).
         let (back, ink) = (pal().text, pal().void);
         let letter = flash.letter.to_string();
-        let w = self.text.width(Face::Title, 200, &letter);
+        let font = pocket_ui::kit::chrome(200, c.h) as u32;
+        let w = self.text.width(Face::Title, font, &letter);
         let mark = pocket_ui::text::boxes::mark();
         let text = &mut self.text;
-        pocket_ui::motion::layer(c, x, y, FLASH, FLASH, alpha, |c| {
-            blend_round_rect(c, x, y, FLASH, FLASH, 44, back, 240);
-            text.draw(c, Face::Title, 200, x + (FLASH - w) / 2, y + FLASH / 2 + 70, ink, &letter);
+        pocket_ui::motion::layer(c, x, y, size, size, alpha, |c| {
+            blend_round_rect(c, x, y, size, size, 44, back, 240);
+            text.draw(c, Face::Title, font, x + (size - w) / 2, y + size / 2 + pocket_ui::kit::chrome(70, c.h), ink, &letter);
         });
         // For the snapshot checks of Settings → Text size: the box covers the page's strings on purpose (as the CJK
         // check says of `letters:`), so what was under it is not read there; the letter painted into it is.
-        pocket_ui::text::boxes::covered_since(mark, c, (x, y, FLASH, FLASH));
+        pocket_ui::text::boxes::covered_since(mark, c, (x, y, size, size));
+        // What tests/brick_look_proportions.rs measures: the box and the spines' top under it (Shelf), in canvas pixels.
+        if crate::SNAPSHOT_RUN.load(std::sync::atomic::Ordering::Relaxed) {
+            println!("letter-flash y={y} size={size} spines={} canvas={}x{}", self.shelf_spines_top(c.w, c.h).unwrap_or(-1), c.w, c.h);
+        }
     }
 
     // ---- the search -----------------------------------------------------------------------------------------

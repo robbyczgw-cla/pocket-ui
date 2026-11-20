@@ -69,10 +69,26 @@ pub enum Extra {
     /// (`showcase`). **Off at the start**, unlike the others: it costs CPU and battery while it plays. Off: no player
     /// is ever started.
     TvPlaysGame,
+    /// A window on the room's wall with the sky as it is now and the season's piece on its sill (Shelf and Cabinet,
+    /// `room_window`).
+    Window,
+    /// After Quit the TV's picture pulls together to a line and a dot that glows on a moment (`eject::tv_off`); off: the
+    /// way back starts from black.
+    CrtOff,
+    /// After dark, while the cabinet's TV is on, the room dims a little and the TV's warm light falls on the shelf and
+    /// the cases (`tv_glow`).
+    EveningGlow,
+    /// The power light of a handheld frame in the game and of the handhelds in the Cabinet, as the original's: it shows the
+    /// battery (red, dim, blinking at the "Battery low" level) and blinks when a state is saved (`frame_led`). Off: the
+    /// light stays steadily on as the frame is drawn.
+    PowerLights,
+    /// A handheld's display switching on and off as the real one's (the Game Boy's green rise, the SP's front light, the
+    /// PSP's fade, `lcd_on`). Off: the display just comes up out of the dark and goes dark, as before.
+    HandheldOn,
 }
 
 impl Extra {
-    pub const ALL: [Extra; 13] = [
+    pub const ALL: [Extra; 18] = [
         Extra::CaseSounds,
         Extra::CrtOn,
         Extra::CabinetTv,
@@ -86,11 +102,16 @@ impl Extra {
         Extra::ShrinkWrap,
         Extra::ProgressFromSaves,
         Extra::TvPlaysGame,
+        Extra::Window,
+        Extra::CrtOff,
+        Extra::EveningGlow,
+        Extra::PowerLights,
+        Extra::HandheldOn,
     ];
 
     /// The page's rows, in its order: the things you see on the shelf, the cabinet, the case, the disc, a game
     /// starting and the game card. (`ALL`'s order is the bits' and stays.)
-    pub const PAGE_ROWS: [Extra; 12] = [
+    pub const PAGE_ROWS: [Extra; 17] = [
         Extra::CabinetTv,
         Extra::TvPlaysGame,
         Extra::Stickers,
@@ -98,7 +119,12 @@ impl Extra {
         Extra::Playful,
         Extra::ShrinkWrap,
         Extra::CrtOn,
+        Extra::CrtOff,
+        Extra::HandheldOn,
+        Extra::PowerLights,
         Extra::TimeOfDayLight,
+        Extra::EveningGlow,
+        Extra::Window,
         Extra::Decorations,
         Extra::ProgressFromSaves,
         Extra::Connections,
@@ -129,6 +155,11 @@ impl Extra {
             Extra::ShrinkWrap => "sealed_new_games",
             Extra::ProgressFromSaves => "progress_from_saves",
             Extra::TvPlaysGame => "tv_plays_game",
+            Extra::Window => "window",
+            Extra::CrtOff => "tv_switch_off",
+            Extra::EveningGlow => "evening_tv_glow",
+            Extra::PowerLights => "power_lights",
+            Extra::HandheldOn => "handheld_switch_on",
         }
     }
 
@@ -148,6 +179,11 @@ impl Extra {
             Extra::ShrinkWrap => "Sealed new games",
             Extra::ProgressFromSaves => "Progress from saves",
             Extra::TvPlaysGame => "TV plays the game",
+            Extra::Window => "Window",
+            Extra::CrtOff => "Old-TV switch-off",
+            Extra::EveningGlow => "Evening TV glow",
+            Extra::PowerLights => "Power lights",
+            Extra::HandheldOn => "Handheld switch-on",
         }
     }
 
@@ -155,7 +191,7 @@ impl Extra {
     pub const fn blurb(self) -> &'static str {
         match self {
             Extra::CaseSounds => "Cases click open, cartridges and discs go in with a sound. Menu sounds stay as they are.",
-            Extra::CrtOn => "The game's picture comes on like an old TV when it starts.",
+            Extra::CrtOn => "The game's picture comes on like an old TV: a dot, a line, the blue channel, then the game.",
             Extra::CabinetTv => "A small old TV on top of the cabinet shows the selected game.",
             Extra::Stickers => "Show your stickers on the cases. Off hides them; they stay on the game's card.",
             Extra::PrintedDiscs => "Discs printed with their cover's art and title. Off: a plain disc in its console's colour.",
@@ -167,17 +203,22 @@ impl Extra {
             Extra::ShrinkWrap => "Games you have never played stand in plastic wrap. It tears off the first time you start one.",
             Extra::ProgressFromSaves => "Badges, stars and hearts from your own saves on the case; off keeps it spoiler-free.",
             Extra::TvPlaysGame => "The TV shows a game you haven't played running live, without sound. Uses more power while it plays; off, nothing extra runs.",
+            Extra::Window => "A window on the wall shows the sky as it is now, with something for the season on its sill.",
+            Extra::CrtOff => "After Quit the picture shrinks to a line and a glowing dot, like an old TV.",
+            Extra::EveningGlow => "After dark the room dims a little and the TV's warm light falls on the shelf.",
+            Extra::PowerLights => "A handheld's power light shows your battery like the real one and blinks when you save.",
+            Extra::HandheldOn => "A handheld's screen comes on and goes off like the real one: a Game Boy's green glow, a PSP's soft fade.",
         }
     }
 
     /// The looks it is seen in, when that is not every look.
     pub fn only(self) -> Option<&'static str> {
         match self {
-            Extra::CaseSounds | Extra::CrtOn | Extra::Stickers | Extra::PrintedDiscs | Extra::TimeOfDayLight | Extra::Decorations | Extra::Playful => {
+            Extra::CaseSounds | Extra::CrtOn | Extra::CrtOff | Extra::HandheldOn | Extra::Stickers | Extra::PrintedDiscs | Extra::TimeOfDayLight | Extra::Decorations | Extra::Window | Extra::Playful => {
                 Some("Shelf and Cabinet looks only.")
             }
-            Extra::CabinetTv | Extra::TvPlaysGame => Some("Cabinet look only."),
-            Extra::Connections | Extra::Rediscover | Extra::ShrinkWrap | Extra::ProgressFromSaves => None,
+            Extra::CabinetTv | Extra::TvPlaysGame | Extra::EveningGlow => Some("Cabinet look only."),
+            Extra::Connections | Extra::Rediscover | Extra::ShrinkWrap | Extra::ProgressFromSaves | Extra::PowerLights => None,
         }
     }
 
@@ -185,7 +226,7 @@ impl Extra {
     pub fn needs(self) -> Option<Needs> {
         match self {
             Extra::CaseSounds => Some(Needs::Sounds),
-            Extra::CrtOn => Some(Needs::CozyFull),
+            Extra::CrtOn | Extra::CrtOff | Extra::HandheldOn => Some(Needs::CozyFull),
             Extra::Playful => Some(Needs::MotionFull),
             _ => None,
         }
@@ -203,11 +244,12 @@ impl Extra {
     /// Whether its feature is there to switch: the row is on the page only then. The key and [`on`] work either way,
     /// so a feature can read its switch before its row is shown.
     pub fn built(self) -> bool {
-        // Every extra has its feature now; a new one starts as `!matches!(self, Extra::<New>)` until it is built.
+        // A new one starts as `!matches!(self, Extra::<New>)` until it is built.
         // Sealed new games too on Android's handheld view (14.11.): it has its own play history, and the Mobile view's comes
         // in (`android_handheld::take_mobile_history`, `mobile_played`).
-        let _ = self;
-        true
+        // The Window is taken off for 0.6 (19.11.: out of place in the room): no row, nothing drawn
+        // (`App::room_window`); its key is still read, so a choice made before stays for when it comes back.
+        !matches!(self, Extra::Window)
     }
 
     /// The extras with a row on the page, in its order.
@@ -300,9 +342,19 @@ pub struct Extras {
     pub sealed_new_games: bool,
     #[serde(default = "yes", deserialize_with = "lenient_on", skip_serializing_if = "is_on")]
     pub progress_from_saves: bool,
+    #[serde(default = "yes", deserialize_with = "lenient_on", skip_serializing_if = "is_on")]
+    pub window: bool,
     /// Off until the player switches it on: it costs power while it plays (`showcase`).
     #[serde(default, deserialize_with = "lenient_off", skip_serializing_if = "is_off")]
     pub tv_plays_game: bool,
+    #[serde(default = "yes", deserialize_with = "lenient_on", skip_serializing_if = "is_on")]
+    pub tv_switch_off: bool,
+    #[serde(default = "yes", deserialize_with = "lenient_on", skip_serializing_if = "is_on")]
+    pub evening_tv_glow: bool,
+    #[serde(default = "yes", deserialize_with = "lenient_on", skip_serializing_if = "is_on")]
+    pub power_lights: bool,
+    #[serde(default = "yes", deserialize_with = "lenient_on", skip_serializing_if = "is_on")]
+    pub handheld_switch_on: bool,
     /// None until the player switches it: then on with Cozy, off with Quick (`Extra::default_on`); written once chosen.
     #[serde(default, deserialize_with = "lenient_choice", skip_serializing_if = "Option::is_none")]
     pub playful_animations: Option<bool>,
@@ -330,6 +382,11 @@ impl Extras {
             Extra::ShrinkWrap => &mut self.sealed_new_games,
             Extra::ProgressFromSaves => &mut self.progress_from_saves,
             Extra::TvPlaysGame => &mut self.tv_plays_game,
+            Extra::Window => &mut self.window,
+            Extra::CrtOff => &mut self.tv_switch_off,
+            Extra::EveningGlow => &mut self.evening_tv_glow,
+            Extra::PowerLights => &mut self.power_lights,
+            Extra::HandheldOn => &mut self.handheld_switch_on,
             Extra::Playful => return None,
         })
     }
@@ -377,6 +434,11 @@ impl Extras {
             sealed_new_games: false,
             progress_from_saves: false,
             tv_plays_game: false,
+            window: false,
+            tv_switch_off: false,
+            evening_tv_glow: false,
+            power_lights: false,
+            handheld_switch_on: false,
             playful_animations: None,
         };
         for e in Extra::ALL.into_iter().filter(|e| *e != Extra::Playful) {
@@ -463,8 +525,10 @@ mod tests {
     }
 
     /// Every extra has exactly one home: a row of the page, or one of Screen & sound (2026-10-30, the tree of
-    /// 2026-11-13), and the page with its GBA console row holds at most thirteen rows (ten until Sealed new games, eleven
-    /// until Progress from saves, twelve with the TV playing the game, 14.11.2026; the page scrolls).
+    /// 2026-11-13), and the page with its GBA console row holds at most eighteen rows (ten until Sealed new games, eleven
+    /// until Progress from saves, twelve with the TV playing the game, 14.11.2026, fifteen with the Window, the TV's
+    /// switch-off and evening glow, 19.11.2026, the Window's row hidden for now, seventeen
+    /// with Handheld switch-on and Power lights; the page scrolls).
     #[test]
     fn every_extra_has_one_home() {
         for e in Extra::ALL {
@@ -472,7 +536,7 @@ mod tests {
         }
         let mut seen = std::collections::BTreeSet::new();
         assert!(Extra::PAGE_ROWS.iter().all(|e| seen.insert(e.key())), "no row twice");
-        assert!(Extra::PAGE_ROWS.len() < 13);
+        assert!(Extra::PAGE_ROWS.len() < 18);
         // What needs another switch says which (`Needs::note`), wherever its row is.
         assert!(Extra::ALL.iter().filter_map(|e| e.needs()).all(|n| !n.note().is_empty()));
     }
@@ -536,7 +600,9 @@ mod tests {
     #[test]
     fn the_placeholders_are_kept_off_the_page_until_built() {
         let shown = Extra::shown();
-        assert_eq!(shown, Extra::PAGE_ROWS, "all of them are built");
+        // All of them are built but the Window, taken off for 0.6: its row is not on the page.
+        assert_eq!(shown, Extra::PAGE_ROWS.into_iter().filter(|e| *e != Extra::Window).collect::<Vec<_>>());
+        assert!(!Extra::Window.built() && !shown.contains(&Extra::Window));
         assert_eq!(Extra::CabinetTv.only(), Some("Cabinet look only."));
     }
 }

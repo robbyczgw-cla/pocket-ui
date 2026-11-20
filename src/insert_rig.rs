@@ -34,6 +34,8 @@ pub const TURN_MS: (f32, f32) = (180.0, 460.0);
 /// A handheld's display comes up between these moments (ms after the medium is in), a moment after its power light
 /// (which takes 90 to 240).
 pub const LIT_AFTER: (f32, f32) = (110.0, 270.0);
+/// The power light starts coming up this long (ms) after the game is in, as its switch is slid on (`insert_scene::switch_on_cue`).
+pub const LED_AFTER_MS: u64 = 90;
 /// A console that turned round to its back for its game (the PSP) turns back to its front once its door has shut, as long as
 /// the turn there (`TURN_MS`) and in the same motion, before its display lights: its power light and display come this much
 /// later, and so do the fade and the game's window (16.11., Alex: the PSP's display lights too, a little longer start).
@@ -512,7 +514,11 @@ pub fn thickness(game: Game) -> f32 {
 
 /// These handhelds are viewed from their screen side, with a cartridge slot behind them.
 pub fn label_away(system: &str) -> bool {
-    matches!(system, "gb" | "gbh" | "gbc" | "gbch" | "gba" | "gbah" | "gba-sp" | "nds" | "ndsh" | "gamegear" | "ggh" | "3ds" | "n3ds" | "ngp" | "ngpc")
+    matches!(
+        system,
+        "gb" | "gbh" | "gbc" | "gbch" | "gba" | "gbah" | "gba-sp" | "nds" | "ndsh" | "gamegear" | "ggh" | "3ds" | "n3ds" | "ngp" | "ngpc" | "atarilynx" | "lynx"
+            | "wonderswan" | "wonderswancolor"
+    )
 }
 
 /// Everything that moves, at one moment.
@@ -572,7 +578,7 @@ pub fn pose_of(kind: Kind, t: Duration, back: bool) -> Pose {
     let fly = ease_in_out(phase(ms, 420.0, 900.0));
     let after = ms - in_at;
     let lights = if back { in_at + TURN_BACK.as_secs_f32() * 1000.0 } else { in_at };
-    let led = phase(ms, lights + 90.0, lights + 240.0);
+    let led = phase(ms, lights + LED_AFTER_MS as f32, lights + 240.0);
     let lit = ease_in_out(phase(ms, lights + LIT_AFTER.0, lights + LIT_AFTER.1));
     let landed = if ms >= in_at { 1.0 } else { 0.0 };
     if kind == Kind::Cart {
@@ -654,6 +660,9 @@ const RIGS: &[Row] = &[
     (&["psp"], bytes!("psp", "rig.json"), bytes!("psp", "base.png"), None, Some(bytes!("psp", "top.png")), Some(bytes!("psp", "under.png"))),
     (&["pcengine"], bytes!("pcengine", "rig.json"), bytes!("pcengine", "base.png"), Some(bytes!("pcengine", "over.png")), None, None),
     (&["mastersystem"], bytes!("mastersystem", "rig.json"), bytes!("mastersystem", "base.png"), Some(bytes!("mastersystem", "over.png")), None, None),
+    (&["neogeo", "neogeoaes"], bytes!("neogeo", "rig.json"), bytes!("neogeo", "base.png"), None, None, None),
+    (&["atarilynx", "lynx"], bytes!("atarilynx", "rig.json"), bytes!("atarilynx", "base.png"), None, None, None),
+    (&["wonderswan", "wonderswancolor"], bytes!("wonderswan", "rig.json"), bytes!("wonderswan", "base.png"), None, None, None),
     (&["nes"], bytes!("nes", "rig.json"), bytes!("nes", "base.png"), Some(bytes!("nes", "over.png")), Some(bytes!("nes", "top.png")), Some(bytes!("nes", "under.png"))),
 ];
 
@@ -842,6 +851,11 @@ mod tests {
             ("wii", Kind::Cart, false, (1, 1), false),
             // Slid in towards the back (up and right on the picture), then pressed down: checked below.
             ("nes", Kind::Door, false, (1, -1), false),
+            // The AES's big cartridge goes straight down into the slot in its top, label to the front.
+            ("neogeo", Kind::Cart, false, (0, 1), false),
+            // The Lynx's card and the WonderSwan's cartridge go into the back from above, label to the back (manuals).
+            ("atarilynx", Kind::Cart, true, (-1, 1), true),
+            ("wonderswan", Kind::Cart, true, (-1, 1), true),
         ];
         assert_eq!(expected.len(), RIGS.len(), "review hardware expectations for new rigs");
         for (system, kind, behind, direction, back) in expected {
@@ -1087,7 +1101,7 @@ mod tests {
             let f = files(r.0[0], Game::Disc).expect(r.0[0]);
             if f.rig.label_away {
                 let game = Game::of(if r.0[0] == "gba-sp" { "gba" } else { r.0[0] }, "x.rom");
-                assert!(crate::media::game_back(game).is_some(), "{}: {game:?} turns its label away and has no rear shell", r.0[0]);
+                assert!(crate::media::game_rear(game, 0x808080).is_some(), "{}: {game:?} turns its label away and has no rear shell", r.0[0]);
             }
         }
     }

@@ -301,7 +301,7 @@ for pu_rk in "${ROOT:-/nonexistent}/scripts/image/pins-rk3566.sh" /repo/scripts/
   if [ -f "$pu_rk" ]; then . "$pu_rk"; break; fi
 done
 unset pu_rk
-# The RK3326 family (Game Console R36S, a private test card) likewise in scripts/image/pins-rk3326.sh, also left out of the export.
+# The RK3326 family (Game Console R36S, a beta card) likewise in scripts/image/pins-rk3326.sh.
 for pu_rk in "${ROOT:-/nonexistent}/scripts/image/pins-rk3326.sh" /repo/scripts/image/pins-rk3326.sh scripts/image/pins-rk3326.sh; do
   if [ -f "$pu_rk" ]; then . "$pu_rk"; break; fi
 done

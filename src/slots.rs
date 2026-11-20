@@ -12,6 +12,7 @@ use std::time::SystemTime;
 use crate::image::{self, Image};
 
 pub mod transaction;
+pub mod undo;
 
 pub const SLOTS: usize = 8;
 pub const STATES_DIR: &str = "/storage/roms/savestates";
@@ -43,6 +44,12 @@ fn moved_from(value: Option<&str>) -> bool {
 /// `<states>/<system>/<stem>`: the common start of every file of one game.
 pub fn base(system: &str, stem: &str) -> PathBuf {
     base_with(RESOLVER.get().map(|f| &**f as &dyn Fn(&str, &str) -> Option<PathBuf>), system, stem)
+}
+
+/// Moments for the selected core; DSperate never overwrites melonDS moments.
+pub fn base_for_core(system: &str, stem: &str, core: &str) -> PathBuf {
+    let base=base(system,stem);
+    if system=="nds" { crate::ds::state_base(&base,core) } else { base }
 }
 
 type Resolver = Box<dyn Fn(&str, &str) -> Option<PathBuf> + Send + Sync>;
@@ -130,6 +137,8 @@ pub enum Loaded {
     Loaded,
     /// The core refused it, why; the game is as it was (or back at Before load).
     Refused(String),
+    /// Both the load and the rollback were refused.
+    RecoveryRequired,
 }
 
 /// pocket-core's Load of any state file (a slot, Auto, Before load, an earlier state): the file is read first, what
@@ -142,7 +151,7 @@ pub fn load_keeping_undo(
     state: &Path,
     keep: impl FnOnce(&Path) -> bool,
     load: impl FnOnce(&[u8]) -> Result<(), (bool, String)>,
-    back: impl FnOnce(&[u8]),
+    back: impl FnOnce(&[u8]) -> Result<(), (bool, String)>,
 ) -> Loaded {
     let Ok(data) = crate::state_file::read(state) else { return Loaded::Unreadable };
     let undo = undo_path(base);
@@ -155,9 +164,10 @@ pub fn load_keeping_undo(
     let Ok(before) = crate::state_file::read(&undo) else { return Loaded::UndoUnavailable };
     match transaction::apply(&data, &before, |bytes| {
         if let Some(load) = load.take() { load(bytes) }
-        else { back.take().unwrap()(bytes); Ok(()) }
+        else { back.take().unwrap()(bytes) }
     }) {
         Ok(()) => Loaded::Loaded,
+        Err(error) if error.recovery => Loaded::RecoveryRequired,
         Err(error) => Loaded::Refused(error.message),
     }
 }
@@ -441,7 +451,7 @@ mod tests {
                         Ok(())
                     }
                 },
-                |before| *self.state.borrow_mut() = before.to_vec(),
+                |before| { *self.state.borrow_mut() = before.to_vec(); Ok(()) },
             )
         }
     }

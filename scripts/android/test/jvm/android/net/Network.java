@@ -1,0 +1,1 @@
+package android.net;import java.net.*;import java.io.*;public class Network{public URLConnection openConnection(URL url)throws IOException{throw new UnsupportedOperationException("network runtime");}}

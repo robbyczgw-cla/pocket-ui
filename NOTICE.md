@@ -164,6 +164,13 @@ were converted with PixelLab from three **public-domain** photographs by Evan Am
 memory card, Xbox memory unit and Memory Stick Duo generated with PixelLab from text alone. No logo or lettering is on
 them.
 
+## The room's props and window
+
+The plant, lamp, cactus, bookend, trophy, framed "100 %", figurines, the window with its four skies and the pieces on its
+sill (`assets/media/props/`) were generated with PixelLab from text alone; how each was made is in
+[assets/media/props/pixellab-assets.json](assets/media/props/pixellab-assets.json). No photograph, logo or lettering is
+in them.
+
 ## Consoles at a game's start
 
 The consoles with their lids and trays that take a game in Cozy's launch (`assets/media/rig/`) are PixelLab conversions of
@@ -278,7 +285,14 @@ described file by file in [assets/ui-art/SOURCES.md](assets/ui-art/SOURCES.md). 
   traced, no logos) and the Settings icons (`tools/draw_icons.py`).
 - **pocket-ui's mark** (`logo.png`, the cartridge): PixelLab `create-image-pixflux` from a text prompt alone, then
   finished by hand (warm greys, the label's stripes and "p", the gold contacts).
-- **Licence of the result:** GPL-2.0-or-later, like pocket-ui. No logo, brand name or lettering of anyone else is in any
+- **The photo album's case and instant photo** (`assets/media/album/`, `src/album_paint.rs`): from photos converted with
+  PixelLab `image-to-pixelart`, file pages and licences in [assets/media/album/SOURCES.md](assets/media/album/SOURCES.md).
+  The instant photo's frame (Polaroid fd01.png, CC0) and the open plastic case (Amaray-case.jpg, public domain) carry no
+  conditions. **`case-cardboard.png` is CC BY-SA 4.0:** it is made from "Flipper Zero Video Game Module opened retail box
+  and manual" by Siarhei V ([Wikimedia Commons](https://commons.wikimedia.org/wiki/File:Flipper_Zero_Video_Game_Module_opened_retail_box_and_manual.jpg),
+  [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/)), its print left out, combined with a CC0 cardboard photo and
+  modified via PixelLab; this derived picture is shared under CC BY-SA 4.0.
+- **Licence of the result:** GPL-2.0-or-later, like pocket-ui (the cardboard case above: CC BY-SA 4.0). No logo, brand name or lettering of anyone else is in any
   of them; the only letter is the "p" on pocket-ui's own mark.
 
 ## Fonts
@@ -298,9 +312,26 @@ that means shipping `assets/fonts/OFL.txt` with it.
 
 ## Sounds, shaders and test files
 
-- **UI sounds:** short sample files (`assets/ui-sounds/`, the menu sounds and the sounds of the cases, cartridges,
-  discs, cards and the CRT) generated with ElevenLabs sound effects under a paid plan, which allows commercial use and
+- **UI sounds:** short sample files (`assets/ui-sounds/`, the menu sounds and the sounds of the cases and of a disc
+  going in) generated with ElevenLabs sound effects under a paid plan, which allows commercial use and
   redistribution; edited by us. Details in `docs/LICENCES.md`.
+- **Hardware sounds** (`assets/ui-sounds/`, the cartridges, cards, lids, CRT TV and power switches of the insert and the
+  way back): real recordings from Freesound, all CC0 1.0 (public domain dedication), cut, filtered and levelled by us:
+  `cart-in.wav` from "Cartridge" by CrimsonGalaxies ([Freesound 723363](https://freesound.org/s/723363/));
+  `cart-out.wav` from "pop in / pop out" by Mafon2 ([Freesound 218938](https://freesound.org/s/218938/));
+  `hh-cart-in.wav` from "Inserting and Removing GBA Cartridge" by DexD73 ([Freesound 677386](https://freesound.org/s/677386/));
+  `hh-cart-out.wav` from "Inserting and Removing GBA Cartridge" by DexD73 ([Freesound 677386](https://freesound.org/s/677386/));
+  `card-in.wav` from "Nintendo DS cartridge removal and insertion" by rothgarblue ([Freesound 504658](https://freesound.org/s/504658/));
+  `card-out.wav` from "Nintendo DS cartridge removal and insertion" by rothgarblue ([Freesound 504658](https://freesound.org/s/504658/));
+  `lid-open.wav` from "GameCube Disc Drive Open and Close" by steeltowngaming ([Freesound 538507](https://freesound.org/s/538507/));
+  `disc-shut.wav` from "GameCube Disc Drive Open and Close" by steeltowngaming ([Freesound 538507](https://freesound.org/s/538507/));
+  `umd-open.wav` from "old psp opening and closing" by KeeganLab ([Freesound 708404](https://freesound.org/s/708404/));
+  `umd-shut.wav` from "old psp opening and closing" by KeeganLab ([Freesound 708404](https://freesound.org/s/708404/));
+  `crt-on.wav` from "CRT TV Switches On" by Fission9 ([Freesound 693860](https://freesound.org/s/693860/));
+  `tv-static.wav` from "TV static" by MieckevanHoek ([Freesound 765159](https://freesound.org/s/765159/));
+  `tv-off.wav` from "CRT TV turn on and off" by Sanderboah ([Freesound 838726](https://freesound.org/s/838726/));
+  `switch-on.wav` from "Toggle switch On Off" by cookies+policy ([Freesound 556636](https://freesound.org/s/556636/));
+  `switch-off.wav` from "Toggle switch On Off" by cookies+policy ([Freesound 556636](https://freesound.org/s/556636/)). Each file with its cut in `assets/ui-sounds/SOURCES.md`.
 - **The film tearing off a sealed case** (`assets/ui-sounds/wrap-tear.wav`): cut from "sound saran plastic wrap unroll
   tear wrap put down - homemade.wav" by buzzatsea ([Freesound 431217](https://freesound.org/people/buzzatsea/sounds/431217/)),
   CC0 1.0 (public domain dedication), a real recording, not generated; cut, filtered and levelled by us.
@@ -364,10 +395,13 @@ that means shipping `assets/fonts/OFL.txt` with it.
 
 ## Rust crates
 
-127 crates end up in the aarch64 build (115 linked into the programs, 12 only run at build time), 240 in the full
+128 crates end up in the aarch64 build (116 linked into the programs, 12 only run at build time), 253 in the full
 dependency graph (all platforms, including a macOS development build). For every crate with a choice, the
 GPLv2-compatible option is the one used: MIT, BSD, ISC, Zlib, Unlicense, 0BSD and Unicode-3.0 qualify; for
 `MIT OR Apache-2.0` the MIT side is used. There is no copyleft or non-commercial crate among them.
+
+The photo album's small JPEGs are written with `jpeg-encoder` (MIT OR Apache-2.0, with parts under the IJG licence):
+this software is based in part on the work of the Independent JPEG Group.
 
 **Not compatible with GPLv2 (Apache-2.0 only), linked into `pocket-ui` and `pocket-core`:** `winit` 0.30.13,
 `glutin` 0.32.3, `glutin_egl_sys` 0.7.1 and `dpi` 0.1.2 (Apache-2.0 AND MIT). Apache-2.0 is fine with
@@ -404,3 +438,20 @@ instruction-cache synchronization header used by that build. The emulator remain
 [SDL_GameControllerDB](https://github.com/mdqinc/SDL_GameControllerDB), retrieved 2026-11-06.
 It retains its **zlib licence**, Copyright (C) 1997-2025 Sam Lantinga; the unchanged licence is in
 `assets/controllers/LICENSE`. These are SDL joystick indices, translated using each evdev node's capabilities.
+
+## DSperate
+
+DSperate by beebono and contributors, with the dsperate-lr libretro wrapper by thwonp,
+uses GPL-3.0-or-later. Wrapper revision: 27b9d76fb4c900d29f9629806f316527b5da90c2;
+engine revision: 99618eb956c66083618395dbae9bb5cbf0241d16.
+Sources: https://github.com/beebono/DSperate and https://github.com/thwonp/dsperate-lr.
+The libretro API header retains its MIT notice; the FreeBIOS replacement by Gilead
+Kutnick uses BSD-2-Clause. The embedded Noto Sans font data retains OFL-1.1, and
+WenQuanYi Micro Hei retains GPL-3+ with its font exception. All notices accompany
+the core, including the complete patched corresponding source and the build recipe.
+Our changes provide a shared cross-toolchain build, Clang/API-26 portability,
+remappable stylus and layout actions, physical pointer mapping and presentation
+state restoration. No proprietary BIOS or game content is supplied.
+The player supplies libretro audio-buffer feedback for automatic frame skipping;
+skipped pictures are reported as repetitions.
+Linux releases carry these files in cores/dsperate; Android lists them under Licences.

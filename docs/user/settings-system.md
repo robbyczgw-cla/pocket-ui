@@ -1,7 +1,7 @@
 # Settings: Connections, System and Help & tools
 
 The **Connections**, **System** and **Help & tools** categories of [Settings](settings.md) (Wi-Fi, Bluetooth, Tailscale,
-remote access, Sync, the Web companion and PC streaming; updates, the language, sleep and power, the battery, the clock,
+remote access, Sync, Pocket Sync, the Web companion and PC streaming; updates, the language, sleep and power, the battery, the clock,
 storage, backups and Kids mode; this guide, the Tour, tools and the About page). Look, Playing, Games
 and how Settings opens are on [the first page](settings.md#open-settings).
 
@@ -18,6 +18,7 @@ Settings → **Connections**. Networks, controllers, and reaching the Pocket fro
 | **Tailscale** | Reach the Pocket from your other devices over a private network, even away from home. See [Tailscale](remote.md) |
 | **Remote access (SSH)** | Log in from a computer. See [Remote access](#remote-access-ssh) |
 | **Sync** | Keep saves and save states in step with your other devices with Syncthing, and, if you like, your favourites, notes and play history too. See [Sync](sync.md) |
+| **Pocket Sync** | Keep saves the same on your other Pockets: pair them with a code, no computer and no account. Off by default. See [Your other Pockets](sync.md#your-other-pockets) |
 | **Web companion** | Your library, play time and uploads in a browser on your phone or computer, on your home Wi-Fi or over Tailscale. Off by default. See [Web companion](web-companion.md) |
 | **PC streaming** | Pair a gaming PC for Moonlight on the Pocket itself, see the paired PCs, stream one of their games. See [PC streaming](pc-streaming.md) |
 
@@ -66,7 +67,7 @@ card, backups and Kids mode.
 | **Back to EmulationStation** | dArkOS only (the test port, [DARKOS.md](../DARKOS.md)), not on any other device: one press closes pocket-ui and EmulationStation comes back, without a confirmation. A running game is saved and closed first. The same row is in the quick settings (HOME); SELECT + START held still opens its dialog |
 | **Updates** | New versions of pocket-ui and the system. See [Updates](updates.md) |
 | **Language** | **English**, **Deutsch**, **Español**, **Português (Brasil)**, **Français** or **Italiano**: menus, hints and messages. See [Language](language.md) |
-| **View** | Android only, not on a Linux handheld: **Handheld** (these pages, for the built-in pad) or **Mobile** (the touch pages, with a folder you pick). A opens the other one. The Mobile view has the same row. At the first start a pad decides: one there, Handheld; none, Mobile |
+| **View** | Android only, not on a Linux handheld: **Handheld** (these pages, for the built-in pad) or **Mobile** (the touch pages, with a folder you pick). A opens the other one. The Mobile view has the same row. The first start opens Handheld, with or without a controller; a view chosen before stays |
 | **Sleep & power** | When the screen goes off and the device sleeps, when it switches off after sleeping, and what the power button does. The row shows the screen-off time ("2 min"). See [Sleep & power](#sleep--power) |
 | **Battery** | Battery history, time left, what a game costs. See [Battery](#battery) |
 | **Time** | Time zone, date and network time. See [Time](#time) |
@@ -189,7 +190,7 @@ Settings → **Help & tools**. This guide, the Tour, the first start again, ROCK
 | **First-start setup** | The first start again from its first page: language, Wi-Fi (not on Android, which has its own), your games, how they stand. Your games, saves and settings stay; it ends on Home. See [Getting started](getting-started.md#3-first-start) |
 | **Tools** | ROCKNIX's tools without its old menu: the emulators' own settings, RetroArch's menu, gamepad test and calibration, file manager, terminal, and tools installed from a store. See [Tools](#tools) |
 | **Report a problem** | Opens About with this row selected; A there saves a file for a bug report in the `reports` folder of the games share ([Report a problem](troubleshooting.md#report-a-problem)) and shows where it is. The same row is in About, and in the dialog of SELECT + START held, where you look when something has just gone wrong |
-| **About** | Version, the system underneath (on the SD card image "pocket-ui OS 0.5.1 · built on ROCKNIX 20261001 (SM8250)", on a ROCKNIX card with pocket-ui added just the ROCKNIX version), number of games, free space, network address, battery, where the logs are kept, and where the licence texts are (a Licences row when the page has the room: `/storage/pocket-ui/licences`: pocket-ui's licence, the credits, the licences of the programs it is built from and of its fonts; they come with the install package and the SD card image); on a Retroid Pocket 5, Flip 2 or first Mini also which one it is, marked experimental ([Getting started](other-handhelds.md#other-retroid-devices)). Two rows: **Report a problem** saves a file for a bug report in the `reports` folder of the games share ([Report a problem](troubleshooting.md#report-a-problem)); **Open EmulationStation…** opens ROCKNIX's own menu, after a warning ([Safe mode and EmulationStation](safe-mode.md#opening-emulationstation)); not on the TrimUI Brick, which has no EmulationStation |
+| **About** | Version, the system underneath (on the SD card image "pocket-ui OS 0.6.0 · built on ROCKNIX 20261001 (SM8250)", on a ROCKNIX card with pocket-ui added just the ROCKNIX version), number of games, free space, network address, battery, where the logs are kept, and where the licence texts are (a Licences row when the page has the room: `/storage/pocket-ui/licences`: pocket-ui's licence, the credits, the licences of the programs it is built from and of its fonts; they come with the install package and the SD card image); on a Retroid Pocket 5, Flip 2 or first Mini also which one it is, marked experimental ([Getting started](other-handhelds.md#other-retroid-devices)). Two rows: **Report a problem** saves a file for a bug report in the `reports` folder of the games share ([Report a problem](troubleshooting.md#report-a-problem)); **Open EmulationStation…** opens ROCKNIX's own menu, after a warning ([Safe mode and EmulationStation](safe-mode.md#opening-emulationstation)); not on the TrimUI Brick, which has no EmulationStation |
 
 ### How you like to play
 

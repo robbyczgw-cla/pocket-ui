@@ -1050,6 +1050,21 @@ impl Audio {
         self.queue.lock().unwrap().len() as f64 / 2.0 / out_rate() as f64 * 1000.0
     }
 
+    /// A software renderer may omit a picture before starving the PCM writer.
+    /// Two source frames cover cores which latch their skip one frame ahead.
+    pub fn buffer_status(&self) -> (bool, u32, bool) {
+        let active = self.playing.load(Ordering::Relaxed) && !self.paused.load(Ordering::Relaxed);
+        let frames = self.queue.lock().unwrap().len() / 2;
+        let delivery = self.delivery.load(Ordering::Relaxed);
+        let target = self.target();
+        let capacity = target.saturating_add(delivery).max(1);
+        // A short low-latency route may hold less than two source frames.
+        // Its healthy target must never request permanent frame skipping.
+        let warning = delivery.saturating_mul(2).saturating_add(CHUNK_FRAMES).min(target * 3 / 4);
+        (active, (frames.saturating_mul(100) / capacity).min(100) as u32,
+            active && frames < warning)
+    }
+
     /// Audio still in the server (PipeWire and the sound card) at the last measurement.
     pub fn server_ms(&self) -> f64 {
         self.server_latency_us.load(Ordering::Relaxed) as f64 / 1000.0
@@ -1060,6 +1075,23 @@ impl Audio {
 mod tests {
     use super::*;
     use std::cell::Cell;
+
+    #[test]
+    fn buffer_feedback_warns_a_frame_early_and_never_asks_to_skip_while_paused() {
+        let audio=Audio::start(paced_sink(),48000.0,false,None,|_|None);
+        audio.stop.store(true,Ordering::Relaxed);
+        audio.ended.recv_timeout(std::time::Duration::from_secs(3)).unwrap();
+        assert_eq!(audio.buffer_status(),(false,0,false),"not started");
+        audio.playing.store(true,Ordering::Relaxed);
+        audio.queue.lock().unwrap().resize(256*2,0);
+        let (active,fill,low)=audio.buffer_status();assert!(active&&fill<100&&low);
+        audio.queue.lock().unwrap().resize(audio.target()*2,0);
+        assert!(!audio.buffer_status().2,"a healthy target never requests permanent skipping");
+        audio.queue.lock().unwrap().resize(48000*2,0);
+        assert_eq!(audio.buffer_status(),(true,100,false));
+        audio.queue.lock().unwrap().clear();audio.paused.store(true,Ordering::Relaxed);
+        assert_eq!(audio.buffer_status(),(false,0,false));
+    }
 
     #[test]
     fn continuous_n64_music_has_normal_queue_latency_after_twenty_seconds() {

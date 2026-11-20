@@ -136,8 +136,11 @@ fn render_all_in(tmp: &Path, bin: &Path, stub: Option<&Stub>, jobs: Vec<(String,
                     .env("POCKETUI_DATA", &data);
                 let out = if reuse { cmd.snapshot_output() } else { cmd.output() }.expect("run pocket-ui");
                 let mut found = found.lock().unwrap();
+                let before = found.len();
                 if !out.status.success() || !png.exists() {
                     found.push(format!("{state} ({size}, {lang}) didn't render: {}", String::from_utf8_lossy(&out.stderr)));
+                    let _ = std::fs::remove_dir_all(&data);
+                    let _ = std::fs::remove_file(&png);
                     continue;
                 }
                 match std::fs::read_to_string(&boxes) {
@@ -150,6 +153,15 @@ fn render_all_in(tmp: &Path, bin: &Path, stub: Option<&Stub>, jobs: Vec<(String,
                     }
                 }
                 let _ = std::fs::remove_dir_all(&data);
+                // What was read is not kept: a matrix paints hundreds of pictures (the language tests: 8 runs x 2 languages x every
+                // state, up to 1440x1440), and they sat in the temp folder until the test ended, four such tests side by side. 19.11.:
+                // the nightly run's /tmp (a tmpfs with a per-user quota) ran full, "write png: Disk quota exceeded". Only the picture of
+                // a state with a finding stays, for the red run to keep (scripts/run-tmp.sh).
+                let _ = std::fs::remove_file(&boxes);
+                let _ = std::fs::remove_file(&misses);
+                if found.len() == before {
+                    let _ = std::fs::remove_file(&png);
+                }
             })
         })
         .collect();
@@ -373,6 +385,28 @@ fn retro_test_buttons_page_keeps_its_hints_inside_the_panel() {
     drop(stub);
     found.sort();
     assert!(found.is_empty(), "{} problems on Retro's Test buttons page (O overlap or the panel's frame, T touch, E side edge, V top/bottom edge, or a hint cut short):\n{}", found.len(), found.join("\n"));
+}
+
+/// A text-fit matrix paints hundreds of pictures; what it has read it removes again. 19.11.2026: the nightly run's four language
+/// matrices (8 runs x 2 languages x every state, up to 1440x1440 each) kept every picture until the test ended and filled the
+/// per-user quota of the build machine's /tmp ("write png: Disk quota exceeded", French/Italian/Portuguese). Only a state with a finding
+/// keeps its picture, for the red run to keep (scripts/run-tmp.sh).
+#[test]
+fn a_matrix_leaves_no_picture_of_a_state_without_a_finding_in_the_temp_folder() {
+    let tmp = tempfile::tempdir().unwrap();
+    fake_library(tmp.path());
+    let bin = PathBuf::from(env!("CARGO_BIN_EXE_pocket-ui"));
+    let stub = wayland(tmp.path());
+    let jobs: Vec<_> = states().into_iter().take(6).enumerate().map(|(i, (safe, state))| (format!("left-{i}"), "normal", "en", safe, state)).collect();
+    let n = jobs.len();
+    // "V" with nothing to find at 1024x768 in Normal text: no line, so no picture may stay.
+    let found = render_all(tmp.path(), &bin, stub.as_ref(), jobs, Some("1024x768"), "V");
+    drop(stub);
+    assert!(found.iter().all(|f| !f.contains("didn't render")), "{n} snapshots must render:\n{}", found.join("\n"));
+    let left: Vec<String> = std::fs::read_dir(tmp.path()).unwrap().flatten().map(|e| e.file_name().to_string_lossy().into_owned())
+        .filter(|f| f.starts_with("left-")).collect();
+    // Pictures stay only for the states that had a finding.
+    assert!(left.iter().all(|f| f.ends_with(".png")) && left.len() <= found.len(), "left behind after {n} jobs ({} findings): {left:?}", found.len());
 }
 
 /// 1024x768 is the shortest screen with a big type: in Large text no heading, line or choice may be

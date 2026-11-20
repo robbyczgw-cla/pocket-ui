@@ -1,7 +1,23 @@
-
-#include <stdbool.h>
-#include <stddef.h>
-#include <string.h>
+#define WIDTH 160
+#define HEIGHT 144
+#define FPS 60.0
+#define RATE 48000.0
+#define NO_SRAM
+#define retro_load_game stub_default_load
+#define retro_unload_game stub_default_unload
+#define retro_reset stub_default_reset
+#define retro_run stub_default_run
+#define retro_serialize_size stub_default_size
+#define retro_serialize stub_default_serialize
+#define retro_unserialize stub_default_unserialize
+#include "POCKET_SHARED_STUB"
+#undef retro_load_game
+#undef retro_unload_game
+#undef retro_reset
+#undef retro_run
+#undef retro_serialize_size
+#undef retro_serialize
+#undef retro_unserialize
 #include <unistd.h>
 #include <stdlib.h>
 #include <stdio.h>
@@ -15,27 +31,10 @@ static void block(const char *phase) {
   for (;;) usleep(1000);
  }
 }
-struct info { const char *name, *version, *exts; bool need_fullpath, block_extract; };
-struct av { unsigned bw, bh, mw, mh; float aspect; double fps, rate; };
-struct game { const char *path; const void *data; size_t size; const char *meta; };
-void retro_set_environment(void *f) {}
-void retro_set_video_refresh(void *f) {}
-void retro_set_audio_sample(void *f) {}
-void retro_set_audio_sample_batch(void *f) {}
-void retro_set_input_poll(void *f) {}
-void retro_set_input_state(void *f) {}
-void retro_set_controller_port_device(unsigned port, unsigned device) {}
-unsigned retro_api_version(void) { return 1; }
-void retro_init(void) {}
-void retro_deinit(void) {}
-void retro_get_system_info(struct info *i) { memset(i, 0, sizeof *i); i->name = "stub"; i->exts = "gb"; }
-void retro_get_system_av_info(struct av *a) { memset(a, 0, sizeof *a); a->bw = a->mw = 160; a->bh = a->mh = 144; a->fps = 60; a->rate = 48000; }
-bool retro_load_game(const struct game *g) { block("load"); return true; }
+bool retro_load_game(const struct game *g) { block("load"); return stub_default_load(g); }
 void retro_unload_game(void) { block("unload"); }
 void retro_reset(void) {}
-void retro_run(void) { marker++; block("run"); }
-void *retro_get_memory_data(unsigned id) { return NULL; }
-size_t retro_get_memory_size(unsigned id) { return 0; }
+void retro_run(void) { marker++; block("run"); stub_default_run(); }
 size_t retro_serialize_size(void) { block("size"); return 16; }
 bool retro_serialize(void *d, size_t s) { if (getenv("POCKETUI_TEST_BLOCK_SERIALIZE")) { FILE *f = fopen(getenv("POCKETUI_TEST_BLOCK_SERIALIZE"), "w"); fputs("entered", f); fclose(f); for (;;) usleep(1000); } memset(d, marker, s); return true; }
 bool retro_unserialize(const void *d, size_t s) { block("resume"); if (s != 16) return false; marker = *(const unsigned char *)d; return true; }

@@ -134,6 +134,12 @@ pub fn bios_file(name: &str) -> Option<(&'static str, String, i64)> {
         "saturn_bios.bin" | "sega_101.bin" | "mpr-17933.bin" => ("saturn", leaf.to_string(), 512 << 10),
         "dc_boot.bin" | "dc_bios.bin" => ("dreamcast", "dc/dc_boot.bin".into(), 2 << 20),
         "dc_flash.bin" => ("dreamcast", "dc/dc_flash.bin".into(), 128 << 10),
+        // Console boot screen's files (`boot_screen`): the Nintendo logo, the Mega-CD's and the PC Engine CD's.
+        "gb_bios.bin" => ("gb", leaf.to_string(), 256),
+        "gbc_bios.bin" => ("gbc", leaf.to_string(), 2304),
+        "gba_bios.bin" => ("gba", leaf.to_string(), 16384),
+        "bios_cd_e.bin" | "bios_cd_u.bin" | "bios_cd_j.bin" => ("segacd", format!("bios_CD_{}.bin", leaf[8..9].to_ascii_uppercase()), 128 << 10),
+        "syscard3.pce" => ("pcenginecd", leaf.to_string(), 256 << 10),
         _ if is_ps1_bios_name(&name) => ("psx", name, PS1_BIOS_BYTES),
         _ => return None,
     };
@@ -460,6 +466,18 @@ mod tests {
         bios.root_name = "BIOS".into();
         assert!(scan(vec![bios]).is_empty(), "a directly selected BIOS folder still holds no games");
     }
+    /// Console boot screen's files on Android (`boot_screen`): copied into the private BIOS folder under the names the cores
+    /// read, only at their original size, and never games.
+    #[test]
+    fn boot_screen_bios_files_are_copied_under_the_cores_names() {
+        let docs = vec![sized("dmg", "bios/GB_BIOS.BIN", "", 256), sized("cgb", "bios/gbc_bios.bin", "", 2304), sized("agb", "BIOS/gba_bios.bin", "", 16384),
+            sized("mcd", "bios/bios_cd_e.bin", "", 128 << 10), sized("pce", "bios/SYSCARD3.PCE", "", 256 << 10),
+            sized("short", "bios/bios_CD_U.bin", "", 1000), sized("gb-in-games", "gb/gb_bios.bin", "", 256)];
+        let bios = player_bios(&docs);
+        assert_eq!(bios.iter().map(|p| p.name.as_str()).collect::<Vec<_>>(), ["gb_bios.bin", "gbc_bios.bin", "gba_bios.bin", "bios_CD_E.bin", "syscard3.pce"]);
+        assert!(scan(docs).is_empty(), "BIOS files never become games, also in a system's folder");
+    }
+
     #[test]
     fn selected_sega_bios_files_are_normalised_and_wrong_sizes_do_not_count() {
         let docs = vec![sized("sat", "bios/SEGA_101.BIN", "", 512 << 10), sized("boot", "bios/dc/DC_BOOT.BIN", "", 2 << 20),

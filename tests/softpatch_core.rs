@@ -8,33 +8,30 @@ use std::sync::Mutex;
 use pocket_ui::libretro::Core;
 use pocket_ui::softpatch;
 
-const STUB: &str = r#"
-#include <stdbool.h>
-#include <stddef.h>
+const STUB: &str = concat!(r#"#define WIDTH 160
+#define HEIGHT 144
+#define FPS 60.0
+#define RATE 48000.0
+#define SRAM_SIZE 8
+#define STUB_FULLPATH FULLPATH
+#define retro_load_game stub_default_load
+#define retro_serialize_size stub_default_size
+#define retro_serialize stub_default_serialize
+#define retro_unserialize stub_default_unserialize
+
+"#, include_str!("../scripts/crash-sweep/stub-core.c"), r#"
+#undef retro_load_game
+#undef retro_serialize_size
+#undef retro_serialize
+#undef retro_unserialize
 #include <stdio.h>
-#include <string.h>
-struct info { const char *name, *version, *exts; bool need_fullpath, block_extract; };
-struct av { unsigned bw, bh, mw, mh; float aspect; double fps, rate; };
-struct game { const char *path; const void *data; size_t size; const char *meta; };
-static unsigned char sram[8];
 static char got_path[4096];
 static unsigned char got_data[64], file_bytes[64];
 static size_t got_size;
 static long file_len = -1;
 static int loads;
-void retro_set_environment(void *f) {}
-void retro_set_video_refresh(void *f) {}
-void retro_set_audio_sample(void *f) {}
-void retro_set_audio_sample_batch(void *f) {}
-void retro_set_input_poll(void *f) {}
-void retro_set_input_state(void *f) {}
-void retro_set_controller_port_device(unsigned port, unsigned device) {}
-unsigned retro_api_version(void) { return 1; }
-void retro_init(void) {}
-void retro_deinit(void) {}
-void retro_get_system_info(struct info *i) { memset(i, 0, sizeof *i); i->name = "stub"; i->exts = "gb"; i->need_fullpath = FULLPATH; }
-void retro_get_system_av_info(struct av *a) { memset(a, 0, sizeof *a); a->bw = a->mw = 160; a->bh = a->mh = 144; a->fps = 60; a->rate = 48000; }
 bool retro_load_game(const struct game *g) {
+    if (!stub_default_load(g)) return false;
     loads++;
     strncpy(got_path, g->path, sizeof got_path - 1);
     got_size = g->size;
@@ -46,22 +43,18 @@ bool retro_load_game(const struct game *g) {
     memcpy(sram, "SAVED!!!", 8);
     return true;
 }
-void retro_unload_game(void) {}
-void retro_reset(void) {}
-void retro_run(void) {}
-void *retro_get_memory_data(unsigned id) { return id == 0 ? sram : NULL; }
-size_t retro_get_memory_size(unsigned id) { return id == 0 ? sizeof sram : 0; }
+
 size_t retro_serialize_size(void) { return 0; }
-bool retro_serialize(void *d, size_t s) { return false; }
-bool retro_unserialize(const void *d, size_t s) { return false; }
+bool retro_serialize(void *d, size_t s) { (void)d; (void)s; return false; }
+bool retro_unserialize(const void *d, size_t s) { (void)d; (void)s; return false; }
 int stub_loads(void) { return loads; }
 const char *stub_path(void) { return got_path; }
 size_t stub_size(void) { return got_size; }
 const unsigned char *stub_data(void) { return got_data; }
 long stub_file_len(void) { return file_len; }
 const unsigned char *stub_file(void) { return file_bytes; }
-"#;
 
+"#);
 /// One test at a time: the stub's globals and pocket-core's per-thread host state.
 static ONE: Mutex<()> = Mutex::new(());
 
@@ -82,7 +75,7 @@ impl Setup {
         let out = std::process::Command::new("cc")
             .args(["-shared", "-fPIC", &format!("-DFULLPATH={}", fullpath as u8), "-o"])
             .arg(&core)
-            .arg(dir.join("stub.c"))
+            .arg(dir.join("stub.c")).arg("-lm")
             .output()
             .expect("the soft-patching tests build a stub core and need a C compiler (cc)");
         assert!(out.status.success(), "cc: {}", String::from_utf8_lossy(&out.stderr));

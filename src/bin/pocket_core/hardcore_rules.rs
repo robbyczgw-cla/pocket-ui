@@ -11,10 +11,10 @@ fn child(name: &str, test: impl FnOnce(&Path)) {
         return;
     }
     let root = tempfile::tempdir().unwrap();
-    let source = include_str!("../../../tests/common/blocked_serialize.c").replace("void retro_reset(void) {}", "void retro_reset(void) { marker = 0; }");
+    let source = include_str!("../../../tests/common/blocked_serialize.c").replace("#include \"POCKET_SHARED_STUB\"", include_str!("../../../scripts/crash-sweep/stub-core.c")).replace("void retro_reset(void) {}", "void retro_reset(void) { marker = 0; }");
     assert!(source.contains("marker = 0; }"), "the stub's reset changed");
     std::fs::write(root.path().join("stub.c"), source).unwrap();
-    assert!(Command::new("cc").args(["-shared", "-fPIC", "-o"]).arg(root.path().join("stub.so")).arg(root.path().join("stub.c")).status().unwrap().success());
+    assert!(Command::new("cc").args(["-shared", "-fPIC", "-o"]).arg(root.path().join("stub.so")).arg(root.path().join("stub.c")).arg("-lm").status().unwrap().success());
     std::fs::write(root.path().join("Game.gb"), b"game").unwrap();
     let output = Command::new(std::env::current_exe().unwrap())
         .args(["--exact", &format!("hardcore_rules::{name}"), "--nocapture"])

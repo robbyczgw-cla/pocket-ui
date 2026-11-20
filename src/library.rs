@@ -120,6 +120,25 @@ pub fn load_with(es_systems: &Path, gamelists: Option<&Gamelists>) -> Result<Vec
                     }
                 }
             }
+            // The paired RomM server's games (`romm`): one that came from there keeps RomM's name, and the ones not on the card
+            // yet stand at the path their download will have (Settings → Games → RomM).
+            if let Some(g) = gamelists {
+                let names = crate::romm::names_in(g.data_dir, &name);
+                if !names.is_empty() {
+                    for game in games.iter_mut() {
+                        if from_list.contains(&game.path) {
+                            continue;
+                        }
+                        if let Some(n) = game.path.file_name().and_then(|f| f.to_str()).and_then(|f| names.get(&f.to_lowercase())) {
+                            game.name = n.clone();
+                            from_list.insert(game.path.clone());
+                        }
+                    }
+                    let remote = crate::romm::shelf_games(g.data_dir, &name, &path, &games);
+                    from_list.extend(remote.iter().map(|g| g.path.clone()));
+                    games.extend(remote);
+                }
+            }
             // A game the checksum (cartridges, `rom_id`) or the serial (PlayStation discs, `disc_serial`) named shows that
             // name: "SLES_556.73.Something" is "Final Fantasy VII", "Supar Mario Land 2" is "Super Mario Land 2" and
             // "Metroid - Fusoin" that is really Advance Wars says so (new-user test 2026-10-30: the cover said one
@@ -466,7 +485,7 @@ fn holds_games(dir: &Path, exts: &std::collections::HashSet<&str>) -> bool {
 
 /// The system of `catalog` a folder called `name` is: a system's folder or full name written another way ("GBA",
 /// "Game Boy Advance"), or the name another card gives it ("Game Boy Advance (GBA)", "Sega Genesis", `layouts::system_ids`).
-fn system_for_folder<'a>(name: &str, catalog: &'a [SysInfo]) -> Option<&'a SysInfo> {
+pub(crate) fn system_for_folder<'a>(name: &str, catalog: &'a [SysInfo]) -> Option<&'a SysInfo> {
     let plain = |s: &str| s.chars().filter(|c| c.is_alphanumeric()).flat_map(char::to_lowercase).collect::<String>();
     let wanted = [plain(name), plain(crate::layouts::split_tag(name).0)];
     if wanted[0].is_empty() {

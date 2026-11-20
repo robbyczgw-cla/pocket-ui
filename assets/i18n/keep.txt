@@ -735,3 +735,13 @@ re:^\d\d\d\d points$
 Tower Quest
 MailBox
 Pixel Racer
+
+DSperate
+RomM
+re:.*/pair/device$
+M9JXERPY
+# Handhelds' and games' names in the Pocket Sync page's snapshots (src/app_pocket_sync.rs).
+RG35XX Plus
+RG35XX SP
+Pokémon Gold Version
+The Legend of Zelda: The Minish Cap

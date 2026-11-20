@@ -1,17 +1,22 @@
-//! The power light of the handheld frames (Brick, Pocket slim, Clamshell, Wide, Gloss, Swan), live:
-//! green above 20 % battery, red at or below 20 %, a slow blink at or below 5 %, and a short bright
-//! flash when a state is saved (a slot or the auto state).
+//! The power light of the handheld frames (Brick, Pocket slim, Clamshell, Wide, Gloss, Swan and the lens of the Game Gear
+//! and Lynx), live, as the original's light does it ([`Model`]): the Game Boy's red light dims when the battery runs low,
+//! the GBA's and the SP's green one turns red, the PSP's blinks orange, the Game Gear's red one flashes. Low is the level
+//! of the "Battery low" warning ([`LOW`], `low_battery::WARN_AT`). A save (a slot, the auto state) blinks the light twice,
+//! briefly and bright, as a memory light does ([`save_blink_level`]).
+//!
+//! Settings → Look → Cozy extras → Power lights ([`live`]): off, the light stays as the frame was drawn, steadily on.
+//! Without a frame (or in full screen) there is no light at all.
 //!
 //! The frame itself is drawn once per size and cached on the GPU (`bezel::Layer`). Only the light's
 //! small square (`Led::rect`, about 60 px across) is painted again, from a copy of the frame under it
 //! without the light, and uploaded with one `glTexSubImage2D` when what it shows changes: never while
-//! it is steady, once a second while it blinks, four times in the half second of a flash. The battery
+//! it is steady, twice a second while it blinks, five times in a save's blink. The battery
 //! is read every 10 s (one sysfs file).
 
 use std::path::PathBuf;
 use std::time::{Duration, Instant};
 
-use crate::bezel::{noise, smoothstep};
+use crate::bezel::{noise, smoothstep, Style};
 use crate::video::Rect;
 
 /// Where a frame's light sits (output pixels) and how large it is.
@@ -35,56 +40,131 @@ pub struct Led {
 pub enum Lamp {
     Green,
     Red,
+    Orange,
 }
 
-/// What the light shows. `flash` counts down 3, 2, 1 over a save's flash, 0 otherwise.
+/// How a frame's light behaves: as the light of the handheld the frame is shaped after.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
+pub enum Model {
+    /// Game Boy, Pocket and Color (Brick, Pocket slim): a red light that dims when the batteries run low.
+    RedDims,
+    /// Game Boy Advance and SP (Wide, Clamshell, and the Swan): green, red when low.
+    #[default]
+    GreenToRed,
+    /// PSP (Gloss): green, blinking orange when low.
+    GreenBlinksOrange,
+    /// Game Gear, Lynx and the other handhelds of the lens frame (Handheld): red, flashing when low.
+    RedFlashes,
+}
+
+impl Model {
+    /// The light of a frame `style`.
+    pub fn of(style: Style) -> Model {
+        match style {
+            Style::Brick(_) | Style::PocketSlim(_) => Model::RedDims,
+            Style::Gloss => Model::GreenBlinksOrange,
+            Style::Handheld => Model::RedFlashes,
+            _ => Model::GreenToRed,
+        }
+    }
+
+    /// The light of the handheld of `system`'s picture (`insert_scene::scene_system`'s id: `gb`, `gba-sp`, …): the same
+    /// lights as the frames', for the handheld standing in the Cabinet.
+    pub fn of_system(system: &str) -> Model {
+        match system {
+            "gb" | "gbh" | "gbc" | "gbch" | "pokemini" => Model::RedDims,
+            "psp" | "psvita" => Model::GreenBlinksOrange,
+            "gamegear" | "atarilynx" | "lynx" | "ngp" | "ngpc" => Model::RedFlashes,
+            _ => Model::GreenToRed,
+        }
+    }
+
+    /// Its light with plenty of battery (or none to read).
+    pub fn steady(self) -> Look {
+        let lamp = match self {
+            Model::RedDims | Model::RedFlashes => Lamp::Red,
+            Model::GreenToRed | Model::GreenBlinksOrange => Lamp::Green,
+        };
+        Look { lamp, lit: true, dim: false, flash: 0 }
+    }
+}
+
+/// What the light shows. `flash` is a save's blink, 0 to 3 ([`save_blink_level`] in steps), 0 otherwise.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Look {
     pub lamp: Lamp,
     pub lit: bool,
+    /// Lit, but faintly: a Game Boy's light on weak batteries.
+    pub dim: bool,
     pub flash: u8,
 }
 
 impl Default for Look {
     /// Steady green: plenty of battery, or no battery to read (the desktop, the virtual device).
     fn default() -> Self {
-        Look {
-            lamp: Lamp::Green,
-            lit: true,
-            flash: 0,
-        }
+        Model::GreenToRed.steady()
     }
 }
 
-/// Red at or below this many percent.
-pub const LOW: u8 = 20;
-/// Blinking at or below this many percent.
-pub const CRITICAL: u8 = 5;
-/// One blink: lit for the first half.
-pub const BLINK_MS: u64 = 2000;
-/// A save's flash, in three steps.
-pub const FLASH_MS: u64 = 450;
+/// Low at or below this many percent: the "Battery low" warning's level (`low_battery::WARN_AT`, held equal by a test).
+pub const LOW: u8 = 5;
+/// One blink while low: lit for the first half.
+pub const BLINK_MS: u64 = 1000;
+/// A save's blink: twice, short and bright, then out (`save_blink_level`).
+pub const SAVE_BLINK: Duration = Duration::from_millis(360);
+/// A save's blink in [`Look::flash`]'s steps, for the frame's light.
+pub const FLASH_MS: u64 = 360;
 /// How often the battery is read.
 pub const READ_EVERY: Duration = Duration::from_secs(10);
 
-/// What the light shows at `capacity` percent (None: no battery), `ms` after the clock started,
+/// The environment pocket-ui sets for pocket-core when Power lights is off (`cozy_extras::Extra::PowerLights`): `0`.
+pub const ENV: &str = "POCKET_POWER_LIGHTS";
+
+/// Whether the lights follow the battery and blink on a save (Power lights on): pocket-ui and Android's player by the
+/// switch itself (`cozy_extras`), pocket-core by [`ENV`], read once.
+pub fn live() -> bool {
+    static ENV_ON: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    *ENV_ON.get_or_init(|| std::env::var_os(ENV).is_none_or(|v| v != "0")) && crate::cozy_extras::on(crate::cozy_extras::Extra::PowerLights)
+}
+
+/// How bright a save's memory light is `since` the save (0 to 1): on, a short break, on again, then out; 0 after
+/// [`SAVE_BLINK`]. The frames' light shows it.
+pub fn save_blink_level(since: Duration) -> f32 {
+    let ms = since.as_millis() as u64;
+    match ms {
+        0..90 => 1.0,
+        90..150 => 0.12,
+        150..270 => 1.0,
+        270..360 => 1.0 - (ms - 270) as f32 / 90.0,
+        _ => 0.0,
+    }
+}
+
+/// What the light of `model` shows at `capacity` percent (None: no battery), `ms` after the clock started,
 /// `since_flash` ms after the last save (None: none yet).
-pub fn look_at(capacity: Option<u8>, ms: u64, since_flash: Option<u64>) -> Look {
-    let lamp = match capacity {
-        Some(c) if c <= LOW => Lamp::Red,
-        _ => Lamp::Green,
-    };
-    let lit = !matches!(capacity, Some(c) if c <= CRITICAL) || ms % BLINK_MS < BLINK_MS / 2;
-    let flash = match since_flash {
-        Some(t) if t < FLASH_MS => 3 - (t * 3 / FLASH_MS) as u8,
+pub fn look_at(model: Model, capacity: Option<u8>, ms: u64, since_flash: Option<u64>) -> Look {
+    let low = capacity.is_some_and(|c| c <= LOW);
+    let blink = ms % BLINK_MS < BLINK_MS / 2;
+    let mut look = model.steady();
+    if low {
+        match model {
+            Model::RedDims => look.dim = true,
+            Model::GreenToRed => look.lamp = Lamp::Red,
+            Model::GreenBlinksOrange => (look.lamp, look.lit) = (Lamp::Orange, blink),
+            Model::RedFlashes => look.lit = blink,
+        }
+    }
+    look.flash = match since_flash {
+        Some(t) if t < FLASH_MS => (save_blink_level(Duration::from_millis(t)) * 3.0).round() as u8,
         _ => 0,
     };
-    Look { lamp, lit, flash }
+    look
 }
 
 /// The light's state over time: reads the battery now and then and remembers the last save.
 pub struct Clock {
     dir: PathBuf,
+    model: Model,
     start: Instant,
     capacity: Option<u8>,
     read_at: Option<Instant>,
@@ -94,10 +174,11 @@ pub struct Clock {
 }
 
 impl Clock {
-    /// Reads the battery in `dir` (`battery::dir()` on the device).
-    pub fn new(dir: PathBuf) -> Self {
+    /// Reads the battery in `dir` (`battery::dir()` on the device), for a light of `model`.
+    pub fn new(dir: PathBuf, model: Model) -> Self {
         Clock {
             dir,
+            model,
             start: Instant::now(),
             capacity: None,
             read_at: None,
@@ -106,27 +187,45 @@ impl Clock {
         }
     }
 
+    /// The frame's light is now one of `model`.
+    pub fn set_model(&mut self, model: Model) {
+        self.model = model;
+    }
+
     /// A state was saved: flash, from the next time the light is drawn. A save from the pause menu
     /// happens while the game (and its frame) isn't drawn, so the flash shows as the game comes back.
     pub fn flash(&mut self) {
         self.flash_pending = true;
     }
 
+    /// What the light shows at `now` on a picture that is painted only when something changes (the Cabinet): no blink,
+    /// so a low light that blinks on the frame shows as low steadily (the PSP's orange, the Game Gear's dimmed red).
+    pub fn still(&mut self, now: Instant) -> Look {
+        let mut look = Look { flash: 0, ..self.look(now) };
+        let low = self.capacity.is_some_and(|c| c <= LOW);
+        look.lit = true;
+        look.dim |= low && self.model == Model::RedFlashes;
+        look
+    }
+
     /// What the light shows at `now`; reads the battery when the last reading is 10 s old.
     pub fn look(&mut self, now: Instant) -> Look {
         if self.read_at.is_none_or(|t| now.duration_since(t) >= READ_EVERY) {
-            self.capacity = std::fs::read_to_string(self.dir.join("capacity"))
-                .ok()
-                .and_then(|s| s.trim().parse::<i64>().ok())
-                .map(|c| c.clamp(0, 100) as u8);
+            self.capacity = read_capacity(&self.dir);
             self.read_at = Some(now);
         }
         if std::mem::take(&mut self.flash_pending) {
             self.flash_at = Some(now);
         }
         let ms = now.duration_since(self.start).as_millis() as u64;
-        look_at(self.capacity, ms, self.flash_at.map(|t| now.duration_since(t).as_millis() as u64))
+        look_at(self.model, self.capacity, ms, self.flash_at.map(|t| now.duration_since(t).as_millis() as u64))
     }
+}
+
+/// The battery's level in `dir` (its `capacity` file), None without one. A battery on the charger reads as it is: the
+/// originals' lights showed the batteries, not the plug.
+pub fn read_capacity(dir: &std::path::Path) -> Option<u8> {
+    std::fs::read_to_string(dir.join("capacity")).ok().and_then(|s| s.trim().parse::<i64>().ok()).map(|c| c.clamp(0, 100) as u8)
 }
 
 /// How far the halo of a flash reaches, in light radii: the square the light may paint.
@@ -163,15 +262,18 @@ pub fn capture(spot: Spot, rgba: &[u8], w: u32, h: u32) -> Led {
 pub fn paint(led: &Led, look: Look, hole: Rect) -> Vec<u8> {
     let mut out = led.base.clone();
     let Spot { x: lx, y: ly, r } = led.spot;
-    let colour = match look.lamp {
+    let full = match look.lamp {
         Lamp::Green => [0.32, 0.93, 0.42],
         Lamp::Red => [0.97, 0.22, 0.16],
+        Lamp::Orange => [1.0, 0.58, 0.14],
     };
+    // Weak batteries: the light glows faintly, its halo nearly gone (a flash still shows bright).
+    let colour = if look.dim && look.flash == 0 { scale(full, 0.32) } else { full };
     let f = look.flash as f32 / 3.0;
     // Lit: the dome in its colour with a hot centre and a soft halo in the plastic around it. A
     // flash brightens it towards white and widens the halo. Unlit: a dark dome.
     let core = mix(colour, [1.0; 3], 0.18 + 0.55 * f);
-    let (halo_k, halo_r) = (0.20 + 0.45 * f, r * (2.1 + 1.6 * f));
+    let (halo_k, halo_r) = (if look.dim && look.flash == 0 { 0.05 } else { 0.20 + 0.45 * f }, r * (2.1 + 1.6 * f));
     let on = look.lit || look.flash > 0;
     for py in 0..led.rect.h {
         for px in 0..led.rect.w {
@@ -216,6 +318,39 @@ pub fn paint(led: &Led, look: Look, hole: Rect) -> Vec<u8> {
     out
 }
 
+/// A small light at (`cx`, `cy`), `r` pixels across, on a picture already painted (the handheld standing in the Cabinet):
+/// a dome in its colour with a hot centre and a soft glow around it; unlit, nothing (the picture's own dark light shows).
+pub fn paint_dot(c: &mut crate::gfx::Canvas, cx: f32, cy: f32, r: f32, look: Look) {
+    let on = look.lit || look.flash > 0;
+    if !on || r <= 0.0 {
+        return;
+    }
+    let full = match look.lamp {
+        Lamp::Green => [0.32, 0.93, 0.42],
+        Lamp::Red => [0.97, 0.22, 0.16],
+        Lamp::Orange => [1.0, 0.58, 0.14],
+    };
+    let f = look.flash as f32 / 3.0;
+    let (gain, reach) = if look.dim && look.flash == 0 { (0.35, 1.6) } else { (1.0, 2.6 + 1.4 * f) };
+    let core = mix(full, [1.0; 3], 0.25 + 0.5 * f);
+    let rgb = |c: [f32; 3]| c.iter().fold(0u32, |v, &k| v << 8 | (k.clamp(0.0, 1.0) * 255.0 + 0.5) as u32);
+    let half = (r * reach).ceil() as i32;
+    let (x0, y0) = (cx.floor() as i32, cy.floor() as i32);
+    for y in y0 - half..=y0 + half {
+        for x in x0 - half..=x0 + half {
+            let d = ((x as f32 + 0.5 - cx).powi(2) + (y as f32 + 0.5 - cy).powi(2)).sqrt();
+            let dome = 1.0 - smoothstep(r * 0.55, r * 0.55 + 0.9, d);
+            let glow = 0.45 * (-(d / (r * reach * 0.5)).powi(2)).exp() * (1.0 - dome);
+            if dome > 0.01 {
+                let hot = 1.0 - smoothstep(0.0, r * 0.5, d);
+                c.blend(x, y, rgb(scale(mix(scale(full, 0.8), core, hot), gain)), (dome * 255.0) as u8);
+            } else if glow * gain > 0.01 {
+                c.blend(x, y, rgb(full), (glow * gain * 255.0) as u8);
+            }
+        }
+    }
+}
+
 /// Puts a painted square back into a whole frame image.
 pub fn blit(rgba: &mut [u8], w: u32, rect: Rect, patch: &[u8]) {
     for row in 0..rect.h {
@@ -242,79 +377,145 @@ mod tests {
     use super::*;
     use crate::testutil::TestDir;
 
-    #[test]
-    fn green_above_twenty_red_at_or_below_and_blinking_at_five() {
-        assert_eq!(look_at(None, 0, None), Look::default(), "no battery: steady green");
-        assert_eq!(
-            look_at(Some(100), 0, None),
-            Look {
-                lamp: Lamp::Green,
-                lit: true,
-                flash: 0
-            }
-        );
-        assert_eq!(
-            look_at(Some(21), 1500, None),
-            Look {
-                lamp: Lamp::Green,
-                lit: true,
-                flash: 0
-            }
-        );
-        assert_eq!(
-            look_at(Some(20), 1500, None),
-            Look {
-                lamp: Lamp::Red,
-                lit: true,
-                flash: 0
-            },
-            "20% is red, and steady"
-        );
-        assert!(look_at(Some(6), 1500, None).lit);
-        // At 5 % and below: lit for the first half of every 2 s.
-        for (ms, lit) in [(0, true), (999, true), (1000, false), (1999, false), (2000, true), (7300, false)] {
-            assert_eq!(
-                look_at(Some(5), ms, None),
-                Look {
-                    lamp: Lamp::Red,
-                    lit,
-                    flash: 0
-                },
-                "{ms} ms"
-            );
-        }
-        assert!(!look_at(Some(0), 1200, None).lit);
+    const ALL: [Model; 4] = [Model::RedDims, Model::GreenToRed, Model::GreenBlinksOrange, Model::RedFlashes];
+
+    fn look(lamp: Lamp, lit: bool, dim: bool) -> Look {
+        Look { lamp, lit, dim, flash: 0 }
     }
 
+    /// Low is the "Battery low" warning's level, the same number everywhere.
+    #[cfg(not(target_os = "android"))]
     #[test]
-    fn a_save_flashes_in_three_steps_even_while_blinking_off() {
-        let steps: Vec<u8> = [0, 149, 150, 299, 300, 449, 450, 5000]
-            .iter()
-            .map(|&t| look_at(Some(50), 0, Some(t)).flash)
-            .collect();
-        assert_eq!(steps, [3, 3, 2, 2, 1, 1, 0, 0]);
-        let off = look_at(Some(3), 1500, Some(100));
-        assert!(!off.lit && off.flash == 3, "the flash shows over the blink's dark half");
+    fn low_is_the_battery_low_warnings_level() {
+        assert_eq!(LOW, crate::low_battery::WARN_AT);
+    }
+
+    /// Each light as the original's: above the warning level steady in its colour; at it the Game Boy's dims, the GBA's
+    /// and the SP's turns red, the PSP's blinks orange, the Game Gear's flashes red. No battery: steady.
+    #[test]
+    fn each_light_goes_low_as_the_originals_did_at_the_warning_level() {
+        for model in ALL {
+            assert_eq!(look_at(model, None, 1500, None), model.steady(), "{model:?}: no battery, steady");
+            assert_eq!(look_at(model, Some(100), 1500, None), model.steady(), "{model:?}: full");
+            assert_eq!(look_at(model, Some(LOW + 1), 1700, None), model.steady(), "{model:?}: just above the warning");
+        }
+        assert_eq!(Model::RedDims.steady(), look(Lamp::Red, true, false));
+        assert_eq!(Model::RedFlashes.steady(), look(Lamp::Red, true, false));
+        assert_eq!(Model::GreenToRed.steady(), look(Lamp::Green, true, false));
+        assert_eq!(Model::GreenBlinksOrange.steady(), look(Lamp::Green, true, false));
+        for ms in [0, 400, 600, 1700] {
+            assert_eq!(look_at(Model::RedDims, Some(LOW), ms, None), look(Lamp::Red, true, true), "Game Boy: dim, never off");
+            assert_eq!(look_at(Model::GreenToRed, Some(LOW), ms, None), look(Lamp::Red, true, false), "GBA, SP: red, steady");
+        }
+        // Blinking: lit for the first half of every second.
+        for (ms, lit) in [(0, true), (499, true), (500, false), (999, false), (1000, true), (7600, false)] {
+            assert_eq!(look_at(Model::GreenBlinksOrange, Some(LOW), ms, None), look(Lamp::Orange, lit, false), "PSP {ms} ms");
+            assert_eq!(look_at(Model::RedFlashes, Some(2), ms, None), look(Lamp::Red, lit, false), "Game Gear {ms} ms");
+        }
+    }
+
+    /// The battery's `capacity` file missing, empty, cut short, flipped bits or not UTF-8: no battery (a steady light), never
+    /// a panic; out-of-range numbers are held to 0-100.
+    #[test]
+    fn a_broken_capacity_file_reads_as_no_battery() {
+        let d = TestDir::new("led-faults");
+        assert_eq!(read_capacity(&d.join("absent")), None, "missing");
+        for (bytes, want) in [(&b""[..], None), (b"4", Some(4)), (b"4\n\n", Some(4)), (b"\xff\xfe5", None), (b"5\x00", None), (b"-7", Some(0)), (b"250", Some(100)), (b"abc", None)] {
+            std::fs::write(d.join("capacity"), bytes).unwrap();
+            assert_eq!(read_capacity(&d), want, "{bytes:?}");
+        }
+        std::fs::write(d.join("capacity"), b"\xff").unwrap();
+        let mut clock = Clock::new(d.to_path_buf(), Model::RedDims);
+        assert_eq!(clock.look(Instant::now()), Model::RedDims.steady(), "garbage: as no battery");
+    }
+
+    /// The Cabinet's handhelds have the same lights as their frames; a dot is painted only where it is lit.
+    #[test]
+    fn the_cabinets_handhelds_have_their_frames_lights_and_paint_a_small_lit_dot() {
+        assert_eq!(Model::of_system("gb"), Model::RedDims);
+        assert_eq!(Model::of_system("gba-sp"), Model::GreenToRed);
+        assert_eq!(Model::of_system("psp"), Model::GreenBlinksOrange);
+        assert_eq!(Model::of_system("gamegear"), Model::RedFlashes);
+        let (w, h) = (40u32, 30u32);
+        let mut buf = vec![0xff40_4040u32; (w * h) as usize];
+        paint_dot(&mut crate::gfx::Canvas::new(&mut buf, w, h), 20.0, 15.0, 3.0, Model::GreenToRed.steady());
+        let at = |buf: &[u32], x: u32, y: u32| buf[(y * w + x) as usize];
+        let c = at(&buf, 20, 15);
+        assert!((c >> 8 & 255) > 200 && (c >> 8 & 255) > (c >> 16 & 255) + 40, "green and lit: {c:08x}");
+        assert_eq!(at(&buf, 0, 0), 0xff40_4040, "far from it nothing changes");
+        let mut dark = vec![0xff40_4040u32; (w * h) as usize];
+        paint_dot(&mut crate::gfx::Canvas::new(&mut dark, w, h), 20.0, 15.0, 3.0, Look { lit: false, ..Model::RedFlashes.steady() });
+        assert!(dark.iter().all(|&p| p == 0xff40_4040), "an unlit light leaves the picture's own");
+        let mut dim = vec![0xff40_4040u32; (w * h) as usize];
+        paint_dot(&mut crate::gfx::Canvas::new(&mut dim, w, h), 20.0, 15.0, 3.0, Look { dim: true, ..Model::RedDims.steady() });
+        let mut full = vec![0xff40_4040u32; (w * h) as usize];
+        paint_dot(&mut crate::gfx::Canvas::new(&mut full, w, h), 20.0, 15.0, 3.0, Model::RedDims.steady());
+        assert!((at(&dim, 20, 15) >> 16 & 255) < (at(&full, 20, 15) >> 16 & 255), "a dim light is darker");
+    }
+
+    /// The frames' shapes take the light of the handheld they're after.
+    #[test]
+    fn each_frame_has_the_light_of_its_handheld() {
+        use crate::bezel::{BrickColour, ClamFinish, SlimFinish, SwanFinish};
+        assert_eq!(Model::of(Style::Brick(BrickColour::Grey)), Model::RedDims);
+        assert_eq!(Model::of(Style::PocketSlim(SlimFinish::Clear)), Model::RedDims);
+        assert_eq!(Model::of(Style::Wide), Model::GreenToRed);
+        assert_eq!(Model::of(Style::Clamshell(ClamFinish::ALL[0])), Model::GreenToRed);
+        assert_eq!(Model::of(Style::Gloss), Model::GreenBlinksOrange);
+        assert_eq!(Model::of(Style::Handheld), Model::RedFlashes);
+        assert_eq!(Model::of(Style::Swan(SwanFinish::Pastel)), Model::GreenToRed);
+    }
+
+    /// A save blinks the light twice, short and bright, and is over in `SAVE_BLINK`, also over a low light's dark half.
+    #[test]
+    fn a_save_blinks_twice_and_is_over_quickly() {
+        let steps: Vec<u8> = [0, 89, 90, 149, 150, 269, 300, 359, 360, 5000].iter().map(|&t| look_at(Model::GreenToRed, Some(50), 0, Some(t)).flash).collect();
+        assert_eq!(steps, [3, 3, 0, 0, 3, 3, 2, 0, 0, 0]);
+        let off = look_at(Model::RedFlashes, Some(3), 700, Some(10));
+        assert!(!off.lit && off.flash == 3, "the blink shows over the low light's dark half");
+        assert_eq!(save_blink_level(Duration::ZERO), 1.0);
+        assert!(save_blink_level(Duration::from_millis(120)) < 0.2, "a break between the two");
+        assert_eq!(save_blink_level(SAVE_BLINK), 0.0);
+        // Smooth at its end: no step of more than a third between two 60 Hz frames once it fades.
+        let fade: Vec<f32> = (16..=22).map(|k| save_blink_level(Duration::from_millis(k * 1000 / 60))).collect();
+        assert!(fade.windows(2).all(|w| (w[0] - w[1]).abs() <= 0.34), "{fade:?}");
     }
 
     #[test]
     fn the_clock_reads_the_battery_every_ten_seconds_and_flashes_on_save() {
         let dir = TestDir::new("led");
         std::fs::write(dir.join("capacity"), "64\n").unwrap();
-        let mut clock = Clock::new(dir.to_path_buf());
+        let mut clock = Clock::new(dir.to_path_buf(), Model::GreenToRed);
         let t0 = clock.start;
         assert_eq!(clock.look(t0).lamp, Lamp::Green);
-        std::fs::write(dir.join("capacity"), "12\n").unwrap();
+        std::fs::write(dir.join("capacity"), "4\n").unwrap();
         assert_eq!(clock.look(t0 + Duration::from_secs(5)).lamp, Lamp::Green, "not read again yet");
         assert_eq!(clock.look(t0 + Duration::from_secs(11)).lamp, Lamp::Red);
+        clock.set_model(Model::RedDims);
+        assert!(clock.look(t0 + Duration::from_secs(12)).dim, "the same battery on a Game Boy's light");
         clock.flash();
         // The flash starts when the light is next drawn (here 3 s after the save was asked for).
         assert_eq!(clock.look(t0 + Duration::from_millis(15_000)).flash, 3);
-        assert_eq!(clock.look(t0 + Duration::from_millis(15_200)).flash, 2);
+        assert_eq!(clock.look(t0 + Duration::from_millis(15_100)).flash, 0);
+        assert_eq!(clock.look(t0 + Duration::from_millis(15_200)).flash, 3);
         assert_eq!(clock.look(t0 + Duration::from_millis(15_500)).flash, 0);
-        // No battery at all: steady green.
-        let mut none = Clock::new(PathBuf::from("/nonexistent/battery"));
-        assert_eq!(none.look(Instant::now()), Look::default());
+        // A fake battery right at the "Battery low" level: 6 % is still steady green, 5 % is red.
+        let fake = TestDir::new("led-threshold");
+        let mut gba = Clock::new(fake.to_path_buf(), Model::GreenToRed);
+        let t1 = gba.start;
+        std::fs::write(fake.join("capacity"), format!("{}\n", LOW + 1)).unwrap();
+        assert_eq!(gba.look(t1).lamp, Lamp::Green);
+        std::fs::write(fake.join("capacity"), format!("{LOW}\n")).unwrap();
+        assert_eq!(gba.look(t1 + READ_EVERY).lamp, Lamp::Red, "at the warning's level");
+        // The Cabinet's still light: low shows without a blink.
+        let mut gg = Clock::new(fake.to_path_buf(), Model::RedFlashes);
+        let still = gg.still(gg.start + Duration::from_millis(700));
+        assert!(still.lit && still.dim && still.lamp == Lamp::Red, "a low Game Gear glows dim red: {still:?}");
+        let mut psp = Clock::new(fake.to_path_buf(), Model::GreenBlinksOrange);
+        assert_eq!(psp.still(psp.start + Duration::from_millis(700)), Look { lamp: Lamp::Orange, lit: true, dim: false, flash: 0 });
+        // No battery at all: steady.
+        let mut none = Clock::new(PathBuf::from("/nonexistent/battery"), Model::RedDims);
+        assert_eq!(none.look(Instant::now()), Model::RedDims.steady());
     }
 
     #[test]
@@ -336,16 +537,10 @@ mod tests {
         assert!(led.rect.x + led.rect.w > hole.x, "the square overlaps the picture");
         for look in [
             Look::default(),
-            Look {
-                lamp: Lamp::Red,
-                lit: false,
-                flash: 0,
-            },
-            Look {
-                lamp: Lamp::Red,
-                lit: true,
-                flash: 3,
-            },
+            Look { lamp: Lamp::Red, lit: false, dim: false, flash: 0 },
+            Look { lamp: Lamp::Red, lit: true, dim: false, flash: 3 },
+            Look { lamp: Lamp::Red, lit: true, dim: true, flash: 0 },
+            Look { lamp: Lamp::Orange, lit: true, dim: false, flash: 0 },
         ] {
             let patch = paint(&led, look, hole);
             let mut out = rgba.clone();
@@ -362,10 +557,12 @@ mod tests {
             }
             let centre = (((40 * w) + 50) * 4) as usize;
             let px = &out[centre..centre + 3];
-            match (look.lamp, look.lit) {
-                (Lamp::Green, true) => assert!(px[1] > 180 && px[1] > px[0] + 40, "{px:?}"),
-                (Lamp::Red, false) => assert!(px.iter().all(|&v| v < 60), "off is dark: {px:?}"),
-                (Lamp::Red, true) => assert!(px[0] > 230, "{px:?}"),
+            match (look.lamp, look.lit, look.dim) {
+                (Lamp::Green, true, _) => assert!(px[1] > 180 && px[1] > px[0] + 40, "{px:?}"),
+                (Lamp::Red, false, _) => assert!(px.iter().all(|&v| v < 60), "off is dark: {px:?}"),
+                (Lamp::Red, true, false) => assert!(px[0] > 230, "{px:?}"),
+                (Lamp::Red, true, true) => assert!(px[0] > 70 && px[0] < 200 && px[0] > px[1] + 30, "dim, still red: {px:?}"),
+                (Lamp::Orange, true, _) => assert!(px[0] > 230 && px[1] > 120 && px[1] < px[0] && px[2] < px[1], "orange: {px:?}"),
                 _ => {}
             }
         }
@@ -376,12 +573,8 @@ mod tests {
                 .map(|p| p[0] as u32 + p[1] as u32 + p[2] as u32)
                 .sum::<u32>()
         };
-        assert!(
-            lit_sum(Look {
-                lamp: Lamp::Green,
-                lit: true,
-                flash: 3
-            }) > lit_sum(Look::default())
-        );
+        assert!(lit_sum(Look { flash: 3, ..Look::default() }) > lit_sum(Look::default()));
+        let red = Model::RedDims.steady();
+        assert!(lit_sum(Look { dim: true, ..red }) < lit_sum(red), "a dim light lights less of the plastic");
     }
 }

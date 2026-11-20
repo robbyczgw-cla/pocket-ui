@@ -19,7 +19,7 @@ pub fn paint(c: &mut Canvas, text: &mut Text, hits: &mut HitMap, rows: &[Row], s
     hits.clear();
     c.clear(pal().void);
     let left = kit::PAD + kit::BTN_PAD;
-    text.draw(c, Face::Title, 50, left, kit::PAD + 58, pal().chalk, TITLE);
+    text.draw(c, Face::Title, 50, left, kit::header_title(c.h), pal().chalk, TITLE);
     text.draw_right(c, Face::Body, 21, c.w - left, kit::PAD + 56, pal().dust, "Settings › Games");
     let selected = rows.get(sel);
     let mut hints = hints(footer.action);

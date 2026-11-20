@@ -27,6 +27,39 @@ const LABEL_H: i32 = 300;
 /// The scrolling part starts under the label and ends above the hints.
 const BODY_TOP: i32 = LABEL_TOP + LABEL_H + 28;
 const BODY_BOTTOM_GAP: i32 = 130;
+
+/// The label's height on a screen `h` lines high: `LABEL_H`, in 960's share of the height under 960 lines (`kit::chrome`,
+/// the Brick's 1024x768 painted natively). A label 300 lines high there took 39 % of the screen against the Plus's 31 %
+/// and left the body four lines, its last one cut over the hints (review 20.11. #12); the title, the facts line and the
+/// player's line keep their sizes, only the paper's empty band between them gives the lines back.
+fn label_h(h: i32) -> i32 {
+    // `kit::chrome`'s rule, written out so the label does not wait for it.
+    if (740..960).contains(&h) { (LABEL_H * h + 480) / 960 } else { LABEL_H }
+}
+
+/// Where the scrolling body starts on a screen `h` lines high: 28 under the label (`BODY_TOP` from 960 lines on).
+fn body_top(h: i32) -> i32 {
+    LABEL_TOP + label_h(h) + 28
+}
+
+/// Where the body ends over the hints: 130 lines over the bottom down to 960 lines; under them (the Brick's 1024x768,
+/// painted natively, the label as tall as on 1080) it reaches the hints' own content bottom, the room the Plus's
+/// body has for its rows (tests/brick_look_proportions.rs).
+thread_local! {
+    /// The scrolling body's top and bottom in the last card painted (snapshots print it, tests/brick_look_proportions.rs).
+    pub static BODY_SEEN: std::cell::Cell<(i32, i32)> = const { std::cell::Cell::new((0, 0)) };
+}
+
+/// The size a fact's value is painted at in `room` px: Body 28, or 24 or 21 where one of its words is wider than the
+/// column at 28 (a wrap breaks such a word in the middle). The words are measured plain: the value is painted whole,
+/// and a word measured with `width` would count as a string of its own on the page (the translation checks).
+fn value_px(text: &mut Text, value: &str, room: i32) -> u32 {
+    [28, 24, 21].into_iter().find(|&px| value.split_whitespace().all(|w| text.width_plain(Face::Body, px, w) <= room)).unwrap_or(21)
+}
+
+fn body_bottom_gap(h: i32) -> i32 {
+    if h < 960 { (h - crate::kit::content_bottom(h)).min(BODY_BOTTOM_GAP) } else { BODY_BOTTOM_GAP }
+}
 const LINE: i32 = 40;
 /// The status picker's row after the five statuses: the player's rating, set with left and right.
 const RATING_ROW: usize = Status::ALL.len();
@@ -163,6 +196,10 @@ pub enum Out {
     Details { boxed: bool },
     /// A on a fact that leads to the player's other games: the list of `CardData::links[i]` (`app_connections`).
     Connection(usize),
+    /// The second A of a photo's delete in the open case (`album`): the app takes it out of the album.
+    DeletePhoto(std::path::PathBuf),
+    /// Down opened the case: what is in it is seen (`album::mark_seen`; its "New" marks stay for this look).
+    AlbumOpened,
 }
 
 pub struct Card {
@@ -180,6 +217,8 @@ pub struct Card {
     /// last paint.
     row_at: std::cell::RefCell<Vec<(i32, i32)>>,
     view_h: i32,
+    /// The body's top on screen in the last paint (`body_top`).
+    view_top: i32,
     /// Shown as the game's box (`game_box`, SELECT switches); None: the page.
     pub boxed: Option<crate::game_box::BoxView>,
     /// Shown as the one-screen info page (`game_info`; the Minimal, Cards and Split looks); None: the page or the box.
@@ -213,6 +252,7 @@ impl Card {
             focus: None,
             row_at: Default::default(),
             view_h: 0,
+            view_top: BODY_TOP,
             boxed: None,
             info: None,
             info_look: false,
@@ -223,12 +263,13 @@ impl Card {
     /// Where Curator's rows are on screen as last painted, (top, height), cut to the card's scrolling body; None
     /// for a row out of view. For taps (`app_curator`).
     pub fn row_areas(&self) -> Vec<Option<(i32, i32)>> {
-        let view = (BODY_TOP, BODY_TOP + self.view_h);
+        let body = self.view_top;
+        let view = (body, body + self.view_h);
         self.row_at
             .borrow()
             .iter()
             .map(|&(top, h)| {
-                let (a, b) = ((BODY_TOP + top - self.scroll).max(view.0), (BODY_TOP + top + h - self.scroll).min(view.1));
+                let (a, b) = ((body + top - self.scroll).max(view.0), (body + top + h - self.scroll).min(view.1));
                 (self.view_h > 0 && b > a).then_some((a, b - a))
             })
             .collect()
@@ -386,6 +427,26 @@ impl Card {
                 Button::Left => return Out::None,
                 Button::Right if self.data.surprise.is_none() => return Out::None,
                 _ => {}
+            }
+        }
+        // The open case with its photos (`album`): every key is its own while it is open.
+        if let (Mode::View, Some(bx)) = (&self.mode, self.boxed.as_mut()) {
+            if let Some(view) = bx.album.as_mut() {
+                let photos = self.data.album.as_ref().map_or(&[][..], |a| &a.photos[..]);
+                return match view.press(b, photos) {
+                    crate::album::AlbumOut::None => Out::None,
+                    crate::album::AlbumOut::Shut => {
+                        bx.album = None;
+                        Out::None
+                    }
+                    crate::album::AlbumOut::Delete(file) => Out::DeletePhoto(file),
+                };
+            }
+            // Down on the front: the case lies down and opens, its photos in it.
+            if b == Button::Down && !bx.back && bx.flip_at_rest() && self.data.album.is_some() && self.data.surprise.is_none() {
+                let n = self.data.album.as_ref().map_or(0, |a| a.photos.len());
+                bx.album = Some(crate::album::AlbumView::new(n));
+                return Out::AlbumOpened;
             }
         }
         // The box: LEFT/RIGHT turn it over, up and down scroll its back, SELECT shows the page; the rest as on the page.
@@ -618,9 +679,30 @@ impl Card {
         Out::None
     }
 
+    /// Whether START gives way to the view's own keys in the bar (`kit::start_yields`): on the 3D case SELECT (the card's
+    /// page: stickers, versions, hide or delete) and turning it over come before START's This game (review 19.11. #4).
+    pub fn start_yields(&self) -> bool {
+        matches!(self.mode, Mode::View) && self.boxed.is_some()
+    }
+
+    /// The hints as the bar shows them (at most `kit::MAX_HINTS`, in this view's order of need).
+    pub fn shown_hints(&self) -> Vec<(&'static str, &'static str)> {
+        let _order = crate::kit::start_yields(self.start_yields());
+        crate::kit::top_hints(&self.hints(), crate::kit::MAX_HINTS)
+    }
+
+    fn paint_hints(&self, c: &mut Canvas, text: &mut Text) {
+        let _order = crate::kit::start_yields(self.start_yields());
+        crate::setup::hints(c, text, &self.hints());
+    }
+
     /// The button hints for the current mode.
     pub fn hints(&self) -> Vec<(&'static str, &'static str)> {
         match self.mode {
+            Mode::View if self.boxed.as_ref().is_some_and(|b| b.album.is_some()) => {
+                let n = self.data.album.as_ref().map_or(0, |a| a.photos.len());
+                self.boxed.as_ref().and_then(|b| b.album.as_ref()).map_or_else(Vec::new, |v| v.hints(n))
+            }
             Mode::View if self.boxed.is_some() => {
                 // Y (the status) and X (the note) work as on the page; their hints make room for the box's own, so the
                 // bar fits a 640 px screen.
@@ -637,6 +719,14 @@ impl Card {
                 if self.boxed.as_ref().is_some_and(|b| b.scrollable()) {
                     h.push(("L1 R1", "Scroll"));
                 }
+                // Down on the front opens the case (`album`). With photos in it, the bar's four places name it instead
+                // of START (which still works, as on the page): the photos are what the box has new to show.
+                let photos = self.data.album.as_ref().is_some_and(|a| !a.photos.is_empty());
+                if photos && self.data.surprise.is_none() && self.boxed.as_ref().is_some_and(|b| !b.back) {
+                    h.retain(|(k, _)| *k != "START");
+                    let at = h.iter().position(|(_, v)| *v == "Turn over").map_or(h.len(), |i| i + 1);
+                    h.insert(at, ("DOWN", "Photos"));
+                }
                 h
             }
             Mode::View if self.data.plain => {
@@ -647,7 +737,7 @@ impl Card {
                 h
             }
             Mode::View if self.info.is_some() => {
-                let start = if self.data.port.is_some() { "Performance & fan" } else { "This game" };
+                let start = if self.data.port.is_some() { crate::perf_fan_page::title() } else { "This game" };
                 let a = if self.info.as_ref().is_some_and(|i| i.link.is_some()) { "Open" } else { "Play" };
                 let mut h = vec![("A", a), ("B", "Back"), ("Y", "Status"), ("START", start), ("SELECT", "Details")];
                 if self.data.app_game {
@@ -702,7 +792,7 @@ impl Card {
             crate::setup::paint_keyboard_with(c, text, kb, "Save");
             let left = NOTE_MAX.saturating_sub(kb.text.chars().count());
             text.draw_right(c, Face::Body, 28, c.w - MARGIN, 272, pal().dust, &format!("{left} left"));
-            crate::setup::hints(c, text, &self.hints());
+            self.paint_hints(c, text);
             return;
         }
         c.clear(pal().void);
@@ -716,8 +806,10 @@ impl Card {
         // The body scrolls inside its own strip of the screen; whatever falls outside is cut off there. On a screen
         // too short for the label and the hints (640x480: 440 px top, 380 px bottom) the strip is empty rather than
         // upside down; the card's top still paints, the body simply has no room.
-        let top = BODY_TOP.clamp(0, c.h);
-        let bottom = (c.h - BODY_BOTTOM_GAP).clamp(top, c.h);
+        let top = body_top(c.h).clamp(0, c.h);
+        let bottom = (c.h - body_bottom_gap(c.h)).clamp(top, c.h);
+        BODY_SEEN.set((top, bottom));
+        self.view_top = top;
         let view_h = bottom - top;
         let w = c.w;
         {
@@ -741,11 +833,11 @@ impl Card {
             // A thin bar on the right: where in the page the view is.
             let total = view_h + self.max_scroll;
             let bar_h = (view_h * view_h / total).max(40);
-            let bar_y = BODY_TOP + (view_h - bar_h) * self.scroll / self.max_scroll.max(1);
-            c.rect(c.w - 28, BODY_TOP, 4, view_h, pal().spine);
+            let bar_y = top + (view_h - bar_h) * self.scroll / self.max_scroll.max(1);
+            c.rect(c.w - 28, top, 4, view_h, pal().spine);
             c.rect(c.w - 28, bar_y, 4, bar_h, pal().dust);
         }
-        crate::setup::hints(c, text, &self.hints());
+        self.paint_hints(c, text);
         match &self.mode {
             Mode::Status { sel, stars } => self.paint_picker(c, text, *sel, *stars),
             Mode::Choose { sel, rows } => self.paint_chooser(c, text, *sel, rows),
@@ -770,7 +862,7 @@ impl Card {
         if let Some(info) = self.info.as_mut() {
             info.paint(c, text, &self.data, cover, console);
         }
-        crate::setup::hints(c, text, &self.hints());
+        self.paint_hints(c, text);
         match &self.mode {
             Mode::Status { sel, stars } => self.paint_picker(c, text, *sel, *stars),
             Mode::Choose { sel, rows } => self.paint_chooser(c, text, *sel, rows),
@@ -808,7 +900,7 @@ impl Card {
                 }
             }
         }
-        crate::setup::hints(c, text, &self.hints());
+        self.paint_hints(c, text);
         match &self.mode {
             Mode::Status { sel, stars } => self.paint_picker(c, text, *sel, *stars),
             Mode::Choose { sel, rows } => self.paint_chooser(c, text, *sel, rows),
@@ -820,14 +912,17 @@ impl Card {
 
     fn paint_label(&self, c: &mut Canvas, text: &mut Text, cover: Option<&Image>) {
         let d = &self.data;
-        let (x, y, w) = (MARGIN, LABEL_TOP, c.w - 2 * MARGIN);
-        c.rect(x, y, w, LABEL_H, pal().label);
-        lift_shadow(c, x, y + LABEL_H, w, pal().t);
-        c.rect(x, y, STRIPE, LABEL_H, d.stripe);
+        let (x, y, w, label) = (MARGIN, LABEL_TOP, c.w - 2 * MARGIN, label_h(c.h));
+        c.rect(x, y, w, label, pal().label);
+        lift_shadow(c, x, y + label, w, pal().t);
+        c.rect(x, y, STRIPE, label, d.stripe);
         let mut text_w = w - STRIPE - 2 * 36;
         if let Some(img) = cover {
-            let (cw, ch) = (img.w as i32, img.h as i32);
-            c.blit_scaled(img, x + w - 12 - cw, y + (LABEL_H - ch) / 2, cw, ch);
+            // Fitted for the 300 lines of `cover_box`; on a lower label it shrinks to the label's room, in proportion.
+            let (iw, ih) = (img.w as i32, img.h as i32);
+            let room = label - 24;
+            let (cw, ch) = if ih > room && ih > 0 { (iw * room / ih, room) } else { (iw, ih) };
+            c.blit_scaled(img, x + w - 12 - cw, y + (label - ch) / 2, cw, ch);
             text_w -= cw + 12;
         }
         let tx = x + STRIPE + 36;
@@ -854,7 +949,7 @@ impl Card {
             text.draw(c, Face::Body, 28, tx, meta_y, pal().label_dust, &meta);
         });
         // The player's own line at the foot of the label: status mark, status, time.
-        let foot = y + LABEL_H - 40;
+        let foot = y + label - 40;
         let mut fx = tx;
         if d.status != Status::NotStarted {
             paint_mark(c, fx + 10, foot - 10, d.status, pal().ink);
@@ -910,10 +1005,13 @@ impl Card {
             for (k, v) in rows {
                 text.draw(c, Face::Body, 28, lx, ly, pal().dust, k);
                 let name = ["Listed as", "Developer", "Publisher", "Series"].contains(&k);
-                let lines = if name { text.wrap_name(Face::Body, 28, &v, lw - key_w) } else { text.wrap(Face::Body, 28, &v, lw - key_w) };
+                // A word wider than the column (Large text on the Brick's 450-px column: "Metroidvania") goes a size
+                // smaller rather than breaking in the middle.
+                let px = value_px(text, &v, lw - key_w);
+                let lines = if name { text.wrap_name(Face::Body, px, &v, lw - key_w) } else { text.wrap(Face::Body, px, &v, lw - key_w) };
                 for (i, line) in lines.iter().take(2).enumerate() {
-                    if name { text.draw_name(c, Face::Body, 28, lx + key_w, ly + i as i32 * tight(), pal().chalk, line); }
-                    else { text.draw(c, Face::Body, 28, lx + key_w, ly + i as i32 * tight(), pal().chalk, line); }
+                    if name { text.draw_name(c, Face::Body, px, lx + key_w, ly + i as i32 * tight(), pal().chalk, line); }
+                    else { text.draw(c, Face::Body, px, lx + key_w, ly + i as i32 * tight(), pal().chalk, line); }
                     if i == 1 {
                         ly += tight();
                     }
@@ -1011,6 +1109,13 @@ impl Card {
                 text.draw(c, Face::Body, 28, rx + rkey, ry - 6, pal().dust, &rest);
                 ry += row();
             }
+        }
+        // Pocket Sync: when a save of it last came from or went to another Pocket, and which, as one quiet line under the
+        // times (no label of its own: its translations would widen every card's labels' column).
+        if let Some(line) = &d.synced {
+            let line = text.fit(Face::Body, 28, &format!("Pocket Sync · {line}"), rw - rkey);
+            text.draw(c, Face::Body, 28, rx + rkey, ry - 6, pal().dust, &line);
+            ry += row();
         }
         // Its save slots, as on the info page and the box's back (`game_info`, `game_box`): this full page is where X leads
         // from a system's list, and it showed no save row there (pocket, 2026-10-31).
@@ -1132,7 +1237,7 @@ impl Card {
 
         // About: the Wikipedia lead when there is one, else a sentence made of the facts.
         let about: Option<(String, Option<String>, u32)> = match &d.summary {
-            Summary::Wikipedia { text: t, .. } | Summary::Gamelist(t) => Some((t.clone(), d.summary.note(), pal().chalk)),
+            Summary::Wikipedia { text: t, .. } | Summary::Gamelist(t) | Summary::Romm(t) => Some((t.clone(), d.summary.note(), pal().chalk)),
             // This card is the second view (SELECT); a game with no article and no sentence has nothing to say here, the
             // info page and the box back say "No Wikipedia article for this game" (`Summary::note`).
             Summary::None => d.sentence.clone().map(|s| (s, None, pal().chalk)),
@@ -1252,7 +1357,7 @@ impl Card {
             text.draw(c, Face::Body, 26, x + STRIPE + 28, y + 78 + type_scale::grow(37) + type_scale::grow(26), dim, &meta);
         }
         c.rect(0, crate::kit::content_bottom(c.h), c.w, c.h - crate::kit::content_bottom(c.h), pal().void);
-        crate::setup::hints(c, text, &self.hints());
+        self.paint_hints(c, text);
     }
 
     /// "Delete from the card?": what goes and what it frees, saves and states kept or not, then Delete (twice).
@@ -1293,7 +1398,7 @@ impl Card {
         }
         if !ready {
             c.rect(0, crate::kit::content_bottom(c.h), c.w, c.h - crate::kit::content_bottom(c.h), pal().void);
-            crate::setup::hints(c, text, &self.hints());
+            self.paint_hints(c, text);
             return;
         }
         let y0 = top + lines * step + 24;
@@ -1332,7 +1437,7 @@ impl Card {
             }
         }
         c.rect(0, crate::kit::content_bottom(c.h), c.w, c.h - crate::kit::content_bottom(c.h), pal().void);
-        crate::setup::hints(c, text, &self.hints());
+        self.paint_hints(c, text);
     }
 
     /// The status choices over the dimmed card, as a short shelf.
@@ -1424,7 +1529,7 @@ impl Card {
             text.draw(c, Face::Body, 28, x + STRIPE + 64, y + extra_h / 2 + type_scale::base(10, 28), fg, "Wrong pictures? Look up again");
         }
         c.rect(0, crate::kit::content_bottom(c.h), c.w, c.h - crate::kit::content_bottom(c.h), pal().void);
-        crate::setup::hints(c, text, &self.hints());
+        self.paint_hints(c, text);
     }
 
     /// "Which game is this?": the closest entries of the system as a short shelf, then "None of these".
@@ -1462,7 +1567,7 @@ impl Card {
             }
         }
         c.rect(0, crate::kit::content_bottom(c.h), c.w, c.h - crate::kit::content_bottom(c.h), pal().void);
-        crate::setup::hints(c, text, &self.hints());
+        self.paint_hints(c, text);
     }
 }
 
@@ -1538,6 +1643,37 @@ mod tests {
         assert_eq!(card.press(Button::East), Out::Play);
     }
 
+    /// Review 19.11. #4: on the 3D case the bar kept START's This game and dropped SELECT, the one way to the card's page
+    /// (stickers, versions, hide or delete). Every key the case answers is in the bar, or listed here with why not.
+    #[test]
+    fn the_3d_case_bar_shows_its_own_keys_first() {
+        // (key, why it may stay out of a bar of four)
+        const OUT: &[(&str, &str)] = &[
+            ("START", "This game: the card's page (SELECT) shows it in its bar"),
+            ("L1 R1", "scrolling a long back: the text shows it goes on"),
+            ("SELECT", "Just Play's case only: Another and Turn over come first there; the card it opens is not the pick's"),
+        ];
+        for surprise in [false, true] {
+            let mut d = data();
+            if surprise { d.surprise = Some("Just Play picked it".into()); }
+            let mut card = Card::new(d);
+            card.boxed = Some(crate::game_box::BoxView::new());
+            assert!(card.start_yields());
+            let shown = card.shown_hints();
+            assert!(shown.len() <= crate::kit::MAX_HINTS);
+            if !surprise {
+                assert!(shown.contains(&("SELECT", "Page")), "{shown:?}");
+                assert!(shown.contains(&("LEFT RIGHT", "Turn over")), "{shown:?}");
+            }
+            for (key, label) in card.hints() {
+                assert!(shown.iter().any(|h| h.0 == key) || OUT.iter().any(|(k, _)| *k == key), "surprise {surprise}: {key} {label} is in no bar: {shown:?}");
+            }
+        }
+        // The card itself (not the case) keeps START next to A and B.
+        let card = Card::new(data());
+        assert!(!card.start_yields() && card.shown_hints().iter().any(|h| h.0 == "START"));
+    }
+
     #[test]
     fn library_headings_are_translated_whole() {
         use crate::i18n::Lang;
@@ -1576,6 +1712,7 @@ mod tests {
             rows: Vec::new(),
             achievements: None,
             battery: None,
+            synced: None,
             port: None,
             port_update: false,
             app_game: false,
@@ -1595,6 +1732,7 @@ mod tests {
             case_meter: None,
             links: Vec::new(),
             plain: false,
+            album: None,
         }
     }
 
@@ -1888,7 +2026,7 @@ mod tests {
     }
 
     #[test]
-    fn a_long_battery_line_parts_where_it_reads_well_and_a_port_offers_its_performance() {
+    fn a_long_battery_line_parts_where_it_reads_well_and_a_port_offers_its_performance_beside_pocket_sync_s_line() {
         assert_eq!(battery_split("About 3 h 20 min left, 18% an hour"), Some(("About 3 h 20 min left", "18% an hour")));
         assert_eq!(battery_split("About 4 h left (Game Boy Color games)"), Some(("About 4 h left", "(Game Boy Color games)")));
         assert_eq!(battery_split("Measuring this game\u{2026}"), None);
@@ -1897,6 +2035,7 @@ mod tests {
         let mut d = data();
         d.port = Some(("Auto, fan Auto".into(), true));
         d.battery = Some("About 3 h 20 min left, 18% an hour".into());
+        d.synced = Some("With TrimUI Brick at 14:05".into());
         let mut card = Card::new(d);
         assert!(card.hints().contains(&("START", "Performance & fan")));
         // Both lines are painted (and measured) without a fuss.
@@ -2090,6 +2229,33 @@ mod tests {
         assert_eq!(card.press(Button::South), Out::None);
         assert!(matches!(card.mode, Mode::View));
         assert_eq!(card.data.note, "qw");
+    }
+
+    /// Review 20.11. #12: on the Brick's 1024x768 (painted natively) the 300-line label took 39 % of the height against
+    /// the Plus's 31 % (640x480, laid out at 1280x960), the body kept 34 % against 41 % and its last line stood cut over
+    /// the hints. Label and body keep the Plus's shares within five points; the label's lines stay inside the paper.
+    #[test]
+    fn the_label_and_body_keep_the_plus_shares_on_768_lines() {
+        let shares = |w: i32, h: i32| {
+            let mut px = vec![0u32; (w * h) as usize];
+            let mut card = Card::new(data());
+            BODY_SEEN.set((0, 0));
+            card.paint(&mut Canvas::new(&mut px, w as u32, h as u32), &mut Text::new(), None, None);
+            let (top, bottom) = BODY_SEEN.get();
+            (label_h(h) as f32 / h as f32, (bottom - top) as f32 / h as f32, top, bottom)
+        };
+        let (plus_label, plus_body, _, _) = shares(1280, 960);
+        let (label, body, top, bottom) = shares(1024, 768);
+        assert!((label - plus_label).abs() <= 0.05, "the label: {label:.3} of the height, the Plus's {plus_label:.3}");
+        assert!((body - plus_body).abs() <= 0.05, "the body ({top}..{bottom}): {body:.3} of the height, the Plus's {plus_body:.3}");
+        assert!(bottom <= crate::kit::content_bottom(768), "the body reaches into the hints");
+        // The player's line (its baseline 40 over the label's foot) stays under the facts line and inside the paper.
+        let foot = LABEL_TOP + label_h(768) - 40;
+        assert!(foot - (LABEL_TOP + 104 + 50 + type_scale::grow(28)) >= type_scale::px(28) as i32, "the player's line runs into the facts line");
+        // 960 lines and more and the Smart Pro's 720 keep the design's label.
+        for h in [720, 960, 1080] {
+            assert_eq!(label_h(h), LABEL_H, "{h} lines");
+        }
     }
 
     #[test]

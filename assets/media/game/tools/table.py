@@ -9,7 +9,7 @@ DIR = "assets/media/game"
 # kind file -> Game variant, in the order of Game::DRAWN.
 KINDS = [("snes", "Snes"), ("snes-us", "SnesUs"), ("n64", "N64"), ("nes", "Nes"), ("gb", "Gb"), ("gbc", "Gbc"), ("gba", "Gba"),
          ("cart", "Cart"), ("md", "MegaDrive"), ("sms", "MasterSystem"), ("gg", "GameGear"), ("hucard", "HuCard"),
-         ("ngp", "NeoGeoPocket"), ("ws", "WonderSwan"), ("lynx", "Lynx"), ("ds", "Card"), ("3ds", "Card3ds"), ("memory", "Memory")]
+         ("neogeo", "NeoGeo"), ("ngp", "NeoGeoPocket"), ("ws", "WonderSwan"), ("lynx", "Lynx"), ("ds", "Card"), ("3ds", "Card3ds"), ("memory", "Memory")]
 # The drawn ones' labels (draw_media.py prints them); "card" is the drawn DS card until ds.png comes.
 LABELS = {"snes": (13, 14, 62, 57), "n64": (8, 16, 72, 35), "nes": (7, 18, 61, 45), "gb": (6, 12, 46, 39), "gba": (7, 7, 61, 27),
           "cart": (13, 14, 59, 59), "md": (7, 13, 58, 66), "card": (3, 5, 26, 19), "memory": (3, 8, 18, 21)}

@@ -119,7 +119,7 @@ done
 touch "$FIXTURE_EVENTS/timing"
 echo 'test result: ok. 1 passed'
 ''')
-    for suite in ['deploy/test-run-pocket-ui.sh','scripts/test-verify-device.sh','scripts/test-check-core-licences.sh','deploy/package/test-package.sh','deploy/test-grub-quiet.sh','scripts/image/test-grub-checks.sh','scripts/image/test-rocknix-source.sh','scripts/image/test-h700-pins.sh','scripts/image/test-storage-budget.sh','deploy/fat/test-hook.sh','deploy/image/test-mount-storage.sh']:
+    for suite in ['deploy/test-run-pocket-ui.sh','scripts/test-verify-device.sh','scripts/test-check-core-licences.sh','deploy/package/test-package.sh','deploy/test-grub-quiet.sh','scripts/image/test-grub-checks.sh','scripts/image/test-bios-checks.sh','scripts/test-check-release-tree.sh','scripts/image/test-rocknix-source.sh','scripts/image/test-h700-pins.sh','scripts/image/test-storage-budget.sh','deploy/fat/test-hook.sh','deploy/image/test-mount-storage.sh']:
         kind='launcher' if 'test-run-pocket-ui' in suite else 'small' if 'verify-device' in suite else ''
         put(tree/suite, '#!/bin/sh\n'+(f'exec stage {kind}\n' if kind else 'exit 0\n'))
     for script in ['scripts/test-device-portability.py','scripts/test-device-transfer.py','scripts/image/test-receipts.py','scripts/android/test-release-check.py']: put(tree/script,'pass\n')
@@ -160,6 +160,16 @@ echo 'test result: ok. 1 passed'
     out=run('killed',kill='1')
     check(out.returncode==1 and 'shell test coordinator FAILED' in out.stdout and 'GATE: ok' not in out.stdout,out.stdout)
     check(not(events/'timing').exists(),"incomplete lane never permits timing")
+    # The optional JVM stage runs only when copied into this fixture; it never
+    # calls the real checkout's compiler or production reader runner.
+    companion=tree/'scripts/android/test/file-reader-rule.sh'
+    for rc,word in [('0','passed'),('77','SKIPPED'),('1','FAILED')]:
+        put(companion,'#!/bin/sh\n[ "$1" = --if-available ] || exit 2\nprintf done >"$FIXTURE_EVENTS/jvm"\nexit '+rc+'\n')
+        out=run('jvm-'+rc)
+        check((events/'jvm').exists(),'selected JVM fixture executed')
+        check(('JVM file-reader companion '+word) in out.stdout,out.stdout)
+        check((out.returncode==0)==(rc in ('0','77')),'real JVM failure must stay red; absence is explicit')
+    companion.unlink()
     # Production aborts the inherited process group; no separate session/cgroup
     # may let a lane escape. This is only our own isolated fixture group.
     for p in events.iterdir():p.unlink()
@@ -178,7 +188,7 @@ echo 'test result: ok. 1 passed'
             def active():
                 for pid in pids:
                     try: state=Path(f'/proc/{pid}/stat').read_text().split(') ')[1]
-                    except FileNotFoundError: continue
+                    except (FileNotFoundError, ProcessLookupError): continue  # the lane ended between the listing and the read
                     if not state.startswith('Z'):return True
                 return False
             until=time.monotonic()+2

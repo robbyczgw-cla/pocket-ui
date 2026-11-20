@@ -3,7 +3,7 @@
 //! Kept out of main.rs so the shelf only carries small hooks.
 
 use std::path::{Path, PathBuf};
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 use pocket_ui::game_card::{self, Card, CardData, ChoiceRow, CuratorRow, Out, RelatedGame, Summary};
 use pocket_ui::gamedb::{self, Choice, GameInfo, Owned};
@@ -33,6 +33,11 @@ pub(crate) struct OpenCard {
     pub article: Option<String>,
 }
 
+/// `App::infos_warm_tick`: how long after the last button the library's facts are looked up ahead, and for how long
+/// at a time.
+const INFOS_WARM_AFTER: Duration = Duration::from_millis(1500);
+const INFOS_WARM_BUDGET: Duration = Duration::from_millis(3);
+
 impl App {
     /// The facts for a game of the library, looked up once per file: the entry the player chose on the
     /// card, else the automatic match by the name its checksum gave (`app_identify`), else by its file name.
@@ -44,8 +49,89 @@ impl App {
         let choice = self.library.get(path).choice;
         let identified = self.identify.names.get(path).cloned();
         let hit = self.gamedb.resolve_rom(system, stem, identified.as_deref(), choice.as_ref());
+        self.infos_resolved += 1;
         self.game_infos.insert(path.to_path_buf(), hit.clone());
         hit
+    }
+
+    /// Looks up the facts of the library's games ahead (`game_info`), in idle moments: the first card of a process
+    /// needs all of them for "More by" and "Other games in" (`related_games`), and on the RG35XX Plus that took 205 of
+    /// the first box's 240 ms with 1200 games (PERF-FEEL.md). From `INFOS_WARM_AFTER` without input, with nothing open
+    /// and no game running, for at most `INFOS_WARM_BUDGET` of the UI thread at a time (one lookup more at worst: the
+    /// first of a system reads its part of the database, ~30 ms there); when to come back while some are left.
+    pub(crate) fn infos_warm_tick(&mut self, now: Instant) -> Option<Instant> {
+        let idle = self.window.is_some()
+            && self.card.is_none()
+            && self.running.is_none()
+            && self.menu.is_none()
+            && self.switcher.is_none()
+            && self.settings_page.is_none()
+            && self.sleep.state() == pocket_ui::sleep::State::Awake;
+        if !idle || self.infos_warm.0 >= self.systems.len() {
+            return None;
+        }
+        let due = self.last_input + INFOS_WARM_AFTER;
+        if now < due {
+            return Some(due);
+        }
+        self.infos_warm_some(INFOS_WARM_BUDGET);
+        (self.infos_warm.0 < self.systems.len()).then(|| now + Duration::from_millis(16))
+    }
+
+    /// Looks up games not looked up yet, from where the last call stopped, until `budget` of wall time is used (at
+    /// least one lookup).
+    pub(crate) fn infos_warm_some(&mut self, budget: Duration) {
+        let t0 = Instant::now();
+        while let Some(system) = self.systems.get(self.infos_warm.0) {
+            let Some(game) = system.games.get(self.infos_warm.1) else {
+                self.infos_warm = (self.infos_warm.0 + 1, 0);
+                if self.infos_warm.0 == self.systems.len() {
+                    pocket_ui::trace::step("game facts looked up ahead");
+                    println!("game facts: the library's looked up ahead ({} lookups since the start)", self.infos_resolved);
+                }
+                continue;
+            };
+            self.infos_warm.1 += 1;
+            if self.game_infos.contains_key(&game.path) {
+                continue;
+            }
+            let (name, path) = (system.name.clone(), game.path.clone());
+            self.game_info(&name, &path);
+            if t0.elapsed() >= budget {
+                return;
+            }
+        }
+    }
+
+    /// `--snapshot infos-warm-check:<system>` (tests/card_infos_warm.rs): the lookups the first card of a game of
+    /// `system` makes, cold and after the idle look-ahead. Prints `infos-warm games=<n> cold=<n> warmed=<n>`.
+    pub(crate) fn infos_warm_check(&mut self, system: &str) {
+        self.shelf_snapshot("");
+        let Some(s) = self.systems.iter().position(|x| x.name == system) else {
+            println!("infos-warm no system {system}");
+            return;
+        };
+        let games = self.systems.iter().map(|x| x.games.len()).sum::<usize>();
+        let game = self.systems[s].games[0].clone();
+        let open = |app: &mut App| {
+            let before = app.infos_resolved;
+            let _ = app.build_card(Item::Game(s, 0), system.to_string(), game.name.clone(), game.path.clone());
+            app.infos_resolved - before
+        };
+        let cold = open(self);
+        self.game_infos.clear();
+        self.infos_warm = (0, 0);
+        while self.infos_warm.0 < self.systems.len() {
+            self.infos_warm_some(INFOS_WARM_BUDGET);
+        }
+        let warmed = open(self);
+        // The checksums gave new names (`names_changed`): the facts go, and the look-ahead starts again.
+        self.names_changed();
+        while self.infos_warm.0 < self.systems.len() {
+            self.infos_warm_some(INFOS_WARM_BUDGET);
+        }
+        let renamed = open(self);
+        println!("infos-warm games={games} cold={cold} warmed={warmed} renamed={renamed}");
     }
 
     /// X on a game: its card.
@@ -100,6 +186,7 @@ impl App {
         pocket_ui::trace::step("card begin");
         let started = Instant::now();
         let info = self.game_info(&system, &path).map(|i| i.sayable());
+        pocket_ui::trace::step("card info ready");
         let mut data = self.card_data(&system, &name, &path, info.as_ref());
         data.leave_out_unsayable();
         pocket_ui::trace::step("card data ready");
@@ -111,6 +198,12 @@ impl App {
         if let Some(e) = self.gamelist.index.get(&system, &path) {
             pocket_ui::gamelist::fill_card(&mut data, e, cached.is_some());
             data.leave_out_unsayable();
+        }
+        // RomM's description of a game of the paired server, when the gamelist has none (`romm`).
+        if matches!(data.summary, Summary::None) {
+            if let Some(text) = self.romm.loaded().and_then(|r| r.catalog.as_ref()).and_then(|c| c.find(&system, &path)).and_then(|e| e.summary.clone()) {
+                data.summary = Summary::Romm(text);
+            }
         }
         // Connections: which facts lead to the player's other games (a few lookups in the index, `app_connections`).
         self.card_connections(&mut data, &path);
@@ -134,7 +227,7 @@ impl App {
             open.card.data.summary = match cached {
                 Some(text) => Summary::Wikipedia { text, title },
                 // The gamelist's description is on the card: no wait for Wikipedia, no request for it.
-                None if matches!(open.card.data.summary, Summary::Gamelist(_)) => open.card.data.summary.clone(),
+                None if matches!(open.card.data.summary, Summary::Gamelist(_) | Summary::Romm(_)) => open.card.data.summary.clone(),
                 None => {
                     let (proxy, dir) = (self.proxy.clone(), self.data_dir.clone());
                     std::thread::spawn(move || {
@@ -168,6 +261,7 @@ impl App {
             .into_iter()
             .chain(self.curator_card_rows(path))
             .chain(self.card_screenshots_row(system, path))
+            .chain(self.card_crate_row(path))
             .chain(std::iter::once(self.card_manage_row()))
             .collect()
     }
@@ -200,6 +294,7 @@ impl App {
             achievements: None,
             // How long the charge lasts in this game, from memory (`battery_games`); "Measuring this game…" before,
             // "Loading…" in the moments before the sampler has read its files.
+            synced: self.pocket_sync_card_line(system, path),
             battery: pocket_ui::battery_history::game_card(&pocket_ui::battery_games::Key::new(system, path, ""), &system_short(&self.systems, system)),
             // A port: its performance and fan, and the busy-core hint (`app_port_perf`).
             port: self.port_card_line(system, path),
@@ -220,7 +315,7 @@ impl App {
             broken: pocket_ui::library_cache::is_empty_file(path).then(|| "The file is empty (0 bytes). Copy the game to the card again.".into()),
             favorite: self.favorites.contains(path),
             // Its save slots on their medium (`save_media`): a few file checks, pocket-core's games only.
-            saves: game_card::CardSaves::of(system, path, stripe(system)),
+            saves: game_card::CardSaves::of_core(system, path, stripe(system), &self.core_for_path(system, path)),
             // Set when painted, from the shelf's latest read (`paint_card`).
             continue_at: None,
             hardcore: false,
@@ -231,7 +326,10 @@ impl App {
             // The facts that lead to the player's other games (`show_card`, `app_connections`).
             links: Vec::new(),
             plain: false,
+            // The photos in its case (`app_album`): one small file read; none at all while Photos of big moments is off.
+            album: self.moment_photos.then(|| self.card_album(system, path)),
         };
+        pocket_ui::trace::step("card base ready");
         if data.play_evidence().files {
             self.remember_played_files(path);
             data.ever_played = true;
@@ -245,6 +343,7 @@ impl App {
             data.facts.push(("By", g.author.clone()));
             data.facts.push(("Licence", g.license_short.clone()));
         }
+        pocket_ui::trace::step("card extras ready");
         let Some(info) = info else { return data };
         data.year = info.year;
         data.players = gamedb::players_text(info);
@@ -269,6 +368,7 @@ impl App {
         data.sentence = game_card::sentence(info);
         // Only an interactive card needs related-game lists: this clones/resolves the whole library.
         // Passive browsing on a 1 GB A55 must stay proportional to the selected game.
+        pocket_ui::trace::step("card facts ready");
         {
             let related = self.related_games(info, path);
             data.more_by = related.0;
@@ -374,6 +474,9 @@ impl App {
             Out::LookUpAgain => self.card_look_up_again(),
             // A on a developer, publisher, series or genre: the player's games with it (`app_connections`).
             Out::Connection(i) => self.open_connection(i),
+            // The second A of a photo's delete in the open case (`app_album`).
+            Out::DeletePhoto(file) => self.album_delete(&file),
+            Out::AlbumOpened => self.album_opened(),
             Out::ChooseGame => {
                 let (system, path) = (open.system.clone(), open.path.clone());
                 let rows = self.choice_rows(&system, &path);
@@ -565,7 +668,12 @@ impl App {
         let progress = line.map(|(l, _)| l);
         let meter = self.card.as_ref().and_then(|o| self.case_progress(&o.system, &o.path)).and_then(|p| p.meter());
         let art = self.card.as_ref().and_then(|o| self.case_art(&o.path));
+        // The case's empty sentence follows the case-knows answer, which may come after the card opened.
+        let reads = self.card.as_ref().is_some_and(|o| self.case_progress(&o.system, &o.path).is_some());
         if let Some(open) = self.card.as_mut() {
+            if let Some(a) = open.card.data.album.as_mut() {
+                a.reads_save = reads;
+            }
             open.card.data.continue_at = at;
             // The game's own pictures (A Link to the Past's pendants) take the place of the plain marks.
             open.card.data.case_meter = progress.as_ref().and(meter).filter(|_| art.is_none());
@@ -577,6 +685,8 @@ impl App {
         if let Some(path) = known_save { self.remember_played_files(&path); }
         let ever_played = self.card.as_ref().is_some_and(|o| self.play_evidence(&o.path).ever_played());
         if let Some(open) = self.card.as_mut() { open.card.data.ever_played = ever_played; }
+        // The open case's photos, decoded off the UI thread (`app_album`).
+        self.album_pictures();
         let pictures = self.card_pictures(item, c.w);
         let corner = self.status_corner();
         let corner = Some(&corner);

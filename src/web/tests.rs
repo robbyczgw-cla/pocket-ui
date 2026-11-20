@@ -1640,3 +1640,14 @@ fn a_game_hidden_on_the_pocket_is_not_listed_and_comes_back_at_once() {
     shared.library_changed();
     assert_eq!(names(&ctx), ["Alpha", "Beta"], "read again at once after the App says so");
 }
+
+#[test]
+fn an_upload_row_keeps_the_file_name_readable_on_a_phone() {
+    // 20.11.2026: `1fr auto` gave the status ("Uploading to roms/gba/…", "Saved as …") its whole width on a 390 px
+    // phone and left the file name a column one letter wide. The name has the row; status and bar go below it.
+    let rule = super::assets::APP_CSS.lines().find(|l| l.starts_with(".file-row {")).expect("the .file-row rule");
+    let cols = rule.split("grid-template-columns:").nth(1).and_then(|s| s.split(';').next()).map(str::trim);
+    assert_eq!(cols, Some("minmax(0, 1fr)"), "one column that may shrink below its longest word: {rule}");
+    // Everything in the row is in that one column: nothing sits beside the name again.
+    assert!(!rule.contains("auto"), "{rule}");
+}

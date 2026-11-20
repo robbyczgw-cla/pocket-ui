@@ -16,3 +16,7 @@ testdata/pixel-path/dolphin/roms/*.iso   # own test data: a disc header with no 
 # The closed-source DraStic binary next to it is passed on unchanged as ROCKNIX does (NOTICE.md); this tree is a SYSTEM, not the repository.
 usr/config/drastic/system/drastic_bios_arm7.bin   # open BSD replacement BIOS, not a console maker's
 usr/config/drastic/system/drastic_bios_arm9.bin   # open BSD replacement BIOS, not a console maker's
+
+# A 43 KB stand-in disc for the reader fault rules (tests/data_sources.rs "playlist"): an ISO 9660 volume whose only file is a
+# SYSTEM.CNF line naming a boot serial, zeros otherwise. Written for the test; no game data, nothing copied.
+tests/fixtures/reader-disc.iso   # own test data: an ISO 9660 with one SYSTEM.CNF line, no content

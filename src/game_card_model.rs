@@ -42,6 +42,8 @@ pub enum Summary {
     /// The description in the player's EmulationStation gamelist (`gamelist::fill_card`): shown when there is no
     /// Wikipedia text on hand, with its source named.
     Gamelist(String),
+    /// RomM's description of a game of the paired server (`romm`), when the gamelist has none: shown as the gamelist's is.
+    Romm(String),
 }
 
 impl Summary {
@@ -52,6 +54,7 @@ impl Summary {
         Some(match self {
             Summary::Wikipedia { title, .. } => format!("Text: Wikipedia, “{title}”, CC BY-SA 4.0"),
             Summary::Gamelist(_) => "From your EmulationStation gamelist".into(),
+            Summary::Romm(_) => "From your RomM server".into(),
             Summary::Loading => "Loading the description from Wikipedia…".into(),
             Summary::None => "No Wikipedia article for this game".into(),
             Summary::Unavailable(why) => match why.as_str() {
@@ -121,6 +124,9 @@ pub struct CardData {
     /// How long the charge lasts in this game: "About 3 h 20 min left, 18 % an hour", "Measuring this game…"
     /// (`battery_games::card_line`); None on a device without a battery.
     pub battery: Option<String>,
+    /// The last time a save of this game came from or went to a paired Pocket: "With TrimUI Brick at 14:05"
+    /// (`pocket_sync_page::card_line`); None with Pocket sync off or before any.
+    pub synced: Option<String>,
     /// A PortMaster port: its performance and fan ("Battery, fan Quiet"; START changes them, `port_perf_page`), and
     /// whether to show that it keeps a core busy (`port_perf::card_hint`).
     pub port: Option<(String, bool)>,
@@ -170,6 +176,9 @@ pub struct CardData {
     pub links: Vec<(usize, CardLink)>,
     /// Opened from Easy: only the picture, the sentence, year, players and time played, and nothing to change here.
     pub plain: bool,
+    /// The photos of big moments in its case (`album`): Down on the box's front opens the case. None where there is
+    /// no case to open (a page without a box).
+    pub album: Option<crate::album::AlbumData>,
 }
 
 impl CardData {
@@ -229,13 +238,18 @@ impl CardSaves {
     /// patch's. None for every other game.
     #[cfg(any(target_os = "linux", target_os = "emscripten", all(target_os = "android", feature = "handheld")))]
     pub fn of(system: &str, rom: &std::path::Path, stripe: u32) -> Option<CardSaves> {
+        Self::of_core(system, rom, stripe, "")
+    }
+
+    #[cfg(any(target_os = "linux", target_os = "emscripten", all(target_os = "android", feature = "handheld")))]
+    pub fn of_core(system: &str, rom: &std::path::Path, stripe: u32, core: &str) -> Option<CardSaves> {
         // The handhelds and the two Nintendo home consoles are `HANDHELD_CORES`, not in `SYSTEMS`.
         let handheld = crate::hostsys::HANDHELD_CORES.iter().any(|(s, _)| *s == system);
         if !handheld {
             crate::hostsys::find(system).filter(|h| h.no_states.is_none())?;
         }
         let stem = rom.file_stem()?.to_str()?;
-        let base = crate::slots::base(system, stem);
+        let base = crate::slots::base_for_core(system, stem, core);
         let times: Vec<Option<std::time::SystemTime>> = (0..crate::slots::SLOTS).map(|i| crate::slots::saved_at(&base, i)).collect();
         let newest = times.iter().flatten().max().and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok()).map(|d| d.as_secs());
         Some(CardSaves { system: system.to_string(), stripe, filled: times.iter().map(Option::is_some).collect(), newest })
@@ -258,6 +272,8 @@ pub enum RowKind {
     SaveVersions,
     /// "Screenshots (3)": the game's own, after Curator's rows (`app_gallery`).
     Screenshots,
+    /// "Into the crate": Shelf space's, while the game is on the shelf (`app_crate`), before Hide or delete.
+    Crate,
     /// "Hide or delete": the last thing on the card, under everything else (`app_storage`).
     Manage,
 }

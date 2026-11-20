@@ -40,6 +40,8 @@ pub mod updates_page;
 #[path = "licences_page.rs"]
 pub mod licences_page;
 
+pub use pocket_ui::android_games::load_preferences;
+
 #[derive(Default, serde::Serialize, serde::Deserialize)]
 #[serde(default)]
 pub struct Preferences {
@@ -65,6 +67,8 @@ pub struct Preferences {
     /// not in it, or whose app is gone from the phone, plays with our own player.
     #[serde(deserialize_with = "lenient")]
     pub plays_with: std::collections::HashMap<String, String>,
+    #[serde(deserialize_with = "lenient")]
+    pub plays_with_game: std::collections::HashMap<String, String>,
     pub onboarding_done: bool,
     pub core_catalog_url: String,
     pub selected_cores: HashSet<String>,
@@ -298,6 +302,10 @@ pub struct Region {
     pub action: Action,
 }
 pub enum Command {
+    /// The folder picker, opened at a games folder the first start found (its document URI).
+    FolderAt(String),
+    /// An emulator app's official page in the browser (`android_first_start::APP_DOWNLOADS`).
+    OpenPage(&'static str),
     Notice(&'static str),
     CoreDownload(String),
     CoreCancel,
@@ -394,6 +402,18 @@ pub struct Ui {
     setup_preview: Option<((Theme, bool, i32, i32), art::Pic)>,
     pub scan_running: bool,
     pub controller_connected: bool,
+    /// Android's first start (`pocket_ui::android_first_start`): the games folders and BIOS on the device, as the host
+    /// last looked; the apps on it for every system (not only the library's); the folders already chosen, as document ids
+    /// ("primary:ROMs"); whether the apps found were switched off on "Where your games are".
+    pub found: Option<pocket_ui::android_first_start::Facts>,
+    pub found_phone: Option<pocket_ui::play_route::Phone>,
+    pub granted: Vec<String>,
+    pub offers_off: bool,
+    /// What was wrong with the last first-start page painted (`SetupLayout::check`): empty when it all fits.
+    pub setup_faults: Vec<String>,
+    /// How much "Where your games are" leaves out upright to fit a small phone (`Ui::pick_setup_plan`): 1 its sentence,
+    /// 2 the status line above the found folders, 3 all but the first found folder and link.
+    setup_compact: u8,
     pub wifi_ready: bool,
     pub core_offers: Vec<pocket_ui::android_cores::CorePackage>,
     /// Whether the system download channel is public (`core-channel.url` in the APK's assets, or an intent's override). While
@@ -512,6 +532,12 @@ impl Ui {
             setup_preview: None,
             scan_running: false,
             controller_connected: false,
+            found: None,
+            found_phone: None,
+            granted: Vec::new(),
+            offers_off: false,
+            setup_faults: Vec::new(),
+            setup_compact: 0,
             wifi_ready: false,
             core_offers: vec![],
             core_channel_open: false,

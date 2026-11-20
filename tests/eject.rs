@@ -7,6 +7,8 @@
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
+const PAUSE_FADE: i32 = pocket_ui::eject::PAUSE_FADE as i32;
+
 include!("common/root.rs");
 
 struct Stub(std::process::Child, PathBuf);
@@ -160,10 +162,10 @@ fn quit_is_not_slower_the_shelf_takes_a_button_at_any_moment_of_the_way_back() {
 fn a_tv_picture_pulls_together_to_a_line_and_a_handheld_display_goes_dark() {
     let tmp = tempfile::tempdir().unwrap();
     let stub = wayland(tmp.path());
-    // SNES: at 165 ms the picture is a bright line through the middle, black above and below.
+    // SNES: at 180 ms the picture is a bright line through the middle, black above and below.
     let (lib, frame) = library(tmp.path(), "snes", "Chrono Trigger (USA).sfc", serde_json::json!({}));
-    let (out, pic) = run(tmp.path(), &stub, &lib, &frame, &[("POCKETUI_SNAPSHOT_EJECT_MS", "165")]);
-    assert!(out.contains("eject-snapshot ms=165 playing=true"), "{out}");
+    let (out, pic) = run(tmp.path(), &stub, &lib, &frame, &[("POCKETUI_SNAPSHOT_EJECT_MS", "180")]);
+    assert!(out.contains("eject-snapshot ms=180 playing=true"), "{out}");
     let pic = pic.expect("a picture");
     let mid = pic.1 / 2;
     assert!(row_light(&pic, mid) > 150, "the line in the middle: {}", row_light(&pic, mid));
@@ -216,7 +218,7 @@ fn a_failed_starts_sounds_come_in_order() {
     use pocket_ui::eject::{Moment, Screen, Way};
     use pocket_ui::{cabinet, insert_rig};
     for lid in [false, true] {
-        let way = Way { screen: Screen::Tv, off: false, lid };
+        let way = Way::new(Screen::Tv, false, lid);
         for ran in [way.start() / 2, way.start(), way.start() + pocket_ui::eject::FADE + std::time::Duration::from_millis(500)] {
             let failed = way.failed(ran);
             let Moment::Shelf { scene, .. } = failed.moment(failed.case_shut_at()) else { panic!("the case still returns ({ran:?})") };
@@ -233,7 +235,7 @@ fn the_case_sound_waits_until_the_medium_is_back_inside() {
     use pocket_ui::eject::{Moment, Screen, Way};
     use pocket_ui::{cabinet, insert_rig};
     for lid in [false, true] {
-        let way = Way { screen: Screen::Tv, off: true, lid };
+        let way = Way::new(Screen::Tv, true, lid);
         let Moment::Shelf { scene, .. } = way.moment(way.case_shut_at()) else { panic!("the case still returns") };
         assert!(cabinet::insert_at(scene, true).carry < 0.01, "the cartridge is inside its case when it clicks shut: {scene:?}");
         assert!(insert_rig::pose(insert_rig::Kind::Lid, scene).out < 0.01, "a jewel case has closed over the disc when it clicks: {scene:?}");
@@ -297,9 +299,11 @@ fn the_way_back_hands_over_to_the_still_shelf_without_a_jump() {
     let stub = wayland(tmp.path());
     // A step at the hand-over measured on the device was 7.7 to 14 (mean per channel); the game sliding a little out
     // of its case afterwards is well under 1 a frame. Its first frame is the hand-over's: since the Shelf look shows
-    // its case 1.4 times as large (17.11.2026) a disc's slide covers about twice the pixels, 0.61 at 640x480.
+    // its case 1.4 times as large (17.11.2026) a disc's slide covers about twice the pixels, 0.61 at 640x480. The flat
+    // hint bar (18.11.2026) gave the room over the shelf 48 more lines at 640x480 and the shown case grows with it: a
+    // Saturn or Dreamcast disc sliding out measured 1.59 a frame, a steady slide, not a jump (the hand-over stays 0.80).
     const STILL: f64 = 0.8;
-    const AFTER: f64 = 1.5;
+    const AFTER: f64 = 1.75;
     let mut failures = Vec::new();
     for (system, rom) in [
         ("snes", "Chrono Trigger (USA).sfc"), ("n64", "Super Mario 64 (USA).z64"),
@@ -368,7 +372,8 @@ fn screen_grab(path: &Path, kind: &str) -> (u32, u32) {
 /// The first picture of the way back is the last picture of the game, frame and all (before: the screen frame was gone at
 /// once and the game stood in another place and size for a tick, 13.11., NES clearly, PlayStation slightly), and what
 /// follows only pulls together: the frame is still there while the picture is squeezed, nothing jumps on the way to the
-/// line. Every kind of screen (a TV, a handheld's display), every screen frame.
+/// line. Every kind of screen (a TV, a handheld's display), every screen frame. A TV's picture starts as dark as the pause
+/// menu showed it (`eject::PAUSE_FADE`; 14.11. review, Fund 2: the bright picture for four frames was a flash).
 #[test]
 fn the_way_back_starts_from_the_last_picture_frame_and_all() {
     let tmp = tempfile::tempdir().unwrap();
@@ -378,10 +383,12 @@ fn the_way_back_starts_from_the_last_picture_frame_and_all() {
         ("snes", "Chrono Trigger (USA).sfc"), ("psx", "Final Fantasy VII (USA).chd"), ("gba", "Golden Sun (USA, Europe).gba"),
     ] {
         let (lib, frame) = library(tmp.path(), system, rom, serde_json::json!({}));
+        // As the pause menu left it: dark on a TV (the shelf's `shade_rect` towards black), as it was on a handheld.
+        let menu = |v: u8| if system == "gba" { v as i32 } else { v as i32 * (255 - PAUSE_FADE) / 255 };
         for kind in ["tv", "console", "none"] {
             let grab = tmp.path().join(format!("grab-{kind}.png"));
             screen_grab(&grab, kind);
-            let want = read_png(&grab);
+            let want: Vec<u8> = read_png(&grab).into_iter().map(|v| menu(v) as u8).collect();
             let dir = tmp.path().join(format!("series-{system}-{kind}"));
             let (out, _) = run(tmp.path(), &stub, &lib, &frame, &[
                 ("EJECT_TEST_SCENE", &format!("shelf:{system}:shelf:games:0")), ("POCKETUI_SNAPSHOT_SIZE", "640x480"),
@@ -400,7 +407,7 @@ fn the_way_back_starts_from_the_last_picture_frame_and_all() {
                 let body = if kind == "tv" { [0x4a, 0x3a, 0x2a] } else { [0xb8, 0xb4, 0xa8] };
                 let at = (240 * 640 + 40) * 3;
                 let got = &pics[3][at..at + 3];
-                if got.iter().zip(body).any(|(g, b)| (*g as i32) < b * 45 / 100 || (*g as i32) > b + 60) {
+                if got.iter().zip(body).any(|(g, b)| (*g as i32) < menu(b as u8) * 45 / 100 || *g == 0 || (*g as i32) > b + 60) {
                     failures.push(format!("{system} {kind}: the frame is gone by the fourth picture ({got:?})"));
                 }
             }

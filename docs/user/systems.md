@@ -183,7 +183,7 @@ in core options still applies. Set the handheld's time correctly for berries and
 If pocket-core cannot start a game, a card at the top of the shelf says why for about eight
 seconds.
 
-With **Animations: Cozy** and **Motion: Full** (Cabinet and Shelf looks) the start's picture runs backwards first: the
+With **Game start animation: Cozy** and **Motion: Full** (Cabinet and Shelf looks) the start's picture runs backwards first: the
 cartridge or disc comes back out of the console, the case closes and returns to the shelf, and then one friendly sentence
 says what is missing and what to do, for example "Pocket CD Demo can't start yet. Sega CD needs a file from your own
 console that isn't on the card: bios_CD_U.bin, bios_CD_E.bin or bios_CD_J.bin. Copy one of them into roms/bios, then try

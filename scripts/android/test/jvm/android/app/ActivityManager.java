@@ -1,0 +1,2 @@
+package android.app;import java.util.*;import android.content.ComponentName;
+public class ActivityManager {public java.util.List<AppTask> getAppTasks(){return Collections.emptyList();}public static class AppTask{public TaskInfo getTaskInfo(){return new TaskInfo();}public void moveToFront(){throw new UnsupportedOperationException("task runtime");}}public static class TaskInfo{public ComponentName baseActivity;}}

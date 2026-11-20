@@ -2,6 +2,8 @@
     <uses-sdk android:minSdkVersion="26" android:targetSdkVersion="35" />
     <uses-feature android:glEsVersion="0x00030000" android:required="true" />
     <uses-permission android:name="android.permission.INTERNET" />
+    <!-- Game rumble in the player (Options › Speed, rumble, fan › Rumble), as on Linux. -->
+    <uses-permission android:name="android.permission.VIBRATE" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <queries>
         <package android:name="com.retroarch"/><package android:name="com.retroarch.aarch64"/><package android:name="com.retroarch.ra32"/>

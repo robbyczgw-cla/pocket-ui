@@ -23,9 +23,8 @@ pub(crate) fn row_at_open(run: &Running, saves: Saves, settings: Option<&GameSet
         return None;
     }
     let stem = run.path.file_stem().and_then(|s| s.to_str()).unwrap_or_default();
-    let entries = timeline::entries(&slots::base(&run.system, stem));
-    let now = pocket_ui::recents::now_secs();
-    (settings.is_some_and(on) || !entries.is_empty()).then(|| Row::new(entries, pocket_ui::appearance::utc_offset_now(now as i64)))
+    let entries = timeline::entries(&slots::base_for_core(&run.system, stem, &run.core));
+    (settings.is_some_and(on) || !entries.is_empty()).then(|| Row::new(entries, timeline::Zone::Local))
 }
 
 /// Earlier states is On for this game.
@@ -40,12 +39,12 @@ pub(crate) fn preview(row: &Row) -> Option<(Option<Image>, SystemTime)> {
 
 /// The chip beside Earlier ("12 min ago"); none while there are no states.
 pub(crate) fn chip(row: &Row) -> Option<String> {
-    row.selected().map(|e| timeline::chip(e, pocket_ui::recents::now_secs(), row.tz))
+    row.selected().map(|e| timeline::chip(e, pocket_ui::recents::now_secs(), row.zone))
 }
 
 /// The line under the picture.
 pub(crate) fn note(row: &Row) -> String {
-    timeline::note(row.selected(), pocket_ui::recents::now_secs(), row.tz)
+    timeline::note(row.selected(), pocket_ui::recents::now_secs(), row.zone)
 }
 
 impl App {
@@ -60,7 +59,7 @@ impl App {
         let now = SystemTime::now();
         let ago = |m: u64| now - std::time::Duration::from_secs(m * 60);
         let entry = |kind, n, at, bytes| Entry { name: Name { kind, n }, path: Default::default(), at, bytes };
-        // Today 14:02 in the snapshot's zone: the zone's offset is taken as UTC (`tz` 0) to stay the same anywhere.
+        // Today 14:02 in the snapshot's zone: the zone's offset is taken as UTC (`Zone::Fixed(0)`) to stay the same anywhere.
         let start = SystemTime::UNIX_EPOCH + std::time::Duration::from_secs({
             let secs = pocket_ui::recents::now_secs();
             let day = secs - secs % 86_400;
@@ -78,7 +77,7 @@ impl App {
             _ => (entries, 0),
         };
         let Some(menu) = self.menu.as_mut() else { return };
-        let mut row = Row::new(entries, 0);
+        let mut row = Row::new(entries, timeline::Zone::Fixed(0));
         row.at = at;
         menu.saved = row.selected().map(|e| (picture.filter(|_| !row.selected().is_some_and(Entry::damaged)), e.at));
         menu.earlier = Some(row);

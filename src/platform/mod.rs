@@ -37,3 +37,47 @@ pub mod android_earlier;
 
 #[cfg(any(target_os = "android", all(test, target_os = "linux")))]
 pub mod android_content;
+
+#[cfg(test)]
+mod tests {
+    /// Android has no curl (review 19.11. #1: the starter pack failed there with a raw "No such file or directory").
+    /// Every place that runs curl is listed with why Android's handheld view never gets there, or which bridge it takes
+    /// there. A new curl needs the Activity's HTTPS on Android (`http`, `update::Tools::bridge`) and a line here.
+    const CURL_PLACES: &[(&str, usize, &str)] = &[
+        ("achievements/http.rs", 2, "not(target_os = \"android\"): Android asks RaHttp"),
+        ("j2me_java.rs", 1, "ROCKNIX's freej2me script only (`needed`); Android's phone games are the player's"),
+        ("net_check.rs", 1, "the Wi-Fi step's sign-in check; Android's setup has no Wi-Fi step, `refine` only follows a curl that ran"),
+        ("platform/linux.rs", 1, "Linux adapters"),
+        ("platform/linux_http.rs", 2, "Linux's http; Android has android_http.rs"),
+        ("portal.rs", 1, "the Wi-Fi sign-in sheet (setup's Wi-Fi step, Linux)"),
+        ("ports.rs", 1, "PortMaster: `ports::offered` is false on Android"),
+        ("romm_net.rs", 2, "RomM's Curl is Linux's; Android's `romm_net::system` is AndroidNet (RommHttp.java)"),
+        ("store.rs", 2, "the Store's catalogue and packages; Android installs cores from bytes (`android_cores`)"),
+        ("sync.rs", 1, "Sync: ANDROID_HIDES \"sync\""),
+        ("update.rs", 5, "3 on Linux (Android's list is `update_channel::android_fetch`; files go through `Tools::bridge`), 2 test probes"),
+        ("update/brick_assets.rs", 1, "a test of the Brick's bundled curl"),
+    ];
+
+    fn rust_files(dir: &std::path::Path, out: &mut Vec<std::path::PathBuf>) {
+        for entry in std::fs::read_dir(dir).unwrap().flatten() {
+            let path = entry.path();
+            if path.is_dir() { rust_files(&path, out) } else if path.extension().is_some_and(|e| e == "rs") { out.push(path) }
+        }
+    }
+
+    #[test]
+    fn every_curl_has_an_android_way() {
+        let src = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src");
+        let mut files = Vec::new();
+        rust_files(&src, &mut files);
+        let mut found: Vec<(String, usize)> = files.iter().filter_map(|f| {
+            let text = std::fs::read_to_string(f).ok()?;
+            let n = text.lines().filter(|l| l.contains("Command::new(") && l.split("Command::new(").nth(1).is_some_and(|a| a.split(')').next().is_some_and(|a| a.contains("curl")))).count();
+            (n > 0).then(|| (f.strip_prefix(&src).unwrap().to_string_lossy().replace('\\', "/"), n))
+        }).collect();
+        found.sort();
+        let listed: Vec<(String, usize)> = CURL_PLACES.iter().map(|(f, n, _)| (f.to_string(), *n)).collect();
+        assert_eq!(found, listed, "a curl was added or moved: on Android it needs the Activity's HTTPS (platform::http, \
+            update::Tools::bridge); then list it in CURL_PLACES with why Android is fine");
+    }
+}

@@ -175,3 +175,11 @@ Painted out with the plastic round them: the lettering, stickers and emboss as o
 ## Console colours 2, 2026-11-13 (n64-iceblue, n64-jungle, gamecube-jetblack)
 `base.png` per colour, plus the layers the console has: the N64's `over.png`, the GameCube's `top.png` (lid) and `under.png` (lid underside). The rig is the original's (`n64/rig.json`, `gamecube/rig.json`, same pose, same slot, same lid), chosen by `system_art::colour_rig` in `insert_rig::files`.
 Pictures: the original rigs' own photos (Public domain, Evan-Amos, see the N64 and GameCube sections above), recoloured: the shell's plastic laid onto the plastic colour of a real console (N64 Ice Blue from a photo by Noa Kosanovic, CC BY 3.0; N64 Jungle Green by Valentin Kozin, CC BY 2.0; GameCube Jet Black from "12 Gamecubes" by Ursinx, CC BY-SA 4.0; Commons API, 2026-11-13). Only the colour distribution is taken. Details: `assets/systems/SOURCES.md`.
+
+## neogeo, atarilynx, wonderswan (19.11.2026)
+Their consoles at the start are their pictures in `assets/systems/` (`neogeo.png`, `atarilynx.png`, `wonderswan.png`, each copied as
+`base.png`), from Evan Amos's public-domain photos with the logos painted out, converted with PixelLab (sources and licences in
+`assets/systems/SOURCES.md`). No new photo or conversion: only `rig.json`, measured on those pictures: the AES's slot along
+the top (its big cartridge goes straight down, label to the front), the Lynx's card slot and the WonderSwan's cartridge
+slot at the back, behind the top edge (label to the back, as their manuals show), the displays' glass for their light.
+Before, these three had no rig: a stand-in cartridge landed on the console with a white glow (ritual inventory 19.11.).

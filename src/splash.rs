@@ -630,6 +630,21 @@ mod tests {
     use super::*;
     use std::sync::atomic::{AtomicU32, Ordering};
 
+    #[test]
+    fn file_source_rule_splash_settings() {
+        let d = crate::testutil::TestDir::new("splash-file-rule");
+        let file = d.join("settings.json");
+        let seed = serde_json::to_vec(&serde_json::json!({"motion": "off"})).unwrap();
+        for (label, bytes) in crate::file_faults::faults(&seed) {
+            let _ = std::fs::remove_file(&file);
+            if let Some(bytes) = bytes { std::fs::write(&file, bytes).unwrap(); }
+            let got = motion(&d);
+            if label == "valid" { assert_eq!(got, Motion::Off); }
+            let look = Timeline::new(got, true).look(Duration::from_millis(500));
+            assert!(!look.note.text().trim().is_empty());
+        }
+    }
+
     fn ms(n: u64) -> Duration {
         Duration::from_millis(n)
     }

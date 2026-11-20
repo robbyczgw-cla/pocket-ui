@@ -598,8 +598,15 @@ pub fn paint_facts(c: &mut Canvas, text: &mut Text, rows: &[Row], x: i32, first:
     let brick = crate::device::brick();
     #[cfg(not(feature = "brick"))]
     let brick = false;
+    // Still a fact short (the Shelf look's spines in the Plus's share, 0.6.1): the same letters a little closer, before
+    // a fact goes.
+    let tight = crate::type_scale::line(24, 7);
+    let tight_rows = ((bottom - first + tight) / tight).max(0) as usize;
     let smaller = brick && rows.len() > regular_rows && compact_rows > regular_rows;
-    let (font, step) = if smaller { (24, compact) } else { (28, regular) };
+    // Only where the frame is in 960's share (the Brick's 768 lines, `kit::chrome`): the Smart Pro's 720 keeps its facts as they were.
+    let scaled = crate::kit::chrome(960, c.h) < 960;
+    let closer = brick && scaled && rows.len() > regular_rows.max(compact_rows) && tight_rows > regular_rows.max(compact_rows);
+    let (font, step) = if closer { (24, tight) } else if smaller { (24, compact) } else { (28, regular) };
     let key = crate::type_scale::wide(FACT_KEY, 28);
     let room = bottom - first + step;
     let shown = consoles::rows_that_fit(rows, room, step);

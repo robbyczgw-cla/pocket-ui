@@ -3,7 +3,7 @@
 /// PPSSPP's pinned adapter ignores that length, so it never gets a shorter file as it is: it goes through the padding
 /// path below instead.
 pub fn core_states_vary(core_id: &str) -> bool {
-    matches!(core_id, "mgba" | "nestopia")
+    matches!(core_id, "mgba" | "nestopia" | "dsperate")
 }
 
 /// The shortest state that is handed over padded (`Core::pad_short_states`): real states of these cores are tens of MB.
@@ -24,7 +24,7 @@ pub fn core_pads_short_states(core_id: &str) -> bool {
 mod tests {
     #[test]
     fn short_states_require_a_length_bounded_adapter() {
-        for core in ["mgba", "nestopia"] {
+        for core in ["mgba", "nestopia", "dsperate"] {
             assert!(super::core_states_vary(core));
         }
         for core in ["ppsspp", "flycast", "mupen64plus_next", "melondsds", "unknown", ""] {

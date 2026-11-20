@@ -213,6 +213,7 @@ scripts/make-image-h700.sh --version V           # make-image-family.sh --family
 scripts/check-image-h700.sh build/image-h700/pocket-ui-V-rg35xx-sp.img.xz
 scripts/image/rocknix-source.sh OUT --device H700   # the source bundle of the H700 build (source-bundle.sh --device H700)
 sh scripts/image/test-h700-pins.sh                   # pins, notes and model list (part of the gate)
+sh scripts/image/test-bios-checks.sh                 # "no BIOS files" on STORAGE/FAT, DSperate's FreeBIOS notice the one exception (part of the gate)
 sh scripts/image/test-storage-budget.sh              # STORAGE room and what build.sh writes there (part of the gate)
 sh scripts/image/storage-budget.sh BIN_DIR           # do these AArch64 programs fit into STORAGE? (release-check.sh runs it)
 ```

@@ -25,8 +25,46 @@ import shlex
 import sys
 
 # The slow layout/matrix suites (about 70 % of the test seconds in a full run, 2026-11-09 junit).
-HEAVY = ["connections", "home_panel_labels", "info_page", "long_titles", "names_never_translated",
+HEAVY = ["connections", "home_panel_labels", "info_page", "list_space", "long_titles", "meta_line", "names_never_translated",
          "nav_explorer", "small_screen", "spine_names", "spine_titles", "stickers_tv", "text_size"]
+# Each slow suite's own layout inputs: the painters of the pages it renders (18.11.: 21b457727 grew the Shelf look's box in
+# app_cabinet.rs, left the words beside it less width, and only the nightly run's connections saw "gespielt" alone on a line).
+# A change to one of these runs the suite in the merge gate (as its sample). text_size and small_screen sweep every page: their
+# inputs are the text sources (TEXT_SOURCE, below) and the state lists; every other page is theirs in the nightly run.
+_SHELF = r"app_cabinet|app_cabinet_tv|cabinet|cabinet_art|cabinet_tv|cabinet_tv_art|media|shelf|app_big_shelf|big_shelf|title_block|tape_label|showcase|app_frozen|frozen|app_case_knows|case_knows_art|app_share_shelf|share_shelf"
+_INFO = r"game_info|game_box|game_card|game_card_model|app_card|app_games_card|games_card|app_connections|connections|app_case_stickers|case_stickers|sticker_press"
+_CURATOR = r"app_curator|curator_page|curatordb|app_home_panel|home_panel"
+_LOOKS = r"look|look_sample|app_look"
+_SPINES = r"media|shelf|app_cabinet|cabinet|cabinet_art|big_shelf|app_big_shelf|tape_label"
+_STICKERS_TV = r"app_cabinet|app_cabinet_tv|cabinet|cabinet_art|cabinet_tv|cabinet_tv_art|case_stickers|app_case_stickers|sticker_press|game_box|media"
+_NAMES = r"title_block|media|tape_label|game_card|game_box"
+# The lists' room under them and the hint bar on every page (tests/list_space.rs): the pause menu's and Settings' list pages,
+# the hint bar and the footer beside it (kit, also a text source), the explanations' wrap.
+_LISTS = r"pause_page|app_settings_groups|settings_values|kit|options|emu_menu|cheats|nav_probe"
+_NAV = r"app_settings_groups|settings_values|quick|quick_paint|power_menu|nav_probe|app_nav_probe"
+# What the meta line under a game's name says and how it is laid out (tests/meta_line.rs, 18.11.: "6 h …" on the Brick's
+# Favourites, "under a …" in the Android handheld view): its painters, the times and play times in it, the status, the tally
+# and the save's progress that take its place.
+_META = r"play_time|recents|library_meta|app_case_knows|case_knows_read|app_achievements|app_connections|connections"
+
+
+def _src(alternatives, dirs=""):
+    return re.compile(rf"^src/(?:(?:{alternatives})\.rs$" + (rf"|(?:{dirs})/)" if dirs else ")"))
+
+
+LAYOUT_INPUTS = {
+    "connections": _src(f"{_SHELF}|{_INFO}|{_CURATOR}", "curator"),
+    "info_page": _src(f"{_SHELF}|{_INFO}|{_LOOKS}"),
+    "meta_line": _src(f"{_SHELF}|{_META}", "achievements"),
+    "home_panel_labels": _src(_CURATOR, "curator"),
+    "long_titles": _src(f"{_SHELF}|{_INFO}|{_LOOKS}"),
+    "spine_names": _src(_SPINES),
+    "spine_titles": _src(_SPINES),
+    "stickers_tv": _src(_STICKERS_TV),
+    "names_never_translated": _src(_NAMES),
+    "nav_explorer": _src(_NAV),
+    "list_space": _src(_LISTS),
+}
 # Absolute CPU/frame-time budgets: each runs alone (threads-required) and goes red on an overloaded host (4 red trains in 3 days,
 # 12.-14.11., none a real slowdown). They are measurements like the timing tier: nightly and before a release, never in the merge
 # gate, not even when their own file changes (preflight-air.sh runs a changed one on the Air).
@@ -47,9 +85,15 @@ NIGHTLY_TESTS = ["android_eject_tests::the_way_back_hands_over_to_the_still_shel
 # What the shell suites read (launcher, package, image, device scripts): their own directories and the licence texts the package
 # carries. A Rust source a script mentions by name is not an input: the suites run stand-in binaries (14.11., test audit).
 SHELL = re.compile(r"^(deploy|scripts)/|(^|/)(LICEN[CS]E[^/]*|COPYING[^/]*|NOTICE\.md|OFL\.txt)$")
+# Scripts no shell suite runs or reads: only their own Rust test calls them (19.11.: the reader inventory, the queue's most
+# touched file that day, started the 4-7 min shell lanes in every gate).
+NOT_SHELL = {"scripts/reader-inventory.py"}
+# Fixtures only tests/data_sources.rs (through scripts/reader-inventory.py) reads: no layout suite draws from them, so they
+# don't start every slow suite as other fixtures do.
+READER_FIXTURES = re.compile(r"^tests/fixtures/reader-(inventory|coverage|audit)\.tsv$")
 # The Brick's own code: its corpus/UI walk, F keys, text-fit and navigation cases run in the merge gate only for these.
 BRICK = re.compile(r"brick|^src/(input_corpus|fn_keys)")
-TEXT = ["text_size", "long_titles", "spine_titles", "spine_names", "small_screen", "home_panel_labels", "info_page"]
+TEXT = ["text_size", "long_titles", "meta_line", "spine_titles", "spine_names", "small_screen", "home_panel_labels", "info_page"]
 # Library tests that draw the Android pages (src/android_*_tests.rs include android/src/*.rs). 240 s for one of them on a busy host.
 ANDROID_TESTS = ["android_02_tests", "android_eject_tests"]
 ANDROID_SOURCES = ["src/android_02_tests.rs", "src/android_phones_tests.rs", "src/android_drawer_tests.rs", "src/android_eject_tests.rs"]
@@ -138,11 +182,11 @@ def parts(root, names):
         if FULL.match(name):
             full = True
         stem = Path(name).stem
-        if SHELL.search(name) and not shell:
+        if SHELL.search(name) and name not in NOT_SHELL and not shell:
             shell, why_shell = 1, name
         if name.startswith("tests/") and name.endswith(".rs") and stem in HEAVY:
             heavy.add(stem)
-        if name.startswith(("tests/snapshots/", "tests/fixtures/")):
+        if name.startswith(("tests/snapshots/", "tests/fixtures/")) and not READER_FIXTURES.match(name):
             heavy.update(HEAVY)
         if name in ("tests/i18n-states.txt", "tests/layout-risk-states.txt"):
             heavy.add("text_size")
@@ -158,15 +202,16 @@ def parts(root, names):
             heavy.update(TEXT)
         if (name.startswith(("assets/i18n/", "docs/user/", "tests/i18n")) and name != "assets/i18n/skip.txt") \
                 or name == "src/i18n.rs":
-            heavy.update({"text_size", "names_never_translated"})
+            heavy.update({"text_size", "names_never_translated", "meta_line"})
             i18n = 1
         # Where a console's name on a card or spine comes from (13.11.: a short-name table left the Atari 800 as "8-bit family"
         # and only the nightly run saw it): the two name suites run, 6 s together when the host is quiet.
         if re.match(r"src/(system_names|app_home_panel|home_panel|consoles|document_library|library|app_cabinet)\.rs$", name) \
                 or name == "assets/data/consoles.json":
             heavy.update({"home_panel_labels", "spine_names"})
-        if name in ("src/nav_probe.rs", "src/app_nav_probe.rs"):
-            heavy.add("nav_explorer")
+        for suite, inputs in LAYOUT_INPUTS.items():
+            if inputs.match(name):
+                heavy.add(suite)
         if BRICK.search(name):
             brick = 1
     # The Brick stage follows Brick paths only (14.11., both test audits: 30 % of all merge-gate seconds, in 74 % of the gates). A

@@ -25,12 +25,21 @@ VERSION=${5:-brick-$COMMIT}
 die() { echo "brick-make-card: $*" >&2; exit 1; }
 for f in pocket-ui pocket-core pocket-fb brick-hw brick-egl; do [ -f "$BINS/$f" ] || die "$BINS/$f is missing"; done
 for f in libwayland-client.so.0 libwayland-cursor.so.0 libwayland-egl.so.1 libxkbcommon.so.0 libffi.so.8; do [ -e "$LIBS/$f" ] || die "$LIBS/$f is missing"; done
-for c in gambatte mgba nestopia snes9x pcsx_rearmed gpsp fceumm picodrive beetle_ngp beetle_wswan beetle_pce_fast handy stella prosystem fbneo mupen64plus_next ppsspp flycast gearsystem beetle_supergrafx pokemini beetle_vb fake08 tic80 melondsds dosbox_pure scummvm yabause; do [ -f "$CORES/cores/${c}_libretro.so" ] || die "core $c is missing in $CORES/cores"; done
+for c in gambatte mgba nestopia snes9x pcsx_rearmed gpsp fceumm picodrive beetle_ngp beetle_wswan beetle_pce_fast handy stella prosystem fbneo mupen64plus_next ppsspp flycast gearsystem beetle_supergrafx pokemini beetle_vb fake08 tic80 melondsds dsperate dosbox_pure scummvm yabause; do [ -f "$CORES/cores/${c}_libretro.so" ] || die "core $c is missing in $CORES/cores"; done
 for f in tailscale tailscaled curl dropbearmulti syncthing; do [ -f "$PARTS/bin/$f" ] || die "$PARTS/bin/$f is missing (scripts/brick-remote-parts.sh)"; done
 for f in bin/bash bin/portmaster-exec licences/bash/LICENSE sources/bash-5.2.37.tar.gz PORTMASTER-PARTS.txt; do
   [ -s "$PORTMASTER_PARTS/$f" ] || die "$PORTMASTER_PARTS/$f is missing (scripts/brick-portmaster-parts.sh)"
 done
 [ -s "$CORES/assets/bios/scummvm/extra/sky.cpt" ] && [ -s "$CORES/assets/bios/scummvm/theme/scummmodern.zip" ] || die "ScummVM engine data/theme bundle is missing"
+# PPSSPP's system files (atlas, fonts, VFPU tables, lang/) for Roms/bios/PPSSPP: from the cores folder (brick-build-cores.sh), or made
+# here from the pinned PPSSPP source archive of a cores folder built before they were part of it.
+PSP_DATA=$CORES/assets
+if [ ! -s "$CORES/assets/bios/PPSSPP/ppge_atlas.zim" ]; then
+  PSP_SRC=$(ls "$CORES"/sources/ppsspp-*.tar.gz 2>/dev/null | head -1)
+  [ -n "$PSP_SRC" ] || die "PPSSPP system files are missing (no assets/bios/PPSSPP and no sources/ppsspp-*.tar.gz in $CORES)"
+  PSP_DATA=$(mktemp -d); trap 'rm -rf "$PSP_DATA"' EXIT
+  python3 -I "$HERE/brick-ppsspp-data.py" "$PSP_SRC" "$PSP_DATA" >/dev/null || die "PPSSPP system files: $PSP_SRC has none"
+fi
 mkdir -p "$OUT"; OUT=$(cd "$OUT" && pwd)
 CARD=$OUT/card
 rm -rf "$CARD"; mkdir -p "$CARD/.tmp_update" "$CARD/trimui/app" "$CARD/pocket-ui"/app/{bin,lib,cores,msg,hwroot/usr/bin,licences,sources} "$CARD/pocket-ui/logs" "$CARD/Roms" "$CARD/Saves/savestates"
@@ -65,11 +74,18 @@ for f in pocket-ui pocket-core pocket-fb brick-hw brick-egl; do cp "$BINS/$f" "$
 # brick-hw with -ffile-prefix-map and -s). BRICK_ALLOW_PATHS=1 for a private test card only.
 [ "${BRICK_ALLOW_PATHS:-0}" = 1 ] || "$ROOT/scripts/check-binary-paths.sh" "$P"/bin/pocket-ui "$P"/bin/pocket-core "$P"/bin/pocket-fb "$P"/bin/brick-egl "$P"/bin/brick-hw >/dev/null \
   || die "a program carries a build path (scripts/check-binary-paths.sh $BINS/*)"
+# Cores that ask EGL by name for GLES 3 functions (PPSSPP's gl3stubInit) get pocket-core's own eglGetProcAddress (build.rs); the
+# Brick's EGL 1.4 answers NULL for them, and every PSP game crashed at its start (20.11.2026).
+# Nothing else of ours may stand in for a core's own functions (rcheevos is in PPSSPP too; build.rs compiles our C hidden).
+python3 -I "$HERE/brick-elf-exports.py" "$P/bin/pocket-core" eglGetProcAddress --not rc_ md5_ pocket_ || die "pocket-core does not export eglGetProcAddress alone (built without --features brick?)"
 for f in tailscale tailscaled curl dropbearmulti syncthing; do cp "$PARTS/bin/$f" "$P/bin/$f"; done
 # Symbols are no use on the card (the pocket-ui binaries are already stripped by the release profile; the rest here).
 if command -v aarch64-linux-gnu-strip >/dev/null 2>&1; then aarch64-linux-gnu-strip "$P/bin/brick-hw" 2>/dev/null || true; fi
 cp -L "$LIBS"/libwayland-client.so.0 "$LIBS"/libwayland-cursor.so.0 "$LIBS"/libwayland-egl.so.1 "$LIBS"/libxkbcommon.so.0 "$LIBS"/libffi.so.8 "$P/lib/"
 cp "$CORES"/cores/*_libretro.so "$P/cores/"
+if LC_ALL=C grep -a -q dsperate "$BINS/pocket-ui"; then
+  python3 -I "$ROOT/scripts/dsperate-files.py" "$CORES" "$P/cores"
+fi
 cp "$ROOT"/deploy/brick/msg/*.png "$ROOT"/deploy/brick/msg/*.raw "$P/msg/"
 cp "$ROOT"/deploy/brick/hwroot/usr/bin/* "$P/hwroot/usr/bin/"
 cp "$ROOT/deploy/brick/es_systems.cfg" "$P/es_systems.cfg"; cp "$ROOT/deploy/brick/asoundrc" "$P/asoundrc"
@@ -204,6 +220,8 @@ readme saturn "Saturn discs (CUE with tracks, CHD, ISO or M3U). Experimental sof
 # Data the cores read from the BIOS folder (ScummVM's engine data and themes) travel in app/ (an update brings them); app/start.sh puts
 # them into Roms/bios once per version. A card from the zip has them there already.
 [ ! -d "$CORES/assets/bios" ] || { mkdir -p "$P/bios-data"; cp -R "$CORES/assets/bios/." "$P/bios-data/"; cp -R "$CORES/assets/bios/." "$CARD/Roms/bios/"; }
+[ -s "$P/bios-data/PPSSPP/ppge_atlas.zim" ] || { mkdir -p "$P/bios-data/PPSSPP" "$CARD/Roms/bios/PPSSPP"; cp -R "$PSP_DATA/bios/PPSSPP/." "$P/bios-data/PPSSPP/"; cp -R "$PSP_DATA/bios/PPSSPP/." "$CARD/Roms/bios/PPSSPP/"; }
+for f in pocket-ui/app/bios-data/PPSSPP/ppge_atlas.zim pocket-ui/app/bios-data/PPSSPP/flash0/font/ltn0.pgf Roms/bios/PPSSPP/ppge_atlas.zim; do [ -s "$CARD/$f" ] || die "no $f"; done
 readme bios "BIOS files, for example the PlayStation BIOS scph5501.bin. Without one, PlayStation games use the built-in replacement. Dreamcast BIOS goes in the dc folder."
 printf '%s\n' "Save states made by pocket-ui go here." >"$CARD/Saves/savestates/README.txt"
 printf '%s\n' "pocket-ui writes its log files here (boot.log tells why the card does not start)." >"$CARD/pocket-ui/logs/README.txt"

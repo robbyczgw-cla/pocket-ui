@@ -18,7 +18,7 @@ use pocket_ui::setup::Only;
 use pocket_ui::text::Face;
 use pocket_ui::touch::Area;
 
-use super::{App, Opens, SettingsPage, UserEvent, CANCEL, CONFIRM, NU_BTN_PAD, NU_PAD, NU_PILL, NU_SMALL};
+use super::{App, Opens, SettingsPage, UserEvent, CANCEL, CONFIRM, NU_BTN_PAD, NU_PAD, NU_SMALL};
 
 /// The name in the Settings list.
 pub(crate) const SETTINGS_NAME: &str = "Game check";
@@ -223,9 +223,9 @@ impl App {
 
     /// Words on an empty page, the way the others say it (`kit::empty_state`).
     fn game_check_words(&mut self, c: &mut Canvas, art: Option<pocket_ui::ui_art::Art>, head: &str, line: &str) -> i32 {
-        let top = NU_PAD + NU_PILL + 12;
+        let top = pocket_ui::kit::header_bottom(c.h) + 12;
         let (left, base) = (NU_PAD + NU_BTN_PAD, top + 60 + pocket_ui::type_scale::grow(37));
-        pocket_ui::kit::empty_state(c, &mut self.text, art, (left, c.w - 2 * left), top + 8, base, c.h - NU_PAD - NU_PILL - 16, head, line)
+        pocket_ui::kit::empty_state(c, &mut self.text, art, (left, c.w - 2 * left), top + 8, base, pocket_ui::kit::hint_bar_top(c.h) - 16, head, line)
     }
 
     fn paint_game_check_offer(&mut self, c: &mut Canvas, n: usize) {
@@ -265,13 +265,13 @@ impl App {
             self.nu_hints(c, &[("B", "Back"), ("X", "Check again")]);
             return;
         }
-        let top = NU_PAD + NU_PILL + 12;
+        let top = pocket_ui::kit::header_bottom(c.h) + 12;
         if report.all_good() {
             let ready = if report.total == 1 { "1 game ready".to_string() } else { format!("{} games ready", report.total) };
             // The moment: the mark, big words, nothing else. A tip is one quiet row under it.
             let left = NU_PAD + NU_BTN_PAD;
             let tips = !groups.is_empty();
-            let bottom = c.h - NU_PAD - NU_PILL - 16 - if tips { pocket_ui::kit::row() + 12 } else { 0 };
+            let bottom = pocket_ui::kit::hint_bar_top(c.h) - 16 - if tips { pocket_ui::kit::row() + 12 } else { 0 };
             let words = pocket_ui::type_scale::line(67, 18) + pocket_ui::type_scale::line(36, 12);
             let art = pocket_ui::ui_art::Art::Logo;
             let scale = pocket_ui::ui_art::empty_scale(c.h) * 2;
@@ -306,7 +306,7 @@ impl App {
         let items = page.items(g);
         let more = page.report.as_ref().and_then(|r| r.more.iter().find(|(m, _)| *m == g)).map_or(0, |(_, n)| *n);
         let rows: Vec<(String, String)> = items.iter().map(|f| (f.name.clone(), f.system.clone())).collect();
-        self.game_check_rows(c, NU_PAD + NU_PILL + 12, &rows, page.item_sel, true);
+        self.game_check_rows(c, pocket_ui::kit::header_bottom(c.h) + 12, &rows, page.item_sel, true);
         let line = match items.get(page.item_sel) {
             Some(_) if more > 0 && page.item_sel + 1 == items.len() => format!("And {more} more. Fix these first, then check again."),
             Some(f) => f.what.clone(),
@@ -321,9 +321,9 @@ impl App {
         let Some(f) = page.finding().cloned() else { return };
         self.sheet_header(c, &f.name);
         let (left, w) = (NU_PAD + NU_BTN_PAD, c.w - 2 * (NU_PAD + NU_BTN_PAD));
-        let bottom = c.h - NU_PAD - NU_PILL - 16;
+        let bottom = pocket_ui::kit::hint_bar_top(c.h) - 16;
         let step = pocket_ui::type_scale::line(NU_SMALL, 12);
-        let mut y = NU_PAD + NU_PILL + 12 + 36 + pocket_ui::type_scale::grow(NU_SMALL);
+        let mut y = pocket_ui::kit::header_bottom(c.h) + 12 + 36 + pocket_ui::type_scale::grow(NU_SMALL);
         for (s, colour) in [(f.what.as_str(), pal().text), (f.todo.as_str(), pal().quiet)] {
             for l in self.text.wrap_prose(Face::Body, NU_SMALL, s, w) {
                 if y + step > bottom {
@@ -351,7 +351,7 @@ impl App {
         let row = pocket_ui::kit::row();
         let font = pocket_ui::kit::ROW_FONT;
         let right = c.w - NU_PAD;
-        let room = c.h - NU_PAD - NU_PILL - 16 - top - if line { 2 * pocket_ui::type_scale::line(NU_SMALL, 12) } else { 0 };
+        let room = pocket_ui::kit::hint_bar_top(c.h) - 16 - top - if line { 2 * pocket_ui::type_scale::line(NU_SMALL, 12) } else { 0 };
         let visible = ((room / row).max(1) as usize).min(MAX_ROWS);
         let first = super::window_start(sel, visible, rows.len());
         if rows.len() > visible {

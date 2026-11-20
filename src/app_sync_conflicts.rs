@@ -21,7 +21,7 @@ use pocket_ui::sync_page::Event;
 use pocket_ui::text::Face;
 use pocket_ui::touch::Area;
 
-use super::{App, Item, UserEvent, CANCEL, CONFIRM, NU_BTN_PAD, NU_PAD, NU_PILL};
+use super::{App, Item, UserEvent, CANCEL, CONFIRM, NU_BTN_PAD, NU_PAD};
 
 /// The first look, once the start's own reading is done.
 const FIRST_LOOK: Duration = Duration::from_secs(20);
@@ -86,6 +86,33 @@ impl ConflictsUi {
     }
 }
 
+/// Where saves and their copies are here: the card's folders, on Android the player's saves (`conflicts::android`).
+fn device_layout() -> Layout {
+    #[cfg(target_os = "android")]
+    return conflicts::android(&pocket_ui::platform::android::data_dir());
+    #[cfg(not(target_os = "android"))]
+    Layout::device()
+}
+
+/// The folders to look through: the shares that are on, on Android the player's saves (only Pockets puts copies there).
+fn device_roots(prefs: &Prefs, layout: &Layout) -> Vec<conflicts::Root> {
+    if cfg!(target_os = "android") {
+        conflicts::android_roots(layout)
+    } else {
+        conflicts::roots(prefs, layout)
+    }
+}
+
+/// The backup folder as the page names it: the card's path, on Android below the app's own folder
+/// (`sync-backups/2026-11-19`, not `/data/user/0/…`: Android's hand test 19.11.2026).
+fn shown_folder(folder: &Path) -> String {
+    let base = device_layout().backup;
+    match (cfg!(target_os = "android"), folder.strip_prefix(base.parent().unwrap_or(&base))) {
+        (true, Ok(rel)) => rel.display().to_string(),
+        _ => folder.display().to_string(),
+    }
+}
+
 fn copies(e: &Entry) -> impl Iterator<Item = &PathBuf> {
     e.group.others.iter().map(|v| &v.path)
 }
@@ -101,7 +128,7 @@ fn on_card(e: &Entry, system: &str, path: &Path) -> bool {
 
 /// The watcher thread: looks when asked and every few minutes, never while a game runs, and reports a change.
 fn watch(rx: mpsc::Receiver<Msg>, data_dir: PathBuf, report: impl Fn(Vec<Group>)) {
-    let layout = Layout::device();
+    let layout = device_layout();
     let mut prefs = Prefs::load(&data_dir);
     let mut due = vec![Instant::now() + FIRST_LOOK];
     let (mut playing, mut was_on) = (false, false);
@@ -132,13 +159,23 @@ fn watch(rx: mpsc::Receiver<Msg>, data_dir: PathBuf, report: impl Fn(Vec<Group>)
         let on = prefs.enabled || ((asked.is_some() || was_on) && sync::running());
         was_on = on;
         let t = Instant::now();
-        let groups = if on { conflicts::find(&conflicts::roots(&prefs, &layout), &layout) } else { Vec::new() };
+        let groups = if on { conflicts::find(&device_roots(&prefs, &layout), &layout) } else { Vec::new() };
         if groups != last {
             println!("sync: {} saves with two versions (looked in {:?})", groups.len(), t.elapsed());
             last = groups.clone();
             report(groups);
         }
     }
+}
+
+/// The look's choices with Pocket-to-Pocket sync on: as if Syncthing shared the saves.
+fn with_pockets(prefs: &Prefs, pockets: bool) -> Prefs {
+    let mut p = prefs.clone();
+    if pockets {
+        p.enabled = true;
+        p.set_shared(pocket_ui::sync::Share::Saves, true);
+    }
+    p
 }
 
 impl App {
@@ -157,6 +194,10 @@ impl App {
 
     /// Look again (now, or after a game a little later too). Returns at once.
     pub(crate) fn sync_conflicts_look(&self, prefs: &Prefs, after_game: bool) {
+        // Pocket-to-Pocket sync puts its questions beside the saves in the same form: with it on, the saves are looked
+        // through too, Syncthing on or not (`app_pocket_sync.rs`).
+        let with_pockets = with_pockets(prefs, self.pocket_sync_on());
+        let prefs = &with_pockets;
         send(Msg::Playing(false));
         send(Msg::Look { prefs: prefs.clone(), after: Duration::ZERO });
         if after_game {
@@ -170,8 +211,10 @@ impl App {
     }
 
     /// The groups the search found, tied to the library's games.
-    fn conflict_entries(&self, groups: Vec<Group>) -> Vec<Entry> {
-        let layout = Layout::device();
+    fn conflict_entries(&mut self, groups: Vec<Group>) -> Vec<Entry> {
+        let layout = device_layout();
+        // Android: a save's copies are in the player's folder by the game's key (Pockets' layout knows the key).
+        let keyed = self.pocket_sync_key();
         let games: Vec<conflicts::Game> = self
             .systems
             .iter()
@@ -180,7 +223,10 @@ impl App {
         groups
             .into_iter()
             .map(|group| {
-                let owner = conflicts::owner(&group, &games, &layout);
+                let owner = match &keyed {
+                    Some(key) => conflicts::owner_by_key(&group, &games, &layout, key.as_ref()),
+                    None => conflicts::owner(&group, &games, &layout),
+                };
                 let title = match &owner {
                     Owner::Game(p) => self
                         .systems
@@ -289,8 +335,14 @@ impl App {
             page::Action::Keep { entry, pick } => {
                 let Some(group) = p.entries.get(entry).map(|e| e.group.clone()) else { return };
                 let proxy = self.proxy.clone();
+                // Pocket-to-Pocket sync: its record learns the choice (`Store::chose`), after looking at the saves
+                // first, so play before the choice counts as play and the choice itself not.
+                let pockets = self.pocket_sync_store();
                 std::thread::spawn(move || {
-                    let layout = Layout::device();
+                    if let Some(s) = &pockets {
+                        let _ = s.index();
+                    }
+                    let layout = device_layout();
                     let folder = conflicts::day_folder(&layout, pocket_ui::recents::now_secs());
                     // Our .stignore learns the backup folder before anything is moved into it.
                     sync::refresh_saves_ignore();
@@ -298,6 +350,11 @@ impl App {
                         println!("sync: kept version {pick} of {}: {:?}", group.original.display(), kept.moved);
                         folder
                     });
+                    if let (Some(s), true) = (&pockets, result.is_ok()) {
+                        if let Some(rel) = s.layout.rel_of(&group.original) {
+                            s.chose(&rel);
+                        }
+                    }
                     if let Err(e) = &result {
                         println!("sync: keeping a version of {}: {e}", group.original.display());
                     }
@@ -310,7 +367,7 @@ impl App {
     /// The choice was carried out (or not).
     pub(crate) fn conflict_kept(&mut self, original: PathBuf, result: Result<PathBuf, String>) {
         let done = result.is_ok();
-        let text = result.map(|folder| format!("Kept. The other version is in {}.", folder.display()));
+        let text = result.map(|folder| format!("Kept. The other version is in {}.", shown_folder(&folder)));
         let ui = &mut self.sync.conflicts;
         if done {
             ui.found.retain(|e| e.group.original != original);
@@ -361,7 +418,7 @@ impl App {
         let n_versions = p.entry().map_or(2, |e| e.group.versions().len());
         let title = if n_versions == 2 { "Two versions".to_string() } else { format!("{n_versions} versions") };
         self.text.draw(c, Face::Title, 50, left, pad + 58, pal().chalk, &title);
-        let top = pad + NU_PILL + 24;
+        let top = pocket_ui::kit::header_bottom(c.h) + 24;
         match (p.view, p.entry()) {
             (View::Versions(_), Some(e)) => {
                 self.paint_conflict_versions(c, &p, e, top, left, right);
@@ -445,7 +502,9 @@ impl App {
             }
         }
         y += 30;
-        let rows = page::version_rows(&e.group);
+        let names = self.pocket_sync_names();
+        let from = |p: &Path| pocket_ui::sync_conflicts::device_of(p).and_then(|d| names.iter().find(|(tag, _)| *tag == d).map(|(_, n)| n.clone()));
+        let rows = page::version_rows(&e.group, &from);
         let (row, x0) = (pocket_ui::type_scale::row(84, 37), NU_PAD);
         // The dates in a column after the widest name (and its "Newer"): a wider font or German needs more than 360.
         let newer_w = self.text.width(Face::Body, 24, "Newer") + 18;
@@ -469,10 +528,10 @@ impl App {
         }
         self.hits.list(p.sel, rows.len(), 0.0, row as f32);
         y += rows.len() as i32 * row + 40 + pocket_ui::type_scale::grow(26);
-        let folder = conflicts::day_folder(&Layout::device(), pocket_ui::recents::now_secs());
-        let explain = page::keep_text(&folder.display().to_string());
+        let folder = conflicts::day_folder(&device_layout(), pocket_ui::recents::now_secs());
+        let explain = page::keep_text(&shown_folder(&folder));
         // Above the hints; with larger text it may end with "…" (a failed keep below still shows).
-        let bottom = c.h - NU_PAD - NU_PILL - 16 - if matches!(&p.message, Some((_, true))) || p.busy { pocket_ui::type_scale::line(28, 8) + 22 } else { 0 };
+        let bottom = pocket_ui::kit::hint_bar_top(c.h) - 16 - if matches!(&p.message, Some((_, true))) || p.busy { pocket_ui::type_scale::line(28, 8) + 22 } else { 0 };
         y = self.text.paragraph(c, Face::Body, 26, (left, y), right - left, pocket_ui::type_scale::line(26, 8), bottom, pal().dust, &explain);
         y += 12;
         if p.busy {
@@ -573,5 +632,38 @@ fn demo_group(system: &str, game: &Path) -> Group {
         original,
         kind,
         previews: Vec::new(),
+    }
+}
+
+#[cfg(test)]
+mod file_source_tests {
+    use super::*;
+    #[test]
+    fn file_source_rule_sync_conflicts_seen() {
+        let d = tempfile::tempdir().unwrap(); let file = d.path().join(SEEN_FILE);
+        for (label, bytes) in crate::file_faults::faults(br#"{"seen":["/reader/game.sync-conflict.srm"]}"#) {
+            let _ = std::fs::remove_file(&file);
+            if let Some(bytes) = bytes { std::fs::write(&file, bytes).unwrap(); }
+            let state = ConflictsUi::load(d.path());
+            if label == "valid" { assert!(state.seen.contains(Path::new("/reader/game.sync-conflict.srm"))); }
+            if label == "missing" { assert!(state.seen.is_empty()); }
+        }
+    }
+}
+
+#[cfg(test)]
+mod pockets_tests {
+    use super::*;
+
+    // Found before shipping (18.11.2026): the look for saves with two versions ran only with Syncthing on, so a question
+    // put by Pocket-to-Pocket sync would never have reached the card.
+    #[test]
+    fn the_look_covers_the_saves_when_pocket_sync_is_on() {
+        let mut off = Prefs::default();
+        off.enabled = false;
+        off.set_shared(pocket_ui::sync::Share::Saves, false);
+        let p = with_pockets(&off, true);
+        assert!(p.enabled && p.shared(pocket_ui::sync::Share::Saves));
+        assert_eq!(with_pockets(&off, false), off, "Pockets off: Syncthing's choices as they are");
     }
 }

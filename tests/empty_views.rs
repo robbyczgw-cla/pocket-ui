@@ -507,7 +507,13 @@ fn development_build_explains_why_it_does_not_offer_a_release_as_newer() {
         }
     }
     if !pocket_ui::update::release_build() {
-        let words = card.screen("about", "1024x768");
-        assert!(words.contains("-dev (") && words.contains(option_env!("POCKETUI_COMMIT").unwrap_or("unknown")), "About identifies the dev build and commit: {words}");
+        // The commit's short form, whole (the full 40 characters ran into "…" on 4:3 panels, depending on the hash's
+        // letters: red on 18.11.2026 for c08cbe2e3…, green for others).
+        let commit = option_env!("POCKETUI_COMMIT").unwrap_or("unknown");
+        let short = commit.get(..9).unwrap_or(commit);
+        for size in ["640x480", "1024x768"] {
+            let words = card.screen("about", size);
+            assert!(words.contains(&format!("-dev ({short})")), "{size}: About identifies the dev build and commit, uncut: {words}");
+        }
     }
 }

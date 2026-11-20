@@ -289,6 +289,11 @@ in that document.
 pocket-core's own GLES context on the Brick's EGL (`src/brick_gles.rs`, [TRIMUI-BRICK.md](TRIMUI-BRICK.md) "3D cores"); frames are read back to
 the CPU picture. They link the Brick's own `libGLESv2.so.2` / `libEGL.so.1` (never shipped). Folders `Roms/n64`, `Roms/psp`, `Roms/dreamcast`
 (extensions as ROCKNIX uses: n64 `.z64 .n64 .v64 .zip .7z`, psp `.iso .cso .pbp .chd`, dreamcast `.cdi .gdi .chd .m3u .cue`).
+**PSP system files:** PPSSPP reads its atlas, fonts, VFPU tables and translations from `Roms/bios/PPSSPP` (pocket-core's system dir
+`/storage/roms/bios`). The card carries them: the 178 files of PPSSPP's `assets/` at the core's commit (the set the Android package has, without
+the web debugger), made by `scripts/brick-ppsspp-data.py` from the source tree (`brick-build-cores.sh`) or from the core's source archive in an
+older cores folder. They travel in `app/bios-data/PPSSPP` (so an update brings them), and `app/start.sh` seeds them into `Roms/bios` once per version.
+The PSP memory stick (game saves, `PSP/SAVEDATA`) is `Roms/psp/PSP`, as on ROCKNIX: pocket-core's save folder is the game's folder.
 **Dreamcast BIOS:** the owner puts `dc_boot.bin` and `dc_flash.bin` (from their own console) in `Roms/bios/dc/` (in pocket-core's `/storage/roms/bios/dc`);
 the card never contains them. Flycast also starts without them on its built-in replacement, with lower compatibility. The speed on the GE8300 is
 not measured; only the device can say.

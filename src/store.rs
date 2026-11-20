@@ -66,6 +66,8 @@ pub fn core_path(core: &str) -> PathBuf {
         installed
     } else if let Some(p) = extra() {
         p
+    } else if core == "dsperate" && crate::ds::bundled_path().is_file() {
+        crate::ds::bundled_path()
     } else {
         Path::new("/usr/lib/libretro").join(file)
     }

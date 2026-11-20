@@ -59,7 +59,7 @@ drops out mid-game pauses the game; it gets its player back when it returns. Up 
 ### Your other apps
 
 **Apps** at the top of the Games page (R2 on a controller) pulls out the drawer: the phone's other apps, such as the
-Play Store, Settings and your Android games, as quiet cards by name. Tap one or press A to open it; when you come back,
+Play Store, Settings and your Android games, as quiet cards by name. If an icon is missing or damaged, its field says **App**. Tap one or press A to open it; when you come back,
 the drawer is where you left it, and B or Back goes to the game you were on. To put an Android game on your shelves,
 hold its card (or press Y): it says **On the shelf** and stands on its own **Android** shelf beside your consoles, in a
 case with its name. Hold it again (Y) to take it off. Android marks some apps as games; their cards say **Looks like a
@@ -115,10 +115,20 @@ Cozy extras have their switches in Settings. Printed discs print the cover on an
 light by time of day and decorations apply to Shelf and Cabinet. The pause menu uses a slim row of save blocks.
 
 
-First start has seven short setup steps: welcome, language, game folders, look,
-covers and pictures, controls, and ready. Continue advances, Back returns, and Skip leaves a step
-for later. If you close the app or return from the folder picker, setup resumes where you left it.
-Settings → First start opens the seven-step guide again. You can finish without games or a network connection.
+First start has seven short setup steps by touch: welcome, language, game folders, look,
+covers and pictures, controls, and ready. With a controller in your hands it has four: the language
+on the welcome page, your games, the look, and ready (covers come on their own on unmetered Wi-Fi;
+Settings has the switch). Continue advances, Back returns, and Skip leaves a step for later. If you
+close the app or return from the folder picker, setup resumes where you left it. On a phone the first
+start stands upright, with large buttons. Settings → First start opens the guide again. You can finish
+without games or a network connection.
+
+The games step looks for games that are already on the device, in the folders other apps use
+(ROMs, Emulation/roms, RetroArch/roms and the like, on internal storage and every card): choosing one
+opens Android's folder picker right there. It names the emulator apps it found for systems pocket-ui
+doesn't play itself (one switch takes them for Plays with), links to the official page of an app you
+don't have yet (nothing is downloaded by pocket-ui), and says which BIOS a system you have still
+needs, with its folder.
 
 Choose English, German, Spanish, Brazilian Portuguese, French or Italian, one of the four looks (Shelf, Easy, Split, Cabinet; Minimal or Cards from an
 earlier build open as Split), Cozy or Quick animations, and dark or light pages.
@@ -276,7 +286,8 @@ Settings → **Save backup** has three rows.
 
 - **Export saves** writes every game's saves and save states (the moment you quit at, your slots and their pictures) into
   one file, `pocket-ui-saves-<date>.zip`. Android asks where it goes: any folder, a card or a cloud folder. The row
-  shows how many games have something to keep.
+  shows how many games have something to keep. If a listed save disappears during export, the export fails and removes
+  the incomplete backup.
 - **Import saves** asks for such a file and brings its saves back. A game without saves on this phone gets the backup's.
   When some games already have saves here, the page asks first: **Keep this phone's saves** only adds the games that have
   none, **Use the backup's saves** replaces those games' saves with the backup's. Nothing is replaced without that answer.
@@ -302,6 +313,7 @@ every game that has none yet, and says so. A game that already has saves on the 
 are the same are left alone, and when the phone and the copy differ (for example you played a bit before choosing the
 folder), nothing is replaced, the page names how many games differ, and both versions stay as they are. A newer save never
 loses to an older one: a file is only written over another when it is different and was written later.
+If reading a saved copy fails or stops partway through, the phone's existing save stays intact.
 
 pocket-ui needs permission to write into your game folder for this. The folder choice asks for it; if you chose your folder
 with an older version (read only), or Android refuses, Settings → Save backup → **Saved copies** says **Off** and A

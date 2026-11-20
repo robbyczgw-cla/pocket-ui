@@ -16,7 +16,7 @@ use pocket_ui::palette::*;
 use pocket_ui::text::Face;
 use pocket_ui::touch::Area;
 
-use super::{App, SettingsPage, UserEvent, CANCEL, CONFIRM, NU_BTN_PAD, NU_PAD, NU_PILL, NU_SMALL};
+use super::{App, SettingsPage, UserEvent, CANCEL, CONFIRM, NU_BTN_PAD, NU_PAD, NU_SMALL};
 
 /// The name in the Settings list, to come back to.
 pub(crate) const SETTINGS_NAME: &str = "Android games";
@@ -165,13 +165,13 @@ impl App {
         let (left, right) = (pad + NU_BTN_PAD, c.w - pad);
         let width = right - NU_BTN_PAD - left;
         // The line over the list: how games get there, or why there is no list.
-        let mut y = pad + NU_PILL + 12 + pocket_ui::type_scale::line(NU_SMALL, 12);
+        let mut y = pocket_ui::kit::header_bottom(c.h) + 12 + pocket_ui::type_scale::line(NU_SMALL, 12);
         for line in self.text.wrap_prose(Face::Body, NU_SMALL, page.line(&marked), width).into_iter().take(3) {
             self.text.draw(c, Face::Body, NU_SMALL, left, y, pal().chalk, &line);
             y += pocket_ui::type_scale::line(NU_SMALL, 12);
         }
         let top = y + 4;
-        let bottom = c.h - pad - NU_PILL - 16;
+        let bottom = pocket_ui::kit::hint_bar_top(c.h) - 16;
         let visible = ((bottom - top) / row).max(1) as usize;
         let first = super::window_start(page.sel, visible, page.len());
         let apps = page.apps.as_deref().unwrap_or_default();

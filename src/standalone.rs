@@ -121,7 +121,11 @@ fn rocknix_setting<'a>(cfg: &'a str, key: &str, system: &str, game: &str) -> Opt
 
 /// Whether ROCKNIX's `hotkey_enable_button` makes Guide Dolphin's hotkey button for this game (Select otherwise).
 fn hotkey_is_guide(system: &str, rom: &Path) -> bool {
-    let cfg = std::fs::read_to_string(SYSTEM_CFG).unwrap_or_default();
+    hotkey_is_guide_at(Path::new(SYSTEM_CFG), system, rom)
+}
+
+fn hotkey_is_guide_at(path: &Path, system: &str, rom: &Path) -> bool {
+    let cfg = std::fs::read_to_string(path).unwrap_or_default();
     let game = rom.file_name().and_then(|n| n.to_str()).unwrap_or_default();
     rocknix_setting(&cfg, "hotkey_enable_button", system, game) == Some("mode")
 }
@@ -461,7 +465,11 @@ pub fn recover_performance() {
 /// The Performance choice of the game: its own, its system's, or Games: performance (Auto is Max here,
 /// `emu_settings::default_performance`).
 fn chosen_performance(system: &str, rom: &Path) -> &'static str {
-    let cfg = std::fs::read_to_string(SYSTEM_CFG).unwrap_or_default();
+    chosen_performance_at(Path::new(SYSTEM_CFG),system,rom)
+}
+
+fn chosen_performance_at(path: &Path, system: &str, rom: &Path) -> &'static str {
+    let cfg = std::fs::read_to_string(path).unwrap_or_default();
     crate::emu_settings::game_performance(system, &cfg, rom.file_name().and_then(|f| f.to_str()).unwrap_or_default())
 }
 
@@ -1501,7 +1509,7 @@ mod defaults {
         };
         if let Some((name, system_kvs, ini)) = tuned {
             let marker = data_dir.join(name);
-            if std::fs::read_to_string(&marker).ok().and_then(|v| v.trim().parse::<u32>().ok()) != Some(VERSION) {
+            if defaults_needed(&marker) {
                 let ok = (set_system_defaults(system_kvs)) && (ini.is_empty() || edit_ini(&pcsx2_ini(), ini));
                 if ok {
                     let _ = crate::fsutil::write_atomic(&marker, format!("{VERSION}\n").as_bytes());
@@ -1534,6 +1542,10 @@ mod defaults {
             }
             Emu::Azahar => azahar_config(),
         }
+    }
+
+    fn defaults_needed(marker: &Path) -> bool {
+        std::fs::read_to_string(marker).ok().and_then(|v|v.trim().parse::<u32>().ok()) != Some(VERSION)
     }
 
     /// Where the `[Hotkeys]` lines of ARMSX2's INI wait while a Kids Mode's game plays.
@@ -1624,10 +1636,14 @@ mod defaults {
     /// Azahar's qt-config.ini (created from ROCKNIX's like start_azahar.sh does, so it is there to edit on
     /// the first start): no "close Azahar?" question on Quit, no save-state warning box on the first load.
     fn azahar_config() {
-        let ini = format!("{AZAHAR_DIR}/qt-config.ini");
-        if !Path::new(&ini).exists() && std::fs::create_dir_all(AZAHAR_DIR).is_ok() {
-            for entry in std::fs::read_dir(AZAHAR_STOCK).into_iter().flatten().flatten() {
-                let to = Path::new(AZAHAR_DIR).join(entry.file_name());
+        azahar_config_in(Path::new(AZAHAR_DIR),Path::new(AZAHAR_STOCK))
+    }
+
+    fn azahar_config_in(dir: &Path, stock: &Path) {
+        let ini = dir.join("qt-config.ini");
+        if !ini.exists() && std::fs::create_dir_all(dir).is_ok() {
+            for entry in std::fs::read_dir(stock).into_iter().flatten().flatten() {
+                let to = dir.join(entry.file_name());
                 if entry.file_type().is_ok_and(|t| t.is_file()) && !to.exists() {
                     let _ = std::fs::copy(entry.path(), to);
                 }
@@ -1638,17 +1654,21 @@ mod defaults {
             .iter()
             .fold(old.clone(), |t, (k, v)| super::azahar::qt_set(&t, "UI", k, v));
         if new != old {
-            write_atomic(&ini, &new);
+            write_atomic(&ini.to_string_lossy(), &new);
         }
     }
 
     /// Adds each `key=value` to ROCKNIX's system.cfg unless the key is set already (the player chose it).
     /// Under ROCKNIX's lock (`system_cfg`), so a runemu.sh writing at the same moment loses nothing.
     fn set_system_defaults(kvs: &[(&str, &str)]) -> bool {
-        if !Path::new(super::SYSTEM_CFG).exists() {
+        set_system_defaults_at(Path::new(super::SYSTEM_CFG),kvs)
+    }
+
+    fn set_system_defaults_at(path: &Path, kvs: &[(&str, &str)]) -> bool {
+        if !path.exists() {
             return false;
         }
-        crate::system_cfg::SystemCfg::at(Path::new(super::SYSTEM_CFG)).edit(|old| Some(with_system_defaults(old, kvs))).is_ok()
+        crate::system_cfg::SystemCfg::at(path).edit(|old| Some(with_system_defaults(old, kvs))).is_ok()
     }
 
     pub fn with_system_defaults(cfg: &str, kvs: &[(&str, &str)]) -> String {
@@ -1764,6 +1784,50 @@ mod defaults {
 
     fn write_atomic(path: &str, text: &str) -> bool {
         crate::fsutil::write_atomic(Path::new(path), text.as_bytes()).is_ok()
+    }
+
+    #[cfg(test)]
+    mod file_rule_tests {
+        use super::*;
+        #[test]
+        fn file_source_rule_standalone_configuration() {
+            let d=crate::testutil::TestDir::new("standalone-defaults-file-rule");let ini=d.join("PCSX2.ini");
+            let seed=b"[EmuCore]\nEnablePINE = false\n[Hotkeys]\nOpenPauseMenu = SDL-0/Back & SDL-0/ButtonX\n";
+            for (label,bytes) in crate::file_faults::faults(seed) {
+                let _=std::fs::remove_file(&ini);if let Some(bytes)=bytes {std::fs::write(&ini,bytes).unwrap();}
+                let ok=edit_ini(&ini.to_string_lossy(),ARMSX2_ENFORCED);
+                if label=="valid" {assert!(ok);assert!(std::fs::read_to_string(&ini).unwrap().contains("EnablePINE = true"));}
+                armsx2_hotkeys(&ini.to_string_lossy(),&d,true);
+            }
+            let keep=d.join(ARMSX2_HOTKEYS_KEPT);
+            for (label,bytes) in crate::file_faults::faults(b"OpenPauseMenu = SDL-0/Back & SDL-0/ButtonX\n") {
+                std::fs::write(&ini,b"[Hotkeys]\n").unwrap();let _=std::fs::remove_file(&keep);if let Some(bytes)=bytes {std::fs::write(&keep,bytes).unwrap();}
+                armsx2_hotkeys(&ini.to_string_lossy(),&d,false);
+                if label=="valid" {assert!(std::fs::read_to_string(&ini).unwrap().contains("OpenPauseMenu"));}
+            }
+            let marker=d.join("defaults-ps2");
+            for (label,bytes) in crate::file_faults::faults(format!("{VERSION}\n").as_bytes()) {
+                let _=std::fs::remove_file(&marker);if let Some(bytes)=bytes {std::fs::write(&marker,bytes).unwrap();}
+                if label=="valid" {assert!(!defaults_needed(&marker));}else {let _=defaults_needed(&marker);}
+            }
+            let cfg=d.join("system.cfg");
+            for (label,bytes) in crate::file_faults::faults(b"reader=keep\n") {
+                let _=std::fs::remove_file(&cfg);if let Some(bytes)=bytes {std::fs::write(&cfg,bytes).unwrap();}
+                let ok=set_system_defaults_at(&cfg,PS2_SYSTEM);if label=="valid" {assert!(ok);let got=std::fs::read_to_string(&cfg).unwrap();assert!(got.contains("reader=keep") && got.contains("ps2.internal_resolution=2"));}
+            }
+            let azahar=d.join("azahar");std::fs::create_dir_all(&azahar).unwrap();let qt=azahar.join("qt-config.ini");
+            for (label,bytes) in crate::file_faults::faults(b"[UI]\nconfirmClose=true\nreader=keep\n") {
+                let _=std::fs::remove_file(&qt);if let Some(bytes)=bytes {std::fs::write(&qt,bytes).unwrap();}
+                azahar_config_in(&azahar,&d.join("absent-stock"));if label=="valid" {let got=std::fs::read_to_string(&qt).unwrap();assert!(got.contains("confirmClose=false") && got.contains("reader=keep"));}
+            }
+            let profile=d.join("Rule.ini");
+            for (label,bytes) in crate::file_faults::faults(b"[Profile]\nDevice = SDL/0/Reader\nButtons/Hotkey = `Select`\nRumble/Motor = Strong\n") {
+                let _=std::fs::remove_file(&profile);if let Some(bytes)=bytes {std::fs::write(&profile,bytes).unwrap();}
+                edit_files(&d.to_string_lossy(),|name|name=="Rule.ini",|t|with_hotkey_for(t,"Back",true));
+                if label=="valid" {assert!(std::fs::read_to_string(&profile).unwrap().contains("Back"));}
+                edit_files(&d.to_string_lossy(),|name|name=="Rule.ini",with_quiet_wiimote);
+            }
+        }
     }
 }
 
@@ -2059,6 +2123,28 @@ mod tests {
     use super::defaults::ini_set;
     use super::*;
     use crate::testutil::TestDir;
+
+    #[test]
+    fn file_source_rule_standalone_game_headers() {
+        let d=TestDir::new("standalone-game-file-rule");let cfg=d.join("system.cfg");
+        for (label,bytes) in crate::file_faults::faults(b"gamecube.hotkey_enable_button=mode\ngamecube.pocket_performance=battery\n") {
+            let _=std::fs::remove_file(&cfg);if let Some(bytes)=bytes {std::fs::write(&cfg,bytes).unwrap();}
+            let guide=hotkey_is_guide_at(&cfg,"gamecube",Path::new("Rule.iso"));let performance=chosen_performance_at(&cfg,"gamecube",Path::new("Rule.iso"));assert!(!performance.is_empty());if label=="valid" {assert!(guide);assert_eq!(performance,"battery");}
+        }
+        let playlist=d.join("Rule.m3u");
+        for (label,bytes) in crate::file_faults::faults(b"# Reader disc list\nRule.iso\n") {
+            let _=std::fs::remove_file(&playlist);if let Some(bytes)=bytes {std::fs::write(&playlist,bytes).unwrap();}
+            let base=dolphin::state_base(&playlist);if label=="valid" {assert_eq!(base.as_deref(),Some("Rule.iso"));}
+        }
+        let rom=d.join("Rule.3ds");let mut ncch=vec![0;512];ncch[0x100..0x104].copy_from_slice(b"NCCH");ncch[0x118..0x120].copy_from_slice(&7u64.to_le_bytes());
+        let mut ncsd=vec![0;512];ncsd[0x100..0x104].copy_from_slice(b"NCSD");ncsd[0x120..0x124].copy_from_slice(&1u32.to_le_bytes());ncsd.extend(&ncch);
+        for seed in [ncch,ncsd] {
+            for (label,bytes) in crate::file_faults::faults(&seed) {
+                let _=std::fs::remove_file(&rom);if let Some(bytes)=bytes {std::fs::write(&rom,bytes).unwrap();}
+                let id=azahar::title_id(&rom);if label=="valid" {assert_eq!(id,Some(7));}
+            }
+        }
+    }
 
     #[test]
     fn a_skipped_resume_is_used_up_by_the_start_it_was_for_even_when_that_start_is_no_standalone_one() {

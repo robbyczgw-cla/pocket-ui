@@ -167,4 +167,23 @@ mod tests {
         assert!(DirectGame::new(file, &root, "Game.gba").is_err());
         assert_eq!(fs::read_dir(&root).unwrap().count(), 0);
     }
+    #[test]
+    fn file_source_rule_document_identity_cache() {
+        let root=crate::testutil::TestDir::new("document-cache-file-rule");
+        let source=root.join("game.nds"); let data=b"reader rule original document";
+        fs::write(&source,data).unwrap();
+        let mut file=File::open(&source).unwrap();
+        let expected=source_stamp(&mut file,&root).unwrap();
+        let seed=fs::read(root.join("source.json")).unwrap();
+        for (label,bytes) in crate::file_faults::faults(&seed) {
+            let cache=root.join("source.json"); let _=fs::remove_file(&cache);
+            if let Some(bytes)=bytes { fs::write(&cache,bytes).unwrap(); }
+            let stamp=source_stamp(&mut file,&root).unwrap();
+            assert_eq!(stamp.crc,crc32fast::hash(data),"{label}: damaged identity must not change a document's checksum");
+            assert_eq!(stamp.samples,expected.samples,"{label}");
+            assert!(stamp.file==expected.file,"{label}");
+            assert_eq!(fs::read(&source).unwrap(),data);
+        }
+    }
+
 }

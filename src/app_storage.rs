@@ -30,7 +30,7 @@ use pocket_ui::text::Face;
 use pocket_ui::type_scale;
 use pocket_ui::touch::Area;
 
-use super::{system_short, App, Item, SettingsPage, UserEvent, CANCEL, CONFIRM, NU_BTN_PAD, NU_PAD, NU_PILL, NU_SMALL};
+use super::{system_short, App, Item, SettingsPage, UserEvent, CANCEL, CONFIRM, NU_BTN_PAD, NU_PAD, NU_SMALL};
 
 /// The name in the Settings list, to come back to.
 pub(crate) const SETTINGS_NAME: &str = "Storage";
@@ -471,8 +471,8 @@ impl App {
             // The numbers below are from an earlier visit; the new ones are being counted.
             self.text.draw(c, Face::Body, NU_SMALL, pad + NU_BTN_PAD + title_w + 24, pad + 58, pal().quiet, "Updating…");
         }
-        let (top, right) = (pad + NU_PILL + 12, c.w - pad);
-        let list_bottom = c.h - pad - NU_PILL - 16 - DETAILS_H;
+        let (top, right) = (pocket_ui::kit::header_bottom(c.h) + 12, c.w - pad);
+        let list_bottom = pocket_ui::kit::hint_bar_top(c.h) - 16 - DETAILS_H;
         let visible = (((list_bottom - top) / row) as usize).max(3);
         // (name, value, value in the alert colour)
         let rows: Vec<(String, String, bool)> = match page.view {

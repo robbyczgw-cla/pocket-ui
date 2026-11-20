@@ -301,4 +301,22 @@ mod tests {
         std::fs::write(&unusual, gpsp_state()).unwrap();
         assert_eq!(scan(&d).get(&("gba".into(), stem.into())), Some(&"gpsp"), "the ROM name cannot turn a raw state into a compressed one");
     }
+    #[test]
+    fn file_source_rule_gba_state_headers() {
+        let d = crate::testutil::TestDir::new("gba-state-file-rule");
+        let compressed = d.join("Game.pstate.auto.z");
+        crate::state_file::write(&compressed, &gpsp_state()).unwrap();
+        let packed = std::fs::read(&compressed).unwrap();
+        for (is_packed, seed) in [(false, gpsp_state()), (true, packed)] {
+            let file = if is_packed { d.join("mutant.pstate.auto.z") } else { d.join("mutant") };
+            for (label, bytes) in crate::file_faults::faults(&seed) {
+                let _ = std::fs::remove_file(&file);
+                if let Some(bytes) = bytes { std::fs::write(&file, bytes).unwrap(); }
+                let core = file_owner(&file, is_packed);
+                if label == "valid" { assert_eq!(core, Some("gpsp")); }
+                assert!(core.is_none() || matches!(core, Some("gpsp" | "mgba")), "{label}: unnamed state owner");
+            }
+        }
+    }
+
 }

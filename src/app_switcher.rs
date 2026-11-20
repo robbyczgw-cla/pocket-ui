@@ -89,6 +89,7 @@ impl App {
             Screen::Home => None,
             Screen::Games(s) => Some(self.systems[s].fullname.clone()),
             Screen::Favorites => Some("Favourites".to_string()),
+            Screen::Crate => Some("Crate".to_string()),
             screen => self.curator_screen_title(screen),
         }
     }
@@ -154,6 +155,7 @@ impl App {
             self.favorites.contains(path),
             Some(cover),
         )
+        .with_core(&self.core_for_path(system, path))
         .with_moment(self.is_frozen_path(path))
         .with_frame(&lastframe::frame_path(&self.data_dir, system, path))
     }
@@ -172,7 +174,7 @@ impl App {
             return;
         }
         // `frame`: the menu's picture, given by `game_exited` (Cozy's way back shows it too, `begin_eject`).
-        let screen = if quit_from_menu && lastframe::needs_frame(pocket_ui::switcher::resume_preview_written(&run.system, &run.path), started) {
+        let screen = if quit_from_menu && lastframe::needs_frame(pocket_ui::switcher::resume_preview_written_for_core(&run.system, &run.path, &run.core), started) {
             frame
         } else {
             None
@@ -390,7 +392,7 @@ impl App {
                 pocket_ui::nav_probe::focus(c, (*x, *y, *w, *h));
             }
         }
-        self.hits.list(sw.sel, sw.entries.len(), switcher::STEP / 2.0, 0.0);
+        self.hits.list(sw.sel, sw.entries.len(), switcher::step(c.w) / 2.0, 0.0);
         self.switcher = Some(sw);
         self.status_pill(c);
         if !switching {

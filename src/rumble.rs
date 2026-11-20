@@ -179,6 +179,13 @@ pub(crate) fn core_rumble(port: usize, effect: c_uint, strength: u16) {
     if port >= PORTS {
         return;
     }
+    #[cfg(target_os = "android")]
+    {
+        static FIRST: AtomicBool = AtomicBool::new(true);
+        if strength > 0 && FIRST.swap(false, Ordering::Relaxed) {
+            dev::log(&format!("first request: port {port} effect {effect} strength {strength}, setting {:?}", self::strength()));
+        }
+    }
     match effect {
         0 => STRONG[port].store(strength, Ordering::Relaxed),
         _ => WEAK[port].store(strength, Ordering::Relaxed),
@@ -222,6 +229,8 @@ pub unsafe fn environment(cmd: c_uint, data: *mut c_void) -> Option<bool> {
     if !data.is_null() {
         (*(data as *mut RumbleInterface)).set_rumble_state = set_rumble_state;
     }
+    #[cfg(target_os = "android")]
+    dev::log("interface handed to the core");
     Some(true)
 }
 
@@ -635,7 +644,61 @@ mod dev {
     }
 }
 
-#[cfg(not(target_os = "linux"))]
+/// Android's player: the vibration goes through the Activity (`PlayerActivity.rumble`): a controller's own vibrator (its
+/// `InputDevice` id as the target), the handheld's (a built-in pad without one of its own, and `motor`). A rumble is a
+/// one-shot of the lease's length that the worker renews, as on Linux, so a player that ends leaves nothing running.
+#[cfg(target_os = "android")]
+mod dev {
+    use super::*;
+    pub struct Haptics {
+        pub kind: Kind,
+        pub name: String,
+        pub path: String,
+    }
+    /// A line in logcat (`player rumble …`): the device found, a refusal, the first rumble, so a game that should shake and
+    /// doesn't can be traced on the handheld.
+    pub fn log(line: &str) {
+        crate::platform::audio_backend::log_line(4, &format!("player rumble {line}"));
+    }
+    fn call(target: &str, magnitude: u16, ms: u16) -> Result<(), String> {
+        let said = crate::platform::android::strings("rumble", &[target, &magnitude.to_string(), &ms.to_string()])?;
+        if said.is_empty() { Ok(()) } else { Err(said) }
+    }
+    impl Haptics {
+        pub fn open() -> Option<Haptics> {
+            Self::open_at("motor")
+        }
+        pub fn open_at(target: &str) -> Option<Haptics> {
+            match call(target, 0, 0) {
+                Ok(()) => {
+                    log(&format!("{target}: a vibrator"));
+                    Some(Haptics { kind: Kind::Rumble, name: "Android vibrator".into(), path: target.into() })
+                }
+                Err(e) => {
+                    log(&format!("{target}: {e}"));
+                    None
+                }
+            }
+        }
+        pub fn open_excluding(_: &[String]) -> Option<Haptics> {
+            Self::open()
+        }
+        pub fn play(&mut self, magnitude: u16, ms: u16) -> bool {
+            match call(&self.path, magnitude, ms) {
+                Ok(()) => true,
+                Err(e) => {
+                    log(&format!("{}: {e}", self.path));
+                    false
+                }
+            }
+        }
+        pub fn stop(&mut self) {
+            let _ = call(&self.path, 0, 0);
+        }
+    }
+}
+
+#[cfg(not(any(target_os = "linux", target_os = "android")))]
 mod dev {
     use super::*;
     pub struct Haptics {

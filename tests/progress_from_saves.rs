@@ -147,21 +147,21 @@ fn the_row_is_on_the_page_in_every_language_fits_large_text_and_is_kept() {
     let c = context("page");
     for (lang, label) in [("en", "Progress from saves"), ("de", "Fortschritt aus Spielständen"), ("es", "Progreso de tus partidas"), ("pt", "Progresso dos saves"), ("fr", "Progrès des saves"), ("it", "Progressi dai save")] {
         for (size, text) in [("640x480", r#", "text_size": "large""#), ("640x480", ""), ("1240x1080", "")] {
-            // Down to the row (it is the tenth of the page), selected.
-            let s = c.shot("shelf", "cozy:9", lang, size, text, "");
+            // Down to the row (it is the fourteenth of the page since the TV and the handheld rows, 19.11.2026), selected.
+            let s = c.shot("shelf", "cozy:13", lang, size, text, "");
             assert!(s.visible.iter().any(|l| l.starts_with(&label[..label.len().min(14)])), "{lang} {size} {text}: the row {label:?}: {:?}", s.visible);
             assert!(s.faults.is_empty(), "{lang} {size} {text}: {:?}", s.faults);
         }
     }
     // The row's line says what it does, in German too.
-    let s = c.shot("shelf", "cozy:9", "de", "640x480", r#", "text_size": "large""#, "");
+    let s = c.shot("shelf", "cozy:13", "de", "640x480", r#", "text_size": "large""#, "");
     assert!(has(&s.visible, "spoilerfrei"), "the German line: {:?}", s.visible);
     // A on it is saved at once; the next start has it off, and the box's back says nothing.
-    let s = c.shot("shelf", "cozy:9::a", "en", "640x480", "", "");
+    let s = c.shot("shelf", "cozy:13::a", "en", "640x480", "", "");
     let saved: serde_json::Value = serde_json::from_slice(&std::fs::read(s.data.join("settings.json")).unwrap()).unwrap();
     assert_eq!(saved["extras"], serde_json::json!({"progress_from_saves": false}), "saved like the other extras");
     // A again switches it on and the start writes nothing for it.
-    let s = c.shot("shelf", "cozy:9::aa", "en", "640x480", "", "");
+    let s = c.shot("shelf", "cozy:13::aa", "en", "640x480", "", "");
     let saved: serde_json::Value = serde_json::from_slice(&std::fs::read(s.data.join("settings.json")).unwrap()).unwrap();
     assert!(saved["extras"].is_null(), "back to the start writes nothing: {saved}");
     // The setting a start reads: off in settings.json, the box's back has no line; the default has it.

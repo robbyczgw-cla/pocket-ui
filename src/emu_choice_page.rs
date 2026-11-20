@@ -272,6 +272,7 @@ impl EmuChoicePage {
     pub fn runner_label(&self, r: &Runner) -> String {
         if let Some(phone) = &self.subject.phone {
             return match phone.labels.iter().find(|(package, _)| *package == r.emulator) {
+                _ if r.is_pocket_core() && self.subject.system=="nds" => format!("pocket-ui · {}",emu_choice::core_label(&r.core)),
                 _ if r.is_pocket_core() => "pocket-ui player".to_string(),
                 Some((_, name)) => name.clone(),
                 None => emu_choice::emulator_label(&r.emulator),

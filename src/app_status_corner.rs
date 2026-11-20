@@ -21,13 +21,19 @@ use pocket_ui::text::Face;
 
 use crate::{App, UserEvent};
 
-/// The top line's baseline on Home and the pages over it.
+/// The top line's baseline on Home and the pages over it, at 960 lines and more.
 pub(crate) const TOP_LINE: i32 = 72;
 
-/// The lowest pixel the top line's type reaches: its baseline and the descent of the size it is painted at now (Large,
-/// the Brick's floors). What stands under the top line starts below this (`app_big_shelf`'s case).
-pub(crate) fn top_line_bottom() -> i32 {
-    TOP_LINE + pocket_ui::type_scale::px(status_corner::PX) as i32 * 3 / 10
+/// The top line's baseline on a screen `h` lines high: `TOP_LINE`, in 960's share of a shorter screen (the Brick's 768,
+/// `kit::chrome`).
+pub(crate) fn top_line(h: i32) -> i32 {
+    pocket_ui::kit::chrome(TOP_LINE, h)
+}
+
+/// The lowest pixel the top line's type reaches on a screen `h` lines high: its baseline and the descent of the size it
+/// is painted at now (Large, the Brick's floors). What stands under the top line starts below this (`app_big_shelf`'s case).
+pub(crate) fn top_line_bottom(h: i32) -> i32 {
+    top_line(h) + pocket_ui::type_scale::px(status_corner::PX) as i32 * 3 / 10
 }
 
 impl App {
@@ -43,11 +49,13 @@ impl App {
     /// Returns the corner's left edge, for a note to stand left of it.
     pub(crate) fn paint_top_line(&mut self, c: &mut Canvas, place: Option<&str>, colour: u32) -> i32 {
         let corner = self.status_corner();
-        let left = corner.paint(c, &mut self.text, c.w - MARGIN, TOP_LINE, colour);
+        let left = corner.paint(c, &mut self.text, c.w - MARGIN, top_line(c.h), colour);
+        // For tests/brick_proportions.rs: the top line, from the top edge to its type's lowest pixel.
+        pocket_ui::shares::mark("header", 0, 0, c.w, top_line_bottom(c.h));
         if let Some(place) = place {
             let room = status_corner::room_left_of(left, c.w - MARGIN) - MARGIN;
             let place = self.text.fit(Face::Body, status_corner::PX, place, room);
-            self.text.draw(c, Face::Body, status_corner::PX, MARGIN, TOP_LINE, colour, &place);
+            self.text.draw(c, Face::Body, status_corner::PX, MARGIN, top_line(c.h), colour, &place);
         }
         left
     }

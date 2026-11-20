@@ -138,6 +138,12 @@ impl App {
     /// True when the moment is left out: the game starts fresh ("Where was I?" shows nothing then, `where_was_i`).
     pub(crate) fn frozen_at_launch(&mut self, path: &Path, hosted: bool, at: AtLaunch, wait: bool, env: &mut Vec<(&'static str, String)>) -> bool {
         self.frozen_wait = None;
+        if hosted {
+            if let Some(mark)=self.recents.list.iter().find(|r|r.path==path&&r.system=="nds")
+                .and_then(|r|r.frozen.as_ref()).filter(|m|m.core=="melondsds") {
+                if let Ok(json)=serde_json::to_string(mark) {env.push((pocket_ui::ds::LEGACY_MARK_ENV,json));}
+            }
+        }
         let (note, fresh) = match at {
             AtLaunch::Normal => {
                 // pocket-core is there in a moment; a big emulator takes as long as it takes, and says that it is on it.

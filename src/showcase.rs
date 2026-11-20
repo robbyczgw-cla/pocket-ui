@@ -573,6 +573,33 @@ pub fn headless(args: &[String]) -> i32 {
 mod tests {
     use super::*;
 
+    #[test]
+    fn file_source_rule_showcase_frames() {
+        let d = crate::testutil::TestDir::new("showcase-file-rule");
+        let path = d.join("frame");
+        let mut writer = Writer::create(&path).unwrap();
+        writer.write(&Pic::new(3, 2, 0xff123456)).unwrap();
+        let live = std::fs::read(&path).unwrap();
+        drop(writer);
+        let out = d.join("handover");
+        write_hand(&out, b"state", &crate::image::Image { w:3, h:2, px:vec![0x123456;6] }).unwrap();
+        let hand = std::fs::read(hand_frame(&out)).unwrap();
+        for (is_hand, seed) in [(false, live), (true, hand)] {
+            for (label, bytes) in crate::file_faults::faults(&seed) {
+                let _ = std::fs::remove_file(&path);
+                if let Some(bytes) = bytes { std::fs::write(&path, bytes).unwrap(); }
+                if is_hand {
+                    let got = read_hand_frame(&path);
+                    if label == "valid" { let pic=got.unwrap(); assert_eq!((pic.w,pic.h,pic.px.len()),(3,2,6)); }
+                } else {
+                    let mut reader=Reader::new(&path); let got=reader.take();
+                    if label == "valid" { let pic=got.unwrap();assert_eq!((pic.w,pic.h,pic.px.len()),(3,2,6)); }
+                    assert!(reader.take().is_none(), "a live frame is not repeated");
+                }
+            }
+        }
+    }
+
     /// The TV plays the game only when the player switched it on (Settings → Look → Cozy extras): at the start no
     /// player is ever started (red before: `enabled()` was true unless `POCKETUI_SHOWCASE=0`).
     #[test]

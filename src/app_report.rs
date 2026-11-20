@@ -229,7 +229,7 @@ impl App {
             &[("A", "OK"), ("B", "Back")]
         };
         // The page's own hints go: only the sheet's are left to read and to touch.
-        c.rect(0, c.h - NU_PAD - NU_PILL - 12, c.w, NU_PAD + NU_PILL + 12, pal().void);
+        c.rect(0, pocket_ui::kit::hint_bar_top(c.h) - 12, c.w, c.h - pocket_ui::kit::hint_bar_top(c.h) + 12, pal().void);
         self.nu_hints(c, hints);
     }
 

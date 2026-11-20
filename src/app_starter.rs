@@ -20,7 +20,7 @@ use pocket_ui::touch::Area;
 
 enum Marker { None, Text(String) }
 fn row_h() -> i32 { pocket_ui::type_scale::row(66, 36) }
-use crate::{App, Screen, SettingsPage, UserEvent, CANCEL, CONFIRM, EMPTY_ART_TOP, NU_BTN_PAD, NU_PAD, NU_PILL, NU_SMALL};
+use crate::{App, Screen, SettingsPage, UserEvent, CANCEL, CONFIRM, EMPTY_ART_TOP, NU_BTN_PAD, NU_PAD, NU_SMALL};
 
 /// What Home says (here and as the note) when the whole system list can't be read.
 pub(crate) const SYSTEM_LIST_LINE: &str = "Your system list can't be read, so pocket-ui uses its built-in list. Settings › Games › Game check says why.";
@@ -431,16 +431,7 @@ impl App {
         let max_w = c.w - 2 * MARGIN;
         let line28 = pocket_ui::type_scale::line(28, 10);
         let mut y = 350 + 38 * self.text.wrap_prose(Face::Body, 28, "Get a few free games to start playing right away.", max_w).len() as i32;
-        let own = if pocket_ui::card_health::image_card() {
-            pocket_ui::card_health::IMAGE_CARD_NOTE
-        } else if pocket_ui::card_health::games_drive() {
-            "Or copy your own: put the card in your computer and copy them to the GAMES drive."
-        } else if pocket_ui::device::no_wifi_chip() {
-            // No phone or file sharing without Wi-Fi: Add games shows the second card (or the computer) instead.
-            "Or copy your own: Settings › Games › Add games shows how."
-        } else {
-            "Or copy your own: Settings › Games › Add games shows the ways (phone, file sharing)."
-        };
+        let own = own_games_line(pocket_ui::device::android_profile());
         y += line28 * self.text.wrap_prose(Face::Body, 28, own, max_w).len() as i32;
         if self.library_ui.unread.is_some_and(|n| n > 0) {
             y += line28 * self.text.wrap(Face::Body, 28, "Some game files in your ROM folders can't be read. Settings › Games › Game check says why.", max_w).len() as i32;
@@ -485,16 +476,7 @@ impl App {
             self.text.draw(c, Face::Body, 28, MARGIN, y, pal().dust, line);
             y += 38;
         }
-        let own = if pocket_ui::card_health::image_card() {
-            pocket_ui::card_health::IMAGE_CARD_NOTE
-        } else if pocket_ui::card_health::games_drive() {
-            "Or copy your own: put the card in your computer and copy them to the GAMES drive."
-        } else if pocket_ui::device::no_wifi_chip() {
-            // No phone or file sharing without Wi-Fi: Add games shows the second card (or the computer) instead.
-            "Or copy your own: Settings › Games › Add games shows how."
-        } else {
-            "Or copy your own: Settings › Games › Add games shows the ways (phone, file sharing)."
-        };
+        let own = own_games_line(pocket_ui::device::android_profile());
         for line in self.text.wrap_prose(Face::Body, 28, own, max_w) {
             self.text.draw(c, Face::Body, 28, MARGIN, y, pal().dust, &line);
             y += pocket_ui::type_scale::line(28, 10);
@@ -604,10 +586,10 @@ impl App {
     pub(crate) fn paint_starter(&mut self, c: &mut Canvas) {
         c.clear(pal().void);
         self.sheet_header(c, SETTINGS_NAME);
-        let top = NU_PAD + NU_PILL + 12;
+        let top = pocket_ui::kit::header_bottom(c.h) + 12;
         let rows = self.starter.rows();
         let sel = self.starter.sel.min(rows.len().saturating_sub(1));
-        let visible = ((c.h - top - NU_PILL - 190) / row_h()).max(1) as usize;
+        let visible = ((pocket_ui::kit::hint_bar_top(c.h) - top - 160) / row_h()).max(1) as usize;
         let first = crate::window_start(sel, visible, rows.len());
         let missing = self.starter.missing();
         let (busy_id, busy_pct) = match &self.starter.busy {
@@ -640,7 +622,7 @@ impl App {
 
         // Under the list: progress, what the last job said, or what the selected game is.
         let lines: Vec<(String, u32)> = if let Some(text) = self.starter.busy_text() {
-            let (w, by) = (c.w - 2 * NU_PAD - 2 * NU_BTN_PAD, c.h - NU_PAD - NU_PILL - 110);
+            let (w, by) = (c.w - 2 * NU_PAD - 2 * NU_BTN_PAD, pocket_ui::kit::hint_bar_top(c.h) - 110);
             let b = self.starter.busy.as_ref();
             let frac = b.map_or(0.0, |b| if b.total > 0 { (b.done as f32 / b.total as f32).clamp(0.0, 1.0) } else { 0.0 });
             pocket_ui::retro::pill(c, NU_PAD + NU_BTN_PAD, by, w, 12, 6, pal().keycap);
@@ -682,7 +664,7 @@ impl App {
                 all.push((l, *colour));
             }
         }
-        let mut y = c.h - NU_PAD - NU_PILL - 30 - 40 * (all.len() as i32 - 1).max(0);
+        let mut y = pocket_ui::kit::hint_bar_top(c.h) - 30 - 40 * (all.len() as i32 - 1).max(0);
         for (line, colour) in &all {
             self.text.draw(c, Face::Body, NU_SMALL, NU_PAD + NU_BTN_PAD, y, *colour, line);
             y += 40;
@@ -747,9 +729,49 @@ impl App {
     }
 }
 
+/// Home's empty shelf, under the starter pack: how to bring your own games. Android's Add games has no phone page and no
+/// file sharing, only the ROMs folders (review 19.11. #1), so it never promises those there.
+pub(crate) fn own_games_line(android: bool) -> &'static str {
+    if android {
+        ANDROID_OWN
+    } else if pocket_ui::card_health::image_card() {
+        pocket_ui::card_health::IMAGE_CARD_NOTE
+    } else if pocket_ui::card_health::games_drive() {
+        "Or copy your own: put the card in your computer and copy them to the GAMES drive."
+    } else if pocket_ui::device::no_wifi_chip() {
+        // No phone or file sharing without Wi-Fi: Add games shows the second card (or the computer) instead.
+        "Or copy your own: Settings › Games › Add games shows how."
+    } else {
+        "Or copy your own: Settings › Games › Add games shows the ways (phone, file sharing)."
+    }
+}
+
+/// Android's way in: the ROMs folder, from a computer over USB or with a file manager.
+pub(crate) const ANDROID_OWN: &str = "Or copy your own into the ROMs folder, one folder per system (over USB or with a file manager). Settings › Games › Add games lists the folders.";
+
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Review 19.11. #1: Android's empty shelf promised the phone page and file sharing, which its Add games doesn't have.
+    #[test]
+    fn androids_empty_shelf_promises_only_what_android_has() {
+        use pocket_ui::i18n::{tr_in, Lang};
+        let line = own_games_line(true);
+        assert!(line.contains("ROMs") && line.contains("Add games"), "{line}");
+        for lang in Lang::ALL {
+            let said = tr_in(lang, line);
+            assert!(lang == Lang::En || said != line, "{lang:?} has the Android line");
+            // The two ways the Linux line names in brackets ("phone, file sharing"), in this language's own words.
+            let linux = tr_in(lang, "Or copy your own: Settings › Games › Add games shows the ways (phone, file sharing).");
+            let ways = linux.split_once('(').and_then(|(_, w)| w.split_once(')')).map(|(w, _)| w.to_string()).unwrap();
+            for way in ways.split(',').map(|w| w.trim().to_lowercase()) {
+                assert!(!said.to_lowercase().contains(&way), "{lang:?} promises {way}: {said}");
+            }
+        }
+        assert!(own_games_line(false).contains("Add games"), "Linux keeps its line");
+    }
 
     #[test]
     fn the_page_offers_all_then_each_game_of_a_system_the_shelf_has() {
@@ -776,3 +798,4 @@ mod tests {
         assert_eq!(ui.busy_text().unwrap(), "Getting Tobu Tobu Girl, 25%");
     }
 }
+

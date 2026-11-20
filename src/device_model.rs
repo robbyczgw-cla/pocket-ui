@@ -170,3 +170,10 @@ pub const NEEDS_NETWORK: &str = "Needs a network, and this handheld has no Wi-Fi
 pub fn wifi_or<'a>(wifi: &'a str, _none: &'a str) -> &'a str {
     wifi
 }
+
+/// The Mobile view's player (Android, this module as `device`): Android cools itself, there is no fan to set
+/// (`device::no_fan` on the Linux side, review 19.11. #2).
+#[cfg(all(target_os = "android", not(feature = "handheld")))]
+pub fn no_fan() -> bool {
+    true
+}

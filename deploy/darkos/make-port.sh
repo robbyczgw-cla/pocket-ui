@@ -19,12 +19,20 @@ cp "$REPO/deploy/brick/boot.sh" "$D/start.sh"
 cp "$HERE/start.sh" "$P/start.sh"
 cp "$HERE/systems.py" "$HERE/host-launch.py" "$P/port-data/"
 for f in pocket-ui pocket-core pocket-fb; do cp "$BINS/$f" "$P/bin/$f"; done
+if [ -n "${DS_CORE_DIR:-}" ]; then
+  python3 -I "$REPO/scripts/dsperate-files.py" "$DS_CORE_DIR" "$P/bin/cores"
+elif [ -f "$BINS/cores/dsperate_libretro.so" ]; then
+  cp -R "$BINS/cores" "$P/bin/cores"
+fi
+if LC_ALL=C grep -a -q dsperate "$BINS/pocket-ui"; then
+  python3 -I "$REPO/scripts/dsperate-files.py" --check "$P/bin/cores"
+fi
 cp "$HERE"/hwroot/usr/bin/* "$P/port-data/hwroot/usr/bin/"
 # The screenshot stand-in asks pocket-fb for the picture (the same on the Brick's card).
 sed 's|/../../../bin/pocket-fb|/../../../../bin/pocket-fb|' "$REPO/deploy/brick/hwroot/usr/bin/grim" >"$P/port-data/hwroot/usr/bin/grim"
 cp "$REPO/LICENSE" "$P/LICENSE.txt"
 sh "$REPO/scripts/licence-files.sh" "$P/port-data/licences/pocket-ui"
-chmod +x "$OUT/ports/pocket-ui.sh" "$D/start.sh" "$P/start.sh" "$P"/bin/* "$P"/port-data/hwroot/usr/bin/*
+chmod +x "$OUT/ports/pocket-ui.sh" "$D/start.sh" "$P/start.sh" "$P"/bin/pocket-* "$P"/port-data/hwroot/usr/bin/*
 echo "$VERSION" >"$P/VERSION"
 # The app version is supplied by the release build; never try an ARM64 binary on the build host.
 printf '%s\n' "${POCKETUI_VERSION:-0.4.0-darkos-$VERSION}" >"$P/RELEASE"

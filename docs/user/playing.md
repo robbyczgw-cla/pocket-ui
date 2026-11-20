@@ -152,7 +152,7 @@ come Curator's shelves, then one shelf per system. A starts the game: its cartri
 
 In Shelf and Cabinet, A starts the emulator while the case opens and its cartridge or disc goes into the console,
 with a quiet click and glow. **Quick** shows the game as soon as it is ready. Any button skips the animation.
-**Animations: Cozy** (Settings → Look → Game start animation; the default in these looks) takes about a second.
+**Game start animation: Cozy** (Settings → Look → Game start animation; the default in these looks) takes about a second.
 pocket-core waits for it: the shelf fades to black, then the game opens from a bright TV line over a third of a
 second, including handhelds and Continue. With Remind me where I was switched on, its card keeps its saved picture while you read.
 With menu sounds on, you hear the case, insertion and TV's soft thunk. Other looks skip this animation.
@@ -238,7 +238,7 @@ seconds, and in most cases the game starts again right away with RetroArch. See
 
 ### After Quit
 
-With **Animations: Cozy** and **Motion: Full**, the way back mirrors putting the game in: the picture switches off,
+With **Game start animation: Cozy** and **Motion: Full**, the way back mirrors putting the game in: the picture switches off,
 the cartridge or disc comes out, and its case closes and returns to the shelf. A home console's picture collapses to
 a line and a dot when **Old-TV switch-on** is enabled; a handheld's display simply goes dark. The case stays a little
 open when Continue is available. This also works in Easy and Kids Mode when Cozy is selected.

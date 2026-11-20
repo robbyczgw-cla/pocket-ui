@@ -17,6 +17,7 @@ ALIASES = {'ppsspp': 'psp', 'lynx': 'atarilynx', 'gc': 'gamecube',
            'turbografx16': 'tg16', 'turbografxcd': 'tg16cd',
            'snes-hacks': 'snesh', 'msdos': 'pc'}
 CORES = {
+    'nds': ('dsperate', 'melondsds'),
     'gb': ('gambatte',), 'gbc': ('gambatte',), 'gba': ('gpsp', 'mgba'),
     'nes': ('fceumm', 'nestopia'), 'fds': ('fceumm', 'nestopia'),
     'snes': ('snes9x',), 'megadrive': ('genesis_plus_gx', 'picodrive'),

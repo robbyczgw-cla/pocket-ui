@@ -7,10 +7,11 @@
 //!   the switcher over it, make sounds), not asleep, not when switched off. Not muted either ([`audible`]),
 //!   which the mixer thread asks the system itself, right before it opens the output.
 //! - The sounds are sample files (`assets/ui-sounds/`, [`synth`] decodes them): warm, tactile hardware sounds
-//!   made with ElevenLabs sound effects; the sounds of the cases and what goes into the console ([`Sound::CaseOpen`]
-//!   on) are ElevenLabs sound effects too, cut and levelled by `scripts/ui-sounds/prep_media_sounds.py`
-//!   (`media-sounds.tsv`: prompt and cut of each). The mixer thread decodes all of them
-//!   once when it starts.
+//!   made with ElevenLabs sound effects; the cases' sounds ([`Sound::CaseOpen`], [`Sound::BoxOpen`]) and a disc's
+//!   ([`Sound::DiscIn`], [`Sound::DiscDrop`]) are ElevenLabs sound effects too (`media-sounds.tsv`: prompt and cut of
+//!   each). The hardware itself is heard in real recordings (CC0, `assets/ui-sounds/SOURCES.md`): a cartridge, card or
+//!   lid going in and coming out, the CRT switching on and off, a power switch ([`is_ritual_sound`]). Both kinds are cut
+//!   and levelled by `scripts/ui-sounds/prep_media_sounds.py`. The mixer thread decodes all of them once when it starts.
 //! - Retro style (`retro::on()`, one atomic load when a sound starts): Nav, Confirm, Back, Menu and Error play synthesised
 //!   chiptune blips instead of the files ([`blip`]: pulse wave, a pitch step or sweep, fast envelope, light low-pass; nothing
 //!   sampled). The mixer thread makes them once beside the files, levelled to 1.5-3 dB under the file each replaces
@@ -82,12 +83,47 @@ pub enum Sound {
     /// A sealed game's first start (`shrink_wrap`): the shop's plastic film ripped off its case. A CC0 recording
     /// (Freesound 431217 by buzzatsea, `assets/ui-sounds/SOURCES.md`), not generated.
     WrapTear,
+    // The ritual's mechanics (19.11.): real recordings of the hardware, CC0 (`assets/ui-sounds/SOURCES.md`), cut and
+    // levelled like the rest. One place for the sounds of the start and the way back, whoever plays them.
+    /// The Cozy launch on a handheld: a Game Boy-style cartridge slides into the back and seats.
+    HandheldCartIn,
+    /// The way back: a cartridge pulled up out of a console's slot.
+    CartOut,
+    /// The way back: a handheld's cartridge pulled out of its back.
+    HandheldCartOut,
+    /// The way back: a game card pushed and popped out of its slot.
+    CardOut,
+    /// The way back: a top-loader's lid springs open (its eject button).
+    LidOpen,
+    /// The PSP's UMD door swinging open.
+    UmdOpen,
+    /// The PSP's UMD door clicking shut.
+    UmdShut,
+    /// An old TV's static on an empty channel, quiet, before the picture comes (`crt_on`).
+    TvStatic,
+    /// An old TV switching off (`eject::tv_off`).
+    TvOff,
+    /// A console's or handheld's power switch slid on.
+    SwitchOn,
+    /// The same switch slid off.
+    SwitchOff,
 }
 
 /// The sounds of the cases and what goes into the console, which Settings → Screen & sound → Case sounds
 /// switches apart from the menu sounds (`cozy_extras`).
 pub fn is_case_sound(sound: Sound) -> bool {
     matches!(sound, Sound::Insert | Sound::CaseOpen | Sound::BoxOpen | Sound::CartIn | Sound::DiscIn | Sound::DiscDrop | Sound::DiscShut | Sound::CardIn | Sound::CrtOn | Sound::WrapTear)
+        || is_ritual_sound(sound)
+}
+
+/// The ritual's mechanics: the way back's and the power switches' sounds and the old TV's static and switching off.
+/// Case sounds like the rest (Settings → Screen & sound → Case sounds turns them off together).
+pub fn is_ritual_sound(sound: Sound) -> bool {
+    matches!(
+        sound,
+        Sound::HandheldCartIn | Sound::CartOut | Sound::HandheldCartOut | Sound::CardOut | Sound::LidOpen | Sound::UmdOpen | Sound::UmdShut
+            | Sound::TvStatic | Sound::TvOff | Sound::SwitchOn | Sound::SwitchOff
+    )
 }
 
 /// How much quieter than the other UI sounds the Quick launch's click plays, in dB.
@@ -106,10 +142,23 @@ pub fn opening(m: crate::media::Medium) -> Sound {
 pub fn going_in(m: crate::media::Medium) -> Sound {
     use crate::media::Game as G;
     match m.game() {
-        G::Snes | G::SnesUs | G::N64 | G::Nes | G::Gb | G::Gbc | G::Gba | G::Cart | G::MegaDrive | G::MasterSystem | G::GameGear | G::HuCard
-        | G::NeoGeoPocket | G::WonderSwan | G::Lynx => Sound::CartIn,
+        G::Snes | G::SnesUs | G::N64 | G::Nes | G::Cart | G::MegaDrive | G::MasterSystem | G::HuCard | G::NeoGeo => Sound::CartIn,
+        G::Gb | G::Gbc | G::Gba | G::GameGear | G::NeoGeoPocket | G::WonderSwan | G::Lynx => Sound::HandheldCartIn,
         G::Disc | G::MiniDisc | G::Umd => Sound::DiscIn,
         G::Card | G::Card3ds | G::Memory => Sound::CardIn,
+    }
+}
+
+/// The sound of the game in the case `m` coming back out of its console on the way back: a cartridge pulled, a card
+/// popped out; a disc lifts off its spindle without a sound of its own (its lid's opening has one, [`Sound::LidOpen`]).
+pub fn coming_out(m: crate::media::Medium) -> Option<Sound> {
+    use crate::media::Game as G;
+    match m.game() {
+        G::Snes | G::SnesUs | G::N64 | G::Nes | G::Cart | G::MegaDrive | G::MasterSystem | G::HuCard | G::NeoGeo => Some(Sound::CartOut),
+        G::Gb | G::Gbc | G::Gba | G::GameGear | G::NeoGeoPocket | G::WonderSwan | G::Lynx => Some(Sound::HandheldCartOut),
+        G::Card | G::Card3ds | G::Memory => Some(Sound::CardOut),
+        G::Umd => Some(Sound::UmdOpen),
+        G::Disc | G::MiniDisc => None,
     }
 }
 
@@ -117,12 +166,22 @@ pub fn going_in(m: crate::media::Medium) -> Sound {
 /// clicks (the file's loudest moment). The launch queues it that much before the animation's moment.
 pub fn hit_at(sound: Sound) -> Duration {
     Duration::from_millis(match sound {
-        Sound::CartIn => 604,
+        Sound::CartIn => 401,
+        Sound::HandheldCartIn => 553,
         Sound::DiscIn | Sound::DiscDrop => 34,
-        Sound::DiscShut => 14,
-        Sound::CardIn => 33,
+        Sound::DiscShut => 390,
+        Sound::CardIn => 59,
         Sound::Insert => 30,
         Sound::WrapTear => 203,
+        Sound::CartOut => 171,
+        Sound::HandheldCartOut => 204,
+        Sound::CardOut => 349,
+        Sound::LidOpen => 301,
+        Sound::UmdOpen => 141,
+        Sound::UmdShut => 150,
+        Sound::TvOff => 163,
+        Sound::SwitchOn => 35,
+        Sound::SwitchOff => 27,
         _ => 0,
     })
 }
@@ -298,7 +357,8 @@ pub fn rate() -> u32 {
 #[cfg(test)]
 const RATE: u32 = WAV_RATE;
 
-/// The sample files, mono 16-bit 48 kHz WAV (`assets/ui-sounds/`, made with ElevenLabs sound effects, docs/LICENCES.md).
+/// The sample files, mono 16-bit 48 kHz WAV (`assets/ui-sounds/`, made with ElevenLabs sound effects or recorded from real
+/// hardware, `SOURCES.md` there and docs/LICENCES.md).
 /// The menu ones are trimmed, faded in and out, and normalised to a peak of -1.5 dBFS (the nav tick -3 dBFS); the media
 /// sounds are levelled to the same loudness (`prep_media_sounds.py`: -24.5 to -29 LUFS at their loudest, true peak at
 /// most -1.5 dBTP). So the
@@ -323,6 +383,17 @@ fn wav(sound: Sound) -> &'static [u8] {
         Sound::CardIn => include_bytes!("../assets/ui-sounds/card-in.wav"),
         Sound::CrtOn => include_bytes!("../assets/ui-sounds/crt-on.wav"),
         Sound::WrapTear => include_bytes!("../assets/ui-sounds/wrap-tear.wav"),
+        Sound::HandheldCartIn => include_bytes!("../assets/ui-sounds/hh-cart-in.wav"),
+        Sound::CartOut => include_bytes!("../assets/ui-sounds/cart-out.wav"),
+        Sound::HandheldCartOut => include_bytes!("../assets/ui-sounds/hh-cart-out.wav"),
+        Sound::CardOut => include_bytes!("../assets/ui-sounds/card-out.wav"),
+        Sound::LidOpen => include_bytes!("../assets/ui-sounds/lid-open.wav"),
+        Sound::UmdOpen => include_bytes!("../assets/ui-sounds/umd-open.wav"),
+        Sound::UmdShut => include_bytes!("../assets/ui-sounds/umd-shut.wav"),
+        Sound::TvStatic => include_bytes!("../assets/ui-sounds/tv-static.wav"),
+        Sound::TvOff => include_bytes!("../assets/ui-sounds/tv-off.wav"),
+        Sound::SwitchOn => include_bytes!("../assets/ui-sounds/switch-on.wav"),
+        Sound::SwitchOff => include_bytes!("../assets/ui-sounds/switch-off.wav"),
     }
 }
 
@@ -350,7 +421,7 @@ pub fn synth_at(sound: Sound, rate: u32) -> Vec<i16> {
 
 // ---- playing ----------------------------------------------------------------------------------------------
 
-const ALL: [Sound; 18] = [
+const ALL: [Sound; 29] = [
     Sound::Nav,
     Sound::Confirm,
     Sound::Back,
@@ -369,6 +440,17 @@ const ALL: [Sound; 18] = [
     Sound::CardIn,
     Sound::CrtOn,
     Sound::WrapTear,
+    Sound::HandheldCartIn,
+    Sound::CartOut,
+    Sound::HandheldCartOut,
+    Sound::CardOut,
+    Sound::LidOpen,
+    Sound::UmdOpen,
+    Sound::UmdShut,
+    Sound::TvStatic,
+    Sound::TvOff,
+    Sound::SwitchOn,
+    Sound::SwitchOff,
 ];
 /// The sounds the Retro style swaps for blips while `retro::on()`: the menu's own, in this order in the bank after [`ALL`].
 const RETRO_SOUNDS: [Sound; 5] = [Sound::Nav, Sound::Confirm, Sound::Back, Sound::Menu, Sound::Error];
@@ -1970,7 +2052,13 @@ mod tests {
             let ms = pcm.len() as u32 * 1000 / RATE;
             // A disc spinning up and a CRT coming on take longer than a click; still under a second.
             // The media sounds (a slide before the click, a disc spinning up) take longer than a menu tick.
-            let longest = if matches!(s, Sound::CaseOpen | Sound::BoxOpen | Sound::CartIn | Sound::DiscIn | Sound::DiscShut | Sound::CardIn | Sound::CrtOn | Sound::WrapTear) { 1200 } else { 450 };
+            let longest = if matches!(s, Sound::CaseOpen | Sound::BoxOpen | Sound::CartIn | Sound::DiscIn | Sound::DiscShut | Sound::CardIn | Sound::CrtOn | Sound::WrapTear)
+                || is_ritual_sound(s)
+            {
+                1200
+            } else {
+                450
+            };
             assert!(ms > 10 && ms <= longest, "{s:?}: {ms} ms");
             // No click: the files fade in over 2 ms and out over up to 30 ms, from and to exactly zero.
             let edge = RATE as usize / 1000;
@@ -1980,7 +2068,12 @@ mod tests {
             }
             let peak = pcm.iter().map(|v| v.unsigned_abs()).max().unwrap();
             // `DiscIn`'s second part keeps its level: the clunk under the disc's hit.
-            let least = if s == Sound::DiscShut { 6000 } else { 16000 };
+            // The TV's static is meant to sit well under everything else (a hiss before the picture, not an event).
+            let least = match s {
+                Sound::DiscShut => 6000,
+                Sound::TvStatic => 2000,
+                _ => 16000,
+            };
             assert!(peak > least && peak <= 28500, "{s:?}: peak {peak} (-1 dBFS is 29204)");
         }
     }

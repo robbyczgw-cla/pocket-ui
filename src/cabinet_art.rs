@@ -1669,6 +1669,73 @@ fn shade_for(facing: f32, shade: u32) -> u32 {
     ((0.5 + 0.5 * facing) * shade as f32) as u32
 }
 
+/// One column of a [`face`]: its rows (r0..r1), the picture's column, where its top is, the step down the picture and
+/// how much of the column the face covers (edge columns only partly).
+struct FaceCol {
+    r0: i32,
+    r1: i32,
+    tx: i32,
+    top: f32,
+    step: f32,
+    edge: f32,
+}
+
+/// The design pixel of `face` at design row `row` of column `k` over `bg` (`bg` itself where nothing is painted).
+#[inline(always)]
+fn face_px(k: &FaceCol, row: i32, bg: u32, tex: &Pic, shade: u32) -> u32 {
+    if row < k.r0 || row >= k.r1 {
+        return bg;
+    }
+    let ty = (((row as f32 + 0.5 - k.top) * k.step) as i32).clamp(0, tex.h - 1);
+    let s = tex.px[(ty * tex.w + k.tx) as usize];
+    let alpha = s >> 24;
+    if alpha == 0 {
+        return bg;
+    }
+    let alpha = (alpha as f32 * k.edge) as u32;
+    if alpha >= 255 {
+        shaded(s, shade)
+    } else {
+        mix(bg, shaded(s, shade), alpha)
+    }
+}
+
+/// [`cells_over`] for a [`face`] (n = 2): the same four calls of [`face_px`] per screen pixel and the same mean, with
+/// each screen column's two face columns looked up once instead of once per design pixel. The turning case of the
+/// Shelf look went through `cells_over` at about 70 ns a design pixel on the H700 (44 % of a held D-pad's frame,
+/// PERF-FEEL.md); bit for bit the same picture (`face_cells_is_cells_over`).
+#[allow(clippy::too_many_arguments)]
+fn face_cells(c: &mut Canvas, x0: i32, x1: i32, y0: i32, y1: i32, cols: &[FaceCol], tex: &Pic, shade: u32) {
+    let c0 = x0;
+    let (x0, x1, y0, y1) = (x0.max(0), x1.min(c.w), y0.max(0), y1.min(c.h));
+    if x0 >= x1 || y0 >= y1 {
+        return;
+    }
+    let stride = c.stride();
+    let rows = (c.pixels().len() / stride.max(1)) as i32;
+    let (_, sr0, _, fy) = c.cell(0, y0);
+    let (_, sr1, _, _) = c.cell(0, y1 - 1);
+    let (sc0, sc1) = ((x0 / 2) as usize, (((x1 - 1) / 2 + 1) as usize).min(stride));
+    let col = |x: i32| &cols[(x - c0) as usize];
+    let px = c.pixels_mut();
+    for sr in sr0.max(0)..(sr1 + 1).min(rows) {
+        let top = y0 - fy as i32 + 2 * (sr - sr0);
+        let (in0, in1) = (top >= y0, top + 1 < y1);
+        let line = &mut px[sr as usize * stride..][..stride];
+        for (sc, d) in (sc0..sc1).zip(line[sc0..sc1].iter_mut()) {
+            let x = sc as i32 * 2;
+            let (l, r) = (x >= x0, x + 1 < x1);
+            let bg = *d;
+            let (kl, kr) = (l.then(|| col(x)), r.then(|| col(x + 1)));
+            let a = match kl { Some(k) if in0 => face_px(k, top, bg, tex, shade), _ => bg };
+            let b = match kr { Some(k) if in0 => face_px(k, top, bg, tex, shade), _ => bg };
+            let cc = match kl { Some(k) if in1 => face_px(k, top + 1, bg, tex, shade), _ => bg };
+            let dd = match kr { Some(k) if in1 => face_px(k, top + 1, bg, tex, shade), _ => bg };
+            *d = avg4(a, b, cc, dd);
+        }
+    }
+}
+
 /// One face from edge `a` to edge `b`, each (screen x, size factor); the picture runs left to right along it.
 #[allow(clippy::too_many_arguments)]
 fn face(c: &mut Canvas, tex: &Pic, a: (f32, f32), b: (f32, f32), cy: f32, h: f32, shade: u32, clip: (i32, i32), covered: &mut (i32, i32, i32, i32)) {
@@ -1680,17 +1747,7 @@ fn face(c: &mut Canvas, tex: &Pic, a: (f32, f32), b: (f32, f32), cy: f32, h: f32
     if c0 >= c1 {
         return;
     }
-    // Each column once: its rows (r0..r1), the picture's column, where its top is, the step down the picture and how
-    // much of the column the face covers (edge columns only partly).
-    struct Col {
-        r0: i32,
-        r1: i32,
-        tx: i32,
-        top: f32,
-        step: f32,
-        edge: f32,
-    }
-    let cols: Vec<Col> = (c0..c1)
+    let cols: Vec<FaceCol> = (c0..c1)
         .map(|col| {
             let t = ((col as f32 + 0.5 - a.0) / (b.0 - a.0)).clamp(0.0, 1.0);
             // Perspective-correct position across the face.
@@ -1707,7 +1764,7 @@ fn face(c: &mut Canvas, tex: &Pic, a: (f32, f32), b: (f32, f32), cy: f32, h: f32
             } else {
                 1.0
             };
-            Col { r0, r1, tx, top, step: tex.h as f32 / ch, edge: edge.clamp(0.0, 1.0) }
+            FaceCol { r0, r1, tx, top, step: tex.h as f32 / ch, edge: edge.clamp(0.0, 1.0) }
         })
         .collect();
     let (mut lo, mut hi) = (i32::MAX, i32::MIN);
@@ -1724,27 +1781,9 @@ fn face(c: &mut Canvas, tex: &Pic, a: (f32, f32), b: (f32, f32), cy: f32, h: f32
     if lo >= hi {
         return;
     }
-    let paint = |col: i32, row: i32, bg: u32| {
-        let k = &cols[(col - c0) as usize];
-        if row < k.r0 || row >= k.r1 {
-            return bg;
-        }
-        let ty = (((row as f32 + 0.5 - k.top) * k.step) as i32).clamp(0, tex.h - 1);
-        let s = tex.px[(ty * tex.w + k.tx) as usize];
-        let alpha = s >> 24;
-        if alpha == 0 {
-            return bg;
-        }
-        let alpha = (alpha as f32 * k.edge) as u32;
-        if alpha >= 255 {
-            shaded(s, shade)
-        } else {
-            mix(bg, shaded(s, shade), alpha)
-        }
-    };
     if c.n() != 1 {
-        // Painted natively: the four design pixels of each screen pixel as below, averaged.
-        return cells_over(c, c0, c1, lo, hi, paint);
+        // Painted natively: the four design pixels of each screen pixel, averaged (`cells_over`'s picture bit for bit).
+        return face_cells(c, c0, c1, lo, hi, &cols, tex, shade);
     }
     // Row by row: column by column every pixel was 4 KB from the last on the Brick's 1024x768, and the A53 paid a cache miss
     // for each (a turning case took 12.7 of a Shelf frame's 22 ms, BRICK-60FPS.md). Each pixel is the one `paint` gives, with
@@ -2081,6 +2120,97 @@ mod tests {
             let cols: std::collections::BTreeSet<usize> = old.iter().zip(&new).enumerate().filter(|(_, (a, b))| a != b).map(|(i, _)| i % 48).collect();
             assert!(cols.len() <= 1, "draw_turning{at}: columns {cols:?} differ from the old picture, only the seam may");
         }
+    }
+
+    /// `face` at n = 2 the way it was painted before `face_cells`: `cells_over` asking `face_px` for each design pixel.
+    /// Whether it painted anything.
+    #[allow(clippy::too_many_arguments)]
+    fn reference_face(c: &mut Canvas, tex: &Pic, a: (f32, f32), b: (f32, f32), cy: f32, h: f32, shade: u32, clip: (i32, i32)) -> bool {
+        let (x0, x1) = (a.0.floor() as i32, b.0.ceil() as i32);
+        let (c0, c1) = (x0.max(0), x1.min(c.w));
+        if c0 >= c1 || b.0 - a.0 < 0.5 {
+            return false;
+        }
+        let cols: Vec<FaceCol> = (c0..c1)
+            .map(|col| {
+                let t = ((col as f32 + 0.5 - a.0) / (b.0 - a.0)).clamp(0.0, 1.0);
+                let u = t * b.1 / ((1.0 - t) * a.1 + t * b.1);
+                let k = a.1 + (b.1 - a.1) * t;
+                let ch = h * k;
+                let top = cy - ch / 2.0;
+                let tx = ((u * tex.w as f32) as i32).clamp(0, tex.w - 1);
+                let (r0, r1) = ((top.floor() as i32).max(clip.0).max(0), ((top + ch).ceil() as i32).min(clip.1).min(c.h));
+                let edge = if col == x0 { 1.0 - (a.0 - x0 as f32) } else if col == x1 - 1 { 1.0 - (x1 as f32 - b.0) } else { 1.0 };
+                FaceCol { r0, r1, tx, top, step: tex.h as f32 / ch, edge: edge.clamp(0.0, 1.0) }
+            })
+            .collect();
+        let (lo, hi) = cols.iter().filter(|k| k.r0 < k.r1).fold((i32::MAX, i32::MIN), |(lo, hi), k| (lo.min(k.r0), hi.max(k.r1)));
+        if lo >= hi {
+            return false;
+        }
+        cells_over(c, c0, c1, lo, hi, |col, row, bg| face_px(&cols[(col - c0) as usize], row, bg, tex, shade));
+        true
+    }
+
+    /// The native face is cheaper than the old way, measured against it in the same run (so a loaded machine slows
+    /// both): the Shelf look's selected case at the RG35XX Plus's size, a front of 300 x 420 design pixels turning.
+    /// On the H700 the whole held-D-pad frame went from 19.3 to 15.3 ms with it (PERF-FEEL.md).
+    #[test]
+    #[ignore = "timing tier: scripts/test-timing.sh (serial)"]
+    fn timing_the_native_face_is_cheaper_than_cells_over() {
+        let tex = Pic::of(300, 420, sample_pic(300, 420).px.iter().map(|q| q | OPAQUE).collect());
+        let (a, b) = ((310.0f32, 1.0f32), (610.0f32, 1.12f32));
+        let run = |native: bool| {
+            let mut buf = vec![0x203040u32; 640 * 480];
+            (0..20)
+                .map(|_| {
+                    let mut c = Canvas::screen(&mut buf, (640, 480), 2);
+                    let t = thread_cpu();
+                    if native {
+                        let mut covered = (i32::MAX, i32::MAX, i32::MIN, i32::MIN);
+                        face(&mut c, &tex, a, b, 480.0, 420.0, 240, (0, 960), &mut covered);
+                    } else {
+                        reference_face(&mut c, &tex, a, b, 480.0, 420.0, 240, (0, 960));
+                    }
+                    thread_cpu() - t
+                })
+                .min()
+                .unwrap()
+        };
+        let (old, new) = (run(false), run(true));
+        eprintln!("a turning front at 640x480: {old:?} through cells_over, {new:?} natively");
+        assert!(new * 10 < old * 9, "the native face ({new:?}) is no cheaper than cells_over ({old:?})");
+    }
+
+    /// The native face (`face_cells`) is `cells_over` with the face's own pixel, bit for bit: every turn, size, offset,
+    /// clip and shade, see-through and half-solid texels, partly covered edge columns and a background that changes
+    /// from screen pixel to screen pixel. Before 19.11. `face` painted through `cells_over`; the held D-pad in the Shelf
+    /// look spent 44 % of its frame there on the H700 (PERF-FEEL.md).
+    #[test]
+    fn face_cells_is_cells_over() {
+        let tex = sample_pic(37, 53);
+        let mut checked = 0;
+        for (i, (sx, w, cy, h)) in [(3.3f32, 41.7f32, 20.0f32, 31.0f32), (-6.4, 30.2, 11.5, 50.0), (60.6, 34.1, 33.2, 17.3), (0.5, 0.9, 7.0, 9.0), (10.0, 97.0, 31.7, 70.4)].into_iter().enumerate() {
+            for (ka, kb) in [(1.0f32, 1.0f32), (0.8, 1.15), (1.2, 0.7)] {
+                for shade in [256u32, 240, 131] {
+                    for clip in [(0, 64), (5, 40), (17, 18)] {
+                        let (a, b) = ((sx, ka), (sx + w, kb));
+                        let back = |x: u32, y: u32| 0x102030 + ((x * 11 + y * 5 + i as u32) % 47) * 0x010305;
+                        let make = || -> Vec<u32> { (0..32u32).flat_map(|y| (0..48u32).map(move |x| back(x, y))).collect() };
+                        let (mut new, mut old) = (make(), make());
+                        let mut covered = (i32::MAX, i32::MAX, i32::MIN, i32::MIN);
+                        face(&mut Canvas::screen(&mut new, (48, 32), 2), &tex, a, b, cy, h, shade, clip, &mut covered);
+                        // The reference: the old way, `cells_over` asking `face_px` for each design pixel.
+                        if reference_face(&mut Canvas::screen(&mut old, (48, 32), 2), &tex, a, b, cy, h, shade, clip) {
+                            checked += 1;
+                        }
+                        let off = old.iter().zip(&new).filter(|(o, n)| o != n).count();
+                        assert_eq!(off, 0, "face {i} {ka}/{kb} shade {shade} clip {clip:?}: {off} screen pixels differ");
+                    }
+                }
+            }
+        }
+        assert!(checked > 100, "only {checked} faces painted anything");
     }
 
     #[test]

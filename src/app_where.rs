@@ -107,12 +107,14 @@ fn settings_name(page: SettingsPage) -> String {
         Manual => "Manual",
         About => "About",
         Sync => "Sync",
+        Pockets => "Pockets",
         Leds(_) => "Leds",
         NightLight(_) => "NightLight",
         CozyExtras(_) => "CozyExtras",
         Buttons(_) => "Buttons",
         Controllers(_) => "Controllers",
         Tailscale => "Tailscale",
+        Romm => "Romm",
         Bluetooth => "Bluetooth",
         Web => "Web",
         PerfFan => "PerfFan",
@@ -205,6 +207,7 @@ fn shelf_name(screen: Screen) -> String {
         Screen::LensResults => "LensResults".into(),
         Screen::Connection => "Connection".into(),
         Screen::Rediscover => "Rediscover".into(),
+        Screen::Crate => "Crate".into(),
     }
 }
 
@@ -569,7 +572,8 @@ impl App {
                     self.manual.mark().hash(h);
                 }
                 // Each Settings page's own rows (one tuple hashes at most twelve fields).
-                (self.updates.sel, self.sleep_page.sel, self.about_mark(), self.sync_row(), self.tailscale_row(), self.bluetooth_row(), self.perf_fan_row(), self.achievements_row(), self.starter.mark()).hash(h);
+                (self.updates.sel, self.sleep_page.sel, self.about_mark(), self.sync_row(), self.tailscale_row(), self.romm_row(), self.bluetooth_row(), self.perf_fan_row(), self.achievements_row(), self.starter.mark()).hash(h);
+                self.pocket_sync_row().hash(h);
                 (self.tools_row(), self.pc_streaming_row(), self.backup_row(), self.web_row(), self.night_light_row(), self.storage_row(), self.gamelist_row(), self.gallery_row(), self.game_check_mark(), self.conflicts_mark(), self.curator_mark()).hash(h);
                 self.android_games_row().hash(h);
             }

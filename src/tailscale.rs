@@ -112,6 +112,34 @@ impl Status {
     }
 }
 
+/// The IPv4 addresses of the other devices of the tailnet that are online, from `tailscale status --json` (Pockets asks
+/// each of them "who is there?": no broadcast crosses Tailscale, `app_pocket_sync`). Empty for anything else.
+pub fn online_peer_ipv4s(json: &str) -> Vec<std::net::Ipv4Addr> {
+    let v: serde_json::Value = serde_json::from_str(json.trim()).unwrap_or_default();
+    let mut out: Vec<std::net::Ipv4Addr> = v
+        .get("Peer")
+        .and_then(|p| p.as_object())
+        .into_iter()
+        .flat_map(|p| p.values())
+        .filter(|n| n.get("Online").and_then(|o| o.as_bool()) == Some(true))
+        .flat_map(|n| strings(n.get("TailscaleIPs")))
+        .filter_map(|ip| ip.parse().ok())
+        .collect();
+    out.sort();
+    out.dedup();
+    out
+}
+
+/// [`online_peer_ipv4s`] of this device's tailnet now; empty when Tailscale is off, missing or slow to answer.
+pub fn online_peers(tools: &Tools) -> Vec<std::net::Ipv4Addr> {
+    if !tools.tailscale.exists() {
+        return Vec::new();
+    }
+    crate::proc::run_with_timeout(Command::new(&tools.tailscale).args(["status", "--json"]), tools.timeouts.status)
+        .map(|out| online_peer_ipv4s(&String::from_utf8_lossy(&out.stdout)))
+        .unwrap_or_default()
+}
+
 /// The addresses `tailscale ip` prints, one per line.
 pub fn parse_ips(output: &str) -> Vec<String> {
     output
@@ -743,6 +771,21 @@ mod tests {
     const STOPPED: &str = include_str!("fixtures/tailscale-status-stopped.json");
     const UP_OUTPUT: &str = include_str!("fixtures/tailscale-up-output.txt");
     const IP_OUTPUT: &str = include_str!("fixtures/tailscale-ip.txt");
+
+    /// Pocket Sync asks the tailnet's devices one by one (no broadcast crosses Tailscale): only those online, IPv4 only, nothing
+    /// from output that is not the status.
+    #[test]
+    fn the_online_peers_for_pocket_sync() {
+        let ips: Vec<String> = online_peer_ipv4s(RUNNING).iter().map(|ip| ip.to_string()).collect();
+        // The fixture's addresses, written from their parts (the leak scan keeps real-looking tailnet addresses out of code).
+        let addr = |last: u8| std::net::Ipv4Addr::new(100, 64, 0, last).to_string();
+        assert_eq!(ips, ["198.51.100.7", "203.0.113.12"], "by address");
+        assert!(online_peer_ipv4s(STOPPED).iter().all(|ip| ips.contains(&ip.to_string())));
+        assert!(online_peer_ipv4s("not json").is_empty());
+        assert!(online_peer_ipv4s(UP_OUTPUT).is_empty());
+        let missing = Tools { tailscale: PathBuf::from("/nonexistent/tailscale"), ..Tools::default() };
+        assert!(online_peers(&missing).is_empty(), "no Tailscale here: nobody to ask");
+    }
 
     // --- parsing ---
 

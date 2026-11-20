@@ -1521,6 +1521,11 @@ disableFsync
 
 # Launch/return/card preparation trace labels, written to POCKETUI_TRACE only; never painted.
 card begin
+game facts looked up ahead
+card info ready
+card facts ready
+card extras ready
+card base ready
 card connections ready
 card data ready
 continue begin
@@ -1918,10 +1923,134 @@ no game in front
 {s} plays it
 {s} is never read ahead
 {s} is {s} MB
-calls={s} repeated={s} doubled={s} core_ms_p50={s} core_ms_p99={s} core_ms_max={s} gap_ms_p50={s} gap_ms_p99={s} gap_ms_max={s} readback_ms_p50={s} readback_ms_p99={s} paint_ms_p50={s} paint_ms_p99={s} mode={s} core_fps={s} display_hz={s} cpu={s} mhz={s} slow_cpu_calls={s} fast_cpus={s}
+calls={s} repeated={s} doubled={s} missed={s} core_ms_p50={s} core_ms_p99={s} core_ms_max={s} gap_ms_p50={s} gap_ms_p99={s} gap_ms_max={s} readback_ms_p50={s} readback_ms_p99={s} paint_ms_p50={s} paint_ms_p99={s} mode={s} core_fps={s} display_hz={s} cpu={s} mhz={s} slow_cpu_calls={s} fast_cpus={s}
 NetworkRule.network(
 mupen64plus-ThreadedRenderer
 sourceHeight
 uniform int effect
 self.speed.key(key, down)
 an app didn't start
+Android vibrator
+the selected case, out of the row
+the bookend after the row
+decoration {s} after the row
+the prop after the row
+the console beside the TV
+the handheld in the TV's place
+the TV
+the stage's floor
+a handheld, in the hands
+coming up from below the screen
+the console (plain)
+{s} at y {s}
+{s} floats: its foot at y {s} (x {s}..{s}) rests on nothing ({s})
+the case back in its row
+the case back in its row, under the console
+the case on its way back to its row
+going back into its row
+the case back in its row is painted over {s}, which stands in front of it
+the console stands twice: {s} and {s}
+{s} and {s} are inside each other ({s} x {s} px)
+{s} hangs on no wall: {s}..{s} x {s}..{s} ({s})
+{s} hangs behind {s} ({s} x {s} px)
+the wall over the cabinet
+, out
+the window
+the window's sill
+the piece on the window's sill
+the wall beside the row
+a shelf of the cabinet
+case {s}
+game {s} going in, {s}0 %: {s}
+on its way between its shelf and the showcase
+prop {s} on the shelf at {s}
+shelf {s} case {s}
+shelf {s} case {s}, out
+shelf {s}, case {s} selected, {s} ms: {s}
+the cabinet's top board
+the shelf's board
+game {s} coming back, {s} ms: {s}
+pressed down as its game seats
+the console (its real mechanism)
+
+# Synthetic names in the file-reader rule, never shipped UI copy.
+Reader jump
+Reader Rule Game
+
+# src/pocket_sync.rs
+Keyed
+the sync record was written by a newer pocket-ui
+
+# src/app_romm.rs: why the shelf is read again (the log); src/romm_page.rs: a part of "{n} games in 1 system"
+RomM unpaired
+RomM list read
+1 system
+
+bsnes_mode7_wsMode
+
+# src/android_first_start.rs and its tests (18.11.2026): bridge names, log lines, test data
+openPage
+games folder added
+{"apps": {"dolphin": [{"p": "org.dolphinemu.dolphinemu", "l": "Dolphin"}]}}
+Step {s} of 4
+• Emulator apps · Dolphin
+primary%3AEmulation%2Froms
+System Card 3
+# src/i18n.rs (FANLESS_NAMES)
+Tempo, Vibration, Lüfter
+Velocidad, vibración, ventilador
+Velocidade, vibração, ventoinha
+Vitesse, vibration, ventilateur
+Velocità, vibrazione, ventola
+Tempo & Vibration
+Velocidad y vibración
+Velocidade e vibração
+Vitesse et vibration
+Velocità e vibrazione
+
+# src/cozy_level.rs and setup's step name (19.11.2026): log line, test name
+how cozy
+first start: {} ({:?}, lived-in {})
+the sync record could not be read from the card
+
+# src/platform/android_http.rs
+path is not UTF-8
+httpDownload
+# src/app_crate.rs: the physics check's names of things and moments (`scene_check`), never painted
+the floor
+a box's floor
+box {s}
+the selected case, up out of its box
+in the hand, from the crate to the shelf
+taken up out of its box, waiting for its place
+the game coming out
+in the hand, from the shelf to the crate
+the game going in
+the game picked to make room, up out of the row
+shelf case {s}
+crate case {s} selected, {s} ms
+crate case {s} out, shelf game {s} picked
+# src/pocket_sync/net.rs (the protocol between Pockets)
+HTTP/1.1 401 Unpaired
+X-Pocket-Sig
+no code
+wrong code
+X-Pocket-Mtime
+{s} {s} HTTP/1.1
+X-Pocket-Id
+POST /pair HTTP/1.1
+not a save path
+ANSWER\n{s}\n{s}\n{s}
+head too large
+body too large
+{s}\r\nContent-Length: {s}\r\nConnection: close\r
+HTTP/1.1 400 Bad
+HTTP/1.1 {s} X
+Was Pocket Sync abgleicht
+Pair a Brick
+PIKACHU
+ONIX
+TORCHIC
+photo {s} into its case
+in its case
+share {s} x={s} y={s} w={s} h={s} canvas={s}x{s}

@@ -110,3 +110,67 @@ after it, including a state written by the old core. Linux's normal Mega Drive c
 For GLES presentation and the matching Earlier preview, use the host regression documented in
 [Android development](../../../docs/dev/android.md). Hardware cores additionally need the player's EGL context;
 this headless software probe does not create one.
+
+The host BIOS reader rule consumes the exact Rust fault corpus from
+`tests/common/data_faults.rs`: `scripts/android/test/file-reader-rule.sh` compiles a tiny
+corpus exporter and the real Java BIOS installer, then checks missing, empty,
+truncated, flipped and wrong-encoding streams for all six supported BIOS names.
+A failed replacement must preserve the kept BIOS and remove its partial file.
+Run it on the Air with `tools/air-build.sh -m arm -x <worktree> bash scripts/android/test/file-reader-rule.sh --bios-only`.
+This is a native JVM companion, not an Android ContentResolver/Activity test.
+
+## Shared Java file-reader rule
+
+On a Linux host with a JDK, run `bash scripts/android/test/file-reader-rule.sh`.
+It runs the 66 BIOS stream variants and the production Java reader companion:
+19 registered case groups, each with the eleven variants exported directly from
+`tests/common/data_faults.rs`. `java-reader-rule.sh` can run just the latter.
+The runner compiles the actual GameCopy, GameDirect, SaveBackup, SaveCopy,
+UpdateInstaller and Views sources. Each variant runs in a new JVM. The watchdog
+allows up to 30 seconds for startup, ending at the flushed `READER_READY` marker.
+Reader work retains a five-second budget excluding measured Linux PSI CPU/IO/memory
+stall time. Overlapping pressure cannot count twice for the same interval;
+the reader has an absolute 30-second wall cap even under continuous pressure.
+A separate five-second CPU budget (also enforced by the kernel, with a six-second
+hard backup) catches busy loops independently of load. Stricter inherited CPU
+limits stay in force. Without PSI the reader keeps its five-second wall budget.
+Async fixture waits use this same watchdog. The first timeout or five failed
+probes stops the rule; there are no timeout retries. Temporary files
+belong to that probe and are removed afterwards. Valid seeds must demonstrate
+accepted view choices, copy-cache reuse, matching ZIP members/manifest, exact save
+bytes, installed-version consumption and checked payload transfer.
+
+Timeout diagnostics identify startup or reader work, elapsed wall/CPU time and
+pressure allowance. A reader timeout requests a bounded HotSpot thread dump before
+killing and reaping that exact child. Diagnostics have 0.5 s and reaping has 2 s;
+an uninterruptible kernel wait is reported with its PID instead of blocking the
+watchdog forever. Phase maxima are observations at the watchdog's
+50 ms polling resolution. `test-reader-watchdog.py` covers slow startup and IO,
+overlapping pressure, persistent blocked readers and CPU loops with a virtual clock;
+it also proves that an actual blocked child is diagnosed, killed and reaped. It
+creates no synthetic host load and runs with the Java rule.
+
+The former five-second timeout covered JVM startup, fixture IO, `fsync` and the
+reader together. Its historical `save-copy-file/empty` failure had no phase data,
+so it does not establish an empty-file loop or a specific source of gate load.
+The empty reader exits on EOF, then syncs and renames its replacement. A delayed
+JVM startup reproduces the old false timeout on that same empty-file case; the
+new watcher accepts it while retaining the independent hang limits above.
+
+`JAVA_READER_JDK` may select a JDK installation; otherwise the scripts try PATH,
+JAVA_HOME and existing `~/opt/jdk-*/bin` installations. They install nothing and
+need no network. `--if-available` returns 77 with an explicit message if the host
+lacks a compatible JDK or Linux `/proc/self/fd`. The ordinary merge gate invokes
+this mode after successful Rust tests: a real reader failure makes the gate red,
+whereas unavailable host capabilities are logged as an unexecuted JVM platform
+stage. `--bios-only` keeps the original portable BIOS-only test on a non-Linux JVM.
+
+The source inventory maps each Java reader to its registered cases and rejects
+missing or unassigned case IDs. The narrow Android API doubles and the vendored,
+licensed test-only Android JSON source are documented in [jvm/README.md](jvm/README.md).
+The production GameDirect probe really reopens a Linux descriptor and seeks it;
+it does not establish Android Binder/SAF permissions or Bionic/native-loader
+behavior. APK byte transfer and installed-notice parsing are tested; Android's APK
+parser, signing implementation, install acceptance and Activity/task routing are
+platform boundaries. Native protocol outcomes are checked here; translated Rust
+views remain covered by their own host painter/model rules.

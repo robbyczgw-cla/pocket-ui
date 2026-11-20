@@ -136,8 +136,8 @@ fn long_titles_fit_their_spines_on_small_and_wide_screens() {
 /// along, above the lifted spine's foot.
 fn shelf_line(h: i32) -> i32 {
     let top = if h < 600 { 80 } else { 104 };
-    // The board stands over the hint bar; the spines' size is the one 112 px of room gave.
-    let bottom = h - 128;
+    // The board stands over the hint bar (`kit::content_bottom`, Normal text); the spines' size is the one 112 px of room gave.
+    let bottom = pocket_ui::kit::content_bottom(h);
     let f = (((h - 112 - top).max(200) as f32 * 0.42 / 120.0 * 2.0).floor() / 2.0).clamp(1.0, 4.0);
     let floor = bottom - (8.0 * f).round() as i32;
     floor - (10.0 * f).round() as i32 - 12

@@ -86,7 +86,7 @@ pub fn sentence(name: &str, notice: &str) -> String {
         Why::DamagedOrBios => {
             format!("{name} can't start. The game file may be damaged, or the system needs a file from your own console. Copy the game to the card again, or add the file in Settings › Games › Add games.")
         }
-        Why::Port => format!("{name} can't start. It may need files that aren't on the card. Reinstall it in Ports."),
+        Why::Port => format!("{name} can't start. It may need files that aren't on the card: its card (X) says which. Or reinstall it in Settings › Games › Box art & downloads › PortMaster games."),
         Why::Other => notice.to_string(),
     }
 }
@@ -145,7 +145,7 @@ mod tests {
     #[test]
     fn a_port_is_told_to_reinstall_without_a_log_file() {
         let said = sentence("SDL Bomber", &port_not_started_notice("SDL Bomber"));
-        assert_eq!(said, "SDL Bomber can't start. It may need files that aren't on the card. Reinstall it in Ports.");
+        assert_eq!(said, "SDL Bomber can't start. It may need files that aren't on the card: its card (X) says which. Or reinstall it in Settings › Games › Box art & downloads › PortMaster games.");
     }
 
     #[test]
@@ -204,7 +204,7 @@ mod tests {
         ] {
             let said = sentence("Metroid", &notice);
             assert!(said.starts_with("Metroid can't start"), "{said}");
-            assert!(["Copy", "Reinstall", "Look for", "try again", "add the file"].iter().any(|w| said.contains(w)), "no next step in {said}");
+            assert!(["Copy", "Reinstall", "reinstall it in Settings", "Look for", "try again", "add the file"].iter().any(|w| said.contains(w)), "no next step in {said}");
         }
     }
 }

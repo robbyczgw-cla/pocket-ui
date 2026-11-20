@@ -75,6 +75,9 @@ fn shot_in(tmp: &Path, lib: &Path, data: &Path, stub: &Option<Stub>, state: &str
         .env("POCKETUI_MOCK", "1").env("POCKETUI_MOCK_NOW", FIXTURE_NOW)
         .env("POCKETUI_LANG", lang)
         .env("POCKETUI_ROOM_TIME", "07:00")
+        // The window (Cozy extras → Window) hangs where the TV stood when the TV is off: its sill shows January's snow
+        // globe, nothing a count of the TV's red could take for the game's picture (November's pumpkin is that orange).
+        .env("POCKETUI_ROOM_MONTH", "1")
         .env("POCKETUI_SNAPSHOT_SIZE", "1240x1080")
         .env("POCKETUI_ES_SYSTEMS", lib.join("es_systems.cfg"))
         .env("POCKETUI_DATA", data)
@@ -116,7 +119,7 @@ fn the_dpad_reaches_the_gba_choice_and_every_console_view_uses_the_saved_sp() {
         sp_views.push(sp);
     }
     // Right returns to the default; the same views return to their original hardware picture.
-    shot_in(tmp.path(), &lib, &data, &stub, "cozy:12::r", "en", "shelf");
+    shot_in(tmp.path(), &lib, &data, &stub, "cozy:16::r", "en", "shelf");
     for ((state, original), sp) in views.iter().zip(before).zip(sp_views) {
         let restored = pixels(shot_in(tmp.path(), &lib, &data, &stub, state, "en", "shelf"));
         if state.ends_with(":insert") {
@@ -142,7 +145,7 @@ fn the_dpad_reaches_the_gba_choice_and_every_console_view_uses_the_saved_sp() {
         let warm = pixels(shot_in(tmp.path(), &lib, &data, &stub, &format!("cozy:0::ua:{look}"), "en", "shelf"));
         let cold = pixels(shot_in(tmp.path(), &lib, &data, &stub, &format!("shelf:gba:{look}"), "en", "shelf"));
         assert!(warm == cold, "{look}: choosing SP immediately replaces already-painted hardware, without a restart");
-        shot_in(tmp.path(), &lib, &data, &stub, "cozy:12::r", "en", "shelf");
+        shot_in(tmp.path(), &lib, &data, &stub, "cozy:16::r", "en", "shelf");
     }
 }
 

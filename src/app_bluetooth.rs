@@ -17,7 +17,7 @@ use pocket_ui::system_ctl::SharedHw;
 use pocket_ui::text::Face;
 use pocket_ui::touch::Area;
 
-use super::{App, SettingsPage, UserEvent, CANCEL, CONFIRM, NU_BTN_PAD, NU_PAD, NU_PILL};
+use super::{App, SettingsPage, UserEvent, CANCEL, CONFIRM, NU_BTN_PAD, NU_PAD};
 
 /// How often the open page looks at the devices.
 const POLL_EVERY: Duration = Duration::from_secs(2);
@@ -71,6 +71,10 @@ fn brick_bluetooth() -> bool {
 }
 
 /// `controllers.bluetooth.enabled=1` in ROCKNIX's system.cfg.
+fn enabled_file(file: &std::path::Path) -> bool {
+    std::fs::read_to_string(file).is_ok_and(|cfg| enabled_in(&cfg))
+}
+
 fn enabled_in(cfg: &str) -> bool {
     cfg.lines().any(|l| l.trim() == "controllers.bluetooth.enabled=1")
 }
@@ -128,7 +132,7 @@ impl App {
         let (real, hw, proxy) = (self.bluetooth.real, self.bluetooth.hw.clone(), self.proxy.clone());
         self.bluetooth.seen.refresh(
             LIST_VALUE_FOR,
-            move || if real && !brick_bluetooth() { std::fs::read_to_string(SYSTEM_CFG).is_ok_and(|c| enabled_in(&c)) } else { hw.bluetooth() == Some(true) },
+            move || if real && !brick_bluetooth() { enabled_file(std::path::Path::new(SYSTEM_CFG)) } else { hw.bluetooth() == Some(true) },
             move || {
                 let _ = proxy.send_event(UserEvent::SettingsValues);
             },
@@ -142,7 +146,7 @@ impl App {
     /// `--snapshot settings…`: the row's value read at once (never so in the running app).
     pub(crate) fn bluetooth_row_now(&self) {
         let ui = &self.bluetooth;
-        ui.seen.set(if ui.real && !brick_bluetooth() { std::fs::read_to_string(SYSTEM_CFG).is_ok_and(|c| enabled_in(&c)) } else { ui.hw.bluetooth() == Some(true) });
+        ui.seen.set(if ui.real && !brick_bluetooth() { enabled_file(std::path::Path::new(SYSTEM_CFG)) } else { ui.hw.bluetooth() == Some(true) });
     }
 
     pub(crate) fn open_bluetooth(&mut self) -> Option<SettingsPage> {
@@ -384,9 +388,9 @@ impl App {
     fn paint_bluetooth_list(&mut self, c: &mut Canvas, page: &BluetoothPage) {
         let (pad, row, font) = (NU_PAD, pocket_ui::type_scale::row(58, 34), 34u32);
         self.sheet_header(c, "Bluetooth");
-        let (top, right) = (pad + NU_PILL + 12, c.w - pad);
+        let (top, right) = (pocket_ui::kit::header_bottom(c.h) + 12, c.w - pad);
         let rows = page.rows();
-        let list_bottom = c.h - pad - NU_PILL - 16 - DETAILS_H;
+        let list_bottom = pocket_ui::kit::hint_bar_top(c.h) - 16 - DETAILS_H;
         let visible = (((list_bottom - top) / row) as usize).max(3);
         let first = super::window_start(page.sel, visible, rows.len());
         if rows.len() > visible {
@@ -625,5 +629,21 @@ mod tests {
         assert!(!enabled_in("controllers.bluetooth.enabled=0\n"));
         assert!(!enabled_in("#controllers.bluetooth.enabled=1\n"));
         assert!(!enabled_in(""));
+    }
+}
+
+#[cfg(test)]
+mod file_source_tests {
+    use super::*;
+    #[test]
+    fn file_source_rule_bluetooth_switch() {
+        let d = tempfile::tempdir().unwrap(); let file = d.path().join("system.cfg");
+        for (label, bytes) in crate::file_faults::faults(b"controllers.bluetooth.enabled=1\n") {
+            let _ = std::fs::remove_file(&file);
+            if let Some(bytes) = bytes { std::fs::write(&file, bytes).unwrap(); }
+            let on = enabled_file(&file);
+            if label == "valid" { assert!(on); }
+            if label == "missing" { assert!(!on); }
+        }
     }
 }

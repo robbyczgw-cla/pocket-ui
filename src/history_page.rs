@@ -243,6 +243,9 @@ pub fn paint_chart(c: &mut Canvas, text: &mut Text, s: &Summary, today: i64, (x,
     }
     // Under the bars: the weekdays, every seventh day of a month, the months of a year.
     let label_y = y + h + 36;
+    // The labels' ink from their letters' top to their descenders (tests/brick_proportions.rs).
+    let px21 = crate::type_scale::px(21) as i32;
+    crate::shares::mark("history-days", x, label_y - px21 * 3 / 4, w, px21 * 3 / 4 + px21 / 3);
     let label_at = |i: usize, label: &str, text: &mut Text, c: &mut Canvas| {
         let cx = x + (slot * (i as f32 + 0.5)).round() as i32;
         let lw = text.width(Face::Body, 21, label);
@@ -372,11 +375,17 @@ pub fn paint_history(c: &mut Canvas, text: &mut Text, page: &HistoryPage, names:
     text.draw(c, Face::Title, 67, MARGIN, 160, p.chalk, &title);
     // On a screen with fewer than 1080 lines (the Mini V1's 960) the chart gives up most of the difference, so the
     // five most played games still end above the hints (docs/DEVICES.md).
-    // On 768 lines the chart is 84 px high from 240 and the five slimmer rows start at 394, so the labels stay apart and
-    // the fifth row ends above the hints.
+    // On 768 lines (the Brick, painted natively) and the Smart Pro's 720 the chart keeps the RG35XX Plus's share of the
+    // height (116 of 960 lines) where the five slimmer rows still end above the hints: they get what they need first,
+    // the chart the rest, at least 54 px. The day labels under the chart keep clear of "Most played" and "Systems"
+    // (on the Brick they ran into each other, 20.11.2026).
     let on_768 = crate::kit::short_screen(c.h);
-    let short = if on_768 { 188 } else { (1080 - c.h).max(0) * 2 / 3 };
-    let (cx, cy, cw, ch) = if on_768 { (MARGIN + 72, 240, c.w - 2 * MARGIN - 72, 54) } else { (MARGIN + 72, 256, c.w - 2 * MARGIN - 72, 196 - short) };
+    let label_gap = 44 + crate::type_scale::px(21) as i32 * 4 / 3;
+    let (gap_768, least_768) = if c.h < 768 { (4, 40) } else { (6, 46) };
+    // 14 px between the fifth row and the hints, as a breath (the Plus has more).
+    let ch_768 = (crate::kit::content_bottom(c.h) - 14 - 240 - label_gap - (20 + ROWS as i32 * (least_768 + gap_768) - gap_768)).clamp(54, c.h * 116 / 960);
+    let short = if on_768 { 0 } else { (1080 - c.h).max(0) * 2 / 3 };
+    let (cx, cy, cw, ch) = if on_768 { (MARGIN + 72, 240, c.w - 2 * MARGIN - 72, ch_768) } else { (MARGIN + 72, 256, c.w - 2 * MARGIN - 72, 196 - short) };
     let Some(s) = page.summary.as_ref() else {
         text.draw(c, Face::Body, 28, MARGIN, 208, p.dust, "Counting…");
         c.rect(cx, cy + ch, cw, 2, p.pick(0x26262a, 0xdcd6ca));
@@ -396,6 +405,7 @@ pub fn paint_history(c: &mut Canvas, text: &mut Text, page: &HistoryPage, names:
         text.draw(c, Face::Body, 28, cx + (cw - lw) / 2, (base + dy).min(cy + ch - 12), p.dust, msg);
     } else {
         paint_chart(c, text, s, page.today, (cx, cy, cw, ch));
+        crate::shares::mark("history-chart", cx, cy, cw, ch);
     }
     for (b, x0, x1) in [(Button::Left, 0, c.w / 2), (Button::Right, c.w / 2, c.w)] {
         hits.push((Area::new(x0, cy, x1 - x0, ch + 50), Hit::Button(b)));
@@ -403,17 +413,20 @@ pub fn paint_history(c: &mut Canvas, text: &mut Text, page: &HistoryPage, names:
 
     // The most played games, left.
     let (lx, lw) = (MARGIN, 620);
-    let top = 548 - short;
+    let top = if on_768 { cy + ch + label_gap } else { 548 - short };
     if !s.games.is_empty() {
         text.draw(c, Face::Body, 21, lx, top, p.dust, "Most played");
+        crate::shares::mark("history-below", lx, top - crate::type_scale::px(21) as i32 * 3 / 4, c.w - 2 * MARGIN, 1);
         let (row, gap) = (crate::type_scale::row(64, 37), 8);
         let (row, gap) = if on_768 { (row * 3 / 4, 6) } else { (row, gap) };
         // Under 768 lines (1280x720) the gaps are 4 px and a row may go down to 36: at 44 the fifth row ran under the bar.
         let (gap, least) = if c.h < 768 { (4, 36) } else { (gap, 44) };
         // The five rows end over the hint bar, whatever the text size makes of a row.
-        let row = row.min(((crate::kit::content_bottom(c.h) - (top + 20) + gap) / ROWS as i32 - gap).max(least));
+        let bottom = crate::kit::content_bottom(c.h) - if on_768 { 14 } else { 0 };
+        let row = row.min(((bottom - (top + 20) + gap) / ROWS as i32 - gap).max(least));
         for (i, g) in s.games.iter().take(ROWS).enumerate() {
             let y = top + 20 + i as i32 * (row + gap);
+            crate::shares::mark("history-row", lx, y, lw, row);
             let selected = i == page.sel;
             let (fg, dim) = row_back(c, (lx, y, lw, row), stripe(&g.system), selected);
             let side = format!("{} · {}", names(&g.system).1, ph::time_text(g.secs, g.untimed, false));
@@ -437,7 +450,7 @@ pub fn paint_history(c: &mut Canvas, text: &mut Text, page: &HistoryPage, names:
     let fw = c.w - MARGIN - fx;
     let mut y = top;
     for (head, line) in facts(s, page.today, names) {
-        let lines = text.wrap_prose(Face::Body, 28, &line, fw);
+        let lines = fact_lines(text, &line, fw);
         let step = crate::type_scale::line(28, 10);
         let need = 30 + lines.len().min(2) as i32 * step;
         if y + need > crate::kit::content_bottom(c.h) {
@@ -450,6 +463,33 @@ pub fn paint_history(c: &mut Canvas, text: &mut Text, page: &HistoryPage, names:
         y += need + 26;
     }
     hits
+}
+
+/// A fact's lines in a column `fw` wide: a list ("SNES 3 h 39 min · N64 1 h 36 min", "Futuristic racing · score chasing")
+/// breaks between its items, so a line never starts or ends with the dot and an item stays whole where it fits (the
+/// Brick's narrow column put a lone "·" on the second line, 20.11.2026); a single item wider than the column wraps.
+fn fact_lines(text: &mut Text, line: &str, fw: i32) -> Vec<String> {
+    let mut out: Vec<String> = Vec::new();
+    let mut cur = String::new();
+    for item in line.split(" · ").map(str::trim).filter(|i| !i.is_empty()) {
+        let joined = if cur.is_empty() { item.to_string() } else { format!("{cur} · {item}") };
+        if text.width(Face::Body, 28, &joined) <= fw {
+            cur = joined;
+            continue;
+        }
+        if !cur.is_empty() {
+            out.push(std::mem::take(&mut cur));
+        }
+        if text.width(Face::Body, 28, item) <= fw {
+            cur = item.to_string();
+        } else {
+            out.extend(text.wrap_prose(Face::Body, 28, item, fw));
+        }
+    }
+    if !cur.is_empty() {
+        out.push(cur);
+    }
+    out
 }
 
 // ---- the review --------------------------------------------------------------------------------------------------
@@ -775,6 +815,26 @@ mod tests {
         let mut p = HistoryPage::new(Period::of(span, today), today);
         assert!(p.set(summarise(log, p.period, today, &Plain)));
         p
+    }
+
+    /// A list of facts breaks between its items in a narrow column (the Brick's, 264 px): no line is a lone dot or
+    /// starts or ends with one, and an item that fits stays on one line.
+    #[test]
+    fn a_fact_list_breaks_between_its_items() {
+        let mut text = Text::new();
+        for fw in [180, 264, 320, 420] {
+            for line in ["SNES 3 h 39 min · N64 1 h 36 min · GBA 1 h 30 min", "Futuristic racing · score chasing", "GBA 13 min · PS1 1 min · GB under 1 min"] {
+                let lines = fact_lines(&mut text, line, fw);
+                for l in &lines {
+                    assert!(!l.trim().is_empty() && !l.trim_start().starts_with('·') && !l.trim_end().ends_with('·'), "{fw}: {lines:?}");
+                }
+                for item in line.split(" · ") {
+                    if text.width(Face::Body, 28, item) <= fw {
+                        assert!(lines.iter().any(|l| l.contains(item)), "{fw}: {item} whole in {lines:?}");
+                    }
+                }
+            }
+        }
     }
 
     #[test]

@@ -513,14 +513,17 @@ fn card_writer() {
     }
 }
 
-/// Deletes a file written by [`write_json`] together with its backup. True when the file itself is gone.
+/// Deletes a file written by [`write_json`] together with its backup. True when both are gone.
 pub fn remove_json(path: &Path) -> bool {
     // Deletion must follow earlier queued writes just like write_json does.
     // Otherwise a pending Options change can recreate an override after reset
     // or after moving its settings to the whole console.
     settle();
-    let _ = fs::remove_file(backup_path(path));
-    fs::remove_file(path).is_ok() || !path.exists()
+    let remove = |p: &Path| match fs::remove_file(p) {
+        Ok(()) => true,
+        Err(e) => e.kind() == io::ErrorKind::NotFound,
+    };
+    remove(&backup_path(path)) && remove(path)
 }
 
 fn read_json<T: serde::de::DeserializeOwned>(path: &Path) -> Result<T, String> {

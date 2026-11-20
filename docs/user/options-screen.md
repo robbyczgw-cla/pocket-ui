@@ -36,9 +36,11 @@ At Integer the space is narrow on some consoles (Game Boy Advance: 20 pixels lef
 **Integer, smaller** gives every frame space, and details such as speaker grilles, knobs and the
 antenna only appear where there is space for them.
 
-**The power light.** DMG, GB Pocket, GBA SP, GBA, PSP and Auto's WonderSwan frame have a small power light
-that shows the battery: green above 20%, red at 20% and below, blinking slowly at 5% and below.
-It flashes briefly when you save a state (to a slot, or the automatic one).
+**The power light.** DMG, GB Pocket, GBA SP, GBA, PSP, Auto's WonderSwan frame and the lens of the Game Gear and
+Lynx have a small power light that shows the battery as the real one did: the Game Boy's and the Pocket's red light
+dims when the battery is low (at the "Battery low" level, 5%), the GBA's and the SP's green light turns red, the PSP's
+blinks orange and the Game Gear's flashes red. It blinks twice, briefly, when you save a state (to a slot, or the
+automatic one). Settings → Look → Cozy extras → **Power lights** off keeps it steadily on.
 
 **DS and the Nintendo DS.** DS fits the DS with its two screens stacked, as games start. The
 hinge sits beside the screens where they touch, and exactly in the gap between them when the

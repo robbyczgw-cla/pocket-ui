@@ -18,6 +18,7 @@ besides the game.
 | **Night light** | Warmer, less blue colours in the evening, in the menus and in games: **Off** (the default), **On** or **Scheduled**, with a strength. See [Night light](#night-light) |
 | **Menu sounds** | Soft clicks in the menus, not the game's volume (that is **Volume** above). A turns them on or off, Left/Right set how loud. See [Playing](playing.md#menu-sounds) |
 | **Case sounds** | Cases click open, cartridges and discs go in with a sound, the old TV hums on. Shelf and Cabinet looks only. Needs Menu sounds on; the menu sounds are not affected. **On** at the start. A or Left/Right switches it |
+| **Photos of big moments** | Off unless you switch it on. On: when your save shows a big step (a new badge, a boss beaten, a level of ten), pocket-ui keeps a small photo of that moment in the game's case, quietly: when you quit it slides into the case. **Also in play** (the third value): the moment a photo is taken you also see it over the game (a soft flash, the shutter, the photo out of the screen's bottom edge, developing); not on the TrimUI Brick and in pocket-ui for Android, which have only Off and On. Off, no photo is taken, nothing is kept and the case has no photos to open (ones taken before stay on the card). See [Photos of big moments](library.md#photos-of-big-moments) |
 
 Case sounds sits beside Menu sounds, which it needs. While Menu sounds is off, the line at the bottom says so.
 

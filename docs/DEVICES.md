@@ -235,7 +235,8 @@ the hints, text cut by an edge, strings cut short), and every page was looked at
   third of the height in small type (DESIGN.md "Type", wide screens). The looks made for the
   whole width keep it: Split shows all six facts beside the shelf, Cards shows five whole cards, Minimal and Cabinet
   fill the screen, as do the game card, the console page and the pause menu over the game. The look step's
-  previews are painted at the screen's size (960x540 at 1920x1080). The same column applies on a 1080p TV
+  previews are painted at the screen's size and as large as the room under the title allows (1159x652 at 1920x1080 in
+  Settings › Look). The same column applies on a 1080p TV
   ([DISPLAY-OUT.md](DISPLAY-OUT.md)).
 - **1280x960 (Mini V1).** 120 lines fewer. Fixed: the Cabinet's shelves and the search keyboard are measured from the
   bottom edge (they ran under the hints); Split's picture panel is 120 px shorter, so all six facts show beside the
@@ -243,10 +244,14 @@ the hints, text cut by an edge, strings cut short), and every page was looked at
   readout goes two by two when four lines would reach the hints; Pixel Path's seven rows share the height (with larger
   text only the selected stage keeps its second line); History's chart is shorter so the five most played games stay
   above the hints; "How do you like to play?" stops its summary above the hints (cut with "…" at larger text); the look
-  step's previews are 560x420; About's facts move closer together when the Device row would push its help into the
+  step's previews are 709x532 (Settings › Look); About's facts move closer together when the Device row would push its help into the
   hints. Left as it is: the letter jump's big letter covers a row for a moment, as it does on purpose.
 - **The Mini V2's 1240x1080:** every state, both looks, three text sizes, compared picture for picture with the code
   before this work: unchanged (only the clock and fades differ between two runs of the same program).
+- **The Brick's 1024x768 (painted natively).** The look step has the 1280x960 page's proportions: its title, subtitle and
+  the gaps around the picture are as much closer as the screen has fewer lines, and the picture takes the room left
+  (Settings › Look 526x395, 51 % of the height, 55 % at 1280x960; the first start 264x198 with one line under its rows,
+  the pointer to more giving way). It was 138x104 with a third of the page empty under it (2026-11-20).
 
 ### Small panels (H700)
 

@@ -34,7 +34,7 @@ fn android_resolution_changes_keep_the_reported_aspect_in_play_and_behind_pause(
     let dir = crate::testutil::TestDir::new("android-changing-geometry");
     let library = dir.join("geometry_libretro.so");
     let result = std::process::Command::new("cc").args(["-shared", "-fPIC", "-std=c11", "-O1", "-Wall", "-Wextra", "-Werror"])
-        .arg(concat!(env!("CARGO_MANIFEST_DIR"), "/tests/fixtures/video_contract.c")).arg("-o").arg(&library).output().unwrap();
+        .arg(concat!(env!("CARGO_MANIFEST_DIR"), "/tests/fixtures/video_contract.c")).arg("-o").arg(&library).arg("-lm").output().unwrap();
     assert!(result.status.success(), "{}", String::from_utf8_lossy(&result.stderr));
     let rom = dir.join("Intro.gb"); std::fs::write(&rom, b"fixture").unwrap();
     let mut core = crate::libretro::Core::load(&library, &rom, &dir, &dir, &[]).unwrap();
@@ -125,7 +125,7 @@ fn software_core_formats_padded_rows_and_null_frames_keep_the_visible_scene() {
     let dir=crate::testutil::TestDir::new("android-video-contract");
     let library=dir.join("video_contract_libretro.so");
     let result=std::process::Command::new("cc").args(["-shared","-fPIC","-std=c11","-O1","-Wall","-Wextra","-Werror"])
-        .arg(concat!(env!("CARGO_MANIFEST_DIR"),"/tests/fixtures/video_contract.c")).arg("-o").arg(&library).output().unwrap();
+        .arg(concat!(env!("CARGO_MANIFEST_DIR"),"/tests/fixtures/video_contract.c")).arg("-o").arg(&library).arg("-lm").output().unwrap();
     assert!(result.status.success(),"{}",String::from_utf8_lossy(&result.stderr));
     let rom=dir.join("Contract.gb");std::fs::write(&rom,b"fixture").unwrap();
     let core=crate::libretro::Core::load(&library,&rom,&dir,&dir,&[]).unwrap();
@@ -224,7 +224,7 @@ fn continue_redraws_the_loaded_scene_in_every_software_format_and_earlier() {
     let dir = crate::testutil::TestDir::new("android-cold-continue");
     let library = dir.join("video_contract_libretro.so");
     let output = std::process::Command::new("cc").args(["-shared", "-fPIC", "-std=c11", "-O1", "-Wall", "-Wextra", "-Werror"])
-        .arg(concat!(env!("CARGO_MANIFEST_DIR"), "/tests/fixtures/video_contract.c")).arg("-o").arg(&library).output().unwrap();
+        .arg(concat!(env!("CARGO_MANIFEST_DIR"), "/tests/fixtures/video_contract.c")).arg("-o").arg(&library).arg("-lm").output().unwrap();
     assert!(output.status.success(), "{}", String::from_utf8_lossy(&output.stderr));
     let rom = dir.join("Continue.gb"); std::fs::write(&rom, b"fixture").unwrap();
     for (format, buttons, colour) in [("rgb565", 1 << 7, 0x00ff00), ("rgb1555", 1 << 5, 0xff0000), ("xrgb8888", 1 << 4, 0x0000ff)] {

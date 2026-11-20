@@ -376,6 +376,7 @@ pub fn core_name(core: &str) -> String {
         "parallel_n64" => "ParaLLEl N64",
         "ppsspp" => "PPSSPP",
         "flycast" => "Flycast",
+        "dsperate" => "DSperate",
         "melondsds" => "melonDS DS",
         "melonds" => "melonDS",
         "desmume" | "desmume2015" => "DeSmuME",

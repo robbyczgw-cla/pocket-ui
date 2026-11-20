@@ -1374,6 +1374,68 @@ pocket-core runs.
 Open: one 4x start (the first of the evening, Mario Kart) stopped before its first picture ("stall guard: game stopped
 responding") and the next two starts did the same; the 30 starts after it, 4x included, were fine. Not reproduced.
 
+## Mode 7 HD (2026-11-17, `src/mode7_hd.rs`, prototype)
+
+Options → Picture → Mode 7 for the Super Nintendo: Original, HD, HD widescreen. The core is bsnes-hd (libretro
+`bsnes_hd_beta`, bsnes-hd beta 10.6, a fork of bsnes 114/115): ROCKNIX's SM8250 image of 2026-10-01 has it in
+`/usr/lib/libretro` (2.3 MB, linked to libgomp: it draws the lines on several cores), beside `bsnes_libretro.so` (bsnes 115).
+pocket-core plays SNES with Snes9x (no HD Mode 7), so HD and HD widescreen start the game with bsnes-hd
+(`app_emu_choice::mode7_core`); Original keeps Snes9x. The Android app's bsnes (115) has HD Mode 7 (`bsnes_mode7_scale`)
+but no widescreen, so Android offers Original and HD.
+
+bsnes-hd's own defaults are HD 2x, widescreen on and 216 lines; `mode7_hd::core_options` sets every key for every mode, with
+"overscan on" (224 lines, as Snes9x shows) and pixel aspect correction on: bsnes-hd then reports its picture with the
+console's 8:7 pixels (Original 1.31:1, a hair narrower than Snes9x's 4:3) and its 16:9 is 48 columns a side (352 × 224
+at 1x, shown 1.80:1); with correction off it would be 72 columns, wider than 16:9. pocket-core shows the reported aspect.
+Its states are version 114.2, not bsnes 115's or Snes9x's: a Continue moment of the other core is put aside (`frozen`).
+
+Frame time on a desktop PC (Ryzen 5 4650G, headless libretro, attract-mode races, aspect correction off, ms per frame mean / p99):
+
+| Game | Threads | Original | HD 2x | HD 3x | HD 4x | Wide 2x | Wide 4x |
+|---|---|---|---|---|---|---|---|
+| Super Mario Kart | 1 | 3.8 / 5.6 | 5.3 / 7.0 | 7.5 / 9.6 | 10.8 / 15.3 | 7.0 / 8.8 | 16.3 / 20.5 |
+| Super Mario Kart | 4 | 2.8 / 3.8 | 3.1 / 5.0 | 4.0 / 5.1 | 4.7 / 7.1 | 3.5 / 4.3 | 6.2 / 8.6 |
+| F-Zero | 1 | 3.2 / 4.0 | 5.6 / 6.6 | 8.7 / 11.9 | 12.9 / 16.6 | 7.3 / 10.7 | 18.8 / 24.5 |
+| F-Zero | 4 | 2.3 / 3.4 | 3.2 / 4.2 | 4.1 / 5.7 | 5.3 / 6.9 | 3.5 / 4.3 | 7.2 / 11.3 |
+| Pilotwings | 1 | 3.2 / 4.3 | 5.4 / 7.7 | 8.4 / 13.0 | 13.2 / 17.8 | 7.0 / 9.7 | 18.7 / 26.3 |
+| Pilotwings | 4 | 2.2 / 3.0 | 2.9 / 3.7 | 4.1 / 5.9 | 5.5 / 9.2 | 3.7 / 6.1 | 7.1 / 11.1 |
+
+Retroid Pocket Mini V2 under Android (2026-11-17, pocket-ui for Android 0.5.0-android.8 as a QA package, its bsnes 115 with
+`bsnes_mode7_scale`, the attract-mode races, 150 s per run, the player's `player pacing:` line every 10 s, screen at the
+lowest brightness, silent). Race windows only:
+
+| Game | Mode 7 | Core ms p50 / p99 | Repeated pictures per 10 s | CPU °C over the run |
+|---|---|---|---|---|
+| F-Zero | Original (1x) | 7.4 / 19.5 | 1-7 (every window) | 34.5 → 35.2 |
+| F-Zero | HD 2x | 10.0 / 12.6 | 0 | 33.3 → 36.4 |
+| F-Zero | HD 3x | 10.4 / 11.8 | 0 | 33.7 → 51.2 |
+| Super Mario Kart (E) | Original (1x) | 8.0 / 19.5 | 3 | 32.5 → 35.6 |
+| Super Mario Kart (E) | HD 2x | 10.0 / 12.5 | 0 | 32.9 → 37.2 |
+| Super Mario Kart (E) | HD 3x | 10.3 / 11.8 | 0 | 33.3 → 46.1 |
+
+The row itself, 2026-11-18 at night (this branch as a QA package, the Picture row's value in game-settings, screen at
+brightness 0, silent; 150 s per run, all windows after the first; core p50 / p99, repeated pictures, audio underruns):
+
+| Game | Mode 7 | Core ms p50 / p99 | Repeated | Underruns | CPU °C |
+|---|---|---|---|---|---|
+| F-Zero | Original | 7.4 / 8.0 | 0 | 0 | 27.1 → 32.5 |
+| F-Zero | HD (2x) | 9.9 / 12.8 | 0 (1 doubled) | 0 | 29.0 → 35.6 |
+| Super Mario Kart (E) | Original | 9.0 / 9.6 | 0 | 0 | 31.4 → 33.7 |
+| Super Mario Kart (E) | HD (2x) | 9.2 / 12.4 | 0 | 0 | 31.4 → 33.7 |
+| Pilotwings | Original | 7.6 / 8.2 | 0 | 0 | 31.0 → 33.7 |
+| Pilotwings | HD (2x) | 9.9 / 12.9 | 0 | 0 | 30.6 → 36.4 |
+
+(Original's repeated pictures of the 17.11. run are gone with the shared pacing, `core_pacing`.) Save states carry over between
+the modes losslessly, in bsnes-hd and in the app's bsnes 115: a state saved in one mode, played on in another and saved again,
+then loaded back, draws the very same picture (0 differing pixels) as the run that never left the first mode (F-Zero,
+Original ↔ HD 2x/3x ↔ HD widescreen; headless libretro runs).
+
+2x and 3x hold full speed with room; 3x costs the chip heat (+13 to +18 °C in 150 s against +3 to +4 at 2x), so the SM8250
+keeps 2x (`mode7_hd::offer`). The SM8550's 3x is still an estimate. Original's p99 near 19.5 ms with repeated pictures, while the
+heavier HD runs have none, looks like the CPU clocking down under the light load (a finding for the player's pacing, not for
+Mode 7). The card (Linux, bsnes-hd with its threads) is still to be measured. Retro Game Corps' widescreen guide (2023): 2x
+slowed down on the AYN Odin (SD845) and the Retroid Pocket 3+ under Android RetroArch.
+
 ## Touch screen (2026-10-22)
 The Mini V2's panel is `generic ft5x06 (8d)`, `/dev/input/event4`: multitouch protocol B (5 slots), direct input,
 `ABS_MT_POSITION_X` 0..1079 and `_Y` 0..1239 (the panel is portrait-native), `BTN_TOUCH`. The device tree
@@ -2154,6 +2216,15 @@ the Pocket's motor at the same time, and the Players page (A on each controller)
   | Menu | -1.5 / -10.2 / 450 | -11.9 / -13.0 / 102 |
   | Error | -1.5 / -19.2 / 124 | -18.6 / -21.0 / 112 |
 
+- **Hardware recordings** (19.11.2026, the ritual): the cartridge, card, lid and CRT sounds are real recordings now,
+  not generated: Freesound, all CC0 (`assets/ui-sounds/SOURCES.md`: file, source, author, cut). `cart-in` (a cartridge
+  into a top slot), `hh-cart-in` (a GBA cartridge, every handheld's), `card-in`, `disc-shut` (a GameCube lid; the old
+  file sat 9 LU under the rest, -33 LUFS / -13 dBTP, review finding 16), `crt-on` (a CRT TV's relay click and degauss).
+  The way back has its own (`eject::Way::sounds`): `tv-off`, `lid-open`, `cart-out`, `hh-cart-out`, `card-out`,
+  `umd-open`, then the case shutting as before; `umd-shut`, `tv-static`, `switch-on`, `switch-off` are there for the
+  PSP's door, the old TV's switch-on and the power switches. Cut with `EXACT=1 prep_media_sounds.py` (the cut in
+  SOURCES.md), levelled to the set: -24.5 to -29.7 LUFS M max, true peak at most -1.5 dBTP, `tv-static` about 5 dB
+  under (-32 LUFS). Case sounds off silences all of them (`ui_sound::is_ritual_sound`).
 - **Media sounds** (0.1.4): ElevenLabs sound effects (2026-10-29, the prompts in `scripts/ui-sounds/media-sounds.tsv`),
   four variants per sound, one chosen by measurement (all four were fine by ear; a first set synthesised with numpy
   sounded "like the same video-game drum" and went): a clean onset (the transient within the first 15 ms after

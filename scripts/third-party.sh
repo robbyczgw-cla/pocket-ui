@@ -88,6 +88,9 @@ OK = {  # may be combined into a GPL-2.0-or-later work that is also shipped next
     "MPL-2.0", "Unicode-3.0", "Unicode-DFS-2016", "BSL-1.0", "NCSA", "Libpng", "bzip2-1.0.6",
     "GPL-2.0", "GPL-2.0-only", "GPL-2.0-or-later", "LGPL-2.0", "LGPL-2.0-or-later", "LGPL-2.1", "LGPL-2.1-only",
     "LGPL-2.1-or-later",
+    # the Independent JPEG Group's licence (jpeg-encoder): BSD-like, GPL-compatible per the FSF; it asks for a line in the
+    # documentation, which NOTICE.md has
+    "IJG",
     # the LLVM exception was written to make Apache-2.0 code usable with GPLv2
     "Apache-2.0 WITH LLVM-exception",
 }

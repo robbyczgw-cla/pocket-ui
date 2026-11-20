@@ -1,51 +1,45 @@
-/* A libretro software core for visible-image contract tests, including Android QA.
- * Directions select RGB565, 0RGB1555 and XRGB8888; A selects no-callback frames.
- * Every scene submits a picture once, then NULL duplicates. Padding is magenta. */
-#include <stdbool.h>
-#include <stddef.h>
-#include <stdint.h>
-#include <string.h>
-typedef bool (*env_cb)(unsigned, void *);
-typedef void (*video_cb)(const void *,unsigned,unsigned,size_t);
-typedef int16_t (*input_cb)(unsigned,unsigned,unsigned,unsigned);
-static env_cb env; static video_cb video; static input_cb input;
+/* Special video scenes on the same core used by journeys: every run still emits sound. */
+#define WIDTH 160
+#define HEIGHT 144
+#define FPS 60.0
+#define RATE 48000.0
+#define NO_SRAM
+#define STUB_FULLPATH false
+#define retro_init stub_default_init
+#define retro_reset stub_default_reset
+#define retro_run stub_default_run
+#define retro_serialize_size stub_default_size
+#define retro_serialize stub_default_serialize
+#define retro_unserialize stub_default_unserialize
+#include "../../scripts/crash-sweep/stub-core.c"
+#undef retro_init
+#undef retro_reset
+#undef retro_run
+#undef retro_serialize_size
+#undef retro_serialize
+#undef retro_unserialize
 static unsigned scene, tick, last = 99;
-struct info { const char *name,*version,*exts;bool fullpath,extract; };
-struct av { unsigned w,h,mw,mh;float aspect;double fps,rate; };
-void retro_set_environment(env_cb f){env=f;}
-void retro_set_video_refresh(video_cb f){video=f;}
-void retro_set_input_state(input_cb f){input=f;}
-void retro_set_input_poll(void (*f)(void)){(void)f;}
-void retro_set_audio_sample(void (*f)(int16_t,int16_t)){(void)f;}
-void retro_set_audio_sample_batch(size_t (*f)(const int16_t *,size_t)){(void)f;}
 void retro_init(void){scene=tick=0;last=99;}
-void retro_deinit(void){}
-void retro_get_system_info(struct info *v){*v=(struct info){"Video contract","1","gb|gbc",false,false};}
-void retro_get_system_av_info(struct av *v){*v=(struct av){160,144,160,144,160.f/144.f,60,48000};}
-bool retro_load_game(const void *game){(void)game;return true;}
-void retro_unload_game(void){}
 void retro_reset(void){retro_init();}
-void retro_set_controller_port_device(unsigned port,unsigned device){(void)port;(void)device;}
-void *retro_get_memory_data(unsigned id){(void)id;return NULL;}
-size_t retro_get_memory_size(unsigned id){(void)id;return 0;}
 size_t retro_serialize_size(void){return sizeof scene;}
 bool retro_serialize(void *d,size_t n){if(n<sizeof scene)return false;memcpy(d,&scene,sizeof scene);return true;}
 bool retro_unserialize(const void *d,size_t n){if(n<sizeof scene)return false;memcpy(&scene,d,sizeof scene);last=99;return true;}
 void retro_run(void){
+    stub_sound();
     ++tick;
     if(input(0,1,0,2)) {
         /* PS1 intro/game and SNES low/high/interlaced modes keep their display aspect. */
         static const struct av modes[] = {
-            {320,240,640,480,4.f/3.f,60,48000}, {512,256,640,480,4.f/3.f,60,48000},
-            {640,480,640,480,4.f/3.f,60,48000}, {256,224,640,480,4.f/3.f,60,48000},
-            {512,448,640,480,4.f/3.f,60,48000}, {640,360,640,480,16.f/9.f,60,48000}
+            {{320,240,640,480,4.f/3.f},{60,48000}}, {{512,256,640,480,4.f/3.f},{60,48000}},
+            {{640,480,640,480,4.f/3.f},{60,48000}}, {{256,224,640,480,4.f/3.f},{60,48000}},
+            {{512,448,640,480,4.f/3.f},{60,48000}}, {{640,360,640,480,16.f/9.f},{60,48000}}
         };
         const struct av *g=&modes[(tick-1)%6];
         env(37,(void *)g);
         unsigned format=1;env(10,&format);
         static uint32_t dynamic[640*480];
-        for(unsigned i=0;i<g->w*g->h;++i)dynamic[i]=0x0080c040;
-        video(dynamic,g->w,g->h,g->w*4);
+        for(unsigned i=0;i<g->g.bw*g->g.bh;++i)dynamic[i]=0x0080c040;
+        video(dynamic,g->g.bw,g->g.bh,g->g.bw*4);
         return;
     }
     if(input(0,1,0,5))scene=1; /* Down: red, RGB1555. */

@@ -75,6 +75,7 @@ mod app_library_sync;
 mod app_appearance;
 /// The Cabinet look: cases on wooden shelves, pulled out and put into the console.
 mod app_cabinet;
+mod app_crate;
 mod app_frozen;
 mod app_loading;
 mod app_launch;
@@ -102,6 +103,8 @@ mod app_controllers;
 mod app_test_buttons;
 /// Settings > Tailscale: switch, QR sign-in, status.
 mod app_tailscale;
+/// Settings → Games → RomM and a RomM game's download at its first start (`app_romm.rs`).
+mod app_romm;
 /// Settings > Bluetooth: the switch, a search, pairing controllers.
 mod app_bluetooth;
 /// Settings > Performance & fan: game defaults, the fan outside games, the live readout.
@@ -112,6 +115,7 @@ mod app_sleep_power;
 mod app_report;
 // Settings > Web companion and the edits browsers send (`app_web.rs`, `pocket_ui::web`).
 mod app_web;
+mod app_pocket_sync;
 /// Quick settings' Performance and Fan rows: the game under the panel, a change saved and applied on a thread.
 mod app_quick_profiles;
 /// PortMaster ports that need the player's own game files: the check before a start and its page.
@@ -167,6 +171,7 @@ mod app_gamelist;
 mod app_android_games;
 /// The screenshot gallery: Settings → Games → Screenshots and the game card's "Screenshots (N)" row (`pocket_ui::gallery`).
 mod app_gallery;
+mod app_album;
 /// Settings > System > Storage, the low-space notice, and Hide or delete on the game card (`pocket_ui::storage`).
 mod app_clock;
 // The quiet "a newer pocket-ui is ready" notice (`pocket_ui::update_hint`).
@@ -208,6 +213,21 @@ mod doc_checks;
 const LABEL_ART_H: i32 = 176;
 /// How high the covers are in Split's panel.
 const SPLIT_PANEL_H: i32 = 260;
+
+/// Split's picture panel (box art, the console over its game count): 420 tall on 1080 lines; a screen down to 960 lines
+/// (the Mini V1, every H700 panel's 1280x960) gives up the missing lines, so the name and the facts under it keep their
+/// room (docs/DEVICES.md). Under 960 lines (the Brick's 1024x768, the Smart Pro's 1280x720, painted natively) it keeps
+/// 960's share of the height, as on the RG35XX Plus: giving up 312 of 420 lines left the Brick a 108-line strip, a 60-pixel
+/// cover and no room for the console at all.
+fn split_panel_h(h: i32) -> i32 {
+    if h >= 960 { 420 - (1080 - h).max(0) } else { 300 * h / 960 }
+}
+
+thread_local! {
+    /// Where the last Split frame put its panel and the console over the game count (x, y, w, h; the console's w 0
+    /// when none was painted) on a canvas of w x h: what a `shelf:` snapshot prints for tests/split_panel.rs.
+    static SPLIT_SEEN: std::cell::Cell<[i32; 10]> = const { std::cell::Cell::new([0; 10]) };
+}
 
 const PULL: Duration = Duration::from_millis(120);
 const FADE: Duration = pocket_ui::insert_scene::FADE;
@@ -341,6 +361,8 @@ enum UserEvent {
     /// A mock-only command FIFO capture (`--test-driver <temporary directory>`); `false`: the navigation explorer's record
     /// only, no picture (`app_nav_probe`).
     TestFrame(bool),
+    /// Opens a real page against the test card, without synthetic snapshot rows.
+    TestPage(String),
     /// Mock-only presentation for launch progress; never publishes a capture or consumes its feedback.
     TestPresent,
     /// Mock-only: press and release a key, then paint its immediate result in the
@@ -384,6 +406,8 @@ enum UserEvent {
     Sync(pocket_ui::sync_page::Event),
     /// Tailscale: news for Settings > Tailscale (`app_tailscale.rs`).
     Tailscale(pocket_ui::tailscale_page::Event),
+    /// RomM: pairing, the list, covers (`app_romm.rs`).
+    Romm(app_romm::RommNews),
     /// Bluetooth: news for Settings > Bluetooth (`app_bluetooth.rs`).
     Bluetooth(pocket_ui::bluetooth_page::Event),
     /// Settings > Performance & fan's readout, and the end of a clean-up the fan outside games waited for (`app_perf_fan.rs`).
@@ -392,6 +416,7 @@ enum UserEvent {
     Night(u16),
     /// The web companion: an edit from a browser, news for its Settings page (`app_web.rs`).
     Web(app_web::Event),
+    PocketSync(app_pocket_sync::Event),
     /// Settings > Tools: the tools were found, a Store tool ran (`app_tools.rs`).
     Tools(pocket_ui::tools_page::Event),
     /// Settings > Games > Game check: how far it is, what it found (`app_game_check.rs`).
@@ -407,6 +432,8 @@ enum UserEvent {
     AndroidApps(Vec<pocket_ui::android_games::App>, &'static str),
     /// The screenshots folder was read, or a screenshot was copied to the shelf (`app_gallery.rs`).
     Gallery(app_gallery::Event),
+    /// A photo of the open case's album, decoded (`app_album`).
+    AlbumPicture(PathBuf, Option<pocket_ui::image::Image>),
     /// The card was measured or cleaned, the free space looked at, a game's delete worked out or done (`app_storage.rs`).
     Storage(app_storage::Event),
     /// Curator's index thread (`app_curator.rs`).
@@ -492,8 +519,13 @@ enum Opens {
     ZoomInPause,
     /// A switch, not a page: the Shelf look's rows lived-in (`App::lived_in`, `pocket_ui::lived_in`).
     LivedIn,
+    /// A value, not a page: Off, 10, 20 or 50 games on the shelf, the rest in the crate (`pocket_ui::shelf_space`, `app_crate`).
+    ShelfSpace,
     /// A switch, not a page: a fresh start runs the console's own boot screen (`App::boot_screen`, `pocket_ui::boot_screen`).
     BootScreen,
+    /// Settings → Screen & sound → Photos of big moments (`app_album`): Off, On (into the case) and, where pocket-core draws the game,
+    /// Also in play (`album_eject` over the running game); Off by default.
+    MomentPhotos,
     /// Kids Mode's setup (`app_kids`).
     Kids,
     /// A switch, not a page: Cozy or Quick animations (`App::animations`).
@@ -516,6 +548,8 @@ enum Opens {
     Sounds,
     /// Syncthing: saves and states kept in step with other devices (`app_sync.rs`).
     Sync,
+    /// Pocket-to-Pocket sync: pairing with a code, the paired Pockets (`app_pocket_sync.rs`).
+    Pockets,
     /// The lights around the sticks (`app_leds.rs`).
     Leds,
     /// Warmer colours in the evening (`app_night_light.rs`).
@@ -526,6 +560,8 @@ enum Opens {
     Extra(Extra),
     /// Tailscale: the private network to the Pocket's other devices (`app_tailscale.rs`).
     Tailscale,
+    /// RomM: the games of the player's own game server on the shelf (`app_romm.rs`).
+    Romm,
     /// Bluetooth: pairing controllers (`app_bluetooth.rs`).
     Bluetooth,
     /// The web companion: the library and uploads from a browser (`app_web.rs`).
@@ -590,6 +626,7 @@ const SETTINGS_GROUPS: [(&str, &[SettingsRow]); 8] = [
         ("Tailscale", Opens::Tailscale, "Reach the Pocket from your other devices."),
         ("Remote access (SSH)", Opens::Setup(Only::Remote), "Log in from a computer. Turns itself off when the Pocket restarts."),
         ("Sync", Opens::Sync, "Keep saves and states in step with your other devices."),
+        (app_pocket_sync::SETTINGS_NAME, Opens::Pockets, "Keep saves the same on your other Pockets, without a computer."),
         (app_web::SETTINGS_NAME, Opens::Web, "Your games, play time and uploads in a browser."),
         (app_moonlight::SETTINGS_NAME, Opens::PcStreaming, "Pair a gaming PC for Moonlight, and stream its games."),
     ]),
@@ -618,6 +655,8 @@ const SETTINGS_GROUPS: [(&str, &[SettingsRow]); 8] = [
         (app_night_light::SETTINGS_NAME, Opens::NightLight, "Warmer, less blue colours in the evening."),
         (MENU_SOUNDS_ROW, Opens::Sounds, "Soft clicks in menus, not in games. Left/right: how loud."),
         (Extra::CaseSounds.label(), Opens::Extra(Extra::CaseSounds), Extra::CaseSounds.blurb()),
+        // 0.6: the case's photos beside its sounds (Games had nine rows with Shelf space).
+        ("Photos of big moments", Opens::MomentPhotos, "Off. On, a photo when your save shows a new badge, a boss beaten or a new level, kept in the game's case."),
     ]),
     // The buttons in one place, and what you feel and see on the controller.
     (CONTROLS_CATEGORY, &[
@@ -644,10 +683,13 @@ const SETTINGS_GROUPS: [(&str, &[SettingsRow]); 8] = [
         (EXTRAS_ROW, Opens::Setup(Only::Extras), "Box art, PortMaster games and starter pack."),
         (app_game_check::SETTINGS_NAME, Opens::GameCheck, "Will your games start? What's missing, in plain words."),
         ("Systems on the shelf", Opens::ShelfSystems, "Which systems are on Home. Their games stay either way."),
+        // 0.5.2: beside Systems on the shelf, the other choice of what stands on the shelf (Look had nine rows).
+        (app_crate::SHELF_SPACE_ROW, Opens::ShelfSpace, app_crate::SHELF_SPACE_LINE),
         (app_curator::SETTINGS_NAME, Opens::Curator, "Lens, smart shelves, Echoes, versions and play history."),
         (app_gallery::SETTINGS_NAME, Opens::Screenshots, "The pictures you took with HOME + A, newest first."),
         (app_gamelist::SETTINGS_NAME, Opens::Gamelist, "Favourites and ratings from your EmulationStation gamelists."),
         (app_android_games::SETTINGS_NAME, Opens::AndroidGames, "Put the Android games you have on a shelf of their own, beside your consoles."),
+        (app_romm::SETTINGS_NAME, Opens::Romm, "The games on your own RomM server, on the shelf. Each downloads the first time you start it."),
     ]),
     ("System", &[
         (pocket_ui::rescue::BACK_ROW, Opens::BackToEs, pocket_ui::rescue::BACK_ROW_HELP),
@@ -940,6 +982,7 @@ enum SettingsPage {
     Manual,
     About,
     Sync,
+    Pockets,
     /// The selected row.
     Leds(usize),
     /// The selected row (`app_night_light.rs`).
@@ -950,6 +993,7 @@ enum SettingsPage {
     Buttons(usize),
     Controllers(usize),
     Tailscale,
+    Romm,
     Bluetooth,
     Web,
     PerfFan,
@@ -982,6 +1026,8 @@ enum Screen {
     /// The games a fact of a card leads to ("More from Criterion Games") and Curator's Rediscover (`app_connections`).
     Connection,
     Rediscover,
+    /// Shelf space's crate: the games not on the shelf (`app_crate`).
+    Crate,
 }
 
 struct Running {
@@ -1579,7 +1625,7 @@ struct App {
     text_run: pocket_ui::auto_texts::AutoTexts,
     /// The games recognised by their checksum, before the covers and descriptions (`app_identify`).
     identify: app_identify::Identify,
-    /// The look step's previews, one per theme (`setup::LOOK_PREVIEW`), and whether they show the built-in
+    /// The look step's previews, one per theme (`setup::look_preview`), and whether they show the built-in
     /// sample games; made when the step opens, dropped when what they show changes.
     look_previews: Option<(Vec<Image>, bool)>,
     /// While the previews are painted: the sample game's ROM path and its box art.
@@ -1633,12 +1679,20 @@ struct App {
     /// Offline game facts from Wikidata, and what each file matched (None: no entry).
     gamedb: pocket_ui::gamedb::GameDb,
     game_infos: std::collections::HashMap<PathBuf, Option<pocket_ui::gamedb::GameInfo>>,
+    /// `infos_warm_tick`: the next game of the library to look up ahead (system, game), and the lookups made by
+    /// `game_info` so far (the card's check counts them).
+    infos_warm: (usize, usize),
+    infos_resolved: u64,
     /// Settings > Sync and the notice after a game (`app_sync.rs`).
     sync: pocket_ui::startup::Later<app_sync::SyncUi>,
     /// Settings > Tailscale (`app_tailscale.rs`).
     tailscale: pocket_ui::startup::Later<app_tailscale::TailscaleUi>,
+    /// Settings > Games > RomM and the RomM games' downloads (`app_romm.rs`).
+    romm: pocket_ui::startup::Later<app_romm::RommUi>,
     /// Settings > Web companion and its server (`app_web.rs`).
     web: pocket_ui::startup::Later<app_web::WebUi>,
+    /// Pocket-to-Pocket sync (`app_pocket_sync.rs`): its switch is read at the start (one small file), its service starts later.
+    pocket_sync: app_pocket_sync::PocketSyncUi,
     /// Settings > Bluetooth (`app_bluetooth.rs`).
     bluetooth: pocket_ui::startup::Later<app_bluetooth::BluetoothUi>,
     /// Settings > Performance & fan, and the fan outside games (`app_perf_fan.rs`).
@@ -1713,6 +1767,10 @@ struct App {
     language: Option<pocket_ui::i18n::Lang>,
     /// The Cabinet look's shelves, animations and pictures (`app_cabinet`).
     cabinet: app_cabinet::CabinetUi,
+    /// Settings → Games → Shelf space: the games on the shelf; the rest are in the crate (`pocket_ui::shelf_space`).
+    shelf_space: pocket_ui::shelf_space::ShelfSpace,
+    /// The crate on screen (`app_crate`).
+    crate_ui: app_crate::CrateUi,
     /// Curator: the index, its pages, smart shelves (`app_curator`).
     curator: app_curator::CuratorUi,
     /// Settings > On start (`pocket_ui::on_start`).
@@ -1731,6 +1789,15 @@ struct App {
     /// Settings → Playing → Console boot screen (settings.json's `boot_screen`): pocket-core reads it itself at a game's start;
     /// this is the switch's state (`pocket_ui::boot_screen`).
     boot_screen: bool,
+    /// Settings → Screen & sound → Photos of big moments (settings.json's `moment_photos`, Off unless switched on): pocket-core and the
+    /// Android player read it themselves at a game's start (`pocket_ui::album`); this is the switch's state.
+    moment_photos: bool,
+    /// Settings → Screen & sound → Photos of big moments → Also in play (settings.json's `moment_in_play`, Off unless chosen):
+    /// pocket-core reads it at a game's start (`album::moment_in_play`).
+    moment_in_play: bool,
+    /// When the game that just ended began (Unix seconds, a minute early): its photos slide into the case on the way back
+    /// (`app_album::album_tucked`).
+    album_since: Option<i64>,
     /// "Where was I?": the card of the game being started, shown over its launch picture (`app_where_was_i`).
     where_was_i: Option<pocket_ui::where_was_i::Card>,
     /// "The case knows where you are": lines read from the games' battery saves (`app_case_knows`).
@@ -1801,8 +1868,10 @@ impl App {
         }
         // Settings > Games > Systems on the shelf: a hidden system's card and its recent games stay off Home.
         let recents = self.recents.list.iter().enumerate().filter(|(_, r)| self.recent_visible(r)).map(|(i, _)| i);
-        let systems = shelf::visible_systems(self.systems.iter().map(|s| s.name.as_str()), &self.hidden);
-        let home = Item::with_apps(Item::home(recents.take(RECENTS_ON_HOME), !self.favorite_items().is_empty(), systems), self.streaming && self.streaming_on);
+        let mut systems = shelf::visible_systems(self.systems.iter().map(|s| s.name.as_str()), &self.hidden);
+        // Shelf space: a system shows while one of its games is on the shelf; the rest are in the crate (`app_crate`).
+        systems.retain(|&s| self.systems[s].games.iter().any(|g| self.shelf_space.on_shelf(&g.path)));
+        let home = Item::with_crate(Item::with_apps(Item::home(recents.take(RECENTS_ON_HOME), !self.favorite_items().is_empty(), systems), self.streaming && self.streaming_on), self.shelf_space_on());
         let home = Item::with_curator(home, self.curator_home_rows(), self.theme != Theme::Cabinet);
         // "Search" above Continue in the list looks (`app_search`); the cabinet opens it with Up on its top shelf.
         let home = Item::with_search(home, self.theme != Theme::Cabinet && self.systems.iter().any(|s| !s.games.is_empty()));
@@ -1820,8 +1889,9 @@ impl App {
             Screen::Home if self.kids_live() => self.kids_items(),
             Screen::Home if self.big_on() => self.big_items(),
             Screen::Home => self.home_items(),
-            Screen::Games(s) => (0..self.systems[s].games.len()).map(|g| Item::Game(s, g)).collect(),
+            Screen::Games(s) => (0..self.systems[s].games.len()).filter(|&g| self.shelf_space.on_shelf(&self.systems[s].games[g].path)).map(|g| Item::Game(s, g)).collect(),
             Screen::Favorites => self.favorite_items(),
+            Screen::Crate => self.crate_items(),
             screen => self.curator_items(screen),
         };
         self.big_after_rebuild(big_was);
@@ -1887,6 +1957,10 @@ impl App {
         }
         // A on Home while the card has no games: the starter pack (`app_starter`).
         if self.starter_home_press(b) {
+            return;
+        }
+        // Shelf space's crate: A takes a game out, the swap's own moves (`app_crate`), in every look.
+        if self.crate_press(b) {
             return;
         }
         // Up on the cabinet's top shelf opens the search, which the list looks have as a row above Continue.
@@ -1965,6 +2039,12 @@ impl App {
             Some(item @ (Item::Curator | Item::Lens | Item::SmartShelf(_) | Item::Sticker(_) | Item::History | Item::Review(_) | Item::Rediscover)) => self.curator_activate(item),
             Some(Item::Search) => self.open_search(),
             Some(Item::JustPlay) => self.curator_just_play(),
+            Some(Item::Crate) => {
+                self.home_item = Some(Item::Crate);
+                self.screen = Screen::Crate;
+                self.sel = 0;
+                self.rebuild();
+            }
             None => {}
         }
     }
@@ -2098,9 +2178,17 @@ impl App {
                 pocket_ui::eject::Screen::Tv => pocket_ui::crt_on::Screen::Tv,
             };
             env.push((pocket_ui::crt_on::ENV, screen.env_value().into()));
+            // A handheld's display switches on as the real one did (Handheld switch-on, `lcd_on`).
+            if screen == pocket_ui::crt_on::Screen::Lcd && extra(Extra::HandheldOn) {
+                env.push((pocket_ui::lcd_on::ENV, pocket_ui::lcd_on::Panel::of(&system).key().into()));
+            }
             if !extra(Extra::CaseSounds) {
                 env.push((pocket_ui::crt_on::SILENT_ENV, "1".into()));
             }
+        }
+        // Power lights off (Cozy extras): the frame's light stays as it is drawn (`frame_led::live`).
+        if !extra(Extra::PowerLights) {
+            env.push((pocket_ui::frame_led::ENV, "0".into()));
         }
         // Smooth fan: a pocket-core game tells pocket-ui its fan choice instead of changing the trips (`app_perf_fan`).
         env.extend(self.perf_fan_game_env().filter(|_| hosted));
@@ -2121,14 +2209,14 @@ impl App {
         // pocket-core starts dark. The deliberate picture behind a readable reminder still needs to be there.
         self.launch_picture = None;
         if grow.is_none() {
-            let (proxy, data_dir, system, path) = (self.proxy.clone(), self.data_dir.clone(), system.clone(), path.clone());
+            let (proxy, data_dir, system, path, preview_core) = (self.proxy.clone(), self.data_dir.clone(), system.clone(), path.clone(), core.clone());
             let (w, h) = self.screen_size();
             std::thread::spawn(move || {
                 let prepared = if crt_on && reminder.is_none() {
                     None
                 } else {
                     let picture = hosted.then(|| pocket_ui::video::VideoSettings::load(&data_dir, &system, &path)).map(|v| (v.scaling, v.orientation.turns()));
-                    pocket_ui::launch_picture::prepare(&data_dir, &system, &path, picture, w, h)
+                    pocket_ui::launch_picture::prepare_for_core(&data_dir, &system, &path, &preview_core, picture, w, h)
                 };
                 // Even an omitted picture must clear a reminder that has no image, just as a failed read does.
                 let _ = proxy.send_event(UserEvent::LaunchPicture(path, prepared));
@@ -2140,7 +2228,7 @@ impl App {
         self.leds_game_started(&system, &path);
         #[cfg(not(feature = "brick"))]
         self.leds_game_started(&system);
-        self.sleep.game_started(pocket_ui::sleep::Game::new(&system, &name, &path, &emulator, pgid));
+        self.sleep.game_started(pocket_ui::sleep::Game::with_core(&system, &name, &path, &emulator, &core, pgid));
         pocket_ui::battery_history::set_activity(Some(&system));
         // The battery per game: this game's stretches on battery go to its ledger (`battery_games`).
         pocket_ui::battery_history::set_game(pocket_ui::battery_games::Key::recorded(&system, &path, &emulator));
@@ -2242,7 +2330,7 @@ impl App {
         let default = if failed { self.fallback.add(&run.path); self.systems.iter().find(|s| s.name == run.system).map(|s| self.route(s, Some(&run.path), true).0).unwrap_or_default() } else { String::new() };
         // A system with no other emulator than pocket-core (its core is missing): the next choice is pocket-core again, which
         // failed again, for ever (1,483 starts in two minutes, 2026-10-29). Say what happened instead.
-        let retry = failed && default != "pocket-core";
+        let retry = failed && pocket_ui::fallback::retry_with(&default);
         if retry {
             println!("pocket-core couldn't start {} (exit ok {ok}, {secs} s): {default} for this launch", run.path.display());
             self.notice = Some(Notice::new(pocket_ui::fallback::notice(&default)));
@@ -2250,7 +2338,8 @@ impl App {
             self.fallback.remove(&run.path);
             println!("pocket-core couldn't start {} (exit ok {ok}, {secs} s): no other emulator for {}", run.path.display(), run.system);
             if self.notice.is_none() {
-                self.notice = Some(Notice::new(pocket_ui::fallback::core_missing_notice(&run.name)));
+                // No other emulator on this system at all (the Brick): not RetroArch's core downloader.
+                self.notice = Some(Notice::new(if default.is_empty() { pocket_ui::fallback::not_started_notice_on(&run.system, &run.name, None) } else { pocket_ui::fallback::core_missing_notice(&run.name) }));
             }
         }
         if let Some(core) = core_gone {
@@ -2283,6 +2372,8 @@ impl App {
         // starts again to apply its options: its saves stay held until it really ends.
         if !retry && reapply.is_none() {
             self.sync_after_game(&run.path);
+            // Pocket-to-Pocket sync: the saves go to the paired Pockets (`app_pocket_sync.rs`).
+            self.pocket_sync_after_game();
         }
         if run.hosted() {
             self.restore_system_then_fan();
@@ -2328,6 +2419,8 @@ impl App {
         }
         // The shelf is live now; the way back only paints over it.
         if let Some(frame) = eject.filter(|_| !never_started && !retry && reapply.is_none()) {
+            let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_secs() as i64);
+            self.album_since = Some(now - secs as i64 - 60);
             self.begin_eject(&run.path, &run.system, frame);
         }
         // A start that failed for good: the shelf stands on the game again, and in Cozy with Motion Full its medium comes back
@@ -2493,7 +2586,7 @@ impl App {
         });
         let stem = run.path.file_stem().and_then(|s| s.to_str()).unwrap_or_default();
         let states = if hosted {
-            Some(StateSet::pocket_core(&slots::base(&run.system, stem)))
+            Some(StateSet::pocket_core(&slots::base_for_core(&run.system, stem, &run.core)))
         } else if standalone::active() {
             standalone::states()
         } else {
@@ -3234,7 +3327,7 @@ impl App {
             return;
         }
         // The game's picture, darkened (made once per picture, `app_menu_open`); a little more behind Pixel Path's text.
-        let fade = if self.menu.as_ref().is_some_and(|m| m.page == Page::PixelPath) { app_pixel_path::PAGE_FADE } else { 225 };
+        let fade = if self.menu.as_ref().is_some_and(|m| m.page == Page::PixelPath) { app_pixel_path::PAGE_FADE } else { pocket_ui::eject::PAUSE_FADE };
         self.paint_game_behind(c, VOID, fade);
         let Some(menu) = self.menu.as_ref() else { return };
         if menu.page == Page::LoadBlocked {
@@ -3452,7 +3545,7 @@ impl App {
                 let rows = opt_entries(menu.emu.as_ref(), menu.cheats.is_some())
                     .into_iter()
                     .map(|e| match e {
-                        OptEntry::Group(g) => (options::GROUPS[g].name.to_string(), ">".to_string(), options::GROUPS[g].desc.to_string()),
+                        OptEntry::Group(g) => (options::GROUPS[g].name.to_string(), ">".to_string(), options::GROUPS[g].desc_here().to_string()),
                         OptEntry::Emulator => ("Emulator".into(), ">".into(), "Settings of the emulator itself, such as colours and palettes.".into()),
                         OptEntry::Controls => ("Controls".into(), ">".into(), "Which button does what, and the left stick.".into()),
                         OptEntry::Zoom => ("Zoom".into(), ">".into(), "The picture larger, to read small text. Move with the D-pad.".into()),
@@ -3592,7 +3685,7 @@ impl App {
     fn sheet_header(&mut self, c: &mut Canvas, title: &str) -> i32 {
         let pill_left = self.status_pill(c);
         let title = self.text.fit(Face::Title, 50, title, pill_left - 24 - (NU_PAD + NU_BTN_PAD));
-        self.text.draw(c, Face::Title, 50, NU_PAD + NU_BTN_PAD, NU_PAD + 58, pal().chalk, &title);
+        self.text.draw(c, Face::Title, 50, NU_PAD + NU_BTN_PAD, pocket_ui::kit::header_title(c.h), pal().chalk, &title);
         pill_left
     }
 
@@ -3622,7 +3715,7 @@ impl App {
         match item {
             Item::Recent(i) => self.recents.list.get(i).map(|r| (r.system.clone(), r.path.clone())),
             Item::Game(s, g) => Some((self.systems[s].name.clone(), self.systems[s].games[g].path.clone())),
-            Item::System(_) | Item::Favorites | Item::Streaming | Item::Search | Item::JustPlay | Item::Curator | Item::Lens | Item::SmartShelf(_) | Item::Sticker(_) | Item::History | Item::Review(_) | Item::Rediscover => None,
+            Item::System(_) | Item::Favorites | Item::Streaming | Item::Search | Item::JustPlay | Item::Crate | Item::Curator | Item::Lens | Item::SmartShelf(_) | Item::Sticker(_) | Item::History | Item::Review(_) | Item::Rediscover => None,
         }
     }
 
@@ -3690,6 +3783,7 @@ impl App {
         .with_appearance(self.appearance)
         .with_animations(self.animations)
         .with_catalog(catalog)
+            .with_lived_in(self.lived_in)
         .with_switches(self.switches(), self.tour.later.clone())
     }
 
@@ -3763,10 +3857,12 @@ impl App {
                 }
                 Opens::GameCheck => self.open_game_check(),
                 Opens::Sync => self.open_sync(),
+                Opens::Pockets => self.open_pocket_sync(),
                 Opens::Leds => self.open_leds(),
                 Opens::NightLight => self.open_night_light(),
                 Opens::CozyExtras => self.open_cozy_extras(),
                 Opens::Tailscale => self.open_tailscale(),
+                Opens::Romm => self.open_romm(),
                 Opens::Web => self.open_web(),
                 Opens::Bluetooth => self.open_bluetooth(),
                 Opens::PerfFan => self.open_perf_fan(),
@@ -3806,8 +3902,17 @@ impl App {
                     self.flip_settings_switch(SETTINGS[sel].1);
                     Some(SettingsPage::List(sel))
                 }
+                Opens::MomentPhotos => {
+                    self.step_moment_photos(true);
+                    Some(SettingsPage::List(sel))
+                }
                 Opens::Extra(e) => {
                     self.switch_extra(e);
+                    Some(SettingsPage::List(sel))
+                }
+                // Off, 10, 20, 50: the next one (`app_crate::shelf_space_step`).
+                Opens::ShelfSpace => {
+                    self.shelf_space_step(true);
                     Some(SettingsPage::List(sel))
                 }
                 Opens::OnStart => {
@@ -3954,8 +4059,16 @@ impl App {
             // The on/off rows: Left and Right switch them as A does (0.5.1: Zoom in the pause menu took only A, a hand
             // walk). Every row that changes in place takes Left/Right (`app_settings_groups::changes_in_place`,
             // tests/user_journeys.rs walks them all).
+            (Some(SettingsPage::List(sel)), b @ (Button::Left | Button::Right)) if matches!(SETTINGS[sel].1, Opens::MomentPhotos) => {
+                self.step_moment_photos(matches!(b, Button::Right));
+                Some(SettingsPage::List(sel))
+            }
             (Some(SettingsPage::List(sel)), Button::Left | Button::Right) if matches!(SETTINGS[sel].1, Opens::Haptics | Opens::RememberQuit | Opens::RemindWhere | Opens::ZoomInPause | Opens::LivedIn | Opens::BootScreen) => {
                 self.flip_settings_switch(SETTINGS[sel].1);
+                Some(SettingsPage::List(sel))
+            }
+            (Some(SettingsPage::List(sel)), Button::Left | Button::Right) if matches!(SETTINGS[sel].1, Opens::ShelfSpace) => {
+                self.shelf_space_step(b == Button::Right);
                 Some(SettingsPage::List(sel))
             }
             (Some(SettingsPage::Starter), b) => self.starter_input(b),
@@ -3966,7 +4079,9 @@ impl App {
             (Some(SettingsPage::Buttons(sel)), b) => self.buttons_input(sel, b),
             (Some(SettingsPage::Controllers(sel)), b) => self.controllers_input(sel, b),
             (Some(SettingsPage::Tailscale), b) => self.tailscale_input(b),
+            (Some(SettingsPage::Romm), b) => self.romm_input(b),
             (Some(SettingsPage::Web), b) => self.web_input(b),
+            (Some(SettingsPage::Pockets), b) => self.pocket_sync_input(b),
             (Some(SettingsPage::Bluetooth), b) => self.bluetooth_input(b),
             (Some(SettingsPage::PerfFan), b) => self.perf_fan_input(b),
             (Some(SettingsPage::SleepPower), b) => self.sleep_power_input(b),
@@ -4052,8 +4167,14 @@ impl App {
         if self.settings_page == Some(SettingsPage::Web) {
             return self.paint_web(c);
         }
+        if self.settings_page == Some(SettingsPage::Pockets) {
+            return self.paint_pocket_sync(c);
+        }
         if self.settings_page == Some(SettingsPage::Tailscale) {
             return self.paint_tailscale(c);
+        }
+        if self.settings_page == Some(SettingsPage::Romm) {
+            return self.paint_romm(c);
         }
         if self.settings_page == Some(SettingsPage::Bluetooth) {
             return self.paint_bluetooth(c);
@@ -4114,8 +4235,8 @@ impl App {
             Some(SettingsPage::List(sel)) => self.paint_settings_header(c, app_settings_groups::group_of(sel), false),
             Some(SettingsPage::Tabs(sel)) => self.paint_settings_header(c, app_settings_groups::group_of(sel), true),
             _ => {
-                self.text.draw(c, Face::Title, 50, pad + NU_BTN_PAD, pad + 58, pal().chalk, title);
-                pad + NU_PILL + 12
+                self.text.draw(c, Face::Title, 50, pad + NU_BTN_PAD, pocket_ui::kit::header_title(c.h), pal().chalk, title);
+                pocket_ui::kit::header_bottom(c.h) + 12
             }
         };
         let right = c.w - pad;
@@ -4215,7 +4336,10 @@ impl App {
                     // The APK's version (Android's app info says the same), never Linux's "-dev (commit)".
                     format!("pocket-ui {}", update::shown_version())
                 } else if update::release_build() { version } else {
-                    format!("pocket-ui {}-dev ({})", update::app_version(), option_env!("POCKETUI_COMMIT").unwrap_or("unknown"))
+                    // The commit's first nine characters, as `git log --oneline` shows it: the whole 40 were cut with "…" on
+                    // the 4:3 panels, how far depended on the hash's letters (18.11.2026).
+                    let commit = option_env!("POCKETUI_COMMIT").unwrap_or("unknown");
+                    format!("pocket-ui {}-dev ({})", update::app_version(), commit.get(..9).unwrap_or(commit))
                 };
                 let mut lines = vec![
                     ("Version", version),
@@ -4255,7 +4379,7 @@ impl App {
                 // Under 768 lines (the Smart Pro's 720) room for two lines of help: one cut "Report a problem"'s explanation short.
                 let help_lines = if c.h < 768 { 2 } else { 1 };
                 let below = 2 * row + 20 + pocket_ui::type_scale::px(NU_SMALL) as i32 / 2 + help_lines * pocket_ui::type_scale::line(NU_SMALL, 12);
-                let fit_for = |n: usize| (c.h - NU_PAD - NU_PILL - 8 - top - below) / (n as i32 + 1);
+                let fit_for = |n: usize| (pocket_ui::kit::hint_bar_top(c.h) - 8 - top - below) / (n as i32 + 1);
                 // Where the licence texts are (put there by the install zip and the image: pocket-ui's licence, the
                 // credits, the crates' and the fonts' texts). Its row comes only where the facts keep three quarters
                 // of the row's height with it; on the shortest page (the Device row, large German text) the help under
@@ -4291,7 +4415,7 @@ impl App {
                 let gap = if c.h < 768 { row / 3 } else { row };
                 self.paint_about_rows(c, top + lines.len() as i32 * row + gap, row_h, font);
             }
-            Some(SettingsPage::Starter | SettingsPage::Sync | SettingsPage::Leds(_) | SettingsPage::NightLight(_) | SettingsPage::CozyExtras(_) | SettingsPage::Buttons(_) | SettingsPage::Controllers(_) | SettingsPage::Tailscale | SettingsPage::Web | SettingsPage::Bluetooth | SettingsPage::PerfFan | SettingsPage::Curator | SettingsPage::Achievements | SettingsPage::Tools | SettingsPage::TestButtons | SettingsPage::GameCheck | SettingsPage::PcStreaming | SettingsPage::Backup | SettingsPage::Storage | SettingsPage::Gamelist | SettingsPage::Screenshots | SettingsPage::AndroidGames | SettingsPage::SleepPower) | None => {}
+            Some(SettingsPage::Starter | SettingsPage::Sync | SettingsPage::Leds(_) | SettingsPage::NightLight(_) | SettingsPage::CozyExtras(_) | SettingsPage::Buttons(_) | SettingsPage::Controllers(_) | SettingsPage::Tailscale | SettingsPage::Romm | SettingsPage::Web | SettingsPage::Pockets | SettingsPage::Bluetooth | SettingsPage::PerfFan | SettingsPage::Curator | SettingsPage::Achievements | SettingsPage::Tools | SettingsPage::TestButtons | SettingsPage::GameCheck | SettingsPage::PcStreaming | SettingsPage::Backup | SettingsPage::Storage | SettingsPage::Gamelist | SettingsPage::Screenshots | SettingsPage::AndroidGames | SettingsPage::SleepPower) | None => {}
         }
     }
 
@@ -4300,7 +4424,7 @@ impl App {
     fn paint_battery(&mut self, c: &mut Canvas, range: usize) {
         use pocket_ui::battery;
         let (pad, font) = (NU_PAD, 36u32);
-        let (left, right, top) = (NU_PAD + NU_BTN_PAD, c.w - NU_PAD - NU_BTN_PAD, NU_PAD + NU_PILL + 12);
+        let (left, right, top) = (NU_PAD + NU_BTN_PAD, c.w - NU_PAD - NU_BTN_PAD, pocket_ui::kit::header_bottom(c.h) + 12);
         let now = recents::now_secs();
         let hours = battery::RANGES[range.min(battery::RANGES.len() - 1)];
         let history = pocket_ui::battery_history::view();
@@ -4329,7 +4453,7 @@ impl App {
         // (100 on a short screen, 768 lines, where a pointer of two lines would otherwise lie on the hints.)
         let min_graph: i32 = if pocket_ui::kit::short_screen(c.h) { 100 } else { 140 };
         let under_for = |n: usize| 80 + 12 + n as i32 * draw_step + 60 + (pointer.len() as i32 - 1).max(0) * desc_step + desc_step / 2;
-        let hints_top = c.h - pad - NU_PILL - 8;
+        let hints_top = pocket_ui::kit::hint_bar_top(c.h) - 8;
         // Where even the shortest graph would leave the lines under it no room (Large German on 1024x768), the games'
         // cost lines go before the pointer to the Sleep settings and the graph, which lie on the hint bar otherwise.
         let top_of_graph = top + 130;
@@ -4379,8 +4503,8 @@ impl App {
     fn paint_manual(&mut self, c: &mut Canvas) {
         use pocket_ui::manual;
         let (pad, left) = (NU_PAD, NU_PAD + NU_BTN_PAD);
-        let top = pad + NU_PILL + 12;
-        let view_h = c.h - pad - NU_PILL - 16 - top;
+        let top = pocket_ui::kit::header_bottom(c.h) + 12;
+        let view_h = pocket_ui::kit::hint_bar_top(c.h) - 16 - top;
         // The guide's pages stay English for now (docs/i18n-glossary.md); the title and hints around them don't.
         self.text.set_translate(false);
         self.manual.paint(c, &mut self.text, left, top, c.w - 2 * left, view_h);
@@ -4450,6 +4574,21 @@ impl App {
         }
     }
 
+    /// Settings → Screen & sound → Photos of big moments one value on (A, Right) or back (Left), and kept: Off, On, Also in play
+    /// (only where pocket-core draws the game: `device::hides("moment_in_play")`), round again.
+    pub(crate) fn step_moment_photos(&mut self, forward: bool) {
+        let values = if pocket_ui::device::hides("moment_in_play", false, false) { 2 } else { 3 };
+        let now = match (self.moment_photos, self.moment_in_play && values == 3) {
+            (false, _) => 0,
+            (true, false) => 1,
+            (true, true) => 2,
+        };
+        let next = if forward { (now + 1) % values } else { (now + values - 1) % values };
+        self.moment_photos = next > 0;
+        self.moment_in_play = next == 2;
+        self.save_settings();
+    }
+
     /// One of Settings' on/off rows switched (A, Left or Right on it) and kept.
     fn flip_settings_switch(&mut self, opens: Opens) {
         match opens {
@@ -4484,6 +4623,8 @@ impl App {
             zoom_in_pause: self.zoom_in_pause,
             lived_in: self.lived_in,
             boot_screen: self.boot_screen,
+            moment_photos: self.moment_photos,
+            moment_in_play: self.moment_in_play,
             big_shelf: false,
             button_layout: self.button_layout,
             prompts: pocket_ui::button_prompts::get(),
@@ -4703,7 +4844,7 @@ impl App {
         let busy = self.updates.is_busy();
         // Bottom: progress while busy, else the last result, else the notes of the selected action.
         let bar = |c: &mut Canvas, frac: f32| {
-            let (w, y) = (c.w - 2 * pad - 2 * NU_BTN_PAD, c.h - pad - NU_PILL - 90);
+            let (w, y) = (c.w - 2 * pad - 2 * NU_BTN_PAD, pocket_ui::kit::hint_bar_top(c.h) - 90);
             pocket_ui::retro::pill(c, pad + NU_BTN_PAD, y, w, 12, 6, pal().keycap);
             pocket_ui::retro::pill(c, pad + NU_BTN_PAD, y, ((w as f32 * frac) as i32).max(12), 12, 6, pal().band);
         };
@@ -4774,7 +4915,7 @@ impl App {
             }
             let actions_end = top + (actions.len() as i32 + 1) * r + r / 3 + if tight { 0 } else { r } + 8;
             let step = (if tight { 36 } else { 40 }) * px as i32 / NU_SMALL as i32;
-            let fit = (((c.h - pad - NU_PILL - 30) - actions_end - 30) / step + 1).max(1) as usize;
+            let fit = (((pocket_ui::kit::hint_bar_top(c.h) - 30) - actions_end - 30) / step + 1).max(1) as usize;
             if lines.len() <= fit || i + 1 == layouts.len() {
                 if lines.len() > fit {
                     lines.truncate(fit);
@@ -4817,7 +4958,7 @@ impl App {
                 self.text.draw(c, Face::Body, font, pad + NU_BTN_PAD, base, ink, &label);
             }
         }
-        let mut y = c.h - pad - NU_PILL - 30 - step * (lines.len() as i32 - 1).max(0);
+        let mut y = pocket_ui::kit::hint_bar_top(c.h) - 30 - step * (lines.len() as i32 - 1).max(0);
         for line in &lines {
             let w = self.text.width(Face::Body, note_px, line);
             self.text.draw(c, Face::Body, note_px, (c.w - w) / 2, y, pal().text, line);
@@ -4993,7 +5134,7 @@ impl App {
         // Only a shelf that is drawn moves (`app_where`): not behind a page, Kids Mode or a game.
         let shelf_visible = self.shelf_in_front();
         self.setup.as_ref().is_some_and(|s| s.animating()) || self.switcher.as_ref().is_some_and(|s| s.animating()) ||
-        self.pending_launch.is_some() || self.quit.is_some() || self.save_filling() || self.kids_animating() || self.pull_moving(Instant::now()) || self.motion_animating(Instant::now()) || self.sync_note_active() || self.tailscale_animating() || self.bluetooth_animating() || self.tools_animating() || self.test_buttons_animating() || self.game_check_animating() || self.pc_streaming_animating() || self.backup_animating() || (self.updates.restart_at.is_some() && self.running.is_none()) || self.launch_at.is_some_and(|t| t.elapsed() < FADE + self.cabinet.launch_delay() + LAST_FADE_FRAME) || (self.theme == Theme::Cabinet && shelf_visible && self.cabinet.animating(Instant::now())) || (self.theme == Theme::Shelf && shelf_visible && self.shelf_media_animating(Instant::now())) || self.stream_message_due() || self.exit_since.is_some() || (if self.sys.quiet_game_controls(&self.sys_ctx()) { self.sys.animating_on_screen(Instant::now()) } else { self.sys.animating(Instant::now()) }) || (self.manual.moving() && self.settings_page == Some(SettingsPage::Manual)) || self.appearance_animating() || self.card.as_ref().is_some_and(|o| o.card.boxed.as_ref().is_some_and(|b| b.animating(Instant::now()))) || self.find_animating() || self.boot_fade.active() || self.ejecting() || (self.theme == Theme::Cabinet && shelf_visible && self.ajar_sliding(Instant::now()))
+        self.pending_launch.is_some() || self.quit.is_some() || self.save_filling() || self.kids_animating() || self.pull_moving(Instant::now()) || self.motion_animating(Instant::now()) || self.sync_note_active() || self.tailscale_animating() || self.romm_animating() || self.bluetooth_animating() || self.tools_animating() || self.test_buttons_animating() || self.game_check_animating() || self.pc_streaming_animating() || self.backup_animating() || (self.updates.restart_at.is_some() && self.running.is_none()) || self.launch_at.is_some_and(|t| t.elapsed() < FADE + self.cabinet.launch_delay() + LAST_FADE_FRAME) || (self.theme == Theme::Cabinet && shelf_visible && self.cabinet.animating(Instant::now())) || (self.theme == Theme::Shelf && shelf_visible && self.shelf_media_animating(Instant::now())) || self.stream_message_due() || self.exit_since.is_some() || (if self.sys.quiet_game_controls(&self.sys_ctx()) { self.sys.animating_on_screen(Instant::now()) } else { self.sys.animating(Instant::now()) }) || (self.manual.moving() && self.settings_page == Some(SettingsPage::Manual)) || self.appearance_animating() || self.card.as_ref().is_some_and(|o| o.card.boxed.as_ref().is_some_and(|b| b.animating(Instant::now()))) || self.find_animating() || self.boot_fade.active() || self.ejecting() || (self.theme == Theme::Cabinet && shelf_visible && self.ajar_sliding(Instant::now()))
     }
 
     fn openness(&self, i: usize) -> f32 {
@@ -5445,6 +5586,14 @@ impl App {
             return false;
         }
         if self.items.is_empty() {
+            // Shelf space's crate with nothing in it: its empty box and a line saying every game is on the shelf.
+            if self.screen == Screen::Crate {
+                self.paint_crate(c);
+                if with_hints {
+                    self.paint_hints(c);
+                }
+                return false;
+            }
             if self.empty_ports() { self.paint_empty_ports(c, with_hints); return false; }
             // A Curator list with nothing on it (yet) says so in its own words.
             if let Some((head, line)) = self.curator_empty_text() {
@@ -5473,6 +5622,7 @@ impl App {
 
         match self.theme {
             _ if big => self.big_paint(c),
+            _ if self.screen == Screen::Crate => self.paint_crate(c),
             Theme::Shelf => self.paint_shelf(c),
             Theme::Split => self.paint_split(c),
             Theme::Cabinet => self.paint_cabinet(c),
@@ -5635,7 +5785,10 @@ impl App {
         c.clear(bg);
         let title = self.screen_title();
         self.paint_top_line(c, title.as_deref(), pal().dust);
-        let (top, row, list_w) = (112, 60, 500);
+        // The list is 500 wide; a canvas under 1280 wide and 960 lines (the Brick's 1024x768) keeps its share of the width,
+        // as on the Plus, so the panel beside it is as wide as there (tests/brick_look_proportions.rs).
+        let list_w = if c.w < 1280 && c.h < 960 { c.w * 500 / 1280 } else { 500 };
+        let (top, row) = (112, 60);
         let visible = ((c.h - 120 - top) / row).max(1) as usize;
         let first = window_start(self.sel, visible, self.items.len());
         // The bar glides to the selection and takes on its system's colour on the way (`app_motion`).
@@ -5667,10 +5820,11 @@ impl App {
         let (title, system, side, meta) = self.describe(item);
         let (px, pw) = (48 + list_w + 40, c.w - (48 + list_w + 40) - 48);
         let color = stripe(&system);
-        // On a screen with fewer than 1080 lines (the Mini V1's 960) the panel gives up the difference, so the name and
-        // the facts under it keep their room (docs/DEVICES.md); on 1080 lines it is 420 tall.
-        let short = (1080 - c.h).max(0);
+        // The panel is 420 tall on 1080 lines and gives up what a shorter screen lacks down to 960 (`split_panel_h`);
+        // `short` is what it gave up, and the name and the facts under it move up by as much.
+        let short = 420 - split_panel_h(c.h);
         pocket_ui::retro::window(c, px, top, pw, 420 - short, 18, mix(color, bg, 90));
+        SPLIT_SEEN.set([px, top, pw, 420 - short, 0, 0, 0, 0, c.w, c.h]);
         // Systems show their game count on the panel, games show their system.
         let big = if split_big_is_side(item) { side } else { system_short(&self.systems, &system) };
         let meta = if meta == big { String::new() } else { meta };
@@ -5691,6 +5845,7 @@ impl App {
             if let Some(art) = self.system_art(item, pw - 48, 310 - short) {
                 let (aw, ah) = (art.w as i32, art.h as i32);
                 c.blit_sprite(&art, px + (pw - aw) / 2, top + 20 + (310 - short - ah) / 2, 0);
+                SPLIT_SEEN.set([px, top, pw, 420 - short, px + (pw - aw) / 2, top + 20 + (310 - short - ah) / 2, aw, ah, c.w, c.h]);
             }
             // A line too wide for the panel (Just Play's "One press" in Retro) goes smaller before it is cut.
             let (big_px, big) = self.text.fit_sizes(Face::Title, &[67, 56, 48, 40], &big, pw - 64);
@@ -5745,6 +5900,17 @@ impl App {
             Item::Curator | Item::Lens | Item::SmartShelf(_) | Item::Sticker(_) | Item::History | Item::Review(_) | Item::Rediscover => self.curator_describe(item),
             Item::Search => ("Search".into(), "search".into(), "All games".into(), "Find any game by its name, typos and all".into()),
             Item::JustPlay => (shelf::JUST_PLAY.into(), "curator".into(), shelf::JUST_PLAY_SIDE.into(), shelf::JUST_PLAY_LINE.into()),
+            Item::Crate => {
+                // Shelf space (`app_crate`): how many are in the crate, and the shelf's free places.
+                let n = self.crate_items().len();
+                let count = if n == 1 { "1 game".to_string() } else { format!("{n} games") };
+                let line = match self.shelf_space.free() {
+                    0 => format!("{count} in the crate, the shelf is full"),
+                    1 => format!("{count} in the crate, 1 place free on the shelf"),
+                    f => format!("{count} in the crate, {f} places free on the shelf"),
+                };
+                ("Crate".into(), "crate".into(), count, line)
+            }
             Item::Favorites => {
                 let n = self.favorite_items().len();
                 let count = if n == 1 { "1 game".to_string() } else { format!("{n} games") };
@@ -5758,7 +5924,8 @@ impl App {
             }
             Item::System(s) => {
                 let sys = &self.systems[s];
-                let n = sys.games.len();
+                // Shelf space: the games on the shelf (the rest are in the crate).
+                let n = sys.games.iter().filter(|g| self.shelf_space.on_shelf(&g.path)).count();
                 let count = if n == 1 { "1 game".to_string() } else { format!("{n} games") };
                 (sys.fullname.clone(), sys.name.clone(), count.clone(), count)
             }
@@ -5767,10 +5934,7 @@ impl App {
                 let game = &sys.games[g];
                 let played = self.recents.list.iter().find(|r| r.path == game.path);
                 let meta = played.map_or_else(|| self.play_evidence(&game.path).untimed().to_string(), |r| recents::played_line(Some(r)));
-                let meta = match self.library.status(&game.path) {
-                    pocket_ui::library_meta::Status::NotStarted => meta,
-                    status => format!("{}, {}", status.label(), meta.to_lowercase()),
-                };
+                let meta = meta_with_status(self.library.status(&game.path), &meta);
                 // The Favorites shelf mixes systems, and one title can be on several (Blockamok Remix is on the 3DS and the
                 // Wii): name the system on the spine and on the label, like the recent games on Home do.
                 // Rediscover says why a game is there ("played a year ago today", "last played 412 days ago").
@@ -5780,12 +5944,59 @@ impl App {
                 let line = (why.is_none() && self.is_frozen_item(item)).then(|| self.case_or_achievements_line(&sys.name, &game.path)).flatten();
                 let meta = why.unwrap_or(meta);
                 if matches!(self.screen, Screen::Favorites | Screen::Shelf(_) | Screen::Sticker(_) | Screen::LensResults | Screen::Connection | Screen::Rediscover) {
-                    let meta = line.unwrap_or_else(|| format!("{}, {}", sys.fullname, meta.to_lowercase()));
+                    let meta = line.unwrap_or_else(|| meta_with_system(&sys.fullname, &meta));
                     return (game.name.clone(), sys.name.clone(), system_short(&self.systems, &sys.name), meta);
                 }
                 let meta = line.unwrap_or(meta);
                 (game.name.clone(), sys.name.clone(), String::new(), meta)
             }
+        }
+    }
+
+    /// The meta line of `describe` in short ("Super Nintendo · Completed · 3 days ago · 6 h"), for the Shelf look when the
+    /// whole one does not fit beside the box (`app_cabinet::meta_choice`; 18.11.2026, Brick Favourites: "Super Nintendo,
+    /// last played 3 days ago, 6 h …"). The same facts, " · " between them: each part is translated on its own. None where
+    /// the line is the save's progress or the RetroAchievements tally (short already) or not a game's.
+    fn meta_short(&self, item: Item) -> Option<String> {
+        match item {
+            Item::Recent(i) => {
+                let r = self.recents.list.get(i)?;
+                if self.case_or_achievements_line(&r.system, &r.path).is_some() {
+                    return None;
+                }
+                Some([system_label(&self.systems, &r.system), recents::ago(r.last_played), recents::duration_short(r.play_secs)].join(" · "))
+            }
+            Item::Game(s, g) => {
+                let sys = self.systems.get(s)?;
+                let game = sys.games.get(g)?;
+                let why = self.rediscover_why(&game.path);
+                if why.is_none() && self.is_frozen_item(item) && self.case_or_achievements_line(&sys.name, &game.path).is_some() {
+                    return None;
+                }
+                let mut parts = Vec::new();
+                if matches!(self.screen, Screen::Favorites | Screen::Shelf(_) | Screen::Sticker(_) | Screen::LensResults | Screen::Connection | Screen::Rediscover) {
+                    parts.push(sys.fullname.clone());
+                }
+                match why {
+                    // Rediscover's reason stands for the rest, as in `describe`.
+                    Some(why) => parts.push(why),
+                    None => {
+                        let status = self.library.status(&game.path);
+                        if status != pocket_ui::library_meta::Status::NotStarted {
+                            parts.push(status.label().to_string());
+                        }
+                        match self.recents.list.iter().find(|r| r.path == game.path) {
+                            Some(r) => {
+                                parts.push(recents::ago(r.last_played));
+                                parts.push(recents::duration_short(r.play_secs));
+                            }
+                            None => parts.push(self.play_evidence(&game.path).untimed().to_string()),
+                        }
+                    }
+                }
+                Some(parts.join(" · "))
+            }
+            _ => None,
         }
     }
 
@@ -5797,12 +6008,18 @@ impl App {
         let details = self.has_console_page(selected);
         let home = self.screen == Screen::Home || (self.theme == Theme::Cabinet && !self.curator_has_back());
         let mut hints = shelf::hints(selected, home, starred, details);
+        // The crate: A takes the game out onto the shelf; while one is picked to make room, A swaps (`app_crate`).
+        if self.screen == Screen::Crate {
+            hints = self.crate_hints(hints);
+        }
         // A frozen game goes on where it was (`app_frozen`).
         if selected.is_some_and(|i| self.is_frozen_item(i)) {
             hints.iter_mut().filter(|h| h.1 == "Play").for_each(|h| h.1 = "Continue");
         }
         // The cabinet's top shelf: Up opens the search (`app_search`).
         hints.extend(self.search_hint());
+        // Below Home START's Settings gives way to the game's own keys: Y Star / Unstar shows (Settings is on Home's bar).
+        let _order = pocket_ui::kit::start_yields(shelf::start_yields(selected, home));
         self.paint_hint_row(c, &hints);
     }
 
@@ -5813,7 +6030,7 @@ impl App {
         let moving = self.moving_now(now);
         if let Some((old, p)) = self.motion.hints_fade(hints, now, moving) {
             let old: Vec<(&str, &str)> = old.iter().map(|(k, l)| (k.as_str(), l.as_str())).collect();
-            let (y, h) = (pocket_ui::kit::hint_bar_top(c.h) - 8, pocket_ui::kit::PILL + 16);
+            let (y, h) = (pocket_ui::kit::hint_bar_top(c.h) - 8, pocket_ui::kit::hint_h(c.h) + 16);
             // Only from the left end of the longer of the two pills: mixing the whole width cost the Brick 4 ms a frame
             // all through the fade, which starts with nearly every move in the Cabinet (docs/TRIMUI-BRICK.md).
             let left = |app: &mut Self, hints: &[(&str, &str)]| pocket_ui::kit::page_hints_left(&mut app.text, c.w, c.h, hints);
@@ -5836,6 +6053,21 @@ impl App {
             }
         }
     }
+}
+
+/// A game's meta line with its status in front ("Completed, last played 3 days ago, 6 h 00 min in total"); as it is for a
+/// game not started. The tables have the status and the line together ("Completed, {t}"): put together without them the
+/// status stayed English ("Nintendo 64, completed, zuletzt gespielt …", 18.11.2026; `meta_words_tests`).
+fn meta_with_status(status: pocket_ui::library_meta::Status, meta: &str) -> String {
+    match status {
+        pocket_ui::library_meta::Status::NotStarted => meta.to_string(),
+        status => format!("{}, {}", status.label(), meta.to_lowercase()),
+    }
+}
+
+/// A game's meta line on a shelf of several systems, its system first ("Super Nintendo, completed, last played …").
+fn meta_with_system(system: &str, meta: &str) -> String {
+    format!("{system}, {}", meta.to_lowercase())
 }
 
 /// `POCKETUI_SNAPSHOT_SIZE=<w>x<h>` for `--snapshot`; without it (or when it doesn't read as a size) the device's
@@ -6087,6 +6319,11 @@ fn snapshot(app: &mut App, args: &[String]) {
         write_png(&buf, w, h, out);
         return;
     }
+    // "crate:<row>[:pick:<k>|:swap:<k>:<ms>|:home|:ask|:clip:<k>|:rests]": Shelf space's crate (`App::crate_snapshot`).
+    if let Some(rest) = state.strip_prefix("crate:") {
+        app.crate_snapshot(rest, w, h, out);
+        return;
+    }
     // "bench-playful:<system>:<launch|pull|lean>": the playful animations' frames in numbers (`App::bench_playful`).
     if let Some(rest) = state.strip_prefix("bench-playful:") {
         app.bench_playful(rest, w, h);
@@ -6096,6 +6333,11 @@ fn snapshot(app: &mut App, args: &[String]) {
     // `App::bench_showcase`).
     if let Some(rest) = state.strip_prefix("bench-showcase:") {
         app.bench_showcase(rest, w, h);
+        return;
+    }
+    // "infos-warm-check:<system>": the first card's lookups cold and after the idle look-ahead (`App::infos_warm_check`).
+    if let Some(rest) = state.strip_prefix("infos-warm-check:") {
+        app.infos_warm_check(rest);
         return;
     }
     // "prefetch-check:<look>:<system>": reading covers ahead, checked (`App::prefetch_check`, tests/cover_prefetch.rs).
@@ -6122,7 +6364,7 @@ fn snapshot(app: &mut App, args: &[String]) {
     if let Some(look) = state.strip_prefix("bench-shelf").map(|r| r.trim_start_matches(':')) {
         let b = app.bench_shelf(if look.is_empty() { "split" } else { look }, w, h);
         println!(
-            "bench-shelf items={} moves={} p50_us={:.0} p95_us={:.0} max_us={:.0} glyphs={} patterns={} panel={}x{} logical={w}x{h} paint={:?} design_passes={:.1} sealed={} look={:?} changes={} moment_ms={:.1} worst={}",
+            "bench-shelf items={} moves={} p50_us={:.0} p95_us={:.0} max_us={:.0} glyphs={} patterns={} panel={}x{} logical={w}x{h} paint={:?} design_passes={:.1} sealed={} look={:?} changes={} moment_ms={:.1} worst={} room_rebuilds={}",
             app.items.len(),
             b.moves,
             b.p50_us,
@@ -6138,7 +6380,8 @@ fn snapshot(app: &mut App, args: &[String]) {
             app.theme,
             b.changes,
             b.moment_ms,
-            b.worst
+            b.worst,
+            app_cabinet::ROOM_REBUILDS.load(std::sync::atomic::Ordering::Relaxed)
         );
         print_design_sites();
         return;
@@ -6261,6 +6504,8 @@ fn snapshot(app: &mut App, args: &[String]) {
             "first-wifi-empty" => setup.at_stage("wifi").with_net_demo(pocket_ui::net_state::demo::empty()),
             "first-games" => setup.at_stage("games"),
             "first-look" => setup.at_stage("look"),
+            // "How cozy should it be?", after the look (`cozy_level`).
+            "first-cozy" => setup.at_stage("cozy"),
             // Settings › Help & tools › How you like to play: without "For a child".
             "play-later" => setup.only(Only::Play),
             _ if step.starts_with("card=") => setup.at_card(&step["card=".len()..]),
@@ -6390,7 +6635,14 @@ fn snapshot(app: &mut App, args: &[String]) {
         app.shelf_snapshot(rest);
         app.frozen_snapshot();
         let mut buf = vec![0u32; (w * h) as usize];
+        SPLIT_SEEN.set([0; 10]);
         app.paint(&mut snap_canvas(&mut buf, w, h));
+        // Split's panel and console, in the canvas' pixels (tests/split_panel.rs).
+        let [x, y, pw, ph, ax, ay, aw, ah, cw, ch] = SPLIT_SEEN.get();
+        if pw > 0 {
+            println!("split-panel x={x} y={y} w={pw} h={ph} canvas={cw}x{ch}");
+            println!("split-console x={ax} y={ay} w={aw} h={ah}");
+        }
         if let Some(lang) = switch {
             app.set_language(pocket_ui::i18n::Lang::from_locale(lang));
             app.paint(&mut snap_canvas(&mut buf, w, h));
@@ -6466,7 +6718,10 @@ fn snapshot(app: &mut App, args: &[String]) {
         // ":saves[=none]" on a card: its save slots on their medium (`App::card_saves_snapshot`).
         app.card_saves_snapshot(rest);
         let mut buf = vec![0u32; (w * h) as usize];
+        pocket_ui::game_card::BODY_SEEN.set((0, 0));
         app.paint(&mut snap_canvas(&mut buf, w, h));
+        let (cw, ch) = { let cv = snap_canvas(&mut buf, w, h); (cv.w, cv.h) };
+        print_card_body(cw, ch);
         // A box's back measures its scrolling part when it is painted: keys after its turn (`box:…:rdd`) press on a
         // painted back, as a player's do, so Down scrolls it.
         match boxed.as_deref().and_then(|_| after_turn(rest)) {
@@ -6652,7 +6907,7 @@ fn snapshot(app: &mut App, args: &[String]) {
         app.paint_manual(&mut snap_canvas(&mut buf, w, h));
         app.manual.scroll_by(at.get(1).copied().unwrap_or(0));
     }
-    if manual_at.is_some() || app.starter_snapshot(state) || app.sync_snapshot(state) || app.leds_snapshot(state) || app.night_light_snapshot(state) || app.buttons_snapshot(state) || app.controllers_snapshot(state) || app.tailscale_snapshot(state) || app.web_snapshot(state) || app.bluetooth_snapshot(state) || app.perf_fan_snapshot(state) || app.sleep_power_snapshot(state) || app.report_snapshot(state) || app.port_perf_snapshot(state) || app.achievements_snapshot(state) || app.tools_snapshot(state) || app.test_buttons_snapshot(state) || app.game_check_snapshot(state) || app.pc_streaming_snapshot(state) || app.backup_snapshot(state) || app.storage_snapshot(state) || app.gamelist_snapshot(state) || app.android_games_snapshot(state) {
+    if manual_at.is_some() || app.starter_snapshot(state) || app.sync_snapshot(state) || app.leds_snapshot(state) || app.night_light_snapshot(state) || app.buttons_snapshot(state) || app.controllers_snapshot(state) || app.tailscale_snapshot(state) || app.romm_snapshot(state) || app.web_snapshot(state) || app.pocket_sync_snapshot(state) || app.bluetooth_snapshot(state) || app.perf_fan_snapshot(state) || app.sleep_power_snapshot(state) || app.report_snapshot(state) || app.port_perf_snapshot(state) || app.achievements_snapshot(state) || app.tools_snapshot(state) || app.test_buttons_snapshot(state) || app.game_check_snapshot(state) || app.pc_streaming_snapshot(state) || app.backup_snapshot(state) || app.storage_snapshot(state) || app.gamelist_snapshot(state) || app.android_games_snapshot(state) {
     } else if let Some(kind) = state.strip_prefix("updates") {
         // The Updates page after "Get system" with a made-up list: "updates:note" staged with a note of what the new
         // system lacks, "updates:refused" refused because pocket-ui would break (`os_compat`).
@@ -6759,9 +7014,18 @@ fn snapshot(app: &mut App, args: &[String]) {
         app.bluetooth_row_now();
     }
     let group = |name: &str| options::GROUPS.iter().position(|g| g.name == name).unwrap_or(0);
-    let emu = EmuMenu::load(&app.data_dir, "gbc", std::path::Path::new("/storage/roms/gbc/uCity.gbc"), &mut settings)
-        // The Controls page needs a layout to draw: without a core snapshot in the data folder, the standard one.
-        .or_else(|| state.starts_with("controls").then(|| EmuMenu::offline("gbc", &settings)));
+    let controls_system = if state.starts_with("controls:nds") { "nds" } else { "gbc" };
+    // Reproducible DS assignments for the live Controls page painters.
+    if controls_system == "nds" {
+        if state.ends_with(":stylus") { settings.values.insert("ctl.l2".into(), "ds_stylus".into()); }
+        if state.ends_with(":layout") { settings.values.insert("ctl.r2".into(), "ds_layout".into()); }
+    }
+    let emu = if controls_system == "nds" {
+        Some(EmuMenu::offline(controls_system, &settings))
+    } else {
+        EmuMenu::load(&app.data_dir, controls_system, std::path::Path::new("/storage/roms/gbc/uCity.gbc"), &mut settings)
+            .or_else(|| state.starts_with("controls").then(|| EmuMenu::offline(controls_system, &settings)))
+    };
     // "name:a:b" selects rows: controls:<row>, emulator:<row>, category:<category>:<row>.
     let mut parts = state.split(':');
     let name = parts.next().unwrap_or_default();
@@ -7148,8 +7412,17 @@ fn snapshot(app: &mut App, args: &[String]) {
     app.frozen_snapshot();
     let mut buf = vec![0u32; (w * h) as usize];
     let mut c = snap_canvas(&mut buf, w, h);
+    pocket_ui::game_card::BODY_SEEN.set((0, 0));
     app.paint(&mut c);
     app.transition_snapshot(&mut c);
+    // What tests/brick_look_proportions.rs measures, in the canvas' pixels: the switcher's selected card (with its touch
+    // margin, as far as its bezel reaches), the heading pill's bottom and the game card's scrolling body.
+    if let Some(sw) = app.switcher.as_ref() {
+        if let Some((x, y, cw, ch, _)) = sw.card_areas.iter().find(|a| a.4 == sw.sel) {
+            println!("switcher-card x={x} y={y} w={cw} h={ch} hints={} pill={} canvas={}x{}", pocket_ui::kit::hint_bar_top(c.h), pocket_ui::switcher::heading_bottom(), c.w, c.h);
+        }
+    }
+    print_card_body(c.w, c.h);
     if quick_over_game {
         app.sys.paint(&mut c, &mut app.text, false);
     }
@@ -7229,6 +7502,14 @@ fn after_turn(rest: &str) -> Option<(String, String)> {
 
 /// The canvas a snapshot paints into `buf` (`w` x `h` design pixels, `snapshot_dims`): that design canvas, or painted
 /// natively (`snapshot_native`) the panel's pixels at the front of `buf`, which `write_png` then writes as they are.
+/// The game card's scrolling body in the last paint, on a canvas `cw` x `ch` (tests/brick_look_proportions.rs).
+fn print_card_body(cw: i32, ch: i32) {
+    let (top, bottom) = pocket_ui::game_card::BODY_SEEN.get();
+    if bottom > 0 {
+        println!("card-body top={top} bottom={bottom} hints={} canvas={cw}x{ch}", pocket_ui::kit::hint_bar_top(ch));
+    }
+}
+
 pub(crate) fn snap_canvas(buf: &mut [u32], w: u32, h: u32) -> Canvas<'_> {
     match snapshot_native(w, h) {
         Some(p) => {
@@ -7259,6 +7540,10 @@ fn eject_shot(app: &mut App, buf: &mut [u32], w: u32, h: u32, out: &str) -> bool
 /// A 0RGB frame as an RGB PNG (`--snapshot`).
 fn write_png(buf: &[u32], w: u32, h: u32, out: &str) {
     pocket_ui::text::boxes::finish(buf, w as i32, h as i32);
+    // The pages' main pictures in the canvas' pixels (`POCKETUI_SHARES`, tests/brick_proportions.rs).
+    for line in pocket_ui::shares::take(w, h) {
+        println!("{line}");
+    }
     let panel = snapshot_panel_dims();
     let mut reduced = Vec::new();
     let native = snapshot_native(w, h).is_some() && NATIVE_SHOT.get() == buf.as_ptr() as usize;
@@ -7345,7 +7630,7 @@ fn spawn_game(proxy: EventLoopProxy<UserEvent>, run: &Run, env: &[(&str, String)
             eprintln!("ports: {e}");
         }
     }
-    let mut cmd = if let Some(dir) = test_driver_dir() {
+    let mut cmd = if let Some(dir) = test_driver_dir().filter(|_| std::env::var_os("POCKETUI_TEST_REAL_CORE").is_none()) {
         // Same process group and exit notification as a game, with a temporary stand-in executable.
         let mut c = std::process::Command::new(dir.join("run-game"));
         c.arg(path);
@@ -7409,7 +7694,7 @@ fn spawn_game(proxy: EventLoopProxy<UserEvent>, run: &Run, env: &[(&str, String)
         }))
     } else { None };
     let hosted = run.player == Player::Hosted;
-    let moment_base = pocket_ui::slots::base(system, path.file_stem().and_then(|s| s.to_str()).unwrap_or_default());
+    let moment_base = pocket_ui::slots::base_for_core(system, path.file_stem().and_then(|s| s.to_str()).unwrap_or_default(), &run.core);
     std::thread::spawn(move || {
         let ok = child.ok().and_then(|mut c| c.wait().ok()).is_some_and(|s| s.success());
         // Drain the launch evidence on the waiter thread, before publishing GameExited. A delayed/broken pipe
@@ -7535,6 +7820,12 @@ fn spawn_command_fifo(proxy: EventLoopProxy<UserEvent>) {
                     let _ = proxy.send_event(UserEvent::Play(system.trim().to_string(), file));
                 }
                 continue;
+            }
+            if test_driver_dir().is_some() {
+                if let Some(page) = line.trim().strip_prefix("page ") {
+                    let _ = proxy.send_event(UserEvent::TestPage(page.to_string()));
+                    continue;
+                }
             }
             // Test driver only, for the Test buttons journey: controllers of their own, as the pad threads introduce them and
             // send what they press. "tconnect <source> <key> <name…>", "tbtn <source> <up|down|left|right|a|b|x|y|l1|r1|l2|r2|
@@ -7707,7 +7998,7 @@ impl App {
         pocket_ui::mark!("event", "{:?}", std::mem::discriminant(&ev));
         // B while a phone game's first start loads Java: the load stops, the cartridge comes back out (`app_loading`).
         if let UserEvent::Pad(PadEvent::Button { button, pressed: true, .. }) = &ev {
-            if self.java_press(*button) { return; }
+            if self.java_press(*button) || self.romm_press(*button) { return; }
         }
         // A start's skip comes before quick settings, notices and volume keys consume their input. HOME and volume
         // never become a game button in pocket-core, so the UI must deliver their skip itself.
@@ -7784,6 +8075,25 @@ impl App {
             UserEvent::UiScreenshot(failed) => self.ui_screenshot_done(failed),
             #[cfg(feature = "brick")]
             UserEvent::EmuChoiceWritten(result) => self.emu_choice_written(result),
+            UserEvent::TestPage(page) => {
+                if let Some(dir) = test_driver_dir() {
+                    self.settings_page = match page.as_str() {
+                        "achievements" => self.open_achievements(),
+                        "battery" => { pocket_ui::battery_history::load_now(&self.data_dir); Some(SettingsPage::Battery(0)) },
+                        "backup" => self.open_backup_at(dir.join("backups"), dir.join("saves-backups")),
+                        "sync" => self.open_sync(),
+                        "storage" => self.open_storage(),
+                        "tools" => self.open_tools(),
+                        "history" => {
+                            pocket_ui::play_log::open();
+                            self.open_history(pocket_ui::play_history::Span::Week);
+                            None
+                        }
+                        _ => panic!("unknown test page: {page}"),
+                    };
+                    self.request_redraw();
+                }
+            }
             UserEvent::TestPressFrame(button) => {
                 if test_driver_dir().is_some() {
                     for pressed in [true, false] {
@@ -7892,7 +8202,9 @@ impl App {
             }
             UserEvent::Sync(e) => self.sync_event(e),
             UserEvent::Tailscale(e) => self.tailscale_event(e),
+            UserEvent::Romm(n) => self.romm_news(n),
             UserEvent::Web(e) => self.web_event(e),
+            UserEvent::PocketSync(e) => self.pocket_sync_event(e),
             UserEvent::Bluetooth(e) => self.bluetooth_event(e),
             UserEvent::PerfFan(e) => self.perf_fan_event(e),
             UserEvent::Night(level) => self.night_light_event(level),
@@ -7903,6 +8215,7 @@ impl App {
             UserEvent::Gamelist(index) => self.gamelist_event(index),
             UserEvent::AndroidApps(apps, why) => self.android_apps_event(apps, why),
             UserEvent::Gallery(e) => self.gallery_event(e),
+            UserEvent::AlbumPicture(file, img) => self.album_picture(file, img),
             UserEvent::Curator(e) => self.curator_event(e),
             UserEvent::Achievements(e) => self.achievements_event(e),
             UserEvent::PixelPath(r) => self.pixel_path_event(*r),
@@ -8057,6 +8370,21 @@ impl App {
                 }
                 // Settings > Games > Box art & downloads > Pictures: kept at once; a choice that brings more downloads starts them,
                 // Off stops the one that runs (after the file it is on).
+                // Android's "Your games": a games folder of another app, read from now on; the emulator apps found, kept as
+                // Plays with's choices.
+                if let Some(folder) = self.setup.as_mut().and_then(|s| s.take_android_folder()) {
+                    self.android_folder_added(&folder);
+                }
+                if let Some(offers) = self.setup.as_mut().and_then(|s| s.take_android_apps()) {
+                    self.phone_take_offers(&offers);
+                }
+                if let Some(url) = self.setup.as_mut().and_then(|s| s.take_android_page()) {
+                    self.phone_open_page(url);
+                }
+                // "How cozy should it be?": its level's switches, used at once and kept.
+                if let Some(level) = self.setup.as_mut().and_then(|s| s.take_cozy()) {
+                    self.adopt_cozy(level);
+                }
                 if let Some(art) = self.setup.as_mut().and_then(|s| s.take_art()) {
                     self.pictures.set_wanted(art == pocket_ui::settings::Art::Pictures);
                     self.art_off = art == pocket_ui::settings::Art::Off;
@@ -8524,6 +8852,8 @@ impl ApplicationHandler<UserEvent> for App {
         // monotonic clock, which stood still in the suspend). The screen is on already; this is after it.
         if self.sleep.take_woke() {
             self.request_redraw();
+            // Pocket-to-Pocket sync: what the other Pockets saved while this one slept comes now.
+            self.pocket_sync_woke();
         }
         // The Brick back from its real sleep: the game waits behind its pause menu (`Sleep::take_menu_after_wake`).
         #[cfg(feature = "brick")]
@@ -8543,6 +8873,8 @@ impl ApplicationHandler<UserEvent> for App {
         self.night_light_tick();
         // The web companion: starts once the Pocket is up; what it reads follows games and Curator (`app_web.rs`).
         self.web_sync();
+        // Pocket-to-Pocket sync: its service follows the switch and knows when a game runs (`app_pocket_sync.rs`).
+        self.pocket_sync_tick();
         // Curator's index, on its own thread, once the first frame is up and no game runs.
         self.curator_tick();
         // The power button has been held long enough.
@@ -8589,6 +8921,9 @@ impl ApplicationHandler<UserEvent> for App {
         if let Some(t) = self.web_wake(now) {
             wake = Some(wake.map_or(t, |w| w.min(t)));
         }
+        if let Some(t) = self.pocket_sync_wake(now) {
+            wake = Some(wake.map_or(t, |w| w.min(t)));
+        }
         if let Some(t) = self.appearance_tick(now) {
             wake = Some(wake.map_or(t, |w| w.min(t)));
         }
@@ -8602,6 +8937,10 @@ impl ApplicationHandler<UserEvent> for App {
         }
         // The selected game's box front and cartridge, built while the player rests on it (`app_card::box_warm_tick`).
         if let Some(t) = self.box_warm_tick(now) {
+            wake = Some(wake.map_or(t, |w| w.min(t)));
+        }
+        // The library's game facts, looked up ahead in idle moments: the first card's "More by" needs all of them (`app_card::infos_warm_tick`).
+        if let Some(t) = self.infos_warm_tick(now) {
             wake = Some(wake.map_or(t, |w| w.min(t)));
         }
         // Lived-in shelf: the row's leaning and lying spines, made ahead after the row opened (`app_cabinet::lived_warm_tick`).
@@ -8810,6 +9149,8 @@ impl App {
         // Library data merged with the other devices, on a thread that waits a while first (`app_library_sync`).
         self.library_sync_start();
         self.tailscale.start();
+        self.romm.start();
+        self.romm_after_start();
         self.web.start();
         self.bluetooth.start();
         self.achievements.start();
@@ -9213,12 +9554,17 @@ fn main() {
         let data_dir = data_dir.clone();
         Later::new("tailscale", move || app_tailscale::TailscaleUi::load(&data_dir))
     };
+    let romm_ui = {
+        let data_dir = data_dir.clone();
+        Later::new("romm", move || app_romm::RommUi::load(&data_dir))
+    };
     let web_ui = {
         let (data_dir, es_systems) = (data_dir.clone(), PathBuf::from(&es_systems));
         Later::new("web", move || app_web::WebUi::load(&data_dir, &es_systems))
     };
     // The web companion's Stats page reads the play history through this (a function pointer stored once; nothing runs now).
     pocket_ui::web::set_history_source(pocket_ui::play_history::stats_json);
+    let pocket_sync_ui = app_pocket_sync::PocketSyncUi::load(&data_dir);
     let perf_ui = app_perf_fan::PerfFanUi::load(&data_dir);
     // The ports' own performance and fan, read on a thread (`app_port_perf`).
     let port_perf_ui = app_port_perf::PortPerfUi::new(&data_dir);
@@ -9279,6 +9625,7 @@ fn main() {
     // The Brick's hardware rows read their file before `data_dir` moves into the app.
     #[cfg(feature = "brick")]
     let brick_state = app_brick_hw::State::load(&data_dir);
+    let shelf_space = pocket_ui::shelf_space::ShelfSpace::load(&data_dir);
     let update_hint = app_update_hint::UpdateHintUi::new(pocket_ui::update_hint::State::load(&app_update_hint::state_dir(&data_dir)), Instant::now());
     // Inspection stays on its own worker. Mock/snapshot fixtures have no installed layout to inspect.
     let update_inspector = if std::env::var_os("POCKETUI_MOCK").is_some() || std::env::args().any(|a| a == "--snapshot") { None } else {
@@ -9407,10 +9754,14 @@ fn main() {
         library,
         gamedb,
         game_infos: Default::default(),
+        infos_warm: (0, 0),
+        infos_resolved: 0,
         volume_step: false,
         sync: sync_ui,
         tailscale: tailscale_ui,
+        romm: romm_ui,
         web: web_ui,
+        pocket_sync: pocket_sync_ui,
         perf: perf_ui,
         tools: Default::default(),
         test_buttons: Default::default(),
@@ -9436,6 +9787,8 @@ fn main() {
         prefetch: Default::default(),
         art_off: settings.art_off,
         cabinet: Default::default(),
+        shelf_space,
+        crate_ui: Default::default(),
         // Read before `curator_ui` moves in: the pause menu's Pixel Path switch (`Prefs::pixel_path`).
         pixel_path: curator_ui.prefs.pixel_path,
         curator: curator_ui,
@@ -9445,6 +9798,9 @@ fn main() {
         zoom_in_pause: settings.zoom_in_pause,
         lived_in: settings.lived_in,
         boot_screen: settings.boot_screen,
+        moment_photos: settings.moment_photos,
+        moment_in_play: settings.moment_in_play,
+        album_since: None,
         where_was_i: None,
         case_knows: Default::default(),
         animations: settings.animations_chosen(),
@@ -9647,6 +10003,7 @@ fn main() {
     pocket_ui::play_log::settle();
     app.perf_fan_exit();
     app.web_exit();
+    app.pocket_sync_exit();
     if app.exit_code == pocket_ui::rescue::OPEN_ES_CODE {
         pocket_ui::rescue::before_es();
     }
@@ -10126,5 +10483,67 @@ mod pause_parity_tests {
                 assert_eq!(pocket_ui::pause_page::main_hints(step, opens, false, false), linux, "{step:?} {opens}");
             }
         }
+    }
+}
+
+#[cfg(test)]
+#[path = "../tests/common/data_faults.rs"]
+mod file_faults;
+
+#[cfg(test)]
+mod meta_words_tests {
+    use super::{meta_with_status, meta_with_system};
+    use pocket_ui::case_stickers::Kind;
+    use pocket_ui::i18n::{tr_in, Lang};
+    use pocket_ui::library_meta::Status;
+
+    /// No status or sticker word stays English in a game's meta line, in any language, in either of its shapes (a system's
+    /// list: "Completed, last played …"; Favourites and the other mixed shelves: "Nintendo 64, completed, last played …"),
+    /// for every time it can say. 18.11.2026: the German line said "Nintendo 64, completed, zuletzt gespielt …". Every
+    /// status × every sticker word × every language; the sticker words also on their own.
+    #[test]
+    fn no_status_or_sticker_word_stays_english_in_the_meta_line() {
+        let statuses = [Status::Playing, Status::Paused, Status::Completed, Status::Dropped];
+        let words: Vec<&str> = statuses.iter().map(|s| s.label()).chain(Kind::ALL.iter().map(|k| k.label())).collect();
+        let lines = [
+            "Last played just now, under a minute in total",
+            "Last played 5 h ago, 6 h 00 min in total",
+            "Last played yesterday, 2 h 00 min in total",
+            "Last played 3 days ago, 6 h 00 min in total",
+            "Last played 800 days ago, 125 h 00 min in total",
+            "Not played yet",
+            "Not here yet",
+        ];
+        let mut wrong = Vec::new();
+        for lang in Lang::ALL.into_iter().filter(|l| l.table().is_some()) {
+            for word in &words {
+                let shown = tr_in(lang, word);
+                // Only a word every language writes the same ("100 %") may stay as it is.
+                if shown == *word && !word.chars().any(|c| c.is_ascii_digit()) {
+                    wrong.push(format!("{lang:?}: the sticker or status word {word:?} has no translation"));
+                }
+            }
+            for status in statuses {
+                for line in lines {
+                    let own = meta_with_status(status, line);
+                    for meta in [own.clone(), meta_with_system("Nintendo 64", &own)] {
+                        let shown = tr_in(lang, &meta);
+                        let english = words.iter().filter(|w| !w.chars().any(|c| c.is_ascii_digit())).find(|w| {
+                            let w = w.to_lowercase();
+                            let low = shown.to_lowercase();
+                            low.match_indices(&w).any(|(at, _)| {
+                                let before = low[..at].chars().next_back().is_none_or(|c| !c.is_alphanumeric());
+                                let after = low[at + w.len()..].chars().next().is_none_or(|c| !c.is_alphanumeric());
+                                before && after
+                            })
+                        });
+                        if let Some(w) = english {
+                            wrong.push(format!("{lang:?}: {meta:?} shows {shown:?} (\"{w}\" in English)"));
+                        }
+                    }
+                }
+            }
+        }
+        assert!(wrong.is_empty(), "{} meta lines with an English word:\n{}", wrong.len(), wrong.join("\n"));
     }
 }

@@ -176,6 +176,7 @@ final class SaveCopy {
 
     /** Copies `pocket-ui saves/<dir>/<rel>` into the local file. */
     String get(String dir, String rel, String local) {
+        File part = null;
         try {
             String[] parts = rel.split("/");
             String[] path = new String[2 + parts.length - 1];
@@ -185,11 +186,22 @@ final class SaveCopy {
             String[] found = folder == null ? null : child(folder, parts[parts.length - 1]);
             if (found == null || found[1].equals("dir")) throw new FileNotFoundException(rel + " is not in the copy");
             byte[] block = new byte[1 << 16];
-            try (InputStream in = resolver.openInputStream(doc(found[0])); OutputStream out = new FileOutputStream(local)) {
+            File target = new File(local).getAbsoluteFile();
+            try (InputStream in = resolver.openInputStream(doc(found[0]))) {
                 if (in == null) throw new FileNotFoundException(rel + " can't be opened");
-                for (int n; (n = in.read(block)) > 0; ) out.write(block, 0, n);
+                // A provider can disappear after a successful prefix. Keep the
+                // local save until its complete replacement is on the same filesystem.
+                part = File.createTempFile(".pocket-ui-save-", ".part", target.getParentFile());
+                try (FileOutputStream out = new FileOutputStream(part)) {
+                    for (int n; (n = in.read(block)) > 0; ) out.write(block, 0, n);
+                    out.getFD().sync();
+                }
             }
+            java.nio.file.Files.move(part.toPath(), target.toPath(),
+                    java.nio.file.StandardCopyOption.ATOMIC_MOVE, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+            part = null;
             return "ok";
         } catch (Exception e) { return failure(e); }
+        finally { if (part != null && part.exists() && !part.delete()) android.util.Log.w(TAG, "save copy: could not remove partial replacement"); }
     }
 }

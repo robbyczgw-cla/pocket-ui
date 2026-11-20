@@ -1,0 +1,5 @@
+{"label": [35, 0, 69, 48], "label_note": "label pixels are exactly (200,200,200); the label runs up over the cartridge's top edge as on the real one", "mm": [185, 136],
+ "mm_note": "approximate: an AES cartridge's front, measured on the straightened photo's proportions",
+ "source": "https://commons.wikimedia.org/wiki/File:Neo-Geo-AES-Cartridge-Front.jpg", "licence": "Public domain", "author": "Evan Amos",
+ "pixellab": "raw-1.png: image-to-pixelart, input 1356x1000 (perspective straightened from the 3/4 photo with ImageMagick), output 137x101, init_image_strength 250, text_guidance_scale 8; budget line ritual",
+ "logos_removed": "none needed: Evan Amos's photo shows a blank grey label and no lettering on the plastic"}

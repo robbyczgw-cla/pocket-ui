@@ -68,6 +68,7 @@ keeps its original language, including with the German interface.
 | Button | On the box |
 |---|---|
 | D-pad Left / Right | Turn the box over. (On a card of [Just Play](curator.md#just-play), Right picks another game and Left turns it.) |
+| D-pad Down (front) | With [Photos of big moments](#photos-of-big-moments) on: open the case, its photos lie in it. With photos in it the hint bar says **Photos** in place of START. |
 | D-pad Up / Down, L1 / R1 | On the back: scroll it. Down also picks the developer, publisher, genre or series once it is in view. |
 | A | Play the game; on a picked fact of the back, show your games with it ([Connections](#connections)). |
 | B, Y, X | As on the card below: back, status and rating, note. |
@@ -126,6 +127,39 @@ pocket-ui recognises the game by what is in its file, not by its name, and check
 does. A hack, a fan translation, another version, a save the game would call damaged, or a game that hasn't been saved
 yet shows no line at all, never a wrong one. A Link to the Past, Super Mario All-Stars and others keep several files: the line is
 the file you saved last (with only one file, that one; with several, from the next time you save).
+
+## Photos of big moments
+
+Off unless you switch it on (Settings → Screen & sound → **Photos of big moments**). Then, when your own save shows a big step, pocket-ui keeps a photo of that moment, like an instant photo, in the game's case:
+a new badge in Pokémon, a level of ten for the leader of your party, a boss's remains, an instrument, an essence or a
+medallion in Zelda, a Star Spirit in Paper Mario, a gold cup in Mario Kart 64, a medal in Star Fox 64, the stars that
+open a door in Super Mario 64, every tenth percent, exit, Jiggy or balloon, a new chapter or mission. The game's clock
+alone never counts. It works for every game in the list under [Where you are in the game](#where-you-are-in-the-game),
+in pocket-core on the handhelds and in the player of pocket-ui for Android.
+
+Nothing interrupts your game: the photo is taken quietly. When you quit (Save & quit), with Animations on Cozy, it slides
+into the case as the game goes back in, with a soft click: several photos of the session go in as a small pile. The next
+time you open the case they lie on top with a small red **New** tab. Its third value, **Also in play**
+(off unless you choose it), shows the moment over the game as well: a soft flash, the shutter and the photo
+sliding up out of the screen's bottom edge, developing from milky grey to its colours (not on the TrimUI Brick and in
+pocket-ui for Android).
+
+On the box's front, **Down** opens the case: the photos lie in it, the newest on top, with what happened, the game's
+clock and the day under it ("Badge 3 · 4 h 12 min · 18 Nov 2026").
+
+| Button | In the open case |
+|---|---|
+| D-pad Left / Right | The photo before or after it. |
+| A | Look closer: the photo in your hand, its note written on it. B puts it back. |
+| X | Delete the photo; A deletes it, B keeps it. |
+| B, D-pad Up | Close the case. |
+
+The photo is the game's picture from a few seconds before you saved (so it shows the game, not the save menu), at most
+320 pixels wide. One step gives one photo, even if you load an older save and play it again; a session adds five at
+most, and a game keeps its newest 30 (1.5 MB): beyond that the oldest go. They are kept in `album/<system>/<game>/` in
+pocket-ui's data folder and never leave the device. Off, there is no camera at all: nothing is taken or kept, and the box has no Photos row in its hint bar. Cozy
+extras → **Progress from saves** off reads no save, so it takes no photo either. A case without photos says why in a
+sentence.
 
 ## Stickers on the case
 

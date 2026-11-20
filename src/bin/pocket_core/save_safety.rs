@@ -16,6 +16,7 @@ pub(super) fn app(root: &Path) -> App {
         audio: None,
         audio_opening: None,
         shown_at: None,
+        quiet_picture: false,
         input,
         touch,
         mapping: Mapping::defaults("gb"),
@@ -25,8 +26,13 @@ pub(super) fn app(root: &Path) -> App {
         stats: Stats { emulated: 0, started: Instant::now(), last_swap: None, intervals: Vec::new(), run_ms: Vec::new(), draw_ms: Vec::new(), strip_us: Vec::new() },
         bench: None,
         period: Duration::from_micros(16_667),
-        frame_clock: FrameClock::default(),
+        pacer: pocket_ui::core_pacing::Pacer::new(60.0, 60.0),
+        pacing: Default::default(),
+        pacing_at: Instant::now(),
         last_frame: None,
+        album: None,
+        album_ring: std::collections::VecDeque::new(),
+        album_moment: false,
         states: root.join("Game"),
         commands,
         video: VideoSettings::default(),
@@ -43,16 +49,16 @@ pub(super) fn app(root: &Path) -> App {
         crt_on: false,
         crt_started: false,
         crt_screen: pocket_ui::crt_on::Screen::Tv,
+        boot_wait: None,
         woke_frame: false,
         held_mask: [0; players::MAX],
+        ds_pad: Default::default(),
         toggled: Default::default(),
         view: (0, 0),
         early: None,
         ex,
         hud: Hud::default(),
         nominal_samples: 1600,
-        time_driven: false,
-        owed: 0.0,
         audio_peak: 0,
         rotate_override: None,
         inject_release: Vec::new(),
@@ -78,11 +84,21 @@ pub(super) fn child(name: &str, test: impl FnOnce(&Path)) {
         return;
     }
     let root = tempfile::tempdir().unwrap();
-    let source = include_str!("../../../tests/common/blocked_serialize.c").replace(
+    let source = include_str!("../../../tests/common/blocked_serialize.c").replace("#include \"POCKET_SHARED_STUB\"", include_str!("../../../scripts/crash-sweep/stub-core.c")).replace(
         "memset(d, marker, s); return true;", "if (getenv(\"POCKET_SAVE_REFUSE\")) return false; memset(d, marker, s); return true;");
+    let source = if name.contains("double_refusal") {
+        source.replace("#define NO_SRAM", "")
+            .replace("static uint8_t sram[SRAM_SIZE];", "static uint8_t sram[SRAM_SIZE], rtc[8];")
+            .replace("id == 0 ? sram : NULL", "id == 0 ? sram : id == 1 ? rtc : NULL")
+            .replace("id == 0 ? sizeof sram : 0", "id == 0 ? sizeof sram : id == 1 ? sizeof rtc : 0")
+            .replace("marker = *(const unsigned char *)d; return true;",
+                     "marker = *(const unsigned char *)d; if (getenv(\"POCKET_TEST_REFUSE_LOAD\")) { sram[0] = rtc[0] = 99; return false; } sram[0] = rtc[0] = marker; return true;")
+    } else {
+        source
+    };
     std::fs::write(root.path().join("stub.c"), source).unwrap();
     assert!(Command::new("cc").args(["-shared", "-fPIC", "-o"]).arg(root.path().join("stub.so"))
-        .arg(root.path().join("stub.c")).status().unwrap().success());
+        .arg(root.path().join("stub.c")).arg("-lm").status().unwrap().success());
     std::fs::write(root.path().join("Game.gb"), b"game").unwrap();
     let qualified = if name.contains("::") { name.to_string() } else { format!("save_safety::{name}") };
     let output = Command::new(std::env::current_exe().unwrap())
@@ -154,4 +170,71 @@ fn save_safety_core_input_gate_drops_shortcuts_and_a_last_dark_touch() {
             assert_eq!(app.touch.frame_for_game(false), None, "the final dark touch belongs to no game");
         }
     });
+}
+
+#[test]
+fn save_safety_double_refusal_preserves_battery_and_moments_until_recovery() {
+    child("save_safety_double_refusal_preserves_battery_and_moments_until_recovery", |root| {
+        for recover in [true, false] {
+            double_refusal(root, recover);
+        }
+    });
+}
+
+#[cfg(test)]
+fn double_refusal(root: &Path, recover: bool) {
+    let battery = root.join("Game.srm");
+    let rtc = root.join("Game.rtc");
+    let original = vec![7; 8192];
+    std::fs::write(&battery, &original).unwrap();
+    std::fs::write(&rtc, [7; 8]).unwrap();
+    let mut app = app(root);
+    let auto = slots::auto_path(&app.states);
+    let slot = slots::state_path(&app.states, 0);
+    let good = vec![4; 16];
+    for path in [&auto, &slot] {
+        pocket_ui::state_file::write(path, &good).unwrap();
+    }
+
+    std::env::set_var("POCKET_TEST_REFUSE_LOAD", "1");
+    app.load_slot(0);
+    app.core.write_sram_in_background();
+    let _ = app.core.write_sram();
+    assert_eq!(std::fs::read(&battery).unwrap(), original, "flushes must preserve the battery save");
+    assert_eq!(std::fs::read(&rtc).unwrap(), [7; 8], "flushes must preserve the cartridge clock");
+    assert!(app.paused);
+    for command in ["resume", "restart", "save", "autosave"] {
+        app.early = Some(command.into());
+        app.handle_commands();
+    }
+    assert!(app.paused);
+    assert_eq!(pocket_ui::state_file::read(&auto).unwrap(), good);
+    assert_eq!(pocket_ui::state_file::read(&slot).unwrap(), good);
+
+    let undo = slots::undo_path(&app.states);
+    let before = pocket_ui::state_file::read(&undo).unwrap();
+    app.load_slot(0);
+    app.load_state_file(&root.join("missing.state"), "missing");
+    assert!(app.paused);
+    assert!(!app.save_auto().complete());
+    assert_eq!(pocket_ui::state_file::read(&undo).unwrap(), before);
+
+    if !recover {
+        assert!(!app.save_exit().complete());
+        drop(app);
+        assert_eq!(std::fs::read(&battery).unwrap(), original, "Quit and Drop must preserve the battery save");
+        assert_eq!(std::fs::read(&rtc).unwrap(), [7; 8]);
+        assert_eq!(pocket_ui::state_file::read(&auto).unwrap(), good);
+        return;
+    }
+    std::env::remove_var("POCKET_TEST_REFUSE_LOAD");
+    app.load_slot(0);
+    app.early = Some("resume".into());
+    app.handle_commands();
+    assert!(!app.paused);
+    drop(app);
+    let mut recovered = original;
+    recovered[0] = 4;
+    assert_eq!(std::fs::read(&battery).unwrap(), recovered);
+    assert_eq!(std::fs::read(&rtc).unwrap(), [4, 7, 7, 7, 7, 7, 7, 7]);
 }

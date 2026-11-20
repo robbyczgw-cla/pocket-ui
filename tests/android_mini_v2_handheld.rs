@@ -151,3 +151,103 @@ fn handheld_view_shots() {
     let failed = run(jobs, true);
     println!("{} pages with faults:\n{}", failed.len(), failed.join("\n"));
 }
+
+/// Android's first start in the handheld view (18.11.2026): "Your games" with what the device has (a games folder of
+/// another app, ARMSX2 installed, GameCube games without an app, Saturn games without a BIOS), and the same page on a
+/// device with nothing found and no app. Every language, Normal and Large: no word cut short, nothing off its room, and the
+/// page names the folder, the apps, the link and the BIOS. `FIRST_START_SHOTS=<dir>` keeps the pictures.
+#[test]
+fn the_first_start_s_your_games_fits_with_what_the_device_has_in_every_language() {
+    let tmp_guard = tempfile::Builder::new().prefix("pui-fs-").tempdir_in("/tmp").unwrap();
+    let tmp = tmp_guard.path().to_path_buf();
+    let status = Command::new("python3").env("POCKETUI_MOCK_NOW", FIXTURE_NOW)
+        .args(["-I", &format!("{ROOT}/scripts/curator-fake-library.py"), tmp.to_str().unwrap(), "dark"])
+        .stdout(std::process::Stdio::null()).status().expect("python3 for scripts/curator-fake-library.py");
+    assert!(status.success());
+    // The device's storage: ES-DE's ROMs (read already), an Emulation/roms folder of another app, no BIOS.
+    let storage = tmp.join("storage");
+    for f in ["emulated/0/ROMs/saturn/Nights.cue", "emulated/0/ROMs/gamecube/Wind Waker.rvz", "emulated/0/ROMs/ps2/Okami.iso",
+        "emulated/0/Emulation/roms/snes/Chrono Trigger.sfc", "emulated/0/Emulation/roms/gba/Golden Sun.gba"] {
+        let p = storage.join(f);
+        std::fs::create_dir_all(p.parent().unwrap()).unwrap();
+        std::fs::write(p, b"game").unwrap();
+    }
+    std::fs::create_dir_all(tmp.join("empty/emulated/0")).unwrap();
+    std::fs::write(tmp.join("phone.json"), r#"{"apps": {"ps2": [{"p": "com.armsx2", "l": "ARMSX2"}], "3ds": [{"p": "org.azahar_emu.azahar", "l": "Azahar"}], "xbox": [{"p": "com.rfandango.haku_x", "l": "hakuX"}]}}"#).unwrap();
+    std::fs::write(tmp.join("nophone.json"), r#"{"apps": {}}"#).unwrap();
+    // A device with nothing yet: no system list with games either.
+    std::fs::write(tmp.join("empty.cfg"), "<?xml version=\"1.0\"?>\n<systemList>\n</systemList>\n").unwrap();
+    let socket = tmp.join("wl");
+    let _stub = (cfg!(target_os = "linux") && std::env::var_os("WAYLAND_DISPLAY").is_none_or(|w| w.is_empty())).then(|| {
+        let child = Command::new("python3").args(["-I", &format!("{ROOT}/scripts/wayland-stub.py"), socket.to_str().unwrap()]).spawn().expect("python3");
+        test_clock::wait_for(|| socket.exists(), std::time::Duration::from_secs(2), "Wayland stub listening");
+        Stub(child)
+    });
+    let bin: PathBuf = std::env::var_os("POCKETUI_NAV_BINARY").map(PathBuf::from).unwrap_or_else(|| env!("CARGO_BIN_EXE_pocket-ui").into());
+    let shots = std::env::var_os("FIRST_START_SHOTS").map(PathBuf::from);
+    let mut failed = Vec::new();
+    let mut i = 0;
+    for (case, store, phone, state, es) in [("found", "storage", "phone.json", "setup:first-games", "es_systems.cfg"),
+        ("found-apps", "storage", "phone.json", "setup:first-games:ddd", "es_systems.cfg"), ("nothing", "empty", "nophone.json", "setup:first-games", "empty.cfg")] {
+        for lang in ["en", "de", "es", "pt", "fr", "it"] {
+            for large in [false, true] {
+                i += 1;
+                let data = tmp.join(format!("data-{i}"));
+                copy_dir(&tmp.join("data"), &data);
+                std::fs::write(data.join("settings.json"), r#"{"theme": "shelf", "onboarded": false, "motion": "off"}"#).unwrap();
+                let (png, boxes, seen) = (tmp.join(format!("{i}.png")), tmp.join(format!("{i}.boxes")), tmp.join(format!("{i}.txt")));
+                let mut cmd = Command::new(&bin);
+                if socket.exists() {
+                    cmd.env("WAYLAND_DISPLAY", &socket).env_remove("SWAYSOCK");
+                }
+                let out = cmd.args(["--snapshot", state, png.to_str().unwrap()])
+                    .env("POCKETUI_ANDROID_PROFILE", "1").env("POCKETUI_SNAPSHOT_SIZE", "1240x1080").env("POCKETUI_SNAPSHOT_FROZEN", "1")
+                    .env("POCKETUI_MOCK", "1").env("POCKETUI_MOCK_NOW", FIXTURE_NOW).env("POCKETUI_LANG", lang)
+                    .env("POCKETUI_TEXT_SIZE", if large { "large" } else { "normal" })
+                    .env("POCKETUI_ES_SYSTEMS", tmp.join(es)).env("POCKETUI_DATA", &data)
+                    .env("POCKETUI_FIRST_START_STORAGE", tmp.join(store)).env("POCKETUI_PHONE", tmp.join(phone))
+                    .env("POCKETUI_TEXT_BOXES", &boxes).env("POCKETUI_VISIBLE_TEXT", &seen)
+                    .output().expect("run pocket-ui");
+                let name = format!("{case} {lang} {}", if large { "large" } else { "normal" });
+                if !out.status.success() {
+                    failed.push(format!("{name}: did not render: {}", String::from_utf8_lossy(&out.stderr)));
+                    continue;
+                }
+                if let Some(dir) = &shots {
+                    std::fs::create_dir_all(dir).unwrap();
+                    std::fs::copy(&png, dir.join(format!("handheld-{}.png", name.replace(' ', "-")))).unwrap();
+                }
+                let bad: Vec<String> = std::fs::read_to_string(&boxes).unwrap_or_default().lines()
+                    .filter(|l| l.starts_with(['E', 'O', 'V', 'W', 'T'])).map(str::to_string).collect();
+                let said = std::fs::read_to_string(&seen).unwrap_or_default();
+                if !bad.is_empty() {
+                    failed.push(format!("{name}: {bad:?}"));
+                }
+                if said.trim().is_empty() {
+                    failed.push(format!("{name}: the page paints no text"));
+                }
+                // A needed BIOS is said in every language and size, whatever row has the focus (the file names are the same in all).
+                if case != "nothing" && !said.contains("saturn_bios.bin") {
+                    failed.push(format!("{name}: Saturn's BIOS is not said: {said}"));
+                }
+                if lang == "en" {
+                    let want: &[&str] = match case {
+                        "found" => &["2 games in Emulation/roms", "Emulator apps", "Get Dolphin (GameCube / Wii)", "Saturn needs a BIOS", "PlayStation plays without a BIOS"],
+                        // The whole note, never cut short ("…") however many apps there are.
+                        "found-apps" => &["Found on this device: ", "ARMSX2 (PlayStation 2)", "per system later."],
+                        _ => &["Add your games"],
+                    };
+                    for w in want {
+                        if !said.contains(w) {
+                            failed.push(format!("{name}: {w:?} not on the page: {said}"));
+                        }
+                    }
+                    if case == "nothing" && (said.contains("Emulator apps") || said.contains("Get ") || said.contains("BIOS")) {
+                        failed.push(format!("{name}: offers what isn't there: {said}"));
+                    }
+                }
+            }
+        }
+    }
+    assert!(failed.is_empty(), "{}", failed.join("\n"));
+}

@@ -9,9 +9,13 @@ macro_rules! contact_address { () => { "robby@robbyczesany.com" }; }
 pub const CONTACT: &str = contact_address!();
 
 pub mod core_pacing;
+pub mod ds_pad;
+pub mod ds;
 pub mod fps_line;
 /// Options → Picture → Resolution, the same on Linux and in Android's player (`render_scale`).
 pub mod render_scale;
+/// Options → Picture → Mode 7 for the Super Nintendo, the same on Linux and in Android's player (`mode7_hd`).
+pub mod mode7_hd;
 /// Earlier's on/off and its starting value per console, the same on Linux and in Android's player (`timeline` uses it).
 pub mod timeline_policy;
 pub mod frame_clock;
@@ -19,6 +23,8 @@ pub mod frame_dump;
 pub mod frame_pace;
 pub mod video_basics;
 pub mod state_policy;
+/// Pocket-to-Pocket sync, the core: version vectors, matching saves across devices, the plan (docs/SYNC-OWN.md).
+pub mod pocket_sync;
 pub mod signed_data;
 #[path = "update/channel.rs"]
 pub mod update_channel;
@@ -78,3 +84,7 @@ pub mod play_evidence;
 
 #[cfg(any(target_os = "linux", target_os = "android", target_os = "emscripten"))]
 pub mod storage_space;
+
+#[cfg(test)]
+#[path = "../tests/common/data_faults.rs"]
+pub(crate) mod file_faults;

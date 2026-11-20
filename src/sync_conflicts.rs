@@ -58,6 +58,35 @@ impl Layout {
     }
 }
 
+/// Android's handheld view (`app_sync_conflicts`): Pocket-to-Pocket sync puts its questions beside the player's saves,
+/// `<files>/saves/<key>/<stem>.<ext>` (`pocket_sync::Layout::android`); what is not kept goes to the app's `sync-backups`.
+/// Android has no Syncthing, so nothing else is looked through.
+pub fn android(files: &Path) -> Layout {
+    Layout {
+        roms: files.join("saves"),
+        states: files.join("states"),
+        config: files.join("no-config"),
+        backup: files.join("sync-backups"),
+    }
+}
+
+/// [`roots`] of [`android`]: the player's saves, `<key>/<file>`.
+pub fn android_roots(layout: &Layout) -> Vec<Root> {
+    vec![Root { path: layout.roms.clone(), depth: 2 }]
+}
+
+/// [`owner`] on Android: the game whose key folder (`key(game, system)`, the player's) holds the save, with the save's name.
+pub fn owner_by_key(g: &Group, games: &[Game], layout: &Layout, key: &dyn Fn(&Path, &str) -> Option<String>) -> Owner {
+    let dir = g.original.parent().unwrap_or(Path::new(""));
+    if g.kind != Kind::Save && g.kind != Kind::Card {
+        return Owner::Nobody;
+    }
+    games
+        .iter()
+        .find(|game| stem(game.path) == stem(&g.original) && key(game.path, game.system).is_some_and(|k| layout.roms.join(k) == dir))
+        .map_or(Owner::Nobody, |game| Owner::Game(game.path.to_path_buf()))
+}
+
 /// What kind of file has two versions.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Kind {
@@ -126,6 +155,12 @@ fn split(name: &str) -> Option<(&str, &str, &str)> {
         return None;
     }
     Some((&name[..i], &rest[..16 + id_len], &rest[16 + id_len..]))
+}
+
+/// The device part of a copy's name (`ABCDEF7`: the first seven letters of the device that had that version), for the
+/// page's "From TrimUI Brick" when a paired Pocket's id starts so (Pocket-to-Pocket sync).
+pub fn device_of(path: &Path) -> Option<String> {
+    tag(path).map(|(d, _)| d)
 }
 
 /// The device part and the time of a conflict copy's name, for pairing a state's picture with its state.

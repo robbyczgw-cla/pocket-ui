@@ -156,10 +156,18 @@ pub struct Settings {
     /// small stack, the spaces differ a little (`crate::lived_in`). Off unless switched on; only On is written.
     #[serde(default, deserialize_with = "lenient", skip_serializing_if = "std::ops::Not::not")]
     pub lived_in: bool,
-    /// Settings > Playing > Console boot screen (`boot_screen`): a fresh start of a Game Boy, Game Boy Advance or PlayStation game runs
-    /// through the console's own boot screen when the player's BIOS file is there. Off unless switched on; only On is written.
+    /// Settings > Playing > Console boot screen (`boot_screen`): a fresh start of a Game Boy, Game Boy Advance, PlayStation or disc console's
+    /// game runs through the console's own boot screen when the player's BIOS file is there. Off unless switched on; only On is written.
     #[serde(default, deserialize_with = "lenient", skip_serializing_if = "std::ops::Not::not")]
     pub boot_screen: bool,
+    /// Settings > Screen & sound > Photos of big moments (`album`): a photo of the game's picture when its save shows a big step.
+    /// Off unless switched on (19.11.); only On is written.
+    #[serde(default, deserialize_with = "lenient", skip_serializing_if = "std::ops::Not::not")]
+    pub moment_photos: bool,
+    /// Settings > Screen & sound > Photos of big moments > Also in play (`album_eject`): the flash and the photo over the running game.
+    /// Off unless switched on (the photo slides into the case on the way back instead); only On is written.
+    #[serde(default, deserialize_with = "lenient", skip_serializing_if = "std::ops::Not::not")]
+    pub moment_in_play: bool,
     /// Read, never written: Easy began as a switch of this name. `load` turns it into the look.
     #[serde(default, deserialize_with = "lenient", skip_serializing)]
     pub big_shelf: bool,
@@ -491,6 +499,8 @@ mod tests {
             zoom_in_pause: true,
             lived_in: true,
             boot_screen: true,
+            moment_photos: true,
+            moment_in_play: true,
             big_shelf: false,
             button_layout: crate::button_layout::ButtonLayout::Xbox,
             prompts: crate::button_prompts::PromptStyle::PlayStation,
@@ -995,6 +1005,18 @@ mod tests {
         assert!(Settings::load(&d).where_was_i, "On is written and kept");
         Settings { where_was_i: false, ..chosen() }.save(&d);
         assert!(!std::fs::read_to_string(d.join(FILE)).unwrap().contains("where_was_i"), "Off is not written");
+    }
+
+    #[test]
+    fn photos_of_big_moments_are_off_until_switched_on_and_the_players_read_it_alone() {
+        let d = dir("moment-photos");
+        assert!(!Settings::load(&d).moment_photos && !crate::album::on(&d), "a new device: Off");
+        Settings { moment_photos: true, ..chosen() }.save(&d);
+        assert!(Settings::load(&d).moment_photos && crate::album::on(&d), "switched on: On, read alone too");
+        Settings { moment_photos: false, ..chosen() }.save(&d);
+        assert!(!crate::album::on(&d), "Off again");
+        std::fs::write(d.join(FILE), b"{ not json").unwrap();
+        assert!(!crate::album::on(&d), "an unreadable file: Off");
     }
 
     #[test]

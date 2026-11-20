@@ -88,7 +88,12 @@ impl std::fmt::Debug for Prepared {
 /// pixels). `hosted`: the game's Picture scaling and Screen orientation's quarter turns when pocket-core plays it. None
 /// when the game has no picture.
 pub fn prepare(data_dir: &Path, system: &str, rom: &Path, hosted: Option<(Scaling, u32)>, view_w: u32, view_h: u32) -> Option<Prepared> {
-    let src = source(data_dir, system, rom)?;
+    prepare_for_core(data_dir, system, rom, "", hosted, view_w, view_h)
+}
+
+pub fn prepare_for_core(data_dir: &Path, system: &str, rom: &Path, core: &str, hosted: Option<(Scaling, u32)>, view_w: u32, view_h: u32) -> Option<Prepared> {
+    let stem = rom.file_stem().and_then(|s| s.to_str()).unwrap_or_default();
+    let src = source_at(&crate::slots::base_for_core(system, stem, core), &crate::lastframe::frame_path(data_dir, system, rom))?;
     let file = match &src {
         Source::Resume(p) | Source::Kept(p) => p,
     };

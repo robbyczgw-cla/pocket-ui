@@ -33,7 +33,11 @@ SKIP_FILES = {"doc_checks.rs", "bin/hello_pad.rs", "bin/store_tool.rs", "manual.
               # pocket-core's FIFO contract tests (`#[cfg(test)]`): command words, never painted.
               "bin/pocket_core/core_contract.rs",
               # The case-knows fuzzer (`#[cfg(test)]`): made-up names in made-up saves, never painted.
-              "case_knows_fuzz_tests.rs"}
+              "case_knows_fuzz_tests.rs",
+              # Pocket-to-Pocket sync's tests (`#[cfg(test)]`): made-up save paths and the simulation's log, never painted.
+              "pocket_sync/tests.rs", "pocket_sync/tests/sim.rs", "pocket_sync/net_tests.rs",
+              # RomM: the made-up server of the tests, and the requests (headers and addresses, nothing on screen).
+              "romm_tests.rs", "romm_net.rs"}
 # Calls whose strings are for a log, a developer or the machine.
 SKIP_CALLS = {
     "println", "eprintln", "print", "eprint", "panic", "assert", "assert_eq", "assert_ne", "debug_assert",

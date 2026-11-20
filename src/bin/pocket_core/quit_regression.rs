@@ -24,9 +24,9 @@ fn timing_blocked_serialize_quit_exits_within_deadline_and_continue_restores_pre
     let tmp = tempfile::tempdir().unwrap();
     let root = tmp.path();
     std::fs::write(root.join("game.gb"), [0u8; 32]).unwrap();
-    std::fs::write(root.join("stub.c"), include_str!("../../../tests/common/blocked_serialize.c")).unwrap();
+    std::fs::write(root.join("stub.c"), include_str!("../../../tests/common/blocked_serialize.c").replace("#include \"POCKET_SHARED_STUB\"", include_str!("../../../scripts/crash-sweep/stub-core.c"))).unwrap();
     let output = Command::new("cc").args(["-shared", "-fPIC", "-o"]).arg(root.join("stub_libretro.so"))
-        .arg(root.join("stub.c")).output().unwrap();
+        .arg(root.join("stub.c")).arg("-lm").output().unwrap();
     assert!(output.status.success(), "{}", String::from_utf8_lossy(&output.stderr));
     let previous = {
         let core = load(root);
@@ -86,9 +86,9 @@ fn timing_stalled_player_returns_to_shelf_and_preserves_continue_in_every_phase(
     let tmp = tempfile::tempdir().unwrap();
     let root = tmp.path();
     std::fs::write(root.join("game.gb"), [0u8; 32]).unwrap();
-    std::fs::write(root.join("stub.c"), include_str!("../../../tests/common/blocked_serialize.c")).unwrap();
+    std::fs::write(root.join("stub.c"), include_str!("../../../tests/common/blocked_serialize.c").replace("#include \"POCKET_SHARED_STUB\"", include_str!("../../../scripts/crash-sweep/stub-core.c"))).unwrap();
     let output = Command::new("cc").args(["-shared", "-fPIC", "-o"]).arg(root.join("stub_libretro.so"))
-        .arg(root.join("stub.c")).output().unwrap();
+        .arg(root.join("stub.c")).arg("-lm").output().unwrap();
     assert!(output.status.success(), "{}", String::from_utf8_lossy(&output.stderr));
     let previous = load(root).save_state().unwrap();
     let auto = slots::auto_path(&root.join("game"));
@@ -144,9 +144,9 @@ fn a_moment_that_crashes_the_core_while_loading_is_not_tried_at_every_start() {
     let tmp = tempfile::tempdir().unwrap();
     let root = tmp.path();
     std::fs::write(root.join("game.gb"), [0u8; 32]).unwrap();
-    std::fs::write(root.join("stub.c"), include_str!("../../../tests/common/blocked_serialize.c")).unwrap();
+    std::fs::write(root.join("stub.c"), include_str!("../../../tests/common/blocked_serialize.c").replace("#include \"POCKET_SHARED_STUB\"", include_str!("../../../scripts/crash-sweep/stub-core.c"))).unwrap();
     let output = Command::new("cc").args(["-shared", "-fPIC", "-o"]).arg(root.join("stub_libretro.so"))
-        .arg(root.join("stub.c")).output().unwrap();
+        .arg(root.join("stub.c")).arg("-lm").output().unwrap();
     assert!(output.status.success(), "{}", String::from_utf8_lossy(&output.stderr));
     let previous = load(root).save_state().unwrap();
     let auto = slots::auto_path(&root.join("game"));

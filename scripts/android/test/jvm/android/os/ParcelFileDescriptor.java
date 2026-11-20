@@ -1,0 +1,3 @@
+package android.os;
+import java.io.*;
+public final class ParcelFileDescriptor implements Closeable { private final RandomAccessFile file; public ParcelFileDescriptor(File source)throws IOException{file=new RandomAccessFile(source,"r");} public FileDescriptor getFileDescriptor(){try{return file.getFD();}catch(IOException e){throw new IllegalStateException(e);}} public int getFd(){try{java.lang.reflect.Field f=FileDescriptor.class.getDeclaredField("fd");f.setAccessible(true);return f.getInt(getFileDescriptor());}catch(Exception e){throw new IllegalStateException(e);}} public long getStatSize(){try{return file.length();}catch(IOException e){return -1;}} public void close()throws IOException{file.close();} }

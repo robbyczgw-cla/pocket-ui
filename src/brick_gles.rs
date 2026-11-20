@@ -27,8 +27,13 @@ struct CallbackHead {
 }
 
 /// What `get_proc_address` hands a core: the GLES library's own symbol first (an EGL 1.4 like the Brick's need not return core
-/// functions from `eglGetProcAddress`), else EGL's, which has the extensions.
-unsafe extern "C" fn get_proc_address(name: *const c_char) -> *const c_void {
+/// functions from `eglGetProcAddress`), else EGL's, which has the extensions. pocket-core also exports it as
+/// `eglGetProcAddress` (`src/bin/pocket_core.rs`): cores that ask EGL directly instead of the frontend (PPSSPP's GLES 3 loader,
+/// `gl3stubInit`) get the same answer. The vendor's own function is reached through its library handle, never by name.
+///
+/// # Safety
+/// `name` is null or a NUL-terminated string.
+pub unsafe extern "C" fn get_proc_address(name: *const c_char) -> *const c_void {
     static LIBS: std::sync::OnceLock<(Option<Library>, Option<(Library, GetProcAddress)>)> = std::sync::OnceLock::new();
     if name.is_null() {
         return std::ptr::null();

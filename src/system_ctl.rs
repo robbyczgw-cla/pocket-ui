@@ -937,6 +937,12 @@ impl MockHw {
     }
 }
 
+/// Whether the mock's zone becomes this process's clock (TZ): without a real time service, but never on Android, whose
+/// libc follows the system's zone by itself (`persist.sys.timezone`) as long as TZ is unset.
+fn mock_owns_clock(time_service: bool, android: bool) -> bool {
+    !time_service && !android
+}
+
 /// Moves libc's local time to `zone` for this process.
 #[cfg(not(feature = "brick"))]
 fn apply_process_zone(zone: &str) {
@@ -1138,12 +1144,24 @@ impl AutoHw {
 
     pub fn new(real: RealHw, caps: Caps) -> Self {
         let mut mock = MockHw::default();
+        // Android: a TZ inherited by this process would be followed instead of the system's zone.
+        #[cfg(target_os = "android")]
+        std::env::remove_var("TZ");
         // A fresh ROCKNIX is on UTC; POCKETUI_MOCK_ZONE=UTC lets a virtual device start like that (docs/VIRTUAL-DEVICE.md).
         if let Some(z) = std::env::var("POCKETUI_MOCK_ZONE").ok().filter(|z| timezone::is_valid(z)) {
             mock.with(|s| s.zone = z);
         }
+        // Android owns the zone: the mock shows the system's, and libc (TZ unset) follows Android's own setting, also when it
+        // changes while pocket-ui runs. The mock's New York moved every local time of the handheld view 5 h back (19.11.2026).
+        #[cfg(target_os = "android")]
+        {
+            let z = crate::render_scale::android_property("persist.sys.timezone");
+            if timezone::is_valid(&z) {
+                mock.with(|s| s.zone = z);
+            }
+        }
         // Without the real time service the mock owns the zone, and shows it on this process's clock.
-        if !caps.time {
+        if mock_owns_clock(caps.time, cfg!(target_os = "android")) {
             // The Brick's card zone, unless a zone was asked for above (the journeys' fresh UTC start).
             #[cfg(feature = "brick")] if std::env::var_os("POCKETUI_MOCK_ZONE").is_none() { if let Some(z) = real.timezone() { mock.with(|s| s.zone = z); } }
             mock = mock.with_clock();
@@ -1505,6 +1523,46 @@ mod tests {
     use super::*;
     use crate::testutil::TestDir;
     use std::sync::atomic::{AtomicUsize, Ordering};
+
+    /// Android's handheld view has no time service of ours: the mock's zone (New York) became the process's TZ and every
+    /// local time there (Two versions, Pocket Sync's "3 min ago", the evening light, play days) was 5 h behind Vienna
+    /// (Mini V2, 19.11.2026; the header clock is Android's own text, so it looked right). On Android the system's zone
+    /// rules libc; elsewhere without a time service the mock still does.
+    #[test]
+    fn android_keeps_its_own_time_zone() {
+        assert!(!mock_owns_clock(false, true), "Android: libc follows the system's zone");
+        assert!(mock_owns_clock(false, false), "a Linux device without the time service: the mock's zone");
+        assert!(!mock_owns_clock(true, false), "the real time service owns it");
+        // The New York default stays the mock's, so it must never reach Android's clock.
+        assert_eq!(MockState::default().zone, "America/New_York");
+    }
+
+    #[test]
+    fn file_source_rule_real_hardware_preferences() {
+        let d=TestDir::new("realhw-file-rule");
+        put(&d,"etc/profile.d/001-functions","set_setting() { :; }\n");
+        let cfg="storage/.config/system/configs/system.cfg";
+        let zones="usr/config/system/configs/tz";
+        let table="usr/share/zoneinfo/zone.tab";
+        for (rel,seed) in [
+            (cfg,b"wifi.enabled=1\nsystem.timezone=Europe/Vienna\n".as_slice()),
+            (zones,b"UTC\nEurope/Vienna\n".as_slice()),
+            (table,b"AT\t+4813+01620\tEurope/Vienna\n".as_slice()),
+            ("brick-volume-curve3",b"37\n".as_slice()),
+            ("brick-volume-curve2",b"37\n".as_slice()),
+        ] {
+            let file=d.join(rel);std::fs::create_dir_all(file.parent().unwrap()).unwrap();
+            for (label,bytes) in crate::file_faults::faults(seed) {
+                let _=std::fs::remove_file(&file);if let Some(bytes)=bytes {std::fs::write(&file,bytes).unwrap();}
+                let hw=RealHw::with_root(&d);
+                if rel==cfg {let wanted=hw.wifi_wanted();let chosen=hw.timezone_chosen();if label=="valid" {assert_eq!(wanted,Some(true));assert!(chosen);}}
+                else if rel==zones {let got=hw.zones();if label=="valid" {assert!(got.contains(&"UTC".into()));}assert!(got.iter().all(|n|!n.trim().is_empty()));}
+                else if rel==table {let got=hw.zoneinfo_file("zone.tab");if label=="valid" {assert!(got.unwrap().contains("Europe/Vienna"));}}
+                else {let got=brick_sink(&d);if label=="valid" {assert_eq!(got,Some((37,false)));}assert!(got.is_none_or(|(v,_)|v<=100));}
+            }
+            let _=std::fs::remove_file(file);
+        }
+    }
 
     #[test]
     fn the_bricks_sound_is_read_from_its_state_files() {

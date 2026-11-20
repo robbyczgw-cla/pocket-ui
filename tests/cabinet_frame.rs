@@ -59,11 +59,12 @@ fn the_top_board_and_the_tvs_place_are_the_same_on_every_shelf_and_handhelds_sho
     let _compositor = compositor(&root);
     // The looks' sizes: the H700's 640 x 480 (laid out at twice its size), the Brick, the Mini V2, the Smart Pro, a TV.
     for size in ["640x480", "1024x768", "1240x1080", "1280x720", "1920x1080"] {
-        let mut first: Option<(String, String)> = None;
+        let mut first: Option<(String, String, String)> = None;
         // The systems stand in the library's order (by name); each shelf's own system says which preview it gets.
         for k in 0..systems.len() {
             let f = outcome(&root, &"d".repeat(k), size);
-            let frame = (f["board"].clone(), f["place"].clone());
+            // The window on the wall (Cozy extras → Window) is taken off for 0.6 (`Extra::built`): none on any shelf.
+            let frame = (f["board"].clone(), f["place"].clone(), f["window"].clone());
             assert_ne!(frame.1, "none", "{size}, shelf {k}: the TV (or handheld) is there");
             // The page is cleared once a frame: the Cabinet clears and paints all of it itself, and Home's clear before it
             // cost the Brick a millisecond a frame for nothing (docs/TRIMUI-BRICK.md).
@@ -72,8 +73,20 @@ fn the_top_board_and_the_tvs_place_are_the_same_on_every_shelf_and_handhelds_sho
             assert!(cleared <= page, "{size}, shelf {k}: the frame cleared {cleared} pixels, the page has {page}: cleared twice");
             match &first {
                 None => first = Some(frame),
-                Some(first) => assert_eq!(&frame, first, "{size}, shelf {k}: the top board and the TV's place moved"),
+                Some(first) => assert_eq!(&frame, first, "{size}, shelf {k}: the top board, the TV's place or the window moved"),
             }
+            // Left of the TV and of the console's place, whole, over the top board.
+            let rect = |v: &str| -> Option<Vec<i32>> { (v != "none").then(|| v.split(',').map(|n| n.parse().unwrap()).collect()) };
+            if let Some(w) = rect(&f["window"]) {
+                for other in ["place", "console_place"] {
+                    if let Some(o) = rect(&f[other]) {
+                        assert!(w[0] + w[2] <= o[0], "{size}, shelf {k}: the window {w:?} reaches into the {other} {o:?}");
+                    }
+                }
+                let board: i32 = f["board"].parse().unwrap();
+                assert!(w[0] >= 0 && w[1] >= 0 && w[1] + w[3] <= board, "{size}, shelf {k}: the window {w:?} over the board at {board}");
+            }
+            assert_eq!(f["window"], "none", "{size}, shelf {k}: the window is taken off for 0.6");
         }
     }
     // Which preview: a handheld for the handheld systems, the TV for the others (the Mini V2's size).

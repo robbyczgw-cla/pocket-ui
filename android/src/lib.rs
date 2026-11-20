@@ -84,7 +84,9 @@ fn player_core(game: &Game, ui: &ui::Ui) -> Option<&'static str> {
     if ui.plays_in_app(game).is_some() {
         None
     } else {
-        own_core(game, ui.prefs.gameboy_gambatte)
+        if pocket_ui::platform::android::string("externalPlayer")=="true" {return None;}
+        pocket_ui::play_route::selected_own_core(game.system_id,ui.prefs.gameboy_gambatte,
+            ui.prefs.plays_with_game.get(&game.key).map(String::as_str),ui.prefs.plays_with.get(game.system_id).map(String::as_str))
     }
 }
 /// `player_core` without Settings → Plays with (the Game check asks it for every game, whatever app would start it).
@@ -167,6 +169,9 @@ struct Finger {
     samples: std::collections::VecDeque<(Instant, f64, f64)>,
 }
 struct App {
+    /// The first start's look at the device runs (`first_start_poll`); the phone was asked to stand upright for it.
+    looking: std::sync::Arc<std::sync::atomic::AtomicBool>,
+    upright_asked: bool,
     ui: Ui,
     window: Option<Rc<Window>>,
     surface: Option<softbuffer::Surface<Rc<Window>, Rc<Window>>>,
@@ -397,7 +402,7 @@ impl App {
                 let core = player_core(g, ui)?;
                 let key = ui::game_key(g, prefs.gameboy_gambatte);
                 let name = g.relative.rsplit('/').next().unwrap_or_default();
-                let base = pocket_ui::frozen_phone::base(&data, &key, name);
+                let base = pocket_ui::frozen_phone::base_for_core(&data, &key, name, core);
                 let mark = pocket_ui::frozen_phone::read_mark(&base);
                 let path = pocket_ui::frozen_phone::staged_rom(&data, &key, name);
                 let game = pocket_ui::frozen::Game { system: g.system_id.into(), path, emulator: pocket_ui::frozen_phone::EMULATOR.into(), core: core.into(), mark };
@@ -573,6 +578,16 @@ impl App {
                     let _ = pocket_ui::fsutil::write_json(&pocket_ui::platform::data_dir().join("launcher.json"), &self.ui.prefs);
                 }
                 bridge("chooseFolder", &[]);
+            }
+            Command::OpenPage(url) => {
+                if pocket_ui::android_first_start::official_page(url) {
+                    bridge("openPage", &[url]);
+                }
+            }
+            // A games folder the first start found: the picker opens in it, "Use this folder" takes it.
+            Command::FolderAt(uri) => {
+                let _ = pocket_ui::fsutil::write_json(&pocket_ui::platform::data_dir().join("launcher.json"), &self.ui.prefs);
+                bridge("chooseFolderAt", &[&uri]);
             }
             Command::PersistSetup => {
                 // A confirmed step survives an immediate force-stop, including a system picker handoff.
@@ -1763,6 +1778,7 @@ impl ApplicationHandler<BridgeEvent> for App {
                 self.redraw();
             }
             self.ui.controller_connected = connected;
+            self.first_start_poll();
             let saver = bridge("batterySaver", &[]) == "true";
             if saver != self.battery_saver {log::info!("Android battery saver={saver}");}
             self.battery_saver = saver;
@@ -1854,6 +1870,43 @@ impl ApplicationHandler<BridgeEvent> for App {
     }
 }
 impl App {
+    /// The first start (`android_first_start`): the device is looked at on a thread once (again when the files became
+    /// readable), the apps for every system read once, the folders already chosen each time; a phone stands upright for it.
+    fn first_start_poll(&mut self) {
+        let setting_up = !self.ui.prefs.onboarding_done;
+        if setting_up != self.upright_asked {
+            self.upright_asked = setting_up;
+            bridge("setupUpright", &[if setting_up { "true" } else { "false" }]);
+        }
+        if !setting_up {
+            return;
+        }
+        let can_read = bridge("filesAccess", &[]) == "true";
+        let stale = self.ui.found.as_ref().map_or(true, |f| !f.can_read && can_read);
+        if stale && !self.looking.swap(true, std::sync::atomic::Ordering::SeqCst) {
+            let busy = self.looking.clone();
+            let _ = std::thread::Builder::new().name("first-start-look".into()).spawn(move || {
+                let facts = pocket_ui::android_first_start::look(std::path::Path::new("/storage"), can_read);
+                log::info!("first start: {} games folders found (files readable: {can_read})", facts.folders.map_or(0, |f| f.len()));
+                busy.store(false, std::sync::atomic::Ordering::SeqCst);
+            });
+        }
+        if let Some(facts) = pocket_ui::android_first_start::facts() {
+            if self.ui.found.as_ref() != Some(&facts) {
+                self.ui.found = Some(facts);
+                self.redraw();
+            }
+        }
+        if self.ui.found_phone.is_none() {
+            let json = bridge("installedApps", &[&pocket_ui::play_route::all_profiles()]);
+            let mut phone = pocket_ui::play_route::Phone::default();
+            phone.set_installed_apps(&json);
+            self.ui.found_phone = Some(phone);
+        }
+        // The chosen folders' document ids, from their tree URIs (".../tree/primary%3AROMs" → "primary%3AROMs").
+        let roots: Vec<String> = serde_json::from_str::<Vec<String>>(&bridge("selectedRoots", &[])).unwrap_or_default();
+        self.ui.granted = roots.iter().filter_map(|r| r.rsplit('/').next().map(str::to_string)).collect();
+    }
     /// Which emulator apps the phone has for the systems of our own player (Settings → Plays with).
     fn read_apps(&mut self) {
         let profiles = self.ui.plays_profiles();
@@ -1913,7 +1966,7 @@ fn android_main(android: AndroidApp) {
         log::info!("android_main: the handheld view is chosen, the Mobile view does not start");
         return;
     }
-    let prefs: Preferences = pocket_ui::fsutil::read_json_or_backup(&pocket_ui::platform::data_dir().join("launcher.json")).unwrap_or_default();
+    let prefs: Preferences = ui::load_preferences(&pocket_ui::platform::data_dir());
     i18n::set(prefs.chosen_language().unwrap_or_else(|| i18n::Lang::from_locale(&bridge("language", &[]))));
     prefs.apply_look();
     pocket_ui::ui_sound::start();
@@ -1980,6 +2033,8 @@ fn android_main(android: AndroidApp) {
         media,
         media_policy: false,
         battery_saver: false,
+        looking: Default::default(),
+        upright_asked: false,
         media_results,
         cover_key: String::new(),
         cover: None,

@@ -63,6 +63,7 @@ Start at [user/index.md](user/index.md).
 | [user/easy.md](user/easy.md), [BIG-SHELF.md](BIG-SHELF.md) | The Easy look: one big game at a time, for a handful of games |
 | [user/kids-mode.md](user/kids-mode.md), [KIDS-MODE.md](KIDS-MODE.md) | Kids mode: for a grown-up; what is closed and how, the clock, what is left open |
 | [user/phone-upload.md](user/phone-upload.md) | Games from your phone: Add games → Y, the QR code, what it takes and refuses, what plain HTTP on a Wi-Fi means |
+| [user/romm.md](user/romm.md) | Games from your RomM server: pairing with a QR code or a code, the download at a game's first start |
 | [user/web-companion.md](user/web-companion.md) | The web companion: switching it on, pairing a browser, what it can do, how it is kept safe |
 | [user/pc-streaming.md](user/pc-streaming.md) | PC streaming with Moonlight: pairing, starting, leaving |
 | [user/updates.md](user/updates.md) | Updating pocket-ui and the system |
@@ -106,6 +107,8 @@ Start at [DEVELOPING.md](DEVELOPING.md).
 | [dev/tests.md](dev/tests.md) | Reference | Tests and documentation checks: read when you write or run tests, or change docs/user (the "Documentation checks" table is here) |
 | [dev/tour.md](dev/tour.md) | Reference | Feature tour: read when you add a feature that needs a tour card |
 | [dev/translations.md](dev/translations.md) | Reference | Translations: read when you add or change UI text, German/Spanish/Portuguese/French/Italian lines or the i18n snapshots |
+| [DS.md](DS.md) | Reference | Nintendo DS: DSperate as the default core on the Brick, Smart Pro, H700 and Rockchip handhelds, melonDS beside it, stylus and layout actions |
+| [dev/rule-test-findings.md](dev/rule-test-findings.md) | Reference | File and game-start rule findings: what the reader and launch fault rules found and how each was closed |
 | [BINARY-SIZE.md](BINARY-SIZE.md) | Internal | Release binary size by crate/function and embedded data, full-LTO savings, storage reserve and before/after runtime measurements |
 | [ARCHITECTURE.md](ARCHITECTURE.md) | Reference | How pocket-ui fits into ROCKNIX, the processes, the launch flow, switching games, the pause menu, and where each feature lives |
 | [i18n-glossary.md](i18n-glossary.md) | Reference | The German, Spanish, Brazilian Portuguese, French and Italian interfaces: tone, the terms every page uses, what stays English and why |
@@ -152,6 +155,7 @@ Start at [DEVELOPING.md](DEVELOPING.md).
 | [SECURITY-HARDENING.md](SECURITY-HARDENING.md) | Reference | File sharing, SSH and other network services |
 | [WEB-COMPANION.md](WEB-COMPANION.md) | Reference | The web companion: threads and cost, where it listens, sign-in, CSRF, every endpoint, uploads, the threat model and its self-review |
 | [PHONE-UPLOAD.md](PHONE-UPLOAD.md) | Reference | "Send from your phone": the upload server that exists only while its page is open, its routes, limits and threat model |
+| [ROMM.md](ROMM.md) | Reference | RomM as a source of games: pairing by RomM's device flow, the server's list on the shelf, a game's download at its first start, Android's requests, the tests against a real RomM |
 | [VIRTUAL-DEVICE.md](VIRTUAL-DEVICE.md) | Reference | The Docker-based virtual Mini V2 |
 | [WIFI-BENCH.md](WIFI-BENCH.md) | Reference | The Wi-Fi bench: ROCKNIX's NetworkManager + iwd and the real pocket-ui against simulated radios and access points (mac80211_hwsim + hostapd), its scenarios and the first results |
 | [IDLE.md](IDLE.md) | Reference | Still menus: finite animation passes, input and timer scheduling, two-window presentation traces and repeatable idle measurements |
@@ -164,6 +168,7 @@ Start at [DEVELOPING.md](DEVELOPING.md).
 | [CURATOR.md](CURATOR.md) | Design notes and reference | Curator (Lens, smart shelves, stickers, Echoes, Versions) and Pixel Path: the design, then what was built ("Developer notes", "Pixel Path as built") |
 | [HISTORY.md](HISTORY.md) | Reference | Play history: the session log and its file, what counts, Curator → History and the Year in review, the read API for the web companion |
 | [SYNC-CURATION.md](SYNC-CURATION.md) | Reference | Settings → Sync → Library data: one folder per device, values with times, the field-by-field merge with tombstones, the play history union, what is left out |
+| [SYNC-OWN.md](SYNC-OWN.md) | Design and reference | Pocket-to-Pocket sync without Syncthing: version vectors for any number of Pockets, one question per conflict, matching saves by the game's CRC, the plan |
 | [SYNC-OWNERSHIP.md](SYNC-OWNERSHIP.md) | Reference and design notes | Save-sync pause ownership, failed-resume retry tests, the remaining interruption ambiguity and the manual-recovery follow-up |
 | [CASE-KNOWS.md](CASE-KNOWS.md) | Reference | The case knows where you are: the line read from a game's own battery save, the games and releases, the checks, the cache and thread, adding a game |
 | [CURATOR-DATA.md](CURATOR-DATA.md) | Reference | Curator's data: Wikidata facts and versions by work, the feel-tag vocabulary and labelling, ROM file-name facts, the reader APIs |

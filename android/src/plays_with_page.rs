@@ -1,6 +1,6 @@
 //! Settings → Plays with in the phone layout. Every system that has pocket-ui's own player and an emulator app on the
 //! phone that pocket-ui knows (`EmulatorIntents.java`) gets a row: A steps through the own player and the installed
-//! apps. Only installed apps are offered. A game of a system set to an app starts there like the systems that have no
+//! apps. DS also offers the two bundled cores. A game of a system set to an app starts there like the systems that have no
 //! player of ours (play time, shelf, start picture and the way back as ever); Continue and the pause menu are the
 //! app's then, and the page says so in words above the rows.
 //!
@@ -72,8 +72,9 @@ impl Ui {
         self.plays.offers = profiles
             .iter()
             .filter_map(|(id, name, profile)| {
-                let apps = self.plays.installed.get(profile).filter(|a| !a.is_empty())?;
-                Some(Offer { system_id: id.clone(), system: name.clone(), apps: apps.clone() })
+                let apps = self.plays.installed.get(profile).cloned().unwrap_or_default();
+                if apps.is_empty() && id!="nds" {return None;}
+                Some(Offer { system_id: id.clone(), system: name.clone(), apps })
             })
             .collect();
         self.plays.profiles = profiles;
@@ -87,7 +88,9 @@ impl Ui {
         pocket_ui::play_route::chosen_app(true, None, self.prefs.plays_with.get(system_id).map(String::as_str), &offer.apps)
     }
     pub fn plays_in_app(&self, game: &Game) -> Option<&App> {
-        self.plays_in_app_of(game.system_id)
+        let offer=self.plays.offers.iter().find(|o|o.system_id==game.system_id)?;
+        pocket_ui::play_route::chosen_app(true,self.prefs.plays_with_game.get(&game.key).map(String::as_str),
+            self.prefs.plays_with.get(game.system_id).map(String::as_str),&offer.apps)
     }
     /// Our own player is the one that starts this system and is not yet qualified (`play_cards::experimental`).
     pub fn experimental(&self, system_id: &str) -> bool {
@@ -110,6 +113,7 @@ impl Ui {
             .map(|o| {
                 let value = match self.plays_in_app_of(&o.system_id) {
                     Some(app) => app.label.clone(),
+                    None if o.system_id=="nds"=>pocket_ui::ds::label(pocket_ui::play_route::selected_own_core("nds",false,None,self.prefs.plays_with.get("nds").map(String::as_str)).unwrap_or("melondsds")).to_string(),
                     None => OWN.to_string(),
                 };
                 MenuRow { label: o.system.clone(), value, check: None, stepper: false }
@@ -122,13 +126,18 @@ impl Ui {
         if self.plays.offers.is_empty() {
             return tr(NONE);
         }
+        let mut about = if self.plays.offers.iter().any(|o| !o.apps.is_empty()) { tr(ABOUT) } else { String::new() };
+        if self.plays.offers.iter().any(|o| o.system_id == "nds") {
+            if !about.is_empty() { about.push('\n'); }
+            about.push_str(&tr("DSperate and melonDS use pocket-ui's pause menu. Saved moments stay with their core; in-game saves are shared."));
+        }
         // The word about our own player, quietly, for the listed systems it is still being tested on (a row is too
         // narrow for it beside a system's name on a phone).
         let testing: Vec<&str> = self.plays.offers.iter().filter(|o| self.experimental(&o.system_id)).map(|o| o.system.as_str()).collect();
         if testing.is_empty() {
-            tr(ABOUT)
+            about
         } else {
-            format!("{}\n{}", tr(ABOUT), tr(&format!("Experimental in pocket-ui's player: {}", testing.join(", "))))
+            format!("{}\n{}", about, tr(&format!("Experimental in pocket-ui's player: {}", testing.join(", "))))
         }
     }
     pub(super) fn plays_press(&mut self, b: Button) -> Command {
@@ -141,18 +150,14 @@ impl Ui {
                     self.navigate(Screen::Settings);
                     return Command::None;
                 };
-                // Own player → the first app → the next ... → own player again.
-                let at = self.plays_in_app_of(&offer.system_id).and_then(|a| offer.apps.iter().position(|x| x == a));
-                let next = at.map_or(0, |i| i + 1);
-                let id = offer.system_id.clone();
-                match offer.apps.get(next) {
-                    Some(app) => {
-                        self.prefs.plays_with.insert(id, app.package.clone());
-                    }
-                    None => {
-                        self.prefs.plays_with.remove(&id);
-                    }
-                }
+                let mut choices=vec![None];
+                if offer.system_id=="nds" {choices.push(Some("own:dsperate".to_string()));}
+                choices.extend(offer.apps.iter().map(|a|Some(a.package.clone())));
+                let current=self.prefs.plays_with.get(&offer.system_id);
+                let at=choices.iter().position(|v|v.as_ref()==current).unwrap_or(0);
+                let id=offer.system_id.clone();
+                if let Some(next)=&choices[(at+1)%choices.len()] {self.prefs.plays_with.insert(id,next.clone());}
+                else {self.prefs.plays_with.remove(&id);}
                 // The shelf's Continue row and the cases that stand open follow the player that starts the game now.
                 self.frozen_stale = true;
                 self.cards.clear();

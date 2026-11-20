@@ -348,7 +348,7 @@ fn a_page_transition_fades_from_the_background_not_from_a_neighbour() {
 #[test]
 fn the_first_start_offers_the_shelf_then_just_play_and_all_five_rows_fit() {
     let card = Card::new();
-    for (lang, shelf, just, enth, choose, child) in [("en", "The shelf", "Easy", "Enthusiast", "Choose for yourself", "For a child"), ("de", "Das Regal", "Einfach", "Enthusiast", "Selbst wählen", "Für ein Kind"), ("es", "El estante", "Easy", "Entusiasta", "Elige tú", "Para un niño")] {
+    for (lang, shelf, just, enth, choose, child) in [("en", "The shelf", "Easy", "Enthusiast", "Choose for yourself", "For a child"), ("de", "Das Regal", "Einfach", "Enthusiast", "Selbst wählen", "Für ein Kind"), ("es", "El estante", "Fácil", "Entusiasta", "Elige tú", "Para un niño")] {
         for text in ["normal", "large"] {
             for state in ["setup:play", "setup:play:d"] {
                 let w = card.show_at(state, "640x480", text, lang).words;

@@ -40,7 +40,7 @@ final class SaveBackup {
                 for (int i = 0; i < files.length(); i++) {
                     JSONArray file = files.getJSONArray(i);
                     File source = new File(file.getString(1));
-                    if (!source.isFile()) continue;
+                    if (!source.isFile()) throw new FileNotFoundException("A planned save is no longer there");
                     ZipEntry entry = new ZipEntry(file.getString(0));
                     entry.setTime(source.lastModified());
                     zip.putNextEntry(entry);
