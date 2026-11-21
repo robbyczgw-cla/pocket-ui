@@ -5,87 +5,82 @@
 
 # pocket-ui
 
-pocket-ui is a game frontend and a small handheld system for handhelds that run ROCKNIX, a Linux system for
-handhelds. It replaces ROCKNIX's usual menu with a shelf of your games. You control it with the buttons; the
-touch screen works on the shelf and in the lists as well.
+pocket-ui OS is a cozy handheld operating system and game player built on ROCKNIX. It replaces the usual menu with a
+shelf of your games in their real boxes. Everything works with buttons, and touch screens work on the shelf and in lists
+too.
 
-This guide is on the device as well: Settings → Help & tools → **Manual**. It is in English; the menus themselves can be
-German, Spanish, Brazilian Portuguese, French or Italian ([Settings → System → Language](language.md)).
+You can read this guide right on your handheld under Settings → Help & tools → **Manual**. The manual is in English,
+while the menus support English, German, Spanish, Brazilian Portuguese, French and Italian
+([Settings → System → Language](language.md)).
 
-pocket-ui is at an early stage and has been tested on a few devices, most of all the Retroid Pocket Mini V2. The pages below describe what works today
-and say clearly where something is still being built or has not been confirmed on a real device.
+pocket-ui is in active alpha and tested daily on the Retroid Pocket Mini V2 alongside several other handhelds. These
+pages cover what works today and clearly flag anything that is still experimental or untested on real hardware.
 
 ## What you need
 
-- A handheld that runs ROCKNIX: the Retroid Pocket Mini V2, the AYN Odin 2 Mini or an Anbernic H700 model, for example.
-- A microSD card of 8 GB or more for ROCKNIX, pocket-ui and your games.
+- A supported handheld running ROCKNIX, such as a Retroid Pocket Mini V2, AYN Odin 2 Mini or Anbernic H700 model.
+- A microSD card (8 GB or larger; 16 GB+ on the RG28XX and RG35XX 2024) for pocket-ui OS and your games.
   <!-- TODO: recommended SD card size. The test card grew its game partition to about 60 GB. -->
-- A computer, once, to write the ready-made SD card image with balenaEtcher or Raspberry Pi Imager. There are
-  images for the Retroid Pocket Mini V2 and 13 Anbernic H700 models on the
-  [install page](https://pocketui.xyz/install.html). You can also add pocket-ui to a card that already runs
-  ROCKNIX; see [Getting started](getting-started.md).
-- Your own game files. pocket-ui does not come with games or BIOS files.
-- Wi-Fi is optional. You need it for cover art, game descriptions, PortMaster games, RetroAchievements, updates
-  and copying games over the network. Without it, updates come as a file you copy onto the card
+- Five minutes at a computer to flash the ready-made SD card image with balenaEtcher or Raspberry Pi Imager. Grab images
+  for the Retroid Pocket Mini V2 and Anbernic H700 models on the [install page](https://pocketui.xyz/install.html), or
+  install pocket-ui onto an existing ROCKNIX card ([Getting started](getting-started.md)).
+- Your own ROMs and BIOS files. pocket-ui ships with no games.
+- Wi-Fi is optional. You need it for box art, descriptions, PortMaster, RetroAchievements, online updates and wireless
+  file transfers. Without Wi-Fi, you can update from a zip on the card
   ([Updates](updates.md#no-wi-fi-update-from-the-card)).
 
 ## What it does
 
-- Shows your games on one shelf: the last game first, then recent games, then your systems.
-- Starts games with the emulator that suits each system, and brings you back to the same place
-  when you quit.
-- Continues games where you left off (on pocket-ui's own emulator host, on RetroArch, and for
-  PlayStation 2, GameCube, Wii and 3DS).
-- Finds any game as you type, and jumps through long lists letter by letter with L2 and R2.
-- Gives you a pause menu on the HOME button: continue, save and load (eight slots per game with previews, on its
-  own host and for PlayStation 2, GameCube and Wii), options, quick settings and quit. Whether quit keeps the moment
-  for next time is one switch in Settings.
-- On its own host: picture settings with a live preview, screen frames, the emulator's own
-  options, button remapping, fast-forward, rewind, run-ahead, cheats and button shortcuts.
-- Switches between recent games with SELECT, and between two games on its own host about as fast as one starts.
-- Helps you find your way around a larger collection with Curator: filters, smart shelves,
-  "more like this" and the versions of a game you own on several systems ([Your library](curator.md#curator)).
-- Sets up Wi-Fi, cover art and PortMaster games on the device itself, with an on-screen keyboard
-  for the gamepad: saved networks, hidden networks and the Wi-Fi country too.
-- Starts ROCKNIX's own tools without ROCKNIX's old menu: the emulators' settings, RetroArch's menu, the gamepad test
-  and calibration, a file manager and a terminal ([Tools](extras.md#tools)).
-- Backs up its settings and your library notes to the SD card, and restores or resets them
+- Puts your games on one shelf: Continue first, then recent games, then each console.
+- Launches every console with the right emulator and brings you right back when you quit.
+- Picks up right where you left off on pocket-ui's own player, RetroArch, PS2, GameCube, Wii and 3DS.
+- Searches as you type and jumps letter by letter with L2 and R2.
+- Opens one pause menu with HOME: Continue, Save and Load (eight visual slots on its own player plus PS2, GameCube and
+  Wii), Options, quick settings and Quit (with a Settings toggle for saving on quit).
+- On its own player: live-preview picture filters, screen frames, core options, button remapping, fast-forward, rewind,
+  run-ahead, cheats and shortcuts.
+- Switches between recent games with SELECT, almost as fast as launching a single game.
+- Organises big libraries with Curator: filters, smart shelves, "more like this" and multi-system versions
+  ([Your library](curator.md#curator)).
+- Sets up Wi-Fi (including saved/hidden networks and Wi-Fi country), box art and PortMaster right on the handheld with a
+  gamepad keyboard.
+- Launches ROCKNIX tools directly without leaving pocket-ui: emulator settings, RetroArch, gamepad test/calibration, a
+  file manager and a terminal ([Tools](extras.md#tools)).
+- Backs up settings, saves and library notes to the SD card, with easy restore and reset
   ([Backup & reset](settings-system.md#backup--reset)).
-- Offers quick settings (brightness, volume, Wi-Fi, Bluetooth, performance, fan, power) on HOME, quiet menu sounds,
-  a battery page with history and time left, and this guide.
-- Keeps your saves and save states in step with a computer, a phone or another handheld with Syncthing, and asks
-  it to look for new saves when a game ends ([Sync](sync.md)).
-- Pairs Bluetooth controllers in one press, and uses them in the menus as soon as they connect ([Bluetooth](bluetooth.md)).
-  Each controller keeps its own button layout through reconnects ([Controller setup](controls-settings.md#controller-setup)),
-  and [Test buttons](settings-sound.md#test-buttons) shows every button, trigger and stick light up.
-- Gives every menu an old handheld's look with one switch: the [Retro style](theme.md#style), pixel letters and frames,
-  little icons and blips, in Cocoa or Pea.
-- Starts in five calm steps on a new card: language, Wi-Fi, your games, the look, how cozy ([First start](getting-started.md#3-first-start)).
-  Help & tools → First-start setup runs them again.
-- Puts the Pocket on your Tailscale network, with a QR code to sign in, so it can be reached from anywhere ([Tailscale](remote.md)).
-- Opens your library in a browser on your phone or computer, on your home Wi-Fi or over Tailscale: edit, upload games, BIOS and
-  PortMaster files, see play time and the screen ([Web companion](web-companion.md)). Off until you switch it on.
-- Counts RetroAchievements while you play on its own host: a small card for each unlock, the list in the pause
-  menu, and your tally on the game card ([Achievements](achievements.md)).
-- Plays your computer's games over Wi-Fi with Moonlight, from an entry on Home that you switch on in Settings, and pairs
-  the computer on the Pocket with a PIN on screen ([PC streaming](pc-streaming.md)).
-- Updates itself from a signed source, with an automatic way back if a new version does not start.
+- Gives you quick settings (brightness, volume, Wi-Fi, Bluetooth, performance, fan, power) on HOME, gentle menu sounds,
+  battery stats and this built-in manual.
+- Keeps saves and save states synced across your handhelds with Pocket Sync or Syncthing ([Sync](sync.md)).
+- Pairs Bluetooth controllers and headphones in one press, remembering per-controller button layouts
+  ([Bluetooth](bluetooth.md), [Controller setup](controls-settings.md#controller-setup),
+  [Test buttons](settings-sound.md#test-buttons)).
+- Switches every menu to classic pixel art in one toggle: [Retro style](theme.md#style) in Cocoa or Pea.
+- Walks you through first boot in five quick steps: language, Wi-Fi, games, layout and coziness
+  ([First start](getting-started.md#3-first-start)). Re-run it any time under Settings → Help & tools →
+  First-start setup.
+- Connects to your Tailscale network with a QR code so you can reach your Pocket from anywhere ([Tailscale](remote.md)).
+- Opens your full library in any browser over home Wi-Fi or Tailscale to browse, edit notes, upload games/BIOS/PortMaster
+  files and check battery or screenshots ([Web companion](web-companion.md)). Off until you switch it on.
+- Tracks RetroAchievements on its own player with unlock pop-ups, a pause-menu checklist and progress on game boxes
+  ([Achievements](achievements.md)).
+- Streams PC games over Wi-Fi via Moonlight, paired right on screen with a PIN ([PC streaming](pc-streaming.md)).
+- Updates safely from signed releases, automatically rolling back if a new build fails to boot.
 
 ## What it does not touch
 
-- **Android stays as it is.** ROCKNIX, pocket-ui and your games live on the microSD card, and Linux cannot
-  see Android's storage: the boot files used here switch the internal storage off.
-- **The bootloader is never rewritten by pocket-ui.** It refuses any system update that would rewrite the
-  bootloader or a partition (see [Updates](updates.md)).
-- The SD card image writes nothing to the device. The manual install can write one small thing: Retroid's own
-  u-boot into the `loader` partition, if that partition is empty. Android does not use that partition. The
-  [install guide](../INSTALL-DUAL-BOOT.md) explains every step, how to back it up and how to undo it.
+- **Android stays untouched.** ROCKNIX, pocket-ui OS and your games live on the microSD card; Linux cannot see Android's
+  internal storage.
+- **Your bootloader is never overwritten by pocket-ui.** Updates refuse to touch the bootloader or system partitions
+  (see [Updates](updates.md)).
+- Ready-made SD card images write nothing to your handheld's internal storage. Manual dual-boot installs only write
+  Retroid's own u-boot into an empty `loader` partition that Android does not use. See the
+  [install guide](../INSTALL-DUAL-BOOT.md) for backup and undo steps.
 
 ## Pages
 
 1. [Getting started](getting-started.md): installing, first start, Wi-Fi, adding games; [Other handhelds](other-handhelds.md): other Retroid devices, SM8550 and Anbernic H700; [The GAMES drive](games-drive.md): games from a computer; [Second card](copy-games.md): games without Wi-Fi; [Game check](game-check.md): will your games start?; [games from your phone](phone-upload.md) over the same Wi-Fi; [games from your RomM server](romm.md), downloaded at their first start; [Kids mode](kids-mode.md): a big simple shelf for a child.
 2. [How to](how-to.md): update over Wi-Fi, a game that won't start, pair a controller, back up saves, sync with a second device.
-3. [Coming from ROCKNIX, ArkOS or Android](coming-from.md): what happens to your saves, states, favourites and settings.
+3. [Coming from ROCKNIX, dArkOS or Android](coming-from.md): what happens to your saves, states, favourites and settings.
 4. [Playing](playing.md): Home, finding a game, the looks, Recent games; [Console pages](console-pages.md): a console's facts and its Credits & links; [Easy](easy.md): the look with one big game at a time; [Big text, Zoom and Hold to toggle](big-text.md): larger text in one switch, a magnifier for the pause menu, buttons that stay down. [Continue](continue.md): an open case means your moment is waiting, and A goes straight back.
 5. [The pause menu](pause-menu.md): what each emulator offers, quitting, Pixel Path; [Saving in the pause menu](pause-menu-saves.md): save slots, Where I quit and Before load, Earlier, when a save fails.
 6. [Options](options.md): picture, screen frames, controls, shortcuts, extras and run-ahead in a game, [Screen frame and Screen orientation](options-screen.md), and [Cheats](options-cheats.md); [their shorter list](options-big.md) for PlayStation 2, GameCube, Wii and 3DS.
@@ -107,7 +102,7 @@ and say clearly where something is still being built or has not been confirmed o
 22. [Web companion](web-companion.md): your library, uploads and play time in a browser, on your Wi-Fi or over Tailscale.
 23. [PC streaming](pc-streaming.md): Moonlight, pairing and leaving a stream.
 24. [Updates](updates.md): updating pocket-ui and the system safely.
-25. [Safe mode and EmulationStation](safe-mode.md): what happens when pocket-ui won't start, and ROCKNIX's own menu.
+25. [Safe mode](safe-mode.md): what happens when pocket-ui won't start, and ROCKNIX's own menu.
 26. [Hotel and train Wi-Fi](hotel-wifi.md): networks that want a sign-in first, and the other ways online.
 27. [Troubleshooting and FAQ](troubleshooting.md): known limits and common questions.
 

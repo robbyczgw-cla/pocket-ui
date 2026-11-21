@@ -1,70 +1,64 @@
 # Sync saves with Syncthing
 
-Settings → Connections → **Sync** keeps your saves and save states (and, if you switch it on, your [library data](#library-data)) the same on your Pocket, your computer, your phone or a second
-handheld. It uses [Syncthing](https://syncthing.net), which ROCKNIX already contains. Nothing goes through a
-company's server, and nothing leaves the Pocket until you pair another device.
+Settings → Connections → **Sync** keeps your saves and save states (plus your [library data](#library-data) if you
+turn it on) matched across your Pocket, PC, phone or another handheld. It runs on [Syncthing](https://syncthing.net),
+already built into ROCKNIX. Nothing goes through a third-party server, and nothing leaves your Pocket until you pair
+another device.
 
-> **Status:** built and checked on a Mini V2 (the switch, the folders, the web interface login, the scan after a
-> game). Syncing with a second device has **not** been tried yet, because no outside device may be paired during
-> development. The first pairing is yours; please tell us what happens. [Two versions of a save](#two-versions-of-a-save)
-> has only been tried on a computer with made-up files, not with a real second device. [Library data](#library-data)
-> too has only been tried in tests on a computer, with two made-up devices.
+> **Status:** tested on a Mini V2 (the switch, shared folders, protected web UI and post-game scan). Real-world pairing
+> with a second device hasn't been tested during development since no external devices are paired on test units; let us
+> know how your setup goes. [Two versions of a save](#two-versions-of-a-save) and [Library data](#library-data) were
+> verified in automated desktop tests with mock devices.
 
 ## Your other Pockets
 
-Settings → Connections → **Pocket Sync** keeps the saves the same on your own Pockets, Pocket to Pocket, with no computer,
-no account and no cloud. It is separate from Syncthing below; you don't need Syncthing for it. It is on the ROCKNIX
-Pockets, on the TrimUI Brick and dArkOS (there the saves are in pocket-ui's own folder, `storage/saves/<system>`), and in
-pocket-ui for Android (the Handheld view).
+Settings → Connections → **Pocket Sync** syncs saves straight between your handhelds with no PC, no account and no
+cloud. It works completely independently of Syncthing (you don't need Syncthing at all). Supported on pocket-ui OS
+(ROCKNIX), TrimUI Brick, pocket-ui beta for dArkOS (saves live in `storage/saves/<system>`), and pocket-ui for Android
+(Handheld view).
 
-**Pair them once.** Switch **Sync with my Pockets** on, on both Pockets, both on the same Wi-Fi (or in your
-Tailscale). Open **Pair a Pocket** on both. Each shows its own six-digit code and lists the Pockets nearby that show
-one. On one of them, choose the other and type the code it shows: Up and Down change a digit, Left and Right move,
-**A** pairs. A code is valid for five minutes and one Pocket; after five wrong tries it is gone. Pair a third Pocket
-the same way: any number of Pockets, none of them is a server.
+**Pair once.** Enable **Sync with my Pockets** on both handhelds on the same Wi-Fi (or Tailscale), then open **Pair a
+Pocket** on both. Each displays a six-digit code and lists nearby Pockets waiting to pair. Select the other Pocket and
+enter its code (Up/Down changes a digit, Left/Right moves, **A** pairs). Each code lasts five minutes for one device and
+expires after five wrong attempts. Add a third or fourth Pocket the same way: there is no central server to manage.
 
-**By itself.** After every game the new saves go to every paired Pocket that answers, and when a Pocket starts or
-wakes from sleep it fetches what the others saved meanwhile. A line on the shelf says what came and for which game
-("New save from TrimUI Brick · Pokémon Gold Version") and, after a game, where it went ("Save given to RG35XX Plus ·
-Golden Sun"). A save another Pocket sends while you are on the shelf gets its line too. Nothing is said when nothing
-changed or no other Pocket is awake: a Pocket that is asleep or off simply gets the saves the next time both are on.
-Never while a game runs. A problem is never quiet: "Not synced with TrimUI Brick: pair again", "1 save not synced
-with TrimUI Brick" (it is tried again next time).
+**Automatic sync.** After every game, updated saves hop over to any paired Pocket that answers. When a handheld boots or
+wakes from sleep, it pulls down anything saved elsewhere. A brief shelf notice tells you what arrived ("New save from
+TrimUI Brick · Pokémon Gold Version") or went out ("Save given to RG35XX Plus · Golden Sun"), including saves that
+arrive while you browse. If nothing changed or the other handheld is asleep, pocket-ui stays quiet and catches up next
+time both are awake. Sync never runs mid-game, and errors always speak up ("Not synced with TrimUI Brick: pair again",
+"1 save not synced with TrimUI Brick", retried next time).
 
-**Pockets on another network.** A Pocket at work and one at home find each other through your Tailscale: both in the
-same tailnet, Tailscale on, then pair as above. A ROCKNIX Pocket lists the Pockets of your tailnet that show a code; the
-Android app can't see your tailnet, so let it show the code and pick it on the other Pocket. After pairing, both sync
-wherever they are.
+**Across networks.** A Pocket on the road finds your handheld at home over Tailscale: sign both into the same tailnet,
+turn Tailscale on, and pair normally. pocket-ui OS lists waiting Pockets on your tailnet; the Android app cannot scan
+your tailnet, so display the code on Android and select it from the other Pocket. Once paired, they sync from anywhere.
 
-**On Android** (pocket-ui for Android, Handheld view): Settings → Connections → **Pocket Sync**, off until you switch it on.
-It syncs the saves of the games in your ROMs folders (internal storage and the card), where the app's player keeps them,
-only while the app is open: when it starts or comes back to the front it fetches what the others saved, and after every
-game it gives what you saved. Nothing runs in the background. A save of a game that this Android device doesn't have
-waits on the other Pockets and comes once you copy the game here. Replaced saves go to the app's own backup folder.
+**On Android** (pocket-ui for Android, Handheld view): enable Settings → Connections → **Pocket Sync** (off by default).
+It syncs saves from your ROMs folders (internal storage and SD card) only while the app is open: pulling updates when
+launched or resumed, and pushing changes after you quit a game. Nothing runs in the background. Saves for games not yet
+on Android wait safely on your other Pockets until you copy the game over. Replaced saves go into the app's backup
+folder.
 
-**The paired Pockets** are listed under **Paired**, each with how it stands, a tick for synced and a cross for a
-problem: **Synced · 3 min ago**, **Syncing…**, **Not reachable since 14:05** (asleep, off or on another network),
-**Playing a game** (nothing is written while a game runs, on either side), **Two saves: choose**, **Pair again** (it
-forgot this Pocket), **Did not answer right**, **2 saves did not sync**, or **Not synced yet**. **A** on a Pocket opens its page: how it stands and its
-last saves, each with the game, the way it went and when ("Golden Sun · From TrimUI Brick · 3 min ago"). **A** there
-syncs now. **X** twice forgets it (in the list too): it needs pairing again.
+**Checking paired Pockets.** Under **Paired**, each handheld shows a tick or cross plus its status: **Synced · 3 min
+ago**, **Syncing…**, **Not reachable since 14:05** (asleep, powered off or on another network), **Playing a game**
+(nothing writes mid-game on either end), **Two saves: choose**, **Pair again** (the other device forgot this one), **Did
+not answer right**, **2 saves did not sync**, or **Not synced yet**. Press **A** on a Pocket to inspect recent transfers
+("Golden Sun · From TrimUI Brick · 3 min ago") and press **A** again to sync now. Press **X** twice to forget a Pocket.
 
-**On the game's card** a quiet line under the play times says when a save of the game last came from or went to
-another Pocket, and which: "Pocket Sync · With TrimUI Brick at 14:05".
+**On the game card,** a quiet line below play time notes the last transfer ("Pocket Sync · With TrimUI Brick at 14:05").
 
-**What goes over**: the battery saves beside your games (`.srm`, `.sav`, the cartridge clock `.rtc` and the others in
-[What is shared](#what-is-shared)). A save goes to the Pocket that lacks it or has an older one. The same game under
-another file name ("Pokemon Emerald (USA)" here, "Emerald" there) still shares its save: games are matched by their
-contents, and a save that arrives gets this Pocket's name for the game. Save states, Continue and your library data
-come later.
+**What syncs:** battery/in-game saves beside your games (`.srm`, `.sav`, `.rtc` cartridge clocks and the rest listed in
+[What is shared](#what-is-shared)). Newer saves push to Pockets that lack them or have an older copy. Matching works by
+file contents, not filename, so "Pokemon Emerald (USA)" on one handheld and "Emerald" on another share the same save
+cleanly. Save states, Continue moments and library data are not part of Pocket Sync yet.
 
-**Played on both?** If you played the same game on two Pockets before they met, nothing is overwritten. The Pocket
-that notices keeps the other save beside yours and asks once, on the game's card and in Settings → Connections → Sync
-→ Two versions ([Two versions of a save](#two-versions-of-a-save)). The other Pockets wait for your choice; the save
-you keep goes to all of them. A save that is replaced is never lost: it goes to `/storage/roms/sync-backups/<date>`.
+**Played on both?** If you play the same game on two handhelds before they sync, nothing is overwritten. pocket-ui keeps
+both files and prompts you once on the game card and under Settings → Connections → Sync → Two versions
+([Two versions of a save](#two-versions-of-a-save)). Your chosen save then goes out to all paired Pockets, while the
+replaced copy is archived safely to `/storage/roms/sync-backups/<date>`.
 
-**Safe enough for home**: every request between two Pockets is signed with a key only the two paired Pockets have;
-only Pockets on a home network or in your Tailscale may connect. It is not encrypted: saves are no secret.
+**Home-network security:** every request between paired Pockets is signed with a shared secret key, and connections are
+restricted to your local network or Tailscale. Traffic itself is unencrypted (saves aren't secrets).
 
 ## What is shared
 
@@ -204,9 +198,8 @@ Sync page says **Nothing waiting**.
 
 ## Library data
 
-Saves tell a game where you were. **Library data** carries what you said about your games: the stars of your
-favourites, the play status, notes and ratings, your the games you hid, your smart shelves and your play
-history. Switch the row on on every Pocket that should share them, and share the folder **Pocket library data** with
+Saves tell a game where you were. **Library data** carries what you set on your shelf: favourites, play status, notes,
+ratings, hidden games, smart shelves and play history. Switch the row on on every Pocket that should share them, and share the folder **Pocket library data** with
 those devices in Syncthing, as in [Pair a computer](#pair-a-computer). On a second Pocket the folder belongs at the
 same place, `/storage/.config/pocket-ui/library-sync`; a computer only passes it on and can keep it anywhere.
 

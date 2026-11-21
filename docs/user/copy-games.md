@@ -1,44 +1,43 @@
 # Second card
 
-A way to copy games without Wi-Fi.
+How to copy games without Wi-Fi.
 
 ## One note on some systems
 
-Pick a system on Add games and it may say under its Files and BIOS lines: *Runs on this handheld, but not every game runs
-smoothly.* It appears where the system is heavy for the chip in your handheld (for example PlayStation 2 and GameCube on a
-Snapdragon 865, Nintendo 64, PSP, Dreamcast and Nintendo DS on an H700), so a game or two may stutter or need another try. Systems
-without the note are ones where games normally run fine; a handheld pocket-ui doesn't know shows no note at all.
+When you highlight a demanding console on Add games, you may see: *Runs on this handheld, but not every game runs
+smoothly.* This appears whenever a console pushes your handheld's chip (for example PS2 and GameCube on a Snapdragon
+865, or N64, PSP, Dreamcast and DS on an H700), so expect some titles to stutter or need tweaks. Systems without that
+note generally run full speed; unknown hardware shows no note.
 
 ## The ways on Add games
 
-Settings → Games → **Add games** (and the first start's last step) has a row of tiles under the grid, one for each way your
-handheld can take games: **File sharing** and **From your phone**. Press Down from the last row of systems (or tap), choose with
-Left and Right, and press A to switch the one you chose on or off. Each tile says **On** or **Off**; the right side shows
-the address and password of file sharing. Without a connection, A on **File sharing** takes you to the Wi-Fi
-page. X still switches file sharing from anywhere on the page, and B goes back. A handheld without Wi-Fi has no file sharing
-or phone tile, A second card
-and the GAMES drive are not switches: the page says how they work on your handheld.
+Settings → Games → **Add games** (and first-start setup) lists transfer options under the system grid: **File sharing**
+and **From your phone**. Move Down past the last system row (or tap), pick with Left/Right, and press A to toggle. Each
+tile shows **On** or **Off**, with your File sharing address and password on the right. If you're offline, pressing A on
+**File sharing** jumps straight to Wi-Fi settings. Pressing X toggles File sharing from anywhere on the page, and B goes
+back. Non-Wi-Fi handhelds hide those tiles and explain how a second card or the GAMES drive works instead.
 
 ## With a second SD card
 
-On a handheld with a second card slot (all the Anbernic H700 models), a second card is the simplest way without Wi-Fi:
+On handhelds with a second SD slot (all Anbernic H700 models), a second card is the easiest way to copy games offline:
 
-1. Take a card bigger than 8 GB, formatted exFAT, FAT32 or ext4 (the way cards come from the shop is fine). In your computer,
-   make a folder called `roms` with a folder per system in it, for example `roms/gba`, and copy your games there.
-2. Put it in the second slot. The handheld reads it by itself, also while it's on: the shelf shows its games within a few
-   seconds, and a new card gets the folders of all systems the first time it's in.
-3. To add more, switch off, take the card to your computer, copy, and put it back.
+1. Grab a microSD card larger than 8 GB formatted as exFAT, FAT32 or ext4 (factory formatting works fine). On your
+   computer, create a `roms` folder with one subfolder per console (like `roms/gba`) and copy your games in.
+2. Insert it into slot 2 (TF2). Your handheld detects it automatically (even while powered on), and your games appear on
+   the shelf within seconds. A blank card automatically gets all console folders created on first insert.
+3. To add more games later, power off, pop the card into your computer, copy, and slide it back in.
 
 Good to know:
 
-- **While the card is in, only its games are on the shelf.** The games on the first card aren't gone; they come back when you take
-  the second card out and restart.
-- **A card that still holds a system image doesn't work as a games card.** If you flashed it with pocket-ui or ROCKNIX, only its
-  small space is used. Home and Add games say so; take it out, or format it for games in your computer.
-- **Your saves and states are on that card too**, next to its games (`roms/savestates`). Settings stay on the first card.
-- **Don't pull the card while a game runs.** Quit first, and switch off to take it out. If it comes out anyway: on pocket-ui's own
-  host the game says its progress can't be saved, and asks before you quit; ROCKNIX's emulators (N64, PSP, Dreamcast and DS on
-  these handhelds) can't say so. What was played since the last save is lost either way; what was saved before stays on the card.
-  The shelf tells you the card is out. Put it back, and it reads the card again.
-- The hidden files a Mac or Windows leaves on a card (`._Game.gba`, `.Spotlight-V100`, `.Trashes`, `.fseventsd`, `System Volume
-  Information`) are never shown as games.
+- **Only the second card's games appear while it is inserted.** Games on your first card aren't erased; remove the second
+  card and reboot to see them again.
+- **Don't use a card that still holds an OS image.** If it was flashed with pocket-ui OS or ROCKNIX, only a small
+  partition is visible. Home and Add games warn you if that happens: remove it or reformat it on a computer first.
+- **Saves and save states live on the second card too**, next to your games (`roms/savestates`). Settings remain on card
+  1.
+- **Never eject the card while a game is running.** Quit the game and power off first. If a card is pulled mid-game,
+  pocket-ui's own player warns that progress can't be saved and asks before quitting (ROCKNIX's standalone emulators for
+  N64, PSP, Dreamcast and DS on H700 cannot warn you). Unsaved progress since the last save is lost, while earlier saves
+  stay intact. The shelf lets you know the card was removed and reloads it when reinserted.
+- Hidden metadata files left by macOS or Windows (`._Game.gba`, `.Spotlight-V100`, `.Trashes`, `.fseventsd`, `System
+  Volume Information`) are ignored automatically.

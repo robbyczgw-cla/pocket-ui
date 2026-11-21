@@ -2,98 +2,85 @@
 
 ## Known limits
 
-**Ready-made SD card images** for the Retroid Pocket Mini V2 and 13 Anbernic H700 models are on the
-[install page](https://pocketui.xyz/install.html). The other ways are the Ports installer, the two-file card install and the SSH
-package ([Getting started](getting-started.md#1-put-pocket-ui-on-the-card)). Tested on a few devices, most of all the Mini V2.
+**Ready-made SD card images** for the Retroid Pocket Mini V2 and Anbernic H700 models live on the
+[install page](https://pocketui.xyz/install.html), alongside the Ports installer, two-file card install and SSH package
+([Getting started](getting-started.md#1-put-pocket-ui-on-the-card)). Tested on several handhelds, most heavily on the
+Retroid Pocket Mini V2.
 
-**Which system starts is a setting of Retroid's start menu.** With **Boot mode: Loader** the Pocket starts pocket-ui
-from the SD card, with **Boot mode: Android** it starts Android (see
-[Getting started](getting-started.md#2-start-pocket-ui)). If pocket-ui is not installed as the start screen,
-ROCKNIX's own menu (EmulationStation) appears instead.
+**Boot choice lives in Retroid's boot menu.** **Boot mode: Loader** starts pocket-ui OS from the SD card, and **Boot
+mode: Android** starts Android ([Getting started](getting-started.md#2-start-pocket-ui)). If pocket-ui isn't installed
+as the active UI, ROCKNIX's own menu opens instead.
 
-**Sleep wakes fast, but its battery use is not known yet.** Waking the Pocket from deep sleep has been timed on a
-Mini V2: the screen and the game are back well under a second. How much battery sleep uses over a night has not been
-measured, and Power off and Restart in the power menu have not been tried on a real device. Save your game before you
-put the device away (see [Settings](quick-settings.md#sleep-and-power)).
+**Sleep wakes fast, though overnight drain isn't measured yet.** Waking a Mini V2 from deep sleep brings your game back
+in well under a second. Overnight battery drain and the Power off / Restart menu items still need more real-hardware
+testing, so save before putting the handheld away ([Settings](quick-settings.md#sleep-and-power)).
 
-**The touch screen is not confirmed on the real panel.** An early version put taps in the wrong place in a Nintendo DS
-game; the mapping has been rotated since, and nobody has checked it again. If a tap lands in the wrong place (mirrored or
-rotated), please report it; developers can rotate the mapping with `POCKETUI_TOUCH_ROTATE`
-([DEVELOPING.md](../DEVELOPING.md)).
+**Touch alignment isn't confirmed on every panel.** An early build misrotated Nintendo DS touch input; the mapping has
+been rotated since, though it still needs fresh confirmation on real hardware. Report any mirrored or rotated taps;
+developers can override rotation with `POCKETUI_TOUCH_ROTATE` ([DEVELOPING.md](../DEVELOPING.md)).
 
-**Playing on a TV has not been tried yet.** Nothing has been plugged into a Mini V2 so far; sound follows the TV
-even with headphones in, and sleep leaves the TV on (see [Playing on a TV](playing.md#playing-on-a-tv)).
+**TV output (USB-C to HDMI) hasn't been tested on hardware yet.** Audio currently routes to the TV even with headphones
+plugged in, and sleep leaves the TV signal active ([Playing on a TV](playing.md#playing-on-a-tv)).
 
+**Options, shortcuts and run-ahead apply to pocket-ui's own player**, while visual save slots work there plus PS2,
+GameCube, Wii and 3DS ([Systems](systems.md#on-pocket-uis-own-host)).
 
-**Options, shortcuts and run-ahead exist only on pocket-ui's own host**, and save slots there and on PlayStation 2,
-GameCube, Wii and 3DS. The systems are listed in [Systems](systems.md#on-pocket-uis-own-host).
+**PS2, GameCube, Wii and 3DS briefly boot the game** before jumping straight to your saved Continue spot.
 
-**PlayStation 2, GameCube, Wii and 3DS show the game booting** for a moment at the next start,
-before they jump to the moment you quit.
+**GameCube and Wii: don't change Dolphin's save slot manually.** Using Dolphin's internal slot hotkeys shifts which slot
+the pause menu saves and loads from.
 
-**GameCube and Wii: leave Dolphin's save slot alone.** Dolphin has its own shortcuts for changing
-its save slot. If you change the slot with them, the pause menu's Save, Load and continuing use a
-different slot than they should.
+**3DS `.3dsx` homebrew shares one quick save.** Azahar keys its quick slot by title ID, which `.3dsx` files lack, so
+homebrew titles share that single Save/Load slot (Continue moments still stay per game file).
 
-**3DS homebrew share one save.** Azahar names its quick save after the game's title ID, and `.3dsx`
-homebrew has none, so all `.3dsx` games share the one quick save (Save and Load in the pause menu).
-Continuing where you left off is kept per game file.
+**Multi-disc PlayStation games need an `.m3u` playlist or multi-disc `.pbp`** to show the pause menu's **Disc** row.
+Individual disc files launch as separate games ([Games on several discs](systems.md#games-on-several-discs)).
 
-**A PlayStation game on several discs has no Disc row.** The pause menu changes discs only for a game started
-from an `.m3u` playlist or a multi-disc `.pbp`; each disc started on its own is a game of its own. See
-[Games on several discs](systems.md#games-on-several-discs).
+**Syncthing pairing hasn't been tested with an external device during dev** (the toggle, folders, protected web UI and
+post-game scans were verified on a Mini V2). PS2, GameCube, Wii and 3DS sync rows are new and awaiting hardware
+confirmation ([Sync](sync.md#what-is-shared)).
 
-**Sync has not been tried with a second device.** The switch, the shared folders, the protected web interface and
-the scan after a game were checked on a Mini V2, but no outside device may be paired during development. The rows
-for PlayStation 2, GameCube & Wii and 3DS saves are new and not yet checked on a Mini V2 (see
-[Sync](sync.md#what-is-shared)).
+**Bluetooth controllers have been tested on an Anbernic H700 so far.** Wake-from-sleep reconnects, multi-controller play
+and specific third-party pads are still being validated; use [Test buttons](settings-sound.md#test-buttons) to verify
+inputs ([Bluetooth](bluetooth.md)).
 
-**Bluetooth controllers have been paired on one handheld so far** (an Anbernic H700 model). Reconnecting after sleep,
-two controllers at once and every controller model are still to be confirmed on real hardware; [Test buttons](settings-sound.md#test-buttons)
-shows what your controller sends (see [Bluetooth](bluetooth.md)).
+**PC streaming (Moonlight) hasn't been paired against a real PC during dev** (launch, discovery and return flow were
+verified, with pairing checked against a stub; see [PC streaming](pc-streaming.md#pair-once)).
 
-**PC streaming has not been tried with a real PC** for the same reason. Starting it, the lookup and the way back
-are checked; pairing on the Pocket was checked with a stand-in for Moonlight (see
-[PC streaming](pc-streaming.md#pair-once)).
+**Smooth fan has an initial Mini V2 test.** Over an 8-minute load test, the fan spun up once instead of cycling twice
+([Smooth fan](performance.md#smooth-fan)). Acoustics, minimum RPM and the 78 °C ceiling still need wider hardware
+checks. If your fan acts strangely, turn off Settings → Playing → Performance & fan → **Smooth fan** to restore the
+system curve immediately.
 
-**Smooth fan has had a first test on a Mini V2.** In eight minutes with a game that keeps one core busy, the fan
-started once where the system's own control started it twice, and was off far less of the time (see
-[Smooth fan](performance.md#smooth-fan)). How quiet it sounds, its lowest speed and the 78 °C limit on the real
-hardware are not checked yet. If the fan behaves oddly, switch Settings → Playing → Performance & fan →
-**Smooth fan** off: the system's own fan control is back at once.
-
-**Settings → Help & tools → Tools, the Wi-Fi country and Backup & reset are new and not yet confirmed on a Mini V2.** They work in
-the virtual device (which has no Wi-Fi chip and none of the big standalone emulators).
+**Settings → Help & tools → Tools, Wi-Fi country and Backup & reset** were verified in our virtual device and are
+awaiting real Mini V2 confirmation.
 
 ## Questions
 
-**The start picture (the "pocket-ui" bar) stays and the shelf doesn't come.**
-After a minute it says "Still starting…". The first start after setting up a card, or after a system update, can take
-a few minutes: give it time. If nothing changes for several minutes, hold Power until the Pocket switches off, and
-switch it on again. If it happens again, start Android instead (Volume Down + Power, **Switch boot mode**) and ask for
-help with the card in hand; [Report a problem](#report-a-problem) works from the next start that reaches the shelf.
+**Stuck on the "pocket-ui" boot bar and the shelf never appears.**
+After one minute it updates to "Still starting…". First boot on a fresh card or right after a system update can take a
+few minutes, so give it time. If nothing moves after several minutes, hold Power to force shut down and turn it back on.
+If it persists, boot Android (Volume Down + Power → **Switch boot mode**) and reach out for help; once you reach the
+shelf, use [Report a problem](#report-a-problem).
 
-**The starter pack says the Pocket isn't online, or the download didn't finish.**
-The games come over the internet, so Wi-Fi has to be on (Settings → Connections → Wi-Fi). Nothing is added by a download that
-was cut off; press A again and it starts that game anew. "Not enough space on the SD card" means the system's folder is on a full
-SD card: free some space first. A game that is already in its folder is never replaced.
+**Starter pack says offline, or a download cut off.**
+Make sure Wi-Fi is connected (Settings → Connections → Wi-Fi). Interrupted downloads never leave partial files; press A
+to retry. If you see "Not enough space on the SD card", free up room first. Existing files are never overwritten.
 
 **The SD card is full.**
-A game on pocket-ui's own host then says "Couldn't save: the SD card is full" at the bottom of the screen, and
-Quit asks first ([When your progress can't be saved](pause-menu-saves.md#when-your-progress-cant-be-saved)). Settings
-→ System → About shows the free space. Make space from a computer through the file share or
-[Remote access (SSH)](settings-system.md#remote-access-ssh), while the game waits in the pause menu or after quitting: save
-states you don't need any more (`roms/savestates/<system>/`, about 40 MB each for PSP and other 3D games), screenshots,
-games you don't play. Delete no `.srm`, `.rtc` or `.sav` file: those are your in-game saves. Once there is space, the next
-try (within 10 seconds) writes the save and the line goes away. An SD card that "can't be written to right now" has turned
-read-only, usually after an SD card error: quitting and restarting the Pocket often clears that; if it comes back, copy
-your saves off and replace the SD card.
+In game, pocket-ui's own player shows "Couldn't save: the SD card is full" and prompts before quitting
+([When your progress can't be saved](pause-menu-saves.md#when-your-progress-cant-be-saved)). On the shelf, unsaved
+settings or favourites trigger "Couldn't save your changes: the SD card is full". Check free space under Settings →
+Help & tools → About, then clear space over File sharing or [Remote access (SSH)](settings-system.md#remote-access-ssh) while
+paused or after quitting: old save states (`roms/savestates/<system>/`, up to ~40 MB each for 3D consoles), screenshots
+or unused ROMs. **Never delete `.srm`, `.rtc` or `.sav` files**, since those hold your in-game saves. Once space is free, the next retry (within 10 seconds) saves cleanly. If the card turns
+read-only ("can't be written to right now"), rebooting often clears it; if it recurs, back up your saves and replace the
+card.
 
 **"Couldn't read this game's save".**
-The SD card couldn't hand over the game's in-game save when the game started, which is how a failing SD card starts to show.
-The save is not changed: nothing is written over it, and what you play in that session isn't kept. Quit, copy the
-`.srm` (or `.sav`) beside the game to a computer through the file share, and back up your saves (Settings → System →
-Backup & reset). If the line comes back after a restart, replace the SD card and copy the saves onto the new one.
+The SD card failed to read your in-game save at launch, often an early sign of a worn card. pocket-ui protects the
+original file by not writing over it (your current session won't save). Quit, copy the `.srm` or `.sav` off over File
+sharing, and run Settings → System → Backup & reset. If the error returns after a reboot, replace the SD card.
 
 **A tool from Settings → Help & tools → Tools doesn't let me out.**
 Hold HOME for a second and let go: pocket-ui stops the tool and Settings → Help & tools → Tools comes back. Tools that support it
@@ -171,7 +158,7 @@ Check [Runs on](options.md#runs-on) to choose an emulator yourself (see
 [Systems](systems.md#when-a-game-does-not-start-on-the-own-host)).
 
 **A game starts with a different emulator than before, or doesn't start at all.**
-Someone chose another emulator for it or its console, in pocket-ui or earlier in ROCKNIX's EmulationStation. Press
+Someone chose another emulator for it or its console, in pocket-ui or earlier in ROCKNIX's own menu. Press
 START on its card: [Runs on](options.md#runs-on) shows what plays it and where that comes from. "Not installed"
 means ROCKNIX can't start that choice on this Pocket; pick another one, or Options → Restore defaults.
 
@@ -200,8 +187,13 @@ such as "needs a BIOS file in roms/bios", are shown as they are). Check that the
 system that needs one, that its BIOS is in `roms/bios`: Settings → Games → **Add games** lists the BIOS files per
 system. When pocket-ui knows the system's BIOS and it is missing (Sega CD, PC Engine CD and others), the line names the
 files instead: "... didn't start. Sega CD needs a BIOS file in roms/bios: bios_CD_U.bin, bios_CD_E.bin or bios_CD_J.bin. BIOS files come from your own console."
+Neo Geo games name `neogeo.zip`, which may also sit next to the games ([Arcade games](arcade.md#when-a-game-does-not-start)).
 A game that never started is not counted as played: it does not become Continue and is not in the switcher.
 For a zip file, pocket-core says what is wrong with it: [see below](#a-zip-game-says-it-holds-several-games-is-damaged-or-cant-be-opened).
+
+**A game shows "... didn't start. Its emulator crashed while loading the game".**
+pocket-ui's own player stopped while it loaded the game, without a reason of its own. Start the game once more; when
+it crashes again, copy the game file to the card again, as a damaged file is the usual cause.
 
 **The fan runs all the time, slowly.**
 That is Smooth fan: once the Pocket is warm, a slow, steady fan is quieter than one that switches on and off. It
@@ -216,7 +208,7 @@ likely.
 **The fan doesn't follow my choice.**
 Settings → Playing → Performance & fan → **Now** says who drives the fan. "smooth, …" is pocket-ui; "starts at … °C" is the
 system's own control, which takes over while the Pocket sleeps, while a game has its own cooling profile in
-EmulationStation set to "custom", and for ten minutes when the system kept changing the fan back (pocket-ui then gives
+ROCKNIX's settings set to "custom", and for ten minutes when the system kept changing the fan back (pocket-ui then gives
 way rather than fight over it). `pocket-ui.log` says which, in lines starting with `fan curve:`.
 
 **A game's sound crackles and the game slows down.**
@@ -274,7 +266,7 @@ network in range (your main network first, otherwise the strongest other saved o
 hotspot when you are out), then tries again after 1, 2 and every 5 minutes, as long as Wi-Fi is switched
 on. It never joins a network you haven't connected to before, and it waits while a connection is already
 being made. A saved network whose password is missing from the system's network settings, or that
-EmulationStation emptied there, is repaired at the next start from the saved network. If it lost the password on both
+ROCKNIX's own menu emptied there, is repaired at the next start from the saved network. If it lost the password on both
 sides, Connect asks for it once: nothing has to be forgotten first.
 
 **Box art found nothing for some games, or the wrong picture.**
@@ -292,7 +284,7 @@ by the last version that worked. Your games and settings are not affected.
 **pocket-ui restarted by itself.**
 If pocket-ui crashes, it starts again, up to three times in a row. If it keeps stopping, the last version that worked
 comes back, and after that pocket-ui opens in **safe mode**, a page to restart, go back a version, reset its settings
-or switch off ([Safe mode](safe-mode.md)). ROCKNIX's own menu (EmulationStation) only opens by itself if pocket-ui
+or switch off ([Safe mode](safe-mode.md)). ROCKNIX's own menu only opens by itself if pocket-ui
 cannot start at all; the next start of pocket-ui then says why. A card on the next screen says that something went
 wrong. The details are in `crash.log` in pocket-ui's data folder and in the logs (see
 [What to send when something crashes](#what-to-send-when-something-crashes)). Games and settings are written so that a
@@ -309,7 +301,7 @@ out, the power was cut, or the power button was held until it switched off. pock
 run have no mark that it ended properly. `crash.log` then has a line with the time of the last sign of life and the
 last messages of the system; the logs have the rest (see below). Nothing in your games or settings is lost by this
 message. Power off, Restart and switching off after sleeping are the normal way and never bring it up, and on dArkOS
-neither does switching off from EmulationStation after Back to EmulationStation.
+neither does switching off from dArkOS's own menu after Back to EmulationStation.
 
 ## Will my games start?
 
@@ -336,8 +328,7 @@ the game does not matter.
 - **"There is no game file in ..." / "... is empty."** The zip holds only texts or pictures, or nothing. Check that it
   is the right file.
 
-A zip that pocket-core can't read otherwise (a rare kind of zip) is still tried with RetroArch, as before. `.7z` games
-always go to RetroArch.
+A zip or `.7z` file that pocket-core can't read otherwise (a rare compression method) is still tried with RetroArch, as before; standard `.7z` archives (LZMA, LZMA2, PPMd) open directly in pocket-core.
 
 ## Report a problem
 
@@ -421,10 +412,9 @@ before you post them in public, or use [Report a problem](#report-a-problem), wh
 Both are shown on screen: Settings → Games → Add games, and Settings → Connections → Remote access (SSH). Each Pocket has its own
 password; it does not change.
 
-**How do I get to ROCKNIX's standard menu (EmulationStation)?**
-On the shelf, hold SELECT + START for one second and choose **Open EmulationStation**, or Settings → Help & tools → About → **Open
-EmulationStation…**. Read the warning first: do not use Updates or Factory reset there. Restart the Pocket to come back
-([Safe mode and EmulationStation](safe-mode.md#opening-emulationstation)).
+**How do I get to ROCKNIX's standard menu?**
+On the shelf, hold SELECT + START for one second and choose **Open EmulationStation**, or Settings → Help & tools → About → **Open EmulationStation…**. Read the warning first: do not use Updates or Factory reset there. Restart the Pocket to come back
+([Safe mode](safe-mode.md#opening-rocknixs-own-menu)).
 
 **Where does pocket-ui keep its data?**
 In `/storage/.config/pocket-ui/` on the SD card:

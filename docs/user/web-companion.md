@@ -1,67 +1,62 @@
 # The web companion: your library in a browser
 
-Settings → Connections → **Web companion** lets you open the Pocket's library on your phone or computer: browse and search your
-games, set a game's status, rating, note and manage smart shelves, upload games, BIOS files and
-PortMaster files, see your play time and the battery, and look at the Pocket's screen. It works on your home Wi-Fi
-and over [Tailscale](remote.md), and it is **off** until you switch it on.
+Settings → Connections → **Web companion** opens your handheld's library right in your phone or computer's browser:
+browse and search games, edit play status, ratings, notes and smart shelves, upload ROMs, BIOS files and PortMaster
+data, check play time and battery, and view your Pocket's screen. It matches your handheld's language (Settings → System
+→ Language), including dates and file sizes. Works on home Wi-Fi or over [Tailscale](remote.md), and stays **off**
+until you switch it on.
 
-> **Status:** switching it on and off, listening on Tailscale, signing in over a real tailnet and the screenshot
-> placeholder were checked on a Mini V2. The Wi-Fi side (new in 0.5), pairing a browser with a code, uploading files
-> and using it while a game runs were only tried on a computer with a stand-in library. Please tell us what happens.
+> **Status:** toggling, Tailscale listening, signing in over a real tailnet and the hidden screenshot placeholder were
+> verified on a Mini V2. Home Wi-Fi pairing, file uploads and in-game access were verified in desktop tests with a mock
+> library. Let us know how it runs on your handheld.
 
-To send a few games from a phone without switching anything on, Add games → Y works too ([From your
-phone](phone-upload.md)): a page that exists only while it is open on the Pocket.
+Just want to drop a few ROMs from your phone without enabling the web companion? Press Y inside Add games
+([From your phone](phone-upload.md)) for a one-off upload page that closes as soon as you leave.
 
 ## Turn it on
 
-1. Connect the Pocket to your Wi-Fi (Settings → Connections → **Wi-Fi**). Your phone or computer must be on the same
-   Wi-Fi. Away from home, [Tailscale](remote.md) works instead (the Pocket and your phone signed in to the same tailnet).
-2. Settings → Connections → **Web companion**. Select **Web companion** and press **A**. It says **On**.
-3. Below the list the page shows the address to open: the Pocket's Wi-Fi address, for example `http://192.168.1.42`,
-   and below it its name on the Wi-Fi (for example `http://sm8250.local`) and, with Tailscale, its Tailscale name
-   (`http://pocket-mini`). Open one of them in a browser on your phone or computer.
-4. A browser on the Wi-Fi needs a code once: **Pair a browser** shows it with a QR code (see [Who gets in](#who-gets-in)).
+1. Connect to Wi-Fi (Settings → Connections → **Wi-Fi**) on the same network as your phone or PC, or connect both to the
+   same [Tailscale](remote.md) tailnet when away from home.
+2. Open Settings → Connections → **Web companion**, highlight **Web companion**, and press **A** to turn it **On**.
+3. Open one of the addresses shown below the list in your browser: your Wi-Fi IP (e.g. `http://192.168.1.42`), local
+   hostname (e.g. `http://sm8250.local`), or Tailscale name (`http://pocket-mini`).
+4. Browsers on Wi-Fi pair once with a code: open **Pair a browser** for a QR code and six-digit code (see
+   [Who gets in](#who-gets-in)).
 
-If the page says **Not listening**, it gives the reason (for example something else is using the address) and tries again
-every 30 seconds. If it says **Waiting for Wi-Fi**, neither the Wi-Fi nor Tailscale is connected; the companion starts
-listening by itself as soon as one is. When the Pocket joins another Wi-Fi, it follows within 30 seconds, with the new
-address on the page. The `.local` name works on most phones and computers (not on every Android phone); the numbers
-always work. The Brick shows the numbers only. The Tailscale name (`http://pocket-mini`) needs MagicDNS, which
-Tailscale switches on by default; the `100.x.y.z` address always works.
+If the screen reads **Not listening**, it explains why (such as another service using the port) and retries every 30
+seconds. **Waiting for Wi-Fi** means neither Wi-Fi nor Tailscale is connected yet; the companion starts automatically
+once you reconnect, and follows network switches within 30 seconds. `.local` names work on most phones and PCs (some
+Android phones don't support them), while numeric IP addresses always work (the Brick shows IP addresses only).
+Tailscale hostnames require MagicDNS (on by default in Tailscale); `100.x.y.z` always works.
 
-The switch is kept across restarts. When it is on, the companion starts a few seconds after the Pocket, so it never
-slows down the start.
+The toggle persists across reboots and starts a few seconds after boot so it never slows down startup.
 
 | Entry | What it does |
 |---|---|
-| **Web companion** | On or Off. Off by default. Off, nothing listens and nothing runs |
-| **Pair a browser** | Shows a one-time code for a browser that needs one (see below). Only while the companion is on |
-| **Paired browsers** | The browsers paired with a code, newest first. A, then A again, revokes one |
-| **Your Tailscale devices** | **Open** (the default): your own devices on your tailnet get in without a code. **Code**: every browser needs a code, yours too. On the Wi-Fi every browser needs a code either way |
+| **Web companion** | On or Off (off by default). When off, nothing runs or listens |
+| **Pair a browser** | Displays a one-time QR code and six digits for pairing (visible while On) |
+| **Paired browsers** | Lists paired browsers, newest first. Press A twice to revoke one |
+| **Your Tailscale devices** | **Open** (default): devices on your own Tailscale account enter without a code. **Code**: every browser requires pairing. Wi-Fi browsers always need a code |
 
 ## Who gets in
 
-- **Any browser on your Wi-Fi** needs the code once (below), then stays paired. Whoever is on your Wi-Fi and can see
-  the code on the Pocket's screen is trusted, the same as for file sharing.
-- **Your own devices over Tailscale**: a phone or computer signed in to Tailscale with **your** account opens the
-  companion straight away, through the Tailscale name or address (on the Wi-Fi address it needs the code like any browser). The Pocket asks Tailscale who is connecting; nothing to type. This means **every** device signed in with your
-  Tailscale account, unless it is tagged: including a computer someone else in your family uses with your account, or a
-  server you added with your own key. Switch **Your Tailscale devices** to **Code** if that is not what you want; then
-  every browser needs a code, and revoking one locks that device out (with Open, a device of your account gets in
-  again through Tailscale even after its browser was revoked). A device you take out of your account in Tailscale may
-  get in for up to a minute more, or until you switch Your Tailscale devices.
-- **Any other browser** on your tailnet (a device shared with you by someone else, a tagged device, or every browser
-  when Your Tailscale devices is set to Code) needs a code too. Pairing goes like this:
-  1. On the Pocket: Settings → Connections → Web companion → **Pair a browser**. A QR code and six digits appear.
-  2. Scan the QR code with the phone's camera (it opens the Pocket's Wi-Fi address with the code and pairs by itself),
-     or open the address and type the six digits.
-  3. The browser stays paired for a year; then it needs a new code. **Forget this browser** at the bottom of the
-     page, or revoking it under **Paired browsers** on the Pocket, ends that at once.
+- **Home Wi-Fi browsers** pair once using the six-digit code (or QR code) and stay paired. Anyone on your Wi-Fi who can
+  read the Pocket's screen can pair, just like with File sharing.
+- **Your own Tailscale devices** open the companion directly via your Tailscale name or `100.x.y.z` address (the Wi-Fi
+  IP still asks for a code). Your Pocket checks identity with Tailscale automatically. Note that this covers **every**
+  untagged device signed into your Tailscale account, including shared family machines or servers. Switch **Your
+  Tailscale devices** to **Code** if you want every browser to pair explicitly (otherwise a revoked device on your
+  account can reconnect over Tailscale). A device removed from your tailnet may keep access for up to a minute unless
+  you toggle the setting.
+- **Other browsers** on your tailnet (shared devices, tagged devices, or all browsers under **Code**) pair like this:
+  1. Open Settings → Connections → Web companion → **Pair a browser** to display a QR code and six digits.
+  2. Scan the QR code with your phone (opens and pairs automatically), or open the URL and enter the six digits.
+  3. Pairing lasts one year. Click **Forget this browser** at the bottom of the page, or revoke it under **Paired
+     browsers** on your Pocket, to end access immediately.
 
-A code is valid for five minutes and for one browser. It is gone after five wrong tries, when you leave the code's
-page, or when it was used. The Pocket answers at most one try a second. A wrong code, an old one and a try while no
-code is showing all get the same answer: **That code is not right, or no code is showing.** Make a new code on the
-Pocket then.
+Pairing codes last five minutes for one browser and expire after five wrong attempts, after use, or when you leave the
+pairing screen. The Pocket rate-limits guesses to one per second and gives the same error (**That code is not right, or
+no code is showing.**) for wrong, expired or inactive codes. Just generate a fresh code if needed.
 
 ## What you can do
 
@@ -70,12 +65,18 @@ Pocket then.
   Status, rating (five stars; tap the stars you gave again to take the rating away), note and favourite
   change on the Pocket at once, as if you had pressed the buttons there. A game hidden on the Pocket
   ([Hide or delete](library.md#hide-or-delete-a-game)) is not listed; shown again, it is back at the next page.
-- **Screenshots**: a game's page lists the screenshots you took in that game (HOME + A, see
-  [Screenshots](playing.md#screenshots)), newest first. Tap one to open it full size. The page only reads them: it
-  cannot delete or add any (use the file share for that). They are not available while a game is running.
-- **Your shelf as a picture**: the Library page shows the pictures you made on the Pocket (Settings › Games ›
-  Screenshots › **My shelf as a picture**), newest first. Tap one to open it, then save it to your phone to post it.
-  Like the screenshots, the page only reads them.
+- **Box art.** Open a game and tap **Choose cover…**. Pick a picture from your phone or computer. Your browser
+  shrinks it to at most 1024 pixels on the longest side and sends a PNG of up to 8 MB. **Reset to automatic**
+  brings back the Pocket’s usual cover, if it has one. The Pocket keeps a copy of a replaced or reset custom cover.
+- **Photo album and screenshots**: open **More → Photo album & screenshots** to browse all album photos (Photos of big
+  moments, `<data>/album/`) and screenshots (HOME + A in a game, plus shelf pictures) in one place, or view a game's
+  own album and screenshots on its page. You can view any picture full size, download it individually, delete
+  individual pictures (with confirmation), or download everything (or a single game's pictures) as a ZIP archive. Not
+  available while a game is running.
+- **Software update**: open **More → Software update** (or tap the version in the footer) to see your current version
+  and any newer release (for example **0.6.0, new: 0.6.1**), check for updates, and start **Install** with live step
+  progress. Updates come straight from pocket-ui, keep your games and settings, and never start while a game is
+  running.
 - **Shelves**: Favourites and Curator's smart shelves (rename, delete; make them on the
   Pocket with the Lens). A smart shelf lists its games in the order chosen for it on the Pocket. Deleting a shelf never deletes a game.
 - **Upload**:
@@ -91,6 +92,22 @@ Pocket then.
     least 256 MB stay free on the SD card, even with several uploads at once. Scripts and programs (`.sh`, `.py`, `.so`,
     `.elf` and any file that starts like a Linux program) are never taken, and nothing goes into the `ports` folder,
     where the Pocket runs programs from.
+- **Saves**:
+  - On a game's page: its saves (the game's own save, the cartridge clock, a memory card) and its save states
+    (Continue, Before load, Slot 1 to 8), each with its time and size and a **Download** button, and **All of this
+    game as a ZIP**.
+  - **Put a save back** on the game's page: drop a save (`.srm`, `.sav` …) or a save state (`.pstate`, `.state` …).
+    The Pocket names it after this game, so a save from another device or with another name fits (`Emerald.srm`
+    becomes `Pokemon - Emerald Version (USA).srm`). Before it replaces a save or state, the page asks, and the one that
+    was there goes into a saves backup first: Settings › System › Backup & reset lists it as **Before restore**, and
+    can put it back. Saves move well between devices; save states only work with the same emulator. Only while no game
+    runs: a game that starts during the upload ends it and nothing changes.
+  - The **Saves** tab: how many saves and states the Pocket has, **Download all saves (ZIP)** and **Saves and states
+    (ZIP)**, with the folders of the SD card inside (`roms/gba/…`), so they can be copied back as they are. A
+    download stops when a game starts.
+  - **Pocket Sync** on the same tab, read only: each paired Pocket with how it stands (**Synced · 3 min ago**, **Not
+    reachable since 14:05**), the last saves that came and went, and the saves played on two Pockets that wait for
+    your choice. Pairing and choosing stay on the Pockets (Settings › Connections › Pocket Sync).
 - **Stats**:
   - **Play history** (the same numbers as Curator → History on the Pocket, see [Your library](curator.md#play-history)):
     **Week**, **Month** or **Year** with a bar per day (per week for a year), the time, sessions and days played, the
@@ -102,6 +119,9 @@ Pocket then.
   - **All time, by game**: time played in all, sessions, games played, time per system and the most played games,
     as the library keeps them for every game (including from before the play history began).
   - The battery over the last 48 hours.
+- **Diagnosis.** At the bottom of the companion, open **Diagnosis** and tap **Download diagnosis ZIP**.
+  It contains the app version, the device model and recent app events. The package leaves out Wi-Fi passwords,
+  tokens, pairing details and file paths. If there are no shareable events yet, the page and the package say so.
 - **Now playing**: while a game runs, its name and since when, and **Screenshot**: a picture of the Pocket's screen,
   at most one new one every 10 seconds. While the Pocket shows Settings or the first-start steps (which can show the
   pairing code, passwords and keys), the screenshot is a grey picture that says it is hidden.
@@ -109,7 +129,7 @@ Pocket then.
 ## While a game runs
 
 The game has the Pocket to itself. The companion answers only what costs next to nothing: Now playing and the
-screenshot. The lists, edits and new uploads wait until the game ends (the page says so and carries on by
+screenshot. The lists, edits, saves and new uploads wait until the game ends (the page says so and carries on by
 itself). An upload that was already running pauses and continues when the game ends.
 
 ## How it is kept safe
@@ -125,8 +145,9 @@ itself). An upload that was already running pauses and continues when the game e
   system alone; revoking one in Settings ends it at once.
 - **Only this page can change things.** Every change needs a token that only the companion's own page has, so another
   website open in the same browser can't change anything on the Pocket. The page loads nothing from the internet.
-- **Only the right folders.** Uploads go only into game folders, `roms/bios` and the folders of PortMaster games that wait for your files. Names
-  that try to reach other folders (`..`, `/`, links, invisible characters) are cleaned or refused.
+- **Only the right folders.** The Upload tab sends files to game folders, `roms/bios` and the folders of PortMaster
+  games that wait for your files. Names that try to reach other folders are cleaned or refused. Own cover images
+  go into the Pocket’s covers folder and belong to the game you opened.
 - **It stays out of the way.** It runs at the lowest priority, apart from the menus and games, and does next to
   nothing while no browser is connected.
 

@@ -1,26 +1,27 @@
 # Continue
 
-A game you have played comes back where you left it. **A** on it goes straight back to the moment you left, with no
-question. Nothing keeps running and nothing extra goes on your card: it is the moment Quit or sleep wrote. With
-[Game start animation](settings.md#game-start-animation) on Cozy (and Motion on Full) you watch the game go into its console first, as at
-every start; the moment loads meanwhile and waits, still, until the scene is over. Quick skips the scene.
+Every game you play picks up right where you stopped. Press **A** and you're straight back in that exact moment with no
+extra prompts. Nothing stays running in the background and nothing extra clogs your card: it simply loads the moment
+saved when you quit or put the handheld to sleep. With [Game start animation](settings.md#game-start-animation) set to
+Cozy (and Motion on Full), you watch the game slide into its console while your moment loads in the background; Quick
+skips straight in.
 
 ## An open case means a moment is waiting
 
-Your last five games with a saved moment stand a little open on the shelf: on Home's recent row and in their system's row,
-the game peeks out over the case's top, and when you pick one its cartridge, card or disc comes a little out of the side.
-In the Split and Cabinet looks the word **Continue** beside the game says the same. For a game whose save pocket-ui can
-read, the line beside it says where you are in it ("8 badges · Charizard Lv. 45 · game clock 31:12",
-[Where you are in the game](library.md#where-you-are-in-the-game)) instead of when you played it. The first time an open case is on screen, one line says what it means: "Open means your moment is waiting"
-(once, never in Kids Mode).
-Other games with a moment continue the same way when you start them; they just don't stand open.
+Your last five games with a saved moment sit slightly ajar on the shelf: on Home's recent row and inside their console's
+row, the game peeks out the top of the box, and highlighting it slides the cartridge, card or disc part-way out. In Split
+and Cabinet, **Continue** beside the title signals the same thing. For games whose in-game save pocket-ui can read, your
+actual progress ("8 badges · Charizard Lv. 45 · game clock 31:12",
+[Where you are in the game](library.md#where-you-are-in-the-game)) replaces the last-played date. The first time you see
+an open case, a quick hint explains "Open means your moment is waiting" (shown once, never in Kids Mode). Older games
+with saved moments still continue the same way; they just sit closed on the shelf.
 
-In Shelf and Cabinet, the case starts moving as soon as you press **A**, while pocket-ui prepares the game.
+In Shelf and Cabinet, the case begins opening the instant you press **A** while pocket-ui loads the game.
 
 ## How fast
 
-It depends on the emulator. From A until the moment is back on the screen with Animations on Quick, measured on real
-games (on Cozy the moment comes once the game is in its console, about 1.6 s after A, or later when the emulator takes longer):
+Resume speed depends on the emulator. Measured from pressing A to seeing your game with Game start animation set to
+Quick (on Cozy, the game appears right after the ~1.6 s console animation, or once a slower emulator finishes booting):
 
 | System | Mini V2 | RG35XX Plus |
 |---|---|---|

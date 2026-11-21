@@ -1,146 +1,135 @@
 # Getting started
 
-This page takes you from a ROCKNIX card to your first game in pocket-ui. You need a computer once, to copy files to the card.
+This page walks you from a blank SD card (or existing ROCKNIX card) to your first game in pocket-ui. You only need a
+computer once to set up the card.
 
-> **Already play on ROCKNIX, ArkOS or Android?** [Coming from ROCKNIX, ArkOS or Android](coming-from.md) says what happens to your
-> saves, states, favourites and settings.
+> **Already playing on ROCKNIX, dArkOS or Android?** Read [Coming from ROCKNIX, dArkOS or Android](coming-from.md) to
+> see what carries over for saves, states, favourites and settings.
 
-> **Not a Mini V2?** The two-file card install below is for the Mini V2 only. Other Retroid devices and the Anbernic H700
-> handhelds are on [Other handhelds](other-handhelds.md) (other Retroid devices, SM8550, H700). They are
-> supported as **experimental**.
+> **Not on a Mini V2?** The two-file card install below is for the Mini V2 only. Other Retroid models, SM8550 devices
+> and Anbernic H700 handhelds are covered on [Other handhelds](other-handhelds.md) (marked **experimental** where not
+> yet tested on hardware).
 
 ## 1. Put pocket-ui on the card
 
-Download from the [install page](https://pocketui.xyz/install.html) and pick one way:
+Head to the [install page](https://pocketui.xyz/install.html) and pick the method that fits your setup:
 
-- **Ready-made SD card image**, the easiest: there is one for the Mini V2 and one for each Anbernic H700 model. Write it to
-  a card with balenaEtcher or Raspberry Pi Imager. Writing erases the card; the handheld itself isn't changed. On an
-  H700 handheld put the card in and switch on; on the Mini V2 go on with [section 2](#2-start-pocket-ui).
-- **Ports installer**, when ROCKNIX is already on your card: section 2 below.
-- **Fresh card, two files**: right below.
-- **Over SSH**: the [install guide](../INSTALL-DUAL-BOOT.md).
+- **Ready-made SD card image (easiest):** available for the Mini V2 and Anbernic H700 models. Flash it to a spare card
+  with balenaEtcher or Raspberry Pi Imager. Flashing wipes the card while leaving your handheld untouched. On H700
+  handhelds, just pop the card in and power on; on a Mini V2, continue with [section 2](#2-start-pocket-ui).
+- **Ports installer:** for a card already running ROCKNIX (see section 2 below).
+- **Fresh card, two files:** right below.
+- **Over SSH:** see the [install guide](../INSTALL-DUAL-BOOT.md).
 
-pocket-ui contains no games and no BIOS files; add only ones you own.
+pocket-ui includes no games or BIOS files; bring your own.
 
 ### Fresh card: two files
 
-If you flashed the official ROCKNIX image yourself, you can add pocket-ui from your computer, without Wi-Fi and without
-any command line:
+If you already flashed the official ROCKNIX image yourself, you can add pocket-ui from your PC or Mac with no Wi-Fi and
+no terminal:
 
-1. New to ROCKNIX on the Mini V2? Set it up once with [ROCKNIX's own guide](https://rocknix.org/devices/retroid/retroid-pocket-mini/) (it covers flashing the card and ROCKNIX's one-time bootloader step), then come back. Flash ROCKNIX 20261001 or newer to the card, but **don't switch the device on yet**.
-2. Take the card out and put it in again. Your computer shows one drive called **ROCKNIX**.
-3. Copy two files into that drive, in the top folder: `mount-storage.sh` and `pocket-ui-seed.tar.gz` (both are in the
-   pocket-ui card zip). Don't rename them or unpack them. Eject the card.
-4. Put the card in and switch on. The first start looks like normal ROCKNIX: it makes room for your games and restarts
-   by itself.
-5. At the second start the screen says "pocket-ui: installing", and then pocket-ui opens. The two files disappear from
-   the drive on their own.
+1. New to ROCKNIX on the Mini V2? Follow [ROCKNIX's own guide](https://rocknix.org/devices/retroid/retroid-pocket-mini/)
+   once (flashing + ROCKNIX's one-time bootloader step), then come back. Flash ROCKNIX 20261001 or newer, and **don't
+   power on yet**.
+2. Unplug and replug the card so your computer mounts the **ROCKNIX** drive.
+3. Drop `mount-storage.sh` and `pocket-ui-seed.tar.gz` (from the pocket-ui card zip) into the root of that drive. Do not
+   rename or unpack them. Safely eject the card.
+4. Insert the card and power on. First boot looks like normal ROCKNIX while it expands the games partition and reboots.
+5. On the second boot you'll see "pocket-ui: installing", then pocket-ui launches and cleans up the two setup files
+   automatically.
 
-Your games, saves and settings are never touched. If pocket-ui doesn't come up, ROCKNIX starts as usual and the
-drive holds a file `pocket-ui-install.log` that says why (for example "damaged": copy the tar again). The two files
-stay until the install worked, so you can just try again.
+Your games, saves and settings stay untouched. If pocket-ui doesn't launch, ROCKNIX boots normally and writes
+`pocket-ui-install.log` on the drive explaining why (for example, a corrupted archive: recopy the tar and try again). The two
+files stay until setup succeeds.
 
 ## 2. Start pocket-ui
 
-pocket-ui starts from the SD card next to Android; Android and its data stay as they are, and nothing is flashed. A
-setting in Retroid's own start menu picks which one starts:
+pocket-ui OS boots from your microSD card right alongside Android, leaving Android and its data untouched. Retroid's
+built-in boot menu picks which OS starts:
 
-1. Put the SD card into the switched-off device.
-2. Hold **Volume Down** and press **Power**. Retroid's menu opens; its bottom line reads "Boot mode: Android".
-3. Pick **Switch boot mode** with the volume keys and press Power until the line reads **Boot mode: Loader**, then
-   pick **Start**. (Volume Up + Power does not start pocket-ui on current Retroid firmware.)
-4. The first start takes a few minutes and restarts once by itself. Then pocket-ui's setup opens (step 3 below).
+1. Insert the SD card while the handheld is powered off.
+2. Hold **Volume Down** and press **Power**. Retroid's boot menu opens, showing "Boot mode: Android" at the bottom.
+3. Use the volume keys to highlight **Switch boot mode** and press Power until it reads **Boot mode: Loader**, then pick
+   **Start**. (Volume Up + Power does not launch pocket-ui on current Retroid firmware.)
+4. First boot takes a few minutes and restarts once on its own before opening first-start setup (step 3 below).
 
-The setting stays: from now on, switching on starts pocket-ui while the SD card is in.
+Your choice sticks: from now on, powering on boots straight into pocket-ui whenever the SD card is inserted.
 
-**What you see when it starts:** Retroid's logo, a moment of black, then a dark screen with a single "pocket-ui" bar
-whose coloured edge slowly changes colour, as long as the Pocket is getting ready (about 20 seconds). Then the screen
-dips to black and the shelf fades in. The first start after setting up the card says "Getting ready for the first
-start…" under it, and a start that takes longer than a minute says "Still starting…".
+**What boot looks like:** Retroid's logo, a brief black screen, then a dark screen with a "pocket-ui" bar whose glowing
+edge shifts colour while the system loads (~20 seconds). Then the shelf fades in. Your first boot shows "Getting ready
+for the first start…", and any boot over a minute shows "Still starting…".
 
-**To go back to Android:** hold Volume Down and press Power, pick **Switch boot mode** until the line reads **Boot
-mode: Android**, then **Start**. The SD card can stay in.
+**Switching back to Android:** hold Volume Down + Power, toggle **Switch boot mode** back to **Boot mode: Android**, and
+select **Start**. You can leave the SD card in.
 
-**If the screen stays black** with Boot mode: Loader, switch back to Android as above and see "If something goes
-wrong" in the [install guide](../INSTALL-DUAL-BOOT.md). The guide also has the way for a ROCKNIX card you
-already use, with no computer commands: copy the one file **Install pocket-ui.sh** into the `roms/ports` folder of the
-card (switch on Samba in ROCKNIX's Network Settings, then open `\\<device name or IP>` on Windows or `smb://<device name or IP>` on a Mac and use the games share; [ROCKNIX explains it](https://rocknix.org/play/add-games/)), open **Ports** in EmulationStation (restart its list once: Start, Game Settings, Update Gamelists) and start
-**Install pocket-ui**. The screen shows what it checks and installs; if something does not fit, it says what, changes
-nothing and **Close** takes you back to EmulationStation. To remove pocket-ui again, open EmulationStation (in pocket-ui: Settings → Help & tools → About → Open
-EmulationStation…, or hold SELECT and START), then start **Ports → Uninstall pocket-ui** (the installer leaves it there).
+**Black screen with Boot mode: Loader?** Switch back to Android as above and check "If something goes wrong" in the
+[install guide](../INSTALL-DUAL-BOOT.md). That guide also covers adding pocket-ui to an existing ROCKNIX card without
+terminal commands: copy **Install pocket-ui.sh** into `roms/ports` over Samba (enable Samba in ROCKNIX's Network
+Settings, open `\\<device name or IP>` on Windows or `smb://<device name or IP>` on Mac; see
+[ROCKNIX's guide](https://rocknix.org/play/add-games/)), refresh gamelists in ROCKNIX (Start, Game Settings, Update
+Gamelists), open **Ports** and run **Install pocket-ui**. It checks compatibility first and changes nothing if your
+device isn't supported. To uninstall later, return to ROCKNIX's own menu (Settings → Help & tools → About →
+**Open EmulationStation…**, or hold SELECT + START) and run **Ports → Uninstall pocket-ui**.
 
-Running the installer again repairs missing or damaged program files, even with the same version number. A complete
-matching install is left in place. Your games and saves stay as they are.
+Re-running the installer repairs missing or damaged files even on the same version, while leaving a healthy install and
+all your games and saves intact.
 
-If pocket-ui is not installed, ROCKNIX's own menu (EmulationStation) appears instead. If pocket-ui keeps stopping, it
-goes back to the last version that worked, then to a [safe mode](safe-mode.md) page; EmulationStation only opens by
-itself if pocket-ui cannot start at all.
+If pocket-ui isn't installed, ROCKNIX's own menu opens instead. If pocket-ui crashes repeatedly, it rolls back to the
+last working version and then offers [safe mode](safe-mode.md); ROCKNIX's own menu only opens automatically if
+pocket-ui cannot launch at all.
 
 ## 3. First start
 
-The first time pocket-ui runs, it walks you through four short stages: your language, Wi-Fi, your games, and how
-your games stand on the shelf. Dots at the top right show how far you are. Every stage works like a list in Settings:
-**Up/Down** reach every row and choice on the page (a bar or the light row shows where you are), **Left/Right** change
-the one you are on, **A** takes it, and the way on is always a row or "A" itself (Continue, Looks right, Finish).
-**B goes back** to the stage before (L1 does too), and **START skips the rest** of the setup; inside a keyboard or a
-list B, L1 and START are the keyboard's and the list's. The hint bar names the keys of the row you are on. **L2**
-switches **Big text** on every stage (larger text and calmer menus, at once, also in the keyboards): the small
-**L2 Aa** at the top right says so. Settings → Help & tools → **First-start setup** runs it all again later.
+On first launch, pocket-ui walks you through five quick screens: language, Wi-Fi, games, layout and coziness. Progress
+dots sit at the top right. Navigation matches Settings everywhere: **Up/Down** moves between rows, **Left/Right**
+changes values, **A** confirms and advances, **B** or **L1** goes back, and **START** skips the rest (inside a keyboard
+or list, B, L1 and START belong to that screen). Hit **L2** on any step to toggle **Big text** immediately (marked **L2
+Aa** at top right). You can re-run setup later in Settings → Help & tools → **First-start setup**.
 
 ![The first start: choose the language, then a few short steps](pictures/first-start.webp)
 
-1. **Your language.** The Spanish welcome reads **Bienvenido a tu Pocket**. Under the cartridge and your handheld,
-   Left/Right choose **English**, **Deutsch**, **Español**, **Português (Brasil)**, **Français** or **Italiano**:
-   the screen changes at once, and the choice is kept ([Language](language.md)). It starts on the system language
-   ROCKNIX was set to. The row under it is **Big text**: Down reaches it and Left/Right switch it there (L2 does it
-   from anywhere), Up goes back to the language. Setting the Pocket up for a child? The third row, **For a child**
-   (On with Left/Right; Y switches it too), notes it, and Kids Mode's own steps come after your games (below). A ("Get started") goes on from any row. SELECT opens the manual, this guide, on the device (in
-   English); B comes back.
-2. **Wi-Fi.** Choose a network. Already connected: A on it is Continue. A network that connects says "Connected to
-   Home" and the setup goes on by itself. Under the networks: **Other network…**, **Wi-Fi country**, **Time zone**,
-   **Scan again** (X does it too) and last **Continue** (**Continue offline** without a connection), the way on
-   without Wi-Fi. The Time zone row: the zone is
-   guessed while you are here and shown with its time ("Vienna, 22:41"); A there changes it. Only when there is no
-   clear guess does the setup ask, right after Wi-Fi (see [Time zone](#time-zone)). A handheld without a Wi-Fi chip
-   shows the time zone here instead.
-3. **Your games.** What is on the card: "Found 81 games" and the consoles with their names and how many games each, or, with no games
-   yet, the way that works on this handheld. **Continue** (or **I'll add games later**) goes on, **Add more…** opens
-   the systems, their folders and file sharing ([Add games](#5-add-games)), and B comes back from there. Something in
-   the roms folder that isn't read (a folder of no system, a disc game missing a file) is named in a line of its own.
-   **Box art** is one switch, **On** as it ships: the boxes come in the background while you're online, only a game's
-   name is sent ([Box art & downloads](extras.md#box-art) has the finer choice). Nothing is downloaded before you leave
-   this page. No switch on a handheld without Wi-Fi.
-4. **How your games stand.** A small picture of the shelf in each look, the one shown in the middle and its
-   neighbours at the sides: your own games when the card has some, else games called "Sample game". Left/Right
-   switch looks; Easy says what it does ("One big game at a time, simple menus."). Under them three rows, as in
-   every list: Down reaches **Style** (Barlow or [Retro](theme.md#style)), **Colours** (Retro's
-   Cocoa and Pea while it is on) and **Appearance** (Dark, Light or Automatic), a bar beside the row you are on;
-   Left/Right change it and the pictures above show it at once, Up goes back to the looks. **A** ("Continue") keeps
-   the look shown, from any row, and goes on to the last page; B goes back to your games, so pressing B a few times
-   never ends the setup by surprise. Under the rows: in a game, HOME opens the menu (save, load, quit), and the look
-   changes any time in Settings → Look (as far as the screen has room). See [Playing](playing.md#looks) for the six
-   looks. The last line points to optional downloads any time: Settings → Games → Box art & downloads.
+1. **Your language.** Use Left/Right to choose **English**, **Deutsch**, **Español**, **Português (Brasil)**,
+   **Français** or **Italiano** (the screen updates live, defaulting to ROCKNIX's language; in Spanish it reads
+   **Bienvenido a tu Pocket**; see [Language](language.md)). Below it sit **Big text** (also toggled anywhere with L2)
+   and **For a child** (toggle with Left/Right or Y to launch Kids Mode setup after your games). Press **A** ("Get
+   started") from any row to continue, or **SELECT** to open this manual on the handheld (B returns).
+2. **Wi-Fi.** Pick a network and hit A to connect (if already connected, A continues). A successful connection shows
+   "Connected to Home" and moves on automatically. Below the network list sit **Other network…**, **Wi-Fi country**,
+   **Time zone**, **Scan again** (or X), and **Continue** (**Continue offline** when disconnected). Time zone is guessed
+   automatically and shown with local time ("Vienna, 22:41"); press A to change it. Setup only prompts for a city if it
+   cannot guess unambiguously (see [Time zone](#time-zone)). Handhelds without Wi-Fi show the time zone picker here
+   instead.
+3. **Your games.** Shows what pocket-ui found ("Found 81 games" plus per-console counts), or how to copy games if the
+   card is empty. Choose **Continue** (or **I'll add games later**), or open **Add more…** for system folders and file
+   sharing ([Add games](#5-add-games); B returns). Unrecognised folders or disc games missing files are flagged cleanly
+   on their own line. **Box art** is a single toggle (**On** by default; only game names are sent while online, with
+   finer controls in [Box art & downloads](extras.md#box-art)). Nothing downloads until you leave this screen. Hidden on
+   non-Wi-Fi handhelds.
+4. **How your games stand.** Previews each shelf layout using your own library (or sample games on an empty card). Use
+   Left/Right to compare layouts (Easy notes "One big game at a time, simple menus."). Below the preview, move Down to
+   adjust **Style** (Barlow or [Retro](theme.md#style)), **Colours** (Cocoa or Pea when Retro is active) and
+   **Appearance** (Dark, Light or Automatic), seeing every change live. Press **A** ("Continue") from any row to keep
+   your pick and advance; B returns to your games. A quick note below reminds you that HOME opens the pause menu in
+   game, layouts can change any time in Settings → Look, and optional downloads live in Settings → Games →
+   Box art & downloads. See [Playing](playing.md#looks) for all four looks.
+5. **How cozy should it be?** Pick one preset instead of hunting through toggles: **Plain** (quick starts, no case
+   sounds or extras), **Cozy** (the default: opening cases, console start animations and sounds, time-of-day lighting,
+   evening TV glow, old-TV switch-on/off, stickers, printed discs and sealed new games) or **Everything** (Cozy plus
+   live attract-mode demos on the Cabinet TV for unplayed games, which uses extra battery). Press **A** ("Finish") to
+   enter your shelf, B to go back, or START to finish unchanged. Every effect remains individually toggleable in
+   Settings › Look › [Cozy extras](settings.md#cozy-extras) and Game start animation; **Lived-in shelf** is always
+   opt-in there.
 
-5. **How cozy should it be?** One choice for all the little touches, instead of finding each in Settings:
-   **Plain** (quick starts, no sounds of the cases, no decorations: just your games), **Cozy** (as it
-   comes: cases open, games go in with a sound, the room's light following the day,
-   a warm TV glow after dark, the old TV switching on and off,
-   stickers, printed discs, sealed new games) or **Everything** (Cozy's touches, plus the
-   cabinet's TV playing games you haven't tried, which uses more power). Up/Down choose, **A** ("Finish") takes it and
-   your shelf comes; B goes back to the look; START finishes and changes nothing. Every touch stays switchable on its
-   own in Settings › Look › [Cozy extras](settings.md#cozy-extras) and Game start animation; the Lived-in shelf is
-   no level's, it is switched on there only.
+If you turned on **For a child**, Kids Mode setup (PIN, allowed games, colour, time limit and max volume) replaces the
+layout step ([Kids mode](kids-mode.md)). Pressing B on its first page returns to normal layout setup; if the card has no
+compatible games yet, Kids Mode is skipped so you never land on an empty shelf (set it up later in Settings → System →
+Kids mode).
 
-For a child (the third row of the first page): after your games, Kids Mode's own steps (a PIN, the games a child may play, its
-colour, time and volume) take the look's place, and the setup ends with them ([Kids mode](kids-mode.md)). B on their
-first page goes on to the look as without it, which then says where Kids Mode is for later. With no game Kids Mode can start it is left out, never an empty
-shelf: the look stage then says to set it up later in Settings → System → Kids mode.
+If the battery dies or you reboot mid-setup, first start resumes right at the step you reached.
 
-After a restart or a flat battery in the middle, the setup opens again at the stage it had reached.
-
-The first start asks no play style and shows no feature cards: everything stands as pocket-ui ships it, and features
-introduce themselves when you meet them. Settings → Help & tools → **How you like to play** (The shelf, Easy,
-Enthusiast or one card per feature) and [Tour](tour.md) are there whenever you like.
+First start skips long feature tours and lets features introduce themselves naturally. Whenever you want to customise
+presets or explore everything, open Settings → Help & tools → **How you like to play** (The shelf, Easy, Enthusiast or
+card by card) and [Tour](tour.md).
 
 ### Time zone
 
@@ -320,13 +309,13 @@ slot: Windows and macOS can't write to the card's STORAGE part.
 
 Without Wi-Fi there's also a second card on a handheld with two slots: [Second card](copy-games.md).
 
-### Coming from EmulationStation
+### Existing gamelists
 
-The whole move, saves included, is on [Coming from ROCKNIX, ArkOS or Android](coming-from.md). Only the gamelists are here.
+The whole move, saves included, is on [Coming from ROCKNIX, dArkOS or Android](coming-from.md). Only the gamelists are here.
 
-If your games were on ROCKNIX's EmulationStation, KNULLI, Batocera or ES-DE, copy each system's `gamelist.xml` with the games:
+If your games come from another handheld system that writes `gamelist.xml` files, copy each system's `gamelist.xml` with the games:
 pocket-ui reads the names, descriptions and pictures in it, and never changes it. More:
-[Your EmulationStation gamelists](library-files.md#your-emulationstation-gamelists).
+[Your gamelists](library-files.md#your-gamelists).
 
 ### When new games appear
 

@@ -1,9 +1,9 @@
 # The pause menu (HOME)
 
-**Tap HOME** while playing to pause the game and open the menu; the first game you start on pocket-ui's own host says so, once (a game in RetroArch or a standalone emulator doesn't, and neither does Android), and so does the last page of the first start: "In a game, HOME opens the menu: save, load, quit." (not in Kids Mode). The game stays dimmed in the
-background; on pocket-ui's own host the menu is there at once and the dimmed game appears behind it a moment
-later. What the menu offers depends on the emulator the system uses (see
-[Systems](systems.md)):
+**Tap HOME** (MENU on Anbernic handhelds) while playing to pause your game and open the menu. Your first launch on
+pocket-ui's own player shows a one-time reminder (not in Kids Mode, and not in RetroArch, standalone emulators or
+Android), and first-start setup notes it too: "In a game, HOME opens the menu: save, load, quit." Your paused game
+stays dimmed behind the menu. Available rows depend on which emulator runs that console (see [Systems](systems.md)):
 
 ![The pause menu over a paused game: Continue, Save, Load, Options, Save & quit](pictures/pause-menu.webp)
 
@@ -18,94 +18,79 @@ later. What the menu offers depends on the emulator the system uses (see
 | PortMaster ports | Continue, Options, Quit |
 | Other emulators | Continue, Options, Quit |
 
-From 0.2.1, pocket-ui compresses the moment kept on Quit or sleep, so less needs to be written to the card. It still
-waits for the save to be safely written. Manual slots keep their previous format, and older Auto states still load.
+Since 0.2.1, pocket-ui compresses the moment saved on Quit or sleep so writes to the SD card stay fast and safe. Manual
+slots keep their existing format, and older Auto states still load cleanly.
 
-If you return to 0.2.0 or 0.1.14, those versions start from the game's own in-game save. They cannot read or overwrite
-the newer compressed moment. After upgrading again, pocket-ui can read both formats; an in-game save changed in the
-older version remains protected from rollback. A damaged compressed moment is refused and the game starts from its
-in-game save with a message.
+If you ever downgrade to 0.2.0 or 0.1.14, those builds boot from your in-game save instead of reading or overwriting
+compressed moments. Upgrading back restores support for both formats while protecting newer in-game saves from rollback.
+If a compressed moment is ever damaged, pocket-ui refuses it with a clear message and boots your in-game save instead.
 
+See [Saving in the pause menu](pause-menu-saves.md) for save slots, Where I quit, Before load, Earlier and full-card
+handling.
 
-Save slots, Where I quit, Before load, Earlier and what happens when a save can't be written are on
-[Saving in the pause menu](pause-menu-saves.md).
+Navigation wraps around: **Up** from Continue jumps to Quit, and **Down** from Quit returns to Continue. Press **START**
+from any row to open [quick settings](quick-settings.md) (brightness, volume, Wi-Fi, fan) right away.
 
-**Up** from Continue wraps to Quit, and **Down** from Quit to Continue, like every other menu. **START** opens the
-[quick settings](quick-settings.md) from any row of the menu (brightness, volume and fan without walking down to them).
+The right side of the header estimates remaining battery **for this exact game** (e.g. "About 3 h 20 min left in this
+game"). See [Battery in this game](#battery-in-this-game).
 
-At the right of the title the menu says how long the battery lasts **in this game**, for example "About 3 h 20 min
-left in this game". See [Battery in this game](#battery-in-this-game).
+Extra rows appear automatically when relevant: **Pixel Path** (right above Quit when enabled in
+[Settings → Games → Curator](settings-playing.md#curator)), **Players** (after Options/Achievements when two or more
+controllers are connected), and **Disc** (before Options for multi-disc games; see [Changing discs](#changing-discs)).
+**Earlier** hides when [Earlier states](pause-menu-saves.md#earlier) is off and no snapshots exist yet (default for N64,
+PSP, DS, Dreamcast and Saturn).
 
-With **Pixel Path in the pause menu** switched on in [Settings → Games → Curator](settings-playing.md#curator), the menu of
-pocket-ui's own host also has **Pixel Path**, right before Quit, as do PS2, GameCube, Wii and 3DS games
-whose emulator settings can be read ([below](#pixel-path-for-ps2-gamecube-wii-and-3ds)). With two or more controllers connected (the Pocket counts as one), it also has **Players**, after Options and
-Achievements. A game with more than one disc also has **Disc**, right before Options ([below](#changing-discs)). **Earlier** is left out where
-[Earlier states](pause-menu-saves.md#earlier) is off and none are kept: N64, PSP, DS, Dreamcast and Saturn games start that way.
+Save and Load only appear when supported. For systems that rely purely on in-game saving (ScummVM, PICO-8, TIC-80,
+[other emulators](#other-emulators)), the menu omits them and reminds you to save inside the game before quitting.
 
-Save and Load are only there when they do something. Where the emulator saves only inside the game (ScummVM, PICO-8,
-TIC-80, [other emulators](#other-emulators)), the menu has no Save or Load and says instead, beside Continue, Options
-and Quit, where saving is: for example "This emulator keeps its own saves. Save in the game before you quit."
-
-- **Continue** returns to the game. B or another tap on HOME does the same.
-- **Save** saves the game's current moment into one of your save slots (1 to 8; see
-  [Save slots](pause-menu-saves.md#save-slots-where-i-quit-and-before-load)). With **Game start animation: Cozy** and **Motion: Full**
-  you see it: a copy of the picture you just saved flies out of the big preview, which stays as it is, shrinks into its slot,
-  and the slot lights up as it lands with a quiet card click; then the game goes on (about half a second). The save is
-  written the moment you press A, the picture is only a picture, and any button or touch ends it and takes you back to the game at once. Only pocket-ui's own
-  host with slots shows it (not RetroArch's single save or a standalone emulator).
-- **Load** goes back to a saved moment: the one from your last quit ("Where I quit"), the one a Load just
-  replaced ("Before load"), or one of your slots. It is greyed out and cannot be chosen while the
-  selected entry holds nothing to load.
-  **Start over** resets the console while keeping its cartridge clock, including Pokémon Gold/Silver/Crystal
-  on Gambatte. The clock keeps the time it had just before the reset.
-- **Earlier** (pocket-ui's own host) goes back to a moment the game kept by itself: one every 5 minutes of play, and
-  where a session began. See [Earlier](pause-menu-saves.md#earlier).
-- **Disc** (pocket-ui's own host, a game with more than one disc) changes the disc in the drive. See
-  [Changing discs](#changing-discs).
-- **Options** opens the settings for this game (own host: see [Options](options.md); PlayStation 2,
-  GameCube, Wii and 3DS: see [Options for PlayStation 2, GameCube, Wii and 3DS](options-big.md)).
-  For RetroArch and the other emulators it opens [Runs on](options.md#runs-on): which emulator plays the game,
-  and RetroArch's own picture and rewind settings. On the own host, Runs on is an entry of Options.
-  Its pages say what the selected row does at the bottom left and which buttons work at the bottom right: B goes
-  back, A opens a page or chooses, Left and Right change a value.
-  On the menu's first page and on every page under it, a row that opens a page (Options, Achievements, Players, Pixel
-  Path, Zoom) ends in **›**, and A's hint says **Open**; a row whose value Left and Right change shows it as **‹ value ›**
-  while selected.
-- **Achievements** (own host, signed in to RetroAchievements) lists the game's achievements, locked and
-  unlocked, with your progress. See [Achievements](achievements.md#the-pause-menu).
-- **Zoom** (own host, under **Options**) shows the frozen picture larger: [Zoom](big-text.md#zoom).
-- **Players** (pocket-ui's own host, a second controller connected) shows which controller is which player and changes
-  it. See [Players](#players).
-- **Pixel Path** (switched on in Settings → Games → Curator) shows how the game's picture and sound reach you, stage by stage. See
-  [Pixel Path](#pixel-path).
-- **START**, on any row, opens the [quick settings](quick-settings.md#quick-settings) (the panel HOME opens on the shelf)
-  over the paused game, which stays visible behind it, so you can see a brightness change on the game itself. Performance
-  and Fan there change what every game runs with and apply to this game at once, unless it has its own choice in Options:
-  then the row says "this game: …" and only the default changes. B or HOME goes back to the pause menu.
-- **Quit** (it reads **Save & quit** while it keeps the moment, with "Next time, A continues from this moment." beside it) ends the game and takes you back to the shelf. Your in-game saves (the game's own save feature, memory
-  cards) are written on every Quit. Whether Quit also keeps the moment you are at is set in
+- **Continue** jumps straight back into the game (B or another HOME tap does the same).
+- **Save** stores your current spot in one of eight slots (see
+  [Save slots](pause-menu-saves.md#save-slots-where-i-quit-and-before-load)). With **Game start animation: Cozy** and
+  **Motion: Full**, a snapshot zooms neatly into its slot with a soft click (~0.5 s) before resuming. The save finishes
+  the instant you press A, and any button or tap skips the animation straight back into gameplay (pocket-ui's own player
+  only).
+- **Load** restores a saved moment: your last exit ("Where I quit"), the spot replaced by your last Load ("Before
+  load"), or any manual slot. Greyed out when the highlighted entry is empty.
+  **Start over** resets the console while keeping the cartridge real-time clock intact (including Pokémon Gold, Silver
+  and Crystal on Gambatte).
+  On ROCKNIX, the RetroArch pause menu warns if it cannot verify a new save file or confirm that RetroArch received a
+  load request.
+- **Earlier** (pocket-ui's own player) jumps back to automatic snapshots captured every 5 minutes of active play plus
+  session starts. See [Earlier](pause-menu-saves.md#earlier).
+- **Disc** (pocket-ui's own player, multi-disc games) swaps discs cleanly. See [Changing discs](#changing-discs).
+- **Options** tunes the current game ([Options](options.md) on pocket-ui's own player;
+  [Options for PlayStation 2, GameCube, Wii and 3DS](options-big.md) on standalone emulators). On RetroArch and other
+  emulators it opens [Runs on](options.md#runs-on) plus RetroArch picture/rewind settings (on pocket-ui's own player,
+  Runs on lives inside Options). Rows that open subpages (Options, Achievements, Players, Pixel Path, Zoom) end with
+  **›**; inline toggles show **‹ value ›** and switch with Left/Right.
+- **Achievements** (pocket-ui's own player, signed into RetroAchievements) shows locked and unlocked achievements with
+  progress. See [Achievements](achievements.md#the-pause-menu).
+- **Zoom** (pocket-ui's own player, under **Options**) magnifies the paused screen: [Zoom](big-text.md#zoom).
+- **Players** (pocket-ui's own player, 2+ controllers) assigns controllers to Player 1–4. See [Players](#players).
+- **Pixel Path** (enabled in Settings → Games → Curator) inspects how your video and audio reach the screen stage by
+  stage. See [Pixel Path](#pixel-path).
+- **START** opens [quick settings](quick-settings.md#quick-settings) right over your paused game so you can preview
+  brightness changes live. Performance and Fan changes apply immediately unless overridden for this specific game in
+  Options. Press B or HOME to return to the pause menu.
+- **Quit** (labelled **Save & quit** when auto-saving your spot) returns you to the shelf. In-game saves and memory
+  cards always write on every exit. Whether Quit also saves a Continue moment is controlled by
   [Settings → Playing → **Continue where I quit**](settings-playing.md#continue-where-i-quit):
-  - **On**, the default: Quit saves the moment first ("Saving and quitting…"), and the next start continues
-    from there.
-  - **Off**: Quit doesn't save the moment ("Quitting…"; the row says "Doesn't save where you are. In-game saves are
-    kept."). On pocket-ui's own host the next start is as if no moment had been kept, and the older moment stays under
-    **Load** as **Where I quit**. PlayStation 2, GameCube, Wii and 3DS close straight away, which is also faster, and
-    their next start goes back to the moment of your last saving Quit, even if you saved in the game since; the save
-    itself stays on the memory card or in the console's storage. A moment saved before sleeping counts as a saving Quit.
+  - **On (default):** saves your exact moment ("Saving and quitting…") so next launch picks right back up.
+  - **Off:** skips saving a new moment ("Quitting…"; in-game saves are still kept). On pocket-ui's own player, next
+    launch starts fresh while keeping any older moment under **Load → Where I quit**. PS2, GameCube, Wii and 3DS exit
+    faster and resume from your last saved moment on next launch (your memory card saves stay intact). Sleep saves still
+    count as saved moments.
 
-  Without Save and Load in the menu (ScummVM, PICO-8, TIC-80, other emulators), Quit keeps no moment: it says
-  "Quitting…", and the line beside it says where saving is.
+  Emulators without save states (ScummVM, PICO-8, TIC-80, other standalone emulators) show "Quitting…" and note where
+  saving happens.
 
-  RetroArch games always save the moment on Quit, even with the switch off: ROCKNIX sets RetroArch to save on
-  every exit, and RetroArch would load an older moment at the next start without checking for a newer in-game
-  save. Other emulators save nothing on Quit to begin with. [Recent games](playing.md#recent-games) always
-  saves the moment of the game it leaves, whatever the switch says, so you can switch back to it.
+  RetroArch always saves on exit because ROCKNIX enables auto-save-state globally. Switching games via
+  [Recent games](playing.md#recent-games) always saves your spot too so you can hop right back.
 
-**SELECT** in the menu opens [Recent games](playing.md#recent-games); B there comes back to the menu.
+Press **SELECT** inside the pause menu to open [Recent games](playing.md#recent-games) (B returns).
 
-Holding HOME and pressing another button is not a tap. On pocket-ui's own host these combinations
-are [shortcuts](options.md#shortcuts); in RetroArch games they stay RetroArch's own shortcuts (see
-[Controls](controls.md#in-a-game)).
+Holding HOME while pressing another button triggers [shortcuts](options.md#shortcuts) instead of opening the menu (also
+mapped in RetroArch where supported; see [Shortcuts in RetroArch games](options.md#shortcuts-in-retroarch-games)).
 
 ## Changing discs
 

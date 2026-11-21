@@ -1,34 +1,33 @@
-# Coming from ROCKNIX, ArkOS or Android
+# Coming from ROCKNIX, dArkOS or Android
 
-You already play on this handheld, or on another one, and have saves, favourites and settings you want to keep. This
-page says what carries over, what needs a copy, and what does not come with you. Where something has not been tried on
-a real device, it says "should" and why.
+Already have a library of games, saves and favourites? Here is what carries straight over to pocket-ui, what needs a
+quick copy, and what stays behind. Anything not yet verified on real hardware is clearly marked.
 
 ## The short answer
 
 | You have | What happens |
 |---|---|
-| **In-game saves** (the kind a cartridge keeps: `.srm`, `.sav`) | Work as they are when the same emulator core plays the game, and the file sits next to the game with the same name. |
-| **Memory cards** of PlayStation 2, GameCube, Wii and 3DS | Work as they are on ROCKNIX; from Android they should work if you copy them to the right place (below). |
-| **Save states** | Belong to one emulator. They do not move between RetroArch and pocket-ui's own host, or from Android. Use the in-game save. |
-| **Favourites and ratings** from EmulationStation | pocket-ui offers them: Settings → Games → **From EmulationStation**. Nothing is taken over by itself. |
-| **Names, descriptions, box art** from a `gamelist.xml` | Read as they are, and never changed. |
-| **Recent games** | On a fresh start, the games EmulationStation last started (the `gamelist.xml` it keeps beside the games) become your recent games, so **Continue** offers the one you played last. Your own history in pocket-ui always wins. |
-| **Settings, play time, achievements** | Do not come over. You set them again; the first start helps. |
+| **In-game saves** (`.srm`, `.sav`) | Work right away when sitting next to the game with the same filename and running on the same core. |
+| **Memory cards** (PS2, GameCube, Wii, 3DS) | Work as-is on ROCKNIX; from Android, copy them into the matching folders below. |
+| **Save states** | Tied to a specific emulator. They don't move between RetroArch, pocket-ui's own player or Android; use in-game saves before switching. |
+| **Favourites and ratings** (`gamelist.xml`) | Importable any time via Settings → Games → **From EmulationStation** (never imported without asking). |
+| **Names, descriptions, box art** (`gamelist.xml`) | Read automatically and never modified. |
+| **Recent games** | On a fresh card, your previous `gamelist.xml` timestamps populate Recent games so **Continue** starts with your last game. Your pocket-ui history always takes priority. |
+| **Settings, play time, achievements** | Don't transfer; first-start setup helps you get dialled in quickly. |
 
 ## Before you switch
 
-1. **Save in the game itself**, with the game's own menu, not only in a save state. The in-game save is the file that
-   moves between emulators. A state does not.
-2. **Quit the old emulator the normal way**, so it writes its saves. Do not copy files while it still runs.
-3. **Copy your saves before you wipe anything**, and keep that copy until you have started each game once and seen your
+1. **Save inside the game itself** using its own save menu, not just save states. In-game saves transfer cleanly; save
+   states don't.
+2. **Quit your old emulator cleanly** so it flushes its save files to disk before you copy anything.
+3. **Back up your saves first** and hang on to that backup until you've loaded each game once and confirmed your
    progress.
-4. **Keep the file names.** A save belongs to its game by name: `Pokemon Emerald.gba` and `Pokemon Emerald.srm`. If
-   you rename a game, rename its save the same way.
-5. **Favourites from an Android launcher** (Daijishō, the Retroid launcher) have no file pocket-ui can read. Write the
-   list down. ES-DE keeps favourites in `gamelist.xml`, which pocket-ui does read (below).
+4. **Keep filenames matched.** Saves pair by filename (`Pokemon Emerald.gba` and `Pokemon Emerald.srm`). Rename both if
+   you rename a ROM.
+5. **Favourites in non-gamelist Android launchers** can't be read automatically, so jot down your must-plays before
+   switching.
 
-## Coming from stock ROCKNIX (EmulationStation and RetroArch)
+## Coming from stock ROCKNIX (default menu and RetroArch)
 
 ### On the same card
 
@@ -66,7 +65,7 @@ default, so the saves stay compatible. The full list is on [Systems](systems.md)
 | PlayStation | RetroArch · PCSX ReARMed (32-bit) | PCSX ReARMed (64-bit) | should work, see below |
 | PSP | PPSSPP | PPSSPP | `roms/psp/PSP/SAVEDATA`, shared |
 | Dreamcast | Flycast | Flycast | each game's memory card, shared |
-| Nintendo DS | melonDS | melonDS DS | `.sav`, shared |
+| Nintendo DS | melonDS / DraStic | melonDS DS (DSperate on H700, Brick, Rockchip, dArkOS) | `.sav`, shared |
 | Sega Saturn | YabaSanshiro | YabaSanshiro, if a Saturn BIOS is in `roms/bios` | **not shared**, see below |
 
 - **PlayStation:** ROCKNIX's default core is the 32-bit PCSX ReARMed, pocket-ui's host runs the 64-bit one. The same
@@ -80,9 +79,9 @@ default, so the saves stay compatible. The full list is on [Systems](systems.md)
 
 ### Runs on: RetroArch
 
-Every other system, `.7z` games and anything you choose yourself plays on RetroArch. START on a game opens
+Every other system and anything you choose yourself plays on RetroArch (cartridge games packed as `.zip` or `.7z` open directly in pocket-core). START on a game opens
 [Runs on](options.md#runs-on), where you can pick RetroArch for one game or a whole console, or go back to what ROCKNIX
-used. This is the same setting EmulationStation has, in the same file, so a choice you made there is used here.
+used. This is the same setting ROCKNIX's own menu uses, in the same file, so a choice you made there is used here.
 
 - A game on RetroArch keeps using its own files: the save next to the game, the state `<game>.state` in
   `roms/savestates/<system>/`, and the moment you quit (RetroArch's `.state.auto`). It continues where you left off.
@@ -118,23 +117,23 @@ The full list of state files is in [Where the states are](pause-menu-saves.md#wh
 PlayStation 2 on **AetherSX2** (ROCKNIX has it as another choice for PS2) and the other standalone emulators keep their
 own saves and settings; save in the game before you quit.
 
-### Favourites, ratings and names from EmulationStation
+### Favourites, ratings and names from existing gamelists
 
-EmulationStation keeps favourites, ratings, descriptions and picture paths in each system's `gamelist.xml`. On the same
+ROCKNIX's own menu keeps favourites, ratings, descriptions and picture paths in each system's `gamelist.xml`. On the same
 card the files are already there.
 
 - pocket-ui reads them and **never changes them**. Cryptic file names show their real names, the game card shows the
   description, developer and genre, and a game without box art shows the picture the gamelist names.
 - Settings → Games → **From EmulationStation** counts your favourites and ratings. **A** adds the favourites to
-  Favourites, or uses the ratings as My rating (ES's 0.1 to 1.0 becomes one to five stars). It only adds: what is in
+  Favourites, or uses the ratings as My rating (0.1 to 1.0 becomes one to five stars). It only adds: what is in
   Favourites stays, and a rating you gave here is kept.
 - Play counts, "last played" dates and hidden flags in a gamelist are not read.
 
-More: [Your EmulationStation gamelists](library-files.md#your-emulationstation-gamelists).
+More: [Your gamelists](library-files.md#your-gamelists).
 
-## Coming from ArkOS, dArkOS or an R36S stock card
+## Coming from dArkOS or an R36S stock card
 
-ArkOS, dArkOS (and the community builds for the R36S, such as dArkOSRE-R36) and the card an R36S comes with keep the
+dArkOS (and community builds for the R36S, such as dArkOSRE-R36) and the card an R36S comes with keep the
 games on a partition called **EASYROMS** (or on a second card), with one folder per system right at the top: `gba`,
 `snes`, `psx`, `n64`, `fbneo`, `bios` and so on. pocket-ui OS reads such a card **as it is**.
 
@@ -143,20 +142,20 @@ games on a partition called **EASYROMS** (or on a second card), with one folder 
 
 | What | What happens |
 |---|---|
-| **Games** | Read where they are, by ArkOS's folder names. A folder for a system ROCKNIX has no emulator for (Apple II, TI-99, Love2D …) stays unread and is named in Settings → Games → Game check. |
-| **In-game saves** (`.srm`, `.sav`, `.rtc` next to the game) | Used as they are. When you play, the game writes its save there too, exactly as under ArkOS, so your progress is on the card if you go back. |
+| **Games** | Read where they are, by dArkOS's folder names. A folder for a system ROCKNIX has no emulator for (Apple II, TI-99, Love2D …) stays unread and is named in Settings → Games → Game check. |
+| **In-game saves** (`.srm`, `.sav`, `.rtc` next to the game) | Used as they are. When you play, the game writes its save there too, exactly as under dArkOS, so your progress is on the card if you go back. |
 | **BIOS** (the card's `bios` folder) | Copied once into pocket-ui's own `bios` folder on the new card. Files that are already there are kept. |
-| **Recent games** | ArkOS's "last played" becomes your recent games on a fresh start, so Continue offers your last game. |
-| **Box art and names** | Read from the `gamelist.xml` and `images` folders ArkOS's scraper made. |
-| **Save states** (RetroArch's `.state` files) | Stay on the card, but pocket-ui does not load them: they belong to ArkOS's RetroArch. Use the in-game save once. |
-| **Ports** (ArkOS's `ports` folder) | Not shown: they start ArkOS's own programs, which pocket-ui OS doesn't have. |
+| **Recent games** | The card's "last played" timestamps become your recent games on a fresh start, so Continue offers your last game. |
+| **Box art and names** | Read from the `gamelist.xml` and `images` folders on the card. |
+| **Save states** (RetroArch's `.state` files) | Stay on the card, but pocket-ui does not load them: they belong to the old RetroArch build. Use the in-game save once. |
+| **Ports** (the card's `ports` folder) | Not shown: they start that system's own programs, which pocket-ui OS doesn't have. |
 
 **What pocket-ui never does to that card:** it creates no folder on it, renames or moves nothing, writes no pictures,
 lists or states there, and doesn't "check" it by writing a test file (ROCKNIX on its own would create a `roms` folder
 with a hundred empty folders on it; pocket-ui OS keeps it from doing that). The only files that change are the saves
-the games themselves write next to themselves, the same files ArkOS would change.
+the games themselves write next to themselves, the same files your previous system would change.
 
-**Going back:** switch off, put your old card back in the first slot. ArkOS starts as before, with your games and the
+**Going back:** switch off, put your old card back in the first slot. Your old system starts as before, with your games and the
 in-game progress you made in pocket-ui.
 
 **Not tried on a real device yet** (2026-11-15): the folder names were checked against dArkOS's own list of systems, and
@@ -205,7 +204,7 @@ that no system reads. Settings → Games → Add games shows each system's folde
 - **Azahar, Citra, Lime3DS (3DS):** bring the save data of each game. It belongs in `roms/3ds/azahar/sdmc/Nintendo 3DS`.
   Not tried from Android; the folders inside have to match.
 - **DraStic (Nintendo DS):** copy each game's `<game>.dsv` next to the game in `roms/nds`, with the game's name. The first
-  time the game starts on pocket-ui's own host (melonDS DS) with no `<game>.sav` yet, the save is taken over into
+  time the game starts on pocket-ui's own host (melonDS DS or DSperate) with no `<game>.sav` yet, the save is taken over into
   `<game>.sav` and the screen says "Took over the DraStic save". Your `.dsv` stays untouched. A `.sav` that is already
   there is never overwritten, and a game that already has a `.srm` keeps that. A `.dsv` that is not a DS save (an odd
   size) is left alone and the game starts without a save. Tried with built test files, not with a save from a real
@@ -215,10 +214,10 @@ that no system reads. Settings → Games → Add games shows each system's folde
 
 ### Favourites and your collection
 
-- **ES-DE** on Android: copy its `gamelists` and `downloaded_media` folders to `ES-DE/` on the Pocket (see
-  [Coming from EmulationStation](getting-started.md#coming-from-emulationstation)), then use **From EmulationStation**
+- **Gamelist-based launchers** on Android: copy your `gamelist.xml` files alongside the games (see
+  [Existing gamelists](getting-started.md#existing-gamelists)), then use **From EmulationStation**
   for the favourites.
-- **Daijishō and the Retroid launcher:** their lists are not read. Mark your favourites again; pocket-ui's
+- **Other Android launchers:** their lists are not read. Mark your favourites again; pocket-ui's
   [Curator](curator.md#curator) and the search help with a large collection.
 
 ## What does not come over
@@ -227,7 +226,7 @@ that no system reads. Settings → Games → Add games shows each system's folde
 - **Settings:** controller layouts, shaders, overlays, core options, per-game settings, bezels. pocket-ui has its own
   [Options](options.md) and [Controls](controls.md) pages.
 - **Play time, play counts and favourites** kept by a launcher or by RetroArch's history. Only favourites, ratings and
-  EmulationStation's "last played" in a `gamelist.xml` are taken over.
+  "last played" entries in a `gamelist.xml` are taken over.
 - **RetroAchievements:** sign in again on the Pocket ([Achievements](achievements.md)). Your unlocks stay with your
   account.
 - **Wi-Fi networks** of Android.

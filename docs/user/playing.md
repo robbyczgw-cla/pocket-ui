@@ -4,115 +4,91 @@
 
 ![The Shelf look on the Super Nintendo: the selected game's box art over its case on the shelf](pictures/shelf.webp)
 
-Home is one shelf, from left to right (in the Shelf look; the other looks show the same entries as a list, top to
-bottom):
+Home lays everything out along one shelf from left to right (or top to bottom as a list in Split):
 
-1. **Curator**, your library by feel: the Lens, your smart shelves
-   ([Curator](curator.md#curator)). Its row says which game it picked for you today ("Today: Super Metroid"). It is
-   on top so you see it whenever Home opens; in the Cabinet look it is a shelf under Favourites (see below).
-2. **Search**, to find any game by its name ([Finding a game](#finding-a-game)). Home opens on the row
-   under it, so Continue is still one press away, Search is one press up and Curator two. The Cabinet look has no
-   Search row: Up on its top shelf opens the search.
-   **Just Play** stands right above Continue (one press up from it, one case to the left of the last game in the Cabinet
-   look): A starts a game picked for you, nothing to choose; X shows the pick first, with the reason ([Just Play](curator.md#just-play)). It has its own
-   switch in Settings → Games → Curator and is not in Kids Mode.
-3. **Your recent games**, up to six. The first one is the game you played last; in the Shelf look
-   it is labelled **Continue**, and Home opens on it.
-4. **Favourites**, the games you starred with Y, by name. The row appears once you star a game and
-   goes away when you unstar the last one.
-5. The **smart shelves you pinned to Home**, each as a row of its own. Each part of Curator can be
-   switched off in [Settings → Games → Curator](settings-playing.md#curator); without the Lens there is no Curator row on
-   top. In the Cabinet look they are shelves (see below).
-6. **PC streaming**, only when Moonlight is installed (it is on ROCKNIX) and you ticked it in Settings → Games →
-   Systems on the shelf. It starts Moonlight, an app that has no pause menu and does not count as a game. See
-   [PC streaming](pc-streaming.md).
-7. **Your systems**, in alphabetical order. Only systems with at least one game are shown, and not the ones you
-   hid in [Systems on the shelf](settings-playing.md#systems-on-the-shelf). A system opens its own list of games.
+1. **Curator**, your library by mood: the Lens and your smart shelves ([Curator](curator.md#curator)). Its row highlights
+   today's pick ("Today: Super Metroid"). It sits at the top on Home (in Cabinet, it sits as its own shelf below
+   Favourites).
+2. **Search**, to find any game as you type ([Finding a game](#finding-a-game)). Home opens right below it so Continue is
+   one tap away, Search is one press up, and Curator two. In Cabinet, press Up from the top shelf to open Search.
+   **Just Play** sits right above Continue (or one box left of your last game in Cabinet): hit A to jump straight into a
+   picked game, or X to see what it chose and why ([Just Play](curator.md#just-play)). Toggle it in Settings → Games →
+   Curator (hidden in Kids Mode).
+3. **Your recent games**, up to six. The first is your last-played game, labelled **Continue** on the Shelf so you can
+   press A immediately.
+4. **Favourites**, every game you starred with Y, sorted alphabetically. Appears once you star a game and hides when
+   empty.
+5. **Pinned smart shelves**, each appearing as its own row (or shelf in Cabinet). Every Curator section can be toggled in
+   [Settings → Games → Curator](settings-playing.md#curator).
+6. **PC streaming**, shown when Moonlight is installed (included on ROCKNIX) and enabled under Settings → Games →
+   Systems on the shelf. Launches Moonlight directly (no pause menu, doesn't log game play time; see
+   [PC streaming](pc-streaming.md)).
+7. **Your systems**, sorted alphabetically. Only consoles with games appear, skipping any you hid under
+   [Systems on the shelf](settings-playing.md#systems-on-the-shelf).
 
-**What the rows show when you pick them.** Where a game shows its box art (the case shown above the shelf in the
-Shelf look, the panel in Split), the other rows show games too:
+**What highlighted rows preview.** Wherever box art appears (above the shelf in Shelf, in the side panel in Split), these
+rows show previews too:
 
-- **Curator**: the cover of today's pick with "Today" under it, and a few of the games waiting for you: the ones
-  you started and haven't played for a month ("4 to rediscover"), or, when there are none, the ones you never
-  played ("12 never played", today's pick included: the number the Lens shows under Played → Never). The line
-  under the name says why it picked that game ("Today: Super Metroid · Never played · you gave it 5 stars"). The pick stays
-  the same all day and changes the next day, or when what you played makes another game more likely.
-- **Favourites** and the **smart shelves on Home**: the covers of their first games, side by side. A
-  game without box art is a tile in its system's colour with its name. A list with nothing in it says how to fill
-  it ("No games here yet"). A game without box art is a printed title card: the system's stripe, its name small, the title centred; where a tile is too narrow for the title in whole words, the system name alone.
-- Right after the start, until Curator has read your library (a moment, once), these rows show their title only: no words and no empty boxes.
+- **Curator:** today's picked cover plus games waiting for you: either unfinished games untouched for a month ("4 to
+  rediscover") or unplayed titles ("12 never played"), with a short note explaining the pick ("Today: Super Metroid ·
+  Never played · you gave it 5 stars"). The pick refreshes daily or when your play shifts it.
+- **Favourites** and **pinned smart shelves:** side-by-side covers of their first games, or clean printed title cards for
+  games without box art. Empty shelves simply read "No games here yet".
+- Right after boot, while Curator scans your library for a moment, rows display titles cleanly with no blank boxes.
 
-A game you hid on its card (**Hide or delete** at the end of the card, [Hide or delete a game](library.md#hide-or-delete-a-game))
-is in none of these rows, nor in the search or the switcher; Settings → System → [Storage](storage.md) →
-Hidden games brings it back. The same row on the SD card deletes a game from the SD card, after asking twice.
+Any game hidden from its card (**Hide or delete**, [Hide or delete a game](library.md#hide-or-delete-a-game)) disappears
+from shelves, search and the game switcher; unhide it under Settings → System → [Storage](storage.md) → Hidden games.
+Deleting from the SD card asks twice to confirm.
 
-**Settings** is not in the list: press **START** (on Home or in a system's list) to open it. B comes back to
-where you were. Every entry is described in [Settings](settings.md). Tap **HOME** on Home for the quick settings
-(brightness, volume, Wi-Fi, Bluetooth, sleep, power).
+Press **START** on Home or inside any console list to open **Settings** (B returns; see [Settings](settings.md)). Tap
+**HOME** on the shelf for quick settings (brightness, volume, Wi-Fi, Bluetooth, sleep and power).
 
-Each entry shows a short line of details:
+Each row includes a quick detail line:
 
-- a recent game: its system, when you last played it, and your total play time. A game that has a twin in its
-  system (two versions of the same game) shows the same name as in the system list, for example "Tobu Tobu Girl (Europe)"
-- a game in a system list: "Last played …, … in total", or "Not played yet"
-- a system: how many games it has, and in most looks a few facts about the console (see
-  [Console pages](console-pages.md))
+- **Recent games:** console, last played and total play time (with region/filename disambiguation if you own two copies,
+  like "Tobu Tobu Girl (Europe)").
+- **Console game list:** "Last played …, … in total", or "Not played yet".
+- **Consoles:** game count, plus console trivia in most layouts ([Console pages](console-pages.md)).
 
-The top right shows the time, a Wi-Fi symbol while the Pocket is connected to a network, and the battery level,
-with ", charging" while it charges. The same corner is on a game's card, a console page, the search and Curator's
-pages; Settings, the quick settings and the pause menu's pages show it in a small pill. With Wi-Fi switched off or not connected, the symbol is simply not there; a device without a battery reading
-shows the time alone, and while the clock has never been set (no network time yet after a reset) no time is shown.
-After a game, with [Sync](sync.md) on, a small line next to it says whether the new saves were passed on ("Saves
-synced").
+The top-right status bar shows the clock, Wi-Fi icon when connected, and battery percentage (with ", charging" on power).
+Devices without a battery sensor show time only, and an unset clock stays blank until synced. After quitting a game with
+[Sync](sync.md) enabled, a brief status appears beside it ("Saves synced").
 
-A name too long for its row ends in "…" at rest. After at least 1.5 seconds on the selected row it
-scrolls slowly to the end, pauses and returns to the beginning. Moving to another row resets this pause;
-the other rows keep their ellipsis. A starred game has a small star after its
-name.
+Long titles end with "…" at rest; pause on a row for 1.5 seconds and the title scrolls smoothly across. Starred games
+display a small star beside their name.
 
 ## Finding a game
 
-**Jump by letter.** In a system's list, in Favourites, on a smart shelf and in the list of systems on Home, **L2** and **R2** jump to
-the previous and next first letter; the letter shows large in the middle of the screen for a moment. Names that
-start with a digit or a sign come first, under "#". Hold the button to keep jumping, a letter at a time. On Home,
-R2 from your recent games goes to the first system.
+**Jump by letter.** Press **L2** or **R2** in any console list, Favourites, smart shelf or the Home console list to skip
+alphabetically with a big letter indicator (numbers and symbols appear first under "#"). Hold to keep jumping. On Home,
+R2 from recent games jumps straight to your first console.
 
-**Search.** Press **Up** on Continue and **A** (in the Cabinet look, Up on the top shelf): the search opens with a keyboard.
-Every game of every system on the shelf is searched as you type, and the list under the field follows each
-letter. It is forgiving:
+**Search.** Press **Up** from Continue and hit **A** (or Up from the top shelf in Cabinet) to open live search:
 
-- Capitals and accents don't matter: "pokemon" finds Pokémon.
-- Parts of words are enough: "mar ka" finds Mario Kart.
-- Small typos are fine: "mrio kart" and "zelad" still find their games (one wrong letter from four letters, two
-  from seven). A wrong first letter is only forgiven when nothing else matches: "oipes" finds Pipes, and the
-  field then says "close matches" instead of the number of games.
-- What is in brackets ("(USA)", "[!]") and numbers in front of a name ("0902 - ") are not part of the name.
-- Names that start with what you typed come first.
-- When nothing matches, the page says "No game matches" and that the game may not be in your games folder.
+- Case and accents don't matter: "pokemon" matches Pokémon.
+- Partial words work: "mar ka" matches Mario Kart.
+- Typo-tolerant: "mrio kart" or "zelad" still finds your game (1 typo from 4 letters, 2 from 7; first-letter typos fall
+  back to "close matches" when nothing else hits).
+- Region tags ("(USA)", "[!]") and leading list numbers ("0902 - ") are ignored.
+- Prefix matches rank first.
+- Empty searches show your last five queries so you can rerun one with A. Hidden systems stay excluded.
 
-Each game shows its cover, its name and its system. Press **START** (or **Results** on the keyboard) to go to the
-list: **A** plays the game, **Y** stars it, **X** opens its card, **B** goes back to typing. When you start a
-game from the search, the search closes and the game's system list is where you come back to.
-
-With nothing typed, the list shows your last five searches; A on one searches it again. A search counts once you
-go to its list or start a game from it. Systems you hid (Settings → Games → Systems on the shelf) are not
-searched. On the touch screen, tap the keys to type, tap a game to select it and tap it again to play it.
+Press **START** (or **Results**) to jump into the result list: **A** plays, **Y** stars, **X** opens the game card, and
+**B** returns to typing. Touch screens let you tap keys directly and double-tap a result to launch.
 
 ## Looks
 
-The shelf has four looks. Choose one in Settings → Look → **Layout**, with a live preview. The look you
-choose is remembered. Each look comes dark or light: Appearance in Settings ([Appearance](settings.md#appearance)),
-and how much the menus move is [Motion](settings.md#motion).
+pocket-ui includes four shelf layouts. Pick yours with a live preview in Settings → Look → **Layout**. Every layout
+supports Dark, Light or Automatic [Appearance](settings.md#appearance) and adjustable [Motion](settings.md#motion).
 
 | Look | What it shows |
 |---|---|
-| **Shelf** | Your games standing on a shelf. The one you pick shows its cover. |
-| **Easy** | One big game at a time, simple menus. See [Easy](easy.md). |
-| **Split** | List on the left, details on the right. |
-| **Cabinet** | Your games in their cases on a wooden shelf. Pull one out to see its cover. |
+| **Shelf** | Games lined up spine to spine; your picked game rises up to show its cover. |
+| **Easy** | One big game box at a time with simple menus. See [Easy](easy.md). |
+| **Split** | Clean game list on the left, big box art and details on the right. |
+| **Cabinet** | Wooden shelving with a lamp, console and little TV; pull a box out to see its cover. |
 
-Minimal and Cards were looks until 0.4. If you had one of them, pocket-ui starts in Split, the look closest to them
-(and as quick to start a game), and says so once.
+Minimal and Cards were retired in 0.4; if you used either, pocket-ui switches you to Split once with a short notice.
 
 Cover art, when you have it, appears on the front of the case shown above the shelf (Shelf), in the detail panel (Split)
 and on the front of the case you pull out (Cabinet), whose spine also takes the

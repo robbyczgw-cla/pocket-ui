@@ -6,7 +6,7 @@
 </h1>
 
 <p align="center"><b>pocket-ui puts every game in its real box on your handheld:</b><br>
-take it off the shelf, click it in, and continue right where you stopped.</p>
+pull it off the shelf, click it in, and pick up right where you left off.</p>
 
 <p align="center">
   <a href="https://pocketui.xyz"><img src="docs/media/hero.webp" width="620" alt="The shelf: Advance Wars ready to continue, the last games as cases and every console as a spine"></a>
@@ -22,11 +22,11 @@ take it off the shelf, click it in, and continue right where you stopped.</p>
 <table align="center">
   <tr>
     <td align="center"><img src="docs/media/readme-insert-gba.webp" width="380" alt="Super Mario Advance 2: its box, and the cartridge right at the slot of a purple Game Boy Advance"><br><sub>In it goes: the cartridge clicks into the Game Boy Advance</sub></td>
-    <td align="center"><img src="docs/media/readme-case-back-snes.webp" width="380" alt="The back of the Super Metroid box: a picture from the game, the title screen and a few lines about it"><br><sub>Turn the box over and read what it's about</sub></td>
+    <td align="center"><img src="docs/media/readme-case-back-snes.webp" width="380" alt="The back of the Super Metroid box: a picture from the game, the title screen and a few lines about it"><br><sub>Flip the box over to read the back</sub></td>
   </tr>
   <tr>
-    <td align="center"><img src="docs/media/readme-save-slots-snes.webp" width="380" alt="The pause menu over The Legend of Zelda: A Link to the Past: Continue, Save in slot 2 with its picture, Load, Earlier, Options, Save &amp; quit"><br><sub>One pause menu: save slots with pictures</sub></td>
-    <td align="center"><img src="docs/media/readme-shelf.webp" width="380" alt="A Game Boy Advance shelf in the Retro look: Golden Sun's box above a row of spines"><br><sub>The Retro look, one switch away</sub></td>
+    <td align="center"><img src="docs/media/readme-save-slots-snes.webp" width="380" alt="The pause menu over The Legend of Zelda: A Link to the Past: Continue, Save in slot 2 with its picture, Load, Earlier, Options, Save &amp; quit"><br><sub>One pause menu with visual save slots</sub></td>
+    <td align="center"><img src="docs/media/readme-shelf.webp" width="380" alt="A Game Boy Advance shelf in the Retro look: Golden Sun's box above a row of spines"><br><sub>Retro style, one switch away</sub></td>
   </tr>
 </table>
 
@@ -38,151 +38,151 @@ take it off the shelf, click it in, and continue right where you stopped.</p>
     <th width="50%">pocket-ui for Android · app</th>
   </tr>
   <tr>
-    <td valign="top">For retro handhelds from Anbernic, Retroid and AYN: flash the image to a microSD card, put it in,
-    switch on, and your handheld starts straight into the shelf, like a console. Your own system stays untouched; take
-    the card out and it's back. For the TrimUI Brick and Smart Pro there is a package you unzip onto a card.
-    Already playing on dArkOS? The pocket-ui beta for dArkOS starts right from its Ports menu.<br><br>
+    <td valign="top">For retro handhelds from Anbernic, Retroid and AYN: flash a spare microSD card, power on, and boot
+    straight to your shelf like a dedicated console. Your stock system stays untouched; swap cards to switch back. For the
+    TrimUI Brick and Smart Pro, just unzip the TrimUI package onto an empty card. Already on dArkOS? Launch
+    <b>pocket-ui beta for dArkOS</b> right from the Ports menu.<br><br>
     <b><a href="https://pocketui.xyz/install">Get the image</a></b> · <a href="../../releases/latest">Releases</a></td>
-    <td valign="top">Got an Android handheld with a built-in controller, like a Retroid Pocket or an AYN Odin 2? pocket-ui
-    runs there as an app: the same shelf, the same Continue, its own player for the classic consoles built in, and the
-    emulator apps you already have for PS2, GameCube and more. Nothing to flash. A preview,
-    for Android 8 or newer.<br><br>
+    <td valign="top">Got an Android handheld with built-in controls, like a Retroid Pocket or AYN Odin 2? Run pocket-ui as
+    a frontend app: same shelf, same instant Continue, classic consoles built right in, and your own emulator apps for PS2,
+    GameCube and more. No flashing needed. Preview build for Android 8 or newer.<br><br>
     <b><a href="https://pocketui.xyz/install#android">Get the app (APK)</a></b></td>
   </tr>
 </table>
 
 ## Why you'll like it
 
-- **Real cases.** Cartridges, jewel cases and big cardboard boxes, made from photos of the real things. Press X and
-  the case opens; turn it over and read what the game is about.
-- **In it goes.** The cartridge clicks into its console, the old TV flickers on, and you're playing. Quit, and it
-  pops back out and goes home to the shelf.
-- **Continue.** Your last games wait half open on the shelf. One press and you're back in the very moment you left.
-- **The case knows your game.** For many favourites the box shows how far you got, read from your own save: items,
-  notes, the furthest mission, the game clock.
-- **One pause menu for every console.** Save slots with pictures, Earlier to jump back a few minutes, screen frames
-  and CRT looks, from Game Boy to GameCube.
+- **Real game boxes.** Cartridges, jewel cases and cardboard boxes built from photos of the real hardware. Hit X to pop
+  a case open, or flip it over to read the back.
+- **Pop it in and play.** The cartridge clicks home, the old TV warms up, and you're in. Quit, and everything packs
+  neatly back onto the shelf.
+- **Instant Continue.** Your recent games sit slightly ajar on the shelf. One press drops you right back into the exact
+  moment you left off.
+- **The case knows your progress.** For dozens of classics, flipping the box shows how far you've gotten, read straight
+  from your save: badges, stars, hearts, missions and play clock.
+- **One pause menu for every console.** Eight visual save slots, Earlier to jump back a few minutes, screen frames and
+  CRT looks from Game Boy to GameCube.
 
-Plus a Retro look in one switch, games sent from your phone, the games of your own RomM server right on the shelf,
-Game check, Kids Mode and updates over Wi-Fi.
-[See everything it does](https://pocketui.xyz/features).
+Plus Retro mode in one toggle, phone-to-handheld ROM uploads, your own RomM server right on the shelf, Game check, Kids
+Mode and one-press Wi-Fi updates. [See everything it does](https://pocketui.xyz/features).
 
-No account, no tracking, free and open source. Menus in English, German, Spanish, Brazilian Portuguese, French and Italian.
+Free and open source, with no account and no tracking. Menus in English, German, Spanish, Brazilian Portuguese, French
+and Italian.
 
-**What it plays:** Game Boy, Game Boy Color and Advance, NES, Super Nintendo, Mega Drive, Master System, Game Gear,
-PC Engine, PlayStation, Nintendo 64, PSP, Dreamcast, Nintendo DS, Saturn, arcade and PortMaster ports. On the stronger
-handhelds, such as the AYN Odin 2, also PlayStation 2, GameCube, Wii and 3DS. Nintendo DS games feel at home without a
-touchscreen too: the stylus moves with the D-pad and one button flips the screen layout, and on the TrimUI and the
-smaller Anbernic handhelds DSperate, a faster DS player, runs them.
-[What plays on which handheld](https://pocketui.xyz/systems)
+**Supported systems:** Game Boy, GBC, GBA, NES, SNES, Mega Drive, Master System, Game Gear, PC Engine, PlayStation, N64,
+PSP, Dreamcast, Nintendo DS, Saturn, arcade and PortMaster ports. Stronger handhelds like the AYN Odin 2 also play PS2,
+GameCube, Wii and 3DS. Nintendo DS works great without a touchscreen too: move the stylus with the D-pad, flip layouts
+with one button, and enjoy faster DS play via DSperate on TrimUI and Anbernic H700 handhelds.
+[See what plays on your handheld](https://pocketui.xyz/systems)
 
 ## Your Pockets, in step
 
-Play in the evening on one handheld, carry on the next morning on another, with the very same save. **Pocket Sync**
-keeps your saves the same on all your Pockets, straight from Pocket to Pocket over your home Wi-Fi or your Tailscale.
-No computer, no account, no cloud.
+Play on one handheld tonight and pick up on another tomorrow with the exact same save. **Pocket Sync** keeps saves in
+sync directly from Pocket to Pocket over your home Wi-Fi or Tailscale. No PC, no account, no cloud.
 
-- **Pair once** with a six-digit code. After every game the new saves go to the others, and a Pocket that wakes up
-  fetches what they saved meanwhile.
-- **As many Pockets as you like**, none of them a server. A Pocket at work finds the one at home over Tailscale.
-- **Nothing is ever overwritten.** Played the same game on two Pockets? You pick the version to keep, and you're asked
-  once.
-- **You see what came in**: "New save from TrimUI Brick · Golden Sun" on the shelf, and each paired Pocket with its last
-  sync.
-- **Where it runs:** pocket-ui OS, the TrimUI package and pocket-ui for Android (in the Handheld view, while the app
-  is open). Switch it on under Settings → Connections → Pocket Sync.
+- **Pair once** with a six-digit code. New saves hop over after each session, and waking a Pocket pulls down anything
+  you saved elsewhere.
+- **Add as many Pockets as you own**, with no host or server to manage. A Pocket on the road finds your handheld at home
+  over Tailscale.
+- **Never overwrites your progress.** Played the same game on two handhelds? You pick which save to keep, and the other
+  goes safely into a backup folder.
+- **Clear shelf notices:** see what arrived ("New save from TrimUI Brick · Golden Sun") and check each paired Pocket's
+  last sync.
+- **Where it runs:** pocket-ui OS, the TrimUI package and pocket-ui for Android (Handheld view while open). Turn it on
+  under Settings → Connections → Pocket Sync.
 
 ## Your shelf in any browser
 
-Switch on the **web companion** (Settings → Connections → Web companion) and open your Pocket on your phone or computer,
-on your home Wi-Fi or over Tailscale:
+Turn on the **web companion** (Settings → Connections → Web companion) to browse your handheld from your phone or
+computer over home Wi-Fi or Tailscale:
 
-- **Your library**: every system and game with its box art, a search over all your games, your play time, status, rating
-  and notes. Change something there and the Pocket follows at once.
-- **Upload a game** and it lands in the right system's folder and stands on your shelf, its cover coming along by
-  itself when the Pocket is online. BIOS files and PortMaster files upload just as easily.
-- **Your play history**, the battery, and a look at what's on the Pocket's screen right now.
+- **Full library view:** browse every console and cover, search all games, and edit play status, ratings or notes with
+  instant updates on your handheld.
+- **Easy uploads:** drop in ROMs and they sort into the right system folder (fetching box art automatically when online).
+  Upload BIOS files and PortMaster data just as easily.
+- **Stats and live view:** check play history, battery status and what's currently on your handheld's screen.
 
-A browser on your Wi-Fi pairs once with a code or a QR code, and the companion stays off until you switch it on.
+Scan a QR code once to pair a browser on your Wi-Fi. The web companion stays completely off until you enable it.
 
 ## What's new
 
-Every release has its own notes on the [Releases page](../../releases), and [CHANGELOG.md](CHANGELOG.md) lists every
-version in one place. Updates come over Wi-Fi: pocket-ui OS and the app tell you when a new one is out.
+Full release notes live on the [Releases page](../../releases), and [CHANGELOG.md](CHANGELOG.md) tracks every version in
+one place. Both pocket-ui OS and the Android app let you know when an update is ready over Wi-Fi.
 
 ## Get the image
 
-Three steps:
+Three quick steps:
 
-1. **Download the image for your handheld** from [pocketui.xyz/install](https://pocketui.xyz/install) (about 1.2 GB).
-2. **Flash it to a spare microSD card** with [balenaEtcher](https://etcher.balena.io) or Raspberry Pi Imager. No
-   unzipping needed. 8 GB is enough (16 GB for the RG28XX and RG35XX 2024).
-3. **Card in the first slot, switch on.** It sets itself up, restarts once, and says hello: pick your language, your
-   Wi-Fi and your look.
+1. **Download the image for your handheld** from [pocketui.xyz/install](https://pocketui.xyz/install) (about 1.3 GB).
+2. **Flash it to a spare microSD card** with [balenaEtcher](https://etcher.balena.io) or Raspberry Pi Imager (no need to
+   unzip). 8 GB works for most models; use 16 GB+ for the RG28XX and RG35XX 2024.
+3. **Slide it into slot 1 and power on.** First boot sets up the card, restarts once, and greets you to pick language,
+   Wi-Fi and look.
 
-Your handheld's own system stays exactly as it is: put your old card back and it's like nothing happened. Then add your
-games from your phone or computer over Wi-Fi (Settings → Games → Add games).
+Your handheld's stock system stays untouched: swap your original card back in and everything is right as you left it.
+Add games from your phone or computer over Wi-Fi via Settings → Games → Add games.
 
 | Brand | Models | |
 |---|---|---|
-| **Anbernic** | RG35XX Plus, RG35XX SP, RG35XX H, RG35XX Pro, RG35XX 2024, RG28XX, RG34XX, RG34XX-SP, RG40XX H, RG40XX V, RG CubeXX, RG-SP | [Image per model](https://pocketui.xyz/install#anbernic). Newer-screen Plus/SP and RG40XX H DDR3 have their own. Not the original RG35XX (2023). |
-| **Retroid** | Pocket Mini V2 | [Image](https://pocketui.xyz/install#retroid), plus one step: Boot mode → Loader. Android stays. |
-| **AYN** | Odin 2, Odin 2 Mini, Odin 2 Portal | [Image](https://pocketui.xyz/install#odin), after ROCKNIX's boot helper once. Android stays. |
-| **TrimUI** | Brick (incl. Brick Hammer), Smart Pro; Brick Pro experimental | [Unzip the TrimUI package onto an empty card](https://pocketui.xyz/install#brick), nothing is flashed. |
-| **Retroid, beta** | Pocket 5, Flip 2, Pocket 6, Pocket Nova | [Beta images](https://pocketui.xyz/install#retroid-cards), see below. Android stays. |
-| **Already on dArkOS** | dArkOS handhelds with 640×480 screens, including the R36S | [pocket-ui beta for dArkOS](https://pocketui.xyz/install#darkos): unzip it into the Ports folder, nothing is flashed. |
-| **Already on ROCKNIX** | any of the above | [Add pocket-ui in five minutes, undo it any time](https://pocketui.xyz/install#way-1) |
+| **Anbernic** | RG35XX Plus, RG35XX SP, RG35XX H, RG35XX Pro, RG35XX 2024, RG28XX, RG34XX, RG34XX-SP, RG40XX H, RG40XX V, RG CubeXX, RG-SP | [Image per model](https://pocketui.xyz/install#anbernic). Dedicated builds for newer-screen Plus/SP and RG40XX H DDR3. Original 2023 RG35XX not supported. |
+| **Retroid** | Pocket Mini V2 | [Image](https://pocketui.xyz/install#retroid), plus one step: Boot mode → Loader. Android stays untouched. |
+| **AYN** | Odin 2, Odin 2 Mini, Odin 2 Portal | [Image](https://pocketui.xyz/install#odin), after installing ROCKNIX's boot helper once. Android stays untouched. |
+| **TrimUI** | Brick (incl. Brick Hammer), Smart Pro; Brick Pro experimental | [Unzip the TrimUI package onto an empty FAT32 card](https://pocketui.xyz/install#brick); nothing is flashed. |
+| **Retroid, beta** | Pocket 5, Flip 2, Pocket 6, Pocket Nova | [Beta images](https://pocketui.xyz/install#retroid-cards), see notes below. Android stays untouched. |
+| **Already on dArkOS** | 640×480 dArkOS handhelds, including the R36S | [pocket-ui beta for dArkOS](https://pocketui.xyz/install#darkos): unzip into `ports`; nothing is flashed. |
+| **Already on ROCKNIX** | any of the above | [Install on top in five minutes, remove any time](https://pocketui.xyz/install#way-1) |
 
-**Retroid beta images:** on the Pocket 5 and Flip 2, start the card from Retroid's "Loader"; if the boot menu says
-"UEFI", set up OpenABL once with ROCKNIX's guide. The Pocket 6 and Nova start from Retroid's UEFI entry; if yours falls
-back to the boot menu, set up OpenABL once. Not the 12 GB models with the Visionox screen. These images haven't started
-on a real one yet, so testers are very welcome.
+**Retroid beta images:** on Pocket 5 and Flip 2, boot from Retroid's "Loader" option (if your boot menu shows "UEFI",
+set up OpenABL once via ROCKNIX's guide). Pocket 6 and Nova boot from Retroid's UEFI entry (fall back to OpenABL if
+needed). Original screens only, not the 12 GB Visionox models. These builds haven't booted on real hardware yet, so
+testers are very welcome.
 
 [All downloads](../../releases/latest)
 
 ## Quick answers
 
-- **Do I lose my stock system?** No. pocket-ui OS runs from its own SD card; swap cards to switch back. On Retroid and
-  AYN, Android stays where it is.
-- **My ROM folders and saves?** Bring them as they are: it reads the folder names other systems use and renames nothing.
-  In-game saves (`.srm`, `.sav`) next to their game keep working; save states don't move between emulators.
-- **Which BIOS files?** Most systems need none. Saturn, Famicom Disk System, the CD add-ons, PlayStation 2 and some
-  arcade sets do: put your own in `roms/bios`, and Game check (Settings → Games → Game check) tells you what's missing.
-- **Any games included?** No, bring your own. An empty shelf offers a [starter pack](docs/STARTER-PACK.md) of free
+- **Do I lose my stock system?** No. pocket-ui OS lives on its own SD card; swap cards to go back. On Retroid and AYN,
+  Android stays completely untouched.
+- **What about my ROM folders and saves?** Bring them as they are. pocket-ui reads common folder names without renaming
+  anything. In-game saves (`.srm`, `.sav`) sitting beside their ROM keep working; save states don't carry across
+  different emulators.
+- **Which BIOS files do I need?** Most consoles need none. Saturn, Famicom Disk System, CD add-ons, PS2 and some arcade
+  sets do: drop yours in `roms/bios` and run Settings → Games → Game check to see what's missing.
+- **Are any games included?** No, bring your own. An empty shelf offers a [starter pack](docs/STARTER-PACK.md) of free
   homebrew games.
-- **Is it free?** Yes. Free and open source, no account, no ads, no tracking.
+- **Is it free?** Yes. Free and open source, with no account, no ads and no tracking.
 
-More in the [FAQ](https://pocketui.xyz/faq).
+More answers in the [FAQ](https://pocketui.xyz/faq).
 
 ## Learn more
 
-- [Try it in your browser](https://pocketui.xyz/try): the real pocket-ui, no install
-- [Guide](https://pocketui.xyz/guide): your first evening, with pictures
-- [Manual](docs/user/index.md): everything, page by page; also on the handheld under Settings → Help & tools
-- [What's new](CHANGELOG.md): every version
-- [Status](docs/STATUS.md): every feature and where it has been played
-- Discord: https://discord.gg/sDqUV4M49g (help, ideas, device testers)
+- [Try it in your browser](https://pocketui.xyz/try): real pocket-ui in a browser tab, nothing to install
+- [Guide](https://pocketui.xyz/guide): walk through your first evening with screenshots
+- [Manual](docs/user/index.md): the complete user guide (also on your handheld under Settings → Help & tools)
+- [What's new](CHANGELOG.md): full changelog
+- [Status](docs/STATUS.md): every feature and where it's been tested
+- Discord: https://discord.gg/sDqUV4M49g (help, ideas and device testers)
 
-Something off? **Settings → Help & tools → Report a problem** makes a file for a report, or
-[open an issue](../../issues) or write to robby@robbyczesany.com. Reports from your handheld help a lot.
+Run into a bug? Use **Settings → Help & tools → Report a problem** to pack your logs into one zip, then
+[open an issue](../../issues) or email robby@robbyczesany.com. Real-hardware reports help a ton.
 
 ## How it's made
 
-pocket-ui is built by Robby Czesany together with AI coding agents (Claude and Codex). The agents write most of the
-code; he decides what gets built and how it should look and feel, and plays it on his own handhelds. Questions are
-welcome in [Discussions](https://github.com/robbyczgw-cla/pocket-ui/discussions).
+pocket-ui is built by Robby Czesany with AI coding agents (Claude and Codex). The agents write most of the code; he
+designs how it looks and feels and tests it on real handhelds. Questions are welcome in
+[Discussions](https://github.com/robbyczgw-cla/pocket-ui/discussions).
 
 ## For developers
 
-pocket-ui is written in Rust: `pocket-ui` is the shelf and menus, `pocket-core` our own libretro player.
+pocket-ui is written in Rust: `pocket-ui` handles the shelf and menus, and `pocket-core` is our libretro game player.
 
 ```sh
 cargo zigbuild --release --target aarch64-unknown-linux-gnu.2.38 --bin pocket-ui --bin pocket-core
 cargo test --release
 ```
 
-Set-up, the dev loop and the code layout: [docs/DEVELOPING.md](docs/DEVELOPING.md) ·
-[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) · [every document](docs/README.md) ·
+Setup, dev loop and repo layout: [docs/DEVELOPING.md](docs/DEVELOPING.md) ·
+[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) · [all docs](docs/README.md) ·
 [CONTRIBUTING.md](CONTRIBUTING.md) · [code of conduct](CODE_OF_CONDUCT.md) · [SECURITY.md](SECURITY.md)
 
 ## Licence

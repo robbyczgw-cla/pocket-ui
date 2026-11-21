@@ -1,37 +1,34 @@
 # Saving in the pause menu
 
-The [pause menu](pause-menu.md) (HOME) is where you save, load and go back in time. This page has the details: save slots,
-Where I quit and Before load, Earlier, where the state files are, saving on the other emulators, and what happens
-when the SD card can't take a save. The menu itself, per emulator, is on [The pause menu](pause-menu.md).
+The [pause menu](pause-menu.md) (HOME) handles manual saves, auto-resume and jumping back in time. Here are the details
+on save slots, Where I quit, Before load, Earlier snapshots, file locations and what happens if your SD card fills up.
 
 ## When your progress can't be saved
 
-On pocket-ui's own host the game's own save (the in-game save, `<game>.srm`) and, for games with a clock, the clock
-(`<game>.rtc`, see [below](#games-with-a-clock)) are written to the SD card every 10 seconds, and again when you quit or
-the Pocket goes to sleep. When the SD card is full, has turned read-only or is failing, that can't go through:
+On pocket-ui's own player, in-game saves (`<game>.srm`) and cartridge clocks (`<game>.rtc`, see
+[below](#games-with-a-clock)) flush to the SD card every 10 seconds and again on Quit or sleep. If the card fills up,
+switches to read-only or starts failing:
 
-- A line stays at the bottom of the game: "Couldn't save: the SD card is full. Free some space." (or "Couldn't save to
-  the SD card. Trying again." when it can't be written to). You can keep playing: the save is tried again every 10
-  seconds, and the line goes away as soon as one gets through.
-- The save already on the SD card stays as it was. A write that fails never damages it.
-- The pause menu shows the same line under the game's name.
-- **Quit** asks first: "Couldn't save. Quit anyway?", and says what is at stake. **Keep playing** (or A on the first
-  row) goes back to the game; B goes back to the menu; **Quit anyway** quits, and tries the save once more on the way
-  out. What you did since the last save that reached the SD card is lost then. Free some space first if you can
-  ("The SD card is full" in [Troubleshooting](troubleshooting.md#questions)).
-- Sleep, the power-off at a nearly empty battery and switching games from Recent games don't ask: they try the save once and go on, so
-  the Pocket never hangs on a full SD card. If the last save failed, the shelf says so once after the game.
-- When Quit or sleep could still save the moment (Where I quit) although the in-game save failed, the next start continues from
-  that moment, and the in-game save in it goes to the SD card as soon as there is space.
-- When the moment itself doesn't fit any more (a big one, a few MB, on a nearly full card), the same line shows and the shelf
-  says so after the game: the next start goes back to the moment before.
-- A moment set aside because another emulator made it is kept even if the card has no room to put it in a slot.
-  A later successful Quit keeps it too. When a slot and enough space are available, the next start puts it under Load.
+- A warning stays at the bottom of the screen ("Couldn't save: the SD card is full. Free some space." or "Couldn't save
+  to the SD card. Trying again."). You can keep playing while pocket-ui retries every 10 seconds, and the banner clears
+  as soon as a write succeeds.
+- Existing saves on the card stay untouched: a failed write never corrupts them.
+- The pause menu repeats the warning below the game title.
+- **Quit** prompts first ("Couldn't save. Quit anyway?"): pick **Keep playing** to return to the game, B to stay in the
+  menu, or **Quit anyway** (retries once more on exit; unsaved progress since the last good write is lost). Free up
+  space first if possible ("The SD card is full" in [Troubleshooting](troubleshooting.md#questions)).
+- Sleep, low-battery auto-shutdown and switching via Recent games attempt one save and continue so the handheld never
+  hangs on a full card, showing a notice on the shelf if the save failed.
+- If the Continue moment saved even though the in-game save didn't, next launch resumes that moment and writes the
+  in-game save once space is free.
+- If the Continue moment itself doesn't fit on a nearly full card, pocket-ui warns you and falls back to the previous
+  moment next time.
+- Moments set aside after switching emulators stay safe even on a full card, moving into a free Load slot once space
+  opens up.
 
-
-If the game's save is on the SD card but can't be read when the game starts (a failing card), the game starts without it and
-the line says "Couldn't read this game's save. It stays as it was." Nothing is written over that save while you play; what you
-do in that session isn't kept. Copy the save off the card ([Troubleshooting](troubleshooting.md#questions)).
+If an existing save can't be read at launch (an early sign of a failing SD card), the game boots cleanly without it and
+warns "Couldn't read this game's save. It stays as it was." Nothing overwrites your original file, and that session
+isn't saved. Back up your card right away ([Troubleshooting](troubleshooting.md#questions)).
 
 ### Games with a clock
 
