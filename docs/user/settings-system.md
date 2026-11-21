@@ -19,8 +19,8 @@ plainly states "This device has no Wi-Fi".
 | **Bluetooth** | Pair controllers, headphones and speakers and check live connections. See [Bluetooth](bluetooth.md) |
 | **Tailscale** | Connect your Pocket to your private Tailscale network from anywhere. See [Tailscale](remote.md) |
 | **Remote access (SSH)** | Turn on temporary SSH login from a computer. See [Remote access](#remote-access-ssh) |
-| **Sync** | Sync saves, save states—and optionally favourites, notes and play history—via Syncthing. See [Sync](sync.md) |
-| **Pocket Sync** | Sync saves directly between your Pockets using a 6-digit code—no PC, account or cloud. Off by default. See [Your other Pockets](sync.md#your-other-pockets) |
+| **Sync** | Sync saves, save states (and optionally favourites, notes and play history) via Syncthing. See [Sync](sync.md) |
+| **Pocket Sync** | Sync saves directly between your Pockets using a 6-digit code, with no PC, account or cloud. Off by default. See [Your other Pockets](sync.md#your-other-pockets) |
 | **Web companion** | Browse your library, check play time and upload games from a phone or PC browser over home Wi-Fi or Tailscale. Off by default. See [Web companion](web-companion.md) |
 | **PC streaming** | Pair a gaming PC for Moonlight and launch PC games straight from your Pocket. See [PC streaming](pc-streaming.md) |
 
@@ -32,12 +32,12 @@ Settings → Connections → **Tailscale** puts your Pocket on your private Tail
 can reach each other over any Wi-Fi, hotspot or mobile data. Full guide: [Tailscale](remote.md).
 
 1. Highlight **Tailscale** and press A to turn it on (stays on across reboots until you switch it off).
-2. Highlight **Sign in** and press A for a QR code. Scan it on your phone and approve the Pocket—the page updates to
+2. Highlight **Sign in** and press A for a QR code. Scan it on your phone and approve the Pocket, and the page updates to
    **Connected as** your tailnet with your Pocket's Tailscale IP and hostname.
 3. Also offers **Sign in with a key** (for Tailscale admin auth keys), **Name** (sets your tailnet hostname) and
    **Log out** (asks twice).
 
-Tailscale only builds the tunnel—enable Remote access (SSH) as well if you want SSH login over it.
+Tailscale only builds the tunnel; enable Remote access (SSH) as well if you want SSH login over it.
 
 ### Remote access (SSH)
 
@@ -47,7 +47,7 @@ Settings → Connections → **Remote access (SSH)** starts **Off** by default a
 2. Connect from your computer with those details (the password stays consistent for this Pocket).
 3. Press A again to turn it off, or reboot.
 
-Handy for copying files or grabbing logs—not needed for everyday gaming. See
+Handy for copying files or grabbing logs, though not needed for everyday gaming. See
 [SECURITY-HARDENING.md](../SECURITY-HARDENING.md) for security details.
 
 ### Sync and PC streaming
@@ -83,18 +83,18 @@ Settings → System → **Time**:
 - **Time zone:** browse by region and city (showing UTC offset and local time) or search with the on-screen keyboard in
   any supported language ("wien", "viena" and "vienna" all match Vienna, with or without accents).
 - Changing your zone updates every clock immediately, including Home's top-right corner ([Home](playing.md#home)).
-- **Network time:** shows whether Wi-Fi clock sync succeeded—press A to sync again.
+- **Network time:** shows whether Wi-Fi clock sync succeeded; press A to sync again.
 - **Date and time:** lets you set the clock manually on offline handhelds. Press A for five fields (year, month, day,
   hour, minute on a 24-hour clock, with weekday underneath): Left/Right move fields, Up/Down adjust (hold to scroll), A
   saves, B cancels (touch taps work too). Automatically respects month lengths and leap years. Persists across reboots
-  (tells you if hardware can't hold time). Network time stays active and takes over once you reconnect—while synced, the
+  (tells you if hardware can't hold time). Network time stays active and takes over once you reconnect. While synced, the
   row shows **From network time**.
 - **Wrong-clock alert:** if the clock falls before 2026 or before your pocket-ui build date (common after a flat
-  battery), an orange note warns you—since Play history, Night light and save timestamps depend on it. Set it manually
+  battery), an orange note warns you, since Play history, Night light and save timestamps depend on it. Set it manually
   (Date and time pre-fills the build date to save scrolling) or join Wi-Fi. Offline handhelds with a plausible clock show
   a gentler note ("it may be a little off") until set manually, and Home shows a one-time notice ~45 seconds after boot
   if the clock is clearly wrong.
-- Adjusting the clock never inflates play time—active game timers run independently, and an already-running session
+- Adjusting the clock never inflates play time: active game timers run independently, and an already-running session
   keeps its original start date.
 
 ### Sleep & power
@@ -102,7 +102,7 @@ Settings → System → **Time**:
 Settings → System → **Sleep & power** configures Screen off after, Sleep after, Switch off after sleeping, and Power
 button short press / hold. Full table and behaviour: [Sleep & power settings](quick-settings.md#sleep--power-settings).
 
-On experimental Pocket 6 and Nova, Screen off replaces Sleep and ROCKNIX manages the fan—see
+On experimental Pocket 6 and Nova, Screen off replaces Sleep and ROCKNIX manages the fan; see
 [Other Retroid devices](other-handhelds.md#other-retroid-devices).
 
 ### Battery
@@ -162,7 +162,7 @@ Settings → **Help & tools** holds this manual, the Tour, setup profiles, ROCKN
 | **Tour** | 7 quick cards covering controls, Continue, saves, Quick settings, adding games, Settings and Big text. See [Features and the Tour](tour.md) |
 | **How you like to play** | One-click presets (The shelf, Easy, Enthusiast or Choose for yourself) for pocket-ui's extras. See [How you like to play](#how-you-like-to-play) |
 | **First-start setup** | Re-run the welcome wizard (language, Wi-Fi on Linux, games, layout) without touching games, saves or settings. See [Getting started](getting-started.md#3-first-start) |
-| **Tools** | Launch ROCKNIX utilities—emulator menus, RetroArch, gamepad test/calibration, file manager, terminal and installed tools. See [Tools](#tools) |
+| **Tools** | Launch ROCKNIX utilities: emulator menus, RetroArch, gamepad test/calibration, file manager, terminal and installed tools. See [Tools](#tools) |
 | **Report a problem** | Jumps to About with Report a problem highlighted; press A to save a diagnostic bundle into `reports` on the games share ([Report a problem](troubleshooting.md#report-a-problem)). Also available from SELECT + START held |
 | **About** | Version, base OS (e.g. "pocket-ui OS 0.6.0 · built on ROCKNIX 20261001 (SM8250)" on SD images, or ROCKNIX version on add-on installs), game count, free space, IP, battery, log paths and open-source licences (`/storage/pocket-ui/licences`). Marks experimental Retroid models ([Other handhelds](other-handhelds.md#other-retroid-devices)). Includes **Report a problem** and **Open EmulationStation…** (with warning, [Safe mode](safe-mode.md#opening-rocknixs-own-menu); omitted on TrimUI Brick) |
 

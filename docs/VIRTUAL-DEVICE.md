@@ -183,7 +183,7 @@ What changes with the device (`docker/vdev/entrypoint.sh`):
 | sway's output | 1240x1080 | 1920x1080 | 1920x1080 | 1280x960 |
 | Touch panel (`vdev-pad.py`, `VDEV_PANEL`) | 1080x1240 | 1080x1920 | 1080x1920 | 960x1280 |
 | Device tree `model` / first `compatible` | Retroid Pocket Mini V2 / `retroidpocket,rpminiv2` | Retroid Pocket 5 / `retroidpocket,rp5` | Retroid Pocket Flip2 / `retroidpocket,rpflip2` | Retroid Pocket Mini / `retroidpocket,rpmini` |
-| Lid | — | — | `gpio-keys-lid` with `SW_LID` (`vdev.sh lid close\|open`) | — |
+| Lid | - | - | `gpio-keys-lid` with `SW_LID` (`vdev.sh lid close\|open`) | - |
 
 The device tree's two files are written to a tmpfs mounted over the container's `/sys/firmware` (the container is
 privileged); where an engine doesn't allow the mount, `POCKETUI_DEVICE=<device>` goes into `dev.env` instead. The

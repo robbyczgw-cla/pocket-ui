@@ -95,11 +95,11 @@ Right on the My rating row). On a card opened by X on [Just Play](curator.md#jus
 
 | Button | History | Year in review |
 |---|---|---|
-| D-pad Up / Down | Move in the most played games | — |
+| D-pad Up / Down | Move in the most played games | - |
 | D-pad Left / Right | The week, month or year before or after | The card before or after |
 | L1 / R1 | Week, month, year | The year (or month) before or after |
 | A | The selected game's card; B there comes back | The card's game, on cards about one game |
-| Y | The review of this month or year | — |
+| Y | The review of this month or year | - |
 | B | Back | Back (to History, when it was opened from there) |
 
 On the touch screen, tap a game to select it and again to open its card; tap the left or right
@@ -147,7 +147,7 @@ see [Playing together](#playing-together).
 
 Games on pocket-ui's own host take up to four players. The Pocket's own buttons are Player 1, the first controller you
 connect is Player 2, the next one Player 3, and so on. When a controller connects or goes away during a game, a short
-message says so, for example "DualSense connected — Player 2". **Players** in the pause menu changes who is who, including
+message says so, for example "DualSense connected, Player 2". **Players** in the pause menu changes who is who, including
 making a controller Player 1 (see [Players](pause-menu.md#players)).
 
 - HOME, the shortcuts and the pause menu work on every controller. To quit with SELECT + START, hold both on one

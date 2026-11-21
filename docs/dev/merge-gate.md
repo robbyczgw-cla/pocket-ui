@@ -214,9 +214,9 @@ After measurements (lower shared load, around 8; these are not controlled idle-m
 | Test executables, separately timed | 216.5s (four failures) | 71.2s (all pass) |
 | Text-size executable | 82.9s | 19.3s |
 | Full outer gate, cached Cargo | Not green; component total 24m 53s including cold build | 2m 59s, exit 0 |
-| Full outer gate, cached nextest | — | 3m 17s, exit 0; one permitted frame-benchmark retry |
-| Rebase onto `55223de`, full outer gate | — | 4m 56s including rebuild, exit 0 |
-| Final cached quick tier, all selected suites + five shell suites | — | 1m 59s, exit 0; shared load 7–13, concurrent ARM build |
+| Full outer gate, cached nextest | - | 3m 17s, exit 0; one permitted frame-benchmark retry |
+| Rebase onto `55223de`, full outer gate | - | 4m 56s including rebuild, exit 0 |
+| Final cached quick tier, all selected suites + five shell suites | - | 1m 59s, exit 0; shared load 7–13, concurrent ARM build |
 
 At the measured 601 states and 39 risk states, layout coverage uses 718 renders instead of 2,404. The 1,686 omitted
 renders repeat the three non-anchor combinations for states outside the risk list. No snapshot state is removed.

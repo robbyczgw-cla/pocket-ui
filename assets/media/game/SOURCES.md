@@ -85,8 +85,8 @@ The licence was read from the Commons API (`extmetadata.LicenseShortName`) and t
    cartridge's front, given by its four corners in the photo, is mapped onto a straight rectangle in its real proportions.
 
 1. **Prepare** (`tools/paint_sega.py <photo> <out> tools/ops.json <kind>`): the areas listed in `tools/ops.json` are
-   filled — lettering and add-ons on the plastic row by row from the plastic either side (`hinterp`), the label as one
-   flat grey polygon — and a dark cartridge photographed on a light backdrop gets a white background (`"bg": "dark"`).
+   filled (lettering and add-ons on the plastic row by row from the plastic either side with `hinterp`, the label as one
+   flat grey polygon), and a dark cartridge photographed on a light backdrop gets a white background (`"bg": "dark"`).
    Then `assets/systems/tools/prep.py` crops it with a 3 % margin to 1280 px on the long side and writes the object mask.
 2. **Convert**: `tools/pixellab_i2p.py prep.png raw-N.png <w> <h> [--strength N] [--fixer]`, PixelLab v2
    image-to-pixelart, output about 160 px on the long side in the photo's proportions. Several variants were made per

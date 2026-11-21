@@ -2,7 +2,7 @@
 
 Part of [Playing](playing.md#home): dedicated info pages for each console, plus **Credits & links**.
 
-Most consoles have their own hardware page. Highlight a console on Home and look for **X Details** in the hint bar—press
+Most consoles have their own hardware page. Highlight a console on Home and look for **X Details** in the hint bar, then press
 **X** to open it. *(On a game, X still opens the game's [card](library.md).)*
 
 What you see on the shelf before even opening the page depends on your layout:
@@ -56,7 +56,7 @@ your library:
   silicon (like the Sharp SM83 across Game Boy, GBC and GBA, or the Zilog Z80 across Master System, Game Gear and Mega
   Drive)
 - **Family:** predecessors, successors, hardware revisions (Game Boy Pocket, PS one) and related systems (add-ons, arcade
-  boards)—systems you have games for come first as clickable links
+  boards). Systems you have games for come first as clickable links
 - **Best-selling game** with its verified sales figure
 - **By the makers, in your library:** up to eight games in your library from the console's own developer or maker (such
   as Nintendo R&D1 on Game Boy), oldest first, plus a count of any more. Right after boot this briefly shows "Getting
@@ -69,7 +69,7 @@ your library:
 | A | Follow the selected link to another console page, a system's game list (like PC Engine CD) or a game [card](library.md). |
 | B or X | Return to the console page. |
 
-Jump from console to console as deep as you like—B steps back up to eight pages before returning to Home, and B on a game
+Jump from console to console as deep as you like: B steps back up to eight pages before returning to Home, and B on a game
 card brings you right back to Credits & links.
 
 On touchscreens: tap once to highlight a link, tap again to open it, and swipe to scroll.

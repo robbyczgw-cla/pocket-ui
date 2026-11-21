@@ -1,7 +1,7 @@
 # Reach your Pocket from anywhere with Tailscale
 
 Settings → Connections → **Tailscale** connects your Pocket to your private [Tailscale](https://tailscale.com) network
-("tailnet")—linking your phone, PC and Pocket across any Wi-Fi, hotspot or mobile network without opening router ports.
+("tailnet"), linking your phone, PC and Pocket across any Wi-Fi, hotspot or mobile network without opening router ports.
 Tailscale is already built into ROCKNIX; this page lets you toggle it on, sign in and check status.
 
 > **Status:** built and verified on the virtual device with mocked `tailscale` and `systemctl`
@@ -29,7 +29,7 @@ Tailscale is already built into ROCKNIX; this page lets you toggle it on, sign i
 3. Scan it on your phone (or open the short URL underneath in any browser), sign in to Tailscale and approve your
    Pocket. The page automatically updates to **Connected as** your tailnet, showing the Pocket's Tailscale IP, hostname
    and how many of your devices are online.
-4. Press B on the QR code to cancel—nothing changes on your tailnet until you approve.
+4. Press B on the QR code to cancel; nothing changes on your tailnet until you approve.
 
 Tailscale stays enabled across reboots by setting ROCKNIX's `tailscale.up` flag (credentials live in
 `/storage/.cache/tailscale`). Switching it off stops the service while keeping your sign-in, so turning it back on
@@ -39,7 +39,7 @@ reconnects without scanning a QR code again. Tailscale has no auto-off timer; it
 
 No phone handy? Use **Sign in with a key**. Generate a key under Keys in the Tailscale admin console and enter it with
 the on-screen keyboard (A types, Y switches to symbols, X is Shift, START finishes) to sign in without a browser. The
-key is written briefly to a root-only file for `tailscale up` and deleted immediately after—never stored or passed on a
+key is written briefly to a root-only file for `tailscale up` and deleted immediately after, never stored or passed on a
 command line. Prefer an expiring, single-use key when possible.
 
 ### Name
@@ -64,10 +64,10 @@ ssh root@pocket-mini
 until you turn it off or reboot; Tailscale doesn't change that. This also gives you an easy lifeline if home Wi-Fi drops:
 join your phone's hotspot in Settings → Connections → Wi-Fi and your Pocket is right back on your tailnet.
 
-Moonlight works over Tailscale too—just put your PC's Tailscale IP in `moonlight.conf`
+Moonlight works over Tailscale too: just put your PC's Tailscale IP in `moonlight.conf`
 ([PC streaming](pc-streaming.md)).
 
-The [web companion](web-companion.md) also works over Tailscale and home Wi-Fi—your library, uploads and play history in
+The [web companion](web-companion.md) also works over Tailscale and home Wi-Fi, putting your library, uploads and play history in
 any browser, with no pairing code needed from your own Tailscale devices.
 
 ## What the status says
@@ -76,7 +76,7 @@ any browser, with no pairing code needed from your own Tailscale devices.
 |---|---|
 | **Off** | Service is stopped. If *Tailscale* reads On right after boot, ROCKNIX is still starting it |
 | **Starting** | Service is running and hasn't answered yet |
-| **Logged out** | Running, not signed in yet—select Sign in |
+| **Logged out** | Running, not signed in yet; select Sign in |
 | **Waiting for approval** | Signed in, waiting for an admin to approve the device in your tailnet |
 | **No network yet** | Tailscale is On, but no Wi-Fi or Ethernet is connected yet. Not an error (see below) |
 | **Connecting** | Signed in and bringing up the tunnel |
@@ -87,7 +87,7 @@ any browser, with no pairing code needed from your own Tailscale devices.
 ### Without a network
 
 When Wi-Fi is off or disconnected (and no Ethernet cable is plugged in), the page calmly shows **No network yet** in
-grey with *Tailscale connects once you're online*—nothing flashes red, even if the daemon briefly reports its old
+grey with *Tailscale connects once you're online*, so nothing flashes red, even if the daemon briefly reports its old
 address. Your toggle stays On and your sign-in stays saved; once you're back online, the page rechecks every few
 seconds, Tailscale reconnects automatically and any temporary offline errors clear themselves.
 
@@ -97,7 +97,7 @@ first* instead of hanging. You can still turn Tailscale On (it connects once onl
 Your Pocket counts as online once joined to Wi-Fi or plugged into USB Ethernet. If a hotel Wi-Fi is joined but gated by
 a login screen, clear it first via [Wi-Fi sign-in pages](hotel-wifi.md) so Tailscale can connect.
 
-If something fails while online, the reason appears in red (such as *tailscale did not answer*—toggle Tailscale Off and
+If something fails while online, the reason appears in red (such as *tailscale did not answer*; toggle Tailscale Off and
 On). Every Tailscale call has a timeout so menus never freeze.
 
 ## Where things are kept

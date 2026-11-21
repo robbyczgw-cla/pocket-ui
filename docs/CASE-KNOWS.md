@@ -68,8 +68,8 @@ on screen until the new one is in.
 | Game | Releases | The line | The save |
 |---|---|---|---|
 | Pokémon Red, Blue, Yellow | EN, DE, ES, FR, IT | badges · first Pokémon and level · the game's clock | bank 1 from the player's name to the checksum byte at `0x3523` |
-| Pokémon Gold, Silver | EN, DE, ES, FR, IT | badges of Johto and Kanto · first Pokémon that isn't an egg · clock | `0x2009`–`0x2D68`, its sum at `0x2D69` |
-| Pokémon Crystal | EN (USA, Rev 1, Australia), DE, ES, FR, IT | as Gold | `0x2009`–`0x2B82`, its sum at `0x2D0D` |
+| Pokémon Gold, Silver | EN, DE, ES, FR, IT | badges of Johto and Kanto · first Pokémon that isn't an egg · clock | `0x2009` to `0x2D68`, its sum at `0x2D69` |
+| Pokémon Crystal | EN (USA, Rev 1, Australia), DE, ES, FR, IT | as Gold | `0x2009` to `0x2B82`, its sum at `0x2D0D` |
 | Pokémon Ruby, Sapphire | EN (Rev 0–2), DE (Rev 0–1), ES, FR, IT (Rev 0–1) | badges · first Pokémon · clock | two copies of 14 sectors, each with its checksum; the newer whole copy |
 | Pokémon Emerald | EN, DE, ES, FR, IT | as Ruby | as Ruby |
 | Pokémon FireRed, LeafGreen | EN (Rev 0–1), DE, ES, FR, IT | as Ruby | as Ruby |

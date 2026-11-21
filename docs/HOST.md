@@ -1121,7 +1121,7 @@ Performance profiles (GBA, GBC): all three keep 60.00 fps with 0 late frames and
 |---|---|---|---|
 | Balanced (system ondemand) | 1393 / 1310 / 1128 MHz (GBA) | 12 % | 29 %, 3.22 (12.8) |
 | Battery (cap 979 / 1286 / 1517 MHz) | 783 / 1186 / 1112 MHz (GBA) | 11 % | 21 %, 2.59 (12.4) |
-| Performance | 1804 / 2419 / 2841 MHz (GBA) | – | 19 %, 2.04 (4.4), frame time ± 0.02 ms |
+| Performance | 1804 / 2419 / 2841 MHz (GBA) | - | 19 %, 2.04 (4.4), frame time ± 0.02 ms |
 
 Read back from sysfs while a game runs: Battery `scaling_max_freq` 979200 / 1286400 / 1516800, Performance governor
 `performance` on all three clusters, Fan Cool trips 40 / 48 / 55 / 61 / 66 / 71 °C (fan at PWM 51, 4400 rpm at 43 °C),
@@ -1186,7 +1186,7 @@ process before and after each measurement (other sessions' games running meanwhi
 | System (core, scene) | pocket-core CPU | RetroArch CPU | GPU busy pc / RA | pocket-core frame timing |
 |---|---|---|---|---|
 | N64 (mupen64plus_next GLideN64, Mario Kart 64 race start, 640×480) | 46 %, 57 % | 64 %, 60 % | 7.9 % / 6.6 % | 59.5–59.8 fps, p99 16.8 ms; 2–4 frames > 25 ms, all in shader compiles at start |
-| PSP (ppsspp, Bomberman stage 1-1, 480×272) | 28 % (GLES renderer) | 212 % (software renderer, see above) | – | 60.00 fps, p99 16.7 ms, 3 late at start |
+| PSP (ppsspp, Bomberman stage 1-1, 480×272) | 28 % (GLES renderer) | 212 % (software renderer, see above) | - | 60.00 fps, p99 16.7 ms, 3 late at start |
 | Dreamcast (flycast, BIOS menu, no game available) | 64 %, 72 %, 81 % | 53 %, 55 %, 53 % | 5.9 % / 6.5–7.3 % | 59.8 fps, p99 16.7–16.9 ms |
 
 Not measured: PPSSPP and Flycast **standalone**, which are ROCKNIX's defaults for PSP and Dreamcast; no
@@ -2109,7 +2109,7 @@ devices and count as the Pocket; ROCKNIX's profile doesn't (to check on the devi
   (`Order::forget`, the same serialized `Order::update`); its button layout in `controllers.json` stays.
 - During the game a controller that connects gets the seat it had in this game, else one nobody had; one
   that goes away leaves its seat empty (that player's port reads nothing). Both show a toast
-  ("DualSense connected — Player 2", `players::connected_note`); the controllers there at the start don't.
+  ("DualSense connected, Player 2", `players::connected_note`); the controllers there at the start don't.
 - pocket-core writes the seats to `/tmp/pocket-core.players.json` on every change; the pause menu's Players page
   (`app_players.rs`) shows that file, re-reading it while open when its time changes. A on a controller there writes
   the new order (exact seats, `""` for an empty one, then the absent controllers it remembered) on a thread and sends

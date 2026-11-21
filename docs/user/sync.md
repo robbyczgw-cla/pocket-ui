@@ -160,10 +160,10 @@ few minutes while you are on the shelf. It never looks while a game runs, and sh
 
 When it finds one:
 
-- The shelf says it once, for a few seconds, and where to choose: **A save has two versions: Pokémon Emerald – open the
+- The shelf says it once, for a few seconds, and where to choose: **A save has two versions: Pokémon Emerald, open the
   game's card to choose** for one game's save. For a memory card, a save no game of your shelf owns, or several at
-  once it says **… – choose in Settings → Connections → Sync** (**A memory card has two versions: Mcd001.ps2 – …**,
-  **… and 2 more – …**).
+  once it says **…, choose in Settings → Connections → Sync** (**A memory card has two versions: Mcd001.ps2, …**,
+  **… and 2 more, …**).
 - The game's [card](library.md#what-the-card-shows) has a row under "Your game": **Two versions of this game's save.
   Choose one…** Press **A** on it.
 - Settings → Connections → **Sync** has the row **Two versions** with how many wait ("2 to choose"). **A** lists them;

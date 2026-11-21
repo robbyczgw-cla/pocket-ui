@@ -1,14 +1,14 @@
 # Games from your RomM server
 
 [RomM](https://romm.app) is a self-hosted game library you run on a home server, NAS or PC. Pair your Pocket once and
-your RomM games appear right on the shelf beside your local games—complete with RomM's titles, box art and descriptions.
+your RomM games appear right on the shelf beside your local games, complete with RomM's titles, box art and descriptions.
 The first time you launch one, pocket-ui downloads it; after that it lives on your SD card like any local game and plays
 completely offline.
 
 ## Pair the Pocket
 
 1. Open Settings → Games → **RomM**.
-2. **Server:** enter your RomM address with the on-screen keyboard, just as you type it in a browser—like
+2. **Server:** enter your RomM address with the on-screen keyboard, just as you type it in a browser, like
    `192.0.2.10:8080`, `romm.example.com` or `https://games.home/romm` (if you omit `http://` or `https://`, pocket-ui
    assumes `http://`). Press **START** to save.
 3. **Pair with QR code:** your Pocket displays a QR code and an 8-letter code. Scan it on your phone, log in to RomM if

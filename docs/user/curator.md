@@ -1,6 +1,6 @@
 # Curator: Lens, smart shelves and play history
 
-The second half of [Your library](library.md): tools that make big retro collections a joy to explore—powered by offline
+The second half of [Your library](library.md): tools that make big retro collections a joy to explore, powered by offline
 metadata built straight into pocket-ui. For game cards, statuses, ratings, notes and metadata sources, see
 [Your library](library.md).
 
@@ -12,7 +12,7 @@ to show. [Rediscover](#rediscover) has its own switch under Settings → Look �
 and only appears when it has a game to suggest.
 
 After pocket-ui boots, Curator indexes your library quietly in the background (never while a game is running). For a
-second or two on huge collections, Curator rows stay quiet and opened pages show **Getting ready…**—nothing ever blocks
+second or two on huge collections, Curator rows stay quiet and opened pages show **Getting ready…**; nothing ever blocks
 your shelf.
 
 The first time you highlight Curator or Just Play on Home, a one-time hint introduces it ("Curator: pick by mood,
@@ -26,10 +26,10 @@ added or edited.)*
 **Curator** is geared toward big libraries and starts enabled in the Enthusiast profile (fresh defaults keep Lens,
 Echoes and Versions off while leaving **Just Play** ready for one-tap picks; upgraded Pockets keep their previous
 choices). Turn on **Lens & smart shelves** under Settings → Games → Curator and Curator sits at the top of Home above
-recent games (or as its own shelf in Cabinet—see [Playing](playing.md#looks)). Press A to open **Lens**, your smart
+recent games (or as its own shelf in Cabinet; see [Playing](playing.md#looks)). Press A to open **Lens**, your smart
 shelves, **History** and **Year in review** (once you've logged play time).
 
-Lens lets you stack filters effortlessly—like "Game Boy Advance · Racing · Never played", or "PlayStation · Story-driven
+Lens lets you stack filters effortlessly, like "Game Boy Advance · Racing · Never played", or "PlayStation · Story-driven
 · Not known for grinding · German":
 
 - **Left column (facets):** System, Family (racing, role-playing, platformer …), Sub-genre (kart racing, metroidvania …),
@@ -38,17 +38,17 @@ Lens lets you stack filters effortlessly—like "Game Boy Advance · Racing · N
   Reading, Language (read from filenames, including fan translations), Controls (plays well on a D-pad, two screens …),
   Era, Setting (fantasy, sci-fi …), Mood (cosy, tense …) and Favourites. Empty facets stay hidden automatically.
 - **Length:** **Under 5 hours**, **5–15 hours**, **15–40 hours**, **40+ hours** or **Endless** (high-score chasers,
-  sports, versus). Rough buckets (give or take one step); picking adjacent ranges merges cleanly—selecting Under 5 hours **and** 5–15
+  sports, versus). Rough buckets (give or take one step); picking adjacent ranges merges cleanly: selecting Under 5 hours **and** 5–15
   hours reads "under 15 hours".
 - **Story:** **Story-driven**, **Some story**, **Cinematic** (cutscene-heavy), **Rich world and lore** or **Little
   story**.
-- **Grinding:** **Grinding** (heavy levelling/farming) or **Not known for grinding** (meaning not flagged—not a
+- **Grinding:** **Grinding** (heavy levelling/farming) or **Not known for grinding** (meaning not flagged, not a
   guarantee).
-- **Reading:** **Lots of reading** or **Little reading**—great alongside Language for finding import games you can enjoy
+- **Reading:** **Lots of reading** or **Little reading**, great alongside Language for finding import games you can enjoy
   without reading Japanese.
 - **My rating:** **5 stars** down to **1 star**, plus **Not rated** ([My rating](library.md#my-rating)). Until you rate
   a game, only Not rated appears with a quick tip; picking 5 and 4 stars reads "rated 4 and up".
-- Story, Grinding and Reading draw from Curator's curated tags covering ~9,300 well-known games—untagged games don't get
+- Story, Grinding and Reading draw from Curator's curated tags covering ~9,300 well-known games. Untagged games don't get
   lumped into "little".
 - **Right column (values):** every value shows a live game count so you never filter yourself into a dead end.
 - Picks inside one facet act as **OR** ("SNES or GBA"); picks across facets act as **AND** ("SNES or GBA, and Racing"),
@@ -60,14 +60,14 @@ Press **SELECT** inside Lens to sort results when you hit START:
 
 | Order | First | Last, in name order |
 |---|---|---|
-| **Name** | A–Z (default) | |
+| **Name** | A to Z (default) | |
 | **Last played first** | Most recently played | Never played |
 | **Most played first** | Most hours logged | Never played |
 | **Best rated first** | Your 5-star games | Unrated games |
 | **Oldest first** | Earliest release year | Games without a year in the offline database |
 | **Shortest first** | Under 5 hours up to 40+ hours, then Endless | Games with unknown length |
 
-Games missing a stat are never dropped—they just sort to the end. Non-alphabetical sorts appear in the title ("Lens:
+Games missing a stat are never dropped; they just sort to the end. Non-alphabetical sorts appear in the title ("Lens:
 Racing · most played first"). Multi-console games count once with combined play time and their most recent session.
 
 See [Controls](controls.md#in-the-lens) for Lens shortcuts. Your picks and sort order stay active until pocket-ui
@@ -76,7 +76,7 @@ restarts.
 ### Just Play
 
 Sitting on Home right above Continue (or as the first case on Cabinet's Continue shelf): **press A to launch a game
-immediately**—no browsing, no prompts. *"Less browsing. More playing."* Want to peek first? Press **X** to open its
+immediately**, with no browsing and no prompts. *"Less browsing. More playing."* Want to peek first? Press **X** to open its
 game card with a quick reason at the top ("Never played · you like arcade racing games", "Started, not played for 3
 months", "Not played for 2 years · you gave it 5 stars"). Press **A** to jump in, **D-pad Right** for another suggestion
 ("RIGHT Another"), or **B** to return. You can set status, rating and notes right on that card.
@@ -90,11 +90,11 @@ How it picks (first match wins):
    in a day or two over something you just closed.
 2. Starred favourites you haven't played yet.
 3. Unplayed games in your collection.
-4. Completed or Dropped games—only if nothing else remains (play time alone never marks a game finished).
+4. Completed or Dropped games, only if nothing else remains (play time alone never marks a game finished).
 
 It skips the very last game you played while other candidates exist in tiers 1–3, merges multi-console copies to your
 preferred version, and never picks hidden games. Unplayed games on demanding consoles ("not every game runs smoothly",
-like PS2/GameCube/Wii) appear one-fifth as often so a casual press won't drop you into a slow boot—though games you've
+like PS2/GameCube/Wii) appear one-fifth as often so a casual press won't drop you into a slow boot, though games you've
 already started or starred aren't throttled. Missing files or unavailable emulators are skipped cleanly without changing
 your emulator picks.
 
@@ -103,7 +103,7 @@ starts the big featured game). Pressing Right cycles through every eligible game
 
 ### Smart shelves
 
-Press **X** in Lens to save your current filters and sort order as a **smart shelf**—pocket-ui suggests a tidy name
+Press **X** in Lens to save your current filters and sort order as a **smart shelf**. pocket-ui suggests a tidy name
 ("GBA · Racing") that you can edit or accept with START. Smart shelves sit on Home just like Favourites and update
 themselves automatically as you add, finish or star games.
 
@@ -122,7 +122,7 @@ list with box art and a crisp reason for each:
 - "Like Burnout 3 - Takedown, which you finished"
 
 Powered by ~170 gameplay, vibe and setting tags crafted across ~9,300 well-known titles (falling back to genre, series,
-developer and era for deeper cuts). Scoring blends gameplay similarity, series/developer, era and your personal taste—
+developer and era for deeper cuts). Scoring blends gameplay similarity, series/developer, era and your personal taste:
 finished, heavily played and starred games pull similar games upward, dropped games push them down, unplayed games get a
 gentle boost, and any single series caps at three slots to keep variety fresh.
 
@@ -154,7 +154,7 @@ Cozy extras → **Rediscover**.
 
 ### Play history
 
-pocket-ui keeps a private play diary—start/end times, console, emulator and duration across all games, ports and big
+pocket-ui keeps a private play diary with start/end times, console, emulator and duration across all games, ports and big
 emulators (excluding PC streaming and tools). Everything stays locally in `/storage/.config/pocket-ui/play-log.bin` and
 never leaves your device unless you enable [Library data](sync.md#library-data) under Settings → Connections → Sync
 (excluded from backups too).
@@ -199,5 +199,5 @@ milestones earn a sticker.
 Flip cards with Left/Right, open a game card with A, change years with L1/R1, exit with B. It never pops up uninvited
 (in January, the Curator row opens the year that just wrapped).
 
-Toggle Settings → Games → Curator → **Play history** Off anytime to hide History and reviews and pause recording—your
+Toggle Settings → Games → Curator → **Play history** Off anytime to hide History and reviews and pause recording. Your
 saved log stays intact if you turn it back on later.

@@ -1,4 +1,4 @@
-# Curator — Roon-style discovery for games
+# Curator: Roon-style discovery for games
 
 Design from 2026-10-23; the sections up to "Build order" are the plan. What was built, and where it differs, is in
 "Pixel Path as built", "Developer notes: what is built" and "Curator 2 as built" below, and for players in
@@ -67,7 +67,7 @@ layer of data.
 Built on 2026-10-23 (layers A, B and the file-name part of C): see [CURATOR-DATA.md](CURATOR-DATA.md) for what
 exists, the reader APIs and the quality numbers.
 
-### A — Facts (Wikidata, CC0, extend `scripts/build-gamedb.py`)
+### A: Facts (Wikidata, CC0, extend `scripts/build-gamedb.py`)
 
 New properties:
 
@@ -80,7 +80,7 @@ New properties:
 | P407 language of work | Where present |
 | Platform list per item | Versions, from the same QID on several systems |
 
-### B — Feel tags (our own data, built offline, bundled)
+### B: Feel tags (our own data, built offline, bundled)
 
 **Vocabulary.** About 150 tags in `assets/data/curator-tags.json`, on a few axes:
 
@@ -92,10 +92,10 @@ New properties:
 | Pace | Calm → frantic |
 | Session | Pick-up-and-play (≤ 15 min) or sit-down |
 | Length | An estimate in buckets: < 5 h, 5–15 h, 15–40 h, 40 h+, endless/score attack |
-| Difficulty | — |
-| Story weight | — |
+| Difficulty | - |
+| Story weight | - |
 | Text-heavy | Needs a language you read |
-| Grinding | — |
+| Grinding | - |
 | Controls | D-pad friendly, needs analog, touch, two screens |
 | Mood | Cosy, tense, funny, … |
 | Multiplayer | Co-op, versus, on one screen |
@@ -121,7 +121,7 @@ per game.
 same pattern as gamedb. It is a few hundred KB, so it is bundled. A download step on first start
 is only worth it later, if optional large packs (screenshots, long texts) are added.
 
-### C — You (local, private)
+### C: You (local, private)
 
 - Play time, sessions, status, stars and stickers, from `library_meta` and favourites.
 - Facts from the ROM file name: region and languages (No-Intro `(En,Fr,De)`), translation patches
@@ -220,8 +220,8 @@ The profile is recomputed in the background after each session.
   |---|---|
   | Core | `mgba` |
   | Source | 240×160 @ 59.73 Hz |
-  | Scale | 4× integer, 960×640, centred — or 4.5× smooth |
-  | Filter / shader / frame | — |
+  | Scale | 4× integer, 960×640, centred, or 4.5× smooth |
+  | Filter / shader / frame | - |
   | Display | 1240×1080 @ 60 Hz, rate matched within ±0.5 % |
   | Latency | Input to photon, an estimated number of frames: core + buffering − run-ahead |
   | Audio | 32,040 Hz → 48,000 Hz, dynamic rate control, buffer, underruns |
@@ -233,7 +233,7 @@ The profile is recomputed in the background after each session.
   | Grade | Colour | Meaning |
   |---|---|---|
   | **Pristine** | purple | Pixel-perfect and native |
-  | **Faithful** | green | — |
+  | **Faithful** | green | - |
   | **Enhanced** | blue | Upscaled internal resolution, run-ahead |
   | **Compromised** | orange | Drops, underruns, rate mismatch |
 
@@ -870,7 +870,7 @@ shelf of its own with the title on its plate). The user's side is [library.md](u
   genre's "video game" dropped and a few spellings joined ("Platformer"/"platform game", "Race"/"Driving"/"racing").
   Values are split at "," "/" ";" (the card joins two, a gamelist writes "Racing, Driving").
 - **Series from titles** (`connections::title_stem`, `derive_series`), only where the data has none, conservatively:
-  the words before a number (arabic, or a roman II–XV) or a subtitle (":", " - ") are a stem; a stem is a series when
+  the words before a number (arabic, or a roman II to XV) or a subtitle (":", " - ") are a stem; a stem is a series when
   two *different* titles share it ("Burnout 2 - Point of Impact", "Burnout 3 - Takedown"; the same title on two
   systems is one). A title that is the stem itself ("Burnout") also takes the titles that start with it and a word
   ("Burnout Revenge"). Stems shorter than three letters and a few plain words ("Super", "Final", "Dark"…) never are.

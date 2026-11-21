@@ -6,7 +6,7 @@ and controller remapping. For shelf, search, gameplay and pause-menu buttons, se
 ## In Settings
 
 Settings opens straight into **Connections**; tap L1/R1 to flip across all eight categories (Connections, Look, Screen &
-sound, Controls, Playing, Games, System, Help & tools—see [Open Settings](settings.md#open-settings)). Their icon bar
+sound, Controls, Playing, Games, System, Help & tools; see [Open Settings](settings.md#open-settings)). Their icon bar
 sits along the top: press Up from the first row to jump into it, switch categories with Left/Right, and drop back in
 with Down.
 
@@ -18,12 +18,12 @@ where supported. Select with Up/Down, open with A, return with B.
 | D-pad Up / Down | Move through rows (Down wraps from last to first; Up from the top jumps to the category icon bar). |
 | On the top icon bar | Left / Right (or L1 / R1) switch categories; Down or A enters the rows; B closes Settings. |
 | L1 / R1 | Jump straight to the previous or next category (wraps at ends; tap any icon on touchscreens). |
-| HOME | Return directly to Home from almost any Settings page (lists, About, Battery, Lights, Night light, Cozy extras, Sleep & power, Curator). Pages mid-operation (updates, downloads, sign-in, pairing, cleanups, remapping) stay open so nothing aborts—use B there. On Home/shelf, HOME still opens Quick settings. |
+| HOME | Return directly to Home from almost any Settings page (lists, About, Battery, Lights, Night light, Cozy extras, Sleep & power, Curator). Pages mid-operation (updates, downloads, sign-in, pairing, cleanups, remapping) stay open so nothing aborts; use B there. On Home/shelf, HOME still opens Quick settings. |
 | A | Opens rows ending in **›**; resets Screen colour to Neutral; does nothing on Brightness/Volume; toggles or cycles every inline setting (Appearance, Colours, Style, Text size, Motion, Game start animation, Lived-in shelf, Menu sounds, Case sounds, Haptics, On start, Continue where I quit, Console boot screen, Remind me where I was, Screen frames, Over the game, Zoom in the pause menu, Shelf space, Language). |
 | D-pad Left / Right | Adjusts inline rows (without **›**, highlighted with **‹ ›**): toggles switches, cycles values, sets Menu sounds/Brightness/Volume level or Screen colour warmth. On the Buttons page, flips Button layout or Button symbols. |
 | B | Closes Settings straight back to the shelf or game list you came from. |
 
-From any Settings subpage (Wi-Fi, Tools, Battery, etc.), B always steps back to its category list—even if you jumped
+From any Settings subpage (Wi-Fi, Tools, Battery, etc.), B always steps back to its category list, even if you jumped
 there from a shortcut.
 
 ### In Wi-Fi
@@ -176,8 +176,8 @@ wizard and over TV out (`touch:` lines in `/var/log/pocket-ui.log` show why, inc
 | Button | What it does |
 |---|---|
 | Power, short press | Puts your Pocket to sleep (saves running game first; press Power again to wake). Or switches to **Screen off** (audio keeps playing) if configured that way. |
-| Power, held (~1 second) | Opens the **power menu** (won't accidentally sleep on release)—or triggers **Sleep** if configured. Also reachable via [Quick settings](quick-settings.md#quick-settings) → **Power…**. |
-| Power, held (many seconds) | Hardware forced reboot without saving—last resort if completely frozen. |
+| Power, held (~1 second) | Opens the **power menu** (won't accidentally sleep on release), or triggers **Sleep** if configured. Also reachable via [Quick settings](quick-settings.md#quick-settings) → **Power…**. |
+| Power, held (many seconds) | Hardware forced reboot without saving (last resort if completely frozen). |
 | Vol+ / Vol- | Volume (H700 speaker has capped max and physical mute at 0). Hold START + Vol for brightness; SELECT + Vol for colour warmth. |
 
 Sleep triggers on button release so short presses stay distinct from long holds, and the wake press never leaks into a
@@ -186,7 +186,7 @@ game or menu. Customise Power button actions under Settings → System → **Sle
 
 ### Volume and brightness keys
 
-Available everywhere—shelf, Quick settings and gameplay—with a slim top bar showing the live level:
+Available everywhere (shelf, Quick settings and gameplay), with a slim top bar showing the live level:
 
 | Keys | What it does |
 |---|---|
@@ -208,7 +208,7 @@ with a description under each row:
 | Sleep | Saves your running game and suspends (same as default short press). |
 | Restart | Saves your running game, reboots and resumes right back in it. |
 | Power off | Saves your running game and shuts down cleanly. |
-| Restart pocket-ui | Saves and closes the game, then restarts pocket-ui in a few seconds without rebooting the OS—handy if a menu ever looks stuck. |
+| Restart pocket-ui | Saves and closes the game, then restarts pocket-ui in a few seconds without rebooting the OS, handy if a menu ever looks stuck. |
 | Restart to boot menu | Reboots into the bootloader to switch back to Android (**Switch boot mode** → Android → **Start**). Where unavailable, explains the manual combo (Power off, then hold Vol Down + Power). |
 
 | Button | What it does |
@@ -232,7 +232,7 @@ Hold HOME for 2 seconds (or B + START together) to exit. See [Test buttons](sett
 ### Controller setup
 
 Open **Settings → Controls → Controller setup**, or **Pause → Options → Controls → Controller setup** during any
-pocket-core game. Pick a controller at the top (A or Left/Right—identical models show an ID suffix plus remembered
+pocket-core game. Pick a controller at the top (A or Left/Right; identical models show an ID suffix plus remembered
 player number), highlight an action, press A, then press the desired button or analogue L2/R2 trigger on that pad.
 
 Pressing an already-bound button **swaps** both actions automatically with a confirmation note. Pressing HOME, pressing
@@ -240,7 +240,7 @@ built-in controls while remapping an external pad, or waiting 8 seconds cancels 
 inputs from other controllers are ignored. Press B to exit, or use **Reset controller layout** for the selected pad
 only.
 
-On the TrimUI Brick, F1 and F2 are reserved global shortcuts—pressing them during capture cancels with a reminder to
+On the TrimUI Brick, F1 and F2 are reserved global shortcuts. Pressing them during capture cancels with a reminder to
 configure them under Settings → Controls → **Lights & buttons**.
 
 If the active controller disconnects during capture, remapping cancels cleanly without altering your layout, and

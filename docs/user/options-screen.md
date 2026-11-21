@@ -8,7 +8,7 @@ Two display options from [Options → Picture](options.md#picture), explained in
 |---|---|
 | **None** | Plain black border around the game. |
 | **Auto** | Picks a matching console or handheld frame automatically (see table below). |
-| **Ambient** | Softly bathes the border in the game's live colours—like bias lighting behind a TV—shifting smoothly as scenes change. |
+| **Ambient** | Softly bathes the border in the game's live colours (like bias lighting behind a TV), shifting smoothly as scenes change. |
 | **DMG** | Classic original Game Boy: dark bezel with one rounded corner, twin accent stripes above the screen and a working power light. **DMG colour**: grey, clear, red, yellow, green or black. Offered for Game Boy and Game Boy Color. |
 | **GB Pocket** | Slimmer Game Boy Pocket shell with tighter glass. **GB Pocket finish**: brushed silver or clear. Offered for Game Boy and Game Boy Color. |
 | **GBC** | Game Boy Color bezel with **GBC colour** selector underneath: classic grey, indigo, clear purple, atomic purple, black, white or glacier blue (clear finishes are translucent). Offered for Game Boy and Game Boy Color. |
@@ -30,7 +30,7 @@ still works).
 Swan, Watch and Goggles are no longer listed manually, though **Auto** still draws them for WonderSwan, Game & Watch
 and Virtual Boy.
 
-Frames need border space around the picture, so they work with Integer, Integer smaller and Aspect scaling—Fullscreen
+Frames need border space around the picture, so they work with Integer, Integer smaller and Aspect scaling. Fullscreen
 fills the entire screen with no room left. Frames sit strictly behind the game and never crop or cover pixels, resizing
 automatically if the game changes resolution. Because standard Integer scaling leaves slim margins on some systems
 (only 20 pixels per side on GBA), **Integer, smaller** gives frames extra breathing room so details like speaker
@@ -62,14 +62,14 @@ When set to **Auto**, pocket-ui picks the frame for each system automatically:
 | Game Gear, Neo Geo Pocket (Color), Lynx, Pokemon mini | **Handheld**: recessed dark lens with a small power LED where space allows |
 | Every other console | **Monitor**: graphite surround with rounded corners |
 
-Any frame you choose manually stays put—only **Auto** follows this table.
+Any frame you choose manually stays put; only **Auto** follows this table.
 
 <!-- TODO: frame packs (/storage/.config/pocket-ui/frames/, docs/FRAMES.md) are meant for the
      store. Describe them for players once there is a way to install them. -->
 
 ## Screen orientation
 
-Some games were built for vertical screens—TATE shmups, many WonderSwan titles, and book-style Game Boy or DS games.
+Some games were built for vertical screens: TATE shmups, many WonderSwan titles, and book-style Game Boy or DS games.
 Held normally, they sit narrow in the middle with wide black bars. Turn your Pocket sideways and fill the screen:
 
 | Choice | How you hold the Pocket |
@@ -80,9 +80,9 @@ Held normally, they sit narrow in the middle with wide black bars. Turn your Poc
 
 - The picture rotates upright and rescales for the vertical shape (for example, a 224 × 288 game jumps from 648 × 864 to
   1195 × 896 at Integer scaling).
-- **The D-pad and sticks rotate automatically** so Up is always up in-game. Other buttons stay put—remap them under
+- **The D-pad and sticks rotate automatically** so Up is always up in-game. Other buttons stay put; remap them under
   [Controls](options.md#controls) if needed. External Bluetooth controllers aren't rotated since you don't turn them.
-- The pause menu, Quick settings and overlays stay in standard landscape—just turn the Pocket back when adjusting menus.
+- The pause menu, Quick settings and overlays stay in standard landscape; just turn the Pocket back when adjusting menus.
 - Touch input rotates along with the picture.
 - Only **Ambient** and **Glow** frames appear while rotated (console shells would sit sideways); switching back to Normal
   restores your frame.

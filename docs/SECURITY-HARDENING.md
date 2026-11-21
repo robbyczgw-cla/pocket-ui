@@ -374,10 +374,10 @@ checks on the device plus a list of every change. `--apply` makes them; `--rever
 |---|---|---|
 | preflight | key-only login works; our public key (`--pubkey`, default `~/.ssh/id_ed25519.pub`) is in `/storage/.ssh/authorized_keys`; that file isn't group/world-writable; `sshd -t` accepts the new options. Otherwise abort | read-only |
 | 1 | drop-in `/storage/.config/system.d/sshd.service.d/10-pocket-ui-keys-only.conf`: `ExecStart=/usr/sbin/sshd -D -o PasswordAuthentication=no -o KbdInteractiveAuthentication=no -o PermitRootLogin=prohibit-password $SSH_ARGS`, `KillMode=process` | survives reboot and updates |
-| 2 | test sshd on port 2222 with the same options while the real one keeps running: key login must work, a password login must be refused (`Permission denied (publickey)`); otherwise the drop-in is removed and the script aborts | — |
-| 3 | rollback armed: `systemd-run --on-active=180` removes the drop-in and restarts sshd | — |
-| 4 | `daemon-reload`, `restart sshd` (`KillMode=process` keeps the open session) | — |
-| 5 | second key login on 22, the running sshd's command line must contain `PasswordAuthentication=no`; then the rollback is disarmed | — |
+| 2 | test sshd on port 2222 with the same options while the real one keeps running: key login must work, a password login must be refused (`Permission denied (publickey)`); otherwise the drop-in is removed and the script aborts | - |
+| 3 | rollback armed: `systemd-run --on-active=180` removes the drop-in and restarts sshd | - |
+| 4 | `daemon-reload`, `restart sshd` (`KillMode=process` keeps the open session) | - |
+| 5 | second key login on 22, the running sshd's command line must contain `PasswordAuthentication=no`; then the rollback is disarmed | - |
 | 6 | rpcbind masked: `rpcbind.socket` and `rpcbind.service` → `/dev/null` in `/storage/.config/system.d`, stopped | survives reboot |
 | 7 | `/storage/.config/resolved.conf.d/10-pocket-ui-no-llmnr.conf`: `LLMNR=no`, `MulticastDNS=no`; resolved restarted | survives reboot |
 
@@ -391,7 +391,7 @@ udp, IPv4 and IPv6).
 |---|---|---|---|
 | Lock-out because the key isn't accepted by the new sshd | low | no SSH until the 3-minute rollback | preflight + test sshd on 2222 before the real one is touched; automatic rollback |
 | Lock-out because the rollback can't run (sshd hangs and systemd is wedged) | very low | device needs local access (no keyboard on the Pocket: card in a computer, delete the drop-in) | the drop-in is the only change to sshd; one file under `/storage/.config/system.d` |
-| Open session killed on restart | none with the drop-in | — | `KillMode=process`; revert restarts via `systemd-run` from outside the session |
+| Open session killed on restart | none with the drop-in | - | `KillMode=process`; revert restarts via `systemd-run` from outside the session |
 | Remote access switch shows a password that doesn't work | certain on a hardened device | user confusion | only harden dev devices (they have `dev-ssh`, the switch is disabled there) |
 | NFS mounts stop working | only if someone uses NFSv3 | mount fails | revert unmasks rpcbind |
 | Name lookups of `.local`/single-label names via LLMNR stop | low | `ping pocket` from Windows without DNS fails; IP addresses and mDNS (avahi) still work | revert |

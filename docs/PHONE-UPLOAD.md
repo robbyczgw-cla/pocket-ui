@@ -6,8 +6,8 @@ and they stream onto the SD card. User guide: [user/phone-upload.md](user/phone-
 Code: `src/phone_upload.rs` (server), `src/phone_upload_page.rs` (the Pocket's page), `assets/phone-upload/` (the
 phone's page), `src/setup.rs` (`Step::Phone`).
 
-> **Status** (ledger: [STATUS.md](STATUS.md)): merged and shipped in 0.1.10. The security review's findings (M1–M6,
-> L1–L3, the recheck's M6 bypass, N1, N2) are fixed, each with a test. On an RG35XX Plus with curl over the Wi-Fi
+> **Status** (ledger: [STATUS.md](STATUS.md)): merged and shipped in 0.1.10. The security review's findings (M1 to M6,
+> L1 to L3, the recheck's M6 bypass, N1, N2) are fixed, each with a test. On an RG35XX Plus with curl over the Wi-Fi
 > (2026-10-31, `examples/phone_upload_dev.rs`): 403 without the code, with a wrong Host and a foreign Origin; routing;
 > `.doom`, an outside-pointing cue, oversize refused without making folders; connections without the code capped;
 > 100 MB at a flat 3.4 MB RSS; the port closed afterwards. Still open: the Pocket's page itself, closing on sleep and a

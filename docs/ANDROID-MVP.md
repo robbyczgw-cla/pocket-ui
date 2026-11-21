@@ -1,4 +1,4 @@
-# Android launcher and in-app player — 30 October 2026
+# Android launcher and in-app player (30 October 2026)
 
 ## Current boundary
 

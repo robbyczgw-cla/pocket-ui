@@ -189,7 +189,7 @@ The photographers do not endorse this application.
 
 | Derived asset (in `assets/media/game/`) | Author | Photograph / source | Licence of source and derived asset | Modification |
 | --- | --- | --- | --- | --- |
-| `gba-back.png` | ITEagle Europe – Sebastiaan Broekhoven | [Game Boy Advance game cartridges - rear view.jpg](https://commons.wikimedia.org/wiki/File:Game_Boy_Advance_game_cartridges_-_rear_view.jpg) | [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/) | modified via PixelLab |
+| `gba-back.png` | ITEagle Europe (Sebastiaan Broekhoven) | [Game Boy Advance game cartridges - rear view.jpg](https://commons.wikimedia.org/wiki/File:Game_Boy_Advance_game_cartridges_-_rear_view.jpg) | [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/) | modified via PixelLab |
 | `gb-back.png` | Christopher Wells | [Baseball cartridge (JP), 02_cartridge_back.jpg](https://archive.org/details/baseball-cartridge-jp) | [CC0 1.0](https://creativecommons.org/publicdomain/zero/1.0/) | modified via PixelLab |
 | `gbc-back.png` | Christopher Wells | [Harvest Moon 3 GBC cartridge (JP), 02_cartridge_back.jpg](https://archive.org/details/harvest-moon-3-gbc-cartridge-jp) | [CC0 1.0](https://creativecommons.org/publicdomain/zero/1.0/) | modified via PixelLab |
 | `ds-back.png` | Christopher Wells | [Lux-Pain cartridge (NA), 02_cartridge_back.jpg](https://archive.org/details/lux-pain-cartridge-na) | [CC0 1.0](https://creativecommons.org/publicdomain/zero/1.0/) | modified via PixelLab |

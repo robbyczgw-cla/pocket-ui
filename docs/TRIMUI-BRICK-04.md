@@ -60,7 +60,7 @@ frequency response**. The vendor TLV has reversed direction: raw zero is the exi
 
 | Volume | Codec raw | dB relative to maximum | Increase from previous step |
 |---:|---:|---:|---:|
-| 5% | 31 | -35.96 | — |
+| 5% | 31 | -35.96 | - |
 | 10% | 30 | -34.80 | 1.16 |
 | 15% | 28 | -32.48 | 2.32 |
 | 20% | 27 | -31.32 | 1.16 |

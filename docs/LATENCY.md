@@ -765,7 +765,7 @@ the three passes, main 6eb648e against the branch:
 
 | Look | `launch.gbc` before | after | `nav.p50` before / after | `nav.p95` before / after |
 |---|---|---|---|---|
-| Cabinet | 332.6 ms | 67.5 ms | – | – |
+| Cabinet | 332.6 ms | 67.5 ms | - | - |
 | Shelf (animation on) | 67.3 ms | 68.4 ms | 4.5 / 4.5 ms | 7.5 / 7.9 ms |
 | Split (no animation) | 65.0 ms | 65.7 ms | 2.9 / 3.0 ms | 3.7 / 3.8 ms |
 

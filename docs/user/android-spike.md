@@ -16,6 +16,6 @@ Install RetroArch (`com.retroarch`) separately and download the matching cores i
 recognises GB/GBC, GBA, NES, SNES, Master System/Game Gear and Mega Drive file extensions; only a Master System test ROM
 with Gearsystem was tested here. No games, BIOS files or cores are bundled.
 
-This prototype has no pause menu, Continue, Earlier states, sound, analogue stick input or Android launcher role—RetroArch
+This prototype has no pause menu, Continue, Earlier states, sound, analogue stick input or Android launcher role: RetroArch
 handles gameplay, controls and saves. Only the folder path is saved; appearance and selection reset when you close it.
 Because it targets API 28 to test legacy paths, use it on a test emulator only; it is not meant for store release.

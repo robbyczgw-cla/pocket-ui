@@ -1,6 +1,6 @@
 # Colours and style
 
-Settings → Look → **Colours** and **Style** let you customise your colour palette and menu font—or switch to the full
+Settings → Look → **Colours** and **Style** let you customise your colour palette and menu font, or switch to the full
 pixel-art Retro style. Both rows update live: move with Up/Down, press A or Left/Right to cycle choices, and watch the
 screen change immediately. Your picks are saved with your look and restored by
 [Reset settings](settings-system.md#backup--reset). To change how button prompts look (letters, Xbox colours or
@@ -8,7 +8,7 @@ PlayStation shapes), go to [Settings → Controls → Buttons](settings-sound.md
 
 ## Colours
 
-Sets the palette across every screen: highlights, frames, button hints, accents, and—in the Cabinet layout—the wood tone,
+Sets the palette across every screen: highlights, frames, button hints, accents, and, in the Cabinet layout, the wood tone,
 shelf nameplates and slot glow. Box art and case artwork always keep their real colours. Every palette has a Dark and
 Light variant that follows [Appearance](settings.md#appearance):
 

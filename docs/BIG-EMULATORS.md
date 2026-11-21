@@ -55,7 +55,7 @@ undo through the quick slot).
 | | ROCKNIX 20261001 ships | Upstream now |
 |---|---|---|
 | ARMSX2 | "2.7.1" (version forced in package.mk), commit `19c83bf`, 2026-09-24, with ARMSX2's own Turnip `axfl1-011` (Mesa 26.3-devel) | stable 2.8.4 is Android-only; Linux arm64 only as nightlies: `nightly-20261020` = 2.8.4-399-gc66d053fe5, 1281 commits newer |
-| Dolphin | 2606 (`6094cfcf`), nogui + Qt, ROCKNIX patches incl. pad hotkeys and Wayland nogui | – (not compared) |
+| Dolphin | 2606 (`6094cfcf`), nogui + Qt, ROCKNIX patches incl. pad hotkeys and Wayland nogui | not compared |
 
 **ARMSX2 nightly vs ROCKNIX's build**, same scene, same CPU governor (ondemand), both on the ARMSX2 Turnip, run
 side by side from `/storage/armsx2-nightly` (extracted Qt AppImage, own config/states/memory cards):
@@ -134,7 +134,7 @@ per setting, live-switched through PINE:
 | ROCKNIX default: Auto(=Vulkan) 1x, vsync off | 59.8 (58.9–59.8) | 45 / 48 / 45 / 11 % | 130–140 % | 305 MHz | 46/44 |
 | **Vulkan 2x, vsync off (new default)** | 59.8 (59.5–59.8) | 48 / 42 / 29 / 29 % | 121–134 % | 305 MHz | 47/44 |
 | Vulkan 3x | 59.8 (59.8) | 45 / 54 / 45 / 37 % | 145 % | 581 MHz | 47/47 |
-| OpenGL 2x | 27 (14 steady) | – | 98 % | 889 MHz | 47/47 |
+| OpenGL 2x | 27 (14 steady) | - | 98 % | 889 MHz | 47/47 |
 | Vulkan 2x + vsync + sync to host | 60.0 (59.3–59.9) | 46 / 58 / 54 / 27 % | 130–135 % | 305 MHz | 46/44 |
 
 - 2x (1280×896) is the closest step to the 1080-line panel and costs nothing measurable: the GPU stays at its
@@ -233,7 +233,7 @@ patches, and the start scripts of the image (`/usr/bin/start_armsx2.sh`, `start_
 | Renderer | `.graphics_backend` 2/1 → `[EmuCore/GS] Renderer` 14 Vulkan / 12 OpenGL (PINE, GS reopen) | `[Core] GFXBackend` Vulkan/OGL (restart) |
 | Widescreen | `.enable_widescreen_patches` → `[EmuCore] EnableWideScreenPatches` (PINE; patch list reloads) | `[Video_Settings] wideScreenHack` (restart) |
 | Aspect ratio | `.aspect_ratio` 0/1/2 → `[EmuCore/GS] AspectRatio` 4:3 / 16:9 / Stretch (PINE) | `[Video_Settings] AspectRatio` 0 Auto, 1 16:9, 2 4:3, 3 Stretch (Auto/Stretch HOTKEY+X; 16:9, 4:3 restart) |
-| Frame skip | – (see below) | `[Video_Hacks] VISkip` "VBI skip" (restart) |
+| Frame skip | none (see below) | `[Video_Hacks] VISkip` "VBI skip" (restart) |
 | Show FPS | `.show_fps` → `[EmuCore/GS] OsdShowFPS` (PINE) | `[Video_Settings] ShowFPS` (HOTKEY+Y) |
 
 PS2 has no frame skip on Linux: this fork's manual frameskip (`GSSetManualFrameSkip`) is only reachable through
@@ -316,9 +316,9 @@ takes the first page's live changes into the restart. Read from start_dolphin_gc
 
 | Row | key → what the script does | GC | Wii |
 |---|---|---|---|
-| Button layout: A bottom / A right / Custom | `gamecube_controller_profile`: `east` and `custom` copy those profiles, anything else south | ✓ | – |
-| Shoulders: Triggers / Bumpers | `swap_shoulders`: `true` takes `GCPadNew.ini.<layout>.inline` (L/R on L1/R1, Z on R2), else `.stacked` | ✓ | – |
-| Controller: Sideways / Upright / Nunchuk / Classic / Custom | `wii_controller_profile` → `WiiControllerProfiles/<x>.ini` → WiimoteNew.ini, else hremote | – | ✓ |
+| Button layout: A bottom / A right / Custom | `gamecube_controller_profile`: `east` and `custom` copy those profiles, anything else south | ✓ | - |
+| Shoulders: Triggers / Bumpers | `swap_shoulders`: `true` takes `GCPadNew.ini.<layout>.inline` (L/R on L1/R1, Z on R2), else `.stacked` | ✓ | - |
+| Controller: Sideways / Upright / Nunchuk / Classic / Custom | `wii_controller_profile` → `WiiControllerProfiles/<x>.ini` → WiimoteNew.ini, else hremote | - | ✓ |
 | Rumble: On / Off | `rumble`: `false` deletes the profile's `Rumble` lines | ✓ | ✓ (Wiimote) |
 | Shaders: Pause to compile / Skip until ready / Hybrid ubershaders / Ubershaders only | `shader_mode` 0/3/2/1 → `ShaderCompilationMode` (unset: GFX.ini's 0; pocket-ui sets the platform to 3 at start, see below) | ✓ | ✓ |
 | Shaders at start: On / Off | `shader_precompile` → `WaitForShadersBeforeStarting` (unset: GFX.ini's True) | ✓ | ✓ |

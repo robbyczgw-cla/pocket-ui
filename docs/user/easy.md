@@ -14,7 +14,7 @@ come first, followed by each console and its games, and it opens straight onto t
 - If you have more than one console, **Up** and **Down** jump between systems. The top line always shows where you are
   (such as "3 of 9 · Super Nintendo" or "Favourites").
 - Pressing **HOME** during a game gives you a compact menu: **Continue**, then **Save & quit** (or **Quit** if the game
-  can't save a moment, or if [Continue where I quit](settings-playing.md#continue-where-i-quit) is Off—your in-game saves
+  can't save a moment, or if [Continue where I quit](settings-playing.md#continue-where-i-quit) is Off. Your in-game saves
   are still safe). Games that only keep in-game saves ask "Have you saved in the game?" once. The third row,
   **More: saves, brightness, options**, opens the full [pause menu](pause-menu.md), and **B** returns. **START** opens
   quick settings.

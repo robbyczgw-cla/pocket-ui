@@ -212,7 +212,7 @@ What differs:
 | Settings › System › About | as before | a Device row: "Retroid Pocket Mini V1 (experimental)" | "Retroid Pocket 5 (experimental)" | "Retroid Pocket Flip 2 (experimental)" |
 | Layouts | as before (pixel for pixel) | the 960-line fixes below | the wide-screen column below | as Pocket 5 |
 | Smooth fan's lowest running speed | 40 (measured) | 51 | 51 | 51 |
-| Lid | — | — | — | closing it is the power button's short press ([SLEEP.md](SLEEP.md#lid-the-flip-2)) |
+| Lid | - | - | - | closing it is the power button's short press ([SLEEP.md](SLEEP.md#lid-the-flip-2)) |
 | Integer scaling (Native) | GB 7x, GBA 5x, NES/PS1 3x | GB 6x, GBA 5x, NES/PS1 4x (the whole screen) | GB 7x, GBA 6x, NES/PS1 4x, PSP 3x | as Pocket 5 |
 
 Nothing else asks the user anything; no reminders after the first start.

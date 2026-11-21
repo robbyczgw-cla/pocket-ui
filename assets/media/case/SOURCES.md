@@ -20,7 +20,7 @@ from the DVD case and the Wii case photos below, in their own sizes and plastics
 |  | DS, real proportions | 172×158 / 32×158 | as ds | white |
 | 3 | 3DS, real proportions | 172×158 / 30×158 | as 3ds | white, red mark |
 | umd-front/spine | PSP | 132×220 / 30×220 | DVD_Jewel_Box.jpg, darker, radius 6 | black |
-| segadisc-front/spine | Dreamcast / Saturn / Mega-CD | 180×160 / 32×160 | CD_Jewel_Case_(Front).jpg (CC0, DiscoA340), as PS1 | – |
+| segadisc-front/spine | Dreamcast / Saturn / Mega-CD | 180×160 / 32×160 | CD_Jewel_Case_(Front).jpg (CC0, DiscoA340), as PS1 | - |
 | generic-disc-front/spine | generic disc | 170×240 / 38×240 | DVD_Jewel_Box.jpg, warm | band (system colour) |
 | generic-cart-front/spine | generic cartridge box | 164×226 / 44×226 | DVD_Jewel_Box.jpg, warm | band |
 | generic-digital-front/spine | generic small/digital | 132×172 / 28×172 | DVD_Jewel_Box.jpg, warm | band |

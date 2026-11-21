@@ -21,13 +21,13 @@ assets**, which the README already promises.
 
 ## Feature by feature
 
-Legend: ✔ has it, ◐ partly, ✘ no, – not applicable.
+Legend: ✔ has it, ◐ partly, ✘ no, - not applicable.
 
 | Feature | pocket-ui | ROCKNIX (stock) | KNULLI | NextUI |
 |---|---|---|---|---|
 | Resume first: last game on Home, auto-resume | ✔ | ◐ (RetroArch auto-save state, no resume-first home) | ◐ | ✔ |
 | Game switcher with play time | ✔ (last frame per game in progress) | ✘ | ◐ | ✔ |
-| One pause menu across libretro **and** PS2/GameCube/Wii/3DS standalones | ✔ | ✘ (each emulator has its own menu and hotkeys) | ✘ | – (no standalones) |
+| One pause menu across libretro **and** PS2/GameCube/Wii/3DS standalones | ✔ | ✘ (each emulator has its own menu and hotkeys) | ✘ | - (no standalones) |
 | Save slots with previews | ✔ 8 slots | ✔ RetroArch | ✔ | ✔ |
 | Per-game / per-console settings | ✔ | ✔ (ES advanced settings) | ✔ | ✔ |
 | Picture effects | ◐ LCD grid, scanlines, CRT | ✔ full RetroArch shaders | ✔ shaders | ✔ shaders, overlays |
@@ -37,7 +37,7 @@ Legend: ✔ has it, ◐ partly, ✘ no, – not applicable.
 | Play status and notes | ◐ in progress | ✘ | ✘ | ✘ |
 | System pictures | ✔ 23 pixel-art consoles (public-domain photos) | theme-dependent | theme-dependent | ✘ |
 | First start: Wi-Fi, time zone, look, systems | ✔ | ◐ | ◐ | ◐ |
-| Touch screen in the UI | ◐ built; not confirmed on the real panel | ◐ | ◐ | – |
+| Touch screen in the UI | ◐ built; not confirmed on the real panel | ◐ | ◐ | - |
 | RetroAchievements | ✘ | ✔ | ✔ | ✘ |
 | Netplay | ✘ | ✔ RetroArch | ✔ | ✘ |
 | Save sync (Syncthing, cloud) | ✔ Settings → Sync, scan after each game (checked on a Mini V2, not with a second device; [user/sync.md](user/sync.md)) | ✔ ([Cloud Sync](https://rocknix.org/configure/cloud-sync/)) | ✔ sync on game exit | ✘ |
@@ -50,8 +50,8 @@ Legend: ✔ has it, ◐ partly, ✘ no, – not applicable.
 | Menu sounds and haptics | ✔ | ✔ | ✔ | ✔ haptics |
 | App updates | ✔ signed, live, automatic rollback | ✔ OTA (whole image) | ✔ OTA | ✔ |
 | Add-on store | ◐ Store page built, no public catalog | ✘ | ✘ | ✔ Pak Store |
-| Security defaults | ✔ SSH off, random password, Samba only shares games | ◐ SSH on with a known password | ◐ | – |
-| Dual boot next to Android, Android untouched | ✔ | ◐ (can boot from SD; some guides overwrite the loader) | ◐ | – |
+| Security defaults | ✔ SSH off, random password, Samba only shares games | ◐ SSH on with a known password | ◐ | - |
+| Dual boot next to Android, Android untouched | ✔ | ◐ (can boot from SD; some guides overwrite the loader) | ◐ | - |
 | Devices | **1** | dozens | dozens | 3 |
 | Install image | ✘ by hand today | ✔ | ✔ | ✔ |
 | Users and community | none yet | large | large | ~1k GitHub stars, Discord |

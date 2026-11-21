@@ -44,10 +44,10 @@ Status 2026-10-21. [V] = verified (file, URL, or measurement), [I] = inferred, n
 | | 1. Full boot image in `loader` | **1b. Retroid u-boot in `loader`, EFI/GRUB on SD** | 2. OpenABL/ROCKNIX ABL in `abl_a/b` |
 |---|---|---|---|
 | Feasible | **No** (27 MB > 10 MiB) | Yes, with an SD EFI layout we still have to build | Yes (the documented ROCKNIX way) |
-| Writes | – | `loader` only, and possibly nothing | `abl_a` and `abl_b` |
-| Worst case | – | Bad `loader` does not stop Android. Vol Down gives stock fastboot, then reflash the backup. | Bad ABL means a hard brick: XBL never falls back [V: OpenABL README]. EDL needs a Retroid firehose; the V1 one exists, V2 and 2026 validity unverified [I]. |
+| Writes | - | `loader` only, and possibly nothing | `abl_a` and `abl_b` |
+| Worst case | - | Bad `loader` does not stop Android. Vol Down gives stock fastboot, then reflash the backup. | Bad ABL means a hard brick: XBL never falls back [V: OpenABL README]. EDL needs a Retroid firehose; the V1 one exists, V2 and 2026 validity unverified [I]. |
 | OTA | Overwrites `loader` | Overwrites `loader` (harmless, re-flash) | Overwrites ABL, no SD boot until re-flashed |
-| Android vs ROCKNIX | – | **Power on = Android. Vol Up = ROCKNIX.** | OpenABL: set *Boot mode* Android and *Volume up at boot* Linux (external) for the same UX [V: README table, `Core/Settings.c`]. **Default is Linux** (`Settings.c:21`), and without an SD card it opens the menu instead of Android. ROCKNIX ABL 1.2 default [I], unreadable (compressed). |
+| Android vs ROCKNIX | - | **Power on = Android. Vol Up = ROCKNIX.** | OpenABL: set *Boot mode* Android and *Volume up at boot* Linux (external) for the same UX [V: README table, `Core/Settings.c`]. **Default is Linux** (`Settings.c:21`), and without an SD card it opens the menu instead of Android. ROCKNIX ABL 1.2 default [I], unreadable (compressed). |
 | ROCKNIX updates | Kernel in flash goes stale | Everything lives on the SD | Native (KERNEL on SD) |
 | Stock ABL | Kept | Kept | Replaced (Retroid's loader menu disappears) |
 

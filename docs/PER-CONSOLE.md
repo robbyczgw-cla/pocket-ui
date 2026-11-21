@@ -61,11 +61,11 @@
 | GBC (gambatte) | integer | colour correction, blending |
 | GBA (mgba) | integer | colour correction, interframe blending |
 | NES (nestopia) | integer / 4:3 | palette, overscan |
-| SNES (snes9x) | 4:3 | – |
+| SNES (snes9x) | 4:3 | - |
 | Mega Drive (genesis_plus_gx) | 4:3 | 3/6-button pad |
-| SMS / GG (gearsystem) | SMS 4:3, GG integer | – |
+| SMS / GG (gearsystem) | SMS 4:3, GG integer | - |
 | PS1 (pcsx_rearmed32) | 4:3, smooth | dithering, hi-res, disc |
-| PCE (beetle_pce_fast) | 4:3 | – |
+| PCE (beetle_pce_fast) | 4:3 | - |
 | N64 (mupen64plus_next) | 4:3 | resolution |
 | PS2 (ARMSX2), GameCube (Dolphin) | standalone, Vulkan 2x | Save/Load/resume through PINE and Dolphin's pad hotkeys (docs/BIG-EMULATORS.md) |
 | NDS, PSP, Dreamcast, Wii | standalone | menu offers Quit only; their own menus stay |

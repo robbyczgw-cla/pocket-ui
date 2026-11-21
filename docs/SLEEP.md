@@ -324,7 +324,7 @@ with its visible rows. `tests/nav_explorer.rs` walks every row in Spanish at tha
 |---|---|---|---|---|
 | pocket-ui (defaults) | sleep (game saved) | power menu at 800 ms (Sleep, Restart, Power off, Restart pocket-ui) | PMIC reset, untouched | screen off 2 min, sleep 2 min later |
 | Android on the Retroid Pocket Mini [I] | screen off and sleep | power menu (Power off, Restart, …) | forced reset by the PMIC | screen timeout, Android's own setting |
-| NextUI (`api.c` `PWR_update`, `config.h`) [V] | sleep | power off at 1 s, no menu | — | screen timeout 60 s, then suspend 30 s later |
+| NextUI (`api.c` `PWR_update`, `config.h`) [V] | sleep | power off at 1 s, no menu | - | screen timeout 60 s, then suspend 30 s later |
 | ROCKNIX (logind) [V] | `HandlePowerKey=suspend` | `HandlePowerKeyLongPress=ignore` | PMIC reset | EmulationStation's screensaver |
 
 The only difference to Android is that pocket-ui's power menu also offers Restart pocket-ui; NextUI powers off on a

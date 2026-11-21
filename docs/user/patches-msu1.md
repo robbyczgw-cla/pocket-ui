@@ -3,7 +3,7 @@
 Fan translations and ROM hacks usually ship as a small **patch file** (`.ips`, `.bps` or `.ups`) rather than a full ROM.
 Applying the patch transforms your own copy of the original game into the translated or modded version.
 
-pocket-ui never includes games or patches—you supply your own ROM and a patch built for that exact release.
+pocket-ui never includes games or patches; you supply your own ROM and a patch built for that exact release.
 
 There are two ways to play patched games; Way 1 is effortless.
 
@@ -22,7 +22,7 @@ time you play.
 
 - Supports `.ips`, `.bps` and `.ups`. If multiple formats share the same name, priority order is `.ips` → `.bps` →
   `.ups`.
-- Stack multiple patches using `Game Name.ips`, `Game Name.ips1`, `Game Name.ips2`, etc.—applied in order (no gaps in
+- Stack multiple patches using `Game Name.ips`, `Game Name.ips1`, `Game Name.ips2`, etc., applied in order (no gaps in
   numbering, or later files are skipped).
 - Works with `.zip` ROMs too: match the archive name (`Game Name.zip` + `Game Name.ips`).
 - Patch files stay hidden from your shelf automatically.
@@ -40,19 +40,19 @@ the folder to play the original."
 Grab the matching ROM version noted in the patch's readme. Note that older `.ips` files have no checksum check, so a
 mismatched `.ips` can cause crashes or garbled graphics.
 
-Corrupt patches or patches that exceed size limits also stop launch with a clear error—pocket-ui never silently boots
+Corrupt patches or patches that exceed size limits also stop launch with a clear error; pocket-ui never silently boots
 the unpatched ROM when a patch is sitting beside it. To play the unpatched game, move the patch elsewhere.
 
 ### What can't be patched this way
 
-Disc images (`.cue`, `.chd`, `.iso`, `.m3u`, etc.), arcade ZIPs and ScummVM games don't support on-the-fly patching—if a
+Disc images (`.cue`, `.chd`, `.iso`, `.m3u`, etc.), arcade ZIPs and ScummVM games don't support on-the-fly patching. If a
 patch sits beside one, pocket-ui stops and tells you. Patch those permanently on a computer instead (Way 2).
 
 ### Saves and achievements
 
 - Save states are tied to the exact patched build. Adding, updating or removing a patch starts the game fresh, keeping
   your previous moment under Pause menu → Load until your next Quit. Patches are tracked by name, size and timestamp.
-- In-game saves follow the ROM filename, just like RetroArch—meaning a soft-patched game and its unpatched original
+- In-game saves follow the ROM filename, just like RetroArch, meaning a soft-patched game and its unpatched original
   share **one save file**. Want separate saves? Pre-patch on a computer with a unique filename (Way 2).
 - [Achievements](achievements.md) check the patched ROM hash, matching RetroArch. Some translations and hacks have their
   own RetroAchievements sets; otherwise no achievements trigger while the patch is active.
@@ -64,7 +64,7 @@ Best for disc games, keeping patched saves separate from the original, or playin
 1. Patch your original ROM on a PC using a free tool like Floating IPS or the browser-based ROM Patcher JS (runs locally
    in your browser). Select your ROM and patch file to save a new patched ROM.
 2. Give it a distinct name, like `Game Name (English).sfc`.
-3. Copy it into its console folder—or into ROCKNIX's hacks/translations subfolder like `snesh`
+3. Copy it into its console folder, or into ROCKNIX's hacks/translations subfolder like `snesh`
    (see [Systems](systems.md)). Both work identically.
 
 Your patched ROM now behaves like its own standalone game with its own separate saves, while your original ROM stays
@@ -73,7 +73,7 @@ the patch requires a different ROM revision.
 
 ## On RetroArch
 
-RetroArch soft-patches the same way (matching filename beside the ROM) for cores that load games into memory—including
+RetroArch soft-patches the same way (matching filename beside the ROM) for cores that load games into memory, including
 Snes9x, Gambatte, mGBA and Genesis Plus GX (except Master System). Check the
 [libretro softpatching page](https://docs.libretro.com/guides/softpatching/) for other cores.
 
@@ -98,7 +98,7 @@ An MSU-1-patched ROM and its audio tracks:
 - `Game Name-1.pcm`, `Game Name-2.pcm`, …: one audio track per file.
 
 All three must share the **exact same base filename** (only the extension and track number differ). Packs often ship
-with mismatched names—rename them to match, paying attention to uppercase and lowercase (`Game.msu` and `game.msu` are
+with mismatched names; rename them to match, paying attention to uppercase and lowercase (`Game.msu` and `game.msu` are
 different on Linux).
 
 ### Where they go

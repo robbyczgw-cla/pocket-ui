@@ -88,10 +88,10 @@ Press X to scan again." (a scan that worked and saw nobody), "Choose your networ
 |---|---|---|
 | The list | Networks in reach and saved ones as one list (`wifi::merge`): the one in use first, then by signal, then saved ones out of reach by name. The line under the title: "Connected to … · signal … % · <address>". In use means the profile's `STATE` is `activated`; `activating` is **Connecting…** (after 60 s **Not answering**) | ES's network list and `wifictl list_saved` |
 | A on a network that wants a password | The keyboard, then `nmcli device wifi connect <ssid> password …`. A refused password deletes the network's profiles (`drop_refused`: iwd's mirrored `.psk` goes with them) and opens the keyboard again with "Wrong password. Try again." | ES's connect |
-| A on a network still connecting | "Still connecting to …. One moment."; after a minute the keyboard (an open network: connect again) | — |
+| A on a network still connecting | "Still connecting to …. One moment."; after a minute the keyboard (an open network: connect again) | - |
 | A on a saved network | `nmcli connection up uuid …` (`wifi::connect_saved`), no password. A password that no longer works opens the keyboard | `wifictl connect_saved` |
 | Y, Y on a saved network | `nmcli connection delete uuid …` (`wifi::forget`); the row leaves the list at once (`NetState::forgotten`), and a profile that is already gone counts as forgotten | `wifictl forget_saved` |
-| Other network… | Name, then password (empty: an open network), `nmcli device wifi connect <ssid> … hidden yes` | — |
+| Other network… | Name, then password (empty: an open network), `nmcli device wifi connect <ssid> … hidden yes` | - |
 | Wi-Fi country | Automatic or a country of zoneinfo's `iso3166.tab` (L2/R2 jump by letter): `wifi::set_country` | ES's "Wi-Fi country" |
 | X | Scan again (with the saved networks and the country read first, `wifi::saving`); one scan at a time | |
 | First row "Wi-Fi is off", A | Turns the radio on (`NetState::set_enabled(true)`; the stored `wifi.enabled` follows only once the radio is on) and scans. Shown instead of "This network wants a sign-in" whenever the radio is off; the list is empty then | ES's Wi-Fi switch |

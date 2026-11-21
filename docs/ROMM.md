@@ -53,7 +53,7 @@ turned into PNG, anything else (WebP) left to the libretro box art. RomM's descr
 A start of a RomM game hands a `RommFetch` to the launch's preparation (`app_launch::prepare`), which runs beside the start's
 scene. Unless the file is there, `romm::download`:
 
-1. checks the free space (the bytes still missing plus 64 MB, `RESERVE`) — `Failure::NoRoom` says how much more;
+1. checks the free space (the bytes still missing plus 64 MB, `RESERVE`), and `Failure::NoRoom` says how much more;
 2. fetches into `<system folder>/.pocket-ui-romm/<id>/<file>.part`, appending from the part's length (a range request),
    so a broken-off download goes on where it stopped (`GET /api/roms/<id>/content/<file>`; one file of a folder game
    with `?file_ids=<file id>`, which serves it as it is instead of a zip);

@@ -2,8 +2,8 @@
 
 Status 2026-10-27: the first reboot on the owner's Mini V2 with the quiet start applied and the unit installed has
 happened; the boot screen itself has not been seen on a device yet. That boot's journal measured the two things the
-first build got wrong — the frame buffer comes about a second after systemd starts the program, and the look for
-sway fired on ROCKNIX's `sway-touch.sh` — plus a wrong key name in the unit. All three are fixed and covered by host
+first build got wrong (the frame buffer comes about a second after systemd starts the program, and the look for
+sway fired on ROCKNIX's `sway-touch.sh`), plus a wrong key name in the unit. All three are fixed and covered by host
 tests below (**host tests only** for the fixes, [STATUS.md](STATUS.md)); the next reboot is their device test, at the
 end. The research behind it is outside the repository
 (`RESEARCH-BOOT-SPLASH-2026-10-26.md`); the boot chain itself is in [INSTALL-DUAL-BOOT.md](INSTALL-DUAL-BOOT.md).
@@ -69,18 +69,18 @@ After the first reboot with the quiet start, the owner still saw very small whit
 shelf. It is not kernel text (`quiet` held), and it is not ROCKNIX's `show-version.service` either: that unit runs
 `/usr/bin/lsb_release` onto the tty unless the command line has ROCKNIX's own `morequiet`, but in the 20261001
 build the ROCKNIX project's `lsb_release` script (the project busybox package wins over the global one; the
-journal's BusyBox 1.36.1 is the project's version) only reads `/etc/os-release` and prints nothing — so
+journal's BusyBox 1.36.1 is the project's version) only reads `/etc/os-release` and prints nothing, so
 `morequiet` would change nothing, and no command-line word was added for it. [V] (ROCKNIX sources, tag 20261001)
 
-What prints it is ROCKNIX's initramfs: its `load_splash` writes `/etc/issue` — "… Version: 20261001 (…) / …
-Built: …" — and "==> Loading, please wait…" to `/dev/console`, unconditionally (`quiet` there only sets the
+What prints it is ROCKNIX's initramfs: its `load_splash` writes `/etc/issue` ("… Version: 20261001 (…) / …
+Built: …") and "==> Loading, please wait…" to `/dev/console`, unconditionally (`quiet` there only sets the
 kernel's `printk` levels; no command-line word switches these lines off). systemd's own first lines
 ("systemd 255.8 running in system mode…") land on the same console. All of it is written before the frame buffer
 exists, so it sits in the console's text buffer and is painted in the moment the frame buffer console binds
-(3.50 s on that boot) — on that boot the splash had already ended, so the lines stayed until sway. The splash now
+(3.50 s on that boot). On that boot the splash had already ended, so the lines stayed until sway. The splash now
 covers this properly: graphics mode from its start (the buffered text is never painted) and the picture the
 moment the frame buffer opens. Stopping the lines at their source instead would mean the initramfs'
-`/flash/post-flash.sh` hook on the owner's card (the SD image already carries one) — that is a new OK from the
+`/flash/post-flash.sh` hook on the owner's card (the SD image already carries one); that is a new OK from the
 owner, so it is described here and not done. The sideways "vertical stuff" before all this is Retroid's
 bootloader logo (and possibly u-boot's own lines): the research's decision *e*, out of scope.
 
@@ -139,17 +139,17 @@ opened at boot.
   Mini V2's turned panel (about 190 rows, 0.8 MB, for a colour step).
 - **Waiting for the frame buffer.** It is not there when systemd starts the program: the first device boot
   measured the program starting at 2.47 s and the msm display driver binding at 3.50 s, and `/dev/fb0` exists only
-  after that. The program looks for it every 25 ms for up to 20 s (`splash::wait_for_fb`), then draws at once — the
+  after that. The program looks for it every 25 ms for up to 20 s (`splash::wait_for_fb`), then draws at once. The
   picture's clock, and with it the fade-in, starts when the frame buffer opens, not at the program's start. The
   wait holds nothing up: the unit is `Type=simple`, so systemd went on as soon as the program started, and sway
   starting (or a stop) during the wait ends it just the same. There is no systemd ordering on the frame buffer
   device instead: nothing in that boot's journal shows a `dev-fb0.device`, so there is no device unit to order on.
-- **The console in graphics mode** (`KDSETMODE KD_GRAPHICS` on `/dev/tty0`) from the program's start — before the
-  wait, not with the first frame — so no kernel or systemd line is drawn over the picture, and so the text already
+- **The console in graphics mode** (`KDSETMODE KD_GRAPHICS` on `/dev/tty0`) from the program's start (before the
+  wait, not with the first frame), so no kernel or systemd line is drawn over the picture, and so the text already
   in the console's buffer (the version lines, below) is never painted when the frame buffer console binds: it
   would appear in the same moment the frame buffer does, before any frame could cover it. It is left that way at
-  the end of a run that showed the picture (sway takes the console over); every way out that shows no picture —
-  the wait ending without a frame buffer, a pixel format it can't write, a write that fails — puts the text mode
+  the end of a run that showed the picture (sway takes the console over); every way out that shows no picture (the
+  wait ending without a frame buffer, a pixel format it can't write, a write that fails) puts the text mode
   back first, so a boot that ends on the console still shows the console, buffered text and all.
 
 ### When it ends
@@ -157,8 +157,8 @@ opened at boot.
 - **sway starts.** The program looks at `/proc` five times a second for a process of sway's unit, by its whole
   name (`sway-config`, the unit's ExecStartPre and the first to run, `sway.sh`, `sway`, also under systemd's name
   for a process about to start one). The whole name matters: the first build matched a prefix, and ROCKNIX's
-  `sway-touch.sh` — its own unit, wanted by `rocknix.target`, running from 3.21 s of the first device boot while
-  sway itself comes much later — counted as sway, so that boot's splash gave up at 3.33 s, a blink before the
+  `sway-touch.sh` (its own unit, wanted by `rocknix.target`, running from 3.21 s of the first device boot while
+  sway itself comes much later) counted as sway, so that boot's splash gave up at 3.33 s, a blink before the
   frame buffer appeared at 3.50 s; even with a frame buffer it would have ended the picture at once. `swaymsg`,
   `swaybar` and the like are not sway either. It then fades to black (250 ms) and ends. sway itself needs longer than that to reach the screen [I], and if it
   is quicker, nothing is lost: the fade just isn't seen.
@@ -175,7 +175,7 @@ opened at boot.
 `shutdown.target`, `ConditionFileIsExecutable=/storage/pocket-ui/current/pocket-splash`, `TimeoutStopSec=1`, linked from
 `sysinit.target.wants/`. It is ordered before nothing of the boot, so it can't hold anything up. (The condition's
 key is `ConditionFileIsExecutable`; the first build shipped `ConditionPathIsExecutable`, which is no key systemd
-knows — the first device boot's journal says so, and the unit simply ran without its condition.
+knows. The first device boot's journal says so, and the unit simply ran without its condition.
 `splash::tests::the_units_keys_are_ones_systemd_knows` parses the unit in the gate, and `systemd-analyze verify`
 (255, the device's major version) passes it with no word.)
 
@@ -224,7 +224,7 @@ at the program's start, and adds nothing to the time to the first frame. Motion 
 - `cargo test` (gate): `splash::tests` (fades, holds, the late and first-start lines, Motion Off and Reduced, frame
   pacing, what each update repaints, the picture on black at the four screen sizes, the turn for every fbcon value with
   padded rows checked against the definition of each turn, RGB565, the loop ending when told, when sway starts, when the
-  screen is taken and when a write fails, sway seen in a fake `/proc` — and `sway-touch.sh` and its kin *not* seen as
+  screen is taken and when a write fails, sway seen in a fake `/proc`, and `sway-touch.sh` and its kin *not* seen as
   sway, the wait for the frame buffer against a fake one that appears late and one that never appears, the wait ending
   for sway and for a stop, the unit's keys parsed, the Motion setting read leniently, the CPU
   budget), `boot_fade::tests`, and in the program the size and offsets of the kernel's two structs.
@@ -242,17 +242,17 @@ On the owner's card, after `scripts/dev.sh deploy` and `scripts/boot-quiet.sh ap
 1. `scripts/boot-quiet.sh status`: "quiet start: on", backup named. `ls /storage/.config/system.d/` shows
    `pocket-splash.service` and `sysinit.target.wants/`; `systemctl is-enabled pocket-splash` is not "masked" (it is
    linked, so "enabled" or "static" [I]).
-2. Restart the device and film it from power-on to the shelf. Expected: Retroid logo (sideways, not ours); black —
+2. Restart the device and film it from power-on to the shelf. Expected: Retroid logo (sideways, not ours); black,
    in particular *not* the small white version lines of the first reboot (they are still written to the console's
    buffer, but the splash has it in graphics mode from about 2.5 s, before the frame buffer console binds at about
    3.5 s); the cartridge and wordmark fading in (from about 3.5 s, when the frame buffer appears) and the bar under
    them changing colour; a dip to black; the shelf fading in. Check that the picture is the right way up and not
    sheared, and that no text is
    drawn over it. A version line flashing for a blink at the moment the panel lights would mean the frame buffer
-   console paints its buffer on bind despite graphics mode on this kernel — the first (black) frame then covers it
+   console paints its buffer on bind despite graphics mode on this kernel. The first (black) frame then covers it
    within about a frame; note it on the video either way.
 3. Over SSH: `cat /proc/cmdline` (the three words); `journalctl -b -u pocket-splash` (its first line names the frame
-   buffer, the turn and the size; its last line why it ended — "sway is starting" expected — with frames, MB and CPU
+   buffer, the turn and the size; its last line says why it ended, "sway is starting" expected, with frames, MB and CPU
    seconds); `systemd-analyze critical-chain sway.service` and `journalctl -b -o short-monotonic | grep -E
    'pocket-splash|sway|essway'` for when each started; `dmesg | grep -i -E 'fb|drm.*(timed out|WARN)'` for anything
    the frame buffer writes or pans caused.
@@ -266,7 +266,7 @@ On the owner's card, after `scripts/dev.sh deploy` and `scripts/boot-quiet.sh ap
   starts the program (2.47 s; the display driver binds at 3.50 s), which is why the program now waits up to 20 s.
   Still open: whether the frame buffer shows the writes without a pan, whether the pan check gives EBUSY once
   sway runs ([I] from the kernel's `drm_fb_helper_pan_display`), and whether graphics mode set before the frame
-  buffer console binds keeps its buffered text unpainted on this kernel (7.2) — the next reboot's video tells.
+  buffer console binds keeps its buffered text unpainted on this kernel (7.2). The next reboot's video tells.
 - With HDMI connected at boot, ROCKNIX sets fbcon's rotation to 0: the splash then draws unturned on whatever fb0 is.
 - Starting it from the initramfs (about a second earlier, image only) was not done; the research's step 3 needs the
   owner's OK.

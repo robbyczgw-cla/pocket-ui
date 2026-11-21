@@ -6,7 +6,7 @@ or offline straight from your SD card ([No Wi-Fi? Update from the card](#no-wi-f
 Your games, saves and settings stay completely untouched. On the TrimUI Brick, unchanged engine files stay in place and
 updated files are staged smoothly before the menu opens.
 
-1. Open Settings → System → **Updates**—it checks automatically.
+1. Open Settings → System → **Updates**; it checks automatically.
 2. When a new release is ready, the pocket-ui row shows it ("0.2.0, 0.2.1 available") and adds **Install pocket-ui …**.
    Press A.
 3. pocket-ui downloads, verifies the signature and checksum, installs and restarts automatically ("Installed.
@@ -19,7 +19,7 @@ network wants a sign-in first. Open Settings › Connections › Wi-Fi." ([Hotel
 update feed exists yet, it says "No updates published yet. A new version installs like the first one; your games and
 settings stay." You can also re-run the installer anytime ([Getting started](getting-started.md)) to upgrade in place.
 
-During a download, pocket-ui shows live status—connecting, switching mirrors, verifying or preparing. If a mirror stalls
+During a download, pocket-ui shows live status: connecting, switching mirrors, verifying or preparing. If a mirror stalls
 for 30 seconds or errors out, it automatically fails over to the next signed mirror. Press **A / Cancel** to stop, or
 **Check again** to retry once your connection recovers. Each mirror gets five minutes plus extra time scaled to large
 files on steady slow connections; connections that stall out completely end cleanly with "The download is too slow on
@@ -33,14 +33,14 @@ HTTPS fails and it explains: "The clock looks wrong, so the update server can't 
 
 ## No Wi-Fi? Update from the card
 
-No Wi-Fi on your handheld (RG28XX, R36S and clones), or Wi-Fi turned off? Update offline using a single zip file—your
+No Wi-Fi on your handheld (RG28XX, R36S and clones), or Wi-Fi turned off? Update offline using a single zip file; your
 games, saves and settings stay safe just like an online update:
 
 1. Grab the matching offline update zip from [pocketui.xyz/install](https://pocketui.xyz/install):
    - `pocket-ui-update-<version>-rocknix.zip` for pocket-ui OS cards
    - `pocket-ui-update-<version>-trimui.zip` for TrimUI Brick / Smart Pro cards
    - `pocket-ui-update-<version>-darkos.zip` for pocket-ui beta for dArkOS
-   Keep it zipped—don't unpack it.
+   Keep it zipped; don't unpack it.
 2. Power off, plug the SD card into your computer and drop the zip straight onto the visible partition:
    - **RG28XX:** the **GAMES** drive ([The GAMES drive](games-drive.md))
    - **Other pocket-ui OS cards:** the small first partition, or your TF2 games card (like on R36S)
@@ -72,11 +72,11 @@ accepts it.
 
 When a new release drops, your shelf notifies you once shortly after boot (Wi-Fi required): "pocket-ui 0.3.0 is ready.
 Your games and settings stay." Press **A** to jump to Settings → System → Updates, or **B** to dismiss. Once dismissed,
-that version won't nag again until the next release—and it never interrupts a game, first start, Kids Mode or dev
+that version won't nag again until the next release, and it never interrupts a game, first start, Kids Mode or dev
 builds. A tiny amber dot stays on Settings → System → Updates until you install.
 
 Background checks run quietly at most once per day (plus once after boot), only on Wi-Fi, never mid-game and only while
-idle, backing off if offline. They simply fetch the signed manifest—no account, no telemetry, never auto-installing.
+idle, backing off if offline. They simply fetch the signed manifest: no account, no telemetry, never auto-installing.
 System (ROCKNIX) and port updates never pop up on the shelf.
 
 Prefer to check manually? Toggle **Check for updates automatically** to Off under Settings → System → Updates; **Check
@@ -99,15 +99,15 @@ A progress bar tracks downloads live, with **A** to cancel ("Download cancelled.
 seconds, while slow steady Wi-Fi keeps going. Release notes for the new version appear at the bottom, or "Everything is
 up to date." if you're already current.
 
-After downloading, the bar tracks each step cleanly—"Step 1 of 4: Downloading", "Step 2 of 4: Unpacking", "Step 3 of 4:
+After downloading, the bar tracks each step cleanly: "Step 1 of 4: Downloading", "Step 2 of 4: Unpacking", "Step 3 of 4:
 Installing" and "Step 4 of 4: Restarting…" (**A** cancels up until Installing begins; unpacking and installing can take
 ~30 seconds on slower SD cards).
 
 Development builds display "Development build: install a release package to use app updates." and don't offer OTA
 updates (About marks them with `-dev` and commit hash, keeping the TrimUI model in its Device row; bug reports log both).
-Install a release package to return to release updates—games and settings stay intact.
+Install a release package to return to release updates; games and settings stay intact.
 
-Once an update starts writing its final commit to the card, it's too late to cancel—let it finish and reboot while
+Once an update starts writing its final commit to the card, it's too late to cancel; let it finish and reboot while
 keeping the battery charged. Didn't see a shelf banner? You may have dismissed it earlier; hit **Check again** anytime.
 
 ## What makes it safe
@@ -118,7 +118,7 @@ keeping the battery charged. Didn't see a shelf banner? You may have dismissed i
   discarded ("The download is damaged or was changed. Nothing was installed.").
 - **Automatic rollback:**
   1. The new version unpacks beside your working version without touching it.
-  2. pocket-ui runs a pre-flight check to confirm the new binary actually launches on your hardware—otherwise it aborts
+  2. pocket-ui runs a pre-flight check to confirm the new binary actually launches on your hardware; otherwise it aborts
      ("… doesn't start on this device. Nothing was changed.").
   3. It swaps cleanly and restarts.
   4. If the new build crashes or fails to draw within 20 seconds, pocket-ui automatically restores the previous version
@@ -127,12 +127,12 @@ keeping the battery charged. Didn't see a shelf banner? You may have dismissed i
 The previous version stays on your card until the next update replaces it, alongside the last version that ran smoothly
 for two minutes (if everything fails, pocket-ui drops into [safe mode](safe-mode.md)).
 
-On ROCKNIX, the installer stages all new files before switching—so even a power cut mid-install leaves a bootable
+On ROCKNIX, the installer stages all new files before switching, so even a power cut mid-install leaves a bootable
 interface. Re-running the installer finishes any interrupted install cleanly.
 
 ## Android
 
 On Android, open **Updates** in Settings. pocket-ui for Android uses its own signed APK channel over Wi-Fi only (with
 progress and **B** to cancel). Android asks once for permission to install unknown apps, then confirms each update. Once
-installed, reopen the app—all data and saves carry over. Auto-checks never interrupt gameplay, and active downloads
+installed, reopen the app; all data and saves carry over. Auto-checks never interrupt gameplay, and active downloads
 finish or cancel before launching a game. See [Android updates](android-mvp.md#updates-over-wi-fi).

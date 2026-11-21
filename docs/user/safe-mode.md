@@ -1,7 +1,7 @@
 # Safe mode
 
 pocket-ui watches out for itself when something breaks. If it crashes, it restarts automatically. If it keeps crashing,
-it rolls back to the last version that worked. And if that still can't start, it opens **safe mode**—a clean rescue
+it rolls back to the last version that worked. And if that still can't start, it opens **safe mode**, a clean rescue
 screen with everything you need to recover. ROCKNIX's own menu only opens if you ask for it or if pocket-ui cannot start
 at all.
 
@@ -40,7 +40,7 @@ that:
 | **Power off** | Shuts down your Pocket. |
 
 Navigate with the D-pad and A, or tap a row; B cancels any confirmation. Safe mode always matches your handheld's printed
-face buttons—A bottom / B right on Odin 2 Mini and Portal, A right / B bottom elsewhere—regardless of Settings → Controls
+face buttons (A bottom / B right on Odin 2 Mini and Portal, A right / B bottom elsewhere), regardless of Settings → Controls
 → Buttons → [**Button layout**](settings-sound.md#button-layout).
 
 If safe mode still appears even after resetting settings, grab the files listed under
@@ -51,7 +51,7 @@ If safe mode still appears even after resetting settings, grab the files listed 
 ROCKNIX's original menu stays installed as an emergency exit whenever you need it:
 
 - On the shelf, hold **SELECT + START** for one second (or press Escape on a keyboard). Pick from **Cancel**, **Restart
-  pocket-ui**, **Report a problem** (saves a diagnostic bundle—see [Report a problem](troubleshooting.md#report-a-problem))
+  pocket-ui**, **Report a problem** (saves a diagnostic bundle; see [Report a problem](troubleshooting.md#report-a-problem))
   or **Open EmulationStation**.
 - Settings → Help & tools → **About** → **Open EmulationStation…**.
 - Inside safe mode: **Open EmulationStation…**.
@@ -62,7 +62,7 @@ launch it.
 **Skip these two options inside ROCKNIX's menu:**
 
 - **Updates:** on the Retroid Pocket Mini V2, running a ROCKNIX update there also overwrites the bootloader Android needs.
-  pocket-ui turns off its built-in update check beforehand—always update through pocket-ui's [Updates](updates.md) page,
+  pocket-ui turns off its built-in update check beforehand. Always update through pocket-ui's [Updates](updates.md) page,
   which blocks unsafe updates.
 - **Factory reset:** wipes pocket-ui and all of its settings.
 

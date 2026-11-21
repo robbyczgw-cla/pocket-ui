@@ -38,11 +38,11 @@ No browser engine: pocket-ui loads the sign-in page itself, reads its form and s
   real sign-in form ("Internet Access - please wait.", "Connecting…"). The helper does what the browser would, without
   running one line of the page's script: the link in a `<noscript>` block is preferred (it is what a browser without
   scripts is offered, and often the real one); a form the page submits **on load** whose fields are all hidden is sent
-  exactly as the page carries it (method, action, hidden values — nothing typed, ticked or accepted), and only where a
+  exactly as the page carries it (method, action, hidden values; nothing typed, ticked or accepted), and only where a
   form may go (rules below). "On load" is read out of the code, not guessed: the `submit()` must sit in an
   `onload` attribute, in a `setTimeout`/`setInterval`, in a `load`/`DOMContentLoaded` handler, in jQuery's ready or at
-  the top level of a script — never in a click handler, a named function or `submit(function(){…})` (which binds a
-  handler and does not submit) — and the page must have no button and no action link of its own (an "Accept and
+  the top level of a script (never in a click handler, a named function or `submit(function(){…})`, which binds a
+  handler and does not submit), and the page must have no button and no action link of its own (an "Accept and
   connect" page is never sent by itself). A script or `onload` handler that goes to one literal address
   (`window.location = "…"`, `location.href = "…"`, `document.location…`, `top.location…`, `location.replace(…)`,
   `location.assign(…)`, and the same inside `setTimeout(function(){ location… = "…" }, n)`),
@@ -76,7 +76,7 @@ No browser engine: pocket-ui loads the sign-in page itself, reads its form and s
   An answer that comes back online also turns the Wi-Fi page online and makes the next update or store check ask again.
 - **When it gives up**: an end that says "This page needs a full browser" saves the last page the network served (the
   HTML only, no cookies or headers, at most 200 KB, query values that look like a MAC or IP address redacted, the
-  `value` of every hidden field blanked — the field names stay) as `logs/portal-last.html` in this boot's log folder;
+  `value` of every hidden field blanked, while the field names stay) as `logs/portal-last.html` in this boot's log folder;
   the next "Report a problem" takes it along (cleaned again like every file in the report), so the problem can be seen
   on a computer. No page is saved once a person's form was sent: an answer that echoes what was typed must never reach
   a file.
@@ -104,7 +104,7 @@ No browser engine: pocket-ui loads the sign-in page itself, reads its form and s
 ## What it never does
 
 - Accept terms, tick a box, press a button or send anything a person typed by itself. The one thing it sends on its
-  own is a form the page itself submits on load and whose fields are all hidden — what a browser sends the moment it
+  own is a form the page itself submits on load and whose fields are all hidden, which is what a browser sends the moment it
   opens that page (no person's data and no choice in it), only when the submit truly runs on load and the page has no
   button or action link of its own, and only where a form may go. The re-check sends only the
   `nmcheck.gnome.org` request.
@@ -143,7 +143,7 @@ page submits on load, garbage and huge pages), `portal` (addresses, links, forbi
 config, headers and body, a stand-in curl for endless redirects, a huge page, a hanging curl, garbage, the Pocket
 itself, a form to another site, the cookie jar; the interstitial fixtures end to end against the stand-in curl: the
 timer's page, the hidden form's request, the `<noscript>` link preferred, the meta refresh, the frame, and the hostile
-ones — a loop, `file:`/`javascript:`, a form to another public host, the "Accept and connect" page whose submit runs
+ones (a loop, `file:`/`javascript:`, a form to another public host, the "Accept and connect" page whose submit runs
 only on the press, a Google Tag Manager page), the saved last page and its redaction (percent-encoded and bare
 addresses, hidden values blanked, private keys), and that no page is kept after a person's form was sent),
 `portal_form` (a hotel page filled in and sent only on its button, required fields, `maxlength`, dots for a

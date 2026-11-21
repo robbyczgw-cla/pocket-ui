@@ -883,8 +883,8 @@ Three rows of Settings → Look → Cozy extras, all on from the start, Shelf lo
   PixelLab pixflux in the props' style, warm, no characters of any game, no logos (`pixellab-assets.json`).
 - **Window** (`room_window`, 19.11.2026; the rest of "the room grows with you" is parked): a window on the room's wall
   with the sky as it is outside now (`sky_at`: morning from 05:30, day from 10:00, evening from 17:30, night from 21:30,
-  by the same clock as the light) and the season's piece on its sill (`season_of`: tulips March–May, a sunflower
-  June–August, a pumpkin September–November, a snow globe December–February). One PixelLab frame, its four skies
+  by the same clock as the light) and the season's piece on its sill (`season_of`: tulips March to May, a sunflower
+  June to August, a pumpkin September to November, a snow globe December to February). One PixelLab frame, its four skies
   painted behind the glass (the frame stays the same pixel for pixel), the piece at 0.75 of the window. It hangs only on
   free wall and never moves with the selection: in the Shelf look over the free part of a row's shelf, in the upper
   third of the case's room, clear of the plant, lamp or cactus standing there (`shelf_spot`; a full row: no window); in

@@ -2,7 +2,7 @@
 
 Settings → System → **Language** switches every menu, button hint, message and in-game notice between **English**,
 **Deutsch** (German), **Español** (Spanish), **Português (Brasil)** (Brazilian Portuguese), **Français** (French) and
-**Italiano** (Italian). Press A or Left/Right to cycle through them—the screen updates instantly with no restart. You can
+**Italiano** (Italian). Press A or Left/Right to cycle through them; the screen updates instantly with no restart. You can
 also pick your language on the Welcome page during first start (Left/Right).
 
 Until you pick one yourself, pocket-ui follows ROCKNIX's system language: German, any regional Spanish, any Portuguese
@@ -27,5 +27,5 @@ A few things stay in English even when you switch languages:
 
 If a line doesn't have a translation yet, pocket-ui shows the English text rather than leaving a blank space.
 
-Menu labels printed on cases—like Search, Just Play and Favourites on spines and fronts—update immediately when you
+Menu labels printed on cases (like Search, Just Play and Favourites on spines and fronts) update immediately when you
 change languages. Custom names you created, like your own shelves or stickers, stay as you wrote them.

@@ -24,7 +24,7 @@ Pair each gaming PC once under Settings → Connections → **PC streaming**:
 1. Make sure your PC is awake with Sunshine (or GeForce Experience) running.
 2. On your Pocket, open Settings → Connections → **PC streaming** → **Pair a PC** → A. Leave the field blank and press
    **START** to auto-discover your PC on the network, or type its hostname/IP (such as `192.168.1.20`) and press START.
-3. A large four-digit **PIN** appears on screen. Enter it on your PC—in Sunshine's web UI (`https://localhost:47990`,
+3. A large four-digit **PIN** appears on screen. Enter it on your PC, in Sunshine's web UI (`https://localhost:47990`,
    **PIN** tab) or the GeForce Experience prompt.
 4. Your Pocket confirms *Paired with …*, pulls your PC's app list and sets it as the default host for Home's PC
    streaming tile.
@@ -35,7 +35,7 @@ PC, double-check it's on the same network and enter its IP address directly.
 All paired PCs appear right on this page:
 
 - **A on a PC:** makes it the active PC for Home's PC streaming tile and refreshes its games list.
-- **X on a PC** (press X again to confirm): unpairs it. If the PC is offline it's still removed locally—just clear the
+- **X on a PC** (press X again to confirm): unpairs it. If the PC is offline it's still removed locally; just clear the
   Pocket in Sunshine's PIN/clients tab later too.
 - **Your PC's games** appear below the PCs. Press **A on any game to stream it directly** instead of Moonlight's default
   app. Entries also sync to `roms/moonlight` for ROCKNIX (kept hidden from your shelf).
@@ -64,7 +64,7 @@ pocket-ui ignores HOME while Moonlight is streaming, so there's no pause menu. T
 **L1 + L2 + SELECT + START**). You return straight to Home and the streamed app closes on your PC (`quitappafter` is
 enabled).
 
-A short press on Power still puts your Pocket to sleep. The long-press power menu is disabled mid-stream—exit the stream
+A short press on Power still puts your Pocket to sleep. The long-press power menu is disabled mid-stream; exit the stream
 first.
 
 ## Away from home
@@ -78,7 +78,7 @@ in `moonlight.conf`.
 
 | What you see | Try |
 |---|---|
-| *Couldn't start the stream*, after 12 seconds | Your PC didn't answer: verify it's awake, Sunshine (or GeForce Experience) is running and both are on the same network—or set `address` in `moonlight.conf` |
+| *Couldn't start the stream*, after 12 seconds | Your PC didn't answer: verify it's awake, Sunshine (or GeForce Experience) is running and both are on the same network, or set `address` in `moonlight.conf` |
 | *Couldn't start the stream*, at once | Moonlight isn't installed or failed to launch: check `/var/log/pocket-ui.log` for `pocket-ui: no PC answered the lookup` |
 | The PC asks for a PIN again | Pairing expired or reset: re-pair in Settings → Connections → PC streaming |
 | *No PC answered* while pairing | PC is off, Sunshine isn't running or discovery is blocked: type the PC's IP address directly |

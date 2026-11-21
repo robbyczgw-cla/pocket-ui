@@ -132,7 +132,7 @@ also shows on its [card](library.md#what-the-card-shows), and the whole Pocket's
 On pocket-ui's own host you can play together, up to four players. Connect a controller (Settings → Connections →
 [Bluetooth](bluetooth.md)) and it is the next player: the Pocket's own buttons are Player 1, the first
 controller Player 2, and so on. When one connects or goes away during a game, a short message says so, for example
-"DualSense connected — Player 2".
+"DualSense connected, Player 2".
 
 **Players** lists Player 1 to 4 and the controller each one has.
 

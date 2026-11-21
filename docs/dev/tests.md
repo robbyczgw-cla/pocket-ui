@@ -122,8 +122,8 @@ publish/exec traffic without retries that would hide the race.
 A test that asserts *how long* something took measures the calling thread's CPU time
 (`run_ahead::thread_cpu_ms()`), never the wall clock: the build machine runs other builds next to the gate, and a thread
 that was paused for 95 ms says nothing about the code (2026-10-28: `timeline`, `control`, `power` had such assertions
-and failed in gates). Where the point is that something did or did not *happen* — a lease given back, a hung helper cut
-off, the menu's list written, a heartbeat that moves — wait for that event (a loop that ends as soon as it holds, with a
+and failed in gates). Where the point is that something did or did not *happen* (a lease given back, a hung helper cut
+off, the menu's list written, a heartbeat that moves), wait for that event (a loop that ends as soon as it holds, with a
 generous bound only as a guard against a hang) instead of sleeping first, and assert on the event (a marker file the
 program would have written, the error kind, a counter the writer reports). Two things that bit us and are neither:
 `flock` is released only when the last copy of the descriptor is gone, so a child another test thread just forked can

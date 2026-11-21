@@ -7,7 +7,7 @@ Reference for the data half of [CURATOR.md](CURATOR.md) (layers A, B and the fil
 |---|---|---|---|---|
 | A, facts | Wikidata (CC0): genres, series, mechanics, inputs, languages, versions grouped by work, series order | `scripts/build-gamedb.py` | `assets/gamedb.bin` | `src/gamedb.rs` |
 | B, feel | Our tags: family, sub-genre, mechanics, pace, controls, mood, multiplayer, setting, length, session, difficulty, text-heavy | `scripts/build-curatordb.py` | `assets/curatordb.bin` (vocabulary inside) | `src/curatordb.rs` |
-| C, the file | Regions, languages, fan translation, revision, dump flags from the ROM's name | — | — | `src/romfacts.rs` |
+| C, the file | Regions, languages, fan translation, revision, dump flags from the ROM's name | - | - | `src/romfacts.rs` |
 
 ## Reader API (what the engine calls)
 
@@ -270,36 +270,36 @@ From `scripts/build-curatordb.py report`:
 |---|---|---|---|---|---|---|
 | 3ds | 796 | 410 | 403 | 9 | 75 % (8) | 72 % (9) |
 | atari2600 | 411 | 255 | 246 | 1 | 73 % (15) | 100 % (1) |
-| atari7800 | 51 | 44 | 44 | 0 | – | – |
-| atarilynx | 61 | 32 | 31 | 1 | – | 100 % (1) |
+| atari7800 | 51 | 44 | 44 | 0 | - | - |
+| atarilynx | 61 | 32 | 31 | 1 | - | 100 % (1) |
 | dreamcast | 498 | 343 | 338 | 12 | 90 % (21) | 82 % (12) |
-| fds | 182 | 92 | 91 | 2 | – | 100 % (2) |
+| fds | 182 | 92 | 91 | 2 | - | 100 % (2) |
 | gamecube | 697 | 586 | 585 | 10 | 96 % (48) | 79 % (10) |
-| gamegear | 184 | 121 | 121 | 10 | – | 94 % (10) |
+| gamegear | 184 | 121 | 121 | 10 | - | 94 % (10) |
 | gb | 545 | 337 | 332 | 14 | 96 % (48) | 89 % (14) |
 | gba | 1066 | 736 | 725 | 113 | 97 % (108) | 80 % (113) |
 | gbc | 469 | 227 | 223 | 10 | 92 % (12) | 76 % (10) |
-| mastersystem | 271 | 209 | 207 | 5 | – | 100 % (5) |
+| mastersystem | 271 | 209 | 207 | 5 | - | 100 % (5) |
 | megadrive | 1042 | 846 | 842 | 34 | 94 % (53) | 86 % (35) |
 | n64 | 424 | 358 | 357 | 13 | 93 % (85) | 83 % (13) |
 | nds | 1716 | 1036 | 1018 | 21 | 93 % (56) | 82 % (21) |
 | nes | 1219 | 942 | 936 | 12 | 94 % (49) | 79 % (12) |
-| ngp | 5 | 4 | 4 | 0 | – | – |
-| ngpc | 33 | 22 | 22 | 0 | – | – |
+| ngp | 5 | 4 | 4 | 0 | - | - |
+| ngpc | 33 | 22 | 22 | 0 | - | - |
 | pcengine | 355 | 235 | 234 | 8 | 86 % (7) | 78 % (8) |
-| pcenginecd | 18 | 5 | 5 | 0 | – | – |
+| pcenginecd | 18 | 5 | 5 | 0 | - | - |
 | ps2 | 3090 | 2125 | 2101 | 31 | 95 % (148) | 82 % (31) |
 | psp | 1278 | 883 | 877 | 18 | 94 % (31) | 82 % (18) |
 | psx | 2237 | 1267 | 1238 | 24 | 87 % (158) | 80 % (24) |
 | saturn | 554 | 322 | 317 | 5 | 65 % (17) | 91 % (5) |
-| sega32x | 41 | 38 | 38 | 3 | – | 80 % (3) |
-| segacd | 161 | 113 | 109 | 4 | – | 91 % (4) |
-| sg-1000 | 43 | 34 | 33 | 0 | – | – |
+| sega32x | 41 | 38 | 38 | 3 | - | 80 % (3) |
+| segacd | 161 | 113 | 109 | 4 | - | 91 % (4) |
+| sg-1000 | 43 | 34 | 33 | 0 | - | - |
 | snes | 1434 | 916 | 904 | 90 | 95 % (146) | 84 % (92) |
-| virtualboy | 26 | 22 | 22 | 1 | – | 100 % (1) |
+| virtualboy | 26 | 22 | 22 | 1 | - | 100 % (1) |
 | wii | 1688 | 994 | 982 | 19 | 88 % (25) | 79 % (19) |
-| wonderswan | 46 | 20 | 20 | 2 | – | 85 % (2) |
-| wonderswancolor | 33 | 7 | 7 | 1 | – | 80 % (1) |
+| wonderswan | 46 | 20 | 20 | 2 | - | 85 % (2) |
+| wonderswancolor | 33 | 7 | 7 | 1 | - | 80 % (1) |
 | **All** | 20674 | 13581 | 13412 | 473 | 92.5 % (1035) | 80.0 % (300) |
 
 Since 2026-10-23 `gamedb.bin` also has NAOMI (12 entries), Atomiswave (1) and Pokémon mini (10), for the systems
