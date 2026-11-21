@@ -20,16 +20,21 @@ body:
         - Anbernic RG35XX 2024
         - Anbernic RG28XX
         - Anbernic RG34XX
-        - Anbernic RG34XX SP
+        - Anbernic RG34XX-SP
         - Anbernic RG40XX H
         - Anbernic RG40XX V
-        - Anbernic RG SP
+        - Anbernic RG CubeXX
+        - Anbernic RG-SP
         - AYN Odin 2 / Odin 2 Mini / Odin 2 Portal
-        - Retroid Pocket 5 / Flip 2 / 6 (ROCKNIX)
+        - Retroid Pocket 5 / Flip 2 / 6 / Nova (ROCKNIX)
+        - RK3566 handheld (experimental)
         - Another ROCKNIX handheld
-        - TrimUI Brick
+        - TrimUI Brick / Brick Hammer
         - TrimUI Smart Pro (experimental)
         - TrimUI Brick Pro (experimental)
+        - dArkOS handheld (R36S or other 640×480)
+        - Android handheld (Retroid, AYN, Anbernic, …)
+        - Android phone or tablet
         - Another device (not supported, but tell us)
         - Virtual device (scripts/vdev.sh)
     validations:
@@ -37,15 +42,15 @@ body:
   - type: input
     id: rocknix
     attributes:
-      label: ROCKNIX version or TrimUI firmware
-      description: "ROCKNIX: the report file's system.txt, or `cat /etc/os-release` over SSH, for example 20261001. TrimUI: the firmware version in TrimUI's own settings, for example 1.1.1. Leave empty if you don't know."
+      label: OS, firmware or Android version
+      description: "ROCKNIX: the report file's system.txt, or `cat /etc/os-release` over SSH (e.g. 20261001). TrimUI: firmware in TrimUI's own settings (e.g. 1.1.1). dArkOS: build date/version. Android: Android version and device model (e.g. Android 13, Retroid Pocket Mini V2). Leave empty if you don't know."
     validations:
       required: false
   - type: input
     id: version
     attributes:
       label: pocket-ui version
-      description: "Settings → System → About (the report file has it too). For a build of your own: the commit."
+      description: "Settings → Help & tools → About (the report file has it too; on Android Mobile view: Settings → About). For a build of your own: the commit."
     validations:
       required: true
   - type: dropdown
@@ -53,9 +58,12 @@ body:
     attributes:
       label: How did you install it?
       options:
-        - SD card image
-        - TrimUI card (zip unpacked onto an SD card)
+        - SD card image (pocket-ui OS)
+        - TrimUI card (pocket-ui-trimui-card-*.zip unpacked onto an SD card)
+        - Android APK (pocket-ui-android.apk)
+        - dArkOS beta (pocket-ui-darkos-*.zip in ports)
         - Update over Wi-Fi (Settings → System → Updates)
+        - Offline update zip on SD card
         - Ports installer on ROCKNIX
         - Manual install on a ROCKNIX card (docs/INSTALL-DUAL-BOOT.md, appendix)
         - Developer deploy (scripts/dev.sh deploy)
@@ -66,7 +74,7 @@ body:
     id: system
     attributes:
       label: System and emulator, if a game is involved
-      description: "For example: SNES on pocket-core, PS2 on ARMSX2, GBA on RetroArch. Name the game, but do not link it."
+      description: "For example: SNES on pocket-core, DS on DSperate, PS2 on ARMSX2, GBA on RetroArch. Name the game, but do not link it."
   - type: textarea
     id: what
     attributes:
@@ -78,17 +86,17 @@ body:
     attributes:
       label: Steps to reproduce
       placeholder: |
-        1. On Home, press ...
+        1. On the shelf, press ...
         2. ...
   - type: textarea
     id: report
     attributes:
       label: Report file
-      description: "On the Pocket: Settings → System → About → Report a problem. It saves `report-<date>-<time>.zip` in the `reports` folder of the games share (`roms/reports` on the SD card; the Report page tells you where it saved it), with versions, logs and settings, and with Wi-Fi names, addresses, accounts and game names left out (the manual's troubleshooting page, \"Report a problem\"). Drag the zip into this box."
-      placeholder: Drop report-2026-10-26-140507.zip here
+      description: "On your handheld: Settings → Help & tools → Report a problem (press A once). It saves `report-<date>-<time>.zip` in `roms/reports` (`Roms/reports` on TrimUI Brick; the Report page tells you where), with Wi-Fi names, addresses, accounts and game names left out. You can also download a diagnosis zip from the Web companion (link Diagnosis at the bottom → Download diagnosis ZIP). Drag the zip into this box."
+      placeholder: Drop report-2026-11-21-140507.zip here
   - type: textarea
     id: log
     attributes:
       label: Log, if you could not make a report file
-      description: "The logs from `/storage/.config/pocket-ui/logs/` (Settings → System → About shows the folder; the manual's troubleshooting page, \"What to send when something crashes\", says which file). Check them for private data first."
+      description: "ROCKNIX / pocket-ui OS: `/storage/.config/pocket-ui/logs/` (Settings → Help & tools → About shows the folder). TrimUI Brick: `pocket-ui/logs/boot.log` on the card. dArkOS: `ports/pocket-ui/logs/`. Android: app logs or logcat if available. Check logs for private data first."
       render: text
