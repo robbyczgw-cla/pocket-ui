@@ -25,7 +25,7 @@ the screen, also between two buttons side by side; on "Slot N" Left and Right ch
 GBA and SNES also have on-screen L/R shoulder buttons.
 A game's first still picture stays visible until the game sends a newer picture.
 Save & quit writes a separate auto state; the next start continues there. It closes the game only after that state is written, however long the phone takes, and a write is never half done. Two games with one file name in different folders keep their own states on the phone. Android Home suspends/saves the game. Back through Android's recent apps it waits paused; through the app icon (or Home,
-when pocket-ui is your home screen) the library opens with the game first under Continue. Disc sheets and playlists keep one Continue entry for the whole game, including CUE/BIN and M3U sets; their tracks and discs stay together. Your saves and save states are private app data, and Android deletes them when the app is removed:
+when pocket-ui is your default launcher) the library opens with the game first under Continue. Disc sheets and playlists keep one Continue entry for the whole game, including CUE/BIN and M3U sets; their tracks and discs stay together. Your saves and save states are private app data, and Android deletes them when the app is removed:
 make a [save backup](#save-backup) first. ROM-folder permission does not expose another emulator's private saves.
 
 If a moment cannot be resumed, or your in-game save is newer, the recovery message tells you where the moment was
@@ -51,7 +51,7 @@ Switch-style pads. Changing the Odin's Controller style during a game pauses it 
 port, the handheld's own pad stays player 1. In a game with only one player port every pad plays player 1. A pad that
 drops out mid-game pauses the game; it gets its player back when it returns. Up to four players; menus take any pad.
 
-**Home screen.** pocket-ui can be the home screen of an Android handheld: press Home and Android asks which app to use
+**Default launcher.** pocket-ui can be the default launcher of an Android handheld: press Home and Android asks which app to use
 (or Settings → Apps → Default apps → Home app). The app never sets this itself. B and Back never close it.
 
 **Time and battery.** At the right end of the top line of every page (Games, Favourites, Search, Settings and the rest) the launcher shows the time and the battery, as the handhelds do. The time follows Android's own setting: 13:28 on a 24-hour clock, 1:28 PM on a 12-hour one. The battery reads "87%", and "87%, charging" on the charger. A device without a battery shows the time alone. It stays out while Android's own status bar is showing (nothing twice), and in a game. Where a very large font leaves no room, "charging" goes first, then the battery, then the time, so the page's name and its game count are never cut for it. It needs no permission.

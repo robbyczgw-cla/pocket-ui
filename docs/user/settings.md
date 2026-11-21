@@ -63,7 +63,7 @@ Big text, Large text and Reduced motion together, is a card of the [Tour](tour.m
 | **Motion** | **Full** (the default), **Reduced** or **Off**: how much the menus move. A or Left/Right switches it. See [Motion](#motion) |
 | **Game start animation** | **Cozy**: watch your game slide into the console, and after Quit come back out of it into its case, and the pages, the box and the menus move a little slower and softer. **Quick**: straight into the game, the animations as short as they get. A or Left/Right switches it. Cozy in the Shelf and Cabinet looks until you choose, Quick in the others. See [Game start animation](#game-start-animation) |
 | **Cozy extras** | The little touches you see, each on or off on its own: the TV on the cabinet (and whether it plays a game you haven't played), stickers, printed discs, playful cases, the old-TV switch-on, the handheld switch-on, power lights, light by time of day, decorations, progress from your saves, game connections, Rediscover. See [Cozy extras](#cozy-extras) |
-| **Lived-in shelf** | **Off** (the default) or **On**: in the Shelf layout some cases of a row of games lean on their neighbour, a few lie on a small stack, and the spaces between them differ a little, like a shelf at home. A or Left/Right switches it. See [Lived-in shelf](#lived-in-shelf) |
+| **Lived-in shelf** | **Off** (starts off) or **On**: in the Shelf layout some cases of a row of games lean on their neighbour, a few lie on a small stack, and the spaces between them differ a little, like a shelf at home. A or Left/Right switches it. See [Lived-in shelf](#lived-in-shelf) |
 
 ### Choose a look
 
