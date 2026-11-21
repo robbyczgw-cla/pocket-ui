@@ -1,52 +1,53 @@
 # Bluetooth
 
-> **TrimUI Brick:** controllers and headphones pair on this page as below. While headphones (or a Bluetooth speaker) are connected, games and menu sounds play on them, and the sound comes back to the Brick's speaker when they are switched off or disconnected; the volume keys and the mute slider work on them too. Turn headphones down before the first connect. The quantum and PipeWire notes below are ROCKNIX's.
+> **TrimUI Brick:** controllers and headphones pair right here just as below. When Bluetooth headphones or a speaker are
+> connected, game and menu audio routes straight to them and returns to the Brick's speaker as soon as they disconnect;
+> both the volume buttons and the mute slider work with them too. Turn headphone volume down before connecting the first
+> time. The quantum and PipeWire notes below apply to ROCKNIX only.
 
-Settings → Connections → **Bluetooth** pairs game controllers, headphones, speakers and other Bluetooth devices with the Pocket.
+Settings → Connections → **Bluetooth** pairs gamepads, headphones, speakers and other Bluetooth gear with your Pocket.
 
-An empty list says **No devices found** and asks you to put the device in pairing mode, then select **Search for devices**.
+If nothing is paired yet, the list says **No devices found** and reminds you to put your device in pairing mode, then
+select **Search for devices**.
 
 ![Bluetooth with controllers found nearby](pictures/bluetooth.webp)
 
 | Row | What A does |
 |---|---|
-| **Bluetooth** | Switches Bluetooth on or off. It is the same switch as in the quick settings and takes a few seconds |
-| **Search for devices** | Looks for devices in pairing mode for 15 seconds, and switches Bluetooth on first if it is off. A again stops the search |
-| A paired device | Connects it, or disconnects it when it is connected |
-| A found device | Pairs it, trusts it and connects it, in one go |
+| **Bluetooth** | Turns Bluetooth On or Off (mirrors the toggle in quick settings; takes a few seconds) |
+| **Search for devices** | Scans for devices in pairing mode for 15 seconds, turning Bluetooth on first if needed. Press A again to stop early |
+| A paired device | Connects or disconnects it |
+| A found device | Pairs, trusts and connects in a single press |
 
-To pair a device:
+To pair a new device:
 
-1. Put the device in pairing mode. For controllers, Xbox: hold the small pair button on top until the Xbox button flashes fast.
-   PlayStation: hold Share (Create on a DualSense) and the PS button until the light flashes. Switch Pro, 8BitDo and
-   most others: hold the pair button for about 3 seconds. Headphones and speakers: see their manual, usually a long
-   press of the power or Bluetooth button.
-2. Select **Search for devices** and press A. Controllers appear at the top of the list, with a small controller
-   in front of their name.
-3. Select your device and press A. The row shows Pairing and Connecting, and the page tells you when it
-   is connected. If it did not work, the page says why, most often: "Put the device in pairing mode first."
+1. Put it in pairing mode. For **Xbox** controllers, hold the small pair button on top until the Xbox button blinks fast.
+   For **PlayStation**, hold Share (or Create on DualSense) + the PS button until the light flashes. For **Switch Pro**,
+   **8BitDo** and most other pads, hold the pair button for ~3 seconds. For headphones and speakers, check their manual
+   (usually a long press on Power or Bluetooth).
+2. Highlight **Search for devices** and press A. Controllers appear at the top with a small gamepad icon.
+3. Highlight your device and press A. You'll see Pairing and Connecting, followed by a confirmation. If pairing fails,
+   the page explains why—most often "Put the device in pairing mode first."
 
-A paired controller reconnects by itself when you switch it on, even after the Pocket has slept. You can use it in the
-menus straight away, and in games on pocket-ui's own host it is the next player: the Pocket stays Player 1, the first
-controller is Player 2 (see [Players](pause-menu.md#players) to change that). **X** on a paired device forgets it; press X a second time to confirm (B keeps it). A forgotten
-device has to be paired again, and a forgotten controller gives up its player number. Use this for a controller you
-don't use any more, or after switching an 8BitDo pad to another mode (D, S, X): each mode pairs as a controller of its
-own, so forget the one you no longer use.
+Paired controllers reconnect automatically whenever you turn them on, even after sleep. They work in menus right away,
+and in pocket-ui's own player they join as the next player: your handheld stays Player 1 and the first Bluetooth pad
+becomes Player 2 (change assignments anytime under [Players](pause-menu.md#players)). Press **X** on a paired device to
+forget it, then X again to confirm (B cancels). Forgetting clears its player slot—handy for old pads or when you switch
+an 8BitDo controller between modes (D, S, X), since each mode pairs as its own controller.
 
-**Your controller's buttons.** Each controller can have its own layout, kept for that controller (two of the same
-model are told apart) and used again whenever it reconnects: Settings → Controls →
+**Per-controller button mapping.** Every Bluetooth pad keeps its own custom layout (even two identical models are tracked
+separately) and recalls it whenever it connects: configure it in Settings → Controls →
 [Controller setup](controls-settings.md#controller-setup). Xbox, PlayStation, Switch Pro and 8BitDo controllers are
-recognised with their triggers and sticks. To see what a controller really sends, Settings → Controls →
-[Test buttons](settings-sound.md#test-buttons) lights up every button, trigger and stick as you press it.
+recognised automatically along with their sticks and triggers. Want to check raw inputs? Settings → Controls →
+[Test buttons](settings-sound.md#test-buttons) lights up every button, trigger and stick live.
 
-**Headphones and speakers** pair the same way: put them in pairing mode, search, select them and press A. Their row
-says Audio. Once they are connected, the sound of the menus and games plays on them. A short delay is normal with
-Bluetooth sound, so games feel a little less direct than on the Pocket's speaker. When you switch them off or
-disconnect them (A on their row), the sound comes from the Pocket's speaker again, even in the middle of a game.
+**Headphones and speakers** pair the exact same way—their row is labelled Audio, and once connected all menu and game
+sound routes through them. Expect a slight audio delay over Bluetooth, which can make timing-heavy games feel a hair
+less snappy than the built-in speaker. Power them off or press A to disconnect and audio switches back to the handheld's
+speaker immediately, even mid-game.
 
-> **Note:** a first version played games through Bluetooth headphones heavily distorted (2026-10-27). That is fixed
-> and was measured on the bench; it has not yet been listened to on the Pocket with real headphones. If a game still
-> crackles on your headphones, tell us with Report a problem.
+> **Note:** an early build distorted game audio over Bluetooth headphones (2026-10-27). The fix passed bench testing,
+> though it hasn't been ear-tested on real headphones yet—if you hear crackling, let us know via Report a problem.
 
-The list shows controllers first, then other devices. Devices nearby that have no name (phones, watches, TVs send
-these all the time) are left out; the page says how many.
+Controllers always appear at the top of the scan list, followed by audio and other devices. Unnamed nearby Bluetooth
+beacons (phones, watches, TVs) are filtered out automatically, with a count shown at the bottom.

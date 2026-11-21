@@ -1,27 +1,31 @@
 # Language
 
-Settings → System → **Language**: menus, hints, messages and the notes over a game are in **English**,
-**Deutsch** (German), **Español** (Spanish), **Português (Brasil)** (Brazilian Portuguese), **Français** (French) or **Italiano** (Italian). A or Left/Right on the row walks through them; the screen changes at
-once, nothing restarts. The first start's Welcome page has the same choice (Left/Right).
+Settings → System → **Language** switches every menu, button hint, message and in-game notice between **English**,
+**Deutsch** (German), **Español** (Spanish), **Português (Brasil)** (Brazilian Portuguese), **Français** (French) and
+**Italiano** (Italian). Press A or Left/Right to cycle through them—the screen updates instantly with no restart. You can
+also pick your language on the Welcome page during first start (Left/Right).
 
-Until you choose, pocket-ui uses the system language set in ROCKNIX's own menu (EmulationStation, in its system
-settings): German when that is German, Spanish when that is Spanish in any country's form, Portuguese when that is Portuguese (it speaks Brazilian Portuguese), French when that is French in any country's form, Italian when that is Italian (Italy or Switzerland), English for every other language. Once you choose here or on the
-Welcome page, pocket-ui keeps its own choice, even when the system language changes later.
+Until you pick one yourself, pocket-ui follows ROCKNIX's system language: German, any regional Spanish, any Portuguese
+(shown as Brazilian Portuguese), any regional French, Italian (Italy or Switzerland), and English for everything else.
+Once you choose a language here or on the Welcome page, pocket-ui remembers it even if the system language changes later.
 
-What stays in English in the German, Spanish, Portuguese, French and Italian interfaces:
+A few things stay in English even when you switch languages:
 
-- **This manual** (Settings → Help & tools → **Manual**). Its title line and buttons are in your language, its pages
-  are not translated yet.
-- **Names**: games, systems, emulators and cores, people and makers, and pocket-ui's own feature names such as
-  Curator, Lens, Echoes and Pixel Path. Game and system names keep their original wording on covers,
-  cards, case spines and details, including wrapped or shortened lines.
-- **What comes from elsewhere**: game descriptions from Wikipedia and Wikidata, the facts and notes on the console
-  pages, PortMaster's texts, RetroAchievements' achievement names, the names of networks and devices.
-- **A few rare refusals on the phone upload page** (a name that can't be used, a folder in the way): the page shows the Pocket's English sentence when it has no translation for them. The common ones are in your phone's language.
-- **Technical details** inside a message, such as another program's reply or a missing library name: the
-  sentence around them is translated.
-- **The web companion's pages in the browser** (Settings → Connections → Web companion is translated on the Pocket).
+- **This manual** (Settings → Help & tools → **Manual**): the header and button hints are translated, while the pages
+  themselves are still in English.
+- **Proper names**: games, consoles, emulators, cores, creators, and pocket-ui feature names like Curator, Lens, Echoes
+  and Pixel Path. Game and console names keep their original wording on covers, cards, spines and details, even when
+  wrapped or shortened.
+- **External text**: Wikipedia and Wikidata game descriptions, console page facts and notes, PortMaster text,
+  RetroAchievements titles, and Wi-Fi or Bluetooth device names.
+- **Rare phone-upload errors**: common messages appear in your phone's language, while a few uncommon errors (like an
+  invalid filename or a folder in the way) fall back to English.
+- **Technical details**: error output from another program or a missing library name stays verbatim, with the sentence
+  around it translated.
+- **The web companion in your browser**: the settings page on your Pocket (Settings → Connections → Web companion) is
+  translated, while the browser pages stay in English.
 
-A sentence pocket-ui has no translation for yet appears in English, never as an empty line.
+If a line doesn't have a translation yet, pocket-ui shows the English text rather than leaving a blank space.
 
-Menu entries printed on cases use the chosen language at once, including Search, Just Play and Favourites on shelf spines and case fronts. Names on those cases, including your own shelves or stickers, keep their wording.
+Menu labels printed on cases—like Search, Just Play and Favourites on spines and fronts—update immediately when you
+change languages. Custom names you created, like your own shelves or stickers, stay as you wrote them.

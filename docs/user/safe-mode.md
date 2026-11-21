@@ -1,70 +1,73 @@
-# Safe mode and EmulationStation
+# Safe mode
 
-pocket-ui looks after itself when something goes wrong. If it stops, it starts again. If it keeps stopping, it tries
-the last version that worked. If that does not help either, it opens in **safe mode**: a calm page with only what you
-need to get going again. ROCKNIX's own menu, EmulationStation, only opens when you ask for it, or when pocket-ui
-cannot start at all.
+pocket-ui watches out for itself when something breaks. If it crashes, it restarts automatically. If it keeps crashing,
+it rolls back to the last version that worked. And if that still can't start, it opens **safe mode**—a clean rescue
+screen with everything you need to recover. ROCKNIX's own menu only opens if you ask for it or if pocket-ui cannot start
+at all.
 
 ## What happens when pocket-ui keeps stopping
 
-1. **It starts again**, up to three times in a row, with a short pause each time. After a long run (two minutes or
-   more) the count starts afresh.
-2. **The last version that worked comes back.** Every version that ran for two minutes and showed its screen counts
-   as one that works. If the current version keeps stopping and an older one worked, the older one starts. The next
-   screen says so: "Version … didn't start properly, so the last version that worked is back." Your games and
-   settings are not affected.
-3. **Safe mode.** If that version stops too (or there is no other), pocket-ui starts in safe mode.
-4. **EmulationStation**, only if even safe mode cannot start: for example after a system update that pocket-ui does
-   not work with. At the next start of pocket-ui a card says why it happened.
+1. **Auto-restart:** pocket-ui tries starting again up to three times in a row with a brief pause between tries. Once a
+   session stays up for two minutes or more, the counter resets.
+2. **Automatic rollback:** any version that ran cleanly for two minutes with a picture on screen is marked as known-good.
+   If a newer version keeps crashing, pocket-ui automatically boots back into that previous working version and tells you:
+   "Version … didn't start properly, so the last version that worked is back." Your games and settings stay untouched.
+3. **Safe mode:** if the older version fails too (or there isn't one), pocket-ui opens in safe mode.
+4. **ROCKNIX's own menu:** used only as a last resort if even safe mode can't run (for example after an incompatible
+   system update). The next time pocket-ui starts, a card explains what happened.
 
-A screen that stays black also counts: if pocket-ui shows nothing for 45 seconds after it starts, it is ended and
-started again in the same way.
+A frozen black screen counts as a crash too: if pocket-ui draws nothing for 45 seconds after launch, it restarts through
+the same steps.
 
 ## Safe mode
 
-With [Kids mode](kids-mode.md) on, a child sees a picture and "Please ask a grown-up" first. Hold SELECT and START for 5 seconds and enter the PIN for the page below.
+If [Kids mode](kids-mode.md) is active, children see a friendly picture saying "Please ask a grown-up" first. Hold SELECT
+and START for 5 seconds and enter your PIN to reach safe mode.
 
-Safe mode starts pocket-ui with only what this page needs. It shows no covers or other pictures and runs no extras
-(Curator, achievements, Sync, cover downloads), and it uses the standard look in dark or light, as you set
-it. Your games and saves are not touched.
+Safe mode boots a stripped-down pocket-ui with no covers, artwork or background extras (Curator, achievements, Sync and
+cover downloads all stay off), using the default dark or light appearance you chose. Your games and saves are never
+touched.
 
-At the top, **What happened** says why safe mode started, the last line of the crash report, and the last steps of
-the start. Under it:
+At the top, **What happened** shows why safe mode opened, the last line of the crash log and the last startup steps. Below
+that:
 
 | Choice | What it does |
 |---|---|
-| **Restart normally** | Starts pocket-ui as usual. If it fails again, this page comes back. |
-| **Use previous version** | Shown only when there is one: goes back to the version that ran before (its number is in brackets), then starts it as usual. Your settings and games stay. |
-| **Reset pocket-ui settings…** | Asks first. Moves pocket-ui's settings aside: your look, Curator, favourites, play history, covers and downloaded extras go to a folder next to them, `/storage/.config/pocket-ui.rescue-<date>`. Nothing is deleted. Games, saves, the logs and the passwords for file sharing and remote access stay; file sharing is switched off. Then choose Restart normally: pocket-ui starts like new, with the first-start setup. |
-| **Open EmulationStation…** | ROCKNIX's own menu, after the warning below. |
-| **Power off** | Switches the Pocket off. |
+| **Restart normally** | Launches pocket-ui normally. If it crashes again, safe mode returns. |
+| **Use previous version** | Appears when a prior working version exists (version number in brackets). Switches back to it and boots normally, keeping your settings and games. |
+| **Reset pocket-ui settings…** | Confirms first, then moves your settings, layout, Curator data, favourites, play history, covers and downloaded extras aside into `/storage/.config/pocket-ui.rescue-<date>`. Nothing is deleted. Games, saves, logs and File sharing / remote passwords stay intact (File sharing turns off). Pick Restart normally afterwards for a clean first-start setup. |
+| **Open EmulationStation…** | Opens ROCKNIX's built-in menu after the warning below. |
+| **Power off** | Shuts down your Pocket. |
 
-Use the D-pad and A, or tap a row. B closes a question without doing anything. Safe mode follows the device’s printed buttons: A bottom and B right on Odin 2 Mini/Portal, A right and B bottom elsewhere, whatever Settings → Controls → Buttons → [**Button layout**](settings-sound.md#button-layout) says.
+Navigate with the D-pad and A, or tap a row; B cancels any confirmation. Safe mode always matches your handheld's printed
+face buttons—A bottom / B right on Odin 2 Mini and Portal, A right / B bottom elsewhere—regardless of Settings → Controls
+→ Buttons → [**Button layout**](settings-sound.md#button-layout).
 
-If safe mode comes back after a reset as well, send the files described in
+If safe mode still appears even after resetting settings, grab the files listed under
 [What to send when something crashes](troubleshooting.md#what-to-send-when-something-crashes).
 
-## Opening EmulationStation
+## Opening ROCKNIX's own menu
 
-EmulationStation stays installed as an emergency exit. You open it on purpose:
+ROCKNIX's original menu stays installed as an emergency exit whenever you need it:
 
-- On the shelf, hold **SELECT + START** for one second (or press Escape on a keyboard). A question opens:
-  **Cancel**, **Restart pocket-ui**, **Report a problem** (saves the file for a bug report, see
-  [Report a problem](troubleshooting.md#report-a-problem)) or **Open EmulationStation**.
+- On the shelf, hold **SELECT + START** for one second (or press Escape on a keyboard). Pick from **Cancel**, **Restart
+  pocket-ui**, **Report a problem** (saves a diagnostic bundle—see [Report a problem](troubleshooting.md#report-a-problem))
+  or **Open EmulationStation**.
 - Settings → Help & tools → **About** → **Open EmulationStation…**.
-- In safe mode, **Open EmulationStation…**.
+- Inside safe mode: **Open EmulationStation…**.
 
-Each time pocket-ui first says what to avoid there, and Cancel is selected, so A pressed by mistake does nothing.
+Each time, pocket-ui warns you what to avoid there with **Cancel** highlighted by default so an accidental A press won't
+launch it.
 
-**In EmulationStation, do not use these two things:**
+**Skip these two options inside ROCKNIX's menu:**
 
-- **Updates.** On the Mini V2 a ROCKNIX update started there also rewrites the bootloader that Android needs.
-  pocket-ui switches EmulationStation's own update check off before it opens it. Update through pocket-ui's
-  [Updates](updates.md) page instead, which refuses such updates.
-- **Factory reset.** It deletes pocket-ui and its settings.
+- **Updates:** on the Retroid Pocket Mini V2, running a ROCKNIX update there also overwrites the bootloader Android needs.
+  pocket-ui turns off its built-in update check beforehand—always update through pocket-ui's [Updates](updates.md) page,
+  which blocks unsafe updates.
+- **Factory reset:** wipes pocket-ui and all of its settings.
 
-**To come back to pocket-ui**, restart the Pocket (or quit EmulationStation). pocket-ui is the start screen again.
+**Getting back to pocket-ui:** simply restart your Pocket (or quit ROCKNIX's menu) and pocket-ui starts right back up.
 
-A connection to a saved Wi-Fi network made in EmulationStation can leave the system's copy of the password empty.
-pocket-ui puts it back from the network's saved profile at its next start, so the network keeps working
+Note: connecting to a saved Wi-Fi network inside ROCKNIX's menu can sometimes blank out the system's stored password. On
+next boot, pocket-ui restores it from the saved network profile automatically so Wi-Fi keeps working
 ([Wi-Fi dropped and stayed off](troubleshooting.md#questions)).

@@ -1,35 +1,36 @@
 # The GAMES drive
 
-The ready-to-flash RG28XX card, 16 GB or bigger, makes a drive called **GAMES** at its first start, because this handheld
-has no Wi-Fi for file sharing. Right after flashing, your computer shows no GAMES drive yet: it appears after the first
-start on the handheld (the first-start setup says so too), so don't flash the card again because of it. No Wi-Fi, no second
-card, no app:
+On the ready-to-flash RG28XX image (16 GB card or larger), pocket-ui creates a **GAMES** drive on first boot because the
+RG28XX has no Wi-Fi for file sharing. You won't see **GAMES** on your computer immediately after flashing—it appears after
+you boot the card once in your handheld (first-start setup reminds you too), so there's no need to re-flash. No Wi-Fi, no
+second card and no extra apps needed:
 
-1. Switch the handheld off and put the card in your Mac or Windows PC. **GAMES** shows up like a USB stick.
-2. Drag your games into its `roms` folder, each into the folder of its system: `roms/gba`, `roms/snes` and so on. The
-   folders are already there. BIOS files go in `roms/bios`.
-3. Eject the drive properly, put the card back in the first slot and switch on. Your games are on the shelf.
+1. Power off your handheld and plug the microSD card into your Mac or Windows PC. **GAMES** pops up like a USB stick.
+2. Drop your games into its `roms` folder, sorted by console (`roms/gba`, `roms/snes`, and so on—the folders are already
+   there). BIOS files go in `roms/bios`.
+3. Safely eject the drive, slide the card back into slot 1 and power on. Your games appear right on the shelf.
 
-**Your computer sees the card's other parts too. Leave them alone.** Windows may ask to format one ("You need to format
-the disk..."): never say yes, press Cancel. A Mac may say a disk isn't readable: press Ignore. Formatting would erase
-pocket-ui from the card. Only GAMES is for you.
+**Ignore the card's other partitions.** Windows may pop up "You need to format the disk..."—always click **Cancel**,
+never Format. macOS may say a disk isn't readable—click **Ignore**. Formatting those partitions will wipe pocket-ui OS
+from the card. Only **GAMES** is for your files.
 
-The hidden files a Mac leaves next to your games (`._Game.gba`, `.Spotlight-V100`, `.Trashes`) and Windows' `System
-Volume Information` don't show up anywhere in pocket-ui, so there's nothing to clean up.
+Hidden Mac and Windows files (`._Game.gba`, `.Spotlight-V100`, `.Trashes`, `System Volume Information`) are ignored
+automatically, so you never have to clean them up.
 
 Good to know:
 
-- Your saves and states go on GAMES too, next to your games, so copy them off with your games to keep a copy. Switch off
-  from the menu when you can: a power cut can cost the last save on any card, and pocket-ui checks GAMES at the next
-  start if it wasn't closed properly.
-- **A games card in the second slot goes first.** While it's in, the handheld plays from that card and leaves GAMES alone.
-  Take it out to go back to GAMES.
-- Flashing the card again usually keeps what's on GAMES, because the new card gets the same layout. Still, keep your own
-  copy of anything you'd miss: flashing tools can erase the whole card.
-- **Updates** come the same way: copy the update file from pocketui.xyz/install onto GAMES, next to `roms`, and switch on
-  ([No Wi-Fi? Update from the card](updates.md#no-wi-fi-update-from-the-card)).
-- A few PortMaster games use links between files, which GAMES can't hold (it's the same on any exFAT games card).
+- Your saves and save states live on **GAMES** alongside your ROMs, so backing up `roms` backs up your saves too. Shut
+  down from the menu whenever you can—a sudden power cut can lose your last save on any card, and pocket-ui runs a check
+  on **GAMES** next boot if it wasn't shut down cleanly.
+- **A games card in slot 2 takes priority.** While a second card is inserted, pocket-ui plays from it and leaves **GAMES**
+  untouched. Pop slot 2 out to return to **GAMES**.
+- Re-flashing the card usually keeps **GAMES** intact since the layout matches, though you should still back up anything
+  important first—flashing tools can wipe the entire card.
+- **Offline updates** work the same way: drop the update zip from pocketui.xyz/install onto **GAMES** right next to
+  `roms` and power on ([No Wi-Fi? Update from the card](updates.md#no-wi-fi-update-from-the-card)).
+- A handful of PortMaster games rely on symlinks, which the exFAT **GAMES** drive doesn't support (true for any exFAT
+  games card).
 
-On all other cards, and on a smaller RG28XX card, the `roms` folder is on the card's STORAGE part, which uses the Linux file
-system ext4. Windows and macOS can't write to that without extra software: use file sharing, a second card on a handheld
-that has a second slot ([With a second SD card](copy-games.md#with-a-second-sd-card)).
+On all other cards—and on smaller RG28XX cards—the `roms` folder lives on the Linux ext4 `STORAGE` partition. Windows and
+macOS can't write to ext4 without extra drivers, so use File sharing over Wi-Fi or a second SD card if your handheld has
+two slots ([With a second SD card](copy-games.md#with-a-second-sd-card)).

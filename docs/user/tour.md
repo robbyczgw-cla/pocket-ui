@@ -1,76 +1,78 @@
 # Features and the Tour
 
-Settings → Help & tools → **Tour** is **the basics in 7 cards**: what to press to play, to save, to change the screen and
-sound, and to add games, followed by a choice for easier reading. A goes to the next card; on the last card, Up/Down choose On, Off or Later and A applies it and closes. B closes the Tour.
+Settings → Help & tools → **Tour** covers **the basics in 7 quick cards**: playing, saving, quick settings, adding games
+and a one-switch readability boost. Press A to step forward; on the final card, pick On, Off or Later with Up/Down and
+press A to apply and exit. Press B anytime to close the Tour.
 
-1. **Play, and HOME is the menu**: pick a game and press A; tap HOME in a game for the [pause menu](pause-menu.md).
-2. **Continue where you stopped**: Home opens on the game you played last; quitting keeps the moment ([Home](playing.md#home)).
-3. **Saving**: Save, Load and Earlier are in the pause menu ([Earlier](pause-menu-saves.md#earlier)).
-4. **Quick settings**: HOME on the shelf, START in the pause menu ([Quick settings](quick-settings.md#quick-settings)).
-5. **Add games**: each system's folder on the SD card, or file sharing over Wi-Fi ([Add games](getting-started.md#5-add-games)).
-6. **Settings**: everything on these cards, and everything you meet along the way, can be switched under START › Settings.
-7. **Big text**: choose Large text and Reduced motion together, with Zoom in the pause menu ([Big text](big-text.md#big-text)).
+1. **Play, and HOME is the menu**: highlight a game and press A; tap HOME in-game for the [pause menu](pause-menu.md).
+2. **Continue where you stopped**: Home opens on your last-played game, and quitting saves your exact spot ([Home](playing.md#home)).
+3. **Saving**: Save, Load and Earlier all live in the pause menu ([Earlier](pause-menu-saves.md#earlier)).
+4. **Quick settings**: press HOME on the shelf or START in the pause menu ([Quick settings](quick-settings.md#quick-settings)).
+5. **Add games**: copy into each console folder on your SD card, or use File sharing over Wi-Fi ([Add games](getting-started.md#5-add-games)).
+6. **Settings**: everything here—and every extra you encounter—can be changed under START › Settings.
+7. **Big text**: turns on Large text, Reduced motion and pause-menu Zoom in one go ([Big text](big-text.md#big-text)).
 
-L1/R1 (or Left/Right) go to the previous or next card. The extras (Curator, frames, Pixel Path and the rest) are not on the
-Tour, apart from Big text. Each one tells you what it is the first time you see it, and has its switch in Settings. After an update, [New in this
-version](#new-in-this-version) shows what is new.
+Use L1/R1 (or Left/Right) to flip back and forth between cards. Extras like Curator, screen frames and Pixel Path stay
+out of the Tour (apart from Big text)—each introduces itself the first time you see it and lives in Settings. After an
+update, [New in this version](#new-in-this-version) highlights what's new.
 
 ## The feature cards
 
-The feature cards, one per extra, come in two places: the first start's "Choose for yourself"
-([Getting started](settings-system.md#how-you-like-to-play)) and "New in this version" below. A card is the feature's name,
-one line about it, a small picture of its screen, and where it is in Settings.
+Feature cards—one per extra—appear in two places: first start's "Choose for yourself"
+([Getting started](settings-system.md#how-you-like-to-play)) and "New in this version" below. Each card shows the feature
+name, a one-line summary, a preview image and where to find it in Settings.
 
-- A card with a switch has three rows: **On**, **Off** and **Later**. "Now" marks what is set. Up/Down choose, A takes
-  the choice and goes to the next card. On and Off change the same switch as the feature's own Settings page, at once.
-  **Later** changes nothing and leaves the feature as it is.
-- A card is only shown on a device that has what it is about, like the Settings rows: no Stick lights on a handheld without sticks;
-- A card without a switch (Search, Players and the others below) only says where the feature is. A goes on.
-- L1/R1 (or Left/Right) go to the previous or next card without choosing anything. B goes back a card (first start) or puts the cards away (new in this version). START skips the rest.
+- Cards with a toggle offer **On**, **Off** and **Later** ("Now" marks your current setting). Pick with Up/Down and press
+  A to apply immediately and move on; **Later** leaves your current setting untouched.
+- Cards only appear when your handheld actually has that hardware (no Stick lights card on a handheld without sticks).
+- Info-only cards (like Search or Players) simply show where to find the feature—press A to continue.
+- L1/R1 (or Left/Right) browse cards without changing anything. B steps back during first start or dismisses "New in this
+  version"; START skips the rest.
 
 ## The cards and the profiles
 
-The cards, in their order, and what the first start's profiles set. **The shelf is pocket-ui as it ships**: it sets
-exactly the defaults, so pressing START on that step at the first start gives the same result. Picked again later, it sets them
-back, including On start and Screen frames. Only Echoes beyond
-this device, Pixel Path, frames and "Continue your last game" are off by default.
+Here is every feature card in order, alongside what each first-start profile sets. **The shelf matches pocket-ui's
+out-of-the-box defaults** (the same result as pressing START to skip during first start). Running it again later resets
+those switches—including On start and Screen frames. By default, only Echoes beyond this device, Pixel Path, Screen
+frames and "Continue your last game" start Off.
 
 | Card | The shelf | Enthusiast | Changed in |
 |---|---|---|---|
 | **Continue where I quit** | As it is | As it is | Settings → Playing → [Continue where I quit](settings-playing.md#continue-where-i-quit) |
 | **Continue your last game** | Off | On | Settings → Playing → [On start](settings-playing.md#on-start) (Last game) |
-| **Motion** | On | On | Settings → Look → [Motion](settings.md#motion) (Off on the card is Motion Off) |
-| **Big text** | As it is | As it is | Settings → Look → [Text size](settings.md#text-size) and Settings → Look → [Motion](settings.md#motion) ([Big text](big-text.md#big-text)): On is Large text and Reduced motion, Off is Normal text and Full motion; while it is on, the pause menu lists [Zoom](big-text.md#zoom) |
-| **Retro** | As it is | As it is | Settings → Look → [Style](theme.md#style) → Retro; Off goes back to Barlow. After the update to 0.3.0 its card starts on On: A tries it, B leaves everything as it is |
+| **Motion** | On | On | Settings → Look → [Motion](settings.md#motion) (Off sets Motion to Off) |
+| **Big text** | As it is | As it is | Settings → Look → [Text size](settings.md#text-size) and Settings → Look → [Motion](settings.md#motion) ([Big text](big-text.md#big-text)): On sets Large text + Reduced motion (and adds [Zoom](big-text.md#zoom) to the pause menu); Off restores Normal text + Full motion |
+| **Retro** | As it is | As it is | Settings → Look → [Style](theme.md#style) → Retro (Off returns to Barlow). After updating to 0.3.0 this card defaults to On: A tries it, B keeps your current style |
 | **Menu sounds** | As it is | As it is | Settings → Screen & sound → Menu sounds |
 | **Haptics** | As it is | As it is | Settings → Controls → Haptics |
-| **Stick lights** | As it is | As it is | Settings → Controls → [LEDs](settings-sound.md#leds) (On is Colour, unless Battery was chosen) |
+| **Stick lights** | As it is | As it is | Settings → Controls → [LEDs](settings-sound.md#leds) (On sets Colour unless Battery was chosen) |
 | **Screen frames on every console** | Off | On | Settings → Playing → [Screen frames](settings-playing.md#screen-frames) |
 | **Echoes** | Off | On | Settings → Games → Curator |
 | **Versions** | Off | On | Settings → Games → Curator ("Merge versions in mixed lists") |
 | **Play history** | As it is | On | Settings → Games → Curator ([Play history](curator.md#play-history)); on by default |
 | **Echoes beyond this device** | Off | On | Settings → Games → Curator ("Games not on this device in Echoes") |
 | **Pixel Path** | Off | On | Settings → Games → Curator ("Pixel Path in the pause menu") |
-| **Pixel Path over every game** | As it is | As it is | Settings → Playing → [Over the game](settings-playing.md#over-the-game) on Pixel Path ([Pixel Path over the game](pause-menu.md#pixel-path-over-the-game)), with Pixel Path in the pause menu, which the level needs; Off takes only that level away |
+| **Pixel Path over every game** | As it is | As it is | Settings → Playing → [Over the game](settings-playing.md#over-the-game) set to Pixel Path ([Pixel Path over the game](pause-menu.md#pixel-path-over-the-game)), enabling Pixel Path in the pause menu too; Off clears only the overlay |
 | **Lens & smart shelves** | Off | On | Settings → Games → Curator |
 
-Cards without a switch, after those: **Search and the letter jump**, **Console credits**, **Players**, **Run-ahead**, **Runs on**,
-**RetroAchievements**, **Sync**, **Tailscale**, **Tools**, **Cozy extras** (real cases, the memory card, stickers and the other
-little touches, each switched in Settings → Look → [Cozy extras](settings.md#cozy-extras)), **Performance & fan** and
-**Settings at once** (START shows the entries straight away, L1 and R1 go through the categories; see
+Info-only cards that follow: **Search and the letter jump**, **Console credits**, **Players**, **Run-ahead**, **Runs on**,
+**RetroAchievements**, **Sync**, **Tailscale**, **Tools**, **Cozy extras** (real cases, memory cards, stickers and other
+cozy touches—each toggled individually in Settings → Look → [Cozy extras](settings.md#cozy-extras)), **Performance & fan**
+and **Settings at once** (START jumps straight into settings rows with L1/R1 switching categories; see
 [Open Settings](settings.md#open-settings)).
 
-The profile **For a child** sets none of these: [Kids mode](kids-mode.md) keeps its own choices and leaves the switches as they are.
+Choosing **For a child** skips all of these: [Kids mode](kids-mode.md) manages its own setup and leaves your switches
+untouched.
 
 ## New in this version
 
-After an update, pocket-ui shows the cards of the features that are new since the version you had, at most three,
-once: when you are on Home with nothing open, never over a game (if the Pocket went straight into your last game, they
-wait until you are back on Home). Each has its switch, as on the feature cards above. A takes the choice and goes on, B
-puts the cards away. A new look you can try starts on On instead: in 0.3.0 the **Retro** card's A says "Try Retro" and
-switches Settings → Look → Style to Retro at once, B leaves your style as it is. The card **Settings at once** says where
-things are in the new Settings: START shows the entries at once, L1 and R1 change the category, and Tailscale, SSH and
-Sync are in Connections. They don't come back; every switch is in Settings. A version without new features shows nothing, and so does the first start of a new Pocket.
+After an update, pocket-ui shows up to three cards highlighting newly added features—shown once when you're idle on Home,
+never interrupting a game (if you boot straight into your last game, they wait until you return to Home). Press A to apply
+your pick and continue, or B to dismiss them. Try-it-out looks default to On (in 0.3.0, **Retro** offers "Try Retro" on A
+and switches Settings → Look → Style right away, while B leaves it untouched). **Settings at once** points out the new
+layout: START opens entries immediately, L1/R1 switch categories, and Tailscale, SSH and Sync live under Connections.
+Once dismissed, the cards never reappear—everything stays in Settings. Updates without new feature cards (and brand-new
+first starts) skip this screen.
 
-While you read a card, a long game title hidden behind it stops scrolling, so it uses no extra refreshes.
-Hidden Shelf and Cabinet artwork also leaves the card still while you read.
+While a card is open, long scrolling titles and Shelf/Cabinet artwork behind it pause automatically so your handheld
+isn't burning extra redraws while you read.

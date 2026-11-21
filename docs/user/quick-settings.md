@@ -2,147 +2,131 @@
 
 ## Quick settings
 
-Tap **HOME** on the shelf, or press **START** in a game's pause menu (the game stays paused and
-visible behind the panel). Brightness and Volume are also rows of Settings → Screen & sound, with the same values.
-Rows, top to bottom:
+Tap **HOME** on the shelf—or press **START** inside the pause menu—to slide open Quick settings while your game stays
+paused behind it. Brightness and Volume stay synced with Settings → Screen & sound. Rows, top to bottom:
 
 | Row | Left/Right and A |
 |---|---|
-| **Brightness** | Left/Right change it. Below 5% it goes on to **Extra dim 1**, **2** and **3** for playing in the dark ([Extra dim](#extra-dim)) |
-| **Volume** | Left/Right change it. Muted sound says so: "5%, muted". The small text beside it says where the sound goes: Speaker, Headphones, Bluetooth: and the device's name, USB audio or HDMI ([Where the sound goes](#where-the-sound-goes)) |
-| **Wi-Fi** | A switches it on or off, by what the radio is doing right now (not by what the row showed a moment ago). The row says **Off** when the radio is off, however that came about, and the same on Settings → Connections → Wi-Fi. If Wi-Fi is on in your settings but the system blocked the radio while starting, pocket-ui switches it on once by itself; a Wi-Fi you switched off stays off. If the switch does not work, a short line says "Couldn't turn Wi-Fi on. Try again." and the row keeps showing what the radio really does. Switching Wi-Fi off ends a remote login |
-| **Bluetooth** | A switches it on or off. It takes a few seconds. To pair a controller, see [Bluetooth](bluetooth.md) |
-| **Performance** | Left/Right: Battery, Auto, Max; A goes on to the next. What games run with |
-| **Fan** | Left/Right: Very quiet, Quiet, Auto, Cool; A goes on to the next. On the shelf the fan in the menus, over a game the fan in games |
-| **Power…** | A opens the power menu: Sleep, Restart, Power off, Restart pocket-ui (and Restart to boot menu where the device can) |
-| **Back to EmulationStation** | dArkOS only (the test port): A returns directly to EmulationStation without a confirmation. On the shelf, not over a game; the power menu also offers it in a game, saving and closing the game first |
+| **Brightness** | Adjust with Left/Right. Going below 5% drops into **Extra dim 1**, **2** and **3** for late-night play ([Extra dim](#extra-dim)) |
+| **Volume** | Adjust with Left/Right. Muted audio reads "5%, muted". The label beside it shows your active output: Speaker, Headphones, Bluetooth (with device name), USB audio or HDMI ([Where the sound goes](#where-the-sound-goes)) |
+| **Wi-Fi** | Press A to toggle Wi-Fi based on the radio's real live state (matching Settings → Connections → Wi-Fi). If Wi-Fi was enabled in your settings but blocked at boot, pocket-ui turns it back on once automatically; Wi-Fi you turned off stays off. If toggling fails, it warns "Couldn't turn Wi-Fi on. Try again." Turning Wi-Fi off ends any active remote session |
+| **Bluetooth** | Press A to switch Bluetooth on or off (takes a few seconds). To pair pads or headphones, see [Bluetooth](bluetooth.md) |
+| **Performance** | Left/Right (or A to step): Battery, Auto, Max—sets default game CPU speed |
+| **Fan** | Left/Right (or A to step): Very quiet, Quiet, Auto, Cool—controls menu fan on the shelf, or game fan mid-game |
+| **Power…** | Press A for the power menu: Sleep, Restart, Power off, Restart pocket-ui (plus Restart to boot menu where supported) |
+| **Back to EmulationStation** | pocket-ui beta for dArkOS only: press A to return straight to dArkOS's own menu without a confirmation prompt. Shown on the shelf only; mid-game, the power menu offers it after saving and closing your game |
 
-The time, the Wi-Fi symbol and the battery level are at the top right, as on Home. B or HOME closes the panel; opened from the pause menu, it
-goes back to the pause menu. In a game, a HOME tap opens the pause menu, not this panel. The rows can also be touched:
-a row selects it, the selected one is A, and the arrows round a value are Left and Right.
+The top-right corner shows the clock, Wi-Fi icon and battery percentage, just like Home. Press B or HOME to close (from
+the pause menu, it returns to the pause menu; tapping HOME mid-game always opens the pause menu, never Quick settings).
+On touchscreens, tap a row to select, tap again for A, and tap the arrows beside values for Left/Right.
 
 ### Extra dim
 
-The lowest backlight can still be too bright in a dark room. Turn Brightness down past 5% and the picture itself gets
-darker in three more steps: **Extra dim 1**, **2** and **3**. It works on the shelf, in the menus and in games, and
-text stays readable on the darkest step. Turning Brightness up takes the extra dim steps away first, then the backlight
-goes up again. Your choice is kept after a restart. On Android, use Android's own Extra dim (in Android's settings, under Accessibility)
-instead.
+Even 5% backlight can feel harsh in a pitch-black room. Drop Brightness below 5% to step through three darker software
+dimming levels: **Extra dim 1**, **2** and **3**. It works across your shelf, menus and games while keeping text crisp
+and readable, and survives reboots. Turning Brightness back up clears Extra dim first before raising the backlight. On
+Android, use Android's built-in Extra dim under Accessibility instead.
 
 ![Quick settings with Brightness turned down past 5%: "Extra dim 2" and an empty bar](pictures/extra-dim.webp)
 
 ### Where the sound goes
 
-On Anbernic H700 handhelds with ROCKNIX, games also keep running silently at 0% volume, including Nintendo 64.
+On Anbernic H700 handhelds running ROCKNIX, games stay silent cleanly at 0% volume (including N64). Mid-range volume
+steps are also louder than in 0.4.0 while keeping max and 0% identical—older speaker levels adjust automatically on
+first boot after updating without touching custom hardware tweaks.
 
-On Anbernic H700 handhelds with ROCKNIX, volume steps below the maximum are louder than in 0.4.0, which made
-middle levels too quiet. The maximum stays the same; 0% stays silent. A speaker level left by the old curve is corrected
-automatically on the first start after updating; other hardware edits are preserved.
+The small label next to the Volume bar reports where audio is actually going **right now**, checked in the background
+when you open Quick settings and refreshed every few seconds (briefly showing "…", or "Output unknown" if the OS doesn't
+report it):
 
-The small text beside the Volume bar is where the system plays sound **right now**, asked when the panel opens and
-again every couple of seconds while it is open. It is read in the background, so the panel never waits for it: a
-"…" stands there for a moment, and "Output unknown" if the system does not say.
+- **Speaker:** built-in speakers.
+- **Headphones:** wired 3.5 mm jack.
+- **Bluetooth: name:** connected Bluetooth headphones or speaker (long names shorten; full names show on the
+  [Bluetooth](bluetooth.md) page, or plain "Bluetooth" if unreadable).
+- **USB audio** / **HDMI:** external USB DAC/headset or HDMI display.
 
-- **Speaker**: the Pocket's own speakers.
-- **Headphones**: the wired jack is the system's current output.
-- **Bluetooth: name**: Bluetooth headphones or a speaker, with the name they give themselves (long names are cut short;
-  the full one is on the [Bluetooth](bluetooth.md) page). Just "Bluetooth" if the name can't be read.
-- **USB audio** and **HDMI**: a USB sound device or a screen.
+This indicator is read-only—pocket-ui doesn't force output switching. **Plugged in wired headphones and it still says
+Speaker?** The OS didn't switch audio routes (ROCKNIX's 20241120 Retroid release notes flagged "no headphone switching"
+as a kernel issue, which may still happen depending on your build). Try unplugging and re-plugging the jack, or putting
+your Pocket to sleep and waking it. If it says Headphones with no sound, check the shared Volume slider above.
 
-This is a read-only report; pocket-ui does not switch the output. **If you plugged in wired headphones and the row
-still says Speaker**, the system has not switched to them. ROCKNIX's own release notes for its Retroid Pocket builds
-(20241120) list "no headphone switching" among kernel-level bugs; whether it still applies to your Mini V2 and
-ROCKNIX version has not been checked here, so treat it as something that **may** happen. What can help: unplug and plug
-the headphones in again, or sleep the Pocket and wake it. If the row says Headphones and you hear nothing, check the
-Volume level above it, which is shared.
+**Performance and Fan** mirror Settings → Playing → [Performance & fan](performance.md) and save immediately:
 
-**Performance and Fan** are the same choices as Settings → Playing → [Performance & fan](performance.md), saved at once:
-
-- **Performance** is always **Games: performance**, what every game runs with unless you chose one for it. Battery:
-  about half speed, the battery lasts longer. Auto: the system decides; for PS2, GameCube and 3DS that is full speed.
-  Max: full speed all the time. The small text left of the value says what it is for: "for games" on the shelf;
-  over a game, a choice of the game's own shows there in orange.
-- **Fan** is **Fan outside games** on the shelf ("in menus" beside the value) and **Games: fan** over a game. Auto is
-  always the system's own cooling profile.
-- Over a paused game a change applies to that game at once: on pocket-ui's own host and for PS2, GameCube, Wii and
-  3DS, the processor; the fan for every game while [Smooth fan](performance.md#smooth-fan) is on. A PortMaster port
-  takes a new Performance from its next start. RetroArch games keep the system's speed ("this game: the system's").
-- A game, its console or a port with its **own** choice keeps it. The row then shows it beside the value, for example
-  "this game: Max", with "Set for this game in Options (Max): this changes the default only." under the list; a
-  change moves only the default for the other games, and a message repeats what the game keeps.
-- On a device without a fan there is no Fan row. Where pocket-ui can't set the processor's speed, Performance says
-  "Not available here".
+- **Performance** controls **Games: performance** (default for all games without an override): Battery runs around half
+  speed for longer runtime, Auto lets the OS decide (full speed for PS2, GameCube and 3DS), and Max locks top clocks.
+  The small sub-label reads "for games" on the shelf, or highlights a game's own override in orange mid-game.
+- **Fan** adjusts **Fan outside games** on the shelf ("in menus") and **Games: fan** mid-game. Auto always uses the
+  system's own cooling profile.
+- Over a paused game, changes apply immediately: CPU clocks for pocket-core, PS2, GameCube, Wii and 3DS, and fan speed
+  for every game when [Smooth fan](performance.md#smooth-fan) is On. PortMaster ports pick up new Performance on their
+  next launch; RetroArch games keep OS speed ("this game: the system's").
+- If a game, console or port has its own override, Quick settings shows it beside the value ("this game: Max") and
+  explains that changing it here only adjusts the default for other games.
+- Fanless handhelds hide the Fan row; devices where CPU speed isn't controllable show "Not available here".
 
 ## Sleep and power
 
-> **Status:** waking from deep sleep has been timed on a Mini V2: the screen and the game are back well under a
-> second. Deep sleep uses a few percent of the battery an hour (about 5% measured over 5½ hours on a Mini V2, about 2.6% on an RG35XX SP). **Power off**,
-> **Restart**, **Restart pocket-ui**, **Switch off after sleeping** and the power button set to **Screen off** have
-> not been tried on a real device yet. Save your game before you put the device away until this note is gone.
+> **Status:** deep sleep wake-up was timed on a Mini V2—screen and game come back in well under a second. Standby drain
+> measures ~5%/hour on a Mini V2 (over 5.5 hours) and ~2.6%/hour on an RG35XX SP. **Power off**, **Restart**, **Restart
+> pocket-ui**, **Switch off after sleeping** and Power set to **Screen off** haven't been hardware-verified yet—save
+> in-game before stashing your handheld until this notice is cleared.
 
-Sleep works in two steps, each with its own time in Settings → System → **Sleep & power**
-([below](#sleep--power-settings); details for developers: [SLEEP.md](../SLEEP.md)):
+Sleep works in two stages, both configurable under Settings → System → **Sleep & power**
+([below](#sleep--power-settings); dev details in [SLEEP.md](../SLEEP.md)):
 
-- **Light sleep** (the screen off) starts after a while without a button press: 2 minutes by default. The screen
-  goes dark and the game pauses. Any button except the volume keys wakes it and the game goes on.
-- **Deep sleep** starts 2 minutes into light sleep, or at once when you press the power button, or when you
-  choose Sleep in the power menu (also from **Power…** in the quick settings). pocket-ui first saves the game, then the system suspends. Press the power
-  button to wake it; the game continues where it was. The screen and the game come back first; the sound can follow
-  a moment later. For about half a second after the screen comes on, the shelf and the menus take no button, so a press in
-  a bag doesn't start a game; a running game gets your buttons at once.
-- **Power off** (in the power menu) saves and closes the running game first. The next start of pocket-ui opens
-  that game again.
-- **Switch off after sleeping.** Off unless you turn it on: a sleeping Pocket stays asleep until you wake it, as on
-  other handhelds. Deep sleep still uses a few percent of the battery an hour, so a full battery can be empty after a day or two
-  in a bag. If you would rather it switched itself off, Settings → System → **Sleep & power** sets the time: 1 h, 3 h
-  or 8 h. After that long asleep (3 hours is about 14% of the battery) the Pocket saves the game and switches itself
-  off, as Power off does, with the screen dark. When you switch it on again, the game opens where you left it,
-  whatever **On start** says, and a line says once "Switched off after 3 h asleep to save the battery." On the charger
-  it never switches off; it stays asleep. Waking it before the time is up works as always. It only switches off once
-  the game is saved: if the save doesn't work, or the game runs in an emulator that can't save a moment for Continue
-  (RetroArch), it stays asleep and the game waits where you left it. With **Off**, no clock alarm is ever set for this.
-- **Low battery.** At 5% (on battery) a note says so, on the shelf and over a game on pocket-ui's own host. At 2% the Pocket saves the
-  running game and switches itself off, as Power off does, so the game is not lost when the battery runs out, even
-  when it lies dark in light sleep. On the charger, none of this happens.
-- A system sleep block also keeps automatic sleep, the Sleep menu and lid sleep from suspending. The screen
-  stays dark; press a button to wake it. The physical power button can still put it to sleep.
-- If the system does not manage to suspend, the screen stays dark and it tries again after 4, 8, 16 and then every
-  30 minutes.
+- **Light sleep (screen off):** kicks in after 2 minutes idle by default—the screen turns dark and your game pauses. Any
+  button (except volume keys) wakes it right back up.
+- **Deep sleep:** starts 2 minutes into light sleep, or immediately on a short Power press or via **Power… → Sleep**.
+  pocket-ui saves your game first, then suspends the hardware. Press Power to wake—the game appears immediately with
+  sound following a beat later. Menus ignore presses for ~0.5 s after wake to prevent pocket triggers, while running
+  games accept input instantly.
+- **Power off** (power menu) saves and cleanly closes your running game first, then automatically reopens it next time
+  you power on.
+- **Switch off after sleeping:** off by default so your Pocket stays in standby like other handhelds. Because deep sleep
+  still sips a few percent per hour, a full battery can drain after a day or two in a bag. Turn on a timer—1 h, 3 h or
+  8 h—under Settings → System → **Sleep & power** and your Pocket will save your game and shut down cleanly in the dark
+  once that time elapses (3 hours uses ~14% battery). Next power-on resumes your game straight away regardless of **On
+  start** and shows "Switched off after 3 h asleep to save the battery." It never shuts off while charging, waking early
+  works normally, and if a game can't save a Continue state (such as RetroArch) or saving fails, it stays safely asleep
+  instead. When **Off**, no wake alarm is ever scheduled.
+- **Low battery:** at 5% on battery, a brief alert appears on the shelf and in pocket-core games. At 2%, your Pocket
+  saves the running game and powers off cleanly—even from light sleep—so progress is never lost to a dead battery.
+  Skipped while charging.
+- If an OS sleep block prevents suspend, the screen stays dark (press any button to wake); pressing Power still suspends
+  manually.
+- If suspend fails, the screen stays dark and retries after 4, 8, 16, then every 30 minutes.
 
-If the device sleeps while a RetroArch game runs, that game stays in memory; it is not saved first.
+RetroArch games stay paused in RAM during sleep rather than saving a state beforehand.
 
-On the experimental Pocket 6 and Nova, Power short press turns the screen off; a playing game can keep running.
-Any button turns it back on. ROCKNIX sleep is unavailable there. The Sleep & power page offers an optional
-Switch off after timer (Off by default), counted while the screen is off on battery.
+On the experimental Pocket 6 and Nova (where ROCKNIX sleep isn't available), a short Power press turns the screen off
+while your game can keep running; any button wakes it. Sleep & power offers an optional **Switch off after** timer (Off
+by default) while dark on battery.
 
-If a restart finds the screen dark and its previous brightness was lost, it brings back a dim picture;
-choose your brightness again in Quick settings.
+If a reboot ever comes up dark with lost brightness settings, pocket-ui restores a dim visible level so you can readjust
+in Quick settings.
 
 ### Sleep & power settings
 
-Settings → System → **Sleep & power**. Up/Down choose a row, Left/Right change it, A goes on to its next choice; the
-line under the rows says what the selected choice does. A change applies at once. The last two rows are under the
-heading **Power button**. On a short screen or with larger text, the list scrolls as you move: the selected row stays above the help and hint bar.
+Open Settings → System → **Sleep & power**. Pick rows with Up/Down, adjust with Left/Right (or A to step); changes apply
+immediately and the footer explains each option. The bottom two rows sit under **Power button**. On smaller screens or
+with Large text, the list scrolls cleanly above the description and hint bar.
 
 | Row | Choices (default in bold) |
 |---|---|
-| **Screen off after** | Never, 30 s, 1 min, **2 min**, 5 min without a button press before the screen goes dark (light sleep). In a game the game pauses. Never: the screen stays on until you press the power button |
-| **Sleep after** | Never, 1 min, **2 min**, 5 min, 15 min with the screen off by itself before the Pocket goes to sleep (deep sleep, the game saved first); a system sleep block keeps it in light sleep. Never: it stays awake with the screen dark until you press a button, which uses the battery; at 2% it still saves and switches off |
-| **Switch off after sleeping** | **Off**, 1 h, 3 h, 8 h asleep on battery before the Pocket saves the game and switches off (above) |
-| **Short press** | **Sleep**, Screen off: what a short press of the power button does |
-| **Hold** | **Power menu**, Sleep: what holding the power button for about a second does |
+| **Screen off after** | Never, 30 s, 1 min, **2 min**, 5 min idle before light sleep (screen dark, game paused). Never keeps the screen on until you press Power |
+| **Sleep after** | Never, 1 min, **2 min**, 5 min, 15 min in light sleep before deep sleep (saves first; stays in light sleep if the OS blocks suspend). Never stays awake with the screen dark (drains battery, still auto-saves and shuts down at 2%) |
+| **Switch off after sleeping** | **Off**, 1 h, 3 h, 8 h asleep on battery before auto-saving and powering off cleanly (details above) |
+| **Short press** | **Sleep**, Screen off: action for a brief Power button press |
+| **Hold** | **Power menu**, Sleep: action for holding Power (~1 second) |
 
-- **Short press: Screen off.** Only the screen goes dark: a game goes on and you hear it, for a game with music you
-  want to keep listening to. Any button except the volume keys turns the screen back on. In games on pocket-ui's own
-  host (pocket-core) nothing is drawn while the screen is off, and the buttons don't reach the game, so a press in a
-  pocket does nothing in it; the button that turns the screen on doesn't reach the game either. RetroArch and the
-  standalone emulators keep drawing and get every press: wake them with the power button. A game left running like
-  this never goes to sleep by itself, so it uses the battery until you come back (at 2% it is saved and the Pocket
-  switches off). On the shelf, or with the pause menu open, Screen off is the same as the screen going off by itself,
-  and Sleep after counts.
-- **Hold: Sleep.** Holding the power button also puts the Pocket to sleep, once you let go. The power menu is then still in the quick
-  settings, under **Power…**.
-- **Retroid Pocket Flip 2** (experimental): closing the lid does what the short press does, Sleep or Screen off;
+- **Short press: Screen off:** turns off the screen while audio keeps playing—handy for listening to a game soundtrack.
+  Any non-volume button wakes the screen. In pocket-core, rendering pauses and buttons are ignored while dark (including
+  the wake press) so pocket bumps can't mess up your game. RetroArch and standalone emulators keep running and receiving
+  inputs, so wake them with Power. Games kept running this way won't auto-sleep (still auto-saving at 2% battery). On
+  the shelf or pause menu, Screen off behaves just like normal light sleep and counts toward Sleep after.
+- **Hold: Sleep:** holding Power puts your Pocket to sleep on release; the power menu remains available via Quick
+  settings → **Power…**.
+- **Retroid Pocket Flip 2** (experimental): closing the lid triggers your Short press action (Sleep or Screen off);
   opening it wakes the screen.
-- Settings from before this page (the times used to be in Settings → System → Battery) are kept: 3 minutes there is
-  3 min under Screen off after until you change it.
+- Older sleep settings migrated from Settings → System → Battery carry over (an old 3-minute setting displays as 3 min
+  under Screen off after until changed).

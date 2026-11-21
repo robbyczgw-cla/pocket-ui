@@ -1,102 +1,95 @@
 # Options for PlayStation 2, GameCube, Wii and 3DS
 
-**Options** in the pause menu shows a short list for the running game. Left/Right (or A) changes a
-value; B goes back. Every change is kept for **this game only**.
+Opening **Options** in the pause menu shows a focused list for the game you're playing. Adjust values with Left/Right
+(or A) and press B to go back. Every tweak saves for **this game only**.
 
 | Option | PlayStation 2 | GameCube and Wii |
 |---|---|---|
-| Resolution | 1x to 3x, in steps of 0.25x | 1x, 1.5x, 2x, 2.5x, 3x |
+| Resolution | 1x to 3x, in 0.25x steps | 1x, 1.5x, 2x, 2.5x, 3x |
 | Renderer | Vulkan, OpenGL | Vulkan, OpenGL |
-| Widescreen | widescreen patch on/off (games that have one) | widescreen hack on/off |
+| Widescreen | Widescreen patch On/Off (where supported) | Widescreen hack On/Off |
 | Aspect ratio | 4:3, 16:9, Stretch | Auto, 16:9, 4:3, Stretch |
 | Frame skip | – | Off, When slow |
-| Show FPS | on/off | on/off |
+| Show FPS | On/Off | On/Off |
 | Performance | Max, Auto, Battery | Max, Auto, Battery |
 
-The 3DS has its own list:
+Nintendo 3DS gets its own options:
 
 | Option | 3DS |
 |---|---|
-| Resolution | 1x (the 3DS's own), 2x, 3x |
-| Screens | Stacked (top above bottom), Large top (with a small bottom screen), Top only |
+| Resolution | 1x (native 3DS), 2x, 3x |
+| Screens | Stacked (top above bottom), Large top (with small bottom screen), Top only |
 | Renderer | Vulkan, OpenGL |
 | Texture filter | Off, Bicubic, ScaleForce, xBRZ |
-| Show FPS | on/off (a small counter in the corner) |
+| Show FPS | On/Off (small corner counter) |
 | Performance | Max, Auto, Battery |
 
 ## Xbox (experimental)
 
-Options of an Xbox game (hakuX in RetroArch). There are no save states yet, so a change **takes effect the next time the game
-starts** (the page says so); pocket-ui does not restart the game under you.
+Options for Xbox games (running on hakuX in RetroArch). Since save states aren't available yet, changes **take effect
+next time you start the game** (the menu reminds you) rather than restarting mid-session:
 
 | Option | Xbox |
 |---|---|
-| Resolution | Original (480p, the Xbox's own), 2x (960p: sharper, more GPU). The default is 2x on the AYN Odin 2 and the other Snapdragon 8 Gen 2 handhelds, Original elsewhere |
-| Screen scaling | Aspect (4:3 with black bars, the default), Fullscreen (stretches to the whole screen), Integer (whole-number multiples) |
-| Performance | Max, Auto, Battery (applies at once) |
+| Resolution | Original (native 480p), 2x (960p: sharper, heavier on GPU). Defaults to 2x on AYN Odin 2 and other Snapdragon 8 Gen 2 handhelds; Original elsewhere |
+| Screen scaling | Aspect (4:3 with black bars, default), Fullscreen (fills screen), Integer (exact pixel multiples) |
+| Performance | Max, Auto, Battery (applies immediately) |
 
-Set it for one game here; set it for all Xbox games with `xbox.pocket_resolution` and `xbox.pocket_scaling` in ROCKNIX's
-system.cfg. The same names as pocket-core's Options → Picture → Screen scaling.
+Options set here apply to the current game; to set defaults for all Xbox games, use `xbox.pocket_resolution` and
+`xbox.pocket_scaling` in ROCKNIX's `system.cfg` (matching pocket-core's Options → Picture → Screen scaling names).
 
-With **Top only** the bottom screen is hidden; games that need the touch screen need one of the
-others.
+On 3DS, **Top only** hides the bottom screen—games that need touch controls require one of the two-screen layouts.
 
-**Performance** decides how hard the Pocket works while this game runs, and changes at once:
+**Performance** controls how hard your handheld pushes while playing, taking effect right away:
 
-- **Max**: the big processor cores and the graphics chip run at full speed. The smoothest, but the Pocket gets
-  warmer and the battery runs down faster.
-- **Auto** (called Balanced until October 2026): the system decides, with ROCKNIX's own setting for this system.
-  How fast that is depends on it: where ROCKNIX's setting for PS2, GameCube or 3DS is "performance", Auto is full
-  speed too, and switching between Auto and Max changes little.
-- **Battery**: lower top speeds. For light games; heavy ones slow down.
+- **Max:** runs the big CPU cores and GPU at top clock speeds—smoothest frame rates, warmer device and shorter battery
+  life.
+- **Auto** *(called Balanced before October 2026)*: follows ROCKNIX's system profile for that console. Where ROCKNIX
+  already sets PS2, GameCube or 3DS to "performance", Auto runs at full speed too, so Auto and Max feel identical.
+- **Battery:** caps top speeds lower—fine for lighter titles, though demanding 3D games will slow down.
 
-Without a choice of its own here, a game follows **Games: performance** (Settings → Playing → Performance & fan, or the
-Performance row of [Quick settings](quick-settings.md#quick-settings)): Battery there is Battery here; Auto and Max there
-are Max here, because these systems need full speed. Changing it in Quick settings over the paused game applies at
-once; a game with its own choice here keeps it, and Quick settings say so ("this game: Auto").
+If you haven't set a per-game choice here, the game follows **Games: performance** (Settings → Playing → Performance &
+fan, or Quick settings' **Performance** row—see [Quick settings](quick-settings.md#quick-settings)): Battery stays
+Battery, while Auto and Max both run at Max since these heavy systems need full power. Changing Performance in Quick
+settings updates immediately unless the game has its own override here (Quick settings notes "this game: Auto"). When
+you exit the game, clocks return to normal.
 
-When the game ends, the Pocket goes back to what it was before.
+Changes take effect as soon as you return to the game (Continue, B or HOME). The footer tells you whether a restart is
+needed:
 
-The changes apply when you go back to the game (Continue, B or HOME). The line under the list tells
-you how:
+- **"Applies as soon as you go back to the game."** Takes effect live without interrupting play. That covers every PS2
+  option, Performance on GameCube/Wii/3DS, plus Resolution, Show FPS and Auto/Stretch on GameCube and Wii (Dolphin
+  flashes a brief message, and GameCube games or Wii games using a GameCube pad see a momentary button tap just like
+  Save/Load).
+- **"Applies when you go back to the game: it restarts where you are."** pocket-ui shows "Applying…", saves your spot,
+  restarts the emulator and drops you right back where you were. Used for Renderer, Widescreen, Frame skip and 16:9/4:3
+  on GameCube/Wii, every non-Performance option on 3DS, and any PS2 option you previously overrode inside ARMSX2's own
+  menu. On Wii with ROCKNIX's "custom" Wii controller profile, every option restarts cleanly so pocket-ui never injects
+  a button press.
 
-- "Applies as soon as you go back to the game." The game simply goes on with the new value. On
-  PlayStation 2 that is every option. On GameCube, Wii and 3DS it is Performance; on GameCube and
-  Wii also Resolution, Show FPS and the switch between Auto and Stretch; Dolphin shows a short
-  message, and a GameCube game (or a Wii game played with a GameCube controller) sees a button
-  press for a moment (as with Save and Load).
-- "Applies when you go back to the game: it restarts where you are." The menu shows
-  "Applying…", the game is saved, closed and started again, and continues from that moment, the
-  same way as after Quit. On GameCube and Wii this is the renderer, widescreen, frame skip, 16:9
-  and 4:3; on 3DS every option but Performance; on PlayStation 2 only an option you had also set in ARMSX2's own
-  menu (see below). On Wii with your own controller layout (ROCKNIX's "custom" Wii controller
-  profile) every option restarts the game, so no button of yours is pressed by pocket-ui.
+If saving fails before a restart, pocket-ui keeps your session alive and tells you: "Couldn't save the game, so the new
+options apply at its next start." Changes made right after **Save** or **Load** that need a restart also wait for the
+next launch.
 
-If the game can't be saved first, nothing restarts: the menu says "Couldn't save the game, so the
-new options apply at its next start." After **Save** or **Load** an option that needs a restart also
-waits for the next start.
+**Advanced…** *(PlayStation 2 only)* opens ARMSX2's full native menu over the game—press B or pick "Resume Game" to
+return, or exit there to return cleanly to the shelf. Dolphin (GameCube/Wii) and Azahar (3DS) don't expose an in-game
+menu on this device.
 
-**Advanced…** (PlayStation 2 only) closes pocket-ui's menu and opens ARMSX2's own menu over the
-game, with all of its settings. Close it there (B, or "Resume Game") to play on. If you end the game
-in that menu, pocket-ui closes ARMSX2 and you are back on the shelf. Dolphin (GameCube and Wii) and
-Azahar (3DS) have no menu of their own on this device.
-
-**More…** (GameCube and Wii) opens a second page with ROCKNIX's own settings for this game. B goes
-back to the first page. Everything on it applies by a restart where you are, as above.
+**More…** *(GameCube and Wii)* opens a second page of ROCKNIX's Dolphin tweaks for this game (press B to go back; all
+changes apply via quick save-and-restart):
 
 | Row | Choices | What it does |
 |---|---|---|
-| Button layout (GameCube) | A right, A bottom, Custom | A right puts GameCube A on the right button, as printed on the Pocket (the default). A bottom puts it on the bottom button. Custom appears once you have made a layout of your own in Dolphin |
-| Shoulders (GameCube) | Triggers, Bumpers | Triggers: L and R on L2/R2, Z on R1. Bumpers: L and R on L1/R1, Z on R2 |
-| Controller (Wii) | Sideways, Upright, Nunchuk, Classic, Custom | How the Wii Remote is held, or a Classic Controller |
-| Rumble | On, Off | |
-| Shaders | Skip until ready, Pause to compile, Hybrid ubershaders, Ubershaders only | Every new effect needs a shader first. Skip until ready (the default): no stutter, an effect can be missing for a moment. Pause to compile: a stutter each time. Ubershaders: no stutter, but much more work for the graphics chip, often too much on the Pocket |
-| Shaders at start | On, Off | Compiles the shaders the game used before while it starts: a longer start, fewer stutters |
-| VSync | Off, On | No tearing, a little more input lag. Off is what was tested |
-| CPU clock | 100%, 125%, 150%, 200%, 75% | Higher can fix a game that slows down by itself, but costs the Pocket's processor; lower can help heavy games, and some then run wrong |
-| Sync GPU thread | Off, On | Fixes crashes and glitches in a few games; costs speed |
-| EFB reads by CPU, EFB copies, XFB copies, Texture cache | Accurate, Fast | Accuracy against speed. Fast is quicker but breaks some effects in a few games (aiming, maps, videos, wrong textures); Accurate is slower |
+| Button layout (GameCube) | A right, A bottom, Custom | A right (default) matches the Pocket's printed right button; A bottom moves GameCube A to the bottom button. Custom appears if you created a Dolphin profile |
+| Shoulders (GameCube) | Triggers, Bumpers | Triggers maps L/R to L2/R2 and Z to R1; Bumpers maps L/R to L1/R1 and Z to R2 |
+| Controller (Wii) | Sideways, Upright, Nunchuk, Classic, Custom | Sets Wii Remote orientation or Classic Controller mode |
+| Rumble | On, Off | Toggles controller vibration |
+| Shaders | Skip until ready, Pause to compile, Hybrid ubershaders, Ubershaders only | Controls shader stutter. Skip until ready (default) avoids stutters with occasional brief pop-in; Pause to compile stutters on new effects; Ubershaders prevent stutter but are heavy on handheld GPUs |
+| Shaders at start | On, Off | Pre-compiles known shaders on launch—slightly longer load, smoother gameplay |
+| VSync | Off, On | Eliminates screen tearing at the cost of a little input lag (tested with Off) |
+| CPU clock | 100%, 125%, 150%, 200%, 75% | Overclocking fixes in-game slowdown at higher CPU cost; underclocking can help heavy titles but may cause glitches |
+| Sync GPU thread | Off, On | Fixes crashes or graphical bugs in a handful of games at a speed cost |
+| EFB reads by CPU, EFB copies, XFB copies, Texture cache | Accurate, Fast | Speed vs accuracy trade-off. Fast runs quicker but can break maps, aiming, videos or textures in some games |
 
-GameCube games start with A on the right button. If you had chosen a layout in ROCKNIX's settings
-before, that choice stays. Wii games that take a GameCube controller always use ROCKNIX's "A
-bottom" layout, as ROCKNIX's Wii start script sets it.
+GameCube games default to A on the right button (preserving any layout you already set in ROCKNIX). Wii games using a
+GameCube controller always use ROCKNIX's "A bottom" layout per ROCKNIX's Wii launch script.

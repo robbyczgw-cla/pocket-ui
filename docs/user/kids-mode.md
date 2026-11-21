@@ -1,63 +1,73 @@
 # Kids mode
 
-A handheld for a child: one big case at a time, only the games you picked, and nothing to break. Left and Right choose, A
-plays, HOME pauses with **Continue** and **Stop**. Your settings, look and saves wait for you, and the mode is off unless you choose it.
+A safe, simple handheld built for kids: one big game case at a time, only the games you choose, and zero settings to
+accidentally break. Left and Right pick a game, A plays, and HOME pauses with just **Continue** and **Stop**. Your own
+layout, settings and saves stay untouched, and Kids mode stays off until you turn it on.
 
 ## Setting it up
 
-At the first start, press **Y** ("For a child…") on its first page: after your games, these steps come instead of the
-look, and the setup ends with them. Later: Settings → System → **Kids mode**. It takes two minutes:
+During first start, press **Y** ("For a child…") on the welcome screen—once you've added games, setup walks straight into
+Kids mode instead of picking a layout. Already set up? Open Settings → System → **Kids mode**. Setup takes about two
+minutes:
 
-1. **A PIN**, four digits, twice. It is for you, not for your child.
-2. **The games**, 5 to 20 (fewer if the card has fewer). A picks, START goes on. No games on the card yet? From Settings, Add games
-   comes first, and you pick right after. That page also has **X: Starter pack**, a handful of free games (Wi-Fi
-   needed); B comes back to the games to pick. In the first start the steps come only once there are games Kids Mode can
-   start; without them the setup goes on to the look and says to set it up later.
-3. **Blue or Pink.**
-4. **How long per day**: 30 minutes to 2 hours, or no limit.
-5. **How loud at most**: the volume keys stop there. Good for small ears and headphones.
+1. **Set a PIN:** four digits, entered twice. Keep this one for grown-ups.
+2. **Pick the games:** choose 5 to 20 games (or fewer if that's all on the card). Press A to pick and START to continue.
+   No games yet? Opening from Settings takes you to Add games first, or press **X: Starter pack** to grab a handful of
+   free games over Wi-Fi (B brings you back). During first start, Kids mode setup only runs once there are compatible
+   games on the card; otherwise setup continues normally and reminds you to enable it later.
+3. **Pick a colour:** **Blue** or **Pink**.
+4. **Daily play limit:** anywhere from 30 minutes to 2 hours, or no limit.
+5. **Max volume:** caps the hardware volume buttons—great for little ears and headphones.
 
-A line under the list says how many games aren't offered. RetroArch and PortMaster have menus of their own a child could reach, so their games
-stay out. PlayStation 2, GameCube, Wii, 3DS and Xbox are there on the handhelds that play them. A game marked **Saves only in the game**
-keeps no moment when your child stops: only what they saved inside the game.
+A note underneath tells you how many games were left out of the list. RetroArch and PortMaster games stay hidden because
+they have their own menus a child could get stuck in. PS2, GameCube, Wii, 3DS and Xbox appear on handhelds that support
+them. Games tagged **Saves only in the game** don't auto-save a moment on exit—only in-game saves are kept.
 
 ## What your child sees
 
-- **The shelf:** one big case, the name in big letters, A to play.
-- **HOME in a game:** Continue and Stop. Stop saves by itself, and A next time goes on from there.
-- **Five minutes before the time is up:** the game pauses with a clock and "5 minutes left"; A goes on.
-- **When the time is up:** the game saves itself and "That's all for today!" stays until tomorrow.
-- **A game that won't start** shows a picture asking for a grown-up, and a press goes back to the shelf. It never starts in another emulator here: check it with Kids mode off.
-- **Volume keys** up to your limit. **The power button:** Sleep, Restart and Power off.
+- **The shelf:** one giant game case, big title text, A to play.
+- **HOME mid-game:** just **Continue** and **Stop**. Stop saves automatically, so pressing A next time jumps right back
+  in.
+- **5-minute warning:** five minutes before the daily limit, the game pauses with a clock and "5 minutes left"; A resumes.
+- **Time's up:** the game saves automatically and shows "That's all for today!" until tomorrow.
+- **Game won't start:** shows a friendly picture asking for a grown-up and returns to the shelf on any button press. It
+  never falls back to another emulator here—turn off Kids mode to troubleshoot it.
+- **Buttons:** volume works up to your cap; Power shows Sleep, Restart and Power off.
 
-The emulators' own shortcuts are off in this mode. HOME is the only way out of a game.
+Emulator hotkeys are disabled in Kids mode—HOME is the only way out of a game.
 
-If pocket-ui itself keeps crashing, your child sees a picture and "Please ask a grown-up" instead of the [safe mode](safe-mode.md) page.
-Hold SELECT and START for 5 seconds and enter your PIN to get to that page.
+If pocket-ui itself crashes repeatedly, your child sees a friendly picture saying "Please ask a grown-up" instead of the
+[safe mode](safe-mode.md) menu. Hold SELECT and START for 5 seconds and enter your PIN to reach safe mode.
 
 ## Getting back in
 
-Hold **SELECT and START for 5 seconds** on the shelf or in the pause menu; a bar shows the time. Then your PIN. The grown-ups' page has:
+Hold **SELECT and START for 5 seconds** on the shelf or in the pause menu (a progress bar counts down), then enter your
+PIN. The grown-ups' screen gives you:
 
-- **30 more minutes today**, and **Start today's time again**
+- **30 more minutes today** and **Start today's time again**
 - **Games**, **Colours**, **Time per day**, **Loudest volume**, **New PIN**
+- **Turn off Kids mode:** puts your full shelf and settings right back as you left them.
 
-If games you picked were deleted or moved off the card meanwhile, the page says so ("2 of the picked games aren't on the card any more."): the child's shelf is shorter by that many.
+If any chosen games were removed from the SD card, the page tells you ("2 of the picked games aren't on the card any
+more.") and trims the child's shelf accordingly.
 
-On the screens that stop your child ("That's all for today!" and an empty shelf), a small line reminds you: "Grown-ups: hold SELECT and START."
-- **Turn off Kids mode**: everything is as it was before.
+On lock screens ("That's all for today!" or an empty shelf), a small footer reminds you: "Grown-ups: hold SELECT and
+START."
 
 ### If you forgot the PIN
 
-The PIN page says this from the first look. Put a file called `kids-mode-off.txt` in the top folder of the card's ROCKNIX drive and
-restart. A computer or a phone with a card reader can write it to the card's first partition; on a handheld with Wi-Fi, the file
-share's games folder works too, if file sharing is already on (a locked-out grown-up can't turn it on). Kids mode goes off and forgets the PIN. Games, saves and settings stay.
+The PIN screen shows this rescue trick right away: drop an empty file named `kids-mode-off.txt` into the root folder of
+the card's ROCKNIX partition and reboot. Any computer or phone with a card reader can create it on the first partition—or,
+if File sharing is already enabled over Wi-Fi, drop it into the shared games folder (you can't turn File sharing on while
+locked out). Kids mode turns off and clears the PIN; your games, saves and settings stay completely safe.
 
 ## Good to know
 
-- **The day's time and the clock:** a handheld that loses its clock doesn't start a new day by that: the time goes on counting from the last
-  date it knew. If that isn't what you want, use **Start today's time again**.
-- **Saves are shared:** your child plays with the same saves as you.
-- **File sharing** stays as you left it. Your child can't reach its page, but anyone on your Wi-Fi with the password can still copy files.
-- **The PIN stops accidents, not a determined kid.** Pulling the card gets past it.
-- Kids mode is not available in the Android app.
+- **Clock resets:** losing the handheld's clock won't trick the daily timer into starting a fresh day—it keeps counting
+  from the last date it knew. Use **Start today's time again** if you want to reset it manually.
+- **Shared saves:** your child uses the same save files as you.
+- **File sharing:** stays however you left it. Your child can't open its settings page, though anyone on your Wi-Fi with
+  the password can still access the share.
+- **Kid-friendly, not tamper-proof:** the PIN prevents accidental changes, not a determined kid who knows how to pull the
+  SD card.
+- Kids mode is not available in pocket-ui for Android.

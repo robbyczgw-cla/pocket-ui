@@ -1,34 +1,38 @@
 # Game check
 
-Settings → Games → **Game check** answers "will my games start?". It goes through the card, on a quiet thread that
-leaves the shelf alone, and shows either **All good** with how many games are ready, or a short list. A folder with more than 50,000 entries is read only as far as the first 50,000; when nothing was found in those, it says **First 50,000 files checked** instead of All good:
+Settings → Games → **Game check** answers one simple question: "Will my games actually start?" It scans your SD card in
+the background without slowing down the shelf, then shows either **All good** with your ready game count or a short list
+of issues. Folders with more than 50,000 entries only check the first 50,000; if those are clean, it says
+**First 50,000 files checked** instead of All good:
 
 ![Game check: how many games are ready, and a row for each kind of problem](pictures/game-check.webp)
 
 | Row | Example | What to do |
 |---|---|---|
-| **Folders that can't be read** | A system entry in `es_systems.cfg` is damaged or has no name or ROM folder | Check the entry at the file and line shown, then scan your games again. Other systems stay on the shelf |
-| **System list** | "The system list is missing / can't be read / has no system in it / every entry is damaged, so pocket-ui uses its built-in list." | Games in their standard folders (`roms/gba`, `roms/nes`, …) show anyway. To use your own list, fix `es_systems.cfg` (it is named) or put a good one back, then scan your games again |
-| **BIOS files** | "Sega CD: BIOS missing." with the exact file names; "The BIOS file is in the wrong folder"; "Wrong BIOS: its checksum differs"; "This BIOS file is empty" | Put your own console's file into `roms/bios`, or move or rename it as the line says |
-| **Discs missing a file** | "Disc: Game.cue is there, its Game.bin is missing." Also an `.m3u` playlist none of whose discs can start | Put the file next to it, with exactly this name |
-| **Empty files** | "This file is empty." | Copy the game again |
-| **Zips that won't start** | "There is no game file in Game.zip"; "Game.zip holds 2 game files" | The line says it, as the shelf would at the start |
-| **Same game twice** | `Game (1).gba` next to `Game.gba` in the same folder (the same file name in two folders of their own is two games) | A hides this copy from the shelf. The file stays, and Settings → System → Storage brings it back |
-| **Wrong folder or file type** | A `.gba` in `roms/snes`, `.sfcc`, `Game.sfc.txt`, a `.rar`, a game two folders down, a folder that is no system's | The line names the folder or the name it should have |
-| **Needs a stronger handheld** | PS2 games on an H700 handheld | Nothing: they stay on the card. Only said where it is known for this handheld |
-| **Tips** | "PlayStation games start without a BIOS, and a few run better with one." | Your choice. Tips don't take the green away |
+| **Folders that can't be read** | A system entry in `es_systems.cfg` is broken or missing a name or ROM folder | Fix the entry at the file and line shown, then rescan your games. All other systems stay on the shelf |
+| **System list** | "The system list is missing / can't be read / has no system in it / every entry is damaged, so pocket-ui uses its built-in list." | Games in standard folders (`roms/gba`, `roms/nes`, …) still appear. To use a custom list, fix or restore `es_systems.cfg` (path shown) and rescan |
+| **BIOS files** | "Sega CD: BIOS missing." with exact filenames; "The BIOS file is in the wrong folder"; "Wrong BIOS: its checksum differs"; "This BIOS file is empty" | Copy your console's BIOS into `roms/bios`, or move or rename it as shown |
+| **Discs missing a file** | "Disc: Game.cue is there, its Game.bin is missing." Also `.m3u` playlists with no playable discs | Place the missing file right beside it with the exact matching filename |
+| **Empty files** | "This file is empty." | Copy the game file over again |
+| **Zips that won't start** | "There is no game file in Game.zip"; "Game.zip holds 2 game files" | Fix the archive as described—the same message appears if you try launching it |
+| **Same game twice** | `Game (1).gba` beside `Game.gba` in the same folder (identical names in separate folders count as separate games) | Press A to hide the extra copy from your shelf. The file stays on your card, and Settings → System → Storage can unhide it anytime |
+| **Wrong folder or file type** | A `.gba` inside `roms/snes`, `.sfcc`, `Game.sfc.txt`, a `.rar`, a game nested two folders deep, or an unrecognised folder | Move or rename the file to the folder or extension shown |
+| **Needs a stronger handheld** | PS2 games on an H700 handheld | Nothing to fix—they stay on your card. Shown only when known for your device |
+| **Tips** | "PlayStation games start without a BIOS, and a few run better with one." | Optional advice. Tips never take away the green **All good** |
 
-A on a row opens its games, A on a game says what is wrong, what to do and where it is. B goes back and stops a check
-that is still running; X looks at everything again. Nothing is downloaded and no network is needed; pocket-ui never
-deletes a game, never gets a BIOS or a game for you and never touches saves. A BIOS is checked against the checksums
-of the known good files (size and checksum, the files of your own console); a game's content is not read, so a damaged
-game that has the right size and name is only found when it is started.
+Press A on a row to see the affected games, and A on a game to see what's wrong, where it lives and how to fix it. Press
+B to go back (or cancel a running scan) and X to scan again. Everything runs offline—pocket-ui never downloads games or
+BIOS files, never deletes your ROMs and never touches saves. BIOS files are verified by size and checksum against known
+good dumps from real consoles; game files aren't read all the way through, so a corrupt ROM with a valid name and size is
+only caught when you launch it.
 
-After Add games with new games the page offers the check ("12 new games"); when games turn up in another way (with the
-SD card in a computer, for example), a short note on Home says where it is. Not for the games you send during the first
-start: the first shelf greets you without it.
-When files were copied that the shelf can't read (a disc without its file, a folder no system reads) and no new game
-turned up with them, the same note says "Some game files can't be read. Settings › Games › Game check says why." On an
-empty Home, "No games yet" says it too.
+When new games arrive via Add games, pocket-ui offers to run Game check right away ("12 new games"). If you copy games
+another way (like popping the SD card into a computer), a brief note on Home points you to Game check—except right after
+first-start setup, so your brand-new shelf stays clean. If you copy files the shelf can't read (a disc missing its `.bin`,
+or an unknown folder) and no new games appear, the note says "Some game files can't be read.
+Settings › Games › Game check says why." An empty Home shows the same hint under "No games yet".
 
-A literal `&` in a system name (such as Game & Watch) is accepted. A damaged system entry is left out individually; the other games remain. A short note points to Game check. If the whole system list can't be read, pocket-ui uses its built-in list (the standard folders), says so in a note and, on an empty shelf, in place of "No games yet". The system list and your games are never changed.
+System names with `&` (like Game & Watch) work fine. If a single entry in `es_systems.cfg` is broken, only that entry is
+skipped while your other games stay put, with a note pointing to Game check. If the whole system list can't be read,
+pocket-ui falls back to its built-in standard folders and lets you know (both in a note and on an empty shelf). Your
+system list and game files are never modified.

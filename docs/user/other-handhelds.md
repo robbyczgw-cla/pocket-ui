@@ -1,67 +1,61 @@
 # Other handhelds
 
-The two-file card install in [Getting started](getting-started.md) is for the Retroid Pocket Mini V2. This page is for the
-handhelds that run pocket-ui as **experimental**: other Retroid devices, SM8550 handhelds and the Anbernic H700 family.
+The quick two-file setup in [Getting started](getting-started.md) targets the Retroid Pocket Mini V2. This page covers
+handhelds supported as **experimental**: other Retroid models, Snapdragon 8 Gen 2 (SM8550) devices, the Anbernic H700
+lineup, TrimUI Brick Pro and Retroid Pocket Classic.
 
 ## Other Retroid devices
 
-pocket-ui also runs on the **Retroid Pocket 5**, the **Retroid Pocket Flip 2** (the Snapdragon 865 one) and the first
-**Retroid Pocket Mini**, as **experimental**: they use the same ROCKNIX system as the Mini V2, so most things should
-work, but nobody has tried pocket-ui on one yet.
+**Retroid Pocket 5**, **Retroid Pocket Flip 2** (Snapdragon 865) and the original **Retroid Pocket Mini** are supported
+as **experimental**—they share the Mini V2's ROCKNIX base, so almost everything works identically, though we haven't
+tested them directly on hardware yet.
 
-- **Installing.** Don't use the Mini V2's SD card image on them. Install ROCKNIX for that device as ROCKNIX's own guide
-  says, start it once, then add pocket-ui with the install package for an existing ROCKNIX card (the
-  [install guide](../INSTALL-DUAL-BOOT.md#install-on-a-rocknix-card-you-already-use) has the steps). It recognises
-  these devices and says they are experimental.
-- **Beta cards for the Pocket 5 and Flip 2.** There are also ready cards to test, in the
-  [beta release](https://github.com/robbyczgw-cla/pocket-ui/releases/tag/beta-images-0.3.2). Hold Volume Down and press
-  Power: if Retroid's menu says **Loader**, start the card from there. If it says **UEFI**, set up OpenABL once with
-  [ROCKNIX's guide](https://rocknix.org/devices/retroid/retroid-pocket-5/) (no computer needed, Run Script as Root;
-  make the backup first, Android stays), then pick Boot mode: Linux and Boot source: SD card. The 12 GB models with the
-  Visionox screen are not supported yet; a card of their own will follow. Steps:
+- **Installing:** don't flash the Mini V2 SD image onto them. Set up ROCKNIX for your exact model first, boot it once,
+  then add pocket-ui with the ROCKNIX install package
+  ([install guide](../INSTALL-DUAL-BOOT.md#install-on-a-rocknix-card-you-already-use)). The installer detects your model
+  and notes its experimental status.
+- **Beta cards for Pocket 5 and Flip 2:** ready-to-flash test images live in the
+  [beta release](https://github.com/robbyczgw-cla/pocket-ui/releases/tag/beta-images-0.3.2). Hold Volume Down + Power:
+  if Retroid's menu shows **Loader**, boot the card right there. If it shows **UEFI**, install OpenABL once using
+  [ROCKNIX's guide](https://rocknix.org/devices/retroid/retroid-pocket-5/) (no PC required—Run Script as Root; back up
+  first, Android stays untouched), then set Boot mode: Linux and Boot source: SD card. *(12 GB models with the Visionox
+  panel aren't supported yet; a dedicated image is planned.)* Full steps:
   [install guide](../INSTALL-DUAL-BOOT.md#pocket-5-and-flip-2-loader-or-uefi).
-- **What you see.** The first start says once that pocket-ui hasn't been tested on your device, unless the project has
-  played on it ([DEVICES](../DEVICES.md)); Settings → Help & tools →
-  About shows the device with "(experimental)". Everything else is the same as on the Mini V2. On the Pocket 5's and
-  Flip 2's wider screen, the Shelf look sits in a column in the middle, and Settings use nearly the whole width in larger type; on the Flip 2, closing the lid
-  puts it to sleep.
-- **If something doesn't work**, Settings → Help & tools → Report a problem saves a file to attach to a report.
-
-
+- **What's different:** first start shows a one-time untested-device note (unless already hardware-tested in
+  [DEVICES](../DEVICES.md)), and Settings → Help & tools → About tags it "(experimental)". On the wider Pocket 5 and
+  Flip 2 displays, Shelf centres cleanly and Settings stretches across the screen in larger type; closing the Flip 2's
+  lid puts it straight to sleep.
+- **Hit a snag?** Use Settings → Help & tools → Report a problem to bundle logs for a bug report.
 
 ### Experimental SM8550 handhelds
 
-The **Retroid Pocket 6** (including TOP-DPAD), **Retroid Pocket Nova**, **AYN Odin 2 Mini**,
-**AYN Odin 2** and **AYN Odin 2 Portal** are experimental. Only the Odin 2 Mini has been tried on a real device
-(2026-10-27: the install package, the first-start screens, the shelf, a GBA game with the pause menu, screen off and
-wake, driven over the command pipe; no button or touch pressed, no Bluetooth, no sleep); the other four are computer
-tests only, with no hardware verification. Use ROCKNIX's own **SM8550 aarch64 image**
-(20261001), set up following ROCKNIX's guide for your device, boot it once, then add pocket-ui
-with the install package. The Mini V2 SD image must not be used on these devices.
+The **Retroid Pocket 6** (including TOP-DPAD), **Retroid Pocket Nova**, **AYN Odin 2 Mini**, **AYN Odin 2** and **AYN
+Odin 2 Portal** are experimental. Only the Odin 2 Mini has been smoke-checked on real hardware so far (2026-10-27:
+installer, first start, shelf, GBA game + pause menu, screen off/wake via command pipe—no live buttons, touch, Bluetooth
+or sleep tested); the other four are virtual-tested only. Install ROCKNIX's **SM8550 aarch64 image** (20261001), boot it
+once, then add pocket-ui via the install package. Never use the Mini V2 image on these devices.
 
-**Beta cards for the Pocket 6 and Nova** are in the
-[beta release](https://github.com/robbyczgw-cla/pocket-ui/releases/tag/beta-images-0.3.2) and start from Retroid's own
-"UEFI" entry (Volume Down + Power). Retroid's own UEFI start has worked for one tester with another Linux card; if your
-device falls back to the boot menu, set up OpenABL once with ROCKNIX's guide
-([Pocket 6](https://rocknix.org/devices/retroid/retroid-pocket-6/), [Nova](https://rocknix.org/devices/retroid/retroid-pocket-nova/)),
-Android stays. Then start the card from OpenABL's menu, and tell us how it went.
+**Beta cards for Pocket 6 and Nova** live in the
+[beta release](https://github.com/robbyczgw-cla/pocket-ui/releases/tag/beta-images-0.3.2) and boot via Retroid's "UEFI"
+entry (Volume Down + Power). If your unit bounces back to the boot menu, set up OpenABL once via ROCKNIX's guide
+([Pocket 6](https://rocknix.org/devices/retroid/retroid-pocket-6/),
+[Nova](https://rocknix.org/devices/retroid/retroid-pocket-nova/))—Android stays untouched—then boot from OpenABL's menu
+and let us know how it runs.
 
-Pocket 6 and the Odin 2 family use 1920×1080; Nova uses 1280×960. First start says once that the device is untested;
-About marks it experimental. **Stock ROCKNIX still disables sleep on these devices (checked 2026-10-27):** the power button
-turns the screen off, and idle turns it off with the game paused. Any button brings it back.
-Settings → System → Sleep & power offers **Switch off after** (Off by default) to save and power
-off after a longer dark spell on battery. Screen off still uses battery. ROCKNIX controls the fan;
-pocket-ui's fan choices have no effect here. Touch, LEDs, vibration, battery drain, 120 Hz pacing
-and Zink on the real GPU still need a tester. Mini and Portal menus start with Xbox buttons
-(A bottom); the original Odin 2 uses Nintendo buttons (A right). Saved layout choices win. See [device notes](../DEVICES.md).
+Pocket 6 and the Odin 2 lineup run at 1920×1080; Nova runs at 1280×960. **Stock ROCKNIX disables deep sleep on SM8550
+devices (checked 2026-10-27):** pressing Power or idling turns the screen off and pauses your game, and any button wakes
+it. Settings → System → Sleep & power adds **Switch off after** (Off by default) to auto-save and shut down after longer
+idle time on battery since screen-off still draws power. ROCKNIX manages the fan directly (pocket-ui's fan toggles don't
+apply). Touch, stick LEDs, rumble, standby drain, 120 Hz pacing and Zink still need hardware feedback. Odin 2 Mini and
+Portal default to Xbox menu layout (A bottom), while the original Odin 2 defaults to Nintendo (A right); your own choice
+always wins. See [device notes](../DEVICES.md).
 
 ## Anbernic H700 handhelds (experimental)
 
-pocket-ui runs on the Anbernic handhelds that ROCKNIX's **H700 image** supports. All of them are **experimental**:
-pocket-ui knows each model (screen, buttons, what it has). The **RG35XX Plus** has been played on a real handheld; the other
-models have only been tested on a computer so far. If something doesn't work, Settings → Help & tools → Report a problem saves a file to attach to a
-report. The **RG CubeXX** (square 720×720 screen) gets the same pages, laid out for a square screen; nobody has played on
-one yet, its speed was measured on an RG35XX Plus, which has the same processor.
+pocket-ui supports the full Anbernic H700 lineup covered by ROCKNIX's **H700 image** as **experimental**, with per-model
+profiles for screen size, inputs and hardware. The **RG35XX Plus** has been played on real hardware; the rest are
+off-device tested so far. The **RG CubeXX** (square 720×720) gets a tailored square layout (performance measured on the
+same-chip RG35XX Plus). Use Settings → Help & tools → Report a problem if anything acts up.
 
 | Model | Screen | Wi-Fi | Sticks | Lid | Lights |
 |---|---|---|---|---|---|
@@ -78,27 +72,23 @@ one yet, its speed was measured on an RG35XX Plus, which has the same processor.
 | RG-SP | 720×480 | yes | no | yes | |
 | RG CubeXX | 720×720 | yes | yes | no | RGB |
 
-All of them have 1 GB of memory, no touch screen and no fan. The RGB lights of the RG40XX are ROCKNIX's; pocket-ui
-doesn't change them.
+All H700 models have 1 GB RAM, no touchscreen and no fan. RG40XX RGB rings stay under ROCKNIX control.
 
 ### Install
 
-1. **Use a spare microSD card for ROCKNIX and keep your stock card as it is.** The H700 handhelds have no internal
-   storage: the stock system lives on the card in slot 1, so ROCKNIX goes on a different card and you can switch back
-   by swapping cards. Back up the card with your games before you put it in a ROCKNIX boot.
-2. Download ROCKNIX's **H700 image** from the [official ROCKNIX H700 install page](https://rocknix.org/configure/h700-installation/)
-   (version 20261001 or newer) and flash it with balenaEtcher or Raspberry Pi Imager. There is one image per memory
-   type: **try the DDR4 image first. If the handheld doesn't start from it** (the screen stays black), flash the **DDR3**
-   image onto the same card instead; only the card is at risk. The **RG-SP** and the **RG34XX-SP sold since 2026**
-   (Metallic Blue, 1 GB or less) have DDR3 memory as far as we know: take the DDR3 image first on those.
-3. Take the card out and in again so your computer shows the **ROCKNIX** drive. Copy your model's device tree file
-   from its `device_trees` folder to the top folder of that drive and name the copy **`dtb.img`** (all lower case).
-   Eject the card properly: skipping this step can leave the card unable to start.
+1. **Use a spare microSD card and leave your stock card untouched.** H700 handhelds boot entirely from slot 1, so you
+   can always swap back to stock by swapping cards. Back up your ROM card before inserting it.
+2. Flash ROCKNIX's **H700 image** (20261001 or newer) from the
+   [official ROCKNIX H700 install page](https://rocknix.org/configure/h700-installation/) using balenaEtcher or Raspberry
+   Pi Imager. **Try the DDR4 image first;** if the screen stays black on boot, flash the **DDR3** image onto the same
+   card instead. For the **RG-SP** and **2026 Metallic Blue RG34XX-SP** (1 GB RAM or less), start with **DDR3**.
+3. Re-insert the card in your PC to mount the **ROCKNIX** drive, copy your model's `.dtb` from `device_trees` to the
+   root of the drive, rename it **`dtb.img`** (all lowercase), and safely eject:
 
    | Model | Device tree file (in `device_trees`) |
    |---|---|
    | RG28XX | `sun50i-h700-anbernic-rg28xx.dtb` |
-   | RG35XX 2024 | `sun50i-h700-anbernic-rg35xx-2024.dtb` (`...-2024-rev6-panel.dtb` if the picture is garbled) |
+   | RG35XX 2024 | `sun50i-h700-anbernic-rg35xx-2024.dtb` (`...-2024-rev6-panel.dtb` if garbled) |
    | RG35XX Plus | `sun50i-h700-anbernic-rg35xx-plus.dtb` (`...-plus-rev6-panel.dtb`) |
    | RG35XX H | `sun50i-h700-anbernic-rg35xx-h.dtb` (`...-h-rev6-panel.dtb`) |
    | RG35XX Pro | `sun50i-h700-anbernic-rg35xx-pro.dtb` |
@@ -106,64 +96,54 @@ doesn't change them.
    | RG40XX H | `sun50i-h700-anbernic-rg40xx-h.dtb` (`...-h-v2-panel.dtb`) |
    | RG40XX V | `sun50i-h700-anbernic-rg40xx-v.dtb` (`...-v-v2-panel.dtb`) |
    | RG34XX | `sun50i-h700-anbernic-rg34xx.dtb` |
-   | RG34XX-SP | `sun50i-h700-anbernic-rg34xx-sp.dtb` (`...-sp-v2-panel.dtb`; the 2026 Metallic Blue units need this one) |
+   | RG34XX-SP | `sun50i-h700-anbernic-rg34xx-sp.dtb` (`...-sp-v2-panel.dtb` for 2026 Metallic Blue units) |
    | RG-SP | `sun50i-h700-anbernic-rg-sp.dtb` |
 
-   The name in brackets is for a newer panel revision: if the first file shows a garbled or striped picture, hold
-   the power button for 10 seconds, flash again and try that one.
-4. Start ROCKNIX from the card. The first start grows its storage and restarts by itself; then ROCKNIX asks its own
-   first questions. Let it come up to EmulationStation once.
-5. Add pocket-ui. Without a network (the RG28XX and RG35XX 2024 have no Wi-Fi), use one of these:
-   - **The Ports installer:** copy the single file *Install pocket-ui.sh* into the `roms/ports` folder of the card
-     (the card in your computer, or ROCKNIX's file sharing), start EmulationStation again, open **Ports** and start
-     **Install pocket-ui**. The screen shows the checks and the install, then pocket-ui starts.
-   - **Two files on the card:** copy `mount-storage.sh` and `pocket-ui-seed.tar.gz` to the top folder of the
-     **ROCKNIX** drive, put the card in and start the handheld. It installs during that start and opens pocket-ui.
-   With Wi-Fi and SSH, the install package for an existing ROCKNIX card works too (see the
-   [install guide](../INSTALL-DUAL-BOOT.md#install-on-a-rocknix-card-you-already-use)).
+   Garbled or striped screen? Hold Power 10 seconds, re-flash and try the bracketed newer-panel revision `.dtb`.
+4. Boot ROCKNIX once—it expands storage, reboots and walks through its first-boot setup until ROCKNIX's menu opens.
+5. Add pocket-ui (pick whichever fits your setup):
+   - **Ports installer (offline-friendly):** copy `Install pocket-ui.sh` into `roms/ports`, open **Ports** in ROCKNIX's
+     menu and launch **Install pocket-ui**.
+   - **Two-file boot install (offline-friendly):** copy `mount-storage.sh` and `pocket-ui-seed.tar.gz` to the root of
+     the **ROCKNIX** drive and boot—it installs automatically and opens pocket-ui.
+   - **Over Wi-Fi / SSH:** use the ROCKNIX install package
+     ([install guide](../INSTALL-DUAL-BOOT.md#install-on-a-rocknix-card-you-already-use)).
 
-   All three check the device first: only the models in the table are accepted, and an H700 handheld that isn't in
-   it is refused with a sentence and nothing is changed. ROCKNIX keeps starting as before.
+   All three check your model first and refuse unknown H700 boards cleanly without modifying ROCKNIX.
 
 ### What works, what is hidden
 
-- **Games.** The consoles ROCKNIX's H700 image ships cores for play in pocket-ui's own player, with its pause menu,
-  states and shortcuts. **N64, PSP, Dreamcast and Nintendo DS stay on ROCKNIX's own emulators** (they ask more than
-  these processors give). PS2, GameCube, Wii and 3DS are not in ROCKNIX's H700 image, so those systems don't appear.
-  See [Game Boy Advance on H700](systems.md#game-boy-advance-on-h700) for GBA cores and existing Continue moments.
-- **Screen.** pocket-ui draws its normal layout and reduces it to the small screen, so it looks like on the Mini V2,
-  only smaller. Small hint text can be hard to read on the 640×480 handhelds; Settings → Look → Text size
-  makes it larger.
-- **Hidden or reduced.** Fan settings say "No fan"; there is no touch setup. The RG28XX and RG35XX 2024 say
-  "This device has no Wi-Fi" on the Wi-Fi page and offer nothing to switch on there: everything else works offline.
-  Pages that need a network (Tailscale, Sync, Web companion, Remote access, RetroAchievements, the starter pack) say
-  "Needs a network, and this handheld has no Wi-Fi." instead of asking you to connect, and Box art says how to copy
-  covers from a computer ([Box art without Wi-Fi](extras.md#without-wi-fi)). On the
-  handhelds without sticks, no stick lights are offered.
-- **Time zone** is set the H700 way (ROCKNIX's system setting); the first-start step is there as on the other devices.
-- **To go back:** take the card out and put your stock card in, or run `sh /storage/pocket-ui/uninstall.sh`, or
-  start *Uninstall pocket-ui* in Ports: EmulationStation is back at the next start. Don't run ROCKNIX's online
-  update on a card with pocket-ui until a pocket-ui release says that version was checked.
+- **Games:** every console ROCKNIX's H700 image ships cores for runs in pocket-ui's own player with its pause menu,
+  states and shortcuts—including **Nintendo DS on DSperate**. **N64, PSP and Dreamcast stay on ROCKNIX's emulators**
+  (too heavy for pocket-core on H700), and PS2/GameCube/Wii/3DS aren't included on H700. See
+  [Game Boy Advance on H700](systems.md#game-boy-advance-on-h700) for GBA core details.
+- **Display:** scales pocket-ui's full layout cleanly to 640×480 / 720×480 / 720×720. Want bigger hints on 640×480? Turn
+  on Settings → Look → Text size → **Large**.
+- **Cleanly tailored:** fan rows read "No fan", touch options stay hidden, and stickless models hide stick LEDs. On
+  non-Wi-Fi models (RG28XX, RG35XX 2024), Wi-Fi and online features (Tailscale, Sync, Web companion, Remote access,
+  RetroAchievements, Starter pack) explain offline mode clearly, and Box art explains copying covers from a PC
+  ([Box art without Wi-Fi](extras.md#without-wi-fi)).
+- **Time zone:** uses ROCKNIX's H700 system setting, still offered during first start.
+- **Uninstalling:** swap back to your stock card, run `sh /storage/pocket-ui/uninstall.sh`, or launch *Uninstall
+  pocket-ui* in Ports to return to ROCKNIX's menu. Skip ROCKNIX online updates until a pocket-ui release confirms
+  compatibility.
 
 ## TrimUI Brick Pro (experimental)
 
-The Brick Pro uses the same TrimUI card as the Brick and Smart Pro. It has two sticks with L3/R3 clicks and separate F1/F2
-buttons. Clicking a stick never quick-saves or quick-loads; use MENU and the pause menu for saves, or assign the separate F keys.
-Its 3.95-inch screen uses the standard type sizes. The side switch has no assigned function and the lights stay off while their
-behaviour is untested. Lights & buttons offers only the F1/F2 assignments.
+Runs the same TrimUI card package as the Brick and Smart Pro, adding dual sticks (L3/R3 clicks never trigger accidental
+quick-save/load—use MENU or F1/F2) and separate F1/F2 keys. Its 3.95" display uses standard font sizes; the side switch
+and LED controls stay disabled until verified, so **Lights & buttons** exposes F1/F2 assignments only.
 
-Nobody on the project has tested a Brick Pro. Use a spare card and back up saves before trying it. For feedback, open
-Settings → Help & tools → Report a problem. If there is no picture, send the card's `pocket-ui/logs` folder.
+Untested on real hardware so far—try it on a spare card and back up saves first. Send feedback via
+Settings → Help & tools → Report a problem (or grab `pocket-ui/logs` off the card if there's no picture).
 
 ## Retroid Pocket Classic beta
 
-The Classic Rev Q is experimental and has not been tested on real hardware. Its screen is
-1240 × 1080 with touch, four face buttons and no sticks. Stick-light settings are hidden;
-ROCKNIX controls the fan. Sleep, sound, touch and every button need verification on the device.
-The six-button Classic and other revisions are not supported by this beta image.
+Experimental and untested on hardware. Features a 1240×1080 touchscreen, four face buttons and no sticks (stick LEDs
+hidden; ROCKNIX manages the fan). Sleep, audio, touch and inputs still need live testing. Six-button Classic models and
+other revisions aren't supported by this beta card.
 
-Needs ROCKNIX's bootloader (ABL) already installed on your Classic; this card does not install it.
-Do not flash a bootloader for this beta or follow the Pocket 5's Loader instructions. Use a spare
-microSD only on a Classic Rev Q already booting ROCKNIX 20261101 through compatible OpenABL (v1.2). The card disables access to internal
-eMMC and carries no ABL payload. Android stays on internal storage; select Android in the
-existing bootloader to return to it. Boot and hardware safety have only been checked offline.
+Requires ROCKNIX 20261101's compatible OpenABL (v1.2) bootloader already installed on your Classic—never flash a
+bootloader from this beta or follow Pocket 5 Loader steps. Use a spare microSD card only. Internal eMMC access is
+disabled and no ABL payload is included, so Android stays safe on internal storage (pick Android in your bootloader to
+return). Boot and safety checks have been verified offline only.

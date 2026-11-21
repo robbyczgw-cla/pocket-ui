@@ -1,128 +1,121 @@
 # Settings: Screen & sound, Controls
 
-The **Screen & sound** and **Controls** categories of [Settings](settings.md), on a page of their own. Until this version
-they were one category, Controls & sound (Sound & feel before that); Brightness and Volume were only in the
-[quick settings](quick-settings.md), Screen colour and Night light were in Look, and Zoom in the pause menu was here (it
-is in [Playing](settings-playing.md#zoom-in-the-pause-menu) now).
+The **Screen & sound** and **Controls** categories from [Settings](settings.md). *(In earlier versions these lived under
+Controls & sound; Brightness and Volume were only in [quick settings](quick-settings.md), Screen colour and Night light
+were under Look, and Zoom in the pause menu has moved to [Playing](settings-playing.md#zoom-in-the-pause-menu).)*
 
 ## Screen & sound
 
-Settings → **Screen & sound**. What the device puts out: how bright and how loud, the screen's colour, and what you hear
-besides the game.
+Settings → **Screen & sound** covers display output, audio levels, colour warmth and menu feedback.
 
 | Entry | What it holds |
 |---|---|
-| **Brightness** | How bright the screen is: the same value as the [quick settings](quick-settings.md)' Brightness and START + Vol, so they always agree. Left/Right change it, one step at a time; below the lowest backlight the screen gets darker still (extra dim), as in the quick settings |
-| **Volume** | How loud games and menus are: the same value as the quick settings' Volume and the volume keys. Left/Right change it, one step at a time |
-| **Screen colour** | The screen's white: **Cooler 10** … **Neutral** … **Warmer 10**. Left/Right changes it, you see it at once; A goes back to Neutral. The same setting as [SELECT + Vol](controls-settings.md#volume-and-brightness-keys), so the two always agree |
-| **Night light** | Warmer, less blue colours in the evening, in the menus and in games: **Off** (the default), **On** or **Scheduled**, with a strength. See [Night light](#night-light) |
-| **Menu sounds** | Soft clicks in the menus, not the game's volume (that is **Volume** above). A turns them on or off, Left/Right set how loud. See [Playing](playing.md#menu-sounds) |
-| **Case sounds** | Cases click open, cartridges and discs go in with a sound, the old TV hums on. Shelf and Cabinet looks only. Needs Menu sounds on; the menu sounds are not affected. **On** at the start. A or Left/Right switches it |
-| **Photos of big moments** | Off unless you switch it on. On: when your save shows a big step (a new badge, a boss beaten, a level of ten), pocket-ui keeps a small photo of that moment in the game's case, quietly: when you quit it slides into the case. **Also in play** (the third value): the moment a photo is taken you also see it over the game (a soft flash, the shutter, the photo out of the screen's bottom edge, developing); not on the TrimUI Brick and in pocket-ui for Android, which have only Off and On. Off, no photo is taken, nothing is kept and the case has no photos to open (ones taken before stay on the card). See [Photos of big moments](library.md#photos-of-big-moments) |
+| **Brightness** | Screen brightness—always synced with [quick settings](quick-settings.md) and START + Vol. Adjust step-by-step with Left/Right; going past the lowest hardware backlight drops into extra-dim software dimming |
+| **Volume** | Master volume for games and menus—synced with quick settings and the hardware volume keys. Adjust with Left/Right |
+| **Screen colour** | White balance from **Cooler 10** through **Neutral** to **Warmer 10**. Adjust live with Left/Right; press A to snap back to Neutral. Synced with [SELECT + Vol](controls-settings.md#volume-and-brightness-keys) |
+| **Night light** | Warmer, low-blue evening screen colours in menus and games: **Off** (default), **On** or **Scheduled** with adjustable strength. See [Night light](#night-light) |
+| **Menu sounds** | Subtle UI clicks (separate from game **Volume**). Press A to toggle On/Off, Left/Right to set click volume. See [Playing](playing.md#menu-sounds) |
+| **Case sounds** | Tactile case clicks, cartridge/disc insertion sounds and CRT switch-on hum (Shelf and Cabinet layouts only; requires Menu sounds On). Starts **On**; toggle with A or Left/Right |
+| **Photos of big moments** | Starts Off. When **On**, pocket-ui quietly snaps a little instant photo whenever your save hits a milestone (a new badge, a beaten boss, every 10 levels) and slides it into the game's case when you quit. **Also in play** (third option) shows a gentle shutter flash and developing photo right in-game (Linux handhelds only; TrimUI Brick and pocket-ui for Android offer Off and On). Turning it Off stops new snaps without deleting existing ones. See [Photos of big moments](library.md#photos-of-big-moments) |
 
-Case sounds sits beside Menu sounds, which it needs. While Menu sounds is off, the line at the bottom says so.
+Case sounds sits right beneath Menu sounds because it depends on it—if Menu sounds is Off, the footer reminds you.
 
 ### Night light
 
 Settings → Screen & sound → **Night light** has its own page: [Night light](night-light.md).
 
-
 ## Controls
 
-Settings → **Controls**. The buttons in one place, then what you feel in your hands and see on the controller.
+Settings → **Controls** puts button layouts, controller remapping, diagnostics, haptics and stick LEDs in one place.
 
 | Entry | What it holds |
 |---|---|
-| **Buttons** | Which face button confirms in pocket-ui's menus, and how the buttons look in the hints, with a picture of the four buttons. See [Buttons](#buttons) |
-| **Controller setup** | A separate layout for each controller, in menus and games: which of its buttons is which. Controllers are paired in Connections → [Bluetooth](bluetooth.md). See [Controller setup](#controller-setup) |
-| **Test buttons** | Every controller's buttons, triggers and sticks light up while you press them, and the page says what each press does in menus and in games. See [Test buttons](#test-buttons) |
-| **Haptics** | A very short tick in the menus as the selection moves, on every page where a move also clicks. A turns it on or off. Off by default |
-| **LEDs** | The lights around the sticks: off, one colour, or the battery colours. Only on a device with sticks. On the TrimUI Brick the row is called **Lights & buttons** and holds the Brick's own lights, the F1 and F2 keys and the mute slider. See [LEDs](#leds) |
+| **Buttons** | Choose which face button confirms in pocket-ui menus and how button icons look in hints, with a live four-button diagram. See [Buttons](#buttons) |
+| **Controller setup** | Custom per-controller button mapping across menus and games. Pair wireless pads under Connections → [Bluetooth](bluetooth.md). See [Controller setup](#controller-setup) |
+| **Test buttons** | Live button, trigger and analogue stick tester showing what each input does in menus and games. See [Test buttons](#test-buttons) |
+| **Haptics** | Crisp, subtle tick as you move through menus (on every screen that clicks). Toggle with A; starts Off |
+| **LEDs** | Analogue stick ring lights: Off, solid colour or battery colour (shown only on handhelds with sticks). On the TrimUI Brick this row is **Lights & buttons** for the Brick's LEDs, F1/F2 keys and mute slider. See [LEDs](#leds) |
 
 ### Buttons
 
-Settings → Controls → **Buttons** has two rows and, under them, a picture of the four face buttons where they sit on
-your device, each with the symbol the hints show for it; the one that confirms is named **Confirm** and the one that
-goes back **Back**. A line under the picture says which button confirms right now. A or Left/Right switches the
-selected row, and the next button you press already works the new way. Both choices are saved at once.
+Settings → Controls → **Buttons** shows two switches above a diagram of your four face buttons with their current hint
+icons, labelling which one is **Confirm** and which is **Back**. A footer line confirms which button selects right now.
+Flip either row with A or Left/Right—the new layout takes effect on your very next press and saves immediately.
 
 #### Button layout
 
-Which face button plays A, B, X and Y in pocket-ui's own screens.
+Sets which physical face button acts as A, B, X and Y in pocket-ui's menus:
 
-- **Nintendo**, the default: A on the right, B at the bottom, X on top, Y on the left, as printed on the Mini V2.
-- **Xbox**: A at the bottom, B on the right, X on the left, Y on top, as on an Xbox controller.
+- **Nintendo** (default): A right, B bottom, X top, Y left—matching the Mini V2's printed buttons.
+- **Xbox**: A bottom, B right, X left, Y top—matching an Xbox controller.
 
-Menus only: games and safe mode keep the printed buttons. What it changes and what it leaves alone is in
-[Controls](controls.md#button-layout).
+Menus only—in-game controls and safe mode always follow the physical buttons. See
+[Controls](controls.md#button-layout) for the exact rules.
 
-Not on Android: there the handheld's own setting decides which button confirms (on the Odin its Controller style),
-and the Buttons page only has Button symbols ([Android](android-mvp.md)).
+On Android, your handheld's own OS setting controls Confirm/Back (like Controller style on Odin), so Buttons only shows
+Button symbols ([Android](android-mvp.md)).
 
-On experimental **AYN Odin 2 Mini** and **Odin 2 Portal**, the default menu layout is **Xbox** (A bottom,
-B right, X left, Y top), matching the printed letters. The original Odin 2 defaults to Nintendo. A saved choice
-wins. Safe mode follows the device’s printed layout. Games keep their positional controls: the screenshot
-shortcut is HOME + the right face button (printed B on Mini/Portal), regardless of the menu layout.
+On the experimental **AYN Odin 2 Mini** and **Odin 2 Portal**, menus default to **Xbox** (A bottom, B right, X left, Y
+top) to match their printed labels, while the original Odin 2 defaults to Nintendo. Your saved choice always wins, safe
+mode always uses the printed layout, and games keep positional controls (so screenshots are always HOME + the right face
+button—printed B on Mini/Portal—regardless of menu layout).
 
 #### Button symbols
 
-How the hints show the four face buttons, everywhere a key is shown (the hint bars, dialogs, the pause menu, this
-manual's key chips and its controls picture).
+Changes how the four face buttons appear across hint bars, dialogs, the pause menu, this manual's chips and the controls
+diagram:
 
-- **Nintendo**: plain letters A, B, X and Y.
-- **Xbox**: A, B, X and Y on green, red, blue and yellow.
-- **PlayStation**: cross, circle, square and triangle. Cross stands for A, circle for B, square for X and triangle
-  for Y.
+- **Nintendo:** plain A, B, X and Y letters.
+- **Xbox:** coloured A (green), B (red), X (blue) and Y (yellow).
+- **PlayStation:** cross (A), circle (B), square (X) and triangle (Y).
 
-Retroid and AYN handhelds start with Xbox, Anbernic handhelds with Nintendo; your choice wins. It only changes the
-pictures of the keys: which button confirms is [Button layout](#button-layout)'s job, and the two can be
-combined freely. The explanations under a list still name the keys by their letter.
+Retroid and AYN handhelds default to Xbox icons, Anbernic handhelds to Nintendo; your pick always wins. Symbols are
+purely visual—mix and match freely with [Button layout](#button-layout). Text descriptions below lists still refer to
+buttons by letter.
 
 ### Controller setup
 
-Settings → Controls → **Controller setup** gives each controller a layout of its own, kept through reconnects:
-choose the controller at the top, then press the button you want for each action. It was the third row of Buttons. The
-same page opens from the pause menu, Options → Controls. See [Controller setup](controls-settings.md#controller-setup).
+Settings → Controls → **Controller setup** lets you remap any connected controller and remembers it across reconnects:
+pick the controller at the top, then press each desired button. Also accessible mid-game via Pause menu → Options →
+Controls. See [Controller setup](controls-settings.md#controller-setup).
 
 ### Test buttons
 
-Settings → Controls → **Test buttons** shows what a controller really sends, for a button that seems dead, a
-trigger that feels off, a stick that drifts, or when you want to see what your own layout does.
+Settings → Controls → **Test buttons** displays raw controller inputs live—ideal for diagnosing a sticky button, quirky
+trigger, stick drift or verifying a custom remap.
 
 ![Test buttons: the controller drawn, a trigger half pulled, the last button pressed](pictures/test-buttons.webp)
 
-- **Left: the controllers.** The Pocket's own buttons, every Bluetooth controller and every USB controller, each with
-  its player number and how it is connected. A small light burns while something of that controller is down. The one
-  you press a button on (or push a stick of) is drawn on the right.
-- **The drawing.** Face buttons, D-pad, L1 and R1, SELECT, START, HOME and both sticks light up while they are down.
-  The letters on the four face buttons are what those buttons are in the menus, after the [Button layout](settings-sound.md#button-layout)
-  and your own layout in Controller setup. A small dot on a button means your own layout moved it.
-- **Triggers** show how far they are pulled, in percent. The tick on the bar is where they count as pressed (55%); they
-  are let go again below 40%. A trigger that is only a button (some controllers) fills at once.
-- **Sticks** show where the stick is, as two numbers from -100 to 100. The small square in the middle is the dead zone:
-  menus ignore a stick that stays inside it.
-- **The last button pressed**, on which controller and player, and what it is **in menus** (A, B, X, Y or its own name)
-  and **in games** (the console's button, through your layout). If your layout moved it, the page says **Remapped to**
-  and the button it acts as. A press that pocket-ui does not know is shown as **Not recognised**, with the name the
-  controller gave it: useful in a bug report.
+- **Controller list (left):** shows your built-in pad plus every connected Bluetooth and USB controller with its player
+  number and connection type. A dot lights whenever any input is active, and whichever pad you press draws on the right.
+- **Live diagram:** face buttons, D-pad, L1/R1, SELECT, START, HOME and both sticks highlight as you press them. Face
+  button labels reflect your [Button layout](settings-sound.md#button-layout) and custom remaps (remapped buttons show a
+  small dot).
+- **Triggers:** displays pull percentage live—the tick mark shows the press threshold (55%), releasing below 40%.
+  Digital button triggers jump straight to 100%.
+- **Sticks:** live X/Y values from -100 to 100 with a centre box showing the menu dead zone.
+- **Last input:** identifies the controller, player number, menu action (A/B/X/Y/etc.) and in-game console button (noting
+  **Remapped to** when moved by Controller setup). Unmapped inputs display **Not recognised** with their raw name—handy
+  for bug reports.
 
-Every button is a test here, B, START and HOME too, so none of them leaves the page. **Hold HOME for 2 seconds, or B and
-START together on one controller**; a bar shows how long to keep holding. A tap on the hint at the bottom right leaves
-as well. The volume and power keys keep their meaning. With two controllers, both can be pressed at the same time: each
-keeps its own lights, and the page names the one that pressed last.
+Because every button—including B, START and HOME—is tested here, single presses won't exit. **Hold HOME for 2 seconds,
+or hold B + START together on one controller** (a progress bar fills), or tap the bottom-right exit hint. Volume and
+power keys work normally. Multiple controllers can be tested simultaneously—each lights independently while the readout
+shows the latest press.
 
 ### LEDs
 
-Settings → Controls → **LEDs** is for the lights around the two sticks. They are **off** unless you turn them on here:
-ROCKNIX lights them at full brightness out of the box, and pocket-ui switches them off the first time it starts.
+Settings → Controls → **LEDs** manages analogue stick ring lights. ROCKNIX ships them at full blast; pocket-ui turns
+them **Off** automatically on first boot until you enable them here:
 
-- **Lights** has three choices. **Off** keeps them dark. **Colour** makes both sticks glow in one colour. **Battery**
-  uses ROCKNIX's own battery colours: green when charged, orange and then red as it runs low, always at full brightness.
-- **Colour** (only with Lights on Colour) picks a calm colour: blue, warm, teal, green, violet or rose. **The game's**
-  is warm in the menus and takes the colour of the system you are playing while a game runs.
-- **Brightness** (also only with Colour) has four steps: 25, 50, 75 and 100%.
+- **Lights:** **Off** (dark), **Colour** (single chosen glow on both sticks), or **Battery** (ROCKNIX's full-brightness
+  green → orange → red battery indicator).
+- **Colour** *(when set to Colour)*: calm presets—blue, warm, teal, green, violet, rose, or **The game's** (warm in
+  menus, matching each console's shelf colour while playing).
+- **Brightness** *(when set to Colour)*: 25%, 50%, 75% or 100%.
 
-Left/Right change the selected row, A moves on to the next choice. The choice takes effect at once, is kept across restarts,
-and is the one ROCKNIX applies at the next boot. The lights also go dark while the device sleeps, as ROCKNIX does it.
+Adjust with Left/Right or step forward with A. Changes apply immediately, persist across reboots (including at ROCKNIX
+boot) and switch off cleanly during sleep.
 
-On the experimental TrimUI Brick Pro, **Lights & buttons** offers only the separate F1/F2 assignments. L3/R3 are stick clicks; the side switch and light controls stay disabled.
+On the experimental TrimUI Brick Pro, **Lights & buttons** exposes separate F1/F2 assignments only; L3/R3 map to stick
+clicks while the side switch and LED controls stay disabled.

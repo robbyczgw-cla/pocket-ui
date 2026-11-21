@@ -1,54 +1,55 @@
 # Big text, Zoom and Hold to toggle
 
-Three helps for small screens and hands that tire: larger text in one switch, a magnifier for a game's picture, and buttons
-that stay down without holding them. The magnifier stays out of the way until you want it.
+Three comfort features for tiny screens and tired thumbs: bigger text in a single switch, an in-game screen magnifier,
+and buttons that stay held down without keeping your finger on them. Nothing gets in your way until you want it.
 
 ## Big text
 
-The Tour's last card **Big text** (Settings → Help & tools → [Tour](tour.md); Up/Down choose On or Off, A applies it) sets two settings together:
-[**Text size**](settings.md#text-size) to Large and [**Motion**](settings.md#motion) to Reduced. Every screen then has larger
-text, and nothing slides: pages and messages only fade. Switching the card off puts Text size back to Normal and Motion to
-Full. It is no setting of its own: both stay in their rows, and you can change either one afterwards. While Big text is on
-(Large text and a Motion that is not Full), the pause menu also lists [Zoom](#zoom) on its first page. After an update the card
-is one of the "New in this version" cards.
+The final card in the Tour—**Big text** (Settings → Help & tools → [Tour](tour.md); pick On or Off with Up/Down, press A
+to apply)—flips two settings at once: [**Text size**](settings.md#text-size) to Large and
+[**Motion**](settings.md#motion) to Reduced. Menus get bigger, easier-to-read letters, and slides become gentle fades.
+Turning it off restores Normal text and Full motion. It isn't a separate lock—both settings stay editable individually
+afterwards. Whenever Big text is active (Large text plus non-Full motion), [Zoom](#zoom) also appears right on the first
+page of the pause menu. After an update, this card appears under "New in this version".
 
 ## Zoom
 
-**Zoom** is in the [pause menu](pause-menu.md) on pocket-ui's own host (see below where). It shows the frozen picture of
-the game **2x** larger, for small text such as a Game Boy Advance dialogue. Only the game's own picture is enlarged, not the black
-borders or the screen frame around it, and on a handheld's games it opens at the bottom of the picture, where the dialogue boxes are.
+Available in the [pause menu](pause-menu.md) for games running in pocket-ui's own player, **Zoom** blows up the paused
+game screen to **2x** so tiny text (like GBA RPG dialogue) is effortless to read. Only the game picture zooms—never the
+black bars or screen frame—and handheld games open focused on the bottom of the screen where dialogue boxes usually sit.
 
-- The **D-pad** moves the part you see, a quarter of it at a time, up to the picture's edge.
-- **A** (or L1 / R1) switches between **2x** and **3x**. A small pill in the top left corner names the level, and the page
-  opens at the one you used last until you quit pocket-ui.
-- **B** goes back to where you came from: the menu (the game stays paused), or, after HOME + X, into the game.
+- **D-pad** pans around the zoomed image a quarter-screen at a time up to the edges.
+- **A** (or L1 / R1) toggles between **2x** and **3x**. A small badge in the top-left shows the current zoom, and
+  pocket-ui remembers your last level until you quit.
+- **B** closes Zoom and takes you back to the pause menu—or straight back into the game if you opened it with HOME + X.
 
-**Where to find it.** Pause menu → Options → **Zoom**, after Speed, rumble, fan, always. It also stands on the menu's first page, right before
-Quit, while Big text is on or Settings → Playing → [**Zoom in the pause menu**](settings-playing.md#zoom-in-the-pause-menu) is **On**
-(**Off** is the default). And for a quick look in the middle of a game, Options → [Shortcuts](options.md#shortcuts) → **Zoom**
-switches on **HOME + X**: the picture is enlarged at once, over the frozen game, with no menu in between. The shortcut is **Off**
-by default, and not in Kids Mode or Easy.
+**Where to find it.** Always available under Pause menu → Options → **Zoom** (right below Speed, rumble, fan). It also
+shows up on the first page of the pause menu right above Quit when Big text is on or when Settings → Playing →
+[**Zoom in the pause menu**](settings-playing.md#zoom-in-the-pause-menu) is **On** (default **Off**). Want instant
+mid-game zoom? Turn on Options → [Shortcuts](options.md#shortcuts) → **Zoom** to map **HOME + X**—it freezes the game
+and zooms immediately without opening the menu (**Off** by default, disabled in Kids Mode and Easy).
 
-Zoom enlarges the picture the menu already shows behind it, whatever the screen's size, so the game does nothing extra. Before
-that picture is there (a game still starting) the row does not open. Games in RetroArch and the other emulators have no Zoom:
-pocket-ui cannot get their picture the same way.
+Zoom magnifies the frame already captured for the pause screen, so it adds zero overhead to the game. It's unavailable
+before the first game frame draws, and isn't supported in RetroArch or standalone emulators because pocket-ui can't grab
+their frames the same way.
 
 ## Hold to toggle
 
-Pause menu → Options → [Controls](options.md#controls) → **Hold to toggle**, on pocket-ui's own host. For a button a game wants
-held down, such as run: choose the console button here (Left/Right: Off, then A, B, X, Y, L1, R1, L2, R2, L3, R3 as the console
-names them). One press then holds it down for the game, and the next press lets go.
+Found under Pause menu → Options → [Controls](options.md#controls) → **Hold to toggle** (pocket-ui's own player). Pick
+any console button a game makes you hold down (like Run)—cycle Off, A, B, X, Y, L1, R1, L2, R2, L3, R3 with Left/Right.
+Tap once to lock it down, tap again to release.
 
-- While a button is held down, a small "B held" badge shows in the top right corner of the game (where "FF" shows too) and goes
-  when you let go.
-- HOME shortcuts do not toggle the chosen game button.
-- Nothing stays held across a pause, a sleep, a dark screen, a loaded state or a restart: you start again with the button up. Disconnecting or moving a controller to another player releases that player’s held button too.
-- It is saved per console or per game like the other lines of Controls, works for every player, and **Reset controls** puts it
-  back to Off.
-- Fast-forward needs no help: HOME + R2 already switches it on and off ([Shortcuts](options.md#shortcuts)).
+- While active, a small "B held" badge sits in the top-right corner (next to "FF") until you release it.
+- HOME shortcuts never accidentally toggle your chosen button.
+- Held buttons always release automatically on pause, sleep, screen-off, loading a state, restarting, or if a controller
+  disconnects or switches player slots.
+- Saved per console or per game just like the rest of Controls, works for all players, and **Reset controls** resets it
+  to Off.
+- Fast-forward doesn't need Hold to toggle: HOME + R2 already toggles it on and off ([Shortcuts](options.md#shortcuts)).
 
-On the TrimUI Brick the small text starts larger. Short system facts try one smaller size before leaving out a row.
-A narrow game-info column can show an unrated game as **None · Y**: Y opens its status and rating choices. The info heading keeps the year visible; a long console name can use its usual short name, such as **NES**.
-In German, **Zuletzt** in Home's hints opens Recent games. Credits and password explanations also try a smaller size
-before shortening a line. Pixel Path keeps its grades, selected explanation and live readings above the hints.
-Sleep & power keeps its explanations complete; Up/Down scrolls the rows above them.
+On the TrimUI Brick, small text starts slightly larger for readability. Short console facts step down one size before
+dropping a row, narrow game-info columns show unrated games as **None · Y** (press Y to set status or rating), and
+headers keep the release year visible by using short console names like **NES**. In German, **Zuletzt** on Home's hint
+bar opens Recent games. Credits and password notes also step down a size before truncating, Pixel Path keeps its grades,
+descriptions and live stats above the hints, and Sleep & power keeps full explanations readable while Up/Down scrolls
+the rows above them.

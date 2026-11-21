@@ -1,238 +1,206 @@
 # Settings: Connections, System and Help & tools
 
-The **Connections**, **System** and **Help & tools** categories of [Settings](settings.md) (Wi-Fi, Bluetooth, Tailscale,
-remote access, Sync, Pocket Sync, the Web companion and PC streaming; updates, the language, sleep and power, the battery, the clock,
-storage, backups and Kids mode; this guide, the Tour, tools and the About page). Look, Playing, Games
-and how Settings opens are on [the first page](settings.md#open-settings).
+The **Connections**, **System** and **Help & tools** sections of [Settings](settings.md): Wi-Fi, Bluetooth, Tailscale,
+SSH, Sync, Pocket Sync, Web companion, PC streaming, updates, language, sleep and power, battery, clock, storage,
+backups, Kids mode, this guide, Tour, tools and About. For Look and how Settings opens, see
+[Settings](settings.md#open-settings).
 
 ## Connections
 
-The Wi-Fi page agrees with the Quick settings radio switch: while it is off, the page says so and its first row turns it on again with A. Old scan results are hidden while the radio is off. On a handheld with no Wi-Fi chip (the experimental Anbernic RG28XX and RG35XX 2024) the page says "This device has no Wi-Fi" and offers nothing to choose.
+Settings → **Connections** gathers every wireless feature, controller pairing and remote service in one place.
 
-Settings → **Connections**. Networks, controllers, and reaching the Pocket from your other devices: every network service of the Pocket is an entry here.
+Wi-Fi always stays in sync with Quick settings: when the radio is off, old scan results hide and the first row switches
+Wi-Fi back on with A. On handhelds without Wi-Fi (such as the experimental Anbernic RG28XX and RG35XX 2024), the page
+plainly states "This device has no Wi-Fi".
 
 | Entry | What it holds |
 |---|---|
-| **Wi-Fi** | Connect to a network, switch between saved ones, forget one, join a hidden network, set the Wi-Fi country. See [Getting started](getting-started.md#4-connect-to-wi-fi) |
-| **Bluetooth** | Pair a controller, headphones or a speaker and see what is connected. See [Bluetooth](bluetooth.md) |
-| **Tailscale** | Reach the Pocket from your other devices over a private network, even away from home. See [Tailscale](remote.md) |
-| **Remote access (SSH)** | Log in from a computer. See [Remote access](#remote-access-ssh) |
-| **Sync** | Keep saves and save states in step with your other devices with Syncthing, and, if you like, your favourites, notes and play history too. See [Sync](sync.md) |
-| **Pocket Sync** | Keep saves the same on your other Pockets: pair them with a code, no computer and no account. Off by default. See [Your other Pockets](sync.md#your-other-pockets) |
-| **Web companion** | Your library, play time and uploads in a browser on your phone or computer, on your home Wi-Fi or over Tailscale. Off by default. See [Web companion](web-companion.md) |
-| **PC streaming** | Pair a gaming PC for Moonlight on the Pocket itself, see the paired PCs, stream one of their games. See [PC streaming](pc-streaming.md) |
+| **Wi-Fi** | Join networks, switch or forget saved networks, connect to hidden SSIDs and set your Wi-Fi country. See [Getting started](getting-started.md#4-connect-to-wi-fi) |
+| **Bluetooth** | Pair controllers, headphones and speakers and check live connections. See [Bluetooth](bluetooth.md) |
+| **Tailscale** | Connect your Pocket to your private Tailscale network from anywhere. See [Tailscale](remote.md) |
+| **Remote access (SSH)** | Turn on temporary SSH login from a computer. See [Remote access](#remote-access-ssh) |
+| **Sync** | Sync saves, save states—and optionally favourites, notes and play history—via Syncthing. See [Sync](sync.md) |
+| **Pocket Sync** | Sync saves directly between your Pockets using a 6-digit code—no PC, account or cloud. Off by default. See [Your other Pockets](sync.md#your-other-pockets) |
+| **Web companion** | Browse your library, check play time and upload games from a phone or PC browser over home Wi-Fi or Tailscale. Off by default. See [Web companion](web-companion.md) |
+| **PC streaming** | Pair a gaming PC for Moonlight and launch PC games straight from your Pocket. See [PC streaming](pc-streaming.md) |
 
-On a device that has none of Sync and PC streaming (a card without its own network) those rows are not there; the TrimUI
-Brick has no PC streaming.
+Devices that don't support Sync or PC streaming omit those rows (for example, the TrimUI Brick has no PC streaming).
 
 ### Tailscale
 
-Settings → Connections → **Tailscale** links the Pocket with your phone, computer and other devices over Tailscale, a private
-network that works on any Wi-Fi, a phone hotspot or mobile data. See [Tailscale](remote.md) for the whole page.
+Settings → Connections → **Tailscale** puts your Pocket on your private Tailscale network so your phone, PC and Pocket
+can reach each other over any Wi-Fi, hotspot or mobile data. Full guide: [Tailscale](remote.md).
 
-1. Select **Tailscale** and press A to switch it on. It stays on after a restart until you switch it off.
-2. Select **Sign in** and press A: a QR code appears. Scan it with your phone and approve the Pocket. The page shows
-   **Connected as** your tailnet, the Pocket's Tailscale address and its name.
-3. **Sign in with a key** is for a key made in the Tailscale admin console. **Name** changes what the Pocket is called on your
-   tailnet. **Log out** asks twice.
+1. Highlight **Tailscale** and press A to turn it on (stays on across reboots until you switch it off).
+2. Highlight **Sign in** and press A for a QR code. Scan it on your phone and approve the Pocket—the page updates to
+   **Connected as** your tailnet with your Pocket's Tailscale IP and hostname.
+3. Also offers **Sign in with a key** (for Tailscale admin auth keys), **Name** (sets your tailnet hostname) and
+   **Log out** (asks twice).
 
-Tailscale only sets up the network. To log in with SSH over it, switch on Remote access (SSH) as well.
+Tailscale only builds the tunnel—enable Remote access (SSH) as well if you want SSH login over it.
 
 ### Remote access (SSH)
 
-Settings → Connections → **Remote access (SSH)**. Remote access is **off** by default, and it is off again after every restart.
+Settings → Connections → **Remote access (SSH)** starts **Off** by default and automatically turns back off on reboot:
 
-1. Press A ("Turn on remote access"). The screen shows `ssh root@<address>`, the user and a password made for this
-   Pocket.
-2. Log in from your computer with those. The password stays the same for this Pocket.
-3. It stays on until you press A again to turn it off. After a restart it is off again.
+1. Press A ("Turn on remote access") to view `ssh root@<address>`, username and your Pocket's unique password.
+2. Connect from your computer with those details (the password stays consistent for this Pocket).
+3. Press A again to turn it off, or reboot.
 
-Remote access is meant for people who want to copy files or look at logs. You do not need it to play. See
-[SECURITY-HARDENING.md](../SECURITY-HARDENING.md) for what it changes.
+Handy for copying files or grabbing logs—not needed for everyday gaming. See
+[SECURITY-HARDENING.md](../SECURITY-HARDENING.md) for security details.
 
 ### Sync and PC streaming
 
-Settings → Connections → **Sync** keeps saves and save states in step with your other devices with Syncthing, and, if you
-like, your favourites, notes and play history too: see [Sync](sync.md). Settings → Connections → **PC streaming** pairs a
-gaming PC for Moonlight: see [PC streaming](pc-streaming.md). Both were under Help & tools → For tinkerers before this
-version.
+Settings → Connections → **Sync** sets up Syncthing for saves, states and optional library data ([Sync](sync.md)).
+Settings → Connections → **PC streaming** pairs Moonlight with your gaming PC ([PC streaming](pc-streaming.md)). *(Both
+previously lived under Help & tools → For tinkerers.)*
 
 ## System
 
-Settings → **System**. New versions, the language, sleep and the power button, the battery, the clock, what takes up space on the SD
-card, backups and Kids mode.
+Settings → **System** covers updates, language, sleep/power, battery stats, clock, storage, backups and Kids mode.
 
 | Entry | What it holds |
 |---|---|
-| **Back to EmulationStation** | dArkOS only (the test port, [DARKOS.md](../DARKOS.md)), not on any other device: one press closes pocket-ui and EmulationStation comes back, without a confirmation. A running game is saved and closed first. The same row is in the quick settings (HOME); SELECT + START held still opens its dialog |
-| **Updates** | New versions of pocket-ui and the system. See [Updates](updates.md) |
-| **Language** | **English**, **Deutsch**, **Español**, **Português (Brasil)**, **Français** or **Italiano**: menus, hints and messages. See [Language](language.md) |
-| **View** | Android only, not on a Linux handheld: **Handheld** (these pages, for the built-in pad) or **Mobile** (the touch pages, with a folder you pick). A opens the other one. The Mobile view has the same row. The first start opens Handheld, with or without a controller; a view chosen before stays |
-| **Sleep & power** | When the screen goes off and the device sleeps, when it switches off after sleeping, and what the power button does. The row shows the screen-off time ("2 min"). See [Sleep & power](#sleep--power) |
-| **Battery** | Battery history, time left, what a game costs. See [Battery](#battery) |
-| **Time** | Time zone, date and network time. See [Time](#time) |
-| **Storage** | What takes up space on the SD card, what can go, and the games you hid. The row shows the free space ("41.2 GB free"). See [Storage](storage.md) |
-| **Backup & reset** | Back up your saves and states, or pocket-ui's settings and library notes, to the SD card, restore a backup, or reset the settings. See [Backup & reset](#backup--reset) |
-| **Kids mode** | A big, simple shelf for a child, with a PIN: see [Kids mode](kids-mode.md).  |
+| **Back to EmulationStation** | pocket-ui beta for dArkOS only ([DARKOS.md](../DARKOS.md)): closes pocket-ui immediately and returns to dArkOS's own menu with no extra prompt (saving and closing any running game first). Also in Quick settings; holding SELECT + START still opens its dialog |
+| **Updates** | Download and install pocket-ui updates over Wi-Fi or from your SD card. See [Updates](updates.md) |
+| **Language** | Switch menus, hints and notices between **English**, **Deutsch**, **Español**, **Português (Brasil)**, **Français** and **Italiano**. See [Language](language.md) |
+| **View** | pocket-ui for Android only: flip between **Handheld** (controller-first shelf) and **Mobile** (touch-first view). First start opens Handheld; your chosen view is remembered |
+| **Sleep & power** | Screen-off timeout, sleep timer, auto-power-off after sleeping and Power button actions (shows current screen-off time, e.g. "2 min"). See [Sleep & power](#sleep--power) |
+| **Battery** | Live charge, runtime estimate, 48-hour graph and per-console battery draw. See [Battery](#battery) |
+| **Time** | Time zone search, network time sync and manual clock setup. See [Time](#time) |
+| **Storage** | Space breakdown across games, saves, states, art and hidden games (shows free space, e.g. "41.2 GB free"). See [Storage](storage.md) |
+| **Backup & reset** | Back up or restore saves and settings to your SD card, or reset settings to defaults. See [Backup & reset](#backup--reset) |
+| **Kids mode** | Curated, PIN-locked shelf for kids with daily play limits and max volume. See [Kids mode](kids-mode.md) |
 
-ROCKNIX's own settings are not part of it, nor are the options PlayStation 2, GameCube, Wii and 3DS keep in ROCKNIX's
-settings file.
+ROCKNIX's own system settings and standalone PS2/GameCube/Wii/3DS settings in `system.cfg` are managed outside this
+backup.
 
 ### Time
 
-Settings → System → **Time**.
+Settings → System → **Time**:
 
-- Choose a time zone by region and city. The list shows each city's offset from UTC and its local time right now.
-  A search row (the on-screen keyboard) finds a city by name, in English, German, Spanish, Portuguese, French or Italian: "wien", "viena" and
-  "vienna" all find Vienna, with or without accents. Cities with a name of their own in your language are listed by
-  it ("Wien", "Viena").
-- The clock changes at once on every screen, the time at the top right of Home too ([Home](playing.md#home)).
-- **Network time** shows whether the clock is in sync (it needs Wi-Fi). Press A on it to ask again.
-- **Date and time** sets the clock by hand, for a Pocket without Wi-Fi. A opens five boxes: year, month, day, hour
-  and minute. Left and Right move between them, Up and Down change one (hold to keep going), A sets the clock, B leaves
-  it as it was. You can also tap a box, and tap the top or bottom half of the chosen one. The time is the local time
-  of your time zone, on the 24-hour clock; under the boxes is the date with its weekday. The day never goes past the
-  end of its month (29 February only in a leap year). The clock keeps the time after a restart (if the Pocket can't
-  keep it, the message after A says so). Network time stays
-  on: once Wi-Fi reaches a time server, it sets the clock again. While network time has set the clock, the row says
-  **From network time** and there is nothing to set.
-- **A wrong clock is pointed out in orange under the list.** If the date is before 2026 or before the day this version of
-  pocket-ui was made (a flat battery can leave the clock far in the past), the line says so. Play history, the night
-  light and the dates on your saves follow the clock, so a game played with a wrong clock is filed under a wrong date.
-  Set it under Date and time, or turn Wi-Fi on and let network time set it; then the line goes away. When the clock
-  is very wrong, Date and time opens at the day this version of pocket-ui was made, so only a few presses are needed.
-  A date before that day is not taken. The dates already written stay as they were. A second, milder line appears
-  when the clock looks fine but Wi-Fi is off and no server has set it since it started ("it may be a little off");
-  it does not appear after you set the clock by hand. The shelf also says it once, about 45 seconds after the start,
-  when the clock is clearly wrong and nothing else is on screen.
-- Setting the clock adds no play time: a game's time is counted on its own, whatever the clock does. A game that was
-  already running when the clock changed keeps its start under the old date.
+- **Time zone:** browse by region and city (showing UTC offset and local time) or search with the on-screen keyboard in
+  any supported language ("wien", "viena" and "vienna" all match Vienna, with or without accents).
+- Changing your zone updates every clock immediately, including Home's top-right corner ([Home](playing.md#home)).
+- **Network time:** shows whether Wi-Fi clock sync succeeded—press A to sync again.
+- **Date and time:** lets you set the clock manually on offline handhelds. Press A for five fields (year, month, day,
+  hour, minute on a 24-hour clock, with weekday underneath): Left/Right move fields, Up/Down adjust (hold to scroll), A
+  saves, B cancels (touch taps work too). Automatically respects month lengths and leap years. Persists across reboots
+  (tells you if hardware can't hold time). Network time stays active and takes over once you reconnect—while synced, the
+  row shows **From network time**.
+- **Wrong-clock alert:** if the clock falls before 2026 or before your pocket-ui build date (common after a flat
+  battery), an orange note warns you—since Play history, Night light and save timestamps depend on it. Set it manually
+  (Date and time pre-fills the build date to save scrolling) or join Wi-Fi. Offline handhelds with a plausible clock show
+  a gentler note ("it may be a little off") until set manually, and Home shows a one-time notice ~45 seconds after boot
+  if the clock is clearly wrong.
+- Adjusting the clock never inflates play time—active game timers run independently, and an already-running session
+  keeps its original start date.
 
 ### Sleep & power
 
-Settings → System → **Sleep & power**: Screen off after, Sleep after, Switch off after
-sleeping, and the power button's short press and hold. The rows and their choices are under
-[Sleep & power settings](quick-settings.md#sleep--power-settings), with what sleep does.
+Settings → System → **Sleep & power** configures Screen off after, Sleep after, Switch off after sleeping, and Power
+button short press / hold. Full table and behaviour: [Sleep & power settings](quick-settings.md#sleep--power-settings).
 
-On experimental Pocket 6 and Nova, screen off replaces Sleep; ROCKNIX controls the fan.
-See [Other Retroid devices](other-handhelds.md#other-retroid-devices).
+On experimental Pocket 6 and Nova, Screen off replaces Sleep and ROCKNIX manages the fan—see
+[Other Retroid devices](other-handhelds.md#other-retroid-devices).
 
 ### Battery
 
-Settings → System → **Battery** shows the charge now, a time estimate, a graph, and what the games you played cost.
+Settings → System → **Battery** shows your current charge, estimated runtime, 48-hour chart and per-console power draw:
 
-- **Time left.** "About 3 h 20 min left" on battery, "Full in about 45 min" while charging, "Plugged in" on the
-  charger when it isn't charging below 95% (the system calls that "full", but the battery isn't), and the rate it is
-  based on ("At the current rate: 15% an hour, measured over the last 40 min"). The rate is the drop of the
-  charge over the last 20 to 90 minutes, with the newest minutes counting most, so a game you started a while
-  ago shows in it. It appears only after 20 minutes on battery without sleep ("Not enough data yet" until then),
-  and the first minutes after waking start from nothing: what the battery lost while asleep is not a rate.
-  Charging needs about 6 minutes. A battery that changes its reading by a jump (a recalibration) starts the
-  measurement again.
-- **Graph.** The last 24 hours when it opens (less while the history is younger than that); L1/R1 switch between 3, 6, 12, 24 and 48 hours. The line is green
-  while charging. Where the device slept, was off, or pocket-ui was not running, the graph shows a hatched
-  stretch and no line across it.
-- **Under the graph.** Voltage, current, power and temperature as the battery reports them, and for the games
-  played last, how much they cost: "PS2 uses about 9% an hour, 3.6 W", and how long the charge lasts at that
-  rate. A system needs 15 minutes on battery for that; time on the charger or asleep does not count.
-- **When the screen goes off and the device sleeps** is no longer set here: a line under the graph points to
-  Settings → System → [Sleep & power](#sleep--power), where those times are now, with the power button's.
+- **Time left:** shows "About 3 h 20 min left" on battery, "Full in about 45 min" while charging, or "Plugged in" when
+  connected below 95% without charging, along with the recent drain rate ("At the current rate: 15% an hour, measured
+  over the last 40 min"). Weighted toward the most recent 20–90 minutes of awake battery use (needs 20 minutes after boot
+  or wake, ~6 minutes while charging; resets on sudden fuel-gauge jumps).
+- **Graph:** opens on the last 24 hours; switch between 3, 6, 12, 24 and 48 hours with L1/R1. Charging shows in green;
+  sleep or powered-off stretches appear hatched.
+- **Live stats & console draw:** voltage, current, wattage and battery temperature, plus per-system estimates once
+  you've logged 15+ minutes on battery ("PS2 uses about 9% an hour, 3.6 W" and estimated runtime).
+- Sleep timers now live under Settings → System → [Sleep & power](#sleep--power) (linked below the graph).
 
-pocket-ui reads the battery once a minute for as long as it runs, even while a game is open, and keeps the
-last 48 hours in `battery-history.bin` in its data folder (about 46 kB). What each game used is kept apart, in
-`battery-games.json`, for the pause menu's [Battery in this game](pause-menu.md#battery-in-this-game) and the card. The minute-by-minute readings appear immediately. They are saved together every ten minutes,
-and before sleep, switching off or a normal exit. A restart keeps them; a sudden loss of power can lose
-the last ten minutes. A damaged file is
-replaced by its backup copy, or the history starts again.
+pocket-ui samples battery once a minute while running and stores 48 hours in `battery-history.bin` (~46 kB) plus
+per-game draw in `battery-games.json` for [Battery in this game](pause-menu.md#battery-in-this-game). Data flushes every
+10 minutes and on sleep/shutdown/exit (a sudden power cut can lose up to 10 minutes; damaged files auto-recover from
+backup or start fresh).
 
 ### Backup & reset
 
-Settings → System → **Backup & reset**.
+Settings → System → **Backup & reset**:
 
 ![Backup & reset: back up saves or settings, and the backups made so far](pictures/backup.webp)
 
-- **Back up saves** copies your battery saves, save states (all of `savestates`, and the states beside your games), the
-  PS2 and GameCube memory cards, Wii and 3DS save data and ScummVM's saves to a folder named after the date and time, in
-  `/storage/roms/backup/pocket-ui-saves`. No games and no BIOS files. **A** counts them and shows the size and the free
-  space; **A** again copies them, and you can keep looking at the page while it does (**B** stops it, and a stopped backup
-  leaves nothing behind). If they don't fit, the page says how much is needed and nothing starts.
-- **Flashing the card erases that folder too**, unless your games are on a second card, where the backup goes with them. So
-  before you flash, copy it to a computer: over file sharing it is `backup/pocket-ui-saves` in the games share. To get
-  the saves back on a newly flashed card, copy the folder back to the same place.
-- **Restoring saves:** **A** on a backup marked **Saves** compares it with the card and says what would change; **A** again
-  does it. What is missing comes back. What is older on the card is replaced, after a copy of it goes into a backup marked
-  **Before restore**. What is newer on the card stays, and the backup keeps its copy, so you have both. A file name the
-  card can't hold is named at the end. pocket-ui doesn't need to start again.
-- **Back up settings** copies pocket-ui's settings, every Options page and your library notes (play status, notes, time
-  played, favourites, recent games) to a folder named after the date and time, in `/storage/roms/backup/pocket-ui`
-  on the SD card. Not your games, saves or states, not the file-sharing password and not your RetroAchievements sign-in.
-  Over file sharing the folder is `backup/pocket-ui` in the games share.
-- The backups are listed below, newest first (saves first), with why they were made (**Backup**, **Before reset**, **Before
-  restore**) and their size. **A** on a settings backup, then **A** again, restores it: settings and library notes go back to how
-  they were then. What you had is backed up first, so a restore can be undone.
-- **Reset settings**, then **A** again: the look, appearance, motion, sounds, haptics, LEDs, sleep, Performance & fan,
-  Curator and every console's and game's Options go back to their defaults. A backup is made first. Kept: your
-  library notes, Sync and Tailscale, your accounts, downloaded extras, and the first start (you land on Home).
-- After a restore of settings or a reset pocket-ui starts again by itself, which takes a few seconds.
+- **Back up saves:** copies battery saves, save states (all of `savestates` plus states beside ROMs), PS2/GameCube
+  memory cards, Wii/3DS saves and ScummVM saves into a timestamped folder under `/storage/roms/backup/pocket-ui-saves`
+  (no ROMs or BIOS files). First A calculates size vs free space; second A copies while you stay on the page (B cancels
+  cleanly without leftovers). Refuses to start if space is too tight.
+- **Before re-flashing your OS card:** flashing wipes internal backups too (unless your games live on TF2). Copy
+  `backup/pocket-ui-saves` off over File sharing to your PC first, then copy it back afterwards to restore.
+- **Restoring saves:** press A on any **Saves** backup to preview changes, then A again to restore. Missing saves return;
+  older files on the card are safely copied into a **Before restore** backup before updating; newer files on the card
+  stay untouched while the backup keeps its copy. No restart needed.
+- **Back up settings:** saves pocket-ui settings, Options pages and library metadata (statuses, notes, play time,
+  favourites, recents) to `/storage/roms/backup/pocket-ui` (`backup/pocket-ui` over File sharing). Excludes ROMs, saves,
+  File sharing passwords and RetroAchievements tokens.
+- Existing backups list newest first (saves above settings) tagged **Backup**, **Before reset** or **Before restore**
+  with size. Press A twice on a settings backup to restore (automatically backing up your current config first so it's
+  reversible).
+- **Reset settings** (press A twice): resets layout, appearance, motion, sounds, haptics, LEDs, sleep, Performance &
+  fan, Curator and all console/game Options back to defaults after taking a safety backup. Keeps library notes, Sync,
+  Tailscale, accounts, downloaded extras and skips first-start setup.
+- Settings restores and resets restart pocket-ui automatically within a few seconds.
 
-ROCKNIX's own settings are not part of it, nor are the options PlayStation 2, GameCube, Wii and 3DS keep in ROCKNIX's
-settings file.
+ROCKNIX's own settings and standalone PS2/GameCube/Wii/3DS configs in `system.cfg` aren't included.
 
 ## Help & tools
 
-Settings → **Help & tools**. This guide, the Tour, the first start again, ROCKNIX's tools, the bug report file and what the Pocket is running.
+Settings → **Help & tools** holds this manual, the Tour, setup profiles, ROCKNIX tools, bug reporting and system info.
 
 | Entry | What it holds |
 |---|---|
-| **Manual** | This guide, on the device. See [Manual](#manual) |
-| **Tour** | The basics in 7 cards: playing and the HOME menu, continuing, saving, quick settings, adding games, Settings, then Big text (Large text and Reduced motion). See [Features and the Tour](tour.md) |
-| **How you like to play** | The shelf, Easy, Enthusiast or Choose for yourself (the cards): pocket-ui's extras in one go. The row shows where the switches stand now. See [How you like to play](#how-you-like-to-play) |
-| **First-start setup** | The first start again from its first page: language, Wi-Fi (not on Android, which has its own), your games, how they stand. Your games, saves and settings stay; it ends on Home. See [Getting started](getting-started.md#3-first-start) |
-| **Tools** | ROCKNIX's tools without its old menu: the emulators' own settings, RetroArch's menu, gamepad test and calibration, file manager, terminal, and tools installed from a store. See [Tools](#tools) |
-| **Report a problem** | Opens About with this row selected; A there saves a file for a bug report in the `reports` folder of the games share ([Report a problem](troubleshooting.md#report-a-problem)) and shows where it is. The same row is in About, and in the dialog of SELECT + START held, where you look when something has just gone wrong |
-| **About** | Version, the system underneath (on the SD card image "pocket-ui OS 0.6.0 · built on ROCKNIX 20261001 (SM8250)", on a ROCKNIX card with pocket-ui added just the ROCKNIX version), number of games, free space, network address, battery, where the logs are kept, and where the licence texts are (a Licences row when the page has the room: `/storage/pocket-ui/licences`: pocket-ui's licence, the credits, the licences of the programs it is built from and of its fonts; they come with the install package and the SD card image); on a Retroid Pocket 5, Flip 2 or first Mini also which one it is, marked experimental ([Getting started](other-handhelds.md#other-retroid-devices)). Two rows: **Report a problem** saves a file for a bug report in the `reports` folder of the games share ([Report a problem](troubleshooting.md#report-a-problem)); **Open EmulationStation…** opens ROCKNIX's own menu, after a warning ([Safe mode and EmulationStation](safe-mode.md#opening-emulationstation)); not on the TrimUI Brick, which has no EmulationStation |
+| **Manual** | Read this entire guide right on your handheld. See [Manual](#manual) |
+| **Tour** | 7 quick cards covering controls, Continue, saves, Quick settings, adding games, Settings and Big text. See [Features and the Tour](tour.md) |
+| **How you like to play** | One-click presets (The shelf, Easy, Enthusiast or Choose for yourself) for pocket-ui's extras. See [How you like to play](#how-you-like-to-play) |
+| **First-start setup** | Re-run the welcome wizard (language, Wi-Fi on Linux, games, layout) without touching games, saves or settings. See [Getting started](getting-started.md#3-first-start) |
+| **Tools** | Launch ROCKNIX utilities—emulator menus, RetroArch, gamepad test/calibration, file manager, terminal and installed tools. See [Tools](#tools) |
+| **Report a problem** | Jumps to About with Report a problem highlighted; press A to save a diagnostic bundle into `reports` on the games share ([Report a problem](troubleshooting.md#report-a-problem)). Also available from SELECT + START held |
+| **About** | Version, base OS (e.g. "pocket-ui OS 0.6.0 · built on ROCKNIX 20261001 (SM8250)" on SD images, or ROCKNIX version on add-on installs), game count, free space, IP, battery, log paths and open-source licences (`/storage/pocket-ui/licences`). Marks experimental Retroid models ([Other handhelds](other-handhelds.md#other-retroid-devices)). Includes **Report a problem** and **Open EmulationStation…** (with warning, [Safe mode](safe-mode.md#opening-rocknixs-own-menu); omitted on TrimUI Brick) |
 
 ### How you like to play
 
-pocket-ui has more than it shows at first: Curator's Lens and Echoes, Pixel Path, screen frames, going straight back
-into your game, and more. This page sets them in one go (the first start doesn't ask: everything stands as it ships).
-Up/Down choose, A takes it and closes the page; under the rows the page says what the selected one switches on and
-off, in everyday words. The feature cards are described in [Features and the Tour](tour.md).
+Sets all optional extras in one go (first start leaves stock defaults untouched so you can get playing fast). Pick with
+Up/Down, press A to apply, and check the live summary below. See [Features and the Tour](tour.md) for every card.
 
-- **The shelf**: "Your games on a shelf, as it comes." The start setting of a new Pocket: Motion
-  is on; Lens & smart shelves, Echoes, Versions, Pixel Path, Echoes beyond this device, frames on every console
-  and going straight back into your game are off (Just Play on Home is the way to "pick me something"). A Pocket set up before keeps its Lens, Echoes and Versions on. It puts every extra back as pocket-ui ships it, On start and
-  Screen frames too.
-- **Easy**: the same start settings with the [Easy](easy.md) look.
-- **Enthusiast**: "Suggestions, play statistics, picture details and frames, all on." All of Curator, Pixel Path in
-  the pause menu (the line over the game stays off), Auto screen frames on every console, and On start set to your
-  last game.
-- **Choose for yourself**: one card per feature, each with a small picture of what it does and three rows, **On**,
-  **Off** and **Later**. Up/Down choose, A takes the choice and shows the next card, B goes back a card, START skips
-  the rest. Later leaves the feature as it is.
+- **The shelf:** *"Your games on a shelf, as it comes."* Clean defaults: Motion On; Lens & smart shelves, Echoes,
+  Versions, Pixel Path, Echoes beyond this device, Screen frames and On start → Last game all Off (with Just Play ready
+  on Home). Picking this later restores all defaults.
+- **Easy:** same defaults paired with the [Easy](easy.md) layout.
+- **Enthusiast:** *"Suggestions, play statistics, picture details and frames, all on."* Enables all of Curator, Pixel
+  Path in the pause menu (overlay stays Off), Auto screen frames on every console and On start → Last game.
+- **Choose for yourself:** walks through one preview card per feature with **On**, **Off** and **Later** (Up/Down + A,
+  B goes back, START skips the rest).
 
-A profile only sets switches that Settings has too; each stays on its Settings page. Menu sounds, haptics and the
-stick lights are left as they are. Kids Mode has its own row: Settings → System → [Kids mode](kids-mode.md).
+Every toggle stays editable individually in Settings afterwards. Menu sounds, haptics and stick LEDs are left untouched.
+For kids, use Settings → System → [Kids mode](kids-mode.md).
 
 ### Manual
 
-Settings → Help & tools → **Manual** is this guide, on the device. It is part of the program, so it always matches the version
-you run. The pages are the ones listed on the first page; the title line shows which one you are on.
+Settings → Help & tools → **Manual** bundles this guide directly inside pocket-ui so it always matches your installed
+version.
 
 | Button | What it does |
 |---|---|
-| D-pad Up / Down, or either stick | Scroll. Held, it goes on by itself; a stick scrolls faster the further you push it. |
-| D-pad Left / Right | Scroll a screen up / down. |
-| L1 / R1 | Previous / next page. After the last page comes the first. |
-| A, X | When a link to another page is on the screen, it has a frame: A opens it, X moves the frame to the next link. |
-| B | Back to the page a link came from; with none, back to Settings. |
+| D-pad Up / Down, or either stick | Scroll (hold for smooth scrolling; sticks scale speed with tilt). |
+| D-pad Left / Right | Page up / page down. |
+| L1 / R1 | Previous / next page (wraps around). |
+| A, X | Open the highlighted link (A) or hop to the next link on screen (X). |
+| B | Go back to the previous linked page, or exit to Settings. |
 
-A swipe on the touch screen scrolls as well. Every page remembers where you were until pocket-ui restarts.
-Button names in the text are drawn like the buttons in the hint bar at the bottom of the screen, pictures are
-left out. A link to another page can be opened (A, or a tap); a link to a web address shows the address after its words. On the first-start screens, SELECT opens
-the manual and B comes back to that screen.
+Swiping scrolls on touchscreens, and every page remembers your scroll spot until restart. Button names render as inline
+chips, screenshots are omitted, internal links open right inside the manual and web links print their URL. On
+first-start screens, press SELECT to open the manual and B to return.
 
 ### Tools
 
-Settings → Help & tools → **Tools** starts ROCKNIX's own tools (the emulators' menus, RetroArch's menu, gamepad test and
-calibration, file manager, terminal) and tools installed from a package installer. See [Tools](extras.md#tools).
+Settings → Help & tools → **Tools** launches ROCKNIX's built-in utilities (emulator menus, RetroArch, gamepad test and
+calibration, file manager, terminal) plus tools installed via package managers. Full list: [Tools](extras.md#tools).
