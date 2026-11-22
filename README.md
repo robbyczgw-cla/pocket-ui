@@ -128,7 +128,7 @@ Add games from your phone or computer over Wi-Fi via Settings → Games → Add 
 | **Retroid** | Pocket Mini V2 | [Image](https://pocketui.xyz/install#retroid), plus one step: Boot mode → Loader. Android stays untouched. |
 | **AYN** | Odin 2, Odin 2 Mini, Odin 2 Portal | [Image](https://pocketui.xyz/install#odin), after installing ROCKNIX's boot helper once (it replaces the bootloader; Android apps and data stay). |
 | **TrimUI** | Brick (incl. Brick Hammer), Smart Pro; Brick Pro experimental | [Unzip the TrimUI package onto an empty FAT32 card](https://pocketui.xyz/install#brick); nothing is flashed. |
-| **Retroid, beta** | Pocket 5, Flip 2, Pocket 6, Pocket Nova | [Beta images](https://pocketui.xyz/install#rp5-uefi), see notes below. Some need OpenABL once, which replaces the bootloader; Android apps and data stay. |
+| **Retroid, beta** | Pocket 5, Flip 2, Pocket 6, Pocket Nova | [Beta images](https://pocketui.xyz/install#rp5-uefi), see notes below. Some need OpenABL once, which replaces the bootloader. |
 | **Already on dArkOS** | 640×480 dArkOS handhelds, including the R36S | [pocket-ui beta for dArkOS](https://pocketui.xyz/install#darkos): unzip into `ports`; nothing is flashed. |
 | **Already on ROCKNIX** | any of the above | [Install on top in five minutes, remove any time](https://pocketui.xyz/install#way-1) |
 
@@ -136,16 +136,17 @@ Add games from your phone or computer over Wi-Fi via Settings → Games → Add 
 not the 12 GB Visionox models. On Pocket 5 and Flip 2, boot from Retroid's **Loader** option if your menu has it (nothing
 gets flashed). If it only shows **UEFI**, install OpenABL once with the `openabl` folder from a ROCKNIX SM8250 card. On
 Pocket 6 and Nova, try Retroid's **UEFI** with Secure Boot off first, or fall back to OpenABL from a ROCKNIX SM8550 card.
-OpenABL replaces the bootloader (`abl_a` and `abl_b`) while Android apps and data stay, and you need a computer for the
-cards and the backup. Every step, the risk and the way back are on the [install page](https://pocketui.xyz/install#rp5-uefi).
+OpenABL replaces the bootloader (`abl_a` and `abl_b`). Run the backup exactly once before flashing and copy both files to
+your computer. Running it again after flashing overwrites the original backup on the handheld. Follow the
+[install guide](docs/INSTALL-DUAL-BOOT.md#installing-openabl-once) for the steps and the way back.
 
 [All downloads](../../releases/latest)
 
 ## Quick answers
 
-- **Do I lose my stock system?** No. pocket-ui OS lives on its own SD card; swap cards to go back. On Retroid and AYN,
-  the card never touches Android. Only the one-time boot setup some of them need (ROCKNIX's boot helper on the Odin 2,
-  OpenABL on some Retroid betas) replaces the bootloader; Android apps and data stay.
+- **Do I lose my stock system?** No. pocket-ui OS lives on its own microSD card. On a Brick or one of the Anbernic models
+  above, put your original card back in to return to stock. On Retroid and AYN, choose Android in the boot menu as
+  described in the [install guide](docs/INSTALL-DUAL-BOOT.md).
 - **What about my ROM folders and saves?** Bring them as they are. pocket-ui reads common folder names without renaming
   anything. In-game saves (`.srm`, `.sav`) sitting beside their ROM keep working; save states don't carry across
   different emulators.

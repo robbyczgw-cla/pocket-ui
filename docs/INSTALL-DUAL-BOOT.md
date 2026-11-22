@@ -131,9 +131,11 @@ has none either. They are in the `openabl` folder of ROCKNIX's official image. R
    and as a quick test.
 2. Boot Android with that card inserted and copy the `openabl` folder to the root of internal storage, so the path is
    exactly `/sdcard/openabl` (the scripts expect it there).
-3. Battery above 50%. In Android, Settings > Handheld Settings > Advanced > **Run Script as Root**: run `backup_abl.sh`.
-4. Check that `abl_a.img` and `abl_b.img` are in `/sdcard/openabl` and are not empty, then copy both to your computer.
-   Don't continue without them.
+3. Battery above 50%. In Android, go to Settings > Handheld Settings > Advanced > **Run Script as Root** and run
+   `backup_abl.sh` exactly once before flashing. Running it again after flashing overwrites the original backup on
+   the handheld with the bootloader now installed.
+4. Check that `abl_a.img` and `abl_b.img` are in `/sdcard/openabl` and are not empty, then copy both to your computer
+   before you continue.
 5. Run `flash_abl.sh` the same way. Don't power off while it runs: the script does no checks of its own.
 6. Restart holding **Vol Down**, set **Device model** to your exact handheld and **Start**. ROCKNIX should boot.
 7. Write the pocket-ui card. Power on holding **Vol Down** + **Power**, set **Boot mode: Linux** and
@@ -157,6 +159,17 @@ still boots Android; if it doesn't, see the risk above.
 The card's first partition is marked as an EFI system partition. A Windows or Mac computer therefore no longer shows it,
 and Android does not mount it; Linux still does. The boot files per bootloader are in
 [SD-IMAGE.md](SD-IMAGE.md#experimental-sm8250-tester-cards-pocket-5-and-flip-2).
+
+### Internal storage on the SD cards
+
+On pocket-ui 0.6, the bundled GRUB and OpenABL entries for the Pocket Mini V2, Pocket 5, Flip 2, Pocket 6 and Nova
+use a device tree that disables internal storage (UFS). OpenABL v1.2 can also start `/KERNEL` directly or as a
+fallback. That boot image leaves UFS enabled. The Odin 2, Odin 2 Mini and Odin 2 Portal use `/KERNEL` as their
+normal boot path.
+
+With UFS enabled, Linux can see its partitions. ROCKNIX's games automount can mount a qualifying partition
+read-write. Whether it picks a partition on a handheld with factory Android depends on the partition and
+its filesystem.
 
 ## Install on a ROCKNIX card you already use
 
@@ -257,9 +270,9 @@ until you switch again. [V] on the author's device.
   `0878019203` and `ad843ff62b`.
 - **Retroid's u-boot** (`rp-v1.0.1`, 2024.10) starts with `bootcmd=… bootefi bootmgr` and looks for
   `/EFI/BOOT/BOOTAA64.EFI`. [V] strings from the binary.
-- **Android stays invisible to Linux.** The device tree used here switches off the internal storage (UFS), as in
-  the memory test of 2026-10-21 ([FASTBOOT-TEST.md](FASTBOOT-TEST.md)). No ROCKNIX script can reach Android or the
-  bootloader. [V] The memory test showed no `sd*` devices.
+- **The Mini V2 GRUB entry disables internal storage (UFS).** The memory test of 2026-10-21
+  ([FASTBOOT-TEST.md](FASTBOOT-TEST.md)) used the same setting and showed no `sd*` devices. [V] See
+  [Internal storage on the SD cards](#internal-storage-on-the-sd-cards) for the other boot paths.
 - Retroid's README also names **Power + Vol Up** to start the loader once. On Android firmware
   `RPMiniV2_V1.0.0.275_20260407` that did not work: Android started both times. [V] Use the boot mode instead.
 
