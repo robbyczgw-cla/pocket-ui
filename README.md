@@ -126,23 +126,26 @@ Add games from your phone or computer over Wi-Fi via Settings → Games → Add 
 |---|---|---|
 | **Anbernic** | RG35XX Plus, RG35XX SP, RG35XX H, RG35XX Pro, RG35XX 2024, RG28XX, RG34XX, RG34XX-SP, RG40XX H, RG40XX V, RG CubeXX, RG-SP | [Image per model](https://pocketui.xyz/install#anbernic). Dedicated builds for newer-screen Plus/SP and RG40XX H DDR3. Original 2023 RG35XX not supported. |
 | **Retroid** | Pocket Mini V2 | [Image](https://pocketui.xyz/install#retroid), plus one step: Boot mode → Loader. Android stays untouched. |
-| **AYN** | Odin 2, Odin 2 Mini, Odin 2 Portal | [Image](https://pocketui.xyz/install#odin), after installing ROCKNIX's boot helper once. Android stays untouched. |
+| **AYN** | Odin 2, Odin 2 Mini, Odin 2 Portal | [Image](https://pocketui.xyz/install#odin), after installing ROCKNIX's boot helper once (it replaces the bootloader; Android apps and data stay). |
 | **TrimUI** | Brick (incl. Brick Hammer), Smart Pro; Brick Pro experimental | [Unzip the TrimUI package onto an empty FAT32 card](https://pocketui.xyz/install#brick); nothing is flashed. |
-| **Retroid, beta** | Pocket 5, Flip 2, Pocket 6, Pocket Nova | [Beta images](https://pocketui.xyz/install#retroid-cards), see notes below. Android stays untouched. |
+| **Retroid, beta** | Pocket 5, Flip 2, Pocket 6, Pocket Nova | [Beta images](https://pocketui.xyz/install#rp5-uefi), see notes below. Some need OpenABL once, which replaces the bootloader; Android apps and data stay. |
 | **Already on dArkOS** | 640×480 dArkOS handhelds, including the R36S | [pocket-ui beta for dArkOS](https://pocketui.xyz/install#darkos): unzip into `ports`; nothing is flashed. |
 | **Already on ROCKNIX** | any of the above | [Install on top in five minutes, remove any time](https://pocketui.xyz/install#way-1) |
 
-**Retroid beta images:** on Pocket 5 and Flip 2, boot from Retroid's "Loader" option (if your boot menu shows "UEFI",
-set up OpenABL once via ROCKNIX's guide). Pocket 6 and Nova boot from Retroid's UEFI entry (fall back to OpenABL if
-needed). Original screens only, not the 12 GB Visionox models. These builds haven't booted on real hardware yet, so
-testers are very welcome.
+**Retroid beta images:** no boot on real hardware is confirmed yet, and testers are very welcome. Original screens only,
+not the 12 GB Visionox models. On Pocket 5 and Flip 2, boot from Retroid's **Loader** option if your menu has it (nothing
+gets flashed). If it only shows **UEFI**, install OpenABL once with the `openabl` folder from a ROCKNIX SM8250 card. On
+Pocket 6 and Nova, try Retroid's **UEFI** with Secure Boot off first, or fall back to OpenABL from a ROCKNIX SM8550 card.
+OpenABL replaces the bootloader (`abl_a` and `abl_b`) while Android apps and data stay, and you need a computer for the
+cards and the backup. Every step, the risk and the way back are on the [install page](https://pocketui.xyz/install#rp5-uefi).
 
 [All downloads](../../releases/latest)
 
 ## Quick answers
 
 - **Do I lose my stock system?** No. pocket-ui OS lives on its own SD card; swap cards to go back. On Retroid and AYN,
-  Android stays completely untouched.
+  the card never touches Android. Only the one-time boot setup some of them need (ROCKNIX's boot helper on the Odin 2,
+  OpenABL on some Retroid betas) replaces the bootloader; Android apps and data stay.
 - **What about my ROM folders and saves?** Bring them as they are. pocket-ui reads common folder names without renaming
   anything. In-game saves (`.srm`, `.sav`) sitting beside their ROM keep working; save states don't carry across
   different emulators.

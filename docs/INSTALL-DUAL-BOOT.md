@@ -106,22 +106,53 @@ boot mode back to Loader the same way. [V] on the author's device.
 
 ## Pocket 5 and Flip 2: "Loader" or "UEFI"
 
-The experimental Pocket 5 and Flip 2 cards (`pocket-ui-<version>-rp5-uefi.img.xz`, `…-flip2-uefi.img.xz`, in the beta
-release) are written like the Mini V2 card above. Retroid's boot menu (hold **Vol Down**, press **Power**) shows which
-way in your device has:
+The Pocket 5 and Flip 2 cards (`pocket-ui-<version>-rp5.img.xz`, `pocket-ui-<version>-flip2.img.xz`) are beta: no boot on
+real hardware is confirmed yet. Original screens only: on **12 GB devices with the Visionox screen** the picture stays
+black with these cards, so don't flash those. Write the card like the Mini V2 card above, then power off and hold
+**Vol Down** + **Power** to open Retroid's boot menu:
 
-- **Boot mode: Loader** (older firmware): start the card straight away, as for the Mini V2. Nothing is flashed.
-- **UEFI** next to Android (newer firmware): Retroid's own UEFI does not start SD cards. Set up **OpenABL** once, as
-  [ROCKNIX's guide](https://rocknix.org/devices/retroid/retroid-pocket-5/) says
-  ([Flip 2](https://rocknix.org/devices/retroid/retroid-pocket-flip2/)). No computer needed: in Android, Settings →
-  Handheld Settings → Advanced → **Run Script as Root** runs `backup_abl.sh` first, then `flash_abl.sh`. Keep the
-  backup files; Android and your data stay. Then power on holding **Vol Down**, set **Boot mode: Linux** and
-  **Boot source: SD card**, and **Start**. The card has its own entry for OpenABL.
-- **12 GB devices with the Visionox screen** are not supported yet: the screen stays black with these cards. A card of
-  their own will follow.
+- **Boot mode: Loader** (older firmware): pick it and **Start**, as for the Mini V2. Nothing is flashed to the handheld.
+  Back to Android: **Boot mode: Android** in the same menu.
+- **Only Android and UEFI** (newer firmware): Retroid's built-in UEFI does not boot our card, so you need **OpenABL** once.
 
-Back to Android: pick **Android** (or Boot mode: Android) in the same menu. Neither card has started on a real
-Pocket 5 or Flip 2 yet.
+### Installing OpenABL once
+
+**Risk:** OpenABL overwrites the bootloader partitions `abl_a` and `abl_b`. Your Android apps and data stay, but if
+flashing cuts out or goes wrong, the handheld may not boot, and in the worst case only EDL recovery brings it back. Only
+go ahead if you accept that. You still need a computer to write the microSD cards and keep the backup (no fastboot or USB
+cable needed).
+
+**Where the scripts come from:** our images leave the flashing scripts off on purpose, and OpenABL's own release download
+has none either. They are in the `openabl` folder of ROCKNIX's official image. ROCKNIX's guides:
+[Pocket 5](https://rocknix.org/devices/retroid/retroid-pocket-5/#step-2-install-openabl),
+[Flip 2](https://rocknix.org/devices/retroid/retroid-pocket-flip2/).
+
+1. Write the **ROCKNIX SM8250** image (20261101 or newer) to a microSD card. You only need it for its `openabl` folder
+   and as a quick test.
+2. Boot Android with that card inserted and copy the `openabl` folder to the root of internal storage, so the path is
+   exactly `/sdcard/openabl` (the scripts expect it there).
+3. Battery above 50%. In Android, Settings > Handheld Settings > Advanced > **Run Script as Root**: run `backup_abl.sh`.
+4. Check that `abl_a.img` and `abl_b.img` are in `/sdcard/openabl` and are not empty, then copy both to your computer.
+   Don't continue without them.
+5. Run `flash_abl.sh` the same way. Don't power off while it runs: the script does no checks of its own.
+6. Restart holding **Vol Down**, set **Device model** to your exact handheld and **Start**. ROCKNIX should boot.
+7. Write the pocket-ui card. Power on holding **Vol Down** + **Power**, set **Boot mode: Linux** and
+   **Boot source: SD card**, and **Start**. The card has its own entry for OpenABL.
+
+Back to Android with OpenABL: **Boot mode: Android** in its menu, or hold **Vol Up** while powering on. Undo OpenABL: in
+Android, run `restore_backup_abl.sh` from `/sdcard/openabl` with Run Script as Root. That only works while the handheld
+still boots Android; if it doesn't, see the risk above.
+
+### Pocket 6 and Nova
+
+1. Try Retroid's built-in **UEFI** first, nothing flashed: write the card for your model, power on holding **Vol Down** +
+   **Power**, turn **Secure Boot** off if it shows up, and pick **UEFI**. Back to Android: pick **Android** in the same
+   menu. This worked for one tester with another Linux card, not yet with ours.
+2. Drops back to the boot menu? Install OpenABL once with the steps and the risk above, using the `openabl` folder of
+   the **ROCKNIX SM8550** image (20261101 or newer) instead. ROCKNIX's guides:
+   [Pocket 6](https://rocknix.org/devices/retroid/retroid-pocket-6/),
+   [Nova](https://rocknix.org/devices/retroid/retroid-pocket-nova/) (section "Flashing OpenABL", where the script step
+   just says "execute as root").
 
 The card's first partition is marked as an EFI system partition. A Windows or Mac computer therefore no longer shows it,
 and Android does not mount it; Linux still does. The boot files per bootloader are in

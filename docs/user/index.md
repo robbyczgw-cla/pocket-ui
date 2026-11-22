@@ -68,10 +68,12 @@ pages cover what works today and clearly flag anything that is still experimenta
 
 ## What it does not touch
 
-- **Android stays untouched.** ROCKNIX, pocket-ui OS and your games live on the microSD card; Linux cannot see Android's
-  internal storage.
-- **Your bootloader is never overwritten by pocket-ui.** Updates refuse to touch the bootloader or system partitions
-  (see [Updates](updates.md)).
+- **Your Android apps and data stay where they are.** ROCKNIX, pocket-ui OS and your games live on the microSD card;
+  Linux cannot see Android's internal storage.
+- **pocket-ui never flashes your bootloader.** Updates refuse to touch the bootloader or system partitions (see
+  [Updates](updates.md)), and our cards carry no bootloader flashers. If your handheld needs a one-time boot setup first
+  (ROCKNIX's boot helper on the Odin 2, OpenABL on some Retroid betas), that separate step from a ROCKNIX card
+  overwrites `abl_a` and `abl_b`: keep its backup on your computer.
 - Ready-made SD card images write nothing to your handheld's internal storage. Manual dual-boot installs only write
   Retroid's own u-boot into an empty `loader` partition that Android does not use. See the
   [install guide](../INSTALL-DUAL-BOOT.md) for backup and undo steps.

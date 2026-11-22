@@ -14,13 +14,13 @@ tested them directly on hardware yet.
   then add pocket-ui with the ROCKNIX install package
   ([install guide](../INSTALL-DUAL-BOOT.md#install-on-a-rocknix-card-you-already-use)). The installer detects your model
   and notes its experimental status.
-- **Beta cards for Pocket 5 and Flip 2:** ready-to-flash test images live in the
-  [beta release](https://github.com/robbyczgw-cla/pocket-ui/releases/tag/beta-images-0.3.2). Hold Volume Down + Power:
-  if Retroid's menu shows **Loader**, boot the card right there. If it shows **UEFI**, install OpenABL once using
-  [ROCKNIX's guide](https://rocknix.org/devices/retroid/retroid-pocket-5/) (no PC required: Run Script as Root; back up
-  first, Android stays untouched), then set Boot mode: Linux and Boot source: SD card. *(12 GB models with the Visionox
-  panel aren't supported yet; a dedicated image is planned.)* Full steps:
-  [install guide](../INSTALL-DUAL-BOOT.md#pocket-5-and-flip-2-loader-or-uefi).
+- **Beta cards for Pocket 5 and Flip 2:** ready-to-flash images live in the
+  [latest release](https://github.com/robbyczgw-cla/pocket-ui/releases/latest). Hold Volume Down + Power to check
+  Retroid's boot menu: if it shows **Loader**, boot the card right there (nothing gets flashed). If it only shows
+  **Android** and **UEFI**, install OpenABL once using the `openabl` folder from a ROCKNIX SM8250 card (20261101 or
+  newer). It replaces `abl_a` and `abl_b`; Android apps and data stay. Back them up to a computer first. Then boot with
+  **Boot mode: Linux** and **Boot source: SD card**. Original screens only: 12 GB models with the Visionox screen stay
+  black. Full steps and the risk: [install guide](../INSTALL-DUAL-BOOT.md#installing-openabl-once).
 - **What's different:** first start shows a one-time untested-device note (unless already hardware-tested in
   [DEVICES](../DEVICES.md)), and Settings → Help & tools → About tags it "(experimental)". On the wider Pocket 5 and
   Flip 2 displays, Shelf centres cleanly and Settings stretches across the screen in larger type; closing the Flip 2's
@@ -36,11 +36,14 @@ or sleep tested); the other four are virtual-tested only. Install ROCKNIX's **SM
 once, then add pocket-ui via the install package. Never use the Mini V2 image on these devices.
 
 **Beta cards for Pocket 6 and Nova** live in the
-[beta release](https://github.com/robbyczgw-cla/pocket-ui/releases/tag/beta-images-0.3.2) and boot via Retroid's "UEFI"
-entry (Volume Down + Power). If your unit bounces back to the boot menu, set up OpenABL once via ROCKNIX's guide
+[latest release](https://github.com/robbyczgw-cla/pocket-ui/releases/latest). Try Retroid's **UEFI** entry (Volume Down +
+Power) with **Secure Boot** off first; nothing gets flashed (it worked for one tester with another Linux card, not yet
+with ours). If your unit drops back to the boot menu, install OpenABL once using the `openabl` folder from a ROCKNIX SM8550
+card (20261101 or newer), as ROCKNIX's "Flashing OpenABL" section says
 ([Pocket 6](https://rocknix.org/devices/retroid/retroid-pocket-6/),
-[Nova](https://rocknix.org/devices/retroid/retroid-pocket-nova/)), leaving Android untouched, then boot from OpenABL's menu
-and let us know how it runs.
+[Nova](https://rocknix.org/devices/retroid/retroid-pocket-nova/)). It replaces the bootloader while Android apps and data
+stay; back up to a computer first. Then boot with **Boot mode: Linux** and **Boot source: SD card**, and let us know how
+it runs ([steps](../INSTALL-DUAL-BOOT.md#pocket-6-and-nova)).
 
 Pocket 6 and the Odin 2 lineup run at 1920×1080; Nova runs at 1280×960. **Stock ROCKNIX disables deep sleep on SM8550
 devices (checked 2026-10-27):** pressing Power or idling turns the screen off and pauses your game, and any button wakes

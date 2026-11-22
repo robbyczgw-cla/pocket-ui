@@ -398,7 +398,7 @@ member of `KERNEL`, md5 `SM8550_IMAGE_MD5`), `boot/pocket/<model>-noufs.dtb` (th
 
 | Bootloader in the Retroid | What it starts from the card |
 |---|---|
-| Retroid's "UEFI" in the Volume Down menu (newer firmware; reported for a Pocket 6 on r/retroid, 2026-08) and any other UEFI | GRUB, with the model's tree. Without the tree the kernel starts and the screen stays black. Worked for one tester with another Linux card, never with ours; a handheld that falls back to the boot menu gets OpenABL once (ROCKNIX's Pocket 6 / Nova guide, `backup_abl.sh`, `flash_abl.sh`) |
+| Retroid's "UEFI" in the Volume Down menu (newer firmware; reported for a Pocket 6 on r/retroid, 2026-08) and any other UEFI | GRUB, with the model's tree. Without the tree the kernel starts and the screen stays black. Worked for one tester with another Linux card, never with ours; a handheld that falls back to the boot menu gets OpenABL once (ROCKNIX's Pocket 6 / Nova guide: the `openabl` folder of ROCKNIX's SM8550 image, 20261101 or newer, copied to `/sdcard/openabl`, then `backup_abl.sh` with the backup copied to a computer, then `flash_abl.sh`; our cards leave that folder off) |
 | OpenABL ("Boot mode: Linux") | the BLS entry, before `KERNEL` |
 | ROCKNIX's ABL (the 20261001 `abl_signed-SM8550.elf`) | `KERNEL` with the menu's device model, as before: its strings name only `\KERNEL`, `\kernel.img` and `\boot\reglinux.update` |
 
@@ -417,7 +417,10 @@ SMBIOS, the Pocket 6 and Nova may start without sound until a link for their lon
 `/proc/asound/cards`.
 
 **What a player needs first.** ROCKNIX's ABL must be in the handheld: flashed once from Android with root
-(`rocknix_abl/README` of the official image: `backup_abl.sh`, `flash_abl.sh`, then Volume Down at start). Its menu then wants
+(`rocknix_abl/README` of the official 20261001 image: `backup_abl.sh`, `flash_abl.sh`, then Volume Down at start).
+ROCKNIX 20261101 and newer carry OpenABL in an `openabl` folder instead and no `rocknix_abl`. OpenABL v1.2 still starts
+`\KERNEL` with the menu's device model as its last way (its README, `Efi/Models.c`), so by its source it starts the Odin
+cards (20261001 `KERNEL`, no BLS entry); untested with this card on hardware. Its menu then wants
 "Set device model" (the ABL's own text: "Device model not set, can't boot Linux") and "Switch boot mode"; it picks the tree in
 KERNEL by that model. We never flash a bootloader and don't carry the ABL. The first-start notes say so plainly. Our SYSTEM goes without
 `usr/share/bootloader/rocknix_abl`, so ROCKNIX's `update.sh` (which runs `updateabl`) has nothing to flash, on top of the
@@ -653,7 +656,7 @@ bootloader a Retroid may have (2026-11-12, after a Pocket 5 tester found no "Boo
 | Retroid's stock ABL, "Boot mode: Loader" (Retroid u-boot 2024.10 in `loader`) | `EFI/BOOT/BOOTAA64.EFI` (GRUB, `grub.cfg`). U-Boot has no BLS reader; it would prefer `extlinux/` or `boot.scr`, which the card must not have |
 | OpenABL (OpenHandheldCollective, ROCKNIX 20261101), "Boot mode: Linux" | `loader/entries/pocket-ui.conf` first (its `devicetree` wins over the menu's device model), else GRUB |
 | ROCKNIX ABL (`ROCKNIX/abl` up to v1.2), "Boot mode: Linux" | `EFI/BOOT/BOOTAA64.EFI` first (strings of the v1.2 SM8250 binary: no BLS reader), else ROCKNIX's `/KERNEL` with the menu's model |
-| Retroid's newer "UEFI" next to Android in the Volume Down menu | Nothing: it does not start SD cards (no report of any card starting that way; two Pocket 5s fall back to the fastboot menu, 2026-11-13). Those devices get OpenABL once (row above, ROCKNIX's guide: Run Script as Root, `backup_abl.sh`, `flash_abl.sh`), then Boot mode: Linux, Boot source: SD card. Other UEFI firmware (EDK2, QEMU) starts `EFI/BOOT/BOOTAA64.EFI` (GRUB), also from a basic-data partition |
+| Retroid's newer "UEFI" next to Android in the Volume Down menu | Nothing: it does not start SD cards (no report of any card starting that way; two Pocket 5s fall back to the fastboot menu, 2026-11-13). Those devices get OpenABL once (row above, ROCKNIX's guide: the `openabl` folder of ROCKNIX's SM8250 image, 20261101 or newer, since our cards leave it off; copied to `/sdcard/openabl`, Run Script as Root, `backup_abl.sh`, the backup copied to a computer, `flash_abl.sh`), then Boot mode: Linux, Boot source: SD card. It overwrites `abl_a` and `abl_b`; [INSTALL-DUAL-BOOT.md](INSTALL-DUAL-BOOT.md#installing-openabl-once) has the steps users get. Other UEFI firmware (EDK2, QEMU) starts `EFI/BOOT/BOOTAA64.EFI` (GRUB), also from a basic-data partition |
 
 Offsets, names and the `LegacyBIOSBootable` attribute stay ROCKNIX's; only p1's type GUID differs on the Pocket 5 and Flip 2
 (`sm8250_p1_type` in `pins.sh`; set for Retroid's UEFI, which turned out not to start cards, so it has no known use). Retroid's u-boot boots ESP-typed partitions as well (they count as bootable). An EFI system

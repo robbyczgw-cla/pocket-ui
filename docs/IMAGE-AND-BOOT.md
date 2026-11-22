@@ -6,7 +6,7 @@ Status 2026-10-21. [V] = verified (file, URL, or measurement), [I] = inferred, n
 
 - **Boot (A):** flashing our 27 MB boot image into `loader` fails on size: `loader` is 10 MiB according to the
   factory firmware package (Mini V1; check V2). Recommendation: **option 1b**. `loader` holds only Retroid's small
-  u-boot (632 KiB), and ROCKNIX starts through EFI/GRUB from the SD card. The stock ABL stays untouched, Android is
+  u-boot (632 KiB), and ROCKNIX starts through EFI/GRUB from the SD card. The stock ABL is not changed, Android is
   the default, and Vol Up starts ROCKNIX. Read first, and test from memory with `fastboot boot`. **Plan B:**
   OpenABL v1.1 with Boot mode Android and Vol Up = Linux (external).
 - **Image (B):** first repack SYSTEM (1 to 2 days), then a fork with a GitHub Actions build. A local build on a Mac
