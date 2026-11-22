@@ -36,8 +36,8 @@ again; a changed file is read again, and deleting the cache file does no harm.
 ## PlayStation 1 and 2 discs
 
 A PlayStation disc is recognised by the **serial on the disc itself**, not by its file name. pocket-ui reads the
-short boot file in the disc's file system (`SYSTEM.CNF`, whose `BOOT` line says "SLES_556.73") — a few kilobytes at
-the start of the image, never the whole image — and looks that serial up in the list of PlayStation 1 and 2 releases
+short boot file in the disc's file system (`SYSTEM.CNF`, whose `BOOT` line says "SLES_556.73"; a few kilobytes at
+the start of the image, never the whole image), and looks that serial up in the list of PlayStation 1 and 2 releases
 (Redump, through libretro-database), the same way a cartridge is recognised by its checksum ([Box art & downloads](extras.md#box-art)).
 A file called `SLES_556.73.Something.iso` or `SLUS_209.46.iso` then shows the game's name on the shelf ("Final Fantasy
 VII", "Gran Turismo 4"), gets that game's facts and its box art and pictures. The list is downloaded once for the
