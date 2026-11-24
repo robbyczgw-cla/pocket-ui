@@ -52,6 +52,8 @@ mod android_02_tests;
 #[cfg(all(test, target_os = "linux"))]
 mod android_network_rule_tests;
 #[cfg(all(test, target_os = "linux"))]
+mod android_orientation_tests;
+#[cfg(all(test, target_os = "linux"))]
 mod android_resolution_tests;
 
 #[cfg(all(test, target_os = "linux"))]

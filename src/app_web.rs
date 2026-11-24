@@ -271,7 +271,7 @@ impl App {
         let avail = self.updates.app_available();
         let (state, step, percent) = match &self.updates.phase {
             UpdatePhase::Running(job) => match &job.task {
-                UpdateTask::Check => (UpdateState::Checking, None, None),
+                UpdateTask::Check | UpdateTask::CheckCard => (UpdateState::Checking, None, None),
                 UpdateTask::App { .. } => match self.updates.app_step() {
                     Some((s, frac)) => {
                         let st = match s {

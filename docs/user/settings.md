@@ -131,7 +131,7 @@ into the picture), while handhelds (Game Boy, GBA, DS, PSP) click on their power
 Continuing an open case plays the same ritual while your saved moment waits ready underneath (skipped on Quick or
 Reduced/Off motion, or on any button press).
 
-After Quit, Cozy plays the return trip: TV shrinking to a glowing dot (when Old-TV switch-on is enabled) or handheld
+After Quit, Cozy plays the return trip: TV shrinking to a glowing dot (when Old-TV switch-off is enabled) or handheld
 going dark, and the cartridge or disc sliding back into its case (left ajar if Continue is waiting). Your shelf is
 live right away, so any button press or tap skips straight to action.
 

@@ -2,7 +2,7 @@
 
 The quick two-file setup in [Getting started](getting-started.md) targets the Retroid Pocket Mini V2. This page covers
 handhelds supported as **experimental**: other Retroid models, Snapdragon 8 Gen 2 (SM8550) devices, the Anbernic H700
-lineup, TrimUI Brick Pro and Retroid Pocket Classic.
+lineup, the R36S (beta), TrimUI Brick Pro and Retroid Pocket Classic.
 
 ## Other Retroid devices
 
@@ -101,6 +101,7 @@ All H700 models have 1 GB RAM, no touchscreen and no fan. RG40XX RGB rings stay 
    | RG34XX | `sun50i-h700-anbernic-rg34xx.dtb` |
    | RG34XX-SP | `sun50i-h700-anbernic-rg34xx-sp.dtb` (`...-sp-v2-panel.dtb` for 2026 Metallic Blue units) |
    | RG-SP | `sun50i-h700-anbernic-rg-sp.dtb` |
+   | RG CubeXX | `sun50i-h700-anbernic-rgcubexx.dtb` |
 
    Garbled or striped screen? Hold Power 10 seconds, re-flash and try the bracketed newer-panel revision `.dtb`.
 4. Boot ROCKNIX once. It expands storage, reboots and walks through its first-boot setup until ROCKNIX's menu opens.
@@ -131,11 +132,28 @@ All H700 models have 1 GB RAM, no touchscreen and no fan. RG40XX RGB rings stay 
   pocket-ui* in Ports to return to ROCKNIX's menu. Skip ROCKNIX online updates until a pocket-ui release confirms
   compatibility.
 
+## R36S (beta)
+
+The R36S has its own pocket-ui card, a beta for genuine R36S handhelds (clones aren't covered yet). Already running dArkOS?
+The [pocket-ui beta for dArkOS](https://pocketui.xyz/install#darkos) needs no extra card.
+
+1. Flash the R36S image from the [install page](https://pocketui.xyz/install#r36s) to a spare microSD card (8 GB or larger)
+   with balenaEtcher or Raspberry Pi Imager.
+2. Power off and put the new card in **TF1**. Your original card (the one your R36S came with, or your dArkOS card) goes in **TF2**, so your games, BIOS
+   files and box art stay where they are.
+3. Power on and wait. The first start takes up to 10 minutes with a restart or two, so don't press anything.
+
+No Wi-Fi is needed. Updates come as one zip on your games card ([updates](updates.md)). To go back to stock, power off and put
+your original card in TF1. Black screen after 10 minutes? Newer R36S screens need one extra file; the install page explains it.
+
 ## TrimUI Brick Pro (experimental)
 
 Runs the same TrimUI card package as the Brick and Smart Pro, adding dual sticks (L3/R3 clicks never trigger accidental
 quick-save/load; use MENU or F1/F2) and separate F1/F2 keys. Its 3.95" display uses standard font sizes; the side switch
 and LED controls stay disabled until verified, so **Lights & buttons** exposes F1/F2 assignments only.
+
+The **TrimUI Smart Pro** (1280×720, both sticks) uses the same card and is experimental too; the Smart Pro S isn't
+supported, and the card tells you so.
 
 Untested on real hardware so far; try it on a spare card and back up saves first. Send feedback via
 Settings → Help & tools → Report a problem (or grab `pocket-ui/logs` off the card if there's no picture).

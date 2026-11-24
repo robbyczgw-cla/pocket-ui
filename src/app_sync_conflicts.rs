@@ -416,7 +416,11 @@ impl App {
         let (left, right) = (pad + NU_BTN_PAD, c.w - pad - NU_BTN_PAD);
         self.status_pill(c);
         let n_versions = p.entry().map_or(2, |e| e.group.versions().len());
-        let title = if n_versions == 2 { "Two versions".to_string() } else { format!("{n_versions} versions") };
+        let title = match n_versions {
+            1 => "1 version".into(),
+            2 => "Two versions".into(),
+            n => format!("{n} versions"),
+        };
         self.text.draw(c, Face::Title, 50, left, pad + 58, pal().chalk, &title);
         let top = pocket_ui::kit::header_bottom(c.h) + 24;
         match (p.view, p.entry()) {

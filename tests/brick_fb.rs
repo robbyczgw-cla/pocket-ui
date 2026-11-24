@@ -29,13 +29,17 @@ impl Bridge {
     }
 
     fn start_env(bits: u32, env: &[(&str, &str)]) -> Bridge {
+        Bridge::start_mode((W, H), bits, env)
+    }
+
+    fn start_mode((w, h): (u32, u32), bits: u32, env: &[(&str, &str)]) -> Bridge {
         let dir = tempfile::tempdir().unwrap();
         let bytes = if bits == 16 { 2 } else { 4 };
-        let original = vec![0x5au8; (W * H) as usize * bytes];
+        let original = vec![0x5au8; (w * h) as usize * bytes];
         std::fs::write(dir.path().join("fb"), &original).unwrap();
         let child = Command::new(env!("CARGO_BIN_EXE_pocket-fb"))
             .args(["--wayland", dir.path().join("w").to_str().unwrap(), "--ipc", dir.path().join("i").to_str().unwrap()])
-            .args(["--fb", dir.path().join("fb").to_str().unwrap(), "--mode", &format!("{W}x{H}x{bits}")])
+            .args(["--fb", dir.path().join("fb").to_str().unwrap(), "--mode", &format!("{w}x{h}x{bits}")])
             .envs(env.iter().copied())
             .stderr(Stdio::null())
             .spawn()
@@ -516,6 +520,81 @@ fn the_real_pocket_ui_reaches_the_framebuffer() {
     let _ = bridge.wait();
     assert!(painted, "pocket-ui's first screen never reached the framebuffer");
     assert!(loading, "the loading message never reached pocket-fb after the fade: {}", std::fs::read_to_string(log).unwrap_or_default());
+}
+
+/// Preparing shelf and launch pictures takes time on the UI thread. Its budget during a held direction is
+/// zero, including after the idle timers expire. Count the preparations to avoid measuring host wall time.
+#[test]
+fn held_cabinet_navigation_spends_no_frame_time_on_shelf_preparation() {
+    use std::os::unix::fs::OpenOptionsExt;
+
+    struct Ui(Child);
+    impl Drop for Ui {
+        fn drop(&mut self) {
+            let _ = self.0.kill();
+            let _ = self.0.wait();
+        }
+    }
+
+    let bridge = Bridge::start_mode((1024, 768), 32, &[]);
+    let roms = bridge.path("gb");
+    std::fs::create_dir(&roms).unwrap();
+    for i in 0..20 {
+        std::fs::write(roms.join(format!("Game {i:02}.gb")), b"game").unwrap();
+    }
+    let systems = bridge.path("systems.cfg");
+    std::fs::write(&systems, format!("<systemList><system><name>gb</name><fullname>Game Boy</fullname><path>{}</path><extension>.gb</extension><command>true</command></system></systemList>", roms.display())).unwrap();
+    std::fs::create_dir(bridge.path("data")).unwrap();
+    std::fs::write(bridge.path("data/settings.json"), r#"{"onboarded":true,"seen_version":"9.9.9","theme":"cabinet","motion":"full","animations":"cozy"}"#).unwrap();
+
+    let trace = bridge.path("trace");
+    let log = bridge.path("ui.log");
+    let mut ui = Ui(Command::new(env!("CARGO_BIN_EXE_pocket-ui"))
+        .arg("--test-driver").arg(bridge.dir.path())
+        .env("POCKETUI_TEST_WINDOW", "1")
+        .env("POCKETUI_MOCK", "1")
+        .env("POCKETUI_DEVICE", "brick")
+        .env("POCKETUI_LANG", "en")
+        .env("POCKETUI_ROOM_TIME", "12:00")
+        .env("POCKETUI_ES_SYSTEMS", systems)
+        .env("POCKETUI_DATA", bridge.path("data"))
+        .env("POCKETUI_TRACE", &trace)
+        .env("WAYLAND_DISPLAY", bridge.path("w"))
+        .env("SWAYSOCK", bridge.path("i"))
+        .env("XDG_RUNTIME_DIR", bridge.dir.path())
+        .stdout(std::fs::File::create(&log).unwrap())
+        .stderr(Stdio::null())
+        .spawn().unwrap());
+
+    let read_trace = || std::fs::read_to_string(&trace).unwrap_or_default();
+    wait_for("a 1024x768 software frame", || {
+        assert!(ui.0.try_wait().unwrap().is_none(), "UI stopped: {}", std::fs::read_to_string(&log).unwrap_or_default());
+        read_trace().lines().any(|l| l.contains(" paint ") && l.ends_with("1024x768"))
+    });
+    let mut fifo = None;
+    wait_for("the UI's command FIFO", || {
+        fifo = std::fs::OpenOptions::new().write(true).custom_flags(libc::O_NONBLOCK).open(bridge.path("ui.in")).ok();
+        fifo.is_some()
+    });
+    let mut fifo = fifo.unwrap();
+    let current_game = |name: &str| read_trace().lines().rev().find(|l| l.contains(" frame ")).is_some_and(|l| l.ends_with(name));
+    if !current_game("Game 00.gb") {
+        writeln!(fifo, "down").unwrap();
+        wait_for("the first game", || current_game("Game 00.gb"));
+    }
+    writeln!(fifo, "tbtn 41 right down").unwrap();
+    wait_for("the held direction to pass the idle delay and repeat across the shelf", || {
+        read_trace().lines().filter_map(|l| l.split_once(" sel=game:gb/Game ")).any(|(_, game)| game >= "06.gb")
+    });
+    writeln!(fifo, "tbtn 41 right up").unwrap();
+
+    wait_for("the release to reach the UI", || read_trace().contains(" Right up"));
+    let events = read_trace();
+    let (_, held) = events.split_once(" Right down").unwrap();
+    let (held, _) = held.split_once(" Right up").unwrap();
+    let preparation: Vec<_> = held.lines().filter(|line| line.contains(" shelf-warm ")).collect();
+    assert!(preparation.is_empty(), "shelf preparation used the animation's frame budget: {preparation:?}");
+    wait_for("launch warming to resume after release", || read_trace().split_once(" Right up").is_some_and(|(_, after)| after.contains(" shelf-warm insert")));
 }
 
 /// The bridge with the GPU's way: Mesa's software GPU on a pbuffer when a computer has one, what was drawn read back into the file.

@@ -1,7 +1,7 @@
 # The GAMES drive
 
-On the ready-to-flash RG28XX image (16 GB card or larger), pocket-ui creates a **GAMES** drive on first boot because the
-RG28XX has no Wi-Fi for file sharing. You won't see **GAMES** on your computer immediately after flashing; it appears after
+On the ready-to-flash RG28XX and RG35XX 2024 images (16 GB card or larger), pocket-ui creates a **GAMES** drive on first boot because
+these handhelds have no Wi-Fi for file sharing. You won't see **GAMES** on your computer immediately after flashing; it appears after
 you boot the card once in your handheld (first-start setup reminds you too), so there's no need to re-flash. No Wi-Fi, no
 second card and no extra apps needed:
 
@@ -22,8 +22,8 @@ Good to know:
 - Your saves and save states live on **GAMES** alongside your ROMs, so backing up `roms` backs up your saves too. Shut
   down from the menu whenever you can: a sudden power cut can lose your last save on any card, and pocket-ui runs a check
   on **GAMES** next boot if it wasn't shut down cleanly.
-- **A games card in slot 2 takes priority.** While a second card is inserted, pocket-ui plays from it and leaves **GAMES**
-  untouched. Pop slot 2 out to return to **GAMES**.
+- **Games on both cards show together.** While a games card is in slot 2, the shelf lists its games and the games on
+  **GAMES** side by side. Pop slot 2 out and only **GAMES** remains.
 - Re-flashing the card usually keeps **GAMES** intact since the layout matches, though you should still back up anything
   important first, as flashing tools can wipe the entire card.
 - **Offline updates** work the same way: drop the update zip from pocketui.xyz/install onto **GAMES** right next to
@@ -31,6 +31,6 @@ Good to know:
 - A handful of PortMaster games rely on symlinks, which the exFAT **GAMES** drive doesn't support (true for any exFAT
   games card).
 
-On all other cards (and on smaller RG28XX cards), the `roms` folder lives on the Linux ext4 `STORAGE` partition. Windows and
+On all other cards (and on smaller RG28XX and RG35XX 2024 cards), the `roms` folder lives on the Linux ext4 `STORAGE` partition. Windows and
 macOS can't write to ext4 without extra drivers, so use File sharing over Wi-Fi or a second SD card if your handheld has
 two slots ([With a second SD card](copy-games.md#with-a-second-sd-card)).

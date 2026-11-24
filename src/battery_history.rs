@@ -26,6 +26,7 @@
 //! File layout, little endian: `"PBH1" | u8 version (1) | u8 tag count | u16 sample count | per tag: u8 length,
 //! name | per sample: 16 bytes (`Sample::encode`) | u32 CRC-32 of everything before`.
 
+use crate::battery_curve::Curve;
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 use std::time::{Duration, Instant, SystemTime};
@@ -44,6 +45,9 @@ pub const MAX_SAMPLES: usize = 3000;
 /// Samples further apart than this (a minute is the rule) have a gap between them: the device slept, was
 /// off, or pocket-ui wasn't running. Three missed samples; a busy moment is no gap.
 pub const GAP: u64 = 180;
+/// The tag of samples taken while the Pocket slept (light or deep sleep, [`set_asleep`]): no system id is called this.
+/// A run of them is one sleep (`battery_estimate::last_sleep`), and they count for no system's draw.
+pub const SLEEP_TAG: &str = "sleep";
 const MAGIC: &[u8; 4] = b"PBH1";
 const VERSION: u8 = 1;
 const MAX_TAGS: usize = 31;
@@ -338,20 +342,29 @@ struct Recorder {
     /// sleep generation ([`GENERATION`]) it was taken in.
     games: Ledger,
     prev: Option<(Sample, Option<Key>, u64)>,
+    /// This Pocket's own discharge curve (`battery_curve`), learned from the history as it grows.
+    curve: Curve,
     dirty: bool,
     games_dirty: bool,
+    curve_dirty: bool,
     last_write: Instant,
 }
 
 impl Recorder {
     fn open(data_dir: &Path) -> Recorder {
+        let history = History::open(data_dir);
+        // A first start with this version learns from the 48 hours already kept; later only what is new (`upto`).
+        let mut curve = Curve::load(data_dir);
+        let curve_dirty = curve.learn(history.samples());
         Recorder {
             path: data_dir.join(FILE),
-            history: History::open(data_dir),
+            history,
             games: Ledger::load(data_dir),
             prev: None,
+            curve,
             dirty: false,
             games_dirty: false,
+            curve_dirty,
             last_write: Instant::now(),
         }
     }
@@ -361,7 +374,12 @@ impl Recorder {
     fn feed_games(&mut self, s: Sample, game: Option<Key>, generation: u64) -> bool {
         let counted = match (&self.prev, &game) {
             (Some((p, Some(was), g)), Some(now)) if was == now && *g == generation => {
-                battery_games::pair(p, &s).map(|(secs, drop)| self.games.add(now, secs, drop, s.t))
+                // The drop in usable charge too, through the curve where it knows both readings (`Entry::used`).
+                let used = |drop: i32| match (self.curve.usable(p.capacity), self.curve.usable(s.capacity)) {
+                    (Some(a), Some(b)) => (a - b) as f64,
+                    _ => drop as f64,
+                };
+                battery_games::pair(p, &s).map(|(secs, drop)| self.games.add_used(now, secs, drop, used(drop), s.t))
             }
             _ => None,
         };
@@ -400,6 +418,11 @@ pub fn set_game(game: Option<Key>) {
 pub fn set_asleep(asleep: bool) {
     ASLEEP.store(asleep, std::sync::atomic::Ordering::SeqCst);
     sleep_boundary();
+    // The sleep's first sample now, not at the next minute: the power button's sleep suspends within seconds, and a sleep
+    // with no sample before its gap would have no start (`battery_estimate::last_sleep`).
+    if asleep {
+        spawn_sample(battery::dir(), PathBuf::new());
+    }
 }
 
 /// The Pocket slept in a way [`set_asleep`] didn't see (a suspend nobody asked for): the stretch to the next sample
@@ -454,13 +477,13 @@ fn flush_locked(now: Instant, force: bool) {
     let snapshot = {
         let mut guard = RECORDER.lock().unwrap();
         let Some(rec) = guard.as_mut() else { return };
-        if !(rec.dirty || rec.games_dirty) || (!force && now.saturating_duration_since(rec.last_write) < WRITE_EVERY) {
+        if !(rec.dirty || rec.games_dirty || rec.curve_dirty) || (!force && now.saturating_duration_since(rec.last_write) < WRITE_EVERY) {
             return;
         }
         rec.last_write = now;
-        (rec.path.clone(), rec.dirty.then(|| rec.history.clone()), rec.games_dirty.then(|| rec.games.clone()))
+        (rec.path.clone(), rec.dirty.then(|| rec.history.clone()), rec.games_dirty.then(|| rec.games.clone()), rec.curve_dirty.then(|| rec.curve.clone()))
     };
-    let (path, history, games) = snapshot;
+    let (path, history, games, curve) = snapshot;
     if let Some(history) = history {
         match write_file(&path, &history.encode()) {
             Ok(()) => RECORDER.lock().unwrap().as_mut().unwrap().dirty = false,
@@ -473,6 +496,18 @@ fn flush_locked(now: Instant, force: bool) {
             Err(e) => eprintln!("battery: can't write {}: {e}", battery_games::FILE),
         }
     }
+    if let Some(curve) = curve {
+        match curve.save(path.parent().unwrap()) {
+            Ok(()) => RECORDER.lock().unwrap().as_mut().unwrap().curve_dirty = false,
+            Err(e) => eprintln!("battery: can't write {}: {e}", crate::battery_curve::FILE),
+        }
+    }
+}
+
+/// This Pocket's own discharge curve as learned so far (`battery_estimate::estimate_with`); None before the sampler
+/// has read its files.
+pub fn curve() -> Option<Curve> {
+    RECORDER.lock().unwrap().as_ref().map(|r| r.curve.clone())
 }
 
 /// The newest sample, if the sampler runs: what the pause menu's battery line goes by.
@@ -485,7 +520,7 @@ pub fn latest() -> Option<Sample> {
 pub fn game_left(game: &Key) -> Option<battery_games::Left> {
     let guard = RECORDER.lock().unwrap();
     let rec = guard.as_ref()?;
-    battery_games::left(rec.games.rate(game), rec.history.samples().last(), crate::recents::now_secs())
+    battery_games::left_with(rec.games.rate(game), rec.history.samples().last(), crate::recents::now_secs(), Some(&rec.curve))
 }
 
 /// The card's Battery line for `game` on the shelf (`battery_games::card_line`; its emulator left empty): the running
@@ -494,7 +529,7 @@ pub fn game_left(game: &Key) -> Option<battery_games::Left> {
 pub fn game_card(game: &Key, system: &str) -> Option<String> {
     let t = crate::recents::now_secs();
     match RECORDER.lock().unwrap().as_ref() {
-        Some(r) => battery_games::card_line(r.games.rate(game), r.history.samples().last(), t, system),
+        Some(r) => battery_games::card_line_with(r.games.rate(game), r.history.samples().last(), t, system, Some(&r.curve)),
         None => Some(LOADING.to_string()),
     }
 }
@@ -523,17 +558,27 @@ fn read_steady(dir: &Path, t: u64) -> Option<Sample> {
 /// `count_game`: false for a sample after a wake ([`sample_soon`]): the stretch to it spans the sleep, so it ends the
 /// game's run of samples instead of adding to it (and the ledger isn't written on the caller's thread). Samples in
 /// light sleep ([`set_asleep`]) count for no game either.
-/// `generation`: [`GENERATION`] before `s` was read; a sleep change while it was read makes it nobody's.
-fn record(data_dir: &Path, s: Sample, count_game: bool, generation: u64) {
-    record_at(data_dir, s, count_game, generation, Instant::now());
+/// What a sample is tagged with: [`SLEEP_TAG`] when it was taken asleep, else what ran (a system id, None for the menus).
+fn tag_for(activity: Option<String>, asleep: bool) -> Option<String> {
+    if asleep {
+        Some(SLEEP_TAG.to_string())
+    } else {
+        activity
+    }
 }
 
-fn record_at(_data_dir: &Path, s: Sample, count_game: bool, generation: u64, tick: Instant) {
+/// `generation`: [`GENERATION`] before `s` was read; a sleep change while it was read makes it nobody's. `asleep`: the
+/// Pocket slept when the read began (taken then, so a wake during the reads doesn't move the sample out of its sleep).
+fn record(data_dir: &Path, s: Sample, count_game: bool, generation: u64, asleep: bool) {
+    record_at(data_dir, s, count_game, generation, asleep, Instant::now());
+}
+
+fn record_at(_data_dir: &Path, s: Sample, count_game: bool, generation: u64, asleep: bool, tick: Instant) {
     let _writing = WRITING.lock().unwrap();
     if STOPPED.load(std::sync::atomic::Ordering::SeqCst) {
         return;
     }
-    let activity = ACTIVITY.lock().unwrap().clone();
+    let activity = tag_for(ACTIVITY.lock().unwrap().clone(), asleep);
     let now = GENERATION.load(std::sync::atomic::Ordering::SeqCst);
     let awake = !ASLEEP.load(std::sync::atomic::Ordering::SeqCst);
     let game = GAME.lock().unwrap().clone().filter(|_| count_game && awake && now == generation);
@@ -546,6 +591,7 @@ fn record_at(_data_dir: &Path, s: Sample, count_game: bool, generation: u64, tic
         }
         rec.dirty = true;
         rec.games_dirty |= rec.feed_games(s, game, now);
+        rec.curve_dirty |= rec.curve.learn(rec.history.samples());
     }
     flush_locked(tick, false);
 }
@@ -561,12 +607,13 @@ pub fn sample_soon(data_dir: &Path) {
 /// [`sample_soon`] from the battery in `dir`; the thread's handle (tests wait for it).
 fn spawn_sample(dir: PathBuf, data_dir: PathBuf) -> Option<std::thread::JoinHandle<()>> {
     let generation = GENERATION.load(std::sync::atomic::Ordering::SeqCst);
+    let asleep = ASLEEP.load(std::sync::atomic::Ordering::SeqCst);
     let t = crate::recents::now_secs();
     std::thread::Builder::new()
         .name("battery-wake".into())
         .spawn(move || {
             if let Some(s) = read_steady(&dir, t) {
-                record(&data_dir, s, false, generation);
+                record(&data_dir, s, false, generation, asleep);
             }
         })
         .ok()
@@ -587,8 +634,9 @@ pub fn start(data_dir: PathBuf) {
             if last_minute != Some(now / 60) {
                 last_minute = Some(now / 60);
                 let generation = GENERATION.load(std::sync::atomic::Ordering::SeqCst);
+                let asleep = ASLEEP.load(std::sync::atomic::Ordering::SeqCst);
                 match read_steady(&dir, now) {
-                    Some(s) => record(&data_dir, s, true, generation),
+                    Some(s) => record(&data_dir, s, true, generation, asleep),
                     // No battery: stop quietly, there is nothing to record.
                     None => return,
                 }
@@ -891,7 +939,7 @@ mod tests {
         assert!(loaded());
         assert_ne!(game_card(&key, "GBA").as_deref(), Some(LOADING));
         let g = GENERATION.load(std::sync::atomic::Ordering::SeqCst);
-        record(&d, s(T0, 80), true, g);
+        record(&d, s(T0, 80), true, g, false);
         assert!(!d.join(FILE).exists(), "the first sample stays in memory");
         assert_eq!(latest().unwrap().capacity, 80);
         let path = d.join(FILE);
@@ -903,7 +951,7 @@ mod tests {
         RECORDER.lock().unwrap().as_mut().unwrap().path = path.clone();
         flush();
         assert_eq!(History::load(&path), view());
-        record(&d, s(T0 + 60, 79), false, g);
+        record(&d, s(T0 + 60, 79), false, g, false);
         assert_eq!(History::load(&path).samples().len(), 1, "buffered until exit");
         // Review SOL 2026-10-24 #12: the exit waits for a write in progress, and nothing is written after it.
         let writing = std::thread::spawn(|| {
@@ -916,7 +964,7 @@ mod tests {
         assert!(t0.elapsed() >= Duration::from_millis(100), "it waited for the write");
         writing.join().unwrap();
         let before = std::fs::read(d.join(FILE)).unwrap();
-        record(&d, s(T0 + 60, 79), true, g);
+        record(&d, s(T0 + 60, 79), true, g, false);
         assert_eq!(std::fs::read(d.join(FILE)).unwrap(), before, "no write after the stop");
         let temps: Vec<_> = std::fs::read_dir(&d).unwrap().flatten().filter(|e| e.file_name().to_string_lossy().ends_with(".tmp")).collect();
         assert!(temps.is_empty(), "{temps:?}");
@@ -966,7 +1014,7 @@ mod polish_batch_bench {
         for i in 0..62 {
             let s = Sample { t: t0 + i*60, capacity: 80, charging: false,
                 full: false, mv: 3900, ma: 500, temp: Some(300), tag: 0 };
-            record_at(&d, s, false, 0, tick + Duration::from_secs(i*60));
+            record_at(&d, s, false, 0, false, tick + Duration::from_secs(i*60));
             assert_eq!(latest().unwrap().t, s.t, "published immediately");
             if i < 10 {
                 assert!(!d.join(FILE).exists());

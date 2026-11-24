@@ -38,7 +38,7 @@ confirms with bottom, Odin style with right; Settings → Buttons on Handheld vi
 In-game controls stay faithful to the original console layout (right button = console A) across Odin, Xbox- and
 Switch-style pads. Flipping Odin's Controller style mid-game pauses safely and keeps Player 1 assigned.
 
-**Multiplayer:** Plugging in or pairing a Bluetooth/USB controller adds Player 2–4 automatically while your built-in pad
+**Multiplayer:** Plugging in or pairing a Bluetooth/USB controller adds Player 2 to 4 automatically while your built-in pad
 stays Player 1 (single-player games accept input from any pad). Disconnecting a pad pauses the game and reclaims its
 slot on reconnect. Up to four players; menus respond to every connected pad.
 

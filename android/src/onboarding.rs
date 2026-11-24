@@ -481,7 +481,11 @@ impl Ui {
                 tr("Reading library...")
             } else if let Some(lib) = &self.library {
                 let systems: HashSet<_> = lib.games.iter().map(|g| g.system_id).collect();
-                let found = tr(&format!("Found {} games on {} systems", lib.games.len(), systems.len()));
+                let found = tr(&match (lib.games.len(), systems.len()) {
+                    (1, _) => "Found 1 game on 1 system".into(),
+                    (n, 1) => format!("Found {n} games on 1 system"),
+                    (n, m) => format!("Found {n} games on {m} systems"),
+                });
                 if lib.games.is_empty() {
                     format!("{found}. {}", tr("Choose the folder that contains your system folders, or a system folder such as psp or gba."))
                 } else {

@@ -17,7 +17,7 @@
 //! for the watts shown next to the rate.
 
 use crate::battery::Sample;
-use crate::battery_history::{History, GAP, KEEP};
+use crate::battery_history::{History, GAP, KEEP, SLEEP_TAG};
 
 /// At least this much continuous time on battery before there is a time left.
 pub const MIN_SPAN: u64 = 20 * 60;
@@ -36,15 +36,21 @@ const HALF_LIFE: f64 = 20.0 * 60.0;
 const JUMP: i32 = 6;
 /// A system needs this much time on battery before its rate is shown.
 const DRAW_MIN: u64 = 15 * 60;
+/// A sleep shorter than this says nothing: the gauge counts whole points.
+pub const SLEEP_MIN: u64 = 30 * 60;
+/// A sleep that ended longer ago than this is old news.
+pub const SLEEP_SHOWN: u64 = 24 * 3600;
 
 /// What can honestly be said about the time left.
 #[derive(Clone, Debug, PartialEq)]
 pub enum Estimate {
-    /// On battery: the drain in points an hour over `over` seconds, and the seconds until empty at that rate.
+    /// On battery: the drain in points an hour over `over` seconds, and the seconds until empty at that rate. `curve`:
+    /// the seconds come from this Pocket's own discharge curve (`battery_curve`), so they don't follow `per_hour`.
     Left {
         per_hour: f32,
         secs: u64,
         over: u64,
+        curve: bool,
     },
     /// Charging, with the time until full when the rise could be measured.
     Charging {
@@ -78,9 +84,14 @@ fn recent_run(samples: &[Sample]) -> &[Sample] {
 
 /// Weighted least-squares slope of capacity over time, in points per hour; newer samples count more.
 fn slope(run: &[Sample]) -> f32 {
+    slope_of(run, |s| s.capacity as f64)
+}
+
+/// The same for any reading of the samples (`battery_curve::Curve::usable`).
+fn slope_of(run: &[Sample], value: impl Fn(&Sample) -> f64) -> f32 {
     let last = run[run.len() - 1].t as f64;
     let (mut sw, mut sx, mut sy) = (0.0, 0.0, 0.0);
-    let point = |s: &Sample| ((s.t as f64 - last) / 3600.0, s.capacity as f64, 0.5f64.powf((last - s.t as f64) / HALF_LIFE));
+    let point = |s: &Sample| ((s.t as f64 - last) / 3600.0, value(s), 0.5f64.powf((last - s.t as f64) / HALF_LIFE));
     for s in run {
         let (x, y, w) = point(s);
         sw += w;
@@ -101,7 +112,15 @@ fn slope(run: &[Sample]) -> f32 {
     }
 }
 
+/// The estimate with the straight line through the percentages (no curve learned yet).
 pub fn estimate(samples: &[Sample], now: u64) -> Option<Estimate> {
+    estimate_with(samples, now, None)
+}
+
+/// The estimate; with `curve` (this Pocket's own discharge curve, once it knows enough) the time left is the usable
+/// charge left at the rate it went over the same samples, down to the low-battery switch-off, instead of a straight
+/// line through the gauge's points. The checks that there is enough to say stay the gauge's.
+pub fn estimate_with(samples: &[Sample], now: u64, curve: Option<&crate::battery_curve::Curve>) -> Option<Estimate> {
     let last = samples.last()?;
     if now.saturating_sub(last.t) > GAP {
         return Some(Estimate::NotEnough { have: 0 });
@@ -127,10 +146,17 @@ pub fn estimate(samples: &[Sample], now: u64) -> Option<Estimate> {
     if span < MIN_SPAN || -change < MIN_DROP || -rate < MIN_RATE {
         return Some(Estimate::NotEnough { have: span });
     }
+    // The usable charge left and the rate it went at, through the curve; nothing when the curve knows too little.
+    let by_curve = curve.filter(|c| c.usable(last.capacity).is_some()).and_then(|c| {
+        let usable = |s: &Sample| c.usable(s.capacity).unwrap_or(0.0) as f64;
+        let rate = slope_of(run, usable);
+        (rate < 0.0).then(|| (usable(last) as f32 / -rate * 3600.0) as u64)
+    });
     Some(Estimate::Left {
         per_hour: -rate,
-        secs: (last.capacity as f32 / -rate * 3600.0) as u64,
+        secs: by_curve.unwrap_or((last.capacity as f32 / -rate * 3600.0) as u64),
         over: span,
+        curve: by_curve.is_some(),
     })
 }
 
@@ -161,7 +187,8 @@ pub fn draws(h: &History, now: u64) -> Vec<Draw> {
     let mut sums: Vec<(u8, Sum)> = Vec::new();
     for pair in h.recent(now, KEEP).windows(2) {
         let (a, b) = (&pair[0], &pair[1]);
-        if a.tag != b.tag || a.plugged() || b.plugged() || !continuous(a, b) {
+        // Asleep is no system's play; the Battery page has a line of its own for it (`last_sleep`).
+        if a.tag != b.tag || a.plugged() || b.plugged() || !continuous(a, b) || h.tag(b) == Some(SLEEP_TAG) {
             continue;
         }
         let i = match sums.iter().position(|(t, _)| *t == b.tag) {
@@ -207,6 +234,52 @@ pub fn draws(h: &History, now: u64) -> Vec<Draw> {
     out
 }
 
+/// One sleep: from its first sample to its last, both taken asleep (the sample at the wake is taken in the sleep).
+#[derive(Clone, Debug, PartialEq)]
+pub struct Slept {
+    pub from: u64,
+    pub to: u64,
+    /// Points of charge it cost (0: under one point).
+    pub drop: u8,
+}
+
+impl Slept {
+    pub fn secs(&self) -> u64 {
+        self.to - self.from
+    }
+
+    /// Points an hour.
+    pub fn per_hour(&self) -> f32 {
+        self.drop as f32 * 3600.0 / self.secs().max(1) as f32
+    }
+}
+
+/// The newest sleep (light or deep: the screen off, the game paused) and what it cost, from the run of samples tagged
+/// [`SLEEP_TAG`] at the history's end or before it; deep sleep leaves a gap inside the run, which counts here (it is
+/// what the line is about). Says nothing when the newest sleep was short ([`SLEEP_MIN`]), ended over a day ago
+/// ([`SLEEP_SHOWN`]), saw the charger (what it cost is unknown), or the gauge read more at its end than at its start.
+/// A Pocket switched off while asleep (Switch off after sleeping, the battery guard) has no wake sample: its run ends
+/// before the switch-off and is too short to show, never stretched over the time it was off.
+pub fn last_sleep(h: &History, now: u64) -> Option<Slept> {
+    let samples = h.recent(now, KEEP);
+    let asleep = |s: &Sample| h.tag(s) == Some(SLEEP_TAG);
+    let end = samples.iter().rposition(asleep)?;
+    let mut start = end;
+    while start > 0 && asleep(&samples[start - 1]) {
+        start -= 1;
+    }
+    let run = &samples[start..=end];
+    let (first, last) = (&run[0], &run[run.len() - 1]);
+    if last.t - first.t < SLEEP_MIN || now.saturating_sub(last.t) > SLEEP_SHOWN || run.iter().any(Sample::plugged) || last.capacity > first.capacity {
+        return None;
+    }
+    Some(Slept {
+        from: first.t,
+        to: last.t,
+        drop: first.capacity - last.capacity,
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -236,9 +309,68 @@ mod tests {
             .collect()
     }
 
+    /// A history from `(minute offset from NOW, capacity, tag, charging)`.
+    fn naps(points: &[(i64, u8, Option<&str>, bool)]) -> History {
+        let mut h = History::new();
+        for &(m, cap, tag, charging) in points {
+            h.push(s((NOW as i64 + m * 60) as u64, cap as f32, charging), tag);
+        }
+        h
+    }
+
+    /// The Reddit wish (24.11.2026): "say on the device what it uses asleep". A night of deep sleep is two samples tagged
+    /// asleep with the suspend's gap between them (the sleep's first sample, and the one taken at the wake).
+    #[test]
+    fn a_night_of_deep_sleep_is_one_sleep_across_its_gap() {
+        let h = naps(&[(-600, 90, None, false), (-599, 90, Some(SLEEP_TAG), false), (-139, 87, Some(SLEEP_TAG), false), (-138, 87, None, false)]);
+        let slept = last_sleep(&h, NOW).expect("a sleep");
+        assert_eq!((slept.secs(), slept.drop), (460 * 60, 3));
+        assert!((slept.per_hour() - 3.0 / (460.0 / 60.0)).abs() < 0.01);
+    }
+
+    /// Light sleep (the screen off, no suspend: the Brick, a Pocket whose suspend fails) is a run of minute samples.
+    #[test]
+    fn a_dark_screen_all_night_counts_as_a_sleep() {
+        let mut points = vec![(-700, 97, None, false)];
+        points.extend((0..600).map(|m| (-699 + m, (97 - m / 7) as u8, Some(SLEEP_TAG), false)));
+        points.push((-99, 12, None, false));
+        let slept = last_sleep(&naps(&points), NOW).expect("a sleep");
+        assert_eq!(slept.drop, 85, "97 % down to 12 %");
+        assert!((slept.per_hour() - 8.5).abs() < 0.2, "{}", slept.per_hour());
+    }
+
+    #[test]
+    fn the_newest_sleep_is_the_one_shown() {
+        let h = naps(&[(-900, 95, Some(SLEEP_TAG), false), (-800, 93, Some(SLEEP_TAG), false), (-799, 93, None, false), (-200, 80, Some(SLEEP_TAG), false), (-100, 79, Some(SLEEP_TAG), false)]);
+        assert_eq!(last_sleep(&h, NOW).map(|s| s.drop), Some(1));
+    }
+
+    /// Nothing honest to say: too short, too long ago, on the charger meanwhile, the gauge higher afterwards, never asleep.
+    #[test]
+    fn a_sleep_says_nothing_when_its_cost_is_not_known() {
+        let short = naps(&[(-20, 80, Some(SLEEP_TAG), false), (-1, 80, Some(SLEEP_TAG), false)]);
+        assert_eq!(last_sleep(&short, NOW), None, "19 minutes");
+        let old = naps(&[(-2000, 80, Some(SLEEP_TAG), false), (-1500, 78, Some(SLEEP_TAG), false), (-1499, 78, None, false)]);
+        assert_eq!(last_sleep(&old, NOW), None, "ended 25 hours ago");
+        let charged = naps(&[(-600, 40, Some(SLEEP_TAG), false), (-300, 70, Some(SLEEP_TAG), true), (-100, 100, Some(SLEEP_TAG), false)]);
+        assert_eq!(last_sleep(&charged, NOW), None, "the charger in between");
+        let rose = naps(&[(-600, 40, Some(SLEEP_TAG), false), (-100, 47, Some(SLEEP_TAG), false)]);
+        assert_eq!(last_sleep(&rose, NOW), None, "a gauge that relearned its charge");
+        assert_eq!(last_sleep(&naps(&[(-600, 40, None, false), (-1, 30, None, false)]), NOW), None, "never asleep");
+    }
+
+    /// Minutes asleep are no system's: before the sleep tag a game paused all night in light sleep showed as a cheap system.
+    #[test]
+    fn asleep_is_no_systems_draw() {
+        let mut points: Vec<(i64, u8, Option<&str>, bool)> = (0..60).map(|m| (-200 + m, (90 - m / 6) as u8, Some("gba"), false)).collect();
+        points.extend((0..100).map(|m| (-140 + m, (80 - m / 30) as u8, Some(SLEEP_TAG), false)));
+        let tags: Vec<_> = draws(&naps(&points), NOW).into_iter().map(|d| d.tag).collect();
+        assert_eq!(tags, vec![Some("gba".to_string())]);
+    }
+
     fn left(v: &[Sample]) -> (f32, u64, u64) {
         match estimate(v, v.last().unwrap().t) {
-            Some(Estimate::Left { per_hour, secs, over }) => (per_hour, secs, over),
+            Some(Estimate::Left { per_hour, secs, over, .. }) => (per_hour, secs, over),
             other => panic!("expected Left, got {other:?}"),
         }
     }

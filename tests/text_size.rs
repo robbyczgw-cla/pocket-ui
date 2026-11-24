@@ -552,7 +552,7 @@ fn pages_found_overlapping_at_1024x768_keep_their_lines_apart() {
     let states = [
         "setup:extras", "setup:extras:da", "setup:play", "setup:card=lens", "tailscale:connected", "web:off", "web:waiting",
         "achievements:offline", "sys:time-wrong-wifi", "search:none:qqqq", "curator:history", "curator:history:year",
-        "battery:3:samples", "port-perf:own", "port-perf:busy", "pc-streaming:pin", "slot-undo",
+        "battery:3:samples", "battery:3:sleep", "port-perf:own", "port-perf:busy", "pc-streaming:pin", "slot-undo",
     ];
     for lang in ["en", "de", "es", "pt", "fr", "it"] {
         for state in states {

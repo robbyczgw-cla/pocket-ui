@@ -1,7 +1,7 @@
 //! Additional persistent file families for the shared mutation/deadline runner.
 use std::path::{Path, PathBuf};
-use pocket_ui::{battery_games, battery_history, core_options, emu_choice, kids, library_meta, system_cfg};
-pub const SOURCES: &[&str] = &["android-app-icon", "setup-resume", "check-zip", "check-rom", "document-zip", "kids-config", "kids-ledger", "library-meta", "controllers", "emu-choice", "system-cfg", "core-options", "battery-history", "battery-games", "secret", "gallery", "preview", "dsv", "backup", "backup-saves", "save-transfer", "sync-prefs", "sync-config", "sync-conflict", "frozen-mark", "timeline", "boot-state", "kernel-log", "sensors-log", "web-prefs", "tailscale-prefs", "performance-prefs", "moonlight-pcs", "last-game", "started-boot", "auto-off", "fallback", "json-backup", "jpeg", "ppm", "cue", "gdi", "kept-frame", "state-preview", "players-order", "players-seats", "crash-marker", "crash-log", "launcher-log", "save-trouble", "scummvm-ini", "sounds-config", "night-light", "frame-pack", "rig-json", "rig-base", "sleep-config", "haptics", "leds-config", "display-config", "storage-warning", "album-index", "album-seen", "album-settings"];
+use pocket_ui::{battery_curve, battery_games, battery_history, core_options, emu_choice, kids, library_meta, system_cfg};
+pub const SOURCES: &[&str] = &["android-app-icon", "setup-resume", "check-zip", "check-rom", "document-zip", "kids-config", "kids-ledger", "library-meta", "controllers", "emu-choice", "system-cfg", "core-options", "battery-history", "battery-games", "battery-curve", "secret", "gallery", "preview", "dsv", "backup", "backup-saves", "save-transfer", "sync-prefs", "sync-config", "sync-conflict", "frozen-mark", "timeline", "boot-state", "kernel-log", "sensors-log", "web-prefs", "tailscale-prefs", "performance-prefs", "moonlight-pcs", "last-game", "started-boot", "auto-off", "fallback", "json-backup", "jpeg", "ppm", "cue", "gdi", "kept-frame", "state-preview", "players-order", "players-seats", "crash-marker", "crash-log", "launcher-log", "save-trouble", "scummvm-ini", "sounds-config", "night-light", "frame-pack", "rig-json", "rig-base", "sleep-config", "haptics", "leds-config", "display-config", "storage-warning", "album-index", "album-seen", "album-settings"];
 pub fn seed(source: &str, d: &Path) -> Vec<u8> {
     for p in ["check/gb", "check/bios", "provider", "data", "data/core-options", "backups/one", "saves-backups/one", "states/gb", "data/logs", "roms/gb"] { std::fs::create_dir_all(d.join(p)).unwrap(); }
     match source {
@@ -16,7 +16,8 @@ pub fn seed(source: &str, d: &Path) -> Vec<u8> {
         "emu-choice" | "system-cfg" => b"gb.emulator=libretro\ngb.core=gambatte\n".to_vec(),
         "core-options" => format!(r#"{{"core":"gambatte","rom":"{}","categories":[],"options":[]}}"#, d.join("gb/Reader Rule Game.gb").display()).into_bytes(),
         "battery-history" => {let mut history=battery_history::History::new();assert!(history.push(pocket_ui::battery::Sample {t:1794139200,capacity:73,charging:false,full:false,mv:3850,ma:-400,temp:Some(290),tag:0},Some("gb")));history.encode()},
-        "battery-games" => serde_json::to_vec(&battery_games::Ledger {games:vec![battery_games::Entry {system:"gb".into(),game:"Reader Rule Game.gb".into(),emulator:"pocket-core".into(),secs:3600.0,drop:10.0,last:1794139200}]}).unwrap(),
+        "battery-curve" => serde_json::json!({"charge": (0..=100).map(|p| if p == 0 { 0.0 } else { 1.0 }).collect::<Vec<f64>>(), "seen": vec![1u8; 101], "amps": false, "upto": 1794139200u64}).to_string().into_bytes(),
+        "battery-games" => serde_json::to_vec(&battery_games::Ledger {games:vec![battery_games::Entry {system:"gb".into(),game:"Reader Rule Game.gb".into(),emulator:"pocket-core".into(),secs:3600.0,drop:10.0,used:None,last:1794139200}]}).unwrap(),
         "secret" => b"reader-rule-test-password".to_vec(),
         "gallery" => { std::fs::create_dir_all(d.join("shots")).unwrap(); super::seed("cover", d) }
         "preview" => pocket_ui::preview::encode(1, &[&pocket_ui::preview::Pixels { w:1, h:1, px:vec![0x285078] }]),
@@ -83,7 +84,7 @@ pub fn location(source: &str, d: &Path) -> PathBuf {
         "check-rom" => "check/gb/Reader.gb",
         "document-zip" => "provider/Reader.zip",
         "kids-config" => "data/kids.json", "kids-ledger" => "data/kids-time.json", "library-meta" => "data/library.json", "controllers" => "data/controllers.json",
-        "emu-choice" | "system-cfg" => "system.cfg", "core-options" => "data/core-options/gb.json", "battery-history" => "data/battery-history.bin", "battery-games" => "data/battery-games.json",
+        "emu-choice" | "system-cfg" => "system.cfg", "core-options" => "data/core-options/gb.json", "battery-history" => "data/battery-history.bin", "battery-games" => "data/battery-games.json", "battery-curve" => "data/battery-curve.json",
         "backup" => "backups/one/backup.json", "backup-saves" => "saves-backups/one/saves.json", "save-transfer" => "manifest.json",
         "sync-prefs" => "data/sync.json", "sync-config" => "syncthing.xml", "sync-conflict" => "roms/gb/Game.sync-conflict-20261118-100000-ABCD.sav",
         "frozen-mark" => "states/gb/Reader Rule Game.pstate.auto.z.mark", "timeline" => "states/gb/Reader Rule Game.pstate.earlier1",
@@ -145,6 +146,7 @@ pub fn probe(source: &str, d: &Path, file: &Path, bytes: Option<&[u8]>, valid: b
         "system-cfg" => { let got = system_cfg::SystemCfg::at(file); if valid { assert_eq!(got.get("gb.core").as_deref(),Some("gambatte")); } else { let _ = got.read(); } }
         "core-options" => { let got = core_options::CoreOptionsFile::read(file,&d.join("gb/Reader Rule Game.gb")); if valid { assert_eq!(got.unwrap().core,"gambatte"); } }
         "battery-history" => { let got = battery_history::History::load(file); if valid {assert_eq!(got.samples().len(),1);assert_eq!(got.samples()[0].capacity,73);assert_eq!(got.tag(&got.samples()[0]),Some("gb"));} }
+        "battery-curve" => { let got = battery_curve::Curve::load(&data); if valid { assert_eq!(got.upto,1794139200); assert!(got.usable(50).is_some()); } else { assert_eq!(got.usable(50),None); } }
         "battery-games" => { let got = battery_games::Ledger::load(&data);if valid {assert_eq!(got.games.len(),1);let key=battery_games::Key::new("gb",&d.join("gb/Reader Rule Game.gb"),"pocket-core");let rate=got.rate(&key).unwrap();assert_eq!(rate.per_hour,10.0);assert_eq!(rate.basis,battery_games::Basis::Game);} }
         "secret" => { let got = pocket_ui::secret::load(file); if valid { assert_eq!(got.as_deref(),Some("reader-rule-test-password")); } }
         "gallery" => { let _ = pocket_ui::gallery::scan(&d.join("shots")); let got = pocket_ui::image::load_image(file); if valid { assert!(got.is_some()); } }

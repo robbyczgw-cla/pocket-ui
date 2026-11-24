@@ -51,7 +51,7 @@ Save and Load only appear when supported. For systems that rely purely on in-gam
   only).
 - **Load** restores a saved moment: your last exit ("Where I quit"), the spot replaced by your last Load ("Before
   load"), or any manual slot. Greyed out when the highlighted entry is empty.
-  **Start over** resets the console while keeping the cartridge real-time clock intact (including Pokémon Gold, Silver
+  **From the start** resets the console while keeping the cartridge real-time clock intact (including Pokémon Gold, Silver
   and Crystal on Gambatte).
   On ROCKNIX, the RetroArch pause menu warns if it cannot verify a new save file or confirm that RetroArch received a
   load request.
@@ -66,7 +66,7 @@ Save and Load only appear when supported. For systems that rely purely on in-gam
 - **Achievements** (pocket-ui's own player, signed into RetroAchievements) shows locked and unlocked achievements with
   progress. See [Achievements](achievements.md#the-pause-menu).
 - **Zoom** (pocket-ui's own player, under **Options**) magnifies the paused screen: [Zoom](big-text.md#zoom).
-- **Players** (pocket-ui's own player, 2+ controllers) assigns controllers to Player 1–4. See [Players](#players).
+- **Players** (pocket-ui's own player, 2+ controllers) assigns controllers to Player 1 to 4. See [Players](#players).
 - **Pixel Path** (enabled in Settings → Games → Curator) inspects how your video and audio reach the screen stage by
   stage. See [Pixel Path](#pixel-path).
 - **START** opens [quick settings](quick-settings.md#quick-settings) right over your paused game so you can preview
@@ -172,7 +172,7 @@ The grade at the top, next to "Pixel Path", is the lowest of the stages.
 |---|---|
 | Core | The emulator and its version |
 | Source | The console's picture: its size, how many per second, the shape of its pixels. 3D systems: the resolution the emulator renders at, against the console's own |
-| Scale | How large the picture is drawn on the 1240×1080 screen: a whole number of times (5×, every pixel a 5×5 block) or not, where, and how sharp |
+| Scale | How large the picture is drawn on the screen: a whole number of times (5×, every pixel a 5×5 block) or not, where, and how sharp |
 | Look | Screen effects, the frame around the picture, colour changes, the emulator's own colour correction |
 | Display | The screen's rate and how the game keeps pace with it, and pictures that came too late |
 | Latency | An estimate of the time from a button to the screen, and run-ahead |
@@ -201,7 +201,7 @@ by stage:
 | Source | The internal resolution: 1×, 2×, … the console's, and the size that makes for GameCube, Wii (640×528 at 1×) and 3DS (400×240 at 1×); a widescreen patch or hack |
 | Scale | The aspect ratio (4:3, 16:9, Auto, Stretch) or the 3DS screen layout, and how the picture is smoothed on its way to the screen |
 | Look | What the emulator adds: FXAA, sharpening, a TV shader, anti-aliasing, texture filters such as xBRZ, or "Nothing added" |
-| Display | The screen (1240×1080 at 60 Hz) and whether the emulator waits for it (VSync) |
+| Display | The screen and whether the emulator waits for it (VSync) |
 | Latency | "Not measured": pocket-ui can't time a game it doesn't run, so there is no number rather than a guess |
 | Audio | The emulator's sound output and its buffer, on its way to the speaker through PipeWire |
 
@@ -299,15 +299,14 @@ appear by themselves when a later core can save states. More in [Systems](system
 
 ## PortMaster ports
 
-Quit closes only this launch and its helpers, including helpers in another process group. A port started next keeps its controls.
-
 HOME opens the menu over a running port, and **Continue** gives the port its buttons back. Saving depends on the game;
 there is no frontend Save or Load: the menu says "Saving is up to the game. Use its save option if it has one."
 
 - **Options** is the port's own **Performance & fan** ([PortMaster ports](performance.md#portmaster-ports)). What you
   change there applies from the port's next start.
-- **Quit** closes the port's window as its own Exit would, then stops everything the port's start script launched (the
-  game, the button translator, helpers), within about five seconds. Anything not saved in the game is lost.
+- **Quit** closes the port's window as its own Exit would, then stops everything this launch started (the
+  game, the button translator and any helper programs), within about five seconds, so the next port you start keeps its
+  controls. Anything not saved in the game is lost.
 
 ## Other emulators
 

@@ -56,6 +56,17 @@ impl GameCheckPage {
         GameCheckPage { level: Level::Offer(added), ..Self::running() }
     }
 
+    pub fn progress_label(&self) -> String {
+        let (done, total, system) = &self.progress;
+        match (*total, system.is_empty()) {
+            (0, _) => String::new(),
+            (1, true) => format!("{done} of 1 game"),
+            (1, false) => format!("{done} of 1 game · {system}"),
+            (_, true) => format!("{done} of {total} games"),
+            (_, false) => format!("{done} of {total} games · {system}"),
+        }
+    }
+
     pub fn event(&mut self, e: Event) {
         match e {
             Event::Progress { done, total, system } => self.progress = (done, total, system),
@@ -197,6 +208,20 @@ mod tests {
 
     const A: Button = Button::East;
     const B: Button = Button::South;
+
+    #[test]
+    fn count_labels_follow_the_total_number_of_games() {
+        let mut page = GameCheckPage::running();
+        assert!(page.progress_label().is_empty());
+        page.event(Event::Progress { done: 0, total: 1, system: String::new() });
+        assert_eq!(page.progress_label(), "0 of 1 game");
+        page.event(Event::Progress { done: 1, total: 1, system: "Game Boy".into() });
+        assert_eq!(page.progress_label(), "1 of 1 game · Game Boy");
+        page.event(Event::Progress { done: 1, total: 2, system: "Game Boy".into() });
+        assert_eq!(page.progress_label(), "1 of 2 games · Game Boy");
+        assert_eq!(Report { ready: 0, total: 1, ..Report::default() }.ready_label(), "0 of 1 game ready");
+        assert_eq!(Report { ready: 1, total: 2, ..Report::default() }.ready_label(), "1 of 2 games ready");
+    }
 
     #[test]
     fn an_offer_starts_nothing_until_a() {

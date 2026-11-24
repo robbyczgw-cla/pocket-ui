@@ -899,7 +899,7 @@ mod tests {
         let read = || Snapshot::read(&dir.join("snapshot.json"), &dir.join("Game.nes"));
         let menu = until(|| read().filter(|s| (s.unlocked, s.total) == (2, 2))).expect("the menu's list");
         assert_eq!((menu.unlocked, menu.total, menu.points_unlocked, menu.points), (2, 2, 7, 7));
-        assert_eq!(until(|| Summary::load(&dir, "nes", &dir.join("Game.nes"))).expect("the summary").text().as_deref(), Some("2 of 2"));
+        assert_eq!(until(|| Summary::load(&dir, "nes", &dir.join("Game.nes"))).expect("the summary").text().as_deref(), Some("2 of 2 achievements"));
         close_cleanly(s);
     }
 

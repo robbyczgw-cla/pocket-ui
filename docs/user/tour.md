@@ -33,8 +33,8 @@ name, a one-line summary, a preview image and where to find it in Settings.
 
 Here is every feature card in order, alongside what each first-start profile sets. **The shelf matches pocket-ui's
 out-of-the-box defaults** (the same result as pressing START to skip during first start). Running it again later resets
-those switches, including On start and Screen frames. By default, only Echoes beyond this device, Pixel Path, Screen
-frames and "Continue your last game" start Off.
+those switches, including On start and Screen frames. By default, Lens & smart shelves, Echoes, Versions, Echoes beyond this
+device, Pixel Path, Screen frames and "Continue your last game" start Off.
 
 | Card | The shelf | Enthusiast | Changed in |
 |---|---|---|---|

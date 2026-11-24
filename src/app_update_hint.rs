@@ -14,7 +14,7 @@ use pocket_ui::palette::pal;
 use pocket_ui::update::{self, Manifest};
 use pocket_ui::update_hint::{self, State};
 
-use super::{App, SettingsPage, UpdateEvent, UserEvent};
+use super::{App, UpdateEvent, UserEvent};
 
 /// The schedule and its worker are one state. A stopped Kids Mode schedule intentionally retains its candidate,
 /// matching the old behavior; toggling automatic checks is what schedules again.
@@ -208,12 +208,12 @@ impl App {
             }
             update_hint::Step::Look => {
                 self.update_hint.phase = HintPhase::Checking { resume: Some(due) };
-                let (url, proxy) = (self.hint_url(), self.proxy.clone());
+                let (url, proxy, job_at_start) = (self.hint_url(), self.proxy.clone(), self.updates.next_job);
                 let pause = pocket_ui::background_io::pause_for_update();
                 std::thread::spawn(move || {
                     let result = fetch(&url);
                     drop(pause);
-                    let _ = proxy.send_event(UserEvent::Update(UpdateEvent::Looked(result)));
+                    let _ = proxy.send_event(UserEvent::Update(UpdateEvent::Looked { job_at_start, result }));
                 });
                 None
             }
@@ -221,7 +221,7 @@ impl App {
     }
 
     /// The list came back: remember it for the Updates page, and find out whether a version is new to the player.
-    pub(crate) fn update_hint_looked(&mut self, result: Result<Manifest, String>, now: Instant) {
+    pub(crate) fn update_hint_looked(&mut self, result: Result<Manifest, String>, now: Instant, job_at_start: u64) {
         self.update_hint.looked_at = Some(SystemTime::now());
         // Switched Off while the request was out: its answer is not used, and nothing more is asked.
         if self.update_hint.state.off {
@@ -233,9 +233,10 @@ impl App {
             Ok(manifest) => {
                 let pending = update_hint::due(&manifest, update::shown_version(), &self.update_hint.state);
                 // The Updates page opened later shows what was just read; it never replaces a look it is making itself.
+                // A foreground job that started meanwhile takes priority, even if it already finished.
                 // An update offered from the card stays what the page offers (`app_card_update`).
-                if !self.updates.is_busy() && self.updates.card.is_none() {
-                    self.updates.manifest = Some(manifest);
+                if !self.updates.is_busy() && self.updates.card.is_none() && self.updates.next_job == job_at_start {
+                    self.updates.remember_manifest(manifest, SystemTime::now());
                 }
                 self.update_hint.failures = 0;
                 let at = if pending.is_some() { now } else { now + update_hint::EVERY };
@@ -347,8 +348,7 @@ impl App {
             self.android_install(Instant::now());
             return;
         }
-        self.updates.sel = 0;
-        self.settings_page = Some(SettingsPage::Updates);
+        self.settings_page = Some(self.open_updates());
     }
 
     /// The signed list this build reads: Android's own (the Mobile view's) in the handheld view, else the Updates page's.

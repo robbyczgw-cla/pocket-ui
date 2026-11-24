@@ -7,7 +7,7 @@ handhelds.
 
 If your SD card already has `gamelist.xml` files (from ROCKNIX's own menu or another handheld), they often contain game
 titles, descriptions, ratings, release years and favourites from a scraper. pocket-ui reads them in read-only mode (**it
-never modifies them**) and uses them to fill in any gaps:
+never changes them**, except that deleting a game from the card also removes that game's entry) and uses them to fill in any gaps:
 
 - **Where it looks:** `gamelist.xml` inside each system's ROM folder (`roms/gba/gamelist.xml`), the system's `gamelists`
   folders, and matching `gamelists/<system>/` or `downloaded_media/<system>/` folders on the card. If a game appears in
@@ -24,7 +24,7 @@ never modifies them**) and uses them to fill in any gaps:
   automatically, which then takes priority.
 - **Favourites and ratings:** nothing is imported automatically. Open Settings → Games → **From EmulationStation** to
   see how many gamelist favourites and ratings were found, then press A to add those favourites or import their ratings
-  as **My rating** (0.1–1.0 maps to 1–5 stars). It only adds: existing favourites and your own star ratings are never
+  as **My rating** (0.1 to 1.0 maps to 1 to 5 stars). It only adds: existing favourites and your own star ratings are never
   overwritten. You can run it anytime; if no gamelists exist, it tells you where to place them.
 
 Broken, truncated or huge (over 32 MB) gamelists won't break your library: valid entries before the corruption still

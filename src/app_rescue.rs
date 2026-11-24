@@ -485,7 +485,7 @@ impl KidsDoor {
                 text.draw(c, Face::Title, px, x + (bw - tw) / 2, top + bh / 2 + px as i32 * 36 / 100, if at { k.on_accent } else { k.ink }, &s);
             }
             if let Some(wait) = gate.waiting(std::time::Instant::now()) {
-                centre(text, c, Face::Body, 38.0, 680.0, k.ink, &format!("Too many tries. Wait {} seconds.", wait.as_secs() + 1));
+                centre(text, c, Face::Body, 38.0, 680.0, k.ink, &pocket_ui::kids::pin_wait_message(wait));
             } else if gate.wrong > 0 {
                 centre(text, c, Face::Body, 38.0, 680.0, k.ink, "That's not it. Try again.");
             }

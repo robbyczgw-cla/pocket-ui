@@ -174,3 +174,7 @@ behavior. APK byte transfer and installed-notice parsing are tested; Android's A
 parser, signing implementation, install acceptance and Activity/task routing are
 platform boundaries. Native protocol outcomes are checked here; translated Rust
 views remain covered by their own host painter/model rules.
+
+`OrientationTest.java` (with `Orientation.java`) runs on the JVM: `javac -cp android.jar -d out android/java/xyz/pocketui/app/Orientation.java
+scripts/android/test/OrientationTest.java && java -cp out:android.jar xyz.pocketui.app.OrientationTest`. A square panel (the RG Rotate's 720x720)
+follows the system's turn; everything else keeps the controller-landscape rule.

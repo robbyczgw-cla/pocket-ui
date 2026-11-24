@@ -69,6 +69,11 @@ pub struct Entry {
     pub secs: f64,
     /// Points of charge used in them.
     pub drop: f64,
+    /// The same in usable charge (`battery_curve::Curve::usable`: percent of what there is down to the low-battery
+    /// switch-off), so a game played only where the gauge's points are cheap or dear isn't counted in their price. Points
+    /// where no curve was known yet count as they are; None in a file from before it (then it is `drop`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub used: Option<f64>,
     /// When it last ran on battery (unix seconds).
     pub last: u64,
 }
@@ -100,15 +105,18 @@ pub enum Basis {
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Rate {
     pub per_hour: f64,
+    /// Usable charge (percent of it, [`Entry::used`]) an hour.
+    pub used_per_hour: f64,
     pub basis: Basis,
     pub secs: f64,
 }
 
 /// Sums of seconds and points, and the rate when they are enough.
 fn rate_of<'a>(entries: impl Iterator<Item = &'a Entry>, basis: Basis) -> Option<Rate> {
-    let (secs, drop) = entries.fold((0.0, 0.0), |(s, d), e| (s + e.secs, d + e.drop));
+    let (secs, drop, used) = entries.fold((0.0, 0.0, 0.0), |(s, d, u), e| (s + e.secs, d + e.drop, u + e.used.unwrap_or(e.drop)));
     (secs >= MIN_SECS && drop >= MIN_DROP).then(|| Rate {
         per_hour: drop * 3600.0 / secs,
+        used_per_hour: used * 3600.0 / secs,
         basis,
         secs,
     })
@@ -126,6 +134,11 @@ impl Ledger {
     /// `secs` on battery with `key` running, and the `drop` in points over them (negative when the gauge went up);
     /// `now` in unix seconds.
     pub fn add(&mut self, key: &Key, secs: u64, drop: i32, now: u64) {
+        self.add_used(key, secs, drop, drop as f64, now);
+    }
+
+    /// [`Self::add`] with the charge used in usable charge as well (`used`, from the discharge curve).
+    pub fn add_used(&mut self, key: &Key, secs: u64, drop: i32, used: f64, now: u64) {
         if key.game.is_empty() || secs == 0 {
             return;
         }
@@ -144,12 +157,14 @@ impl Ledger {
                     emulator: key.emulator.clone(),
                     secs: 0.0,
                     drop: 0.0,
+                    used: Some(0.0),
                     last: now,
                 });
                 self.games.len() - 1
             }
         };
         let e = &mut self.games[i];
+        e.used = Some(e.used.unwrap_or(e.drop) + used);
         e.secs += secs as f64;
         e.drop += drop as f64;
         e.last = now;
@@ -157,6 +172,7 @@ impl Ledger {
             let k = CAP / e.secs;
             e.secs *= k;
             e.drop *= k;
+            e.used = e.used.map(|u| u * k);
         }
     }
 
@@ -193,13 +209,23 @@ const FRESH: u64 = crate::battery_history::GAP;
 /// What there is to say for a game with `rate`, the charge being `now` (the newest sample) at `t`. None without a
 /// battery reading of the last minutes: then the line says nothing rather than something old.
 pub fn left(rate: Option<Rate>, now: Option<&Sample>, t: u64) -> Option<Left> {
+    left_with(rate, now, t, None)
+}
+
+/// [`left`] with this Pocket's own discharge curve (`battery_curve`): the charge left is the usable charge down to the
+/// low-battery switch-off, as on the Battery page, and the game's rate is in usable charge too ([`Entry::used`]), so the
+/// pause menu and the page don't tell two times.
+pub fn left_with(rate: Option<Rate>, now: Option<&Sample>, t: u64, curve: Option<&crate::battery_curve::Curve>) -> Option<Left> {
     let s = now.filter(|s| t.saturating_sub(s.t) <= FRESH)?;
     if s.plugged() {
         return Some(if s.capacity >= crate::battery::FULL_FROM { Left::Full } else { Left::Charging });
     }
     Some(match rate {
         Some(r) if r.per_hour > 0.0 => Left::Time {
-            secs: (s.capacity as f64 / r.per_hour * 3600.0) as u64,
+            secs: match curve.and_then(|c| c.usable(s.capacity)).filter(|_| r.used_per_hour > 0.0) {
+                Some(usable) => usable as f64 / r.used_per_hour * 3600.0,
+                None => s.capacity as f64 / r.per_hour * 3600.0,
+            } as u64,
             basis: r.basis,
         },
         _ => Left::Measuring(s.capacity),
@@ -259,8 +285,13 @@ fn capitalise(s: &str) -> String {
 /// (nothing measured enough yet); on the charger the rate alone ("About 18 % an hour", "About 15 % an hour (PS2
 /// games)"). None without a battery reading and without a rate (a device without a battery): nothing to say there.
 pub fn card_line(rate: Option<Rate>, now: Option<&Sample>, t: u64, system: &str) -> Option<String> {
+    card_line_with(rate, now, t, system, None)
+}
+
+/// [`card_line`] with the discharge curve ([`left_with`]).
+pub fn card_line_with(rate: Option<Rate>, now: Option<&Sample>, t: u64, system: &str, curve: Option<&crate::battery_curve::Curve>) -> Option<String> {
     let measuring = || "Measuring this game\u{2026}".to_string();
-    Some(match (left(rate, now, t), rate) {
+    Some(match (left_with(rate, now, t, curve), rate) {
         (Some(Left::Time { secs, basis: Basis::Game }), Some(r)) => format!("{}, {}", time_left(secs), per_hour(&r)),
         (Some(Left::Time { secs, basis }), _) => format!("{}{}", time_left(secs), whose(basis, system)),
         (Some(Left::Measuring(_)), _) | (Some(Left::Charging | Left::Full), None) => measuring(),
@@ -457,10 +488,26 @@ mod tests {
         assert_eq!(Left::Full.line("SNES"), "Full");
     }
 
+    /// A ledger written before the discharge curve has no `used`: its points count as usable charge, and new play adds
+    /// to them, so nobody's time left jumps at the update.
+    #[test]
+    fn a_ledger_from_before_the_curve_reads_as_it_was() {
+        let old = r#"{"games":[{"system":"gba","game":"a.gba","emulator":"pocket-core","secs":3600.0,"drop":10.0,"last":1}]}"#;
+        let mut l: Ledger = serde_json::from_str(old).unwrap();
+        let k = Key::new("gba", Path::new("a.gba"), "pocket-core");
+        let r = l.rate(&k).unwrap();
+        assert_eq!((r.per_hour, r.used_per_hour), (10.0, 10.0));
+        l.add_used(&k, 3600, 10, 4.0, 2);
+        let r = l.rate(&k).unwrap();
+        assert_eq!((r.per_hour, r.used_per_hour), (10.0, 7.0), "an hour of 10 points that were 4 of usable charge");
+        assert!(serde_json::to_string(&l).unwrap().contains(r#""used":14.0"#));
+    }
+
     #[test]
     fn without_a_recent_reading_nothing_is_said() {
         let r = Rate {
             per_hour: 10.0,
+            used_per_hour: 10.0,
             basis: Basis::Game,
             secs: 3600.0,
         };
@@ -519,6 +566,7 @@ mod tests {
         assert_eq!(Left::Measuring(83).line("GBA"), "83%");
         let r = Rate {
             per_hour: 12.2,
+            used_per_hour: 12.2,
             basis: Basis::Game,
             secs: 2.0 * 3600.0,
         };

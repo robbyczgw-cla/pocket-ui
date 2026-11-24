@@ -110,7 +110,7 @@ fn your_rows(d: &CardData) -> Vec<(&'static str, Val)> {
     }
     rows.push(("Rating", if d.rating > 0 { Val::Stars(d.rating) } else { Val::Quiet(crate::game_card_model::no_rating()) }));
     if let Some(a) = &d.achievements {
-        rows.push(("Unlocked", Val::Text(format!("{a} achievements"))));
+        rows.push(("Unlocked", Val::Text(a.clone())));
     }
     if let Some((speed, hint)) = &d.port {
         rows.push(("Speed", Val::Text(speed.clone())));

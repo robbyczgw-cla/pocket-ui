@@ -28,6 +28,10 @@ pub enum Model {
     /// Anbernic RG DS Plus (ROCKNIX's RK3566 image; an RK3568, 1 GB): two 1024x768 panels, one above the other, touch only
     /// on the lower one, a lid, one stick, no fan. pocket-ui uses the main output.
     RgDsPlus,
+    /// Anbernic RG Rotate (Unisoc T618 on base618's Linux, not ROCKNIX): a 720x720 square panel on a swivel, touch, no sticks,
+    /// no fan, 3 GB. Its hall sensor is a lid switch (`SW_LID`, "Hall Swivel") that means the screen turned, not a closed lid
+    /// (`Model::lid_turns_screen`). Experimental, no card yet.
+    RgRotate,
     /// A one-screen handheld of ROCKNIX's RK3566 image on the Generic U-Boot (RG353 family, RG503, RGB30, RK2023): one
     /// profile like the H700's (1 GB counted, no fan; Cortex-A55), one row per model in `RK3566_BOARDS`.
     Rk3566(&'static H700Board),

@@ -32,6 +32,37 @@ pub(super) struct MenuRow {
     pub stepper: bool,
 }
 
+/// The longer side, in dp, that the phone pages need: a phone held across has 800 and more, the Retroid Pocket Mini V2's
+/// window 456 to 600; the RG Rotate's pages fit every look at 1.5 (458 dp; measured 24.11.2026).
+pub const MIN_LONG_DP: f32 = 450.0;
+
+/// The density the phone pages are laid out at. A small square screen at a high density had too few dp for them: the
+/// Anbernic RG Rotate's 720x720 at 2.0 leaves a 344x304 dp window, where the folder page's button stood over its text,
+/// Licences and Report a problem were cut off and lists showed two rows (24.11.2026). There the pages are drawn at the
+/// density that gives the longer side `MIN_LONG_DP` (never below 1.0); every screen with that much room keeps its own.
+pub fn layout_density((w, h): (u32, u32), density: f32) -> f32 {
+    let density = if density.is_finite() && density > 0.0 { density } else { 1.0 };
+    let long = w.max(h) as f32;
+    if long / density >= MIN_LONG_DP { density } else { (long / MIN_LONG_DP).clamp(1.0, density.max(1.0)) }
+}
+
+#[cfg(test)]
+mod layout_density_tests {
+    use super::layout_density;
+    #[test]
+    fn small_square_screens_get_the_room_of_the_pages_and_every_other_screen_keeps_its_density() {
+        // The RG Rotate's window at 2.0 (720x720 less the bars): about 1.5 pixels per dp, where its pages fit.
+        let d = layout_density((688, 608), 2.0);
+        assert!((d - 688.0 / 450.0).abs() < 1e-4 && d < 1.6, "{d}");
+        assert_eq!(layout_density((688, 608), 1.5), 1.5, "at 1.5 it already has the room");
+        for (w, h, density) in [(1080, 2400, 2.625), (2400, 1080, 2.625), (1600, 720, 2.0), (720, 1600, 2.0), (1240, 1080, 2.0), (1240, 1080, 2.625), (1198, 1006, 2.625), (1120, 968, 2.0), (1200, 1920, 1.5), (1440, 3200, 3.5)] {
+            assert_eq!(layout_density((w, h), density), density, "{w}x{h} at {density} keeps its density");
+        }
+        assert_eq!(layout_density((300, 300), 2.0), 1.0, "never below one pixel per dp");
+        assert_eq!(layout_density((688, 608), f32::NAN), 1.0);
+    }
+}
+
 impl Ui {
     /// `v` dp in canvas pixels.
     pub(super) fn d(&self, v: f32) -> i32 {
@@ -61,6 +92,7 @@ impl Ui {
     /// pixels, or a smaller one that is enlarged (the shared game card). Sets `dp` to the canvas'
     /// pixels per dp. The launcher's window and the phone-format tests use this one rule.
     pub fn canvas_for(&mut self, (w, h): (u32, u32), density: f32) -> (u32, u32) {
+        let density = layout_density((w, h), density);
         let zoom = self.zoom(w > h);
         let (lw, lh) = if zoom < 1.0 {
             let (mw, mh) = pocket_ui::scaled_layout::mobile_size((w, h), density);

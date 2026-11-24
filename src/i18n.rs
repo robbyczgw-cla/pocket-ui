@@ -59,6 +59,8 @@ struct Traits {
     accept_language: &'static str,
     /// The game search's keyboard has y and z the German way round.
     qwertz: bool,
+    /// What stands between a number's whole part and its decimals ("2,3 W", Korean "2.3 W").
+    decimal: char,
     /// Its table has every line the others have (`Lang::complete`): false while a language is being translated; its
     /// missing lines are painted in English, and the checks that every line is there leave it out until it is true.
     complete: bool,
@@ -66,13 +68,13 @@ struct Traits {
 
 /// In the order of `Lang`.
 const TRAITS: [Traits; 7] = [
-    Traits { code: "en", name: "English", accept_language: "Accept-Language: en,de;q=0.5", qwertz: false, complete: true },
-    Traits { code: "de", name: "Deutsch", accept_language: "Accept-Language: de,en;q=0.8", qwertz: true, complete: true },
-    Traits { code: "es", name: "Español", accept_language: "Accept-Language: es,en;q=0.8", qwertz: false, complete: true },
-    Traits { code: "pt", name: "Português (Brasil)", accept_language: "Accept-Language: pt-BR,pt;q=0.9,en;q=0.7", qwertz: false, complete: true },
-    Traits { code: "fr", name: "Français", accept_language: "Accept-Language: fr-FR,fr;q=0.9,en;q=0.7", qwertz: false, complete: true },
-    Traits { code: "it", name: "Italiano", accept_language: "Accept-Language: it,en;q=0.8", qwertz: false, complete: true },
-    Traits { code: "ko", name: "한국어", accept_language: "Accept-Language: ko-KR,ko;q=0.9,en;q=0.7", qwertz: false, complete: true },
+    Traits { code: "en", name: "English", accept_language: "Accept-Language: en,de;q=0.5", qwertz: false, decimal: '.', complete: true },
+    Traits { code: "de", name: "Deutsch", accept_language: "Accept-Language: de,en;q=0.8", qwertz: true, decimal: ',', complete: true },
+    Traits { code: "es", name: "Español", accept_language: "Accept-Language: es,en;q=0.8", qwertz: false, decimal: ',', complete: true },
+    Traits { code: "pt", name: "Português (Brasil)", accept_language: "Accept-Language: pt-BR,pt;q=0.9,en;q=0.7", qwertz: false, decimal: ',', complete: true },
+    Traits { code: "fr", name: "Français", accept_language: "Accept-Language: fr-FR,fr;q=0.9,en;q=0.7", qwertz: false, decimal: ',', complete: true },
+    Traits { code: "it", name: "Italiano", accept_language: "Accept-Language: it,en;q=0.8", qwertz: false, decimal: ',', complete: true },
+    Traits { code: "ko", name: "한국어", accept_language: "Accept-Language: ko-KR,ko;q=0.9,en;q=0.7", qwertz: false, decimal: '.', complete: true },
 ];
 
 impl Lang {
@@ -145,10 +147,11 @@ impl Lang {
         let (slot, src, file) = self.source()?;
         Some(slot.get_or_init(|| {
             let (src, file) = override_table(std::env::var("POCKETUI_I18N_TABLE").ok(), self).unwrap_or((src, file));
-            let (table, errors) = Table::parse(src);
+            let (mut table, errors) = Table::parse(src);
             for e in &errors {
                 eprintln!("i18n: {file} {e}");
             }
+            table.decimal = self.traits().decimal;
             table
         }))
     }
@@ -382,6 +385,8 @@ struct Pattern {
 pub struct Table {
     exact: FastMap<&'static str, &'static str>,
     patterns: Vec<Pattern>,
+    /// The language's decimal sign (`Traits::decimal`); a comma for a table read on its own.
+    decimal: char,
 }
 
 fn hole_kind(name: &str) -> Option<Hole> {
@@ -488,7 +493,7 @@ impl Table {
         }
         // The most specific pattern first: "{n} games you own" before "{n} games".
         patterns.sort_by_key(|p| std::cmp::Reverse(p.segs.iter().map(|s| if let Seg::Lit(l) = s { l.len() } else { 0 }).sum::<usize>()));
-        (Table { exact, patterns }, errors)
+        (Table { exact, patterns, decimal: ',' }, errors)
     }
 
     pub fn exact(&self, s: &str) -> Option<&'static str> {
@@ -632,7 +637,7 @@ impl Table {
                                         out.push_str(v);
                                     }
                                 },
-                                Hole::Num => out.push_str(&decimal_comma(v)),
+                                Hole::Num => out.push_str(&decimal_sign(v, self.decimal)),
                                 _ => out.push_str(v),
                             }
                         }
@@ -664,14 +669,14 @@ impl Made {
     }
 }
 
-/// A number in a translated line: every language with a table writes its decimals with a comma ("7,4 Go", "118,1 GB
-/// frei"; a device showed "7.4 Go" on 15.11.). Only one point between digits is a decimal point: "0.5.0" (a version)
-/// and "1,204" stay as they are.
-fn decimal_comma(v: &str) -> Cow<'_, str> {
+/// A number in a translated line with the language's decimal sign: a comma in German, French and the others ("7,4 Go",
+/// "118,1 GB frei"; a device showed "7.4 Go" on 15.11.), a point in Korean, as the number came. Only one point between
+/// digits is a decimal point: "0.5.0" (a version) and "1,204" stay as they are.
+fn decimal_sign(v: &str, sign: char) -> Cow<'_, str> {
     let b = v.as_bytes();
     match v.find('.') {
-        Some(at) if v.matches('.').count() == 1 && !v.contains(',') && at > 0 && b[at - 1].is_ascii_digit() && b.get(at + 1).is_some_and(u8::is_ascii_digit) => {
-            Cow::Owned(format!("{},{}", &v[..at], &v[at + 1..]))
+        Some(at) if sign != '.' && v.matches('.').count() == 1 && !v.contains(',') && at > 0 && b[at - 1].is_ascii_digit() && b.get(at + 1).is_some_and(u8::is_ascii_digit) => {
+            Cow::Owned(format!("{}{sign}{}", &v[..at], &v[at + 1..]))
         }
         _ => Cow::Borrowed(v),
     }
@@ -1338,6 +1343,23 @@ mod tests {
         assert_eq!(empty.translate("Settings"), None, "no table: English");
     }
 
+    /// Each language writes a decimal number its own way, in every shipped table: a comma in German, Spanish, Portuguese,
+    /// French and Italian, a point in Korean ("2,3 W" on the Battery page in Korean, 24.11.2026: every language with a
+    /// table had been given the comma). The list is the languages' own usage, not the code's.
+    #[test]
+    fn each_language_writes_decimals_its_own_way() {
+        let usage = |l: Lang| match l {
+            Lang::En | Lang::Ko => '.',
+            Lang::De | Lang::Es | Lang::Pt | Lang::Fr | Lang::It => ',',
+        };
+        for lang in Lang::ALL {
+            let Some(t) = lang.table() else { continue };
+            let line = t.translate("PS1 uses about 7% an hour, 2.3 W").unwrap_or_else(|| panic!("{lang:?}: the draw line is in the table"));
+            let want = format!("2{}3", usage(lang));
+            assert!(line.contains(&want), "{lang:?}: {line:?} should have {want:?}");
+        }
+    }
+
     #[test]
     fn a_number_with_decimals_takes_the_languages_comma() {
         // 15.11. on a pocket in French: "7.4 Go libres", and "118.1 GB frei" in German.
@@ -1345,9 +1367,9 @@ mod tests {
         assert_eq!(t.translate("7.4 GB free").as_deref(), Some("7,4 Go libres"));
         assert_eq!(t.translate("118 GB free").as_deref(), Some("118 Go libres"));
         assert_eq!(t.translate("6 of 96 exits").as_deref(), Some("6 sur 96 sorties"));
-        assert_eq!(decimal_comma("0.5.0"), "0.5.0", "a version stays");
-        assert_eq!(decimal_comma("1,204"), "1,204");
-        assert_eq!(decimal_comma("60.00"), "60,00");
+        assert_eq!(decimal_sign("0.5.0", ','), "0.5.0", "a version stays");
+        assert_eq!(decimal_sign("1,204", ','), "1,204");
+        assert_eq!(decimal_sign("60.00", ','), "60,00");
     }
 
     #[test]

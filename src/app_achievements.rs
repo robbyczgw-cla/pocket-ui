@@ -256,7 +256,7 @@ impl App {
         self.achievements.page.as_ref().map(|p| (view_kind(&p.view), p.signed_in(), p.confirm_logout, p.sel, p.hardcore()))
     }
 
-    /// "12 of 40" for a game's card: what is known now, and a lookup in the background when that is old or missing
+    /// "12 of 40 achievements" for a game's card: what is known now, and a lookup when that is old or missing
     /// (signed in, on Wi-Fi; `lookup::wanted` keeps it to once an hour per game).
     pub(crate) fn card_achievements(&mut self, system: &str, path: &Path) -> Option<String> {
         pocket_ui::achievements::consoles::console_id(system)?;

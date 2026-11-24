@@ -247,10 +247,9 @@ abstract class PocketBase extends NativeActivity {
         lastController = controller;
         // A phone without a pad during the first start: upright, its pages are made for it (the r/EmulationOnAndroid video
         // showed them on their side, 18.11.2026). A tablet still turns freely.
+        // A square panel (the RG Rotate) follows the system's turn instead (`Orientation`).
         boolean phone = getResources().getConfiguration().smallestScreenWidthDp < 600;
-        int wanted = controller ? android.content.pm.ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
-            : setupUpright && phone ? android.content.pm.ActivityInfo.SCREEN_ORIENTATION_SENSOR_PORTRAIT
-            : android.content.pm.ActivityInfo.SCREEN_ORIENTATION_FULL_SENSOR;
+        int wanted = Orientation.wanted(controller, setupUpright, phone, Orientation.squareDisplay(this));
         if (wanted == orientation) return;
         orientation = wanted;
         runOnUiThread(() -> setRequestedOrientation(wanted));

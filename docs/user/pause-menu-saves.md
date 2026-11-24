@@ -37,7 +37,7 @@ in `<game>.rtc` beside the in-game save, the file RetroArch uses too, so the tim
 start again, even without the moment saved by Quit. [Sync](sync.md) shares it with the save. Game Boy Advance games
 with a clock (Pokémon Ruby, Sapphire and Emerald) read the Pocket's own time instead; if theirs is off, check the time
 zone in [Settings → System → Time](settings-system.md#system). Loading an old gpSP moment follows that time too.
-**Start over** keeps the cartridge clock, just as resetting a console does.
+**From the start** keeps the cartridge clock, just as resetting a console does.
 
 ## Save slots, Where I quit and Before load
 
@@ -84,8 +84,8 @@ A slow shortcut save or Earlier capture is allowed to finish when you open the p
 ### Where the states are, for players coming from Android
 
 The slot numbers are the ones the emulators use, so a state saved on the Android version is the
-same slot here. All states are in `roms/savestates/<system>/` on the SD card. The file share leaves that folder out;
-reach it with [Remote access (SSH)](settings-system.md#remote-access-ssh) or keep it in step with [Sync](sync.md).
+same slot here. All states are in `roms/savestates/<system>/` on the SD card. File sharing shows that folder
+next to your games, and you can reach it with [Remote access (SSH)](settings-system.md#remote-access-ssh) or keep it in step with [Sync](sync.md).
 
 | | Slots 1 to 8 | Where I quit | Before load |
 |---|---|---|---|

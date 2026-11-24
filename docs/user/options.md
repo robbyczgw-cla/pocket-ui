@@ -168,7 +168,7 @@ Pause menu → Options → **Shortcuts** toggles each HOME + button combo in poc
 |---|---|---|
 | **Save state** | HOME + R1 | Quick-save to the active slot. |
 | **Load state** | HOME + L1 | Quick-load from the active slot. |
-| **Change slot** | HOME + Left / Right | Cycle active save slot (1–8). |
+| **Change slot** | HOME + Left / Right | Cycle active save slot (1 to 8). |
 | **Fast-forward** | HOME + R2 | Toggle fast-forward on/off (speed set under [Speed, rumble, fan](#speed-rumble-fan)). |
 | **Rewind** | Hold HOME + L2 | Rewind while held (requires Rewind On under [Speed, rumble, fan](#speed-rumble-fan)). |
 | **Screenshot** | HOME + A | Save a [screenshot](playing.md#screenshots) silently without pausing. |
@@ -208,12 +208,12 @@ Pause menu → Options → **Speed, rumble, fan** (bold values are defaults):
 |---|---|---|
 | **Fast-forward speed** | 2x, 3x, **4x**, 8x, As fast as possible | Fast-forward multiplier for HOME + R2 (mutes audio, displays "FF 4x"). |
 | **Rewind** | **Off**, On | Buffers the last minute so holding HOME + L2 rewinds smoothly ("REWIND", muted; costs extra CPU/battery). |
-| **Earlier states** | Off, **On** | Auto-snapshots every 5 minutes (last 30 min) plus session start for pause menu **Earlier** ([Earlier](pause-menu-saves.md#earlier)). **Defaults Off on N64, PSP, DS, Dreamcast and Saturn** (8–40 MB states). Capped at 100 MB/game and 1 GB total. |
+| **Earlier states** | Off, **On** | Auto-snapshots every 5 minutes (last 30 min) plus session start for pause menu **Earlier** ([Earlier](pause-menu-saves.md#earlier)). **Defaults Off on N64, PSP, DS, Dreamcast and Saturn** (8 to 40 MB states). Capped at 100 MB/game and 1 GB total. |
 | **Over the game** | **Off**, FPS, FPS + sensors, Pixel Path (with Pixel Path in the pause menu) | Live overlay: **FPS** ("60 FPS   CPU 23%"), **FPS + sensors** (adds temp, fan, battery; [details](pause-menu.md#the-fps-line-and-sensors)), or **Pixel Path** ([details](pause-menu.md#pixel-path-over-the-game)). Defaults to Settings → Playing → [Over the game](settings-playing.md#over-the-game). |
 | **Rumble** | Off, Low, **Medium**, High | Vibration intensity for rumble-capable games. |
 | **Performance** | Battery, **Auto**, Max | **Auto** *(formerly Balanced)* scales dynamically; **Battery** caps CPU around half speed for light 2D; **Max** locks top clocks. |
 | **Fan** | Very quiet, **Quiet**, Auto, Cool | Game cooling curve (smooth with [Smooth fan](performance.md#smooth-fan) On; hidden on fanless H700 and TrimUI Brick). |
-| **Run-ahead** | **Off**, 1 frame, 2 frames | Cuts 1–2 frames of internal game latency on supported 8/16-bit and handheld cores (NES, FDS, SNES, GB/GBC/GBA, Mega Drive, Master System, Game Gear, SG-1000, PC Engine, SuperGrafx, Atari 2600, WonderSwan, Virtual Boy). See [Run-ahead](#run-ahead). |
+| **Run-ahead** | **Off**, 1 frame, 2 frames | Cuts 1 to 2 frames of internal game latency on supported 8/16-bit and handheld cores (NES, FDS, SNES, GB/GBC/GBA, Mega Drive, Master System, Game Gear, SG-1000, PC Engine, SuperGrafx, Atari 2600, WonderSwan, Virtual Boy). See [Run-ahead](#run-ahead). |
 
 - Rewind starts Off because state history uses noticeable CPU (especially on SNES); loading a state resets the rewind
   buffer.
@@ -223,7 +223,7 @@ Pause menu → Options → **Speed, rumble, fan** (bold values are defaults):
 
 ### Run-ahead
 
-Many classic games inherently take 1–2 frames to respond on real hardware. Run-ahead simulates ahead with your inputs to
+Many classic games inherently take 1 to 2 frames to respond on real hardware. Run-ahead simulates ahead with your inputs to
 hide that lag, so jumps and dodges feel snappier without changing gameplay.
 
 - **Recommended starting points:** start with **1 frame**; try **2 frames** only if a game still feels slightly heavy
@@ -237,7 +237,7 @@ hide that lag, so jumps and dodges feel snappier without changing gameplay.
   | Atari 2600, WonderSwan | 1 frame |
   | Famicom Disk System, SuperGrafx, Virtual Boy | 1 frame |
 
-- Runs 2–3 internal frames per visible frame, using more CPU/battery ([HOST.md](../HOST.md)).
+- Runs 2 to 3 internal frames per visible frame, using more CPU/battery ([HOST.md](../HOST.md)).
 - Auto-disables cleanly with a message if a core doesn't support it, drops frames or fails deterministic replay.
 - Pauses automatically during fast-forward and rewind; saves and cheats always use the real game state. Saved per game
   or console via [Keep for](#keep-for).
@@ -266,7 +266,7 @@ Save states never cross emulators; switching emulators boots from your in-game s
 
 When RetroArch is picked, extra rows appear (applied on next launch): **Aspect ratio** (Core provided, 4:3, 3:2, 16:9,
 Square pixels, Full screen), **Integer scaling**, **Smoothing**, **Shader** (None plus curated ROCKNIX CRT/LCD presets
-like `crt-geom` and `lcd-grid-v2`), **Rewind**, **Run-ahead** (1–2 frames) and **Auto save and load** (turning Off
+like `crt-geom` and `lcd-grid-v2`), **Rewind**, **Run-ahead** (1 to 2 frames) and **Auto save and load** (turning Off
 disables Continue). Rewind/run-ahead hide on heavy systems (N64, PSP, Dreamcast, Saturn, 32X). Includes **Shortcuts** in
 the pause menu, **D-pad** / **Screen size** for [Phone games](systems.md#phone-games-j2me), and **D-pad** (**Automatic**,
 **Left stick**, **D-pad**) for N64 and Dreamcast on RetroArch so stickless handhelds steer smoothly (never overwriting

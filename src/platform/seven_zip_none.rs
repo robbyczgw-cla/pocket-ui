@@ -16,6 +16,10 @@ pub fn rom_crc(_path: &Path, _wanted: &[&str]) -> Option<(u32, u64)> {
     None
 }
 
+pub fn rom_crc_in(_f: &mut (impl Read + Seek), _wanted: &[&str]) -> Option<(u32, u64)> {
+    None
+}
+
 pub fn refusal_in(_f: &mut (impl Read + Seek), _name: &str, _wanted: &[&str], _only_cut_off: bool) -> Option<String> {
     None
 }

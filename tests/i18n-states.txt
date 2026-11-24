@@ -191,6 +191,7 @@ battery
 battery:0
 battery:3
 battery:3:samples
+battery:3:sleep
 updates:note
 updates:refused
 updates:unreachable
@@ -274,6 +275,7 @@ storage-notice
 card-manage:ps2:revenge:row
 card-manage:ps2:revenge:hide
 card-manage:ps2:revenge:delete
+card-manage:gba:advance:delete-one
 card-manage:ps2:revenge:armed
 card-manage:ps2:revenge:saves
 card-manage:ps2:revenge:working

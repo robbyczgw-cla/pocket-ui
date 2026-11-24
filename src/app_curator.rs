@@ -1695,6 +1695,7 @@ impl App {
         let sub = match (p.echoes.len(), &p.why) {
             (0, _) => "Nothing in your library is alike enough yet.".to_string(),
             (_, Some(why)) => format!("Why these? {why}"),
+            (1, None) => "1 game you own".into(),
             (n, None) => format!("{n} games you own, the closest first"),
         };
         let sub = self.text.fit(Face::Body, 28, &sub, c.w - 2 * MARGIN);

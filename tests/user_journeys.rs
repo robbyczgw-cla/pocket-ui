@@ -1011,6 +1011,34 @@ sleep 30
         }
     }
 
+    #[test]
+    fn opening_updates_checks_an_old_offer_even_with_background_checks_off() {
+        let mut d = Driver::start("updates-old-offer", true, |tmp, cmd| {
+            std::fs::write(tmp.join("data/update-hint.json"), r#"{"off":true}"#).unwrap();
+            let programs = tmp.join("programs");
+            std::fs::create_dir_all(&programs).unwrap();
+            executable(&programs.join("curl"), "#!/bin/sh\nprintf checked > \"$0.called\"\nfor i in $(seq 1 500); do [ ! -f \"$0.release\" ] || break; sleep 0.02; done\nexit 7\n");
+            executable(&programs.join("ip"), "#!/bin/sh\nexit 0\n");
+            cmd.env("POCKETUI_UPDATE_HINT", "98.0.0")
+                .env("POCKETUI_CARD_PLACES", tmp.join("update-card"))
+                .env("PATH", format!("{}:{}", programs.display(), std::env::var("PATH").unwrap_or_default()));
+        });
+        d.sees("Game Boy");
+        d.send("start");
+        d.wait(|d| {
+            d.frame();
+            status_of(d).contains("place=settings:")
+        });
+        let groups = status_of(&d).contains("place=settings:Groups");
+        d.send(if groups { "down\ndown\ndown\ndown\ndown\na" } else { "l1\nl1" });
+        d.sees("Updates");
+        d.send("a");
+        d.sees("Checking for updates…");
+        d.wait(|d| d.card.tmp.join("programs/curl.called").exists());
+        std::fs::write(d.card.tmp.join("programs/curl.release"), "").unwrap();
+        d.sees("No update file on the card");
+    }
+
     /// 0.3.1: the notice's A lands on the page with the new version and its notes; "Install" asks first ("Install now" /
     /// "Later"), B and Later go back to the page, and nothing is installed by a single press.
     #[test]
@@ -3528,7 +3556,7 @@ true
         ui.send("up\na");
         ui.sees("Delete Tobu Tobu Girl?");
         // The heading appears before the asynchronous file scan enables Delete: wait for its visible result.
-        let sheet = ui.sees("Frees 1 KB: 1 files.");
+        let sheet = ui.sees("Frees 1 KB: 1 file.");
         assert!(sheet.contains("Keep, 1 KB"), "saves kept unless asked: {sheet}");
         assert!(rom.exists(), "the sheet only asks: {sheet}");
         ui.send("a");

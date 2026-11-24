@@ -11,7 +11,7 @@ quick copy, and what stays behind. Anything not yet verified on real hardware is
 | **Memory cards** (PS2, GameCube, Wii, 3DS) | Work as-is on ROCKNIX; from Android, copy them into the matching folders below. |
 | **Save states** | Tied to a specific emulator. They don't move between RetroArch, pocket-ui's own player or Android; use in-game saves before switching. |
 | **Favourites and ratings** (`gamelist.xml`) | Importable any time via Settings → Games → **From EmulationStation** (never imported without asking). |
-| **Names, descriptions, box art** (`gamelist.xml`) | Read automatically and never modified. |
+| **Names, descriptions, box art** (`gamelist.xml`) | Read automatically and never changed, except that deleting a game from the card removes its entry. |
 | **Recent games** | On a fresh card, your previous `gamelist.xml` timestamps populate Recent games so **Continue** starts with your last game. Your pocket-ui history always takes priority. |
 | **Settings, play time, achievements** | Don't transfer; first-start setup helps you get dialled in quickly. |
 
@@ -41,7 +41,7 @@ is, so everything in the table is already in place.
 | In-game save | `roms/<system>/`, next to the game | `<game>.srm`, for Nintendo DS `<game>.sav` (DraStic's `<game>.dsv` is taken over once) |
 | Cartridge clock (Pokémon Gold, Silver, Crystal) | next to the save | `<game>.rtc` |
 | RetroArch's save state | `roms/savestates/<system>/` | `<game>.state`, and `<game>.state.auto` for where you quit |
-| pocket-ui's own host: states | `roms/savestates/<system>/` | `<game>.pstate` to `.pstate7` (slots 1 to 8), `.pstate.auto` |
+| pocket-ui's own host: states | `roms/savestates/<system>/` | `<game>.pstate` to `.pstate7` (slots 1 to 8), `.pstate.auto.z` |
 | Screenshots (HOME + A) | `roms/screenshots/<system>/` | `<game> <date> <time>.png` |
 | Backups of pocket-ui's settings | `roms/backup/pocket-ui/` | one folder per backup |
 
@@ -122,12 +122,12 @@ own saves and settings; save in the game before you quit.
 ROCKNIX's own menu keeps favourites, ratings, descriptions and picture paths in each system's `gamelist.xml`. On the same
 card the files are already there.
 
-- pocket-ui reads them and **never changes them**. Cryptic file names show their real names, the game card shows the
+- pocket-ui reads them and **never changes them** (deleting a game from the card removes that game's entry). Cryptic file names show their real names, the game card shows the
   description, developer and genre, and a game without box art shows the picture the gamelist names.
 - Settings → Games → **From EmulationStation** counts your favourites and ratings. **A** adds the favourites to
   Favourites, or uses the ratings as My rating (0.1 to 1.0 becomes one to five stars). It only adds: what is in
   Favourites stays, and a rating you gave here is kept.
-- Play counts, "last played" dates and hidden flags in a gamelist are not read.
+- Play counts and hidden flags in a gamelist are not read. "Last played" dates only fill Recent games on a fresh card.
 
 More: [Your gamelists](library-files.md#your-gamelists).
 
@@ -158,8 +158,7 @@ the games themselves write next to themselves, the same files your previous syst
 **Going back:** switch off, put your old card back in the first slot. Your old system starts as before, with your games and the
 in-game progress you made in pocket-ui.
 
-**Not tried on a real device yet** (2026-11-15): the folder names were checked against dArkOS's own list of systems, and
-the card handling with a made-up card; the first R36S test follows.
+**The R36S's own card:** since 0.7.0 there is a pocket-ui card for genuine R36S handhelds, as a beta, tested on an original R36S. It goes in TF1 and plays from your original card in TF2. Steps and download: [pocketui.xyz/install#r36s](https://pocketui.xyz/install#r36s).
 
 ## Coming from Android
 
@@ -174,7 +173,7 @@ Use a backup on your computer to copy your games and saves over. Access to inter
 | **Remote access (SSH)** (Settings → Connections) | Everything, also outside `roms` | needs a computer that can log in over the network |
 | **SD card in a computer** | Everything, but STORAGE uses Linux's ext4, which Windows and macOS cannot write | Windows and macOS without extra software |
 | **Sync** (Syncthing) | Keeping saves in step with a computer or another handheld, after the first copy ([Sync](sync.md)) | a first copy out of Android's storage: copy to your computer first |
-| **Web companion** | Games and BIOS files | saves: it only takes game, BIOS and PortMaster files |
+| **Web companion** | Games, BIOS and PortMaster files, and a game's saves from its page | needs the handheld on Wi-Fi |
 
 Copy the games first and start each one once, so the folders exist. Use the folder names of ROCKNIX, not your
 launcher's: `roms/gba`, `roms/snes` and so on ([Add games](getting-started.md#5-add-games)). Add games names a folder

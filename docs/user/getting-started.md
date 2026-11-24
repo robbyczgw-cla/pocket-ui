@@ -8,13 +8,13 @@ computer once to set up the card.
 
 > **Not on a Mini V2?** The two-file card install below is for the Mini V2 only. Other Retroid models, SM8550 devices
 > and Anbernic H700 handhelds are covered on [Other handhelds](other-handhelds.md) (marked **experimental** where not
-> yet tested on hardware).
+> yet tested on hardware). The R36S has its own beta card, also described there.
 
 ## 1. Put pocket-ui on the card
 
 Head to the [install page](https://pocketui.xyz/install.html) and pick the method that fits your setup:
 
-- **Ready-made SD card image (easiest):** available for the Mini V2 and Anbernic H700 models. Flash it to a spare card
+- **Ready-made SD card image (easiest):** available for the Mini V2, Anbernic H700 models and the R36S (beta). Flash it to a spare card
   with balenaEtcher or Raspberry Pi Imager. Flashing wipes the card while leaving your handheld untouched. On H700
   handhelds, just pop the card in and power on; on a Mini V2, continue with [section 2](#2-start-pocket-ui).
 - **Ports installer:** for a card already running ROCKNIX (see section 2 below).
@@ -89,7 +89,7 @@ Aa** at top right). You can re-run setup later in Settings → Help & tools → 
 ![The first start: choose the language, then a few short steps](pictures/first-start.webp)
 
 1. **Your language.** Use Left/Right to choose **English**, **Deutsch**, **Español**, **Português (Brasil)**,
-   **Français** or **Italiano** (the screen updates live, defaulting to ROCKNIX's language; in Spanish it reads
+   **Français**, **Italiano** or **한국어** (the screen updates live, defaulting to ROCKNIX's language; in Spanish it reads
    **Bienvenido a tu Pocket**; see [Language](language.md)). Below it sit **Big text** (also toggled anywhere with L2)
    and **For a child** (toggle with Left/Right or Y to launch Kids Mode setup after your games). Press **A** ("Get
    started") from any row to continue, or **SELECT** to open this manual on the handheld (B returns).
@@ -189,7 +189,7 @@ Settings → Connections → **Wi-Fi**, or the Wi-Fi step of the first start.
 
 If the Pocket is already connecting to the network you chose, it waits for that connection (up to 50 seconds) instead of
 starting again. Choosing a different network leaves the previous one first; a newly typed password replaces an old
-attempt. "Wi-Fi isn’t ready yet" means the radio or network service is still starting; try again in a moment.
+attempt. "Wi-Fi isn't ready yet" means the radio or network service is still starting; try again in a moment.
 
 The **Scan again** row (or X) refreshes the list. The line under the title is always true to what happened:
 
@@ -208,8 +208,8 @@ system starts. If the connection drops while pocket-ui runs, it reconnects by it
 
 ### Saved networks, hidden networks, the Wi-Fi country
 
-- **A on a saved network** connects to it without asking for the password again. If the saved password no
-  longer works, the keyboard comes up.
+- **A on a saved network** opens a small menu: **Connect** (without asking for the password again; if the saved
+  password no longer works, the keyboard comes up) or **Forget**.
 - **Y on a saved network** asks "Forget …? Press Y again." Y again forgets it (the password goes with it); B keeps
   it. To use it again, connect and type the password.
 - **A network that stays on Connecting…**: the Pocket keeps trying a saved network by itself, for example after the
@@ -221,6 +221,12 @@ system starts. If the connection drops while pocket-ui runs, it reconnects by it
   in brackets. Choose your country when networks on some 5 GHz channels don't show or connect. L2/R2 jump to the
   next or previous letter. The choice is kept across restarts.
 
+A saved Wi-Fi network opens its Connect / Forget menu with A. B closes that menu back to the same network
+on the list; another B returns to the previous first-start step. When another Wi-Fi network is already connected,
+choosing a saved network that a fresh scan cannot find leaves the current connection in place and says it is out of
+range. Hidden networks still get a connection attempt, since their absence from a scan does not mean they are
+unavailable.
+
 ## 5. Add games
 
 ### Nothing on the SD card yet: the starter pack
@@ -230,7 +236,8 @@ a handful of small games that their authors share for anyone to play, from Game 
 also open it from Settings → Games → Box art & downloads → **Starter pack**.
 
 1. Offline, Home's button says **Connect to Wi-Fi** (A opens the Wi-Fi page; B comes back here).
-2. Press A on **Get the starter pack**. **Get all** takes every game, A on a game takes just that one. Each is checked and put into
+2. Press A on **Get the starter pack**. **Get all** takes every game, A on a game takes just that one (Up/Down choose a
+   game; Left/Right leave the focus where it is). Each is checked and put into
    its system's folder (for example `roms/gb`); B leaves the page while it runs, and the games appear on the shelf when it is done.
 
 **Add games** works online or not and opens the ways to copy your own. **Look around** (B) puts the hint away and shows the empty
@@ -238,6 +245,8 @@ shelf in your look; A brings it back, START opens Settings. The hint returns at 
 
 Nothing is added without your A, and a file that is already there is never replaced. Each game's card (X) names its author and
 licence; [the credits](../STARTER-PACK.md) list them all.
+
+### Where your games go
 
 Games go into the `roms` folder, **one folder per system**, for example `roms/gba` for Game Boy
 Advance or `roms/snes` for Super Nintendo. The folder names are the ones ROCKNIX uses; the
@@ -270,7 +279,7 @@ many.
   games follows them.
 - The last tile, **All systems**, opens every system ROCKNIX can start (A on it; A again closes the list). Systems
   without a console picture show a plain cartridge.
-- Move with the D-pad (L1/R1 jump three rows). Under the grid, the selected system shows its folder, the file
+- Move with the D-pad (L1/R1 jump three rows); the grid scrolls with the selected tile, including on a small screen. Under the grid, the selected system shows its folder, the file
   types it takes, and whether it needs a BIOS: "Not needed", the files it needs and whether they are in
   `roms/bios` (in red while one is missing), or, for systems pocket-ui knows nothing about, that a BIOS would go
   into `roms/bios`.
@@ -303,9 +312,9 @@ password can add or change files there, so keep it to yourself.
 
 ### With the SD card in a computer: the GAMES drive
 
-The ready-to-flash RG28XX card, 16 GB or bigger, has a **GAMES** drive: put the card in your computer and drag your games
+The ready-to-flash RG28XX and RG35XX 2024 cards, 16 GB or bigger, have a **GAMES** drive: put the card in your computer and drag your games
 in ([The GAMES drive](games-drive.md)). On other cards, use file sharing, or a second card on a handheld with a second
-slot: Windows and macOS can't write to the card's STORAGE part.
+slot: Windows and macOS can't write to the card's STORAGE part. The R36S plays from your original card in TF2, so its games go there.
 
 Without Wi-Fi there's also a second card on a handheld with two slots: [Second card](copy-games.md).
 
@@ -314,7 +323,7 @@ Without Wi-Fi there's also a second card on a handheld with two slots: [Second c
 The whole move, saves included, is on [Coming from ROCKNIX, dArkOS or Android](coming-from.md). Only the gamelists are here.
 
 If your games come from another handheld system that writes `gamelist.xml` files, copy each system's `gamelist.xml` with the games:
-pocket-ui reads the names, descriptions and pictures in it, and never changes it. More:
+pocket-ui reads the names, descriptions and pictures in it, and never changes it (deleting a game from the card removes that game's entry). More:
 [Your gamelists](library-files.md#your-gamelists).
 
 ### When new games appear
@@ -328,11 +337,3 @@ missing a file.
 
 A game whose file is no longer on the SD card (deleted or moved over file sharing, for example) does not start: the
 Pocket says "*Game* can't start: its file … is no longer there" and reads the list again.
-
-A saved Wi-Fi network opens its Connect / Forget menu with A. B closes that menu back to the same network
-on the list; another B returns to the previous first-start step. In Add games, the grid scrolls with the
-selected tile, including on a small screen. In the Starter pack list, Up/Down choose a game; Left/Right leave
-the focus where it is.
-When another Wi-Fi network is already connected, choosing a saved network that a fresh scan cannot find
-leaves the current connection in place and says it is out of range. Hidden networks still get a connection
-attempt, since their absence from a scan does not mean they are unavailable.

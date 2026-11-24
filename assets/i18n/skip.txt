@@ -1009,6 +1009,9 @@ screen off
 # src/system_ctl.rs (Restart pocket-ui through `Hw::power`: never asked for, never painted)
 Only pocket-ui itself can restart pocket-ui.
 
+# src/system_ctl.rs (the kernel's power_supply status word, matched and never painted)
+Not charging
+
 # src/report.rs (the report's own files, never painted)
 Alias
 from the Store

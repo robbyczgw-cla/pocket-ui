@@ -89,7 +89,14 @@ pub fn command(bin: &Path) -> Spawn {
     Spawn { cmd, _image: image }
 }
 
+/// The web demo has no memory files (and no pocket-core, so no showcase runs there).
+#[cfg(target_os = "emscripten")]
+fn program_image(_bin: &Path) -> Option<std::os::fd::OwnedFd> {
+    None
+}
+
 /// `bin` copied into a memory file named [`PROCESS`], read-only: exec refuses a file still open for writing (ETXTBSY).
+#[cfg(not(target_os = "emscripten"))]
 fn program_image(bin: &Path) -> Option<std::os::fd::OwnedFd> {
     use std::os::fd::FromRawFd;
     use std::os::unix::fs::OpenOptionsExt;
@@ -455,7 +462,9 @@ pub fn headless(args: &[String]) -> i32 {
     unsafe {
         // Behind the shelf, always; gone with pocket-ui; quiet on TERM.
         libc::setpriority(libc::PRIO_PROCESS, 0, 10);
+        #[cfg(target_os = "linux")]
         libc::prctl(libc::PR_SET_PDEATHSIG, libc::SIGTERM);
+        #[cfg(target_os = "linux")]
         libc::prctl(libc::PR_SET_NAME, c"pocket-showcase".as_ptr());
         libc::signal(libc::SIGTERM, on_term as extern "C" fn(libc::c_int) as libc::sighandler_t);
         libc::signal(libc::SIGINT, on_term as extern "C" fn(libc::c_int) as libc::sighandler_t);

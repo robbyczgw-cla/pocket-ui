@@ -132,24 +132,22 @@ fn paint_card(system: &str, path: &std::path::Path) {
     TEXT.with(|t| {
         let mut t = t.borrow_mut();
         let text = t.get_or_insert_with(pocket_ui::text::Text::new);
-        scaled.render(&mut plain, (w, h), &mut |px, lw, lh| {
+        scaled.render(&mut plain, (w, h), &mut |c: &mut Canvas| {
             use pocket_ui::text::Face;
-            let mut c = Canvas::new(px, lw, lh);
             c.clear(pal().spine);
-            let (lw, lh) = (lw as i32, lh as i32);
+            let (lw, lh) = (c.w, c.h);
             let (top, bottom) = ("Game picture", "shows here on a handheld");
             let (top_w, bottom_w) = (text.width(Face::Title, 56, top), text.width(Face::Body, 34, bottom));
-            text.draw(&mut c, Face::Title, 56, (lw - top_w) / 2, lh / 2 - 10, pal().dust, top);
-            text.draw(&mut c, Face::Body, 34, (lw - bottom_w) / 2, lh / 2 + 42, pal().dust, bottom);
+            text.draw(c, Face::Title, 56, (lw - top_w) / 2, lh / 2 - 10, pal().dust, top);
+            text.draw(c, Face::Body, 34, (lw - bottom_w) / 2, lh / 2 + 42, pal().dust, bottom);
             // Once more on one line near the lower edge: Zoom starts there on handhelds (their dialogue boxes, `zoom`).
             let line = "Game picture shows here on a handheld";
             let line_w = text.width(Face::Body, 34, line);
-            text.draw(&mut c, Face::Body, 34, (lw - line_w) / 2, lh - 90, pal().dust, line);
+            text.draw(c, Face::Body, 34, (lw - line_w) / 2, lh - 90, pal().dust, line);
         });
-        scaled.render(&mut words, (w, h), &mut |px, lw, lh| {
-            let mut c = Canvas::new(px, lw, lh);
+        scaled.render(&mut words, (w, h), &mut |c: &mut Canvas| {
             c.clear(pal().void);
-            let (lw, lh) = (lw as i32, lh as i32);
+            let (lw, lh) = (c.w, c.h);
             // The console on the right, half as big again (the shelf's console art, `system_art`).
             let words_w = match pocket_ui::system_art::get(system) {
                 Some(art) => {
@@ -160,10 +158,10 @@ fn paint_card(system: &str, path: &std::path::Path) {
                 }
                 None => lw - 2 * MARGIN,
             };
-            text.draw(&mut c, pocket_ui::text::Face::Body, 21, MARGIN, 64, pal().dust, &console);
+            text.draw(c, pocket_ui::text::Face::Body, 21, MARGIN, 64, pal().dust, &console);
             let line = "would start here. On a handheld you would be playing now. No games run in the browser.";
-            pocket_ui::kit::empty_state(&mut c, text, None, (MARGIN, words_w), lh / 5, lh * 2 / 5, lh - 110, &name, line);
-            pocket_ui::kit::page_hints(&mut c, text, &[("HOME", "Pause menu")]);
+            pocket_ui::kit::empty_state(c, text, None, (MARGIN, words_w), lh / 5, lh * 2 / 5, lh - 110, &name, line);
+            pocket_ui::kit::page_hints(c, text, &[("HOME", "Pause menu")]);
         });
     });
     *PLACEHOLDER.lock().unwrap_or_else(|p| p.into_inner()) = Some(pocket_ui::preview::Pixels { w, h, px: plain });

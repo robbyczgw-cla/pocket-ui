@@ -294,13 +294,14 @@ src/backup_saves.rs	1	match e.metadata() {
 src/backup_saves.rs	1	return b.read(&mut y).is_ok_and(|m| m == 0);
 src/backup_saves.rs	1	to.symlink_metadata().is_ok_and(|m| !m.is_file() || seconds(&m) + SAME_TIME >= item.modified)
 src/battery.rs	1	let get = |name: &str| std::fs::read_to_string(dir.join(name)).ok().map(|s| s.trim().to_string());
+src/battery_curve.rs	1	crate::fsutil::read_json_or_backup(&data_dir.join(FILE)).unwrap_or_default()
 src/battery_games.rs	1	crate::fsutil::read_json_or_backup(&data_dir.join(FILE)).unwrap_or_default()
 src/battery_history.rs	1	Some(_) => std::fs::read(&bak).map_err(|e| e.to_string()).and_then(|b| History::parse(&b)).is_err(),
-src/battery_history.rs	1	history: History::open(data_dir),
 src/battery_history.rs	1	if let Ok(bytes) = std::fs::read(&ring) {
 src/battery_history.rs	1	if let Some(r) = battery::read(dir, t) {
 src/battery_history.rs	1	let age = std::fs::metadata(&bak)
 src/battery_history.rs	1	let bytes = match std::fs::read(path) {
+src/battery_history.rs	1	let history = History::open(data_dir);
 src/battery_history.rs	1	let mut first = battery::read(dir, t)?;
 src/battery_history.rs	1	let rec = Recorder::open(data_dir);
 src/battery_history.rs	1	match std::fs::read(&bak).map_err(|e| e.to_string()).and_then(|b| History::parse(&b)) {

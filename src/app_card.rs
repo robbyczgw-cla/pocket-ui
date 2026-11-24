@@ -662,6 +662,7 @@ impl App {
         if now < due {
             return Some(due);
         }
+        pocket_ui::mark!("shelf-warm", "box");
         let (w, h) = self.screen_size();
         let (w, h) = (w as i32, h as i32);
         self.cabinet_poll();
@@ -799,7 +800,7 @@ impl App {
         use pocket_ui::battery_games::{card_line, left, Basis, Rate};
         let Some(case) = state.split(':').find_map(|p| p.strip_prefix("battery=")) else { return };
         let t = pocket_ui::recents::now_secs();
-        let rate = |per_hour: f64, basis| Some(Rate { per_hour, basis, secs: 3600.0 });
+        let rate = |per_hour: f64, basis| Some(Rate { per_hour, used_per_hour: per_hour, basis, secs: 3600.0 });
         let (rate, plugged) = match case {
             "system" => (rate(14.4, Basis::System), false),
             "all" => (rate(10.6, Basis::AllGames), false),

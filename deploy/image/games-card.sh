@@ -7,11 +7,12 @@
 # creates <card>/roms with ~100 empty system folders and shows only <card>/roms as /storage/roms. ArkOS cards keep their
 # system folders at the partition's root (gba/, snes/, psx/, bios/ ... on EASYROMS), so that would hide every game and
 # litter the card. This script looks first, read-only:
-# - an ArkOS card (no entry "roms" at its root in any case, and at least two known system folders there): mounted on
-#   /storage/games-external as automount would, but nothing is written on it (no probe file, no fsck, no folders);
+# - an ArkOS card (at least two known system folders at the root, with roms/ absent or containing only empty folders): mounted on
+#   /storage/games-external. ext4 cards stay read-only, with journal replay and symlink traversal disabled.
+#   The script writes no probe file or folders there and does not run fsck;
 #   /storage/roms is the internal folder as without a card; the card's BIOS files are copied into it where missing;
 #   /run/pocket-ui/games-card-root names the card's root for pocket-ui.
-# - anything else (a ROCKNIX card with roms/, an Anbernic stock card with Roms/, a blank card, no card, the probe failing):
+# - anything else (a populated ROCKNIX roms/, an Anbernic stock card with Roms/, a blank card, no card, the probe failing):
 #   ROCKNIX's automount runs. On Qualcomm SD images both mount paths admit only SD cards and USB storage, even if
 #   the kernel exposes internal UFS or eMMC.
 # A failure on the ArkOS path ends with the internal folder only: automount never gets an ArkOS card. Never fails the unit.
@@ -90,15 +91,18 @@ entry() {
   return 1
 }
 
-# An ArkOS card: no roms entry at the root, and at least two known system folders there.
+# Require two system folders at the root. ROCKNIX may already have created empty folders under roms/.
 arkos_card() {
-  local p n count=0
-  entry "$1" roms >/dev/null && return 1
+  local p n roms contents count=0
   for p in "$1"/*; do
     n=${p##*/}
     case $KNOWN in *" ${n,,} "*) [ -d "$p" ] && count=$((count + 1)) ;; esac
   done
-  [ "$count" -ge 2 ]
+  [ "$count" -ge 2 ] || return 1
+  roms=$(entry "$1" roms) || return 0
+  [ -d "$1/$roms" ] && [ ! -L "$1/$roms" ] || return 1
+  contents=$(find "$1/$roms" ! -type d -print -quit 2>/dev/null) || return 1
+  [ -z "$contents" ]
 }
 
 # The whole device of a partition: mmcblk1p3 -> mmcblk1, nvme0n1p1 -> nvme0n1, sda1 -> sda.
@@ -178,14 +182,15 @@ for mp in "$STORAGE" /flash; do
   [ -n "$d" ] && own="$own$(root_of "$d") "
 done
 
-# The partitions automount would look at, in its order (all mmcblk, then sd, then nvme, each sort -r), FAT/exFAT/NTFS only.
+# The partitions automount would look at, in its order (all mmcblk, then sd, then nvme, each sort -r).
 table=$(blkid 2>/dev/null)
-found= ftype=
+found=
+mount_args=()
 for pat in 'mmcblk[0-9]' 'sd[a-z]' 'nvme[0-9]n[0-9]'; do
   [ -n "$found" ] && break
   while read -r part type; do
     [ -n "$part" ] || continue
-    case $type in *fat* | ntfs) ;; *) continue ;; esac
+    case $type in *fat* | ntfs | ext4) ;; *) continue ;; esac
     if [ "$only_sd_usb" = 1 ] && ! pocket_external_games_device "$part"; then continue; fi
     root=$(root_of "$part")
     case $own in *" $root "*) continue ;; esac
@@ -193,12 +198,16 @@ for pat in 'mmcblk[0-9]' 'sd[a-z]' 'nvme[0-9]n[0-9]'; do
     [ "${size:-0}" -gt 8388608 ] 2>/dev/null || { log "$part: device under 8 GiB"; continue; }
     [ -L "$SYSBLOCK/${root}boot0" ] && { log "$part: an Android boot device"; continue; }
     grep -q "^$part " "$MOUNTS" 2>/dev/null && { log "$part: already mounted"; continue; }
-    margs=()
-    [ "$type" = ntfs ] && margs=(-t ntfs3)
+    mount_args=()
+    case $type in
+      ntfs) mount_args=(-t ntfs3) ;;
+      # A read-only ext4 mount can replay the journal unless noload is set. Disable symlink traversal on the card.
+      ext4) mount_args=(-t ext4 -o ro,noload,nosymfollow,nodev,nosuid,noexec) ;;
+    esac
     mkdir -p "$PROBE" 2>/dev/null
-    if "$BB" mount -o ro "${margs[@]}" "$part" "$PROBE" >/dev/null 2>&1; then
+    if "$BB" mount -o ro "${mount_args[@]}" "$part" "$PROBE" >/dev/null 2>&1; then
       if arkos_card "$PROBE"; then
-        found=$part ftype=$type
+        found=$part
         log "$part ($type): an ArkOS card (system folders at its root)"
       else
         log "$part ($type): not an ArkOS card"
@@ -218,10 +227,9 @@ fi
 
 card=0
 if [ -n "$found" ]; then
-  margs=()
-  [ "$ftype" = ntfs ] && margs=(-t ntfs3)
+  # The scan stops at the matching partition and leaves its mount options in mount_args.
   mkdir -p "$EXT" 2>/dev/null
-  if "$BB" mount "${margs[@]}" "$found" "$EXT" >/dev/null 2>&1; then
+  if "$BB" mount "${mount_args[@]}" "$found" "$EXT" >/dev/null 2>&1; then
     card=1
     log "$found on $EXT, as it is"
   else

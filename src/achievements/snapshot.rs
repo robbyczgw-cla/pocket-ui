@@ -102,10 +102,9 @@ impl Snapshot {
     pub fn headline(&self) -> String {
         match self.state {
             State::Ready if self.total > 0 => {
-                let mut s = format!(
-                    "{} of {} unlocked · {} of {} points",
-                    self.unlocked, self.total, self.points_unlocked, self.points
-                );
+                let (unlocked, total, earned, points) = (self.unlocked, self.total, self.points_unlocked, self.points);
+                let mut s = if points == 1 { format!("{unlocked} of {total} unlocked · {earned} of 1 point") }
+                else { format!("{unlocked} of {total} unlocked · {earned} of {points} points") };
                 if self.waiting > 0 {
                     s.push_str(&format!(" · {} to send", self.waiting));
                 }
@@ -166,9 +165,14 @@ impl Summary {
         }
     }
 
-    /// "12 of 40" when the game has a set; None otherwise.
+    /// The game's achievement count for its card, when it has a set.
     pub fn text(&self) -> Option<String> {
-        (self.game_id != 0 && self.total > 0).then(|| format!("{} of {}", self.unlocked, self.total))
+        match self.total {
+            _ if self.game_id == 0 => None,
+            0 => None,
+            1 => Some(format!("{} of 1 achievement", self.unlocked)),
+            total => Some(format!("{} of {total} achievements", self.unlocked)),
+        }
     }
 }
 
@@ -200,7 +204,12 @@ pub fn console_tally<'a>(data_dir: &Path, system: &str, roms: impl Iterator<Item
 /// "35 of 120 achievements in 3 games" for the console page.
 pub fn console_text(t: (u32, u32, usize)) -> String {
     let (unlocked, total, games) = t;
-    format!("{unlocked} of {total} achievements in {games} {}", if games == 1 { "game" } else { "games" })
+    match (total, games) {
+        (1, 1) => format!("{unlocked} of 1 achievement in 1 game"),
+        (1, _) => format!("{unlocked} of 1 achievement in {games} games"),
+        (_, 1) => format!("{unlocked} of {total} achievements in 1 game"),
+        _ => format!("{unlocked} of {total} achievements in {games} games"),
+    }
 }
 
 #[cfg(test)]
@@ -225,6 +234,7 @@ mod tests {
         assert_eq!(Snapshot::read(&path, Path::new("/roms/nes/a.nes")), Some(s.clone()));
         assert_eq!(Snapshot::read(&path, Path::new("/roms/nes/b.nes")), None);
         assert_eq!(s.headline(), "1 of 2 unlocked · 5 of 7 points");
+        assert_eq!(Snapshot { points: 1, points_unlocked: 1, ..s.clone() }.headline(), "1 of 2 unlocked · 1 of 1 point");
         let waiting = Snapshot { waiting: 1, ..s };
         assert!(waiting.headline().ends_with("· 1 to send"));
     }
@@ -269,10 +279,13 @@ mod tests {
         };
         none.save(&dir, "nes", c);
         assert_eq!(none.text(), None);
-        assert_eq!(Summary::load(&dir, "nes", a).unwrap().text().as_deref(), Some("5 of 20"));
+        assert_eq!(Summary::load(&dir, "nes", a).unwrap().text().as_deref(), Some("5 of 20 achievements"));
+        assert_eq!(Summary { game_id: 7, unlocked: 0, total: 1, ..Default::default() }.text().as_deref(), Some("0 of 1 achievement"));
         let t = console_tally(&dir, "nes", [a, b, c].into_iter()).unwrap();
         assert_eq!(t, (15, 30, 2));
         assert_eq!(console_text(t), "15 of 30 achievements in 2 games");
         assert_eq!(console_text((1, 5, 1)), "1 of 5 achievements in 1 game");
+        assert_eq!(console_text((1, 1, 1)), "1 of 1 achievement in 1 game");
+        assert_eq!(crate::i18n::tr_in(crate::i18n::Lang::De, &console_text(t)), "15 von 30 Erfolgen in 2 Spielen");
     }
 }

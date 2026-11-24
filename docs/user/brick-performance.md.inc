@@ -1,7 +1,7 @@
 # Performance
 
 Settings → Playing → **Performance** sets how fast the processor may run in your games. Left/Right (or A) change it; a change is
-saved at once. The same choice is in [Quick settings](quick-settings.md#quick-settings) (MENU over a game). The Brick has no fan,
+saved at once. The same choice is in [Quick settings](quick-settings.md#quick-settings) (MENU on the shelf, or START in the pause menu). The Brick has no fan,
 so there are no fan rows.
 
 | Row | Choices |

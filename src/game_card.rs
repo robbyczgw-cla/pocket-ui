@@ -132,6 +132,15 @@ pub struct DeleteInfo {
     pub kept_bytes: u64,
 }
 
+impl DeleteInfo {
+    fn freed_summary(&self, with_saves: bool) -> String {
+        let freed = self.game_bytes + if with_saves { self.kept_bytes } else { 0 };
+        let files = self.files + if with_saves { self.kept_files } else { 0 };
+        let size = crate::storage::size(freed);
+        if files == 1 { format!("Frees {size}: 1 file.") } else { format!("Frees {size}: {files} files.") }
+    }
+}
+
 /// The delete sheet's state.
 #[derive(Clone, Debug, PartialEq)]
 pub struct DeleteSheet {
@@ -1161,7 +1170,7 @@ impl Card {
         }
         if let Some(a) = d.achievements.as_ref().filter(|_| !d.progress_achievements) {
             text.draw(c, Face::Body, 28, rx, ry, pal().dust, "Unlocked");
-            let a = text.fit(Face::Body, 28, &format!("{a} achievements"), rw - rkey);
+            let a = text.fit(Face::Body, 28, a, rw - rkey);
             text.draw(c, Face::Body, 28, rx + rkey, ry, pal().chalk, &a);
             ry += row();
         }
@@ -1307,9 +1316,7 @@ impl Card {
             None => say.push(("Working out what it takes…".into(), pal().chalk)),
             Some(Err(why)) => say.push((why.clone(), pal().alert)),
             Some(Ok(i)) => {
-                let freed = i.game_bytes + if d.with_saves { i.kept_bytes } else { 0 };
-                let files = i.files + if d.with_saves { i.kept_files } else { 0 };
-                say.push((format!("Frees {}: {} files.", crate::storage::size(freed), files), pal().chalk));
+                say.push((i.freed_summary(d.with_saves), pal().chalk));
                 let more = i.files.saturating_sub(i.names.len());
                 let names = if more > 0 { format!("{} and {more} more", i.names.join(", ")) } else { i.names.join(", ") };
                 say.push((names, pal().dust));
@@ -1904,6 +1911,24 @@ mod tests {
         assert_eq!(card.press(Button::East), Out::None, "an error: no delete");
         card.press(Button::South);
         assert!(matches!(card.mode, Mode::View));
+    }
+
+    #[test]
+    fn delete_sheet_counts_files_in_every_language() {
+        use crate::i18n::{tr_in, Lang};
+        let info = DeleteInfo { game_bytes: 4_000_000, files: 1, names: vec!["A.gba".into()], kept_files: 1, kept_bytes: 1_000_000 };
+        for (lang, singular, plural) in [
+            (Lang::En, "Frees 4 MB: 1 file.", "Frees 5 MB: 2 files."),
+            (Lang::De, "Macht 4 MB frei: 1 Datei.", "Macht 5 MB frei: 2 Dateien."),
+            (Lang::Es, "Libera 4 MB: 1 archivo.", "Libera 5 MB: 2 archivos."),
+            (Lang::Pt, "Libera 4 MB: 1 arquivo.", "Libera 5 MB: 2 arquivos."),
+            (Lang::Fr, "Libère 4 MB : 1 fichier.", "Libère 5 MB : 2 fichiers."),
+            (Lang::It, "Libera 4 MB: 1 file.", "Libera 5 MB: 2 file."),
+            (Lang::Ko, "4 MB 확보: 파일 1개.", "5 MB 확보: 파일 2개."),
+        ] {
+            assert_eq!(tr_in(lang, &info.freed_summary(false)), singular, "{lang:?}, game only");
+            assert_eq!(tr_in(lang, &info.freed_summary(true)), plural, "{lang:?}, game and save");
+        }
     }
 
     #[test]

@@ -25,6 +25,12 @@ pub const WRONG_BEFORE_HELP: u32 = 3;
 /// From this many on, each further try waits.
 pub const WRONG_BEFORE_WAIT: u32 = 5;
 pub const WRONG_WAIT: Duration = Duration::from_secs(60);
+
+pub fn pin_wait_message(wait: Duration) -> String {
+    let secs = wait.as_secs() + 1;
+    if secs == 1 { "Too many tries. Wait 1 second.".into() } else { format!("Too many tries. Wait {secs} seconds.") }
+}
+
 /// A grown-up's "a bit longer".
 pub const MORE_MINUTES: u32 = 30;
 /// How long before the time is up the child is told.
@@ -466,6 +472,12 @@ pub fn time_counts(game: bool, menu: bool, starting: bool, awake: bool, dark_gam
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn pin_wait_message_uses_the_singular_in_the_last_second() {
+        assert_eq!(pin_wait_message(Duration::from_millis(500)), "Too many tries. Wait 1 second.");
+        assert_eq!(pin_wait_message(Duration::from_millis(1500)), "Too many tries. Wait 2 seconds.");
+    }
+
     #[test]
     fn a_game_paused_by_sleep_uses_none_of_the_days_time() {
         assert!(time_counts(true, false, false, true, false), "playing");

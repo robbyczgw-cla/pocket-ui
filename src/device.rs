@@ -77,6 +77,7 @@ impl Model {
             Model::Odin2Portal => "AYN Odin 2 Portal",
             Model::H700(b) | Model::Rk3566(b) | Model::Rk3326(b) => b.name,
             Model::RgDsPlus => "Anbernic RG DS Plus",
+            Model::RgRotate => "Anbernic RG Rotate",
             #[cfg(feature = "brick")] Model::Brick(b) => b.name(),
         }
     }
@@ -87,6 +88,7 @@ impl Model {
             Model::MiniV2 | Model::PocketClassic => MINI_V2_SCREEN,
             Model::MiniV1 | Model::Nova => (1280, 960),
             Model::RgDsPlus => (1024, 768),
+            Model::RgRotate => (720, 720),
             Model::H700(b) | Model::Rk3566(b) | Model::Rk3326(b) => b.screen,
             #[cfg(feature = "brick")] Model::Brick(b) => b.screen(),
             Model::Pocket5 | Model::Flip2 | Model::Pocket6 | Model::Odin2 | Model::Odin2Mini | Model::Odin2Portal => (1920, 1080),
@@ -117,13 +119,21 @@ impl Model {
         matches!(self, Model::Rk3326(_))
     }
 
-    /// The Flip 2's hall sensor: `SW_LID` on a `gpio-keys` device (docs/SLEEP.md "Lid"); the RG DS Plus's too.
+    /// The Flip 2's hall sensor: `SW_LID` on a `gpio-keys` device (docs/SLEEP.md "Lid"); the RG DS Plus's too, and the RG
+    /// Rotate's swivel (`lid_turns_screen`): logind's lid handling is inhibited on all of them.
     pub fn has_lid(self) -> bool {
         match self {
-            Model::Flip2 | Model::RgDsPlus => true,
+            Model::Flip2 | Model::RgDsPlus | Model::RgRotate => true,
             Model::H700(b) | Model::Rk3566(b) | Model::Rk3326(b) => b.lid,
             _ => false,
         }
+    }
+
+    /// The lid switch is a swivel, not a lid: the RG Rotate's hall sensor (base618's `gpio-keys-system`, "Hall Swivel", 1 =
+    /// turned) reports `SW_LID` when the screen is swivelled, a normal way to play. It never sleeps; it turns the panel's
+    /// output instead (`Sleep::on_lid`, `display_out::swivel_transform`).
+    pub fn lid_turns_screen(self) -> bool {
+        self == Model::RgRotate
     }
 
     /// The Allwinner H700 handhelds (ROCKNIX's H700 image): 1 GB, no fan, no touch; sticks and Wi-Fi per model.
@@ -171,6 +181,7 @@ impl Model {
             Model::Odin2Portal => "odin2portal",
             Model::H700(b) | Model::Rk3566(b) | Model::Rk3326(b) => b.key,
             Model::RgDsPlus => "rgdsplus",
+            Model::RgRotate => "rgrotate",
             #[cfg(feature = "brick")] Model::Brick(b) => b.key(),
         }
     }
@@ -203,12 +214,12 @@ impl Device {
     /// A fan the system can run. None on the H700 handhelds and the RG DS Plus: the fan page says so instead of offering a fan.
     #[cfg(not(feature = "brick"))]
     pub fn has_fan(&self) -> bool {
-        !self.model.is_some_and(|m| m.small_chip())
+        !self.model.is_some_and(|m| m.small_chip() || m == Model::RgRotate)
     }
 
     #[cfg(feature = "brick")]
     pub fn has_fan(&self) -> bool {
-        !self.model.is_some_and(|m| m.small_chip() || { #[cfg(feature = "brick")] { matches!(m, Model::Brick(_)) } #[cfg(not(feature = "brick"))] { false } })
+        !self.model.is_some_and(|m| m.small_chip() || m == Model::RgRotate || { #[cfg(feature = "brick")] { matches!(m, Model::Brick(_)) } #[cfg(not(feature = "brick"))] { false } })
     }
 
     /// A touch screen. None on the H700 handhelds (the kernel has no touch driver there) and the R36S (no touch panel).
@@ -241,19 +252,19 @@ impl Device {
     /// Analog sticks, and so the lights around them. Per model on the H700 handhelds.
     #[cfg(not(feature = "brick"))]
     pub fn has_sticks(&self) -> bool {
-        !self.model.is_some_and(|m| m == Model::PocketClassic) && !matches!(self.model, Some(Model::H700(b) | Model::Rk3566(b) | Model::Rk3326(b)) if !b.sticks)
+        !self.model.is_some_and(|m| m == Model::PocketClassic || m == Model::RgRotate) && !matches!(self.model, Some(Model::H700(b) | Model::Rk3566(b) | Model::Rk3326(b)) if !b.sticks)
     }
 
     #[cfg(feature = "brick")]
     pub fn has_sticks(&self) -> bool {
-        !self.model.is_some_and(|m| m == Model::PocketClassic) && !{ #[cfg(feature = "brick")] { matches!(self.model, Some(Model::Brick(b)) if !b.sticks()) } #[cfg(not(feature = "brick"))] { false } } && !matches!(self.model, Some(Model::H700(b) | Model::Rk3566(b) | Model::Rk3326(b)) if !b.sticks)
+        !self.model.is_some_and(|m| m == Model::PocketClassic || m == Model::RgRotate) && !{ #[cfg(feature = "brick")] { matches!(self.model, Some(Model::Brick(b)) if !b.sticks()) } #[cfg(not(feature = "brick"))] { false } } && !matches!(self.model, Some(Model::H700(b) | Model::Rk3566(b) | Model::Rk3326(b)) if !b.sticks)
     }
 
     /// Android next to ROCKNIX, reached through the bootloader's Switch boot mode (Retroid, AYN): the power menu's Restart to
     /// boot menu and its "To start Android" note. Not on the Anbernic H700 and Rockchip boards (R36S hand test 20.11.2026
     /// #15a: the RK3326's syscon reboot-mode knows "bootloader", and the menu offered Android there), nor on the Brick.
     pub fn android_beside(&self) -> bool {
-        !matches!(self.model, Some(Model::H700(_) | Model::Rk3566(_) | Model::Rk3326(_)))
+        !matches!(self.model, Some(Model::H700(_) | Model::Rk3566(_) | Model::Rk3326(_) | Model::RgRotate))
             && !{ #[cfg(feature = "brick")] { matches!(self.model, Some(Model::Brick(_))) } #[cfg(not(feature = "brick"))] { false } }
     }
 
@@ -335,7 +346,7 @@ impl Device {
     pub fn prompt_style(&self) -> crate::button_prompts::PromptStyle {
         use crate::button_prompts::PromptStyle;
         match self.model {
-            Some(Model::H700(_) | Model::Rk3566(_) | Model::Rk3326(_) | Model::RgDsPlus) | None => PromptStyle::Nintendo,
+            Some(Model::H700(_) | Model::Rk3566(_) | Model::Rk3326(_) | Model::RgDsPlus | Model::RgRotate) | None => PromptStyle::Nintendo,
             Some(_) => PromptStyle::Xbox,
         }
     }
@@ -370,6 +381,10 @@ impl Device {
 
     pub fn has_lid(&self) -> bool {
         self.model.is_some_and(Model::has_lid)
+    }
+
+    pub fn lid_turns_screen(&self) -> bool {
+        self.model.is_some_and(Model::lid_turns_screen)
     }
 
     /// Settings › System › About's Device row: "Retroid Pocket 5 (experimental)". None on the Mini V2 and on an
@@ -439,6 +454,8 @@ pub fn identify(model: &str, compatible: &[u8]) -> Device {
         "AYN Odin 2 Mini" => Some(Model::Odin2Mini),
         "AYN Odin 2 Portal" => Some(Model::Odin2Portal),
         "Anbernic RG DS Plus" => Some(Model::RgDsPlus),
+        // base618's `ums512-rg-rotate.dts`: its `compatible` is only the SoC's (`sprd,ums512-1h10`), so `model` tells it.
+        "Anbernic RG Rotate" => Some(Model::RgRotate),
         other => h700_board(other, &[]).map(Model::H700).or_else(|| rk3566_board(other, &[]).map(Model::Rk3566)).or_else(|| rk3326_board(other, &[]).map(Model::Rk3326)),
     });
     let panel = if model.ends_with(" Visionox") { Panel::Visionox } else { Panel::Original };
@@ -453,7 +470,7 @@ pub fn from_override(v: &str) -> Device {
         Some(k) => (k, Panel::Visionox),
         None => (lower.as_str(), Panel::Original),
     };
-    match [Model::PocketClassic, Model::MiniV2, Model::MiniV1, Model::Pocket5, Model::Flip2, Model::Pocket6, Model::Nova, Model::Odin2, Model::Odin2Mini, Model::Odin2Portal, Model::RgDsPlus]
+    match [Model::PocketClassic, Model::MiniV2, Model::MiniV1, Model::Pocket5, Model::Flip2, Model::Pocket6, Model::Nova, Model::Odin2, Model::Odin2Mini, Model::Odin2Portal, Model::RgDsPlus, Model::RgRotate]
         .into_iter()
         .chain(H700_BOARDS.iter().map(Model::H700))
         .chain(RK3566_BOARDS.iter().map(Model::Rk3566))
@@ -1057,6 +1074,32 @@ mod tests {
         assert_eq!(d.menu_layout(), crate::button_layout::ButtonLayout::Nintendo);
         assert_eq!(d.about_line().as_deref(), Some("Anbernic RG DS Plus (experimental)"));
         assert!(include_str!("../deploy/package/install.sh").contains("MODELS_RK3566=\"Anbernic RG DS Plus|"));
+    }
+
+    /// base618's `ums512-rg-rotate.dts` (thwonp/linux-mainline-sprd, `rotate-fixes`): `model` "Anbernic RG Rotate", `compatible`
+    /// only the SoC's. Its swivel's hall sensor is a lid switch that turns the screen; on the clamshells the lid still sleeps.
+    #[test]
+    fn the_rg_rotate_is_told_by_its_model_and_its_swivel_is_no_lid() {
+        let d = identify("Anbernic RG Rotate\0", b"sprd,ums512-1h10\0sprd,ums512\0");
+        assert_eq!(d.model, Some(Model::RgRotate));
+        assert_eq!(from_override("rgrotate").model, Some(Model::RgRotate));
+        assert_eq!(identify("", b"sprd,ums512-1h10\0sprd,ums512\0").model, None, "another T618 board stays unknown");
+        assert!(d.experimental() && !Model::RgRotate.played_on() && !d.screen_off_only() && !d.is_sm8550());
+        assert_eq!((d.screen(), d.panel_size()), ((720, 720), (720, 720)));
+        assert!(d.has_touch() && d.has_wifi() && !d.has_sticks() && !d.has_fan() && !d.android_beside());
+        assert!(!Model::RgRotate.small_chip());
+        assert_eq!(d.prompt_style(), crate::button_prompts::PromptStyle::Nintendo, "Anbernic: plain letters");
+        assert_eq!(d.about_line().as_deref(), Some("Anbernic RG Rotate (experimental)"));
+        // The swivel: logind's lid handling is still inhibited (ROCKNIX's HandleLidSwitch=suspend), but it turns, not sleeps.
+        assert!(d.has_lid() && d.lid_turns_screen());
+        for k in ["flip2", "flip2-visionox", "rgdsplus", "rg35xx-sp", "rg34xx-sp", "rg-sp"] {
+            let d = from_override(k);
+            assert!(d.has_lid() && !d.lid_turns_screen(), "{k}: a real lid, closing it sleeps");
+        }
+        for k in ["miniv2", "rp5", "odin2", "rgcubexx", "r36s"] {
+            assert!(!from_override(k).lid_turns_screen(), "{k}");
+        }
+        assert!(!identify("", b"").lid_turns_screen());
     }
 
     /// ROCKNIX 20261101's RK3566 trees (`device_trees/` of its Generic image, read 2026-11-15): each one-screen model by its own

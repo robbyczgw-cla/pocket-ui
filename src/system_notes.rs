@@ -34,7 +34,8 @@ fn family(model: Model) -> Option<Family> {
         // The R36S's Cortex-A35 is slower than the H700's A53: the same systems get the note.
         Model::H700(_) | Model::Rk3326(_) => Some(Family::H700),
         Model::RgDsPlus | Model::Rk3566(_) => Some(Family::Rk3566),
-        Model::PocketClassic => None,
+        // The RG Rotate's T618 (2x A75 + 6x A55) is not measured: no family yet.
+        Model::PocketClassic | Model::RgRotate => None,
         #[cfg(feature = "brick")] Model::Brick(_) => None,
     }
 }

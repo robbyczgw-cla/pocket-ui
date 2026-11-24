@@ -29,7 +29,7 @@ untouched ([Button layout](#button-layout)).
 | X | Open a game's [card](library.md) (facts, status, notes, related games), a system's [console page](console-pages.md), [Credits & links](console-pages.md#credits--links) from a console page, or options on a smart shelf/label. |
 | SELECT (tap) | Open [Recent games](playing.md#recent-games). |
 | START (tap) | Open [Settings](controls-settings.md#in-settings) from Home, any console or Favourites (L1/R1 switch categories; B returns where you left off). Holding START with SELECT or Volume triggers a combo instead. |
-| SELECT + START, held for 1 second | Opens recovery dialog: **Cancel**, **Restart pocket-ui** or **Open EmulationStation** (ROCKNIX's menu, with warning; see [Safe mode](safe-mode.md#opening-rocknixs-own-menu)). Escape on a keyboard does the same. |
+| SELECT + START, held for 1 second | Opens recovery dialog: **Cancel**, **Restart pocket-ui**, **Report a problem** or **Open EmulationStation** (ROCKNIX's menu, with warning; see [Safe mode](safe-mode.md#opening-rocknixs-own-menu)). Escape on a keyboard does the same. |
 
 In the **Cabinet** layout, Left/Right move along a shelf and Up/Down switch shelves (landing on the nearest case).
 Both L1/R1 and L2/R2 jump by starting letter. Pressing Up from the top shelf opens [search](playing.md#finding-a-game).

@@ -380,12 +380,17 @@ impl StoragePage {
                 } else {
                     lines.push("Shows a low-space alert on the shelf under 1 GB free.".into());
                 }
-                if u.unreadable > 0 {
-                    lines.push(format!("{} folders could not be read; what is in them is not counted.", u.unreadable));
+                match u.unreadable {
+                    0 => {},
+                    1 => lines.push("1 folder could not be read. Its contents aren't counted.".into()),
+                    n => lines.push(format!("{n} folders could not be read; what is in them is not counted.")),
                 }
             }
             Row::Kind(Kind::Games) => {
-                lines.push(format!("On {} systems. A lists them by size.", u.systems.len()));
+                lines.push(match u.systems.len() {
+                    1 => "On 1 system. A opens the list by size.".into(),
+                    n => format!("On {n} systems. A lists them by size."),
+                });
                 lines.push("To delete a game, press X on it, then choose Delete from the card.".into());
             }
             Row::Kind(Kind::States) => {
@@ -575,6 +580,15 @@ mod tests {
         assert_eq!(confirm_text(Cleanup::OldBackups, &sel(3)).0, "Delete 3 old backups?");
         assert!(confirm_text(Cleanup::OldStates(6), &sel(1)).1[0].contains("states of 1 game not played"));
         assert!(confirm_text(Cleanup::OldStates(6), &sel(2)).1[0].contains("states of 2 games not played"));
+        let mut p = page();
+        let mut u = usage();
+        u.systems.truncate(1);
+        u.unreadable = 1;
+        p.event(Event::Measured(Box::new(u)));
+        at(&mut p, Row::Kind(Kind::Games));
+        assert_eq!(p.details().1[0], "On 1 system. A opens the list by size.");
+        at(&mut p, Row::Free);
+        assert!(p.details().1.iter().any(|line| line == "1 folder could not be read. Its contents aren't counted."));
     }
 
     #[test]

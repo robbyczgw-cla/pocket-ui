@@ -115,7 +115,7 @@ Three quick steps:
 
 1. **Download the image for your handheld** from [pocketui.xyz/install](https://pocketui.xyz/install) (about 1.3 GB).
 2. **Flash it to a spare microSD card** with [balenaEtcher](https://etcher.balena.io) or Raspberry Pi Imager (no need to
-   unzip). 8 GB works for most models; use 16 GB+ for the RG28XX and RG35XX 2024.
+   unzip). 8 GB works for most models; use 16 GB+ for the RG28XX and RG35XX 2024. The R36S has its own card, see the table below.
 3. **Slide it into slot 1 and power on.** First boot sets up the card, restarts once, and greets you to pick language,
    Wi-Fi and look.
 
@@ -128,7 +128,8 @@ Add games from your phone or computer over Wi-Fi via Settings → Games → Add 
 | **Retroid** | Pocket Mini V2 | [Image](https://pocketui.xyz/install#retroid), plus one step: Boot mode → Loader. Android stays untouched. |
 | **AYN** | Odin 2, Odin 2 Mini, Odin 2 Portal | [Image](https://pocketui.xyz/install#odin), after installing ROCKNIX's boot helper once (it replaces the bootloader; Android apps and data stay). |
 | **TrimUI** | Brick (incl. Brick Hammer), Smart Pro; Brick Pro experimental | [Unzip the TrimUI package onto an empty FAT32 card](https://pocketui.xyz/install#brick); nothing is flashed. |
-| **Retroid, beta** | Pocket 5, Flip 2, Pocket 6, Pocket Nova | [Beta images](https://pocketui.xyz/install#rp5-uefi), see notes below. Some need OpenABL once, which replaces the bootloader. |
+| **Retroid, beta** | Pocket 5, Flip 2, Pocket 6, Pocket Nova | [Beta images](https://pocketui.xyz/install#rp5-uefi), see notes below. Some need OpenABL once (it replaces the bootloader; Android apps and data stay). |
+| **R36S, beta** | Genuine R36S (clones aren't covered yet) | [Own card](https://pocketui.xyz/install#r36s) in TF1; your original card stays in TF2 with your games. No Wi-Fi needed, updates come as a zip, and the first start takes up to 10 minutes. |
 | **Already on dArkOS** | 640×480 dArkOS handhelds, including the R36S | [pocket-ui beta for dArkOS](https://pocketui.xyz/install#darkos): unzip into `ports`; nothing is flashed. |
 | **Already on ROCKNIX** | any of the above | [Install on top in five minutes, remove any time](https://pocketui.xyz/install#way-1) |
 
@@ -136,7 +137,7 @@ Add games from your phone or computer over Wi-Fi via Settings → Games → Add 
 not the 12 GB Visionox models. On Pocket 5 and Flip 2, boot from Retroid's **Loader** option if your menu has it (nothing
 gets flashed). If it only shows **UEFI**, install OpenABL once with the `openabl` folder from a ROCKNIX SM8250 card. On
 Pocket 6 and Nova, try Retroid's **UEFI** with Secure Boot off first, or fall back to OpenABL from a ROCKNIX SM8550 card.
-OpenABL replaces the bootloader (`abl_a` and `abl_b`). Run the backup exactly once before flashing and copy both files to
+OpenABL replaces the bootloader (`abl_a` and `abl_b`), while your Android apps and data stay. Run the backup exactly once before flashing and copy both files to
 your computer. Running it again after flashing overwrites the original backup on the handheld. Follow the
 [install guide](docs/INSTALL-DUAL-BOOT.md#installing-openabl-once) for the steps and the way back.
 

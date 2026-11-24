@@ -2971,6 +2971,7 @@ impl App {
         }
         let (w, h) = self.screen_size();
         self.cabinet_poll();
+        pocket_ui::mark!("shelf-warm", "insert");
         self.warm_focused_insert(w as i32, h as i32);
         self.cabinet.insert_warm = Some((item, tries + 1));
         AFTER_MS.get(tries as usize + 1).map(|a| self.last_input + Duration::from_millis(*a))
@@ -4806,6 +4807,7 @@ impl App {
         }
         // Covers' colours still on their way remake those spines: looked at again for a while after the move.
         let colours = self.cabinet.pending > 0 && now < self.last_input + CABINET_WARM_COLOURS;
+        pocket_ui::mark!("shelf-warm", "cabinet");
         (self.cabinet_warm(CABINET_WARM_BUDGET) > 0 || colours).then(|| now + Duration::from_millis(16))
     }
 

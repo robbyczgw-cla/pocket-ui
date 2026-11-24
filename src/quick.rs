@@ -1565,7 +1565,7 @@ impl Sys {
 /// The zone list, once (a walk of the zoneinfo tree; on the worker, or a snapshot's own thread).
 /// The battery of the power menu's snapshots: 73 %, about 4 h 20 min left.
 fn demo_battery() -> BatteryLine {
-    let left = crate::battery_estimate::Estimate::Left { per_hour: 16.8, secs: 4 * 3600 + 20 * 60, over: 40 * 60 };
+    let left = crate::battery_estimate::Estimate::Left { per_hour: 16.8, secs: 4 * 3600 + 20 * 60, over: 40 * 60, curve: false };
     crate::power_menu::battery_line(Some(73), true, Some(&left))
 }
 

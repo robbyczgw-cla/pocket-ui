@@ -1595,10 +1595,13 @@ fn extras_sub(online: bool, has_wifi: bool, card_ports: bool) -> &'static str {
 /// (new-user test 2026-10-30).
 fn extras_status(covers: Option<(usize, usize, usize)>, running: bool, pictures: bool, games: usize, dots: &str) -> String {
     match (covers, running) {
+        (Some((d, 1, _)), true) if pictures => format!("Looking up {d} of 1 picture{dots}"),
         (Some((d, t, _)), true) if pictures => format!("Looking up {d} of {t} pictures{dots}"),
+        (Some((d, 1, _)), true) => format!("Looking up {d} of 1 cover{dots}"),
         (Some((d, t, _)), true) => format!("Looking up {d} of {t} covers{dots}"),
         (Some((_, _, 1)), false) if pictures => "Found 1 new picture".into(),
         (Some((_, _, f)), false) if f > 0 && pictures => format!("Found {f} new pictures"),
+        (Some((_, _, 1)), false) => "Found 1 new cover".into(),
         (Some((_, _, f)), false) if f > 0 => format!("Found {f} new covers"),
         (Some(_), false) if pictures => "No new pictures found".into(),
         (Some(_), false) => "No new covers found".into(),
@@ -6762,7 +6765,10 @@ mod tests {
         assert_eq!(extras_status(None, false, true, 0, ""), "no games yet");
         assert_eq!(extras_status(Some((2, 12, 0)), true, true, 6, "…"), "Looking up 2 of 12 pictures…", "pictures: up to three a game, so not '6 games'");
         assert_eq!(extras_status(Some((2, 6, 0)), true, false, 6, ""), "Looking up 2 of 6 covers");
+        assert_eq!(extras_status(Some((0, 1, 0)), true, false, 1, ""), "Looking up 0 of 1 cover");
+        assert_eq!(extras_status(Some((0, 1, 0)), true, true, 1, "…"), "Looking up 0 of 1 picture…");
         assert_eq!(extras_status(Some((6, 6, 4)), false, false, 6, ""), "Found 4 new covers");
+        assert_eq!(extras_status(Some((1, 1, 1)), false, false, 1, ""), "Found 1 new cover");
     }
 
     /// The image's default zone nobody chose (New York), and the Wi-Fi region says Austria.

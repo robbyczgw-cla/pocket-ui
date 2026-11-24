@@ -395,10 +395,14 @@ would suspend without saving the game, as the power key would.
   (logind's), pocket-ui does nothing with it.
 - **Not handled:** the power key pressed while the lid is closed wakes the Pocket with the lid shut (Screen off after
   and Sleep after send it back to sleep, 2 + 2 minutes by default).
+- **A swivel is no lid** (`Model::lid_turns_screen`, the Anbernic RG Rotate, experimental, no card yet): its hall sensor
+  ("Hall Swivel" on `gpio-keys-system`) reports `SW_LID` 1 when the screen is swivelled, a normal way to play. The
+  inhibitor still covers `handle-lid-switch`, but `on_lid` only logs it: no sleep, no dark screen, no wake. Turning the
+  panel is the system's (the T618 card's `lid-rotate` service sets sway's transform); touch mapping when turned is open.
 
 Tests (`sleep::tests`): closing sleeps by default and turns only the screen off when set so, a second close changes
 nothing, opening wakes; a dark screen goes to deep sleep on closing; right after waking a close still sleeps; without
-the inhibitor nothing happens; the Mini V2's inhibitor stays `handle-power-key`. `pad::lid_tests`: the evdev stream
+the inhibitor nothing happens; the Mini V2's inhibitor stays `handle-power-key`; the RG Rotate's swivel neither sleeps nor darkens. `pad::lid_tests`: the evdev stream
 (`SW_LID` 1, a report, a headphone switch, `SW_LID` 0) reads as closed and opened.
 
 ## Device test plan (Mini V2, 2026-10-22)

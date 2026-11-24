@@ -80,7 +80,9 @@ track files inside `Roms/psx`. Missing memory cards are created automatically on
 **Nintendo 64, PSP and Dreamcast:** both sticks map as analogue sticks, and in-game saves are shared directly with
 ROCKNIX's existing emulators (RetroArch N64 saves, `roms/psp/PSP/SAVEDATA`, and Dreamcast VMUs), so progress carries back
 and forth. PSP requires no BIOS: pocket-ui copies ROCKNIX's system fonts/tables into `roms/bios/PPSSPP` if missing
-without overwriting your own files.
+without overwriting your own files. For Wild Arms XF and Crisis Core in pocket-ui's own PSP host, GPU readbacks are
+skipped by default to prevent an exit-save hang (an explicit per-game or per-console Emulator setting still wins if you
+need to change it for visual effects).
 
 *Jeanne d'Arc* defaults to ROCKNIX's standalone PPSSPP because the libretro core can hang on its intro movie (save
 in-game before quitting; standalone PPSSPP uses its own states while existing pocket-core states stay safe; your own
@@ -228,7 +230,7 @@ Powered by ROCKNIX's standalone emulators: **ARMSX2** (PS2), **Dolphin** (GameCu
 Pause menu: Continue, Save, Load, Options, Save & quit (plain Quit if Settings → Playing →
 [Continue where I quit](settings-playing.md#continue-where-i-quit) is Off); START opens Quick settings.
 
-- **Save & Load:** slots 1–8 plus Where I quit and Before load (3DS uses Azahar's single quick slot, the same one
+- **Save & Load:** slots 1 to 8 plus Where I quit and Before load (3DS uses Azahar's single quick slot, the same one
   ROCKNIX's HOME + R1/L1 use). See [Save slots](pause-menu-saves.md#save-slots-where-i-quit-and-before-load).
 - **Options:** per-game resolution, renderer, aspect ratio and more ([Options](options-big.md)).
 - **Quit:** saves your spot cleanly ("Saving and quitting…", waiting up to 35 s; 3DS flashes back briefly while saving)
@@ -277,7 +279,7 @@ once under Settings → Help & tools → [Tools](extras.md#tools), then place ga
 key `.txt`, or `.zip`). They appear on your shelf in blue-topped Vita cases.
 
 Nintendo 64, PSP, Dreamcast, DS and Saturn (with BIOS) run in pocket-core on supported hardware after matching or
-beating stock ROCKNIX emulators (docs/HOST.md), with automatic fallback if a title won't start. On Anbernic H700
+beating stock ROCKNIX emulators ([HOST.md](../HOST.md)), with automatic fallback if a title won't start. On Anbernic H700
 handhelds, **Nintendo DS runs on DSperate in pocket-core** with pocket-ui's full pause menu, while N64, PSP and
 Dreamcast stay on ROCKNIX's emulators (RetroArch for N64/Dreamcast, PPSSPP for PSP) with the D-pad automatically mapped
 to the left stick on stickless units ([Runs on › D-pad](options.md#runs-on)).

@@ -6,7 +6,7 @@ Quick step-by-step recipes for the things players do most, with links to the ful
 
 1. Connect to Wi-Fi.
 2. Open Settings → System → **Updates**. pocket-ui checks automatically and shows any new release next to **pocket-ui**
-   (e.g. "0.2.1 available").
+   (e.g. "0.7.1 available").
 3. Highlight **Install pocket-ui …** and press **A**. It downloads, verifies the signature and reboots.
 
 Your games, saves and settings stay untouched. If a new build ever fails to boot, pocket-ui automatically rolls back to

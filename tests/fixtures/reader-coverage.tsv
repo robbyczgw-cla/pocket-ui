@@ -79,6 +79,7 @@ src/background_io.rs	12	unit:file_source_rule_background_reads_have_the_same_byt
 src/backup.rs	11	backup
 src/backup_saves.rs	19	backup-saves
 src/battery.rs	1	UNASSIGNED
+src/battery_curve.rs	1	battery-curve
 src/battery_games.rs	1	battery-games
 src/battery_history.rs	9	battery-history
 src/bezel.rs	3	frame-pack

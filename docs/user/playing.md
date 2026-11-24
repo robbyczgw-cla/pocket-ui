@@ -146,7 +146,7 @@ The console pictures throughout the menus follow the choice; it starts with the 
 On the other systems each game still goes in its own way (Settings → Look → Cozy extras → Playful cases, on with Cozy): a
 cartridge is pushed into its slot and seats with a little squash as it clicks; a game card clicks all the way in; a disc
 console's tray slides out, the disc drops in and the tray shuts with the sound's clunk; the GameCube, PlayStation,
-Dreamcast and Mega-CD open their lid instead; the Wii takes the disc in through the slot. The PSP's UMD goes in a door at the PSP's back, so for now its start only lights the PSP up. A case you
+Dreamcast and Mega-CD open their lid instead; the Wii takes the disc in through the slot. The PSP turns round and its UMD slides into the door at its back. A case you
 pick springs out of the shelf and wiggles once, the disc beside an open box turns slowly for a few seconds, and holding
 Left or Right on the Shelf tips the spines a little until they swing back.
 
@@ -216,7 +216,7 @@ seconds, and in most cases the game starts again right away with RetroArch. See
 
 With **Game start animation: Cozy** and **Motion: Full**, the way back mirrors putting the game in: the picture switches off,
 the cartridge or disc comes out, and its case closes and returns to the shelf. A home console's picture collapses to
-a line and a dot when **Old-TV switch-on** is enabled; a handheld's display simply goes dark. The case stays a little
+a line and a dot when **Old-TV switch-off** is enabled; a handheld's display simply goes dark. The case stays a little
 open when Continue is available. This also works in Easy and Kids Mode when Cozy is selected.
 
 The shelf accepts input immediately. Any button or touch ends the effect and acts on the shelf in the same press.
@@ -259,7 +259,7 @@ and the pause menu does not open.
 - **PlayStation 2, GameCube, Wii, 3DS and PortMaster ports:** pocket-ui takes a picture of the whole screen, as the
   game shows it. Nothing can be drawn over these games, so there is no message: you hear the camera click (Menu sounds on),
   or the low double sound if it did not work. This shortcut cannot be switched off there.
-- **RetroArch** games have their own screenshot key; this one does not apply to them.
+- **RetroArch** games take the same shortcut. Switch it off under Options → Shortcuts → Screenshot.
 - **If it does not work,** the message says why: "Screenshot not saved: the SD card is full", "...: the folder can't be
   written to" or "...: no picture yet" (the game has not shown a picture). A screenshot is either whole or not there;
   a failed one leaves no file behind. Settings → System → [Storage](storage.md) shows what takes up space,
@@ -335,10 +335,10 @@ hub without it shows nothing.
 - **Other emulators** start fresh. Use the game's own save feature.
 
 If a game in pocket-ui's own host stops answering Pause or Quit, it closes after a few seconds
-and keeps the previous saved moment. A game that is only busy saving or loading is not closed. A PSP stall without a request closes after 25 seconds without
-progress, including a stalled Continue or shutdown. The PSP exit save still has a 20-second state
-capture guard. Progress after the last saved moment cannot be recovered. A newer in-game save
-is still protected when continuing.
+and keeps the previous saved moment. A game that is only busy saving or loading is not closed. If a PSP game
+freezes without responding, including during Continue or shutdown, pocket-ui closes it after 25 seconds; saving a
+PSP state on exit also has a 20-second safety limit. Progress after the last saved moment cannot be recovered,
+while a newer in-game save is still protected when continuing.
 
 Messages about a fresh start or a saved moment stay inside the screen as the game opens.
 

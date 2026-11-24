@@ -516,6 +516,7 @@ AYN Odin 2 Mini
 AYN Odin 2 Portal
 Anbernic RG28XX
 Anbernic RG DS Plus
+Anbernic RG Rotate
 Anbernic RG35XX SP
 Anbernic RG35XX 2024
 Anbernic RG35XX Plus

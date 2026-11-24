@@ -141,7 +141,7 @@ mod tests {
         ]);
         assert!(wanted(None, 1000));
         let s = lookup(&mock, &dir, &account, "gb", &rom, 1000, false).unwrap();
-        assert_eq!(s.text().as_deref(), Some("12 of 40"));
+        assert_eq!(s.text().as_deref(), Some("12 of 40 achievements"));
         assert!(!wanted(Some(&s), 1000 + FRESH_FOR));
         assert!(wanted(Some(&s), 1001 + FRESH_FOR));
         // An hour later: no new hash lookup, and the console's list comes from the server again.

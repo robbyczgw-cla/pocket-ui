@@ -192,7 +192,7 @@ In **Bring your own game files**, press **X** ("How to copy"), or finish install
   and view credentials):
   - Windows: `\\<address>\games-roms\ports\sprout\assets`
   - macOS / Linux: `smb://<address>/games-roms/ports/sprout/assets`
-- **From a browser:** upload directly via the [web companion](web-companion.md) over Tailscale.
+- **From a browser:** upload directly via the [web companion](web-companion.md) over home Wi-Fi or Tailscale.
 - **PortMaster says:** full official instructions (scroll with Up/Down).
 
 If instructions call for multiple subfolders (like `valve` and `cstrike` for Counter-Strike), drop them into the game's

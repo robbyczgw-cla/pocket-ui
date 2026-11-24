@@ -5,10 +5,9 @@ and versions follow [Semantic Versioning](https://semver.org/) (before 1.0, a mi
 
 ## [Unreleased]
 
-## [0.7.0] - 2026-11-26
-
 ### Added
 
+- **See what sleep uses:** Settings → Battery now shows what the last sleep used, such as "Last sleep: 3% in 7 h 40 min". It covers both deep sleep and screen-off idle time, and stays hidden if the charger was plugged in or sleep lasted under 30 minutes. Time asleep no longer counts toward a system's battery use.
 - **Korean menus:** pocket-ui now speaks Korean (한국어), drawn with its own Korean fonts. Pick it under Settings → System → Language or on the Welcome page; a Korean system or phone starts in it. On every handheld, TrimUI Brick and pocket-ui for Android included.
 - **Korean game names stay Korean:** hangul is now drawn with pocket-ui's own Korean fonts (the pixel font Galmuri in Retro, Noto Sans KR in Barlow) on every handheld, TrimUI Brick and the Android app included, instead of being spelled out in Latin letters ("Jeldaui Jeonseol").
 - **RetroArch games now share pocket-ui's HOME shortcuts** (pocket-ui OS): HOME + R1 saves, HOME + L1 loads, HOME + R2 toggles fast-forward, hold HOME + L2 to rewind, HOME + A saves a screenshot straight into Screenshots, and HOME + Y toggles the FPS counter. Any shortcut you switch off under Options → Shortcuts stays off in RetroArch too, and HOME + A no longer pauses RetroArch on RG35XX and Retroid handhelds.
@@ -20,6 +19,7 @@ and versions follow [Semantic Versioning](https://semver.org/) (before 1.0, a mi
 
 ### Changed
 
+- **Battery time left that matches your handheld:** pocket-ui learns how your battery actually drains and bases "About … left" on that, on the Battery page and in the pause menu alike, instead of assuming every percent lasts equally long. On an RG35XX Plus at 40%, it estimated about 6 h where the old formula showed under 2 h 30 min, and the battery really lasted 6 h 10 min.
 - **The pause menu shows your game:** on Continue, Options and Save & quit the right side of the pause menu now shows the paused game in the same window Save and Load use, with how long you played it today ("Paused here · played 42 min today"). It used to stay dark there. On every handheld and in pocket-ui for Android's Handheld view.
 - **A calmer, cleaner update bar:** software updates now show one steady progress bar and status line across the whole download, with percentage and estimated time left ("Downloading the update… 42% · About 2 min left"). No more flashing "Connecting to the update server" between chunks, no backwards jumps, and dropped connections clearly show "Connection lost, trying again (2/3)". Available on ROCKNIX, TrimUI Brick and dArkOS.
 - **Delete a single game right from its card:** games now have a dedicated **Delete from the card** row right after Stickers and Screenshots (with **Hide from the shelf** right beside it) instead of tucking both at the bottom under "Hide or delete". It names the game and space freed, asks twice, keeps saves and states unless you opt in, and cleans up every disc, cover, gamelist entry, scraped media, Shelf space slot, Recent games, Continue and Favourites. Also available on the web companion; disabled mid-game, in Kids mode, and on dArkOS and Android where pocket-ui can't delete games.
@@ -28,6 +28,12 @@ and versions follow [Semantic Versioning](https://semver.org/) (before 1.0, a mi
 
 ### Fixed
 
+- **Small square screens on Android** (pocket-ui for Android): on a 720x720 handheld at Android's usual density the pages now fit. The folder page's button no longer covers its text, Licences and Report a problem show their whole text, and lists show four rows instead of two.
+- **Square screens keep the system's turn** (pocket-ui for Android): with a built-in pad the app used to ask Android for landscape, which on a square panel turned the picture a quarter turn against the buttons. On a square screen the app, the Handheld view and games now follow the system's own rotation.
+- **TrimUI Brick now switches off safely at low battery** (pocket-ui's own card): at 2 % on battery the game is saved and the Brick switches off, instead of running on until the battery is completely empty and the game in progress is lost.
+- **Battery on the charger reads right** (seen on the RG35XX Plus): a handheld on the charger that says it is not charging (full, or a charge that stopped early) now shows Full or Plugged in, and those hours no longer count as time on battery in the battery estimates.
+- **Korean numbers use a decimal point:** values such as watts and gigabytes read "2.3 W" in Korean instead of "2,3 W".
+- Game Boy Advance, Super Nintendo and Game Boy boxes on the shelf now show their cover's colour on the spine, under the system's band at the top. Before, every one of them had the same white or grey spine, so a whole row looked white or grey.
 - **PortMaster no longer stands on the Ports shelf as a game:** its own menu (which needs a network) was listed beside your ports once PortMaster was set up. pocket-ui installs and starts ports itself, so it is left out on every handheld.
 - **R36S game starts get more memory and card time:** very large libraries use less RAM, and shelf readers pause when you start a game. RetroArch gets two minutes to load before the idle timer starts. The Power button still puts the handheld to sleep.
 - **SD cards for the Retroids keep the GRUB checked on a real device:** the cards are built from that GRUB version (Debian 2.12-9+deb13u2), pinned by its checksum, instead of whatever Debian has newest that day.

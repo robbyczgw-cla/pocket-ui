@@ -124,7 +124,7 @@ pub struct CardData {
     pub note: String,
     pub more_by: Option<(String, Vec<RelatedGame>)>,
     pub series: Option<(String, Vec<RelatedGame>)>,
-    /// RetroAchievements: "12 of 40" when the game has a set (`achievements::snapshot::Summary`).
+    /// RetroAchievements: "12 of 40 achievements" when the game has a set (`achievements::snapshot::Summary`).
     pub achievements: Option<String>,
     /// Curator's rows, in order (none when Curator has nothing to show for the game).
     pub rows: Vec<CuratorRow>,

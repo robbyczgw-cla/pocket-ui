@@ -416,7 +416,7 @@ pub fn probe(source: &str, d: &Path, file: &Path, bytes: Option<&[u8]>, valid: b
         "ra-summary" => {
             let rom=d.join("gb/Reader Rule Game.gb"); let got=pocket_ui::achievements::snapshot::Summary::load(&data,"gb",&rom);
             let tally=pocket_ui::achievements::snapshot::console_tally(&data,"gb",std::iter::once(rom.as_path()));
-            if valid { assert_eq!(got.unwrap().text().as_deref(),Some("2 of 4")); assert_eq!(tally,Some((2,4,1))); }
+            if valid { assert_eq!(got.unwrap().text().as_deref(),Some("2 of 4 achievements")); assert_eq!(tally,Some((2,4,1))); }
         }
         "ra-snapshot" => { let got=pocket_ui::achievements::snapshot::Snapshot::read(file,&d.join("gb/Reader Rule Game.gb")); if valid { assert_eq!(got.unwrap().state,pocket_ui::achievements::snapshot::State::Ready); } }
         "ra-console-progress" => {
